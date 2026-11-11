@@ -1,0 +1,27 @@
+{
+  "mode": "preview",
+  "sampleRate": 48000,
+  "state": "running",
+  "superdoughVoicesScheduled": 24,
+  "superdoughFailed": 0,
+  "superdoughPeakRms": 0.0979,
+  "frames": 305,
+  "messageRateHz": 93.75,
+  "expectedRateHz": 93.75,
+  "voicedPct": 100,
+  "medianCents": 0.0003,
+  "centsRange": [
+    -0.0012,
+    0.0017
+  ],
+  "messageGapMs": {
+    "median": 10.7,
+    "p95": 10.8,
+    "max": 11
+  },
+  "segments": [
+    "A4+0.00c"
+  ],
+  "logs": [],
+  "problems": []
+}

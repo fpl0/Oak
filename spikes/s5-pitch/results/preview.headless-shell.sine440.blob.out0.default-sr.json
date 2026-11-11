@@ -1,0 +1,86 @@
+{
+  "mode": "preview",
+  "loader": "blob",
+  "numberOfOutputs": 0,
+  "sampleRate": 48000,
+  "requestedSampleRate": null,
+  "framesTotal": 321,
+  "messageRateHz": 93.75,
+  "expectedRateHz": 93.75,
+  "windowFrames": 94,
+  "voicedPct": 100,
+  "medianHz": 440.0001,
+  "medianCents": 0,
+  "minCents": -0.001,
+  "maxCents": 0.002,
+  "medianClarity": 1,
+  "medianRmsDb": -9.03,
+  "oscOutputRms": 0.0487,
+  "postDelayMs": {
+    "median": 0,
+    "p95": 0,
+    "max": 0
+  },
+  "hopMs": 10.667,
+  "messageGapMs": {
+    "median": 10.7,
+    "p95": 10.8,
+    "max": 10.8
+  },
+  "deliveryLagMs": {
+    "median": 0.1,
+    "p95": 0.23,
+    "max": 3.87
+  },
+  "baseLatencyMs": 5.33,
+  "outputLatencyMs": 32,
+  "addModuleMs": 2.3,
+  "worklet": {
+    "blocks": 1300,
+    "emptyBlocks": 0,
+    "clock": "Date.now",
+    "busyMs": 101,
+    "renderLoadPct": 2.913,
+    "maxBlockMs": 4,
+    "maxAtBlock": 16,
+    "warmUpMs": 0,
+    "findPitchUsInWorklet": 116,
+    "renderLoadPctFromBench": 1.09,
+    "histMs_0_1_2_3plus": [
+      1202,
+      97,
+      0,
+      1
+    ],
+    "globals": {
+      "self": "undefined",
+      "performance": "undefined",
+      "viteDefines": "undefined",
+      "process": "undefined"
+    }
+  },
+  "mainThreadFindPitchUs": 117.2,
+  "mainThreadColdCallsMs": [
+    3.8,
+    0.7,
+    0.8,
+    0.7,
+    0.5
+  ],
+  "trackSettings": {
+    "autoGainControl": false,
+    "channelCount": 2,
+    "deviceId": "default",
+    "echoCancellation": false,
+    "groupId": "278fb24f2916572a48bb055af1b071dea30f459929c94cdd9b9fc25050184e0a",
+    "latency": 0.01,
+    "noiseSuppression": false,
+    "sampleRate": 44100,
+    "sampleSize": 16,
+    "voiceIsolation": false
+  },
+  "trackLabel": "Fake Default Audio Input",
+  "workletUrl": "blob:http://127.0.0.1:5185/f83cd97b-0181-40f7-997c-767a71f45cdf",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/158.0.8127.18 Safari/537.36",
+  "problems": []
+}

@@ -1,0 +1,101 @@
+cannot use window: not in browser?
+🌀 @strudel/core loaded 🌀
+ON Pattern.prototype: s sound note n gain bank slow fast struct lastOf firstOf off superimpose degradeBy sometimesBy mask range segment swingBy swing early late velocity ply euclid euclidRot transpose scale scaleTranspose legato arp chord voicing anchor mode dict add rev rootNotes set offset room clip lpf delay distort pan jux partials hpf bpf lpq lpenv lpa lpd lps lpr attack decay sustain release roomsize delaytime delayfeedback orbit crush coarse distorttype vib vibmod phaser tremolo tremolosync tremolodepth tremoloskew tremolophase tremoloshape lprate lpdepth lpsync lpshape fm fmh unison detune spread pw pwrate pwsweep chop slice splice striate loopAt speed begin end compressor postgain duckorbit duckdepth duckattack duck nudge leslie lrate lsize amp squiz triode ring voicings cpm hush adsr phaserdepth shape noise wt warp stretch fit cut hcutoff cutoff resonance bandf hpq bpq size delayfb delayt dt dfb sz rsize att dec sus rel euclidLegato inside outside every iter palindrome echo stut hurry linger chunk within when brak press color fmattack fmdecay fmsustain fmenv dist distortvol xfade octave accelerate vowel drive density
+MISSING: scope fscope pianoroll punchcard spiral pitchwheel _scope piano while tremolorate am amdepth rate
+globals: sine:object saw:object perlin:object rand:object tri:object square:object isaw:object cosine:object arrange:function stack:function silence:object chord:function note:function n:function s:function sound:function setcpm:function samples:undefined rev:function cat:function seq:function hush:undefined irand:function choose:function mini:function m:function
+## scale after arrange
+   const melVerse = n("<[0 2 4 2] [4 2 1 ~]>") ⏎ const melChorus = n("<[7 6 4 2] [4 ~ 2 ~]>") ⏎ mel: arrange([2, melVerse], [2, melChorus], [2, melChorus]).scale("<C4:major!4 D4:major!2>").s("piano")
+   => 0:C4(C4 major) 1/4:E4(C4 major) 1/2:G4(C4 major) 3/4:E4(C4 major) 1:G4(C4 major) 5/4:E4(C4 major) 3/2:D4(C4 major) 2:C5(C4 major) 9/4:B4(C4 major) 5/2:G4(C4 major) 11/4:E4(C4 major) 3:G4(C4 major) 7/2:E4(C4 major) 4:D5(D4 major) 17/4:C#5(D4 major) 9/2:A4(D4 major) 19/4:F#4(D4 major) 5:A4(D4 major) 11/2:F#4(D4 major)
+## patterned scale INSIDE section under arrange
+   const melChorus = n("0 4").scale("<C4:major!2 D4:major!2>") ⏎ mel: arrange([2, melChorus], [2, melChorus])
+   => 0:C4(C4 major) 1/2:G4(C4 major) 1:C4(C4 major) 3/2:G4(C4 major) 2:C4(C4 major) 5/2:G4(C4 major) 3:C4(C4 major) 7/2:G4(C4 major) 4:D4(D4 major) 9/2:A4(D4 major) 5:D4(D4 major) 11/2:A4(D4 major) 6:D4(D4 major) 13/2:A4(D4 major) 7:D4(D4 major) 15/2:A4(D4 major)
+## lifted section const
+   const melChorusN = n("0 4") ⏎ const melChorus = melChorusN.scale("C4:major") ⏎ const melLift = melChorusN.scale("D4:major") ⏎ mel: arrange([2, melChorus], [2, melLift])
+   => 0:C4(C4 major) 1/2:G4(C4 major) 1:C4(C4 major) 3/2:G4(C4 major) 2:D4(D4 major) 5/2:A4(D4 major) 3:D4(D4 major) 7/2:A4(D4 major)
+## chords by degree + scale after arrange
+   const chordsVerse = n("[0,2,4]").add(n("<0 4 5 3>")) ⏎ chords: arrange([4, chordsVerse], [4, chordsVerse]).scale("<C3:major!4 D3:major!4>")
+   => 0:C3(C3 major) 0:E3(C3 major) 0:G3(C3 major) 1:G3(C3 major) 1:B3(C3 major) 1:D4(C3 major) 2:A3(C3 major) 2:C4(C3 major) 2:E4(C3 major) 3:F3(C3 major) 3:A3(C3 major) 3:C4(C3 major) 4:D3(D3 major) 4:F#3(D3 major) 4:A3(D3 major) 5:A3(D3 major) 5:C#4(D3 major) 5:E4(D3 major) 6:B3(D3 major) 6:D4(D3 major) 6:F#4(D3 major) 7:G3(D3 major) 7:B3(D3 major) 7:D4(D3 major)
+## chord() then voicing then transpose
+   chords: chord("<C G>").dict("triads").voicing().transpose("<0!2 2!2>")
+   => 0:E4() 0:G4() 0:C5() 1:D4() 1:G4() 1:B4() 2:F#4() 2:A4() 2:D5() 3:E4() 3:A4() 3:C#5()
+## _oakChord shim
+   chords: chord("<Dm7 G7>").dict("lefthand").voicing().s("rhodes").struct("x ~ x ~") ⏎ mel: n("0 1").chord("<Dm7 G7>").voicing() ⏎ bass: chord("<Dm7 G7>").rootNotes(2)
+   => bass@0:{"note":"D2"} chords@0:{"note":"C4","_oakChord":"Dm7","s":"rhodes"} chords@0:{"note":"E4","_oakChord":"Dm7","s":"rhodes"} chords@0:{"note":"F4","_oakChord":"Dm7","s":"rhodes"} chords@0:{"note":"A4","_oakChord":"Dm7","s":"rhodes"} mel@0:{"note":53,"_oakChord":"Dm7"} chords@1/2:{"note":"C4","_oakChord":"Dm7","s":"rhodes"} chords@1/2:{"note":"E4","_oakChord":"Dm7","s":"rhodes"} chords@1/2:{"note":"F4","_oakChord":"Dm7","s":"rhodes"} chords@1/2:{"note":"A4","_oakChord":"Dm7","s":"rhodes"} mel@1/2:{"note":60,"_oakChord":"Dm7"} bass@1:{"note":"G2"} chords@1:{"note":"B3","_oakChord":"G7","s":"rhodes"} chords@1:{"note":"E4","_oakChord":"G7","s":"rhodes"} chords@1:{"note":"F4","_oakChord":"G7","s":"rhodes"} chords@1:{"note":"A4","_oakChord":"G7","s":"rhodes"} mel@1:{"note":55,"_oakChord":"G7"} chords@3/2:{"note":"B3","_oakChord":"G7","s":"rhodes"} chords@3/2:{"note":"E4","_oakChord":"G7","s":"rhodes"} chords@3/2:{"note":"F4","_oakChord":"G7","s":"rhodes"} chords@3/2:{"note":"A4","_oakChord":"G7","s":"rhodes"} mel@3/2:{"note":62,"_oakChord":"G7"}
+## slash
+   chord("<C C/E F G>").voicing()
+   => ERROR: Invalid argument
+## sample ops
+   s("brk").loopAt(2).chop(8)
+   => 8 {"s":"brk","speed":0.25,"unit":"c","begin":0,"end":0.125}
+## slice
+   s("brk").slice(8, "0 3 2 1").loopAt(1)
+   => 4 {"begin":0,"end":0.125,"_slices":8,"s":"brk","speed":0.5,"unit":"c"}
+## splice
+   s("brk").splice(8, "0 3 2 1")
+   => 4 {"speed":0.5,"unit":"c","begin":0,"end":0.125,"_slices":8,"s":"brk"}
+## striate
+   s("brk").striate(4)
+   => 4 {"s":"brk","begin":0,"end":0.25}
+## compressor
+   s("bd").compressor("-20:20:10:.002:.02")
+   => {"s":"bd","compressor":-20,"compressorRatio":20,"compressorKnee":10,"compressorAttack":0.002,"compressorRelease":0.02}
+## adsr group
+   note("c4").s("sawtooth").attack(.01).decay(.1).sustain(.5).release(.2).lpf(600).lpq(5).lpenv(4).lpa(.01).lpd(.1).lps(.2).lpr(.1)
+   => {"note":"c4","s":"sawtooth","attack":0.01,"decay":0.1,"sustain":0.5,"release":0.2,"cutoff":600,"resonance":5,"lpenv":4,"lpattack":0.01,"lpdecay":0.1,"lpsustain":0.2,"lprelease":0.1}
+## fm etc
+   note("c4").s("supersaw").unison(5).detune(.2).spread(.5).fm(2).fmh(1.5).vib(4).vibmod(.2).phaser(2).pw(.3)
+   => {"note":"c4","s":"supersaw","unison":5,"detune":0.2,"spread":0.5,"fmi":2,"fmh":1.5,"vib":4,"vibmod":0.2,"phaserrate":2,"pw":0.3}
+## tremolo family
+   note("c4").tremolosync(4).tremolodepth(.5)
+   => {"note":"c4","tremolosync":4,"tremolodepth":0.5}
+## lprate
+   note("c4").lpf(500).lprate(2).lpdepth(.5)
+   => {"note":"c4","cutoff":500,"lprate":2,"lpdepth":0.5}
+## duck
+   s("bd").duckorbit(2).duckdepth(.8)
+   => {"s":"bd","duckorbit":2,"duckdepth":0.8}
+## partials
+   note("c4").s("sawtooth").partials([1, 0, .5])
+   => {"note":"c4","s":"sawtooth","partials":[1,0,0.5]}
+## distorttype
+   note("c4").distort(2).distorttype("fold")
+   => {"note":"c4","distort":2,"distorttype":"fold"}
+## room group
+   s("sd").room(.5).roomsize(4).delay(.3).delaytime(.25).delayfeedback(.5).orbit(2).crush(4).coarse(8).hpf(200).bpf(800).postgain(1.2).pan(.2)
+   => {"s":"sd","room":0.5,"roomsize":4,"delay":0.3,"delaytime":0.25,"delayfeedback":0.5,"orbit":2,"crush":4,"coarse":8,"hcutoff":200,"bandf":800,"postgain":1.2,"pan":0.2}
+## scope/fscope in grader realm
+   note("c4").scope()
+   => ERROR: note(m('c4', 5)).scope is not a function. (In 'note(m('c4', 5)).scope()', 'note(m('c4', 5)).scope' is undefined)
+## piano()
+   note("c4").piano()
+   => ERROR: note(m('c4', 5)).piano is not a function. (In 'note(m('c4', 5)).piano()', 'note(m('c4', 5)).piano' is undefined)
+## cpm method
+   s("bd").cpm(90)
+   => {"s":"bd"}
+## S label length-1
+   S: s("bd")
+   => S
+## off with string time
+   note("c4").off("1/8", x => x.transpose(7))
+   => main@0:C4 main@0:G4
+## backtick mini
+   s(`bd sd`)
+   => main@0:bd main@1/2:sd
+## hh*8 with gain pattern
+   s("hh*8").gain(".6 1")
+   => 0.6 0.6 0.6 0.6 1 1 1 1
+## ireal-ext
+   chord("<C^9 Cm11 C13>").dict("ireal-ext").voicing()
+   => 0:E3 0:B3 0:D4 0:A4 0:B4 1:Eb3 1:Bb3 1:D4 1:F4 1:Bb4 2:E3 2:Bb3 2:D4 2:A4 2:C5
+## dorian vamp n
+   n("[0,2,4,6]").scale("D3:dorian")
+   => main@0:D3 main@0:F3 main@0:A3 main@0:C4
+## mixolydian I bVII IV
+   n("[0,2,4]").add(n("<0 6 3>")).scale("G3:mixolydian")
+   => 0:G3 0:B3 0:D4 1:F4 1:A4 1:C5 2:C4 2:E4 2:G4
+## neg n and note below
+   n("-1 -2 7 8").scale("C4:major")
+   => main@0:B3 main@1/4:A3 main@1/2:C5 main@3/4:D5
+## fraction step
+   n("0.5").scale("C4:major")
+   => [{"note":"D4"}]

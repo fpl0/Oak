@@ -1,0 +1,61 @@
+{
+  "9.unlock.click": {
+    "mode": "dev",
+    "noGestureProbe": {
+      "ctxStateAtCreation": "created: state=suspended sampleRate=48000",
+      "activationBefore": false,
+      "outcome": "rejected: oak: audio is locked (needs a user gesture)",
+      "ms": 1502,
+      "startedAfterFailedUnlock": false,
+      "ctxStateAfter": "suspended",
+      "activationAfter": false,
+      "evalsRun": 1,
+      "patternHapsAfterEvaluateFalse": 3,
+      "playButton": {
+        "x": 45.234375,
+        "y": 133.375
+      }
+    },
+    "rmsAfterClick": 0.1197878129773186,
+    "ctxState": "running",
+    "audioLog": [
+      "created: state=suspended sampleRate=48000",
+      "unlock: state before resume = suspended",
+      "unlock failed: oak: audio is locked (needs a user gesture)",
+      "unlock: state before resume = suspended",
+      "unlock: state after resume = running",
+      "unlock: initAudio done in 19ms, state = running"
+    ],
+    "audioContextsConstructed": 1,
+    "consoleErrors": []
+  },
+  "9b.unlock.keyboard": {
+    "mode": "dev",
+    "noGestureProbe": {
+      "ctxStateAtCreation": "created: state=suspended sampleRate=48000",
+      "activationBefore": false,
+      "outcome": "rejected: oak: audio is locked (needs a user gesture)",
+      "ms": 1502,
+      "startedAfterFailedUnlock": false,
+      "ctxStateAfter": "suspended",
+      "activationAfter": false,
+      "evalsRun": 1,
+      "patternHapsAfterEvaluateFalse": 3,
+      "playButton": {
+        "x": 45.234375,
+        "y": 133.375
+      }
+    },
+    "ctxState": "running",
+    "audioLog": [
+      "created: state=suspended sampleRate=48000",
+      "unlock: state before resume = suspended",
+      "unlock failed: oak: audio is locked (needs a user gesture)",
+      "unlock: state before resume = suspended",
+      "unlock: state after resume = running",
+      "unlock: initAudio done in 11ms, state = running"
+    ],
+    "rms": 0.09569437909584456,
+    "consoleErrors": []
+  }
+}

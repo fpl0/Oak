@@ -1,0 +1,27 @@
+{
+  "scenario": "D-list-slow",
+  "delaySoundsMs": 300,
+  "preload": "list",
+  "preloadReport": {
+    "warmed": 60,
+    "synths": 0,
+    "missing": [],
+    "ms": 354
+  },
+  "soundFileRequests": {
+    "beforePreload": 18,
+    "atStart": 18,
+    "afterStart": 0
+  },
+  "logsAfterStart": {
+    "total": 23,
+    "skipped": 0,
+    "loads": 0,
+    "samples": [],
+    "other": [
+      "[superdough] Deprecation warning: it seems your code path is setting 'node.onended = callback' instead of using the onceEnded helper"
+    ]
+  },
+  "firstCycleRms": 0.3864,
+  "external": []
+}

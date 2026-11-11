@@ -1,0 +1,71 @@
+{
+  "mode": "preview",
+  "sampleRate": 48000,
+  "phases": [
+    {
+      "name": "idle-before-mic",
+      "t": 0.3413333333333333,
+      "frames": 0
+    },
+    {
+      "name": "mic-session-1-closed",
+      "t": 1.376,
+      "frames": 91
+    },
+    {
+      "name": "idle-after-session-1",
+      "t": 1.776,
+      "frames": 91
+    },
+    {
+      "name": "mic-session-2-closed",
+      "t": 2.8053333333333335,
+      "frames": 182
+    },
+    {
+      "name": "idle-after-session-2",
+      "t": 3.2053333333333334,
+      "frames": 182
+    }
+  ],
+  "sessions": [
+    {
+      "openedAt": 0.37333333333333335,
+      "firstFrameAt": 0.416,
+      "medianHz": 440.0000791908281,
+      "n": 91,
+      "trackStateAfterStop": "ended"
+    },
+    {
+      "openedAt": 1.8026666666666666,
+      "firstFrameAt": 1.8453333333333333,
+      "medianHz": 440.0000791908281,
+      "n": 91,
+      "trackStateAfterStop": "ended"
+    }
+  ],
+  "stats": {
+    "type": "stats",
+    "sampleRate": 48000,
+    "blocks": 1200,
+    "emptyBlocks": 448,
+    "busyMs": 31,
+    "maxBlockMs": 1,
+    "maxAtBlock": 141,
+    "warmUpMs": 10,
+    "hist": [
+      721,
+      31,
+      0,
+      0
+    ],
+    "clock": "Date.now",
+    "globals": {
+      "self": "undefined",
+      "performance": "undefined",
+      "viteDefines": "undefined",
+      "process": "undefined"
+    }
+  },
+  "problems": []
+}

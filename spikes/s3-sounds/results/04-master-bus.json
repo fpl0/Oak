@@ -1,0 +1,68 @@
+{
+  "destinationGain": "GainNode",
+  "bus": {
+    "attachCount": 1,
+    "reduction": 0,
+    "trimGain": 0.8212965726852417,
+    "limiter": {
+      "threshold": -3,
+      "ratio": 20,
+      "channelCount": 2,
+      "channelCountMode": "clamped-max"
+    },
+    "tapTracks": 1
+  },
+  "recording": {
+    "size": 30590,
+    "type": "audio/webm;codecs=opus",
+    "decodedSeconds": 1.98,
+    "decodedChannels": 2,
+    "decodedRms": 0.12208182919202787
+  },
+  "whilePlaying": {
+    "preRms": 0.5557,
+    "prePeak": 1.262,
+    "postRms": 0.3952,
+    "postPeak": 0.823,
+    "gainDb": -2.46,
+    "reductionDb": -0.96
+  },
+  "quietNoTrim": {
+    "preRms": 0.0701,
+    "prePeak": 0.134,
+    "postRms": 0.0853,
+    "postPeak": 0.163,
+    "gainDb": 1.73,
+    "reductionDb": 0
+  },
+  "quietWithTrim": {
+    "preRms": 0.0657,
+    "prePeak": 0.113,
+    "postRms": 0.0657,
+    "postPeak": 0.113,
+    "gainDb": 0,
+    "reductionDb": 0
+  },
+  "hot": {
+    "preRms": 0.3329,
+    "prePeak": 1.066,
+    "postRms": 0.3011,
+    "postPeak": 0.807,
+    "gainDb": -1.12,
+    "reductionDb": -2.03
+  },
+  "reset": {
+    "before": 1,
+    "after": 2
+  },
+  "afterReset": {
+    "preRms": 0.2387,
+    "prePeak": 0.91,
+    "postRms": 0.2386,
+    "postPeak": 0.764,
+    "gainDb": 0.07,
+    "reductionDb": -0.04
+  },
+  "external": [],
+  "consoleErrors": []
+}

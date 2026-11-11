@@ -1,0 +1,14 @@
+import * as core from "@strudel/core";
+import * as mini from "@strudel/mini";
+import * as tonal from "@strudel/tonal";
+import * as tp from "@strudel/transpiler";
+const P = (core as any).Pattern.prototype;
+const vis = ["pianoroll","punchcard","spiral","pitchwheel","wordfall","scope","tscope","fscope","spectrum","color","colour","markcss","draw","onPaint","animate","piano","log","hush","p","q","d1","p1","cpm","bank","dict","voicing","swingBy","arrange","transpose","scaleTranspose","scale","late","nudge","room","lpf","orbit","slider"];
+await (core as any).evalScope(core, mini, tonal);
+for (const v of vis) console.log(v, typeof P[v], "_"+v, typeof P["_"+v], "global", typeof (globalThis as any)[v]);
+console.log("core exports", Object.keys(core).length, "mini", Object.keys(mini), "tonal", Object.keys(tonal), "transpiler", Object.keys(tp));
+console.log("globals of interest", ["setcps","setcpm","samples","hush","all","each","sliderWithID","repl","evaluate","evalScope","logger","register","Cyclist","SalatRepl","strudelScope","getTrigger","ref","slider","aliasBank","soundAlias","useRNG","arrange","mondo"].map(k=>k+":"+typeof (globalThis as any)[k]).join(" "));
+const F = (core as any).Fraction;
+const f = F(1,3);
+console.log(Object.keys(f), typeof f.n, f.toFraction(), f.valueOf(), String(f));
+console.log(typeof (globalThis as any).document, typeof CustomEvent, typeof ShadowRealm, typeof require, typeof (globalThis as any).require);

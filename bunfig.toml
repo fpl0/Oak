@@ -1,0 +1,6 @@
+[install]
+exact = true
+
+[test]
+timeout = 20000
+pathIgnorePatterns = ["spikes/**", "e2e/**", "**/*.pw.ts", "node_modules/**", "dist/**"]

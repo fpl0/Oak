@@ -1,0 +1,70 @@
+{
+  "boot1": {
+    "state": "running",
+    "sampleRate": 48000,
+    "maxChannelCount": 2,
+    "packVersion": "v1",
+    "controlled": true
+  },
+  "onlinePianoRms": 0.117,
+  "afterRuntimeCachingOnly": {
+    "soundsCached": 9,
+    "fromNetwork": 9
+  },
+  "packUrls": 231,
+  "precache": {
+    "added": 222,
+    "megabytes": 26.65,
+    "errors": [],
+    "soundsCached": 231
+  },
+  "afterPrecache": {
+    "soundsCached": 231,
+    "cache": "oak-sounds-v1"
+  },
+  "onlineResponses": 15,
+  "serverReachableFromNode": false,
+  "boot2": {
+    "state": "running",
+    "sampleRate": 48000,
+    "maxChannelCount": 2,
+    "packVersion": "v1",
+    "controlled": true
+  },
+  "offline": {
+    "piano": 0.1169,
+    "tr909": 0.3364,
+    "rhodes": 0.0891,
+    "upright": 0.147,
+    "crunch": 0.1616,
+    "linnDrum": 0.3532,
+    "linnDrumSpaces": 0.2849
+  },
+  "offlineResponses": {
+    "total": 34,
+    "allFromServiceWorker": true,
+    "statuses": [
+      200
+    ],
+    "shell": [
+      "/",
+      "/assets/index-PKy-RtCR.js",
+      "/assets/oak-audio-sL_xVWqM.js"
+    ],
+    "sounds": 31,
+    "sample": [
+      "/sounds/v1/piano/C3v8.mp3",
+      "/sounds/v1/piano/Ds3v8.mp3",
+      "/sounds/v1/piano/Fs3v8.mp3",
+      "/sounds/v1/piano/C4v8.mp3"
+    ]
+  },
+  "swDelta": {
+    "soundsFromCache": 26,
+    "soundsFromNetwork": 0,
+    "failed": 0
+  },
+  "evalErrors": [],
+  "pageErrors": [],
+  "external": []
+}

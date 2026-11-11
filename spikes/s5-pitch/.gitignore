@@ -1,0 +1,4 @@
+.vite-cache/
+.vite-cache-cold/
+dist/
+results/pw/

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Oak S4 — notation spike</title>
+    <style>
+      :root { --oak-fg: #1a1a1a; --oak-bg: #ffffff; --oak-hl: #d9480f; --oak-clicked: #1971c2; }
+      body { font: 14px/1.4 system-ui, sans-serif; margin: 16px; color: var(--oak-fg); background: var(--oak-bg); }
+      body.dark { --oak-fg: #e6e6e6; --oak-bg: #121212; --oak-hl: #ffa94d; --oak-clicked: #74c0fc; }
+      .staff-card { max-width: 720px; margin: 0 0 12px; }
+      .staff-card code { font-size: 12px; opacity: 0.8; }
+      /* abcjs writes fill="currentColor" as an ATTRIBUTE on each group, so plain CSS wins over it. */
+      .staff svg .oak-active { fill: var(--oak-hl); }
+      .staff svg .oak-clicked { fill: var(--oak-clicked); }
+      #status { font-family: ui-monospace, monospace; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <h1>Oak S4 — haps → NotationModel → ABC → abcjs</h1>
+    <p>
+      <button id="dark">toggle dark</button>
+      <button id="play">step fake clock</button>
+      <span id="status">loading…</span>
+    </p>
+    <div id="gallery"></div>
+    <h2>Grand staff + chord symbols (hand-written ABC)</h2>
+    <div class="staff-card"><div class="staff" id="grand"></div></div>
+    <div class="staff-card"><div class="staff" id="grand-jazz"></div></div>
+    <h2>Chord-symbol display probe</h2>
+    <div class="staff-card"><div class="staff" id="chords"></div></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

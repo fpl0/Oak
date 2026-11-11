@@ -1,0 +1,86 @@
+{
+  "mode": "dev",
+  "loader": "blob",
+  "numberOfOutputs": 0,
+  "sampleRate": 48000,
+  "requestedSampleRate": null,
+  "framesTotal": 322,
+  "messageRateHz": 93.75,
+  "expectedRateHz": 93.75,
+  "windowFrames": 94,
+  "voicedPct": 100,
+  "medianHz": 440.0001,
+  "medianCents": 0,
+  "minCents": -0.001,
+  "maxCents": 0.002,
+  "medianClarity": 1,
+  "medianRmsDb": -9.03,
+  "oscOutputRms": 0.0487,
+  "postDelayMs": {
+    "median": 0,
+    "p95": 0,
+    "max": 0
+  },
+  "hopMs": 10.667,
+  "messageGapMs": {
+    "median": 10.7,
+    "p95": 10.8,
+    "max": 10.8
+  },
+  "deliveryLagMs": {
+    "median": 0.13,
+    "p95": 0.2,
+    "max": 3.6
+  },
+  "baseLatencyMs": 5.33,
+  "outputLatencyMs": 28,
+  "addModuleMs": 98,
+  "worklet": {
+    "blocks": 1300,
+    "emptyBlocks": 0,
+    "clock": "Date.now",
+    "busyMs": 5,
+    "renderLoadPct": 0.144,
+    "maxBlockMs": 4,
+    "maxAtBlock": 16,
+    "warmUpMs": 0,
+    "findPitchUsInWorklet": 116.5,
+    "renderLoadPctFromBench": 1.09,
+    "histMs_0_1_2_3plus": [
+      1298,
+      1,
+      0,
+      1
+    ],
+    "globals": {
+      "self": "undefined",
+      "performance": "undefined",
+      "viteDefines": "undefined",
+      "process": "undefined"
+    }
+  },
+  "mainThreadFindPitchUs": 117,
+  "mainThreadColdCallsMs": [
+    4.3,
+    0.8,
+    0.6,
+    0.6,
+    0.6
+  ],
+  "trackSettings": {
+    "autoGainControl": false,
+    "channelCount": 2,
+    "deviceId": "default",
+    "echoCancellation": false,
+    "groupId": "c1c4e68ae914bd7f464f69081b31e64b0dbbaf7c764d51f03a00c44e666f1a5d",
+    "latency": 0.01,
+    "noiseSuppression": false,
+    "sampleRate": 44100,
+    "sampleSize": 16,
+    "voiceIsolation": false
+  },
+  "trackLabel": "Fake Default Audio Input",
+  "workletUrl": "blob:http://127.0.0.1:5185/b4b8a830-87e0-4578-a99d-a78a1d01e862",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/158.0.0.0 Safari/537.36",
+  "problems": []
+}

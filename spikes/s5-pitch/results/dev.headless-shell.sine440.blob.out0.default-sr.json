@@ -1,0 +1,86 @@
+{
+  "mode": "dev",
+  "loader": "blob",
+  "numberOfOutputs": 0,
+  "sampleRate": 48000,
+  "requestedSampleRate": null,
+  "framesTotal": 322,
+  "messageRateHz": 93.75,
+  "expectedRateHz": 93.75,
+  "windowFrames": 94,
+  "voicedPct": 100,
+  "medianHz": 440.0001,
+  "medianCents": 0,
+  "minCents": -0.001,
+  "maxCents": 0.002,
+  "medianClarity": 1,
+  "medianRmsDb": -9.03,
+  "oscOutputRms": 0.0489,
+  "postDelayMs": {
+    "median": 0,
+    "p95": 0,
+    "max": 0
+  },
+  "hopMs": 10.667,
+  "messageGapMs": {
+    "median": 10.7,
+    "p95": 10.7,
+    "max": 10.9
+  },
+  "deliveryLagMs": {
+    "median": 0.13,
+    "p95": 0.23,
+    "max": 3.97
+  },
+  "baseLatencyMs": 5.33,
+  "outputLatencyMs": 32,
+  "addModuleMs": 2.1,
+  "worklet": {
+    "blocks": 1300,
+    "emptyBlocks": 0,
+    "clock": "Date.now",
+    "busyMs": 40,
+    "renderLoadPct": 1.154,
+    "maxBlockMs": 4,
+    "maxAtBlock": 16,
+    "warmUpMs": 0,
+    "findPitchUsInWorklet": 116.5,
+    "renderLoadPctFromBench": 1.09,
+    "histMs_0_1_2_3plus": [
+      1263,
+      36,
+      0,
+      1
+    ],
+    "globals": {
+      "self": "undefined",
+      "performance": "undefined",
+      "viteDefines": "undefined",
+      "process": "undefined"
+    }
+  },
+  "mainThreadFindPitchUs": 116.7,
+  "mainThreadColdCallsMs": [
+    3.8,
+    0.6,
+    0.9,
+    0.7,
+    0.4
+  ],
+  "trackSettings": {
+    "autoGainControl": false,
+    "channelCount": 2,
+    "deviceId": "default",
+    "echoCancellation": false,
+    "groupId": "0ec369cb88cc71eae880f891d9576aa8bc2ffef4b4d5b2efb21f4d73143bbd3b",
+    "latency": 0.01,
+    "noiseSuppression": false,
+    "sampleRate": 44100,
+    "sampleSize": 16,
+    "voiceIsolation": false
+  },
+  "trackLabel": "Fake Default Audio Input",
+  "workletUrl": "blob:http://127.0.0.1:5185/d59d08cb-3714-4d4c-bd94-80800bb97de6",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/158.0.8127.18 Safari/537.36",
+  "problems": []
+}

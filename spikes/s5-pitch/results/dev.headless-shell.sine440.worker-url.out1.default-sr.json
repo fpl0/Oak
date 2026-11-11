@@ -1,0 +1,87 @@
+{
+  "mode": "dev",
+  "loader": "worker-url",
+  "numberOfOutputs": 1,
+  "sampleRate": 48000,
+  "requestedSampleRate": null,
+  "framesTotal": 325,
+  "messageRateHz": 93.75,
+  "expectedRateHz": 93.75,
+  "windowFrames": 94,
+  "voicedPct": 100,
+  "medianHz": 440.0001,
+  "medianCents": 0,
+  "minCents": -0.001,
+  "maxCents": 0.002,
+  "medianClarity": 1,
+  "medianRmsDb": -9.03,
+  "oscOutputRms": 0.0487,
+  "postDelayMs": {
+    "median": 0,
+    "p95": 0,
+    "max": 0
+  },
+  "hopMs": 10.667,
+  "messageGapMs": {
+    "median": 10.7,
+    "p95": 10.8,
+    "max": 10.8
+  },
+  "deliveryLagMs": {
+    "median": 0.1,
+    "p95": 0.2,
+    "max": 3.9
+  },
+  "baseLatencyMs": 5.33,
+  "outputLatencyMs": 32,
+  "addModuleMs": 5.3,
+  "worklet": {
+    "blocks": 1312,
+    "emptyBlocks": 0,
+    "clock": "Date.now",
+    "busyMs": 4,
+    "renderLoadPct": 0.114,
+    "maxBlockMs": 4,
+    "maxAtBlock": 16,
+    "warmUpMs": 0,
+    "findPitchUsInWorklet": 115.5,
+    "renderLoadPctFromBench": 1.08,
+    "histMs_0_1_2_3plus": [
+      1311,
+      0,
+      0,
+      1
+    ],
+    "globals": {
+      "self": "undefined",
+      "performance": "undefined",
+      "viteDefines": "undefined",
+      "process": "undefined"
+    }
+  },
+  "mainThreadFindPitchUs": 116.4,
+  "mainThreadColdCallsMs": [
+    3.8,
+    0.8,
+    0.7,
+    0.8,
+    0.4
+  ],
+  "trackSettings": {
+    "autoGainControl": false,
+    "channelCount": 2,
+    "deviceId": "default",
+    "echoCancellation": false,
+    "groupId": "b5f8413f9743c175c8d4d86b9bb3fdde049de6225b320a223e9c052283f32dca",
+    "latency": 0.01,
+    "noiseSuppression": false,
+    "sampleRate": 44100,
+    "sampleSize": 16,
+    "voiceIsolation": false
+  },
+  "trackLabel": "Fake Default Audio Input",
+  "workletUrl": "/src/pitch.worklet.ts?worker_file&type=module",
+  "workletHead": "import \"/@fs/Users/fpl0/Code/Oak/node_modules/.bun/vite@8.3.7+47d058d098868c7b/node_modules/vite/dist/client/env.mjs\"\n;\n/**\n* S5 spike — AudioWorkletProcessor '",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/158.0.8127.18 Safari/537.36",
+  "problems": []
+}

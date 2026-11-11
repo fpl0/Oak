@@ -1,0 +1,22 @@
+{
+  "scenario": "A-none-natural",
+  "delaySoundsMs": 0,
+  "preload": "none",
+  "preloadReport": null,
+  "soundFileRequests": {
+    "beforePreload": 5,
+    "atStart": 10,
+    "afterStart": 4
+  },
+  "logsAfterStart": {
+    "total": 37,
+    "skipped": 0,
+    "loads": 14,
+    "samples": [],
+    "other": [
+      "[superdough] Deprecation warning: it seems your code path is setting 'node.onended = callback' instead of using the onceEnded helper"
+    ]
+  },
+  "firstCycleRms": 0.3864,
+  "external": []
+}

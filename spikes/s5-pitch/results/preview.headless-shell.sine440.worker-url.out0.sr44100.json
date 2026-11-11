@@ -1,0 +1,87 @@
+{
+  "mode": "preview",
+  "loader": "worker-url",
+  "numberOfOutputs": 0,
+  "sampleRate": 44100,
+  "requestedSampleRate": 44100,
+  "framesTotal": 295,
+  "messageRateHz": 86.133,
+  "expectedRateHz": 86.133,
+  "windowFrames": 87,
+  "voicedPct": 100,
+  "medianHz": 440.0003,
+  "medianCents": 0.001,
+  "minCents": -0.006,
+  "maxCents": 0.008,
+  "medianClarity": 1,
+  "medianRmsDb": -9.03,
+  "oscOutputRms": 0.0489,
+  "postDelayMs": {
+    "median": 0,
+    "p95": 2.9,
+    "max": 2.9
+  },
+  "hopMs": 11.61,
+  "messageGapMs": {
+    "median": 10.7,
+    "p95": 16,
+    "max": 21.4
+  },
+  "deliveryLagMs": {
+    "median": 5.08,
+    "p95": 8.78,
+    "max": 10.05
+  },
+  "baseLatencyMs": 5.35,
+  "outputLatencyMs": 32,
+  "addModuleMs": 4.5,
+  "worklet": {
+    "blocks": 1194,
+    "emptyBlocks": 0,
+    "clock": "Date.now",
+    "busyMs": 102,
+    "renderLoadPct": 2.943,
+    "maxBlockMs": 4,
+    "maxAtBlock": 16,
+    "warmUpMs": 0,
+    "findPitchUsInWorklet": 116,
+    "renderLoadPctFromBench": 1,
+    "histMs_0_1_2_3plus": [
+      1095,
+      98,
+      0,
+      1
+    ],
+    "globals": {
+      "self": "undefined",
+      "performance": "undefined",
+      "viteDefines": "undefined",
+      "process": "undefined"
+    }
+  },
+  "mainThreadFindPitchUs": 117.1,
+  "mainThreadColdCallsMs": [
+    4.3,
+    0.9,
+    0.8,
+    0.6,
+    0.5
+  ],
+  "trackSettings": {
+    "autoGainControl": false,
+    "channelCount": 2,
+    "deviceId": "default",
+    "echoCancellation": false,
+    "groupId": "b06abccb866976d6608b14ff29e539e689c21aad256a99b1874fcdac1aa44052",
+    "latency": 0.01,
+    "noiseSuppression": false,
+    "sampleRate": 44100,
+    "sampleSize": 16,
+    "voiceIsolation": false
+  },
+  "trackLabel": "Fake Default Audio Input",
+  "workletUrl": "/assets/pitch.worklet-CiabVPbq.js",
+  "workletHead": "(function(){var e=Object.create,t=Object.defineProperty,n=Object.getOwnPropertyDescriptor,r=Object.getOwnPropertyNames,i=Object.getPrototypeOf,a=Object.prototyp",
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/158.0.8127.18 Safari/537.36",
+  "problems": []
+}

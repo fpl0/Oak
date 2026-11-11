@@ -1,0 +1,166 @@
+{
+  "boot": {
+    "state": "running",
+    "sampleRate": 48000,
+    "maxChannelCount": 2,
+    "packVersion": "v1",
+    "controlled": false
+  },
+  "exportsFound": {
+    "registerSynthSounds": "function",
+    "registerZZFXSounds": "function",
+    "aliasBank": "function",
+    "soundAlias": "function",
+    "registerSound": "function",
+    "loadBuffer": "function",
+    "getSampleBuffer": "function",
+    "getSampleBufferSource": "function",
+    "getLoadedBuffer": "function",
+    "getSuperdoughAudioController": "function",
+    "setSuperdoughAudioController": "function",
+    "SuperdoughAudioController": "undefined",
+    "renderPatternAudio": "function",
+    "registerSoundfonts": "function",
+    "setSoundfontUrl": "function",
+    "getFontBufferSource": "function",
+    "getFontPitch": "undefined",
+    "destinationGain": "GainNode"
+  },
+  "total": 178,
+  "byType": {
+    "synth": 25,
+    "input": 1,
+    "soundfont": 27,
+    "sample": 125
+  },
+  "gm": [
+    "gm_piano",
+    "gm_epiano1",
+    "gm_vibraphone",
+    "gm_drawbar_organ",
+    "gm_acoustic_guitar_steel",
+    "gm_electric_guitar_jazz",
+    "gm_electric_guitar_clean",
+    "gm_overdriven_guitar",
+    "gm_acoustic_bass",
+    "gm_electric_bass_finger",
+    "gm_electric_bass_pick",
+    "gm_string_ensemble_1",
+    "gm_choir_aahs",
+    "gm_trumpet",
+    "gm_brass_section",
+    "gm_tenor_sax",
+    "gm_flute"
+  ],
+  "oakAliases": [
+    "rhodes",
+    "upright",
+    "ebass",
+    "organ",
+    "jazzgtr",
+    "cleangtr",
+    "crunch",
+    "strings",
+    "horns",
+    "tenor"
+  ],
+  "bankAliasSamples": 48,
+  "probe": {
+    "piano": {
+      "type": "sample",
+      "notes": 29
+    },
+    "gm_piano": {
+      "type": "soundfont",
+      "fonts": [
+        "0000_JCLive_sf2_file"
+      ]
+    },
+    "gm_epiano1": {
+      "type": "soundfont",
+      "fonts": [
+        "0040_JCLive_sf2_file",
+        "0040_FluidR3_GM_sf2_file"
+      ]
+    },
+    "gm_violin": null,
+    "rhodes": {
+      "type": "soundfont",
+      "fonts": [
+        "0040_FluidR3_GM_sf2_file"
+      ],
+      "tag": "oak"
+    },
+    "crunch": {
+      "type": "soundfont",
+      "fonts": [
+        "0290_LesPaul_sf2_file"
+      ],
+      "tag": "oak"
+    },
+    "RolandTR909_bd": {
+      "type": "sample",
+      "samples": [
+        "/sounds/v1/tidal-drum-machines/machines/RolandTR909/rolandtr909-bd/Bassdrum-01.wav",
+        "/sounds/v1/tidal-drum-machines/machines/RolandTR909/rolandtr909-bd/Bassdrum-02.wav",
+        "/sounds/v1/tidal-drum-machines/machines/RolandTR909/rolandtr909-bd/Bassdrum-03.wav",
+        "/sounds/v1/tidal-drum-machines/machines/RolandTR909/rolandtr909-bd/Bassdrum-04.wav"
+      ],
+      "tag": "drum-machines"
+    },
+    "tr909_bd": {
+      "type": "sample",
+      "samples": [
+        "/sounds/v1/tidal-drum-machines/machines/RolandTR909/rolandtr909-bd/Bassdrum-01.wav",
+        "/sounds/v1/tidal-drum-machines/machines/RolandTR909/rolandtr909-bd/Bassdrum-02.wav",
+        "/sounds/v1/tidal-drum-machines/machines/RolandTR909/rolandtr909-bd/Bassdrum-03.wav",
+        "/sounds/v1/tidal-drum-machines/machines/RolandTR909/rolandtr909-bd/Bassdrum-04.wav"
+      ],
+      "tag": "drum-machines"
+    },
+    "linn_tb": {
+      "type": "sample",
+      "samples": [
+        "/sounds/v1/tidal-drum-machines/machines/AkaiLinn/akailinn-tb/Tambourin.wav"
+      ],
+      "tag": "drum-machines"
+    },
+    "tr808_sd": {
+      "type": "sample",
+      "samples": [
+        "/sounds/v1/tidal-drum-machines/machines/RolandTR808/rolandtr808-sd/SD0000.WAV",
+        "/sounds/v1/tidal-drum-machines/machines/RolandTR808/rolandtr808-sd/SD0010.WAV",
+        "/sounds/v1/tidal-drum-machines/machines/RolandTR808/rolandtr808-sd/SD0025.WAV",
+        "/sounds/v1/tidal-drum-machines/machines/RolandTR808/rolandtr808-sd/SD0050.WAV"
+      ],
+      "tag": "drum-machines"
+    },
+    "bd": {
+      "type": "sample",
+      "samples": [
+        "/sounds/v1/uzu-drumkit/bd/10_bd_switchangel.wav",
+        "/sounds/v1/uzu-drumkit/bd/11_bd_mot4i.wav",
+        "/sounds/v1/uzu-drumkit/bd/12_bd_mot4i.wav",
+        "/sounds/v1/uzu-drumkit/bd/13_bd_mot4i.wav",
+        "/sounds/v1/uzu-drumkit/bd/14_bd_switchangel.wav",
+        "/sounds/v1/uzu-drumkit/bd/15_bd_switchangel.wav",
+        "/sounds/v1/uzu-drumkit/bd/16_bd_switchangel.wav",
+        "/sounds/v1/uzu-drumkit/bd/17_bd_switchangel.wav"
+      ]
+    },
+    "_base": null
+  },
+  "junkBaseFromStringSamples": [
+    "/sounds/v1/piano//sounds/v1/piano/"
+  ],
+  "soundRequestsDuringPrebake": [
+    "/sounds/v1/manifest.json",
+    "/sounds/v1/piano.json",
+    "/sounds/v1/uzu-drumkit.json",
+    "/sounds/v1/tidal-drum-machines.json",
+    "/sounds/v1/tidal-drum-machines-alias.json",
+    "/sounds/v1/piano.json"
+  ],
+  "external": [],
+  "consoleErrors": []
+}
