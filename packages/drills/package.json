@@ -1,0 +1,10 @@
+{
+  "name": "@oak/drills",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Drill engine: generators, family runtime, staircase, trial grading, AudioPlan. Isomorphic.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

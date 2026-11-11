@@ -1,0 +1,15 @@
+{
+  "name": "@oak/grader",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "The shared headless grader: Strudel realm, .p collector, normalization, lint, matchers, rubric rules, worker protocol and hosts. Isomorphic core; hosts in *.dom.ts / *.bun.ts.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./host/browser": "./src/host/browser.dom.ts",
+    "./host/bun": "./src/host/bun.bun.ts",
+    "./worker": "./src/worker.ts",
+    "./proc": "./src/proc.bun.ts",
+    "./testing": "./src/testing.ts"
+  }
+}

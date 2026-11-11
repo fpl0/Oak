@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "lib": ["es2023", "dom", "dom.iterable", "dom.asynciterable"], "types": ["bun"] },
+  "include": ["src", "../../types/strudel.d.ts", "../../types/vite-worker-url.d.ts"],
+  "exclude": ["**/*.worklet.ts", "**/*.pw.ts"]
+}

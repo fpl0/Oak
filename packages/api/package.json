@@ -1,0 +1,10 @@
+{
+  "name": "@oak/api",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Oak's REST contract (zod), shared DTOs, typed fetch client and tutor SSE event types. Isomorphic.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

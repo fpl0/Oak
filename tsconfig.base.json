@@ -3,6 +3,7 @@
     "target": "es2022",
     "module": "esnext",
     "moduleResolution": "bundler",
+    "lib": ["es2023"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
@@ -10,10 +11,15 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "isolatedModules": true,
+    "resolveJsonModule": true,
     "jsx": "react-jsx",
     "skipLibCheck": true,
     "allowJs": true,
-    "types": []
+    "types": [],
+    "paths": {
+      "@content/*": ["./content/*"],
+      "@app/*": ["./app/src/*"]
+    }
   },
   "exclude": ["node_modules", "dist", "spikes"]
 }

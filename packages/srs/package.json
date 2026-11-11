@@ -1,0 +1,10 @@
+{
+  "name": "@oak/srs",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "ts-fsrs 6 wrapper (FSRS-7), grade map, review-load governor, warm-up planner, constants of contracts section 7. Isomorphic.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

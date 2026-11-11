@@ -1,0 +1,10 @@
+{
+  "name": "@oak/pitch",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Pitch detection (pitchy), tracking, segmentation and the one sung-note and tap graders. Isomorphic.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

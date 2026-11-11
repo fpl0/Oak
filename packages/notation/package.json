@@ -1,0 +1,10 @@
+{
+  "name": "@oak/notation",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "NotationModel pipeline: quantizer, speller, ABC emitter with stable note IDs. Isomorphic.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

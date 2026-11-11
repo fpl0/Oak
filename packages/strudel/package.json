@@ -1,0 +1,10 @@
+{
+  "name": "@oak/strudel",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "OakStrudel adapter: the only StrudelMirror construction site, transport, prebake, sounds, preload, master bus, recorder, CM6 extensions. Browser only.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

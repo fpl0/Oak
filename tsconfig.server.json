@@ -1,0 +1,37 @@
+{
+  // Bun project: the server, scripts, tests, content and every non-browser package.
+  // Excluded by file-name convention: DOM-only files (*.dom.ts, *.dom.tsx), AudioWorklet code (*.worklet.ts),
+  // Playwright specs (*.pw.ts) and the two browser-only packages. server/src/tutor is a separate session's
+  // folder with its own tsconfig (server/src/tutor/tsconfig.json) and is checked there.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["es2023"],
+    "types": ["bun"]
+  },
+  "include": [
+    "server/src",
+    "scripts",
+    "tests",
+    "content",
+    "packages/api/src",
+    "packages/content-kit/src",
+    "packages/theory/src",
+    "packages/grader/src",
+    "packages/notation/src",
+    "packages/pitch/src",
+    "packages/drills/src",
+    "packages/srs/src",
+    "types/strudel.d.ts",
+    "types/abcjs-ext.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "spikes",
+    "server/src/tutor",
+    "**/*.dom.ts",
+    "**/*.dom.tsx",
+    "**/*.worklet.ts",
+    "**/*.pw.ts"
+  ]
+}

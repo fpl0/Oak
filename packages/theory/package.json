@@ -1,0 +1,10 @@
+{
+  "name": "@oak/theory",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Music theory for Oak: tonal 6.5.1 behind normalization, meters, degrees, chord spelling table, Roman numerals, schemas. Isomorphic.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

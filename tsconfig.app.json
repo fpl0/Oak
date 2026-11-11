@@ -1,0 +1,31 @@
+{
+  // Browser project: the app, every package (isomorphic ones prove they need no Bun API here) and content.
+  // Excluded by file-name convention: Bun-only hosts (*.bun.ts), bun tests (*.test.ts), Playwright specs
+  // (*.pw.ts) and AudioWorklet-scope code (*.worklet.ts, checked by tsconfig.worklet.json).
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["es2023", "dom", "dom.iterable", "dom.asynciterable", "webworker.importscripts"],
+    "types": ["vite/client"]
+  },
+  "include": [
+    "app/src",
+    "app/vite.config.ts",
+    "packages/*/src",
+    "content",
+    "types/strudel.d.ts",
+    "types/abcjs-ext.d.ts",
+    "types/signalsmith-stretch.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "spikes",
+    "**/*.bun.ts",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.pw.ts",
+    "**/*.worklet.ts",
+    "content/validate",
+    "content/.generated/tutor"
+  ]
+}

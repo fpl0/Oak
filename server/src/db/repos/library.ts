@@ -1,0 +1,588 @@
+// sketches, sketch_versions, album_tracks, album_track_versions, audio_files, transcriptions,
+// transcription_versions.
+import type {
+  AlbumTrack,
+  AlbumTrackVersion,
+  AudioFile,
+  Sketch,
+  SketchVersion,
+  Transcription,
+} from "@oak/api";
+import type { GradeResult } from "@oak/content-kit";
+import { all, bool, type Db, fromJson, get, int, run, toJson, toJsonOrNull } from "../index.ts";
+
+const NO_FLAGS = { lockedTools: [] as string[], previewTools: [] as string[] };
+
+// --- sketches -----------------------------------------------------------------------------------
+
+interface SketchRow {
+  id: string;
+  title: string;
+  origin_kind: string;
+  origin_id: string | null;
+  current_version: number;
+  tags_json: string;
+  archived: number;
+  listening_comment: string | null;
+  created_at: string;
+  updated_at: string;
+}
+const toSketch = (r: SketchRow): Sketch => ({
+  id: r.id,
+  title: r.title,
+  originKind: r.origin_kind as Sketch["originKind"],
+  originId: r.origin_id,
+  currentVersion: r.current_version,
+  tags: fromJson<string[]>(r.tags_json, []),
+  archived: bool(r.archived),
+  listeningNote: r.listening_comment,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+});
+interface SketchVersionRow {
+  sketch_id: string;
+  version: number;
+  code: string;
+  bpm: number | null;
+  meter: string | null;
+  key: string | null;
+  analysis_json: string | null;
+  note: string | null;
+  tutor_assisted: number;
+  band_json: string | null;
+  flags_json: string | null;
+  created_at: string;
+}
+const toSketchVersion = (r: SketchVersionRow): SketchVersion => ({
+  sketchId: r.sketch_id,
+  version: r.version,
+  code: r.code,
+  bpm: r.bpm,
+  meter: r.meter as SketchVersion["meter"],
+  key: fromJson<SketchVersion["key"]>(r.key, null),
+  analysis: fromJson<SketchVersion["analysis"]>(r.analysis_json, null),
+  note: r.note,
+  tutorAssisted: bool(r.tutor_assisted),
+  band: fromJson<SketchVersion["band"]>(r.band_json, null),
+  flags: fromJson<SketchVersion["flags"]>(r.flags_json, NO_FLAGS),
+  createdAt: r.created_at,
+});
+
+export class SketchesRepo {
+  constructor(private readonly db: Db) {}
+  list(filter: { origin?: string; archived?: boolean } = {}): Sketch[] {
+    const where: string[] = [];
+    const params: (string | number)[] = [];
+    if (filter.origin !== undefined) {
+      where.push("origin_kind = ?");
+      params.push(filter.origin);
+    }
+    if (filter.archived !== undefined) {
+      where.push("archived = ?");
+      params.push(int(filter.archived));
+    }
+    return all<SketchRow>(
+      this.db,
+      `SELECT * FROM sketches ${where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY updated_at DESC, id`,
+      ...params,
+    ).map(toSketch);
+  }
+  get(id: string): Sketch | null {
+    const row = get<SketchRow>(this.db, "SELECT * FROM sketches WHERE id = ?", id);
+    return row === null ? null : toSketch(row);
+  }
+  versions(id: string): SketchVersion[] {
+    return all<SketchVersionRow>(
+      this.db,
+      "SELECT * FROM sketch_versions WHERE sketch_id = ? ORDER BY version",
+      id,
+    ).map(toSketchVersion);
+  }
+  version(id: string, version: number): SketchVersion | null {
+    const row = get<SketchVersionRow>(
+      this.db,
+      "SELECT * FROM sketch_versions WHERE sketch_id = ? AND version = ?",
+      id,
+      version,
+    );
+    return row === null ? null : toSketchVersion(row);
+  }
+  insert(s: Sketch): void {
+    run(
+      this.db,
+      `INSERT INTO sketches (id, title, origin_kind, origin_id, current_version, tags_json, archived, listening_comment, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      s.id,
+      s.title,
+      s.originKind,
+      s.originId,
+      s.currentVersion,
+      toJson(s.tags),
+      int(s.archived),
+      s.listeningNote,
+      s.createdAt,
+      s.updatedAt,
+    );
+  }
+  insertVersion(v: SketchVersion): void {
+    run(
+      this.db,
+      `INSERT INTO sketch_versions (sketch_id, version, code, bpm, meter, key, analysis_json, note, tutor_assisted, band_json, flags_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      v.sketchId,
+      v.version,
+      v.code,
+      v.bpm,
+      v.meter,
+      toJsonOrNull(v.key),
+      toJsonOrNull(v.analysis),
+      v.note,
+      int(v.tutorAssisted),
+      toJsonOrNull(v.band),
+      toJson(v.flags),
+      v.createdAt,
+    );
+    run(
+      this.db,
+      "UPDATE sketches SET current_version = ?, updated_at = ? WHERE id = ?",
+      v.version,
+      v.createdAt,
+      v.sketchId,
+    );
+  }
+  patch(
+    id: string,
+    patch: { title?: string; tags?: string[]; archived?: boolean; listeningNote?: string | null },
+    at: string,
+  ): void {
+    if (patch.title !== undefined) run(this.db, "UPDATE sketches SET title = ? WHERE id = ?", patch.title, id);
+    if (patch.tags !== undefined) run(this.db, "UPDATE sketches SET tags_json = ? WHERE id = ?", toJson(patch.tags), id);
+    if (patch.archived !== undefined)
+      run(this.db, "UPDATE sketches SET archived = ? WHERE id = ?", int(patch.archived), id);
+    if (patch.listeningNote !== undefined)
+      run(this.db, "UPDATE sketches SET listening_comment = ? WHERE id = ?", patch.listeningNote, id);
+    run(this.db, "UPDATE sketches SET updated_at = ? WHERE id = ?", at, id);
+  }
+  delete(id: string): boolean {
+    return run(this.db, "DELETE FROM sketches WHERE id = ?", id).changes > 0;
+  }
+  savedSince(at: string): string[] {
+    return all<{ sketch_id: string }>(
+      this.db,
+      "SELECT DISTINCT sketch_id FROM sketch_versions WHERE created_at >= ? ORDER BY created_at",
+      at,
+    ).map((r) => r.sketch_id);
+  }
+  latest(): Sketch | null {
+    const row = get<SketchRow>(this.db, "SELECT * FROM sketches WHERE archived = 0 ORDER BY updated_at DESC LIMIT 1");
+    return row === null ? null : toSketch(row);
+  }
+}
+
+// --- album --------------------------------------------------------------------------------------
+
+interface TrackRow {
+  id: string;
+  capstone_id: string | null;
+  sketch_id: string | null;
+  side: string;
+  track_no: number;
+  title: string;
+  flavour: string | null;
+  current_version: number;
+  cover_seed: string;
+  created_at: string;
+}
+const toTrack = (r: TrackRow): AlbumTrack => ({
+  id: r.id,
+  capstoneId: r.capstone_id as AlbumTrack["capstoneId"],
+  sketchId: r.sketch_id,
+  side: r.side as AlbumTrack["side"],
+  trackNo: r.track_no,
+  title: r.title,
+  flavour: r.flavour as AlbumTrack["flavour"],
+  currentVersion: r.current_version,
+  coverSeed: r.cover_seed,
+  createdAt: r.created_at,
+});
+interface TrackVersionRow {
+  track_id: string;
+  version: number;
+  sketch_id: string;
+  sketch_version: number;
+  audio_path: string | null;
+  audio_mime: string | null;
+  duration_s: number | null;
+  liner_notes_md: string;
+  theory_tags_json: string;
+  review_json: string | null;
+  tutor_assisted: number;
+  attribution: string | null;
+  band_json: string | null;
+  flags_json: string | null;
+  created_at: string;
+}
+const toTrackVersion = (r: TrackVersionRow): AlbumTrackVersion => ({
+  trackId: r.track_id,
+  version: r.version,
+  sketchId: r.sketch_id,
+  sketchVersion: r.sketch_version,
+  hasAudio: r.audio_path !== null,
+  audioMime: r.audio_mime,
+  durationS: r.duration_s,
+  linerNotesMd: r.liner_notes_md,
+  theoryTags: fromJson<string[]>(r.theory_tags_json, []),
+  review: fromJson<unknown>(r.review_json, null),
+  tutorAssisted: bool(r.tutor_assisted),
+  attribution: r.attribution,
+  band: fromJson<AlbumTrackVersion["band"]>(r.band_json, null),
+  flags: fromJson<AlbumTrackVersion["flags"]>(r.flags_json, NO_FLAGS),
+  createdAt: r.created_at,
+});
+
+export class AlbumRepo {
+  constructor(private readonly db: Db) {}
+  tracks(): AlbumTrack[] {
+    return all<TrackRow>(
+      this.db,
+      "SELECT * FROM album_tracks ORDER BY CASE side WHEN 'A' THEN 0 WHEN 'B' THEN 1 ELSE 2 END, track_no, created_at",
+    ).map(toTrack);
+  }
+  track(id: string): AlbumTrack | null {
+    const row = get<TrackRow>(this.db, "SELECT * FROM album_tracks WHERE id = ?", id);
+    return row === null ? null : toTrack(row);
+  }
+  trackOfCapstone(capstoneId: string): AlbumTrack | null {
+    const row = get<TrackRow>(this.db, "SELECT * FROM album_tracks WHERE capstone_id = ?", capstoneId);
+    return row === null ? null : toTrack(row);
+  }
+  nextTrackNo(side: string): number {
+    return Number(
+      get<{ n: number }>(this.db, "SELECT COALESCE(MAX(track_no), 0) + 1 AS n FROM album_tracks WHERE side = ?", side)
+        ?.n ?? 1,
+    );
+  }
+  insertTrack(t: AlbumTrack): void {
+    run(
+      this.db,
+      `INSERT INTO album_tracks (id, capstone_id, sketch_id, side, track_no, title, flavour, current_version, cover_seed, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      t.id,
+      t.capstoneId,
+      t.sketchId,
+      t.side,
+      t.trackNo,
+      t.title,
+      t.flavour,
+      t.currentVersion,
+      t.coverSeed,
+      t.createdAt,
+    );
+  }
+  versions(trackId: string): AlbumTrackVersion[] {
+    return all<TrackVersionRow>(
+      this.db,
+      "SELECT * FROM album_track_versions WHERE track_id = ? ORDER BY version",
+      trackId,
+    ).map(toTrackVersion);
+  }
+  version(trackId: string, version: number): AlbumTrackVersion | null {
+    const row = get<TrackVersionRow>(
+      this.db,
+      "SELECT * FROM album_track_versions WHERE track_id = ? AND version = ?",
+      trackId,
+      version,
+    );
+    return row === null ? null : toTrackVersion(row);
+  }
+  audioOf(trackId: string, version: number): { path: string; mime: string } | null {
+    const row = get<{ audio_path: string | null; audio_mime: string | null }>(
+      this.db,
+      "SELECT audio_path, audio_mime FROM album_track_versions WHERE track_id = ? AND version = ?",
+      trackId,
+      version,
+    );
+    return row === null || row.audio_path === null
+      ? null
+      : { path: row.audio_path, mime: row.audio_mime ?? "application/octet-stream" };
+  }
+  audioPaths(trackId?: string): { trackId: string; version: number; path: string; mime: string | null }[] {
+    return all<{ track_id: string; version: number; audio_path: string; audio_mime: string | null }>(
+      this.db,
+      `SELECT track_id, version, audio_path, audio_mime FROM album_track_versions
+       WHERE audio_path IS NOT NULL ${trackId === undefined ? "" : "AND track_id = ?"} ORDER BY track_id, version`,
+      ...(trackId === undefined ? [] : [trackId]),
+    ).map((r) => ({ trackId: r.track_id, version: r.version, path: r.audio_path, mime: r.audio_mime }));
+  }
+  insertVersion(v: AlbumTrackVersion): void {
+    run(
+      this.db,
+      `INSERT INTO album_track_versions (track_id, version, sketch_id, sketch_version, liner_notes_md, theory_tags_json,
+         review_json, tutor_assisted, attribution, band_json, flags_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      v.trackId,
+      v.version,
+      v.sketchId,
+      v.sketchVersion,
+      v.linerNotesMd,
+      toJson(v.theoryTags),
+      toJsonOrNull(v.review),
+      int(v.tutorAssisted),
+      v.attribution,
+      toJsonOrNull(v.band),
+      toJson(v.flags),
+      v.createdAt,
+    );
+    run(this.db, "UPDATE album_tracks SET current_version = ? WHERE id = ?", v.version, v.trackId);
+  }
+  setAudio(trackId: string, version: number, path: string, mime: string, durationS: number | null): void {
+    run(
+      this.db,
+      "UPDATE album_track_versions SET audio_path = ?, audio_mime = ?, duration_s = COALESCE(?, duration_s) WHERE track_id = ? AND version = ?",
+      path,
+      mime,
+      durationS,
+      trackId,
+      version,
+    );
+  }
+  setReview(trackId: string, version: number, review: unknown): void {
+    run(
+      this.db,
+      "UPDATE album_track_versions SET review_json = ? WHERE track_id = ? AND version = ?",
+      toJsonOrNull(review),
+      trackId,
+      version,
+    );
+  }
+  deleteTrack(id: string): boolean {
+    return run(this.db, "DELETE FROM album_tracks WHERE id = ?", id).changes > 0;
+  }
+}
+
+// --- audio files --------------------------------------------------------------------------------
+
+interface AudioRow {
+  id: string;
+  original_name: string;
+  mime: string;
+  bytes: number;
+  duration_s: number | null;
+  sample_rate: number | null;
+  channels: number | null;
+  stored_path: string;
+  peaks_path: string | null;
+  created_at: string;
+}
+export interface StoredAudio extends AudioFile {
+  storedPath: string;
+  peaksPath: string | null;
+}
+const toAudio = (r: AudioRow): StoredAudio => ({
+  id: r.id,
+  originalName: r.original_name,
+  mime: r.mime,
+  bytes: r.bytes,
+  durationS: r.duration_s,
+  sampleRate: r.sample_rate,
+  channels: r.channels,
+  hasPeaks: r.peaks_path !== null,
+  createdAt: r.created_at,
+  storedPath: r.stored_path,
+  peaksPath: r.peaks_path,
+});
+
+export class AudioRepo {
+  constructor(private readonly db: Db) {}
+  get(id: string): StoredAudio | null {
+    const row = get<AudioRow>(this.db, "SELECT * FROM audio_files WHERE id = ?", id);
+    return row === null ? null : toAudio(row);
+  }
+  list(): StoredAudio[] {
+    return all<AudioRow>(this.db, "SELECT * FROM audio_files ORDER BY created_at, id").map(toAudio);
+  }
+  insert(a: StoredAudio): void {
+    run(
+      this.db,
+      `INSERT OR IGNORE INTO audio_files (id, original_name, mime, bytes, duration_s, sample_rate, channels, stored_path, peaks_path, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      a.id,
+      a.originalName,
+      a.mime,
+      a.bytes,
+      a.durationS,
+      a.sampleRate,
+      a.channels,
+      a.storedPath,
+      a.peaksPath,
+      a.createdAt,
+    );
+  }
+  setPeaks(id: string, peaksPath: string): void {
+    run(this.db, "UPDATE audio_files SET peaks_path = ? WHERE id = ?", peaksPath, id);
+  }
+  delete(id: string): boolean {
+    return run(this.db, "DELETE FROM audio_files WHERE id = ?", id).changes > 0;
+  }
+}
+
+// --- transcriptions -----------------------------------------------------------------------------
+
+interface TrRow {
+  id: string;
+  source_kind: string;
+  player: string;
+  audio_id: string | null;
+  song_id: string | null;
+  title: string;
+  artist: string | null;
+  key: string | null;
+  bpm: number | null;
+  meter: string | null;
+  downbeat_s: number | null;
+  fine_tune_cents: number;
+  ladder_level: number | null;
+  realism: number | null;
+  hidden_code: string | null;
+  regions_json: string;
+  checklist_json: string;
+  self_score: number | null;
+  current_version: number;
+  status: string;
+  review_json: string | null;
+  created_at: string;
+  updated_at: string;
+}
+export interface StoredTranscription extends Transcription {
+  /** Never sent to the browser (contracts §11.11). */
+  hiddenCode: string | null;
+}
+const toTranscription = (r: TrRow): StoredTranscription => ({
+  id: r.id,
+  sourceKind: r.source_kind as Transcription["sourceKind"],
+  player: r.player as Transcription["player"],
+  audioId: r.audio_id,
+  songId: r.song_id,
+  title: r.title,
+  artist: r.artist,
+  key: fromJson<Transcription["key"]>(r.key, null),
+  bpm: r.bpm,
+  meter: r.meter as Transcription["meter"],
+  downbeatS: r.downbeat_s,
+  fineTuneCents: r.fine_tune_cents,
+  ladderLevel: r.ladder_level,
+  realism: r.realism,
+  regions: fromJson<Transcription["regions"]>(r.regions_json, []),
+  checklist: fromJson<Transcription["checklist"]>(r.checklist_json, {}),
+  selfScore: r.self_score,
+  currentVersion: r.current_version,
+  status: r.status as Transcription["status"],
+  review: fromJson<unknown>(r.review_json, null),
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+  hiddenCode: r.hidden_code,
+});
+
+export interface TranscriptionVersionRow {
+  transcriptionId: string;
+  version: number;
+  code: string;
+  result: GradeResult | null;
+  createdAt: string;
+}
+
+export class TranscriptionsRepo {
+  constructor(private readonly db: Db) {}
+  list(): StoredTranscription[] {
+    return all<TrRow>(this.db, "SELECT * FROM transcriptions ORDER BY updated_at DESC, id").map(toTranscription);
+  }
+  get(id: string): StoredTranscription | null {
+    const row = get<TrRow>(this.db, "SELECT * FROM transcriptions WHERE id = ?", id);
+    return row === null ? null : toTranscription(row);
+  }
+  usingAudio(audioId: string): string[] {
+    return all<{ id: string }>(this.db, "SELECT id FROM transcriptions WHERE audio_id = ?", audioId).map((r) => r.id);
+  }
+  insert(t: StoredTranscription): void {
+    run(
+      this.db,
+      `INSERT INTO transcriptions (id, source_kind, player, audio_id, song_id, title, artist, key, bpm, meter, downbeat_s,
+         fine_tune_cents, ladder_level, realism, hidden_code, regions_json, checklist_json, self_score, current_version,
+         status, review_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      t.id,
+      t.sourceKind,
+      t.player,
+      t.audioId,
+      t.songId,
+      t.title,
+      t.artist,
+      toJsonOrNull(t.key),
+      t.bpm,
+      t.meter,
+      t.downbeatS,
+      t.fineTuneCents,
+      t.ladderLevel,
+      t.realism,
+      t.hiddenCode,
+      toJson(t.regions),
+      toJson(t.checklist),
+      t.selfScore,
+      t.currentVersion,
+      t.status,
+      toJsonOrNull(t.review),
+      t.createdAt,
+      t.updatedAt,
+    );
+  }
+  update(t: StoredTranscription): void {
+    run(
+      this.db,
+      `UPDATE transcriptions SET title = ?, artist = ?, key = ?, bpm = ?, meter = ?, downbeat_s = ?, fine_tune_cents = ?,
+         regions_json = ?, checklist_json = ?, self_score = ?, current_version = ?, status = ?, review_json = ?, updated_at = ?
+       WHERE id = ?`,
+      t.title,
+      t.artist,
+      toJsonOrNull(t.key),
+      t.bpm,
+      t.meter,
+      t.downbeatS,
+      t.fineTuneCents,
+      toJson(t.regions),
+      toJson(t.checklist),
+      t.selfScore,
+      t.currentVersion,
+      t.status,
+      toJsonOrNull(t.review),
+      t.updatedAt,
+      t.id,
+    );
+  }
+  versions(id: string): TranscriptionVersionRow[] {
+    return all<{ transcription_id: string; version: number; code: string; result_json: string | null; created_at: string }>(
+      this.db,
+      "SELECT * FROM transcription_versions WHERE transcription_id = ? ORDER BY version",
+      id,
+    ).map((r) => ({
+      transcriptionId: r.transcription_id,
+      version: r.version,
+      code: r.code,
+      result: fromJson<GradeResult | null>(r.result_json, null),
+      createdAt: r.created_at,
+    }));
+  }
+  insertVersion(v: TranscriptionVersionRow): void {
+    run(
+      this.db,
+      "INSERT INTO transcription_versions (transcription_id, version, code, result_json, created_at) VALUES (?, ?, ?, ?, ?)",
+      v.transcriptionId,
+      v.version,
+      v.code,
+      toJsonOrNull(v.result),
+      v.createdAt,
+    );
+  }
+  delete(id: string): boolean {
+    return run(this.db, "DELETE FROM transcriptions WHERE id = ?", id).changes > 0;
+  }
+}

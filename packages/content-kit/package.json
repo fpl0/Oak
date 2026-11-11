@@ -1,0 +1,11 @@
+{
+  "name": "@oak/content-kit",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Oak's canonical content schema (types + zod), ID grammar and define* helpers. Isomorphic.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./zod": "./src/zod.ts"
+  }
+}

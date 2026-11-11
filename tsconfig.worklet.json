@@ -1,0 +1,12 @@
+{
+  // AudioWorkletGlobalScope project: no DOM, no Bun, no `self`/`performance`/`process` (spike S5).
+  // The worklet globals (sampleRate, currentTime, currentFrame, AudioWorkletProcessor, registerProcessor)
+  // are declared by hand in types/audio-worklet.d.ts.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["es2023"],
+    "types": []
+  },
+  "include": ["packages/audio/src/worklets/**/*.worklet.ts", "types/audio-worklet.d.ts"],
+  "exclude": ["node_modules", "dist", "spikes"]
+}
