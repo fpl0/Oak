@@ -367,6 +367,19 @@ export class TutorRepo {
     ).map((r) => r.id);
   }
 
+  /** The newest review delivered on a subject (an accepted review is stored on its assistant message). */
+  latestReview(subjectKind: string, subjectId: string): unknown | null {
+    const r = get<{ review_json: string }>(
+      this.db,
+      `SELECT m.review_json FROM tutor_messages m JOIN tutor_conversations c ON c.id = m.conversation_id
+       WHERE c.subject_kind = ? AND c.subject_id = ? AND m.review_json IS NOT NULL AND m.excluded = 0
+       ORDER BY m.at DESC, m.id DESC LIMIT 1`,
+      subjectKind,
+      subjectId,
+    );
+    return r === null ? null : fromJson<unknown>(r.review_json, null);
+  }
+
   // --- notes ---
   addNote(n: Omit<TutorNote, "retractedAt"> & { conversationId: string | null; at: string }): TutorNote {
     run(

@@ -5,6 +5,9 @@
 //  3. Origin allowlist on every non-GET (and on any request that carries an Origin).
 //  4. `X-Oak: 1` on every /api request, except the three media GETs, which need `Sec-Fetch-Site: same-origin`.
 //  5. /api/dev/* only with OAK_DEV=1 (404 otherwise, as if it did not exist).
+// In dev (OAK_DEV=1) rules 1 and 3 accept any loopback port (`127.0.0.1:<n>`, `localhost:<n>`), so several
+// Vite dev servers on their own ports can proxy to their own API (docs/design/wave2.md §2). Production keeps
+// the exact list: the server's own port only.
 import type { MiddlewareHandler } from "hono";
 import { ApiError, errorResponse } from "./errors.ts";
 
@@ -24,6 +27,23 @@ export function allowedOrigins(cfg: Pick<SecurityConfig, "port" | "devPorts">): 
   return allowedHosts(cfg).map((h) => `http://${h}`);
 }
 
+/** `127.0.0.1:<port>` or `localhost:<port>` with a port in 1–65535; nothing else (no other loopback address). */
+const LOOPBACK_HOST = /^(?:127\.0\.0\.1|localhost):([1-9]\d{0,4})$/;
+function loopbackPort(host: string): boolean {
+  const m = LOOPBACK_HOST.exec(host);
+  return m !== null && Number(m[1]) <= 65535;
+}
+
+/** Rule 1: the exact list, or in dev any loopback port. */
+export function isAllowedHost(host: string, cfg: SecurityConfig): boolean {
+  return allowedHosts(cfg).includes(host) || (cfg.dev && loopbackPort(host));
+}
+/** Rule 3: the exact list, or in dev `http://` plus any loopback host and port. */
+export function isAllowedOrigin(origin: string, cfg: SecurityConfig): boolean {
+  if (allowedOrigins(cfg).includes(origin)) return true;
+  return cfg.dev && origin.startsWith("http://") && loopbackPort(origin.slice("http://".length));
+}
+
 const MEDIA_GETS = [
   /^\/api\/audio\/[^/]+$/,
   /^\/api\/audio\/[^/]+\/peaks$/,
@@ -37,12 +57,12 @@ export function isMediaGet(method: string, path: string): boolean {
 export function checkApiRequest(req: Request, cfg: SecurityConfig): DenyReason | null {
   const h = req.headers;
   const host = (h.get("host") ?? "").toLowerCase();
-  if (!allowedHosts(cfg).includes(host)) return "host";
+  if (!isAllowedHost(host, cfg)) return "host";
   if (req.method === "OPTIONS") return "preflight";
   const safe = req.method === "GET" || req.method === "HEAD";
   const origin = h.get("origin");
   if (origin !== null) {
-    if (!allowedOrigins(cfg).includes(origin)) return "origin";
+    if (!isAllowedOrigin(origin, cfg)) return "origin";
   } else if (!safe) return "origin";
   const site = h.get("sec-fetch-site");
   const path = new URL(req.url).pathname;
@@ -87,8 +107,7 @@ export function apiSecurity(
 export function hostOnly(cfg: SecurityConfig): MiddlewareHandler {
   return async (c, next) => {
     const host = (c.req.header("host") ?? "").toLowerCase();
-    if (!allowedHosts(cfg).includes(host))
-      return errorResponse(new ApiError("forbidden", "request refused (host)"));
+    if (!isAllowedHost(host, cfg)) return errorResponse(new ApiError("forbidden", "request refused (host)"));
     if (c.req.method === "OPTIONS")
       return errorResponse(new ApiError("forbidden", "request refused (preflight)"));
     await next();

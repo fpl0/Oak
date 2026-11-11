@@ -1,9 +1,9 @@
-// /dev/listen (architecture §3.8): every code example of the course with OK / flag verdicts. The manifest
-// is `content/.generated/examples.json` (`{ref, code, hash, bars, key, meter}`) when the content build has
-// run, otherwise it is collected from the lesson files' step examples. Verdicts persist through a
-// `ListenStore`: the API has no listen-log endpoint yet, so the store is localStorage (reported). Pure
-// except for the storage object it is given.
-import type { KeySpec, LessonDef, MeterId } from "@oak/content-kit";
+// /dev/listen (architecture §3.8): the listening pass over every curated sound of the pack and every code
+// example of the course, with a verdict each. Examples come from `content/.generated/examples.json`
+// (`{ref, code, hash, bars, key, meter}`) when the content build has run, otherwise from the lesson files'
+// step examples; sounds from the pack manifest. Verdicts live on the server (`GET /api/dev/listen`,
+// `PUT /api/dev/listen/:ref`, wave2 §4). Pure.
+import type { ListenMark as ApiListenMark, KeySpec, LessonDef, MeterId } from "@oak/api";
 
 export interface ListenExample {
   /** `U01.L02@slug` (or the generated ref). */
@@ -14,9 +14,11 @@ export interface ListenExample {
   bars: number;
   key: KeySpec | null;
   meter: MeterId;
-  /** Unit of the lesson ("U01"), for the filter. */
+  /** Unit of the lesson ("U01"), or "Sounds" for the pack's sounds, for the filter. */
   unit: string;
   preview?: boolean;
+  /** Sounds only: the group in the list ("Instruments", "Drum kit", ...). */
+  group?: string;
 }
 
 export const VERDICTS = ["ok", "wrong-sound", "wrong-notation", "weak", "wrong-theory"] as const;
@@ -29,13 +31,81 @@ export const VERDICT_LABEL: Record<Verdict, string> = {
   "wrong-theory": "Wrong theory",
 };
 
-export interface ListenMark {
-  ref: string;
-  /** Hash of the code the verdict was given on. */
-  hash: string;
-  verdict: Verdict;
-  note: string;
-  at: string;
+export type ListenMark = ApiListenMark;
+
+/** Sounds get three plain verdicts: keep (ok), replace (wrong sound), flag (weak, with a note). */
+export const SOUND_VERDICTS: readonly { verdict: Verdict; label: string }[] = [
+  { verdict: "ok", label: "Keep" },
+  { verdict: "wrong-sound", label: "Replace" },
+  { verdict: "weak", label: "Flag" },
+];
+
+/** The marks the server returned, by ref (the newest wins if a ref repeats). */
+export function marksByRef(items: readonly ListenMark[]): Record<string, ListenMark> {
+  const out: Record<string, ListenMark> = {};
+  for (const m of [...items].sort((a, b) => a.at.localeCompare(b.at))) out[m.ref] = m;
+  return out;
+}
+
+// --- sounds ---------------------------------------------------------------------------------------
+
+export const SOUNDS_UNIT = "Sounds";
+const BASS = /bass|upright/;
+const SYNTHS = ["sine", "triangle", "square", "sawtooth"] as const;
+
+/** A short demo in Oak's dialect (STYLE §1–2) that shows the sound off in its natural register. */
+export function soundDemo(name: string, kind: "drum" | "pitched"): string {
+  if (kind === "drum") {
+    const pattern = /^(hh|oh|sh|rd)$/.test(name)
+      ? `${name}*8`
+      : /^(cr|cb)$/.test(name)
+        ? `${name} ~ ~ ~`
+        : `${name}*4`;
+    return `setcpm(96/4)\n\ndrums: s("${pattern}")`;
+  }
+  if (BASS.test(name)) return `setcpm(96/4)\n\nbass: note("c2 ~ g2 c3").s("${name}")`;
+  return `setcpm(96/4)\n\nkeys: note("c4 e4 g4 [c4,e4,g4]").s("${name}")`;
+}
+
+export interface PackSounds {
+  /** Curated aliases (`rhodes`, `upright`, ...). */
+  aliases: readonly string[];
+  /** General MIDI soundfonts in the pack (`gm_piano`, ...). */
+  soundfonts: readonly string[];
+  /** Sample-map groups: name → sound names (`piano`, the drum kit). */
+  samples: Readonly<Record<string, readonly string[]>>;
+}
+
+/** Every curated sound as a listen item, grouped; deterministic order. */
+export function soundItems(pack: PackSounds): ListenExample[] {
+  const item = (name: string, group: string, kind: "drum" | "pitched"): ListenExample => {
+    const code = soundDemo(name, kind);
+    return {
+      ref: `sound:${name}`,
+      code,
+      hash: codeHash(code),
+      bars: 1,
+      key: null,
+      meter: "4/4" as MeterId,
+      unit: SOUNDS_UNIT,
+      group,
+    };
+  };
+  const out: ListenExample[] = [];
+  for (const a of [...pack.aliases].sort()) out.push(item(a, "Instruments", "pitched"));
+  for (const [group, names] of Object.entries(pack.samples).sort(([a], [b]) => a.localeCompare(b))) {
+    const drum = !/piano/.test(group);
+    for (const n of [...names].filter((x) => x !== "_base").sort())
+      out.push(item(n, drum ? "Drum kit" : "Piano", drum ? "drum" : "pitched"));
+  }
+  for (const f of [...pack.soundfonts].sort()) out.push(item(f, "General MIDI", "pitched"));
+  for (const s of SYNTHS) out.push(item(s, "Synths", "pitched"));
+  const seen = new Set<string>();
+  return out.filter((e) => {
+    if (seen.has(e.ref)) return false;
+    seen.add(e.ref);
+    return true;
+  });
 }
 
 /** FNV-1a 32-bit of the code, hex: deterministic, synchronous, isomorphic. */
@@ -125,37 +195,6 @@ export function filterExamples(
     }
     return true;
   });
-}
-
-/** Where verdicts live. */
-export interface ListenStore {
-  readonly kind: "api" | "local";
-  load(): Promise<Record<string, ListenMark>>;
-  save(mark: ListenMark): Promise<void>;
-}
-
-export const LISTEN_STORAGE_KEY = "oak.dev.listen-marks.v1";
-
-/** localStorage (or any Storage-like object). */
-export function localListenStore(storage: Pick<Storage, "getItem" | "setItem">): ListenStore {
-  const read = (): Record<string, ListenMark> => {
-    try {
-      const raw = storage.getItem(LISTEN_STORAGE_KEY);
-      const parsed: unknown = raw ? JSON.parse(raw) : {};
-      return parsed && typeof parsed === "object" ? (parsed as Record<string, ListenMark>) : {};
-    } catch {
-      return {};
-    }
-  };
-  return {
-    kind: "local",
-    load: async () => read(),
-    save: async (mark) => {
-      const all = read();
-      all[mark.ref] = mark;
-      storage.setItem(LISTEN_STORAGE_KEY, JSON.stringify(all));
-    },
-  };
 }
 
 /** The marks as the JSON file content/.qa/listen-log.json would hold (for the export button). */

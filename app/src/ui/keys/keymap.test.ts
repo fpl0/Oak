@@ -182,6 +182,7 @@ describe("focus routes", () => {
     ["/learn/U01.L02", true],
     ["/checkpoint/U03", true],
     ["/onboarding/1", true],
+    ["/session", true],
     ["/session/coda", true],
     ["/practice/review", true],
     ["/practice/fam.deg.major", true],

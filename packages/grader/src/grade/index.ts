@@ -879,6 +879,25 @@ export async function gradeWith(req: GradeRequest, deps: GradeDeps): Promise<Gra
     case "code-make":
     case "compose-brief":
       if (!("code" in resp)) return wrongShape();
+      // Onboarding (a preview context, contracts §3.1 rule 5a) is exempt: Sketch 001 is the loop as heard.
+      if (
+        ex.kind === "code-make" &&
+        !ctx.lint?.allowPreview &&
+        isUnchangedStarter(ex.code.starter, resp.code)
+      ) {
+        // A Make is the learner's own piece: its starter, as it came, made nothing, even where the starter
+        // already meets the brief's required rule. The rubric still shows; the result does not pass.
+        const r = await gradeRubricPiece(ex, ctx, deps, resp.code);
+        if (r.status !== "pass") return r;
+        return finish(ex, ctx, {
+          score: 0,
+          pass: false,
+          ...(r.dims ? { dims: r.dims } : {}),
+          diagnostics: [diag("make.unchanged"), ...r.diagnostics.filter((d) => d.severity !== "praise")],
+          ...(r.rubric ? { rubric: r.rubric } : {}),
+          ...(r.eval ? { eval: r.eval } : {}),
+        });
+      }
       return gradeRubricPiece(ex, ctx, deps, resp.code);
     case "identify":
       if (!("answer" in resp)) return wrongShape();
@@ -1072,4 +1091,16 @@ async function gradeStaffEvents(
     diagnostics: m.diagnostics,
     ...(m.overlay ? { overlay: m.overlay } : {}),
   });
+}
+
+/** The code is the starter as it came (markers stripped; whitespace at the ends and line ends ignored). */
+export function isUnchangedStarter(starter: string | undefined, code: string): boolean {
+  if (starter === undefined || starter.trim() === "") return false;
+  const norm = (s: string) =>
+    s
+      .split("\n")
+      .map((l) => l.trimEnd())
+      .join("\n")
+      .trim();
+  return norm(stripMarkers(starter).code) === norm(code);
 }

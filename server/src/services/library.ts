@@ -20,6 +20,7 @@ import {
   type AudioStore,
   extFor,
   MAX_AUDIO_BYTES,
+  MAX_PEAKS_BYTES,
   mimeFor,
   sha256,
   sniffAudio,
@@ -343,7 +344,7 @@ export class LibraryService {
   putPeaks(id: string, bytes: Uint8Array): void {
     const a = this.#repos.audio.get(id);
     if (a === null) throw notFound(`audio ${id}`);
-    if (bytes.length === 0 || bytes.length > 16 * 1024 * 1024)
+    if (bytes.length === 0 || bytes.length > MAX_PEAKS_BYTES)
       throw badRequest("peaks must be 1 byte to 16 MB");
     const abs = this.d.store.peaksPath(id);
     this.d.store.write(abs, bytes);

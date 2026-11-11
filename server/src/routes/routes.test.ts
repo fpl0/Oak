@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { contract, ENDPOINT_NAMES } from "@oak/api";
+import { contract, ENDPOINT_NAMES, WAVE2_ENDPOINTS } from "@oak/api";
 import { gradeResult, type Harness, harness } from "../testing/harness.ts";
 
 let h: Harness;
@@ -39,7 +39,7 @@ describe("meta", () => {
     }>("GET", "/api/health");
     expect(r.status).toBe(200);
     expect(r.body.ok).toBe(true);
-    expect(r.body.schemaVersion).toBe(1);
+    expect(r.body.schemaVersion).toBe(2);
     expect(r.body.contentVersion).toBe("fixture-1");
     expect(r.body.tutor).toBe("unreachable");
     expect(r.body.dev).toBe(false);
@@ -606,3 +606,39 @@ function makeWav(sampleRate: number, seconds: number): Uint8Array {
     v.setInt16(44 + i * 2, Math.round(Math.sin((2 * Math.PI * 440 * i) / sampleRate) * 8000), true);
   return buf;
 }
+
+describe("Wave 2 endpoints", () => {
+  test("no Wave 2 endpoint answers the 501 stub any more", async () => {
+    const full = await harness({ dev: true });
+    try {
+      for (const name of WAVE2_ENDPOINTS) {
+        const def = contract[name] as { method: string; path: string };
+        const path = `/api${def.path.replace(/:([A-Za-z]+)/g, "x")}`;
+        const body =
+          name === "lessons.position"
+            ? { sessionId: null, stepId: "S1", splitPart: null, wrapped: false }
+            : name === "capstones.release"
+              ? {
+                  sessionId: null,
+                  sketchId: "sk",
+                  sketchVersion: 1,
+                  title: "t",
+                  flavour: null,
+                  linerNotesMd: "",
+                  theoryTags: [],
+                  includeReviewNote: false,
+                }
+              : name === "dev.listenMark"
+                ? { hash: "h", verdict: "ok", note: "" }
+                : name === "onboarding.put"
+                  ? { step: "loop" }
+                  : undefined;
+        const r = await full.json<{ error?: { code: string } }>(def.method, path, body);
+        expect({ name, status: r.status }).not.toEqual({ name, status: 501 });
+        expect({ name, code: r.body?.error?.code }).not.toEqual({ name, code: "not_implemented" });
+      }
+    } finally {
+      await full.close();
+    }
+  });
+});

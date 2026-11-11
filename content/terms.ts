@@ -1,4 +1,4 @@
-// The glossary (AUTHORING §6): one sound-first sentence and one audio example per term, with the lesson
+// The glossary (AUTHORING §7): one sound-first sentence and one audio example per term, with the lesson
 // that introduces it. A term becomes a fact card only when a later lesson tests it (`TermDef.card` in that
 // lesson). Each example evaluates headlessly and uses only tools unlocked at `introducedBy` in every
 // legal order (content/validate/registries.test.ts).
@@ -36,15 +36,30 @@ export const terms: readonly TermEntry[] = [
   t("term.subdivision", "subdivision", "Splitting each beat into equal smaller parts, like two eighths per beat.", ex4(96, 'hats: s("[hh hh]*4")'), "U01.L04"),
   t("term.eighth-note", "eighth note", "Half a beat long: two of them fill one beat in 4/4.", ex4(96, 'hats: s("hh*8")'), "U01.L05", "term.quarter-note"),
   t("term.quarter-note", "quarter note", "One beat long in 4/4.", ex4(96, 'drums: s("bd bd bd bd")'), "U01.L05", "term.eighth-note"),
+  t("term.half-note", "half note", "Two beats long in 4/4: a sound that lasts half the bar.", ex4(96, 'drums: s("bd@2 sd@2")'), "U01.L05", "term.whole-note"),
+  t("term.whole-note", "whole note", "Four beats long in 4/4: one sound that lasts the whole bar.", ex4(96, 'drums: s("bd@4")'), "U01.L05", "term.half-note"),
+  t("term.sixteenth-note", "sixteenth note", "A quarter of a beat: four of them, counted 1-e-&-a, fill one beat.", ex4(90, 'hats: s("hh*16")'), "U01.L06"),
   t("term.fill", "fill", "A short break in the groove, often at the end of a phrase, that leads into the next bar.", ex4(96, 'drums: s("<[bd sd bd sd] [bd sd bd sd] [bd sd bd sd] [ht mt lt lt]>")'), "U01.L07"),
   t("term.meter", "meter", "How many beats a bar has and how they are grouped: 4/4, 3/4.", `setcpm(96/3)\n\ndrums: s("bd hh hh")`, "U01.L08"),
+  t("term.time-signature", "time signature", "The two numbers at the start of a piece, such as 3/4: how many beats a bar has, and which note gets one beat.", `setcpm(108/3)\n\ndrums: s("bd hh hh")`, "U01.L08"),
+  t("term.half-time", "half-time", "The same groove at half the speed: the backbeat lands half as often, the tempo stays put.", ex4(96, 'drums: s("bd ~ sd ~").slow(2)'), "U01.L09", "term.double-time"),
+  t("term.double-time", "double-time", "The same groove twice as fast inside the same tempo.", ex4(96, 'drums: s("bd ~ sd ~").fast(2)'), "U01.L09", "term.half-time"),
   t("term.pitch", "pitch", "How high or low a note sounds.", ex4(84, 'mel: note("c3 c4 c5 c4").s("piano")'), "U02.L01"),
   t("term.octave", "octave", "The same note name, higher or lower: c4 and c5 sound like one note at two heights.", ex4(84, 'mel: note("c4 c5").s("piano")'), "U02.L01"),
+  t("term.middle-c", "middle C", "The C nearest the middle of the piano keyboard: c4 in code, note number 60.", ex4(84, 'mel: note("c4 ~ c4 ~").s("piano")'), "U02.L02"),
   t("term.semitone", "half step", "The smallest step on the keyboard: from one key to the very next.", ex4(84, 'mel: note("e4 f4 b4 c5").s("piano")'), "U02.L03", "term.whole-step"),
   t("term.whole-step", "whole step", "Two half steps: one key skipped in between.", ex4(84, 'mel: note("c4 d4 f4 g4").s("piano")'), "U02.L03", "term.semitone"),
   t("term.sharp", "sharp", "A sign that raises a note by a half step: f#4.", ex4(84, 'mel: note("f4 f#4").s("piano")'), "U02.L03", "term.flat"),
   t("term.flat", "flat", "A sign that lowers a note by a half step: bb3.", ex4(84, 'mel: note("b3 bb3").s("piano")'), "U02.L03", "term.sharp"),
+  t("term.enharmonic", "enharmonic", "Two names for the same key and the same sound: c#4 and db4.", ex4(84, 'mel: note("c#4 ~ db4 ~").s("piano")'), "U02.L03"),
   t("term.staff", "staff", "Five lines on which notes are written: higher on the staff sounds higher.", ex4(84, 'mel: note("e4 g4 b4 d5").s("piano")'), "U02.L04"),
+  t("term.treble-clef", "treble clef", "The curly sign at the start of the staff that fixes the second line from the bottom as G4.", ex4(84, 'mel: note("e4 g4 b4 d5 f5").s("piano")'), "U02.L04"),
+  t("term.ledger-line", "ledger line", "A short extra line above or below the staff for a note that does not fit on it, like c4 under the treble staff.", ex4(84, 'mel: note("c4 ~ a5 ~").s("piano")'), "U02.L04"),
+  t("term.transpose", "transpose", "Move every note of a line up or down by the same distance, so the tune stays the same tune.", ex4(84, 'mel: note("c4 e4 g4 e4").transpose(2).s("piano")'), "U02.L05"),
+  t("term.chromatic-scale", "chromatic scale", "All twelve notes in a row, each one a half step above the last.", ex4(84, 'mel: note("c4 c#4 d4 d#4 e4 f4 f#4 g4 g#4 a4 a#4 b4").s("piano")'), "U02.L05"),
+  t("term.midi-number", "MIDI number", "A note's number counted in half steps, with middle C as 60: one higher is one half step up.", ex4(84, 'mel: note("60 62 64 65").s("piano")'), "U02.L05"),
+  t("term.waveform", "waveform", "The shape of the vibration a synth plays: sine is pure, square is hollow, sawtooth is bright and buzzy.", ex4(84, 'mel: note("c4 e4 g4 e4").s("<sine square sawtooth triangle>")'), "U02.L06"),
+  t("term.reverb", "reverb", "The sound of a room: echoes so close together that they blur into a tail after each note.", ex4(84, 'mel: note("c4 e4 g4 c5").s("piano").room(.5)'), "U02.L08"),
   t("term.tonic", "tonic", "Home: the note a melody feels finished on.", ex4(84, 'mel: note("e4 d4 c4 ~").s("piano")'), "U03.L01"),
   t("term.major-scale", "major scale", "Seven notes in the pattern whole, whole, half, whole, whole, whole, half.", ex4(84, 'mel: note("c4 d4 e4 f4 g4 a4 b4 c5").s("piano")'), "U03.L01"),
   t("term.scale-degree", "scale degree", "A note's number in the key: the tonic is 1.", ex4(84, 'mel: n("0 2 4 2").scale("C4:major").s("piano")'), "U03.L02"),

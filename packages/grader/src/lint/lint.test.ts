@@ -1,7 +1,8 @@
 // The toolbox-aware lint (contracts §3.3, §11.3; STYLE §12). Golden expectations: each case states the
 // finding the dialect spec asks for, then asserts it.
 import { describe, expect, test } from "bun:test";
-import type { LintContext, LintProfile } from "@oak/content-kit";
+import type { Diagnostic, LintContext, LintProfile } from "@oak/content-kit";
+import { renderFeedback } from "../feedback/catalog.ts";
 import { sectionsFromAst } from "./ast.ts";
 import { miniErrorDetail } from "./mini.ts";
 import { lintBase, lintOak, lintStrict, toolsUsed } from "./oak.ts";
@@ -285,6 +286,10 @@ describe("toolbox", () => {
     });
     const chordMsg = graded.diagnostics.find((d) => d.id === "code.locked-tool");
     expect(chordMsg?.message).toBe("`chord` unlocks in U05.L08.");
+    // The catalog template's slots are filled from the lint's own params (no empty `` in the copy).
+    expect(renderFeedback(chordMsg as Diagnostic)).toBe(
+      "`chord` unlocks in U05.L08. For now, use the tools you have.",
+    );
     expect(sev(lintOak(code, ctx("studio", { unlocked }), TOOLBOX))).toEqual({
       "code.locked-tool": "info",
       "code.locked-chord": "info",

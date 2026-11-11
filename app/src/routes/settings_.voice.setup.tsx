@@ -1,95 +1,88 @@
-// Mic and voice calibration wizard (focus mode, ux §4.7), shared with onboarding steps 4–8. The measuring steps
-// (device detection, noise floor, bleed, tap latency, range) run on @oak/audio in Wave 2; this page loads the
-// profile and the calibration state and shows where each measurement stands.
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { Check, Circle } from "lucide-react";
+// /settings/voice/setup: the mic and voice wizard (focus mode, ux §4.7; contracts §8.6), the same screens as
+// onboarding. `?part=range` (or headphones, mic, latency, first-sing) runs one of them only: Settings › Voice
+// links here to re-run the range or the timing.
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { z } from "zod";
 import { usePageTitle } from "../lib/nav.ts";
-import { formatNoteMidi } from "../lib/notes.ts";
 import { useProfile } from "../lib/queries.ts";
 import { buttonClass } from "../ui/kit/Button.tsx";
-import { Card, Page, type RailStep, WavePlaceholder } from "../ui/kit/basics.tsx";
+import { Page, type RailStep } from "../ui/kit/basics.tsx";
+import { Callout } from "../ui/kit/Controls.tsx";
 import { QueryView } from "../ui/kit/QueryState.tsx";
 import { useFocusHeaderContent } from "../ui/shell/focus-header.ts";
+import { renderPart } from "../voice/index.tsx";
+import { WIZARD, type WizardPart, wizardNext } from "../voice/wizard.ts";
 
-export const Route = createFileRoute("/settings_/voice/setup")({ component: VoiceSetup });
+const searchSchema = z.object({
+  part: z.enum(["headphones", "mic", "range", "latency", "first-sing"]).optional().catch(undefined),
+  at: z.enum(["headphones", "mic", "range", "latency", "first-sing", "done"]).optional().catch(undefined),
+});
+
+export const Route = createFileRoute("/settings_/voice/setup")({
+  validateSearch: (s) => searchSchema.parse(s),
+  component: VoiceSetup,
+});
+
+const LABEL: Record<WizardPart, string> = {
+  headphones: "Headphones",
+  mic: "Microphone",
+  range: "Range",
+  latency: "Timing",
+  "first-sing": "First note",
+};
 
 function VoiceSetup() {
-  usePageTitle("Set up mic and voice");
+  const { part, at } = Route.useSearch();
+  const navigate = useNavigate();
   const profile = useProfile();
-  const p = profile.data;
-  const steps: { id: string; label: string; done: boolean; value: string }[] = p
-    ? [
-        { id: "output", label: "Output", done: p.outputKind !== "unknown", value: p.outputKind },
-        { id: "mic", label: "Microphone", done: p.inputKind !== "none", value: p.inputKind },
-        {
-          id: "noise",
-          label: "Noise floor",
-          done: p.noiseFloorDb !== null,
-          value: p.noiseFloorDb === null ? "" : `${Math.round(p.noiseFloorDb)} dBFS`,
-        },
-        {
-          id: "tap",
-          label: "Tap latency",
-          done: p.tapLatencyMs !== null,
-          value: p.tapLatencyMs === null ? "" : `${Math.round(p.tapLatencyMs)} ms`,
-        },
-        {
-          id: "sing",
-          label: "Sing latency",
-          done: p.singLatencyMs !== null,
-          value: p.singLatencyMs === null ? "" : `${Math.round(p.singLatencyMs)} ms`,
-        },
-        {
-          id: "range",
-          label: "Range",
-          done: p.vocalLowMidi !== null && p.vocalHighMidi !== null,
-          value:
-            p.vocalLowMidi !== null && p.vocalHighMidi !== null
-              ? `${formatNoteMidi(p.vocalLowMidi)}–${formatNoteMidi(p.vocalHighMidi)}`
-              : "",
-        },
-      ]
-    : [];
-  const firstTodo = steps.findIndex((s) => !s.done);
-  const rail: RailStep[] = steps.map((s, i) => ({
-    id: s.id,
-    label: s.label,
-    state: s.done ? "done" : i === firstTodo ? "current" : "todo",
+  const parts: readonly WizardPart[] = part ? [part] : WIZARD;
+  const current: WizardPart | "done" = at ?? parts[0] ?? "done";
+  usePageTitle(part ? `Re-run · ${LABEL[part]}` : "Set up mic and voice");
+  const rail: RailStep[] = parts.map((p) => ({
+    id: p,
+    label: LABEL[p],
+    state:
+      current === "done" || parts.indexOf(p) < parts.indexOf(current as WizardPart)
+        ? "done"
+        : p === current
+          ? "current"
+          : "todo",
   }));
-  useFocusHeaderContent("Set up mic and voice", rail.length ? rail : null);
+  useFocusHeaderContent(part ? LABEL[part] : "Mic and voice", rail);
+
+  const go = (next: WizardPart | "done") =>
+    void navigate({ to: "/settings/voice/setup", search: { ...(part ? { part } : {}), at: next } });
+
   return (
     <Page width="narrow">
-      <div className="flex flex-col gap-4">
-        <h1 className="text-h1">Set up mic and voice</h1>
-        <p className="text-text-2">
-          Your voice is analysed live on this computer. Nothing is recorded or sent.
-        </p>
-        <WavePlaceholder feature="The calibration wizard" />
-        <QueryView query={profile}>
-          {() => (
-            <Card className="p-4">
-              <ul className="flex flex-col gap-2">
-                {steps.map((s) => (
-                  <li key={s.id} className="flex items-center justify-between gap-3">
-                    <span className="flex items-center gap-2">
-                      {s.done ? (
-                        <Check aria-label="measured" className="size-4 text-accent" />
-                      ) : (
-                        <Circle aria-label="not yet" className="size-4 text-text-3" />
-                      )}
-                      {s.label}
-                    </span>
-                    <span className="text-sm text-text-2">{s.value}</span>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
-        </QueryView>
-        <Link to="/settings/voice" className={buttonClass("secondary", "md", "self-start")}>
-          Back to voice settings
-        </Link>
-      </div>
+      <QueryView query={profile}>
+        {(p) => {
+          if (current === "done")
+            return (
+              <section className="flex flex-col gap-4 py-6" data-testid="setup-done">
+                <h1 className="text-h1 outline-none" tabIndex={-1}>
+                  All set
+                </h1>
+                <Callout tone="success" title="Your results are saved.">
+                  Settings › Voice shows them; re-run any part whenever you change headphones or rooms.
+                </Callout>
+                <div>
+                  <Link to="/settings/voice" className={buttonClass("primary")} autoFocus>
+                    Back to Settings › Voice
+                  </Link>
+                </div>
+              </section>
+            );
+          const next = wizardNext(parts, current, p.quiet);
+          return renderPart(p, {
+            part: current,
+            context: "settings",
+            onDone: () => go(next),
+            onSkip: () => go(next),
+            onQuiet: () => go("done"),
+          });
+        }}
+      </QueryView>
     </Page>
   );
 }

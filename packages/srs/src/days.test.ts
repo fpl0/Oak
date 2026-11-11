@@ -57,3 +57,30 @@ describe("learner days (contracts §7.8)", () => {
     }
   });
 });
+
+describe("dayStartInstant when the rollover hour falls in a DST gap or overlap", () => {
+  // Card due dates are `dayStartInstant(today + n)`: a start that lands in the day before makes a card
+  // due a day early. Rollover 02:00 in Berlin and 04:00 in Helsinki meet the gap and the repeated hour.
+  const cases: [string, number][] = [
+    ["Europe/Berlin", 2],
+    ["Europe/Lisbon", 1],
+    ["Europe/Helsinki", 4],
+    ["Europe/Helsinki", 3],
+    ["Australia/Lord_Howe", 2],
+    ["Pacific/Chatham", 3],
+    ["America/Santiago", 0],
+    ["America/Havana", 0],
+  ];
+  test("the start belongs to the day and the instant before it to the day before, all year", () => {
+    const problems: string[] = [];
+    for (const [zone, hour] of cases)
+      for (let d = 0; d < 366; d++) {
+        const day = addDays("2026-01-01", d);
+        const start = dayStartInstant(day, zone, hour);
+        if (learnerDay(start, zone, hour) !== day) problems.push(`${zone} ${hour}h ${day}: start`);
+        if (learnerDay(new Date(start.getTime() - 1), zone, hour) !== addDays(day, -1))
+          problems.push(`${zone} ${hour}h ${day}: before`);
+      }
+    expect(problems).toEqual([]);
+  });
+});

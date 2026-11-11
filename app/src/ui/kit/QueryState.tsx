@@ -25,6 +25,8 @@ export function describeError(error: unknown): { title: string; body: string } {
         };
       case "forbidden":
         return { title: "Request refused", body: "Oak only answers its own page on this computer." };
+      case "not_implemented":
+        return { title: "Not built yet", body: "This part of Oak's server is still being built." };
       default:
         return { title: "Something went wrong", body: error.message };
     }

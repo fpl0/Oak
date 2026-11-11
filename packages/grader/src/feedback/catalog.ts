@@ -59,7 +59,7 @@ const entries: [string, Sev, string][] = [
   [
     "code.locked-tool",
     { graded: E, studio: I, content: E },
-    "`{tool}` unlocks in {lesson}. For now use {alt}.",
+    "`{tool}` unlocks in {lesson}. For now, use the tools you have.",
   ],
   ["code.locked-sound", { graded: E, studio: I, content: E }, 'The sound "{tool}" unlocks in {lesson}.'],
   ["code.locked-scale", { graded: E, studio: I, content: E }, 'The scale "{tool}" unlocks in {lesson}.'],
@@ -115,7 +115,7 @@ const entries: [string, Sev, string][] = [
     'Inside a pattern string write the amount as a decimal (`.33`), not "1/3".',
   ],
   ["code.setcpm-missing", W, "No tempo line: add `setcpm({bpm}/{beats})`."],
-  ["code.setcpm-form", W, "Write the tempo as a division that shows the BPM: `setcpm({bpm}/{beats})`."],
+  ["code.setcpm-form", W, "Tempo line: {detail}."],
   ["code.range-spacing", E, "Write ranges with spaces: `0 .. 7`."],
   [
     "code.time-fraction-string",
@@ -212,8 +212,8 @@ const entries: [string, Sev, string][] = [
   ["sing.unstable", I, "Note {i} wobbled ±{cents}¢."],
   ["sing.early", W, "Note {i}: {ms} ms {dir}."],
   ["sing.late", W, "Note {i}: {ms} ms {dir}."],
-  ["tap.missed", E, "Bar {bar}, {beatLabel}: missed."],
-  ["tap.extra", W, "Bar {bar}, {beatLabel}: extra tap."],
+  ["tap.missed", E, "No tap for note {i} of the rhythm."],
+  ["tap.extra", W, "Tap {j} was one too many."],
   ["tap.offset", I, "You're consistently {ms} ms {dir}."],
   ["tap.rushing", W, "You sped up {ms} ms over the phrase."],
   ["tap.dragging", W, "You slowed down {ms} ms over the phrase."],
@@ -230,7 +230,7 @@ const entries: [string, Sev, string][] = [
   ["hunt.not-here", E, "The problem isn't here. Listen again and compare."],
   ["hunt.found", P, "Found it."],
   ["investigate.not-here", E, "Not that one. Listen again and compare."],
-  ["investigate.wrong", E, "Not quite: the answer is {exp}."],
+  ["investigate.wrong", E, "Not quite. Listen again and compare."],
   ["kb.wrong-note", E, "You played {got}; the answer is {exp}."],
   ["kb.missing-note", E, "{exp} is missing."],
   ["kb.extra-note", E, "{got} doesn't belong."],
@@ -254,11 +254,12 @@ const entries: [string, Sev, string][] = [
   // --- make, rubric, pass
   ["make.beyond-brief", I, "You went past today's brief. Nice."],
   ["make.silent", E, "Nothing plays yet."],
+  ["make.unchanged", E, "This is still the starter as it came. Change it to make it yours, then save."],
   ["rubric.unmet", E, "{label}: {detail}"],
   ["rubric.met", P, "{label}: done"],
   ["rubric.unknown", E, "Rule {rule} can't be checked."],
   ["pass.perfect", P, "Exactly right."],
-  ["pass.close", P, "Passed; {n} small things to polish."],
+  ["pass.close", P, "Passed. Small things to polish: {n}."],
 ];
 
 /** The registry of feedback codes. Source of truth for which `FeedbackId`s exist. */

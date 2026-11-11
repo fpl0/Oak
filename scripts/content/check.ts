@@ -1,20 +1,36 @@
-// `bun run content:check <id>`: the focused validation of AUTHORING §9.1 for one lesson, a unit (`U06`),
-// a capstone or checkpoint, or `all`. Prints each check in order with its first problems, then a summary;
-// exits 1 when anything fails. Things only an unfinished package can decide are listed as pending.
+// `bun run content:check <id> [--verbose]`: the focused validation of AUTHORING §12.1 for one lesson
+// (`U01.L03`), a unit (`U01`: its authored lessons and its checkpoint file), a checkpoint (`U01.CP`), a
+// capstone (`C0`), or `all`. Prints each check in order with its first problems, then a summary; exits 1
+// when anything fails. `--verbose` also prints every graded test with the grader's feedback codes and the
+// text the learner would read. Things only an unfinished package can decide are listed as pending.
+//
+// Parallel-safe: the check reads the content sources and writes nothing, so several authors can run it at
+// once. A lesson that another author is still writing and that does not load is reported, and fails the
+// run only when it is one of the targets.
 import { relative } from "node:path";
-import { stripMarkers } from "@oak/content-kit";
+import type { CheckpointDef } from "@oak/content-kit";
 import { capstones } from "../../content/capstones.ts";
 import { checkpointMetas } from "../../content/checkpoints.ts";
-import { type LoadedLesson, loadLessons } from "../../content/lib/load.bun.ts";
+import {
+  CONTENT_ROOT,
+  type LoadedLesson,
+  loadCheckpointFiles,
+  loadLessons,
+} from "../../content/lib/load.bun.ts";
 import { syllabus } from "../../content/syllabus.ts";
 import { type CheckSection, checkLesson } from "../../content/validate/checks.ts";
-import { backends, evaluate, lint } from "../../content/validate/harness.ts";
+import { backends } from "../../content/validate/harness.ts";
+import { checkCapstone, checkCheckpoint } from "../../content/validate/owners.ts";
 
-const MAX_SHOWN = 5;
+const MAX_SHOWN = 8;
+const args = process.argv.slice(2);
+const verbose = args.includes("--verbose") || args.includes("-v");
+const arg = args.find((a) => !a.startsWith("-"));
 const color = (code: number, s: string) => (process.stdout.isTTY ? `\x1b[${code}m${s}\x1b[0m` : s);
 const PASS = color(32, "PASS");
 const FAIL = color(31, "FAIL");
 const WAIT = color(33, "PENDING");
+const WARN = color(33, "WARN");
 
 function print(title: string, sections: CheckSection[]): boolean {
   console.log(`\n${title}`);
@@ -22,61 +38,103 @@ function print(title: string, sections: CheckSection[]): boolean {
   for (const s of sections) {
     const failed = s.issues.length > 0;
     ok &&= !failed;
-    const tag = failed ? FAIL : s.pending?.length ? WAIT : PASS;
+    const tag = failed ? FAIL : s.pending?.length ? WAIT : s.warnings?.length ? WARN : PASS;
     console.log(`  ${String(s.n).padStart(2)}. ${s.name.padEnd(34)} ${tag}`);
-    for (const i of s.issues.slice(0, MAX_SHOWN)) console.log(`        ${i}`);
-    if (s.issues.length > MAX_SHOWN) console.log(`        … and ${s.issues.length - MAX_SHOWN} more`);
-    for (const p of (s.pending ?? []).slice(0, 3)) console.log(color(2, `        pending: ${p}`));
+    const limit = verbose ? Number.POSITIVE_INFINITY : MAX_SHOWN;
+    for (const i of s.issues.slice(0, limit)) console.log(`        ${i}`);
+    if (s.issues.length > limit) console.log(`        … and ${s.issues.length - limit} more (--verbose)`);
+    for (const w of (s.warnings ?? []).slice(0, verbose ? undefined : 3))
+      console.log(color(33, `        advice: ${w}`));
+    if (!verbose && (s.warnings?.length ?? 0) > 3)
+      console.log(color(33, `        … and ${(s.warnings?.length ?? 0) - 3} more advice lines (--verbose)`));
+    for (const p of (s.pending ?? []).slice(0, verbose ? undefined : 3))
+      console.log(color(2, `        pending: ${p}`));
+    if (verbose) for (const n of s.notes ?? []) console.log(color(2, `        ${n}`));
   }
   return ok;
 }
 
-async function checkCapstone(id: string): Promise<boolean> {
-  const c = capstones.find((x) => x.id === id);
-  if (!c) return false;
-  const issues: string[] = [];
-  if (c.brief) {
-    const code = stripMarkers(c.brief.code.starter).code;
-    const r = await evaluate(code, 4);
-    if (!r.ok) issues.push(`starter: ${r.error}`);
-    else if (r.events.length === 0) issues.push("starter: silent");
-    for (const d of lint(code, { session: c.sessionDefs[0]?.id as never, meter: c.meter }).diagnostics)
-      if (d.severity === "error") issues.push(`starter:${d.line} ${d.id}: ${d.message}`);
-  }
-  return print(`${c.id} ${c.title} (${c.kind}, ${c.sessions} sessions)`, [
-    { n: 1, name: "Brief and starter", issues },
-  ]);
-}
-
-const arg = process.argv[2];
 if (!arg) {
-  console.error("usage: bun run content:check <lessonId | unitId | capstoneId | checkpointId | all>");
+  console.error(
+    "usage: bun run content:check <lessonId | unitId | checkpointId | capstoneId | all> [--verbose]",
+  );
   process.exit(2);
 }
+
 const { lessons, errors } = await loadLessons();
-for (const e of errors) console.error(`${FAIL} ${e.file}: ${e.error}`);
+const cps = await loadCheckpointFiles();
+const unitIds = new Set(syllabus.units.map((u) => u.id as string));
+const isLessonTarget = (id: string | null | undefined) =>
+  !!id && (arg === "all" || id === arg || (unitIds.has(arg) && id.startsWith(`${arg}.`)));
+
+let ok = true;
+// Load errors: fatal for the targets, a note for anybody else's lesson in progress.
+for (const e of errors) {
+  if (isLessonTarget(e.folderId) || (arg !== "all" && e.file.includes(arg))) {
+    console.error(`${FAIL} ${e.file}: ${e.error}`);
+    ok = false;
+  } else console.log(color(2, `note: ${e.file} does not load (not checked here): ${e.error.split("\n")[0]}`));
+}
+for (const e of cps.errors) {
+  const id = e.file.match(/core\/(U\d{2})\/CP\//)?.[1];
+  if (arg === "all" || (id && (arg === id || arg === `${id}.CP`))) {
+    console.error(`${FAIL} ${e.file}: ${e.error}`);
+    ok = false;
+  } else console.log(color(2, `note: ${e.file} does not load (not checked here)`));
+}
 
 let targets: LoadedLesson[] = [];
-let ok = errors.length === 0;
-if (arg === "all") targets = lessons;
-else if (syllabus.units.some((u) => u.id === arg))
+let checkpoints: CheckpointDef[] = [];
+let capstoneIds: string[] = [];
+if (arg === "all") {
+  targets = lessons;
+  checkpoints = cps.defs;
+  // A brief is authored just in time (two units ahead of the learner): `all` checks the ones that carry
+  // tests, and names the rest.
+  capstoneIds = capstones.filter((c) => (c.brief?.tests.length ?? 0) > 0).map((c) => c.id);
+  const later = capstones.filter((c) => c.brief && c.brief.tests.length === 0).map((c) => c.id);
+  if (later.length) console.log(color(2, `note: briefs without tests yet (not checked): ${later.join(" ")}`));
+} else if (unitIds.has(arg)) {
   targets = lessons.filter((l) => l.def.id.startsWith(`${arg}.`) && !l.sample);
-else if (capstones.some((c) => c.id === arg)) ok = (await checkCapstone(arg)) && ok;
+  checkpoints = cps.defs.filter((c) => c.id === `${arg}.CP`);
+  if (targets.length === 0 && checkpoints.length === 0 && ok)
+    console.log(`\n${arg}: nothing authored yet (lessons go in content/core/${arg}/Lnn/).`);
+} else if (capstones.some((c) => c.id === arg)) capstoneIds = [arg];
 else if (checkpointMetas.some((c) => c.id === arg)) {
-  const cp = checkpointMetas.find((c) => c.id === arg);
-  console.log(
-    `\n${arg}: authored items are not written yet (content/core/${arg.split(".")[0]}/CP/checkpoint.ts); covers ${cp?.covers.join(" ")}`,
-  );
-} else {
-  targets = lessons.filter((l) => l.def.id === arg || relative(process.cwd(), l.dir).includes(arg));
-  if (targets.length === 0) {
+  checkpoints = cps.defs.filter((c) => c.id === arg);
+  if (checkpoints.length === 0) {
     console.error(
-      `${FAIL} no lesson, unit, capstone or checkpoint "${arg}" (authored lessons: ${lessons.map((l) => l.def.id).join(" ") || "none"})`,
+      `${FAIL} ${arg}: no checkpoint file yet (content/core/${arg.split(".")[0]}/CP/checkpoint.ts, AUTHORING §10)`,
+    );
+    ok = false;
+  }
+} else {
+  targets = lessons.filter(
+    (l) => l.def.id === arg || relative(CONTENT_ROOT, l.dir).includes(arg) || l.folderId === arg,
+  );
+  if (targets.length === 0 && ok) {
+    console.error(
+      `${FAIL} no lesson, unit, checkpoint or capstone "${arg}" (authored lessons: ${lessons.map((l) => l.def.id).join(" ") || "none"})`,
     );
     process.exit(1);
   }
 }
-if (arg === "all") for (const c of capstones) ok = (await checkCapstone(c.id)) && ok;
+
+for (const id of capstoneIds) {
+  const c = capstones.find((x) => x.id === id);
+  if (c)
+    ok =
+      print(
+        `${c.id} ${c.title} (${c.kind}, ${c.sessions} session${c.sessions === 1 ? "" : "s"})`,
+        await checkCapstone(c),
+      ) && ok;
+}
+for (const cp of checkpoints)
+  ok =
+    print(
+      `${cp.id} ${cp.title}  content/core/${cp.id.split(".")[0]}/CP/checkpoint.ts`,
+      await checkCheckpoint(cp),
+    ) && ok;
 for (const l of targets)
   ok =
     print(

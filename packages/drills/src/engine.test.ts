@@ -1,11 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { Answer, FamilyDef, KeySpec, LessonId, SkillId, Trial } from "@oak/content-kit";
 import { defineDeck, defineFamily } from "@oak/content-kit";
-import { ChordType, Key, Note } from "tonal";
+import { decks as DECKS, KEY_SIGNATURES, STAFF_NAMES } from "../../../content/decks/index.ts";
 import { skills } from "../../../content/skills.ts";
 import { units } from "../../../content/syllabus.ts";
 import { clickPlan, eventsToAudioPlan, trialAudio } from "./audio.ts";
-import { CHORD_SYMBOLS, DECKS, KEY_SIGNATURES, STAFF_NAMES, signatureKeys } from "./catalog/decks.ts";
 import { FAMILIES } from "./catalog/families.ts";
 import {
   bindDeck,
@@ -29,7 +28,6 @@ import {
 } from "./engine.ts";
 import { gradeSungResolution } from "./gen/degree.ts";
 import { type DrillTrialResult, gradeAnswer, gradeCodeTrial } from "./grade.ts";
-import type { CHORD_SUFFIX } from "./kernel.ts";
 import { generateLadderPiece } from "./ladder.ts";
 import { parseMini, parseMiniCode } from "./mini.ts";
 import { pitch } from "./pitch-seam.ts";
@@ -71,59 +69,6 @@ describe("catalog", () => {
       for (const c of d.cards) if (c.gate) expect(lessons.has(c.gate)).toBe(true);
     }
   });
-  test("key signatures: 15 major and 15 minor keys, counts agree with tonal", () => {
-    expect(signatureKeys("major").length).toBe(15);
-    expect(signatureKeys("minor").length).toBe(15);
-    for (const c of KEY_SIGNATURES.cards) {
-      const m = /fact\.keysig\.(major|minor)\.([A-G])(-sharp|-flat)?\.(sig|key)/.exec(
-        c.id,
-      ) as RegExpExecArray;
-      const tonic = `${m[2]}${m[3] === "-sharp" ? "#" : m[3] === "-flat" ? "b" : ""}`;
-      const alt = m[1] === "major" ? Key.majorKey(tonic).alteration : Key.minorKey(tonic).alteration;
-      const text = alt === 0 ? "0" : alt > 0 ? `${alt}#` : `${-alt}b`;
-      if (m[4] === "sig") expect(c.answer.text?.[0]).toBe(text);
-      else expect(c.answer.text?.[0]).toBe(tonic);
-    }
-    expect(KEY_SIGNATURES.cards.length).toBe(60);
-  });
-  test("staff names: letters agree with the written note", () => {
-    for (const c of STAFF_NAMES.cards)
-      expect(c.answer.choice?.[0]).toBe(Note.get(c.prompt.staff?.notes[0] as string).letter);
-    const treble = STAFF_NAMES.cards
-      .filter((c) => c.prompt.staff?.clef === "treble")
-      .map((c) => c.prompt.staff?.notes[0]);
-    expect(treble).toContain("D4");
-    expect(treble).toContain("G5");
-    expect(treble).toContain("C6");
-  });
-  test("chord symbols: the code spelling is a chord tonal knows with the same quality", () => {
-    const tonal: Record<string, string> = {
-      maj: "M",
-      min: "m",
-      dim: "dim",
-      aug: "aug",
-      "7": "7",
-      maj7: "maj7",
-      m7: "m7",
-      m7b5: "m7b5",
-      dim7: "dim7",
-      "6": "6",
-      m6: "m6",
-      "69": "6add9",
-      sus2: "sus2",
-      sus4: "sus4",
-      "7sus4": "7sus4",
-      "9": "9",
-      maj9: "maj9",
-      m9: "m9",
-      "13": "13",
-      mMaj7: "mMaj7",
-    };
-    for (const c of CHORD_SYMBOLS.cards.filter((x) => x.id.endsWith(".name"))) {
-      const q = c.answer.choice?.[0] as keyof typeof CHORD_SUFFIX;
-      expect(ChordType.get(tonal[q] as string).empty).toBe(false);
-    }
-  });
   test("deck grading", () => {
     const deck = bindDeck(KEY_SIGNATURES);
     const card = KEY_SIGNATURES.cards[0];
@@ -138,10 +83,13 @@ describe("catalog", () => {
 });
 
 describe("registry", () => {
-  test("binds implemented families, pending ones throw clearly", () => {
-    const reg = createRegistry(FAMILIES, DECKS);
+  test("binds every family of the catalog; a pending one throws clearly", () => {
+    const pending = { ...fam("fam.frm.sections"), generator: "pending:form-sections" };
+    const reg = createRegistry([...FAMILIES.filter((f) => f.id !== pending.id), pending], DECKS);
     expect(reg.family("fam.deg.fet-major").def.id).toBe("fam.deg.fet-major");
     expect(() => reg.family("fam.frm.sections")).toThrow(/not implemented/);
+    expect(createRegistry(FAMILIES, DECKS).families().length).toBe(FAMILIES.length);
+    expect(FAMILIES.every((f) => !isPendingGenerator(f.generator))).toBe(true);
     expect(() => reg.family("fam.nope.x")).toThrow(/unknown/);
     expect(reg.decks().length).toBe(3);
     expect(() => bindFamily({ ...fam("fam.pit.compare"), generator: "nope" })).toThrow(/unknown generator/);

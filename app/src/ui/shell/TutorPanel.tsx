@@ -1,90 +1,23 @@
-// The tutor panel container (ux §2.1, §6.1): docked at L (360 px default, resizable 320–520, persisted) and a
-// 400 px overlay drawer at M. Its content is a slot: Wave 2 registers the chat with `setTutorContent`; until then
-// a placeholder shows the backend status and the latest notes, which already come from the server.
-import { TUTOR_ERROR_COPY } from "@oak/api";
+// The tutor panel container (ux §2.1, §6.1): docked on large screens (360 px default, resizable 320–520 with the
+// pointer or the arrow keys, width remembered), collapsed to a slim rail when hidden, and a 400 px overlay drawer
+// on smaller screens. Mod+J toggles it (GlobalKeys); Mod+I asks Claude: it opens the panel with the editor's
+// selection as context and puts the cursor in the composer, or closes the panel when the composer already has
+// focus. The content is app/src/tutor/TutorChat.tsx.
 import { clsx } from "clsx";
-import { MessageCircle, X } from "lucide-react";
-import type { ComponentType, KeyboardEvent, PointerEvent } from "react";
-import { create } from "zustand";
-import { useHealth, useTutorNotes } from "../../lib/queries.ts";
+import { Leaf, PanelRightClose, PanelRightOpen } from "lucide-react";
+import type { KeyboardEvent, PointerEvent } from "react";
 import { useShell } from "../../lib/shell-store.ts";
 import { useIsLarge } from "../../lib/use-media.ts";
+import { focusTutor, patchSubject, useTutorContext } from "../../tutor/context.ts";
+import { installTutorDevHook } from "../../tutor/dev-hook.ts";
+import { TutorChat } from "../../tutor/TutorChat.tsx";
+import { useHotkeys } from "../keys/KeymapProvider.tsx";
 import { IconButton } from "../kit/Button.tsx";
-import { Chip, WavePlaceholder } from "../kit/basics.tsx";
 import { Drawer } from "../kit/Dialog.tsx";
 import { TUTOR_WIDTH, usePrefs } from "../theme/prefs.ts";
 import { useTutorToggle } from "./status.tsx";
 
-interface TutorSlot {
-  Content: ComponentType | null;
-}
-export const useTutorSlot = create<TutorSlot>(() => ({ Content: null }));
-/** Wave 2: the tutor chat registers itself here. */
-export function setTutorContent(Content: ComponentType | null): void {
-  useTutorSlot.setState({ Content });
-}
-
-const STATUS_COPY: Record<string, string> = {
-  ready: "Ready",
-  missing_key: "No API key and no Claude login found",
-  invalid_key: "The API key was refused",
-  unreachable: "Anthropic could not be reached",
-};
-
-function Placeholder() {
-  const health = useHealth();
-  const notes = useTutorNotes();
-  const h = health.data;
-  return (
-    <div className="flex flex-col gap-4 p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        {h ? (
-          <>
-            <Chip tone={h.tutor === "ready" ? "accent" : "issue"}>{STATUS_COPY[h.tutor] ?? h.tutor}</Chip>
-            <Chip>
-              {h.tutorBackend === "claude-cli"
-                ? "Claude CLI"
-                : h.tutorBackend === "anthropic-api"
-                  ? "Anthropic API"
-                  : "Off"}
-            </Chip>
-          </>
-        ) : health.isError ? (
-          <Chip tone="issue">{TUTOR_ERROR_COPY.network}</Chip>
-        ) : (
-          <Chip>Checking…</Chip>
-        )}
-      </div>
-      <WavePlaceholder feature="The tutor chat">
-        <p className="text-sm text-text-2">
-          Oak works fully without the tutor. When it is on, Claude sees your code, your grader result and the
-          lesson — never your audio.
-        </p>
-      </WavePlaceholder>
-      {notes.data && notes.data.items.length > 0 && (
-        <section aria-label="Recent tutor notes">
-          <h3 className="mb-2 text-sm font-semibold text-text-2">Recent notes</h3>
-          <ul className="flex flex-col gap-2">
-            {notes.data.items
-              .filter((n) => !n.retractedAt)
-              .slice(0, 5)
-              .map((n) => (
-                <li key={n.id} className="rounded-control border border-border p-2 text-sm">
-                  {n.text}
-                  <span className="mt-1 block text-text-3">{n.day}</span>
-                </li>
-              ))}
-          </ul>
-        </section>
-      )}
-    </div>
-  );
-}
-
-function PanelBody() {
-  const Content = useTutorSlot((s) => s.Content);
-  return Content ? <Content /> : <Placeholder />;
-}
+installTutorDevHook();
 
 function ResizeHandle() {
   const width = usePrefs((s) => s.tutorWidth);
@@ -123,47 +56,108 @@ function ResizeHandle() {
       tabIndex={0}
       onPointerDown={onPointerDown}
       onKeyDown={onKeyDown}
-      className="absolute inset-y-0 -left-1 w-2 cursor-col-resize focus-visible:bg-accent/30 hover:bg-accent/20"
+      data-testid="tutor-resize"
+      className="absolute inset-y-0 -left-1 z-10 w-2 cursor-col-resize hover:bg-accent/20 focus-visible:bg-accent/30 focus-visible:outline-none"
     />
   );
 }
 
-/** Docked panel (L) or drawer (M). Renders nothing when closed. */
+/** The selected text of the focused CodeMirror editor, if any (Mod+I "ask about the selection"). */
+function editorSelection(): string | null {
+  const active = document.activeElement;
+  if (!active?.closest(".cm-editor")) return null;
+  const text = document.getSelection()?.toString() ?? "";
+  return text.trim() ? text : null;
+}
+
+function useAskKey(open: boolean, toggle: () => void) {
+  useHotkeys([
+    {
+      id: "tutor-ask",
+      keys: "Mod+I",
+      scope: "global",
+      group: "Global",
+      description: "Ask Claude (focus the tutor; again to close it)",
+      allowInInput: true,
+      run: () => {
+        const inPanel = document.activeElement?.closest("[data-tutor-panel]");
+        if (open && inPanel) {
+          toggle();
+          return;
+        }
+        const selection = editorSelection();
+        const subject = useTutorContext.getState().subject;
+        if (subject) patchSubject(subject.thread, { selection });
+        focusTutor();
+      },
+    },
+  ]);
+}
+
+/** The collapsed panel: a slim rail that keeps the tutor one click (or Mod+J) away. */
+function Rail({ onOpen }: { onOpen(): void }) {
+  const availability = useTutorContext((s) => s.availability);
+  return (
+    <aside
+      aria-label="Tutor (collapsed)"
+      data-testid="tutor-rail"
+      className="flex h-full w-11 shrink-0 flex-col items-center gap-2 border-l border-border bg-surface py-2"
+    >
+      <IconButton
+        label="Show tutor"
+        shortcut="⌘J"
+        tooltipSide="left"
+        icon={<PanelRightOpen aria-hidden className="size-4" />}
+        onClick={onOpen}
+      />
+      <span
+        aria-hidden
+        title={availability === "ready" ? "Claude is ready" : "Tutor off"}
+        className={clsx("size-2 rounded-full", availability === "ready" ? "bg-accent" : "bg-text-3")}
+      />
+      <Leaf aria-hidden className="mt-1 size-4 text-text-3" />
+    </aside>
+  );
+}
+
+/** Docked panel or rail (large screens), drawer (smaller). */
 export function TutorPanel() {
   const large = useIsLarge();
   const { open, toggle } = useTutorToggle();
   const width = usePrefs((s) => s.tutorWidth);
   const drawerOpen = useShell((s) => s.tutorDrawerOpen);
   const setDrawer = useShell((s) => s.setTutorDrawerOpen);
+  useAskKey(open, toggle);
   if (!large)
     return (
       <Drawer open={drawerOpen} onClose={() => setDrawer(false)} title="Tutor" width={400}>
-        <PanelBody />
+        <div data-tutor-panel data-keyscope="tutor-composer" className="h-full">
+          <TutorChat variant="drawer" />
+        </div>
       </Drawer>
     );
-  if (!open) return null;
+  if (!open) return <Rail onOpen={toggle} />;
   return (
     <aside
       aria-label="Tutor"
+      data-tutor-panel
       data-keyscope="tutor-composer"
+      data-testid="tutor-panel"
       style={{ width }}
-      className={clsx("relative flex h-full shrink-0 flex-col border-l border-border bg-surface")}
+      className="relative flex h-full shrink-0 flex-col border-l border-border bg-surface"
     >
       <ResizeHandle />
-      <div className="flex h-12 items-center justify-between border-b border-border px-3">
-        <h2 className="flex items-center gap-2 font-sans text-base font-semibold">
-          <MessageCircle aria-hidden className="size-4" /> Tutor
-        </h2>
-        <IconButton
-          label="Hide tutor"
-          shortcut="⌘J"
-          icon={<X aria-hidden className="size-4" />}
-          onClick={toggle}
-        />
-      </div>
-      <div className="min-h-0 flex-1 overflow-auto">
-        <PanelBody />
-      </div>
+      <TutorChat
+        headerEnd={
+          <IconButton
+            label="Hide tutor"
+            shortcut="⌘J"
+            tooltipSide="left"
+            icon={<PanelRightClose aria-hidden className="size-4" />}
+            onClick={toggle}
+          />
+        }
+      />
     </aside>
   );
 }

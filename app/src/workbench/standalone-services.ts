@@ -36,6 +36,8 @@ export function standaloneServices(soundsRoot = "/sounds/v1"): Promise<Workbench
     const oak = adapter(soundsRoot);
     const grader = createBrowserGraderHost({ toolbox: [...toolbox] });
     await Promise.all([oak.ready.catch(() => undefined), grader.ready()]);
+    // Dev page only: the e2e specs read the master-bus level (as the app's own dev hook does).
+    if (import.meta.env?.DEV) (globalThis as { __oakStrudel?: OakStrudel }).__oakStrudel = oak;
     return { oak, grader, renderFeedback: render };
   })();
   pending.catch(() => {

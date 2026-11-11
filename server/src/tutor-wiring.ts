@@ -11,8 +11,10 @@ import type { GraderHosts } from "./deps.ts";
 import type { Secrets } from "./secrets.ts";
 import type { Services } from "./services/index.ts";
 import { createDefaultTutor, type DefaultTutorDeps } from "./tutor/compose.ts";
+import { createTutorApp, createTutorService, localSecurity, type TutorLogEntry } from "./tutor/index.ts";
 import type { TutorPorts } from "./tutor/ports.ts";
 import type { TutorService } from "./tutor/service-types.ts";
+import { FakeTutorBackend, type FakeTutorOptions } from "./tutor-adapters/fake-backend.ts";
 import { GraderAdapter } from "./tutor-adapters/grader.ts";
 import { LessonContextAdapter } from "./tutor-adapters/lessons.ts";
 import { ProgressAdapter } from "./tutor-adapters/progress.ts";
@@ -48,6 +50,11 @@ export interface TutorWiringDeps {
   devPorts: readonly number[];
   /** Test and transport options passed through to `createDefaultTutor`. */
   tutor?: Pick<DefaultTutorDeps, "api" | "cli" | "idleTimeout" | "bunServer" | "heartbeatMs" | "log">;
+  /**
+   * Dev only (`OAK_DEV=1 OAK_TUTOR_FAKE=1`, config.ts `tutorFake`): the scripted fake backend replaces both
+   * real backends, so no model is ever called (docs/design/wave2.md §5). `true` or its options.
+   */
+  fake?: boolean | FakeTutorOptions;
 }
 
 export function createTutorWiring(d: TutorWiringDeps): TutorWiring {
@@ -67,18 +74,21 @@ export function createTutorWiring(d: TutorWiringDeps): TutorWiring {
     usage: new SqliteUsageSink(d.repos),
     clock,
   };
-  const tutor = createDefaultTutor({
-    ports,
-    apiKey: () => d.secrets.anthropicKey(),
-    port: d.port,
-    devPorts: d.devPorts,
-    onReview: (accepted) => {
-      if (accepted.reviewKind === "capstone")
-        d.services.library.saveCapstoneReview(accepted.subject.subjectId, accepted.review);
-      else d.services.library.saveTranscriptionReview(accepted.subject.subjectId, accepted.review);
-    },
-    ...(d.tutor ?? {}),
-  });
+  const onReview: NonNullable<DefaultTutorDeps["onReview"]> = (accepted) => {
+    if (accepted.reviewKind === "capstone")
+      d.services.library.saveCapstoneReview(accepted.subject.subjectId, accepted.review);
+    else d.services.library.saveTranscriptionReview(accepted.subject.subjectId, accepted.review);
+  };
+  const tutor = d.fake
+    ? fakeTutor(d, ports, onReview)
+    : createDefaultTutor({
+        ports,
+        apiKey: () => d.secrets.anthropicKey(),
+        port: d.port,
+        devPorts: d.devPorts,
+        onReview,
+        ...(d.tutor ?? {}),
+      });
   return {
     app: tutor.app,
     service: tutor.service,
@@ -94,4 +104,32 @@ export function createTutorWiring(d: TutorWiringDeps): TutorWiring {
     },
     refresh: () => tutor.refresh(),
   };
+}
+
+/**
+ * The tutor service and routes over the scripted fake backend only: the same service, redaction, card
+ * validation and SSE routes as production, without the API and CLI backends (and without the CLI's MCP
+ * endpoint, which only the CLI backend calls).
+ */
+function fakeTutor(
+  d: TutorWiringDeps,
+  ports: TutorPorts,
+  onReview: NonNullable<DefaultTutorDeps["onReview"]>,
+): { app: Hono; service: TutorService; refresh(): void } {
+  const log =
+    d.tutor?.log ??
+    ((e: TutorLogEntry) =>
+      console.error(`[tutor:fake] ${e.level}: ${e.msg}${e.detail ? ` (${e.detail})` : ""}`));
+  const backend = new FakeTutorBackend(typeof d.fake === "object" ? d.fake : {});
+  const service = createTutorService({ ports, backends: [backend], log, onReview });
+  const app = createTutorApp({
+    service,
+    security: localSecurity(d.port, d.devPorts),
+    log,
+    basePath: "/api",
+    idleTimeout: d.tutor?.idleTimeout ?? "require",
+    ...(d.tutor?.bunServer === undefined ? {} : { bunServer: d.tutor.bunServer }),
+    ...(d.tutor?.heartbeatMs === undefined ? {} : { heartbeatMs: d.tutor.heartbeatMs }),
+  });
+  return { app, service, refresh: () => service.refreshBackends() };
 }

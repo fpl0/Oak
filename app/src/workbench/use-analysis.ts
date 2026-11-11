@@ -63,7 +63,8 @@ export function useAnalysis(
       grader
         .analyze(src, evalOpts, ctl.signal)
         .then((result) => {
-          if (my !== seq.current) return;
+          // An aborted analysis (a newer one, or StrictMode's unmount) says nothing about the code.
+          if (my !== seq.current || ctl.signal.aborted) return;
           const out = buildModel(src, result, {
             meter: o.meter,
             key: o.key,
@@ -95,8 +96,11 @@ export function useAnalysis(
     return () => clearTimeout(t);
   }, [grader, code, run]);
 
-  // Re-analyse when what shapes the model changes (key, meter, bars, band, staff kind).
-  const shape = `${opts.bars}|${opts.meter}|${opts.key?.tonic}:${opts.key?.mode}|${opts.band?.code ?? ""}|${opts.staff}|${opts.staffLabels}`;
+  // Re-analyse when what shapes the model changes (key, meter, bars, band, staff kind) or what the lint allows
+  // (the learner's unlocked set often arrives after the first analysis: without this the "locked" errors of an
+  // empty set stay on screen).
+  const lintKey = `${opts.lint.profile}|${opts.lint.allowPreview}|${[...opts.lint.unlocked].sort().join(",")}`;
+  const shape = `${opts.bars}|${opts.meter}|${opts.key?.tonic}:${opts.key?.mode}|${opts.band?.code ?? ""}|${opts.staff}|${opts.staffLabels}|${lintKey}`;
   const lastShape = useRef(shape);
   useEffect(() => {
     if (lastShape.current === shape) return;
@@ -105,7 +109,15 @@ export function useAnalysis(
     // eslint-style: `code` is read at the time of the shape change on purpose
   }, [shape, run, code]);
 
-  useEffect(() => () => abort.current?.abort(), []);
+  useEffect(
+    () => () => {
+      abort.current?.abort();
+      // A remount (StrictMode in dev, or a kept-alive view) analyses at once again instead of waiting for
+      // the debounce with the aborted run's state on screen.
+      first.current = true;
+    },
+    [],
+  );
 
   return { ...state, analyzeNow: run };
 }

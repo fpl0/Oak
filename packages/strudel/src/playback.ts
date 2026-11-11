@@ -87,8 +87,10 @@ export function playEvents(rt: Runtime, plan: AudioPlan, opts: PlayEventsOptions
       const t = Math.max(ev.t, ctx.currentTime);
       void Promise.resolve(webaudio.superdough(ev.value, t, ev.dur)).catch(() => undefined);
     }
-    if (queue.length === 0 && timer !== null) {
-      WT.clearInterval(timer);
+    // Arm the end timer once, when the queue drains: on the first pump (a one-note plan, or every event
+    // inside the lookahead) as well as on a later tick.
+    if (queue.length === 0 && endTimer === null) {
+      if (timer !== null) WT.clearInterval(timer);
       timer = null;
       endTimer = setTimeout(finish, Math.max(0, (endTime - ctx.currentTime) * 1000));
     }

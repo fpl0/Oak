@@ -4,11 +4,13 @@ import type { OakConfig } from "../config.ts";
 import { AudioStore } from "./audio-store.ts";
 import { BackupService } from "./backup.ts";
 import { CanDoService } from "./cando.ts";
+import { CapstoneReleaseService } from "./capstone-release.ts";
 import type { ServiceContext } from "./context.ts";
 import { CourseService } from "./course.ts";
 import { GatesService } from "./gates.ts";
 import { type LadderGenerator, LibraryService, type PatternStimulus } from "./library.ts";
 import { MasteryService } from "./mastery.ts";
+import { OnboardingService } from "./onboarding.ts";
 import { OpsService } from "./ops.ts";
 import type { SrsPort } from "./ports.ts";
 import { SessionsService } from "./sessions.ts";
@@ -23,6 +25,8 @@ export interface Services {
   cando: CanDoService;
   streak: StreakService;
   course: CourseService;
+  release: CapstoneReleaseService;
+  onboarding: OnboardingService;
   sessions: SessionsService;
   library: LibraryService;
   ops: OpsService;
@@ -76,11 +80,28 @@ export function createServices(ctx: ServiceContext, opts: ServiceOptions): Servi
     ...(opts.stimulus === undefined ? {} : { stimulus: opts.stimulus }),
     ...(opts.ladder === undefined ? {} : { ladder: opts.ladder }),
   });
+  const release = new CapstoneReleaseService(ctx, { course, gates, library, unlocks, cando, streak });
+  const onboarding = new OnboardingService(ctx, course);
   const ops = new OpsService(ctx, mastery);
   const backup = new BackupService(
     ctx.repos.db,
     { backupsDir: opts.config.backupsDir, store },
     { contentVersion: () => ctx.content.contentVersion, now: () => ctx.clock.now() },
   );
-  return { ctx, gates, unlocks, mastery, cando, streak, course, sessions, library, ops, backup, store };
+  return {
+    ctx,
+    gates,
+    unlocks,
+    mastery,
+    cando,
+    streak,
+    course,
+    release,
+    onboarding,
+    sessions,
+    library,
+    ops,
+    backup,
+    store,
+  };
 }

@@ -9,6 +9,7 @@ import {
   CardRecordSchema,
   SubjectRefSchema,
   TutorNoteSchema,
+  TutorStatusSchema,
   TutorTimelineSchema,
   TutorTurnRequestSchema,
   TutorUsageReportSchema,
@@ -487,7 +488,110 @@ export const contract = {
     }),
     dev: true,
   },
+
+  // --- Wave 2 additions (docs/design/wave2.md §4). Until the server engineer builds a handler, each answers
+  // 501 `not_implemented` (except `tutor.status`, which the tutor service already serves). ---
+  /** Coda after a reload: the summary `session.end` returned. */
+  "session.summary": {
+    method: "GET",
+    path: "/session/:id/summary",
+    params: p("id"),
+    res: D.SessionSummarySchema,
+  },
+  /** Every step's state of one lesson (step rail, resume). */
+  "lessons.steps": { method: "GET", path: "/lessons/:id/steps", params: p("id"), res: D.LessonStepsSchema },
+  /** Where the learner is in a lesson; "Wrap up" before the Make (contracts §9.3, §9.4). */
+  "lessons.position": {
+    method: "PUT",
+    path: "/lessons/:id/position",
+    params: p("id"),
+    body: D.LessonPositionSchema,
+    res: D.LessonProgressSchema,
+  },
+  /** Release a capstone draft to the album (first release or a revision). */
+  "capstones.release": {
+    method: "POST",
+    path: "/capstones/:id/release",
+    params: p("id"),
+    body: D.CapstoneReleaseSchema,
+    res: D.CapstoneReleaseResultSchema,
+  },
+  /** The next unlocks and how far away they are (Today's NextUnlockCard, the Coda's goal-gradient line). */
+  "unlocks.next": { method: "GET", path: "/unlocks/next", res: list(D.NextUnlockSchema) },
+  /** The map's "Revive": the planned warm-up sets of stale nodes (one node with `skillId`); `more` = "Revive more". */
+  "skills.revive": {
+    method: "GET",
+    path: "/skills/revive",
+    query: z.strictObject({ skillId: id.optional(), more: flag.optional() }),
+    res: D.DueBatchSchema,
+  },
+  "onboarding.get": { method: "GET", path: "/onboarding", res: D.OnboardingStateSchema },
+  "onboarding.put": {
+    method: "PUT",
+    path: "/onboarding",
+    body: D.OnboardingPatchSchema,
+    res: D.OnboardingStateSchema,
+  },
+  /** Calibration history, newest first (Settings → Voice and Audio show the last result of each kind). */
+  "profile.calibrations": {
+    method: "GET",
+    path: "/profile/calibrations",
+    query: z.strictObject({ kind: z.enum(D.CALIBRATION_KINDS).optional() }),
+    res: list(D.CalibrationRecordSchema),
+  },
+  /** Settings → Tutor: backends, selection, budget. Served by the tutor service's own route. */
+  "tutor.status": {
+    method: "GET",
+    path: "/tutor/status",
+    query: z.strictObject({ refresh: z.literal("1").optional() }),
+    res: TutorStatusSchema,
+  },
+  "dev.listen": { method: "GET", path: "/dev/listen", res: list(D.ListenMarkSchema), dev: true },
+  "dev.listenMark": {
+    method: "PUT",
+    path: "/dev/listen/:ref",
+    params: p("ref"),
+    body: D.ListenMarkCreateSchema,
+    res: D.ListenMarkSchema,
+    dev: true,
+  },
+
+  // --- Wave 2 Build: dev tools for e2e (server engineer). ---
+  /** Wipe the data and fast-forward the learner to a named point (DevSeedRequestSchema lists the points). */
+  "dev.seed": {
+    method: "POST",
+    path: "/dev/seed",
+    body: D.DevSeedRequestSchema,
+    res: D.DevSeedResultSchema,
+    dev: true,
+  },
+  /** The named seed points with one line each. */
+  "dev.seedPoints": { method: "GET", path: "/dev/seed", res: list(D.DevSeedPointSchema), dev: true },
+  "dev.clock": { method: "GET", path: "/dev/clock", res: D.DevClockSchema, dev: true },
+  /** Move, freeze or reset the server clock (dev only). */
+  "dev.clockSet": {
+    method: "PUT",
+    path: "/dev/clock",
+    body: D.DevClockSetSchema,
+    res: D.DevClockSchema,
+    dev: true,
+  },
 } as const satisfies Record<string, EndpointDef>;
+
+/** The Wave 2 endpoints of docs/design/wave2.md §4. All are built now (routes.test.ts checks none answers 501). */
+export const WAVE2_ENDPOINTS = [
+  "session.summary",
+  "lessons.steps",
+  "lessons.position",
+  "capstones.release",
+  "unlocks.next",
+  "skills.revive",
+  "onboarding.get",
+  "onboarding.put",
+  "profile.calibrations",
+  "dev.listen",
+  "dev.listenMark",
+] as const satisfies readonly (keyof typeof contract)[];
 
 export type Contract = typeof contract;
 export type EndpointName = keyof Contract;

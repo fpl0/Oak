@@ -1,8 +1,8 @@
 // /dev/workbench: the workbench playground inside the app shell, with the app's own adapter and grader host.
 import { Playground } from "../../../workbench/dev/Playground.tsx";
 import "../../../workbench/index.ts";
+import { appWorkbenchServices } from "../../../lib/workbench-services.ts";
 import { ServicesGate } from "../../../workbench/ServicesGate.tsx";
-import { appWorkbenchServices } from "../-lib/app-services.ts";
 
 export function WorkbenchPage() {
   return (

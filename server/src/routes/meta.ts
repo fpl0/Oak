@@ -1,5 +1,6 @@
 // health, bootstrap, settings (incl. the API key), confirm, data reset, profile.
 import {
+  type CalibrationRecord,
   CONTRACTS_VERSION,
   type Health,
   type KeyStatus,
@@ -102,4 +103,14 @@ export function metaRoutes(mount: Mounter, d: AppDeps): void {
     d.repos.profile.addCalibration(body.kind, body.result, d.clock.now().toISOString());
     return d.repos.profile.patch(body.patch as never);
   });
+
+  // Wave 2 (docs/design/wave2.md §4).
+  mount("profile.calibrations", ({ query }) => ({
+    items: d.repos.profile
+      .calibrations()
+      .filter((c) => query.kind === undefined || c.kind === query.kind)
+      .reverse() as CalibrationRecord[],
+  }));
+  mount("onboarding.get", () => s.onboarding.get());
+  mount("onboarding.put", ({ body }) => s.onboarding.put(body));
 }

@@ -7,7 +7,9 @@
 ## Wave 1 state (read this first)
 
 Written at the Wave 1 final gate (2026-11-11). §1–§10 are the Foundation API; §11 and §12 record what the
-code changed since. When they disagree, §12 beats §11 beats §4, and the code beats all of them.
+code changed since. When they disagree, §12 beats §11 beats §4, and the code beats all of them. **Wave 2** is
+recorded in §13–§15 and in `docs/design/wave2.md` (its "Wave 2 state" section is the current summary); the
+"Known gaps" below are Wave 1's, most of them closed by Wave 2.
 
 **What Wave 2 can rely on** (implemented, tested by execution, green in `bun run check` and `bun run e2e`):
 
@@ -132,7 +134,7 @@ Ambient declarations in `types/`: `strudel.d.ts` (untyped Strudel modules plus t
 | `lint` | `biome ci .` (Markdown, JSON and the generated route tree are excluded) |
 | `test` | `bun test --isolate` (ignores `spikes/**`, `e2e/**`, `**/*.pw.ts`) |
 | `test:content` | `bun test --isolate content` |
-| `e2e`, `test:browser` | `playwright test` with the root `playwright.config.ts`: every `*.pw.ts` suite (platform, app, workbench, strudel, audio) and their servers |
+| `e2e`, `test:browser` | `playwright test` with the root `playwright.config.ts`: one project per suite (platform, app, journey, the Wave 2 areas, workbench, strudel, audio); only the selected projects' servers start (§14) |
 | `check` | `typecheck`, `lint`, `test` |
 | `check:full` | `check`, then `e2e` (which itself runs `build` for the production project) |
 | `content:build`, `content:new`, `content:check` | `scripts/content/{build,new,check}.ts` |
@@ -1018,3 +1020,121 @@ finish, lesson seed, after-step and due call in one transaction.
 **Content CI.** `contracts-sync.test.ts` also checks capstone `sessionDefs[].goal` against the Objective
 column of §2.4 and §2.6. `content/capstones.ts`: C4's `major-v` rule is `contains-rn ["V"]` with
 `mustResolve` (contracts §6.6).
+
+## 13. Wave 2 Foundation additions
+
+`docs/design/wave2.md` is the Wave 2 seam document: ownership, ports by environment (`OAK_VITE_PORT`, `OAK_API_PORT`,
+any loopback port allowed in dev), the per-area Playwright stacks (`e2e/support/stack.ts`), the fake tutor backend
+(`OAK_TUTOR_FAKE=1`), the app-internal contracts (answers, lesson, session, tutor context, telemetry, kit) and the
+twelve API additions of its §4 (`WAVE2_ENDPOINTS` answer a typed 501 `not_implemented` until built;
+`tutor.status` is served by the tutor service). Where it and §4–§12 here disagree on those subjects, wave2.md is current.
+
+## 14. Wave 2 integration (the first playable)
+
+The builders' areas are joined into one app; `docs/design/wave2.md` §9 is the detailed record. What changed here:
+
+- **Session ↔ blocks are static imports** (`app/src/session/host/BlockViews.tsx`): `WarmUp` (drills), `LessonPlayer`,
+  `CheckpointPlayer` (lesson) and `CapstoneScreen` (capstone) mount inside `/session`; the lazy `import.meta.glob`
+  lookup (`blocks.tsx`, `find-export.ts`) and the warm-up "skip" fallback are gone. Only the Transcription Gym is handed
+  to its route. `/session` is a focus route (`FOCUS_ROUTE_PATTERNS`); the focus header carries "Today".
+- **Shared app code promoted** (import these, do not copy them): `app/src/lib/workbench-services.ts`
+  (`appWorkbenchServices`, `catalogText`; the lesson's `lessonServices` and onboarding's `onboardingServices` re-export
+  it), `app/src/lib/editors.ts` (`editableEditor`, `applyToEditor`: the tutor's Apply as one undoable change),
+  `app/src/lib/audition.ts` (`auditionCode(code, bars)`, `stopAudition`), `app/src/lib/unlocked.ts`
+  (`useUnlockedSet`), `app/src/ui/theme/use-theme-name.ts` (`useThemeName`), `app/src/album/TrackCover.tsx`.
+- **Tutor hosts**: the lesson player (Apply into the step's editor + `APPLY_CARD`, Reveal through its own ladder),
+  Studio (Apply into the sketch's editor) and the capstone (after the first release) call `registerTutorHost`. A
+  `Workbench` with the new optional prop `tutorBars` loops the bars of a tutor `[[bars …]]` reference
+  (`TUTOR_BARS_EVENT`); Studio, the capstone and the lesson Make set it.
+- **Grader**: the lint's locked/preview diagnostics carry `tool` and `lesson` params, so the catalog templates
+  `code.locked-*` and `code.preview-tool` name the tool ("`chord` unlocks in U05.L08. For now, use the tools you
+  have."). `lockedParams` in the lesson stays as a no-op guard.
+- **Lesson grading**: a sung step whose target comes from a code stimulus reads only the stimulus's own bars
+  (`stimulus.bars`), so a one-bar call is one target note.
+- **Checkpoint in a session**: the Make is reported after the hand-in (the result screen's "On to the coda"), never
+  at its save; the family registry uses the content decks (`@content/families.ts` `decks`).
+- **Server**: Today offers the Transcription Gym as an alternative only once U07.L01 is completed.
+- **Browser suites**: the root `playwright.config.ts` has one project per suite (`platform`, `app`, `journey`, `kit`,
+  `lesson`, `answers`, `drills`, `session`, `studio`, `map`, `tutor`, `onboarding`, `capstone`, `workbench`,
+  `strudel-*`, `audio`); `--project <name>` starts only that project's servers. Each area config exports
+  `area: Area` and `default areaConfig(area)` (`e2e/support/stack.ts`). The `e2e` row of §1.4 reads accordingly.
+- **Typecheck**: `app/tsconfig.json` excludes `**/*.bun.ts` like `tsconfig.app.json`; Bun-only e2e seeders are named
+  `*.bun.ts` (`app/src/capstone/e2e/seed.bun.ts`).
+
+## 15. Wave 2 final gate (after the four reviews)
+
+The reviews (teaching, journey, surfaces, robustness) and the final gate changed these cross-area APIs. Where this
+section and §14 disagree, this section is current; the code beats both.
+
+**Grader (`@oak/grader`)**
+
+- `code-make` (lesson and checkpoint Makes): **the starter as it came never passes.** When the rubric would pass
+  the unchanged starter (markers stripped, line-end whitespace ignored), the result is `fail` with the new error
+  `make.unchanged` ("This is still the starter as it came. Change it to make it yours, then save."), the rubric rows
+  still attached. A preview context (`ctx.lint.allowPreview`, the onboarding lessons) is exempt: Sketch 001 is the
+  loop as heard. `isUnchangedStarter(starter, code)` is exported from `grade/index.ts`. `compose-brief` is unchanged.
+- Catalog text: `tap.missed` "No tap for note {i} of the rhythm.", `tap.extra` "Tap {j} was one too many." (the tap
+  grader sends `i`/`j`, never bar or beat labels); `code.setcpm-form` "Tempo line: {detail}." (both the lint and the
+  runtime send `detail`); `investigate.wrong` "Not quite. Listen again and compare." (it no longer prints the answer
+  or raw option IDs); `pass.close` "Passed. Small things to polish: {n}.". `id.wrong` keeps "Listen to both" (right
+  for ear identification); fact and staff-reading steps override it with `feedbackText`.
+- Known and kept: in the `events` matcher `rhythm: "exact"` **also compares durations** (`wantDur = cfg.durations ||
+  cfg.rhythm === "exact"`), whatever `durations` says. Content uses `rhythm: "onsets"` where only onsets matter
+  (every drum step of U01 except U01.L05, which checks lengths).
+
+**Strudel adapter (`@oak/strudel`)**
+
+- `playEvents(...).done` now resolves for a plan whose events all fit in the first look-ahead (one note, one chord):
+  the end timer is armed whenever the queue drains (`playback.test.ts`). The app's workarounds (`playSettled` in
+  `app/src/drills/runtime.ts`, the clock-settled `done` in `app/src/lesson/audio.ts`) are now redundant but harmless.
+- `friendlyEvalError` reads only Strudel's parser errors (`[mini]`, `parse error`) as a mini-notation typo; an Oak lint
+  message that mentions "mini-notation" passes through as written.
+- `prebake` registers Oak's own kits after the bank aliases (`registerOakKits`): `.bank("jazzkit")` (`snd.jazzkit`,
+  the jazz-soul flavour's drums) plays the default acoustic kit (uzu-drumkit) per role until a brushes-and-ride kit is
+  mirrored. Before, every `jazzkit_*` sound was missing and the jazz-soul Band's drums were silent.
+
+**Server**
+
+- `PUT /lessons/:id/position`: only the steps **before** `stepId` are recorded as visited; `stepId` itself never is.
+  With `wrapped: true` an ungraded step on screen at "Wrap up" (e.g. U01.L01 S4) is where the lesson resumes.
+- Dev seeds use real course code: a seeded lesson Make is that Make's first passing test (Sketch 001 the onboarding
+  loop), a checkpoint Make a labelled kick/snare/hats groove, a capstone draft the brief's first passing test
+  (`lessonMakeCode`, `capstoneDraftCode`, `CHECKPOINT_GROOVE` in `services/dev-seed.ts`). Every seeded sketch after U00
+  lints clean under the learner's unlocks (`scenario.test.ts`).
+- From the robustness review: mastery **level** moves only on evidence (P decays with age, but level, debt and
+  hysteresis are judged at the time of the last evidence, `levelDay`); fading shows through freshness only. The
+  12-minute "a little more" cap (§7.4) is enforced on the server across the day (`SrsAdapter.reviewedTodaySec`, an
+  estimate: trials × `estTrialSec` + listen blocks + fact cards); `moreAvailable` is true only when a probe finds a
+  card the current block does not hold. A qualifying day in an already-closed streak week counts there (it can settle
+  a tie-open week, never demote a met one). `dayStartInstant` is exact at DST gaps and overlaps (packages/srs and
+  server). Binary uploads are bounded while they stream (`BINARY_LIMITS`, `MAX_PEAKS_BYTES`). A repeated identical
+  capstone release returns the existing album version. The fake tutor needs `OAK_DEV` in `createServer` as well
+  (`fakeTutorEnabled()`). The test harness's `req()`/`close()` go through `self.server` (restart on the same data dir).
+- Not added: idempotency keys for `steps.attempt` and `srs.review` (a double submit counts twice); a single-open-
+  session rule (two tabs can each start a session on the same day).
+
+**App**
+
+- Promoted: `app/src/lib/tool-label.ts` (`toolLabel(tool) → { text, mono }`), the learner-facing name of a toolbox
+  entry (a feature by its plain name, a code row by its code or its catalog signature). Used by Today's Next unlock,
+  the session and onboarding Codas, the unlock moment, the Toolbox index, the tool page and `/studio?try=`.
+- The unlock moment says "From <lesson title>" and links "Read more in the toolbox" (no internal IDs or paths).
+- `useAnalysis` (Workbench) ignores an aborted analysis and re-analyses at once after a remount, so StrictMode no
+  longer flashes "Code didn't run. aborted" / "No music yet." on every mount in dev.
+- `recordPerformance` lives in `app/src/capstone/record.ts` (re-exported from `engine.ts` with `isSilentTake`,
+  `SILENT_PEAK`, `SILENT_TAKE`): a take whose master-bus peak stays under −70 dBFS is refused. The release dialog and
+  album re-recording have Stop and Esc.
+- Lesson: `MicPart` takes `only: "mic"` (a lesson's mic part stops after hearing the learner); a sung step whose
+  target is `from: "stimulus"` reads the stimulus's own bars (`useSungFromMusic`); a Make with a code line over 56
+  characters gets the compact Workbench; `loopBars` falls back to a code-make's `bars[1]`.
+- Session: onboarding's "Done for today" writes the session store's ended record (`sessionId: "onboarding"`), so Today
+  shows the done state on the first day; Today's `lastEnded` has an optional `endedAt` and the day uses the session's
+  end time across the 04:00 rollover. Starting a session pushes a history entry (Back returns to Today, which offers
+  Resume). Today's done state still lives in this browser's localStorage, not on the server.
+- Tutor UI: Markdown scans are bounded at 1,000 characters per emphasis/link label (`app/src/tutor/markdown.ts`);
+  Retry refuses while another turn streams.
+
+**Browser suites.** The root `playwright.config.ts` adds the projects `review` (`e2e/review`, Vite 5221 / API 8821,
+fake tutor, fake mic) and `ui-review` (`app/src/ui/review/e2e`, 5222 / 8822). The `platform` project's `testMatch`
+is `/\/e2e\/[^/]+\.pw\.ts$/` (the earlier `^[^/]*` pattern matched no absolute path, so `bun run e2e` had silently
+stopped running the 53 platform tests) and it ignores `journey/` and `review/`.

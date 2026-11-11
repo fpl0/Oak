@@ -154,9 +154,10 @@ export async function harness(
       init.body = JSON.stringify(body);
       (init.headers as Record<string, string>)["content-type"] = "application/json";
     }
-    return Promise.resolve(server.app.request(`http://127.0.0.1:8787${path}`, init));
+    // `self.server`, not the first server: a test may restart the server on the same data directory.
+    return Promise.resolve(self.server.app.request(`http://127.0.0.1:8787${path}`, init));
   };
-  return {
+  const self: Harness = {
     server,
     clock,
     dir,
@@ -174,8 +175,9 @@ export async function harness(
       return req(method, path, body, { "x-oak-confirm": nonce });
     },
     async close() {
-      await server.close();
+      await self.server.close();
       rmSync(dir, { recursive: true, force: true });
     },
   };
+  return self;
 }

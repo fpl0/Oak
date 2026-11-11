@@ -70,4 +70,12 @@ describe("errorToDiagnostic is friendly", () => {
     expect(d.id).toBe(ADAPTER_FEEDBACK.runtime);
     expect(code.slice(d.range.from, d.range.to)).toBe("fooBar");
   });
+
+  test("a lint message that mentions mini-notation is not read as a typo", () => {
+    const f = friendlyEvalError(
+      "The mini-notation `,` unlocks in U04.L03. For now, use the tools you have.",
+      's("bd, hh")',
+    );
+    expect(f.message).not.toContain("typo");
+  });
 });

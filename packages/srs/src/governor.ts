@@ -4,11 +4,18 @@
 //
 // Levers, in the order they act on a day:
 //   1. smoothBacklog   after a gap of 3 days or more, overdue items are dealt out over 5 to 7 days
-//   2. admitNew        deferred cards are released while the 7-day forecast is below 0.70 × budget
+//   2. pickReleases    deferred cards are released, oldest first, while the 7-day forecast is below
+//                      0.70 × budget (`admitNew` gives the counts only, and lets the oldest block the rest)
 //   3. planWarmup      (planner.ts) a strict budget; leftovers stay due and are never shown as a count
 //   4. capRelearning   after a gap, at most 3 cards a day enter relearning
 //   5. shouldGraduate  a family at its mastery level with a 21-day stability joins a composite card
-//   6. admitCreated    cards a lesson seeds are created `deferred` while the forecast is over 0.85 × budget
+//   6. admitCreated    cards a lesson seeds are created `deferred` while the forecast is over 0.85 × budget;
+//                      before that, `earlyGraduate(…, "time")` may graduate a family already at its mastery level
+//
+// The forecast (Wave 2): the window is today and the next 6 days; every return of a card inside it counts
+// (a card returns after the interval a Good rating would give it today, or its cap); sets are measured
+// against the budget less what the fact cards need (`classBudget`); and the caller passes as `budgetSec`
+// the mean warm-up budget of the sessions the window will hold (checkpoint and capstone days are shorter).
 //   7. makeDayPicker   a rescheduled card takes the least-loaded day inside its fuzz window
 import { DECISION_2, GOVERNOR, RETURN, WARMUP_BUDGET_SEC } from "./constants.ts";
 import type {
@@ -79,10 +86,6 @@ export function forecastLoad(items: readonly ReviewItem[], today: number, days: 
 export type IntakeClass = "all" | "sets" | "facts";
 const inClass = (it: ReviewItem, cls: IntakeClass) =>
   cls === "all" || (cls === "facts" ? it.cls === "fact" : it.cls !== "fact");
-/** The share of the warm-up budget a class of work may plan into on a full day (`factShare`). */
-export function classShare(cls: IntakeClass, cfg: Pick<GovernorConfig, "factShare">): number {
-  return cls === "all" ? 1 : cls === "facts" ? cfg.factShare : 1 - cfg.factShare;
-}
 /**
  * Planning cost of an item in the forecast: its own seconds plus its half of the listen-only block that
  * follows every second perceptual set, and the blocked-intro sets still to come for a new family.
@@ -108,29 +111,64 @@ export function intakeForecast(
   extraSec = 0,
   cls: IntakeClass = "all",
 ): IntakeForecast {
-  const usable = items.filter((it) => inClass(it, cls) && !(cfg.quiet && it.mic));
-  const load = new Array<number>(cfg.forecastDays + 1).fill(0);
-  for (const it of usable) {
-    const step = it.repeatDays !== undefined && it.repeatDays >= 1 ? it.repeatDays : Number.POSITIVE_INFINITY;
-    for (
-      let d = Math.max(it.dueDay, it.deferUntilDay ?? it.dueDay, today) - today;
-      d <= cfg.forecastDays;
-      d += step
-    ) {
-      load[d] = (load[d] ?? 0) + forecastCost(it);
-    }
-  }
-  const sessions = Math.max(1, (load.length * Math.min(7, Math.max(1, cfg.sessionsPerWeek))) / 7);
-  const meanSec = (load.reduce((a, b) => a + b, 0) + extraSec) / sessions;
-  const maxDaySec = Math.max(0, ...load);
-  const budget = classShare(cls, cfg) * cfg.budgetSec;
+  const { meanSec, maxDaySec, load } = classLoad(items, today, cfg, cls, extraSec);
+  const budget = classBudget(items, today, cfg, cls);
   const state =
     meanSec > cfg.intakeMeanHigh * budget || maxDaySec > cfg.intakeDayHigh * budget
       ? "closed"
       : meanSec < cfg.intakeMeanLow * budget
         ? "open"
         : "hold";
-  return { state, meanSec, maxDaySec, load };
+  return { state, meanSec, maxDaySec, load, budgetSec: budget };
+}
+/** The forecast of one class: seconds per expected session, the heaviest day, the per-day load. */
+function classLoad(
+  items: readonly ReviewItem[],
+  today: number,
+  cfg: GovernorConfig,
+  cls: IntakeClass,
+  extraSec = 0,
+): { meanSec: number; maxDaySec: number; load: number[] } {
+  const usable = items.filter((it) => inClass(it, cls) && !(cfg.quiet && it.mic));
+  // The window is the next `forecastDays` days, today included: day 0 … forecastDays − 1. A card capped at
+  // a 7-day cadence returns exactly once inside it.
+  const load = new Array<number>(cfg.forecastDays).fill(0);
+  for (const it of usable) {
+    const step = it.repeatDays !== undefined && it.repeatDays >= 1 ? it.repeatDays : Number.POSITIVE_INFINITY;
+    let first = true;
+    for (
+      let d = Math.max(it.dueDay, it.deferUntilDay ?? it.dueDay, today) - today;
+      d < cfg.forecastDays;
+      d += step
+    ) {
+      load[d] =
+        (load[d] ?? 0) + (first ? forecastCost(it) : forecastCost({ ...it, blockedIntroPending: false }));
+      first = false;
+    }
+  }
+  const sessions = Math.max(1, (load.length * Math.min(7, Math.max(1, cfg.sessionsPerWeek))) / 7);
+  return {
+    meanSec: (load.reduce((a, b) => a + b, 0) + extraSec) / sessions,
+    maxDaySec: Math.max(0, ...load),
+    load,
+  };
+}
+/**
+ * The seconds of a session a class may plan for. Facts keep up to their share (`factShare`); sets may use
+ * the whole budget less what the fact cards are forecast to need, so room the facts leave is not wasted
+ * (the planner's second pass gives it to sets on the day as well).
+ */
+export function classBudget(
+  items: readonly ReviewItem[],
+  today: number,
+  cfg: GovernorConfig,
+  cls: IntakeClass,
+): number {
+  if (cls === "all") return cfg.budgetSec;
+  const factRoom = cfg.factShare * cfg.budgetSec;
+  if (cls === "facts") return factRoom;
+  const facts = classLoad(items, today, cfg, "facts").meanSec;
+  return cfg.budgetSec - Math.min(factRoom, facts);
 }
 /**
  * Mic sets a session can hold are capped at `maxMicSets` (0 in Quiet mode). A production family is admitted
@@ -175,6 +213,55 @@ export function admitNew(
       setsOpen && micOk ? Math.max(0, Math.min(waiting.families, cfg.releasePerDay.families, slots)) : 0,
     facts: factsOpen ? Math.max(0, Math.min(waiting.facts, cfg.releasePerDay.facts)) : 0,
   };
+}
+
+/** A card waiting in the deferred queue, as `pickReleases` sees it. */
+export interface WaitingCard {
+  cardId: string;
+  /** `perceptual` and `production` families take an active slot; production ones also need mic room. */
+  kind: "perceptual" | "production" | "concept" | "fact";
+  /** Position in the queue: lower is older. */
+  seq: number;
+}
+/**
+ * The deferred cards to release today (contracts §7.4): oldest first, at most 1 family and 4 fact cards a
+ * day, families while the set forecast is open and facts while the fact forecast is open. A family that
+ * cannot start today (no active slot, or a production family with no mic room) is passed over rather than
+ * holding up the families behind it: a waiting concept family needs no slot.
+ */
+export function pickReleases(
+  items: readonly ReviewItem[],
+  waiting: readonly WaitingCard[],
+  activePerceptual: number,
+  today: number,
+  cfg: GovernorConfig,
+): string[] {
+  const out: string[] = [];
+  const order = [...waiting].sort((a, b) => a.seq - b.seq || (a.cardId < b.cardId ? -1 : 1));
+  if (intakeForecast(items, today, cfg, 0, "sets").state === "open") {
+    let slots = Math.max(0, cfg.maxActivePerceptual - activePerceptual);
+    let n = 0;
+    for (const w of order) {
+      if (n >= cfg.releasePerDay.families) break;
+      if (w.kind === "fact") continue;
+      if (w.kind !== "concept") {
+        if (slots === 0) continue;
+        if (w.kind === "production" && !micRoom(items, today, cfg)) continue;
+        slots--;
+      }
+      out.push(w.cardId);
+      n++;
+    }
+  }
+  if (intakeForecast(items, today, cfg, 0, "facts").state === "open") {
+    out.push(
+      ...order
+        .filter((w) => w.kind === "fact")
+        .slice(0, cfg.releasePerDay.facts)
+        .map((w) => w.cardId),
+    );
+  }
+  return out;
 }
 
 /**
@@ -253,12 +340,19 @@ export function shouldGraduate(input: GraduationInput, cfg: GovernorConfig): boo
   const last = input.lastRatings.slice(-2);
   return last.length === 2 && last.every((r) => r >= 3);
 }
-/** When the active cap is hit: the family to graduate early (highest stability at or above its mastery level), or `null`. */
+/**
+ * When the cap is hit: the family to graduate early (highest stability at or above its mastery level), or
+ * `null`. "The cap" is the 12 active slots; with `reason: "time"` it is the warm-up time, when the intake
+ * throttle would leave a new family waiting (see `admitCreated`) while an active family already stands at
+ * its mastery level. It is read the same way in both cases: a family at its mastery level keeps being
+ * sampled in its composite and is recalled the moment its composite credit falls below 0.65.
+ */
 export function earlyGraduate(
   active: readonly (GraduationInput & { cardId: string })[],
   cfg: GovernorConfig,
+  reason: "slots" | "time" = "slots",
 ): string | null {
-  if (active.length < cfg.maxActivePerceptual) return null;
+  if (reason === "slots" && active.length < cfg.maxActivePerceptual) return null;
   let best: (GraduationInput & { cardId: string }) | null = null;
   for (const f of active) {
     if (!atMasteryForGraduation(f)) continue;

@@ -19,6 +19,7 @@ import {
   type SkillRef,
   type SongId,
   type SwingSpec,
+  type TestCase,
 } from "@oak/content-kit";
 
 type Body = RubricRule extends infer R
@@ -65,6 +66,8 @@ interface ComposeSpec {
   album?: string;
   minDurationSec?: number;
   hints: HintLadder;
+  /** Graded by content CI (`bun run content:check <id>`): ≥ 2 passing pieces, ≥ 2 failing ones, the starter. */
+  tests?: TestCase[];
 }
 
 function compose(c: ComposeSpec): CapstoneDef {
@@ -77,7 +80,7 @@ function compose(c: ComposeSpec): CapstoneDef {
     skills: c.skills.map((skill) => ({ skill, w: 1 })),
     role: "capstone",
     hints: c.hints,
-    tests: [],
+    tests: c.tests ?? [],
     brief: c.brief,
     flavours: ["flavour.pop", "flavour.jazz-soul", "flavour.indie", "flavour.funk"],
     code: { starter: c.starter },
@@ -196,6 +199,44 @@ export const CUSTOM_RUBRIC_FNS = {
 const PIANO_LOOP = (bpm: number) =>
   `setcpm(${bpm}/4)\n\ndrums: s("bd ~ sd ~, hh*8")\nchords: chord("<C G Am F>").voicing().s("piano")\nmel: n("⟪0 2 4 2⟫").scale("C4:major").s("piano")`;
 
+/** C0's reference intro (tests and the release preview): four bars, the fill a sixteenth-note snare-tom run. */
+const C0_REFERENCE =
+  'setcpm(100/4)\n\nkick: s("<[bd ~ bd ~] [bd ~ bd [~ bd]] [bd ~ bd ~] [bd ~ ~ ~]>")\nsnare: s("<[~ sd ~ sd]!3 [~ sd [sd sd sd sd] [ht ht lt lt]]>")\nhats: s("<hh*8!3 [hh hh hh hh ~ ~ ~ ~]>").gain(.6)';
+
+/**
+ * C1's reference loop with one part swapped out, for the known-weak tests. The capstone's Band plays the
+ * chords of `band.axis-4bar` (C G Am F, one a bar), so the bass walks those roots and the riff uses notes
+ * that sit inside them; a bass on C A F G under that Band put F under A minor and G under F.
+ */
+const c1Loop = (o: { bpm?: number; snare?: string; bass?: string; mel?: string } = {}) =>
+  [
+    `setcpm(${o.bpm ?? 96}/4)`,
+    "",
+    'kick: s("bd ~ [~ bd] ~")',
+    `snare: s("${o.snare ?? "~ sd ~ sd"}")`,
+    'hats: s("hh*8").gain(.6)',
+    `bass: note("${o.bass ?? "<[c2 ~ c2 g1] [g1 ~ g1 d2] [a1 ~ a1 e2] [f1 ~ f1 c2]>"}").s("ebass").lpf(600)`,
+    `mel: note("${o.mel ?? "<[c5 ~ g4 a4] [g4 e4 ~ d4]>"}").s("piano")`,
+  ].join("\n");
+
+/**
+ * Liner-note seeds for the release dialog (ux §5, "write a one-line liner note"): first lines the learner
+ * can take, edit or ignore. `{bars}` and `{bpm}` are filled from the released piece. They describe what
+ * the brief made the learner write, never how well it went; the tutor's own note is separate (§10.6).
+ */
+export const CAPSTONE_LINER_SEEDS: Readonly<Partial<Record<CapstoneId, readonly string[]>>> = {
+  C0: [
+    "The album opens on {bars} bars of drums at {bpm} BPM: snare on 2 and 4, hats underneath, a fill to hand over.",
+    "A count-in for everything that follows. The last bar breaks the pattern on purpose.",
+    "Kick, snare and hats, one line each. The fill is the only bar that changes.",
+  ],
+  C1: [
+    "Four bars at {bpm} BPM: a groove, a bass line written note by note, and a two-bar riff on top.",
+    "The bass walks underneath; the riff says its line twice.",
+    "The first loop with notes in it. Drums from the intro, a bass and a riff of my own.",
+  ],
+};
+
 export const capstones: readonly CapstoneDef[] = [
   compose({
     id: "C0",
@@ -208,12 +249,47 @@ export const capstones: readonly CapstoneDef[] = [
       "Write a 4 to 8 bar drum intro for your album: a backbeat, steady hats, and a fill in the last bar.",
     starter: 'setcpm(100/4)\n\nkick: s("bd ~ bd ~")\nsnare: s("~ sd ~ sd")\nhats: s("hh*8")',
     skills: ["R04", "R05", "R07"],
+    // §6.6 names two one-off checks, `hats-grid` and `fill-last-bar` (CUSTOM_RUBRIC_FNS). Until @oak/grader
+    // registers them, C0 grades the same ideas with implemented rules: closed hats on every 8th of bar 1
+    // (16ths contain the 8ths), the backbeat in bars 1–3 (the last bar is free for the fill), and the
+    // fill written as bar-level variation with `< >`, the U01.L07 way.
     rubric: [
       req("meter", "In 4/4, 4 to 8 bars long", ["R03"], { rule: "bars", min: 4, max: 8 }),
       req("drum-lines", "At least two drum lines", ["R04"], { rule: "tracks", min: 2, roles: ["drums"] }),
-      ...backbeat,
-      req("hats-grid", "Hats on an 8th or 16th grid", ["R05", "R07"], custom("hats-grid", { minBars: 3 })),
-      req("fill", "The last bar is a fill (it differs from bar 1)", ["R07"], custom("fill-last-bar")),
+      req("snare-backbeat", "Snare on beats 2 and 4 in bars 1 to 3", ["R04"], {
+        rule: "onsets",
+        track: "@drums",
+        drum: "snare",
+        contains: [
+          [1, 4],
+          [3, 4],
+          [5, 4],
+          [7, 4],
+          [9, 4],
+          [11, 4],
+        ],
+        perBar: false,
+      }),
+      req("hats-grid", "Closed hats on every eighth of bar 1 (or every sixteenth)", ["R05", "R07"], {
+        rule: "onsets",
+        track: "@drums",
+        drum: "hatClosed",
+        contains: [
+          [0, 1],
+          [1, 8],
+          [1, 4],
+          [3, 8],
+          [1, 2],
+          [5, 8],
+          [3, 4],
+          [7, 8],
+        ],
+        perBar: false,
+      }),
+      req("fill", "A fill: the last bar changes, written with `< >`", ["R07"], {
+        rule: "uses",
+        tool: "tb.mini.alt",
+      }),
       tempo(70, 140),
     ],
     sessions: [["Intro", "A 4–8 bar drum intro: backbeat, 8th or 16th hats, a fill; first album track."]],
@@ -221,8 +297,79 @@ export const capstones: readonly CapstoneDef[] = [
     hints: ladder(
       "What does a listener need to hear before the band comes in?",
       "The snare marks beats 2 and 4; the last bar is where the fill goes.",
-      'Try toms in the last bar: `s("<[~ sd ~ sd] [ht mt lt lt]>")`.',
+      'Try toms in the last bar: `s("<[~ sd ~ sd] [~ sd ~ sd] [~ sd ~ sd] [ht mt lt lt]>")`.',
     ),
+    tests: [
+      {
+        name: "the starter: one bar, no fill",
+        response: { code: 'setcpm(100/4)\n\nkick: s("bd ~ bd ~")\nsnare: s("~ sd ~ sd")\nhats: s("hh*8")' },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "four bars, tom fill in bar 4",
+        response: {
+          code: 'setcpm(100/4)\n\nkick: s("bd ~ bd ~")\nsnare: s("<[~ sd ~ sd] [~ sd ~ sd] [~ sd ~ sd] [sd sd ht lt]>")\nhats: s("<hh*8 hh*8 hh*8 [hh hh hh hh ~ ~ ~ ~]>")',
+        },
+        expect: "pass",
+      },
+      {
+        name: "eight bars, sixteenth hats, crash and fill",
+        response: {
+          code: 'setcpm(124/4)\n\nkick: s("<[bd ~ bd ~]!7 [bd bd ~ ~]>")\nsnare: s("<[~ sd ~ sd]!7 [[sd sd] [mt mt] [lt lt] [lt ~]]>")\nhats: s("<hh*16!7 ~>")\nperc: s("<cr ~ ~ ~ ~ ~ ~ ~>")',
+        },
+        expect: "pass",
+      },
+      {
+        name: "no backbeat",
+        response: {
+          code: 'setcpm(100/4)\n\nkick: s("bd bd bd bd")\nsnare: s("<[sd ~ ~ ~]!3 [ht mt lt lt]>")\nhats: s("hh*8")',
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "too fast",
+        response: {
+          code: 'setcpm(160/4)\n\nkick: s("bd ~ bd ~")\nsnare: s("<[~ sd ~ sd]!3 [ht mt lt lt]>")\nhats: s("hh*8")',
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      // The reference intro: kick pushes into bar 2, the hats drop out for a sixteenth-note snare and tom
+      // run in bar 4 that hands the downbeat back to bar 1.
+      {
+        name: "reference: four bars with a sixteenth-note fill",
+        response: { code: C0_REFERENCE },
+        expect: "pass",
+      },
+      // Known-weak pieces, one per required rule (the other rules hold).
+      {
+        name: "weak: two bars only",
+        response: {
+          code: 'setcpm(100/4)\n\nkick: s("bd ~ bd ~")\nsnare: s("<[~ sd ~ sd] [~ sd [ht lt] sd]>")\nhats: s("hh*8")',
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: quarter-note hats",
+        response: {
+          code: 'setcpm(100/4)\n\nkick: s("bd ~ bd ~")\nsnare: s("<[~ sd ~ sd]!3 [~ sd ht lt]>")\nhats: s("hh*4")',
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        // The same bar four times is, to the grader, one bar repeated: it fails the length and the fill.
+        name: "weak: one bar repeated, no fill",
+        response: {
+          code: 'setcpm(100/4)\n\nkick: s("[bd ~ bd ~]!4").slow(4)\nsnare: s("[~ sd ~ sd]!4").slow(4)\nhats: s("hh*32").slow(4)',
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+    ],
   }),
   compose({
     id: "C1",
@@ -233,7 +380,7 @@ export const capstones: readonly CapstoneDef[] = [
     bpm: [70, 140],
     brief: "A 4-bar loop: a groove, a bass line written with note names, and a 2-bar riff on top.",
     starter:
-      'setcpm(96/4)\n\nkick: s("bd ~ bd ~")\nsnare: s("~ sd ~ sd")\nhats: s("hh*8")\nbass: note("⟪c2 c2 g1 bb1⟫").s("ebass").lpf(600)\nmel: note("⟪c4 e4 g4 e4⟫").s("piano")',
+      'setcpm(96/4)\n\nkick: s("bd ~ bd ~")\nsnare: s("~ sd ~ sd")\nhats: s("hh*8")\nbass: note("⟪c2 c2 g1 a1⟫").s("ebass").lpf(600)\nmel: note("⟪e4 g4 a4 g4⟫").s("piano")',
     skills: ["R04", "P02", "P05"],
     rubric: [
       req("roles", "Drums, bass and melody", ["R04"], {
@@ -253,7 +400,7 @@ export const capstones: readonly CapstoneDef[] = [
         track: "@bass",
         min: 3,
       }),
-      req("riff-range", "Riff within 15 semitones", ["P03"], {
+      req("riff-range", "Riff spans at most 15 half steps", ["P03"], {
         rule: "range",
         track: "@melody",
         maxSpan: 15,
@@ -267,8 +414,76 @@ export const capstones: readonly CapstoneDef[] = [
     hints: ladder(
       "Which part holds the floor of the loop?",
       "The bass line sits under C3; give it three different notes.",
-      'A riff can repeat its first bar: `note("<[c4 e4 g4 e4] [c4 e4 g4 c5]>")`.',
+      'A two-bar riff: a first bar, then one that answers it, `note("<[c4 e4 g4 e4] [d4 g4 a4 g4]>")`. The bass can walk the band\'s chords: c, g, a, f.',
     ),
+    tests: [
+      {
+        name: "the starter: one bar",
+        response: {
+          code: 'setcpm(96/4)\n\nkick: s("bd ~ bd ~")\nsnare: s("~ sd ~ sd")\nhats: s("hh*8")\nbass: note("c2 c2 g1 a1").s("ebass").lpf(600)\nmel: note("e4 g4 a4 g4").s("piano")',
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "four bars, riff answers itself",
+        response: {
+          code: 'setcpm(96/4)\n\nkick: s("bd ~ bd ~")\nsnare: s("~ sd ~ sd")\nhats: s("hh*8")\nbass: note("<[c2 ~ c2 g1] [g1 ~ g1 d2] [a1 ~ a1 e2] [f1 ~ f1 c2]>").s("ebass").lpf(600)\nmel: note("<[c4 e4 g4 e4] [d4 g4 b4 g4] [c4 e4 a4 e4] [c4 f4 a4 ~]>").s("piano")',
+        },
+        expect: "pass",
+      },
+      {
+        name: "two-bar ideas filling four bars, at 120",
+        response: {
+          code: 'setcpm(120/4)\n\nkick: s("bd ~ [~ bd] ~")\nsnare: s("~ sd ~ sd")\nhats: s("hh*16").gain(.5)\nbass: note("<c2 g1 a1 f1>").s("ebass").lpf(600)\nmel: note("<[c5 ~ a4 g4] [~ g4 a4 d5]>").s("piano")',
+        },
+        expect: "pass",
+      },
+      {
+        name: "bass too high",
+        response: {
+          code: 'setcpm(96/4)\n\nkick: s("bd ~ bd ~")\nsnare: s("~ sd ~ sd")\nhats: s("hh*8")\nbass: note("<c3 e3 g3 e3>").s("ebass").lpf(600)\nmel: note("<[c4 e4 g4 e4] [c4 e4 g4 c5]>").s("piano")',
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "no melody",
+        response: {
+          code: 'setcpm(96/4)\n\nkick: s("bd ~ bd ~")\nsnare: s("~ sd ~ sd")\nhats: s("hh*8")\nbass: note("<c2 g1 a1 f1>").s("ebass").lpf(600)',
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      // The reference loop: a bass on C, G, A and F (the Band's chords) that adds each root's fifth on beat
+      // 4, under a two-bar riff whose notes sit inside the chord of every bar.
+      { name: "reference: walking bass, two-bar riff", response: { code: c1Loop() }, expect: "pass" },
+      // Known-weak pieces, one per required rule (the other rules hold).
+      {
+        name: "weak: snare on 1 and 3",
+        response: { code: c1Loop({ snare: "sd ~ sd ~" }) },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: a two-note bass",
+        response: { code: c1Loop({ bass: "<[c2 ~ c2 ~] [g1 ~ g1 ~] [c2 ~ c2 ~] [g1 ~ g1 g1]>" }) },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: a riff that leaps two octaves",
+        response: { code: c1Loop({ mel: "<[c4 ~ g4 c6] [g5 e5 ~ c4]>" }) },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: too slow",
+        response: { code: c1Loop({ bpm: 64 }) },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+    ],
   }),
   compose({
     id: "C2",

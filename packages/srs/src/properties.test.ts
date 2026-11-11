@@ -126,6 +126,7 @@ describe("simulation determinism across seeds", () => {
   test("every seed replays identically; different seeds differ; Math.random and the clock are not read", async () => {
     const { DECISION_2, recommendedGovernor } = await import("./index.ts");
     const { DEFAULT_LEARNER, simulate } = await import("./sim/simulate.ts");
+    const { COURSE_CATALOG } = await import("./sim/course-catalog.test-util.ts");
     const live = await createSrs({ factRetention: DECISION_2.factRetention });
     const opts = (seed: string, target: 15 | 20 | 25) => ({
       seed,
@@ -137,6 +138,7 @@ describe("simulation determinism across seeds", () => {
       learner: DEFAULT_LEARNER,
       termsPerLesson: 3,
       durationJitter: 0.12,
+      catalog: COURSE_CATALOG,
     });
     const realRandom = Math.random;
     const realNow = Date.now;

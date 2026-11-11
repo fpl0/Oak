@@ -297,7 +297,7 @@ test("Listen QA: switching examples quickly keeps one live mirror and one source
   const problems = watch(page);
   await noHmr(page);
   await page.goto("/dev/listen");
-  await page.getByRole("button", { name: /wake/i }).click();
+  // /dev/listen has no separate wake button any more: the first Play wakes the sound (a user gesture).
   const plays = page.getByTestId("listen-list").getByRole("button", { name: /^Play / });
   await expect(plays.first()).toBeVisible({ timeout: 30_000 });
   const n = Math.min(await plays.count(), 6);
@@ -359,20 +359,30 @@ test("64 bars: smooth frames, legible roll, the staff pages with the playhead, n
   const pagesSeen = new Set<string>();
   let worst = 0;
   for (let i = 0; i < 32; i++) {
-    const s = await page.evaluate(() => {
-      const o = (globalThis as OakGlobal).__oakStrudel;
-      const head = Number(document.querySelector("[data-testid=roll-canvas]")?.getAttribute("data-playhead"));
-      const audible = (o?.transport.audibleCycle() ?? 0) % 64;
-      const ids = (sel: string, attr: string) =>
-        (document.querySelector(sel)?.getAttribute(attr) ?? "").split(" ").filter(Boolean);
-      return {
-        head,
-        audible,
-        roll: ids("[data-testid=piano-roll]", "data-active"),
-        staff: ids(".oak-staff-host", "data-active-events"),
-        page: document.querySelector("[data-testid=staff-view]")?.getAttribute("data-page") ?? "",
-      };
-    });
+    // The roll and the staff repaint in separate frames: a sample taken on a step boundary can catch one of them a
+    // step ahead, so a mismatched sample is taken again on the next frame.
+    const sample = () =>
+      page.evaluate(() => {
+        const o = (globalThis as OakGlobal).__oakStrudel;
+        const head = Number(
+          document.querySelector("[data-testid=roll-canvas]")?.getAttribute("data-playhead"),
+        );
+        const audible = (o?.transport.audibleCycle() ?? 0) % 64;
+        const ids = (sel: string, attr: string) =>
+          (document.querySelector(sel)?.getAttribute(attr) ?? "").split(" ").filter(Boolean);
+        return {
+          head,
+          audible,
+          roll: ids("[data-testid=piano-roll]", "data-active"),
+          staff: ids(".oak-staff-host", "data-active-events"),
+          page: document.querySelector("[data-testid=staff-view]")?.getAttribute("data-page") ?? "",
+        };
+      });
+    let s = await sample();
+    if (!s.staff.every((id) => s.roll.includes(id))) {
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      s = await sample();
+    }
     if (Number.isFinite(s.head)) {
       let d = Math.abs(s.head - s.audible);
       if (d > 32) d = 64 - d;
@@ -432,10 +442,11 @@ test("keyboard only: one tab stop for the staff, arrows walk its notes, Space/F/
   await expect(page.getByTestId("staff-view")).toHaveAttribute("data-status", "ready");
   const stops = await page.evaluate(() => document.querySelectorAll(".oak-staff-host [tabindex='0']").length);
   expect(stops).toBe(1);
-  // From the transport, Tab reaches the staff after at most the chips and the notes-table toggle.
+  // From the transport, Tab reaches the staff after the loop and metronome controls (Wave 2), the track chips and
+  // the notes-table toggle.
   await page.getByTestId("play-toggle").focus();
   let onStaff = false;
-  for (let i = 0; i < 15 && !onStaff; i++) {
+  for (let i = 0; i < 30 && !onStaff; i++) {
     await page.keyboard.press("Tab");
     onStaff = await page.evaluate(() => document.activeElement?.closest(".oak-staff-host") !== null);
   }

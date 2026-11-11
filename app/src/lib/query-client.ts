@@ -5,7 +5,7 @@ import { QueryClient } from "@tanstack/react-query";
 export function shouldRetry(failureCount: number, error: unknown): boolean {
   if (
     error instanceof OakApiError &&
-    ["network", "not_found", "contract", "forbidden", "bad_request"].includes(error.code)
+    ["network", "not_found", "contract", "forbidden", "bad_request", "not_implemented"].includes(error.code)
   )
     return false;
   return failureCount < 2;

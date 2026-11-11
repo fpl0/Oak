@@ -17,6 +17,8 @@ import { Route as AlbumIndexRouteImport } from "./routes/album/index";
 import { Route as AlbumTrackIdRouteImport } from "./routes/album/$trackId";
 import { Route as CapstoneIdRouteImport } from "./routes/capstone/$id";
 import { Route as CheckpointUnitIdRouteImport } from "./routes/checkpoint/$unitId";
+import { Route as DevGlanceRouteImport } from "./routes/dev/glance";
+import { Route as DevKitRouteImport } from "./routes/dev/kit";
 import { Route as DevListenRouteImport } from "./routes/dev/listen";
 import { Route as DevQaRouteImport } from "./routes/dev/qa";
 import { Route as DevTelemetryRouteImport } from "./routes/dev/telemetry";
@@ -26,6 +28,7 @@ import { Route as OnboardingStepRouteImport } from "./routes/onboarding/$step";
 import { Route as PracticeIndexRouteImport } from "./routes/practice/index";
 import { Route as PracticeFamilyIdRouteImport } from "./routes/practice/$familyId";
 import { Route as PracticeReviewRouteImport } from "./routes/practice/review";
+import { Route as SessionIndexRouteImport } from "./routes/session/index";
 import { Route as SessionCodaRouteImport } from "./routes/session/coda";
 import { Route as SettingsIndexRouteImport } from "./routes/settings/index";
 import { Route as SettingsAboutRouteImport } from "./routes/settings/about";
@@ -84,6 +87,16 @@ const CheckpointUnitIdRoute = CheckpointUnitIdRouteImport.update({
   path: "/checkpoint/$unitId",
   getParentRoute: () => rootRouteImport,
 } as any);
+const DevGlanceRoute = DevGlanceRouteImport.update({
+  id: "/dev/glance",
+  path: "/dev/glance",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const DevKitRoute = DevKitRouteImport.update({
+  id: "/dev/kit",
+  path: "/dev/kit",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const DevListenRoute = DevListenRouteImport.update({
   id: "/dev/listen",
   path: "/dev/listen",
@@ -127,6 +140,11 @@ const PracticeFamilyIdRoute = PracticeFamilyIdRouteImport.update({
 const PracticeReviewRoute = PracticeReviewRouteImport.update({
   id: "/practice/review",
   path: "/practice/review",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const SessionIndexRoute = SessionIndexRouteImport.update({
+  id: "/session/",
+  path: "/session/",
   getParentRoute: () => rootRouteImport,
 } as any);
 const SessionCodaRoute = SessionCodaRouteImport.update({
@@ -223,6 +241,8 @@ export interface FileRoutesByFullPath {
   "/album/$trackId": typeof AlbumTrackIdRoute;
   "/capstone/$id": typeof CapstoneIdRoute;
   "/checkpoint/$unitId": typeof CheckpointUnitIdRoute;
+  "/dev/glance": typeof DevGlanceRoute;
+  "/dev/kit": typeof DevKitRoute;
   "/dev/listen": typeof DevListenRoute;
   "/dev/qa": typeof DevQaRoute;
   "/dev/telemetry": typeof DevTelemetryRoute;
@@ -245,6 +265,7 @@ export interface FileRoutesByFullPath {
   "/transcribe/$projectId": typeof TranscribeProjectIdRoute;
   "/album/": typeof AlbumIndexRoute;
   "/practice/": typeof PracticeIndexRoute;
+  "/session/": typeof SessionIndexRoute;
   "/settings/": typeof SettingsIndexRoute;
   "/studio/": typeof StudioIndexRoute;
   "/toolbox/": typeof ToolboxIndexRoute;
@@ -258,6 +279,8 @@ export interface FileRoutesByTo {
   "/album/$trackId": typeof AlbumTrackIdRoute;
   "/capstone/$id": typeof CapstoneIdRoute;
   "/checkpoint/$unitId": typeof CheckpointUnitIdRoute;
+  "/dev/glance": typeof DevGlanceRoute;
+  "/dev/kit": typeof DevKitRoute;
   "/dev/listen": typeof DevListenRoute;
   "/dev/qa": typeof DevQaRoute;
   "/dev/telemetry": typeof DevTelemetryRoute;
@@ -280,6 +303,7 @@ export interface FileRoutesByTo {
   "/transcribe/$projectId": typeof TranscribeProjectIdRoute;
   "/album": typeof AlbumIndexRoute;
   "/practice": typeof PracticeIndexRoute;
+  "/session": typeof SessionIndexRoute;
   "/settings": typeof SettingsIndexRoute;
   "/studio": typeof StudioIndexRoute;
   "/toolbox": typeof ToolboxIndexRoute;
@@ -295,6 +319,8 @@ export interface FileRoutesById {
   "/album/$trackId": typeof AlbumTrackIdRoute;
   "/capstone/$id": typeof CapstoneIdRoute;
   "/checkpoint/$unitId": typeof CheckpointUnitIdRoute;
+  "/dev/glance": typeof DevGlanceRoute;
+  "/dev/kit": typeof DevKitRoute;
   "/dev/listen": typeof DevListenRoute;
   "/dev/qa": typeof DevQaRoute;
   "/dev/telemetry": typeof DevTelemetryRoute;
@@ -317,6 +343,7 @@ export interface FileRoutesById {
   "/transcribe/$projectId": typeof TranscribeProjectIdRoute;
   "/album/": typeof AlbumIndexRoute;
   "/practice/": typeof PracticeIndexRoute;
+  "/session/": typeof SessionIndexRoute;
   "/settings/": typeof SettingsIndexRoute;
   "/studio/": typeof StudioIndexRoute;
   "/toolbox/": typeof ToolboxIndexRoute;
@@ -333,6 +360,8 @@ export interface FileRouteTypes {
     | "/album/$trackId"
     | "/capstone/$id"
     | "/checkpoint/$unitId"
+    | "/dev/glance"
+    | "/dev/kit"
     | "/dev/listen"
     | "/dev/qa"
     | "/dev/telemetry"
@@ -355,6 +384,7 @@ export interface FileRouteTypes {
     | "/transcribe/$projectId"
     | "/album/"
     | "/practice/"
+    | "/session/"
     | "/settings/"
     | "/studio/"
     | "/toolbox/"
@@ -368,6 +398,8 @@ export interface FileRouteTypes {
     | "/album/$trackId"
     | "/capstone/$id"
     | "/checkpoint/$unitId"
+    | "/dev/glance"
+    | "/dev/kit"
     | "/dev/listen"
     | "/dev/qa"
     | "/dev/telemetry"
@@ -390,6 +422,7 @@ export interface FileRouteTypes {
     | "/transcribe/$projectId"
     | "/album"
     | "/practice"
+    | "/session"
     | "/settings"
     | "/studio"
     | "/toolbox"
@@ -404,6 +437,8 @@ export interface FileRouteTypes {
     | "/album/$trackId"
     | "/capstone/$id"
     | "/checkpoint/$unitId"
+    | "/dev/glance"
+    | "/dev/kit"
     | "/dev/listen"
     | "/dev/qa"
     | "/dev/telemetry"
@@ -426,6 +461,7 @@ export interface FileRouteTypes {
     | "/transcribe/$projectId"
     | "/album/"
     | "/practice/"
+    | "/session/"
     | "/settings/"
     | "/studio/"
     | "/toolbox/"
@@ -441,6 +477,8 @@ export interface RootRouteChildren {
   AlbumTrackIdRoute: typeof AlbumTrackIdRoute;
   CapstoneIdRoute: typeof CapstoneIdRoute;
   CheckpointUnitIdRoute: typeof CheckpointUnitIdRoute;
+  DevGlanceRoute: typeof DevGlanceRoute;
+  DevKitRoute: typeof DevKitRoute;
   DevListenRoute: typeof DevListenRoute;
   DevQaRoute: typeof DevQaRoute;
   DevTelemetryRoute: typeof DevTelemetryRoute;
@@ -455,6 +493,7 @@ export interface RootRouteChildren {
   TranscribeProjectIdRoute: typeof TranscribeProjectIdRoute;
   AlbumIndexRoute: typeof AlbumIndexRoute;
   PracticeIndexRoute: typeof PracticeIndexRoute;
+  SessionIndexRoute: typeof SessionIndexRoute;
   StudioIndexRoute: typeof StudioIndexRoute;
   ToolboxIndexRoute: typeof ToolboxIndexRoute;
   TranscribeIndexRoute: typeof TranscribeIndexRoute;
@@ -519,6 +558,20 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof CheckpointUnitIdRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/dev/glance": {
+      id: "/dev/glance";
+      path: "/dev/glance";
+      fullPath: "/dev/glance";
+      preLoaderRoute: typeof DevGlanceRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/dev/kit": {
+      id: "/dev/kit";
+      path: "/dev/kit";
+      fullPath: "/dev/kit";
+      preLoaderRoute: typeof DevKitRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/dev/listen": {
       id: "/dev/listen";
       path: "/dev/listen";
@@ -580,6 +633,13 @@ declare module "@tanstack/react-router" {
       path: "/practice/review";
       fullPath: "/practice/review";
       preLoaderRoute: typeof PracticeReviewRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/session/": {
+      id: "/session/";
+      path: "/session";
+      fullPath: "/session/";
+      preLoaderRoute: typeof SessionIndexRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/session/coda": {
@@ -740,6 +800,8 @@ const rootRouteChildren: RootRouteChildren = {
   AlbumTrackIdRoute: AlbumTrackIdRoute,
   CapstoneIdRoute: CapstoneIdRoute,
   CheckpointUnitIdRoute: CheckpointUnitIdRoute,
+  DevGlanceRoute: DevGlanceRoute,
+  DevKitRoute: DevKitRoute,
   DevListenRoute: DevListenRoute,
   DevQaRoute: DevQaRoute,
   DevTelemetryRoute: DevTelemetryRoute,
@@ -754,6 +816,7 @@ const rootRouteChildren: RootRouteChildren = {
   TranscribeProjectIdRoute: TranscribeProjectIdRoute,
   AlbumIndexRoute: AlbumIndexRoute,
   PracticeIndexRoute: PracticeIndexRoute,
+  SessionIndexRoute: SessionIndexRoute,
   StudioIndexRoute: StudioIndexRoute,
   ToolboxIndexRoute: ToolboxIndexRoute,
   TranscribeIndexRoute: TranscribeIndexRoute,

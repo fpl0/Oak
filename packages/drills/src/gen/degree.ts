@@ -162,6 +162,9 @@ export const fet: Generator = {
     });
   },
   categorySkill(category, def) {
+    // A category may name its node (fet-major: 1, 3, 5 are E04, the rest E05); else the family's first.
+    const declared = def.categories.find((c) => c.id === category)?.skill;
+    if (declared) return declared;
     const skill = def.skills[0]?.skill ?? "E05";
     return `${skill.split("/")[0]}/${category}` as never;
   },

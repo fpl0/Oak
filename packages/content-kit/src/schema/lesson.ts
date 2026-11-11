@@ -53,7 +53,7 @@ export interface BandRef {
   band: BandId;
   /** The Band takes the tonic and mode of the learner's first `.scale()` after each evaluation. */
   followsLearnerKey?: boolean;
-  tracks?: ("drums" | "bass" | "chords")[];
+  tracks?: readonly ("drums" | "bass" | "chords")[];
 }
 /** Glossary entry; a fact card only if a later lesson tests it. */
 export interface TermDef {

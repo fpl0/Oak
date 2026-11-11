@@ -1,7 +1,7 @@
 // The single unlock table at run time (contracts §3.1, §11.7 rule 5): grants on session complete and
 // on session start, the silent fallback of START rows, the conditional voicing gate, and the backfill
 // pass at start-up. Rows are never revoked.
-import type { Unlock } from "@oak/api";
+import type { NextUnlock, Unlock } from "@oak/api";
 import type { ToolEntry, UnlockableId } from "@oak/content-kit";
 import { LearnerTime, type ServiceContext } from "./context.ts";
 import type { GatesService } from "./gates.ts";
@@ -184,6 +184,52 @@ export class UnlocksService {
     return (
       this.ctx.repos.db.query("SELECT 1 FROM sessions WHERE map_item_id = ? LIMIT 1").get(mapItemId) !== null
     );
+  }
+
+  /**
+   * The goal-gradient line (wave2 §4 `unlocks.next`, ux §1.4): the nearest tools not yet granted and how many
+   * map sessions of the default order are still to complete to reach them, counting the granting session
+   * itself (for a START row, starting it). Nearest first, at most `limit`. Track sessions are left out.
+   */
+  next(limit = 3): NextUnlock[] {
+    const order = this.ctx.content.defaultOrder();
+    const pending = order.filter((id) => !this.gates.sessionDone(id));
+    const pos = new Map(pending.map((id, i) => [id, i]));
+    const kindOf = (id: string): NextUnlock["remainingKind"] => {
+      if (this.ctx.content.lessonSite(id) !== null) return "lesson";
+      if (this.ctx.content.checkpointMeta(id) !== null) return "checkpoint";
+      if (/\.S\d+$/.test(id) && !id.startsWith("GYM.")) return "capstone";
+      return "session";
+    };
+    const out: (NextUnlock & { at: number })[] = [];
+    for (const t of this.ctx.content.toolbox()) {
+      if (this.ctx.repos.unlocks.get(t.id) !== null) continue;
+      const sites = [
+        ...this.ctx.content.unlockSites(t),
+        ...(t.unlock.fallbackAt ? [t.unlock.fallbackAt] : []),
+      ];
+      let best: string | null = null;
+      for (const site of sites) {
+        const i = pos.get(site);
+        if (i !== undefined && (best === null || i < (pos.get(best) as number))) best = site;
+      }
+      if (best === null) continue;
+      const at = pos.get(best) as number;
+      const span = pending.slice(0, at + 1).map(kindOf);
+      const kinds = new Set(span);
+      out.push({
+        itemId: t.id,
+        kind: unlockKind(t),
+        grantedBy: best as NextUnlock["grantedBy"],
+        remaining: at + 1,
+        remainingKind: kinds.size === 1 ? (span[0] as NextUnlock["remainingKind"]) : "session",
+        at,
+      });
+    }
+    return out
+      .sort((a, b) => a.at - b.at || a.itemId.localeCompare(b.itemId))
+      .slice(0, limit)
+      .map(({ at: _at, ...n }) => n);
   }
 
   markSeen(itemId: string): boolean {

@@ -1,0 +1,55 @@
+{/* U01.L08 Three to a Bar: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+Everything so far came in fours. This groove does not. Count along from the kick.
+
+<Example id="hook" views="code,roll" autoplay />
+
+<Callout kind="tip">The band leans on 1 with its bass and answers on 2 and 3 with its chords: oom, pah, pah.</Callout>
+</Step>
+
+<Step id="S2">
+Put the count in your hands. One tap per bar, on the kick.
+
+<Tap exercise="tap-on-one" />
+
+<OnPass>Every 1 lands on the kick, and three beats pass before the next one. That lilt, strong-weak-weak, is a waltz.</OnPass>
+</Step>
+
+<Step id="S3">
+The drums line has three words, and the tempo line ends in a different number.
+
+<OnPass>The number after `/` is the beats in a bar, and the words in the quotes share that bar. How many beats a bar holds, and how they are grouped, is the **meter**. Everything before this lesson was in four; this groove is in three.</OnPass>
+</Step>
+
+<Step id="S4">
+One more bar size, for contrast: two beats, `setcpm(100/2)`. Marching bands walk to it.
+
+<OnPass>On paper the bar size is two numbers stacked at the start of a piece: 4/4, 3/4, 2/4. The top number counts the beats in a bar; the bottom 4 says each beat is a quarter note. That pair is the **time signature**. In code, the top number is the one after `/` in the tempo line.</OnPass>
+</Step>
+
+<Step id="S5">
+A drums line written for four, under a tempo line written for three. The words have to fit the bar.
+
+<Editor exercise="make-it-a-waltz" />
+
+<OnPass>Kick, snare, snare in a bar of three: a waltz at 108. Both halves matter: `/3` makes the bar three beats long, and three words give each beat one sound.</OnPass>
+</Step>
+
+<Step id="S6">
+Now by ear alone. Find the kick, then count to the next one.
+
+<EarDrill family="fam.rhy.meter" level={1} trials={6} />
+
+<OnPass>Three or four by ear: count from one strong beat to the next.</OnPass>
+</Step>
+
+<Step id="S7">
+Your turn. Three beats to every bar, over the waltz band. Keep the kick on 1 and the groove will sway with the bass.
+
+<Make exercise="your-waltz" />
+
+<CanDo id="cd.hear.meter" />
+
+<Recap />
+</Step>

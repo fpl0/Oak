@@ -1,7 +1,7 @@
 // LessonContextPort over the content index and the learner's library. Step sources are UNREDACTED
 // (solutions, wrong variants from `tests` with `expect: 'fail'`, the four hint texts); the tutor redacts.
 // Checkpoint items and the current drill trial are never given to the tutor (contracts §10.4).
-import type { AnalysisSummary, Exercise, KeySpec, StepDef } from "@oak/content-kit";
+import type { AnalysisSummary, Answer, Exercise, KeySpec, StepDef } from "@oak/content-kit";
 import { stripMarkers } from "@oak/content-kit";
 import type { ContentIndex } from "../content/index.ts";
 import type { Repos } from "../db/repos/index.ts";
@@ -9,6 +9,14 @@ import type { LessonSource, ReviewSource, StepSource, SubjectFacts } from "../tu
 import type { LessonContextPort } from "../tutor/ports.ts";
 import { revisionCountFor } from "../tutor/reviews.ts";
 import type { SubjectRef } from "../tutor/types.ts";
+
+/**
+ * A step ID as the tool schema documents it (`U03.L02/S5`) or as the app sends it (`S5`): the local ID.
+ * The model is told to pass the qualified form; the content index keys steps by the local one.
+ */
+export function localStepId(lessonId: string, stepId: string): string {
+  return stepId.startsWith(`${lessonId}/`) ? stepId.slice(lessonId.length + 1) : stepId;
+}
 
 export function keyText(key: KeySpec | null | undefined): string | null {
   return key === null || key === undefined ? null : `${key.tonic} ${key.mode}`;
@@ -48,12 +56,66 @@ function hintsOf(ex: Exercise, solutions: readonly string[]): StepSource["hints"
   return [a.text, b.text, c.text, reveal];
 }
 
+type ChoiceLike = { id: string; label: string };
+
+/** A static answer as the learner would say it: choice labels (not IDs), texts, numbers, numerals. */
+function answerTexts(answer: Partial<Answer> | undefined, choices: readonly ChoiceLike[] = []): string[] {
+  if (answer === undefined || answer === null) return [];
+  const label = (id: string) => choices.find((c) => c.id === id)?.label ?? id;
+  const out: string[] = [];
+  if (answer.choice !== undefined && answer.choice.length > 0) out.push(answer.choice.map(label).join(", "));
+  if (answer.text !== undefined) out.push(...answer.text.slice(0, 1));
+  if (answer.number !== undefined) out.push(String(answer.number));
+  if (answer.rn !== undefined && answer.rn.length > 0) out.push(answer.rn.join(" "));
+  if (answer.degrees !== undefined && answer.degrees.length > 0) out.push(answer.degrees.join(" "));
+  if (answer.qualities !== undefined && answer.qualities.length > 0) out.push(answer.qualities.join(" "));
+  return out;
+}
+
+/**
+ * Reference answers of a step for the tutor's answer policy and redaction (contracts §10.5): the code
+ * solutions, and for answer-type exercises with a fixed answer (predict, identify, fact, staff-read, the
+ * questions of an investigate step) the answer itself. Without these an ear or predict step looked like
+ * an open step ("nothing to withhold") and the tutor was free to say the answer at rung 1. Answers drawn
+ * by a generator (`correct: {}`) are not known before the trial and are not here.
+ */
+export function referenceAnswers(ex: Exercise | undefined): string[] {
+  if (ex === undefined) return [];
+  const out: string[] = [];
+  if ("reference" in ex && ex.reference !== undefined && ex.reference !== null && "solutions" in ex.reference)
+    out.push(...(ex.reference as { solutions: string[] }).solutions);
+  const optionsOf = (ui: unknown): ChoiceLike[] =>
+    typeof ui === "object" && ui !== null && Array.isArray((ui as { options?: unknown }).options)
+      ? ((ui as { options: ChoiceLike[] }).options ?? [])
+      : [];
+  switch (ex.kind) {
+    case "predict":
+      if (Array.isArray(ex.correct))
+        out.push(ex.correct.map((id) => ex.choices?.find((c) => c.id === id)?.label ?? id).join(", "));
+      else if (typeof ex.correct === "number") out.push(String(ex.correct));
+      break;
+    case "identify":
+    case "fact":
+      out.push(...answerTexts(ex.correct, optionsOf(ex.answer)));
+      break;
+    case "staff-read":
+      out.push(...answerTexts(ex.correct, optionsOf(ex.answer)));
+      break;
+    case "run-investigate":
+      for (const q of ex.questions)
+        if (q.q === "choice")
+          out.push(q.correct.map((id) => q.options.find((o) => o.id === id)?.label ?? id).join(", "));
+        else if (q.q === "number") out.push(String(q.correct));
+      break;
+    default:
+      break;
+  }
+  return [...new Set(out.map((t) => t.trim()).filter((t) => t.length > 0))];
+}
+
 export function stepSource(lessonId: string, step: StepDef): StepSource {
   const ex = step.exercise;
-  const solutions =
-    ex !== undefined && "reference" in ex && ex.reference !== undefined && "solutions" in ex.reference
-      ? [...(ex.reference as { solutions: string[] }).solutions]
-      : [];
+  const solutions = referenceAnswers(ex);
   const rubric =
     ex !== undefined && "rubric" in ex && Array.isArray(ex.rubric)
       ? (ex.rubric as { label: string; required: boolean }[]).map((r) => ({
@@ -124,7 +186,7 @@ export class LessonContextAdapter implements LessonContextPort {
   async step(lessonId: string, stepId: string): Promise<StepSource | null> {
     // Checkpoint items (owner is a checkpoint) and drill trials are not lesson steps: never sent.
     if (this.content.checkpointMeta(lessonId) !== null) return null;
-    const step = this.content.stepDef(lessonId, stepId);
+    const step = this.content.stepDef(lessonId, localStepId(lessonId, stepId));
     if (step === null) return null;
     return stepSource(lessonId, step);
   }

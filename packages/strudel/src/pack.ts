@@ -162,6 +162,7 @@ export async function prebake(soundsRoot: string): Promise<PackManifest> {
     }),
   );
   await webaudio.aliasBank(manifest.bankAliases);
+  registerOakKits();
 
   for (const [alias, { gm, upstreamIndex, font }] of Object.entries(manifest.aliases)) {
     const original = upstream.get(gm);
@@ -209,4 +210,33 @@ export async function packFileUrls(soundsRoot: string, manifest: PackManifest): 
 /** superdough's own escaping before it fetches: `encodeURI`-like, plus `#`. */
 export function encodeSoundPath(path: string): string {
   return encodeURI(decodeURI(path)).replace(/#/g, "%23");
+}
+
+/** The drum roles an Oak kit maps (contracts §3.2 `snd.drum.*`). */
+const KIT_ROLES = [
+  "bd",
+  "sd",
+  "hh",
+  "oh",
+  "rd",
+  "cr",
+  "cp",
+  "rim",
+  "lt",
+  "mt",
+  "ht",
+  "sh",
+  "cb",
+  "tb",
+] as const;
+
+/**
+ * Oak's own kits, aliases of mirrored samples: `.bank("jazzkit")` (the jazz-soul flavour's drums, `snd.jazzkit`)
+ * plays the default acoustic kit (uzu-drumkit) until a brushes-and-ride kit is mirrored. Without this every
+ * `jazzkit_*` sound is missing and the jazz-soul Band's drums are silent.
+ */
+export function registerOakKits(): void {
+  const map = webaudio.soundMap.get() as Record<string, unknown>;
+  for (const role of KIT_ROLES)
+    if (map[role] && !map[`jazzkit_${role}`]) webaudio.soundAlias(role, `jazzkit_${role}`);
 }

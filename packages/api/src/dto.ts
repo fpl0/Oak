@@ -51,6 +51,8 @@ export const ApiErrorBodySchema = z.object({
       "payload_too_large",
       "unavailable",
       "internal",
+      /** 501: a Wave 2 endpoint whose contract exists and whose handler is not built yet (docs/design/wave2.md §4). */
+      "not_implemented",
     ]),
     message: z.string(),
     issues: z.array(z.object({ path: z.string(), message: z.string() })).exactOptional(),
@@ -1208,14 +1210,54 @@ export const SessionTelemetrySchema = z.object({
   dueSecBefore: z.number(),
   dueSecAfter: z.number(),
   deferredCards: z.number().int(),
+  /** Warm-up overflow: seconds of due review left beyond the planned warm-up (never shown to the learner). */
   overflowSec: z.number(),
   wrappedEarly: z.boolean(),
   split: z.boolean(),
 });
 export type SessionTelemetry = z.infer<typeof SessionTelemetrySchema>;
+/**
+ * What /dev/telemetry shows (contracts §9.7), computed by the server from the rows: per lesson actual vs
+ * scaled minutes (flagged above 1.15 ×), daily review seconds against the warm-up budget, warm-up overflow,
+ * and whether the rolling multiplier asks for a new BEGINNER_FACTOR (outside 1.25–1.55). Wave 2 addition.
+ */
+export const TelemetryAggregatesSchema = z.object({
+  lessons: z.array(
+    z.object({
+      lessonId: z.string(),
+      lessonVersion: z.number().int(),
+      steps: z.number().int(),
+      activeMin: z.number(),
+      authoredMin: z.number(),
+      scaledMin: z.number(),
+      /** activeMin / scaledMin; `null` with no scaled minutes. */
+      ratio: z.number().nullable(),
+      /** Over 1.15 × its scaled budget. */
+      flagged: z.boolean(),
+      lastAt: Instant,
+    }),
+  ),
+  days: z.array(
+    z.object({
+      day: Day,
+      sessions: z.number().int(),
+      reviewSec: z.number(),
+      plannedSec: z.number(),
+      budgetSec: z.number(),
+      overflowSec: z.number(),
+      activeMin: z.number(),
+    }),
+  ),
+  /** Rolling multiplier outside 1.25–1.55: time to revisit BEGINNER_FACTOR. */
+  multiplierPrompt: z.boolean(),
+  overflow: z.object({ sessions: z.number().int(), meanSec: z.number(), maxSec: z.number() }),
+});
+export type TelemetryAggregates = z.infer<typeof TelemetryAggregatesSchema>;
+
 export const TelemetryReportSchema = z.object({
   steps: z.array(StepTelemetrySchema),
   sessions: z.array(SessionTelemetrySchema),
+  aggregates: TelemetryAggregatesSchema,
   /** median(active content time / authored minutes) over the last 10 lessons; prompt when it leaves 1.25 to 1.55. */
   rollingMultiplier: z.number().nullable(),
   forecastSec: z.array(z.number()),
@@ -1361,3 +1403,207 @@ export const AnalyzeResponseSchema = z.object({
 });
 export type AnalyzeResponse = z.infer<typeof AnalyzeResponseSchema>;
 export { GradeResultSchema };
+
+// --- Wave 2 additions (docs/design/wave2.md §4) -------------------------------------------------
+// Each one names the surface that needs it. Additive: no existing schema changed.
+
+/** `GET /lessons/:id/steps`: every step's state in one call (the step rail, resume, "new since you finished"). */
+export const LessonStepsSchema = z.object({
+  lessonId,
+  /** `null` until the lesson was first opened. */
+  progress: LessonProgressSchema.nullable(),
+  /** One per authored step, in lesson order (steps without an exercise report `passed` once visited). */
+  steps: z.array(StepStateSchema),
+});
+export type LessonSteps = z.infer<typeof LessonStepsSchema>;
+
+/**
+ * `PUT /lessons/:id/position`: where the learner is in a lesson, so the next session resumes there
+ * (contracts §9.3 pause and resume; §9.4 "Wrap up" before the Make resumes at the next unfinished step).
+ */
+export const LessonPositionSchema = z.strictObject({
+  sessionId: z.string().nullable(),
+  /** The step now on screen (local ID, `S5`). */
+  stepId: z.string().min(1),
+  /** 15-minute split: the part being played. */
+  splitPart: z.enum(["A", "B"]).nullable(),
+  /** True when the learner pressed "Wrap up": the Quick sketch follows and the lesson stays in progress. */
+  wrapped: z.boolean(),
+});
+export type LessonPosition = z.infer<typeof LessonPositionSchema>;
+
+/** `POST /capstones/:id/release`: the first (or a new) album release of a capstone draft (ux §5.3). */
+export const CapstoneReleaseSchema = z.strictObject({
+  sessionId: z.string().nullable(),
+  sketchId: z.string(),
+  sketchVersion: z.number().int().positive(),
+  title: z.string().min(1).max(120),
+  flavour: flavour.nullable(),
+  /** Deterministic liner notes (the tutor's liner note is added only if the learner chooses it). */
+  linerNotesMd: z.string().max(4000),
+  theoryTags: z.array(z.string()).max(12),
+  /** Whether the review's liner note goes into the album (`Settings.linerNotesInAlbum` is the default). */
+  includeReviewNote: z.boolean(),
+});
+export type CapstoneRelease = z.infer<typeof CapstoneReleaseSchema>;
+export const CapstoneReleaseResultSchema = z.object({
+  state: CapstoneStateSchema,
+  /** The album track with the new version (render its audio next with `album.putAudio`). */
+  track: AlbumTrackDetailSchema,
+  unlocks: z.array(UnlockSchema),
+  canDo: z.array(CanDoEntrySchema),
+  streak: StreakSummarySchema,
+});
+export type CapstoneReleaseResult = z.infer<typeof CapstoneReleaseResultSchema>;
+
+/**
+ * `GET /unlocks/next`: the goal-gradient line of Today and the Coda ("2 lessons → .voicing()", ux §1.4, §1.6).
+ * Sorted nearest first; at most 3.
+ */
+export const NextUnlockSchema = z.object({
+  itemId: unlockable,
+  kind: z.enum(UNLOCK_KINDS),
+  /** The map item whose completion grants it. */
+  grantedBy: SessionIdSchema,
+  /** Map sessions still to complete in the default order, counting `grantedBy` itself (≥ 1). */
+  remaining: z.number().int().positive(),
+  /** What `remaining` counts, for the copy ("2 lessons", "1 checkpoint"). */
+  remainingKind: z.enum(["lesson", "checkpoint", "capstone", "session"]),
+});
+export type NextUnlock = z.infer<typeof NextUnlockSchema>;
+
+export const ONBOARDING_STEPS = [
+  "welcome",
+  "loop",
+  "edit",
+  "react",
+  "tutor",
+  "headphones",
+  "mic",
+  "latency",
+  "range",
+  "first-sing",
+  "prefs",
+  "sketch",
+  "coda",
+] as const;
+export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
+/** Onboarding = U00.L01 "Hello, loop" (ux §8). Survives a reload; `profile.onboardedAt` marks the end. */
+export const OnboardingStateSchema = z.object({
+  /** The step to show now. */
+  step: z.enum(ONBOARDING_STEPS),
+  completed: z.array(z.enum(ONBOARDING_STEPS)),
+  /** Steps the learner skipped (no mic, no headphones): set up later in Settings. */
+  skipped: z.array(z.enum(ONBOARDING_STEPS)),
+  /** The degree the learner typed at `edit` (0–7, n = degree − 1), which keys the `react` copy. */
+  firstEdit: z.number().int().min(0).max(7).nullable(),
+  /** Sketch 001, saved at `sketch`. */
+  sketchId: z.string().nullable(),
+  startedAt: Instant.nullable(),
+  finishedAt: Instant.nullable(),
+});
+export type OnboardingState = z.infer<typeof OnboardingStateSchema>;
+export const OnboardingPatchSchema = z
+  .strictObject({
+    step: z.enum(ONBOARDING_STEPS),
+    completed: z.array(z.enum(ONBOARDING_STEPS)),
+    skipped: z.array(z.enum(ONBOARDING_STEPS)),
+    firstEdit: z.number().int().min(0).max(7).nullable(),
+    sketchId: z.string().nullable(),
+    /** True on the last step: the server also sets `profile.onboardedAt`. */
+    finished: z.boolean(),
+  })
+  .partial();
+export type OnboardingPatch = z.infer<typeof OnboardingPatchSchema>;
+
+/** `calibration_runs` row, newest first in `GET /profile/calibrations` (Settings → Voice, Audio). */
+export const CalibrationRecordSchema = z.object({
+  id: z.number().int(),
+  kind: z.enum(CALIBRATION_KINDS),
+  result: z.record(z.string(), z.unknown()),
+  at: Instant,
+});
+export type CalibrationRecord = z.infer<typeof CalibrationRecordSchema>;
+
+/** `/dev/listen` verdicts (architecture §3.8), moved from localStorage to the server. Dev only. */
+export const LISTEN_VERDICTS = ["ok", "wrong-sound", "wrong-notation", "weak", "wrong-theory"] as const;
+export const ListenMarkCreateSchema = z.strictObject({
+  /** Hash of the code the verdict was given on: a verdict is stale once the code changes. */
+  hash: z.string().min(1).max(64),
+  verdict: z.enum(LISTEN_VERDICTS),
+  note: z.string().max(2000),
+});
+export const ListenMarkSchema = z.object({
+  /** `U01.L02@slug`. */
+  ref: z.string(),
+  hash: z.string(),
+  verdict: z.enum(LISTEN_VERDICTS),
+  note: z.string(),
+  at: Instant,
+});
+export type ListenMark = z.infer<typeof ListenMarkSchema>;
+
+// --- Wave 2 Build additions (server engineer; dev only) ----------------------------------------
+
+/**
+ * `POST /dev/seed` (OAK_DEV=1): wipe the learner's data and fast-forward to a named point of the default
+ * order, one simulated day per map session, ending yesterday (so today is a fresh day). For other engineers'
+ * e2e. Points (case-insensitive): `fresh`, `onboarded`, `after <SessionId>` (e.g. `after U01.L03`,
+ * `after U01.CP`, `after C0.S1`), `U01.CP due`, `U01.CP failed`, `U01.CP failed twice`, `C0 ready`,
+ * `C0 in progress`, `C0 released`, `U02.CP due`, `C1 ready`, `C1 in progress`, `C1 released`, and
+ * `<N>-day gap` (the base `after U01.L03` with `gapDays: N`). `GET /dev/seed` lists them.
+ */
+export const DevSeedRequestSchema = z.strictObject({
+  point: z.string().min(1).max(80),
+  /**
+   * Days with no practice between the last seeded activity and today: the gap of contracts §7.9 as the
+   * planner counts it (0, the default: the last session was yesterday; 3+ return warm-up; 10+ Light lesson).
+   */
+  gapDays: z.number().int().min(0).max(400).optional(),
+  targetMinutes: z.union([z.literal(15), z.literal(20), z.literal(25)]).optional(),
+  /** Do one warm-up review set on each simulated day (default true): SRS cards have history. */
+  practice: z.boolean().optional(),
+});
+export type DevSeedRequest = z.infer<typeof DevSeedRequestSchema>;
+export const DevSeedResultSchema = z.object({
+  point: z.string(),
+  /** Map sessions completed, in order. */
+  done: z.array(z.string()),
+  /** The next map item in the default order. */
+  next: z.string().nullable(),
+  /** The learner day now and the last day with activity. */
+  day: z.string(),
+  lastActiveDay: z.string().nullable(),
+  /** Days without practice between `lastActiveDay` and `day` (contracts §7.9). */
+  gapDays: z.number().int(),
+  /** IDs created on the way, for specs that need them. */
+  sketchIds: z.array(z.string()),
+  capstoneSketchId: z.string().nullable(),
+  trackId: z.string().nullable(),
+});
+export type DevSeedResult = z.infer<typeof DevSeedResultSchema>;
+export const DevSeedPointSchema = z.object({ point: z.string(), description: z.string() });
+export type DevSeedPoint = z.infer<typeof DevSeedPointSchema>;
+
+/** `GET/PUT /dev/clock`: the server's clock in dev (`OAK_NOW=<ISO>` sets it at start-up). */
+export const DevClockSchema = z.object({
+  now: Instant,
+  /** The learner day of `now` (04:00 rollover in the profile's zone). */
+  day: z.string(),
+  /** Milliseconds added to the real clock (0 when not moved). */
+  offsetMs: z.number(),
+  /** A frozen clock does not move with real time. */
+  frozen: z.boolean(),
+});
+export type DevClock = z.infer<typeof DevClockSchema>;
+export const DevClockSetSchema = z.strictObject({
+  /** Jump to this instant. */
+  at: Instant.optional(),
+  advanceMs: z.number().int().optional(),
+  advanceDays: z.number().int().min(-400).max(400).optional(),
+  /** Stop (true) or restart (false) the clock at its current reading. */
+  freeze: z.boolean().optional(),
+  /** Back to real time (offset 0, running). Applied first. */
+  reset: z.boolean().optional(),
+});
+export type DevClockSet = z.infer<typeof DevClockSetSchema>;

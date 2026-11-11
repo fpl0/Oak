@@ -16,6 +16,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { NAV_ITEMS, type NavId } from "../../lib/nav.ts";
 import { useDue } from "../../lib/queries.ts";
 import { useShell } from "../../lib/shell-store.ts";
+import { useTutorBridge } from "../../tutor/use-tutor-bridge.ts";
 import { OakIcon, RingIcon, TuningForkIcon } from "../icons/index.tsx";
 import { isFocusRoute } from "../keys/keymap.ts";
 import { IconButton } from "../kit/Button.tsx";
@@ -175,6 +176,7 @@ function FocusBar() {
 export function AppShell({ children }: { children: ReactNode }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const focus = isFocusRoute(path);
+  useTutorBridge();
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-bg text-text" data-mode={focus ? "focus" : "shell"}>
       <a

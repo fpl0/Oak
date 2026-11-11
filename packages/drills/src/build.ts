@@ -32,6 +32,12 @@ export interface TrackSpec {
   gain?: number | Node;
   /** `.swingBy(amount, per)`. */
   swing?: { amount: Rat; per: number };
+  /**
+   * Sound controls in Strudel's names (`lpf`, `lpq`, `attack`, `release`, `room`, `delay`, …): a number, or
+   * a pattern (`.lpf("<800 2400>")`, one value per bar). Printed after the sound; they do not change the
+   * events (the trial carries them for playback as `params.controlsByBar`).
+   */
+  controls?: Readonly<Record<string, number | Node>>;
 }
 export interface Piece {
   code: string;
@@ -102,6 +108,8 @@ function trackLine(track: TrackSpec): { line: string; patOffset: number; locs: M
   if (track.bank) line += `.bank("${track.bank}")`;
   if (typeof track.gain === "number") line += `.gain(${fmtNum(track.gain)})`;
   else if (track.gain) line += `.gain("${print(track.gain).text}")`;
+  for (const [name, v] of Object.entries(track.controls ?? {}))
+    line += typeof v === "number" ? `.${name}(${fmtNum(v)})` : `.${name}("${print(v).text}")`;
   return { line, patOffset, locs: printed.locs };
 }
 

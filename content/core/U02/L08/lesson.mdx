@@ -1,0 +1,51 @@
+{/* U02.L08 Playing from the Page: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+Beethoven wrote this tune in 1824 for the last movement of his Ninth Symphony. Here are its first four bars, in a plain rhythm, on the staff and the roll at once.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+The opening tune ended with something new: `.room(.4)`. Here is a short line with the room turned off. <CodeRef fn="room" />
+
+<OnPass>That tail is **reverb**: the sound bouncing off the walls of a room, so many echoes so close together that they blur into one fading wash. More `.room()` gives more of that tail, and the piano seems to sit farther away in a larger space.</OnPass>
+</Step>
+
+<Step id="S3">
+The same tune, now only on the page. No sound and no roll: read it the way you read the staff in The Treble Staff.
+
+<Staff example="ode-bars-1-2" />
+
+<Editor exercise="read-the-opening" />
+
+<OnPass>Two bars read off the page: up from the bottom line to `g4`, then back down to `d4`, the space below the staff.</OnPass>
+</Step>
+
+<Step id="S4">
+When the Saints Go Marching In, a traditional tune. Its first three notes, "oh when the", come before the first full bar, so here they follow a rest on beat 1.
+
+<Staff example="saints" />
+
+<Editor exercise="read-the-saints" />
+
+<Callout kind="trap">Inside `< >` each item is one bar, and `@` outside brackets stretches an item over more bars: `g4@4` on its own lasts four bars. Keep the whole note in its brackets, `[g4@4]`.</Callout>
+
+<OnPass>The first phrase of the Saints, from the page: three quick notes, then a long `g4` that fills the bar, twice.</OnPass>
+</Step>
+
+<Step id="S5">
+The page says how long a note lasts on paper. How long it rings is your choice. <CodeRef fn="clip" />
+
+<OnPass>`.clip(.5)` cuts each note to half its length, so the tune sounds detached and bouncy; `.clip(1)` joins the notes into a smooth line. Same notes, same staff, a different character.</OnPass>
+</Step>
+
+<Step id="S6">
+Your turn. Pick one of the two tunes, give it a sound and a room, and decide how long its notes ring. Two lines on two sounds are welcome too.
+
+<Make exercise="your-arrangement" />
+
+<CanDo id="cd.read.play-from-page" />
+
+<Recap />
+</Step>

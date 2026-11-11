@@ -1,6 +1,6 @@
 // `bun run content:new <lessonId> [--root <dir>] [--force]`: scaffolds content/core/Uxx/Lyy/{lesson.ts,
 // lesson.mdx} (track lessons under content/advanced/<unit>/Lyy) from the lesson's row in the syllabus,
-// following the template of AUTHORING §2: listen → predict → run → modify → make. The scaffold loads
+// following the template of AUTHORING §3: listen → predict → run → modify → make. The scaffold loads
 // and passes `defineLesson`; the author then writes the prompts, the real steps and their tests, and runs
 // `bun run content:check <lessonId>`. Starter code uses only tools unlocked at that lesson.
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
@@ -52,7 +52,7 @@ export function scaffold(id: LessonId, root = CONTENT_ROOT): Scaffold {
   const band = parsed.unit === "U00" ? "false" : '{ band: "band.two-chord-vamp", followsLearnerKey: true }';
   const panels = "{ roll: true, staff: false, keyboard: false }";
   const lessonTs = `// ${id} ${meta.title}: ${meta.objective}
-// Scaffolded by \`bun run content:new ${id}\`. Write the real steps (AUTHORING §2, §8), then run
+// Scaffolded by \`bun run content:new ${id}\`. Write the real steps (AUTHORING §3, §9), then run
 // \`bun run content:check ${id}\`.
 import { defineLesson } from "@oak/content-kit";
 

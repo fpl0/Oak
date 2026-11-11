@@ -1,16 +1,44 @@
-import type { Profile } from "@oak/api";
+// Settings › Voice (ux §2.3, §4.7; contracts §8.2, §8.5, §8.6): the mic and Quiet mode, the singing range, the
+// tolerance ladder, timing, and the last calibration results. Each measurement re-runs on its own through
+// /settings/voice/setup?part=… (the same screens as onboarding).
+import type { CalibrationRecord, Profile } from "@oak/api";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { formatDate } from "../../lib/format.ts";
 import { usePageTitle } from "../../lib/nav.ts";
 import { formatNoteMidi } from "../../lib/notes.ts";
-import { useProfile } from "../../lib/queries.ts";
+import { useCalibrations, useProfile } from "../../lib/queries.ts";
 import { useUpdateProfile } from "../../lib/settings.ts";
 import { buttonClass } from "../../ui/kit/Button.tsx";
 import { Field, ReadOnlyRow, Section, Select, Switch } from "../../ui/kit/Field.tsx";
 import { QueryView } from "../../ui/kit/QueryState.tsx";
+import { calibrationLine, inputLabel } from "../../voice/history.ts";
+import { ladderSummary } from "../../voice/logic.ts";
 
 export const Route = createFileRoute("/settings/voice")({ component: VoiceSettings });
 
 type Tol = "auto" | 70 | 50 | 35 | 25;
+
+function History() {
+  const runs = useCalibrations();
+  if (runs.isPending) return <p className="py-3 text-sm text-text-3">Loading results…</p>;
+  // The history endpoint may not exist on an older server: the profile above still holds every value.
+  if (runs.isError) return <p className="py-3 text-sm text-text-3">No result history on this server yet.</p>;
+  const items: CalibrationRecord[] = runs.data.items.slice(0, 8);
+  if (items.length === 0)
+    return (
+      <p className="py-3 text-sm text-text-3">Nothing measured yet. Set up the mic to see results here.</p>
+    );
+  return (
+    <ul className="flex flex-col" data-testid="calibration-history">
+      {items.map((r) => (
+        <li key={r.id} className="grid gap-1 py-2 text-sm sm:grid-cols-[14rem_1fr]">
+          <span className="text-text-3">{formatDate(r.at)}</span>
+          <span>{calibrationLine(r)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 function VoiceSettings() {
   usePageTitle("Settings · Voice");
@@ -20,24 +48,48 @@ function VoiceSettings() {
     <QueryView query={profile}>
       {(p: Profile) => {
         const tol: Tol = p.singTolMode === "auto" ? "auto" : p.singToleranceCents;
+        const ladder = ladderSummary(p);
         return (
           <div className="flex flex-col gap-6">
             <Section
               title="Microphone"
               description="Your voice is analysed live on this computer. Nothing is recorded or sent."
             >
-              <ReadOnlyRow label="Input" value={p.inputKind === "none" ? "No microphone" : p.inputKind} />
+              <ReadOnlyRow label="Input" value={inputLabel(p)} />
               <ReadOnlyRow
                 label="Noise floor"
                 value={p.noiseFloorDb === null ? "not measured" : `${Math.round(p.noiseFloorDb)} dBFS`}
               />
-              <div className="py-3">
-                <Link to="/settings/voice/setup" className={buttonClass("primary")}>
+              <Field
+                label="Quiet mode"
+                help="No singing today: singing steps become listening steps. Nothing is locked or lost."
+              >
+                {({ id, describedBy }) => (
+                  <Switch
+                    id={id}
+                    describedBy={describedBy}
+                    checked={p.quiet}
+                    onChange={(on) => update.set({ quiet: on })}
+                  />
+                )}
+              </Field>
+              <div className="flex flex-wrap gap-2 py-3">
+                <Link to="/settings/voice/setup" className={buttonClass("primary")} data-testid="voice-setup">
                   Set up mic and voice
+                </Link>
+                <Link
+                  to="/settings/voice/setup"
+                  search={{ part: "mic" }}
+                  className={buttonClass("secondary")}
+                >
+                  Re-check the mic
                 </Link>
               </div>
             </Section>
-            <Section title="Your voice">
+            <Section
+              title="Your voice"
+              description="Oak moves sung notes into this zone. There are no voice types."
+            >
               <ReadOnlyRow
                 label="Range"
                 value={
@@ -54,7 +106,24 @@ function VoiceSettings() {
                     : "not measured"
                 }
               />
-              <Field label="Pitch tolerance" help="Auto tightens as your aim gets finer.">
+              <div className="py-3">
+                <Link
+                  to="/settings/voice/setup"
+                  search={{ part: "range" }}
+                  className={buttonClass("secondary")}
+                  data-testid="rerun-range"
+                >
+                  Measure the range again
+                </Link>
+              </div>
+            </Section>
+            <Section
+              title="Pitch tolerance"
+              description="How close a sung note must be to count. It tightens as your aim gets finer and never loosens by itself."
+            >
+              <ReadOnlyRow label="Now" value={<span data-testid="ladder-now">{ladder.current}</span>} />
+              <ReadOnlyRow label="Next step" value={ladder.next} />
+              <Field label="Tolerance" help="Auto follows your singing; a fixed value stays put.">
                 {({ id, describedBy }) => (
                   <Select<Tol>
                     id={id}
@@ -87,16 +156,36 @@ function VoiceSettings() {
                   />
                 )}
               </Field>
-              <Field label="Quiet mode" help="No singing today. Singing steps become listening steps.">
-                {({ id, describedBy }) => (
-                  <Switch
-                    id={id}
-                    describedBy={describedBy}
-                    checked={p.quiet}
-                    onChange={(on) => update.set({ quiet: on })}
-                  />
-                )}
-              </Field>
+            </Section>
+            <Section
+              title="Timing"
+              description="Measured with your current headphones; re-run it when they change."
+            >
+              <ReadOnlyRow
+                label="Tap latency"
+                value={
+                  p.tapLatencyMs === null
+                    ? "not measured"
+                    : `${Math.round(p.tapLatencyMs)} ms${p.tapJitterMs === null ? "" : ` (±${Math.round(p.tapJitterMs)} ms)`}`
+                }
+              />
+              <ReadOnlyRow
+                label="Sing latency"
+                value={p.singLatencyMs === null ? "not measured" : `${Math.round(p.singLatencyMs)} ms`}
+              />
+              <div className="py-3">
+                <Link
+                  to="/settings/voice/setup"
+                  search={{ part: "latency" }}
+                  className={buttonClass("secondary")}
+                  data-testid="rerun-latency"
+                >
+                  Measure timing again
+                </Link>
+              </div>
+            </Section>
+            <Section title="Recent results">
+              <History />
             </Section>
           </div>
         );

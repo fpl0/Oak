@@ -3,8 +3,7 @@
 // by evaluating Strudel code; the shown `code` evaluates to the same events (property-tested).
 
 export { clickPlan, eventsToAudioPlan, trialAudio } from "./audio.ts";
-export { CHORD_SYMBOLS, DECKS, KEY_SIGNATURES, STAFF_NAMES } from "./catalog/decks.ts";
-export { FAMILIES } from "./catalog/families.ts";
+export { DECKS, FAMILIES } from "./catalog/families.ts";
 export {
   bindDeck,
   bindFamily,

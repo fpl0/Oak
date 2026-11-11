@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { LessonDef } from "@oak/content-kit";
+import { evalHeadless, midisOf } from "@oak/grader/testing";
 import {
   codeHash,
   exportMarks,
@@ -7,19 +8,12 @@ import {
   fromGenerated,
   fromLessons,
   type ListenMark,
-  localListenStore,
+  marksByRef,
+  SOUNDS_UNIT,
+  soundDemo,
+  soundItems,
   statusOf,
 } from "./listen.ts";
-
-class MemoryStorage {
-  data = new Map<string, string>();
-  getItem(k: string) {
-    return this.data.get(k) ?? null;
-  }
-  setItem(k: string, v: string) {
-    this.data.set(k, v);
-  }
-}
 
 describe("listen manifest", () => {
   test("hash is deterministic and changes with the code", () => {
@@ -86,16 +80,48 @@ describe("verdicts", () => {
     );
   });
 
-  test("the local store persists, survives junk, and exports sorted JSON", async () => {
-    const storage = new MemoryStorage();
-    const store = localListenStore(storage);
-    expect(await store.load()).toEqual({});
-    await store.save(ok);
-    await store.save({ ...ok, ref: "U00.L01@z", verdict: "weak", note: "thin" });
-    const again = await localListenStore(storage).load();
-    expect(Object.keys(again).sort()).toEqual(["U00.L01@z", "U01.L01@a"]);
-    expect(JSON.parse(exportMarks(again)).map((m: ListenMark) => m.ref)).toEqual(["U00.L01@z", "U01.L01@a"]);
-    storage.setItem("oak.dev.listen-marks.v1", "{not json");
-    expect(await localListenStore(storage).load()).toEqual({});
+  test("server marks are keyed by ref, newest first wins, and export sorted", () => {
+    const older = { ...ok, verdict: "weak" as const, at: "2026-11-10T00:00:00Z" };
+    const other = { ...ok, ref: "U00.L01@z", verdict: "weak" as const, note: "thin" };
+    const marks = marksByRef([ok, older, other]);
+    expect(marks[a.ref]?.verdict).toBe("ok");
+    expect(JSON.parse(exportMarks(marks)).map((m: ListenMark) => m.ref)).toEqual(["U00.L01@z", "U01.L01@a"]);
+  });
+});
+
+describe("sounds", () => {
+  const items = soundItems({
+    aliases: ["upright", "rhodes"],
+    soundfonts: ["gm_piano"],
+    samples: { "uzu-drumkit": ["_base", "sd", "bd", "hh"], piano: ["piano"] },
+  });
+
+  test("every curated sound is one item with a stable ref, grouped", () => {
+    expect(items.map((i) => i.ref)).toEqual([
+      "sound:rhodes",
+      "sound:upright",
+      "sound:piano",
+      "sound:bd",
+      "sound:hh",
+      "sound:sd",
+      "sound:gm_piano",
+      "sound:sine",
+      "sound:triangle",
+      "sound:square",
+      "sound:sawtooth",
+    ]);
+    expect(items.find((i) => i.ref === "sound:bd")?.group).toBe("Drum kit");
+    expect(items.every((i) => i.unit === SOUNDS_UNIT && i.hash === codeHash(i.code))).toBe(true);
+  });
+
+  test("demos follow the dialect and play in the right register", async () => {
+    for (const i of items) {
+      expect(i.code.startsWith("setcpm(96/4)\n\n")).toBe(true);
+      expect(i.code).not.toContain("'");
+      const r = await evalHeadless(i.code, 1);
+      expect(r.events.length, i.ref).toBeGreaterThan(0);
+    }
+    expect(await midisOf(soundDemo("upright", "pitched"), 1)).toEqual([36, 43, 48]);
+    expect(await midisOf(soundDemo("rhodes", "pitched"), 1)).toEqual([60, 64, 67, 60, 64, 67]);
   });
 });

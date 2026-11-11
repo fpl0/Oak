@@ -1,2 +1,4 @@
 # Screenshots written by the runtime review specs (regenerated on every run).
 screenshots/
+# Fake-microphone WAVs written by e2e/review/make-fixtures.bun.ts.
+.generated/

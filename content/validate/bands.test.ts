@@ -3,29 +3,30 @@
 // allowed, dialect enforced), and plays the harmony it says. Kits sit in the production ranges.
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { midisOf } from "@oak/grader/testing";
-import { bands } from "../bands/index.ts";
+import { bandMeter, bands } from "../bands/index.ts";
 import { FLAVOUR_RULES, flavours, PRODUCTION_RANGES } from "../flavours.ts";
 import { BAD_LOG, evaluate, lint } from "./harness.ts";
 
 setDefaultTimeout(60_000);
-const fill = (code: string, key = "C4:major") =>
-  `setcpm(96/4)\n\n${code.replaceAll("{{key}}", key).replaceAll("{{bpm}}", "96")}`;
+const fill = (code: string, key = "C4:major", beats = 4) =>
+  `setcpm(96/${beats})\n\n${code.replaceAll("{{key}}", key).replaceAll("{{bpm}}", "96")}`;
+const beatsOf = (id: string) => Number(bandMeter(id).split("/")[0]);
 
 describe("bands", () => {
   for (const b of bands)
     for (const [flavour, code] of Object.entries(b.code))
       test(`${b.id} × ${flavour}`, async () => {
         for (const key of ["C4:major", "G4:major", "Eb4:major"]) {
-          const r = await evaluate(fill(code, key), b.bars);
+          const r = await evaluate(fill(code, key, beatsOf(b.id)), b.bars);
           expect([key, r.ok, r.error ?? ""]).toEqual([key, true, ""]);
           expect(r.logs.filter((l) => BAD_LOG.test(l))).toEqual([]);
           expect([...r.tracks].sort()).toEqual([...b.roles].sort());
           for (const role of b.roles)
             expect([role, r.events.some((e) => e.track === role)]).toEqual([role, true]);
         }
-        const res = lint(fill(code), {
+        const res = lint(fill(code, "C4:major", beatsOf(b.id)), {
           session: "U01.L01",
-          meter: "4/4",
+          meter: bandMeter(b.id),
           allowPreview: true,
           profile: "band",
         });
@@ -70,6 +71,35 @@ describe("harmony (music facts, checked against Strudel)", () => {
       1,
     );
     expect(r.events.map((e) => e.midi)).toEqual([48, 52, 55, 59]);
+  });
+  test("the waltz band: bass on beat 1, chords on beats 2 and 3, I then IV", async () => {
+    const code = bands.find((b) => b.id === "band.waltz-vamp")?.code["flavour.pop"] ?? "";
+    const r = await evaluate(fill(code, "C4:major", 3), 2);
+    const on = (track: string) =>
+      r.events.filter((e) => e.track === track).map((e) => [Number(e.onset.toFixed(3)), e.midi]);
+    expect(on("bass")).toEqual([
+      [0, 36],
+      [1, 41],
+    ]);
+    const chordOnsets = [...new Set(on("chords").map(([t]) => t))];
+    expect(chordOnsets).toEqual([0.333, 0.667, 1.333, 1.667]);
+    expect(
+      on("chords")
+        .filter(([t]) => t === 1.333)
+        .map(([, m]) => m),
+    ).toEqual([53, 57, 60]);
+  });
+  // U01.L08 tells the learner the waltz band "leans on 1 with its bass and answers on 2 and 3 with its
+  // chords". In every flavour the bass plays on beat 1 and no chord does (the indie chords once hit all three).
+  test("the waltz band in every flavour: bass on 1, chords never on 1", async () => {
+    const b = bands.find((x) => x.id === "band.waltz-vamp");
+    for (const [flavour, code] of Object.entries(b?.code ?? {})) {
+      const r = await evaluate(fill(code, "C4:major", 3), 2);
+      const onsets = (track: string) =>
+        r.events.filter((e) => e.track === track).map((e) => Number((e.onset % 1).toFixed(3)));
+      expect({ flavour, bassOnOne: onsets("bass").includes(0) }).toEqual({ flavour, bassOnOne: true });
+      expect({ flavour, chordsOnOne: onsets("chords").includes(0) }).toEqual({ flavour, chordsOnOne: false });
+    }
   });
   test("the band follows the key: in G the vamp is G and C", async () => {
     const line = (bands.find((b) => b.id === "band.two-chord-vamp")?.code["flavour.pop"] ?? "")

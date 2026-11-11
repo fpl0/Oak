@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { createClient, type TutorEvent, type TutorTurnRequest } from "@oak/api";
-import { setApiClient } from "./api.ts";
+import { describe, expect, test } from "bun:test";
+import type { TutorEvent, TutorTurnRequest } from "@oak/api";
 import {
   INITIAL_TURN,
   reduceTurn,
+  retryAt,
   runTutorTurn,
+  STALLED_COPY,
   settleTurn,
   startTurn,
   type TurnState,
@@ -53,8 +54,6 @@ function fakeFetch(body: string, status = 200) {
   return { fn, calls };
 }
 
-afterEach(() => setApiClient(createClient()));
-
 describe("reduceTurn", () => {
   test("accumulates text deltas and tool progress, then finishes on done", () => {
     let s: TurnState = startTurn();
@@ -72,7 +71,7 @@ describe("reduceTurn", () => {
     for (const e of events) s = reduceTurn(s, e);
     expect(s.status).toBe("done");
     expect(s.text).toBe("A cadence is a resting point.");
-    expect(s.tools).toEqual([{ toolUseId: "t1", name: "evaluate_strudel", ok: true, summary: "4 bars" }]);
+    expect(s.tools).toEqual([{ toolUseId: "t1", name: "evaluate_strudel", ok: true }]);
     expect(s.phase).toBeNull();
     expect(s.usage).toEqual(usage);
   });
@@ -129,9 +128,8 @@ describe("runTutorTurn over a real SSE body", () => {
         { comments: true },
       ),
     );
-    setApiClient(createClient({ fetch: fn }));
     const states: TurnState[] = [];
-    const final = await runTutorTurn(request, { onState: (s) => states.push(s) });
+    const final = await runTutorTurn(request, { fetch: fn, onState: (s) => states.push(s) });
     expect(final.status).toBe("done");
     expect(final.text).toBe("Hi");
     expect(calls[0]?.url).toBe("/api/tutor/chat");
@@ -141,8 +139,7 @@ describe("runTutorTurn over a real SSE body", () => {
 
   test("a stream that ends without done is an error, not a silent success", async () => {
     const { fn } = fakeFetch(sse([{ type: "text", data: { delta: "The answer is" } }]));
-    setApiClient(createClient({ fetch: fn }));
-    const final = await runTutorTurn(request);
+    const final = await runTutorTurn(request, { fetch: fn });
     expect(final.status).toBe("error");
     expect(final.error?.kind).toBe("network");
     expect(final.text).toBe("The answer is");
@@ -150,8 +147,7 @@ describe("runTutorTurn over a real SSE body", () => {
 
   test("an HTTP 429 becomes a rate_limit error", async () => {
     const { fn } = fakeFetch("", 429);
-    setApiClient(createClient({ fetch: fn }));
-    const final = await runTutorTurn({ ...request, kind: "hint" });
+    const final = await runTutorTurn({ ...request, kind: "hint" }, { fetch: fn });
     expect(final.status).toBe("error");
     expect(final.error?.kind).toBe("rate_limit");
   });
@@ -164,11 +160,111 @@ describe("runTutorTurn over a real SSE body", () => {
           reject(Object.assign(new Error("aborted"), { name: "AbortError" })),
         );
       });
-    setApiClient(createClient({ fetch: fn }));
-    const run = runTutorTurn(request, { signal: ac.signal });
+    const run = runTutorTurn(request, { signal: ac.signal, fetch: fn });
     ac.abort();
     const final = await run;
     expect(final.status).toBe("error");
     expect(final.error?.kind).toBe("aborted");
+  });
+
+  test("an explain request goes to the hint route", async () => {
+    const { fn, calls } = fakeFetch(
+      sse([{ type: "done", data: { stopReason: "end_turn", backend: "claude-cli", iterations: 1, usage } }]),
+    );
+    const final = await runTutorTurn({ ...request, kind: "explain", stepId: "S6" }, { fetch: fn });
+    expect(final.status).toBe("done");
+    expect(calls[0]?.url).toBe("/api/tutor/hint");
+  });
+
+  test("pings keep a quiet turn alive; silence stalls it with its own copy and keeps the text", async () => {
+    const enc = new TextEncoder();
+    // Pings every 20 ms for 120 ms, then a done: with idleMs 80 the turn must survive.
+    const pinging = async () => {
+      const stream = new ReadableStream<Uint8Array>({
+        async start(c) {
+          c.enqueue(enc.encode(sse([{ type: "text", data: { delta: "Listen " } }])));
+          for (let i = 0; i < 6; i++) {
+            await Bun.sleep(20);
+            c.enqueue(enc.encode(": ping\n\n"));
+          }
+          c.enqueue(
+            enc.encode(
+              sse([
+                {
+                  type: "done",
+                  data: { stopReason: "end_turn", backend: "claude-cli", iterations: 1, usage },
+                },
+              ]),
+            ),
+          );
+          c.close();
+        },
+      });
+      return new Response(stream, { status: 200 });
+    };
+    const alive = await runTutorTurn(request, { fetch: pinging, idleMs: 80, watchEveryMs: 10 });
+    expect(alive.status).toBe("done");
+
+    // One text event, then nothing at all: the watchdog aborts and the turn reads as stalled.
+    const silent = async (_url: string, init: RequestInit) => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(c) {
+          c.enqueue(enc.encode(sse([{ type: "text", data: { delta: "Half an ans" } }])));
+          init.signal?.addEventListener("abort", () =>
+            c.error(Object.assign(new Error("aborted"), { name: "AbortError" })),
+          );
+        },
+      });
+      return new Response(stream, { status: 200 });
+    };
+    const stalled = await runTutorTurn(request, { fetch: silent, idleMs: 60, watchEveryMs: 10 });
+    expect(stalled.status).toBe("error");
+    expect(stalled.error).toMatchObject({ kind: "network", message: STALLED_COPY, stalled: true });
+    expect(stalled.text).toBe("Half an ans");
+  });
+
+  test("a learner's Stop is aborted, never stalled", async () => {
+    const ac = new AbortController();
+    const enc = new TextEncoder();
+    const fn = async (_url: string, init: RequestInit) => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(c) {
+          c.enqueue(enc.encode(sse([{ type: "text", data: { delta: "Slowly" } }])));
+          init.signal?.addEventListener("abort", () =>
+            c.error(Object.assign(new Error("aborted"), { name: "AbortError" })),
+          );
+        },
+      });
+      return new Response(stream, { status: 200 });
+    };
+    const run = runTutorTurn(request, { fetch: fn, signal: ac.signal, idleMs: 10_000 });
+    await Bun.sleep(20);
+    ac.abort();
+    const final = await run;
+    expect(final.error?.kind).toBe("aborted");
+    expect(final.text).toBe("Slowly");
+  });
+});
+
+describe("retryAt", () => {
+  test("a rate limit waits retryAfterSec; other errors may retry at once", () => {
+    const limited = reduceTurn(startTurn(), {
+      type: "error",
+      data: { kind: "rate_limit", message: "slow down", retryAfterSec: 20 },
+    });
+    expect(retryAt(limited, 1_000)).toBe(21_000);
+    const busy = reduceTurn(startTurn(), { type: "error", data: { kind: "overloaded", message: "busy" } });
+    expect(retryAt(busy, 1_000)).toBe(1_000);
+  });
+
+  test("tool results keep no server summary; duplicate cards and tool starts are ignored", () => {
+    let s = reduceTurn(startTurn(), { type: "tool_start", data: { toolUseId: "t1", name: "compare_haps" } });
+    s = reduceTurn(s, { type: "tool_start", data: { toolUseId: "t1", name: "compare_haps" } });
+    s = reduceTurn(s, {
+      type: "tool_result",
+      data: { toolUseId: "t1", name: "compare_haps", ok: true, summary: "fail, score 0.40" },
+    });
+    expect(s.tools).toEqual([{ toolUseId: "t1", name: "compare_haps", ok: true }]);
+    expect(JSON.stringify(s)).not.toContain("score 0.40");
   });
 });

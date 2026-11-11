@@ -38,6 +38,8 @@ const MIME_OF: Readonly<Record<string, string>> = {
 
 /** Upload limit for one audio file (a long song in WAV fits; contracts says nothing, 300 MB is generous). */
 export const MAX_AUDIO_BYTES = 300 * 1024 * 1024;
+/** Waveform peaks of one file. */
+export const MAX_PEAKS_BYTES = 16 * 1024 * 1024;
 
 export function extFor(mime: string, name: string): string {
   const fromMime = EXT_OF[mime.split(";")[0]?.trim().toLowerCase() ?? ""];

@@ -390,3 +390,117 @@
     grid-area: feedback;
   }
 }
+
+/* Wave 2 additions: the roll pager on long loops, the loop region and the metronome (ux §3.4, §7.10). */
+.oak-roll-pager {
+  margin-right: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--wb-text-2);
+  font-variant-numeric: tabular-nums;
+}
+.oak-roll-pager .oak-link-button {
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 4px;
+  text-decoration: none;
+}
+.oak-roll-pager .oak-link-button:disabled {
+  color: var(--wb-text-3);
+  cursor: default;
+}
+.oak-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--wb-border);
+  border-radius: 6px;
+  background: var(--wb-surface);
+  color: var(--wb-text);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.oak-toggle[aria-pressed="true"] {
+  border-color: var(--wb-accent);
+  color: var(--wb-accent);
+  box-shadow: inset 0 0 0 1px var(--wb-accent);
+}
+.oak-loop-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.oak-loop-step .oak-toggle {
+  margin-right: 2px;
+}
+.oak-loop-step button:not(.oak-toggle) {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--wb-border);
+  border-radius: 4px;
+  background: var(--wb-surface);
+  color: var(--wb-text-2);
+  font-family: var(--wb-font-code);
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+}
+.oak-loop-step button:not(.oak-toggle):disabled {
+  color: var(--wb-text-3);
+  cursor: default;
+}
+.oak-beats {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+.oak-beats i {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--wb-border);
+}
+.oak-beats i[data-on="1"] {
+  background: var(--wb-accent);
+}
+.oak-beats i[data-accent="1"] {
+  width: 8px;
+  height: 8px;
+}
+.oak-ab-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--wb-border);
+  border-radius: 6px;
+  background: var(--wb-surface);
+  font-size: 13px;
+}
+.oak-ab-btn {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--wb-border);
+  border-radius: 6px;
+  background: var(--wb-surface);
+  color: var(--wb-text);
+  font: inherit;
+  cursor: pointer;
+}
+.oak-ab-btn[aria-pressed="true"] {
+  background: var(--wb-accent);
+  border-color: var(--wb-accent);
+  color: var(--wb-on-accent);
+}
+.oak-transport button:focus-visible,
+.oak-roll-pager button:focus-visible,
+.oak-ab-btn:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 2px;
+}

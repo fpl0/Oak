@@ -28,6 +28,13 @@ import { toolbox } from "../toolbox.ts";
 /** The Wave 1 gate sample is checked as if it were taught at this session. */
 export const SAMPLE_CONTEXT: SessionId = "U03.L05";
 
+/**
+ * The onboarding lessons run on the onboarding loop, one of the four preview contexts (contracts §3.1
+ * rule 5a): its code may use locked tools, in examples, starters and graded steps alike. U00.L02 brings
+ * the same loop back for its Make (its own tools, the tuner and the setup screens, carry no code).
+ */
+export const ONBOARDING_PREVIEW: ReadonlySet<string> = new Set(["U00.L01", "U00.L02"]);
+
 type Backend = "package";
 const used = { lint: new Set<Backend>(), grade: new Set<Backend>(), notation: new Set<Backend>() };
 export function backends(): Record<keyof typeof used, Backend[]> {
@@ -115,6 +122,8 @@ export interface GradeOutcome {
   feedback: string[];
   backend: Backend;
   note?: string;
+  /** What the learner would read (the grader's rendered feedback), for `content:check --verbose`. */
+  messages?: string[];
 }
 
 const NEUTRAL_PROFILE = {
@@ -166,6 +175,7 @@ export async function grade(
   test: TestCase,
   lesson: Lesson,
   session: SessionId,
+  mode: "lesson" | "capstone" = "lesson",
 ): Promise<GradeOutcome> {
   await ensureRealm();
   const response = await toExerciseResponse(ex, test.response, lesson);
@@ -183,7 +193,7 @@ export async function grade(
     response,
     ctx: {
       exerciseGlobalId: `${lesson.id}/${ex.id}`,
-      mode: "lesson",
+      mode,
       key: ex.key ?? lesson.key,
       meter: ex.meter ?? lesson.meter,
       bpm: lesson.bpm,
@@ -198,7 +208,7 @@ export async function grade(
       lint: {
         profile: "graded",
         unlocked: unlockedFor(session),
-        allowPreview: false,
+        allowPreview: ONBOARDING_PREVIEW.has(lesson.id),
         meter: lesson.meter,
         key: lesson.key,
       },
@@ -211,9 +221,10 @@ export async function grade(
     passed: result.status === "pass",
     score: result.score,
     feedback: result.diagnostics.map((d) => d.id),
+    messages: result.messages.map((m) => m.text),
     backend: "package",
     ...(result.status === "error" && test.expect !== "error"
-      ? { note: result.messages.join(" / ") || "evaluation error" }
+      ? { note: result.messages.map((m) => m.text).join(" / ") || "evaluation error" }
       : {}),
   };
 }
@@ -233,17 +244,26 @@ export async function notateCode(
   meter: MeterId,
   key: KeySpec | null,
   bars: number,
+  staff: "treble" | "bass" | "grand" | "perc" | "lead" = "treble",
 ): Promise<NotationOutcome> {
   await ensureRealm();
   const res = await grader.evaluateForGrading(code, { mode: "lesson", bars, lint: null, meter });
   if (!res.ok) return { available: true, error: res.error.message };
   const n = grader.normalize(res, key ? { meter, key } : { meter });
+  // The percussion staff engraves the drums; every other staff the pitched events.
+  const events =
+    staff === "perc" ? n.all.filter((e) => !!e.drum) : n.all.filter((e) => e.midi !== null && !e.drum);
+  if (events.length === 0)
+    return {
+      available: true,
+      error: `nothing to engrave on the ${staff} staff (no ${staff === "perc" ? "drum" : "pitched"} events)`,
+    };
   const { score, abc } = notation.notate({
-    events: n.all.filter((e) => e.midi !== null && !e.drum),
+    events,
     meter: METERS[meter],
     key,
     bars,
-    staff: "treble",
+    staff: staff === "perc" ? "percussion" : staff,
   });
   used.notation.add("package");
   return { available: true, approximate: score.approximate, warnings: score.warnings.length, abc: abc.abc };

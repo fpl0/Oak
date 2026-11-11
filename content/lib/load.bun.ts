@@ -68,6 +68,8 @@ export interface LoadedLesson extends LessonFile {
 export interface LoadError {
   file: string;
   error: string;
+  /** The lesson ID the folder says (`U01.L03`), when the file is a lesson. */
+  folderId?: string | null;
 }
 
 /** Imports every lesson; a file that throws (a `ContentDefinitionError`) becomes a load error. */
@@ -82,7 +84,11 @@ export async function loadLessons(
       if (!mod.default) throw new Error("lesson.ts has no default export (export default defineLesson({…}))");
       lessons.push({ ...f, def: mod.default, mdxSource: f.mdx ? readFileSync(f.mdx, "utf8") : null });
     } catch (e) {
-      errors.push({ file: relative(root, f.file), error: e instanceof Error ? e.message : String(e) });
+      errors.push({
+        file: relative(root, f.file),
+        error: e instanceof Error ? e.message : String(e),
+        folderId: f.folderId,
+      });
     }
   }
   return { lessons, errors };

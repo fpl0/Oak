@@ -12,10 +12,10 @@ const repos = () => {
 };
 
 describe("schema", () => {
-  test("0001 creates every table of interfaces.md §7 and sets user_version", () => {
+  test("0001 and 0002 create every table of interfaces.md §7 plus Wave 2's, and set user_version", () => {
     const db = openDb(":memory:");
-    expect(schemaVersion(db)).toBe(1);
-    expect(latestVersion()).toBe(1);
+    expect(schemaVersion(db)).toBe(2);
+    expect(latestVersion()).toBe(2);
     const expected = [
       "settings",
       "learner_profile",
@@ -58,6 +58,8 @@ describe("schema", () => {
       "qa_reports",
       "step_telemetry",
       "session_telemetry",
+      "onboarding_state",
+      "listen_marks",
     ];
     expect(tableNames(db).sort()).toEqual([...expected].sort());
     expect(all<{ foreign_keys: number }>(db, "PRAGMA foreign_keys")[0]?.foreign_keys).toBe(1);

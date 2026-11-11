@@ -84,8 +84,16 @@ export async function loadContent(options: LoadOptions): Promise<ContentSource> 
       return null;
     }
   };
-  const byKind = <T>(mod: unknown, ...kinds: string[]): T[] =>
-    exportedObjects(mod).filter((o) => typeof o.id === "string" && kinds.includes(idKind(o.id) ?? "")) as T[];
+  // One entry per ID: a module that exports its table twice (a named array and `default`) must not
+  // give every row twice (unlock rows, can-dos and `unlocks.next` were doubled).
+  const byKind = <T>(mod: unknown, ...kinds: string[]): T[] => {
+    const seen = new Set<string>();
+    return exportedObjects(mod).filter((o) => {
+      if (typeof o.id !== "string" || !kinds.includes(idKind(o.id) ?? "") || seen.has(o.id)) return false;
+      seen.add(o.id);
+      return true;
+    }) as T[];
+  };
 
   // Registries.
   const syllabusMod = await load("syllabus.ts", true);
@@ -106,6 +114,12 @@ export async function loadContent(options: LoadOptions): Promise<ContentSource> 
     ...byKind<MilestoneDef>(canDosMod, "milestone"),
     ...byKind<MilestoneDef>(await load("milestones.ts", false), "milestone"),
   ];
+
+  // The capstone registry (`content/capstones.ts`: the full definitions with briefs and rubrics, contracts
+  // §6.6). It also exports the metas; a definition is told apart by its `sessionDefs`.
+  const capstoneRegistry = exportedObjects(await load("capstones.ts", false)).filter(
+    (o) => typeof o.id === "string" && idKind(o.id) === "capstone" && Array.isArray(o.sessionDefs),
+  ) as unknown as CapstoneDef[];
 
   // Per-folder files.
   const lessons: LessonDef[] = [];
@@ -129,6 +143,16 @@ export async function loadContent(options: LoadOptions): Promise<ContentSource> 
       capstones.push(def as unknown as CapstoneDef);
     else if (rel.endsWith("song.ts") && kind === "song") songs.push(def as unknown as SongDef);
     else problems.push({ id: rel, message: `unexpected id "${def.id}"` });
+  }
+
+  // A capstone folder file wins over the registry entry of the same ID.
+  for (const c of capstoneRegistry)
+    if (!capstones.some((x) => x.id === c.id) && !capstones.includes(c)) capstones.push(c);
+  const seenCap = new Set<string>();
+  for (let i = capstones.length - 1; i >= 0; i--) {
+    const id = (capstones[i] as CapstoneDef).id;
+    if (seenCap.has(id)) capstones.splice(i, 1);
+    seenCap.add(id);
   }
 
   // Generated files.

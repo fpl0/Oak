@@ -13,6 +13,7 @@ import type { Context, Hono } from "hono";
 import type { z } from "zod";
 import type { ConfirmStore } from "../confirm.ts";
 import { ApiError, type ApiIssue, badRequest, errorResponse } from "../errors.ts";
+import { MAX_AUDIO_BYTES, MAX_PEAKS_BYTES } from "../services/audio-store.ts";
 
 type Def<N extends EndpointName> = (typeof contract)[N];
 
@@ -40,8 +41,18 @@ export type Mounter = <N extends EndpointName>(
 
 /** Largest JSON body accepted (a full code string plus a grade result fits many times over). */
 export const MAX_JSON_BYTES = 2 * 1024 * 1024;
-/** Largest raw upload: audio files and backups. */
+/** Largest raw upload: a backup archive with all its audio. */
 export const MAX_BINARY_BYTES = 1024 * 1024 * 1024;
+/**
+ * Tighter limits per binary endpoint, enforced while the body streams in (a declared Content-Length over
+ * the limit is refused before any byte is read), so a peaks upload cannot make the server buffer a
+ * gigabyte before the service's own check refuses it.
+ */
+export const BINARY_LIMITS: Partial<Record<EndpointName, number>> = {
+  "audio.upload": MAX_AUDIO_BYTES,
+  "album.putAudio": MAX_AUDIO_BYTES,
+  "audio.putPeaks": MAX_PEAKS_BYTES,
+};
 
 /**
  * The request body, read chunk by chunk and abandoned as soon as it passes `max` bytes (`null`). A
@@ -117,7 +128,7 @@ export function createMounter(
         input.query = r.data;
       }
       if (def.body === "binary") {
-        const bytes = await readBounded(c.req.raw, MAX_BINARY_BYTES);
+        const bytes = await readBounded(c.req.raw, BINARY_LIMITS[name] ?? MAX_BINARY_BYTES);
         if (bytes === null) return errorResponse(new ApiError("payload_too_large", "upload too large"));
         input.bytes = bytes;
         input.contentType = c.req.header("content-type") ?? "application/octet-stream";

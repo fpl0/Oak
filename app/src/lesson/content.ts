@@ -1,0 +1,110 @@
+// Loads one lesson for the player: the typed `lesson.ts` (the truth: steps, exercises, code, grading) and its
+// `lesson.mdx` (prose only, one <Step id> block per step). Both are lazy chunks that Vite finds by glob, so a
+// lesson an author adds is picked up without touching this file. Also the checkpoint definitions
+// (`content/core/Uxx/CP/checkpoint.ts`) the checkpoint player renders its authored items and Make from.
+import type { CheckpointDef, LessonDef } from "@oak/api";
+import { queryOptions, useQuery } from "@tanstack/react-query";
+import type { ComponentType } from "react";
+
+export type MdxComponents = Record<string, ComponentType<Record<string, unknown>>>;
+export type LessonMdx = ComponentType<{ components?: MdxComponents }>;
+
+const LESSON_FILES = import.meta.glob<{ default: LessonDef }>(
+  "../../../content/{core,advanced}/**/lesson.ts",
+);
+const MDX_FILES = import.meta.glob<{ default: LessonMdx }>("../../../content/{core,advanced}/**/lesson.mdx");
+const CHECKPOINT_FILES = import.meta.glob<Record<string, unknown>>(
+  "../../../content/{core,advanced}/**/checkpoint.ts",
+);
+
+/** `…/core/U01/L02/lesson.ts` → `U01.L02`; the gate sample in `core/_sample/L00` is `U00.L00`. */
+export function lessonIdOfPath(path: string): string | null {
+  const m = /\/(?:core|advanced)\/([^/]+)\/(L\d\d)\/lesson\.(?:ts|mdx)$/.exec(path);
+  if (!m) return null;
+  const unit = m[1] === "_sample" ? "U00" : (m[1] as string);
+  return `${unit}.${m[2]}`;
+}
+
+function filesById<T>(files: Record<string, () => Promise<T>>): Map<string, () => Promise<T>> {
+  const out = new Map<string, () => Promise<T>>();
+  for (const [path, load] of Object.entries(files)) {
+    const id = lessonIdOfPath(path);
+    if (id && !out.has(id)) out.set(id, load);
+  }
+  return out;
+}
+
+const lessonFiles = filesById(LESSON_FILES);
+const mdxFiles = filesById(MDX_FILES);
+
+export interface LoadedLesson {
+  def: LessonDef;
+  /** `null` when the lesson has no prose file (the player then shows each step's title and prompt). */
+  Mdx: LessonMdx | null;
+  /** True for the Wave 1 gate fixture, which is not part of the course. */
+  sample: boolean;
+}
+
+/** Whether an authored lesson file exists for `id` (cheap: no module is loaded). */
+export function hasLessonFile(id: string): boolean {
+  return lessonFiles.has(id);
+}
+
+export async function loadLesson(id: string): Promise<LoadedLesson | null> {
+  const load = lessonFiles.get(id);
+  if (!load) return null;
+  const [mod, mdx] = await Promise.all([
+    load(),
+    mdxFiles
+      .get(id)?.()
+      .catch(() => null) ?? null,
+  ]);
+  const def = mod.default;
+  if (!def || def.id !== id) return null;
+  return {
+    def,
+    Mdx: mdx?.default ?? null,
+    sample: Object.keys(LESSON_FILES).some((p) => p.includes("/_sample/") && lessonIdOfPath(p) === id),
+  };
+}
+
+export const lessonQuery = (id: string) =>
+  queryOptions({
+    queryKey: ["lesson-content", id] as const,
+    queryFn: () => loadLesson(id),
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: 10 * 60_000,
+  });
+
+export function useLessonContent(id: string) {
+  return useQuery(lessonQuery(id));
+}
+
+function isCheckpointDef(v: unknown): v is CheckpointDef {
+  return (
+    !!v &&
+    typeof v === "object" &&
+    typeof (v as { id?: unknown }).id === "string" &&
+    Array.isArray((v as { authored?: unknown }).authored) &&
+    !!(v as { make?: unknown }).make
+  );
+}
+
+/** The checkpoint's authored items and Make, or `null` when no `checkpoint.ts` defines it yet. */
+export async function loadCheckpointDef(cpId: string): Promise<CheckpointDef | null> {
+  for (const load of Object.values(CHECKPOINT_FILES)) {
+    const mod = await load().catch(() => null);
+    if (!mod) continue;
+    for (const v of Object.values(mod)) if (isCheckpointDef(v) && v.id === cpId) return v;
+  }
+  return null;
+}
+
+export function useCheckpointDef(cpId: string | null) {
+  return useQuery({
+    queryKey: ["checkpoint-def", cpId] as const,
+    queryFn: () => (cpId ? loadCheckpointDef(cpId) : Promise.resolve(null)),
+    staleTime: Number.POSITIVE_INFINITY,
+    enabled: cpId !== null,
+  });
+}

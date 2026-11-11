@@ -1,0 +1,53 @@
+{/* U02.L03 Half & Whole Steps: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+Two bars, both climbing. One creeps, one strides, and the keyboard shows why: bar 1 moves to the very next key every time, black or white; bar 2 always skips one key on the way.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+Most white keys have a black key between them. Two pairs do not.
+
+<OnPass>The step to the very next key is a **half step**: `e4` to `f4`, `b4` to `c5`. Two half steps, like `c4` to `d4` across a black key, make a **whole step**. Every distance in music is counted in these.</OnPass>
+</Step>
+
+<Step id="S3">
+The black keys have no letters of their own. They borrow the names of their white neighbours.
+
+<OnPass>A `#` raises a note by a half step: `f#4` is F **sharp**, the black key just above `f4`. A `b` after the letter lowers it: `gb4` is G **flat**, the black key just below `g4`. Here both names land on the same key. `bb4`, B flat, is the black key below `b4`.</OnPass>
+</Step>
+
+<Step id="S4">
+Now by ear alone. No code, no keys: two notes, and you judge the distance.
+
+<EarDrill family="fam.pit.steps" level={1} trials={6} />
+
+<Callout kind="tip">Hum both notes. A half step barely moves your voice; a whole step moves it a little more.</Callout>
+
+<OnPass>Half and whole steps by ear. Every tune you know is built from these two, plus the occasional jump.</OnPass>
+</Step>
+
+<Step id="S5">
+A plain four-note line. Bend one note of it.
+
+<Editor exercise="raise-one-note" />
+
+<OnPass>`c4 d4 f#4 g4`: the third note now leans into the last. If you wrote `gb4`, it sounds exactly the same: two names for one key are **enharmonic**. Which name to write depends on the music around it, a choice you will meet again later.</OnPass>
+</Step>
+
+<Step id="S6">
+Two keys up from `e4`, counting the black ones too.
+
+<OnPass>`f#4`: a half step to `f4`, another to the black key above it. Two white keys up would have been `g4`, three half steps away.</OnPass>
+</Step>
+
+<Step id="S7">
+Your turn. One black key changes the colour of a white-key riff: a sharp can lean up into the next note, a flat can sag down into it. Try it in more than one place and listen over the band.
+
+<Make exercise="riff-black-key" />
+
+<CanDo id="cd.read.half-whole" />
+
+<Recap />
+</Step>

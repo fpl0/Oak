@@ -98,6 +98,28 @@ describe("checkApiRequest (contracts §11.1)", () => {
     ).toBeNull();
   });
 
+  test("in dev any loopback port is allowed (several Vite stacks side by side); production stays exact", () => {
+    const dev = { port: 8801, devPorts: [5173], dev: true };
+    const at = (host: string, origin = `http://${host}`) =>
+      req("POST", "/api/sketches", { ...BROWSER, host, origin });
+    expect(checkApiRequest(at("127.0.0.1:5201"), dev)).toBeNull();
+    expect(checkApiRequest(at("localhost:5299"), dev)).toBeNull();
+    expect(checkApiRequest(at("127.0.0.1:5201", "http://localhost:5207"), dev)).toBeNull();
+    // Still refused in dev: another host, another loopback address, a port out of range, https, a suffix.
+    expect(checkApiRequest(at("evil.example:5201"), dev)).toBe("host");
+    expect(checkApiRequest(at("127.0.0.2:5201"), dev)).toBe("host");
+    expect(checkApiRequest(at("127.0.0.1:70000"), dev)).toBe("host");
+    expect(checkApiRequest(at("127.0.0.1:0"), dev)).toBe("host");
+    expect(checkApiRequest(at("127.0.0.1:5201", "https://127.0.0.1:5201"), dev)).toBe("origin");
+    expect(checkApiRequest(at("127.0.0.1:5201", "http://127.0.0.1:5201.evil.example"), dev)).toBe("origin");
+    expect(checkApiRequest(at("127.0.0.1:5201", "http://127.0.0.1:5201/x"), dev)).toBe("origin");
+    // Production: only the server's own port.
+    const prod = { port: 8801, devPorts: [], dev: false };
+    expect(checkApiRequest(at("127.0.0.1:5201"), prod)).toBe("host");
+    expect(checkApiRequest(at("127.0.0.1:8801", "http://127.0.0.1:5201"), prod)).toBe("origin");
+    expect(checkApiRequest(at("127.0.0.1:8801"), prod)).toBeNull();
+  });
+
   test("exactly three media GETs", () => {
     expect(isMediaGet("GET", "/api/audio/abc")).toBe(true);
     expect(isMediaGet("GET", "/api/audio/abc/peaks")).toBe(true);

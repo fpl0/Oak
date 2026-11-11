@@ -118,7 +118,18 @@ export function dayStartInstant(
     if (diff === 0) break;
     guess += diff;
   }
-  return new Date(guess);
+  const at = (t: number) => dayIndex(learnerDay(new Date(t), timeZone, rolloverHour));
+  if (at(guess) === index && at(guess - 1) === index - 1) return new Date(guess);
+  // A rollover hour inside a DST gap or overlap (rollover 02:00 in Berlin, 04:00 in Helsinki, 00:00 on
+  // Lord Howe): the learner day is monotonic in time, so bisect for its first instant.
+  let lo = wall - 15 * HOUR_MS; // before the day starts in every zone (offsets are within −12 h … +14 h)
+  let hi = wall + 13 * HOUR_MS; // after it has started
+  while (hi - lo > 1) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (at(mid) >= index) hi = mid;
+    else lo = mid;
+  }
+  return new Date(hi);
 }
 /** The learner-day index of an instant. */
 export function dayIndexOf(at: Date, timeZone: string, rolloverHour: number = STREAK.rolloverHour): number {

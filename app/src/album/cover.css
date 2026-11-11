@@ -1,0 +1,73 @@
+/* The release ceremony (ux §2.3): the rings cover draws itself, pith first, one ring per bar. */
+.oak-cover-draw .oak-cover-ring,
+.oak-cover-draw .oak-cover-text {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  animation: oak-cover-ring 480ms var(--oak-ease-out, cubic-bezier(0.2, 0.8, 0.2, 1)) both;
+  animation-delay: calc(var(--i, 0) * 110ms + 120ms);
+}
+.oak-cover-draw .oak-cover-text {
+  animation-name: oak-cover-text;
+  animation-delay: 900ms;
+}
+.oak-cover-draw .oak-cover-pith {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  animation: oak-cover-pith 360ms var(--oak-ease-out, cubic-bezier(0.2, 0.8, 0.2, 1)) both;
+}
+
+@keyframes oak-cover-ring {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes oak-cover-pith {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes oak-cover-text {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Reduced motion (system or Settings → Appearance): the cover is simply there. */
+[data-motion="reduced"] .oak-cover-draw .oak-cover-ring,
+[data-motion="reduced"] .oak-cover-draw .oak-cover-text,
+[data-motion="reduced"] .oak-cover-draw .oak-cover-pith {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .oak-cover-draw .oak-cover-ring,
+  :root:not([data-motion="full"]) .oak-cover-draw .oak-cover-text,
+  :root:not([data-motion="full"]) .oak-cover-draw .oak-cover-pith {
+    animation: none;
+  }
+}
+
+/* The record turns slowly while the album plays (33⅓ rpm would be a blur; this is a gesture). */
+.oak-vinyl-spin {
+  animation: oak-vinyl 7.2s linear infinite;
+}
+@keyframes oak-vinyl {
+  to {
+    transform: rotate(360deg);
+  }
+}
+[data-motion="reduced"] .oak-vinyl-spin {
+  animation: none;
+}

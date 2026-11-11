@@ -28,6 +28,7 @@ describe("IDs", () => {
     ...R.decks.flatMap((d) => ids("fact", d.cards)),
     ...ids("term", R.terms),
     ...ids("canDo", R.candos),
+    ...ids("milestone", R.milestones),
     ...ids("flavour", R.flavours),
     ...ids("band", R.bands),
     ...ids("song", R.repertoire),
@@ -53,7 +54,11 @@ describe("IDs", () => {
       ids: { id: string; kind: string; retiredAt?: string }[];
     };
     const live = new Set<string>([...all.map(([, id]) => id), ...R.toolbox.map((t) => t.id)]);
-    const lost = lock.ids.filter((e) => !e.retiredAt && !live.has(e.id)).map((e) => e.id);
+    // Step, exercise and example IDs live in lesson files: build.test.ts and course.test.ts check those.
+    const lessonScoped = new Set(["step", "exercise", "example"]);
+    const lost = lock.ids
+      .filter((e) => !e.retiredAt && !lessonScoped.has(e.kind) && !live.has(e.id))
+      .map((e) => e.id);
     expect(lost).toEqual([]);
     const retired = new Set(lock.ids.filter((e) => e.retiredAt).map((e) => e.id));
     expect([...retired].filter((id) => live.has(id))).toEqual([]);

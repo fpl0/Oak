@@ -33,6 +33,8 @@ export type ApiErrorCode =
   | "payload_too_large"
   | "unavailable"
   | "internal"
+  /** 501: the endpoint is in the contract but its handler is not built yet (Wave 2). */
+  | "not_implemented"
   | "network"
   | "contract"
   | "aborted";
@@ -198,9 +200,11 @@ export function createClient(options: OakClientOptions = {}): OakClient {
             ? "conflict"
             : res.status === 428
               ? "confirm_required"
-              : res.status >= 500
-                ? "internal"
-                : "bad_request";
+              : res.status === 501
+                ? "not_implemented"
+                : res.status >= 500
+                  ? "internal"
+                  : "bad_request";
     return new OakApiError(name, res.status, code, `${name}: HTTP ${res.status}`);
   }
 

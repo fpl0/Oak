@@ -1,0 +1,59 @@
+{/* U01.L02 Count to Four: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+Four beats to a bar, over and over. The crash tells you where each bar begins.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+Now tap only the crash. The kicks keep going between your taps; count them in your head.
+
+<Tap exercise="tap-the-one" />
+
+<OnPass>Beat 1, where the count starts again, is the **downbeat**. Drummers mark it with a crash, bass players with their first note, and listeners with a slightly deeper nod.</OnPass>
+</Step>
+
+<Step id="S3">
+The `~` has been in your loop since the first lesson. Here it sits where a kick used to be. <CodeRef fn="~" />
+
+<Predict exercise="which-beat-goes-quiet" />
+</Step>
+
+<Step id="S4">
+Watch the roll while it loops: three kicks, and a gap the size of one beat.
+
+<Example id="gap-run" views="code,roll" />
+</Step>
+
+<Step id="S5">
+One careful edit. The bar shares its length among however many words it holds, so count them before you run.
+
+<Editor exercise="silence-beat-3" />
+
+<OnPass>That `~` is a **rest**: a beat with no sound that still takes its place in the bar. The count goes on through it, which is why the snare on beat 4 still lands on 4.</OnPass>
+</Step>
+
+<Step id="S6">
+Drummers rarely hit every beat equally hard. `.gain()` sets loudness from 0 (silent) to 1 (full). <CodeRef fn="gain" />
+
+<OnPass>A louder downbeat is the oldest trick for keeping a band together: everyone can hear where 1 is.</OnPass>
+</Step>
+
+<Step id="S7">
+Kick on 1 and 3 only: the floor that most pop and rock grooves stand on.
+
+<Editor exercise="kick-one-and-three" />
+
+<OnPass>`bd ~ bd ~`: two kicks and two rests, every beat accounted for.</OnPass>
+</Step>
+
+<Step id="S8">
+Your turn. A sound on every single beat can feel crowded. Leave at least one beat empty and hear how the band breathes in the gap.
+
+<Make exercise="groove-with-air" />
+
+<CanDo id="cd.read.count-four" />
+
+<Recap />
+</Step>

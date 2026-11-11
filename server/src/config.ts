@@ -27,8 +27,15 @@ export interface OakConfig {
   soundsDir: string;
   contentDir: string;
   appVersion: string;
-  /** Extra ports whose Host and Origin are allowed (the Vite proxy in dev). */
+  /**
+   * Extra ports whose Host and Origin the tutor's own routes allow (the Vite proxy in dev): 5173 and
+   * `OAK_VITE_PORT`. Oak's /api security accepts any loopback port in dev (security.ts).
+   */
   devPorts: readonly number[];
+  /** `OAK_DEV=1` and `OAK_TUTOR_FAKE=1`: the scripted fake tutor backend answers (tutor-adapters/fake-backend.ts). */
+  tutorFake: boolean;
+  /** `OAK_NOW=<ISO>` with `OAK_DEV=1`: the dev clock starts at this instant and runs on (services/dev-clock.ts). */
+  nowAt: string | null;
 }
 
 export interface ConfigInput {
@@ -56,6 +63,7 @@ export function loadConfig(input: ConfigInput = {}): OakConfig {
   const dataDir = resolve(env.OAK_DATA_DIR?.trim() || join(homedir(), ".oak"));
   const dev = env.OAK_DEV === "1";
   const port = Number(env.OAK_PORT) > 0 ? Number(env.OAK_PORT) : PORTS.api;
+  const vitePort = Number(env.OAK_VITE_PORT) > 0 ? Number(env.OAK_VITE_PORT) : PORTS.vite;
   return {
     hostname: "127.0.0.1",
     port,
@@ -67,7 +75,9 @@ export function loadConfig(input: ConfigInput = {}): OakConfig {
     soundsDir: join(rootDir, "sounds", "pack"),
     contentDir: join(rootDir, "content"),
     appVersion: APP_VERSION,
-    devPorts: dev ? [PORTS.vite] : [],
+    devPorts: dev ? [...new Set([PORTS.vite, vitePort])] : [],
+    tutorFake: dev && env.OAK_TUTOR_FAKE === "1",
+    nowAt: dev && env.OAK_NOW?.trim() && Number.isFinite(Date.parse(env.OAK_NOW)) ? env.OAK_NOW.trim() : null,
   };
 }
 
@@ -86,6 +96,8 @@ export function testConfig(dataDir: string, overrides: Partial<OakConfig> = {}):
     contentDir: join(dataDir, "content"),
     appVersion: APP_VERSION,
     devPorts: [],
+    tutorFake: false,
+    nowAt: null,
     ...overrides,
   };
 }

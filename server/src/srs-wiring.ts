@@ -21,12 +21,13 @@ import {
   type SkillId,
   skillOf,
 } from "@oak/content-kit";
-import { dayIndex, forecastLoad } from "@oak/srs";
+import { dayIndex, forecastLoad, GOVERNOR, LISTEN_BLOCK_SEC, REVIEW_DAY_MAX_SEC } from "@oak/srs";
 import type { ContentIndex } from "./content/index.ts";
 import { tx } from "./db/index.ts";
 import type { Repos } from "./db/repos/index.ts";
 import type { FamilyStateRow } from "./db/repos/srs.ts";
 import { badRequest, notFound } from "./errors.ts";
+import { dayStartInstant } from "./lib/days.ts";
 import { type Clock, newId } from "./services/context.ts";
 import type { Services } from "./services/index.ts";
 import { evidenceWeight } from "./services/mastery.ts";
@@ -199,18 +200,81 @@ export class SrsAdapter implements SrsPort {
   #due(input: { budgetSec: number | null; more: boolean }): DueBatch {
     const now = this.#now();
     this.service.prepareDay(now, this.#gap());
-    const { plan, items } = this.service.planWarmup(now, {
-      gapDays: this.#gap(),
-      ...(input.budgetSec === null ? {} : { budgetSec: input.budgetSec }),
-      ...(input.more ? { continuation: true } : {}),
-    });
+    const gapDays = this.#gap();
+    const plan1 = (budgetSec: number | null, continuation: boolean) =>
+      this.service.planWarmup(now, {
+        gapDays,
+        ...(budgetSec === null ? {} : { budgetSec }),
+        ...(continuation ? { continuation: true } : {}),
+      });
+    // "A little more" stops at 12 minutes of review in the day (contracts §7.4), counted from the sets and
+    // fact cards already done today, so a reload of /practice/review cannot start the count again.
+    const done = this.reviewedTodaySec(now);
+    const left = REVIEW_DAY_MAX_SEC - done;
+    let { plan, items } = plan1(input.budgetSec, input.more);
+    if (input.more) {
+      if (left <= 0)
+        return {
+          budgetSec: plan.budgetSec,
+          plannedSec: 0,
+          items: [],
+          label: warmupLabel(0),
+          moreAvailable: false,
+        };
+      if (plan.plannedSec > left) ({ plan, items } = plan1(Math.min(plan.budgetSec, left), true));
+    }
+    // "More" is offered only when a next block would hold something: the overflow can be all items that
+    // wait for another day (the return policy's relearning cap, a spread backlog), and a button that
+    // opens an empty block is a dead end.
+    // The probe plans this block and the next together and looks for a card this block does not hold.
+    let moreAvailable = false;
+    const space = left - plan.plannedSec;
+    if (plan.overflow.length > 0 && space > 0) {
+      const here = new Set(
+        items.flatMap((i) => [...i.cardIds, ...(i.familyId === null ? [] : [i.familyId])]),
+      );
+      const probe = plan1(plan.plannedSec + Math.min(plan.budgetSec, space), true);
+      moreAvailable = probe.items.some(
+        (i) =>
+          i.kind !== "listen" &&
+          [...i.cardIds, ...(i.familyId === null ? [] : [i.familyId])].some((c) => !here.has(c)),
+      );
+    }
     return {
       budgetSec: plan.budgetSec,
       plannedSec: plan.plannedSec,
       items,
       label: warmupLabel(plan.plannedSec),
-      moreAvailable: plan.overflow.length > 0,
+      moreAvailable,
     };
+  }
+
+  /** Estimated seconds of review done today: finished review sets (trials × the family's trial time) and fact cards. */
+  reviewedTodaySec(now: Date = this.#now()): number {
+    const time = this.services.streak.time;
+    const p = time.profile();
+    const since = dayStartInstant(time.day(now), p.timezone, p.rolloverHour).toISOString();
+    const sets = this.repos.db
+      .query(
+        "SELECT family_ids, trials_total FROM drill_sessions WHERE finished_at >= ? AND purpose NOT IN ('lesson', 'checkpoint')",
+      )
+      .all(since) as { family_ids: string; trials_total: number }[];
+    let sec = 0;
+    for (const s of sets) {
+      let ids: string[] = [];
+      try {
+        ids = JSON.parse(s.family_ids) as string[];
+      } catch {
+        /* an unreadable row counts at the default trial time */
+      }
+      const per = Math.max(0, ...ids.map((id) => this.content.family(id)?.estTrialSec ?? 0));
+      sec += s.trials_total * (per > 0 ? per : GOVERNOR.factCardSec);
+    }
+    const facts = this.repos.db
+      .query("SELECT COUNT(*) AS n FROM srs_revlog WHERE drill_session_id IS NULL AND reviewed_at >= ?")
+      .get(since) as { n: number };
+    // The plan puts a listen-only block after every second perceptual set; it is time spent too.
+    return sec + Math.floor(sets.length / 2) * LISTEN_BLOCK_SEC + facts.n * GOVERNOR.factCardSec;
   }
 
   /** One transaction: a failure part-way leaves no card without its revlog, no half-recorded set. */
@@ -478,9 +542,14 @@ export class SrsAdapter implements SrsPort {
   #seedLesson(lessonId: string): { cardId: string; status: SrsCard["status"] }[] {
     const now = this.#now();
     const lesson = this.content.lessonDef(lessonId);
+    // A composite (`fam.mix.*`) is never seeded: its card is created when its first member graduates
+    // (contracts §7.4). Seeding it at its lesson put member-less composite sets of 0 trials in warm-ups.
     const families = this.content
       .families()
-      .filter((f) => f.unlock.lesson === lessonId)
+      .filter(
+        (f) =>
+          f.unlock.lesson === lessonId && !f.id.startsWith("fam.mix.") && !f.generator.startsWith("mix."),
+      )
       .map((f) => f.id);
     // Concept cards get their first rating from the lesson step that seeded them: its first-attempt score.
     const attempts = this.repos.lessons.attemptsOfLesson(lessonId).filter((a) => !a.disputed);
@@ -637,8 +706,15 @@ export class CourseAdapter implements SessionPlanCoursePort {
       const next = this.content.capstoneSessionIds(c.id)[st.sessionsDone];
       if (next !== undefined) out.push({ kind: "capstone", mapItemId: next as SessionId, title: c.title });
     }
-    const gym = `GYM.${String(this.gymCount() + 1).padStart(2, "0")}` as SessionId;
-    out.push({ kind: "gym", mapItemId: gym, title: "Transcription Gym" });
+    // The Transcription Gym opens with U07.L01 (its slots run every 5th session from there, contracts §2.5); before
+    // that it is not offered (the page is not part of the first units).
+    const gymOpen = this.repos.lessons
+      .allProgress()
+      .some((p) => p.lessonId === "U07.L01" && p.status === "completed");
+    if (gymOpen) {
+      const gym = `GYM.${String(this.gymCount() + 1).padStart(2, "0")}` as SessionId;
+      out.push({ kind: "gym", mapItemId: gym, title: "Transcription Gym" });
+    }
     return out;
   }
 }

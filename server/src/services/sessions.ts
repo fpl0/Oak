@@ -20,6 +20,13 @@ export interface SessionsDeps {
   tutorOff: () => boolean;
 }
 
+/** Stored as `sessions.plan_json` at start: the planned warm-up and all review due then. */
+export interface SessionStartRecord {
+  warmupPlannedSec: number;
+  dueSec: number;
+  warmupItems: number;
+}
+
 export class SessionsService {
   readonly time: LearnerTime;
   constructor(
@@ -39,11 +46,15 @@ export class SessionsService {
     return this.ctx.repos.sessions.openOn(this.time.day());
   }
 
-  start(body: {
-    kind: Session["kind"];
-    mapItemId: Session["mapItemId"];
-    targetMinutes: Session["targetMinutes"];
-  }): Session {
+  start(
+    body: {
+      kind: Session["kind"];
+      mapItemId: Session["mapItemId"];
+      targetMinutes: Session["targetMinutes"];
+    },
+    /** What the planner had for today when the session started (session telemetry, contracts §9.7). */
+    plan: SessionStartRecord | null = null,
+  ): Session {
     return tx(this.ctx.repos.db, () => {
       const id = body.mapItemId;
       if (id !== null && !this.d.gates.sessionOpen(id) && !this.d.gates.sessionDone(id))
@@ -60,7 +71,7 @@ export class SessionsService {
         activeMinutes: 0,
         phase: "idle",
       };
-      this.ctx.repos.sessions.create(session);
+      this.ctx.repos.sessions.create(session, plan);
       if (id !== null) {
         this.d.unlocks.onStart(id);
         const m = /^(.+)\.S\d+$/.exec(id);
@@ -95,6 +106,7 @@ export class SessionsService {
   end(
     id: string,
     body: { wrappedEarly: boolean; phaseMs: { warmup: number; main: number; make: number; coda: number } },
+    measured: { dueSecAfter: number; deferredCards: number } | null = null,
   ): SessionSummary {
     const s = this.get(id);
     if (s.endedAt !== null) {
@@ -129,9 +141,9 @@ export class SessionsService {
         warmupSets: drills.n,
         warmupPlannedSec: 0,
         dueSecBefore: 0,
-        dueSecAfter: 0,
-        deferredCards: 0,
-        overflowSec: Math.max(0, totalMs / 1000 - s.targetMinutes * 60),
+        dueSecAfter: measured?.dueSecAfter ?? 0,
+        deferredCards: measured?.deferredCards ?? 0,
+        overflowSec: 0,
         wrappedEarly: body.wrappedEarly,
         split: this.ctx.repos.lessons.progress(s.mapItemId ?? "")?.splitPart === "A",
       };
@@ -140,8 +152,13 @@ export class SessionsService {
       };
       if (plan?.plan_json) {
         try {
-          const p = JSON.parse(plan.plan_json) as { warmup?: { plannedSec?: number } };
-          telemetry.warmupPlannedSec = p.warmup?.plannedSec ?? 0;
+          const p = JSON.parse(plan.plan_json) as Partial<SessionStartRecord> & {
+            warmup?: { plannedSec?: number };
+          };
+          telemetry.warmupPlannedSec = p.warmupPlannedSec ?? p.warmup?.plannedSec ?? 0;
+          telemetry.dueSecBefore = p.dueSec ?? 0;
+          // Warm-up overflow (§7.4, §9.7): due review left beyond what the warm-up planned. Invisible to the learner.
+          telemetry.overflowSec = Math.max(0, telemetry.dueSecBefore - telemetry.warmupPlannedSec);
         } catch {
           /* a plan that does not parse is left out */
         }
@@ -172,6 +189,15 @@ export class SessionsService {
       this.ctx.repos.sessions.end(id, now, minutes, summary);
       return summary;
     });
+  }
+
+  /** The Coda after a reload (wave2 §4 `session.summary`): the summary `end` stored. */
+  summary(id: string): SessionSummary {
+    const s = this.get(id);
+    if (s.endedAt === null) throw conflict("this session has not ended yet");
+    const stored = this.ctx.repos.sessions.summary(id) as SessionSummary | null;
+    if (stored === null) throw notFound(`summary of session ${id}`);
+    return stored;
   }
 
   #title(id: string): string {

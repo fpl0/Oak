@@ -11,6 +11,8 @@ import type { ViewEvent, WorkbenchModel } from "./model.ts";
 import { pitchLabel, tooltipText } from "./music.ts";
 import { degreeStyle, neutralSwatch, partColor, type ThemeName, themeOf } from "./palette.ts";
 import {
+  contentWindow,
+  followWindow,
   hitTest,
   layoutRoll,
   playheadCycle,
@@ -44,6 +46,11 @@ export interface PianoRollProps {
   /** Show the analysis is not what is playing. */
   stale?: boolean;
   height?: number;
+  /**
+   * Long loops: show this many bars at a time and turn the page with the playhead (and by hand while
+   * stopped) instead of squeezing the whole loop into the panel. Off when absent.
+   */
+  followBars?: number;
 }
 
 interface Colors {
@@ -190,6 +197,7 @@ export function PianoRoll(props: PianoRollProps) {
   const [tip, setTip] = useState<{ x: number; y: number; text: string } | null>(null);
   const [table, setTable] = useState(false);
   const busState = useRef<BusState>(bus.get());
+  const playPageRef = useRef<number | null>(null);
   const frame = useRef(0);
   const propsRef = useRef(props);
   propsRef.current = props;
@@ -216,6 +224,23 @@ export function PianoRoll(props: PianoRollProps) {
     [model],
   );
 
+  // Long loops: a page of `followBars` bars that follows the playhead (manual page while stopped).
+  const [manualPage, setManualPage] = useState(0);
+  const [playPage, setPlayPage] = useState<number | null>(null);
+  const content = useMemo(
+    () => contentWindow(inputs, model.bars, props.minBars ?? 1),
+    [inputs, model.bars, props.minBars],
+  );
+  const follow =
+    props.followBars && props.followBars > 0
+      ? followWindow(content, props.followBars, {
+          playhead: playPage === null ? null : content[0] + playPage * props.followBars,
+          page: manualPage,
+        })
+      : null;
+  const followRef = useRef(follow);
+  followRef.current = follow;
+
   const layout: RollLayout = useMemo(
     () =>
       layoutRoll(inputs, {
@@ -224,11 +249,22 @@ export function PianoRoll(props: PianoRollProps) {
         key: model.key as KeySpec | null,
         bars: model.bars,
         minBars: props.minBars ?? 1,
+        ...(follow ? { window: follow.window } : {}),
         labels: props.labels ?? (model.key ? "degree" : "note"),
         extra: props.ghosts ?? [],
         pitchHeight: props.height ?? 180,
       }),
-    [inputs, width, model, props.minBars, props.labels, props.ghosts, props.height],
+    [
+      inputs,
+      width,
+      model,
+      props.minBars,
+      props.labels,
+      props.ghosts,
+      props.height,
+      follow?.window[0],
+      follow?.window[1],
+    ],
   );
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
@@ -475,7 +511,27 @@ export function PianoRoll(props: PianoRollProps) {
       }),
     [bus, invalidate],
   );
-  useEffect(() => clock.subscribe(() => invalidate()), [clock, invalidate]);
+  useEffect(
+    () =>
+      clock.subscribe((f) => {
+        const pageBars = propsRef.current.followBars;
+        if (pageBars && pageBars > 0 && followRef.current) {
+          const next = f.playing
+            ? (followWindow(content, pageBars, {
+                playhead: playheadCycle(f.audibleCycle, model.bars),
+                page: 0,
+              })?.page ?? null)
+            : null;
+          if (next !== playPageRef.current) {
+            playPageRef.current = next;
+            setPlayPage(next);
+            if (next !== null) setManualPage(next);
+          }
+        }
+        invalidate();
+      }),
+    [clock, invalidate, content, model.bars],
+  );
   useEffect(() => {
     const mo = new MutationObserver(() => invalidate());
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
@@ -537,6 +593,31 @@ export function PianoRoll(props: PianoRollProps) {
   return (
     <div className="oak-roll" ref={wrapRef} data-testid="piano-roll">
       <div className="oak-view-head">
+        {follow ? (
+          <span className="oak-roll-pager" data-testid="roll-pager">
+            <button
+              type="button"
+              className="oak-link-button"
+              aria-label="Roll: earlier bars"
+              disabled={follow.page <= 0 || playPage !== null}
+              onClick={() => setManualPage(Math.max(0, follow.page - 1))}
+            >
+              ‹
+            </button>
+            <span aria-live="polite">
+              Bars {follow.window[0] + 1}–{follow.window[0] + follow.window[1]} of {content[1]}
+            </span>
+            <button
+              type="button"
+              className="oak-link-button"
+              aria-label="Roll: later bars"
+              disabled={follow.page >= follow.pages - 1 || playPage !== null}
+              onClick={() => setManualPage(Math.min(follow.pages - 1, follow.page + 1))}
+            >
+              ›
+            </button>
+          </span>
+        ) : null}
         {props.stale ? (
           <span className="oak-badge" data-testid="roll-stale">
             preview · not playing
@@ -561,6 +642,7 @@ export function PianoRoll(props: PianoRollProps) {
         onClick={onClick}
         data-testid="roll-canvas"
         data-notes={layout.rects.length}
+        data-window={`${layout.from}-${layout.to}`}
       />
       {tip ? (
         <div

@@ -1,0 +1,197 @@
+// The sketchbook (ux §2.3): every sketch with its ring cover (one ring per version), flavour, key and tempo,
+// when it was last edited and its liner flags (tools not yet unlocked, an imported version to review).
+// Filters, search, sort, and "New sketch from…".
+import type { Sketch, SketchDetail } from "@oak/api";
+import { Link } from "@tanstack/react-router";
+import { NotebookPen, Plus, Search } from "lucide-react";
+import { useEffect, useState } from "react";
+import { FLAVOUR_LABEL, formatDate, formatKey } from "../lib/format.ts";
+import { usePageTitle } from "../lib/nav.ts";
+import { type SketchOrigin, useSketches } from "../lib/queries.ts";
+import { Button } from "../ui/kit/Button.tsx";
+import { Card, Chip, EmptyState, Page, PageHeader } from "../ui/kit/basics.tsx";
+import { QueryView } from "../ui/kit/QueryState.tsx";
+import { Tabs } from "../ui/kit/Tabs.tsx";
+import { needsReview, sinceText } from "./model.ts";
+import { NewSketchDialog } from "./NewSketchDialog.tsx";
+import { useSketchDetails } from "./queries.ts";
+import { SketchCover } from "./SketchCover.tsx";
+
+type Filter = "all" | "free" | "lesson-make" | "capstone" | "transcription";
+const FILTERS: { value: Filter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "free", label: "Mine" },
+  { value: "lesson-make", label: "From lessons" },
+  { value: "capstone", label: "Capstone drafts" },
+  { value: "transcription", label: "Transcriptions" },
+];
+const ORIGIN_LABEL: Record<Sketch["originKind"], string> = {
+  "lesson-make": "Lesson Make",
+  free: "Free play",
+  capstone: "Capstone draft",
+  transcription: "Transcription",
+  tutor: "From the tutor",
+  keepalive: "Keep-alive",
+  checkpoint: "Checkpoint",
+};
+type Sort = "recent" | "title" | "oldest";
+
+export function Sketchbook({ wantsNew, onNewHandled }: { wantsNew: boolean; onNewHandled(): void }) {
+  usePageTitle("Studio");
+  const [filter, setFilter] = useState<Filter>("all");
+  const [q, setQ] = useState("");
+  const [sort, setSort] = useState<Sort>("recent");
+  const [dialog, setDialog] = useState(false);
+  const sketches = useSketches(filter === "all" ? undefined : (filter as SketchOrigin));
+  const all = useSketches();
+
+  // "New sketch" from the command palette arrives as ?new=true: open the chooser.
+  useEffect(() => {
+    if (wantsNew) {
+      setDialog(true);
+      onNewHandled();
+    }
+  }, [wantsNew, onNewHandled]);
+
+  const items = sketches.data?.items ?? [];
+  const needle = q.trim().toLowerCase();
+  const visible = [...items]
+    .filter(
+      (s) =>
+        !needle ||
+        s.title.toLowerCase().includes(needle) ||
+        s.tags.some((t) => t.toLowerCase().includes(needle)) ||
+        (s.originId ?? "").toLowerCase().includes(needle),
+    )
+    .sort((a, b) =>
+      sort === "title"
+        ? a.title.localeCompare(b.title)
+        : sort === "oldest"
+          ? a.createdAt.localeCompare(b.createdAt)
+          : b.updatedAt.localeCompare(a.updatedAt),
+    );
+  const details = useSketchDetails(visible.map((s) => s.id));
+  const now = Date.now();
+
+  return (
+    <Page>
+      <PageHeader
+        title="Studio"
+        sub="Free play and your sketchbook. Every Run saves a version; nothing here is graded."
+        actions={
+          <Button
+            variant="primary"
+            icon={<Plus aria-hidden className="size-4" />}
+            onClick={() => setDialog(true)}
+            data-testid="new-sketch"
+          >
+            New sketch
+          </Button>
+        }
+      />
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Tabs<Filter> label="Show" value={filter} onChange={setFilter} items={FILTERS} />
+        <label className="relative flex items-center">
+          <span className="sr-only">Search sketches</span>
+          <Search aria-hidden className="pointer-events-none absolute left-2 size-4 text-text-3" />
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search"
+            className="h-8 w-56 rounded-control border border-border bg-surface pr-2 pl-8 text-sm"
+          />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-text-2">
+          Sort
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as Sort)}
+            className="h-8 rounded-control border border-border bg-surface px-2 text-text"
+          >
+            <option value="recent">Last edited</option>
+            <option value="oldest">Oldest first</option>
+            <option value="title">Title</option>
+          </select>
+        </label>
+      </div>
+      <QueryView
+        query={sketches}
+        isEmpty={(d) => d.items.length === 0}
+        empty={
+          <EmptyState
+            icon={<NotebookPen aria-hidden />}
+            title={filter === "all" ? "Your sketchbook fills up one session at a time." : "Nothing here yet."}
+            action={
+              <Button variant="primary" onClick={() => setDialog(true)}>
+                New sketch
+              </Button>
+            }
+          >
+            {filter === "all"
+              ? "Start blank, from a lesson's Make, or over a Band."
+              : "Sketches of this kind appear here as you make them."}
+          </EmptyState>
+        }
+      >
+        {() =>
+          visible.length === 0 ? (
+            <p className="py-8 text-center text-text-2">No sketches match “{q}”.</p>
+          ) : (
+            <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="sketch-list">
+              {visible.map((s) => (
+                <li key={s.id}>
+                  <SketchCard sketch={s} detail={details.get(s.id) ?? null} now={now} />
+                </li>
+              ))}
+            </ul>
+          )
+        }
+      </QueryView>
+      <NewSketchDialog open={dialog} onClose={() => setDialog(false)} sketches={all.data?.items ?? []} />
+    </Page>
+  );
+}
+
+function SketchCard({
+  sketch: s,
+  detail,
+  now,
+}: {
+  sketch: Sketch;
+  detail: SketchDetail | null;
+  now: number;
+}) {
+  const v = detail?.versions.find((x) => x.version === s.currentVersion) ?? detail?.versions.at(-1) ?? null;
+  const locked = v?.flags.lockedTools.length ?? 0;
+  return (
+    <Link
+      to="/studio/$sketchId"
+      params={{ sketchId: s.id }}
+      className="block rounded-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      data-testid="sketch-card"
+    >
+      <Card interactive className="flex h-full gap-3 p-3">
+        <SketchCover seed={s.id} versions={s.currentVersion} flavour={v?.band?.flavour ?? null} size={64} />
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="truncate font-medium text-text">{s.title}</span>
+          <span className="text-sm text-text-2">
+            v{s.currentVersion} · edited {sinceText(s.updatedAt, now, (iso) => formatDate(iso))}
+          </span>
+          <span className="mt-auto flex flex-wrap gap-1 pt-1">
+            {v?.band ? <Chip tone="accent">{FLAVOUR_LABEL[v.band.flavour] ?? v.band.flavour}</Chip> : null}
+            {v?.key ? <Chip>{formatKey(v.key)}</Chip> : null}
+            {v?.bpm ? <Chip>{Math.round(v.bpm)} BPM</Chip> : null}
+            {s.originKind !== "free" ? <Chip>{ORIGIN_LABEL[s.originKind]}</Chip> : null}
+            {locked > 0 ? (
+              <Chip tone="amber" title="Liner note: uses tools not yet unlocked">
+                {locked === 1 ? "1 tool ahead" : `${locked} tools ahead`}
+              </Chip>
+            ) : null}
+            {needsReview(v) ? <Chip tone="issue">review before running</Chip> : null}
+          </span>
+        </span>
+      </Card>
+    </Link>
+  );
+}

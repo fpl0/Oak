@@ -12,7 +12,18 @@ import type { AudioPlan, SuperdoughValue } from "./types.ts";
 export function eventsToAudioPlan(
   events: readonly NEvent[],
   cps: number,
-  opts: { gain?: number; rate?: number; transpose?: number; fromBar?: number; bars?: number } = {},
+  opts: {
+    gain?: number;
+    rate?: number;
+    transpose?: number;
+    fromBar?: number;
+    bars?: number;
+    /**
+     * Sound controls per bar (superdough's internal names: `cutoff`, `resonance`, `attack`, `release`,
+     * `room`, `delay`, …), indexed by the event's bar from 0; applied to every event of that bar.
+     */
+    controlsByBar?: readonly (Readonly<Record<string, number>> | null)[];
+  } = {},
 ): AudioPlan {
   const rate = opts.rate ?? 1;
   const from = opts.fromBar ?? 0;
@@ -30,6 +41,8 @@ export function eventsToAudioPlan(
       gain: Math.round(e.gain * (opts.gain ?? 1) * 1000) / 1000,
     };
     if (e.midi !== null) value.note = e.midi + (opts.transpose ?? 0);
+    const controls = opts.controlsByBar?.[Math.floor(onset)];
+    if (controls) Object.assign(value, controls);
     if (e.bank) value.bank = e.bank;
     if (e.sampleN !== undefined) value.n = e.sampleN;
     out.push({ at, dur, value });
@@ -82,8 +95,13 @@ export function trialAudio(
 ): { cue: AudioPlan | null; stimulus: AudioPlan; resolution: AudioPlan | null } {
   const cueBars = typeof trial.params.cueBars === "number" ? trial.params.cueBars : 0;
   const meter = (trial.params.meter as MeterId | undefined) ?? "4/4";
+  const controlsByBar = Array.isArray(trial.params.controlsByBar)
+    ? (trial.params.controlsByBar as (Record<string, number> | null)[])
+    : undefined;
+  const withControls = controlsByBar ? { controlsByBar } : {};
   let cue: AudioPlan | null = null;
-  if (cueBars > 0) cue = eventsToAudioPlan(trial.events, trial.cps, { fromBar: 0, bars: cueBars });
+  if (cueBars > 0)
+    cue = eventsToAudioPlan(trial.events, trial.cps, { fromBar: 0, bars: cueBars, ...withControls });
   else if (trial.cue.countInBars > 0)
     cue = clickPlan(trial.cue.countInBars, trial.cps, (METERS[meter] ?? METERS["4/4"]).unitsPerBar);
   else if (key && trial.cue.context !== "none" && trial.events.length > 0)
@@ -92,6 +110,7 @@ export function trialAudio(
   const stimulus = eventsToAudioPlan(trial.events, trial.cps, {
     fromBar: cueBars,
     ...(bars !== undefined && bars > 0 ? { bars } : {}),
+    ...withControls,
   });
   const resolution = trial.resolution ? eventsToAudioPlan(trial.resolution.events, trial.cps) : null;
   return { cue, stimulus, resolution };

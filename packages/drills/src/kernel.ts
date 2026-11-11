@@ -339,7 +339,8 @@ export const CHORD_TONES: Readonly<
   "7#11": { semis: [0, 4, 7, 10, 18], degrees: [1, 3, 5, 7, 11] },
   "7b13": { semis: [0, 4, 7, 10, 20], degrees: [1, 3, 5, 7, 13] },
   "13": { semis: [0, 4, 7, 10, 14, 21], degrees: [1, 3, 5, 7, 9, 13] },
-  "7alt": { semis: [0, 4, 10, 13, 15, 20], degrees: [1, 3, 7, 9, 9, 13] },
+  // The altered dominant as @oak/theory defines it: 1 3 ♭7 with every altered tension ♭9 ♯9 ♯11 ♭13.
+  "7alt": { semis: [0, 4, 10, 13, 15, 18, 20], degrees: [1, 3, 7, 9, 9, 11, 13] },
   "maj7#11": { semis: [0, 4, 7, 11, 18], degrees: [1, 3, 5, 7, 11] },
   "7sus4": { semis: [0, 5, 7, 10], degrees: [1, 4, 5, 7] },
 };

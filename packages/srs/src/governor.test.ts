@@ -15,6 +15,7 @@ import {
   makeDayPicker,
   micRoom,
   otherWorkCredit,
+  pickReleases,
   RECOMMENDED_GOVERNOR,
   type ReviewItem,
   recommendedGovernor,
@@ -22,6 +23,7 @@ import {
   returnRank,
   shouldGraduate,
   smoothBacklog,
+  type WaitingCard,
 } from "./index.ts";
 
 const T = 20_000;
@@ -84,19 +86,19 @@ describe("forecast and intake throttle", () => {
   });
 
   test("states by the mean per session: open below 0.70, closed above 0.85, hold between", () => {
-    // 8 days at 5 sessions a week = 5.71 sessions. Budget 300.
+    // The window is today and the next 6 days: 7 days at 5 sessions a week = 5 sessions. Budget 300.
     const mean = (sec: number) =>
       intakeForecast([item({ sec, cls: "concept", perceptual: false })], T, cfg).meanSec;
-    expect(mean(571.4)).toBeCloseTo(100, 0);
+    expect(mean(500)).toBeCloseTo(100, 6);
     const state = (sec: number) =>
       intakeForecast([item({ sec, cls: "concept", perceptual: false })], T, cfg).state;
     // All of it on one day: that day is over 1.25 × budget, which closes intake whatever the mean.
-    expect(state(0.6 * 300 * (40 / 7))).toBe("closed");
+    expect(state(0.6 * 300 * 5)).toBe("closed");
     expect(state(1.2 * 300)).toBe("open");
     const spread = (perSession: number) =>
       intakeForecast(
-        Array.from({ length: 8 }, (_, d) =>
-          item({ dueDay: T + d, sec: (perSession * 40) / 7 / 8, cls: "concept", perceptual: false }),
+        Array.from({ length: 7 }, (_, d) =>
+          item({ dueDay: T + d, sec: (perSession * 5) / 7, cls: "concept", perceptual: false }),
         ),
         T,
         cfg,
@@ -104,24 +106,71 @@ describe("forecast and intake throttle", () => {
     expect(spread(0.6 * 300)).toBe("open");
     expect(spread(0.8 * 300)).toBe("hold");
     expect(spread(0.9 * 300)).toBe("closed");
+    // A card due on day 7 is outside the 7-day window.
+    expect(mean(0) + intakeForecast([item({ dueDay: T + 7 })], T, cfg).meanSec).toBe(0);
   });
 
-  test("per class: sets against the set share, facts against the fact share", () => {
-    const facts = Array.from({ length: 8 }, (_, d) =>
-      item({ dueDay: T + d, cls: "fact", perceptual: false, sec: 0.5 * 120 * (5 / 7) }),
+  test("per class: facts against their share, sets against the budget less what the facts need", () => {
+    const facts = Array.from({ length: 7 }, (_, d) =>
+      item({ dueDay: T + d, cls: "fact", perceptual: false, sec: (0.5 * 120 * 5) / 7 }),
     );
-    expect(intakeForecast(facts, T, cfg, 0, "facts").state).toBe("open");
-    expect(intakeForecast(facts, T, cfg, 0, "sets").meanSec).toBe(0);
-    const heavy = facts.map((f) => ({ ...f, sec: f.sec * 1.5 }));
-    expect(intakeForecast(heavy, T, cfg, 0, "facts").state).toBe("hold");
+    const f = intakeForecast(facts, T, cfg, 0, "facts");
+    expect(f.budgetSec).toBeCloseTo(0.4 * 300, 6);
+    expect(f.meanSec).toBeCloseTo(60, 6);
+    expect(f.state).toBe("open");
+    // Sets may use the 240 s the facts leave; with no facts due they may use all 300 s.
+    expect(intakeForecast(facts, T, cfg, 0, "sets")).toMatchObject({ meanSec: 0, budgetSec: 240 });
+    expect(intakeForecast([], T, cfg, 0, "sets").budgetSec).toBe(300);
+    // Facts never take more than their share from the sets.
+    const heavy = facts.map((x) => ({ ...x, sec: x.sec * 3 }));
+    expect(intakeForecast(heavy, T, cfg, 0, "facts").state).toBe("closed");
+    expect(intakeForecast(heavy, T, cfg, 0, "sets").budgetSec).toBeCloseTo(180, 6);
     expect(intakeForecast(heavy, T, cfg, 0, "all").state).toBe("open");
   });
 
-  test("a capped family counts every return inside the window; quiet mode leaves mic sets out", () => {
+  test("every return inside the window counts; a blocked intro adds its extra set once; quiet leaves mic out", () => {
     const once = intakeForecast([item({ dueDay: T })], T, cfg, 0, "sets").meanSec;
-    const twice = intakeForecast([item({ dueDay: T, repeatDays: 7 })], T, cfg, 0, "sets").meanSec;
-    expect(twice).toBeCloseTo(2 * once, 6);
+    expect(intakeForecast([item({ dueDay: T, repeatDays: 7 })], T, cfg, 0, "sets").meanSec).toBeCloseTo(
+      once,
+      6,
+    );
+    expect(intakeForecast([item({ dueDay: T, repeatDays: 3 })], T, cfg, 0, "sets").meanSec).toBeCloseTo(
+      3 * once,
+      6,
+    );
+    const blocked = intakeForecast(
+      [item({ dueDay: T, repeatDays: 3, blockedIntroPending: true })],
+      T,
+      cfg,
+      0,
+      "sets",
+    );
+    expect(blocked.meanSec).toBeCloseTo(4 * once, 6);
     expect(intakeForecast([item({ mic: true })], T, { ...cfg, quiet: true }).meanSec).toBe(0);
+  });
+
+  test("pickReleases: oldest first, a family without a slot or mic room is passed over, facts while open", () => {
+    const waiting: WaitingCard[] = [
+      { cardId: "fam.a", kind: "perceptual", seq: 1 },
+      { cardId: "fam.b", kind: "concept", seq: 2 },
+      { cardId: "fam.c", kind: "perceptual", seq: 3 },
+      ...Array.from(
+        { length: 6 },
+        (_, i): WaitingCard => ({ cardId: `fact.${i}`, kind: "fact", seq: 10 + i }),
+      ),
+    ];
+    expect(pickReleases([], waiting, 5, T, cfg)).toEqual(["fam.a", "fact.0", "fact.1", "fact.2", "fact.3"]);
+    // No active slot: the perceptual family waits, the concept family behind it starts.
+    expect(pickReleases([], waiting, 12, T, cfg).slice(0, 1)).toEqual(["fam.b"]);
+    // A production family with no mic room (quiet mode) is passed over too.
+    const mic: WaitingCard[] = [
+      { cardId: "fam.sing", kind: "production", seq: 1 },
+      { cardId: "fam.ear", kind: "perceptual", seq: 2 },
+    ];
+    expect(pickReleases([], mic, 0, T, { ...cfg, quiet: true })).toEqual(["fam.ear"]);
+    // Nothing is released while the forecast is not open.
+    const busy = Array.from({ length: 30 }, () => item({ cls: "concept", perceptual: false, sec: 90 }));
+    expect(pickReleases(busy, waiting, 0, T, cfg).filter((id) => id.startsWith("fam."))).toEqual([]);
   });
 
   test("admitNew releases 1 family and 4 facts a day while open, within the active cap and mic room", () => {
@@ -197,6 +246,9 @@ describe("graduation and the active cap", () => {
     }));
     expect(earlyGraduate(active, cfg)).toBe("f2");
     expect(earlyGraduate(active.slice(0, 11), cfg)).toBeNull();
+    // The time cap: the same pick without 12 active families.
+    expect(earlyGraduate(active.slice(0, 11), cfg, "time")).toBe("f2");
+    expect(earlyGraduate(active.slice(3, 11), cfg, "time")).toBeNull();
     expect(
       earlyGraduate(
         active.map((a) => ({ ...a, level: 1 })),

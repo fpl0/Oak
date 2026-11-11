@@ -91,6 +91,13 @@ export function computeSkill(input: SkillInput): SkillResult {
   const { evidence, today, kind } = input;
   const P = performance(evidence, today);
   const D = spreadDays(evidence, today);
+  // The level moves only on evidence (contracts §7.5: "Low R never revokes mastery"; time away shows as
+  // fading, §7.10). P decays with the age of the evidence, so judging the level by today's P would demote a
+  // node after a long gap with nothing new to go on. The level, debt and lag rules read P and D as of the
+  // node's latest evidence; the P returned (and M) are today's, for display and planning.
+  const asOf = levelDay(evidence, today);
+  const Pl = asOf === today ? P : performance(evidence, asOf);
+  const Dl = asOf === today ? D : spreadDays(evidence, asOf);
   const weight = evidence.reduce((s, e) => s + e.weight, 0);
   const R = nodeRetrievability(input.cards);
   const freshness = nodeFreshness(input.cards) ?? 1;
@@ -103,20 +110,20 @@ export function computeSkill(input: SkillInput): SkillResult {
   let level: MasteryLevel;
   if (!input.lessonOpen && evidence.length === 0) level = "new";
   else if (!input.introduced && evidence.length === 0) level = "available";
-  else if (P < MASTERY.practiced || weight < MASTERY.minWeight) level = "learning";
+  else if (Pl < MASTERY.practiced || weight < MASTERY.minWeight) level = "learning";
   else level = "practiced";
 
   if (level === "practiced") {
     const familyOk = input.familyAtMastery !== false;
     const checkpointOk = input.checkpointPassed !== false;
     const creativeOk = kind !== "creative" || pieces >= MASTERY.creativePieces;
-    const meets = P >= tau && D >= MASTERY.minDays && familyOk && checkpointOk && creativeOk;
+    const meets = Pl >= tau && Dl >= MASTERY.minDays && familyOk && checkpointOk && creativeOk;
     // Hysteresis: mastered → practiced only when P < τ − 0.10. Low R never revokes mastery.
-    const keeps = input.previous?.level === "mastered" && P >= tau - MASTERY.hysteresis;
+    const keeps = input.previous?.level === "mastered" && Pl >= tau - MASTERY.hysteresis;
     if (meets || keeps) level = "mastered";
   } else if (
     input.previous?.level === "mastered" &&
-    P >= tau - MASTERY.hysteresis &&
+    Pl >= tau - MASTERY.hysteresis &&
     weight >= MASTERY.minWeight
   ) {
     level = "mastered";
@@ -126,11 +133,11 @@ export function computeSkill(input: SkillInput): SkillResult {
   const evidenceDays = new Set(evidence.map((e) => e.day)).size;
   let debt = input.previous?.debt ?? false;
   let debtReason: DebtReason | null = debt ? (input.previous?.debtReason ?? null) : null;
-  if (debt && P >= MASTERY.debtClear && evidenceDays >= MASTERY.minDays) {
+  if (debt && Pl >= MASTERY.debtClear && evidenceDays >= MASTERY.minDays) {
     debt = false;
     debtReason = null;
   }
-  if (!debt && kind === "production" && productionLags(evidence, today, P)) {
+  if (!debt && kind === "production" && productionLags(evidence, today, Pl)) {
     debt = true;
     debtReason = "production-lag";
   }
@@ -161,6 +168,16 @@ export function computeSkill(input: SkillInput): SkillResult {
     paused: kind === "production" && input.noMic,
     freshness,
   };
+}
+
+/**
+ * The day a node's level is judged on: its latest evidence day (today when it has none). Also when that day
+ * is after today (a clock stepped back): the level does not move with the clock in either direction.
+ */
+export function levelDay(evidence: readonly EvidenceItem[], today: string): string {
+  let last = "";
+  for (const e of evidence) if (e.day > last) last = e.day;
+  return last === "" ? today : last;
 }
 
 /** A production node lags when it has had evidence for 14 days or more and is still below `practiced`. */

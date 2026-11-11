@@ -10,6 +10,7 @@ import {
 import { analyzePiece, type ExerciseResponse, normalize } from "@oak/grader";
 import type { AppDeps } from "../deps.ts";
 import { badRequest, notFound } from "../errors.ts";
+import { clockState, needDevClock, SEED_POINTS, seedLearner } from "../services/dev-seed.ts";
 import type { Mounter } from "./define.ts";
 
 const DEFAULT_KEY: KeySpec = { tonic: "C", mode: "major" };
@@ -156,4 +157,25 @@ export function opsRoutes(mount: Mounter, d: AppDeps): void {
     lessons: d.content.source.lessons.length,
     problems: [...d.content.source.problems],
   }));
+
+  // Wave 2 (docs/design/wave2.md §4).
+  mount("dev.listen", () => ({ items: d.repos.listen.list() }));
+  mount("dev.listenMark", ({ params, body }) => {
+    if (params.ref.length > 200) throw badRequest("example reference too long");
+    return d.repos.listen.put({ ref: params.ref, ...body, at: d.clock.now().toISOString() });
+  });
+
+  // Dev tools for the other areas' e2e: the seeder and the clock (services/dev-seed.ts, dev-clock.ts).
+  mount("dev.seedPoints", () => ({ items: SEED_POINTS.map((p) => ({ ...p })) }));
+  mount("dev.seed", ({ body }) => seedLearner(d, body));
+  mount("dev.clock", () => clockState(d));
+  mount("dev.clockSet", ({ body }) => {
+    const clock = needDevClock(d);
+    if (body.reset === true) clock.reset();
+    if (body.at !== undefined) clock.jump(body.at);
+    if (body.advanceDays !== undefined) clock.advance(body.advanceDays * 86_400_000);
+    if (body.advanceMs !== undefined) clock.advance(body.advanceMs);
+    if (body.freeze !== undefined) clock.freeze(body.freeze);
+    return clockState(d);
+  });
 }

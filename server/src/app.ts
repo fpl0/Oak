@@ -21,6 +21,7 @@ import { anthropicKeyValidator, type KeyValidator, redactSecrets, Secrets } from
 import { apiSecurity, cspOnHtml, hostOnly } from "./security.ts";
 import { dailyBackup } from "./services/backup.ts";
 import { type Clock, LearnerTime, systemClock, systemTimeZone } from "./services/context.ts";
+import { DevClock } from "./services/dev-clock.ts";
 import { createServices } from "./services/index.ts";
 import type { SessionPlannerPort, SrsPort } from "./services/ports.ts";
 import { createSrsWiring } from "./srs-wiring.ts";
@@ -114,13 +115,23 @@ export function startupTasks(d: AppDeps): void {
   d.services.unlocks.backfill();
 }
 
+/**
+ * The scripted fake tutor exists only in dev (contracts §11.1 rule 7, wave2 §5): `loadConfig` already ties
+ * OAK_TUTOR_FAKE to OAK_DEV; a config built any other way gets the same rule here.
+ */
+export function fakeTutorEnabled(config: Pick<OakConfig, "dev" | "tutorFake">): boolean {
+  return config.dev && config.tutorFake;
+}
+
 export async function createServer(o: ServerOptions): Promise<OakServer> {
   const sink = o.log ?? ((msg: string) => console.error(`[oak] ${msg}`));
   // Every server log line passes the redaction (contracts §11.1 rule 6): the key in hand, and anything
   // shaped like an Anthropic key (a pasted key that failed validation is in no store to look up).
   let knownKey: () => string | null = () => null;
   const log = (msg: string) => sink(redactSecrets(msg, knownKey()));
-  const clock = o.clock ?? systemClock;
+  // In dev the clock can be moved (`/api/dev/clock`, `OAK_NOW`); production reads the real one.
+  const devClock = o.config.dev ? new DevClock(o.clock ?? systemClock, { at: o.config.nowAt }) : null;
+  const clock: Clock = devClock ?? o.clock ?? systemClock;
   const db: Db = openDb(o.config.dbPath);
   const repos = createRepos(db, { timezone: systemTimeZone(), now: () => clock.now() });
   const content = new ContentIndex(o.content);
@@ -147,6 +158,7 @@ export async function createServer(o: ServerOptions): Promise<OakServer> {
     repos,
     content,
     clock,
+    devClock,
     services,
     confirm: new ConfirmStore(() => clock.now()),
     secrets,
@@ -158,6 +170,7 @@ export async function createServer(o: ServerOptions): Promise<OakServer> {
     validateResponses: o.validateResponses ?? o.config.dev,
     log,
   };
+  const tutorFake = fakeTutorEnabled(o.config);
   if (o.tutor !== false) {
     deps.tutor = createTutorWiring({
       repos,
@@ -169,7 +182,9 @@ export async function createServer(o: ServerOptions): Promise<OakServer> {
       port: o.config.port,
       devPorts: o.config.devPorts,
       ...(o.tutor === undefined ? {} : { tutor: o.tutor }),
+      ...(tutorFake ? { fake: true } : {}),
     });
+    if (tutorFake) log("tutor: the scripted fake backend answers (OAK_TUTOR_FAKE=1); no model is called");
   }
   if (o.startup !== false) startupTasks(deps);
   const app = buildApp(deps);

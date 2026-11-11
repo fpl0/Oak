@@ -7,6 +7,7 @@ import type { Db } from "./db/index.ts";
 import type { Repos } from "./db/repos/index.ts";
 import type { KeyValidator, Secrets } from "./secrets.ts";
 import type { Clock } from "./services/context.ts";
+import type { DevClock } from "./services/dev-clock.ts";
 import type { Services } from "./services/index.ts";
 import type { SessionPlannerPort, SrsPort } from "./services/ports.ts";
 import type { TutorWiring } from "./tutor-wiring.ts";
@@ -26,6 +27,8 @@ export interface AppDeps {
   repos: Repos;
   content: ContentIndex;
   clock: Clock;
+  /** The movable clock behind `clock` in dev (`/api/dev/clock`, `OAK_NOW`); `null` in production. */
+  devClock: DevClock | null;
   services: Services;
   confirm: ConfirmStore;
   secrets: Secrets;

@@ -23,9 +23,18 @@ describe("config", () => {
       dbPath: "/tmp/oak-x/oak.db",
     });
     expect(c.devPorts).toEqual([5173]);
+    expect(c.tutorFake).toBe(false);
     const d = loadConfig({ env: {}, argv: [] });
     expect(d.dataDir.endsWith("/.oak")).toBe(true);
     expect(d.devPorts).toEqual([]);
+    // Wave 2 stacks: own ports by environment; the fake tutor only together with OAK_DEV=1.
+    const w = loadConfig({
+      env: { OAK_DEV: "1", OAK_PORT: "8801", OAK_VITE_PORT: "5201", OAK_TUTOR_FAKE: "1" },
+      argv: [],
+    });
+    expect(w).toMatchObject({ port: 8801, devPorts: [5173, 5201], tutorFake: true });
+    const p = loadConfig({ env: { OAK_PORT: "8801", OAK_VITE_PORT: "5201", OAK_TUTOR_FAKE: "1" }, argv: [] });
+    expect(p).toMatchObject({ port: 8801, devPorts: [], tutorFake: false });
   });
 });
 

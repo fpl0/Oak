@@ -1,0 +1,53 @@
+{/* U02.L05 Moving Melodies: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+One riff, four bars. Listen to how bars 2 and 3 are the same tune as bar 1, only higher. Songs do this all the time to lift a part that comes round again.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+`c4` is 60, as you saw in The White Keys. Every other key has a number too.
+
+<OnPass>65 is `f4`: `e4` and `f4` are a half step apart, so their numbers are one apart. A note's number counted this way, one per half step with `c4` at 60, is its **MIDI number**. Synths, sequencers and Strudel all speak it.</OnPass>
+</Step>
+
+<Step id="S3">
+One method, one number, and the whole riff moves.
+
+<OnPass>`.transpose(2)` added 2 to every note's number: `c4 e4 g4 e4` became `d4 f#4 a4 f#4`. Moving a whole line by the same number of half steps is to **transpose** it. The tune stays the same tune because every distance inside it stays the same.</OnPass>
+</Step>
+
+<Step id="S4">
+The riff, an exact copy, five half steps higher. One method does it.
+
+<Editor exercise="up-five" />
+
+<OnPass>`c4 e4 g4 e4` became `f4 a4 c5 a4`: the same tune, five half steps up. Those are also the three notes of the band's second chord, which is why this copy will sit so well over it in the Make.</OnPass>
+</Step>
+
+<Step id="S5">
+Twelve notes in one bar: every key from `c4` up to `b4`, black and white. Three are missing.
+
+<Editor exercise="every-key" />
+
+<OnPass>All twelve keys in a row, each a half step above the last, is the **chromatic scale**. After `b4` comes `c5`, number 72, and the twelve start again an octave higher.</OnPass>
+</Step>
+
+<Step id="S6">
+Ears only. A moved tune keeps its shape; a new tune changes it.
+
+<Choice exercise="moved-or-new" />
+
+<OnPass>The ups and downs are the tune. Where it starts is only the height.</OnPass>
+</Step>
+
+<Step id="S7">
+Your turn. Write a riff, then let `.transpose()` play it somewhere else: an octave up on a second line, or five half steps up in the second bar, where the band moves to its second chord.
+
+<Make exercise="riff-and-copy" />
+
+<CanDo id="cd.code.transpose" />
+
+<Recap />
+</Step>

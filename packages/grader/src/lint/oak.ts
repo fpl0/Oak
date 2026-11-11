@@ -915,10 +915,13 @@ function runLint(code: string, ctx: LintContext, toolbox: readonly ToolEntry[], 
       const key = `${entry.id}@${u.start}`;
       if (reported.has(key)) continue;
       reported.add(key);
+      // `tool` and `lesson` are the catalog templates' slots (code.locked-*, code.preview-tool).
       const params = {
         name: u.name,
         id: entry.id,
         at: unlockText(entry),
+        tool: u.name,
+        lesson: unlockText(entry),
         reason: `unlocks in ${unlockText(entry)}`,
       };
       if (ctx.allowPreview) diagnostics.push(diag(code, "code.preview-tool", "info", u, params));

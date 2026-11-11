@@ -72,6 +72,32 @@ describe("build", () => {
   });
 });
 
+describe("parallel builds (five authors run content:build and content:check at once)", () => {
+  test("concurrent builds into one directory leave it complete, identical and free of temporaries", async () => {
+    const out = join(tmp, "parallel");
+    const reference = await generate({ outDir: join(tmp, "single"), writeLock: false });
+    // An old file the build no longer produces, and a stale copy of one it does.
+    mkdirSync(join(out, "lesson-text"), { recursive: true });
+    writeFileSync(join(out, "lesson-text", "U99.L99.json"), "{}");
+    writeFileSync(join(out, "index.json"), "stale");
+    const runs = Array.from({ length: 4 }, () =>
+      Bun.spawn(["bun", join(import.meta.dir, "../../scripts/content/build.ts"), "--out", out, "--no-lock"], {
+        stdout: "pipe",
+        stderr: "pipe",
+      }),
+    );
+    expect(await Promise.all(runs.map((r) => r.exited))).toEqual([0, 0, 0, 0]);
+    for (const f of reference.files)
+      expect([f, readFileSync(join(out, f), "utf8")]).toEqual([
+        f,
+        readFileSync(join(tmp, "single", f), "utf8"),
+      ]);
+    expect(existsSync(join(out, "lesson-text", "U99.L99.json"))).toBe(false);
+    const leftovers = new Bun.Glob("**/.*.tmp-*").scanSync({ cwd: out, dot: true });
+    expect([...leftovers]).toEqual([]);
+  });
+});
+
 describe("ID ledger (contracts §1.1 rule 4)", () => {
   test("new IDs are added; a vanished ID fails unless it is retired", () => {
     const { lock, errors } = updateLock(
@@ -84,6 +110,17 @@ describe("ID ledger (contracts §1.1 rule 4)", () => {
     expect(errors).toEqual([]);
     expect(lock.map((e) => e.id)).toEqual(["CF", "U01.L01", "U01.L02"]);
     expect(updateLock([{ id: "U01.L09", kind: "lesson" }], { lesson: ["U01.L01"] }).errors.length).toBe(1);
+  });
+  test("step, exercise and example IDs are ledgered once their unit is released", () => {
+    const { lock } = updateLock([], {
+      exercise: ["U01.L02/silence-beat-3", "U09.L01/draft-name"],
+      step: ["U02.L01/S5", "U09.L01/S1"],
+    });
+    expect(lock.map((e) => e.id)).toEqual(["U01.L02/silence-beat-3", "U02.L01/S5"]);
+    const renamed = updateLock([{ id: "U01.L02/silence-beat-3", kind: "exercise" }], {
+      exercise: ["U01.L02/beat-3"],
+    });
+    expect(renamed.errors.length).toBe(1);
   });
   test("the committed ledger knows every current ID", async () => {
     const r = await generate({ outDir: join(tmp, "c"), writeLock: false });

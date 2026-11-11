@@ -89,7 +89,8 @@ export const useDataReset = () =>
 
 export const useProfile = () => useQuery(apiQuery("profile.get"));
 export const useProfileUpdate = () => useApiMutation("profile.put", ["profile.get", "bootstrap"]);
-export const useCalibrationRun = () => useApiMutation("profile.calibration", ["profile.get", "bootstrap"]);
+export const useCalibrationRun = () =>
+  useApiMutation("profile.calibration", ["profile.get", "bootstrap", "profile.calibrations"]);
 
 // --- session ------------------------------------------------------------------------------------
 
@@ -234,3 +235,42 @@ export const useDevQa = () => useQuery(apiQuery("dev.qa"));
 export const useDevQaUpdate = () => useApiMutation("dev.qaUpdate", ["dev.qa"]);
 export const useDevTelemetry = () => useQuery(apiQuery("dev.telemetry"));
 export const useDevContentReport = () => useQuery(apiQuery("dev.contentReport"));
+
+// --- Wave 2 additions (docs/design/wave2.md §4) -------------------------------------------------------
+// Until the server engineer builds them these answer 501 (`OakApiError.code === "not_implemented"`, never
+// retried); a surface shows its own "not built yet" copy through `ErrorState`.
+
+export const useSessionSummary = (id: string | null) =>
+  useQuery({ ...apiQuery("session.summary", { params: { id: id ?? "none" } }), enabled: id !== null });
+export const useLessonSteps = (id: string) => useQuery(apiQuery("lessons.steps", { params: { id } }));
+export const useLessonPosition = () =>
+  useApiMutation("lessons.position", ["lessons.progress", "lessons.steps"]);
+export const useCapstoneRelease = () =>
+  useApiMutation("capstones.release", [
+    "capstones.get",
+    "album.get",
+    "album.track",
+    "lessons.progress",
+    "unlocks.list",
+    "unlocks.next",
+    "streak.get",
+  ]);
+export const useNextUnlocks = () => useQuery(apiQuery("unlocks.next"));
+export const useRevive = (skillId?: string, more = false) =>
+  useQuery(
+    apiQuery("skills.revive", {
+      query: { ...(skillId ? { skillId } : {}), ...(more ? { more: "1" as const } : {}) },
+    }),
+  );
+export const useOnboarding = () => useQuery(apiQuery("onboarding.get"));
+export const useOnboardingUpdate = () =>
+  useApiMutation("onboarding.put", ["onboarding.get", "profile.get", "bootstrap"]);
+export type CalibrationKind = NonNullable<
+  NonNullable<EndpointInput<"profile.calibrations">["query"]>["kind"]
+>;
+export const useCalibrations = (kind?: CalibrationKind) =>
+  useQuery(apiQuery("profile.calibrations", { query: kind ? { kind } : {} }));
+export const useTutorStatus = (refresh = false) =>
+  useQuery({ ...apiQuery("tutor.status", { query: refresh ? { refresh: "1" } : {} }), retry: 0 });
+export const useDevListen = () => useQuery(apiQuery("dev.listen"));
+export const useDevListenMark = () => useApiMutation("dev.listenMark", ["dev.listen"]);

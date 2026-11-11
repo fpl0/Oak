@@ -51,7 +51,15 @@ export function reviewItem(srs: Srs, card: Card, meta: ItemMeta, now: Date): Rev
     skills: [...meta.skills],
   };
   if (meta.deferUntilDay !== undefined) item.deferUntilDay = meta.deferUntilDay;
-  if (meta.repeatDays !== undefined) item.repeatDays = meta.repeatDays;
+  // How soon the card comes back after its next review: the interval a Good rating would give it today,
+  // or its cap (`meta.repeatDays`) when that is shorter. A card that keeps lapsing returns every day or
+  // two, and the intake forecast must count each return inside its window, not just the next one. (A Good
+  // review only lengthens the interval, so a card already spaced past the window needs no preview.)
+  const spaced =
+    card.reps === 0 || srs.intervalAt(card, srs.desiredRetention(card.kind)) >= GOVERNOR.forecastDays;
+  const good = spaced ? undefined : Math.max(1, srs.preview(card, now)[3].scheduledDays);
+  const repeat = good === undefined ? meta.repeatDays : Math.min(meta.repeatDays ?? good, good);
+  if (repeat !== undefined) item.repeatDays = repeat;
   // A never-reviewed fact (a released deck card) is filler. A family's first set is a blocked-intro set,
   // planned like any due item; a lesson's seeding step has already rated its concept and term cards.
   if (card.reps === 0 && meta.cls === "fact") item.fresh = true;

@@ -1,2 +1,5 @@
 # Vite dependency cache (vite.config.ts cacheDir)
 .vite-cache/
+.vite-cache-*/
+# Screenshots written by the per-area Playwright suites (docs/design/wave2.md §8), regenerated on every run.
+screenshots/

@@ -8,13 +8,14 @@ import { installStubApi } from "./stub-api.ts";
 
 const ROUTES: { path: string; title: RegExp; focus?: boolean }[] = [
   { path: "/", title: /Today/ },
-  { path: "/onboarding/1", title: /Hello, loop/, focus: true },
-  { path: "/onboarding/4", title: /Hello, loop/, focus: true },
+  { path: "/onboarding/1", title: /Hello, loop/i, focus: true },
+  { path: "/onboarding/4", title: /Hello, loop/i, focus: true },
   { path: "/learn/U01.L02", title: /./, focus: true },
   { path: "/learn/U01.L02?step=S2", title: /./, focus: true },
   { path: "/checkpoint/U01", title: /Checkpoint/, focus: true },
   { path: "/capstone/C1", title: /./ },
-  { path: "/session/coda", title: /Coda/, focus: true },
+  // Without a session in this browser the Coda hands back to Today (app/src/session/coda/CodaPage.tsx).
+  { path: "/session/coda", title: /Today/ },
   { path: "/studio", title: /Studio/ },
   { path: "/studio/sk_1", title: /Sketch 001/ },
   { path: "/oak", title: /The Oak/ },
@@ -34,7 +35,7 @@ const ROUTES: { path: string; title: RegExp; focus?: boolean }[] = [
   { path: "/progress", title: /Progress/ },
   { path: "/settings/audio", title: /Audio/ },
   { path: "/settings/voice", title: /Voice/ },
-  { path: "/settings/voice/setup", title: /Set up mic and voice/, focus: true },
+  { path: "/settings/voice/setup", title: /Mic and voice/, focus: true },
   { path: "/settings/tutor", title: /Tutor/ },
   { path: "/settings/learning", title: /Learning/ },
   { path: "/settings/appearance", title: /Appearance/ },
@@ -163,7 +164,10 @@ test.describe("keyboard", () => {
     await expect(page.locator(":focus")).toHaveAttribute("data-nav", "oak");
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/\/oak(\?view=tree)?$/);
-    await expect(page.getByRole("link", { name: "The Oak" })).toHaveAttribute("aria-current", "page");
+    await expect(page.getByRole("link", { name: "The Oak", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 
   test("tabs move with the arrow keys and keep the view in the URL", async ({ page }) => {
@@ -183,13 +187,14 @@ test.describe("keyboard", () => {
     await installStubApi(page);
     await page.goto("/");
     await settle(page);
-    const panel = page.getByRole("complementary", { name: "Tutor" });
-    await expect(panel).toHaveCount(0);
+    // Hidden, the panel is a 44 px rail; shown, it holds the conversation (here: the tutor is not set up).
+    const rail = page.getByTestId("tutor-rail");
+    await expect(rail).toBeVisible();
     await page.keyboard.press("ControlOrMeta+j");
-    await expect(panel).toBeVisible();
-    await expect(panel).toContainText("Wave 2");
+    await expect(page.getByRole("complementary", { name: "Tutor" }).getByTestId("tutor-chat")).toBeVisible();
+    await expect(rail).toHaveCount(0);
     await page.keyboard.press("ControlOrMeta+j");
-    await expect(panel).toHaveCount(0);
+    await expect(rail).toBeVisible();
   });
 });
 

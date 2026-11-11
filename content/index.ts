@@ -10,6 +10,7 @@ import { flavours } from "./flavours.ts";
 import { ladder } from "./gym/ladder.ts";
 import { templates } from "./gym/templates.ts";
 import { buildCourseGraph, type CourseGraph } from "./lib/course.ts";
+import { milestones } from "./milestones.ts";
 import { repertoire } from "./repertoire/index.ts";
 import { skills } from "./skills.ts";
 import { syllabus } from "./syllabus.ts";
@@ -24,6 +25,7 @@ export const registries = {
   decks,
   terms,
   candos,
+  milestones,
   flavours,
   bands,
   capstones,

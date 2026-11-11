@@ -230,6 +230,8 @@ export interface IntakeForecast {
   /** The heaviest single day of the window, in seconds. */
   maxDaySec: number;
   load: number[];
+  /** The seconds per session this class may plan for (`classBudget`); the thresholds are fractions of it. */
+  budgetSec: number;
 }
 
 /** Work outside a card's own review that may still count as its review (contracts §7.4). */

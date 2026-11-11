@@ -1,6 +1,10 @@
 // Oak's single-page app. Run on Node, never `bunx --bun vite`:
 //   node node_modules/vite/bin/vite.js --config app/vite.config.ts          (dev, 127.0.0.1:5173)
 //   node node_modules/vite/bin/vite.js build --config app/vite.config.ts    (production build into dist/)
+// Ports by environment (docs/design/wave2.md §2), so several stacks can run side by side:
+//   OAK_VITE_PORT (default 5173) is this server's port; OAK_API_PORT (default 8787) is the Oak server it proxies
+//   /api and /sounds to. A non-default port also gets its own dependency cache (`.vite-cache-<port>`), so two
+//   dev servers never optimise into the same directory.
 import { fileURLToPath } from "node:url";
 import mdx from "@mdx-js/rollup";
 import babel from "@rolldown/plugin-babel";
@@ -11,7 +15,12 @@ import { defineConfig, type PluginOption } from "vite";
 
 const appRoot = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
-const API = "http://127.0.0.1:8787";
+const envPort = (name: string, fallback: number): number => {
+  const n = Number(process.env[name]);
+  return Number.isInteger(n) && n > 0 && n < 65536 ? n : fallback;
+};
+const VITE_PORT = envPort("OAK_VITE_PORT", 5173);
+const API = `http://127.0.0.1:${envPort("OAK_API_PORT", 8787)}`;
 
 /** contracts §11.2. The Oak server sends it on every HTML response; `vite preview` sends it too, so the
  *  production build is exercised under the real policy (the dev server needs inline scripts and cannot). */
@@ -33,7 +42,7 @@ export const CSP = [
 export default defineConfig(({ mode }) => ({
   root: appRoot,
   // Keep Vite's dependency cache inside app/ (never the shared node_modules/.vite).
-  cacheDir: `${appRoot}.vite-cache`,
+  cacheDir: VITE_PORT === 5173 ? `${appRoot}.vite-cache` : `${appRoot}.vite-cache-${VITE_PORT}`,
   publicDir: `${appRoot}public`,
   plugins: [
     // File routes first: the generator writes src/routeTree.gen.ts and splits route components.
@@ -69,7 +78,7 @@ export default defineConfig(({ mode }) => ({
   },
   server: {
     host: "127.0.0.1",
-    port: 5173,
+    port: VITE_PORT,
     strictPort: true,
     fs: { allow: [repoRoot] },
     proxy: {
@@ -79,7 +88,7 @@ export default defineConfig(({ mode }) => ({
   },
   preview: {
     host: "127.0.0.1",
-    port: 5173,
+    port: VITE_PORT,
     strictPort: true,
     headers: { "Content-Security-Policy": CSP },
     proxy: {

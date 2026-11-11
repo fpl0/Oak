@@ -471,6 +471,58 @@ export const FIXTURES = {
   "tutor.usage": usage,
   "tutor.notes": { items: [] },
   "backup.info": { bytesWithAudio: 52_428_800, bytesWithoutAudio: 1_048_576, lastAutomatic: DAY },
+  // Wave 2 endpoints the shell's surfaces read.
+  "onboarding.get": {
+    step: "welcome",
+    completed: [],
+    skipped: [],
+    firstEdit: null,
+    sketchId: null,
+    startedAt: null,
+    finishedAt: null,
+  },
+  "unlocks.next": {
+    items: [{ itemId: "tb.gain", kind: "tool", grantedBy: "U01.L02", remaining: 1, remainingKind: "lesson" }],
+  },
+  "tutor.status": {
+    tutor: "missing_key",
+    active: null,
+    setting: "auto",
+    reason: "no-backend",
+    guidance: "Sign in with `claude` in a terminal, or add an API key in Settings › Tutor.",
+    model: "claude-opus-5-5",
+    backends: [
+      {
+        id: "claude-cli",
+        wired: true,
+        ok: false,
+        active: false,
+        reason: "not-signed-in",
+        guidance: null,
+        billing: "plan",
+      },
+      {
+        id: "anthropic-api",
+        wired: true,
+        ok: false,
+        active: false,
+        reason: "no-key",
+        guidance: null,
+        billing: "api",
+      },
+    ],
+    budget: { month: "2026-11", monthUsd: 0, softMarkerUsd: 20, softPassed: false },
+    usage: {
+      costUsd: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheHitRatio: 0,
+    },
+  },
+  "lessons.steps": { lessonId: "U01.L02", progress: null, steps: [] },
+  "profile.calibrations": { items: [] },
 } satisfies Partial<Record<JsonEndpointName, unknown>>;
 
 FIXTURES["profile.get"] = FIXTURES.bootstrap.profile;
@@ -478,3 +530,20 @@ FIXTURES["profile.get"] = FIXTURES.bootstrap.profile;
 /** The fixture names whose response is typed by the contract (for the schema test). */
 export type FixtureName = keyof typeof FIXTURES & JsonEndpointName;
 export type FixtureOf<N extends FixtureName> = EndpointOutput<N>;
+
+/** Answers of the few writes a page makes on its own while it renders (starting a free-practice set). */
+export const WRITE_FIXTURES = {
+  "drills.start": {
+    id: "ds_1",
+    sessionId: null,
+    purpose: "srs",
+    familyIds: ["fam.rhy.pulse"],
+    setId: "set_1",
+    levels: { "fam.rhy.pulse": 1 },
+    openCategories: { "fam.rhy.pulse": ["straight"] },
+    focus: { "fam.rhy.pulse": null },
+    trialsPlanned: 4,
+    startedAt: NOW,
+    finishedAt: null,
+  },
+} satisfies Partial<Record<JsonEndpointName, unknown>>;

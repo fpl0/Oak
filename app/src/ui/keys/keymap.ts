@@ -294,6 +294,7 @@ export const FOCUS_ROUTE_PATTERNS: readonly RegExp[] = [
   /^\/learn\//,
   /^\/checkpoint\//,
   /^\/onboarding\//,
+  /^\/session\/?$/,
   /^\/session\/coda\/?$/,
   /^\/practice\/review\/?$/,
   /^\/practice\/(?!review)[^/]+\/?$/,

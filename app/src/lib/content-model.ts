@@ -315,7 +315,13 @@ export function lessonTitles(syllabus: SyllabusDef | null): Map<string, string> 
 /** Human title for a map item ID, falling back to the ID itself. */
 export function titleOf(id: string | null | undefined, titles: Map<string, string>): string {
   if (!id) return "";
-  return titles.get(id) ?? id;
+  const own = titles.get(id);
+  if (own) return own;
+  // A capstone session (`C0.S1`) reads as its capstone, with the session number past the first.
+  const m = /^(C\w*?)\.S(\d+)$/.exec(id);
+  const cap = m ? titles.get(m[1] as string) : undefined;
+  if (m && cap) return m[2] === "1" ? cap : `${cap} · session ${m[2]}`;
+  return id;
 }
 
 export const TOOL_KIND_LABEL: Record<string, string> = {

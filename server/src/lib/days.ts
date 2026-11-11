@@ -78,19 +78,32 @@ export function daysOfWeek(weekStartDay: string): string[] {
  * searching: time-zone offsets are not known without the zone database, and DST makes them vary.
  */
 export function dayStartInstant(day: string, timeZone: string, rolloverHour = 4): Date {
-  // Start from the naive UTC reading and correct by the observed offset; two passes settle DST edges.
-  let guess = Date.parse(`${day}T${String(rolloverHour).padStart(2, "0")}:00:00Z`);
+  // Start from the naive UTC reading and correct by the observed offset; two passes settle most days.
+  const naive = Date.parse(`${day}T${String(rolloverHour).padStart(2, "0")}:00:00Z`);
+  let guess = naive;
   for (let i = 0; i < 3; i++) {
     const parts = formatter(timeZone).formatToParts(new Date(guess));
     const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
     const asUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"));
     const minutes = new Date(guess).getUTCMinutes() * 60_000;
     const offset = asUtc + minutes - guess;
-    const next = Date.parse(`${day}T${String(rolloverHour).padStart(2, "0")}:00:00Z`) - offset;
+    const next = naive - offset;
     if (next === guess) break;
     guess = next;
   }
-  return new Date(guess);
+  const index = dayIndex(day);
+  const at = (t: number) => dayIndex(learnerDay(new Date(t), timeZone, rolloverHour));
+  if (at(guess) === index && at(guess - 1) === index - 1) return new Date(guess);
+  // A rollover hour inside a DST gap or overlap, or a zone whose offset is not whole hours (Lord Howe's
+  // 30-minute DST): the learner day is monotonic in time, so bisect for its first instant.
+  let lo = naive - 15 * 3_600_000;
+  let hi = naive + 13 * 3_600_000;
+  while (hi - lo > 1) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (at(mid) >= index) hi = mid;
+    else lo = mid;
+  }
+  return new Date(hi);
 }
 
 /** `YYYY-MM` of a learner day. */

@@ -4,6 +4,8 @@ import { GOVERNOR, PRIORITY_WEIGHTS, RETURN, REVIEW_DAY_MAX_SEC } from "./consta
 import { returnRank } from "./governor.ts";
 import type { GovernorConfig, PlanContext, PlannedItem, ReviewItem, WarmupPlan } from "./types.ts";
 
+/** Days a due item may wait before it is planned first, whatever its length (`planWarmup` step 0). */
+export const URGENT_AFTER_DAYS = 2;
 /** Planning estimate of one listen-only block (15 to 20 s). */
 export const LISTEN_BLOCK_SEC = (GOVERNOR.listenBlockSec[0] + GOVERNOR.listenBlockSec[1]) / 2;
 
@@ -92,15 +94,26 @@ export function planWarmup(due: readonly ReviewItem[], ctx: PlanContext, cfg: Go
     chosen.add(it);
   };
 
+  // (0) The most urgent item, once it has waited two days, is planned before anything else, outside the
+  // class shares: a long set (a progression dictation, a whole song form) otherwise never fits after the
+  // other items and waits indefinitely.
+  const urgent = ranked.find((it) => !it.fresh && micOk(it)) ?? null;
+  if (urgent && !returning && today - urgent.dueDay >= URGENT_AFTER_DAYS && cost(urgent) <= limit)
+    take(urgent);
+
   // (1) The opener: a sure win.
   let opener: ReviewItem | null = null;
   let anchor: ReviewItem | null = null;
   if (!ctx.continuation && offered.length > 0) {
-    const byRecall = offered.filter((it) => !it.fresh).sort((a, b) => b.recall - a.recall || byId(a, b));
-    const best = byRecall.find((it) => cost(it) <= limit && micOk(it)) ?? null;
+    const byRecall = offered
+      .filter((it) => !it.fresh && !chosen.has(it))
+      .sort((a, b) => b.recall - a.recall || byId(a, b));
+    const best = byRecall.find((it) => total() + cost(it) <= limit && micOk(it)) ?? null;
     const fallback = ctx.anchorFallback;
     const fallbackUsable =
-      fallback !== null && fallback.sec <= limit && !(fallback.mic && (cfg.quiet || micLimit === 0));
+      fallback !== null &&
+      total() + fallback.sec <= limit &&
+      !(fallback.mic && (cfg.quiet || micLimit === 0));
     if (best && best.recall >= GOVERNOR.anchorMinRecall) opener = best;
     else if (fallbackUsable) anchor = fallback;
     else opener = best;

@@ -1,0 +1,131 @@
+// `POST /api/capstones/:id/release` (wave2 §4, ux §5.2–§5.3): a capstone draft goes on the album. The first
+// release creates the capstone's track (Side A for core capstones, Side B for track capstones); a release of
+// an already released capstone is a revision and becomes the next version. One transaction: the last
+// capstone session (when it is still open), the track version, the capstone state, unlocks and can-dos.
+import type { AlbumTrackDetail, CanDoEntry, CapstoneRelease, CapstoneReleaseResult, Unlock } from "@oak/api";
+import { CapstoneReviewSchema } from "@oak/api";
+import { tx } from "../db/index.ts";
+import { conflict, notFound } from "../errors.ts";
+import type { CanDoService } from "./cando.ts";
+import { LearnerTime, type ServiceContext } from "./context.ts";
+import type { CourseService } from "./course.ts";
+import type { GatesService } from "./gates.ts";
+import type { LibraryService } from "./library.ts";
+import type { StreakService } from "./streak.ts";
+import type { UnlocksService } from "./unlocks.ts";
+
+export interface ReleaseDeps {
+  course: CourseService;
+  gates: GatesService;
+  library: LibraryService;
+  unlocks: UnlocksService;
+  cando: CanDoService;
+  streak: StreakService;
+}
+
+export class CapstoneReleaseService {
+  readonly time: LearnerTime;
+  constructor(
+    private readonly ctx: ServiceContext,
+    private readonly d: ReleaseDeps,
+  ) {
+    this.time = new LearnerTime(ctx);
+  }
+
+  /** Side A holds the core capstones; capstones of an advanced track go on Side B. */
+  sideOf(capstoneId: string): "A" | "B" {
+    return this.ctx.content.source.syllabus.tracks.some((t) => (t.capstones as string[]).includes(capstoneId))
+      ? "B"
+      : "A";
+  }
+
+  release(id: string, body: CapstoneRelease): CapstoneReleaseResult {
+    const meta = this.ctx.content.capstoneMeta(id);
+    if (meta === null) throw notFound(`capstone ${id}`);
+    const repos = this.ctx.repos;
+    const out = tx(repos.db, () => {
+      const status = this.d.gates.capstoneStatus(id);
+      if (status.status === "locked") throw conflict(status.lockedReason ?? "this capstone is not open yet");
+      const row = repos.capstones.get(id);
+      if (row === null) throw conflict("start the capstone's first session before releasing it");
+      if (repos.sketches.version(body.sketchId, body.sketchVersion) === null)
+        throw notFound(`sketch ${body.sketchId} v${body.sketchVersion}`);
+      // The requirements checklist must be met: the latest rubric run on the draft passed (§6.6).
+      if (row.lastResult === null || row.lastResult.status !== "pass")
+        throw conflict("every required rule of the brief has to pass before release; run the check first");
+      const all = this.ctx.content.capstoneSessionIds(id);
+      const missing = all.filter((s) => !row.sessions.includes(s));
+      if (missing.length > 1)
+        throw conflict(
+          `finish ${missing.slice(0, -1).join(", ")} first; the release is the last session's work`,
+        );
+      const unlocks: Unlock[] = [];
+      const now = this.time.iso();
+      const sessions = [...row.sessions, ...missing];
+      for (const s of missing) unlocks.push(...this.d.unlocks.onComplete(s));
+
+      const review = CapstoneReviewSchema.safeParse(repos.tutor.latestReview("capstone", id));
+      const note = review.success && body.includeReviewNote ? review.data.linerNote.trim() : "";
+      const linerNotesMd =
+        note === "" ? body.linerNotesMd : `${body.linerNotesMd.trimEnd()}\n\n${note}`.trim();
+      const version = {
+        sketchId: body.sketchId,
+        sketchVersion: body.sketchVersion,
+        linerNotesMd,
+        theoryTags: body.theoryTags,
+        attribution: null,
+      };
+      const existing = repos.album.trackOfCapstone(id);
+      // The same release sent twice (a retried request, a second tab) is not a revision: when the track's
+      // current version already is this sketch version with these notes and tags, nothing new is made.
+      if (existing !== null && row.status === "released") {
+        const current = this.d.library.track(existing.id);
+        const latest = current.versions.find((v) => v.version === current.currentVersion);
+        if (
+          latest !== undefined &&
+          latest.sketchId === body.sketchId &&
+          latest.sketchVersion === body.sketchVersion &&
+          latest.linerNotesMd === linerNotesMd &&
+          JSON.stringify(latest.theoryTags) === JSON.stringify(body.theoryTags)
+        )
+          return { trackId: existing.id, unlocks, canDo: [] as CanDoEntry[] };
+      }
+      const track =
+        existing === null
+          ? this.d.library.createTrack({
+              capstoneId: id as AlbumTrackDetail["capstoneId"],
+              side: this.sideOf(id),
+              title: body.title,
+              flavour: body.flavour,
+              ...version,
+            })
+          : this.d.library.addTrackVersion(existing.id, version);
+      if (review.success) repos.album.setReview(track.id, track.currentVersion, review.data);
+      const first = row.status !== "released";
+      repos.capstones.save({
+        ...row,
+        status: "released",
+        sessions,
+        sketchId: body.sketchId,
+        trackId: track.id,
+        flavour: body.flavour ?? row.flavour,
+        startedAt: row.startedAt ?? now,
+        releasedAt: row.releasedAt ?? now,
+        updatedAt: now,
+      });
+      let canDo: CanDoEntry[] = [];
+      if (first) {
+        unlocks.push(...this.d.unlocks.onComplete(id));
+        canDo = this.d.cando.evaluate({ sourceId: id, evidence: { kind: "track", id } });
+      }
+      return { trackId: track.id, unlocks, canDo };
+    });
+    return {
+      state: this.d.course.capstoneState(id),
+      track: this.d.library.track(out.trackId),
+      unlocks: out.unlocks,
+      canDo: out.canDo,
+      streak: this.d.streak.summary(),
+    };
+  }
+}

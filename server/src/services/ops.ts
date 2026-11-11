@@ -1,5 +1,13 @@
 // Telemetry (contracts §9.7) and the "Report a grading problem" queue (§11.8). Local only.
-import type { QaReport, QaReportCreate, StepTelemetry, TelemetryReport } from "@oak/api";
+import type {
+  QaReport,
+  QaReportCreate,
+  SessionTelemetry,
+  StepTelemetry,
+  TelemetryAggregates,
+  TelemetryReport,
+} from "@oak/api";
+import { WARMUP_BUDGET_SEC, WARMUP_SHORT_SEC } from "@oak/srs";
 import { tx } from "../db/index.ts";
 import { notFound } from "../errors.ts";
 import { LearnerTime, type ServiceContext } from "./context.ts";
@@ -30,6 +38,82 @@ export function rollingMultiplier(steps: readonly StepTelemetry[]): number | nul
   return median(recent.map((a) => a.active / a.authored));
 }
 
+/** contracts §9.7: flag a lesson whose active time passes 1.15 × its scaled budget. */
+export const LESSON_FLAG_RATIO = 1.15;
+/** contracts §9.7: prompt to change BEGINNER_FACTOR when the rolling multiplier leaves this band. */
+export const MULTIPLIER_BAND = [1.25, 1.55] as const;
+
+/** The aggregates /dev/telemetry shows (contracts §9.7), from the stored rows. Pure. */
+export function telemetryAggregates(
+  steps: readonly StepTelemetry[],
+  sessions: readonly SessionTelemetry[],
+  rolling: number | null,
+): TelemetryAggregates {
+  const byLesson = new Map<string, TelemetryAggregates["lessons"][number]>();
+  for (const s of steps) {
+    const key = `${s.lessonId}@${s.lessonVersion}`;
+    const a = byLesson.get(key) ?? {
+      lessonId: s.lessonId,
+      lessonVersion: s.lessonVersion,
+      steps: 0,
+      activeMin: 0,
+      authoredMin: 0,
+      scaledMin: 0,
+      ratio: null,
+      flagged: false,
+      lastAt: s.endedAt,
+    };
+    a.steps += 1;
+    a.activeMin += s.activeMs / 60_000;
+    if (!s.skipped && !s.testedOut) {
+      a.authoredMin += s.authoredMinutes;
+      a.scaledMin += s.scaledMinutes;
+    }
+    if (s.endedAt > a.lastAt) a.lastAt = s.endedAt;
+    byLesson.set(key, a);
+  }
+  const lessons = [...byLesson.values()]
+    .map((a) => {
+      const ratio = a.scaledMin > 0 ? a.activeMin / a.scaledMin : null;
+      return { ...a, ratio, flagged: ratio !== null && ratio > LESSON_FLAG_RATIO };
+    })
+    .sort((x, y) => y.lastAt.localeCompare(x.lastAt));
+  const byDay = new Map<string, TelemetryAggregates["days"][number]>();
+  for (const s of sessions) {
+    const budget =
+      s.kind === "checkpoint" || s.kind === "capstone"
+        ? WARMUP_SHORT_SEC
+        : WARMUP_BUDGET_SEC[s.targetMinutes];
+    const d = byDay.get(s.day) ?? {
+      day: s.day,
+      sessions: 0,
+      reviewSec: 0,
+      plannedSec: 0,
+      budgetSec: budget,
+      overflowSec: 0,
+      activeMin: 0,
+    };
+    d.sessions += 1;
+    d.reviewSec += s.warmupMs / 1000;
+    d.plannedSec += s.warmupPlannedSec;
+    d.budgetSec = Math.max(d.budgetSec, budget);
+    d.overflowSec = Math.max(d.overflowSec, s.overflowSec);
+    d.activeMin += s.totalActiveMs / 60_000;
+    byDay.set(s.day, d);
+  }
+  const over = sessions.filter((s) => s.overflowSec > 0);
+  return {
+    lessons,
+    days: [...byDay.values()].sort((x, y) => y.day.localeCompare(x.day)),
+    multiplierPrompt: rolling !== null && (rolling < MULTIPLIER_BAND[0] || rolling > MULTIPLIER_BAND[1]),
+    overflow: {
+      sessions: over.length,
+      meanSec: over.length === 0 ? 0 : over.reduce((t, s) => t + s.overflowSec, 0) / over.length,
+      maxSec: over.reduce((m, s) => Math.max(m, s.overflowSec), 0),
+    },
+  };
+}
+
 export class OpsService {
   readonly time: LearnerTime;
   constructor(
@@ -45,10 +129,13 @@ export class OpsService {
 
   report(forecastSec: number[], tutor: { cacheHitRatio: number; costUsd: number }): TelemetryReport {
     const steps = this.ctx.repos.ops.stepTelemetry();
+    const sessions = this.ctx.repos.ops.sessionTelemetry();
+    const rolling = rollingMultiplier(steps);
     return {
       steps,
-      sessions: this.ctx.repos.ops.sessionTelemetry(),
-      rollingMultiplier: rollingMultiplier(steps),
+      sessions,
+      aggregates: telemetryAggregates(steps, sessions, rolling),
+      rollingMultiplier: rolling,
       forecastSec,
       tutor,
     };

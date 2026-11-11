@@ -132,8 +132,13 @@ interface ExResultRow {
   assisted: number;
   last_at: string;
 }
+// The column holds the global ID (`U01.L01/slug`, migration 0002): local slugs repeat across lessons.
+// The DTO keeps the local slug, as `step_attempts.exercise_id` and the client do.
+const globalExId = (lessonId: string, slug: string) => (slug.includes("/") ? slug : `${lessonId}/${slug}`);
 const toExResult = (r: ExResultRow): ExerciseResult => ({
-  exerciseId: r.exercise_id,
+  exerciseId: r.exercise_id.startsWith(`${r.lesson_id}/`)
+    ? r.exercise_id.slice(r.lesson_id.length + 1)
+    : r.exercise_id,
   exerciseVersion: r.exercise_version,
   lessonId: r.lesson_id,
   firstPassAt: r.first_pass_at,
@@ -320,21 +325,21 @@ export class LessonsRepo {
   }
 
   // --- exercise_results ---
-  exerciseResult(exerciseId: string, version: number): ExerciseResult | null {
+  exerciseResult(lessonId: string, exerciseId: string, version: number): ExerciseResult | null {
     const row = get<ExResultRow>(
       this.db,
       "SELECT * FROM exercise_results WHERE exercise_id = ? AND exercise_version = ?",
-      exerciseId,
+      globalExId(lessonId, exerciseId),
       version,
     );
     return row === null ? null : toExResult(row);
   }
-  /** The latest version's row of an exercise. */
-  latestExerciseResult(exerciseId: string): ExerciseResult | null {
+  /** The latest version's row of one lesson's exercise. */
+  latestExerciseResult(lessonId: string, exerciseId: string): ExerciseResult | null {
     const row = get<ExResultRow>(
       this.db,
       "SELECT * FROM exercise_results WHERE exercise_id = ? ORDER BY exercise_version DESC LIMIT 1",
-      exerciseId,
+      globalExId(lessonId, exerciseId),
     );
     return row === null ? null : toExResult(row);
   }
@@ -346,7 +351,7 @@ export class LessonsRepo {
        ON CONFLICT (exercise_id, exercise_version) DO UPDATE SET first_pass_at = excluded.first_pass_at,
          attempts_to_pass = excluded.attempts_to_pass, best_score = excluded.best_score, last_score = excluded.last_score,
          assisted = excluded.assisted, last_at = excluded.last_at`,
-      r.exerciseId,
+      globalExId(r.lessonId, r.exerciseId),
       r.exerciseVersion,
       r.lessonId,
       r.firstPassAt,

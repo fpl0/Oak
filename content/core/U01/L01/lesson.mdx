@@ -1,0 +1,63 @@
+{/* U01.L01 Heartbeat: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+Drums, a bass and a piano. Before any theory, find the thing your head wants to nod to.
+
+<Example id="groove" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+Now put it in your hands. Tap with the kick and the snare, not with the quicker hats in between.
+
+<Tap exercise="tap-the-pulse" />
+
+<Callout kind="tip">Oak measures your timing against your own setup, so a little lag from your keyboard is already taken into account.</Callout>
+
+<OnPass>That steady beat you tapped is the **pulse**. Almost every song you know has one, and the drums usually say it out loud.</OnPass>
+</Step>
+
+<Step id="S3">
+One number changed in the first line.
+
+<Predict exercise="bigger-number" />
+</Step>
+
+<Step id="S4">
+The line `setcpm(132/4)` is the speed dial for everything below it. <CodeRef fn="setcpm" />
+
+<OnPass>The first number is the **tempo**: how many beats go by in a minute. 132 is brisk, 70 is a slow walk, and most pop sits between 90 and 130.</OnPass>
+</Step>
+
+<Step id="S5">
+Strudel plays the words inside the quotes from left to right, then starts again. Watch the roll while it loops.
+
+<OnPass>One trip through the quotes is one **bar**. The tempo line keeps every bar four beats long, so more words in the same bar sit closer together. The `/4` in `setcpm(132/4)` is those four beats.</OnPass>
+</Step>
+
+<Step id="S6">
+Slow grooves have their place, but this one should move. Change one number.
+
+<Editor exercise="set-120" />
+
+<OnPass>Same drums, 120 beats per minute: two beats every second.</OnPass>
+</Step>
+
+<Step id="S7">
+A kick on every beat is the plainest pulse there is. Dance music builds whole tracks on it.
+
+<Editor exercise="kick-every-beat" />
+
+<OnPass>Four kicks, one per beat. `bd*4` writes the same bar: `*` repeats a sound inside its slot, the way `hh*8` gave you eight hats.</OnPass>
+</Step>
+
+<Step id="S8">
+Your turn. The starter plays one kick a bar. Pick a tempo, give each of the four beats a sound, and let the band play along. A second line on top, the way the hats rode over the first groove, is welcome.
+
+<Make exercise="your-heartbeat" />
+
+<CanDo id="cd.hear.pulse" />
+
+<CanDo id="cd.code.tempo" />
+
+<Recap />
+</Step>

@@ -21,11 +21,15 @@ export const candos: readonly CanDoDef[] = [
   c("cd.hear.sevenths", "hear", "I can tell seventh-chord qualities apart.", "E11", "U12.L02"),
   c("cd.hear.chromatic", "hear", "I can hear chromatic degrees and borrowed chords.", "E12a E12b", "U16.L05"),
   c("cd.hear.key-change", "hear", "I can hear where a song changes key.", "E13", "U17.L03"),
+  c("cd.hear.meter", "hear", "I can tell a groove in three from a groove in four.", "R08", "U01.L08"),
   c("cd.hear.swing", "hear", "I can hear whether a groove is straight or swung.", "R13", "U11.L07"),
   // read
   c("cd.read.count-four", "read", "I can find beat 1, count a bar of four, and use a rest as part of a rhythm.", "R03 R06", "U01.L02"),
-  c("cd.read.rhythm", "read", "I can read quarter, eighth and sixteenth notes on the percussion staff.", "N01", "U01.L05"),
+  c("cd.read.rhythm", "read", "I can read whole, half, quarter and eighth notes on the percussion staff.", "N01", "U01.L05"),
+  c("cd.read.sixteenths", "read", "I can count 1-e-&-a and write sixteenth-note patterns.", "R07", "U01.L06"),
+  c("cd.read.half-whole", "read", "I can find half and whole steps and name the black keys as sharps or flats.", "P03 P04", "U02.L03"),
   c("cd.read.treble", "read", "I can read notes on the treble staff.", "N02", "U02.L04"),
+  c("cd.read.play-from-page", "read", "I can play a short tune from the treble staff in code.", "N02 D05", "U02.L08"),
   c("cd.read.keysig", "read", "I can name a major key from its key signature.", "N03 S04", "U03.L06"),
   c("cd.read.bass-clef", "read", "I can read notes on the bass clef.", "N04", "U05.L06"),
   c("cd.read.chord-symbols", "read", "I can read lead-sheet chord symbols.", "N05", "U05.L04"),
@@ -39,6 +43,7 @@ export const candos: readonly CanDoDef[] = [
   c("cd.write.bass-line", "write", "I can write a bass line from the chords.", "B01 B02", "U08.L02"),
   // compose
   c("cd.compose.backbeat", "compose", "I can write a backbeat groove with one line per drum.", "R04", "U01.L03"),
+  c("cd.compose.fill", "compose", "I can vary a four-bar phrase and end it with a fill.", "R04 R07", "U01.L07"),
   c("cd.compose.drum-intro", "compose", "I can write a drum intro with a fill.", "R04 R07", "C0"),
   c("cd.compose.first-loop", "compose", "I can write a 4-bar loop with drums, bass and a riff.", "R04 P05", "C1"),
   c("cd.compose.melody-on-1", "compose", "I can write an 8-bar melody that ends at home.", "M01 S03", "U03.L11"),
@@ -65,6 +70,7 @@ export const candos: readonly CanDoDef[] = [
   c("cd.transcribe.standard", "transcribe", "I can transcribe a standard's form, bass, changes and melody.", "E13 E07", "CF-T"),
   // sing
   c("cd.sing.first-note", "sing", "I can sing back a note I hear.", "V01", "U00.L02"),
+  c("cd.sing.echo", "sing", "I can sing back a short phrase of two or three notes.", "V01 E02", "U02.L07"),
   c("cd.sing.degrees", "sing", "I can sing degrees on numbers and syllables.", "V02 V03", "U03.L08"),
   c("cd.sing.sight", "sing", "I can sight-sing a simple tune from the staff.", "V04", "U03.L09"),
   c("cd.sing.bass", "sing", "I can sing the roots of a progression.", "V05", "U06.L05"),
@@ -72,7 +78,10 @@ export const candos: readonly CanDoDef[] = [
   // code
   c("cd.code.first-loop", "code", "I can start, stop and change a loop in code.", "D01", "U00.L01"),
   c("cd.code.tempo", "code", "I can set a tempo and write a one-line beat.", "R02", "U01.L01"),
+  c("cd.code.subdivision", "code", "I can split a beat in two with [ ] and write eighth-note hats.", "R05", "U01.L04"),
   c("cd.code.notes", "code", "I can write a melody with note names and octaves.", "P02 P05", "U02.L02"),
+  c("cd.code.transpose", "code", "I can move a melody up or down by half steps with .transpose().", "P06", "U02.L05"),
+  c("cd.code.timbre", "code", "I can play the same line on different instruments and synth waves.", "D01", "U02.L06"),
   c("cd.code.degrees", "code", "I can write a melody as degrees with n() and .scale().", "S02", "U03.L02"),
   c("cd.code.chords", "code", "I can write chords as symbols and let Strudel voice them.", "C05 N05", "U05.L08"),
   c("cd.code.arrange", "code", "I can arrange sections with one arrange() per track.", "F02 F06", "U09.L02"),

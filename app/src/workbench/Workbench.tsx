@@ -19,14 +19,25 @@ import {
 } from "@oak/strudel";
 import { METERS } from "@oak/theory";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { TUTOR_BARS_EVENT } from "../tutor/context.ts";
 import { WorkbenchClock } from "./clock.ts";
 import { FeedbackPanel, viewOf } from "./FeedbackPanel.tsx";
 import { ghostEvents, marksOf, unlocks } from "./feedback.ts";
 import { HighlightBus } from "./highlight-bus.ts";
 import { Keyboard } from "./Keyboard.tsx";
 import { TYPING_MAP, typedMidi } from "./keyboard-layout.ts";
+import {
+  clampRegion,
+  defaultRegion,
+  type LoopRegion,
+  type RegionStep,
+  regionLabel,
+  stepRegion,
+} from "./loop-math.ts";
+import { Metronome } from "./metronome.ts";
 import { activeAt, type WorkbenchModel } from "./model.ts";
 import { PianoRoll, type RollColorMode, type RollLabelMode } from "./PianoRoll.tsx";
+import { FOLLOW_PAGE_BARS } from "./roll-layout.ts";
 import { StaffView } from "./StaffView.tsx";
 import { useWorkbenchServices } from "./services.tsx";
 import { TransportBar } from "./TransportBar.tsx";
@@ -39,6 +50,7 @@ import {
 } from "./transport-math.ts";
 import { useAB } from "./use-ab.ts";
 import { useAnalysis } from "./use-analysis.ts";
+import { useLoopPlayback } from "./use-loop.ts";
 import { clampViews, isEarlyUnit, layoutFor, type MusicView, type ViewTab } from "./views.ts";
 
 export interface WorkbenchFeedback {
@@ -83,6 +95,26 @@ export interface WorkbenchProps {
   autoPlay?: boolean;
   /** Extra controls rendered at the end of the transport row. */
   toolbar?: ReactNode;
+  /**
+   * Names of the A/B sides when the target is not a grading target (Studio's "this version" against an
+   * earlier one). With these and no `feedback`, a plain A/B strip replaces the feedback panel.
+   */
+  abLabels?: { a: string; b: string };
+  /** Loop region and metronome (ux §7.10 `L`, `[`/`]`, `M`). Default on, except in the mini variant. */
+  loopControls?: boolean;
+  /** Long loops: the roll shows this many bars at a time and follows the playhead. Default 16; 0 = off. */
+  rollFollowBars?: number;
+  /**
+   * Follow the tutor's bar references (`[[bars 2-3]]` → `TUTOR_BARS_EVENT`): loop those bars here. For the one
+   * Workbench a surface writes in (Studio, the capstone, a lesson's Make). Default off.
+   */
+  tutorBars?: boolean;
+  /** The loop region changed (on/off or bars), e.g. to remember it. */
+  onLoopChange?(loop: { on: boolean; region: LoopRegion }): void;
+  /** Mutes to start with (a sketch's saved Band mutes). Read when the editor is created. */
+  initialMutes?: MuteMap;
+  /** The learner changed a mute or solo chip. */
+  onMutes?(mutes: MuteMap): void;
 }
 
 interface RunIssue {
@@ -122,7 +154,7 @@ export function Workbench(props: WorkbenchProps) {
   const [playing, setPlaying] = useState(false);
   const [busy, setBusy] = useState(false);
   const [playedCode, setPlayedCode] = useState<string | null>(null);
-  const [mutes, setMutes] = useState<MuteMap>(NO_MUTES);
+  const [mutes, setMutes] = useState<MuteMap>(props.initialMutes ?? NO_MUTES);
   const [practice, setPractice] = useState<PracticeTempo>(1);
   const [width, setWidth] = useState(1024);
   const [availHeight, setAvailHeight] = useState(Number.POSITIVE_INFINITY);
@@ -135,6 +167,11 @@ export function Workbench(props: WorkbenchProps) {
   const variant = props.variant ?? "full";
   const meter = METERS[props.lessonCtx.meter];
   const loopBars = props.lessonCtx.loopBars;
+  const loopControls = (props.loopControls ?? true) && variant !== "mini";
+  const [loopOn, setLoopOn] = useState(false);
+  const [regionRaw, setRegion] = useState<LoopRegion>(() => defaultRegion(loopBars));
+  const region = clampRegion(regionRaw, loopBars);
+  const [metronomeOn, setMetronomeOn] = useState(false);
   const staffKind: StaffKind = props.staff?.kind ?? "auto";
 
   const views = useMemo(() => {
@@ -226,6 +263,9 @@ export function Workbench(props: WorkbenchProps) {
           analysis.analyzeNow(outcome.code);
           if (outcome.cps !== null && practiceRef.current !== 1)
             oak.transport.setCps(outcome.cps * practiceRef.current);
+          // A Run while the loop region is on: the new code takes over the loop (the editor itself
+          // started playing; the loop player replaces it).
+          if (loopOnRef.current) setTimeout(() => loopRef.current.handOver(outcome.code), 0);
         }
         propsRef.current.onEvaluated?.(outcome);
       },
@@ -244,6 +284,7 @@ export function Workbench(props: WorkbenchProps) {
     };
     if (p.readOnly !== undefined) opts.readOnly = p.readOnly;
     const h = oak.createEditor(el, opts);
+    if (p.initialMutes) h.setMutes(p.initialMutes);
     setHandle(h);
     if (p.autoPlay) {
       void oak.unlock().then(() => {
@@ -313,27 +354,104 @@ export function Workbench(props: WorkbenchProps) {
     cps: model?.cps ?? 0.5,
   });
 
+  // --- loop region and metronome (ux §3.4, §7.10) ------------------------------------------------
+  const loop = useLoopPlayback({
+    oak,
+    handle,
+    clock,
+    onPosition: (position) => {
+      const m = playedModel.current ?? modelRef.current;
+      if (m) bus.setPlaying(activeAt(m, position));
+    },
+    onStopped: () => bus.setPlaying([]),
+    lint: props.lint,
+    loopBars,
+    band: props.band ?? null,
+    mutes,
+    region,
+    rate: practice,
+  });
+  const loopOnRef = useRef(loopOn);
+  loopOnRef.current = loopOn;
+  const loopRef = useRef({
+    handOver: (_code: string) => {},
+  });
+  loopRef.current.handOver = (code: string) => {
+    if (!loopOnRef.current || !handle || handle.disposed) return;
+    if (handle.playing || loop.playing) void loop.start(code);
+  };
+  const anyPlaying = playing || loop.playing;
+
+  const metronome = useMemo(() => new Metronome(oak, meter), [oak, meter]);
+  useEffect(() => {
+    if (metronomeOn) metronome.start();
+    else metronome.stop();
+    return () => metronome.stop();
+  }, [metronome, metronomeOn]);
+
+  const reportLoop = (on: boolean, r: LoopRegion) => propsRef.current.onLoopChange?.({ on, region: r });
+  const toggleLoop = () => {
+    const on = !loopOn;
+    setLoopOn(on);
+    reportLoop(on, region);
+    if (!handle || handle.disposed) return;
+    if (on && handle.playing) void loop.start(handle.getCode());
+    else if (!on && loop.playing) {
+      loop.stop();
+      void handle.play();
+    }
+  };
+  const stepLoop = (step: RegionStep) => {
+    const next = stepRegion(region, step, loopBars);
+    setRegion(next);
+    reportLoop(loopOn, next);
+  };
+  const canStep = (step: RegionStep) => {
+    const next = stepRegion(region, step, loopBars);
+    return next.from !== region.from || next.bars !== region.bars;
+  };
+  // The tutor's bar references loop those bars (1-based, inclusive) in this Workbench.
+  const tutorBars = props.tutorBars === true && loopControls;
+  useEffect(() => {
+    if (!tutorBars) return;
+    const onBars = (e: Event) => {
+      const d = (e as CustomEvent<{ from: number; to: number }>).detail;
+      if (!d || !Number.isFinite(d.from) || !Number.isFinite(d.to)) return;
+      const next = clampRegion({ from: d.from - 1, bars: d.to - d.from + 1 }, loopBars);
+      setRegion(next);
+      setLoopOn(true);
+      propsRef.current.onLoopChange?.({ on: true, region: next });
+      if (handle && !handle.disposed && handle.playing) void loop.start(handle.getCode());
+    };
+    window.addEventListener(TUTOR_BARS_EVENT, onBars);
+    return () => window.removeEventListener(TUTOR_BARS_EVENT, onBars);
+  });
+
   const onToggle = useCallback(async () => {
     if (!handle) return;
     if (ab?.active) ab.stop();
     setBusy(true);
     try {
       await oak.unlock();
-      if (handle.playing) handle.stop();
+      if (loop.playing) loop.stop();
+      else if (handle.playing) handle.stop();
+      else if (loopOn) await loop.start(handle.getCode());
       else await handle.play();
     } finally {
       setBusy(false);
     }
-  }, [handle, oak, ab]);
+  }, [handle, oak, ab, loop, loopOn]);
 
   const applyMutes = (next: MuteMap) => {
     setMutes(next);
     handle?.setMutes(next);
+    propsRef.current.onMutes?.(next);
   };
   const onPracticeTempo = () => {
     const next = nextPracticeTempo(practice);
     setPractice(next);
     if (playing && model) oak.transport.setCps(model.cps * next);
+    // While looping, the player's rate follows (use-loop.ts).
   };
 
   const audition = useCallback(
@@ -428,6 +546,34 @@ export function Workbench(props: WorkbenchProps) {
         }
       }
     }
+    // Loop region and metronome (ux §7.10): L, [ ], Shift+[ Shift+], M. Not in text fields.
+    const textField = target.closest?.("input, select, textarea, [contenteditable]");
+    if (loopControls && !typing && !textField && !ev.repeat) {
+      const code = ev.code;
+      const bracket =
+        code === "BracketLeft" || ev.key === "[" || ev.key === "{"
+          ? "left"
+          : code === "BracketRight" || ev.key === "]" || ev.key === "}"
+            ? "right"
+            : null;
+      if (k === "l" && !ev.shiftKey) {
+        ev.preventDefault();
+        toggleLoop();
+        return;
+      }
+      if (k === "m" && !ev.shiftKey) {
+        ev.preventDefault();
+        setMetronomeOn((on) => !on);
+        return;
+      }
+      if (bracket) {
+        ev.preventDefault();
+        stepLoop(
+          bracket === "left" ? (ev.shiftKey ? "earlier" : "shrink") : ev.shiftKey ? "later" : "extend",
+        );
+        return;
+      }
+    }
     if (k === "k" && !typing && showKeyboard) {
       setTyping(true);
       ev.preventDefault();
@@ -460,7 +606,7 @@ export function Workbench(props: WorkbenchProps) {
     if (midi !== null) setPressed((p) => new Set([...p].filter((m) => m !== midi)));
   };
 
-  const stale = !playing || (model !== null && model.code !== playedCode);
+  const stale = !anyPlaying || (model !== null && model.code !== playedCode);
   const evalError = analysis.error && analysis.errorCode === code ? analysis.error : null;
   // The Run's own error wins (it is what Strudel said); otherwise the static analysis's, made friendly.
   const issue = runIssue && runIssue.code === code ? runIssue : null;
@@ -470,7 +616,11 @@ export function Workbench(props: WorkbenchProps) {
       : evalError
         ? evalError.kind === "timeout"
           ? { message: "That took too long — infinite loop or huge pattern?", detail: evalError.message }
-          : friendlyEvalError(evalError.message, code, evalError.pos ?? null)
+          : evalError.kind === "lint"
+            ? // Oak's own lint already speaks to the learner ("`stack` unlocks in U04.L03"); the Strudel-error
+              // rewording would misread a locked mini-notation operator as a typo.
+              { message: evalError.message, detail: evalError.message }
+            : friendlyEvalError(evalError.message, code, evalError.pos ?? null)
         : null;
   const silent =
     !banner &&
@@ -496,6 +646,9 @@ export function Workbench(props: WorkbenchProps) {
           onAudition={(e) => e.midi !== null && audition(e.midi)}
           stale={stale}
           height={variant === "mini" ? 60 : 180}
+          {...(variant !== "mini" && (props.rollFollowBars ?? FOLLOW_PAGE_BARS) > 0
+            ? { followBars: props.rollFollowBars ?? FOLLOW_PAGE_BARS }
+            : {})}
         />
       );
     if (v === "staff") return <StaffView model={model} bus={bus} stale={stale} />;
@@ -509,7 +662,10 @@ export function Workbench(props: WorkbenchProps) {
       className={`oak-workbench oak-workbench--${variant} oak-layout--${layout}`}
       data-testid="workbench"
       data-editor-id={id}
-      data-playing={playing ? "1" : "0"}
+      data-playing={anyPlaying ? "1" : "0"}
+      data-loop={loopOn ? `${region.from + 1}-${region.from + region.bars}` : undefined}
+      data-looping={loop.playing ? "1" : "0"}
+      data-metronome={metronomeOn ? "1" : "0"}
       data-analysis={analysis.pending ? "pending" : model ? "ready" : "none"}
       // Focusable (not a tab stop) so a click on the roll or the staff gives the workbench its keys.
       tabIndex={-1}
@@ -520,7 +676,7 @@ export function Workbench(props: WorkbenchProps) {
         <div ref={editorRoot} className="oak-editor-root" data-testid="editor-root" />
       </div>
       <TransportBar
-        playing={playing}
+        playing={anyPlaying}
         busy={busy || !handle}
         onToggle={() => void onToggle()}
         clock={clock}
@@ -536,6 +692,23 @@ export function Workbench(props: WorkbenchProps) {
         practiceTempo={practice}
         onPracticeTempo={onPracticeTempo}
         readOnly={props.readOnly === true}
+        {...(loopControls
+          ? {
+              loop: {
+                on: loopOn,
+                label: regionLabel(region),
+                onToggle: toggleLoop,
+                onStep: stepLoop,
+                can: {
+                  shrink: canStep("shrink"),
+                  extend: canStep("extend"),
+                  earlier: canStep("earlier"),
+                  later: canStep("later"),
+                },
+              },
+              metronome: { on: metronomeOn, onToggle: () => setMetronomeOn((on) => !on) },
+            }
+          : {})}
       />
       {props.toolbar ? <div className="oak-wb-toolbar">{props.toolbar}</div> : null}
       {banner ? (
@@ -544,7 +717,7 @@ export function Workbench(props: WorkbenchProps) {
             <strong>Code didn't run.</strong> {banner.message}
             {model ? (
               <span className="oak-muted">
-                {playing
+                {anyPlaying
                   ? " The last version that ran keeps playing."
                   : " Showing the last version that ran."}
               </span>
@@ -589,13 +762,16 @@ export function Workbench(props: WorkbenchProps) {
               aria-labelledby={`${tabIds}-${activeTab}`}
               className="oak-tabpanel"
             >
-              {activeTab === "both"
+              {activeTab === "both" && model
                 ? musicViews.map((v) => <div key={v}>{renderView(v)}</div>)
-                : renderView(activeTab)}
+                : renderView(activeTab === "both" ? "roll" : activeTab)}
             </div>
           </>
-        ) : (
+        ) : model ? (
           musicViews.map((v) => <div key={v}>{renderView(v)}</div>)
+        ) : (
+          // Nothing to draw yet: one line, not one per view side by side.
+          <div>{renderView(musicViews[0] ?? "roll")}</div>
         )}
         {showKeyboard ? (
           <Keyboard
@@ -608,7 +784,11 @@ export function Workbench(props: WorkbenchProps) {
           />
         ) : null}
       </div>
-      {variant !== "mini" && (fb || props.target) ? (
+      {variant !== "mini" && !fb && props.target && props.abLabels ? (
+        ab ? (
+          <ABStrip ab={ab} labels={props.abLabels} />
+        ) : null
+      ) : variant !== "mini" && (fb || props.target) ? (
         <FeedbackPanel
           result={fb?.result ?? null}
           rung={fb?.rung ?? 0}
@@ -623,5 +803,50 @@ export function Workbench(props: WorkbenchProps) {
         />
       ) : null}
     </div>
+  );
+}
+
+/** A/B outside grading (Studio: this version against an earlier one): two sides, the side that plays now. */
+function ABStrip({
+  ab,
+  labels,
+}: {
+  ab: NonNullable<ReturnType<typeof useAB>>;
+  labels: { a: string; b: string };
+}) {
+  return (
+    <section className="oak-ab-strip" aria-label="Compare versions" data-testid="ab-controls">
+      <button
+        type="button"
+        className="oak-ab-btn"
+        aria-pressed={ab.active === "A"}
+        onClick={ab.playA}
+        data-testid="ab-a"
+      >
+        A · {labels.a}
+        {ab.pendingSide === "A" ? " …" : ""}
+      </button>
+      <button
+        type="button"
+        className="oak-ab-btn"
+        aria-pressed={ab.active === "B"}
+        onClick={ab.playB}
+        data-testid="ab-b"
+      >
+        B · {labels.b}
+        {ab.pendingSide === "B" ? " …" : ""}
+      </button>
+      {ab.active ? (
+        <span className="oak-muted" data-testid="ab-now" aria-live="polite">
+          Now playing {ab.active === "A" ? `A · ${labels.a}` : `B · ${labels.b}`}
+          {" · "}
+          <button type="button" className="oak-ab-btn" onClick={ab.stop}>
+            Stop
+          </button>
+        </span>
+      ) : (
+        <span className="oak-muted">Switches on the next bar line. Keys: A and B.</span>
+      )}
+    </section>
   );
 }

@@ -5,7 +5,7 @@ import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 
-/** The MDX component set (architecture §3.3, plus `OnPass` from AUTHORING §8). */
+/** The MDX component set (architecture §3.3, plus `OnPass` from AUTHORING §9). */
 export const MDX_COMPONENTS = {
   Step: { required: ["id"], refs: { id: "step" } },
   Example: { required: ["id"], refs: { id: "example" }, optional: ["views", "autoplay"] },
@@ -21,8 +21,9 @@ export const MDX_COMPONENTS = {
   Staff: { required: ["example"], refs: { example: "example" } },
   PianoRoll: { required: ["example"], refs: { example: "example" } },
   LeadSheet: { required: ["example"], refs: { example: "example" } },
-  Keyboard: { required: [], refs: {}, optional: ["notes", "degrees", "key"], oneOf: ["notes", "degrees"] },
-  Degrees: { required: ["key", "show"], refs: { key: "key" } },
+  /** `scale`, not `key`: React keeps `key` for itself, so a `key` prop never reaches the component. */
+  Keyboard: { required: [], refs: {}, optional: ["notes", "degrees", "scale"], oneOf: ["notes", "degrees"] },
+  Degrees: { required: ["scale", "show"], refs: { scale: "key" } },
   Compare: { required: ["a", "b"], refs: { a: "example", b: "example" } },
   Term: { required: ["id"], refs: { id: "term" } },
   CodeRef: { required: ["fn"], refs: { fn: "fn" } },
@@ -31,6 +32,16 @@ export const MDX_COMPONENTS = {
   CanDo: { required: ["id"], refs: { id: "cando" } },
   Recap: { required: [], refs: {} },
   OnPass: { required: [], refs: {} },
+  /**
+   * U00.L02 only: mounts one screen of the audio and voice setup (ux §4.7) inside a `concept` step. The
+   * screen stores its result in the learner profile; the step completes when the screen does (or is
+   * skipped, for everything but headphones).
+   */
+  Setup: {
+    required: ["part"],
+    refs: {},
+    enums: { part: ["headphones", "mic", "noise", "bleed", "tap-latency", "sing-latency", "range"] },
+  },
 } as const satisfies Record<
   string,
   {
@@ -172,11 +183,11 @@ export function checkMdx(parsed: ParsedMdx, refs: MdxRefs): MdxIssue[] {
           message: `<${el.name} ${prop}="${value}">: no such ${kind}`,
         });
     }
-    if (el.name === "Keyboard" && typeof el.props.key === "string" && !KEY_RE.test(el.props.key))
+    if (el.name === "Keyboard" && typeof el.props.scale === "string" && !KEY_RE.test(el.props.scale))
       issues.push({
         line: el.line,
         rule: "mdx.unknown-ref",
-        message: `<Keyboard key="${el.props.key}">: not a key`,
+        message: `<Keyboard scale="${el.props.scale}">: not a key`,
       });
   }
   const mdxSteps = new Set(parsed.steps);

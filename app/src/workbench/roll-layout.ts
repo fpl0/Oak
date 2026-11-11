@@ -304,3 +304,30 @@ export function playheadCycle(audibleCycle: number, bars: number): number {
   if (bars <= 0 || !Number.isFinite(audibleCycle)) return 0;
   return ((audibleCycle % bars) + bars) % bars;
 }
+
+/** Default page length of a following roll: longer loops are shown this many bars at a time. */
+export const FOLLOW_PAGE_BARS = 16;
+
+/**
+ * The window of a roll that follows the playhead on a long loop (a page of `pageBars` bars instead of the
+ * whole loop squeezed into the panel). `content` is the zoom-to-content window `[from, to)`; returns null
+ * when it already fits. Pages turn at whole pages so the notes never slide: while playing, the page holds the
+ * playhead; while stopped, the page the learner chose (clamped). Every page has the same width, so the last
+ * one starts early enough to end at `to`.
+ */
+export function followWindow(
+  content: [number, number],
+  pageBars: number,
+  at: { playhead: number | null; page: number },
+): { window: [number, number]; page: number; pages: number } | null {
+  const [from, to] = content;
+  const size = Math.max(1, Math.floor(pageBars));
+  if (to - from <= size) return null;
+  const pages = Math.ceil((to - from) / size);
+  const page =
+    at.playhead !== null && Number.isFinite(at.playhead)
+      ? Math.max(0, Math.min(pages - 1, Math.floor((at.playhead - from + 1e-9) / size)))
+      : Math.max(0, Math.min(pages - 1, Math.floor(at.page)));
+  const start = Math.min(from + page * size, to - size);
+  return { window: [start, size], page, pages };
+}

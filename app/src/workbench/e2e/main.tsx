@@ -2,6 +2,7 @@
 // adapter and grader host (standalone-services.ts). Served by ./vite.config.ts.
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { KeymapProvider } from "../../ui/keys/KeymapProvider.tsx";
 import { Playground } from "../dev/Playground.tsx";
 import "../index.ts";
 import { ServicesGate } from "../ServicesGate.tsx";
@@ -11,9 +12,12 @@ const root = document.getElementById("root");
 if (!root) throw new Error("#root missing");
 createRoot(root).render(
   <StrictMode>
-    <h1 style={{ fontSize: 18 }}>Oak workbench (e2e)</h1>
-    <ServicesGate load={() => standaloneServices()} auto>
-      <Playground />
-    </ServicesGate>
+    {/* The workbench lists its Wave 2 keys in the shortcut sheet through the app's keymap. */}
+    <KeymapProvider focusRoute={() => false}>
+      <h1 style={{ fontSize: 18 }}>Oak workbench (e2e)</h1>
+      <ServicesGate load={() => standaloneServices()} auto>
+        <Playground />
+      </ServicesGate>
+    </KeymapProvider>
   </StrictMode>,
 );

@@ -1,4 +1,4 @@
-// The per-lesson checks of AUTHORING §9.1, as one function both the validation suite
+// The per-lesson checks of AUTHORING §12.1, as one function both the validation suite
 // (content/validate/lessons.test.ts) and `bun run content:check <id>` run. Each check returns its issues;
 // an empty list is a pass. Grading and notation go through the adapters of ./harness.ts.
 import {
@@ -8,10 +8,11 @@ import {
   type LessonDef,
   type SessionId,
   stripMarkers,
+  type UnlockableId,
   unimplementedInLesson,
 } from "@oak/content-kit";
 import { exerciseCode } from "../../scripts/content/generate.ts";
-import { bandById } from "../bands/index.ts";
+import { bandById, bandMeter } from "../bands/index.ts";
 import { candoById } from "../candos.ts";
 import { catalogByName } from "../catalog/index.ts";
 import { familyById } from "../families.ts";
@@ -19,17 +20,32 @@ import { flavourById } from "../flavours.ts";
 import { registries } from "../index.ts";
 import type { LoadedLesson } from "../lib/load.bun.ts";
 import { checkMdx, parseMdx } from "../lib/mdx.ts";
+import { unitSpecs } from "../specs/index.ts";
 import { termById } from "../terms.ts";
 import { toolboxById } from "../toolbox.ts";
-import { BAD_LOG, evaluate, grade, lint, notateCode, SAMPLE_CONTEXT, unlockedFor } from "./harness.ts";
+import { lessonAuthoring } from "./authoring.ts";
+import {
+  BAD_LOG,
+  evaluate,
+  grade,
+  lint,
+  notateCode,
+  ONBOARDING_PREVIEW,
+  SAMPLE_CONTEXT,
+  unlockedFor,
+} from "./harness.ts";
 
 export interface CheckSection {
-  /** AUTHORING §9.1 numbering. */
+  /** AUTHORING §12.1 numbering. */
   n: number;
   name: string;
   issues: string[];
   /** Things no backend could decide yet (reported, never counted as a pass or a failure). */
   pending?: string[];
+  /** Advice: printed, never counted as a failure (a word that may be a later lesson's term, …). */
+  warnings?: string[];
+  /** Detail for `content:check --verbose` (every test's outcome and feedback). */
+  notes?: string[];
 }
 
 export const sessionOf = (l: LoadedLesson): SessionId => (l.sample ? SAMPLE_CONTEXT : l.def.id);
@@ -66,6 +82,16 @@ export function checkSchema(l: LoadedLesson): CheckSection {
   return { n: 1, name: "Schema and MDX", issues };
 }
 
+/** Toolbox IDs a rubric names: `uses` tools and `sounds` rules' sound IDs (both are toolbox rows). */
+export function rubricToolIds(e: object): string[] {
+  const rubric = "rubric" in e && Array.isArray(e.rubric) ? (e.rubric as Record<string, unknown>[]) : [];
+  return rubric.flatMap((r) => {
+    if (r.rule === "uses") return (Array.isArray(r.tool) ? r.tool : [r.tool]).map(String);
+    if (r.rule === "sounds") return (r.contains as string[] | undefined) ?? [];
+    return [];
+  });
+}
+
 export function checkIds(l: LoadedLesson): CheckSection {
   const def = l.def;
   const issues: string[] = [];
@@ -83,6 +109,8 @@ export function checkIds(l: LoadedLesson): CheckSection {
     for (const sk of e.skills)
       if (!registries.skills.some((x) => x.id === sk.skill.split("/")[0]))
         issues.push(`${step.id}/${e.id}: skill ${sk.skill}`);
+    for (const id of rubricToolIds(e))
+      if (!toolboxById.has(id)) issues.push(`${step.id}/${e.id}: no tool ${id}`);
   }
   // A real lesson may not use what the platform does not implement (contracts IMPLEMENTED); the gate
   // sample uses every kind on purpose, so for it these are reported, not failed.
@@ -120,23 +148,30 @@ export function checkLint(l: LoadedLesson): CheckSection {
         session,
         meter: def.meter,
         key: def.key,
-        allowPreview: Boolean(s.example.preview),
+        allowPreview: Boolean(s.example.preview) || ONBOARDING_PREVIEW.has(def.id),
       }).diagnostics)
         if (d.severity === "error") issues.push(`${s.id}@${s.example.id}:${d.line} ${d.id}: ${d.message}`);
     for (const e of s.exercise ? flattenExercise(s.exercise) : []) {
       for (const c of exerciseCode(e)) {
         if (c.what.startsWith("test:")) continue; // wrong variants may be wrong
-        for (const d of lint(c.code, { session, meter: e.meter ?? def.meter, key: e.key ?? def.key })
-          .diagnostics)
+        for (const d of lint(c.code, {
+          session,
+          meter: e.meter ?? def.meter,
+          key: e.key ?? def.key,
+          allowPreview: ONBOARDING_PREVIEW.has(def.id),
+        }).diagnostics)
           if (d.severity === "error")
             issues.push(`${s.id}/${e.id}#${c.what}:${d.line} ${d.id}: ${d.message}`);
       }
+      // Every rule that names a tool or a sound, required or a suggestion: a suggestion the learner can only
+      // meet with a locked tool would be refused by the Make's own lint.
       for (const rule of "rubric" in e ? e.rubric : [])
-        if (rule.required && rule.rule === "uses")
-          for (const t of Array.isArray(rule.tool) ? rule.tool : [rule.tool])
-            if (!toolboxById.has(t)) issues.push(`${s.id}/${e.id}/${rule.id}: no tool ${t}`);
-            else if (!unlocked.has(t))
-              issues.push(`${s.id}/${e.id}/${rule.id}: the required ${t} is locked here`);
+        for (const t of rubricToolIds({ rubric: [rule] }))
+          if (!toolboxById.has(t)) issues.push(`${s.id}/${e.id}/${rule.id}: no tool ${t}`);
+          else if (!unlocked.has(t as UnlockableId))
+            issues.push(
+              `${s.id}/${e.id}/${rule.id}: ${rule.required ? "the required" : "the suggested"} ${t} is locked here`,
+            );
     }
   }
   for (const [f, swap] of Object.entries(def.flavours ?? {}))
@@ -174,6 +209,7 @@ export async function checkGrading(l: LoadedLesson): Promise<CheckSection> {
   const session = sessionOf(l);
   const issues: string[] = [];
   const pending: string[] = [];
+  const notes: string[] = [];
   for (const { step, e } of exercisesOf(def)) {
     for (const t of e.tests) {
       const r = await grade(e as Exercise, t, def, session);
@@ -181,6 +217,7 @@ export async function checkGrading(l: LoadedLesson): Promise<CheckSection> {
         pending.push(`${step.id}/${e.id}/${t.name}: ${r.note}`);
         continue;
       }
+      notes.push(describeOutcome(`${step.id}/${e.id}/${t.name}`, t.expect, r));
       const ok = t.expect === "pass" ? r.passed : !r.passed;
       if (!ok)
         issues.push(
@@ -204,7 +241,17 @@ export async function checkGrading(l: LoadedLesson): Promise<CheckSection> {
         if (r.decided && !r.passed) issues.push(`${step.id}/${e.id}: reference solution ${i} does not pass`);
       }
   }
-  return { n: 7, name: "Grading", issues, pending };
+  return { n: 7, name: "Grading", issues, pending, notes };
+}
+
+/** One line per graded test for `--verbose`: what was expected, what the grader said, what the learner reads. */
+export function describeOutcome(
+  where: string,
+  expect: string,
+  r: { passed: boolean; score: number; feedback: string[]; messages?: string[] },
+): string {
+  const said = (r.messages ?? []).filter(Boolean).join(" / ");
+  return `${where}: expect ${expect}, got ${r.passed ? "pass" : "fail"} ${r.score.toFixed(2)} [${r.feedback.join(", ")}]${said ? `  "${said}"` : ""}`;
 }
 
 export function checkHints(l: LoadedLesson): CheckSection {
@@ -228,7 +275,7 @@ export async function checkNotation(l: LoadedLesson): Promise<CheckSection> {
   const pending: string[] = [];
   for (const s of def.steps) {
     if (!s.example || s.ui.panels.staff === false) continue;
-    const n = await notateCode(s.example.code, def.meter, def.key, s.example.bars);
+    const n = await notateCode(s.example.code, def.meter, def.key, s.example.bars, s.ui.panels.staff);
     if (n.error) issues.push(`${s.id}@${s.example.id}: ${n.error}`);
     else {
       if (n.approximate) issues.push(`${s.id}@${s.example.id}: renders approximately`);
@@ -272,8 +319,13 @@ export function checkMake(l: LoadedLesson): CheckSection {
   const ex = make?.exercise;
   if (ex?.kind === "code-make" && ex.rubric.filter((r) => r.required).length !== 1)
     issues.push("a lesson Make has exactly one required rule");
-  if ((!l.def.id.startsWith("U00") || l.sample) && !make?.ui.band)
+  if ((!l.def.id.startsWith("U00") || l.sample) && !make?.ui.band && make?.ui.band !== false)
     issues.push("from U01 every Make declares a Band (ui.band)");
+  for (const s of l.def.steps)
+    if (s.ui.band && bandMeter(s.ui.band.band) !== l.def.meter)
+      issues.push(
+        `${s.id}: ${s.ui.band.band} is written in ${bandMeter(s.ui.band.band)}; this lesson is in ${l.def.meter}`,
+      );
   return { n: 12, name: "Make", issues };
 }
 
@@ -292,7 +344,42 @@ export function checkTheory(l: LoadedLesson): CheckSection {
   return { n: 13, name: "Theory", issues };
 }
 
-/** All checks in AUTHORING §9.1 order. */
+/** AUTHORING §5, §7, §9: voice, terms, test shape (content/validate/authoring.ts). */
+export function checkAuthoring(l: LoadedLesson): CheckSection {
+  const r = lessonAuthoring(l.def, l.mdxSource, l.sample);
+  return {
+    n: 14,
+    name: "Voice, terms and test shape",
+    issues: r.issues,
+    warnings: [...r.warnings, ...specDrift(l.def)],
+  };
+}
+
+/** Where an authored lesson departs from its unit spec (content/specs): advice, since a spec can be wrong. */
+export function specDrift(def: LessonDef): string[] {
+  const spec = unitSpecs.flatMap((u) => u.lessons).find((x) => x.id === def.id);
+  if (!spec) return [];
+  const out: string[] = [];
+  const specTerms = spec.steps.flatMap((s) =>
+    s.term === undefined ? [] : Array.isArray(s.term) ? s.term : [s.term],
+  );
+  const terms = def.terms.map((t) => t.id as string);
+  if ([...specTerms].sort().join() !== [...terms].sort().join())
+    out.push(`spec: terms [${specTerms.join(" ")}], lesson: [${terms.join(" ")}]`);
+  for (const c of spec.canDo) if (!def.canDo.includes(c)) out.push(`spec: can-do ${c} is missing`);
+  const make = def.steps[def.steps.length - 1];
+  const band = make?.ui.band === undefined ? undefined : make.ui.band === false ? false : make.ui.band.band;
+  if (band !== spec.make.band)
+    out.push(`spec: the Make's Band is ${String(spec.make.band)}, lesson: ${String(band)}`);
+  const ex = make?.exercise;
+  const req = ex?.kind === "code-make" ? ex.rubric.find((r) => r.required)?.rule : undefined;
+  if (req && req !== spec.make.required.rule)
+    out.push(`spec: the Make's required rule is \`${spec.make.required.rule}\`, lesson: \`${req}\``);
+  if (def.meter !== spec.meter) out.push(`spec: meter ${spec.meter}, lesson: ${def.meter}`);
+  return out;
+}
+
+/** All checks in AUTHORING §12.1 order. */
 export async function checkLesson(l: LoadedLesson): Promise<CheckSection[]> {
   return [
     checkSchema(l),
@@ -307,5 +394,6 @@ export async function checkLesson(l: LoadedLesson): Promise<CheckSection[]> {
     checkBudget(l),
     checkMake(l),
     checkTheory(l),
+    checkAuthoring(l),
   ];
 }

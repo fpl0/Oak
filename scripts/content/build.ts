@@ -1,14 +1,19 @@
-// `bun run content:build [--watch]`: regenerates content/.generated/ from the content sources and updates
-// the ID ledger content/ids.lock.json (contracts §1.1). Exits 1 when a source fails to load or a locked
-// ID disappeared. --watch rebuilds in a fresh process on every change (module caches stay clean).
+// `bun run content:build [--watch] [--out <dir>] [--no-lock]`: regenerates content/.generated/ from the
+// content sources and updates the ID ledger content/ids.lock.json (contracts §1.1). Exits 1 when a source
+// fails to load or a locked ID disappeared. --watch rebuilds in a fresh process on every change (module
+// caches stay clean). Safe to run concurrently: every file is replaced atomically (generate.ts, writeTree).
 import { watch } from "node:fs";
 import { relative } from "node:path";
 import { CONTENT_ROOT } from "../../content/lib/load.bun.ts";
 import { generate } from "./generate.ts";
 
+const argv = process.argv.slice(2);
+const outIdx = argv.indexOf("--out");
+const outDir = outIdx >= 0 ? argv[outIdx + 1] : undefined;
+
 async function once(): Promise<boolean> {
   const t0 = performance.now();
-  const r = await generate();
+  const r = await generate({ ...(outDir ? { outDir } : {}), writeLock: !argv.includes("--no-lock") });
   for (const e of r.errors) console.error(`content:build: ${e}`);
   const ms = Math.round(performance.now() - t0);
   console.log(

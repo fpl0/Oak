@@ -378,6 +378,12 @@ export class SrsService {
     if (gapDays >= RETURN.warmupGap && s.smoothedOn !== day) {
       const overdue = this.dueItems(now, { ...s, deferUntil: {} });
       const spread = smoothBacklog(overdue, today, cfg);
+      // `smoothBacklog` places an item on the day its midpoint falls in, so a small backlog (two 60 s sets
+      // over 5 days) put nothing on the first day back: the return warm-up was empty. Shift the spread so
+      // it starts today, keeping its spacing (reported to @oak/srs).
+      const first = Math.min(...spread.values());
+      if (Number.isFinite(first) && first > today)
+        for (const [id, d] of spread) spread.set(id, d - (first - today));
       s.deferUntil = {};
       let last = today;
       for (const [id, d] of spread) {
@@ -498,8 +504,11 @@ export class SrsService {
    * relearning today, items with R below 0.60 wait for tomorrow (the Again cascade of contracts §7.9).
    */
   private offeredDue(now: Date, s: SrsWorkingState): ReviewItem[] {
-    const due = this.dueItems(now, s);
-    const backlog = s.backlogUntil !== null && dayIndex(s.backlogUntil) >= this.srs.dayOf(now);
+    // Repair-queue families (a failed checkpoint's skills, §7.6) are scheduled into the next warm-ups
+    // whether or not their card is due: the planner takes them right after the opener.
+    const today = this.srs.dayOf(now);
+    const due = this.reviewItems(now, s).filter((it) => it.dueDay <= today || it.repair);
+    const backlog = s.backlogUntil !== null && dayIndex(s.backlogUntil) >= today;
     return capRelearning(due, s.today.agains, backlog).keep;
   }
   /** A reviews-only day: the budget, then "a little more" blocks up to 12 minutes. */

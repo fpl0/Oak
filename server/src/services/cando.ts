@@ -21,7 +21,10 @@ export interface CanDoFacts {
 }
 
 export function canDoStatus(f: CanDoFacts): CanDoEntry["status"] | null {
-  if (!f.sourceDone && !f.anyEvidence) return null;
+  // A can-do is a claim about the learner ("I can transcribe a standard"): it first appears when its
+  // source (lesson, checkpoint, capstone) is done, never from stray evidence on a shared skill weeks
+  // before (cd.transcribe.standard showed as "emerging" after three lessons). Once shown it is never revoked.
+  if (!f.sourceDone && f.previous === null) return null;
   const wasSolid = f.previous === "solid" || f.previous === "strong" || f.previous === "fading";
   if ((wasSolid || f.solidDays >= 2) && f.freshness < SHADING.canDoFadingF) return "fading";
   if (f.solidDays >= 2 || wasSolid) {

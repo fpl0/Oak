@@ -1,0 +1,375 @@
+// U02.L06 Tones & Timbres. The same notes on different sounds: the piano and the four synth waves
+// (sine, triangle, square, sawtooth), which unlock here. Notes are names with octaves; `n()` and
+// `.scale()` wait for U03.L02. Synth waves are loud, so every wave line carries a gain of .4 to .6.
+// Spec: content/specs/U02.md.
+import { defineLesson, type HintLadder } from "@oak/content-kit";
+
+const BPM = 96;
+const TEMPO = `setcpm(${BPM}/4)\n\n`;
+/** One labelled line: notes, a sound, then a gain (waves need one; the piano gets the same for balance). */
+const line = (label: string, notes: string, sound: string, gain = ".5", extra = "") =>
+  `${label}: note("${notes}")${extra}.s("${sound}").gain(${gain})`;
+const code = (...lines: string[]) => `${TEMPO}${lines.join("\n")}`;
+
+const ladder = (nudge: string, pointer: string, partial: string): HintLadder => [
+  { text: nudge },
+  { text: pointer },
+  { text: partial },
+  "auto",
+];
+
+/** The Band carries drums, bass and chords; the learner's lines sit on top. */
+const BAND = { band: "band.two-chord-vamp" } as const;
+const ROLL = { roll: true, staff: false, keyboard: false } as const;
+const NONE = { roll: false, staff: false, keyboard: false } as const;
+
+const RIFF = "c4 e4 g4 e4";
+/** The hook: one riff handed from the piano to three synth waves, one bar each. */
+const HOOK = code(line("mel", RIFF, "<piano square sawtooth sine>"));
+
+/** Before U03.L02 the grader's melody feedback speaks in degrees; say it in places and letters instead. */
+const LETTER_FEEDBACK = {
+  "melody.octave":
+    "Bar {bar}, {beatLabel}: the right letter, but {dir} than the target. Check the octave number of each note.",
+  "melody.wrong-degree": "Bar {bar}, {beatLabel}: a different note from the one asked for.",
+  "melody.missing-note": "Bar {bar}, {beatLabel}: a note is missing here.",
+  "melody.extra-note": "Bar {bar}, {beatLabel}: one note too many here.",
+} as const;
+
+/** S4: four short lines, each on one sound. Different notes each time, so only the sound gives it away. */
+const TRIALS = [
+  { id: "trial-1", notes: "c4 e4 g4 e4", sound: "square" },
+  { id: "trial-2", notes: "g4 e4 d4 c4", sound: "piano" },
+  { id: "trial-3", notes: "e4 g4 c5 g4", sound: "sawtooth" },
+  { id: "trial-4", notes: "c5 g4 e4 c4", sound: "sine" },
+] as const;
+const SOUND_OPTIONS = [
+  { id: "piano", label: "Piano" },
+  { id: "sine", label: "Sine" },
+  { id: "square", label: "Square" },
+  { id: "sawtooth", label: "Sawtooth" },
+];
+const TRIAL_HINTS = ladder(
+  "Does the note start with a strike and fade away, or does it hold steady like an organ?",
+  "Of the steady ones: the sine is smooth like a whistle, the square is hollow, the sawtooth is the buzziest.",
+  "Only the piano fades while it holds. If it does not fade, decide between smooth, hollow and buzzy.",
+);
+
+const MAKE_STARTER = code(line("mel", "<[c4 e4 g4 e4] [f4 a4 g4 e4]>", "piano"));
+
+export default defineLesson({
+  id: "U02.L06",
+  version: 1,
+  title: "Tones & Timbres",
+  objective:
+    "I can play the same line on different instruments and synth waves, and double it on a second sound.",
+  key: { tonic: "C", mode: "major" },
+  meter: "4/4",
+  bpm: BPM,
+  introduces: [],
+  practises: ["D01"],
+  terms: [{ id: "term.waveform", step: "S3" }],
+  canDo: ["cd.code.timbre"],
+  wrapAt: "S4",
+  steps: [
+    {
+      id: "S1",
+      kind: "listen",
+      title: "One riff, four sounds",
+      minutes: 0.5,
+      ui: { panels: ROLL, rollLabels: "note", band: BAND },
+      example: { id: "hook", code: HOOK, bars: 4 },
+      exercise: {
+        kind: "listen",
+        id: "one-riff-four-sounds",
+        version: 1,
+        role: "practice",
+        prompt: "Press Play. The same four notes come round four times. Listen to what changes each time.",
+        skills: [{ skill: "D01", w: 1 }],
+        hints: null,
+        tests: [],
+        items: [{ code: HOOK, caption: "One riff over the band, on a new sound every bar.", bars: 4 }],
+      },
+    },
+    {
+      id: "S2",
+      kind: "compare",
+      title: "Same tune or not?",
+      minutes: 0.75,
+      ui: { panels: NONE },
+      exercise: {
+        kind: "identify",
+        id: "same-tune",
+        version: 1,
+        role: "practice",
+        prompt: "Two bars: the piano, then a synth. Do they play the same tune?",
+        skills: [{ skill: "D01", w: 1 }],
+        hints: ladder(
+          "Hum along with the first bar. Can you keep humming the same thing through the second?",
+          "Listen for the ups and downs, not the sound: do the notes climb and fall in the same places?",
+          "Both bars start low, climb twice, then drop back once.",
+        ),
+        stimulus: {
+          src: "code",
+          code: code(line("mel", RIFF, "<piano square>")),
+          bars: 2,
+          showCode: false,
+        },
+        cue: { context: "none", countInBars: 0, click: false, replays: -1 },
+        answer: {
+          ui: "choice",
+          options: [
+            { id: "same", label: "The same notes on two different sounds" },
+            { id: "different", label: "Two different tunes" },
+            { id: "louder", label: "The same sound, the second time louder" },
+          ],
+        },
+        correct: { choice: ["same"] },
+        // The catalog line names the option IDs; point back at the tune instead.
+        feedbackText: {
+          "id.wrong":
+            "Not quite. Hum along with the first bar and keep humming through the second: did the tune change, or only the sound?",
+        },
+        tests: [
+          { name: "same notes", response: { answer: { choice: ["same"] } }, expect: "pass" },
+          { name: "heard a new tune", response: { answer: { choice: ["different"] } }, expect: "fail" },
+        ],
+      },
+    },
+    {
+      id: "S3",
+      kind: "investigate",
+      title: "Try the synths",
+      minutes: 1,
+      ui: { panels: ROLL, rollLabels: "note" },
+      exercise: {
+        kind: "run-investigate",
+        id: "try-the-synths",
+        version: 1,
+        role: "practice",
+        prompt:
+          'Run it. Then replace `"piano"` with `"sine"`, `"square"`, `"sawtooth"` and `"triangle"` in turn, and run after each change.',
+        skills: [{ skill: "D01", w: 1 }],
+        feedbackText: {
+          "investigate.wrong":
+            "Not quite. Play `sine`, `square` and `sawtooth` one after the other: which is smoothest, and which buzzes most?",
+        },
+        hints: ladder(
+          "Which of the synths could you mistake for someone whistling, and which for an angry insect?",
+          "Only the word inside `.s(…)` changes. The roll stays the same, so the notes are the same.",
+          "The square sits between the two extremes: hollow, a little like a clarinet.",
+        ),
+        code: { starter: code(line("mel", RIFF, "piano")) },
+        mustPlayLoops: 1,
+        questions: [
+          {
+            q: "choice",
+            prompt: "Put three of them in order, from the purest to the buzziest.",
+            options: [
+              { id: "sine-first", label: "`sine`, `square`, `sawtooth`" },
+              { id: "saw-first", label: "`sawtooth`, `square`, `sine`" },
+              { id: "square-first", label: "`square`, `sine`, `sawtooth`" },
+            ],
+            correct: ["sine-first"],
+          },
+        ],
+        tests: [
+          { name: "sine to sawtooth", response: { answer: { choice: ["sine-first"] } }, expect: "pass" },
+          { name: "the wrong way round", response: { answer: { choice: ["saw-first"] } }, expect: "fail" },
+        ],
+      },
+    },
+    {
+      id: "S4",
+      kind: "ear",
+      title: "Name the sound",
+      minutes: 1.25,
+      graded: true,
+      ui: { panels: NONE },
+      exercise: {
+        kind: "all",
+        id: "name-the-sound",
+        version: 1,
+        role: "check",
+        prompt: "Four short lines, each on one sound. Which sound plays: piano, sine, square or sawtooth?",
+        skills: [{ skill: "D01", w: 1 }],
+        hints: TRIAL_HINTS,
+        tests: [],
+        parts: TRIALS.map((t) => ({
+          kind: "identify" as const,
+          id: t.id,
+          version: 1,
+          role: "check" as const,
+          prompt: "Which sound plays?",
+          skills: [{ skill: "D01", w: 1 }],
+          hints: TRIAL_HINTS,
+          stimulus: {
+            src: "code" as const,
+            code: code(line("mel", t.notes, t.sound)),
+            bars: 1,
+            showCode: false,
+          },
+          cue: { context: "none" as const, countInBars: 0 as const, click: false, replays: -1 },
+          answer: { ui: "choice" as const, options: SOUND_OPTIONS },
+          correct: { choice: [t.sound] },
+          feedbackText: {
+            "id.wrong":
+              "Not that one. Does the note fade like a struck string, or hold steady? If it holds: smooth, hollow or buzzy?",
+          },
+          tests: [
+            { name: t.sound, response: { answer: { choice: [t.sound] } }, expect: "pass" as const },
+            {
+              name: "another sound",
+              response: { answer: { choice: [t.sound === "piano" ? "sine" : "piano"] } },
+              expect: "fail" as const,
+            },
+          ],
+        })),
+      },
+    },
+    {
+      id: "S5",
+      kind: "modify",
+      title: "Double it up",
+      minutes: 1.25,
+      graded: true,
+      ui: { panels: ROLL, rollLabels: "note" },
+      exercise: {
+        kind: "code-modify",
+        id: "double-it-up",
+        version: 1,
+        role: "check",
+        prompt:
+          "Add a second line labelled `vox`, the label for a second lead line, that plays the same four notes **one octave higher** on a synth wave, with `.gain(.4)`. Keep the piano line as it is.",
+        skills: [{ skill: "D01", w: 1 }],
+        code: { starter: code(line("mel", RIFF, "piano"), "⟪⟫") },
+        reference: {
+          solutions: [code(line("mel", RIFF, "piano"), line("vox", "c5 e5 g5 e5", "triangle", ".4"))],
+          bars: 1,
+        },
+        matcher: { m: "events", pitch: "absolute", rhythm: "onsets", durations: false },
+        constraints: [{ c: "labels", min: 2, feedback: "code.labels" }],
+        target: { audible: true, showRoll: true },
+        feedbackText: LETTER_FEEDBACK,
+        hints: ladder(
+          "How do you tell Strudel about a second part that plays at the same time?",
+          "A new line with its own label plays alongside the first. The octave is the number after each letter.",
+          'The new line starts `vox: note("c5 …`. Finish the notes, then pick a synth with `.s(…)`.',
+        ),
+        tests: [
+          {
+            name: "reference",
+            response: {
+              code: code(line("mel", RIFF, "piano"), line("vox", "c5 e5 g5 e5", "triangle", ".4")),
+            },
+            expect: "pass",
+          },
+          {
+            name: "moved with transpose, on a square",
+            response: {
+              code: code(line("mel", RIFF, "piano"), line("vox", RIFF, "square", ".4", ".transpose(12)")),
+            },
+            expect: "pass",
+          },
+          {
+            name: "unchanged",
+            response: { code: code(line("mel", RIFF, "piano"), "") },
+            expect: "fail",
+            feedback: ["code.unchanged"],
+          },
+          {
+            name: "second line at the same height",
+            response: { code: code(line("mel", RIFF, "piano"), line("vox", RIFF, "sine", ".4")) },
+            expect: "fail",
+            feedback: ["melody.octave"],
+          },
+          {
+            name: "one line only, moved up",
+            response: { code: code(line("mel", "c5 e5 g5 e5", "sine", ".4")) },
+            expect: "fail",
+            feedback: ["code.labels"],
+          },
+        ],
+      },
+    },
+    {
+      id: "S6",
+      kind: "make",
+      title: "One line, two colours",
+      minutes: 2.75,
+      ui: { panels: ROLL, rollLabels: "note", band: BAND },
+      exercise: {
+        kind: "code-make",
+        id: "one-line-two-colours",
+        version: 1,
+        role: "practice",
+        prompt:
+          "Write a line over the band and play it on **two sounds at once**: a second labelled line that doubles it on another sound, at the same height or an octave apart.",
+        skills: [{ skill: "D01", w: 1 }],
+        code: { starter: MAKE_STARTER },
+        bars: [1, 4],
+        saveAs: "sketch",
+        rubric: [
+          {
+            id: "two-parts",
+            label: "Two pitched parts",
+            required: true,
+            skills: ["D01"],
+            rule: "tracks",
+            min: 2,
+            roles: ["melody"],
+          },
+          {
+            id: "space",
+            label: "Leaves some space with a rest",
+            required: false,
+            skills: ["R06"],
+            rule: "uses",
+            tool: "tb.mini.rest",
+          },
+          {
+            id: "octave-apart",
+            label: "The copy moved with `.transpose()`",
+            required: false,
+            skills: ["P06"],
+            rule: "uses",
+            tool: "tb.transpose",
+          },
+        ],
+        hints: ladder(
+          "How many lines does the starter have, and how many does the brief ask for?",
+          "Copy the `mel` line, label the copy `vox`, and change its sound.",
+          '`vox` with the same notes, `.s("sine")` and `.gain(.4)` is already enough. Then make it yours.',
+        ),
+        tests: [
+          {
+            name: "the starter as it is",
+            response: { code: MAKE_STARTER },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "minimal",
+            response: {
+              code: code(
+                line("mel", "<[c4 e4 g4 e4] [f4 a4 g4 e4]>", "piano"),
+                line("vox", "<[c4 e4 g4 e4] [f4 a4 g4 e4]>", "sine", ".4"),
+              ),
+            },
+            expect: "pass",
+          },
+          {
+            name: "beyond the brief",
+            response: {
+              code: code(
+                line("mel", "<[c4 e4 g4 ~] [f4 a4 c5 a4]>", "<piano sawtooth>"),
+                line("vox", "<[c4 e4 g4 ~] [f4 a4 c5 a4]>", "triangle", ".4", ".transpose(12)"),
+              ),
+            },
+            expect: "pass",
+          },
+        ],
+      },
+    },
+  ],
+});

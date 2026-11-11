@@ -2,12 +2,50 @@
 import { checkpointFromRouteParam, isCheckpointId } from "@oak/content-kit";
 import type { AppDeps } from "../deps.ts";
 import { ApiError } from "../errors.ts";
+import type { SessionStartRecord } from "../services/sessions.ts";
 import type { Mounter } from "./define.ts";
 
 /** `U07` (core route parameter) or the full ID (`U07.CP`, `J.CP1`). */
 function checkpointId(param: string): string {
   if (isCheckpointId(param)) return param;
   return checkpointFromRouteParam(param) ?? param;
+}
+
+/** All review due now, in seconds: the planner's estimate with no budget limit. */
+async function dueSecNow(d: AppDeps): Promise<number> {
+  const srs = d.srs();
+  if (srs === null) return 0;
+  return (await srs.due({ budgetSec: 86_400, more: false })).plannedSec;
+}
+
+/** Session telemetry at start (contracts §9.7): today's planned warm-up and the review due before it. */
+async function startRecord(d: AppDeps, targetMinutes: 15 | 20 | 25): Promise<SessionStartRecord | null> {
+  try {
+    const planner = d.planner();
+    const plan = planner === null ? null : await planner.today({ targetMinutes });
+    return {
+      warmupPlannedSec: plan?.warmup.plannedSec ?? 0,
+      warmupItems: plan?.warmup.items.length ?? 0,
+      dueSec: await dueSecNow(d),
+    };
+  } catch (e) {
+    d.log(`session telemetry at start: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
+}
+
+async function endMeasures(d: AppDeps): Promise<{ dueSecAfter: number; deferredCards: number } | null> {
+  try {
+    const deferred = d.repos.db
+      .query("SELECT COUNT(*) AS n FROM srs_cards WHERE status = 'deferred'")
+      .get() as {
+      n: number;
+    };
+    return { dueSecAfter: await dueSecNow(d), deferredCards: deferred.n };
+  } catch (e) {
+    d.log(`session telemetry at end: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
 }
 
 export function courseRoutes(mount: Mounter, d: AppDeps): void {
@@ -22,12 +60,14 @@ export function courseRoutes(mount: Mounter, d: AppDeps): void {
         : (Number(query.targetMinutes) as 15 | 20 | 25);
     return planner.today({ targetMinutes: target });
   });
-  mount("session.start", ({ body }) => s.sessions.start(body));
+  mount("session.start", async ({ body }) =>
+    s.sessions.start(body, await startRecord(d, body.targetMinutes)),
+  );
   mount("session.heartbeat", ({ params, body }) => {
     s.sessions.heartbeat(params.id, body);
     return { ok: true as const };
   });
-  mount("session.end", ({ params, body }) => s.sessions.end(params.id, body));
+  mount("session.end", async ({ params, body }) => s.sessions.end(params.id, body, await endMeasures(d)));
 
   mount("lessons.progress", () => s.gates.courseProgress());
   mount("steps.state", ({ params }) => s.course.stepState(params.id, params.stepId));
@@ -47,4 +87,10 @@ export function courseRoutes(mount: Mounter, d: AppDeps): void {
 
   mount("gym.start", ({ body }) => s.course.gymStart(body));
   mount("terms.introduced", () => ({ items: d.repos.terms.list() }));
+
+  // Wave 2 (docs/design/wave2.md §4).
+  mount("session.summary", ({ params }) => s.sessions.summary(params.id));
+  mount("lessons.steps", ({ params }) => s.course.lessonSteps(params.id));
+  mount("lessons.position", ({ params, body }) => s.course.position(params.id, body));
+  mount("capstones.release", ({ params, body }) => s.release.release(params.id, body));
 }

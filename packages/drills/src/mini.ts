@@ -1,10 +1,45 @@
 // A parser for the mini-notation subset the drills ask learners to write (rhythm dictation in code,
-// "Read it"): atoms, `~`, `[ ]`, `< >`, `,`, `@n`, `_`, `*n`, `!n`. It builds the same pattern model the
-// generators print, so a learner's string and the trial's events are compared on one semantics.
+// "Read it", the mini-notation drill): atoms, `~`, `[ ]`, `< >`, `,`, `@n`, `_`, `*n`, `!n`, Euclidean
+// rhythms `x(k,n,r)` and polymeter `{a b c}%n`. It builds the same pattern model the generators print
+// (Euclid and polymeter are expanded into sequences and alternations), so a learner's string and the
+// trial's events are compared on one semantics.
 import type { KeySpec, ScaleMode } from "@oak/content-kit";
 import { SCALE_MODES } from "@oak/content-kit";
 import { noteMidi, stepToMidi } from "./kernel.ts";
 import { alt, atom, type Node, query, rest, seq, stack } from "./pat.ts";
+
+/**
+ * Strudel's Euclidean rhythm (`bjork` in @strudel/core 1.2.6): `k` onsets spread over `n` steps, then
+ * every onset moved `r` steps later (wrapping round the bar), as `x(k,n,r)` plays. `true` = onset.
+ */
+export function euclid(k: number, n: number, r = 0): boolean[] {
+  if (n <= 0) return [];
+  const ons = Math.max(0, Math.min(k, n));
+  // Bjorklund by repeated pairing of the remainder groups.
+  let a: boolean[][] = Array.from({ length: ons }, () => [true]);
+  let b: boolean[][] = Array.from({ length: n - ons }, () => [false]);
+  while (b.length > 1 && a.length > 0) {
+    const pairs = Math.min(a.length, b.length);
+    const joined = Array.from({ length: pairs }, (_, i) => [...(a[i] as boolean[]), ...(b[i] as boolean[])]);
+    const restA = a.slice(pairs);
+    const restB = b.slice(pairs);
+    a = joined;
+    b = restA.length > 0 ? restA : restB;
+  }
+  const flat = [...a.flat(), ...b.flat()];
+  const rot = ((r % n) + n) % n;
+  return flat.map((_, i) => flat[(i - rot + n) % n] as boolean);
+}
+/** `{a b c}%steps` as cycles: an alternation of sequences that continues the items across bars. */
+function polymeterNode(items: readonly Node[], steps: number): Node {
+  const len = items.length;
+  const gcd = (x: number, y: number): number => (y === 0 ? x : gcd(y, x % y));
+  const cycles = len / gcd(len, steps);
+  const bars = Array.from({ length: cycles }, (_, c) =>
+    seq(Array.from({ length: steps }, (_, i) => items[(c * steps + i) % len] as Node)),
+  );
+  return bars.length === 1 ? (bars[0] as Node) : alt(bars);
+}
 
 export class MiniParseError extends Error {}
 
@@ -91,6 +126,20 @@ export function parseMini(text: string): Node {
       if (inner.t === "seq") throw new MiniParseError("`@` inside `< >` is not supported here");
       return alt([inner]);
     }
+    if (c === "{") {
+      i++;
+      const inner = sequence("}");
+      if (peek() !== "}") throw new MiniParseError("a `{` is not closed");
+      i++;
+      if (inner.t !== "seq" || inner.w) throw new MiniParseError("only `{a b c}%n` is supported here");
+      let steps = inner.items.length;
+      if (peek() === "%") {
+        i++;
+        steps = number();
+        if (!Number.isInteger(steps) || steps < 1) throw new MiniParseError("`%` takes a whole number");
+      }
+      return polymeterNode(inner.items, steps);
+    }
     if (c === "~") {
       i++;
       return rest;
@@ -98,7 +147,23 @@ export function parseMini(text: string): Node {
     const m = /^-?[A-Za-z0-9#.:]+/.exec(text.slice(i));
     if (!m) throw new MiniParseError(`unexpected "${c}" at ${i}`);
     i += m[0].length;
-    return atom(m[0]);
+    const word = m[0];
+    if (peek() === "(") {
+      // Euclid: x(k,n) or x(k,n,r).
+      const close = text.indexOf(")", i);
+      if (close < 0) throw new MiniParseError("a `(` is not closed");
+      const args = text
+        .slice(i + 1, close)
+        .split(",")
+        .map((x) => x.trim());
+      if (args.length < 2 || args.length > 3 || args.some((x) => !/^-?\d+$/.test(x)))
+        throw new MiniParseError("Euclid takes (pulses, steps) or (pulses, steps, rotation)");
+      i = close + 1;
+      const [k, n, r] = args.map(Number) as [number, number, number | undefined];
+      if (n < 1) throw new MiniParseError("Euclid needs at least one step");
+      return seq(euclid(k, n, r ?? 0).map((on) => (on ? atom(word) : rest)));
+    }
+    return atom(word);
   };
   const node = sequence("");
   if (i < text.length) throw new MiniParseError(`unexpected "${peek()}" at ${i}`);

@@ -6,8 +6,10 @@ import { ApiError } from "../errors.ts";
 import type { CourseService } from "../services/course.ts";
 import type { GatesService } from "../services/gates.ts";
 import type { StreakService } from "../services/streak.ts";
+import { MAX_RECENT_TERMS } from "../tutor/context.ts";
 import type { IntroducedTerms, ProgressSnapshot, Rung, StepState } from "../tutor/domain.ts";
 import type { ProgressPort } from "../tutor/ports.ts";
+import { localStepId } from "./lessons.ts";
 
 export class ProgressAdapter implements ProgressPort {
   constructor(
@@ -16,7 +18,8 @@ export class ProgressAdapter implements ProgressPort {
     private readonly d: { course: CourseService; gates: GatesService; streak: StreakService },
   ) {}
 
-  async stepState(lessonId: string, stepId: string): Promise<StepState> {
+  async stepState(lessonId: string, qualified: string): Promise<StepState> {
+    const stepId = localStepId(lessonId, qualified);
     const row = this.repos.lessons.stepState(lessonId, stepId);
     const step = this.content.stepDef(lessonId, stepId);
     const attempts = this.repos.lessons.attemptsOfStep(lessonId, stepId).filter((a) => !a.disputed);
@@ -40,7 +43,8 @@ export class ProgressAdapter implements ProgressPort {
     };
   }
 
-  async advanceHintRung(lessonId: string, stepId: string, max: Rung): Promise<Rung> {
+  async advanceHintRung(lessonId: string, qualified: string, max: Rung): Promise<Rung> {
+    const stepId = localStepId(lessonId, qualified);
     try {
       return this.d.course.hint(lessonId, stepId, { reveal: false, max, fromTutor: true }).rung;
     } catch (e) {
@@ -97,15 +101,19 @@ export class ProgressAdapter implements ProgressPort {
     };
   }
 
+  /**
+   * Contracts §10.8: the IDs (`term.pulse`) of the terms of completed lessons, as a count plus the 30 most
+   * recent. IDs, not display names: the markup guard badges `[[term:<id>]]` as a preview unless the ID is
+   * in this list, so names made every introduced term look unintroduced.
+   */
   async termsIntroduced(): Promise<IntroducedTerms> {
     const rows = this.repos.terms.list();
-    const names = new Map(this.content.source.terms.map((t) => [t.id as string, t.term]));
     return {
       count: rows.length,
       recent: [...rows]
         .reverse()
-        .slice(0, 20)
-        .map((r) => names.get(r.termId) ?? r.termId),
+        .slice(0, MAX_RECENT_TERMS)
+        .map((r) => r.termId as string),
     };
   }
 }

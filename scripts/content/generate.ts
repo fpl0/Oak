@@ -2,7 +2,16 @@
 // function of the sources: no timestamps, sorted keys, so two runs over the same tree are byte-identical.
 // Used by scripts/content/build.ts (CLI, --watch) and by content/validate/build.test.ts.
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, relative } from "node:path";
 import {
   type Exercise,
@@ -74,6 +83,7 @@ export function collectIds(lessons: readonly LoadedLesson[]): Record<string, str
     scale: R.toolbox.filter((t) => t.id.startsWith("scale.")).map((t) => t.id),
     chordFamily: R.toolbox.filter((t) => t.id.startsWith("chord.")).map((t) => t.id),
     canDo: R.candos.map((c) => c.id),
+    milestone: R.milestones.map((m) => m.id),
     term: R.terms.map((t) => t.id),
     song: R.repertoire.map((s) => s.id),
     flavour: R.flavours.map((f) => f.id),
@@ -103,6 +113,7 @@ const TYPE_NAMES: Record<string, string> = {
   scale: "ScaleId",
   chordFamily: "ChordFamilyId",
   canDo: "CanDoId",
+  milestone: "MilestoneId",
   term: "TermId",
   song: "SongId",
   flavour: "FlavourId",
@@ -134,15 +145,24 @@ export function idsModule(byKind: Record<string, string[]>): string {
 }
 
 /** Updates the ledger: new IDs are added; a locked ID missing from the sources is an error unless retired. */
+/**
+ * Units whose lessons have shipped to the learner. Their step, exercise and example IDs join the ledger
+ * (contracts §1.1 rule 4, §11.7 rule 1: attempts and step state are keyed by them, so they never change
+ * again). Lessons of later units are still being written, and their authors may rename those IDs freely
+ * until the unit is added here.
+ */
+export const RELEASED_UNITS: readonly string[] = ["U00", "U01", "U02"];
+const LESSON_SCOPED = ["step", "exercise", "example"];
+const released = (id: string) => RELEASED_UNITS.includes(id.slice(0, 3));
+
 export function updateLock(
   previous: LockEntry[],
   byKind: Record<string, string[]>,
 ): { lock: LockEntry[]; errors: string[] } {
-  const ledgerKinds = Object.keys(byKind).filter(
-    (k) => !["step", "exercise", "example", "track"].includes(k),
-  );
+  const ledgerKinds = Object.keys(byKind).filter((k) => k !== "track");
   const live = new Map<string, string>();
-  for (const k of ledgerKinds) for (const id of byKind[k] ?? []) live.set(id, k);
+  for (const k of ledgerKinds)
+    for (const id of byKind[k] ?? []) if (!LESSON_SCOPED.includes(k) || released(id)) live.set(id, k);
   const errors: string[] = [];
   const out = new Map<string, LockEntry>(previous.map((e) => [e.id, e]));
   for (const e of previous)
@@ -378,6 +398,9 @@ export async function generate(
         id: l.def.id,
         sample: l.sample,
         version: l.def.version,
+        // Contracts §11.7 rule 9: the hash `lessons.complete` records as `contentHash`. It covers the
+        // lesson's own two source files only, so editing another lesson never changes it.
+        hash: sha(`${readFileSync(l.file, "utf8")}\n\0\n${l.mdxSource ?? ""}`).slice(0, 16),
         file: relative(root, l.file),
         mdx: l.mdx ? relative(root, l.mdx) : null,
         steps: l.def.steps.map((s) => ({
@@ -453,13 +476,59 @@ export async function generate(
     defaultOrder: R.syllabus.defaultOrder,
   });
 
-  if (existsSync(outDir)) rmSync(outDir, { recursive: true, force: true });
-  for (const [name, body] of Object.entries(files)) {
-    const p = join(outDir, name);
-    mkdirSync(dirname(p), { recursive: true });
-    writeFileSync(p, body);
-  }
+  writeTree(outDir, files);
   if (opts.writeLock !== false && lockErrors.length === 0)
-    writeFileSync(lockFile, json({ version: 1, ids: lock }));
+    atomicWrite(lockFile, json({ version: 1, ids: lock }));
   return { outDir, files: Object.keys(files).sort(), contentVersion, errors, lock };
+}
+
+// --- writing ------------------------------------------------------------------------------------
+// Several authors run `content:build` (and the dev server's `--watch`) at the same time, and the app,
+// the server and the tutor read content/.generated while they do. So the output directory is never
+// emptied: every file is written to a temporary sibling and renamed over the old one (rename is atomic
+// on one file system), unchanged files are not touched (no spurious watcher events), and files the build
+// no longer produces are removed only after the new ones are in place. Two concurrent builds over the
+// same sources write byte-identical files, so their interleaving cannot corrupt anything.
+
+let tmpCounter = 0;
+/** Writes `body` to `file` atomically; skips the write when the content is already identical. */
+export function atomicWrite(file: string, body: string): boolean {
+  if (existsSync(file) && readFileSync(file, "utf8") === body) return false;
+  mkdirSync(dirname(file), { recursive: true });
+  const tmp = join(dirname(file), `.${file.split(/[\\/]/).pop()}.tmp-${process.pid}-${tmpCounter++}`);
+  writeFileSync(tmp, body);
+  try {
+    renameSync(tmp, file);
+  } catch (e) {
+    rmSync(tmp, { force: true });
+    throw e;
+  }
+  return true;
+}
+
+function listFiles(dir: string, base = dir, out: string[] = []): string[] {
+  if (!existsSync(dir)) return out;
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name);
+    let dirent: ReturnType<typeof statSync>;
+    try {
+      dirent = statSync(p);
+    } catch {
+      continue; // renamed or removed by a concurrent build between readdir and stat
+    }
+    if (dirent.isDirectory()) listFiles(p, base, out);
+    else out.push(relative(base, p).split(/[\\/]/).join("/"));
+  }
+  return out;
+}
+
+/** Makes `outDir` hold exactly `files`, without ever leaving a file missing or half-written. */
+export function writeTree(outDir: string, files: Record<string, string>): void {
+  for (const [name, body] of Object.entries(files)) atomicWrite(join(outDir, name), body);
+  for (const name of listFiles(outDir)) {
+    if (name in files) continue;
+    // Another build's temporary file: leave it to that build.
+    if (/(^|\/)\.[^/]+\.tmp-\d+-\d+$/.test(name)) continue;
+    rmSync(join(outDir, name), { force: true });
+  }
 }

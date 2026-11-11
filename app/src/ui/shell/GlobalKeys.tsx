@@ -1,5 +1,6 @@
 // Global shortcuts (ux §7.10, contracts §11.9), the navigation and action commands of the palette, and the
 // shortcut sheet (`?`).
+
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useMemo } from "react";
 import type { Command } from "../../lib/commands.ts";
@@ -8,6 +9,7 @@ import { NAV_ITEMS, SETTINGS_SECTIONS } from "../../lib/nav.ts";
 import { stopAllAudio } from "../../lib/oak.ts";
 import { useBootstrap } from "../../lib/queries.ts";
 import { useShell } from "../../lib/shell-store.ts";
+import { WORKBENCH_LOOP_SHORTCUTS } from "../../workbench/shortcuts.ts";
 import { IS_MAC, useHotkeys, useKeymap } from "../keys/KeymapProvider.tsx";
 import { type Binding, formatKeys } from "../keys/keymap.ts";
 import { Kbd } from "../kit/basics.tsx";
@@ -207,13 +209,11 @@ export function GlobalKeys() {
 }
 
 /**
- * Shortcuts that live inside the editor and the workbench (handled there, listed here). Only keys that work
- * today are listed. Wave 2 adds each of these rows with its feature (ux §7.10): `Mod+Shift+Enter` check
- * (lesson steps), `Mod+I` ask Claude (tutor panel), `Mod+S` named version (Studio), `L` and `[`/`]` loop
- * region, `M` metronome, and the Drills (1–7, Enter, C, R, Shift+S, P) and Lesson (Enter, H) sections with
- * the drill runner and the lesson player.
+ * Shortcuts handled inside the editor, the workbench and the answer widgets (listed here, handled there; ux
+ * §7.10). Page keys (the lesson's Check, Hint and step moves, the drills, Studio's named version, the capstone's
+ * check, Mod+I for Claude) are registered in the keymap by their pages and listed above while they are on screen.
  */
-const STATIC_SECTIONS: { title: string; rows: [string, string][] }[] = [
+const STATIC_SECTIONS: { title: string; rows: (readonly [string, string])[] }[] = [
   {
     title: "Editor",
     rows: [
@@ -236,6 +236,25 @@ const STATIC_SECTIONS: { title: string; rows: [string, string][] }[] = [
       ["B", "A/B: hear B"],
       ["T", "Practice tempo"],
       ["F", "Focus the editor"],
+      ...WORKBENCH_LOOP_SHORTCUTS,
+    ],
+  },
+  {
+    title: "Answers",
+    rows: [
+      ["Enter", "Check"],
+      ["1", "Pick an option, a degree or a numeral (1 to 9)"],
+      ["Shift+1", "Hear an option (1 to 9)"],
+      ["-", "Flat before a degree or numeral"],
+      ["+", "Sharp before a degree or numeral"],
+      ["M", "Major / minor numeral"],
+      ["Backspace", "Clear the last slot"],
+      ["A", "Piano keys: A W S E D F T G Y H U J K (C to C)"],
+      ["Z", "Piano keys: octave down (X up)"],
+      ["Alt+ArrowUp", "Move a block up (Alt+Down: down)"],
+      ["X", "Rhythm grid: toggle a cell"],
+      ["P", "Rhythm grid and blocks: play"],
+      ["Space", "Tap pad: tap (also F and J)"],
     ],
   },
 ];

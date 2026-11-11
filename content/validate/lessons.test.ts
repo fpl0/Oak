@@ -1,11 +1,12 @@
 // Every authored lesson (and the Wave 1 gate sample) against the per-lesson suite of architecture §3.7 as
-// amended by contracts, in the order of AUTHORING §9.1 (content/validate/checks.ts, shared with
+// amended by contracts, in the order of AUTHORING §12.1 (content/validate/checks.ts, shared with
 // `bun run content:check`). Grading and notation go through content/validate/harness.ts.
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { EXERCISE_KINDS, flattenExercise } from "@oak/content-kit";
 import { type LoadedLesson, loadLessons } from "../lib/load.bun.ts";
 import { MDX_COMPONENTS, parseMdx } from "../lib/mdx.ts";
 import {
+  checkAuthoring,
   checkBudget,
   checkEvaluation,
   checkGrading,
@@ -54,6 +55,7 @@ for (const l of lessons)
       checkBudget,
       checkMake,
       checkTheory,
+      checkAuthoring,
     ];
     for (const check of sync)
       test(check.name.replace(/^check/, ""), () => {

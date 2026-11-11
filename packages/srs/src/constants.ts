@@ -132,8 +132,12 @@ export const GOVERNOR = {
    * what the other leaves. (Spike S7: without it one class crowds the other out.)
    */
   factShare: 0.4,
-  /** Priority gained per day a due item has waited, so a high-recall item is never starved (spike S7). */
-  agingPerDay: 0.05,
+  /**
+   * Priority gained per day a due item has waited, so a high-recall item is never starved (spike S7: 0.05).
+   * Wave 2: 0.3, so after two days of waiting an item outranks any fresh one (2·(1 − R) ≤ 0.6 at R 0.7);
+   * with 0.05 to 0.15 the oldest undelivered due card aged past 7 days at p95 in 2 of 15 runs.
+   */
+  agingPerDay: 0.3,
   /** Sessions a week the forecast assumes when nothing else is known: the default weekly goal (§7.8). */
   sessionsPerWeek: 5,
   /** Planning estimates, in seconds, when the catalog gives none. */

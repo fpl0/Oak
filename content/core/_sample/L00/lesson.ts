@@ -1,7 +1,7 @@
 // The Wave 1 gate fixture: one complete lesson that uses EVERY exercise kind of contracts §5.4 and every
 // MDX component of architecture §3.3, following content/AUTHORING.md. It is not in the syllabus; content
 // CI checks it in the tool context of SAMPLE_CONTEXT (content/validate/harness.ts). Feedback codes in the
-// tests are the ones AUTHORING §8 uses; the grader decides the real catalog when it lands.
+// tests are the ones AUTHORING §9 uses; the grader decides the real catalog when it lands.
 import { defineLesson, type HintLadder } from "@oak/content-kit";
 
 const TEMPO = "setcpm(90/4)\n\n";
@@ -702,7 +702,13 @@ export default defineLesson({
           "Try `[4 2 1 0]` for bar 2.",
         ),
         tests: [
-          { name: "minimal", response: { code: mel("<[0 2 4 2] [4 2 1 0]>") }, expect: "pass" },
+          { name: "minimal", response: { code: mel("<[0 2 4 2] [4 3 1 0]>") }, expect: "pass" },
+          {
+            name: "the starter as it came",
+            response: { code: mel("<[0 2 4 2] [4 2 1 0]>") },
+            expect: "fail",
+            feedback: ["make.unchanged"],
+          },
           {
             name: "beyond the brief",
             response: {

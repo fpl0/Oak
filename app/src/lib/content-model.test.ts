@@ -10,6 +10,7 @@ import {
   normalizeSkillGraph,
   REGION_ORDER,
   skillGraphFromDefs,
+  titleOf,
   unlockSite,
 } from "./content-model.ts";
 
@@ -150,5 +151,18 @@ describe("buildBundle", () => {
     const voicing = registries.toolbox.find((t) => t.code.includes(".voicing("));
     // contracts §3.1 rule 6: .voicing() unlocks at U05.L08 behind the hand-voicing gate.
     if (voicing) expect(unlockSite(voicing)).toBe("U05.L08");
+  });
+});
+
+describe("titles of map items", () => {
+  test("a capstone session reads as its capstone", () => {
+    const titles = new Map([
+      ["C0", "C0 Intro"],
+      ["U01.L01", "Heartbeat"],
+    ]);
+    expect(titleOf("U01.L01", titles)).toBe("Heartbeat");
+    expect(titleOf("C0.S1", titles)).toBe("C0 Intro");
+    expect(titleOf("C0.S2", titles)).toBe("C0 Intro · session 2");
+    expect(titleOf("C9.S1", titles)).toBe("C9.S1");
   });
 });

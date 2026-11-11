@@ -9,6 +9,8 @@ import { LearnerTime, type ServiceContext } from "./context.ts";
 export type QualifyingKind = "review" | "sketch" | "keepalive";
 
 const MET = new Set<StreakWeek["status"]>(["met", "met-banked", "met-repaired"]);
+/** Statuses a week has once `close()` settled it. */
+const CLOSED = new Set<StreakWeek["status"]>([...MET, "tie-open", "missed"]);
 
 /** The goal of a week: the first week after onboarding is pro-rated, `max(1, ceil(G × daysLeft / 7))`. */
 export function weekGoal(goal: number, week: string, firstDay: string): number {
@@ -130,7 +132,7 @@ export class StreakService {
       reviewSets: (existing?.reviewSets ?? 0) + (opts.reviewSets ?? (kind === "review" ? 1 : 0)),
       sketchSaved: (existing?.sketchSaved ?? false) || kind === "sketch",
     });
-    this.#saveOpenWeek(day);
+    this.#recordInWeek(day);
     return this.summary(day);
   }
 
@@ -174,6 +176,29 @@ export class StreakService {
       repo.saveWeek({ ...w, repairedDays: repaired });
     }
     return true;
+  }
+
+  /**
+   * Counts a qualifying day in its week. A week already closed (met, banked, repaired, tie-open, missed)
+   * is never reopened: a day that lands in one late (a session ended after the rollover, a time-zone
+   * change, a clock stepped back) only adds to its count, and can settle an open tie. Reopening it would
+   * re-run the close and could turn a met week into a missed one (its spent rests stay spent).
+   */
+  #recordInWeek(day: string): void {
+    const repo = this.ctx.repos.streak;
+    const stored = repo.week(weekStart(day));
+    if (stored === null || !CLOSED.has(stored.status)) {
+      this.#saveOpenWeek(day);
+      return;
+    }
+    const q = this.#qualifyingDays(stored.weekStart);
+    if (q <= stored.qualifyingDays) return;
+    const settled = stored.status === "tie-open" && q + stored.repairedDays >= stored.goal;
+    repo.saveWeek({
+      ...stored,
+      qualifyingDays: q,
+      status: settled ? (stored.repairedDays > 0 ? "met-repaired" : "met") : stored.status,
+    });
   }
 
   #saveOpenWeek(day: string): void {
@@ -231,10 +256,15 @@ export class StreakService {
     this.close(today);
     const repo = this.ctx.repos.streak;
     const current = weekStart(today);
-    const closed = repo.weeks().filter((w) => dayIndex(w.weekStart) < dayIndex(current));
+    // A week settled by `close()` stays settled even when the learner day is behind it (a clock stepped
+    // back, a time-zone change across Monday 04:00): the runs never shrink because the clock moved.
+    const closed = repo
+      .weeks()
+      .filter((w) => dayIndex(w.weekStart) < dayIndex(current) || CLOSED.has(w.status));
     const thisWeek = this.#thisWeek(today);
-    const runs = StreakService.runs(closed, thisWeek.status === "met");
-    const last = closed.at(-1);
+    const currentClosed = closed.some((w) => w.weekStart === current);
+    const runs = StreakService.runs(closed, !currentClosed && thisWeek.status === "met");
+    const last = closed.find((w) => w.weekStart === addDays(current, -7));
     const bank = repo.unspentRests();
     let repair: StreakSummary["repair"] = null;
     if (last?.status === "tie-open" && last.weekStart === addDays(current, -7) && inRepairWindow(today)) {

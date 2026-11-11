@@ -171,3 +171,23 @@ describe("planReviewDay", () => {
     expect(small.overflow).toHaveLength(0);
   });
 });
+
+describe("long sets are not starved", () => {
+  test("an item that waited two days is planned first, outside the class shares, even when it is long", () => {
+    // A 180 s set (a progression dictation) and plenty of short, fresher work: on its own the long set
+    // never fits after the opener and the shares; once it has waited two days it goes in first.
+    const long = item({ cardId: "long", sec: 180, recall: 0.7, dueDay: T - 2, domain: "harmony" });
+    const short = Array.from({ length: 6 }, (_, i) =>
+      item({ cardId: `s${i}`, sec: 50, recall: 0.85, dueDay: T, domain: i % 2 ? "pitch" : "rhythm" }),
+    );
+    const plan = planWarmup([long, ...short], ctx(), cfg);
+    expect(plan.items.some((p) => p.item.cardId === "long")).toBe(true);
+    expect(plan.plannedSec).toBeLessThanOrEqual(cfg.budgetSec * cfg.planFraction);
+    // A day earlier it is just one more item, ranked by priority (and it does not fit).
+    const fresh = planWarmup([{ ...long, dueDay: T - 1 }, ...short], ctx(), cfg);
+    expect(fresh.items.some((p) => p.item.cardId === "long")).toBe(false);
+    // After a break the return order of contracts §7.9 decides instead.
+    const back = planWarmup([long, ...short], ctx({ gapDays: 4 }), cfg);
+    expect(back.overflow.length + back.items.length).toBeGreaterThan(0);
+  });
+});

@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { contract, type EndpointName } from "@oak/api";
 import type { Page, Route } from "@playwright/test";
-import { FIXTURES } from "./fixtures.ts";
+import { FIXTURES, WRITE_FIXTURES } from "./fixtures.ts";
 
 const ROOT = join(import.meta.dirname, "../..");
 const PACK = join(ROOT, "sounds/pack");
@@ -46,8 +46,11 @@ export async function installStubApi(page: Page, opts: StubOptions = {}): Promis
       const endpoint = endpointOf(req.method(), url.pathname);
       opts.log?.push({ method: req.method(), endpoint, headers: req.headers() });
       if (opts.offline) return route.abort("connectionrefused");
-      const body = endpoint ? (FIXTURES as Record<string, unknown>)[endpoint] : undefined;
-      if (body === undefined)
+      const body = endpoint
+        ? ((req.method() === "GET" ? FIXTURES : WRITE_FIXTURES) as Record<string, unknown>)[endpoint]
+        : undefined;
+      if (body === undefined) {
+        if (process.env.OAK_STUB_MISSES) console.log(`STUB-MISS ${req.method()} ${url.pathname} ${endpoint}`);
         return route.fulfill({
           status: 404,
           contentType: "application/json",
@@ -55,6 +58,7 @@ export async function installStubApi(page: Page, opts: StubOptions = {}): Promis
             error: { code: "not_found", message: `stub: no fixture for ${req.method()} ${url.pathname}` },
           }),
         });
+      }
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
     },
   );

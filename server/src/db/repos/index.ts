@@ -3,6 +3,7 @@ import type { Db } from "../index.ts";
 import { LessonsRepo } from "./lessons.ts";
 import { AlbumRepo, AudioRepo, SketchesRepo, TranscriptionsRepo } from "./library.ts";
 import { MasteryRepo } from "./mastery.ts";
+import { ListenRepo, OnboardingRepo } from "./onboarding.ts";
 import { OpsRepo } from "./ops.ts";
 import { ProfileRepo, SettingsRepo } from "./profile.ts";
 import { CanDoRepo, CapstonesRepo, CheckpointsRepo, TermsRepo, UnlocksRepo } from "./progress.ts";
@@ -32,6 +33,8 @@ export interface Repos {
   transcriptions: TranscriptionsRepo;
   tutor: TutorRepo;
   ops: OpsRepo;
+  onboarding: OnboardingRepo;
+  listen: ListenRepo;
 }
 
 export function createRepos(db: Db, defaults: { timezone: string; now: () => Date }): Repos {
@@ -56,6 +59,8 @@ export function createRepos(db: Db, defaults: { timezone: string; now: () => Dat
     transcriptions: new TranscriptionsRepo(db),
     tutor: new TutorRepo(db),
     ops: new OpsRepo(db),
+    onboarding: new OnboardingRepo(db),
+    listen: new ListenRepo(db),
   };
 }
 
@@ -67,7 +72,9 @@ export {
   CheckpointsRepo,
   GymRepo,
   LessonsRepo,
+  ListenRepo,
   MasteryRepo,
+  OnboardingRepo,
   OpsRepo,
   ProfileRepo,
   SessionsRepo,

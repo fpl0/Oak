@@ -1,17 +1,23 @@
-// The CI gate of contracts §7.4: a 300-day simulation with the full family and deck catalog introduced in
-// the default course order, 5 sessions a week (with a 4-, a 10- and a 4-day break), a simulated learner
-// at about 85% mean credit with about 10% of sets below 0.65, for each target, on five seeds.
+// The CI gate of contracts §7.4: a 300-day simulation with the course's real family and deck catalog
+// (content/families.ts, converted by sim/course-catalog.test-util.ts) introduced in the default course
+// order, 5 sessions a week (with a 4-, a 10- and a 4-day break), a simulated learner at about 85% mean
+// credit with about 10% of sets below 0.65, for each target, on five seeds.
 //
 // What runs is the production code (`createSrs`, `planWarmup`, the governor, composites, `stepLevel`)
 // under the live configuration: decision 2 of docs/decisions.md (`recommendedGovernor`, facts at 0.85).
 //
-// The contract's five criteria are asserted below. Two of them (deferred queue p95 ≤ 4 cards, p95 age
-// of the oldest undelivered due card ≤ 7 days) do not hold on every seed: with blocked-intro sets, the
-// 2-mic-set limit, listen blocks, 3-minute warm-ups on checkpoint and capstone days and a learner who
-// fails 10% of sets, the catalog brings more families than 12 active slots and the warm-up budget can
-// carry, so families wait in the deferred queue. They are recorded as known failures (`test.failing`)
-// with the measured values printed, together with the S7 companion assertions that bound how far off
-// they are. When a change makes them pass, `test.failing` turns red and the marker must be removed.
+// Four of the contract's five criteria hold on every seed and target. The fifth, "deferred queue p95 ≤ 4
+// cards", does not, and it cannot under the contract's own rules: it is recorded as a known failure
+// (`test.failing`) with the measured values printed. Why (Wave 2 investigation; numbers in the printed table):
+//   - Units U03–U06 unlock about 20 families in about 40 sessions. Released at most 1 a day, only while the
+//     7-day forecast is under 0.70 × budget, and graduating only at their mastery level with a 21-day t90
+//     and two Good ratings, they queue: deferred p95 is 3–14 (15 min), 7–12 (20) and 4–9 (25).
+//   - Unthrottled (budget × 3), the catalog asks for 232–290 s of warm-up a session at 20 and 25 minutes
+//     against 254 and 293 s of plannable budget: utilisation 0.9–1.15. Every variant that admitted faster
+//     overloaded the warm-up and pushed the oldest undelivered due card past 7 days (13–43 days).
+//   - With warm-ups 25% longer, the queue criterion holds at 15 and 25 minutes on most seeds.
+// The amendment proposed instead (Wave 2 report): bound how long a deferred family waits, not how many wait.
+// When a change makes the criterion pass, `test.failing` turns red and the marker must be removed.
 import { describe, expect, test } from "bun:test";
 import {
   createSrs,
@@ -22,6 +28,7 @@ import {
   SIM_GATE,
   WARMUP_BUDGET_SEC,
 } from "./index.ts";
+import { COURSE_CATALOG } from "./sim/course-catalog.test-util.ts";
 import { DEFAULT_LEARNER, type SimOptions, type SimSummary, simulate } from "./sim/simulate.ts";
 
 const TARGETS = [15, 20, 25] as const;
@@ -42,6 +49,7 @@ const options = (seed: string, target: 15 | 20 | 25, over: Partial<SimOptions> =
   learner: DEFAULT_LEARNER,
   termsPerLesson: 3,
   durationJitter: 0.12,
+  catalog: COURSE_CATALOG,
   ...over,
 });
 const runs = new Map<15 | 20 | 25, SimSummary[]>(
@@ -53,10 +61,10 @@ const all = () =>
 const r1 = (x: number) => Math.round(x * 10) / 10;
 console.log(
   [
-    "target seed | warm-up p50/p95/max s | oldest undelivered p95 d | deferred p95 | review day p95 s | active max | at mastery | wait p95 d | credit / <0.65 | sessions to clear after gaps",
+    "target seed | warm-up p50/p95/max s | oldest undelivered p95 d | deferred p95 (families, of them P/Pr) | review day p95 s | active max | at mastery | wait p95 d | credit / <0.65 | sessions to clear after gaps",
     ...all().map(
       ({ t, seed, s }) =>
-        `${t} ${seed} | ${r1(s.warmupSec.p50)}/${r1(s.warmupSec.p95)}/${r1(s.warmupSec.max)} | ${s.oldestUndeliveredDays.p95} | ${s.deferredCards.p95} | ${r1(s.reviewDaySec.p95)} | ${s.maxActivePerceptual} | ${s.families.atMastery}/${s.families.unlocked} | ${s.families.waitDaysP95} | ${r1(s.setCredit.mean * 100)}% / ${r1(s.setCredit.below065 * 100)}% | ${s.sessionsToClearAfterGap.join(",")}`,
+        `${t} ${seed} | ${r1(s.warmupSec.p50)}/${r1(s.warmupSec.p95)}/${r1(s.warmupSec.max)} | ${s.oldestUndeliveredDays.p95} | ${s.deferredCards.p95} (${s.deferredFamiliesP95.all}, ${s.deferredFamiliesP95.perceptual}) | ${r1(s.reviewDaySec.p95)} | ${s.maxActivePerceptual} | ${s.families.atMastery}/${s.families.unlocked} | ${s.families.waitDaysP95} | ${r1(s.setCredit.mean * 100)}% / ${r1(s.setCredit.below065 * 100)}% | ${s.sessionsToClearAfterGap.join(",")}`,
     ),
   ].join("\n"),
 );
@@ -89,12 +97,12 @@ describe("300-day simulation: the contract gate (contracts §7.4)", () => {
     }
   });
 
-  test.failing("p95 age of the oldest undelivered due card ≤ 7 days on every seed and target (KNOWN FAILURE)", () => {
+  test("p95 age of the oldest undelivered due card ≤ 7 days on every seed and target", () => {
     for (const { s } of all())
       expect(s.oldestUndeliveredDays.p95).toBeLessThanOrEqual(SIM_GATE.p95OldestDueDays);
   });
 
-  test.failing("deferred queue p95 ≤ 4 cards on every seed and target (KNOWN FAILURE)", () => {
+  test.failing("deferred queue p95 ≤ 4 cards on every seed and target (KNOWN FAILURE, see the header)", () => {
     for (const { s } of all()) expect(s.deferredCards.p95).toBeLessThanOrEqual(SIM_GATE.p95DeferredCards);
   });
 });
@@ -102,43 +110,48 @@ describe("300-day simulation: the contract gate (contracts §7.4)", () => {
 describe("300-day simulation: companion assertions (spike S7)", () => {
   test("the simulated learner is the contract's: about 85% mean credit, about 10% of sets below 0.65", () => {
     for (const { s } of all()) {
-      // Two 25-minute seeds (a1, d4) overload into a forgetting spiral: about 77% credit and a quarter of
-      // sets below 0.65. The floor below bounds it; the mean across runs must still be the contract's learner.
-      expect(s.setCredit.mean).toBeGreaterThan(0.76);
+      // Every run is the contract's learner (the learner's relearning floor keeps it out of the FSRS-7
+      // lapse loop, see `relearnFloor` in sim/simulate.ts).
+      expect(s.setCredit.mean).toBeGreaterThan(0.8);
       expect(s.setCredit.mean).toBeLessThan(0.88);
       expect(s.setCredit.below065).toBeGreaterThan(0.04);
-      expect(s.setCredit.below065).toBeLessThan(0.28);
+      expect(s.setCredit.below065).toBeLessThan(0.18);
     }
     const mean = all().reduce((a, { s }) => a + s.setCredit.mean, 0) / all().length;
     expect(mean).toBeGreaterThan(0.82);
   });
 
-  test("how far the two failing criteria are off stays bounded", () => {
+  test("how far the failing criterion is off stays bounded; concept families are never starved", () => {
     for (const { s } of all()) {
-      expect(s.oldestUndeliveredDays.p95).toBeLessThanOrEqual(14);
-      expect(s.deferredCards.p95).toBeLessThanOrEqual(24);
+      expect(s.deferredCards.p95).toBeLessThanOrEqual(16);
+      // The waiting families are perceptual ones held by the active cap and the warm-up time; a concept
+      // family needs no slot and is released in turn (it used to wait behind them for the whole run).
+      expect(s.deferredFamiliesP95.all - s.deferredFamiliesP95.perceptual).toBeLessThanOrEqual(6);
     }
-    // Most runs meet the 7-day criterion; the median run is within it.
-    const ages = all()
-      .map(({ s }) => s.oldestUndeliveredDays.p95)
+    // The median run is within twice the criterion.
+    const q = all()
+      .map(({ s }) => s.deferredCards.p95)
       .sort((a, b) => a - b);
-    expect(ages[Math.floor(ages.length / 2)]).toBeLessThanOrEqual(9);
+    expect(q[Math.floor(q.length / 2)]).toBeLessThanOrEqual(2 * SIM_GATE.p95DeferredCards + 1);
   });
 
-  test("a returning learner is back to at most one set of overflow within 20 sessions of each break", () => {
+  // The two bounds below were re-based when the gate moved from spike S7's table to the real catalog,
+  // whose longest sets (progression dictation, song form, "Read it") take 160–180 s: one of them waiting
+  // is most of a 15-minute warm-up on its own.
+  test("a returning learner is back to at most one set of overflow within 25 sessions of each break", () => {
     for (const { s } of all()) {
       expect(s.sessionsToClearAfterGap).toHaveLength(3);
       for (const n of s.sessionsToClearAfterGap) {
         expect(n).toBeGreaterThan(0);
-        expect(n).toBeLessThanOrEqual(20);
+        expect(n).toBeLessThanOrEqual(25);
       }
     }
   });
 
-  test("steady-state overflow stays under one budget and reviews are rarely late", () => {
+  test("steady-state overflow stays near one budget and reviews are rarely late", () => {
     for (const { t, s } of all()) {
-      expect(s.overflowSteadySec.p95).toBeLessThanOrEqual(WARMUP_BUDGET_SEC[t]);
-      expect(s.lateDays.p95).toBeLessThanOrEqual(10);
+      expect(s.overflowSteadySec.p95).toBeLessThanOrEqual(1.2 * WARMUP_BUDGET_SEC[t]);
+      expect(s.lateDays.p95).toBeLessThanOrEqual(7);
     }
   });
 
@@ -152,7 +165,7 @@ describe("300-day simulation: companion assertions (spike S7)", () => {
   test("facts are recalled near their target at review time and the decks drain", () => {
     for (const { s } of all()) {
       expect(s.recallAtReview.fact).toBeGreaterThan(0.78);
-      expect(s.recallAtReview.set).toBeGreaterThan(0.7);
+      expect(s.recallAtReview.set).toBeGreaterThan(0.8);
       expect(s.deckPending.atEnd).toBeLessThanOrEqual(30);
     }
   });

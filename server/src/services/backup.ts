@@ -67,7 +67,9 @@ export function lastAutomatic(backupsDir: string): string | null {
 export function safetyCopy(db: Db, backupsDir: string, label: string, now: Date): string {
   mkdirSync(backupsDir, { recursive: true, mode: 0o700 });
   const stamp = now.toISOString().replaceAll(/[:.]/g, "-");
-  const path = join(backupsDir, `${label}-${stamp}.db`);
+  // Two copies at one clock reading (a frozen dev clock, two quick resets) get distinct names.
+  let path = join(backupsDir, `${label}-${stamp}.db`);
+  for (let n = 2; existsSync(path); n++) path = join(backupsDir, `${label}-${stamp}-${n}.db`);
   db.run("VACUUM INTO ?", [path]);
   tightenMode(path, 0o600);
   return path;

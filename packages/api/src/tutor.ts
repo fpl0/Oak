@@ -448,6 +448,45 @@ export const TutorUsageReportSchema = z.object({
 });
 export type TutorUsageReport = z.infer<typeof TutorUsageReportSchema>;
 
+/**
+ * `GET /api/tutor/status` (served by the tutor service itself, server/src/tutor/http/routes.ts): what Settings →
+ * Tutor shows. Mirrors `TutorStatus` (server/src/tutor/service-types.ts). Wave 2 addition.
+ */
+export const TutorStatusSchema = z.object({
+  tutor: z.enum(TUTOR_HEALTH),
+  active: z.enum(BACKEND_IDS).nullable(),
+  setting: z.enum(["auto", "off", ...BACKEND_IDS]),
+  reason: z.string(),
+  guidance: z.string().nullable(),
+  model: z.string(),
+  backends: z.array(
+    z.object({
+      id: z.enum(BACKEND_IDS),
+      wired: z.boolean(),
+      ok: z.boolean(),
+      active: z.boolean(),
+      reason: z.string().nullable(),
+      guidance: z.string().nullable(),
+      billing: z.enum(["api", "plan"]),
+    }),
+  ),
+  budget: z.object({
+    month: z.string(),
+    monthUsd: z.number(),
+    softMarkerUsd: z.number(),
+    softPassed: z.boolean(),
+  }),
+  usage: z.object({
+    costUsd: z.number(),
+    inputTokens: z.number(),
+    outputTokens: z.number(),
+    cacheReadInputTokens: z.number(),
+    cacheCreationInputTokens: z.number(),
+    cacheHitRatio: z.number(),
+  }),
+});
+export type TutorStatus = z.infer<typeof TutorStatusSchema>;
+
 // --- music tokens in tutor text (contracts §10.7) -----------------------------------------------
 
 export const MUSIC_TOKEN_KINDS = ["deg", "rn", "note", "chord", "bars", "tool", "term"] as const;

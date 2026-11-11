@@ -83,10 +83,7 @@ describe("kernel agrees with @oak/theory", () => {
         expect([code, id === null]).toEqual([code, false]);
         const mine = [...chordPcs(parsePc(root).pc, q)].sort((a, b) => a - b);
         const theirs = [...theory.chordPcs(id as theory.ChordId)].sort((a, b) => a - b);
-        // 7alt: theory lists every altered tension (b9 #9 #11 b13); the drills voice the usual four-tone
-        // subset without #11. Every drill tone must still be one of theory's.
-        if (q === "7alt") expect(mine.every((pc) => (theirs as number[]).includes(pc))).toBe(true);
-        else expect([code, mine]).toEqual([code, theirs]);
+        expect([code, mine]).toEqual([code, theirs]);
       }
   });
 });

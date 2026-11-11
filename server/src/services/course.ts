@@ -13,6 +13,7 @@ import type {
   GymSession,
   LessonCompleteResult,
   LessonProgress,
+  LessonSteps,
   SrsReviewResult,
   StepAttemptCreate,
   StepAttemptResult,
@@ -127,9 +128,7 @@ export class CourseService {
     const ex = step.exercise;
     const needed = ex !== undefined && TAP_SING.has(ex.kind) ? 3 : 2;
     const result: ExerciseResult | null =
-      ex === undefined
-        ? null
-        : (this.#repos.lessons.latestExerciseResult(ex.id) ?? this.#lessonResult(lessonId, ex.id));
+      ex === undefined ? null : this.#repos.lessons.latestExerciseResult(lessonId, ex.id);
     return {
       lessonId,
       stepId,
@@ -140,10 +139,6 @@ export class CourseService {
       revealAvailable: row.attempts >= needed && ex !== undefined && ex.hints !== null,
       result,
     };
-  }
-  #lessonResult(lessonId: string, exerciseId: string): ExerciseResult | null {
-    const r = this.#repos.lessons.latestExerciseResult(exerciseId);
-    return r !== null && r.lessonId === lessonId ? r : null;
   }
 
   /**
@@ -215,6 +210,65 @@ export class CourseService {
     }
   }
 
+  // --- the step rail and the learner's position (wave2 §4: lessons.steps, lessons.position) ------
+
+  /** A step the learner must pass to finish the lesson: one with a graded exercise. Others pass once visited. */
+  static needsPass(step: StepDef): boolean {
+    return step.exercise !== undefined && step.graded === true;
+  }
+
+  /** Every authored step's state, in lesson order, and the stored progress (`null` before the first visit). */
+  lessonSteps(lessonId: string): LessonSteps {
+    const def = this.lesson(lessonId);
+    const stored = this.#repos.lessons.progress(lessonId);
+    return {
+      lessonId: def.id,
+      progress: stored === null ? null : { ...stored, status: this.d.gates.lessonStatus(lessonId) },
+      steps: def.steps.map((st) => this.stepState(lessonId, st.id)),
+    };
+  }
+
+  /**
+   * Where the learner is (contracts §9.3, §9.4). Steps before `stepId` that need no pass are recorded as
+   * visited (passed); `stepId` itself is not. With `wrapped` ("Wrap up" before the Make) the lesson stays in
+   * progress and resumes at the first unfinished step; otherwise it resumes at `stepId`. A completed lesson only moves its replay
+   * position. `splitPart` records the half being played (15-minute split, §9.4).
+   */
+  position(
+    lessonId: string,
+    body: { sessionId: string | null; stepId: string; splitPart: "A" | "B" | null; wrapped: boolean },
+  ): LessonProgress {
+    const def = this.lesson(lessonId);
+    const index = def.steps.findIndex((st) => st.id === body.stepId);
+    if (index < 0) throw notFound(`step ${lessonId}/${body.stepId}`);
+    return tx(this.#repos.db, () => {
+      this.#touchLesson(lessonId, body.stepId);
+      const at = this.time.iso();
+      // Only the steps BEFORE `stepId` count as visited: with `wrapped`, `stepId` is where the learner resumes,
+      // so an ungraded step on screen at "Wrap up" is done next time, not skipped.
+      for (const st of def.steps.slice(0, index)) {
+        if (CourseService.needsPass(st)) continue;
+        const row = this.#stepRow(lessonId, st.id);
+        if (!row.passed) this.#repos.lessons.saveStepState({ ...row, passed: true, updatedAt: at });
+      }
+      const stored = this.#repos.lessons.progress(lessonId) as LessonProgress;
+      if (stored.status === "completed") return { ...stored, status: this.d.gates.lessonStatus(lessonId) };
+      let current = body.stepId;
+      if (body.wrapped) {
+        const open = def.steps.find((st) => !this.#stepRow(lessonId, st.id).passed);
+        current = open?.id ?? (def.steps.at(-1)?.id as string);
+      }
+      const saved = this.#repos.lessons.saveProgress({
+        ...stored,
+        status: "in_progress",
+        currentStep: current,
+        splitPart: body.splitPart ?? stored.splitPart,
+        updatedAt: at,
+      });
+      return { ...saved, status: this.d.gates.lessonStatus(lessonId) };
+    });
+  }
+
   // --- attempts ---------------------------------------------------------------------------------
 
   async attempt(lessonId: string, stepId: string, body: StepAttemptCreate): Promise<StepAttemptResult> {
@@ -279,7 +333,7 @@ export class CourseService {
           passed: row.passed || passed,
           updatedAt: at,
         });
-        const prev = this.#repos.lessons.exerciseResult(body.exerciseId, body.exerciseVersion);
+        const prev = this.#repos.lessons.exerciseResult(lessonId, body.exerciseId, body.exerciseVersion);
         this.#repos.lessons.saveExerciseResult({
           exerciseId: body.exerciseId,
           exerciseVersion: body.exerciseVersion,
@@ -400,9 +454,20 @@ export class CourseService {
       contentHash: string;
       splitPart: "A" | "B" | null;
     },
+    opts: { allowUnauthored?: boolean; sketchOptional?: boolean } = {},
   ): Promise<LessonCompleteResult> {
-    const def = this.lesson(lessonId);
-    if (this.#repos.sketches.get(body.sketchId) === null) throw notFound(`sketch ${body.sketchId}`);
+    // `allowUnauthored`: onboarding (U00.L01 is the app's own flow) and the dev seeder complete a syllabus
+    // lesson that has no lesson file; the HTTP route never does.
+    const def: Pick<LessonDef, "id" | "wrapAt" | "introduces" | "practises"> =
+      opts.allowUnauthored === true && this.#content.lessonDef(lessonId) === null
+        ? this.#unauthored(lessonId)
+        : this.lesson(lessonId);
+    // `sketchOptional`: onboarding finished without Sketch 001 (the learner skipped saving it).
+    if (
+      !(opts.sketchOptional === true && body.sketchId === "") &&
+      this.#repos.sketches.get(body.sketchId) === null
+    )
+      throw notFound(`sketch ${body.sketchId}`);
     const blocked = this.d.unlocks.blockedAt(lessonId);
     if (blocked.length > 0 && body.splitPart !== "A")
       throw conflict("the gate check of this lesson has to pass at 0.9 or better before it can be completed");
@@ -461,6 +526,18 @@ export class CourseService {
       seeded,
       opened: done.opened as LessonCompleteResult["opened"],
       streak: this.d.streak.summary(),
+    };
+  }
+
+  /** The syllabus row of a lesson without a lesson file, shaped like the parts of a `LessonDef` completion reads. */
+  #unauthored(lessonId: string): Pick<LessonDef, "id" | "wrapAt" | "introduces" | "practises"> {
+    const site = this.#content.lessonSite(lessonId);
+    if (site === null) throw notFound(`lesson ${lessonId}`);
+    return {
+      id: site.meta.id,
+      wrapAt: "S1" as LessonDef["wrapAt"],
+      introduces: [...site.meta.introduces],
+      practises: [...(site.meta.practises ?? [])],
     };
   }
 
@@ -705,22 +782,22 @@ export class CourseService {
     tx(this.#repos.db, () => {
       const row = this.#capstoneRow(id);
       const now = this.time.iso();
+      if (this.#repos.sketches.get(body.sketchId) === null) throw notFound(`sketch ${body.sketchId}`);
       const sessions = row.sessions.includes(body.capstoneSessionId)
         ? row.sessions
         : [...row.sessions, body.capstoneSessionId];
-      const released = sessions.length >= meta.sessions;
+      // Finishing the last session does not release: `POST /capstones/:id/release` puts the track on the album.
       this.#repos.capstones.save({
         ...row,
-        status: released ? "released" : "in_progress",
+        status: row.status === "released" ? "released" : "in_progress",
         sessions,
         sketchId: body.sketchId,
         flavour: body.flavour ?? row.flavour,
         startedAt: row.startedAt ?? now,
-        releasedAt: released ? (row.releasedAt ?? now) : row.releasedAt,
         updatedAt: now,
       });
       this.d.unlocks.onComplete(body.capstoneSessionId);
-      if (released) this.d.cando.evaluate({ sourceId: id, evidence: { kind: "track", id } });
+      void meta;
     });
     return this.capstoneState(id);
   }
