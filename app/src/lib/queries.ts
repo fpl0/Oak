@@ -1,0 +1,236 @@
+// TanStack Query hooks for every endpoint group of the REST contract (interfaces §6). Server state lives here
+// and nowhere else; keys are `["api", endpointName, input]`, so a mutation invalidates by endpoint name.
+import type { ConfirmEndpointName, EndpointInput, EndpointOutput, JsonEndpointName } from "@oak/api";
+import {
+  type QueryClient,
+  queryOptions,
+  type UseMutationOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { apiUrl, callApi, callDestructive } from "./api.ts";
+
+// --- generic -------------------------------------------------------------------------------------
+
+export function apiKey<N extends JsonEndpointName>(name: N, input?: EndpointInput<N>) {
+  return ["api", name, input ?? null] as const;
+}
+
+/** Query options for a GET endpoint; reuse with `queryClient.ensureQueryData` in route loaders. */
+export function apiQuery<N extends JsonEndpointName>(name: N, input?: EndpointInput<N>) {
+  return queryOptions({
+    queryKey: apiKey(name, input),
+    queryFn: ({ signal }) => callApi(name, input, { signal }),
+  });
+}
+
+function invalidate(qc: QueryClient, names: readonly JsonEndpointName[]) {
+  return Promise.all(names.map((n) => qc.invalidateQueries({ queryKey: ["api", n] })));
+}
+
+type MutOpts<N extends JsonEndpointName> = Omit<
+  UseMutationOptions<EndpointOutput<N>, Error, EndpointInput<N>>,
+  "mutationFn"
+>;
+
+/** A mutation over one endpoint that invalidates the listed GET endpoints on success. */
+export function useApiMutation<N extends JsonEndpointName>(
+  name: N,
+  invalidates: readonly JsonEndpointName[] = [],
+  options: MutOpts<N> = {},
+) {
+  const qc = useQueryClient();
+  return useMutation<EndpointOutput<N>, Error, EndpointInput<N>>({
+    ...options,
+    mutationKey: ["api", name],
+    mutationFn: (input) => callApi(name, input),
+    onSuccess: async (data, vars, onMutateResult, ctx) => {
+      await invalidate(qc, invalidates);
+      await options.onSuccess?.(data, vars, onMutateResult, ctx);
+    },
+  });
+}
+
+/**
+ * A destructive mutation (contracts §11.6): native confirm dialog naming the action, then nonce and call.
+ * Resolves `null` when the learner cancels.
+ */
+export function useDestructiveMutation<N extends ConfirmEndpointName>(
+  name: N,
+  invalidates: readonly JsonEndpointName[] = [],
+) {
+  const qc = useQueryClient();
+  return useMutation<
+    EndpointOutput<N> | null,
+    Error,
+    { target: string; question: string; input?: EndpointInput<N> }
+  >({
+    mutationKey: ["api", name],
+    mutationFn: ({ target, question, input }) => callDestructive(name, target, question, input),
+    onSuccess: async (data) => {
+      if (data !== null) await invalidate(qc, invalidates);
+    },
+  });
+}
+
+// --- health, bootstrap, settings ------------------------------------------------------------------
+
+export const useHealth = () => useQuery({ ...apiQuery("health"), refetchInterval: 30_000, retry: 0 });
+export const useBootstrap = () => useQuery({ ...apiQuery("bootstrap"), staleTime: 30_000 });
+export const useSettingsPut = () => useApiMutation("settings.put", ["bootstrap"]);
+export const useAnthropicKeySet = () => useApiMutation("settings.anthropicKey.set", ["health", "bootstrap"]);
+export const useAnthropicKeyDelete = () =>
+  useDestructiveMutation("settings.anthropicKey.delete", ["health", "bootstrap"]);
+export const useDataReset = () =>
+  useDestructiveMutation("data.reset", ["bootstrap", "profile.get", "lessons.progress", "skills.map"]);
+
+// --- profile ------------------------------------------------------------------------------------
+
+export const useProfile = () => useQuery(apiQuery("profile.get"));
+export const useProfileUpdate = () => useApiMutation("profile.put", ["profile.get", "bootstrap"]);
+export const useCalibrationRun = () => useApiMutation("profile.calibration", ["profile.get", "bootstrap"]);
+
+// --- session ------------------------------------------------------------------------------------
+
+export const useTodayPlan = (targetMinutes?: "15" | "20" | "25") =>
+  useQuery(apiQuery("session.today", targetMinutes ? { query: { targetMinutes } } : {}));
+export const useSessionStart = () => useApiMutation("session.start", ["bootstrap", "session.today"]);
+export const useSessionHeartbeat = () => useApiMutation("session.heartbeat");
+export const useSessionEnd = () =>
+  useApiMutation("session.end", ["bootstrap", "session.today", "streak.get", "unlocks.list", "cando.list"]);
+
+// --- lessons, steps, checkpoints, capstones, gym ----------------------------------------------------
+
+export const useCourseProgress = () => useQuery(apiQuery("lessons.progress"));
+export const useStepState = (id: string, stepId: string, enabled = true) =>
+  useQuery({ ...apiQuery("steps.state", { params: { id, stepId } }), enabled });
+export const useStepAttempt = () => useApiMutation("steps.attempt", ["steps.state", "skills.map"]);
+export const useStepHint = () => useApiMutation("steps.hint", ["steps.state"]);
+export const useStepNewSeries = () => useApiMutation("steps.newSeries", ["steps.state"]);
+export const useLessonComplete = () =>
+  useApiMutation("lessons.complete", ["lessons.progress", "unlocks.list", "session.today", "skills.map"]);
+export const useCheckpointStart = () => useApiMutation("checkpoints.start", ["lessons.progress"]);
+export const useCheckpointAttempt = () =>
+  useApiMutation("checkpoints.attempt", ["lessons.progress", "skills.map", "session.today"]);
+export const useCapstone = (id: string) => useQuery(apiQuery("capstones.get", { params: { id } }));
+export const useCapstoneCheck = () => useApiMutation("capstones.check", ["capstones.get"]);
+export const useCapstoneSessionComplete = () =>
+  useApiMutation("capstones.completeSession", ["capstones.get", "lessons.progress", "session.today"]);
+export const useGymStart = () => useApiMutation("gym.start", ["lessons.progress", "session.today"]);
+export const useTermsIntroduced = () => useQuery(apiQuery("terms.introduced"));
+
+// --- skills, SRS, drills ------------------------------------------------------------------------
+
+export const useSkillMap = () => useQuery(apiQuery("skills.map"));
+export const useDue = (budgetSec?: number, more = false) =>
+  useQuery(
+    apiQuery("srs.due", {
+      query: {
+        ...(budgetSec === undefined ? {} : { budgetSec: String(Math.round(budgetSec)) }),
+        ...(more ? { more: "1" as const } : {}),
+      },
+    }),
+  );
+export const useSrsReview = () => useApiMutation("srs.review", ["srs.due", "skills.map", "families.list"]);
+export const useFamilies = () => useQuery(apiQuery("families.list"));
+export const useFamilyState = (familyId: string) =>
+  useQuery(apiQuery("families.state", { params: { familyId } }));
+export const useDrillStart = () => useApiMutation("drills.start");
+export const useDrillTrials = () => useApiMutation("drills.trials");
+export const useDrillFinish = () =>
+  useApiMutation("drills.finish", ["families.list", "families.state", "srs.due", "skills.map", "streak.get"]);
+
+// --- unlocks, can-do, progress, streak ------------------------------------------------------------
+
+export const useUnlocks = () => useQuery(apiQuery("unlocks.list"));
+export const useUnlockSeen = () => useApiMutation("unlocks.seen", ["unlocks.list", "bootstrap"]);
+export const useCanDo = () => useQuery(apiQuery("cando.list"));
+export const useProgressReport = () => useQuery(apiQuery("progress.get"));
+export const useStreak = (weeks?: number) =>
+  useQuery(apiQuery("streak.get", { query: weeks === undefined ? {} : { weeks: String(weeks) } }));
+
+// --- sketches (Studio) ----------------------------------------------------------------------------
+
+export type SketchOrigin = NonNullable<NonNullable<EndpointInput<"sketches.list">["query"]>["origin"]>;
+export const useSketches = (origin?: SketchOrigin, archived = false) =>
+  useQuery(
+    apiQuery("sketches.list", {
+      query: { ...(origin ? { origin } : {}), ...(archived ? { archived: "1" as const } : {}) },
+    }),
+  );
+export const useSketch = (id: string) => useQuery(apiQuery("sketches.get", { params: { id } }));
+export const useSketchCreate = () => useApiMutation("sketches.create", ["sketches.list", "streak.get"]);
+export const useSketchAddVersion = () =>
+  useApiMutation("sketches.addVersion", ["sketches.get", "sketches.list", "streak.get"]);
+export const useSketchPatch = () => useApiMutation("sketches.patch", ["sketches.get", "sketches.list"]);
+export const useSketchDelete = () => useDestructiveMutation("sketches.delete", ["sketches.list"]);
+
+// --- album --------------------------------------------------------------------------------------
+
+export const useAlbum = () => useQuery(apiQuery("album.get"));
+export const useAlbumTrack = (id: string) => useQuery(apiQuery("album.track", { params: { id } }));
+export const useAlbumCreateTrack = () => useApiMutation("album.createTrack", ["album.get"]);
+export const useAlbumAddVersion = () => useApiMutation("album.addVersion", ["album.get", "album.track"]);
+export const useAlbumPutAudio = () => useApiMutation("album.putAudio", ["album.track"]);
+export const useAlbumDeleteTrack = () => useDestructiveMutation("album.deleteTrack", ["album.get"]);
+export const albumAudioUrl = (id: string, v: number) =>
+  apiUrl("album.getAudio", { params: { id, v: String(v) } });
+
+// --- audio files and transcriptions ---------------------------------------------------------------
+
+export const useAudioUpload = () => useApiMutation("audio.upload");
+export const useAudioPutPeaks = () => useApiMutation("audio.putPeaks");
+export const useAudioDelete = () => useDestructiveMutation("audio.delete", ["transcriptions.list"]);
+export const audioUrl = (id: string) => apiUrl("audio.get", { params: { id } });
+export const audioPeaksUrl = (id: string) => apiUrl("audio.getPeaks", { params: { id } });
+
+export const useTranscriptions = () => useQuery(apiQuery("transcriptions.list"));
+export const useTranscription = (id: string) => useQuery(apiQuery("transcriptions.get", { params: { id } }));
+export const useTranscriptionCreate = () => useApiMutation("transcriptions.create", ["transcriptions.list"]);
+export const useTranscriptionPatch = () =>
+  useApiMutation("transcriptions.patch", ["transcriptions.get", "transcriptions.list"]);
+export const useTranscriptionAddVersion = () =>
+  useApiMutation("transcriptions.addVersion", ["transcriptions.get", "transcriptions.list"]);
+export const useTranscriptionDelete = () =>
+  useDestructiveMutation("transcriptions.delete", ["transcriptions.list"]);
+
+// --- tutor (REST side; the streams are in tutor-stream.ts) ----------------------------------------
+
+export type SubjectRef = EndpointInput<"tutor.timeline">["query"];
+export const useTutorTimeline = (subject: NonNullable<SubjectRef> | null) =>
+  useQuery({
+    ...apiQuery("tutor.timeline", { query: subject ?? { subjectKind: "general", subjectId: "general" } }),
+    enabled: subject !== null,
+  });
+export const useTutorUsage = (month?: string) =>
+  useQuery(apiQuery("tutor.usage", { query: month ? { month } : {} }));
+export const useTutorNotes = (subject?: Partial<NonNullable<SubjectRef>>) =>
+  useQuery(apiQuery("tutor.notes", { query: subject ?? {} }));
+export const useTutorWarm = () => useApiMutation("tutor.warm");
+export const useTutorCardApplied = () =>
+  useApiMutation("tutor.cardApplied", ["tutor.timeline", "sketches.get"]);
+export const useTutorRetractNote = () =>
+  useApiMutation("tutor.retractNote", ["tutor.notes", "session.today"]);
+
+// --- server grader, telemetry, QA -------------------------------------------------------------------
+
+export const useServerGrade = () => useApiMutation("grade");
+export const useAnalyze = () => useApiMutation("analyze");
+export const useTelemetrySteps = () => useApiMutation("telemetry.steps");
+export const useQaReport = () => useApiMutation("qa.report", ["dev.qa"]);
+
+// --- backup -------------------------------------------------------------------------------------
+
+export const useBackupInfo = () => useQuery(apiQuery("backup.info"));
+export const backupExportUrl = (withAudio: boolean) =>
+  apiUrl("backup.export", { query: { audio: withAudio ? "1" : "0" } });
+export const useBackupImport = () =>
+  useDestructiveMutation("backup.import", ["bootstrap", "profile.get", "lessons.progress", "sketches.list"]);
+
+// --- dev (OAK_DEV=1) ------------------------------------------------------------------------------
+
+export const useDevQa = () => useQuery(apiQuery("dev.qa"));
+export const useDevQaUpdate = () => useApiMutation("dev.qaUpdate", ["dev.qa"]);
+export const useDevTelemetry = () => useQuery(apiQuery("dev.telemetry"));
+export const useDevContentReport = () => useQuery(apiQuery("dev.contentReport"));

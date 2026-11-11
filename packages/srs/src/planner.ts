@@ -5,7 +5,7 @@ import { returnRank } from "./governor.ts";
 import type { GovernorConfig, PlanContext, PlannedItem, ReviewItem, WarmupPlan } from "./types.ts";
 
 /** Planning estimate of one listen-only block (15 to 20 s). */
-export const LISTEN_BLOCK_SEC = (GOVERNOR.listenBlockSec[0]! + GOVERNOR.listenBlockSec[1]!) / 2;
+export const LISTEN_BLOCK_SEC = (GOVERNOR.listenBlockSec[0] + GOVERNOR.listenBlockSec[1]) / 2;
 
 const byId = (a: ReviewItem, b: ReviewItem) => (a.cardId < b.cardId ? -1 : a.cardId > b.cardId ? 1 : 0);
 const isFact = (it: ReviewItem) => it.cls === "fact";
@@ -17,7 +17,11 @@ const isPerceptualSet = (it: ReviewItem) => !isFact(it) && it.perceptual;
  * plus a small gain per day waited so a high-recall item is never starved. A never-reviewed card
  * (`fresh`) fills only the room the due items leave.
  */
-export function warmupPriority(it: ReviewItem, today: number, cfg: Pick<GovernorConfig, "agingPerDay">): number {
+export function warmupPriority(
+  it: ReviewItem,
+  today: number,
+  cfg: Pick<GovernorConfig, "agingPerDay">,
+): number {
   if (it.fresh) return -1;
   return (
     PRIORITY_WEIGHTS.forgetting * (1 - it.recall) +
@@ -203,7 +207,13 @@ export function planWarmup(due: readonly ReviewItem[], ctx: PlanContext, cfg: Go
     if (!b.perceptual) continue;
     seen++;
     if (seen % 2 === 0) {
-      items.push({ item: b.planned.item, kind: "listen", cardIds: [], estSec: LISTEN_BLOCK_SEC, rated: false });
+      items.push({
+        item: b.planned.item,
+        kind: "listen",
+        cardIds: [],
+        estSec: LISTEN_BLOCK_SEC,
+        rated: false,
+      });
     }
   }
 
@@ -229,7 +239,11 @@ export interface ReviewDayPlan {
  * A reviews-only day (`/practice/review`): the warm-up budget first, then "a little more" in budget-sized
  * blocks, up to 12 minutes in total. A block is offered only while something is left to review.
  */
-export function planReviewDay(due: readonly ReviewItem[], ctx: PlanContext, cfg: GovernorConfig): ReviewDayPlan {
+export function planReviewDay(
+  due: readonly ReviewItem[],
+  ctx: PlanContext,
+  cfg: GovernorConfig,
+): ReviewDayPlan {
   const blockBudget = ctx.budgetSec ?? cfg.budgetSec;
   const blocks: WarmupPlan[] = [];
   let remaining: readonly ReviewItem[] = due;

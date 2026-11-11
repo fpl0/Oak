@@ -142,6 +142,8 @@ export interface TapResult {
   offsetMs: number;
   /** Window actually used, ms. */
   windowMs: number;
+  /** `tempo: 'free'` only: the learner's tempo over the target tempo (1.1 = 10 % faster). */
+  tempoRatio?: number;
 }
 
 /** One day's sung-note statistics, for the tolerance ladder. */

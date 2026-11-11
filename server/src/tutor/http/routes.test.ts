@@ -155,7 +155,7 @@ describe("turn routes", () => {
     });
   });
 
-  test("budget: the soft marker is a notice frame before done; the hard cap is an error event", async () => {
+  test("budget: the soft marker is a notice frame before done and never turns into an error", async () => {
     const backend = new ScriptedBackend("anthropic-api", [{ text: "ok" }]);
     const { post, ports } = setup([backend]);
     ports.settings.value.softMonthlyUsd = 0.001;
@@ -166,10 +166,11 @@ describe("turn routes", () => {
       message: "Tutor spending passed your monthly marker. Details in Settings.",
     });
     expect(ports.settings.value.softWarnedMonth).toBe("2026-11");
-    ports.settings.value.hardMonthlyUsd = 0.001;
-    const capped = await sse(await post("/tutor/chat", { thread: lesson, userText: "hi" }));
-    expect(capped.events).toEqual(["error"]);
-    expect(capped.last?.data).toMatchObject({ kind: "budget" });
+    // Far past the marker: still a full turn, with no second notice this month.
+    for (let i = 0; i < 3; i++) {
+      const later = await sse(await post("/tutor/chat", { thread: lesson, userText: "hi" }));
+      expect(later.events).toEqual(["meta", "text", "done"]);
+    }
   });
 
   test("without a Bun server the stream still runs and the gap is logged once; `require` refuses", async () => {

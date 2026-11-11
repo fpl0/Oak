@@ -117,11 +117,17 @@ export class ContentIndex {
     }
     for (const c of source.capstones) {
       if (c.brief !== undefined) this.#addExercise(c.id, "capstone", null, c.brief);
-      for (const s of c.sessionDefs) for (const st of s.stages ?? []) this.#addExercise(c.id, "capstone", null, st);
+      for (const s of c.sessionDefs)
+        for (const st of s.stages ?? []) this.#addExercise(c.id, "capstone", null, st);
     }
   }
 
-  #addExercise(owner: string, ownerKind: ExerciseSite["ownerKind"], step: StepDef | null, top: Exercise): void {
+  #addExercise(
+    owner: string,
+    ownerKind: ExerciseSite["ownerKind"],
+    step: StepDef | null,
+    top: Exercise,
+  ): void {
     for (const exercise of flattenExercise(top)) {
       const globalId = `${owner}/${exercise.id}`;
       if (this.#exercises.has(globalId)) continue;
@@ -190,7 +196,9 @@ export class ContentIndex {
     const meta = this.#checkpointMeta.get(cpId);
     if (meta === undefined) return [];
     const covered = new Set<string>(meta.covers);
-    return this.source.syllabus.units.filter((u) => covered.has(u.id)).flatMap((u) => u.lessons.map((l) => l.id));
+    return this.source.syllabus.units
+      .filter((u) => covered.has(u.id))
+      .flatMap((u) => u.lessons.map((l) => l.id));
   }
   /**
    * The most recent checkpoint before a core unit: the checkpoint of the nearest earlier core unit
@@ -207,7 +215,11 @@ export class ContentIndex {
   /** Track gates whose `opens` names this lesson, its unit or this capstone. */
   trackGatesFor(id: string, unitId?: string): GateSpec[] {
     return this.source.syllabus.trackGates
-      .filter((g) => (g.opens as string[]).includes(id) || (unitId !== undefined && (g.opens as string[]).includes(unitId)))
+      .filter(
+        (g) =>
+          (g.opens as string[]).includes(id) ||
+          (unitId !== undefined && (g.opens as string[]).includes(unitId)),
+      )
       .map((g) => g.gate);
   }
   /** The checkpoint whose pass opens this capstone's unit ("the unit's capstones open"), from its gate. */
@@ -267,7 +279,9 @@ export class ContentIndex {
 
   /** Rows granted when `sessionId` is completed (`when: 'complete'`) or started (`when: 'start'`). */
   unlockRowsAt(sessionId: string, when: "complete" | "start"): ToolEntry[] {
-    return this.source.toolbox.filter((t) => t.unlock.when === when && sitesOf(t.unlock.at).includes(sessionId));
+    return this.source.toolbox.filter(
+      (t) => t.unlock.when === when && sitesOf(t.unlock.at).includes(sessionId),
+    );
   }
   /** START rows whose silent fallback site is `sessionId` (contracts §3.1 rule 12). */
   fallbackRowsAt(sessionId: string): ToolEntry[] {

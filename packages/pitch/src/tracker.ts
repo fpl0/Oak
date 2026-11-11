@@ -91,11 +91,15 @@ export class PitchTracker {
 
   push(frame: PitchFrame): TrackedFrame {
     const o = this.o;
-    if (this.lastT !== null && frame.t > this.lastT && frame.t - this.lastT < 0.2) this.hop = frame.t - this.lastT;
+    if (this.lastT !== null && frame.t > this.lastT && frame.t - this.lastT < 0.2)
+      this.hop = frame.t - this.lastT;
     this.lastT = frame.t;
     const tc = frame.t - o.windowSec / 2;
     const voiced =
-      frame.clarity >= o.clarityMin && rmsDb(frame.rms) >= o.rmsMinDb && frame.hz >= o.minHz && frame.hz <= o.maxHz;
+      frame.clarity >= o.clarityMin &&
+      rmsDb(frame.rms) >= o.rmsMinDb &&
+      frame.hz >= o.minHz &&
+      frame.hz <= o.maxHz;
     if (!voiced) {
       this.noteDip(frame.rms);
       if (++this.unvoicedRun >= o.gapFrames) {

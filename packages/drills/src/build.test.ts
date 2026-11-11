@@ -68,7 +68,13 @@ describe("generated code plays the generated events (headless Strudel)", () => {
       bpm: 120,
       bars: 2,
       tracks: [
-        { label: "hats", src: "s", pat: seq([atom("hh", 8)]), swing: { amount: rat(1, 3), per: 4 }, gain: 0.6 },
+        {
+          label: "hats",
+          src: "s",
+          pat: seq([atom("hh", 8)]),
+          swing: { amount: rat(1, 3), per: 4 },
+          gain: 0.6,
+        },
         { label: "kick", src: "s", pat: line(["bd", null, "bd", null]), bank: "RolandTR909" },
         { label: "snare", src: "s", pat: line([null, "sd", null, "sd"]), bank: "RolandTR909" },
       ],
@@ -98,9 +104,7 @@ describe("generated code plays the generated events (headless Strudel)", () => {
       name: "sixteenth swing",
       bpm: 96,
       bars: 1,
-      tracks: [
-        { label: "hats", src: "s", pat: seq([atom("hh", 16)]), swing: { amount: rat(1, 4), per: 8 } },
-      ],
+      tracks: [{ label: "hats", src: "s", pat: seq([atom("hh", 16)]), swing: { amount: rat(1, 4), per: 8 } }],
     },
   ];
   for (const c of cases) {
@@ -126,7 +130,11 @@ describe("generated code plays the generated events (headless Strudel)", () => {
     };
     for (let i = 0; i < 40; i++) {
       const pat = seq([tree(3), tree(2)]);
-      const piece = buildPiece({ bpm: 90, bars: 6, tracks: [{ label: "mel", src: "note", pat, s: "piano" }] });
+      const piece = buildPiece({
+        bpm: 90,
+        bars: 6,
+        tracks: [{ label: "mel", src: "note", pat, s: "piano" }],
+      });
       if (piece.events.length === 0) continue;
       const got = await strudelEvents(piece.code, 6);
       expect(flattenEvents(piece.events)).toEqual(got.flat);

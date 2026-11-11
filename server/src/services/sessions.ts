@@ -1,0 +1,186 @@
+// Sessions: start (START unlocks, capstone state), heartbeat, end (minutes, keep-alive qualification,
+// session telemetry, the Coda summary). Today's plan itself comes from the SRS engineer's planner.
+import type { Session, SessionSummary, SessionTelemetry } from "@oak/api";
+import { STREAK } from "@oak/srs";
+import { tx } from "../db/index.ts";
+import { conflict, notFound } from "../errors.ts";
+import { dayIndex } from "../lib/days.ts";
+import { LearnerTime, newId, type ServiceContext } from "./context.ts";
+import type { CourseService } from "./course.ts";
+import type { GatesService } from "./gates.ts";
+import type { StreakService } from "./streak.ts";
+import type { UnlocksService } from "./unlocks.ts";
+
+export interface SessionsDeps {
+  gates: GatesService;
+  unlocks: UnlocksService;
+  streak: StreakService;
+  course: CourseService;
+  /** Whether the tutor is switched off in Settings (then the Coda never offers a listening note). */
+  tutorOff: () => boolean;
+}
+
+export class SessionsService {
+  readonly time: LearnerTime;
+  constructor(
+    private readonly ctx: ServiceContext,
+    private readonly d: SessionsDeps,
+  ) {
+    this.time = new LearnerTime(ctx);
+  }
+
+  get(id: string): Session {
+    const s = this.ctx.repos.sessions.get(id);
+    if (s === null) throw notFound(`session ${id}`);
+    return s;
+  }
+
+  openToday(): Session | null {
+    return this.ctx.repos.sessions.openOn(this.time.day());
+  }
+
+  start(body: {
+    kind: Session["kind"];
+    mapItemId: Session["mapItemId"];
+    targetMinutes: Session["targetMinutes"];
+  }): Session {
+    return tx(this.ctx.repos.db, () => {
+      const id = body.mapItemId;
+      if (id !== null && !this.d.gates.sessionOpen(id) && !this.d.gates.sessionDone(id))
+        throw conflict(`${id} is not open yet`);
+      const session: Session = {
+        id: newId("ses"),
+        day: this.time.day(),
+        kind: body.kind,
+        targetMinutes: body.targetMinutes,
+        mapItemId: id,
+        contentVersion: this.ctx.content.contentVersion,
+        startedAt: this.time.iso(),
+        endedAt: null,
+        activeMinutes: 0,
+        phase: "idle",
+      };
+      this.ctx.repos.sessions.create(session);
+      if (id !== null) {
+        this.d.unlocks.onStart(id);
+        const m = /^(.+)\.S\d+$/.exec(id);
+        const capstone = m === null ? null : this.ctx.content.capstoneMeta(m[1] as string);
+        if (capstone !== null) {
+          const row = this.ctx.repos.capstones.get(capstone.id);
+          const now = session.startedAt;
+          this.ctx.repos.capstones.save({
+            capstoneId: capstone.id,
+            status: row?.status === "released" ? "released" : "in_progress",
+            sessions: row?.sessions ?? [],
+            sketchId: row?.sketchId ?? null,
+            trackId: row?.trackId ?? null,
+            flavour: row?.flavour ?? null,
+            lastResult: row?.lastResult ?? null,
+            startedAt: row?.startedAt ?? now,
+            releasedAt: row?.releasedAt ?? null,
+            updatedAt: now,
+          });
+        }
+      }
+      return session;
+    });
+  }
+
+  heartbeat(id: string, body: { phase: Session["phase"]; activeMs: number; stepId: string | null }): void {
+    const s = this.get(id);
+    if (s.endedAt !== null) throw conflict("this session has ended");
+    this.ctx.repos.sessions.heartbeat(id, body.phase, body.activeMs / 60_000);
+  }
+
+  end(
+    id: string,
+    body: { wrappedEarly: boolean; phaseMs: { warmup: number; main: number; make: number; coda: number } },
+  ): SessionSummary {
+    const s = this.get(id);
+    if (s.endedAt !== null) {
+      const stored = this.ctx.repos.sessions.summary(id) as SessionSummary | null;
+      if (stored !== null) return stored;
+    }
+    return tx(this.ctx.repos.db, () => {
+      const now = this.time.iso();
+      const totalMs = body.phaseMs.warmup + body.phaseMs.main + body.phaseMs.make + body.phaseMs.coda;
+      const minutes = Math.max(s.activeMinutes, totalMs / 60_000);
+      // Keep-alive qualifies the day at the 2-minute mark or when its set ended (contracts §7.8 c).
+      const drills = this.ctx.repos.db
+        .query(
+          "SELECT COUNT(*) AS n, SUM(trials_total) AS trials FROM drill_sessions WHERE session_id = ? AND finished_at IS NOT NULL",
+        )
+        .get(id) as { n: number; trials: number | null };
+      if (s.kind === "keepalive" && (minutes * 60 >= STREAK.keepAliveSec || drills.n > 0))
+        this.d.streak.qualify("keepalive", { day: s.day });
+      this.d.streak.addMinutes(minutes, s.day);
+      const ended: Session = { ...s, endedAt: now, phase: "done", activeMinutes: minutes };
+
+      const telemetry: SessionTelemetry = {
+        sessionId: id,
+        day: s.day,
+        targetMinutes: s.targetMinutes,
+        kind: s.kind,
+        warmupMs: body.phaseMs.warmup,
+        newMs: body.phaseMs.main,
+        makeMs: body.phaseMs.make,
+        codaMs: body.phaseMs.coda,
+        totalActiveMs: totalMs,
+        warmupSets: drills.n,
+        warmupPlannedSec: 0,
+        dueSecBefore: 0,
+        dueSecAfter: 0,
+        deferredCards: 0,
+        overflowSec: Math.max(0, totalMs / 1000 - s.targetMinutes * 60),
+        wrappedEarly: body.wrappedEarly,
+        split: this.ctx.repos.lessons.progress(s.mapItemId ?? "")?.splitPart === "A",
+      };
+      const plan = this.ctx.repos.db.query("SELECT plan_json FROM sessions WHERE id = ?").get(id) as {
+        plan_json: string | null;
+      };
+      if (plan?.plan_json) {
+        try {
+          const p = JSON.parse(plan.plan_json) as { warmup?: { plannedSec?: number } };
+          telemetry.warmupPlannedSec = p.warmup?.plannedSec ?? 0;
+        } catch {
+          /* a plan that does not parse is left out */
+        }
+      }
+      this.ctx.repos.ops.saveSessionTelemetry(telemetry);
+
+      const firstDay = this.time.firstDay();
+      const listening: SessionSummary["listeningNote"] = this.d.tutorOff()
+        ? "off"
+        : s.kind === "capstone" || dayIndex(s.day) - dayIndex(firstDay) < 7
+          ? "auto"
+          : "offer";
+      const next = this.d.gates.nextMapItem();
+      const teaser =
+        this.ctx.repos.settings.get("teaserOptIn") && next !== null
+          ? { mapItemId: next, title: this.#title(next) }
+          : null;
+      const summary: SessionSummary = {
+        session: ended,
+        streak: this.d.streak.summary(),
+        sketchesSaved: this.ctx.repos.sketches.savedSince(s.startedAt),
+        canDo: this.ctx.repos.cando.since(s.startedAt),
+        unlocks: this.ctx.repos.unlocks.since(s.startedAt),
+        toleranceChange: null,
+        listeningNote: listening,
+        teaser,
+      };
+      this.ctx.repos.sessions.end(id, now, minutes, summary);
+      return summary;
+    });
+  }
+
+  #title(id: string): string {
+    return (
+      this.ctx.content.lessonDef(id)?.title ??
+      this.ctx.content.lessonSite(id)?.meta.title ??
+      this.ctx.content.checkpointMeta(id)?.title ??
+      this.ctx.content.capstoneMeta(id.replace(/\.S\d+$/, ""))?.title ??
+      id
+    );
+  }
+}

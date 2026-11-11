@@ -159,7 +159,8 @@ export function alignSung(
   let i = n;
   if (opts.freeTail) {
     let best = n;
-    for (let k = n; k >= 0; k--) if (((d[k] as number[])[m] as number) < ((d[best] as number[])[m] as number)) best = k;
+    for (let k = n; k >= 0; k--)
+      if (((d[k] as number[])[m] as number) < ((d[best] as number[])[m] as number)) best = k;
     i = best;
   }
   const match: (number | null)[] = new Array<number | null>(n).fill(null);
@@ -243,7 +244,10 @@ function modeOf(values: readonly number[]): number {
   let best = 0;
   let bestCount = -1;
   for (const [v, c] of counts) {
-    if (c > bestCount || (c === bestCount && (Math.abs(v) < Math.abs(best) || (Math.abs(v) === Math.abs(best) && v > best)))) {
+    if (
+      c > bestCount ||
+      (c === bestCount && (Math.abs(v) < Math.abs(best) || (Math.abs(v) === Math.abs(best) && v > best)))
+    ) {
       best = v;
       bestCount = c;
     }
@@ -406,7 +410,11 @@ function grade(
           severity: "warn",
           dim: "timing",
           where,
-          params: { i: i + 1, ms: Math.round(Math.abs(onsetErrorMs)), dir: onsetErrorMs < 0 ? "early" : "late" },
+          params: {
+            i: i + 1,
+            ms: Math.round(Math.abs(onsetErrorMs)),
+            dir: onsetErrorMs < 0 ? "early" : "late",
+          },
         });
       }
     }
@@ -433,7 +441,9 @@ function grade(
   }
 
   // Score and pass. Live: only the notes whose window has closed count.
-  const settled = notes.filter((_, i) => !(estimates[i] as Estimate).pending && !(estimates[i] as Estimate).future);
+  const settled = notes.filter(
+    (_, i) => !(estimates[i] as Estimate).pending && !(estimates[i] as Estimate).future,
+  );
   const pitch = settled.length > 0 ? mean(settled.map((n) => n.credit)) : 0;
   const missed = settled.filter((n) => n.feedback === "sing.missed").length;
   const timings = settled.map((n) => n.timingCredit).filter((t): t is number => t !== null);
@@ -454,7 +464,10 @@ function grade(
   if (settled.length > 0) {
     dims.coverage = { score: mean(settled.map((n) => n.coverage)), weight: 0, n: settled.length };
   }
-  const abs = settled.map((n) => n.cents).filter((c): c is number => c !== null).map(Math.abs);
+  const abs = settled
+    .map((n) => n.cents)
+    .filter((c): c is number => c !== null)
+    .map(Math.abs);
   const complete = settled.length === targets.length;
   return {
     score,
@@ -503,7 +516,9 @@ export function gradeSungLive(
   const last = frames[frames.length - 1];
   const hop = hopSecOf(frames);
   // "Now" on the clock of the targets: the newest analysed moment, never later than the newest frame.
-  const lag = ((WINDOW_SIZE / HOP_SIZE) * hop) / 2 + (Number.isFinite(profile.singLatencyMs) ? profile.singLatencyMs : 0) / 1000;
+  const lag =
+    ((WINDOW_SIZE / HOP_SIZE) * hop) / 2 +
+    (Number.isFinite(profile.singLatencyMs) ? profile.singLatencyMs : 0) / 1000;
   const heard = Math.min(now, last ? last.t : now) - lag;
   return grade(frames, targets, tol, mode, profile, heard);
 }

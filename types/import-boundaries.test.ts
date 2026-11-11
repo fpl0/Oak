@@ -31,7 +31,8 @@ const HEADLESS_STRUDEL = ["@strudel/core", "@strudel/mini", "@strudel/tonal", "@
 
 const isStrudel = (spec: string): boolean =>
   spec.startsWith("@strudel/") || spec === "superdough" || spec.startsWith("superdough/");
-const isTest = (file: string): boolean => /\.(test|pw)\.tsx?$/.test(file);
+// Test-only support files (`*.test-util.ts`, `*.test-data.ts`) count as tests.
+const isTest = (file: string): boolean => /\.(test|pw|test-util|test-data)\.tsx?$/.test(file);
 const oakPackage = (spec: string): string | null => /^@oak\/([a-z-]+)/.exec(spec)?.[1] ?? null;
 
 const IMPORT =

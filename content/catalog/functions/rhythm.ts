@@ -87,8 +87,7 @@ export const rhythmFns = defineFns([
     tool: "tb.bank",
     kind: "control",
     signature: '.bank("RolandTR909")',
-    explanation:
-      "Plays the same drum names on another drum machine. The bank is written with its full name.",
+    explanation: "Plays the same drum names on another drum machine. The bank is written with its full name.",
     example: ex(110, 'drums: s("bd hh sd hh").bank("RolandTR909")'),
     gotchas: ['Short names such as "tr909" are not used in Oak.'],
   },
@@ -106,7 +105,8 @@ export const rhythmFns = defineFns([
     tool: "tb.mini.elongate",
     kind: "mini",
     signature: '"a@3 b"',
-    explanation: "Makes a slot longer: bd@3 hh gives the kick three quarters of the bar and the hat the last quarter.",
+    explanation:
+      "Makes a slot longer: bd@3 hh gives the kick three quarters of the bar and the hat the last quarter.",
     example: ex(96, 'drums: s("bd@3 hh")'),
   },
   {
@@ -224,7 +224,8 @@ export const rhythmFns = defineFns([
     tool: "tb.superimpose",
     kind: "method",
     signature: ".superimpose(x => …)",
-    explanation: "Plays a changed copy on top of the original at the same time: a line doubled a third above.",
+    explanation:
+      "Plays a changed copy on top of the original at the same time: a line doubled a third above.",
     example: ex(84, 'mel: n("0 1 2 4").scale("C4:major").superimpose(x => x.scaleTranspose(2)).s("piano")'),
   },
   {
@@ -250,7 +251,10 @@ export const rhythmFns = defineFns([
     kind: "method",
     signature: ".sometimesBy(0 to 1, x => …)",
     explanation: "Applies a change to some events only, chosen at random with the chance you give.",
-    example: ex(96, 'mel: n("0 2 4 2").scale("C4:major").sometimesBy(.3, x => x.scaleTranspose(2)).s("piano")'),
+    example: ex(
+      96,
+      'mel: n("0 2 4 2").scale("C4:major").sometimesBy(.3, x => x.scaleTranspose(2)).s("piano")',
+    ),
   },
   {
     name: "const",
@@ -315,7 +319,8 @@ export const rhythmFns = defineFns([
     tool: "tb.mask",
     kind: "method",
     signature: '.mask("<1 0>")',
-    explanation: "Lets a part through where the mask is 1 and silences it where it is 0: layers enter and leave.",
+    explanation:
+      "Lets a part through where the mask is 1 and silences it where it is 0: layers enter and leave.",
     example: ex(96, 'hats: s("hh*8").mask("<0 1>")', 'kick: s("bd ~ bd ~")'),
   },
   {
@@ -344,9 +349,10 @@ export const rhythmFns = defineFns([
     tool: "tb.early",
     kind: "method",
     signature: ".early(1/8)",
-    explanation: "Moves a part earlier by a part of a bar: a note that arrives before the beat instead of on it.",
+    explanation:
+      "Moves a part earlier by a part of a bar: a note that arrives before the beat instead of on it.",
     example: ex(96, 'snare: s("~ sd ~ sd").early(1/8)', 'kick: s("bd ~ bd ~")'),
-    gotchas: ['The amount is written as code (1/8), never inside quotes.'],
+    gotchas: ["The amount is written as code (1/8), never inside quotes."],
   },
   {
     name: "late",

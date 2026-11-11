@@ -184,6 +184,7 @@ export const TRACK_LABELS = [
   "keys",
   "gtr",
   "horns",
+  "fx",
 ] as const;
 export type TrackLabel = (typeof TRACK_LABELS)[number];
 export const LABEL_ROLES: Readonly<Partial<Record<TrackLabel, Exclude<Layer, "all">>>> = {

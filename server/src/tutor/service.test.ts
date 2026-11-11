@@ -128,7 +128,7 @@ describe("a turn", () => {
     expect((off.events[0] as { data: { message: string } }).data.message).toContain("turned off");
   });
 
-  test("the hard cap answers budget; the soft marker is one notice before done and never blocks", async () => {
+  test("the soft marker is one notice before done and never blocks, however far past it", async () => {
     const backend = new ScriptedBackend("anthropic-api", [{ text: "ok" }]);
     const { run, ports } = setup([backend]);
     ports.settings.value.softMonthlyUsd = 0.001;
@@ -142,13 +142,12 @@ describe("a turn", () => {
     // Once per month.
     expect((await run(chat)).types).toEqual(["meta", "text", "done"]);
 
-    ports.settings.value.hardMonthlyUsd = 0.002;
-    const capped = await run(hint);
-    expect(capped.events).toEqual([
-      { type: "error", data: { kind: "budget", message: expect.stringContaining("monthly tutor cap") } },
-    ]);
-    expect(ports.progress.advances).toEqual([]);
-    expect(backend.turns).toHaveLength(2);
+    // Far past the marker (there is no hard cap): every lane still runs to done.
+    for (let i = 0; i < 3; i++) expect((await run(chat)).types).toEqual(["meta", "text", "done"]);
+    const heavy = await run(hint);
+    expect(heavy.events.at(-1)?.type).toBe("done");
+    expect(heavy.events.some((e) => e.type === "error")).toBe(false);
+    expect(backend.turns).toHaveLength(6);
   });
 
   test("a closed subject and a thrown port error both end in one error event", async () => {

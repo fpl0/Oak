@@ -1,0 +1,135 @@
+/* Oak design tokens (ux §7.2, §7.5, §7.6). Paper is the light theme, Bark the dark one; the theme hook is
+   data-theme="paper" | "bark" on <html> (contracts §11.9). Chrome is warm neutral; saturated colour is
+   reserved for musical meaning (palette.ts). Every token is an --oak-* custom property; Tailwind maps them
+   in app.css. */
+
+:root,
+:root[data-theme="paper"] {
+  color-scheme: light;
+  --oak-bg: #f6f2ea;
+  --oak-surface: #fffdf8;
+  --oak-surface-2: #efe9de;
+  --oak-border: #ddd3c3;
+  --oak-text: #1f1a14;
+  --oak-text-2: #5c5247;
+  /* ux §7.2 lists #8A7F72; darkened a step so small text passes WCAG AA (4.5:1) on --oak-surface-2. */
+  --oak-text-3: #6e6457;
+  --oak-accent: #2f6b45;
+  --oak-accent-hover: #255838;
+  --oak-on-accent: #ffffff;
+  --oak-accent-2: #b7791f;
+  --oak-link: #2f6b45;
+  --oak-issue: #b4532a;
+  --oak-lane-in: rgba(47, 107, 69, 0.06);
+  --oak-danger: #a4262c;
+  --oak-on-danger: #ffffff;
+  --oak-mic: #c62828;
+  --oak-selection: rgba(47, 107, 69, 0.18);
+  --oak-scrim: rgba(31, 26, 20, 0.32);
+  --oak-shadow: 0 1px 2px rgba(31, 26, 20, 0.06), 0 4px 12px rgba(31, 26, 20, 0.05);
+  --oak-shadow-overlay: 0 8px 32px rgba(31, 26, 20, 0.16), 0 1px 2px rgba(31, 26, 20, 0.08);
+  /* Code (the Strudel editor, @oak/strudel editor-theme.ts): every role is AA on --oak-surface. */
+  --oak-code-text: #1f1a14;
+  --oak-code-fn: #6b3fa0;
+  --oak-code-string: #2f6b45;
+  --oak-code-label: #0b5f8a;
+  --oak-code-atom: #a8471c;
+  --oak-code-punct: #5c5247;
+  --oak-code-bracket: #6e6457;
+  --oak-code-comment: #6e6457;
+  --oak-code-meta: #8a5a00;
+  --oak-code-invalid: #b4532a;
+  --oak-code-caret: #2f6b45;
+  --oak-code-gutter: #8a7f72;
+  --oak-code-active-line: rgba(31, 26, 20, 0.04);
+  --oak-code-selection: rgba(47, 107, 69, 0.2);
+}
+
+:root[data-theme="bark"] {
+  color-scheme: dark;
+  --oak-bg: #14110e;
+  --oak-surface: #1c1814;
+  --oak-surface-2: #26201a;
+  --oak-border: #3a3128;
+  --oak-text: #f2ebdf;
+  --oak-text-2: #bdb2a3;
+  /* ux §7.2 lists #8C8172; lifted a step for AA on --oak-surface-2. */
+  --oak-text-3: #9a8f80;
+  --oak-accent: #6fbf8a;
+  --oak-accent-hover: #86cc9d;
+  --oak-on-accent: #10180f;
+  --oak-accent-2: #e0a54a;
+  --oak-link: #6fbf8a;
+  --oak-issue: #e07b4f;
+  --oak-lane-in: rgba(111, 191, 138, 0.07);
+  --oak-danger: #e5484d;
+  --oak-on-danger: #14110e;
+  --oak-mic: #ff5a52;
+  --oak-selection: rgba(111, 191, 138, 0.22);
+  --oak-scrim: rgba(0, 0, 0, 0.5);
+  /* Bark uses borders, not shadows (ux §7.5). */
+  --oak-shadow: none;
+  --oak-shadow-overlay: 0 0 0 1px var(--oak-border), 0 12px 40px rgba(0, 0, 0, 0.5);
+  --oak-code-text: #f2ebdf;
+  --oak-code-fn: #cfa6f0;
+  --oak-code-string: #9fd8a4;
+  --oak-code-label: #7cc8f2;
+  --oak-code-atom: #f2a07a;
+  --oak-code-punct: #bdb2a3;
+  --oak-code-bracket: #9a8f80;
+  --oak-code-comment: #9a8f80;
+  --oak-code-meta: #e0a54a;
+  --oak-code-invalid: #e07b4f;
+  --oak-code-caret: #6fbf8a;
+  --oak-code-gutter: #8c8172;
+  --oak-code-active-line: rgba(242, 235, 223, 0.04);
+  --oak-code-selection: rgba(111, 191, 138, 0.25);
+}
+
+/* High contrast (Settings → Appearance). */
+:root[data-contrast="high"][data-theme="paper"] {
+  --oak-border: #a89a86;
+  --oak-text-2: #3e362d;
+  --oak-text-3: #514839;
+}
+:root[data-contrast="high"][data-theme="bark"] {
+  --oak-border: #6a5c4c;
+  --oak-text-2: #e0d6c7;
+  --oak-text-3: #c4b8a6;
+}
+
+:root {
+  /* Layout (ux §7.5): 4 px grid; radii 6 controls, 10 cards, 16 sheets. */
+  --oak-radius-control: 6px;
+  --oak-radius-card: 10px;
+  --oak-radius-sheet: 16px;
+  --oak-control-h: 32px;
+  --oak-control-h-lg: 40px;
+  --oak-nav-w: 56px;
+  --oak-topbar-h: 48px;
+  --oak-focusbar-h: 56px;
+  --oak-tutor-w: 360px;
+
+  /* Typography (ux §7.4). */
+  --oak-font-display: "Fraunces Variable", "Iowan Old Style", Georgia, serif;
+  --oak-font-ui: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --oak-font-code: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+  --oak-text-base: 0.9375rem; /* 15 px */
+  --oak-text-small: 0.8125rem; /* 13 px */
+  --oak-h1: 1.75rem; /* 28 */
+  --oak-h2: 1.375rem; /* 22 */
+  --oak-h3: 1.125rem; /* 18 */
+
+  /* Motion (ux §7.6). */
+  --oak-dur-fast: 120ms;
+  --oak-dur-base: 200ms;
+  --oak-dur-slow: 360ms;
+  --oak-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Reduced motion: system setting or the in-app override (data-motion is set by boot.js and prefs.ts).
+   Cross-fades only, at most 120 ms; no growth, flips or shakes. The playhead is canvas-driven and keeps moving. */
+:root[data-motion="reduced"] {
+  --oak-dur-base: 120ms;
+  --oak-dur-slow: 120ms;
+}

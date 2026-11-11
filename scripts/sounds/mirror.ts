@@ -27,6 +27,7 @@ import {
   SAMPLE_MAPS,
   SOUNDFONT_CDN,
 } from "./pack.config.ts";
+import { insideRoot, isSafeSamplePath } from "./paths.ts";
 
 const SOUNDS_DIR = join(import.meta.dirname, "../../sounds");
 const PACK_DIR = join(SOUNDS_DIR, "pack");
@@ -131,6 +132,8 @@ async function resolvePlan(): Promise<{ plan: Planned[]; manifest: PackManifest 
     const out: SampleMap = { _base: base };
     const group = spec.json.replace(/\.json$/, "");
     const add = (file: string) => {
+      if (!isSafeSamplePath(file))
+        throw new Error(`upstream ${spec.json} lists an unsafe path: ${JSON.stringify(file)}`);
       plan.push({
         path: `${v}/${spec.dir}${file}`,
         sourceUrl: `${SAMPLE_CDN}/${spec.dir}${encodePath(file)}`,
@@ -274,7 +277,7 @@ async function main() {
   let downloaded = 0;
   let reused = 0;
   const files = await pool(plan, CONCURRENCY, async (p): Promise<LockFile & { group: string }> => {
-    const dest = join(PACK_DIR, p.path);
+    const dest = insideRoot(PACK_DIR, p.path);
     const want = locked.get(p.path);
     let body: Uint8Array;
     if (p.content !== undefined) {

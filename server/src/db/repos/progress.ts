@@ -50,9 +50,11 @@ export class UnlocksRepo {
     return run(this.db, "UPDATE unlocks SET seen = 1 WHERE item_id = ?", itemId).changes > 0;
   }
   since(at: string): Unlock[] {
-    return all<UnlockRow>(this.db, "SELECT * FROM unlocks WHERE unlocked_at >= ? ORDER BY unlocked_at, item_id", at).map(
-      toUnlock,
-    );
+    return all<UnlockRow>(
+      this.db,
+      "SELECT * FROM unlocks WHERE unlocked_at >= ? ORDER BY unlocked_at, item_id",
+      at,
+    ).map(toUnlock);
   }
 }
 
@@ -100,10 +102,14 @@ export class CanDoRepo {
     ).map(toCanDo);
   }
   history(candoId: string): CanDoEntry[] {
-    return all<CanDoRow>(this.db, "SELECT * FROM cando_ledger WHERE cando_id = ? ORDER BY at", candoId).map(toCanDo);
+    return all<CanDoRow>(this.db, "SELECT * FROM cando_ledger WHERE cando_id = ? ORDER BY at", candoId).map(
+      toCanDo,
+    );
   }
   since(at: string): CanDoEntry[] {
-    return all<CanDoRow>(this.db, "SELECT * FROM cando_ledger WHERE at >= ? ORDER BY at, cando_id", at).map(toCanDo);
+    return all<CanDoRow>(this.db, "SELECT * FROM cando_ledger WHERE at >= ? ORDER BY at, cando_id", at).map(
+      toCanDo,
+    );
   }
 }
 
@@ -191,7 +197,11 @@ export interface RepairRow {
 export class CheckpointsRepo {
   constructor(private readonly db: Db) {}
   attempts(cpId: string): CheckpointAttemptRow[] {
-    return all<CpRow>(this.db, "SELECT * FROM checkpoint_attempts WHERE cp_id = ? ORDER BY attempt_no", cpId).map(toCp);
+    return all<CpRow>(
+      this.db,
+      "SELECT * FROM checkpoint_attempts WHERE cp_id = ? ORDER BY attempt_no",
+      cpId,
+    ).map(toCp);
   }
   allAttempts(): CheckpointAttemptRow[] {
     return all<CpRow>(this.db, "SELECT * FROM checkpoint_attempts ORDER BY cp_id, attempt_no").map(toCp);
@@ -205,7 +215,12 @@ export class CheckpointsRepo {
     );
     return row === null ? null : toCp(row);
   }
-  start(cpId: string, attemptNo: number, startedAt: string, items: CheckpointItemSpec[]): CheckpointAttemptRow {
+  start(
+    cpId: string,
+    attemptNo: number,
+    startedAt: string,
+    items: CheckpointItemSpec[],
+  ): CheckpointAttemptRow {
     run(
       this.db,
       `INSERT INTO checkpoint_attempts (cp_id, attempt_no, started_at, items_json) VALUES (?, ?, ?, ?)
@@ -220,7 +235,14 @@ export class CheckpointsRepo {
   finish(
     cpId: string,
     attemptNo: number,
-    f: { finishedAt: string; score: number; passed: boolean; softPass: boolean; perSkill: PerSkillScore[]; detail: unknown },
+    f: {
+      finishedAt: string;
+      score: number;
+      passed: boolean;
+      softPass: boolean;
+      perSkill: PerSkillScore[];
+      detail: unknown;
+    },
   ): void {
     run(
       this.db,
@@ -238,7 +260,12 @@ export class CheckpointsRepo {
   }
   /** Marks a finished attempt as a soft pass ("Continue anyway" accepted afterwards). */
   setSoftPass(cpId: string, attemptNo: number): void {
-    run(this.db, "UPDATE checkpoint_attempts SET soft_pass = 1 WHERE cp_id = ? AND attempt_no = ?", cpId, attemptNo);
+    run(
+      this.db,
+      "UPDATE checkpoint_attempts SET soft_pass = 1 WHERE cp_id = ? AND attempt_no = ?",
+      cpId,
+      attemptNo,
+    );
   }
 
   repairs(): RepairRow[] {
@@ -259,7 +286,11 @@ export class CheckpointsRepo {
     }));
   }
   /** Replaces the queue of one checkpoint (a new fail supersedes the old plan). */
-  setRepairs(cpId: string, rows: { skillId: string; familyId: string | null; sets: number }[], at: string): void {
+  setRepairs(
+    cpId: string,
+    rows: { skillId: string; familyId: string | null; sets: number }[],
+    at: string,
+  ): void {
     run(this.db, "DELETE FROM repair_queue WHERE cp_id = ?", cpId);
     for (const r of rows)
       run(
@@ -331,7 +362,10 @@ export class CapstonesRepo {
     };
   }
   all(): CapstoneRow[] {
-    return all<{ capstone_id: string }>(this.db, "SELECT capstone_id FROM capstone_state ORDER BY capstone_id")
+    return all<{ capstone_id: string }>(
+      this.db,
+      "SELECT capstone_id FROM capstone_state ORDER BY capstone_id",
+    )
       .map((r) => this.get(r.capstone_id))
       .filter((r): r is CapstoneRow => r !== null);
   }
@@ -359,9 +393,10 @@ export class CapstonesRepo {
   }
   releasedIds(): Set<string> {
     return new Set(
-      all<{ capstone_id: string }>(this.db, "SELECT capstone_id FROM capstone_state WHERE status = 'released'").map(
-        (r) => r.capstone_id,
-      ),
+      all<{ capstone_id: string }>(
+        this.db,
+        "SELECT capstone_id FROM capstone_state WHERE status = 'released'",
+      ).map((r) => r.capstone_id),
     );
   }
 }

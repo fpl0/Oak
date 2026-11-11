@@ -209,9 +209,12 @@ describe("DTOs", () => {
     expect(DEFAULT_SETTINGS.tutor).toEqual({
       backend: "auto",
       softMonthlyUsd: 25,
-      hardMonthlyUsd: null,
       softWarnedMonth: null,
     });
+    // The hard monthly cap is gone: a client may no longer send it.
+    expect(
+      SettingsSchema.shape.tutor.safeParse({ ...DEFAULT_SETTINGS.tutor, hardMonthlyUsd: 40 }).success,
+    ).toBe(false);
   });
 
   const profile = ProfileSchema.parse({
@@ -291,5 +294,18 @@ describe("DTOs", () => {
       false,
     );
     expect(contract.confirm.body.safeParse({ action: "tutor.delete", target: "x" }).success).toBe(false);
+  });
+});
+
+describe("adversarial: path parameters", () => {
+  test("a dot-segment parameter is refused (it would resolve to another endpoint)", () => {
+    for (const id of [".", "..", "%2e", "%2E%2e", ".%2E"])
+      expect(() => buildPath(contract["sketches.delete"], { id })).toThrow("cannot be");
+    // Dots inside an ID, and slashes, are encoded as usual.
+    expect(buildPath(contract["sketches.delete"], { id: "a..b" })).toBe("/api/sketches/a..b");
+    expect(buildPath(contract["sketches.delete"], { id: "../x" })).toBe("/api/sketches/..%2Fx");
+    expect(new URL(`http://h${buildPath(contract["sketches.delete"], { id: "../x" })}`).pathname).toBe(
+      "/api/sketches/..%2Fx",
+    );
   });
 });

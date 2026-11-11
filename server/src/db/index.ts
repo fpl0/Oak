@@ -1,6 +1,6 @@
 // SQLite (bun:sqlite): one connection, WAL, foreign keys on. The server is the single writer.
 import { Database, type SQLQueryBindings } from "bun:sqlite";
-import { mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 import { migrate } from "./migrate.ts";
 
@@ -14,14 +14,28 @@ export interface OpenOptions {
 }
 
 export function openDb(path: string, options: OpenOptions = {}): Db {
-  if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
+  // The data directory holds the learner's history, audio and backups: private to the user (0700) when
+  // Oak creates it. An existing directory is left as the learner set it.
+  if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const db = new Database(path, { create: true, strict: true });
+  // SQLite creates the -wal and -shm files with the database file's mode: 0600 covers all three.
+  if (path !== ":memory:") tightenMode(path, 0o600);
   db.run("PRAGMA journal_mode = WAL");
   db.run("PRAGMA foreign_keys = ON");
   db.run("PRAGMA busy_timeout = 5000");
   db.run("PRAGMA synchronous = NORMAL");
   if (options.migrate !== false) migrate(db);
   return db;
+}
+
+/** Removes group and other permission bits a file has beyond `mode` (never widens). */
+export function tightenMode(path: string, mode: number): void {
+  try {
+    const cur = statSync(path).mode & 0o777;
+    if ((cur & ~mode) !== 0) chmodSync(path, cur & mode);
+  } catch {
+    /* not there (yet) or not ours: nothing to tighten */
+  }
 }
 
 /** Run `fn` in one transaction (BEGIN IMMEDIATE); a throw rolls everything back. Nested calls join the outer one. */
@@ -46,7 +60,8 @@ export function run(db: Db, sql: string, ...params: Bind[]): { changes: number; 
 export const bool = (v: unknown): boolean => v === 1 || v === true || v === 1n;
 export const int = (v: boolean): 0 | 1 => (v ? 1 : 0);
 export const toJson = (v: unknown): string => JSON.stringify(v);
-export const toJsonOrNull = (v: unknown): string | null => (v === null || v === undefined ? null : JSON.stringify(v));
+export const toJsonOrNull = (v: unknown): string | null =>
+  v === null || v === undefined ? null : JSON.stringify(v);
 
 /** Parse a `*_json` column; a NULL or unreadable value gives `fallback`. */
 export function fromJson<T>(text: unknown, fallback: T): T {

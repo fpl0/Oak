@@ -11,7 +11,6 @@ export const TUTOR_ERROR_KINDS = [
   "refusal",
   "max_tokens",
   "iteration_limit",
-  "budget",
   "aborted",
   "internal",
 ] as const;
@@ -37,7 +36,6 @@ export const ERROR_COPY: Record<TutorErrorKind, string> = {
   refusal: "The tutor declined to answer that. Try asking in a different way.",
   max_tokens: "The tutor's answer was cut off. Try again.",
   iteration_limit: "The tutor took too many steps without finishing. Try again.",
-  budget: "The monthly tutor cap you set has been reached. You can raise it in Settings.",
   aborted: "Stopped.",
   internal: "Something went wrong in the tutor.",
 };

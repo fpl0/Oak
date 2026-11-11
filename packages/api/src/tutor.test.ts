@@ -41,7 +41,6 @@ describe("tutor protocol (contracts §10)", () => {
       "refusal",
       "max_tokens",
       "iteration_limit",
-      "budget",
       "aborted",
       "internal",
     ]);
@@ -71,11 +70,15 @@ describe("tutor protocol (contracts §10)", () => {
   test("events validate; unknown shapes are rejected", () => {
     expect(TutorEventSchema.safeParse({ type: "text", data: { delta: "hi" } }).success).toBe(true);
     expect(
-      TutorEventSchema.safeParse({ type: "error", data: { kind: "budget", message: "x" } }).success,
+      TutorEventSchema.safeParse({ type: "error", data: { kind: "refusal", message: "x" } }).success,
     ).toBe(true);
     expect(TutorEventSchema.safeParse({ type: "error", data: { kind: "quota", message: "x" } }).success).toBe(
       false,
     );
+    // The hard monthly cap was removed (2026-11-11), and its error kind with it.
+    expect(
+      TutorEventSchema.safeParse({ type: "error", data: { kind: "budget", message: "x" } }).success,
+    ).toBe(false);
     expect(asTutorEvent({ event: "message", data: {} })).toBeNull();
     expect(asTutorEvent({ event: "text", data: "plain" })).toBeNull();
     expect(

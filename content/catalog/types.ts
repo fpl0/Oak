@@ -45,7 +45,8 @@ export function defineFns(entries: FnEntry[]): readonly FnEntry[] {
   for (const e of entries) {
     if (!/^tb\.[A-Za-z0-9]+(\.[A-Za-z0-9-]+)*$/.test(e.tool))
       throw new Error(`catalog: "${e.name}" names "${e.tool}", which is not a tool ID`);
-    if (!e.example.startsWith("setcpm(")) throw new Error(`catalog: the example of "${e.name}" has no tempo line`);
+    if (!e.example.startsWith("setcpm("))
+      throw new Error(`catalog: the example of "${e.name}" has no tempo line`);
     if (e.explanation.trim() === "" || e.signature.trim() === "")
       throw new Error(`catalog: "${e.name}" needs a signature and an explanation`);
   }

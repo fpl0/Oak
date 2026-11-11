@@ -19,7 +19,12 @@ export function firstScaleOf(code: string): { tonic: string; octave: number | nu
   for (const arg of stringArgsOf(stripComments(code), ["scale"])) {
     for (const token of arg.split(/[\s<>[\],!*@/|]+/)) {
       const m = SCALE_NAME.exec(token);
-      if (m) return { tonic: m[1] as string, octave: m[2] === undefined ? null : Number(m[2]), mode: m[3] as string };
+      if (m)
+        return {
+          tonic: m[1] as string,
+          octave: m[2] === undefined ? null : Number(m[2]),
+          mode: m[3] as string,
+        };
     }
   }
   return null;
@@ -64,8 +69,14 @@ export function bandCodeFor(band: BandSetup, ctx: BandContext): string {
     code = code.replaceAll("{{bpm}}", String(tempo?.bpm ?? ctx.defaultBpm));
   }
   if (learner && stepKey && (learner.tonic !== stepKey.tonic || learner.mode !== stepKey.mode)) {
-    const from = new RegExp(`(^|[^A-Za-z#])${escapeRe(stepKey.tonic)}(-?\\d):${escapeRe(stepKey.mode)}(?![a-z:])`, "g");
-    code = code.replace(from, (_all, lead: string, octave: string) => `${lead}${learner.tonic}${octave}:${learner.mode}`);
+    const from = new RegExp(
+      `(^|[^A-Za-z#])${escapeRe(stepKey.tonic)}(-?\\d):${escapeRe(stepKey.mode)}(?![a-z:])`,
+      "g",
+    );
+    code = code.replace(
+      from,
+      (_all, lead: string, octave: string) => `${lead}${learner.tonic}${octave}:${learner.mode}`,
+    );
   }
   return code;
 }

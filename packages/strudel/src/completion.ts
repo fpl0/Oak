@@ -88,7 +88,8 @@ export function completionSiteAt(text: string, pos: number): CompletionSite {
     }
     if (ch === "/" && text[i + 1] === "/") {
       const end = text.indexOf("\n", i);
-      if (end < 0 || end >= pos) return { from: pos, prefix: "", inString: false, callee: null, afterDot: false };
+      if (end < 0 || end >= pos)
+        return { from: pos, prefix: "", inString: false, callee: null, afterDot: false };
       i = end;
     } else if (ch === '"' || ch === "'" || ch === "`") {
       quote = ch;
@@ -112,7 +113,12 @@ export function completionSiteAt(text: string, pos: number): CompletionSite {
   return { from, prefix, inString: false, callee: calls.at(-1) ?? null, afterDot: text[from - 1] === "." };
 }
 
-const STRING_KINDS: Record<string, CompletionKind> = { s: "sound", sound: "sound", bank: "bank", scale: "scale" };
+const STRING_KINDS: Record<string, CompletionKind> = {
+  s: "sound",
+  sound: "sound",
+  bank: "bank",
+  scale: "scale",
+};
 
 /** Unlocked completions for a site, best match first. An empty prefix completes only on request (`explicit`). */
 export function completionsFor(
@@ -121,13 +127,22 @@ export function completionsFor(
   site: CompletionSite,
   explicit = false,
 ): OakCompletion[] {
-  const wanted: CompletionKind | null = site.inString ? (STRING_KINDS[site.callee ?? ""] ?? null) : "function";
+  const wanted: CompletionKind | null = site.inString
+    ? (STRING_KINDS[site.callee ?? ""] ?? null)
+    : "function";
   if (wanted === null) return [];
   if (site.prefix === "" && !explicit) return [];
   const prefix = site.prefix.toLowerCase();
   const seen = new Set<string>();
   return vocabulary.items
-    .filter((item) => item.kind === wanted && unlocked.has(item.toolId) && item.label.toLowerCase().startsWith(prefix))
-    .filter((item) => (seen.has(item.label) ? false : (seen.add(item.label), true)))
+    .filter(
+      (item) =>
+        item.kind === wanted && unlocked.has(item.toolId) && item.label.toLowerCase().startsWith(prefix),
+    )
+    .filter((item) => {
+      if (seen.has(item.label)) return false;
+      seen.add(item.label);
+      return true;
+    })
     .sort((a, b) => a.label.length - b.label.length || a.label.localeCompare(b.label));
 }

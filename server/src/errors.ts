@@ -34,7 +34,8 @@ export class ApiError extends Error {
   }
 }
 
-export const badRequest = (message: string, issues?: ApiIssue[]) => new ApiError("bad_request", message, issues);
+export const badRequest = (message: string, issues?: ApiIssue[]) =>
+  new ApiError("bad_request", message, issues);
 export const notFound = (what: string) => new ApiError("not_found", `${what} not found`);
 export const conflict = (message: string) => new ApiError("conflict", message);
 export const forbidden = (message: string) => new ApiError("forbidden", message);

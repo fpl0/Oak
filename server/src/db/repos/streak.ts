@@ -63,9 +63,12 @@ export class StreakRepo {
     return d;
   }
   daysBetween(from: string, to: string): StreakDay[] {
-    return all<DayRow>(this.db, "SELECT * FROM streak_days WHERE day >= ? AND day <= ? ORDER BY day", from, to).map(
-      toDay,
-    );
+    return all<DayRow>(
+      this.db,
+      "SELECT * FROM streak_days WHERE day >= ? AND day <= ? ORDER BY day",
+      from,
+      to,
+    ).map(toDay);
   }
   qualifiedDays(): string[] {
     return all<{ day: string }>(this.db, "SELECT day FROM streak_days WHERE qualified = 1 ORDER BY day").map(
@@ -75,7 +78,10 @@ export class StreakRepo {
   lastQualifiedDay(before?: string): string | null {
     const row =
       before === undefined
-        ? get<{ day: string }>(this.db, "SELECT day FROM streak_days WHERE qualified = 1 ORDER BY day DESC LIMIT 1")
+        ? get<{ day: string }>(
+            this.db,
+            "SELECT day FROM streak_days WHERE qualified = 1 ORDER BY day DESC LIMIT 1",
+          )
         : get<{ day: string }>(
             this.db,
             "SELECT day FROM streak_days WHERE qualified = 1 AND day < ? ORDER BY day DESC LIMIT 1",
@@ -109,7 +115,9 @@ export class StreakRepo {
   }
 
   unspentRests(): number {
-    return Number(get<{ n: number }>(this.db, "SELECT COUNT(*) AS n FROM rests WHERE spent_week IS NULL")?.n ?? 0);
+    return Number(
+      get<{ n: number }>(this.db, "SELECT COUNT(*) AS n FROM rests WHERE spent_week IS NULL")?.n ?? 0,
+    );
   }
   earnedIn(week: string): boolean {
     return get(this.db, "SELECT 1 FROM rests WHERE earned_week = ?", week) !== null;

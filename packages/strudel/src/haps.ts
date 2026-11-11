@@ -21,7 +21,8 @@ function jsonSafe(value: unknown, depth = 0): unknown {
   if (Array.isArray(value)) return value.map((v) => jsonSafe(v, depth + 1) ?? null);
   // A Fraction (BigInt fields): keep its number.
   const maybeFraction = value as { s?: unknown; n?: unknown; d?: unknown; valueOf?: () => unknown };
-  if (typeof maybeFraction.n === "bigint" && typeof maybeFraction.d === "bigint") return Number(maybeFraction.valueOf?.());
+  if (typeof maybeFraction.n === "bigint" && typeof maybeFraction.d === "bigint")
+    return Number(maybeFraction.valueOf?.());
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
     const safe = jsonSafe(v, depth + 1);
@@ -76,6 +77,7 @@ export function audibleCycle(
   cps: number,
   latency: { schedulerLeadS: number; outputLatencyS: number; baseLatencyS: number; visualOffsetMs: number },
 ): number {
-  const seconds = latency.schedulerLeadS + latency.outputLatencyS + latency.baseLatencyS + latency.visualOffsetMs / 1000;
+  const seconds =
+    latency.schedulerLeadS + latency.outputLatencyS + latency.baseLatencyS + latency.visualOffsetMs / 1000;
   return cycle - seconds * cps;
 }

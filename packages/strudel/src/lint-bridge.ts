@@ -1,6 +1,7 @@
 // The bridge between the one lint pass (`lintOak` in @oak/grader, injected as `OakStrudelOptions.lint`)
 // and the editor. Pure: no CodeMirror import, so it is tested under Bun.
 import type { CodeRange, FeedbackId, LintContext, LintDiagnostic, LintResult } from "@oak/content-kit";
+import { friendlyEvalError } from "./friendly.ts";
 
 /** What `@codemirror/lint` takes. */
 export interface CmDiagnostic {
@@ -42,6 +43,8 @@ export const ADAPTER_FEEDBACK = {
   band: "eval.band-failed",
   /** The editor was disposed while the evaluation waited. */
   disposed: "eval.disposed",
+  /** The code evaluated to a pattern with no note in the loop (info, never blocking). */
+  silent: "eval.silent",
 } as const satisfies Record<string, FeedbackId>;
 
 export function lineOf(code: string, offset: number): number {
@@ -67,13 +70,30 @@ export function diagnostic(
  * (docs/spikes.md, s2 gotchas). acorn errors carry `pos`; peggy errors carry `location.start.offset`.
  */
 export function errorToDiagnostic(err: unknown, code: string): LintDiagnostic {
-  const e = (err ?? {}) as { name?: string; message?: string; pos?: number; location?: { start?: { offset?: number } } };
+  const e = (err ?? {}) as {
+    name?: string;
+    message?: string;
+    pos?: number;
+    location?: { start?: { offset?: number } };
+  };
   const message = typeof e.message === "string" && e.message.length > 0 ? e.message : String(err);
   const offset = typeof e.pos === "number" ? e.pos : e.location?.start?.offset;
-  const syntax = typeof offset === "number" || e.name === "SyntaxError" || /parse error|Unexpected token/i.test(message);
-  const from = typeof offset === "number" ? Math.max(0, Math.min(offset, code.length)) : 0;
-  const to = typeof offset === "number" ? Math.min(code.length, from + 1) : 0;
-  return diagnostic(syntax ? ADAPTER_FEEDBACK.syntax : ADAPTER_FEEDBACK.runtime, "error", message, code, { from, to });
+  const syntax =
+    typeof offset === "number" ||
+    e.name === "SyntaxError" ||
+    /parse error|Unexpected token|Unterminated/i.test(message);
+  // The learner reads one calm sentence at the place it is about (ux §7.11); the raw text stays in `detail`.
+  const friendly = friendlyEvalError(message, code, typeof offset === "number" ? offset : null);
+  const range = friendly.range ?? { from: 0, to: 0 };
+  const d = diagnostic(
+    syntax ? ADAPTER_FEEDBACK.syntax : ADAPTER_FEEDBACK.runtime,
+    "error",
+    friendly.message,
+    code,
+    range,
+  );
+  d.params = { detail: friendly.detail };
+  return d;
 }
 
 export type LintOutcome = { ok: true; result: LintResult } | { ok: false; diagnostic: LintDiagnostic };

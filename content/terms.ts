@@ -1,0 +1,85 @@
+// The glossary (AUTHORING §6): one sound-first sentence and one audio example per term, with the lesson
+// that introduces it. A term becomes a fact card only when a later lesson tests it (`TermDef.card` in that
+// lesson). Each example evaluates headlessly and uses only tools unlocked at `introducedBy` in every
+// legal order (content/validate/registries.test.ts).
+import { defineTerm, type LessonId, type TermEntry, type TermId } from "@oak/content-kit";
+
+const t = (
+  id: string,
+  term: string,
+  definition: string,
+  example: string,
+  introducedBy: LessonId,
+  pairedWith?: string,
+) =>
+  defineTerm({
+    id: id as TermId,
+    term,
+    definition,
+    example,
+    introducedBy,
+    ...(pairedWith ? { pairedWith: pairedWith as TermId } : {}),
+  });
+
+const ex4 = (bpm: number, ...lines: string[]) => `setcpm(${bpm}/4)\n\n${lines.join("\n")}`;
+
+// biome-ignore format: one term to a line
+export const terms: readonly TermEntry[] = [
+  t("term.loop", "loop", "A short pattern that repeats until you stop it.", ex4(92, 'drums: s("bd ~ sd ~, hh*8")'), "U00.L01"),
+  t("term.timbre", "timbre", "The colour of a sound: what makes a piano and a bass sound different on the same note.", ex4(92, 'drums: s("bd ~ sd ~")'), "U00.L01"),
+  t("term.pulse", "pulse", "The steady beat you tap your foot to.", ex4(96, 'drums: s("bd bd bd bd")'), "U01.L01"),
+  t("term.tempo", "tempo", "How fast the pulse goes, counted in beats per minute (BPM).", ex4(120, 'drums: s("bd bd bd bd")'), "U01.L01"),
+  t("term.bar", "bar", "A group of beats; in Oak one cycle is one bar.", ex4(96, 'drums: s("bd sd sd sd")'), "U01.L01"),
+  t("term.downbeat", "downbeat", "Beat 1 of a bar: where the bar starts and the groove lands.", ex4(96, 'drums: s("bd hh hh hh")'), "U01.L02"),
+  t("term.rest", "rest", "A beat that is silent on purpose and still counts.", ex4(96, 'drums: s("bd bd ~ bd")'), "U01.L02"),
+  t("term.backbeat", "backbeat", "The snare on beats 2 and 4, the clap of most pop and rock.", ex4(96, 'kick: s("bd ~ bd ~")', 'snare: s("~ sd ~ sd")'), "U01.L03"),
+  t("term.subdivision", "subdivision", "Splitting each beat into equal smaller parts, like two eighths per beat.", ex4(96, 'hats: s("[hh hh]*4")'), "U01.L04"),
+  t("term.eighth-note", "eighth note", "Half a beat long: two of them fill one beat in 4/4.", ex4(96, 'hats: s("hh*8")'), "U01.L05", "term.quarter-note"),
+  t("term.quarter-note", "quarter note", "One beat long in 4/4.", ex4(96, 'drums: s("bd bd bd bd")'), "U01.L05", "term.eighth-note"),
+  t("term.fill", "fill", "A short break in the groove, often at the end of a phrase, that leads into the next bar.", ex4(96, 'drums: s("<[bd sd bd sd] [bd sd bd sd] [bd sd bd sd] [ht mt lt lt]>")'), "U01.L07"),
+  t("term.meter", "meter", "How many beats a bar has and how they are grouped: 4/4, 3/4.", `setcpm(96/3)\n\ndrums: s("bd hh hh")`, "U01.L08"),
+  t("term.pitch", "pitch", "How high or low a note sounds.", ex4(84, 'mel: note("c3 c4 c5 c4").s("piano")'), "U02.L01"),
+  t("term.octave", "octave", "The same note name, higher or lower: c4 and c5 sound like one note at two heights.", ex4(84, 'mel: note("c4 c5").s("piano")'), "U02.L01"),
+  t("term.semitone", "half step", "The smallest step on the keyboard: from one key to the very next.", ex4(84, 'mel: note("e4 f4 b4 c5").s("piano")'), "U02.L03", "term.whole-step"),
+  t("term.whole-step", "whole step", "Two half steps: one key skipped in between.", ex4(84, 'mel: note("c4 d4 f4 g4").s("piano")'), "U02.L03", "term.semitone"),
+  t("term.sharp", "sharp", "A sign that raises a note by a half step: f#4.", ex4(84, 'mel: note("f4 f#4").s("piano")'), "U02.L03", "term.flat"),
+  t("term.flat", "flat", "A sign that lowers a note by a half step: bb3.", ex4(84, 'mel: note("b3 bb3").s("piano")'), "U02.L03", "term.sharp"),
+  t("term.staff", "staff", "Five lines on which notes are written: higher on the staff sounds higher.", ex4(84, 'mel: note("e4 g4 b4 d5").s("piano")'), "U02.L04"),
+  t("term.tonic", "tonic", "Home: the note a melody feels finished on.", ex4(84, 'mel: note("e4 d4 c4 ~").s("piano")'), "U03.L01"),
+  t("term.major-scale", "major scale", "Seven notes in the pattern whole, whole, half, whole, whole, whole, half.", ex4(84, 'mel: note("c4 d4 e4 f4 g4 a4 b4 c5").s("piano")'), "U03.L01"),
+  t("term.scale-degree", "scale degree", "A note's number in the key: the tonic is 1.", ex4(84, 'mel: n("0 2 4 2").scale("C4:major").s("piano")'), "U03.L02"),
+  t("term.leading-tone", "leading tone", "Degree 7, a half step under the tonic, which pulls up to it.", ex4(84, 'mel: n("6 7").scale("C4:major").s("piano")'), "U03.L04"),
+  t("term.key-signature", "key signature", "The sharps or flats at the start of the staff that hold for the whole piece.", ex4(84, 'mel: n("0 1 2 3 4 5 6 7").scale("G4:major").s("piano")'), "U03.L06"),
+  t("term.circle-of-fifths", "circle of fifths", "Keys arranged by fifths, each one adding one sharp or flat.", ex4(84, 'mel: n("0 4 0 4").scale("<C4:major G4:major D4:major A4:major>").s("piano")'), "U03.L07"),
+  t("term.solfege", "solfège", "Singing names for degrees: do re mi fa sol la ti.", ex4(84, 'mel: n("0 1 2 3 4 5 6 7").scale("C4:major").s("piano")'), "U03.L08"),
+  t("term.interval", "interval", "The distance between two notes.", ex4(84, 'mel: n("0 2 0 4").scale("C4:major").s("piano")'), "U04.L01"),
+  t("term.consonance", "consonance", "Notes that sound stable and at rest together.", ex4(84, 'chords: note("[c4,e4] [c4,g4]").s("piano")'), "U04.L03", "term.dissonance"),
+  t("term.dissonance", "dissonance", "Notes that clash and want to move.", ex4(84, 'chords: note("[c4,db4] [c4,f#4]").s("piano")'), "U04.L03", "term.consonance"),
+  t("term.triad", "triad", "Three notes stacked in thirds: root, third, fifth.", ex4(84, 'chords: n("[0,2,4]").scale("C4:major").s("piano")'), "U05.L01"),
+  t("term.inversion", "inversion", "A chord with a note other than the root at the bottom.", ex4(84, 'chords: note("[c4,e4,g4] [e3,g3,c4] [g3,c4,e4]").s("piano")'), "U05.L05"),
+  t("term.voice-leading", "voice leading", "Moving each note of a chord to the nearest note of the next.", ex4(84, 'chords: note("[c4,e4,g4] [c4,f4,a4] [b3,d4,g4] [c4,e4,g4]").s("piano")'), "U05.L07"),
+  t("term.roman-numeral", "Roman numeral", "A chord named by the degree it is built on: I, IV, V.", ex4(90, 'chords: n("<[0,2,4] [3,5,7] [4,6,8] [0,2,4]>").scale("C4:major").s("piano")'), "U06.L02"),
+  t("term.cadence", "cadence", "A chord move that ends a phrase, like V to I.", ex4(90, 'chords: n("<[4,6,8] [0,2,4]>").scale("C4:major").s("piano")'), "U06.L04"),
+  t("term.harmonic-rhythm", "harmonic rhythm", "How often the chords change.", ex4(90, 'chords: n("<[0,2,4] [[3,5,7] [4,6,8]]>").scale("C4:major").s("piano")'), "U06.L08"),
+  t("term.contour", "contour", "The up-and-down shape of a melody.", ex4(90, 'mel: n("0 2 4 7 4 2 0 ~").scale("C4:major").s("piano")'), "U07.L01"),
+  t("term.motif", "motif", "A short musical idea that comes back.", ex4(90, 'mel: n("<[0 2 4 ~] [1 3 5 ~]>").scale("C4:major").s("piano")'), "U07.L02"),
+  t("term.pickup", "pickup", "Notes before the first full bar that lead into it.", `setcpm(84/3)\n\nmel: n("<[~ ~ 4] [0 ~ 2]>").scale("C4:major").s("piano")`, "U07.L08"),
+  t("term.chorus", "chorus", "The section of a song that returns with the same music and the hook.", ex4(100, 'chords: chord("<F G C C>").voicing().s("piano")'), "U09.L02", "term.verse"),
+  t("term.verse", "verse", "The section of a song that tells the story; its music returns, its words change.", ex4(100, 'chords: chord("<C Am F G>").voicing().s("piano")'), "U09.L02", "term.chorus"),
+  t("term.relative-minor", "relative minor", "The minor key that shares a major key's notes, starting on degree 6.", ex4(84, 'mel: n("0 2 4 7").scale("<C4:major A3:minor>").s("piano")'), "U10.L02"),
+  t("term.blue-note", "blue note", "A flattened note (♭3, ♭5, ♭7) that gives the blues its bite.", ex4(100, 'mel: n("0 2 3 4").scale("C4:blues").s("piano")'), "U11.L03"),
+  t("term.shuffle", "shuffle", "A swung feel where each beat is split long-short.", ex4(112, 'hats: s("hh*8").swingBy(1/3, 4)'), "U11.L07"),
+  t("term.syncopation", "syncopation", "Accents that land off the beat, pushing against the pulse.", ex4(100, 'drums: s("bd ~ ~ bd ~ ~ bd ~")'), "U13.L01"),
+  t("term.triplet", "triplet", "Three equal notes in the time of two.", ex4(90, 'drums: s("[hh hh hh]*4")'), "U13.L05"),
+  t("term.mode", "mode", "A scale that starts the major-scale pattern from another note, with its own colour.", ex4(96, 'mel: n("0 1 2 3 4 5 6 7").scale("G4:mixolydian").s("piano")'), "U14.L01"),
+  t("term.secondary-dominant", "secondary dominant", "A V chord borrowed from the key of another chord, pointing at it.", ex4(90, 'chords: chord("<C A7 Dm G>").voicing().s("piano")'), "U15.L02"),
+  t("term.borrowed-chord", "borrowed chord", "A chord taken from the parallel minor key.", ex4(90, 'chords: chord("<C F Fm C>").voicing().s("piano")'), "U16.L01"),
+  t("term.modulation", "modulation", "Changing key in the middle of a piece.", ex4(100, 'mel: n("0 2 4 2").scale("<C4:major!2 D4:major!2>").s("piano")'), "U17.L01"),
+  t("term.guide-tones", "guide tones", "The 3rd and 7th of a chord, which carry its quality and move smoothly.", ex4(90, 'chords: chord("<Dm7 G7 C^7 C^7>").dict("guidetones").voicing().s("piano")'), "J1.L04"),
+  t("term.tritone-sub", "tritone substitution", "Replacing a V7 with the dominant a tritone away.", ex4(90, 'chords: chord("<Dm7 Db7 C^7 C^7>").voicing().s("piano")'), "J5.L01"),
+  t("term.clave", "clave", "A two-bar rhythmic key that the whole groove lines up with.", ex4(110, 'perc: s("<[rim ~ ~ rim ~ ~ rim ~] [~ ~ rim ~ rim ~ ~ ~]>")'), "R3.L02"),
+  t("term.envelope", "envelope", "How a sound's level changes over a note: attack, decay, sustain, release.", ex4(80, 'mel: note("c4 e4 g4 c5").s("sawtooth").attack(.2).release(.5)'), "A1.L03"),
+];
+export default terms;
+
+export const termById: ReadonlyMap<string, TermEntry> = new Map(terms.map((x) => [x.id, x] as const));

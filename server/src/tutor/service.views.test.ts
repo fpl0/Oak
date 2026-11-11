@@ -40,7 +40,7 @@ describe("status", () => {
       reason: "auto",
       guidance: null,
       model: MODEL,
-      budget: { softMarkerUsd: 25, softPassed: false, hardCapUsd: null, blocked: false, month: "2026-11" },
+      budget: { softMarkerUsd: 25, softPassed: false, month: "2026-11" },
     });
     expect(status.backends.map((b) => [b.id, b.ok, b.active, b.reason, b.billing])).toEqual([
       ["anthropic-api", true, true, null, "api"],
@@ -158,10 +158,12 @@ describe("warm-up", () => {
       reason: "not_needed",
     });
 
-    const capped = setup([new PacedBackend("anthropic-api", [{ text: "ok" }])]);
-    await capped.run(chat);
-    capped.ports.settings.value.hardMonthlyUsd = 0.001;
-    expect(await capped.service.warm()).toMatchObject({ warmed: false, reason: "budget" });
+    // Spend past the soft marker never stops a warm-up (there is no hard cap).
+    const spent = setup([new PacedBackend("anthropic-api", [{ text: "ok" }])]);
+    spent.ports.settings.value.softMonthlyUsd = 0.000001;
+    await spent.run(chat);
+    expect((await spent.service.status()).budget.softPassed).toBe(true);
+    expect(await spent.service.warm()).toMatchObject({ warmed: true, backend: "anthropic-api" });
 
     const failing = new PacedBackend("anthropic-api");
     failing.warmError = Object.assign(new Error(`bad ${SECRET}`), { status: 529 });

@@ -58,7 +58,16 @@ export const contract = {
   "settings.anthropicKey.set": {
     method: "POST",
     path: "/settings/anthropic-key",
-    body: z.strictObject({ key: z.string().min(20).max(400) }),
+    // Printable ASCII without spaces once trimmed: a key with a line break or control character would be
+    // stored (an unreachable API stores the key) and then break, or split, the request header it goes in.
+    body: z.strictObject({
+      key: z
+        .string()
+        .trim()
+        .min(20)
+        .max(400)
+        .regex(/^[\x21-\x7e]+$/, "an API key is printable characters without spaces"),
+    }),
     res: D.KeyStatusSchema,
   },
   "settings.anthropicKey.delete": {
@@ -541,6 +550,10 @@ export function buildPath(
     const value = params[name];
     if (value === undefined || value === "")
       throw new Error(`missing path parameter "${name}" for ${def.path}`);
+    // A URL parser resolves `.` and `..` (also as %2E) as dot segments: `/sketches/..` would be another
+    // endpoint. No Oak ID is all dots.
+    if (/^(?:\.|%2e){1,2}$/i.test(value))
+      throw new Error(`path parameter "${name}" cannot be "${value}" for ${def.path}`);
     return encodeURIComponent(value);
   });
   const search = new URLSearchParams();

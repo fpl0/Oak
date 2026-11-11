@@ -5,6 +5,8 @@
   "type": "module",
   "description": "Pitch detection (pitchy), tracking, segmentation and the one sung-note and tap graders. Isomorphic.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./detector": "./src/detector.ts",
+    "./synth": "./src/synth.ts"
   }
 }

@@ -67,7 +67,8 @@ describe("createSrs", () => {
     expect(live.desiredRetention("fact")).toBe(0.85);
     await expect(createSrs({ factRetention: 1.2 })).rejects.toThrow("out of range");
     // A lower target means longer intervals.
-    const first = (srs: typeof plan) => srs.rate(srs.createCard("fact", "fact.a", T0), 3, T0).revlog.modelIntervalDays;
+    const first = (srs: typeof plan) =>
+      srs.rate(srs.createCard("fact", "fact.a", T0), 3, T0).revlog.modelIntervalDays;
     expect(first(live)).toBeGreaterThan(first(plan));
   });
 
@@ -75,7 +76,14 @@ describe("createSrs", () => {
     const srs = await createSrs();
     for (const kind of ["fact", "concept", "family", "composite"] as const) {
       const c = srs.createCard(kind, `card.${kind}`, T0);
-      expect(c).toMatchObject({ id: `card.${kind}`, kind, status: "active", model: "fsrs-7", reps: 0, state: 0 });
+      expect(c).toMatchObject({
+        id: `card.${kind}`,
+        kind,
+        status: "active",
+        model: "fsrs-7",
+        reps: 0,
+        state: 0,
+      });
       expect(c.lastReviewAt).toBeNull();
       expect(c.lastRatings).toEqual([]);
       expect(srs.isDue(c, T0)).toBe(true);
@@ -107,7 +115,7 @@ describe("createSrs", () => {
     for (const kind of ["concept", "family", "composite"] as const) {
       const r = srs.review(srs.createCard(kind, `f.${kind}`, T0), again, T0);
       expect(r.rating).toBe(1);
-      expect(r.revlog.modelIntervalDays * 86_400).toBeLessThan(15);
+      expect(r.revlog.modelIntervalDays * 86_400).toBeLessThan(60); // FSRS-7: seconds, not a day
       expect(r.card.scheduledDays).toBe(1);
       expect(r.card.dueAt).toBe("2027-01-05T04:00:00.000Z");
     }
@@ -184,9 +192,14 @@ describe("createSrs", () => {
     }
     expect(lowest[1]).toBeLessThanOrEqual(run("fam.a.one")[1] as number);
     // A pick outside the window is clamped.
-    const wild = srs.review(srs.review(srs.createCard("concept", "fam.a.two", T0), good, T0).card, good, plus(T0, 5), {
-      pickDay: () => 10_000,
-    });
+    const wild = srs.review(
+      srs.review(srs.createCard("concept", "fam.a.two", T0), good, T0).card,
+      good,
+      plus(T0, 5),
+      {
+        pickDay: () => 10_000,
+      },
+    );
     expect(wild.card.scheduledDays).toBeLessThanOrEqual(180);
   });
 

@@ -6,6 +6,31 @@ import type { LogLine } from "../types.ts";
 type ConsoleMethod = (...args: unknown[]) => void;
 
 let sink: LogLine[] | null = null;
+
+/**
+ * Bounds on what one request may log: evaluated code can call `console.log` in a callback that runs per
+ * event, and every line travels back to the host. Past the limit lines are dropped and one marker says so.
+ */
+export const MAX_LOG_LINES = 200;
+export const MAX_LOG_CHARS = 2000;
+let dropped = 0;
+
+function push(make: () => LogLine): void {
+  if (sink === null) return;
+  if (sink.length < MAX_LOG_LINES) {
+    const line = make();
+    sink.push(
+      line.message.length > MAX_LOG_CHARS
+        ? { ...line, message: `${line.message.slice(0, MAX_LOG_CHARS)}…` }
+        : line,
+    );
+    return;
+  }
+  dropped++;
+  const marker = { level: "warn" as const, tag: null, message: `(${dropped} more log lines not shown)` };
+  if (dropped === 1) sink.push(marker);
+  else sink[sink.length - 1] = marker;
+}
 let installed = false;
 
 function safeJson(value: unknown): string {
@@ -38,7 +63,7 @@ export function installConsoleCapture(): void {
   installed = true;
   const hook = (level: LogLine["level"], native: ConsoleMethod): ConsoleMethod => {
     return (...args: unknown[]) => {
-      if (sink) sink.push(toLogLine(level, args));
+      if (sink) push(() => toLogLine(level, args));
       else native.apply(console, args);
     };
   };
@@ -50,6 +75,7 @@ export function installConsoleCapture(): void {
 
 export function captureInto(logs: LogLine[] | null): void {
   sink = logs;
+  dropped = 0;
 }
 
 /**

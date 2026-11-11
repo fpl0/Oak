@@ -133,7 +133,8 @@ export function buildPiece(spec: {
       const extra: Partial<NEvent> = {};
       if (track.src === "note") {
         midi = noteMidi(e.v);
-        if (midi === null) throw new Error(`track ${track.label}: "${e.v}" is not a note name with an octave`);
+        if (midi === null)
+          throw new Error(`track ${track.label}: "${e.v}" is not a note name with an octave`);
         s = track.s as string;
         extra.written = e.v;
         preload.add(s);

@@ -1,7 +1,7 @@
 // Chord segmentation and what is read from it: slots, Roman numerals, harmonic rhythm, cadences,
 // progressions on the triad core, the blues form, voice leading and guide tones (exercises §3.5;
 // contracts §6.6 and §6.7). Chord identity always comes from the symbol when the events carry one.
-import type { CadenceType, KeySpec, MeterId, NEvent, Rat } from "@oak/content-kit";
+import type { CadenceType, KeySpec, NEvent, Rat } from "@oak/content-kit";
 import { R, rat } from "@oak/content-kit";
 import type { ChordId, Pc, RomanNumeral, SchemaDef } from "@oak/theory";
 import {
@@ -35,7 +35,8 @@ export interface ChordSlot {
   ids: string[];
 }
 
-const pcsOfMidis = (midis: readonly number[]): number[] => [...new Set(midis.map(mod12))].sort((a, b) => a - b);
+const pcsOfMidis = (midis: readonly number[]): number[] =>
+  [...new Set(midis.map(mod12))].sort((a, b) => a - b);
 
 /** Pitch classes of a slot: from its chord when it has one, else from its sounding notes. */
 export function slotPcs(slot: ChordSlot): number[] {
@@ -62,7 +63,10 @@ function withBass(chord: ChordId | null, bassMidi: number | undefined): ChordId 
  * The bass is the lowest note sounding at the slot start across `bass` (default: the chord events), so a
  * separate bass track sets the inversion.
  */
-export function chordSlots(events: readonly NEvent[], o: { bass?: readonly NEvent[]; minDur?: Rat } = {}): ChordSlot[] {
+export function chordSlots(
+  events: readonly NEvent[],
+  o: { bass?: readonly NEvent[]; minDur?: Rat } = {},
+): ChordSlot[] {
   const bassPool = o.bass ?? events;
   const lowestAt = (at: Rat): number | undefined => {
     const s = sounding(bassPool, at);
@@ -110,9 +114,16 @@ export function chordSlots(events: readonly NEvent[], o: { bass?: readonly NEven
         last.span[1] = to;
         continue;
       }
-      slots.push({ span: [from, to], chord: null, midis: here.map((e) => e.midi).sort((a, b) => a - b), ids: here.map((e) => e.id) });
+      slots.push({
+        span: [from, to],
+        chord: null,
+        midis: here.map((e) => e.midi).sort((a, b) => a - b),
+        ids: here.map((e) => e.id),
+      });
     }
-    for (let i = slots.length - 1; i >= 0; i--) if (R.lt(R.sub((slots[i] as ChordSlot).span[1], (slots[i] as ChordSlot).span[0]), minDur)) slots.splice(i, 1);
+    for (let i = slots.length - 1; i >= 0; i--)
+      if (R.lt(R.sub((slots[i] as ChordSlot).span[1], (slots[i] as ChordSlot).span[0]), minDur))
+        slots.splice(i, 1);
   }
   for (const slot of slots) {
     slot.midis.sort((a, b) => a - b);
@@ -121,8 +132,11 @@ export function chordSlots(events: readonly NEvent[], o: { bass?: readonly NEven
     if (slot.symbol === undefined && slot.midis.length > 0) {
       const found = identifyChord(slot.midis, bass === undefined ? {} : { bassPc: mod12(bass) as Pc });
       const [best, ...others] = found;
-      slot.chord = best ? { rootPc: best.rootPc, root: best.root, quality: best.quality, bassPc: best.bassPc, ext: best.ext } : null;
-      if (best && others.some((c) => c.fit === best.fit)) slot.ambiguous = others.filter((c) => c.fit === best.fit);
+      slot.chord = best
+        ? { rootPc: best.rootPc, root: best.root, quality: best.quality, bassPc: best.bassPc, ext: best.ext }
+        : null;
+      if (best && others.some((c) => c.fit === best.fit))
+        slot.ambiguous = others.filter((c) => c.fit === best.fit);
     }
     slot.chord = withBass(slot.chord, slot.bassMidi);
   }
@@ -130,7 +144,10 @@ export function chordSlots(events: readonly NEvent[], o: { bass?: readonly NEven
 }
 
 /** Slots built from chord symbols alone, one per bar or per given span (staged dictation answers). */
-export function slotsFromChords(chords: readonly (ChordId | null)[], spans: readonly [Rat, Rat][]): ChordSlot[] {
+export function slotsFromChords(
+  chords: readonly (ChordId | null)[],
+  spans: readonly [Rat, Rat][],
+): ChordSlot[] {
   return chords.map((chord, i) => ({ span: spans[i] ?? [rat(i), rat(i + 1)], chord, midis: [], ids: [] }));
 }
 
@@ -159,7 +176,8 @@ export function chordPerBar(slots: readonly ChordSlot[], bars: number): (ChordId
 
 type Core = { rootPc: number; quality: string };
 const coreOf = (c: ChordId): Core => triadCore(c);
-const sameCore = (a: Core | null, b: Core | null): boolean => !!a && !!b && a.rootPc === b.rootPc && a.quality === b.quality;
+const sameCore = (a: Core | null, b: Core | null): boolean =>
+  !!a && !!b && a.rootPc === b.rootPc && a.quality === b.quality;
 
 /** Roman numerals (Oak dialect) to chords in a key; `null` where a numeral does not parse. */
 export function chordsOfRomans(rns: readonly string[], key: KeySpec): (ChordId | null)[] {
@@ -205,7 +223,10 @@ export function findSchema(id: string, lib: readonly SchemaDef[] = SCHEMAS): Sch
 /** A schema's Roman numerals, one per bar when it has `slotBars`, else one per chord. */
 export function schemaRomans(schema: SchemaDef): { rn: string[]; perBar: boolean } {
   if (!schema.slotBars) return { rn: [...schema.rn], perBar: false };
-  return { rn: schema.rn.flatMap((r, i) => Array.from({ length: schema.slotBars?.[i] ?? 1 }, () => r)), perBar: true };
+  return {
+    rn: schema.rn.flatMap((r, i) => Array.from({ length: schema.slotBars?.[i] ?? 1 }, () => r)),
+    perBar: true,
+  };
 }
 
 /** The chord sequence of the slots with repeated neighbours merged. */
@@ -219,15 +240,32 @@ export function chordChanges(slots: readonly ChordSlot[]): (ChordId | null)[] {
   return out;
 }
 
-const MINORISH: readonly string[] = ["minor", "harmonic minor", "melodic minor", "dorian", "phrygian", "locrian", "minor pentatonic", "blues"];
+const MINORISH: readonly string[] = [
+  "minor",
+  "harmonic minor",
+  "melodic minor",
+  "dorian",
+  "phrygian",
+  "locrian",
+  "minor pentatonic",
+  "blues",
+];
 export const isMinorKey = (key: KeySpec): boolean => MINORISH.includes(key.mode);
 
 /**
  * The cadence at the end of bar `endBar` (1-based), from the last two chords before it (exercises §3.5):
- * V → I with both in root position and the melody on 1 is PAC, otherwise IAC; ending on V is HC;
- * IV → I is PC; V → vi (or ♭VI) is DC; ♭VII → I is its own type. Minor keys use V → i and iv → i.
+ * V → I with both in root position and the soprano on 1 is PAC, otherwise IAC; vii°(7) → I is IAC;
+ * ending on V is HC; IV (or iv) → I is PC; V → vi (or ♭VI) is DC; ♭VII → I is its own type. Minor keys use
+ * V → i and iv → i, and a Picardy I counts as the tonic; a blues key's tonic is I(7). The soprano is the
+ * melody's last note before the bar line; with no melody, the top note of a hand-voiced final chord, else
+ * harmony alone decides (as `classifyCadence` does).
  */
-export function cadenceAt(slots: readonly ChordSlot[], melody: readonly Note[] | null, key: KeySpec, endBar: number): CadenceType {
+export function cadenceAt(
+  slots: readonly ChordSlot[],
+  melody: readonly Note[] | null,
+  key: KeySpec,
+  endBar: number,
+): CadenceType {
   const end = rat(endBar);
   const before = slots.filter((s) => R.lt(s.span[0], end) && s.chord);
   const last = before[before.length - 1];
@@ -237,24 +275,32 @@ export function cadenceAt(slots: readonly ChordSlot[], melody: readonly Note[] |
   const prev = i >= 0 ? (before[i] as ChordSlot) : undefined;
   const semis = (c: ChordId): number => degreeOf(c.rootPc, key).semitones;
   const major = (c: ChordId): boolean => ["maj", "aug"].includes(triadCore(c).quality);
-  const tonicQuality = isMinorKey(key) ? "min" : "maj";
   const lastSemis = semis(last.chord);
-  const isTonic = lastSemis === 0 && triadCore(last.chord).quality === tonicQuality;
+  const lastTriad = triadCore(last.chord).quality;
+  // Major keys end on a major I; minor keys on i or a Picardy I; the blues on I7 (or a minor-blues i).
+  const tonicQualities = key.mode === "blues" ? ["maj", "min"] : isMinorKey(key) ? ["min", "maj"] : ["maj"];
+  const isTonic = lastSemis === 0 && tonicQualities.includes(lastTriad);
   const isDominant = (c: ChordId): boolean => semis(c) === 7 && major(c);
+  const isLeadingTone = (c: ChordId): boolean => semis(c) === 11 && triadCore(c).quality === "dim";
   if (isTonic && prev?.chord) {
     const p = prev.chord;
     if (isDominant(p)) {
       const rootPosition = p.bassPc === p.rootPc && last.chord.bassPc === last.chord.rootPc;
       const lastNote = melody ? [...melody].reverse().find((n) => R.lt(n.onset, end)) : undefined;
-      const onTonic = lastNote !== undefined && degreeOf(lastNote.midi, key).semitones === 0;
+      // `voicing()` output is never graded by its top note (contracts §6.7 item 1): only hand voicings count.
+      const handTop =
+        last.symbol === undefined && last.midis.length > 0 ? Math.max(...last.midis) : undefined;
+      const soprano = lastNote?.midi ?? handTop;
+      const onTonic = soprano === undefined || degreeOf(soprano, key).semitones === 0;
       return rootPosition && onTonic ? "PAC" : "IAC";
     }
+    if (isLeadingTone(p)) return "IAC";
     if (semis(p) === 5) return "PC";
     if (semis(p) === 10 && major(p)) return "bVII-I";
   }
   if (isDominant(last.chord)) return "HC";
   if (prev?.chord && isDominant(prev.chord)) {
-    const q = triadCore(last.chord).quality;
+    const q = lastTriad;
     if ((lastSemis === 9 && q === "min") || (lastSemis === 8 && q === "maj")) return "DC";
   }
   return "none";
@@ -277,21 +323,35 @@ export interface BluesForm {
 export function bluesForm(slots: readonly ChordSlot[], key: KeySpec, bars: number): BluesForm {
   const perBar = chordPerBar(slots, bars).map((c) => (c ? degreeOf(c.rootPc, key).semitones : null));
   const choruses = Math.floor(bars / 12);
-  let best: BluesForm = { variant: null, choruses: 0, wrongBars: Array.from({ length: Math.max(12, bars) }, (_, i) => i + 1) };
+  let best: BluesForm = {
+    variant: null,
+    choruses: 0,
+    wrongBars: Array.from({ length: Math.max(12, bars) }, (_, i) => i + 1),
+  };
   if (choruses === 0) return best;
   // `standard` is tested last so a form that fits two variants is named by its distinguishing bar.
   for (const variant of ["jazz", "quick-change", "standard"] as const) {
     const wrong: number[] = [];
     for (let b = 0; b < choruses * 12; b++) {
       const root = perBar[b];
-      if (root === null || root === undefined || !(BLUES_FORMS[variant][b % 12] as number[]).includes(root)) wrong.push(b + 1);
+      if (root === null || root === undefined || !(BLUES_FORMS[variant][b % 12] as number[]).includes(root))
+        wrong.push(b + 1);
     }
-    if (wrong.length < best.wrongBars.length || (wrong.length === best.wrongBars.length && best.variant === null))
-      best = { variant: wrong.length === 0 ? variant : null, choruses: wrong.length === 0 ? choruses : 0, wrongBars: wrong };
+    if (
+      wrong.length < best.wrongBars.length ||
+      (wrong.length === best.wrongBars.length && best.variant === null)
+    )
+      best = {
+        variant: wrong.length === 0 ? variant : null,
+        choruses: wrong.length === 0 ? choruses : 0,
+        wrongBars: wrong,
+      };
     if (wrong.length === 0 && variant !== "standard") {
       // A jazz blues also fits fewer bars of the others; keep the most specific exact match.
       const std = BLUES_FORMS.standard;
-      const alsoStandard = perBar.slice(0, choruses * 12).every((r, b) => r !== null && r !== undefined && (std[b % 12] as number[]).includes(r));
+      const alsoStandard = perBar
+        .slice(0, choruses * 12)
+        .every((r, b) => r !== null && r !== undefined && (std[b % 12] as number[]).includes(r));
       if (!alsoStandard) return best;
     }
   }
@@ -315,7 +375,8 @@ export interface VoiceLeading {
 export function voiceLeading(a: readonly number[], b: readonly number[]): VoiceLeading {
   const from = [...a].sort((x, y) => x - y).slice(0, 6);
   const to = [...b].sort((x, y) => x - y).slice(0, 6);
-  if (from.length === 0 || to.length === 0) return { total: 0, maxMove: 0, mapping: [], commonTones: 0, parallels: [] };
+  if (from.length === 0 || to.length === 0)
+    return { total: 0, maxMove: 0, mapping: [], commonTones: 0, parallels: [] };
   const pad = (small: number[], big: number[]): number[] => {
     const out = [...small];
     while (out.length < big.length) {
@@ -370,7 +431,8 @@ export function voiceLeadingOfSlots(slots: readonly ChordSlot[]): { at: Rat; vl:
   const out: { at: Rat; vl: VoiceLeading }[] = [];
   for (let i = 1; i < slots.length; i++) {
     const [a, b] = [slots[i - 1] as ChordSlot, slots[i] as ChordSlot];
-    if (a.midis.length > 0 && b.midis.length > 0) out.push({ at: b.span[0], vl: voiceLeading(a.midis, b.midis) });
+    if (a.midis.length > 0 && b.midis.length > 0)
+      out.push({ at: b.span[0], vl: voiceLeading(a.midis, b.midis) });
   }
   return out;
 }
@@ -380,7 +442,10 @@ export function topVoiceMoves(slots: readonly ChordSlot[]): { at: Rat; move: num
   for (let i = 1; i < slots.length; i++) {
     const [a, b] = [slots[i - 1] as ChordSlot, slots[i] as ChordSlot];
     if (a.midis.length > 0 && b.midis.length > 0)
-      out.push({ at: b.span[0], move: Math.abs((b.midis[b.midis.length - 1] as number) - (a.midis[a.midis.length - 1] as number)) });
+      out.push({
+        at: b.span[0],
+        move: Math.abs((b.midis[b.midis.length - 1] as number) - (a.midis[a.midis.length - 1] as number)),
+      });
   }
   return out;
 }
@@ -397,7 +462,10 @@ export function isGuideTone(pc: number, chord: ChordId): boolean {
  * At each chord change the line's note should be the chord's 3rd or 7th, and successive guide tones
  * should move by at most 2 semitones.
  */
-export function guideToneLine(line: readonly Note[], slots: readonly ChordSlot[]): { ratio: number; maxMove: number; n: number; misses: Rat[] } {
+export function guideToneLine(
+  line: readonly Note[],
+  slots: readonly ChordSlot[],
+): { ratio: number; maxMove: number; n: number; misses: Rat[] } {
   let hits = 0;
   let n = 0;
   let maxMove = 0;
@@ -405,7 +473,9 @@ export function guideToneLine(line: readonly Note[], slots: readonly ChordSlot[]
   const misses: Rat[] = [];
   for (const slot of slots) {
     if (!slot.chord) continue;
-    const note = [...line].reverse().find((x) => R.lte(x.onset, slot.span[0]) && R.lt(slot.span[0], R.add(x.onset, x.dur)));
+    const note = [...line]
+      .reverse()
+      .find((x) => R.lte(x.onset, slot.span[0]) && R.lt(slot.span[0], R.add(x.onset, x.dur)));
     n++;
     if (note && isGuideTone(note.midi, slot.chord)) {
       hits++;
@@ -417,15 +487,22 @@ export function guideToneLine(line: readonly Note[], slots: readonly ChordSlot[]
 }
 
 /** Muddy low intervals: a third or less below C3, a fourth below A2, a fifth below B♭1. */
-export function lowIntervalViolations(events: readonly NEvent[]): { at: Rat; low: number; interval: number }[] {
+export function lowIntervalViolations(
+  events: readonly NEvent[],
+): { at: Rat; low: number; interval: number }[] {
   const out: { at: Rat; low: number; interval: number }[] = [];
   const seen = new Set<string>();
   for (const e of pitched(events)) {
-    const here = sounding(events, e.onset).map((x) => x.midi).sort((a, b) => a - b);
+    const here = sounding(events, e.onset)
+      .map((x) => x.midi)
+      .sort((a, b) => a - b);
     for (let i = 0; i + 1 < here.length; i++) {
       const low = here[i] as number;
       const interval = (here[i + 1] as number) - low;
-      const bad = (interval >= 1 && interval <= 4 && low < 48) || (interval === 5 && low < 45) || (interval === 7 && low < 34);
+      const bad =
+        (interval >= 1 && interval <= 4 && low < 48) ||
+        (interval === 5 && low < 45) ||
+        (interval === 7 && low < 34);
       const key = `${ratKey(e.onset)}|${low}|${interval}`;
       if (bad && !seen.has(key)) {
         seen.add(key);
@@ -440,7 +517,3 @@ export function lowIntervalViolations(events: readonly NEvent[]): { at: Rat; low
 export function slotLabel(slot: ChordSlot): string {
   return slot.chord ? toLeadSheet(slot.chord) : (slot.symbol ?? "?");
 }
-
-/** Bars and beats are computed by the caller; this is the meter-free part of a slot's place. */
-export const slotStart = (slot: ChordSlot): Rat => slot.span[0];
-export type { MeterId };

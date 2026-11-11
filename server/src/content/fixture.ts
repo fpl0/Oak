@@ -24,7 +24,12 @@ import type {
 import type { ContentSource } from "./types.ts";
 
 const ui: StepUi = { panels: { roll: true, staff: false, keyboard: false } };
-const ladder: HintLadder = [{ text: "Listen again." }, { text: "Look at beat 3." }, { text: "Use `~`." }, "auto"];
+const ladder: HintLadder = [
+  { text: "Listen again." },
+  { text: "Look at beat 3." },
+  { text: "Use `~`." },
+  "auto",
+];
 
 function modifyEx(id: string, skill: SkillId, extra: Partial<CodeModifyEx> = {}): CodeModifyEx {
   return {
@@ -64,7 +69,14 @@ function makeEx(id: string, skill: SkillId): CodeMakeEx {
     skills: [{ skill, w: 1 }],
     code: { starter: 'setcpm(96/4)\n\ndrums: s("bd ~ sd hh")' },
     rubric: [
-      { id: "has-rest", label: "Uses at least one rest", required: true, skills: [skill], rule: "uses", tool: "tb.mini.rest" },
+      {
+        id: "has-rest",
+        label: "Uses at least one rest",
+        required: true,
+        skills: [skill],
+        rule: "uses",
+        tool: "tb.mini.rest",
+      },
       {
         id: "downbeat",
         label: "Something lands on beat 1",
@@ -199,8 +211,20 @@ export function fixtureContent(): ContentSource {
   const by = (id: string) => lessons.find((l) => l.id === id) as LessonDef;
 
   const checkpointMeta: CheckpointMeta[] = [
-    { id: "U01.CP", title: "Pulse and rests", covers: ["U01"], gated: ["R03", "R06"], levelSetting: ["E01", "V01"] },
-    { id: "U03.CP", title: "Chords and form", covers: ["U02", "U03"], gated: ["P01", "C01", "M01"], levelSetting: [] },
+    {
+      id: "U01.CP",
+      title: "Pulse and rests",
+      covers: ["U01"],
+      gated: ["R03", "R06"],
+      levelSetting: ["E01", "V01"],
+    },
+    {
+      id: "U03.CP",
+      title: "Chords and form",
+      covers: ["U02", "U03"],
+      gated: ["P01", "C01", "M01"],
+      levelSetting: [],
+    },
     { id: "J.CP1", title: "Jazz one", covers: ["J1", "J2"], gated: ["J01", "J02"], levelSetting: [] },
   ];
   const checkpoints: CheckpointDef[] = [
@@ -214,7 +238,12 @@ export function fixtureContent(): ContentSource {
       recipe: {
         items: [12, 18],
         perSkillMin: 2,
-        families: { R03: ["fam.rhy.read"], R06: ["fam.rhy.read"], E01: ["fam.ear.pulse"], V01: ["fam.tap.pulse"] },
+        families: {
+          R03: ["fam.rhy.read"],
+          R06: ["fam.rhy.read"],
+          E01: ["fam.ear.pulse"],
+          V01: ["fam.tap.pulse"],
+        },
       },
       make: { ...makeEx("cp-make", "R06"), role: "checkpoint", hints: null },
     },
@@ -400,7 +429,12 @@ export function fixtureContent(): ContentSource {
     ...extra,
   });
   const families: FamilyDef[] = [
-    family("fam.rhy.read", "concept", "R03", "U01.L02", { skills: [{ skill: "R03", w: 1 }, { skill: "R06", w: 1 }] }),
+    family("fam.rhy.read", "concept", "R03", "U01.L02", {
+      skills: [
+        { skill: "R03", w: 1 },
+        { skill: "R06", w: 1 },
+      ],
+    }),
     family("fam.ear.pulse", "perceptual", "E01", "U01.L02"),
     family("fam.tap.pulse", "production", "V01", "U01.L03", { mic: true }),
   ];
@@ -427,11 +461,29 @@ export function fixtureContent(): ContentSource {
     families,
     decks,
     terms: [
-      { id: "term.pulse", term: "pulse", definition: "The steady beat.", example: 's("bd*4")', introducedBy: "U01.L01" },
-      { id: "term.rest", term: "rest", definition: "A silence with a length.", example: 's("bd ~")', introducedBy: "U01.L02" },
+      {
+        id: "term.pulse",
+        term: "pulse",
+        definition: "The steady beat.",
+        example: 's("bd*4")',
+        introducedBy: "U01.L01",
+      },
+      {
+        id: "term.rest",
+        term: "rest",
+        definition: "A silence with a length.",
+        example: 's("bd ~")',
+        introducedBy: "U01.L02",
+      },
     ],
     canDos: [
-      { id: "cd.hear.pulse", area: "hear", statement: "I can find the pulse.", skills: ["R03"], source: "U01.L01" },
+      {
+        id: "cd.hear.pulse",
+        area: "hear",
+        statement: "I can find the pulse.",
+        skills: ["R03"],
+        source: "U01.L01",
+      },
       {
         id: "cd.compose.first-loop",
         area: "compose",
@@ -441,7 +493,12 @@ export function fixtureContent(): ContentSource {
       },
     ],
     milestones: [
-      { id: "ms.01", title: "First week", description: "Three lessons done.", when: { sessions: ["U01.L01", "U01.L02", "U01.L03"] } },
+      {
+        id: "ms.01",
+        title: "First week",
+        description: "Three lessons done.",
+        when: { sessions: ["U01.L01", "U01.L02", "U01.L03"] },
+      },
     ],
     songs: [],
     lessons,

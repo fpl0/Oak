@@ -5,7 +5,6 @@
 // starts new conversations, which bounds token growth; earlier days stay as read-only history.
 // Nothing is ever updated or deleted.
 import type { Rung, StepSource, StepState, TutorNote } from "./domain.ts";
-import { TutorError } from "./errors.ts";
 import type {
   Clock,
   ConversationRecord,
@@ -189,15 +188,12 @@ export interface BudgetStatus {
   softPassed: boolean;
   /** True the first time the month's estimate is seen past the marker: show the one toast. */
   firstSoftCrossing: boolean;
-  hardCapUsd: number | null;
-  /** Only with a learner-set hard cap. */
-  blocked: boolean;
 }
 
 /**
  * The budget hook (contracts §10.9). The soft marker never blocks and never changes model or
- * effort. The hard cap is optional and off by default. Subscription usage has no dollar figure and
- * so never counts towards either.
+ * effort. There is no hard cap (removed 2026-11-11). Subscription usage has no dollar figure and
+ * so never counts towards the marker.
  */
 export async function checkBudget(ports: {
   settings: SettingsPort;
@@ -208,18 +204,11 @@ export async function checkBudget(ports: {
   const month = monthOf(learnerDay(ports.clock.now(), ports.clock.timeZone()));
   const { costUsd } = await ports.usage.month(month);
   const softPassed = costUsd >= settings.softMonthlyUsd;
-  const hard = settings.hardMonthlyUsd;
   return {
     month,
     monthUsd: costUsd,
     softMarkerUsd: settings.softMonthlyUsd,
     softPassed,
     firstSoftCrossing: softPassed && settings.softWarnedMonth !== month,
-    hardCapUsd: hard,
-    blocked: hard !== null && costUsd >= hard,
   };
-}
-
-export function assertWithinBudget(status: BudgetStatus): void {
-  if (status.blocked) throw new TutorError("budget");
 }

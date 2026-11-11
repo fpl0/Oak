@@ -311,37 +311,38 @@ export function intervalName(low: Spelled, high: Spelled): string {
 // --- chords -------------------------------------------------------------------------------------
 
 /** Semitones above the root, and the chord degree (1 3 5 7 9 11 13, or 2 4 6) each tone is spelled as. */
-export const CHORD_TONES: Readonly<Record<ChordQuality, { semis: readonly number[]; degrees: readonly number[] }>> =
-  {
-    maj: { semis: [0, 4, 7], degrees: [1, 3, 5] },
-    min: { semis: [0, 3, 7], degrees: [1, 3, 5] },
-    dim: { semis: [0, 3, 6], degrees: [1, 3, 5] },
-    aug: { semis: [0, 4, 8], degrees: [1, 3, 5] },
-    sus2: { semis: [0, 2, 7], degrees: [1, 2, 5] },
-    sus4: { semis: [0, 5, 7], degrees: [1, 4, 5] },
-    maj7: { semis: [0, 4, 7, 11], degrees: [1, 3, 5, 7] },
-    "7": { semis: [0, 4, 7, 10], degrees: [1, 3, 5, 7] },
-    m7: { semis: [0, 3, 7, 10], degrees: [1, 3, 5, 7] },
-    m7b5: { semis: [0, 3, 6, 10], degrees: [1, 3, 5, 7] },
-    dim7: { semis: [0, 3, 6, 9], degrees: [1, 3, 5, 7] },
-    mMaj7: { semis: [0, 3, 7, 11], degrees: [1, 3, 5, 7] },
-    "6": { semis: [0, 4, 7, 9], degrees: [1, 3, 5, 6] },
-    m6: { semis: [0, 3, 7, 9], degrees: [1, 3, 5, 6] },
-    "69": { semis: [0, 4, 7, 9, 14], degrees: [1, 3, 5, 6, 9] },
-    add9: { semis: [0, 4, 7, 14], degrees: [1, 3, 5, 9] },
-    "9": { semis: [0, 4, 7, 10, 14], degrees: [1, 3, 5, 7, 9] },
-    maj9: { semis: [0, 4, 7, 11, 14], degrees: [1, 3, 5, 7, 9] },
-    m9: { semis: [0, 3, 7, 10, 14], degrees: [1, 3, 5, 7, 9] },
-    m11: { semis: [0, 3, 7, 10, 14, 17], degrees: [1, 3, 5, 7, 9, 11] },
-    "7b9": { semis: [0, 4, 7, 10, 13], degrees: [1, 3, 5, 7, 9] },
-    "7#9": { semis: [0, 4, 7, 10, 15], degrees: [1, 3, 5, 7, 9] },
-    "7#11": { semis: [0, 4, 7, 10, 18], degrees: [1, 3, 5, 7, 11] },
-    "7b13": { semis: [0, 4, 7, 10, 20], degrees: [1, 3, 5, 7, 13] },
-    "13": { semis: [0, 4, 7, 10, 14, 21], degrees: [1, 3, 5, 7, 9, 13] },
-    "7alt": { semis: [0, 4, 10, 13, 15, 20], degrees: [1, 3, 7, 9, 9, 13] },
-    "maj7#11": { semis: [0, 4, 7, 11, 18], degrees: [1, 3, 5, 7, 11] },
-    "7sus4": { semis: [0, 5, 7, 10], degrees: [1, 4, 5, 7] },
-  };
+export const CHORD_TONES: Readonly<
+  Record<ChordQuality, { semis: readonly number[]; degrees: readonly number[] }>
+> = {
+  maj: { semis: [0, 4, 7], degrees: [1, 3, 5] },
+  min: { semis: [0, 3, 7], degrees: [1, 3, 5] },
+  dim: { semis: [0, 3, 6], degrees: [1, 3, 5] },
+  aug: { semis: [0, 4, 8], degrees: [1, 3, 5] },
+  sus2: { semis: [0, 2, 7], degrees: [1, 2, 5] },
+  sus4: { semis: [0, 5, 7], degrees: [1, 4, 5] },
+  maj7: { semis: [0, 4, 7, 11], degrees: [1, 3, 5, 7] },
+  "7": { semis: [0, 4, 7, 10], degrees: [1, 3, 5, 7] },
+  m7: { semis: [0, 3, 7, 10], degrees: [1, 3, 5, 7] },
+  m7b5: { semis: [0, 3, 6, 10], degrees: [1, 3, 5, 7] },
+  dim7: { semis: [0, 3, 6, 9], degrees: [1, 3, 5, 7] },
+  mMaj7: { semis: [0, 3, 7, 11], degrees: [1, 3, 5, 7] },
+  "6": { semis: [0, 4, 7, 9], degrees: [1, 3, 5, 6] },
+  m6: { semis: [0, 3, 7, 9], degrees: [1, 3, 5, 6] },
+  "69": { semis: [0, 4, 7, 9, 14], degrees: [1, 3, 5, 6, 9] },
+  add9: { semis: [0, 4, 7, 14], degrees: [1, 3, 5, 9] },
+  "9": { semis: [0, 4, 7, 10, 14], degrees: [1, 3, 5, 7, 9] },
+  maj9: { semis: [0, 4, 7, 11, 14], degrees: [1, 3, 5, 7, 9] },
+  m9: { semis: [0, 3, 7, 10, 14], degrees: [1, 3, 5, 7, 9] },
+  m11: { semis: [0, 3, 7, 10, 14, 17], degrees: [1, 3, 5, 7, 9, 11] },
+  "7b9": { semis: [0, 4, 7, 10, 13], degrees: [1, 3, 5, 7, 9] },
+  "7#9": { semis: [0, 4, 7, 10, 15], degrees: [1, 3, 5, 7, 9] },
+  "7#11": { semis: [0, 4, 7, 10, 18], degrees: [1, 3, 5, 7, 11] },
+  "7b13": { semis: [0, 4, 7, 10, 20], degrees: [1, 3, 5, 7, 13] },
+  "13": { semis: [0, 4, 7, 10, 14, 21], degrees: [1, 3, 5, 7, 9, 13] },
+  "7alt": { semis: [0, 4, 10, 13, 15, 20], degrees: [1, 3, 7, 9, 9, 13] },
+  "maj7#11": { semis: [0, 4, 7, 11, 18], degrees: [1, 3, 5, 7, 11] },
+  "7sus4": { semis: [0, 5, 7, 10], degrees: [1, 4, 5, 7] },
+};
 /** The code suffix of STYLE §5.1 ("^7", "m7b5", "o") and the lead-sheet suffix ("maj7", "m7♭5", "°"). */
 export const CHORD_SUFFIX: Readonly<Record<ChordQuality, { code: string; lead: string; name: string }>> = {
   maj: { code: "", lead: "", name: "major triad" },
@@ -440,7 +441,7 @@ export function formatRn(chord: RnChord): string {
     const figure = INVERSION_FIGURE.seventh[inv] as string;
     text = `${prefix}${numeral}${suffix.replace(/7$/, "")}${figure}`;
   } else {
-    text = `${prefix}${numeral}${suffix}${INVERSION_FIGURE.triad[inv] ?? ""}`;
+    text = `${prefix}${numeral}${suffix}${(INVERSION_FIGURE.triad as readonly string[])[inv] ?? ""}`;
   }
   return chord.of ? `${text}/${formatRn({ degree: chord.of, quality: degreeTriad(chord.of) })}` : text;
 }

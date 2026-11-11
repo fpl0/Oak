@@ -42,7 +42,12 @@ export const R = {
   locked: false,
   /** True while a request evaluates or queries: the shims only act then. */
   active: false,
-  collector: { tracks: new Map<string, Pat>(), anon: 0, all: [] as Transform[], each: undefined } as Collector,
+  collector: {
+    tracks: new Map<string, Pat>(),
+    anon: 0,
+    all: [] as Transform[],
+    each: undefined,
+  } as Collector,
   cps: DEFAULT_CPS,
   cpsSet: false,
   /** Calls like `setcpm("90")` that did not set a tempo: the name of the function. */
@@ -192,18 +197,16 @@ function installPatternMethods(): string[] {
 
   // The `.p` collector: repl.mjs injectPatternMethods (1.2.6). The transpiler turns `label: expr` into
   // `expr.p('label')`.
-  proto.p = function (this: Pat, id: unknown) {
-    if (typeof id === "string" && (id.startsWith("_") || id.endsWith("_"))) return core.silence;
-    // Like repl.mjs 1.2.6 this THROWS for a non-string id ("id.includes is not a function"): that is what
-    // `.p(1)`, `.d1`, `.p1` and `.p("x")` in double quotes do in the editor.
-    let key = id as string;
-    if (key.includes("$")) key = `${key}${R.collector.anon++}`;
-    R.collector.tracks.set(key, this);
+  proto.p = function (this: Pat, label: unknown) {
+    if (typeof label === "string" && (label.startsWith("_") || label.endsWith("_"))) return core.silence;
+    // Like repl.mjs 1.2.6 this THROWS for a non-string id ("id.includes is not a function", the same
+    // words): that is what `.p(1)`, `.d1`, `.p1` and `.p("x")` in double quotes do in the editor.
+    let id = label as string;
+    if (id.includes("$")) id = `${id}${R.collector.anon++}`;
+    R.collector.tracks.set(id, this);
     return this;
   };
-  proto.q = function () {
-    return core.silence;
-  };
+  proto.q = () => core.silence;
   for (let i = 1; i < 10; i++) {
     for (const prefix of ["d", "p"]) {
       Object.defineProperty(proto, `${prefix}${i}`, {

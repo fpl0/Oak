@@ -1,0 +1,96 @@
+// Seams to modules other engineers own: the grader hosts (`server/src/grader/host.ts`), created lazily;
+// the pattern stimulus of hidden Transcribe sources (evaluated by the learner host); the ladder
+// generator (`@oak/drills`). A piece that is unfinished fails the request that needs it with 503.
+import { toLearnerProfile } from "@oak/api";
+import type { NEvent, ToolEntry, UnlockableId } from "@oak/content-kit";
+import { generateLadderPiece } from "@oak/drills";
+import { type GraderHost, normalize } from "@oak/grader";
+import type { ContentIndex } from "./content/index.ts";
+import type { Repos } from "./db/repos/index.ts";
+import type { GraderHosts } from "./deps.ts";
+import { ApiError } from "./errors.ts";
+import { createGraderHosts } from "./grader/host.ts";
+import type { LadderGenerator, PatternStimulus } from "./services/library.ts";
+
+/** A host created on first use; creation failures surface as 503 on the request that needed it. */
+export interface LazyHost {
+  (): GraderHost;
+  /** The host if it was started, without starting it. */
+  peek(): GraderHost | null;
+}
+export function lazyHost(make: () => GraderHost): LazyHost {
+  let host: GraderHost | null = null;
+  const get = (() => {
+    if (host !== null) return host;
+    try {
+      host = make();
+      return host;
+    } catch (e) {
+      throw new ApiError(
+        "unavailable",
+        `the grader is not available: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }) as LazyHost;
+  get.peek = () => host;
+  return get;
+}
+
+/**
+ * The server's two hosts from `server/src/grader/host.ts` (the grader-runtime engineer's
+ * `createGraderHosts`), created on first use: a host that cannot start fails the request that needs it
+ * (503), never the server's start-up.
+ */
+export function serverGraderHosts(opts: { toolbox: () => readonly ToolEntry[] }): GraderHosts {
+  let hosts: ReturnType<typeof createGraderHosts> | null = null;
+  const all = () => {
+    hosts ??= createGraderHosts({ toolbox: opts.toolbox() });
+    return hosts;
+  };
+  return {
+    learner: lazyHost(() => all().learner),
+    tutor: lazyHost(() => all().tutor),
+    async dispose() {
+      await hosts?.dispose().catch(() => undefined);
+    },
+  };
+}
+
+/** Events of hidden pattern code (pd-song and ladder sources), evaluated by the learner host. */
+export function patternStimulus(graders: GraderHosts, content: ContentIndex): PatternStimulus {
+  return async (code, bars) => {
+    const r = await graders.learner().analyze(code, {
+      mode: "capstone",
+      bars,
+      lint: {
+        profile: "content",
+        unlocked: new Set(content.toolbox().map((t) => t.id)) as Set<UnlockableId>,
+        allowPreview: true,
+        meter: "4/4",
+        key: null,
+      },
+    });
+    if (!r.ok) return null;
+    const n = normalize(r, { meter: "4/4" });
+    const preload = [...new Set(n.all.map((e: NEvent) => e.s).filter((s): s is string => s !== undefined))];
+    return { events: n.all, cps: r.cps, bars: r.bars, preload };
+  };
+}
+
+export function ladderGenerator(repos: Repos): LadderGenerator {
+  return (level, realism, seed) => {
+    try {
+      return generateLadderPiece(
+        Math.min(4, Math.max(1, level)) as 1 | 2 | 3 | 4,
+        Math.min(4, Math.max(0, realism)) as 0 | 1 | 2 | 3 | 4,
+        seed,
+        toLearnerProfile(repos.profile.get()),
+      );
+    } catch (e) {
+      throw new ApiError(
+        "unavailable",
+        `the ladder generator is not available: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  };
+}

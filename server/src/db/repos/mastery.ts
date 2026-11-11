@@ -86,7 +86,9 @@ export class MasteryRepo {
     return { ...e, id: lastInsertRowid };
   }
   evidenceOf(skillId: string): EvidenceRow[] {
-    return all<EvRow>(this.db, "SELECT * FROM evidence WHERE skill_id = ? ORDER BY at, id", skillId).map(toEvidence);
+    return all<EvRow>(this.db, "SELECT * FROM evidence WHERE skill_id = ? ORDER BY at, id", skillId).map(
+      toEvidence,
+    );
   }
   allEvidence(): EvidenceRow[] {
     return all<EvRow>(this.db, "SELECT * FROM evidence ORDER BY at, id").map(toEvidence);
@@ -100,11 +102,18 @@ export class MasteryRepo {
       sourceId,
       ...sourceKinds,
     ).map((r) => r.skill_id);
-    run(this.db, `DELETE FROM evidence WHERE source_id = ? AND source_kind IN (${marks})`, sourceId, ...sourceKinds);
+    run(
+      this.db,
+      `DELETE FROM evidence WHERE source_id = ? AND source_kind IN (${marks})`,
+      sourceId,
+      ...sourceKinds,
+    );
     return skills;
   }
   skillsWithEvidence(): string[] {
-    return all<{ skill_id: string }>(this.db, "SELECT DISTINCT skill_id FROM evidence").map((r) => r.skill_id);
+    return all<{ skill_id: string }>(this.db, "SELECT DISTINCT skill_id FROM evidence").map(
+      (r) => r.skill_id,
+    );
   }
 
   state(skillId: string): SkillStateRow | null {

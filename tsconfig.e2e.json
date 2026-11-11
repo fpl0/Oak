@@ -1,0 +1,11 @@
+{
+  // Browser suites run by the root playwright.config.ts: the platform spec (e2e/) and the root config.
+  // The per-package suites keep their own tsconfigs (app/, app/src/workbench/e2e, packages/*/e2e).
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["es2023", "dom", "dom.iterable", "dom.asynciterable"],
+    "types": ["bun"]
+  },
+  "include": ["e2e", "playwright.config.ts"],
+  "exclude": ["node_modules", "dist", "test-results"]
+}

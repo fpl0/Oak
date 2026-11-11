@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en" data-theme="paper">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Oak: learn music theory by writing music in Strudel." />
+    <link rel="icon" href="data:," />
+    <title>Oak</title>
+    <!-- CSP (contracts §11.2): no inline script. boot.js applies the theme before paint and stops
+         non-Chromium browsers with a static page before any app code loads (contracts §11.12). -->
+    <script src="/boot.js"></script>
+  </head>
+  <body>
+    <noscript>Oak needs JavaScript.</noscript>
+    <div id="root"></div>
+    <!-- Strudel's draw module looks for this canvas; pre-creating it hidden keeps it out of the layout
+         (spike S2, goal 7). -->
+    <canvas id="test-canvas" width="1" height="1" hidden></canvas>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -18,7 +18,10 @@ export function copyMutes(mutes: MuteMap): MuteMap {
  * How `repl.mjs` 1.2.6 names a labelled pattern: `x_` and `_x` are muted in code (never registered), a
  * label containing `$` gets the running anonymous index appended (`$:` → `$0`, `$1`, …).
  */
-export function trackNameOf(label: string, anonymousIndex: number): { track: string | null; anonymous: boolean } {
+export function trackNameOf(
+  label: string,
+  anonymousIndex: number,
+): { track: string | null; anonymous: boolean } {
   if (label.startsWith("_") || label.endsWith("_")) return { track: null, anonymous: false };
   if (label.includes("$")) return { track: `${label}${anonymousIndex}`, anonymous: true };
   return { track: label, anonymous: false };

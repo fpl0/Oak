@@ -1,0 +1,3979 @@
+{
+  "version": 1,
+  "ids": [
+    {
+      "id": "band.axis-4bar",
+      "kind": "band"
+    },
+    {
+      "id": "band.two-chord-vamp",
+      "kind": "band"
+    },
+    {
+      "id": "cd.code.arrange",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.code.chords",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.code.degrees",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.code.first-loop",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.code.notes",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.code.tempo",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.album-single",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.backbeat",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.chromatic",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.clave",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.contrafact",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.drum-intro",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.first-loop",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.fourchord",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.funk",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.ii-v-ballad",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.jazz-blues",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.melody-on-1",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.minor-ballad",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.modal-vamp",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.neo-soul",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.reharm",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.twelve-bar",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.two-genres",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.verse-chorus",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.hear.bass",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.hear.cadences",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.hear.chromatic",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.hear.degrees",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.hear.higher-lower",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.hear.home",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.hear.intervals",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.hear.key-change",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.hear.minor",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.hear.pulse",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.hear.sevenths",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.hear.swing",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.hear.triads",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.read.bass-clef",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.read.chord-symbols",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.read.count-four",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.read.jazz-symbols",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.read.keysig",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.read.leadsheet",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.read.rhythm",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.read.roman",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.read.treble",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.sing.bass",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.sing.degrees",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.sing.first-note",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.sing.guide-tones",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.sing.sight",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.transcribe.blues",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.transcribe.drums",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.transcribe.folk-tune",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.transcribe.melody",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.transcribe.standard",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.write.bass-line",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.write.scale",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.write.triads",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.write.voice-leading",
+      "kind": "canDo"
+    },
+    {
+      "id": "AC1",
+      "kind": "capstone"
+    },
+    {
+      "id": "AC2",
+      "kind": "capstone"
+    },
+    {
+      "id": "C0",
+      "kind": "capstone"
+    },
+    {
+      "id": "C1",
+      "kind": "capstone"
+    },
+    {
+      "id": "C2",
+      "kind": "capstone"
+    },
+    {
+      "id": "C3",
+      "kind": "capstone"
+    },
+    {
+      "id": "C4",
+      "kind": "capstone"
+    },
+    {
+      "id": "C5",
+      "kind": "capstone"
+    },
+    {
+      "id": "C6",
+      "kind": "capstone"
+    },
+    {
+      "id": "C7",
+      "kind": "capstone"
+    },
+    {
+      "id": "CF",
+      "kind": "capstone",
+      "retiredAt": "v1",
+      "supersededBy": [
+        "CF-A",
+        "CF-T"
+      ]
+    },
+    {
+      "id": "CF-A",
+      "kind": "capstone"
+    },
+    {
+      "id": "CF-T",
+      "kind": "capstone"
+    },
+    {
+      "id": "JC1",
+      "kind": "capstone"
+    },
+    {
+      "id": "JC2",
+      "kind": "capstone"
+    },
+    {
+      "id": "JC3",
+      "kind": "capstone"
+    },
+    {
+      "id": "JC4",
+      "kind": "capstone"
+    },
+    {
+      "id": "RC1",
+      "kind": "capstone"
+    },
+    {
+      "id": "RC2",
+      "kind": "capstone"
+    },
+    {
+      "id": "X1",
+      "kind": "capstone"
+    },
+    {
+      "id": "X2",
+      "kind": "capstone"
+    },
+    {
+      "id": "AC1.S1",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "AC1.S2",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "AC1.S3",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "AC2.S1",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "AC2.S2",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "AC2.S3",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "C0.S1",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "C1.S1",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "C2.S1",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "C2.S2",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "C3.S1",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "C3.S2",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "C3.S3",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "C4.S1",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "C4.S2",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "C5.S1",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "C5.S2",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "C6.S1",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "C6.S2",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "C7.S1",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "C7.S2",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "C7.S3",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "CF-A.S1",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "CF-A.S2",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "CF-A.S3",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "CF-A.S4",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "CF-T.S1",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "CF-T.S2",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "CF-T.S3",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "CF-T.S4",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "JC1.S1",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "JC1.S2",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "JC2.S1",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "JC2.S2",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "JC3.S1",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "JC3.S2",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "JC3.S3",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "JC4.S1",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "JC4.S2",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "JC4.S3",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "RC1.S1",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "RC1.S2",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "RC2.S1",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "RC2.S2",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "X1.S1",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "X1.S2",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "X1.S3",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "X2.S1",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "X2.S2",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "A.CP",
+      "kind": "checkpoint"
+    },
+    {
+      "id": "J.CP1",
+      "kind": "checkpoint"
+    },
+    {
+      "id": "J.CP2",
+      "kind": "checkpoint"
+    },
+    {
+      "id": "R.CP",
+      "kind": "checkpoint"
+    },
+    {
+      "id": "U01.CP",
+      "kind": "checkpoint"
+    },
+    {
+      "id": "U02.CP",
+      "kind": "checkpoint"
+    },
+    {
+      "id": "U03.CP",
+      "kind": "checkpoint"
+    },
+    {
+      "id": "U04.CP",
+      "kind": "checkpoint"
+    },
+    {
+      "id": "U05.CP",
+      "kind": "checkpoint"
+    },
+    {
+      "id": "U06.CP",
+      "kind": "checkpoint"
+    },
+    {
+      "id": "U07.CP",
+      "kind": "checkpoint"
+    },
+    {
+      "id": "U09.CP",
+      "kind": "checkpoint"
+    },
+    {
+      "id": "U10.CP",
+      "kind": "checkpoint"
+    },
+    {
+      "id": "U11.CP",
+      "kind": "checkpoint"
+    },
+    {
+      "id": "U13.CP",
+      "kind": "checkpoint"
+    },
+    {
+      "id": "U14.CP",
+      "kind": "checkpoint"
+    },
+    {
+      "id": "U17.CP",
+      "kind": "checkpoint"
+    },
+    {
+      "id": "chord.alt",
+      "kind": "chordFamily"
+    },
+    {
+      "id": "chord.dom7",
+      "kind": "chordFamily"
+    },
+    {
+      "id": "chord.ext",
+      "kind": "chordFamily"
+    },
+    {
+      "id": "chord.seventh",
+      "kind": "chordFamily"
+    },
+    {
+      "id": "chord.seventh-dim",
+      "kind": "chordFamily"
+    },
+    {
+      "id": "chord.sixth-sus",
+      "kind": "chordFamily"
+    },
+    {
+      "id": "chord.triad",
+      "kind": "chordFamily"
+    },
+    {
+      "id": "deck.chd.symbols",
+      "kind": "deck"
+    },
+    {
+      "id": "deck.key.signature",
+      "kind": "deck"
+    },
+    {
+      "id": "deck.pit.staff-names",
+      "kind": "deck"
+    },
+    {
+      "id": "fact.chord.Bb",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Bb6",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Bb7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Bbaug",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Bbdim",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Bbdim7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Bbm",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Bbm6",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Bbm7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Bbm7b5",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Bbmaj7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Bbsus",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.C",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.C6",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.C7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Caug",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Cdim",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Cdim7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Cm",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Cm6",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Cm7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Cm7b5",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Cmaj7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Csus",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.D",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.D6",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.D7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Daug",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Ddim",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Ddim7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Dm",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Dm6",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Dm7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Dm7b5",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Dmaj7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Dsus",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.F",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.F6",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.F7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Faug",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Fdim",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Fdim7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Fm",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Fm6",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Fm7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Fm7b5",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Fmaj7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Fsus",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.G",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.G6",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.G7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Gaug",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Gdim",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Gdim7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Gm",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Gm6",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Gm7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Gm7b5",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Gmaj7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.chord.Gsus",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.keysig.A-major",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.keysig.Ab-major",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.keysig.B-major",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.keysig.B-minor",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.keysig.Bb-major",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.keysig.C-minor",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.keysig.Cs-minor",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.keysig.D-major",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.keysig.D-minor",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.keysig.Db-major",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.keysig.E-major",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.keysig.E-minor",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.keysig.Eb-major",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.keysig.F-major",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.keysig.F-minor",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.keysig.Fs-major",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.keysig.Fs-minor",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.keysig.G-major",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.keysig.G-minor",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.bass.A2",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.bass.A3",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.bass.B2",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.bass.B3",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.bass.C3",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.bass.C4",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.bass.D3",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.bass.E2",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.bass.E3",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.bass.F2",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.bass.F3",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.bass.G2",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.bass.G3",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.treble.A4",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.treble.A5",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.treble.B4",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.treble.C4",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.treble.C5",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.treble.D4",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.treble.D5",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.treble.E4",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.treble.E5",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.treble.F4",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.treble.F5",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.treble.G4",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.staff.treble.G5",
+      "kind": "fact"
+    },
+    {
+      "id": "fam.chd.inversion",
+      "kind": "family"
+    },
+    {
+      "id": "fam.chd.quality-7th",
+      "kind": "family"
+    },
+    {
+      "id": "fam.chd.quality-triad",
+      "kind": "family"
+    },
+    {
+      "id": "fam.chd.spell",
+      "kind": "family"
+    },
+    {
+      "id": "fam.code.functions",
+      "kind": "family"
+    },
+    {
+      "id": "fam.code.mini",
+      "kind": "family"
+    },
+    {
+      "id": "fam.deg.fet-chromatic",
+      "kind": "family"
+    },
+    {
+      "id": "fam.deg.fet-major",
+      "kind": "family"
+    },
+    {
+      "id": "fam.deg.fet-minor",
+      "kind": "family"
+    },
+    {
+      "id": "fam.deg.index",
+      "kind": "family"
+    },
+    {
+      "id": "fam.deg.resolve",
+      "kind": "family"
+    },
+    {
+      "id": "fam.deg.sing",
+      "kind": "family"
+    },
+    {
+      "id": "fam.deg.tonic",
+      "kind": "family"
+    },
+    {
+      "id": "fam.frm.blues",
+      "kind": "family"
+    },
+    {
+      "id": "fam.frm.sections",
+      "kind": "family"
+    },
+    {
+      "id": "fam.har.bass",
+      "kind": "family"
+    },
+    {
+      "id": "fam.har.cadence",
+      "kind": "family"
+    },
+    {
+      "id": "fam.har.chromatic",
+      "kind": "family"
+    },
+    {
+      "id": "fam.har.function",
+      "kind": "family"
+    },
+    {
+      "id": "fam.har.modulation",
+      "kind": "family"
+    },
+    {
+      "id": "fam.har.progression",
+      "kind": "family"
+    },
+    {
+      "id": "fam.har.rn",
+      "kind": "family"
+    },
+    {
+      "id": "fam.har.schema",
+      "kind": "family"
+    },
+    {
+      "id": "fam.int.in-key",
+      "kind": "family"
+    },
+    {
+      "id": "fam.int.isolated",
+      "kind": "family"
+    },
+    {
+      "id": "fam.int.sing",
+      "kind": "family"
+    },
+    {
+      "id": "fam.int.spell",
+      "kind": "family"
+    },
+    {
+      "id": "fam.jzz.chord-scale",
+      "kind": "family"
+    },
+    {
+      "id": "fam.jzz.extension",
+      "kind": "family"
+    },
+    {
+      "id": "fam.jzz.guide",
+      "kind": "family"
+    },
+    {
+      "id": "fam.jzz.ii-v",
+      "kind": "family"
+    },
+    {
+      "id": "fam.jzz.subs",
+      "kind": "family"
+    },
+    {
+      "id": "fam.jzz.voicing",
+      "kind": "family"
+    },
+    {
+      "id": "fam.key.circle",
+      "kind": "family"
+    },
+    {
+      "id": "fam.key.mode",
+      "kind": "family"
+    },
+    {
+      "id": "fam.key.scale-spell",
+      "kind": "family"
+    },
+    {
+      "id": "fam.mel.dictation",
+      "kind": "family"
+    },
+    {
+      "id": "fam.mel.echo",
+      "kind": "family"
+    },
+    {
+      "id": "fam.mel.nct",
+      "kind": "family"
+    },
+    {
+      "id": "fam.mel.sight",
+      "kind": "family"
+    },
+    {
+      "id": "fam.mix.harmony",
+      "kind": "family"
+    },
+    {
+      "id": "fam.mix.pitch",
+      "kind": "family"
+    },
+    {
+      "id": "fam.mix.rhythm",
+      "kind": "family"
+    },
+    {
+      "id": "fam.not.read",
+      "kind": "family"
+    },
+    {
+      "id": "fam.pit.compare",
+      "kind": "family"
+    },
+    {
+      "id": "fam.pit.keyboard",
+      "kind": "family"
+    },
+    {
+      "id": "fam.pit.match",
+      "kind": "family"
+    },
+    {
+      "id": "fam.pit.steps",
+      "kind": "family"
+    },
+    {
+      "id": "fam.rhy.clave",
+      "kind": "family"
+    },
+    {
+      "id": "fam.rhy.count",
+      "kind": "family"
+    },
+    {
+      "id": "fam.rhy.dictation",
+      "kind": "family"
+    },
+    {
+      "id": "fam.rhy.echo",
+      "kind": "family"
+    },
+    {
+      "id": "fam.rhy.groove-lock",
+      "kind": "family"
+    },
+    {
+      "id": "fam.rhy.meter",
+      "kind": "family"
+    },
+    {
+      "id": "fam.rhy.odd-grouping",
+      "kind": "family"
+    },
+    {
+      "id": "fam.rhy.polyrhythm",
+      "kind": "family"
+    },
+    {
+      "id": "fam.rhy.pulse",
+      "kind": "family"
+    },
+    {
+      "id": "fam.rhy.read",
+      "kind": "family"
+    },
+    {
+      "id": "fam.rhy.subdivision",
+      "kind": "family"
+    },
+    {
+      "id": "fam.rhy.swing",
+      "kind": "family"
+    },
+    {
+      "id": "fam.rhy.syncopation",
+      "kind": "family"
+    },
+    {
+      "id": "fam.snd.params",
+      "kind": "family"
+    },
+    {
+      "id": "fam.snd.roles",
+      "kind": "family"
+    },
+    {
+      "id": "flavour.funk",
+      "kind": "flavour"
+    },
+    {
+      "id": "flavour.indie",
+      "kind": "flavour"
+    },
+    {
+      "id": "flavour.jazz-soul",
+      "kind": "flavour"
+    },
+    {
+      "id": "flavour.pop",
+      "kind": "flavour"
+    },
+    {
+      "id": "GYM.01",
+      "kind": "gymSession"
+    },
+    {
+      "id": "GYM.02",
+      "kind": "gymSession"
+    },
+    {
+      "id": "GYM.03",
+      "kind": "gymSession"
+    },
+    {
+      "id": "GYM.04",
+      "kind": "gymSession"
+    },
+    {
+      "id": "GYM.05",
+      "kind": "gymSession"
+    },
+    {
+      "id": "GYM.06",
+      "kind": "gymSession"
+    },
+    {
+      "id": "GYM.07",
+      "kind": "gymSession"
+    },
+    {
+      "id": "GYM.08",
+      "kind": "gymSession"
+    },
+    {
+      "id": "GYM.09",
+      "kind": "gymSession"
+    },
+    {
+      "id": "GYM.10",
+      "kind": "gymSession"
+    },
+    {
+      "id": "GYM.11",
+      "kind": "gymSession"
+    },
+    {
+      "id": "GYM.12",
+      "kind": "gymSession"
+    },
+    {
+      "id": "GYM.13",
+      "kind": "gymSession"
+    },
+    {
+      "id": "GYM.14",
+      "kind": "gymSession"
+    },
+    {
+      "id": "GYM.15",
+      "kind": "gymSession"
+    },
+    {
+      "id": "GYM.16",
+      "kind": "gymSession"
+    },
+    {
+      "id": "GYM.17",
+      "kind": "gymSession"
+    },
+    {
+      "id": "A1.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "A1.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "A1.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "A1.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "A1.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "A1.L06",
+      "kind": "lesson"
+    },
+    {
+      "id": "A1.L07",
+      "kind": "lesson"
+    },
+    {
+      "id": "A2.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "A2.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "A2.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "A2.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "A2.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "A2.L06",
+      "kind": "lesson"
+    },
+    {
+      "id": "J1.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "J1.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "J1.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "J1.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "J1.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "J2.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "J2.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "J2.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "J2.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "J3.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "J3.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "J3.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "J3.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "J4.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "J4.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "J4.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "J4.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "J5.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "J5.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "J5.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "J5.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "J5.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "R1.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "R1.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "R1.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "R1.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "R1.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "R2.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "R2.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "R2.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "R2.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "R2.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "R3.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "R3.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "R3.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "R3.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "R3.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "U00.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "U00.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "U01.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "U01.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "U01.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "U01.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "U01.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "U01.L06",
+      "kind": "lesson"
+    },
+    {
+      "id": "U01.L07",
+      "kind": "lesson"
+    },
+    {
+      "id": "U01.L08",
+      "kind": "lesson"
+    },
+    {
+      "id": "U01.L09",
+      "kind": "lesson"
+    },
+    {
+      "id": "U02.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "U02.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "U02.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "U02.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "U02.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "U02.L06",
+      "kind": "lesson"
+    },
+    {
+      "id": "U02.L07",
+      "kind": "lesson"
+    },
+    {
+      "id": "U02.L08",
+      "kind": "lesson"
+    },
+    {
+      "id": "U03.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "U03.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "U03.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "U03.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "U03.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "U03.L06",
+      "kind": "lesson"
+    },
+    {
+      "id": "U03.L07",
+      "kind": "lesson"
+    },
+    {
+      "id": "U03.L08",
+      "kind": "lesson"
+    },
+    {
+      "id": "U03.L09",
+      "kind": "lesson"
+    },
+    {
+      "id": "U03.L10",
+      "kind": "lesson"
+    },
+    {
+      "id": "U03.L11",
+      "kind": "lesson"
+    },
+    {
+      "id": "U04.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "U04.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "U04.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "U04.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "U05.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "U05.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "U05.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "U05.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "U05.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "U05.L06",
+      "kind": "lesson"
+    },
+    {
+      "id": "U05.L07",
+      "kind": "lesson"
+    },
+    {
+      "id": "U05.L08",
+      "kind": "lesson"
+    },
+    {
+      "id": "U06.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "U06.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "U06.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "U06.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "U06.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "U06.L06",
+      "kind": "lesson"
+    },
+    {
+      "id": "U06.L07",
+      "kind": "lesson"
+    },
+    {
+      "id": "U06.L08",
+      "kind": "lesson"
+    },
+    {
+      "id": "U06.L09",
+      "kind": "lesson"
+    },
+    {
+      "id": "U06.L10",
+      "kind": "lesson"
+    },
+    {
+      "id": "U06.L11",
+      "kind": "lesson"
+    },
+    {
+      "id": "U06.L12",
+      "kind": "lesson"
+    },
+    {
+      "id": "U07.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "U07.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "U07.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "U07.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "U07.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "U07.L06",
+      "kind": "lesson"
+    },
+    {
+      "id": "U07.L07",
+      "kind": "lesson"
+    },
+    {
+      "id": "U07.L08",
+      "kind": "lesson"
+    },
+    {
+      "id": "U07.L09",
+      "kind": "lesson"
+    },
+    {
+      "id": "U07.L10",
+      "kind": "lesson"
+    },
+    {
+      "id": "U08.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "U08.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "U08.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "U08.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "U08.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "U09.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "U09.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "U09.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "U09.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "U09.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "U10.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "U10.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "U10.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "U10.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "U10.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "U10.L06",
+      "kind": "lesson"
+    },
+    {
+      "id": "U10.L07",
+      "kind": "lesson"
+    },
+    {
+      "id": "U10.L08",
+      "kind": "lesson"
+    },
+    {
+      "id": "U10.L09",
+      "kind": "lesson"
+    },
+    {
+      "id": "U11.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "U11.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "U11.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "U11.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "U11.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "U11.L06",
+      "kind": "lesson"
+    },
+    {
+      "id": "U11.L07",
+      "kind": "lesson"
+    },
+    {
+      "id": "U11.L08",
+      "kind": "lesson"
+    },
+    {
+      "id": "U12.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "U12.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "U12.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "U12.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "U12.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "U12.L06",
+      "kind": "lesson"
+    },
+    {
+      "id": "U13.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "U13.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "U13.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "U13.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "U13.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "U13.L06",
+      "kind": "lesson"
+    },
+    {
+      "id": "U14.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "U14.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "U14.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "U14.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "U14.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "U14.L06",
+      "kind": "lesson"
+    },
+    {
+      "id": "U15.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "U15.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "U15.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "U15.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "U15.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "U15.L06",
+      "kind": "lesson"
+    },
+    {
+      "id": "U16.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "U16.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "U16.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "U16.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "U16.L05",
+      "kind": "lesson"
+    },
+    {
+      "id": "U17.L01",
+      "kind": "lesson"
+    },
+    {
+      "id": "U17.L02",
+      "kind": "lesson"
+    },
+    {
+      "id": "U17.L03",
+      "kind": "lesson"
+    },
+    {
+      "id": "U17.L04",
+      "kind": "lesson"
+    },
+    {
+      "id": "scale.altered",
+      "kind": "scale"
+    },
+    {
+      "id": "scale.bebop",
+      "kind": "scale"
+    },
+    {
+      "id": "scale.blues",
+      "kind": "scale"
+    },
+    {
+      "id": "scale.dorian",
+      "kind": "scale"
+    },
+    {
+      "id": "scale.harmonic-minor",
+      "kind": "scale"
+    },
+    {
+      "id": "scale.locrian",
+      "kind": "scale"
+    },
+    {
+      "id": "scale.lydian",
+      "kind": "scale"
+    },
+    {
+      "id": "scale.lydian-dominant",
+      "kind": "scale"
+    },
+    {
+      "id": "scale.major",
+      "kind": "scale"
+    },
+    {
+      "id": "scale.major-pentatonic",
+      "kind": "scale"
+    },
+    {
+      "id": "scale.melodic-minor",
+      "kind": "scale"
+    },
+    {
+      "id": "scale.minor",
+      "kind": "scale"
+    },
+    {
+      "id": "scale.minor-pentatonic",
+      "kind": "scale"
+    },
+    {
+      "id": "scale.mixolydian",
+      "kind": "scale"
+    },
+    {
+      "id": "scale.phrygian",
+      "kind": "scale"
+    },
+    {
+      "id": "B01",
+      "kind": "skill"
+    },
+    {
+      "id": "B02",
+      "kind": "skill"
+    },
+    {
+      "id": "B03",
+      "kind": "skill"
+    },
+    {
+      "id": "B04",
+      "kind": "skill"
+    },
+    {
+      "id": "B05",
+      "kind": "skill"
+    },
+    {
+      "id": "C01",
+      "kind": "skill"
+    },
+    {
+      "id": "C02",
+      "kind": "skill"
+    },
+    {
+      "id": "C03",
+      "kind": "skill"
+    },
+    {
+      "id": "C04",
+      "kind": "skill"
+    },
+    {
+      "id": "C05",
+      "kind": "skill"
+    },
+    {
+      "id": "C06",
+      "kind": "skill"
+    },
+    {
+      "id": "C07",
+      "kind": "skill"
+    },
+    {
+      "id": "C08",
+      "kind": "skill"
+    },
+    {
+      "id": "C09",
+      "kind": "skill"
+    },
+    {
+      "id": "C10",
+      "kind": "skill"
+    },
+    {
+      "id": "D01",
+      "kind": "skill"
+    },
+    {
+      "id": "D02",
+      "kind": "skill"
+    },
+    {
+      "id": "D03",
+      "kind": "skill"
+    },
+    {
+      "id": "D04",
+      "kind": "skill"
+    },
+    {
+      "id": "D05",
+      "kind": "skill"
+    },
+    {
+      "id": "D06",
+      "kind": "skill"
+    },
+    {
+      "id": "D07",
+      "kind": "skill"
+    },
+    {
+      "id": "D08",
+      "kind": "skill"
+    },
+    {
+      "id": "D09",
+      "kind": "skill"
+    },
+    {
+      "id": "D10",
+      "kind": "skill"
+    },
+    {
+      "id": "D11",
+      "kind": "skill"
+    },
+    {
+      "id": "E01",
+      "kind": "skill"
+    },
+    {
+      "id": "E02",
+      "kind": "skill"
+    },
+    {
+      "id": "E03",
+      "kind": "skill"
+    },
+    {
+      "id": "E04",
+      "kind": "skill"
+    },
+    {
+      "id": "E05",
+      "kind": "skill"
+    },
+    {
+      "id": "E06",
+      "kind": "skill"
+    },
+    {
+      "id": "E07",
+      "kind": "skill"
+    },
+    {
+      "id": "E08",
+      "kind": "skill"
+    },
+    {
+      "id": "E09",
+      "kind": "skill"
+    },
+    {
+      "id": "E10",
+      "kind": "skill"
+    },
+    {
+      "id": "E11",
+      "kind": "skill"
+    },
+    {
+      "id": "E12",
+      "kind": "skill",
+      "retiredAt": "v1",
+      "supersededBy": [
+        "E12a",
+        "E12b"
+      ]
+    },
+    {
+      "id": "E12a",
+      "kind": "skill"
+    },
+    {
+      "id": "E12b",
+      "kind": "skill"
+    },
+    {
+      "id": "E13",
+      "kind": "skill"
+    },
+    {
+      "id": "E14",
+      "kind": "skill"
+    },
+    {
+      "id": "F01",
+      "kind": "skill"
+    },
+    {
+      "id": "F02",
+      "kind": "skill"
+    },
+    {
+      "id": "F03",
+      "kind": "skill"
+    },
+    {
+      "id": "F04",
+      "kind": "skill"
+    },
+    {
+      "id": "F05",
+      "kind": "skill"
+    },
+    {
+      "id": "F06",
+      "kind": "skill"
+    },
+    {
+      "id": "H01",
+      "kind": "skill"
+    },
+    {
+      "id": "H02",
+      "kind": "skill"
+    },
+    {
+      "id": "H03",
+      "kind": "skill"
+    },
+    {
+      "id": "H04",
+      "kind": "skill"
+    },
+    {
+      "id": "H05",
+      "kind": "skill"
+    },
+    {
+      "id": "H06",
+      "kind": "skill"
+    },
+    {
+      "id": "H07",
+      "kind": "skill"
+    },
+    {
+      "id": "H08",
+      "kind": "skill"
+    },
+    {
+      "id": "H09",
+      "kind": "skill"
+    },
+    {
+      "id": "H10",
+      "kind": "skill"
+    },
+    {
+      "id": "H11",
+      "kind": "skill"
+    },
+    {
+      "id": "H12",
+      "kind": "skill"
+    },
+    {
+      "id": "H13",
+      "kind": "skill"
+    },
+    {
+      "id": "H14",
+      "kind": "skill"
+    },
+    {
+      "id": "H15",
+      "kind": "skill"
+    },
+    {
+      "id": "I01",
+      "kind": "skill"
+    },
+    {
+      "id": "I02",
+      "kind": "skill"
+    },
+    {
+      "id": "I03",
+      "kind": "skill"
+    },
+    {
+      "id": "I04",
+      "kind": "skill"
+    },
+    {
+      "id": "I05",
+      "kind": "skill"
+    },
+    {
+      "id": "J01",
+      "kind": "skill"
+    },
+    {
+      "id": "J02",
+      "kind": "skill"
+    },
+    {
+      "id": "J03",
+      "kind": "skill"
+    },
+    {
+      "id": "J04",
+      "kind": "skill"
+    },
+    {
+      "id": "J05",
+      "kind": "skill"
+    },
+    {
+      "id": "J06",
+      "kind": "skill"
+    },
+    {
+      "id": "J07",
+      "kind": "skill"
+    },
+    {
+      "id": "J08",
+      "kind": "skill"
+    },
+    {
+      "id": "J09",
+      "kind": "skill"
+    },
+    {
+      "id": "J10",
+      "kind": "skill"
+    },
+    {
+      "id": "J11",
+      "kind": "skill"
+    },
+    {
+      "id": "J12",
+      "kind": "skill"
+    },
+    {
+      "id": "J13",
+      "kind": "skill"
+    },
+    {
+      "id": "J14",
+      "kind": "skill"
+    },
+    {
+      "id": "M01",
+      "kind": "skill"
+    },
+    {
+      "id": "M02",
+      "kind": "skill"
+    },
+    {
+      "id": "M03",
+      "kind": "skill"
+    },
+    {
+      "id": "M04",
+      "kind": "skill"
+    },
+    {
+      "id": "M05",
+      "kind": "skill"
+    },
+    {
+      "id": "M06",
+      "kind": "skill"
+    },
+    {
+      "id": "M07",
+      "kind": "skill"
+    },
+    {
+      "id": "M08",
+      "kind": "skill"
+    },
+    {
+      "id": "M09",
+      "kind": "skill"
+    },
+    {
+      "id": "M10",
+      "kind": "skill"
+    },
+    {
+      "id": "N01",
+      "kind": "skill"
+    },
+    {
+      "id": "N02",
+      "kind": "skill"
+    },
+    {
+      "id": "N03",
+      "kind": "skill"
+    },
+    {
+      "id": "N04",
+      "kind": "skill"
+    },
+    {
+      "id": "N05",
+      "kind": "skill"
+    },
+    {
+      "id": "N06",
+      "kind": "skill"
+    },
+    {
+      "id": "N07",
+      "kind": "skill"
+    },
+    {
+      "id": "N08",
+      "kind": "skill"
+    },
+    {
+      "id": "N09",
+      "kind": "skill"
+    },
+    {
+      "id": "P01",
+      "kind": "skill"
+    },
+    {
+      "id": "P02",
+      "kind": "skill"
+    },
+    {
+      "id": "P03",
+      "kind": "skill"
+    },
+    {
+      "id": "P04",
+      "kind": "skill"
+    },
+    {
+      "id": "P05",
+      "kind": "skill"
+    },
+    {
+      "id": "P06",
+      "kind": "skill"
+    },
+    {
+      "id": "R01",
+      "kind": "skill"
+    },
+    {
+      "id": "R02",
+      "kind": "skill"
+    },
+    {
+      "id": "R03",
+      "kind": "skill"
+    },
+    {
+      "id": "R04",
+      "kind": "skill"
+    },
+    {
+      "id": "R05",
+      "kind": "skill"
+    },
+    {
+      "id": "R06",
+      "kind": "skill"
+    },
+    {
+      "id": "R07",
+      "kind": "skill"
+    },
+    {
+      "id": "R08",
+      "kind": "skill"
+    },
+    {
+      "id": "R09",
+      "kind": "skill"
+    },
+    {
+      "id": "R10",
+      "kind": "skill"
+    },
+    {
+      "id": "R11",
+      "kind": "skill"
+    },
+    {
+      "id": "R12",
+      "kind": "skill"
+    },
+    {
+      "id": "R13",
+      "kind": "skill"
+    },
+    {
+      "id": "R14",
+      "kind": "skill"
+    },
+    {
+      "id": "R15",
+      "kind": "skill"
+    },
+    {
+      "id": "R16",
+      "kind": "skill"
+    },
+    {
+      "id": "R17",
+      "kind": "skill"
+    },
+    {
+      "id": "R18",
+      "kind": "skill"
+    },
+    {
+      "id": "S01",
+      "kind": "skill"
+    },
+    {
+      "id": "S02",
+      "kind": "skill"
+    },
+    {
+      "id": "S03",
+      "kind": "skill"
+    },
+    {
+      "id": "S04",
+      "kind": "skill"
+    },
+    {
+      "id": "S05",
+      "kind": "skill"
+    },
+    {
+      "id": "S06",
+      "kind": "skill"
+    },
+    {
+      "id": "S07",
+      "kind": "skill"
+    },
+    {
+      "id": "S08",
+      "kind": "skill"
+    },
+    {
+      "id": "S09",
+      "kind": "skill"
+    },
+    {
+      "id": "S10",
+      "kind": "skill"
+    },
+    {
+      "id": "S11",
+      "kind": "skill"
+    },
+    {
+      "id": "S12",
+      "kind": "skill"
+    },
+    {
+      "id": "S13",
+      "kind": "skill"
+    },
+    {
+      "id": "V01",
+      "kind": "skill"
+    },
+    {
+      "id": "V02",
+      "kind": "skill"
+    },
+    {
+      "id": "V03",
+      "kind": "skill"
+    },
+    {
+      "id": "V04",
+      "kind": "skill"
+    },
+    {
+      "id": "V05",
+      "kind": "skill"
+    },
+    {
+      "id": "V06",
+      "kind": "skill"
+    },
+    {
+      "id": "song.aint-misbehavin",
+      "kind": "song"
+    },
+    {
+      "id": "song.aint-she-sweet",
+      "kind": "song"
+    },
+    {
+      "id": "song.amazing-grace",
+      "kind": "song"
+    },
+    {
+      "id": "song.auld-lang-syne",
+      "kind": "song"
+    },
+    {
+      "id": "song.aura-lee",
+      "kind": "song"
+    },
+    {
+      "id": "song.blue-skies",
+      "kind": "song"
+    },
+    {
+      "id": "song.body-and-soul",
+      "kind": "song"
+    },
+    {
+      "id": "song.bye-bye-blackbird",
+      "kind": "song"
+    },
+    {
+      "id": "song.careless-love",
+      "kind": "song"
+    },
+    {
+      "id": "song.down-by-the-riverside",
+      "kind": "song"
+    },
+    {
+      "id": "song.drunken-sailor",
+      "kind": "song"
+    },
+    {
+      "id": "song.five-foot-two",
+      "kind": "song"
+    },
+    {
+      "id": "song.frankie-and-johnny",
+      "kind": "song"
+    },
+    {
+      "id": "song.georgia-on-my-mind",
+      "kind": "song"
+    },
+    {
+      "id": "song.go-down-moses",
+      "kind": "song"
+    },
+    {
+      "id": "song.greensleeves",
+      "kind": "song"
+    },
+    {
+      "id": "song.honeysuckle-rose",
+      "kind": "song"
+    },
+    {
+      "id": "song.i-got-rhythm",
+      "kind": "song"
+    },
+    {
+      "id": "song.joshua-fit-the-battle",
+      "kind": "song"
+    },
+    {
+      "id": "song.lady-be-good",
+      "kind": "song"
+    },
+    {
+      "id": "song.memphis-blues",
+      "kind": "song"
+    },
+    {
+      "id": "song.michael-row",
+      "kind": "song"
+    },
+    {
+      "id": "song.ode-to-joy",
+      "kind": "song"
+    },
+    {
+      "id": "song.oh-susanna",
+      "kind": "song"
+    },
+    {
+      "id": "song.old-joe-clark",
+      "kind": "song"
+    },
+    {
+      "id": "song.red-river-valley",
+      "kind": "song"
+    },
+    {
+      "id": "song.scarborough-fair",
+      "kind": "song"
+    },
+    {
+      "id": "song.shenandoah",
+      "kind": "song"
+    },
+    {
+      "id": "song.simple-gifts",
+      "kind": "song"
+    },
+    {
+      "id": "song.st-louis-blues",
+      "kind": "song"
+    },
+    {
+      "id": "song.sunny-side-of-the-street",
+      "kind": "song"
+    },
+    {
+      "id": "song.sweet-georgia-brown",
+      "kind": "song"
+    },
+    {
+      "id": "song.swing-low",
+      "kind": "song"
+    },
+    {
+      "id": "song.tea-for-two",
+      "kind": "song"
+    },
+    {
+      "id": "song.the-entertainer",
+      "kind": "song"
+    },
+    {
+      "id": "song.wayfaring-stranger",
+      "kind": "song"
+    },
+    {
+      "id": "song.when-the-saints",
+      "kind": "song"
+    },
+    {
+      "id": "snd.acgtr",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.bank.AkaiLinn",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.bank.LinnDrum",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.bank.RolandTR707",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.bank.RolandTR808",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.bank.RolandTR909",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.brk",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.choir",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.clav",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.cleangtr",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.crunch",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.drum.bd",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.drum.cb",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.drum.cp",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.drum.cr",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.drum.hh",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.drum.ht",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.drum.lt",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.drum.mt",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.drum.oh",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.drum.rd",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.drum.rim",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.drum.sd",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.drum.sh",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.drum.tb",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.ebass",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.fingerbass",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.horns",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.jazzgtr",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.jazzkit",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.mutetpt",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.organ",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.pad",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.piano",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.rhodes",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.strings",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.tenor",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.trumpet",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.upright",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.vibes",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.wave.pulse",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.wave.sawtooth",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.wave.sine",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.wave.square",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.wave.supersaw",
+      "kind": "sound"
+    },
+    {
+      "id": "snd.wave.triangle",
+      "kind": "sound"
+    },
+    {
+      "id": "term.backbeat",
+      "kind": "term"
+    },
+    {
+      "id": "term.bar",
+      "kind": "term"
+    },
+    {
+      "id": "term.blue-note",
+      "kind": "term"
+    },
+    {
+      "id": "term.borrowed-chord",
+      "kind": "term"
+    },
+    {
+      "id": "term.cadence",
+      "kind": "term"
+    },
+    {
+      "id": "term.chorus",
+      "kind": "term"
+    },
+    {
+      "id": "term.circle-of-fifths",
+      "kind": "term"
+    },
+    {
+      "id": "term.clave",
+      "kind": "term"
+    },
+    {
+      "id": "term.consonance",
+      "kind": "term"
+    },
+    {
+      "id": "term.contour",
+      "kind": "term"
+    },
+    {
+      "id": "term.dissonance",
+      "kind": "term"
+    },
+    {
+      "id": "term.downbeat",
+      "kind": "term"
+    },
+    {
+      "id": "term.eighth-note",
+      "kind": "term"
+    },
+    {
+      "id": "term.envelope",
+      "kind": "term"
+    },
+    {
+      "id": "term.fill",
+      "kind": "term"
+    },
+    {
+      "id": "term.flat",
+      "kind": "term"
+    },
+    {
+      "id": "term.guide-tones",
+      "kind": "term"
+    },
+    {
+      "id": "term.harmonic-rhythm",
+      "kind": "term"
+    },
+    {
+      "id": "term.interval",
+      "kind": "term"
+    },
+    {
+      "id": "term.inversion",
+      "kind": "term"
+    },
+    {
+      "id": "term.key-signature",
+      "kind": "term"
+    },
+    {
+      "id": "term.leading-tone",
+      "kind": "term"
+    },
+    {
+      "id": "term.loop",
+      "kind": "term"
+    },
+    {
+      "id": "term.major-scale",
+      "kind": "term"
+    },
+    {
+      "id": "term.meter",
+      "kind": "term"
+    },
+    {
+      "id": "term.mode",
+      "kind": "term"
+    },
+    {
+      "id": "term.modulation",
+      "kind": "term"
+    },
+    {
+      "id": "term.motif",
+      "kind": "term"
+    },
+    {
+      "id": "term.octave",
+      "kind": "term"
+    },
+    {
+      "id": "term.pickup",
+      "kind": "term"
+    },
+    {
+      "id": "term.pitch",
+      "kind": "term"
+    },
+    {
+      "id": "term.pulse",
+      "kind": "term"
+    },
+    {
+      "id": "term.quarter-note",
+      "kind": "term"
+    },
+    {
+      "id": "term.relative-minor",
+      "kind": "term"
+    },
+    {
+      "id": "term.rest",
+      "kind": "term"
+    },
+    {
+      "id": "term.roman-numeral",
+      "kind": "term"
+    },
+    {
+      "id": "term.scale-degree",
+      "kind": "term"
+    },
+    {
+      "id": "term.secondary-dominant",
+      "kind": "term"
+    },
+    {
+      "id": "term.semitone",
+      "kind": "term"
+    },
+    {
+      "id": "term.sharp",
+      "kind": "term"
+    },
+    {
+      "id": "term.shuffle",
+      "kind": "term"
+    },
+    {
+      "id": "term.solfege",
+      "kind": "term"
+    },
+    {
+      "id": "term.staff",
+      "kind": "term"
+    },
+    {
+      "id": "term.subdivision",
+      "kind": "term"
+    },
+    {
+      "id": "term.syncopation",
+      "kind": "term"
+    },
+    {
+      "id": "term.tempo",
+      "kind": "term"
+    },
+    {
+      "id": "term.timbre",
+      "kind": "term"
+    },
+    {
+      "id": "term.tonic",
+      "kind": "term"
+    },
+    {
+      "id": "term.triad",
+      "kind": "term"
+    },
+    {
+      "id": "term.triplet",
+      "kind": "term"
+    },
+    {
+      "id": "term.tritone-sub",
+      "kind": "term"
+    },
+    {
+      "id": "term.verse",
+      "kind": "term"
+    },
+    {
+      "id": "term.voice-leading",
+      "kind": "term"
+    },
+    {
+      "id": "term.whole-step",
+      "kind": "term"
+    },
+    {
+      "id": "tb.add",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.adsr",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.anchor",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.arp",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.arrange",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.bank",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.bpf",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.chop",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.chord",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.clip",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.coarse",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.compressor",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.const",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.crush",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.degradeBy",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.delay",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.delayfeedback",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.delaytime",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.dict.guidetones",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.dict.ireal-ext",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.dict.lefthand",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.dict.triads",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.distort",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.distorttype",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.duck",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.early",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.euclid",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.euclidRot",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.fast",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.feature.album",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.feature.band",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.feature.circle",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.feature.degree-labels",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.feature.grand-staff",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.feature.jazz-glyphs",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.feature.keysig",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.feature.leadsheet",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.feature.rn",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.feature.roll",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.feature.solfege",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.feature.staff",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.feature.studio",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.feature.transcribe",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.feature.transcribe.bass",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.feature.transcribe.chords",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.feature.transcribe.full",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.feature.transport",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.feature.tuner",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.feature.tutor",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.firstOf",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.fm",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.fscope",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.gain",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.hpf",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.jux",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.label",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.label.mute",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.lastOf",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.late",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.legato",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.lens.chord-tones",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.lens.form",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.lens.function",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.lens.range",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.loopAt",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.lpenv",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.lpf",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.lpmod",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.lpq",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.mask",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.meter.2-4",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.meter.3-4",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.meter.compound",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.meter.odd",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.mini.alt",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.mini.elongate",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.mini.euclid",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.mini.euclid-rot",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.mini.hold",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.mini.maybe",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.mini.polymeter",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.mini.range",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.mini.repeat",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.mini.replicate",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.mini.rest",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.mini.seq",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.mini.stack",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.mini.sub",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.mode.below",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.mode.duck",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.mode.root",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.n",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.n.chromatic",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.n.range",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.note",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.note.accidentals",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.note.midi",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.note.names",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.off",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.offset",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.orbit",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.pan",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.partials",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.phaser",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.ply",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.postgain",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.pw",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.range",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.rev",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.room",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.roomsize",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.rootNotes",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.s",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.s.pitched",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.scale",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.scale.patterned",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.scaleTranspose",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.scope",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.segment",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.set",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.setcpm",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.signal",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.slow",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.sometimesBy",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.speed",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.stack",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.struct",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.superimpose",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.swing",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.swing.patterned",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.swingBy",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.template.12-bar-shuffle",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.template.dorian-funk-vamp",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.template.four-chord-pop",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.template.jazz-blues-f",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.template.synthbass",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.transpose",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.transpose.interval",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.tremolo",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.unison",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.velocity",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.vib",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.voicing",
+      "kind": "tool"
+    },
+    {
+      "id": "tb.voicing.n",
+      "kind": "tool"
+    },
+    {
+      "id": "A1",
+      "kind": "unit"
+    },
+    {
+      "id": "A2",
+      "kind": "unit"
+    },
+    {
+      "id": "J1",
+      "kind": "unit"
+    },
+    {
+      "id": "J2",
+      "kind": "unit"
+    },
+    {
+      "id": "J3",
+      "kind": "unit"
+    },
+    {
+      "id": "J4",
+      "kind": "unit"
+    },
+    {
+      "id": "J5",
+      "kind": "unit"
+    },
+    {
+      "id": "R1",
+      "kind": "unit"
+    },
+    {
+      "id": "R2",
+      "kind": "unit"
+    },
+    {
+      "id": "R3",
+      "kind": "unit"
+    },
+    {
+      "id": "U00",
+      "kind": "unit"
+    },
+    {
+      "id": "U01",
+      "kind": "unit"
+    },
+    {
+      "id": "U02",
+      "kind": "unit"
+    },
+    {
+      "id": "U03",
+      "kind": "unit"
+    },
+    {
+      "id": "U04",
+      "kind": "unit"
+    },
+    {
+      "id": "U05",
+      "kind": "unit"
+    },
+    {
+      "id": "U06",
+      "kind": "unit"
+    },
+    {
+      "id": "U07",
+      "kind": "unit"
+    },
+    {
+      "id": "U08",
+      "kind": "unit"
+    },
+    {
+      "id": "U09",
+      "kind": "unit"
+    },
+    {
+      "id": "U10",
+      "kind": "unit"
+    },
+    {
+      "id": "U11",
+      "kind": "unit"
+    },
+    {
+      "id": "U12",
+      "kind": "unit"
+    },
+    {
+      "id": "U13",
+      "kind": "unit"
+    },
+    {
+      "id": "U14",
+      "kind": "unit"
+    },
+    {
+      "id": "U15",
+      "kind": "unit"
+    },
+    {
+      "id": "U16",
+      "kind": "unit"
+    },
+    {
+      "id": "U17",
+      "kind": "unit"
+    }
+  ]
+}

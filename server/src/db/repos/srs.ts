@@ -123,7 +123,12 @@ interface DrillRow {
   mean_credit: number | null;
 }
 function toDrill(r: DrillRow): DrillSession & { warmupItemId: string | null; meanCredit: number | null } {
-  const plan = fromJson<DrillPlan>(r.plan_json, { levels: {}, openCategories: {}, focus: {}, trialsPlanned: 0 });
+  const plan = fromJson<DrillPlan>(r.plan_json, {
+    levels: {},
+    openCategories: {},
+    focus: {},
+    trialsPlanned: 0,
+  });
   return {
     id: r.id,
     sessionId: r.session_id,
@@ -154,10 +159,13 @@ interface TrialRow {
   at: string;
 }
 function toTrial(r: TrialRow): DrillTrialRecord {
-  const trial = fromJson<{ params: Record<string, unknown>; confusion: [string, string] | null }>(r.trial_json, {
-    params: {},
-    confusion: null,
-  });
+  const trial = fromJson<{ params: Record<string, unknown>; confusion: [string, string] | null }>(
+    r.trial_json,
+    {
+      params: {},
+      confusion: null,
+    },
+  );
   return {
     idx: r.idx,
     familyId: r.family_id as DrillTrialRecord["familyId"],
@@ -216,7 +224,12 @@ export class SrsRepo {
   }
   saveCard(
     card: Card,
-    meta: { desiredRetention: number; payload?: unknown; introducedBy?: string | null; releasedAt?: string | null },
+    meta: {
+      desiredRetention: number;
+      payload?: unknown;
+      introducedBy?: string | null;
+      releasedAt?: string | null;
+    },
     at: string,
   ): StoredCard {
     run(
@@ -290,7 +303,10 @@ export class SrsRepo {
   }
   /** Reviews recorded on or after `since`. */
   reviewsSince(since: string): number {
-    return Number(get<{ n: number }>(this.db, "SELECT COUNT(*) AS n FROM srs_revlog WHERE reviewed_at >= ?", since)?.n ?? 0);
+    return Number(
+      get<{ n: number }>(this.db, "SELECT COUNT(*) AS n FROM srs_revlog WHERE reviewed_at >= ?", since)?.n ??
+        0,
+    );
   }
 
   // --- family_state ---

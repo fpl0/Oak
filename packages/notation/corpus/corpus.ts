@@ -1,0 +1,497 @@
+// The golden corpus of @oak/notation: Strudel patterns with the notation a musician expects, stated
+// by hand (note-list DSL: value 4 = quarter, `.` dot, `~` tie, `(p:q …)` tuplet, `|` bar line).
+// Entries 01–10 are the ten patterns spike S4 required; the rest cover meters, ties, tuplets, swing,
+// pickups, staves, keys, chromatic spelling, voicings and lead sheets.
+import type { CorpusEntry } from "./harness.ts";
+
+export const CORPUS: CorpusEntry[] = [
+  // --- the ten patterns of spike S4 ---------------------------------------------------------------
+  {
+    name: "01 four quarters",
+    code: 'note("c4 d4 e4 f4")',
+    bars: 1,
+    expect: {
+      voices: { S1: "C4:4 D4:4 E4:4 F4:4" },
+      abc: ["!class=oak-e0!C4 !class=oak-e1!D4 !class=oak-e2!E4 !class=oak-e3!F4 |]"],
+    },
+  },
+  {
+    name: "02 eighth pair in a beat",
+    code: 'note("c4 [d4 e4] f4 g4")',
+    bars: 1,
+    expect: { voices: { S1: "C4:4 D4:8 E4:8 F4:4 G4:4" }, abc: ["!class=oak-e1!D2!class=oak-e2!E2 "] },
+  },
+  {
+    name: "03 dotted half + quarter",
+    code: 'note("c4@3 d4")',
+    bars: 1,
+    expect: { voices: { S1: "C4:2. D4:4" } },
+  },
+  {
+    name: "04 alternation over 2 bars",
+    code: 'note("<c4 e4> g4")',
+    bars: 2,
+    expect: { voices: { S1: "C4:2 G4:2 | E4:2 G4:2" } },
+  },
+  { name: "05 rests", code: 'note("c4 ~ d4 ~")', bars: 1, expect: { voices: { S1: "C4:4 r:4 D4:4 r:4" } } },
+  {
+    name: "06 quarter triplet in half a bar",
+    code: 'note("c4*3 e4")',
+    bars: 1,
+    expect: { voices: { S1: "(3:2 C4:4 C4:4 C4:4) E4:2" }, abc: ["(3:2:3!class=oak-e0!C4"] },
+  },
+  {
+    name: "07 D major by scale",
+    code: 'n("0 2 4 6").scale("D4:major")',
+    bars: 1,
+    expect: { voices: { S1: "D4:4 F#4:4 A4:4 C#5:4" }, key: { tonic: "D", mode: "major" }, abc: ["K:D\n"] },
+  },
+  {
+    name: "08 chord stack",
+    code: 'note("[c4,e4,g4] [f4,a4,c5]")',
+    bars: 1,
+    expect: {
+      voices: { S1: "[C4,E4,G4]:2 [F4,A4,C5]:2" },
+      abc: ["!class=oak-e0![CEG]8 !class=oak-e1![FAc]8"],
+    },
+  },
+  {
+    name: "09 syncopated tie",
+    code: 'note("~ c4@1.5 d4@1.5")',
+    bars: 1,
+    expect: {
+      voices: { S1: "r:4 C4:4~ C4:8 D4:8~ D4:4" },
+      abc: ["z4 !class=oak-e0!C4- !class=oak-e0!C2!class=oak-e1!D2- !class=oak-e1!D4"],
+    },
+  },
+  {
+    name: "10 F# major scale",
+    code: 'n("0 1 2 3 4 5 6 7").scale("F#4:major")',
+    bars: 1,
+    expect: {
+      voices: { S1: "F#4:8 G#4:8 A#4:8 B4:8 C#5:8 D#5:8 E#5:8 F#5:8" },
+      key: { tonic: "F#", mode: "major" },
+      abc: [
+        "K:F#\n",
+        "!class=oak-e0!F2!class=oak-e1!G2 !class=oak-e2!A2!class=oak-e3!B2 !class=oak-e4!c2!class=oak-e5!d2 !class=oak-e6!e2!class=oak-e7!f2 |]",
+      ],
+    },
+  },
+  // --- ties, dots, beats ---------------------------------------------------------------------------
+  {
+    name: "11 cross-bar tie with bar-scoped accidentals",
+    code: 'note("f#4@5 f#4 f4 f#4").slow(2)',
+    bars: 2,
+    expect: {
+      voices: { S1: "F#4:1~ | F#4:4 F#4:4 F4:4 F#4:4" },
+      abc: [
+        "!class=oak-e0!^F16- | !class=oak-e0!F4 !class=oak-e1!^F4 !class=oak-e2!=F4 !class=oak-e3!^F4 |]",
+      ],
+    },
+  },
+  {
+    name: "12 ties across the bar line and the half bar",
+    code: 'note("c4@3 d4@2 e4@3").slow(2)',
+    bars: 2,
+    expect: { voices: { S1: "C4:2. D4:4~ | D4:4 E4:4~ E4:2" } },
+  },
+  {
+    name: "13 syncopation: half note on beat 2",
+    code: 'note("c4 d4@2 e4")',
+    bars: 1,
+    expect: { voices: { S1: "C4:4 D4:2 E4:4" } },
+  },
+  {
+    name: "14 dotted quarter and eighth",
+    code: 'note("c4@3 d4 e4@4")',
+    bars: 1,
+    expect: { voices: { S1: "C4:4. D4:8 E4:2" } },
+  },
+  {
+    name: "15 sixteenths and a dotted eighth",
+    code: 'note("c4 d4 e4 f4 g4@3 a4 b4@2 c5@2 ~@4")',
+    bars: 1,
+    expect: { voices: { S1: "C4:16 D4:16 E4:16 F4:16 G4:8. A4:16 B4:8 C5:8 r:4" } },
+  },
+  {
+    name: "16 off-beat note tied over the beat",
+    code: 'note("~ c4@2 ~@5")',
+    bars: 1,
+    expect: { voices: { S1: "r:8 C4:8~ C4:8 r:8 r:2" } },
+  },
+  {
+    name: "17 long note across two bars",
+    code: 'note("c4@7 d4").slow(2)',
+    bars: 2,
+    expect: { voices: { S1: "C4:1~ | C4:2. D4:4" } },
+  },
+  // --- tuplets -------------------------------------------------------------------------------------
+  {
+    name: "18 eighth triplets by beat",
+    code: 'note("[c4 d4 e4] f4 [g4 a4 b4] c5")',
+    bars: 1,
+    expect: { voices: { S1: "(3:2 C4:8 D4:8 E4:8) F4:4 (3:2 G4:8 A4:8 B4:8) C5:4" } },
+  },
+  {
+    name: "19 quintuplet in a beat",
+    code: 'note("[c4 d4 e4 f4 g4] a4 b4 c5")',
+    bars: 1,
+    expect: { voices: { S1: "(5:4 C4:16 D4:16 E4:16 F4:16 G4:16) A4:4 B4:4 C5:4" }, abc: ["(5:4:5"] },
+  },
+  {
+    name: "20 sextuplet beat as two sixteenth triplets",
+    code: 'note("[c4 d4 e4 f4 g4 a4] c5 ~ c5")',
+    bars: 1,
+    expect: { voices: { S1: "(3:2 C4:16 D4:16 E4:16) (3:2 F4:16 G4:16 A4:16) C5:4 r:4 C5:4" } },
+  },
+  {
+    name: "21 quarter triplets then a half",
+    code: 'note("[c4 d4 e4] f4")',
+    bars: 1,
+    expect: { voices: { S1: "(3:2 C4:4 D4:4 E4:4) F4:2" } },
+  },
+  {
+    name: "22 not notatable: 11 in a bar (approximate)",
+    code: 'note("c4*11")',
+    bars: 1,
+    expect: { approximate: true, warnings: ["tuplet-too-long"] },
+  },
+  {
+    name: "23 mixed tuplets: a triplet inside a quintuplet (approximate)",
+    code: 'note("[c4 d4 e4] f4@4")',
+    bars: 1,
+    expect: { approximate: true, warnings: ["mixed-tuplets"] },
+  },
+  // --- meters --------------------------------------------------------------------------------------
+  {
+    name: "24 3/4 waltz",
+    code: 'note("c4 e4 g4")',
+    bars: 1,
+    meter: "3/4",
+    expect: { voices: { S1: "C4:4 E4:4 G4:4" }, abc: ["M:3/4"] },
+  },
+  {
+    name: "25 3/4 dotted half then a half on beat 2",
+    code: 'note("<c4 [e4 g4@2]>")',
+    bars: 2,
+    meter: "3/4",
+    expect: { voices: { S1: "C4:2. | E4:4 G4:2" } },
+  },
+  {
+    name: "26 6/8 eighths beamed in threes",
+    code: 'note("c4 d4 e4 f4 g4 a4")',
+    bars: 1,
+    meter: "6/8",
+    expect: {
+      voices: { S1: "C4:8 D4:8 E4:8 F4:8 G4:8 A4:8" },
+      abc: ["M:6/8", "!class=oak-e0!C2!class=oak-e1!D2!class=oak-e2!E2 !class=oak-e3!F2"],
+    },
+  },
+  {
+    name: "27 6/8 dotted quarters",
+    code: 'note("c4 g4")',
+    bars: 1,
+    meter: "6/8",
+    expect: { voices: { S1: "C4:4. G4:4." } },
+  },
+  {
+    name: "28 6/8 quarter-eighth",
+    code: 'note("[c4@2 d4] [e4@2 f4]")',
+    bars: 1,
+    meter: "6/8",
+    expect: { voices: { S1: "C4:4 D4:8 E4:4 F4:8" } },
+  },
+  {
+    name: "29 6/8 note tied over the beat",
+    code: 'note("c4 d4@4 e4")',
+    bars: 1,
+    meter: "6/8",
+    expect: { voices: { S1: "C4:8 D4:4~ D4:4 E4:8" } },
+  },
+  {
+    name: "30 12/8 compound beats",
+    code: 'note("[c4 d4 e4] [f4@2 g4] a4 [b4 a4 g4]")',
+    bars: 1,
+    meter: "12/8",
+    expect: { voices: { S1: "C4:8 D4:8 E4:8 F4:4 G4:8 A4:4. B4:8 A4:8 G4:8" } },
+  },
+  {
+    name: "31 7/8 grouped 2+2+3",
+    code: 'note("c4 d4 e4 f4 g4 a4 b4")',
+    bars: 1,
+    meter: "7/8",
+    expect: {
+      voices: { S1: "C4:8 D4:8 E4:8 F4:8 G4:8 A4:8 B4:8" },
+      abc: ["C2!class=oak-e1!D2 !class=oak-e2!E2!class=oak-e3!F2 !class=oak-e4!G2"],
+    },
+  },
+  {
+    name: "32 5/4 grouped 3+2",
+    code: 'note("c4 d4@2 e4 f4")',
+    bars: 1,
+    meter: "5/4",
+    expect: { voices: { S1: "C4:4 D4:2 E4:4 F4:4" } },
+  },
+  // --- swing and pickups ---------------------------------------------------------------------------
+  {
+    name: "33 swing 8ths straightened",
+    code: 'note("c4 d4 e4 f4 g4 a4 b4 c5").swingBy(1/3, 4)',
+    bars: 1,
+    swing: { subdivision: 8, amount: 1 / 3 },
+    expect: {
+      voices: { S1: "C4:8 D4:8 E4:8 F4:8 G4:8 A4:8 B4:8 C5:8" },
+      approximate: false,
+      abc: ['"^Swing 8ths"'],
+    },
+  },
+  {
+    name: "34 swing 16ths on a hi-hat",
+    code: 's("hh*16").swingBy(1/3, 8)',
+    bars: 1,
+    staff: "percussion",
+    swing: { subdivision: 16, amount: 1 / 3 },
+    expect: {
+      voices: { DR: Array(16).fill("hh:16").join(" ") },
+      approximate: false,
+      abc: ['"^Swing 16ths"', "clef=perc"],
+    },
+  },
+  {
+    name: "35 pickup in 3/4 (one beat), last bar shortened",
+    code: 'note("<[~ ~ g4] [c5 c5 d5] [e5@2 c5] [~ ~ ~]>")',
+    bars: 4,
+    meter: "3/4",
+    pickup: { units: [1, 1] },
+    expect: { voices: { S1: "G4:4 | C5:4 C5:4 D5:4 | E5:2 C5:4 | r:2" } },
+  },
+  {
+    name: "36 pickup of two eighths in 4/4",
+    code: 'note("<[~@3 [g4 a4]] [b4 c5 d5 e5] [c5@3 ~]>")',
+    bars: 3,
+    pickup: { units: [1, 1] },
+    expect: { voices: { S1: "G4:8 A4:8 | B4:4 C5:4 D5:4 E5:4 | C5:2." } },
+  },
+  // --- staves ---------------------------------------------------------------------------------------
+  {
+    name: "37 grand staff by track",
+    code: 'rh: note("e4 g4 c5 g4")\nlh: note("c3 g2")',
+    bars: 1,
+    staff: "grand",
+    split: "track",
+    expect: {
+      voices: { RH: "E4:4 G4:4 C5:4 G4:4", LH: "C3:2 G2:2" },
+      abc: ["%%score {RH LH}", "V:LH clef=bass"],
+    },
+  },
+  {
+    name: "38 grand staff split by register",
+    code: 'note("[c3,c4,e4,g4] [g2,b3,d4,g4]")',
+    bars: 1,
+    staff: "grand",
+    expect: { voices: { RH: "[C4,E4,G4]:2 [D4,G4]:2", LH: "C3:2 [G2,B3]:2" } },
+  },
+  {
+    name: "39 bass clef chosen by register",
+    code: 'note("c2 e2 g2 c3")',
+    bars: 1,
+    expect: { voices: { S1: "C2:4 E2:4 G2:4 C3:4" }, staves: ["S1:bass"], abc: ["K:C clef=bass"] },
+  },
+  {
+    name: "40 two voices on one staff",
+    code: 'note("[c5@3 b4, e4@2 g4@2]")',
+    bars: 1,
+    staff: "treble",
+    expect: { voices: { S1: "C5:2. B4:4", S1v2: "E4:2 G4:2" }, abc: ["%%score (S1 S1v2)", "stem=down"] },
+  },
+  {
+    name: "41 drum staff: hands up, kick down",
+    code: 's("bd hh sd hh")',
+    bars: 1,
+    staff: "percussion",
+    expect: { voices: { DR: "r:4 hh:4 sd:4 hh:4", DRv2: "bd:4 r:4 r:2" }, abc: ["!style=x!"] },
+  },
+  {
+    name: "42 drum staff: hi-hat eighths with snare chord",
+    code: 's("hh*8, bd sd")',
+    bars: 1,
+    staff: "percussion",
+    expect: {
+      voices: { DR: "hh:8 hh:8 hh:8 hh:8 [sd,hh]:8 hh:8 hh:8 hh:8", DRv2: "bd:2 r:2" },
+      abc: ["[c!style=x!g]2"],
+    },
+  },
+  {
+    name: "43 rhythm staff with counts",
+    code: 's("bd [~ bd] sd [bd bd]")',
+    bars: 1,
+    staff: "rhythm",
+    labels: "counts",
+    expect: {
+      voices: { S1: "rhythm:4 r:8 rhythm:8 rhythm:4 rhythm:8 rhythm:8" },
+      abc: ["stafflines=1", "w:1 & 3 4 &"],
+    },
+  },
+  {
+    name: "44 drums and melody together (auto)",
+    code: 'mel: note("c5 b4 g4 e4")\ndr: s("bd sd bd sd")',
+    bars: 1,
+    expect: { staves: ["S1:treble", "DR:perc"], voices: { S1: "C5:4 B4:4 G4:4 E4:4" } },
+  },
+  // --- keys and spelling ----------------------------------------------------------------------------
+  {
+    name: "45 sharp key: E major",
+    code: 'n("0 1 2 3 4 5 6 7").scale("E4:major")',
+    bars: 1,
+    expect: {
+      voices: { S1: "E4:8 F#4:8 G#4:8 A4:8 B4:8 C#5:8 D#5:8 E5:8" },
+      abc: ["K:E\n", "!class=oak-e1!F2 !class=oak-e2!G2"],
+    },
+  },
+  {
+    name: "46 flat key: E-flat major",
+    code: 'n("0 2 4 6 7 4 2 0").scale("Eb4:major")',
+    bars: 1,
+    expect: { voices: { S1: "Eb4:8 G4:8 Bb4:8 D5:8 Eb5:8 Bb4:8 G4:8 Eb4:8" }, abc: ["K:Eb\n"] },
+  },
+  {
+    name: "47 flat key: B-flat major below middle C",
+    code: 'n("0 1 2 3").scale("Bb3:major")',
+    bars: 1,
+    expect: { voices: { S1: "Bb3:4 C4:4 D4:4 Eb4:4" }, key: { tonic: "Bb", mode: "major" } },
+  },
+  {
+    name: "48 A harmonic minor: raised 7th as an accidental",
+    code: 'n("0 1 2 3 4 5 6 7").scale("A3:harmonic:minor")',
+    bars: 1,
+    expect: {
+      voices: { S1: "A3:8 B3:8 C4:8 D4:8 E4:8 F4:8 G#4:8 A4:8" },
+      key: { tonic: "A", mode: "harmonic minor" },
+      abc: ["K:Am\n", "^G2"],
+    },
+  },
+  {
+    name: "49 C harmonic minor: B natural against the key signature",
+    code: 'n("4 6 7 ~").scale("C4:harmonic:minor")',
+    bars: 1,
+    expect: { voices: { S1: "G4:4 B4:4 C5:4 r:4" }, abc: ["K:Cm\n", "=B4"] },
+  },
+  {
+    name: "50 F# harmonic minor: E sharp, never F",
+    code: 'n("4 5 6 7").scale("F#4:harmonic:minor")',
+    bars: 1,
+    expect: { voices: { S1: "C#5:4 D5:4 E#5:4 F#5:4" }, abc: ["K:F#m\n", "^e4"] },
+  },
+  {
+    name: "51 D minor with B flat in the signature",
+    code: 'n("0 2 4 5 4 2 1 0").scale("D4:minor")',
+    bars: 1,
+    expect: { voices: { S1: "D4:8 F4:8 A4:8 Bb4:8 A4:8 F4:8 E4:8 D4:8" }, abc: ["K:Dm\n"] },
+  },
+  {
+    name: "52 chromatic degrees b3, #4, b7 in C",
+    code: 'n("0 2b 3# 6b").scale("C4:major")',
+    bars: 1,
+    expect: { voices: { S1: "C4:4 Eb4:4 F#4:4 Bb4:4" }, abc: ["_E4", "^F4", "_B4"] },
+  },
+  {
+    name: "53 bar-scoped natural in D major",
+    code: 'n("2 2b 2 0").scale("D4:major")',
+    bars: 1,
+    expect: {
+      voices: { S1: "F#4:4 F4:4 F#4:4 D4:4" },
+      abc: ["!class=oak-e0!F4 !class=oak-e1!=F4 !class=oak-e2!^F4 !class=oak-e3!D4"],
+    },
+  },
+  {
+    name: "54 key estimated from the notes (G major)",
+    code: 'note("g4 a4 b4 c5 d5 e5 f#5 g5")',
+    bars: 1,
+    expect: { key: { tonic: "G", mode: "major" }, abc: ["K:G\n", "!class=oak-e6!f2"] },
+  },
+  {
+    name: "55 chromatic passing tone spelled by direction",
+    code: 'note("c4 c#4 d4 ~ e4 eb4 d4 ~")',
+    bars: 1,
+    expect: { voices: { S1: "C4:8 C#4:8 D4:8 r:8 E4:8 Eb4:8 D4:8 r:8" } },
+  },
+  {
+    name: "56 voicing() chords in A major spelled from the symbol",
+    code: 'chord("<A E>").voicing()',
+    bars: 2,
+    key: { tonic: "A", mode: "major" },
+    chordByBar: ["A", "E"],
+    staff: "grand",
+    expect: { voices: { RH: "[C#4,E4,A4]:1 | [E4,G#4,B4]:1" } },
+  },
+  {
+    name: "57 voicing() in B major: D sharp and A sharp",
+    code: 'chord("<B F#>").voicing()',
+    bars: 2,
+    key: { tonic: "B", mode: "major" },
+    chordByBar: ["B", "F#"],
+    staff: "grand",
+    expect: {
+      voices: { RH: "[D#4,F#4,B4]:1 | [C#4,F#4,A#4]:1", LH: "[D#3,B3]:1 | F#3:1" },
+      abc: ["K:B\n", "[DFB]16 | !class=oak-e1![CFA]16"],
+    },
+  },
+  // --- lead sheets and lyrics -----------------------------------------------------------------------
+  {
+    name: "58 lead sheet with chord symbols",
+    code: 'note("<[e4 d4 c4 d4] [e4 e4 e4@2]>")',
+    bars: 2,
+    staff: "lead",
+    key: { tonic: "C", mode: "major" },
+    chords: [
+      { bar: 0, beat: 1, symbol: "C" },
+      { bar: 0, beat: 3, symbol: "Am7" },
+      { bar: 1, beat: 1, symbol: "Dm7" },
+      { bar: 1, beat: 3, symbol: "G7" },
+    ],
+    expect: {
+      voices: { S1: "E4:4 D4:4 C4:4 D4:4 | E4:4 E4:4 E4:2" },
+      abc: ['"C"', '"Am7"', '"Dm7"', '"G7"'],
+    },
+  },
+  {
+    name: "59 lead sheet from a chord track: display translation",
+    code: 'mel: note("<b4 g#4 a4 c5>")\nch: chord("<Bm7b5 E7 A^7 Co7>").voicing()',
+    bars: 4,
+    staff: "lead",
+    key: { tonic: "A", mode: "minor" },
+    chordByBar: ["Bm7b5", "E7", "A^7", "Co7"],
+    chordTracks: ["ch"],
+    expect: { voices: { S1: "B4:1 | G#4:1 | A4:1 | C5:1" }, chordTexts: ["Bm7♭5", "E7", "Amaj7", "C°7"] },
+  },
+  {
+    name: "60 chord symbol in the middle of a long note splits it",
+    code: 'note("c4@4")',
+    bars: 1,
+    staff: "lead",
+    chords: [
+      { bar: 0, beat: 1, symbol: "C" },
+      { bar: 0, beat: 3, symbol: "F" },
+    ],
+    expect: { voices: { S1: "C4:2~ C4:2" }, abc: ['"F"!class=oak-e0!C8'] },
+  },
+  {
+    name: "61 degree lyrics in G major",
+    code: 'n("0 1 2 3 4 3 2 0").scale("G4:major")',
+    bars: 1,
+    labels: "degree",
+    expect: { abc: ["w:1 2 3 4 5 4 3 1"] },
+  },
+  {
+    name: "62 solfege in A minor (do-based minor)",
+    code: 'n("0 2 4 7").scale("A3:minor")',
+    bars: 1,
+    labels: "solfege",
+    expect: { abc: ["w:do me sol do"] },
+  },
+  {
+    name: "63 nested triplet inside a bar-wide triplet",
+    code: 'note("[c4 [d4 d4] e4] f4 g4")',
+    bars: 1,
+    expect: { approximate: false },
+  },
+];

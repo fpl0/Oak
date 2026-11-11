@@ -8,7 +8,10 @@ export interface NotationInput {
   /** Normalized events of the tracks to notate, sorted by (onset, midi). */
   events: NEvent[];
   meter: MeterSpec;
-  /** The declared key wins; otherwise the events' `scaleCtx`; otherwise a key estimate; otherwise none. */
+  /**
+   * The declared key wins; otherwise the events' `scaleCtx`; otherwise a conservative key estimate
+   * (at least 7 pitched notes whose pitch classes all fit one key); otherwise none.
+   */
   key: KeySpec | null;
   /** Cycles to engrave, from `startBar`. */
   bars: number;
@@ -18,12 +21,19 @@ export interface NotationInput {
   /** Grand staff: split by register at `splitMidi` (default 60) or by track. */
   split?: "register" | "track";
   splitMidi?: number;
-  /** Lead-sheet chords above the staff, in code spelling; they are translated for display. */
+  /**
+   * Lead-sheet chords above the staff, in code spelling; they are translated for display.
+   * `bar` is the 0-based cycle, `beat` is 1-based in tempo units (1.5 = the "&" of beat 1).
+   * When absent on a `lead` staff, the symbols are taken from the events' `chordSymbol`.
+   */
   chords?: { bar: number; beat: number; symbol: string }[];
-  /** Roman numerals under the staff. */
+  /** Roman numerals under the staff (same `bar`/`beat` convention as `chords`). */
   romans?: { bar: number; beat: number; rn: string }[];
-  /** Lyric line under the notes. */
-  labels?: "none" | "degree" | "solfege";
+  /**
+   * Lyric line under the notes: scale degrees (1-based, "b3"), movable-do syllables, or rhythm
+   * counts ("1 e & a", "1 la li") for the percussion and rhythm staves.
+   */
+  labels?: "none" | "degree" | "solfege" | "counts";
   tempoBpm?: number;
   /**
    * A declared swing: onsets on the swung subdivision are mapped back to the straight grid before
@@ -61,8 +71,16 @@ export interface NoteItem {
   inTuplet: boolean;
   /** A beam group ends before this item (ABC: a space). */
   breakBefore: boolean;
-  /** Drum staff: the notehead style and position come from the sound. */
+  /** Drum staff: the notehead style and position come from the sound (aligned with `pitches`). */
   drum?: { s: string; head: "normal" | "x" };
+  /** Per-pitch drum sounds of a drum chord (hi-hat + snare), aligned with `pitches`. */
+  drums?: { s: string; head: "normal" | "x" }[];
+  /** An invisible rest (ABC `x`): a second voice that is silent for the whole bar. */
+  hidden?: true;
+  /** Union of the engraved events' code locations (feeds `IdMapEntry.locs`). */
+  locs?: CodeRange[];
+  /** Lyric syllable under this item (first piece of a note only). */
+  lyric?: string;
 }
 export interface Voice {
   id: string;
@@ -86,6 +104,17 @@ export interface NotationWarning {
   bar: number;
   message: string;
 }
+/** A chord symbol or Roman numeral placed in the score, already translated for display. */
+export interface ScoreAnnotation {
+  /** 0-based cycle. */
+  bar: number;
+  /** Absolute position in cycles. */
+  at: Rat;
+  /** Code spelling as given ("Cm7b5", "V7/V"). */
+  source: string;
+  /** What is printed ("Cm7♭5" is written as "Cm7b5", which abcjs renders with a flat glyph). */
+  text: string;
+}
 /** The NotationModel. Everything a staff view needs, with no abcjs in it. */
 export interface Score {
   meter: MeterSpec;
@@ -103,6 +132,11 @@ export interface Score {
    */
   approximate: boolean;
   warnings: NotationWarning[];
+  /** Chord symbols above the top staff. */
+  chords?: ScoreAnnotation[];
+  /** Roman numerals under the bottom pitched staff. */
+  romans?: ScoreAnnotation[];
+  title?: string;
 }
 export type NotationModel = Score;
 
@@ -118,7 +152,10 @@ export interface IdMapEntry {
   locs: CodeRange[];
   /** Spelled pitches, low to high. */
   pitches: string[];
+  /** Display bar: 1-based (`floor(onset) + 1`); with a declared pickup, cycle 0 is bar 0. */
   bar: number;
+  /** 1-based beat in tempo units inside the bar (fractional inside a beat). */
+  beat: number;
   onset: Rat;
   dur: Rat;
 }

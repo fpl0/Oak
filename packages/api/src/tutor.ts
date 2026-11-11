@@ -51,7 +51,6 @@ export const TUTOR_ERROR_KINDS = [
   "refusal",
   "max_tokens",
   "iteration_limit",
-  "budget",
   "aborted",
   "internal",
 ] as const;
@@ -354,7 +353,6 @@ export const TUTOR_ERROR_COPY: Readonly<Record<TutorErrorKind, string>> = {
   refusal: "The tutor declined to answer that. Try asking in a different way.",
   max_tokens: "The tutor's answer was cut off. Try again.",
   iteration_limit: "The tutor took too many steps without finishing. Try again.",
-  budget: "The monthly tutor cap you set has been reached. You can raise it in Settings.",
   aborted: "Stopped.",
   internal: "Something went wrong in the tutor.",
 };
@@ -413,8 +411,6 @@ export const TutorSettingsSchema = z.strictObject({
   backend: z.enum(["auto", "off", ...BACKEND_IDS]),
   /** Always on. Default 25. */
   softMonthlyUsd: z.number().nonnegative(),
-  /** Optional, off (`null`) by default. */
-  hardMonthlyUsd: z.number().positive().nullable(),
   softWarnedMonth: z
     .string()
     .regex(/^\d{4}-\d{2}$/)
@@ -424,7 +420,6 @@ export type TutorSettings = z.infer<typeof TutorSettingsSchema>;
 export const DEFAULT_TUTOR_SETTINGS: TutorSettings = {
   backend: "auto",
   softMonthlyUsd: 25,
-  hardMonthlyUsd: null,
   softWarnedMonth: null,
 };
 
@@ -449,9 +444,7 @@ export const TutorUsageReportSchema = z.object({
     }),
   ),
   softMonthlyUsd: z.number(),
-  hardMonthlyUsd: z.number().nullable(),
   softPassed: z.boolean(),
-  hardReached: z.boolean(),
 });
 export type TutorUsageReport = z.infer<typeof TutorUsageReportSchema>;
 

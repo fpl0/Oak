@@ -206,7 +206,8 @@ export const pitchFns = defineFns([
     tool: "tb.scaleTranspose",
     kind: "method",
     signature: ".scaleTranspose(steps)",
-    explanation: "Moves a line up or down by steps of its own scale, staying in the key. It goes after .scale().",
+    explanation:
+      "Moves a line up or down by steps of its own scale, staying in the key. It goes after .scale().",
     example: ex(84, 'mel: n("0 1 2 4").scale("C4:major").scaleTranspose("<0 1 2 1>").s("piano")'),
   },
   {
@@ -214,7 +215,8 @@ export const pitchFns = defineFns([
     tool: "tb.rootNotes",
     kind: "method",
     signature: ".rootNotes(octave)",
-    explanation: "Takes the root of each chord, in the octave you give: a bass line straight from the chord symbols.",
+    explanation:
+      "Takes the root of each chord, in the octave you give: a bass line straight from the chord symbols.",
     example: ex(88, 'bass: chord("<C Am F G>").rootNotes(2).s("ebass").lpf(700)'),
   },
   {
@@ -242,7 +244,8 @@ export const pitchFns = defineFns([
     tool: "tb.dict.guidetones",
     kind: "argument",
     signature: '.dict("guidetones")',
-    explanation: "Two notes per chord: the third and the seventh, the notes that tell one chord from the next.",
+    explanation:
+      "Two notes per chord: the third and the seventh, the notes that tell one chord from the next.",
     example: ex(110, 'chords: chord("<Dm7 G7 C^7 C^7>").dict("guidetones").voicing().s("piano")'),
   },
   {
@@ -255,7 +258,7 @@ export const pitchFns = defineFns([
     example: exConst(
       110,
       ['const changes = "<Dm7 G7 C^7 C^7>"'],
-      "mel: n(\"0 1 2 3\").set(chord(changes)).voicing().s(\"vibes\")",
+      'mel: n("0 1 2 3").set(chord(changes)).voicing().s("vibes")',
     ),
   },
   {
@@ -263,12 +266,13 @@ export const pitchFns = defineFns([
     tool: "tb.voicing.n",
     kind: "syntax",
     signature: 'n("0 1 2 3").chord(changes).voicing()',
-    explanation: "Plays the notes of each voicing one at a time, lowest first: n goes first, then the chords.",
+    explanation:
+      "Plays the notes of each voicing one at a time, lowest first: n goes first, then the chords.",
     example: exConst(
       110,
       ['const changes = "<Dm7 G7 C^7 C^7>"'],
-      "chords: chord(changes).dict(\"lefthand\").voicing().s(\"piano\").gain(.5)",
-      "mel: n(\"0 1 2 3\").chord(changes).voicing().s(\"vibes\")",
+      'chords: chord(changes).dict("lefthand").voicing().s("piano").gain(.5)',
+      'mel: n("0 1 2 3").chord(changes).voicing().s("vibes")',
     ),
     gotchas: [".n() written after .voicing() does nothing."],
   },
@@ -286,14 +290,18 @@ export const pitchFns = defineFns([
     kind: "argument",
     signature: '.mode("duck")',
     explanation: "Keeps the voicing out of the way of the anchor note: the chord ducks under the melody.",
-    example: ex(110, 'chords: chord("<Dm7 G7 C^7 C^7>").dict("lefthand").anchor("c5").mode("duck").voicing().s("piano")'),
+    example: ex(
+      110,
+      'chords: chord("<Dm7 G7 C^7 C^7>").dict("lefthand").anchor("c5").mode("duck").voicing().s("piano")',
+    ),
   },
   {
     name: "offset",
     tool: "tb.offset",
     kind: "control",
     signature: ".offset(n)",
-    explanation: "Picks the next voicing up or down from the one .voicing() would choose: the A and B positions.",
+    explanation:
+      "Picks the next voicing up or down from the one .voicing() would choose: the A and B positions.",
     example: ex(110, 'chords: chord("<Dm7 G7 C^7 C^7>").dict("lefthand").offset(1).voicing().s("piano")'),
   },
 ]);

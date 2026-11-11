@@ -1,0 +1,102 @@
+{/* The Wave 1 gate fixture: prose only, one <Step> per step of lesson.ts, every MDX component of
+architecture §3.3 at least once. No code fences; code lives in lesson.ts and is referenced by id. */}
+
+<Step id="S1">
+Press play and just listen. The tune climbs, then comes back down to where it started.
+
+<Example id="loop-full" views="roll" autoplay />
+</Step>
+
+<Step id="S2">
+Before you run anything: this line counts `0 1 2 3`. What will you hear?
+
+<Predict exercise="which-way" hum />
+</Step>
+
+<Step id="S3">
+Run it. Each number is one note of the key, counted from home.
+
+<Example id="degrees-in-code" views="code,roll" />
+
+<Compare a="climb" b="degrees-in-code" />
+
+<Callout kind="trap">Strudel counts from **zero**: the number is one less than the note's place in the key.</Callout>
+</Step>
+
+<Step id="S4">
+Change a number, run again, and watch which note moves. <CodeRef fn="scale" /> sets the key; <CodeRef fn="n" /> picks the notes.
+
+<Keyboard notes="c4 e4 g4" />
+</Step>
+
+<Step id="S5">
+Each note's place in the key is its <Term id="term.scale-degree">scale degree</Term>. Home is 1.
+
+<Degrees key="C:major" show="1 3 5" />
+
+<Editor exercise="play-1353" />
+
+<OnPass>Degrees **1 3 5 3**, written `0 2 4 2`. You just wrote a melody by its place in the key.</OnPass>
+</Step>
+
+<Step id="S6">
+The same tune on the staff and on the keys.
+
+<Staff example="staff-1353" />
+
+<Keyboard degrees="1 3 5" key="C:major" />
+
+<Choice exercise="read-1353" />
+</Step>
+
+<Step id="S7">
+Now by ear. Listen for home after the cadence.
+
+<EarDrill family="fam.deg.fet-major" level={1} trials={4} />
+
+<Callout kind="tip">Sing home quietly after each note: the distance tells you the degree.</Callout>
+</Step>
+
+<Step id="S8">
+Sing the chord's three notes, then tap the beat.
+
+<Sing exercise="sing-135" />
+
+<Tap exercise="tap-beat" />
+</Step>
+
+<Step id="S9">
+Copy the loop by ear, one drum at a time.
+
+<PianoRoll example="loop-full" />
+</Step>
+
+<Step id="S10">
+Write the four notes on the staff.
+
+<StaffInput exercise="write-staff-1353" />
+</Step>
+
+<Step id="S11">
+Four small jobs with the same tune.
+
+<Parsons exercise="order-bars" />
+
+<Callout kind="why">Writing a tune as degrees means one change of `.scale()` moves the whole tune to another key.</Callout>
+</Step>
+
+<Step id="S12">
+Your turn: a two-bar tune in degrees, over the band.
+
+<LeadSheet example="make-start" />
+
+<Make exercise="make-degree-tune" />
+
+<Unlock fn="scale" />
+
+<Unlock sound="piano" />
+
+<CanDo id="cd.code.degrees" />
+
+<Recap />
+</Step>

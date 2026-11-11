@@ -170,7 +170,7 @@ export const DEFAULT_SETTINGS: Settings = {
   pausedWeeks: [],
   teaserOptIn: false,
   linerNotesInAlbum: true,
-  tutor: { backend: "auto", softMonthlyUsd: 25, hardMonthlyUsd: null, softWarnedMonth: null },
+  tutor: { backend: "auto", softMonthlyUsd: 25, softWarnedMonth: null },
   backupWithAudio: true,
 };
 
@@ -930,7 +930,16 @@ const bandState = z.strictObject({
   flavour,
   mutes: z.array(z.enum(["drums", "bass", "chords"])),
 });
-const sketchFlags = z.strictObject({ lockedTools: z.array(z.string()), previewTools: z.array(z.string()) });
+const sketchFlags = z.strictObject({
+  lockedTools: z.array(z.string()),
+  previewTools: z.array(z.string()),
+  /**
+   * Set by a backup import on every imported version (contracts §11.3): the code was not typed on this
+   * machine, so it runs only after the strict lint passes; otherwise it opens as text with "Review before
+   * running". A version the learner saves afterwards does not carry it.
+   */
+  reviewBeforeRun: z.literal(true).optional(),
+});
 /** `sketch_versions` row. */
 export const SketchVersionSchema = z.object({
   sketchId: z.string(),
@@ -1305,6 +1314,8 @@ export const BackupImportResultSchema = z.object({
   tables: z.number().int(),
   rows: z.number().int(),
   audioFiles: z.number().int(),
+  /** Audio of the replaced data that the imported tables no longer reference, moved beside the safety copy. */
+  orphanedFiles: z.number().int(),
   migratedFrom: z.number().int().nullable(),
   safetyCopy: z.string(),
 });

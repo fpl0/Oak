@@ -59,11 +59,15 @@ export async function createSrs(overrides?: {
   const rolloverHour = overrides?.rolloverHour ?? STREAK.rolloverHour;
   const schedules: Record<CardKind, KindSchedule> = {
     ...SCHEDULES,
-    fact: { ...SCHEDULES.fact, desiredRetention: overrides?.factRetention ?? SCHEDULES.fact.desiredRetention },
+    fact: {
+      ...SCHEDULES.fact,
+      desiredRetention: overrides?.factRetention ?? SCHEDULES.fact.desiredRetention,
+    },
   };
   for (const kind of KINDS) {
     const r = schedules[kind].desiredRetention;
-    if (!(r > 0.5 && r < 1)) throw new Error(`@oak/srs: desired retention ${r} for ${kind} cards is out of range`);
+    if (!(r > 0.5 && r < 1))
+      throw new Error(`@oak/srs: desired retention ${r} for ${kind} cards is out of range`);
   }
 
   const make = (k: KindSchedule) =>
@@ -150,7 +154,8 @@ export async function createSrs(overrides?: {
     const max = Math.max(min, opts?.maxIntervalDays ?? k.maxIntervalDays);
     const ideal = Math.min(Math.max(modelDays, min), max);
     // A learning step of minutes keeps its exact instant; it is met in the quick-recall strip or first tomorrow.
-    if (ideal <= STEP_MAX_DAYS) return { dueAt: new Date(now.getTime() + ideal * DAY_MS), scheduledDays: ideal };
+    if (ideal <= STEP_MAX_DAYS)
+      return { dueAt: new Date(now.getTime() + ideal * DAY_MS), scheduledDays: ideal };
     const delta = ideal >= 3 ? Math.max(1, ideal * fuzz) : 0;
     const lo = Math.max(1, Math.ceil(min), Math.round(ideal - delta));
     const hi = Math.max(lo, Math.min(Math.floor(max), Math.round(ideal + delta)));
@@ -179,13 +184,24 @@ export async function createSrs(overrides?: {
     learningStep: card.learningStep,
   });
 
+  /**
+   * A review is never earlier than the card's last review. The system clock can step backwards (NTP, a
+   * manual change, a restored backup), and the library refuses a negative elapsed time: the review is
+   * then taken to happen at the last review's instant.
+   */
+  const notBeforeLast = (card: Card, now: Date): Date => {
+    const last = card.lastReviewAt === null ? Number.NaN : Date.parse(card.lastReviewAt);
+    return Number.isFinite(last) && last > now.getTime() ? new Date(last) : now;
+  };
+
   const apply = (
     card: Card,
     rating: Rating,
     outcome: ReviewOutcome,
-    now: Date,
+    at: Date,
     opts: ReviewOptions | undefined,
   ): ReviewResult => {
+    const now = notBeforeLast(card, at);
     const before = retrievability(card, now);
     const res = schedulers[card.kind].review({ card: toLib(card), grade: rating as LibGrade, now });
     const next = fromLib(res.card, {
@@ -247,10 +263,12 @@ export async function createSrs(overrides?: {
     },
     intervalAt(card, retention) {
       if (!reviewed(card)) return 0;
-      if (!(retention > 0 && retention < 1)) throw new Error(`@oak/srs: retention ${retention} is out of (0, 1)`);
+      if (!(retention > 0 && retention < 1))
+        throw new Error(`@oak/srs: retention ${retention} is out of (0, 1)`);
       return schedulers[card.kind].model.nextInterval(toLib(card), retention);
     },
-    preview(card, now) {
+    preview(card, at) {
+      const now = notBeforeLast(card, at);
       const out = {} as Record<Rating, { dueAt: string; scheduledDays: number }>;
       for (const item of schedulers[card.kind].preview({ card: toLib(card), now })) {
         const next = fromLib(item.card as LibCard, card);

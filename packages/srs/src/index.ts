@@ -10,8 +10,8 @@ export {
   dayFromIndex,
   dayIndex,
   dayIndexOf,
-  daysBetween,
   dayStartInstant,
+  daysBetween,
   learnerDay,
   weekdayOf,
   weekStart,
@@ -19,6 +19,7 @@ export {
 export { createSrs, hash01 } from "./fsrs.ts";
 export * from "./governor.ts";
 export { factGrade, gradeFor, rungCap, stepGrade } from "./grade.ts";
+export * from "./items.ts";
 export * from "./level.ts";
 export * from "./planner.ts";
 export * from "./shading.ts";

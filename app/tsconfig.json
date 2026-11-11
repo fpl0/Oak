@@ -1,0 +1,15 @@
+{
+  // The app alone (the root tsconfig.app.json checks the app together with every package and content).
+  // Run: bunx tsc --noEmit -p app/tsconfig.json
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["es2023", "dom", "dom.iterable", "dom.asynciterable", "webworker.importscripts"],
+    "types": ["vite/client"],
+    "paths": {
+      "@content/*": ["../content/*"],
+      "@app/*": ["./src/*"]
+    }
+  },
+  "include": ["src", "vite.config.ts", "playwright.config.ts", "e2e", "../types/strudel.d.ts", "../types/abcjs-ext.d.ts", "../types/signalsmith-stretch.d.ts"],
+  "exclude": ["node_modules", "src/workbench", "src/routes/dev", "**/*.test.ts"]
+}

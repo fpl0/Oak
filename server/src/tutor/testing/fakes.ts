@@ -105,7 +105,7 @@ export class FakeProgress implements ProgressPort {
 }
 
 export class FakeSettings implements SettingsPort {
-  value: TutorSettings = { backend: "auto", softMonthlyUsd: 25, hardMonthlyUsd: null, softWarnedMonth: null };
+  value: TutorSettings = { backend: "auto", softMonthlyUsd: 25, softWarnedMonth: null };
   async tutor(): Promise<TutorSettings> {
     return { ...this.value };
   }

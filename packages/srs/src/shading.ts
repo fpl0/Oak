@@ -24,7 +24,9 @@ export function cardWeight(kind: CardKind, perceptual: boolean): number {
 export function nodeFreshness(cards: readonly ShadingCard[]): number | null {
   const total = cards.reduce((sum, c) => sum + c.weight, 0);
   if (total === 0) return null;
-  return cards.reduce((sum, c) => sum + c.weight * freshness(c.retrievability, c.desiredRetention), 0) / total;
+  return (
+    cards.reduce((sum, c) => sum + c.weight * freshness(c.retrievability, c.desiredRetention), 0) / total
+  );
 }
 /** `0.35 + 0.65 · F_node`, where F_node is the ω-weighted mean freshness of the node's cards. */
 export function nodeOpacity(cards: readonly ShadingCard[]): number | null {
@@ -32,7 +34,9 @@ export function nodeOpacity(cards: readonly ShadingCard[]): number | null {
   return f === null ? null : SHADING.minOpacity + (1 - SHADING.minOpacity) * f;
 }
 /** R of contracts §7.5: the ω-weighted mean retrievability of a node's cards, or `null` with none. */
-export function nodeRetrievability(cards: readonly Pick<ShadingCard, "retrievability" | "weight">[]): number | null {
+export function nodeRetrievability(
+  cards: readonly Pick<ShadingCard, "retrievability" | "weight">[],
+): number | null {
   const total = cards.reduce((sum, c) => sum + c.weight, 0);
   if (total === 0) return null;
   return cards.reduce((sum, c) => sum + c.weight * c.retrievability, 0) / total;

@@ -88,6 +88,8 @@ export const SET_TRIALS = { min: 5, max: 8 } as const;
 export const WARMUP_BUDGET_SEC: Readonly<Record<15 | 20 | 25, number>> = { 15: 240, 20: 300, 25: 360 };
 /** Warm-up on checkpoint and capstone days. */
 export const WARMUP_SHORT_SEC = 180;
+/** Warm-up on a gym day: "4 + transcription + 1" at every target (contracts §9.1). */
+export const WARMUP_GYM_SEC = 240;
 /** A reviews-only day: the same budget, then "a little more" up to this in total. */
 export const REVIEW_DAY_MAX_SEC = 720;
 export const GOVERNOR = {
@@ -111,7 +113,7 @@ export const GOVERNOR = {
   planFraction: 0.94,
   maxMicSets: 2,
   /** A listen-only block after every second perceptual set. */
-  listenBlockSec: [15, 20],
+  listenBlockSec: [15, 20] as [number, number],
   /** Fact mini-set size. */
   factSetMax: 10,
   compositeTrialsMax: 10,

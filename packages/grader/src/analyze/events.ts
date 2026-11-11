@@ -30,7 +30,8 @@ export function toRat(x: number, maxDen = 1000): Rat {
 /** Sorted by (onset, midi, id): the order every array of events in the grader has. */
 export function sortEvents<T extends NEvent>(events: readonly T[]): T[] {
   return [...events].sort(
-    (a, b) => R.cmp(a.onset, b.onset) || (a.midi ?? -1) - (b.midi ?? -1) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    (a, b) =>
+      R.cmp(a.onset, b.onset) || (a.midi ?? -1) - (b.midi ?? -1) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
   );
 }
 
@@ -48,7 +49,8 @@ export function inCycles<T extends NEvent>(events: readonly T[], from: number, t
   });
 }
 /** Events whose onset is before `bars`. */
-export const firstBars = <T extends NEvent>(events: readonly T[], bars: number): T[] => inCycles(events, 0, bars);
+export const firstBars = <T extends NEvent>(events: readonly T[], bars: number): T[] =>
+  inCycles(events, 0, bars);
 
 /** Sorted, deduplicated onsets. */
 export function onsets(events: readonly NEvent[], o: { drum?: DrumRole; dedupe?: boolean } = {}): Rat[] {
@@ -88,13 +90,15 @@ export function simultaneities(events: readonly NEvent[]): Simultaneity[] {
 /** Highest pitched event per onset. */
 export function skyline(events: readonly NEvent[]): (NEvent & { midi: number })[] {
   return simultaneities(events).map(
-    (s) => s.events.reduce((hi, e) => ((e.midi ?? -1) > (hi.midi ?? -1) ? e : hi)) as NEvent & { midi: number },
+    (s) =>
+      s.events.reduce((hi, e) => ((e.midi ?? -1) > (hi.midi ?? -1) ? e : hi)) as NEvent & { midi: number },
   );
 }
 /** Lowest pitched event per onset. */
 export function bassline(events: readonly NEvent[]): (NEvent & { midi: number })[] {
   return simultaneities(events).map(
-    (s) => s.events.reduce((lo, e) => ((e.midi ?? 999) < (lo.midi ?? 999) ? e : lo)) as NEvent & { midi: number },
+    (s) =>
+      s.events.reduce((lo, e) => ((e.midi ?? 999) < (lo.midi ?? 999) ? e : lo)) as NEvent & { midi: number },
   );
 }
 /** Pitched events sounding at `at` (onset ≤ at < onset + dur). */

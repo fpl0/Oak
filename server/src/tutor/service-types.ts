@@ -72,8 +72,6 @@ export interface TutorStatus {
     monthUsd: number;
     softMarkerUsd: number;
     softPassed: boolean;
-    hardCapUsd: number | null;
-    blocked: boolean;
   };
   usage: MonthUsage & { cacheHitRatio: number };
 }
@@ -81,7 +79,7 @@ export interface TutorStatus {
 export interface WarmResult {
   warmed: boolean;
   backend: BackendId | null;
-  /** Why nothing was sent: an unavailable code, `not_needed`, `fresh`, `budget`, or an error kind. */
+  /** Why nothing was sent: an unavailable code, `not_needed`, `fresh`, or an error kind. */
   reason: string | null;
 }
 

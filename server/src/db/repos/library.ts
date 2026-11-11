@@ -155,8 +155,10 @@ export class SketchesRepo {
     patch: { title?: string; tags?: string[]; archived?: boolean; listeningNote?: string | null },
     at: string,
   ): void {
-    if (patch.title !== undefined) run(this.db, "UPDATE sketches SET title = ? WHERE id = ?", patch.title, id);
-    if (patch.tags !== undefined) run(this.db, "UPDATE sketches SET tags_json = ? WHERE id = ?", toJson(patch.tags), id);
+    if (patch.title !== undefined)
+      run(this.db, "UPDATE sketches SET title = ? WHERE id = ?", patch.title, id);
+    if (patch.tags !== undefined)
+      run(this.db, "UPDATE sketches SET tags_json = ? WHERE id = ?", toJson(patch.tags), id);
     if (patch.archived !== undefined)
       run(this.db, "UPDATE sketches SET archived = ? WHERE id = ?", int(patch.archived), id);
     if (patch.listeningNote !== undefined)
@@ -174,7 +176,10 @@ export class SketchesRepo {
     ).map((r) => r.sketch_id);
   }
   latest(): Sketch | null {
-    const row = get<SketchRow>(this.db, "SELECT * FROM sketches WHERE archived = 0 ORDER BY updated_at DESC LIMIT 1");
+    const row = get<SketchRow>(
+      this.db,
+      "SELECT * FROM sketches WHERE archived = 0 ORDER BY updated_at DESC LIMIT 1",
+    );
     return row === null ? null : toSketch(row);
   }
 }
@@ -258,8 +263,11 @@ export class AlbumRepo {
   }
   nextTrackNo(side: string): number {
     return Number(
-      get<{ n: number }>(this.db, "SELECT COALESCE(MAX(track_no), 0) + 1 AS n FROM album_tracks WHERE side = ?", side)
-        ?.n ?? 1,
+      get<{ n: number }>(
+        this.db,
+        "SELECT COALESCE(MAX(track_no), 0) + 1 AS n FROM album_tracks WHERE side = ?",
+        side,
+      )?.n ?? 1,
     );
   }
   insertTrack(t: AlbumTrack): void {
@@ -494,14 +502,18 @@ export interface TranscriptionVersionRow {
 export class TranscriptionsRepo {
   constructor(private readonly db: Db) {}
   list(): StoredTranscription[] {
-    return all<TrRow>(this.db, "SELECT * FROM transcriptions ORDER BY updated_at DESC, id").map(toTranscription);
+    return all<TrRow>(this.db, "SELECT * FROM transcriptions ORDER BY updated_at DESC, id").map(
+      toTranscription,
+    );
   }
   get(id: string): StoredTranscription | null {
     const row = get<TrRow>(this.db, "SELECT * FROM transcriptions WHERE id = ?", id);
     return row === null ? null : toTranscription(row);
   }
   usingAudio(audioId: string): string[] {
-    return all<{ id: string }>(this.db, "SELECT id FROM transcriptions WHERE audio_id = ?", audioId).map((r) => r.id);
+    return all<{ id: string }>(this.db, "SELECT id FROM transcriptions WHERE audio_id = ?", audioId).map(
+      (r) => r.id,
+    );
   }
   insert(t: StoredTranscription): void {
     run(
@@ -559,17 +571,21 @@ export class TranscriptionsRepo {
     );
   }
   versions(id: string): TranscriptionVersionRow[] {
-    return all<{ transcription_id: string; version: number; code: string; result_json: string | null; created_at: string }>(
-      this.db,
-      "SELECT * FROM transcription_versions WHERE transcription_id = ? ORDER BY version",
-      id,
-    ).map((r) => ({
-      transcriptionId: r.transcription_id,
-      version: r.version,
-      code: r.code,
-      result: fromJson<GradeResult | null>(r.result_json, null),
-      createdAt: r.created_at,
-    }));
+    return all<{
+      transcription_id: string;
+      version: number;
+      code: string;
+      result_json: string | null;
+      created_at: string;
+    }>(this.db, "SELECT * FROM transcription_versions WHERE transcription_id = ? ORDER BY version", id).map(
+      (r) => ({
+        transcriptionId: r.transcription_id,
+        version: r.version,
+        code: r.code,
+        result: fromJson<GradeResult | null>(r.result_json, null),
+        createdAt: r.created_at,
+      }),
+    );
   }
   insertVersion(v: TranscriptionVersionRow): void {
     run(

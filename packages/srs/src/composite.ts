@@ -62,6 +62,9 @@ export function planCompositeSet(
 
 /** Planning estimate of a composite set for a number of members. */
 export function compositeSetSec(memberCount: number): number {
-  const trials = Math.min(GOVERNOR.compositeTrialsMax, Math.max(1, memberCount) * GOVERNOR.compositeTrialsPerMember);
+  const trials = Math.min(
+    GOVERNOR.compositeTrialsMax,
+    Math.max(1, memberCount) * GOVERNOR.compositeTrialsPerMember,
+  );
   return trials * GOVERNOR.compositeTrialSec;
 }

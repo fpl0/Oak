@@ -1,33 +1,93 @@
 # Oak interfaces (Wave 1)
 
-**Status: binding for Wave 1.** This is the cross-package public API that the platform is built against. It was written in the Foundation phase from `docs/design/contracts.md` (which outranks it), `docs/design/architecture.md` §2 (corrected where contracts differ) and the gotchas in `docs/spikes.md`. Every signature below is copied from the code in `packages/*/src`; when this file and the code disagree, the code is right and this file has a bug.
+**Status: binding for Wave 1; updated at the Wave 1 final gate.** This is the cross-package public API that the platform is built against. It was written in the Foundation phase from `docs/design/contracts.md` (which outranks it), `docs/design/architecture.md` §2 (corrected where contracts differ) and the gotchas in `docs/spikes.md`. Every signature below is copied from the code in `packages/*/src`; when this file and the code disagree, the code is right and this file has a bug.
 
 **How to work with it.** You own one folder. Code against the signatures here and import other packages by name (`@oak/theory`); never reach into another package's files. If another package is still a stub when you need it, write a local fake in your tests and say so. If you need an API to change, do not edit the other package: adapt on your side and report it.
+
+## Wave 1 state (read this first)
+
+Written at the Wave 1 final gate (2026-11-11). §1–§10 are the Foundation API; §11 and §12 record what the
+code changed since. When they disagree, §12 beats §11 beats §4, and the code beats all of them.
+
+**What Wave 2 can rely on** (implemented, tested by execution, green in `bun run check` and `bun run e2e`):
+
+- **Every package of §4 is implemented**: `@oak/content-kit`, `api`, `theory`, `grader` (lint, evaluate,
+  normalize, analyze, match, rubric, feedback, Bun subprocess/worker and browser hosts), `notation` (63 golden
+  snapshots), `pitch`, `drills` (engine, ladder, grading, the generators not marked `pending:*`), `srs`
+  (FSRS-7, governor, planner, mastery helpers), `strudel` (the one adapter: editors, transport, coordinator,
+  playback, recorder, audibility, pack) and `audio` (mic graph, pitch worklet, calibration, tap,
+  transcription, wave view).
+- **The server** (`server/src` minus `tutor/`): every §6 endpoint of `@oak/api`'s contract, SQLite with
+  migrations and append-only triggers, SRS wiring in one transaction per call, backups (export, import with a
+  safety copy, reset), the confirm-nonce flow, dev routes behind `OAK_DEV=1` (encoded-path bypass closed),
+  bounded request bodies, the static/production server with the Service Worker pack, the grader hosts
+  (subprocess for code the learner did not type, with an RSS watchdog and a respawn breaker).
+- **The app shell**: every §8 route renders in Paper and Bark; global keys and the shortcut sheet (only keys
+  that work are listed); settings; the Workbench (`app/src/workbench`: editor + roll + staff + keyboard +
+  track chips, A/B, Band layer, the 760 px tab rule, 8-bar staff pages, calm highlighting, keyboard-only
+  use); `app/src/lib/mic.ts` as the only mic entry point; offline production reloads.
+- **Content**: the registries (syllabus, skills, toolbox, families, terms, can-dos, flavours, bands,
+  repertoire, capstones with rubrics), checked against the contracts tables by
+  `content/validate/contracts-sync.test.ts` (course map, default order, unlock table, skill graph, family
+  catalog, checkpoint map, capstone session goals), and one gate sample lesson that uses every exercise kind
+  and every MDX component and passes every content-CI check with the real grader.
+- **Music facts** are checked against headless Strudel 1.2.6 (`@oak/grader/testing`), including the
+  adversarial theory and analyzer suites of the final review.
+
+**Known gaps** (each is either a Wave 2 task or a recorded decision; none is hidden behind a passing test):
+
+1. **SRS §7.4 gate**: "deferred queue p95 ≤ 4" and "oldest undelivered due card p95 ≤ 7 days" are not met
+   in the 300-day simulation (`packages/srs/src/simulation.test.ts`, `test.failing` with measured values).
+   The warm-up, active-family and review-day criteria are met.
+2. **17 drill generators are `pending:*`** (groove-lock, polyrhythm, NCT, progression, chromatic,
+   modulation, form sections and blues, the jazz families, sound params and roles, code mini and
+   functions). `createRegistry` skips them and says why; the families stay in the catalog.
+3. **App surfaces still placeholders** (`WavePlaceholder`): the lesson player, the drill runner, the Studio
+   workbench on `/studio/$sketchId` (code is shown as text), capstone, transcribe and the tutor panel UI.
+   Their keys (`Mod+Shift+Enter`, `Mod+I`, `Mod+S`, Drills and Lesson keys) are added to the shortcut
+   sheet with their features. **Loop region (`L`, `[`/`]`) and metronome (`M`) do not exist yet.**
+4. **Imported code**: the server flags every imported sketch and album version
+   (`flags.reviewBeforeRun: true`, §12). Wave 2's Studio must run such a version only after `lintStrict`
+   passes and otherwise open it as text with "Review before running" (contracts §11.3).
+5. **The `bun-worker` learner host shares the server heap**: learner code can grow the server by
+   gigabytes within the 1.5 s window. Only the subprocess host is memory-capped. Base-profile code can
+   also poison builtin prototypes in a reused realm until it respawns, and `Error.stack` inside the realm
+   shows absolute file paths.
+6. **Browser coverage**: every browser test runs in headless Chromium only (contracts §11.12 supports
+   Chromium-based browsers). Strudel's repl `console.error`s each learner evaluation error (harmless):
+   the platform e2e's zero-console-error rule holds only because it runs valid code, so a Wave 2 spec that
+   runs broken learner code must allow for that one message. The app smoke test "the command palette
+   navigates and runs actions" failed once in three full runs (the second `Cmd+K` did not open the
+   palette). It passes when repeated alone, and no cause has been found.
+7. **Roll on long loops**: the roll draws a 64-bar loop at once (readable, dense); a roll that follows the
+   playhead was not built. The staff pages 8 bars at a time.
+8. **Content**: only the gate sample lesson exists; the course lessons, checkpoints' authored items and
+   the listening pass on instruments (`docs/decisions.md`, "Needs you") are Wave 2.
 
 ## 1. Workspace
 
 ### 1.1 Layout and ownership
 
-| Path | Package | Owner in Wave 1 | State after Foundation |
+| Path | Package | Owner in Wave 1 | State at the end of Wave 1 |
 |---|---|---|---|
 | `packages/content-kit` | `@oak/content-kit` | Foundation | **implemented and tested** |
 | `packages/api` | `@oak/api` | Foundation | **implemented and tested** |
-| `packages/theory` | `@oak/theory` | theory builder | meters implemented; the rest are signatures that throw |
-| `packages/grader` | `@oak/grader` | grader builders | types, limits and the test helper implemented; the rest are signatures |
-| `packages/notation` | `@oak/notation` | notation builder | signatures |
-| `packages/pitch` | `@oak/pitch` | pitch builder | signatures (three small pure helpers implemented) |
-| `packages/drills` | `@oak/drills` | drills builder | signatures |
-| `packages/srs` | `@oak/srs` | srs builder | constants implemented; the rest are signatures |
-| `packages/strudel` | `@oak/strudel` | adapter builder | signatures |
-| `packages/audio` | `@oak/audio` | audio builder | signatures |
-| `server/src` (except `tutor/`) | `@oak/server` | server builder | empty |
+| `packages/theory` | `@oak/theory` | theory builder | **implemented and tested** |
+| `packages/grader` | `@oak/grader` | grader builders | **implemented and tested** |
+| `packages/notation` | `@oak/notation` | notation builder | **implemented and tested** |
+| `packages/pitch` | `@oak/pitch` | pitch builder | **implemented and tested** |
+| `packages/drills` | `@oak/drills` | drills builder | **implemented and tested** (some generators `pending:*`, see §11) |
+| `packages/srs` | `@oak/srs` | srs builder | **implemented and tested** (two §7.4 sub-criteria open, see §11) |
+| `packages/strudel` | `@oak/strudel` | adapter builder | **implemented and tested** (browser e2e) |
+| `packages/audio` | `@oak/audio` | audio builder | **implemented and tested** (browser e2e) |
+| `server/src` (except `tutor/`) | `@oak/server` | server builder | **implemented and tested** |
 | `server/src/tutor` | — | a separate session | exists; read-only for everyone else |
-| `app/` | `@oak/app` | app builders | empty |
-| `content/` | — | content builders | `STYLE.md`, `AUTHORING.md` only |
-| `scripts/content`, `scripts/db`, `scripts/tutor` | — | whoever owns the feature | missing (see §1.4) |
+| `app/` | `@oak/app` | app builders | shell, routes, settings, workbench; lesson player, drill runner and Studio workbench are Wave 2 placeholders |
+| `content/` | — | content builders | registries, capstones, bands, the gate sample lesson and content CI; course lessons are Wave 2 |
+| `scripts/content`, `scripts/db` | — | whoever owns the feature | exist (see §1.4) |
 | `types/` | — | Foundation | ambient declarations and the import-boundary test |
 
-A stub function throws `Error("@oak/<pkg>: <name> is not implemented yet")`. Replace the body, keep the signature.
+No `not implemented yet` stub is left in any package. Where a feature is deliberately unfinished the code says so with a typed marker (`pending:*` generators, `WavePlaceholder` in the app, `test.failing` with the measured values).
 
 ### 1.2 Toolchain facts
 
@@ -59,31 +119,35 @@ Ambient declarations in `types/`: `strudel.d.ts` (untyped Strudel modules plus t
 
 - **Dev ports:** Vite `127.0.0.1:5173` (strict port; proxies `/api` and `/sounds` to the API), API `127.0.0.1:8787`. The server binds `127.0.0.1` only. Constants: `PORTS`, `ALLOWED_HOSTS`, `ALLOWED_DEV_HOSTS` in `@oak/api`. Stop every server you start.
 - **Data directory:** `OAK_DATA_DIR` (default `~/.oak`): `oak.db`, `audio/`, `album/`, `backups/`, `secrets/`. Tests must set it to a temp directory.
-- **Root scripts** (`package.json`). Scripts whose file does not exist yet are marked with the owner who creates it.
+- **Root scripts** (`package.json`), as of the end of Wave 1 (all exist and are exercised by `check` or the e2e run).
 
-| Script | Runs | File owner |
-|---|---|---|
-| `dev` | server (`bun --watch server/src/main.ts`), Vite, content build in watch mode | server, app, content |
-| `dev:server`, `dev:web` | one of the two alone (`dev:server` sets `OAK_DEV=1`) | server, app |
-| `build` | `scripts/content/build.ts`, `scripts/sounds/check.ts`, `vite build` | content, app |
-| `start`, `oak` | `server/src/main.ts --serve-dist`; `oak` builds first | server |
-| `typecheck` | `tsc -p tsconfig.app.json && … server.json && … worklet.json` | exists |
-| `typecheck:packages` | each `packages/*/tsconfig.json` in turn | exists |
-| `test` | `bun test` (ignores `spikes/**`, `e2e/**`, `**/*.pw.ts`) | exists |
-| `test:content` | `bun test content/validate` | content |
-| `e2e` | `playwright test` | app |
-| `check` | typecheck, `biome ci .`, `bun test` | exists |
-| `content:build`, `content:new`, `content:check` | `scripts/content/{build,new,check}.ts` | content |
-| `theory` | `packages/theory/src/cli.bun.ts` (`bun run theory <op> …`) | theory |
-| `sounds:mirror`, `sounds:check` | `scripts/sounds/*.ts` | exist |
-| `tutor:smoke`, `db:backup` | `scripts/tutor/smoke.ts`, `scripts/db/backup.ts` | tutor, server |
+| Script | Runs |
+|---|---|
+| `dev` | `content:build` once, then `concurrently`: server (`OAK_DEV=1 bun --watch server/src/main.ts`), Vite on 5173, `content:build --watch` |
+| `dev:server`, `dev:web` | one of the two alone (`dev:server` sets `OAK_DEV=1`) |
+| `build` | `scripts/content/build.ts`, `scripts/sounds/check.ts`, `vite build` → `dist/` |
+| `start`, `oak` | `server/src/main.ts --serve-dist` (dist + `/sounds` + `/api` on 8787); `oak` builds first |
+| `typecheck` | `tsconfig.{app,server,worklet,e2e}.json`, `server/src/tutor/tsconfig.json`, `app/tsconfig.json`, the strudel and audio e2e tsconfigs, then `typecheck:packages` |
+| `typecheck:packages` | each `packages/*/tsconfig.json` in turn |
+| `lint` | `biome ci .` (Markdown, JSON and the generated route tree are excluded) |
+| `test` | `bun test --isolate` (ignores `spikes/**`, `e2e/**`, `**/*.pw.ts`) |
+| `test:content` | `bun test --isolate content` |
+| `e2e`, `test:browser` | `playwright test` with the root `playwright.config.ts`: every `*.pw.ts` suite (platform, app, workbench, strudel, audio) and their servers |
+| `check` | `typecheck`, `lint`, `test` |
+| `check:full` | `check`, then `e2e` (which itself runs `build` for the production project) |
+| `content:build`, `content:new`, `content:check` | `scripts/content/{build,new,check}.ts` |
+| `theory` | `packages/theory/src/cli.bun.ts` (`bun run theory <op> …`) |
+| `sounds:mirror`, `sounds:check` | `scripts/sounds/*.ts` |
+| `tutor:smoke` | `server/src/tutor/backends/cli/live-smoke.ts` (one live CLI turn; refuses to run without `--yes`) |
+| `db:backup` | `scripts/db/backup.ts`: a manual `VACUUM INTO` copy in `<data>/backups` |
 
 ### 1.5 Test conventions
 
 - Tests live next to the code as `*.test.ts` and run with `bun test <your folder>`. Browser and Playwright specs are `*.pw.ts`.
 - Bun 1.4.4 does not honour the `[test] timeout` of `bunfig.toml`: a test that needs more than 5 s calls `setDefaultTimeout(…)` itself.
 - **Headless Strudel in tests:** `import { evalHeadless, midisOf } from "@oak/grader/testing"`. It evaluates a code string (labels, `$:`, `_muted:`, a tempo line) and returns sorted onset events with exact fraction strings, MIDI, scale context, logs and code locations. Use it to verify any theory or music claim against Strudel 1.2.6. Do not import `@strudel/*` in tests outside `packages/grader` and `packages/strudel`.
-- `types/import-boundaries.test.ts` runs with the root `bun test` and fails on a forbidden import (§2).
+- `types/import-boundaries.test.ts` runs with the root `bun test` and fails on a forbidden import (§2). Test-support files (`*.test-util.ts`, `*.test-data.ts`) count as tests.
+- **Run the suite with `--isolate`** (`bun run test`). Strudel's repl and the grader realm install globals (`Pattern.prototype.p`, the eval scope); without a fresh global per file, the order of files changes results. Bun 1.4.4 reads `isolate` from the command line only, not from `bunfig.toml`.
 - Fixtures that are not tests must not be named `*.test.ts` (see `packages/content-kit/src/fixtures.test-data.ts`).
 - Music correctness is tested with golden facts, not snapshots of whatever the code returned: state the expected notes, then assert them.
 
@@ -845,3 +909,112 @@ Where the sources were silent or disagreed, Foundation chose as follows. Each is
 10. **Tables added:** `step_state` (a hint can be taken before any attempt exists), `repair_queue`, `capstone_state`, `tutor_backend_records` (required by `ConversationStore.backendRecords`); `tutor_messages` stores the app-level transcript the port describes.
 11. **SRS constants** carry the contract's numbers; `DECISION_2` and `recommendedGovernor` carry the overrides of `docs/decisions.md` row 2. The SRS builder settles which is live by the simulation gate of contracts §7.4 and records it.
 12. **`@oak/grader/testing`** exists so that every package can check music facts against Strudel without importing it.
+
+## 11. Integration amendments (end of Wave 1)
+
+What the integration pass changed or found in the real code. Where this section and §4 disagree, this section is current.
+
+**`@oak/grader`.** Every §4.4 function is implemented; `index.ts` delegates to `grade/`, `match/`, `rubric/`, `feedback/`, `analyze/` (incl. the new `analyze/tutor-view.ts`) and injects the realm (`evaluateForGrading`, `normalize`, `toolsUsed` over the realm's toolbox) into the grade pipeline. Additional exports: `catalogSeverity`, `messagesOf`, `sortDiagnostics`; the performance helpers `tapTargets`, `singTargets`, `tapWindow`, `minIoiMs`, `performancePasses` (targets and pass rules for tap/sing; the measurement is `@oak/pitch`). `OakEvent.locations` is `OakLocation[]` (`{ start, end, fn?, text? }`). `createBunGraderHost` returns `GraderHost & HostCore` (`ping`, `request`, `lastReady`, `stats`); `BunHostOptions` adds `spare?`, `lockdown?`; `BrowserHostOptions` adds `spare?`; the `ready` message carries `lockdown: { neutered, failed }`. `runMatcher`/`runRubric` accept the wider `RubricContext` (bars, totalBars, toolsUsed, profile, resolveReference). Behaviour settled here: an `error-hunt` fix sent without clicks locates the bug by its edit (the changed token ranges are the clicks); a single (non-`parts`) `run-investigate` response answers every question it fits; a melody substitution puts the target note in `overlay.missing` (the rung-3 ghost); the `band` lint profile does not require a tempo line (Band code shares the session tempo, contracts §5.10). Feedback IDs are the catalog's: `fill.blank-empty` (not `fill.empty`), no `hunt.wrong-fix` (a wrong fix reports what the matcher found). The theory stand-in used by the grader tests during the wave is gone: they run against `@oak/theory`.
+
+**`@oak/theory`.** As §4.3, plus: `schemaMatch(slots, lib?, key?)`; schema IDs are lower-case (`schema.rhythm-a`); `parseChordWithBass`, `classifyCadence`, `toCode(chord, dict?)`, `DICT_CODE`, `ALIAS_DICTS`, `parseKeyText`; the CLI logic is `runTheoryCli(argv)` in the isomorphic `src/cli.ts`, entry `src/cli.bun.ts`.
+
+**`@oak/notation`.** Additive `types.ts` changes (`NoteItem.drums|hidden|locs|lyric`, `IdMapEntry.beat`); one `oak-e{n}` class per engraved element (n = idMap index); voice ids `S1v2`; browser helper entry `@oak/notation/render` → `src/render.dom.ts`; extra exports `toNoteList`, `withIds`, `estimateKey`, `straightenSwing`, the staff-input helpers (`applyEdit`, `editStaff`, `staffStepAtY`, `stepToPitch`, `pitchToStep`, `nudgePitch`, `xToOnset`, `writtenToCycles`). `parseNoteList(text, { meter?: MeterSpec })`.
+
+**`@oak/pitch` / `@oak/audio`.** Subpath exports `@oak/pitch/detector` (the worklet's only import) and `@oak/pitch/synth` (test tones, WAV); hum-to-draft (`draftFromHum`), the tolerance ladder (`ladderProgress`, `nextSingTolerance(…, { since })`), `TapResult.tempoRatio`. `@oak/audio`: `createMicGraphWith`, `PITCH_WORKLET_URL`, `micConstraints`, `bindMicShortcut`, `createPatternSource(PatternPlayerLike)`, entry `@oak/audio/waveview`. The processor name `oak-pitch` is reserved.
+
+**`@oak/drills`.** The family catalog lives in `@oak/drills` (`FAMILIES`, `DECKS`); `content/families.ts` re-exports the drill families and keeps the §7.3 table (`FAMILY_TABLE`, checked against contracts) for the composites and for families whose generator is still `pending:*` (those keep the content-authored categories). Fact decks stay content's (their card IDs are in `ids.lock.json`); `DECKS` in drills is the generators' own test catalog. New: `isCompositeGenerator`; `createRegistry` skips `pending:*` and composite (`mix.*`) families, and `family(id)` explains which. Extra exports `generateSet`, `setPreload`, `setOutcome`, `factOutcome`; `DrillTrialResult` adds `centsError`, `skipped`. `@oak/pitch` is reached through `src/pitch-seam.ts`; the tests run both the mapping (stand-in) and the real `gradeTaps`/`gradeSung`.
+
+**`@oak/srs`.** `intakeForecast(items, today, cfg, extraSec, cls)`, `micRoom`, `classShare`, `forecastCost`, `WARMUP_GYM_SEC`, `items.ts` helpers. The §7.4 gate criteria "deferred queue p95 ≤ 4" and "oldest undelivered due card p95 ≤ 7 days" are not met (recorded as `test.failing` with the measured values).
+
+**`@oak/strudel`.** As §4.9 plus the additions of `types.ts` (coordinator, ui, scope, packFiles, `EditorHandle.flashRanges|queryHaps`, `Transport.haps`, `PlayEventsOptions.exclusive`, `EditorOptions.onEvicted`); subpaths `@oak/strudel/audibility`, `…/audibility/cases`, `…/audibility/render-frame`, `…/audibility.json`. A locked AudioContext resolves `evaluate` with `eval.audio-locked` (warn), never rejects. Register the Service Worker as `/sw.js?pack=<packVersion>` (production only).
+
+**`@oak/content-kit`.** `TRACK_LABELS` includes `fx` (STYLE §2). `TestResponse` is unchanged (contracts §5.1): a test cannot combine an answer and a click, so click questions are tested in their own `run-investigate` part.
+
+**Server.** Real grader hosts (`server/src/grader/host.ts`, lazily through `seams.ts`), real content (`content/` sources plus `content/.generated/`). Tutor turn routes are validated in `routes/tutor.ts` and forwarded to the tutor app; `/api/tutor/status` is the tutor app's own route. Dev mode (`OAK_DEV=1`) is required behind the Vite proxy (its Host and Origin are allowed only then).
+
+**App.** `/dev/workbench` compares with the grader's own `compare` (the dev fake is gone). In a dev build the adapter is on `globalThis.__oakStrudel` for the platform e2e (never in production).
+
+**Content CI.** `content/validate/harness.ts` uses only the real packages (no fallback grader): `lintOak`, `gradeExercise` (realm initialised with the course toolbox), `evaluateForGrading` + `normalize` + `notate` for notation, `@oak/pitch` `gradeTaps` for tap tests. A test no package can decide (a sung response without a recorded fixture) is reported as pending.
+
+## 12. Final-gate amendments (review pass)
+
+Three reviews (music correctness, robustness, browser runtime) and the final gate changed these public
+behaviours. Where this section and §4 or §11 disagree, this section is current.
+
+**`@oak/theory`.** `parseRN` accepts slash figures (`V6/5` → `V65`, `V4/3`, `V4/2`, `I6/4`); `V7/V` still
+reads as applied. `normalizeText(…, "interval")` maps tritone/TT → `TT`, octave → `P8`, unison → `P1`; the
+note and key forms accept spelled-out sharp/flat (`E-flat`, `c sharp minor`). `romanOf`: in a minor key a
+°7 chord is diatonic only on the leading tone; other °7 roots read as applied `vii°7/x`.
+
+**`@oak/grader` (analysis).** `scaleMembership(events, key, o?: { strict?: boolean })`: in minor it accepts
+the raised 6th and 7th unless `strict` (only the `in-key` rubric rule calls it; strict Aeolian belongs to the
+`mode` rule). `cadenceAt` matches `@oak/theory` `classifyCadence`: a Picardy I closes a minor key, the blues
+tonic is I(7) or i, vii°(7)→I is IAC, and with no melody the soprano is the top note of a hand-voiced final
+chord (otherwise harmony alone decides PAC). `classifyNct` may report `suspension` for a chord tone tied into
+a chord it does not belong to that then resolves down by step. `inferMeter` correlates on the music's own
+grid, ranks meters whose metric level matches that grid first and weights snare/clap ×1.25 (the
+`MeterGuess` shape is unchanged; an all-half-note bar now prefers 2/4). Key-relative melody matching takes
+the answer's key from `keyFromContext(answer)` or the reference key moved by `bestTransposition`;
+`keyEstimate` only when there is no reference key. `contains-rn` with an applied numeral (`x/y`) matches
+only when `romanOf` reads the slot chord as applied.
+
+**`@oak/grader` (lint and feedback).** `eval.mini-parse`'s `{detail}` is one calm clause, never the Peggy
+dump: `a "[" is never closed: add a "]"`, `there is a "]" with no "[" before it`, `the "<" is closed with
+"]"; it needs ">"`, else `there is a typo near "x"; check its brackets and symbols` or `it ends before a
+bracket or group is closed`. New exports in `lint/mini.ts`: `miniErrorDetail(raw, body?)`,
+`miniBracketProblem(body)`; `evalFailureDiagnostics` uses the same wording. Strict profile:
+`samples()`/`aliasBank()` take only literals, arrays and plain objects (`lint.strict.construct`
+otherwise); `registerMultiControl`, `createParam`, `createParams` are banned identifiers. Base profile:
+`lint.base.remote-samples` looks inside nested map/array values and refuses `\\host`, a leading control
+character and any URL scheme.
+
+**`@oak/grader` (hosts and limits).** `BunHostOptions` gains `maxRssMb` (default 1024, subprocess only) and
+`maxLineBytes` (default 64 MB); `HostCoreOptions` gains `bootFailureLimit` (3) and `bootCooldownMs` (2000,
+doubling to 60 s). While boots fail, requests resolve to error kind `crashed` with "the grader failed to
+start N times in a row; retrying in S s". `EvalResult.logs` is capped at `MAX_LOG_LINES` (200) plus one
+"(N more log lines not shown)" line, each at most 2000 chars plus "…". `OakEvent` string fields (`s`,
+`bank`, `chord`, `scale`, `track`, `note`, `n`) are capped at `MAX_EVENT_TEXT` (1024); `capText` is
+exported from `normalize/hap.ts`.
+
+**`@oak/srs`.** `createSrs().rate/review/preview` clamp a review instant earlier than the card's
+`lastReviewAt` (clock stepped back) to `lastReviewAt`: the revlog's `reviewedAt` is that instant and
+`elapsedDays` is 0, instead of throwing `SRSSchemaError`.
+
+**`@oak/api`.** `settings.anthropicKey.set`: the body is trimmed and must match `/^[\x21-\x7e]+$/`, 20–400
+chars (400 otherwise). `buildPath` throws for a path parameter that is `.`, `..` or a `%2E` form of them.
+`BackupImportResultSchema` gains `orphanedFiles: number`. The sketch/album version `flags` object gains
+`reviewBeforeRun?: true` (see Server).
+
+**`@oak/strudel`.** New `friendlyEvalError(raw, code, offset?)` and `FriendlyError`; `errorToDiagnostic`
+(`eval.syntax`/`eval.runtime`) returns a friendly message and a range when it finds one, the raw text in
+`params.detail`. New `ADAPTER_FEEDBACK.silent = "eval.silent"`: an `info` diagnostic in
+`EvalOutcome.diagnostics` when a successful run has no onsets in the first `min(loopBars, 16)` cycles and
+no mutes are set (the grader's catalogue uses the same ID as an error when grading). New optional
+`OakStrudelOptions.calmHighlight?: () => boolean`, read every frame. `OAK_CM_SETTINGS.fontFamily` is the Oak
+code font; a `Prec.highest` editor theme coloured by `--oak-code-*` variables (Paper fallbacks) is installed
+on every mirror. The editor binds `Mod-Enter` (run) and `Mod-.` (stop) on top of Strudel's Ctrl keys.
+Disposing a playing editor calls `coordinator.panic()`; disposing a stopped one touches nothing.
+
+**App.** `model.ts`: `staffSource`, `staffPage(src, page)`, `staffPageCount`, `STAFF_PAGE_BARS = 8`
+(`score`/`abc` are page 0); `HighlightBus.staffNsOf`/`eventsOfStaffNs` take an optional page ABC.
+`views.ts`: `layoutFor(width, availableHeight?)` returns tabs when width < 760 **or** available height <
+760; `ViewTab` includes `"both"`. The shell store's `AudioStatus` gains `{ kind: "suspended" }`.
+`app/src/lib/mic.ts` (`getMicGraph`, `openMic`, `closeMic`, `bindMicState`) is the only place a sing step or
+calibration opens the mic; a route change closes it. The Service Worker accepts a `warm-shell` message and
+falls back to the cached `/` for offline navigations; `vite build` also writes `dist/asset-manifest.json`.
+`e2e/attached.config.ts` runs the `e2e/` specs against an already-running stack (`OAK_PROD_URL` for the
+production URL).
+
+**Server.** New exports: `readBounded`, `MAX_JSON_BYTES` (`routes/define.ts`); `MAX_OUTSTANDING_NONCES =
+256` (`confirm.ts`; the oldest is evicted); `safeSegment` (`static.ts`); `redactSecrets` (`secrets.ts`);
+`tightenMode` (`db/index.ts`). The CSP is also sent on `image/svg+xml`. The data dir is 0700, the database,
+backups and audio files 0600. Backup import: inflation is bounded by the declared sizes; stored audio paths
+that escape the data dir are skipped; **every imported `sketch_versions` and `album_track_versions` row gets
+`flags.reviewBeforeRun = true`** (contracts §11.3); **audio of the replaced data that the imported tables
+no longer reference is moved to `<safety copy>-audio/{audio,album}/…`** (never deleted, so the safety copy
+stays restorable) and counted in `orphanedFiles`. `srs-wiring.ts` runs each review, drill start/trials/
+finish, lesson seed, after-step and due call in one transaction.
+
+**Content CI.** `contracts-sync.test.ts` also checks capstone `sessionDefs[].goal` against the Objective
+column of §2.4 and §2.6. `content/capstones.ts`: C4's `major-v` rule is `contains-rn ["V"]` with
+`mustResolve` (contracts §6.6).

@@ -60,7 +60,7 @@ Bun.serve({ hostname: "127.0.0.1", port: 8787, fetch: root.fetch }); // c.env is
 | `TutorNotesStore`   | `tutor_notes` with `retracted_at`; `recent` returns non-retracted notes of one subject, newest first.                                                                                                                                                                                                                      |
 | `LessonContextPort` | Content index: `lesson`, `step` (**`null` for checkpoint items and the current drill trial**), `resolveExercise`, `subject` (`tutorOpen: false` during a checkpoint and during drill trials; `released`), `review` (reference only after a pass; `revisions` from `revisionCountFor`), the generated syllabus and catalog. |
 | `ProgressPort`      | `stepState` (the rung is `step_attempts.hint_rung`, max over the attempt series), `advanceHintRung` (writes it and counts a tutor hint), `snapshot`, `termsIntroduced`.                                                                                                                                                    |
-| `SettingsPort`      | `tutor.backend` (`auto`, `off`, `anthropic-api`, `claude-cli`), `tutor.softMonthlyUsd` (25), `tutor.hardMonthlyUsd` (`null`), the month the soft-marker toast was shown.                                                                                                                                                   |
+| `SettingsPort`      | `tutor.backend` (`auto`, `off`, `anthropic-api`, `claude-cli`), `tutor.softMonthlyUsd` (25), the month the soft-marker toast was shown. There is no hard cap (removed 2026-11-11).                                                                                                                                              |
 | `UsageSink`         | `tutor_usage`: one row per model call; `month(YYYY-MM)` totals. Warm-ups arrive with `conversationId: "warm"`.                                                                                                                                                                                                             |
 | `Clock`             | `now()` and the learner's IANA time zone (the day rolls over at 04:00 there).                                                                                                                                                                                                                                              |
 
@@ -257,7 +257,7 @@ steps listed under "Review" below each fails at least one test.
 - **Heartbeat 5 s** (`SSE_PING_INTERVAL_MS`), not the 15 s of §10.1: spike S6 showed 15 s does not
   survive Bun's 10 s idle timeout on its own.
 - **Subscription usage has no dollar figure** (`costUsd: null`, `includedInPlan: true`) and does
-  not count towards the soft marker or the hard cap.
+  not count towards the soft marker.
 - **A hint that failed does not climb the ladder again on retry.** The contracts say a hint
   request advances the rung before the model is called; without this a rate-limit retry would
   cost the learner two rungs.
@@ -272,8 +272,8 @@ steps listed under "Review" below each fails at least one test.
   tools); on the API they use the submit tool. One validator (`acceptReview`) serves both.
 - **Persona is a TypeScript constant** (`prompt/persona.ts`), not `persona.md`: the prefix must be
   byte-stable and a module constant cannot be edited on disk between two requests.
-- **The hard cap also stops the CLI backend**, although a subscription turn costs nothing: §10.9
-  read literally. One line in `prepare.ts` if the cap should bind the API backend only.
+- **There is no hard cap.** It was removed on 2026-11-11 (contracts §10.9 v1.2); spend past the
+  soft marker never refuses a turn or a warm-up, on either backend.
 - **`compare_haps` refuses an exercise whose step the content port withholds** (checkpoint item,
   current drill trial), and withholds a grader error message that quotes the reference below
   hint 4. The contracts do not mention either case.
@@ -300,9 +300,9 @@ How the browser reads an answer:
 
 - **A turn that passed validation is always `200 text/event-stream` and always ends with exactly
   one `done` or `error`**, also when the tutor is off (`error.kind: "auth"`, the message says how
-  to set it up), when the hard cap is reached (`budget`), when the subject is closed or there is
-  nothing to review (`bad_request`), and when the turn was queued and then stopped (`aborted`). A
-  stream that ends without a terminal frame is a dropped connection.
+  to set it up), when the subject is closed or there is nothing to review (`bad_request`), and
+  when the turn was queued and then stopped (`aborted`). A stream that ends without a terminal
+  frame is a dropped connection.
 - **4xx/5xx JSON** means no turn was started: `403 { error: "forbidden", reason }` from the security
   rules, `400/413/415 { error: { kind: "bad_request", message, problems } }` for a bad body, `500`
   with fixed copy for a server fault. No response ever carries upstream text or a credential.
@@ -318,7 +318,7 @@ What the service adds on top of `prepareTurn` and `runTurn` / `runReview`:
 - **One turn at a time per conversation** (subject and lane), in arrival order. A queued turn
   that is aborted leaves without running: no rung is spent and nothing is stored.
 - **The warm-up is sent at most once per 50 minutes** per backend and prefix, concurrent calls
-  share one request, and it is skipped when the hard cap is reached.
+  share one request. Spend past the soft marker never skips it.
 - **A review's bounded retry is the core's**: `maxResubmits` (one resubmission) is handed to the
   backend; the service does not add a second, paid attempt on top. When it fails the stream ends in
   `error` and the caller shows the deterministic liner notes.

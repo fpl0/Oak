@@ -8,7 +8,6 @@ import type { ConversationRecord, TutorPorts } from "./ports.ts";
 import { buildPrefix, prefixVersion } from "./prompt/persona.ts";
 import { answerPolicy, disclosureLevel } from "./redaction.ts";
 import {
-  assertWithinBudget,
   type BudgetStatus,
   checkBudget,
   conversationKey,
@@ -48,13 +47,12 @@ const DEFAULT_REVIEW_TEXT = "Please review this.";
 const DEFAULT_NOTE_TEXT = "Please write a listening note for this sketch.";
 
 /**
- * Throws a TutorError for the cases a route answers with `error` instead of a stream: `budget`
- * (the learner's hard cap) and `bad_request` (the tutor is off for this subject, or there is
- * nothing to review).
+ * Throws a TutorError for the cases a route answers with `error` instead of a stream:
+ * `bad_request` (the tutor is off for this subject, or there is nothing to review). The budget is
+ * read for the soft marker only; it never blocks a turn.
  */
 export async function prepareTurn(request: TurnRequest, ports: TutorPorts): Promise<PreparedTurn> {
   const budget = await checkBudget(ports);
-  assertWithinBudget(budget);
 
   const { thread, kind } = request;
   const facts = await ports.lessons.subject(thread);

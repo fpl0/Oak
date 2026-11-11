@@ -20,7 +20,8 @@ export function loadMigrations(dir: string = MIGRATIONS_DIR): Migration[] {
     out.push({ version: Number(m[1]), name: m[2] as string, sql: readFileSync(join(dir, file), "utf8") });
   }
   out.forEach((mig, i) => {
-    if (mig.version !== i + 1) throw new Error(`migration ${mig.name}: expected version ${i + 1}, got ${mig.version}`);
+    if (mig.version !== i + 1)
+      throw new Error(`migration ${mig.name}: expected version ${i + 1}, got ${mig.version}`);
   });
   return out;
 }

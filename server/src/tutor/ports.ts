@@ -178,8 +178,6 @@ export interface TutorSettings {
   backend: "auto" | "off" | BackendId;
   /** Always on. Default 25. */
   softMonthlyUsd: number;
-  /** Optional, off (`null`) by default. */
-  hardMonthlyUsd: number | null;
   /** The month (`YYYY-MM`) whose soft-marker toast has been shown, so it shows once. */
   softWarnedMonth: string | null;
 }

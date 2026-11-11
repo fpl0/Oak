@@ -17,7 +17,8 @@ export function tracksOfRole(n: Normalized, role: RoleName): string[] {
     if ((LABEL_ROLES as Record<string, string | undefined>)[track] === role) out.push(track);
   }
   const inferred = n.roles[role];
-  if (inferred && !inferred.startsWith("band.") && !out.includes(inferred) && n.byTrack[inferred]) out.push(inferred);
+  if (inferred && !inferred.startsWith("band.") && !out.includes(inferred) && n.byTrack[inferred])
+    out.push(inferred);
   return out;
 }
 
@@ -142,7 +143,10 @@ export function medianPitch(events: readonly NEvent[]): number {
  * drums; a track is chords when ≥ 25% of its onsets are polyphonic; the lowest monophonic track is bass
  * when its median is below C3; the highest is melody.
  */
-export function normalizedFromEvents(events: readonly NEvent[], tempo: { cps?: number; bpm?: number } = {}): Normalized {
+export function normalizedFromEvents(
+  events: readonly NEvent[],
+  tempo: { cps?: number; bpm?: number } = {},
+): Normalized {
   const byTrack: Record<string, NEvent[]> = {};
   for (const e of sortEvents(events)) {
     const list = byTrack[e.track] ?? [];
@@ -176,7 +180,11 @@ export function normalizedFromEvents(events: readonly NEvent[], tempo: { cps?: n
   return {
     byTrack,
     all: sortEvents(learner.flatMap((t) => byTrack[t] as NEvent[])),
-    band: sortEvents(Object.keys(byTrack).filter((t) => t.startsWith("band.")).flatMap((t) => byTrack[t] as NEvent[])),
+    band: sortEvents(
+      Object.keys(byTrack)
+        .filter((t) => t.startsWith("band."))
+        .flatMap((t) => byTrack[t] as NEvent[]),
+    ),
     cps,
     bpm: tempo.bpm ?? cps * 240,
     roles,

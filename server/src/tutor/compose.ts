@@ -115,7 +115,7 @@ export function createDefaultTutor(deps: DefaultTutorDeps): DefaultTutor {
   const security = localSecurity(port, deps.devPorts ?? []);
 
   // A warm-up is a billed call with no turn to hang its usage on; it is logged as its own row so
-  // the month's estimate and the hard cap see it.
+  // the month's estimate and the soft marker see it.
   const recordWarm = (usage: UsageSummary) => {
     const now = ports.clock.now();
     const row = {

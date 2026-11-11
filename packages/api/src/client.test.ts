@@ -313,7 +313,7 @@ describe("tutor streams", () => {
       ["meta", meta],
       ["bogus", { x: 1 }],
       ["text", { delta: 3 }],
-      ["error", { kind: "budget", message: "cap" }],
+      ["error", { kind: "refusal", message: "no" }],
       ["text", { delta: "late" }],
     ])}event: error\ndata: Internal Server Error\n\n`;
     const seen: TutorEvent[] = [];
@@ -321,7 +321,7 @@ describe("tutor streams", () => {
       onEvent: (e) => seen.push(e),
     });
     expect(seen.map((e) => e.type)).toEqual(["meta", "error"]);
-    expect(last.type === "error" && last.data.kind).toBe("budget");
+    expect(last.type === "error" && last.data.kind).toBe("refusal");
   });
 
   test("HTTP failures and aborts become error events; the promise never rejects", async () => {

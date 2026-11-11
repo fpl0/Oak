@@ -39,13 +39,21 @@ export function parsons(notes: readonly Pick<Note, "midi">[], threshCents = 50):
 }
 
 /** Levenshtein distance with a substitution cost function (default 1). */
-export function editDistance<T>(a: readonly T[], b: readonly T[], sub: (x: T, y: T) => number = (x, y) => (x === y ? 0 : 1)): number {
+export function editDistance<T>(
+  a: readonly T[],
+  b: readonly T[],
+  sub: (x: T, y: T) => number = (x, y) => (x === y ? 0 : 1),
+): number {
   let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
   for (let i = 1; i <= a.length; i++) {
     const row = [i];
     for (let j = 1; j <= b.length; j++) {
       row.push(
-        Math.min((prev[j] as number) + 1, (row[j - 1] as number) + 1, (prev[j - 1] as number) + sub(a[i - 1] as T, b[j - 1] as T)),
+        Math.min(
+          (prev[j] as number) + 1,
+          (row[j - 1] as number) + 1,
+          (prev[j - 1] as number) + sub(a[i - 1] as T, b[j - 1] as T),
+        ),
       );
     }
     prev = row;
@@ -61,9 +69,22 @@ export function contourScore(target: string, answer: string): number {
   return editSimilarity([...target], [...answer]);
 }
 
-/** Share of pitched events whose pitch class belongs to the key's scale, and the ones that do not. */
-export function scaleMembership(events: readonly NEvent[], key: KeySpec): { ratio: number; outside: NEvent[]; n: number } {
+/**
+ * Share of pitched events whose pitch class belongs to the key's scale, and the ones that do not. A minor
+ * key also owns its raised 6th and 7th (the melodic- and harmonic-minor tones: G♯ and F♯ in A minor), as
+ * a musician reads "in A minor"; `strict` keeps to the natural-minor scale.
+ */
+export function scaleMembership(
+  events: readonly NEvent[],
+  key: KeySpec,
+  o: { strict?: boolean } = {},
+): { ratio: number; outside: NEvent[]; n: number } {
   const pcs = new Set<number>(scalePcs(key));
+  if (key.mode === "minor" && !o.strict) {
+    const tonic = scalePcs(key)[0] as number;
+    pcs.add(mod12(tonic + 9));
+    pcs.add(mod12(tonic + 11));
+  }
   const notes = pitched(events);
   const outside = notes.filter((e) => !pcs.has(mod12(e.midi)));
   return { ratio: notes.length === 0 ? 1 : 1 - outside.length / notes.length, outside, n: notes.length };
@@ -89,7 +110,12 @@ export function tessitura(events: readonly NEvent[], within: readonly [number, n
 }
 
 /** A step is at most 2 semitones (a repeat counts). A leap of more than 4 is recovered by a step back. */
-export function stepLeap(notes: readonly Note[]): { stepRatio: number; maxLeap: number; unrecovered: string[]; intervals: number } {
+export function stepLeap(notes: readonly Note[]): {
+  stepRatio: number;
+  maxLeap: number;
+  unrecovered: string[];
+  intervals: number;
+} {
   let steps = 0;
   let maxLeap = 0;
   const unrecovered: string[] = [];
@@ -100,7 +126,8 @@ export function stepLeap(notes: readonly Note[]): { stepRatio: number; maxLeap: 
     if (Math.abs(d) > 4) {
       const next = notes[i + 1];
       const back = next ? next.midi - (notes[i] as Note).midi : 0;
-      if (!next || Math.abs(back) > 2 || back === 0 || Math.sign(back) === Math.sign(d)) unrecovered.push((notes[i] as Note).id);
+      if (!next || Math.abs(back) > 2 || back === 0 || Math.sign(back) === Math.sign(d))
+        unrecovered.push((notes[i] as Note).id);
     }
   }
   const intervals = Math.max(0, notes.length - 1);
@@ -138,7 +165,10 @@ export function motifReuse(notes: readonly Note[], unitBars = 1, minSimilarity =
   const reusedAt: number[] = [];
   for (const [u, list] of units) {
     const intervals = list.slice(1).map((n, i) => n.midi - (list[i] as Note).midi);
-    if (intervals.length > 0 && seen.some((s) => s.length > 0 && editSimilarity(s, intervals) >= minSimilarity))
+    if (
+      intervals.length > 0 &&
+      seen.some((s) => s.length > 0 && editSimilarity(s, intervals) >= minSimilarity)
+    )
       reusedAt.push(u * unitBars);
     seen.push(intervals);
   }
@@ -182,32 +212,68 @@ export function chordToneRatio(
   return { ratio: n === 0 ? 0 : 1 - misses.length / n, n, misses };
 }
 
-export type NctType = "passing" | "neighbor" | "appoggiatura" | "suspension" | "anticipation" | "escape" | "other";
+export type NctType =
+  | "passing"
+  | "neighbor"
+  | "appoggiatura"
+  | "suspension"
+  | "anticipation"
+  | "escape"
+  | "other";
 /**
  * Names each non-chord tone of the melody from how it is approached and left (exercises §3.4):
  * passing (step in, step out, same direction), neighbor (step in, step back), appoggiatura (leap in, step
- * out, strong position), suspension (held over from a chord tone, then a step down, strong position),
+ * out, strong position), suspension (a chord tone re-struck or tied into a chord it does not belong to,
+ * then a step down; the tied form is reported on the held note),
  * anticipation (a tone of the next chord, weak position), escape (step in, leap out the other way).
  */
-export function classifyNct(melody: readonly Note[], slots: readonly ChordSlot[], meter: MeterId): { id: string; type: NctType }[] {
+export function classifyNct(
+  melody: readonly Note[],
+  slots: readonly ChordSlot[],
+  meter: MeterId,
+): { id: string; type: NctType }[] {
   const out: { id: string; type: NctType }[] = [];
   const isStep = (d: number): boolean => Math.abs(d) >= 1 && Math.abs(d) <= 2;
   melody.forEach((note, i) => {
     const slot = slotAt(slots, note.onset);
-    if (!slot || slotPcs(slot).includes(mod12(note.midi))) return;
     const prev = melody[i - 1];
     const next = melody[i + 1];
+    if (slot && slotPcs(slot).includes(mod12(note.midi))) {
+      // A tied suspension: a chord tone held into a chord it does not belong to, then resolved down by
+      // step. The note has no onset of its own at the change, so it is read where the chord changes.
+      const end = R.add(note.onset, note.dur);
+      const change = slots.find((s) => R.lt(note.onset, s.span[0]) && R.lt(s.span[0], end));
+      const outOf = next ? next.midi - note.midi : null;
+      if (
+        change &&
+        !slotPcs(change).includes(mod12(note.midi)) &&
+        outOf !== null &&
+        outOf < 0 &&
+        isStep(outOf)
+      )
+        out.push({ id: note.id, type: "suspension" });
+      return;
+    }
+    if (!slot) return;
     const into = prev ? note.midi - prev.midi : null;
     const outOf = next ? next.midi - note.midi : null;
     const strong = isStrong(note.onset, meter, "beat");
     const nextSlot = next ? slotAt(slots, next.onset) : slots[slots.indexOf(slot) + 1];
     let type: NctType = "other";
     if (into === 0 && outOf !== null && outOf < 0 && isStep(outOf) && strong) type = "suspension";
-    else if (!strong && nextSlot && nextSlot !== slot && slotPcs(nextSlot).includes(mod12(note.midi))) type = "anticipation";
+    else if (!strong && nextSlot && nextSlot !== slot && slotPcs(nextSlot).includes(mod12(note.midi)))
+      type = "anticipation";
     else if (into !== null && outOf !== null && isStep(into) && isStep(outOf))
       type = Math.sign(into) === Math.sign(outOf) ? "passing" : "neighbor";
-    else if (into !== null && outOf !== null && !isStep(into) && into !== 0 && isStep(outOf) && strong) type = "appoggiatura";
-    else if (into !== null && outOf !== null && isStep(into) && Math.abs(outOf) > 2 && Math.sign(into) !== Math.sign(outOf))
+    else if (into !== null && outOf !== null && !isStep(into) && into !== 0 && isStep(outOf) && strong)
+      type = "appoggiatura";
+    else if (
+      into !== null &&
+      outOf !== null &&
+      isStep(into) &&
+      Math.abs(outOf) > 2 &&
+      Math.sign(into) !== Math.sign(outOf)
+    )
       type = "escape";
     out.push({ id: note.id, type });
   });
@@ -215,7 +281,11 @@ export function classifyNct(melody: readonly Note[], slots: readonly ChordSlot[]
 }
 
 /** Phrases of `phraseBars` bars (default 4) over the span of the events; bars are 1-based and inclusive. */
-export function phrases(events: readonly NEvent[], phraseBars = 4, totalBars?: number): { bars: [number, number] }[] {
+export function phrases(
+  events: readonly NEvent[],
+  phraseBars = 4,
+  totalBars?: number,
+): { bars: [number, number] }[] {
   const bars = totalBars ?? events.reduce((m, e) => Math.max(m, R.floor(e.onset) + 1), 0);
   const out: { bars: [number, number] }[] = [];
   for (let b = 0; b < bars; b += phraseBars) out.push({ bars: [b + 1, Math.min(bars, b + phraseBars)] });

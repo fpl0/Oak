@@ -1,9 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { TutorError } from "./errors.ts";
 import { makePorts } from "./testing/fakes.ts";
 import { LESSON_ID, MAKE_STEP, STEP, STEP_ID, stepState } from "./testing/fixtures.ts";
 import {
-  assertWithinBudget,
   checkBudget,
   conversationId,
   conversationKey,
@@ -395,45 +393,42 @@ describe("budget", () => {
       month: "2026-11",
       softPassed: false,
       firstSoftCrossing: false,
-      blocked: false,
     });
     await spend(ports, 20);
     const status = await checkBudget(ports);
     expect(status).toMatchObject({
       softPassed: true,
       firstSoftCrossing: true,
-      blocked: false,
       softMarkerUsd: 25,
     });
     expect(status.monthUsd).toBeCloseTo(30, 6);
-    expect(() => assertWithinBudget(status)).not.toThrow();
     await ports.settings.markSoftWarned("2026-11");
     expect(await checkBudget(ports)).toMatchObject({ softPassed: true, firstSoftCrossing: false });
   });
 
-  test("the hard cap is off by default and blocks only when the learner set one", async () => {
+  test("there is no hard cap: heavy spend only passes the soft marker", async () => {
     const ports = makePorts();
     await spend(ports, 500);
-    expect((await checkBudget(ports)).blocked).toBe(false);
-    ports.settings.value.hardMonthlyUsd = 40;
     const status = await checkBudget(ports);
-    expect(status.blocked).toBe(true);
-    expect(() => assertWithinBudget(status)).toThrow(TutorError);
-    try {
-      assertWithinBudget(status);
-    } catch (e) {
-      expect((e as TutorError).kind).toBe("budget");
-    }
-    // Raising the cap lifts the block.
-    ports.settings.value.hardMonthlyUsd = 600;
-    expect((await checkBudget(ports)).blocked).toBe(false);
+    expect(Object.keys(status).sort()).toEqual([
+      "firstSoftCrossing",
+      "month",
+      "monthUsd",
+      "softMarkerUsd",
+      "softPassed",
+    ]);
+    expect(status).toMatchObject({ softPassed: true, firstSoftCrossing: true });
+    expect(status.monthUsd).toBeCloseTo(500, 6);
   });
 
   test("it resets with the month, and subscription usage never counts", async () => {
     const ports = makePorts();
-    ports.settings.value.hardMonthlyUsd = 40;
     await spend(ports, 100, "2026-10-28");
     await spend(ports, 100, "2026-11-03", true);
-    expect(await checkBudget(ports)).toMatchObject({ monthUsd: 0, blocked: false, softPassed: false });
+    expect(await checkBudget(ports)).toMatchObject({
+      monthUsd: 0,
+      softPassed: false,
+      firstSoftCrossing: false,
+    });
   });
 });

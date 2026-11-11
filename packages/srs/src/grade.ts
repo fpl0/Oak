@@ -23,8 +23,7 @@ export function gradeFor(outcome: ReviewOutcome): Rating {
   // Production families carry cents: Easy needs the mean deviation within half the tolerance.
   const production = outcome.meanAbsCents !== undefined || outcome.tolCents !== undefined;
   const inTune =
-    !production ||
-    (outcome.meanAbsCents ?? Number.POSITIVE_INFINITY) <= 0.5 * (outcome.tolCents ?? 50);
+    !production || (outcome.meanAbsCents ?? Number.POSITIVE_INFINITY) <= 0.5 * (outcome.tolCents ?? 50);
   const easy =
     outcome.meanCredit >= GRADE_MAP.easy &&
     outcome.medianRtMs <= outcome.fastRtMs &&

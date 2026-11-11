@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import type { Rung } from "./domain.ts";
-import { TutorError } from "./errors.ts";
 import { encodeSse, type TutorEvent } from "./events.ts";
 import { prepareTurn } from "./prepare.ts";
 import { findLeaks, forbiddenKeys, leakMarkers } from "./redaction.ts";
@@ -448,23 +447,19 @@ describe("failures", () => {
     );
   });
 
-  test("the learner's hard cap answers `budget` before anything is called or stored", async () => {
+  test("spend far past the soft marker never blocks a turn (there is no hard cap)", async () => {
     const ports = makePorts();
-    ports.settings.value.hardMonthlyUsd = 0.000001;
+    ports.settings.value.softMonthlyUsd = 0.000001;
     const backend = new ScriptedBackend("anthropic-api", [{ text: "x" }]);
     await turn(ports, backend, req());
-    let caught: unknown;
-    try {
-      await prepareTurn(req(), ports);
-    } catch (e) {
-      caught = e;
-    }
-    expect(caught).toBeInstanceOf(TutorError);
-    expect((caught as TutorError).kind).toBe("budget");
-    expect(backend.turns).toHaveLength(1);
-    // Subscription usage never trips it.
+    const prep = await prepareTurn(req(), ports);
+    expect(prep.budget.softPassed).toBe(true);
+    await turn(ports, backend, req());
+    await turn(ports, backend, req());
+    expect(backend.turns).toHaveLength(3);
+    // Subscription usage never counts towards the marker.
     const cliPorts = makePorts();
-    cliPorts.settings.value.hardMonthlyUsd = 0.000001;
+    cliPorts.settings.value.softMonthlyUsd = 0.000001;
     const cli = new ScriptedBackend("claude-cli", [{ text: "x" }]);
     await turn(cliPorts, cli, req());
     await turn(cliPorts, cli, req());

@@ -6,6 +6,7 @@
   "description": "Mic graph, pitch worklet, calibration, device checks, tap input, transcription player. Browser only.",
   "exports": {
     ".": "./src/index.ts",
-    "./pitch-worklet": "./src/worklets/pitch.worklet.ts"
+    "./pitch-worklet": "./src/worklets/pitch.worklet.ts",
+    "./waveview": "./src/waveview.ts"
   }
 }

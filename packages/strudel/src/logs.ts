@@ -1,7 +1,17 @@
 // Parsing of Strudel's log lines (the `strudel.log` document event and superdough's logger).
 import type { StrudelLog } from "./types.ts";
 
-const TAGS = ["query", "getTrigger", "cyclist", "voicing", "tonal", "mini", "webaudio", "sampler", "eval"] as const;
+const TAGS = [
+  "query",
+  "getTrigger",
+  "cyclist",
+  "voicing",
+  "tonal",
+  "mini",
+  "webaudio",
+  "sampler",
+  "eval",
+] as const;
 
 /** `[sampler] loading sound "RolandTR909_bd:0" took too long` (samples) and `[webaudio] skip hap: still loading` (soundfonts). */
 const SAMPLER_SKIP = /^\[sampler\] loading sound "([^"]+)" took too long/;

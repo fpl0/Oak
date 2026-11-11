@@ -1,0 +1,696 @@
+// The server side of the SRS engineer's services (services/srs.ts, services/session-plan.ts): their
+// storage and catalog ports over SQLite and the content index, and the `SrsPort` the routes call. The
+// drill-session bookkeeping (start, trials, finish: category statistics, confusion pairs, evidence) is
+// here; every scheduling decision is `SrsService`'s.
+import type {
+  DrillFinish,
+  DrillSession,
+  DueBatch,
+  Evidence,
+  FamilyState,
+  SessionPlan,
+  SrsCard,
+  SrsReviewResult,
+} from "@oak/api";
+import {
+  type FamilyDef,
+  type FamilyId,
+  type LessonId,
+  lessonBudget,
+  type SessionId,
+  type SkillId,
+  skillOf,
+} from "@oak/content-kit";
+import { dayIndex, forecastLoad } from "@oak/srs";
+import type { ContentIndex } from "./content/index.ts";
+import { tx } from "./db/index.ts";
+import type { Repos } from "./db/repos/index.ts";
+import type { FamilyStateRow } from "./db/repos/srs.ts";
+import { badRequest, notFound } from "./errors.ts";
+import { type Clock, newId } from "./services/context.ts";
+import type { Services } from "./services/index.ts";
+import { evidenceWeight } from "./services/mastery.ts";
+import type { DrillSessionCreate, SessionPlannerPort, SrsPort, StepReviewInput } from "./services/ports.ts";
+import {
+  type CourseItem,
+  type SessionPlanCoursePort,
+  type SessionPlanLearnerPort,
+  SessionPlanService,
+  warmupLabel,
+} from "./services/session-plan.ts";
+import {
+  COMPOSITE_IDS,
+  type SrsCatalogPort,
+  type SrsLearnerPort,
+  SrsService,
+  type SrsStatePort,
+  type SrsWorkingState,
+} from "./services/srs.ts";
+
+const STATE_KEY = "srs.state";
+
+/** The governor's working state as one JSON value in `settings` (not a learner setting: `SettingsRepo.all` skips it). */
+export function settingsStatePort(repos: Repos, clock: Clock): SrsStatePort {
+  return {
+    get() {
+      const row = repos.db.query("SELECT value_json FROM settings WHERE key = ?").get(STATE_KEY) as {
+        value_json: string;
+      } | null;
+      if (row === null) return null;
+      try {
+        return JSON.parse(row.value_json) as SrsWorkingState;
+      } catch {
+        return null;
+      }
+    },
+    put(state) {
+      repos.db
+        .query(
+          `INSERT INTO settings (key, value_json, updated_at) VALUES (?, ?, ?)
+           ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at`,
+        )
+        .run(STATE_KEY, JSON.stringify(state), clock.now().toISOString());
+    },
+  };
+}
+
+export class CatalogAdapter implements SrsCatalogPort {
+  constructor(
+    private readonly content: ContentIndex,
+    private readonly services: Services,
+  ) {}
+  #done(lesson: string): boolean {
+    return this.services.gates.lessonCompleted(lesson);
+  }
+  family(id: FamilyId): FamilyDef | null {
+    return this.content.family(id);
+  }
+  /**
+   * Contracts §7.3 "Level and category gates": a category is open when its lesson is completed; a level
+   * opens at its gate (one of its gate lessons completed) and needs at least one open category.
+   */
+  levelLimits(id: FamilyId): { maxOpenLevel: number; topLevel: number; openCategories: string[] } {
+    const def = this.content.family(id);
+    if (def === null) return { maxOpenLevel: 1, topLevel: 1, openCategories: [] };
+    const open = def.categories.filter((c) => this.#done(c.unlockAt)).map((c) => c.id);
+    const openSet = new Set(open);
+    let max = 1;
+    for (let level = 2; level <= def.levels.length; level++) {
+      const gate = def.unlock.levelGates?.[level];
+      const gateOk =
+        gate === undefined || (Array.isArray(gate) ? gate.some((l) => this.#done(l)) : this.#done(gate));
+      const cats = (def.levels[level - 1] as { categories?: string[] } | undefined)?.categories ?? [];
+      if (!gateOk || (cats.length > 0 && !cats.some((c) => openSet.has(c)))) break;
+      max = level;
+    }
+    return { maxOpenLevel: max, topLevel: def.levels.length, openCategories: open };
+  }
+  fact(cardId: string): { fastRtMs: number; skills: SkillId[] } | null {
+    const f = this.content.fact(cardId);
+    if (f !== null) return { fastRtMs: f.deck.fastRtMs, skills: [f.deck.unlock.skill] };
+    // A tested term (`TermDef.card`): the skills its lesson introduces.
+    for (const lesson of this.content.source.lessons)
+      if (lesson.terms.some((t) => t.id === cardId && t.card !== undefined))
+        return { fastRtMs: 4000, skills: [...lesson.introduces] };
+    return null;
+  }
+  openDeckCards(): { cardId: string; deckId: string; newPerDay: number }[] {
+    const out: { cardId: string; deckId: string; newPerDay: number }[] = [];
+    for (const deck of this.content.source.decks)
+      for (const card of deck.cards)
+        if (this.#done(card.gate ?? deck.unlock.lesson))
+          out.push({ cardId: card.id, deckId: deck.id, newPerDay: deck.newPerDay });
+    return out;
+  }
+}
+
+export class LearnerAdapter implements SrsLearnerPort {
+  constructor(
+    private readonly repos: Repos,
+    private readonly content: ContentIndex,
+    private readonly services: Services,
+  ) {}
+  profile() {
+    const p = this.repos.profile.get();
+    return {
+      targetMinutes: p.targetMinutes,
+      timeZone: p.timezone,
+      rolloverHour: p.rolloverHour,
+      quiet: p.quiet,
+      weeklyGoal: p.weeklyGoal,
+      singToleranceCents: p.singToleranceCents,
+    };
+  }
+  repairFamilies(): FamilyId[] {
+    return [
+      ...new Set(
+        this.repos.checkpoints
+          .repairs()
+          .flatMap((r) => (r.familyId === null ? [] : [r.familyId as FamilyId])),
+      ),
+    ];
+  }
+  debtSkills(): SkillId[] {
+    return this.services.mastery.debts() as SkillId[];
+  }
+  nextLessonSkills(): SkillId[] {
+    const next = this.services.gates.nextMapItem();
+    const meta = next === null ? null : this.content.lessonSite(next)?.meta;
+    return meta === undefined || meta === null ? [] : [...meta.introduces, ...meta.practises];
+  }
+}
+
+function median(xs: readonly number[]): number {
+  if (xs.length === 0) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? (s[m] as number) : ((s[m - 1] as number) + (s[m] as number)) / 2;
+}
+
+/** `SrsPort` over `SrsService`, plus the drill-set bookkeeping. */
+export class SrsAdapter implements SrsPort {
+  #recall: { at: number; map: Map<string, { retrievability: number; desiredRetention: number }> } | null =
+    null;
+  constructor(
+    readonly service: SrsService,
+    private readonly repos: Repos,
+    private readonly content: ContentIndex,
+    private readonly services: Services,
+    private readonly catalog: CatalogAdapter,
+    private readonly clock: Clock,
+  ) {}
+
+  #now(): Date {
+    return this.clock.now();
+  }
+  #gap(): number {
+    const day = this.service.day(this.#now());
+    const last = this.repos.streak.lastQualifiedDay(day);
+    return last === null ? 0 : dayIndex(day) - dayIndex(last);
+  }
+  #touched(): void {
+    this.#recall = null;
+  }
+
+  /** One transaction: a failure part-way leaves no card without its revlog, no half-recorded set. */
+  due(input: { budgetSec: number | null; more: boolean }): DueBatch {
+    return tx(this.repos.db, () => this.#due(input));
+  }
+  #due(input: { budgetSec: number | null; more: boolean }): DueBatch {
+    const now = this.#now();
+    this.service.prepareDay(now, this.#gap());
+    const { plan, items } = this.service.planWarmup(now, {
+      gapDays: this.#gap(),
+      ...(input.budgetSec === null ? {} : { budgetSec: input.budgetSec }),
+      ...(input.more ? { continuation: true } : {}),
+    });
+    return {
+      budgetSec: plan.budgetSec,
+      plannedSec: plan.plannedSec,
+      items,
+      label: warmupLabel(plan.plannedSec),
+      moreAvailable: plan.overflow.length > 0,
+    };
+  }
+
+  /** One transaction: a failure part-way leaves no card without its revlog, no half-recorded set. */
+  review(req: Parameters<SrsPort["review"]>[0]): SrsReviewResult {
+    return tx(this.repos.db, () => this.#review(req));
+  }
+  #review(req: Parameters<SrsPort["review"]>[0]): SrsReviewResult {
+    const trials =
+      req.drillSessionId === null
+        ? undefined
+        : this.repos.srs.trials(req.drillSessionId).map((t) => ({ familyId: t.familyId, credit: t.credit }));
+    if (this.repos.srs.card(req.cardId) === null) throw notFound(`card ${req.cardId}`);
+    const r = this.service.review({ ...req, ...(trials === undefined ? {} : { trials }) }, this.#now());
+    this.#touched();
+    // A fact answered on its own is evidence for the deck's skill.
+    if (req.drillSessionId === null && r.rating !== null) {
+      const fact = this.catalog.fact(req.cardId);
+      if (fact !== null)
+        this.services.mastery.addEvidence(
+          fact.skills.map((skill) => ({
+            skillId: skill,
+            category: null,
+            score: req.outcome.meanCredit,
+            weight: evidenceWeight("srs-set"),
+            sourceKind: "srs-set",
+            sourceId: `${req.cardId}#${this.#now().toISOString()}`,
+          })),
+        );
+    }
+    return r;
+  }
+
+  #familyDto(id: string): FamilyState | null {
+    if (this.content.family(id) === null) return null;
+    const row: FamilyStateRow = this.repos.srs.family(id) ?? {
+      familyId: id,
+      level: 1,
+      promoDay: null,
+      categoryStats: {},
+      confusion: {},
+      blockedRemaining: 0,
+      compositeId: null,
+      graduatedAt: null,
+      updatedAt: this.#now().toISOString(),
+    };
+    return this.service.familyDto(row);
+  }
+
+  families(): { families: FamilyState[]; cards: SrsCard[] } {
+    const now = this.#now();
+    return {
+      families: this.repos.srs.families().map((r) => this.service.familyDto(r)),
+      cards: this.repos.srs.cards().map((c) => this.service.cardDto(c, now)),
+    };
+  }
+
+  familyState(familyId: string): FamilyState | null {
+    return this.#familyDto(familyId);
+  }
+
+  /** One transaction: a failure part-way leaves no card without its revlog, no half-recorded set. */
+  startDrill(req: DrillSessionCreate): DrillSession {
+    return tx(this.repos.db, () => this.#startDrill(req));
+  }
+  #startDrill(req: DrillSessionCreate): DrillSession {
+    const levels: Record<string, number> = {};
+    const openCategories: Record<string, string[]> = {};
+    const focus: Record<string, string | null> = {};
+    let trials = 0;
+    for (const id of req.familyIds) {
+      const def = this.content.family(id);
+      if (def === null) throw notFound(`family ${id}`);
+      const dto = this.#familyDto(id) as FamilyState;
+      // An anchor set is four trials one level down (contracts §7.4).
+      const level = Math.max(1, Math.min(dto.level, dto.maxOpenLevel) - (req.purpose === "anchor" ? 1 : 0));
+      levels[id] = level;
+      openCategories[id] = dto.openCategories;
+      let worst: { id: string; acc: number } | null = null;
+      for (const c of dto.openCategories) {
+        const s = dto.categoryStats[c];
+        const acc = s === undefined || s.n === 0 ? 0 : s.hits / s.n;
+        if (worst === null || acc < worst.acc) worst = { id: c, acc };
+      }
+      focus[id] = worst?.id ?? null;
+      trials += req.purpose === "anchor" ? 4 : req.familyIds.length > 1 ? 2 : def.trialsPerSet;
+    }
+    if (req.sessionId !== null && this.repos.sessions.get(req.sessionId) === null)
+      throw notFound(`session ${req.sessionId}`);
+    const id = newId("drl");
+    const session: DrillSession = {
+      id,
+      sessionId: req.sessionId,
+      purpose: req.purpose,
+      familyIds: req.familyIds,
+      setId: id,
+      levels,
+      openCategories,
+      focus,
+      trialsPlanned: req.familyIds.length > 1 ? Math.min(10, trials) : trials,
+      startedAt: this.#now().toISOString(),
+      finishedAt: null,
+    };
+    this.repos.srs.createDrill(session, req.warmupItemId);
+    return session;
+  }
+
+  /** One transaction: a failure part-way leaves no card without its revlog, no half-recorded set. */
+  recordTrials(drillSessionId: string, trials: Parameters<SrsPort["recordTrials"]>[1]): void {
+    tx(this.repos.db, () => this.#recordTrials(drillSessionId, trials));
+  }
+  #recordTrials(drillSessionId: string, trials: Parameters<SrsPort["recordTrials"]>[1]): void {
+    const drill = this.repos.srs.drill(drillSessionId);
+    if (drill === null) throw notFound(`drill session ${drillSessionId}`);
+    for (const t of trials)
+      if (!drill.familyIds.includes(t.familyId))
+        throw badRequest(`trial ${t.idx} is not of this set's families`);
+    this.repos.srs.saveTrials(drillSessionId, trials);
+  }
+
+  /** One transaction: a failure part-way leaves no card without its revlog, no half-recorded set. */
+  finishDrill(drillSessionId: string): Omit<DrillFinish, "streak"> {
+    return tx(this.repos.db, () => this.#finishDrill(drillSessionId));
+  }
+  #finishDrill(drillSessionId: string): Omit<DrillFinish, "streak"> {
+    const drill = this.repos.srs.drill(drillSessionId);
+    if (drill === null) throw notFound(`drill session ${drillSessionId}`);
+    const now = this.#now();
+    const at = now.toISOString();
+    const trials = this.repos.srs.trials(drillSessionId).filter((t) => !t.response.skipped);
+    const meanCredit = trials.length === 0 ? 0 : trials.reduce((s, t) => s + t.credit, 0) / trials.length;
+    const medianRtMs = median(trials.map((t) => t.rtMs));
+    const reviews: SrsReviewResult[] = [];
+    const evidence: Omit<Evidence, "at" | "day">[] = [];
+    if (drill.finishedAt === null && trials.length > 0) {
+      // Category statistics and confusion pairs live in family_state (contracts §7.1).
+      for (const familyId of drill.familyIds) {
+        const mine = trials.filter((t) => t.familyId === familyId);
+        if (mine.length === 0) continue;
+        const def = this.content.family(familyId);
+        const row = this.repos.srs.family(familyId) ?? {
+          familyId,
+          level: 1,
+          promoDay: null,
+          categoryStats: {},
+          confusion: {},
+          blockedRemaining: 0,
+          compositeId: null,
+          graduatedAt: null,
+          updatedAt: at,
+        };
+        const stats = structuredClone(row.categoryStats);
+        const confusion = { ...row.confusion };
+        for (const t of mine) {
+          const s = stats[t.category] ?? { n: 0, hits: 0, lastAt: null };
+          stats[t.category] = { n: s.n + 1, hits: s.hits + t.credit, lastAt: t.at };
+          if (t.confusion !== null) {
+            const key = `${t.confusion[0]}|${t.confusion[1]}`;
+            confusion[key] = (confusion[key] ?? 0) + 1;
+          }
+        }
+        this.repos.srs.saveFamily({ ...row, categoryStats: stats, confusion, updatedAt: at });
+
+        const mean = mine.reduce((s, t) => s + t.credit, 0) / mine.length;
+        const played = Math.round(mine.reduce((s, t) => s + t.level, 0) / mine.length);
+        const limit =
+          (def?.levels[played - 1] as { replays?: number } | undefined)?.replays ?? Number.POSITIVE_INFINITY;
+        const extraReplays = mine.reduce((s, t) => s + Math.max(0, t.replays - limit), 0);
+        const cents = mine.map((t) => t.centsError).filter((c): c is number => c !== null);
+        const outcome = {
+          meanCredit: mean,
+          medianRtMs: median(mine.map((t) => t.rtMs)),
+          extraReplays,
+          hintRung: 0 as const,
+          revealed: false,
+          playedLevel: played,
+          meanAbsCents: cents.length === 0 ? null : cents.reduce((s, c) => s + Math.abs(c), 0) / cents.length,
+        };
+        if (drill.familyIds.length === 1 && this.repos.srs.card(familyId) !== null) {
+          if (drill.purpose === "srs" || drill.purpose === "repair" || drill.purpose === "keepalive") {
+            reviews.push(this.service.review({ cardId: familyId, drillSessionId, outcome }, now));
+          } else if (drill.purpose !== "anchor") {
+            const source =
+              drill.purpose === "gym"
+                ? "gym"
+                : drill.purpose === "checkpoint"
+                  ? "checkpoint"
+                  : drill.purpose === "lesson"
+                    ? "lesson"
+                    : "practice";
+            const r = this.service.otherWork(
+              {
+                source,
+                familyId: familyId as FamilyId,
+                meanCredit: mean,
+                medianRtMs: outcome.medianRtMs,
+                playedLevel: played,
+              },
+              now,
+            );
+            if (r.reviewed !== null) reviews.push(r.reviewed);
+          }
+        }
+        // Evidence for the family's skills: SRS set 1.0 (+0.5 per category with ≥ 2 trials), gym and anchor sets 0.5.
+        const perCategory = new Map<string, number>();
+        for (const t of mine) perCategory.set(t.category, (perCategory.get(t.category) ?? 0) + 1);
+        const bonus = [...perCategory.values()].filter((n) => n >= 2).length;
+        const sourceKind: Evidence["sourceKind"] =
+          drill.purpose === "gym" ? "gym-set" : drill.purpose === "anchor" ? "anchor-set" : "srs-set";
+        for (const sw of def?.skills ?? [])
+          evidence.push({
+            skillId: skillOf(sw.skill) as Evidence["skillId"],
+            category: sw.skill.includes("/") ? sw.skill : null,
+            score: mean,
+            weight: evidenceWeight(sourceKind, sourceKind === "srs-set" ? bonus : 0) * sw.w,
+            sourceKind,
+            sourceId: `${drillSessionId}#${familyId}`,
+          });
+      }
+      // A composite set reviews the composite card once, with each member's trial credits.
+      if (drill.familyIds.length > 1 && drill.purpose === "srs") {
+        const mix = this.content.family(drill.familyIds[0] as string)?.mix;
+        const compositeId = mix === undefined || mix === null ? null : COMPOSITE_IDS[mix];
+        if (compositeId !== null && this.repos.srs.card(compositeId) !== null)
+          reviews.push(
+            this.service.review(
+              {
+                cardId: compositeId,
+                drillSessionId,
+                outcome: {
+                  meanCredit,
+                  medianRtMs,
+                  extraReplays: 0,
+                  hintRung: 0,
+                  revealed: false,
+                  playedLevel: null,
+                  meanAbsCents: null,
+                },
+                trials: trials.map((t) => ({ familyId: t.familyId, credit: t.credit })),
+              },
+              now,
+            ),
+          );
+      }
+      this.repos.srs.finishDrill(drillSessionId, at, trials.length, meanCredit);
+      this.#touched();
+    }
+    const added = this.services.mastery.addEvidence(evidence);
+    if (added.length > 0)
+      this.services.cando.evaluate({
+        skills: added.map((e) => e.skillId),
+        evidence: { kind: "set", id: drillSessionId },
+      });
+    const session = this.repos.srs.drill(drillSessionId) as DrillSession & {
+      warmupItemId: string | null;
+      meanCredit: number | null;
+    };
+    const { warmupItemId: _w, meanCredit: _m, ...dto } = session;
+    return { session: dto, meanCredit, medianRtMs, reviews, evidence: added };
+  }
+
+  /** One transaction: a failure part-way leaves no card without its revlog, no half-recorded set. */
+  seedLesson(lessonId: string): { cardId: string; status: SrsCard["status"] }[] {
+    return tx(this.repos.db, () => this.#seedLesson(lessonId));
+  }
+  #seedLesson(lessonId: string): { cardId: string; status: SrsCard["status"] }[] {
+    const now = this.#now();
+    const lesson = this.content.lessonDef(lessonId);
+    const families = this.content
+      .families()
+      .filter((f) => f.unlock.lesson === lessonId)
+      .map((f) => f.id);
+    // Concept cards get their first rating from the lesson step that seeded them: its first-attempt score.
+    const attempts = this.repos.lessons.attemptsOfLesson(lessonId).filter((a) => !a.disputed);
+    const conceptScores: Partial<Record<FamilyId, number>> = {};
+    for (const step of lesson?.steps ?? []) {
+      const links = step.exercise?.srs ?? [];
+      for (const link of links) {
+        if (link.family === undefined || link.mode !== "seed") continue;
+        const first = attempts.find((a) => a.stepId === step.id && a.attemptNo === 1);
+        if (first !== undefined) conceptScores[link.family] = first.adjusted;
+      }
+    }
+    const terms = (lesson?.terms ?? [])
+      .filter((t) => t.card !== undefined)
+      .map((t) => {
+        const first = attempts.find((a) => a.stepId === t.step && a.attemptNo === 1);
+        return { factId: t.id as string, score: first?.adjusted ?? 1 };
+      });
+    const r = this.service.seedFromLesson({ lessonId, families, conceptScores, terms }, now);
+    this.service.recallOpenedLadders(now);
+    this.#touched();
+    return [
+      ...r.active.map((cardId) => ({ cardId, status: "active" as const })),
+      ...r.deferred.map((cardId) => ({ cardId, status: "deferred" as const })),
+    ];
+  }
+
+  /** One transaction: a failure part-way leaves no card without its revlog, no half-recorded set. */
+  afterStep(input: StepReviewInput): SrsReviewResult[] {
+    return tx(this.repos.db, () => this.#afterStep(input));
+  }
+  #afterStep(input: StepReviewInput): SrsReviewResult[] {
+    if (!input.firstAttempt || input.disputed) return [];
+    const site = this.content.exercise(input.exerciseId);
+    const out: SrsReviewResult[] = [];
+    for (const link of site?.exercise.srs ?? []) {
+      if (link.family === undefined || link.mode === "evidence-only" || link.mode === "seed") continue;
+      const r = this.service.otherWork(
+        {
+          source: "lesson",
+          familyId: link.family,
+          meanCredit: input.adjustedScore,
+          medianRtMs: 0,
+          playedLevel: null,
+        },
+        this.#now(),
+      );
+      if (r.reviewed !== null) out.push(r.reviewed);
+    }
+    if (out.length > 0) this.#touched();
+    return out;
+  }
+
+  recall(cardId: string): { retrievability: number; desiredRetention: number } | null {
+    const now = this.#now().getTime();
+    if (this.#recall === null || Math.abs(this.#recall.at - now) > 1000) {
+      const map = new Map<string, { retrievability: number; desiredRetention: number }>();
+      for (const r of this.service.cardRecalls(new Date(now)))
+        map.set(r.cardId, { retrievability: r.retrievability, desiredRetention: r.desiredRetention });
+      this.#recall = { at: now, map };
+    }
+    return this.#recall.map.get(cardId) ?? null;
+  }
+
+  forecast(): number[] {
+    const now = this.#now();
+    return forecastLoad(this.service.reviewItems(now), this.service.srs.dayOf(now), 7);
+  }
+}
+
+// --- the planner's ports ------------------------------------------------------------------------------
+
+const isTranscriptionSlot = (id: string) => id.startsWith("GYM.") || id.startsWith("CF-T.");
+
+export class CourseAdapter implements SessionPlanCoursePort {
+  constructor(
+    private readonly repos: Repos,
+    private readonly content: ContentIndex,
+    private readonly services: Services,
+  ) {}
+  #title(id: string): string {
+    return (
+      this.content.lessonDef(id)?.title ??
+      this.content.lessonSite(id)?.meta.title ??
+      this.content.checkpointMeta(id)?.title ??
+      this.content.capstoneMeta(id.replace(/\.S\d+$/, ""))?.title ??
+      id
+    );
+  }
+  #kind(id: string): CourseItem["kind"] {
+    if (this.content.lessonSite(id) !== null) return "lesson";
+    if (this.content.checkpointMeta(id) !== null) return "checkpoint";
+    return "capstone";
+  }
+  next(): CourseItem | null {
+    const g = this.services.gates;
+    for (const id of this.content.defaultOrder()) {
+      if (isTranscriptionSlot(id) || g.sessionDone(id) || !g.sessionOpen(id)) continue;
+      return { id: id as SessionId, kind: this.#kind(id), title: this.#title(id) };
+    }
+    const track = g.nextMapItem();
+    return track === null || isTranscriptionSlot(track)
+      ? null
+      : { id: track, kind: this.#kind(track), title: this.#title(track) };
+  }
+  history(): SessionId[] {
+    const done: { id: string; at: string }[] = [];
+    for (const p of this.repos.lessons.allProgress())
+      if (p.status === "completed") done.push({ id: p.lessonId, at: p.completedAt ?? p.updatedAt });
+    for (const a of this.repos.checkpoints.allAttempts())
+      if ((a.passed || a.softPass) && a.finishedAt !== null) done.push({ id: a.cpId, at: a.finishedAt });
+    for (const c of this.repos.capstones.all())
+      for (const [i, s] of c.sessions.entries()) done.push({ id: s, at: `${c.updatedAt}#${i}` });
+    for (const g of this.repos.gym.list()) done.push({ id: g.gymId, at: g.at });
+    const seen = new Set<string>();
+    return done
+      .sort((x, y) => x.at.localeCompare(y.at))
+      .filter((x) => !seen.has(x.id) && seen.add(x.id))
+      .map((x) => x.id as SessionId);
+  }
+  nextCftSession(): SessionId | null {
+    if (!this.services.gates.lessonCompleted("U15.L01")) return null;
+    const ids = this.content.capstoneSessionIds("CF-T");
+    const done = new Set(this.repos.capstones.get("CF-T")?.sessions ?? []);
+    return (ids.find((s) => !done.has(s)) as SessionId | undefined) ?? null;
+  }
+  gymCount(): number {
+    return this.repos.gym.list().length;
+  }
+  hasAudioProject(): boolean {
+    return this.repos.transcriptions.list().some((t) => t.sourceKind === "own-audio" && t.status !== "done");
+  }
+  lessonProgress(id: LessonId) {
+    if (this.content.lessonSite(id) === null) return null;
+    const p = this.services.gates.lessonProgress(id);
+    return { status: p.status, currentStep: p.currentStep, splitPart: p.splitPart };
+  }
+  lessonScaledMinutes(id: LessonId): number {
+    const def = this.content.lessonDef(id);
+    return def === null ? 0 : lessonBudget(def).scaledMinutes;
+  }
+  lastCompletedLesson(): LessonId | null {
+    const done = this.repos.lessons
+      .allProgress()
+      .filter((p) => p.status === "completed")
+      .sort((a, b) => (a.completedAt ?? "").localeCompare(b.completedAt ?? ""));
+    return done.at(-1)?.lessonId ?? null;
+  }
+  alternatives(): SessionPlan["alternatives"] {
+    const out: SessionPlan["alternatives"] = [];
+    for (const c of this.content.capstones()) {
+      const st = this.services.gates.capstoneStatus(c.id);
+      if (st.status !== "open" && st.status !== "in_progress") continue;
+      const next = this.content.capstoneSessionIds(c.id)[st.sessionsDone];
+      if (next !== undefined) out.push({ kind: "capstone", mapItemId: next as SessionId, title: c.title });
+    }
+    const gym = `GYM.${String(this.gymCount() + 1).padStart(2, "0")}` as SessionId;
+    out.push({ kind: "gym", mapItemId: gym, title: "Transcription Gym" });
+    return out;
+  }
+}
+
+export class PlanLearnerAdapter implements SessionPlanLearnerPort {
+  constructor(private readonly repos: Repos) {}
+  profile() {
+    const p = this.repos.profile.get();
+    return { targetMinutes: p.targetMinutes, timeZone: p.timezone, rolloverHour: p.rolloverHour };
+  }
+  lastQualifyingDayBefore(day: string): string | null {
+    return this.repos.streak.lastQualifiedDay(day);
+  }
+  lastCanDo() {
+    return this.repos.cando.current().at(-1)?.candoId ?? null;
+  }
+  lastSketchId(): string | null {
+    return this.repos.sketches.latest()?.id ?? null;
+  }
+  tutorNote(): string | null {
+    const note = this.repos.tutor.notes({ limit: 1 })[0];
+    return note === undefined ? null : note.text;
+  }
+}
+
+export interface SrsWiring {
+  srs: SrsAdapter;
+  planner: SessionPlannerPort;
+}
+
+/** Builds the SRS service and the planner over this server's storage. */
+export async function createSrsWiring(d: {
+  repos: Repos;
+  content: ContentIndex;
+  services: Services;
+  clock: Clock;
+}): Promise<SrsWiring> {
+  const catalog = new CatalogAdapter(d.content, d.services);
+  const service = await SrsService.create({
+    store: d.repos.srs,
+    state: settingsStatePort(d.repos, d.clock),
+    catalog,
+    learner: new LearnerAdapter(d.repos, d.content, d.services),
+  });
+  const srs = new SrsAdapter(service, d.repos, d.content, d.services, catalog, d.clock);
+  const plan = new SessionPlanService({
+    srs: service,
+    course: new CourseAdapter(d.repos, d.content, d.services),
+    learner: new PlanLearnerAdapter(d.repos),
+  });
+  return {
+    srs,
+    planner: { today: ({ targetMinutes }) => plan.today(d.clock.now(), targetMinutes) },
+  };
+}

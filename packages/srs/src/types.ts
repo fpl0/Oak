@@ -159,6 +159,11 @@ export interface ReviewItem {
   deferUntilDay?: number;
   /** A card that has never been reviewed (a released deck card): it fills only the room the due items leave. */
   fresh?: boolean;
+  /**
+   * The interval the card returns at after its next review when a cap binds it (an active family's 7-day
+   * cadence). The intake forecast counts every return inside its window, not just the next one.
+   */
+  repeatDays?: number;
   skills: SkillId[];
 }
 export interface PlannedItem {

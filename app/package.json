@@ -1,1 +1,15 @@
-{ "name": "@oak/app", "private": true, "version": "0.0.0", "type": "module" }
+{
+  "name": "@oak/app",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "cd .. && node node_modules/vite/bin/vite.js --config app/vite.config.ts",
+    "build": "cd .. && node node_modules/vite/bin/vite.js build --config app/vite.config.ts",
+    "preview": "cd .. && node node_modules/vite/bin/vite.js preview --config app/vite.config.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test src",
+    "e2e": "playwright test -c playwright.config.ts",
+    "e2e:preview": "E2E_MODE=preview playwright test -c playwright.config.ts"
+  }
+}

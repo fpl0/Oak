@@ -1,0 +1,392 @@
+/* The Music Workbench (ux §3.4). Colours are the theme tokens (app/src/ui/theme/tokens.css); fallbacks keep
+   the standalone e2e page readable without the app shell. */
+.oak-workbench {
+  /* The app's tokens are --oak-*; the bare names are the standalone e2e page's. Paper is the last resort. */
+  --wb-surface: var(--oak-surface, var(--surface, #fffdf8));
+  --wb-surface-2: var(--oak-surface-2, var(--surface-2, #efe9de));
+  --wb-border: var(--oak-border, var(--border, #ddd3c3));
+  --wb-text: var(--oak-text, var(--text, #1f1a14));
+  --wb-text-2: var(--oak-text-2, var(--text-2, #5c5247));
+  --wb-text-3: var(--oak-text-3, var(--text-3, #8a7f72));
+  --wb-accent: var(--oak-accent, var(--accent, #2f6b45));
+  --wb-on-accent: var(--oak-on-accent, #ffffff);
+  --wb-link: var(--oak-link, var(--link, #2f6b45));
+  --wb-issue: var(--oak-issue, var(--issue, #b4532a));
+  --wb-lane-in: var(--oak-lane-in, var(--lane-in, rgba(47, 107, 69, 0.06)));
+  --wb-selection: var(--oak-selection, rgba(47, 107, 69, 0.18));
+  --wb-font-code: var(--oak-font-code, ui-monospace, "SF Mono", Menlo, monospace);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--wb-text);
+  min-width: 0;
+  position: relative;
+}
+.oak-workbench:focus-within {
+  outline: none;
+}
+.oak-wb-editor {
+  border: 1px solid var(--wb-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--wb-surface);
+  /* Strudel's hap outline uses var(--foreground) (spike S2) */
+  --foreground: var(--wb-text);
+}
+.oak-wb-editor:focus-within {
+  /* ux §7.9 / tokens: 2 px accent ring with a 2 px gap. */
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 2px;
+}
+.oak-editor-root {
+  min-height: 3em;
+}
+.oak-transport {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 4px 8px;
+  border: 1px solid var(--wb-border);
+  border-radius: 6px;
+  background: var(--wb-surface-2);
+  font-size: 13px;
+}
+.oak-transport button {
+  font: inherit;
+  cursor: pointer;
+}
+.oak-play {
+  width: 36px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--wb-border);
+  background: var(--wb-surface);
+  color: var(--wb-accent);
+}
+.oak-play[aria-pressed="true"] {
+  background: var(--wb-accent);
+  border-color: var(--wb-accent);
+  color: var(--wb-on-accent);
+}
+.oak-counter {
+  font-family: var(--wb-font-code);
+  font-variant-numeric: tabular-nums;
+  min-width: 6ch;
+}
+.oak-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.oak-track-chip {
+  display: inline-flex;
+  border: 1px solid var(--wb-border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.oak-track-chip button {
+  border: 0;
+  background: transparent;
+  padding: 2px 8px;
+  color: var(--wb-text);
+}
+.oak-track-chip button + button {
+  border-left: 1px solid var(--wb-border);
+  padding: 2px 6px;
+}
+.oak-track-chip.muted button:first-child,
+.oak-track-chip.silenced button:first-child {
+  text-decoration: line-through;
+  color: var(--wb-text-3);
+}
+.oak-track-chip.solo button:last-child {
+  background: var(--wb-accent);
+  color: var(--wb-on-accent);
+}
+.oak-link-button {
+  border: 0;
+  background: none;
+  color: var(--wb-link);
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.oak-badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--wb-surface-2);
+  color: var(--wb-text-2);
+  border: 1px solid var(--wb-border);
+}
+.oak-muted {
+  color: var(--wb-text-3);
+}
+.oak-banner {
+  border: 1px solid var(--wb-issue);
+  border-left-width: 4px;
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: var(--wb-surface);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.oak-banner p {
+  margin: 0;
+}
+.oak-banner strong {
+  color: var(--wb-issue);
+}
+.oak-banner-detail {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--wb-text-2);
+}
+.oak-banner-detail summary {
+  cursor: pointer;
+  width: max-content;
+}
+.oak-banner-detail code {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--wb-font-code);
+  white-space: pre-wrap;
+}
+.oak-notice {
+  margin: 0;
+  border: 1px dashed var(--wb-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 14px;
+  color: var(--wb-text-2);
+  background: var(--wb-surface);
+}
+.oak-wb-views {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.oak-tabs {
+  display: flex;
+  gap: 4px;
+}
+.oak-tabs [role="tab"] {
+  border: 1px solid var(--wb-border);
+  background: var(--wb-surface-2);
+  border-radius: 6px 6px 0 0;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.oak-tabpanel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.oak-tabs [role="tab"] {
+  color: var(--wb-text-2);
+  font: inherit;
+  font-size: 13px;
+}
+.oak-tabs [role="tab"][aria-selected="true"] {
+  color: var(--wb-text);
+  font-weight: 600;
+  background: var(--wb-surface);
+  border-bottom-color: var(--wb-surface);
+}
+.oak-roll,
+.oak-staff,
+.oak-keyboard {
+  position: relative;
+  border: 1px solid var(--wb-border);
+  border-radius: 6px;
+  background: var(--wb-surface);
+  min-width: 0;
+}
+.oak-view-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 18px;
+  padding: 2px 6px;
+}
+.oak-staff-pager {
+  margin-right: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--wb-text-2);
+  font-variant-numeric: tabular-nums;
+}
+.oak-staff-pager .oak-link-button {
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 4px;
+  text-decoration: none;
+}
+.oak-staff-pager .oak-link-button:disabled {
+  color: var(--wb-text-3);
+  cursor: default;
+}
+.oak-roll-canvas {
+  display: block;
+  width: 100%;
+  cursor: crosshair;
+}
+.oak-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--wb-text);
+  color: var(--wb-surface);
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  z-index: 2;
+}
+.oak-notes-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.oak-notes-table th,
+.oak-notes-table td {
+  text-align: left;
+  padding: 2px 6px;
+  border-top: 1px solid var(--wb-border);
+}
+.oak-staff {
+  padding: 0 4px 4px;
+  color: var(--wb-text);
+}
+.oak-staff-host svg {
+  max-width: 100%;
+}
+.oak-staff-host .abcjs-note,
+.oak-staff-host .abcjs-rest {
+  cursor: pointer;
+}
+.oak-staff-host .oak-playing {
+  fill: var(--wb-accent);
+  color: var(--wb-accent);
+}
+.oak-staff-host .oak-hover {
+  fill: var(--wb-link);
+  filter: drop-shadow(0 0 2px var(--wb-link));
+}
+.oak-staff-host .oak-selected {
+  fill: var(--wb-link);
+  filter: drop-shadow(0 0 3px var(--wb-link));
+}
+.oak-staff-host .oak-issue {
+  fill: var(--wb-issue);
+}
+.oak-keyboard {
+  padding: 4px;
+}
+.oak-key {
+  cursor: pointer;
+}
+.oak-feedback {
+  border: 1px solid var(--wb-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: var(--wb-surface);
+  font-size: 14px;
+}
+.oak-facets {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0;
+  margin: 6px 0;
+}
+.oak-chip {
+  border: 1px solid var(--wb-border);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 12px;
+}
+.oak-chip.ok {
+  border-color: var(--wb-accent);
+  color: var(--wb-accent);
+}
+.oak-issues {
+  margin: 6px 0;
+  padding-left: 1.4em;
+}
+.oak-issue-row {
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  text-align: left;
+  color: var(--wb-text);
+  cursor: pointer;
+  font: inherit;
+}
+[data-severity="error"] .oak-issue-where {
+  color: var(--wb-issue);
+}
+.oak-issue-row:hover .oak-issue-where {
+  text-decoration: underline;
+}
+.oak-feedback-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.oak-ab {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.oak-ab-now {
+  font-weight: 600;
+  font-size: 16px;
+}
+.oak-workbench--mini .oak-transport {
+  min-height: 32px;
+}
+@media (min-width: 1100px) {
+  .oak-workbench--full.oak-layout--stacked {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "editor views"
+      "transport views"
+      "toolbar views"
+      "banner views"
+      "notice views"
+      "feedback views";
+    align-items: start;
+  }
+  .oak-workbench--full.oak-layout--stacked > .oak-wb-editor {
+    grid-area: editor;
+  }
+  .oak-workbench--full.oak-layout--stacked > .oak-transport {
+    grid-area: transport;
+  }
+  .oak-workbench--full.oak-layout--stacked > .oak-wb-toolbar {
+    grid-area: toolbar;
+  }
+  .oak-workbench--full.oak-layout--stacked > .oak-banner {
+    grid-area: banner;
+  }
+  .oak-workbench--full.oak-layout--stacked > .oak-notice {
+    grid-area: notice;
+  }
+  .oak-workbench--full.oak-layout--stacked > .oak-wb-views {
+    grid-area: views;
+  }
+  .oak-workbench--full.oak-layout--stacked > .oak-feedback {
+    grid-area: feedback;
+  }
+}

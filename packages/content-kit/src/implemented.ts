@@ -23,7 +23,12 @@ export interface Implemented {
   customRules: readonly string[];
 }
 
-/** Wave 1 (the platform, exemplar lessons U00 to U03, C0 and C1). */
+/**
+ * Wave 1 (the platform, exemplar lessons U00 to U03, C0 and C1): what @oak/grader grades and @oak/notation
+ * supports. `transcribe-step` and `staff-write` (with the `staff-input` answer, @oak/notation's staff
+ * editing helpers) joined at integration, once gradeExercise handled all kinds; the app's answer UIs are
+ * Wave 2 for every kind alike.
+ */
 export const IMPLEMENTED: Implemented = {
   exerciseKinds: [
     "predict",
@@ -40,6 +45,8 @@ export const IMPLEMENTED: Implemented = {
     "tap",
     "sing",
     "dictation",
+    "transcribe-step",
+    "staff-write",
     "compose-brief",
     "listen",
     "all",
@@ -86,6 +93,7 @@ export const IMPLEMENTED: Implemented = {
     "click-code",
     "click-staff",
     "click-roll",
+    "staff-input",
   ],
   customRules: [],
 };

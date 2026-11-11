@@ -3,8 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "NotationModel pipeline: quantizer, speller, ABC emitter with stable note IDs. Isomorphic.",
+  "description": "NotationModel pipeline: quantizer, speller, ABC emitter with stable note IDs. Isomorphic; ./render is a lazy abcjs helper for the browser.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./render": "./src/render.dom.ts"
   }
 }

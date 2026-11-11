@@ -303,6 +303,11 @@ export interface OakStrudelOptions {
   panicKey?: boolean;
   /** Wire `unlock()` to the first `pointerdown`, `keydown` or `touchstart` on the document. Default true. */
   autoUnlock?: boolean;
+  /**
+   * Calm highlighting (ux §7.6: reduced motion, or the learner's choice), read every frame: code tokens keep a
+   * steady outline for the whole cycle they play in instead of retriggering per hap. Default: never calm.
+   */
+  calmHighlight?: () => boolean;
 }
 
 // --- additions to the Foundation surface (reported in the Wave 1 result) ---------------------------

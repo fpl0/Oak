@@ -75,29 +75,78 @@ export function forecastLoad(items: readonly ReviewItem[], today: number, days: 
   return load;
 }
 
+/** Which work a forecast measures: everything, the sets (family, concept, composite), or fact cards. */
+export type IntakeClass = "all" | "sets" | "facts";
+const inClass = (it: ReviewItem, cls: IntakeClass) =>
+  cls === "all" || (cls === "facts" ? it.cls === "fact" : it.cls !== "fact");
+/** The share of the warm-up budget a class of work may plan into on a full day (`factShare`). */
+export function classShare(cls: IntakeClass, cfg: Pick<GovernorConfig, "factShare">): number {
+  return cls === "all" ? 1 : cls === "facts" ? cfg.factShare : 1 - cfg.factShare;
+}
 /**
- * The intake throttle on the 7-day forecast. "Mean" is seconds per expected session: the window's total
- * divided by the sessions it holds at the learner's weekly goal, so a day off does not look like spare room.
- * `extraSec` adds work that is about to be created (to ask "would it still fit?").
+ * Planning cost of an item in the forecast: its own seconds plus its half of the listen-only block that
+ * follows every second perceptual set, and the blocked-intro sets still to come for a new family.
+ */
+export function forecastCost(it: ReviewItem): number {
+  if (it.cls === "fact" || !it.perceptual) return it.sec;
+  const listen = (GOVERNOR.listenBlockSec[0] + GOVERNOR.listenBlockSec[1]) / 4;
+  return (it.sec + listen) * (it.blockedIntroPending ? 2 : 1);
+}
+
+/**
+ * The intake throttle on the 7-day forecast (contracts §7.4). "Mean" is seconds per expected session: the
+ * window's total divided by the sessions it holds at the learner's weekly goal, so a day off does not look
+ * like spare room. With `cls` "sets" or "facts" the forecast covers that class only and the thresholds
+ * apply to its share of the budget, which is how spike S7 made the throttle bind before the warm-up
+ * overflows (a total-only throttle lets one class fill the other's room). `extraSec` adds work that is
+ * about to be created (to ask "would it still fit?").
  */
 export function intakeForecast(
   items: readonly ReviewItem[],
   today: number,
   cfg: GovernorConfig,
   extraSec = 0,
+  cls: IntakeClass = "all",
 ): IntakeForecast {
-  const usable = cfg.quiet ? items.filter((it) => !it.mic) : items;
-  const load = forecastLoad(usable, today, cfg.forecastDays);
+  const usable = items.filter((it) => inClass(it, cls) && !(cfg.quiet && it.mic));
+  const load = new Array<number>(cfg.forecastDays + 1).fill(0);
+  for (const it of usable) {
+    const step = it.repeatDays !== undefined && it.repeatDays >= 1 ? it.repeatDays : Number.POSITIVE_INFINITY;
+    for (
+      let d = Math.max(it.dueDay, it.deferUntilDay ?? it.dueDay, today) - today;
+      d <= cfg.forecastDays;
+      d += step
+    ) {
+      load[d] = (load[d] ?? 0) + forecastCost(it);
+    }
+  }
   const sessions = Math.max(1, (load.length * Math.min(7, Math.max(1, cfg.sessionsPerWeek))) / 7);
   const meanSec = (load.reduce((a, b) => a + b, 0) + extraSec) / sessions;
   const maxDaySec = Math.max(0, ...load);
+  const budget = classShare(cls, cfg) * cfg.budgetSec;
   const state =
-    meanSec > cfg.intakeMeanHigh * cfg.budgetSec || maxDaySec > cfg.intakeDayHigh * cfg.budgetSec
+    meanSec > cfg.intakeMeanHigh * budget || maxDaySec > cfg.intakeDayHigh * budget
       ? "closed"
-      : meanSec < cfg.intakeMeanLow * cfg.budgetSec
+      : meanSec < cfg.intakeMeanLow * budget
         ? "open"
         : "hold";
   return { state, meanSec, maxDaySec, load };
+}
+/**
+ * Mic sets a session can hold are capped at `maxMicSets` (0 in Quiet mode). A production family is admitted
+ * only while the 7-day forecast of mic sets per session stays under that cap × `intakeMeanHigh`, or the
+ * mic sets would overflow every day however much time is left.
+ */
+export function micRoom(items: readonly ReviewItem[], today: number, cfg: GovernorConfig): boolean {
+  if (cfg.quiet || cfg.maxMicSets === 0) return false;
+  let n = 0;
+  for (const it of items) {
+    if (!it.mic || it.cls === "fact") continue;
+    const d = Math.max(it.dueDay, it.deferUntilDay ?? it.dueDay, today) - today;
+    if (d <= cfg.forecastDays) n += it.blockedIntroPending ? 2 : 1;
+  }
+  const sessions = Math.max(1, ((cfg.forecastDays + 1) * Math.min(7, Math.max(1, cfg.sessionsPerWeek))) / 7);
+  return n / sessions < cfg.maxMicSets * cfg.intakeMeanHigh;
 }
 
 /**
@@ -108,30 +157,40 @@ export function intakeForecast(
  */
 export function admitNew(
   items: readonly ReviewItem[],
-  waiting: { families: number; facts: number },
+  waiting: {
+    families: number;
+    facts: number /** The oldest waiting family needs the microphone. */;
+    nextFamilyMic?: boolean;
+  },
   activePerceptual: number,
   today: number,
   cfg: GovernorConfig,
 ): { families: number; facts: number } {
-  if (intakeForecast(items, today, cfg).state !== "open") return { families: 0, facts: 0 };
+  const setsOpen = intakeForecast(items, today, cfg, 0, "sets").state === "open";
+  const factsOpen = intakeForecast(items, today, cfg, 0, "facts").state === "open";
   const slots = Math.max(0, cfg.maxActivePerceptual - activePerceptual);
+  const micOk = !waiting.nextFamilyMic || micRoom(items, today, cfg);
   return {
-    families: Math.max(0, Math.min(waiting.families, cfg.releasePerDay.families, slots)),
-    facts: Math.max(0, Math.min(waiting.facts, cfg.releasePerDay.facts)),
+    families:
+      setsOpen && micOk ? Math.max(0, Math.min(waiting.families, cfg.releasePerDay.families, slots)) : 0,
+    facts: factsOpen ? Math.max(0, Math.min(waiting.facts, cfg.releasePerDay.facts)) : 0,
   };
 }
 
 /**
- * Cards a lesson is about to seed: how many start `active` and how many are created `deferred`. Everything
- * is deferred while the forecast is closed (mean over 0.85 × budget, or one day over 1.25 × budget).
- * Otherwise the daily caps apply (2 new families, 6 new fact cards, counting what today already took) and
- * perceptual families stop at the active cap.
+ * Cards a lesson is about to seed: how many start `active` and how many are created `deferred`. Families are
+ * deferred while the set forecast is closed (mean over 0.85 × the set share of the budget, or one day over
+ * 1.25 × it), fact cards while the fact forecast is closed. Otherwise the daily caps apply (2 new families,
+ * 6 new fact cards, counting what today already took), perceptual families stop at the active cap and
+ * production (mic) families also need mic room (`micRoom`).
  */
 export function admitCreated(args: {
   items: readonly ReviewItem[];
   today: number;
-  /** Perceptual or production families the lesson seeds. */
+  /** Perceptual families the lesson seeds (no microphone). */
   perceptual: number;
+  /** Production families the lesson seeds (they need the microphone; also capped by `micRoom`). */
+  production?: number;
   /** Concept families the lesson seeds. */
   concept: number;
   facts: number;
@@ -139,25 +198,35 @@ export function admitCreated(args: {
   /** New cards that already started today (seeded or released). */
   newToday: { families: number; facts: number };
   cfg: GovernorConfig;
-}): { perceptual: number; concept: number; facts: number; closed: boolean } {
+}): { perceptual: number; production: number; concept: number; facts: number; closed: boolean } {
   const { cfg } = args;
-  if (intakeForecast(args.items, args.today, cfg).state === "closed") {
-    return { perceptual: 0, concept: 0, facts: 0, closed: true };
-  }
-  let familyRoom = Math.max(0, cfg.newPerDay.families - args.newToday.families);
-  const slots = Math.max(0, cfg.maxActivePerceptual - args.activePerceptual);
+  const setsClosed = intakeForecast(args.items, args.today, cfg, 0, "sets").state === "closed";
+  const factsClosed = intakeForecast(args.items, args.today, cfg, 0, "facts").state === "closed";
+  let familyRoom = setsClosed ? 0 : Math.max(0, cfg.newPerDay.families - args.newToday.families);
+  let slots = Math.max(0, cfg.maxActivePerceptual - args.activePerceptual);
   const perceptual = Math.min(args.perceptual, familyRoom, slots);
   familyRoom -= perceptual;
+  slots -= perceptual;
+  const production =
+    (args.production ?? 0) > 0 && micRoom(args.items, args.today, cfg)
+      ? Math.min(args.production ?? 0, familyRoom, slots, 1)
+      : 0;
+  familyRoom -= production;
   const concept = Math.min(args.concept, familyRoom);
-  const facts = Math.min(args.facts, Math.max(0, cfg.newPerDay.facts - args.newToday.facts));
-  return { perceptual, concept, facts, closed: false };
+  const facts = factsClosed
+    ? 0
+    : Math.min(args.facts, Math.max(0, cfg.newPerDay.facts - args.newToday.facts));
+  return { perceptual, production, concept, facts, closed: setsClosed && factsClosed };
 }
 
 /**
  * The per-lesson limit on fact cards (decision 2: 2). The first `max` tested terms become cards; the rest
  * stay glossary entries.
  */
-export function capLessonFacts<T>(tested: readonly T[], cfg: GovernorConfig): { cards: T[]; glossaryOnly: T[] } {
+export function capLessonFacts<T>(
+  tested: readonly T[],
+  cfg: GovernorConfig,
+): { cards: T[]; glossaryOnly: T[] } {
   const max = cfg.maxFactCardsPerLesson ?? tested.length;
   return { cards: tested.slice(0, max), glossaryOnly: tested.slice(max) };
 }
@@ -168,7 +237,9 @@ export function capLessonFacts<T>(tested: readonly T[], cfg: GovernorConfig): { 
  * Whether a family stands at its mastery level for graduation: really there, or held at its highest open
  * level by a gate the learner has not reached (the gated-ladder rule of contracts §7.4).
  */
-export function atMasteryForGraduation(input: Pick<GraduationInput, "level" | "masteryLevel" | "maxOpenLevel">): boolean {
+export function atMasteryForGraduation(
+  input: Pick<GraduationInput, "level" | "masteryLevel" | "maxOpenLevel">,
+): boolean {
   if (input.level >= input.masteryLevel) return true;
   return input.maxOpenLevel < input.masteryLevel && input.level >= input.maxOpenLevel;
 }
@@ -251,7 +322,8 @@ export function smoothBacklog(
   const days = Math.min(maxDays, Math.max(minDays, Math.ceil(total / cfg.budgetSec)));
   const slice = total / days;
   const order = [...items].sort(
-    (a, b) => returnRank(b.recall) - returnRank(a.recall) || (a.cardId < b.cardId ? -1 : a.cardId > b.cardId ? 1 : 0),
+    (a, b) =>
+      returnRank(b.recall) - returnRank(a.recall) || (a.cardId < b.cardId ? -1 : a.cardId > b.cardId ? 1 : 0),
   );
   let acc = 0;
   for (const it of order) {

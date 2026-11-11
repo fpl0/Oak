@@ -65,7 +65,8 @@ export async function loadContent(options: LoadOptions): Promise<ContentSource> 
   const { contentDir } = options;
   const importModule = options.importModule ?? ((path: string) => import(path));
   const problems: ContentProblem[] = [];
-  if (!existsSync(contentDir)) return emptyContent([{ id: "content", message: `${contentDir} does not exist` }]);
+  if (!existsSync(contentDir))
+    return emptyContent([{ id: "content", message: `${contentDir} does not exist` }]);
 
   const load = async (rel: string, required: boolean): Promise<unknown> => {
     const path = join(contentDir, rel);
@@ -76,7 +77,10 @@ export async function loadContent(options: LoadOptions): Promise<ContentSource> 
     try {
       return await importModule(path);
     } catch (err) {
-      problems.push({ id: rel, message: `import failed: ${err instanceof Error ? err.message : String(err)}` });
+      problems.push({
+        id: rel,
+        message: `import failed: ${err instanceof Error ? err.message : String(err)}`,
+      });
       return null;
     }
   };
@@ -119,8 +123,10 @@ export async function loadContent(options: LoadOptions): Promise<ContentSource> 
     }
     const kind = idKind(def.id);
     if (rel.endsWith("lesson.ts") && kind === "lesson") lessons.push(def as unknown as LessonDef);
-    else if (rel.endsWith("checkpoint.ts") && kind === "checkpoint") checkpoints.push(def as unknown as CheckpointDef);
-    else if (rel.endsWith("capstone.ts") && kind === "capstone") capstones.push(def as unknown as CapstoneDef);
+    else if (rel.endsWith("checkpoint.ts") && kind === "checkpoint")
+      checkpoints.push(def as unknown as CheckpointDef);
+    else if (rel.endsWith("capstone.ts") && kind === "capstone")
+      capstones.push(def as unknown as CapstoneDef);
     else if (rel.endsWith("song.ts") && kind === "song") songs.push(def as unknown as SongDef);
     else problems.push({ id: rel, message: `unexpected id "${def.id}"` });
   }
@@ -150,7 +156,8 @@ export async function loadContent(options: LoadOptions): Promise<ContentSource> 
 
   for (const unit of syllabus.units)
     for (const meta of unit.lessons)
-      if (!lessons.some((l) => l.id === meta.id)) problems.push({ id: meta.id, message: "lesson not authored yet" });
+      if (!lessons.some((l) => l.id === meta.id))
+        problems.push({ id: meta.id, message: "lesson not authored yet" });
 
   return {
     contentVersion,

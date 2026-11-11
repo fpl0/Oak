@@ -14,13 +14,12 @@ import {
 } from "./errors.ts";
 
 describe("error kinds", () => {
-  test("are the contract's eleven, each with fixed learner-facing copy", () => {
+  test("are the contract's ten, each with fixed learner-facing copy", () => {
     expect([...TUTOR_ERROR_KINDS].sort() as string[]).toEqual(
       [
         "aborted",
         "auth",
         "bad_request",
-        "budget",
         "internal",
         "iteration_limit",
         "max_tokens",
@@ -103,7 +102,7 @@ describe("classifyThrown, most specific first", () => {
   });
 
   test("a TutorError keeps its kind", () => {
-    expect(classifyThrown(new TutorError("budget"))).toEqual(errorInfo("budget"));
+    expect(classifyThrown(new TutorError("bad_request"))).toEqual(errorInfo("bad_request"));
     expect(classifyThrown(new TutorError("rate_limit", { retryAfterSec: 5 })).retryAfterSec).toBe(5);
   });
 

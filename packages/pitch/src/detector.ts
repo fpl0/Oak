@@ -58,7 +58,8 @@ export class PitchFrameAnalyzer {
     this.sampleRate = sampleRate;
     this.windowSize = options.windowSize ?? WINDOW_SIZE;
     this.hopSize = options.hopSize ?? HOP_SIZE;
-    if (!(this.hopSize > 0) || !(this.windowSize > 1)) throw new RangeError("PitchFrameAnalyzer: bad geometry");
+    if (!(this.hopSize > 0) || !(this.windowSize > 1))
+      throw new RangeError("PitchFrameAnalyzer: bad geometry");
     this.ring = new Float32Array(this.windowSize);
     this.scratch = new Float32Array(this.windowSize);
     this.detector = createDetector(options);

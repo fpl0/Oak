@@ -130,12 +130,19 @@ export class ProfileRepo {
       sets.push(`${column} = ?`);
       values.push(typeof value === "boolean" ? int(value) : (value as string | number | null));
     }
-    if (sets.length > 0) run(this.db, `UPDATE learner_profile SET ${sets.join(", ")} WHERE id = 1`, ...values);
+    if (sets.length > 0)
+      run(this.db, `UPDATE learner_profile SET ${sets.join(", ")} WHERE id = 1`, ...values);
     return this.get();
   }
 
   addCalibration(kind: string, result: unknown, at: string): void {
-    run(this.db, "INSERT INTO calibration_runs (kind, result_json, at) VALUES (?, ?, ?)", kind, toJson(result), at);
+    run(
+      this.db,
+      "INSERT INTO calibration_runs (kind, result_json, at) VALUES (?, ?, ?)",
+      kind,
+      toJson(result),
+      at,
+    );
   }
 
   calibrations(): { id: number; kind: string; result: unknown; at: string }[] {
@@ -146,15 +153,39 @@ export class ProfileRepo {
   }
 }
 
+/**
+ * Fields an older build stored inside a setting and the schema no longer has. They are dropped on
+ * read, so the rest of the stored value survives instead of failing validation and falling back.
+ */
+const RETIRED_FIELDS: Partial<Record<SettingKey, readonly string[]>> = {
+  // The tutor's optional hard monthly cap, removed on 2026-11-11 (docs/decisions.md row 8).
+  tutor: ["hardMonthlyUsd"],
+};
+
+function withoutRetired(key: SettingKey, value: unknown): unknown {
+  const retired = RETIRED_FIELDS[key];
+  if (retired === undefined || typeof value !== "object" || value === null || Array.isArray(value))
+    return value;
+  const kept: Record<string, unknown> = { ...(value as Record<string, unknown>) };
+  for (const field of retired) delete kept[field];
+  return kept;
+}
+
 export class SettingsRepo {
   constructor(private readonly db: Db) {}
 
   /** Every setting, stored values over the defaults. A stored value that no longer validates falls back to its default. */
   all(): Settings {
     const out: Record<string, unknown> = { ...DEFAULT_SETTINGS };
-    for (const row of all<{ key: string; value_json: string }>(this.db, "SELECT key, value_json FROM settings")) {
+    for (const row of all<{ key: string; value_json: string }>(
+      this.db,
+      "SELECT key, value_json FROM settings",
+    )) {
       if (!(SETTING_KEYS as string[]).includes(row.key)) continue;
-      const parsed = SettingsSchema.shape[row.key as SettingKey].safeParse(fromJson(row.value_json, undefined));
+      const key = row.key as SettingKey;
+      const parsed = SettingsSchema.shape[key].safeParse(
+        withoutRetired(key, fromJson(row.value_json, undefined)),
+      );
       if (parsed.success) out[row.key] = parsed.data;
     }
     return out as Settings;

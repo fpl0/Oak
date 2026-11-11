@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en" data-theme="paper">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>Oak workbench (e2e)</title>
+    <style>
+      :root {
+        --bg: #f6f2ea;
+        --surface: #fffdf8;
+        --surface-2: #efe9de;
+        --border: #ddd3c3;
+        --text: #1f1a14;
+        --text-2: #5c5247;
+        --text-3: #8a7f72;
+        --accent: #2f6b45;
+        --accent-2: #b7791f;
+        --link: #2f6b45;
+        --issue: #b4532a;
+        --lane-in: rgba(47, 107, 69, 0.06);
+      }
+      body { margin: 16px; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; }
+    </style>
+  </head>
+  <body>
+    <canvas id="test-canvas" hidden width="1" height="1"></canvas>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

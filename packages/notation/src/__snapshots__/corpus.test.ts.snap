@@ -1,0 +1,1328 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`golden corpus 01 four quarters 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C4 !class=oak-e1!D4 !class=oak-e2!E4 !class=oak-e3!F4 |]",
+  ],
+  "approximate": false,
+  "code": "note("c4 d4 e4 f4")",
+  "key": null,
+  "voices": {
+    "S1": "C4:4 D4:4 E4:4 F4:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 02 eighth pair in a beat 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C4 !class=oak-e1!D2!class=oak-e2!E2 !class=oak-e3!F4 !class=oak-e4!G4 |]",
+  ],
+  "approximate": false,
+  "code": "note("c4 [d4 e4] f4 g4")",
+  "key": null,
+  "voices": {
+    "S1": "C4:4 D4:8 E4:8 F4:4 G4:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 03 dotted half + quarter 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C12 !class=oak-e1!D4 |]",
+  ],
+  "approximate": false,
+  "code": "note("c4@3 d4")",
+  "key": null,
+  "voices": {
+    "S1": "C4:2. D4:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 04 alternation over 2 bars 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C8 !class=oak-e1!G8 | !class=oak-e2!E8 !class=oak-e3!G8 |]",
+  ],
+  "approximate": false,
+  "code": "note("<c4 e4> g4")",
+  "key": null,
+  "voices": {
+    "S1": "C4:2 G4:2 | E4:2 G4:2",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 05 rests 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C4 z4 !class=oak-e1!D4 z4 |]",
+  ],
+  "approximate": false,
+  "code": "note("c4 ~ d4 ~")",
+  "key": null,
+  "voices": {
+    "S1": "C4:4 r:4 D4:4 r:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 06 quarter triplet in half a bar 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "(3:2:3!class=oak-e0!C4 !class=oak-e1!C4 !class=oak-e2!C4 !class=oak-e3!E8 |]",
+  ],
+  "approximate": false,
+  "code": "note("c4*3 e4")",
+  "key": null,
+  "voices": {
+    "S1": "(3:2 C4:4 C4:4 C4:4) E4:2",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 07 D major by scale 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:D",
+    "!class=oak-e0!D4 !class=oak-e1!F4 !class=oak-e2!A4 !class=oak-e3!c4 |]",
+  ],
+  "approximate": false,
+  "code": "n("0 2 4 6").scale("D4:major")",
+  "key": {
+    "mode": "major",
+    "tonic": "D",
+  },
+  "voices": {
+    "S1": "D4:4 F#4:4 A4:4 C#5:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 08 chord stack 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0![CEG]8 !class=oak-e1![FAc]8 |]",
+  ],
+  "approximate": false,
+  "code": "note("[c4,e4,g4] [f4,a4,c5]")",
+  "key": null,
+  "voices": {
+    "S1": "[C4,E4,G4]:2 [F4,A4,C5]:2",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 09 syncopated tie 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "z4 !class=oak-e0!C4- !class=oak-e0!C2!class=oak-e1!D2- !class=oak-e1!D4 |]",
+  ],
+  "approximate": false,
+  "code": "note("~ c4@1.5 d4@1.5")",
+  "key": null,
+  "voices": {
+    "S1": "r:4 C4:4~ C4:8 D4:8~ D4:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 10 F# major scale 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:F#",
+    "!class=oak-e0!F2!class=oak-e1!G2 !class=oak-e2!A2!class=oak-e3!B2 !class=oak-e4!c2!class=oak-e5!d2 !class=oak-e6!e2!class=oak-e7!f2 |]",
+  ],
+  "approximate": false,
+  "code": "n("0 1 2 3 4 5 6 7").scale("F#4:major")",
+  "key": {
+    "mode": "major",
+    "tonic": "F#",
+  },
+  "voices": {
+    "S1": "F#4:8 G#4:8 A#4:8 B4:8 C#5:8 D#5:8 E#5:8 F#5:8",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 11 cross-bar tie with bar-scoped accidentals 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!^F16- | !class=oak-e0!F4 !class=oak-e1!^F4 !class=oak-e2!=F4 !class=oak-e3!^F4 |]",
+  ],
+  "approximate": false,
+  "code": "note("f#4@5 f#4 f4 f#4").slow(2)",
+  "key": null,
+  "voices": {
+    "S1": "F#4:1~ | F#4:4 F#4:4 F4:4 F#4:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 12 ties across the bar line and the half bar 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C12 !class=oak-e1!D4- | !class=oak-e1!D4 !class=oak-e2!E4- !class=oak-e2!E8 |]",
+  ],
+  "approximate": false,
+  "code": "note("c4@3 d4@2 e4@3").slow(2)",
+  "key": null,
+  "voices": {
+    "S1": "C4:2. D4:4~ | D4:4 E4:4~ E4:2",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 13 syncopation: half note on beat 2 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C4 !class=oak-e1!D8 !class=oak-e2!E4 |]",
+  ],
+  "approximate": false,
+  "code": "note("c4 d4@2 e4")",
+  "key": null,
+  "voices": {
+    "S1": "C4:4 D4:2 E4:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 14 dotted quarter and eighth 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C6 !class=oak-e1!D2 !class=oak-e2!E8 |]",
+  ],
+  "approximate": false,
+  "code": "note("c4@3 d4 e4@4")",
+  "key": null,
+  "voices": {
+    "S1": "C4:4. D4:8 E4:2",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 15 sixteenths and a dotted eighth 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C!class=oak-e1!D!class=oak-e2!E!class=oak-e3!F !class=oak-e4!G3!class=oak-e5!A !class=oak-e6!B2!class=oak-e7!c2 z4 |]",
+  ],
+  "approximate": false,
+  "code": "note("c4 d4 e4 f4 g4@3 a4 b4@2 c5@2 ~@4")",
+  "key": null,
+  "voices": {
+    "S1": "C4:16 D4:16 E4:16 F4:16 G4:8. A4:16 B4:8 C5:8 r:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 16 off-beat note tied over the beat 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "z2 !class=oak-e0!C2- !class=oak-e0!C2 z2 z8 |]",
+  ],
+  "approximate": false,
+  "code": "note("~ c4@2 ~@5")",
+  "key": null,
+  "voices": {
+    "S1": "r:8 C4:8~ C4:8 r:8 r:2",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 17 long note across two bars 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C16- | !class=oak-e0!C12 !class=oak-e1!D4 |]",
+  ],
+  "approximate": false,
+  "code": "note("c4@7 d4").slow(2)",
+  "key": null,
+  "voices": {
+    "S1": "C4:1~ | C4:2. D4:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 18 eighth triplets by beat 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "(3:2:3!class=oak-e0!C2!class=oak-e1!D2!class=oak-e2!E2 !class=oak-e3!F4 (3:2:3!class=oak-e4!G2!class=oak-e5!A2!class=oak-e6!B2 !class=oak-e7!c4 |]",
+  ],
+  "approximate": false,
+  "code": "note("[c4 d4 e4] f4 [g4 a4 b4] c5")",
+  "key": null,
+  "voices": {
+    "S1": "(3:2 C4:8 D4:8 E4:8) F4:4 (3:2 G4:8 A4:8 B4:8) C5:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 19 quintuplet in a beat 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "(5:4:5!class=oak-e0!C!class=oak-e1!D!class=oak-e2!E!class=oak-e3!F!class=oak-e4!G !class=oak-e5!A4 !class=oak-e6!B4 !class=oak-e7!c4 |]",
+  ],
+  "approximate": false,
+  "code": "note("[c4 d4 e4 f4 g4] a4 b4 c5")",
+  "key": null,
+  "voices": {
+    "S1": "(5:4 C4:16 D4:16 E4:16 F4:16 G4:16) A4:4 B4:4 C5:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 20 sextuplet beat as two sixteenth triplets 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "(3:2:3!class=oak-e0!C!class=oak-e1!D!class=oak-e2!E (3:2:3!class=oak-e3!F!class=oak-e4!G!class=oak-e5!A !class=oak-e6!c4 z4 !class=oak-e7!c4 |]",
+  ],
+  "approximate": false,
+  "code": "note("[c4 d4 e4 f4 g4 a4] c5 ~ c5")",
+  "key": null,
+  "voices": {
+    "S1": "(3:2 C4:16 D4:16 E4:16) (3:2 F4:16 G4:16 A4:16) C5:4 r:4 C5:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 21 quarter triplets then a half 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "(3:2:3!class=oak-e0!C4 !class=oak-e1!D4 !class=oak-e2!E4 !class=oak-e3!F8 |]",
+  ],
+  "approximate": false,
+  "code": "note("[c4 d4 e4] f4")",
+  "key": null,
+  "voices": {
+    "S1": "(3:2 C4:4 D4:4 E4:4) F4:2",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 22 not notatable: 11 in a bar (approximate) 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C!class=oak-e1!C2!class=oak-e2!C !class=oak-e3!C2!class=oak-e4!C!class=oak-e5!C- !class=oak-e5!C!class=oak-e6!C!class=oak-e7!C2 !class=oak-e8!C!class=oak-e9!C2!class=oak-e10!C |]",
+  ],
+  "approximate": true,
+  "code": "note("c4*11")",
+  "key": null,
+  "voices": {
+    "S1": "C4:16 C4:8 C4:16 C4:8 C4:16 C4:16~ C4:16 C4:16 C4:8 C4:16 C4:8 C4:16",
+  },
+  "warnings": [
+    "tuplet-too-long@0",
+  ],
+}
+`;
+
+exports[`golden corpus 23 mixed tuplets: a triplet inside a quintuplet (approximate) 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C!class=oak-e1!D!class=oak-e2!E!class=oak-e3!F- !class=oak-e3!F4- !class=oak-e3!F8 |]",
+  ],
+  "approximate": true,
+  "code": "note("[c4 d4 e4] f4@4")",
+  "key": null,
+  "voices": {
+    "S1": "C4:16 D4:16 E4:16 F4:16~ F4:4~ F4:2",
+  },
+  "warnings": [
+    "mixed-tuplets@0",
+  ],
+}
+`;
+
+exports[`golden corpus 24 3/4 waltz 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:3/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C4 !class=oak-e1!E4 !class=oak-e2!G4 |]",
+  ],
+  "approximate": false,
+  "code": "note("c4 e4 g4")",
+  "key": null,
+  "voices": {
+    "S1": "C4:4 E4:4 G4:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 25 3/4 dotted half then a half on beat 2 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:3/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C12 | !class=oak-e1!E4 !class=oak-e2!G8 |]",
+  ],
+  "approximate": false,
+  "code": "note("<c4 [e4 g4@2]>")",
+  "key": null,
+  "voices": {
+    "S1": "C4:2. | E4:4 G4:2",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 26 6/8 eighths beamed in threes 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:6/8",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C2!class=oak-e1!D2!class=oak-e2!E2 !class=oak-e3!F2!class=oak-e4!G2!class=oak-e5!A2 |]",
+  ],
+  "approximate": false,
+  "code": "note("c4 d4 e4 f4 g4 a4")",
+  "key": null,
+  "voices": {
+    "S1": "C4:8 D4:8 E4:8 F4:8 G4:8 A4:8",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 27 6/8 dotted quarters 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:6/8",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C6 !class=oak-e1!G6 |]",
+  ],
+  "approximate": false,
+  "code": "note("c4 g4")",
+  "key": null,
+  "voices": {
+    "S1": "C4:4. G4:4.",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 28 6/8 quarter-eighth 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:6/8",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C4 !class=oak-e1!D2 !class=oak-e2!E4 !class=oak-e3!F2 |]",
+  ],
+  "approximate": false,
+  "code": "note("[c4@2 d4] [e4@2 f4]")",
+  "key": null,
+  "voices": {
+    "S1": "C4:4 D4:8 E4:4 F4:8",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 29 6/8 note tied over the beat 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:6/8",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C2 !class=oak-e1!D4- !class=oak-e1!D4 !class=oak-e2!E2 |]",
+  ],
+  "approximate": false,
+  "code": "note("c4 d4@4 e4")",
+  "key": null,
+  "voices": {
+    "S1": "C4:8 D4:4~ D4:4 E4:8",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 30 12/8 compound beats 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:12/8",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C2!class=oak-e1!D2!class=oak-e2!E2 !class=oak-e3!F4 !class=oak-e4!G2 !class=oak-e5!A6 !class=oak-e6!B2!class=oak-e7!A2!class=oak-e8!G2 |]",
+  ],
+  "approximate": false,
+  "code": "note("[c4 d4 e4] [f4@2 g4] a4 [b4 a4 g4]")",
+  "key": null,
+  "voices": {
+    "S1": "C4:8 D4:8 E4:8 F4:4 G4:8 A4:4. B4:8 A4:8 G4:8",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 31 7/8 grouped 2+2+3 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:7/8",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C2!class=oak-e1!D2 !class=oak-e2!E2!class=oak-e3!F2 !class=oak-e4!G2!class=oak-e5!A2!class=oak-e6!B2 |]",
+  ],
+  "approximate": false,
+  "code": "note("c4 d4 e4 f4 g4 a4 b4")",
+  "key": null,
+  "voices": {
+    "S1": "C4:8 D4:8 E4:8 F4:8 G4:8 A4:8 B4:8",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 32 5/4 grouped 3+2 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:5/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C4 !class=oak-e1!D8 !class=oak-e2!E4 !class=oak-e3!F4 |]",
+  ],
+  "approximate": false,
+  "code": "note("c4 d4@2 e4 f4")",
+  "key": null,
+  "voices": {
+    "S1": "C4:4 D4:2 E4:4 F4:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 33 swing 8ths straightened 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    ""^Swing 8ths"!class=oak-e0!C2!class=oak-e1!D2 !class=oak-e2!E2!class=oak-e3!F2 !class=oak-e4!G2!class=oak-e5!A2 !class=oak-e6!B2!class=oak-e7!c2 |]",
+  ],
+  "approximate": false,
+  "code": "note("c4 d4 e4 f4 g4 a4 b4 c5").swingBy(1/3, 4)",
+  "key": null,
+  "voices": {
+    "S1": "C4:8 D4:8 E4:8 F4:8 G4:8 A4:8 B4:8 C5:8",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 34 swing 16ths on a hi-hat 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C clef=perc",
+    ""^Swing 16ths"!class=oak-e0!!style=x!g!class=oak-e1!!style=x!g!class=oak-e2!!style=x!g!class=oak-e3!!style=x!g !class=oak-e4!!style=x!g!class=oak-e5!!style=x!g!class=oak-e6!!style=x!g!class=oak-e7!!style=x!g !class=oak-e8!!style=x!g!class=oak-e9!!style=x!g!class=oak-e10!!style=x!g!class=oak-e11!!style=x!g !class=oak-e12!!style=x!g!class=oak-e13!!style=x!g!class=oak-e14!!style=x!g!class=oak-e15!!style=x!g |]",
+  ],
+  "approximate": false,
+  "code": "s("hh*16").swingBy(1/3, 8)",
+  "key": null,
+  "voices": {
+    "DR": "hh:16 hh:16 hh:16 hh:16 hh:16 hh:16 hh:16 hh:16 hh:16 hh:16 hh:16 hh:16 hh:16 hh:16 hh:16 hh:16",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 35 pickup in 3/4 (one beat), last bar shortened 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:3/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!G4 | !class=oak-e1!c4 !class=oak-e2!c4 !class=oak-e3!d4 | !class=oak-e4!e8 !class=oak-e5!c4 | z8 |]",
+  ],
+  "approximate": false,
+  "code": "note("<[~ ~ g4] [c5 c5 d5] [e5@2 c5] [~ ~ ~]>")",
+  "key": null,
+  "voices": {
+    "S1": "G4:4 | C5:4 C5:4 D5:4 | E5:2 C5:4 | r:2",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 36 pickup of two eighths in 4/4 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!G2!class=oak-e1!A2 | !class=oak-e2!B4 !class=oak-e3!c4 !class=oak-e4!d4 !class=oak-e5!e4 | !class=oak-e6!c12 |]",
+  ],
+  "approximate": false,
+  "code": "note("<[~@3 [g4 a4]] [b4 c5 d5 e5] [c5@3 ~]>")",
+  "key": null,
+  "voices": {
+    "S1": "G4:8 A4:8 | B4:4 C5:4 D5:4 E5:4 | C5:2.",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 37 grand staff by track 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "%%score {RH LH}",
+    "V:RH clef=treble",
+    "V:LH clef=bass",
+    "K:C",
+    "V:RH",
+    "!class=oak-e0!E4 !class=oak-e1!G4 !class=oak-e2!c4 !class=oak-e3!G4 |]",
+    "V:LH",
+    "!class=oak-e4!C,8 !class=oak-e5!G,,8 |]",
+  ],
+  "approximate": false,
+  "code": 
+"rh: note("e4 g4 c5 g4")
+lh: note("c3 g2")"
+,
+  "key": null,
+  "voices": {
+    "LH": "C3:2 G2:2",
+    "RH": "E4:4 G4:4 C5:4 G4:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 38 grand staff split by register 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "%%score {RH LH}",
+    "V:RH clef=treble",
+    "V:LH clef=bass",
+    "K:C",
+    "V:RH",
+    "!class=oak-e0![CEG]8 !class=oak-e1![DG]8 |]",
+    "V:LH",
+    "!class=oak-e2!C,8 !class=oak-e3![G,,B,]8 |]",
+  ],
+  "approximate": false,
+  "code": "note("[c3,c4,e4,g4] [g2,b3,d4,g4]")",
+  "key": null,
+  "voices": {
+    "LH": "C3:2 [G2,B3]:2",
+    "RH": "[C4,E4,G4]:2 [D4,G4]:2",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 39 bass clef chosen by register 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C clef=bass",
+    "!class=oak-e0!C,,4 !class=oak-e1!E,,4 !class=oak-e2!G,,4 !class=oak-e3!C,4 |]",
+  ],
+  "approximate": false,
+  "code": "note("c2 e2 g2 c3")",
+  "key": null,
+  "voices": {
+    "S1": "C2:4 E2:4 G2:4 C3:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 40 two voices on one staff 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "%%score (S1 S1v2)",
+    "V:S1 clef=treble stem=up",
+    "V:S1v2 clef=treble stem=down",
+    "K:C",
+    "V:S1",
+    "!class=oak-e0!c12 !class=oak-e1!B4 |]",
+    "V:S1v2",
+    "!class=oak-e2!E8 !class=oak-e3!G8 |]",
+  ],
+  "approximate": false,
+  "code": "note("[c5@3 b4, e4@2 g4@2]")",
+  "key": null,
+  "voices": {
+    "S1": "C5:2. B4:4",
+    "S1v2": "E4:2 G4:2",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 41 drum staff: hands up, kick down 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "%%score (DR DRv2)",
+    "V:DR clef=perc stem=up",
+    "V:DRv2 clef=perc stem=down",
+    "K:C",
+    "V:DR",
+    "z4 !class=oak-e0!!style=x!g4 !class=oak-e1!c4 !class=oak-e2!!style=x!g4 |]",
+    "V:DRv2",
+    "!class=oak-e3!F4 z4 z8 |]",
+  ],
+  "approximate": false,
+  "code": "s("bd hh sd hh")",
+  "key": null,
+  "voices": {
+    "DR": "r:4 hh:4 sd:4 hh:4",
+    "DRv2": "bd:4 r:4 r:2",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 42 drum staff: hi-hat eighths with snare chord 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "%%score (DR DRv2)",
+    "V:DR clef=perc stem=up",
+    "V:DRv2 clef=perc stem=down",
+    "K:C",
+    "V:DR",
+    "!class=oak-e0!!style=x!g2!class=oak-e1!!style=x!g2 !class=oak-e2!!style=x!g2!class=oak-e3!!style=x!g2 !class=oak-e4![c!style=x!g]2!class=oak-e5!!style=x!g2 !class=oak-e6!!style=x!g2!class=oak-e7!!style=x!g2 |]",
+    "V:DRv2",
+    "!class=oak-e8!F8 z8 |]",
+  ],
+  "approximate": false,
+  "code": "s("hh*8, bd sd")",
+  "key": null,
+  "voices": {
+    "DR": "hh:8 hh:8 hh:8 hh:8 [sd,hh]:8 hh:8 hh:8 hh:8",
+    "DRv2": "bd:2 r:2",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 43 rhythm staff with counts 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C clef=perc stafflines=1",
+    "!class=oak-e0!B4 z2 !class=oak-e1!B2 !class=oak-e2!B4 !class=oak-e3!B2!class=oak-e4!B2 |]",
+    "w:1 & 3 4 &",
+  ],
+  "approximate": false,
+  "code": "s("bd [~ bd] sd [bd bd]")",
+  "key": null,
+  "voices": {
+    "S1": "rhythm:4 r:8 rhythm:8 rhythm:4 rhythm:8 rhythm:8",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 44 drums and melody together (auto) 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "%%score S1 (DR DRv2)",
+    "V:S1 clef=treble",
+    "V:DR clef=perc stem=up",
+    "V:DRv2 clef=perc stem=down",
+    "K:C",
+    "V:S1",
+    "!class=oak-e0!c4 !class=oak-e1!B4 !class=oak-e2!G4 !class=oak-e3!E4 |]",
+    "V:DR",
+    "z4 !class=oak-e4!c4 z4 !class=oak-e5!c4 |]",
+    "V:DRv2",
+    "!class=oak-e6!F4 z4 !class=oak-e7!F4 z4 |]",
+  ],
+  "approximate": false,
+  "code": 
+"mel: note("c5 b4 g4 e4")
+dr: s("bd sd bd sd")"
+,
+  "key": null,
+  "voices": {
+    "DR": "r:4 sd:4 r:4 sd:4",
+    "DRv2": "bd:4 r:4 bd:4 r:4",
+    "S1": "C5:4 B4:4 G4:4 E4:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 45 sharp key: E major 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:E",
+    "!class=oak-e0!E2!class=oak-e1!F2 !class=oak-e2!G2!class=oak-e3!A2 !class=oak-e4!B2!class=oak-e5!c2 !class=oak-e6!d2!class=oak-e7!e2 |]",
+  ],
+  "approximate": false,
+  "code": "n("0 1 2 3 4 5 6 7").scale("E4:major")",
+  "key": {
+    "mode": "major",
+    "tonic": "E",
+  },
+  "voices": {
+    "S1": "E4:8 F#4:8 G#4:8 A4:8 B4:8 C#5:8 D#5:8 E5:8",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 46 flat key: E-flat major 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:Eb",
+    "!class=oak-e0!E2!class=oak-e1!G2 !class=oak-e2!B2!class=oak-e3!d2 !class=oak-e4!e2!class=oak-e5!B2 !class=oak-e6!G2!class=oak-e7!E2 |]",
+  ],
+  "approximate": false,
+  "code": "n("0 2 4 6 7 4 2 0").scale("Eb4:major")",
+  "key": {
+    "mode": "major",
+    "tonic": "Eb",
+  },
+  "voices": {
+    "S1": "Eb4:8 G4:8 Bb4:8 D5:8 Eb5:8 Bb4:8 G4:8 Eb4:8",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 47 flat key: B-flat major below middle C 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:Bb",
+    "!class=oak-e0!B,4 !class=oak-e1!C4 !class=oak-e2!D4 !class=oak-e3!E4 |]",
+  ],
+  "approximate": false,
+  "code": "n("0 1 2 3").scale("Bb3:major")",
+  "key": {
+    "mode": "major",
+    "tonic": "Bb",
+  },
+  "voices": {
+    "S1": "Bb3:4 C4:4 D4:4 Eb4:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 48 A harmonic minor: raised 7th as an accidental 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:Am",
+    "!class=oak-e0!A,2!class=oak-e1!B,2 !class=oak-e2!C2!class=oak-e3!D2 !class=oak-e4!E2!class=oak-e5!F2 !class=oak-e6!^G2!class=oak-e7!A2 |]",
+  ],
+  "approximate": false,
+  "code": "n("0 1 2 3 4 5 6 7").scale("A3:harmonic:minor")",
+  "key": {
+    "mode": "harmonic minor",
+    "tonic": "A",
+  },
+  "voices": {
+    "S1": "A3:8 B3:8 C4:8 D4:8 E4:8 F4:8 G#4:8 A4:8",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 49 C harmonic minor: B natural against the key signature 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:Cm",
+    "!class=oak-e0!G4 !class=oak-e1!=B4 !class=oak-e2!c4 z4 |]",
+  ],
+  "approximate": false,
+  "code": "n("4 6 7 ~").scale("C4:harmonic:minor")",
+  "key": {
+    "mode": "harmonic minor",
+    "tonic": "C",
+  },
+  "voices": {
+    "S1": "G4:4 B4:4 C5:4 r:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 50 F# harmonic minor: E sharp, never F 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:F#m",
+    "!class=oak-e0!c4 !class=oak-e1!d4 !class=oak-e2!^e4 !class=oak-e3!f4 |]",
+  ],
+  "approximate": false,
+  "code": "n("4 5 6 7").scale("F#4:harmonic:minor")",
+  "key": {
+    "mode": "harmonic minor",
+    "tonic": "F#",
+  },
+  "voices": {
+    "S1": "C#5:4 D5:4 E#5:4 F#5:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 51 D minor with B flat in the signature 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:Dm",
+    "!class=oak-e0!D2!class=oak-e1!F2 !class=oak-e2!A2!class=oak-e3!B2 !class=oak-e4!A2!class=oak-e5!F2 !class=oak-e6!E2!class=oak-e7!D2 |]",
+  ],
+  "approximate": false,
+  "code": "n("0 2 4 5 4 2 1 0").scale("D4:minor")",
+  "key": {
+    "mode": "minor",
+    "tonic": "D",
+  },
+  "voices": {
+    "S1": "D4:8 F4:8 A4:8 Bb4:8 A4:8 F4:8 E4:8 D4:8",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 52 chromatic degrees b3, #4, b7 in C 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C4 !class=oak-e1!_E4 !class=oak-e2!^F4 !class=oak-e3!_B4 |]",
+  ],
+  "approximate": false,
+  "code": "n("0 2b 3# 6b").scale("C4:major")",
+  "key": {
+    "mode": "major",
+    "tonic": "C",
+  },
+  "voices": {
+    "S1": "C4:4 Eb4:4 F#4:4 Bb4:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 53 bar-scoped natural in D major 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:D",
+    "!class=oak-e0!F4 !class=oak-e1!=F4 !class=oak-e2!^F4 !class=oak-e3!D4 |]",
+  ],
+  "approximate": false,
+  "code": "n("2 2b 2 0").scale("D4:major")",
+  "key": {
+    "mode": "major",
+    "tonic": "D",
+  },
+  "voices": {
+    "S1": "F#4:4 F4:4 F#4:4 D4:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 54 key estimated from the notes (G major) 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:G",
+    "!class=oak-e0!G2!class=oak-e1!A2 !class=oak-e2!B2!class=oak-e3!c2 !class=oak-e4!d2!class=oak-e5!e2 !class=oak-e6!f2!class=oak-e7!g2 |]",
+  ],
+  "approximate": false,
+  "code": "note("g4 a4 b4 c5 d5 e5 f#5 g5")",
+  "key": {
+    "mode": "major",
+    "tonic": "G",
+  },
+  "voices": {
+    "S1": "G4:8 A4:8 B4:8 C5:8 D5:8 E5:8 F#5:8 G5:8",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 55 chromatic passing tone spelled by direction 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "!class=oak-e0!C2!class=oak-e1!^C2 !class=oak-e2!D2 z2 !class=oak-e3!E2!class=oak-e4!_E2 !class=oak-e5!D2 z2 |]",
+  ],
+  "approximate": false,
+  "code": "note("c4 c#4 d4 ~ e4 eb4 d4 ~")",
+  "key": null,
+  "voices": {
+    "S1": "C4:8 C#4:8 D4:8 r:8 E4:8 Eb4:8 D4:8 r:8",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 56 voicing() chords in A major spelled from the symbol 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "%%score {RH LH}",
+    "V:RH clef=treble",
+    "V:LH clef=bass",
+    "K:A",
+    "V:RH",
+    "!class=oak-e0![CEA]16 | !class=oak-e1![EGB]16 |]",
+    "V:LH",
+    "!class=oak-e2![C,A,]16 | !class=oak-e3![E,B,]16 |]",
+  ],
+  "approximate": false,
+  "code": "chord("<A E>").voicing()",
+  "key": {
+    "mode": "major",
+    "tonic": "A",
+  },
+  "voices": {
+    "LH": "[C#3,A3]:1 | [E3,B3]:1",
+    "RH": "[C#4,E4,A4]:1 | [E4,G#4,B4]:1",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 57 voicing() in B major: D sharp and A sharp 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "%%score {RH LH}",
+    "V:RH clef=treble",
+    "V:LH clef=bass",
+    "K:B",
+    "V:RH",
+    "!class=oak-e0![DFB]16 | !class=oak-e1![CFA]16 |]",
+    "V:LH",
+    "!class=oak-e2![D,B,]16 | !class=oak-e3!F,16 |]",
+  ],
+  "approximate": false,
+  "code": "chord("<B F#>").voicing()",
+  "key": {
+    "mode": "major",
+    "tonic": "B",
+  },
+  "voices": {
+    "LH": "[D#3,B3]:1 | F#3:1",
+    "RH": "[D#4,F#4,B4]:1 | [C#4,F#4,A#4]:1",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 58 lead sheet with chord symbols 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    ""C"!class=oak-e0!E4 !class=oak-e1!D4 "Am7"!class=oak-e2!C4 !class=oak-e3!D4 | "Dm7"!class=oak-e4!E4 !class=oak-e5!E4 "G7"!class=oak-e6!E8 |]",
+  ],
+  "approximate": false,
+  "code": "note("<[e4 d4 c4 d4] [e4 e4 e4@2]>")",
+  "key": {
+    "mode": "major",
+    "tonic": "C",
+  },
+  "voices": {
+    "S1": "E4:4 D4:4 C4:4 D4:4 | E4:4 E4:4 E4:2",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 59 lead sheet from a chord track: display translation 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:Am",
+    ""Bm7b5"!class=oak-e0!B16 | "E7"!class=oak-e1!^G16 | "Amaj7"!class=oak-e2!A16 | "Co7"!class=oak-e3!c16 |]",
+  ],
+  "approximate": false,
+  "code": 
+"mel: note("<b4 g#4 a4 c5>")
+ch: chord("<Bm7b5 E7 A^7 Co7>").voicing()"
+,
+  "key": {
+    "mode": "minor",
+    "tonic": "A",
+  },
+  "voices": {
+    "S1": "B4:1 | G#4:1 | A4:1 | C5:1",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 60 chord symbol in the middle of a long note splits it 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    ""C"!class=oak-e0!C8- "F"!class=oak-e0!C8 |]",
+  ],
+  "approximate": false,
+  "code": "note("c4@4")",
+  "key": null,
+  "voices": {
+    "S1": "C4:2~ C4:2",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 61 degree lyrics in G major 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:G",
+    "!class=oak-e0!G2!class=oak-e1!A2 !class=oak-e2!B2!class=oak-e3!c2 !class=oak-e4!d2!class=oak-e5!c2 !class=oak-e6!B2!class=oak-e7!G2 |]",
+    "w:1 2 3 4 5 4 3 1",
+  ],
+  "approximate": false,
+  "code": "n("0 1 2 3 4 3 2 0").scale("G4:major")",
+  "key": {
+    "mode": "major",
+    "tonic": "G",
+  },
+  "voices": {
+    "S1": "G4:8 A4:8 B4:8 C5:8 D5:8 C5:8 B4:8 G4:8",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 62 solfege in A minor (do-based minor) 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:Am",
+    "!class=oak-e0!A,4 !class=oak-e1!C4 !class=oak-e2!E4 !class=oak-e3!A4 |]",
+    "w:do me sol do",
+  ],
+  "approximate": false,
+  "code": "n("0 2 4 7").scale("A3:minor")",
+  "key": {
+    "mode": "minor",
+    "tonic": "A",
+  },
+  "voices": {
+    "S1": "A3:4 C4:4 E4:4 A4:4",
+  },
+  "warnings": [],
+}
+`;
+
+exports[`golden corpus 63 nested triplet inside a bar-wide triplet 1`] = `
+{
+  "abc": [
+    "X:1",
+    "M:4/4",
+    "L:1/16",
+    "K:C",
+    "(9:8:6!class=oak-e0!C2!class=oak-e1!D!class=oak-e2!D!class=oak-e3!E2 !class=oak-e4!F6 !class=oak-e5!G6 |]",
+  ],
+  "approximate": false,
+  "code": "note("[c4 [d4 d4] e4] f4 g4")",
+  "key": null,
+  "voices": {
+    "S1": "(9:8 C4:8 D4:16 D4:16 E4:8 F4:4. G4:4.)",
+  },
+  "warnings": [],
+}
+`;

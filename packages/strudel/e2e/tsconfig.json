@@ -1,0 +1,10 @@
+{
+  // The test page, its Vite config and the Playwright specs (not part of the root projects).
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["es2023", "dom", "dom.iterable", "dom.asynciterable"],
+    "types": ["bun", "vite/client"]
+  },
+  "include": [".", "../src", "../../../types/strudel.d.ts", "../../../types/vite-worker-url.d.ts"],
+  "exclude": ["**/*.test.ts", ".vite", "test-results"]
+}

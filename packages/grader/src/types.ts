@@ -68,7 +68,19 @@ export interface OakEvent {
    * [start, end) offsets into the ORIGINAL code, one per contributing mini-notation atom, later-applied
    * first: for `note("c4").s("piano")` the first entry is the word `piano`, not the note.
    */
-  locations: { start: number; end: number }[];
+  locations: OakLocation[];
+}
+
+/**
+ * One contributing mini-notation atom. `fn` is the role of the location: the call whose string argument
+ * holds the atom (`note`, `n`, `s`, `scale`, `chord`, …); `text` is the atom as written. Both are absent
+ * when the location falls outside a string argument of a call.
+ */
+export interface OakLocation {
+  start: number;
+  end: number;
+  fn?: string;
+  text?: string;
 }
 
 export interface LogLine {

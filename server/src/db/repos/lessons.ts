@@ -157,9 +157,10 @@ export class LessonsRepo {
   }
   completedIds(): Set<string> {
     return new Set(
-      all<{ lesson_id: string }>(this.db, "SELECT lesson_id FROM lesson_progress WHERE status = 'completed'").map(
-        (r) => r.lesson_id,
-      ),
+      all<{ lesson_id: string }>(
+        this.db,
+        "SELECT lesson_id FROM lesson_progress WHERE status = 'completed'",
+      ).map((r) => r.lesson_id),
     );
   }
   saveProgress(p: LessonProgress): LessonProgress {
@@ -279,14 +280,18 @@ export class LessonsRepo {
     ).map(toStored);
   }
   attemptsOfExercise(exerciseId: string): StoredAttempt[] {
-    return all<AttemptRow>(this.db, "SELECT * FROM step_attempts WHERE exercise_id = ? ORDER BY id", exerciseId).map(
-      toStored,
-    );
+    return all<AttemptRow>(
+      this.db,
+      "SELECT * FROM step_attempts WHERE exercise_id = ? ORDER BY id",
+      exerciseId,
+    ).map(toStored);
   }
   attemptsOfLesson(lessonId: string): StoredAttempt[] {
-    return all<AttemptRow>(this.db, "SELECT * FROM step_attempts WHERE lesson_id = ? ORDER BY id", lessonId).map(
-      toStored,
-    );
+    return all<AttemptRow>(
+      this.db,
+      "SELECT * FROM step_attempts WHERE lesson_id = ? ORDER BY id",
+      lessonId,
+    ).map(toStored);
   }
   markDisputed(id: number): void {
     const row = get<AttemptRow>(this.db, "SELECT * FROM step_attempts WHERE id = ?", id);
@@ -306,7 +311,8 @@ export class LessonsRepo {
       this.db,
       "SELECT feedback_codes FROM step_attempts WHERE passed = 0 ORDER BY id DESC LIMIT 60",
     ))
-      for (const code of fromJson<string[]>(r.feedback_codes, [])) counts.set(code, (counts.get(code) ?? 0) + 1);
+      for (const code of fromJson<string[]>(r.feedback_codes, []))
+        counts.set(code, (counts.get(code) ?? 0) + 1);
     return [...counts.entries()]
       .map(([code, count]) => ({ code, count }))
       .sort((a, b) => b.count - a.count || a.code.localeCompare(b.code))

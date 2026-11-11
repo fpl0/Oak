@@ -78,7 +78,11 @@ export class SessionsRepo {
     );
   }
   summary(id: string): unknown {
-    return fromJson(get<{ summary_json: string | null }>(this.db, "SELECT summary_json FROM sessions WHERE id = ?", id)?.summary_json, null);
+    return fromJson(
+      get<{ summary_json: string | null }>(this.db, "SELECT summary_json FROM sessions WHERE id = ?", id)
+        ?.summary_json,
+      null,
+    );
   }
   /** The most recent session of `day` that has not ended. */
   openOn(day: string): Session | null {
@@ -90,10 +94,14 @@ export class SessionsRepo {
     return row === null ? null : toSession(row);
   }
   onDay(day: string): Session[] {
-    return all<SessionRow>(this.db, "SELECT * FROM sessions WHERE day = ? ORDER BY started_at", day).map(toSession);
+    return all<SessionRow>(this.db, "SELECT * FROM sessions WHERE day = ? ORDER BY started_at", day).map(
+      toSession,
+    );
   }
   since(day: string): Session[] {
-    return all<SessionRow>(this.db, "SELECT * FROM sessions WHERE day >= ? ORDER BY started_at", day).map(toSession);
+    return all<SessionRow>(this.db, "SELECT * FROM sessions WHERE day >= ? ORDER BY started_at", day).map(
+      toSession,
+    );
   }
   first(): Session | null {
     const row = get<SessionRow>(this.db, "SELECT * FROM sessions ORDER BY started_at LIMIT 1");

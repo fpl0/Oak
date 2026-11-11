@@ -124,8 +124,6 @@ export function createTutorService(deps: TutorServiceDeps): TutorService {
     const backend = selection.backend;
     if (backend === null) return { warmed: false, backend: null, reason: reasonCode(selection.reason) };
     if (backend.warm === undefined) return { warmed: false, backend: backend.id, reason: "not_needed" };
-    // A warm-up writes the cache at list price: it is spend, so the learner's hard cap covers it.
-    if ((await checkBudget(ports)).blocked) return { warmed: false, backend: backend.id, reason: "budget" };
     const prefix = buildPrefix(await ports.lessons.prefixSources());
     const version = prefixVersion(prefix);
     const recent =
@@ -216,7 +214,7 @@ export function createTutorService(deps: TutorServiceDeps): TutorService {
       return summary;
     } catch (e) {
       const info = classifyThrown(e, { aborted: signal.aborted });
-      // A TutorError is an expected refusal (budget, closed subject, stopped); anything else is a bug
+      // A TutorError is an expected refusal (closed subject, stopped); anything else is a bug
       // or an infrastructure failure and is logged, scrubbed. The learner reads fixed copy either way.
       if (!(e instanceof TutorError)) log({ level: "error", msg: "tutor turn failed", detail: describe(e) });
       else if (e.detail !== undefined)
@@ -250,8 +248,6 @@ export function createTutorService(deps: TutorServiceDeps): TutorService {
           monthUsd: budget.monthUsd,
           softMarkerUsd: budget.softMarkerUsd,
           softPassed: budget.softPassed,
-          hardCapUsd: budget.hardCapUsd,
-          blocked: budget.blocked,
         },
         usage: { ...month, cacheHitRatio: cacheHitRatio(month) },
       };

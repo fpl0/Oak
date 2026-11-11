@@ -1,0 +1,210 @@
+/* Oak's global stylesheet: self-hosted fonts, tokens, Tailwind 4 with the data-theme dark variant, and the
+   base layer. Every colour comes from an --oak-* token (ui/theme/tokens.css). */
+@import "@fontsource-variable/inter/index.css";
+@import "@fontsource-variable/fraunces/full.css";
+@import "@fontsource-variable/jetbrains-mono/index.css";
+@import "tailwindcss";
+@import "../ui/theme/tokens.css";
+
+/* Oak never uses the `dark` class (StrudelMirror toggles it): `dark:` follows data-theme="bark". */
+@custom-variant dark (&:where([data-theme="bark"], [data-theme="bark"] *));
+/* `motion-safe:`-style variants keyed to Oak's own reduced-motion switch. */
+@custom-variant reduced (&:where([data-motion="reduced"], [data-motion="reduced"] *));
+@custom-variant animated (&:where([data-motion="full"], [data-motion="full"] *));
+
+@theme inline {
+  --color-bg: var(--oak-bg);
+  --color-surface: var(--oak-surface);
+  --color-surface-2: var(--oak-surface-2);
+  --color-border: var(--oak-border);
+  --color-text: var(--oak-text);
+  --color-text-2: var(--oak-text-2);
+  --color-text-3: var(--oak-text-3);
+  --color-accent: var(--oak-accent);
+  --color-accent-hover: var(--oak-accent-hover);
+  --color-on-accent: var(--oak-on-accent);
+  --color-accent-2: var(--oak-accent-2);
+  --color-link: var(--oak-link);
+  --color-issue: var(--oak-issue);
+  --color-lane-in: var(--oak-lane-in);
+  --color-danger: var(--oak-danger);
+  --color-on-danger: var(--oak-on-danger);
+  --color-mic: var(--oak-mic);
+  --color-scrim: var(--oak-scrim);
+
+  --font-display: var(--oak-font-display);
+  --font-sans: var(--oak-font-ui);
+  --font-mono: var(--oak-font-code);
+
+  --text-base: var(--oak-text-base);
+  --text-sm: var(--oak-text-small);
+  --text-h1: var(--oak-h1);
+  --text-h2: var(--oak-h2);
+  --text-h3: var(--oak-h3);
+
+  --radius-control: var(--oak-radius-control);
+  --radius-card: var(--oak-radius-card);
+  --radius-sheet: var(--oak-radius-sheet);
+
+  --shadow-card: var(--oak-shadow);
+  --shadow-overlay: var(--oak-shadow-overlay);
+
+  --ease-out: var(--oak-ease-out);
+  --animate-fade-in: oak-fade-in var(--oak-dur-base) var(--oak-ease-out) both;
+  --animate-slide-in-right: oak-slide-in-right var(--oak-dur-base) var(--oak-ease-out) both;
+  --animate-pop-in: oak-pop-in var(--oak-dur-base) var(--oak-ease-out) both;
+}
+
+@keyframes oak-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes oak-slide-in-right {
+  from {
+    transform: translateX(16px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes oak-pop-in {
+  from {
+    transform: scale(0.97);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes oak-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@layer base {
+  html {
+    background: var(--oak-bg);
+    color: var(--oak-text);
+    font-family: var(--oak-font-ui);
+    font-size: 100%;
+    font-feature-settings:
+      "tnum" 1,
+      "cv11" 1;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    margin: 0;
+    background: var(--oak-bg);
+    color: var(--oak-text);
+    font-size: var(--oak-text-base);
+    line-height: 1.5;
+    min-height: 100dvh;
+  }
+  #root {
+    min-height: 100dvh;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--oak-font-display);
+    font-weight: 560;
+    font-variation-settings:
+      "SOFT" 50,
+      "opsz" 36;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+  }
+  h1 {
+    font-size: var(--oak-h1);
+  }
+  h2 {
+    font-size: var(--oak-h2);
+  }
+  h3 {
+    font-size: var(--oak-h3);
+  }
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family: var(--oak-font-code);
+  }
+  ::selection {
+    background: var(--oak-selection);
+  }
+  a {
+    color: var(--oak-link);
+  }
+  /* Visible focus everywhere (ux §7.2 --focus: 2 px accent with a 2 px bg offset). */
+  :focus-visible {
+    outline: 2px solid var(--oak-accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+}
+
+@layer utilities {
+  .prose-oak {
+    max-width: 60ch;
+  }
+  .prose-oak p {
+    margin: 0 0 0.75em;
+  }
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--oak-surface-2) 25%,
+      color-mix(in srgb, var(--oak-surface-2) 60%, var(--oak-surface)) 50%,
+      var(--oak-surface-2) 75%
+    );
+    background-size: 200% 100%;
+    animation: oak-shimmer 1.4s linear infinite;
+  }
+  [data-motion="reduced"] .skeleton {
+    animation-name: none;
+  }
+  .sr-only-focusable:not(:focus):not(:focus-within) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* Reduced motion: transitions and animations collapse to a 120 ms cross-fade at most. */
+/* !important is the point here: the override must beat every component's own durations. */
+[data-motion="reduced"] *,
+[data-motion="reduced"] *::before,
+[data-motion="reduced"] *::after {
+  /* biome-ignore lint/complexity/noImportantStyles: global reduced-motion override */
+  animation-duration: 120ms !important;
+  /* biome-ignore lint/complexity/noImportantStyles: global reduced-motion override */
+  animation-iteration-count: 1 !important;
+  /* biome-ignore lint/complexity/noImportantStyles: global reduced-motion override */
+  transition-duration: 120ms !important;
+  /* biome-ignore lint/complexity/noImportantStyles: global reduced-motion override */
+  scroll-behavior: auto !important;
+}
+
+/* The /dev tool pages (workbench playground, Listen QA, telemetry, QA) sit on the same 24 px page gutter as
+   every other page instead of touching the nav rail. */
+@layer components {
+  .oak-dev-page {
+    padding: 24px;
+    min-width: 0;
+  }
+}

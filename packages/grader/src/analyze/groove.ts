@@ -15,7 +15,12 @@ export interface GrooveLock {
   /** Bass onsets one grid step before a kick that has no bass onset of its own. */
   anticipations: Rat[];
 }
-export function grooveLock(kick: readonly Rat[], bass: readonly Rat[], tol: Rat, grid: Rat = [1, 16]): GrooveLock {
+export function grooveLock(
+  kick: readonly Rat[],
+  bass: readonly Rat[],
+  tol: Rat,
+  grid: Rat = [1, 16],
+): GrooveLock {
   if (bass.length === 0 || kick.length === 0) return { lock: 0, coverage: 0, anticipations: [] };
   const onKick = bass.filter((b) => kick.some((k) => near(k, b, tol)));
   const covered = kick.filter((k) => bass.some((b) => near(k, b, tol)));
@@ -51,11 +56,14 @@ export function euclidPattern(k: number, n: number): boolean[] {
   const out = [...xs.flat(), ...ys.flat()];
   return k < 0 ? out.map((v) => !v) : out;
 }
-/** Step indices of the pulses, rotated left by `rotation` (Strudel's `(k,n,r)`). */
+/**
+ * Step indices of the pulses with Strudel's `(k,n,r)` rotation. Executed against 1.2.6: `x(3,8,1)` plays
+ * steps 1 4 7, so `r` moves every pulse r steps later (a rotation to the right).
+ */
 export function euclidSteps(k: number, n: number, rotation = 0): number[] {
   const pat = euclidPattern(k, n);
   const out: number[] = [];
-  for (let i = 0; i < n; i++) if (pat[(((i + rotation) % n) + n) % n]) out.push(i);
+  for (let i = 0; i < n; i++) if (pat[(((i - rotation) % n) + n) % n]) out.push(i);
   return out;
 }
 
@@ -84,8 +92,13 @@ export function stepsPerPeriod(on: readonly Rat[], n: number, period: Rat = [1, 
   return steps;
 }
 
-/** Whether the onsets are E(k, n) in every period; `rotation` is the left rotation that matches (0 = as written). */
-export function euclidMatch(on: readonly Rat[], k: number, n: number, period: Rat = [1, 1]): { ok: boolean; rotation?: number } {
+/** Whether the onsets are E(k, n) in every period; `rotation` is the smallest Strudel `r` that matches (0 = as written). */
+export function euclidMatch(
+  on: readonly Rat[],
+  k: number,
+  n: number,
+  period: Rat = [1, 1],
+): { ok: boolean; rotation?: number } {
   const steps = stepsPerPeriod(on, n, period);
   if (!steps || steps.length !== Math.min(Math.abs(k), n)) return { ok: false };
   const key = steps.join(",");
@@ -150,7 +163,11 @@ export function evenCount(on: readonly Rat[], period: Rat = [1, 1]): number | nu
   return count;
 }
 /** `[a, b]` when both lines play evenly spaced onsets, `a` against `b` per period. */
-export function polyRatio(a: readonly Rat[], b: readonly Rat[], period: Rat = [1, 1]): [number, number] | null {
+export function polyRatio(
+  a: readonly Rat[],
+  b: readonly Rat[],
+  period: Rat = [1, 1],
+): [number, number] | null {
   const na = evenCount(a, period);
   const nb = evenCount(b, period);
   return na === null || nb === null ? null : [na, nb];
