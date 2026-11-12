@@ -2,9 +2,11 @@
 // every state (idle, pending, correct, wrong, revealed) can be drawn from real data. Musical claims are checked
 // in `fixtures.test.ts` with headless Strudel and @oak/theory.
 import { type AnswerEnv, NEUTRAL_PROFILE } from "../env.tsx";
+import { parseSignatureValue } from "../keys/circle.ts";
 import { readsAs, type TextKind } from "../normalize.ts";
 import { emptyValue } from "../response.ts";
-import { centsText } from "../sing.ts";
+import { centsText, degreeNotes } from "../sing.ts";
+import { engrave, staffContext, staffNotes } from "../staff/model.ts";
 import { tapReport, targetSeconds } from "../tap.ts";
 import type {
   AnswerFeedback,
@@ -41,6 +43,13 @@ export const CLICK_CODE = 'setcpm(90/4)\n\nkick: s("bd ~ bd ~")\nsnare: s("~ sd 
 /** The first `sd` atom of CLICK_CODE (the snare on beat 2). */
 export const CLICK_CODE_SNARE = { from: CLICK_CODE.indexOf("sd"), to: CLICK_CODE.indexOf("sd") + 2 };
 export const MELODY_CODE = 'setcpm(90/4)\n\nmel: n("0 2 4 2").scale("C4:major").s("piano")';
+
+/** U02.L04's staff answer, and a G-major line with rhythm (1 2 3 1 | 5 1). */
+export const STAFF_C_MAJOR = "C4:4 E4:4 G4:4 C5:4";
+export const STAFF_G_MAJOR = "G4:4 A4:4 B4:4 G4:4 | D5:2 G4:2";
+/** 1 3 5 in A major from A3, one per second after a four-beat count-in at 120 (the fake-mic WAVs sing it). */
+export const SING_TONIC = 57;
+export const SING_PATTERN = degreeNotes(SING_TONIC, ["1", "3", "5"], { beat: 1, start: 0 });
 
 export const FIXTURES: Fixture[] = [
   fx({
@@ -385,18 +394,169 @@ export const FIXTURES: Fixture[] = [
     sample: 0.15,
   }),
   fx({
+    id: "text-interval-quality",
+    kind: "text",
+    title: "Interval: number, then quality",
+    prompt: "C up to E♭ is a…",
+    spec: { ui: "text", normalize: "interval" },
+    expected: "m3",
+    sample: "M3",
+    wrongMessage: "Count the half steps: C to E♭ is three, a minor 3rd. Four would be major.",
+  }),
+  fx({
+    id: "text-key",
+    kind: "text",
+    title: "Key: the circle of fifths",
+    prompt: "Which major key has three flats?",
+    spec: { ui: "text", normalize: "key" },
+    expected: "Eb major",
+    sample: "Ab major",
+    wrongMessage: "A♭ major has four flats. One step back clockwise.",
+  }),
+  fx({
+    id: "degree-lens",
+    kind: "degree-pad",
+    title: "Degree pad, solfège lens on",
+    prompt: "After the chords, which degree was the note?",
+    spec: { ui: "degree-pad", set: ["1", "2", "3", "4", "5", "6", "7"], syllables: false },
+    expected: ["6"],
+    sample: ["4"],
+    env: { lenses: { degrees: true, solfege: true, noteNames: false } },
+  }),
+  fx({
     id: "staff-input",
     kind: "staff-input",
-    title: "Staff input (Wave 3)",
-    prompt: "Write the melody on the staff.",
+    title: "Staff input: treble",
+    prompt: "Write C4 E4 G4 C5 on the staff, one note per beat.",
     spec: {
       ui: "staff-input",
       clef: "treble",
       bars: 1,
-      palette: { durations: ["q"], accidentals: false, ties: false, rests: true },
+      palette: { durations: ["4"], accidentals: false, ties: false, rests: false },
     },
-    expected: "",
-    sample: "",
+    expected: STAFF_C_MAJOR,
+    sample: "C4:4 F4:4 G4:4 C5:4",
+    wrongMessage: "The second note is one space too high: E4 is the bottom line.",
+  }),
+  fx({
+    id: "staff-key",
+    kind: "staff-input",
+    title: "Staff input: G major, with rhythm",
+    prompt: "In G major, write 1 2 3 1 as quarters, then 5 and 1 as half notes.",
+    spec: {
+      ui: "staff-input",
+      clef: "treble",
+      bars: 2,
+      key: { tonic: "G", mode: "major" },
+      palette: { durations: ["4", "2"], accidentals: true, ties: false, rests: true },
+    },
+    expected: STAFF_G_MAJOR,
+    sample: "G4:4 A4:4 B4:4 G4:4 | D5:2 F#4:2",
+  }),
+  fx({
+    id: "staff-bass",
+    kind: "staff-input",
+    title: "Staff input: bass clef",
+    prompt: "Write C3 E3 G3 C4 in the bass clef.",
+    spec: {
+      ui: "staff-input",
+      clef: "bass",
+      bars: 1,
+      palette: { durations: ["4"], accidentals: false, ties: false, rests: false },
+    },
+    expected: "C3:4 E3:4 G3:4 C4:4",
+    sample: "C3:4 E3:4 A3:4 C4:4",
+  }),
+  fx({
+    id: "staff-grand",
+    kind: "staff-input",
+    title: "Staff input: grand staff in D",
+    prompt: "In D major, write D3 A3 F♯4 D5: from the bass staff up to the treble.",
+    spec: {
+      ui: "staff-input",
+      clef: "grand",
+      bars: 1,
+      key: { tonic: "D", mode: "major" },
+      palette: { durations: ["4"], accidentals: true, ties: false, rests: false },
+    },
+    expected: "D3:4 A3:4 F#4:4 D5:4",
+    sample: "D3:4 A3:4 F4:4 D5:4",
+  }),
+  fx({
+    id: "keysig",
+    kind: "staff-input",
+    title: "Key signature: D major",
+    prompt: "Write D major's key signature, in order.",
+    spec: {
+      ui: "staff-input",
+      clef: "treble",
+      bars: 1,
+      mode: "key-signature",
+      palette: { durations: ["4"], accidentals: true, ties: false, rests: false },
+    },
+    expected: "F# C#",
+    sample: "C# F#",
+    wrongMessage: "Sharps are written in the order F C G D A E B.",
+  }),
+  fx({
+    id: "keysig-bass",
+    kind: "staff-input",
+    title: "Key signature: E♭ major, bass clef",
+    prompt: "Write E♭ major's key signature in the bass clef.",
+    spec: {
+      ui: "staff-input",
+      clef: "bass",
+      bars: 1,
+      mode: "key-signature",
+      palette: { durations: ["4"], accidentals: true, ties: false, rests: false },
+    },
+    expected: "Bb Eb Ab",
+    sample: "Bb Eb",
+  }),
+  fx({
+    id: "sing-degrees",
+    kind: "mic",
+    title: "Sing a degree pattern",
+    prompt: "After the chords, sing 1 3 5 in A major.",
+    spec: { ui: "mic" },
+    expected: [
+      { midi: 57.03, cents: 3, credit: 1 },
+      { midi: 61.05, cents: 5, credit: 1 },
+      { midi: 63.9, cents: -10, credit: 1 },
+    ],
+    sample: [
+      { midi: 57.03, cents: 3, credit: 1 },
+      { midi: 61.05, cents: 5, credit: 1 },
+      { midi: 66.01, cents: 201, credit: 0 },
+    ],
+    env: {
+      sing: {
+        notes: SING_PATTERN,
+        mode: "degree",
+        labels: "numbers",
+        countIn: { beats: 4, bpm: 120 },
+        reference: { tonic: SING_TONIC, chords: true },
+        tolCents: 50,
+      },
+    },
+  }),
+  fx({
+    id: "sing-quiet",
+    kind: "mic",
+    title: "Sight-singing in Quiet mode",
+    prompt: "Sight-sing do mi sol, then hear it.",
+    spec: { ui: "mic" },
+    expected: [],
+    sample: [],
+    env: {
+      quiet: true,
+      sing: {
+        notes: SING_PATTERN,
+        mode: "sight",
+        labels: "syllables",
+        reference: { tonic: SING_TONIC, chords: true },
+      },
+    },
   }),
 ];
 
@@ -448,6 +608,18 @@ export function demoMarks(spec: AnswerSpec, value: AnswerValue, expected: Answer
         ok: n.credit >= 1,
         note: n.cents === null ? "not heard" : centsText(n.cents),
       }));
+    case "staff-input": {
+      if (spec.mode === "key-signature") {
+        const want = parseSignatureValue(expected as string);
+        return parseSignatureValue(value as string).map((a, i) => ({ part: i, ok: a === want[i] }));
+      }
+      const names = (v: string) => {
+        const r = engrave(v, staffContext(spec));
+        return r.ok ? staffNotes(r.score).map((n) => n.pitches.map((x) => x.name).join("+")) : [];
+      };
+      const want = names(expected as string);
+      return names(value as string).map((n, i) => ({ part: i, ok: n === want[i] }));
+    }
     case "blanks":
       return Object.entries(value as Record<string, string>).map(([id, text]) => ({
         part: id,
@@ -473,12 +645,15 @@ export function demoCheck(f: Fixture, value: AnswerValue): AnswerFeedback {
     return tapReport(value as number[], targets, NEUTRAL_PROFILE).feedback;
   }
   const marks = demoMarks(f.spec, value, f.expected);
+  const sameLength =
+    f.spec.ui !== "staff-input" || marks.length === demoMarks(f.spec, f.expected, f.expected).length;
   const ok =
-    f.spec.ui === "text"
+    sameLength &&
+    (f.spec.ui === "text"
       ? marks.every((m) => m.ok)
       : marks.length > 0 &&
         marks.every((m) => m.ok) &&
-        (f.spec.ui !== "choice" || (value as string[]).length === (f.expected as string[]).length);
+        (f.spec.ui !== "choice" || (value as string[]).length === (f.expected as string[]).length));
   if (ok) return { state: "correct", marks };
   return { state: "wrong", marks, ...(f.wrongMessage ? { message: f.wrongMessage } : {}) };
 }

@@ -9,12 +9,29 @@
 // plays "hear it again / hear the answer / compare"; `resolve` runs an FET trial's sung resolution; `finish`
 // posts every trial record (idempotent upserts) and finishes the set. Grading is synchronous and pure
 // (`@oak/drills` through `deps.grade`), so the unit tests drive the whole flow with fakes.
-import type { Answer, DrillFinish, DrillSession, DrillTrialRecord, FamilyId, Trial } from "@oak/api";
+import type {
+  Answer,
+  DrillFinish,
+  DrillSession,
+  DrillTrialRecord,
+  FamilyId,
+  SungResolution,
+  Trial,
+} from "@oak/api";
 import type { DrillTrialResult, TrialResponse } from "@oak/drills";
 import type { PitchFrame } from "@oak/pitch";
 import { assign, fromCallback, fromPromise, setup } from "xstate";
 import type { SungSummary } from "../answers/types.ts";
-import { type PlannedTrial, revealedResult, skippedResult, type TrialOutcome, trialRecord } from "./model.ts";
+import {
+  type Modality,
+  type PlannedTrial,
+  revealedResult,
+  skippedResult,
+  sungResolutionOf,
+  type TrialOutcome,
+  trialRecord,
+} from "./model.ts";
+import { isFetTrial, resolutionOf, resolutionPath } from "./plans.ts";
 
 /** Where the trials of a set come from. A free-practice source adapts the level after every answer. */
 export interface TrialSource {
@@ -33,7 +50,10 @@ export interface ResumeState {
 export interface DrillDeps {
   grade(trial: Trial, response: TrialResponse): DrillTrialResult;
   /** An FET trial's sung resolution (feeds `fam.deg.resolve`; never the identification credit). */
-  gradeResolution(trial: Trial, frames: PitchFrame[]): { credit: number; sung: SungSummary[] };
+  gradeResolution(
+    trial: Trial,
+    frames: PitchFrame[],
+  ): { credit: number; passed: boolean; sung: SungSummary[] };
   /** A sing trial's per-note summary for the record (never audio). */
   sungOf(trial: Trial, frames: PitchFrame[]): SungSummary[];
   now(): number;
@@ -47,13 +67,16 @@ export interface DrillInput {
   familyIds: FamilyId[];
   warmupItemId: string | null;
   sessionId: string | null;
+  /** Quiet mode as `voice.get` reports it (the runner never decides it itself, wave3.md §5.3). */
   quiet: boolean;
+  /** The sing tolerance of the ladder (contracts §8.2), recorded with each sung resolution. */
+  tolCents: number;
   resume: ResumeState | null;
   deps: DrillDeps;
 }
 
 export type Stage = "cue" | "count-in" | "listen" | "respond" | "sing" | "resolution" | null;
-export type Audition = "again" | "answer" | "compare" | "cue";
+export type Audition = "again" | "answer" | "compare" | "cue" | "resolve";
 
 export type DrillEvent =
   | { type: "PRESENTED" }
@@ -66,6 +89,15 @@ export type DrillEvent =
   | { type: "REPLAY" }
   | { type: "CUE" }
   | { type: "SKIP_SUNG" }
+  /** Quiet mode: the learner heard the way home in their head (Space). */
+  | { type: "HEARD" }
+  /**
+   * Quiet mode changed while the set runs (the mic chip, Settings): later trials follow it; a way home being
+   * sung right now stops listening at once (it counts as skipped in Quiet mode — the mic never stays open).
+   */
+  | { type: "QUIET"; quiet: boolean }
+  /** A dictation A/B or bar replay while answering: counts as a replay, no state change. */
+  | { type: "LISTENED" }
   | { type: "AUDITION"; what: Audition }
   | { type: "AUDITION_DONE" }
   | { type: "NEXT" }
@@ -134,12 +166,13 @@ function outcomeFrom(
     revealed,
     sung,
     resolutionCredit: null,
+    sungResolution: null,
   };
   const record = trialRecord(
     cur.trial,
     ctx.index,
     { result, answer: ctx.captured.answer },
-    { taps: ctx.captured.taps, sung, at: ctx.deps.iso() },
+    { taps: ctx.captured.taps, sung, at: ctx.deps.iso(), revealed },
   );
   const outcomes = [...ctx.outcomes];
   outcomes[ctx.index] = outcome;
@@ -152,6 +185,46 @@ function rtOf(ctx: DrillContext): number {
   return ctx.answerAt === null ? 0 : Math.max(0, ctx.deps.now() - ctx.answerAt);
 }
 
+/** Folds the taken resolution into the current outcome and record (identification credit unchanged). */
+function withResolution(
+  ctx: DrillContext,
+  taken: Parameters<typeof sungResolutionOf>[2],
+  modality: Modality,
+): Pick<DrillContext, "outcomes" | "records"> {
+  const trial = (ctx.current as PlannedTrial).trial;
+  const sr: SungResolution | null = sungResolutionOf(
+    resolutionPath(trial),
+    resolutionOf(trial).playFirst,
+    taken,
+    ctx.input.tolCents,
+  );
+  const outcomes = [...ctx.outcomes];
+  const prev = outcomes[ctx.index] as TrialOutcome;
+  const sung = taken.kind === "sung" ? taken.notes : prev.sung;
+  outcomes[ctx.index] = {
+    ...prev,
+    sung,
+    resolutionCredit: taken.kind === "sung" ? taken.credit : null,
+    sungResolution: sr,
+  };
+  const records = [...ctx.records];
+  const rec = records[ctx.index] as DrillTrialRecord;
+  records[ctx.index] = { ...rec, modality, sungResolution: sr };
+  return { outcomes, records };
+}
+
+/** The feedback's automatic listen-back on an FET trial (ux §4.2): right → it walks home; wrong → yours vs it. */
+function autoAudition(ctx: DrillContext): Audition | null {
+  const trial = ctx.current?.trial;
+  const outcome = ctx.outcomes[ctx.index];
+  if (!trial || !outcome || !isFetTrial(trial) || outcome.result.skipped) return null;
+  // A sung resolution comes next: from level 3 the learner sings before hearing the path (audiation).
+  if (trial.params.sungResolution === true && !outcome.revealed) return null;
+  const got = ctx.captured.answer?.degrees;
+  if (!outcome.result.correct && !outcome.revealed && got && got.length === 1) return "compare";
+  return "resolve";
+}
+
 export const drillMachine = setup({
   types: {
     context: {} as DrillContext,
@@ -160,7 +233,7 @@ export const drillMachine = setup({
   },
   actors: {
     start: fromPromise<
-      { session: DrillSession; source: TrialSource },
+      { session: DrillSession; source: TrialSource; resumed?: Omit<ResumeState, "session"> },
       { input: DrillContext["input"]; resume: ResumeState | null }
     >(async () => {
       throw new Error("drill actors not provided");
@@ -247,6 +320,11 @@ export const drillMachine = setup({
     };
   },
   initial: "loading",
+  on: {
+    QUIET: {
+      actions: assign({ input: ({ context, event }) => ({ ...context.input, quiet: event.quiet }) }),
+    },
+  },
   states: {
     loading: {
       invoke: {
@@ -255,11 +333,22 @@ export const drillMachine = setup({
         onDone: {
           target: "routing",
           actions: assign(({ context, event }) => {
+            // The server handed back a set already open for this warm-up item (another browser started it):
+            // continue from its trials.
+            const resumed = event.output.resumed;
+            const outcomes = resumed ? resumed.outcomes : context.outcomes;
+            const index = resumed ? resumed.outcomes.length : context.index;
             // Regenerate the trials already answered so the summary can fold them.
             const trials: Trial[] = [];
-            for (let i = 0; i < Math.min(context.index, event.output.source.total); i++)
-              trials[i] = event.output.source.at(i, context.outcomes.slice(0, i)).trial;
-            return { session: event.output.session, source: event.output.source, trials, error: null };
+            for (let i = 0; i < Math.min(index, event.output.source.total); i++)
+              trials[i] = event.output.source.at(i, outcomes.slice(0, i)).trial;
+            return {
+              session: event.output.session,
+              source: event.output.source,
+              trials,
+              error: null,
+              ...(resumed ? { index, outcomes, records: resumed.records } : {}),
+            };
           }),
         },
         onError: {
@@ -346,6 +435,7 @@ export const drillMachine = setup({
               actions: assign({ replays: ({ context }) => context.replays + 1, micError: null }),
             },
             CUE: { guard: ({ context }) => !capturesResponse(context.current?.trial), target: "cueing" },
+            LISTENED: { actions: assign({ replays: ({ context }) => context.replays + 1 }) },
             SKIP_SUNG: { guard: "capturesResponse", target: "#drill.feedback", actions: "gradeSkipped" },
           },
         },
@@ -378,8 +468,18 @@ export const drillMachine = setup({
         },
         { type: "persist", params: ({ context }) => ({ ctx: { ...context, index: context.index + 1 } }) },
       ],
-      initial: "idle",
+      initial: "auto",
       states: {
+        auto: {
+          always: [
+            {
+              guard: ({ context }) => autoAudition(context) !== null,
+              target: "auditioning",
+              actions: assign({ audition: ({ context }) => autoAudition(context) }),
+            },
+            { target: "idle" },
+          ],
+        },
         idle: {
           on: {
             AUDITION: { target: "auditioning", actions: assign({ audition: ({ event }) => event.what }) },
@@ -439,21 +539,77 @@ export const drillMachine = setup({
               actions: assign(({ context, event }) => {
                 const trial = (context.current as PlannedTrial).trial;
                 const graded = context.deps.gradeResolution(trial, event.frames ?? []);
-                const outcomes = [...context.outcomes];
-                const prev = outcomes[context.index] as TrialOutcome;
-                outcomes[context.index] = { ...prev, sung: graded.sung, resolutionCredit: graded.credit };
-                const records = [...context.records];
+                const folded = withResolution(
+                  context,
+                  { kind: "sung", notes: graded.sung, credit: graded.credit, passed: graded.passed },
+                  "normal",
+                );
+                const records = [...folded.records];
                 const rec = records[context.index] as DrillTrialRecord;
                 records[context.index] = { ...rec, response: { ...rec.response, sung: graded.sung } };
-                return { outcomes, records, stage: null };
+                return { outcomes: folded.outcomes, records, stage: null };
               }),
             },
-            PRESENTED: { target: "done", actions: assign({ stage: null }) },
+            // Quiet mode: the way home has played; now it is heard in the head, then Space.
+            PRESENTED: [
+              {
+                guard: ({ context }) => context.input.quiet,
+                target: "imagining",
+                actions: assign({ stage: null }),
+              },
+              { target: "done", actions: assign({ stage: null }) },
+            ],
+            HEARD: {
+              guard: ({ context }) => context.input.quiet,
+              target: "done",
+              actions: assign(({ context }) => ({
+                ...withResolution(context, { kind: "quiet" }, "quiet"),
+                stage: null,
+              })),
+            },
+            QUIET: [
+              {
+                guard: ({ context, event }) => event.quiet && !context.input.quiet,
+                target: "done",
+                actions: assign(({ context }) => ({
+                  ...withResolution(context, { kind: "skipped" }, "quiet"),
+                  input: { ...context.input, quiet: true },
+                  stage: null,
+                })),
+              },
+              {
+                actions: assign({
+                  input: ({ context, event }) => ({ ...context.input, quiet: event.quiet }),
+                }),
+              },
+            ],
             MIC_ERROR: {
               target: "done",
-              actions: assign({ micError: ({ event }) => event.message, stage: null }),
+              actions: assign(({ context, event }) => ({
+                ...withResolution(context, { kind: "skipped" }, "fallback"),
+                micError: event.message,
+                stage: null,
+              })),
             },
-            SKIP_SUNG: { target: "done", actions: assign({ stage: null }) },
+            SKIP_SUNG: {
+              target: "done",
+              actions: assign(({ context }) => ({
+                ...withResolution(context, { kind: "skipped" }, context.input.quiet ? "quiet" : "normal"),
+                stage: null,
+              })),
+            },
+          },
+        },
+        imagining: {
+          on: {
+            HEARD: {
+              target: "done",
+              actions: assign(({ context }) => withResolution(context, { kind: "quiet" }, "quiet")),
+            },
+            SKIP_SUNG: {
+              target: "done",
+              actions: assign(({ context }) => withResolution(context, { kind: "skipped" }, "quiet")),
+            },
           },
         },
         done: {

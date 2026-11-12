@@ -8,22 +8,67 @@ import { drumStaffPosition as drumPos } from "./drums.ts";
 import type { AbcOptions, AbcResult, NotationInput, Score } from "./types.ts";
 
 export { abcLength, abcPitchLetter, toAbc } from "./abc.ts";
-export { barBeat, buildScore, estimateKey, straightenSwing } from "./build.ts";
+export {
+  annotationsOn,
+  barBeat,
+  buildScore,
+  clefOfTrack,
+  estimateKey,
+  keyAtBar,
+  straightenSwing,
+} from "./build.ts";
 export { DRUM_NAMES } from "./drums.ts";
 export {
   applyEdit,
+  type EditRefusal,
+  editNoteList,
   editStaff,
+  type NoteListContext,
+  type NoteListEditResult,
+  noteListInput,
   nudgePitch,
   pitchToStep,
+  plainNoteList,
   type StaffEdit,
+  slicedNoteList,
   staffStepAtY,
   stepToPitch,
   writtenToCycles,
   xToOnset,
 } from "./edit.ts";
+export {
+  type BarGeometry,
+  type Box,
+  barFraction,
+  barPoints,
+  type HitContext,
+  headAt,
+  hitTest,
+  NotationNotBuiltError,
+  type NoteGeometry,
+  noteAt,
+  onsetX,
+  type StaffBandGeometry,
+  type StaffGeometry,
+  type StaffHit,
+  staffAt,
+  stepY,
+} from "./geometry.ts";
+export { ABCJS_LIMITS, type AbcjsLimit, abcjsLimitWarnings } from "./limits.ts";
 export { type Grid, gridOf } from "./meter.ts";
 export { activeNotes, scoreToEvents } from "./model.ts";
 export { eventIdBase, parseNoteList, toNoteList, withIds } from "./notelist.ts";
+export {
+  ANNOTATION_CLASSES,
+  type AnnotationSet,
+  CLEFS,
+  type Clef,
+  type KeySignatureOption,
+  labelSpelled,
+  type NoteAnnotation,
+  noteAnnotations,
+  resolveKeySignature,
+} from "./options.ts";
 export * from "./types.ts";
 
 /** `buildScore` + `toAbc`. */

@@ -3,17 +3,33 @@
 // through the HighlightBus (abcjs TimingCallbacks are never used): `.oak-playing`, `.oak-hover`,
 // `.oak-selected` and `.oak-issue` on the `oak-e{n}` elements. A click selects the note's events, which
 // selects their code range. Loops longer than a page (8 bars) are engraved one page at a time; the page
-// follows the playhead while playing (so the lit note is always on screen) and turns by hand when stopped.
+// follows the playhead while playing (so the lit note is always on screen); when stopped it turns by hand, or to
+// the notes pointed at from elsewhere (a tutor reference, a feedback row, a note selected in the code or the roll).
+import type { KeySpec } from "@oak/content-kit";
 import type { AbcResult } from "@oak/notation";
 import { nsFromClasses, type RenderedStaff, renderStaff } from "@oak/notation/render";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { type AnnotationKinds, anyAnnotation } from "./annotate.ts";
 import type { BusState, HighlightBus } from "./highlight-bus.ts";
-import { staffPage, staffPageCount, type WorkbenchModel } from "./model.ts";
+import { keyList, keyName, keySummary, staffClefText } from "./key-tools.ts";
+import {
+  barsPerLineFor,
+  busiestBar,
+  pageBarsFor,
+  staffPage,
+  staffPageCount,
+  type WorkbenchModel,
+} from "./model.ts";
+import { colourHeads } from "./staff-colour.ts";
 
 export interface StaffViewProps {
   model: WorkbenchModel;
   bus: HighlightBus;
   stale?: boolean;
+  /** Degree and syllable in each note's accessible name (their unlocks). Default both. */
+  hover?: { degree: boolean; solfege: boolean };
+  /** The lines under the staff (lenses, or a lesson step's `staffLabels`); default: the model's own. */
+  annotations?: AnnotationKinds;
 }
 
 const PREFIX = "oak-e";
@@ -49,7 +65,7 @@ function rove(host: HTMLElement, to: SVGElement | null): void {
   if (to) target.focus();
 }
 
-export function StaffView({ model, bus, stale }: StaffViewProps) {
+export function StaffView({ model, bus, stale, hover, annotations }: StaffViewProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const rendered = useRef<RenderedStaff | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -60,46 +76,125 @@ export function StaffView({ model, bus, stale }: StaffViewProps) {
     selected: ClassSync;
     issue: ClassSync;
   } | null>(null);
-  const src = model.staffSource;
+  const ann = annotations ?? model.staffSource?.annotations ?? null;
+  const annRef = useRef(ann);
+  annRef.current = ann;
+  const annKey = ann ? `${+ann.degree}${+ann.solfege}${+ann.noteName}` : "";
+  // The staff's width decides how many bars share a line when texts sit under the notes.
+  const [hostWidth, setHostWidth] = useState(0);
+  useEffect(() => {
+    const el = hostRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () => setHostWidth(Math.round(el.clientWidth / 20) * 20);
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    measure();
+    return () => ro.disconnect();
+  }, []);
+  const busiest = useMemo(
+    () => (model.staffSource ? busiestBar(model.staffSource.events) : 0),
+    [model.staffSource],
+  );
+  const lines0 = ann ?? model.staffSource?.annotations ?? null;
+  const perLine =
+    hostWidth > 0 && lines0 && anyAnnotation(lines0) ? barsPerLineFor(busiest, lines0, hostWidth) : null;
+  const src = useMemo(() => {
+    const base = model.staffSource;
+    if (!base) return base;
+    if (!ann && perLine === null) return base;
+    const staves = model.score?.staves.length ?? 1;
+    const textLines = lines0 ? +lines0.degree + +lines0.solfege + +lines0.noteName : 0;
+    return {
+      ...base,
+      ...(ann ? { annotations: ann } : {}),
+      ...(perLine !== null
+        ? {
+            barsPerLine: perLine,
+            pageBars: pageBarsFor(base.pageBars, perLine, staves, textLines),
+          }
+        : {}),
+    };
+    // `ann` is read through its key: a new object with the same lines engraves nothing new.
+  }, [model.staffSource, model.score, annKey, perLine]);
+  const same = src === model.staffSource;
   const pages = src ? staffPageCount(src) : 1;
   const [pageWanted, setPage] = useState(0);
   const page = Math.min(pageWanted, pages - 1);
   const sheet = useMemo(
     () =>
-      page === 0 || !src
+      (page === 0 && same) || !src
         ? {
             startBar: 0,
             bars: Math.min(src?.bars ?? model.bars, src?.pageBars ?? model.bars),
+            score: model.score,
             abc: model.abc,
             error: model.notationError,
           }
         : staffPage(src, page),
-    [model, src, page],
+    [model, src, page, same],
   );
   const pageAbc = useRef<AbcResult | null>(sheet.abc);
   pageAbc.current = sheet.abc;
   const abc = sheet.abc?.abc ?? null;
   const modelRef = useRef(model);
   modelRef.current = model;
+  const hoverRef = useRef(hover ?? { degree: true, solfege: true });
+  hoverRef.current = hover ?? { degree: true, solfege: true };
   const pageRef = useRef({ page, pages, pageBars: src?.pageBars ?? 8 });
   pageRef.current = { page, pages, pageBars: src?.pageBars ?? 8 };
+  /** The last outside focus (feedback hover, code or roll selection) the page followed. */
+  const focusKey = useRef("");
 
   const apply = (s: BusState) => {
     // Turn the page to where the clock is (only loops longer than a page).
     const pr = pageRef.current;
-    if (pr.pages > 1 && s.playing.size > 0) {
+    const pageOf = (ids: Iterable<string>): number | null => {
       let first = Number.POSITIVE_INFINITY;
-      for (const id of s.playing) first = Math.min(first, modelRef.current.byId.get(id)?.onset ?? first);
-      const want = Number.isFinite(first) ? Math.floor(first / pr.pageBars) : pr.page;
-      if (want !== pr.page && want >= 0 && want < pr.pages) {
-        pageRef.current = { ...pr, page: want };
-        setPage(want);
-        return;
+      for (const id of ids) {
+        const e = modelRef.current.byId.get(id);
+        if (e && !e.band) first = Math.min(first, e.onset);
+      }
+      const want = Number.isFinite(first) ? Math.floor(first / pr.pageBars) : null;
+      return want !== null && want >= 0 && want < pr.pages ? want : null;
+    };
+    const turn = (want: number | null): boolean => {
+      if (want === null || want === pr.page) return false;
+      pageRef.current = { ...pr, page: want };
+      setPage(want);
+      return true;
+    };
+    if (pr.pages > 1 && s.playing.size > 0) {
+      if (turn(pageOf(s.playing))) return;
+    } else if (pr.pages > 1) {
+      // Stopped: something pointed at from elsewhere (a tutor reference or a feedback row, a note clicked in the
+      // code or on the roll) that is on no note of this page turns to its page, once per new focus, so the
+      // pointed-at notes are on screen. A page the learner turned by hand stays until the focus changes.
+      const ext = [
+        s.hover.source === "feedback" ? s.hover.events : [],
+        s.selected.source !== null && s.selected.source !== "staff" ? s.selected.events : [],
+      ];
+      const key = ext.map((l) => l.join(" ")).join("|");
+      if (key !== focusKey.current) {
+        focusKey.current = key;
+        for (const ids of ext) {
+          if (ids.length === 0) continue;
+          const onPage = ids.some((id) => pageOf([id]) === pr.page);
+          if (!onPage && turn(pageOf(ids))) return;
+          break;
+        }
       }
     }
     const sy = syncs.current;
     const page = pageAbc.current;
-    if (!sy || !rendered.current) return;
+    if (!sy || !rendered.current) {
+      // Re-engraving (new code, lens lines, a page turn): nothing on the old drawing stays lit meanwhile.
+      const host = hostRef.current;
+      if (host) {
+        delete host.dataset.activeEvents;
+        delete host.dataset.activeNs;
+      }
+      return;
+    }
     const playingNs = bus.staffNsOf(s.playing, page);
     sy.playing.set(playingNs);
     const host = hostRef.current;
@@ -142,15 +237,37 @@ export function StaffView({ model, bus, stale }: StaffViewProps) {
         };
         // Label every engraved note with its pitches and place (screen readers, tests, devtools).
         const offset = sheetRef.current.startBar;
+        const show = hoverRef.current;
         for (const entry of pageAbc.current?.idMap ?? []) {
+          const labels = entry.eventIds
+            .map((id) => modelRef.current.byId.get(id)?.label?.degree)
+            .filter((d): d is NonNullable<typeof d> => !!d);
+          const degree = labels.map((d) => d.label).join(" ");
+          const syllable = labels.map((d) => d.syllable).join(" ");
+          const said = [
+            entry.pitches.join(" "),
+            `bar ${entry.bar + offset}, beat ${entry.beat}`,
+            show.degree && degree ? `degree ${degree}` : null,
+            show.solfege && syllable ? syllable : null,
+          ].filter(Boolean);
           for (const node of host.querySelectorAll(`.${PREFIX}${entry.n}`)) {
-            node.setAttribute(
-              "aria-label",
-              `${entry.pitches.join(" ")}, bar ${entry.bar + offset}, beat ${entry.beat}`,
-            );
+            node.setAttribute("aria-label", said.join(", "));
             node.setAttribute("data-oak-events", entry.eventIds.join(" "));
+            if (show.degree && degree) node.setAttribute("data-oak-degree", degree);
+            else node.removeAttribute("data-oak-degree");
           }
         }
+        // Degree colours on the heads while the degree line shows (tb.feature.degree-labels: labels and colours).
+        if (annRef.current?.degree)
+          colourHeads(
+            host,
+            (pageAbc.current?.idMap ?? []).map((entry) => ({
+              n: entry.n,
+              degrees: entry.eventIds
+                .map((id) => modelRef.current.byId.get(id)?.label?.degree?.num ?? 0)
+                .filter((d) => d > 0),
+            })),
+          );
         // One tab stop for the whole staff (roving tabindex): abcjs makes every note and rest a stop, which
         // puts hundreds of stops between the transport and the rest of the page on a long loop.
         rove(host, null);
@@ -167,6 +284,11 @@ export function StaffView({ model, bus, stale }: StaffViewProps) {
       cancelled = true;
       rendered.current = null;
       syncs.current = null;
+      // The old drawing stays on screen until the new one lands: drop its highlights and its playing mirror now.
+      for (const cls of ["oak-playing", "oak-hover", "oak-selected", "oak-issue"])
+        for (const el of host.querySelectorAll(`.${cls}`)) el.classList.remove(cls);
+      delete host.dataset.activeEvents;
+      delete host.dataset.activeNs;
     };
   }, [abc, bus]);
 
@@ -225,9 +347,53 @@ export function StaffView({ model, bus, stale }: StaffViewProps) {
 
   const first = sheet.startBar + 1;
   const last = sheet.startBar + sheet.bars;
+  const clef = staffClefText(sheet.score);
+  const keys = keySummary(
+    model.keySpans,
+    sheet.startBar,
+    sheet.startBar + sheet.bars,
+    sheet.score?.key ?? null,
+  );
+  // A staff in a key of its own (two tracks in two keys) is named after the piece's key.
+  const ownKeys = (sheet.score?.staves ?? [])
+    .filter((st) => st.key)
+    .map((st) => {
+      const keys = [st.key as KeySpec, ...(st.keyChanges ?? []).map((c) => c.key as KeySpec)].map(keyName);
+      const shown = keys.length > 3 ? [keys[0], "…", keys[keys.length - 1]] : keys;
+      return `${st.clef === "bass" ? "bass staff" : "treble staff"} in ${shown.join(" → ")}`;
+    });
+  const lines: AnnotationKinds | null = src?.annotations ?? null;
   return (
-    <div className="oak-staff" data-testid="staff-view" data-status={status} data-page={page}>
+    <div
+      className="oak-staff"
+      data-testid="staff-view"
+      data-status={status}
+      data-page={page}
+      data-annotations={
+        lines && anyAnnotation(lines)
+          ? (["degree", "solfege", "noteName"] as const).filter((k) => lines[k]).join(" ")
+          : ""
+      }
+    >
       <div className="oak-view-head">
+        {sheet.score ? (
+          <span className="oak-staff-facts" data-testid="staff-facts">
+            {clef ? <span data-testid="staff-clef">{clef}</span> : null}
+            {keys ? (
+              <span
+                data-testid="staff-key"
+                title={
+                  keys.includes("…")
+                    ? keyList(model.keySpans, sheet.startBar, sheet.startBar + sheet.bars)
+                    : undefined
+                }
+              >
+                {keys}
+              </span>
+            ) : null}
+            {ownKeys.length ? <span data-testid="staff-own-keys">{ownKeys.join(", ")}</span> : null}
+          </span>
+        ) : null}
         {pages > 1 ? (
           <span className="oak-staff-pager" data-testid="staff-pager">
             <button

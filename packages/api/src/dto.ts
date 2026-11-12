@@ -1,7 +1,7 @@
 // Shared domain DTOs: what crosses the wire between the app and the server. Each is a zod schema plus
 // its inferred type. Field names are camelCase; the SQLite columns they come from are in
 // docs/design/interfaces.md. Absent values are `null` in responses (never a missing key).
-import { FLAVOUR_IDS, type LearnerProfile, schemas } from "@oak/content-kit";
+import { DEGREES, FLAVOUR_IDS, type LearnerProfile, schemas } from "@oak/content-kit";
 import { z } from "zod";
 import { BACKEND_IDS, RungSchema, TUTOR_HEALTH, TutorSettingsSchema } from "./tutor.ts";
 
@@ -142,6 +142,19 @@ export const CalibrationRunSchema = z.strictObject({
 });
 export type CalibrationRun = z.infer<typeof CalibrationRunSchema>;
 
+/** The note-label lenses (Wave 3). Each is the learner's preference; the unlock gate is applied on top. */
+export const LensPrefsSchema = z.strictObject({
+  /** 1-based scale degrees with ♭/♯ ("1", "♭3"). Gated by tb.feature.degree-labels (U03.L02). */
+  degrees: z.boolean(),
+  /** Movable-do syllables ("do", "me"). Gated by tb.feature.solfege (U03.L08). */
+  solfege: z.boolean(),
+  /** Spelled note names ("F♯4"). Never gated. */
+  noteNames: z.boolean(),
+});
+export type LensPrefs = z.infer<typeof LensPrefsSchema>;
+export const LENS_IDS = ["degrees", "solfege", "noteNames"] as const;
+export type LensId = (typeof LENS_IDS)[number];
+
 /** `settings` rows by key. `PUT /api/settings/:key` validates the value with this shape's entry. */
 export const SettingsSchema = z.object({
   theme: z.enum(["paper", "bark"]),
@@ -159,6 +172,25 @@ export const SettingsSchema = z.object({
   tutor: TutorSettingsSchema,
   /** Include audio in `.oakbackup` exports by default. */
   backupWithAudio: z.boolean(),
+  /**
+   * Wave 3 lenses (docs/design/wave3.md §4.3): the learner's choice of note labels in the Workbench, drills and
+   * answer widgets. A lens shows only once its tool is unlocked (`degrees`: tb.feature.degree-labels, `solfege`:
+   * tb.feature.solfege); `app/src/lib/lenses.ts` applies the gate. A lesson step's `ui.rollLabels` wins inside it.
+   */
+  lenses: LensPrefsSchema,
+  /**
+   * Wave 3: the album's name (ux §5.3: printed on every cover and heading /album; editable). `null` until the
+   * learner names it (the app then prints "Oak Sessions"). Optional in the type so Wave 2 settings objects still
+   * type-check; the server always answers it (default `null`).
+   */
+  albumTitle: z
+    .string()
+    .trim()
+    .min(1)
+    .max(60)
+    .regex(/^[^\p{Cc}]*$/u, "no control characters")
+    .nullable()
+    .optional(),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 export type SettingKey = keyof Settings;
@@ -174,6 +206,8 @@ export const DEFAULT_SETTINGS: Settings = {
   linerNotesInAlbum: true,
   tutor: { backend: "auto", softMonthlyUsd: 25, softWarnedMonth: null },
   backupWithAudio: true,
+  lenses: { degrees: true, solfege: true, noteNames: false },
+  albumTitle: null,
 };
 
 export const HealthSchema = z.object({
@@ -391,6 +425,13 @@ export const FamilyStateSchema = z.object({
   openCategories: z.array(z.string()),
   /** The highest level whose gate is open. */
   maxOpenLevel: z.number().int(),
+  /**
+   * Wave 3 (decision 27): the learner day this family began resting in its composite, below its mastery level,
+   * or `null` when it is not resting. A resting family shows `graduatedAt` and `compositeId` like a graduated
+   * one; it is still practised in mixed practice and returns to its own sets where it left off. Absent from a
+   * server older than Wave 3.
+   */
+  restingSince: Day.nullable().optional(),
 });
 export type FamilyState = z.infer<typeof FamilyStateSchema>;
 
@@ -431,7 +472,18 @@ export const DueBatchSchema = z.object({
 });
 export type DueBatch = z.infer<typeof DueBatchSchema>;
 
+/**
+ * Wave 3 (docs/design/wave3.md §5.2): a client-generated key (`crypto.randomUUID()`) that makes a write
+ * idempotent. The server stores the first response under the key and answers a repeat with that same
+ * response, counting nothing twice (a double submit, two tabs, a retry after a lost response).
+ */
+export const IdempotencyKeySchema = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{8,64}$/, "an idempotency key is 8 to 64 characters of [A-Za-z0-9_-]");
+
 export const SrsReviewRequestSchema = z.strictObject({
+  /** Wave 3: see `IdempotencyKeySchema`. Optional on the wire; the app always sends one. */
+  idempotencyKey: IdempotencyKeySchema.optional(),
   cardId: z.string(),
   drillSessionId: z.string().nullable(),
   /** Fact cards: one answer. Families: the set's summary (the server recomputes it from the stored trials). */
@@ -497,6 +549,35 @@ export const DrillSessionSchema = z.object({
   finishedAt: Instant.nullable(),
 });
 export type DrillSession = z.infer<typeof DrillSessionSchema>;
+/** One sung note's summary (never audio): what `@oak/pitch` `gradeSung` measured. */
+export const SungNoteSchema = z.strictObject({
+  midi: z.number().nullable(),
+  cents: z.number().nullable(),
+  credit: z.number(),
+});
+export type SungNote = z.infer<typeof SungNoteSchema>;
+/**
+ * A sung resolution of a functional-ear trial (contracts §8.3, ux §4.2): the path from the answered degree to
+ * the tonic (4→3→2→1, 5→6→7→1′), sung after Oak played it (levels 1–2) or before (level 3+). It never changes
+ * the trial's identification credit; it is evidence for `fam.deg.resolve` and the tolerance ladder.
+ */
+export const SungResolutionSchema = z.strictObject({
+  /** The degrees sung, in order, 1-based ("4", "3", "2", "1"). */
+  path: z.array(z.enum(DEGREES)).min(1).max(8),
+  order: z.enum(["play-first", "sing-first"]),
+  notes: z.array(SungNoteSchema),
+  /** Mean pitch credit of the notes (contracts §8.1 item 5). */
+  credit: z.number().min(0).max(1),
+  passed: z.boolean(),
+  /** `Shift+S`: skipped (logged, no evidence, no penalty). */
+  skipped: z.boolean(),
+  /** Quiet mode: listened instead of sung (self-report, no voice evidence). */
+  quiet: z.boolean(),
+  /** The tolerance the notes were graded at. */
+  tolCents: SingTolCentsSchema,
+});
+export type SungResolution = z.infer<typeof SungResolutionSchema>;
+
 export const DrillTrialRecordSchema = z.strictObject({
   idx: z.number().int().nonnegative(),
   familyId,
@@ -523,6 +604,17 @@ export const DrillTrialRecordSchema = z.strictObject({
   confusion: z.tuple([z.string(), z.string()]).nullable(),
   centsError: z.number().nullable(),
   at: Instant,
+  // --- Wave 3 (docs/design/wave3.md §5.3); optional on the wire, the drill runner always sends them ---
+  /** The learner asked to be shown the answer before answering: credit 0, no evidence (contracts §5.3 rung 4). */
+  revealed: z.boolean().optional(),
+  /**
+   * How the trial was taken: `normal`; `quiet` (Quiet mode: a sung part replaced by listening or "hear it in
+   * your head, then press Space", contracts §8.5: no voice evidence, no penalty); `fallback` (a mic kind shown
+   * as its identify fallback).
+   */
+  modality: z.enum(["normal", "quiet", "fallback"]).optional(),
+  /** FET trials: the sung resolution after the answer (contracts §8.3). `null` when none was asked. */
+  sungResolution: SungResolutionSchema.nullable().optional(),
 });
 export type DrillTrialRecord = z.infer<typeof DrillTrialRecordSchema>;
 export const DrillFinishSchema = z.object({
@@ -613,6 +705,8 @@ export const AttemptResponseSchema = z.union([
 export type AttemptResponse = z.infer<typeof AttemptResponseSchema>;
 
 export const StepAttemptCreateSchema = z.strictObject({
+  /** Wave 3: see `IdempotencyKeySchema`. Optional on the wire; the app always sends one. */
+  idempotencyKey: IdempotencyKeySchema.optional(),
   sessionId: z.string().nullable(),
   /** Slug inside the lesson; the global ID is `${lessonId}/${exerciseId}`. */
   exerciseId: z.string(),
@@ -1304,7 +1398,10 @@ export type QaReport = z.infer<typeof QaReportSchema>;
 
 export const ProgressReportSchema = z.object({
   canDo: z.array(CanDoEntrySchema),
-  milestones: z.array(z.object({ id: z.string(), reachedAt: Instant.nullable() })),
+  /** Every milestone of `content/milestones.ts`, in registry order; `reachedAt` null until reached. */
+  milestones: z.array(
+    z.object({ id: z.string(), title: z.string(), description: z.string(), reachedAt: Instant.nullable() }),
+  ),
   /** Shown as a month, never as a count of sessions behind. `null` until there is enough data. */
   paceEstimate: z
     .object({ coreDoneBy: z.string().regex(/^\d{4}-\d{2}$/), sessionsPerWeek: z.number() })
@@ -1551,7 +1648,8 @@ export type ListenMark = z.infer<typeof ListenMarkSchema>;
  * e2e. Points (case-insensitive): `fresh`, `onboarded`, `after <SessionId>` (e.g. `after U01.L03`,
  * `after U01.CP`, `after C0.S1`), `U01.CP due`, `U01.CP failed`, `U01.CP failed twice`, `C0 ready`,
  * `C0 in progress`, `C0 released`, `U02.CP due`, `C1 ready`, `C1 in progress`, `C1 released`, and
- * `<N>-day gap` (the base `after U01.L03` with `gapDays: N`). `GET /dev/seed` lists them.
+ * `<N>-day gap` (the base `after U01.L03` with `gapDays: N`). Wave 3 adds `WAVE3_SEED_POINTS` (end of this
+ * file). `GET /dev/seed` lists them.
  */
 export const DevSeedRequestSchema = z.strictObject({
   point: z.string().min(1).max(80),
@@ -1563,6 +1661,11 @@ export const DevSeedRequestSchema = z.strictObject({
   targetMinutes: z.union([z.literal(15), z.literal(20), z.literal(25)]).optional(),
   /** Do one warm-up review set on each simulated day (default true): SRS cards have history. */
   practice: z.boolean().optional(),
+  /**
+   * Wave 3: the learner has a working microphone and a calibrated range (default true, as after onboarding's
+   * mic and range steps). `false`: no microphone (`inputKind: "none"`, Quiet mode with reason `no-mic`).
+   */
+  mic: z.boolean().optional(),
 });
 export type DevSeedRequest = z.infer<typeof DevSeedRequestSchema>;
 export const DevSeedResultSchema = z.object({
@@ -1607,3 +1710,140 @@ export const DevClockSetSchema = z.strictObject({
   reset: z.boolean().optional(),
 });
 export type DevClockSet = z.infer<typeof DevClockSetSchema>;
+
+// --- Wave 3 additions (docs/design/wave3.md §5) ----------------------------------------------------
+// Each names the surface that needs it. Additive: existing fields are unchanged; the few new request fields
+// above are optional, and every new endpoint answers a typed 501 until the server engineer builds it.
+
+/**
+ * `GET /session/day`: today's sessions as the server stores them, so Today's "done for today" survives a
+ * reload and another browser (wave2.md known gap 3). One open session per learner day: `session.start` on a
+ * day with an open session returns that session instead of starting a second (docs/design/wave3.md §5.1).
+ */
+export const SessionDaySchema = z.object({
+  day: Day,
+  /** The session left open today (also `bootstrap.openSession`). */
+  open: SessionSchema.nullable(),
+  /** Sessions ended today, oldest first. */
+  ended: z.array(SessionSchema),
+  /**
+   * True once a planned session (kind lesson, checkpoint, capstone, gym, keepalive, light or review) ended today:
+   * Today shows the done state with "More practice" and Studio. Studio sessions never count.
+   */
+  doneForToday: z.boolean(),
+  /** The session whose summary the done state links to (`session.summary`), the last planned one ended. */
+  summarySessionId: z.string().nullable(),
+});
+export type SessionDay = z.infer<typeof SessionDaySchema>;
+
+/** One day of graded sung notes inside the ladder's 21-day window (contracts §8.2). */
+export const VoiceLadderDaySchema = z.object({
+  day: Day,
+  /** Graded sung notes that day (Quiet, skipped and calibration notes excluded). */
+  notes: z.number().int().nonnegative(),
+  /** Median |cents error| of those notes; `null` with no notes. */
+  medianAbsCents: z.number().nullable(),
+  /** ≥ 8 notes and a median at or under the next step's bar. */
+  qualifies: z.boolean(),
+});
+/**
+ * The sing tolerance ladder 70 → 50 → 35 → 25 (contracts §8.2), as the server keeps it. It is updated from
+ * evidence the server already receives: `drills.trials` (sung responses and `sungResolution`) and
+ * `steps.attempt` (sung responses); never by unit or date, never while a checkpoint is pending.
+ */
+export const VoiceLadderSchema = z.object({
+  cents: SingTolCentsSchema,
+  mode: z.enum(["auto", "fixed"]),
+  /** The next rung and the median it needs on 3 days; `null` at ±25¢ or in fixed mode. */
+  next: z.object({ cents: SingTolCentsSchema, medianAtMost: z.number() }).nullable(),
+  /** The days inside the 21-day window with any graded sung notes, oldest first. */
+  days: z.array(VoiceLadderDaySchema),
+  /** Qualifying days in the window, and how many tightening needs (3). */
+  qualifyingDays: z.number().int().nonnegative(),
+  daysNeeded: z.number().int().positive(),
+  /**
+   * Tightening is held while a checkpoint the planner has offered (within the last 14 learner days) is not yet
+   * passed or soft-passed (decision 29).
+   */
+  held: z.object({ reason: z.literal("checkpoint-pending"), checkpointId: z.string() }).nullable(),
+  /** After a gap of 21 days or more: a one-tap loosen is offered (Settings → Voice, the return day). */
+  offerLoosen: z.boolean(),
+  /** The last change, announced once in the Coda (`SessionSummary.toleranceChange`). */
+  lastChange: z
+    .object({
+      from: SingTolCentsSchema,
+      to: SingTolCentsSchema,
+      at: Instant,
+      reason: z.enum(["evidence", "learner", "loosen"]),
+    })
+    .nullable(),
+});
+export type VoiceLadder = z.infer<typeof VoiceLadderSchema>;
+
+export const QUIET_REASONS = ["today", "always", "no-mic"] as const;
+/**
+ * `GET /voice`: the voice state drills and lessons read before asking for the mic (contracts §8.5): Quiet mode
+ * for today, the vocal range and the tolerance ladder. One request; the drill runner and the lesson's sing
+ * steps never derive Quiet mode on their own.
+ */
+export const VoiceStateSchema = z.object({
+  day: Day,
+  /** Quiet mode is in effect today. */
+  quiet: z.boolean(),
+  /** Why: toggled for today, set always, or no usable mic (`profile.inputKind === "none"`). */
+  quietReason: z.enum(QUIET_REASONS).nullable(),
+  /** From the range sweep; `null` until calibrated (drills then use the defaults of `toLearnerProfile`). */
+  range: z
+    .object({
+      low: z.number(),
+      high: z.number(),
+      comfortLow: z.number(),
+      comfortHigh: z.number(),
+    })
+    .nullable(),
+  /** Singing labels: numbers until U03.L08 introduces syllables (contracts §8.3). */
+  labels: z.enum(["numbers", "syllables"]),
+  ladder: VoiceLadderSchema,
+});
+export type VoiceState = z.infer<typeof VoiceStateSchema>;
+/** `PUT /voice/quiet`: the mic chip and Settings → Voice. `today` lapses at the next learner day. */
+export const VoiceQuietSetSchema = z.strictObject({
+  quiet: z.boolean(),
+  scope: z.enum(["today", "always"]),
+});
+export type VoiceQuietSet = z.infer<typeof VoiceQuietSetSchema>;
+/** `PUT /voice/ladder`: Settings → Voice (Auto / ±70 / ±50 / ±35 / ±25) and the one-tap loosen. */
+export const VoiceLadderSetSchema = z
+  .strictObject({
+    /** `auto`: tighten from evidence; `fixed`: hold `cents`; `loosen`: one rung looser (only when `offerLoosen`). */
+    mode: z.enum(["auto", "fixed", "loosen"]),
+    /** Required with `fixed`, absent otherwise. */
+    cents: SingTolCentsSchema.optional(),
+  })
+  .refine((b) => (b.mode === "fixed") === (b.cents !== undefined), {
+    message: "cents is given with mode 'fixed' and only then",
+    path: ["cents"],
+  });
+export type VoiceLadderSet = z.infer<typeof VoiceLadderSetSchema>;
+
+/** `GET /drills/sessions/:id`: a drill set with its stored trials (resume after a reload, the set summary). */
+export const DrillSessionDetailSchema = z.object({
+  session: DrillSessionSchema,
+  trials: z.array(DrillTrialRecordSchema),
+});
+export type DrillSessionDetail = z.infer<typeof DrillSessionDetailSchema>;
+
+/**
+ * Dev seed points Wave 3 e2e needs (`POST /dev/seed`, `point`). The server engineer implements them first;
+ * `GET /dev/seed` lists what exists. "after U03.L02" and the U03/U04 points need the U03/U04 content.
+ */
+export const WAVE3_SEED_POINTS = [
+  "after U02.CP",
+  "C1 released",
+  "after U03.L02",
+  "U03.CP due",
+  "after U03.CP",
+  "U04.CP due",
+  "after U04.CP",
+] as const;
+export type Wave3SeedPoint = (typeof WAVE3_SEED_POINTS)[number];

@@ -11,8 +11,8 @@ const SIMPLE_SUB: Record<string, string> = {
   "1/4": "e",
   "1/2": "&",
   "3/4": "a",
-  "1/3": "t",
-  "2/3": "l",
+  "1/3": "-trip",
+  "2/3": "-let",
 };
 const COMPOUND_SUB: Record<string, string> = { "0/1": "", "1/3": "la", "2/3": "li" };
 const key = (r: Rat) => `${r[0]}/${r[1]}`;
@@ -27,13 +27,16 @@ export function barPosition(onset: Rat, meter: MeterId | MeterSpec, pickup?: Pic
   const frac = R.sub(units, rat(whole));
   const beatNo = whole + 1;
   const beat = units[0] / units[1] + 1;
+  // A position off the counting grid (a seventh of a beat) is said in words, never as a fraction.
+  const offGrid = () =>
+    beatNo >= m.unitsPerBar ? `after ${beatNo}, before the bar line` : `between ${beatNo} and ${beatNo + 1}`;
   let label: string;
   if (m.tempoUnit === "quarter") {
     const sub = SIMPLE_SUB[key(frac)];
-    label = sub === undefined ? `${beatNo}+${key(frac)}` : `${beatNo}${sub}`;
+    label = sub === undefined ? offGrid() : `${beatNo}${sub}`;
   } else if (m.tempoUnit === "dottedQuarter") {
     const sub = COMPOUND_SUB[key(frac)];
-    label = sub === undefined ? `${beatNo}+${key(frac)}` : `${beatNo}${sub}`;
+    label = sub === undefined ? offGrid() : `${beatNo}${sub}`;
   } else {
     // Odd meters count each group from 1: 7/8 as 2+2+3 is "1 2 1 2 1 2 3".
     let start = 0;

@@ -8,8 +8,10 @@
 // the learner may run only ever arrives as a `propose_code` card.
 //
 // Music tokens (`[[deg:5]]`, `[[rn:V7]]`, …) are parsed with `parseTutorText` from @oak/api, so the panel and the
-// server's markup guard agree on what a token is. Inside inline code a token is just text.
+// server's markup guard agree on what a token is. Inside inline code a token is just text. A value written with
+// Unicode accidentals or as a movable-do syllable is first put in the grammar's own spelling (`canonicalTokenRaw`).
 import { type MusicToken, parseTutorText } from "@oak/api";
+import { canonicalTokenRaw } from "./music-tokens.ts";
 
 export type Inline =
   | { t: "text"; text: string }
@@ -134,7 +136,8 @@ export function parseInline(src: string, depth = 0): Inline[] {
       const end = src.indexOf("]]", i + 2);
       if (end > 0 && end - i <= 80) {
         const raw = src.slice(i, end + 2);
-        const parts = parseTutorText(raw);
+        // `[[deg:♭3]]` and `[[deg:me]]` are read as `[[deg:b3]]` (music-tokens.ts); the raw text is kept.
+        const parts = parseTutorText(canonicalTokenRaw(raw));
         const only = parts.length === 1 ? parts[0] : undefined;
         if (only?.type === "token") {
           flush();

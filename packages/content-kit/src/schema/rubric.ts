@@ -76,9 +76,19 @@ export type RubricRuleBody =
   | { rule: "custom"; fn: string; params?: Record<string, unknown> }
   /**
    * Share of melody units (default 1 bar) whose interval sequence matches an earlier unit, exactly or
-   * transposed, by edit similarity ≥ 0.75.
+   * transposed, by edit similarity ≥ 0.75. Measured over ONE period of the learner's line (a loop's own
+   * repeats never count). `shape` (Wave 3): what "the same shape" means. `semitones` (default) keeps every
+   * distance in half steps; `steps` keeps it in scale steps, so a sequence moved by degrees inside the key
+   * ([2 4 6 4] after [0 2 4 2]) counts; `either` takes both. Scale steps are read in the line's own
+   * `.scale()` key, else the lesson key.
    */
-  | { rule: "motif-reuse"; track: TrackRef; minRatio: number; unitBars?: number }
+  | {
+      rule: "motif-reuse";
+      track: TrackRef;
+      minRatio: number;
+      unitBars?: number;
+      shape?: "semitones" | "steps" | "either";
+    }
   /**
    * pitch: mean melody pitch differs ≥ 3 st; density: onsets per bar differ ≥ 25%; harmony: RN sequences
    * differ; register: lowest/highest sounding note moves ≥ 5 st; energy: |ΔE| ≥ 0.15.

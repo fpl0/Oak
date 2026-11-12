@@ -100,7 +100,7 @@ export function TutorScreen({
         <h1 id="tutor-title" className="text-h1 outline-none" tabIndex={-1}>
           Meet your tutor
         </h1>
-        <p className="max-w-[62ch] text-text-2">
+        <p className="max-w-measure text-text-2">
           Claude sits beside every lesson. Ask it what you're hearing, why a check failed, or for a nudge when
           you're stuck. Oak works fully without it.
         </p>

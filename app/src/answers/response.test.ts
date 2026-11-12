@@ -97,3 +97,19 @@ describe("AnswerWidget values", () => {
     expect(isComplete(at(20), 96)).toBe(true);
   });
 });
+
+describe("Wave 3 staff answers", () => {
+  const palette = { durations: ["4"], accidentals: true, ties: false, rests: true };
+  test("staff notes go out as the note list (bare pitches read as quarters)", () => {
+    const spec: AnswerSpec = { ui: "staff-input", clef: "treble", bars: 1, palette };
+    expect(responseOf(spec, "C4 E4 G4 C5")).toEqual({ staff: "C4:4 E4:4 G4:4 C5:4" });
+    expect(responseOf(spec, "F#4:4 r:4 r:2")).toEqual({ staff: "F#4:4 r:4 r:2" });
+  });
+  test("a key signature goes out as answer.text in the order placed (wave3.md §10)", () => {
+    const spec: AnswerSpec = { ui: "staff-input", clef: "treble", bars: 1, palette, mode: "key-signature" };
+    const r = responseOf(spec, "F# C#");
+    expect(r).toEqual({ answer: { text: ["F#", "C#"] } });
+    expect(AttemptResponseSchema.safeParse(r).success).toBe(true);
+    expect(isComplete(spec, "Bb")).toBe(true);
+  });
+});

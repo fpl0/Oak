@@ -8,8 +8,59 @@ export const FIXTURE_DIR = `${REPO_ROOT}test-results/stacks/answers-fixtures`;
 export const GALLERY = "/src/answers/dev/gallery.html";
 export const SHOTS = `${REPO_ROOT}app/src/answers/e2e/screenshots`;
 
-/** A4, and A♯4 (a semitone sharp): 0.3 s of near-silence, then a steady sine. */
-export const MIC_FILES = { a4: "sing-a4-440.wav", sharp: "sing-a4-sharp-466.wav" } as const;
+/**
+ * A4, and A♯4 (a semitone sharp): 0.3 s of near-silence, then a steady sine. The patterns sing the gallery's
+ * `sing-degrees` (1 3 5 in A from A3, one per second after a 2 s count-in): right, and with 6 (F♯4) for 5.
+ */
+export const MIC_FILES = {
+  a4: "sing-a4-440.wav",
+  sharp: "sing-a4-sharp-466.wav",
+  pattern: "sing-135-a.wav",
+  patternWrong: "sing-136-a.wav",
+} as const;
+
+const hz = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
+
+/** A sequence of sines (MIDI) or silences (`null`), each `seconds` long, 10 ms fades, ≈ −70 dBFS noise floor. */
+function wavSeq(parts: readonly [midi: number | null, seconds: number][], sampleRate = 48000): Uint8Array {
+  const n = parts.reduce((a, [, sec]) => a + Math.round(sec * sampleRate), 0);
+  const buf = new ArrayBuffer(44 + n * 2);
+  const v = new DataView(buf);
+  header(v, n, sampleRate);
+  const fade = Math.round(0.01 * sampleRate);
+  let i = 0;
+  for (const [midi, sec] of parts) {
+    const len = Math.round(sec * sampleRate);
+    for (let k = 0; k < len; k++, i++) {
+      let x = (((i * 7919) % 101) / 101 - 0.5) * 0.0006;
+      if (midi !== null) {
+        const env = Math.min(1, k / fade, (len - k) / fade);
+        x = 0.5 * env * Math.sin((2 * Math.PI * hz(midi) * k) / sampleRate);
+      }
+      v.setInt16(44 + i * 2, Math.max(-32768, Math.min(32767, Math.round(x * 32767))), true);
+    }
+  }
+  return new Uint8Array(buf);
+}
+
+function header(v: DataView, n: number, sampleRate: number): void {
+  const str = (o: number, s: string) => {
+    for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i));
+  };
+  str(0, "RIFF");
+  v.setUint32(4, 36 + n * 2, true);
+  str(8, "WAVE");
+  str(12, "fmt ");
+  v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);
+  v.setUint16(22, 1, true);
+  v.setUint32(24, sampleRate, true);
+  v.setUint32(28, sampleRate * 2, true);
+  v.setUint16(32, 2, true);
+  v.setUint16(34, 16, true);
+  str(36, "data");
+  v.setUint32(40, n * 2, true);
+}
 
 function wav(hz: number, seconds: number, sampleRate = 48000): Uint8Array {
   const lead = Math.round(0.3 * sampleRate);
@@ -49,6 +100,16 @@ export function writeMicFixtures(): void {
   mkdirSync(FIXTURE_DIR, { recursive: true });
   writeFileSync(`${FIXTURE_DIR}/${MIC_FILES.a4}`, wav(440, 8));
   writeFileSync(`${FIXTURE_DIR}/${MIC_FILES.sharp}`, wav(440 * 2 ** (1 / 12), 8));
+  const pattern = (third: number) =>
+    wavSeq([
+      [null, 2],
+      [57, 1],
+      [61, 1],
+      [third, 1],
+      [null, 3],
+    ]);
+  writeFileSync(`${FIXTURE_DIR}/${MIC_FILES.pattern}`, pattern(64));
+  writeFileSync(`${FIXTURE_DIR}/${MIC_FILES.patternWrong}`, pattern(66));
 }
 
 /** Chromium flags for a fake microphone fed from one of the WAVs. */
@@ -76,6 +137,8 @@ export function collectErrors(page: Page): string[] {
 /** Opens the gallery (optionally one widget) and waits until the analysed melody is in. */
 export async function openGallery(page: Page, query = ""): Promise<void> {
   const q = query ? `${query}&pin=1` : "?pin=1";
+  // Other engineers' edits must not reload the page mid-test (wave3.md §8): no HMR socket.
+  await page.routeWebSocket(/.*/, () => {});
   await page.goto(`${GALLERY}${q}`);
   await page.locator("main[data-ready='1']").waitFor({ timeout: 60_000 });
 }

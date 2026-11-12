@@ -16,8 +16,16 @@ import type {
   Reference,
   RubricRule,
 } from "@oak/content-kit";
-import { adjustScore, DEFAULT_PASS, R, rat, stripMarkers, substituteParams } from "@oak/content-kit";
-import { romanOf, triadCore } from "@oak/theory";
+import {
+  adjustScore,
+  BY_EAR_PITCH,
+  DEFAULT_PASS,
+  R,
+  rat,
+  stripMarkers,
+  substituteParams,
+} from "@oak/content-kit";
+import { intervalOf, labelPitch, romanOf, triadCore } from "@oak/theory";
 import { romanText } from "../analyze/chords.ts";
 import { firstBars, mod12 } from "../analyze/events.ts";
 import { keyOf } from "../analyze/key.ts";
@@ -31,6 +39,7 @@ import { pitchLabel } from "../match/common.ts";
 import { slotsOf } from "../match/harmony.ts";
 import { runMatcher } from "../match/index.ts";
 import { melodyEvents } from "../match/melody.ts";
+import type { PerformanceResult } from "../perf/index.ts";
 import { performancePasses } from "../perf/index.ts";
 import type { RubricContext } from "../rubric/context.ts";
 import { evaluateRubric } from "../rubric/index.ts";
@@ -52,6 +61,8 @@ import type { AnswerCheck } from "./answers.ts";
 import { gradeAnswer, keyboardCheck, keySignatureCheck, spelledNotes, staffName } from "./answers.ts";
 import type { ConstraintRow } from "./constraints.ts";
 import { checkConstraints } from "./constraints.ts";
+import { judgeSungPattern } from "./sing.ts";
+import { refineStaffResult } from "./staff.ts";
 
 /** What the pipeline needs from the realm. `evaluateForGrading` and `normalize` in production. */
 export interface GradeDeps {
@@ -59,6 +70,8 @@ export interface GradeDeps {
   normalize(result: EvalSuccess, ctx: NormalizeContext): Normalized;
   /** The lint's `toolsUsed`, so `must-use` and `uses` resolve toolbox IDs exactly. */
   toolsUsed?: (code: string) => { id: string }[];
+  /** A toolbox entry's code form (`ToolEntry.code`), so messages name a tool as the learner writes it. */
+  toolCode?: (id: string) => string | null;
   /** Replaces the built-in constraint checker (the lint package's AST-exact one). */
   checkConstraints?: (
     constraints: readonly AstConstraint[],
@@ -249,6 +262,8 @@ interface CodeSpecLite {
   matcher?: Matcher;
   constraints?: readonly AstConstraint[];
   requireChange?: boolean;
+  /** By-ear steps: the matcher reports like a transcription teacher (`MelodyReportOptions`). */
+  transcription?: boolean;
 }
 
 /** Grades code against a reference with a matcher (code-modify, code-fill, error-hunt fix, transcribe). */
@@ -292,6 +307,8 @@ async function gradeAgainstReference(
       params: ctx.params,
       bars,
       ...(deps.toolsUsed ? { toolsUsed: deps.toolsUsed } : {}),
+      ...(deps.toolCode ? { toolCode: deps.toolCode } : {}),
+      ...(spec.transcription ? { transcription: true } : {}),
     };
     const m = runMatcher(matcher, scoped(refEv.n, ref), scoped(nAns, ref), rctx);
     if (!best || m.score > best.score) best = m;
@@ -325,6 +342,7 @@ function runConstraints(
     cpsSet: res.cpsSet,
     tracks: res.tracks,
     ...(deps.toolsUsed ? { toolsUsed: deps.toolsUsed } : {}),
+    ...(deps.toolCode ? { toolCode: deps.toolCode } : {}),
   };
   return (deps.checkConstraints ?? checkConstraints)(constraints, input);
 }
@@ -587,6 +605,7 @@ async function gradeRubricPiece(
     bars,
     totalBars,
     ...(deps.toolsUsed ? { toolsUsed: deps.toolsUsed } : {}),
+    ...(deps.toolCode ? { toolCode: deps.toolCode } : {}),
     ...(ctx.profile ? { profile: ctx.profile } : {}),
     resolveReference: (ref) => refs.get(ref) ?? null,
   };
@@ -899,18 +918,22 @@ export async function gradeWith(req: GradeRequest, deps: GradeDeps): Promise<Gra
         });
       }
       return gradeRubricPiece(ex, ctx, deps, resp.code);
-    case "identify":
+    case "identify": {
       if (!("answer" in resp)) return wrongShape();
+      const spelled = await spelledIntervalsOf(ex, ctx, deps);
       return answerFold(
         ex,
         ctx,
         gradeAnswer(ex.answer, ex.correct, resp.answer, {
           ...(ex.partial ? { partial: ex.partial } : {}),
           key: ex.key ?? ctx.key,
+          ...(spelled ? { spelledIntervals: spelled } : {}),
         }),
       );
-    case "fact":
+    }
+    case "fact": {
       if (!("answer" in resp)) return wrongShape();
+      const spelled = ex.spelling === "strict" ? await spelledIntervalsOf(ex, ctx, deps) : null;
       return answerFold(
         ex,
         ctx,
@@ -918,8 +941,10 @@ export async function gradeWith(req: GradeRequest, deps: GradeDeps): Promise<Gra
           key: ex.key ?? ctx.key,
           spelling: ex.spelling,
           order: ex.order,
+          ...(spelled ? { spelledIntervals: spelled } : {}),
         }),
       );
+    }
     case "keyboard": {
       if (!("answer" in resp)) return wrongShape();
       return answerFold(
@@ -951,16 +976,23 @@ export async function gradeWith(req: GradeRequest, deps: GradeDeps): Promise<Gra
       const e = ex.expect;
       if (e.e === "key-signature") {
         if (!("answer" in resp)) return wrongShape();
-        return answerFold(ex, ctx, keySignatureCheck(e.key, resp.answer.text ?? []));
+        return answerFold(ex, ctx, keySignatureCheck(e.key, resp.answer.text ?? [], e.order ?? "set"));
       }
       if (!("staff" in resp)) return wrongShape();
       if (e.e === "pitches") {
-        const key = ex.key ?? ctx.key;
+        // The staff's own key signature (Wave 3) is the key the notes are written in.
+        const key = ex.answer.key ?? ex.key ?? ctx.key;
         const names = resp.staff.filter((x) => x.midi !== null).map((x) => staffName(x, key));
         return answerFold(
           ex,
           ctx,
-          spelledNotes(e.spelled, names, { strict: true, order: e.order, key, withOctave: e.withOctave }),
+          spelledNotes(e.spelled, names, {
+            strict: true,
+            order: e.order,
+            key,
+            withOctave: e.withOctave,
+            staff: true,
+          }),
         );
       }
       const matcher: Matcher =
@@ -976,22 +1008,49 @@ export async function gradeWith(req: GradeRequest, deps: GradeDeps): Promise<Gra
       if (perf.diagnostics.some((d) => d.id === "sing.no-voice" || d.id === "sing.bleed"))
         return errorResult(ex, ctx, perf.diagnostics);
       const pass = performancePasses(ex.kind, perf, ex.tol);
+      // A sung pattern: pitch judged each note; the pattern findings name degrees, not cents. Degree targets
+      // carry their own degrees; a melody to echo or sight-sing is labelled in the key.
+      const notes = (perf as PerformanceResult).notes;
+      const key = ex.key ?? ctx.key;
+      const degrees =
+        ex.kind !== "sing"
+          ? null
+          : ex.target.from === "degrees"
+            ? ex.target.degrees
+            : notes?.every((x) => x.targetMidi !== undefined)
+              ? notes.map((x) => labelPitch(Math.round(x.targetMidi as number), key).degree)
+              : null;
+      const diagnostics =
+        ex.kind === "sing" && degrees && notes?.some((x) => x.targetMidi !== undefined)
+          ? judgeSungPattern({
+              degrees,
+              key,
+              labels: ex.labels ?? defaultSingLabels(ctx.exerciseGlobalId),
+              notes,
+              diagnostics: perf.diagnostics,
+              mode: ex.mode,
+            })
+          : perf.diagnostics;
       return finish(ex, ctx, {
         score: perf.score,
         pass,
         dims: perf.dims,
-        diagnostics: perf.diagnostics,
+        diagnostics,
         modality: "normal",
       });
     }
     case "dictation": {
       if ("answer" in resp && resp.answer.stages) return gradeStages(ex, ctx, deps, resp.answer.stages);
       if ("code" in resp)
+        // A code answer starts from the step's starter: handing it back unchanged is `code.unchanged`
+        // (AUTHORING §9), not a list of every missing note.
         return gradeAgainstReference(ex, ctx, deps, {
           code: resp.code,
-          starter: "",
+          starter: ex.answer.ui === "code" ? ex.answer.starter : "",
+          ...(ex.answer.ui === "code" && ex.answer.starter.trim() !== "" ? { requireChange: true } : {}),
           reference: ex.reference,
-          matcher: ex.matcher,
+          matcher: ex.byEar ? byEarMatcher(ex.matcher, ex.byEar.accepts) : ex.matcher,
+          ...(ex.byEar ? { transcription: true } : {}),
         });
       if ("staff" in resp) return gradeStaffEvents(ex, ctx, deps, resp.staff, ex.reference, ex.matcher);
       if ("answer" in resp && resp.answer.degrees) {
@@ -1080,10 +1139,17 @@ async function gradeStaffEvents(
     { cps: r.n.cps, bpm: r.n.bpm },
   );
   // A staff answer has one line: compare it with the reference's whole selection.
-  const m = runMatcher(matcher, scoped(window(r.n, ref.bars), ref), ans, {
+  const refN = scoped(window(r.n, ref.bars), ref);
+  const raw = runMatcher(matcher, refN, ans, {
     ...nc,
     code: "",
     params: ctx.params,
+  });
+  // What was written, not only what sounds: octave, accidental and enharmonic slips are named apart.
+  const staffKey = (ex.kind === "staff-write" ? ex.answer.key : undefined) ?? nc.key ?? null;
+  const m = refineStaffResult(raw, refN.all, ans.all, staffKey, {
+    meter: nc.meter,
+    ...(nc.pickup ? { pickup: nc.pickup } : {}),
   });
   return finish(ex, ctx, {
     score: m.score,
@@ -1091,6 +1157,76 @@ async function gradeStaffEvents(
     diagnostics: m.diagnostics,
     ...(m.overlay ? { overlay: m.overlay } : {}),
   });
+}
+
+/**
+ * The pitch rule a by-ear step shows the learner decides the comparison (content CI checks the matcher
+ * agrees): `exact` = these notes in this octave, `any-octave` = octave-free, `any-key` = the tune in any
+ * key. The matcher's own `pitch` is replaced by the rule's, nested matchers included, so a by-ear step can
+ * never accept a transposition its rule does not allow.
+ */
+/**
+ * The interval each answer slot names, as the stimulus spells it: one bar per slot, two notes per bar.
+ * Only read when an interval answer expects the tritone ("TT"), which A4 and d5 both sound as; null when
+ * the stimulus does not lay the pairs out that way.
+ */
+async function spelledIntervalsOf(
+  ex: Extract<Exercise, { kind: "identify" | "fact" }>,
+  ctx: GradeContext,
+  deps: GradeDeps,
+): Promise<(string | null)[] | null> {
+  const expected = ex.correct.text;
+  if (ex.answer.ui !== "text" || ex.answer.normalize !== "interval" || !expected) return null;
+  if (!expected.some((e) => /^tt$|tritone/i.test(e.trim()))) return null;
+  const stim = ex.stimulus;
+  if (stim?.src !== "code") return null;
+  const ref = await evaluateReference(deps, stim.code, stim.bars, ex, ctx);
+  const key = nctx(ex, ctx).key ?? null;
+  const bars = new Map<number, NEvent[]>();
+  for (const e of ref.n.all) {
+    if (e.midi === null) continue;
+    const bar = Math.floor(e.onset[0] / e.onset[1]);
+    bars.set(bar, [...(bars.get(bar) ?? []), e]);
+  }
+  const pairs = [...bars.entries()].sort((a, b) => a[0] - b[0]).map(([, es]) => es);
+  if (pairs.length !== expected.length) return null;
+  return pairs.map((es) => {
+    const notes = [...new Map(es.map((e) => [e.midi, e])).values()];
+    if (notes.length !== 2) return null;
+    const [a, b] = notes as [NEvent, NEvent];
+    const named = (e: NEvent): number | string =>
+      e.written && /^[A-Ga-g](?:##|bb|#|b)?-?\d+$/.test(e.written) ? e.written : (e.midi as number);
+    try {
+      return intervalOf(named(a), named(b), key).name;
+    } catch {
+      return null;
+    }
+  });
+}
+
+export function byEarMatcher(matcher: Matcher, accepts: "exact" | "any-octave" | "any-key"): Matcher {
+  const pitch = BY_EAR_PITCH[accepts][0];
+  switch (matcher.m) {
+    case "melody":
+    case "events":
+      return { ...matcher, pitch };
+    case "all":
+      return { ...matcher, of: matcher.of.map((m) => byEarMatcher(m, accepts)) };
+    default:
+      return matcher;
+  }
+}
+
+/**
+ * What a sing step labels its notes with when the step does not say: numbers before U03.L08, movable-do
+ * syllables from U03.L08 on (contracts §8.3). Read from the exercise's owner (`U03.L08/…`, `U04.CP/…`).
+ */
+export function defaultSingLabels(exerciseGlobalId: string): "numbers" | "syllables" {
+  const m = /^U(\d{2})\.(?:L(\d{2})|CP)\//.exec(exerciseGlobalId);
+  if (!m) return "numbers";
+  const unit = Number(m[1]);
+  const lesson = m[2] === undefined ? 99 : Number(m[2]);
+  return unit > 3 || (unit === 3 && lesson >= 8) ? "syllables" : "numbers";
 }
 
 /** The code is the starter as it came (markers stripped; whitespace at the ends and line ends ignored). */

@@ -63,6 +63,7 @@ export function reviewItem(srs: Srs, card: Card, meta: ItemMeta, now: Date): Rev
   // A never-reviewed fact (a released deck card) is filler. A family's first set is a blocked-intro set,
   // planned like any due item; a lesson's seeding step has already rated its concept and term cards.
   if (card.reps === 0 && meta.cls === "fact") item.fresh = true;
+  if (card.reps === 0 && meta.cls === "family" && meta.perceptual) item.firstSet = true;
   return item;
 }
 

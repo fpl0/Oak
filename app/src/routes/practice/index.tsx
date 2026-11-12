@@ -12,8 +12,10 @@ import {
   familyAccuracy,
   familyStatus,
   groupByStage,
+  levelLine,
   pctText,
   pendingText,
+  RESTING_LINE,
   recallOf,
   unitOf,
 } from "../../drills/model.ts";
@@ -44,6 +46,7 @@ const STATUS_CHIP: Record<FamilyStatus, { label: string; tone: "neutral" | "acce
   pending: { label: "Later", tone: "neutral" },
   locked: { label: "Locked", tone: "neutral" },
   unlocked: { label: "Open", tone: "accent" },
+  resting: { label: "In mixed practice", tone: "accent" },
   mastered: { label: "Mastered", tone: "amber" },
 };
 
@@ -53,7 +56,7 @@ function FamilyCard({ def, data }: { def: FamilyDef; data: DrillData }) {
   const card = data.cards.get(def.id);
   const recall = recallOf(card);
   const { n, acc } = familyAccuracy(state);
-  const playable = status === "unlocked" || status === "mastered";
+  const playable = status === "unlocked" || status === "resting" || status === "mastered";
   const quietBlocked = playable && def.mic === true && data.profile.quiet;
   const chip = STATUS_CHIP[status];
   return (
@@ -92,11 +95,16 @@ function FamilyCard({ def, data }: { def: FamilyDef; data: DrillData }) {
         <>
           <p className="text-sm text-text-2">
             {status === "mastered" && <Check aria-hidden className="mr-1 inline size-3.5 text-accent" />}
-            Level {state?.level ?? 1} of {def.levels.length}
+            {levelLine(def, state)}
             {acc !== null
               ? ` · ${pctText(acc)} over ${n} ${n === 1 ? "trial" : "trials"}`
               : " · not practised yet"}
           </p>
+          {status === "resting" && (
+            <p className="text-sm text-text-2" data-testid="family-resting">
+              {RESTING_LINE}
+            </p>
+          )}
           {quietBlocked ? (
             <p className="text-sm text-text-3">Quiet mode is on: this one waits for the microphone.</p>
           ) : (
@@ -155,7 +163,7 @@ function Stages({ data }: { data: DrillData }) {
     return <EmptyState title="No drill families yet">Families open as lessons introduce them.</EmptyState>;
   const anyOpen = groups.some((g) =>
     g.families.some((d) =>
-      ["unlocked", "mastered"].includes(familyStatus(d, data.states.get(d.id), data.completed)),
+      ["unlocked", "resting", "mastered"].includes(familyStatus(d, data.states.get(d.id), data.completed)),
     ),
   );
   return (
@@ -172,7 +180,9 @@ function Stages({ data }: { data: DrillData }) {
       )}
       {groups.map((g) => {
         const open = g.families.filter((d) =>
-          ["unlocked", "mastered"].includes(familyStatus(d, data.states.get(d.id), data.completed)),
+          ["unlocked", "resting", "mastered"].includes(
+            familyStatus(d, data.states.get(d.id), data.completed),
+          ),
         ).length;
         return (
           <section key={g.key} aria-labelledby={`stage-${g.key}`} data-testid={`stage-${g.key}`}>

@@ -1,8 +1,10 @@
 // skills map, SRS, drill families and sessions, unlocks, can-do ledger, progress page, streak.
 import type { DrillFinish, DueBatch, ProgressReport, SrsReviewRequest, SrsReviewResult } from "@oak/api";
 import { STREAK } from "@oak/srs";
+import type { ContentSource } from "../content/types.ts";
 import type { AppDeps } from "../deps.ts";
 import { ApiError, notFound } from "../errors.ts";
+import { idempotent } from "../idempotency.ts";
 import { addDays, dayIndex } from "../lib/days.ts";
 import type { SrsPort } from "../services/ports.ts";
 import type { Mounter } from "./define.ts";
@@ -33,13 +35,29 @@ export function progressReport(d: AppDeps): ProgressReport {
   const canDoAt = new Map(
     canDo.map((c) => [c.candoId as string, d.repos.cando.history(c.candoId)[0]?.at ?? c.at]),
   );
+  // A graded transcription-ladder pass (gym, X1, X2, CF-T): a finished generated transcription, at its level.
+  const ladderPasses = d.repos.transcriptions
+    .list()
+    .filter((t) => t.sourceKind === "generated" && t.status === "done" && t.ladderLevel !== null)
+    .map((t) => ({ level: t.ladderLevel as number, at: t.updatedAt }));
   const milestones = d.content.source.milestones.map((m) => {
-    const needs = [...(m.when.sessions ?? []), ...(m.when.capstones ?? [])];
-    const times = needs.map((id) => doneAt.get(id) ?? null);
-    const cando = (m.when.canDos ?? []).map((id) => canDoAt.get(id) ?? null);
-    const all = [...times, ...cando];
-    const reached = all.length > 0 && all.every((t) => t !== null);
-    return { id: m.id as string, reachedAt: reached ? (([...all] as string[]).sort().at(-1) ?? null) : null };
+    const anyOf = m.when.anyOf ?? [];
+    const at = conditionReachedAt(m.when, doneAt, canDoAt, ladderPasses);
+    // `anyOf` (Wave 3): at least one of its condition sets holds too; the earliest one that does counts.
+    const alt = anyOf
+      .map((c) => conditionReachedAt(c, doneAt, canDoAt, ladderPasses))
+      .filter((t): t is string => t !== null)
+      .sort()[0];
+    const own = hasCondition(m.when);
+    const reachedAt =
+      anyOf.length === 0
+        ? at
+        : alt === undefined || (own && at === null)
+          ? null
+          : own
+            ? ([at as string, alt].sort().at(-1) ?? null)
+            : alt;
+    return { id: m.id as string, title: m.title, description: m.description, reachedAt };
   });
   // Pace: map sessions completed in the last 28 days, shown as a month, never as sessions behind.
   const course = s.gates.courseProgress();
@@ -56,6 +74,46 @@ export function progressReport(d: AppDeps): ProgressReport {
     };
   }
   return { canDo, milestones, paceEstimate, streak: s.streak.summary(today) };
+}
+
+type MilestoneCondition = NonNullable<ContentSource["milestones"][number]["when"]>;
+
+function hasCondition(c: MilestoneCondition): boolean {
+  return (
+    (c.sessions?.length ?? 0) + (c.capstones?.length ?? 0) + (c.canDos?.length ?? 0) > 0 ||
+    c.ladder !== undefined
+  );
+}
+
+/**
+ * When one milestone condition set was reached (the latest of its parts), or `null`: sessions done,
+ * capstones released, can-dos held, and (Wave 3) a ladder pass at `level` or higher, on or after the day
+ * `after` was done when it is given. An empty set is never reached.
+ */
+export function conditionReachedAt(
+  c: MilestoneCondition,
+  doneAt: ReadonlyMap<string, string>,
+  canDoAt: ReadonlyMap<string, string>,
+  ladderPasses: readonly { level: number; at: string }[],
+): string | null {
+  if (!hasCondition(c)) return null;
+  const times: (string | null)[] = [
+    ...[...(c.sessions ?? []), ...(c.capstones ?? [])].map((id) => doneAt.get(id) ?? null),
+    ...(c.canDos ?? []).map((id) => canDoAt.get(id) ?? null),
+  ];
+  if (c.ladder !== undefined) {
+    const { level, after } = c.ladder;
+    const from = after === undefined ? "" : (doneAt.get(after) ?? null);
+    const pass =
+      from === null
+        ? undefined
+        : ladderPasses
+            .filter((p) => p.level >= level && p.at >= from)
+            .map((p) => p.at)
+            .sort()[0];
+    times.push(pass ?? null);
+  }
+  return times.every((t) => t !== null) ? ((times as string[]).sort().at(-1) ?? null) : null;
 }
 
 /** `POST /srs/review`: one fact card answered on its own counts towards a review set (contracts §7.8 a). */
@@ -78,7 +136,32 @@ export async function reviewCard(d: AppDeps, body: SrsReviewRequest): Promise<Sr
 }
 
 /** `POST /drills/sessions/:id/finish`: the set's reviews, the repair queue, and the streak's review set. */
+/**
+ * Finishes of one set run one at a time: `already` is read before the SRS call, which awaits a re-zone after a
+ * time-zone change, so two raced finishes (a retried request, a second tab) both counted the set for the
+ * streak and both consumed a repair item. The second now waits and sees the set finished.
+ */
+const finishing = new WeakMap<AppDeps["repos"]["db"], Map<string, Promise<unknown>>>();
 export async function finishDrill(d: AppDeps, id: string): Promise<DrillFinish> {
+  let running = finishing.get(d.repos.db);
+  if (running === undefined) {
+    running = new Map();
+    finishing.set(d.repos.db, running);
+  }
+  for (;;) {
+    const pending = running.get(id);
+    if (pending === undefined) break;
+    await pending.catch(() => {});
+  }
+  const run = finishDrillOnce(d, id);
+  running.set(id, run);
+  try {
+    return await run;
+  } finally {
+    if (running.get(id) === run) running.delete(id);
+  }
+}
+async function finishDrillOnce(d: AppDeps, id: string): Promise<DrillFinish> {
   const drill = d.repos.srs.drill(id);
   if (drill === null) throw notFound(`drill session ${id}`);
   const already = drill.finishedAt !== null;
@@ -167,7 +250,11 @@ export function practiceRoutes(mount: Mounter, d: AppDeps): void {
       more: query.more === "1",
     }),
   );
-  mount("srs.review", async ({ body }) => reviewCard(d, body));
+  // Wave 3 (wave3.md §5.2): a retried or double-submitted review with the same key is rated once.
+  mount("srs.review", async ({ body }) => {
+    const { idempotencyKey, ...rest } = body;
+    return idempotent(d, "srs.review", idempotencyKey, rest, () => reviewCard(d, rest));
+  });
   mount("families.list", async () => needSrs(d).families());
   mount("families.state", async ({ params }) => {
     const state = await needSrs(d).familyState(params.familyId);
@@ -201,4 +288,12 @@ export function practiceRoutes(mount: Mounter, d: AppDeps): void {
   // Wave 2 (docs/design/wave2.md §4).
   mount("unlocks.next", () => ({ items: s.unlocks.next() }));
   mount("skills.revive", ({ query }) => reviveBatch(d, query.skillId ?? null, query.more === "1"));
+
+  // Wave 3 (docs/design/wave3.md §5): one set with its stored trials (resume after a reload, the summary).
+  mount("drills.get", ({ params }) => {
+    const drill = d.repos.srs.drill(params.id);
+    if (drill === null) throw notFound(`drill session ${params.id}`);
+    const { warmupItemId: _w, meanCredit: _m, ...session } = drill;
+    return { session, trials: d.repos.srs.trials(params.id) };
+  });
 }

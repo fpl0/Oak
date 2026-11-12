@@ -30,6 +30,7 @@ import { Route as PracticeFamilyIdRouteImport } from "./routes/practice/$familyI
 import { Route as PracticeReviewRouteImport } from "./routes/practice/review";
 import { Route as SessionIndexRouteImport } from "./routes/session/index";
 import { Route as SessionCodaRouteImport } from "./routes/session/coda";
+import { Route as SessionReviveRouteImport } from "./routes/session/revive";
 import { Route as SettingsIndexRouteImport } from "./routes/settings/index";
 import { Route as SettingsAboutRouteImport } from "./routes/settings/about";
 import { Route as SettingsAppearanceRouteImport } from "./routes/settings/appearance";
@@ -152,6 +153,11 @@ const SessionCodaRoute = SessionCodaRouteImport.update({
   path: "/session/coda",
   getParentRoute: () => rootRouteImport,
 } as any);
+const SessionReviveRoute = SessionReviveRouteImport.update({
+  id: "/session/revive",
+  path: "/session/revive",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
   id: "/",
   path: "/",
@@ -252,6 +258,7 @@ export interface FileRoutesByFullPath {
   "/practice/$familyId": typeof PracticeFamilyIdRoute;
   "/practice/review": typeof PracticeReviewRoute;
   "/session/coda": typeof SessionCodaRoute;
+  "/session/revive": typeof SessionReviveRoute;
   "/settings/about": typeof SettingsAboutRoute;
   "/settings/appearance": typeof SettingsAppearanceRoute;
   "/settings/audio": typeof SettingsAudioRoute;
@@ -290,6 +297,7 @@ export interface FileRoutesByTo {
   "/practice/$familyId": typeof PracticeFamilyIdRoute;
   "/practice/review": typeof PracticeReviewRoute;
   "/session/coda": typeof SessionCodaRoute;
+  "/session/revive": typeof SessionReviveRoute;
   "/settings/about": typeof SettingsAboutRoute;
   "/settings/appearance": typeof SettingsAppearanceRoute;
   "/settings/audio": typeof SettingsAudioRoute;
@@ -330,6 +338,7 @@ export interface FileRoutesById {
   "/practice/$familyId": typeof PracticeFamilyIdRoute;
   "/practice/review": typeof PracticeReviewRoute;
   "/session/coda": typeof SessionCodaRoute;
+  "/session/revive": typeof SessionReviveRoute;
   "/settings/about": typeof SettingsAboutRoute;
   "/settings/appearance": typeof SettingsAppearanceRoute;
   "/settings/audio": typeof SettingsAudioRoute;
@@ -371,6 +380,7 @@ export interface FileRouteTypes {
     | "/practice/$familyId"
     | "/practice/review"
     | "/session/coda"
+    | "/session/revive"
     | "/settings/about"
     | "/settings/appearance"
     | "/settings/audio"
@@ -409,6 +419,7 @@ export interface FileRouteTypes {
     | "/practice/$familyId"
     | "/practice/review"
     | "/session/coda"
+    | "/session/revive"
     | "/settings/about"
     | "/settings/appearance"
     | "/settings/audio"
@@ -448,6 +459,7 @@ export interface FileRouteTypes {
     | "/practice/$familyId"
     | "/practice/review"
     | "/session/coda"
+    | "/session/revive"
     | "/settings/about"
     | "/settings/appearance"
     | "/settings/audio"
@@ -488,6 +500,7 @@ export interface RootRouteChildren {
   PracticeFamilyIdRoute: typeof PracticeFamilyIdRoute;
   PracticeReviewRoute: typeof PracticeReviewRoute;
   SessionCodaRoute: typeof SessionCodaRoute;
+  SessionReviveRoute: typeof SessionReviveRoute;
   StudioSketchIdRoute: typeof StudioSketchIdRoute;
   ToolboxToolIdRoute: typeof ToolboxToolIdRoute;
   TranscribeProjectIdRoute: typeof TranscribeProjectIdRoute;
@@ -647,6 +660,13 @@ declare module "@tanstack/react-router" {
       path: "/session/coda";
       fullPath: "/session/coda";
       preLoaderRoute: typeof SessionCodaRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/session/revive": {
+      id: "/session/revive";
+      path: "/session/revive";
+      fullPath: "/session/revive";
+      preLoaderRoute: typeof SessionReviveRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/settings/": {
@@ -811,6 +831,7 @@ const rootRouteChildren: RootRouteChildren = {
   PracticeFamilyIdRoute: PracticeFamilyIdRoute,
   PracticeReviewRoute: PracticeReviewRoute,
   SessionCodaRoute: SessionCodaRoute,
+  SessionReviveRoute: SessionReviveRoute,
   StudioSketchIdRoute: StudioSketchIdRoute,
   ToolboxToolIdRoute: ToolboxToolIdRoute,
   TranscribeProjectIdRoute: TranscribeProjectIdRoute,

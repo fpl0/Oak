@@ -15,15 +15,23 @@ for (const m of SCREENSHOT_MATRIX) {
     await openGallery(page);
     await expect(page.getByRole("heading", { level: 1, name: "Answer widgets" })).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("data-theme", m.theme);
-    // One live copy and five states per fixture; the Wave 3 kind says so instead of a dead control.
+    // One live copy and five states per fixture; every kind has its widget (no "not available yet").
     await expect(page.locator("section[data-fixture]")).toHaveCount(FIXTURE_IDS.length);
     for (const [id, kind] of FIXTURE_IDS) {
       const section = page.locator(`section[data-fixture="${id}"]`);
       await expect(section.locator("[data-state]")).toHaveCount(5);
-      if (kind === "staff-input")
-        await expect(section.getByText("This answer type isn't available yet").first()).toBeVisible();
-      else await expect(section.locator(`[data-answer="${kind}"]`)).toHaveCount(6);
+      await expect(section.locator(`[data-answer="${kind}"]`)).toHaveCount(6);
     }
+    await expect(page.getByText("This answer type isn't available yet")).toHaveCount(0);
+    // Staff answers engrave in every state; a reveal prints the answer and draws it dashed.
+    await expect(page.locator("[data-answer='staff-input'] [data-status='ready']").first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(
+      page.locator(
+        "section[data-fixture='staff-input'] [data-state='revealed'] [data-testid='staff-reveal']",
+      ),
+    ).toHaveText("Answer: C4 E4 G4 C5");
     await expect(
       page.locator("[data-answer='click-staff'] .oak-staff[data-status='ready']").first(),
     ).toBeVisible({
@@ -47,6 +55,10 @@ for (const [id, kind] of FIXTURE_IDS)
       await expect(page.locator(`section[data-fixture="${id}"]`)).toBeVisible();
       if (kind === "click-staff")
         await expect(page.locator(".oak-staff[data-status='ready']").first()).toBeVisible({
+          timeout: 30_000,
+        });
+      if (kind === "staff-input")
+        await expect(page.locator("[data-answer='staff-input'] [data-status='ready']")).toHaveCount(6, {
           timeout: 30_000,
         });
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

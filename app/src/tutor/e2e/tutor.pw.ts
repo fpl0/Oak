@@ -89,6 +89,11 @@ async function setBackend(page: Page, backend: "auto" | "off") {
 
 test.describe.configure({ mode: "serial" });
 
+// Other engineers edit the shared tree while this suite runs: Vite's HMR socket must not reload the page mid-test.
+test.beforeEach(async ({ page }) => {
+  await page.routeWebSocket(/.*/, () => {});
+});
+
 test("chat streams with a thinking line, then lands in the merged timeline", async ({ page }) => {
   const errors: string[] = [];
   page.on("console", (m) => m.type() === "error" && errors.push(m.text()));

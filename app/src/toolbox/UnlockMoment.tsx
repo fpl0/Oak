@@ -18,6 +18,8 @@ import { useUnlockSeen, useUnlocks } from "../lib/queries.ts";
 import { toolLabel } from "../lib/tool-label.ts";
 import { Button } from "../ui/kit/Button.tsx";
 import { Kbd } from "../ui/kit/basics.tsx";
+import { FeatureGlimpse } from "./Glimpse.tsx";
+import { glimpseOf } from "./glimpse.ts";
 import { KIND_LABEL, sitesOf, unlockArpeggio } from "./model.ts";
 
 /** The whole moment never runs longer than this (contracts §9.3). */
@@ -158,6 +160,11 @@ export function UnlockMoment({
               {toolLabel(t).text}
             </p>
             <p className="mt-2 text-text">{t.catalog.meaning}</p>
+            {glimpseOf(t.id) ? (
+              <div className="mt-3">
+                <FeatureGlimpse glimpse={glimpseOf(t.id) as NonNullable<ReturnType<typeof glimpseOf>>} />
+              </div>
+            ) : null}
             <p className="mt-1 text-sm text-text-2">
               From{" "}
               {sitesOf(t)

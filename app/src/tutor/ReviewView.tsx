@@ -72,6 +72,9 @@ export function ReviewView({
   id: string;
 }) {
   const r = data.review;
+  // Review `tryCode` is Preview-only before a capstone's first release; after it (revision mode) it applies like
+  // any card (contracts §10.7 table).
+  const revising = data.reviewKind === "capstone" && subject.released === true;
   const tryCard = (i: number, title: string, code: string, bars: [number, number]): CardData => ({
     cardId: `${id}-rev-${i}`,
     toolUseId: `${id}-rev-${i}`,
@@ -80,9 +83,8 @@ export function ReviewView({
     code,
     explanation: "",
     bars: Math.max(1, Math.min(16, Math.abs(bars[1] - bars[0]) + 1, 4)),
-    // Review `tryCode` before a capstone's first release is Preview-only (contracts §10.7).
-    apply: "preview_only",
-    applyAllowed: false,
+    apply: revising ? "applicable" : "preview_only",
+    applyAllowed: revising,
     lockedTools: [],
   });
   return (
@@ -129,6 +131,7 @@ export function ReviewView({
                   subject={subject}
                   thread={thread}
                   ctx={ctx}
+                  local
                 />
               )}
             </li>

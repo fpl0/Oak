@@ -56,6 +56,11 @@ const HOSTILE = [
 ].join("\n\n");
 
 test.describe.configure({ mode: "serial" });
+
+// Other engineers edit the shared tree while this suite runs: Vite's HMR socket must not reload the page mid-test.
+test.beforeEach(async ({ page }) => {
+  await page.routeWebSocket(/.*/, () => {});
+});
 // page.route does not see requests a service worker answers.
 test.use({ serviceWorkers: "block" });
 

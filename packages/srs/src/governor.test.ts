@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
+  type ActiveFamily,
   admitCreated,
   admitNew,
   atMasteryForGraduation,
   capLessonFacts,
   capRelearning,
+  DECISION_27,
   earlyGraduate,
   forecastLoad,
   type GovernorConfig,
@@ -16,9 +18,12 @@ import {
   micRoom,
   otherWorkCredit,
   pickReleases,
+  pickRestReturn,
+  planOverdueReleases,
   RECOMMENDED_GOVERNOR,
   type ReviewItem,
   recommendedGovernor,
+  restCandidate,
   returnMode,
   returnRank,
   shouldGraduate,
@@ -173,6 +178,147 @@ describe("forecast and intake throttle", () => {
     expect(pickReleases(busy, waiting, 0, T, cfg).filter((id) => id.startsWith("fam."))).toEqual([]);
   });
 
+  test("pickReleases with the wait bound: a family past it starts whatever the forecast, within the caps", () => {
+    const busy = Array.from({ length: 30 }, () => item({ cls: "concept", perceptual: false, sec: 90 }));
+    const waiting: WaitingCard[] = [
+      { cardId: "fam.young", kind: "perceptual", seq: 1, waitedDays: 3 },
+      { cardId: "fam.old", kind: "perceptual", seq: 2, waitedDays: 14 },
+      { cardId: "fam.older", kind: "perceptual", seq: 3, waitedDays: 20 },
+    ];
+    const bounded = { ...cfg, releaseAfterDays: 14 };
+    // Off (the contract as written): nothing while the forecast is closed.
+    expect(pickReleases(busy, waiting, 0, T, { ...cfg, releaseAfterDays: null })).toEqual([]);
+    // On: the oldest family past the bound, one a day.
+    expect(pickReleases(busy, waiting, 0, T, bounded)).toEqual(["fam.old"]);
+    // Still no slot past 12.
+    expect(pickReleases(busy, waiting, 12, T, bounded)).toEqual([]);
+    // With the forecast open, the plain oldest-first rule applies.
+    expect(pickReleases([], waiting, 0, T, bounded)).toEqual(["fam.young"]);
+  });
+
+  // The wait bound of decision 27: the room-making side.
+  const fam = (o: Partial<ActiveFamily> & { cardId: string }): ActiveFamily => ({
+    level: 2,
+    masteryLevel: 4,
+    maxOpenLevel: 7,
+    t90Days: 10,
+    lastRatings: [3, 3],
+    mic: false,
+    reps: 6,
+    blockedIntroPending: false,
+    ...o,
+  });
+
+  test("decision 27 is live: release after 2 days, rest after 3 sets of its own", () => {
+    expect(cfg.releaseAfterDays).toBe(DECISION_27.releaseAfterDays);
+    expect(cfg.restMinReps).toBe(DECISION_27.restMinReps);
+    expect(DECISION_27.releaseAfterDays).toBeLessThan(DECISION_27.firstReviewWithinDays);
+    // The contract's bare numbers have neither.
+    expect(governorFor(20).releaseAfterDays ?? null).toBeNull();
+    expect(governorFor(20).restMinReps ?? null).toBeNull();
+  });
+
+  test("restCandidate: the most stable family with 3 sets of its own, intro done, last rating Good", () => {
+    const active = [
+      fam({ cardId: "fam.stable", t90Days: 30 }),
+      fam({ cardId: "fam.young", t90Days: 60, reps: 2 }),
+      fam({ cardId: "fam.intro", t90Days: 60, blockedIntroPending: true }),
+      fam({ cardId: "fam.lapsed", t90Days: 60, lastRatings: [3, 1] }),
+      fam({ cardId: "fam.mid", t90Days: 20 }),
+    ];
+    expect(restCandidate(active, cfg)).toBe("fam.stable");
+    expect(restCandidate(active.slice(1, 4), cfg)).toBeNull();
+    expect(restCandidate(active, { ...cfg, restMinReps: null })).toBeNull();
+  });
+
+  test("planOverdueReleases: a family past the bound starts today; room comes from graduation, then resting", () => {
+    const late: WaitingCard[] = [{ cardId: "fam.w", kind: "perceptual", seq: 1, waitedDays: 2 }];
+    const active = [fam({ cardId: "fam.m", level: 4, t90Days: 25 }), fam({ cardId: "fam.low", t90Days: 40 })];
+    const base = { items: [], waiting: late, active, today: T, cfg };
+    // A free slot and an open forecast: no room needed.
+    expect(planOverdueReleases({ ...base, activePerceptual: 5 })).toEqual({
+      graduate: [],
+      rest: [],
+      release: ["fam.w"],
+    });
+    // Full slots: the family at its mastery level graduates early.
+    expect(planOverdueReleases({ ...base, activePerceptual: 12 })).toEqual({
+      graduate: ["fam.m"],
+      rest: [],
+      release: ["fam.w"],
+    });
+    // None at its mastery level: the most stable one rests in its composite.
+    expect(
+      planOverdueReleases({ ...base, active: [active[1] as ActiveFamily], activePerceptual: 12 }),
+    ).toEqual({ graduate: [], rest: ["fam.low"], release: ["fam.w"] });
+    // Nobody can make room and no slot is free: it waits (the 12 slots are never exceeded).
+    expect(planOverdueReleases({ ...base, active: [], activePerceptual: 12 }).release).toEqual([]);
+    // Not yet past the bound, or the bound off: nothing.
+    expect(
+      planOverdueReleases({
+        ...base,
+        waiting: [{ ...(late[0] as WaitingCard), waitedDays: 1 }],
+        activePerceptual: 12,
+      }),
+    ).toEqual({ graduate: [], rest: [], release: [] });
+    expect(
+      planOverdueReleases({ ...base, activePerceptual: 12, cfg: { ...cfg, releaseAfterDays: null } }).release,
+    ).toEqual([]);
+  });
+
+  test("planOverdueReleases: the forecast not open makes room too; a sung family frees a sung one; longest wait first, 2 a day", () => {
+    const busy = Array.from({ length: 30 }, (_, i) => item({ cardId: `busy${i}`, sec: 90 }));
+    const active = [
+      fam({ cardId: "fam.ear", t90Days: 40 }),
+      fam({ cardId: "fam.sing", mic: true, t90Days: 20 }),
+    ];
+    const waiting: WaitingCard[] = [
+      { cardId: "fam.a", kind: "perceptual", seq: 1, waitedDays: 2 },
+      { cardId: "fam.b", kind: "perceptual", seq: 2, waitedDays: 5 },
+      { cardId: "fam.c", kind: "perceptual", seq: 3, waitedDays: 3 },
+      { cardId: "fam.concept", kind: "concept", seq: 4, waitedDays: 9 },
+    ];
+    const plan = planOverdueReleases({ items: busy, waiting, active, activePerceptual: 4, today: T, cfg });
+    expect(plan.release).toEqual(["fam.b", "fam.c"]);
+    expect(plan.rest).toEqual(["fam.ear", "fam.sing"]);
+    // A sung family without mic room: only a sung family can make it.
+    const mics = Array.from({ length: 12 }, (_, i) => item({ cardId: `m${i}`, mic: true }));
+    const sung: WaitingCard[] = [{ cardId: "fam.echo", kind: "production", seq: 1, waitedDays: 3 }];
+    expect(
+      planOverdueReleases({ items: mics, waiting: sung, active, activePerceptual: 4, today: T, cfg }),
+    ).toEqual({
+      graduate: [],
+      rest: ["fam.sing"],
+      release: ["fam.echo"],
+    });
+  });
+
+  test("pickRestReturn: the longest-resting family comes back once nothing waits and there is room", () => {
+    const resting = [
+      { cardId: "fam.new", restedDays: 3, mic: false },
+      { cardId: "fam.old", restedDays: 20, mic: false },
+    ];
+    const base = { items: [], resting, waitingFamilies: 0, activePerceptual: 5, today: T, cfg };
+    expect(pickRestReturn(base)).toBe("fam.old");
+    expect(pickRestReturn({ ...base, waitingFamilies: 1 })).toBeNull();
+    expect(pickRestReturn({ ...base, activePerceptual: 12 })).toBeNull();
+    const busy = Array.from({ length: 30 }, () => item({ sec: 90 }));
+    expect(pickRestReturn({ ...base, items: busy })).toBeNull();
+    // A sung family needs mic room.
+    const mics = Array.from({ length: 12 }, () => item({ mic: true }));
+    expect(
+      pickRestReturn({ ...base, items: mics, resting: [{ cardId: "fam.sing", restedDays: 9, mic: true }] }),
+    ).toBeNull();
+  });
+
+  test("earlyGraduate never takes a family before its first review set", () => {
+    const g = { level: 4, masteryLevel: 4, maxOpenLevel: 7, t90Days: 0 };
+    expect(earlyGraduate([{ ...g, cardId: "fam.unreviewed", lastRatings: [] }], cfg, "time")).toBeNull();
+    expect(earlyGraduate([{ ...g, cardId: "fam.reviewed", lastRatings: [3] }], cfg, "time")).toBe(
+      "fam.reviewed",
+    );
+  });
+
   test("admitNew releases 1 family and 4 facts a day while open, within the active cap and mic room", () => {
     expect(admitNew([], { families: 3, facts: 9 }, 5, T, cfg)).toEqual({ families: 1, facts: 4 });
     expect(admitNew([], { families: 3, facts: 9 }, 12, T, cfg)).toEqual({ families: 0, facts: 4 });
@@ -256,6 +402,13 @@ describe("graduation and the active cap", () => {
       ),
     ).toBeNull();
   });
+  test("earlyGraduate: a family held at level 1 by a gate needs the gated-ladder proof, never a seeded one", () => {
+    const gated = { ...g, cardId: "fam.gated", level: 1, masteryLevel: 2, maxOpenLevel: 1 };
+    // Seeded today: no stability, no ratings yet.
+    expect(earlyGraduate([{ ...gated, t90Days: 0, lastRatings: [] }], cfg, "time")).toBeNull();
+    expect(earlyGraduate([{ ...gated, t90Days: 25, lastRatings: [3] }], cfg, "time")).toBeNull();
+    expect(earlyGraduate([{ ...gated, t90Days: 25, lastRatings: [3, 4] }], cfg, "time")).toBe("fam.gated");
+  });
   test("intervalCap: an active perceptual family runs on the 7-day cadence under decision 2 only", () => {
     expect(intervalCap({ kind: "family", status: "active" }, true, cfg)).toBe(7);
     expect(intervalCap({ kind: "family", status: "active" }, true, governorFor(20))).toBeUndefined();
@@ -312,6 +465,10 @@ describe("return policy (contracts §7.9)", () => {
     const r = capRelearning(rest, 3, true);
     expect(r.held.map((x) => x.recall)).toEqual([0.5]);
     expect(r.keep).toHaveLength(2);
+  });
+  test("the Again cascade never holds a family's first set (decision 27)", () => {
+    const first = item({ recall: 0, firstSet: true });
+    expect(capRelearning([first, item({ recall: 0.4 })], 5, true).keep).toEqual([first]);
   });
 });
 

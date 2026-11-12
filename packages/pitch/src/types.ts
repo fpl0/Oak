@@ -27,6 +27,11 @@ export interface PitchFrame {
   clarity: number;
   /** Linear RMS of the window (0 to 1 for full-scale audio). */
   rms: number;
+  /**
+   * Largest |sample| in the window (Wave 3, optional): 1 is full scale, so a take that keeps reaching it is
+   * clipped (`takeQuality().clipped`). Older frames without it fall back to the RMS.
+   */
+  peak?: number;
 }
 
 export interface DetectorOptions {
@@ -35,6 +40,11 @@ export interface DetectorOptions {
   minVolumeDb?: number;
   /** Reject estimates whose period does not fit this many times in the window (default 2): pure noise passes the clarity gate otherwise. */
   minPeriods?: number;
+  /**
+   * Move an estimate down an octave when the half-period trap is detected (a weak fundamental; see
+   * `detector.ts`). Default true.
+   */
+  octaveCheck?: boolean;
 }
 export interface Detector {
   readonly windowSize: number;
@@ -55,6 +65,11 @@ export interface TrackerOptions {
   splitCents?: number;
   /** … for at least this many voiced frames. */
   splitFrames?: number;
+  /**
+   * … where the pitch compared is the mean of the last this many frames (default 12, about 130 ms): a vibrato
+   * averages out over it, a held new pitch does not.
+   */
+  splitWindow?: number;
   /** Unvoiced frames that close a note. */
   gapFrames?: number;
   minNoteSec?: number;
@@ -125,6 +140,17 @@ export interface SungResult {
   mode: SingMode;
   /** Tolerance actually applied. */
   tolCents: SingTolCents;
+  /**
+   * Timed modes: how late (positive) or early the whole take was against the targets, seconds. The pitch
+   * windows follow it, so a late start keeps the credit of every note sung in tune; timing credit and
+   * `onsetErrorMs` are still measured from the beat. 0 in free modes and when no shift explains the take better.
+   */
+  startShiftSec?: number;
+  /**
+   * Wave 3: the take as a whole (`takeQuality`): why nothing could be graded (no voice, too noisy, only
+   * blips) and whether the input clipped. Absent on live (incremental) results.
+   */
+  take?: import("./take.ts").TakeQuality;
 }
 
 export interface TapResult {

@@ -1,7 +1,7 @@
 // The calibration wizard's measurements, driven by a fake clock and a scripted "world" the mic hears.
 import { describe, expect, test } from "bun:test";
 import type { PitchFrame } from "@oak/pitch";
-import { CALIBRATION, createCalibration } from "./calibration.ts";
+import { CALIBRATION, createCalibration, quietCheckOf } from "./calibration.ts";
 import { FakeContext, framesBetween } from "./fakes.test-data.ts";
 import type { MicGraph, MicSession, MicState } from "./types.ts";
 
@@ -84,6 +84,28 @@ describe("calibration", () => {
     expect(db).toBeCloseTo(-62, 3);
     expect(r.state()).toBe("closed");
     expect(r.opens()).toBe(1);
+  });
+
+  test("quiet check: a quiet room passes; humming through it is caught, not stored as the floor", async () => {
+    const quiet = await rig(() => silent).cal.noiseCheck(1);
+    expect(quiet.voiced).toBe(false);
+    expect(quiet.floorDb).toBeCloseTo(-62, 3);
+    // The learner hums C4 at −30 dBFS for the middle half of the check.
+    const hum = rig(() => (tc) => (tc > 0.5 && tc < 1.0 ? { midi: 60, rms: 10 ** (-30 / 20) } : silent(tc)));
+    const r = await hum.cal.noiseCheck(1.2);
+    expect(r.voiced).toBe(true);
+    expect(r.voicedSec).toBeGreaterThan(0.3);
+    expect(hum.state()).toBe("closed");
+    // A short cough is not a voice.
+    const cough = quietCheckOf(
+      Array.from({ length: 280 }, (_, i) => ({
+        t: i * 0.0107,
+        hz: i > 100 && i < 110 ? 200 : 0,
+        clarity: i > 100 && i < 110 ? 0.95 : 0.1,
+        rms: i > 100 && i < 110 ? 0.05 : 0.0008,
+      })),
+    );
+    expect(cough.voiced).toBe(false);
   });
 
   test("bleed test: true when the mic hears the 880/1175/1568 Hz tones, false on headphones", async () => {

@@ -25,6 +25,8 @@ import { toast } from "../ui/kit/Toast.tsx";
 import "../workbench/index.ts";
 import { ServicesGate } from "../workbench/ServicesGate.tsx";
 import { Workbench } from "../workbench/Workbench.tsx";
+import { FeatureGlimpse } from "./Glimpse.tsx";
+import { glimpseOf } from "./glimpse.ts";
 import { demoKey, demoMeter, KIND_LABEL, sitesOf, siteText, toolSketchBody, unlockText } from "./model.ts";
 import { UnlockMoment } from "./UnlockMoment.tsx";
 import { useToolUsage } from "./usage.ts";
@@ -111,8 +113,13 @@ function ToolDetail({ tool, unlockedAt }: { tool: ToolEntry; unlockedAt: string 
           <p className="text-text">{tool.concept[0]?.toUpperCase() + tool.concept.slice(1)}.</p>
           <h2 className="mt-4 mb-1 font-sans text-sm font-semibold text-text-2">What it does</h2>
           <p className="whitespace-pre-wrap">{tool.catalog.meaning}</p>
-          <h2 className="mt-4 mb-1 font-sans text-sm font-semibold text-text-2">Signature</h2>
-          <code className="font-mono">{tool.catalog.signature}</code>
+          {/* An app feature has no code signature (its catalog row repeats its name): nothing to show. */}
+          {tool.catalog.signature !== tool.code || !["feature", "lens", "template"].includes(tool.kind) ? (
+            <>
+              <h2 className="mt-4 mb-1 font-sans text-sm font-semibold text-text-2">Signature</h2>
+              <code className="font-mono">{tool.catalog.signature}</code>
+            </>
+          ) : null}
         </Card>
 
         {open && hasDemo ? (
@@ -169,6 +176,24 @@ function ToolDetail({ tool, unlockedAt }: { tool: ToolEntry; unlockedAt: string 
   );
 }
 
+/** How a feature's own page shows it at work (Wave 3 features). */
+const FEATURE_DEMOS: Record<string, { panels?: { key?: boolean; circle?: boolean }; hint: string }> = {
+  "tb.feature.degree-labels": {
+    hint: "Every note carries its degree on the roll and under the staff. D in the Workbench turns them off and on.",
+  },
+  "tb.feature.solfege": {
+    hint: "Syllables under the degrees: do is home. S in the Workbench turns them off and on.",
+  },
+  "tb.feature.keysig": {
+    panels: { key: true },
+    hint: "The Key panel follows the code: change D4 to A4 in .scale() and press Run. Shift+K opens it anywhere.",
+  },
+  "tb.feature.circle": {
+    panels: { circle: true },
+    hint: "Choose a key on the ring to hear this code in it; nothing in the code changes until you press Use. Shift+C opens it anywhere.",
+  },
+};
+
 /** A small Workbench with the tool's two-bar example: editable, played and drawn like any other code. */
 function LiveExample({ tool }: { tool: ToolEntry }) {
   const navigate = useNavigate();
@@ -177,6 +202,8 @@ function LiveExample({ tool }: { tool: ToolEntry }) {
   const [code, setCode] = useState(tool.catalog.demo);
   const meter = demoMeter(tool.catalog.demo);
   const key = demoKey(tool.catalog.demo) as { tonic: string; mode: "major" } | null;
+  // A feature's page shows the feature at work: roll and staff side by side, its panel open, its lens switch.
+  const feature = FEATURE_DEMOS[tool.id] ?? null;
 
   const openInStudio = async () => {
     try {
@@ -202,11 +229,19 @@ function LiveExample({ tool }: { tool: ToolEntry }) {
           Open in Studio
         </Button>
       </div>
+      {feature ? <p className="text-sm text-text-2">{feature.hint}</p> : null}
       <ServicesGate load={appWorkbenchServices} auto>
         <Workbench
           id={`tool${tool.id.replace(/[^a-z0-9]/gi, "").slice(-12)}`}
           code={tool.catalog.demo}
-          variant="mini"
+          {...(feature
+            ? {
+                variant: "compact" as const,
+                views: ["roll", "staff"] as ("roll" | "staff")[],
+                initialTab: "both" as const,
+                ...(feature.panels ? { initialPanels: feature.panels } : {}),
+              }
+            : { variant: "mini" as const })}
           lessonCtx={{ key, meter, defaultBpm: 90, loopBars: 2 }}
           lint={{
             profile: "studio",
@@ -271,6 +306,11 @@ function LockedTeaser({ tool, titles }: { tool: ToolEntry; titles: ReadonlyMap<s
     <Card className="border-dashed p-4" data-testid="tool-locked">
       <h2 className="mb-1 font-sans text-sm font-semibold text-text-2">Not in your toolbox yet</h2>
       <p data-testid="unlock-condition">{unlockText(tool, titles)}</p>
+      {glimpseOf(tool.id) ? (
+        <div className="mt-3">
+          <FeatureGlimpse glimpse={glimpseOf(tool.id) as NonNullable<ReturnType<typeof glimpseOf>>} />
+        </div>
+      ) : null}
       <p className="mt-1 text-sm text-text-2">
         You can already use it in the Studio, where it plays with a hint; graded steps wait until it is
         unlocked.

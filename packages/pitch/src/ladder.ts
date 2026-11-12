@@ -140,3 +140,111 @@ export function loosenOffer(
   if (a === null || b === null) return null;
   return b - a >= LADDER_LOOSEN_GAP_DAYS ? looser : null;
 }
+
+/** One graded sung note as the ladder counts it (Quiet, skipped and calibration notes never reach here). */
+export interface LadderNote {
+  /** The learner's local day, `yyyy-mm-dd`. */
+  day: string;
+  /** Signed or absolute cents error after octave folding and drift compensation. */
+  cents: number;
+}
+
+/** Per-day statistics from single notes: the count and the true median |e| of each day, oldest first. */
+export function singDayStats(notes: readonly LadderNote[]): SingDayStat[] {
+  const byDay = new Map<string, number[]>();
+  for (const n of notes) {
+    if (!Number.isFinite(n.cents) || dayNumber(n.day) === null) continue;
+    const list = byDay.get(n.day) ?? [];
+    list.push(Math.abs(n.cents));
+    byDay.set(n.day, list);
+  }
+  return [...byDay.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([day, list]) => {
+      const s = [...list].sort((a, b) => a - b);
+      const mid = s.length >> 1;
+      const med = s.length % 2 ? (s[mid] as number) : ((s[mid - 1] as number) + (s[mid] as number)) / 2;
+      return { day, gradedNotes: s.length, medianAbsCents: med };
+    });
+}
+
+export interface LadderSnapshotInput {
+  cents: SingTolCents;
+  mode: "auto" | "fixed";
+  days: readonly SingDayStat[];
+  today: string;
+  /** The checkpoint that holds tightening (contracts §8.2), or null. */
+  pendingCheckpoint: string | null;
+  /** Day of the last change of rung (the days before it do not count again). */
+  since?: string;
+  /** The last day with graded sung notes, for the one-tap loosen after a gap. */
+  lastSingDay: string | null;
+  lastChange: {
+    from: SingTolCents;
+    to: SingTolCents;
+    at: string;
+    reason: "evidence" | "learner" | "loosen";
+  } | null;
+}
+
+/**
+ * The ladder as `GET /voice` reports it (`VoiceLadderSchema` of @oak/api, field for field): where the learner
+ * stands, the days inside the 21-day window, what holds it and whether a loosen is offered. Computed from the
+ * same rules as `nextSingTolerance`, so the Settings card can never disagree with what the server does. A bad
+ * day is just a day that does not count: it never undoes the days that did, and the ladder never steps back
+ * on its own.
+ */
+export function ladderSnapshot(input: LadderSnapshotInput) {
+  const progress = ladderProgress(input.cents, input.days, {
+    today: input.today,
+    checkpointPending: input.pendingCheckpoint !== null,
+    mode: input.mode,
+    ...(input.since !== undefined ? { since: input.since } : {}),
+  });
+  const today = dayNumber(input.today) as number;
+  const qualifying = new Set(progress.qualifyingDays);
+  const merged = new Map<string, SingDayStat>();
+  for (const d of input.days) {
+    const n = dayNumber(d.day);
+    if (n === null || n > today || today - n >= LADDER_WINDOW_DAYS || !(d.gradedNotes > 0)) continue;
+    const prev = merged.get(d.day);
+    merged.set(
+      d.day,
+      prev
+        ? {
+            day: d.day,
+            gradedNotes: prev.gradedNotes + d.gradedNotes,
+            medianAbsCents:
+              (prev.medianAbsCents * prev.gradedNotes + d.medianAbsCents * d.gradedNotes) /
+              (prev.gradedNotes + d.gradedNotes),
+          }
+        : { ...d },
+    );
+  }
+  const days = [...merged.values()]
+    .sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0))
+    .map((d) => ({
+      day: d.day,
+      notes: d.gradedNotes,
+      medianAbsCents: Number.isFinite(d.medianAbsCents) ? d.medianAbsCents : null,
+      qualifies: qualifying.has(d.day),
+    }));
+  return {
+    cents: input.cents,
+    mode: input.mode,
+    next:
+      input.mode === "fixed" || progress.target === null || progress.thresholdCents === null
+        ? null
+        : { cents: progress.target, medianAtMost: progress.thresholdCents },
+    days,
+    qualifyingDays: progress.qualifyingDays.length,
+    daysNeeded: progress.daysNeeded,
+    held:
+      input.pendingCheckpoint !== null && input.mode === "auto" && progress.target !== null
+        ? { reason: "checkpoint-pending" as const, checkpointId: input.pendingCheckpoint }
+        : null,
+    offerLoosen: loosenOffer(input.cents, input.lastSingDay, input.today) !== null,
+    lastChange: input.lastChange,
+  };
+}
+export type LadderSnapshot = ReturnType<typeof ladderSnapshot>;

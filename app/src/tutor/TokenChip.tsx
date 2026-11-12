@@ -1,14 +1,16 @@
 // A music token in tutor text as an interactive chip (contracts §10.7, ux §6.4). Hover or focus shows the
-// definition; a click plays degrees, numerals, notes and chords, loops bars in the Workbench, opens a tool in
-// the Toolbox, and pins a term's definition open. Terms beyond the learner's vocabulary and locked tools carry a
-// "preview" badge.
+// definition; a click plays degrees, numerals, notes, chords, intervals and keys (in the subject's key), loops
+// bars in the Workbench and lights them (and a clicked note) on the roll and the staff, opens a tool in the
+// Toolbox, and pins a term's definition open. Terms beyond the learner's vocabulary and locked tools carry a
+// "preview" badge. A degree chip shows its syllable when the solfège lens is on; a note chip its degree when the
+// degree lens is on.
 import type { MusicToken, SubjectRef } from "@oak/api";
 import { Link } from "@tanstack/react-router";
 import { clsx } from "clsx";
 import { Lock, Repeat } from "lucide-react";
 import { type ReactNode, useId, useRef, useState } from "react";
 import { degreeBackgroundCss, degreeStyle } from "../ui/theme/palette.ts";
-import { showBars } from "./context.ts";
+import { highlightReference, showBars } from "./context.ts";
 import { useThemeName } from "./hooks.ts";
 import { describeToken, type TokenContext, type TokenInfo } from "./music-tokens.ts";
 import { playChords } from "./preview.ts";
@@ -153,17 +155,25 @@ export function TokenChip({
       const ds = degreeStyle(info.degree, theme);
       style = { background: degreeBackgroundCss(ds), color: ds.label, borderColor: ds.outline ?? ds.fill };
       cls = "";
+    } else if (info.kind === "note" && info.degree) {
+      // The degree lens is on and the key is known: the note wears its degree's colour as an edge.
+      const ds = degreeStyle(info.degree, theme);
+      style = { borderColor: ds.fill, boxShadow: `inset 3px 0 0 ${ds.fill}` };
+      cls = "bg-surface text-text hover:bg-surface-2";
+    } else if (info.kind === "term" && info.variant) {
+      cls = "border-border bg-surface-2 text-text hover:bg-surface";
     } else if (info.kind === "rn") {
       const ds = info.degree ? degreeStyle(info.degree, theme) : null;
       style = ds ? { borderColor: ds.fill, boxShadow: `inset 3px 0 0 ${ds.fill}` } : undefined;
       cls = "bg-surface text-text hover:bg-surface-2";
     } else if (info.kind === "bars") {
       cls = "border-accent/40 bg-lane-in text-accent hover:bg-surface-2";
-    } else if (info.kind === "term") {
+    } else if (info.kind === "term" && !info.variant) {
       cls =
         "rounded-none border-0 border-b border-dotted border-text-3 bg-transparent px-0.5 font-normal text-text hover:bg-surface-2";
     }
     const onClick = () => {
+      if (info.midi !== undefined) highlightReference({ kind: "note", thread, midi: info.midi });
       if (info.play) void playChords(info.play);
       else if (info.bars) showBars(thread, info.bars.from, info.bars.to);
       else if (info.kind === "term") def.pinned ? def.close() : def.pin();
@@ -182,10 +192,17 @@ export function TokenChip({
           cls,
           (info.kind === "note" || info.kind === "chord") && "font-mono text-[0.8125rem]",
         )}
+        data-variant={info.variant}
         {...handlers}
       >
         {info.kind === "bars" && <Repeat aria-hidden className="size-3" />}
         {info.label}
+        {info.sub && (
+          // Full strength: at 12 px on a degree fill, any fading drops the syllable below 4.5:1.
+          <span data-sub className="font-sans text-[0.75rem] font-normal">
+            {info.sub}
+          </span>
+        )}
         {info.kind === "term" && info.preview && <PreviewBadge />}
       </button>
     );

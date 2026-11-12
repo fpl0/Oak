@@ -136,7 +136,7 @@ export interface BarPosition {
   bar: number;
   /** 1-based, in tempo units; fractional inside a beat. */
   beat: number;
-  /** "1", "1e", "1&", "1a"; triplets "1t", "1l"; compound "1la", "1li"; odd meters: group counts. */
+  /** "1", "1e", "1&", "1a"; triplets "1-trip", "1-let"; off the grid "between 1 and 2"; compound "1la", "1li"; odd meters: group counts. */
   label: string;
   /** Position inside the bar, in cycles. */
   inBar: Rat;

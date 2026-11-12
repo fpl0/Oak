@@ -4,12 +4,19 @@
 import type { SessionPlan } from "@oak/api";
 import { clsx } from "clsx";
 import { Check, Pause } from "lucide-react";
+import { IS_MAC } from "../../ui/keys/KeymapProvider.tsx";
 import { Button } from "../../ui/kit/Button.tsx";
+import { Kbd } from "../../ui/kit/basics.tsx";
 import { Callout } from "../../ui/kit/Controls.tsx";
 import { ProgressRing } from "../../ui/kit/Meters.tsx";
 import { sessionRunner } from "../live.ts";
 import { blockBudget, useSession } from "../store.ts";
 import type { SessionBlock } from "../types.ts";
+
+/** Pause and resume (contracts §9.3 "pause and resume at a step"). Alt, not a bare letter: drills and the
+ * Workbench own the letter keys, and this works from every block. Registered by the session host. */
+export const PAUSE_KEYS = "Alt+P";
+export const PAUSE_KEY_LABEL = IS_MAC ? "⌥P" : "Alt+P";
 
 const LABEL: Record<SessionBlock, string> = { warmup: "Warm-up", new: "New", make: "Make", coda: "Coda" };
 
@@ -127,8 +134,9 @@ export function SessionHeader({ title, lessonHasWrap = false }: { title: string;
             onClick={() => sessionRunner.pause()}
             icon={<Pause aria-hidden className="size-4" />}
             data-testid="pause"
+            aria-keyshortcuts="Alt+P"
           >
-            Pause
+            Pause <Kbd>{PAUSE_KEY_LABEL}</Kbd>
           </Button>
         </div>
       </div>

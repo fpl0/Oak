@@ -60,8 +60,8 @@ import { syncopation } from "../analyze/meter.ts";
 import { detectDevices } from "../analyze/piece.ts";
 import { resolveSection, sectionsFromAst } from "../analyze/sections.ts";
 import { pickSwingTrack } from "../analyze/swing.ts";
-import { selectTrack, selectTracks, tracksOfRole } from "../analyze/tracks.ts";
-import { diag } from "../feedback/catalog.ts";
+import { periodOf, selectTrack, selectTracks, tracksOfRole } from "../analyze/tracks.ts";
+import { diag, toolText } from "../feedback/catalog.ts";
 import { runMatcher } from "../match/index.ts";
 import type { Normalized } from "../types.ts";
 import type { RubricContext } from "./context.ts";
@@ -84,6 +84,7 @@ type Impl<K extends RubricRule["rule"]> = (rule: RuleOf<K>, n: Normalized, ctx: 
 const fmt = (x: number, digits = 2): string =>
   Number.isInteger(x) ? String(x) : x.toFixed(digits).replace(/0+$/, "").replace(/\.$/, "");
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
+const times = (n: number): string => (n === 1 ? "once" : n === 2 ? "twice" : `${n} times`);
 
 /** Bars of the piece: the AST total, else the queried bars, else through the last event. */
 export function pieceBars(n: Normalized, ctx: RubricContext): number {
@@ -682,20 +683,40 @@ const uses: Impl<"uses"> = (r, _n, ctx) => {
     (a, t) => a + (used ? used.filter((u) => u === t).length : usesInSource(ctx.code, t)),
     0,
   );
+  const label = tools.map((t) => toolText(t, ctx.toolCode)).join(" or ");
   return {
     ok: count >= min,
     value: count,
     target: min,
-    detail: `${tools.join(" or ")} used ${count}×; at least ${min}`,
+    detail:
+      count === 0
+        ? `${label} is not used yet (at least ${times(min)})`
+        : `${label} used ${times(count)}; at least ${times(min)}`,
   };
 };
-const motifReuseRule: Impl<"motif-reuse"> = (r, n) => {
-  const m = motifReuse(melodyLine(selectTrack(n, r.track)), r.unitBars ?? 1);
+/** Longest loop the motif check looks for (bars); a line with no shorter period is read whole. */
+const MOTIF_PERIOD_CAP = 16;
+const motifReuseRule: Impl<"motif-reuse"> = (r, n, ctx) => {
+  const events = selectTrack(n, r.track);
+  const unitBars = r.unitBars ?? 1;
+  // One pass of the learner's own line: a 2-bar riff rendered over 16 bars is read as its 2 bars, so the
+  // loop's repeats never count as reuse (contracts §5.6 measures the idea, not the playback).
+  const reach = events.reduce((m, e) => Math.max(m, R.floor(e.onset) + 1), 0);
+  const window = Math.max(1, Math.min(ctx.bars ?? reach, reach || 1));
+  const period = periodOf(events, MOTIF_PERIOD_CAP, window);
+  const m = motifReuse(melodyLine(events), unitBars, {
+    periodBars: period,
+    shape: r.shape ?? "semitones",
+    key: keyFromContext(events) ?? ctx.key ?? null,
+  });
+  const unit = unitBars === 1 ? "bar" : `${fmt(unitBars)}-bar group`;
+  const span = period < window ? `in one pass of your ${period}-bar loop` : `over your ${period} bars`;
+  const verb = m.matched === 1 ? "repeats" : "repeat";
   return {
     ok: m.ratio >= r.minRatio,
     value: m.ratio,
     target: r.minRatio,
-    detail: `${m.matched} of ${m.units} bars reuse an earlier idea (${pct(m.ratio)}); at least ${pct(r.minRatio)}`,
+    detail: `${span}, ${m.matched} of ${m.units} ${unit}s ${verb} the shape of an earlier one (${pct(m.ratio)}); at least ${pct(r.minRatio)}`,
   };
 };
 

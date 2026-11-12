@@ -142,7 +142,7 @@ export const FIXTURES = {
   health: {
     ok: true,
     appVersion: "0.0.0-e2e",
-    contractsVersion: "1.2",
+    contractsVersion: "1.3",
     schemaVersion: 1,
     contentVersion: null,
     tutor: "ready",
@@ -153,7 +153,7 @@ export const FIXTURES = {
     health: {
       ok: true,
       appVersion: "0.0.0-e2e",
-      contractsVersion: "1.2",
+      contractsVersion: "1.3",
       schemaVersion: 1,
       contentVersion: null,
       tutor: "ready",
@@ -199,6 +199,7 @@ export const FIXTURES = {
       linerNotesInAlbum: true,
       tutor: { backend: "auto", softMonthlyUsd: 25, softWarnedMonth: null },
       backupWithAudio: true,
+      lenses: { degrees: true, solfege: true, noteNames: false },
     },
     unlocks: [unlock("tb.feature.transport"), unlock("tb.feature.roll", false)],
     streak,
@@ -207,6 +208,26 @@ export const FIXTURES = {
     openSession: null,
   },
   "profile.get": null as unknown, // filled below (same as bootstrap.profile)
+  // Wave 3: today's sessions on the server (Today's done state) and the voice state (Quiet mode, range, ladder).
+  "session.day": { day: DAY, open: null, ended: [], doneForToday: false, summarySessionId: null },
+  "voice.get": {
+    day: DAY,
+    quiet: false,
+    quietReason: null,
+    range: null,
+    labels: "numbers",
+    ladder: {
+      cents: 70,
+      mode: "auto",
+      next: { cents: 50, medianAtMost: 35 },
+      days: [],
+      qualifyingDays: 0,
+      daysNeeded: 3,
+      held: null,
+      offerLoosen: false,
+      lastChange: null,
+    },
+  },
   "session.today": {
     day: DAY,
     targetMinutes: 20,
@@ -398,7 +419,14 @@ export const FIXTURES = {
     canDo: [
       { candoId: "cd.hear.pulse", status: "solid", evidenceKind: "lesson", evidenceId: "U01.L01", at: NOW },
     ],
-    milestones: [{ id: "ms.first-loop", reachedAt: NOW }],
+    milestones: [
+      {
+        id: "ms.first-loop",
+        title: "You made a loop.",
+        description: "Your first loop plays.",
+        reachedAt: NOW,
+      },
+    ],
     paceEstimate: { coreDoneBy: "2027-09", sessionsPerWeek: 5 },
     streak,
   },
@@ -547,3 +575,6 @@ export const WRITE_FIXTURES = {
     finishedAt: null,
   },
 } satisfies Partial<Record<JsonEndpointName, unknown>>;
+
+/** A warm-up set started inside a session is read back once (`drills.start` may hand back an open set). */
+(FIXTURES as Record<string, unknown>)["drills.get"] = { session: WRITE_FIXTURES["drills.start"], trials: [] };

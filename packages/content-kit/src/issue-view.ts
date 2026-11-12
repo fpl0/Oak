@@ -40,6 +40,11 @@ export const ANSWER_PARAMS = [
   "idx",
   "deg",
   "member",
+  // Wave 3: where a note belongs, the long interval name, the key's kind, the key-signature reason.
+  "expAt",
+  "expLong",
+  "expKind",
+  "why",
 ] as const;
 
 export interface IssueViewOptions {

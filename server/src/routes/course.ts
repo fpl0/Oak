@@ -2,6 +2,7 @@
 import { checkpointFromRouteParam, isCheckpointId } from "@oak/content-kit";
 import type { AppDeps } from "../deps.ts";
 import { ApiError } from "../errors.ts";
+import { idempotent } from "../idempotency.ts";
 import type { SessionStartRecord } from "../services/sessions.ts";
 import type { Mounter } from "./define.ts";
 
@@ -71,7 +72,17 @@ export function courseRoutes(mount: Mounter, d: AppDeps): void {
 
   mount("lessons.progress", () => s.gates.courseProgress());
   mount("steps.state", ({ params }) => s.course.stepState(params.id, params.stepId));
-  mount("steps.attempt", ({ params, body }) => s.course.attempt(params.id, params.stepId, body));
+  // Wave 3 (wave3.md §5.2): a retried or double-submitted attempt with the same key counts once.
+  mount("steps.attempt", ({ params, body }) => {
+    const { idempotencyKey, ...rest } = body;
+    return idempotent(
+      d,
+      "steps.attempt",
+      idempotencyKey,
+      { lessonId: params.id, stepId: params.stepId, body: rest },
+      () => s.course.attempt(params.id, params.stepId, rest),
+    );
+  });
   mount("steps.hint", ({ params, body }) => s.course.hint(params.id, params.stepId, { reveal: body.reveal }));
   mount("steps.newSeries", ({ params }) => s.course.newSeries(params.id, params.stepId));
   mount("lessons.complete", ({ params, body }) => s.course.complete(params.id, body));
@@ -93,4 +104,7 @@ export function courseRoutes(mount: Mounter, d: AppDeps): void {
   mount("lessons.steps", ({ params }) => s.course.lessonSteps(params.id));
   mount("lessons.position", ({ params, body }) => s.course.position(params.id, body));
   mount("capstones.release", ({ params, body }) => s.release.release(params.id, body));
+
+  // Wave 3 (docs/design/wave3.md §5.1): today's sessions on the server, Today's done state.
+  mount("session.day", () => s.sessions.dayState());
 }

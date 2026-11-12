@@ -20,7 +20,7 @@ import { useStepHint } from "../lib/queries.ts";
 import { retryAt, type TurnState } from "../lib/tutor-stream.ts";
 import { Button } from "../ui/kit/Button.tsx";
 import { CodeCard } from "./CodeCard.tsx";
-import { patchSubject, type TutorSubject, tutorHostFor } from "./context.ts";
+import { patchSubject, splitUserText, type TutorSubject, tutorHostFor } from "./context.ts";
 import { Markdown } from "./Markdown.tsx";
 import type { TokenContext } from "./music-tokens.ts";
 import { ReviewView, reviewOf } from "./ReviewView.tsx";
@@ -104,8 +104,9 @@ function DayDivider({ label }: { label: string }) {
 // --- pieces ------------------------------------------------------------------------------------------
 
 function YouBubble({ text }: { text: string }) {
-  // The selection travels inside the message; show the learner's own words and say a selection went with them.
-  const [own, sel] = text.split("\n\nSelected code:\n");
+  // The selection and the "On screen" line travel inside the message; show the learner's own words and say what
+  // went with them.
+  const { own, selection: sel } = splitUserText(text);
   return (
     <div className="ml-6 self-end rounded-card rounded-br-sm bg-lane-in px-3 py-2 text-sm whitespace-pre-wrap break-words">
       <span className="sr-only">You: </span>

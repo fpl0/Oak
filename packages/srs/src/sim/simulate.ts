@@ -2,7 +2,8 @@
 // run the production modules end to end: `createSrs` (ts-fsrs behind Oak's floors, caps and day pick),
 // `planWarmup`, `smoothBacklog`, the Again-cascade cap, `admitCreated`, `admitNew`, `capLessonFacts`,
 // `shouldGraduate`, `earlyGraduate`, `intervalCap`, composite sets with member recall, `stepLevel`,
-// `otherWorkCredit`, `makeDayPicker` and `planReviewDay`.
+// `otherWorkCredit`, `makeDayPicker`, `planReviewDay`, and the wait bound of decision 27
+// (`planOverdueReleases`, resting families, `pickRestReturn`).
 //
 // Deterministic: every draw is mulberry32(FNV-1a(seed | event key)); no Math.random, no wall clock.
 //
@@ -22,6 +23,7 @@ import {
 import { dayStartInstant } from "../days.ts";
 import type { WaitingCard } from "../governor.ts";
 import {
+  type ActiveFamily,
   admitCreated,
   capLessonFacts,
   earlyGraduate,
@@ -32,6 +34,8 @@ import {
   makeDayPicker,
   otherWorkCredit,
   pickReleases,
+  pickRestReturn,
+  planOverdueReleases,
   returnMode,
   shouldGraduate,
   smoothBacklog,
@@ -156,6 +160,8 @@ export interface SimCatalog {
   families: readonly SimFamily[];
   levelGates: Readonly<Record<string, Readonly<Record<number, readonly string[]>>>>;
   deckBatches: readonly (readonly [string, string, number, number])[];
+  /** The sessions in the order the learner meets them (lessons, checkpoints, capstones, gym slots). */
+  order: readonly string[];
 }
 
 // --- results --------------------------------------------------------------------------------------
@@ -201,10 +207,21 @@ export interface SimSummary {
     unlocked: number;
     atMastery: number;
     graduated: number;
+    /** Resting in a composite at the end (decision 27), how many times a family rested, and came back. */
+    resting: number;
+    rests: number;
+    returns: number;
     deferredAtEnd: number;
     waitDaysP95: number;
     recalled: number;
   };
+  /**
+   * Days a perceptual or production family waits from the lesson that seeded it to its first review set
+   * (the amendment of the §7.4 gate: a bound on how long a deferred family waits, not on how many wait).
+   * Days of the learner's own breaks are not counted. A family still unreviewed at the end counts the days
+   * it has waited so far (`censored`). `deferred`: the families created deferred; `all`: every one.
+   */
+  firstReviewWait: { deferred: WaitStats; all: WaitStats; perFamily: FamilyWait[]; concept: WaitStats };
   setCredit: { mean: number; below065: number };
   recallAtReview: { set: number; fact: number };
   ratings: Record<Rating, number>;
@@ -213,6 +230,32 @@ export interface SimSummary {
   factCards: number;
   /** Mean warm-up seconds per session by planned item kind. */
   spentByKind: Record<string, number>;
+}
+export interface WaitStats {
+  n: number;
+  p50: number;
+  p95: number;
+  max: number;
+  /** Families not yet reviewed when the run ended. */
+  censored: number;
+}
+export interface FamilyWait {
+  family: string;
+  seededDeferred: boolean;
+  /** Day index of the seeding lesson. */
+  seededDay: number;
+  waitDays: number;
+  censored: boolean;
+}
+export function waitStats(waits: readonly FamilyWait[]): WaitStats {
+  const days = waits.map((w) => w.waitDays);
+  return {
+    n: waits.length,
+    p50: percentile(days, 50),
+    p95: percentile(days, 95),
+    max: Math.max(0, ...days),
+    censored: waits.filter((w) => w.censored).length,
+  };
 }
 export interface SimResult {
   rows: SessionRow[];
@@ -237,6 +280,15 @@ interface FamS {
   recalled: boolean;
   deferredSeq: number;
   deferUntil: number;
+  /** Created `deferred` by the lesson that seeded it (the intake throttle or the active cap held it back). */
+  seededDeferred: boolean;
+  /** Day index of the family's first review set (its first blocked-intro set), -1 until then. */
+  firstReviewDay: number;
+  /** Resting in its composite below its mastery level to make room (decision 27), since `restDay`. */
+  resting: boolean;
+  restDay: number;
+  /** Back from resting: its next set is played with the practice its composite trials kept up. */
+  returned: boolean;
 }
 interface CompS {
   id: string;
@@ -258,7 +310,7 @@ export function simulate(srs: Srs, o: SimOptions): SimResult {
   const L = o.learner;
   const rng = (key: string) => mulberry32(fnv1a(`${o.seed}|${key}`));
   const base = srs.dayOf(dayStartInstant(BASE_DAY_ISO, srs.timeZone, srs.rolloverHour));
-  const timeline = buildTimeline();
+  const timeline = buildTimeline(o.catalog.order);
   const sessionsPerLesson = o.sessionsPerLesson ?? (o.targetMinutes === 15 ? 2 : 1);
   const lessonBudget = WARMUP_BUDGET_SEC[o.targetMinutes];
 
@@ -301,6 +353,11 @@ export function simulate(srs: Srs, o: SimOptions): SimResult {
     recalled: false,
     deferredSeq: 0,
     deferUntil: -1,
+    seededDeferred: false,
+    firstReviewDay: -1,
+    resting: false,
+    restDay: -1,
+    returned: false,
   }));
   const famById = new Map(fams.map((f) => [f.def.id as string, f]));
   const comps = new Map<string, CompS>(
@@ -373,6 +430,8 @@ export function simulate(srs: Srs, o: SimOptions): SimResult {
   const recallFact: number[] = [];
   const ratings: Record<Rating, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
   let recalledCount = 0;
+  let restCount = 0;
+  let returnCount = 0;
   let lastDay = -1;
   let cursor = 0;
   let lessonPart = 0;
@@ -467,35 +526,65 @@ export function simulate(srs: Srs, o: SimOptions): SimResult {
     const backlogMode = today <= backlogUntil;
     const newToday = { families: 0, facts: 0 };
 
-    // (2) Releases and deck introductions (never while a backlog is being cleared).
+    // (2) Releases and deck introductions (never while a backlog is being cleared, except the wait bound).
     if (!backlogMode) {
-      const items = allItems(now, today);
       // A recalled composite member takes the first free slot.
       for (const f of fams) {
         if (!f.recalled || !f.card || activeP() >= cfg.maxActivePerceptual) continue;
         f.recalled = false;
+        f.resting = false;
         f.card = srs.rate({ ...f.card, status: "active" }, 1, now).card;
         for (const c of comps.values()) c.members = c.members.filter((m) => m !== f);
       }
-      const waiting: WaitingCard[] = [
-        ...fams
-          .filter((f) => f.card?.status === "deferred")
-          .map(
-            (f): WaitingCard => ({
-              cardId: f.def.id,
-              kind: !isP(f) ? "concept" : f.def.mic ? "production" : "perceptual",
-              seq: f.deferredSeq,
-            }),
-          ),
-        ...[...facts.entries()]
-          .filter(([, x]) => x.card.status === "deferred")
-          .map(([id, x]): WaitingCard => ({ cardId: id, kind: "fact", seq: x.deferredSeq })),
-      ];
-      for (const id of pickReleases(items, waiting, activeP(), today, intakeCfg)) {
+    }
+    // The wait bound (decision 27): a family past it is released today, and room is made for it.
+    const overdue = planOverdueReleases({
+      items: allItems(now, today),
+      waiting: waitingCards(today),
+      active: activeFamilies(),
+      activePerceptual: activeP(),
+      today,
+      cfg: intakeCfg,
+    });
+    for (const id of overdue.graduate) graduate(famById.get(id) as FamS, now, d);
+    for (const id of overdue.rest) {
+      graduate(famById.get(id) as FamS, now, d, true);
+      restCount++;
+    }
+    for (const id of overdue.release) release(famById.get(id) as FamS, today, now);
+    if (!backlogMode) {
+      const items = allItems(now, today);
+      const releaseCfg: GovernorConfig = {
+        ...intakeCfg,
+        releasePerDay: {
+          ...intakeCfg.releasePerDay,
+          families: Math.max(0, intakeCfg.releasePerDay.families - overdue.release.length),
+        },
+      };
+      for (const id of pickReleases(items, waitingCards(today), activeP(), today, releaseCfg)) {
         const f = famById.get(id);
         const x = facts.get(id);
         if (f) release(f, today, now);
         else if (x) x.card = { ...x.card, status: "active", dueAt: now.toISOString() };
+      }
+      // A resting family comes back to its own card once nothing waits.
+      const back = pickRestReturn({
+        items: allItems(now, today),
+        resting: fams
+          .filter((f) => f.resting && !f.recalled)
+          .map((f) => ({ cardId: f.def.id, restedDays: d - f.restDay, mic: f.def.mic })),
+        waitingFamilies: fams.filter((f) => isP(f) && f.card?.status === "deferred").length,
+        activePerceptual: activeP(),
+        today,
+        cfg: intakeCfg,
+      });
+      if (back !== null) {
+        const f = famById.get(back) as FamS;
+        f.resting = false;
+        f.returned = true;
+        f.card = { ...(f.card as Card), status: "active", dueAt: now.toISOString() };
+        for (const c of comps.values()) c.members = c.members.filter((m) => m !== f);
+        returnCount++;
       }
 
       // Deck cards not yet created are newer than any deferred fact card: they wait while one does.
@@ -563,7 +652,8 @@ export function simulate(srs: Srs, o: SimOptions): SimResult {
       addLoad(srs.dayOf(res.card.dueAt), sec);
       return res;
     };
-    const heldBack = (it: ReviewItem) => backlogMode && againsToday >= 3 && !it.fresh && it.recall < 0.6;
+    const heldBack = (it: ReviewItem) =>
+      backlogMode && againsToday >= 3 && !it.fresh && !it.firstSet && it.recall < 0.6;
 
     for (const p of plan.items) {
       const key = `${p.kind}:${p.item.cardId}:${d}`;
@@ -641,6 +731,7 @@ export function simulate(srs: Srs, o: SimOptions): SimResult {
             n++;
           }
           if (!f.recalled && memberNeedsRecall(f.recentCredits)) {
+            f.resting = false;
             f.recalled = true;
             recalledCount++;
           }
@@ -664,11 +755,15 @@ export function simulate(srs: Srs, o: SimOptions): SimResult {
       const f = famById.get(it.cardId) as FamS;
       if (!f.card) continue;
       if (f.card.reps > 0) recallSet.push(it.recall);
+      else if (f.firstReviewDay < 0) f.firstReviewDay = d;
+      // Back from resting: its composite trials kept it in practice, so the composite's recall applies.
+      const restedRecall = f.returned ? compRecall(f, now) : 0;
+      f.returned = false;
       const outcome = setOutcome(
         `set:${key}`,
         pTrial(f),
         f.def.trialsPerSet,
-        f.card.reps === 0 ? 1 : learnerRecall(f.card, it.recall, now),
+        f.card.reps === 0 ? 1 : Math.max(restedRecall, learnerRecall(f.card, it.recall, now)),
         srs.desiredRetention(f.card.kind),
         layoff,
         f.def.fastRtMs,
@@ -722,7 +817,7 @@ export function simulate(srs: Srs, o: SimOptions): SimResult {
           completed.add(entry.id);
           // A graduated member whose next level just opened is recalled and climbs on (contracts §7.4).
           for (const f of fams) {
-            if (f.card?.status !== "graduated" || f.recalled) continue;
+            if (f.card?.status !== "graduated" || f.recalled || f.resting) continue;
             if (f.level < f.def.masteryLevel && openLevel(f) > f.level) {
               f.recalled = true;
               recalledCount++;
@@ -823,6 +918,54 @@ export function simulate(srs: Srs, o: SimOptions): SimResult {
         : lessonBudget;
   }
 
+  /** Active perceptual families that could join a composite, as `earlyGraduate` reads them. */
+  function graduationCandidates() {
+    return fams
+      .filter((f) => isP(f) && f.card?.status === "active" && f.def.mix)
+      .map((f) => ({
+        cardId: f.def.id,
+        level: f.level,
+        masteryLevel: f.def.masteryLevel,
+        maxOpenLevel: openLevel(f),
+        t90Days: srs.intervalAt(f.card as Card, 0.9),
+        lastRatings: (f.card as Card).lastRatings,
+      }));
+  }
+  /** Every deferred card as `pickReleases` reads it. */
+  function waitingCards(today: number): WaitingCard[] {
+    return [
+      ...fams
+        .filter((f) => f.card?.status === "deferred")
+        .map(
+          (f): WaitingCard => ({
+            cardId: f.def.id,
+            kind: !isP(f) ? "concept" : f.def.mic ? "production" : "perceptual",
+            seq: f.deferredSeq,
+            waitedDays: ageDays(base + f.unlockDay, today),
+          }),
+        ),
+      ...[...facts.entries()]
+        .filter(([, x]) => x.card.status === "deferred")
+        .map(([id, x]): WaitingCard => ({ cardId: id, kind: "fact", seq: x.deferredSeq })),
+    ];
+  }
+  /** Active perceptual families with a composite, as the wait bound's room-making reads them. */
+  function activeFamilies(): ActiveFamily[] {
+    return graduationCandidates().map((g) => {
+      const f = famById.get(g.cardId) as FamS;
+      return {
+        ...g,
+        mic: f.def.mic,
+        reps: (f.card as Card).reps,
+        blockedIntroPending: f.blockedRemaining > 0,
+      };
+    });
+  }
+  /** The recall of the composite a family is a member of (0 with none). */
+  function compRecall(f: FamS, now: Date): number {
+    const c = f.def.mix ? comps.get(`fam.mix.${f.def.mix}`) : undefined;
+    return c?.card ? srs.retrievability(c.card, now) : 0;
+  }
   function release(f: FamS, today: number, now: Date) {
     if (!f.card) return;
     f.card = { ...f.card, status: "active", dueAt: now.toISOString() };
@@ -839,10 +982,12 @@ export function simulate(srs: Srs, o: SimOptions): SimResult {
     f.promoDay = next.promoDay;
     f.k = next.level === before ? f.k + 1 : next.change === "demoted" ? 3 : 0;
   }
-  function graduate(f: FamS, now: Date, d: number) {
+  function graduate(f: FamS, now: Date, d: number, rest = false) {
     if (!f.card || !f.def.mix) return;
     f.card = { ...f.card, status: "graduated" };
     f.graduatedDay = d;
+    f.resting = rest;
+    f.restDay = rest ? d : -1;
     const c = comps.get(`fam.mix.${f.def.mix}`) as CompS;
     c.members.push(f);
     if (!c.card) {
@@ -883,17 +1028,7 @@ export function simulate(srs: Srs, o: SimOptions): SimResult {
       (_, i) => `fact.${lessonId.toLowerCase()}.t${i + 1}`,
     );
     const tested = capLessonFacts(terms, cfg).cards;
-    const candidates = () =>
-      fams
-        .filter((f) => isP(f) && f.card?.status === "active" && f.def.mix)
-        .map((f) => ({
-          cardId: f.def.id,
-          level: f.level,
-          masteryLevel: f.def.masteryLevel,
-          maxOpenLevel: openLevel(f),
-          t90Days: srs.intervalAt(f.card as Card, 0.9),
-          lastRatings: (f.card as Card).lastRatings,
-        }));
+    const candidates = graduationCandidates;
     // The cap is hit: graduate the strongest family at its mastery level early, if there is one.
     while (
       perceptual.length + production.length > 0 &&
@@ -940,6 +1075,7 @@ export function simulate(srs: Srs, o: SimOptions): SimResult {
       f.unlockDay = d;
       f.unlockLesson = lessonsDone;
       f.card = srs.createCard(isP(f) ? "family" : "concept", f.def.id, now, active ? "active" : "deferred");
+      f.seededDeferred = !active;
       if (active) release(f, today, now);
       else f.deferredSeq = ++seq;
       if (active && !isP(f)) {
@@ -977,6 +1113,32 @@ export function simulate(srs: Srs, o: SimOptions): SimResult {
   const perceptual = fams.filter(isP);
   const unlocked = perceptual.filter((f) => f.card);
   const waits = unlocked.map((f) => (f.activatedDay >= 0 ? f.activatedDay : o.days - 1) - f.unlockDay);
+  const lastPractised = rows[rows.length - 1]?.day ?? o.days - 1;
+  const firstReview: FamilyWait[] = unlocked.map((f) => {
+    const censored = f.firstReviewDay < 0;
+    const end = censored ? lastPractised : f.firstReviewDay;
+    return {
+      family: f.def.id,
+      seededDeferred: f.seededDeferred,
+      seededDay: f.unlockDay,
+      waitDays: ageDays(base + f.unlockDay, base + end),
+      censored,
+    };
+  });
+  // Concept families (no active slot): a lesson's seeding step rates one created active, so only those
+  // created deferred wait, until their first set.
+  const conceptWaits: FamilyWait[] = fams
+    .filter((f) => !isP(f) && f.card && f.seededDeferred)
+    .map((f) => {
+      const censored = f.firstReviewDay < 0;
+      return {
+        family: f.def.id,
+        seededDeferred: true,
+        seededDay: f.unlockDay,
+        waitDays: ageDays(base + f.unlockDay, base + (censored ? lastPractised : f.firstReviewDay)),
+        censored,
+      };
+    });
   const inReturn = new Set<number>();
   const sessionsToClearAfterGap = o.gaps.map(([, end]) => {
     const i = rows.findIndex((r) => r.day > end);
@@ -1059,10 +1221,19 @@ export function simulate(srs: Srs, o: SimOptions): SimResult {
     families: {
       unlocked: unlocked.length,
       atMastery: unlocked.filter((f) => f.level >= f.def.masteryLevel).length,
-      graduated: perceptual.filter((f) => f.card?.status === "graduated").length,
+      graduated: perceptual.filter((f) => f.card?.status === "graduated" && !f.resting).length,
+      resting: perceptual.filter((f) => f.card?.status === "graduated" && f.resting).length,
+      rests: restCount,
+      returns: returnCount,
       deferredAtEnd: perceptual.filter((f) => f.card?.status === "deferred").length,
       waitDaysP95: percentile(waits, 95),
       recalled: recalledCount,
+    },
+    firstReviewWait: {
+      deferred: waitStats(firstReview.filter((w) => w.seededDeferred)),
+      all: waitStats(firstReview),
+      perFamily: firstReview,
+      concept: waitStats(conceptWaits),
     },
     setCredit: {
       mean: mean(setCredits),

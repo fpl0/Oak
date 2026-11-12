@@ -1,5 +1,10 @@
-// The AnswerWidget registry (docs/design/wave2.md §3.1): one component per answer kind. `staff-input` (writing new
-// notes on a staff) is Wave 3 and returns null; the host then shows `<AnswerUnavailable>`.
+// The AnswerWidget registry (docs/design/wave2.md §3.1): one component per answer kind. Wave 3: `staff-input` is the
+// staff (notes, or a key signature with `mode: "key-signature"`); a `text` answer read as an interval or a key gets
+// the interval pad or the circle of fifths, each with its forgiving text field. A kind without a widget returns
+// null and the host shows `<AnswerUnavailable>`.
+import { IntervalAnswer } from "./keys/IntervalAnswer.tsx";
+import { KeyAnswer } from "./keys/KeyAnswer.tsx";
+import { StaffInputAnswer } from "./staff/StaffInput.tsx";
 import type { AnswerKind, AnswerSpecOf, AnswerWidget, AnswerWidgetFor, AnswerWidgetProps } from "./types.ts";
 import { ChoiceAnswer } from "./widgets/Choice.tsx";
 import { ClickRollAnswer, ClickStaffAnswer } from "./widgets/ClickMusic.tsx";
@@ -16,15 +21,22 @@ import { NumberAnswer, TextAnswer } from "./widgets/TextEntry.tsx";
 
 type Registry = { [K in AnswerKind]: AnswerWidget<K> | null };
 
+/** Text answers: an interval gets the number-then-quality pad, a key the circle of fifths, the rest a text field. */
+function TextKindAnswer(p: AnswerWidgetProps<"text">) {
+  if (p.spec.normalize === "interval") return <IntervalAnswer {...p} />;
+  if (p.spec.normalize === "key") return <KeyAnswer {...p} />;
+  return <TextAnswer {...p} />;
+}
+
 export const ANSWER_WIDGETS: Registry = {
   choice: ChoiceAnswer,
   "degree-pad": DegreePadAnswer,
   "quality-pad": QualityPadAnswer,
   "rn-palette": RnPaletteAnswer,
-  text: TextAnswer,
+  text: TextKindAnswer,
   number: NumberAnswer,
   keyboard: KeyboardAnswer,
-  "staff-input": null,
+  "staff-input": StaffInputAnswer,
   grid: RhythmGridAnswer,
   code: CodeAnswer,
   tap: TapPadAnswer,

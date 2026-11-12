@@ -1,6 +1,9 @@
 // The Music Workbench (architecture §2.2, ux §3.4–§3.6). Pages import from here.
 import "./workbench.css";
 
+// Wave 3 additions (additive): lenses (labels per view), the staff's lens lines, the key panels and key tools.
+export { type AnnotationKinds, annotateAbc, annotationText } from "./annotate.ts";
+export { CircleOfFifths } from "./CircleOfFifths.tsx";
 export { WorkbenchClock } from "./clock.ts";
 export { callOf, primaryRanges, roleRanges } from "./code-roles.ts";
 export { FULL_LOOP, PLAYGROUND_EXAMPLES, type PlaygroundExample } from "./examples.ts";
@@ -17,10 +20,31 @@ export {
 } from "./feedback.ts";
 export { type BusState, type Focus, HighlightBus, type HighlightSource } from "./highlight-bus.ts";
 export { Keyboard } from "./Keyboard.tsx";
+export { KeyPanel } from "./KeyPanel.tsx";
+export {
+  keyName,
+  moveKey,
+  neighbours,
+  scaleTokens,
+  signatureText,
+  spelledScale,
+  staffClefText,
+} from "./key-tools.ts";
+export { type LensSource, useAppLensSource, WorkbenchLensProvider } from "./lens-source.tsx";
+export { type StaffLabelMode, type ViewLabels, viewLabels } from "./lens-view.ts";
 // Wave 2 additions (additive): loop region, metronome, the following roll, the shortcut-sheet rows.
 export { defaultRegion, type LoopRegion, type RegionStep, regionLabel, stepRegion } from "./loop-math.ts";
 export { Metronome } from "./metronome.ts";
-export { activeAt, buildModel, type ModelOutcome, type ViewEvent, type WorkbenchModel } from "./model.ts";
+export {
+  activeAt,
+  buildModel,
+  keyAtCycle,
+  type ModelOutcome,
+  type PieceKeySpan,
+  pieceKeys,
+  type ViewEvent,
+  type WorkbenchModel,
+} from "./model.ts";
 export { chordRoleOf, chordToneOf, pitchLabel, tooltipText } from "./music.ts";
 export { PianoRoll, type RollColorMode, type RollLabelMode } from "./PianoRoll.tsx";
 export { FOLLOW_PAGE_BARS, followWindow } from "./roll-layout.ts";
@@ -28,6 +52,7 @@ export { ServicesGate } from "./ServicesGate.tsx";
 export { StaffView } from "./StaffView.tsx";
 export { useWorkbenchServices, type WorkbenchServices, WorkbenchServicesProvider } from "./services.tsx";
 export { WORKBENCH_LOOP_SHORTCUTS, WORKBENCH_SHORTCUT_GROUP } from "./shortcuts.ts";
+export { colourHeads } from "./staff-colour.ts";
 export type { TransportLoop, TransportMetronome } from "./TransportBar.tsx";
 export { TransportBar } from "./TransportBar.tsx";
 export { clampViews, isEarlyUnit, layoutFor, type MusicView } from "./views.ts";

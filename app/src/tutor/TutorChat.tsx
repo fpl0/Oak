@@ -161,6 +161,11 @@ export function TutorStatusLine() {
 const CHIP_SEES: Record<ContextChip["id"], string> = {
   step: "Which lesson and step you are on. The server adds the prompt, never an answer you have not reached.",
   code: "The code in your editor now.",
+  answer:
+    "Your answer on this step as you gave it: the notes you placed, how close each sung note was, or the code you wrote by ear. Never the expected answer.",
+  key: "The key the music on screen is in, so degrees and numerals mean the same to Claude as to you.",
+  labels:
+    "Which note labels you see (degrees, solfège, note names), so Claude names notes the way you read them.",
   result: "Oak's last check of this step, held back to what your hints have opened.",
   hints: "How many hints are open. Claude says no more than they allow.",
   selection: "The code you selected, added under your message.",
@@ -172,7 +177,8 @@ const CHIP_SEES: Record<ContextChip["id"], string> = {
 
 function Chips({ subject }: { subject: TutorSubject }) {
   const excluded = useTutorContext((s) => s.excluded);
-  const chips = chipsOf(subject);
+  const lenses = useTutorContext((s) => s.lenses);
+  const chips = chipsOf(subject, lenses);
   const [open, setOpen] = useState(false);
   const id = useId();
   if (chips.length === 0 && subject.thread.subjectKind !== "transcription") return null;

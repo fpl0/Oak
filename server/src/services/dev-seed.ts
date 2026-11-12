@@ -52,6 +52,38 @@ export const SEED_POINTS: readonly DevSeedPoint[] = [
   },
   { point: "C1 in progress", description: "C1.S1 started yesterday with a passing draft; not released yet." },
   { point: "C1 released", description: "C1 released to the album yesterday." },
+  // Wave 3 (wave3.md §5.5). The learner of every point has a working mic and a calibrated range (onboarding's
+  // mic and range steps); `mic: false` seeds one without a mic (Quiet mode, reason no-mic).
+  {
+    point: "after U02.CP",
+    description:
+      "Every default-order session through U02.CP done (U03.L01 the day before it), the last yesterday; today is C1.S1.",
+  },
+  {
+    point: "after U03.L02",
+    description:
+      "Through C1 (released) and U03.L02 'Degrees in Code', the last yesterday: degree labels, n() and .scale() unlocked; today is U03.L03.",
+  },
+  {
+    point: "U03.CP due",
+    description:
+      "Every U03 lesson done (and U04.L01 once it is written), the last yesterday; today's New block is the U03 checkpoint.",
+  },
+  {
+    point: "after U03.CP",
+    description:
+      "U03.CP passed yesterday (after U04.L01 once it is written); today is the next written U04 lesson, or a review day while U04 is being written.",
+  },
+  {
+    point: "U04.CP due",
+    description:
+      "Every U04 lesson done, the last yesterday; U05.L01 is not written yet, so today's New block is the U04 checkpoint.",
+  },
+  {
+    point: "after U04.CP",
+    description:
+      "U04.CP passed yesterday: the end of the authored course. Today is a review day (warm-up sets, 'a little more', Studio) with a note that the next lessons are still being written.",
+  },
   {
     point: "<N>-day gap",
     description:
@@ -66,6 +98,8 @@ interface SeedPlan {
   /** After `upTo`: failed attempts of a checkpoint, or an unreleased capstone draft. */
   extra: { kind: "cp-failed"; cpId: string; times: 1 | 2 } | { kind: "draft"; capstoneId: string } | null;
   gapDays: number | null;
+  /** An item of the unit the point is about (`U03.CP due` → U03.CP), when `upTo` is of another unit. */
+  unit?: string;
 }
 
 export function needDevClock(d: AppDeps): DevClock {
@@ -77,7 +111,7 @@ export function clockState(d: AppDeps): DevClockDto {
   const s = needDevClock(d).state();
   return {
     now: s.now.toISOString(),
-    day: new LearnerTime(d.services.ctx).day(s.now),
+    day: new LearnerTime(d.services.ctx).day(),
     offsetMs: s.offsetMs,
     frozen: s.frozen,
   };
@@ -101,7 +135,10 @@ export function planSeed(point: string, order: readonly string[]): SeedPlan {
   let m = /^after\s+(\S+)$/i.exec(p);
   if (m !== null) return { upTo: inOrder((m[1] as string).toUpperCase()), extra: null, gapDays: null };
   m = /^(U\d{2}\.CP)\s+due$/i.exec(p);
-  if (m !== null) return { upTo: before((m[1] as string).toUpperCase()), extra: null, gapDays: null };
+  if (m !== null) {
+    const cpId = (m[1] as string).toUpperCase();
+    return { upTo: before(cpId), extra: null, gapDays: null, unit: cpId };
+  }
   m = /^(U\d{2}\.CP)\s+failed(\s+twice)?$/i.exec(p);
   if (m !== null) {
     const cpId = (m[1] as string).toUpperCase();
@@ -125,6 +162,23 @@ export function planSeed(point: string, order: readonly string[]): SeedPlan {
   throw badRequest(
     `unknown seed point "${point}"; GET /api/dev/seed lists them (${SEED_POINTS.map((s) => s.point).join(", ")})`,
   );
+}
+
+/**
+ * The default-order items a plan completes, in order. A lesson that is not written yet is completed as a
+ * stand-in (evidence for the skills it introduces) only inside the seed point's own unit or before it; one of a
+ * later unit is left out, as Today never offers it (`CourseAdapter.next`): "U04.CP due" does not complete
+ * U05.L01, and "U03.CP due" completes U04.L01 only once it is written.
+ */
+export function seedItems(d: Pick<AppDeps, "content">, order: readonly string[], plan: SeedPlan): string[] {
+  if (plan.upTo === null) return [];
+  const unitOf = (id: string) => /^(U\d{2})\./.exec(id)?.[1] ?? null;
+  const own = unitOf(plan.unit ?? (plan.extra?.kind === "cp-failed" ? plan.extra.cpId : plan.upTo));
+  return order.slice(0, order.indexOf(plan.upTo) + 1).filter((id) => {
+    if (d.content.lessonSite(id) === null || d.content.lessonDef(id) !== null) return true;
+    const unit = unitOf(id);
+    return own === null || unit === null || unit <= own;
+  });
 }
 
 /** A tiny seeded generator so a seed is the same every time. */
@@ -213,6 +267,15 @@ class Seeder {
     });
     this.sketchIds.push(saved.sketch.id);
     return saved.sketch;
+  }
+
+  /**
+   * The Make of a stand-in (a lesson not written yet, a checkpoint): course code the learner's unlocks allow.
+   * A degree line over `.scale()` once U03.L02's tools are unlocked, a labelled groove before.
+   */
+  #standIn(): string {
+    const have = this.#s.unlocks.ids();
+    return DEGREE_LINE_TOOLS.every((t) => have.has(t)) ? DEGREE_LINE : CHECKPOINT_GROOVE;
   }
 
   /** One warm-up of today's plan, every set done at about 85% credit (one in ten below 0.65). */
@@ -366,7 +429,8 @@ class Seeder {
       );
     }
     const title = def?.title ?? this.d.content.lessonTitle(lessonId);
-    const sk = this.sketch(title, "lesson-make", lessonId, lessonMakeCode(def?.steps.at(-1)?.exercise));
+    const code = def === null ? this.#standIn() : lessonMakeCode(def.steps.at(-1)?.exercise);
+    const sk = this.sketch(title, "lesson-make", lessonId, code);
     await s.course.complete(
       lessonId,
       {
@@ -392,7 +456,7 @@ class Seeder {
     });
     await this.warmup(ses.id);
     const start = s.course.checkpointStart(cpId);
-    const sk = this.sketch(`${cpId} groove`, "checkpoint", cpId, CHECKPOINT_GROOVE);
+    const sk = this.sketch(`${cpId} Make`, "checkpoint", cpId, this.#standIn());
     s.course.checkpointSubmit(cpId, {
       sessionId: ses.id,
       attemptNo: start.attemptNo,
@@ -478,7 +542,7 @@ export async function seedLearner(d: AppDeps, body: DevSeedRequest): Promise<Dev
   const order = d.content.defaultOrder();
   const plan = planSeed(body.point, order);
   const gapDays = body.gapDays ?? plan.gapDays ?? 0;
-  const items = plan.upTo === null ? [] : order.slice(0, order.indexOf(plan.upTo) + 1);
+  const items = seedItems(d, order, plan);
   const extraDays = plan.extra === null ? 0 : plan.extra.kind === "cp-failed" ? plan.extra.times : 1;
   const days = items.length + extraDays;
 
@@ -497,6 +561,8 @@ export async function seedLearner(d: AppDeps, body: DevSeedRequest): Promise<Dev
     const p = d.repos.profile.get();
     if (body.targetMinutes !== undefined && p.targetMinutes !== body.targetMinutes)
       d.repos.profile.patch({ targetMinutes: body.targetMinutes });
+    // Onboarding's mic and range steps: a working mic and a calibrated range (`mic: false`: no mic, Quiet mode).
+    if (days > 0) seedVoice(d, body.mic ?? true);
   });
   let k = 0;
   for (const id of items) {
@@ -528,6 +594,19 @@ export async function seedLearner(d: AppDeps, body: DevSeedRequest): Promise<Dev
   };
 }
 
+/** The voice part of onboarding as a seed: the mic check and the range sweep, or no mic at all. */
+export function seedVoice(d: AppDeps, mic: boolean): void {
+  const at = d.clock.now().toISOString();
+  if (!mic) {
+    d.repos.profile.patch({ inputKind: "none", quiet: false });
+    return;
+  }
+  const range = { vocalLowMidi: 48, vocalHighMidi: 69, comfortLowMidi: 50, comfortHighMidi: 66 };
+  d.repos.profile.addCalibration("noise", { floorDb: -62 }, at);
+  d.repos.profile.addCalibration("range", { lowMidi: 48, highMidi: 69 }, at);
+  d.repos.profile.patch({ inputKind: "builtin", noiseFloorDb: -62, quiet: false, ...range });
+}
+
 /**
  * A seeded capstone draft: the brief's own first passing test (content CI grades it), else its starter. Real
  * course code, so the seeded piece runs under the learner's unlocks in the browser.
@@ -548,6 +627,21 @@ function firstPassingCode(ex: Exercise | undefined): string | null {
   const pass = b?.tests?.find((t) => t.expect === "pass" && typeof t.response?.code === "string");
   return pass?.response?.code ?? b?.code?.starter ?? null;
 }
+
+/** A seeded Make in degrees (U03.L02 on): 1 3 5 3 | 4 2 1, home on the last beat but one. */
+export const DEGREE_LINE = 'setcpm(84/4)\n\nmel: n("<[0 2 4 2] [3 1 0 ~]>").scale("C4:major").s("piano")';
+const DEGREE_LINE_TOOLS = [
+  "tb.n",
+  "tb.scale",
+  "scale.major",
+  "snd.piano",
+  "tb.s.pitched",
+  "tb.label",
+  "tb.mini.alt",
+  "tb.mini.sub",
+  "tb.mini.rest",
+  "tb.setcpm",
+];
 
 /** A seeded checkpoint Make: labelled parts with tools every checkpoint from U01.CP on has unlocked. */
 export const CHECKPOINT_GROOVE =

@@ -1,26 +1,36 @@
 // Sing capture (contracts §8, ux §4.3 PitchLane): the mic through `app/src/lib/mic.ts` only, a live trace of the
 // tracked pitch folded onto the target lane, a ribbon per target at ±tolerance, a needle in words (never red or
 // green), and the per-note credit from `gradeSungLive` while singing and `gradeSung` at the end: the fill, the tick
-// and the grade come from the one rule. Quiet mode or no usable mic: "listen and self-check" (contracts §8.5),
+// and the grade come from the one rule. Wave 3: degree patterns and sight-singing — targets labelled with numbers or
+// syllables (`SingEnv.labels`), the tolerance from the server's ladder (`tolCents`), a count-in with numerals, the
+// reference (home, and a few chords that set it), "Hear it" (after the take in sight mode) and "Hear my take" (the
+// tracked pitches played back; never audio). Quiet mode or no usable mic: "listen and self-check" (contracts §8.5),
 // which reports quiet evidence and records nothing.
 import type { MicSession } from "@oak/audio";
+import type { LearnerProfile } from "@oak/content-kit";
 import type { PitchFrame, SungResult } from "@oak/pitch";
 import { clsx } from "clsx";
-import { Ear, Mic, RotateCcw, Square } from "lucide-react";
+import { Check, Ear, Home, Mic, Music2, Play, RotateCcw, Square, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, dbToLevel, MicLevelMeter } from "../../ui/kit/index.ts";
+import { useThemeName } from "../../ui/theme/use-theme-name.ts";
 import { appAudio, NEUTRAL_PROFILE, type QuietEvidence, useAnswerEnv } from "../env.tsx";
 import {
+  cadenceChords,
   centsText,
   DEFAULT_SING_TOL,
   fitNotes,
   gradeLive,
   gradeTake,
   needleWords,
+  noteMarkText,
   type SingNote,
   summarize,
   type TracePoint,
+  takeNotes,
   takeSeconds,
+  targetLabel,
+  targetSpoken,
   traceOf,
 } from "../sing.ts";
 import type { AnswerWidgetProps } from "../types.ts";
@@ -141,17 +151,29 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
   const { value, onChange, disabled, feedback } = p;
   const env = useAnswerEnv();
   const setup = env.sing;
-  const profile = env.profile ?? NEUTRAL_PROFILE;
+  const baseProfile = env.profile ?? NEUTRAL_PROFILE;
+  // The server's ladder decides the tolerance (wave3.md §5.3): it reaches the grade through the profile.
+  const profile: LearnerProfile =
+    setup?.tolCents !== undefined
+      ? { ...baseProfile, singTolCents: setup.tolCents as LearnerProfile["singTolCents"] }
+      : baseProfile;
   const audio = env.audio ?? appAudio;
   const tol = setup?.tol ?? DEFAULT_SING_TOL;
   const tolCents = tol.cents === "learner" ? profile.singTolCents : tol.cents;
   const showTrace = setup?.showTrace ?? "live";
-  const leadIn = setup?.leadIn ?? 1;
+  const labels = setup?.labels ?? "numbers";
+  const beat = setup?.countIn ? 60 / setup.countIn.bpm : 0;
+  const leadIn = setup?.countIn ? setup.countIn.beats * beat : (setup?.leadIn ?? 1);
   const fitted = setup ? fitNotes(setup.notes, profile) : { notes: [], shift: 0 };
-  const notes = fitted.notes.map((n) => ({ ...n, at: n.at + leadIn }));
+  const notes = fitted.notes.map((n) => ({ ...n, at: n.at + leadIn, label: targetLabel(n, labels) }));
   const span = takeSeconds(notes) + 0.4;
+  const sight = setup?.mode === "sight";
+  const ref = setup?.reference;
+  const refTonic = ref ? ref.tonic + fitted.shift : null;
 
   const [phase, setPhase] = useState<Phase>(env.quiet ? "quiet" : value.length > 0 ? "done" : "idle");
+  // Why the self-check is showing: Quiet mode (server state), the learner's choice, or the mic.
+  const [quietBy, setQuietBy] = useState<"mode" | "choice" | "mic">(env.quiet ? "mode" : "choice");
   const [problem, setProblem] = useState<string | null>(null);
   const [result, setResult] = useState<SungResult | null>(null);
   const [trace, setTrace] = useState<TracePoint[]>([]);
@@ -167,8 +189,55 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
   const btn = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (env.quiet) setPhase("quiet");
+    if (env.quiet) {
+      setPhase("quiet");
+      setQuietBy("mode");
+    } else if (quietBy === "mode" && phase === "quiet") {
+      // Quiet mode switched off (here or in another tab): the mic is offered again. A self-check the learner
+      // chose ("Can't sing now") stays as it is.
+      setPhase(value.length > 0 ? "done" : "idle");
+      setQuietBy("choice");
+    }
   }, [env.quiet]);
+  // Playback (the target, the reference, the take): timers cleared on unmount and on every new playback.
+  const timers = useRef<number[]>([]);
+  const clearTimers = () => {
+    for (const t of timers.current) window.clearTimeout(t);
+    timers.current = [];
+  };
+  useEffect(() => clearTimers, []);
+  const playSeq = (seq: readonly { midi: number | readonly number[]; at: number; dur: number }[]) => {
+    clearTimers();
+    const t0 = seq[0]?.at ?? 0;
+    for (const n of seq)
+      timers.current.push(
+        window.setTimeout(() => audio.playNote(n.midi, { dur: n.dur }), Math.max(0, n.at - t0) * 1000),
+      );
+  };
+  const playTarget = () => {
+    if (setup?.playTarget) setup.playTarget();
+    else playSeq(notes);
+  };
+  // Home and the chords that set it are the shared singing reference (@oak/strudel/reference) when the host
+  // has it, so every sung step and trial hears the same home; else the piano.
+  const playHome = () => {
+    if (refTonic === null) return;
+    clearTimers();
+    if (audio.reference) audio.reference("tonic", refTonic);
+    else audio.playNote(refTonic, { dur: 1.2 });
+  };
+  const playChords = () => {
+    if (refTonic === null) return;
+    if (audio.reference) {
+      clearTimers();
+      audio.reference("cadence", refTonic, ref?.mode ?? "major");
+      return;
+    }
+    playSeq(
+      cadenceChords(refTonic, ref?.mode ?? "major").map((c, i) => ({ midi: c, at: i * 0.75, dur: 0.7 })),
+    );
+  };
+  const playTake = () => playSeq(takeNotes(value, notes));
   useEffect(() => {
     if (p.autoFocus) btn.current?.focus();
   }, [p.autoFocus]);
@@ -177,8 +246,11 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
   // What the lane and the chips show: the live or final result, else a stored take's summary (`value`).
   const graded: readonly { cents: number | null; credit: number }[] | null =
     result?.notes ?? (value.length > 0 ? value : null);
-  // Redraw on every change (cheap: a few hundred points).
+  // Redraw on every change (cheap: a few hundred points), a theme switch included: the canvas reads the
+  // theme's tokens when it draws, and a Paper lane stayed on a Bark page after the theme changed.
+  const theme = useThemeName();
   useEffect(() => {
+    void theme;
     const el = canvas.current;
     if (!el || notes.length === 0) return;
     drawLane(
@@ -204,7 +276,7 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
     setNow(t);
     setLevel(dbToLevel(s.levelDb()));
     const fs = frames.current;
-    const tr = traceOf(fs, notes, startAt.current, profile);
+    const tr = traceOf(fs, notes, startAt.current, profile, tol.octave);
     setTrace(tr);
     setResult(gradeLive(fs, notes, startAt.current, tol, setup?.mode ?? "pitch", profile, ctx.currentTime));
     if (performance.now() - lastSr.current > 1500) {
@@ -214,7 +286,10 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
       if (active >= 0 && last && last.midi !== null) {
         const cents = (last.midi - (notes[active] as SingNote).midi) * 100;
         const n = needleWords(cents, tolCents);
-        setSrLine(`Target ${notes[active]?.label ?? active + 1}. You're ${n.words}, ${centsText(cents)}.`);
+        const target = notes[active] as SingNote;
+        setSrLine(
+          `Target ${target.degree ? targetSpoken(target, labels) : (target.label ?? active + 1)}. You're ${n.words}, ${centsText(cents)}.`,
+        );
       }
     }
     if (t >= span) stop(true);
@@ -237,10 +312,15 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
     }
     const final = gradeTake(frames.current, notes, startAt.current, tol, setup?.mode ?? "pitch", profile);
     setResult(final);
-    setTrace(traceOf(frames.current, notes, startAt.current, profile));
+    setTrace(traceOf(frames.current, notes, startAt.current, profile, tol.octave));
     setPhase("done");
     onChange(summarize(final));
-    setup?.onTake?.({ result: final, startAt: startAt.current, frames: frames.current.length });
+    setup?.onTake?.({
+      result: final,
+      startAt: startAt.current,
+      frames: frames.current.length,
+      pitchFrames: frames.current,
+    });
   };
 
   const sing = async () => {
@@ -262,6 +342,8 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
       s.onFrame((f) => frames.current.push(f));
       ctxRef.current = ctx;
       startAt.current = ctx.currentTime;
+      if (setup.countIn)
+        for (let i = 0; i < setup.countIn.beats; i++) audio.click(startAt.current + 0.05 + i * beat, i === 0);
       setPhase("singing");
     } catch (e) {
       const reason = (e as { reason?: string }).reason;
@@ -273,6 +355,7 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
             ? "The microphone is blocked for Oak. You can listen and self-check instead."
             : "No microphone was found. You can listen and self-check instead.",
         );
+        setQuietBy("mic");
         setPhase("quiet");
       } else {
         setProblem(
@@ -285,7 +368,11 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
 
   const report = (check: QuietEvidence["selfCheck"]) => {
     setSelfCheck(check);
-    setup?.onQuietEvidence?.({ modality: "fallback", selfCheck: check, at: Date.now() });
+    setup?.onQuietEvidence?.({
+      modality: quietBy === "mode" ? "quiet" : "fallback",
+      selfCheck: check,
+      at: Date.now(),
+    });
   };
 
   if (!setup)
@@ -305,6 +392,69 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
   })();
   const needle = needleWords(lastCents?.cents ?? null, tolCents);
 
+  const countNum =
+    phase === "singing" && setup.countIn && now !== null && now >= 0 && now < (notes[0]?.at ?? 0)
+      ? Math.min(setup.countIn.beats, Math.floor(now / beat) + 1)
+      : null;
+  const targets = (
+    <ol className="flex min-h-7 flex-wrap items-start gap-2 text-sm" aria-label="Notes">
+      {notes.map((n, i) => {
+        const r = graded?.[i];
+        const settled = (phase === "done" || (phase !== "singing" && value.length > 0)) && r;
+        const ok = settled ? r.credit >= 1 : null;
+        return (
+          <li
+            key={i}
+            aria-label={`${n.degree ? targetSpoken(n, labels) : (n.label ?? `note ${i + 1}`)}${settled ? (r.cents === null ? ", not heard" : `, ${noteMarkText(r.cents)}, ${ok ? "in tune" : "outside the band"}`) : ""}`}
+            className={clsx(
+              "inline-flex items-center gap-1 rounded-control border px-2 py-0.5",
+              settled ? (ok ? "border-accent" : "border-issue") : "border-border",
+            )}
+          >
+            {settled ? (
+              ok ? (
+                <Check aria-hidden className="size-3.5 text-accent" />
+              ) : (
+                <X aria-hidden className="size-3.5 text-issue" />
+              )
+            ) : null}
+            <span className="font-semibold">{n.label || i + 1}</span>
+            {quiet ? null : (
+              <span className="text-text-2 tabular-nums">{settled ? noteMarkText(r.cents) : "·"}</span>
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+  const refButtons =
+    refTonic !== null ? (
+      <>
+        <Button
+          size="sm"
+          variant="ghost"
+          data-enter="native"
+          icon={<Home aria-hidden className="size-4" />}
+          onClick={playHome}
+          disabled={disabled || phase === "singing" || phase === "opening"}
+        >
+          Home
+        </Button>
+        {ref?.chords ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            data-enter="native"
+            icon={<Music2 aria-hidden className="size-4" />}
+            onClick={playChords}
+            disabled={disabled || phase === "singing" || phase === "opening"}
+          >
+            Chords
+          </Button>
+        ) : null}
+      </>
+    ) : null;
+
   return (
     <AnswerFrame
       kind="mic"
@@ -321,23 +471,32 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
       }
     >
       {quiet ? (
-        <div className="flex max-w-[40rem] flex-col gap-3 rounded-card border border-border bg-surface p-3">
+        <div
+          className="flex max-w-[40rem] flex-col gap-3 rounded-card border border-border bg-surface p-3"
+          data-testid="sing-quiet"
+          data-quiet-by={quietBy}
+        >
           <p className="flex items-center gap-2 font-medium">
             <Ear aria-hidden className="size-4 text-text-2" />
             Listen and self-check
           </p>
           <p className="text-sm text-text-2">
-            {/* "Quiet mode" only when the learner chose it; a blocked or missing mic says why below instead. */}
-            {problem ? "Play it" : "Quiet mode: play it"}, hear it in your head, then say how it went. Nothing
-            is recorded, and there is no penalty.
+            {/* "Quiet mode" only when it is on; a blocked or missing mic says why below instead. */}
+            {quietBy === "mode" ? "Quiet mode: play it" : "Play it"}, then sing it in your head or aloud and
+            say how it went. Nothing is recorded, and there is no penalty.
           </p>
           {problem ? <p className="text-sm text-text-2">{problem}</p> : null}
+          {notes.length > 1 || notes[0]?.degree ? targets : null}
           <div className="flex flex-wrap items-center gap-2">
-            {setup.playTarget ? (
-              <Button data-enter="native" onClick={() => setup.playTarget?.()} disabled={disabled}>
-                Play it
-              </Button>
-            ) : null}
+            <Button
+              data-enter="native"
+              icon={<Play aria-hidden className="size-4" />}
+              onClick={playTarget}
+              disabled={disabled}
+            >
+              Play it
+            </Button>
+            {refButtons}
             <Button
               data-enter="native"
               variant={selfCheck === "heard-it" ? "primary" : "secondary"}
@@ -364,10 +523,27 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
                 ? "Noted. Play it again as often as you like."
                 : ""}
           </p>
+          {quietBy !== "mode" ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="w-fit"
+              data-enter="native"
+              icon={<Mic aria-hidden className="size-4" />}
+              onClick={() => {
+                setSelfCheck(null);
+                setProblem(null);
+                setPhase(value.length > 0 ? "done" : "idle");
+              }}
+              disabled={disabled}
+            >
+              Sing it after all
+            </Button>
+          ) : null}
         </div>
       ) : (
         <div className="flex flex-col gap-2">
-          <div className="flex min-h-10 flex-wrap items-center gap-3">
+          <div className="flex min-h-10 flex-wrap items-center gap-2">
             {phase === "singing" ? (
               <Button
                 data-enter="native"
@@ -395,40 +571,79 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
                 {phase === "done" ? "Sing it again" : phase === "cue" ? "Listen…" : "Sing"}
               </Button>
             )}
-            <span className="text-sm text-text-2" aria-live="polite" data-testid="sing-phase">
-              {phase === "idle"
-                ? `${notes.length === 1 ? "One note" : `${notes.length} notes`}, within ±${tolCents}¢. Your voice is analysed live on this computer. Nothing is recorded or sent.`
-                : phase === "cue"
-                  ? "Listen first."
-                  : phase === "opening"
-                    ? "Opening the microphone…"
-                    : phase === "singing"
-                      ? (now ?? 0) < (notes[0]?.at ?? 0)
-                        ? "Get ready…"
-                        : "Sing now."
-                      : `Done: ${value.filter((n) => n.credit >= 1).length} of ${value.length} in tune.`}
-            </span>
+            {refButtons}
+            {!sight || phase === "done" ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                data-enter="native"
+                icon={<Play aria-hidden className="size-4" />}
+                onClick={playTarget}
+                disabled={disabled || phase === "singing" || phase === "opening"}
+              >
+                Hear it
+              </Button>
+            ) : null}
+            {phase === "done" && value.some((n) => n.cents !== null) ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                data-enter="native"
+                icon={<Ear aria-hidden className="size-4" />}
+                onClick={playTake}
+                disabled={disabled}
+              >
+                Hear my take
+              </Button>
+            ) : null}
             {phase !== "singing" ? (
               <Button
                 variant="ghost"
                 size="sm"
                 data-enter="native"
-                onClick={() => setPhase("quiet")}
+                onClick={() => {
+                  setQuietBy("choice");
+                  setPhase("quiet");
+                }}
                 disabled={disabled}
               >
                 Can't sing now
               </Button>
             ) : null}
           </div>
+          <p className="min-h-5 text-sm text-text-2" aria-live="polite" data-testid="sing-phase">
+            {phase === "idle"
+              ? `${notes.length === 1 ? "One note" : `${notes.length} notes`}, within ±${tolCents}¢.${sight ? " Read it, then sing: Oak plays it after." : ""} Your voice is analysed live on this computer. Nothing is recorded or sent.`
+              : phase === "cue"
+                ? "Listen first."
+                : phase === "opening"
+                  ? "Opening the microphone…"
+                  : phase === "singing"
+                    ? (now ?? 0) < (notes[0]?.at ?? 0)
+                      ? countNum !== null
+                        ? `Count-in: ${countNum}`
+                        : "Get ready…"
+                      : "Sing now."
+                    : `Done: ${value.filter((n) => n.credit >= 1).length} of ${value.length} in tune.`}
+          </p>
           {problem ? <p className="text-sm text-issue">{problem}</p> : null}
           <div className="relative">
             <canvas
               ref={canvas}
               role="img"
-              aria-label={`Pitch lane: ${notes.map((n) => n.label ?? "").join(" ")}`}
+              aria-label={`Pitch lane: ${notes.map((n) => n.label ?? "").join(", ")}; band ±${tolCents}¢`}
               className="block w-full rounded-card border border-border"
               style={{ height: LANE_H }}
             />
+            {countNum !== null ? (
+              <span
+                aria-hidden
+                data-testid="sing-count"
+                className="pointer-events-none absolute inset-0 flex items-center justify-center font-display text-[4rem] leading-none text-text-3"
+              >
+                {countNum}
+              </span>
+            ) : null}
             <div className="pointer-events-none absolute top-2 right-2 flex flex-col items-end gap-1 text-sm">
               <span
                 className={clsx(
@@ -449,26 +664,7 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
             </div>
           </div>
           <div className="grid items-start gap-3 sm:grid-cols-[minmax(0,1fr)_14rem]">
-            <ol className="flex min-h-7 flex-wrap items-start gap-2 text-sm" aria-label="Notes">
-              {notes.map((n, i) => {
-                const r = graded?.[i];
-                const settled = phase === "done" && r;
-                return (
-                  <li
-                    key={i}
-                    className={clsx(
-                      "inline-flex items-center gap-1 rounded-control border px-2 py-0.5",
-                      settled ? (r.credit >= 1 ? "border-accent" : "border-issue") : "border-border",
-                    )}
-                  >
-                    <span className="font-semibold">{n.label ?? i + 1}</span>
-                    <span className="text-text-2 tabular-nums">
-                      {settled ? (r.cents === null ? "not heard" : centsText(r.cents)) : "·"}
-                    </span>
-                  </li>
-                );
-              })}
-            </ol>
+            {targets}
             <MicLevelMeter level={level} live={phase === "singing"} segments={16} />
           </div>
           <p className="sr-only" aria-live="polite">

@@ -55,10 +55,13 @@ export function SingPanel({
   active,
   micOpen,
   label,
+  labels,
 }: {
   trial: Trial;
   targets: readonly SingTarget[];
   tolCents: number;
+  /** Ribbon labels per target ("5", "5 · sol"); note names when absent (an unkeyed trial). */
+  labels?: readonly string[] | undefined;
   /** The sung window is open (the trace and needle are live). */
   active: boolean;
   /** The microphone is open (the level meter is live). */
@@ -66,6 +69,7 @@ export function SingPanel({
   label: string;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const labelText = labels ?? targets.map((t) => noteName(t.midi));
   const [needle, setNeedle] = useState<string | null>(null);
   const levelDb = useLive((s) => s.levelDb);
   const span = Math.max(1, ...targets.map((t) => t.off)) + 0.4;
@@ -103,7 +107,7 @@ export function SingPanel({
         ctx.strokeRect(x(g.on) + 0.5, top + 0.5, x(g.off) - x(g.on) - 1, bot - top - 1);
         ctx.fillStyle = text2;
         ctx.font = "12px var(--oak-font-sans, system-ui)";
-        ctx.fillText(noteName(g.midi), x(g.on) + 4, top - 4);
+        ctx.fillText(labelText[targets.indexOf(g)] ?? noteName(g.midi), x(g.on) + 4, top - 4);
       }
       // The live trace, folded to the target octave; gaps where unvoiced.
       const frames = useLive.getState().frames;
@@ -143,7 +147,7 @@ export function SingPanel({
       unsub();
       window.removeEventListener("resize", onResize);
     };
-  }, [targets, tolCents, span, lo, hi]);
+  }, [targets, tolCents, span, lo, hi, labelText]);
 
   const first = targets[0];
   return (
@@ -157,7 +161,7 @@ export function SingPanel({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-text-2" aria-live="polite" data-testid="sing-needle">
           {first
-            ? `Target ${noteName(first.midi)}${targets.length > 1 ? ` and ${targets.length - 1} more` : ""}.`
+            ? `Target ${targets.length > 1 ? labelText.join(", ") : (labelText[0] ?? noteName(first.midi))}.`
             : label}{" "}
           {active && needle ? `You are ${needle}.` : ""}
         </p>

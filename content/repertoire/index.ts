@@ -1,6 +1,6 @@
 // The repertoire pool by stage (contracts §2.8, §2.9): metadata for every song the course, the ladder and
-// the transcription capstones may use. Answer keys come in later waves as
-// content/repertoire/<song-id>/song.ts (`defineSong`), which also needs `verifiedBy`: the human who checks
+// the transcription capstones may use. Answer keys live in content/repertoire/<slug>/song.ts (`defineSong`;
+// the U03 fragments are built by fragment.ts), which also needs `verifiedBy`: the human who checks
 // the answer key against the cited score. Until then each entry carries a CANDIDATE source (a score or
 // collection published in 1930 or earlier) with `verified: false`; content CI fails a `song.ts` that
 // lacks both, and never lets an unverified source pass as checked. Oak ships only its own renditions:
@@ -50,11 +50,11 @@ const song = (e: E): RepertoireEntry => ({ ...e, verified: false });
 // biome-ignore format: one song to a line
 export const repertoire: readonly RepertoireEntry[] = [
   // U02–U03 reading, tunes by number, first by-ear work
-  song({ id: "song.ode-to-joy", title: "Ode to Joy (theme)", year: 1824, status: "US-PD", provenance: { source: "L. van Beethoven, Symphony No. 9, Op. 125, first edition (Schott)", year: 1826 }, key: C, meter: "4/4", form: "AA'BA'", stage: "reading", usedIn: ["U02.L08"] }),
-  song({ id: "song.when-the-saints", title: "When the Saints Go Marching In", year: "trad", status: "trad", provenance: { source: "K. E. Purvis and J. M. Black, \"When the Saints Are Marching In\"", year: 1896 }, key: F, meter: "4/4", form: "strophic", stage: "reading", usedIn: ["U02.L08"], note: "The familiar tune begins with a pickup: before U07.L08 start at the first full bar." }),
+  song({ id: "song.ode-to-joy", title: "Ode to Joy (theme)", year: 1824, status: "US-PD", provenance: { source: "L. van Beethoven, Symphony No. 9, Op. 125, first edition (Schott)", year: 1826 }, key: C, meter: "4/4", form: "AA'BA'", stage: "reading", usedIn: ["U02.L08", "U03.L09"] }),
+  song({ id: "song.when-the-saints", title: "When the Saints Go Marching In", year: "trad", status: "trad", provenance: { source: TBV, year: 1930 }, key: F, meter: "4/4", form: "strophic", stage: "reading", usedIn: ["U02.L08", "U03.L09"], note: "Purvis and Black's \"When the Saints Are Marching In\" (1896) has other words and another tune, so it cannot be the source of this answer key: the verifier needs a printing of the familiar tune from 1930 or earlier. The tune begins with a pickup: before U07.L08 start at the first full bar." }),
   song({ id: "song.auld-lang-syne", title: "Auld Lang Syne", year: "trad", status: "trad", provenance: { source: "G. Thomson, A Select Collection of Original Scottish Airs", year: 1799 }, key: F, meter: "4/4", pickup: { units: [1, 4] }, form: "verse chorus", stage: "reading", usedIn: ["U03.L10"], note: "Begins with a pickup: before U07.L08 use a setting that starts at the first full bar." }),
   song({ id: "song.swing-low", title: "Swing Low, Sweet Chariot", year: "trad", status: "trad", provenance: { source: "Jubilee Songs, as Sung by the Fisk Jubilee Singers", year: 1872 }, key: F, meter: "4/4", form: "verse chorus", stage: "reading", usedIn: ["U03.L10"] }),
-  song({ id: "song.michael-row", title: "Michael, Row the Boat Ashore", year: "trad", status: "trad", provenance: { source: "W. F. Allen, C. P. Ware and L. M. Garrison, Slave Songs of the United States", year: 1867 }, key: C, meter: "4/4", pickup: { units: [1, 4] }, form: "strophic", stage: "reading", usedIn: ["U03.L10"], note: "Begins with a pickup: before U07.L08 use a setting that starts at the first full bar." }),
+  song({ id: "song.michael-row", title: "Michael, Row the Boat Ashore", year: "trad", status: "trad", provenance: { source: "W. F. Allen, C. P. Ware and L. M. Garrison, Slave Songs of the United States", year: 1867 }, key: C, meter: "4/4", pickup: { units: [1, 4] }, form: "strophic", stage: "reading", usedIn: ["U03.L10"], note: "Begins with a pickup: before U07.L08 use a setting that starts at the first full bar. The familiar tune is T. Saletan's 1954 adaptation of the 1867 song (pp. 23–24): the answer key must follow the 1867 notes where they differ." }),
   song({ id: "song.down-by-the-riverside", title: "Down by the Riverside", year: "trad", status: "trad", provenance: { source: TBV, year: 1930 }, key: C, meter: "4/4", form: "verse chorus", stage: "reading", usedIn: [] }),
   // Ladder L5 (PD folk), U07, X1
   song({ id: "song.aura-lee", title: "Aura Lee", year: 1861, status: "US-PD", provenance: { source: "G. R. Poulton and W. W. Fosdick, \"Aura Lea\", sheet music", year: 1861 }, key: C, meter: "4/4", form: "verse chorus (4 phrases)", stage: "folk", ladder: 5, usedIn: ["X1"] }),

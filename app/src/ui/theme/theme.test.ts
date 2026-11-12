@@ -94,12 +94,29 @@ describe("music palette (ux §7.3)", () => {
     ]);
   });
 
-  test("degree labels stay legible on their fill (3:1, bold note labels)", () => {
+  test("degree labels stay legible on their fill: WCAG AA for small text (4.5:1), chips and scale rows are 13 px", () => {
     for (const theme of ["paper", "bark"] as const) {
       for (const s of Object.values(DEGREE_COLOURS[theme]))
-        expect(contrast(s.label, s.fill)).toBeGreaterThanOrEqual(3);
-      expect(contrast(NEUTRAL[theme].label, NEUTRAL[theme].fill)).toBeGreaterThanOrEqual(3);
+        expect(contrast(s.label, s.fill)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(NEUTRAL[theme].label, NEUTRAL[theme].fill)).toBeGreaterThanOrEqual(4.5);
     }
+  });
+
+  test("an altered degree's hatch strokes keep the label at 4.5:1 where it crosses them", () => {
+    const blend = (fill: string, rgba: string) => {
+      const m = /rgba\((\d+),(\d+),(\d+),([\d.]+)\)/.exec(rgba) as RegExpExecArray;
+      const [r, g, b, a] = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
+      const f = [1, 3, 5].map((i) => Number.parseInt(fill.slice(i, i + 2), 16));
+      const mix = [r, g, b].map((c, i) => Math.round(c * a + (f[i] as number) * (1 - a)));
+      return `#${mix.map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+    };
+    for (const theme of ["paper", "bark"] as const)
+      for (const d of ["b1", "#1", "b2", "b3", "#4", "b5", "b6", "b7", "#2", "#5", "#6"]) {
+        const st = degreeStyle(d, theme);
+        const css = degreeBackgroundCss(st);
+        const stroke = /rgba\([^)]*\)/.exec(css)?.[0] as string;
+        expect(contrast(st.label, blend(st.fill, stroke)), `${theme} ${d}`).toBeGreaterThanOrEqual(4.5);
+      }
   });
 
   test("all seven fills are distinct in each theme", () => {

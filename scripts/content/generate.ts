@@ -151,7 +151,7 @@ export function idsModule(byKind: Record<string, string[]>): string {
  * again). Lessons of later units are still being written, and their authors may rename those IDs freely
  * until the unit is added here.
  */
-export const RELEASED_UNITS: readonly string[] = ["U00", "U01", "U02"];
+export const RELEASED_UNITS: readonly string[] = ["U00", "U01", "U02", "U03", "U04"];
 const LESSON_SCOPED = ["step", "exercise", "example"];
 const released = (id: string) => RELEASED_UNITS.includes(id.slice(0, 3));
 

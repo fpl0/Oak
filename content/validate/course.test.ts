@@ -38,6 +38,14 @@ const LESSONS = FIRST_PLAYABLE.filter((s) => /\.L\d{2}$/.test(s));
 const { lessons: loaded, errors } = await loadLessons();
 const byId = new Map(loaded.filter((l) => !l.sample).map((l) => [l.def.id as string, l]));
 const course = LESSONS.map((id) => byId.get(id)).filter((l): l is LoadedLesson => Boolean(l));
+/**
+ * Every authored core lesson in the default order: the first playable plus the lessons written since (U03,
+ * U04 in Wave 3). The cross-lesson scans (vocabulary, unlocks, skills, families, budgets, music over the
+ * Band) read all of them; the completeness and ID-ledger tests keep to the released first playable.
+ */
+const authored = ORDER.filter((s) => /\.L\d{2}$/.test(s))
+  .map((id) => byId.get(id))
+  .filter((l): l is LoadedLesson => Boolean(l));
 const g = courseGraph();
 const exercisesOf = (l: LoadedLesson) =>
   l.def.steps.flatMap((s) => (s.exercise ? flattenExercise(s.exercise).map((e) => ({ s, e })) : []));
@@ -87,7 +95,7 @@ describe("IDs (contracts §1.1, §11.7)", () => {
     expect(missing).toEqual([]);
   });
   test("exercise IDs are unique inside a lesson; step IDs are S1, S2, … in order", () => {
-    for (const l of course) {
+    for (const l of authored) {
       const ids = exercisesOf(l).map(({ e }) => e.id);
       expect([l.def.id, ids.length]).toEqual([l.def.id, new Set(ids).size]);
       const stepIds: string[] = l.def.steps.map((s) => s.id);
@@ -96,14 +104,100 @@ describe("IDs (contracts §1.1, §11.7)", () => {
   });
 });
 
+/** Wave 3's units, U03 and U04 with their checkpoints: sessions 25–41 of the default order, less U05.L01. */
+const WAVE3 = ORDER.slice(
+  ORDER.indexOf("U03.L02" as SessionId),
+  ORDER.indexOf("U04.CP" as SessionId) + 1,
+).filter((s) => !s.startsWith("U05."));
+const W3_LESSONS = ["U03.L01", ...WAVE3.filter((s) => /\.L\d{2}$/.test(s))] as SessionId[];
+const w3course = W3_LESSONS.map((id) => byId.get(id)).filter((l): l is LoadedLesson => Boolean(l));
+
+describe("U03 and U04 are complete (contracts §2.3, §2.5)", () => {
+  test("the default order runs U03.L02 … U04.CP as §2.5 prints it, with U05.L01 before U04.CP", () => {
+    expect(ORDER.slice(24, 41)).toEqual([
+      ...["U03.L02", "U03.L03", "U03.L04", "U03.L05", "U03.L06", "U03.L07", "U03.L08", "U03.L09", "U03.L10"],
+      ...["U03.L11", "U04.L01", "U03.CP", "U04.L02", "U04.L03", "U04.L04", "U05.L01", "U04.CP"],
+    ] as SessionId[]);
+  });
+  test("all 15 lessons of U03–U04 are authored and load", () => {
+    expect(errors.filter((e) => e.folderId && W3_LESSONS.includes(e.folderId as SessionId))).toEqual([]);
+    expect(W3_LESSONS.filter((id) => !byId.has(id))).toEqual([]);
+    expect(W3_LESSONS.length).toBe(15);
+  });
+  test("U03.CP and U04.CP have authored items and a Make", async () => {
+    const { defs } = await loadCheckpointFiles();
+    for (const id of ["U03.CP", "U04.CP"]) {
+      const d = defs.find((x) => x.id === id);
+      expect([id, Boolean(d), (d?.authored.length ?? 0) >= 2, Boolean(d?.make)]).toEqual([
+        id,
+        true,
+        true,
+        true,
+      ]);
+    }
+  });
+  test("every lesson, step, example and exercise ID of U03–U04 is in ids.lock.json", () => {
+    const lock = new Set(
+      (
+        JSON.parse(readFileSync(join(CONTENT_ROOT, "ids.lock.json"), "utf8")) as { ids: { id: string }[] }
+      ).ids.map((x) => x.id),
+    );
+    const missing: string[] = [];
+    for (const l of w3course) {
+      const ids = [
+        l.def.id,
+        ...l.def.steps.flatMap((s) => [
+          `${l.def.id}/${s.id}`,
+          ...(s.example ? [`${l.def.id}@${s.example.id}`] : []),
+        ]),
+        ...exercisesOf(l).map(({ e }) => `${l.def.id}/${e.id}`),
+      ];
+      missing.push(...ids.filter((id) => !lock.has(id)));
+    }
+    expect(missing).toEqual([]);
+  });
+  test("each can-do of U03–U04 is awarded once, by the lesson the registry names", () => {
+    const problems: string[] = [];
+    for (const c of candos) {
+      if (!W3_LESSONS.includes(c.source as SessionId)) continue;
+      const by = w3course.filter((l) => (l.def.canDo as string[]).includes(c.id)).map((l) => l.def.id);
+      if (by.join() !== c.source) problems.push(`${c.id}: source ${c.source}, awarded by [${by.join(" ")}]`);
+    }
+    expect(problems).toEqual([]);
+  });
+});
+
+describe("prerequisite order (contracts §4)", () => {
+  test("a lesson introduces the skills the graph says it does, after their prerequisites, in every legal order", () => {
+    const problems: string[] = [];
+    for (const l of authored)
+      for (const sk of l.def.introduces) {
+        const node = registries.skills.find((x) => x.id === sk);
+        if (!node) {
+          problems.push(`${l.def.id}: introduces unknown skill ${sk}`);
+          continue;
+        }
+        if (node.introducedBy !== l.def.id)
+          problems.push(`${l.def.id}: introduces ${sk}, which the graph gives to ${node.introducedBy}`);
+        for (const p of node.prerequisites) {
+          const pre = registries.skills.find((x) => x.id === p);
+          if (pre && !atOrBefore(g, pre.introducedBy, l.def.id as SessionId))
+            problems.push(`${l.def.id}: ${sk} needs ${p}, which arrives in ${pre.introducedBy}`);
+        }
+      }
+    expect(problems).toEqual([]);
+  });
+});
+
 describe("vocabulary across lesson boundaries (AUTHORING §7)", () => {
-  test("every term of U00–U02 is declared once, by the lesson the glossary names, both halves of a pair", () => {
+  test("every term of an authored lesson is declared once, by the lesson the glossary names, both halves of a pair", () => {
     const declaredBy = new Map<string, string[]>();
-    for (const l of course)
+    for (const l of authored)
       for (const t of l.def.terms) declaredBy.set(t.id, [...(declaredBy.get(t.id) ?? []), l.def.id]);
     const problems: string[] = [];
+    const authoredIds = new Set<string>(authored.map((l) => l.def.id));
     for (const t of registries.terms) {
-      if (!LESSONS.includes(t.introducedBy as SessionId)) continue;
+      if (!authoredIds.has(t.introducedBy)) continue;
       const by = declaredBy.get(t.id) ?? [];
       if (by.length !== 1 || by[0] !== t.introducedBy)
         problems.push(`${t.id}: glossary says ${t.introducedBy}, declared by [${by.join(" ")}]`);
@@ -113,7 +207,7 @@ describe("vocabulary across lesson boundaries (AUTHORING §7)", () => {
     expect(problems).toEqual([]);
   });
   test("no lesson introduces more than three terms, counting a pair once", () => {
-    for (const l of course)
+    for (const l of authored)
       expect([l.def.id, countTerms(l.def.terms, registries.terms) <= 3]).toEqual([l.def.id, true]);
   });
   // A later lesson's term in an earlier lesson's text is advice in content:check (many are plain English).
@@ -124,7 +218,7 @@ describe("vocabulary across lesson boundaries (AUTHORING §7)", () => {
   };
   test("no lesson uses a later lesson's term unless it is listed with its reason", () => {
     const found: string[] = [];
-    for (const l of course)
+    for (const l of authored)
       for (const w of lessonAuthoring(l.def, l.mdxSource).warnings) {
         const m = w.match(/^(\S+ [a-z ]+?\d*): "([^"]+)" is a term of/);
         if (m) found.push(`${l.def.id} ${m[1]} "${m[2]}"`);
@@ -139,7 +233,7 @@ describe("unlock-before-use across lesson boundaries (contracts §3.1)", () => {
   for (const t of toolbox) for (const m of t.matches ?? []) byName.set(m, [...(byName.get(m) ?? []), t.id]);
   test("prose, prompts, hints and labels name only tools and sounds the learner has at that lesson", () => {
     const locked: string[] = [];
-    for (const l of course) {
+    for (const l of authored) {
       if (ONBOARDING_PREVIEW.has(l.def.id)) continue; // U00 is a preview context (§3.1 rule 5a)
       const open = unlockedFor(l.def.id as SessionId);
       const mdx = mdxSteps(l.mdxSource ?? "");
@@ -162,7 +256,7 @@ describe("unlock-before-use across lesson boundaries (contracts §3.1)", () => {
   });
   test("every exercise's skills are introduced at or before its lesson, in every legal order", () => {
     const late: string[] = [];
-    for (const l of course)
+    for (const l of authored)
       for (const { s, e } of exercisesOf(l))
         for (const sk of e.skills) {
           const node = registries.skills.find((x) => x.id === sk.skill.split("/")[0]);
@@ -173,7 +267,7 @@ describe("unlock-before-use across lesson boundaries (contracts §3.1)", () => {
   });
   test("every drill family a lesson seeds, reviews or draws a stimulus from is open there", () => {
     const late: string[] = [];
-    for (const l of course)
+    for (const l of authored)
       for (const { s, e } of exercisesOf(l)) {
         const fams = [
           ...(e.srs ?? []).flatMap((x) => (x.family ? [{ id: x.family, level: 1 }] : [])),
@@ -205,20 +299,33 @@ describe("can-dos and milestones", () => {
     expect(problems).toEqual([]);
   });
   test("every milestone condition names a real session, capstone or can-do", () => {
-    const sessions = new Set<string>(ORDER);
-    for (const m of milestones) {
-      for (const s of m.when.sessions ?? []) expect([m.id, s, sessions.has(s)]).toEqual([m.id, s, true]);
-      for (const c of m.when.capstones ?? [])
-        expect([m.id, c, capstones.some((x) => x.id === c)]).toEqual([m.id, c, true]);
-      for (const c of m.when.canDos ?? [])
-        expect([m.id, c, candos.some((x) => x.id === c)]).toEqual([m.id, c, true]);
-    }
+    const sessions = new Set<string>([
+      ...ORDER,
+      ...registries.syllabus.units.flatMap((u) => u.lessons.map((l) => l.id as string)),
+      ...registries.syllabus.checkpoints.map((c) => c.id as string),
+    ]);
+    for (const m of milestones)
+      for (const w of [m.when, ...(m.when.anyOf ?? [])]) {
+        for (const s of [...(w.sessions ?? []), ...(w.ladder?.after ? [w.ladder.after] : [])])
+          expect([m.id, s, sessions.has(s)]).toEqual([m.id, s, true]);
+        for (const c of w.capstones ?? [])
+          expect([m.id, c, capstones.some((x) => x.id === c)]).toEqual([m.id, c, true]);
+        for (const c of w.canDos ?? [])
+          expect([m.id, c, candos.some((x) => x.id === c)]).toEqual([m.id, c, true]);
+      }
+  });
+  test("the nine milestones of ux §5.5 are all defined", () => {
+    expect(milestones.map((m) => m.id)).toEqual(
+      ["ms.01", "ms.02", "ms.03", "ms.04", "ms.05", "ms.06", "ms.07", "ms.08", "ms.09"].map(
+        (x) => x as never,
+      ),
+    );
   });
 });
 
 describe("session budget and shape (contracts §9)", () => {
   test("each lesson fits the 20-minute target and splits cleanly at 15 minutes", () => {
-    for (const l of course) {
+    for (const l of authored) {
       const b = lessonBudget(l.def);
       expect([
         l.def.id,
@@ -230,29 +337,32 @@ describe("session budget and shape (contracts §9)", () => {
     }
   });
   test("every graded step has a four-rung hint ladder", () => {
-    for (const l of course)
+    for (const l of authored)
       for (const s of l.def.steps.filter((x) => x.graded && x.exercise))
         for (const e of flattenExercise(s.exercise as Exercise))
           expect([l.def.id, s.id, e.id, e.hints?.length ?? 0]).toEqual([l.def.id, s.id, e.id, 4]);
   });
   test("each Make's required rule practises the lesson's own idea", () => {
-    for (const l of course) {
+    for (const l of authored) {
       const make = l.def.steps.at(-1)?.exercise;
       const req = make && "rubric" in make ? make.rubric.find((r) => r.required) : undefined;
       const own = new Set<string>([...l.def.introduces, ...l.def.practises]);
       expect([l.def.id, (req?.skills ?? []).some((sk) => own.has(sk))]).toEqual([l.def.id, true]);
     }
   });
-  test("U02 has a Play from the page step: a modify or dictate step with the staff and no roll (§9.2 rule 8)", () => {
-    const u02 = course.filter((l) => l.def.id.startsWith("U02."));
-    const pages = u02.flatMap((l) =>
-      l.def.steps
-        .filter(
-          (s) => (s.kind === "modify" || s.kind === "dictate") && s.ui.panels?.staff && !s.ui.panels?.roll,
-        )
-        .map((s) => `${l.def.id}/${s.id}`),
-    );
-    expect(pages.length).toBeGreaterThan(0);
+  test("every unit from U02 has a Play from the page step once it is authored: staff, no roll (§9.2 rule 8)", () => {
+    for (const unit of registries.syllabus.units.filter((u) => u.track === "core" && u.id >= "U02")) {
+      const lessons = authored.filter((l) => unit.lessons.some((m) => m.id === l.def.id));
+      if (lessons.length < unit.lessons.length) continue; // still being written
+      const pages = lessons.flatMap((l) =>
+        l.def.steps
+          .filter(
+            (s) => (s.kind === "modify" || s.kind === "dictate") && s.ui.panels?.staff && !s.ui.panels?.roll,
+          )
+          .map((s) => `${l.def.id}/${s.id}`),
+      );
+      expect([unit.id, pages.length > 0]).toEqual([unit.id, true]);
+    }
   });
 });
 
@@ -268,7 +378,7 @@ const ALLOWED_CLASHES: Record<string, string> = {
 describe("music over the Band", () => {
   test("no shown example or reference sounds a half step above the Band's chord for a beat", async () => {
     const found: string[] = [];
-    for (const l of course) {
+    for (const l of authored) {
       const beats = Number(l.def.meter.split("/")[0]);
       const key = `${l.def.key.tonic}4:${l.def.key.mode}`;
       const band = l.def.steps.find((s) => s.ui.band)?.ui.band;

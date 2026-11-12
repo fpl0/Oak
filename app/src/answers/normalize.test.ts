@@ -16,6 +16,19 @@ import {
   spokenNote,
 } from "./normalize.ts";
 
+describe("readsAs: a list of notes", () => {
+  test("a spelled scale reads note by note, with real accidentals", () => {
+    const r = readsAs("note", "D E F# G A B C#");
+    expect(r.state).toBe("ok");
+    if (r.state === "ok") expect(r.display).toBe("D E F♯ G A B C♯");
+  });
+  test("one unreadable token says what Oak reads, as a list", () => {
+    const r = readsAs("note", "D E H");
+    expect(r.state).toBe("unknown");
+    if (r.state === "unknown") expect(r.hint).toContain("separated by spaces");
+  });
+});
+
 describe("readsAs: forgiving input, canonical display", () => {
   const ok = (kind: Parameters<typeof readsAs>[0], text: string) => {
     const r = readsAs(kind, text);

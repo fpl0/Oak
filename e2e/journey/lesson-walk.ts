@@ -112,6 +112,14 @@ export async function walkLesson(page: Page, def: LessonDef, o: WalkOptions = {}
         }
       }
     }
+    // A passive listening block (AUTHORING §16.5): heard until the first example is named, then stopped.
+    const passive = page.getByTestId("passive");
+    if (await passive.isVisible().catch(() => false)) {
+      const play = page.getByTestId("passive-play");
+      await play.click();
+      await expect(page.getByTestId("passive-names").locator("li").first()).toBeVisible({ timeout: 30_000 });
+      if (/Stop/.test((await play.textContent()) ?? "")) await play.click();
+    }
     await continueOn(page);
   }
 }

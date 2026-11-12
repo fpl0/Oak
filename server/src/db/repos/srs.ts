@@ -159,13 +159,16 @@ interface TrialRow {
   at: string;
 }
 function toTrial(r: TrialRow): DrillTrialRecord {
-  const trial = fromJson<{ params: Record<string, unknown>; confusion: [string, string] | null }>(
-    r.trial_json,
-    {
-      params: {},
-      confusion: null,
-    },
-  );
+  const trial = fromJson<{
+    params: Record<string, unknown>;
+    confusion: [string, string] | null;
+    revealed?: boolean;
+    modality?: DrillTrialRecord["modality"];
+    sungResolution?: DrillTrialRecord["sungResolution"];
+  }>(r.trial_json, {
+    params: {},
+    confusion: null,
+  });
   return {
     idx: r.idx,
     familyId: r.family_id as DrillTrialRecord["familyId"],
@@ -186,6 +189,10 @@ function toTrial(r: TrialRow): DrillTrialRecord {
     confusion: trial.confusion,
     centsError: r.cents_error,
     at: r.at,
+    // Wave 3 (wave3.md §5.3): present when the runner sent them.
+    ...(trial.revealed === undefined ? {} : { revealed: trial.revealed }),
+    ...(trial.modality === undefined ? {} : { modality: trial.modality }),
+    ...(trial.sungResolution === undefined ? {} : { sungResolution: trial.sungResolution }),
   };
 }
 
@@ -361,6 +368,20 @@ export class SrsRepo {
       d.startedAt,
     );
   }
+  /** The unfinished set started for this warm-up item of this session, newest first (drills.start reuses it). */
+  openDrillFor(
+    sessionId: string,
+    warmupItemId: string,
+  ): (DrillSession & { warmupItemId: string | null; meanCredit: number | null }) | null {
+    const row = get<DrillRow>(
+      this.db,
+      `SELECT * FROM drill_sessions WHERE session_id = ? AND warmup_item_id = ? AND finished_at IS NULL
+       ORDER BY started_at DESC, rowid DESC LIMIT 1`,
+      sessionId,
+      warmupItemId,
+    );
+    return row === null ? null : toDrill(row);
+  }
   drill(id: string): (DrillSession & { warmupItemId: string | null; meanCredit: number | null }) | null {
     const row = get<DrillRow>(this.db, "SELECT * FROM drill_sessions WHERE id = ?", id);
     return row === null ? null : toDrill(row);
@@ -392,7 +413,13 @@ export class SrsRepo {
         t.seed,
         t.level,
         t.category,
-        toJson({ params: t.params, confusion: t.confusion }),
+        toJson({
+          params: t.params,
+          confusion: t.confusion,
+          ...(t.revealed === undefined ? {} : { revealed: t.revealed }),
+          ...(t.modality === undefined ? {} : { modality: t.modality }),
+          ...(t.sungResolution === undefined ? {} : { sungResolution: t.sungResolution }),
+        }),
         toJson(t.response),
         t.credit,
         int(t.correct),

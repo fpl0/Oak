@@ -208,3 +208,93 @@ export function outputGuidance(kind: OutputChoice): {
 export function outputChoiceOf(kind: Profile["outputKind"]): OutputChoice {
   return kind === "bluetooth" ? "bluetooth" : kind === "speakers" ? "speakers" : "wired";
 }
+
+// --- the three pitch-match trials (ux §4.7 `voice.match`, contracts §8.6) ---------------------------
+
+/** The window a pitch-match trial is judged on: ±50¢ (ux §4.7), any octave. */
+export const MATCH_CENTS = 50;
+/** Seconds the learner has to sing each note back. */
+export const MATCH_SING_SEC = 3;
+
+/**
+ * Three notes inside the comfort zone (ux §4.7): the middle, a major third above it and a fourth below it,
+ * kept inside the zone; without a measured zone, around middle C.
+ */
+export function matchTargets(
+  p: Pick<Profile, "comfortLowMidi" | "comfortHighMidi">,
+): [number, number, number] {
+  const lo = p.comfortLowMidi ?? 55;
+  const hi = p.comfortHighMidi ?? 67;
+  const mid = Math.round((lo + hi) / 2);
+  const inside = (m: number) => Math.min(hi, Math.max(lo, m));
+  return [mid, inside(mid + 4), inside(mid - 5)];
+}
+
+export interface MatchTrial {
+  midi: number;
+  /** Signed cents, folded to the nearest octave; null when no steady note was heard. */
+  cents: number | null;
+}
+
+/** One trial in words and arrows (ux §4.3: no red or green): "spot on (+4¢)", "↓ a little low (−32¢)", "↑ 5 semitones high". */
+export function matchWords(cents: number | null): string {
+  if (cents === null) return "no steady note heard";
+  const arrow = cents > 0 ? "↑ " : "↓ ";
+  if (Math.abs(cents) <= 10) return `spot on (${cents > 0 ? "+" : cents < 0 ? "−" : "±"}${Math.abs(cents)}¢)`;
+  if (Math.abs(cents) < 100)
+    return `${arrow}${centsWords(cents)} (${cents > 0 ? "+" : "−"}${Math.abs(cents)}¢)`;
+  const semis = Math.round(Math.abs(cents) / 100);
+  return `${arrow}${semis} semitone${semis === 1 ? "" : "s"} ${cents > 0 ? "high" : "low"}`;
+}
+
+export function matchVerdict(trials: readonly MatchTrial[]): {
+  within: number;
+  title: string;
+  body: string;
+} {
+  const within = trials.filter((t) => t.cents !== null && Math.abs(t.cents) <= MATCH_CENTS).length;
+  const heard = trials.filter((t) => t.cents !== null).length;
+  if (heard === 0)
+    return {
+      within,
+      title: "Oak didn't hear a steady note",
+      body: "Sing a long 'ooh' right after each note, at a comfortable volume. You can try again now or later; nothing waits on it.",
+    };
+  if (within >= 2)
+    return {
+      within,
+      title: `${within} of 3 notes matched within ±${MATCH_CENTS}¢`,
+      body: "Your voice finds the notes. Oak starts every learner at ±70¢ and tightens it as your singing settles.",
+    };
+  return {
+    within,
+    title: `${within} of 3 notes matched within ±${MATCH_CENTS}¢`,
+    body: "Matching a note you just heard is a skill, and the singing steps are where it grows. Oak starts wide, at ±70¢, and only tightens once your singing shows it is ready.",
+  };
+}
+
+// --- headphones changed since the set-up (contracts §8.6: re-checked when the device changes) ----------
+
+/**
+ * What to say when the output the computer reports now differs from the one the timing was measured with.
+ * `nowKind` is the class of the default output's label (Bluetooth earbuds, wired, speakers) or null when the
+ * browser does not name it (no permission yet).
+ */
+export function outputChangeAdvice(
+  nowLabel: string | null,
+  nowKind: OutputChoice | null,
+  measured: Profile["outputKind"],
+): { title: string; body: string } | null {
+  if (!nowLabel || !nowKind || measured === "unknown") return null;
+  if (nowKind === "bluetooth" && measured !== "bluetooth")
+    return {
+      title: `Oak sees ${nowLabel}`,
+      body: "AirPods are fine for listening; Oak listens through your computer's own microphone. Bluetooth adds delay, so measure the timing again with them on.",
+    };
+  if (nowKind !== "bluetooth" && measured === "bluetooth")
+    return {
+      title: `Oak sees ${nowLabel}`,
+      body: "Your timing was measured over Bluetooth. Measure it again so taps and sung notes line up without the extra delay.",
+    };
+  return null;
+}

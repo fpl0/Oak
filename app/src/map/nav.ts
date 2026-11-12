@@ -122,3 +122,14 @@ export function ensureVisible(
   else if (bottom > vh - margin) ty -= Math.min(bottom - (vh - margin), top - margin);
   return { k: v.k, tx, ty };
 }
+
+/**
+ * The map's first view: the unit row of what's next sits in the upper third (whole, when it fits), so the
+ * leaves that are lighting up now read at a glance instead of at the bottom edge. Horizontal pan is kept.
+ */
+export function rowIntoView(v: View, row: { y: number; h: number }, vh: number, margin = 48): View {
+  const top = row.y * v.k + v.ty;
+  const h = row.h * v.k;
+  const want = h + 2 * margin <= vh ? Math.max(margin, (vh - h) / 3) : margin;
+  return { k: v.k, tx: v.tx, ty: v.ty + (want - top) };
+}

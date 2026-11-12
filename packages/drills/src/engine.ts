@@ -141,22 +141,36 @@ export const DEFAULT_PROFILE: LearnerProfile = {
   quiet: false,
 };
 
-/** Grades a fact card answer: text, choice and number answers, with the card's own answer key. */
+/** A fact card as a silent trial with one answer key (note names: the letter's case is free). */
+const factTrial = (card: FactCardDef, expected: Answer): Trial<Answer> => ({
+  seed: 0,
+  family: "fam.fact.deck" as FamilyId,
+  level: 1,
+  category: card.id,
+  params: { textKind: "note" },
+  code: "",
+  events: [],
+  cps: 0.5,
+  preload: [],
+  cue: { context: "none", countInBars: 0, click: false, replays: -1 },
+  expected,
+});
+/**
+ * Grades a fact card answer: text, choice and number answers, with the card's own answer key and the other
+ * answers it accepts (`accept`, Wave 3): the best match counts; when none matches, the diagnostics name the
+ * card's own answer.
+ */
 export function gradeFactCard(card: FactCardDef, answer: Answer, rtMs: number): TrialResult {
-  const trial = {
-    seed: 0,
-    family: "fam.fact.deck" as FamilyId,
-    level: 1,
-    category: card.id,
-    params: { textKind: "note" },
-    code: "",
-    events: [],
-    cps: 0.5,
-    preload: [],
-    cue: { context: "none" as const, countInBars: 0 as const, click: false, replays: -1 },
-    expected: card.answer,
-  };
-  return gradeAnswer(trial, { answer, rtMs, replays: 0 });
+  const response = { answer, rtMs, replays: 0 };
+  const own = gradeAnswer(factTrial(card, card.answer), response);
+  if (own.correct) return own;
+  let credit = own.credit;
+  for (const alt of card.accept ?? []) {
+    const r = gradeAnswer(factTrial(card, alt), response);
+    if (r.correct) return r;
+    credit = Math.max(credit, r.credit);
+  }
+  return { ...own, credit };
 }
 export function bindDeck(def: FactDeck): FactDeckRuntime {
   return { def, grade: (card, answer, rtMs) => gradeFactCard(card, answer, rtMs) };
@@ -248,9 +262,13 @@ export function planSet(family: DrillFamilyRuntime, input: SetPlanInput): SetPla
 
   const cur = levelParams(def, level);
   const prev = level > 1 ? levelParams(def, level - 1) : null;
-  const curOpen = openCategoriesOf(cur, input.openCategories);
-  const newCats = curOpen.filter((c) => !prev?.categories.includes(c));
-  const blocked = input.blockedRemaining > 0 && newCats.length > 0 && newCats.length < curOpen.length;
+  const staged = introStage(cur, input.openCategories, input.blockedRemaining);
+  const curOpen = staged?.open ?? openCategoriesOf(cur, input.openCategories);
+  const newCats = staged?.fresh ?? curOpen.filter((c) => !prev?.categories.includes(c));
+  const blocked =
+    staged !== null
+      ? staged.fresh.length < staged.open.length
+      : input.blockedRemaining > 0 && newCats.length > 0 && newCats.length < curOpen.length;
   const neighbours = blocked
     ? (() => {
         const declared = new Set(
@@ -266,6 +284,7 @@ export function planSet(family: DrillFamilyRuntime, input: SetPlanInput): SetPla
   for (let i = 0; i < n; i++) {
     const lvl = trialLevels[i] as number;
     let pool = openCategoriesOf(levelParams(def, lvl), input.openCategories);
+    if (staged && lvl === level) pool = curOpen;
     if (blocked && lvl === level) pool = i % 2 === 0 ? newCats : neighbours.length > 0 ? neighbours : pool;
     // No category more than twice in a row.
     const last2 = picked.slice(-2);
@@ -281,15 +300,13 @@ export function planSet(family: DrillFamilyRuntime, input: SetPlanInput): SetPla
     trials.push({ index: i, family: def.id, level: lvl, category, seed: trialSeed(def.id, input.setId, i) });
   }
 
-  // Sung resolutions: FET sets only, the weakest categories first, 2–3 per set, none in Quiet mode.
+  // Sung resolutions: FET sets only, 2–3 per set and never every trial, none in Quiet mode; they cover the
+  // degrees with the lowest sung accuracy first (contracts §8.3), one trial per degree, and the tonic (a
+  // path of one note) only when nothing else is left.
   if (def.generator === "degree-id" && !input.quiet) {
-    const want = Math.max(0, Math.min(3, input.sungResolutions ?? 2, n));
-    const order = [...trials].sort(
-      (a, b) =>
-        categoryWeight(input.categoryStats[b.category]) - categoryWeight(input.categoryStats[a.category]) ||
-        a.index - b.index,
-    );
-    for (const t of order.slice(0, want)) t.sungResolution = true;
+    const want = Math.max(0, Math.min(3, input.sungResolutions ?? 2, n - 1));
+    for (const t of sungResolutionTrials(trials, input.sungStats ?? input.categoryStats, want))
+      t.sungResolution = true;
   }
   return {
     setId: input.setId,
@@ -300,6 +317,62 @@ export function planSet(family: DrillFamilyRuntime, input: SetPlanInput): SetPla
     preload: preloadOf(def, trialLevels),
     blockedIntro: blocked,
   };
+}
+
+/**
+ * The blocked introduction of a level that declares `intro` (groups of its categories in teaching order,
+ * e.g. fet-major level 1: 1 against 5, then 3): the first blocked-intro set plays the first group only, the
+ * next one brings the following group in against the earlier ones, and so on. `null` when the level has no
+ * `intro` or the introduction is over (`blockedRemaining` 0).
+ */
+export function introStage(
+  level: LevelParams,
+  openCategories: readonly string[],
+  blockedRemaining: number,
+): { open: string[]; fresh: string[] } | null {
+  const groups = Array.isArray(level.intro) ? (level.intro as string[][]) : null;
+  if (!groups || groups.length === 0 || blockedRemaining <= 0) return null;
+  const open = openCategoriesOf(level, openCategories);
+  const stage = Math.max(0, Math.min(groups.length - 1, groups.length - blockedRemaining));
+  const seen = groups.slice(0, stage + 1).flat();
+  const inStage = open.filter((c) => seen.includes(c));
+  const fresh = inStage.filter((c) => (groups[stage] as string[]).includes(c));
+  if (inStage.length === 0 || fresh.length === 0) return null;
+  return { open: inStage, fresh };
+}
+
+/**
+ * The trials of an FET set that ask for a sung resolution: the weakest sung degrees first (`stats`: hits
+ * per category, Laplace-smoothed as in `categoryWeight`), each degree once, the tonic last, never more than
+ * `want`.
+ */
+export function sungResolutionTrials<T extends { index: number; category: string }>(
+  trials: readonly T[],
+  stats: Readonly<Record<string, { n: number; hits: number }>>,
+  want: number,
+): T[] {
+  const tonic = (t: T) => t.category === "deg.1";
+  const order = [...trials].sort(
+    (a, b) =>
+      Number(tonic(a)) - Number(tonic(b)) ||
+      categoryWeight(stats[b.category]) - categoryWeight(stats[a.category]) ||
+      a.index - b.index,
+  );
+  const out: T[] = [];
+  const used = new Set<string>();
+  const take = (pass: (t: T) => boolean) => {
+    for (const t of order) {
+      if (out.length >= want) return;
+      if (out.includes(t) || !pass(t)) continue;
+      used.add(t.category);
+      out.push(t);
+    }
+  };
+  // Distinct degrees other than the tonic, then repeats of them, then the tonic.
+  take((t) => !tonic(t) && !used.has(t.category));
+  take((t) => !tonic(t));
+  take(() => true);
+  return out.sort((a, b) => a.index - b.index);
 }
 
 /**
@@ -588,6 +661,39 @@ export function levelAtDifficulty(def: FamilyDef, d: number): { level: number; p
     replays: cur.replays < 0 || next.replays < 0 ? cur.replays : lerp(cur.replays, next.replays),
   };
   return { level, params };
+}
+
+/**
+ * The trial order of a passive-listen block (`ListenEx.passive`, U04.L04): `items` trials at `level`, its open
+ * categories dealt in shuffled rounds so every one is heard equally often, never the same category twice in a
+ * row. Deterministic for a seed; generate each with `generateTrial`. No evidence and no SRS come from it.
+ */
+export function passiveSequence(
+  family: DrillFamilyRuntime,
+  level: number,
+  items: number,
+  seed: number,
+  openCategories: readonly string[],
+): TrialSpec[] {
+  const def = family.def;
+  const lvl = Math.max(1, Math.min(def.levels.length, level));
+  const cats = openCategoriesOf(levelParams(def, lvl), openCategories);
+  const rng = createRng(hashString(`${def.id}|passive|${seed}`));
+  const n = Math.max(1, Math.min(40, Math.round(items)));
+  const order: string[] = [];
+  while (order.length < n) {
+    let round = rng.shuffle(cats);
+    if (round.length > 1 && round[0] === order[order.length - 1])
+      round = [...round.slice(1), round[0] as string];
+    order.push(...round);
+  }
+  return order.slice(0, n).map((category, index) => ({
+    index,
+    family: def.id,
+    level: lvl,
+    category,
+    seed: trialSeed(def.id, `passive:${seed}`, index),
+  }));
 }
 
 /** A passive listen block of about `maxSec` seconds: labelled examples of a family's categories, as plans. */

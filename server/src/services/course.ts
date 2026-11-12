@@ -44,6 +44,7 @@ import { evidenceWeight, type MasteryService } from "./mastery.ts";
 import type { SrsPort } from "./ports.ts";
 import type { StreakService } from "./streak.ts";
 import type { UnlocksService } from "./unlocks.ts";
+import type { VoiceService } from "./voice.ts";
 
 const TAP_SING = new Set<Exercise["kind"]>(["sing", "tap"]);
 const NO_EVIDENCE_KINDS = new Set<Exercise["kind"]>(["listen", "run-investigate"]);
@@ -54,6 +55,7 @@ export interface CourseDeps {
   mastery: MasteryService;
   cando: CanDoService;
   streak: StreakService;
+  voice: VoiceService;
   srs: () => SrsPort | null;
 }
 
@@ -368,6 +370,15 @@ export class CourseService {
         }
       }
       const added = this.d.mastery.addEvidence(evidence);
+      // Graded sung notes feed the tolerance ladder (contracts §8.2); they never gate anything.
+      this.d.voice.recordStep({
+        attemptId: attempt.id,
+        exercise: ex,
+        sung: "sung" in body.response ? body.response.sung : null,
+        modality: result.modality,
+        status: result.status,
+        tutorAssisted: body.tutorAssisted,
+      });
 
       // Test-out (contracts §9.5): a pass marks the scaffold steps it skips as done.
       const testedOut: string[] = [];
@@ -504,6 +515,7 @@ export class CourseService {
         updatedAt: now,
       });
       const unlocks = this.d.unlocks.onComplete(lessonId);
+      if (first) this.d.voice.onLessonComplete(lessonId);
       const terms: TermIntroduced[] = [];
       for (const t of this.#content.termsOfLesson(lessonId)) {
         const row = this.#repos.terms.introduce({ termId: t.id, lessonId: def.id, at: now });
@@ -563,7 +575,7 @@ export class CourseService {
       const attemptNo = pending?.attemptNo ?? attempts.length + 1;
       const now = this.time.iso();
       const items = this.d.gates.composeCheckpoint(cpId, attemptNo, {
-        quiet: this.time.profile().quiet,
+        quiet: this.d.voice.quiet(),
         salt: now,
       });
       const row = this.#repos.checkpoints.start(cpId, attemptNo, now, items);

@@ -44,7 +44,9 @@ export const area: Area = {
   webServer,
   use: stackUse(stack, { actionTimeout: 60_000 }),
   outputDir: stack.outputDir,
-  timeout: 2_400_000,
+  // Every journey test starts from a dev seed and runs in a few minutes (the Wave 2 gate journey is split in five);
+  // a test that needs more than this ceiling is a test to split, not a timeout to raise.
+  timeout: 360_000,
   expect: { timeout: 20_000 },
 };
 

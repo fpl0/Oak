@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { FamilyDef, FamilyId, SkillId } from "@oak/content-kit";
 import { type CardKind, type CardStatus, dayFromIndex } from "@oak/srs";
 import type { SrsRepo } from "../db/repos/srs.ts";
+import { DevClock } from "./dev-clock.ts";
 import {
   type FamilyStateRow,
   type RevlogEntry,
@@ -562,5 +563,191 @@ describe("SrsService: the Again cascade", () => {
       if (c && c.reps > 0 && c.state === 2)
         expect(svc.srs.retrievability(c, back)).toBeGreaterThanOrEqual(0.6);
     }
+  });
+});
+
+describe("SrsService: the governor as simulated (Wave 3)", () => {
+  test("pickReleases: a waiting family with no slot does not hold up a concept family behind it", async () => {
+    const defs = [
+      ...Array.from({ length: 12 }, (_, i) =>
+        famDef(`fam.p.f${String(i).padStart(2, "0")}`, "perceptual", { masteryLevel: 6 }),
+      ),
+      famDef("fam.p.waiting", "perceptual", { masteryLevel: 6 }),
+      famDef("fam.c.waiting", "concept"),
+    ];
+    const t = setup({ families: defs });
+    const svc = await SrsService.create(t.deps);
+    const at = day(12).toISOString();
+    // Twelve active perceptual families, next due in two months: every slot is taken, the forecast is open.
+    for (let i = 0; i < 12; i++)
+      t.store.saveCard(
+        {
+          ...svc.srs.createCard("family", defs[i]?.id as string, day(0), "active"),
+          dueAt: day(60).toISOString(),
+        },
+        { desiredRetention: 0.85, introducedBy: "U03.L02" },
+        at,
+      );
+    expect(t.store.cards({ status: "active", kind: "family" })).toHaveLength(12);
+    // Both wait: the perceptual one (older) has no slot; the concept one needs none.
+    for (const [id, kind] of [
+      ["fam.p.waiting", "family"],
+      ["fam.c.waiting", "concept"],
+    ] as const)
+      t.store.saveCard(
+        { ...svc.srs.createCard(kind, id, day(12), "deferred") },
+        { desiredRetention: 0.85, introducedBy: "U03.L03" },
+        at,
+      );
+    const s = t.stateRef() as SrsWorkingState;
+    t.deps.state.put({ ...s, deferredSeq: { "fam.p.waiting": 1, "fam.c.waiting": 2 }, seq: 2 });
+    svc.prepareDay(day(13), 0);
+    expect(t.store.card("fam.c.waiting")?.card.status).toBe("active");
+    expect(t.store.card("fam.p.waiting")?.card.status).toBe("deferred");
+  });
+
+  test("intake against the mean warm-up budget of the upcoming sessions (checkpoint days are shorter)", async () => {
+    const t = setup();
+    let upcoming: ("lesson" | "checkpoint" | "capstone" | "gym")[] = [];
+    t.deps.learner.upcomingSessions = (n) => upcoming.slice(0, n);
+    const svc = await SrsService.create(t.deps);
+    expect(svc.intakeGovernor().budgetSec).toBe(300); // past the course: lesson-sized days
+    upcoming = ["lesson", "checkpoint", "capstone", "lesson", "lesson"];
+    expect(svc.intakeGovernor().budgetSec).toBe((300 + 180 + 180 + 300 + 300) / 5);
+    upcoming = ["gym", "lesson", "lesson", "lesson", "lesson", "lesson"];
+    expect(svc.intakeGovernor().budgetSec).toBe((240 + 4 * 300) / 5);
+  });
+
+  test("earlyGraduate(…, 'time'): a lesson's family starts when an active family stands at its mastery level", async () => {
+    // Six concept sets due today (60 s each) and fam.old: today is over 1.25 × the set budget; without fam.old it is not.
+    const load = Array.from({ length: 6 }, (_, i) => famDef(`fam.load.${i}`, "concept"));
+    const t = setup({
+      families: [
+        famDef("fam.old", "perceptual", { masteryLevel: 1 }),
+        famDef("fam.new", "perceptual"),
+        ...load,
+      ],
+    });
+    const svc = await SrsService.create(t.deps);
+    const now = day(3);
+    const at = now.toISOString();
+    // fam.old is active, has had its first set, and is already at its mastery level (level 1 of a 1-level
+    // mastery). A family never graduates before its first review set (decision 27).
+    t.store.saveCard(
+      {
+        ...svc.srs.rate(svc.srs.createCard("family", "fam.old", day(0), "active"), 3, day(0)).card,
+        dueAt: day(0).toISOString(),
+      },
+      { desiredRetention: 0.85 },
+      at,
+    );
+    // The set forecast is closed, so the throttle alone would defer a new family.
+    for (const f of load)
+      t.store.saveCard(svc.srs.createCard("concept", f.id, now, "active"), { desiredRetention: 0.9 }, at);
+    const r = svc.seedFromLesson({ lessonId: "U03.L03", families: ["fam.new" as FamilyId], terms: [] }, now);
+    expect(r.graduatedEarly).toEqual(["fam.old"]);
+    expect(t.store.card("fam.old")?.card.status).toBe("graduated");
+    expect(t.store.card("fam.mix.pitch")?.card.status).toBe("active");
+    expect(r.active).toContain("fam.new");
+    // Without a family at its mastery level, the new family waits deferred.
+    const t2 = setup({
+      families: [
+        famDef("fam.young", "perceptual", { masteryLevel: 3 }),
+        famDef("fam.new", "perceptual"),
+        ...load,
+      ],
+    });
+    const svc2 = await SrsService.create(t2.deps);
+    t2.store.saveCard(
+      svc2.srs.createCard("family", "fam.young", day(0), "active"),
+      { desiredRetention: 0.85 },
+      at,
+    );
+    for (const f of load)
+      t2.store.saveCard(svc2.srs.createCard("concept", f.id, now, "active"), { desiredRetention: 0.9 }, at);
+    const r2 = svc2.seedFromLesson(
+      { lessonId: "U03.L03", families: ["fam.new" as FamilyId], terms: [] },
+      now,
+    );
+    expect(r2).toMatchObject({ graduatedEarly: [], deferred: ["fam.new"] });
+  });
+});
+
+describe("SrsService: the first-review bound of decision 27, through the service on the dev clock", () => {
+  // A U03–U06-like stretch: a new family every lesson day for six weeks, more than the 12 slots and the
+  // warm-up time can take, none of them near its mastery level (6). Every weekday the service prepares the
+  // day, plans the warm-up and the learner plays every planned set at 0.9 credit; the dev clock moves the day.
+  test("every family gets its first set within 7 days of its lesson; the slots hold; resting families come back", async () => {
+    const N = 30;
+    const defs = Array.from({ length: N }, (_, i) =>
+      famDef(`fam.w.${String(i).padStart(2, "0")}`, i % 5 === 4 ? "production" : "perceptual", {
+        masteryLevel: 6,
+        mic: i % 5 === 4,
+        mix: i % 2 ? "pitch" : "harmony",
+        trialsPerSet: 6,
+        estTrialSec: i % 3 === 0 ? 15 : 10,
+        domain: i % 3 === 0 ? "harmony" : i % 3 === 1 ? "degree" : "melody",
+      }),
+    );
+    const t = setup({ families: defs });
+    const base = { now: () => day(0, 18) };
+    const clock = new DevClock(base);
+    const svc = await SrsService.create(t.deps);
+    const seededOn = new Map<string, number>();
+    const firstSetOn = new Map<string, number>();
+    let maxActive = 0;
+    let rested = 0;
+    let lastPractice = -1;
+    let next = 0;
+    for (let d = 0; d < 112; d++) {
+      clock.jump(day(d, 18));
+      const now = clock.now();
+      const weekday = now.getUTCDay();
+      if (weekday === 0 || weekday === 6) continue;
+      const gapDays = lastPractice < 0 ? 0 : d - lastPractice - 1;
+      lastPractice = d;
+      svc.prepareDay(now, gapDays);
+      const resting = Object.keys(t.stateRef()?.resting ?? {}).length;
+      rested = Math.max(rested, resting);
+      const { items } = svc.planWarmup(now, { gapDays });
+      for (const it of items) {
+        if (it.kind === "listen" || it.kind === "anchor" || it.kind === "fact-set" || !it.familyId) continue;
+        const before = t.store.card(it.familyId);
+        if (before && before.card.reps === 0 && !firstSetOn.has(it.familyId)) firstSetOn.set(it.familyId, d);
+        svc.review(
+          {
+            cardId: it.familyId,
+            drillSessionId: null,
+            outcome: outcome(0.9),
+            ...(it.kind === "composite-set"
+              ? {
+                  trials: it.members.flatMap((m) => [
+                    { familyId: m, credit: 1 },
+                    { familyId: m, credit: 1 },
+                  ]),
+                }
+              : {}),
+          },
+          now,
+        );
+      }
+      // The New block: six weeks of lessons, each seeding the next family.
+      if (d < 42 && next < N) {
+        const def = defs[next++] as FamilyDef;
+        svc.seedFromLesson({ lessonId: `U9.L${next}`, families: [def.id], terms: [] }, now);
+        seededOn.set(def.id, d);
+      }
+      const active = t.store.cards({ status: "active", kind: "family" }).length;
+      maxActive = Math.max(maxActive, active);
+    }
+    expect(maxActive).toBeLessThanOrEqual(12);
+    // The bound holds for every family seeded, whatever the queue.
+    const waits = [...seededOn].map(([id, d]) => [id, (firstSetOn.get(id) ?? Number.POSITIVE_INFINITY) - d]);
+    for (const [id, w] of waits) expect([id, (w as number) <= 7]).toEqual([id, true]);
+    expect(seededOn.size).toBe(N);
+    // Room was made by resting families in their composites, and they came back once nothing waited.
+    expect(rested).toBeGreaterThan(0);
+    expect(Object.keys(t.stateRef()?.resting ?? {}).length).toBeLessThan(rested);
+    expect(t.store.cards({ status: "deferred" })).toHaveLength(0);
   });
 });

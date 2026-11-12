@@ -3,7 +3,7 @@ import type { SessionSummary } from "@oak/api";
 import { fixtureSession, fixtureSummary, PLANS } from "./fixtures.ts";
 import type { EndInput } from "./machine.ts";
 import { ACTIVE_KEY, ENDED_KEY, type KeyValue, loadActive, loadEnded } from "./persist.ts";
-import { createRunner, isSessionSurface, type RunnerDeps, type SessionPath } from "./runner.ts";
+import { createRunner, isSessionSurface, joinedPlan, type RunnerDeps, type SessionPath } from "./runner.ts";
 import { reportBlockDone, useSession } from "./store.ts";
 
 class MemoryKV implements KeyValue {
@@ -220,5 +220,57 @@ describe("the session runner", () => {
       expect(isSessionSurface(p)).toBe(true);
     for (const p of ["/", "/oak", "/progress", "/settings/audio", "/album"])
       expect(isSessionSurface(p)).toBe(false);
+  });
+});
+
+describe("one open session per learner day (wave3.md §5.1)", () => {
+  test("joinedPlan keeps today's plan for the same session, relabels it for another", () => {
+    expect(joinedPlan(PLANS.lesson, { kind: "lesson", mapItemId: PLANS.lesson.mapItemId })).toBe(
+      PLANS.lesson,
+    );
+    const cp = joinedPlan(PLANS.lesson, { kind: "checkpoint", mapItemId: "U01.CP" });
+    expect(cp.kind).toBe("checkpoint");
+    expect(cp.mapItemId).toBe("U01.CP");
+    const ka = joinedPlan(PLANS.lesson, { kind: "keepalive", mapItemId: null });
+    expect(ka.kind).toBe("keepalive");
+    expect(ka.warmup.items).toHaveLength(Math.min(1, PLANS.lesson.warmup.items.length));
+    expect(ka.main).toBeNull();
+  });
+
+  test("Start in a second tab joins the open session at the block this browser saved", async () => {
+    const shared = new MemoryKV();
+    const open = fixtureSession({ id: "ses_open" });
+    const a = fakes({ storage: shared, startSession: async () => open });
+    await a.runner.start(PLANS.lesson);
+    reportBlockDone({
+      block: "warmup",
+      source: "drills",
+      warmupItemId: "w1",
+      drillSessionId: null,
+      meanCredit: 1,
+    });
+    a.play(3_000);
+    const blockA = useSession.getState().block;
+    const warmupIndex = useSession.getState().warmupIndex;
+    a.runner.dispose();
+    // The second tab: same browser storage, the server answers its Start with the open session.
+    const b = fakes({ storage: shared, startSession: async () => open });
+    // dispose() wiped this tab's store; the saved record is what the second tab finds.
+    expect(loadActive(shared, "ses_open")).not.toBeNull();
+    await b.runner.start(PLANS.lesson);
+    expect(useSession.getState().session?.id).toBe("ses_open");
+    expect(useSession.getState().block).toBe(blockA);
+    expect(useSession.getState().warmupIndex).toBe(warmupIndex);
+    b.runner.dispose();
+  });
+
+  test("Start answered with an open session of another kind runs that session", async () => {
+    const f = fakes({
+      startSession: async () => fixtureSession({ id: "ses_cp", kind: "checkpoint", mapItemId: "U01.CP" }),
+    });
+    await f.runner.start(PLANS.lesson);
+    expect(useSession.getState().plan?.kind).toBe("checkpoint");
+    expect(useSession.getState().plan?.mapItemId).toBe("U01.CP");
+    f.runner.dispose();
   });
 });

@@ -14,9 +14,14 @@ import {
   CHORD_SYMBOLS,
   chordCardId,
   decks,
+  FLAT_ORDER,
+  INTERVAL_NAMES,
+  INTERVAL_ROWS,
   KEY_SIGNATURES,
   MAJOR_SIGNATURES,
   MINOR_SIGNATURES,
+  PENDING_DECKS,
+  SHARP_ORDER,
   STAFF_NAMES,
   signatureText,
 } from "./index.ts";
@@ -81,11 +86,101 @@ describe("fact decks", () => {
     for (const [tonic, n] of MINOR_SIGNATURES)
       expect([tonic, n]).toEqual([tonic, theory.keySignature({ tonic, mode: "minor" }).accidentals]);
     for (const c of KEY_SIGNATURES.cards) {
-      const m = /^fact\.keysig\.([A-G]s?b?)-(major|minor)$/.exec(c.id) as RegExpExecArray;
+      const m = /^fact\.keysig\.([A-G]s?b?)-(major|minor)$/.exec(c.id);
+      if (!m) continue;
       const tonic = (m[1] as string).replace("s", "#");
       const sig = theory.keySignature({ tonic, mode: m[2] as "major" }).accidentals;
       expect([c.id, c.answer.text?.[0]]).toEqual([c.id, signatureText(sig)]);
     }
+  });
+
+  test("key signatures: the key from its signature, the spelled signature and the order, as @oak/theory has them", () => {
+    const byId = new Map(KEY_SIGNATURES.cards.map((c) => [c.id as string, c]));
+    for (const [tonic, n, gate] of MAJOR_SIGNATURES) {
+      const sig = theory.signatureOf(n);
+      const from = byId.get(`fact.keysig.from-${Math.abs(n)}${n > 0 ? "s" : "b"}`);
+      expect([n, from?.answer.text, from?.gate]).toEqual([n, [sig.major.tonic], gate]);
+      expect(sig.major.tonic).toBe(tonic);
+      const spell = byId.get(`fact.keysig.spell-${tonic.replace("#", "s")}-major`);
+      expect([tonic, spell?.answer.text]).toEqual([tonic, n > 0 ? sig.sharps : sig.flats]);
+      // The prompt names the key and never gives the answer away.
+      for (const card of [from, spell]) {
+        const text = card?.prompt.text ?? "";
+        expect(text.length).toBeGreaterThan(20);
+        for (const a of card?.answer.text ?? [])
+          expect([card?.id, text.includes(` ${a} `)]).toEqual([card?.id, false]);
+      }
+    }
+    expect(SHARP_ORDER.map((l) => `${l}#`)).toEqual([...theory.SHARP_ORDER]);
+    expect(FLAT_ORDER.map((l) => `${l}b`)).toEqual([...theory.FLAT_ORDER]);
+    // The last sharp is the leading tone (7), the last flat is degree 4, in every key of the deck.
+    for (const [tonic, n] of MAJOR_SIGNATURES) {
+      const sig = theory.signatureOf(n);
+      const last = (n > 0 ? sig.sharps : sig.flats).at(-1) as string;
+      const pc = (theory.parseNote(`${last}4`) as theory.ParsedNote).midi % 12;
+      const tonicPc = (theory.parseNote(`${tonic}4`) as theory.ParsedNote).midi % 12;
+      expect([tonic, (pc - tonicPc + 12) % 12]).toEqual([tonic, n > 0 ? 11 : 5]);
+    }
+    // Flat cards open with the flat keys (U03.L07); sharp cards with the deck (U03.L06).
+    for (const [tonic, , gate] of MAJOR_SIGNATURES)
+      expect(byId.get(`fact.keysig.spell-${tonic.replace("#", "s")}-major`)?.gate).toBe(gate);
+    expect(
+      ["order-sharps", "last-sharp", "order-flats", "last-flat"].map(
+        (k) => byId.get(`fact.keysig.${k}`)?.gate,
+      ),
+    ).toEqual([undefined, undefined, "U03.L07", "U03.L07"]);
+  });
+
+  test("every prompt states the answer format, and each accepted alternative earns full credit", () => {
+    for (const d of [...decks, ...PENDING_DECKS])
+      for (const c of d.cards) {
+        if (c.prompt.staff) continue;
+        expect([c.id, /Write|write/.test(c.prompt.text ?? "")]).toEqual([c.id, true]);
+        for (const alt of c.accept ?? []) {
+          const r = bindDeck(d).grade(c, { text: [(alt.text ?? []).join(" ")] }, 1000);
+          expect([c.id, alt.text, r.credit]).toEqual([c.id, alt.text, 1]);
+        }
+      }
+  });
+
+  test("sequences typed into one box are graded item by item", () => {
+    const order = KEY_SIGNATURES.cards.find(
+      (c) => c.id === "fact.keysig.order-sharps",
+    ) as FactDeck["cards"][number];
+    const g = (t: string) => bindDeck(KEY_SIGNATURES).grade(order, { text: [t] }, 1000).credit;
+    expect(g("F C G D A E B")).toBe(1);
+    expect(g("f, c, g, d, a, e, b")).toBe(1);
+    expect(g("F# C# G# D# A# E# B#")).toBe(1);
+    expect(g("F C G D A B E")).toBeCloseTo(5 / 7, 5);
+  });
+
+  test("interval names (pending deck): half steps and names as @oak/theory measures them, Strudel's strings too", () => {
+    expect(() => defineDeck(INTERVAL_NAMES)).not.toThrow();
+    expect(decks.map((d) => d.id as string)).not.toContain(INTERVAL_NAMES.id);
+    for (const [name, semis, code, , gate] of INTERVAL_ROWS) {
+      const info = theory.intervalOf(60, 60 + semis);
+      expect([name, info.semitones]).toEqual([name, semis]);
+      if (name !== "TT") expect([name, info.name]).toEqual([name, name]);
+      else expect(info.tritone).toBe(true);
+      expect([code, theory.parseStrudelInterval(code)?.semitones]).toEqual([code, semis]);
+      const semisCard = INTERVAL_NAMES.cards.find((c) => c.id === `fact.int.semis-${semis}`);
+      expect(semisCard?.gate).toBe(gate);
+    }
+    const grade = (id: string, t: string) => {
+      const c = INTERVAL_NAMES.cards.find((x) => x.id === id) as FactDeck["cards"][number];
+      return bindDeck(INTERVAL_NAMES).grade(c, { text: [t] }, 1000).credit;
+    };
+    // Major and minor differ only in the letter's case: never forgiven.
+    expect(grade("fact.int.semis-4", "M3")).toBe(1);
+    expect(grade("fact.int.semis-4", "3M")).toBe(1);
+    expect(grade("fact.int.semis-4", "major 3rd")).toBe(1);
+    expect(grade("fact.int.semis-4", "m3")).toBe(0);
+    expect(grade("fact.int.semis-3", "M3")).toBe(0);
+    expect(grade("fact.int.semis-6", "4A")).toBe(1);
+    expect(grade("fact.int.semis-6", "tritone")).toBe(1);
+    expect(grade("fact.int.M3-semis", "4")).toBe(1);
+    expect(grade("fact.int.code-P5", "5P")).toBe(1);
+    expect(grade("fact.int.code-P5", "P5")).toBe(0);
   });
 
   test("chord symbols: @oak/theory reads each answer as the asked quality on the asked root", () => {
@@ -121,7 +216,7 @@ describe("fact decks", () => {
     const grade = (deck: FactDeck, i: number, text: string) =>
       bindDeck(deck).grade(deck.cards[i] as FactDeck["cards"][number], { text: [text] }, 1000).credit;
     for (const d of decks)
-      for (const [i, c] of d.cards.entries()) expect(grade(d, i, c.answer.text?.[0] as string)).toBe(1);
+      for (const [i, c] of d.cards.entries()) expect(grade(d, i, (c.answer.text ?? []).join(" "))).toBe(1);
     expect(grade(STAFF_NAMES, 0, "c")).toBe(1);
     expect(grade(STAFF_NAMES, 0, "D")).toBe(0);
     expect(grade(KEY_SIGNATURES, 0, "2#")).toBe(0);

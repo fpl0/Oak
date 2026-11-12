@@ -41,9 +41,24 @@ export function calibrationLine(r: CalibrationRecord): string {
       const c = num(x.centsError);
       if (x.first === true)
         return `First note · sung${c === null ? "" : ` (${c > 0 ? "+" : ""}${Math.round(c)}¢)`}`;
-      return "Pitch match";
+      const within = num(x.within);
+      const trials = Array.isArray(x.trials) ? x.trials.length : null;
+      return within === null || trials === null
+        ? "Pitch match"
+        : `Pitch match · ${within} of ${trials} within ±${num(x.windowCents) ?? 50}¢`;
     }
   }
+}
+
+/** The newest three-note pitch match, as Settings › Voice shows it ("2 of 3 within ±50¢ · 11 Nov"), or null. */
+export function lastMatch(items: readonly CalibrationRecord[]): string | null {
+  const r = items.find(
+    (x) => x.kind === "pitch-match" && x.result.first !== true && Array.isArray(x.result.trials),
+  );
+  if (!r) return null;
+  const within = num(r.result.within);
+  const trials = (r.result.trials as unknown[]).length;
+  return within === null ? null : `${within} of ${trials} within ±${num(r.result.windowCents) ?? 50}¢`;
 }
 
 export function inputLabel(p: Pick<Profile, "inputKind" | "quiet">): string {
@@ -54,5 +69,5 @@ export function inputLabel(p: Pick<Profile, "inputKind" | "quiet">): string {
       : p.inputKind === "bluetooth"
         ? "Bluetooth microphone"
         : "External microphone";
-  return p.quiet ? `${kind} · Quiet mode today` : kind;
+  return p.quiet ? `${kind} · Quiet mode on` : kind;
 }

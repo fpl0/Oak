@@ -9,9 +9,9 @@ import { NAV_ITEMS, SETTINGS_SECTIONS } from "../../lib/nav.ts";
 import { stopAllAudio } from "../../lib/oak.ts";
 import { useBootstrap } from "../../lib/queries.ts";
 import { useShell } from "../../lib/shell-store.ts";
-import { WORKBENCH_LOOP_SHORTCUTS } from "../../workbench/shortcuts.ts";
 import { IS_MAC, useHotkeys, useKeymap } from "../keys/KeymapProvider.tsx";
 import { type Binding, formatKeys } from "../keys/keymap.ts";
+import { sheetSections, useSheetSections } from "../keys/sheet.ts";
 import { Kbd } from "../kit/basics.tsx";
 import { Dialog } from "../kit/Dialog.tsx";
 import { resolveTheme, usePrefs } from "../theme/prefs.ts";
@@ -208,57 +208,6 @@ export function GlobalKeys() {
   return <ShortcutSheet />;
 }
 
-/**
- * Shortcuts handled inside the editor, the workbench and the answer widgets (listed here, handled there; ux
- * §7.10). Page keys (the lesson's Check, Hint and step moves, the drills, Studio's named version, the capstone's
- * check, Mod+I for Claude) are registered in the keymap by their pages and listed above while they are on screen.
- */
-const STATIC_SECTIONS: { title: string; rows: (readonly [string, string])[] }[] = [
-  {
-    title: "Editor",
-    rows: [
-      ["Mod+Enter", "Run (evaluate and play)"],
-      ["Mod+.", "Stop"],
-      ["Alt+Q", "Previous block"],
-      ["Alt+W", "Next block"],
-      ["Mod+/", "Toggle comment"],
-      ["Ctrl+Space", "Autocomplete"],
-    ],
-  },
-  {
-    title: "Workbench",
-    rows: [
-      ["Space", "Play / stop"],
-      ["R", "Roll"],
-      ["N", "Notation"],
-      ["K", "Typing-keyboard play"],
-      ["A", "A/B: hear A"],
-      ["B", "A/B: hear B"],
-      ["T", "Practice tempo"],
-      ["F", "Focus the editor"],
-      ...WORKBENCH_LOOP_SHORTCUTS,
-    ],
-  },
-  {
-    title: "Answers",
-    rows: [
-      ["Enter", "Check"],
-      ["1", "Pick an option, a degree or a numeral (1 to 9)"],
-      ["Shift+1", "Hear an option (1 to 9)"],
-      ["-", "Flat before a degree or numeral"],
-      ["+", "Sharp before a degree or numeral"],
-      ["M", "Major / minor numeral"],
-      ["Backspace", "Clear the last slot"],
-      ["A", "Piano keys: A W S E D F T G Y H U J K (C to C)"],
-      ["Z", "Piano keys: octave down (X up)"],
-      ["Alt+ArrowUp", "Move a block up (Alt+Down: down)"],
-      ["X", "Rhythm grid: toggle a cell"],
-      ["P", "Rhythm grid and blocks: play"],
-      ["Space", "Tap pad: tap (also F and J)"],
-    ],
-  },
-];
-
 function ShortcutSheet() {
   const open = useShell((s) => s.shortcutsOpen);
   const setOpen = useShell((s) => s.setShortcutsOpen);
@@ -266,6 +215,10 @@ function ShortcutSheet() {
   const live = open ? keymap.list().filter((b) => b.group) : [];
   const groups = new Map<string, Binding[]>();
   for (const b of live) groups.set(b.group ?? "", [...(groups.get(b.group ?? "") ?? []), b]);
+  // Keys components handle themselves (editor, Workbench, answers, tutor, and any section an area registers,
+  // app/src/ui/keys/sheet.ts); a row a live page group already lists is not repeated.
+  const registered = useSheetSections((s) => s.sections);
+  const statics = sheetSections(registered, new Set(live.map((b) => `${b.keys}|${b.description}`)));
   return (
     <Dialog
       open={open}
@@ -289,8 +242,8 @@ function ShortcutSheet() {
             </dl>
           </section>
         ))}
-        {STATIC_SECTIONS.map((s) => (
-          <section key={s.title}>
+        {statics.map((s) => (
+          <section key={s.id} data-sheet-section={s.id}>
             <h3 className="mb-2 font-sans text-sm font-semibold text-text-2">{s.title}</h3>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
               {s.rows.map(([k, d]) => (

@@ -4,7 +4,7 @@
 import type { Exercise, HintLadder, HintRung, StepDef } from "@oak/api";
 import { ArrowRight, Lightbulb, MessageCircle } from "lucide-react";
 import type { ReactNode } from "react";
-import { Button } from "../ui/kit/Button.tsx";
+import { Button, buttonClass } from "../ui/kit/Button.tsx";
 import { Kbd } from "../ui/kit/basics.tsx";
 import { InlineMd } from "./frame.tsx";
 import { hintText } from "./model.ts";
@@ -148,7 +148,7 @@ export function StepFooter(p: StepFooterProps) {
           {p.onNewSeries && (
             <button
               type="button"
-              className="text-link underline-offset-2 hover:underline"
+              className={buttonClass("link", "sm")}
               onClick={p.onNewSeries}
               data-testid="new-series"
             >
@@ -158,7 +158,7 @@ export function StepFooter(p: StepFooterProps) {
           {p.onReport && (
             <button
               type="button"
-              className="text-text-3 underline-offset-2 hover:text-text hover:underline"
+              className={buttonClass("link", "sm")}
               onClick={p.onReport}
               data-testid="report-problem"
             >
@@ -168,7 +168,7 @@ export function StepFooter(p: StepFooterProps) {
           {p.onWrapUp && (
             <button
               type="button"
-              className="text-text-3 underline-offset-2 hover:text-text hover:underline"
+              className={buttonClass("link", "sm")}
               onClick={p.onWrapUp}
               data-testid="wrap-up"
             >

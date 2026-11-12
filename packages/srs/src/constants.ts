@@ -59,6 +59,21 @@ export const DECISION_2 = {
   activeMaxIntervalDays: 7,
   maxFactCardsPerLesson: 2,
 } as const;
+/**
+ * docs/decisions.md row 27 (Wave 3): the bound on a new ear or voice family's first review replaces the
+ * deferred-queue count of the §7.4 gate, and the governor makes room to meet it (see `planOverdueReleases`).
+ */
+export const DECISION_27 = {
+  /** A perceptual or production family has its first review set within this many days of its lesson. */
+  firstReviewWithinDays: 7,
+  /**
+   * A family still waiting this many days after its lesson is released whatever the forecast says, and
+   * room is made for it. Less than the bound so a weekend between the two still lands the set inside it.
+   */
+  releaseAfterDays: 2,
+  /** A family rests in its composite only once it has had this many review sets of its own. */
+  restMinReps: 3,
+} as const;
 export const FSRS_VERSION = "FSRS-7";
 /** Stored on every card so a later model change can migrate by replay. */
 export const FSRS_MODEL_NAME = "fsrs-7";
@@ -155,8 +170,15 @@ export const SIM_GATE = {
   p95WarmupSec: { 15: 240, 20: 300, 25: 360 },
   maxActive: 12,
   p95OldestDueDays: 7,
+  /** The Wave 2 criterion decision 27 replaced; the simulation still prints the deferred-queue count. */
   p95DeferredCards: 4,
   p95ReviewDaySec: 720,
+  /**
+   * Decision 27: every perceptual or production family has its first review set within this many days of
+   * the lesson that seeded it, on every run (the learner's own breaks not counted; a family still unreviewed
+   * at the end counts the days it has waited). Wave 3 measured at most 6 with `DECISION_27` live.
+   */
+  firstReviewWaitDays: DECISION_27.firstReviewWithinDays,
 } as const;
 
 // --- mastery (§7.5) ---

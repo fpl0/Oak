@@ -67,7 +67,12 @@ export function createHarness(options: HarnessOptions = {}) {
   const sampleRate = options.sampleRate ?? 44100;
   const seconds = options.seconds ?? 2.5;
 
-  function renderInFrame(code: string, cycles = 1, cps = 1): Promise<Rendered> {
+  function renderInFrame(
+    code: string,
+    cycles = 1,
+    cps = 1,
+    events?: RenderRequest["events"],
+  ): Promise<Rendered> {
     return new Promise((resolve, reject) => {
       const id = nextId++;
       const frame = document.createElement("iframe");
@@ -83,7 +88,16 @@ export function createHarness(options: HarnessOptions = {}) {
       const onMessage = (event: MessageEvent): void => {
         if (event.source !== frame.contentWindow) return;
         if (event.data?.type === "ready") {
-          const req: RenderRequest = { type: "render", id, code, seconds, cycles, cps, sampleRate };
+          const req: RenderRequest = {
+            type: "render",
+            id,
+            code,
+            seconds,
+            cycles,
+            cps,
+            sampleRate,
+            ...(events ? { events } : {}),
+          };
           frame.contentWindow?.postMessage(req, location.origin);
         } else if (event.data?.type === "rendered" && event.data.id === id) {
           const { error, left, right, haps, logs } = event.data as Rendered & { error?: string };
@@ -193,5 +207,9 @@ export function createHarness(options: HarnessOptions = {}) {
     return { base, rms: rms(a), haps: a.haps, floorDb: db(diffRms(a, b) / rms(a)) };
   }
 
-  return { renderInFrame, audible, soundAudible, noiseFloorDb };
+  /** Renders superdough values (an `AudioPlan`'s events) exactly as `playEvents` would trigger them. */
+  const renderEvents = (events: NonNullable<RenderRequest["events"]>): Promise<Rendered> =>
+    renderInFrame("silence", 1, 1, events);
+
+  return { renderInFrame, renderEvents, audible, soundAudible, noiseFloorDb, sampleRate, seconds };
 }

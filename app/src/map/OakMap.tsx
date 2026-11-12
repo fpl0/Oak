@@ -15,6 +15,7 @@ import {
   fitAll,
   fitWidth,
   neighbour,
+  rowIntoView,
   type View,
   zoomAt,
 } from "./nav.ts";
@@ -58,7 +59,7 @@ export function nodeAriaLabel(n: PlacedNode, v: LeafView, next: boolean): string
   const parts = [`${n.name} (${n.id})`, STATUS_LABEL[v.status]];
   if (v.freshness !== null && v.freshness < 0.999) parts.push(`freshness ${Math.round(v.freshness * 100)}%`);
   if (v.drying) parts.push("in today's warm-up");
-  if (v.paused) parts.push("paused without a microphone");
+  if (v.paused) parts.push("waiting for the mic");
   if (next) parts.push("part of what's next");
   return parts.join(", ");
 }
@@ -93,7 +94,11 @@ export function OakMap(props: OakMapProps) {
     if (size.w === 0 || view !== null) return;
     let v = fitWidth(layout, size.w, size.h);
     const start = props.initialId ? layout.byId.get(props.initialId) : undefined;
-    if (start) v = clampView(ensureVisible(v, start, size.w, size.h, 48), layout, size.w, size.h);
+    if (start) {
+      const row = layout.rows.find((r) => r.unit === start.unit);
+      if (row) v = rowIntoView(v, row, size.h - HEADER_H);
+      v = clampView(ensureVisible(v, start, size.w, size.h, 48), layout, size.w, size.h);
+    }
     setView(v);
   }, [size, view, layout, props.initialId]);
 

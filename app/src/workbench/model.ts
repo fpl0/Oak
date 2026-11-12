@@ -3,9 +3,18 @@
 // (`@oak/notation`). Pure and synchronous, so it runs the same in the browser and in bun tests.
 import type { CodeRange, KeySpec, MeterId, MeterSpec, NEvent, Rat } from "@oak/content-kit";
 import { R } from "@oak/content-kit";
-import { type EvalResult, type EvalSuccess, type GraderErrorInfo, normalize } from "@oak/grader";
-import { type AbcResult, notate, type Score, type StaffKind } from "@oak/notation";
-import { barPosition, keyFromScaleCtx, METERS, parseChordSymbol } from "@oak/theory";
+import {
+  type EvalResult,
+  type EvalSuccess,
+  type GraderErrorInfo,
+  keyAt,
+  normalize,
+  type TrackKeyContext,
+  trackKeyContexts,
+} from "@oak/grader";
+import { type AbcResult, buildScore, type Score, type StaffKind } from "@oak/notation";
+import { barPosition, keyFromScaleCtx, METERS, parseChordSymbol, parseNote } from "@oak/theory";
+import { type AnnotationKinds, annotateAbc, annotationText, NO_ANNOTATIONS } from "./annotate.ts";
 import { primaryRanges } from "./code-roles.ts";
 import { type ChordRole, chordRoleOf, type PitchLabel, pitchLabel } from "./music.ts";
 
@@ -50,7 +59,16 @@ export interface WorkbenchModel {
   totalBars: number | null;
   truncated: boolean;
   meter: MeterSpec;
+  /**
+   * The piece's key: the first key of the learner's code (its first `.scale()`), else the declared key, else
+   * an estimate from the notes (Wave 3: `trackKeyContexts`, prefer "code"). Every event is labelled in the key
+   * of its own track and bar (`keySpans`, `keyContexts`), which differs from this one in a patterned `.scale()`.
+   */
   key: KeySpec | null;
+  /** The learner piece's keys in time order (a patterned `.scale("<C4:major G4:major>")` gives several). */
+  keySpans: PieceKeySpan[];
+  /** Each track's key spans (the grader's seam, wave3.md §3.3). */
+  keyContexts: TrackKeyContext[];
   events: ViewEvent[];
   byId: ReadonlyMap<string, ViewEvent>;
   score: Score | null;
@@ -64,17 +82,107 @@ export interface WorkbenchModel {
 /** The staff engraves at most this many bars at a time; longer loops turn pages with the playhead. */
 export const STAFF_PAGE_BARS = 8;
 
+/** Fewest pitched notes a key estimate needs before notes are labelled in it. */
+export const ESTIMATE_MIN_NOTES = 7;
+
+/** A stretch of the piece in one key, in cycles (bars). */
+export interface PieceKeySpan {
+  from: number;
+  to: number;
+  key: KeySpec;
+  source: "declared" | "scale" | "estimate";
+}
+
+/** The key of the piece at `cycle` (wrapped into nothing: the span containing it, else the nearest before). */
+export function keyAtCycle(spans: readonly PieceKeySpan[], cycle: number): KeySpec | null {
+  let found: PieceKeySpan | null = null;
+  for (const s of spans) {
+    if (s.from <= cycle + 1e-9) found = s;
+    if (s.from <= cycle + 1e-9 && cycle < s.to - 1e-9) return s.key;
+  }
+  return (found ?? spans[0] ?? null)?.key ?? null;
+}
+
+const sameKey = (a: KeySpec | null, b: KeySpec | null) =>
+  a === b || (a !== null && b !== null && a.tonic === b.tonic && a.mode === b.mode);
+
+/**
+ * The learner piece's key spans: from the first learner track (in source order) that reads a `.scale()`, else
+ * the first pitched learner track. Neighbouring spans in the same key merge.
+ */
+export function pieceKeySpans(
+  contexts: readonly TrackKeyContext[],
+  trackOrder: readonly string[] = [],
+): PieceKeySpan[] {
+  // Source order (the first track the learner wrote, usually the melody), not the grader's order.
+  const rank = (t: string) => {
+    const i = trackOrder.indexOf(t);
+    return i < 0 ? trackOrder.length : i;
+  };
+  const learner = contexts
+    .filter((c) => !c.band && c.spans.length > 0)
+    .sort((a, b) => rank(a.track) - rank(b.track));
+  const ctx = learner.find((c) => c.spans.some((s) => s.source === "scale")) ?? learner[0];
+  if (!ctx) return [];
+  const out: PieceKeySpan[] = [];
+  for (const s of ctx.spans) {
+    const span = { from: R.toNum(s.from), to: R.toNum(s.to), key: s.key, source: s.source };
+    const last = out[out.length - 1];
+    if (last && sameKey(last.key, span.key)) last.to = Math.max(last.to, span.to);
+    else out.push(span);
+  }
+  return out;
+}
+
+/** The distinct keys of the piece, in order of appearance. */
+export function pieceKeys(spans: readonly PieceKeySpan[]): KeySpec[] {
+  const out: KeySpec[] = [];
+  for (const s of spans) if (!out.some((k) => sameKey(k, s.key))) out.push(s.key);
+  return out;
+}
+
+/**
+ * Labelled tracks whose `.scale()` is followed by a `.transpose()` (contracts §6.8 item 3, lint
+ * `code.transpose-after-scale`): their scale context names the wrong key, so they are read another way.
+ */
+export function transposedAfterScale(code: string): string[] {
+  const out: string[] = [];
+  const re = /^\s*([A-Za-z_]\w*)\s*:/gm;
+  const starts: { name: string; at: number }[] = [];
+  for (let m = re.exec(code); m; m = re.exec(code)) starts.push({ name: m[1] as string, at: m.index });
+  starts.forEach((s, i) => {
+    const text = code.slice(s.at, starts[i + 1]?.at ?? code.length);
+    if (/\.scale\s*\([\s\S]*\.transpose\s*\(/.test(text)) out.push(s.name);
+  });
+  return out;
+}
+
 export interface StaffSource {
   events: readonly NEvent[];
   meter: MeterSpec;
+  /** The key signature of page 0 (each page takes the key at its first bar from `keySpans`). */
   key: KeySpec | null;
+  keySpans: readonly PieceKeySpan[];
+  /**
+   * Tracks whose code states their own key (`.scale()`) unlike the piece's (a bass in G-flat under a melody in
+   * C): their staff shows its own signature. Absent or empty: one signature for every staff.
+   */
+  trackKeySpans?: Readonly<Record<string, readonly PieceKeySpan[]>>;
   staff: StaffKind;
-  labels: "none" | "degree" | "solfege" | "counts";
+  /** Grand staff split (by track when the piece has several pitched tracks). */
+  split: "register" | "track";
+  /** Rhythm counts under a percussion staff (the notation package's own lyric line). */
+  labels: "none" | "counts";
+  /** The annotation lines under the staff and the text of each, per event (in its own track's key). */
+  annotations: AnnotationKinds;
+  labelOf: (eventId: string) => PitchLabel | null;
   tempoBpm: number;
   /** Bars analysed. */
   bars: number;
   /** Bars per page. */
   pageBars: number;
+  /** Bars per staff line, when the view knows its width (`barsPerLineFor`); else `barsPerLineOf` decides. */
+  barsPerLine?: number;
 }
 
 export interface StaffPage {
@@ -108,19 +216,43 @@ export function staffPage(src: StaffSource, page: number): StaffPage {
     })
     .map((e) => ({ ...e, onset: R.sub(e.onset, shift) }));
   try {
-    const out = notate(
-      {
-        events,
-        meter: src.meter,
-        key: src.key,
-        bars,
-        staff: src.staff,
-        labels: src.labels,
-        tempoBpm: src.tempoBpm,
-      },
-      { barsPerLine: 4 },
+    const key = src.keySpans.length > 0 ? keyAtCycle(src.keySpans, startBar) : src.key;
+    // A key that changes at a bar line inside the page (a patterned `.scale()`) changes the signature there,
+    // so every note is spelled, and its accidental written, against the key it is in.
+    const changesIn = (spans: readonly PieceKeySpan[]) =>
+      spans
+        .filter((s) => Number.isInteger(s.from) && s.from > startBar && s.from < startBar + bars)
+        .map((s) => ({ bar: s.from - startBar, key: s.key }));
+    const keyChanges = changesIn(src.keySpans);
+    const trackKeys = Object.fromEntries(
+      Object.entries(src.trackKeySpans ?? {}).flatMap(([track, spans]) => {
+        const k = keyAtCycle(spans, startBar);
+        return k ? [[track, { key: k, keyChanges: changesIn(spans) }] as const] : [];
+      }),
     );
-    return { page: p, startBar, bars, score: out.score, abc: out.abc, error: null };
+    const score = buildScore({
+      events,
+      meter: src.meter,
+      key,
+      ...(keyChanges.length ? { keyChanges } : {}),
+      ...(Object.keys(trackKeys).length ? { trackKeys } : {}),
+      bars,
+      staff: src.staff,
+      split: src.split,
+      labels: src.labels,
+      tempoBpm: src.tempoBpm,
+    });
+    const abc = annotateAbc(
+      score,
+      {
+        barsPerLine: src.barsPerLine ?? barsPerLineOf(score, src.annotations),
+        // Only the page that ends the piece ends with the final barline.
+        finalBar: startBar + bars >= src.bars,
+      },
+      src.annotations,
+      (_n, ids) => annotationText(ids.map(src.labelOf), src.annotations),
+    );
+    return { page: p, startBar, bars, score, abc, error: null };
   } catch (err) {
     return {
       page: p,
@@ -133,6 +265,69 @@ export function staffPage(src: StaffSource, page: number): StaffPage {
   }
 }
 
+/**
+ * Bars per staff line: four, or fewer when lines of text sit under busy bars, so the texts under the notes do not
+ * run into each other (abcjs spaces notes by their length, not their lyrics). Degree numbers are narrow: two bars
+ * a line past five notes a bar. Syllables and note names are words ("sol", "F♯5"): two bars a line past three
+ * notes a bar, one bar past seven.
+ */
+export function barsPerLineOf(score: Score, lines: AnnotationKinds): number {
+  if (!lines.degree && !lines.solfege && !lines.noteName) return 4;
+  let most = 0;
+  for (const st of score.staves)
+    for (const b of st.voices[0]?.bars ?? [])
+      most = Math.max(most, b.items.filter((it) => it.kind !== "rest" && !it.tieFromPrev).length);
+  const words = lines.solfege || lines.noteName;
+  if (words && most > 7) return 1;
+  return most > (words ? 3 : 5) ? 2 : 4;
+}
+
+/** The most notes (distinct onsets of one track) in any bar of a staff source. */
+export function busiestBar(events: readonly NEvent[]): number {
+  const per = new Map<string, Set<number>>();
+  for (const e of events) {
+    if (e.midi === null) continue;
+    const on = R.toNum(e.onset);
+    const k = `${e.track}|${Math.floor(on)}`;
+    const set = per.get(k) ?? new Set<number>();
+    set.add(on);
+    per.set(k, set);
+  }
+  let most = 0;
+  for (const s of per.values()) most = Math.max(most, s.size);
+  return most;
+}
+
+/**
+ * Bars per staff line for a staff `width` px wide: as many bars as fit with room under every note for its texts
+ * (abcjs spaces notes by length, so short notes under long words collide). Note names ("F♯5") need the most room,
+ * syllables less, degree numbers least; the clef, signature and time take the start of each line. 1 to 4.
+ */
+export function barsPerLineFor(most: number, lines: AnnotationKinds, width: number): number {
+  if (!lines.degree && !lines.solfege && !lines.noteName) return 4;
+  const perNote = lines.noteName ? 40 : lines.solfege ? 30 : 18;
+  const need = Math.max(1, most) * perNote + 20;
+  const room = width - 30 - 90;
+  return Math.max(1, Math.min(4, Math.floor(room / need)));
+}
+
+/**
+ * Bars per staff page once the lines are known: at most four lines of music, three when two or more lens lines
+ * sit under each (a system is then half as tall again), half as many for a grand staff, whose systems are two
+ * staves tall. A narrow host with words under busy bars then never stacks eight one-bar systems; the staff pages
+ * with the playhead instead. Never more than the source's own page.
+ */
+export function pageBarsFor(
+  pageBars: number,
+  barsPerLine: number,
+  staves: number,
+  textLines: number,
+): number {
+  const lines = textLines >= 2 ? 3 : 4;
+  const systems = staves > 1 ? Math.max(1, Math.floor(lines / 2)) : lines;
+  return Math.max(1, Math.min(pageBars, Math.max(1, barsPerLine) * systems));
+}
+
 export type ModelOutcome =
   | { ok: true; model: WorkbenchModel; result: EvalSuccess }
   | { ok: false; error: GraderErrorInfo; result: EvalResult };
@@ -143,8 +338,12 @@ export interface ModelOptions {
   key: KeySpec | null;
   /** Staff to engrave; `false` skips notation. */
   staff: StaffKind | false;
-  /** Lyric line under the staff. */
+  /** Rhythm counts under a percussion staff (the old single lyric line; degrees and syllables: `annotations`). */
   staffLabels?: "none" | "degree" | "solfege" | "counts";
+  /** Annotation lines under the staff (the lenses, or a lesson step's `staffLabels`). */
+  annotations?: AnnotationKinds;
+  /** Whose key labels the notes: the code's `.scale()` first (views, default) or the declared key (grading). */
+  keyPrefer?: "code" | "declared";
   /** Most bars engraved at a time (the staff is the slow view; longer loops page). Default 8. */
   maxStaffBars?: number;
 }
@@ -153,7 +352,7 @@ function meterSpec(m: MeterId | MeterSpec): MeterSpec {
   return typeof m === "string" ? METERS[m] : m;
 }
 
-/** The key context: the declared key, else the first `.scale()` context of the learner's events. */
+/** Wave 2's key context (the declared key, else the first `.scale()`); views now read `keySpans`. */
 export function keyContext(declared: KeySpec | null, events: readonly NEvent[]): KeySpec | null {
   if (declared) return declared;
   for (const e of events) {
@@ -171,7 +370,19 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
   const n = normalize(result, { meter: meter.id });
   const learner = n.all;
   const all: NEvent[] = [...learner, ...n.band];
-  const key = keyContext(opts.key, learner);
+  // A key guessed from a handful of letter-name notes would label them wrongly as often as not: an estimate
+  // is used only with at least ESTIMATE_MIN_NOTES pitched notes to go on (as the staff's own key estimate).
+  const pitchedCount = learner.filter((e) => e.midi !== null).length;
+  const keyContexts = trackKeyContexts(n, {
+    declared: opts.key,
+    prefer: opts.keyPrefer ?? "code",
+    ignoreScaleCtx: transposedAfterScale(code),
+  }).map((c) =>
+    pitchedCount >= ESTIMATE_MIN_NOTES ? c : { ...c, spans: c.spans.filter((s) => s.source !== "estimate") },
+  );
+  const keySpans = pieceKeySpans(keyContexts, result.tracks);
+  const key = keySpans[0]?.key ?? opts.key ?? keyContext(null, learner);
+  const spellings = spellingOf(all);
   const trackIndex = new Map(result.tracks.map((t, i) => [t, i] as const));
 
   const events: ViewEvent[] = all.map((e) => {
@@ -195,7 +406,16 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
       bar: pos.bar,
       beat: pos.beat,
       beatLabel: pos.label,
-      label: e.midi === null ? null : pitchLabel(e.midi, key, chord),
+      label:
+        e.midi === null
+          ? null
+          : pitchLabel(
+              e.midi,
+              keyAt(keyContexts, e.track, e.onset),
+              chord,
+              spellings.get(e.id)?.direction,
+              spellings.get(e.id)?.written,
+            ),
       chordTone: e.midi !== null && e.chordSymbol ? chordRoleOf(e.midi, e.chordSymbol) : null,
     };
     if (e.s !== undefined) v.s = e.s;
@@ -210,12 +430,30 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
   let notationError: string | null = null;
   let staffSource: StaffSource | null = null;
   if (opts.staff !== false && learner.length > 0) {
+    const labelOf = new Map(events.map((e) => [e.id, e.label] as const));
+    const legacy = opts.staffLabels ?? "none";
+    const pitchedTracks = new Set(learner.filter((e) => e.midi !== null).map((e) => e.track));
+    // Only keys the code states (`.scale()` on every stretch of the track), never an estimate or the lesson's.
+    const trackKeySpans: Record<string, PieceKeySpan[]> = {};
+    for (const c of keyContexts) {
+      if (c.band || c.spans.length === 0 || !c.spans.every((sp) => sp.source === "scale")) continue;
+      trackKeySpans[c.track] = pieceKeySpans([c]);
+    }
     staffSource = {
       events: learner,
       meter,
       key,
+      keySpans,
+      ...(Object.keys(trackKeySpans).length > 1 ? { trackKeySpans } : {}),
       staff: opts.staff,
-      labels: opts.staffLabels ?? "none",
+      split: pitchedTracks.size > 1 ? "track" : "register",
+      labels: legacy === "counts" ? "counts" : "none",
+      annotations: opts.annotations ?? {
+        ...NO_ANNOTATIONS,
+        degree: legacy === "degree",
+        solfege: legacy === "solfege",
+      },
+      labelOf: (id) => labelOf.get(id) ?? null,
       tempoBpm: Math.round(result.bpm),
       bars: Math.max(1, result.bars),
       pageBars: Math.max(1, opts.maxStaffBars ?? STAFF_PAGE_BARS),
@@ -240,6 +478,8 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
       truncated: result.truncated,
       meter,
       key,
+      keySpans,
+      keyContexts,
       events,
       byId: new Map(events.map((e) => [e.id, e] as const)),
       score,
@@ -249,6 +489,53 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
       staffSource,
     },
   };
+}
+
+/**
+ * How each pitched event is spelled, the same way the staff spells it (`@oak/notation` `spellVoice`), so a label
+ * never contradicts the note drawn above it:
+ * - a note the code names (`note("f5")`, `note("eb4")`) keeps the code's letter and accidental — a natural
+ *   included: `f5` in G major is F♮ (♭7), never E♯ (♯6);
+ * - otherwise only a chromatic *passing* note (one note between two neighbours a step or less away, moving the
+ *   same way) is spelled by its motion (A♯ rising = ♯6, G♭ falling = ♭5; theory `labelPitch`); neighbours and
+ *   leaps keep the key's default chromatic spelling (♭3 ♯4 ♭6 ♭7 ♭2 in major).
+ * Only chromatic notes use the direction; `written` is the code's spelling (shown as the note name).
+ */
+export function spellingOf(events: readonly NEvent[]): Map<string, { direction?: 1 | -1; written?: string }> {
+  const byTrack = new Map<string, NEvent[]>();
+  for (const e of events) if (e.midi !== null) byTrack.set(e.track, [...(byTrack.get(e.track) ?? []), e]);
+  const out = new Map<string, { direction?: 1 | -1; written?: string }>();
+  for (const list of byTrack.values()) {
+    // Slots: the events of the track at one onset (a chord is one slot), in time order.
+    const slots = new Map<number, NEvent[]>();
+    for (const e of list) {
+      const at = R.toNum(e.onset);
+      slots.set(at, [...(slots.get(at) ?? []), e]);
+    }
+    const ordered = [...slots.entries()].sort((a, b) => a[0] - b[0]).map(([, es]) => es);
+    ordered.forEach((slot, i) => {
+      const single = slot.length === 1;
+      const cur = slot[0]?.midi ?? 0;
+      const prev = ordered[i - 1]?.length === 1 ? ordered[i - 1]?.[0]?.midi : undefined;
+      const next = ordered[i + 1]?.length === 1 ? ordered[i + 1]?.[0]?.midi : undefined;
+      const near = (m: number | null | undefined): m is number =>
+        m != null && m !== cur && Math.abs(m - cur) <= 2;
+      let motion: 1 | -1 | undefined;
+      if (single && near(prev) && near(next)) {
+        if (prev < cur && cur < next) motion = 1;
+        else if (prev > cur && cur > next) motion = -1;
+      }
+      for (const e of slot) {
+        const midi = Math.round(e.midi as number);
+        const w = e.pitchSource === "note-str" && e.written ? parseNote(e.written) : null;
+        if (w && w.midi === midi) {
+          const acc = w.alt > 0 ? "#".repeat(w.alt) : "b".repeat(-w.alt);
+          out.set(e.id, { written: `${w.letter}${acc}${w.oct}` });
+        } else if (motion) out.set(e.id, { direction: motion });
+      }
+    });
+  }
+  return out;
 }
 
 /** Events sounding at `cycle` (wrapped into the analysed bars): the clock → roll/staff highlight. */

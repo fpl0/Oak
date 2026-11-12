@@ -1,21 +1,35 @@
 // The first sung note (contracts §2.3 U00.L02, §8.1 rule 8; ux §8 `onb.firstSing`): Oak plays the home note,
-// the learner sings it back, and any sustained pitch within ±100¢ of it in any octave passes (the one exception to
-// the tolerance ladder; `firstSingPasses` from @oak/pitch). On a pass the note is named, calmly: it is 1, home.
+// the learner sings it back, and any sustained pitch within ±100¢ of it in any octave passes — the schema's
+// lenient tolerance (`SingTolerance.lenient`), graded by the one rule for a sung note (`gradeSungLive` while
+// listening, `gradeSung` at the end), the one exception to the ladder. On a pass the note is named, calmly: it
+// is 1, home. A take that heard no voice leaves the "re-run the quiet check" suggestion behind.
 import { toLearnerProfile } from "@oak/api";
 import type { MicSession } from "@oak/audio";
-import { firstSingPasses, type PitchFrame } from "@oak/pitch";
+import type { SingTolerance } from "@oak/content-kit";
+import { gradeSung, gradeSungLive, type PitchFrame, type SungTarget } from "@oak/pitch";
 import { Mic, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { formatNoteMidi } from "../../lib/notes.ts";
 import { Button } from "../../ui/kit/Button.tsx";
 import { Callout } from "../../ui/kit/Controls.tsx";
-import { centsWords, firstSingTonic, foldedCents, liveMidi, midiOfHz, voiced } from "../logic.ts";
+import { centsWords, firstSingTonic, liveMidi } from "../logic.ts";
 import { PitchTrace } from "../PitchTrace.tsx";
+import { RecheckHint } from "../panels.tsx";
+import { clearRecheck, reportTake } from "../recheck.ts";
 import { closeInput, openInput, playAt, voiceAudio } from "../services.ts";
 import { PartFooter, PartFrame, type PartProps, useSaveRun } from "./common.tsx";
 
 const LISTEN_SEC = 12;
 const NOTE_SEC = 1.6;
+/** U00.L02's first sing, as content declares it (`tol.lenient`; `cents` is ignored by the lenient rule). */
+export const FIRST_SING_TOL: SingTolerance = {
+  cents: "learner",
+  octave: "per-note",
+  driftCompCents: 0,
+  minCoverage: 0.4,
+  passHitRate: 1,
+  lenient: true,
+};
 
 type Phase = "intro" | "playing" | "listening" | "passed" | "missed";
 
@@ -63,6 +77,12 @@ export function FirstSingPart({ profile, onDone, onSkip }: PartProps) {
       session.current = s;
       setPhase("listening");
       const off = s.onFrame((f) => frames.current.push(f));
+      const { oak } = await voiceAudio();
+      const target: SungTarget = {
+        midi: tonic,
+        on: oak.ctx.currentTime,
+        off: oak.ctx.currentTime + LISTEN_SEC,
+      };
       const t0 = performance.now();
       const passed = await new Promise<boolean>((resolve) => {
         const iv = setInterval(() => {
@@ -72,7 +92,15 @@ export function FirstSingPart({ profile, onDone, onSkip }: PartProps) {
             return;
           }
           setNow(liveMidi(frames.current));
-          if (firstSingPasses(frames.current, tonic, learner)) {
+          const live = gradeSungLive(
+            frames.current,
+            [target],
+            FIRST_SING_TOL,
+            "pitch",
+            learner,
+            oak.ctx.currentTime,
+          );
+          if (live.notes[0]?.credit === 1) {
             clearInterval(iv);
             resolve(true);
           } else if (performance.now() - t0 > LISTEN_SEC * 1000) {
@@ -84,20 +112,18 @@ export function FirstSingPart({ profile, onDone, onSkip }: PartProps) {
       off();
       close();
       if (!alive.current) return;
+      const final = gradeSung(frames.current, [target], FIRST_SING_TOL, "pitch", learner);
       if (!passed) {
+        reportTake({ diagnostics: final.diagnostics, frames: frames.current, floorDb: profile.noiseFloorDb });
         setPhase("missed");
         return;
       }
-      // The error of the steady part: the voiced frames of the last 0.6 s, folded to the tonic.
-      const last = frames.current.at(-1)?.t ?? 0;
-      const recent = frames.current.filter((f) => f.t > last - 0.6 && voiced(f)).map((f) => midiOfHz(f.hz));
-      const sorted = recent.sort((a, b) => a - b);
-      const med = sorted[sorted.length >> 1] ?? tonic;
-      const c = Math.round(foldedCents(med, tonic));
+      clearRecheck();
+      // The error of the steady part the lenient rule found, folded to the tonic.
+      const c = Math.round(final.notes[0]?.cents ?? 0);
       setCents(c);
       setPhase("passed");
       // The resolution: the home chord under the learner's note, softly.
-      const { oak } = await voiceAudio();
       const at = oak.ctx.currentTime + 0.1;
       for (const n of [tonic - 12, tonic - 5, tonic + 4, tonic])
         playAt(oak, { s: "piano", note: n, gain: n === tonic ? 0.6 : 0.4 }, at, 2.4);
@@ -142,6 +168,7 @@ export function FirstSingPart({ profile, onDone, onSkip }: PartProps) {
             : ""}
         </Callout>
       )}
+      {phase === "missed" && <RecheckHint />}
       {phase === "missed" && (
         <Callout tone="attention" title="No steady note yet">
           Listen once more and sing a long "ooh". Any octave counts. If now is not a good time, set it up

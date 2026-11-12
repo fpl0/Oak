@@ -15,7 +15,14 @@ import {
   WINDOW_SIZE,
 } from "@oak/pitch";
 import { detectDevices } from "./devices.ts";
-import type { Calibration, CalibrationDeps, MicSession, RangeResult, TapLatencyResult } from "./types.ts";
+import type {
+  Calibration,
+  CalibrationDeps,
+  MicSession,
+  QuietCheck,
+  RangeResult,
+  TapLatencyResult,
+} from "./types.ts";
 
 /** Step lengths and counts (seconds unless stated). Exposed for the wizard's progress copy and for tests. */
 export const CALIBRATION = {
@@ -85,6 +92,32 @@ function medianMidiIn(
   return voiced.length >= 10 ? median(voiced) : null;
 }
 
+/**
+ * A quiet check: the median frame level (the noise floor) and how much of it was a voice. Someone humming or
+ * talking through the check would set the floor at their own voice, and every later take would then be cut by
+ * the voicing gate (floor + 12 dB) and read as "no voice" (Wave 2, known gap 9). The wizard measures again
+ * when `voiced` is true instead of storing that floor.
+ */
+export function quietCheckOf(frames: readonly PitchFrame[]): QuietCheck {
+  const levels = frames.map((f) => rmsDb(f.rms)).filter(Number.isFinite);
+  const floorDb = levels.length > 0 ? median(levels) : -120;
+  const tracker = new PitchTracker();
+  let voicedFrames = 0;
+  for (const f of frames) if (tracker.push(f).voiced) voicedFrames++;
+  const hop =
+    frames.length > 1
+      ? ((frames.at(-1) as PitchFrame).t - (frames[0] as PitchFrame).t) / (frames.length - 1)
+      : 0;
+  const voicedSec = voicedFrames * hop;
+  return {
+    floorDb,
+    voicedSec,
+    voiced: voicedSec >= QUIET_VOICE_SEC || (frames.length > 0 && voicedFrames / frames.length >= 0.15),
+  };
+}
+/** A voice this long during the quiet check spoils it. */
+export const QUIET_VOICE_SEC = 0.3;
+
 export interface CalibrationExtras {
   /** For tests: replaces `setTimeout` polling. */
   sleep?: (ms: number) => Promise<void>;
@@ -109,6 +142,14 @@ export function createCalibration(deps: CalibrationDeps & CalibrationExtras): Ca
     }
   }
 
+  async function noiseCheck(seconds: number = CALIBRATION.noiseFloorSec): Promise<QuietCheck> {
+    return withMic(async (s) => {
+      const from = ctx.currentTime + 0.2; // skip the first window after the stream opens
+      await wait(from + seconds);
+      return quietCheckOf(s.frames().filter((f) => f.t >= from));
+    });
+  }
+
   return {
     async outputCheck() {
       const t = ctx.currentTime + 0.1;
@@ -120,17 +161,10 @@ export function createCalibration(deps: CalibrationDeps & CalibrationExtras): Ca
     devices: () => detectDevices(ctx),
 
     async noiseFloor(seconds = CALIBRATION.noiseFloorSec) {
-      return withMic(async (s) => {
-        const from = ctx.currentTime + 0.2; // skip the first window after the stream opens
-        await wait(from + seconds);
-        const levels = s
-          .frames()
-          .filter((f) => f.t >= from)
-          .map((f) => rmsDb(f.rms))
-          .filter(Number.isFinite);
-        return levels.length > 0 ? median(levels) : -120;
-      });
+      return (await noiseCheck(seconds)).floorDb;
     },
+
+    noiseCheck,
 
     async bleedTest() {
       return withMic(async (s) => {

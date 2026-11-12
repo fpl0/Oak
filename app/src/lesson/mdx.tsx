@@ -360,6 +360,7 @@ const PART_RUNS: Record<SetupPartId, readonly CalibrationRecord["kind"][]> = {
   "sing-latency": ["sing-latency"],
   range: ["range"],
   "first-sing": ["pitch-match"],
+  match: ["pitch-match"],
 };
 
 /**

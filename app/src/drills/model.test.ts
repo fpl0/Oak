@@ -9,8 +9,10 @@ import {
   expectedValueOf,
   familyStatus,
   groupByStage,
+  isResting,
   levelChangeText,
   nextDueText,
+  optionLabel,
   pendingText,
   planDrillSet,
   setWord,
@@ -20,6 +22,7 @@ import {
   type TrialOutcome,
   tapReport,
   trialRecord,
+  wrongMarks,
 } from "./model.ts";
 
 const registry = createRegistry(families, []);
@@ -160,7 +163,10 @@ describe("widget values reach the grader in the shape it reads", () => {
         if (s.kind !== "widget" || s.spec.ui === "code") continue;
         const value = expectedValueOf(s.spec, t.expected as Answer);
         expect(value).not.toBeNull();
-        const r = grade(t, answerOf(s.spec, value as never, (t.expected as Answer).text?.length ?? 1));
+        const r = grade(
+          t,
+          answerOf(s.spec, value as never, (t.expected as Answer).text?.length ?? 1, t.expected as Answer),
+        );
         expect(r.correct).toBe(true);
       }
     });
@@ -249,7 +255,8 @@ describe("set planning", () => {
       ).length;
     expect(sung(DEFAULT_PROFILE, 3)).toBe(3);
     expect(sung(DEFAULT_PROFILE, 2)).toBe(2);
-    expect(sung({ ...DEFAULT_PROFILE, quiet: true }, 3)).toBe(0);
+    // Quiet mode keeps them: they are heard, not sung (contracts §8.5; the runner records them as quiet).
+    expect(sung({ ...DEFAULT_PROFILE, quiet: true }, 3)).toBe(3);
   });
 });
 
@@ -389,5 +396,60 @@ describe("Practice hub", () => {
     expect(familyStatus(def("fam.jzz.subs"), undefined, none)).toBe("locked");
     expect(familyStatus(pending, undefined, none)).toBe("pending");
     expect(pendingText(pending, none)).toBe("Arrives with J5");
+  });
+
+  test("a family resting in its composite reads as resting, never mastered (decision 27)", () => {
+    const d = def("fam.deg.fet-major");
+    const none = new Set<string>();
+    const resting = {
+      level: Math.max(1, d.masteryLevel - 2),
+      graduatedAt: "2026-11-01T10:00:00.000Z",
+      compositeId: "fam.mix.pitch",
+    } as never;
+    expect(isResting(d, resting)).toBe(true);
+    expect(familyStatus(d, resting, none)).toBe("resting");
+    // Back on its own card (no longer graduated): open again, at the level it left off.
+    const back = {
+      level: Math.max(1, d.masteryLevel - 2),
+      graduatedAt: null,
+      compositeId: "fam.mix.pitch",
+    } as never;
+    expect(familyStatus(d, back, none)).toBe("unlocked");
+    // Graduated at its mastery level: mastered.
+    const done = {
+      level: d.masteryLevel,
+      graduatedAt: "2026-11-01T10:00:00.000Z",
+      compositeId: "fam.mix.pitch",
+    } as never;
+    expect(isResting(d, done)).toBe(false);
+    expect(familyStatus(d, done, none)).toBe("mastered");
+  });
+
+  test("the server's restingSince decides when it is sent", () => {
+    const d = def("fam.deg.fet-major");
+    const shaped = { level: 1, graduatedAt: "2026-11-01T10:00:00.000Z", compositeId: "fam.mix.pitch" };
+    expect(isResting(d, { ...shaped, restingSince: "2026-11-01" } as never)).toBe(true);
+    // Graduated early below mastery but not resting: the server says so.
+    expect(isResting(d, { ...shaped, restingSince: null } as never)).toBe(false);
+    expect(isResting(d, { ...shaped, graduatedAt: null, restingSince: "2026-11-01" } as never)).toBe(true);
+  });
+});
+
+describe("Wave 3 review: words, not IDs; a wrong pick is marked", () => {
+  test("degree categories read as degrees", () => {
+    expect(optionLabel("deg.5")).toBe("Degree 5");
+    expect(optionLabel("deg.b6")).toBe("Degree ♭6");
+    expect(optionLabel("higher")).toBe("Higher");
+  });
+  test("a wrong degree is marked on the pick; a choice on its option", () => {
+    const pad = { ui: "degree-pad", set: ["1", "3", "5"] } as unknown as AnswerSpec;
+    expect(wrongMarks(pad, ["3"], ["5"])).toEqual([{ part: 0, ok: false }]);
+    expect(wrongMarks(pad, ["1", "3"], ["1", "5"])).toEqual([
+      { part: 0, ok: true },
+      { part: 1, ok: false },
+    ]);
+    const choice = { ui: "choice", options: [] } as unknown as AnswerSpec;
+    expect(wrongMarks(choice, ["higher"], ["lower"])).toEqual([{ part: "higher", ok: false }]);
+    expect(wrongMarks({ ui: "text" } as unknown as AnswerSpec, "C D", "C E")).toEqual([]);
   });
 });

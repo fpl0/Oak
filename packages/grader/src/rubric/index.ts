@@ -46,7 +46,11 @@ export function evaluateRubric(
       diag: d,
     });
     credits.push(ruleCredit(e));
-    if (e.extra) extra.push(...e.extra.map((x) => ({ ...x, where: { ...(x.where ?? {}), rule: rule.id } })));
+    // An optional rule speaks only through its own (info) row: its findings would otherwise print a second,
+    // error-looking line on a passing Make ("It ends on 5; the brief asks for 1" under a met brief).
+    const kept = rule.required ? e.extra : e.extra?.filter((x) => x.id === "rubric.unknown");
+    if (kept?.length)
+      extra.push(...kept.map((x) => ({ ...x, where: { ...(x.where ?? {}), rule: rule.id } })));
   }
   return { rows, extra, credits };
 }

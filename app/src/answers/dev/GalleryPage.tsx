@@ -10,9 +10,9 @@ import { graderHost } from "../../lib/grader-client.ts";
 import { Button, Card, Chip, SegmentedControl } from "../../ui/kit/index.ts";
 import { usePrefs } from "../../ui/theme/prefs.ts";
 import { buildModel, type WorkbenchModel } from "../../workbench/model.ts";
-import { type AnswerEnv, AnswerEnvProvider, appAudio, NEUTRAL_PROFILE } from "../env.tsx";
+import { type AnswerEnv, AnswerEnvProvider, appAudio, NEUTRAL_PROFILE, type QuietEvidence } from "../env.tsx";
 import { AnswerView } from "../registry.tsx";
-import { singFeedback } from "../sing.ts";
+import { singFeedback, targetLabel } from "../sing.ts";
 import { tapReport, targetSeconds } from "../tap.ts";
 import type { AnswerFeedback, AnswerValue } from "../types.ts";
 import { useThemeName } from "../ui.tsx";
@@ -78,6 +78,7 @@ function LiveWidget({ f, env }: { f: Fixture; env: AnswerEnv }) {
   const [feedback, setFeedback] = useState<AnswerFeedback>({ state: "idle" });
   const [tries, setTries] = useState(0);
   const [take, setTake] = useState<AnswerFeedback | null>(null);
+  const [quiet, setQuiet] = useState<QuietEvidence | null>(null);
   const passed = feedback.state === "correct";
   // Taps and sung notes are graded from the take (tapReport / gradeSung); the rest by the demo host.
   const liveEnv: AnswerEnv = { ...env };
@@ -91,7 +92,15 @@ function LiveWidget({ f, env }: { f: Fixture; env: AnswerEnv }) {
       },
     };
   }
-  if (env.sing) liveEnv.sing = { ...env.sing, onTake: (t) => setTake(singFeedback(t.result, ["A"])) };
+  if (env.sing) {
+    const sing = env.sing;
+    const labels = sing.notes.map((n) => targetLabel(n, sing.labels ?? "numbers"));
+    liveEnv.sing = {
+      ...sing,
+      onTake: (t) => setTake(singFeedback(t.result, labels)),
+      onQuietEvidence: setQuiet,
+    };
+  }
   const check = () => {
     if (passed || feedback.state === "pending") return;
     setFeedback({ state: "pending" });
@@ -102,6 +111,7 @@ function LiveWidget({ f, env }: { f: Fixture; env: AnswerEnv }) {
     setValue(stateOf(f, "idle").value);
     setFeedback({ state: "idle" });
     setTake(null);
+    setQuiet(null);
     setTries(0);
   };
   return (
@@ -128,12 +138,19 @@ function LiveWidget({ f, env }: { f: Fixture; env: AnswerEnv }) {
         </Button>
         <Button onClick={reset}>Reset</Button>
         {tries > 0 ? <span>{tries === 1 ? "1 check" : `${tries} checks`}</span> : null}
+        {quiet ? (
+          <span data-testid="quiet-evidence" data-modality={quiet.modality}>
+            The host received {quiet.modality} evidence (
+            {quiet.selfCheck === "heard-it" ? "heard it" : "not sure"}), no voice.
+          </span>
+        ) : null}
       </div>
     </div>
   );
 }
 
 const WIDE = new Set([
+  "staff-input",
   "keyboard",
   "grid",
   "tap",

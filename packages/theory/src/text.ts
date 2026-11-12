@@ -49,6 +49,9 @@ function normalizeIntervalText(text: string): string | null {
   let t = text.trim();
   const bare = BARE_INTERVALS[t.toLowerCase().replace(/\s+/g, " ")];
   if (bare) return bare;
+  // Strudel's own form, as written in `.transpose("3M")` (number first; a sign is a direction, not a name).
+  const strudel = /^[-+]?(\d{1,2})(P|M|m|A|d)$/.exec(t);
+  if (strudel) return parseInterval(`${strudel[2]}${strudel[1]}`) ? `${strudel[2]}${strudel[1]}` : null;
   let q: string | null = null;
   for (const [re, letter] of INTERVAL_WORDS) {
     if (re.test(t) && !/^[Mm]\d/.test(t)) {

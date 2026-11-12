@@ -51,7 +51,58 @@ export function melodySteps(
   return out;
 }
 
-/** One bar of a melody: quarters (rhythm given) or a mix of quarters, eighth pairs and a half. */
+/**
+ * A short diatonic phrase as scale steps (0 = tonic), the material of dictation, echo and sight-singing:
+ * it starts on a note of the tonic chord, moves mostly by step, leaps at most `leapMax` steps (1 = steps
+ * only, 2 = up to a 3rd), turns back by step after a leap of a 4th or more, never repeats a note, stays in
+ * [lowest, highest] and ends on 1, 3 or 5 (on 1 when `endOnTonic`), reached by step or by a skip of a 3rd.
+ */
+export function phraseSteps(
+  rng: Rng,
+  opts: { length: number; lowest: number; highest: number; leapMax: number; endOnTonic?: boolean },
+): number[] {
+  const { length, lowest, highest } = opts;
+  const leapMax = Math.max(1, opts.leapMax);
+  const inRange = (x: number) => x >= lowest && x <= highest;
+  const stable = [-7, -5, -3, 0, 2, 4, 7, 9, 11].filter(
+    (x) => inRange(x) && (opts.endOnTonic ? x % 7 === 0 : [0, 2, 4].includes(((x % 7) + 7) % 7)),
+  );
+  const starts = [0, 2, 4].filter(inRange);
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const out: number[] = [rng.pick(starts.length > 0 ? starts : [lowest])];
+    let ok = true;
+    while (out.length < length && ok) {
+      const cur = out[out.length - 1] as number;
+      const prev = out[out.length - 2];
+      const last = out.length === length - 1;
+      const moves: number[] = [];
+      const weights: number[] = [];
+      for (let m = -leapMax; m <= leapMax; m++) {
+        if (m === 0 || !inRange(cur + m)) continue;
+        // After a leap of a 4th or more, step back the other way.
+        if (
+          prev !== undefined &&
+          Math.abs(cur - prev) >= 3 &&
+          (Math.sign(m) === Math.sign(cur - prev) || Math.abs(m) > 1)
+        )
+          continue;
+        if (last && (!stable.includes(cur + m) || Math.abs(m) > 2)) continue;
+        moves.push(m);
+        weights.push(Math.abs(m) === 1 ? 4 : Math.abs(m) === 2 ? 2 : 1);
+      }
+      if (moves.length === 0) ok = false;
+      else out.push(cur + rng.weighted(moves, weights));
+    }
+    if (ok && out.length === length) return out;
+  }
+  // Fallback: a stepwise descent onto the tonic.
+  return Array.from({ length }, (_, i) => Math.min(highest, length - 1 - i));
+}
+
+/**
+ * One bar of a melody: quarters (rhythm given) or a mix of quarters, eighth pairs and halves. Halves sit on
+ * beat 1 or 3 and nothing crosses a bar line: no ties, no dots, no pickup.
+ */
 function rhythmBars(
   rng: Rng,
   notes: (number | string)[],
@@ -77,7 +128,7 @@ function rhythmBars(
         w.push(1);
         i += 2;
         beat += 1;
-      } else if (varied && r < 0.4 && beat <= 2) {
+      } else if (varied && r < 0.4 && beat % 2 === 0) {
         beats.push(atom(notes[i] as number));
         w.push(2);
         i += 1;
@@ -115,11 +166,10 @@ function melodyMaterial(ctx: GenCtx, withContext: boolean): MelodyMaterial {
   const length = ctx.rng.int(minLen, maxLen);
   const [lowest, highest] = range(ctx.level, "steps", [0, 4]);
   const leapMax = num(ctx.level, "leapMax", 1);
-  const plain = melodySteps(ctx.rng, {
+  const plain = phraseSteps(ctx.rng, {
     length,
     lowest,
     highest,
-    leaps: leapMax > 2,
     leapMax,
     endOnTonic: ctx.level.endOnTonic === true,
   });
@@ -228,6 +278,7 @@ export const melEcho: Generator = {
         mode: "sing",
         key: m.key,
         singMode: "echo",
+        cueBars: m.cueBars,
         singTargets: targets,
         responseAt: (m.cueBars + m.bars) / piece.cps,
       },

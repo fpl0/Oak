@@ -132,6 +132,19 @@ export interface GovernorConfig {
   agingPerDay: number;
   /** Sessions a week the forecast assumes: the learner's weekly goal. */
   sessionsPerWeek: number;
+  /**
+   * The wait bound of the §7.4 amendment (decision 27): a deferred family that has waited this many days is
+   * released even while the set forecast is not open (still oldest first, within the daily release cap,
+   * the 12 active slots and mic room). `null` or absent: released only while the forecast is open (the
+   * contract as written).
+   */
+  releaseAfterDays?: number | null;
+  /**
+   * Decision 27: room for a family past `releaseAfterDays` is made by resting the most stable active family
+   * below its mastery level in its composite when no family at its mastery level can graduate. Needs at
+   * least this many review sets of its own. `null` or absent: no resting (only graduation makes room).
+   */
+  restMinReps?: number | null;
 }
 export type GovernorDefaults = typeof GOVERNOR;
 
@@ -159,6 +172,11 @@ export interface ReviewItem {
   deferUntilDay?: number;
   /** A card that has never been reviewed (a released deck card): it fills only the room the due items leave. */
   fresh?: boolean;
+  /**
+   * A perceptual or production family's first set (never reviewed): planned first, before anything else,
+   * so its first review lands within the bound of decision 27 even after a break.
+   */
+  firstSet?: boolean;
   /**
    * The interval the card returns at after its next review when a cap binds it (an active family's 7-day
    * cadence). The intake forecast counts every return inside its window, not just the next one.

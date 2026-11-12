@@ -94,11 +94,15 @@ export function planWarmup(due: readonly ReviewItem[], ctx: PlanContext, cfg: Go
     chosen.add(it);
   };
 
-  // (0) The most urgent item, once it has waited two days, is planned before anything else, outside the
-  // class shares: a long set (a progression dictation, a whole song form) otherwise never fits after the
-  // other items and waits indefinitely.
-  const urgent = ranked.find((it) => !it.fresh && micOk(it)) ?? null;
-  if (urgent && !returning && today - urgent.dueDay >= URGENT_AFTER_DAYS && cost(urgent) <= limit)
+  // (0) A family's first set (decision 27: its first review is bounded in days), after a break too, then the
+  // most urgent item once it has waited two days, are planned before anything else, outside the class
+  // shares: a long set (a progression dictation, a whole song form) otherwise never fits after the other
+  // items and waits indefinitely.
+  for (const it of ranked) {
+    if (it.firstSet && !it.fresh && micOk(it) && total() + cost(it) <= limit) take(it);
+  }
+  const urgent = ranked.find((it) => !chosen.has(it) && !it.fresh && micOk(it)) ?? null;
+  if (urgent && !returning && today - urgent.dueDay >= URGENT_AFTER_DAYS && total() + cost(urgent) <= limit)
     take(urgent);
 
   // (1) The opener: a sure win.

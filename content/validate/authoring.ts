@@ -8,6 +8,7 @@ import {
   type Exercise,
   flattenExercise,
   type LessonDef,
+  type Matcher,
   type RubricRule,
   stripMarkers,
   type TermEntry,
@@ -176,14 +177,20 @@ export function lessonAuthoring(def: LessonDef, mdxSource: string | null, sample
   // Feedback in words the learner has: before U03.L02 the grader's melody feedback names scale degrees
   // and solfège ("you have 5 (sol)"), so note-name steps override it.
   const order = registries.syllabus.defaultOrder as readonly string[];
-  const beforeDegrees =
-    !sample && order.indexOf(def.id) >= 0 && order.indexOf(def.id) < order.indexOf("U03.L02");
+  const at = order.indexOf(def.id);
+  const beforeDegrees = !sample && at >= 0 && at < order.indexOf("U03.L02");
+  // Singing is on numbers until U03.L08 introduces syllables (contracts §8.3): before it, no syllable labels
+  // and no catalog text that names syllables.
+  const beforeSyllables = !sample && at >= 0 && at < order.indexOf("U03.L08");
+  issues.push(...labelIssues(def, { beforeDegrees, beforeSyllables }));
   // Test shape.
   for (const s of def.steps) {
     if (!s.exercise) continue;
     for (const e of flattenExercise(s.exercise)) {
       issues.push(...testShapeIssues(e, `${s.id}/${e.id}`));
       if (beforeDegrees) issues.push(...degreeWordIssues(e, `${s.id}/${e.id}`));
+      if (beforeSyllables) issues.push(...syllableWordIssues(e, `${s.id}/${e.id}`));
+      issues.push(...singIssues(e, `${s.id}/${e.id}`, { lesson: def.id, beforeSyllables }));
     }
     if (s.kind === "make" && (s.minutes < 2 || s.minutes > 3))
       warnings.push(`${s.id}: a Make is budgeted at 2.5–3 expert minutes (found ${s.minutes})`);
@@ -218,6 +225,68 @@ export function testShapeIssues(e: Exercise, where: string): string[] {
   }
   if (e.kind === "tap" && e.tol.windowMs !== "auto")
     issues.push(`${where}: tap tolerance is windowMs: 'auto'`);
+  return issues;
+}
+
+/** Degree and syllable labels on the roll and staff only once they are taught (AUTHORING §6, contracts §8.3). */
+export function labelIssues(
+  def: LessonDef,
+  o: { beforeDegrees: boolean; beforeSyllables: boolean },
+): string[] {
+  const issues: string[] = [];
+  for (const s of def.steps)
+    for (const [panel, labels] of [
+      ["roll", s.ui.rollLabels],
+      ["staff", s.ui.staffLabels],
+    ] as const) {
+      if (o.beforeDegrees && (labels === "degree" || labels === "degree+solfege"))
+        issues.push(`${s.id}: ${panel} labels "${labels}" before U03.L02 teaches degrees`);
+      else if (o.beforeSyllables && labels === "degree+solfege")
+        issues.push(`${s.id}: ${panel} labels "${labels}" before U03.L08 teaches the syllables`);
+    }
+  return issues;
+}
+
+/**
+ * The catalog codes whose text names solfège syllables (`{gotSyl}`, `{tonicSyl}`): overridden in
+ * `feedbackText` before U03.L08 on every step that can earn them.
+ */
+export const SYLLABLE_WORDED_CODES = { pitched: "melody.wrong-degree", sing: "sing.drift" } as const;
+
+/**
+ * Before U03.L08: a step graded on pitch rewords `melody.wrong-degree`; a sung phrase (any mode but a
+ * single `pitch` target, where nothing can drift) rewords `sing.drift`.
+ */
+export function syllableWordIssues(e: Exercise, where: string): string[] {
+  if (e.kind === "sing")
+    return e.mode === "pitch" || e.feedbackText?.[SYLLABLE_WORDED_CODES.sing]
+      ? []
+      : [
+          `${where}: before U03.L08 the grader's ${SYLLABLE_WORDED_CODES.sing} text names a syllable; override it in feedbackText (numbers only)`,
+        ];
+  const m = "matcher" in e ? e.matcher : undefined;
+  // Graded on pitch, and about pitched notes (a drum step's events matcher also names a pitch mode).
+  const notes = "reference" in e && e.reference?.solutions.some((c) => /\b(?:n|note)\(/.test(c));
+  if (!m || !isPitched(m) || !notes || e.feedbackText?.[SYLLABLE_WORDED_CODES.pitched]) return [];
+  return [
+    `${where}: before U03.L08 the grader's ${SYLLABLE_WORDED_CODES.pitched} text names syllables ("5 (sol)"); override it in feedbackText with numbers only (see U03.L02 S4)`,
+  ];
+}
+const isPitched = (m: Matcher): boolean =>
+  (m.m === "events" && m.pitch !== undefined) || m.m === "melody" || (m.m === "all" && m.of.some(isPitched));
+
+/** Sung labels and the lenient first sing (contracts §8.1 item 8, §8.3). */
+export function singIssues(
+  e: Exercise,
+  where: string,
+  o: { lesson: string; beforeSyllables: boolean },
+): string[] {
+  if (e.kind !== "sing") return [];
+  const issues: string[] = [];
+  if (o.beforeSyllables && e.labels === "syllables")
+    issues.push(`${where}: sung on syllables before U03.L08 teaches them; use labels "numbers"`);
+  if (e.tol.lenient && o.lesson !== "U00.L02")
+    issues.push(`${where}: the lenient ±100¢ sing is U00.L02's first note only (contracts §8.1 item 8)`);
   return issues;
 }
 

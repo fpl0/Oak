@@ -68,8 +68,12 @@ export async function installStubApi(page: Page, opts: StubOptions = {}): Promis
       const url = new URL(route.request().url());
       let rel = decodeURIComponent(url.pathname.replace(/^\/sounds\//, ""));
       if (rel === "manifest.json") {
+        // The version the app serves: sounds/pack.lock.json's packVersion (v2), as server/src/static.ts does.
+        const locked = (
+          JSON.parse(readFileSync(join(ROOT, "sounds/pack.lock.json"), "utf8")) as { packVersion: string }
+        ).packVersion;
         const versions = existsSync(PACK)
-          ? ["v1"].filter((v) => existsSync(join(PACK, v, "manifest.json")))
+          ? [locked].filter((v) => existsSync(join(PACK, v, "manifest.json")))
           : [];
         if (!versions[0]) return route.fulfill({ status: 404, body: "" });
         rel = `${versions[0]}/manifest.json`;

@@ -99,6 +99,30 @@ mel: n("0 2 4 5 4 2").scale("G4:major").s("triangle")`,
     bars: 1,
   },
   {
+    // Wave 3: a patterned key. Bar 1 in C major (C4 E4 G4 B4 C5), bar 2 in G major (G4 B4 D5 F#5 G5): the same
+    // degrees 1 3 5 7 1 in both bars, every label read in its own bar's key.
+    id: "patterned-keys",
+    title: "Patterned key (C, then G)",
+    code: `setcpm(84/4)
+
+mel: n("0 2 4 [6 7]").scale("<C4:major G4:major>").s("piano")`,
+    key: null,
+    meter: "4/4",
+    bars: 2,
+  },
+  {
+    // Wave 3: two registers, two tracks: a grand staff (melody on the treble staff, bass on the bass staff).
+    id: "grand",
+    title: "Melody and bass (grand staff)",
+    code: `setcpm(84/4)
+
+mel: n("<[4 2 0 2] [3 5 4 ~]>").scale("D4:major").s("piano")
+bass: n("<0 3>").scale("D2:major").s("piano")`,
+    key: null,
+    meter: "4/4",
+    bars: 2,
+  },
+  {
     // The long-form stress case (64 bars, 8 melody notes a bar over drums and a bass): the roll, the staff
     // and the highlight clock must stay smooth and in sync (e2e/runtime-review.pw.ts).
     id: "long-64",

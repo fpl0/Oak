@@ -96,7 +96,7 @@ export function CodaScreen({
           <h1 id="coda-title" className="text-h1 outline-none" tabIndex={-1}>
             Session complete. Stopping here is good practice.
           </h1>
-          <p className="max-w-[62ch] text-text-2">
+          <p className="max-w-measure text-text-2">
             You made a loop sound different by changing one number, and Oak now knows how you listen.
           </p>
         </div>

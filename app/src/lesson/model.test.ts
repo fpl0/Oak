@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 import type { Exercise, GradeResult, LessonDef, StepDef, StepState } from "@oak/api";
 import sample from "../../../content/core/_sample/L00/lesson.ts";
 import u01l01 from "../../../content/core/U01/L01/lesson.ts";
+import type { AnswerSpec } from "../answers/types.ts";
 import { answerFeedback, partMarks, revealValue } from "./feedback.ts";
 import {
   answerSpecOf,
@@ -25,6 +26,7 @@ import {
   viewsOf,
   visibleSteps,
   withParams,
+  withTrialOptions,
 } from "./model.ts";
 
 const step = (def: LessonDef, id: string) => def.steps.find((s) => s.id === id) as StepDef;
@@ -251,5 +253,39 @@ describe("locked-tool copy", () => {
       (id) => (id === "tb.mini.alt" ? "< >" : null),
     );
     expect(d.params).toMatchObject({ tool: "< >", lesson: "U01.L07" });
+  });
+});
+
+describe("a drawn trial's own choice options (U03.L01 Find home)", () => {
+  const authored = {
+    ui: "choice" as const,
+    layout: "audio-cards" as const,
+    options: [
+      { id: "C", label: "C" },
+      { id: "G", label: "G" },
+    ],
+  };
+  test("the trial's options replace the authored ones, spelled, with their audio", () => {
+    const spec = withTrialOptions(authored, {
+      params: { options: ["Bb", "D", "F"], choiceAudio: [{ id: "Bb", audio: 'note("bb3")' }] },
+    });
+    expect(spec).toEqual({
+      ui: "choice",
+      layout: "audio-cards",
+      options: [
+        { id: "Bb", label: "B♭", audio: 'note("bb3")' },
+        { id: "D", label: "D" },
+        { id: "F", label: "F" },
+      ],
+    });
+  });
+  test("no trial, or a trial without options: the authored spec", () => {
+    expect(withTrialOptions(authored, null)).toBe(authored);
+    // A drawn melody sets how many degrees the pad takes (U03.L10 S2).
+    const pad = { ui: "degree-pad", set: ["1", "2", "3"] } as AnswerSpec;
+    expect(withTrialOptions(pad, { params: { sequenceLen: 4 } })).toEqual({ ...pad, sequenceLen: 4 });
+    expect(withTrialOptions(pad, { params: {} })).toBe(pad);
+    expect(withTrialOptions(authored, { params: {} })).toBe(authored);
+    expect(withTrialOptions({ ui: "number" }, { params: { options: ["1"] } })).toEqual({ ui: "number" });
   });
 });

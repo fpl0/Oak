@@ -5,7 +5,14 @@ import type { KeySpec, MeterId, NEvent, PickupSpec, Rat, SwingSpec } from "@oak/
 import { parseRat, R } from "@oak/content-kit";
 import { evalHeadless } from "@oak/grader/testing";
 import { METERS, meterWith } from "@oak/theory";
-import { type NotationInput, type NotationWarning, notate, type StaffKind, withIds } from "../src/index.ts";
+import {
+  type AnnotationSet,
+  type NotationInput,
+  type NotationWarning,
+  notate,
+  type StaffKind,
+  withIds,
+} from "../src/index.ts";
 
 export interface CorpusEntry {
   name: string;
@@ -20,6 +27,9 @@ export interface CorpusEntry {
   pickup?: PickupSpec;
   chords?: NotationInput["chords"];
   labels?: NotationInput["labels"];
+  annotations?: AnnotationSet;
+  trackClefs?: NotationInput["trackClefs"];
+  splitMidi?: number;
   /** Simulates the grader's `_oakChord` shim: the chord symbol of each cycle. */
   chordByBar?: string[];
   /** Tracks the chord symbols belong to (default: every pitched track). */
@@ -89,6 +99,9 @@ export function inputOf(e: CorpusEntry, events: NEvent[]): NotationInput {
     ...(e.pickup ? { pickup: e.pickup } : {}),
     ...(e.chords ? { chords: e.chords } : {}),
     ...(e.labels ? { labels: e.labels } : {}),
+    ...(e.annotations ? { annotations: e.annotations } : {}),
+    ...(e.trackClefs ? { trackClefs: e.trackClefs } : {}),
+    ...(e.splitMidi !== undefined ? { splitMidi: e.splitMidi } : {}),
     ...(e.tempoBpm ? { tempoBpm: e.tempoBpm } : {}),
   };
 }
@@ -150,6 +163,114 @@ export function checkAbc(abc: string): AbcCheck {
     });
   }
   return { warnings: tune.warnings ?? [], barTotals, classes, lyrics, chordTexts };
+}
+
+const LETTERS = "CDEFGAB";
+const NATURAL = [0, 2, 4, 5, 7, 9, 11];
+const ALT: Record<string, number> = { sharp: 1, flat: -1, natural: 0, dblsharp: 2, dblflat: -2 };
+
+/** One sounding note (or chord, or drum stroke) read back from the ABC: times in whole notes from the start. */
+export interface ReadNote {
+  onset: number;
+  dur: number;
+  /** MIDI numbers low to high (pitched staves); empty on a percussion staff. */
+  midis: number[];
+  /** Heads of the element (percussion: one per drum). */
+  heads: number;
+}
+/**
+ * Reads an ABC tune back into sounding notes, independently of the emitter: abcjs.parseOnly gives the
+ * elements; the ABC rules are applied here (the key signature holds in every octave, an accidental holds
+ * for the rest of its bar in its octave, a tie continues the pitch it comes from, tuplets scale lengths),
+ * and tie chains become one note. Per staff (index in the tune) and voice.
+ */
+export function readBack(abc: string): { staves: { perc: boolean; voices: ReadNote[][] }[] } {
+  const tune = abcjs.parseOnly(abc)[0];
+  const staves: { perc: boolean; voices: ReadNote[][] }[] = [];
+  const time: number[][] = [];
+  const open: Map<string, { note: ReadNote; midi: number }>[][] = [];
+  for (const line of tune.lines) {
+    // biome-ignore lint/suspicious/noExplicitAny: abcjs parse tree
+    (line.staff ?? []).forEach((staff: any, si: number) => {
+      const st = staves[si] ?? { perc: staff.clef?.type === "perc", voices: [] };
+      staves[si] = st;
+      const sig0: Record<string, number> = {};
+      for (const a of staff.key?.accidentals ?? []) sig0[String(a.note).toUpperCase()] = ALT[a.acc] ?? 0;
+      // biome-ignore lint/suspicious/noExplicitAny: abcjs element
+      staff.voices.forEach((voice: any[], vi: number) => {
+        // An inline key change (`[K:G]`) replaces the signature from where it stands.
+        let sig: Record<string, number> = { ...sig0 };
+        const notes = st.voices[vi] ?? [];
+        st.voices[vi] = notes;
+        time[si] ??= [];
+        open[si] ??= [];
+        let t = time[si]?.[vi] ?? 0;
+        const ties = open[si]?.[vi] ?? new Map<string, { note: ReadNote; midi: number }>();
+        (open[si] as Map<string, { note: ReadNote; midi: number }>[])[vi] = ties;
+        let bar = new Map<string, number>();
+        let mult = 1;
+        let left = 0;
+        for (const el of voice) {
+          if (el.el_type === "bar") {
+            bar = new Map();
+            continue;
+          }
+          if (el.el_type === "key") {
+            sig = {};
+            for (const a of el.accidentals ?? []) sig[String(a.note).toUpperCase()] = ALT[a.acc] ?? 0;
+            continue;
+          }
+          if (el.el_type !== "note") continue;
+          if (el.startTriplet) {
+            mult = el.tripletMultiplier;
+            left = el.tripletR;
+          }
+          const dur = el.duration * (left > 0 ? mult : 1);
+          if (left > 0) left--;
+          if (el.rest) {
+            t += dur;
+            continue;
+          }
+          const pitches: { midi: number; step: string; tieIn: boolean; tieOut: boolean }[] = (
+            el.pitches ?? []
+          ).map((p: { pitch: number; accidental?: string; endTie?: boolean; startTie?: unknown }) => {
+            const letter = LETTERS[((p.pitch % 7) + 7) % 7] as string;
+            const oct = 4 + Math.floor(p.pitch / 7);
+            const step = `${letter}${oct}`;
+            let alt: number;
+            const from = p.endTie ? ties.get(step) : undefined;
+            if (p.accidental) {
+              alt = ALT[p.accidental] ?? 0;
+              bar.set(step, alt);
+            } else alt = bar.get(step) ?? sig[letter] ?? 0;
+            // A tie continues the pitch it comes from (its accidental is not restated over the bar line).
+            const midi =
+              from && !p.accidental
+                ? from.midi
+                : (oct + 1) * 12 + (NATURAL[LETTERS.indexOf(letter)] as number) + alt;
+            return { midi, step, tieIn: !!p.endTie, tieOut: !!p.startTie };
+          });
+          const midis = st.perc ? [] : pitches.map((p) => p.midi).sort((a, b) => a - b);
+          const prev = pitches.every((p) => p.tieIn) ? ties.get(pitches[0]?.step ?? "")?.note : undefined;
+          let note: ReadNote;
+          if (prev && Math.abs(prev.onset + prev.dur - t) < 1e-9) {
+            prev.dur += dur;
+            note = prev;
+          } else {
+            note = { onset: t, dur, midis, heads: pitches.length };
+            notes.push(note);
+          }
+          for (const p of pitches) {
+            if (p.tieOut) ties.set(p.step, { note, midi: p.midi });
+            else ties.delete(p.step);
+          }
+          t += dur;
+        }
+        (time[si] as number[])[vi] = t;
+      });
+    });
+  }
+  return { staves };
 }
 
 export async function runEntry(e: CorpusEntry) {

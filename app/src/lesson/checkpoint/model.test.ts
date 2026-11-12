@@ -5,7 +5,19 @@ import { describe, expect, test } from "bun:test";
 import type { CheckpointItemSpec } from "@oak/api";
 import { createRegistry, DECKS, FAMILIES, generateTrial, gradeTrial } from "@oak/drills";
 import { NEUTRAL_PROFILE } from "../grading.ts";
-import { familyAnswerSpec, familyResponse, resultCopy, scoreLocal, skillLine } from "./model.ts";
+import {
+  familyAnswerSpec,
+  familyResponse,
+  isSungTrial,
+  progressLine,
+  quietNote,
+  resultCopy,
+  reviewTitle,
+  scoreLocal,
+  skillLine,
+  sungItemScore,
+  sungTargetsOf,
+} from "./model.ts";
 
 const item = (idx: number, skillId: string, role: CheckpointItemSpec["role"]): CheckpointItemSpec =>
   ({
@@ -121,6 +133,19 @@ describe("family items", () => {
     const fet = draw("fam.deg.fet-major");
     expect(familyAnswerSpec(fet.fam.def.answer, fet.trial, fet.cats)).toMatchObject({ ui: "degree-pad" });
   });
+
+  test("intervals in a key (U04.CP): a pad with the keys of the answer, two degrees long", () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const { fam, cats, trial } = draw("fam.int.in-key", seed);
+      const spec = familyAnswerSpec(fam.def.answer, trial, cats, fam.def);
+      expect(spec?.ui).toBe("degree-pad");
+      if (spec?.ui !== "degree-pad") continue;
+      const want = trial.expected.degrees ?? [];
+      expect(want.length).toBe(2);
+      expect(spec.sequenceLen).toBe(2);
+      for (const d of want) expect(spec.set).toContain(d);
+    }
+  });
 });
 
 describe("result copy", () => {
@@ -159,5 +184,113 @@ describe("tap items", () => {
       const r = gradeTrial(fam, trial, familyResponse({ taps }, 1500, 1, p.responseAt), NEUTRAL_PROFILE);
       expect(r.credit).toBeGreaterThan(0.9);
     }
+  });
+});
+
+describe("Wave 3 checkpoint items (U03.CP, U04.CP)", () => {
+  const reg = createRegistry(FAMILIES, DECKS);
+  const draw = (id: string, level = 1, seed = 11) => {
+    const fam = reg.family(id as never);
+    const cats = fam.def.categories.map((c) => c.id);
+    return {
+      fam,
+      cats,
+      trial: generateTrial(
+        fam,
+        { index: 0, family: fam.def.id, level, category: cats[0] as string, seed },
+        NEUTRAL_PROFILE,
+        cats,
+      ),
+    };
+  };
+
+  test("reading the staff into code (fam.not.read, gated N03) gets the code surface, not 'unavailable'", () => {
+    const { fam, cats, trial } = draw("fam.not.read");
+    expect(familyAnswerSpec(fam.def.answer, trial, cats)).toBeNull();
+    expect(familyAnswerSpec(fam.def.answer, trial, cats, fam.def)?.ui).toBe("code");
+  });
+
+  test("a typed answer of several parts is split as the trial expects (spell a scale)", () => {
+    const { fam, trial } = draw("fam.key.scale-spell");
+    const typed = (trial.expected.text ?? []).join(" ");
+    const ok = gradeTrial(
+      fam,
+      trial,
+      familyResponse({ answer: { text: [typed] } }, 2000, 1, 0, trial.expected),
+      NEUTRAL_PROFILE,
+    );
+    expect(ok.credit).toBe(1);
+  });
+
+  test("a code answer goes to the drill engine as text", () => {
+    expect(familyResponse({ code: '  n("0 1")  ' }, 10, 1)).toEqual({
+      answer: { text: ['n("0 1")'] },
+      rtMs: 10,
+      replays: 1,
+    });
+  });
+
+  test("sung families are sing items with their own targets; a take on the targets scores 1", () => {
+    for (const id of ["fam.deg.sing", "fam.mel.echo", "fam.deg.resolve"]) {
+      const { trial } = draw(id);
+      expect(isSungTrial(trial)).toBe(true);
+      const targets = sungTargetsOf(trial);
+      expect(targets.length).toBeGreaterThan(0);
+      const right = sungItemScore(
+        targets.map((t) => ({ midi: t.midi, cents: 5, credit: 1 })),
+        trial,
+        50,
+      );
+      expect(right).toEqual({ score: 1, noVoice: false });
+      const silent = sungItemScore([{ midi: null, cents: null, credit: 0 }], trial, 50);
+      expect(silent.noVoice).toBe(true);
+    }
+    expect(isSungTrial(draw("fam.deg.fet-major").trial)).toBe(false);
+  });
+
+  test("sung items set aside in Quiet mode never count: level-setting skips are left out of the score", () => {
+    const items = [
+      { idx: 0, skillId: "N03", role: "gating" },
+      { idx: 1, skillId: "V02", role: "level-setting" },
+    ] as unknown as CheckpointItemSpec[];
+    const local = scoreLocal(items, new Map([[0, { score: 1, skipped: false }]]), 1);
+    expect(local.passed).toBe(true);
+    expect(local.perSkill.map((p) => p.skillId)).toEqual(["N03"]);
+    expect(quietNote(0)).toBeNull();
+    expect(quietNote(2)).toContain("2 sung items were set aside");
+    expect(quietNote(1)?.toLowerCase()).not.toMatch(/fail|miss|lost/);
+  });
+
+  test("a retake at 0.75 offers Continue anyway; the copy says 'worth another look', never 'failed'", () => {
+    const items = [0, 1, 2, 3].map((idx) => ({ idx, skillId: idx < 2 ? "S01" : "S02", role: "gating" }));
+    const recs = new Map(items.map((it) => [it.idx, { score: it.idx === 0 ? 0 : 1, skipped: false }]));
+    const second = scoreLocal(items as unknown as CheckpointItemSpec[], recs, 2);
+    expect(second.score).toBe(0.75);
+    expect(second.passed).toBe(false);
+    expect(second.softPassOffered).toBe(true);
+    expect(scoreLocal(items as unknown as CheckpointItemSpec[], recs, 1).softPassOffered).toBe(false);
+    const debt = skillLine({ skillId: "S01" as never, role: "gating", mean: 0.5, items: 2, ok: false });
+    expect(debt.text).toContain("worth another look");
+    for (const c of [
+      resultCopy({ passed: false, softPass: false }),
+      resultCopy({ passed: false, softPass: true }),
+    ])
+      expect(`${c.title} ${c.body}`.toLowerCase()).not.toMatch(/fail|debt|wrong/);
+  });
+});
+
+describe("progress and review wording", () => {
+  test("a skipped item is not counted as answered", () => {
+    const skipped = Array.from({ length: 25 }, () => ({ skipped: true }));
+    expect(progressLine(skipped, 26)).toBe("0 of 26 answered, 25 skipped");
+    expect(progressLine([{ skipped: false }, { skipped: true }], 26)).toBe("1 of 26 answered, 1 skipped");
+    expect(progressLine([{ skipped: false }], 26)).toBe("1 of 26 answered");
+    expect(reviewTitle([...skipped, { skipped: false }], 26)).toBe("1 of 26 items answered, 25 skipped");
+    expect(
+      reviewTitle(
+        Array.from({ length: 26 }, () => ({ skipped: false })),
+        26,
+      ),
+    ).toBe("All 26 items answered");
   });
 });

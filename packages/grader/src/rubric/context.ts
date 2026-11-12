@@ -11,6 +11,8 @@ export interface RubricContext extends NormalizeContext {
   totalBars?: number | null;
   /** Maps code to toolbox IDs (`toolsUsed` of the lint). Without it `uses` falls back to a source scan. */
   toolsUsed?: (code: string) => { id: string }[];
+  /** A toolbox entry's code form, so details name a tool as it is written (`toolText`). */
+  toolCode?: (id: string) => string | null;
   /** For `range: 'learner-voice'`. */
   profile?: LearnerProfile;
   /** Evaluated reference for a `matches` rule; the grade pipeline evaluates it before the rubric runs. */

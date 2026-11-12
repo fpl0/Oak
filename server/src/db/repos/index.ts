@@ -11,6 +11,7 @@ import { GymRepo, SessionsRepo } from "./sessions.ts";
 import { SrsRepo } from "./srs.ts";
 import { StreakRepo } from "./streak.ts";
 import { TutorRepo } from "./tutor.ts";
+import { IdempotencyRepo, SungNotesRepo, VoiceRepo } from "./voice.ts";
 
 export interface Repos {
   db: Db;
@@ -35,6 +36,9 @@ export interface Repos {
   ops: OpsRepo;
   onboarding: OnboardingRepo;
   listen: ListenRepo;
+  idempotency: IdempotencyRepo;
+  voice: VoiceRepo;
+  sung: SungNotesRepo;
 }
 
 export function createRepos(db: Db, defaults: { timezone: string; now: () => Date }): Repos {
@@ -61,6 +65,9 @@ export function createRepos(db: Db, defaults: { timezone: string; now: () => Dat
     ops: new OpsRepo(db),
     onboarding: new OnboardingRepo(db),
     listen: new ListenRepo(db),
+    idempotency: new IdempotencyRepo(db),
+    voice: new VoiceRepo(db),
+    sung: new SungNotesRepo(db),
   };
 }
 
@@ -71,6 +78,7 @@ export {
   CapstonesRepo,
   CheckpointsRepo,
   GymRepo,
+  IdempotencyRepo,
   LessonsRepo,
   ListenRepo,
   MasteryRepo,
@@ -82,8 +90,10 @@ export {
   SketchesRepo,
   SrsRepo,
   StreakRepo,
+  SungNotesRepo,
   TermsRepo,
   TranscriptionsRepo,
   TutorRepo,
   UnlocksRepo,
+  VoiceRepo,
 };

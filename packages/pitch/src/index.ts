@@ -22,12 +22,17 @@ export {
   LADDER_MIN_NOTES,
   LADDER_THRESHOLDS,
   LADDER_WINDOW_DAYS,
+  type LadderNote,
   type LadderOptions,
+  type LadderSnapshot,
+  type LadderSnapshotInput,
   ladderProgress,
+  ladderSnapshot,
   loosenOffer,
   looserTolerance,
   nextSingTolerance,
   SING_TOL_LADDER,
+  singDayStats,
 } from "./ladder.ts";
 export {
   centsFrom,
@@ -53,9 +58,22 @@ export {
   fitToRange,
   gradeSung,
   gradeSungLive,
+  LENIENT_CENTS,
+  LENIENT_SPAN_SEC,
+  MAX_LATE_START_SEC,
   resolveSingTolerance,
   sungCredit,
 } from "./sung.ts";
+export {
+  CLIP_LEVEL,
+  CLIP_MIN_FRAMES,
+  HOLD_SEC,
+  type TakeHeard,
+  type TakeQuality,
+  takeQuality,
+  VOICE_LIKE_ABOVE_FLOOR_DB,
+  VOICE_LIKE_CLARITY,
+} from "./take.ts";
 export {
   alignTaps,
   calibrateTapLatency,

@@ -447,6 +447,10 @@ export class LibraryService {
     } else if (body.sourceKind === "pd-song") {
       const song = this.ctx.content.source.songs.find((s) => s.id === body.songId);
       if (song === undefined) throw notFound(`song ${body.songId ?? ""}`);
+      // A song whose answer key no human has checked against its cited edition is never offered: grading a
+      // transcription against an unchecked key could mark the learner's right notes wrong.
+      if (/^pending\b/i.test(song.verifiedBy))
+        throw conflict(`${song.title} is not available yet: its answer key has not been checked`);
       Object.assign(base, {
         songId: song.id,
         key: song.key,

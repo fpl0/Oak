@@ -12,6 +12,7 @@ import {
   whereText,
 } from "./feedback.ts";
 import { isBlack, keyboardRange, keyRects, typedMidi } from "./keyboard-layout.ts";
+import { pageBarsFor } from "./model.ts";
 import { chordRoleOf, chordToneOf, pitchLabel, rowLabel, tooltipText } from "./music.ts";
 import { degreeSwatch, functionColor, hatchOf, partColor, prettyDegree } from "./palette.ts";
 import {
@@ -338,5 +339,20 @@ describe("long rolls stay legible (runtime review: 64 bars)", () => {
     const L = layoutRoll([], { width: 600, meter: METERS["4/4"], key: null, bars: 1 });
     expect(L.grid.filter((g) => g.kind === "bar").every((g) => g.label)).toBe(true);
     expect(L.grid.some((g) => g.kind === "sub")).toBe(true);
+  });
+});
+
+describe("staff pages with lens lines (pageBarsFor)", () => {
+  test("at most four lines of music, three under two or more lens lines, half for a grand staff", () => {
+    // One bar a line (a narrow host, names under busy bars): 4 bars a page, 3 with two text lines.
+    expect(pageBarsFor(8, 1, 1, 1)).toBe(4);
+    expect(pageBarsFor(8, 1, 1, 3)).toBe(3);
+    expect(pageBarsFor(8, 2, 1, 3)).toBe(6);
+    expect(pageBarsFor(8, 1, 2, 1)).toBe(2);
+    expect(pageBarsFor(8, 1, 2, 2)).toBe(1);
+    // Never more than the source's own page; never below one bar.
+    expect(pageBarsFor(8, 4, 1, 1)).toBe(8);
+    expect(pageBarsFor(2, 4, 1, 3)).toBe(2);
+    expect(pageBarsFor(8, 0, 2, 3)).toBe(1);
   });
 });

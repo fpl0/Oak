@@ -7,7 +7,14 @@ import { clsx } from "clsx";
 import { useContent } from "../../lib/content.ts";
 import { formatDate, formatMonth } from "../../lib/format.ts";
 import { usePageTitle } from "../../lib/nav.ts";
-import { useBootstrap, useCourseProgress, useProgressReport, useStreak } from "../../lib/queries.ts";
+import {
+  useBootstrap,
+  useCourseProgress,
+  useProgressReport,
+  useStreak,
+  useTodayPlan,
+  useVoiceState,
+} from "../../lib/queries.ts";
 import {
   Card,
   Chip,
@@ -19,7 +26,17 @@ import {
   Skeleton,
 } from "../../ui/kit/basics.tsx";
 import { ErrorState, LoadingState } from "../../ui/kit/QueryState.tsx";
-import { formatMinutes, ledger, MILESTONE_BANNER, practiceTime, unitProgress } from "../progress-model.ts";
+import { courseEdge, edgeLead } from "../edge.ts";
+import {
+  EVIDENCE_LABEL,
+  formatMinutes,
+  ledger,
+  ledgerCounts,
+  type MilestoneRow,
+  milestoneTimeline,
+  practiceTime,
+  unitProgress,
+} from "../progress-model.ts";
 import { restsLine, streakLine, weekStatusLabel } from "../streak-model.ts";
 
 const AREAS = ["hear", "read", "write", "compose", "transcribe", "sing", "code"] as const;
@@ -50,10 +67,17 @@ const CP_LABEL = {
 function CourseCard() {
   const content = useContent();
   const course = useCourseProgress();
+  const plan = useTodayPlan();
   if (course.isError) return <ErrorState error={course.error} onRetry={() => void course.refetch()} />;
   if (!course.data || !content.data?.syllabus) return <LoadingState rows={3} label="Loading the course" />;
   const units = unitProgress(content.data.syllabus, course.data);
   const shown = units.filter((u, i) => u.done > 0 || u.inProgress || i < 3);
+  const edge = courseEdge(
+    course.data,
+    content.data.syllabus,
+    new Set(content.data.lessons.map((l) => l.id as string)),
+    plan.data ?? null,
+  );
   return (
     <Card className="p-4" data-testid="progress-course">
       <div className="mb-3 flex items-baseline justify-between gap-3">
@@ -62,6 +86,25 @@ function CourseCard() {
           {course.data.mapDone} of {course.data.mapTotal} sessions on the map
         </span>
       </div>
+      {edge && (
+        <div
+          className="mb-3 rounded-control border border-accent/40 bg-lane-in px-3 py-2"
+          data-testid="progress-edge"
+        >
+          <p className="font-medium">You have reached the edge of what's written.</p>
+          <p className="text-sm text-text-2">
+            {edgeLead(edge)}{" "}
+            <Link to="/practice" className="text-link underline-offset-2 hover:underline">
+              Practice
+            </Link>{" "}
+            and{" "}
+            <Link to="/studio" className="text-link underline-offset-2 hover:underline">
+              Studio
+            </Link>{" "}
+            are open any time.
+          </p>
+        </div>
+      )}
       <ul className="flex flex-col gap-3">
         {shown.map((u) => (
           <li key={u.unitId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1">
@@ -70,7 +113,11 @@ function CourseCard() {
             </span>
             <span className="text-sm text-text-2">
               {u.done} of {u.total} lessons
-              {u.checkpoint ? ` · ${CP_LABEL[u.checkpoint.status]}` : ""}
+              {edge?.nextUnit?.id === u.unitId
+                ? " · being written"
+                : u.checkpoint
+                  ? ` · ${CP_LABEL[u.checkpoint.status]}`
+                  : ""}
             </span>
             <Progress
               value={u.done}
@@ -97,6 +144,8 @@ function CourseCard() {
 function Ledger() {
   const content = useContent();
   const report = useProgressReport();
+  const voice = useVoiceState();
+  const quiet = voice.data?.quiet === true;
   if (report.isError) return <ErrorState error={report.error} onRetry={() => void report.refetch()} />;
   if (content.isPending || report.isPending) return <LoadingState rows={5} label="Loading the ledger" />;
   const rows = ledger(report.data.canDo);
@@ -113,26 +162,43 @@ function Ledger() {
       {AREAS.map((area) => {
         const defs = content.data?.candos.filter((c) => c.area === area) ?? [];
         if (defs.length === 0) return null;
-        const got = defs.filter((d) => rows.has(d.id)).length;
+        const counts = ledgerCounts(defs, rows);
         return (
           <Card key={area} className="p-4" data-testid={`ledger-${area}`}>
-            <div className="mb-2 flex items-baseline justify-between gap-3">
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3">
               <h2 className="text-h3">{AREA_LABEL[area]}</h2>
-              <span className="text-sm text-text-3">
-                {got} of {defs.length}
+              <span className="text-sm text-text-3" data-testid={`ledger-${area}-counts`}>
+                {counts.shown} of {counts.total} shown
+                {counts.shown > 0 ? ` · ${counts.solid} solid or strong` : ""}
               </span>
             </div>
+            {area === "sing" && quiet && (
+              <p className="mb-1 text-sm text-text-2" data-testid="ledger-sing-quiet">
+                Quiet mode is on: these wait for the microphone. Nothing else does.
+              </p>
+            )}
             <ul className="divide-y divide-border">
               {defs.map((d) => {
                 const e = rows.get(d.id);
                 const status = e?.latest.status ?? "not-yet";
                 return (
                   <li key={d.id} className="flex items-center justify-between gap-3 py-2">
-                    <span className={clsx(!e && "text-text-2")}>{d.statement}</span>
-                    <span className="flex shrink-0 items-center gap-2">
-                      {e && <span className="text-sm text-text-3">since {formatDate(e.firstAt, true)}</span>}
-                      <Chip tone={STATUS_TONE[status]}>{status === "not-yet" ? "not yet" : status}</Chip>
+                    <span className="min-w-0">
+                      <span className={clsx("block", !e && "text-text-2")}>{d.statement}</span>
+                      {e && (
+                        <span className="block text-sm text-text-3">
+                          since {formatDate(e.firstAt, true)} · latest from{" "}
+                          {EVIDENCE_LABEL[e.latest.evidenceKind]}
+                        </span>
+                      )}
                     </span>
+                    <Chip tone={STATUS_TONE[status]} className="shrink-0">
+                      {status === "not-yet"
+                        ? area === "sing" && quiet
+                          ? "waits for the mic"
+                          : "not yet"
+                        : status}
+                    </Chip>
                   </li>
                 );
               })}
@@ -141,6 +207,60 @@ function Ledger() {
         );
       })}
     </>
+  );
+}
+
+function MilestoneItem({ m, tone }: { m: MilestoneRow; tone: "reached" | "next" | "ahead" }) {
+  return (
+    <li
+      className={clsx(
+        "flex flex-col gap-0.5",
+        tone === "next" && "rounded-control border border-accent/50 bg-lane-in px-3 py-2",
+      )}
+      data-milestone={m.id}
+      data-state={tone}
+    >
+      <span className="flex items-baseline justify-between gap-2">
+        <span className={clsx(tone === "ahead" ? "text-text-3" : "font-medium")}>{m.title}</span>
+        <span className="shrink-0 text-sm text-text-3">
+          {m.reachedAt ? formatDate(m.reachedAt, true) : tone === "next" ? "next" : ""}
+        </span>
+      </span>
+      {tone !== "ahead" && <span className="text-sm text-text-2">{m.description}</span>}
+    </li>
+  );
+}
+
+function Milestones({ milestones }: { milestones: readonly MilestoneRow[] }) {
+  const t = milestoneTimeline(milestones);
+  return (
+    <div className="flex flex-col gap-3">
+      {t.reached.length === 0 && t.next && (
+        <p className="text-sm text-text-2">None reached yet. The first comes with your first album track.</p>
+      )}
+      {t.reached.length > 0 && (
+        <ol className="flex flex-col gap-2" aria-label="Reached">
+          {t.reached.map((m) => (
+            <MilestoneItem key={m.id} m={m} tone="reached" />
+          ))}
+        </ol>
+      )}
+      {t.next && (
+        <ol aria-label="Next">
+          <MilestoneItem m={t.next} tone="next" />
+        </ol>
+      )}
+      {t.ahead.length > 0 && (
+        <details className="text-sm">
+          <summary className="cursor-pointer text-text-2">Later ({t.ahead.length})</summary>
+          <ol className="mt-2 flex flex-col gap-1.5">
+            {t.ahead.map((m) => (
+              <MilestoneItem key={m.id} m={m} tone="ahead" />
+            ))}
+          </ol>
+        </details>
+      )}
+    </div>
   );
 }
 
@@ -241,24 +361,12 @@ export function ProgressPage() {
             <h2 className="mb-2 text-h3">Milestones</h2>
             {report.data ? (
               report.data.milestones.length === 0 ? (
-                <p className="text-sm text-text-2">
-                  The first milestone is "You can make a beat": it comes with your first album track.
-                </p>
+                <p className="text-sm text-text-2">The course defines no milestones yet.</p>
               ) : (
-                <ol className="flex flex-col gap-1.5">
-                  {report.data.milestones.map((m) => (
-                    <li
-                      key={m.id}
-                      className={clsx("flex justify-between gap-2", !m.reachedAt && "text-text-3")}
-                    >
-                      <span>{MILESTONE_BANNER[m.id] ?? m.id}</span>
-                      <span className="shrink-0 text-sm">
-                        {m.reachedAt ? formatDate(m.reachedAt, true) : "ahead"}
-                      </span>
-                    </li>
-                  ))}
-                </ol>
+                <Milestones milestones={report.data.milestones} />
               )
+            ) : report.isError ? (
+              <ErrorState error={report.error} onRetry={() => void report.refetch()} />
             ) : (
               <Skeleton className="h-20 w-full" />
             )}

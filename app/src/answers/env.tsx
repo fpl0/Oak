@@ -2,8 +2,8 @@
 // learner's calibration for taps and singing, the music a click question points into, the notes to sing, the
 // take's timing. A host wraps the widget in `<AnswerEnvProvider value={…}>`; every field is optional and a
 // widget that lacks what it needs says so in words instead of showing a dead control.
-import type { Choice, LearnerProfile, SingMode, SingTolerance } from "@oak/content-kit";
-import type { SungResult } from "@oak/pitch";
+import type { Choice, LearnerProfile, MeterSpec, SingMode, SingTolerance } from "@oak/content-kit";
+import type { PitchFrame, SungResult } from "@oak/pitch";
 import { createContext, type ReactNode, useContext } from "react";
 import type { WorkbenchModel } from "../workbench/model.ts";
 import type { SingNote } from "./sing.ts";
@@ -16,6 +16,11 @@ export interface AnswerAudio {
   playNote(midi: number | readonly number[], o?: { sound?: string; dur?: number }): void;
   /** A metronome click at an AudioContext time (`accent` on the downbeat). */
   click(at: number, accent?: boolean): void;
+  /**
+   * A singing reference (`@oak/strudel/reference`): home, or the chords that set it, the same sound every sung
+   * trial hears. Optional: a host without it gets the piano through `playNote`.
+   */
+  reference?(kind: "tonic" | "cadence", tonicMidi: number, mode?: "major" | "minor"): void;
 }
 
 /** A tap take (contracts §8.4, ux §4.4). Targets are drawn only after an attempt (feedback not idle). */
@@ -56,6 +61,8 @@ export interface SingTake {
   result: SungResult;
   startAt: number;
   frames: number;
+  /** The take's pitch frames, for a host that checks the room (`reportTake` in app/src/voice/recheck.ts). */
+  pitchFrames?: readonly PitchFrame[];
 }
 
 /** A sing take (contracts §8.1, ux §4.3). */
@@ -71,6 +78,20 @@ export interface SingEnv {
   leadIn?: number;
   /** Plays the reference (tonic, target) before the take; resolves when it has finished. */
   playCue?: () => Promise<void>;
+  /**
+   * Wave 3: what the lane prints under each target (contracts §8.3, `VoiceState.labels`): numbers until U03.L08,
+   * then number and syllable. Default numbers.
+   */
+  labels?: "numbers" | "syllables";
+  /** Wave 3: the tolerance the server's ladder holds (`VoiceState.ladder.cents`); wins over the profile's. */
+  tolCents?: LearnerProfile["singTolCents"];
+  /** Wave 3: a count-in before the first target, clicked and shown as numerals (replaces `leadIn`). */
+  countIn?: { beats: number; bpm: number };
+  /**
+   * Wave 3: the reference the learner can ask for before singing: home (the tonic, MIDI) and, with `chords`, a
+   * few chords that set it (I IV V I). The take's notes are in this key.
+   */
+  reference?: { tonic: number; mode?: "major" | "minor"; chords?: boolean };
   /** "Quiet mode": listen and self-check instead (contracts §8.5). */
   onQuietEvidence?: (evidence: QuietEvidence) => void;
   /** Plays the target notes for the Quiet-mode self-check. */
@@ -79,9 +100,13 @@ export interface SingEnv {
   onTake?: (take: SingTake) => void;
 }
 
-/** What a Quiet-mode self-check reports: no voice evidence, no penalty (contracts §8.5). */
+/**
+ * What a Quiet-mode self-check reports: no voice evidence, no penalty (contracts §8.5). `quiet` when Quiet mode is
+ * on (`AnswerEnv.quiet`, from `voice.get`); `fallback` when the mic was blocked or missing, or the learner chose
+ * "Can't sing now". Never mic evidence: the widget's value stays empty.
+ */
 export interface QuietEvidence {
-  modality: "fallback";
+  modality: "quiet" | "fallback";
   /** The learner's own report after hearing it in their head. */
   selfCheck: "heard-it" | "not-sure";
   at: number;
@@ -109,6 +134,18 @@ export interface AnswerEnv {
   choiceThumb?: (choice: Choice) => ReactNode;
   /** Keyboard pick: the typing-row octave and the sound. */
   keyboard?: { octave?: number; sound?: string };
+  /** Staff input: the meter the answer is written in (default 4/4) and the sound of a placed note. */
+  staff?: { meter?: MeterSpec; sound?: string };
+  /**
+   * The note-label lenses the learner has on (wave3.md §4.3: the host passes `useLenses().shown`). Widgets only
+   * read them: a degree pad shows syllables when the solfège lens is on. Absent: no lens.
+   */
+  lenses?: { degrees: boolean; solfege: boolean; noteNames: boolean };
+  /**
+   * What Enter does to the answer, as a verb for the key hints: "check" (default), or "save" in a checkpoint,
+   * which stores the answer without grading it.
+   */
+  submitVerb?: "check" | "save";
 }
 
 const EnvContext = createContext<AnswerEnv>({});
@@ -119,6 +156,11 @@ export function AnswerEnvProvider({ value, children }: { value: AnswerEnv; child
 
 export function useAnswerEnv(): AnswerEnv {
   return useContext(EnvContext);
+}
+
+/** The verb of the Enter key hint ("check", or "save" in a checkpoint). */
+export function useSubmitVerb(): "check" | "save" {
+  return useContext(EnvContext).submitVerb ?? "check";
 }
 
 /** A neutral profile (comfortable range around A3–E4, uncalibrated) for hosts without one. */
@@ -163,5 +205,14 @@ export const appAudio: AnswerAudio = {
         { at, exclusive: false },
       );
     });
+  },
+  reference(kind, tonicMidi, mode = "major") {
+    void Promise.all([import("../lib/oak.ts"), import("@oak/strudel/reference")]).then(
+      async ([{ getOak }, ref]) => {
+        const oak = await getOak();
+        const plan = kind === "tonic" ? ref.tonicPlan(tonicMidi) : ref.cadencePlan(tonicMidi, { mode });
+        oak.playEvents(plan, { exclusive: false });
+      },
+    );
   },
 };

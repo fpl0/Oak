@@ -364,3 +364,48 @@ describe("the Make", () => {
     expect(stepId(actor)).toBe("S8");
   });
 });
+
+describe("idempotency keys (wave3.md §5.2)", () => {
+  test("each Check gets its own key; a retry of the same answer after a failed save keeps it", async () => {
+    let n = 0;
+    const calls: AttemptInput[] = [];
+    let fail = true;
+    const { deps } = fakeDeps();
+    deps.newKey = () => `key-${++n}-abcdef`;
+    deps.postAttempt = async (a) => {
+      calls.push(a);
+      if (fail) throw new Error("offline");
+      return { state: stateOf(a.stepId, { attempts: 1, passed: a.result.status === "pass" }), testedOut: [] };
+    };
+    const actor = createActor(lessonMachine, {
+      input: { lessonId: u01l01.id, target: 20, sessionId: null, deps },
+    }).start();
+    actor.send({ type: "LOADED", lesson: u01l01, resumeStep: "S6", splitPart: null });
+    submit(actor, u01l01, "S6", "fail", { code: "a" });
+    await waitFor(actor, (s) => s.matches({ active: "idle" }));
+    // The save failed: the same answer again is the same action.
+    submit(actor, u01l01, "S6", "fail", { code: "a" });
+    await waitFor(actor, (s) => s.matches({ active: "idle" }));
+    expect(calls.map((c) => c.idempotencyKey)).toEqual(["key-1-abcdef", "key-1-abcdef"]);
+    // A different answer is a new Check with a new key; once saved, the same answer again is new too.
+    fail = false;
+    submit(actor, u01l01, "S6", "fail", { code: "b" });
+    await waitFor(actor, (s) => s.matches({ active: "idle" }));
+    submit(actor, u01l01, "S6", "fail", { code: "b" });
+    await waitFor(actor, (s) => s.matches({ active: "idle" }));
+    expect(calls.map((c) => c.idempotencyKey)).toEqual([
+      "key-1-abcdef",
+      "key-1-abcdef",
+      "key-2-abcdef",
+      "key-3-abcdef",
+    ]);
+    expect(actor.getSnapshot().context.attemptKeys).toEqual({});
+  });
+
+  test("keys default to random URL-safe strings the API accepts", async () => {
+    const { actor, calls } = start(u01l01, { resume: "S6" });
+    submit(actor, u01l01, "S6", "pass");
+    await waitFor(actor, (s) => s.matches({ active: "idle" }));
+    expect(calls.attempts[0]?.idempotencyKey).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+  });
+});

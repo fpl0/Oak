@@ -100,6 +100,7 @@ export const CONTROL_CASES: ControlCase[] = [
     withCode: `stack(${ARP}.orbit(1), s("~ bd ~ bd").orbit(2).duckorbit(1).duckdepth(1))`,
   },
   { id: "tb.velocity", control: "velocity", value: 0.3 },
+  { id: "tb.gain", control: "gain", value: 0.3 },
   // Known silent no-ops (contracts §3.1 rule 7): never taught; listed so a Strudel update that changes them shows.
   { id: "noop.leslie", control: "leslie", value: 1 },
   { id: "noop.lrate", control: "lrate", value: 4 },
@@ -151,4 +152,49 @@ export const SOUND_CASES: SoundCase[] = [
   pitched("snd.mutetpt", "mutetpt", "c4 e4 g4 c5"),
   pitched("snd.clav", "clav"),
   pitched("snd.choir", "choir"),
+];
+
+/** A pitched alias the sound-quality harness measures: tuning at `notes`, clicks at `clickNote`, loudness of `phrase`. */
+export interface QualityCase {
+  id: string;
+  sound: string;
+  /** MIDI notes whose fundamental is checked: A1/A2/A3 for basses, A2/A3/A4 or A3/A4 for the rest. */
+  notes: number[];
+  clickNote: number;
+  phrase: string;
+  /** Used by U03–U04 (the Band's jazz-soul and indie kits, and U03.L11): asserted, not only reported. */
+  wave3: boolean;
+}
+
+const q = (sound: string, notes: number[], phrase: string, wave3 = false): QualityCase => ({
+  id: `snd.${sound}`,
+  sound,
+  notes,
+  clickNote: notes[1] ?? (notes[0] as number),
+  phrase: `note("${phrase}").s("${sound}")`,
+  wave3,
+});
+const MID = "c4 e4 g4 c5";
+const LOW = "c2 e2 g2 c3";
+
+export const QUALITY_CASES: QualityCase[] = [
+  q("piano", [45, 57, 69], MID, true),
+  q("rhodes", [45, 57, 69], MID, true),
+  q("acgtr", [45, 57, 69], MID, true),
+  q("upright", [33, 45, 57], LOW, true),
+  q("ebass", [33, 45, 57], LOW, true),
+  q("organ", [45, 57, 69], MID),
+  q("jazzgtr", [45, 57, 69], MID),
+  q("cleangtr", [45, 57, 69], MID),
+  q("crunch", [45, 57, 69], "e3 g3 b3 e4"),
+  q("strings", [45, 57, 69], MID),
+  q("horns", [57, 69], MID),
+  q("tenor", [57, 69], MID),
+  q("fingerbass", [33, 45, 57], LOW),
+  q("trumpet", [57, 69], MID),
+  q("mutetpt", [57, 69], MID),
+  q("vibes", [57, 69, 81], MID),
+  q("clav", [45, 57, 69], MID),
+  q("pad", [45, 57, 69], MID),
+  q("choir", [45, 57, 69], MID),
 ];

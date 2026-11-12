@@ -10,15 +10,19 @@ import { useContent } from "../../lib/content.ts";
 import { lessonTitles, titleOf } from "../../lib/content-model.ts";
 import { usePageTitle } from "../../lib/nav.ts";
 import { useBootstrap, useTodayPlan } from "../../lib/queries.ts";
+import { useHotkeys } from "../../ui/keys/KeymapProvider.tsx";
 import { Button } from "../../ui/kit/Button.tsx";
-import { Card, Page } from "../../ui/kit/basics.tsx";
+import { Card, Kbd, Page } from "../../ui/kit/basics.tsx";
 import { ErrorState, LoadingState } from "../../ui/kit/QueryState.tsx";
 import { useRunnerNavigator, useRunnerView } from "../hooks.ts";
+
+const useRunnerViewState = () => sessionRunner.view.getState();
+
 import { sessionRunner } from "../live.ts";
 import { useSession } from "../store.ts";
 import { CapstoneView, CheckpointView, LessonView, RouteHandoff, WarmupView } from "./BlockViews.tsx";
 import { RecapCard } from "./RecapCard.tsx";
-import { SessionHeader } from "./SessionHeader.tsx";
+import { PAUSE_KEY_LABEL, PAUSE_KEYS, SessionHeader } from "./SessionHeader.tsx";
 import { SketchBlock } from "./SketchBlock.tsx";
 
 function Paused() {
@@ -40,7 +44,7 @@ function Paused() {
           icon={<Play aria-hidden className="size-4" />}
           data-testid="resume"
         >
-          Resume
+          Resume <Kbd tone="inverse">{PAUSE_KEY_LABEL}</Kbd>
         </Button>
       </Card>
     </div>
@@ -116,6 +120,18 @@ export function SessionHost() {
     if (lessonWrapping && block === "new" && plan?.kind === "lesson" && plan.main?.splitPart !== "A")
       sessionRunner.wrapUp();
   }, [lessonWrapping, block, plan]);
+
+  useHotkeys([
+    {
+      id: "session-pause",
+      keys: PAUSE_KEYS,
+      scope: "global",
+      group: "Session",
+      description: "Pause or resume the session",
+      when: () => live && block !== null && block !== "coda",
+      run: () => (useRunnerViewState().paused ? sessionRunner.resumeClock() : sessionRunner.pause()),
+    },
+  ]);
 
   // No session in this tab (a reload, a bookmark): resume the one open today, or go back to Today.
   useEffect(() => {

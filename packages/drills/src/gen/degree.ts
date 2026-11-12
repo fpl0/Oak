@@ -23,11 +23,13 @@ import {
   cueOf,
   type GenCtx,
   type Generator,
+  metKeys,
   num,
   pickKey,
   pickSound,
   pickTempo,
   silentTrial,
+  solfegeOn,
   str,
   trialOf,
 } from "./common.ts";
@@ -138,7 +140,9 @@ export const fet: Generator = {
         steps: t.steps,
         targetBar: t.targetBar,
         cueBars: t.targetBar,
-        syllables: ctx.level.syllables === true,
+        syllables: solfegeOn(ctx),
+        // Sung parts are labelled with numbers until U03.L08, then with syllables (numbers stay accepted).
+        labels: solfegeOn(ctx) ? "syllables" : "numbers",
         resolutionTargets: t.resolutionTargets,
         resolutionMode: "resolution",
         // Levels 1–2 play the path first; from level 3 the learner sings first (contracts §8.3).
@@ -197,7 +201,8 @@ export const degSing: Generator = {
       {
         mode: "sing",
         key: t.key,
-        prompt: `Sing ${degree}`,
+        prompt: solfegeOn(ctx) ? `Sing ${degree} (${SYLLABLES[degree]})` : `Sing ${degree}`,
+        labels: solfegeOn(ctx) ? "syllables" : "numbers",
         singMode: "degree",
         singTargets: singTargets(ctx, [midi], 2, 0),
         responseAt: 1 / piece.cps,
@@ -248,6 +253,8 @@ export const degResolve: Generator = {
         singMode: "resolution",
         singTargets: singTargets(ctx, midis, 60 / bpm, 0),
         responseAt: 2 / piece.cps,
+        prompt: `Sing ${path.map((d) => (solfegeOn(ctx) ? SYLLABLES[d] : d)).join(" ")} home`,
+        labels: solfegeOn(ctx) ? "syllables" : "numbers",
       },
       resolution,
     );
@@ -293,6 +300,8 @@ export const tonic: Generator = {
     const bpm = pickTempo(ctx);
     const tracks = [];
     let bars = 2;
+    /** Scale index of the phrase's last note (the strongest lure when it is not the tonic). */
+    let lastNoteIndex = 0;
     if (loop) {
       bars = 4;
       const voiced = voiceProgression(loop.chords, key);
@@ -323,6 +332,7 @@ export const tonic: Generator = {
         cur = Math.max(0, Math.min(6, cur + ctx.rng.pick([-1, 1, 1, -1, 2, -2])));
       }
       notes.push(end);
+      lastNoteIndex = end;
       const chords = voiceProgression(
         [
           { degree: "1", quality: "maj" },
@@ -338,8 +348,7 @@ export const tonic: Generator = {
     const piece = buildPiece({ bpm, bars, tracks });
     const names = scaleNames(key);
     const tonicName = names[0] as string;
-    const others = ctx.rng.shuffle(names.slice(1).filter((_n, i) => [2, 3, 4, 5].includes(i + 1)));
-    const options = ctx.rng.shuffle([tonicName, others[0] as string, others[1] as string]);
+    const options = ctx.rng.shuffle([tonicName, ...tonicDistractors(ctx, names, lastNoteIndex)]);
     const base = tonicMidi(key.tonic, 3);
     const choiceAudio = options.map((n) => {
       const idx = names.indexOf(n);
@@ -363,6 +372,20 @@ export const tonic: Generator = {
       : gradeAnswer(trial, response, def);
   },
 };
+
+/**
+ * Two near-miss candidates for "which note is home?": the phrase's last note when it is not the tonic (a
+ * phrase that stops on 3 or 5 sounds finished to an untrained ear), the 5th (the other pole of every
+ * cadence), then the 3rd, 4th or 6th. Scale indices, read as note names of the key.
+ */
+export function tonicDistractors(
+  ctx: Pick<GenCtx, "rng">,
+  names: readonly string[],
+  lastIndex: number,
+): string[] {
+  const order = [lastIndex, 4, ...ctx.rng.shuffle([2, 3, 5])].filter((i) => i !== 0);
+  return [...new Set(order)].slice(0, 2).map((i) => names[i] as string);
+}
 
 // --- deg.index (n ↔ degree ↔ note name) ------------------------------------------------------------
 
@@ -433,6 +456,9 @@ export const nIndex: Generator = {
 };
 function pickKeyFrom(ctx: GenCtx, tonics: string[], mode: ScaleMode): KeySpec {
   const prev = ctx.previous?.params.key as KeySpec | undefined;
+  const met = new Set(metKeys(ctx, "all", mode).map((k) => k.tonic));
+  const known = tonics.filter((t) => met.has(t));
+  if (known.length > 0) tonics = known;
   const fresh = tonics.filter((t) => t !== prev?.tonic);
   return { tonic: ctx.rng.pick(fresh.length > 0 ? fresh : tonics), mode };
 }

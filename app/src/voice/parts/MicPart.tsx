@@ -65,6 +65,7 @@ export function MicPart({ profile, onDone, onQuiet, only, context }: MicPartProp
   const [floorDb, setFloorDb] = useState<number | null>(null);
   const [bleed, setBleed] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [voiceInQuiet, setVoiceInQuiet] = useState(false);
   const [progress, setProgress] = useState(0);
   const session = useRef<MicSession | null>(null);
   const run = useSaveRun();
@@ -157,7 +158,17 @@ export function MicPart({ profile, onDone, onQuiet, only, context }: MicPartProp
     await measure(3.2, async () => {
       try {
         const { calibration } = await voiceAudio();
-        const db = await calibration.noiseFloor();
+        const check = await calibration.noiseCheck();
+        // Someone humming or talking through the check would set the floor at their own voice and later
+        // takes would hear "no voice": say so and measure again rather than storing it.
+        if (check.voiced) {
+          setFloorDb(null);
+          setVoiceInQuiet(true);
+          setPhase("noise");
+          return;
+        }
+        setVoiceInQuiet(false);
+        const db = check.floorDb;
         setFloorDb(db);
         const saved = await run.save({
           kind: "noise",
@@ -348,6 +359,14 @@ export function MicPart({ profile, onDone, onQuiet, only, context }: MicPartProp
             Oak measures the room so it can tell your voice from the hum around you.
           </p>
           {phase === "noise-measuring" && <Progress value={progress} label="Measuring the room" />}
+          {phase === "noise" && voiceInQuiet && (
+            <Callout tone="attention" title="Oak heard a voice during the quiet check">
+              <span data-testid="noise-voice">
+                Humming or talking would be measured as the room, and Oak would then miss your singing. Stay
+                silent for three seconds and measure again.
+              </span>
+            </Callout>
+          )}
           {nv && phase === "noise-done" && (
             <Callout tone={nv.ok ? "success" : "attention"} title={nv.title}>
               {nv.body}
@@ -383,7 +402,7 @@ export function MicPart({ profile, onDone, onQuiet, only, context }: MicPartProp
                   data-testid="noise-start"
                   autoFocus
                 >
-                  Start the quiet check
+                  {voiceInQuiet ? "Measure again" : "Start the quiet check"}
                 </Button>
               )
             }

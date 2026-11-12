@@ -34,6 +34,8 @@ export interface Runtime {
     from: number,
     to: number,
   ): Promise<PreloadReport>;
+  /** Warms exactly these hap values (a plan's events): the sound, bank, variant and pitch each triggers. */
+  preloadValues(values: readonly Record<string, unknown>[]): Promise<PreloadReport>;
   /** Records the sound a scheduler is about to trigger (names the soundfont skip message). */
   noteTrigger(value: unknown): void;
   emitLog(log: StrudelLog): void;

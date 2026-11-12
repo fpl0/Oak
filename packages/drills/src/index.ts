@@ -17,6 +17,7 @@ export {
   generateTrial,
   gradeFactCard,
   gradeTrial,
+  introStage,
   isCompositeGenerator,
   isPendingGenerator,
   levelAfterSet,
@@ -24,6 +25,7 @@ export {
   listenBlock,
   maxOpenLevel,
   openCategoriesOf,
+  passiveSequence,
   planCompositeSet,
   planSet,
   type SetReviewOutcome,
@@ -31,7 +33,9 @@ export {
   setPreload,
   staircaseStep,
   summarizeSet,
+  sungResolutionTrials,
 } from "./engine.ts";
+export { CTX, isContextCategory } from "./gen/common.ts";
 export { gradeSungResolution } from "./gen/degree.ts";
 export { type DrillTrialResult, gradeAnswer, normalizeAnswerText } from "./grade.ts";
 export { generateLadderPiece } from "./ladder.ts";

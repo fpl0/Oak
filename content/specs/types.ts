@@ -15,13 +15,62 @@ import type {
   MeterId,
   RubricRuleName,
   SkillId,
+  SongId,
   StepKind,
   TermId,
   UnlockableId,
 } from "@oak/content-kit";
 
-/** Who writes the lesson in Wave 2 (the Build-phase ownership table). */
-export type Author = "content-lead" | "U00" | "U01a" | "U01b" | "U02a" | "U02b";
+/** Who writes the lesson (the Build-phase ownership tables of Waves 2 and 3). */
+export type Author =
+  | "content-lead"
+  | "U00"
+  | "U01a"
+  | "U01b"
+  | "U02a"
+  | "U02b"
+  | "U03a"
+  | "U03b"
+  | "U03c"
+  | "U03d"
+  | "U04"
+  | "CP";
+
+/**
+ * The Wave 3 schema a step uses (AUTHORING §16), so the author and the app engineers know which new shape
+ * it needs: staff writing with a key signature, a key signature in order, a sung degree pattern or
+ * sight-singing, by-ear transcription, a passive-listen block, the target roll after a failed try.
+ */
+export type Wave3Kind =
+  | "staff-write+key"
+  | "key-signature"
+  | "sing-degrees"
+  | "sight-sing"
+  | "by-ear"
+  | "passive-listen"
+  | "reveal-roll"
+  | "staff-labels";
+
+/**
+ * A repertoire fragment a lesson uses (contracts §2.8): the tune as degrees in the teaching key, and the
+ * same notes spelled as letters in the key of the cited source. content/validate/specs.test.ts evaluates
+ * both with headless Strudel and requires the same pitches and onsets, no pickup (the fragment starts at
+ * the bar line or with a rest), no dotted or tied value, nothing over a bar line.
+ */
+export interface RepertoireSpec {
+  song: SongId;
+  /** Which bars, in words: "the first phrase, from the first full bar". */
+  fragment: string;
+  /** `n()` mini-notation in `key` (the teaching key, a `.scale()` argument). */
+  degrees: string;
+  key: string;
+  /** The same tune as note names in `sourceKey` (the key of the cited edition). */
+  letters: string;
+  sourceKey: string;
+  bars: number;
+  /** How the setting differs from the source: "plain rhythm: the dotted quarter and eighth are two quarters". */
+  setting: string;
+}
 
 export interface StepSpec {
   kind: StepKind;
@@ -30,6 +79,8 @@ export interface StepSpec {
   parts?: ExerciseKind[];
   /** The answer widget(s) the step needs from the app (AnswerUi kinds). */
   answer?: AnswerUiKind[];
+  /** Wave 3 schema the step uses (rendered with the step; AUTHORING §16). */
+  wave3?: Wave3Kind[];
   minutes: number;
   graded?: boolean;
   optional?: boolean;
@@ -68,7 +119,13 @@ export interface LessonSpec {
     deck?: DeckId;
     cards?: FactId[];
     mode: "seed" | "review-if-due" | "evidence-only";
+    /** The family level the lesson's step plays (generator stimulus) or the engine starts at. */
+    level?: number;
   }[];
+  /** What the learner sings on in this lesson's sing steps (contracts §8.3: numbers until U03.L08). */
+  singOn?: "numbers" | "syllables";
+  /** Repertoire fragments the lesson plays or asks for (contracts §2.8). */
+  repertoire?: RepertoireSpec[];
   /** Graded-step feedback the author must make sure the tests pin (the realistic mistakes). */
   mistakes: string[];
   connects: { back: string; forward: string };

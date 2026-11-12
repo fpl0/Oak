@@ -10,7 +10,7 @@ import { openPage } from "./helpers.ts";
 type W = Window & { __oak: any };
 
 test("audibility table for every group-H control and every sound", async ({ page }) => {
-  test.setTimeout(600_000);
+  test.setTimeout(240_000);
   await openPage(page);
   const result = await page.evaluate(
     async ([controls, sounds]) => {
@@ -78,6 +78,11 @@ test("audibility table for every group-H control and every sound", async ({ page
   ]) {
     expect(get(id), id).toBe(true);
   }
-  expect(get("snd.pad")).toBe(false); // not in pack v1
   expect(get("tb.unison")).toBe(true); // supersaw is not bit-repeatable: proven through spectrum and width
+  // Wave 3: clip (U02.L08) and the Oak jazz kit are proven; every catalog sound is in pack v2 but the break.
+  expect(get("tb.clip")).toBe(true);
+  expect(get("snd.jazzkit")).toBe(true);
+  const silentSounds = SOUND_CASES.map((c) => c.id).filter((id) => !get(id));
+  expect(silentSounds).toEqual(["snd.brk"]); // A2.L04: the CC0 break Oak renders is not in the pack yet
+  for (const r of table.sounds) if (r.id !== "snd.brk") expect(r.error, String(r.id)).toBeUndefined();
 });

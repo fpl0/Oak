@@ -19,9 +19,19 @@ export interface KeyboardProps {
   /** Keys pressed with the computer keyboard right now. */
   pressed?: ReadonlySet<number>;
   width?: number;
+  /** Degree numbers on the in-key keys (the degrees lens; default on). */
+  degrees?: boolean;
 }
 
-export function Keyboard({ model, keySpec, bus, onAudition, typing, pressed }: KeyboardProps) {
+export function Keyboard({
+  model,
+  keySpec,
+  bus,
+  onAudition,
+  typing,
+  pressed,
+  degrees = true,
+}: KeyboardProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(560);
   const [sounding, setSounding] = useState<ReadonlySet<number>>(new Set());
@@ -74,7 +84,7 @@ export function Keyboard({ model, keySpec, bus, onAudition, typing, pressed }: K
               const p = pitchLabel(r.midi, keySpec);
               const lit = sounding.has(r.midi) || (pressed?.has(r.midi) ?? false);
               const fill = lit
-                ? p.degree
+                ? degrees && p.degree
                   ? degreeStyle(p.degree.raw, theme).fill
                   : "var(--wb-accent)"
                 : black
@@ -91,7 +101,7 @@ export function Keyboard({ model, keySpec, bus, onAudition, typing, pressed }: K
                   onClick={() => onAudition(r.midi)}
                   role="button"
                   tabIndex={-1}
-                  aria-label={`${p.display}${p.degree ? `, degree ${p.degree.label}` : ""}`}
+                  aria-label={`${p.display}${degrees && p.degree ? `, degree ${p.degree.label}` : ""}`}
                 >
                   <rect
                     x={r.x + 0.5}
@@ -102,7 +112,7 @@ export function Keyboard({ model, keySpec, bus, onAudition, typing, pressed }: K
                     fill={fill}
                     stroke="var(--wb-border)"
                   />
-                  {!black && p.degree?.inKey ? (
+                  {degrees && !black && p.degree?.inKey ? (
                     <text
                       x={r.x + r.w / 2}
                       y={H - 8}

@@ -71,7 +71,7 @@ drums: stack(s("bd*2"), s("hh*8"))   // use two labelled lines
 
 ## 3. Pitch, octaves and scales
 
-1. **Note names always carry an octave**: `c4`, never `c`. A bare `c` plays C3 (48). Lint: `code.octave-default`. Letters are lowercase; accidentals are `#` and `b` (`f#4`, `bb3`). Strudel's `s`/`f` accidentals (`cs4`, `df4`) are forbidden.
+1. **Note names always carry an octave**: `c4`, never `c`. A bare `c` plays C3 (48). Lint: `code.octave-default`. Letters are lowercase; accidentals are `#` and `b` (`f#4`, `bb3`). Strudel's `s`/`f` accidentals (`cs4`, `df4`) are forbidden (lint `code.letter-accidental`; they play the right note).
 2. `c4` = 60. Registers: melody around octave 4–5, chords around octave 3–4, bass in octave 1–2 (bass notes stay at or below `c3`).
 3. **`.scale()` always names tonic, octave and mode**: `"C4:major"`. Uppercase tonic letter, `#` or `b`, octave digit, then the scale name with `:` in place of every space. `"C:major"` plays from C3 (`code.scale-no-octave`). `"C4 major"` throws nothing: Strudel logs an error and most of the notes go missing (`code.scale-spaces`). **[learner: error for the space form]**
 4. Scale tonic octave by part: melody `X4` (or `X3`/`X5` to fit the range), bass `X2` (or `X1`), stacked chords by degree `X3`.
@@ -437,7 +437,7 @@ hats: s("hh*16").velocity("[1 .35 .6 .35]*4").gain(.7)
 | `_name:` code mute | error | info | `code.muted-label` |
 | Single-quoted pattern string | error | error | `code.single-quoted-pattern` |
 | Note name without octave | error | info | `code.octave-default` |
-| `s`/`f` accidentals (`cs4`) | error | info | `code.octave-default` family |
+| `s`/`f` accidentals (`cs4`) | error | info | `code.letter-accidental` |
 | `.scale()` without octave / with spaces | error / error | warning / error | `code.scale-no-octave` / `code.scale-spaces` |
 | `n()` without `.scale()` on a pitched sound | error | error | `code.n-without-scale` |
 | `Cmaj7 Cdim Cdim7 Csus4`, lowercase roots, `C+` | error | error | `code.unknown-chord`, `code.lowercase-chord-root` |

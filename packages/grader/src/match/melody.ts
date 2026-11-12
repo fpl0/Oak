@@ -2,7 +2,7 @@
 // edit distance on pitch, onset F1 for rhythm, and a Needleman–Wunsch backtrace for per-note findings.
 // Pitch modes: absolute, octave-free, key-relative (degrees in each side's own key) and
 // transposition-invariant (the answer moved by the most common interval first).
-import type { Diagnostic, KeySpec, Matcher, NEvent } from "@oak/content-kit";
+import type { Diagnostic, KeySpec, Matcher, NEvent, Rat } from "@oak/content-kit";
 import { R } from "@oak/content-kit";
 import { degreeOf, pcOf } from "@oak/theory";
 import { locAt, locOf, median, mod12, modeOf } from "../analyze/events.ts";
@@ -16,6 +16,16 @@ import { alignFeel, clampScore, f1, noteName, pitchLabel } from "./common.ts";
 import { matchOnsets } from "./rhythm.ts";
 
 export type MelodyMatcher = Extract<Matcher, { m: "melody" }>;
+
+/**
+ * `transcription` (by-ear steps, `DictationEx.byEar`): report like a transcription teacher. The first
+ * difference by bar and beat (`melody.first-difference`), a right note at the wrong time
+ * (`melody.rhythm-note`), "only the pitches differ" (`melody.pitch-only`), and a whole tune moved where
+ * the step does not allow it (`melody.wrong-key`, `melody.wrong-octave`) instead of one finding per note.
+ */
+export interface MelodyReportOptions {
+  transcription?: boolean;
+}
 
 /** The events a melody matcher reads: the named track or `@melody`, else every learner track. */
 export function melodyEvents(n: Normalized, track?: string): NEvent[] {
@@ -31,6 +41,35 @@ export function bestTransposition(t: readonly Note[], a: readonly Note[]): numbe
   const n = Math.min(t.length, a.length);
   if (n === 0) return 0;
   return Math.round(median(Array.from({ length: n }, (_, i) => (t[i] as Note).midi - (a[i] as Note).midi)));
+}
+
+/**
+ * The shift that moves a transposition-invariant answer onto the reference. With the answer's own
+ * `.scale()` key, its tonic goes onto the reference's (in the octave nearest the best fit), so its degrees
+ * are compared as the learner wrote them: a tune moved by scale steps in C then reads as wrong degrees in C,
+ * not as a half-matching tune in E♭. The best-fitting interval wins only when it fits (nearly) every note
+ * and the key's shift does not: then the notes really are the tune in another key.
+ */
+export function transpositionOf(
+  t: readonly Note[],
+  a: readonly Note[],
+  tKey: KeySpec | null,
+  aKey: KeySpec | null,
+): number {
+  const best = bestTransposition(t, a);
+  if (!tKey || !aKey) return best;
+  const base = mod12(pitchClassOfKey(tKey) - pitchClassOfKey(aKey));
+  const byKey = [-36, -24, -12, 0, 12, 24, 36]
+    .map((o) => base + o)
+    .reduce((x, y) => (Math.abs(y - best) < Math.abs(x - best) ? y : x));
+  if (byKey === best) return best;
+  const misses = (k: number): number =>
+    editDistance(
+      t.map((n) => Math.round(n.midi)),
+      a.map((n) => Math.round(n.midi + k)),
+    );
+  const room = Math.floor(0.1 * Math.max(t.length, a.length));
+  return misses(best) <= room && misses(byKey) > misses(best) ? best : byKey;
 }
 
 type Op = { op: "match" | "sub"; i: number; j: number } | { op: "del"; i: number } | { op: "ins"; j: number };
@@ -72,7 +111,7 @@ export function needlemanWunsch(n: number, m: number, cost: (i: number, j: numbe
 }
 
 /** Diatonic step index of a note in a key: 7 per octave, chromatic notes counted with their letter degree. */
-const stepIndex = (midi: number, key: KeySpec): number => {
+export const stepIndex = (midi: number, key: KeySpec): number => {
   const d = degreeOf(midi, key);
   const tonicPc = mod12(midi - d.semitones);
   const octave = Math.floor((midi - tonicPc) / 12);
@@ -86,7 +125,7 @@ export function melodyMatch(
   reference: Normalized,
   answer: Normalized,
   cfg: MelodyMatcher,
-  ctx: NormalizeContext,
+  ctx: NormalizeContext & MelodyReportOptions,
 ): MatchResult {
   const [tEv, aEv] = alignFeel(melodyEvents(reference, cfg.track), melodyEvents(answer, cfg.track), ctx);
   const T = melodyLine(tEv);
@@ -122,15 +161,20 @@ export function melodyMatch(
   // Pitch values per mode.
   let value: (n: Note, side: "t" | "a") => number;
   let octaveAware = false;
+  // "Right tune, but in another key": said only once the tune is known to be right (step 6).
+  let transposed: Diagnostic | null = null;
   if (cfg.pitch === "transposition-invariant") {
-    const k = bestTransposition(T, A);
+    const k = transpositionOf(T, A, tKey, aCtxKey);
     if (mod12(k) !== 0 && tKey) {
       const gotKey = {
         tonic: noteName(60 + mod12(pitchClassOfKey(tKey) - k), tKey).replace(/-?\d+$/, ""),
         mode: tKey.mode,
       };
-      diagnostics.push(
-        diag("melody.transposed", { gotKey: keyText(gotKey), expKey: keyText(tKey) }, undefined, "pitch"),
+      transposed = diag(
+        "melody.transposed",
+        { gotKey: keyText(gotKey), expKey: keyText(tKey) },
+        undefined,
+        "pitch",
       );
     }
     A = A.map((n) => ({ ...n, midi: n.midi + k }));
@@ -181,8 +225,9 @@ export function melodyMatch(
   const overlay: NonNullable<MatchResult["overlay"]> = { answer: [], missing: [] };
   const subs: { i: number; j: number; octave: boolean }[] = [];
   let otherErrors = 0;
+  // Transposition-invariant answers were moved into the reference's key above, so both sides read in it.
   const label = (n: Note, key: KeySpec | null, side: "t" | "a"): { name: string; syl: string } =>
-    cfg.pitch === "absolute" || cfg.pitch === "octave-free"
+    cfg.pitch === "absolute" || cfg.pitch === "octave-free" || cfg.pitch === "transposition-invariant"
       ? pitchLabel(n.midi, tKey)
       : pitchLabel(n.midi, side === "t" ? tKey : key);
   for (const o of ops) {
@@ -274,7 +319,115 @@ export function melodyMatch(
       indexShift = true;
     }
   }
-  if (!indexShift) diagnostics.push(...perNote);
+  // Index shift on a tune with repeated notes (Ode to Joy): the alignment can pair shifted notes with
+  // neighbours and hide the pattern, so test it note by note too. Same number of notes, same onsets, and
+  // nearly every note one scale step off in the same direction.
+  if (!indexShift && tKey && cfg.pitch !== "octave-free" && T.length >= 3 && T.length === A.length) {
+    const keyA = cfg.pitch === "key-relative" ? (aKey ?? tKey) : tKey;
+    const sameTimes = T.every((t, i) => R.eq(t.onset, (A[i] as Note).onset));
+    const deltas = T.map((t, i) => stepIndex((A[i] as Note).midi, keyA) - stepIndex(t.midi, tKey));
+    const up = deltas.filter((x) => x === 1).length;
+    const down = deltas.filter((x) => x === -1).length;
+    const dir = up >= down ? 1 : -1;
+    const off = deltas.filter((x) => x !== 0).length;
+    if (sameTimes && off > 0 && Math.max(up, down) / T.length >= 0.7 && Math.max(up, down) === off) {
+      const i = deltas.indexOf(dir);
+      const deg = degreeOf((T[i] as Note).midi, tKey);
+      diagnostics.push(
+        diag(
+          "melody.index-shift",
+          { dir: dir > 0 ? "too high" : "too low", deg: deg.degree, idx: deg.num - 1 },
+          undefined,
+          "pitch",
+        ),
+      );
+      indexShift = true;
+    }
+  }
+  // Moved into another key and right there: say so. Not when the notes are not the tune (a tune moved by
+  // scale steps keeps its contour, not its intervals) or when they are the index slip.
+  if (transposed && !indexShift && Sp >= 0.75) diagnostics.push(transposed);
+  // By ear: a whole tune moved where the step wants it as heard is one finding, not one per note.
+  let moved: Diagnostic | null = null;
+  if (ctx.transcription && (cfg.pitch === "absolute" || cfg.pitch === "octave-free") && tKey) {
+    const k = bestTransposition(T, A);
+    const shifted = A.map((n) => (cfg.pitch === "absolute" ? n.midi + k : mod12(n.midi + k)));
+    const ref = T.map((n) => (cfg.pitch === "absolute" ? n.midi : mod12(n.midi)));
+    const fits =
+      k !== 0 &&
+      (cfg.pitch === "absolute" || mod12(k) !== 0) &&
+      shifted.length === ref.length &&
+      shifted.every((x, i) => x === ref[i]);
+    if (fits && mod12(k) === 0)
+      moved = diag("melody.wrong-octave", { dir: k < 0 ? "higher" : "lower" }, undefined, "pitch");
+    else if (fits) {
+      const gotKey = {
+        tonic: noteName(60 + mod12(pitchClassOfKey(tKey) - k), tKey).replace(/-?\d+$/, ""),
+        mode: tKey.mode,
+      };
+      const semis = Math.abs(k) % 12 || 12;
+      moved = diag(
+        "melody.wrong-key",
+        {
+          gotKey: keyText(gotKey),
+          expKey: keyText(tKey),
+          semis: `${semis} semitone${semis === 1 ? "" : "s"}`,
+          dir: k > 0 ? "up" : "down",
+        },
+        undefined,
+        "pitch",
+      );
+    }
+  }
+  if (moved) diagnostics.push(moved);
+  else if (!indexShift) diagnostics.push(...perNote);
+  if (ctx.transcription && !moved) {
+    const say = (x: { name: string; syl: string }): string =>
+      x.syl && x.syl !== x.name ? `${x.name} (${x.syl})` : x.name;
+    // Right pitch, wrong time: the matcher's alignment already paired them; say where the note belongs.
+    for (const o of ops) {
+      if (o.op !== "sub" || pitchCost(o.i, o.j) !== 0) continue;
+      const t = T[o.i] as Note;
+      const a = A[o.j] as Note;
+      const p = locAt(t.onset, pos);
+      diagnostics.push(
+        diag(
+          "melody.rhythm-note",
+          { got: say(label(a, aKey, "a")), expAt: `bar ${p.bar}, ${p.beatLabel}` },
+          locOf(a.event, pos),
+          "rhythm",
+        ),
+      );
+    }
+    const first = ops.find((o) => o.op !== "match");
+    if (first) {
+      let what = "";
+      let onset = (T[0] as Note | undefined)?.onset ?? [0, 1];
+      if (first.op === "sub") {
+        const t = T[first.i] as Note;
+        const a = A[first.j] as Note;
+        onset = R.lt(a.onset, t.onset) ? a.onset : t.onset;
+        const cost = pitchCost(first.i, first.j);
+        const later = onsetDiffers(first.i, first.j) ? ", and at another time" : "";
+        what =
+          cost === 0
+            ? `${say(label(a, aKey, "a"))} is the right note at the wrong time`
+            : cost === 0.5
+              ? `${say(label(a, aKey, "a"))} is the right note, but an octave ${(av[first.j] as number) > (tv[first.i] as number) ? "higher" : "lower"} than the source${later}`
+              : `${say(label(a, aKey, "a"))} where the source has ${say(label(t, tKey, "t"))}${later}`;
+      } else if (first.op === "del") {
+        const t = T[first.i] as Note;
+        onset = t.onset;
+        what = `the source has ${say(label(t, tKey, "t"))}, and yours has no note there`;
+      } else {
+        const a = A[first.j] as Note;
+        onset = a.onset;
+        what = `yours has an extra ${say(label(a, aKey, "a"))}`;
+      }
+      diagnostics.push(diag("melody.first-difference", { what }, locAt(onset as Rat, pos), "pitch"));
+    }
+    if (Sr === 1 && Sp < 1) diagnostics.push(diag("melody.pitch-only", {}, undefined, "pitch"));
+  }
 
   // 6. Summary findings.
   const contour = contourScore(parsons(T), parsons(A));

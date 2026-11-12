@@ -1,6 +1,7 @@
 // Public types of @oak/notation: the NotationModel (`Score`) and what goes in and out of it.
 import type { CodeRange, KeySpec, MeterSpec, NEvent, PickupSpec, Rat, SwingSpec } from "@oak/content-kit";
 import type { SpelledPitch } from "@oak/theory";
+import type { AnnotationSet } from "./options.ts";
 
 export type StaffKind = "auto" | "treble" | "bass" | "grand" | "percussion" | "rhythm" | "lead";
 
@@ -13,14 +14,37 @@ export interface NotationInput {
    * (at least 7 pitched notes whose pitch classes all fit one key); otherwise none.
    */
   key: KeySpec | null;
+  /**
+   * Key changes inside the engraved bars (Wave 3: a patterned `.scale("<C4:major G4:major>")`): from `bar`
+   * (absolute 0-based cycle) on, notes are spelled in `key` and the staff shows its signature (`[K:…]` at that
+   * bar line). `key` above is the signature at the start. A change to the key already in force is ignored.
+   */
+  keyChanges?: readonly KeyChange[];
+  /**
+   * A track's own key plan, when it differs from the piece's (two tracks in different keys on a grand staff:
+   * a melody in C over a bass in G-flat). A staff whose notes all come from tracks with the same entry here is
+   * spelled in that plan and shows its own signature; a staff mixing tracks, or a track with no entry, follows
+   * `key`/`keyChanges`. Give only keys the code states (`.scale()`), never estimates.
+   */
+  trackKeys?: Readonly<Record<string, { key: KeySpec; keyChanges?: readonly KeyChange[] }>>;
   /** Cycles to engrave, from `startBar`. */
   bars: number;
   /** 0-based first cycle. Default 0. */
   startBar?: number;
   staff: StaffKind;
-  /** Grand staff: split by register at `splitMidi` (default 60) or by track. */
+  /**
+   * Grand staff: split by register at `splitMidi` (default 60: middle C and up on the treble staff) or by
+   * track (each track whole on one staff). Default: by track when there are two or more pitched tracks and
+   * they divide into low and high ones (`clefOfTrack`), otherwise by register.
+   */
   split?: "register" | "track";
   splitMidi?: number;
+  /**
+   * Per-track clef: a track named here goes to that staff of a grand staff (`bass` → the lower one), and on a
+   * single `auto` staff decides the clef when every pitched track agrees. Unnamed tracks follow
+   * `clefOfTrack` (a track called bass/lh/left/low, or one whose median is below `splitMidi`, reads in bass).
+   */
+  trackClefs?: Record<string, "treble" | "bass">;
   /**
    * Lead-sheet chords above the staff, in code spelling; they are translated for display.
    * `bar` is the 0-based cycle, `beat` is 1-based in tempo units (1.5 = the "&" of beat 1).
@@ -34,6 +58,15 @@ export interface NotationInput {
    * counts ("1 e & a", "1 la li") for the percussion and rhythm staves.
    */
   labels?: "none" | "degree" | "solfege" | "counts";
+  /**
+   * Wave 3 lenses (docs/design/wave3.md §3.1): up to three annotation lines at once (degree, solfège, note
+   * name), under the notes (abcjs lyric lines, one per kind, in that order) or over them (stacked text
+   * annotations), on every pitched staff. When any kind is on it replaces `labels`. The texts are
+   * `noteAnnotations(score, set)`; the DOM layer (`placeAnnotations`) gives them the stable classes of
+   * `ANNOTATION_CLASSES`. Degree and solfège need a key (the declared, `.scale()` or estimated one); without
+   * one only names are written.
+   */
+  annotations?: AnnotationSet;
   tempoBpm?: number;
   /**
    * A declared swing: onsets on the swung subdivision are mapped back to the straight grid before
@@ -91,6 +124,9 @@ export interface Staff {
   clef: "treble" | "bass" | "perc";
   lines: 1 | 5;
   voices: Voice[];
+  /** This staff's own signature (`NotationInput.trackKeys`); absent: the score's `key`/`keyChanges`. */
+  key?: KeySpec | null;
+  keyChanges?: KeyChange[];
 }
 export interface NotationWarning {
   code:
@@ -99,7 +135,9 @@ export interface NotationWarning {
     | "overlap-cut"
     | "snapped-to-grid"
     | "unpitched-dropped"
-    | "out-of-range";
+    | "out-of-range"
+    /** Something abcjs 6.7.2 cannot draw as written (see `ABCJS_LIMITS`); the ABC uses the stated fallback. */
+    | "abcjs-limit";
   /** 0-based cycle. */
   bar: number;
   message: string;
@@ -115,10 +153,19 @@ export interface ScoreAnnotation {
   /** What is printed ("Cm7♭5" is written as "Cm7b5", which abcjs renders with a flat glyph). */
   text: string;
 }
+/** A key signature change at the start of a bar. */
+export interface KeyChange {
+  /** 0-based cycle (absolute, like `ScoreAnnotation.bar`). */
+  bar: number;
+  key: KeySpec;
+}
 /** The NotationModel. Everything a staff view needs, with no abcjs in it. */
 export interface Score {
   meter: MeterSpec;
+  /** The signature at the start (every bar, without `keyChanges`). */
   key: KeySpec | null;
+  /** Signature changes at bar lines inside the score, in order (absent: one key throughout). */
+  keyChanges?: KeyChange[];
   tempoBpm?: number;
   /** "Swing 8ths" or "Swing 16ths" when the input declared a swing. */
   swingText?: string;
@@ -136,12 +183,19 @@ export interface Score {
   chords?: ScoreAnnotation[];
   /** Roman numerals under the bottom pitched staff. */
   romans?: ScoreAnnotation[];
+  /** The annotation lines asked for (`NotationInput.annotations`), when any kind is on. */
+  annotations?: AnnotationSet;
   title?: string;
 }
 export type NotationModel = Score;
 
 export interface AbcOptions {
   barsPerLine?: number;
+  /**
+   * End the last bar with the final barline `|]` (default). False for a page of a longer piece: a page that is
+   * not the piece's end closes with a plain barline.
+   */
+  finalBar?: boolean;
   /** Class prefix; default "oak-e". */
   classPrefix?: string;
 }

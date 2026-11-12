@@ -6,6 +6,8 @@ import {
   type CoverInput,
   coverModel,
   coverSvg,
+  coverTextWidth,
+  fitCoverText,
   functionDegree,
   OUTER_R,
   PITH_R,
@@ -116,5 +118,83 @@ describe("tree-ring covers", () => {
     const a = seededRandom("s");
     const b = seededRandom("s");
     expect([a(), a(), a()]).toEqual([b(), b(), b()]);
+  });
+});
+
+describe("cover text fits its corner", () => {
+  const seedOnly = (title: string, albumTitle: string) =>
+    coverModel({ events: null, bars: 6, key: null, bpm: null, flavour: null, title, albumTitle, seed: "s" });
+  const texts = (m: ReturnType<typeof coverModel>) =>
+    m.groups.flatMap((g) => g.items).filter((p) => p.t === "text") as Extract<
+      ReturnType<typeof coverModel>["groups"][number]["items"][number],
+      { t: "text" }
+    >[];
+
+  test("a short title and the default album name are printed as before", () => {
+    const [title, album] = texts(seedOnly("Intro", "Oak Sessions"));
+    expect(title?.text).toBe("Intro");
+    expect(title?.size).toBe(46);
+    expect(album?.text).toBe("OAK SESSIONS");
+    expect(album?.size).toBe(18);
+    expect(album?.spacing).toBe(3);
+  });
+
+  test("the longest names the API allows stay inside the cover, cut at a word with an ellipsis", () => {
+    const long =
+      "A fairly long title for a track that someone wrote one evening after work, with some feeling";
+    const [title, album] = texts(seedOnly(`${long} ${"M".repeat(120)}`.slice(0, 120), "W".repeat(60)));
+    expect(title?.text.endsWith("…")).toBe(true);
+    expect(title?.text.startsWith("A fairly long title")).toBe(true);
+    expect(title?.text).not.toMatch(/\s…$/);
+    expect(coverTextWidth(title?.text ?? "", "display", title?.size ?? 0)).toBeLessThanOrEqual(896);
+    expect(52 + coverTextWidth(title?.text ?? "", "display", title?.size ?? 0)).toBeLessThanOrEqual(948);
+    expect(album?.text.endsWith("…")).toBe(true);
+    expect(coverTextWidth(album?.text ?? "", "sans", album?.size ?? 0, album?.spacing)).toBeLessThanOrEqual(
+      560,
+    );
+    // A halo in the wood colour keeps ring lines off the letters.
+    expect(title?.halo?.color).toBe(WOODS.default.bg);
+    expect(coverSvg(seedOnly(long, "Oak Sessions"), long)).toContain('paint-order="stroke"');
+  });
+
+  test("a name that fits at a smaller size is shrunk, not cut; emoji are never split", () => {
+    const fit = fitCoverText("The quiet hours between lessons", {
+      family: "sans",
+      size: 18,
+      minSize: 13,
+      width: 560,
+      spacingEm: 1 / 6,
+    });
+    expect(fit.text).toBe("The quiet hours between lessons");
+    const cut = fitCoverText("🌳".repeat(80), { family: "display", size: 30, minSize: 24, width: 300 });
+    expect(cut.text.endsWith("…")).toBe(true);
+    expect([...cut.text.slice(0, -1)].every((c) => c === "🌳")).toBe(true);
+  });
+});
+
+describe("small covers", () => {
+  test("a thumbnail's ring lines and marks stay at least a pixel wide", async () => {
+    const { minStrokeAt } = await import("../ui/AlbumCover.tsx");
+    expect(minStrokeAt(360)).toBe(0);
+    expect(minStrokeAt(56) * (56 / 1000)).toBeCloseTo(0.85, 5);
+    expect(minStrokeAt(48)).toBeGreaterThan(minStrokeAt(56));
+  });
+
+  test("a cover grown from its seed alone has a plain pith, not a dash", () => {
+    const m = coverModel({
+      events: null,
+      bars: 5,
+      key: null,
+      bpm: null,
+      flavour: null,
+      title: "T",
+      seed: "s",
+      albumTitle: "A",
+    });
+    const pith = m.groups.find((g) => g.kind === "pith");
+    expect(pith?.items.filter((p) => p.t === "text")).toHaveLength(0);
+    expect(
+      m.groups.flatMap((g) => g.items).filter((p) => p.t === "path" && p.role === "latewood"),
+    ).toHaveLength(5);
   });
 });

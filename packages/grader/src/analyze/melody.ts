@@ -147,36 +147,78 @@ export interface MotifReuse {
   matched: number;
   /** 0-based first cycle of every unit that reuses an earlier one. */
   reusedAt: number[];
+  /** Bars measured: the period the line was trimmed to, or every bar the notes reach. */
+  bars: number;
 }
+export interface MotifReuseOptions {
+  /** Edit similarity a unit needs to an earlier one (contracts §5.6: 0.75). */
+  minSimilarity?: number;
+  /** Only notes starting before this cycle count: one period of a loop, so its own repeats never match. */
+  periodBars?: number;
+  /** `semitones` (default), `steps` (scale steps in `key`), or `either`. */
+  shape?: "semitones" | "steps" | "either";
+  /** The key scale steps are counted in; without one only semitones are compared. */
+  key?: KeySpec | null;
+}
+
+/** Diatonic step index in a key: 7 per octave; a chromatic note counts with its letter degree. */
+export function diatonicIndex(midi: number, key: KeySpec): number {
+  const d = degreeOf(midi, key);
+  const tonicPc = mod12(midi - d.semitones);
+  return Math.floor((midi - tonicPc) / 12) * 7 + d.num - 1;
+}
+
 /**
  * Share of melody units (default one bar) whose interval sequence matches an earlier unit, exactly or
- * transposed, by edit similarity ≥ 0.75 (contracts §5.6). A unit needs at least two notes to match.
+ * transposed, by edit similarity ≥ 0.75 (contracts §5.6). A unit needs at least two notes to match. With
+ * `periodBars`, only one period is read; with `shape`, the intervals are half steps, scale steps or either.
  */
-export function motifReuse(notes: readonly Note[], unitBars = 1, minSimilarity = 0.75): MotifReuse {
+export function motifReuse(
+  notes: readonly Note[],
+  unitBars = 1,
+  minSimilarityOrOptions: number | MotifReuseOptions = 0.75,
+): MotifReuse {
+  const o: MotifReuseOptions =
+    typeof minSimilarityOrOptions === "number"
+      ? { minSimilarity: minSimilarityOrOptions }
+      : minSimilarityOrOptions;
+  const minSimilarity = o.minSimilarity ?? 0.75;
+  const shape = o.key ? (o.shape ?? "semitones") : "semitones";
+  const read =
+    o.periodBars !== undefined ? notes.filter((n) => R.floor(n.onset) < (o.periodBars as number)) : notes;
   const byUnit = new Map<number, Note[]>();
-  for (const n of notes) {
+  for (const n of read) {
     const u = Math.floor(R.floor(n.onset) / unitBars);
     const list = byUnit.get(u) ?? [];
     list.push(n);
     byUnit.set(u, list);
   }
   const units = [...byUnit.entries()].sort((a, b) => a[0] - b[0]);
-  const seen: number[][] = [];
+  const seen: { semis: number[]; steps: number[] }[] = [];
   const reusedAt: number[] = [];
+  const key = o.key ?? null;
   for (const [u, list] of units) {
-    const intervals = list.slice(1).map((n, i) => n.midi - (list[i] as Note).midi);
-    if (
-      intervals.length > 0 &&
-      seen.some((s) => s.length > 0 && editSimilarity(s, intervals) >= minSimilarity)
-    )
-      reusedAt.push(u * unitBars);
-    seen.push(intervals);
+    const semis = list.slice(1).map((n, i) => n.midi - (list[i] as Note).midi);
+    const steps = key
+      ? list.slice(1).map((n, i) => diatonicIndex(n.midi, key) - diatonicIndex((list[i] as Note).midi, key))
+      : semis;
+    const like = (s: { semis: number[]; steps: number[] }): boolean =>
+      ((shape === "semitones" || shape === "either") &&
+        s.semis.length > 0 &&
+        editSimilarity(s.semis, semis) >= minSimilarity) ||
+      ((shape === "steps" || shape === "either") &&
+        s.steps.length > 0 &&
+        editSimilarity(s.steps, steps) >= minSimilarity);
+    if (semis.length > 0 && seen.some(like)) reusedAt.push(u * unitBars);
+    seen.push({ semis, steps });
   }
+  const last = read.reduce((m, n) => Math.max(m, R.floor(n.onset) + 1), 0);
   return {
     ratio: units.length === 0 ? 0 : reusedAt.length / units.length,
     units: units.length,
     matched: reusedAt.length,
     reusedAt,
+    bars: o.periodBars ?? last,
   };
 }
 

@@ -1,11 +1,12 @@
 // Connects the tutor context store (context.ts) to the shell: health → availability, and `openTutor()` → the
-// docked panel (L) or the drawer (M). Mounted once by AppShell.
+// docked panel (L) or the drawer (M), and the shown lenses → the "Labels" context chip. Mounted once by AppShell.
 import { useEffect, useRef } from "react";
+import { useLenses } from "../lib/lenses.ts";
 import { useHealth } from "../lib/queries.ts";
 import { useShell } from "../lib/shell-store.ts";
 import { useIsLarge } from "../lib/use-media.ts";
 import { usePrefs } from "../ui/theme/prefs.ts";
-import { setAvailability, useTutorContext } from "./context.ts";
+import { setAvailability, setLensState, useTutorContext } from "./context.ts";
 
 export function useTutorBridge(): void {
   const health = useHealth();
@@ -15,6 +16,13 @@ export function useTutorBridge(): void {
     if (data) setAvailability(data);
     else if (failed) setAvailability({ tutor: "unreachable", tutorBackend: null });
   }, [data, failed]);
+
+  const lenses = useLenses();
+  const { degrees, solfege, noteNames } = lenses.shown;
+  const lensReady = lenses.ready;
+  useEffect(() => {
+    setLensState(lensReady ? { degrees, solfege, noteNames } : null);
+  }, [lensReady, degrees, solfege, noteNames]);
 
   const large = useIsLarge();
   const requests = useTutorContext((s) => s.openRequests);

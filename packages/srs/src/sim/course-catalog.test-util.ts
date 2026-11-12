@@ -5,13 +5,25 @@
 // Test support (it imports the course content, which the package itself never does).
 import type { FactDeck, FamilyDef } from "@oak/content-kit";
 import { decks, families } from "../../../../content/families.ts";
+import { defaultOrder, trackOrder, tracks } from "../../../../content/syllabus.ts";
 import type { SimFamily, SimFamilyKind } from "./catalog.ts";
 import type { SimCatalog } from "./simulate.ts";
 
 const simKind = (f: FamilyDef): SimFamilyKind =>
   f.kind === "concept" ? "C" : f.kind === "production" ? "Pr" : "P";
 
-export function simCatalogOf(fams: readonly FamilyDef[], dks: readonly FactDeck[]): SimCatalog {
+/**
+ * The course order the simulation walks: the default order of the core (contracts §2.5, gym slots
+ * included), then each advanced track in its own fixed order (§2.6), in the syllabus's track order. The
+ * order between tracks is the learner's choice; the 300 simulated days reach only the start of them.
+ */
+export const COURSE_ORDER: readonly string[] = [...defaultOrder, ...tracks.flatMap((t) => trackOrder[t.id])];
+
+export function simCatalogOf(
+  fams: readonly FamilyDef[],
+  dks: readonly FactDeck[],
+  order: readonly string[] = COURSE_ORDER,
+): SimCatalog {
   const playable = fams.filter((f) => !f.generator.startsWith("mix."));
   const simFamilies: SimFamily[] = playable.map((f) => ({
     id: f.id,
@@ -46,7 +58,7 @@ export function simCatalogOf(fams: readonly FamilyDef[], dks: readonly FactDeck[
       b[2]++;
       batches.set(k, b);
     }
-  return { families: simFamilies, levelGates, deckBatches: [...batches.values()] };
+  return { families: simFamilies, levelGates, deckBatches: [...batches.values()], order };
 }
 
 /** The course catalog as the 300-day simulation introduces it. */

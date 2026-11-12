@@ -1,21 +1,31 @@
 import { create } from "zustand";
 import { useContent } from "../lib/content.ts";
 import { useTermsIntroduced, useUnlocks } from "../lib/queries.ts";
-import { GENERAL_SUBJECT, sameThread, type TutorSubject, useTutorContext } from "./context.ts";
+import { GENERAL_SUBJECT, sameThread, subjectKey, type TutorSubject, useTutorContext } from "./context.ts";
 import type { TokenContext } from "./music-tokens.ts";
 
 const EMPTY: TokenContext = { terms: [], introduced: null, tools: [], unlocked: null };
 
+/**
+ * What the chips of tutor text need: the glossary and tools, what the learner has met, and — Wave 3 — the key of
+ * the subject on screen (degrees and numerals sound in it) and the labels the learner sees (a lesson step's own,
+ * else the lenses).
+ */
 export function useTokenContext(): TokenContext {
   const content = useContent();
   const terms = useTermsIntroduced();
   const unlocks = useUnlocks();
+  const subject = useShownSubject();
+  const lenses = useTutorContext((s) => s.lenses);
   if (!content.data) return EMPTY;
+  const labels = subject.labels ?? lenses;
   return {
     terms: content.data.terms,
     tools: content.data.toolbox,
     introduced: terms.data ? new Set(terms.data.items.map((t) => t.termId as string)) : null,
     unlocked: unlocks.data ? new Set(unlocks.data.items.map((u) => u.itemId as string)) : null,
+    key: subjectKey(subject),
+    ...(labels ? { labels: { degrees: labels.degrees, solfege: labels.solfege } } : {}),
   };
 }
 

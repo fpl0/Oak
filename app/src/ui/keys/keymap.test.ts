@@ -70,6 +70,9 @@ describe("chords", () => {
     expect(formatKeys("Mod+K", true)).toBe("⌘K");
     expect(formatKeys("Mod+Shift+M", false)).toBe("Ctrl+Shift+M");
     expect(formatKeys("G T", false)).toBe("G then T");
+    expect(formatKeys("Shift+ArrowUp", true)).toBe("⇧↑");
+    expect(formatKeys("Mod+ArrowDown", false)).toBe("Ctrl+↓");
+    expect(formatKeys("ArrowLeft", false)).toBe("←");
   });
 });
 

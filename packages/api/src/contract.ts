@@ -576,7 +576,47 @@ export const contract = {
     res: D.DevClockSchema,
     dev: true,
   },
+
+  // --- Wave 3 additions (docs/design/wave3.md §5). Until the server engineer builds a handler, each answers
+  // 501 `not_implemented` (`WAVE3_ENDPOINTS`; routes.test.ts keeps the list of those still pending). ---
+  /** Today's sessions on the server: the "done for today" state across reloads and browsers. */
+  "session.day": { method: "GET", path: "/session/day", res: D.SessionDaySchema },
+  /** Quiet mode for today, vocal range and the tolerance ladder: read before any mic is asked for. */
+  "voice.get": { method: "GET", path: "/voice", res: D.VoiceStateSchema },
+  /** The mic chip and Settings → Voice: Quiet mode for today or always. */
+  "voice.quiet": {
+    method: "PUT",
+    path: "/voice/quiet",
+    body: D.VoiceQuietSetSchema,
+    res: D.VoiceStateSchema,
+  },
+  /** Settings → Voice: Auto, a fixed tolerance, or the one-tap loosen. */
+  "voice.ladder": {
+    method: "PUT",
+    path: "/voice/ladder",
+    body: D.VoiceLadderSetSchema,
+    res: D.VoiceStateSchema,
+  },
+  /** One drill set with its stored trials (resume after a reload, the set summary). */
+  "drills.get": {
+    method: "GET",
+    path: "/drills/sessions/:id",
+    params: p("id"),
+    res: D.DrillSessionDetailSchema,
+  },
 } as const satisfies Record<string, EndpointDef>;
+
+/**
+ * The Wave 3 endpoints of docs/design/wave3.md §5. Each answers a typed 501 until built; `routes.test.ts`
+ * lists the ones still pending, and the server engineer removes a name there as each handler lands.
+ */
+export const WAVE3_ENDPOINTS = [
+  "session.day",
+  "voice.get",
+  "voice.quiet",
+  "voice.ladder",
+  "drills.get",
+] as const satisfies readonly (keyof typeof contract)[];
 
 /** The Wave 2 endpoints of docs/design/wave2.md §4. All are built now (routes.test.ts checks none answers 501). */
 export const WAVE2_ENDPOINTS = [

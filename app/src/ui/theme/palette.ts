@@ -16,14 +16,16 @@ export interface Swatch {
 }
 
 const PAPER_LABEL_DARK = "#1F1A14";
+/** Near-black ink for the two mid-dark Paper fills (1, neutral) where neither white nor the dark label reach 4.5:1. */
+const PAPER_LABEL_INK = "#0D0A07";
 const BARK_LABEL_DARK = "#14110E";
 
 export const DEGREE_COLOURS: Record<ThemeName, Record<BaseDegree, Swatch>> = {
   paper: {
-    1: { fill: "#D55E00", label: "#FFFFFF" },
+    1: { fill: "#D55E00", label: PAPER_LABEL_INK },
     2: { fill: "#E69F00", label: PAPER_LABEL_DARK },
     3: { fill: "#E8D93A", label: PAPER_LABEL_DARK, outline: "#8A7A10" },
-    4: { fill: "#009E73", label: "#FFFFFF" },
+    4: { fill: "#009E73", label: PAPER_LABEL_DARK },
     5: { fill: "#56B4E9", label: PAPER_LABEL_DARK },
     6: { fill: "#0072B2", label: "#FFFFFF" },
     7: { fill: "#CC79A7", label: PAPER_LABEL_DARK },
@@ -41,7 +43,7 @@ export const DEGREE_COLOURS: Record<ThemeName, Record<BaseDegree, Swatch>> = {
 
 /** Non-diatonic with no degree reading, or an unknown pitch. */
 export const NEUTRAL: Record<ThemeName, Swatch> = {
-  paper: { fill: "#8A7F72", label: "#FFFFFF" },
+  paper: { fill: "#8A7F72", label: PAPER_LABEL_INK },
   bark: { fill: "#8C8172", label: BARK_LABEL_DARK },
 };
 
@@ -121,9 +123,22 @@ export function functionStyle(fn: HarmonicFn, theme: ThemeName, secondary = fals
 }
 
 /** CSS background for a degree chip: solid fill, plus a hatch overlay for an altered degree. */
+/** True for a light `#RRGGBB` colour (relative luminance above one half). */
+function isLightColour(hex: string): boolean {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (!m) return false;
+  const [r, g, b] = [m[1], m[2], m[3]].map((x) => Number.parseInt(x as string, 16) / 255) as [
+    number,
+    number,
+    number,
+  ];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.5;
+}
+
 export function degreeBackgroundCss(style: DegreeStyle): string {
   if (style.hatchAngle === null) return style.fill;
-  const line = "rgba(0,0,0,0.28)";
+  // The hatch moves away from the label's colour, so the text keeps its contrast where it crosses a stroke.
+  const line = isLightColour(style.label) ? "rgba(0,0,0,0.28)" : "rgba(255,255,255,0.38)";
   const { spacing, width } = HATCH;
   // CSS gradient angles run clockwise from "to top"; 45° in screen terms is a "/" stroke for ♭.
   const angle = style.hatchAngle === HATCH.flatAngle ? 45 : -45;

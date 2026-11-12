@@ -24,6 +24,7 @@ import type {
 } from "../ids.ts";
 import type { KeySpec, Md, MeterId, PickupSpec, SkillRef, SkillWeight, SwingSpec } from "./common.ts";
 import type { Answer, AnswerUiKind, Cue, KeyPool, Stimulus } from "./exercise.ts";
+import type { LadderLevel } from "./lesson.ts";
 import type { Diagnostic, NEvent } from "./results.ts";
 
 // --- toolbox (the single unlock table, §3.1) ----------------------------------------------------
@@ -215,6 +216,12 @@ export interface FactCardDef {
     staff?: { clef: "treble" | "bass"; notes: string[]; key?: KeySpec };
   };
   answer: Answer;
+  /**
+   * Wave 3. Other answers that also count as correct, each graded like `answer` (e.g. `C^7` with
+   * `{ text: ["Cmaj7"] }` and `{ text: ["CM7"] }`; a key signature named `F#` or `Gb` where both are meant).
+   * The card is correct when the response matches `answer` or any entry here.
+   */
+  accept?: Answer[];
 }
 export interface FactDeck {
   id: DeckId;
@@ -251,12 +258,29 @@ export interface CanDoDef {
   /** First awarded by. */
   source: LessonId | CapstoneId | CheckpointId;
 }
+/** One set of milestone conditions; all listed conditions must hold. */
+export interface MilestoneCondition {
+  /** Completed (lessons, checkpoints passed or soft-passed, capstone and gym sessions done). */
+  sessions?: SessionId[];
+  /** Released capstones. */
+  capstones?: CapstoneId[];
+  /** Can-dos at `emerging` or better. */
+  canDos?: CanDoId[];
+  /**
+   * Wave 3. A graded transcription-ladder session (gym, X1, X2, CF-T) passed at `level` or higher. With
+   * `after`, only a pass on or after the day `after` was completed counts (an advanced-track milestone).
+   */
+  ladder?: { level: LadderLevel; after?: SessionId };
+}
 export interface MilestoneDef {
   id: MilestoneId;
   title: string;
   description: Md;
-  /** Reached when all of these hold. */
-  when: { sessions?: SessionId[]; capstones?: CapstoneId[]; canDos?: CanDoId[] };
+  /**
+   * Reached when every condition listed here holds and, when `anyOf` is given (Wave 3), at least one of
+   * its condition sets holds as well (ms.07: either core finale released).
+   */
+  when: MilestoneCondition & { anyOf?: MilestoneCondition[] };
 }
 
 // --- repertoire (§2.8) --------------------------------------------------------------------------

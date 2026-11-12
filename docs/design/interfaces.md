@@ -1138,3 +1138,80 @@ section and §14 disagree, this section is current; the code beats both.
 fake tutor, fake mic) and `ui-review` (`app/src/ui/review/e2e`, 5222 / 8822). The `platform` project's `testMatch`
 is `/\/e2e\/[^/]+\.pw\.ts$/` (the earlier `^[^/]*` pattern matched no absolute path, so `bun run e2e` had silently
 stopped running the 53 platform tests) and it ignores `journey/` and `review/`.
+
+## 16. Wave 3 Foundation additions
+
+`docs/design/wave3.md` is the Wave 3 seam document: ownership, ports (notation's page on 5194, second stacks on
+52xx+30), the root Playwright config discovering every area config that exports `area`, and the seams. Package
+API added: `@oak/theory` `keys.ts` (`keyOf`, `keyFromFifths`, `fifthsOfKey`, `signatureOf`, `SHARP_ORDER`,
+`FLAT_ORDER`, `labelPitch`, `fifthsNeighbours`, `intervalOf`); `@oak/grader` `trackKeyContexts`/`keyAt` (the key of
+each stretch of each track, from `.scale()` contexts including patterned ones); `@oak/notation` `options.ts`
+(`Clef`, `KeySignatureOption`, `resolveKeySignature`, `AnnotationSet`, `noteAnnotations`, `ANNOTATION_CLASSES`),
+`geometry.ts` (`StaffGeometry`, `hitTest`, `noteAt`, `headAt`, `staffAt`, `stepY`, `onsetX`,
+`NotationNotBuiltError`), `StaffEdit` `move`/`accidental`, `noteListInput`/`editNoteList`, and in
+`render.dom.ts` `noteElements`, `noteBox`, `measureStaff` and `placeAnnotations` (the last two throw until built).
+`@oak/api`: five endpoints (`WAVE3_ENDPOINTS`: `session.day`, `voice.get`, `voice.quiet`, `voice.ladder`,
+`drills.get`, typed 501 until built), the `lenses` setting, `idempotencyKey` on `steps.attempt`/`srs.review`,
+`revealed`/`modality`/`sungResolution` on drill trials, milestone `title`/`description`, `WAVE3_SEED_POINTS`.
+App lib: `useSessionDay`, `useVoiceState`, `useVoiceQuiet`, `useVoiceLadder`, `useDrillSession`, `lenses.ts`
+(`useLenses`), `idempotency.ts`. Where wave3.md and §4–§15 here disagree on those subjects, wave3.md is current.
+
+## 17. Wave 3 integration (notation and voice, through U04)
+
+`docs/design/wave3.md` §0 ("Wave 3 state") is the current summary and §3.4 lists the package seams added during
+the wave; this section records the cross-package API as built, for the next wave.
+
+- **Endpoints:** the five Wave 3 endpoints are built (`WAVE3_PENDING` is empty). `session.start` returns the open
+  session of the learner day whatever it is asked for (decision 28); surfaces that start sessions outside Today
+  (the capstone start screen) check `bootstrap.openSession` first. `session.day.doneForToday` is also true on the
+  learner day onboarding finished.
+- **Shapes (additive):** `FamilyState.restingSince?: Day | null`; `Settings.albumTitle?: string | null`;
+  `SrsWorkingState` (server-internal) gains `resting` and `today.overdueReleased`; checkpoint offers live in the
+  internal setting `voice.cpOffers` (skipped by `SettingsRepo.all()`, carried by backups). New dev seed point
+  `after U04.CP` (`WAVE3_SEED_POINTS`).
+- **Grading codes content may pin** (`@oak/grader`): `code.unchanged` for an untouched by-ear starter;
+  `melody.index-shift` once for a whole-melody shift of one scale step; `id.interval-quality` for a tritone named
+  P4/P5; `d5` refused where the page spells A4; `sing.clipped`; `sing.no-voice` with `params.reason`. U03.L10 S3/S5
+  now pin `code.unchanged` (the last content pin of the old behaviour).
+- **App seams:** `lib/tool-label.ts` `toolName` (sounds as `.s("alias")`, scale rows in words) is the one helper;
+  `session/tool-name.ts` re-exports it. `drills/resting.ts` `isResting` reads `restingSince` and falls back to the
+  DTO's shape for an older server. The answer widgets' `AnswerFrame` keyscope is `"tap" | "staff-input"` (page keys
+  such as Enter = Continue never fire inside a staff). `AnswerEnv.audio.reference(kind, tonicMidi, mode)` plays the
+  `@oak/strudel/reference` home and chords. The drill machine takes `{ type: "QUIET", quiet }` when Quiet mode
+  changes mid-set.
+- **Browser suites:** `e2e/journey` now holds the Wave 3 journeys (`w3-*.pw.ts`, wave3.md §6.1) beside the Wave 2
+  gate journey; `day.ts` holds the shared day helpers. `app/e2e/smoke.pw.ts` checks the sound pack that
+  `sounds/pack.lock.json` names (v2), so `sounds/pack/v1` is no longer needed by any test.
+- **Not built (wave3.md §0 "Known gaps"):** lesson-step key/circle panels and the step key in the tutor's lesson
+  context. (Cross-browser resume and per-staff key signatures were built after this section was written; see §18.)
+
+## 18. Wave 3 final gate (after the four reviews)
+
+The reviews and the final gate changed these seams. wave3.md §0 is the summary; this is the API.
+
+- **`drills.start` returns the open set** for the same `(sessionId, warmupItemId)` when it is unfinished and has the
+  same `purpose` and `familyIds` (`SrsRepo.openDrillFor`); a start with no session or no warm-up item always makes a
+  new set. The drill runner's `start` actor reads such a set back with `drills.get` and continues from its trials
+  (`resumed` on the actor's output; `resumeFromServer` merges). A second browser therefore resumes a half-done
+  warm-up set, and a double click no longer makes two sets.
+- **Decision 29, as built:** an offered checkpoint holds the ladder until it is passed or soft-passed, or until the
+  learner has had `LADDER_OFFER_HOLD_DAYS` (14) learner days **with a session** on which it was not offered. A break
+  does not lapse the hold. `drills.finish` calls for one set are serialised in-process (a raced finish counts once).
+- **`@oak/notation`** (additive): `NotationInput.trackKeys?: Record<track, { key, keyChanges? }>` and
+  `Staff.key?` / `Staff.keyChanges?` give each staff its own signature; `AbcOptions.finalBar?: boolean` (default
+  true; `staffPage` sets it only on the page that ends the piece). A key change at a bar line is now preceded by a
+  double barline (`|| [K:x]`). The Workbench's `StaffSource.trackKeySpans` fills `trackKeys` when two or more
+  learner tracks state their own `.scale()` keys. A stopped staff turns to the page of an outside focus (a tutor
+  reference, a feedback hover, a code or roll selection).
+- **`@oak/grader`:** new lint code `code.letter-accidental` (info when graded) for Strudel's `s`/`f` accidentals
+  with an octave (`"fs5"` plays F♯5; the old text said it had no octave). An optional rubric rule no longer adds its
+  own findings (`melody.ends-on` and the like) to the diagnostics, only its info row; `rubric.unknown` is kept.
+- **`@oak/theory` beat labels** (`barPosition().label`): triplets read `1-trip`, `1-let` (were `1t`, `1l`); a
+  position off the counting grid reads `between 1 and 2` or `after 4, before the bar line` (was `1+4/7`).
+- **App:** `AnswerEnv.submitVerb?: "check" | "save"` and `useSubmitVerb()`; the lesson host sets `"save"` in a
+  checkpoint, so the key-signature, staff, key and interval widgets say "Enter save". `voice/sync.ts`
+  (`useVoiceSync`, `announceQuiet`) carries a Quiet-mode change to every open tab over a `BroadcastChannel`; the
+  lesson and the drill runner use it. `lesson/target-marks.ts` draws the editable region of a code-modify step.
+  `AlbumCover` text is fitted (`fitCoverText`, `coverTextWidth`, `ALBUM_WIDTH`, `TITLE_WIDTH`) and haloed. The
+  Workbench's play button is `aria-disabled` (not `disabled`) while the audio starts, so keyboard focus stays on
+  it. Checkpoint progress counts skipped items apart from answered ones.

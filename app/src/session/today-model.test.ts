@@ -154,6 +154,53 @@ describe("Today states (ux §1.4)", () => {
     expect(v.keepAlive).toBe(false);
   });
 
+  test("review day: the server's note is the lead", () => {
+    const note = "The next lessons are still being written. Today: a review, then Studio.";
+    const v = todayView(input({ plan: { ...PLANS.review, note } }));
+    expect(v.state).toBe("review");
+    expect(v.lead).toBe(note);
+  });
+
+  test("the edge of what's written: a review day that says so, with Start, never a dead lesson", () => {
+    const edge = {
+      nextId: "U05.L01",
+      nextUnit: { id: "U05", title: "Triads" },
+      doneUnit: { id: "U04", title: "Intervals (compressed)" },
+    };
+    const v = todayView(input({ plan: PLANS.review, edge }));
+    expect(v.state).toBe("edge");
+    expect(v.heading).toBe("The edge of what's written");
+    expect(v.lead).toContain("through Intervals (compressed)");
+    expect(v.lead).toContain("Triads, the next unit, is still being written.");
+    expect(v.lead).not.toMatch(/behind|missed|lost/i);
+    expect(v.primary).toEqual({ action: "start", label: "Start session" });
+    expect(v.rows.map((r) => r.key)).toEqual(["warmup", "coda"]);
+    // The edge never hides an open session or today's done state.
+    const open = todayView(
+      input({
+        plan: PLANS.review,
+        edge,
+        server: { day: DAY, open: fixtureSession({ id: "s_open" }), doneForToday: false },
+      }),
+    );
+    expect(open.state).toBe("in-session");
+    const done = todayView(
+      input({ plan: PLANS.review, edge, server: { day: DAY, open: null, doneForToday: true } }),
+    );
+    expect(done.state).toBe("done");
+  });
+
+  test("the one-tap loosen follows the server's ladder when it answers", () => {
+    const ladder = { cents: 35 as const, offerLoosen: true };
+    expect(todayView(input({ plan: PLANS.welcomeBack, ladder })).offerLoosen).toBe(true);
+    expect(
+      todayView(input({ plan: PLANS.lightLoosen, ladder: { cents: 35, offerLoosen: false } })).offerLoosen,
+    ).toBe(false);
+    expect(
+      todayView(input({ plan: PLANS.welcomeBack, ladder: { cents: 70, offerLoosen: true } })).offerLoosen,
+    ).toBe(false);
+  });
+
   test("welcome back after 3+ days: recap row, no gap counts in the copy", () => {
     const v = todayView(input({ plan: PLANS.welcomeBack }));
     expect(v.state).toBe("welcome-back");
@@ -240,5 +287,64 @@ describe("helpers", () => {
     expect(k.mapItemId).toBeNull();
     expect(k.main).toBeNull();
     expect(k.warmup.items.map((i) => i.id)).toEqual(["w1"]);
+  });
+});
+
+describe("Today from the server's record of the day (wave3.md §5.1)", () => {
+  const day = (over: Partial<NonNullable<TodayInput["server"]>> = {}) => ({
+    day: DAY,
+    open: null,
+    doneForToday: false,
+    ...over,
+  });
+
+  test("done for today on the server: done in any browser, whatever this one remembers", () => {
+    const v = todayView(input({ server: day({ doneForToday: true }), lastEnded: null }));
+    expect(v.state).toBe("done");
+    expect(v.primary).toBeNull();
+  });
+
+  test("not done on the server: this browser's stale record does not make it done", () => {
+    const v = todayView(input({ server: day(), lastEnded: { sessionId: "ses_old", day: DAY } }));
+    expect(v.state).toBe("normal");
+  });
+
+  test("a session open on the server (another tab, another browser) → Resume session", () => {
+    const v = todayView(input({ server: day({ open: fixtureSession({ id: "ses_9" }) }) }));
+    expect(v.state).toBe("in-session");
+    expect(v.primary?.label).toBe("Resume session");
+  });
+
+  test("open before Done, ended since: the session this tab just ended is done", () => {
+    const v = todayView(
+      input({
+        server: day({ open: fixtureSession({ id: "ses_9" }) }),
+        lastEnded: { sessionId: "ses_9", day: DAY },
+      }),
+    );
+    expect(v.state).toBe("done");
+  });
+
+  test("an open session after an earlier one ended (More practice) is resumed, not done", () => {
+    const v = todayView(
+      input({ server: day({ open: fixtureSession({ id: "ses_2" }), doneForToday: true }) }),
+    );
+    expect(v.state).toBe("in-session");
+  });
+
+  test("a record of another day (the dev clock moved) is ignored; the bootstrap decides", () => {
+    const v = todayView(input({ server: day({ day: "2026-11-10", doneForToday: true }) }));
+    expect(v.state).toBe("normal");
+  });
+
+  test("a paused week still reads paused when nothing is open or done", () => {
+    const boot = fixtureBootstrap();
+    const v = todayView(
+      input({
+        server: day(),
+        boot: { ...boot, settings: { ...boot.settings, pausedWeeks: ["2026-11-09"] } },
+      }),
+    );
+    expect(v.state).toBe("paused-week");
   });
 });

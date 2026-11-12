@@ -41,7 +41,7 @@ export const notFound = (what: string) => new ApiError("not_found", `${what} not
 export const conflict = (message: string) => new ApiError("conflict", message);
 export const forbidden = (message: string) => new ApiError("forbidden", message);
 export const unavailable = (message: string) => new ApiError("unavailable", message);
-/** The typed stub of a Wave 2 endpoint whose handler is not built yet (docs/design/wave2.md §4). */
+/** The typed stub of an endpoint whose handler is not built yet (docs/design/wave2.md §4, wave3.md §5). */
 export const notImplemented = (endpoint: string) =>
   new ApiError("not_implemented", `${endpoint} is not implemented yet`);
 

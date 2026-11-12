@@ -14,6 +14,8 @@ export interface RenderRequest {
   cycles: number;
   cps: number;
   sampleRate: number;
+  /** Superdough values to render instead of `code` (an `AudioPlan`'s events: seconds from 0). */
+  events?: { at: number; dur: number; value: Record<string, unknown> }[];
 }
 
 /** Deterministic renders: superdough's reverb impulse response is Math.random() noise, so seed it. */
@@ -33,6 +35,15 @@ async function renderOffline(req: RenderRequest, soundsRoot: string) {
   webaudio.setSuperdoughAudioController(null); // lazily rebuilt for the offline context
   await webaudio.initAudio({ maxPolyphony: 128 });
   await prebake(soundsRoot);
+  if (req.events) {
+    for (const ev of req.events) await webaudio.superdough({ ...ev.value }, ev.at, ev.dur, 1, ev.at);
+    const out = await ctx.startRendering();
+    return {
+      left: out.getChannelData(0).slice(),
+      right: out.getChannelData(1).slice(),
+      haps: req.events.length,
+    };
+  }
   const { pattern } = (await core.evaluate(req.code, transpiler)) as { pattern: Strudel.Pattern };
   const haps = pattern
     .queryArc(0, req.cycles, { _cps: req.cps })

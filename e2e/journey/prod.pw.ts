@@ -1,10 +1,14 @@
 // The journey's first session on the production build (`bun run build`, `--serve-dist`, no OAK_DEV: production
 // security, the real tutor detection, no dev hooks): a fresh learner opens Oak, goes through onboarding in Quiet mode
-// to Today, and the app then reloads with the network off (the Service Worker serves the shell).
+// to Today, and the app then reloads with the network off (the Service Worker serves the shell). A second test
+// moves a learner who is mid-U03 onto the production server the way a person would (a backup made on the dev
+// stack, imported with the confirm nonce of contracts §11.6), starts that day's U03 session, and reloads it offline.
 import { expect, test } from "@playwright/test";
 import { expectStep, throughTheLoop } from "../../app/src/onboarding/e2e/helpers.ts";
-import { PROD_URL } from "./playwright.config.ts";
-import { expectClean, watch } from "./support.ts";
+import { PROD_URL, stack } from "./playwright.config.ts";
+import { expectClean, resetClock, seed, watch } from "./support.ts";
+
+test.describe.configure({ mode: "serial" });
 
 test("production: onboarding to Today, then an offline reload", async ({ browser }) => {
   const up = await fetch(`${PROD_URL}/api/health`, { headers: { "X-Oak": "1" } }).catch(() => null);
@@ -63,6 +67,87 @@ test("production: onboarding to Today, then an offline reload", async ({ browser
   await page.reload();
   await expect(page.getByTestId("page-title")).toHaveText(/Today/, { timeout: 30_000 });
   await expect(page.locator("#main")).toBeVisible();
+  const offlineProblems = w.problems.filter(
+    (p) => !/Failed to load resource|net::ERR_INTERNET_DISCONNECTED|fetch/i.test(p),
+  );
+  expect(offlineProblems).toEqual([]);
+  expect(w.remote).toEqual([]);
+  await context.setOffline(false);
+  await context.close();
+});
+
+test("production: a mid-U03 learner from a backup starts the day's U03 session, then reloads offline", async ({
+  browser,
+  request,
+}) => {
+  test.setTimeout(240_000);
+  const up = await fetch(`${PROD_URL}/api/health`, { headers: { "X-Oak": "1" } }).catch(() => null);
+  test.skip(up === null, `no production server on ${PROD_URL}`);
+  // The learner on the dev stack: U03.L02 done yesterday, so today is U03.L03. Exported as a backup.
+  await resetClock(request);
+  await seed(request, "after U03.L02");
+  const exported = await request.get(`${stack.apiURL}/api/backup/export?audio=0`, {
+    headers: { "x-oak": "1", origin: stack.apiURL },
+  });
+  expect(exported.ok()).toBe(true);
+  const bytes = await exported.body();
+  // Imported on the production server: a destructive action, so it needs a fresh confirm nonce.
+  const prodHeaders = { "x-oak": "1", origin: PROD_URL };
+  const nonce = await request.post(`${PROD_URL}/api/confirm`, {
+    headers: { ...prodHeaders, "content-type": "application/json" },
+    data: JSON.stringify({ action: "backup.import", target: "*" }),
+  });
+  expect(nonce.ok()).toBe(true);
+  const imported = await request.post(`${PROD_URL}/api/backup/import`, {
+    headers: {
+      ...prodHeaders,
+      "content-type": "application/octet-stream",
+      "x-oak-confirm": ((await nonce.json()) as { nonce: string }).nonce,
+    },
+    data: bytes,
+  });
+  expect(imported.ok(), await imported.text()).toBe(true);
+
+  const context = await browser.newContext({ baseURL: PROD_URL, viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  const w = watch(page);
+  await page.goto("/");
+  const today = page.getByTestId("today-card");
+  await expect(today).toBeVisible({ timeout: 30_000 });
+  await expect(today).not.toHaveAttribute("data-state", /first-run|done/);
+  await expect(today).toContainText("Restless Neighbours");
+  // No dev hooks in a production build.
+  expect(await page.evaluate(() => "__oakSession" in window || "__oakLesson" in window)).toBe(false);
+  await page.getByTestId("start-session").click();
+  await expect(page).toHaveURL(/\/session\/?$/);
+  await expect(page.getByTestId("warmup").or(page.getByTestId("lesson-step")).first()).toBeVisible({
+    timeout: 60_000,
+  });
+  await expect(page.getByRole("list", { name: "Today's setlist" })).toBeVisible();
+
+  // Offline: the Service Worker serves the shell and the session page still renders.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => (await navigator.serviceWorker.getRegistration())?.active?.scriptURL ?? ""),
+      { timeout: 30_000 },
+    )
+    .toMatch(/\/sw\.js/);
+  await page.reload();
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 30_000 });
+  expectClean(w);
+  await context.setOffline(true);
+  w.problems.length = 0;
+  await page.reload();
+  await expect(page.locator("#main")).toBeVisible({ timeout: 30_000 });
+  await expect(
+    page
+      .getByTestId("page-title")
+      .or(page.getByRole("list", { name: "Today's setlist" }))
+      .first(),
+  ).toBeVisible({
+    timeout: 30_000,
+  });
   const offlineProblems = w.problems.filter(
     (p) => !/Failed to load resource|net::ERR_INTERNET_DISCONNECTED|fetch/i.test(p),
   );

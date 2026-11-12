@@ -1,6 +1,13 @@
 // The tolerance ladder (contracts §8.2).
 import { describe, expect, test } from "bun:test";
-import { dayNumber, ladderProgress, loosenOffer, nextSingTolerance } from "./ladder.ts";
+import {
+  dayNumber,
+  ladderProgress,
+  ladderSnapshot,
+  loosenOffer,
+  nextSingTolerance,
+  singDayStats,
+} from "./ladder.ts";
 import type { SingDayStat } from "./types.ts";
 
 const auto = { today: "2026-11-21", checkpointPending: false, mode: "auto" as const };
@@ -98,4 +105,63 @@ test("dayNumber is calendar maths", () => {
   expect((dayNumber("2026-03-01") ?? 0) - (dayNumber("2026-02-28") ?? 0)).toBe(1);
   expect((dayNumber("2028-03-01") ?? 0) - (dayNumber("2028-02-28") ?? 0)).toBe(2);
   expect(dayNumber("2026-02-30")).toBe(null);
+});
+
+describe("singDayStats and ladderSnapshot (what GET /voice reports)", () => {
+  test("per-day true medians from single notes, oldest first", () => {
+    const notes = [
+      { day: "2026-11-03", cents: -40 },
+      { day: "2026-11-02", cents: 10 },
+      { day: "2026-11-02", cents: -30 },
+      { day: "2026-11-02", cents: 20 },
+      { day: "bad", cents: 5 },
+      { day: "2026-11-03", cents: Number.NaN },
+    ];
+    expect(singDayStats(notes)).toEqual([
+      { day: "2026-11-02", gradedNotes: 3, medianAbsCents: 20 },
+      { day: "2026-11-03", gradedNotes: 1, medianAbsCents: 40 },
+    ]);
+  });
+
+  const base = {
+    cents: 70 as const,
+    mode: "auto" as const,
+    today: "2026-11-21",
+    pendingCheckpoint: null,
+    lastSingDay: "2026-11-20",
+    lastChange: null,
+  };
+
+  test("a bad day between good ones never undoes them; the third good day earns the step", () => {
+    const days = [day("2026-11-10", 30), day("2026-11-12", 80), day("2026-11-14", 28)];
+    const s = ladderSnapshot({ ...base, days });
+    expect(s.qualifyingDays).toBe(2);
+    expect(s.days.map((d) => d.qualifies)).toEqual([true, false, true]);
+    expect(s.next).toEqual({ cents: 50, medianAtMost: 35 });
+    expect(nextSingTolerance(70, days, auto)).toBe(70);
+    const more = [...days, day("2026-11-20", 90), day("2026-11-21", 33)];
+    expect(nextSingTolerance(70, more, auto)).toBe(50);
+    expect(ladderSnapshot({ ...base, days: more }).qualifyingDays).toBe(3);
+  });
+
+  test("held while a checkpoint is pending; fixed mode has no next step; days outside the window drop out", () => {
+    const days = [day("2026-10-01", 20), day("2026-11-15", 20)];
+    const held = ladderSnapshot({ ...base, days, pendingCheckpoint: "U03.CP" });
+    expect(held.held).toEqual({ reason: "checkpoint-pending", checkpointId: "U03.CP" });
+    expect(held.days.map((d) => d.day)).toEqual(["2026-11-15"]);
+    const fixed = ladderSnapshot({ ...base, mode: "fixed", days, pendingCheckpoint: "U03.CP" });
+    expect(fixed.next).toBeNull();
+    expect(fixed.held).toBeNull();
+    expect(ladderSnapshot({ ...base, cents: 25, days }).next).toBeNull();
+  });
+
+  test("the one-tap loosen is offered after 21 days without singing, never at ±70", () => {
+    expect(ladderSnapshot({ ...base, cents: 35, days: [], lastSingDay: "2026-10-30" }).offerLoosen).toBe(
+      true,
+    );
+    expect(ladderSnapshot({ ...base, cents: 35, days: [], lastSingDay: "2026-11-19" }).offerLoosen).toBe(
+      false,
+    );
+    expect(ladderSnapshot({ ...base, days: [], lastSingDay: "2026-01-01" }).offerLoosen).toBe(false);
+  });
 });

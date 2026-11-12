@@ -476,7 +476,10 @@ function scanProgram(code: string, ast: AstNode, ctx: LintContext): Scan {
       });
     }
     if (/\S\.\.|\.\.\S/.test(lit.value)) {
-      find("code.range-spacing", lit.node, { suggest: lit.value.replace(/\s*\.\.\s*/g, " .. ") });
+      find("code.range-spacing", lit.node, {
+        text: lit.value,
+        suggest: lit.value.replace(/\s*\.\.\s*/g, " .. "),
+      });
     }
     if (!callee || !NO_MINI_OPS.has(callee)) {
       for (const op of mini.ops)
@@ -578,10 +581,12 @@ function scanProgram(code: string, ast: AstNode, ctx: LintContext): Scan {
     if (!m) return;
     const [, letter, acc = "", oct = ""] = m;
     const fixedAcc = acc.replace(/s/g, "#").replace(/f/g, "b");
-    if (/[sf]/.test(acc)) {
-      find("code.octave-default", a, {
+    // Strudel reads `s` and `f` as sharp and flat ("fs5" is F♯5): with an octave it plays right, so the note is
+    // only about the spelling (STYLE §1), never "has no octave".
+    if (/[sf]/.test(acc) && oct) {
+      find("code.letter-accidental", a, {
         note: a.text,
-        suggest: `${letter?.toLowerCase()}${fixedAcc}${oct || "4"}`,
+        suggest: `${letter?.toLowerCase()}${fixedAcc}${oct}`,
       });
     } else if (!oct) {
       find("code.octave-default", a, { note: a.text, suggest: `${letter?.toLowerCase()}${fixedAcc}4` });

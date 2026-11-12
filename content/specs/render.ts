@@ -89,7 +89,8 @@ function lesson(l: LessonSpec): string {
     "|---|---|---|---|---|---|---|---|",
   );
   l.steps.forEach((s, i) => {
-    const ex = s.exercise ? (s.parts ? `${s.exercise} (${s.parts.join(", ")})` : s.exercise) : "—";
+    const kind = s.exercise ? (s.parts ? `${s.exercise} (${s.parts.join(", ")})` : s.exercise) : "—";
+    const ex = s.wave3?.length ? `${kind}; Wave 3: ${s.wave3.join(", ")}` : kind;
     out.push(
       `| S${i + 1}${i + 1 === l.wrapAt ? " (wrap)" : ""} | ${s.kind}${s.optional ? " (optional)" : ""} | ${ex} | ${(s.answer ?? []).join(", ") || "—"} | ${fmt(s.minutes)} | ${s.graded ? "yes" : ""} | ${cell(s.what)} | ${termsOf(s).join(", ")} |`,
     );
@@ -114,13 +115,31 @@ function lesson(l: LessonSpec): string {
         ? l.srs
             .map(
               (r) =>
-                `${r.family ? code(r.family) : code(r.deck ?? "")}${r.cards ? ` cards ${list(r.cards)}` : ""} (${r.mode})`,
+                `${r.family ? code(r.family) : code(r.deck ?? "")}${r.cards ? ` cards ${list(r.cards)}` : ""} (${r.mode}${r.level ? `, level ${r.level}` : ""})`,
             )
             .join("; ")
         : "none"
     }. Fact cards: ${l.srs.flatMap((r) => r.cards ?? []).length || "none"}.`,
     "",
   );
+  if (l.singOn)
+    out.push(
+      `**Singing.** On ${l.singOn}${l.singOn === "numbers" ? " (syllables arrive in U03.L08)" : ", numbers still shown and accepted"}.`,
+      "",
+    );
+  for (const r of l.repertoire ?? []) {
+    out.push(
+      `**Repertoire: ${r.song}**, ${r.fragment} (${r.bars} bars). Setting: ${r.setting}`,
+      "",
+      "```js",
+      `// as degrees, in ${r.key}`,
+      `n("${r.degrees}").scale("${r.key}")`,
+      `// the same notes in the source's key, ${r.sourceKey}`,
+      `note("${r.letters}")`,
+      "```",
+      "",
+    );
+  }
   out.push("**Mistakes the tests must pin (feedback codes as the grader emits them).**", "");
   for (const x of l.mistakes) out.push(`- ${x}`);
   out.push("");

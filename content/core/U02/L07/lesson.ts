@@ -53,9 +53,14 @@ const LETTER_FEEDBACK = {
 
 const MAKE_STARTER = mel("<[c4 d4 e4 ~] [~ ~ ~ ~]>");
 
+/** The catalog's drift text names a syllable ("re-anchor on do"); syllables wait for U03.L08. */
+const DRIFT_FEEDBACK = {
+  "sing.drift": "You drifted {cents}¢ {dir} over the call. Hear its first note again and start from there.",
+} as const;
+
 export default defineLesson({
   id: "U02.L07",
-  version: 1,
+  version: 2,
   title: "Sing It Back",
   objective:
     "I can match a note with my voice, hear whether a note goes up or down, and sing back a short phrase.",
@@ -191,6 +196,7 @@ export default defineLesson({
             target: { from: "stimulus", track: "mel" },
             tol: SING_TOL("global"),
             showTrace: "after",
+            feedbackText: DRIFT_FEEDBACK,
             tests: [],
           },
           {
@@ -211,6 +217,7 @@ export default defineLesson({
             target: { from: "stimulus", track: "mel" },
             tol: SING_TOL("global"),
             showTrace: "after",
+            feedbackText: DRIFT_FEEDBACK,
             tests: [],
           },
         ],
@@ -237,7 +244,8 @@ export default defineLesson({
         code: { starter: mel("e4 ⟪~ ~⟫ ~") },
         reference: { solutions: [mel("e4 d4 c4 ~")], bars: 1 },
         matcher: { m: "events", pitch: "absolute", rhythm: "onsets", durations: false },
-        target: { audible: true, showRoll: false },
+        // The roll of the target appears after the first failed check: by ear first, then a picture to compare.
+        target: { audible: true, showRoll: false, revealRollAfter: 1 },
         feedbackText: LETTER_FEEDBACK,
         hints: ladder(
           "Sing it again. Does each note go up or down from the one before?",

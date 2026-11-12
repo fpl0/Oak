@@ -53,18 +53,26 @@ export function CodeMusic({
     () => ({ profile: "content" as const, unlocked: new Set<never>(), allowPreview: true, meter: m, key }),
     [m, key],
   );
-  const analysis = useAnalysis(grader, code, {
+  // Built as a value, not a literal: the Workbench's analysis options grow this wave (lens lines), and a plain
+  // static picture asks for none of them.
+  const opts = {
     bars,
     meter: m,
     key,
     lint,
     band: null,
-    staff: view === "roll" ? false : view === "lead" ? "lead" : "auto",
-    staffLabels: "none",
+    staff: view === "roll" ? (false as const) : view === "lead" ? ("lead" as const) : ("auto" as const),
+    staffLabels: "none" as const,
+    annotations: { degree: false, solfege: false, noteName: false },
     debounceMs: 0,
-  });
+  };
+  const analysis = useAnalysis(grader, code, opts);
   return (
-    <figure className="overflow-x-auto rounded-card border border-border bg-surface p-2" aria-label={label}>
+    // `oak-workbench` carries the theme's tokens to the roll and staff canvases (Bark as well as Paper).
+    <figure
+      className="oak-workbench overflow-x-auto rounded-card border border-border bg-surface p-2"
+      aria-label={label}
+    >
       {analysis.model ? (
         view === "roll" ? (
           <PianoRoll model={analysis.model} bus={bus} clock={clock} stale={false} height={140} />

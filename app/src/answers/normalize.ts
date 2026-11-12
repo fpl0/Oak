@@ -126,6 +126,29 @@ function free(text: string): string {
  */
 export function readsAs(kind: TextKind, text: string): ReadsAs {
   if (text.trim() === "") return { state: "empty" };
+  const one = readOne(kind, text);
+  if (one.state !== "unknown") return one;
+  // A list of notes or numerals ("D E F# G A B C#": a scale to spell, a key signature) reads token by token;
+  // as one note it read "Oak reads a note name" while the grader took it, and its reveal showed "F#". A
+  // single note in words ("e flat") is read whole first.
+  const tokens = text.trim().split(/[\s,]+/);
+  if ((kind === "note" || kind === "rn") && tokens.length > 1) {
+    const each = tokens.map((t) => readOne(kind, t));
+    if (each.every((r) => r.state === "ok")) {
+      const ok = each as Extract<ReadsAs, { state: "ok" }>[];
+      return {
+        state: "ok",
+        canonical: ok.map((r) => r.canonical).join(" "),
+        display: ok.map((r) => r.display).join(" "),
+        spoken: ok.map((r) => r.spoken).join(", "),
+      };
+    }
+    return { state: "unknown", hint: `Oak reads ${EXPECT[kind]}, separated by spaces.` };
+  }
+  return one;
+}
+
+function readOne(kind: TextKind, text: string): ReadsAs {
   if (kind === "free") {
     const c = free(text);
     return { state: "ok", canonical: c, display: c, spoken: c };

@@ -165,6 +165,17 @@ export interface AnalysisSummary {
   energy: number[];
   /** For example 'V/vi→vi bar 6', 'bVII borrowed bar 12'. */
   devices: string[];
+  /**
+   * Wave 3: the key each pitched track is read in, bar by bar (`.scale()` contexts, patterned ones
+   * included; else the declared key or an estimate), so the degree labels of every bar are right.
+   */
+  keyContexts?: AnalysisKeyContext[];
+}
+export interface AnalysisKeyContext {
+  track: string;
+  band: boolean;
+  /** 1-based, inclusive bars. */
+  spans: { fromBar: number; toBar: number; key: KeySpec; source: "declared" | "scale" | "estimate" }[];
 }
 
 // --- the UI / tutor view of a result (§5.7, §10.5) ----------------------------------------------

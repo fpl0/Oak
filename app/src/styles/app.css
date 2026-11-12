@@ -42,6 +42,12 @@
   --text-h2: var(--oak-h2);
   --text-h3: var(--oak-h3);
 
+  /* max-w-page, max-w-page-focus, max-w-page-narrow, max-w-measure */
+  --container-page: var(--oak-page-wide);
+  --container-page-focus: var(--oak-page-focus);
+  --container-page-narrow: var(--oak-page-narrow);
+  --container-measure: var(--oak-measure);
+
   --radius-control: var(--oak-radius-control);
   --radius-card: var(--oak-radius-card);
   --radius-sheet: var(--oak-radius-sheet);
@@ -140,6 +146,13 @@
   pre,
   samp {
     font-family: var(--oak-font-code);
+  }
+  /* abcjs writes its text faces as SVG attributes: lens lines in Helvetica, which has no sharp or flat sign,
+     so macOS substitutes a full-width glyph ("F ♯ 5"). Staff lyrics and annotations use the UI face, whose
+     fallback (system-ui) has compact accidentals. */
+  svg .abcjs-lyric,
+  svg .abcjs-annotation {
+    font-family: var(--oak-font-ui);
   }
   ::selection {
     background: var(--oak-selection);

@@ -16,6 +16,7 @@ import {
   diatonicChords,
   displayName,
   euclid,
+  fifthsNeighbours,
   formatRN,
   formatScaleName,
   functionOf,
@@ -23,20 +24,25 @@ import {
   gridToMini,
   identifyChord,
   intervalBetween,
+  intervalInKey,
+  intervalOf,
   intervalSemitones,
   invertInterval,
   isCanonicalCode,
   keySignature,
+  labelPitch,
   METERS,
   midiToFreq,
   normalizeText,
   noteToMidi,
   parallelKey,
   parseChordWithBass,
+  parseInterval,
   parseKeyText,
   parseNote,
   parseRN,
   parseScaleArg,
+  parseStrudelInterval,
   RHYTHM_GRIDS,
   relativeKey,
   rhythmGrid,
@@ -46,8 +52,10 @@ import {
   scaleNotes,
   scalePcs,
   schemaMatch,
+  signatureOf,
   spellMidi,
   stepToMidi,
+  strudelInterval,
   strudelStep,
   tempoLine,
   toAbcChord,
@@ -67,10 +75,16 @@ notes and intervals
   spell <midi> [key] [--chord X] [--up|--down]   spell a MIDI note in context
   interval <low> <high>          interval name ("C4" "E5" → M10; "F" "B" → A4)
   invert <interval>              m3 → M6
+  between <a> <b> [key]          generic and specific interval, direction, Strudel string ("C4" "Eb4"; MIDI spelled in key)
+  ivl <name|strudel> [--down]    an interval name both ways: M3 ↔ "3M", m2 down ↔ "-2m", semitones
 keys, scales, degrees
   scale <key>                    notes, pitch classes, signature, .scale() name, characteristic tones
   keysig <key>  |  relative <key>  |  parallel <key>  |  transpose <key> <semitones>  |  circle
   degree <note|midi> <key>       degree, syllable, n step
+  label <note|midi> <key> [--up|--down]   degree (b3, #4), syllable and spelling in the key (the lenses' label)
+  signature <key|fifths> [--minor]        sharps or flats in written order, and the two keys that share them
+  neighbours <key>               circle of fifths: clockwise, counterclockwise, relative, parallel
+  degree-interval <deg> <deg> <key> [--down]   interval from one degree to another, spelled in the key (7 4 C → d5)
   step <degree> <key>            the n value for a degree ("#4" C:major → "3#")
   n <scale> <step...>            what n("…").scale(scale) plays ("C4:major" 0 2 4 3# 6b)
 chords
@@ -162,6 +176,70 @@ function run(op: string, a: string[], flags: Set<string>, opts: Map<string, stri
     case "interval": {
       const name = intervalBetween(a[0] ?? fail("missing note"), a[1] ?? fail("missing note"));
       return { interval: name, semitones: intervalSemitones(name), inversion: invertInterval(name) };
+    }
+    case "between": {
+      const parse = (t: string | undefined): number | string => {
+        if (!t) return fail("missing note");
+        if (/^-?\d+$/.test(t)) return Number(t);
+        if (/^[A-Ga-g](?:##|bb|#|b)?-?\d+$/.test(t)) return t;
+        return midiArg(t);
+      };
+      const key = a[2] ? keyArg(a[2]) : null;
+      const info = intervalOf(parse(a[0]), parse(a[1]), key);
+      return {
+        ...info,
+        strudel: strudelInterval(info.name, info.direction === "down" ? "down" : "up"),
+        inversion: invertInterval(info.name),
+      };
+    }
+    case "ivl": {
+      const text = a[0] ?? fail("missing interval");
+      const p = parseStrudelInterval(flags.has("down") && !text.startsWith("-") ? `-${text}` : text);
+      if (!p) return fail(`not an interval name: ${text} (write M3, "3M" or "-2m")`);
+      const info = parseInterval(p.name);
+      return { ...p, inversion: invertInterval(p.name), compound: (info?.num ?? 0) > 8 };
+    }
+    case "label": {
+      const k = keyArg(a[1]);
+      const midi = midiArg(a[0]);
+      return labelPitch(
+        midi,
+        k,
+        flags.has("up") ? { direction: 1 } : flags.has("down") ? { direction: -1 } : {},
+      );
+    }
+    case "signature": {
+      const t = a[0] ?? fail("missing key or fifths");
+      const sig = /^[-+]?\d+$/.test(t) ? signatureOf(Number(t)) : signatureOf(keyArg(t));
+      return {
+        fifths: sig.fifths,
+        accidentals: sig.fifths > 0 ? sig.sharps : sig.flats,
+        kind: sig.fifths > 0 ? "sharps" : sig.fifths < 0 ? "flats" : "none",
+        major: keyText(sig.major),
+        minor: keyText(sig.minor),
+        ...(flags.has("minor") ? { key: keyText(sig.minor) } : { key: keyText(sig.major) }),
+      };
+    }
+    case "neighbours": {
+      const n = fifthsNeighbours(keyArg(a[0]));
+      return {
+        key: keyText(n.key),
+        fifths: n.fifths,
+        clockwise: keyText(n.clockwise),
+        counterclockwise: keyText(n.counterclockwise),
+        relative: keyText(n.relative),
+        parallel: keyText(n.parallel),
+      };
+    }
+    case "degree-interval": {
+      const k = keyArg(a[2]);
+      const info = intervalInKey(
+        a[0] ?? fail("missing degree"),
+        a[1] ?? fail("missing degree"),
+        k,
+        flags.has("down") ? { direction: "down" } : {},
+      );
+      return { ...info, strudel: strudelInterval(info.name, info.direction === "down" ? "down" : "up") };
     }
     case "invert":
       return { interval: a[0], inversion: invertInterval(a[0] ?? fail("missing interval")) };

@@ -84,12 +84,23 @@ export interface RangeResult {
   comfortHighMidi: number;
 }
 /** The steps of the set-up wizard (U00.L02 and `/settings/voice/setup`). Each returns what the profile stores. */
+export interface QuietCheck {
+  /** Median frame level, dBFS. */
+  floorDb: number;
+  /** Seconds of voiced frames heard during the check. */
+  voicedSec: number;
+  /** A voice spoilt the check: hum or talk heard for ≥ 0.3 s (or ≥ 15 % of the frames). */
+  voiced: boolean;
+}
+
 export interface Calibration {
   /** Left and right test tones; the learner confirms what they heard. */
   outputCheck(): Promise<void>;
   devices(): Promise<DeviceReport>;
   /** Median input level over `seconds` of silence, dBFS. */
   noiseFloor(seconds?: number): Promise<number>;
+  /** The quiet check: the noise floor and whether a voice was heard during it (then measure again). */
+  noiseCheck(seconds?: number): Promise<QuietCheck>;
   /** Plays 880, 1175 and 1568 Hz with the mic open: true when the mic hears the speakers. */
   bleedTest(): Promise<boolean>;
   /** 16 clicks; the learner taps along. `onClick` reports progress. */

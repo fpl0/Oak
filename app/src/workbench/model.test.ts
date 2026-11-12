@@ -239,5 +239,9 @@ describe("long loops page the staff (runtime review: 64 bars)", () => {
       expect(engraved.has(e.id)).toBe(true);
     // Past the end clamps to the last page.
     expect(staffPage(src, 99).startBar).toBe(56);
+    // Only the page that ends the piece ends with the final barline; the others close with a plain one.
+    expect(m.abc?.abc).not.toContain("|]");
+    expect(p.abc?.abc).not.toContain("|]");
+    expect(staffPage(src, 7).abc?.abc.trimEnd()).toMatch(/\|\]$/m);
   });
 });

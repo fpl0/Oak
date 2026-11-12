@@ -198,21 +198,26 @@ export function PageHeader({
   );
 }
 
+/**
+ * A page column on the shared widths (tokens.css `--oak-page-*`): `wide` for most pages, `focus` for a guided
+ * flow that keeps one width across its screens (onboarding, voice setup), `narrow` for forms and reading.
+ */
 export function Page({
   children,
   width = "wide",
   className,
 }: {
   children: ReactNode;
-  width?: "wide" | "narrow" | "full";
+  width?: "wide" | "focus" | "narrow" | "full";
   className?: string;
 }) {
   return (
     <div
       className={clsx(
         "mx-auto w-full px-6 py-6",
-        width === "wide" && "max-w-6xl",
-        width === "narrow" && "max-w-3xl",
+        width === "wide" && "max-w-page",
+        width === "focus" && "max-w-page-focus",
+        width === "narrow" && "max-w-page-narrow",
         className,
       )}
     >

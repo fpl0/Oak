@@ -1,7 +1,16 @@
 // Graders for answers that are not code: choices, degrees, qualities, Roman numerals, text, numbers,
 // keyboard notes, spelled staff notes and key signatures (exercises §1, §3.9). Pure and synchronous.
 import type { Answer, AnswerUi, Diagnostic, KeySpec, NEvent, PartialMap, PitchMode } from "@oak/content-kit";
-import { keySignature, normalizeText, parseRN, pcOf, rnToChord, spellMidi, triadCore } from "@oak/theory";
+import {
+  keySignature,
+  normalizeText,
+  parseInterval,
+  parseRN,
+  pcOf,
+  rnToChord,
+  spellMidi,
+  triadCore,
+} from "@oak/theory";
 import { mod12 } from "../analyze/events.ts";
 import { diag } from "../feedback/catalog.ts";
 import type { MatchResult } from "../types.ts";
@@ -129,6 +138,11 @@ export function gradeAnswer(
     spelling?: "strict" | "enharmonic";
     order?: "sequence" | "set";
     tol?: number;
+    /**
+     * Interval answers: the interval each slot's notes are spelled as on the page (from the stimulus),
+     * when known. A slot that expects "TT" then takes the tritone's own spelling (F–B is A4, never d5).
+     */
+    spelledIntervals?: readonly (string | null)[];
   } = {},
 ): AnswerCheck {
   const parts: AnswerCheck[] = [];
@@ -173,6 +187,14 @@ export function gradeAnswer(
           withOctave: false,
         }),
       );
+    else if (kind === "interval")
+      parts.push(
+        intervalSlots(correct.text, got.text ?? [], {
+          ...(o.partial ? { partial: o.partial } : {}),
+          ...(o.spelledIntervals ? { spelled: o.spelledIntervals } : {}),
+          order,
+        }),
+      );
     else
       parts.push(
         compareSlots(correct.text, got.text ?? [], (e, g) => norm(kind, e) === norm(kind, g), {
@@ -212,6 +234,120 @@ export function gradeAnswer(
   };
 }
 
+/** The size of an interval answer: "TT" is the tritone, whichever way it is spelled. */
+const intervalParts = (s: string): { name: string; num: number; semis: number } | null => {
+  const n = norm("interval", s);
+  if (n === "TT") return { name: "TT", num: 0, semis: 6 };
+  const p = parseInterval(n);
+  return p ? { name: n, num: p.num, semis: p.semitones } : null;
+};
+const LONG_Q: Record<string, string> = {
+  P: "perfect",
+  M: "major",
+  m: "minor",
+  A: "augmented",
+  d: "diminished",
+  AA: "doubly augmented",
+  dd: "doubly diminished",
+};
+const ORD = [
+  "",
+  "unison",
+  "2nd",
+  "3rd",
+  "4th",
+  "5th",
+  "6th",
+  "7th",
+  "octave",
+  "9th",
+  "10th",
+  "11th",
+  "12th",
+  "13th",
+];
+const longName = (name: string): string => {
+  if (name === "TT") return "tritone";
+  const p = parseInterval(name);
+  if (!p) return name;
+  if (p.num === 1 && p.quality === "P") return "unison";
+  if (p.num === 8 && p.quality === "P") return "octave";
+  return `${LONG_Q[p.quality]} ${ORD[p.num] ?? `${p.num}th`}`;
+};
+
+/**
+ * Interval-name answers ("m3", "minor 3rd", "3m" as `.transpose()` writes it, "TT"): the same name, or the
+ * tritone. "TT" names the tritone however it is spelled; a spelled tritone answer (A4, d5) must match the
+ * spelling on the page when the step gives it (`spelled`, per slot), so F–B is A4 and not d5. A miss names
+ * what is wrong: the number (count the letters) or only the quality (count the half steps).
+ */
+export function intervalSlots(
+  expected: readonly string[],
+  got: readonly string[],
+  o: { partial?: PartialMap; order?: "sequence" | "set"; spelled?: readonly (string | null)[] } = {},
+): AnswerCheck {
+  // What each expected slot is, spelled: "TT" becomes the page's A4 or d5 when the stimulus says which.
+  const spelledAt = (i: number, e: string): string => {
+    const pe = intervalParts(e);
+    const sp = o.spelled?.[i];
+    const ps = sp ? intervalParts(sp) : null;
+    return pe?.name === "TT" && ps && ps.semis === 6 && ps.name !== "TT" ? ps.name : e;
+  };
+  const exp = expected.map((e, i) => spelledAt(i, e));
+  const same = (e: string, g: string): boolean => {
+    const pe = intervalParts(e);
+    const pg = intervalParts(g);
+    if (!pe || !pg) return norm("interval", e) === norm("interval", g);
+    if (pe.name === pg.name) return true;
+    // "TT" is the tritone's own name and always right; A4 and d5 are spellings and must match the page.
+    if (pg.name === "TT") return pe.semis === 6;
+    return pe.name === "TT" && pg.semis === 6;
+  };
+  const base = compareSlots(exp, got, same, {
+    ...(o.partial ? { partial: o.partial } : {}),
+    order: o.order ?? "sequence",
+  });
+  const diagnostics = base.diagnostics.map((d) => {
+    if (d.id !== "id.wrong") return d;
+    const pe = intervalParts(String(d.params.exp ?? ""));
+    const pg = intervalParts(String(d.params.got ?? ""));
+    if (!pe || !pg) return d;
+    const where = d.where;
+    // A slot the step asked for as "TT" is named "TT" in the message too (A4/d5 come later in the course).
+    const asked = intervalParts(expected[(where?.slot ?? 1) - 1] ?? "");
+    const shown = asked?.name === "TT" && pe.semis === 6 ? "TT" : pe.name;
+    // The same number of letters, or the tritone against a 4th or 5th: only the half steps differ.
+    const generic =
+      pe.num > 0 && pe.num === pg.num
+        ? pe.num
+        : pe.name === "TT" && (pg.num === 4 || pg.num === 5)
+          ? pg.num
+          : pg.name === "TT" && (pe.num === 4 || pe.num === 5)
+            ? pe.num
+            : 0;
+    if (generic > 0)
+      return diag(
+        "id.interval-quality",
+        {
+          exp: shown,
+          expLong: longName(shown),
+          got: pg.name,
+          generic: ORD[generic] ?? `${generic}th`,
+          semis: `${pe.semis}, not ${pg.semis}`,
+        },
+        where,
+        "choice",
+      );
+    return diag(
+      "id.interval-number",
+      { exp: shown, expLong: longName(shown), got: pg.name === "TT" ? "a tritone" : longName(pg.name) },
+      where,
+      "choice",
+    );
+  });
+  return { ...base, diagnostics };
+}
+
 const parseSpelled = (s: string): { letter: string; acc: string; oct: number | null } | null => {
   const m = /^([A-Ga-g])(##|bb|#|b|x|♯|♭)?(-?\d+)?$/.exec(s.trim());
   if (!m) return null;
@@ -240,7 +376,14 @@ const spelledMidi = (p: { letter: string; acc: string; oct: number | null }): nu
 export function spelledNotes(
   expected: readonly string[],
   got: readonly string[],
-  o: { strict: boolean; order: "sequence" | "set"; key: KeySpec | null; withOctave: boolean },
+  o: {
+    strict: boolean;
+    order: "sequence" | "set";
+    key: KeySpec | null;
+    withOctave: boolean;
+    /** Staff writing: name an octave slip, a wrong accidental and an enharmonic misspelling apart. */
+    staff?: boolean;
+  },
 ): AnswerCheck {
   const diagnostics: Diagnostic[] = [];
   const slots: number[] = [];
@@ -296,18 +439,92 @@ export function spelledNotes(
       } else if (sameSpelling(e, x)) slots.push(1);
       else if (sameSound(e, x)) {
         slots.push(o.strict ? 0.5 : 1);
-        if (o.strict)
+        if (o.strict && o.staff) diagnostics.push(staffSlip("enharmonic", e, x, i, o.key));
+        else if (o.strict)
           diagnostics.push(
             diag("spell.enharmonic", { got: x, exp: e, context: ctxName }, { slot: i + 1 }, "spelling"),
           );
       } else {
         slots.push(0);
-        diagnostics.push(diag("spell.wrong", { got: x, exp: e }, { slot: i + 1 }, "spelling"));
+        const slip = o.staff ? staffSlipKind(e, x, o.withOctave) : null;
+        // The specific finding explains; the terse `spell.wrong` arrow stays (as information) so authored
+        // overrides of it keep working.
+        if (slip) diagnostics.push(staffSlip(slip, e, x, i, o.key));
+        const terse = diag("spell.wrong", { got: x, exp: e }, { slot: i + 1 }, "spelling");
+        diagnostics.push(slip ? { ...terse, severity: "info" } : terse);
       }
     }
     const score = n === 0 ? 1 : slots.reduce((a, b) => a + b, 0) / n;
     return { score, dims: { spelling: { score, weight: 1, n } }, diagnostics, slots };
   }
+}
+
+/** What kind of slip a wrong staff note is: same letter in another octave, or another accidental. */
+export function staffSlipKind(exp: string, got: string, withOctave: boolean): "octave" | "accidental" | null {
+  const pe = parseSpelled(exp);
+  const pg = parseSpelled(got);
+  if (!pe || !pg || pe.letter !== pg.letter) return null;
+  if (pe.acc === pg.acc)
+    return withOctave && pe.oct !== null && pg.oct !== null && pe.oct !== pg.oct ? "octave" : null;
+  return "accidental";
+}
+
+const ACC_WORD: Record<string, string> = {
+  "": "natural",
+  "#": "sharp",
+  b: "flat",
+  "##": "double sharp",
+  bb: "double flat",
+};
+
+/**
+ * A staff-writing finding (`staff.octave`, `staff.accidental`, `staff.enharmonic`) for note `i` (0-based),
+ * naming the key signature when it is the reason: "in G major the key signature makes every F sharp".
+ */
+export function staffSlip(
+  kind: "octave" | "accidental" | "enharmonic",
+  exp: string,
+  got: string,
+  i: number,
+  key: KeySpec | null,
+  at?: { bar: number; beat: number; beatLabel: string },
+): Diagnostic {
+  const where = at ? { slot: i + 1, ...at } : { slot: i + 1 };
+  const atText = at ? `Bar ${at.bar}, ${at.beatLabel}` : `Note ${i + 1}`;
+  const pe = parseSpelled(exp);
+  const pg = parseSpelled(got);
+  const keyName = key ? `${key.tonic} ${key.mode}` : "C major";
+  const sig = key ? keySignature(key).notes : [];
+  if (kind === "octave") {
+    const up = pe && pg ? spelledMidi(pg) > spelledMidi(pe) : true;
+    return diag(
+      "staff.octave",
+      { at: atText, got, exp, dir: up ? "high" : "low", dir2: up ? "lower" : "higher" },
+      where,
+      "pitch",
+    );
+  }
+  let why = "";
+  if (pe && pg) {
+    const sigAcc = sig.find((n) => n[0] === pe.letter)?.slice(1) ?? "";
+    if (sigAcc && pe.acc === sigAcc)
+      why = `: in ${keyName} the key signature already makes every ${pe.letter} ${ACC_WORD[sigAcc]}`;
+    else if (!sigAcc && pe.acc === "" && kind === "accidental")
+      why = `: ${keyName} has no ${pg.acc === "#" ? "sharp" : "flat"} on ${pe.letter}`;
+    else if (kind === "enharmonic") why = ` (on the ${pe.letter} line or space)`;
+  }
+  return diag(
+    kind === "accidental" ? "staff.accidental" : "staff.enharmonic",
+    {
+      at: atText,
+      got,
+      exp,
+      key: keyName,
+      why,
+    },
+    where,
+    "spelling",
+  );
 }
 
 /** The spelled name of a staff event: its written spelling, else re-spelled from MIDI in the key. */
@@ -418,31 +635,70 @@ export function keyboardCheck(
   return { score, dims: { pitch: { score, weight: 1, n: got.length } }, diagnostics, slots: parts };
 }
 
-/** Key-signature answers: the accidentals of the key, as a set of spelled notes. */
-export function keySignatureCheck(key: KeySpec, got: readonly string[]): AnswerCheck {
+/**
+ * Key-signature answers (`StaffExpect` `key-signature`): the accidentals of the key, as placed. Each finding
+ * names the actual mistake: sharps for a flat key (`keysig.type`), too many or too few (`keysig.count`),
+ * the right ones in another order when the step asks for the written order (`keysig.order`, F C G D A E B
+ * or B E A D G C F), or other notes (`keysig.wrong`). Partial credit counts the accidentals in place; a
+ * pass needs all of them (and the order, with `order: "sequence"`).
+ */
+export function keySignatureCheck(
+  key: KeySpec,
+  got: readonly string[],
+  order: "sequence" | "set" = "set",
+): AnswerCheck {
   const want = keySignature(key).notes;
   const norm1 = (s: string): string =>
     s
       .trim()
-      .replace("♯", "#")
-      .replace("♭", "b")
+      .replace(/♯/g, "#")
+      .replace(/♭/g, "b")
       .replace(/^[a-g]/, (c) => c.toUpperCase());
-  const g = got.map(norm1);
-  const ok = want.length === g.length && want.every((n) => g.includes(n));
+  const g = got.map(norm1).filter((x) => x !== "");
   const fmt = (xs: readonly string[]): string => (xs.length ? xs.join(" ") : "no sharps or flats");
+  const kindOf = (xs: readonly string[]): "sharps" | "flats" | "none" | "mixed" => {
+    const sharp = xs.some((x) => x.includes("#"));
+    const flat = xs.some((x) => /^[A-G]b/.test(x));
+    return sharp && flat ? "mixed" : sharp ? "sharps" : flat ? "flats" : "none";
+  };
+  const expKind = kindOf(want);
+  const gotKind = kindOf(g);
+  const keyName = `${key.tonic} ${key.mode}`;
+  const inSet = want.filter((n) => g.includes(n)).length;
+  const sameSet = want.length === g.length && inSet === want.length;
+  const inOrder = sameSet && want.every((n, i) => g[i] === n);
+  const ok = sameSet && (order === "set" || inOrder);
+  const diagnostics: Diagnostic[] = [];
+  const d = (id: Parameters<typeof diag>[0], params: Record<string, string | number>) =>
+    diagnostics.push(
+      diag(id, { key: keyName, exp: fmt(want), got: fmt(g), ...params }, undefined, "spelling"),
+    );
+  if (!ok) {
+    if (sameSet)
+      d("keysig.order", {
+        kind: expKind,
+        order: expKind === "sharps" ? "F C G D A E B" : "B E A D G C F",
+      });
+    else if (want.length > 0 && gotKind !== "none" && gotKind !== expKind)
+      d("keysig.type", { expKind: expKind === "sharps" ? "sharp" : "flat" });
+    else if (want.length === 0) d("keysig.wrong", {});
+    else if (g.length !== want.length)
+      d("keysig.count", {
+        n: want.length,
+        kind: want.length === 1 ? expKind.replace(/s$/, "") : expKind,
+        count: g.length === 0 ? "none" : fmt(g),
+      });
+    else d("keysig.wrong", {});
+  }
+  // Credit: accidentals of the key that were placed (in place, when the order counts), less extras.
+  const placed = order === "sequence" ? want.filter((n, i) => g[i] === n).length : inSet;
+  const extras = Math.max(0, g.length - inSet);
+  const denom = Math.max(want.length, g.length);
+  const score = ok ? 1 : denom === 0 ? 0 : Math.max(0, (placed - extras * 0.5) / denom) * 0.999;
   return {
-    score: ok ? 1 : 0,
-    dims: { spelling: { score: ok ? 1 : 0, weight: 1 } },
-    diagnostics: ok
-      ? []
-      : [
-          diag(
-            "keysig.wrong",
-            { key: `${key.tonic} ${key.mode}`, exp: fmt(want), got: fmt(g) },
-            undefined,
-            "spelling",
-          ),
-        ],
-    slots: [ok ? 1 : 0],
+    score,
+    dims: { spelling: { score, weight: 1, n: want.length } },
+    diagnostics,
+    slots: want.map((n, i) => (order === "sequence" ? (g[i] === n ? 1 : 0) : g.includes(n) ? 1 : 0)),
   };
 }

@@ -96,7 +96,7 @@ export function SketchScreen({
         <h1 id="sketch-title" className="text-h1 outline-none" tabIndex={-1}>
           Make it yours
         </h1>
-        <p className="max-w-[62ch] text-text-2">
+        <p className="max-w-measure text-text-2">
           Change anything in the melody's pattern: numbers from 0 to 7, a <span className="font-mono">~</span>{" "}
           for a rest. Run it with <Kbd>{mod}</Kbd> <Kbd>Enter</Kbd>, then save it as {SKETCH_TITLE}. Every
           session ends with a sketch like this one.

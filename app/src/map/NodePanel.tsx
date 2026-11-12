@@ -1,17 +1,20 @@
 // The node panel (ux §5.2 "Inspector"): what the skill is in one sentence, where it was introduced, the
 // evidence so far, what it builds on and leads to, its drill families, and the one next action
 // ("Practise this", or "Revive" while it is drying).
-import type { FamilyDef, SkillState, SrsCard } from "@oak/api";
+import type { FamilyDef, FamilyState, SkillState, SrsCard } from "@oak/api";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, X } from "lucide-react";
+import { ArrowRight, MicOff, X } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { isResting } from "../drills/resting.ts";
 import { REGION_LABEL } from "../lib/content-model.ts";
+import { useRevive } from "../lib/queries.ts";
 import { buttonClass, IconButton } from "../ui/kit/Button.tsx";
 import { Chip } from "../ui/kit/basics.tsx";
 import { blurbOf } from "./blurbs.ts";
 import type { MapGraph, MapNode } from "./graph.ts";
 import { familiesOf, type PractiseTarget, practiseTarget } from "./guide.ts";
 import { LeafSwatch } from "./Leaf.tsx";
+import { minutesOf, type ReviveAction, reviveAction, WAITING_MIC, waitingMicLine } from "./revive.ts";
 import { freshnessLabel, leafView, pctText, STATUS_HELP, STATUS_LABEL } from "./state.ts";
 
 const KIND_LABEL: Record<string, string> = {
@@ -29,12 +32,43 @@ export interface NodePanelProps {
   graph: MapGraph;
   families: readonly FamilyDef[];
   cards: readonly Pick<SrsCard, "cardId" | "status">[];
+  /** The families' states: a family resting in mixed practice (decision 27) says so, never "mastered". */
+  familyStates?: readonly FamilyState[];
   lessonStatus: ReadonlyMap<string, string>;
   lessonTitle: (id: string) => string;
+  /** Lessons with a lesson file; absent: all count as written. */
+  authored?: ReadonlySet<string>;
   reviveSec: number;
   isNext: boolean;
+  /** Quiet mode today: voice leaves wait for the mic. */
+  quiet?: { on: boolean; reason: "today" | "always" | "no-mic" | null };
   onSelect: (id: string) => void;
   onClose: () => void;
+}
+
+/** "Revive" (today's planned sets for this leaf) and "Revive more" (the next block), each with its own time. */
+function ReviveLink({ action }: { action: Extract<ReviveAction, { kind: "revive" | "revive-more" }> }) {
+  const more = action.kind === "revive-more";
+  const batch = useRevive(action.skillId, more);
+  const sec = batch.data?.plannedSec ?? null;
+  const empty = batch.data !== undefined && batch.data.items.length === 0;
+  if (empty && more)
+    return (
+      <p className="text-sm text-text-2" data-testid="revive-none">
+        A little faded, and nothing of it is due today: tomorrow's reviews will pick it up.
+      </p>
+    );
+  return (
+    <Link
+      to="/session/revive"
+      search={more ? { skill: action.skillId, more: true } : { skill: action.skillId }}
+      className={buttonClass(more ? "secondary" : "primary", "md", "w-full")}
+      data-testid={more ? "revive-more" : "revive"}
+    >
+      {more ? "Revive more" : "Revive"}
+      {sec !== null && !empty ? ` (≈ ${minutesOf(sec)} min)` : ""}
+    </Link>
+  );
 }
 
 function PractiseAction({ target }: { target: PractiseTarget }) {
@@ -64,7 +98,9 @@ function PractiseAction({ target }: { target: PractiseTarget }) {
   return (
     <p className="rounded-control border border-dashed border-border px-3 py-2 text-sm text-text-2">
       {target.lessonId
-        ? `Opens with ${target.lessonId} · ${target.title}. Nothing to do here until then.`
+        ? target.unwritten
+          ? `Opens with ${target.lessonId} · ${target.title}, which is still being written.`
+          : `Opens with ${target.lessonId} · ${target.title}. Nothing to do here until then.`
         : "No lesson teaches this yet."}
     </p>
   );
@@ -79,9 +115,11 @@ export function NodePanel(p: NodePanelProps) {
   const names = new Map(graph.nodes.map((n) => [n.id, n.name]));
   const fams = familiesOf(node.id, p.families);
   const cardStatus = new Map(p.cards.map((c) => [c.cardId, c.status]));
+  const famState = new Map((p.familyStates ?? []).map((f) => [f.familyId as string, f]));
   const target = practiseTarget(node, p);
   const introStatus = node.introducedBy ? (p.lessonStatus.get(node.introducedBy) ?? "locked") : "locked";
   const tracked = v.status === "introduced" || v.status === "practising" || v.status === "mastered";
+  const revive = reviveAction(node, v, p.quiet ? { quiet: p.quiet.on, reason: p.quiet.reason } : null);
 
   // Move focus to the heading when the panel opens on a new leaf (screen readers hear the skill's name).
   useEffect(() => {
@@ -150,11 +188,14 @@ export function NodePanel(p: NodePanelProps) {
             Introduced in
           </h3>
           {node.introducedBy ? (
-            introStatus === "locked" ? (
+            introStatus === "locked" ||
+            (p.authored && p.authored.size > 0 && !p.authored.has(node.introducedBy)) ? (
               <p className="text-sm">
                 <span className="font-mono text-text-3">{node.introducedBy}</span>{" "}
                 {p.lessonTitle(node.introducedBy)}
-                <span className="text-text-3"> · not open yet</span>
+                <span className="text-text-3">
+                  {introStatus === "locked" ? " · not open yet" : " · still being written"}
+                </span>
               </p>
             ) : (
               <p className="text-sm">
@@ -190,16 +231,21 @@ export function NodePanel(p: NodePanelProps) {
                 {state.R === null ? "no cards yet" : pctText(state.R)}
               </dd>
               <dt className="text-text-2">Freshness</dt>
-              <dd className="text-right">{freshnessLabel(v.freshness)}</dd>
+              <dd className="text-right">
+                {revive.kind === "waiting-mic" ? "Waits for the mic" : freshnessLabel(v.freshness)}
+              </dd>
             </dl>
           ) : (
             <p className="text-sm text-text-2">
               None yet. It starts counting the first time you use this skill in a lesson.
             </p>
           )}
-          {v.paused && (
-            <p className="text-sm text-text-2">
-              Paused while Oak has no microphone: its reviews wait, and the leaf keeps its last colour.
+          {revive.kind === "waiting-mic" && (
+            <p className="flex items-start gap-2 text-sm text-text-2" data-testid="waiting-mic">
+              <MicOff aria-hidden className="mt-0.5 size-4 shrink-0" />
+              <span>
+                <span className="font-medium text-text">{WAITING_MIC}.</span> {waitingMicLine(revive.reason)}
+              </span>
             </p>
           )}
         </section>
@@ -216,13 +262,15 @@ export function NodePanel(p: NodePanelProps) {
                   <li key={f.id} className="flex items-baseline justify-between gap-2">
                     <span>{f.title}</span>
                     <span className="shrink-0 text-text-3">
-                      {st === "active" || st === "graduated"
-                        ? "in your reviews"
-                        : st === "deferred"
-                          ? "queued for later"
-                          : (p.lessonStatus.get(f.unlock.lesson) ?? "locked") === "locked"
-                            ? `opens with ${f.unlock.lesson}`
-                            : "not in your reviews yet"}
+                      {isResting(f, famState.get(f.id))
+                        ? "resting in mixed practice"
+                        : st === "active" || st === "graduated"
+                          ? "in your reviews"
+                          : st === "deferred"
+                            ? "queued for later"
+                            : (p.lessonStatus.get(f.unlock.lesson) ?? "locked") === "locked"
+                              ? `opens with ${f.unlock.lesson}`
+                              : "not in your reviews yet"}
                     </span>
                   </li>
                 );
@@ -249,16 +297,18 @@ export function NodePanel(p: NodePanelProps) {
         )}
       </div>
       <div className="flex shrink-0 flex-col gap-2 border-t border-border p-4">
-        {v.drying && (
+        {(revive.kind === "revive" || revive.kind === "revive-more") && <ReviveLink action={revive} />}
+        {revive.kind === "waiting-mic" ? (
           <Link
-            to="/practice/review"
-            className={buttonClass("secondary", "md", "w-full")}
-            data-testid="revive"
+            to="/settings/voice"
+            className={buttonClass("ghost", "md", "w-full")}
+            data-testid="voice-settings"
           >
-            Revive in today's warm-up (≈{Math.max(1, Math.round(p.reviveSec / 60))} min)
+            Quiet mode and the mic: Settings → Voice
           </Link>
+        ) : (
+          <PractiseAction target={target} />
         )}
-        <PractiseAction target={target} />
       </div>
     </aside>
   );

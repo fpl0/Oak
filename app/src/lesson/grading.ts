@@ -144,6 +144,11 @@ export function familyAnswerKind(familyId: string): string {
   return drills().family(familyId as never).def.answer;
 }
 
+/** FNV-1a: a stable seed from a string (a passive block's examples, a generator stimulus's series). */
+export function hashSeed(s: string): number {
+  return hash(s);
+}
+
 function hash(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) {
@@ -151,6 +156,12 @@ function hash(s: string): number {
     h = Math.imul(h, 16777619);
   }
   return h >>> 0;
+}
+
+/** The key a drawn trial plays in (`params.key`), when it says. */
+function trialKey(trial: Trial): KeySpec | null {
+  const k = trial.params.key as { tonic?: unknown; mode?: unknown } | undefined;
+  return k && typeof k.tonic === "string" && typeof k.mode === "string" ? (k as KeySpec) : null;
 }
 
 /** Every part of an `all` step against its own drawn trial (`trials[i]`, `null` for parts without one). */
@@ -163,7 +174,28 @@ export function withTrials<E extends Exercise>(ex: E, trials: readonly (Trial | 
 export function withTrial<E extends Exercise>(ex: E, trial: Trial | null): E {
   if (!trial) return ex;
   if (ex.kind === "identify") return { ...ex, correct: trial.expected } as E;
-  if (ex.kind === "dictation") return { ...ex, reference: { ...ex.reference, solutions: [trial.code] } } as E;
+  if (ex.kind === "dictation" && ex.answer.ui === "degree-pad" && trial.expected.degrees) {
+    // A drawn melody written on the degree pad is checked against the trial's own answer, as the drills check
+    // it: reading the degrees back from the trial's code took the chords that set home for the tune (U03.L10
+    // S2 always failed). The step keeps its prompt, hints, feedback and the trial's key.
+    const key = trialKey(trial);
+    return {
+      ...ex,
+      kind: "identify",
+      correct: trial.expected,
+      ...(key ? { key } : {}),
+    } as unknown as E;
+  }
+  if (ex.kind === "dictation") {
+    // The drawn tune is in the trial's own key (a dictation trial moves round the keys the learner has met):
+    // its degrees are read in that key, not the lesson's (U03.L10 S2 heard in G was read in C).
+    const key = trialKey(trial);
+    return {
+      ...ex,
+      ...(key ? { key } : {}),
+      reference: { ...ex.reference, solutions: [trial.code] },
+    } as E;
+  }
   return ex;
 }
 
@@ -182,13 +214,25 @@ function centsOff(sung: SungSummary, target: number, octave: SingEx["tol"]["octa
 /**
  * Sung notes (the mic widget's summaries) against the step's targets: full credit within the tolerance,
  * half within twice it. Nothing voiced at all is `sing.no-voice`, which grades as an error (not an attempt).
+ * Each note carries what the grader reads from @oak/pitch's per-note result (the target, the folded sung
+ * pitch, the signed error), so a lenient first sing and a sung degree pattern are judged as the grader does.
  */
 export function sungPerformance(
   sung: readonly SungSummary[],
   targets: readonly number[],
   tolCents: number,
   octave: SingEx["tol"]["octave"],
-): MatchResult & { notes: { credit: number; feedback: string | null }[] } {
+): MatchResult & {
+  notes: {
+    credit: number;
+    feedback: string | null;
+    index: number;
+    targetMidi: number;
+    sungMidi: number | null;
+    cents: number | null;
+    coverage: number;
+  }[];
+} {
   if (sung.length === 0 || sung.every((s) => s.midi === null))
     return {
       score: 0,
@@ -199,9 +243,26 @@ export function sungPerformance(
   const notes = targets.map((t, i) => {
     const s = sung[i];
     const off = s ? centsOff(s, t, octave) : null;
-    if (off === null) return { credit: 0, feedback: "sing.missed" };
+    if (off === null)
+      return {
+        credit: 0,
+        feedback: "sing.missed",
+        index: i,
+        targetMidi: t,
+        sungMidi: null,
+        cents: null,
+        coverage: 0,
+      };
     const a = Math.abs(off);
-    return { credit: a <= tolCents ? 1 : a <= 2 * tolCents ? 0.5 : 0, feedback: null };
+    return {
+      credit: a <= tolCents ? 1 : a <= 2 * tolCents ? 0.5 : 0,
+      feedback: null,
+      index: i,
+      targetMidi: t,
+      sungMidi: t + off / 100,
+      cents: off,
+      coverage: 1,
+    };
   });
   const score = notes.length ? notes.reduce((a, n) => a + n.credit, 0) / notes.length : 0;
   return { score, dims: { pitch: { score, weight: 1, n: notes.length } }, diagnostics: [], notes };
@@ -253,6 +314,8 @@ async function singPerformance(
     }
   }
   const targets = singTargets(ex.target, n, key, meter, cps).map((t) => t.midi);
+  // The lenient first sing (contracts §8.1 item 8): ±100¢ after per-note folding, whatever the ladder says.
+  if (ex.tol.lenient) return sungPerformance(sung, targets, 100, "per-note");
   const tol = ex.tol.cents === "learner" ? env.profile.singTolCents : ex.tol.cents;
   return sungPerformance(sung, targets, tol, ex.tol.octave);
 }
@@ -265,6 +328,7 @@ export async function toGraderResponse(
   env: GradeEnv,
   ex: Exercise,
   r: AttemptResponse,
+  takeOf?: TakeLookup,
 ): Promise<ExerciseResponse> {
   if ("parts" in r) {
     const parts = ex.kind === "all" ? ex.parts : null;
@@ -275,7 +339,7 @@ export async function toGraderResponse(
     const out: ExerciseResponse[] = [];
     for (const [i, part] of parts.entries()) {
       const pr = (r.parts[i] ?? { skipped: true }) as AttemptResponse;
-      out.push(await toGraderResponse(deps, env, part, pr));
+      out.push(await toGraderResponse(deps, env, part, pr, takeOf));
     }
     return { parts: out };
   }
@@ -287,10 +351,33 @@ export async function toGraderResponse(
   if ("sung" in r) {
     if (ex.kind === "predict") return { answer: {} };
     if (ex.kind !== "sing") return { skipped: true };
+    // The take the widget just measured, when this response is its summary: @oak/pitch's whole result (per-note
+    // targets, folded pitch, why nothing was heard, clipping), which the grader reads the pattern from.
+    const take = takeOf?.(ex.id, r.sung);
+    if (take) return { performance: take };
     return { performance: await singPerformance(deps, env, ex, r.sung) };
   }
+  if ("answer" in r) return { ...r, answer: splitTypedParts(ex, r.answer) } as ExerciseResponse;
   return r as ExerciseResponse;
 }
+
+/**
+ * A text field sends what was typed as one string. When the answer has several parts (a scale spelled
+ * `D E F# G A B C#`, a key signature typed `F# C#`), the string is split on spaces and commas into those parts
+ * before grading, as the drills do; a one-part answer is left whole (U03.L01 S7, wave3 integration).
+ */
+export function splitTypedParts<A extends { text?: string[] | undefined }>(ex: Exercise, answer: A): A {
+  const typed = answer.text;
+  if (typed?.length !== 1) return answer;
+  const correct = "correct" in ex && ex.correct && typeof ex.correct === "object" ? ex.correct : null;
+  const want = correct && "text" in correct && Array.isArray(correct.text) ? correct.text.length : 1;
+  if (want <= 1) return answer;
+  const parts = (typed[0] ?? "").split(/[\s,]+/).filter((s) => s !== "");
+  return parts.length > 1 ? { ...answer, text: parts } : answer;
+}
+
+/** The measured take behind a sung response (`{ performance }`), or null to re-read the summary. */
+export type TakeLookup = (exerciseId: string, sung: readonly SungSummary[]) => MatchResult | null;
 
 export interface GradeOptions {
   params: ParamValues;
@@ -303,6 +390,8 @@ export interface GradeOptions {
   trials?: readonly (Trial | null)[];
   /** The exercise's own global ID when it differs from `${ownerId}/${id}`. */
   globalId?: string;
+  /** The widget's measured takes (`lessonTakes` in inputs.tsx). */
+  takeOf?: TakeLookup;
 }
 
 /** Grades one response to one exercise. Failures in the learner's code come back as `status: 'error'`. */
@@ -315,7 +404,7 @@ export async function gradeStep(
 ): Promise<GradeResult> {
   const base = withParams(exercise, o.params);
   const ex = o.trials ? withTrials(base, o.trials) : withTrial(base, o.trial ?? null);
-  const graderResponse = await toGraderResponse(deps, env, ex, response);
+  const graderResponse = await toGraderResponse(deps, env, ex, response, o.takeOf);
   const key = ex.key ?? env.key;
   const meter = ex.meter ?? env.meter;
   return deps.grade({

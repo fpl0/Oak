@@ -11,6 +11,7 @@ import {
   BLANK_CODE,
   bandKeyArg,
   bandMutesOf,
+  bandReached,
   bandSetupFor,
   bandsForMeter,
   differsFrom,
@@ -101,6 +102,29 @@ describe("the Band layer", () => {
     const bar2 = pcs(chords.filter((e) => e.onset >= 1));
     expect([...bar1].sort((a, z) => a - z)).toEqual([0, 4, 7]);
     expect([...bar2].sort((a, z) => a - z)).toEqual([0, 5, 9]);
+  });
+
+  test("jazz-soul plays its U03 stage (four-note chords, swung) once U03.L01 is reached, triads before", async () => {
+    const band = { bandId: "band.two-chord-vamp", flavour: "flavour.jazz-soul", mutes: [] } as const;
+    const before = bandReached({ lessons: [{ lessonId: "U02.L08", status: "completed" }] });
+    const after = bandReached({
+      lessons: [
+        { lessonId: "U02.L08", status: "completed" },
+        { lessonId: "U03.L01", status: "in_progress" },
+      ],
+    });
+    expect(bandReached(undefined)("U03.L01")).toBe(false);
+    expect(before("U03.L01")).toBe(false);
+    expect(after("U03.L01")).toBe(true);
+    const chordSizes = async (reached: (from: string) => boolean) => {
+      const b = bandSetupFor(band, bands, { tonic: "C", mode: "major" }, reached);
+      const { events } = await evalHeadless(`setcpm(90/4)\n\n${b?.code ?? ""}`, 1);
+      const chords = events.filter((e) => e.track === "chords");
+      const first = chords.filter((e) => e.onset === chords[0]?.onset);
+      return { size: first.length, swung: (b?.code ?? "").includes("swingBy") };
+    };
+    expect(await chordSizes(before)).toEqual({ size: 3, swung: false });
+    expect(await chordSizes(after)).toEqual({ size: 4, swung: true });
   });
 
   test("a 3/4 sketch offers the waltz vamp only; 4/4 never offers it", () => {

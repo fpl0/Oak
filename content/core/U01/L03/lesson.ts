@@ -57,7 +57,7 @@ const TAP_FEEDBACK = {
 
 export default defineLesson({
   id: "U01.L03",
-  version: 1,
+  version: 2,
   title: "Backbeat",
   objective: "I can put the kick on 1 and 3 and the snare on 2 and 4, one labelled line per drum.",
   key: { tonic: "C", mode: "major" },
@@ -244,7 +244,9 @@ export default defineLesson({
         hints: ladder(
           "On which beats does `bd` play, and on which does `sd` play?",
           "Each new line keeps four words, one per beat, with `~` wherever its drum is silent.",
-          "The kick line is `bd ~ bd ~`. Now write the snare line the same way.",
+          // The same idea on another drum: rung 3 never quotes the solution (the tutor's leak guard rates
+          // solution literals as a reveal).
+          "A hats line that played only on beat 3 would read `~ ~ hh ~`. Write the kick line that way, then the snare.",
         ),
         tests: [
           { name: "reference", response: { code: code(KICK, SNARE, HATS) }, expect: "pass" },

@@ -7,6 +7,9 @@ import { createOakStrudel, getOakStrudel, type OakStrudel } from "@oak/strudel";
 import { toolbox } from "../../../content/toolbox.ts";
 import type { WorkbenchServices } from "./services.tsx";
 
+/** The pack version this page loads: sounds/pack.lock.json's `publicRoot` (kept-in-step.test.ts checks they agree). */
+export const STANDALONE_SOUNDS_ROOT = "/sounds/v2";
+
 let pending: Promise<WorkbenchServices> | null = null;
 
 function adapter(soundsRoot: string): OakStrudel {
@@ -31,7 +34,7 @@ function render(d: Parameters<typeof renderFeedback>[0]): string {
 }
 
 /** One adapter and one grader host per page; call it from a user gesture so audio may start. */
-export function standaloneServices(soundsRoot = "/sounds/v1"): Promise<WorkbenchServices> {
+export function standaloneServices(soundsRoot = STANDALONE_SOUNDS_ROOT): Promise<WorkbenchServices> {
   pending ??= (async () => {
     const oak = adapter(soundsRoot);
     const grader = createBrowserGraderHost({ toolbox: [...toolbox] });

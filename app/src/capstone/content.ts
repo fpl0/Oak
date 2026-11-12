@@ -4,6 +4,7 @@
 import type { BandDef, CanDoDef, CapstoneDef, FlavourId, FlavourKit, KeySpec } from "@oak/content-kit";
 import type { BandSetup } from "@oak/strudel";
 import { queryOptions, useQuery } from "@tanstack/react-query";
+import { bandCodeAt } from "../../../content/bands/index.ts";
 
 export interface CapstoneContent {
   capstones: readonly CapstoneDef[];
@@ -72,13 +73,15 @@ export function bandSetupFor(
   flavour: FlavourId,
   bands: readonly BandDef[],
   key: KeySpec,
+  /** Whether the course has reached a session (contracts §5.10 Band stages); absent: the first stage. */
+  reached: (from: string) => boolean = () => false,
 ): BandSetup | null {
   const tracks = bandTracksFor(def);
   if (tracks.length === 0) return null;
   const wanted =
     def.flavours?.[flavour]?.band ?? (def.meter === "3/4" ? "band.waltz-vamp" : "band.axis-4bar");
   const band = bands.find((b) => b.id === wanted);
-  const code = band?.code[flavour];
+  const code = band?.code[flavour] ? bandCodeAt(band, flavour, reached) : undefined;
   if (!band || !code) return null;
   return {
     band: band.id,

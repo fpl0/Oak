@@ -1,12 +1,11 @@
 // The Wave 2 gate journey (docs/design/wave2.md §9) on the real stack: real server, real content, the scripted fake
-// tutor, Chrome's fake microphone. A fresh learner opens the app, goes through onboarding with a microphone, then
-// plays real daily sessions with the dev clock moved one day at a time: U00.L02 (day 2), U01.L01 (day 3), U01.L02
-// with a tutor hint and an explanation (day 4); looks at the Studio sketch with a listening note, the Toolbox and
-// the Oak; skips ahead with the dev seeder to the U01 checkpoint (an honest skip: the lessons between are walked
-// by the lesson suites); passes it; makes and releases C0; and finds track 1 on the album with its cover, audio
-// and liner notes. Zero console errors (beyond Strudel's learner-error line) and zero requests off this machine.
-// A second test does onboarding in Quiet mode (no microphone) and one session.
-import type { LessonDef } from "@oak/content-kit";
+// tutor, Chrome's fake microphone. Split at the final gate of Wave 3 into five tests of a few minutes each, every one
+// starting from a dev seed (wave2.md §5) instead of replaying the days before it: onboarding with a microphone (a
+// fresh learner); U00.L02 and U01.L01 as daily sessions with their warm-ups; U01.L02 with a tutor hint and an
+// explanation, then the Studio sketch with a listening note, the Toolbox and the Oak; the U01 checkpoint; C0 made,
+// released and found on the album with its cover, audio and liner notes. Zero console errors (beyond Strudel's
+// learner-error line) and zero requests off this machine. A last test does onboarding in Quiet mode (no microphone)
+// and one session.
 import { expect, type Page, test } from "@playwright/test";
 import { expectStep, fakeMic, throughTheLoop } from "../../app/src/onboarding/e2e/helpers.ts";
 import { capstones } from "../../content/capstones.ts";
@@ -16,6 +15,7 @@ import u01l02 from "../../content/core/U01/L02/lesson.ts";
 import { useUiPrefs } from "../support/ui.ts";
 import { walkCapstone } from "./capstone-walk.ts";
 import { walkCheckpoint } from "./checkpoint-walk.ts";
+import { coda, lessonDay, startToday } from "./day.ts";
 import { passingResponse, setCode, walkLesson } from "./lesson-walk.ts";
 import {
   advanceDays,
@@ -28,18 +28,10 @@ import {
   shootAll,
   watch,
 } from "./support.ts";
-import { walkWarmup } from "./warmup-walk.ts";
 
 test.use({ launchOptions: { args: fakeMic("voice.wav") }, permissions: ["microphone"] });
-test.describe.configure({ mode: "serial" });
 
 const SING_HOME = { sung: [{ midi: 60, cents: 0, credit: 1 }] };
-
-interface Plan {
-  kind: string;
-  mapItemId: string | null;
-  warmup: { items: unknown[] };
-}
 
 /** The latency screen's 16 taps: one Space as each dot lights (as the onboarding suite does). */
 async function tapAlong(page: Page) {
@@ -58,52 +50,12 @@ async function tapAlong(page: Page) {
   });
 }
 
-/** Today → Start session; returns the plan the server made for today. */
-async function startToday(page: Page, request: import("@playwright/test").APIRequestContext): Promise<Plan> {
-  const plan = await api<Plan>(request, "GET", "/api/session/today");
-  await openToday(page);
-  // "normal", or the kind of day ("checkpoint", "capstone"): one Start button either way.
-  await expect(page.getByTestId("today-card")).not.toHaveAttribute("data-state", /first-run|done|in-session/);
-  await page.getByTestId("start-session").click();
-  await expect(page).toHaveURL(/\/session\/?$/);
-  if (plan.warmup.items.length > 0) await walkWarmup(page);
-  return plan;
-}
-
-/** The Coda: the unlock moment (when the session granted tools), then "Done for today" back to Today. */
-async function coda(page: Page, o: { unlocks: boolean; shots?: string }) {
-  await expect(page).toHaveURL(/\/session\/coda$/, { timeout: 60_000 });
-  await expect(page.getByTestId("coda-title")).toBeVisible();
-  if (o.unlocks) {
-    const moment = page.getByTestId("coda-unlock-moment");
-    await expect(moment).toBeVisible({ timeout: 30_000 });
-    if (o.shots) await shootAll(page, o.shots);
-    await moment.getByRole("button", { name: "See the rest of today" }).click();
-    await expect(page.getByTestId("coda-tools")).toBeVisible();
-  }
-  await page.getByTestId("done-for-today").click();
-  await expect(page).toHaveURL(/\/$/, { timeout: 30_000 });
-  await expect(page.getByTestId("today-card")).toHaveAttribute("data-state", "done");
-}
-
-async function lessonDay(
-  page: Page,
-  request: import("@playwright/test").APIRequestContext,
-  def: LessonDef,
-  o: Parameters<typeof walkLesson>[2] = {},
-) {
-  const plan = await startToday(page, request);
-  expect(plan).toMatchObject({ kind: "lesson", mapItemId: def.id });
-  await walkLesson(page, def, o);
-  await coda(page, { unlocks: true, shots: `coda-unlock-${def.id}` });
-}
-
 const tutorMessage = (page: Page) => page.getByTestId("tutor-chat").getByTestId("tutor-message").last();
 async function tutorDone(page: Page) {
   await expect(tutorMessage(page)).toHaveAttribute("data-status", /done/, { timeout: 30_000 });
 }
 
-test("the gate journey: onboarding, daily sessions through U01, the checkpoint, C0 on the album", async ({
+test("gate journey 1: a fresh learner goes through onboarding with a microphone", async ({
   page,
   request,
 }) => {
@@ -167,19 +119,47 @@ test("the gate journey: onboarding, daily sessions through U01, the checkpoint, 
   expect(p1.lessons.find((l) => l.lessonId === "U00.L01")?.status).toBe("completed");
   const profile = await api<{ tapLatencyMs: number | null; quiet: boolean }>(request, "GET", "/api/profile");
   expect(profile.quiet).toBe(false);
-  const leavesBefore = await grownLeaves(page);
   await shootAll(page, "today-day1");
 
+  expectClean(w);
+});
+
+test("gate journey 2: U00.L02 and U01.L01 as daily sessions, warm-ups included", async ({
+  page,
+  request,
+}) => {
+  // Onboarding (U00.L01) finished yesterday.
+  await resetClock(request);
+  await seed(request, "onboarded");
+  await noHmr(page);
+  await useUiPrefs(page, { theme: "paper" });
+  const w = watch(page);
+
   // --- day 2: U00.L02; the set-up parts done in onboarding are kept, the first note is sung --------------------
-  await advanceDays(request, 1);
   await lessonDay(page, request, u00l02, { answers: { S5: SING_HOME } });
 
   // --- day 3: the warm-up the plan holds, then U01.L01 and its Make over the Band ------------------------------
   await advanceDays(request, 1);
   await lessonDay(page, request, u01l01, { makeTitle: "First beat" });
 
+  expectClean(w);
+});
+
+test("gate journey 3: U01.L02 with a tutor hint and an explanation, then Studio, Toolbox and the Oak", async ({
+  page,
+  request,
+}) => {
+  // The Oak as it stands the day after onboarding, to compare with after U01.L02 (one lesson alone may grow no
+  // leaf); then U01.L01 done yesterday, today U01.L02.
+  await resetClock(request);
+  await noHmr(page);
+  await useUiPrefs(page, { theme: "paper" });
+  await seed(request, "onboarded");
+  const leavesBefore = await grownLeaves(page);
+  await seed(request, "after U01.L01");
+  const w = watch(page);
+
   // --- day 4: U01.L02 with a tutor hint and an explanation on its first graded step ----------------------------
-  await advanceDays(request, 1);
   await lessonDay(page, request, u01l02, {
     makeTitle: "Count to four",
     before: async (step) => {
@@ -227,10 +207,18 @@ test("the gate journey: onboarding, daily sessions through U01, the checkpoint, 
   await page.goto("/oak");
   await expect(page.getByRole("heading", { name: /The Oak/ }).first()).toBeVisible();
 
-  // --- skip ahead (dev seeder): U01.L03 … U02.L01 done one day each, today's New block is the U01 checkpoint -----
-  // The seed replays the course one day per session up to yesterday on the real clock.
+  expectClean(w);
+});
+
+test("gate journey 4: the U01 checkpoint day, passed", async ({ page, request }) => {
   await resetClock(request);
   await seed(request, "U01.CP due");
+  await noHmr(page);
+  await useUiPrefs(page, { theme: "paper" });
+  const w = watch(page);
+
+  // --- skip ahead (dev seeder): U01.L03 … U02.L01 done one day each, today's New block is the U01 checkpoint -----
+  // The seed replays the course one day per session up to yesterday on the real clock.
   const cpPlan = await startToday(page, request);
   expect(cpPlan).toMatchObject({ kind: "checkpoint", mapItemId: "U01.CP" });
   const tap = (await api<{ tapLatencyMs: number | null }>(request, "GET", "/api/profile")).tapLatencyMs ?? 0;
@@ -238,8 +226,18 @@ test("the gate journey: onboarding, daily sessions through U01, the checkpoint, 
   await page.getByTestId("checkpoint-done").click();
   await coda(page, { unlocks: false });
 
+  expectClean(w);
+});
+
+test("gate journey 5: C0 made, released and found on the album", async ({ page, request }) => {
+  // U01.CP passed yesterday: C0 is open and today's New block is C0.S1.
+  await resetClock(request);
+  await seed(request, "C0 ready");
+  await noHmr(page);
+  await useUiPrefs(page, { theme: "paper" });
+  const w = watch(page);
+
   // --- the next day: C0, checked and released to the album -------------------------------------------------------
-  await advanceDays(request, 1);
   const c0Plan = await startToday(page, request);
   expect(c0Plan).toMatchObject({ kind: "capstone", mapItemId: "C0.S1" });
   const ref = capstones

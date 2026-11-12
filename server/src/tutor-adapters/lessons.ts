@@ -1,8 +1,9 @@
 // LessonContextPort over the content index and the learner's library. Step sources are UNREDACTED
 // (solutions, wrong variants from `tests` with `expect: 'fail'`, the four hint texts); the tutor redacts.
 // Checkpoint items and the current drill trial are never given to the tutor (contracts §10.4).
-import type { AnalysisSummary, Answer, Exercise, KeySpec, StepDef } from "@oak/content-kit";
+import type { AnalysisSummary, Answer, Exercise, KeySpec, StepDef, TestCase } from "@oak/content-kit";
 import { stripMarkers } from "@oak/content-kit";
+import { signatureOf } from "@oak/theory";
 import type { ContentIndex } from "../content/index.ts";
 import type { Repos } from "../db/repos/index.ts";
 import type { LessonSource, ReviewSource, StepSource, SubjectFacts } from "../tutor/domain.ts";
@@ -101,6 +102,21 @@ export function referenceAnswers(ex: Exercise | undefined): string[] {
     case "staff-read":
       out.push(...answerTexts(ex.correct, optionsOf(ex.answer)));
       break;
+    case "staff-write": {
+      // Staff writing (Wave 3): the notes to write, or the key signature's accidentals in written order.
+      const e = ex.expect;
+      if (e.e === "pitches") out.push(e.spelled.join(" "));
+      else if (e.e === "key-signature") {
+        const sig = signatureOf(e.key);
+        const acc = sig.sharps.length > 0 ? sig.sharps : sig.flats;
+        if (acc.length > 0) out.push(acc.join(" "));
+      } else if ("solutions" in e.reference) out.push(...(e.reference as { solutions: string[] }).solutions);
+      break;
+    }
+    case "dictation":
+      // By ear (Wave 3): the hidden source is the answer as much as the reference is.
+      if (ex.byEar !== undefined && ex.stimulus.src === "code") out.push(ex.stimulus.code);
+      break;
     case "run-investigate":
       for (const q of ex.questions)
         if (q.q === "choice")
@@ -111,6 +127,23 @@ export function referenceAnswers(ex: Exercise | undefined): string[] {
       break;
   }
   return [...new Set(out.map((t) => t.trim()).filter((t) => t.length > 0))];
+}
+
+/**
+ * A known wrong answer as the learner would have given it: code, a staff note list (`C4:4 E4:4`), the
+ * accidentals of a key signature or a typed answer, the degrees of a pad, the order of a sequence. `null`
+ * for taps and sung fixtures (nothing the tutor could quote).
+ */
+export function responseText(r: TestCase["response"]): string | null {
+  if ("code" in r) return r.code;
+  if ("staff" in r) return r.staff;
+  if ("answer" in r)
+    return r.answer.text !== undefined && r.answer.text.length > 0
+      ? r.answer.text.join(" ")
+      : answerTexts(r.answer).join(" ") || null;
+  if ("order" in r) return r.order.join(" ");
+  if ("blanks" in r) return Object.values(r.blanks).join(" ") || null;
+  return null;
 }
 
 export function stepSource(lessonId: string, step: StepDef): StepSource {
@@ -148,7 +181,7 @@ export function stepSource(lessonId: string, step: StepDef): StepSource {
         .map((t) => ({
           feedback: t.feedback?.[0] ?? "",
           description: t.name,
-          variantCode: "code" in t.response ? t.response.code : null,
+          variantCode: responseText(t.response),
         })) ?? [],
     solutions: step.kind === "make" ? [] : solutions,
   };

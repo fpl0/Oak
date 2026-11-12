@@ -1,0 +1,65 @@
+{/* U03.L05 Same Song, Any Key: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+In Degrees in Code you moved Ode to Joy to G with one word. Here the word itself takes turns: the tune plays with C as home, then with G as home, without stopping.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+Before you run it: the numbers in `n` say what each note does; `.scale()` says where home is.
+
+<Predict exercise="new-home-same-tune" hum />
+
+<OnPass>The same tune, with F as home. A tune is its degrees; the key only decides how high it sits.</OnPass>
+</Step>
+
+<Step id="S3">
+`< >` inside `.scale()` works as it does everywhere else: one item per bar. `!2` keeps a key for two bars, the length of the tune. <CodeRef fn="scale" />
+
+<Example id="three-keys" views="code,roll" />
+
+<OnPass>The numbers never change. Every note moved up two half steps from C to D, and from C to F every note moved up five: the whole tune shifts as one.</OnPass>
+</Step>
+
+<Step id="S4">
+Now write the key plan yourself. Play the target first: the tune in C, then in G.
+
+<Editor exercise="visit-g" />
+
+<OnPass>`<C4:major!2 G4:major!2>`: two bars in C, two in G. The tune never changed; you wrote one plan for where home is.</OnPass>
+</Step>
+
+<Step id="S5">
+Degrees work both ways: from a number and a key you can name the note without playing it.
+
+<Choice exercise="n-two-in-d" />
+
+<OnPass>F♯: `n` 2 is degree 3, and D major's third note is F♯. In D major every F is sharp, wherever it appears.</OnPass>
+</Step>
+
+<Step id="S6">
+Your ears get the same deal as your code: the key moves every time, the degrees do not. Listen for how the note sits against home, not for how high it is.
+
+<EarDrill family="fam.deg.fet-major" level={2} trials={6} />
+
+<OnPass>Degrees 1 to 5 in keys you did not choose. The pull towards home is the same in every one of them.</OnPass>
+</Step>
+
+<Step id="S7">
+Your voice is analysed live on this computer. Nothing is recorded or sent.
+
+<Sing exercise="sing-it-in-a" />
+
+<OnPass>One, two, three, two, one: the same numbers you would sing in C. Your voice found home in A and counted from there.</OnPass>
+</Step>
+
+<Step id="S8">
+Your turn. Change the notes until the tune is yours, then give it a key plan. The band reads your `.scale()` and changes key with you.
+
+<Make exercise="your-tune-two-keys" />
+
+<CanDo id="cd.code.any-key" />
+
+<Recap />
+</Step>

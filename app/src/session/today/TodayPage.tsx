@@ -3,7 +3,7 @@
 // album at a glance, the last sketch and Claude's one-line note. States: first run, a session open, done for
 // today, a paused week, a free rest day, welcome back (3+ days), a light session (10+), checkpoint, capstone,
 // gym and review days (today-model.ts).
-import type { SessionPlan } from "@oak/api";
+import { OakApiError, type SessionPlan } from "@oak/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, Leaf, Play } from "lucide-react";
@@ -12,11 +12,15 @@ import { lessonTitles, titleOf } from "../../lib/content-model.ts";
 import { usePageTitle } from "../../lib/nav.ts";
 import {
   useBootstrap,
+  useCourseProgress,
   useOnboarding,
   useProfileUpdate,
+  useSessionDay,
   useStreak,
   useTodayPlan,
   useTutorWarm,
+  useVoiceLadder,
+  useVoiceState,
 } from "../../lib/queries.ts";
 import { routeOfItem } from "../../lib/session-route.ts";
 import { useHotkeys } from "../../ui/keys/KeymapProvider.tsx";
@@ -25,6 +29,7 @@ import { Card, Chip, Page, Skeleton } from "../../ui/kit/basics.tsx";
 import { Callout } from "../../ui/kit/Controls.tsx";
 import { ErrorState, LoadingState } from "../../ui/kit/QueryState.tsx";
 import { toast } from "../../ui/kit/Toast.tsx";
+import { type CourseEdge, courseEdge, edgeShort } from "../edge.ts";
 import { useLastEnded, useRunnerNavigator, useRunnerView } from "../hooks.ts";
 import { sessionRunner } from "../live.ts";
 import { daysLine, goalLine, repairLine, restsLine, streakLine } from "../streak-model.ts";
@@ -140,16 +145,23 @@ function PrimaryAction({
 function DoneCard({
   plan,
   titles,
+  edge,
+  hasCoda,
   onStart,
 }: {
   plan: SessionPlan;
   titles: Map<string, string>;
+  edge: CourseEdge | null;
+  /** Today's Coda can be shown (a session ended today has a summary; onboarding's Coda was its own). */
+  hasCoda: boolean;
   onStart(): void;
 }) {
   const next = plan.mapItemId
     ? titleOf(plan.mapItemId, titles)
     : plan.kind === "review"
-      ? "a review day"
+      ? edge
+        ? `a review day. ${edgeShort(edge)}.`
+        : "a review day"
       : null;
   return (
     <div className="flex flex-col gap-4" data-testid="today-done">
@@ -163,6 +175,11 @@ function DoneCard({
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2">
+        {hasCoda && (
+          <Link to="/session/coda" className={buttonClass("secondary", "md")} data-testid="see-coda">
+            Today's Coda
+          </Link>
+        )}
         <Link to="/studio" className={buttonClass("secondary", "md")}>
           Keep playing in Studio
         </Link>
@@ -185,29 +202,53 @@ export function TodayPage() {
   const content = useContent();
   const warm = useTutorWarm();
   const profile = useProfileUpdate();
+  const setLadder = useVoiceLadder();
+  const sessionDay = useSessionDay();
+  const voice = useVoiceState();
+  const progress = useCourseProgress();
   const ended = useLastEnded();
   const starting = useRunnerView((v) => v.starting);
   const qc = useQueryClient();
   const titles = lessonTitles(content.data?.syllabus ?? null);
   const stepsOf = (id: string) => content.data?.lessons.find((l) => l.id === id)?.steps.length ?? null;
+  const edge = courseEdge(
+    progress.data,
+    content.data?.syllabus ?? null,
+    new Set((content.data?.lessons ?? []).map((l) => l.id as string)),
+    plan.data ?? null,
+  );
+  const ladder = voice.data?.ladder ?? null;
+  const lastEnded = ended ? { ...ended, endedAt: ended.summary?.session.endedAt ?? null } : null;
 
   const view =
     plan.data && boot.data
       ? todayView({
           plan: plan.data,
           boot: boot.data,
-          lastEnded: ended ? { ...ended, endedAt: ended.summary?.session.endedAt ?? null } : null,
+          lastEnded,
+          // The server's record of today (wave3.md §5.1); while it loads (or offline) the bootstrap and this
+          // browser's last ended session decide, as in Wave 2.
+          server: sessionDay.data ?? null,
           titleOf: (id) => titleOf(id, titles),
           stepsOf,
+          edge,
+          ladder: ladder ? { cents: ladder.cents, offerLoosen: ladder.offerLoosen } : null,
         })
       : null;
+  // Today's Coda exists when a session with a summary ended today: the server's record, or this browser's.
+  const hasCoda =
+    !!sessionDay.data?.summarySessionId ||
+    (!!ended?.summary &&
+      !!boot.data &&
+      (ended.day === boot.data.day || ended.summary.session.day === boot.data.day));
 
   const onStart = async (p: SessionPlan) => {
     try {
       await sessionRunner.start(p);
       // The open session is now on the server: a Back to Today (or Today in another tab) must offer to resume
-      // it, not to start a second one, so the bootstrap's `openSession` is read again.
+      // it, not to start a second one, so the bootstrap's `openSession` and today's sessions are read again.
       void qc.invalidateQueries({ queryKey: ["api", "bootstrap"] });
+      void qc.invalidateQueries({ queryKey: ["api", "session.day"] });
       // Warms the tutor's prompt cache in the background; the tutor is optional, so failures are ignored.
       warm.mutate(undefined as never, { onError: () => {} });
     } catch (e) {
@@ -215,7 +256,7 @@ export function TodayPage() {
     }
   };
   const onResume = async () => {
-    const open = boot.data?.openSession;
+    const open = sessionDay.data?.open ?? boot.data?.openSession;
     if (!open || !plan.data) return;
     try {
       await sessionRunner.resume(open, plan.data);
@@ -223,12 +264,22 @@ export function TodayPage() {
       toast.error("The session didn't resume", e instanceof Error ? e.message : undefined);
     }
   };
+  const loosenFrom = ladder?.cents ?? boot.data?.profile.singToleranceCents ?? 70;
   const loosen = async () => {
-    const cur = boot.data?.profile.singToleranceCents;
-    if (!cur || cur >= 70) return;
-    const to = looserTolerance(cur);
+    if (loosenFrom >= 70) return;
     try {
-      await profile.mutateAsync({ body: { singToleranceCents: to } });
+      // The ladder is the only writer of the tolerance in Auto (wave3.md §5.3): the one-tap loosen goes to
+      // `PUT /voice/ladder { mode: "loosen" }`, and the answer says where the ladder now stands. Only a server
+      // without the voice endpoints (501) gets the Wave 2 profile write.
+      let to: number;
+      try {
+        const state = await setLadder.mutateAsync({ body: { mode: "loosen" } });
+        to = state.ladder.cents;
+      } catch (e) {
+        if (!(e instanceof OakApiError && e.code === "not_implemented")) throw e;
+        to = looserTolerance(loosenFrom);
+        await profile.mutateAsync({ body: { singToleranceCents: to as 35 | 50 | 70 } });
+      }
       toast.success(`Singing is checked at ±${to}¢ now.`);
     } catch (e) {
       toast.error("That didn't save", e instanceof Error ? e.message : undefined);
@@ -286,7 +337,13 @@ export function TodayPage() {
                 </div>
                 {view.lead && <p className="mb-2 max-w-[62ch] text-text-2">{view.lead}</p>}
                 {view.state === "done" ? (
-                  <DoneCard plan={plan.data} titles={titles} onStart={() => void onStart(plan.data)} />
+                  <DoneCard
+                    plan={plan.data}
+                    titles={titles}
+                    edge={edge}
+                    hasCoda={hasCoda}
+                    onStart={() => void onStart(plan.data)}
+                  />
                 ) : view.state === "first-run" ? (
                   <div className="mt-4">
                     <PrimaryAction
@@ -339,8 +396,13 @@ export function TodayPage() {
               tone="info"
               title="Ease into singing again?"
               actions={
-                <Button size="sm" onClick={() => void loosen()} loading={profile.isPending}>
-                  Check singing at ±{looserTolerance(b.profile.singToleranceCents)}¢
+                <Button
+                  size="sm"
+                  onClick={() => void loosen()}
+                  loading={profile.isPending || setLadder.isPending}
+                  data-testid="loosen"
+                >
+                  Check singing at ±{looserTolerance(loosenFrom as 25 | 35 | 50 | 70)}¢
                 </Button>
               }
             >
@@ -348,26 +410,37 @@ export function TodayPage() {
               choose it.
             </Callout>
           )}
-          {plan.data && view && view.state !== "first-run" && view.state !== "in-session" && (
-            <nav aria-label="Other ways today" className="flex flex-wrap items-center gap-2">
-              <span className="text-sm text-text-2">Other ways today:</span>
-              {plan.data.alternatives.map((a) => (
-                <Link
-                  key={`${a.kind}:${a.mapItemId ?? ""}`}
-                  {...(a.kind === "studio" ? { to: "/studio" as const } : routeOfItem(a.mapItemId))}
-                  className={buttonClass("secondary", "sm")}
-                >
-                  {a.title}
+          {/* The done card carries its own ways on (Studio, free practice): never twice. */}
+          {plan.data &&
+            view &&
+            view.state !== "first-run" &&
+            view.state !== "in-session" &&
+            view.state !== "done" && (
+              <nav aria-label="Other ways today" className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-text-2">Other ways today:</span>
+                {plan.data.alternatives
+                  // The main item itself is not "another way" (a capstone day listed its own capstone again).
+                  .filter((a) => !(a.mapItemId !== null && a.mapItemId === plan.data.mapItemId))
+                  .map((a) => (
+                    <Link
+                      key={`${a.kind}:${a.mapItemId ?? ""}`}
+                      {...(a.kind === "studio" ? { to: "/studio" as const } : routeOfItem(a.mapItemId))}
+                      className={buttonClass("secondary", "sm")}
+                    >
+                      {a.title}
+                    </Link>
+                  ))}
+                <Link to="/practice" className={buttonClass("ghost", "sm")}>
+                  Practice
                 </Link>
-              ))}
-              <Link to="/practice" className={buttonClass("ghost", "sm")}>
-                Practice
-              </Link>
-              <Link to="/studio" className={buttonClass("ghost", "sm")}>
-                Studio
-              </Link>
-            </nav>
-          )}
+                {/* A review day's plan names Studio itself (the server's alternative); never twice. */}
+                {!plan.data.alternatives.some((a) => a.kind === "studio") && (
+                  <Link to="/studio" className={buttonClass("ghost", "sm")}>
+                    Studio
+                  </Link>
+                )}
+              </nav>
+            )}
         </section>
 
         <aside className="flex flex-col gap-4 lg:col-span-4" aria-label="At a glance">

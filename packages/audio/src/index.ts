@@ -15,6 +15,8 @@ export {
   type CalibrationExtras,
   createCalibration,
   playPannedTone,
+  QUIET_VOICE_SEC,
+  quietCheckOf,
   waitUntil,
 } from "./calibration.ts";
 export {

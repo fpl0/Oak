@@ -40,6 +40,19 @@ const PROMPTS: Record<string, string> = {
 export function promptOf(trial: Trial<unknown>, def: FamilyDef): string {
   const own = trial.params.prompt;
   if (typeof own === "string" && own.trim() !== "") return own;
+  const p = trial.params;
+  if (def.generator === "melody-dictation") {
+    if (p.ui === "degree-pad") return "Write the tune as degrees, in order.";
+    if (p.ui === "code") return "Write the tune as code: n is the degree − 1.";
+    if (p.ui === "staff-input")
+      return "Write the tune on the staff: the pitches and how long each one lasts.";
+  }
+  if (def.generator === "rhythm-dictation" && p.ui === "staff-input")
+    return "Write the rhythm on the staff: where each hit falls and how long it lasts.";
+  if (def.generator === "interval-in-key" && p.shape === "harmonic")
+    return "Which two degrees sounded together? Lower first.";
+  if (def.generator === "degree-id" && Number(p.steps && (p.steps as unknown[]).length) > 1)
+    return "Which degrees, in order?";
   return PROMPTS[def.generator] ?? def.title;
 }
 

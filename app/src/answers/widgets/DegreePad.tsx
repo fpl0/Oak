@@ -1,11 +1,14 @@
 // Degree buttons (contracts §5.4 `degree-pad`, ux §4.2, §4.5 DegreeSlots): the pad shows only the set in play, in
 // the degree colours with the number always printed (♭/♯ add a hatch); movable-do syllables when asked. `1`–`7`
 // pick (a minor pad shows 1 2 ♭3 4 5 ♭6 ♭7 on the same keys), `-` or `+` before a digit picks the altered
-// degree, `Backspace` clears the last slot, `←`/`→` choose a slot to overwrite. One slot is a radio group.
+// degree (also `b` or `#`), `Backspace` clears the last slot, `←`/`→` choose a slot to overwrite. One slot is a radio
+// group. Syllables show when the content asks, the learner's singing labels say so (`solfege`), or the solfège
+// lens is on (wave3.md §4.3, `AnswerEnv.lenses`).
 import type { Degree } from "@oak/api";
 import { clsx } from "clsx";
 import { useEffect, useRef, useState } from "react";
 import { degreeBackgroundCss, degreeStyle } from "../../ui/theme/palette.ts";
+import { useAnswerEnv } from "../env.tsx";
 import { degreeForDigit, padOrder, popSlot, putSlot } from "../keys.ts";
 import { degreeDisplay, degreeSpoken, SYLLABLES } from "../normalize.ts";
 import type { AnswerWidgetProps } from "../types.ts";
@@ -73,7 +76,8 @@ export function DegreePadAnswer(p: AnswerWidgetProps<"degree-pad">) {
   const len = spec.sequenceLen ?? 1;
   const [prefix, setPrefix] = useState<"flat" | "sharp" | null>(null);
   const [slot, setSlot] = useState<number | null>(null);
-  const syllables = spec.syllables || p.solfege === "syllables";
+  const lenses = useAnswerEnv().lenses;
+  const syllables = spec.syllables || p.solfege === "syllables" || lenses?.solfege === true;
   const set = padOrder(spec.set);
   const correct = revealedOf<Degree[]>(feedback);
 
@@ -90,7 +94,7 @@ export function DegreePadAnswer(p: AnswerWidgetProps<"degree-pad">) {
   };
 
   const onKey = (e: React.KeyboardEvent<HTMLElement>): boolean => {
-    if (e.key === "-") {
+    if (e.key === "-" || (e.key === "b" && set.some((d) => d.startsWith("b")))) {
       setPrefix("flat");
       return true;
     }

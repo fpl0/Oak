@@ -22,6 +22,7 @@ import {
   useBootstrap,
   useCapstoneCheck,
   useCapstoneSessionComplete,
+  useCourseProgress,
   useUnlocks,
 } from "../lib/queries.ts";
 import { currentSessionId, reportBlockDone } from "../session/store.ts";
@@ -41,6 +42,7 @@ import { toast } from "../ui/kit/Toast.tsx";
 import { useWorkbenchServices } from "../workbench/services.tsx";
 import { Workbench } from "../workbench/Workbench.tsx";
 import "../workbench/index.ts";
+import { bandReached } from "../studio/model.ts";
 import { BriefPanel } from "./BriefPanel.tsx";
 import { trackTitleOf } from "./CapstoneScreen.tsx";
 import { Ceremony, type CeremonyData } from "./Ceremony.tsx";
@@ -79,9 +81,15 @@ export function Workspace({
   const draftRef = useDraftSketchId(def.id, state.sketchId);
   const draft = useDraft(draftRef.id);
   const ready = !draftRef.pending && (draftRef.id === null || draft.data !== undefined);
+  // Once open, the workspace stays mounted. Inside a session there is no draft until the first save creates one;
+  // the server then links it (`capstones.get` refetches after a check) while its `sketches.get` is still on the
+  // way, which made `ready` false for a moment and remounted the editor — losing the "Checked version N" notice
+  // and the live state with it. The draft only seeds the first render, so nothing is lost by staying.
+  const [opened, setOpened] = useState(false);
+  if (ready && !opened) setOpened(true);
   return (
     <div className="flex h-full min-h-0" data-testid="capstone-workspace">
-      {ready ? (
+      {ready || opened ? (
         <WorkbenchServicesLoader label="Loading the workbench">
           <Loaded
             def={def}
@@ -124,6 +132,7 @@ function Loaded({
   const qc = useQueryClient();
   const boot = useBootstrap();
   const unlocksQ = useUnlocks();
+  const progress = useCourseProgress();
   const brief = def.brief as NonNullable<CapstoneDef["brief"]>;
   const released = state.status === "released" && state.trackId !== null;
   const total = def.sessionDefs.length;
@@ -208,7 +217,13 @@ function Loaded({
   }, [def, code, unlocked, unlocksQ.isPending]);
 
   const band = bandOn
-    ? bandSetupFor(def, flavour, content.bands, def.key ?? live.outcome?.key ?? { tonic: "C", mode: "major" })
+    ? bandSetupFor(
+        def,
+        flavour,
+        content.bands,
+        def.key ?? live.outcome?.key ?? { tonic: "C", mode: "major" },
+        bandReached(progress.data),
+      )
     : null;
 
   const versionBody = (src: string, ranOk: boolean) => {
@@ -386,15 +401,18 @@ function Loaded({
       tutorOpen: true,
       capstoneId: def.id,
       code: codeRef.current,
+      released,
+      ...(def.key ? { key: def.key } : {}),
       ...(saved.current.sketchId ? { sketchId: saved.current.sketchId } : {}),
     });
     return () => clearSubject(thread);
     // The thread is fixed for this workspace.
   }, [def.id]);
   const lastResult = live.outcome?.result ?? state.lastResult ?? null;
+  // The brief's key, else the piece's own (its `.scale()`, read by the subject) — the tutor's Key chip.
   useEffect(() => {
-    patchSubject({ subjectKind: "capstone", subjectId: def.id }, { code, lastResult });
-  }, [def.id, code, lastResult]);
+    patchSubject({ subjectKind: "capstone", subjectId: def.id }, { code, lastResult, released });
+  }, [def.id, code, lastResult, released]);
   // Cards stay Preview-only until the first release (contracts §10.7); afterwards Apply lands in this editor.
   useEffect(
     () =>

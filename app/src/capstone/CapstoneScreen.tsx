@@ -178,8 +178,12 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
   );
   const first = def.sessionDefs[0];
   const unlocks = first ? startUnlocks(shared.data?.toolbox ?? [], first.id) : [];
+  // A learner day holds one open session (decision 28): started from the map while another is open, the server
+  // would hand that one back. Say so, and send the learner to finish it, instead of a button that does nothing.
+  const open = boot.data?.openSession ?? null;
+  const blocked = !currentSessionId() && open !== null && open.mapItemId !== first?.id;
   const onStart = async () => {
-    if (!first || !boot.data) return;
+    if (!first || !boot.data || blocked) return;
     try {
       // The draft first, so the flavour chosen here stays with it (the server stores it at completion) and the
       // workspace opens on it; then the session, which flips the capstone to "in progress" and grants its START
@@ -261,20 +265,32 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
             </p>
           </div>
         )}
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            variant="primary"
-            size="lg"
-            loading={start.isPending || create.isPending || patch.isPending}
-            onClick={() => void onStart()}
-            autoFocus
-          >
-            Start session 1 of {def.sessionDefs.length}
-          </Button>
-          <span className="text-sm text-text-3">
-            About {def.sessionDefs.length > 1 ? "15 minutes a session" : "15 minutes"}.
-          </span>
-        </div>
+        {blocked ? (
+          <div className="flex flex-col items-start gap-3" data-testid="capstone-session-open">
+            <p className="max-w-[60ch] text-sm text-text-2">
+              Today already has a session open. Finish it from Today first; {def.title} starts here after,
+              today or tomorrow.
+            </p>
+            <Link to="/" className={buttonClass("primary", "lg")}>
+              Back to Today
+            </Link>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant="primary"
+              size="lg"
+              loading={start.isPending || create.isPending || patch.isPending}
+              onClick={() => void onStart()}
+              autoFocus
+            >
+              Start session 1 of {def.sessionDefs.length}
+            </Button>
+            <span className="text-sm text-text-3">
+              About {def.sessionDefs.length > 1 ? "15 minutes a session" : "15 minutes"}.
+            </span>
+          </div>
+        )}
       </Card>
       <p className="mt-4 flex items-center gap-2 text-sm text-text-3">
         {def.id === "C0" && <Chip tone="accent">Side A · track 1</Chip>}

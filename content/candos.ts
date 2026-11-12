@@ -13,6 +13,7 @@ export const candos: readonly CanDoDef[] = [
   c("cd.hear.higher-lower", "hear", "I can tell which of two notes is higher.", "E02", "U02.L01"),
   c("cd.hear.home", "hear", "I can hear which note is home in a melody.", "E03", "U03.L01"),
   c("cd.hear.degrees", "hear", "I can name degrees 1 to 7 in a major key by ear.", "E04 E05", "U03.L04"),
+  c("cd.hear.consonance", "hear", "I can hear whether two notes played together are at rest or clash.", "I05 I03", "U04.L03"),
   c("cd.hear.intervals", "hear", "I can name the distance between two notes in a key.", "E06", "U04.L04"),
   c("cd.hear.triads", "hear", "I can tell major, minor, diminished and augmented chords apart.", "E08", "U05.L03"),
   c("cd.hear.bass", "hear", "I can hear the bass degree under a chord progression.", "E09", "U06.L05"),
@@ -30,6 +31,9 @@ export const candos: readonly CanDoDef[] = [
   c("cd.read.half-whole", "read", "I can find half and whole steps and name the black keys as sharps or flats.", "P03 P04", "U02.L03"),
   c("cd.read.treble", "read", "I can read notes on the treble staff.", "N02", "U02.L04"),
   c("cd.read.play-from-page", "read", "I can play a short tune from the treble staff in code.", "N02 D05", "U02.L08"),
+  c("cd.read.circle", "read", "I can find any major key's sharps or flats on the circle of fifths.", "S04", "U03.L07"),
+  c("cd.read.intervals-in-key", "read", "I can count the distance between two degrees of a key: a 2nd, a 3rd, up to an octave.", "I01", "U04.L01"),
+  c("cd.read.interval-quality", "read", "I can name an interval as major, minor or perfect from its half steps.", "I02", "U04.L02"),
   c("cd.read.keysig", "read", "I can name a major key from its key signature.", "N03 S04", "U03.L06"),
   c("cd.read.bass-clef", "read", "I can read notes on the bass clef.", "N04", "U05.L06"),
   c("cd.read.chord-symbols", "read", "I can read lead-sheet chord symbols.", "N05", "U05.L04"),
@@ -71,6 +75,7 @@ export const candos: readonly CanDoDef[] = [
   // sing
   c("cd.sing.first-note", "sing", "I can sing back a note I hear.", "V01", "U00.L02"),
   c("cd.sing.echo", "sing", "I can sing back a short phrase of two or three notes.", "V01 E02", "U02.L07"),
+  c("cd.sing.neighbours", "sing", "I can sing degrees 2 and 4 and lead each one home.", "V03", "U03.L03"),
   c("cd.sing.degrees", "sing", "I can sing degrees on numbers and syllables.", "V02 V03", "U03.L08"),
   c("cd.sing.sight", "sing", "I can sight-sing a simple tune from the staff.", "V04", "U03.L09"),
   c("cd.sing.bass", "sing", "I can sing the roots of a progression.", "V05", "U06.L05"),
@@ -83,6 +88,7 @@ export const candos: readonly CanDoDef[] = [
   c("cd.code.transpose", "code", "I can move a melody up or down by half steps with .transpose().", "P06", "U02.L05"),
   c("cd.code.timbre", "code", "I can play the same line on different instruments and synth waves.", "D01", "U02.L06"),
   c("cd.code.degrees", "code", "I can write a melody as degrees with n() and .scale().", "S02", "U03.L02"),
+  c("cd.code.any-key", "code", "I can play the same tune in any major key by changing one word.", "S03", "U03.L05"),
   c("cd.code.chords", "code", "I can write chords as symbols and let Strudel voice them.", "C05 N05", "U05.L08"),
   c("cd.code.arrange", "code", "I can arrange sections with one arrange() per track.", "F02 F06", "U09.L02"),
 ];

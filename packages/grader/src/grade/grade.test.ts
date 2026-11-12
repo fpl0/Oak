@@ -414,7 +414,8 @@ describe("answer kinds", () => {
     const right = await grade(ex, { staff: [ev({ onset: rat(0), midi: 66, track: "staff" })] });
     expect(right.status).toBe("pass");
     const gb = { ...ev({ onset: rat(0), midi: 66, track: "staff" }), written: "Gb4" };
-    expect(ids(await grade(ex, { staff: [gb] }))).toEqual(["spell.enharmonic"]);
+    // Staff writing names the slip: sounds right, written against the key (Wave 3).
+    expect(ids(await grade(ex, { staff: [gb] }))).toEqual(["staff.enharmonic"]);
   });
   test("parsons: a listed order passes; a distractor is named", async () => {
     const ex: ExerciseOf<"parsons"> = {

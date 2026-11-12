@@ -1,0 +1,61 @@
+{/* U03.L07 Flat Keys & the Circle: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+Sharp keys gather sharps. Today the other half of the keys: the ones that gather flats. Listen to home step from key to key.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+F major is built the way every major key is: the pattern, from home, each letter once.
+
+<Predict exercise="which-note-is-flat" />
+
+<OnPass>B♭. From A, a half step up lands on B♭; B natural would be a whole step. F major has one flat.</OnPass>
+</Step>
+
+<Step id="S3">
+Picture the keys as a clock face with C at twelve. Clockwise, each step goes to the key whose home is degree 5 of the last and adds a sharp: G, D, A, E, B, F♯. Anticlockwise, each home is degree 4 of the last and each step adds a flat.
+
+<Example id="clockwise" views="code,roll" />
+
+Neighbours on the clock share all but one note of their scales: C major and G major differ only in F and F♯. Keys across the clock share only two. Change the plan to `<C4:major G4:major C4:major F#4:major>` and listen: C to G is a gentle lift, C to F♯ lands somewhere far away.
+
+<OnPass>F one step anticlockwise with one flat, then B♭ with two, E♭ with three. Twelve places fit round the clock, each key a sharp or a flat from its neighbours: the **circle of fifths**, named for that degree 5 from one home to the next. At the bottom of the clock three places have two names, one with sharps and one with flats: B or C♭, F♯ or G♭, C♯ or D♭. Same keys on the piano, spelled two ways: fifteen major keys in all.</OnPass>
+</Step>
+
+<Step id="S4">
+Flats keep their own order, **B E A D G C F**: the order of sharps, backwards. Each flat key keeps the flats of the one before and adds the next.
+
+<StaffInput exercise="b-flat-major-flats" />
+
+<OnPass>B♭, then E♭. The last flat is always degree 4 of the key: E♭ in B♭ major, A♭ in E♭ major.</OnPass>
+</Step>
+
+<Step id="S5">
+Now spell a flat key in code, letter by letter. The staff shows each note as you write it.
+
+<Editor exercise="spell-e-flat-major" />
+
+<OnPass>`eb4 f4 g4 ab4 bb4 c5 d5 eb5`: three flats, B♭ E♭ A♭, the first three of the order. Every letter once.</OnPass>
+</Step>
+
+<Step id="S6">
+Round the circle without a picture: one step clockwise, or one step back.
+
+<Choice exercise="one-step-round" />
+
+<OnPass>One step round the circle is one sharp or one flat away, and the two keys share all but one note.</OnPass>
+</Step>
+
+<Step id="S7">
+Your turn: F major in note names. The band plays in F; you supply the flat.
+
+<Make exercise="every-b-flat" />
+
+<Callout kind="tip">Hear what the circle is for. Take the tune of Same Song, Any Key, `n("<[0 2 4 2] [3 1 0 ~]>")`, and give it the key plan `<C4:major!2 G4:major!2>`, then `<C4:major!2 F#4:major!2>`. One step round the circle changes a single note of the scale and the move sounds like a gentle lift; half-way round, five of the seven notes of the scale change and the tune lands somewhere far away.</Callout>
+
+<CanDo id="cd.read.circle" />
+
+<Recap />
+</Step>

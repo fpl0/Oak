@@ -55,11 +55,16 @@ export function SetSummary({
   });
   const answered = outcomes.filter((o) => o.result.skipped !== true);
   const hits = answered.filter((o) => o.result.correct).length;
+  const aural = def.kind !== "concept";
+  const word = !aural && view.word === "worth another listen" ? "worth another look" : view.word;
   const top = Object.entries(summary.confusions).sort((a, b) => b[1] - a[1])[0];
   const question = top
     ? (() => {
         const [expected, got] = top[0].split("|");
-        return `How do I hear ${optionLabel(expected ?? "")} apart from ${optionLabel(got ?? "")}?`;
+        // A concept set (spelling a scale, a key signature) is not heard: its question is about the rule.
+        return aural
+          ? `How do I hear ${optionLabel(expected ?? "")} apart from ${optionLabel(got ?? "")}?`
+          : `Why ${optionLabel(expected ?? "")} here, not ${optionLabel(got ?? "")}?`;
       })()
     : null;
   const composite = familyIds.length > 1;
@@ -81,7 +86,7 @@ export function SetSummary({
         <div className="min-w-0">
           <p className="text-sm text-text-2">Set complete</p>
           <h2 className="text-h2" data-testid="summary-title">
-            {title} · {view.word}
+            {title} · {word}
           </h2>
           <p className="text-text-2">
             {view.accuracy} {answered.length ? "right" : ""}

@@ -110,3 +110,18 @@ export function dayStartInstant(day: string, timeZone: string, rolloverHour = 4)
 export function monthOf(day: string): string {
   return day.slice(0, 7);
 }
+
+/**
+ * The learner day never runs backwards (wave2.md known gap 5). Today is the later of the clock's learner day
+ * (`raw`) and the latest day Oak already recorded activity on (`floor`: a session or a streak day), as long as
+ * that floor is at most `MAX_DAY_STEP_BACK` days ahead. A clock stepped back (NTP, a laptop waking with a stale
+ * clock) or a westward time-zone change therefore continues the day already recorded: nothing is dated into a
+ * day that is over, so a past day or a closed streak week is never filled in after the fact and no day is
+ * counted twice. An eastward change that skips a day leaves that day empty (it was not practised). A clock set
+ * back further than that (a reset dev clock, a corrected year) is taken as the truth.
+ */
+export const MAX_DAY_STEP_BACK = 2;
+export function monotonicDay(raw: string, floor: string | null): string {
+  if (floor === null || floor <= raw) return raw;
+  return daysBetween(raw, floor) <= MAX_DAY_STEP_BACK ? floor : raw;
+}

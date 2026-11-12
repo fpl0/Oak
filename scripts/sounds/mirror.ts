@@ -4,21 +4,26 @@
 //   bun scripts/sounds/mirror.ts --update   # re-resolve from upstream + pack.config.ts, rewrite the lock
 //   bun scripts/sounds/mirror.ts --dry-run  # resolve and print the plan/sizes (HEAD only), write nothing
 //
+// On --update after a PACK_VERSION bump, a file whose source URL is unchanged is copied from the previous
+// version's directory when its bytes still match the previous lock (no re-download of an immutable upstream).
+//
 // Sources are the hosts the strudel.cc REPL prebake uses: strudel.b-cdn.net (sample maps + audio) and
 // felixroos.github.io/webaudiofontdata (gm_* WebAudioFont presets). Every JSON `_base` is rewritten to
 // `/sounds/<packVersion>/<dir>/` so nothing in the pack points at a third-party host.
 
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import gm from "@strudel/soundfonts/gm.mjs";
 import {
   BANK_ALIAS_JSON,
   DRUM_BANKS,
   GM_VARIANTS,
+  kitJson,
   type LockFile,
   OAK_ALIASES,
+  OAK_KITS,
   PACK_VERSION,
   type PackLock,
   type PackManifest,
@@ -125,9 +130,19 @@ async function resolvePlan(): Promise<{ plan: Planned[]; manifest: PackManifest 
     aliases: {},
   };
 
+  const upstreamCache = new Map<string, Promise<SampleMap>>();
+  const upstreamMap = (json: string): Promise<SampleMap> => {
+    let p = upstreamCache.get(json);
+    if (!p) {
+      p = fetchRetry(`${SAMPLE_CDN}/${json}`).then((r) => r.json() as Promise<SampleMap>);
+      upstreamCache.set(json, p);
+    }
+    return p;
+  };
+
   for (const spec of SAMPLE_MAPS) {
     const jsonUrl = `${SAMPLE_CDN}/${spec.json}`;
-    const upstream = (await (await fetchRetry(jsonUrl)).json()) as SampleMap;
+    const upstream = await upstreamMap(spec.json);
     const base = `${PUBLIC_ROOT}/${spec.dir}`;
     const out: SampleMap = { _base: base };
     const group = spec.json.replace(/\.json$/, "");
@@ -170,6 +185,42 @@ async function resolvePlan(): Promise<{ plan: Planned[]; manifest: PackManifest 
     });
   }
 
+  // Oak kits: a derived map per kit (`<kit>_<role>` keys) over files of an upstream map, which must list them.
+  manifest.kitGains = {};
+  for (const [kit, spec] of Object.entries(OAK_KITS)) {
+    const upstream = await upstreamMap(spec.json);
+    const listed = new Set<string>();
+    for (const [key, value] of Object.entries(upstream)) {
+      if (key.startsWith("_")) continue;
+      const files =
+        typeof value === "string" ? [value] : Array.isArray(value) ? value : Object.values(value).flat();
+      for (const f of files) listed.add(f);
+    }
+    const base = `${PUBLIC_ROOT}/${spec.dir}`;
+    const out: SampleMap = { _base: base };
+    for (const [role, def] of Object.entries(spec.roles)) {
+      if (!def) continue;
+      for (const file of def.files) {
+        if (!listed.has(file))
+          throw new Error(`pack.config: kit ${kit} ${role}: ${file} is not in upstream ${spec.json}`);
+        if (!isSafeSamplePath(file)) throw new Error(`pack.config: kit ${kit} lists an unsafe path ${file}`);
+        const path = `${v}/${spec.dir}${file}`;
+        if (!plan.some((p) => p.path === path))
+          plan.push({ path, sourceUrl: `${SAMPLE_CDN}/${spec.dir}${encodePath(file)}`, group: `kit-${kit}` });
+      }
+      out[`${kit}_${role}`] = [...def.files];
+      manifest.kitGains[`${kit}_${role}`] = def.gain;
+    }
+    const json = kitJson(kit);
+    plan.push({
+      path: `${v}/${json}`,
+      sourceUrl: `generated:scripts/sounds/pack.config.ts#${kit}`,
+      group: `kit-${kit}`,
+      content: `${JSON.stringify(out, null, 2)}\n`,
+    });
+    manifest.sampleMaps.push({ json: `${PUBLIC_ROOT}/${json}`, base, tag: "oak-kit" });
+  }
+
   // bank aliases (RolandTR909 -> TR909 ...), pruned to our banks
   const aliasUrl = `${SAMPLE_CDN}/${BANK_ALIAS_JSON}`;
   const aliasUpstream = (await (await fetchRetry(aliasUrl)).json()) as Record<string, string | string[]>;
@@ -205,10 +256,17 @@ async function resolvePlan(): Promise<{ plan: Planned[]; manifest: PackManifest 
       return { upstreamIndex, font };
     });
   }
-  for (const [alias, [gmName, upstreamIndex]] of Object.entries(OAK_ALIASES)) {
-    const entry = manifest.soundfonts[gmName]?.find((f) => f.upstreamIndex === upstreamIndex);
-    if (!entry) throw new Error(`pack.config: alias ${alias} -> ${gmName}:${upstreamIndex} is not mirrored`);
-    manifest.aliases[alias] = { gm: gmName, upstreamIndex, font: entry.font };
+  for (const [alias, spec] of Object.entries(OAK_ALIASES)) {
+    const entry = manifest.soundfonts[spec.gm]?.find((f) => f.upstreamIndex === spec.variant);
+    if (!entry) throw new Error(`pack.config: alias ${alias} -> ${spec.gm}:${spec.variant} is not mirrored`);
+    manifest.aliases[alias] = {
+      gm: spec.gm,
+      upstreamIndex: spec.variant,
+      font: entry.font,
+      ...(spec.gain !== undefined ? { gain: spec.gain } : {}),
+      ...(spec.release !== undefined ? { release: spec.release } : {}),
+      ...(spec.range !== undefined ? { range: spec.range } : {}),
+    };
   }
   plan.push({
     path: `${v}/manifest.json`,
@@ -260,6 +318,12 @@ async function main() {
 
   const { plan } = await resolvePlan();
   const locked = new Map((lock?.files ?? []).map((f) => [f.path, f]));
+  // After a version bump: the previous version's files by source URL (byte-identical upstream, no download).
+  const previous =
+    lock && lock.packVersion !== PACK_VERSION
+      ? new Map(lock.files.filter((f) => !f.derived).map((f) => [f.sourceUrl, f]))
+      : new Map<string, LockFile>();
+  let copied = 0;
 
   if (dryRun) {
     const sizes = await pool(plan, CONCURRENCY, async (p) => {
@@ -285,6 +349,17 @@ async function main() {
     } else if (want && existsSync(dest) && sha256(await readFile(dest)) === want.sha256) {
       reused++;
       return { path: p.path, sourceUrl: p.sourceUrl, bytes: want.bytes, sha256: want.sha256, group: p.group };
+    } else if (
+      previous.has(p.sourceUrl) &&
+      existsSync(insideRoot(PACK_DIR, (previous.get(p.sourceUrl) as LockFile).path)) &&
+      sha256(await readFile(insideRoot(PACK_DIR, (previous.get(p.sourceUrl) as LockFile).path))) ===
+        (previous.get(p.sourceUrl) as LockFile).sha256
+    ) {
+      const prev = previous.get(p.sourceUrl) as LockFile;
+      await mkdir(dirname(dest), { recursive: true });
+      await copyFile(insideRoot(PACK_DIR, prev.path), dest);
+      copied++;
+      return { path: p.path, sourceUrl: p.sourceUrl, bytes: prev.bytes, sha256: prev.sha256, group: p.group };
     } else {
       body = new Uint8Array(await (await fetchRetry(p.sourceUrl)).arrayBuffer());
       validate(p.path, body);
@@ -346,7 +421,7 @@ async function main() {
 
   report(files);
   console.log(
-    `[mirror] ${downloaded} downloaded, ${reused} reused, ${removed} stale removed; lock ${frozen ? "verified" : "written"}`,
+    `[mirror] ${downloaded} downloaded, ${reused} reused, ${copied} copied from the previous version, ${removed} stale removed; lock ${frozen ? "verified" : "written"}`,
   );
   if (totalBytes > BUDGET_BYTES) {
     console.error(`[mirror] WARNING: pack is ${mb(totalBytes)}, over the ${mb(BUDGET_BYTES)} budget`);

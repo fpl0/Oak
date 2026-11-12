@@ -109,3 +109,73 @@ test("a one-line rhythm staff and a partial first bar parse cleanly", () => {
   expect(t.warnings).toBeUndefined();
   expect(t.lines[0].staff[0].clef.stafflines).toBe(1);
 });
+
+// --- Wave 3: the rows of ABCJS_LIMITS (src/limits.ts) and the facts the annotation lines rely on ---------
+
+const keyAcc = (k: string): string[] =>
+  tune(`X:1\nM:4/4\nL:1/16\nK:${k}\nC16|]`).lines[0].staff[0].key.accidentals.map(
+    (a: { acc: string; note: string }) => `${a.acc}${a.note.toUpperCase()}`,
+  );
+
+test("theoretical-key: K: past seven accidentals is silently another key; an explicit signature is right", () => {
+  expect(keyAcc("G#")).toEqual(["flatB", "flatE", "flatA", "flatD"]);
+  expect(keyAcc("Fb")).toEqual([]);
+  expect(keyAcc("D#")).toEqual(["flatB", "flatE", "flatA"]);
+  expect(keyAcc("C exp ^^f ^c ^g ^d ^a ^e ^b")).toEqual([
+    "dblsharpF",
+    "sharpC",
+    "sharpG",
+    "sharpD",
+    "sharpA",
+    "sharpE",
+    "sharpB",
+  ]);
+  expect(keyAcc("C exp __b _e _a _d _g _c _f clef=bass")).toEqual([
+    "dblflatB",
+    "flatE",
+    "flatA",
+    "flatD",
+    "flatG",
+    "flatC",
+    "flatF",
+  ]);
+  // Seven is still fine.
+  expect(keyAcc("C#").length).toBe(7);
+  expect(keyAcc("Cb").length).toBe(7);
+  expect(keyAcc("A#m").length).toBe(7);
+  expect(keyAcc("Abm").length).toBe(7);
+});
+
+test("same-step-chord: two notes on one staff step share a position (abcjs offsets the heads, one sign)", () => {
+  const { warnings, notes } = parse("[F^F]8 z8 |]");
+  expect(warnings).toEqual([]);
+  // biome-ignore lint/suspicious/noExplicitAny: abcjs pitch
+  expect(notes[0].pitches.map((p: any) => p.pitch)).toEqual([3, 3]);
+});
+
+test("lyric-per-element: ~ joins a chord's texts into one syllable; several w: lines stack as verses", () => {
+  const t = tune(`${HEAD}[CEG]8 F8 |]\nw:1~3~5 4\nw:do~mi~sol fa`);
+  // biome-ignore lint/suspicious/noExplicitAny: abcjs lyric
+  const lyr = notesOf(t).map((n: any) => n.lyric.map((l: any) => l.syllable));
+  // abcjs turns ~ into a no-break space.
+  expect(lyr).toEqual([
+    ["1\u00a03\u00a05", "do\u00a0mi\u00a0sol"],
+    ["4", "fa"],
+  ]);
+  expect(t.warnings).toBeUndefined();
+});
+
+test("w: lines follow their own voice on a grand staff; %%vocalfont parses cleanly", () => {
+  const t = tune(
+    "X:1\nM:4/4\nL:1/16\n%%vocalfont Helvetica 12\n%%score {RH LH}\nV:RH clef=treble\nV:LH clef=bass\nK:D\nV:RH\nf16|]\nw:3\nV:LH\nD,16|]\nw:1\n",
+  );
+  expect(t.warnings).toBeUndefined();
+  // biome-ignore lint/suspicious/noExplicitAny: abcjs staff
+  expect(t.lines[0].staff.map((s: any) => s.voices[0][0].lyric[0].syllable)).toEqual(["3", "1"]);
+});
+
+test("annotation-above: several ^ texts on one note become one stacked text; ♭ and ♯ are kept", () => {
+  const { notes } = parse('"^♭3""^me"!class=oak-e0!_E16 |]');
+  expect(notes[0].chord).toEqual([{ name: "♭3\nme", position: "above" }]);
+  expect(notes[0].extraClass).toBe("oak-e0");
+});

@@ -83,6 +83,20 @@ export function ListenBlock({
       description: "Play the examples again",
       run: () => void playAll(),
     },
+    {
+      // The button shows Enter: it works wherever focus is (it used to need focus on the button, which only
+      // `autoFocus` gave on first render — a keyboard learner pressed Enter and nothing happened).
+      id: "listen-done",
+      keys: "Enter",
+      scope: "global",
+      group: "Drills",
+      description: "Start the set",
+      when: (k) => !k.onControl,
+      run: () => {
+        stop.current?.();
+        onDone();
+      },
+    },
   ]);
 
   return (

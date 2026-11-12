@@ -260,7 +260,7 @@ export class GatesService {
   /**
    * Composes a fresh attempt: ≥ 2 items per skill in range from the recipe's families at each
    * family's mastery level, the authored items, up to 3 debt re-tests, the Make; 12 to 18 items,
-   * interleaved. Production (sing, tap) items are left out in Quiet mode.
+   * interleaved. Items that need the mic (sung skills) are left out in Quiet mode; tapping stays.
    */
   composeCheckpoint(
     cpId: string,
@@ -271,7 +271,18 @@ export class GatesService {
     const meta = this.#content.checkpointMeta(cpId);
     if (meta === null) return [];
     const salt = opts.salt ?? "";
-    const skip = (skill: string) => opts.quiet && this.#content.skill(skill)?.kind === "production";
+    // Quiet mode skips the items that need the microphone: sung skills (the voice category, or a production
+    // skill whose families are all mic families). Tapping needs no mic and stays (contracts §8.5).
+    const needsMic = (skill: string) => {
+      const sk = this.#content.skill(skill);
+      if (sk === null || sk.kind !== "production") return false;
+      if (sk.category === "voice") return true;
+      const fams = ((def?.recipe.families[skill as SkillId] ?? []) as string[]).map((f) =>
+        this.#content.family(f),
+      );
+      return fams.length > 0 && fams.every((f) => f?.mic === true);
+    };
+    const skip = (skill: string) => opts.quiet && needsMic(skill);
     type Draft = Omit<CheckpointItemSpec, "idx">;
     const drafts: Draft[] = [];
     let n = 0;
@@ -395,11 +406,11 @@ export class GatesService {
         role: a.role,
         mean,
         items: a.n,
-        ok: mean >= CHECKPOINT.perSkillPass,
+        ok: mean >= CHECKPOINT.perSkillPass - SCORE_EPS,
       };
     });
     const score = gN === 0 ? 1 : gSum / gN;
-    const passed = score >= CHECKPOINT.pass && perSkill.every((p) => p.role !== "gating" || p.ok);
+    const passed = score >= CHECKPOINT.pass - SCORE_EPS && perSkill.every((p) => p.role !== "gating" || p.ok);
     return { score, passed, softPassOffered: !passed && softPassOffered(attemptNo, score), perSkill };
   }
 
@@ -410,10 +421,16 @@ export class GatesService {
   }
 }
 
+/**
+ * Scores are means of item scores: twelve items at exactly 0.85 sum to 10.199999999999998, a mean just under
+ * the bar. A learner who scores the bar on every item has met it (contracts §7.6 "≥ 0.85").
+ */
+const SCORE_EPS = 1e-9;
+
 /** "Continue anyway": a retake (attempt ≥ 2) scoring ≥ 0.75, or any attempt from the third on. */
 export function softPassOffered(attemptNo: number, score: number): boolean {
   if (attemptNo >= CHECKPOINT.softPassAlwaysFromAttempt) return true;
-  return attemptNo >= 2 && score >= CHECKPOINT.softPass;
+  return attemptNo >= 2 && score >= CHECKPOINT.softPass - SCORE_EPS;
 }
 
 /** Deterministic interleave: a seeded shuffle that then avoids two items of one skill in a row where it can. */

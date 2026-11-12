@@ -1,0 +1,49 @@
+{/* U04.L01 Steps Apart: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+Two voices this time, and the second one never goes its own way: it moves with the first, always the same distance above it.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+Musicians name the distance between two notes by counting degrees, and they count both ends. Try it before you hear it.
+
+<Predict exercise="count-both-ends" />
+</Step>
+
+<Step id="S3">
+Home is always the first note here. Listen to how the second note changes the sound: close and warm, then open, then the same note again, higher.
+
+<Example id="three-pairs" views="code,roll" />
+
+<OnPass>The distance between two notes is an **interval**, named by its count: 1 up to 3 is a 3rd, 1 up to 5 a 5th, 1 up to the 1 above an octave. In code, subtract: `n` 4 minus `n` 0 is 4, one less than the name, because `n` counts from 0.</OnPass>
+</Step>
+
+<Step id="S4">
+The hook's second voice was a 3rd above the first all the way through. Give this riff the same companion.
+
+<Editor exercise="a-third-above" />
+
+<OnPass>Every note of `vox` sits two degrees above `mel`: a line in 3rds. Notice that you added 2 to every `n`, and the name says 3. That gap of one is the same bridge as degree and `n`.</OnPass>
+</Step>
+
+<Step id="S5">
+Your ear can count too. A few chords set home, then home sounds and one note above it.
+
+<EarDrill family="fam.int.in-key" level={1} trials={6} />
+
+<Callout kind="tip">Sing up from do to the second note. The number of syllables you sing is the name of the distance.</Callout>
+
+<OnPass>Heard from home, every distance is just a degree: 3 is a 3rd, 5 is a 5th, the 1 above is the octave.</OnPass>
+</Step>
+
+<Step id="S6">
+Your turn. Write a riff, then give it a second voice that moves with it.
+
+<Make exercise="riff-in-two-voices" />
+
+<CanDo id="cd.read.intervals-in-key" />
+
+<Recap />
+</Step>

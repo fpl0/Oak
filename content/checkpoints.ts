@@ -2,7 +2,7 @@
 // nodes, counted in the pass score) and which it only level-sets (perceptual and production nodes, which
 // never block). Authored items and generator recipes live in content/core/Uxx/CP/checkpoint.ts
 // (`defineCheckpoint`); this file is the registry the syllabus, the gates and content CI read.
-import type { CheckpointId, CheckpointMeta, LessonId, SkillId, UnitId } from "@oak/content-kit";
+import type { BandRef, CheckpointId, CheckpointMeta, LessonId, SkillId, UnitId } from "@oak/content-kit";
 
 const ids = <T extends string>(list: string): T[] => (list === "" ? [] : (list.split(" ") as T[]));
 const cp = (
@@ -60,6 +60,21 @@ export const CHECKPOINT_RETESTS: Partial<Record<CheckpointId, SkillId[]>> = {
   "U07.CP": ["V04"],
   "U14.CP": ["E10"],
   "R.CP": ["E14"],
+};
+
+/**
+ * The Band under each checkpoint's Make (contracts §5.10 rule 6: from U01 every Make has one). A lesson Make
+ * names its Band in its step's UI; a checkpoint has no steps, so its Make's Band is registered here. The
+ * Make prompts say "over the band"; each Band is in the Make's meter (4/4) and, where the Make counts
+ * degrees, the prompt keeps the declared key, so the Band does not follow the learner's `.scale()`.
+ */
+export const CHECKPOINT_MAKE_BANDS: Partial<Record<CheckpointId, BandRef>> = {
+  // A groove: the Band plays the harmony under the learner's drums.
+  "U01.CP": { band: "band.two-chord-vamp", tracks: ["bass", "chords"] },
+  "U02.CP": { band: "band.two-chord-vamp" },
+  // An eight-bar melody that pauses on V in bar 4 and comes home in bar 8.
+  "U03.CP": { band: "band.phrase-8bar" },
+  "U04.CP": { band: "band.two-chord-vamp" },
 };
 
 /** Pass rules (contracts §7.6). The numbers are also in @oak/srs `CHECKPOINT`; content CI compares them. */

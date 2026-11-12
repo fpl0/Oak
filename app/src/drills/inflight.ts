@@ -1,9 +1,12 @@
-// The set in flight, kept in this browser so a reload resumes the same set at its next trial (the trial records
-// are on the server too: every answer is upserted at once, and `finish` re-sends them all). A per-viewer
-// convenience only: storage can be empty or throw (private windows, previews), and the runner then simply
-// starts a fresh set. Entries expire after 12 hours and are dropped as soon as their set finishes.
-import type { DrillSession } from "@oak/api";
+// The set in flight. This browser keeps a pointer to it (the server's drill session, plus the trials as they were
+// answered here) so a reload resumes the same set at its next trial; the server is the record: on a reload the
+// runner reads the set back with `drills.get` (`resumeFromServer`) and continues from the trials the server
+// stored, adding only answers this tab could not send yet. A per-viewer convenience only: storage can be empty or
+// throw (private windows, previews), and the runner then simply starts a fresh set. Entries expire after 12
+// hours and are dropped as soon as their set finishes.
+import type { DrillSession, DrillSessionDetail, DrillTrialRecord } from "@oak/api";
 import type { ResumeState } from "./machine.ts";
+import type { TrialOutcome } from "./model.ts";
 
 const KEY = "oak.drills.inflight.v1";
 const DONE_KEY = "oak.drills.done.v1";
@@ -123,4 +126,66 @@ export function markItemDone(day: string, key: string, s: Storage | null = stora
   } catch {
     // ignore
   }
+}
+
+/** A trial as the server stored it, back in the runner's outcome shape (diagnostics are not stored). */
+export function outcomeOfRecord(r: DrillTrialRecord): TrialOutcome {
+  const skipped = r.response.skipped;
+  return {
+    index: r.idx,
+    familyId: r.familyId,
+    result: {
+      credit: r.credit,
+      correct: r.correct,
+      rtMs: r.rtMs,
+      replays: r.replays,
+      diagnostics: [],
+      ...(r.confusion ? { confusion: [r.confusion[0], r.confusion[1]] as [string, string] } : {}),
+      centsError: r.centsError,
+      ...(skipped ? { skipped: true } : {}),
+    },
+    revealed: r.revealed === true,
+    sung: r.response.sung,
+    resolutionCredit:
+      r.sungResolution && !r.sungResolution.skipped && !r.sungResolution.quiet
+        ? r.sungResolution.credit
+        : null,
+    sungResolution: r.sungResolution ?? null,
+  };
+}
+
+/**
+ * The set to resume, with the server as the record (wave3.md §4.1 `useDrillSession`). `detail` is what
+ * `drills.get` returned for this browser's pointer: `null` when the server no longer has the set (404), or
+ * `undefined` when it could not be asked (offline), in which case this browser's copy stands in.
+ *
+ * - A set the server has finished is never resumed.
+ * - The trials are the server's, in order; a trial this tab answered but could not send yet (a failed upsert) is
+ *   kept after them, as long as the indices stay contiguous. The outcome of a trial both sides have keeps this
+ *   tab's (it carries the grader's diagnostics); the server's stands in when this tab has none.
+ */
+export function resumeFromServer(
+  local: ResumeState,
+  detail: DrillSessionDetail | null | undefined,
+): ResumeState | null {
+  if (detail === undefined) return local;
+  if (detail === null || detail.session.id !== local.session.id) return null;
+  if (detail.session.finishedAt !== null) return null;
+  const byIdx = new Map(detail.trials.map((t) => [t.idx, t]));
+  const records: DrillTrialRecord[] = [];
+  const outcomes: TrialOutcome[] = [];
+  for (let i = 0; ; i++) {
+    const server = byIdx.get(i);
+    const mine = local.records[i]?.idx === i ? local.records[i] : undefined;
+    const record = server ?? mine;
+    if (!record) break;
+    records.push(record);
+    const kept = local.outcomes[i];
+    outcomes.push(
+      kept && kept.index === i && (!server || kept.familyId === server.familyId)
+        ? kept
+        : outcomeOfRecord(record),
+    );
+  }
+  return { session: detail.session, outcomes, records };
 }

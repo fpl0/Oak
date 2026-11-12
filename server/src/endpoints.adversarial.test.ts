@@ -150,7 +150,8 @@ describe("bodies and parameters", () => {
     for (const e of ENDPOINTS.filter((x) => x.path.includes(":"))) {
       for (const v of hostile) {
         const res = await dev.req(e.method, fill(e.path, v), e.method === "GET" ? undefined : {});
-        if (res.status >= 500 && res.status !== 503)
+        // 503: a service that is down; 501: the typed stub of an endpoint not built yet (wave3.md §5).
+        if (res.status >= 500 && res.status !== 503 && res.status !== 501)
           problems.push(`${e.name} ${v.slice(0, 20)} → ${res.status}`);
         if (e.res === "binary" && res.status === 200)
           problems.push(`${e.name} ${v.slice(0, 20)} served a file`);

@@ -3,6 +3,7 @@ import type { DrillFinish, DrillSession, FamilyDef, Trial } from "@oak/api";
 import { createRegistry, DEFAULT_PROFILE, gradeTrial, type TrialResponse } from "@oak/drills";
 import { createActor, fromCallback, fromPromise, waitFor } from "xstate";
 import { families } from "../../../content/families.ts";
+import { resumeFromServer } from "./inflight.ts";
 import {
   type DrillDeps,
   type DrillInput,
@@ -42,7 +43,7 @@ let clock = 1_000;
 const deps: DrillDeps = {
   grade: (trial, response: TrialResponse) =>
     gradeTrial(registry.family(trial.family), trial, response, DEFAULT_PROFILE),
-  gradeResolution: () => ({ credit: 0.75, sung: [{ midi: 64, cents: 12, credit: 1 }] }),
+  gradeResolution: () => ({ credit: 0.75, passed: false, sung: [{ midi: 64, cents: 12, credit: 1 }] }),
   sungOf: () => [{ midi: 61, cents: 30, credit: 1 }],
   now: () => clock,
   iso: () => "2026-11-11T10:01:00.000Z",
@@ -57,7 +58,7 @@ interface Spy {
 
 function run(
   s: DrillSession,
-  opts: { resume?: ResumeState | null; source?: TrialSource; failStart?: number } = {},
+  opts: { resume?: ResumeState | null; source?: TrialSource; failStart?: number; quiet?: boolean } = {},
 ) {
   const spy: Spy = { persisted: [], sent: [], finished: null, done: 0 };
   let starts = 0;
@@ -99,7 +100,8 @@ function run(
     familyIds: s.familyIds,
     warmupItemId: null,
     sessionId: null,
-    quiet: false,
+    quiet: opts.quiet ?? false,
+    tolCents: 50,
     resume: opts.resume ?? null,
     deps,
   };
@@ -274,6 +276,47 @@ describe("drill machine", () => {
     expect(second.spy.finished).toEqual([0, 1, 2]);
   });
 
+  test("resume reads the server's record: its trials win, unsent answers follow, a finished set is not resumed", async () => {
+    const s = session("fam.pit.compare", 4);
+    const first = run(s);
+    await waitFor(first.actor, (st) => st.matches({ trial: "presenting" }));
+    for (let i = 0; i < 3; i++) {
+      first.actor.send({ type: "PRESENTED" });
+      answer(first.actor, i !== 1);
+      first.actor.send({ type: "NEXT" });
+    }
+    const ctx = first.actor.getSnapshot().context;
+    first.actor.stop();
+    // This browser lost its copy of trial 3 (an old pointer: 1 trial); the server stored three.
+    const local: ResumeState = {
+      session: s,
+      outcomes: ctx.outcomes.slice(0, 1),
+      records: ctx.records.slice(0, 1),
+    };
+    const server = { session: s, trials: ctx.records.slice(0, 3) };
+    const merged = resumeFromServer(local, server);
+    expect(merged?.records.map((r) => r.idx)).toEqual([0, 1, 2]);
+    expect(merged?.outcomes.map((o) => o.result.correct)).toEqual([true, false, true]);
+    expect(merged?.outcomes[1]?.revealed).toBe(false);
+    // The server is behind (an upsert failed): this tab's unsent answers follow its record.
+    const behind = resumeFromServer(
+      { session: s, outcomes: ctx.outcomes.slice(0, 3), records: ctx.records.slice(0, 3) },
+      { session: s, trials: ctx.records.slice(0, 1) },
+    );
+    expect(behind?.records).toHaveLength(3);
+    // Offline: this browser's copy stands in; gone (404) or finished: a fresh set.
+    expect(resumeFromServer(local, undefined)).toBe(local);
+    expect(resumeFromServer(local, null)).toBeNull();
+    expect(
+      resumeFromServer(local, { session: { ...s, finishedAt: "2026-11-12T10:00:00.000Z" }, trials: [] }),
+    ).toBeNull();
+    // The merged state resumes the runner at trial 4.
+    const second = run(s, { resume: merged });
+    await waitFor(second.actor, (st) => st.matches({ trial: "presenting" }));
+    expect(second.actor.getSnapshot().context.index).toBe(3);
+    second.actor.stop();
+  });
+
   test("a set resumed after its last answer goes straight to finishing", async () => {
     const s = session("fam.pit.compare", 1);
     const first = run(s);
@@ -293,5 +336,188 @@ describe("drill machine", () => {
     expect(actor.getSnapshot().context.error).toBe("server is offline");
     actor.send({ type: "RETRY" });
     await waitFor(actor, (st) => st.matches({ trial: "presenting" }));
+  });
+
+  // --- Wave 3: functional ear training --------------------------------------------------------------
+
+  /** Answers the current FET trial on the degree pad, right or with a wrong degree of its set. */
+  function answerDegree(actor: ReturnType<typeof run>["actor"], right: boolean) {
+    const trial = actor.getSnapshot().context.current?.trial as Trial;
+    const want = (trial.expected as { degrees: string[] }).degrees;
+    const got = right ? want : [want[0] === "1" ? "5" : "1"];
+    actor.send({ type: "SUBMIT", answer: { degrees: got as never } });
+  }
+
+  test("an FET answer is followed by hearing it resolve (right) or yours vs it (wrong)", async () => {
+    const s = session("fam.deg.fet-major", 8);
+    const { actor } = run(s, {
+      // No sung resolutions here: every trial shows the automatic listen-back.
+      source: (() => {
+        const base = sourceFor(s);
+        return {
+          total: 2,
+          at: (i: number) => {
+            const p = base.at(i, []);
+            const params = { ...p.trial.params, sungResolution: false };
+            return { ...p, trial: { ...p.trial, params } };
+          },
+        };
+      })(),
+    });
+    const audits: string[] = [];
+    actor.subscribe((st) => {
+      if (st.context.audition) audits.push(st.context.audition);
+    });
+    await waitFor(actor, (st) => st.matches({ trial: "presenting" }));
+    actor.send({ type: "PRESENTED" });
+    answerDegree(actor, true);
+    expect(audits.at(-1)).toBe("resolve");
+    expect(actor.getSnapshot().matches({ feedback: "idle" })).toBe(true);
+    actor.send({ type: "NEXT" });
+    actor.send({ type: "PRESENTED" });
+    answerDegree(actor, false);
+    expect(audits.at(-1)).toBe("compare");
+    const rec = actor.getSnapshot().context.records[1];
+    expect(rec).toMatchObject({ revealed: false, modality: "normal", sungResolution: null });
+  });
+
+  test("a trial that sings its resolution next is not given the path first; the sung take is recorded", async () => {
+    const s = session("fam.deg.fet-major", 8);
+    const { actor } = run(s);
+    await waitFor(actor, (st) => st.matches({ trial: "presenting" }));
+    let sungSeen = 0;
+    for (let i = 0; i < 8; i++) {
+      const trial = actor.getSnapshot().context.current?.trial as Trial;
+      actor.send({ type: "PRESENTED" });
+      answerDegree(actor, true);
+      if (trial.params.sungResolution === true) {
+        sungSeen++;
+        // No automatic listen-back: from level 3 the learner sings before hearing the path.
+        expect(actor.getSnapshot().context.audition).toBeNull();
+        actor.send({ type: "NEXT" });
+        expect(actor.getSnapshot().matches({ resolution: "running" })).toBe(true);
+        actor.send({ type: "CAPTURED", frames: [] });
+        const ctx = actor.getSnapshot().context;
+        const sr = ctx.records[i]?.sungResolution;
+        expect(sr).toMatchObject({
+          order: "play-first",
+          credit: 0.75,
+          passed: false,
+          skipped: false,
+          quiet: false,
+        });
+        expect(sr?.tolCents).toBe(50);
+        expect(sr?.path.at(-1)).toBe("1");
+        expect(sr?.notes).toHaveLength(1);
+        // The identification credit is untouched.
+        expect(ctx.records[i]?.credit).toBe(1);
+      }
+      actor.send({ type: "NEXT" });
+    }
+    // Two or three per set, never all (contracts §8.3).
+    expect(sungSeen).toBeGreaterThanOrEqual(2);
+    expect(sungSeen).toBeLessThanOrEqual(3);
+    await waitFor(actor, (st) => st.matches("summary"));
+  });
+
+  test("Quiet mode: the resolution is heard, then imagined (Space), recorded as quiet with no notes", async () => {
+    const s = session("fam.deg.fet-major", 8);
+    const { actor } = run(s, { quiet: true });
+    await waitFor(actor, (st) => st.matches({ trial: "presenting" }));
+    let quietSeen = 0;
+    for (let i = 0; i < 8; i++) {
+      const trial = actor.getSnapshot().context.current?.trial as Trial;
+      actor.send({ type: "PRESENTED" });
+      answerDegree(actor, i % 2 === 0);
+      if (trial.params.sungResolution === true) {
+        quietSeen++;
+        actor.send({ type: "NEXT" });
+        // The way home plays (the actor reports PRESENTED when it has), then the learner hears it inside.
+        actor.send({ type: "PRESENTED" });
+        expect(actor.getSnapshot().matches({ resolution: "imagining" })).toBe(true);
+        actor.send({ type: "HEARD" });
+        const rec = actor.getSnapshot().context.records[i];
+        expect(rec?.modality).toBe("quiet");
+        expect(rec?.sungResolution).toMatchObject({ quiet: true, skipped: false, notes: [], credit: 0 });
+        expect(rec?.response.sung).toBeNull();
+      }
+      actor.send({ type: "NEXT" });
+    }
+    // The planner keeps the resolutions in Quiet mode: they are listened to, not dropped.
+    expect(quietSeen).toBeGreaterThanOrEqual(2);
+    await waitFor(actor, (st) => st.matches("summary"));
+  });
+
+  test("Quiet mode switched on mid-set: a way home being sung stops at once; later ones are heard inside", async () => {
+    const s = session("fam.deg.fet-major", 8);
+    const { actor } = run(s, { quiet: false });
+    await waitFor(actor, (st) => st.matches({ trial: "presenting" }));
+    let phase: "sing" | "quiet" = "sing";
+    let quietSeen = 0;
+    for (let i = 0; i < 8; i++) {
+      const trial = actor.getSnapshot().context.current?.trial as Trial;
+      actor.send({ type: "PRESENTED" });
+      answerDegree(actor, true);
+      if (trial.params.sungResolution === true) {
+        actor.send({ type: "NEXT" });
+        if (phase === "sing") {
+          expect(actor.getSnapshot().matches({ resolution: "running" })).toBe(true);
+          // The learner switches Quiet mode on while the mic listens: the take stops, skipped, no penalty.
+          actor.send({ type: "QUIET", quiet: true });
+          const ctx = actor.getSnapshot().context;
+          expect(actor.getSnapshot().matches({ resolution: "done" })).toBe(true);
+          expect(ctx.input.quiet).toBe(true);
+          expect(ctx.records[i]?.modality).toBe("quiet");
+          expect(ctx.records[i]?.sungResolution).toMatchObject({ skipped: true });
+          expect(ctx.records[i]?.credit).toBe(1);
+          phase = "quiet";
+        } else {
+          quietSeen++;
+          actor.send({ type: "PRESENTED" });
+          expect(actor.getSnapshot().matches({ resolution: "imagining" })).toBe(true);
+          actor.send({ type: "HEARD" });
+          expect(actor.getSnapshot().context.records[i]?.sungResolution).toMatchObject({ quiet: true });
+        }
+      }
+      actor.send({ type: "NEXT" });
+    }
+    expect(phase).toBe("quiet");
+    expect(quietSeen).toBeGreaterThanOrEqual(1);
+    await waitFor(actor, (st) => st.matches("summary"));
+  });
+
+  test("Shift+S on a resolution records it as skipped; Show me records the reveal", async () => {
+    const s = session("fam.deg.fet-major", 8);
+    const { actor } = run(s);
+    await waitFor(actor, (st) => st.matches({ trial: "presenting" }));
+    let skipped = false;
+    for (let i = 0; i < 8 && !skipped; i++) {
+      const trial = actor.getSnapshot().context.current?.trial as Trial;
+      actor.send({ type: "PRESENTED" });
+      if (trial.params.sungResolution === true) {
+        answerDegree(actor, true);
+        actor.send({ type: "NEXT" });
+        actor.send({ type: "SKIP_SUNG" });
+        expect(actor.getSnapshot().context.records[i]?.sungResolution).toMatchObject({ skipped: true });
+        skipped = true;
+      } else {
+        actor.send({ type: "REVEAL" });
+        expect(actor.getSnapshot().context.records[i]).toMatchObject({ revealed: true, credit: 0 });
+        // A revealed trial still hears its way home.
+        expect(actor.getSnapshot().context.audition).toBe("resolve");
+      }
+      actor.send({ type: "NEXT" });
+    }
+    expect(skipped).toBe(true);
+  });
+
+  test("A/B listening while answering counts as a replay", async () => {
+    const { actor } = run(session("fam.pit.compare", 1));
+    await waitFor(actor, (st) => st.matches({ trial: "presenting" }));
+    actor.send({ type: "PRESENTED" });
+    actor.send({ type: "LISTENED" });
+    actor.send({ type: "LISTENED" });
+    expect(actor.getSnapshot().context.replays).toBe(2);
+    expect(actor.getSnapshot().matches({ trial: "answering" })).toBe(true);
   });
 });

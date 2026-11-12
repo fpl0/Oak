@@ -7,6 +7,7 @@ import { useMachine } from "@xstate/react";
 import { Disc3, Mic2, RotateCcw, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { fromPromise } from "xstate";
+import { ALBUM_TITLE_MAX, DEFAULT_ALBUM_TITLE, useAlbumTitle } from "../album/title.ts";
 import { Button } from "../ui/kit/Button.tsx";
 import { Progress } from "../ui/kit/basics.tsx";
 import { Callout } from "../ui/kit/Controls.tsx";
@@ -54,6 +55,12 @@ export function ReleaseDialog(p: ReleaseDialogProps) {
         })
       : line;
   const tags = theoryTags(brief.rubric, outcome.result, analysis, p.skillName);
+  // The album gets its name at its first release (ux §5.3), editable later on /album.
+  const album = useAlbumTitle();
+  const namesAlbum = p.state.trackId === null && !album.named;
+  const [albumName, setAlbumName] = useState(album.title);
+  const albumNameRef = useRef<string | null>(null);
+  albumNameRef.current = namesAlbum ? albumName : null;
 
   // Stop (or Esc, or leaving the page) during a take cancels the recorder: the take is dropped, the piece stops.
   const stopped = useRef(false);
@@ -91,6 +98,8 @@ export function ReleaseDialog(p: ReleaseDialogProps) {
             reviewNote: p.review?.linerNote ?? null,
             recording: input.recording,
           });
+          const name = albumNameRef.current?.trim();
+          if (name && name !== DEFAULT_ALBUM_TITLE) await album.set(name).catch(() => {});
           const music = outcome.n
             ? {
                 events: outcome.n.all,
@@ -247,6 +256,26 @@ export function ReleaseDialog(p: ReleaseDialogProps) {
             className="h-9 rounded-control border border-border bg-surface px-2"
           />
         </div>
+        {namesAlbum && (
+          <div className="grid gap-1.5">
+            <label htmlFor="rel-album" className="font-medium">
+              Album name
+            </label>
+            <input
+              id="rel-album"
+              value={albumName}
+              maxLength={ALBUM_TITLE_MAX}
+              disabled={busy}
+              aria-describedby="rel-album-hint"
+              onChange={(e) => setAlbumName(e.target.value)}
+              className="h-9 rounded-control border border-border bg-surface px-2"
+              data-testid="release-album-name"
+            />
+            <p id="rel-album-hint" className="text-sm text-text-3">
+              Your first track starts the album. Its name is printed on every cover; you can change it later.
+            </p>
+          </div>
+        )}
         <div className="grid gap-1.5">
           <label htmlFor="rel-line" className="font-medium">
             One line for the liner notes <span className="font-normal text-text-3">(optional)</span>

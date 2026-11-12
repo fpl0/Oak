@@ -40,12 +40,18 @@ export function CodeCard({
   thread,
   ctx,
   applied = false,
+  local = false,
 }: {
   card: CardData;
   subject: TutorSubject;
   thread: SubjectRef;
   ctx: TokenContext;
   applied?: boolean;
+  /**
+   * The card has no server record (a review's `tryCode`): applying it is not reported through
+   * `tutor.cardApplied`. The host still marks the change as Claude's (the version note credits it).
+   */
+  local?: boolean;
 }) {
   const [showDiff, setShowDiff] = useState(false);
   const [done, setDone] = useState(applied);
@@ -73,10 +79,11 @@ export function CodeCard({
     if (!host?.applyCode) return;
     try {
       host.applyCode(card.code, { cardId: card.cardId, title: card.title });
-      await applyMut.mutateAsync({
-        params: { id: card.cardId },
-        body: { sketchId: host.sketchId ?? null, toNewSketch: false },
-      });
+      if (!local)
+        await applyMut.mutateAsync({
+          params: { id: card.cardId },
+          body: { sketchId: host.sketchId ?? null, toNewSketch: false },
+        });
       setDone(true);
       toast.success("Applied", "One change in the editor. Undo with ⌘Z.");
     } catch (e) {
@@ -104,10 +111,11 @@ export function CodeCard({
           ranOk: false,
         },
       });
-      await applyMut.mutateAsync({
-        params: { id: card.cardId },
-        body: { sketchId: sketch.id, toNewSketch: true },
-      });
+      if (!local)
+        await applyMut.mutateAsync({
+          params: { id: card.cardId },
+          body: { sketchId: sketch.id, toNewSketch: true },
+        });
       setDone(true);
       void navigate({ to: "/studio/$sketchId", params: { sketchId: sketch.id } });
     } catch (e) {

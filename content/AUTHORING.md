@@ -2,7 +2,7 @@
 
 For every agent or person who writes or reviews Oak content. It applies `docs/design/contracts.md` (schemas, budgets, IDs, unlocks, grading) and `content/STYLE.md` (the code dialect). If this guide and those disagree, they win; fix this guide.
 
-Start here, in this order: this guide, STYLE, your unit's spec (`content/specs/Uxx.md`), then the two exemplar lessons `content/core/U01/L01` ("Heartbeat") and `content/core/U02/L01` ("High & Low"). Both pass every check with the real grader; copy their shape, not their words.
+Start here, in this order: this guide, STYLE, your unit's spec (`content/specs/Uxx.md`), then the exemplar lessons `content/core/U01/L01` ("Heartbeat"), `content/core/U02/L01` ("High & Low") and, for U03 on, `content/core/U03/L02` ("Degrees in Code"), which also shows the Wave 3 shapes of §16. All three pass every check with the real grader; copy their shape, not their words.
 
 ## 1. How content gets made
 
@@ -48,7 +48,7 @@ Every lesson is **Predict → Run → Investigate → Modify → Make** (PRIMM),
 
 | PRIMM stage | Step kind | Exercise kind (contracts §5.8) | What the learner does | Graded? |
 |---|---|---|---|---|
-| sound first | `listen` | `ListenEx` | plays a loop, just listens | no (completes on one full loop) |
+| sound first | `listen` | `ListenEx` (or a passive block: `passive`, §16.5) | plays a loop, just listens | no (completes on one full loop) |
 | **Predict** | `predict` | `PredictEx` (`hum`, `choose` or `count`) | hums or picks what the code will sound like, before running it | never gates; logged |
 | **Run** | `run` | `RunInvestigateEx` with no questions | runs the code, sees the prediction against the result | no |
 | **Investigate** | `investigate` | `RunInvestigateEx` | toggles layers, clicks the token or note that does X | light (predicate targets) |
@@ -60,8 +60,8 @@ Every lesson is **Predict → Run → Investigate → Modify → Make** (PRIMM),
 | ear | `ear` | `IdentifyEx`, `DictationEx` (generator stimulus) | a mini-set that introduces a drill family | yes → SRS |
 | voice | `sing` | `SingEx` (must declare `fallback`) | sings a pitch, degree or echo | yes → SRS; never gates |
 | pulse | `tap` | `TapEx` | taps along, echoes or reads a rhythm | yes → SRS; never gates |
-| dictation | `dictate` | `DictationEx`, `TranscribeStepEx` | writes down what was heard | yes |
-| writing | `notate` | `StaffWriteEx` | writes notes on the staff | yes |
+| dictation | `dictate` | `DictationEx` (by ear: `byEar`, §16.4), `TranscribeStepEx` | writes down what was heard | yes |
+| writing | `notate` | `StaffWriteEx` (notes with a key, or a key signature: §16.1, §16.2) | writes notes or a key signature on the staff | yes |
 | judgement | `compare` | `IdentifyEx` (two audio cards) | A/B: which ends more conclusively? | light |
 | **Make** | `make` | `CodeMakeEx` | writes a 1–8 bar sketch over the Band and saves it | one required rule; never blocks saving |
 | metacognition | `reflect` | none | rates a can-do statement | no |
@@ -151,7 +151,7 @@ Rules:
 | U00 | none | by part | hidden | — | — | — |
 | U01 | drum lanes | by part | percussion + counts | — | — | — |
 | U02 | note names | by letter name | treble from U02.L04 | on (by letter name) | — | — |
-| U03–U04 | note names in U03.L01; degrees from U03.L02 (+ syllables from U03.L08) | by letter name in U03.L01; by degree from U03.L02 | treble | on | on, from U03.L02 | — |
+| U03–U04 | note names in U03.L01; degrees from U03.L02 (+ syllables from U03.L08) | by letter name in U03.L01; by degree from U03.L02 | treble | on | on, from U03.L02 (`staffLabels`, §16.7) | — |
 | U05 | degrees | degree / chord tone | grand | on | on | — |
 | U06 | degrees | degree + chord band | grand / lead | on hover only | on | from U06.L02 |
 | U07 | degrees | learner's choice | lead sheet | off | on hover only | on |
@@ -175,7 +175,10 @@ Rules:
 |---|---|---|---|
 | `band.two-chord-vamp` | 4/4 | I–IV, one chord per bar | every U01 groove Make (`tracks: ["bass", "chords"]`) and every U02 melody Make (all tracks) |
 | `band.waltz-vamp` | 3/4 | I–IV, bass on 1, chords on 2 and 3 | U01.L08 and later waltzes |
+| `band.phrase-8bar` | 4/4 | I–IV–I–V, I–IV–V–I (eight bars, voiced so each change moves a voice by a step) | an eight-bar melody that pauses on V in bar 4 and comes home on I in bar 8 (U03.L11, U03.CP) |
 | `band.axis-4bar` | 4/4 | I–V–vi–IV | schema lessons (U06 on); its jazz-soul version swings and uses sevenths |
+
+`followsLearnerKey: true` makes the Band take the key of the learner's `.scale()` (a pattern included, from U03.L05), so a learner who moves the tune keeps the backing. The degree rubric rules (`ends-on-degree`, `degree-set`) are judged in the exercise's declared key: until the grader reads the learner's `.scale()` there, a Make whose required rule counts degrees does not invite another key (U03.L02 S9 keeps C).
 
 2. A Band carries no tempo line: it plays at the lesson's tempo, so its bar must have the lesson's number of beats. The Make check fails a Band written in another meter (`BAND_METERS` in `content/bands/index.ts`).
 3. Band code is read-only for the learner and may use locked tools (it is a preview context). It must follow STYLE, pass the strict lint, and exist for every flavour.
@@ -213,11 +216,12 @@ For **Make** steps:
 - [ ] Exactly one `required: true` rule: the lesson's concept, and one that cannot be met by accident or failed by good music. Everything else is a suggestion.
 - [ ] Tests: the starter (it never passes as it came: a starter that already meets the required rule fails with `make.unchanged`, one that does not fails with `rubric.unmet`; onboarding's preview Makes are exempt), one minimal passing sketch that changes something, one rich sketch that goes beyond the brief and still passes, one sketch that breaks the required rule and fails with `rubric.unmet`.
 - [ ] No rule depends on singing or tapping.
+- [ ] The Make's `title` is the saved sketch's default title (the lesson title otherwise): set it when the step heading names the sketch ("Sketch 002").
 
 For **ear, sing, tap** steps:
 
 - [ ] Stimuli come from a family generator (`stimulus: { src: 'generator', family, level }`) unless the lesson needs a fixed example. A generator stimulus has no tests in the lesson (the generator is tested in `@oak/drills`).
-- [ ] `sing` declares `fallback`; tolerance is `cents: 'learner'`; tap tolerance is `windowMs: 'auto'` (check 14). Sung targets are degrees or stimulus-relative, so the engine can fold them into the learner's range.
+- [ ] `sing` declares `fallback`; tolerance is `cents: 'learner'`; tap tolerance is `windowMs: 'auto'` (check 14). Sung targets are degrees or stimulus-relative, so the engine can fold them into the learner's range. A degree pattern says what the learner sings on (`labels: "numbers"` before U03.L08, `"syllables"` from it) and, when it crosses home, the octaves (`octaves`). Only U00.L02's first note is `lenient` (§16.3).
 - [ ] Tap tests are tap times in **seconds from the start of the stimulus** (the count-in is not counted). U01.L01's `beatTimes(bpm, n, every, offset)` builds them; test the on-beat taps (pass), half-speed taps and taps on the off-beats (fail), no taps (fail).
 - [ ] Sing tests need recorded pitch fixtures, which do not exist yet: content CI lists them as **pending**, never as passes.
 
@@ -238,7 +242,24 @@ What CI adds on its own: **auto-mutants** (five single-token mutations of the re
 | a Make that breaks its required rule | `rubric.unmet` |
 | an investigate or identify answer that is wrong | `investigate.wrong`, `id.wrong` |
 
-Before U03.L02, override the text of `melody.wrong-degree`, `melody.missing-note` and `melody.extra-note` on every step graded on pitch: the catalog words them in degrees and solfège (U02.L01 S5 shows the overrides; check 14 enforces it).
+Before U03.L02, override the text of `melody.wrong-degree`, `melody.missing-note` and `melody.extra-note` on every step graded on pitch: the catalog words them in degrees and solfège (U02.L01 S5 shows the overrides; check 14 enforces it). From U03.L02 to U03.L07 degrees are fine but syllables are not: override `melody.wrong-degree` (its text carries `({gotSyl})`) on every step graded on pitch, and `sing.drift` ("re-anchor on do") on every sung phrase. U03.L02 S4 and S8 show both; check 14 enforces them.
+
+More codes the U03–U04 steps meet: `code.edit-outside` (an `edit-only-regions` step edited elsewhere), `melody.index-shift` (the `melody` matcher only, when every note is one scale step off; on a tune with repeated notes its alignment may pair the notes differently and report `melody.wrong-degree` per note instead, so pin what `--verbose` prints), `spell.enharmonic` (right sound, wrong letter: `gb5` in G major), `spell.wrong`, `harmony.pcset` (notes played together that are not the ones asked for).
+
+The Wave 3 answer shapes (§16) have codes of their own:
+
+| Situation | Code |
+|---|---|
+| a key signature with an accidental missing or extra | `keysig.count` |
+| the right accidentals in the wrong order (only with `order: "sequence"`) | `keysig.order` |
+| sharps for a flat key, or flats for a sharp one | `keysig.type` |
+| a wrong accidental | `keysig.wrong` |
+| a note written on the staff an octave off / with the wrong accidental / with the right sound but the wrong letter | `staff.octave` / `staff.accidental` / `staff.enharmonic` (`spell.wrong` stays beside them as info) |
+| an interval with the right number and the wrong quality / the wrong number | `id.interval-quality` / `id.interval-number` |
+| a sung degree pattern: a wrong degree / the right contour on the wrong notes / an octave fold (still credited) / too short | `sing.wrong-degree` / `sing.contour-right` / `sing.octave-folded` / `sing.too-short` |
+| a by-ear transcription: where it first goes wrong / the right note at the wrong time / right pitches, wrong rhythm | `melody.first-difference` / `melody.rhythm-note` / `melody.pitch-only` |
+
+The events matcher's rhythm `"onsets+durations"` compares onsets and lengths; write it in new content. `"exact"` is the same thing under its older name (U01.L05 keeps it), and content CI refuses `"exact"` together with `durations: false` (`matcher.rhythm-exact-durations`).
 
 Write the tests with your best guess, run `bun run content:check <id> --verbose`, and pin the codes it shows. The verbose output also prints the exact text the learner would read; fix the lesson (or override `feedbackText`) when that text uses a word the learner does not have yet.
 
@@ -273,7 +294,7 @@ Check with `bun run content:check C0`. `bun run content:check all` checks every 
 | `bun run content:check all` | everything authored, plus every tested capstone brief |
 | `bun run content:build` | regenerates `content/.generated/` (IDs, index, toolbox, examples, lesson text, tutor syllabus, and each lesson's source `hash` in `lessons.json`, which `lessons.complete` records as its `contentHash`) and updates `content/ids.lock.json`; run it after adding or renaming anything. Step, exercise and example IDs join the ledger once their unit is in `RELEASED_UNITS` (`scripts/content/generate.ts`): from then on they never change |
 | `bun scripts/content/spec.ts` | re-renders `content/specs/Uxx.md` from `content/specs/Uxx.ts` (`--check` only reports) |
-| `bun run test:content` | the whole content suite (every lesson, the registries, Bands, specs, capstones, the build, and `content/validate/course.test.ts`, which reads the released units as one course: terms and can-dos once each, no later term or locked tool named in prose, skills and families open in every legal order, IDs in the ledger, nothing a half step above the Band's chord for a beat) |
+| `bun run test:content` | the whole content suite (every lesson, the registries, Bands, specs, capstones, the build, and `content/validate/course.test.ts`, which reads every authored core lesson as one course: terms once each, no later term or locked tool named in prose, skills and families open in every legal order, budgets, a Play-from-the-page step in each finished unit, nothing a half step above the Band's chord for a beat; IDs in the ledger for the released units). The Band scan is not part of `content:check`: run `test:content` before you hand over |
 | `bun run check` | typecheck, lint and every test in the repo |
 
 Several authors run these at the same time. `content:check` only reads, and a lesson that another author is still writing and that does not load is reported as a note: it fails your run only when it is one of your targets. `content:build` replaces each file of `content/.generated/` atomically and never empties the directory, so concurrent builds (and the dev server's `--watch`) cannot leave a missing or half-written file. `bun run test:content` runs every authored lesson: while someone else's lesson is mid-edit it may be red for reasons that are not yours; check your own with `content:check` and say so.
@@ -288,12 +309,12 @@ Several authors run these at the same time. `content:check` only reads, and a le
 6. **Evaluation**: every example, starter and solution evaluates headlessly with no console error, is not silent, and has a tempo line.
 7. **Grading**: every reference solution scores 1.0; every test meets its `expect` and feedback codes.
 8. **Hints**: four rungs; no solution literal in rungs 1–3.
-9. **Notation**: every example on a staff step renders with `approximate = false` and no warnings (percussion staff for `staff: "perc"`).
+9. **Notation**: every example on a staff step renders with `approximate = false` and no warnings (percussion staff for `staff: "perc"`), labels included (`staffLabels`).
 10. **Sounds**: every sound is in the pack; every control is `audible: true` (pending until the audibility harness proves it).
 11. **Budget**: scaled minutes, step count, graded checks, terms, panels, split halves, the test counts of code kinds and Makes.
 12. **Make**: the last step is a Make with exactly one required rule; a Band from U01 on, written in the lesson's meter.
-13. **Theory**: declared keys match `.scale()` usage.
-14. **Voice, terms and test shape**: §5 and §7 (no exclamation marks, hype words or emoji; prompts ≤ 60 words; concept cards ≤ 120; every term bolded once in its step's pass text and never used before it), §9 (the starter fails with `code.unchanged`; the Make has a `rubric.unmet` sketch; sing and tap tolerances; degree-worded feedback overridden before U03.L02). Advice lines also report terms of later lessons and where the lesson departs from its unit spec.
+13. **Theory**: declared keys match `.scale()` usage (the exercise's `key` when it has one; a starter may also sit in the lesson's key, for a step that moves the tune to another).
+14. **Voice, terms and test shape**: §5 and §7 (no exclamation marks, hype words or emoji; prompts ≤ 60 words; concept cards ≤ 120; every term bolded once in its step's pass text and never used before it), §9 (the starter fails with `code.unchanged`; the Make has a `rubric.unmet` sketch; sing and tap tolerances; degree-worded feedback overridden before U03.L02, syllable-worded feedback before U03.L08), §16 (degree labels on the roll or staff only from U03.L02, syllable labels and `labels: "syllables"` only from U03.L08, `lenient` only in U00.L02). Advice lines also report terms of later lessons and where the lesson departs from its unit spec.
 
 ## 13. Mistakes the checks caught in the first lessons
 
@@ -315,16 +336,21 @@ Several authors run these at the same time. `content:check` only reads, and a le
 - **Capstone rules the grader does not implement.** C0's §6.6 custom checks returned `rubric.unknown` on every attempt; the check now refuses unimplemented rules.
 - **A Band in the wrong meter.** A 4/4 Band under a 3/4 Make plays four beats against three; use `band.waltz-vamp`.
 - **Rhythms on the percussion staff.** A long crash under eighth hats engraves as an eighth (§6 rule 3).
+- **The octave above home before U03.L03.** `n` 7 and negative `n` are `tb.n.range` (U03.L03): in U03.L02 the lint refuses `n("0 .. 7")` and `n("-3")`. Degree 1' waits a lesson.
+- **`.transpose()` after `.scale()`.** The lint reads it as a key change and refuses it: move a degree line with a patterned `.scale()`, and write a harmony line a named distance away in note names (`note("c4 e4").transpose("3M")`).
+- **A step param inside code.** `{{param:x}}` in a stimulus or starter does not evaluate in check 6; a fixed stimulus with two audio cards (U03.L02 S6) gives the same contrast.
+- **A word that waits.** "Cadence" is U06.L04's term: in U03 the chords that set home are "a few chords that set home". The spec's conventions list every such word for its unit.
+- **A degree rule in another key.** A Make that said "any key you like" graded `degree-set` in C while the learner's line was in G; the prompt now keeps the declared key (§8).
 
 ## 14. Asking for a registry change
 
-During the Build phase the registries are frozen: `content/syllabus.ts`, `skills.ts`, `toolbox.ts`, `terms.ts` (and `glossary.ts`), `candos.ts`, `flavours.ts`, `families.ts`, `repertoire/`, and `scripts/content/**`. Only the U00 author edits `content/capstones.ts`, `content/checkpoints.ts` and `content/bands/`. If your lesson needs a change:
+During the Build phase the registries are frozen: `content/syllabus.ts`, `skills.ts`, `toolbox.ts`, `terms.ts` (and `glossary.ts`), `candos.ts`, `flavours.ts`, `milestones.ts`, `content/specs/**`, `content/validate/**` and `scripts/content/**`. One named owner edits each of the rest: in Wave 3 the checkpoint author (author:CP) edits `content/checkpoints.ts`, the checkpoint folders, `content/bands/` and `content/repertoire/`; the drills engineer edits `content/families.ts` and `content/decks/`. If your lesson needs a change:
 
 1. Do not edit the registry. Write the lesson as if the entry existed only if the check still passes; otherwise leave that part out.
 2. In your result's `apiNotes`, give the **exact entry** you need, as code, with its reason: for a term, the `t(...)` line with id, word, one-sentence sound-first definition, example code legal at your lesson, your lesson ID; for a can-do, the `c(...)` line; for a tool, the unlock row and its contracts §3.2 justification; for a Band, the meter, harmony and all four flavour codes.
 3. If a check is wrong (it fails something contracts allow), report the check, the input and the contract line; do not work around it in content.
 
-The U00–U02 entries already exist: every term, can-do and Band the unit specs name.
+The U00–U04 entries already exist: every term, can-do and Band the unit specs name (U03–U04 added `term.resolution`, `term.leap`, `term.legato`, `term.interval-quality`, `term.tritone`, six can-dos and `band.phrase-8bar`).
 
 ## 15. Review
 
@@ -365,3 +391,99 @@ You are a learner who has completed exactly the lessons before this one. You may
 ### 15.3 Listen QA (human)
 
 On `/dev/listen`, for each new or changed shown example and reference solution: it sounds like what the prose says; the balance is pleasant on headphones; the notation matches; the Band supports and does not mask the learner's part. Verdicts are OK / Wrong sound / Wrong notation / Musically weak / Wrong theory, each with a note. A release build requires every such item to be OK.
+
+## 16. The Wave 3 shapes (notation and voice)
+
+Wave 3 added these to `@oak/content-kit` (`CONTENT_SCHEMA_VERSION` 2). Each one is checked structurally by `defineLesson` (the rule names in brackets) and by check 14 where it depends on the lesson's place in the course. `content/core/U03/L02` uses §16.3, §16.6 and §16.7; the rest are shown here as they will appear in U03–U04 (the unit specs name the step of each).
+
+### 16.1 Notes on a staff with a key signature
+
+A `notate` step with `StaffWriteEx`. The staff input prints the key signature (`key`); a note entered on a line takes its sharp or flat, as on paper, and the answer is the sounding spelling (`F#4:4`). What is compared is the `expect`:
+
+```ts
+answer: { ui: "staff-input", clef: "treble", bars: 2, key: { tonic: "G", mode: "major" },
+  palette: { durations: ["4", "2"], accidentals: true, ties: false, rests: true } },
+// pitch only: spelled notes in order, lengths ignored
+expect: { e: "pitches", spelled: ["G4", "B4", "D5", "F#5"], order: "sequence", withOctave: true },
+// or pitch and rhythm: against a reference (code, never hand-written)
+expect: { e: "events", reference: { solutions: [TUNE_IN_G], bars: 2 },
+  matcher: { m: "events", pitch: "absolute", rhythm: "onsets+durations", durations: true } },
+```
+
+Tests answer with `{ staff: "G4:4 B4:4 D5:4 F#5:4" }` (the note-list DSL). A bass or grand staff (`clef: "bass"`) waits for U05.L06.
+
+### 16.2 A key signature, in order
+
+The same staff input in `mode: "key-signature"`: the learner places the accidentals at the start of the staff, in the order written. `order: "sequence"` also checks the order (F C G D A E B, or B E A D G C F); the default `set` checks only which ones.
+
+```ts
+answer: { ui: "staff-input", mode: "key-signature", clef: "treble", bars: 1,
+  palette: { durations: [], accidentals: true, ties: false, rests: false } },
+expect: { e: "key-signature", key: { tonic: "D", mode: "major" }, order: "sequence" },
+tests: [{ name: "F# then C#", response: { answer: { text: ["F#", "C#"] } }, expect: "pass" },
+        { name: "C# first", response: { answer: { text: ["C#", "F#"] } }, expect: "fail", feedback: ["keysig.order"] },
+        { name: "F# only", response: { answer: { text: ["F#"] } }, expect: "fail", feedback: ["keysig.count"] }],
+```
+
+A wrong order earns `keysig.order` only with `order: "sequence"`; with `set` it passes. A missing or extra accidental is `keysig.count`, sharps for a flat key `keysig.type`, a wrong accidental `keysig.wrong`; a wrong answer earns partial credit below 1, still a fail. `mode: "key-signature"` and `e: "key-signature"` go together (`staff.key-signature-mode`). The "name the key" direction is a `fact` with `text` answers (`normalize: "key"`) or a card of `deck.key.signature`.
+
+### 16.3 Singing a degree pattern, sight-singing, the first note
+
+A `sing` step whose targets are degrees, with what the learner sings on and, when the pattern crosses home, the octave of each degree (0 = from home up to 7, 1 = the octave above, −1 below). U03.L02 S8:
+
+```ts
+mode: "degree",                       // the cue sets the key, then the learner sings the targets
+stimulus: { src: "code", code: deg("<[0 2 4 2] 0>"), bars: 2, showCode: false },  // Oak's model ("Hear it")
+cue: { context: "cadence", countInBars: 1, click: false, replays: -1 },
+target: { from: "degrees", degrees: ["1", "3", "5", "3", "1"] },   // 1-3-5-1' adds octaves: [0, 0, 0, 1]
+labels: "numbers",                    // "syllables" from U03.L08 (check 14 refuses them before)
+tol: { cents: "learner", octave: "global", driftCompCents: 30, minCoverage: 0.4, passHitRate: 0.8 },
+feedbackText: { "sing.drift": "…numbers only, before U03.L08…" },
+fallback: "skip",
+```
+
+`mode: "sight"` is sight-singing: the target is shown (a code stimulus with `showStaff: true`, or the degree numbers) and only the cue plays; Oak plays the target after the attempt. `mode: "echo"` plays the target first. `octaves` has one entry per degree (`sing.octaves-length`).
+
+`tol.lenient: true` is the one exception to the tolerance ladder: U00.L02's first sung note, where any sustained pitch within ±100¢ of the target after octave folding passes (contracts §8.1 item 8). It needs `mode: "pitch"` (`sing.lenient-mode`), and check 14 refuses it anywhere else.
+
+Sing tests need recorded pitch fixtures (`{ pitchFixture }`); until they exist, content CI lists sing tests as pending.
+
+### 16.4 By-ear transcription
+
+A `dictate` step with `DictationEx` and `byEar`: the source plays with its code, roll and staff hidden; the learner writes code and switches between the source and their own code at the same bar (A/B), at the rates offered. The transposition rule is stated to the learner and must match the matcher's pitch mode (`by-ear.accepts-matcher`): `exact` = `absolute`, `any-octave` = `octave-free`, `any-key` = `transposition-invariant`.
+
+```ts
+kind: "dictation", domain: "melody",
+stimulus: { src: "code", code: SWING_LOW, bars: 4, showCode: false },
+cue: { context: "tonic-chord", countInBars: 1, click: false, replays: -1 },
+answer: { ui: "code", starter: `${TEMPO}mel: n("⟪0 ~ ~ ~⟫").scale("C4:major").s("piano")` },
+reference: { solutions: [SWING_LOW], bars: 4 },
+matcher: { m: "melody", pitch: "transposition-invariant", wPitch: 0.8, wRhythm: 0.2, rhythmTol: [1, 16] },
+byEar: { ab: true, rates: [1, 0.75, 0.5], accepts: "any-key" },
+```
+
+The answer is code (`by-ear.code-answer`); `rates` start at 1 (`by-ear.rates`). Tests are code like any code step: the reference, the tune in another key (passes under `any-key`), a wrong first note, a missing note, the unchanged starter.
+
+### 16.5 Passive listening
+
+A `listen` step with a `passive` block: a stream of generated examples from a family, each named as it plays (`reveal: "with"`) or just after (`"after"`), with nothing to answer. It feeds no evidence and no SRS and completes when the stream ends (or on Continue). `items` may then be empty, or hold the hook that opens the step.
+
+```ts
+kind: "listen",
+items: [{ code: HOOK, caption: "Home, then a 5th, a 3rd, a 6th and the octave.", bars: 4 }],
+passive: { family: "fam.int.in-key", level: 3, items: 12, reveal: "with", gapBeats: 2 },
+```
+
+### 16.6 The target's roll after a failed try
+
+A `modify` step that starts by ear and ends with a picture: `target: { audible: true, showRoll: false, revealRollAfter: 1 }` shows the target's roll after the first failed check (U03.L02 S4; U02.L07 S5). Only with `showRoll` false (`modify.reveal-roll`).
+
+### 16.7 Labels on the staff
+
+`StepUi.staffLabels` mirrors `rollLabels` for the staff panel: `"note"`, `"degree"` (from U03.L02, when the degree labels unlock) or `"degree+solfege"` (from U03.L08). Set it on every step with a staff panel in U03–U04 (AUTHORING §6 table); check 14 refuses degree labels before U03.L02 and syllables before U03.L08.
+
+### 16.8 Registries
+
+- A fact card may list other correct answers: `accept: [{ text: ["CM7"] }]` beside `answer: { text: ["Cmaj7"] }` (content/decks).
+- A milestone may require a transcription-ladder level (`ladder: { level: 5 }`, optionally counted only from a session on: `after: "J1.L01"`) and alternatives (`anyOf: [{ capstones: ["CF-A"] }, { capstones: ["CF-T"] }]`). ms.05, ms.07, ms.08 and ms.09 use them.
+

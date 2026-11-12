@@ -185,7 +185,7 @@ export function fixtureBootstrap(over: Partial<Bootstrap> = {}): Bootstrap {
     health: {
       ok: true,
       appVersion: "0.0.0",
-      contractsVersion: "1.2",
+      contractsVersion: "1.3",
       schemaVersion: 1,
       contentVersion: null,
       tutor: "ready",
@@ -231,6 +231,7 @@ export function fixtureBootstrap(over: Partial<Bootstrap> = {}): Bootstrap {
       linerNotesInAlbum: true,
       tutor: { backend: "auto", softMonthlyUsd: 25, softWarnedMonth: null },
       backupWithAudio: true,
+      lenses: { degrees: true, solfege: true, noteNames: false },
     },
     unlocks: [],
     streak: fixtureStreak(),

@@ -1,7 +1,7 @@
 // Smoke suite: every route of the contracts §11.9 table renders without console errors in Paper and Bark,
 // keyboard navigation works (G-prefix, palette, shortcut sheet, focus-mode Esc, tabs), and the app survives a
 // server that is down. The API is the in-page stub (stub-api.ts); fixtures are contract-checked by bun test.
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { installStubApi } from "./stub-api.ts";
@@ -228,8 +228,12 @@ test("unknown routes show the not-found page", async ({ page }) => {
 });
 
 test("the first key press wakes sound from the local pack, with no errors", async ({ page }) => {
+  // The pack the app loads is the one sounds/pack.lock.json names (publicRoot "/sounds/v2" → sounds/pack/v2).
+  const lock = JSON.parse(readFileSync(join(import.meta.dirname, "../../sounds/pack.lock.json"), "utf8")) as {
+    packVersion: string;
+  };
   test.skip(
-    !existsSync(join(import.meta.dirname, "../../sounds/pack/v1/manifest.json")),
+    !existsSync(join(import.meta.dirname, `../../sounds/pack/${lock.packVersion}/manifest.json`)),
     "sound pack not mirrored",
   );
   const problems = watchConsole(page);

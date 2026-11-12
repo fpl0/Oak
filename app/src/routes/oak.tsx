@@ -7,6 +7,7 @@ import { z } from "zod";
 import { usePageTitle } from "../lib/nav.ts";
 import { LeavesTable, OakTree, useOak } from "../map/index.ts";
 import { countLeaves } from "../map/state.ts";
+import { isWritten } from "../session/edge.ts";
 import { Card, Chip, EmptyState, Page, PageHeader } from "../ui/kit/basics.tsx";
 import { ErrorState, LoadingState } from "../ui/kit/QueryState.tsx";
 import { Tabs } from "../ui/kit/Tabs.tsx";
@@ -40,7 +41,8 @@ function CourseView() {
       </EmptyState>
     );
   const status = new Map(progress.data?.lessons.map((l) => [l.lessonId, l.status]) ?? []);
-  const next = progress.data?.next ?? null;
+  // What the Oak calls next (an unwritten lesson gives way to today's written item, use-oak.ts).
+  const next = model?.next.sessionId ?? progress.data?.next ?? null;
   return (
     <div className="flex flex-col gap-4">
       {progress.isError && (
@@ -79,7 +81,7 @@ function CourseView() {
                               : "bg-border",
                       )}
                     />
-                    {st === "locked" ? (
+                    {st === "locked" || (model && !isWritten(l.id, model.authored)) ? (
                       <span className="text-text-3">{l.title}</span>
                     ) : (
                       <Link to="/learn/$lessonId" params={{ lessonId: l.id }} className="text-link">
@@ -88,6 +90,9 @@ function CourseView() {
                     )}
                     <span className="sr-only">({STATUS_TEXT[st] ?? st})</span>
                     {next === l.id && <Chip tone="amber">next</Chip>}
+                    {st !== "locked" && st !== "completed" && model && !isWritten(l.id, model.authored) && (
+                      <Chip>being written</Chip>
+                    )}
                     {l.optional && <Chip>optional</Chip>}
                   </li>
                 );

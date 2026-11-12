@@ -172,6 +172,18 @@ export type AnswerUi =
       clef: "treble" | "bass" | "grand";
       bars: number;
       palette: { durations: string[]; accidentals: boolean; ties: boolean; rests: boolean };
+      /**
+       * Wave 3. The key signature printed at the start of every line. A note entered on a line or space
+       * takes the signature's sharp or flat, as on paper; the value is the sounding spelling (`F#4:4` in
+       * G major for a note written on the top line). Absent: C major / no signature.
+       */
+      key?: KeySpec;
+      /**
+       * Wave 3. `notes` (default): enter notes. `key-signature`: place the accidentals of a key signature at
+       * the start of the staff, in the order written; the value is the spelled accidentals in that order
+       * ("F# C#"), which the host sends as `answer.text` (`StaffExpect` `key-signature`).
+       */
+      mode?: "notes" | "key-signature";
     }
   | { ui: "grid"; rows: DrumRole[] | ["hit"]; stepsPerBar: 8 | 12 | 16; bars: number }
   | { ui: "code"; starter: string; constraints?: AstConstraint[] }
@@ -244,7 +256,18 @@ export type Matcher =
   | {
       m: "events";
       pitch: PitchMode;
-      rhythm: "exact" | "onsets" | "ignore";
+      /**
+       * What time is compared (Wave 3 made this unambiguous):
+       * - `onsets`: where each event starts; lengths only when `durations: true`.
+       * - `onsets+durations`: where each event starts AND how long it lasts (the explicit name of what
+       *   `exact` has always done).
+       * - `exact`: the original name of `onsets+durations`, kept for the lessons that use it; it ALWAYS
+       *   compares lengths, whatever `durations` says, so content CI requires `durations: true` with it
+       *   (`matcher.rhythm-exact-durations`). New content writes `onsets+durations`.
+       * - `ignore`: order and pitch only.
+       */
+      rhythm: "exact" | "onsets" | "onsets+durations" | "ignore";
+      /** Also compare lengths (implied by `onsets+durations` and `exact`). */
       durations: boolean;
       sound?: "ignore" | "s" | "drum-role";
       tracks?: TrackRef[];
@@ -332,6 +355,12 @@ export interface SingTolerance {
   onsetMs?: number;
   minCoverage: number;
   passHitRate: number;
+  /**
+   * Wave 3. The one exception to the ladder (contracts §8.1 item 8, U00.L02's first sung note): any
+   * sustained pitch (coverage ≥ `minCoverage` for at least 600 ms) within ±100¢ of the target after
+   * per-note octave folding passes; `cents` is ignored. Content CI allows it only in U00.L02.
+   */
+  lenient?: boolean;
 }
 export interface LearnerProfile {
   /** MIDI numbers. */
@@ -376,7 +405,12 @@ export interface CodeModifyEx extends ExBase<"code-modify"> {
   reference: Reference;
   matcher: Matcher;
   constraints?: AstConstraint[];
-  target: { audible: boolean; showRoll?: boolean };
+  /**
+   * `audible`: the target can be played. `showRoll`: the target's roll is shown from the start.
+   * `revealRollAfter` (Wave 3): with `showRoll` false, the target's roll appears after this many failed
+   * checks (1 = after the first failed try), so a step that starts by ear ends with a picture to compare.
+   */
+  target: { audible: boolean; showRoll?: boolean; revealRollAfter?: number };
 }
 export interface CodeFillEx extends ExBase<"code-fill"> {
   code: CodeSpec;
@@ -452,10 +486,21 @@ export interface StaffWriteEx extends ExBase<"staff-write"> {
   answer: Extract<AnswerUi, { ui: "staff-input" }>;
   expect: StaffExpect;
 }
+/**
+ * What a staff-writing answer is compared with. Pitch only: `pitches` (spelled notes in order or as a set,
+ * with or without octave; lengths ignored). Pitch and rhythm: `events` with a reference (code, never
+ * hand-written) and an `events` matcher (`pitch: "absolute"`, `rhythm: "onsets"`, `durations: true`).
+ * Rhythm only: `rhythm`. A key signature: `key-signature`.
+ */
 export type StaffExpect =
   | { e: "pitches"; spelled: string[]; order: "sequence" | "set"; withOctave: boolean }
   | { e: "rhythm"; reference: Reference }
-  | { e: "key-signature"; key: KeySpec }
+  /**
+   * The key signature's accidentals (staff-input `mode: "key-signature"`; the response is `answer.text`).
+   * `order` (Wave 3): `sequence` also checks the written order (F C G D A E B, or B E A D G C F); default
+   * `set`.
+   */
+  | { e: "key-signature"; key: KeySpec; order?: "sequence" | "set" }
   | { e: "events"; reference: Reference; matcher: Matcher };
 export interface TapEx extends ExBase<"tap"> {
   mode: "along" | "echo" | "read";
@@ -465,6 +510,12 @@ export interface TapEx extends ExBase<"tap"> {
   target: "beat" | { track?: TrackRef; drum?: DrumRole[] };
   tol: TapTolerance;
 }
+/**
+ * `pitch`, `degree`: one timed target after the cue. `resolution`: a degree, then the path home.
+ * `echo`: the target plays first, then the learner sings it back. `sight`: the target is shown (the
+ * stimulus with `showStaff`, or the degree numbers) and only the cue plays; Oak plays the target after the
+ * attempt. `bassline`: the bass of a progression.
+ */
 export type SingMode = "pitch" | "degree" | "resolution" | "echo" | "sight" | "bassline";
 export interface SingEx extends ExBase<"sing"> {
   mode: SingMode;
@@ -473,11 +524,22 @@ export interface SingEx extends ExBase<"sing"> {
   target: SingTarget;
   tol: SingTolerance;
   showTrace: "live" | "after" | "never";
+  /**
+   * Wave 3. What the learner sings on and sees under each target: `numbers` ("one, three, five") or
+   * `syllables` (movable do, numbers still shown and accepted). Default: `numbers` before U03.L08,
+   * `syllables` from U03.L08 on (contracts §8.3); content CI refuses `syllables` before U03.L08.
+   */
+  labels?: "numbers" | "syllables";
 }
 export type SingTarget =
   | { from: "stimulus"; track?: TrackRef }
-  /** `rhythm` is mini-notation; default one note per beat. */
-  | { from: "degrees"; degrees: Degree[]; rhythm?: string }
+  /**
+   * `rhythm` is mini-notation; default one note per beat. `octaves` (Wave 3): one entry per degree, the
+   * octave relative to the tonic's (0 = from the tonic up to 7, 1 = the octave above, −1 = below), so
+   * 1-3-5-1' is `degrees: ["1","3","5","1"], octaves: [0,0,0,1]`; default all 0. The whole pattern is
+   * then moved by octaves into the learner's comfortable range.
+   */
+  | { from: "degrees"; degrees: Degree[]; rhythm?: string; octaves?: number[] }
   | { from: "reference"; reference: Reference; track: TrackRef };
 export type DictationStage = "tonic" | "bass" | "quality" | "rn" | "rhythm" | "pitch";
 export interface DictationEx extends ExBase<"dictation"> {
@@ -490,6 +552,25 @@ export interface DictationEx extends ExBase<"dictation"> {
   reference: Reference;
   matcher: Matcher;
   given?: { rhythm?: boolean; firstNote?: boolean; harmonicRhythm?: boolean };
+  /** Wave 3. A by-ear transcription step: see `ByEarSpec`. Needs `answer: { ui: "code" }`. */
+  byEar?: ByEarSpec;
+}
+/**
+ * By-ear transcription inside a lesson (U03.L10 on): the source plays with its code, roll and staff
+ * hidden; the learner writes code and switches between the source and their own code at the same bar
+ * (`A`/`B`, the Transcribe convention), at full speed or slower. Graded by `matcher` (usually `melody`).
+ */
+export interface ByEarSpec {
+  /** A/B between the hidden source and the learner's code, aligned to the bar. */
+  ab: boolean;
+  /** Playback rates offered for the source, 1 first: `[1, 0.75, 0.5]`. */
+  rates: number[];
+  /**
+   * The transposition rule, shown to the learner before they start, and checked against the matcher's
+   * `pitch` by content CI: `exact` = `absolute` (these notes in this octave), `any-octave` = `octave-free`,
+   * `any-key` = `transposition-invariant` (the tune in any key; degrees and rhythm decide).
+   */
+  accepts: "exact" | "any-octave" | "any-key";
 }
 export interface TranscribeStepEx extends ExBase<"transcribe-step"> {
   projectId: string;
@@ -514,7 +595,23 @@ export interface ComposeBriefEx extends ExBase<"compose-brief"> {
   review: { tutor: "auto" | "offer" };
 }
 export interface ListenEx extends ExBase<"listen"> {
+  /** At least one item, unless `passive` is set. */
   items: { code: string; caption: Md; bars: number }[];
+  /** Wave 3. A passive-listen block (contracts U04.L04): see `PassiveListen`. */
+  passive?: PassiveListen;
+}
+/**
+ * A passive-listen block: a stream of generated examples from a drill family, each labelled as it plays
+ * (`with`) or just after (`after`), with no answer asked. The learner only listens; the block completes
+ * when the stream ends (or on Continue). It feeds no evidence and no SRS. Played from the family's
+ * generator at `level`, `items` examples, `gapBeats` of silence between them.
+ */
+export interface PassiveListen {
+  family: FamilyId;
+  level: number;
+  items: number;
+  reveal: "with" | "after";
+  gapBeats: number;
 }
 /** Multi-part step graded as one check: every part must pass. Parts may be any non-'all' kind. */
 export interface AllEx extends ExBase<"all"> {

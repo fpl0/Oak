@@ -38,6 +38,11 @@ export interface StepHost {
   /** A passed step revisited (read-only replay, "Try a new one"). */
   review: boolean;
   env: GradeEnv;
+  /**
+   * Quiet mode (server state, `voice.get`; the profile's flag until that answers) and the learner's singing
+   * labels. While quiet, a sing step plays as its fallback (contracts §8.5).
+   */
+  voice: { quiet: boolean; labels: "numbers" | "syllables" | null };
   /** What every Workbench of this step shares: lesson context, graded lint, views, the Band. */
   workbench: Omit<WorkbenchProps, "id" | "code">;
   /** A live check on a Make (never posted). */
@@ -158,7 +163,8 @@ export function StepLayout({ stage, answer, actions, hidePrompt, answerFirst }: 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-5 pb-4">
           <p className="text-xs font-medium tracking-wide text-text-3 uppercase">
             {kindLabel} · {h.mode === "checkpoint" ? "item" : "step"} {h.index + 1} of {h.total}
-            {h.step.graded ? " · checked" : ""}
+            {/* "checked" read as a status (already checked) before the learner had done anything */}
+            {h.step.graded ? " · graded" : ""}
           </p>
           <h2
             id={`${stepKey}-title`}

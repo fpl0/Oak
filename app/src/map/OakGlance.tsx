@@ -93,7 +93,7 @@ export function OakGlance({ width = 240, className, caption = true }: OakGlanceP
             <>
               {" · "}
               {counts.drying} in today's warm-up.{" "}
-              <Link to="/practice/review" className="text-link underline-offset-2 hover:underline">
+              <Link to="/session/revive" className="text-link underline-offset-2 hover:underline">
                 Revive (≈{Math.max(1, Math.round(model.reviveSec / 60))} min)
               </Link>
             </>

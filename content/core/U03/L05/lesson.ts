@@ -1,0 +1,422 @@
+// U03.L05 Same Song, Any Key. Degrees describe a tune in every key: the same numbers over another
+// `.scale()` are the same tune with a new home, and a patterned `.scale("<…>")` changes the key bar by bar.
+// What the learner has from U03.L01–L04: the major scale, degrees 1 to 7 as `n` 0 to 6, `n` below 0 and
+// from 7 up, `..`, one-word key changes (U03.L02 S5). Not yet: key signatures (U03.L06), syllables
+// (U03.L08). Spec: content/specs/U03.md.
+//
+// The hook and the investigate step play without the Band: it sits in one key, the tune moves. The Make's
+// Band follows the learner's whole `.scale()` argument, a pattern included (`followsLearnerKey`).
+import { defineLesson, type HintLadder } from "@oak/content-kit";
+
+const BPM = 92;
+const TEMPO = `setcpm(${BPM}/4)\n\n`;
+/** A line written in degrees over a (possibly patterned) major scale. */
+const deg = (pattern: string, key = "C4:major", extra = "") =>
+  `${TEMPO}mel: n("${pattern}").scale("${key}").s("piano")${extra}`;
+
+const ladder = (nudge: string, pointer: string, partial: string): HintLadder => [
+  { text: nudge },
+  { text: pointer },
+  { text: partial },
+  "auto",
+];
+
+/** The tune of the lesson: 1 3 5 3, then 4 2 1, rest. Two bars, home at the end. */
+const TUNE = "<[0 2 4 2] [3 1 0 ~]>";
+/** The hook: the tune in C, then in G a little lower (G3), one word deciding. */
+const HOOK = deg(TUNE, "<C4:major!2 G3:major!2>");
+/** S3: the same numbers in C, D and F, the whole tune in each. */
+const THREE_KEYS = deg(TUNE, "<C4:major!2 D4:major!2 F4:major!2>");
+/** S4: the whole tune in C, then the whole tune in G above middle C. */
+const C_THEN_G = "<C4:major!2 G4:major!2>";
+
+const BAND = { band: "band.two-chord-vamp", followsLearnerKey: true } as const;
+const NONE = { roll: false, staff: false, keyboard: false } as const;
+const ROLL = { roll: true, staff: false, keyboard: false } as const;
+
+/** The catalog's `melody.wrong-degree` names syllables, which wait for U03.L08: numbers only. */
+const NUMBERS = {
+  "melody.wrong-degree":
+    "Bar {bar}, {beatLabel}: you have degree {got} where the tune has degree {exp}. Which key is playing in this bar?",
+} as const;
+
+export default defineLesson({
+  id: "U03.L05",
+  version: 1,
+  title: "Same Song, Any Key",
+  objective:
+    "I can play the same tune in any major key by changing one word, and change key bar by bar with a pattern in .scale().",
+  key: { tonic: "C", mode: "major" },
+  meter: "4/4",
+  bpm: BPM,
+  introduces: ["S03"],
+  practises: [],
+  terms: [],
+  canDo: ["cd.code.any-key"],
+  wrapAt: "S4",
+  steps: [
+    {
+      id: "S1",
+      kind: "listen",
+      title: "One tune, two homes",
+      minutes: 0.5,
+      // No Band: it would stay in C while the tune moves to G.
+      ui: { panels: ROLL, rollLabels: "degree", band: false },
+      example: { id: "hook", code: HOOK, bars: 4 },
+      exercise: {
+        kind: "listen",
+        id: "one-tune-two-homes",
+        version: 1,
+        role: "practice",
+        prompt:
+          "Press Play. The tune plays with C as home, then again with G as home. Watch the numbers on the roll.",
+        skills: [{ skill: "S03", w: 1 }],
+        hints: null,
+        tests: [],
+        items: [{ code: HOOK, caption: "The same two bars in C, then in G, a little lower.", bars: 4 }],
+      },
+    },
+    {
+      id: "S2",
+      kind: "predict",
+      title: "New home, same tune?",
+      minutes: 0.5,
+      ui: { panels: NONE },
+      example: { id: "in-f", code: deg(TUNE, "F4:major"), bars: 2 },
+      exercise: {
+        kind: "predict",
+        id: "new-home-same-tune",
+        version: 1,
+        role: "practice",
+        key: { tonic: "F", mode: "major" },
+        prompt:
+          'The numbers stay as they are, and `.scale("C4:major")` becomes `.scale("F4:major")`. What will you hear?',
+        skills: [{ skill: "S03", w: 1 }],
+        hints: null,
+        tests: [],
+        code: deg(TUNE, "F4:major"),
+        bars: 2,
+        mode: "choose",
+        choices: [
+          { id: "same-tune", label: "The same tune, with F as home" },
+          { id: "other-tune", label: "A different tune: the numbers now pick other notes" },
+          { id: "same-notes", label: "The same notes as in C: `.scale()` only names the key" },
+        ],
+        correct: ["same-tune"],
+      },
+    },
+    {
+      id: "S3",
+      kind: "investigate",
+      title: "Three keys",
+      minutes: 1,
+      ui: { panels: ROLL, rollLabels: "degree", band: false },
+      example: { id: "three-keys", code: THREE_KEYS, bars: 6 },
+      exercise: {
+        kind: "run-investigate",
+        id: "three-keys",
+        version: 1,
+        role: "practice",
+        prompt:
+          "Run it: the tune in C, then in D, then in F. Watch the roll's numbers and the heights of the notes.",
+        skills: [{ skill: "S03", w: 1 }],
+        feedbackText: {
+          "investigate.wrong":
+            "Not quite. Compare the first note in C with the first note in D: the label on the roll, and how far up it moved.",
+        },
+        hints: ladder(
+          "When the key changes, what on the roll changes, and what stays put?",
+          "The labels are degrees: they say what each note does in its key. The heights are the notes themselves.",
+          "From `c4` to `d4` is one whole step. Every note of the tune moves by the same amount.",
+        ),
+        code: { starter: THREE_KEYS },
+        mustPlayLoops: 1,
+        questions: [
+          {
+            q: "choice",
+            prompt: "What is the same in all three keys?",
+            options: [
+              { id: "numbers", label: "The numbers in `n`, and the labels on the roll" },
+              { id: "letters", label: "The letters of the notes" },
+              { id: "lowest", label: "The lowest note" },
+            ],
+            correct: ["numbers"],
+          },
+          { q: "number", prompt: "From C to D, how many half steps did every note move?", correct: 2 },
+        ],
+        tests: [
+          { name: "both right", response: { answer: { choice: ["numbers"], number: 2 } }, expect: "pass" },
+          {
+            name: "the letters stay",
+            response: { answer: { choice: ["letters"], number: 2 } },
+            expect: "fail",
+            feedback: ["investigate.wrong"],
+          },
+          {
+            name: "one step of the scale",
+            response: { answer: { choice: ["numbers"], number: 1 } },
+            expect: "fail",
+            feedback: ["investigate.wrong"],
+          },
+        ],
+      },
+    },
+    {
+      id: "S4",
+      kind: "modify",
+      title: "Visit G",
+      minutes: 1.25,
+      graded: true,
+      ui: { panels: ROLL, rollLabels: "degree", band: false },
+      exercise: {
+        kind: "code-modify",
+        id: "visit-g",
+        version: 1,
+        role: "check",
+        prompt:
+          "Play the whole tune in C, then the whole tune again with G above middle C as home. Change only what is inside `.scale()`.",
+        skills: [{ skill: "S03", w: 1 }],
+        code: { starter: `${TEMPO}mel: n("${TUNE}").scale("⟪C4:major⟫").s("piano")` },
+        reference: { solutions: [deg(TUNE, C_THEN_G)], bars: 4 },
+        matcher: { m: "events", pitch: "absolute", rhythm: "onsets", durations: false },
+        constraints: [{ c: "edit-only-regions", feedback: "code.edit-outside" }],
+        target: { audible: true, showRoll: false, revealRollAfter: 1 },
+        feedbackText: NUMBERS,
+        hints: ladder(
+          "The tune is two bars long. For how many bars should each key last?",
+          "Inside `.scale()`, `< >` plays one key per bar, and `!2` repeats a key for two bars, as in the hook.",
+          "The first key is `C4:major!2`. The second is G, with the octave number of middle C.",
+        ),
+        srs: [{ family: "fam.code.functions", mode: "evidence-only" }],
+        tests: [
+          { name: "reference", response: { code: deg(TUNE, C_THEN_G) }, expect: "pass" },
+          {
+            name: "the four bars written out",
+            response: { code: deg(TUNE, "<C4:major C4:major G4:major G4:major>") },
+            expect: "pass",
+          },
+          {
+            name: "unchanged",
+            response: { code: deg(TUNE) },
+            expect: "fail",
+            feedback: ["code.unchanged"],
+          },
+          {
+            name: "a new key every bar",
+            response: { code: deg(TUNE, "<C4:major G4:major>") },
+            expect: "fail",
+            feedback: ["melody.wrong-degree"],
+          },
+          {
+            name: "the G below middle C",
+            response: { code: deg(TUNE, "<C4:major!2 G3:major!2>") },
+            expect: "fail",
+            feedback: ["melody.octave"],
+          },
+          {
+            name: "changed a number as well",
+            response: { code: deg("<[0 2 4 2] [3 1 0 0]>", C_THEN_G) },
+            expect: "fail",
+            feedback: ["code.edit-outside"],
+          },
+        ],
+      },
+    },
+    {
+      id: "S5",
+      kind: "quiz",
+      title: "n 2 in D",
+      minutes: 0.75,
+      graded: true,
+      ui: { panels: NONE },
+      exercise: {
+        kind: "fact",
+        id: "n-two-in-d",
+        version: 1,
+        role: "check",
+        key: { tonic: "D", mode: "major" },
+        prompt:
+          'Which note does `n("2")` play over `.scale("D4:major")`? Write its letter, with a sharp if it has one.',
+        skills: [
+          { skill: "S03", w: 0.6 },
+          { skill: "S02", w: 0.4 },
+        ],
+        feedbackText: {
+          "spell.wrong":
+            "Not {got}. Spell D major from D, whole, whole, half: which letter is third, and does it need a sharp?",
+        },
+        hints: ladder(
+          "Which degree is `n` 2?",
+          "`n` counts from 0, so `n` 2 is degree 3. Spell D major up to its third note.",
+          "D major starts D, E, … The step from E to the next note is a whole step.",
+        ),
+        answer: { ui: "text", normalize: "note" },
+        correct: { text: ["F#"] },
+        spelling: "strict",
+        order: "sequence",
+        srs: [{ family: "fam.deg.index", mode: "review-if-due" }],
+        tests: [
+          { name: "F#", response: { answer: { text: ["F#"] } }, expect: "pass" },
+          { name: "lower case", response: { answer: { text: ["f#"] } }, expect: "pass" },
+          {
+            name: "F without its sharp",
+            response: { answer: { text: ["F"] } },
+            expect: "fail",
+            feedback: ["spell.wrong"],
+          },
+          {
+            name: "counted n from 1",
+            response: { answer: { text: ["E"] } },
+            expect: "fail",
+            feedback: ["spell.wrong"],
+          },
+          {
+            name: "the same sound, spelled G flat",
+            response: { answer: { text: ["Gb"] } },
+            expect: "fail",
+            feedback: ["spell.enharmonic"],
+          },
+        ],
+      },
+    },
+    {
+      id: "S6",
+      kind: "ear",
+      title: "1 to 5, any key",
+      minutes: 1.25,
+      graded: true,
+      ui: { panels: NONE },
+      exercise: {
+        kind: "identify",
+        id: "one-to-five-any-key",
+        version: 1,
+        role: "check",
+        prompt: "Every time, a new home: chords set it, then one note. Which degree is it, 1 to 5?",
+        skills: [{ skill: "E05", w: 1 }],
+        hints: [
+          { text: "Hum home, the note the chords end on. Is the note above it, or is it home?" },
+          { text: "Sing up from home on numbers, one, two, three, until you reach the note." },
+          { text: "Hear it again, slower, and sing from 1 up to it.", replay: { rate: 0.75 } },
+          "auto",
+        ],
+        stimulus: { src: "generator", family: "fam.deg.fet-major", level: 2 },
+        cue: { context: "cadence", countInBars: 0, click: false, replays: 2 },
+        answer: { ui: "degree-pad", set: ["1", "2", "3", "4", "5"], syllables: false },
+        correct: {},
+        srs: [{ family: "fam.deg.fet-major", mode: "review-if-due" }],
+        tests: [],
+      },
+    },
+    {
+      id: "S7",
+      kind: "sing",
+      title: "Sing it in A",
+      minutes: 1,
+      ui: { panels: NONE },
+      exercise: {
+        kind: "sing",
+        id: "sing-it-in-a",
+        version: 1,
+        role: "practice",
+        // The chords set A as home: the numbers sung are the ones sung in C.
+        key: { tonic: "A", mode: "major" },
+        prompt:
+          "The chords set a new home, A. Sing one, two, three, two, one: one number to a beat, on any vowel or on the numbers.",
+        skills: [
+          { skill: "V03", w: 0.6 },
+          { skill: "S03", w: 0.4 },
+        ],
+        hints: [
+          { text: "Hum home first, the note the chords end on. Then step up from it." },
+          { text: "Each number is the next note of the scale: one step up, one more, then back down." },
+          { text: "Hear the pattern on the piano once, then sing it back.", replay: { rate: 0.75 } },
+          "auto",
+        ],
+        // Quiet mode or no microphone: "hear it in your head" (contracts §8.5); singing never gates.
+        fallback: "skip",
+        mode: "degree",
+        stimulus: { src: "code", code: deg("<[0 1 2 1] 0>", "A3:major"), bars: 2, showCode: false },
+        cue: { context: "cadence", countInBars: 1, click: false, replays: -1 },
+        target: { from: "degrees", degrees: ["1", "2", "3", "2", "1"] },
+        labels: "numbers",
+        tol: { cents: "learner", octave: "global", driftCompCents: 30, minCoverage: 0.4, passHitRate: 0.8 },
+        showTrace: "live",
+        feedbackText: {
+          "sing.drift":
+            "You drifted {cents}¢ {dir}. Hum home again, the note the chords end on, and step up from it.",
+        },
+        tests: [],
+      },
+    },
+    {
+      id: "S8",
+      kind: "make",
+      title: "Your tune, two keys",
+      minutes: 2.5,
+      ui: { panels: ROLL, rollLabels: "degree", band: BAND },
+      exercise: {
+        kind: "code-make",
+        id: "your-tune-two-keys",
+        version: 1,
+        role: "practice",
+        // The catalog's text for a `uses` rule names the tool ID; the label says it in words.
+        feedbackText: { "rubric.unmet": "{label}: not yet." },
+        prompt:
+          'Make this tune yours, then let it visit a **second key** with a pattern in `.scale("< >")`. The band follows you.',
+        skills: [{ skill: "S03", w: 1 }],
+        code: { starter: deg("<[0 2 1 4] [3 2 0 ~]>") },
+        bars: [1, 8],
+        saveAs: "sketch",
+        rubric: [
+          {
+            id: "two-keys",
+            label: 'The key changes: a pattern in `.scale("< >")`',
+            required: true,
+            skills: ["S03"],
+            rule: "uses",
+            tool: "tb.scale.patterned",
+          },
+          {
+            id: "four-bars",
+            label: "Four bars or more, so each key gets the whole tune",
+            required: false,
+            skills: ["S03"],
+            rule: "bars",
+            min: 4,
+          },
+        ],
+        hints: ladder(
+          "Where in the line does the key live?",
+          "Put a pattern inside `.scale()`: `< >` with one key per bar, and `!2` to hold a key for two bars.",
+          'For the tune in C and then in F: `.scale("<C4:major!2 F4:major!2>")`.',
+        ),
+        tests: [
+          {
+            name: "the starter as it is",
+            response: { code: deg("<[0 2 1 4] [3 2 0 ~]>") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "minimal: C then F",
+            response: { code: deg("<[0 2 1 4] [3 2 0 ~]>", "<C4:major!2 F4:major!2>") },
+            expect: "pass",
+          },
+          {
+            name: "beyond the brief: four keys, hats, a held ending",
+            response: {
+              code: `${TEMPO}hats: s("hh*8").gain(.35)\nmel: n("<[0 2 4 2] [4 [5 4] 2 1] [0 2 4 7] [4 2 0@2]>").scale("<C4:major!4 D4:major!4 F4:major!4 G3:major!4>").s("piano")`,
+            },
+            expect: "pass",
+          },
+          {
+            name: "a new tune, still one key",
+            response: { code: deg("<[0 2 4 2] [4 2 0 ~]>", "D4:major") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+        ],
+      },
+    },
+  ],
+});

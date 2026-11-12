@@ -5,6 +5,7 @@ import type {
   Answer,
   Cue,
   FamilyDef,
+  KeyPool,
   KeySpec,
   LearnerProfile,
   LevelParams,
@@ -17,7 +18,7 @@ import type {
   TrialResult,
 } from "@oak/content-kit";
 import type { Piece } from "../build.ts";
-import { keysFor, sameKey } from "../kernel.ts";
+import { keyAccidentals, keysFor, sameKey } from "../kernel.ts";
 import { CLICKS, EARLY_KITS, KITS, soundName } from "../pools.ts";
 import type { Rng, TrialResponse } from "../types.ts";
 
@@ -77,9 +78,55 @@ export function list<T>(level: LevelParams, key: string, fallback: T[]): T[] {
 
 // --- randomization ------------------------------------------------------------------------------
 
-/** Code K: a key of the level's pool, never the previous trial's key (when the pool has more than one). */
+// --- context categories -----------------------------------------------------------------------------
+
+/**
+ * Context categories: a family may declare categories named `ctx.*` that no level lists. They open with
+ * their lesson like any category (the server and the lesson pass them in `openCategories`) and are never
+ * sampled; they tell a generator what the learner has met besides the level's own material.
+ */
+export const CTX = {
+  /** Keys with sharps may be used. */
+  sharpKeys: "ctx.sharp-keys",
+  /** Keys with flats may be used. */
+  flatKeys: "ctx.flat-keys",
+  /** Movable-do syllables join the degree numbers (U03.L08). */
+  solfege: "ctx.solfege",
+} as const;
+export const isContextCategory = (id: string): boolean => id.startsWith("ctx.");
+/** Whether the family declares a context category. */
+export const declaresContext = (def: Pick<FamilyDef, "categories">, id: string): boolean =>
+  def.categories.some((c) => c.id === id);
+/** A declared context category is open only when its lesson is; an undeclared one never restricts. */
+export const contextOpen = (ctx: Pick<GenCtx, "def" | "openCategories">, id: string): boolean =>
+  !declaresContext(ctx.def, id) || ctx.openCategories.includes(id);
+/** Syllables in prompts and labels: the family declares `ctx.solfege` and it is open, or the level asks. */
+export const solfegeOn = (ctx: Pick<GenCtx, "def" | "openCategories" | "level">): boolean =>
+  declaresContext(ctx.def, CTX.solfege)
+    ? ctx.openCategories.includes(CTX.solfege)
+    : ctx.level.syllables === true;
+
+/** The keys of a pool the learner has met: sharp and flat keys only once their context category is open. */
+export function metKeys(
+  ctx: Pick<GenCtx, "def" | "openCategories">,
+  pool: KeyPool,
+  mode: ScaleMode,
+): KeySpec[] {
+  const sharps = contextOpen(ctx, CTX.sharpKeys);
+  const flats = contextOpen(ctx, CTX.flatKeys);
+  const keys = keysFor(pool, mode).filter((k) => {
+    const n = keyAccidentals(k);
+    return n === 0 || (n > 0 ? sharps : flats);
+  });
+  return keys.length > 0 ? keys : keysFor("C", mode);
+}
+
+/**
+ * Code K: a key of the level's pool that the learner has met (`metKeys`), never the previous trial's key
+ * (when there is more than one).
+ */
 export function pickKey(ctx: GenCtx, mode: ScaleMode, pool = ctx.level.keys): KeySpec {
-  const keys = keysFor(pool, mode);
+  const keys = metKeys(ctx, pool, mode);
   const prev = ctx.previous?.params.key as KeySpec | undefined;
   const fresh = keys.filter((k) => !sameKey(k, prev));
   return ctx.rng.pick(fresh.length > 0 ? fresh : keys);

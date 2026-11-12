@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { toolbox } from "../../../content/toolbox.ts";
-import { toolLabel } from "./tool-label.ts";
+import { toolLabel, toolName } from "./tool-label.ts";
 
 const of = (id: string) => {
   const t = toolbox.find((x) => x.id === id);
@@ -33,5 +33,21 @@ describe("toolLabel", () => {
       expect(l.text.length).toBeGreaterThan(0);
       if (!l.mono) expect(l.text).not.toMatch(/\)$/);
     }
+  });
+});
+
+describe("toolName (Today, the Coda, the ceremony)", () => {
+  test("a sound is the code the learner types, a scale row its name, anything else its label", () => {
+    expect(toolName({ kind: "sound", code: "ebass (gm_electric_bass_pick:0)" } as never)).toEqual({
+      text: '.s("ebass")',
+      mono: true,
+    });
+    expect(toolName({ kind: "scale", code: "X4:major" } as never)).toEqual({
+      text: "the major scale",
+      mono: false,
+    });
+    expect(toolName({ kind: "code", code: ".lpf()" } as never)).toEqual(
+      toolLabel({ kind: "code", code: ".lpf()" } as never),
+    );
   });
 });

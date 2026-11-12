@@ -43,6 +43,27 @@ describe("theory CLI", () => {
     expect(json("n", "C4:major", "0", "4#", "7b").map((x: { midi: number }) => x.midi)).toEqual([60, 68, 71]);
     expect(json("circle")).toHaveLength(12);
   });
+  test("Wave 3: labels, signatures, neighbours, intervals and Strudel interval strings", () => {
+    expect(json("label", "66", "C", "--down")).toMatchObject({ degree: "b5", syllable: "se", name: "Gb4" });
+    expect(json("label", "f#4", "D")).toMatchObject({ degree: "3", syllable: "mi", display: "F♯4" });
+    expect(json("signature", "-3", "--minor")).toMatchObject({
+      accidentals: ["Bb", "Eb", "Ab"],
+      kind: "flats",
+      key: "C minor",
+    });
+    expect(json("signature", "A").accidentals).toEqual(["F#", "C#", "G#"]);
+    expect(json("signature", "0").kind).toBe("none");
+    expect(json("neighbours", "C#")).toMatchObject({ clockwise: "Ab major", relative: "A# minor" });
+    expect(json("between", "C4", "Eb4")).toMatchObject({ name: "m3", strudel: "3m", inversion: "M6" });
+    expect(json("between", "67", "60")).toMatchObject({ name: "P5", direction: "down", strudel: "-5P" });
+    expect(json("between", "66", "72", "G")).toMatchObject({ name: "d5", tritone: true });
+    expect(json("ivl", "M3")).toMatchObject({ text: "3M", semitones: 4 });
+    expect(json("ivl", "m2", "--down")).toMatchObject({ text: "-2m", semitones: -1 });
+    expect(json("ivl", "-2m").name).toBe("m2");
+    expect(runTheoryCli(["ivl", "M4"]).code).toBe(1);
+    expect(json("degree-interval", "7", "4", "C")).toMatchObject({ name: "d5", strudel: "5d" });
+    expect(json("degree-interval", "5", "1", "C", "--down")).toMatchObject({ name: "P5", strudel: "-5P" });
+  });
   test("chords", () => {
     const c = json("chord", "C69");
     expect(c).toMatchObject({ code: "C69", leadSheet: "C6/9", canonical: true, family: "chord.sixth-sus" });

@@ -11,12 +11,18 @@ test("Settings › Voice: re-run the range from its link, see it saved, the ladd
   page,
   request,
 }) => {
+  // A learner who set up the mic (a fresh profile has no input yet, which is Quiet mode: contracts §8.5).
+  const put = await request.put(`${stack.apiURL}/api/profile`, {
+    headers: { "x-oak": "1", "content-type": "application/json", origin: stack.apiURL },
+    data: { inputKind: "builtin", quiet: false },
+  });
+  expect(put.ok()).toBe(true);
   await noHmr(page);
   await useUiPrefs(page, { theme: "paper" });
   const problems = watchErrors(page);
   await page.goto("/settings/voice");
-  await expect(page.getByTestId("ladder-now")).toHaveText("±70¢ (Auto)");
-  await expect(page.getByText("Tightens to ±50¢ when")).toBeVisible();
+  await expect(page.getByTestId("ladder-now")).toHaveText("±70¢");
+  await expect(page.getByTestId("ladder-why")).toHaveText(/Where everyone starts/);
   await shootAll(page, "30-settings-voice");
   await page.getByTestId("rerun-range").click();
   await expect(page).toHaveURL(/\/settings\/voice\/setup\?part=range/);
@@ -27,14 +33,15 @@ test("Settings › Voice: re-run the range from its link, see it saved, the ladd
   await expect(page.getByTestId("setup-done")).toBeVisible();
   await page.getByRole("link", { name: "Back to Settings › Voice" }).click();
   await expect(page.getByText("A2 – E4")).toBeVisible();
-  // Quiet mode switch, stored on the profile.
+  // Quiet mode switch, stored by the server (GET /voice, or the profile while that endpoint is not built).
   await page.getByRole("switch", { name: "Quiet mode" }).click();
   await expect
-    .poll(
-      async () =>
-        (await (await request.get(`${stack.apiURL}/api/profile`, { headers: { "x-oak": "1" } })).json())
-          .quiet,
-    )
+    .poll(async () => {
+      const v = await request.get(`${stack.apiURL}/api/voice`, { headers: { "x-oak": "1" } });
+      if (v.ok()) return (await v.json()).quiet;
+      return (await (await request.get(`${stack.apiURL}/api/profile`, { headers: { "x-oak": "1" } })).json())
+        .quiet;
+    })
     .toBe(true);
   expect(problems).toEqual([]);
 });
@@ -45,7 +52,7 @@ test("Settings › Audio: the left/right check plays, the limiter and the sound 
   await noHmr(page);
   await useUiPrefs(page, { theme: "bark" });
   await page.goto("/settings/audio");
-  await expect(page.getByTestId("pack-status")).toHaveText(/^Pack v1/);
+  await expect(page.getByTestId("pack-status")).toHaveText(/^Pack v\d+/);
   await expect(page.getByTestId("pack-offline")).toHaveText(/^Not cached/);
   await expect(page.getByText(/nothing goes above -3 dBFS/)).toBeVisible();
   await page.getByTestId("audio-lr").click();

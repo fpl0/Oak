@@ -4,7 +4,11 @@
 //
 // Levers, in the order they act on a day:
 //   1. smoothBacklog   after a gap of 3 days or more, overdue items are dealt out over 5 to 7 days
-//   2. pickReleases    deferred cards are released, oldest first, while the 7-day forecast is below
+//   2. planOverdueReleases  the wait bound (decision 27): a family still waiting `releaseAfterDays` after
+//                      its lesson is released whatever the forecast says; room is made for it by graduating
+//                      a family at its mastery level early or resting the most stable one in its composite
+//                      (`restCandidate`); a resting family comes back once nothing waits (`pickRestReturn`)
+//      pickReleases    then deferred cards are released, oldest first, while the 7-day forecast is below
 //                      0.70 × budget (`admitNew` gives the counts only, and lets the oldest block the rest)
 //   3. planWarmup      (planner.ts) a strict budget; leftovers stay due and are never shown as a count
 //   4. capRelearning   after a gap, at most 3 cards a day enter relearning
@@ -17,7 +21,7 @@
 // against the budget less what the fact cards need (`classBudget`); and the caller passes as `budgetSec`
 // the mean warm-up budget of the sessions the window will hold (checkpoint and capstone days are shorter).
 //   7. makeDayPicker   a rescheduled card takes the least-loaded day inside its fuzz window
-import { DECISION_2, GOVERNOR, RETURN, WARMUP_BUDGET_SEC } from "./constants.ts";
+import { DECISION_2, DECISION_27, GOVERNOR, RETURN, WARMUP_BUDGET_SEC } from "./constants.ts";
 import type {
   Card,
   GovernorConfig,
@@ -64,6 +68,8 @@ export function recommendedGovernor(
   return governorFor(targetMinutes, {
     activeMaxIntervalDays: DECISION_2.activeMaxIntervalDays,
     maxFactCardsPerLesson: DECISION_2.maxFactCardsPerLesson,
+    releaseAfterDays: DECISION_27.releaseAfterDays,
+    restMinReps: DECISION_27.restMinReps,
     ...opts,
   });
 }
@@ -222,12 +228,18 @@ export interface WaitingCard {
   kind: "perceptual" | "production" | "concept" | "fact";
   /** Position in the queue: lower is older. */
   seq: number;
+  /** Days the card has waited since it was created deferred (for `releaseAfterDays`). */
+  waitedDays?: number;
 }
 /**
  * The deferred cards to release today (contracts §7.4): oldest first, at most 1 family and 4 fact cards a
  * day, families while the set forecast is open and facts while the fact forecast is open. A family that
  * cannot start today (no active slot, or a production family with no mic room) is passed over rather than
  * holding up the families behind it: a waiting concept family needs no slot.
+ *
+ * With `cfg.releaseAfterDays` (the wait bound of decision 27), a family that has waited that many days is
+ * released whatever the set forecast says, within the same daily cap, slots and mic room. The live
+ * callers run `planOverdueReleases` first, which also makes room; this covers what it left.
  */
 export function pickReleases(
   items: readonly ReviewItem[],
@@ -238,20 +250,21 @@ export function pickReleases(
 ): string[] {
   const out: string[] = [];
   const order = [...waiting].sort((a, b) => a.seq - b.seq || (a.cardId < b.cardId ? -1 : 1));
-  if (intakeForecast(items, today, cfg, 0, "sets").state === "open") {
-    let slots = Math.max(0, cfg.maxActivePerceptual - activePerceptual);
-    let n = 0;
-    for (const w of order) {
-      if (n >= cfg.releasePerDay.families) break;
-      if (w.kind === "fact") continue;
-      if (w.kind !== "concept") {
-        if (slots === 0) continue;
-        if (w.kind === "production" && !micRoom(items, today, cfg)) continue;
-        slots--;
-      }
-      out.push(w.cardId);
-      n++;
+  const setsOpen = intakeForecast(items, today, cfg, 0, "sets").state === "open";
+  const bound = cfg.releaseAfterDays ?? null;
+  const overdue = (w: WaitingCard) => bound !== null && (w.waitedDays ?? 0) >= bound;
+  let slots = Math.max(0, cfg.maxActivePerceptual - activePerceptual);
+  let n = 0;
+  for (const w of order) {
+    if (n >= cfg.releasePerDay.families) break;
+    if (w.kind === "fact" || !(setsOpen || overdue(w))) continue;
+    if (w.kind !== "concept") {
+      if (slots === 0) continue;
+      if (w.kind === "production" && !micRoom(items, today, cfg)) continue;
+      slots--;
     }
+    out.push(w.cardId);
+    n++;
   }
   if (intakeForecast(items, today, cfg, 0, "facts").state === "open") {
     out.push(
@@ -262,6 +275,132 @@ export function pickReleases(
     );
   }
   return out;
+}
+
+/** An active perceptual or production family as the wait bound's room-making reads it. */
+export interface ActiveFamily extends GraduationInput {
+  cardId: string;
+  /** A production (sung) family: resting it frees mic room. */
+  mic: boolean;
+  /** Review sets of its own so far (`Card.reps`). */
+  reps: number;
+  /** Its blocked-intro sets are not all done yet. */
+  blockedIntroPending: boolean;
+}
+/** What `planOverdueReleases` decided for today. */
+export interface OverdueReleasePlan {
+  /** Active families at their mastery level that graduate into their composite now. */
+  graduate: string[];
+  /** Active families below their mastery level that rest in their composite now (decision 27). */
+  rest: string[];
+  /** Waiting families released now, whatever the forecast says. */
+  release: string[];
+}
+
+/** The waiting perceptual and production families past `releaseAfterDays`, longest wait first. */
+export function overdueFirstReviews(waiting: readonly WaitingCard[], cfg: GovernorConfig): WaitingCard[] {
+  const bound = cfg.releaseAfterDays ?? null;
+  if (bound === null) return [];
+  return waiting
+    .filter((w) => (w.kind === "perceptual" || w.kind === "production") && (w.waitedDays ?? 0) >= bound)
+    .sort(
+      (a, b) => (b.waitedDays ?? 0) - (a.waitedDays ?? 0) || a.seq - b.seq || (a.cardId < b.cardId ? -1 : 1),
+    );
+}
+
+/**
+ * The active family that rests in its composite to make room (decision 27): the most stable one (highest
+ * `t90Days`) with at least `restMinReps` sets of its own, its blocked-intro sets done and its last rating
+ * Good or Easy. A resting family is a composite member like a graduated one (2 trials whenever it is drawn,
+ * recalled below 0.65) and comes back to its own card, where it left off, once nothing waits
+ * (`pickRestReturn`). `null` when none qualifies or resting is off.
+ */
+export function restCandidate(active: readonly ActiveFamily[], cfg: GovernorConfig): string | null {
+  const minReps = cfg.restMinReps ?? null;
+  if (minReps === null) return null;
+  let best: ActiveFamily | null = null;
+  for (const f of active) {
+    if (f.reps < minReps || f.blockedIntroPending) continue;
+    const last = f.lastRatings[f.lastRatings.length - 1];
+    if (last === undefined || last < 3) continue;
+    if (best === null || f.t90Days > best.t90Days || (f.t90Days === best.t90Days && f.cardId < best.cardId)) {
+      best = f;
+    }
+  }
+  return best?.cardId ?? null;
+}
+
+/**
+ * The wait bound of decision 27 (contracts §7.4 as amended): a perceptual or production family still waiting
+ * `releaseAfterDays` after the lesson that seeded it is released today whatever the forecast says, longest
+ * wait first, at most `newPerDay.families` a day. Room is made for each one that needs it — no free slot,
+ * the set forecast `closed`, or a sung family without mic room — by moving one active family into its
+ * composite: one at its mastery level graduates early (`earlyGraduate(…, "time")`); otherwise the most
+ * stable family rests there (`restCandidate`; for a sung family a sung one, which frees mic room). Runs
+ * before `pickReleases`, also while a backlog is being cleared. Pure: `items` are today's planner items;
+ * a family moved out is taken out of them for the next decision.
+ */
+export function planOverdueReleases(args: {
+  items: readonly ReviewItem[];
+  waiting: readonly WaitingCard[];
+  active: readonly ActiveFamily[];
+  activePerceptual: number;
+  today: number;
+  cfg: GovernorConfig;
+}): OverdueReleasePlan {
+  const { cfg, today } = args;
+  const out: OverdueReleasePlan = { graduate: [], rest: [], release: [] };
+  const overdue = overdueFirstReviews(args.waiting, cfg);
+  let items = [...args.items];
+  let active = [...args.active];
+  let slots = Math.max(0, cfg.maxActivePerceptual - args.activePerceptual);
+  for (const w of overdue) {
+    if (out.release.length >= cfg.newPerDay.families) break;
+    const needSlot = slots === 0;
+    const needTime = intakeForecast(items, today, cfg, 0, "sets").state !== "open";
+    const needMic = w.kind === "production" && !micRoom(items, today, cfg);
+    if (needSlot || needTime || needMic) {
+      const pool = needMic ? active.filter((f) => f.mic) : active;
+      const grad = earlyGraduate(pool, cfg, "time");
+      const pick = grad ?? restCandidate(pool, cfg);
+      if (pick !== null) {
+        (grad !== null ? out.graduate : out.rest).push(pick);
+        active = active.filter((f) => f.cardId !== pick);
+        items = items.filter((it) => it.cardId !== pick);
+        slots++;
+      } else if (needSlot) continue; // the 12 slots are never exceeded: it waits for one
+    }
+    out.release.push(w.cardId);
+    slots--;
+  }
+  return out;
+}
+
+/**
+ * The resting family that comes back to its own card today (decision 27), or `null`: the one resting
+ * longest, once no perceptual or production family is waiting, a slot is free and the set forecast is
+ * open; at most one a day. A sung family also needs mic room. It comes back where it left off (its card is
+ * due at once, its level unchanged); a member recalled for low composite credit takes precedence (§7.4).
+ */
+export function pickRestReturn(args: {
+  items: readonly ReviewItem[];
+  resting: readonly { cardId: string; restedDays: number; mic: boolean }[];
+  waitingFamilies: number;
+  activePerceptual: number;
+  today: number;
+  cfg: GovernorConfig;
+}): string | null {
+  const { cfg } = args;
+  if (args.waitingFamilies > 0 || args.activePerceptual >= cfg.maxActivePerceptual) return null;
+  if (intakeForecast(args.items, args.today, cfg, 0, "sets").state !== "open") return null;
+  const order = [...args.resting].sort(
+    (a, b) => b.restedDays - a.restedDays || (a.cardId < b.cardId ? -1 : 1),
+  );
+  for (const r of order) {
+    if (r.mic && !micRoom(args.items, args.today, cfg)) continue;
+    return r.cardId;
+  }
+  return null;
 }
 
 /**
@@ -356,6 +495,13 @@ export function earlyGraduate(
   let best: (GraduationInput & { cardId: string }) | null = null;
   for (const f of active) {
     if (!atMasteryForGraduation(f)) continue;
+    // Never before its first review set: a waiting family can reach its mastery level from in-lesson
+    // evidence alone, and must still have its own first sets (decision 27).
+    if (f.lastRatings.length === 0) continue;
+    // A family held below its mastery level by a gate counts as there only with the gated-ladder proof
+    // (contracts §7.4): a 21-day stability and two Good-or-better ratings. Without it a family seeded today
+    // at level 1 of a gated ladder would graduate before its first review.
+    if (f.level < f.masteryLevel && !shouldGraduate(f, cfg)) continue;
     if (best === null || f.t90Days > best.t90Days || (f.t90Days === best.t90Days && f.cardId < best.cardId)) {
       best = f;
     }
@@ -431,9 +577,10 @@ export function smoothBacklog(
 
 /**
  * The Again-cascade cap of contracts §7.9: while a backlog is being cleared, at most 3 cards a day enter
- * relearning. After the third Again, items still to come with R below 0.60 wait for tomorrow.
+ * relearning. After the third Again, items still to come with R below 0.60 wait for tomorrow (a family's
+ * first set excepted).
  */
-export function capRelearning<T extends Pick<ReviewItem, "recall" | "fresh">>(
+export function capRelearning<T extends Pick<ReviewItem, "recall" | "fresh" | "firstSet">>(
   remaining: readonly T[],
   againsToday: number,
   backlogMode: boolean,
@@ -441,7 +588,9 @@ export function capRelearning<T extends Pick<ReviewItem, "recall" | "fresh">>(
   if (!backlogMode || againsToday < RETURN.maxRelearnPerDay) return { keep: [...remaining], held: [] };
   const keep: T[] = [];
   const held: T[] = [];
-  for (const it of remaining) (it.fresh || it.recall >= RETURN.holdBelowR ? keep : held).push(it);
+  // A family's first set is not relearning: it is never held (its first review is bounded, decision 27).
+  for (const it of remaining)
+    (it.fresh || it.firstSet || it.recall >= RETURN.holdBelowR ? keep : held).push(it);
   return { keep, held };
 }
 

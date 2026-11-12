@@ -3,10 +3,12 @@
 // Deterministic for a given session, so a reload regenerates the very same trials.
 import type { DrillSession, FamilyDef, FamilyState, LearnerProfile, Trial } from "@oak/api";
 import {
+  createRng,
   type DrillFamilyRuntime,
   type DrillRegistry,
   generateSet,
   generateTrial,
+  hashString,
   planCompositeSet,
   staircaseStep,
   trialSeed,
@@ -74,15 +76,31 @@ export function compositeSource(env: SourceEnv, session: DrillSession): TrialSou
  * on about 85% success). The level of trial i follows from the answers before it, so the source stays
  * deterministic and a reload regenerates the same trials.
  */
+/**
+ * Which trials of a free-practice FET set sing their resolution: `count` of them (2–3, contracts §8.3), never
+ * the first, fixed by the set's ID so a reload asks the same ones.
+ */
+export function practiceResolutions(setId: string, total: number, count: number): Set<number> {
+  const want = Math.max(0, Math.min(3, count, total - 1));
+  const rng = createRng(hashString(`${setId}|practice-resolutions`));
+  const pool = rng.shuffle(Array.from({ length: Math.max(0, total - 1) }, (_, i) => i + 1));
+  return new Set(pool.slice(0, want));
+}
+
 export function staircaseSource(
   family: DrillFamilyRuntime,
   session: DrillSession,
   profile: LearnerProfile,
   startLevel: number,
   maxLevel: number,
+  sungResolutions = 2,
 ): TrialSource & { levelAt(outcomes: readonly TrialOutcome[]): number } {
   const id = family.def.id;
   const levels = family.def.levels.length;
+  const sungAt =
+    family.def.generator === "degree-id"
+      ? practiceResolutions(session.setId, family.def.trialsPerSet, sungResolutions)
+      : new Set<number>();
   const levelAt = (outcomes: readonly TrialOutcome[]): number => {
     let st = { d: Math.max(1, Math.min(maxLevel, startLevel)), levels };
     for (const o of outcomes) if (o && o.result.skipped !== true) st = staircaseStep(st, o.result.correct);
@@ -97,7 +115,14 @@ export function staircaseSource(
       const key = `${i}|${level}`;
       const hit = cache.get(key);
       if (hit) return hit;
-      const spec = { index: i, family: id, level, category: "", seed: trialSeed(id, session.setId, i) };
+      const spec = {
+        index: i,
+        family: id,
+        level,
+        category: "",
+        seed: trialSeed(id, session.setId, i),
+        ...(sungAt.has(i) ? { sungResolution: true } : {}),
+      };
       const previous = i > 0 ? cache.get(`${i - 1}|${levelAt(outcomes.slice(0, i - 1))}`)?.trial : undefined;
       const trial = generateTrial(family, spec, profile, session.openCategories[id] ?? [], previous) as Trial;
       const planned = { spec: { ...spec, category: trial.category }, trial };

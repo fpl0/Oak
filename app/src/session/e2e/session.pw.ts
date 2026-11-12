@@ -18,6 +18,10 @@ import {
 } from "./support.ts";
 
 test.describe.configure({ mode: "serial" });
+// Other engineers' edits make Vite reload the page mid-test (an HMR update reloaded a running session).
+test.beforeEach(async ({ page }) => {
+  await page.routeWebSocket(/.*/, () => {});
+});
 
 let day0 = "";
 
@@ -103,7 +107,8 @@ test("a whole session: Start (Enter) → New → Wrap up → Quick sketch → Co
       (window as never as { __oakSession: { runner: { wrapUp(): void } } }).__oakSession.runner.wrapUp(),
     );
   } else {
-    await expect(page.getByTestId("session-header")).toBeVisible();
+    // The first open of the session page compiles the session, lesson and drill modules in the dev server.
+    await expect(page.getByTestId("session-header")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("session-block")).toContainText("New");
     // The lesson player, mounted inside the session (lesson's own surface), once it has loaded.
     await expect(page.locator(".skeleton"))

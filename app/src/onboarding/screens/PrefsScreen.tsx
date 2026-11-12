@@ -92,7 +92,7 @@ export function PrefsScreen({ profile, onDone }: { profile: Profile; onDone(): v
         <h1 id="prefs-title" className="text-h1 outline-none" tabIndex={-1}>
           Your sound and your week
         </h1>
-        <p className="max-w-[62ch] text-text-2">
+        <p className="max-w-measure text-text-2">
           Most lessons put your part inside a small backing band. Pick the one you'd rather hear; it changes
           the sounds, never what you learn. You can change all of this in Settings.
         </p>

@@ -91,12 +91,19 @@ export function singTargets(
   if (target.from === "degrees") {
     if (!key) return [];
     const tonic = 60 + pcOf(key.tonic);
-    const unit = 1 / METERS[meter].unitsPerBar / cps;
-    return target.degrees.map((d: Degree, i) => ({
-      midi: tonic + degreeSemitones(d),
-      on: i * unit,
-      off: (i + 1) * unit,
-    }));
+    const bar = 1 / cps;
+    const slots = target.rhythm ? rhythmSlots(target.rhythm) : null;
+    const unit = 1 / METERS[meter].unitsPerBar;
+    return target.degrees.map((d: Degree, i) => {
+      const midi = tonic + degreeSemitones(d) + 12 * (target.octaves?.[i] ?? 0);
+      if (slots && slots.length > 0) {
+        // The rhythm is one bar; a longer pattern takes the same rhythm again in the next bar.
+        const s = slots[i % slots.length] as { on: number; dur: number };
+        const b = Math.floor(i / slots.length);
+        return { midi, on: (b + s.on) * bar, off: (b + s.on + s.dur) * bar };
+      }
+      return { midi, on: i * unit * bar, off: (i + 1) * unit * bar };
+    });
   }
   if (!n) return [];
   const line = melodyLine(
@@ -111,12 +118,84 @@ export function singTargets(
   }));
 }
 
+/**
+ * The note slots of a one-bar rhythm in mini-notation, as fractions of the bar: `"x x [x x] x"` → four
+ * beats, the third split in two. `~` is a rest, `_` holds the previous note, `@n` weights a step, `[…]`
+ * subdivides, `!n` repeats a step; any other word is a note.
+ */
+export function rhythmSlots(mini: string): { on: number; dur: number }[] {
+  const tokens = mini.match(/\[|\]|[^\s[\]]+/g) ?? [];
+  let pos = 0;
+  type Item = { kind: "note" | "rest" | "hold" | "group"; w: number; children?: Item[] };
+  const parseSeq = (): Item[] => {
+    const out: Item[] = [];
+    while (pos < tokens.length) {
+      const t = tokens[pos] as string;
+      if (t === "]") {
+        pos++;
+        return out;
+      }
+      pos++;
+      let item: Item;
+      if (t === "[") item = { kind: "group", w: 1, children: parseSeq() };
+      else {
+        const m = /^([^@!]*)(?:@(\d+(?:\.\d+)?))?(?:!(\d+))?$/.exec(t);
+        const word = m?.[1] ?? t;
+        item = { kind: word === "~" ? "rest" : word === "_" ? "hold" : "note", w: m?.[2] ? Number(m[2]) : 1 };
+        const rep = m?.[3] ? Number(m[3]) : 1;
+        for (let k = 1; k < rep; k++) out.push({ ...item });
+      }
+      // A weight written after a group: "[x x]@2".
+      const next = tokens[pos];
+      if (item.kind === "group" && next && /^@\d/.test(next)) {
+        item.w = Number(next.slice(1));
+        pos++;
+      }
+      out.push(item);
+    }
+    return out;
+  };
+  const items = parseSeq();
+  const slots: { on: number; dur: number }[] = [];
+  const lay = (seq: Item[], from: number, span: number): void => {
+    const total = seq.reduce((a, x) => a + x.w, 0) || 1;
+    let t = from;
+    for (const x of seq) {
+      const d = (span * x.w) / total;
+      if (x.kind === "group") lay(x.children ?? [], t, d);
+      else if (x.kind === "note") slots.push({ on: t, dur: d });
+      else if (x.kind === "hold") {
+        const last = slots[slots.length - 1];
+        if (last) last.dur += d;
+      }
+      t += d;
+    }
+  };
+  lay(items, 0, 1);
+  return slots;
+}
+
 /** What a performance result from @oak/pitch looks like to the grader (`SungResult`, `TapResult` fit it). */
 export interface PerformanceResult extends MatchResult {
   pass?: boolean;
   f1?: number;
   timing?: number;
-  notes?: { credit: number; feedback: string | null }[];
+  /** Per note, as @oak/pitch's `SungNoteResult` reports it (the extra fields let the grader judge a pattern). */
+  notes?: SungNoteLike[];
+}
+/** The fields of @oak/pitch's `SungNoteResult` the grader reads (it may not import @oak/pitch). */
+export interface SungNoteLike {
+  credit: number;
+  feedback: string | null;
+  index?: number;
+  targetMidi?: number;
+  /** After octave folding and drift compensation (`targetMidi + cents / 100`); `null` when missed. */
+  sungMidi?: number | null;
+  /** Signed error after folding. */
+  cents?: number | null;
+  coverage?: number;
+  /** Octaves the note was folded by (raw sung ≈ sungMidi + 12 × octaveShift). */
+  octaveShift?: number;
 }
 
 /**
@@ -129,6 +208,17 @@ export function performancePasses(
   perf: PerformanceResult,
   tol: TapTolerance | SingTolerance,
 ): boolean {
+  // The lenient first sing (contracts §8.1 item 8, U00.L02): any sustained pitch within ±100¢ of the target
+  // after per-note folding passes, whatever the ladder says; `cents` in the tolerance is ignored. @oak/pitch's
+  // `firstSingPasses` judges the frames (600 ms sustained); from a note summary, a covered note within 100¢.
+  if (kind === "sing" && (tol as SingTolerance).lenient) {
+    if (perf.pass === true) return true;
+    const minCov = (tol as SingTolerance).minCoverage;
+    return (perf.notes ?? []).some(
+      (x) =>
+        typeof x.cents === "number" && Math.abs(x.cents) <= 100 + 1e-9 && (x.coverage ?? 1) >= minCov - 1e-9,
+    );
+  }
   if (typeof perf.pass === "boolean") return perf.pass;
   if (kind === "tap") {
     const t = tol as TapTolerance;

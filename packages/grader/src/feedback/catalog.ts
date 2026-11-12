@@ -50,18 +50,15 @@ const entries: [string, Sev, string][] = [
   ],
   ["code.bare-value", E, 'Values with no sound control. Use `note("…")` or `s("…")`.'],
   ["code.no-pitch", W, "`{s}` needs a pitch: add `note(…)` or `n(…).scale(…)`."],
-  [
-    "code.unknown-chord",
-    E,
-    '"{sym}" isn\'t a Strudel chord name. Write "{suggest}" (lead sheet: {display}).',
-  ],
+  ["code.unknown-chord", E, '"{sym}" isn\'t a Strudel chord name. Write "{suggest}".'],
   ["code.lowercase-chord-root", E, 'Chord roots are capitals: "{suggest}".'],
   [
     "code.locked-tool",
     { graded: E, studio: I, content: E },
     "`{tool}` unlocks in {lesson}. For now, use the tools you have.",
   ],
-  ["code.locked-sound", { graded: E, studio: I, content: E }, 'The sound "{tool}" unlocks in {lesson}.'],
+  // The lint reports a sound as `{name}` with a `{reason}` ("unlocks in U03.L02", or why a bank is unknown).
+  ["code.locked-sound", { graded: E, studio: I, content: E }, 'The sound "{name}" {reason}.'],
   ["code.locked-scale", { graded: E, studio: I, content: E }, 'The scale "{tool}" unlocks in {lesson}.'],
   ["code.locked-chord", { graded: E, studio: I, content: E }, 'The chord "{tool}" unlocks in {lesson}.'],
   [
@@ -70,11 +67,7 @@ const entries: [string, Sev, string][] = [
     "The mini-notation `{tool}` unlocks in {lesson}.",
   ],
   ["code.preview-tool", I, "`{tool}` is only being previewed here."],
-  [
-    "code.uncatalogued",
-    { graded: W, studio: W, content: E },
-    "`{tool}` is a Strudel name Oak has no card for yet.",
-  ],
+  ["code.uncatalogued", { graded: W, studio: W, content: E }, "`{name}` is not in Oak's toolbox{why}."],
   [
     "code.dollar-label",
     { graded: I, studio: I, content: E },
@@ -91,11 +84,15 @@ const entries: [string, Sev, string][] = [
     I,
     "`{label}:` is muted in the code (the `_`), so the checker doesn't hear it either.",
   ],
-  ["code.chord-not-in-dict", E, '"{sym}" isn\'t voiced correctly by the `{dict}` dictionary. Try {suggest}.'],
+  ["code.chord-not-in-dict", E, '"{sym}" {problem} in the `{dict}` dictionary. {fix}'],
   ["code.slash-chord", E, 'No `/` inside `chord("…")`: put the bass note in the `bass:` track.'],
-  ["code.scale-no-octave", W, '"{text}" has no octave, so it plays in octave 3. Write "{suggest}".'],
-  ["code.scale-spaces", E, 'Scale names use colons: "{suggest}", not "{text}".'],
-  ["code.chromatic-step", W, '"{text}": check the chromatic step; ♯4 in major is "3#".'],
+  ["code.scale-no-octave", W, '"{scale}" has no octave, so it plays in octave 3. Write "{suggest}".'],
+  ["code.scale-spaces", E, 'Scale names use colons, not spaces: write "{suggest}".'],
+  [
+    "code.chromatic-step",
+    W,
+    '"{step}" is step {n} with an accidental: the number is the 0-based step, not the degree (♯4 in major is "3#").',
+  ],
   ["code.mode-above", E, '`mode("above")` isn\'t used in Oak; use `below`, `root:<note>` or `duck`.'],
   [
     "code.transpose-after-scale",
@@ -108,15 +105,23 @@ const entries: [string, Sev, string][] = [
     { graded: E, studio: I, content: E },
     "`nudge` only works in the Studio; use `.late()` here.",
   ],
-  ["code.swing-convention", W, "The second number of `swingBy` is beats per bar ({expected} here)."],
+  [
+    "code.swing-convention",
+    W,
+    "`{fn}(…, {got})`: the second number is the beats per bar ({beats} here), or {double} for 16ths.",
+  ],
   [
     "code.swing-fraction-string",
     E,
     'Inside a pattern string write the amount as a decimal (`.33`), not "1/3".',
   ],
-  ["code.setcpm-missing", W, "No tempo line: add `setcpm({bpm}/{beats})`."],
+  ["code.setcpm-missing", W, "{detail}: start with a tempo line like `setcpm({example})`."],
   ["code.setcpm-form", W, "Tempo line: {detail}."],
-  ["code.range-spacing", E, "Write ranges with spaces: `0 .. 7`."],
+  [
+    "code.range-spacing",
+    E,
+    'Strudel reads "{text}" as one word, not a range. Put a space on each side of the dots: "{suggest}".',
+  ],
   [
     "code.time-fraction-string",
     E,
@@ -145,6 +150,11 @@ const entries: [string, Sev, string][] = [
   ["code.tempo-factor", W, "That is {got} BPM: divide by the beats per bar, `setcpm({expected}/{beats})`."],
   ["code.max-chars", W, "That's {n} characters; keep it under {max}."],
   ["code.octave-default", I, '"{note}" has no octave, so it plays in octave 3. Did you mean "{suggest}"?'],
+  [
+    "code.letter-accidental",
+    I,
+    '"{note}" plays the right note; Oak writes sharps and flats as # and b: "{suggest}".',
+  ],
   ["lint.strict.computed-member", E, "Computed member access isn't allowed in code Oak runs for you."],
   ["lint.strict.this", E, "`this` isn't allowed in code Oak runs for you."],
   ["lint.strict.reserved-string", E, "That string isn't allowed in code Oak runs for you."],
@@ -182,6 +192,24 @@ const entries: [string, Sev, string][] = [
   ["melody.rhythm-only", I, "All pitches right; the rhythm differs at the marks."],
   ["melody.ends-on", E, "It ends on {got}; the brief asks for {expected}."],
   ["melody.no-line", E, "No melody line found{track}."],
+  // by-ear transcription (Wave 3, DictationEx.byEar)
+  ["melody.first-difference", I, "The first difference is in bar {bar}, {beatLabel}: {what}."],
+  [
+    "melody.rhythm-note",
+    W,
+    "Bar {bar}, {beatLabel}: {got} is the right note, but it starts at {expAt} in the source.",
+  ],
+  ["melody.pitch-only", I, "The rhythm is right throughout; only the pitches at the marks differ."],
+  [
+    "melody.wrong-key",
+    E,
+    "Right tune, but in {gotKey}. This step wants it as it plays, in {expKey}: move every note {semis} {dir}.",
+  ],
+  [
+    "melody.wrong-octave",
+    E,
+    "Right notes, an octave {dir} than the source. This step wants the octave you hear.",
+  ],
   // --- harmony
   ["harmony.bass", E, "Chord {slot} (bar {bar}): bass is {got}; you should hear {exp}."],
   ["harmony.root", E, "Chord {slot}: root {got}, expected {exp}."],
@@ -200,8 +228,25 @@ const entries: [string, Sev, string][] = [
   ["spell.wrong", E, "{got} → {exp}."],
   ["spell.order", W, "Right notes, wrong order."],
   ["keysig.wrong", E, "{key} has {exp}; you wrote {got}."],
+  ["keysig.count", E, "{key} has {n} {kind}: {exp}. You wrote {count}."],
+  [
+    "keysig.type",
+    E,
+    "{key} is a {expKind} key: its signature is {exp}. Sharps and flats never mix in a key signature.",
+  ],
+  [
+    "keysig.order",
+    E,
+    "Right {kind}, written in another order. A signature always reads {order}: here {exp}.",
+  ],
   // --- singing and tapping (graded by @oak/pitch; the text lives here)
-  ["sing.no-voice", E, "I couldn't hear singing (input {db} dB)."],
+  // `more` (from @oak/pitch) says why: too much noise around the voice, or only short blips.
+  ["sing.no-voice", E, "I couldn't hear singing (input {db} dB).{more}"],
+  [
+    "sing.clipped",
+    W,
+    "The mic input is too loud: it hit full scale {n} times, which distorts the pitch. Turn the input down or sing a little further from the mic.",
+  ],
   ["sing.bleed", E, "The mic hears the playback; use wired headphones."],
   ["sing.sharp", W, "Note {i} ({exp}): {cents}¢ {dir}."],
   ["sing.flat", W, "Note {i} ({exp}): {cents}¢ {dir}."],
@@ -212,6 +257,15 @@ const entries: [string, Sev, string][] = [
   ["sing.unstable", I, "Note {i} wobbled ±{cents}¢."],
   ["sing.early", W, "Note {i}: {ms} ms {dir}."],
   ["sing.late", W, "Note {i}: {ms} ms {dir}."],
+  // sung degree patterns (the grader judges the pattern; @oak/pitch judged each note)
+  ["sing.wrong-degree", E, "Note {i}: you sang {got}; the pattern has {exp} here."],
+  ["sing.contour-right", I, "The ups and downs are right; check how far each step goes."],
+  [
+    "sing.octave-folded",
+    I,
+    "Note {i}: right degree ({exp}), but the pattern goes {targetDir} to it and you sang it {gotDir}. Counted as right.",
+  ],
+  ["sing.too-short", E, "You sang {got} of {n} notes; the pattern goes on with {rest}."],
   ["tap.missed", E, "No tap for note {i} of the rhythm."],
   ["tap.extra", W, "Tap {j} was one too many."],
   ["tap.offset", I, "You're consistently {ms} ms {dir}."],
@@ -222,6 +276,16 @@ const entries: [string, Sev, string][] = [
   ["id.partial", W, "Close: {got} is near {exp}."],
   ["id.confusion", I, "You mixed up {a} and {b} {n}×: {tip}"],
   ["id.missing", E, "Answer every slot ({n} left)."],
+  [
+    "id.interval-quality",
+    E,
+    "Right size, a {generic}, but {exp} ({expLong}), not {got}. Count the semitones: {semis}.",
+  ],
+  [
+    "id.interval-number",
+    E,
+    "That was {exp} ({expLong}), not {got}. Count the letter names from the lower note, both ends included.",
+  ],
   ["fill.blank-wrong", E, "Blank {blank} isn't right yet."],
   ["fill.blank-empty", E, "Fill in blank {blank}."],
   ["parsons.swap", E, "Two blocks are in the wrong order: check line {slot}."],
@@ -241,14 +305,17 @@ const entries: [string, Sev, string][] = [
   ["staff.missing-note", E, "Bar {bar}, {beatLabel}: a note is missing."],
   ["staff.extra-note", E, "Bar {bar}, {beatLabel}: one note too many."],
   ["staff.rhythm", E, "Bar {bar}, {beatLabel}: the rhythm differs."],
+  [
+    "staff.octave",
+    E,
+    "{at}: {got} is the right note, an octave too {dir}. {exp} sits seven lines and spaces {dir2}.",
+  ],
+  ["staff.accidental", E, "{at}: {got} should be {exp}: same line or space, different accidental{why}."],
+  ["staff.enharmonic", E, "{at}: {got} sounds right, but in {key} it is written {exp}{why}."],
   ["predict.done", P, "Now listen and compare."],
   // --- form
   ["form.inconsistent-arrange", E, "The tracks disagree about the sections: {detail}."],
-  [
-    "form.section-period",
-    W,
-    "Section {section} is {bars} bars, but its pattern repeats every {period}: the idea is cut off.",
-  ],
+  ["form.section-period", W, "`{name}` repeats every {period} bars, so a {bars}-bar section cuts it off."],
   ["form.wrong", E, "The form is {got}; the brief asks for {expected}."],
   ["form.no-sections", E, "No sections found: write one `arrange()` per labelled track."],
   // --- make, rubric, pass
@@ -261,6 +328,18 @@ const entries: [string, Sev, string][] = [
   ["pass.perfect", P, "Exactly right."],
   ["pass.close", P, "Passed. Small things to polish: {n}."],
 ];
+
+/**
+ * How a toolbox entry reads in a message: its code form from the toolbox (`ToolEntry.code`) when the caller
+ * has the toolbox, in backticks when it is code (`.transpose("3M")`, `,`) and as written when it is a
+ * description ("negative and ≥7 n"); without the toolbox, the last part of the ID in backticks. Never the
+ * raw ID ("tb.mini.stack").
+ */
+export function toolText(id: string, toolCode?: (id: string) => string | null): string {
+  const code = toolCode?.(id)?.trim();
+  if (!code) return `\`${id.split(".").pop() ?? id}\``;
+  return /\s/.test(code) && !/^[.\w$]+\(.*\)$/.test(code) ? code : `\`${code}\``;
+}
 
 /** The registry of feedback codes. Source of truth for which `FeedbackId`s exist. */
 export const FEEDBACK_CATALOG: Readonly<Record<string, FeedbackTemplate>> = Object.freeze(
@@ -313,6 +392,47 @@ export function renderFeedback(d: Diagnostic, overrides?: Partial<Record<Feedbac
     .replace(/ ?\uE000/g, "")
     .replace(/\s{2,}/g, " ")
     .trim();
+}
+
+/**
+ * Slots a template may leave out by design (the text reads whole without them): an optional suffix such as
+ * `{role}` (" (kick)"), `{why}` or `{more}`. Every other slot must be filled by the diagnostic.
+ */
+export const OPTIONAL_SLOTS: Readonly<Record<string, readonly string[]>> = {
+  "rhythm.missing": ["role"],
+  "rhythm.extra": ["role"],
+  "melody.no-line": ["track"],
+  "harmony.no-chords": ["track"],
+  "code.uncatalogued": ["why"],
+  "staff.accidental": ["why"],
+  "staff.enharmonic": ["why"],
+  "sing.no-voice": ["more"],
+};
+
+/**
+ * The template slots a diagnostic leaves empty (neither `params` nor `where` fills them), minus the
+ * entry's optional ones: a non-empty result renders as a sentence with a hole ('"" has no octave').
+ */
+export function unfilledSlots(d: Diagnostic, overrides?: Partial<Record<FeedbackId, Md>>): string[] {
+  const template = overrides?.[d.id] ?? FEEDBACK_CATALOG[d.id]?.template ?? "";
+  const w = d.where ?? {};
+  const have: Record<string, unknown> = {
+    bar: w.bar,
+    beat: w.beat,
+    beatLabel: w.beatLabel,
+    track: w.track,
+    slot: w.slot,
+    rule: w.rule,
+    blank: w.blank,
+    ...d.params,
+  };
+  const optional = new Set(OPTIONAL_SLOTS[d.id] ?? []);
+  const out = new Set<string>();
+  for (const m of template.matchAll(/\{(\w+)\}/g)) {
+    const k = m[1] as string;
+    if (!optional.has(k) && (have[k] === undefined || have[k] === null)) out.add(k);
+  }
+  return [...out];
 }
 
 const SEV_ORDER: Record<Severity, number> = { error: 0, warn: 1, info: 2, praise: 3 };

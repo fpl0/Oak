@@ -8,6 +8,7 @@ import { renderStaff } from "@oak/notation/render";
 import { METERS } from "@oak/theory";
 import { useEffect, useId, useRef, useState } from "react";
 import { callApi } from "../lib/api.ts";
+import { idempotencyKey } from "../lib/idempotency.ts";
 import { Button } from "../ui/kit/Button.tsx";
 import { Card, Kbd } from "../ui/kit/basics.tsx";
 import { ProgressRing } from "../ui/kit/Meters.tsx";
@@ -132,9 +133,12 @@ export function FactSet({
   const record = async (correct: boolean, revealed: boolean) => {
     const rtMs = Math.round(performance.now() - shownAt.current);
     setResults((r) => [...r, { cardId: card.id, correct, revealed, rtMs }]);
+    const key = idempotencyKey();
     try {
       await callApi("srs.review", {
         body: {
+          // One key per answered card: a double submit (two tabs, a retry) counts once (wave3.md §5.2).
+          idempotencyKey: key,
           cardId: card.id,
           drillSessionId: null,
           outcome: {

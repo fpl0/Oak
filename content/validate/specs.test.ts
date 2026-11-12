@@ -11,6 +11,7 @@ import { checkpointMetas } from "../checkpoints.ts";
 import { deckById, familyById } from "../families.ts";
 import { courseGraph, registries } from "../index.ts";
 import { atOrBefore, skillOrderIssues } from "../lib/course.ts";
+import { songById } from "../repertoire/index.ts";
 import { unitSpecs } from "../specs/index.ts";
 import { renderUnit, specBudget } from "../specs/render.ts";
 import { termById } from "../terms.ts";
@@ -115,8 +116,39 @@ for (const u of unitSpecs)
             }
             if (r.deck) {
               const d = deckById.get(r.deck);
-              expect([r.deck, d?.unlock.lesson]).toEqual([r.deck, l.id]);
-              for (const c of r.cards ?? []) expect([c, d?.cards.some((x) => x.id === c)]).toEqual([c, true]);
+              expect([r.deck, !!d && atOrBefore(g, d.unlock.lesson, l.id as SessionId)]).toEqual([
+                r.deck,
+                true,
+              ]);
+              if (r.mode === "seed" && !r.cards) expect([r.deck, d?.unlock.lesson]).toEqual([r.deck, l.id]);
+              for (const c of r.cards ?? []) {
+                const card = d?.cards.find((x) => x.id === c);
+                expect([c, !!card]).toEqual([c, true]);
+                // A seeded card opens here: its own gate, or the deck's lesson when it has none.
+                if (r.mode === "seed") expect([c, card?.gate ?? d?.unlock.lesson]).toEqual([c, l.id]);
+              }
+            }
+            if (r.family && r.level !== undefined) {
+              // The level the lesson plays is open here in every legal order (contracts §7.3 level gates).
+              const f = familyById.get(r.family);
+              expect([r.family, r.level >= 1 && r.level <= (f?.levels.length ?? 0)]).toEqual([
+                r.family,
+                true,
+              ]);
+              const gate = f?.unlock.levelGates?.[r.level];
+              for (const at of gate === undefined ? [] : Array.isArray(gate) ? gate : [gate])
+                if (gate && !Array.isArray(gate))
+                  expect([r.family, r.level, atOrBefore(g, at, l.id as SessionId)]).toEqual([
+                    r.family,
+                    r.level,
+                    true,
+                  ]);
+              if (Array.isArray(gate))
+                expect([r.family, r.level, gate.some((at) => atOrBefore(g, at, l.id as SessionId))]).toEqual([
+                  r.family,
+                  r.level,
+                  true,
+                ]);
             }
           }
           expect(l.srs.flatMap((r) => r.cards ?? []).length).toBeLessThanOrEqual(2);
@@ -154,6 +186,62 @@ for (const u of unitSpecs)
             expect(bandMeter(l.make.band)).toBe(l.meter);
           }
         });
+        test("singing: numbers until U03.L08, syllables from it (contracts §8.3)", () => {
+          const order = registries.syllabus.defaultOrder as readonly string[];
+          const before = order.indexOf(l.id) >= 0 && order.indexOf(l.id) < order.indexOf("U03.L08");
+          const sings = l.steps.some((s) => s.kind === "sing");
+          if (sings && order.indexOf(l.id) >= order.indexOf("U03.L02"))
+            expect([l.id, l.singOn]).toEqual([l.id, before ? "numbers" : "syllables"]);
+          if (l.singOn === "syllables") expect([l.id, before]).toEqual([l.id, false]);
+        });
+        for (const r of l.repertoire ?? [])
+          test(`repertoire ${r.song}: the degrees are the cited tune, no pickup, no dot or tie`, async () => {
+            expect([r.song, !!songById.get(r.song)]).toEqual([r.song, true]);
+            expect([r.song, songById.get(r.song)?.usedIn.includes(l.id)]).toEqual([r.song, true]);
+            const tempo = `setcpm(${l.bpm}/4)\n\n`;
+            const asDegrees = await evaluate(
+              `${tempo}mel: n("${r.degrees}").scale("${r.sourceKey}").s("piano")`,
+              r.bars,
+            );
+            const asLetters = await evaluate(`${tempo}mel: note("${r.letters}").s("piano")`, r.bars);
+            const sig = (x: typeof asDegrees) =>
+              x.events.map((e) => `${e.begin}-${e.end}:${e.midi}`).join(" ");
+            expect(sig(asDegrees)).toBe(sig(asLetters));
+            const taught = await evaluate(
+              `${tempo}mel: n("${r.degrees}").scale("${r.key}").s("piano")`,
+              r.bars,
+            );
+            expect(taught.events.length).toBeGreaterThan(0);
+            const rat = (x: string) => {
+              const [a, b] = String(x).split("/").map(Number);
+              return b ? (a as number) / b : (a as number);
+            };
+            const plain = [1, 1 / 2, 1 / 4, 1 / 8];
+            for (const e of taught.events) {
+              const [b0, b1] = [rat(e.begin), rat(e.end)];
+              // No dotted value, nothing held over a bar line (both would need a dot or a tie before U13.L03).
+              expect([r.song, e.begin, plain.some((p) => Math.abs(b1 - b0 - p) < 1e-9)]).toEqual([
+                r.song,
+                e.begin,
+                true,
+              ]);
+              expect([r.song, e.begin, Math.floor(b0 + 1e-9) === Math.floor(b1 - 1e-9)]).toEqual([
+                r.song,
+                e.begin,
+                true,
+              ]);
+            }
+            // No pickup (contracts §2.8, before U07.L08): the first bar has a note or a rest on beat 1, and the
+            // fragment is written from that bar on.
+            expect([r.song, rat(taught.events[0]?.begin ?? "1") < 1]).toEqual([r.song, true]);
+            const lint1 = lint(`${tempo}mel: n("${r.degrees}").scale("${r.key}").s("piano")`, {
+              session: l.id as SessionId,
+              meter: l.meter,
+              key: l.key,
+              allowPreview: false,
+            }).diagnostics.filter((d) => d.severity === "error");
+            expect(lint1.map((d) => d.message)).toEqual([]);
+          });
         test("the hook evaluates, makes sound, has a tempo line and lints in this lesson", async () => {
           const r = await evaluate(l.hook.code, 2);
           expect([r.ok, r.error ?? ""]).toEqual([true, ""]);

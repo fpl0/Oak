@@ -7,6 +7,7 @@ import * as webaudio from "@strudel/webaudio";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createHarness } from "../src/audibility/harness.ts";
+import { createQualityHarness } from "../src/audibility/quality-harness.ts";
 import {
   createOakStrudel,
   type EditorHandle,
@@ -14,6 +15,7 @@ import {
   editorId,
   type StrudelLog,
 } from "../src/index.ts";
+import { SOUNDS_ROOT } from "./pack-root.ts";
 
 const entry = (id: string, code: string, matches: string[], kind: ToolEntry["kind"] = "tool"): ToolEntry =>
   ({
@@ -66,7 +68,7 @@ const lintCtx: LintContext = {
 };
 
 const oak = createOakStrudel({
-  soundsRoot: "/sounds/v1",
+  soundsRoot: SOUNDS_ROOT,
   toolbox: TOOLBOX,
   lint: fakeLint,
   maxLiveEditors: 6,
@@ -193,6 +195,7 @@ Object.assign(window, {
     rawPlay,
     decodeRecording,
     harness: createHarness({ frameUrl: "/render.html" }),
+    quality: createQualityHarness("/render.html"),
     editorId,
     webaudio,
   },

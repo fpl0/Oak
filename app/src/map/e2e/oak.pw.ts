@@ -58,7 +58,8 @@ test("the panel explains a leaf and points at the right practice", async ({ page
   await expect(panel).toContainText("U01.L01");
   await expect(panel.getByTestId("oak-evidence")).toContainText("Solid days");
   await expect(panel.getByTestId("practise-this")).toHaveAttribute("href", "/practice/fam.rhy.pulse");
-  await expect(panel.getByTestId("revive")).toHaveAttribute("href", "/practice/review");
+  // Revive runs exactly this leaf's planned sets (contracts §7.10).
+  await expect(panel.getByTestId("revive")).toHaveAttribute("href", "/session/revive?skill=R01");
   // Builds-on and leads-to chips move the selection.
   await panel.getByRole("button", { name: /R02 Tempo/ }).click();
   await expect(panel.getByRole("heading", { name: "Tempo / BPM" })).toBeVisible();
@@ -78,8 +79,11 @@ test("keyboard only: arrows between leaves, Enter opens, Esc closes, N goes to w
   page,
 }) => {
   await openTree(page);
-  // Tab from the toolbar reaches the map's single tab stop: the first what's-next leaf.
-  await page.getByRole("button", { name: "Show the whole map" }).focus();
+  // Tab from the toolbar (and the Revive links under it) reaches the map's single tab stop: the first
+  // what's-next leaf.
+  const revive = page.getByTestId("revive-bar").getByRole("link");
+  if ((await revive.count()) > 0) await revive.last().focus();
+  else await page.getByRole("button", { name: "Show the whole map" }).focus();
   await page.keyboard.press("Tab");
   await expect(leaf(page, "R05")).toBeFocused();
   await expect(page.locator('[data-node][tabindex="0"]')).toHaveCount(1);

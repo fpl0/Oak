@@ -181,7 +181,14 @@ export function parseKeys(keys: string, isMac: boolean, macCtrl: boolean): strin
   );
 }
 
-/** Human form for the shortcut sheet and tooltips: `⌘K` on macOS, `Ctrl+K` elsewhere. */
+const ARROWS: Readonly<Record<string, string>> = {
+  arrowup: "↑",
+  arrowdown: "↓",
+  arrowleft: "←",
+  arrowright: "→",
+};
+
+/** Human form for the shortcut sheet and tooltips: `⌘K` on macOS, `Ctrl+K` elsewhere; arrows as ↑ ↓ ← →. */
 export function formatKeys(keys: string, isMac: boolean): string {
   const first = keys.split("|")[0]?.trim() ?? "";
   return first
@@ -197,6 +204,8 @@ export function formatKeys(keys: string, isMac: boolean): string {
           if (l === "ctrl") return isMac ? "⌃" : "Ctrl";
           if (l === "escape") return "Esc";
           if (l === "space") return "Space";
+          const arrow = ARROWS[l];
+          if (arrow) return arrow;
           return p.length === 1 ? p.toUpperCase() : p;
         })
         .join(isMac ? "" : "+"),

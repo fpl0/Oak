@@ -5,7 +5,6 @@
 // tutor, logs step telemetry and reports its blocks to the session.
 import {
   type AttemptResponse,
-  type BandId,
   type Exercise,
   type FlavourId,
   type GradeResult,
@@ -13,6 +12,7 @@ import {
   type LessonDef,
   type LessonProgress,
   OakApiError,
+  type SessionId,
   type StepDef,
   type StepState,
   type TargetMinutes,
@@ -24,7 +24,6 @@ import { Link } from "@tanstack/react-router";
 import { useActorRef, useSelector } from "@xstate/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { ActorRefFrom } from "xstate";
-import { bandById } from "../../../content/bands/index.ts";
 import { courseGraph } from "../../../content/index.ts";
 import { unlockedAt } from "../../../content/lib/course.ts";
 import { callApi } from "../lib/api.ts";
@@ -32,7 +31,7 @@ import { useContent } from "../lib/content.ts";
 import type { ContentBundle } from "../lib/content-model.ts";
 import { applyToEditor } from "../lib/editors.ts";
 import { usePageTitle } from "../lib/nav.ts";
-import { useCourseProgress, useHealth, useProfile, useUnlocks } from "../lib/queries.ts";
+import { useCourseProgress, useHealth, useProfile, useUnlocks, useVoiceState } from "../lib/queries.ts";
 import { ActivityClock, logStep } from "../lib/telemetry.ts";
 import { currentSessionId, reportBlockDone, useSession } from "../session/store.ts";
 import {
@@ -50,10 +49,13 @@ import { EmptyState, Page } from "../ui/kit/basics.tsx";
 import { Callout } from "../ui/kit/Controls.tsx";
 import { ErrorState, LoadingState } from "../ui/kit/QueryState.tsx";
 import { useFocusHeaderContent } from "../ui/shell/focus-header.ts";
+import { useVoiceSync } from "../voice/sync.ts";
 import { ServicesGate } from "../workbench/ServicesGate.tsx";
 import "../workbench/workbench.css";
 import { lessonWidgetFor } from "./answers.tsx";
+import { bandSetupOf } from "./band.ts";
 import { type LoadedLesson, useLessonContent } from "./content.ts";
+import { FeatureMoment, useFeatureSwitch } from "./feature-moment.tsx";
 import { renderer as feedbackRenderer } from "./feedback.ts";
 import { InlineMd, type StepHost, StepHostContext, StepLayout, useStepHost } from "./frame.tsx";
 import {
@@ -64,13 +66,12 @@ import {
   openCategories,
   stimulusTrial,
 } from "./grading.ts";
-import { starterOf } from "./inputs.tsx";
+import { devSingTargets, lessonTakes, starterOf } from "./inputs.tsx";
 import { type LessonDeps, latestCode, lessonMachine, progressOf, snapshotOf } from "./machine.ts";
 import { lessonMdxComponents, MdxStepProvider } from "./mdx.tsx";
 import {
   canContinue,
   continueLabel,
-  keyArg,
   ladderOf,
   partsOf,
   railOf,
@@ -79,8 +80,24 @@ import {
   viewsOf,
   withParams,
 } from "./model.ts";
-import { clearLesson, lessonSubject, publishLesson, setLessonSink } from "./public.ts";
+import {
+  clearLesson,
+  lessonSubject,
+  publishLesson,
+  publishStepAnswer,
+  setLessonSink,
+  stepLabels,
+  tutorAnswerOf,
+  useStepAnswer,
+} from "./public.ts";
 import { MakeRenderer, rendererFor } from "./renderers.tsx";
+import {
+  featureMoment,
+  featuresUnlockedAt,
+  labelsBefore,
+  staffLabelsOf,
+  workbenchStaffLabels,
+} from "./rules.ts";
 import { StepFooter } from "./StepFooter.tsx";
 import { CompleteScreen, QuickSketch, ReportDialog } from "./screens.tsx";
 import { isNotImplemented, previewDeps, serverDeps } from "./server.ts";
@@ -105,6 +122,10 @@ export function LessonPlayer({ lessonId, step, preview }: LessonPlayerProps) {
   const profile = useProfile();
   const unlocks = useUnlocks();
   const health = useHealth();
+  // Quiet mode and singing labels are server state (wave3.md §5.3); until voice.get answers, the profile's flag.
+  const voice = useVoiceState();
+  // Quiet mode switched in another tab reaches this step at once (no Sing, no mic).
+  useVoiceSync();
   const meta = bundle.data?.syllabus?.units.flatMap((u) => u.lessons).find((l) => l.id === lessonId) ?? null;
   const title = loaded.data?.def.title ?? meta?.title ?? lessonId;
   usePageTitle(title);
@@ -176,7 +197,19 @@ export function LessonPlayer({ lessonId, step, preview }: LessonPlayerProps) {
         loaded={loaded.data}
         lp={lp}
         preview={sample || locked}
-        profile={profile.data ? toLearnerProfile(profile.data) : NEUTRAL_PROFILE}
+        profile={
+          // The tolerance the server's ladder holds (wave3.md §5.3) wins over the profile's copy.
+          profile.data
+            ? {
+                ...toLearnerProfile(profile.data),
+                ...(voice.data ? { singTolCents: voice.data.ladder.cents, quiet: voice.data.quiet } : {}),
+              }
+            : NEUTRAL_PROFILE
+        }
+        voice={{
+          quiet: voice.data?.quiet ?? profile.data?.quiet ?? false,
+          labels: voice.data?.labels ?? null,
+        }}
         flavour={profile.data?.flavour ?? "flavour.pop"}
         profileTarget={profile.data?.targetMinutes ?? 20}
         serverUnlocked={(unlocks.data?.items ?? []).map((u) => u.itemId as UnlockableId)}
@@ -220,6 +253,7 @@ function useStepStates(def: LessonDef, enabled: boolean) {
 
 interface CoreProps {
   loaded: LoadedLesson;
+  voice: { quiet: boolean; labels: "numbers" | "syllables" | null };
   lp: LessonProgress | null;
   preview: boolean;
   profile: LearnerProfile;
@@ -265,7 +299,11 @@ function PlayerCore(props: CoreProps) {
 
   const unlocked = new Set<UnlockableId>([
     ...props.serverUnlocked,
-    ...unlockedAt(courseGraph(), bundle?.toolbox ?? [], (loaded.sample ? SAMPLE_CONTEXT : def.id) as never),
+    ...unlockedAt(
+      courseGraph(),
+      bundle?.toolbox ?? [],
+      (loaded.context ?? (loaded.sample ? SAMPLE_CONTEXT : def.id)) as never,
+    ),
   ]);
   const env: GradeEnv = {
     ownerId: def.id,
@@ -281,23 +319,13 @@ function PlayerCore(props: CoreProps) {
   const envRef = useRef(env);
   envRef.current = env;
 
-  const bandOf = (step: StepDef | undefined) => {
-    const b = step?.ui.band;
-    if (!b) return null;
-    const bandDef = bandById.get(b.band);
-    if (!bandDef) return null;
-    const flavour = (bandDef.code[props.flavour] ? props.flavour : "flavour.pop") as FlavourId;
-    const code = (bandDef.code[flavour] ?? "")
-      .replaceAll("{{key}}", keyArg(def.key))
-      .replaceAll("{{bpm}}", String(def.bpm));
-    return {
-      band: b.band as BandId,
-      flavour,
-      code,
-      followsLearnerKey: b.followsLearnerKey === true,
-      tracks: [...(b.tracks ?? bandDef.roles)],
-    };
-  };
+  const bandOf = (step: StepDef | undefined) =>
+    bandSetupOf(step?.ui.band, {
+      flavour: props.flavour,
+      key: def.key,
+      bpm: def.bpm,
+      at: def.id as SessionId,
+    });
 
   const actorRef = useRef<ActorRefFrom<typeof lessonMachine> | null>(null);
   const deps = useRef<LessonDeps>(
@@ -389,11 +417,22 @@ function PlayerCore(props: CoreProps) {
     (s) => snapshotOf(s),
     (a, b) => JSON.stringify(a) === JSON.stringify(b),
   );
+  // The tutor also reads the key, the step's own labels and the last answer that is not code (wave3.md §4.3).
+  const stepAnswer = useStepAnswer();
   useEffect(() => {
     if (!snap) return;
     publishLesson(snap);
-    setSubject(lessonSubject(snap));
-  }, [snap]);
+    const stepDef = def.steps.find((s) => s.id === snap.stepId);
+    const ex = stepDef?.exercise;
+    const exKey = ex && "key" in ex && ex.key ? ex.key : null;
+    setSubject(
+      lessonSubject(snap, {
+        key: exKey ?? def.key,
+        labels: stepDef ? stepLabels(stepDef) : null,
+        answer: stepAnswer.stepId === snap.stepId ? stepAnswer.answer : null,
+      }),
+    );
+  }, [snap, def, stepAnswer]);
   useEffect(
     () => () => {
       clearLesson(def.id);
@@ -448,6 +487,16 @@ function PlayerCore(props: CoreProps) {
   const quickSaving = useSelector(actor, (s) => s.matches({ wrapping: "saving" }));
 
   const step = ctx.steps[ctx.index] ?? null;
+  // A feature tool this lesson unlocks (degree labels at U03.L02 …) switches on in the Workbench at the first
+  // step that shows it, unless the learner already holds it (a replay, a lesson done before).
+  const fresh =
+    lp?.status === "completed" || loaded.sample
+      ? []
+      : featuresUnlockedAt(bundle?.toolbox ?? [], def.id).filter(
+          (id) => !props.serverUnlocked.includes(id as UnlockableId),
+        );
+  const moment = step ? featureMoment(ctx.steps, ctx.index, fresh) : [];
+  const featureSwitch = useFeatureSwitch(step?.id ?? "", moment.length > 0);
   const rail = step ? railOf(ctx.steps, ctx.index, (id) => progressOf(ctx, id)) : null;
   useFocusHeaderContent(
     def.title,
@@ -548,9 +597,11 @@ function PlayerCore(props: CoreProps) {
 
   // Dev and e2e: set the editor, read the drawn trial, or submit a response through the same grading path
   // (tap and sing need real timing and a voice otherwise). Never in a production build.
-  const dev = useRef<{ submit(r: AttemptResponse): Promise<GradeResult | null>; trial(): unknown } | null>(
-    null,
-  );
+  const dev = useRef<{
+    submit(r: AttemptResponse): Promise<GradeResult | null>;
+    trial(): unknown;
+    trials(): unknown;
+  } | null>(null);
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     (globalThis as { __oakLesson?: unknown }).__oakLesson = {
@@ -558,6 +609,8 @@ function PlayerCore(props: CoreProps) {
       snapshot: () => snapshotOf(actor.getSnapshot()),
       submit: (r: AttemptResponse) => dev.current?.submit(r),
       trial: () => dev.current?.trial(),
+      trials: () => dev.current?.trials(),
+      singTargets: () => Object.fromEntries(devSingTargets),
     };
     return () => {
       delete (globalThis as { __oakLesson?: unknown }).__oakLesson;
@@ -604,6 +657,8 @@ function PlayerCore(props: CoreProps) {
     // under it: side by side, the editor cut the lines off, and the highlighted number with them.
     const shown = s.example?.code ?? (ex ? starterOf(ex).code : "");
     const wide = Math.max(0, ...shown.split("\n").map((l) => l.length)) > 56;
+    const rollLabels = s.ui.rollLabels ?? "none";
+    const staffLabels = staffLabelsOf(s, def.id);
     return {
       ...(wide ? { variant: "compact" as const } : {}),
       lessonCtx: {
@@ -616,8 +671,20 @@ function PlayerCore(props: CoreProps) {
       views: viewsOf(s),
       unit: def.id,
       band,
-      roll: { labels: s.ui.rollLabels ?? "none", color: "part" as const },
-      ...(staff ? { staff: { kind: staff === "perc" ? ("percussion" as const) : staff } } : {}),
+      roll: {
+        labels: moment.length > 0 && !featureSwitch.on ? labelsBefore(rollLabels, moment) : rollLabels,
+        color: "part" as const,
+      },
+      ...(staff
+        ? {
+            staff: {
+              kind: staff === "perc" ? ("percussion" as const) : staff,
+              labels: workbenchStaffLabels(
+                moment.length > 0 && !featureSwitch.on ? labelsBefore(staffLabels, moment) : staffLabels,
+              ),
+            },
+          }
+        : {}),
     };
   };
   if (status === "complete")
@@ -685,6 +752,10 @@ function PlayerCore(props: CoreProps) {
     if (!target) return null;
     actor.send({ type: "CHECK" });
     lastResponse.current.set(step.id, response);
+    publishStepAnswer(
+      step.id,
+      tutorAnswerOf(target, response, { key: env.key, tolCents: profile.singTolCents }),
+    );
     try {
       return await gradeStep(browserGrader, env, target, response, {
         params,
@@ -693,6 +764,7 @@ function PlayerCore(props: CoreProps) {
         extraReplays: 0,
         trial,
         trials,
+        takeOf: lessonTakes,
       });
     } catch (e) {
       actor.send({ type: "CHECK_FAILED", message: e instanceof Error ? e.message : String(e) });
@@ -717,6 +789,7 @@ function PlayerCore(props: CoreProps) {
   };
   dev.current = {
     trial: () => trials.find((t) => t !== null)?.expected ?? null,
+    trials: () => trials.map((t) => t?.expected ?? null),
     submit: async (response) => {
       const result = await grade(response);
       if (result && ex)
@@ -769,11 +842,20 @@ function PlayerCore(props: CoreProps) {
   const testOutTarget = ctx.steps.find((s) => s.testOut?.skips.includes(step.id));
   const banner: ReactNode = (
     <>
+      {moment.length > 0 && (
+        <FeatureMoment
+          tools={moment}
+          entries={bundle?.toolbox ?? []}
+          on={featureSwitch.on}
+          onReplay={featureSwitch.replay}
+        />
+      )}
       {preview && ctx.index === ctx.range[0] && (
         <Callout tone="info" title="Preview" className="mt-3">
-          {loadedSample(loaded)
-            ? "The gate sample lesson: every exercise kind in one place. Nothing here is saved to your progress."
-            : "This lesson isn't open in your course yet. Nothing here is saved."}
+          {loaded.note ??
+            (loadedSample(loaded)
+              ? "The gate sample lesson: every exercise kind in one place. Nothing here is saved to your progress."
+              : "This lesson isn't open in your course yet. Nothing here is saved.")}
         </Callout>
       )}
       {splitPart === "B" && ctx.index === ctx.range[0] && (
@@ -829,6 +911,7 @@ function PlayerCore(props: CoreProps) {
     checking,
     review,
     env,
+    voice: props.voice,
     workbench: workbenchBase(step),
     trial,
     trials,

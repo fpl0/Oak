@@ -38,7 +38,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U00.L01",
-  version: 1,
+  version: 2,
   title: "Hello, Loop",
   objective: "I can start, stop and change a loop in code, and hear what each of its lines plays.",
   key: { tonic: "C", mode: "major" },
@@ -207,6 +207,8 @@ export default defineLesson({
         kind: "code-make",
         id: "sketch-001",
         version: 1,
+        // The default title of the saved sketch, as the step heading and the prose promise.
+        title: "Sketch 001",
         role: "practice",
         prompt:
           "Make the loop yours. Change any of the numbers in the `mel` line, run it after each change, and save it when it sounds like yours.",

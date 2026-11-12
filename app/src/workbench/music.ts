@@ -5,7 +5,7 @@ import type { KeySpec } from "@oak/content-kit";
 import {
   type ChordId,
   chordSpelling,
-  degreeOf,
+  labelPitch,
   parseChordSymbol,
   scalePcs,
   spellMidi,
@@ -50,26 +50,50 @@ export function inKey(midi: number, key: KeySpec): boolean {
   return keyPcs(key).has((((Math.round(midi) % 12) + 12) % 12) as number);
 }
 
-export function pitchLabel(midi: number, key: KeySpec | null, chord?: ChordId): PitchLabel {
-  const spelled = spellMidi(midi, chord ? { key, chord } : { key });
-  const out: PitchLabel = {
-    midi,
-    name: spelled.name,
-    display: spelled.name.replace(/#/g, "♯").replace(/(?<=[A-G])b/g, "♭"),
-  };
-  if (key) {
-    const d = degreeOf(midi, key);
-    out.degree = {
-      raw: d.degree,
-      label: prettyDegree(d.degree),
-      num: d.num,
-      alt: d.alt,
-      syllable: d.syllable,
-      inKey: inKey(midi, key),
-      tonic: d.semitones === 0,
-    };
+/**
+ * A pitch's labels in a key (Wave 3: theory `labelPitch`, the same reading as the staff annotations and the
+ * drills). A chromatic note is spelled by its melodic `direction` when one is given (A♯ rising = ♯6, B♭
+ * falling = ♭7); diatonic notes always take the key's spelling. `written` is the code's own spelling (`note("f5")`):
+ * the staff draws it, so the name is it and the degree is the reading that spells it (F♮ in G major is ♭7, not
+ * ♯6). Over a chord symbol the name follows the chord.
+ */
+export function pitchLabel(
+  midi: number,
+  key: KeySpec | null,
+  chord?: ChordId,
+  direction?: 1 | -1,
+  written?: string,
+): PitchLabel {
+  if (!key) {
+    const spelled = written && !chord ? { name: written } : spellMidi(midi, chord ? { key, chord } : { key });
+    return { midi, name: spelled.name, display: glyphs(spelled.name) };
   }
-  return out;
+  const plain = labelPitch(midi, key);
+  let l = plain.chromatic && direction ? labelPitch(midi, key, { direction }) : plain;
+  if (written && l.name !== written)
+    for (const d of [1, -1] as const) {
+      const alt = labelPitch(midi, key, { direction: d });
+      if (alt.name === written) l = alt;
+    }
+  const name = chord ? spellMidi(midi, { key, chord }).name : (written ?? l.name);
+  return {
+    midi,
+    name,
+    display: glyphs(name),
+    degree: {
+      raw: l.degree,
+      label: prettyDegree(l.degree),
+      num: l.num,
+      alt: l.alt,
+      syllable: l.syllable,
+      inKey: !l.chromatic,
+      tonic: l.degree === "1",
+    },
+  };
+}
+
+function glyphs(name: string): string {
+  return name.replace(/#/g, "♯").replace(/(?<=[A-G])b/g, "♭");
 }
 
 /** Row label for the roll gutter by the label mode of ux §3.4. */
@@ -203,18 +227,27 @@ export interface TooltipInput {
   track: string;
   bar: number;
   beatLabel: string;
+  /** The event's own label (read in its track's key at its bar); computed from `key` when absent. */
+  label?: PitchLabel | null;
 }
 
-/** "F♯4 · degree 3 · mi · bar 2, beat 1&" (ux §3.4: note names appear on hover). */
-export function tooltipText(e: TooltipInput, key: KeySpec | null): string {
+/**
+ * "F♯4 · degree 3 · mi · bar 2, beat 1&" (ux §3.4: note names appear on hover). `show` gates the degree and the
+ * syllable by their unlocks (Wave 3: no degree before U03.L02, no syllable before U03.L08).
+ */
+export function tooltipText(
+  e: TooltipInput,
+  key: KeySpec | null,
+  show: { degree: boolean; solfege: boolean } = { degree: true, solfege: true },
+): string {
   const parts: string[] = [];
   if (e.midi !== null) {
     const chord = e.chordSymbol ? (parseChordSymbol(e.chordSymbol) ?? undefined) : undefined;
-    const p = pitchLabel(e.midi, key, chord);
+    const p = e.label ?? pitchLabel(e.midi, key, chord);
     parts.push(p.display);
     if (p.degree) {
-      parts.push(`degree ${p.degree.label}`);
-      parts.push(p.degree.syllable);
+      if (show.degree) parts.push(`degree ${p.degree.label}`);
+      if (show.solfege) parts.push(p.degree.syllable);
     }
     if (e.chordSymbol) {
       const role = chordRoleOf(e.midi, e.chordSymbol);

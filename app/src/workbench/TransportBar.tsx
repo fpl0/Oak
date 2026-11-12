@@ -19,6 +19,24 @@ export interface TransportLoop {
   can: Record<RegionStep, boolean>;
 }
 
+/** One switch of the lens bar: a note-label lens (`D`, `S`, `Shift+N`) or a panel (`Shift+K`, `Shift+C`). */
+export interface TransportSwitch {
+  id: string;
+  label: string;
+  on: boolean;
+  /** The shortcut, in the keymap's syntax ("D", "Shift+N"). */
+  keys: string;
+  /** What the switch does, for its tooltip. */
+  title: string;
+}
+
+/** The lens bar (Wave 3): label lenses and the key panels, each only once unlocked. */
+export interface TransportLenses {
+  labels: TransportSwitch[];
+  panels: TransportSwitch[];
+  onToggle(id: string): void;
+}
+
 /** The metronome control (`M`) and its visual twin (a beat dot per tempo unit). */
 export interface TransportMetronome {
   on: boolean;
@@ -48,6 +66,41 @@ export interface TransportBarProps {
   loop?: TransportLoop;
   /** Metronome (absent: no metronome control). */
   metronome?: TransportMetronome;
+  /** Lens switches and panel toggles (absent: none, e.g. inside a lesson step or before U03.L02). */
+  lenses?: TransportLenses;
+}
+
+function SwitchGroup({
+  label,
+  items,
+  onToggle,
+  testId,
+}: {
+  label: string;
+  items: TransportSwitch[];
+  onToggle(id: string): void;
+  testId: string;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <fieldset className="oak-lens-switch" data-testid={testId}>
+      <legend className="oak-lens-switch-label">{label}</legend>
+      {items.map((it) => (
+        <button
+          key={it.id}
+          type="button"
+          className="oak-toggle oak-toggle--small"
+          aria-pressed={it.on}
+          aria-keyshortcuts={it.keys}
+          onClick={() => onToggle(it.id)}
+          title={`${it.title} (${it.keys})`}
+          data-testid={`lens-${it.id}`}
+        >
+          {it.label}
+        </button>
+      ))}
+    </fieldset>
+  );
 }
 
 function keyText(k: KeySpec | null): string | null {
@@ -96,8 +149,11 @@ export function TransportBar(p: TransportBarProps) {
       <button
         type="button"
         className="oak-play"
-        onClick={p.onToggle}
-        disabled={p.busy}
+        // aria-disabled, not disabled: Chromium moves the focus of a disabled button to <body>, so a keyboard
+        // learner pressing Enter on Play would lose their place while the audio starts.
+        onClick={p.busy ? undefined : p.onToggle}
+        aria-disabled={p.busy || undefined}
+        aria-busy={p.busy || undefined}
         aria-pressed={p.playing}
         data-testid="play-toggle"
         aria-label={p.playing ? "Stop" : "Play"}
@@ -118,7 +174,11 @@ export function TransportBar(p: TransportBarProps) {
           </span>
         ) : null}
       </span>
-      {keyText(p.keySpec) ? <span className="oak-key-name">{keyText(p.keySpec)}</span> : null}
+      {keyText(p.keySpec) ? (
+        <span className="oak-key-name" data-testid="transport-key">
+          {keyText(p.keySpec)}
+        </span>
+      ) : null}
       <button
         type="button"
         className="oak-link-button"
@@ -195,6 +255,22 @@ export function TransportBar(p: TransportBarProps) {
             </span>
           ) : null}
         </button>
+      ) : null}
+      {p.lenses ? (
+        <>
+          <SwitchGroup
+            label="Labels"
+            items={p.lenses.labels}
+            onToggle={p.lenses.onToggle}
+            testId="lens-switch"
+          />
+          <SwitchGroup
+            label="Panels"
+            items={p.lenses.panels}
+            onToggle={p.lenses.onToggle}
+            testId="panel-switch"
+          />
+        </>
       ) : null}
       <span className="oak-chips">
         {p.tracks.map((t) => {

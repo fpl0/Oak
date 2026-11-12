@@ -14,13 +14,15 @@ import { usePageTitle } from "../../lib/nav.ts";
 import {
   apiQuery,
   useBootstrap,
+  useCanDo,
   useCourseProgress,
+  useProgressReport,
+  useSessionDay,
+  useSessionSummary,
   useSkillMap,
   useTodayPlan,
   useUnlocks,
 } from "../../lib/queries.ts";
-import { toolLabel } from "../../lib/tool-label.ts";
-import { UnlockMoment } from "../../toolbox/index.ts";
 import { askListeningNote, useTutorContext } from "../../tutor/context.ts";
 import { useHotkeys } from "../../ui/keys/KeymapProvider.tsx";
 import { Button, buttonClass } from "../../ui/kit/Button.tsx";
@@ -42,15 +44,20 @@ import {
 import { useLastEnded, useRunnerNavigator, useRunnerView } from "../hooks.ts";
 import { sessionRunner } from "../live.ts";
 import type { EndedRecord } from "../persist.ts";
+import { milestonesReached, statusesBefore } from "../progress-model.ts";
 import { useSession } from "../store.ts";
 import { goalLine, streakLine } from "../streak-model.ts";
 import { useNextUnlockList } from "../today/Glance.tsx";
 import { WeeklyRhythm } from "../today/WeeklyRhythm.tsx";
+import { toolName as toolLabel } from "../tool-name.ts";
+import { CodaUnlock } from "./CodaUnlock.tsx";
 
 /** Server reads that a finished session changes. */
 const SESSION_ENDED_KEYS = [
   "bootstrap",
   "session.today",
+  "session.day",
+  "voice.get",
   "skills.map",
   "streak.get",
   "lessons.progress",
@@ -144,17 +151,26 @@ function CodaBody({ summary, ended }: { summary: SessionSummary; ended: EndedRec
   const next = useNextUnlockList();
   const titles = lessonTitles(content.data?.syllabus ?? null);
   const name = (id: string) => content.data?.skills.nodes.find((n) => n.id === id)?.name ?? id;
-  const baseline = ended?.baseline ?? { levels: [], canDo: [] };
-  const reports = ended?.reports ?? [];
+  // This browser's record of the session (its baseline and block reports) belongs to it only when the ids
+  // agree; a Coda opened elsewhere (another browser, after "Done for today") reads the server alone: the can-do
+  // statuses before the session come from the ledger's history, and the skill moves (no history) are left out.
+  const own = ended && ended.sessionId === summary.session.id ? ended : null;
+  const ledger = useCanDo();
+  const reports = own?.reports ?? [];
   const lines = todayLines(reports, (id) => titleOf(id, titles), summary.sketchesSaved.length);
-  const cando = canDoChanges(summary.canDo, new Map(baseline.canDo), content.data?.candos ?? []);
+  const before = own
+    ? new Map(own.baseline.canDo)
+    : statusesBefore(ledger.data?.items ?? [], summary.session.startedAt);
+  const cando = canDoChanges(summary.canDo, before, content.data?.candos ?? []);
   const tools = toolCards(summary.unlocks, content.data?.toolbox ?? []);
-  const moves = map.data ? skillMoves(new Map(baseline.levels), map.data.nodes, name) : [];
+  const moves = map.data && own ? skillMoves(new Map(own.baseline.levels), map.data.nodes, name) : [];
+  const report = useProgressReport();
+  const reached = report.data ? milestonesReached(report.data.milestones, summary.session.startedAt) : [];
   const nextId = course.data?.next ?? null;
   const tomorrow = tomorrowLine(summary, nextId ? { id: nextId, title: titleOf(nextId, titles) } : null);
   const gradient = next.items?.[0];
   const gradientTool = gradient ? content.data?.toolbox.find((t) => t.id === gradient.itemId) : undefined;
-  const wrapped = ended?.wrappedEarly === true || reports.some((r) => r.block === "new" && !r.completed);
+  const wrapped = own?.wrappedEarly === true || reports.some((r) => r.block === "new" && !r.completed);
 
   // The unlock ceremony (ux §5.1) plays here once for the tools not seen yet, judged by the live unlock list so a
   // reload does not replay it; the moment marks them seen (they stay replayable from the Toolbox).
@@ -210,17 +226,40 @@ function CodaBody({ summary, ended }: { summary: SessionSummary; ended: EndedRec
         </Section>
       )}
 
-      {ceremony && (
-        <section aria-label="New in your toolbox" data-testid="coda-unlock-moment">
-          <UnlockMoment toolIds={moment} onDone={() => setMoment([])} continueLabel="See the rest of today" />
+      {reached.map((m) => (
+        <section
+          key={m.id}
+          aria-label="Milestone"
+          className="rounded-card border border-accent/50 bg-lane-in px-5 py-4 animate-fade-in"
+          data-testid="coda-milestone"
+        >
+          <p className="text-sm text-text-2">Milestone</p>
+          <p className="font-display text-h2">{m.title}</p>
+          <p className="mt-1 text-text-2">{m.description}</p>
+          <Link
+            to="/progress"
+            className="mt-2 inline-block text-sm text-link underline-offset-2 hover:underline"
+          >
+            See it on your progress
+          </Link>
         </section>
+      ))}
+
+      {ceremony && (
+        <CodaUnlock
+          toolIds={moment}
+          onDone={() => {
+            setMoment([]);
+            // The moment is over: the next action is the Coda's own.
+            requestAnimationFrame(() =>
+              document.querySelector<HTMLButtonElement>('[data-testid="done-for-today"]')?.focus(),
+            );
+          }}
+        />
       )}
 
       {tools.length > 0 && !ceremony && (
-        <Section
-          title={tools.length === 1 ? "New in your toolbox" : "New in your toolbox"}
-          testId="coda-tools"
-        >
+        <Section title="New in your toolbox" testId="coda-tools">
           <ul className="flex flex-col gap-3">
             {tools.map((t) => (
               <li key={t.id} className="flex flex-wrap items-center justify-between gap-3">
@@ -234,7 +273,7 @@ function CodaBody({ summary, ended }: { summary: SessionSummary; ended: EndedRec
                 </div>
                 <span className="flex shrink-0 items-center gap-2">
                   <Link to="/studio" search={{ try: t.id }} className={buttonClass("secondary", "sm")}>
-                    Try it in Studio
+                    Try it
                   </Link>
                   <Link
                     to="/toolbox/$toolId"
@@ -292,13 +331,24 @@ function CodaBody({ summary, ended }: { summary: SessionSummary; ended: EndedRec
           {gradient && (
             <p className="text-sm text-text-2">
               {goalGradient(gradient, "")}
-              <code className="font-mono">{gradientTool?.code ?? gradient.itemId}</code>
+              {gradientTool && !toolLabel(gradientTool).mono ? (
+                <span className="font-medium text-text">{toolLabel(gradientTool).text}</span>
+              ) : (
+                <code className="font-mono">
+                  {gradientTool ? toolLabel(gradientTool).text : gradient.itemId}
+                </code>
+              )}
             </p>
           )}
         </Section>
       )}
     </div>
   );
+}
+
+/** A record from an earlier day is not today's Coda. */
+function endedToday(e: EndedRecord, today: string): boolean {
+  return e.day === today || (e.summary?.session.day ?? e.day) === today;
 }
 
 export function CodaPage() {
@@ -313,16 +363,29 @@ export function CodaPage() {
   const endError = useRunnerView((v) => v.endError);
   const ended = useLastEnded();
   const inSession = useSession((s) => s.session !== null);
-  const summary = liveSummary ?? ended?.summary ?? null;
+  // Another browser, or this one after its record was cleared: the server's last planned session today.
+  const day = useSessionDay();
+  // This browser's record is today's Coda when it ended today — or when the server says that session is
+  // today's last (one begun before the 04:00 rollover and ended after it belongs to the new day).
+  const localSummary =
+    ended?.summary &&
+    (!boot.data || endedToday(ended, boot.data.day) || day.data?.summarySessionId === ended.sessionId)
+      ? ended.summary
+      : null;
+  const serverId = !liveSummary && !localSummary && !inSession ? (day.data?.summarySessionId ?? null) : null;
+  const fromServer = useSessionSummary(serverId);
+  const summary = liveSummary ?? localSummary ?? fromServer.data ?? null;
   const doneRef = useRef<HTMLButtonElement>(null);
 
   // A reload with nothing saved here: resume the open session (it reaches the Coda again), or go home.
+  const waitingForServer = day.isPending || (serverId !== null && fromServer.isPending);
   useEffect(() => {
     if (summary || inSession || sessionRunner.active() || !boot.data || !today.data) return;
-    const open = boot.data.openSession;
+    if (waitingForServer && !day.isError) return;
+    const open = day.data?.open ?? boot.data.openSession;
     if (open && open.day === boot.data.day) void sessionRunner.resume(open, today.data).catch(() => {});
     else void navigate({ to: "/", replace: true });
-  }, [summary, inSession, boot.data, today.data, navigate]);
+  }, [summary, inSession, boot.data, today.data, navigate, waitingForServer, day.data, day.isError]);
 
   // The session is over on the server: what Today, the map and Progress show has changed.
   const queryClient = useQueryClient();

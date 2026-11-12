@@ -1,12 +1,28 @@
 // The workbench keys that arrived in Wave 2 (ux §7.10: `L` loop, `[`/`]` shrink/extend, `Shift+[`/`Shift+]`
-// move, `M` metronome). The workbench handles them itself (its own keydown, focus on the workbench, not in the
+// move, `M` metronome) and Wave 3 (the lens bar: `D` degrees, `S` solfège, `Shift+N` note names, `Shift+K` the
+// key-signature panel, `Shift+C` the circle of fifths). The workbench handles them itself (its own keydown, focus on the workbench, not in the
 // editor); the shortcut sheet lists them in its static Workbench section (app/src/ui/shell/GlobalKeys.tsx).
 // `shortcutRows()` gives them as display-only keymap rows (`when` is false) for a host that wants them there.
 import type { Binding } from "../ui/keys/keymap.ts";
 
-export const WORKBENCH_SHORTCUT_GROUP = "Workbench: loop and metronome";
+export const WORKBENCH_SHORTCUT_GROUP = "Workbench: loop, metronome, labels and panels";
 
-/** [keys, description] in the keymap's key syntax. */
+/**
+ * Wave 3: the lens bar (labels and key panels, each once unlocked; not inside a lesson step, where the step
+ * decides the labels).
+ */
+export const WORKBENCH_LENS_SHORTCUTS: readonly (readonly [string, string])[] = [
+  ["D", "Degree labels on / off"],
+  ["S", "Solfège labels on / off"],
+  ["Shift+N", "Note-name labels on / off"],
+  ["Shift+K", "Key-signature panel"],
+  ["Shift+C", "Circle of fifths"],
+];
+
+/**
+ * [keys, description] in the keymap's key syntax: the loop and metronome keys (Wave 2), then the lens bar's
+ * (Wave 3). The shortcut sheet's static Workbench section lists every row.
+ */
 export const WORKBENCH_LOOP_SHORTCUTS: readonly (readonly [string, string])[] = [
   ["L", "Loop a region on / off"],
   ["[", "Loop one bar shorter"],
@@ -14,6 +30,7 @@ export const WORKBENCH_LOOP_SHORTCUTS: readonly (readonly [string, string])[] = 
   ["Shift+[", "Move the loop one bar earlier"],
   ["Shift+]", "Move the loop one bar later"],
   ["M", "Metronome on / off"],
+  ...WORKBENCH_LENS_SHORTCUTS,
 ];
 
 export function shortcutRows(): Binding[] {

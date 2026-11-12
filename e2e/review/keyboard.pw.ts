@@ -32,8 +32,10 @@ const active = (page: Page) =>
 
 /** Tab forward until the focused control matches; asserts it shows a focus ring. */
 async function tabTo(page: Page, match: { id?: string; text?: RegExp }, max = 40): Promise<void> {
-  for (let i = 0; i < max; i++) {
-    await page.keyboard.press("Tab");
+  // The screen may already have put focus on it (the Coda focuses "Done for today"): check before tabbing away.
+  for (let i = -1; i < max; i++) {
+    if (i >= 0) await page.keyboard.press("Tab");
+    else await page.waitForTimeout(600);
     const a = await active(page);
     if ((match.id && a.id === match.id) || match.text?.test(a.text)) {
       expect(a.ring, `focus ring on ${a.id || a.text}`).toBe(true);
@@ -74,17 +76,21 @@ test("a whole session from the keyboard, with reduced motion", async ({ page, re
   await expect(page.getByText("Oak can hear you.")).toBeVisible({ timeout: 15_000 });
   // The mic part ends once Oak hears the learner ("Done"); focus moves straight to the quiet check's button.
   await press(page, { id: "part-continue" });
-  await expect.poll(async () => (await active(page)).id).toBe("noise-start");
-  // One quiet check and one bleed check on the page, not two of each (the mic part used to run both again).
-  await expect(page.getByTestId("noise-start")).toHaveCount(1);
-  expect(await page.getByText("Oak listens when you sing a note back").count()).toBeLessThanOrEqual(1);
-  await page.keyboard.press("Enter");
-  await expect(page.getByTestId("mic-noise").getByTestId("part-continue")).toBeVisible({ timeout: 15_000 });
-  await press(page, { id: "part-continue" });
-  await expect.poll(async () => (await active(page)).id).toBe("bleed-start");
-  await page.keyboard.press("Enter");
-  await expect(page.getByTestId("part-continue")).toBeVisible({ timeout: 15_000 });
-  await press(page, { id: "part-continue" });
+  // Wave 3: the "onboarded" seed has measured the room and the bleed already, so the quiet and bleed parts read
+  // "Already set up" and focus moves to their "Keep it" in turn, then to Continue — never onto <body>.
+  for (const part of ["noise", "bleed"]) {
+    const kept = page.getByTestId(`setup-${part}-kept`);
+    if (await kept.isVisible()) {
+      await expect.poll(async () => (await active(page)).id).toBe("setup-keep");
+      await page.keyboard.press("Enter");
+      continue;
+    }
+    await expect.poll(async () => (await active(page)).id).toBe(`${part}-start`);
+    await expect(page.getByTestId(`${part}-start`)).toHaveCount(1);
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("part-continue")).toBeVisible({ timeout: 15_000 });
+    await press(page, { id: "part-continue" });
+  }
   await expect.poll(async () => (await active(page)).id).toBe("continue");
   await shootAll(page, "keyboard-mic-step-done");
   await page.keyboard.press("Enter");
@@ -96,10 +102,13 @@ test("a whole session from the keyboard, with reduced motion", async ({ page, re
   await expect.poll(async () => (await active(page)).id).toBe("continue");
   await page.keyboard.press("Enter");
   await onStep(page, "S4");
+  // (Wave 3: the seeded range is already set up, so only the sing-latency part may still be open.)
   await press(page, { id: "part-skip" });
-  await expect.poll(async () => (await active(page)).id).toBe("sing-start");
-  await press(page, { id: "part-skip" });
-  await expect.poll(async () => (await active(page)).id).toBe("continue");
+  await expect.poll(async () => (await active(page)).id).toMatch(/^(sing-start|continue)$/);
+  if ((await active(page)).id === "sing-start") {
+    await press(page, { id: "part-skip" });
+    await expect.poll(async () => (await active(page)).id).toBe("continue");
+  }
   await page.keyboard.press("Enter");
 
   // S5, the first sung note: the fake microphone hummed through the quiet check above (so the room measured

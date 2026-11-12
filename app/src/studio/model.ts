@@ -14,6 +14,7 @@ import type {
   ToolEntry,
 } from "@oak/content-kit";
 import type { BandSetup, MuteMap } from "@oak/strudel";
+import { bandCodeAt } from "../../../content/bands/index.ts";
 
 // --- starters -------------------------------------------------------------------------------------
 
@@ -63,15 +64,33 @@ export function bandKeyArg(key: KeySpec | null): string {
   return `${k.tonic}4:${k.mode.trim().replace(/\s+/g, ":")}`;
 }
 
+/**
+ * Whether the learner has reached a lesson, for the Band's stages (contracts §5.10: jazz-soul plays four-note
+ * chords and swings once U03 has begun, funk adds four-note chords from U06). A lesson counts once it is
+ * started or done; until the course progress loads nothing is reached, so the first stage plays.
+ */
+export function bandReached(
+  progress: { lessons: readonly { lessonId: string; status: string }[] } | null | undefined,
+): (from: string) => boolean {
+  const reached = new Set(
+    (progress?.lessons ?? [])
+      .filter((l) => l.status === "in_progress" || l.status === "completed")
+      .map((l) => l.lessonId),
+  );
+  return (from) => reached.has(from);
+}
+
 /** The adapter's BandSetup for a sketch's Band: code for the flavour in the sketch's key; the tempo is the sketch's. */
 export function bandSetupFor(
   band: SketchBand | null,
   bands: readonly BandDef[],
   key: KeySpec | null,
+  /** Whether the learner has reached a lesson (contracts §5.10 Band stages); absent: the first stage. */
+  reached: (from: string) => boolean = () => false,
 ): BandSetup | null {
   if (!band) return null;
   const def = bands.find((b) => b.id === band.bandId);
-  const code = def?.code[band.flavour] ?? def?.code[DEFAULT_FLAVOUR];
+  const code = def ? bandCodeAt(def, band.flavour, reached) || undefined : undefined;
   if (!def || !code) return null;
   return {
     band: def.id,

@@ -27,8 +27,11 @@ describe("barPosition and beat labels (contracts §6.9)", () => {
       "2a",
     ]);
     expect(label(15, 16, "4/4")).toBe("4a");
-    expect(label(1, 12, "4/4")).toBe("1t");
-    expect(label(2, 12, "4/4")).toBe("1l");
+    expect(label(1, 12, "4/4")).toBe("1-trip");
+    expect(label(2, 12, "4/4")).toBe("1-let");
+    // Off the counting grid: words, never a fraction such as "1+4/7".
+    expect(label(4, 28, "4/4")).toBe("between 1 and 2");
+    expect(label(27, 28, "4/4")).toBe("after 4, before the bar line");
     expect(barPosition(rat(9, 4), "4/4")).toEqual({
       bar: 3,
       beat: 2,

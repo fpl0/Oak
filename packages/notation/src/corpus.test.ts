@@ -1,11 +1,13 @@
 // Golden corpus: Strudel patterns → headless Strudel 1.2.6 → NEvents → Score → ABC → abcjs.parseOnly.
 // Each entry states the notation a musician expects (corpus/corpus.ts); on top of that every entry must
 // parse in abcjs with no warning, fill every bar exactly, keep every class, and engrave the same pitches
-// and times Strudel produced.
+// and times Strudel produced. The snapshot is never the only check: the ABC is read back independently
+// (`readBack`: key signature, bar-scoped accidentals, ties, tuplets) and its pitches and durations must
+// equal the input events (the Score's own events where the engraving is approximate, swung or a lead sheet).
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { R } from "@oak/content-kit";
 import { CORPUS } from "../corpus/corpus.ts";
-import { runEntry } from "../corpus/harness.ts";
+import { readBack, runEntry } from "../corpus/harness.ts";
 import { parseNoteList, scoreToEvents, toNoteList } from "./index.ts";
 
 setDefaultTimeout(30_000);
@@ -17,9 +19,35 @@ const key3 = (e: {
   s?: string;
 }) => `${R.str(e.onset)}+${R.str(e.dur)}:${e.midi ?? e.s}`;
 
+describe("the independent read-back", () => {
+  const back = (body: string, k = "C") =>
+    readBack(`X:1\nM:4/4\nL:1/16\nK:${k}\n${body}`).staves[0]?.voices[0]?.map(
+      (n) => `${n.onset}+${n.dur}:${n.midis.join(",")}`,
+    );
+  test("key signature in every octave, accidentals for the bar in their octave, naturals", () => {
+    expect(back("F4 =F4 F4 f4 | F16 |]", "D")).toEqual([
+      "0+0.25:66",
+      "0.25+0.25:65",
+      "0.5+0.25:65",
+      "0.75+0.25:78",
+      "1+1:66",
+    ]);
+    expect(back("^c4 c4 C4 =c4 |]")).toEqual(["0+0.25:73", "0.25+0.25:73", "0.5+0.25:60", "0.75+0.25:72"]);
+    expect(back("^^F4 __B4 z8 |]")).toEqual(["0+0.25:67", "0.25+0.25:69"]);
+  });
+  test("ties continue their pitch over the bar line and merge; tuplets scale", () => {
+    expect(back("z8 ^F8- | F4 F4 [CE]8 |]")).toEqual(["0.5+0.75:66", "1.25+0.25:65", "1.5+0.5:60,64"]);
+    expect(back("(3:2:3C4 D4 E4 z8 |]")).toEqual([
+      "0+0.16666666666666666:60",
+      "0.16666666666666666+0.16666666666666666:62",
+      "0.3333333333333333+0.16666666666666666:64",
+    ]);
+  });
+});
+
 describe("golden corpus", () => {
-  test("has at least 40 patterns", () => {
-    expect(CORPUS.length).toBeGreaterThanOrEqual(40);
+  test("has at least 100 patterns", () => {
+    expect(CORPUS.length).toBeGreaterThanOrEqual(100);
     expect(new Set(CORPUS.map((e) => e.name)).size).toBe(CORPUS.length);
   });
 
@@ -76,6 +104,59 @@ describe("golden corpus", () => {
         expect(e.n).toBe(n);
         for (const id of e.eventIds) expect(abc.byEvent.get(id)).toBe(n);
       });
+
+      // Independent read-back: the ABC's own pitches and durations are the input's.
+      const rb = readBack(abc.abc);
+      const firstItem = score.staves[0]?.voices[0]?.bars[0]?.items[0];
+      const t0 = firstItem ? R.toNum(firstItem.onset) : score.startBar;
+      const num = (x: number) => (Math.round(x * 1e6) / 1e6).toString();
+      const fromAbc = (on: number, dur: number, what: string | number) =>
+        `${num(t0 + on / W)}+${num(dur / W)}:${what}`;
+      const pitchedBack = rb.staves
+        .filter((s) => !s.perc)
+        .flatMap((s) => s.voices.flat().flatMap((n) => n.midis.map((m) => fromAbc(n.onset, n.dur, m))))
+        .sort();
+      const asNum = (e: {
+        onset: readonly [number, number];
+        dur: readonly [number, number];
+        midi: number | null;
+      }) =>
+        `${num(R.toNum(e.onset as [number, number]))}+${num(R.toNum(e.dur as [number, number]))}:${e.midi}`;
+      const engraved = scoreToEvents(score).filter((e) => e.midi !== null);
+      const truth =
+        !score.approximate &&
+        !entry.swing &&
+        (entry.staff ?? "auto") !== "lead" &&
+        (entry.staff ?? "auto") !== "rhythm"
+          ? events.filter((e) => e.midi !== null)
+          : engraved;
+      expect(pitchedBack).toEqual(truth.map(asNum).sort());
+      // Percussion: every stroke at its time with its heads.
+      const percBack = rb.staves
+        .filter((s) => s.perc)
+        .flatMap((s) => s.voices.flat().map((n) => fromAbc(n.onset, n.dur, n.heads)))
+        .sort();
+      const percWant: string[] = [];
+      for (const s of score.staves) {
+        if (s.clef !== "perc") continue;
+        for (const v of s.voices) {
+          const chains = new Map<number, { onset: number; dur: number; heads: number }>();
+          for (const b of v.bars)
+            for (const it of b.items) {
+              if (it.n === null) continue;
+              const c = chains.get(it.n);
+              if (c) c.dur += R.toNum(it.dur);
+              else
+                chains.set(it.n, {
+                  onset: R.toNum(it.onset),
+                  dur: R.toNum(it.dur),
+                  heads: it.pitches.length,
+                });
+            }
+          for (const c of chains.values()) percWant.push(`${num(c.onset)}+${num(c.dur)}:${c.heads}`);
+        }
+      }
+      expect(percBack).toEqual(percWant.sort());
 
       // Exact single-staff entries: the engraving gives back Strudel's events (ties merged).
       const exact =

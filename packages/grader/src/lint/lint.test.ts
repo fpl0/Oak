@@ -60,7 +60,7 @@ describe("STYLE §12: forbidden constructs, authored vs graded", () => {
     [`${T}drums: s("bd")\nnote("c4")`, "code.unlabelled-line", "error", "warn"],
     [`${T}mel: note('c4 e4')`, "code.single-quoted-pattern", "error", "error"],
     [`${T}mel: note("c e g")`, "code.octave-default", "error", "info"],
-    [`${T}mel: note("cs4 ef4")`, "code.octave-default", "error", "info"],
+    [`${T}mel: note("cs4 ef4")`, "code.letter-accidental", "error", "info"],
     [`${T}mel: n("0 2 4").scale("C:major")`, "code.scale-no-octave", "error", "warn"],
     [`${T}mel: n("0 2 4").scale("C4 major")`, "code.scale-spaces", "error", "error"],
     [`${T}mel: n("0 2 4").s("piano")`, "code.n-without-scale", "error", "error"],

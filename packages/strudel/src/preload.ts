@@ -10,8 +10,23 @@ import type { PreloadReport, PreloadSpec } from "./types.ts";
 export type WarmResult = "warmed" | "synth" | "missing";
 
 const REST = new Set(["-", "~", "_"]);
-/** Pitches a soundfont is warmed at when the spec names none: C2 to C6 by octave. */
-const DEFAULT_FONT_NOTES = [36, 48, 60, 72, 84];
+/** The range a soundfont is warmed over when the spec names no pitch and the sound declares none: C2–C6. */
+export const DEFAULT_FONT_RANGE: readonly [number, number] = [36, 84];
+/** Semitones between warmed pitches: a font's zones span a few semitones, so every zone in range is loaded. */
+export const FONT_WARM_STEP = 3;
+
+/**
+ * The pitches a by-name preload warms for a soundfont: every `FONT_WARM_STEP` semitones across its range, ends
+ * included. The font file is fetched once; each pitch decodes the zone it falls in (the soundfont loader caches
+ * per pitch), so the first notes of a melody in any key find their zone decoded.
+ */
+export function fontWarmNotes(range: readonly [number, number] = DEFAULT_FONT_RANGE): number[] {
+  const [lo, hi] = range[0] <= range[1] ? range : [range[1], range[0]];
+  const out: number[] = [];
+  for (let m = Math.round(lo); m < hi; m += FONT_WARM_STEP) out.push(m);
+  out.push(Math.round(hi));
+  return out;
+}
 
 /** The registry key superdough looks a hap value up by: `bank_s`, lower-cased by `getSound`. */
 export function soundKeyOf(value: { s?: unknown; bank?: unknown }): string | null {
@@ -38,7 +53,10 @@ export async function warmValue(value: HapValue): Promise<WarmResult> {
   return "synth";
 }
 
-/** Hap values to warm for one spec entry: every pitch it names, or the whole pitched map, or a default range. */
+/**
+ * Hap values to warm for one spec entry: every pitch it names; else the whole pitched map, every variant of a
+ * sample role, or a soundfont's range.
+ */
 export function valuesOfSpec(spec: PreloadSpec["sounds"][number]): HapValue[] {
   const base: HapValue = { s: spec.s, n: spec.n ?? 0 };
   if (spec.bank !== undefined) base.bank = spec.bank;
@@ -55,7 +73,11 @@ export function valuesOfSpec(spec: PreloadSpec["sounds"][number]): HapValue[] {
     // A pitched map ({ "c3": [...], "e3": [...] }): warm every file of it.
     return Object.keys(data.samples).map((note) => ({ ...base, note }));
   }
-  if (data?.type === "soundfont") return DEFAULT_FONT_NOTES.map((note) => ({ ...base, note }));
+  if (data?.type === "sample" && Array.isArray(data.samples) && spec.n === undefined) {
+    // A drum role by name: every variant `n` can select (a kit's brush swirl is `sd:2`).
+    return data.samples.map((_, n) => ({ ...base, n }));
+  }
+  if (data?.type === "soundfont") return fontWarmNotes(data.range).map((note) => ({ ...base, note }));
   return [base];
 }
 

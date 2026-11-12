@@ -51,6 +51,11 @@ export interface SessionPlanCoursePort {
   lastCompletedLesson(): LessonId | null;
   /** Other things Today may offer (an extra gym session, a capstone left open, a side lesson). */
   alternatives(): SessionPlan["alternatives"];
+  /**
+   * After `next()` returned `null` although the course is not finished (the next lessons are not written yet,
+   * or a checkpoint waits for tomorrow): the line Today shows on the review day. `null` otherwise.
+   */
+  pause?(): string | null;
 }
 export interface SessionPlanLearnerPort {
   profile(): { targetMinutes: 15 | 20 | 25; timeZone: string; rolloverHour: number };
@@ -197,15 +202,21 @@ export class SessionPlanService {
 
     const next = course.next();
     if (next === null) {
-      // Nothing left on the map: a reviews-only day (`/practice/review` offers "a little more").
+      // Nothing to offer from the map today (the course is done, its next lessons are not written yet, or a
+      // checkpoint waits for tomorrow): a reviews-only day (`/practice/review` offers "a little more"), with
+      // Studio as the alternative. Never an error.
       const review = srs.planReviewDay(now, gap);
       const first = srs.planWarmup(now, { budgetSec: WARMUP_BUDGET_SEC[target], gapDays: gap });
+      const alternatives = base.alternatives.some((a) => a.kind === "studio")
+        ? base.alternatives
+        : [...base.alternatives, { kind: "studio" as const, mapItemId: null, title: "Studio" }];
       return {
         ...base,
+        alternatives,
         kind: "review",
         mapItemId: null,
         title: "Review",
-        note: null,
+        note: course.pause?.() ?? null,
         warmup: {
           ...this.batch(first, WARMUP_BUDGET_SEC[target]),
           moreAvailable: review.blocks.length > 1 || review.overflow.length > 0,

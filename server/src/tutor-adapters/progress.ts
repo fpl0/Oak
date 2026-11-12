@@ -6,6 +6,7 @@ import { ApiError } from "../errors.ts";
 import type { CourseService } from "../services/course.ts";
 import type { GatesService } from "../services/gates.ts";
 import type { StreakService } from "../services/streak.ts";
+import type { VoiceService } from "../services/voice.ts";
 import { MAX_RECENT_TERMS } from "../tutor/context.ts";
 import type { IntroducedTerms, ProgressSnapshot, Rung, StepState } from "../tutor/domain.ts";
 import type { ProgressPort } from "../tutor/ports.ts";
@@ -15,7 +16,13 @@ export class ProgressAdapter implements ProgressPort {
   constructor(
     private readonly repos: Repos,
     private readonly content: ContentIndex,
-    private readonly d: { course: CourseService; gates: GatesService; streak: StreakService },
+    private readonly d: {
+      course: CourseService;
+      gates: GatesService;
+      streak: StreakService;
+      /** Quiet mode as the server decides it today (for today, always, or no usable mic). */
+      voice?: VoiceService;
+    },
   ) {}
 
   async stepState(lessonId: string, qualified: string): Promise<StepState> {
@@ -97,7 +104,7 @@ export class ProgressAdapter implements ProgressPort {
       })),
       streakWeeks: this.d.streak.summary().weeks,
       singTolerance: profile.singToleranceCents,
-      quiet: profile.quiet,
+      quiet: this.d.voice?.quiet() ?? profile.quiet,
     };
   }
 

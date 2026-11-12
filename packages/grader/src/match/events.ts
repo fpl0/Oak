@@ -2,13 +2,14 @@
 // paired by onset, then by pitch (per `PitchMode`) and sound; durations count when asked.
 import type { Diagnostic, KeySpec, Matcher, NEvent } from "@oak/content-kit";
 import { R } from "@oak/content-kit";
+import { degreeOf } from "@oak/theory";
 import { effectiveDur, locAt, locOf, mod12, ratKey, sortEvents } from "../analyze/events.ts";
 import { keyOf } from "../analyze/key.ts";
 import { selectTracks } from "../analyze/tracks.ts";
 import { diag } from "../feedback/catalog.ts";
 import type { MatchResult, NormalizeContext, Normalized } from "../types.ts";
 import { alignFeel, clampScore, f1, lengthLabel, pitchLabel } from "./common.ts";
-import { pitchClassOfKey } from "./melody.ts";
+import { pitchClassOfKey, stepIndex } from "./melody.ts";
 
 export type EventsMatcher = Extract<Matcher, { m: "events" }>;
 
@@ -70,7 +71,8 @@ export function eventsMatch(
   // Durations: matched pairs whose (clipped) length differs.
   const diagnostics: Diagnostic[] = [];
   let durOk = 0;
-  const wantDur = cfg.durations || cfg.rhythm === "exact";
+  // `exact` is the original name of `onsets+durations`: both compare lengths whatever `durations` says.
+  const wantDur = cfg.durations || cfg.rhythm === "exact" || cfg.rhythm === "onsets+durations";
   if (wantDur)
     for (const [i, j] of pairs) {
       const td = effectiveDur(T[i] as NEvent);
@@ -90,6 +92,8 @@ export function eventsMatch(
   // Pair what is left at the same onset: a wrong note rather than one missing and one extra.
   const overlay: NonNullable<MatchResult["overlay"]> = { answer: [], missing: [] };
   const leftA = new Set(unA);
+  // Wrong pitches at the right onsets, for the index-shift test below: [target, answer, its diagnostic].
+  const wrongPitch: { t: NEvent; a: NEvent; d: Diagnostic }[] = [];
   for (const i of unT) {
     const t = T[i] as NEvent;
     const j = [...leftA].find((x) => cfg.rhythm === "ignore" || R.eq((A[x] as NEvent).onset, t.onset));
@@ -99,21 +103,21 @@ export function eventsMatch(
       const g = pitchLabel(a.midi as number, cfg.pitch === "key-relative" ? aKey : tKey);
       const e = pitchLabel(t.midi as number, tKey);
       const octave = cfg.pitch === "absolute" && mod12((a.midi as number) - (t.midi as number)) === 0;
-      diagnostics.push(
-        octave
-          ? diag(
-              "melody.octave",
-              { dir: (a.midi as number) > (t.midi as number) ? "higher" : "lower" },
-              locOf(a, pos),
-              "pitch",
-            )
-          : diag(
-              "melody.wrong-degree",
-              { got: g.name, gotSyl: g.syl, exp: e.name, expSyl: e.syl },
-              locOf(a, pos),
-              "pitch",
-            ),
-      );
+      const d = octave
+        ? diag(
+            "melody.octave",
+            { dir: (a.midi as number) > (t.midi as number) ? "higher" : "lower" },
+            locOf(a, pos),
+            "pitch",
+          )
+        : diag(
+            "melody.wrong-degree",
+            { got: g.name, gotSyl: g.syl, exp: e.name, expSyl: e.syl },
+            locOf(a, pos),
+            "pitch",
+          );
+      diagnostics.push(d);
+      if (!octave) wrongPitch.push({ t, a, d });
       overlay.answer.push({ id: a.id, ok: false });
       overlay.missing.push(t);
       continue;
@@ -146,6 +150,20 @@ export function eventsMatch(
   }
   for (const [, j] of pairs) overlay.answer.push({ id: (A[j] as NEvent).id, ok: true });
 
+  // The index slip (degrees typed into `n` as they are): every pitched note one scale step off in the
+  // same direction, at the right times, nothing missing or extra. One finding says why, instead of a
+  // wrong-degree line per note (exercises §2.6 `melody.index-shift`).
+  const slip =
+    cfg.pitch === "absolute" || cfg.pitch === "key-relative"
+      ? indexShift(T, A, pairs, wrongPitch, tKey, cfg.pitch === "key-relative" ? aKey : tKey)
+      : null;
+  if (slip) {
+    const drop = new Set(wrongPitch.map((w) => w.d));
+    const kept = diagnostics.filter((d) => !drop.has(d));
+    diagnostics.length = 0;
+    diagnostics.push(slip, ...kept);
+  }
+
   const keyF1 = f1(pairs.length, T.length, A.length);
   const tOn = new Set(T.map((e) => ratKey(e.onset)));
   const aOn = new Set(A.map((e) => ratKey(e.onset)));
@@ -165,4 +183,32 @@ export function eventsMatch(
     score = keyF1 * (0.8 + 0.2 * acc);
   }
   return { score: clampScore(score), dims, diagnostics, overlay };
+}
+
+/** `melody.index-shift` when every pitched note is the same one scale step off, else null. */
+function indexShift(
+  T: readonly NEvent[],
+  A: readonly NEvent[],
+  pairs: readonly [number, number][],
+  wrong: readonly { t: NEvent; a: NEvent }[],
+  tKey: KeySpec | null,
+  aKey: KeySpec | null,
+): Diagnostic | null {
+  if (!tKey || !aKey) return null;
+  const pitchedT = T.filter((e) => e.midi !== null).length;
+  const pitchedA = A.filter((e) => e.midi !== null).length;
+  const matchedPitched = pairs.filter(([i]) => (T[i] as NEvent).midi !== null).length;
+  if (matchedPitched > 0 || wrong.length < 3 || wrong.length !== pitchedT || wrong.length !== pitchedA)
+    return null;
+  const deltas = wrong.map((w) => stepIndex(w.a.midi as number, aKey) - stepIndex(w.t.midi as number, tKey));
+  const d = deltas[0] as number;
+  if (Math.abs(d) !== 1 || !deltas.every((x) => x === d)) return null;
+  const first = wrong[0] as { t: NEvent };
+  const deg = degreeOf(first.t.midi as number, tKey);
+  return diag(
+    "melody.index-shift",
+    { dir: d > 0 ? "too high" : "too low", deg: deg.degree, idx: deg.num - 1 },
+    undefined,
+    "pitch",
+  );
 }

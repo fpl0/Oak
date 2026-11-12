@@ -11,6 +11,11 @@ setDefaultTimeout(60_000);
 const fill = (code: string, key = "C4:major", beats = 4) =>
   `setcpm(96/${beats})\n\n${code.replaceAll("{{key}}", key).replaceAll("{{bpm}}", "96")}`;
 const beatsOf = (id: string) => Number(bandMeter(id).split("/")[0]);
+/** The 0-based bar of an event's begin ("a/b" or a whole number). */
+const barOf = (begin: string | number): number => {
+  const [a, b] = String(begin).split("/").map(Number);
+  return Math.floor(b ? (a as number) / b : (a as number));
+};
 
 describe("bands", () => {
   for (const b of bands)
@@ -100,6 +105,30 @@ describe("harmony (music facts, checked against Strudel)", () => {
       expect({ flavour, bassOnOne: onsets("bass").includes(0) }).toEqual({ flavour, bassOnOne: true });
       expect({ flavour, chordsOnOne: onsets("chords").includes(0) }).toEqual({ flavour, chordsOnOne: false });
     }
+  });
+  test("the eight-bar phrase: roots I IV I V I IV V I, the half close on V in bar 4, home in bar 8", async () => {
+    const pop = bands.find((b) => b.id === "band.phrase-8bar")?.code["flavour.pop"] ?? "";
+    const bass = pop.split("\n").find((l) => l.startsWith("bass:")) as string;
+    expect(await midisOf(fill(bass), 8)).toEqual([36, 41, 36, 43, 36, 41, 43, 36]);
+    const chords = pop.split("\n").find((l) => l.startsWith("chords:")) as string;
+    const r = await evaluate(fill(chords), 8);
+    const bar = (i: number) =>
+      [...new Set(r.events.filter((e) => barOf(e.begin) === i).map((e) => e.midi))].sort();
+    // C E G · C F A · B D G · C E G: each chord change moves a voice by a step at most.
+    expect([bar(0), bar(1), bar(3), bar(6), bar(7)]).toEqual([
+      [48, 52, 55],
+      [48, 53, 57],
+      [47, 50, 55],
+      [47, 50, 55],
+      [48, 52, 55],
+    ]);
+    const jazz = (bands.find((b) => b.id === "band.phrase-8bar")?.code["flavour.jazz-soul"] ?? "")
+      .split("\n")
+      .find((l) => l.startsWith("chords:")) as string;
+    const j = await evaluate(fill(jazz), 8);
+    const v7 = [...new Set(j.events.filter((e) => barOf(e.begin) === 3).map((e) => e.midi))];
+    // G7 as B D F G.
+    expect(v7.sort()).toEqual([47, 50, 53, 55]);
   });
   test("the band follows the key: in G the vamp is G and C", async () => {
     const line = (bands.find((b) => b.id === "band.two-chord-vamp")?.code["flavour.pop"] ?? "")

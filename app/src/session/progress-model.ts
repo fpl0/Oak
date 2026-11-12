@@ -155,15 +155,69 @@ export function nextUnlocksFrom(
   return out.sort((a, b) => a.remaining - b.remaining || a.itemId.localeCompare(b.itemId)).slice(0, limit);
 }
 
-/** The banner text of a milestone (ux §5.5), by ID; unknown IDs fall back to their title. */
-export const MILESTONE_BANNER: Record<string, string> = {
-  M1: "You can make a beat.",
-  M2: "You can build a loop with a bass line.",
-  M3: "You can now compose a song.",
-  M4: "You can read a lead sheet.",
-  M5: "You can transcribe a pop song's bass and chords.",
-  M6: "You can write in minor and in the blues.",
-  M7: "You finished the core. Side A is complete.",
-  M8: "You can transcribe a jazz standard's changes.",
-  M9: "You can reharmonise a standard.",
+export interface MilestoneRow {
+  id: string;
+  title: string;
+  description: string;
+  reachedAt: string | null;
+}
+
+/** Milestones reached at or after `since` (the Coda's banner: reached in this session), oldest first. */
+export function milestonesReached(milestones: readonly MilestoneRow[], since: string): MilestoneRow[] {
+  return milestones
+    .filter((m) => m.reachedAt !== null && m.reachedAt >= since)
+    .sort((a, b) => (a.reachedAt as string).localeCompare(b.reachedAt as string));
+}
+
+export interface MilestoneTimeline {
+  /** Reached, oldest first. */
+  reached: MilestoneRow[];
+  /** The first one not reached yet, in the registry's order (the course's order). */
+  next: MilestoneRow | null;
+  /** The rest ahead, after `next`. */
+  ahead: MilestoneRow[];
+}
+
+/** The /progress timeline: what is behind you, the one milestone you are working towards, the rest. */
+export function milestoneTimeline(milestones: readonly MilestoneRow[]): MilestoneTimeline {
+  const reached = milestones
+    .filter((m) => m.reachedAt !== null)
+    .sort((a, b) => (a.reachedAt as string).localeCompare(b.reachedAt as string));
+  const open = milestones.filter((m) => m.reachedAt === null);
+  return { reached, next: open[0] ?? null, ahead: open.slice(1) };
+}
+
+export interface LedgerCounts {
+  /** Statements in this area. */
+  total: number;
+  /** With any evidence (emerging or better, fading included). */
+  shown: number;
+  /** Solid or strong now. */
+  solid: number;
+}
+
+/** Honest counts per area: evidence, and how many hold at solid or better today. */
+export function ledgerCounts(
+  defs: readonly { id: string }[],
+  rows: ReadonlyMap<string, { latest: Pick<CanDoEntry, "status"> }>,
+): LedgerCounts {
+  let shown = 0;
+  let solid = 0;
+  for (const d of defs) {
+    const r = rows.get(d.id);
+    if (!r) continue;
+    shown++;
+    if (r.latest.status === "solid" || r.latest.status === "strong") solid++;
+  }
+  return { total: defs.length, shown, solid };
+}
+
+/** Where a can-do's latest evidence came from, in words ("a lesson", "a checkpoint"). */
+export const EVIDENCE_LABEL: Record<CanDoEntry["evidenceKind"], string> = {
+  sketch: "a sketch",
+  track: "an album track",
+  lesson: "a lesson",
+  checkpoint: "a checkpoint",
+  set: "a review set",
+  transcription: "a transcription",
 };

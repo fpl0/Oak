@@ -21,6 +21,11 @@ async function rms(page: Page, ms = 1200): Promise<number> {
 
 test.describe.configure({ mode: "serial" });
 
+// Other engineers edit the shared tree while this suite runs: Vite's HMR socket must not reload the page mid-test.
+test.beforeEach(async ({ page }) => {
+  await page.routeWebSocket(/.*/, () => {});
+});
+
 test.beforeAll(async ({ browser }) => {
   const page = await browser.newPage();
   await seed(page, "after U02.L08");

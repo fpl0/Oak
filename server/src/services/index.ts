@@ -16,6 +16,7 @@ import type { SrsPort } from "./ports.ts";
 import { SessionsService } from "./sessions.ts";
 import { StreakService } from "./streak.ts";
 import { UnlocksService } from "./unlocks.ts";
+import { VoiceService } from "./voice.ts";
 
 export interface Services {
   ctx: ServiceContext;
@@ -32,6 +33,7 @@ export interface Services {
   ops: OpsService;
   backup: BackupService;
   store: AudioStore;
+  voice: VoiceService;
 }
 
 export interface ServiceOptions {
@@ -49,6 +51,7 @@ export function createServices(ctx: ServiceContext, opts: ServiceOptions): Servi
     lessonStatus: (id) => gates.lessonStatus(id),
   });
   const streak = new StreakService(ctx);
+  const voice = new VoiceService(ctx, { gates });
   const sourceDone = (id: string): boolean => {
     if (ctx.content.lessonSite(id) !== null) return gates.lessonCompleted(id);
     if (ctx.content.checkpointMeta(id) !== null) return gates.checkpointPassed(id);
@@ -65,13 +68,14 @@ export function createServices(ctx: ServiceContext, opts: ServiceOptions): Servi
     );
   };
   const cando = new CanDoService(ctx, { sourceDone, freshness });
-  const course = new CourseService(ctx, { gates, unlocks, mastery, cando, streak, srs: opts.srs });
+  const course = new CourseService(ctx, { gates, unlocks, mastery, cando, streak, voice, srs: opts.srs });
   const store = new AudioStore(opts.config.audioDir, opts.config.albumDir);
   const sessions = new SessionsService(ctx, {
     gates,
     unlocks,
     streak,
     course,
+    voice,
     tutorOff: () => ctx.repos.settings.get("tutor").backend === "off",
   });
   const library = new LibraryService(ctx, {
@@ -103,5 +107,6 @@ export function createServices(ctx: ServiceContext, opts: ServiceOptions): Servi
     ops,
     backup,
     store,
+    voice,
   };
 }

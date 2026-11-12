@@ -42,6 +42,26 @@ export {
   invertInterval,
   parseInterval,
 } from "./intervals.ts";
+export {
+  type FifthsNeighbours,
+  FLAT_ORDER,
+  fifthsNeighbours,
+  fifthsOfKey,
+  type IntervalInfo,
+  intervalInKey,
+  intervalOf,
+  type KeyInput,
+  keyFromFifths,
+  keyOf,
+  labelPitch,
+  type PitchLabel,
+  parseStrudelInterval,
+  SHARP_ORDER,
+  type SignatureInfo,
+  type StrudelIntervalInfo,
+  signatureOf,
+  strudelInterval,
+} from "./keys.ts";
 export * from "./meters.ts";
 export { freqToMidi, midiToFreq, midiToPc, normalizeNoteName, noteToMidi, parseNote, pcOf } from "./notes.ts";
 export {

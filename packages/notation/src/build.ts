@@ -5,6 +5,7 @@ import type { DrumRole, KeySpec, NEvent, Rat } from "@oak/content-kit";
 import { barOf, R, rat } from "@oak/content-kit";
 import type { SpelledPitch } from "@oak/theory";
 import { drumPlace, isFoot } from "./drums.ts";
+import { abcjsLimitWarnings } from "./limits.ts";
 import { type Grid, gridOf } from "./meter.ts";
 import { toRat } from "./q.ts";
 import { type QItem, quantizeBar, type Seg, writtenOf } from "./quantize.ts";
@@ -18,6 +19,7 @@ import {
   spell,
 } from "./theory-port.ts";
 import type {
+  KeyChange,
   NotationInput,
   NotationWarning,
   NoteItem,
@@ -132,11 +134,44 @@ export function straightenSwing(
 function pitchedClef(midis: number[]): "treble" | "bass" {
   return median(midis) >= 57 ? "treble" : "bass";
 }
+/** Track names that read in the bass clef whatever they play: bass, bassline, lh, left, low, b (and `x.bass`). */
+const BASS_TRACK = /^(?:.*[._-])?(?:bass(?:line)?\d*|lh|left|low|b)$/i;
+
+/**
+ * The clef a pitched track reads in: `trackClefs[track]` when given; else bass for a track named like a
+ * bass (bass, bassline, lh, left, low, b), else by register (median below `split`, default 60, is bass).
+ */
+export function clefOfTrack(
+  track: string,
+  midis: readonly number[],
+  opts: { split?: number; trackClefs?: Record<string, "treble" | "bass"> } = {},
+): "treble" | "bass" {
+  const set = opts.trackClefs?.[track];
+  if (set) return set;
+  if (BASS_TRACK.test(track)) return "bass";
+  return midis.length && median([...midis]) < (opts.split ?? 60) ? "bass" : "treble";
+}
+
 function planStaves(input: NotationInput, events: NEvent[], warnings: NotationWarning[]): StaffPlan[] {
   const drums = events.filter(isDrum);
   const pitchedAll = events.filter((e) => e.midi !== null);
   const kind: StaffKind = input.staff;
   const pitched = kind === "lead" ? pitchedAll.filter((e) => e.chordSymbol === undefined) : pitchedAll;
+  const split = input.splitMidi ?? 60;
+  const tracks = [...new Set(pitched.map((e) => e.track))];
+  const trackClef = new Map(
+    tracks.map((t) => [
+      t,
+      clefOfTrack(
+        t,
+        pitched.filter((e) => e.track === t).map((e) => e.midi as number),
+        input.trackClefs ? { split, trackClefs: input.trackClefs } : { split },
+      ),
+    ]),
+  );
+  const lowTracks = tracks.filter((t) => trackClef.get(t) === "bass");
+  // The tracks divide into a treble part and a bass part (each track whole on one staff).
+  const byTrack = lowTracks.length > 0 && lowTracks.length < tracks.length;
   const dropDrums = () => {
     if (drums.length)
       warnings.push({
@@ -153,24 +188,14 @@ function planStaves(input: NotationInput, events: NEvent[], warnings: NotationWa
     events: pitched,
   });
   const grand = (): StaffPlan[] => {
-    const split = input.splitMidi ?? 60;
     let rh: NEvent[] = [];
     let lh: NEvent[] = [];
-    if (input.split === "track") {
-      const tracks = [...new Set(pitched.map((e) => e.track))];
-      const low = new Set(
-        tracks.filter(
-          (t) =>
-            /^(bass|lh|left|b)$/i.test(t) ||
-            median(pitched.filter((e) => e.track === t).map((e) => e.midi as number)) < split,
-        ),
-      );
-      if (low.size > 0 && low.size < tracks.length) {
-        rh = pitched.filter((e) => !low.has(e.track));
-        lh = pitched.filter((e) => low.has(e.track));
-      }
-    }
-    if (!rh.length && !lh.length) {
+    const wantTrack = input.split === "track" || (input.split === undefined && tracks.length > 1);
+    if (wantTrack && byTrack) {
+      const low = new Set(lowTracks);
+      rh = pitched.filter((e) => !low.has(e.track));
+      lh = pitched.filter((e) => low.has(e.track));
+    } else {
       rh = pitched.filter((e) => (e.midi as number) >= split);
       lh = pitched.filter((e) => (e.midi as number) < split);
     }
@@ -201,9 +226,16 @@ function planStaves(input: NotationInput, events: NEvent[], warnings: NotationWa
         const ms = pitched.map((e) => e.midi as number);
         const lo = Math.min(...ms);
         const hi = Math.max(...ms);
-        if (lo >= 55) out.push(single("treble"));
+        // Every track named for one clef (trackClefs, or bass-named tracks that stay low enough to read).
+        const named = tracks.every((t) => input.trackClefs?.[t] !== undefined || BASS_TRACK.test(t));
+        const agreed = new Set(trackClef.values());
+        const namedBass = lowTracks.some((t) => input.trackClefs?.[t] === "bass" || BASS_TRACK.test(t));
+        if (tracks.length > 1 && byTrack && (namedBass || (lo < 55 && hi > 64))) out.push(...grand());
+        else if (named && agreed.size === 1 && (agreed.has("treble") || hi <= 67))
+          out.push(single([...agreed][0] as "treble" | "bass"));
+        else if (lo >= 55) out.push(single("treble"));
         else if (hi <= 64) out.push(single("bass"));
-        else if (hi - lo > 24 || new Set(pitched.map((e) => e.track)).size > 1) out.push(...grand());
+        else if (hi - lo > 24 || tracks.length > 1) out.push(...grand());
         else out.push(single(pitchedClef(ms)));
       }
       if (drums.length) out.push(drumStaff());
@@ -335,7 +367,7 @@ interface ChordAt {
   at: Rat;
   symbol: string;
 }
-function spellVoice(slots: Slot[], key: KeySpec | null, chords: ChordAt[]): void {
+function spellVoice(slots: Slot[], keyAt: (t: Rat) => KeySpec | null, chords: ChordAt[]): void {
   const chordAt = (t: Rat): string | undefined => {
     let found: string | undefined;
     for (const c of chords) if (R.lte(c.at, t)) found = c.symbol;
@@ -367,7 +399,7 @@ function spellVoice(slots: Slot[], key: KeySpec | null, chords: ChordAt[]): void
       const symbol = e.chordSymbol ?? chordAt(s.onset);
       const chord = symbol ? parseChord(symbol) : null;
       return spell(midi, {
-        key,
+        key: keyAt(s.onset),
         ...(chord ? { chord } : {}),
         ...(direction && !chord ? { direction } : {}),
       });
@@ -401,6 +433,8 @@ export function buildScore(input: NotationInput): Score {
     input.key ??
     (ctx ? keyFromScaleCtx(ctx) : null) ??
     estimateKey(events.filter((e) => e.chordSymbol === undefined));
+  const keyChanges = normalizeKeyChanges(key, input.keyChanges ?? [], startBar, stop);
+  const keyAt = (t: Rat): KeySpec | null => keyAtBar({ key, keyChanges }, R.floor(t));
 
   // 3. chord symbols (display) and their context for spelling
   const chordList: ChordAt[] = (input.chords ?? []).map((c) => ({
@@ -433,7 +467,27 @@ export function buildScore(input: NotationInput): Score {
 
   // 4. staves and voices
   const plans = planStaves(input, events, warnings);
-  const staffVoices: Slot[][][] = plans.map((p) => {
+  // A staff whose tracks all carry one key plan of their own (`trackKeys`) other than the piece's: its own
+  // signature and spelling.
+  const own = plans.map((p): { key: KeySpec; keyChanges: KeyChange[] } | null => {
+    if (p.kind !== "pitched" || !input.trackKeys || p.events.length === 0) return null;
+    const plansOf = [...new Set(p.events.map((e) => e.track))].map((t) => input.trackKeys?.[t]);
+    const first = plansOf[0];
+    if (!first) return null;
+    const changes = normalizeKeyChanges(first.key, first.keyChanges ?? [], startBar, stop);
+    const same = (o: typeof first | undefined) =>
+      o !== undefined &&
+      sameKey(o.key, first.key) &&
+      sameChanges(normalizeKeyChanges(o.key, o.keyChanges ?? [], startBar, stop), changes);
+    if (!plansOf.every(same)) return null;
+    if (sameKey(first.key, key) && sameChanges(changes, keyChanges)) return null;
+    return { key: first.key, keyChanges: changes };
+  });
+  const keyAtOf = (pi: number): ((t: Rat) => KeySpec | null) => {
+    const o = own[pi];
+    return o ? (t) => keyAtBar(o, R.floor(t)) : keyAt;
+  };
+  const staffVoices: Slot[][][] = plans.map((p, pi) => {
     if (p.kind === "drums") return drumVoices(p.events);
     if (p.kind === "rhythm") {
       const [one] = drumVoices(p.events.map((e) => ({ ...e, midi: null, s: "rhythm" })));
@@ -447,7 +501,7 @@ export function buildScore(input: NotationInput): Score {
     // Clipping at the next onset belongs to a declared swing (§6.10.6); otherwise overlaps are polyphony.
     const evs = input.swing ? clipWithinTracks(p.events) : p.events;
     const voices = assignVoices(groupSlots(evs), warnings).map((v) => v.slots);
-    for (const v of voices) spellVoice(v, key, chordList);
+    for (const v of voices) spellVoice(v, keyAtOf(pi), chordList);
     const ms = p.events.map((e) => e.midi as number);
     const lo = p.clef === "treble" ? 48 : 26;
     const hi = p.clef === "treble" ? 93 : 72;
@@ -542,7 +596,9 @@ export function buildScore(input: NotationInput): Score {
   // 8. NoteItems, ids, lyrics
   let nextN = 0;
   const lyricStaff = 0;
-  const labels = input.labels ?? "none";
+  const annotations = annotationsOn(input.annotations) ? input.annotations : undefined;
+  // The annotation lines replace the single lyric line of `labels`.
+  const labels = annotations ? "none" : (input.labels ?? "none");
   const staves: Staff[] = plans.map((p, si) => {
     const voices: Voice[] = (quantized[si] ?? []).map((bars, vi) => ({
       id: vi === 0 ? p.id : `${p.id}v${vi + 1}`,
@@ -574,7 +630,7 @@ export function buildScore(input: NotationInput): Score {
             else if (slot.drums && slot.drums.length > 1) item.drums = slot.drums;
           } else if (vi > 0 && !hasNotes) item.hidden = true;
           if (si === lyricStaff && vi === 0 && slot && !it.tieFromPrev && labels !== "none") {
-            const lyric = lyricOf(labels, item, p.kind, key, it.start, b.c, input);
+            const lyric = lyricOf(labels, item, p.kind, keyAtOf(si)(item.onset), it.start, b.c, input);
             if (lyric) item.lyric = lyric;
           }
           return item;
@@ -582,13 +638,22 @@ export function buildScore(input: NotationInput): Score {
         return { index: b.c, partial: b.partial, items };
       }),
     }));
-    return { id: p.id, clef: p.clef, lines: p.lines, voices };
+    const o = own[si];
+    return {
+      id: p.id,
+      clef: p.clef,
+      lines: p.lines,
+      voices,
+      ...(o ? { key: o.key, ...(o.keyChanges.length ? { keyChanges: o.keyChanges } : {}) } : {}),
+    };
   });
 
+  warnings.push(...abcjsLimitWarnings({ key, staves }));
   const swingText = input.swing ? (input.swing.subdivision === 8 ? "Swing 8ths" : "Swing 16ths") : undefined;
   return {
     meter,
     key,
+    ...(keyChanges.length ? { keyChanges } : {}),
     ...(input.tempoBpm !== undefined ? { tempoBpm: input.tempoBpm } : {}),
     ...(swingText ? { swingText } : {}),
     staves,
@@ -599,8 +664,14 @@ export function buildScore(input: NotationInput): Score {
     warnings,
     ...(chords.length ? { chords } : {}),
     ...(romans.length ? { romans } : {}),
+    ...(annotations ? { annotations } : {}),
     ...(input.title ? { title: input.title } : {}),
   };
+}
+
+/** True when an annotation set switches at least one line on. */
+export function annotationsOn(a: NotationInput["annotations"]): boolean {
+  return !!a && !!(a.degree || a.solfege || a.noteName);
 }
 
 function lyricOf(
@@ -622,6 +693,43 @@ function lyricOf(
 }
 
 /** Display bar (1-based; 0 is the pickup bar) and 1-based beat of an onset. */
+const sameChanges = (a: readonly KeyChange[], b: readonly KeyChange[]) =>
+  a.length === b.length && a.every((c, i) => c.bar === b[i]?.bar && sameKey(c.key, b[i]?.key ?? null));
+const sameKey = (a: KeySpec | null, b: KeySpec | null) =>
+  a === b || (a !== null && b !== null && a.tonic === b.tonic && a.mode === b.mode);
+
+/** Key changes strictly inside the engraved bars, in order, each to a key other than the one in force. */
+function normalizeKeyChanges(
+  start: KeySpec | null,
+  changes: readonly KeyChange[],
+  startBar: number,
+  stop: number,
+): KeyChange[] {
+  const out: KeyChange[] = [];
+  let current = start;
+  const inside = [...changes]
+    .filter((c) => Number.isInteger(c.bar) && c.bar > startBar && c.bar < stop)
+    .sort((a, b) => a.bar - b.bar);
+  for (const c of inside) {
+    const last = out[out.length - 1];
+    if (last && last.bar === c.bar) {
+      out.pop();
+      current = out[out.length - 1]?.key ?? start;
+    }
+    if (sameKey(current, c.key)) continue;
+    out.push({ bar: c.bar, key: c.key });
+    current = c.key;
+  }
+  return out;
+}
+
+/** The key signature in force at cycle `bar` (absolute, 0-based). */
+export function keyAtBar(score: Pick<Score, "key" | "keyChanges">, bar: number): KeySpec | null {
+  let key = score.key;
+  for (const c of score.keyChanges ?? []) if (c.bar <= bar) key = c.key;
+  return key;
+}
+
 export function barBeat(score: Score, onset: Rat): { bar: number; beat: number } {
   const inBar = R.frac(onset);
   return { bar: barOf(onset, score.pickup), beat: 1 + R.toNum(inBar) * score.meter.unitsPerBar };

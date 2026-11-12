@@ -51,7 +51,8 @@ function sameText(expected: string, got: string, kind: string | undefined): bool
   const a = normalizeAnswerText(expected);
   const b = normalizeAnswerText(got);
   if (a === b) return true;
-  if (kind === "note" || kind === "key") {
+  // Only a note letter's case is free: "m3" and "M3" (minor and major 3rd) stay different answers.
+  if ((kind === "note" || kind === "key") && /^[a-g]/i.test(a) && /^[a-g]/i.test(b)) {
     const cap = (s: string): string => (s.length > 0 ? s[0]?.toUpperCase() + s.slice(1) : s);
     return (
       cap(a).replace(/ (major|minor)$/i, (m) => m.toLowerCase()) ===
@@ -66,6 +67,21 @@ function sameText(expected: string, got: string, kind: string | undefined): bool
     }
   }
   return false;
+}
+
+/**
+ * A sequence typed into one box ("F C G D A E B", "G, A, B"): split on spaces and commas when the key
+ * expects several items and the response is a single string.
+ */
+export function splitTyped(
+  expected: readonly string[] | undefined,
+  got: readonly string[] | undefined,
+): string[] | undefined {
+  if (!expected || !got || expected.length < 2 || got.length !== 1) return got ? [...got] : undefined;
+  return (got[0] as string)
+    .trim()
+    .split(/[\s,]+/)
+    .filter((t) => t.length > 0);
 }
 
 function positional<T>(
@@ -130,7 +146,7 @@ export function gradeAnswer(
   seq(exp.degrees, got.degrees);
   seq(exp.qualities, got.qualities);
   seq(exp.rn, got.rn, (a, b) => normalizeAnswerText(a) === normalizeAnswerText(b));
-  seq(exp.text, got.text, (a, b) => sameText(a, b, textKind));
+  seq(exp.text, splitTyped(exp.text, got.text), (a, b) => sameText(a, b, textKind));
   if (exp.midi) {
     const pcOnly = trial.params.pcOnly === true;
     seq(exp.midi, got.midi, (a, b) => (pcOnly ? (((a - b) % 12) + 12) % 12 === 0 : a === b));

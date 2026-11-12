@@ -36,8 +36,6 @@ import { WelcomeScreen } from "./screens/WelcomeScreen.tsx";
 import { ONBOARDING_THREAD } from "./thread.ts";
 import "../workbench/index.ts";
 
-const WIDE: readonly OnboardingStep[] = ["loop", "edit", "react", "sketch", "coda", "prefs"];
-
 export function OnboardingFlow({ param }: { param: string }) {
   const profile = useProfile();
   if (profile.isError) return <ErrorState error={profile.error} onRetry={() => void profile.refetch()} />;
@@ -171,7 +169,7 @@ function Flow({ param, profile }: { param: string; profile: Profile }) {
 
   if (loadError)
     return (
-      <Page width="narrow">
+      <Page width="focus">
         <Callout
           tone="issue"
           title="Oak couldn't load your place"
@@ -184,7 +182,7 @@ function Flow({ param, profile }: { param: string; profile: Profile }) {
   if (!loaded) return <LoadingState label="Loading your place…" />;
   if (finished && !finishing)
     return (
-      <Page width="narrow">
+      <Page width="focus">
         <section className="flex flex-col gap-4 py-8" data-testid="onboarding-finished">
           <h1 className="text-h1">You're set up</h1>
           <p className="text-text-2">
@@ -298,7 +296,7 @@ function Flow({ param, profile }: { param: string; profile: Profile }) {
   }
 
   return (
-    <Page width={WIDE.includes(step) ? "wide" : "narrow"}>
+    <Page width="focus">
       <div
         className="flex flex-col gap-4"
         data-testid="onboarding"

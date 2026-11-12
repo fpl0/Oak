@@ -1,7 +1,8 @@
 // What Today shows (ux §1.4): one decision — start the session — and the state around it. Pure, so every plan
 // and return state is unit-tested from fixture plans (today-model.test.ts). The page (TodayPage.tsx) renders it.
-import type { Bootstrap, SessionPlan, WarmupItem } from "@oak/api";
+import type { Bootstrap, SessionDay, SessionPlan, WarmupItem } from "@oak/api";
 import { learnerDay } from "@oak/srs";
+import { type CourseEdge, edgeLead } from "./edge.ts";
 import { blockBudget } from "./store.ts";
 import { isRestDay } from "./streak-model.ts";
 
@@ -23,6 +24,8 @@ export type TodayState =
   | "capstone"
   | "gym"
   | "review"
+  /** Every written lesson is done: a review day, Studio, and the plain fact that the next unit is being written. */
+  | "edge"
   | "normal";
 
 export type RowKey = "warmup" | "recap" | "new" | "make" | "coda";
@@ -60,10 +63,23 @@ export interface TodayInput {
    * previous day, yet the learner has just finished for today.
    */
   lastEnded: { sessionId: string; day: string; endedAt?: string | null } | null;
+  /**
+   * Today's sessions as the server stores them (`GET /session/day`, wave3.md §5.1): the record of "done for
+   * today" and of the one open session, so a second browser, a moved dev clock and a seed all agree. `null`
+   * while it loads or when the server has not built it (501): then `boot.openSession` and `lastEnded` decide.
+   */
+  server?: Pick<SessionDay, "day" | "open" | "doneForToday"> | null;
   /** Map item titles (lessons, checkpoints, capstones). */
   titleOf: (id: string) => string;
   /** Step count of a lesson, for "from step 4 of 8". */
   stepsOf?: (lessonId: string) => number | null;
+  /** The written course is used up (edge.ts): review days until the next unit is written. */
+  edge?: CourseEdge | null;
+  /**
+   * The tolerance ladder (`voice.get`, wave3.md §5.3): the one-tap loosen is offered when the server offers it.
+   * `null` while it loads; then the plan's return note and the profile decide, as in Wave 2.
+   */
+  ladder?: { cents: 25 | 35 | 50 | 70; offerLoosen: boolean } | null;
 }
 
 const WARMUP_LABEL: Record<WarmupItem["kind"], [string, string]> = {
@@ -239,6 +255,7 @@ const HEADING: Record<TodayState, string> = {
   capstone: "Capstone day",
   gym: "Transcription Gym",
   review: "Review day",
+  edge: "The edge of what's written",
   normal: "Your setlist for today",
 };
 
@@ -276,7 +293,9 @@ function leadOf(state: TodayState, input: TodayInput): string | null {
     case "gym":
       return plan.note ?? "Listen, then write down what you hear.";
     case "review":
-      return "Nothing new is open right now. Today keeps what you know fresh.";
+      return plan.note ?? "Nothing new is open right now. Today keeps what you know fresh.";
+    case "edge":
+      return input.edge ? edgeLead(input.edge) : plan.note;
     default:
       return plan.note;
   }
@@ -306,22 +325,42 @@ function endedOn(
   }
 }
 
+/** A day with nothing open and nothing done: a paused week, or the plan's own state. */
+function activeState({ plan, boot, edge }: TodayInput): TodayState {
+  if (boot.settings.pausedWeeks.includes(weekStartOf(boot.day))) return "paused-week";
+  const state = stateOfPlan(plan);
+  return state === "review" && edge ? "edge" : state;
+}
+
 export function todayView(input: TodayInput): TodayView {
   const { plan, boot } = input;
   const rows = setlistRows(plan, input.titleOf);
+  // A review day is as long as its sets, not the day's target (the server plans what is due, nothing more).
+  const rowMinutes = rows.reduce((sum, r) => sum + (r.unit === "min" ? r.amount : r.amount / 60), 0);
   const length =
-    plan.kind === "checkpoint" && plan.targetMinutes === 15 ? "about 20 min" : `${plan.targetMinutes} min`;
+    plan.kind === "checkpoint" && plan.targetMinutes === 15
+      ? "about 20 min"
+      : plan.kind === "review"
+        ? `about ${Math.max(1, Math.round(rowMinutes))} min`
+        : `${plan.targetMinutes} min`;
   let state: TodayState;
+  const server = input.server && input.server.day === boot.day ? input.server : null;
   if (!boot.profile.onboardedAt) state = "first-run";
-  else if (
+  else if (server) {
+    // The server is the record. Only one thing is newer than its answer: the session this tab just ended
+    // (a `session.day` read before the end still lists it as open).
+    const justEnded = input.lastEnded?.sessionId ?? null;
+    if (server.open && server.open.id !== justEnded) state = "in-session";
+    else if (server.doneForToday || (server.open !== null && server.open.id === justEnded)) state = "done";
+    else state = activeState(input);
+  } else if (
     boot.openSession &&
     boot.openSession.day === boot.day &&
     boot.openSession.id !== input.lastEnded?.sessionId
   )
     state = "in-session";
   else if (input.lastEnded && endedOn(input.lastEnded, boot.profile) === boot.day) state = "done";
-  else if (boot.settings.pausedWeeks.includes(weekStartOf(boot.day))) state = "paused-week";
-  else state = stateOfPlan(plan);
+  else state = activeState(input);
 
   const primary: TodayView["primary"] =
     state === "first-run"
@@ -340,7 +379,11 @@ export function todayView(input: TodayInput): TodayView {
     length,
     primary,
     restDay: active && state !== "paused-week" && isRestDay(boot.streak),
-    offerLoosen: active && plan.returning?.offerLoosen === true && boot.profile.singToleranceCents < 70,
+    offerLoosen:
+      active &&
+      (input.ladder
+        ? input.ladder.offerLoosen && input.ladder.cents < 70
+        : plan.returning?.offerLoosen === true && boot.profile.singToleranceCents < 70),
     keepAlive: active && plan.kind !== "review" && plan.warmup.items.length > 0,
   };
 }

@@ -23,8 +23,25 @@ export interface PackManifest {
   bankAliases: string;
   soundfontUrl: string;
   soundfonts: Record<string, { upstreamIndex: number; font: string }[]>;
-  aliases: Record<string, { gm: string; upstreamIndex: number; font: string }>;
+  aliases: Record<string, AliasEntry>;
+  /** `<kit>_<role>` -> linear gain (Oak kits, `.bank("jazzkit")`). Absent in v1 packs. */
+  kitGains?: Record<string, number | number[]>;
 }
+
+/** A curated alias in the manifest (`scripts/sounds/pack.config.ts` `OAK_ALIASES`). */
+export interface AliasEntry {
+  gm: string;
+  upstreamIndex: number;
+  font: string;
+  /** Linear output gain (loudness match). */
+  gain?: number;
+  /** Release (s) used when the code sets none. */
+  release?: number;
+  /** MIDI range a by-name preload warms. */
+  range?: [number, number];
+}
+
+type SoundHandle = { node?: AudioNode; [k: string]: unknown } | undefined;
 
 export type HapValue = Record<string, unknown> & {
   s?: unknown;
@@ -43,6 +60,8 @@ export interface SoundEntry {
     prebake?: boolean;
     tag?: string;
     baseUrl?: string;
+    /** Oak aliases: the MIDI range a by-name preload warms. */
+    range?: [number, number];
   };
 }
 
@@ -91,10 +110,37 @@ export function stubVisualMethods(Pattern: { prototype: Record<string, unknown> 
 /** The unmodified gm_* entries `registerSoundfonts()` created (their closures index the FULL upstream list). */
 const upstream = new Map<string, SoundEntry>();
 
-/** Wrap an upstream gm_* trigger so that `n` selects among `indices` (upstream variant numbers) only. */
-export function pinVariant(entry: SoundEntry, indices: readonly number[]): OnTrigger {
-  return (t, value, onended, cps) =>
-    entry.onTrigger(t, { ...value, n: indices[core.getSoundIndex(value.n, indices.length)] }, onended, cps);
+/**
+ * Wrap an upstream gm_* trigger so that `n` selects among `indices` (upstream variant numbers) only.
+ * `defaults` fills controls the code did not set (an alias's release).
+ */
+export function pinVariant(
+  entry: SoundEntry,
+  indices: readonly number[],
+  defaults: Record<string, unknown> = {},
+): OnTrigger {
+  return (t, value, onended, cps) => {
+    const v: HapValue = { ...value, n: indices[core.getSoundIndex(value.n, indices.length)] };
+    for (const [k, d] of Object.entries(defaults)) if (v[k] === undefined) v[k] = d;
+    return entry.onTrigger(t, v, onended, cps);
+  };
+}
+
+/**
+ * A trigger whose output passes through a fixed gain (an alias's or a kit role's level trim). The handle's
+ * `node` becomes the gain node, so superdough's chain (velocity, gain, effects) follows the trim.
+ */
+export function withOutputGain(trigger: OnTrigger, gain: number | ((value: HapValue) => number)): OnTrigger {
+  if (gain === 1) return trigger;
+  return async (t, value, onended, cps) => {
+    const handle = (await trigger(t, value, onended, cps)) as SoundHandle;
+    const node = handle?.node;
+    if (!handle || !node) return handle;
+    const trim = node.context.createGain();
+    trim.gain.value = typeof gain === "number" ? gain : gain(value);
+    node.connect(trim);
+    return { ...handle, node: trim };
+  };
 }
 
 function curateSoundfonts(manifest: PackManifest): void {
@@ -163,16 +209,23 @@ export async function prebake(soundsRoot: string): Promise<PackManifest> {
   );
   await webaudio.aliasBank(manifest.bankAliases);
   registerOakKits();
+  trimKits(manifest.kitGains ?? {});
 
-  for (const [alias, { gm, upstreamIndex, font }] of Object.entries(manifest.aliases)) {
-    const original = upstream.get(gm);
-    if (!original) throw new Error(`@oak/strudel: alias ${alias}: ${gm} is not in the pack`);
-    webaudio.registerSound(alias.toLowerCase(), pinVariant(original, [upstreamIndex]), {
-      type: "soundfont",
-      prebake: true,
-      fonts: [font],
-      tag: "oak",
-    });
+  for (const [alias, a] of Object.entries(manifest.aliases)) {
+    const original = upstream.get(a.gm);
+    if (!original) throw new Error(`@oak/strudel: alias ${alias}: ${a.gm} is not in the pack`);
+    const defaults = a.release !== undefined ? { release: a.release } : {};
+    webaudio.registerSound(
+      alias.toLowerCase(),
+      withOutputGain(pinVariant(original, [a.upstreamIndex], defaults), a.gain ?? 1),
+      {
+        type: "soundfont",
+        prebake: true,
+        fonts: [a.font],
+        tag: "oak",
+        ...(a.range ? { range: a.range } : {}),
+      },
+    );
   }
   return manifest;
 }
@@ -230,13 +283,36 @@ const KIT_ROLES = [
   "tb",
 ] as const;
 
+/** Oak's kits (`.bank("<kit>")`); their samples come from the pack's `oak-kit-<kit>.json` maps. */
+export const OAK_KITS = ["jazzkit"] as const;
+
 /**
- * Oak's own kits, aliases of mirrored samples: `.bank("jazzkit")` (the jazz-soul flavour's drums, `snd.jazzkit`)
- * plays the default acoustic kit (uzu-drumkit) until a brushes-and-ride kit is mirrored. Without this every
- * `jazzkit_*` sound is missing and the jazz-soul Band's drums are silent.
+ * Every role an Oak kit's map does not define falls back to the default kit (uzu-drumkit), so `.bank("jazzkit")`
+ * never goes silent on a role (the brushes kit has no crash; a v1 pack has no kit map at all).
  */
 export function registerOakKits(): void {
   const map = webaudio.soundMap.get() as Record<string, unknown>;
-  for (const role of KIT_ROLES)
-    if (map[role] && !map[`jazzkit_${role}`]) webaudio.soundAlias(role, `jazzkit_${role}`);
+  for (const kit of OAK_KITS)
+    for (const role of KIT_ROLES)
+      if (map[role] && !map[`${kit}_${role}`]) webaudio.soundAlias(role, `${kit}_${role}`);
+}
+
+/** The trim of one hit: a role's single gain, or the gain of the variant `n` selects (wrapping like superdough). */
+export function kitGainOf(gain: number | readonly number[], n: unknown): number {
+  if (typeof gain === "number") return gain;
+  if (gain.length === 0) return 1;
+  return gain[core.getSoundIndex(n, gain.length)] ?? 1;
+}
+
+/** Applies the manifest's per-role level trims to the kit sounds (data kept: the preloader reads it). */
+export function trimKits(gains: Record<string, number | number[]>): void {
+  for (const [key, gain] of Object.entries(gains)) {
+    const entry = webaudio.getSound(key) as SoundEntry | undefined;
+    if (!entry || gain === 1) continue;
+    webaudio.registerSound(
+      key,
+      withOutputGain(entry.onTrigger, (v) => kitGainOf(gain, v.n)),
+      entry.data ?? {},
+    );
+  }
 }

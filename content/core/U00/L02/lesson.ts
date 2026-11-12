@@ -42,7 +42,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U00.L02",
-  version: 1,
+  version: 2,
   title: "Set Up & First Sing",
   objective:
     "I can sing back a note I hear, and Oak knows my headphones, my microphone, my timing and my range.",
@@ -94,7 +94,8 @@ export default defineLesson({
       exercise: {
         kind: "sing",
         id: "first-note",
-        version: 1,
+        // 2: the lenient ±100¢ first sing (contracts §8.1 item 8) replaced the learner's ±70¢.
+        version: 2,
         role: "practice",
         prompt:
           "A piano note plays over soft keys. Hum or sing the piano's note back on any vowel and hold it steady for a moment. Higher or lower than the piano is fine.",
@@ -116,9 +117,16 @@ export default defineLesson({
         stimulus: { src: "code", code: HOME_NOTE, bars: 1, showCode: false },
         cue: { context: "none", countInBars: 0, click: false, replays: -1 },
         target: { from: "stimulus", track: "mel" },
-        // Contracts §8.1 item 8 asks for ±100 cents here; the schema stops at 70, which is also where every
-        // learner's own tolerance starts (§8.2), so `learner` gives the loosest value the schema allows.
-        tol: { cents: "learner", octave: "per-note", driftCompCents: 0, minCoverage: 0.4, passHitRate: 1 },
+        // Contracts §8.1 item 8: the one exception to the tolerance ladder. Any sustained pitch within ±100¢
+        // of the home note after octave folding passes (`lenient`); `cents` stays 'learner' for the record.
+        tol: {
+          cents: "learner",
+          lenient: true,
+          octave: "per-note",
+          driftCompCents: 0,
+          minCoverage: 0.4,
+          passHitRate: 1,
+        },
         showTrace: "live",
         srs: [{ family: "fam.pit.match", mode: "seed" }],
         tests: [],
@@ -135,6 +143,8 @@ export default defineLesson({
         kind: "code-make",
         id: "sketch-002",
         version: 1,
+        // The default title of the saved sketch, as the step heading promises (the lesson title otherwise).
+        title: "Sketch 002",
         role: "practice",
         prompt:
           "The loop is back, and this time the band ends on its home chord. Change the highlighted number so the tune ends on the note that feels like home too, then save.",

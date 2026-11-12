@@ -7,12 +7,15 @@ import type {
   AttemptResponse,
   CheckpointItemSpec,
   CheckpointOutcome,
+  FamilyDef,
   GradeResult,
   Trial,
 } from "@oak/api";
 import type { TrialResponse } from "@oak/drills";
 import { CHECKPOINT } from "@oak/srs";
-import type { AnswerSpec } from "../../answers/types.ts";
+import type { AnswerSpec, SungSummary } from "../../answers/types.ts";
+import { surfaceOf } from "../../drills/model.ts";
+import { sungPerformance } from "../grading.ts";
 
 export interface ItemRecord {
   idx: number;
@@ -35,7 +38,8 @@ export function scoreLocal(
   let gN = 0;
   for (const item of items) {
     const r = records.get(item.idx);
-    if (r?.skipped === true && item.role === "level-setting") continue;
+    // A level-setting item never answered is handed in as skipped (Quiet mode sets sung items aside): left out.
+    if ((r === undefined || r.skipped) && item.role === "level-setting") continue;
     const score = r === undefined || r.skipped ? 0 : Math.max(0, Math.min(1, r.score));
     const agg = bySkill.get(item.skillId) ?? { role: item.role, sum: 0, n: 0 };
     agg.sum += score;
@@ -74,6 +78,41 @@ export function familyAnswerSpec(
   answer: string,
   trial: Pick<Trial, "params" | "expected">,
   categories: readonly string[],
+  /** The family, for the surfaces this table leaves to the drill runner's (code, contours, choices by label). */
+  def?: FamilyDef,
+): AnswerSpec | null {
+  const own = ownSpec(answer, trial, categories);
+  if (own || !def) return own;
+  const s = surfaceOf(trial as Trial<unknown>, def);
+  return s.kind === "widget" ? s.spec : null;
+}
+
+/** A family item answered by singing (contracts §7.6: level-setting, skipped in Quiet mode). */
+export function isSungTrial(trial: Pick<Trial, "params">): boolean {
+  return (trial.params as Record<string, unknown>).mode === "sing";
+}
+
+/** The sung targets a family trial carries (seconds from the response window), as MIDI. */
+export function sungTargetsOf(trial: Pick<Trial, "params">): { midi: number; on: number; off: number }[] {
+  const raw = (trial.params as Record<string, unknown>).singTargets;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (t): t is { midi: number; on: number; off: number } =>
+      !!t && typeof t === "object" && typeof (t as { midi?: unknown }).midi === "number",
+  );
+}
+
+/** A sung family item's score: the mean per-note credit within the learner's current tolerance (§7.6). */
+export function sungItemScore(sung: readonly SungSummary[], trial: Pick<Trial, "params">, tolCents: number) {
+  const targets = sungTargetsOf(trial).map((t) => t.midi);
+  const perf = sungPerformance(sung, targets, tolCents, "global");
+  return { score: perf.score, noVoice: perf.diagnostics.some((d) => d.id === "sing.no-voice") };
+}
+
+function ownSpec(
+  answer: string,
+  trial: Pick<Trial, "params" | "expected">,
+  categories: readonly string[],
 ): AnswerSpec | null {
   const p = trial.params as Record<string, unknown>;
   const ui = typeof p.ui === "string" ? p.ui : answer;
@@ -83,8 +122,18 @@ export function familyAnswerSpec(
       return { ui: "choice", options: opts.map((o) => ({ id: o, label: label(o) })) };
     }
     case "degree-pad": {
+      // Categories named by degree (`deg.5`) are the pad's keys. A family whose categories are something else
+      // (intervals in a key: "3rd", "up") leaves the pad to the drill runner's surface, which knows its degrees;
+      // an empty pad had no keys at all (U04.CP "Intervals in a key").
       const set = categories.filter((c) => c.startsWith("deg.")).map((c) => c.slice(4));
-      return { ui: "degree-pad", set: set as never, syllables: false };
+      if (set.length === 0) return null;
+      const len = trial.expected.degrees?.length ?? 1;
+      return {
+        ui: "degree-pad",
+        set: set as never,
+        syllables: false,
+        ...(len > 1 ? { sequenceLen: len } : {}),
+      };
     }
     case "number":
       return { ui: "number" };
@@ -109,8 +158,20 @@ export function familyResponse(
   replays: number,
   /** Seconds from bar 1 of the stimulus to the response window (an echo is tapped after the stimulus). */
   responseAt = 0,
+  /** The trial's expected answer: a typed answer of several parts ("C D E F G A B") is split to match it. */
+  expected?: Answer,
 ): TrialResponse {
-  if ("answer" in response) return { answer: response.answer as Answer, rtMs, replays };
+  if ("answer" in response) {
+    const a = response.answer as Answer;
+    const parts = expected?.text?.length ?? 1;
+    if (a.text && a.text.length === 1 && parts > 1) {
+      const split = (a.text[0] as string).split(/[\s,]+/).filter(Boolean);
+      return { answer: { ...a, text: split }, rtMs, replays };
+    }
+    return { answer: a, rtMs, replays };
+  }
+  // A code answer (reading the staff into code) goes to the drill engine as text, as the drill runner sends it.
+  if ("code" in response) return { answer: { text: [response.code.trim()] }, rtMs, replays };
   if ("taps" in response) return { taps: response.taps.map((t) => t - responseAt), rtMs, replays };
   return { skipped: true, rtMs, replays };
 }
@@ -126,6 +187,12 @@ export function skillLine(p: LocalScore["perSkill"][number]): {
   return p.ok
     ? { tone: "ok", text: `${pct}%: solid` }
     : { tone: "look", text: `${pct}%: worth another look` };
+}
+
+/** The line under "All N items answered" when sung items were set aside (Quiet mode, contracts §8.5). */
+export function quietNote(setAside: number): string | null {
+  if (setAside <= 0) return null;
+  return `${setAside === 1 ? "One sung item was" : `${setAside} sung items were`} set aside in Quiet mode. Singing never counts against a checkpoint.`;
 }
 
 /** The headline of the result screen (calm in every case; "not yet" is never "failed"). */
@@ -174,4 +241,21 @@ export function clearRecords(cpId: string, attemptNo: number): void {
   } catch {
     // ignore
   }
+}
+
+/**
+ * The footer's count and the review's title. A skipped item is not "answered": after skipping every item the
+ * footer read "25 of 26 answered" and the review "All 26 items answered".
+ */
+export function progressLine(records: readonly Pick<ItemRecord, "skipped">[], total: number): string {
+  const skipped = records.filter((r) => r.skipped).length;
+  const answered = records.length - skipped;
+  return `${answered} of ${total} answered${skipped > 0 ? `, ${skipped} skipped` : ""}`;
+}
+
+export function reviewTitle(records: readonly Pick<ItemRecord, "skipped">[], total: number): string {
+  const skipped = records.filter((r) => r.skipped).length;
+  if (skipped === 0) return `All ${total} items answered`;
+  const answered = records.length - skipped;
+  return `${answered} of ${total} items answered, ${skipped} skipped`;
 }

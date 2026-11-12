@@ -19,13 +19,64 @@ import {
   type ThreadKind,
   type TutorTurnRequest,
 } from "@oak/api";
+import { type KeySpec, keyOf } from "@oak/theory";
 import { create } from "zustand";
 
 /** One context chip: exactly what the next turn will carry (contracts §10.2, ux §6.2). */
 export interface ContextChip {
-  id: "step" | "code" | "result" | "hints" | "selection" | "sketch" | "capstone" | "track" | "transcription";
+  id:
+    | "step"
+    | "code"
+    | "answer"
+    | "result"
+    | "hints"
+    | "selection"
+    | "sketch"
+    | "capstone"
+    | "track"
+    | "transcription"
+    | "key"
+    | "labels";
   label: string;
 }
+
+/** Which note labels are on screen (the lenses of docs/design/wave3.md §4.3, or a lesson step's own labels). */
+export interface LabelState {
+  degrees: boolean;
+  solfege: boolean;
+  noteNames: boolean;
+}
+
+/**
+ * The learner's answer on a step that is not code (Wave 3), in a form the tutor can read. It carries only what
+ * the learner did and what they were shown — never the expected answer: the server redacts the grade by its own
+ * rung, and this goes to the model as written.
+ *
+ * - `staff`: the note list they placed (`"F#4:4 r:4 G4:2"`, the staff-input value), or for a key-signature
+ *   question the accidentals in the order placed (`mode: "key-signature"`, `notes: "F# C#"`);
+ * - `sung`: per sung note, the label the learner saw for its target (a degree or syllable they were shown; omit
+ *   it in echo mode, where the target is the question) and the measured cents from that target (`null`: no voice
+ *   heard), plus the tolerance they were graded at;
+ * - `by-ear`: the code they wrote by ear (`subject.code` may hold it instead) and the playback rate they used;
+ * - `text`: any other answer as the learner gave it (a typed name, the option they picked).
+ */
+export type TutorAnswer =
+  | {
+      kind: "staff";
+      notes: string;
+      mode?: "notes" | "key-signature";
+      clef?: "treble" | "bass" | "grand";
+      key?: KeySpec | null;
+    }
+  | {
+      kind: "sung";
+      notes: { target?: string; cents: number | null }[];
+      tolCents?: number;
+      /** Quiet mode or no mic: the step was done by its fallback, nothing was sung. */
+      quiet?: boolean;
+    }
+  | { kind: "by-ear"; code: string; rate?: number }
+  | { kind: "text"; prompt?: string; value: string };
 
 /** What the learner is looking at. Set by the surface that owns the screen. */
 export interface TutorSubject {
@@ -50,6 +101,17 @@ export interface TutorSubject {
   selection?: string | null;
   sketchId?: string;
   capstoneId?: string;
+  /** The key the learner is in. Absent: read from the code's first `.scale()`, else none (C major for sound). */
+  key?: KeySpec | null;
+  /** The learner's answer on a step that is not code (staff, sung, by ear); see `TutorAnswer`. */
+  answer?: TutorAnswer | null;
+  /**
+   * The labels a lesson step itself shows (content's `ui.staffLabels`/`ui.rollLabels` win inside a step, wave3
+   * §4.3). Absent: the learner's lenses.
+   */
+  labels?: LabelState | null;
+  /** A capstone after its first release (revision mode): review `tryCode` may be applied (contracts §10.7). */
+  released?: boolean;
 }
 
 export interface TutorAsk {
@@ -80,7 +142,12 @@ export type ChipId = ContextChip["id"];
  * the server's own state and is not sent by the browser at all. A listening note is about the code, so its code
  * chip stays too.
  */
-export const REMOVABLE_CHIPS: ReadonlySet<ChipId> = new Set<ChipId>(["code", "result", "selection"]);
+export const REMOVABLE_CHIPS: ReadonlySet<ChipId> = new Set<ChipId>([
+  "code",
+  "answer",
+  "result",
+  "selection",
+]);
 
 export function chipRemovable(id: ChipId, kind: ThreadKind = "chat"): boolean {
   if (!REMOVABLE_CHIPS.has(id)) return false;
@@ -109,6 +176,42 @@ export interface TutorHost {
 /** `window` event a bar reference fires when no host handles it: `detail = { from, to }`. */
 export const TUTOR_BARS_EVENT = "oak:tutor-bars";
 
+/**
+ * What a tutor reference points at in the music on screen (Wave 3): bars (`[[bars:3-4]]`, a review's bar chip)
+ * or a note (`[[note:F#4]]`). The Workbench lights it on the roll and the staff for `HIGHLIGHT_MS` (it reads
+ * `useTutorHighlight` or listens for `TUTOR_HIGHLIGHT_EVENT`, `detail = TutorHighlight`); the loop is set by the
+ * bars event as before. `seq` changes with every reference, so the same one clicked twice lights again.
+ */
+export type TutorHighlight =
+  | { kind: "bars"; thread: SubjectRef; from: number; to: number; seq: number; at: number }
+  | { kind: "note"; thread: SubjectRef; midi: number; seq: number; at: number };
+
+export const TUTOR_HIGHLIGHT_EVENT = "oak:tutor-highlight";
+export const HIGHLIGHT_MS = 2400;
+
+export const useTutorHighlight = create<{ current: TutorHighlight | null }>(() => ({ current: null }));
+let highlightSeq = 0;
+
+type HighlightInput =
+  | { kind: "bars"; thread: SubjectRef; from: number; to: number }
+  | { kind: "note"; thread: SubjectRef; midi: number };
+
+/** Publishes a reference for the Workbench on screen to light (store and window event). */
+export function highlightReference(ref: HighlightInput): TutorHighlight {
+  const h = { ...ref, seq: ++highlightSeq, at: Date.now() } as TutorHighlight;
+  useTutorHighlight.setState({ current: h });
+  if (typeof window !== "undefined")
+    window.dispatchEvent(new CustomEvent(TUTOR_HIGHLIGHT_EVENT, { detail: h }));
+  return h;
+}
+
+/** Bar numbers (1-based, inclusive) to the half-open cycle span the Workbench uses: bars 3–4 → [2, 4). */
+export function barsToCycles(from: number, to: number): [number, number] {
+  const a = Math.max(1, Math.min(from, to));
+  const b = Math.max(a, Math.max(from, to));
+  return [a - 1, b];
+}
+
 interface TutorContextState {
   subject: TutorSubject | null;
   availability: TutorAvailability;
@@ -126,6 +229,8 @@ interface TutorContextState {
   hosts: number;
   /** Bumped by `focusTutor()` (Mod+I): the panel moves focus to its composer. */
   focusRequests: number;
+  /** The learner's shown lenses (synced by `useTutorBridge`); null until known. */
+  lenses: LabelState | null;
 }
 
 export const useTutorContext = create<TutorContextState>(() => ({
@@ -138,7 +243,23 @@ export const useTutorContext = create<TutorContextState>(() => ({
   excluded: [],
   hosts: 0,
   focusRequests: 0,
+  lenses: null,
 }));
+
+/** The shell keeps the shown lenses here, so a turn built outside React knows them (`useTutorBridge`). */
+export function setLensState(lenses: LabelState | null): void {
+  const cur = useTutorContext.getState().lenses;
+  if (
+    cur === lenses ||
+    (cur &&
+      lenses &&
+      cur.degrees === lenses.degrees &&
+      cur.solfege === lenses.solfege &&
+      cur.noteNames === lenses.noteNames)
+  )
+    return;
+  useTutorContext.setState({ lenses });
+}
 
 // --- subject --------------------------------------------------------------------------------------
 
@@ -193,6 +314,7 @@ export function tutorHostFor(thread: SubjectRef): TutorHost | null {
 
 /** Loops bars in the active Workbench: through the host if there is one, else as a window event. */
 export function showBars(thread: SubjectRef, from: number, to: number): void {
+  highlightReference({ kind: "bars", thread, from, to });
   const host = tutorHostFor(thread);
   if (host?.showBars) host.showBars(from, to);
   else if (typeof window !== "undefined")
@@ -210,15 +332,24 @@ export const GENERAL_SUBJECT: TutorSubject = {
   tutorOpen: true,
 };
 
-/** The chips of a subject, in display order. */
-export function chipsOf(s: TutorSubject): ContextChip[] {
+/** The chips of a subject, in display order. `lenses` are the learner's shown lenses (`state.lenses`). */
+export function chipsOf(s: TutorSubject, lenses: LabelState | null = null): ContextChip[] {
   const chips: ContextChip[] = [];
   if (s.lessonId && s.stepId) chips.push({ id: "step", label: `${s.lessonId} · ${s.stepId}` });
   if (s.sketchId) chips.push({ id: "sketch", label: s.title });
   if (s.capstoneId) chips.push({ id: "capstone", label: `Capstone ${s.capstoneId}` });
   if (s.thread.subjectKind === "track") chips.push({ id: "track", label: s.title });
   if (s.thread.subjectKind === "transcription") chips.push({ id: "transcription", label: s.title });
-  if (s.code) chips.push({ id: "code", label: `Your code · ${lineCount(s.code)} lines` });
+  const key = subjectKey(s);
+  if (key) chips.push({ id: "key", label: `Key · ${keyLabel(key)}` });
+  const labels = labelsLine(s.labels ?? lenses);
+  if (labels && (s.code || s.answer || s.lessonId || s.sketchId || s.capstoneId))
+    chips.push({ id: "labels", label: `Labels · ${labels}` });
+  const answer = s.answer ? answerChip(s.answer) : null;
+  // A step answered on the staff, by voice, in words or by ear has one chip for that answer (code written by ear
+  // included): a second "Your code" chip would list the same lines twice.
+  if (s.code && !s.answer) chips.push({ id: "code", label: `Your code · ${lineCount(s.code)} lines` });
+  if (answer) chips.push({ id: "answer", label: answer });
   if (s.lastResult) chips.push({ id: "result", label: resultLabel(s.lastResult) });
   if (s.graded && !s.passed) chips.push({ id: "hints", label: `Hints ${s.rung ?? 0}/4` });
   if (s.selection) chips.push({ id: "selection", label: `Selection · ${lineCount(s.selection)} lines` });
@@ -226,6 +357,138 @@ export function chipsOf(s: TutorSubject): ContextChip[] {
 }
 
 const lineCount = (code: string) => code.replace(/\s+$/, "").split("\n").length;
+
+const ACC = (s: string) => s.replace(/#/g, "♯").replace(/b/g, "♭");
+
+/** "G major", "E♭ minor". */
+export function keyLabel(key: KeySpec): string {
+  return `${key.tonic.charAt(0).toUpperCase()}${ACC(key.tonic.slice(1))} ${key.mode}`;
+}
+
+/**
+ * The key of the music on screen: the subject's own, else the code's first `.scale("…")` (a patterned
+ * `.scale("<C4:major D4:major>")` gives its first key), else none.
+ */
+export function subjectKey(s: Pick<TutorSubject, "key" | "code" | "answer">): KeySpec | null {
+  if (s.key) return s.key;
+  if (s.answer?.kind === "staff" && s.answer.key) return s.answer.key;
+  const code = s.code ?? (s.answer?.kind === "by-ear" ? s.answer.code : null);
+  return code ? keyFromCode(code) : null;
+}
+
+/** The key of a piece's first `.scale()` call, or null. */
+export function keyFromCode(code: string): KeySpec | null {
+  const m = /\.scale\(\s*["'`]([^"'`]{1,40})["'`]/.exec(code);
+  if (!m) return null;
+  const first =
+    (m[1] as string)
+      .replace(/[<>[\]]/g, " ")
+      .trim()
+      .split(/\s+/)[0] ?? "";
+  if (!first) return null;
+  try {
+    const k = keyOf(first);
+    return k;
+  } catch {
+    return null;
+  }
+}
+
+/** "degrees, solfège", "note names", "none". */
+export function labelsLine(l: LabelState | null | undefined): string | null {
+  if (!l) return null;
+  const on = [l.degrees && "degrees", l.solfege && "solfège", l.noteNames && "note names"].filter(Boolean);
+  return on.length > 0 ? on.join(", ") : "none";
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+function answerChip(a: TutorAnswer): string {
+  switch (a.kind) {
+    case "staff": {
+      const n = a.notes.trim()
+        ? a.notes
+            .trim()
+            .split(/\s+/)
+            .filter((t) => t !== "|")
+        : [];
+      if (a.mode === "key-signature")
+        return `Your signature · ${plural(n.length, "accidental", "accidentals")}`;
+      const notes = n.filter((t) => !/^r:/.test(t)).length;
+      return `Your staff · ${plural(notes, "note", "notes")}`;
+    }
+    case "sung":
+      return a.quiet
+        ? "Quiet mode · nothing sung"
+        : `Your singing · ${plural(a.notes.length, "note", "notes")}`;
+    case "by-ear":
+      return `Your code by ear · ${lineCount(a.code)} lines`;
+    case "text":
+      return "Your answer";
+  }
+}
+
+const signedCents = (c: number) => `${c > 0 ? "+" : c < 0 ? "−" : "±"}${Math.abs(Math.round(c))}¢`;
+
+/**
+ * The learner's answer as text the tutor reads (sent as the turn's `learnerCode`). Only what the learner did and
+ * saw: placed notes, measured cents, the code they wrote. Pure.
+ */
+export function answerText(a: TutorAnswer): string {
+  switch (a.kind) {
+    case "staff": {
+      const where = [a.clef ? `${a.clef} clef` : null, a.key ? `key signature of ${keyLabel(a.key)}` : null]
+        .filter(Boolean)
+        .join(", ");
+      if (a.mode === "key-signature")
+        return `Accidentals I placed on the staff, in the order I placed them${where ? ` (${where})` : ""}:\n${a.notes.trim() || "(none yet)"}`;
+      return `Notes I placed on the staff${where ? ` (${where})` : ""}, as a note list (pitch:duration, 4 = quarter, r = rest, | = bar line):\n${a.notes.trim() || "(none yet)"}`;
+    }
+    case "sung": {
+      if (a.quiet) return "Quiet mode: I did this step without singing (its listening fallback).";
+      const tol = a.tolCents ? ` I was graded within ±${a.tolCents}¢.` : "";
+      const rows = a.notes.map((n, i) => {
+        const what = n.target ? `note ${i + 1} (target ${n.target})` : `note ${i + 1}`;
+        return `${what}: ${n.cents === null ? "no voice heard" : `${signedCents(n.cents)} ${n.cents > 0 ? "sharp" : n.cents < 0 ? "flat" : "on pitch"}`}`;
+      });
+      return `What Oak's pitch tracker heard when I sang, in cents from each target (100¢ = a half step).${tol}\n${rows.join("\n")}`;
+    }
+    case "by-ear":
+      return a.rate && a.rate !== 1 ? `// written by ear, listening at ${a.rate}× speed\n${a.code}` : a.code;
+    case "text":
+      return a.prompt ? `${a.prompt}\nMy answer: ${a.value}` : `My answer: ${a.value}`;
+  }
+}
+
+/** The line the key and label chips add under the learner's words ("On screen: …"); null when neither applies. */
+export function onScreenLine(s: TutorSubject, lenses: LabelState | null): string | null {
+  const chips = chipsOf(s, lenses);
+  const parts: string[] = [];
+  const key = chips.find((c) => c.id === "key");
+  const labels = chips.find((c) => c.id === "labels");
+  if (key) parts.push(`key ${key.label.replace(/^Key · /, "")}`);
+  if (labels) parts.push(`labels shown: ${labels.label.replace(/^Labels · /, "")}`);
+  return parts.length > 0 ? `${ON_SCREEN}${parts.join("; ")}.` : null;
+}
+
+export const ON_SCREEN = "On screen: ";
+const SELECTED = "\n\nSelected code:\n";
+
+/** A sent message split back into the learner's words, the "On screen" line and the selection (for display). */
+export function splitUserText(text: string): {
+  own: string;
+  onScreen: string | null;
+  selection: string | null;
+} {
+  const [head, sel] = text.split(SELECTED) as [string, string | undefined];
+  const at = head.lastIndexOf(`\n\n${ON_SCREEN}`);
+  if (at < 0) return { own: head, onScreen: null, selection: sel ?? null };
+  return {
+    own: head.slice(0, at),
+    onScreen: head.slice(at + 2 + ON_SCREEN.length),
+    selection: sel ?? null,
+  };
+}
 
 function resultLabel(r: GradeResult): string {
   if (r.status === "pass") return "Last check: passed";
@@ -293,12 +556,20 @@ export function buildTurnRequest(
   kind: ThreadKind,
   userText: string,
   exclude: readonly ChipId[] = [],
+  lenses: LabelState | null = null,
 ): TutorTurnRequest {
   const off = (id: ChipId) => exclude.includes(id) && chipRemovable(id, kind);
   const selection = subject.selection?.trim() && !off("selection") ? subject.selection.trim() : null;
-  const text = selection ? `${userText}\n\nSelected code:\n\`\`\`\n${selection}\n\`\`\`` : userText;
+  const screen = onScreenLine(subject, lenses);
+  let text = screen ? `${userText}\n\n${screen}` : userText;
+  if (selection) text = `${text}${SELECTED}\`\`\`\n${selection}\n\`\`\``;
   const req: TutorTurnRequest = { thread: subject.thread, kind, userText: text };
-  if (subject.code && !off("code")) req.learnerCode = subject.code;
+  // A step answered on the staff, by voice, in words or by ear sends that answer (its chip left out: nothing);
+  // otherwise the code.
+  const a = subject.answer ?? null;
+  if (a) {
+    if (!off("answer")) req.learnerCode = answerText(a);
+  } else if (subject.code && !off("code")) req.learnerCode = subject.code;
   if (subject.lastResult && !off("result")) req.graderResult = gradeSnapshotOf(subject.lastResult);
   if (subject.lessonId) req.lessonId = subject.lessonId;
   if (subject.stepId) req.stepId = subject.stepId;
@@ -329,6 +600,7 @@ function ask(kind: ThreadKind, userText: string, label: string, subject?: TutorS
       kind,
       userText,
       st.subject && sameThread(st.subject.thread, subj.thread) ? st.excluded : [],
+      st.lenses,
     ),
     label,
     at: Date.now(),

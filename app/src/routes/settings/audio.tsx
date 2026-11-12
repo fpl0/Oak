@@ -1,9 +1,10 @@
-// Settings › Audio (ux §2.3; contracts §8.6): volumes, a left/right output check, the limiter, timing (with
-// re-runs through /settings/voice/setup), and the sound pack: its version, what is cached for offline use, and
-// "Preload all".
+// Settings › Audio (ux §2.3; contracts §8.6): volumes, a live output level meter with a test phrase, a left/right
+// output check, the limiter, what the computer reports as the output now (AirPods guidance, and a nudge to
+// re-measure timing when it changed), timing (with re-runs through /settings/voice/setup), and the sound pack:
+// its version, what is cached for offline use, and "Preload all".
 import { LIMITER } from "@oak/strudel";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Play } from "lucide-react";
+import { Music, Play } from "lucide-react";
 import { useEffect, useState } from "react";
 import { usePageTitle } from "../../lib/nav.ts";
 import { getOak, peekOak } from "../../lib/oak.ts";
@@ -11,12 +12,15 @@ import { useBootstrap } from "../../lib/queries.ts";
 import { useUpdateSetting } from "../../lib/settings.ts";
 import { audioStatusLabel, useShell } from "../../lib/shell-store.ts";
 import { Button, buttonClass } from "../../ui/kit/Button.tsx";
+import { Callout } from "../../ui/kit/Controls.tsx";
 import { Field, ReadOnlyRow, Section, Slider } from "../../ui/kit/Field.tsx";
 import { QueryView } from "../../ui/kit/QueryState.tsx";
 import { toast } from "../../ui/kit/Toast.tsx";
-import { outputChoiceOf, outputGuidance } from "../../voice/logic.ts";
+import { outputChangeAdvice, outputChoiceOf, outputGuidance } from "../../voice/logic.ts";
 import { browserPackDeps, type PackStatus, packLine, readPackStatus } from "../../voice/pack-status.ts";
-import { voiceAudio } from "../../voice/services.ts";
+import { OutputMeter } from "../../voice/panels.tsx";
+import { playAt, voiceAudio } from "../../voice/services.ts";
+import { useOutputDevice } from "../../voice/use-output-device.ts";
 
 export const Route = createFileRoute("/settings/audio")({ component: AudioSettings });
 
@@ -63,6 +67,38 @@ function OutputCheck({ onPlayed }: { onPlayed(): void }) {
   );
 }
 
+/** A short piano phrase through the master bus at practice volume, so the output meter has something to show. */
+function TestPhrase() {
+  const [playing, setPlaying] = useState(false);
+  const play = async () => {
+    setPlaying(true);
+    try {
+      const { oak } = await voiceAudio();
+      await oak.unlock();
+      const at = oak.ctx.currentTime + 0.1;
+      // C E G C′, then the chord: the range most lessons play in.
+      for (const [i, note] of [60, 64, 67, 72].entries())
+        playAt(oak, { s: "piano", note, gain: 0.7 }, at + i * 0.35, 0.5);
+      for (const note of [48, 60, 64, 67]) playAt(oak, { s: "piano", note, gain: 0.5 }, at + 1.5, 1.6);
+      await new Promise((r) => setTimeout(r, 3300));
+    } catch (e) {
+      toast.error("Sound didn't start", e instanceof Error ? e.message : undefined);
+    } finally {
+      setPlaying(false);
+    }
+  };
+  return (
+    <Button
+      onClick={() => void play()}
+      loading={playing}
+      icon={<Music aria-hidden className="size-4" />}
+      data-testid="audio-phrase"
+    >
+      Play a test phrase
+    </Button>
+  );
+}
+
 function usePackStatus(key: string) {
   const [status, setStatus] = useState<PackStatus | null>(null);
   // Re-read when sound wakes (the adapter's sound list appears then) or after a preload.
@@ -85,6 +121,7 @@ function AudioSettings() {
   const audio = useShell((s) => s.audio);
   const [played, setPlayed] = useState(0);
   const pack = usePackStatus(`${audio.kind}:${played}`);
+  const device = useOutputDevice();
   const preloadAll = async () => {
     try {
       const oak = peekOak() ?? (await getOak());
@@ -146,13 +183,53 @@ function AudioSettings() {
                   profile.outputKind === "unknown" ? (
                     "not set up yet"
                   ) : (
-                    <span>
+                    <span data-testid="listening-on">
                       {OUTPUT_WORDS[out]}
                       <span className="block text-sm text-text-3">{outputGuidance(out).title}</span>
+                      {device && (
+                        <span className="block text-sm text-text-3">
+                          Your computer reports {device.label}.
+                        </span>
+                      )}
                     </span>
                   )
                 }
               />
+              {(() => {
+                const advice = outputChangeAdvice(
+                  device?.label ?? null,
+                  device?.kind ?? null,
+                  profile.outputKind,
+                );
+                return advice ? (
+                  <div className="py-3">
+                    <Callout
+                      tone="attention"
+                      title={advice.title}
+                      actions={
+                        <Link
+                          to="/settings/voice/setup"
+                          search={{ part: "headphones" }}
+                          className={buttonClass("secondary", "sm")}
+                        >
+                          Set up these headphones
+                        </Link>
+                      }
+                    >
+                      {advice.body}
+                    </Callout>
+                  </div>
+                ) : null;
+              })()}
+              <div className="flex flex-col gap-3 py-3">
+                <OutputMeter />
+                <div className="flex flex-wrap items-center gap-3">
+                  <TestPhrase />
+                  <span className="text-sm text-text-2">
+                    The meter shows what Oak sends to your headphones, whatever is playing.
+                  </span>
+                </div>
+              </div>
               <OutputCheck onPlayed={() => setPlayed((n) => n + 1)} />
               <div className="pb-1">
                 <Link

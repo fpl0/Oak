@@ -1,6 +1,8 @@
 // Pure helpers of the AnswerWidget contract (docs/design/wave2.md §3.1): the empty value of each kind, whether a
 // value is complete enough to check, and the wire response an attempt stores. No DOM: tested with `bun test`.
 import type { AttemptResponse } from "@oak/api";
+import { parseSignatureValue } from "./keys/circle.ts";
+import { normalizeStaffValue } from "./staff/model.ts";
 import type { AnswerKind, AnswerSpec, AnswerSpecOf, AnswerValue, AnswerValueMap } from "./types.ts";
 
 /** Steps in a grid row: `stepsPerBar × bars`. */
@@ -84,7 +86,9 @@ export function isComplete(spec: AnswerSpec, value: AnswerValue): boolean {
 /**
  * The response an attempt stores and the grader reads (`AttemptResponse`, `@oak/api`). Grid cells are sent as
  * choice IDs: the cell index for a one-row grid (as `@oak/drills` rhythm dictation expects), `row:cell` with
- * several rows. Staff input is the staff text; the lesson host converts it to `NEvent[]` for the grader.
+ * several rows. Staff input is the staff text (bare pitches read as quarters); the lesson host converts it to
+ * `NEvent[]` for the grader. A key-signature staff (`mode: "key-signature"`) sends its accidentals in the order
+ * placed as `answer.text` (wave3.md §10).
  */
 export function responseOf(spec: AnswerSpec, value: AnswerValue): AttemptResponse {
   switch (spec.ui) {
@@ -105,7 +109,8 @@ export function responseOf(spec: AnswerSpec, value: AnswerValue): AttemptRespons
     case "keyboard":
       return { answer: { midi: value as number[] } };
     case "staff-input":
-      return { staff: value as string };
+      if (spec.mode === "key-signature") return { answer: { text: parseSignatureValue(value as string) } };
+      return { staff: normalizeStaffValue(value as string) };
     case "grid": {
       const rows = value as boolean[][];
       const one = rows.length === 1;

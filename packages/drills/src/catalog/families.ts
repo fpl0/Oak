@@ -95,6 +95,25 @@ const base = (
 ): FamSpec["base"] => ({ replays, instruments, keys, tempo, ...(context ? { context } : {}) });
 const deg = (d: string): string => `deg.${d.replace("#", "s")}`;
 
+/**
+ * Context categories (`ctx.*`, see gen/common.ts): opened by a lesson like any category, never sampled and
+ * never in a level. They widen what a trial may use as the course teaches it: keys with sharps, keys with
+ * flats, syllables next to the degree numbers.
+ */
+type Cats = FamSpec["cats"];
+/** Ear families: C until U03.L05 plays tunes in other keys; sharp keys from there, flat keys from U03.L07. */
+const EAR_KEYS: Cats = [
+  ["ctx.sharp-keys", "U03.L05"],
+  ["ctx.flat-keys", "U03.L07"],
+];
+/** Spelling and reading families: sharp keys with their signatures (U03.L06), flat keys from U03.L07. */
+const SPELLED_KEYS: Cats = [
+  ["ctx.sharp-keys", "U03.L06"],
+  ["ctx.flat-keys", "U03.L07"],
+];
+/** Movable do (U03.L08): syllables join the degree numbers in prompts, pads and sung labels. */
+const SOLFEGE: Cats = [["ctx.solfege", "U03.L08"]];
+
 // --- rhythm -------------------------------------------------------------------------------------
 
 const rhythm: FamilyDef[] = [
@@ -612,6 +631,7 @@ const pitch: FamilyDef[] = [
       ["accidentals", "U03.L06"],
       ["bass", "U05.L06"],
       ["lead-sheet", "U07.L09"],
+      ...SPELLED_KEYS,
     ],
     base: base(-1, KEYS1, "≤2acc", [80, 100], "none"),
     levels: [
@@ -649,6 +669,7 @@ const pitch: FamilyDef[] = [
       ["lydian", "U14.L04"],
       ["phrygian", "U14.L05"],
       ["locrian", "U14.L06"],
+      ["ctx.flat-keys", "U03.L07"],
     ],
     base: base(-1, KEYS1, "≤2acc", [90, 90], "none"),
     levels: [
@@ -796,12 +817,14 @@ const degrees: FamilyDef[] = [
     skills: "E04 E05",
     lesson: "U03.L02",
     gates: { 2: "U03.L03", 3: "U03.L04" },
-    cats: fetMajorCats,
-    base: { ...base(2, KEYS1, "C", [90, 110], "cadence"), register: [60, 72] },
+    cats: [...fetMajorCats, ...EAR_KEYS, ...SOLFEGE],
+    // Keys: C until U03.L05, then up to two sharps, then two flats (EAR_KEYS); all keys from level 4.
+    base: { ...base(2, KEYS1, "≤2acc", [90, 110], "cadence"), register: [60, 72] },
     levels: [
-      { categories: [deg("1"), deg("3"), deg("5")] },
+      // Contracts §7.3: 1 against 5 first, then 3 joins (the two blocked-intro sets).
+      { categories: [deg("1"), deg("3"), deg("5")], intro: [[deg("1"), deg("5")], [deg("3")]] },
       { categories: [deg("2"), deg("4")] },
-      { categories: [deg("6"), deg("7")], keys: "≤2acc" },
+      { categories: [deg("6"), deg("7")] },
       { categories: [], keys: "all", register: [48, 84], instruments: KEYS3 },
       {
         categories: [],
@@ -914,12 +937,14 @@ const degrees: FamilyDef[] = [
       [deg("4"), "U03.L03"],
       [deg("6"), "U03.L04"],
       [deg("7"), "U03.L04"],
+      ...EAR_KEYS,
+      ...SOLFEGE,
     ],
-    base: { ...base(1, KEYS1, "C", [90, 110], "cadence"), register: [60, 72] },
+    base: { ...base(1, KEYS1, "≤2acc", [90, 110], "cadence"), register: [60, 72] },
     levels: [
       { categories: [deg("1"), deg("3"), deg("5")] },
       { categories: [deg("2"), deg("4")] },
-      { categories: [deg("6"), deg("7")], keys: "≤2acc" },
+      { categories: [deg("6"), deg("7")] },
       { categories: [], keys: "all", register: [48, 84] },
     ],
     mastery: 3,
@@ -948,6 +973,8 @@ const degrees: FamilyDef[] = [
       ["5-6-7-1", "U03.L04"],
       ["b3-2-1", "U10.L03"],
       ["b6-5", "U10.L03"],
+      ...EAR_KEYS,
+      ...SOLFEGE,
     ],
     base: { ...base(1, KEYS1, "≤2acc", [80, 100], "cadence"), register: [55, 72] },
     levels: [
@@ -980,6 +1007,8 @@ const degrees: FamilyDef[] = [
       ["minor", "U10.L01"],
       ["modes", "U14.L01"],
       ["chromatic", "U15.L01"],
+      // n → note name in D major is asked in U03.L05, flat keys from U03.L07.
+      ...EAR_KEYS,
     ],
     base: base(-1, KEYS1, "≤4acc", [90, 90], "none"),
     levels: [
@@ -1274,6 +1303,12 @@ const melody: FamilyDef[] = [
 // --- intervals ----------------------------------------------------------------------------------
 
 const IN_KEY = ["i2", "i3", "i4", "i5", "i6", "i7", "i8"];
+/** Each size against its neighbours: a 3rd is contrasted with a 2nd and a 4th. */
+const inKeyCats: FamSpec["cats"] = IN_KEY.map((id, i) => [
+  id,
+  "U04.L01",
+  [IN_KEY[i - 1], IN_KEY[i + 1]].filter((x): x is string => x !== undefined),
+]);
 const intervals: FamilyDef[] = [
   fam({
     id: "fam.int.in-key",
@@ -1282,10 +1317,21 @@ const intervals: FamilyDef[] = [
     domain: "interval",
     skills: "E06",
     lesson: "U04.L01",
-    cats: IN_KEY.map((id) => [id, "U04.L01"]),
+    // The lessons that teach each shape: to the tonic (U04.L02), anywhere up and down (U04.L04), together
+    // (U04.L03). A level past a closed one waits for it (contracts §7.3).
+    gates: { 2: "U04.L02", 3: "U04.L04", 4: "U04.L04", 5: "U04.L03" },
+    cats: inKeyCats,
     base: { ...base(2, KEYS2, "≤2acc", [84, 104], "cadence"), register: [55, 76] },
     levels: [
-      { categories: IN_KEY, shape: "from-tonic" },
+      // By size: the 3rd, 5th and octave of 1-3-5-1' first, then the steps and the wide ones between them.
+      {
+        categories: IN_KEY,
+        shape: "from-tonic",
+        intro: [
+          ["i3", "i5", "i8"],
+          ["i2", "i4", "i6", "i7"],
+        ],
+      },
       { categories: [], shape: "to-tonic" },
       { categories: [], shape: "any-up", keys: "all" },
       { categories: [], shape: "any-down", keys: "all" },
@@ -1298,6 +1344,7 @@ const intervals: FamilyDef[] = [
     mix: "pitch",
     answer: "degree-pad",
     generator: "interval-in-key",
+    tips: DEG_TIPS,
   }),
   fam({
     id: "fam.int.spell",
@@ -1310,13 +1357,15 @@ const intervals: FamilyDef[] = [
     cats: [
       ["above-pm", "U04.L02"],
       ["above-all", "U04.L02"],
+      // The tritone is named in U04.L03; augmented and diminished as words wait for U05.L03.
+      ["tritone", "U04.L03"],
       ["below", "U04.L02"],
       ["accidental-roots", "U05.L03"],
     ],
     base: base(-1, KEYS1, "all", [90, 90], "none"),
     levels: [
       { categories: ["above-pm"] },
-      { categories: ["above-all"] },
+      { categories: ["above-all", "tritone"] },
       { categories: ["below"] },
       { categories: ["accidental-roots"] },
     ],

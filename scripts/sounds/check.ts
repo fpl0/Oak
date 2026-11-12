@@ -4,7 +4,8 @@
 //
 // Fails (exit 1) when: a locked file is missing, its size or sha256 differs, an unlocked file exists in the
 // pack version directory, a sample map still points at a remote host / a `_base` does not end in "/", a
-// sample map references a file that is not in the pack, or the manifest references an unmirrored font.
+// sample map references a file that is not in the pack, the manifest references an unmirrored font, an alias's
+// gain/release/range is out of bounds, or an Oak kit's gains do not match its map.
 
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -114,7 +115,29 @@ if (manifest) {
   for (const [alias, a] of Object.entries(manifest.aliases)) {
     if (!manifest.soundfonts[a.gm]?.some((f) => f.font === a.font))
       fail(`manifest: alias ${alias} -> ${a.font} not mirrored`);
+    if (a.gain !== undefined && !(a.gain > 0 && a.gain <= 4)) fail(`manifest: alias ${alias} gain ${a.gain}`);
+    if (a.release !== undefined && !(a.release >= 0.01 && a.release <= 2))
+      fail(`manifest: alias ${alias} release ${a.release}`);
+    if (a.range && !(a.range[0] >= 0 && a.range[0] < a.range[1] && a.range[1] <= 127))
+      fail(`manifest: alias ${alias} range ${JSON.stringify(a.range)}`);
   }
+  // Oak kits: every gain key is a key of an oak-kit map, every gain list matches its role's file count.
+  const kitKeys = new Map<string, number>();
+  for (const map of manifest.sampleMaps.filter((m) => m.tag === "oak-kit")) {
+    const json = await readJson<Record<string, unknown>>(map.json.slice(PUBLIC_ROOT.length + 1));
+    for (const [key, value] of Object.entries(json))
+      if (!key.startsWith("_")) kitKeys.set(key, Array.isArray(value) ? value.length : 1);
+  }
+  for (const [key, gain] of Object.entries(manifest.kitGains ?? {})) {
+    const files = kitKeys.get(key);
+    if (files === undefined) fail(`manifest: kit gain ${key} has no sample map entry`);
+    const gains = Array.isArray(gain) ? gain : [gain];
+    if (Array.isArray(gain) && gain.length !== files)
+      fail(`manifest: kit gain ${key} lists ${gain.length} gains for ${files} files`);
+    if (gains.some((g) => !(g > 0 && g <= 4))) fail(`manifest: kit gain ${key} out of range`);
+  }
+  for (const key of kitKeys.keys())
+    if (manifest.kitGains?.[key] === undefined) fail(`manifest: kit sound ${key} has no gain`);
 }
 
 if (errors.length) {

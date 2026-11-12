@@ -59,6 +59,11 @@ describe("normalizeText (exercises §3.9)", () => {
     expect(i("A4")).toBe("A4");
     expect(i("M5")).toBeNull();
     expect(i("b3")).toBeNull();
+    // Strudel's form, as in `.transpose("3M")`: number first; the sign is a direction, not part of the name.
+    expect(i("3M")).toBe("M3");
+    expect(i("-2m")).toBe("m2");
+    expect(i("8P")).toBe("P8");
+    expect(i("4M")).toBeNull();
   });
   test("keys", () => {
     const k = (t: string) => normalizeText("key", t);

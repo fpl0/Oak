@@ -10,6 +10,7 @@ import {
   clicksPlan,
   comparePlan,
   cuePlan,
+  homeSemitones,
   resolutionOf,
   sequence,
   stagingOf,
@@ -107,7 +108,13 @@ describe("hear the answer, compare", () => {
       .map((e) => e.value.note);
     const [target] = targetMidisOf(t);
     const tonic = (target as number) - degreeSemitones(expected as never);
-    expect(notes.slice(-2)).toEqual([tonic + degreeSemitones(wrong as never), target]);
+    // Yours, then it, each walking home (ux §4.2): the wrong degree starts the first path, the target the last.
+    const homeOf = (d: string) => homeSemitones(d as never).map((x) => tonic + x);
+    expect(notes.slice(-(homeOf(wrong).length + homeOf(expected).length))).toEqual([
+      ...homeOf(wrong),
+      ...homeOf(expected),
+    ]);
+    expect(homeOf(expected)[0]).toBe(target);
     // Nothing to compare when the answer was right.
     expect(comparePlan(t, { taps: null, answer: { degrees: [expected as never] } }, null)).toBeNull();
   });

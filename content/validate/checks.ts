@@ -1,6 +1,8 @@
 // The per-lesson checks of AUTHORING §12.1, as one function both the validation suite
 // (content/validate/lessons.test.ts) and `bun run content:check <id>` run. Each check returns its issues;
 // an empty list is a pass. Grading and notation go through the adapters of ./harness.ts.
+
+import { readFileSync } from "node:fs";
 import {
   checkLessonAuthoring,
   type Exercise,
@@ -285,6 +287,24 @@ export async function checkNotation(l: LoadedLesson): Promise<CheckSection> {
   return { n: 9, name: "Notation", issues, pending };
 }
 
+/**
+ * The S3 harness's committed table (packages/strudel/audibility.json). A group-H control is proven audible when the
+ * toolbox row says so or the harness measured it; the table is read once and a missing file proves nothing.
+ */
+let harnessAudible: Record<string, boolean> | null = null;
+function provenByHarness(id: string): boolean {
+  if (!harnessAudible) {
+    try {
+      const path = new URL("../../packages/strudel/audibility.json", import.meta.url);
+      harnessAudible =
+        (JSON.parse(readFileSync(path, "utf8")) as { audible?: Record<string, boolean> }).audible ?? {};
+    } catch {
+      harnessAudible = {};
+    }
+  }
+  return harnessAudible[id] === true;
+}
+
 export function checkSounds(l: LoadedLesson): CheckSection {
   const issues: string[] = [];
   const used = new Set<string>();
@@ -299,7 +319,10 @@ export function checkSounds(l: LoadedLesson): CheckSection {
           used.add(id);
   }
   const pending = [...used]
-    .filter((id) => toolboxById.get(id)?.group === "H" && toolboxById.get(id)?.audible !== true)
+    .filter(
+      (id) =>
+        toolboxById.get(id)?.group === "H" && toolboxById.get(id)?.audible !== true && !provenByHarness(id),
+    )
     .map((id) => `${id}: audibility not yet proven by the S3 harness`);
   return { n: 10, name: "Sounds", issues, pending };
 }
@@ -335,8 +358,10 @@ export function checkTheory(l: LoadedLesson): CheckSection {
     for (const c of exerciseCode(e)) {
       if (c.what.startsWith("test:")) continue;
       const key = e.key ?? l.def.key;
+      // A starter may sit in the lesson's key while the step asks for another (U03.L02 S5: "move it to G").
+      const keys = c.what === "starter" ? [key, l.def.key] : [key];
       for (const m of c.code.matchAll(/\.scale\("([A-G][#b]?)\d:([a-z:]+)"\)/g))
-        if (m[1] !== key.tonic || (m[2] as string).replace(/:/g, " ") !== key.mode)
+        if (!keys.some((k) => m[1] === k.tonic && (m[2] as string).replace(/:/g, " ") === k.mode))
           issues.push(
             `${step.id}/${e.id}#${c.what}: .scale("${m[1]}…:${m[2]}") but the key is ${key.tonic} ${key.mode}`,
           );

@@ -30,6 +30,17 @@ import type {
   TutorEvalView,
 } from "./types.ts";
 
+// Wave 3 seam (docs/design/wave3.md §3.3): which key each stretch of each track is read in, for degree labels.
+export {
+  type EventLabel,
+  eventLabels,
+  type KeyContextOptions,
+  type KeySpan,
+  keyAt,
+  type TrackKeyContext,
+  trackKeyContexts,
+  transposeAfterScaleTracks,
+} from "./analyze/scale-context.ts";
 // --- realm, evaluation, normalization, lint (grader runtime) --------------------------------------
 export { lintBase, lintOak, lintStrict, sectionsFromAst, toolsUsed } from "./lint/index.ts";
 export { drumRole, inferRoles, normalize } from "./normalize/nevent.ts";
@@ -69,9 +80,16 @@ import { R as REALM } from "./runtime/realm.ts";
 // `toolsUsed` reads the toolbox the realm was initialised with; an empty toolbox means "no toolbox data".
 // Without toolbox data `toolsUsed` is left out so `uses` / `must-use` fall back to their source scan.
 const realmToolsUsed = (code: string): { id: string }[] => toolsUsedImpl(code, REALM.toolbox);
+let codeIndex: { of: readonly unknown[]; map: Map<string, string> } | null = null;
+/** A toolbox entry's code form (`ToolEntry.code`), indexed once per toolbox. */
+const realmToolCode = (id: string): string | null => {
+  if (codeIndex?.of !== REALM.toolbox)
+    codeIndex = { of: REALM.toolbox, map: new Map(REALM.toolbox.map((t) => [t.id as string, t.code])) };
+  return codeIndex.map.get(id) ?? null;
+};
 function realmDeps(): GradeDeps {
   const base: GradeDeps = { evaluate: evaluateImpl, normalize: normalizeImpl };
-  return REALM.toolbox.length > 0 ? { ...base, toolsUsed: realmToolsUsed } : base;
+  return REALM.toolbox.length > 0 ? { ...base, toolsUsed: realmToolsUsed, toolCode: realmToolCode } : base;
 }
 
 // --- realm (call inside a worker, a subprocess, or directly in tests and content CI) -------------
@@ -150,7 +168,11 @@ export function runRubric(
   n: Normalized,
   ctx: NormalizeContext & { code: string; params: ParamValues },
 ): NonNullable<GradeResult["rubric"]> {
-  return runRubricImpl(rules, n, REALM.toolbox.length > 0 ? { ...ctx, toolsUsed: realmToolsUsed } : ctx);
+  return runRubricImpl(
+    rules,
+    n,
+    REALM.toolbox.length > 0 ? { ...ctx, toolsUsed: realmToolsUsed, toolCode: realmToolCode } : ctx,
+  );
 }
 
 // --- views for the tutor ------------------------------------------------------------------------

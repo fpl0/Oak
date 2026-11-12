@@ -32,6 +32,8 @@ export const LINT_TEMPLATES = {
   "code.single-quoted-pattern":
     "'{text}' uses single quotes, so it's plain text, not a pattern. Use \"{text}\".",
   "code.octave-default": '"{note}" has no octave, so it plays in octave 3. Did you mean "{suggest}"?',
+  "code.letter-accidental":
+    '"{note}" plays the right note; Oak writes sharps and flats as # and b: "{suggest}".',
   "code.scale-no-octave": '"{scale}" has no octave, so it starts in octave 3. Write "{suggest}".',
   "code.scale-spaces": 'Scale names use ":" instead of spaces: write "{suggest}".',
   "code.n-without-scale": '`n("…")` gives numbers, not pitches. Add `.scale("{key}")`, where 0 = degree 1.',
@@ -44,7 +46,8 @@ export const LINT_TEMPLATES = {
     '`.add({arg})` does nothing here: wrap the argument in n(…), as in `.add(n("{inner}"))`.',
   "code.chromatic-step":
     '"{step}" is step {n} with an accidental: the number is the 0-based step, not the degree.',
-  "code.range-spacing": 'Ranges need spaces: write "{suggest}".',
+  "code.range-spacing":
+    'Strudel reads "{text}" as one word, not a range. Put a space on each side of the dots: "{suggest}".',
   "code.swing-convention":
     "`{fn}(…, {got})`: the second argument is the beats per bar ({beats}), or {double} for 16ths.",
   "code.swing-fraction-string":
@@ -81,6 +84,7 @@ const DIALECT: Partial<Record<LintCode, readonly [LintSeverity, LintSeverity]>> 
   "code.unlabelled-line": ["error", "warn"],
   "code.single-quoted-pattern": ["error", "error"],
   "code.octave-default": ["error", "info"],
+  "code.letter-accidental": ["error", "info"],
   "code.scale-no-octave": ["error", "warn"],
   "code.scale-spaces": ["error", "error"],
   "code.n-without-scale": ["error", "error"],

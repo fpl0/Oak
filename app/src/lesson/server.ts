@@ -15,6 +15,7 @@ import {
 } from "@oak/api";
 import type { QueryClient } from "@tanstack/react-query";
 import { callApi } from "../lib/api.ts";
+import { idempotencyKey } from "../lib/idempotency.ts";
 import type { LessonDeps } from "./machine.ts";
 import { localRung, revealNeeds } from "./model.ts";
 
@@ -42,6 +43,16 @@ export function serverDeps(o: ServerDepsOptions): LessonDeps {
     for (const n of names) void o.qc.invalidateQueries({ queryKey: ["api", n] });
   };
   const exerciseOf = (stepId: string) => o.lesson.steps.find((s) => s.id === stepId)?.exercise;
+  /** The Make's attempt: one key per saved code, so a Save retried after a failure counts once. */
+  const makeKeys = new Map<string, string>();
+  const makeKey = (stepId: string, code: string) => {
+    const k = `${stepId}\n${code}`;
+    const held = makeKeys.get(k);
+    if (held) return held;
+    const key = idempotencyKey();
+    makeKeys.set(k, key);
+    return key;
+  };
 
   const createSketch = async (stepId: string, code: string, title: string, tutorAssisted: boolean) => {
     const band = o.band(stepId);
@@ -82,6 +93,7 @@ export function serverDeps(o: ServerDepsOptions): LessonDeps {
           extraReplays: a.extraReplays,
           activeMs: Math.max(0, Math.round(o.activeMs())),
           tutorAssisted: a.tutorAssisted,
+          idempotencyKey: a.idempotencyKey,
         },
       });
       o.onAttempt?.(a.stepId, res.attempt.id);
@@ -108,6 +120,7 @@ export function serverDeps(o: ServerDepsOptions): LessonDeps {
             extraReplays: 0,
             activeMs: Math.max(0, Math.round(o.activeMs())),
             tutorAssisted: f.tutorAssisted,
+            idempotencyKey: makeKey(f.stepId, f.code),
           },
         }).catch(() => null);
       const sketchId = await createSketch(f.stepId, f.code, f.title, f.tutorAssisted);

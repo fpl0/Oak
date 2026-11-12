@@ -18,7 +18,13 @@ import { applyToEditor } from "../lib/editors.ts";
 import { FLAVOUR_LABEL, formatDate, formatKey } from "../lib/format.ts";
 import { lintInBrowser } from "../lib/grader-client.ts";
 import { usePageTitle } from "../lib/nav.ts";
-import { useSketchAddVersion, useSketchDelete, useSketchPatch, useTutorNotes } from "../lib/queries.ts";
+import {
+  useCourseProgress,
+  useSketchAddVersion,
+  useSketchDelete,
+  useSketchPatch,
+  useTutorNotes,
+} from "../lib/queries.ts";
 import { currentSessionId } from "../session/store.ts";
 import {
   askListeningNote,
@@ -41,6 +47,7 @@ import { Workbench } from "../workbench/Workbench.tsx";
 import { clearDraft, readDraft, readLength, writeDraft, writeLength } from "./draft.ts";
 import {
   bandMutesOf,
+  bandReached,
   bandSetupFor,
   bandsForMeter,
   differsFrom,
@@ -88,6 +95,7 @@ export function SketchEditor({ sketch }: { sketch: SketchDetail }) {
   const patch = useSketchPatch();
   const del = useSketchDelete();
   const notes = useTutorNotes({ subjectKind: "sketch", subjectId: id });
+  const progress = useCourseProgress();
   usePageTitle(sketch.title);
 
   const latest: SketchVersion =
@@ -129,7 +137,7 @@ export function SketchEditor({ sketch }: { sketch: SketchDetail }) {
   const bpmRef = useRef<number | null>(latest.bpm);
 
   const bandNow = (): SketchBand | null => (band ? { ...band, mutes: bandMutesOf(mutes.current) } : null);
-  const bandSetup = bandSetupFor(band, bands, keySpec);
+  const bandSetup = bandSetupFor(band, bands, keySpec, bandReached(progress.data));
   const lessonCtx = { key: keySpec, meter, defaultBpm: latest.bpm ?? 90, loopBars: length };
   const lintCtx = studioLint(unlocked, meter, keySpec);
 
@@ -593,7 +601,6 @@ export function SketchEditor({ sketch }: { sketch: SketchDetail }) {
                 band={bandSetup}
                 initialMutes={mutes.current}
                 onMutes={onWorkbenchMutes}
-                roll={keySpec ? { color: "degree", labels: "degree" } : { color: "part", labels: "note" }}
                 target={compare ? { code: compare.code, audible: "always" } : null}
                 abLabels={compare ? { a: "now", b: versionLabel(compare) } : { a: "now", b: "earlier" }}
                 onChange={onChange}

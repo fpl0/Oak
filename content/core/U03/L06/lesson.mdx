@@ -1,0 +1,61 @@
+{/* U03.L06 Sharp Keys: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+Home is G today, and the band plays in G with you. Before the first note, the staff shows something new: one sharp, on the top line.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+In Home & the Major Scale you built G major from the pattern and needed one sharp. Find it again on the keys, then try D.
+
+<Example id="g-major" views="code,roll" />
+
+<OnPass>G major has one sharp, F♯. D major has two: F♯ and C♯. Every time you play in D, those two notes are sharp, whatever the tune.</OnPass>
+</Step>
+
+<Step id="S3">
+Because a key's sharps never change, musicians write them once, at the start of every line of the staff, instead of before each note. Every F on the page is then F♯, in any octave, until the piece says otherwise.
+
+The sharps always come in the same order: **F C G D A E B**. Each sharp key keeps the sharps of the one before and adds the next. G major has F♯. D major adds C♯. A major adds G♯, E major D♯, and so on.
+
+<Example id="d-major" views="code,roll" />
+
+<Callout kind="tip">The last sharp is always degree 7 of the key, a half step under home: C♯ in D major, G♯ in A major.</Callout>
+</Step>
+
+<Step id="S4">
+Now write one. Place the sharps at the start of the staff, left to right, in the order they are always written.
+
+<StaffInput exercise="d-major-sharps" />
+
+<OnPass>F♯, then C♯: D major's **key signature**. One glance at the start of the staff tells you which notes are sharp for the whole piece.</OnPass>
+</Step>
+
+<Step id="S5">
+Play from the page. No code, no roll: only the staff with its key signature, the way a musician gets a part. Count up from home, `g4` on the second line.
+
+<Staff example="the-page" />
+
+<Editor exercise="page-in-g" />
+
+<OnPass>`<[4 6 7 4] [5 4 2@2]>`: 5 7 1' 5, then 6 5 3. The note on the top line was F♯, because the key signature said so; nothing next to the note did.</OnPass>
+</Step>
+
+<Step id="S6">
+No staff this time: from the order alone.
+
+<Choice exercise="sharps-in-a" />
+
+<OnPass>Three: F♯, C♯ and G♯. Each step along the sharp keys adds one more.</OnPass>
+</Step>
+
+<Step id="S7">
+Your turn, in note names, so the key signature lives in your head instead of in `.scale()`. The staff shows the sharp at its start; every `f` you write must be `f#`.
+
+<Make exercise="every-f-sharp" />
+
+<CanDo id="cd.read.keysig" />
+
+<Recap />
+</Step>

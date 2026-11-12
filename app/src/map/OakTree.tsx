@@ -2,17 +2,19 @@
 // canvas' right edge. Keys: arrows between leaves, Enter opens, Esc closes, + / − zoom, 0 fits the whole map,
 // W fits the width, N goes to what's next.
 import type { SkillState } from "@oak/api";
+import { Link } from "@tanstack/react-router";
 import { clsx } from "clsx";
-import { Maximize2, Minus, MoveHorizontal, Plus, Route as RouteIcon } from "lucide-react";
+import { Maximize2, MicOff, Minus, MoveHorizontal, Plus, Route as RouteIcon } from "lucide-react";
 import { useState } from "react";
 import { useHotkeys } from "../ui/keys/KeymapProvider.tsx";
-import { Button, IconButton } from "../ui/kit/Button.tsx";
+import { Button, buttonClass, IconButton } from "../ui/kit/Button.tsx";
 import { EmptyState } from "../ui/kit/basics.tsx";
 import { ErrorState, LoadingState } from "../ui/kit/QueryState.tsx";
 import { LeafSwatch } from "./Leaf.tsx";
 import { NodePanel } from "./NodePanel.tsx";
 import { type MapCommand, OakMap, PANEL_WIDTH } from "./OakMap.tsx";
-import { LEAF_STATUSES, leafView, STATUS_HELP, STATUS_LABEL } from "./state.ts";
+import { minutesOf } from "./revive.ts";
+import { countLeaves, LEAF_STATUSES, leafView, STATUS_HELP, STATUS_LABEL } from "./state.ts";
 import { type OakModel, useOak } from "./use-oak.ts";
 
 const SAMPLE_STATE = {
@@ -23,7 +25,7 @@ const SAMPLE_STATE = {
   mastered: "mastered",
 } as const;
 
-export function Legend({ className }: { className?: string }) {
+export function Legend({ className, quiet = false }: { className?: string; quiet?: boolean }) {
   const sample = (level: (typeof SAMPLE_STATE)[keyof typeof SAMPLE_STATE], freshness = 1, drying = false) =>
     leafView({
       skillId: "R01" as SkillState["skillId"],
@@ -59,7 +61,43 @@ export function Legend({ className }: { className?: string }) {
         <LeafSwatch view={sample("practiced", 0.3, true)} />
         In today's warm-up
       </li>
+      {quiet && (
+        <li
+          className="flex items-center gap-1.5"
+          title="Quiet mode: singing reviews wait."
+          data-testid="legend-quiet"
+        >
+          <MicOff aria-hidden className="size-3.5" />
+          Voice: waiting for the mic
+        </li>
+      )}
     </ul>
+  );
+}
+
+/** "Revive" (every drying leaf: today's planned sets, inside the budget) and "Revive more" (the opt-in). */
+function ReviveBar({ model }: { model: OakModel }) {
+  const ids = model.graph.nodes.map((n) => n.id);
+  const counts = countLeaves(ids, model.states);
+  const faded = ids.filter((id) => {
+    const v = leafView(model.states.get(id));
+    return v.freshness !== null && v.freshness < 0.999 && !v.drying && !v.paused;
+  }).length;
+  if (counts.drying === 0 && faded === 0) return null;
+  return (
+    <div className="flex items-center gap-2" data-testid="revive-bar">
+      {counts.drying > 0 && (
+        <Link to="/session/revive" className={buttonClass("secondary", "sm")} data-testid="revive-all">
+          Revive {counts.drying} {counts.drying === 1 ? "leaf" : "leaves"} (≈ {minutesOf(model.reviveSec)}{" "}
+          min)
+        </Link>
+      )}
+      {faded > 0 && (
+        <Link to="/session/revive" search={{ more: true }} className={buttonClass("ghost", "sm")}>
+          Revive more
+        </Link>
+      )}
+    </div>
   );
 }
 
@@ -69,8 +107,12 @@ function TreeBody({
   model,
   families,
   cards,
+  familyStates,
   leaf,
-}: { model: OakModel; leaf: string | null } & Pick<Parameters<typeof NodePanel>[0], "families" | "cards">) {
+}: { model: OakModel; leaf: string | null } & Pick<
+  Parameters<typeof NodePanel>[0],
+  "families" | "cards" | "familyStates"
+>) {
   const { graph, layout, states, next } = model;
   const [selected, setSelected] = useState<string | null>(leaf && model.layout.byId.has(leaf) ? leaf : null);
   const [showNext, setShowNext] = useState(true);
@@ -196,6 +238,7 @@ function TreeBody({
                 data-testid="whats-next"
               >
                 {next.title}
+                {!next.written && <span className="text-text-3"> · still being written</span>}
                 {next.targets.length > 0 && (
                   <span className="text-text-3">
                     {" "}
@@ -238,7 +281,10 @@ function TreeBody({
           />
         </div>
       </div>
-      <Legend />
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <Legend quiet={model.quiet.on} />
+        <ReviveBar model={model} />
+      </div>
       <div className="relative h-[calc(100dvh-262px)] min-h-[380px]">
         <OakMap
           layout={layout}
@@ -265,9 +311,12 @@ function TreeBody({
               graph={graph}
               families={families}
               cards={cards}
+              {...(familyStates ? { familyStates } : {})}
               lessonStatus={model.lessonStatus}
               lessonTitle={model.lessonTitle}
+              authored={model.authored}
               reviveSec={model.reviveSec}
+              quiet={model.quiet}
               isNext={next.targets.includes(node.id)}
               onSelect={(id) => {
                 setSelected(id);
@@ -303,6 +352,7 @@ export function OakTree({ leaf = null }: { leaf?: string | null }) {
         model={model}
         families={content.data?.families ?? []}
         cards={families.data?.cards ?? []}
+        familyStates={families.data?.families ?? []}
         leaf={leaf}
       />
     </>

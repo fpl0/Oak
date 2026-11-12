@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { CalibrationRecord } from "@oak/api";
-import { calibrationLine, inputLabel } from "./history.ts";
+import { calibrationLine, inputLabel, lastMatch } from "./history.ts";
 
 const rec = (kind: CalibrationRecord["kind"], result: Record<string, unknown>): CalibrationRecord => ({
   id: 1,
@@ -27,5 +27,20 @@ test("one readable line per calibration kind", () => {
 
 test("input words", () => {
   expect(inputLabel({ inputKind: "none", quiet: true })).toBe("No microphone (Quiet mode)");
-  expect(inputLabel({ inputKind: "builtin", quiet: true })).toBe("Built-in microphone · Quiet mode today");
+  expect(inputLabel({ inputKind: "builtin", quiet: true })).toBe("Built-in microphone · Quiet mode on");
+});
+
+test("the three-note pitch match", () => {
+  const match = rec("pitch-match", {
+    trials: [
+      { midi: 60, cents: 12 },
+      { midi: 64, cents: -70 },
+      { midi: 55, cents: 30 },
+    ],
+    within: 2,
+    windowCents: 50,
+  });
+  expect(calibrationLine(match)).toBe("Pitch match · 2 of 3 within ±50¢");
+  expect(lastMatch([rec("pitch-match", { first: true, centsError: 3 }), match])).toBe("2 of 3 within ±50¢");
+  expect(lastMatch([rec("range", {})])).toBeNull();
 });

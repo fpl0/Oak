@@ -1,11 +1,12 @@
 {
   // Browser suites run by the root playwright.config.ts: the platform spec (e2e/) and the root config.
-  // The per-package suites keep their own tsconfigs (app/, app/src/workbench/e2e, packages/*/e2e).
+  // The per-package suites keep their own tsconfigs (app/, app/src/workbench/e2e, packages/*/e2e), except the
+  // Wave 3 notation page (packages/notation/e2e, port 5194), which is checked here.
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "lib": ["es2023", "dom", "dom.iterable", "dom.asynciterable"],
     "types": ["bun"]
   },
-  "include": ["e2e", "playwright.config.ts"],
+  "include": ["e2e", "playwright.config.ts", "packages/notation/e2e"],
   "exclude": ["node_modules", "dist", "test-results"]
 }

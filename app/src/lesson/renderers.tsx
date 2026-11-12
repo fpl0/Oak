@@ -2,16 +2,17 @@
 // Listen, predict, the Make and multi-part `all` steps have their own; every other kind (run, investigate,
 // modify, fill, error hunt, order, quiz, ear, dictation, notation, sing, tap, transcription) is the single-input
 // renderer over `PartInput`. Renderers grade in the browser through the host and report with `onCheck`.
-import type { AllEx, AttemptResponse, Exercise, ExerciseKind, GradeResult } from "@oak/api";
+import type { AllEx, Exercise, ExerciseKind, GradeResult } from "@oak/api";
 import { Check, CircleDashed } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import type { AnswerFeedback, AnswerSpec } from "../answers/types.ts";
+import type { AnswerSpec } from "../answers/types.ts";
 import { IS_MAC } from "../ui/keys/KeymapProvider.tsx";
 import { Button } from "../ui/kit/Button.tsx";
 import { Kbd } from "../ui/kit/basics.tsx";
-import { useWorkbenchServices } from "../workbench/services.tsx";
 import { Workbench } from "../workbench/Workbench.tsx";
-import { answerFeedback, issueLines, revealValue, summaryOf, viewFor } from "./feedback.ts";
+import { ByEarPanel } from "./byear.tsx";
+import { CheckButton, quietIn, StepFeedback, useCheck } from "./check.tsx";
+import { answerFeedback, revealValue } from "./feedback.ts";
 import { InlineMd, StepLayout, useStepHost } from "./frame.tsx";
 import {
   type InputRuntime,
@@ -23,120 +24,15 @@ import {
   PartInput,
   starterOf,
 } from "./inputs.tsx";
-import { answerSpecOf, revealCode } from "./model.ts";
+import { answerSpecOf, revealCode, withTrialOptions } from "./model.ts";
+import { CodeMusic } from "./music.tsx";
+import { PassiveListenRenderer } from "./passive.tsx";
+import { failedChecks, isByEar, makeTitle, targetRollShown } from "./rules.ts";
+import { SingRenderer } from "./sing.tsx";
+import { useTargetMarks } from "./target-marks.ts";
 import type { ExerciseRenderer, ExerciseRendererProps, RendererFor } from "./types.ts";
 
 type Part = Exclude<Exercise, AllEx>;
-
-const CHECK_KEYS = IS_MAC ? "⌘⇧↵" : "Ctrl+Shift+Enter";
-
-function extraReplays(ex: Exercise, rt: InputRuntime): number {
-  const replays = "cue" in ex && ex.cue ? ex.cue.replays : -1;
-  return replays < 0 ? 0 : Math.max(0, rt.plays - 1 - replays);
-}
-
-/** In a checkpoint the widgets show no verdict, only that a check runs. */
-function quietIn(mode: "lesson" | "checkpoint", checking: boolean): AnswerFeedback | null {
-  if (mode !== "checkpoint") return null;
-  return checking ? { state: "pending" } : { state: "idle" };
-}
-
-/** The check flow every renderer shares: grade in the browser, then report to the host. */
-function useCheck(props: ExerciseRendererProps, build: () => AttemptResponse | null, rt: InputRuntime) {
-  const h = useStepHost();
-  const [checked, setChecked] = useState(false);
-  const run = async () => {
-    if (h.checking || h.review) return;
-    const response = build();
-    if (!response) return;
-    const result = await h.grade(response);
-    setChecked(true);
-    if (result) props.onCheck({ response, result, extraReplays: extraReplays(props.exercise, rt) });
-  };
-  const latest = useRef(run);
-  latest.current = run;
-  useEffect(() => {
-    h.setCheck(() => void latest.current());
-    return () => h.setCheck(null);
-  }, [h.setCheck]);
-  return { check: run, checked };
-}
-
-function CheckButton({
-  onClick,
-  disabled,
-  label: wanted = "Check",
-}: {
-  onClick(): void;
-  disabled: boolean;
-  label?: string;
-}) {
-  const h = useStepHost();
-  const label = h.mode === "checkpoint" ? "Save answer" : wanted;
-  return (
-    <Button
-      variant={h.passed ? "secondary" : "primary"}
-      onClick={onClick}
-      disabled={disabled || h.review}
-      loading={h.checking}
-      data-testid="check"
-      title={`${label} (${CHECK_KEYS})`}
-    >
-      {label} <Kbd tone={h.passed ? "default" : "inverse"}>{CHECK_KEYS}</Kbd>
-    </Button>
-  );
-}
-
-/** The step's own feedback line(s), redacted to the rung; announced politely. */
-export function StepFeedback({ detail }: { detail: boolean }) {
-  const h = useStepHost();
-  const r = h.result;
-  // A checkpoint shows no verdict per item (contracts §7.6): the result screen does.
-  if (h.mode === "checkpoint")
-    return (
-      <p
-        aria-live="polite"
-        className="text-sm text-text-2"
-        data-testid="step-feedback"
-        data-status={r ? "saved" : "open"}
-      >
-        {r ? "Answer saved. You can change it and save again, or go on." : ""}
-      </p>
-    );
-  if (!r) return <div aria-live="polite" className="sr-only" />;
-  const view = viewFor(r, h.rung, h.passed, h.render);
-  const lines = detail || r.status === "error" ? issueLines(view) : [];
-  const tone =
-    r.status === "pass"
-      ? "border-accent bg-lane-in"
-      : r.status === "error"
-        ? "border-accent-2"
-        : "border-issue/60";
-  return (
-    <section
-      aria-live="polite"
-      aria-label="Check result"
-      className={`rounded-control border-l-2 px-3 py-2 ${tone}`}
-      data-testid="step-feedback"
-      data-status={r.status}
-    >
-      <p className="font-medium" data-testid="step-feedback-summary">
-        {r.status === "ungraded" ? "Noted." : summaryOf(view, r)}
-      </p>
-      {lines.length > 0 && (
-        <ul className="mt-1 flex flex-col gap-1 text-sm">
-          {lines.map((l) => (
-            <li key={l.key} data-testid="feedback-line">
-              <span className="text-text-2">{l.where}</span>
-              {l.what && <span>: {l.what}</span>}
-              {l.fix && <span className="text-accent"> → {l.fix}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
 
 /** Rung 4 on a code step: the solution, with the lines that differ marked, and Apply. */
 function RevealCard({ ex, current, apply }: { ex: Exercise; current: string; apply(code: string): void }) {
@@ -188,10 +84,10 @@ function SingleRenderer(props: ExerciseRendererProps) {
       if (ex.kind === "run-investigate") h.setCode((v as InvestigateValue).code);
     }
   };
-  const ready = inputReady(ex, value);
+  const ready = inputReady(ex, value, h.trial);
   const isRun = ex.kind === "run-investigate" && ex.questions.length === 0;
   const { check, checked } = useCheck(props, () => (ready ? inputResponse(ex, value, rt) : null), rt);
-  const spec: AnswerSpec | null = answerSpecOf(ex);
+  const spec: AnswerSpec | null = withTrialOptions(answerSpecOf(ex), h.trial);
   const feedback =
     quietIn(h.mode, h.checking) ??
     answerFeedback({
@@ -226,13 +122,32 @@ function SingleRenderer(props: ExerciseRendererProps) {
       if (code && checked && autoCheck && !h.passed) void check();
     },
   };
-  const stage = <PartInput {...common} slot="stage" />;
+  const passedNow = h.passed;
+  const showTarget = targetRollShown(ex, {
+    failed: failedChecks(h.state, passedNow),
+    passed: passedNow,
+    rung: h.rung,
+  });
+  const reference = showTarget ? revealCode(ex) : null;
+  const refBars = "reference" in ex && ex.reference && "bars" in ex.reference ? ex.reference.bars : 1;
+  const stage = (
+    <div className="flex flex-col gap-3">
+      {reference ? (
+        <div data-testid="target-roll">
+          <p className="mb-1 text-sm font-medium">The target, on the roll</p>
+          <CodeMusic code={reference} bars={refBars} view="roll" label="The target on the roll" />
+        </div>
+      ) : null}
+      <PartInput {...common} slot="stage" />
+    </div>
+  );
   const hasStage = code || ex.kind === "code-fill" || ex.kind === "run-investigate";
   return (
     <StepLayout
       {...(hasStage ? { stage } : {})}
       answer={
         <>
+          {isByEar(ex) ? <ByEarPanel ex={ex} /> : null}
           <PartInput {...common} slot="answer" />
           {isRun ? (
             <p className="text-sm text-text-2">
@@ -253,6 +168,13 @@ function SingleRenderer(props: ExerciseRendererProps) {
 // --- listen -------------------------------------------------------------------------------------------
 
 function ListenRenderer() {
+  const h = useStepHost();
+  const ex = h.exercise as Extract<Exercise, { kind: "listen" }>;
+  if (ex.passive) return <PassiveListenRenderer />;
+  return <ListenItems />;
+}
+
+function ListenItems() {
   const h = useStepHost();
   const ex = h.exercise as Extract<Exercise, { kind: "listen" }>;
   const [i, setI] = useState(0);
@@ -400,7 +322,7 @@ function AllRenderer(props: ExerciseRendererProps) {
   const parts = ex.parts;
   const runtimes = useRef<InputRuntime[]>(parts.map(() => ({ tapStart: null, plays: 0 }))).current;
   const [values, setValues] = useState<unknown[]>(() => parts.map((p) => initialInput(p)));
-  const ready = parts.every((p, i) => inputReady(p, values[i]));
+  const ready = parts.every((p, i) => inputReady(p, values[i], h.trials[i] ?? null));
   const rt: InputRuntime = { tapStart: null, plays: runtimes.reduce((a, r) => a + r.plays, 0) };
   const { check } = useCheck(
     props,
@@ -482,25 +404,11 @@ function MakeRenderer() {
   const starter = starterOf(ex);
   const code = h.code ?? starter.code;
   const editorId = `l-${h.step.id.toLowerCase()}-make`;
-  const { oak } = useWorkbenchServices();
   // The starter's marked spot (`⟪4⟫`: "change the highlighted number") gets the dashed target box until the
   // learner edits; the whole Make stays editable. Without it the prompt pointed at a highlight nobody could see.
-  const pristine = code === starter.code && (starter.editable?.length ?? 0) > 0;
-  useEffect(() => {
-    if (!pristine) return;
-    const mark = () => {
-      const ed = oak.editors.get(editorId);
-      if (!ed || ed.disposed) return false;
-      ed.setMarks((starter.editable ?? []).map((range) => ({ range, kind: "target" as const })));
-      return true;
-    };
-    if (mark()) return;
-    const t = window.setInterval(() => {
-      if (mark()) window.clearInterval(t);
-    }, 150);
-    return () => window.clearInterval(t);
-  });
-  const [title, setTitle] = useState(h.lesson.title);
+  // (It looked the editor up by the Workbench's id, not the editor's `oak_…_0_` id, so the box never appeared.)
+  useTargetMarks(editorId, starter.editable, code === starter.code, h.result);
+  const [title, setTitle] = useState(() => makeTitle(ex, h.lesson));
   const seq = useRef(0);
   const r = h.result;
   const live = async (src: string) => {
@@ -515,7 +423,7 @@ function MakeRenderer() {
   const beyond = r?.diagnostics.some((d) => d.id === "make.beyond-brief") ?? false;
   const lockedDiag = r?.diagnostics.find((d) => d.id.startsWith("code.locked")) ?? null;
   const blocked = lockedDiag !== null;
-  const save = () => h.save?.(code, title.trim() || h.lesson.title);
+  const save = () => h.save?.(code, title.trim() || makeTitle(ex, h.lesson));
   // The list follows the code as it changes (debounced), and every Run checks at once.
   const liveRef = useRef(live);
   liveRef.current = live;
@@ -629,6 +537,7 @@ const RENDERERS: Partial<Record<ExerciseKind, ExerciseRenderer<never>>> = {
   predict: PredictRenderer as unknown as ExerciseRenderer<never>,
   all: AllRenderer as unknown as ExerciseRenderer<never>,
   "code-make": MakeRenderer as unknown as ExerciseRenderer<never>,
+  sing: SingRenderer as unknown as ExerciseRenderer<never>,
   "compose-brief": SingleRenderer as unknown as ExerciseRenderer<never>,
 };
 

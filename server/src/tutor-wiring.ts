@@ -69,6 +69,7 @@ export function createTutorWiring(d: TutorWiringDeps): TutorWiring {
       course: d.services.course,
       gates: d.services.gates,
       streak: d.services.streak,
+      voice: d.services.voice,
     }),
     settings: new SettingsAdapter(d.repos, clock),
     usage: new SqliteUsageSink(d.repos),

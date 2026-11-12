@@ -9,31 +9,17 @@
 //   journey         e2e/journey: the Wave 2 gate journey on the real stack with real content, the scripted fake tutor
 //                   and Chrome's fake microphone (Vite 5212, API 8812), and the first session on the production
 //                   build (8792, its own data dir).
-//   kit, lesson, answers, drills, session, studio, map, tutor, onboarding, capstone
-//                   app/src/<area>/e2e on the area's own stack (docs/design/wave2.md §2).
-//   workbench       app/src/workbench/e2e on its own Vite page (5193).
-//   review          e2e/review: the Wave 2 journey review's regression specs (Vite 5221, API 8821, fake tutor, fake mic).
-//   ui-review       app/src/ui/review/e2e: the Wave 2 surfaces review (visual, a11y, contrast, hostile tutor; 5222/8822).
+//   <area>          every config that exports `area` is discovered (docs/design/wave3.md §6): app/src/<area>/e2e on
+//                   the area's own stack (wave2.md §2), app/src/workbench/e2e on its own Vite page (5193),
+//                   e2e/review (5221/8821), app/src/ui/review/e2e (5222/8822), packages/<pkg>/e2e pages that
+//                   export `area` (notation 5194), and any new Wave 3 area config, without editing this file.
 //   strudel-*       packages/strudel/e2e on its own Vite page (5192), autoplay and gesture policies.
 //   audio           packages/audio/e2e on its own Vite page (5191).
 //
 // Servers run on Node or Bun as the spikes require (Vite on Node, never `bunx --bun vite`) and stop when the run ends.
-import { fileURLToPath } from "node:url";
+import { globSync } from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { defineConfig, type PlaywrightTestConfig, type Project } from "@playwright/test";
-import { area as answers } from "./app/src/answers/e2e/playwright.config.ts";
-import { area as capstone } from "./app/src/capstone/e2e/playwright.config.ts";
-import { area as drills } from "./app/src/drills/e2e/playwright.config.ts";
-import { area as lesson } from "./app/src/lesson/e2e/playwright.config.ts";
-import { area as map } from "./app/src/map/e2e/playwright.config.ts";
-import { area as onboarding } from "./app/src/onboarding/e2e/playwright.config.ts";
-import { area as session } from "./app/src/session/e2e/playwright.config.ts";
-import { area as studio } from "./app/src/studio/e2e/playwright.config.ts";
-import { area as tutor } from "./app/src/tutor/e2e/playwright.config.ts";
-import { area as kit } from "./app/src/ui/kit/e2e/playwright.config.ts";
-import { area as uiReview } from "./app/src/ui/review/e2e/playwright.config.ts";
-import { area as workbench } from "./app/src/workbench/e2e/playwright.config.ts";
-import { area as journey } from "./e2e/journey/playwright.config.ts";
-import { area as review } from "./e2e/review/playwright.config.ts";
 import { type Area, selectedProjects } from "./e2e/support/stack.ts";
 
 type WebServer = Extract<NonNullable<PlaywrightTestConfig["webServer"]>, readonly unknown[]>[number];
@@ -107,6 +93,53 @@ const fromArea = (a: Area): Suite => ({
   servers: a.webServer,
 });
 
+/**
+ * Area suites are found by convention, not listed by hand (docs/design/wave3.md §6): every
+ * `app/src/<any depth>/e2e/playwright.config.ts`, `e2e/<suite>/playwright.config.ts` and `packages/<pkg>/e2e/playwright.config.ts`
+ * that exports `area: Area` (`e2e/support/stack.ts`) becomes a project named `area.name`. A config without an
+ * `area` export (the strudel and audio pages) is configured explicitly below. Two areas may not claim the same
+ * web-server name (`oak-api:<port>`, `oak-vite:<port>`) with different commands: that is a port clash.
+ */
+async function discoverAreas(): Promise<Area[]> {
+  const files = globSync(
+    [
+      "app/src/**/e2e/playwright.config.ts",
+      "e2e/*/playwright.config.ts",
+      "packages/*/e2e/playwright.config.ts",
+    ],
+    { cwd: root, exclude: (f) => f.includes("node_modules") },
+  ).sort();
+  const out: Area[] = [];
+  const names = new Map<string, string>();
+  for (const file of files) {
+    const mod = (await import(pathToFileURL(`${root}${file}`).href)) as { area?: Area };
+    if (!mod.area) continue;
+    const prev = names.get(mod.area.name);
+    if (prev)
+      throw new Error(`playwright.config.ts: project name "${mod.area.name}" is used by ${prev} and ${file}`);
+    names.set(mod.area.name, file);
+    out.push(mod.area);
+  }
+  // The gate journey first (its production server builds the app), then by name.
+  return out.sort(
+    (a, b) => Number(b.name === "journey") - Number(a.name === "journey") || a.name.localeCompare(b.name),
+  );
+}
+const AREAS = await discoverAreas();
+{
+  const seen = new Map<string, { area: string; command: string }>();
+  for (const a of AREAS)
+    for (const w of a.webServer) {
+      const key = w.name ?? w.command;
+      const prev = seen.get(key);
+      if (prev && prev.command !== w.command)
+        throw new Error(
+          `playwright.config.ts: areas "${prev.area}" and "${a.name}" both start "${key}" with different commands (a port clash; docs/design/wave3.md §6 lists the ports)`,
+        );
+      seen.set(key, { area: a.name, command: w.command });
+    }
+}
+
 const SUITES: Suite[] = [
   {
     project: {
@@ -133,20 +166,7 @@ const SUITES: Suite[] = [
     },
     servers: [platformDev, platformVite],
   },
-  fromArea(journey),
-  fromArea(kit),
-  fromArea(lesson),
-  fromArea(answers),
-  fromArea(drills),
-  fromArea(session),
-  fromArea(studio),
-  fromArea(map),
-  fromArea(tutor),
-  fromArea(onboarding),
-  fromArea(capstone),
-  fromArea(workbench),
-  fromArea(review),
-  fromArea(uiReview),
+  ...AREAS.map(fromArea),
   {
     project: {
       name: "strudel-autoplay",

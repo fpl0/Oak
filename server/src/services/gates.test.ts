@@ -10,7 +10,8 @@ let h: Harness;
 let s: Services;
 beforeEach(async () => {
   h = await harness();
-  h.server.deps.repos.profile.patch({ timezone: "UTC" });
+  // A learner whose mic works (onboarding's mic step): without one Quiet mode skips the sing items (§8.5).
+  h.server.deps.repos.profile.patch({ timezone: "UTC", inputKind: "builtin" });
   s = h.server.deps.services;
 });
 afterEach(async () => {
@@ -233,6 +234,43 @@ describe("checkpoint scoring (pure)", () => {
       if (out[i]?.skillId === out[i - 1]?.skillId)
         expect(out.slice(i).every((x) => x.skillId === out[i]?.skillId)).toBe(true);
     expect(interleave(xs, 7)).toEqual(out); // deterministic
+  });
+
+  test("the bar met exactly on every item of a real-sized checkpoint passes (floating-point sums, Wave 3 review)", () => {
+    // 12–18 items at 0.85 sum to a mean of 0.8499999999999998: before the fix every one of these failed.
+    for (let n = 12; n <= 18; n++) {
+      const many: CheckpointItemSpec[] = Array.from({ length: n }, (_, idx) => ({
+        idx,
+        skillId: idx % 2 ? "R03" : "R06",
+        role: "gating",
+        source: { kind: "make" },
+        debt: false,
+      }));
+      const at = (s: number, attemptNo = 1) =>
+        GatesService.scoreCheckpoint(
+          many,
+          new Map(many.map((i) => [i.idx, { score: s, skipped: false }])),
+          attemptNo,
+        );
+      expect({ n, passed: at(0.85).passed }).toEqual({ n, passed: true });
+      expect({ n, passed: at(0.84).passed }).toEqual({ n, passed: false });
+      expect({ n, offered: at(0.75, 2).softPassOffered }).toEqual({ n, offered: true });
+    }
+    // The per-skill bar too: 0.85 overall with one gated skill at exactly 0.70 on 15 items.
+    const fifteen: CheckpointItemSpec[] = Array.from({ length: 30 }, (_, idx) => ({
+      idx,
+      skillId: idx < 15 ? "R03" : "R06",
+      role: "gating",
+      source: { kind: "make" },
+      debt: false,
+    }));
+    const r = GatesService.scoreCheckpoint(
+      fifteen,
+      new Map(fifteen.map((i) => [i.idx, { score: i.idx < 15 ? 0.7 : 1, skipped: false }])),
+      1,
+    );
+    expect(r.perSkill.find((p) => p.skillId === "R03")?.ok).toBe(true);
+    expect(r.passed).toBe(true);
   });
 });
 

@@ -1,6 +1,13 @@
 // The deterministic summary of a piece (AnalysisSummary, contracts §5.7) and the liner notes written
 // from it when the tutor is off; the device detector behind the `device-count` rule.
-import type { AnalysisSummary, CadenceType, GradeResult, KeySpec, Layer } from "@oak/content-kit";
+import type {
+  AnalysisKeyContext,
+  AnalysisSummary,
+  CadenceType,
+  GradeResult,
+  KeySpec,
+  Layer,
+} from "@oak/content-kit";
 import { R, rat } from "@oak/content-kit";
 import type { ChordId } from "@oak/theory";
 import { barPosition, pcOf, romanOf, schemaMatch, toLeadSheet, triadCore } from "@oak/theory";
@@ -12,6 +19,7 @@ import { durationSec, energyCurve, formLabels } from "./form.ts";
 import { keyEstimate, keyOf, modulations } from "./key.ts";
 import { classifyNct, melodyLine } from "./melody.ts";
 import { syncopation } from "./meter.ts";
+import { trackKeyContexts, transposeAfterScaleTracks } from "./scale-context.ts";
 import { sectionsFromAst } from "./sections.ts";
 import { selectTrack, tracksOfRole } from "./tracks.ts";
 
@@ -206,7 +214,35 @@ export function analyzePiece(
     form,
     energy: energyCurve(n.byTrack, queried).map((x) => Math.round(x * 100) / 100),
     devices: detectDevices(n, { ...ctx, bars: queried }).map((d) => d.text),
+    keyContexts: analysisKeyContexts(n, ctx),
   };
+}
+
+/**
+ * Each pitched track's key, bar by bar, as a view reads it (`prefer: "code"`: the code's own `.scale()`,
+ * patterned ones included; then the declared key; then an estimate). A `.transpose()` after `.scale()`
+ * makes that track's scale context untrustworthy (contracts §6.8 item 3).
+ */
+export function analysisKeyContexts(
+  n: Normalized,
+  ctx: NormalizeContext & { code: string },
+): AnalysisKeyContext[] {
+  return trackKeyContexts(n, {
+    declared: ctx.key ?? null,
+    prefer: "code",
+    ignoreScaleCtx: transposeAfterScaleTracks(ctx.code),
+  })
+    .filter((c) => c.spans.length > 0)
+    .map((c) => ({
+      track: c.track,
+      band: c.band,
+      spans: c.spans.map((sp) => ({
+        fromBar: R.floor(sp.from) + 1,
+        toBar: Math.max(R.floor(sp.from) + 1, Math.ceil(sp.to[0] / sp.to[1])),
+        key: sp.key,
+        source: sp.source,
+      })),
+    }));
 }
 
 const ROLE_NAMES: Record<string, string> = {

@@ -9,6 +9,7 @@ import type {
   CapstoneReleaseResult,
   CourseProgress,
   DueBatch,
+  FamilyState,
   SessionPlan,
   SessionSummary,
   SkillMap,
@@ -16,6 +17,7 @@ import type {
   StreakSummary,
   StreakWeek,
   Unlock,
+  VoiceState,
 } from "@oak/api";
 import { MASTERY_LEVELS } from "@oak/api";
 import type { ContentSource } from "./content/types.ts";
@@ -196,6 +198,13 @@ class Sim {
   readonly kinds = new Map<string, number>();
   zone = "UTC";
   now: number;
+  keys = 0;
+  /**
+   * The learner day Quiet mode was switched on for (the mic chip, scope "today"), or `null`. The choice lapses at
+   * the next learner day (wave3.md §5.3): a binge session an hour later can fall on the next day (a time-zone hop
+   * or the rollover), where Quiet is off again and mic sets are lawful.
+   */
+  quietDay: string | null = null;
   /** The plan reached a lesson the test course does not have (past the stand-ins). */
   endOfCourse = false;
   prevWeeks: StreakWeek[] = [];
@@ -277,13 +286,42 @@ class Sim {
       const status = l?.status ?? c?.status ?? cap?.status ?? "unknown";
       if (status === "locked" || status === "unknown") this.fail(plan.day, `${id} planned while ${status}`);
     }
-    const { cards } = await this.me.api<{ cards: SrsCard[] }>("GET", "/api/drills/families");
+    const { cards, families } = await this.me.api<{ cards: SrsCard[]; families: FamilyState[] }>(
+      "GET",
+      "/api/drills/families",
+    );
     const live = new Map(cards.map((c) => [c.cardId as string, c.status]));
+    const completed = new Set(
+      progress.lessons.filter((l) => l.status === "completed").map((l) => l.lessonId as string),
+    );
     for (const item of w.items)
       for (const f of [item.familyId, ...item.members, ...item.cardIds]) {
         if (f === null) continue;
         if (!live.has(f)) this.fail(plan.day, `warm-up item ${f} has no card (never seeded)`);
+        // Nothing is scheduled before it is unlocked: a family after its lesson, a deck card after its gate.
+        const fam = course.families.find((x) => x.id === f);
+        const gate =
+          fam !== undefined
+            ? fam.id.startsWith("fam.mix.")
+              ? null
+              : fam.unlock.lesson
+            : (() => {
+                const deck = course.decks.find((d) => d.cards.some((c) => c.id === f));
+                const card = deck?.cards.find((c) => c.id === f);
+                return deck === undefined ? null : (card?.gate ?? deck.unlock.lesson);
+              })();
+        if (gate !== null && !completed.has(gate)) this.fail(plan.day, `warm-up item ${f} before ${gate}`);
       }
+    // ... and never above the level its gates open (contracts §7.3).
+    for (const item of w.items) {
+      if (item.familyId === null || item.level === null) continue;
+      const st = families.find((x) => x.familyId === item.familyId);
+      if (st !== undefined && item.level > st.maxOpenLevel)
+        this.fail(plan.day, `${item.familyId} planned at level ${item.level} > open ${st.maxOpenLevel}`);
+    }
+    // Quiet mode (contracts §8.5): no mic set is planned.
+    if (this.quietDay === plan.day && w.items.some((i) => i.mic))
+      this.fail(plan.day, "a mic set planned in Quiet mode");
     // §7.6: L03+ of a unit waits for the previous checkpoint; a checkpoint needs its unit's lessons.
     for (const [unit, cp] of [
       ["U02", "U01.CP"],
@@ -425,7 +463,18 @@ class Sim {
           activeMs: 10_000,
           tutorAssisted: false,
         };
-        await this.write("POST", `/api/lessons/${id}/steps/${step.id}/attempts`, pass);
+        // One learner action, one key (wave3.md §5.2): a retry or a second tab counts once.
+        const stepPath = `/api/lessons/${id}/steps/${step.id}`;
+        const a0 = (await this.me.api<{ attempts: number }>("GET", stepPath)).attempts;
+        const sent = await this.write("POST", `${stepPath}/attempts`, {
+          ...pass,
+          idempotencyKey: `${this.p.name}-${id}-${step.id}-${this.keys++}`.replace(/[^A-Za-z0-9_-]/g, "_"),
+        });
+        for (const r of sent)
+          if (r.status !== 200) this.fail(plan.day, `attempt ${id}/${step.id}: ${r.status}`);
+        const a1 = (await this.me.api<{ attempts: number }>("GET", stepPath)).attempts;
+        if (a1 !== a0 + 1)
+          this.fail(plan.day, `attempt ${id}/${step.id} sent ${sent.length}× counted ${a1 - a0}×`);
       }
       const sk = await this.me.sketch(`${def.title} Make`, "lesson-make", id, ses.id);
       const done = await this.write<{ unlocks: Unlock[] }>("POST", `/api/lessons/${id}/complete`, {
@@ -477,7 +526,8 @@ class Sim {
 
   async run(): Promise<void> {
     const me = this.me;
-    await me.api("PUT", "/api/profile", { timezone: "UTC" });
+    // A learner whose mic works (onboarding's mic step); some days they switch Quiet mode on for the day.
+    await me.api("PUT", "/api/profile", { timezone: "UTC", inputKind: "builtin" });
     // Day 1: onboarding is U00.L01.
     this.setClock(START);
     const first = await me.today();
@@ -556,8 +606,18 @@ class Sim {
     }
     let sessions = 1;
     while (this.r() < this.p.binge && sessions < 3) sessions += 1;
+    if (this.r() < 0.1) {
+      const v = await this.me.api<VoiceState>("PUT", "/api/voice/quiet", { quiet: true, scope: "today" });
+      this.quietDay = v.day;
+    }
     for (let i = 0; i < sessions; i++) {
+      // The server holds Quiet for exactly the learner day it was chosen for, and drops it at the boundary.
+      const voice = await this.me.api<VoiceState>("GET", "/api/voice");
+      const expectQuiet = this.quietDay === voice.day;
+      if (voice.quiet !== expectQuiet || (expectQuiet && voice.quietReason !== "today"))
+        this.fail(voice.day, `Quiet is ${voice.quiet} (${voice.quietReason}); chosen for ${this.quietDay}`);
       const plan = await this.me.today();
+      if (plan.day !== voice.day) this.fail(plan.day, `the plan's day differs from voice.get's ${voice.day}`);
       const progress = await this.me.api<CourseProgress>("GET", "/api/lessons/progress");
       await this.checkPlan(plan, progress);
       await this.session(plan);

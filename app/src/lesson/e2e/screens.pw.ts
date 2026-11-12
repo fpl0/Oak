@@ -39,7 +39,7 @@ for (const m of SCREENSHOT_MATRIX) {
     await page.getByTestId("hint").click();
     await expect(page.getByTestId("hint-texts")).toBeVisible();
     await expect(page.getByTestId("workbench")).toHaveAttribute("data-analysis", "ready");
-    await expect(page.getByTestId("roll-canvas")).toBeVisible();
+    await expect(page.getByTestId("workbench").getByTestId("roll-canvas")).toBeVisible();
     await noOverflow(page);
     await onScreen(page, "check");
     await onScreen(page, "continue");
@@ -74,7 +74,7 @@ for (const m of SCREENSHOT_MATRIX) {
     await shoot(page, SHOTS, "complete", m.theme);
 
     // A lesson that is not open yet, and the checkpoint before its lessons are done.
-    await page.goto("/learn/U03.L02");
+    await page.goto("/learn/U03.L09");
     await expect(
       page.getByText("This lesson isn't open yet").or(page.getByText("planned but not written yet")),
     ).toBeVisible();

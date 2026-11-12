@@ -16,21 +16,28 @@ import type {
 } from "@oak/api";
 import { fillBlanks, stripMarkers } from "@oak/api";
 import { normalize, singTargets } from "@oak/grader";
+import type { SungResult } from "@oak/pitch";
 import { METERS } from "@oak/theory";
 import { Play, Square } from "lucide-react";
 import { useEffect, useState } from "react";
-import { type AnswerEnv, AnswerEnvProvider, appAudio } from "../answers/env.tsx";
+import { type AnswerEnv, AnswerEnvProvider, appAudio, type SingTake } from "../answers/env.tsx";
 import { emptyValue, isComplete, responseOf } from "../answers/response.ts";
+import { summarize } from "../answers/sing.ts";
 import type { AnswerFeedback, AnswerKind, AnswerSpec, AnswerSpecOf, AnswerValue } from "../answers/types.ts";
 import { auditionCode } from "../lib/audition.ts";
 import { analyzeCode } from "../lib/grader-client.ts";
+import { useLenses } from "../lib/lenses.ts";
 import { Button } from "../ui/kit/Button.tsx";
+import { reportTake } from "../voice/recheck.ts";
 import { Workbench, type WorkbenchProps } from "../workbench/Workbench.tsx";
 import { lessonWidgetFor } from "./answers.tsx";
-import { type Playing, playStimulus } from "./audio.ts";
+import { type Playing, playLead, playStimulus } from "./audio.ts";
 import { InlineMd, useStepHost } from "./frame.tsx";
-import { answerSpecOf, questionSpec, revealCode } from "./model.ts";
+import type { TakeLookup } from "./grading.ts";
+import { answerSpecOf, questionSpec, revealCode, withTrialOptions } from "./model.ts";
 import { CodeMusic } from "./music.tsx";
+import { byEarSource, isByEar, keySignatureResponse, singLabelsFor, tonicPc } from "./rules.ts";
+import { useTargetMarks } from "./target-marks.ts";
 
 type Part = Exclude<Exercise, AllEx>;
 
@@ -54,13 +61,17 @@ const CODE_INPUT = new Set<Exercise["kind"]>([
 ]);
 
 export function isCodeInput(ex: Exercise): boolean {
-  return CODE_INPUT.has(ex.kind);
+  return CODE_INPUT.has(ex.kind) || isByEar(ex);
 }
 
 /** The starter of a code part as the editor shows it (clean), and its editable regions. */
 export function starterOf(ex: Exercise): { code: string; editable: CodeRange[] | null } {
   if ("code" in ex && ex.code && typeof ex.code === "object" && "starter" in ex.code) {
     const c = stripMarkers(ex.code.starter);
+    return { code: c.code, editable: c.editable };
+  }
+  if (isByEar(ex) && ex.answer.ui === "code") {
+    const c = stripMarkers(ex.answer.starter);
     return { code: c.code, editable: c.editable };
   }
   return { code: "", editable: null };
@@ -77,13 +88,13 @@ export function initialInput(ex: Part): unknown {
   return spec ? emptyValue(spec as AnswerSpecOf<AnswerKind>) : null;
 }
 
-export function inputReady(ex: Part, value: unknown): boolean {
+export function inputReady(ex: Part, value: unknown, trial: Trial | null = null): boolean {
   if (isCodeInput(ex)) return typeof value === "string";
   if (ex.kind === "run-investigate") {
     const v = value as InvestigateValue;
     return ex.questions.every((q, i) => isComplete(questionSpec(q), v.answers[i] as AnswerValue));
   }
-  const spec = answerSpecOf(ex);
+  const spec = withTrialOptions(answerSpecOf(ex), trial);
   if (!spec) return true;
   if (spec.ui === "keyboard") return Array.isArray(value) && value.length > 0;
   return isComplete(spec, value as AnswerValue);
@@ -97,6 +108,9 @@ export function inputResponse(ex: Part, value: unknown, rt: InputRuntime): Attem
   }
   const spec = answerSpecOf(ex);
   if (!spec) return { skipped: true };
+  // A key signature is placed as accidentals in order; the grader reads them as `answer.text` (wave3.md §10).
+  if (spec.ui === "staff-input" && spec.mode === "key-signature")
+    return keySignatureResponse(value as string);
   const r = responseOf(spec, value as AnswerValue);
   // The tap pad reports AudioContext seconds; the grader reads seconds from bar 1 of the stimulus.
   if ("taps" in r && rt.tapStart !== null) {
@@ -140,6 +154,8 @@ export function StimulusPlayer({
         key: ex.key ?? h.env.key,
         countInBars: cue?.countInBars ?? 0,
         click: cue?.click ?? false,
+        // A code stimulus plays its "chords that set home" first, as a drill trial does (U03.L02 S6).
+        ...(stim.src === "code" && cue ? { context: cue.context } : {}),
       });
       runtime.plays += 1;
       setPlaying(p);
@@ -214,12 +230,23 @@ function useWorkbenchBase(ex: Part, variant: "full" | "compact"): Omit<Workbench
 /** The Workbench of a code part, its A/B target and its marks. */
 function CodeStage(p: PartInputProps & { code: string; setCode(code: string): void; readOnly?: true }) {
   const base = useWorkbenchBase(p.ex, p.variant ?? "full");
-  const { editable } = starterOf(p.ex);
-  const reference = revealCode(p.ex);
+  const starter = starterOf(p.ex);
+  const { editable } = starter;
+  // The ⟪…⟫ regions are the only editable text: they are boxed, and a keyboard focus lands in them.
+  useTargetMarks(p.wbId, p.readOnly ? null : editable, p.code === starter.code, p.result);
+  const reference = isByEar(p.ex) ? byEarSource(p.ex).code : revealCode(p.ex);
   const audible =
-    "target" in p.ex && p.ex.target && typeof p.ex.target === "object" && "audible" in p.ex.target
+    isByEar(p.ex) ||
+    ("target" in p.ex && p.ex.target && typeof p.ex.target === "object" && "audible" in p.ex.target
       ? p.ex.target.audible
-      : false;
+      : false);
+  // ux §3.6: A/B from rung 2 on a modify step, always on a dictation. A modify step that starts by ear (its
+  // roll appears only after a failed check, `revealRollAfter`) can be heard from the start: the ear is the point.
+  const abAudible =
+    isByEar(p.ex) ||
+    (p.ex.kind === "code-modify" && p.ex.target.revealRollAfter !== undefined && !p.ex.target.showRoll)
+      ? ("always" as const)
+      : ("fromHint2" as const);
   return (
     <Workbench
       {...base}
@@ -239,7 +266,8 @@ function CodeStage(p: PartInputProps & { code: string; setCode(code: string): vo
             },
           }
         : {})}
-      target={reference && audible ? { code: reference, audible: "fromHint2" } : null}
+      target={reference && audible ? { code: reference, audible: abAudible } : null}
+      {...(isByEar(p.ex) ? { abLabels: { a: "Your code", b: "The tune" } } : {})}
       onChange={(c) => p.setCode(c)}
       onEvaluated={(o) => {
         if (o.ok) p.onRun?.(o.code);
@@ -248,7 +276,7 @@ function CodeStage(p: PartInputProps & { code: string; setCode(code: string): vo
   );
 }
 
-function AnswerWidgetHost(p: {
+export function AnswerWidgetHost(p: {
   spec: AnswerSpec;
   value: AnswerValue;
   onChange(v: AnswerValue): void;
@@ -331,8 +359,63 @@ function useSungFromMusic(ex: Part, key: AnswerEnvKey, meter: AnswerEnvMeter): S
 type AnswerEnvKey = Parameters<typeof singTargets>[2];
 type AnswerEnvMeter = Parameters<typeof singTargets>[3];
 
+/**
+ * Dev and e2e only: the target pitches each sing part on screen is graded against, by exercise ID, so a browser
+ * spec can submit a take on its targets through the player's own path (`__oakLesson.singTargets()`).
+ */
+export const devSingTargets = new Map<string, number[]>();
+
+/**
+ * The takes the sing widgets on this page measured, by exercise ID: the grader reads the whole @oak/pitch result
+ * of the take a response summarises (`TakeLookup`), so a failed pattern names the first wrong degree and a take
+ * Oak could not hear says why (no voice, too noisy, too short, clipped). A response that is not the latest take's
+ * summary (a replay, the dev hook) is graded from its summary.
+ */
+const takes = new Map<string, { summary: string; result: SungResult }>();
+export const lessonTakes: TakeLookup = (exerciseId, sung) => {
+  const t = takes.get(exerciseId);
+  if (!t || t.summary !== JSON.stringify(sung)) return null;
+  return t.result as unknown as ReturnType<TakeLookup>;
+};
+
+/** Keeps a finished take for grading and leaves the voice's re-check advice when it heard no voice or noise. */
+function onSingTake(exerciseId: string, take: SingTake, floorDb: number | null): void {
+  takes.set(exerciseId, { summary: JSON.stringify(summarize(take.result)), result: take.result });
+  reportTake({
+    diagnostics: take.result.diagnostics,
+    ...(take.pitchFrames ? { frames: take.pitchFrames } : {}),
+    floorDb,
+  });
+}
+
+/** The pitches a sing part is graded against: the trial's, the music's, or its degrees placed in the key. */
+function singTargetMidis(
+  ex: Part,
+  trial: Trial | null,
+  fromMusic: SingNotes | null,
+  env: { key: AnswerEnvKey & object; meter: AnswerEnvMeter; bpm: number },
+): readonly { midi: number }[] | undefined {
+  if (ex.kind !== "sing") return undefined;
+  if (trial && Array.isArray(trial.params.singTargets)) return trial.params.singTargets as { midi: number }[];
+  if (ex.target.from !== "degrees") return fromMusic ?? undefined;
+  const meter = ex.meter ?? env.meter;
+  return singTargets(ex.target, null, ex.key ?? env.key, meter, env.bpm / 60 / METERS[meter].unitsPerBar);
+}
+
+/** Publishes a sing part's targets for the dev hook (a no-op in a production build). */
+function useDevSingTargets(exId: string, notes: readonly { midi: number }[] | undefined): void {
+  const key = notes ? notes.map((n) => n.midi).join(",") : "";
+  useEffect(() => {
+    if (!import.meta.env.DEV || key === "") return;
+    devSingTargets.set(exId, key.split(",").map(Number));
+    return () => {
+      devSingTargets.delete(exId);
+    };
+  }, [exId, key]);
+}
+
 /** The answer environment of a part: calibration, quiet mode, the tap take and the notes to sing. */
-function useAnswerEnvFor(
+export function useAnswerEnvFor(
   ex: Part,
   runtime: InputRuntime,
   trial: Trial | null,
@@ -344,8 +427,23 @@ function useAnswerEnvFor(
     ex.kind === "sing" ? (ex.key ?? h.env.key) : null,
     ex.kind === "sing" ? (ex.meter ?? h.env.meter) : h.env.meter,
   );
-  const env: AnswerEnv = { profile: h.env.profile, quiet: h.env.profile.quiet, audio: appAudio };
+  const lenses = useLenses().shown;
+  const env: AnswerEnv = { profile: h.env.profile, quiet: h.voice.quiet, audio: appAudio };
+  // A checkpoint stores the answer without grading it ("Save answer"), so the widgets' Enter hint says so.
+  if (h.mode === "checkpoint") env.submitVerb = "save";
+  useDevSingTargets(ex.id, singTargetMidis(ex, trial, fromMusic, h.env));
   if (code !== null) env.code = code;
+  // The Workbench's labels are the content's inside a step; the answer widgets read the learner's lenses
+  // (wave3.md §4.3), and show what the step itself labels too: a widget shows syllables when either asks. A lens
+  // switched elsewhere mid-step (Studio, the drill footer, Settings) reaches the widget without a remount.
+  const labels = [h.step.ui.rollLabels ?? "none", h.step.ui.staffLabels ?? "none"];
+  env.lenses = {
+    degrees: lenses.degrees || labels.some((l) => l.includes("degree")),
+    solfege: lenses.solfege || labels.some((l) => l.includes("solfege")),
+    noteNames: lenses.noteNames || labels.includes("note"),
+  };
+  if (ex.kind === "staff-write" || ex.kind === "staff-read" || ex.kind === "dictation")
+    env.staff = { meter: METERS[ex.meter ?? h.env.meter] };
   if (ex.kind === "tap") {
     const meter = ex.meter ?? h.env.meter;
     env.tap = {
@@ -368,10 +466,51 @@ function useAnswerEnvFor(
       },
     };
   }
+  // A drill trial sung in a checkpoint carries its own targets (seconds from the response window) and cue.
+  const trialTargets =
+    ex.kind === "sing" && trial && Array.isArray(trial.params.singTargets)
+      ? (trial.params.singTargets as { midi: number; on: number; off: number }[])
+      : null;
+  if (ex.kind === "sing" && trialTargets && trial) {
+    const degrees = ex.target.from === "degrees" ? ex.target.degrees : [];
+    const labels = singLabelsFor(ex, h.lesson.id);
+    env.sing = {
+      notes: trialTargets.map((t, i) => {
+        return { midi: t.midi, at: t.on, dur: t.off - t.on, label: degrees[i] ?? "" };
+      }),
+      mode: ex.mode,
+      tol: ex.tol,
+      showTrace: ex.showTrace,
+      labels,
+      ...(ex.cue.countInBars > 0
+        ? {
+            countIn: {
+              beats: ex.cue.countInBars * METERS[ex.meter ?? h.env.meter].unitsPerBar,
+              bpm: Number(trial.params.bpm ?? h.env.bpm),
+            },
+          }
+        : {}),
+      playCue: async () => {
+        const p = await playStimulus({
+          trial,
+          bars: Number(trial.params.bars ?? 1),
+          meter: ex.meter ?? h.env.meter,
+          key: ex.key ?? h.env.key,
+        });
+        runtime.plays += 1;
+        await p.done;
+      },
+      onTake: (take) => onSingTake(ex.id, take, h.env.profile.noiseFloorDb),
+    };
+    return env;
+  }
   if (ex.kind === "sing" && (ex.target.from === "degrees" || fromMusic)) {
     const meter = ex.meter ?? h.env.meter;
     const key = ex.key ?? h.env.key;
     const cps = h.env.bpm / 60 / METERS[meter].unitsPerBar;
+    const labels = singLabelsFor(ex, h.lesson.id);
+    const degrees = ex.target.from === "degrees" ? ex.target.degrees : [];
+    const stim = ex.stimulus.src === "code" ? ex.stimulus : null;
     env.sing = {
       notes:
         ex.target.from === "degrees"
@@ -379,25 +518,64 @@ function useAnswerEnvFor(
               midi: t.midi,
               at: t.on,
               dur: t.off - t.on,
-              label: ex.target.from === "degrees" ? (ex.target.degrees[i] ?? "") : "",
+              // A sight-sing's lane does not number the notes: the staff is what is read.
+              label: ex.mode === "sight" ? "" : (degrees[i] ?? ""),
             }))
           : (fromMusic ?? []),
       mode: ex.mode,
       tol: ex.tol,
       showTrace: ex.showTrace,
-      playCue: async () => {
-        if (ex.stimulus.src !== "code") return;
-        const p = await playStimulus({ code: ex.stimulus.code, bars: ex.stimulus.bars, meter, key });
-        runtime.plays += 1;
-        await p.done;
+      // The widget prints the labels (numbers, or number and syllable), clicks the count-in with numerals and
+      // offers home and the chords that set it; "Hear it" plays the pattern itself on the piano.
+      labels,
+      ...(ex.cue.countInBars > 0
+        ? { countIn: { beats: ex.cue.countInBars * METERS[meter].unitsPerBar, bpm: h.env.bpm } }
+        : {}),
+      reference: {
+        tonic: 60 + tonicPc(key.tonic),
+        mode: /minor/.test(key.mode) ? "minor" : "major",
+        chords: ex.cue.context !== "none",
       },
+      ...(stim
+        ? {
+            playTarget: () => {
+              void playStimulus({ code: stim.code, bars: stim.bars, meter, key })
+                .then((p) => {
+                  runtime.plays += 1;
+                  return p.done;
+                })
+                .catch(() => null);
+            },
+          }
+        : {}),
+      // contracts §8.1: an echo hears the target first; every other mode hears what sets home (the cue's
+      // chords), then the widget's count-in. `sight` never hears the target before the take.
+      playCue: async () => {
+        const echo = ex.mode === "echo";
+        if (echo && stim) {
+          const p = await playStimulus({
+            code: stim.code,
+            bars: stim.bars,
+            meter,
+            key,
+            context: ex.cue.context,
+          });
+          runtime.plays += 1;
+          await p.done;
+          return;
+        }
+        const lead = await playLead({ key, context: ex.cue.context, countInBars: 0, meter, cps });
+        await lead?.done;
+      },
+      onQuietEvidence: () => h.markDone(),
+      onTake: (take) => onSingTake(ex.id, take, h.env.profile.noiseFloorDb),
     };
   }
   return env;
 }
 
 /** A static view of the stimulus where the exercise asks for one (staff to read, roll to look at). */
-function StimulusView({ ex }: { ex: Part }) {
+export function StimulusView({ ex }: { ex: Part }) {
   if (ex.kind === "staff-read")
     return <CodeMusic code={ex.source} bars={ex.bars} view="staff" label="The music to read" />;
   if ("stimulus" in ex && ex.stimulus?.src === "code" && (ex.stimulus.showRoll || ex.stimulus.showStaff))
@@ -497,7 +675,7 @@ export function PartInput(p: PartInputProps) {
 
   // Answer kinds: stimulus and widget, all in the answer slot.
   if (p.slot === "stage") return null;
-  const spec = answerSpecOf(ex);
+  const spec = withTrialOptions(answerSpecOf(ex), p.trial);
   if (!spec) return null;
   return (
     <AnswerEnvProvider value={env}>

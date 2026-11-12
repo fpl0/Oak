@@ -8,7 +8,8 @@ import { blurbOf, faceLabel, SKILL_BLURBS } from "./blurbs.ts";
 import { ancestorsOf, buildMapGraph, unitOfSession } from "./graph.ts";
 import { edgeKey, familiesOf, practiseTarget, unitProgress, whatsNext } from "./guide.ts";
 import { layoutOak, overlaps } from "./layout.ts";
-import { clampView, ensureVisible, fitAll, fitWidth, neighbour, zoomAt } from "./nav.ts";
+import { clampView, ensureVisible, fitAll, fitWidth, neighbour, rowIntoView, zoomAt } from "./nav.ts";
+import { isVoiceSkill, minutesOf, reviveAction, withQuiet } from "./revive.ts";
 import { countLeaves, freshnessLabel, leafView } from "./state.ts";
 
 const graph = buildMapGraph(skillGraphFromDefs(skills), syllabus);
@@ -266,6 +267,14 @@ describe("what's next", () => {
     expect(cap.targets.sort()).toEqual(cp.targets.sort());
   });
 
+  test("an unwritten next lesson is shown as still being written (the edge of the course)", () => {
+    const authored = new Set(["U01.L04"]);
+    expect(whatsNext({ next: "U05.L01" }, syllabus, graph, authored).written).toBe(false);
+    expect(whatsNext({ next: "U01.L04" }, syllabus, graph, authored).written).toBe(true);
+    expect(whatsNext({ next: "U01.CP" }, syllabus, graph, authored).written).toBe(true);
+    expect(whatsNext({ next: "U05.L01" }, syllabus, graph).written).toBe(true);
+  });
+
   test("nothing next, nothing highlighted", () => {
     expect(whatsNext({ next: null }, syllabus, graph).targets).toEqual([]);
     expect(whatsNext(undefined, syllabus, graph).sessionId).toBeNull();
@@ -306,6 +315,14 @@ describe("practise this", () => {
     expect(open).toEqual({ kind: "lesson", lessonId: "U01.L01", title: "Lesson U01.L01", completed: true });
     const locked = practiseTarget({ id: "R01", introducedBy: "U01.L01" }, ctx([], []));
     expect(locked.kind).toBe("locked");
+  });
+
+  test("an open lesson with no lesson file is never offered: it is still being written", () => {
+    const t = practiseTarget(
+      { id: "C01", introducedBy: "U05.L01" },
+      { ...ctx([], [["U05.L01", "available"]]), authored: new Set(["U01.L01"]) },
+    );
+    expect(t).toEqual({ kind: "locked", lessonId: "U05.L01", title: "Lesson U05.L01", unwritten: true });
   });
 });
 
@@ -384,5 +401,108 @@ describe("leaves table", () => {
     );
     const byStatus = sortLeaves(rows, "status", "desc", regions, units);
     expect(byStatus[0]?.node.id).toBe("R02");
+  });
+});
+
+describe("Revive and Quiet mode (contracts §7.10, §8.5)", () => {
+  const view = (o: Partial<ReturnType<typeof leafView>> = {}) => ({
+    status: "practising" as const,
+    drying: false,
+    freshness: 1,
+    paused: false,
+    ...o,
+  });
+  const S02 = { id: "S02", kind: "concept" };
+  const V03 = { id: "V03", kind: "production" };
+
+  test("a drying leaf: Revive (today's planned sets)", () => {
+    expect(reviveAction(S02, view({ drying: true, freshness: 0.4 }), null)).toEqual({
+      kind: "revive",
+      skillId: "S02",
+    });
+  });
+  test("a faded leaf not in today's warm-up: Revive more", () => {
+    expect(reviveAction(S02, view({ freshness: 0.7 }), null)).toEqual({
+      kind: "revive-more",
+      skillId: "S02",
+    });
+  });
+  test("a fresh or unstarted leaf: nothing to revive", () => {
+    expect(reviveAction(S02, view(), null).kind).toBe("none");
+    expect(reviveAction(S02, view({ status: "available", freshness: null }), null).kind).toBe("none");
+  });
+  test("a voice leaf in Quiet mode waits for the mic, even when drying; never offered a Revive", () => {
+    expect(
+      reviveAction(V03, view({ drying: true, freshness: 0.3 }), { quiet: true, reason: "today" }),
+    ).toEqual({
+      kind: "waiting-mic",
+      reason: "quiet",
+    });
+    expect(reviveAction(V03, view(), { quiet: true, reason: "no-mic" })).toEqual({
+      kind: "waiting-mic",
+      reason: "no-mic",
+    });
+    expect(
+      reviveAction(V03, view({ status: "locked", freshness: null }), { quiet: true, reason: "today" }).kind,
+    ).toBe("none");
+    // Out of Quiet mode a voice leaf revives like any other.
+    expect(reviveAction(V03, view({ drying: true }), { quiet: false, reason: null }).kind).toBe("revive");
+    expect(isVoiceSkill(V03)).toBe(true);
+    expect(isVoiceSkill({ id: "E05", kind: "perceptual" })).toBe(false);
+  });
+  test("withQuiet: started voice leaves are drawn paused and never drying; nothing else changes", () => {
+    const st = (skillId: string, level: SkillState["level"], drying = false) =>
+      ({ skillId, level, paused: false, drying }) as const;
+    const states = new Map([
+      ["V02", st("V02", "learning", true)],
+      ["V04", st("V04", "available")],
+      ["E05", st("E05", "learning", true)],
+    ]);
+    expect(withQuiet(states, false)).toBe(states);
+    const q = withQuiet(states, true);
+    expect(q.get("V02")).toEqual({ skillId: "V02", level: "learning", paused: true, drying: false });
+    expect(q.get("V04")?.paused).toBe(false);
+    expect(q.get("E05")?.drying).toBe(true);
+  });
+  test("minutesOf rounds to whole minutes, at least one", () => {
+    expect(minutesOf(0)).toBe(1);
+    expect(minutesOf(150)).toBe(3);
+  });
+  test("every U03 and U04 skill has a plain blurb and a face label that fits", () => {
+    for (const id of [
+      "S01",
+      "S02",
+      "S03",
+      "S04",
+      "N03",
+      "M01",
+      "E03",
+      "E04",
+      "E05",
+      "E06",
+      "E07",
+      "V02",
+      "V03",
+      "V04",
+      "I01",
+      "I02",
+      "I03",
+      "I05",
+    ]) {
+      expect(SKILL_BLURBS[id]?.what.length ?? 0).toBeGreaterThan(10);
+      const name = skills.find((s) => s.id === id)?.name ?? "";
+      expect(faceLabel(id, name).length).toBeLessThanOrEqual(18);
+    }
+  });
+});
+
+describe("the first view", () => {
+  test("rowIntoView puts the row of what's next in the upper third when it fits, else at the margin", () => {
+    const v = { k: 1, tx: -5, ty: 0 };
+    const fits = rowIntoView(v, { y: 900, h: 200 }, 600);
+    expect(fits.tx).toBe(-5);
+    expect(900 + fits.ty).toBeCloseTo((600 - 200) / 3);
+    const tall = rowIntoView(v, { y: 900, h: 800 }, 600);
+    expect(900 + tall.ty).toBe(48);
   });
 });

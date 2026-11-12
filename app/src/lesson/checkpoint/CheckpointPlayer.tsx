@@ -7,15 +7,20 @@
 import { decks } from "@content/families.ts";
 import {
   type AttemptResponse,
+  type BandRef,
   type CheckpointAttemptStart,
   type CheckpointDef,
   type CheckpointOutcome,
   type CheckpointStatus,
   checkpointFromRouteParam,
   type Exercise,
+  type FlavourId,
   type GradeResult,
+  type KeySpec,
   type LearnerProfile,
   type LessonDef,
+  type SessionId,
+  type SingEx,
   type StepDef,
   type Trial,
   toLearnerProfile,
@@ -31,7 +36,7 @@ import { callApi } from "../../lib/api.ts";
 import { useContent } from "../../lib/content.ts";
 import { formatDate, pct } from "../../lib/format.ts";
 import { usePageTitle } from "../../lib/nav.ts";
-import { useCourseProgress, useProfile, useUnlocks } from "../../lib/queries.ts";
+import { useCourseProgress, useProfile, useUnlocks, useVoiceState } from "../../lib/queries.ts";
 import { currentSessionId, reportBlockDone, useSession } from "../../session/store.ts";
 import { askChat, clearSubject, setSubject } from "../../tutor/context.ts";
 import { useHotkeys } from "../../ui/keys/KeymapProvider.tsx";
@@ -43,7 +48,9 @@ import { ErrorState, LoadingState } from "../../ui/kit/QueryState.tsx";
 import { useFocusHeader, useFocusHeaderContent } from "../../ui/shell/focus-header.ts";
 import { ServicesGate } from "../../workbench/ServicesGate.tsx";
 import "../../workbench/workbench.css";
-import { useCheckpointDef } from "../content.ts";
+import { promptOf } from "../../drills/copy.ts";
+import { bandSetupOf, checkpointMakeBand } from "../band.ts";
+import { useCheckpointDef, useLessonContent } from "../content.ts";
 import { renderer as feedbackRenderer } from "../feedback.ts";
 import { type StepHost, StepHostContext } from "../frame.tsx";
 import {
@@ -62,11 +69,16 @@ import {
   familyAnswerSpec,
   familyResponse,
   type ItemRecord,
+  isSungTrial,
   loadRecords,
+  progressLine,
+  quietNote,
   resultCopy,
+  reviewTitle,
   saveRecords,
   scoreLocal,
   skillLine,
+  sungItemScore,
 } from "./model.ts";
 
 const CP_KEY = { tonic: "C", mode: "major" } as const;
@@ -79,7 +91,15 @@ export function CheckpointPlayer({ unitId }: { unitId: string }) {
   const def = useCheckpointDef(cpId);
   const profile = useProfile();
   const unlocks = useUnlocks();
+  // Quiet mode is server state (wave3.md §5.3): sung items are set aside, never counted (contracts §7.6, §8.5).
+  const voice = useVoiceState();
+  const quiet = voice.data?.quiet ?? profile.data?.quiet ?? false;
   const meta = content.data?.checkpoints.find((c) => c.id === cpId);
+  // The checkpoint's Make plays the Band content names for it, else its unit's last Band.
+  const covered = meta?.covers.at(-1) ?? null;
+  const lastLesson = content.data?.syllabus?.units.find((u) => u.id === covered)?.lessons.at(-1)?.id ?? "";
+  const lastDef = useLessonContent(lastLesson);
+  const makeBand = cpId ? checkpointMakeBand(cpId, lastDef.data?.def ?? null) : null;
   const title = meta ? `Checkpoint · ${meta.title}` : `Checkpoint ${unitId}`;
   usePageTitle(title);
   const [attempt, setAttempt] = useState<CheckpointAttemptStart | null>(null);
@@ -128,7 +148,13 @@ export function CheckpointPlayer({ unitId }: { unitId: string }) {
       </Page>
     );
   const status = progress.data.checkpoints.find((c) => c.cpId === cpId) ?? null;
-  const learner = profile.data ? toLearnerProfile(profile.data) : NEUTRAL_PROFILE;
+  // The tolerance the server's ladder holds (wave3.md §5.3) wins over the profile's copy.
+  const learner = profile.data
+    ? {
+        ...toLearnerProfile(profile.data),
+        ...(voice.data ? { singTolCents: voice.data.ladder.cents, quiet } : {}),
+      }
+    : NEUTRAL_PROFILE;
 
   if (outcome)
     return (
@@ -156,6 +182,9 @@ export function CheckpointPlayer({ unitId }: { unitId: string }) {
           attempt={attempt}
           def={def.data ?? null}
           profile={learner}
+          quiet={quiet}
+          band={makeBand}
+          flavour={profile.data?.flavour ?? "flavour.pop"}
           unlocked={[
             ...(unlocks.data?.items ?? []).map((u) => u.itemId as UnlockableId),
             ...unlockedAt(courseGraph(), content.data?.toolbox ?? [], cpId as never),
@@ -276,6 +305,27 @@ interface RunnerItem {
   kind: "family" | "authored" | "make";
   /** No widget can answer it in this version: it is skipped (level-setting skips never count). */
   unavailable: boolean;
+  /** Answered by singing: level-setting, set aside in Quiet mode. */
+  sung: boolean;
+}
+
+/** A plain title for an authored item that has none: what the learner does, never "a short task". */
+function authoredTitle(ex: Exercise): string {
+  if (ex.kind === "staff-write")
+    return ex.answer.ui === "staff-input" && ex.answer.mode === "key-signature"
+      ? "Write the key signature"
+      : "Write it on the staff";
+  if (ex.kind === "code-modify" || ex.kind === "error-hunt") return "Change the code";
+  if (ex.kind === "code-make" || ex.kind === "compose-brief") return "Write it in code";
+  if (ex.kind === "staff-read") return "Read it";
+  if ("stimulus" in ex && ex.stimulus) return "Listen and answer";
+  return "Answer this one";
+}
+
+/** The key an item is played and graded in: its own, its trial's, else the checkpoint's. */
+function itemKey(ex: Exercise, trial: Trial | null, fallback: KeySpec): KeySpec {
+  const tk = (trial?.params as { key?: KeySpec } | undefined)?.key;
+  return ex.key ?? tk ?? fallback;
 }
 
 const registry = createRegistry(FAMILIES, decks);
@@ -294,7 +344,8 @@ function buildItems(
         step: {
           id: `I${spec.idx + 1}` as StepDef["id"],
           kind: "make",
-          title: "Your groove",
+          // The Make's own name ("Eight bars home"), as its sketch is saved under it.
+          title: def.make.title ?? "Your groove",
           minutes: 4,
           ui: { ...base, panels: { ...base.panels, roll: true } },
         },
@@ -302,37 +353,44 @@ function buildItems(
         trial: null,
         kind: "make" as const,
         unavailable: false,
+        sung: false,
       };
     }
     if (spec.source.kind === "authored") {
       const slug = spec.source.exerciseId.split("/").pop() ?? "";
       const ex = def?.authored.find((e) => e.id === slug);
-      if (ex)
+      if (ex) {
+        // A staff item (a key signature to write, notes to place) shows the staff; a code item the roll.
+        const staffy = ex.kind === "staff-write" || ex.kind === "staff-read";
         return {
           idx: spec.idx,
           step: {
             id: `I${spec.idx + 1}` as StepDef["id"],
-            kind: "modify",
-            title: ex.title ?? "A short task",
+            kind: staffy ? "notate" : ex.kind === "fact" ? "quiz" : "modify",
+            title: ex.title ?? authoredTitle(ex),
             minutes: 1,
-            ui: { ...base, panels: { ...base.panels, roll: true } },
+            ui: staffy
+              ? { ...base, panels: { ...base.panels, staff: "treble" as const } }
+              : { ...base, panels: { ...base.panels, roll: true } },
           },
           exercise: ex,
           trial: null,
           kind: "authored" as const,
           unavailable: false,
+          sung: false,
         };
+      }
     }
     if (spec.source.kind === "family") {
       const src = spec.source;
       const fam = registry.family(src.familyId);
       const trial = familyTrial(src.familyId, src.level, src.category, src.seed, profile);
       const cats = fam.def.categories.map((c) => c.id);
-      const answer = familyAnswerSpec(familyAnswerKind(src.familyId), trial, cats);
-      const prompt =
-        typeof trial.params.prompt === "string"
-          ? trial.params.prompt
-          : `Listen, then answer: ${fam.def.title.toLowerCase()}.`;
+      if (isSungTrial(trial)) return sungItem(spec.idx, spec.skillId, fam.def.title, trial);
+      const answer = familyAnswerSpec(familyAnswerKind(src.familyId), trial, cats, fam.def);
+      // The drill runner's own words for the trial ("Which two degrees sounded together? Lower first."), as
+      // the learner has met them in warm-ups; never a generic "Listen, then answer".
+      const prompt = promptOf(trial as Trial<unknown>, fam.def);
       const common = {
         id: `item-${spec.idx + 1}`,
         version: 1,
@@ -342,26 +400,39 @@ function buildItems(
         hints: null,
         tests: [],
       };
+      const p = trial.params as Record<string, unknown>;
+      const tkey = (p.key as KeySpec | undefined) ?? undefined;
       const exercise: Exercise =
-        answer?.ui === "tap"
+        // Reading from the page (`showStaff`, not played first): the staff, and no Play.
+        p.showStaff === true && p.playFirst === false && answer && answer.ui !== "tap"
           ? {
               ...common,
-              kind: "tap",
-              mode: "echo",
-              stimulus: { src: "generator", family: src.familyId, level: src.level, seed: src.seed },
-              cue: trial.cue,
-              bars: typeof trial.params.bars === "number" ? trial.params.bars : 1,
-              target: "beat",
-              tol: { windowMs: "auto", tempo: "locked", forgiveOffset: true, passF1: 0.8, passTiming: 0.7 },
-            }
-          : {
-              ...common,
-              kind: "identify",
-              stimulus: { src: "generator", family: src.familyId, level: src.level, seed: src.seed },
-              cue: trial.cue,
-              answer: (answer ?? { ui: "choice", options: [] }) as never,
+              kind: "staff-read",
+              ...(tkey ? { key: tkey } : {}),
+              source: trial.code,
+              bars: typeof p.bars === "number" ? p.bars : 2,
+              answer: answer as never,
               correct: trial.expected,
-            };
+            }
+          : answer?.ui === "tap"
+            ? {
+                ...common,
+                kind: "tap",
+                mode: "echo",
+                stimulus: { src: "generator", family: src.familyId, level: src.level, seed: src.seed },
+                cue: trial.cue,
+                bars: typeof trial.params.bars === "number" ? trial.params.bars : 1,
+                target: "beat",
+                tol: { windowMs: "auto", tempo: "locked", forgiveOffset: true, passF1: 0.8, passTiming: 0.7 },
+              }
+            : {
+                ...common,
+                kind: "identify",
+                stimulus: { src: "generator", family: src.familyId, level: src.level, seed: src.seed },
+                cue: trial.cue,
+                answer: (answer ?? { ui: "choice", options: [] }) as never,
+                correct: trial.expected,
+              };
       return {
         idx: spec.idx,
         step: {
@@ -375,6 +446,7 @@ function buildItems(
         trial,
         kind: "family" as const,
         unavailable: answer === null,
+        sung: false,
       };
     }
     // An authored item whose definition is missing: shown as unavailable and skipped.
@@ -395,8 +467,63 @@ function buildItems(
       trial: null,
       kind: "authored" as const,
       unavailable: true,
+      sung: false,
     };
   });
+}
+
+/** A sung family item (`fam.deg.sing`, `fam.deg.resolve`, `fam.mel.echo`, `fam.mel.sight`) as a sing step. */
+function sungItem(idx: number, skillId: string, title: string, trial: Trial): RunnerItem {
+  const p = trial.params as Record<string, unknown>;
+  const mode = (typeof p.singMode === "string" ? p.singMode : "degree") as SingEx["mode"];
+  const degrees = trial.expected.degrees;
+  const key = p.key as KeySpec | undefined;
+  const exercise: SingEx = {
+    kind: "sing",
+    id: `item-${idx + 1}`,
+    version: 1,
+    role: "checkpoint",
+    prompt:
+      typeof p.prompt === "string"
+        ? p.prompt
+        : mode === "echo"
+          ? "Listen, then sing it back."
+          : mode === "sight"
+            ? "Read it, then sing it."
+            : "Sing the notes shown, after the chords that set home.",
+    skills: [{ skill: skillId as never, w: 1 }],
+    hints: null,
+    tests: [],
+    fallback: "skip",
+    mode,
+    ...(key ? { key } : {}),
+    stimulus: {
+      src: "code",
+      code: trial.code,
+      bars: typeof p.bars === "number" ? p.bars : 1,
+      showCode: false,
+      ...(p.showStaff === true ? { showStaff: true } : {}),
+    },
+    cue: trial.cue,
+    target: degrees && degrees.length > 0 ? { from: "degrees", degrees } : { from: "stimulus" },
+    tol: { cents: "learner", octave: "global", driftCompCents: 30, minCoverage: 0.4, passHitRate: 0.8 },
+    showTrace: "live",
+  };
+  return {
+    idx,
+    step: {
+      id: `I${idx + 1}` as StepDef["id"],
+      kind: "sing",
+      title,
+      minutes: 1,
+      ui: { panels: { roll: false, staff: false, keyboard: false } },
+    },
+    exercise,
+    trial,
+    kind: "family",
+    unavailable: false,
+    sung: true,
+  };
 }
 
 function asResult(exerciseId: string, credit: number, diagnostics: GradeResult["diagnostics"]): GradeResult {
@@ -423,12 +550,18 @@ function Runner(p: {
   attempt: CheckpointAttemptStart;
   def: CheckpointDef | null;
   profile: LearnerProfile;
+  quiet: boolean;
+  band: BandRef | null;
+  flavour: FlavourId;
   unlocked: UnlockableId[];
   /** The hand-in's outcome and the Make's sketch (null when the Make was skipped). */
   onDone(o: CheckpointOutcome, makeSketchId: string | null): void;
 }) {
   const qc = useQueryClient();
-  const items = useRef(buildItems(p.attempt, p.def, p.profile)).current;
+  const all = useRef(buildItems(p.attempt, p.def, p.profile)).current;
+  // Quiet mode sets the sung items aside: they are handed in as skipped, which a level-setting item never counts.
+  const items = p.quiet ? all.filter((it) => !it.sung) : all;
+  const setAside = all.length - items.length;
   const [records, setRecords] = useState<ItemRecord[]>(() => loadRecords(p.cpId, p.attempt.attemptNo));
   const firstOpen = items.findIndex((it) => !records.some((r) => r.idx === it.idx));
   const [index, setIndex] = useState(firstOpen < 0 ? items.length : firstOpen);
@@ -449,6 +582,7 @@ function Runner(p: {
     (globalThis as { __oakCheckpoint?: unknown }).__oakCheckpoint = {
       expected: () => devItem.current?.trial?.expected ?? null,
       params: () => devItem.current?.trial?.params ?? null,
+      trialCode: () => devItem.current?.trial?.code ?? null,
       kind: () => devItem.current?.kind ?? null,
       exercise: () => devItem.current?.exercise ?? null,
       /** Grades and saves a response for the item on screen, then moves on (the Make: saves its sketch). */
@@ -499,11 +633,19 @@ function Runner(p: {
 
   const record = (r: ItemRecord) => setRecords((rs) => [...rs.filter((x) => x.idx !== r.idx), r]);
   const next = () => setIndex((i) => Math.min(items.length, i + 1));
+  const cpKey: KeySpec = p.def?.make.key ?? CP_KEY;
+  const cpBpm = typeof p.def?.make.bpm === "number" ? p.def.make.bpm : CP_BPM;
+  const makeBand = bandSetupOf(p.band ?? undefined, {
+    flavour: p.flavour,
+    key: cpKey,
+    bpm: cpBpm,
+    at: p.cpId as SessionId,
+  });
   const env: GradeEnv = {
     ownerId: p.cpId,
-    key: CP_KEY,
+    key: item ? itemKey(item.exercise, item.trial, cpKey) : cpKey,
     meter: "4/4",
-    bpm: CP_BPM,
+    bpm: cpBpm,
     unlocked: new Set(p.unlocked),
     allowPreview: false,
     profile: p.profile,
@@ -518,7 +660,7 @@ function Runner(p: {
         body: {
           sessionId: currentSessionId(),
           attemptNo: p.attempt.attemptNo,
-          items: items.map((it) => {
+          items: all.map((it) => {
             const r = rec.get(it.idx);
             return {
               idx: it.idx,
@@ -562,9 +704,14 @@ function Runner(p: {
             className="font-display text-h1 font-semibold"
             ref={(el) => el?.focus({ preventScroll: true })}
           >
-            All {items.length} items answered
+            {reviewTitle(records, items.length)}
           </h2>
           <p className="text-text-2">Hand it in to see how each skill went.</p>
+          {quietNote(setAside) && (
+            <p className="text-sm text-text-3" data-testid="quiet-set-aside">
+              {quietNote(setAside)}
+            </p>
+          )}
           {submitError && (
             <Callout tone="attention" title="It was not handed in">
               {submitError}. Your answers are kept; try again.
@@ -607,13 +754,18 @@ function Runner(p: {
   const grade = async (response: AttemptResponse): Promise<GradeResult | null> => {
     setChecking(true);
     try {
+      if (item.sung && item.trial) {
+        if (!("sung" in response)) return null;
+        const { score, noVoice } = sungItemScore(response.sung, item.trial, p.profile.singTolCents);
+        return asResult(ex.id, noVoice ? 0 : score, []);
+      }
       if (item.kind === "family" && item.trial) {
         const fam = registry.family(item.trial.family);
         const at = typeof item.trial.params.responseAt === "number" ? item.trial.params.responseAt : 0;
         const tr = gradeTrial(
           fam,
           item.trial,
-          familyResponse(response, Date.now() - started.current, 1, at),
+          familyResponse(response, Date.now() - started.current, 1, at, item.trial.expected),
           p.profile,
         );
         return asResult(ex.id, tr.credit, tr.diagnostics);
@@ -636,9 +788,9 @@ function Runner(p: {
     version: 1,
     title: p.title,
     objective: "",
-    key: CP_KEY,
+    key: env.key,
     meter: "4/4",
-    bpm: CP_BPM,
+    bpm: cpBpm,
     introduces: [],
     practises: [],
     terms: [],
@@ -663,12 +815,18 @@ function Runner(p: {
     checking,
     review: false,
     env,
+    voice: { quiet: p.quiet, labels: null },
     workbench: {
-      lessonCtx: { key: CP_KEY, meter: "4/4", defaultBpm: CP_BPM, loopBars: 2 },
+      lessonCtx: {
+        key: env.key,
+        meter: "4/4",
+        defaultBpm: cpBpm,
+        loopBars: item.kind === "make" && ex.kind === "code-make" ? ex.bars[1] : 2,
+      },
       lint: gradedLint(env),
       views: viewsOf(item.step),
       unit: p.cpId,
-      band: null,
+      band: item.kind === "make" ? makeBand : null,
       roll: { labels: "none", color: "part" },
     },
     trial: item.trial,
@@ -700,13 +858,13 @@ function Runner(p: {
               originId: p.cpId,
               sessionId: currentSessionId(),
               code: src,
-              bpm: CP_BPM,
+              bpm: cpBpm,
               meter: "4/4",
-              key: CP_KEY,
+              key: env.key,
               analysis: null,
               note: null,
               tutorAssisted: false,
-              band: null,
+              band: makeBand ? { bandId: makeBand.band, flavour: makeBand.flavour, mutes: [] } : null,
               flags: { lockedTools: [], previewTools: [] },
               ranOk: result.status !== "error",
             },
@@ -738,7 +896,7 @@ function Runner(p: {
     renderFooter: (actions: ReactNode) => (
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-sm text-text-3" data-testid="checkpoint-progress">
-          {records.length} of {items.length} answered
+          {progressLine(records, items.length)}
         </span>
         <div className="flex flex-wrap items-center gap-2">
           {item.kind !== "make" && (

@@ -15,6 +15,18 @@ export {
 } from "./env.tsx";
 export { ANSWER_WIDGETS, AnswerUnavailable, AnswerView, answerWidgetFor } from "./registry.tsx";
 export { emptyValue, gridSteps, isComplete, responseOf, slotCount } from "./response.ts";
-export { DEFAULT_SING_TOL, fitNotes, gradeTake, type SingNote, singFeedback, summarize } from "./sing.ts";
+export {
+  cadenceChords,
+  DEFAULT_SING_TOL,
+  degreeNotes,
+  fitNotes,
+  gradeTake,
+  type SingNote,
+  singFeedback,
+  summarize,
+  takeNotes,
+  targetLabel,
+  voiceSing,
+} from "./sing.ts";
 export { DEFAULT_TAP_TOL, type TapReport, tapReport, targetSeconds } from "./tap.ts";
 export * from "./types.ts";

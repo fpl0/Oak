@@ -41,8 +41,26 @@ export interface LoadedLesson {
   def: LessonDef;
   /** `null` when the lesson has no prose file (the player then shows each step's title and prompt). */
   Mdx: LessonMdx | null;
-  /** True for the Wave 1 gate fixture, which is not part of the course. */
+  /** True for the Wave 1 gate fixture (and the dev fixture), which is not part of the course. */
   sample: boolean;
+  /** The session whose tools the lesson is played with, when it is not the lesson itself (a fixture). */
+  context?: string;
+  /** The preview banner's line, for a fixture. */
+  note?: string;
+}
+
+/** The dev-only fixture of the Wave 3 step kinds (`app/src/lesson/dev/wave3-fixture.ts`); never in a build. */
+async function devFixture(id: string): Promise<LoadedLesson | null> {
+  if (!import.meta.env.DEV) return null;
+  const mod = await import("./dev/wave3-fixture.ts");
+  if (id !== mod.FIXTURE_ID) return null;
+  return {
+    def: mod.default,
+    Mdx: null,
+    sample: true,
+    context: mod.FIXTURE_CONTEXT,
+    note: "A dev fixture of the Wave 3 step kinds, played with the tools of U04. Nothing here is saved.",
+  };
 }
 
 /** Whether an authored lesson file exists for `id` (cheap: no module is loaded). */
@@ -52,7 +70,7 @@ export function hasLessonFile(id: string): boolean {
 
 export async function loadLesson(id: string): Promise<LoadedLesson | null> {
   const load = lessonFiles.get(id);
-  if (!load) return null;
+  if (!load) return devFixture(id);
   const [mod, mdx] = await Promise.all([
     load(),
     mdxFiles

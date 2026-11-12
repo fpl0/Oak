@@ -277,8 +277,18 @@ export function createRunner(deps: RunnerDeps) {
           }),
           baselineSafely(),
         ]);
+        // One open session per learner day (wave3.md §5.1): when another tab already opened today's session the
+        // server answers with that one. Join it: at the block this browser saved for it, else from the top of
+        // the plan with the open session's own kind and item.
+        const saved = loadActive(deps.storage, session.id);
+        if (saved) {
+          view.setState({ baseline: saved.baseline, starting: false, recapDone: saved.recapDone });
+          restoreSession(saved.state);
+          launch();
+          return;
+        }
         view.setState({ baseline, starting: false, recapDone: plan.returning?.recap == null });
-        useSession.getState().begin(plan, session);
+        useSession.getState().begin(joinedPlan(plan, session), session);
         launch();
       } catch (e) {
         view.setState({ starting: false, startError: e instanceof Error ? e.message : String(e) });
@@ -306,7 +316,7 @@ export function createRunner(deps: RunnerDeps) {
           baseline: await baselineSafely(),
           recapDone: plan.returning?.recap == null,
         });
-        useSession.getState().begin({ ...plan, kind: open.kind, mapItemId: open.mapItemId }, open);
+        useSession.getState().begin(joinedPlan(plan, open), open);
       }
       launch();
     },
@@ -358,6 +368,33 @@ export function createRunner(deps: RunnerDeps) {
       view.setState(INITIAL_VIEW);
     },
   };
+}
+
+/**
+ * The plan a joined session runs: today's plan when it is the same session kind and item, else the plan
+ * re-labelled with the open session's kind and item (a Keep-alive tab joining a lesson session runs the
+ * lesson; a lesson tab joining a Keep-alive runs the Keep-alive's one set).
+ */
+export function joinedPlan(plan: SessionPlan, open: Pick<Session, "kind" | "mapItemId">): SessionPlan {
+  if (plan.kind === open.kind && plan.mapItemId === open.mapItemId) return plan;
+  if (open.kind === "keepalive") {
+    const first = plan.warmup.items[0];
+    return {
+      ...plan,
+      kind: "keepalive",
+      mapItemId: null,
+      title: "Keep-alive",
+      main: null,
+      returning: null,
+      warmup: {
+        ...plan.warmup,
+        items: first ? [first] : [],
+        plannedSec: first?.estSec ?? 0,
+        moreAvailable: false,
+      },
+    };
+  }
+  return { ...plan, kind: open.kind, mapItemId: open.mapItemId };
 }
 
 /** The skill-map levels and can-do statuses now, from the server (the Coda's baseline). */

@@ -107,6 +107,11 @@ export interface SetPlanInput {
   trials?: number;
   /** First FET set of the day sings 3 resolutions, later ones 2; 0 in Quiet mode. */
   sungResolutions?: number;
+  /**
+   * Per-category hits of the learner's sung resolutions (a resolution passed counts as a hit): the trials
+   * that ask for one cover the weakest sung degrees first (contracts §8.3). Default: `categoryStats`.
+   */
+  sungStats?: Readonly<Record<string, { n: number; hits: number }>>;
   quiet: boolean;
 }
 export interface SetSummary {

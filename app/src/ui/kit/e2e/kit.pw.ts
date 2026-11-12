@@ -7,6 +7,11 @@ import { shoot, useUiPrefs } from "../../../../../e2e/support/ui.ts";
 
 const SHOTS = fileURLToPath(new URL("./screenshots", import.meta.url));
 
+// Other engineers edit the shared tree while this suite runs: Vite's HMR socket must not reload the page mid-test.
+test.beforeEach(async ({ page }) => {
+  await page.routeWebSocket(/.*/, () => {});
+});
+
 for (const m of SCREENSHOT_MATRIX) {
   test(`gallery renders in ${m.theme} at ${m.width}x${m.height}`, async ({ page }) => {
     const errors: string[] = [];

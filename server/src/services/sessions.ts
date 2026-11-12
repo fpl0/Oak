@@ -1,21 +1,23 @@
 // Sessions: start (START unlocks, capstone state), heartbeat, end (minutes, keep-alive qualification,
 // session telemetry, the Coda summary). Today's plan itself comes from the SRS engineer's planner.
-import type { Session, SessionSummary, SessionTelemetry } from "@oak/api";
+import type { Session, SessionDay, SessionSummary, SessionTelemetry } from "@oak/api";
 import { STREAK } from "@oak/srs";
 import { tx } from "../db/index.ts";
 import { conflict, notFound } from "../errors.ts";
-import { dayIndex } from "../lib/days.ts";
+import { addDays, dayIndex } from "../lib/days.ts";
 import { LearnerTime, newId, type ServiceContext } from "./context.ts";
 import type { CourseService } from "./course.ts";
 import type { GatesService } from "./gates.ts";
 import type { StreakService } from "./streak.ts";
 import type { UnlocksService } from "./unlocks.ts";
+import type { VoiceService } from "./voice.ts";
 
 export interface SessionsDeps {
   gates: GatesService;
   unlocks: UnlocksService;
   streak: StreakService;
   course: CourseService;
+  voice: VoiceService;
   /** Whether the tutor is switched off in Settings (then the Coda never offers a listening note). */
   tutorOff: () => boolean;
 }
@@ -46,6 +48,39 @@ export class SessionsService {
     return this.ctx.repos.sessions.openOn(this.time.day());
   }
 
+  /**
+   * `GET /session/day` (wave3.md §5.1): the session open today and those ended today, so Today's done state
+   * lives on the server. A session counts for the day its end falls on (one that crossed the 04:00 rollover
+   * belongs to the new day, as the app shows it). Done for today: a planned session (any kind but Studio) ended.
+   */
+  dayState(): SessionDay {
+    const day = this.time.day();
+    const endedOn = (s: Session) =>
+      s.endedAt === null ? null : s.day === day ? day : this.time.day(new Date(s.endedAt));
+    const ended = this.ctx.repos.sessions
+      .since(addDays(day, -1))
+      .filter((s) => endedOn(s) === day)
+      .sort((a, b) => (a.endedAt ?? "").localeCompare(b.endedAt ?? ""));
+    const planned = ended.filter((s) => s.kind !== "studio");
+    return {
+      day,
+      open: this.openToday(),
+      ended,
+      doneForToday: planned.length > 0 || this.onboardedOn(day),
+      summarySessionId: planned.at(-1)?.id ?? null,
+    };
+  }
+
+  /**
+   * Onboarding is the first day's session (ux §8: its Coda says "Done for today"). It runs outside
+   * `session.start` (it is U00.L01, completed by `PUT /onboarding { finished: true }`), so the day it finished
+   * on counts as done here; its Coda lives in the onboarding flow, so there is no `summarySessionId` for it.
+   */
+  onboardedOn(day: string): boolean {
+    const at = this.ctx.repos.onboarding.get().finishedAt;
+    return at !== null && this.time.day(new Date(at)) === day;
+  }
+
   start(
     body: {
       kind: Session["kind"];
@@ -56,6 +91,10 @@ export class SessionsService {
     plan: SessionStartRecord | null = null,
   ): Session {
     return tx(this.ctx.repos.db, () => {
+      // One open session per learner day (wave3.md §5.1): a second start (another tab, a double click)
+      // resumes the open one, whatever it names. A session ended today does not block a new one.
+      const open = this.openToday();
+      if (open !== null) return open;
       const id = body.mapItemId;
       if (id !== null && !this.d.gates.sessionOpen(id) && !this.d.gates.sessionDone(id))
         throw conflict(`${id} is not open yet`);
@@ -74,6 +113,8 @@ export class SessionsService {
       this.ctx.repos.sessions.create(session, plan);
       if (id !== null) {
         this.d.unlocks.onStart(id);
+        // A checkpoint started from the map was offered too (decision 29: it holds the ladder until passed).
+        this.d.voice.recordOffer(id, session.day);
         const m = /^(.+)\.S\d+$/.exec(id);
         const capstone = m === null ? null : this.ctx.content.capstoneMeta(m[1] as string);
         if (capstone !== null) {
@@ -176,13 +217,16 @@ export class SessionsService {
         this.ctx.repos.settings.get("teaserOptIn") && next !== null
           ? { mapItemId: next, title: this.#title(next) }
           : null;
+      // The sing-tolerance ladder moves only between sessions and is announced once, here (contracts §8.2).
+      this.d.voice.evaluate();
+      const toleranceChange = this.d.voice.announce();
       const summary: SessionSummary = {
         session: ended,
         streak: this.d.streak.summary(),
         sketchesSaved: this.ctx.repos.sketches.savedSince(s.startedAt),
         canDo: this.ctx.repos.cando.since(s.startedAt),
         unlocks: this.ctx.repos.unlocks.since(s.startedAt),
-        toleranceChange: null,
+        toleranceChange,
         listeningNote: listening,
         teaser,
       };

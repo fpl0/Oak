@@ -102,14 +102,14 @@ describe("Band code", () => {
     followsLearnerKey: true,
     tracks: ["chords", "bass"] as ("drums" | "bass" | "chords")[],
   };
-  test("follows the learner's first .scale(), keeping the Band's octaves, and the learner's tempo", () => {
+  test("follows the learner's first .scale(), keeping the Band's register (A sits below C), and the learner's tempo", () => {
     const code = bandCodeFor(setup, {
       key: { tonic: "C", mode: "major" } as never,
       defaultBpm: 100,
       learnerCode: 'setcpm(90/4)\nmel: n("0 1 2").scale("A4:harmonic:minor")',
     });
     expect(code).toBe(
-      'chords: n("0 2 4").scale("A4:harmonic:minor").s("piano")\nbass: n("0").scale("A2:harmonic:minor").s("ebass")\nsetcpm(90/4)',
+      'chords: n("0 2 4").scale("A3:harmonic:minor").s("piano")\nbass: n("0").scale("A1:harmonic:minor").s("ebass")\nsetcpm(90/4)',
     );
   });
   test("without a learner scale the step key stays; without a tempo line the lesson default fills {{bpm}}", () => {

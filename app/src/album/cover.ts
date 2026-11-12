@@ -77,7 +77,7 @@ export type Prim =
       fill?: string;
       cap?: "round";
       /** What the mark stands for (model only; not written to the SVG). */
-      role?: "note" | "kick" | "snare" | "hat" | "crash";
+      role?: "note" | "kick" | "snare" | "hat" | "crash" | "latewood";
     }
   | { t: "line"; x1: number; y1: number; x2: number; y2: number; stroke: string; sw: number; op?: number }
   | {
@@ -92,6 +92,8 @@ export type Prim =
       weight?: number;
       spacing?: number;
       op?: number;
+      /** A halo in the wood's colour behind the letters, so a ring line passing under them never crosses them. */
+      halo?: { color: string; width: number };
     };
 
 export interface CoverGroup {
@@ -194,6 +196,58 @@ export function functionDegree(rn: string): BaseDegree | null {
 
 /** How far the outermost ring's centre drifts from the pith: trees grow a little off-centre. */
 const DRIFT = 14;
+
+/** The title's line: from x 52 to 948 along the bottom edge (a halo keeps the rings' lowest line off its letters). */
+export const TITLE_WIDTH = 896;
+/**
+ * The album name's line: right-aligned at x 948 along the top edge. Past x ≈ 620 it crosses the top of the outer
+ * ring (drifted up by DRIFT), where its halo keeps the ring line off the letters; it never reaches the left half.
+ */
+export const ALBUM_WIDTH = 560;
+
+/**
+ * Advance widths in em, rounded up from Fraunces 600 (display) and Inter (sans) so an estimate is never short:
+ * the cover is a static SVG (exported, snapshot-tested) and cannot measure its own text.
+ */
+function advanceEm(ch: string, family: "display" | "sans"): number {
+  const wide = family === "display" ? 1.12 : 1.04;
+  if (/[MWmw@%&]/.test(ch)) return wide;
+  if (/[ .,:;'!|ilIjtf()[\]"’‘]/.test(ch)) return 0.34;
+  if (/[A-Z]/.test(ch)) return family === "display" ? 0.78 : 0.74;
+  if (/[a-z0-9]/.test(ch)) return 0.62;
+  // Accented Latin letters and common punctuation are about a letter wide; anything else (CJK, emoji) a full em.
+  return /[\p{Script=Latin}\p{P}\p{S}]/u.test(ch) ? 0.8 : 1.05;
+}
+
+/** The estimated drawn width of `text` (letter spacing after every character, as SVG does). */
+export function coverTextWidth(text: string, family: "display" | "sans", size: number, spacing = 0): number {
+  let w = 0;
+  for (const ch of text) w += advanceEm(ch, family) * size + spacing;
+  return w;
+}
+
+/**
+ * Fits a line of cover text into `width`: the given size if it fits, else the largest size down to `minSize` that
+ * does, else `minSize` with the text cut at a word (or a character) and an ellipsis. Never splits a surrogate pair.
+ */
+export function fitCoverText(
+  text: string,
+  o: { family: "display" | "sans"; size: number; minSize: number; width: number; spacingEm?: number },
+): { text: string; size: number; spacing: number } {
+  const sp = (size: number) => (o.spacingEm ?? 0) * size;
+  const fits = (t: string, size: number) => coverTextWidth(t, o.family, size, sp(size)) <= o.width;
+  for (let size = o.size; size >= o.minSize; size--)
+    if (fits(text, size)) return { text, size, spacing: sp(size) };
+  const size = o.minSize;
+  const chars = [...text];
+  let n = chars.length;
+  while (n > 0 && !fits(`${chars.slice(0, n).join("").trimEnd()}…`, size)) n--;
+  let cut = chars.slice(0, n).join("");
+  // Prefer a word boundary when one is near (within the last third of what fits).
+  const space = cut.lastIndexOf(" ");
+  if (space > (cut.length * 2) / 3) cut = cut.slice(0, space);
+  return { text: `${cut.trimEnd()}…`, size, spacing: sp(size) };
+}
 
 export function coverModel(input: CoverInput): CoverModel {
   const wood = WOODS[input.flavour ?? "default"] ?? WOODS.default;
@@ -374,6 +428,7 @@ export function coverModel(input: CoverInput): CoverModel {
       stroke: wood.line,
       sw: (w > 10 ? 1.4 : 0.9) + 1.6 * density,
       op: 0.55 + 0.35 * density,
+      role: "latewood",
     });
     groups.push({ kind: "ring", index: i, items });
   }
@@ -387,54 +442,85 @@ export function coverModel(input: CoverInput): CoverModel {
   // Pith: degree 1 of the key, labelled with the key (or the tempo of a piece without pitches).
   const one = DEGREE_COLOURS[wood.theme][1];
   const label = pithLabel(input.key, pitched.length > 0, input.bpm);
+  // A cover grown from its seed alone (no music: the code did not run) has a plain pith, not "— BPM".
+  const plainPith = input.events === null && !input.bpm && !input.key;
   groups.push({
     kind: "pith",
     items: [
       { t: "circle", cx: C, cy: C, r: PITH_R, fill: one.fill },
-      {
-        t: "text",
-        x: C,
-        y: C + 6,
-        text: label.big,
-        size: label.big.length > 2 ? 30 : 40,
-        fill: one.label,
-        anchor: "middle",
-        family: "display",
-        weight: 600,
-      },
-      {
-        t: "text",
-        x: C,
-        y: C + 30,
-        text: label.small,
-        size: 14,
-        fill: one.label,
-        anchor: "middle",
-        family: "sans",
-        spacing: 1.5,
-        op: 0.85,
-      },
+      ...((plainPith
+        ? []
+        : [
+            {
+              t: "text",
+              x: C,
+              y: C + 6,
+              text: label.big,
+              size: label.big.length > 2 ? 30 : 40,
+              fill: one.label,
+              anchor: "middle",
+              family: "display",
+              weight: 600,
+            },
+            {
+              t: "text",
+              x: C,
+              y: C + 30,
+              text: label.small,
+              size: 14,
+              fill: one.label,
+              anchor: "middle",
+              family: "sans",
+              spacing: 1.5,
+              op: 0.85,
+            },
+          ]) as Prim[]),
     ],
   });
 
-  // Title (bottom left) and album name (top right), in the free corners.
-  const title = input.title.trim() || "Untitled";
-  const size = Math.max(26, Math.min(46, Math.floor(620 / Math.max(8, title.length))));
+  // Title (bottom left) and album name (top right), in the free corners. Each is fitted to its corner: smaller
+  // type first, then cut with an ellipsis (the full title is in the cover's accessible name), so a long name never
+  // runs off the cover or into the rings.
+  const rawTitle = input.title.trim() || "Untitled";
+  const titleFit = fitCoverText(rawTitle, {
+    family: "display",
+    size: Math.max(26, Math.min(46, Math.floor(620 / Math.max(8, rawTitle.length)))),
+    minSize: 24,
+    width: TITLE_WIDTH,
+  });
+  const albumFit = fitCoverText(input.albumTitle.toUpperCase(), {
+    family: "sans",
+    size: 18,
+    minSize: 13,
+    width: ALBUM_WIDTH,
+    spacingEm: 1 / 6,
+  });
   groups.push({
     kind: "text",
     items: [
-      { t: "text", x: 52, y: 952, text: title, size, fill: wood.ink, family: "display", weight: 600 },
+      {
+        t: "text",
+        x: 52,
+        y: 952,
+        text: titleFit.text,
+        size: titleFit.size,
+        fill: wood.ink,
+        family: "display",
+        weight: 600,
+        halo: { color: wood.bg, width: 8 },
+      },
       {
         t: "text",
         x: 948,
         y: 66,
-        text: input.albumTitle.toUpperCase(),
-        size: 18,
+        text: albumFit.text,
+        size: albumFit.size,
         fill: wood.ink,
         anchor: "end",
         family: "sans",
-        spacing: 3,
+        spacing: albumFit.spacing,
         op: 0.7,
+        halo: { color: wood.bg, width: 6 },
       },
     ],
   });
@@ -482,7 +568,7 @@ function primSvg(p: Prim): string {
     case "line":
       return `<line x1="${f(p.x1)}" y1="${f(p.y1)}" x2="${f(p.x2)}" y2="${f(p.y2)}" stroke="${p.stroke}" stroke-width="${f(p.sw)}" stroke-linecap="round"${op}/>`;
     case "text":
-      return `<text x="${f(p.x)}" y="${f(p.y)}" font-family="${esc(COVER_FONTS[p.family])}" font-size="${f(p.size)}" fill="${p.fill}"${p.anchor && p.anchor !== "start" ? ` text-anchor="${p.anchor}"` : ""}${p.weight ? ` font-weight="${p.weight}"` : ""}${p.spacing ? ` letter-spacing="${f(p.spacing)}"` : ""}${op}>${esc(p.text)}</text>`;
+      return `<text x="${f(p.x)}" y="${f(p.y)}" font-family="${esc(COVER_FONTS[p.family])}" font-size="${f(p.size)}" fill="${p.fill}"${p.anchor && p.anchor !== "start" ? ` text-anchor="${p.anchor}"` : ""}${p.weight ? ` font-weight="${p.weight}"` : ""}${p.spacing ? ` letter-spacing="${f(p.spacing)}"` : ""}${p.halo ? ` stroke="${p.halo.color}" stroke-width="${f(p.halo.width)}" stroke-linejoin="round" paint-order="stroke"` : ""}${op}>${esc(p.text)}</text>`;
   }
 }
 

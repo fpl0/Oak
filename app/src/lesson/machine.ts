@@ -16,6 +16,7 @@ import type {
   TargetMinutes,
 } from "@oak/api";
 import { assign, fromPromise, type SnapshotFrom, setup } from "xstate";
+import { idempotencyKey } from "../lib/idempotency.ts";
 import {
   canContinue,
   type EditorStart,
@@ -37,6 +38,11 @@ export interface AttemptInput {
   result: GradeResult;
   extraReplays: number;
   tutorAssisted: boolean;
+  /**
+   * One key per Check (docs/design/wave3.md §5.2): a retry of the same answer after a failed save reuses it, so
+   * the server counts the attempt once; a different answer gets a new key.
+   */
+  idempotencyKey: string;
 }
 
 export interface FinishInput {
@@ -70,6 +76,8 @@ export interface LessonDeps {
   position(stepId: string, wrapped: boolean): void;
   /** Fire and forget: the step on screen changed (telemetry, session heartbeat, tutor subject). */
   stepLeft?(stepId: string, how: "continue" | "goto" | "wrap" | "finish"): void;
+  /** A fresh idempotency key (tests inject a counter); default `idempotencyKey()`. */
+  newKey?(): string;
 }
 
 export interface LessonInput {
@@ -97,6 +105,8 @@ export interface LessonContext extends LessonInput {
   tutorAssisted: Record<string, boolean>;
   /** Steps marked complete by a test-out pass (contracts §9.5). */
   testedOut: string[];
+  /** The idempotency key of the Check being saved per step, with what it was for (kept until it is saved). */
+  attemptKeys: Record<string, { sig: string; key: string }>;
   /** A calm, transient message ("That check could not be saved; try again"). */
   notice: string | null;
   error: string | null;
@@ -170,6 +180,13 @@ export function latestCode(c: LessonContext): string {
     if (code) return code;
   }
   return "";
+}
+
+const newKeyOf = (c: LessonContext) => (c.deps.newKey ?? idempotencyKey)();
+
+/** What makes two Checks "the same action": the exercise, the series and the answer. */
+function attemptSig(e: Extract<LessonInternalEvent, { type: "SUBMIT" }>): string {
+  return JSON.stringify([e.exercise.id, e.exercise.version, e.seriesNo, e.params, e.response]);
 }
 
 /** A result with `status: 'error'` (the code did not run) is shown, never posted: it is not an attempt. */
@@ -249,6 +266,7 @@ export const lessonMachine = setup({
     code: {},
     tutorAssisted: {},
     testedOut: [],
+    attemptKeys: {},
     notice: null,
     error: null,
     wrapReason: null,
@@ -436,6 +454,7 @@ export const lessonMachine = setup({
                   result: e.result,
                   extraReplays: e.extraReplays,
                   tutorAssisted: context.tutorAssisted[s.id] === true,
+                  idempotencyKey: context.attemptKeys[s.id]?.key ?? newKeyOf(context),
                 },
               };
             },
@@ -443,9 +462,11 @@ export const lessonMachine = setup({
               target: "idle",
               actions: assign(({ context, event }) => {
                 const st = event.output.state;
+                const { [st.stepId]: _saved, ...attemptKeys } = context.attemptKeys;
                 return {
                   states: { ...context.states, [st.stepId]: st },
                   testedOut: [...new Set([...context.testedOut, ...event.output.testedOut])],
+                  attemptKeys,
                   notice: null,
                 };
               }),
@@ -460,7 +481,14 @@ export const lessonMachine = setup({
           entry: assign(({ context, event }) => {
             const s = current(context);
             if (!s || event.type !== "SUBMIT") return {};
-            return { results: { ...context.results, [s.id]: event.result } };
+            // The same answer again (a retry after a failed save) keeps its key; anything else is a new Check.
+            const sig = attemptSig(event);
+            const held = context.attemptKeys[s.id];
+            const key = held && held.sig === sig ? held.key : newKeyOf(context);
+            return {
+              results: { ...context.results, [s.id]: event.result },
+              attemptKeys: { ...context.attemptKeys, [s.id]: { sig, key } },
+            };
           }),
         },
         hinting: {

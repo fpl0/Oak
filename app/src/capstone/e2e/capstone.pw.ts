@@ -313,6 +313,26 @@ test("C1: starting the first session grants ebass and .lpf()", async ({ page }) 
   const errors = watchErrors(page);
   await page.goto("/capstone/C1");
   await expect(page.getByRole("heading", { level: 1, name: "C1 First Loop" })).toBeVisible();
+  // A day holds one open session (decision 28): with one open, the page says so and sends the learner to Today
+  // instead of a Start button the server would answer with the other session. Ending it frees the day.
+  const boot = await api<{ openSession: { id: string } | null }>(page, "/bootstrap");
+  const open =
+    boot.openSession ??
+    (await api<{ id: string }>(page, "/session/start", {
+      method: "POST",
+      body: JSON.stringify({ kind: "studio", mapItemId: null, targetMinutes: 20 }),
+    }));
+  await page.reload();
+  await expect(page.getByTestId("capstone-session-open")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Back to Today" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Start session/ })).toHaveCount(0);
+  await shoot(page, SHOTS, "w3-capstone-session-open", "paper");
+  await api(page, `/session/${open.id}/end`, {
+    method: "POST",
+    body: JSON.stringify({ wrappedEarly: true, phaseMs: { warmup: 0, main: 0, make: 0, coda: 0 } }),
+  });
+  await page.reload();
+  await expect(page.getByTestId("capstone-session-open")).toHaveCount(0);
   await expect(page.getByText("Starting this session unlocks")).toBeVisible();
   const ids = async () =>
     (await api<{ items: { itemId: string }[] }>(page, "/unlocks")).items.map((u) => u.itemId);

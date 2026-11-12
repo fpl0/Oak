@@ -9,14 +9,18 @@ const { playEvents } = await import("./playback.ts");
 function fakeRuntime() {
   const ctx = { currentTime: 0 };
   const triggered: unknown[] = [];
+  const warmed: unknown[][] = [];
   const rt = {
     ctx,
     coordinator: { claim: () => () => undefined },
     preload: async () => undefined,
+    preloadValues: async (values: unknown[]) => {
+      warmed.push(values);
+    },
     unlock: async () => true,
     noteTrigger: (v: unknown) => triggered.push(v),
   };
-  return { rt, ctx, triggered };
+  return { rt, ctx, triggered, warmed };
 }
 
 describe("playEvents done", () => {
@@ -35,6 +39,22 @@ describe("playEvents done", () => {
     ]);
     expect(settled).toBe("done");
     expect(triggered).toHaveLength(1);
+  });
+
+  test("the plan's exact event values are warmed before the first pump", () => {
+    const { rt, warmed } = fakeRuntime();
+    const plan = {
+      events: [
+        { at: 0, dur: 0.5, value: { note: 62, s: "acgtr" } },
+        { at: 0.5, dur: 0.5, value: { note: 66, s: "acgtr" } },
+      ],
+      durationSec: 1,
+      preload: ["acgtr"],
+    };
+    // biome-ignore lint/suspicious/noExplicitAny: a minimal runtime stand-in for the test
+    const h = playEvents(rt as any, plan as any, { at: 0 });
+    expect(warmed).toEqual([[plan.events[0]?.value, plan.events[1]?.value]]);
+    h.stop();
   });
 
   test("stop resolves done at once", async () => {

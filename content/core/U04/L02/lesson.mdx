@@ -1,0 +1,67 @@
+{/* U04.L02 Major, Minor, Perfect: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+In Moving Melodies you moved a line with `.transpose()` and a number of half steps. This copy moves by a name instead, and the result sounds open and strong under the riff.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+In Steps Apart a 3rd was three degrees, both ends counted: three letters, such as C D E. Three letters do not always hold the same number of keys.
+
+<Example id="two-thirds" views="code,roll" />
+
+<OnPass>Same number, different size: C up to E is four half steps, E up to G only three. The wider 3rd is called major, the narrower one minor.</OnPass>
+</Step>
+
+<Step id="S3">
+Count the letters for the number, then the half steps for the size. Most numbers come in a major and a minor size; the 4th, the 5th and the octave come in one usual size, called perfect.
+
+| Half steps | Name | In code |
+|---|---|---|
+| 1 / 2 | minor / major 2nd | `"2m"` / `"2M"` |
+| 3 / 4 | minor / major 3rd | `"3m"` / `"3M"` |
+| 5 | perfect 4th | `"4P"` |
+| 7 | perfect 5th | `"5P"` |
+| 8 / 9 | minor / major 6th | `"6m"` / `"6M"` |
+| 10 / 11 | minor / major 7th | `"7m"` / `"7M"` |
+| 12 | octave | `"8P"` |
+
+Six half steps has a name of its own: next lesson.
+
+<Example id="from-c" views="code,roll" />
+</Step>
+
+<Step id="S4">
+A number of half steps works, but it hides what you meant. A name says it.
+
+<Editor exercise="name-the-distance" />
+
+<OnPass>`.transpose("3M")` (a major 3rd up) plays the same notes as `.transpose(4)`, and now the code says what you hear. Major, minor or perfect is the **interval quality**: the exact number of half steps inside an interval.</OnPass>
+</Step>
+
+<Step id="S5">
+Writing the top note works the same way on paper as in your head: the number picks the letter, the half steps pick its sharp or flat.
+
+<Choice exercise="spell-it" />
+
+<OnPass>Letters first, then half steps. That order keeps every spelling right, even where a sharp is needed.</OnPass>
+</Step>
+
+<Step id="S6">
+Now the other way round: a note, then down to home. Your ear counts the distance the same way.
+
+<EarDrill family="fam.int.in-key" level={2} trials={6} />
+
+<OnPass>Heard against home, every note has its distance: 5 down to 1 is a 5th, 3 down to 1 a 3rd.</OnPass>
+</Step>
+
+<Step id="S7">
+This riff uses only 1, 4 and 5 (C, F and G). A major 3rd, a major 6th or a perfect 5th above each of them lands on a note of C major, so any of those three keeps the harmony in the key.
+
+<Make exercise="named-harmony" />
+
+<CanDo id="cd.read.interval-quality" />
+
+<Recap />
+</Step>

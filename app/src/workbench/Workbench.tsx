@@ -4,6 +4,7 @@
 // FeedbackPanel, all linked through one HighlightBus per instance. The roll and the staff come from the
 // static analysis path (the browser grader host), so they show code that has not been played; while it
 // plays, the adapter's paint clock drives the playhead and the highlights.
+import type { LensId } from "@oak/api";
 import type { GradeResult, HintLadder, HintRung, KeySpec, LintContext, UnlockableId } from "@oak/content-kit";
 import type { StaffKind } from "@oak/notation";
 import {
@@ -19,13 +20,22 @@ import {
 } from "@oak/strudel";
 import { METERS } from "@oak/theory";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { TUTOR_BARS_EVENT } from "../tutor/context.ts";
+import {
+  HIGHLIGHT_MS,
+  TUTOR_BARS_EVENT,
+  TUTOR_HIGHLIGHT_EVENT,
+  type TutorHighlight,
+} from "../tutor/context.ts";
+import { CircleOfFifths } from "./CircleOfFifths.tsx";
 import { WorkbenchClock } from "./clock.ts";
 import { FeedbackPanel, viewOf } from "./FeedbackPanel.tsx";
 import { ghostEvents, marksOf, unlocks } from "./feedback.ts";
 import { HighlightBus } from "./highlight-bus.ts";
 import { Keyboard } from "./Keyboard.tsx";
+import { KeyPanel } from "./KeyPanel.tsx";
 import { TYPING_MAP, typedMidi } from "./keyboard-layout.ts";
+import { type LensSource, useAppLensSource, useLensSourceKind } from "./lens-source.tsx";
+import { type StaffLabelMode, showsSwitcher, viewLabels } from "./lens-view.ts";
 import {
   clampRegion,
   defaultRegion,
@@ -35,12 +45,12 @@ import {
   stepRegion,
 } from "./loop-math.ts";
 import { Metronome } from "./metronome.ts";
-import { activeAt, type WorkbenchModel } from "./model.ts";
+import { activeAt, keyAtCycle, pieceKeys, type WorkbenchModel } from "./model.ts";
 import { PianoRoll, type RollColorMode, type RollLabelMode } from "./PianoRoll.tsx";
 import { FOLLOW_PAGE_BARS } from "./roll-layout.ts";
 import { StaffView } from "./StaffView.tsx";
 import { useWorkbenchServices } from "./services.tsx";
-import { TransportBar } from "./TransportBar.tsx";
+import { TransportBar, type TransportLenses } from "./TransportBar.tsx";
 import {
   isSilenced,
   nextPracticeTempo,
@@ -48,8 +58,10 @@ import {
   toggleMute,
   toggleSolo,
 } from "./transport-math.ts";
+import { tutorHighlightEvents } from "./tutor-highlight.ts";
 import { useAB } from "./use-ab.ts";
 import { useAnalysis } from "./use-analysis.ts";
+import { useKeyPreview } from "./use-key-preview.ts";
 import { useLoopPlayback } from "./use-loop.ts";
 import { clampViews, isEarlyUnit, layoutFor, type MusicView, type ViewTab } from "./views.ts";
 
@@ -80,8 +92,24 @@ export interface WorkbenchProps {
   readOnly?: EditorOptions["readOnly"];
   /** Hidden backing tracks (mutable, never editable). */
   band?: BandSetup | null;
+  /**
+   * The roll's colours and labels. Naming `labels` (a lesson step's `ui.rollLabels`) makes the content decide:
+   * the lenses do not apply and their switches are hidden. Without it the shared lenses decide (Wave 3).
+   */
   roll?: { color?: RollColorMode; labels?: RollLabelMode };
-  staff?: { kind?: StaffKind; labels?: "none" | "degree" | "solfege" | "counts" };
+  /** The staff and its lines; `labels` (a step's `ui.staffLabels`) makes the content decide, as for the roll. */
+  staff?: { kind?: StaffKind; labels?: StaffLabelMode };
+  /**
+   * The lens source: by default the app's shared lenses (under a QueryClient) or a `WorkbenchLensProvider`;
+   * `null` turns the lenses off (the Wave 2 labels).
+   */
+  lenses?: LensSource | null;
+  /** Offer the key-signature panel and the circle of fifths once unlocked (lens mode, not mini). Default true. */
+  panels?: boolean;
+  /** The tab shown first when roll and staff are tabbed (narrow or short): default the roll. */
+  initialTab?: ViewTab;
+  /** Panels open at first (the Toolbox's feature pages); otherwise the viewer's last choice. */
+  initialPanels?: Partial<Record<"key" | "circle", boolean>>;
   feedback?: WorkbenchFeedback;
   /** A/B target, played as hidden code. */
   target?: { code: string; audible: "always" | "fromHint2" | "never" } | null;
@@ -143,7 +171,40 @@ function runIssueOf(outcome: EvalOutcome): RunIssue | null {
 const sameUnlocked = (a: ReadonlySet<UnlockableId>, b: ReadonlySet<UnlockableId>) =>
   a.size === b.size && [...a].every((x) => b.has(x));
 
+/** Unlocks of the two key panels (contracts §3.2 group A). */
+const PANEL_UNLOCKS = { key: "tb.feature.keysig", circle: "tb.feature.circle" } as const;
+type PanelId = keyof typeof PANEL_UNLOCKS;
+const PANELS_STORE = "oak.wb.panels";
+
+function readPanels(): Record<PanelId, boolean> {
+  try {
+    const v = JSON.parse(localStorage.getItem(PANELS_STORE) ?? "{}") as Partial<Record<PanelId, boolean>>;
+    return { key: v.key === true, circle: v.circle === true };
+  } catch {
+    return { key: false, circle: false };
+  }
+}
+function writePanels(v: Record<PanelId, boolean>): void {
+  try {
+    localStorage.setItem(PANELS_STORE, JSON.stringify(v));
+  } catch {
+    // a per-viewer convenience: nothing to do when storage is unavailable
+  }
+}
+
 export function Workbench(props: WorkbenchProps) {
+  const kind = useLensSourceKind();
+  if (props.lenses !== undefined) return <WorkbenchView {...props} source={props.lenses} />;
+  if (kind === "app") return <AppLensWorkbench {...props} />;
+  return <WorkbenchView {...props} source={kind} />;
+}
+
+function AppLensWorkbench(props: WorkbenchProps) {
+  const source = useAppLensSource();
+  return <WorkbenchView {...props} source={source} />;
+}
+
+function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
   const { oak, grader, renderFeedback } = useWorkbenchServices();
   const bus = useMemo(() => new HighlightBus(), []);
   const clock = useMemo(() => new WorkbenchClock(), []);
@@ -158,7 +219,7 @@ export function Workbench(props: WorkbenchProps) {
   const [practice, setPractice] = useState<PracticeTempo>(1);
   const [width, setWidth] = useState(1024);
   const [availHeight, setAvailHeight] = useState(Number.POSITIVE_INFINITY);
-  const [tab, setTab] = useState<ViewTab>("roll");
+  const [tab, setTab] = useState<ViewTab>(props.initialTab ?? "roll");
   const [typing, setTyping] = useState(false);
   const [octave, setOctave] = useState(4);
   const [pressed, setPressed] = useState<ReadonlySet<number>>(new Set());
@@ -186,11 +247,50 @@ export function Workbench(props: WorkbenchProps) {
     lint: props.lint,
     band: props.band ?? null,
     staff: views.includes("staff") ? staffKind : false,
-    staffLabels: props.staff?.labels ?? "none",
+    staffLabels: props.staff?.labels === "counts" ? "counts" : "none",
     debounceMs: props.analysisDebounceMs ?? 300,
   });
   const model = analysis.model;
   const keySpec: KeySpec | null = model?.key ?? props.lessonCtx.key;
+
+  // --- labels: the lenses or the content (wave3.md §4.3) -------------------------------------------
+  const source = props.source;
+  const labels = viewLabels({
+    ...(props.roll?.labels === undefined ? {} : { rollLabels: props.roll.labels }),
+    ...(props.roll?.color === undefined ? {} : { rollColor: props.roll.color }),
+    ...(props.staff?.labels === undefined ? {} : { staffLabels: props.staff.labels }),
+    lenses: source,
+    ...(source ? { rollSetting: source.rollSetting } : {}),
+    hasKey: (model?.key ?? null) !== null,
+  });
+  const lensBar = variant !== "mini" && showsSwitcher(source, labels.mode);
+  const unlockedSet = props.lint.unlocked as ReadonlySet<string>;
+  const panelsAllowed =
+    (props.panels ?? true) && variant !== "mini" && labels.mode === "lenses" && source !== null;
+  const panelAvailable: Record<PanelId, boolean> = {
+    key: panelsAllowed && unlockedSet.has(PANEL_UNLOCKS.key),
+    circle: panelsAllowed && unlockedSet.has(PANEL_UNLOCKS.circle),
+  };
+  const [panelPrefs, setPanelPrefs] = useState<Record<PanelId, boolean>>(() => ({
+    ...readPanels(),
+    ...props.initialPanels,
+  }));
+  const panelsOpen: Record<PanelId, boolean> = {
+    key: panelAvailable.key && panelPrefs.key,
+    circle: panelAvailable.circle && panelPrefs.circle,
+  };
+  const togglePanel = (id: PanelId) => {
+    if (!panelAvailable[id]) return;
+    setPanelPrefs((p) => {
+      const next = { ...p, [id]: !p[id] };
+      writePanels(next);
+      return next;
+    });
+  };
+  const toggleLens = (id: LensId) => {
+    if (!source || !lensBar || !source.available[id]) return;
+    source.toggle(id);
+  };
 
   // The model of the code that is playing (the clock highlights that, not an unplayed edit).
   const playedModel = useRef<WorkbenchModel | null>(null);
@@ -205,6 +305,30 @@ export function Workbench(props: WorkbenchProps) {
     bus.setEvents(model?.events ?? [], model?.abc ?? null);
     if (model) propsRef.current.onModel?.(model);
   }, [bus, model]);
+
+  // The tutor's references ([[bars:3-4]], [[note:F#4]], a review's bar chip) light the learner's notes on the
+  // roll, the staff and in the code for HIGHLIGHT_MS, unless the learner points at something else meanwhile.
+  useEffect(() => {
+    if (variant === "mini") return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onHighlight = (e: Event) => {
+      const h = (e as CustomEvent<TutorHighlight>).detail;
+      const m = modelRef.current;
+      if (!h || !m) return;
+      const ids = tutorHighlightEvents(m.events, h);
+      if (ids.length === 0) return;
+      bus.hover({ events: ids }, "feedback");
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (bus.get().hover.source === "feedback") bus.hover(null, "feedback");
+      }, HIGHLIGHT_MS);
+    };
+    window.addEventListener(TUTOR_HIGHLIGHT_EVENT, onHighlight);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener(TUTOR_HIGHLIGHT_EVENT, onHighlight);
+    };
+  }, [bus, variant]);
 
   // --- feedback → views -------------------------------------------------------------------------
   const fb = props.feedback;
@@ -345,6 +469,36 @@ export function Workbench(props: WorkbenchProps) {
     });
   }, [bus, handle]);
 
+  // --- the key now: the bar that plays (a patterned .scale() changes key), else the piece's first ---------
+  const [keyBar, setKeyBar] = useState(0);
+  useEffect(
+    () =>
+      clock.subscribe((f) => {
+        const bars = modelRef.current?.bars ?? 1;
+        const bar = f.playing && bars > 0 ? Math.floor(f.audibleCycle % bars) : 0;
+        setKeyBar((b) => (b === bar ? b : bar));
+      }),
+    [clock],
+  );
+  const keyNow = model ? (keyAtCycle(model.keySpans, keyBar) ?? model.key) : keySpec;
+  const keysOfPiece = useMemo(() => (model ? pieceKeys(model.keySpans) : []), [model]);
+  const anyPanel = panelsOpen.key || panelsOpen.circle;
+  const preview = useKeyPreview({
+    oak,
+    handle,
+    pieceKey: model?.keySpans[0]?.key ?? null,
+    bars: loopBars,
+    cps: model?.cps ?? 0.5,
+    lint: props.lint,
+    readOnly: props.readOnly === true,
+  });
+  const previewRef = useRef(preview);
+  previewRef.current = preview;
+  // Closing the panels (or leaving) ends a preview.
+  useEffect(() => {
+    if (!anyPanel) previewRef.current.stop();
+  }, [anyPanel]);
+
   // --- transport --------------------------------------------------------------------------------
   const ab = useAB({
     oak,
@@ -430,6 +584,10 @@ export function Workbench(props: WorkbenchProps) {
   const onToggle = useCallback(async () => {
     if (!handle) return;
     if (ab?.active) ab.stop();
+    if (previewRef.current.playing || previewRef.current.pending) {
+      previewRef.current.stop();
+      return;
+    }
     setBusy(true);
     try {
       await oak.unlock();
@@ -487,6 +645,7 @@ export function Workbench(props: WorkbenchProps) {
     };
   }, []);
   const layout = layoutFor(width, availHeight);
+  const anyPanelAvailable = panelAvailable.key || panelAvailable.circle;
   const musicViews: MusicView[] = views.filter((v) => v !== "keyboard");
   const showKeyboard = views.includes("keyboard");
   const tabs: ViewTab[] = musicViews.length > 1 ? [...musicViews, "both"] : musicViews;
@@ -548,6 +707,29 @@ export function Workbench(props: WorkbenchProps) {
     }
     // Loop region and metronome (ux §7.10): L, [ ], Shift+[ Shift+], M. Not in text fields.
     const textField = target.closest?.("input, select, textarea, [contenteditable]");
+    // The lens bar (Wave 3): D degrees, S solfège, Shift+N note names, Shift+K key panel, Shift+C circle.
+    if (!typing && !textField && !ev.repeat && (lensBar || anyPanelAvailable)) {
+      const lens: LensId | null =
+        !ev.shiftKey && k === "d"
+          ? "degrees"
+          : !ev.shiftKey && k === "s"
+            ? "solfege"
+            : ev.shiftKey && k === "n"
+              ? "noteNames"
+              : null;
+      if (lens && lensBar && source?.available[lens]) {
+        ev.preventDefault();
+        toggleLens(lens);
+        return;
+      }
+      const panel: PanelId | null =
+        ev.shiftKey && k === "k" ? "key" : ev.shiftKey && k === "c" ? "circle" : null;
+      if (panel && panelAvailable[panel]) {
+        ev.preventDefault();
+        togglePanel(panel);
+        return;
+      }
+    }
     if (loopControls && !typing && !textField && !ev.repeat) {
       const code = ev.code;
       const bracket =
@@ -574,7 +756,7 @@ export function Workbench(props: WorkbenchProps) {
         return;
       }
     }
-    if (k === "k" && !typing && showKeyboard) {
+    if (k === "k" && !ev.shiftKey && !typing && showKeyboard) {
       setTyping(true);
       ev.preventDefault();
       return;
@@ -606,6 +788,62 @@ export function Workbench(props: WorkbenchProps) {
     if (midi !== null) setPressed((p) => new Set([...p].filter((m) => m !== midi)));
   };
 
+  const lensSwitches: TransportLenses = {
+    labels:
+      lensBar && source
+        ? [
+            ...(source.available.degrees
+              ? [
+                  {
+                    id: "degrees",
+                    label: "Degrees",
+                    on: source.shown.degrees,
+                    keys: "D",
+                    title: "Degree numbers on every note",
+                  },
+                ]
+              : []),
+            ...(source.available.solfege
+              ? [
+                  {
+                    id: "solfege",
+                    label: "Solfège",
+                    on: source.shown.solfege,
+                    keys: "S",
+                    title: "Movable-do syllables",
+                  },
+                ]
+              : []),
+            {
+              id: "noteNames",
+              label: "Names",
+              on: source.shown.noteNames,
+              keys: "Shift+N",
+              title: "Note names",
+            },
+          ]
+        : [],
+    panels: [
+      ...(panelAvailable.key
+        ? [{ id: "key", label: "Key", on: panelsOpen.key, keys: "Shift+K", title: "The key-signature panel" }]
+        : []),
+      ...(panelAvailable.circle
+        ? [
+            {
+              id: "circle",
+              label: "Circle",
+              on: panelsOpen.circle,
+              keys: "Shift+C",
+              title: "The circle of fifths",
+            },
+          ]
+        : []),
+    ],
+    onToggle: (id) => {
+      if (id === "key" || id === "circle") togglePanel(id);
+      else toggleLens(id as LensId);
+    },
+  };
   const stale = !anyPlaying || (model !== null && model.code !== playedCode);
   const evalError = analysis.error && analysis.errorCode === code ? analysis.error : null;
   // The Run's own error wins (it is what Strudel said); otherwise the static analysis's, made friendly.
@@ -638,8 +876,10 @@ export function Workbench(props: WorkbenchProps) {
           model={model}
           bus={bus}
           clock={clock}
-          {...(props.roll?.color ? { color: props.roll.color } : {})}
-          {...(props.roll?.labels ? { labels: props.roll.labels } : {})}
+          color={labels.color}
+          labels={labels.gutter}
+          noteLabels={labels.note}
+          hover={labels.hover}
           ghosts={ghosts}
           barMarks={marks.barMarks}
           silenced={silenced}
@@ -651,7 +891,10 @@ export function Workbench(props: WorkbenchProps) {
             : {})}
         />
       );
-    if (v === "staff") return <StaffView model={model} bus={bus} stale={stale} />;
+    if (v === "staff")
+      return (
+        <StaffView model={model} bus={bus} stale={stale} hover={labels.hover} annotations={labels.staff} />
+      );
     return null;
   };
 
@@ -667,6 +910,13 @@ export function Workbench(props: WorkbenchProps) {
       data-looping={loop.playing ? "1" : "0"}
       data-metronome={metronomeOn ? "1" : "0"}
       data-analysis={analysis.pending ? "pending" : model ? "ready" : "none"}
+      data-labels={labels.mode}
+      data-lenses={
+        labels.mode === "lenses"
+          ? (["degree", "solfege", "noteName"] as const).filter((k) => labels.note[k]).join(" ")
+          : undefined
+      }
+      data-key={keyNow ? `${keyNow.tonic} ${keyNow.mode}` : undefined}
       // Focusable (not a tab stop) so a click on the roll or the staff gives the workbench its keys.
       tabIndex={-1}
       onKeyDown={onKeyDown}
@@ -692,6 +942,7 @@ export function Workbench(props: WorkbenchProps) {
         practiceTempo={practice}
         onPracticeTempo={onPracticeTempo}
         readOnly={props.readOnly === true}
+        {...(lensBar || anyPanelAvailable ? { lenses: lensSwitches } : {})}
         {...(loopControls
           ? {
               loop: {
@@ -781,9 +1032,20 @@ export function Workbench(props: WorkbenchProps) {
             onAudition={audition}
             typing={typing}
             pressed={pressed}
+            degrees={labels.keyboardDegrees}
           />
         ) : null}
       </div>
+      {anyPanel ? (
+        <div className={`oak-wb-panels${panelsOpen.key && panelsOpen.circle ? " oak-wb-panels--two" : ""}`}>
+          <div className="oak-wb-panels-grid">
+            {panelsOpen.key ? <KeyPanel current={keyNow} keys={keysOfPiece} preview={preview} /> : null}
+            {panelsOpen.circle ? (
+              <CircleOfFifths current={keyNow} keys={keysOfPiece} preview={preview} />
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       {variant !== "mini" && !fb && props.target && props.abLabels ? (
         ab ? (
           <ABStrip ab={ab} labels={props.abLabels} />

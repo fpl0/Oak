@@ -18,7 +18,8 @@ const today = new Date().toISOString().slice(0, 10);
 function watch(page: Page): string[] {
   const problems: string[] = [];
   page.on("console", (m) => {
-    if (m.type() === "error") problems.push(`console: ${m.text()}`);
+    // `voice.get` answers a typed 501 until the server builds it; the runner falls back to the profile.
+    if (m.type() === "error" && !/status of 501/.test(m.text())) problems.push(`console: ${m.text()}`);
   });
   page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
   return problems;
@@ -49,6 +50,13 @@ const item = (i: number, familyId: string, trials: number, mic: boolean, kind = 
 
 /** A planned warm-up: a tap set (the pulse) then a sing set (pitch match). */
 async function planWarmup(page: Page): Promise<void> {
+  // A fresh learner has no microphone set up, which is Quiet mode on the server (wave3.md §5.3): this warm-up
+  // sings, so the learner has a built-in mic (Chromium's fake one).
+  const res = await page.request.put(`${stack.apiURL}/api/profile`, {
+    headers: { "X-Oak": "1", Origin: stack.baseURL, "Content-Type": "application/json" },
+    data: { inputKind: "builtin" },
+  });
+  expect(res.ok(), await res.text()).toBe(true);
   await page.route(/\/api\/srs\/due(\?.*)?$/, (route) =>
     route.fulfill({
       json: {
@@ -81,6 +89,11 @@ async function noHorizontalOverflow(page: Page): Promise<void> {
 }
 
 test.describe.configure({ mode: "serial" });
+
+// Other engineers' edits must not reload the page mid-test (wave3.md §8): Vite's HMR socket is blocked.
+test.beforeEach(async ({ page }) => {
+  await page.routeWebSocket(/.*/, () => {});
+});
 
 test("the hub groups families by stage, with locked, later and open states", async ({ page }) => {
   const problems = watch(page);
@@ -196,6 +209,8 @@ test("a warm-up runs a tap set and a sing set, writes its trials, and resumes af
     }
     if (i === 0) await shoot(page, SHOTS, "tap-respond", "bark");
     await expect(page.getByTestId("trial-feedback")).toBeVisible({ timeout: 20_000 });
+    // One feedback line, never a hidden duplicate.
+    await expect(page.getByTestId("trial-feedback")).toHaveCount(1);
     if (i === 0) {
       await expect(page.getByTestId("tap-timeline")).toHaveAttribute("aria-label", /hits matched/);
       await shoot(page, SHOTS, "tap-feedback", "bark");
@@ -203,6 +218,7 @@ test("a warm-up runs a tap set and a sing set, writes its trials, and resumes af
     await page.keyboard.press("Enter");
   }
   await expect(page.getByTestId("set-summary")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("set-summary")).toHaveCount(1);
   await page.keyboard.press("Enter");
   // Pitch match on the fake microphone: the Mic-live dot shows while it listens.
   await expect(page.getByTestId("warmup-position")).toHaveText("Warm-up · 2 of 2");

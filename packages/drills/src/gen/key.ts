@@ -13,7 +13,16 @@ import {
 } from "../kernel.ts";
 import { rn, voiceProgression } from "../music.ts";
 import { line } from "../pat.ts";
-import { cueOf, type Generator, pickKey, pickSound, pickTempo, silentTrial, trialOf } from "./common.ts";
+import {
+  cueOf,
+  type Generator,
+  metKeys,
+  pickKey,
+  pickSound,
+  pickTempo,
+  silentTrial,
+  trialOf,
+} from "./common.ts";
 import { chordTrack, pickOctave, stepTrack } from "./keyed.ts";
 import { melodySteps } from "./melody.ts";
 
@@ -105,12 +114,41 @@ export const scaleSpell: Generator = {
       key,
       ui: "text",
       textKind: "note",
-      prompt: `Spell ${key.tonic} ${mode} from the tonic up.`,
+      prompt: `Spell ${key.tonic} ${mode} from ${key.tonic} up: ${spellCount(notes.length)}, with a sharp (#) or a flat (b) where the scale needs one, separated by spaces.`,
     });
   },
 };
 
+/**
+ * How many notes a spelling has, in words. The format is said in words, never shown as an example: any
+ * row of letters is the answer for some key (C D E F G A B is C major's).
+ */
+function spellCount(n: number): string {
+  const words = ["", "one", "two", "three", "four", "five", "six", "seven", "eight"];
+  return n === 7 ? "seven letters, each once" : `${words[n] ?? String(n)} notes, each once`;
+}
+
 // --- key.circle ---------------------------------------------------------------------------------
+
+/**
+ * The major keys of the course on the circle, flat side to sharp side: every step clockwise is a fifth up.
+ * Each answer of the dominant category is one of these spellings, so "a fifth up from B" is F♯ (6 sharps),
+ * never G♭, and nothing asks past F♯ or D♭.
+ */
+export const CIRCLE_MAJOR: readonly string[] = [
+  "Db",
+  "Ab",
+  "Eb",
+  "Bb",
+  "F",
+  "C",
+  "G",
+  "D",
+  "A",
+  "E",
+  "B",
+  "F#",
+];
 
 /** The spelled key at `semis` above a key's tonic, in the mode, with the fewest accidentals. */
 function keyAt(key: KeySpec, semis: number, mode: ScaleMode): KeySpec {
@@ -129,13 +167,22 @@ export const circle: Generator = {
     const key = pickKey(ctx, "major");
     switch (ctx.category) {
       case "dominant": {
+        // A neighbouring pair of the circle, both met (sharp keys and flat keys open with their lessons).
+        const met = new Set(metKeys(ctx, "all", "major").map((k) => k.tonic));
+        const pairs = CIRCLE_MAJOR.slice(0, -1)
+          .map((t, i) => [t, CIRCLE_MAJOR[i + 1] as string] as const)
+          .filter(([a, b]) => met.has(a) && met.has(b));
+        const prev = (ctx.previous?.params.key as KeySpec | undefined)?.tonic;
         const up = ctx.rng.next() < 0.5;
-        const answer = keyAt(key, up ? 7 : 5, "major");
-        return silentTrial({ text: [answer.tonic] }, cue, {
-          key,
+        const fresh = pairs.filter(([a, b]) => (up ? a : b) !== prev);
+        const [lower, upper] = ctx.rng.pick(fresh.length > 0 ? fresh : pairs);
+        const from: KeySpec = { tonic: up ? lower : upper, mode: "major" };
+        const answer = up ? upper : lower;
+        return silentTrial({ text: [answer] }, cue, {
+          key: from,
           ui: "text",
           textKind: "note",
-          prompt: `Which major key is one step ${up ? "clockwise (a fifth up)" : "anticlockwise (a fifth down)"} from ${key.tonic} major?`,
+          prompt: `Which major key is one step ${up ? "clockwise (a fifth up)" : "anticlockwise (a fifth down)"} from ${from.tonic} major? Write its letter, then # or b if it has a sharp or a flat.`,
         });
       }
       case "relative": {

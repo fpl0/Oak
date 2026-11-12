@@ -5,19 +5,20 @@ import type { AlbumTrack, AlbumTrackDetail } from "@oak/api";
 import { useQueries } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { clsx } from "clsx";
-import { ChevronDown, Lock, Pause, Play } from "lucide-react";
-import { useRef, useState } from "react";
+import { Check, ChevronDown, Lock, Pause, Pencil, Play, X } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 import "./cover.css";
 import { useCapstoneContent } from "../capstone/content.ts";
 import { FLAVOUR_LABEL, formatDuration } from "../lib/format.ts";
 import { usePageTitle } from "../lib/nav.ts";
 import { albumAudioUrl, apiQuery, useAlbum, useCourseProgress } from "../lib/queries.ts";
-import { ALBUM_TITLE, AlbumCover } from "../ui/AlbumCover.tsx";
-import { Button, buttonClass } from "../ui/kit/Button.tsx";
+import { AlbumCover } from "../ui/AlbumCover.tsx";
+import { Button, buttonClass, IconButton } from "../ui/kit/Button.tsx";
 import { Chip, Page, Skeleton } from "../ui/kit/basics.tsx";
 import { ErrorState } from "../ui/kit/QueryState.tsx";
 import { albumSides, runtime, type Slot } from "./model.ts";
 import { useCoverMusic } from "./music.ts";
+import { ALBUM_TITLE_MAX, cleanAlbumTitle, DEFAULT_ALBUM_TITLE, useAlbumTitle } from "./title.ts";
 import { Vinyl } from "./Vinyl.tsx";
 
 interface Playing {
@@ -123,7 +124,7 @@ export function AlbumPage() {
         />
         <div className="min-w-0">
           <p className="text-sm tracking-[0.2em] text-text-3 uppercase">Album</p>
-          <h1 className="font-display text-[2.6rem] leading-tight">{ALBUM_TITLE}</h1>
+          <AlbumTitleHeading />
           {tracks.length > 0 ? (
             <>
               <p className="mt-1 text-text-2" data-testid="album-meta">
@@ -207,6 +208,111 @@ export function AlbumPage() {
         ))}
       </div>
     </Page>
+  );
+}
+
+/** The album's name, renamed in place (ux §5.3 "editable"): every cover prints the new name at once. */
+function AlbumTitleHeading() {
+  const album = useAlbumTitle();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(album.title);
+  const [error, setError] = useState<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const rename = useRef<HTMLButtonElement>(null);
+  const hintId = useId();
+  const back = useRef(false);
+  useEffect(() => {
+    if (editing) input.current?.select();
+    else if (back.current) {
+      back.current = false;
+      rename.current?.focus();
+    }
+  }, [editing]);
+  const close = () => {
+    back.current = true;
+    setEditing(false);
+    setError(null);
+  };
+  const save = async () => {
+    const next = cleanAlbumTitle(draft) ?? DEFAULT_ALBUM_TITLE;
+    try {
+      await album.set(next === DEFAULT_ALBUM_TITLE ? "" : next);
+      close();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "The name was not saved.");
+    }
+  };
+  if (!editing)
+    return (
+      <div className="flex items-center gap-2">
+        <h1
+          className="min-w-0 font-display text-[2.6rem] leading-tight break-words"
+          data-testid="album-title"
+        >
+          {album.title}
+        </h1>
+        <IconButton
+          ref={rename}
+          label="Rename the album"
+          icon={<Pencil aria-hidden className="size-4" />}
+          onClick={() => {
+            setDraft(album.title);
+            setEditing(true);
+          }}
+          data-testid="rename-album"
+        />
+      </div>
+    );
+  return (
+    <form
+      className="flex flex-col gap-1.5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save();
+      }}
+    >
+      <h1 className="sr-only">{album.title}</h1>
+      <label htmlFor="album-title-input" className="text-sm font-medium text-text-2">
+        Album name
+      </label>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          id="album-title-input"
+          ref={input}
+          value={draft}
+          maxLength={ALBUM_TITLE_MAX}
+          aria-describedby={hintId}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              e.stopPropagation();
+              close();
+            }
+          }}
+          className="h-11 w-[min(100%,22rem)] rounded-control border border-border bg-surface px-3 font-display text-h2"
+        />
+        <Button
+          type="submit"
+          variant="primary"
+          loading={album.saving}
+          icon={<Check aria-hidden className="size-4" />}
+        >
+          Save
+        </Button>
+        <Button variant="ghost" icon={<X aria-hidden className="size-4" />} onClick={close}>
+          Cancel
+        </Button>
+      </div>
+      <p id={hintId} className="text-sm text-text-3">
+        Printed on every cover. Leave it empty for “{DEFAULT_ALBUM_TITLE}”.
+      </p>
+      {error && (
+        <p role="alert" className="text-sm text-issue">
+          {error}
+        </p>
+      )}
+    </form>
   );
 }
 

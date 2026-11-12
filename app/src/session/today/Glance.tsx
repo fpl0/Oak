@@ -8,13 +8,14 @@ import { Sprout } from "lucide-react";
 import { TrackCover } from "../../album/TrackCover.tsx";
 import { useContent } from "../../lib/content.ts";
 import { useAlbum, useBootstrap, useCourseProgress, useNextUnlocks, useSketches } from "../../lib/queries.ts";
-import { toolLabel } from "../../lib/tool-label.ts";
 import { useMediaQuery } from "../../lib/use-media.ts";
 import { OakGlance as MapGlance } from "../../map/index.ts";
 import { AcornIcon, LeafIcon, RingIcon } from "../../ui/icons/index.tsx";
 import { Card, Skeleton } from "../../ui/kit/basics.tsx";
 import { goalGradient } from "../coda-model.ts";
+import { isWritten, unitTitleOf } from "../edge.ts";
 import { doneItems, nextUnlocksFrom } from "../progress-model.ts";
+import { toolName as toolLabel } from "../tool-name.ts";
 
 function CardTitle({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -52,6 +53,10 @@ export function NextUnlockCard() {
   const first = items?.[0];
   const tool = first ? content.data?.toolbox.find((t) => t.id === first.itemId) : undefined;
   const label = tool ? toolLabel(tool) : null;
+  const authored = new Set((content.data?.lessons ?? []).map((l) => l.id as string));
+  // A tool granted by a lesson nobody has written yet: its count ("4 lessons to …") would not move, so the card
+  // says where it comes from instead.
+  const grantedUnwritten = !!first && content.data !== undefined && !isWritten(first.grantedBy, authored);
   return (
     <Card className="p-4" data-testid="next-unlock">
       <CardTitle icon={<AcornIcon size={16} />}>Next unlock</CardTitle>
@@ -60,7 +65,9 @@ export function NextUnlockCard() {
       ) : first ? (
         <div className="flex flex-col gap-1">
           <p data-testid="goal-gradient">
-            {goalGradient(first, "")}
+            {grantedUnwritten
+              ? `Arrives with ${unitTitleOf(content.data?.syllabus ?? null, first.grantedBy)}, which is still being written: `
+              : goalGradient(first, "")}
             {label?.mono === false ? (
               <span className="font-medium">{label.text}</span>
             ) : (

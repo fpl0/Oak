@@ -13,12 +13,13 @@ import {
   seededRandom,
   WOODS,
 } from "../album/cover.ts";
+import { DEFAULT_ALBUM_TITLE, useAlbumTitle } from "../album/title.ts";
 import { PARTS_PALETTE } from "./theme/palette.ts";
 
 export { seededRandom };
 
-/** The album name printed on every cover (ux §5.3: default "Oak Sessions"). */
-export const ALBUM_TITLE = "Oak Sessions";
+/** The default album name printed on every cover (ux §5.3); the learner's own comes from `useAlbumTitle`. */
+export const ALBUM_TITLE = DEFAULT_ALBUM_TITLE;
 
 export interface Ring {
   r: number;
@@ -49,7 +50,17 @@ export function coverRings(seed: string, size = 100): Ring[] {
   return rings;
 }
 
-function PrimEl({ p }: { p: Prim }) {
+/**
+ * The thinnest a ring line or a mark may render, in cover units, at `size` px: a thumbnail (56 px on Today and in
+ * the tracklist, 48 px in the version list) would otherwise draw its bar lines at a fifth of a pixel, and a cover
+ * grown from its seed alone (a version whose code does not run) would read as a blank disc.
+ */
+export function minStrokeAt(size: number): number {
+  return size >= 160 ? 0 : (COVER_SIZE / size) * 0.85;
+}
+
+function PrimEl({ p, minSw = 0 }: { p: Prim; minSw?: number }) {
+  if (minSw > 0 && p.t === "path" && p.role) p = { ...p, sw: Math.max(p.sw, minSw) };
   switch (p.t) {
     case "circle":
       return (
@@ -99,6 +110,14 @@ function PrimEl({ p }: { p: Prim }) {
           fontWeight={p.weight}
           letterSpacing={p.spacing}
           opacity={p.op}
+          {...(p.halo
+            ? {
+                stroke: p.halo.color,
+                strokeWidth: p.halo.width,
+                strokeLinejoin: "round" as const,
+                paintOrder: "stroke",
+              }
+            : {})}
         >
           {p.text}
         </text>
@@ -121,6 +140,8 @@ export interface AlbumCoverProps {
   plain?: boolean;
   /** The music is still being analysed: the wood and the pith, no rings yet. */
   loading?: boolean;
+  /** The album name to print; default: the learner's (`useAlbumTitle`). */
+  albumTitle?: string;
   className?: string;
 }
 
@@ -133,8 +154,11 @@ export function AlbumCover({
   draw,
   plain,
   loading,
+  albumTitle,
   className,
 }: AlbumCoverProps) {
+  const album = useAlbumTitle();
+  const ALBUM_TITLE = albumTitle ?? album.title;
   if (loading) {
     const wood = WOODS[music?.flavour ?? "default"] ?? WOODS.default;
     return (
@@ -169,13 +193,14 @@ export function AlbumCover({
         },
   );
   const showText = !plain && size >= 120;
+  const minSw = minStrokeAt(size);
   return (
     <svg
       viewBox={`0 0 ${COVER_SIZE} ${COVER_SIZE}`}
       width={size}
       height={size}
       role="img"
-      aria-label={`Cover of ${title}: ${model.summary}`}
+      aria-label={music ? `Cover of ${title}: ${model.summary}` : `Cover of ${title}, grown from its seed`}
       data-cover-rings={model.groups.filter((g) => g.kind === "ring").length}
       className={[
         "oak-cover",
@@ -193,7 +218,7 @@ export function AlbumCover({
             style={g.index === undefined ? undefined : ({ "--i": g.index } as React.CSSProperties)}
           >
             {g.items.map((p, i) => (
-              <PrimEl key={i} p={p} />
+              <PrimEl key={i} p={p} minSw={minSw} />
             ))}
           </g>
         ),

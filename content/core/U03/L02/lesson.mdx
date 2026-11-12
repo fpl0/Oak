@@ -1,0 +1,73 @@
+{/* U03.L02 Degrees in Code: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+In Home & the Major Scale you spelled scales with letters. This line uses no letters at all, only numbers, and it sounds the same as letters would.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+`n` plays notes of the scale named in `.scale()` by their place in it. The first number is home. <CodeRef fn="n" />
+
+<Predict exercise="which-three-notes" hum />
+</Step>
+
+<Step id="S3">
+The first seven notes of C major, one number each. Run it and compare the code with the labels.
+
+<Example id="seven-degrees" views="code,roll" />
+
+<OnPass>The label is the note's **scale degree**: its number in the key, with home as 1. Strudel counts from 0, like an array, so `n` is always one less: degree 5 is `n` 4.</OnPass>
+</Step>
+
+<Step id="S4">
+You played this tune from letters in Playing from the Page. A tune written in degrees says what each note does in the key, not just which key to press.
+
+<Editor exercise="tune-by-numbers" />
+
+<OnPass>Ode to Joy, by degree: `2 2 3 4`, then `4 3 2 1`. Every degree one less, every time.</OnPass>
+</Step>
+
+<Step id="S5">
+The numbers say what each note does; `.scale()` says where home is: its letter, its octave, then the kind of scale. <CodeRef fn="scale" />
+
+<Editor exercise="home-is-g" />
+
+<OnPass>Same numbers, new home: the whole tune moved to G with one word. That is why musicians think in degrees: the tune is the numbers, the key is a setting.</OnPass>
+</Step>
+
+<Step id="S6">
+From here on your ears learn degrees too. First the two clearest: 1, which sounds finished, and 5, which sounds stable but open.
+
+<Choice exercise="rest-or-open" />
+
+<OnPass>5: steady, but the music could go on from it. Only 1 sounds like the end.</OnPass>
+</Step>
+
+<Step id="S7">
+Now 3 joins them. Before each note, a few chords set home, so every key works the same way.
+
+<EarDrill family="fam.deg.fet-major" level={1} trials={6} />
+
+<Callout kind="tip">Sing down from the note to home on numbers. Your voice counts the steps for you.</Callout>
+
+<OnPass>1, 3 and 5 by ear. The same three numbers you can now write as `n` 0, 2 and 4.</OnPass>
+</Step>
+
+<Step id="S8">
+Your voice is analysed live on this computer. Nothing is recorded or sent.
+
+<Sing exercise="sing-one-three-five" />
+
+<OnPass>One, three, five and back home. Those three degrees are the bones of the key.</OnPass>
+</Step>
+
+<Step id="S9">
+Your turn. Think in degrees, write in `n`, and let the band play under you.
+
+<Make exercise="a-line-by-numbers" />
+
+<CanDo id="cd.code.degrees" />
+
+<Recap />
+</Step>

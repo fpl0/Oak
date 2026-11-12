@@ -2,7 +2,7 @@
 // then notes. Pure and incremental: the PitchLane pushes frames as they arrive, the graders run a fresh
 // tracker over the whole take.
 import type { LearnerProfile } from "@oak/content-kit";
-import { hzToMidi, median, quantile, rmsDb } from "./math.ts";
+import { hzToMidi, mean, median, quantile, rmsDb } from "./math.ts";
 import type { PitchFrame, SungNote, TrackedFrame, TrackerOptions } from "./types.ts";
 import { HOP_SIZE, WINDOW_SIZE } from "./types.ts";
 
@@ -15,6 +15,7 @@ export const TRACKER_DEFAULTS: Required<TrackerOptions> = {
   maxHz: 1600,
   splitCents: 70,
   splitFrames: 3,
+  splitWindow: 16,
   gapFrames: 3,
   minNoteSec: 0.1,
   windowSec: WINDOW_SIZE / 48000,
@@ -49,11 +50,31 @@ interface OpenSeg {
 }
 
 const REF_FRAMES = 48;
+/** Frames (about 260 ms, a whole cycle of a 4 Hz vibrato) the reference needs before it may leave out the frames under test. */
+const MIN_REF_FRAMES = 24;
 
-function refMidi(seg: OpenSeg): number {
-  const from = Math.max(0, seg.frames.length - REF_FRAMES);
+/** Range of the last `n` frames' pitch, cents. */
+function heldSpread(frames: readonly SegFrame[], n: number): number {
+  let lo = Number.POSITIVE_INFINITY;
+  let hi = Number.NEGATIVE_INFINITY;
+  for (let i = Math.max(0, frames.length - n); i < frames.length; i++) {
+    const m = (frames[i] as SegFrame).midi;
+    lo = Math.min(lo, m);
+    hi = Math.max(hi, m);
+  }
+  return (hi - lo) * 100;
+}
+
+/**
+ * The note's pitch: the median of its frames BEFORE the last `exclude` (the ones under test), so the frames of a new
+ * pitch never pull the reference towards themselves. A note with fewer than `MIN_REF_FRAMES` frames before them uses all its frames (a part of a vibrato cycle is no reference).
+ */
+function refMidi(seg: OpenSeg, exclude = 0): number {
+  const len = seg.frames.length;
+  const to = len - exclude >= MIN_REF_FRAMES ? len - exclude : len;
+  const from = Math.max(0, to - REF_FRAMES);
   const values: number[] = [];
-  for (let i = from; i < seg.frames.length; i++) values.push((seg.frames[i] as SegFrame).midi);
+  for (let i = from; i < to; i++) values.push((seg.frames[i] as SegFrame).midi);
   return median(values);
 }
 function refLevel(seg: OpenSeg): number {
@@ -71,10 +92,15 @@ export class PitchTracker {
   private ref: number | null = null;
   private unvoicedRun = 0;
   private seg: OpenSeg | null = null;
-  private pending: SegFrame[] = [];
+  /** Frames in a row whose trailing mean sits off the note. */
+  private pending = 0;
+  /** Smoothed pitch of the last `splitWindow` frames of the open note. */
+  private trail: number[] = [];
   private octRun: SegFrame[] = [];
   private octSeg: OpenSeg | null = null;
   private octSegLen = 0;
+  /** The segment behind the last closed note, when a pitch split closed it (for the merge in `closeSegment`). */
+  private prevSplit: OpenSeg | null = null;
   private closed: SungNote[] = [];
   private lastT: number | null = null;
   private hop = HOP_SIZE / 48000;
@@ -150,9 +176,10 @@ export class PitchTracker {
       // A split happened during the run: the open note holds folded frames only.
       this.seg = null;
     }
-    this.pending = [];
+    this.pending = 0;
     this.closeSegment();
     this.seg = { frames: run, lagged: false, dipAt: -1 };
+    this.trail = run.slice(-this.o.splitWindow).map((f) => f.midi);
     this.win = run.slice(-this.o.median).map((f) => f.midi);
     this.ref = median(this.win);
   }
@@ -163,24 +190,33 @@ export class PitchTracker {
     if (rms < refLevel(seg) * 10 ** (-this.o.dipDb / 20)) seg.dipAt = seg.frames.length;
   }
 
+  /**
+   * A pitch change splits the note when the MEAN of the last `splitWindow` frames moves more than `splitCents`
+   * from the note's median for `splitFrames` frames in a row. Reading single frames (Wave 3 review) cut a held
+   * note with an ordinary vibrato (±60¢ at 5.5–7 Hz) into fragments shorter than `minNoteSec`: the note came
+   * out 45¢ flat or vanished. The mean over ~130 ms cancels a 4–7 Hz vibrato (±90¢ at 4 Hz stays under the
+   * split line); a held new pitch crosses it a few frames late, so the cut is then moved back to the first
+   * frame that sits nearer the new pitch than the old one.
+   */
   private segment(f: SegFrame): void {
     const o = this.o;
     const seg = this.seg;
     if (!seg) {
       this.seg = { frames: [f], lagged: false, dipAt: -1 };
+      this.trail = [f.midi];
       return;
     }
-    if (Math.abs(f.midi - refMidi(seg)) * 100 > o.splitCents) {
-      this.pending.push(f);
-      if (this.pending.length >= o.splitFrames) {
-        const p = this.pending;
-        this.pending = [];
-        this.closeSegment();
-        this.seg = { frames: p, lagged: true, dipAt: -1 };
-      }
+    this.trail.push(f.midi);
+    if (this.trail.length > o.splitWindow) this.trail.shift();
+    const ref = refMidi(seg, this.trail.length);
+    if (Math.abs(mean(this.trail) - ref) * 100 > o.splitCents) {
+      seg.frames.push(f);
+      // … and only once the new pitch is held: in the middle of a glide the last frames are still moving.
+      if (++this.pending >= o.splitFrames && heldSpread(seg.frames, o.splitFrames) <= o.splitCents)
+        this.splitAt(seg, ref);
       return;
     }
-    this.pending = []; // transient outliers are dropped, the note continues
+    this.pending = 0;
     if (o.dipDb > 0 && seg.frames.length >= 3) {
       const level = refLevel(seg);
       if (seg.dipAt < 0) {
@@ -195,6 +231,54 @@ export class PitchTracker {
       }
     }
     seg.frames.push(f);
+  }
+
+  /**
+   * Cuts the open note where the new pitch begins: among the recent frames, the change point that best fits
+   * "the note's pitch, then one new level" (least squares). A vibrato on the new note makes any few frames a
+   * poor guess of its level, so the cut is made only when the new level, averaged from the change point on,
+   * is itself more than `splitCents` away; otherwise the next frame tries again.
+   */
+  private splitAt(seg: OpenSeg, ref: number): void {
+    const o = this.o;
+    const frames = seg.frames;
+    const lowest = Math.max(0, frames.length - o.splitWindow - o.splitFrames);
+    let cut = -1;
+    let best = Number.POSITIVE_INFINITY;
+    let level = ref;
+    // Suffix sums from the end, prefix cost against the note's pitch from `lowest`.
+    let sum = 0;
+    let sumSq = 0;
+    let before = 0;
+    for (let i = lowest; i < frames.length; i++) before += ((frames[i] as SegFrame).midi - ref) ** 2;
+    for (let c = frames.length - 1; c >= lowest; c--) {
+      const x = (frames[c] as SegFrame).midi;
+      sum += x;
+      sumSq += x * x;
+      before -= (x - ref) ** 2;
+      const n = frames.length - c;
+      if (n < o.splitFrames) continue;
+      const m = sum / n;
+      const cost = sumSq - n * m * m + before;
+      if (cost < best) {
+        best = cost;
+        cut = c;
+        level = m;
+      }
+    }
+    if (cut < 0 || Math.abs(level - ref) * 100 <= o.splitCents) return;
+    this.pending = 0;
+    if (cut === 0) {
+      // The whole note so far already sits at the new pitch: nothing to cut off.
+      this.trail = frames.slice(-o.splitWindow).map((x) => x.midi);
+      return;
+    }
+    const tail = frames.splice(cut);
+    if (seg.dipAt >= frames.length) seg.dipAt = -1;
+    const closed = this.closeSegment();
+    this.seg = { frames: tail, lagged: true, dipAt: -1 };
+    this.prevSplit = closed;
+    this.trail = tail.slice(-o.splitWindow).map((x) => x.midi);
   }
 
   private toNote(seg: OpenSeg): SungNote | null {
@@ -219,13 +303,36 @@ export class PitchTracker {
     return { start, end, midi, centsSpread, frames: frames.length };
   }
 
-  private closeSegment(): void {
+  /**
+   * Closes the open note. A note opened by a pitch split that ends up within `splitCents` of the note the split
+   * closed was no change of pitch (a wide vibrato swinging past the line): the two are merged back into one.
+   * Returns the segment the last closed note stands for, or null when this one made no note.
+   */
+  private closeSegment(): OpenSeg | null {
     const seg = this.seg;
+    const prev = this.prevSplit;
+    this.prevSplit = null;
     this.seg = null;
-    this.pending = [];
-    if (!seg) return;
+    this.pending = 0;
+    if (!seg) return null;
     const note = this.toNote(seg);
-    if (note) this.closed.push(note);
+    if (!note) return null;
+    const last = this.closed[this.closed.length - 1];
+    if (
+      seg.lagged &&
+      prev !== null &&
+      last !== undefined &&
+      Math.abs(note.midi - last.midi) * 100 < this.o.splitCents
+    ) {
+      const merged: OpenSeg = { frames: [...prev.frames, ...seg.frames], lagged: prev.lagged, dipAt: -1 };
+      const whole = this.toNote(merged);
+      if (whole) {
+        this.closed[this.closed.length - 1] = whole;
+        return merged;
+      }
+    }
+    this.closed.push(note);
+    return seg;
   }
 
   /** Notes closed so far. */
@@ -247,10 +354,12 @@ export class PitchTracker {
   }
   reset(): void {
     this.win = [];
+    this.trail = [];
+    this.prevSplit = null;
     this.ref = null;
     this.unvoicedRun = 0;
     this.seg = null;
-    this.pending = [];
+    this.pending = 0;
     this.octRun = [];
     this.octSeg = null;
     this.closed = [];

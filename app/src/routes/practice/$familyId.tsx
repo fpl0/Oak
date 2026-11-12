@@ -3,6 +3,7 @@
 // toward about 85% right (Kaernbach staircase). The server logs each set as practice; a card already nearly
 // due counts it as its review. A set in flight resumes after a reload.
 import type { FamilyDef, FamilyId } from "@oak/api";
+import { isContextCategory } from "@oak/drills";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Hourglass, Lock, MicOff } from "lucide-react";
 import { useId, useState } from "react";
@@ -11,11 +12,16 @@ import { inflightKey, loadInflight } from "../../drills/inflight.ts";
 import {
   familyAccuracy,
   familyStatus,
+  isResting,
+  levelLine,
   optionLabel,
   pctText,
   pendingText,
+  RESTING_LINE,
   unitOf,
 } from "../../drills/model.ts";
+import { PassiveListen } from "../../drills/PassiveListen.tsx";
+import { PASSIVE_GENERATORS } from "../../drills/passive.ts";
 import { type DrillData, useAfterSet, useDrillData } from "../../drills/use-drill-data.ts";
 import { usePageTitle } from "../../lib/nav.ts";
 import { keyScope, useHotkeys } from "../../ui/keys/KeymapProvider.tsx";
@@ -67,6 +73,7 @@ function Family({ def, data }: { def: FamilyDef; data: DrillData }) {
   const [resumed] = useState(() => loadInflight(key));
   const [level, setLevel] = useState(() => Math.min(maxLevel, st?.level ?? 1));
   // The running set: its start level and a counter that remounts the runner for "Another set".
+  const [listening, setListening] = useState(false);
   const [run, setRun] = useState<{ n: number; level: number } | null>(() =>
     resumed ? { n: 0, level: resumed.records[0]?.level ?? resumed.session.levels[def.id] ?? 1 } : null,
   );
@@ -107,6 +114,19 @@ function Family({ def, data }: { def: FamilyDef; data: DrillData }) {
       </EmptyState>
     );
 
+  if (listening && !run)
+    return (
+      <PassiveListen
+        spec={{ family: def.id as FamilyId, level, items: 8, reveal: "with", gapBeats: 2 }}
+        data={data}
+        title={`${def.title} · level ${level}`}
+        doneLabel="Start the set"
+        onDone={() => {
+          setListening(false);
+          setRun({ n: 0, level });
+        }}
+      />
+    );
   if (run)
     return (
       <DrillRunner
@@ -134,6 +154,7 @@ function Family({ def, data }: { def: FamilyDef; data: DrillData }) {
       maxLevel={maxLevel}
       setLevel={setLevel}
       onStart={() => setRun({ n: 0, level })}
+      {...(PASSIVE_GENERATORS.includes(def.generator) ? { onListen: () => setListening(true) } : {})}
     />
   );
 }
@@ -145,6 +166,7 @@ function Setup({
   maxLevel,
   setLevel,
   onStart,
+  onListen,
 }: {
   def: FamilyDef;
   data: DrillData;
@@ -152,6 +174,8 @@ function Setup({
   maxLevel: number;
   setLevel(n: number): void;
   onStart(): void;
+  /** A guided listening block at this level before the set (no answers), where the family has one. */
+  onListen?(): void;
 }) {
   const st = data.states.get(def.id);
   const id = useId();
@@ -159,7 +183,9 @@ function Setup({
   const confusions = Object.entries(st?.confusion ?? {})
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3);
-  const cats = def.levels[level - 1]?.categories ?? [];
+  // Context categories (sharp keys, flat keys, syllables) open with their lessons but are not things to hear.
+  const cats = (def.levels[level - 1]?.categories ?? []).filter((c) => !isContextCategory(c));
+  const resting = isResting(def, st);
   useHotkeys([
     {
       id: "practice-start",
@@ -170,6 +196,19 @@ function Setup({
       when: (k) => !k.onControl && !k.inEditable,
       run: onStart,
     },
+    ...(onListen
+      ? [
+          {
+            id: "practice-listen",
+            keys: "L",
+            scope: "answer-pad" as const,
+            group: "Drills",
+            description: "Just listen first (nothing to answer)",
+            when: (k: { inEditable: boolean }) => !k.inEditable,
+            run: onListen,
+          },
+        ]
+      : []),
   ]);
   return (
     <div {...keyScope("answer-pad")} className="flex flex-col gap-4">
@@ -214,18 +253,28 @@ function Setup({
           <Button variant="primary" size="lg" autoFocus onClick={onStart} data-testid="start-set">
             Start the set <Kbd tone="inverse">Enter</Kbd>
           </Button>
+          {onListen && (
+            <Button size="lg" onClick={onListen} data-testid="listen-first">
+              Just listen first <Kbd>L</Kbd>
+            </Button>
+          )}
           <Link to="/practice" className={buttonClass("ghost", "lg")}>
             Back to Practice
           </Link>
         </div>
       </Card>
-      {(n > 0 || confusions.length > 0) && (
+      {(n > 0 || confusions.length > 0 || resting) && (
         <Card className="p-4">
           <h2 className="mb-1 text-h3">Where you are</h2>
           <p className="text-text-2">
-            Level {st?.level ?? 1} of {def.levels.length}
+            {levelLine(def, st)}
             {acc !== null && ` · ${pctText(acc)} over ${n} ${n === 1 ? "trial" : "trials"}`}
           </p>
+          {resting && (
+            <p className="mt-1 text-sm text-text-2" data-testid="family-resting">
+              {RESTING_LINE}
+            </p>
+          )}
           {confusions.length > 0 && (
             <ul className="mt-2 text-sm text-text-2">
               {confusions.map(([pair, count]) => {

@@ -8,8 +8,12 @@ import {
   foldedCents,
   ladderSummary,
   liveMidi,
+  matchTargets,
+  matchVerdict,
+  matchWords,
   noiseVerdict,
   noteReadout,
+  outputChangeAdvice,
   outputChoiceOf,
   outputGuidance,
   rangeOk,
@@ -122,5 +126,45 @@ describe("readouts", () => {
   test("output kind → choice", () => {
     expect(outputChoiceOf("bluetooth")).toBe("bluetooth");
     expect(outputChoiceOf("unknown")).toBe("wired");
+  });
+});
+
+describe("the pitch match and the output-change advice", () => {
+  test("three targets inside the comfort zone", () => {
+    expect(matchTargets({ comfortLowMidi: 48, comfortHighMidi: 60 })).toEqual([54, 58, 49]);
+    expect(matchTargets({ comfortLowMidi: 57, comfortHighMidi: 60 })).toEqual([59, 60, 57]);
+    expect(matchTargets({ comfortLowMidi: null, comfortHighMidi: null })).toEqual([61, 65, 56]);
+  });
+  test("the verdict counts within ±50¢ and never shames", () => {
+    const v = matchVerdict([
+      { midi: 60, cents: 12 },
+      { midi: 64, cents: -49 },
+      { midi: 55, cents: 120 },
+    ]);
+    expect(v.within).toBe(2);
+    expect(v.title).toBe("2 of 3 notes matched within ±50¢");
+    const low = matchVerdict([
+      { midi: 60, cents: 80 },
+      { midi: 64, cents: null },
+      { midi: 55, cents: -300 },
+    ]);
+    expect(low.within).toBe(0);
+    expect(low.body).toMatch(/starts wide/);
+    expect(low.body).not.toMatch(/fail|wrong|bad/i);
+    expect(matchVerdict([{ midi: 60, cents: null }]).title).toMatch(/didn't hear/);
+  });
+  test("each trial in words and arrows", () => {
+    expect(matchWords(1)).toBe("spot on (+1¢)");
+    expect(matchWords(-32)).toBe("↓ a little low (−32¢)");
+    expect(matchWords(-399)).toBe("↓ 4 semitones low");
+    expect(matchWords(100)).toBe("↑ 1 semitone high");
+    expect(matchWords(null)).toBe("no steady note heard");
+  });
+  test("output change: only when the class changed to or from Bluetooth", () => {
+    expect(outputChangeAdvice("AirPods Pro", "bluetooth", "wired")?.title).toBe("Oak sees AirPods Pro");
+    expect(outputChangeAdvice("External Headphones", "wired", "bluetooth")?.body).toMatch(/over Bluetooth/);
+    expect(outputChangeAdvice("AirPods Pro", "bluetooth", "bluetooth")).toBeNull();
+    expect(outputChangeAdvice(null, null, "wired")).toBeNull();
+    expect(outputChangeAdvice("MacBook Pro Speakers", "speakers", "unknown")).toBeNull();
   });
 });

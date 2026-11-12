@@ -11,11 +11,15 @@ import { Callout } from "../ui/kit/Controls.tsx";
 import { QueryView } from "../ui/kit/QueryState.tsx";
 import { useFocusHeaderContent } from "../ui/shell/focus-header.ts";
 import { renderPart } from "../voice/index.tsx";
-import { WIZARD, type WizardPart, wizardNext } from "../voice/wizard.ts";
+import { clearRecheck } from "../voice/recheck.ts";
+import { SETUP_ROUTE_PARTS, WIZARD, type WizardPart, wizardNext } from "../voice/wizard.ts";
 
 const searchSchema = z.object({
-  part: z.enum(["headphones", "mic", "range", "latency", "first-sing"]).optional().catch(undefined),
-  at: z.enum(["headphones", "mic", "range", "latency", "first-sing", "done"]).optional().catch(undefined),
+  part: z.enum(SETUP_ROUTE_PARTS).optional().catch(undefined),
+  at: z
+    .enum([...SETUP_ROUTE_PARTS, "done"])
+    .optional()
+    .catch(undefined),
 });
 
 export const Route = createFileRoute("/settings_/voice/setup")({
@@ -28,7 +32,9 @@ const LABEL: Record<WizardPart, string> = {
   mic: "Microphone",
   range: "Range",
   latency: "Timing",
+  match: "Match three notes",
   "first-sing": "First note",
+  noise: "Quiet check",
 };
 
 function VoiceSetup() {
@@ -77,7 +83,11 @@ function VoiceSetup() {
           return renderPart(p, {
             part: current,
             context: "settings",
-            onDone: () => go(next),
+            onDone: () => {
+              // A fresh quiet check answers the "re-run the quiet check" suggestion.
+              if (current === "noise" || current === "mic") clearRecheck();
+              go(next);
+            },
             onSkip: () => go(next),
             onQuiet: () => go("done"),
           });

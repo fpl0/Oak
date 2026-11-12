@@ -15,6 +15,8 @@ export interface NextPath {
   feeders: string[];
   /** `from>to` keys of the edges into the targets. */
   edges: Set<string>;
+  /** False for a lesson nobody has written yet (the edge of the written course): shown, never opened. */
+  written: boolean;
 }
 
 export const edgeKey = (from: string, to: string) => `${from}>${to}`;
@@ -26,6 +28,7 @@ const EMPTY: NextPath = {
   targets: [],
   feeders: [],
   edges: new Set(),
+  written: true,
 };
 
 function lessonOf(syllabus: SyllabusDef | null, id: string) {
@@ -42,6 +45,8 @@ export function whatsNext(
   progress: Pick<CourseProgress, "next"> | null | undefined,
   syllabus: SyllabusDef | null,
   graph: MapGraph,
+  /** Lessons with a lesson file; absent: every lesson counts as written. */
+  authored?: ReadonlySet<string>,
 ): NextPath {
   const next = progress?.next ?? null;
   if (!next) return EMPTY;
@@ -85,13 +90,14 @@ export function whatsNext(
     edges.add(edgeKey(a, b));
     if (!targetSet.has(a)) feeders.add(a);
   }
-  return { sessionId: next, kind, title, targets, feeders: [...feeders].sort(), edges };
+  const written = kind !== "lesson" || !authored || authored.size === 0 || authored.has(next);
+  return { sessionId: next, kind, title, targets, feeders: [...feeders].sort(), edges, written };
 }
 
 export type PractiseTarget =
   | { kind: "family"; familyId: string; title: string }
   | { kind: "lesson"; lessonId: string; title: string; completed: boolean }
-  | { kind: "locked"; lessonId: string | null; title: string };
+  | { kind: "locked"; lessonId: string | null; title: string; unwritten?: boolean };
 
 /** Drill families that train a skill, strongest weight first. */
 export function familiesOf(skillId: string, families: readonly FamilyDef[]): FamilyDef[] {
@@ -115,6 +121,8 @@ export function practiseTarget(
     cards: readonly Pick<SrsCard, "cardId" | "status">[];
     lessonStatus: ReadonlyMap<string, string>;
     lessonTitle: (id: string) => string;
+    /** Lessons with a lesson file; an open lesson nobody has written yet is not offered. */
+    authored?: ReadonlySet<string>;
   },
 ): PractiseTarget {
   const live = new Set(
@@ -124,9 +132,17 @@ export function practiseTarget(
   if (fam) return { kind: "family", familyId: fam.id, title: fam.title };
   const lessonId = skill.introducedBy;
   const status = lessonId ? (ctx.lessonStatus.get(lessonId) ?? "locked") : "locked";
-  if (lessonId && status !== "locked")
+  const unwrittenLesson =
+    !!lessonId && !!ctx.authored && ctx.authored.size > 0 && !ctx.authored.has(lessonId);
+  if (lessonId && status !== "locked" && !unwrittenLesson)
     return { kind: "lesson", lessonId, title: ctx.lessonTitle(lessonId), completed: status === "completed" };
-  return { kind: "locked", lessonId, title: lessonId ? ctx.lessonTitle(lessonId) : "" };
+  const unwritten = unwrittenLesson && status !== "locked";
+  return {
+    kind: "locked",
+    lessonId,
+    title: lessonId ? ctx.lessonTitle(lessonId) : "",
+    ...(unwritten ? { unwritten: true } : {}),
+  };
 }
 
 /** Lessons done per unit (optional lessons left out), and which unit holds the next map item. */

@@ -1,5 +1,5 @@
 // Cards, reviews, `family_state`, graduation, composites and recall, through `@oak/srs` (contracts §7.1 to
-// §7.4 and §7.9; decision 2 of docs/decisions.md). The service owns the scheduling rules; storage is behind
+// §7.4 and §7.9; decisions 2 and 27 of docs/decisions.md: the live governor is the simulated one). The service owns the scheduling rules; storage is behind
 // the ports below, which the server implements over SQLite (`db/repos/srs.ts` satisfies `SrsStore`
 // structurally; `SrsStatePort` is one JSON value, e.g. the `settings` row `srs.state`).
 //
@@ -13,8 +13,8 @@ import type {
 } from "@oak/api";
 import type { FamilyDef, FamilyId, HintRung, SkillId } from "@oak/content-kit";
 import {
+  type ActiveFamily,
   admitCreated,
-  admitNew,
   BLOCKED_INTRO_SETS,
   type Card,
   type CardKind,
@@ -43,7 +43,10 @@ import {
   type OtherWorkSource,
   otherWorkCredit,
   type PlannedItem,
+  pickReleases,
+  pickRestReturn,
   planCompositeSet,
+  planOverdueReleases,
   planReviewDay,
   planWarmup,
   RATING_NAME,
@@ -59,8 +62,13 @@ import {
   smoothBacklog,
   stepGrade,
   stepLevel,
+  WARMUP_BUDGET_SEC,
+  WARMUP_GYM_SEC,
+  WARMUP_SHORT_SEC,
+  type WaitingCard,
   type WarmupPlan,
 } from "@oak/srs";
+import { monotonicDay } from "../lib/days.ts";
 
 // --- ports ----------------------------------------------------------------------------------------
 
@@ -132,11 +140,18 @@ export interface SrsWorkingState {
     newFamilies: number;
     newFacts: number;
     deckIntro: Record<string, number>;
+    /** Families the wait bound (decision 27) released today. */
+    overdueReleased?: number;
   };
   /** Credits of the last composite trials of each graduated member, newest last. */
   compositeCredits: Record<string, number[]>;
   /** Members recalled from a composite, waiting for a free active slot. */
   recallPending: string[];
+  /**
+   * Families resting in their composite below their mastery level (decision 27): family → the learner day it
+   * rested. One comes back to its own card once nothing waits (`pickRestReturn`).
+   */
+  resting: Record<string, string>;
   /** Order of deferral: card → sequence number (oldest is released first). */
   deferredSeq: Record<string, number>;
   seq: number;
@@ -154,6 +169,7 @@ export const EMPTY_SRS_STATE: SrsWorkingState = {
   today: { day: "", agains: 0, newFamilies: 0, newFacts: 0, deckIntro: {} },
   compositeCredits: {},
   recallPending: [],
+  resting: {},
   deferredSeq: {},
   seq: 0,
   sessionDays: [],
@@ -185,6 +201,13 @@ export interface SrsLearnerPort {
   debtSkills(): SkillId[];
   /** Skills the next lesson builds on. */
   nextLessonSkills(): SkillId[];
+  /** The latest learner day with recorded activity: today never runs backwards past it (`monotonicDay`). */
+  dayFloor?(): string | null;
+  /**
+   * The kinds of the next `n` sessions of the learner's course (the New block of each), for the intake
+   * throttle: checkpoint and capstone days have shorter warm-ups. Fewer than `n` when the course runs out.
+   */
+  upcomingSessions?(n: number): ("lesson" | "checkpoint" | "capstone" | "gym")[];
 }
 export interface SrsServiceDeps {
   store: SrsStore;
@@ -233,7 +256,8 @@ export interface PlanOptions {
 export class SrsService {
   private constructor(
     private readonly deps: SrsServiceDeps,
-    readonly srs: Srs,
+    /** The scheduler for the learner's current zone (`rezone` replaces it after a zone change). */
+    public srs: Srs,
   ) {}
 
   /** Decision 2 is live: fact cards at 0.85 desired retention (docs/decisions.md row 2). */
@@ -256,8 +280,57 @@ export class SrsService {
     });
   }
 
+  /**
+   * The governor for intake decisions (releases, a lesson's new cards, deck intake): the 7-day forecast is
+   * measured against the MEAN warm-up budget of the sessions the window will hold, as the simulation does
+   * (checkpoint and capstone days have 3-minute warm-ups, gym days 4; past the course, lesson-sized days).
+   */
+  intakeGovernor(): GovernorConfig {
+    const cfg = this.governor();
+    const p = this.deps.learner.profile();
+    const n = Math.max(1, Math.round((cfg.forecastDays * Math.min(7, cfg.sessionsPerWeek)) / 7));
+    const kinds = this.deps.learner.upcomingSessions?.(n) ?? [];
+    const budgets = kinds.map((k) =>
+      k === "checkpoint" || k === "capstone"
+        ? WARMUP_SHORT_SEC
+        : k === "gym"
+          ? WARMUP_GYM_SEC
+          : WARMUP_BUDGET_SEC[p.targetMinutes],
+    );
+    while (budgets.length < n) budgets.push(WARMUP_BUDGET_SEC[p.targetMinutes]);
+    return { ...cfg, budgetSec: budgets.reduce((a, b) => a + b, 0) / budgets.length };
+  }
+
+  /** Today's learner day (never earlier than the latest day with recorded activity, `monotonicDay`). */
   day(now: Date): string {
-    return dayFromIndex(this.srs.dayOf(now));
+    return dayFromIndex(this.todayIndex(now));
+  }
+  /** Today as a day index: the scheduler's day of `now`, held at the learner's activity floor. */
+  todayIndex(now: Date): number {
+    const raw = this.srs.dayOf(now);
+    const floor = this.deps.learner.dayFloor?.() ?? null;
+    return floor === null ? raw : dayIndex(monotonicDay(dayFromIndex(raw), floor));
+  }
+
+  /**
+   * The scheduler counts days in the learner's zone and rollover: after a change in the profile, a new
+   * scheduler is built for the new zone (cards keep their instants; only the day arithmetic moves).
+   * Returns whether it changed.
+   */
+  /** Whether the scheduler counts days in the profile's current zone and rollover. */
+  zoneCurrent(): boolean {
+    const p = this.deps.learner.profile();
+    return p.timeZone === this.srs.timeZone && p.rolloverHour === this.srs.rolloverHour;
+  }
+  async rezone(): Promise<boolean> {
+    if (this.zoneCurrent()) return false;
+    const p = this.deps.learner.profile();
+    this.srs = await createSrs({
+      factRetention: DECISION_2.factRetention,
+      timeZone: p.timeZone,
+      rolloverHour: p.rolloverHour,
+    });
+    return true;
   }
 
   // --- state ---
@@ -296,6 +369,45 @@ export class SrsService {
     if (c.kind !== "family") return false;
     const def = this.deps.catalog.family(c.id as FamilyId);
     return def ? isPerceptualFamily(def) : true;
+  }
+  /** How a deferred card waits for release (`pickReleases`): perceptual and production families take a slot. */
+  private waitingKind(c: Card): WaitingCard["kind"] {
+    if (c.kind === "fact") return "fact";
+    if (c.kind === "concept" || !this.isPerceptualCard(c)) return "concept";
+    return this.deps.catalog.family(c.id as FamilyId)?.mic === true ? "production" : "perceptual";
+  }
+  /** Active perceptual families as `earlyGraduate` reads them (those with a composite to join). */
+  private graduationCandidates(now: Date) {
+    const at = now.toISOString();
+    return this.deps.store
+      .cards({ status: "active", kind: "family" })
+      .filter((c) => this.isPerceptualCard(c.card) && this.deps.catalog.family(c.card.id as FamilyId)?.mix)
+      .map((c) => {
+        const def = this.deps.catalog.family(c.card.id as FamilyId);
+        const row = this.familyRow(c.card.id, at);
+        const lim = this.deps.catalog.levelLimits(c.card.id as FamilyId);
+        return {
+          cardId: c.card.id,
+          level: row.level,
+          masteryLevel: def?.masteryLevel ?? Number.POSITIVE_INFINITY,
+          maxOpenLevel: lim.maxOpenLevel,
+          t90Days: this.srs.intervalAt(c.card, 0.9),
+          lastRatings: c.card.lastRatings,
+        };
+      });
+  }
+  /** Active perceptual families as the wait bound's room-making reads them (decision 27). */
+  private activeFamilies(now: Date): ActiveFamily[] {
+    const at = now.toISOString();
+    return this.graduationCandidates(now).map((g) => {
+      const stored = this.deps.store.card(g.cardId);
+      return {
+        ...g,
+        mic: this.deps.catalog.family(g.cardId as FamilyId)?.mic === true,
+        reps: stored?.card.reps ?? 0,
+        blockedIntroPending: this.familyRow(g.cardId, at).blockedRemaining > 0,
+      };
+    });
   }
   private activePerceptual(): number {
     return this.deps.store
@@ -351,7 +463,7 @@ export class SrsService {
 
   /** Due today (by learner day). */
   dueItems(now: Date, state?: SrsWorkingState): ReviewItem[] {
-    const today = this.srs.dayOf(now);
+    const today = this.todayIndex(now);
     return this.reviewItems(now, state).filter((it) => it.dueDay <= today);
   }
 
@@ -369,7 +481,7 @@ export class SrsService {
   prepareDay(now: Date, gapDays: number): void {
     const s = this.loadState(now);
     const day = this.day(now);
-    const today = this.srs.dayOf(now);
+    const today = this.todayIndex(now);
     const at = now.toISOString();
     const cfg = this.governor();
     if (!s.sessionDays.includes(day)) s.sessionDays = [...s.sessionDays, day].slice(-40);
@@ -397,6 +509,15 @@ export class SrsService {
     for (const [id, d] of Object.entries(s.deferUntil)) if (dayIndex(d) <= today) delete s.deferUntil[id];
     const backlog = s.backlogUntil !== null && dayIndex(s.backlogUntil) >= today;
 
+    // Production cards seeded while the learner was in Quiet mode were created paused (contracts §8.5). Once
+    // the mic is back they join the deferred queue and are released like any other waiting family.
+    if (!cfg.quiet)
+      for (const stored of this.deps.store.cards({ status: "paused", kind: "family" })) {
+        if (this.deps.catalog.family(stored.card.id as FamilyId)?.mic !== true) continue;
+        this.deps.store.setCardStatus(stored.card.id, "deferred", now.toISOString());
+        s.deferredSeq[stored.card.id] = ++s.seq;
+      }
+
     if (!backlog) {
       // 2. Recalled composite members take free slots first, in the relearning state.
       for (const id of [...s.recallPending]) {
@@ -409,32 +530,103 @@ export class SrsService {
         this.deps.store.saveFamily({ ...row, compositeId: null, graduatedAt: null, updatedAt: at });
         s.recallPending = s.recallPending.filter((x) => x !== id);
         delete s.compositeCredits[id];
+        delete s.resting[id];
       }
-      // 3. Deferred cards, oldest first, while the forecast is open.
-      const items = this.reviewItems(now, s);
-      const deferred = this.deps.store
-        .cards({ status: "deferred" })
-        .sort(
-          (a, b) =>
-            (s.deferredSeq[a.card.id] ?? 0) - (s.deferredSeq[b.card.id] ?? 0) ||
-            (a.createdAt < b.createdAt ? -1 : 1),
-        );
-      const famWaiting = deferred.filter((d) => d.card.kind === "family" || d.card.kind === "concept");
-      const factWaiting = deferred.filter((d) => d.card.kind === "fact");
-      const nextFam = famWaiting[0] ? this.deps.catalog.family(famWaiting[0].card.id as FamilyId) : null;
-      const firstPerceptual = famWaiting[0] ? this.isPerceptualCard(famWaiting[0].card) : false;
-      const allow = admitNew(
-        items,
-        { families: famWaiting.length, facts: factWaiting.length, nextFamilyMic: nextFam?.mic ?? false },
-        firstPerceptual ? this.activePerceptual() : 0,
+    }
+    // 3. The wait bound (decision 27), a backlog or not: a family still waiting `releaseAfterDays` after its
+    // lesson is released today whatever the forecast says, and room is made for it (a family at its mastery
+    // level graduates early, otherwise the most stable one rests in its composite). The forecast is
+    // measured against the mean warm-up budget of the upcoming sessions.
+    const intake = this.intakeGovernor();
+    const waitingNow = (): { waiting: WaitingCard[]; deferred: Map<string, StoredCard> } => {
+      const deferred = new Map(this.deps.store.cards({ status: "deferred" }).map((d) => [d.card.id, d]));
+      const waiting: WaitingCard[] = [...deferred.values()].map((d) => ({
+        cardId: d.card.id,
+        kind: this.waitingKind(d.card),
+        seq: s.deferredSeq[d.card.id] ?? 0,
+        waitedDays: Math.max(0, today - this.srs.dayOf(d.createdAt)),
+      }));
+      return { waiting, deferred };
+    };
+    {
+      const { waiting, deferred } = waitingNow();
+      const overdue = planOverdueReleases({
+        items: this.reviewItems(now, s),
+        waiting,
+        active: this.activeFamilies(now),
+        activePerceptual: this.activePerceptual(),
         today,
-        cfg,
-      );
-      for (const d of [...famWaiting.slice(0, allow.families), ...factWaiting.slice(0, allow.facts)]) {
-        this.release(d, now, s);
+        cfg: intake,
+      });
+      for (const id of overdue.graduate) this.graduate(id, now);
+      for (const id of overdue.rest) {
+        this.graduate(id, now);
+        s.resting[id] = day;
       }
-      // 4. Deck cards at each deck's daily pace, while the fact forecast is not closed.
-      if (intakeForecast(items, today, cfg, 0, "facts").state !== "closed") {
+      for (const id of overdue.release) {
+        const d = deferred.get(id);
+        if (d !== undefined) this.release(d, now, s);
+      }
+      s.today.overdueReleased = (s.today.overdueReleased ?? 0) + overdue.release.length;
+    }
+    if (!backlog) {
+      // 4. Deferred cards (contracts §7.4), oldest first, while the forecast is open: `pickReleases` passes
+      // over a family that cannot start today (no active slot, or a mic family without mic room) instead of
+      // letting it hold up the ones behind it. Families the wait bound released count toward the daily cap.
+      const items = this.reviewItems(now, s);
+      const { waiting, deferred } = waitingNow();
+      const releaseCfg: GovernorConfig = {
+        ...intake,
+        releasePerDay: {
+          ...intake.releasePerDay,
+          families: Math.max(0, intake.releasePerDay.families - (s.today.overdueReleased ?? 0)),
+        },
+      };
+      for (const id of pickReleases(items, waiting, this.activePerceptual(), today, releaseCfg)) {
+        const d = deferred.get(id);
+        if (d !== undefined) this.release(d, now, s);
+      }
+      // 5. A resting family comes back to its own card, where it left off, once nothing waits (decision 27).
+      // One that reached its mastery level meanwhile (evidence from other work) simply stays graduated.
+      for (const id of Object.keys(s.resting)) {
+        const def = this.deps.catalog.family(id as FamilyId);
+        const row = this.deps.store.family(id);
+        if (!def || !row?.compositeId || row.level >= def.masteryLevel) delete s.resting[id];
+      }
+      const back = pickRestReturn({
+        items: this.reviewItems(now, s),
+        resting: Object.entries(s.resting)
+          .filter(([id]) => !s.recallPending.includes(id))
+          .map(([id, since]) => ({
+            cardId: id,
+            restedDays: today - dayIndex(since),
+            mic: this.deps.catalog.family(id as FamilyId)?.mic === true,
+          })),
+        waitingFamilies: this.deps.store
+          .cards({ status: "deferred", kind: "family" })
+          .filter((d) => this.isPerceptualCard(d.card)).length,
+        activePerceptual: this.activePerceptual(),
+        today,
+        cfg: intake,
+      });
+      if (back !== null) {
+        const stored = this.deps.store.card(back);
+        if (stored) {
+          this.deps.store.saveCard(
+            { ...stored.card, status: "active", dueAt: at },
+            { desiredRetention: stored.desiredRetention },
+            at,
+          );
+          const row = this.familyRow(back, at);
+          this.deps.store.saveFamily({ ...row, compositeId: null, graduatedAt: null, updatedAt: at });
+          delete s.compositeCredits[back];
+        }
+        delete s.resting[back];
+      }
+      // 6. Deck cards at each deck's daily pace, while the fact forecast is not closed. Deck cards not yet
+      // created are newer than any deferred fact card: they wait while one does.
+      const factsWaiting = this.deps.store.cards({ status: "deferred", kind: "fact" }).length > 0;
+      if (!factsWaiting && intakeForecast(items, today, intake, 0, "facts").state !== "closed") {
         for (const dc of this.deps.catalog.openDeckCards()) {
           if (s.today.newFacts >= cfg.newPerDay.facts) break;
           if (this.deps.store.card(dc.cardId)) continue;
@@ -478,7 +670,7 @@ export class SrsService {
   planWarmup(now: Date, opts: PlanOptions): { plan: WarmupPlan; items: WarmupItem[] } {
     const s = this.loadState(now);
     const cfg = this.governor();
-    const today = this.srs.dayOf(now);
+    const today = this.todayIndex(now);
     const due = this.offeredDue(now, s);
     const plan = planWarmup(
       due,
@@ -506,7 +698,7 @@ export class SrsService {
   private offeredDue(now: Date, s: SrsWorkingState): ReviewItem[] {
     // Repair-queue families (a failed checkpoint's skills, §7.6) are scheduled into the next warm-ups
     // whether or not their card is due: the planner takes them right after the opener.
-    const today = this.srs.dayOf(now);
+    const today = this.todayIndex(now);
     const due = this.reviewItems(now, s).filter((it) => it.dueDay <= today || it.repair);
     const backlog = s.backlogUntil !== null && dayIndex(s.backlogUntil) >= today;
     return capRelearning(due, s.today.agains, backlog).keep;
@@ -516,7 +708,7 @@ export class SrsService {
     const s = this.loadState(now);
     return planReviewDay(
       this.offeredDue(now, s),
-      { today: this.srs.dayOf(now), gapDays, anchorFallback: this.anchorFallback(now) },
+      { today: this.todayIndex(now), gapDays, anchorFallback: this.anchorFallback(now) },
       this.governor(),
     );
   }
@@ -589,7 +781,7 @@ export class SrsService {
     const s = this.loadState(now);
     const at = now.toISOString();
     const cfg = this.governor();
-    const today = this.srs.dayOf(now);
+    const today = this.todayIndex(now);
     const out: SeedResult = { active: [], deferred: [], glossaryOnly: [], graduatedEarly: [] };
 
     const defs = req.families
@@ -609,39 +801,40 @@ export class SrsService {
     // The cap is hit: graduate the strongest family at its mastery level early.
     const want = perceptual.length + production.length;
     while (want > 0 && this.activePerceptual() + want > cfg.maxActivePerceptual) {
-      const candidates = this.deps.store
-        .cards({ status: "active", kind: "family" })
-        .filter((c) => this.isPerceptualCard(c.card))
-        .map((c) => {
-          const def = this.deps.catalog.family(c.card.id as FamilyId);
-          const row = this.familyRow(c.card.id, at);
-          const lim = this.deps.catalog.levelLimits(c.card.id as FamilyId);
-          return {
-            cardId: c.card.id,
-            level: row.level,
-            masteryLevel: def?.masteryLevel ?? Number.POSITIVE_INFINITY,
-            maxOpenLevel: lim.maxOpenLevel,
-            t90Days: this.srs.intervalAt(c.card, 0.9),
-            lastRatings: c.card.lastRatings,
-          };
-        });
-      const pick = earlyGraduate(candidates, cfg);
+      const pick = earlyGraduate(this.graduationCandidates(now), cfg);
       if (!pick) break;
       this.graduate(pick, now);
       out.graduatedEarly.push(pick);
     }
 
-    const admit = admitCreated({
-      items: this.reviewItems(now, s),
-      today,
-      perceptual: perceptual.length,
-      production: production.length,
-      concept: concept.length,
-      facts: tested.length,
-      activePerceptual: this.activePerceptual(),
-      newToday: { families: s.today.newFamilies, facts: s.today.newFacts },
-      cfg,
-    });
+    // The intake throttle measures the forecast against the mean warm-up budget of the upcoming sessions.
+    const intake = this.intakeGovernor();
+    const admitNow = () =>
+      admitCreated({
+        items: this.reviewItems(now, s),
+        today,
+        perceptual: perceptual.length,
+        production: production.length,
+        concept: concept.length,
+        facts: tested.length,
+        activePerceptual: this.activePerceptual(),
+        newToday: { families: s.today.newFamilies, facts: s.today.newFacts },
+        cfg: intake,
+      });
+    let admit = admitNow();
+    // The time cap is hit (contracts §7.4): the throttle would leave a new family waiting while an active
+    // family already stands at its mastery level. That one graduates early (it keeps being sampled in its
+    // composite), and the lesson's family starts now instead of waiting.
+    while (
+      admit.perceptual + admit.production < perceptual.length + production.length &&
+      s.today.newFamilies + admit.perceptual + admit.production + admit.concept < cfg.newPerDay.families
+    ) {
+      const pick = earlyGraduate(this.graduationCandidates(now), cfg, "time");
+      if (!pick) break;
+      this.graduate(pick, now);
+      out.graduatedEarly.push(pick);
+      admit = admitNow();
+    }
     s.today.newFamilies += admit.perceptual + admit.production + admit.concept;
     s.today.newFacts += admit.facts;
 
@@ -739,7 +932,7 @@ export class SrsService {
     const s = this.loadState(now);
     const cfg = this.governor();
     const c = stored.card;
-    const today = this.srs.dayOf(now);
+    const today = this.todayIndex(now);
     const famRow = c.kind === "family" || c.kind === "concept" ? this.familyRow(c.id, at) : null;
     if (req.disputed || req.skipped) {
       return this.result(stored.card, null, famRow, null, false);
@@ -840,8 +1033,10 @@ export class SrsService {
       for (const t of req.trials) {
         const credits = [...(s.compositeCredits[t.familyId] ?? []), t.credit].slice(-GOVERNOR.recallWindow);
         s.compositeCredits[t.familyId] = credits;
-        if (memberNeedsRecall(credits) && !s.recallPending.includes(t.familyId))
+        if (memberNeedsRecall(credits) && !s.recallPending.includes(t.familyId)) {
           s.recallPending.push(t.familyId);
+          delete s.resting[t.familyId];
+        }
       }
     }
     this.saveState(s);
@@ -888,7 +1083,8 @@ export class SrsService {
     const s = this.loadState(now);
     const recalled: string[] = [];
     for (const row of this.deps.store.families()) {
-      if (!row.compositeId || s.recallPending.includes(row.familyId)) continue;
+      // A resting family (decision 27) comes back through the rest queue, not here.
+      if (!row.compositeId || s.recallPending.includes(row.familyId) || s.resting[row.familyId]) continue;
       const def = this.deps.catalog.family(row.familyId as FamilyId);
       if (!def || row.level >= def.masteryLevel) continue;
       if (this.deps.catalog.levelLimits(def.id).maxOpenLevel > row.level) {
@@ -917,7 +1113,7 @@ export class SrsService {
   ): { reviewed: SrsReviewResult | null; levelChange: "promoted" | "demoted" | null } {
     const stored = this.deps.store.card(args.familyId);
     const at = now.toISOString();
-    const today = this.srs.dayOf(now);
+    const today = this.todayIndex(now);
     if (!stored) return { reviewed: null, levelChange: null };
     const verdict = otherWorkCredit({
       source: args.source,
@@ -1015,9 +1211,12 @@ export class SrsService {
   }[] {
     const out: ReturnType<SrsService["cardRecalls"]> = [];
     const byId = new Map(this.deps.store.cards().map((s) => [s.card.id, s]));
+    // In Quiet mode production (sing) cards are paused: not in map shading either (contracts §8.5).
+    const quiet = this.deps.learner.profile().quiet;
     for (const stored of byId.values()) {
       const c = stored.card;
       if (c.status === "paused" || c.status === "retired" || c.status === "deferred") continue;
+      if (quiet && c.kind === "family" && this.deps.catalog.family(c.id as FamilyId)?.mic === true) continue;
       let source = stored;
       let via: string | null = null;
       if (c.status === "graduated") {

@@ -193,12 +193,14 @@ describe("today", () => {
     await completeLesson("U01.L01");
     const p = await h.json<{
       canDo: { candoId: string }[];
-      milestones: { id: string; reachedAt: string | null }[];
+      milestones: { id: string; title: string; description: string; reachedAt: string | null }[];
       paceEstimate: null;
     }>("GET", "/api/progress");
     expect(p.status).toBe(200);
     expect(p.body.canDo.map((c) => c.candoId)).toEqual(["cd.hear.pulse"]);
-    expect(p.body.milestones).toEqual([{ id: "ms.01", reachedAt: null }]);
+    expect(p.body.milestones).toEqual([
+      { id: "ms.01", title: "First week", description: "Three lessons done.", reachedAt: null },
+    ]);
   });
 });
 

@@ -1,0 +1,500 @@
+// U03.L02 Degrees in Code (exemplar of U03). n = degree − 1 over `.scale("C4:major")`; the key as one word;
+// the first functional ear training (1 against 5, then 1, 3 and 5 after a few chords that set home); a
+// first degree pattern sung on numbers; degree labels on the roll and the staff. What the learner has from
+// U03.L01: the major scale in note names, home (the tonic), W W H W W W H. Not yet: `n` 7 or below 0
+// (U03.L03), `..` (U03.L04), a patterned `.scale()` (U03.L05), syllables (U03.L08). Spec: content/specs/U03.md.
+//
+// Shows the Wave 3 shapes (AUTHORING §16): `staffLabels`, a modify step that reveals the target roll after
+// the first failed check (`revealRollAfter`), and a sung degree pattern (`target.from: "degrees"`,
+// `labels: "numbers"`). Feedback that names syllables is overridden with numbers until U03.L08.
+import { defineLesson, type HintLadder } from "@oak/content-kit";
+
+const BPM = 84;
+const TEMPO = `setcpm(${BPM}/4)\n\n`;
+/** A line written in degrees: `n` over a major scale. */
+const deg = (pattern: string, key = "C4:major", extra = "") =>
+  `${TEMPO}mel: n("${pattern}").scale("${key}").s("piano")${extra}`;
+
+const ladder = (nudge: string, pointer: string, partial: string): HintLadder => [
+  { text: nudge },
+  { text: pointer },
+  { text: partial },
+  "auto",
+];
+
+/** The hook: 1 3 5 6-5, then 6 5-4 2, rest. Over the vamp's I and IV chords nothing clashes. */
+const HOOK = deg("<[0 2 4 [5 4]] [5 [4 3] 1 ~]>");
+/** The first seven degrees, one per eighth, and a rest where the eighth would be. */
+const SCALE = deg("0 1 2 3 4 5 6 ~");
+/** Ode to Joy, bars 1–2 (U02.L08 played them as e4 e4 f4 g4 | g4 f4 e4 d4): degrees 3 3 4 5 | 5 4 3 2. */
+const ODE = "<[2 2 3 4] [4 3 2 1]>";
+
+/** The Band takes the key of the learner's `.scale()`, so a line moved to G keeps its backing. */
+const BAND = { band: "band.two-chord-vamp", followsLearnerKey: true } as const;
+const NONE = { roll: false, staff: false, keyboard: false } as const;
+const ROLL = { roll: true, staff: false, keyboard: false } as const;
+const ROLL_STAFF = { roll: true, staff: "treble", keyboard: false } as const;
+
+/**
+ * The catalog's `melody.wrong-degree` reads "you have 5 (sol)": syllables wait for U03.L08. Numbers only,
+ * and the bridge said the way the unit says it.
+ */
+const NUMBERS = {
+  "melody.wrong-degree":
+    "Bar {bar}, {beatLabel}: you have degree {got}; the tune has degree {exp}. In `n`, every degree is one less.",
+  // The catalog's "extra note 3" / "note 3 missing" says nothing about why: usually the `< >` was lost and
+  // eight notes were squeezed into one bar.
+  "melody.extra-note":
+    "Bar {bar}, {beatLabel}: one note too many here. The tune has four notes a bar: keep the `< >`, one group of four per bar.",
+  "melody.missing-note":
+    "Bar {bar}, {beatLabel}: a note is missing here. The tune has four notes a bar: keep the `< >`, one group of four per bar.",
+} as const;
+
+export default defineLesson({
+  id: "U03.L02",
+  version: 1,
+  title: "Degrees in Code",
+  objective:
+    "I can write a melody as scale degrees with n() and .scale(), and move it to another key with one word.",
+  key: { tonic: "C", mode: "major" },
+  meter: "4/4",
+  bpm: BPM,
+  introduces: ["S02", "E04", "V02"],
+  practises: [],
+  terms: [{ id: "term.scale-degree", step: "S3" }],
+  canDo: ["cd.code.degrees"],
+  wrapAt: "S5",
+  steps: [
+    {
+      id: "S1",
+      kind: "listen",
+      title: "Numbers, not letters",
+      minutes: 0.5,
+      ui: { panels: ROLL, rollLabels: "degree", band: BAND },
+      example: { id: "hook", code: HOOK, bars: 2 },
+      exercise: {
+        kind: "listen",
+        id: "numbers-not-letters",
+        version: 1,
+        role: "practice",
+        prompt: "Press Play. Watch the numbers on the roll: the note marked 1 is home.",
+        skills: [{ skill: "S02", w: 1 }],
+        hints: null,
+        tests: [],
+        items: [{ code: HOOK, caption: "A piano line written in numbers, over the band.", bars: 2 }],
+      },
+    },
+    {
+      id: "S2",
+      kind: "predict",
+      title: "Which three notes?",
+      minutes: 0.5,
+      ui: { panels: NONE },
+      example: { id: "zero-two-four", code: deg("0 2 4 ~"), bars: 1 },
+      exercise: {
+        kind: "predict",
+        id: "which-three-notes",
+        version: 1,
+        role: "practice",
+        prompt:
+          '`n` picks notes of the C major scale by number, counting from 0 at home. Which notes will `n("0 2 4 ~")` play?',
+        skills: [{ skill: "S02", w: 1 }],
+        hints: null,
+        tests: [],
+        code: deg("0 2 4 ~"),
+        bars: 1,
+        mode: "choose",
+        choices: [
+          { id: "steps", label: "`c4 e4 g4`: every other note of the scale" },
+          { id: "half-steps", label: "`c4 d4 e4`: two half steps at a time" },
+          { id: "from-one", label: "`d4 f4 a4`: counting from 1" },
+        ],
+        correct: ["steps"],
+      },
+    },
+    {
+      id: "S3",
+      kind: "investigate",
+      title: "Read the labels",
+      minutes: 1,
+      // The roll and the staff both label degrees from here (tb.feature.degree-labels unlocks in this lesson).
+      ui: { panels: ROLL_STAFF, rollLabels: "degree", staffLabels: "degree" },
+      example: { id: "seven-degrees", code: SCALE, bars: 1 },
+      exercise: {
+        kind: "run-investigate",
+        id: "read-the-labels",
+        version: 1,
+        role: "practice",
+        prompt:
+          "Run it. Each note of the scale has a number under it on the staff and beside it on the roll.",
+        skills: [{ skill: "S02", w: 1 }],
+        feedbackText: {
+          "investigate.wrong":
+            "Not quite. Put the number in the code next to the label on the roll: `n` 0 sits beside the label for home.",
+        },
+        hints: ladder(
+          "Which note sounds like home, and what is written beside it on the roll?",
+          "Line the code up with the labels: the first number in the code is the first label, then the second.",
+          "`n` 0 plays the note labelled 1. Count up from there to the label 5.",
+        ),
+        code: { starter: SCALE },
+        mustPlayLoops: 1,
+        questions: [
+          {
+            q: "choice",
+            prompt: "What is the label beside the note `n` 0 plays?",
+            options: [
+              { id: "one", label: "1: home" },
+              { id: "zero", label: "0, the same as the code" },
+              { id: "letter", label: "C, its letter" },
+            ],
+            correct: ["one"],
+          },
+          { q: "number", prompt: "Which `n` plays the note labelled 5?", correct: 4 },
+        ],
+        srs: [{ family: "fam.deg.index", mode: "seed" }],
+        tests: [
+          { name: "both right", response: { answer: { choice: ["one"], number: 4 } }, expect: "pass" },
+          {
+            name: "labels count from 0",
+            response: { answer: { choice: ["zero"], number: 4 } },
+            expect: "fail",
+            feedback: ["investigate.wrong"],
+          },
+          {
+            name: "n equals the label",
+            response: { answer: { choice: ["one"], number: 5 } },
+            expect: "fail",
+            feedback: ["investigate.wrong"],
+          },
+        ],
+      },
+    },
+    {
+      id: "S4",
+      kind: "modify",
+      title: "A tune by numbers",
+      minutes: 1.25,
+      graded: true,
+      ui: { panels: ROLL_STAFF, rollLabels: "degree", staffLabels: "degree" },
+      exercise: {
+        kind: "code-modify",
+        id: "tune-by-numbers",
+        version: 1,
+        role: "check",
+        prompt:
+          "The start of Ode to Joy, by degrees: 3 3 4 5, then 5 4 3 2. Write it with `n`. Play the target and listen first.",
+        skills: [
+          { skill: "S02", w: 0.7 },
+          { skill: "E04", w: 0.3 },
+        ],
+        code: { starter: `${TEMPO}mel: n("⟪<[0 0 0 0] [0 0 0 0]>⟫").scale("C4:major").s("piano")` },
+        reference: { solutions: [deg(ODE)], bars: 2 },
+        // `events`, note against note at the same onset: the classic slip (the degrees typed as `n`, every note
+        // one step high) then reads "you have degree 4; the tune has degree 3" at each place, with the bridge.
+        matcher: { m: "events", pitch: "absolute", rhythm: "onsets", durations: false },
+        constraints: [{ c: "must-use", tool: "tb.n", feedback: "code.must-use" }],
+        // By ear and by number first; after one failed check the target's roll appears, to compare with yours.
+        target: { audible: true, showRoll: false, revealRollAfter: 1 },
+        feedbackText: NUMBERS,
+        hints: ladder(
+          "Sing the target on numbers. Which degree does it start on, and which does it end on?",
+          "`n` counts from 0, so every degree becomes one less: degree 3 is `n` 2.",
+          "Degree 4 is `n` 3 and degree 5 is `n` 4. The second bar comes back down the same way.",
+        ),
+        srs: [{ family: "fam.deg.index", mode: "evidence-only" }],
+        tests: [
+          { name: "reference", response: { code: deg(ODE) }, expect: "pass" },
+          {
+            name: "the repeated note written with !",
+            response: { code: deg("<[2!2 3 4] [4 3 2 1]>") },
+            expect: "pass",
+          },
+          {
+            name: "unchanged",
+            response: { code: `${TEMPO}mel: n("<[0 0 0 0] [0 0 0 0]>").scale("C4:major").s("piano")` },
+            expect: "fail",
+            feedback: ["code.unchanged"],
+          },
+          {
+            name: "the degrees written as n",
+            response: { code: deg("<[3 3 4 5] [5 4 3 2]>") },
+            expect: "fail",
+            feedback: ["melody.index-shift"],
+          },
+          {
+            name: "the `< >` dropped: both bars squeezed into one",
+            response: { code: deg("[2 2 3 4] [4 3 2 1]") },
+            expect: "fail",
+            feedback: ["melody.extra-note"],
+          },
+          {
+            name: "an octave up",
+            response: { code: deg(ODE, "C5:major") },
+            expect: "fail",
+            feedback: ["melody.octave"],
+          },
+          {
+            name: "note names instead of n",
+            response: { code: `${TEMPO}mel: note("<[e4 e4 f4 g4] [g4 f4 e4 d4]>").s("piano")` },
+            expect: "fail",
+            feedback: ["code.must-use"],
+          },
+        ],
+      },
+    },
+    {
+      id: "S5",
+      kind: "modify",
+      title: "Home is G",
+      minutes: 0.75,
+      graded: true,
+      ui: { panels: ROLL_STAFF, rollLabels: "degree", staffLabels: "degree" },
+      exercise: {
+        kind: "code-modify",
+        id: "home-is-g",
+        version: 1,
+        role: "check",
+        // The answer is in G major; the starter stays in the lesson's C (content check 13 allows a starter that).
+        key: { tonic: "G", mode: "major" },
+        prompt: "Play the same tune with G as home. Change one word and nothing else.",
+        skills: [
+          { skill: "S02", w: 0.8 },
+          { skill: "E04", w: 0.2 },
+        ],
+        code: { starter: `${TEMPO}mel: n("${ODE}").scale("⟪C4:major⟫").s("piano")` },
+        reference: { solutions: [deg(ODE, "G4:major")], bars: 2 },
+        // Any octave of G is fine: the key is the point, not the register.
+        matcher: { m: "events", pitch: "octave-free", rhythm: "onsets", durations: false },
+        constraints: [{ c: "edit-only-regions", feedback: "code.edit-outside" }],
+        target: { audible: true, showRoll: false },
+        // The catalog's wrong-degree text (with syllables), worded for a key that went to the wrong place. It
+        // does not print the learner's degree: a wrong home makes it chromatic in G ("degree #4" for A major's
+        // C♯), a symbol this lesson has not taught.
+        feedbackText: {
+          "melody.wrong-degree":
+            "Bar {bar}, {beatLabel}: the tune has degree {exp} of G major here, and your note is not it. Is G home in your `.scale()`?",
+        },
+        hints: ladder(
+          "Which part of the line says where home is?",
+          "`.scale()` names home: its letter, its octave number, then the kind of scale.",
+          "Keep the octave number and `:major`; only the letter changes.",
+        ),
+        srs: [{ family: "fam.code.functions", mode: "seed" }],
+        tests: [
+          { name: "reference", response: { code: deg(ODE, "G4:major") }, expect: "pass" },
+          { name: "the G below", response: { code: deg(ODE, "G3:major") }, expect: "pass" },
+          {
+            name: "unchanged",
+            response: { code: deg(ODE) },
+            expect: "fail",
+            feedback: ["code.unchanged"],
+          },
+          {
+            name: "A instead of G",
+            response: { code: deg(ODE, "A4:major") },
+            expect: "fail",
+            feedback: ["melody.wrong-degree"],
+          },
+          {
+            name: "changed the tune as well as the key",
+            response: { code: deg("<[2 2 3 4] [4 3 2 0]>", "G4:major") },
+            expect: "fail",
+            feedback: ["code.edit-outside"],
+          },
+        ],
+      },
+    },
+    {
+      id: "S6",
+      kind: "compare",
+      title: "At rest or open?",
+      minutes: 0.5,
+      ui: { panels: NONE },
+      exercise: {
+        kind: "identify",
+        id: "rest-or-open",
+        version: 1,
+        role: "practice",
+        prompt:
+          "A few chords set home, then one note. Play the two cards to compare. Is the note 1, at rest, or 5, open?",
+        skills: [{ skill: "E04", w: 1 }],
+        hints: ladder(
+          "Hum the note after the chords. Could the music stop there?",
+          "1 sounds finished. 5 sounds stable too, but leaves the door open: it wants to go on.",
+          "Play card 1, then the note again. Are they the same note?",
+        ),
+        // The chords that set home come from the cue (the drills' cadence); the stimulus is the one note.
+        stimulus: { src: "code", code: deg("4@4"), bars: 1, showCode: false },
+        cue: { context: "cadence", countInBars: 0, click: false, replays: -1 },
+        answer: {
+          ui: "choice",
+          layout: "audio-cards",
+          options: [
+            { id: "one", label: "1, at rest", audio: deg("0@4") },
+            { id: "five", label: "5, open", audio: deg("4@4") },
+          ],
+        },
+        correct: { choice: ["five"] },
+        tests: [
+          { name: "five", response: { answer: { choice: ["five"] } }, expect: "pass" },
+          { name: "one", response: { answer: { choice: ["one"] } }, expect: "fail", feedback: ["id.wrong"] },
+        ],
+      },
+    },
+    {
+      id: "S7",
+      kind: "ear",
+      title: "1, 3 or 5",
+      minutes: 1.25,
+      graded: true,
+      ui: { panels: NONE },
+      exercise: {
+        kind: "identify",
+        id: "one-three-five",
+        version: 1,
+        role: "check",
+        prompt: "Chords set home, then one note. Is it 1, 3 or 5?",
+        skills: [{ skill: "E04", w: 1 }],
+        hints: [
+          { text: "Hum the note, then sing down to home on numbers. How many steps did it take?" },
+          { text: "1 is at rest. 5 is open. 3 sits between them and sounds warm." },
+          { text: "Hear it again, slower, then sing 1 3 5 against it.", replay: { rate: 0.75 } },
+          "auto",
+        ],
+        stimulus: { src: "generator", family: "fam.deg.fet-major", level: 1 },
+        cue: { context: "cadence", countInBars: 0, click: false, replays: 2 },
+        answer: { ui: "degree-pad", set: ["1", "3", "5"], syllables: false },
+        correct: {},
+        srs: [{ family: "fam.deg.fet-major", mode: "seed" }],
+        tests: [],
+      },
+    },
+    {
+      id: "S8",
+      kind: "sing",
+      title: "Sing 1 3 5",
+      minutes: 1,
+      ui: { panels: NONE },
+      exercise: {
+        kind: "sing",
+        id: "sing-one-three-five",
+        version: 1,
+        role: "practice",
+        prompt:
+          "Chords set home. Then sing one, three, five, three, one: one number to a beat, on any vowel or on the numbers.",
+        skills: [
+          { skill: "V02", w: 0.6 },
+          { skill: "E04", w: 0.4 },
+        ],
+        hints: [
+          { text: "Hum home first, the note the chords end on. Then climb from it." },
+          // Not "two steps": 3 to 5 is a step and a half, so a count in whole steps would mislead.
+          { text: "Three is two notes of the scale above one; five is two more above three." },
+          { text: "Hear the pattern on the piano once, then sing it back.", replay: { rate: 0.75 } },
+          "auto",
+        ],
+        // Quiet mode or no microphone: "hear it in your head" (contracts §8.5); singing never gates.
+        fallback: "skip",
+        mode: "degree",
+        // What Oak plays on "Hear it" and after the attempt; the targets are the degrees below.
+        stimulus: { src: "code", code: deg("<[0 2 4 2] 0>"), bars: 2, showCode: false },
+        cue: { context: "cadence", countInBars: 1, click: false, replays: -1 },
+        target: { from: "degrees", degrees: ["1", "3", "5", "3", "1"] },
+        labels: "numbers",
+        tol: { cents: "learner", octave: "global", driftCompCents: 30, minCoverage: 0.4, passHitRate: 0.8 },
+        showTrace: "live",
+        feedbackText: {
+          "sing.drift":
+            "You drifted {cents}¢ {dir}. Hum home again, the note the chords end on, and climb from it.",
+        },
+        srs: [{ family: "fam.deg.sing", mode: "seed" }],
+        tests: [],
+      },
+    },
+    {
+      id: "S9",
+      kind: "make",
+      title: "A line by numbers",
+      minutes: 2.5,
+      ui: { panels: ROLL, rollLabels: "degree", band: BAND },
+      exercise: {
+        kind: "code-make",
+        id: "a-line-by-numbers",
+        version: 1,
+        role: "practice",
+        // The catalog's text for a `uses` rule names the tool ID; the label says it in words.
+        feedbackText: { "rubric.unmet": "{label}: not yet." },
+        prompt:
+          "Write a two-bar line in degrees over the band. Use degrees **1, 3 and 5** somewhere in it: `n` 0, 2 and 4.",
+        skills: [{ skill: "S02", w: 1 }],
+        code: { starter: deg("<[0 1 0 ~] [4 [5 4] 1 ~]>") },
+        bars: [1, 4],
+        saveAs: "sketch",
+        rubric: [
+          {
+            id: "one-three-five",
+            label: "Uses degrees 1, 3 and 5",
+            required: true,
+            skills: ["S02"],
+            rule: "degree-set",
+            track: "@melody",
+            contains: ["1", "3", "5"],
+          },
+          {
+            id: "ends-home",
+            label: "Ends on 1, home",
+            required: false,
+            skills: ["E04"],
+            rule: "ends-on-degree",
+            track: "@melody",
+            degrees: ["1"],
+          },
+          {
+            id: "answer",
+            label: "Two bars that answer each other, with `< >`",
+            required: false,
+            skills: ["R03"],
+            rule: "uses",
+            tool: "tb.mini.alt",
+          },
+          {
+            id: "space",
+            label: "Leaves some space with a rest",
+            required: false,
+            skills: ["R06"],
+            rule: "uses",
+            tool: "tb.mini.rest",
+          },
+        ],
+        hints: ladder(
+          "Which of 1, 3 and 5 does the starter already play, and which one is missing?",
+          "Degree 3 is `n` 2. Put it where it sounds good, in the first bar or the second.",
+          "Change the `1` in the first bar to a `2`: that note becomes degree 3.",
+        ),
+        tests: [
+          {
+            name: "the starter as it is",
+            response: { code: deg("<[0 1 0 ~] [4 [5 4] 1 ~]>") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          { name: "minimal", response: { code: deg("<[0 1 2 ~] [4 [5 4] 1 ~]>") }, expect: "pass" },
+          {
+            name: "beyond the brief: a hats line, a rest, ending home",
+            response: {
+              code: `${TEMPO}hats: s("hh*8").gain(.35)\nmel: n("<[0 2 4 [5 4]] [5 [4 3] 1 [0 ~]]>").scale("C4:major").s("piano")`,
+            },
+            expect: "pass",
+          },
+          {
+            name: "no 3 anywhere",
+            response: { code: deg("<[0 1 0 ~] [4 5 4 ~]>") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+        ],
+      },
+    },
+  ],
+});

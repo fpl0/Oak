@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { Profile } from "@oak/api";
 import type { ContentIndex } from "../content/index.ts";
 import type { Repos } from "../db/repos/index.ts";
-import { addDays, learnerDay, weekStart } from "../lib/days.ts";
+import { addDays, learnerDay, monotonicDay, weekStart } from "../lib/days.ts";
 
 export interface Clock {
   now(): Date;
@@ -33,10 +33,25 @@ export class LearnerTime {
   timeZone(): string {
     return this.profile().timezone;
   }
-  /** The learner day of an instant (default: now). */
-  day(at: Date = this.now()): string {
+  /**
+   * The learner day of an instant. Without `at` it is TODAY, which never runs backwards (`monotonicDay`):
+   * a clock stepped back or a westward time-zone change continues the day Oak already recorded activity on
+   * instead of reopening an earlier one. With `at`, the plain calendar day of that instant (for dating
+   * stored instants).
+   */
+  day(at?: Date): string {
     const p = this.profile();
-    return learnerDay(at, p.timezone, p.rolloverHour);
+    const raw = learnerDay(at ?? this.now(), p.timezone, p.rolloverHour);
+    return at === undefined ? monotonicDay(raw, this.activityFloor()) : raw;
+  }
+  /** The latest learner day with recorded activity (a session or a streak day), or `null`. */
+  activityFloor(): string | null {
+    const r = this.ctx.repos.db
+      .query(
+        "SELECT MAX(d) AS d FROM (SELECT MAX(day) AS d FROM sessions UNION ALL SELECT MAX(day) AS d FROM streak_days)",
+      )
+      .get() as { d: string | null } | null;
+    return r?.d ?? null;
   }
   week(day: string = this.day()): string {
     return weekStart(day);

@@ -5,15 +5,21 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { openPage } from "./helpers.ts";
+import { SOUNDS_ROOT } from "./pack-root.ts";
 
 // biome-ignore lint/suspicious/noExplicitAny: the test API is driven untyped from page.evaluate
 type W = Window & { __oak: any };
 const LOCK = JSON.parse(
   readFileSync(resolve(import.meta.dirname, "../../../sounds/pack.lock.json"), "utf8"),
 ) as {
+  packVersion: string;
   files?: unknown[];
   entries?: unknown[];
 };
+
+test("the test pages load the locked pack version", () => {
+  expect(SOUNDS_ROOT).toBe(`/sounds/${LOCK.packVersion}`);
+});
 
 async function playFor(
   page: Page,
@@ -64,6 +70,13 @@ test("zero non-localhost requests while playing piano, TR909 and the curated ali
     ["tenor", 'note("c4 d4").s("tenor")'],
     ["jazzgtr", 'note("c3 e3").s("jazzgtr")'],
     ["cleangtr", 'note("c3 e3").s("cleangtr")'],
+    ["acgtr", 'n("0 2 4 7").scale("G3:major").s("acgtr")'],
+    ["jazzkit", 's("bd ~ sd ~, rd*4, ~ rim").bank("jazzkit")'],
+    ["jazzkit brushes", 's("sd sd:1 sd:2").bank("jazzkit")'],
+    ["vibes", 'note("c4 e4").s("vibes")'],
+    ["fingerbass", 'note("c2 g2").s("fingerbass")'],
+    ["clav", 'note("c3 e3").s("clav")'],
+    ["trumpet", 'note("c4 d4").s("trumpet")'],
   ];
   const quiet: string[] = [];
   for (const [name, code] of cases) {
@@ -132,6 +145,98 @@ test("the adapter's play preloads the first cycles: no skips, audio from the fir
   expect(r.rms).toBeGreaterThan(0.05);
 });
 
+/** The U03–U04 sounds by name, as the lesson and drill hosts preload them before a stimulus. */
+const WAVE3_SPEC = {
+  sounds: [
+    { s: "piano" },
+    { s: "acgtr" },
+    { s: "upright" },
+    { s: "ebass" },
+    { s: "rhodes" },
+    ...["bd", "sd", "rd", "rim", "hh"].map((r) => ({ s: r, bank: "jazzkit" })),
+  ],
+};
+
+test("U03–U04 sounds preloaded by name: a plan in a new key plays its first notes on a slow pack", async ({
+  page,
+}) => {
+  await slowSounds(page);
+  await openPage(page);
+  const r = await page.evaluate(async (spec) => {
+    const w = window as unknown as W;
+    const { oak } = w.__oak;
+    const report = await oak.preload(spec);
+    // D major on the guitar (degrees 1 3 5 8 7 5), E on the upright, A major on the rhodes, the jazz kit:
+    // pitches no octave-C warm-up would have touched, all inside the first half second.
+    const ev = (at: number, value: Record<string, unknown>) => ({ at, dur: 0.2, value });
+    const plan = {
+      events: [
+        ...[62, 66, 69, 74, 73, 69].map((note, i) => ev(i * 0.08, { s: "acgtr", note })),
+        ev(0, { s: "upright", note: 40 }),
+        ev(0.1, { s: "upright", note: 35 }),
+        ev(0, { s: "ebass", note: 38 }),
+        ...[57, 61, 64].map((note) => ev(0.05, { s: "rhodes", note })),
+        ev(0, { s: "bd", bank: "jazzkit" }),
+        ev(0.1, { s: "rd", bank: "jazzkit" }),
+        ev(0.2, { s: "sd", bank: "jazzkit", n: 2 }),
+        ev(0.25, { s: "rim", bank: "jazzkit" }),
+      ],
+      durationSec: 1,
+      preload: spec.sounds.map((x: { s: string }) => x.s),
+    };
+    const before = w.__oak.logs.length;
+    const h = oak.playEvents(plan);
+    const level = await w.__oak.maxLevel(800);
+    await h.done;
+    oak.stopAll();
+    const logs = w.__oak.logs.slice(before);
+    return {
+      report,
+      skips: logs
+        .filter((l: { skippedSound?: string }) => l.skippedSound)
+        .map((l: { message: string }) => l.message),
+      notFound: logs.filter((l: { message: string }) => /not found/.test(l.message)).length,
+      rms: level.rms,
+    };
+  }, WAVE3_SPEC);
+  expect(r.report.missing).toEqual([]);
+  expect(r.skips).toEqual([]);
+  expect(r.notFound).toBe(0);
+  expect(r.rms).toBeGreaterThan(0.02);
+});
+
+test("a Band-style editor in the jazz-soul and indie kits plays from the first cycle on a slow pack", async ({
+  page,
+}) => {
+  await slowSounds(page);
+  await openPage(page);
+  const r = await page.evaluate(async () => {
+    const w = window as unknown as W;
+    const code = [
+      'drums: s("bd ~ sd [~ bd], rd*8").bank("jazzkit").gain(.65)',
+      'bass: n("<-14 -10>").scale("D:major").s("upright").lpf(900)',
+      'chords: n("[0,2,4]").scale("D4:major").struct("x ~ ~ [~ x]").s("rhodes").gain(.45)',
+      'mel: n("0 2 4 7").scale("D4:major").s("acgtr")',
+    ].join("\n");
+    const e = w.__oak.mountImperative("oak_band3_0_", code);
+    const before = w.__oak.logs.length;
+    const out = await e.play();
+    const level = await w.__oak.maxLevel(1500);
+    e.stop();
+    const logs = w.__oak.logs.slice(before);
+    return {
+      ok: out.ok,
+      rms: level.rms,
+      skips: logs.filter((l: { skippedSound?: string }) => l.skippedSound).length,
+      notFound: logs.filter((l: { message: string }) => /not found/.test(l.message)).length,
+    };
+  });
+  expect(r.ok).toBe(true);
+  expect(r.skips).toBe(0);
+  expect(r.notFound).toBe(0);
+  expect(r.rms).toBeGreaterThan(0.02);
+});
+
 test("preload(spec) warms named sounds at their pitches and reports missing names", async ({ page }) => {
   await openPage(page);
   const r = await page.evaluate(async () => {
@@ -151,10 +256,11 @@ test("preload(spec) warms named sounds at their pitches and reports missing name
     );
     return { report, last: progress.at(-1), spec: oak.soundsIn('x: s("bd hh").bank("RolandTR909")') };
   });
-  expect(r.report.warmed).toBe(5);
+  // piano at its 3 pitches, every variant of the TR-909 kick (4), the rhodes at C4
+  expect(r.report.warmed).toBe(8);
   expect(r.report.synths).toBe(1);
   expect(r.report.missing).toEqual(["gm_violin"]);
-  expect(r.last).toBe(7);
+  expect(r.last).toBe(10);
   expect(r.spec.sounds).toEqual([
     { s: "bd", bank: "RolandTR909" },
     { s: "hh", bank: "RolandTR909" },
@@ -333,10 +439,10 @@ test("Service Worker: CacheFirst /sounds/*, precache of the whole pack, sounds s
   page,
 }) => {
   await openPage(page);
-  await page.evaluate(async () => {
-    await navigator.serviceWorker.register("/sw.js?pack=v1");
+  await page.evaluate(async (version) => {
+    await navigator.serviceWorker.register(`/sw.js?pack=${version}`);
     await navigator.serviceWorker.ready;
-  });
+  }, LOCK.packVersion);
   await page.reload();
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
   await page.evaluate(() => (window as unknown as W).__oak.oak.ready);
@@ -373,4 +479,25 @@ test("Service Worker: CacheFirst /sounds/*, precache of the whole pack, sounds s
   expect(offline.bytes).toBeGreaterThan(100);
   const stats = await sw({ type: "stats" });
   expect(stats.soundsFromCache).toBeGreaterThan(0);
+
+  // Offline reload: the page, the prebake and the U03–U04 sounds all come from the worker's caches.
+  await page.context().setOffline(true);
+  try {
+    await page.reload();
+    await page.waitForFunction(() => (window as unknown as { __oak?: unknown }).__oak !== undefined);
+    const played = await page.evaluate(async () => {
+      const w = window as unknown as W;
+      await w.__oak.oak.ready;
+      const e = w.__oak.mountImperative("oak_offline_0_", "");
+      e.setCode('mel: n("0 2 4 7").scale("G3:major").s("acgtr")\ndrums: s("bd rd sd rd").bank("jazzkit")');
+      const out = await e.play();
+      const level = await w.__oak.maxLevel(1200);
+      e.stop();
+      return { ok: out.ok, rms: level.rms };
+    });
+    expect(played.ok).toBe(true);
+    expect(played.rms).toBeGreaterThan(0.01);
+  } finally {
+    await page.context().setOffline(false);
+  }
 });

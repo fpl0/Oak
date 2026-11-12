@@ -119,7 +119,7 @@ export interface FrameProps {
   /** Visible question text above the controls (the host usually shows the prompt itself). */
   caption?: ReactNode;
   /** A tap pad says so (contracts: only a tap pad may take Space). */
-  keyscope?: "tap";
+  keyscope?: "tap" | "staff-input";
   className?: string;
   children: ReactNode;
 }

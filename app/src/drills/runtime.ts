@@ -14,7 +14,7 @@ import type {
   Trial,
 } from "@oak/api";
 import { type AudioPlan, type DrillRegistry, gradeSungResolution, gradeTrial, setPreload } from "@oak/drills";
-import type { PitchFrame } from "@oak/pitch";
+import { gradeSung, type PitchFrame, type SungTarget } from "@oak/pitch";
 import type { OakStrudel, PlaybackHandle } from "@oak/strudel";
 import { freqToMidi } from "@oak/theory";
 import { fromCallback, fromPromise } from "xstate";
@@ -23,7 +23,7 @@ import type { SungSummary } from "../answers/types.ts";
 import { callApi } from "../lib/api.ts";
 import { openMic } from "../lib/mic.ts";
 import { getOak } from "../lib/oak.ts";
-import { clearInflight, saveInflight } from "./inflight.ts";
+import { clearInflight, resumeFromServer, saveInflight } from "./inflight.ts";
 import type {
   AuditionInput,
   DrillContext,
@@ -35,7 +35,17 @@ import type {
   ResumeState,
   TrialSource,
 } from "./machine.ts";
-import { answerPlan, comparePlan, cuePlan, resolutionOf, sequence, stagingOf } from "./plans.ts";
+import {
+  answerPlan,
+  comparePlan,
+  cuePlan,
+  homePlan,
+  keyOfTrial,
+  resolutionOf,
+  sequence,
+  stagingOf,
+  trialTonicMidi,
+} from "./plans.ts";
 import { compositeSource, plannedSource, staircaseSource } from "./sources.ts";
 
 // --- live data for the panels -------------------------------------------------------------------
@@ -177,14 +187,56 @@ export interface DrillEnv {
   onFinished?(finish: DrillFinish): void;
 }
 
+/**
+ * Per-note summaries of a sung take against its targets (contracts §8.1, the one `gradeSung` rule): what the
+ * trial record stores, never audio. Falls back to one median note when the trial has no targets.
+ */
+export function sungNotes(
+  trial: Trial,
+  frames: readonly PitchFrame[],
+  profile: LearnerProfile,
+  targetsKey: "singTargets" | "resolutionTargets" = "singTargets",
+  modeKey: "singMode" | "resolutionMode" = "singMode",
+): SungSummary[] {
+  const targets = (trial.params[targetsKey] as SungTarget[] | undefined) ?? [];
+  if (targets.length === 0) return framesToSummary(frames);
+  try {
+    const mode = (trial.params[modeKey] as Parameters<typeof gradeSung>[3] | undefined) ?? "pitch";
+    const res = gradeSung(
+      frames,
+      targets,
+      {
+        cents: "learner",
+        octave: targets.length > 1 ? "global" : "per-note",
+        driftCompCents: 30,
+        minCoverage: 0.4,
+        passHitRate: 0.8,
+      },
+      mode,
+      profile,
+    );
+    return res.notes.map((n) => ({
+      midi: n.sungMidi === null ? null : Math.round(n.sungMidi),
+      cents: n.cents === null ? null : Math.round(n.cents),
+      credit: n.credit,
+    }));
+  } catch {
+    return framesToSummary(frames);
+  }
+}
+
 export function drillDeps(env: Pick<DrillEnv, "registry" | "profile">): DrillDeps {
   return {
     grade: (trial, response) => gradeTrial(env.registry.family(trial.family), trial, response, env.profile),
     gradeResolution: (trial, frames) => {
       const r = gradeSungResolution(trial, { frames, rtMs: 0, replays: 0 }, env.profile);
-      return { credit: r.credit, sung: framesToSummary(frames) };
+      return {
+        credit: r.credit,
+        passed: r.correct,
+        sung: sungNotes(trial, frames, env.profile, "resolutionTargets", "resolutionMode"),
+      };
     },
-    sungOf: (_trial, frames) => framesToSummary(frames),
+    sungOf: (trial, frames) => sungNotes(trial, frames, env.profile),
     now: () => (typeof performance !== "undefined" ? performance.now() : Date.now()),
     iso: () => new Date().toISOString(),
   };
@@ -202,7 +254,7 @@ async function postRecords(session: DrillSession, records: readonly DrillTrialRe
 
 function startActor(env: DrillEnv) {
   return fromPromise<
-    { session: DrillSession; source: TrialSource },
+    { session: DrillSession; source: TrialSource; resumed?: Omit<ResumeState, "session"> },
     { input: DrillContext["input"]; resume: ResumeState | null }
   >(async ({ input: { input, resume } }) => {
     const same =
@@ -219,6 +271,14 @@ function startActor(env: DrillEnv) {
             warmupItemId: input.warmupItemId,
           },
         });
+    // drills.start returns the set already open for this warm-up item (wave3.md §5): a second browser picks it up
+    // where the first one left it, from the server's trials.
+    let resumed: Omit<ResumeState, "session"> | undefined;
+    if (!same && input.sessionId !== null && input.warmupItemId !== null) {
+      const detail = await callApi("drills.get", { params: { id: session.id } }).catch(() => undefined);
+      const back = detail ? resumeFromServer({ session, outcomes: [], records: [] }, detail) : null;
+      if (back && back.records.length > 0) resumed = { outcomes: back.outcomes, records: back.records };
+    }
     let source: TrialSource;
     if (session.familyIds.length > 1) source = compositeSource(env, session);
     else {
@@ -226,7 +286,7 @@ function startActor(env: DrillEnv) {
       if (input.purpose === "practice" && env.practiceLevel !== null) {
         const state = env.states.get(family.def.id);
         const max = Math.max(env.practiceLevel, state?.maxOpenLevel ?? 1);
-        source = staircaseSource(family, session, env.profile, env.practiceLevel, max);
+        source = staircaseSource(family, session, env.profile, env.practiceLevel, max, env.sungResolutions);
       } else source = plannedSource(env, family, session);
     }
     // Preload every sound of a planned set before trial 1 (a staircase preloads per trial).
@@ -239,7 +299,7 @@ function startActor(env: DrillEnv) {
     }).filter((t): t is Trial => t !== null);
     const oak = await getOak();
     await preload(oak, setPreload(firstTrials));
-    return { session, source };
+    return { session, source, ...(resumed ? { resumed } : {}) };
   });
 }
 
@@ -399,7 +459,18 @@ function auditionActor() {
       const { trial, what, captured } = input;
       let plan: AudioPlan | null = null;
       if (what === "answer") plan = answerPlan(trial);
-      else if (what === "cue") plan = cuePlan(trial);
+      else if (what === "resolve") {
+        // "Hear it resolve": the asked degree walks home to 1 in the trial's register.
+        const own = resolutionOf(trial).plan;
+        const tonic = trialTonicMidi(trial);
+        const d = (trial.expected as { degrees?: string[] }).degrees?.at(-1);
+        plan =
+          own && own.events.length > 0
+            ? own
+            : tonic !== null && d
+              ? homePlan(tonic, d as never, keyOfTrial(trial)?.mode ?? "major")
+              : null;
+      } else if (what === "cue") plan = cuePlan(trial);
       else if (what === "compare") plan = comparePlan(trial, captured, null);
       else {
         const st = stagingOf(trial);

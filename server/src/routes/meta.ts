@@ -53,6 +53,9 @@ export function metaRoutes(mount: Mounter, d: AppDeps): void {
 
   mount("settings.put", ({ params, body }) => {
     const key = params.key as SettingKey;
+    // A missing value is never a setting (an optional key such as `albumTitle` would otherwise accept it).
+    if (body.value === undefined)
+      throw badRequest(`invalid value for ${key}`, [{ path: "value", message: "Required" }]);
     const parsed = SettingsSchema.shape[key].safeParse(body.value);
     if (!parsed.success)
       throw badRequest(
@@ -113,4 +116,9 @@ export function metaRoutes(mount: Mounter, d: AppDeps): void {
   }));
   mount("onboarding.get", () => s.onboarding.get());
   mount("onboarding.put", ({ body }) => s.onboarding.put(body));
+
+  // Wave 3 (docs/design/wave3.md §5.3): Quiet mode, the vocal range and the sing-tolerance ladder.
+  mount("voice.get", () => s.voice.state());
+  mount("voice.quiet", ({ body }) => s.voice.setQuiet(body));
+  mount("voice.ladder", ({ body }) => s.voice.setLadder(body));
 }

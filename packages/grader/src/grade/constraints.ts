@@ -4,7 +4,7 @@
 import type { AstConstraint, Diagnostic, FeedbackId, MeterId, ParamValues } from "@oak/content-kit";
 import { stripMarkers } from "@oak/content-kit";
 import { METERS } from "@oak/theory";
-import { diag } from "../feedback/catalog.ts";
+import { diag, toolText } from "../feedback/catalog.ts";
 
 export interface ConstraintInput {
   code: string;
@@ -18,6 +18,8 @@ export interface ConstraintInput {
   /** Labelled tracks of the evaluation. */
   tracks?: string[];
   toolsUsed?: (code: string) => { id: string }[];
+  /** A toolbox entry's code form, for messages (`toolText`). */
+  toolCode?: (id: string) => string | null;
 }
 export type ConstraintRow = { id: string; ok: boolean; diag?: Diagnostic };
 
@@ -175,18 +177,21 @@ export function checkConstraints(
         const n = tools.reduce((a, t) => a + usesTool(input.code, t, input.toolsUsed), 0);
         return n >= (c.min ?? 1)
           ? { id, ok: true }
-          : fail("code.must-use", { tool: tools.map((t) => `\`${t.split(".").pop()}\``).join(" or ") });
+          : fail("code.must-use", { tool: tools.map((t) => toolText(t, input.toolCode)).join(" or ") });
       }
       case "must-not-use": {
         const tools = Array.isArray(c.tool) ? c.tool : [c.tool];
         const hit = tools.find((t) => usesTool(input.code, t, input.toolsUsed) > 0);
         return !hit
           ? { id, ok: true }
-          : fail("code.must-not-use", { tool: `\`${hit.split(".").pop()}\``, why: c.why ?? "" });
+          : fail("code.must-not-use", { tool: toolText(hit, input.toolCode), why: c.why ?? "" });
       }
       case "arg-matches": {
         const args = callArgs(input.code, c.fn);
         const got = args?.[c.argIndex];
+        if (got !== undefined && new RegExp(c.pattern).test(got)) return { id, ok: true };
+        // Not called at all: say to call it, rather than "`scale()`: this needs …" with nothing inside.
+        if (got === undefined && !c.feedback) return fail("code.must-call", { fn: c.fn });
         return got !== undefined && new RegExp(c.pattern).test(got)
           ? { id, ok: true }
           : fail("code.arg-mismatch", {

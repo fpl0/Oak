@@ -76,6 +76,9 @@ export function playEvents(rt: Runtime, plan: AudioPlan, opts: PlayEventsOptions
   };
 
   if (opts.exclusive ?? true) release = rt.coordinator.claim({ id, kind: "plan", stop });
+  // Warm exactly what the plan triggers (sound, bank, variant, pitch) as well as the named sounds: a caller that
+  // awaited `preload(names)` finds everything warm; one that did not gets the earliest possible start.
+  void rt.preloadValues(plan.events.map((e) => e.value as Record<string, unknown>));
   if (plan.preload.length > 0) void rt.preload(preloadSpecOfNames(plan.preload));
 
   const pump = (): void => {

@@ -10,9 +10,11 @@ import {
   gradeLive,
   gradeTake,
   needleWords,
+  noteMarkText,
   type SingNote,
   singFeedback,
   summarize,
+  takeProblem,
   takeSeconds,
   traceOf,
 } from "./sing.ts";
@@ -139,10 +141,30 @@ describe("sing capture (gradeSung)", () => {
     const { notes } = fitNotes(a4, PROFILE);
     const quiet = steady(440, 0, 2.2).map((f) => ({ ...f, clarity: 0.2, rms: 0.0001 }));
     const r = gradeTake(quiet, notes, 0, DEFAULT_SING_TOL, "pitch", PROFILE);
-    expect(singFeedback(r)).toMatchObject({
-      state: "wrong",
-      message: "Oak heard no voice. Check the mic, then sing a little louder.",
+    const fb = singFeedback(r);
+    expect(fb.state).toBe("wrong");
+    expect(fb.state === "wrong" ? fb.message : "").toMatch(/^Oak didn't hear a voice\..*Quiet mode/);
+  });
+
+  test("every take the tracker could not judge says why, and what to do next", () => {
+    const say = (params: Record<string, unknown>) =>
+      takeProblem([{ id: "sing.no-voice", params: { db: -70, ...params } }]);
+    expect(say({ reason: "none" })).toMatchObject({ kind: "no-voice" });
+    expect(say({ reason: "noisy" })).toMatchObject({
+      kind: "too-noisy",
+      text: expect.stringMatching(/quieter/),
     });
+    expect(say({ reason: "short", ms: 140 })).toMatchObject({
+      kind: "too-short",
+      text: expect.stringMatching(/Hold each note/),
+    });
+    expect(takeProblem([{ id: "sing.clipped", params: { n: 40 } }])).toMatchObject({
+      kind: "clipped",
+      text: expect.stringMatching(/Turn the input down/),
+    });
+    expect(takeProblem([{ id: "sing.wrong-note", params: {} }])).toBeNull();
+    for (const r of ["none", "noisy", "short"])
+      expect(say({ reason: r })?.text).toMatch(/then try again|instead/);
   });
 
   test("live grading credits only the windows that have closed", () => {
@@ -164,6 +186,28 @@ describe("sing capture (gradeSung)", () => {
     expect(voiced.length).toBeGreaterThan(10);
     expect(Math.abs((voiced.at(-1)?.midi ?? 0) - 57)).toBeLessThan(0.05);
     expect(voiced.at(-1)?.folded).toBe(-1);
+  });
+
+  test("a sung pattern folds the whole take once: a held 1 stays under 3 and 5, never above them", () => {
+    // 1 3 5 in C4: a voice holding C4 the whole time.
+    const notes: SingNote[] = [
+      { midi: 60, at: 0, dur: 0.5 },
+      { midi: 64, at: 0.5, dur: 0.5 },
+      { midi: 67, at: 1, dur: 0.5 },
+    ];
+    const frames = steady(261.63, 0, 1.5);
+    const perNote = traceOf(frames, notes, 0, PROFILE).filter((p) => p.midi !== null);
+    const global = traceOf(frames, notes, 0, PROFILE, "global").filter((p) => p.midi !== null);
+    // Per-target folding drew the held C4 at C5, a fourth above the 5.
+    expect(Math.max(...perNote.map((p) => p.midi as number))).toBeGreaterThan(70);
+    for (const p of global) expect(Math.abs((p.midi as number) - 60)).toBeLessThan(0.1);
+  });
+
+  test("a mark a semitone or more away says 'another note', not folded cents", () => {
+    expect(noteMarkText(440)).toBe("another note");
+    expect(noteMarkText(-460)).toBe("another note");
+    expect(noteMarkText(-60)).toBe("−60¢");
+    expect(noteMarkText(null)).toBe("not heard");
   });
 
   test("folding, needle words and cents text", () => {

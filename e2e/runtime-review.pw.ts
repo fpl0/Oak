@@ -328,11 +328,16 @@ test("64 bars: smooth frames, legible roll, the staff pages with the playhead, n
   const problems = watch(page);
   await openWorkbench(page, "?example=long-64");
   await expect(page.getByTestId("staff-view")).toHaveAttribute("data-status", "ready", { timeout: 30_000 });
-  await expect(page.getByTestId("staff-pager")).toContainText("Bars 1–8 of 64");
+  // A page holds as many bars as fit at most 4 systems at this width (Wave 3's staff-height cap, pageBarsFor).
+  const pager = page.getByTestId("staff-pager");
+  await expect(pager).toContainText(/Bars 1–\d+ of 64/);
+  const per = Number(/Bars 1–(\d+) of 64/.exec((await pager.textContent()) ?? "")?.[1]);
+  expect(per).toBeGreaterThanOrEqual(2);
+  expect(per).toBeLessThanOrEqual(16);
   // The pager turns by hand while stopped, and engraves the right bars.
   await page.getByRole("button", { name: "Next bars" }).click();
-  await expect(page.getByTestId("staff-pager")).toContainText("Bars 9–16 of 64");
-  await expect(page.locator(".oak-staff-host [aria-label*='bar 9,']").first()).toBeAttached();
+  await expect(pager).toContainText(`Bars ${per + 1}–${2 * per} of 64`);
+  await expect(page.locator(`.oak-staff-host [aria-label*='bar ${per + 1},']`).first()).toBeAttached();
   await page.getByRole("button", { name: "Previous bars" }).click();
 
   await page.getByTestId("play-toggle").click();

@@ -5,6 +5,7 @@
 import type { Diagnostic, LintDiagnostic, LintResult, MeterId } from "@oak/content-kit";
 import { cpsToBpm } from "@oak/theory";
 import { sectionsFromAst } from "../lint/ast.ts";
+import { checkChord, splitChord } from "../lint/chords.ts";
 import { lintOak } from "../lint/oak.ts";
 import { sortOakEvents } from "../normalize/hap.ts";
 import {
@@ -211,13 +212,14 @@ function evalDiagnostics(
     if (seen.has(key)) continue;
     seen.add(key);
     const chord = l.tag === "voicing" ? VOICING_UNKNOWN.exec(l.message) : null;
-    if (chord)
-      out.push({
-        id: "code.unknown-chord",
-        severity: "error",
-        params: { sym: chord[1] as string, suggest: "" },
-      });
-    else out.push({ id: "eval.runtime", severity: "warn", params: { fn: l.tag, detail: l.message } });
+    if (chord?.[1]) {
+      const sym = chord[1];
+      // Same suggestion as the lint's (code.unknown-chord names a replacement): the known alias, else
+      // the bare root, which always voices.
+      const parts = splitChord(sym);
+      const suggest = checkChord(sym).suggest ?? (parts ? parts.root.toUpperCase() : "C");
+      out.push({ id: "code.unknown-chord", severity: "error", params: { sym, suggest } });
+    } else out.push({ id: "eval.runtime", severity: "warn", params: { fn: l.tag, detail: l.message } });
   }
   for (const fn of tempoProblems) {
     out.push({

@@ -8,6 +8,7 @@ import { parseLessonId } from "./ids.ts";
 import { collectParamRefs, StarterMarkerError, stripMarkers } from "./params.ts";
 import type {
   BandDef,
+  ByEarSpec,
   CanDoDef,
   CapstoneDef,
   CheckpointDef,
@@ -17,7 +18,9 @@ import type {
   FlavourKit,
   LessonDef,
   LevelParams,
+  Matcher,
   MilestoneDef,
+  PitchMode,
   SkillDef,
   SongDef,
   StepDef,
@@ -192,6 +195,7 @@ export function checkExercise(
       message: "stageWeights must have one entry per stage",
     });
   }
+  issues.push(...checkWave3(ex, path));
   if (ex.kind === "predict" && ex.mode !== "hum" && ex.correct === undefined) {
     issues.push({
       path: `${path}.correct`,
@@ -257,6 +261,85 @@ export function checkExercise(
       rule: "tests.duplicate-name",
       message: `test name "${name}" is used twice`,
     });
+  return issues;
+}
+
+/** The matcher pitch mode each by-ear transposition rule stands for (`ByEarSpec.accepts`). */
+export const BY_EAR_PITCH = {
+  exact: ["absolute"],
+  "any-octave": ["octave-free"],
+  "any-key": ["transposition-invariant"],
+} as const satisfies Record<ByEarSpec["accepts"], readonly PitchMode[]>;
+
+type EventsMatcherDef = Extract<Matcher, { m: "events" }>;
+/** Every `events` matcher anywhere in an exercise (matchers, staff expectations, rubric `matches` rules). */
+function eventsMatchersIn(value: unknown, path: string): { m: EventsMatcherDef; path: string }[] {
+  if (Array.isArray(value)) return value.flatMap((v, i) => eventsMatchersIn(v, `${path}[${i}]`));
+  if (!value || typeof value !== "object") return [];
+  const o = value as Record<string, unknown>;
+  const here = o.m === "events" ? [{ m: o as unknown as EventsMatcherDef, path }] : [];
+  return [
+    ...here,
+    ...Object.entries(o).flatMap(([k, v]) => (k === "parts" ? [] : eventsMatchersIn(v, `${path}.${k}`))),
+  ];
+}
+
+/** The pitch mode of a matcher (the first pitched member of an `all`), if it has one. */
+function matcherPitch(m: Matcher): PitchMode | null {
+  if (m.m === "events" || m.m === "melody") return m.pitch;
+  if (m.m === "all") for (const sub of m.of) if (matcherPitch(sub)) return matcherPitch(sub);
+  return null;
+}
+
+/** Structural rules of the Wave 3 additions (staff writing, key signatures, singing, by-ear, listening). */
+function checkWave3(ex: Exercise, path: string): ContentIssue[] {
+  const issues: ContentIssue[] = [];
+  const add = (p: string, rule: string, message: string) =>
+    issues.push({ path: `${path}${p}`, rule, message });
+  if (ex.kind === "staff-write") {
+    const keySig = ex.expect.e === "key-signature";
+    if (keySig !== (ex.answer.mode === "key-signature"))
+      add(
+        ".answer.mode",
+        "staff.key-signature-mode",
+        "a key-signature answer uses staff-input with mode 'key-signature', and only it does",
+      );
+  }
+  if (ex.kind === "sing") {
+    if (ex.tol.lenient && ex.mode !== "pitch")
+      add(".tol.lenient", "sing.lenient-mode", "the lenient first sing is a single 'pitch' target");
+    const t = ex.target;
+    if (t.from === "degrees" && t.octaves && t.octaves.length !== t.degrees.length)
+      add(".target.octaves", "sing.octaves-length", "octaves has one entry per degree");
+  }
+  if (ex.kind === "dictation" && ex.byEar) {
+    if (ex.answer.ui !== "code")
+      add(".answer", "by-ear.code-answer", "a by-ear transcription step is answered in code (ui 'code')");
+    const pitch = matcherPitch(ex.matcher);
+    const allowed: readonly string[] = BY_EAR_PITCH[ex.byEar.accepts];
+    if (!pitch || !allowed.includes(pitch))
+      add(
+        ".byEar.accepts",
+        "by-ear.accepts-matcher",
+        `accepts '${ex.byEar.accepts}' needs a matcher with pitch ${allowed.join(" or ")} (found ${pitch ?? "none"})`,
+      );
+    if (ex.byEar.rates[0] !== 1)
+      add(".byEar.rates", "by-ear.rates", "rates start with 1 (full speed), then slower ones");
+  }
+  // `rhythm: "exact"` always compares lengths; `durations: false` beside it would say the opposite.
+  for (const at of eventsMatchersIn(ex, ""))
+    if (at.m.rhythm === "exact" && !at.m.durations)
+      add(
+        at.path,
+        "matcher.rhythm-exact-durations",
+        "rhythm 'exact' compares lengths too: write rhythm 'onsets' (starts only) or 'onsets+durations' (starts and lengths)",
+      );
+  if (ex.kind === "code-modify" && ex.target.revealRollAfter !== undefined && ex.target.showRoll)
+    add(
+      ".target.revealRollAfter",
+      "modify.reveal-roll",
+      "revealRollAfter is for a target whose roll starts hidden (showRoll false)",
+    );
   return issues;
 }
 

@@ -5,8 +5,10 @@
 import type { KeySpec, MeterSpec } from "@oak/content-kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { degreeCanvasFill } from "../ui/theme/palette.ts";
+import type { AnnotationKinds } from "./annotate.ts";
 import type { WorkbenchClock } from "./clock.ts";
 import type { BusState, HighlightBus } from "./highlight-bus.ts";
+import { noteText, type RollColorMode, type RollLabelMode } from "./lens-view.ts";
 import type { ViewEvent, WorkbenchModel } from "./model.ts";
 import { pitchLabel, tooltipText } from "./music.ts";
 import { degreeStyle, neutralSwatch, partColor, type ThemeName, themeOf } from "./palette.ts";
@@ -22,8 +24,7 @@ import {
   xOfCycle,
 } from "./roll-layout.ts";
 
-export type RollColorMode = "degree" | "chordTone" | "part" | "mono";
-export type RollLabelMode = "none" | "note" | "degree" | "degree+solfege";
+export type { RollColorMode, RollLabelMode };
 
 export interface GhostNote extends RollInputEvent {}
 
@@ -32,7 +33,12 @@ export interface PianoRollProps {
   bus: HighlightBus;
   clock: WorkbenchClock;
   color?: RollColorMode;
+  /** The gutter's row labels (and, without `noteLabels`, each note's label). */
   labels?: RollLabelMode;
+  /** What each note prints (Wave 3 lenses: degree, syllable, note name, any combination). */
+  noteLabels?: AnnotationKinds;
+  /** Degree and syllable in hover text and the notes table (their unlocks). Default both. */
+  hover?: { degree: boolean; solfege: boolean };
   /** Target notes drawn as dashed outlines (rung ≥ 3). */
   ghosts?: readonly GhostNote[];
   /** Issues without note IDs: a marker at the bar (and beat) on the ruler. */
@@ -121,11 +127,14 @@ function noteStyle(
   theme: ThemeName,
   c: Colors,
   g: CanvasRenderingContext2D,
+  kinds?: AnnotationKinds,
 ): NoteStyle {
   const deg = e.label?.degree;
   const labelText = (): string => {
+    if (kinds) return noteText(e.label, kinds);
     if (labels === "none") return "";
     if (labels === "note" || !deg) return e.label?.display ?? e.s ?? "";
+    if (labels === "degree+solfege") return `${deg.label} ${deg.syllable}`;
     return deg.label;
   };
   if (e.midi === null) {
@@ -407,6 +416,7 @@ export function PianoRoll(props: PianoRollProps) {
         theme,
         c,
         g,
+        p.noteLabels,
       );
       const silent = p.silenced?.(e.track) ?? false;
       const playing = s.playing.has(e.id);
@@ -428,10 +438,31 @@ export function PianoRoll(props: PianoRollProps) {
         g.stroke();
         g.restore();
       }
+      // The tonic is "home": a firm dark edge on every degree-1 note, whatever the theme.
+      const home =
+        r.kind === "note" &&
+        e.label?.degree?.tonic === true &&
+        (p.color ?? (model.key ? "degree" : "part")) === "degree";
+      if (home) {
+        g.save();
+        g.globalAlpha = silent ? 0.3 : 0.9;
+        g.lineWidth = 2;
+        g.strokeStyle = c.text;
+        roundRect(g, r.x + 1, r.y + 1, Math.max(0, r.w - 2), Math.max(0, r.h - 2), 2.5);
+        g.stroke();
+        g.restore();
+      }
       if (st.label && r.kind === "note" && r.w >= 18 && r.h >= 9) {
         g.fillStyle = st.labelColor;
         g.font = "bold 9px ui-monospace, monospace";
         g.fillText(st.label, r.x + 3, r.y + r.h / 2 + 0.5, r.w - 4);
+      } else if (st.label && r.kind === "note" && r.w >= 10 && r.y - L.rulerHeight >= 9) {
+        // Rows too thin to hold the text: the label sits just above its note, in the text colour.
+        g.fillStyle = c.text;
+        g.font = "bold 9px ui-monospace, monospace";
+        g.textBaseline = "bottom";
+        g.fillText(st.label, r.x + 1, r.y - 0.5, Math.max(r.w + 8, 24));
+        g.textBaseline = "middle";
       }
       g.globalAlpha = 1;
       const issue = s.issues.get(e.id);
@@ -496,7 +527,16 @@ export function PianoRoll(props: PianoRollProps) {
 
   useEffect(() => {
     invalidate();
-  }, [invalidate, layout, props.ghosts, props.barMarks, props.color, props.labels, props.silenced]);
+  }, [
+    invalidate,
+    layout,
+    props.ghosts,
+    props.barMarks,
+    props.color,
+    props.labels,
+    props.noteLabels,
+    props.silenced,
+  ]);
   useEffect(
     () =>
       bus.subscribe((s) => {
@@ -561,8 +601,10 @@ export function PianoRoll(props: PianoRollProps) {
             beatLabel: e.beatLabel,
             ...(e.s === undefined ? {} : { s: e.s }),
             ...(e.chordSymbol === undefined ? {} : { chordSymbol: e.chordSymbol }),
+            label: e.label,
           },
           model.key,
+          props.hover ?? { degree: true, solfege: true },
         );
         setTip({ x: pt.x, y: pt.y, text });
       }
@@ -654,7 +696,9 @@ export function PianoRoll(props: PianoRollProps) {
           {tip.text}
         </div>
       ) : null}
-      {table ? <NotesTable model={model} bus={bus} /> : null}
+      {table ? (
+        <NotesTable model={model} bus={bus} show={props.hover ?? { degree: true, solfege: true }} />
+      ) : null}
     </div>
   );
 }
@@ -663,16 +707,25 @@ function degreeKey(midi: number, model: WorkbenchModel): string {
   return pitchLabel(midi, model.key).degree?.raw ?? "";
 }
 
-/** Accessibility: the roll as a table (bar, beat, part, degree, note, duration). */
-function NotesTable({ model, bus }: { model: WorkbenchModel; bus: HighlightBus }) {
+/** Accessibility: the roll as a table (bar, beat, part, degree, syllable, note, duration). */
+function NotesTable({
+  model,
+  bus,
+  show,
+}: {
+  model: WorkbenchModel;
+  bus: HighlightBus;
+  show: { degree: boolean; solfege: boolean };
+}) {
   return (
-    <table className="oak-notes-table">
+    <table className="oak-notes-table" data-testid="notes-table">
       <thead>
         <tr>
           <th>Bar</th>
           <th>Beat</th>
           <th>Part</th>
-          <th>Degree</th>
+          {show.degree ? <th>Degree</th> : null}
+          {show.solfege ? <th>Syllable</th> : null}
           <th>Note</th>
           <th>Length</th>
         </tr>
@@ -683,7 +736,8 @@ function NotesTable({ model, bus }: { model: WorkbenchModel; bus: HighlightBus }
             <td>{e.bar}</td>
             <td>{e.beatLabel}</td>
             <td>{e.track}</td>
-            <td>{e.label?.degree?.label ?? "—"}</td>
+            {show.degree ? <td>{e.label?.degree?.label ?? "—"}</td> : null}
+            {show.solfege ? <td>{e.label?.degree?.syllable ?? "—"}</td> : null}
             <td>{e.label?.display ?? e.s ?? "—"}</td>
             <td>
               {e.durRat[0]}/{e.durRat[1]}

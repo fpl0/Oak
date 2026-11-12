@@ -109,6 +109,13 @@
   --oak-topbar-h: 48px;
   --oak-focusbar-h: 56px;
   --oak-tutor-w: 360px;
+  /* Page columns (ux §7.5): one width per kind of page, so a flow never changes width between its screens.
+     wide = most pages; focus = a guided flow with a workbench in it (onboarding, setup); narrow = a form or a
+     single column of reading; measure = a paragraph's line length. */
+  --oak-page-wide: 72rem;
+  --oak-page-focus: 60rem;
+  --oak-page-narrow: 48rem;
+  --oak-measure: 62ch;
 
   /* Typography (ux §7.4). */
   --oak-font-display: "Fraunces Variable", "Iowan Old Style", Georgia, serif;

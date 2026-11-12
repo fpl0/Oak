@@ -1,7 +1,7 @@
 // Sound for steps that are not a Workbench: a stimulus played on the AudioContext clock (ear, tap and sing
 // steps, checkpoint items), with a count-in and the time of bar 1 for the tap pad, and authored examples played
 // at full fidelity through a hidden pattern player. Everything goes through the app's one adapter (`getOak`).
-import type { KeySpec, MeterId, Trial } from "@oak/api";
+import type { Cue, KeySpec, MeterId, Trial } from "@oak/api";
 import { type AudioPlan, clickPlan, eventsToAudioPlan, trialAudio } from "@oak/drills";
 import { normalize } from "@oak/grader";
 import type { PatternPlayer, PlaybackHandle } from "@oak/strudel";
@@ -9,6 +9,7 @@ import { METERS } from "@oak/theory";
 import { useEffect, useRef, useState } from "react";
 import { analyzeCode } from "../lib/grader-client.ts";
 import { getOak } from "../lib/oak.ts";
+import { cadenceChords, tonicPc } from "./rules.ts";
 
 export interface StimulusSource {
   code?: string;
@@ -18,6 +19,30 @@ export interface StimulusSource {
   key: KeySpec | null;
   countInBars?: number;
   click?: boolean;
+  /**
+   * What sets home before a code stimulus (a generator trial carries its own cue): "a few chords that set
+   * home" for `cadence`/`short-cadence`, the tonic chord for `tonic-chord` and `drone`. Default none.
+   */
+  context?: Cue["context"];
+}
+
+/** One bar of ii–V–I (or the tonic chord) in the key at `cps`: the cue a code stimulus plays first. */
+export function homeCuePlan(key: KeySpec, context: Cue["context"], cps: number): AudioPlan | null {
+  if (context === "none") return null;
+  const bar = 1 / cps;
+  const pc = tonicPc(key.tonic);
+  const root = 48 + (pc > 5 ? pc - 12 : pc);
+  const third = /minor|aeolian|dorian|phrygian/.test(key.mode) ? 3 : 4;
+  const chords =
+    context === "cadence" || context === "short-cadence"
+      ? cadenceChords(key)
+      : [[root, root + 12 + third, root + 19, root + 24]];
+  const each = chords.length === 1 ? bar : bar / chords.length;
+  const events = chords.flatMap((c, i) =>
+    c.map((note) => ({ at: i * each, dur: each * 0.95, value: { s: "piano", note, gain: 0.45 } })),
+  );
+  // A beat of silence after the chords, so the stimulus is heard on its own.
+  return { events, durationSec: bar * 1.25, preload: ["piano"] };
 }
 
 export interface Playing {
@@ -38,7 +63,17 @@ async function planOf(src: StimulusSource): Promise<{ plan: AudioPlan; cue: Audi
   const res = await analyzeCode(code, { mode: "lesson", bars: src.bars, lint: null, meter: src.meter });
   if (!res.ok) throw new Error("the example did not run");
   const n = normalize(res, src.key ? { meter: src.meter, key: src.key } : { meter: src.meter });
-  return { plan: eventsToAudioPlan([...n.all, ...n.band], n.cps, { bars: src.bars }), cue: null, cps: n.cps };
+  const cue = src.key && src.context ? homeCuePlan(src.key, src.context, n.cps) : null;
+  return { plan: eventsToAudioPlan([...n.all, ...n.band], n.cps, { bars: src.bars }), cue, cps: n.cps };
+}
+
+/** One plan after another. */
+export function joinPlans(a: AudioPlan, b: AudioPlan): AudioPlan {
+  return {
+    events: [...a.events, ...b.events.map((e) => ({ ...e, at: e.at + a.durationSec }))],
+    durationSec: a.durationSec + b.durationSec,
+    preload: [...new Set([...a.preload, ...b.preload])].sort(),
+  };
 }
 
 /** Plays a stimulus once (count-in first when asked) and says when bar 1 sounds. */
@@ -48,7 +83,9 @@ export async function playStimulus(src: StimulusSource): Promise<Playing> {
   const { plan, cue, cps } = await planOf(src);
   const units = METERS[src.meter].unitsPerBar;
   const countIn = src.countInBars ?? 0;
-  const lead = cue ?? (countIn > 0 ? clickPlan(countIn, cps, units) : null);
+  // The chords that set home, then the count-in clicks (both when asked: a sung take after a cadence).
+  const clicks = countIn > 0 ? clickPlan(countIn, cps, units) : null;
+  const lead = cue && clicks && !src.trial ? joinPlans(cue, clicks) : (cue ?? clicks);
   const sounds = [...new Set([...plan.preload, ...(lead?.preload ?? [])])];
   await oak.preload({ sounds: sounds.map((s) => ({ s })) });
   const t0 = oak.ctx.currentTime + 0.12;
@@ -58,19 +95,38 @@ export async function playStimulus(src: StimulusSource): Promise<Playing> {
   handles.push(oak.playEvents(plan, { at: startAt, exclusive: !lead }));
   if (src.click && !cue)
     handles.push(oak.playEvents(clickPlan(src.bars, cps, units), { at: startAt, exclusive: false }));
-  // The handles' own `done` can stay pending when every event falls inside the first scheduling window (a single
-  // note or chord: @oak/strudel's `playEvents` only arms its end timer from its interval, which never starts when
-  // the first pump empties the queue). The plan's own length settles it: a sing step's cue waited forever on that.
-  const endsIn = Math.max(0, startAt - oak.ctx.currentTime + plan.durationSec) * 1000 + 150;
-  const byClock = new Promise<void>((resolve) => setTimeout(resolve, endsIn));
+  // @oak/strudel resolves `done` for every plan, a single note or chord included (wave2.md gap 8, its
+  // playback.test.ts); the clock-settled race the lesson kept for it is gone.
   return {
     startAt,
     barSec: 1 / cps,
-    done: Promise.race([Promise.all(handles.map((h) => h.done)).then(() => undefined), byClock]),
+    done: Promise.all(handles.map((h) => h.done)).then(() => undefined),
     stop: () => {
       for (const h of handles) h.stop();
     },
   };
+}
+
+/**
+ * What a sung take hears before it starts: the chords that set home and the count-in clicks, without the
+ * target (`null` when there is neither). Resolves when it has been scheduled; `done` when it has sounded.
+ */
+export async function playLead(o: {
+  key: KeySpec;
+  context: Cue["context"];
+  countInBars: number;
+  meter: MeterId;
+  cps: number;
+}): Promise<{ done: Promise<void>; stop(): void } | null> {
+  const home = homeCuePlan(o.key, o.context, o.cps);
+  const clicks = o.countInBars > 0 ? clickPlan(o.countInBars, o.cps, METERS[o.meter].unitsPerBar) : null;
+  const plan = home && clicks ? joinPlans(home, clicks) : (home ?? clicks);
+  if (!plan) return null;
+  const oak = await getOak();
+  await oak.unlock();
+  await oak.preload({ sounds: plan.preload.map((s) => ({ s })) });
+  const handle = oak.playEvents(plan, { at: oak.ctx.currentTime + 0.12 });
+  return { done: handle.done.then(() => undefined), stop: () => handle.stop() };
 }
 
 /** A hidden pattern player for authored examples (full sound, loops until stopped). */

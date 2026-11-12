@@ -45,6 +45,12 @@ export type StepKind = (typeof STEP_KINDS)[number];
 export interface StepUi {
   panels: { roll: boolean; staff: false | "treble" | "bass" | "grand" | "perc" | "lead"; keyboard: boolean };
   rollLabels?: "none" | "note" | "degree" | "degree+solfege";
+  /**
+   * Wave 3. Labels under the notes on the staff panel (ux "degree lyrics"): `note` names, 1-based
+   * `degree` numbers, or `degree+solfege`. Default by unit (AUTHORING §6): none before U03.L02, `degree`
+   * from U03.L02 (when `tb.feature.degree-labels` unlocks), `degree+solfege` from U03.L08.
+   */
+  staffLabels?: "none" | "note" | "degree" | "degree+solfege";
   loopBars?: number;
   /** From U01 every Make declares a Band; `false` only when silence around the part is the point. */
   band?: BandRef | false;

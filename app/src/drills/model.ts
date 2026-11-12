@@ -14,8 +14,10 @@ import type {
   FamilyState,
   KeySpec,
   LearnerProfile,
+  SingTolCents,
   SrsCard,
   SrsReviewResult,
+  SungResolution,
   Trial,
   TrialResult,
 } from "@oak/api";
@@ -34,6 +36,8 @@ import {
 import { gradeFor } from "@oak/srs";
 import { degreeSemitones, syllableOf } from "@oak/theory";
 import type { AnswerSpec, AnswerValue, SungSummary } from "../answers/types.ts";
+import { isResting, RESTING_LINE } from "./resting.ts";
+import { staffSpecOf } from "./staff.ts";
 
 // --- answer surfaces -----------------------------------------------------------------------------
 
@@ -82,6 +86,9 @@ const OPTION_LABELS: Record<string, string> = {
 };
 
 export function optionLabel(id: string): string {
+  // Degree categories ("deg.5", "deg.b6") read as the learner's word for them, never as an ID.
+  const deg = /^deg\.([#b]?[1-7])$/.exec(id);
+  if (deg) return `Degree ${(deg[1] as string).replace("b", "♭").replace("#", "♯")}`;
   return OPTION_LABELS[id] ?? id.replace(/b(?=\d)/g, "♭").replace(/#(?=\d)/g, "♯");
 }
 
@@ -141,8 +148,34 @@ export function surfaceOf(
   if (p.mode === "tap") return { kind: "tap", twoVoices: p.twoVoices === true };
   if (p.mode === "sing") return { kind: "sing" };
   const ui = typeof p.ui === "string" ? p.ui : null;
+  // Written on the staff (dictation's top levels): the answers registry's staff widget; graded as code.
+  if (ui === "staff-input") return { kind: "widget", spec: staffSpecOf(trial) };
   if (p.mode === "code" || ui === "code")
-    return { kind: "widget", spec: { ui: "code", starter: typeof p.starter === "string" ? p.starter : "" } };
+    return { kind: "widget", spec: { ui: "code", starter: codeStarterOf(trial) } };
+  if (ui === "bar-buttons") {
+    const bars = Math.max(1, Number(p.bars ?? 4));
+    const multi = (expected.choice?.length ?? 0) > 1 || p.multi === true;
+    // The generator names its own options (some bars only, or "No key change"), or several bars are asked
+    // (where each phrase starts): buttons labelled by bar, one or more picks.
+    if (Array.isArray(p.options) || multi) {
+      const labels =
+        p.optionLabels && typeof p.optionLabels === "object"
+          ? (p.optionLabels as Record<string, unknown>)
+          : {};
+      const ids = Array.isArray(p.options)
+        ? (p.options as unknown[]).map(String)
+        : Array.from({ length: bars }, (_, i) => String(i + 1));
+      const options = ids.map((id) => ({
+        id,
+        label: typeof labels[id] === "string" ? (labels[id] as string) : `Bar ${id}`,
+      }));
+      return {
+        kind: "widget",
+        spec: { ui: "choice", options, layout: "buttons", ...(multi ? { multi: true } : {}) },
+      };
+    }
+    return { kind: "widget", spec: { ui: "bar-buttons", bars } };
+  }
   if (ui === "grid") {
     const steps = Number(p.stepsPerBar ?? 8);
     const stepsPerBar = (steps === 12 || steps === 16 ? steps : 8) as 8 | 12 | 16;
@@ -165,7 +198,7 @@ export function surfaceOf(
       kind: "widget",
       spec: {
         ui: "rn-palette",
-        slots: Math.max(1, expected.rn?.length ?? 1),
+        slots: Math.max(1, typeof p.slots === "number" ? p.slots : (expected.rn?.length ?? 1)),
         allow: rnAllowOf(p.rnAllow),
       },
     };
@@ -220,6 +253,19 @@ export function surfaceOf(
   };
 }
 
+/**
+ * The editor's starting text of a code trial: the generator's own `starter`, else (melodic dictation in code)
+ * an empty `n("")` already in the trial's key and octave, so the learner writes only the steps (degree − 1).
+ */
+export function codeStarterOf(trial: Trial<unknown>): string {
+  const p = trial.params;
+  if (typeof p.starter === "string") return p.starter;
+  const ak = p.answerKey as { key?: KeySpec; octave?: number } | undefined;
+  if (ak?.key && typeof ak.key.tonic === "string" && typeof ak.octave === "number")
+    return `n("").scale("${ak.key.tonic}${ak.octave}:${ak.key.mode.replace(/ /g, ":")}").s("piano")`;
+  return "";
+}
+
 const RN_ALLOW = ["triads", "sevenths", "inversions", "secondary", "borrowed"] as const;
 type RnAllow = (typeof RN_ALLOW)[number];
 /** The Roman-numeral palette a generator asks for (`params.rnAllow`), triads when it says nothing. */
@@ -233,10 +279,21 @@ function rnAllowOf(raw: unknown): RnAllow[] {
  * A typed answer with several parts ("Spell B major": B D♯ F♯) is split on spaces and commas when the trial
  * expects more than one part (`textParts`), since the grader compares parts by position.
  */
-export function answerOf(spec: AnswerSpec, value: AnswerValue, textParts = 1): Answer | null {
+export function answerOf(
+  spec: AnswerSpec,
+  value: AnswerValue,
+  textParts = 1,
+  expected: Answer | null = null,
+): Answer | null {
   switch (spec.ui) {
     case "choice":
       return { choice: value as string[] };
+    case "bar-buttons": {
+      // A bar is asked either as a number (which bar holds the inversion) or as a choice ID ("3").
+      const bars = value as number[];
+      if (bars.length === 0) return null;
+      return expected?.number !== undefined ? { number: bars[0] as number } : { choice: bars.map(String) };
+    }
     case "degree-pad":
       return { degrees: value as Degree[] };
     case "quality-pad":
@@ -272,6 +329,12 @@ export function expectedValueOf(spec: AnswerSpec, expected: Answer): AnswerValue
   switch (spec.ui) {
     case "choice":
       return expected.choice ?? null;
+    case "bar-buttons":
+      return expected.number !== undefined
+        ? [expected.number]
+        : expected.choice
+          ? expected.choice.map(Number).filter(Number.isFinite)
+          : null;
     case "degree-pad":
       return expected.degrees ?? null;
     case "quality-pad":
@@ -292,8 +355,33 @@ export function expectedValueOf(spec: AnswerSpec, expected: Answer): AnswerValue
   }
 }
 
+/**
+ * The learner's own parts of a wrong answer, marked against the expected value, so the pick they made reads
+ * "not this one" next to the outlined answer (ux §4.2 step 4). Degree pads mark by slot; choices by option ID.
+ * Other widgets mark nothing (their revealed answer speaks for itself).
+ */
+export function wrongMarks(
+  spec: AnswerSpec,
+  value: AnswerValue | null,
+  expected: AnswerValue | null,
+): { part: number | string; ok: boolean }[] {
+  if (!Array.isArray(value) || !Array.isArray(expected)) return [];
+  if (spec.ui === "degree-pad") {
+    return (value as unknown[]).map((v, i) => ({ part: i, ok: v === (expected as unknown[])[i] }));
+  }
+  if (spec.ui === "choice") {
+    const want = new Set((expected as unknown[]).map(String));
+    return (value as unknown[]).map((v) => ({ part: String(v), ok: want.has(String(v)) }));
+  }
+  return [];
+}
+
 /** A short spoken form of the expected answer ("3 · mi", "Lower", "B D♯ F♯"). */
 export function expectedText(spec: AnswerSpec | null, expected: Answer, solfege = false): string | null {
+  if (spec?.ui === "bar-buttons") {
+    const bars = expectedValueOf(spec, expected) as number[] | null;
+    return bars && bars.length > 0 ? `bar ${bars.join(", ")}` : null;
+  }
   if (expected.degrees)
     return expected.degrees
       .map((d) => (solfege ? `${optionLabel(d)} · ${syllableOf(d)}` : optionLabel(d)))
@@ -322,14 +410,26 @@ export interface TrialOutcome {
   sung: SungSummary[] | null;
   /** Credit of a sung resolution; feeds `fam.deg.resolve`, never the identification credit. */
   resolutionCredit: number | null;
+  /** The FET resolution as asked and taken (sung, skipped or, in Quiet mode, heard), or null when none was asked. */
+  sungResolution?: SungResolution | null;
 }
+
+/** How a trial was taken (wave3.md §5.3): a sung part heard in Quiet mode is `quiet` (no voice evidence). */
+export type Modality = NonNullable<DrillTrialRecord["modality"]>;
 
 /** One `drill_trials` row (contracts §7.1: the trial is regenerable from seed and params). */
 export function trialRecord(
   trial: Trial<unknown>,
   index: number,
   outcome: { result: TrialResult & { centsError?: number | null; skipped?: boolean }; answer: Answer | null },
-  extra: { taps?: number[] | null; sung?: SungSummary[] | null; at: string },
+  extra: {
+    taps?: number[] | null;
+    sung?: SungSummary[] | null;
+    at: string;
+    revealed?: boolean;
+    modality?: Modality;
+    sungResolution?: SungResolution | null;
+  },
 ): DrillTrialRecord {
   const r = outcome.result;
   return {
@@ -352,6 +452,54 @@ export function trialRecord(
     confusion: r.confusion ? [r.confusion[0], r.confusion[1]] : null,
     centsError: typeof r.centsError === "number" && Number.isFinite(r.centsError) ? r.centsError : null,
     at: extra.at,
+    revealed: extra.revealed === true,
+    modality: extra.modality ?? "normal",
+    sungResolution: extra.sungResolution ?? null,
+  };
+}
+
+/** The nearest rung of the tolerance ladder (contracts §8.2) for a tolerance in cents. */
+export function ladderCents(cents: number): SingTolCents {
+  const rungs: SingTolCents[] = [70, 50, 35, 25];
+  return rungs.reduce((best, r) => (Math.abs(r - cents) < Math.abs(best - cents) ? r : best), 70);
+}
+
+/**
+ * The wire form of an FET trial's resolution (`SungResolutionSchema`): sung (graded notes), skipped
+ * (`Shift+S`), or heard in Quiet mode (self-report, no notes, no voice evidence). It never touches the
+ * identification credit.
+ */
+export function sungResolutionOf(
+  path: readonly Degree[],
+  playFirst: boolean,
+  taken:
+    | { kind: "sung"; notes: SungSummary[]; credit: number; passed: boolean }
+    | { kind: "skipped" }
+    | { kind: "quiet" },
+  tolCents: number,
+): SungResolution | null {
+  if (path.length === 0) return null;
+  const base = {
+    path: path.slice(0, 8) as Degree[],
+    order: playFirst ? ("play-first" as const) : ("sing-first" as const),
+    tolCents: ladderCents(tolCents),
+  };
+  if (taken.kind === "sung")
+    return {
+      ...base,
+      notes: taken.notes.map((n) => ({ midi: n.midi, cents: n.cents, credit: n.credit })),
+      credit: Math.max(0, Math.min(1, Number.isFinite(taken.credit) ? taken.credit : 0)),
+      passed: taken.passed,
+      skipped: false,
+      quiet: false,
+    };
+  return {
+    ...base,
+    notes: [],
+    credit: 0,
+    passed: false,
+    skipped: taken.kind === "skipped",
+    quiet: taken.kind === "quiet",
   };
 }
 
@@ -386,6 +534,9 @@ export function planDrillSet(
 ): { plan: SetPlan; trials: PlannedTrial[] } {
   const id = family.def.id;
   const open = session.openCategories[id] ?? [];
+  // An FET set keeps its 2–3 resolutions in Quiet mode: they are heard instead of sung (contracts §8.5,
+  // "sung resolutions: replaced by listening to the resolution"). FET trials themselves need no mic.
+  const fet = family.def.generator === "degree-id";
   const plan = planSet(family, {
     family: id,
     setId: session.setId,
@@ -394,8 +545,8 @@ export function planDrillSet(
     categoryStats: state?.categoryStats ?? {},
     blockedRemaining: state?.blockedRemaining ?? 0,
     trials: opts.trials ?? session.trialsPlanned,
-    sungResolutions: profile.quiet ? 0 : (opts.sungResolutions ?? 2),
-    quiet: profile.quiet,
+    sungResolutions: opts.sungResolutions ?? 2,
+    quiet: profile.quiet && !fet,
   });
   if (opts.easyFirst) {
     const easy = plan.trials.findIndex((t) => t.level < plan.level);
@@ -539,10 +690,17 @@ export function summarize(
 
 // --- Practice hub ----------------------------------------------------------------------------------
 
-export type FamilyStatus = "pending" | "locked" | "unlocked" | "mastered";
+/**
+ * `resting`: a family that left its own card for mixed practice before its mastery level (decision 27: the
+ * first-review bound makes room by letting the most stable family rest in its composite). It is still practised
+ * there, keeps its level and comes back to its own card where it left off — never "mastered", never lost.
+ */
+export type FamilyStatus = "pending" | "locked" | "unlocked" | "resting" | "mastered";
 
 /** The lesson unit of a lesson ID ("U04.L01" → "U04"). */
 export const unitOf = (lessonId: string): string => lessonId.split(".")[0] ?? lessonId;
+
+export { isResting, RESTING_LINE };
 
 export function familyStatus(
   def: FamilyDef,
@@ -551,7 +709,9 @@ export function familyStatus(
 ): FamilyStatus {
   if (isPendingGenerator(def.generator)) return "pending";
   if (!completed.has(def.unlock.lesson) && !state) return "locked";
-  if (state && (state.graduatedAt !== null || state.level >= def.masteryLevel)) return "mastered";
+  if (state && state.level >= def.masteryLevel) return "mastered";
+  if (state && isResting(def, state)) return "resting";
+  if (state && state.graduatedAt !== null) return "mastered";
   return "unlocked";
 }
 
@@ -623,6 +783,19 @@ export function familyAccuracy(state: FamilyState | undefined): { n: number; acc
   const n = stats.reduce((a, s) => a + s.n, 0);
   const hits = stats.reduce((a, s) => a + s.hits, 0);
   return { n, acc: n === 0 ? null : hits / n };
+}
+
+/**
+ * A family's level, honestly: where it is, of how many, and how far the lessons done so far let it go
+ * ("Level 2 of 7 · up to level 3 for now"). Never a count of due cards.
+ */
+export function levelLine(def: FamilyDef, state: FamilyState | undefined): string {
+  const total = def.levels.length;
+  const level = Math.max(1, Math.min(total, state?.level ?? 1));
+  const open = Math.max(level, Math.min(total, state?.maxOpenLevel ?? 1));
+  const head = `Level ${level} of ${total}`;
+  if (total === 1 || open >= total) return head;
+  return `${head} · up to level ${open} for now`;
 }
 
 /** The status line of a pending family: honest about when its drills arrive. */

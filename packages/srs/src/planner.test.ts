@@ -190,4 +190,20 @@ describe("long sets are not starved", () => {
     const back = planWarmup([long, ...short], ctx({ gapDays: 4 }), cfg);
     expect(back.overflow.length + back.items.length).toBeGreaterThan(0);
   });
+
+  test("a family's first set is planned before anything else, after a break too (decision 27)", () => {
+    // A never-reviewed family (recall 0) behind a day's worth of aged, low-recall work.
+    const first = item({ cardId: "first", sec: 160, recall: 0, firstSet: true, blockedIntroPending: true });
+    const aged = Array.from({ length: 8 }, (_, i) =>
+      item({ cardId: `old${i}`, sec: 60, recall: 0.5, dueDay: T - 4, domain: i % 2 ? "pitch" : "rhythm" }),
+    );
+    for (const gapDays of [0, 4, 12]) {
+      const plan = planWarmup([...aged, first], ctx({ gapDays }), cfg);
+      expect([gapDays, plan.items.some((p) => p.item.cardId === "first")]).toEqual([gapDays, true]);
+      expect(plan.plannedSec).toBeLessThanOrEqual(cfg.budgetSec * cfg.planFraction);
+    }
+    // Without the mark it is one more item and does not fit.
+    const unmarked = planWarmup([...aged, { ...first, firstSet: false }], ctx(), cfg);
+    expect(unmarked.items.some((p) => p.item.cardId === "first")).toBe(false);
+  });
 });

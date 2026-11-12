@@ -96,17 +96,26 @@ export const useCalibrationRun = () =>
 
 export const useTodayPlan = (targetMinutes?: "15" | "20" | "25") =>
   useQuery(apiQuery("session.today", targetMinutes ? { query: { targetMinutes } } : {}));
-export const useSessionStart = () => useApiMutation("session.start", ["bootstrap", "session.today"]);
+export const useSessionStart = () =>
+  useApiMutation("session.start", ["bootstrap", "session.today", "session.day"]);
 export const useSessionHeartbeat = () => useApiMutation("session.heartbeat");
 export const useSessionEnd = () =>
-  useApiMutation("session.end", ["bootstrap", "session.today", "streak.get", "unlocks.list", "cando.list"]);
+  useApiMutation("session.end", [
+    "bootstrap",
+    "session.today",
+    "session.day",
+    "streak.get",
+    "unlocks.list",
+    "cando.list",
+  ]);
 
 // --- lessons, steps, checkpoints, capstones, gym ----------------------------------------------------
 
 export const useCourseProgress = () => useQuery(apiQuery("lessons.progress"));
 export const useStepState = (id: string, stepId: string, enabled = true) =>
   useQuery({ ...apiQuery("steps.state", { params: { id, stepId } }), enabled });
-export const useStepAttempt = () => useApiMutation("steps.attempt", ["steps.state", "skills.map"]);
+export const useStepAttempt = () =>
+  useApiMutation("steps.attempt", ["steps.state", "skills.map", "voice.get"]);
 export const useStepHint = () => useApiMutation("steps.hint", ["steps.state"]);
 export const useStepNewSeries = () => useApiMutation("steps.newSeries", ["steps.state"]);
 export const useLessonComplete = () =>
@@ -140,7 +149,15 @@ export const useFamilyState = (familyId: string) =>
 export const useDrillStart = () => useApiMutation("drills.start");
 export const useDrillTrials = () => useApiMutation("drills.trials");
 export const useDrillFinish = () =>
-  useApiMutation("drills.finish", ["families.list", "families.state", "srs.due", "skills.map", "streak.get"]);
+  useApiMutation("drills.finish", [
+    "families.list",
+    "families.state",
+    "srs.due",
+    "skills.map",
+    "streak.get",
+    "voice.get",
+    "drills.get",
+  ]);
 
 // --- unlocks, can-do, progress, streak ------------------------------------------------------------
 
@@ -274,3 +291,20 @@ export const useTutorStatus = (refresh = false) =>
   useQuery({ ...apiQuery("tutor.status", { query: refresh ? { refresh: "1" } : {} }), retry: 0 });
 export const useDevListen = () => useQuery(apiQuery("dev.listen"));
 export const useDevListenMark = () => useApiMutation("dev.listenMark", ["dev.listen"]);
+
+// --- Wave 3 additions (docs/design/wave3.md §5) -------------------------------------------------------
+// Until the server engineer builds them these answer 501 (`OakApiError.code === "not_implemented"`, never
+// retried); a surface shows its own "not built yet" copy through `ErrorState`. The lenses are `lenses.ts`.
+
+/** Today's sessions on the server: Today's "done for today" across reloads and browsers. */
+export const useSessionDay = () => useQuery(apiQuery("session.day"));
+/** Quiet mode for today, vocal range and the tolerance ladder. Read before asking for the mic. */
+export const useVoiceState = () => useQuery(apiQuery("voice.get"));
+/** The mic chip and Settings → Voice: `{ quiet, scope: "today" | "always" }`. */
+export const useVoiceQuiet = () =>
+  useApiMutation("voice.quiet", ["voice.get", "profile.get", "bootstrap", "srs.due"]);
+/** Settings → Voice: `{ mode: "auto" }`, `{ mode: "fixed", cents }`, `{ mode: "loosen" }`. */
+export const useVoiceLadder = () => useApiMutation("voice.ladder", ["voice.get", "profile.get"]);
+/** One drill set with its stored trials. */
+export const useDrillSession = (id: string | null) =>
+  useQuery({ ...apiQuery("drills.get", { params: { id: id ?? "none" } }), enabled: id !== null });

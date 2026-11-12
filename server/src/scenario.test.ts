@@ -39,6 +39,26 @@ async function newLearner(now = MONDAY): Promise<{ h: Harness; me: SimLearner }>
 const familyOf = (id: string) => course.families.find((f) => f.id === id) ?? null;
 const isFact = (id: string) => course.decks.some((d) => d.cards.some((c) => c.id === id));
 
+/** The fewest same-domain neighbours over every order of `domains` that keeps the first (the opener) first. */
+function minAdjacent(domains: readonly string[]): number {
+  const [first, ...rest] = domains;
+  if (first === undefined) return 0;
+  const counts = new Map<string, number>();
+  for (const d of rest) counts.set(d, (counts.get(d) ?? 0) + 1);
+  const go = (prev: string, left: number): number => {
+    if (left === 0) return 0;
+    let best = Number.POSITIVE_INFINITY;
+    for (const [d, n] of counts) {
+      if (n === 0) continue;
+      counts.set(d, n - 1);
+      best = Math.min(best, (d === prev ? 1 : 0) + go(d, left - 1));
+      counts.set(d, n);
+    }
+    return best;
+  };
+  return go(first, rest.length);
+}
+
 /** Warm-up invariants of contracts §7.4 that hold on every planned day. */
 function checkWarmup(plan: SessionPlan): void {
   const w = plan.warmup;
@@ -54,10 +74,9 @@ function checkWarmup(plan: SessionPlan): void {
   const seq = w.items.map((i) =>
     i.kind === "listen" || i.kind === "fact-set" ? `|${i.id}` : (familyOf(i.familyId ?? "")?.domain ?? "?"),
   );
-  const counts = new Map<string, number>();
-  for (const d of domains) counts.set(d, (counts.get(d) ?? 0) + 1);
-  const most = Math.max(0, ...counts.values());
-  const unavoidable = Math.max(0, most - (domains.length - most) - 1);
+  // The opener is the day's sure win (highest R) and stays first: the fewest adjacent pairs any order of
+  // the other sets after it allows is what the planner must reach.
+  const unavoidable = minAdjacent(domains);
   const adjacent = seq.filter((d, i) => i > 0 && seq[i - 1] === d).length;
   if (adjacent > unavoidable)
     console.log(

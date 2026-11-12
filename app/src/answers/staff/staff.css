@@ -1,0 +1,51 @@
+/* Staff input (answers): the engraved answer (abcjs, currentColor) and the pointer layer above it. Every colour is
+   an --oak-* token, so Paper and Bark both hold. */
+.oak-si-host {
+  color: var(--oak-text);
+}
+.oak-si-host svg {
+  display: block;
+  max-width: 100%;
+  overflow: visible;
+}
+.oak-si-host .oak-si-sel {
+  color: var(--oak-link);
+  fill: var(--oak-link);
+}
+.oak-si-host .oak-si-ok {
+  color: var(--oak-accent);
+  fill: var(--oak-accent);
+}
+.oak-si-host .oak-si-bad {
+  color: var(--oak-issue);
+  fill: var(--oak-issue);
+}
+.oak-si-surface {
+  cursor: crosshair;
+  touch-action: none;
+}
+.oak-si-surface[data-over-note="1"] {
+  cursor: grab;
+}
+.oak-si-surface[data-dragging="1"] {
+  cursor: grabbing;
+}
+.oak-si-surface[aria-disabled="true"] {
+  cursor: default;
+}
+.oak-si-ghost {
+  fill: var(--oak-text-2);
+  opacity: 0.55;
+}
+.oak-si-ghost-line {
+  stroke: var(--oak-text-2);
+  opacity: 0.7;
+}
+.oak-si-caret {
+  stroke: var(--oak-link);
+}
+.oak-si-reveal {
+  fill: none;
+  stroke: var(--oak-accent-2);
+  stroke-dasharray: 3 2;
+}

@@ -8,31 +8,25 @@ import { FirstSingPart } from "./parts/FirstSingPart.tsx";
 import { HeadphonesPart } from "./parts/HeadphonesPart.tsx";
 import { LatencyPart } from "./parts/LatencyPart.tsx";
 import { MicPart } from "./parts/MicPart.tsx";
+import { PitchMatchPart } from "./parts/PitchMatchPart.tsx";
 import { RangePart } from "./parts/RangePart.tsx";
+import type { RenderablePart } from "./setup-parts.ts";
 
+export { LadderCard, OutputMeter, QuietControl, RecheckHint } from "./panels.tsx";
 export type { PartContext, PartProps } from "./parts/common.tsx";
 export { FirstSingPart } from "./parts/FirstSingPart.tsx";
 export { HeadphonesPart } from "./parts/HeadphonesPart.tsx";
 export { LatencyPart } from "./parts/LatencyPart.tsx";
 export { MicPart, PRIVACY_LINE } from "./parts/MicPart.tsx";
+export { PitchMatchPart } from "./parts/PitchMatchPart.tsx";
 export { RangePart } from "./parts/RangePart.tsx";
-
-/** The `part` values of the MDX `<Setup part="…" />` component (plus `latency`, both halves, and `first-sing`). */
-export const SETUP_PARTS = [
-  "headphones",
-  "mic",
-  "noise",
-  "bleed",
-  "latency",
-  "tap-latency",
-  "sing-latency",
-  "range",
-  "first-sing",
-] as const;
-export type SetupPartId = (typeof SETUP_PARTS)[number];
+export { clearRecheck, type RecheckAdvice, reportTake, takeAdvice, useRecheck } from "./recheck.ts";
+export { RENDERABLE_PARTS, type RenderablePart, SETUP_PARTS, type SetupPartId } from "./setup-parts.ts";
+export { isNotBuilt, type LadderView, ladderViewOf, type QuietView, quietViewOf } from "./state.ts";
+export { useVoice, type Voice } from "./use-voice.ts";
 
 export interface SetupPartProps {
-  part: SetupPartId;
+  part: RenderablePart;
   onDone(): void;
   onSkip?: () => void;
   /** The learner chose Quiet mode (no mic): the host records it and moves on. */
@@ -74,6 +68,8 @@ export function renderPart(profile: Profile, p: SetupPartProps) {
       return <RangePart {...common} />;
     case "first-sing":
       return <FirstSingPart {...common} />;
+    case "match":
+      return <PitchMatchPart {...common} />;
   }
 }
 

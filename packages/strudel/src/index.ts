@@ -14,7 +14,7 @@ import { EvalMutex, withTimeout } from "./mutex.ts";
 import { type PackManifest, packFileUrls, prebake, soundNames } from "./pack.ts";
 import { createPatternPlayer } from "./pattern-player.ts";
 import { playEvents, playNote } from "./playback.ts";
-import { preloadPattern, preloadSpec, soundKeyOf } from "./preload.ts";
+import { preloadPattern, preloadSpec, soundKeyOf, warmAll } from "./preload.ts";
 import { createRecorder } from "./recorder.ts";
 import type { Runtime } from "./runtime.ts";
 import { createScopeTap } from "./scope-tap.ts";
@@ -28,6 +28,15 @@ export { buildVocabulary, completionSiteAt, completionsFor } from "./completion.
 export type { InternalEditor } from "./editor.ts";
 export { type FriendlyError, friendlyEvalError } from "./friendly.ts";
 export { isMuted, NO_MUTES } from "./mutes.ts";
+export {
+  cadencePlan,
+  dronePlan,
+  REFERENCE_PRELOAD,
+  REFERENCE_TONES,
+  type ReferenceKind,
+  referenceValue,
+  tonicPlan,
+} from "./reference.ts";
 export { soundsIn } from "./sounds-in.ts";
 export * from "./types.ts";
 export { LIMITER, limiterMakeupDb };
@@ -267,6 +276,7 @@ export function createOakStrudel(options: OakStrudelOptions): OakStrudel {
     editors,
     preload: (spec) => preloadSpec(spec),
     preloadPattern: (pattern, from, to) => preloadPattern(pattern, from, to),
+    preloadValues: (values) => prebakeOnce().then(() => warmAll(values)),
     noteTrigger(value) {
       if (!value || typeof value !== "object") return;
       const key = soundKeyOf(value as { s?: unknown; bank?: unknown });

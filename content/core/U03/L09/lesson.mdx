@@ -1,0 +1,51 @@
+{/* U03.L09 Tunes by Number: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+You read this tune off the staff in Playing from the Page, as note names. Here it is again, written in degrees, each note held almost until the next.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+The second tune from Playing from the Page, When the Saints Go Marching In. Its first three notes, "oh when the", come before the first full bar, so here they follow a rest on beat 1, as before.
+
+<Editor exercise="saints-by-number" />
+
+<OnPass>The Saints by number: do mi fa sol, and sol held. In note names it started on `c4`; in degrees it starts on 1, and `.scale()` decides where 1 is.</OnPass>
+</Step>
+
+<Step id="S3">
+Both tunes, one after the other. A tune moves from note to note in two ways: to a neighbour, or further.
+
+<Example id="both-tunes" views="code,roll" />
+
+<OnPass>A move to the next degree, up or down, is a step. A move further than that, like 1 up to 3, is a **leap**. A note repeated is neither: the line stays put, so it counts with the steps. The Ode moves only by step and repeated notes; the Saints opens with a leap, then climbs by step.</OnPass>
+</Step>
+
+<Step id="S4">
+How long each note lasts shapes the tune as much as which notes it plays. <CodeRef fn="legato" />
+
+<Editor exercise="join-the-notes" />
+
+<OnPass>Each note now lasts until the next one begins: the notes are **legato**, joined. `.legato()` is the same control as `.clip()`, under the musician's name for it.</OnPass>
+</Step>
+
+<Step id="S5">
+Sight-singing: reading a tune and singing it before you hear it. Your voice is analysed live on this computer. Nothing is recorded or sent.
+
+<Sing exercise="sing-from-the-page" />
+
+<Callout kind="tip">Find do before you start. Every note on the page is a number of steps from it.</Callout>
+
+<OnPass>Two bars sung from the page. Mostly steps, and the syllables under the notes tell you where each one sits.</OnPass>
+</Step>
+
+<Step id="S6">
+Your turn. Write a tune of your own by number: steps keep it singable, and a leap or two keeps it from standing still.
+
+<Make exercise="a-tune-by-numbers" />
+
+<CanDo id="cd.sing.sight" />
+
+<Recap />
+</Step>

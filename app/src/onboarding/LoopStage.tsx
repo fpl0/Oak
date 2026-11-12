@@ -210,7 +210,7 @@ export function LoopStage(props: LoopStageProps) {
           <h1 id="loop-title" className="text-h1 outline-none" tabIndex={-1}>
             This is code. Each line is a musician.
           </h1>
-          <p className="max-w-[62ch] text-text-2">
+          <p className="max-w-measure text-text-2">
             Four lines, four players. They come in one at a time: drums, then bass, then chords, then the
             melody. You'll learn to write every one of them.
           </p>
@@ -239,7 +239,7 @@ export function LoopStage(props: LoopStageProps) {
           <h1 id="edit-title" className="text-h1 outline-none" tabIndex={-1}>
             Change one number
           </h1>
-          <p className="max-w-[62ch] text-text-2">
+          <p className="max-w-measure text-text-2">
             The boxed <span className="font-mono text-text">4</span> in the last line is the melody's final
             note. Change it to any number from 0 to 7, then press <Kbd>{mod}</Kbd> <Kbd>Enter</Kbd> to run it.
             You'll hear it in the fourth bar of every loop.
@@ -261,8 +261,8 @@ export function LoopStage(props: LoopStageProps) {
           <h1 id="react-title" className="text-h1 outline-none" tabIndex={-1}>
             {reaction.title}
           </h1>
-          <p className="max-w-[62ch] text-text-2">{reaction.body}</p>
-          <p className="max-w-[62ch] text-text-3">{reaction.listen}</p>
+          <p className="max-w-measure text-text-2">{reaction.body}</p>
+          <p className="max-w-measure text-text-3">{reaction.listen}</p>
           {problem && <Callout tone="attention" title={problem} />}
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="primary" onClick={props.onContinue} data-testid="react-continue" autoFocus>

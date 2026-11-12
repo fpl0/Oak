@@ -29,3 +29,28 @@ export function toolLabel(
   if (sig && PROSE.test(bare(t.code))) return { text: sig, mono: true };
   return { text: t.code, mono: true };
 }
+
+/**
+ * The name a learner reads for a tool in Today, the Coda and the ceremony (promoted from session/tool-name.ts):
+ * `toolLabel`, except that a sound is the code the learner types (`.s("ebass")`), never the registry's
+ * sample-bank note ("ebass (gm_electric_bass_pick:0)"), and a scale row (written with a placeholder tonic,
+ * "X4:major") is the scale named in words.
+ */
+export function toolName(
+  t: Pick<ToolEntry, "kind" | "code"> & { catalog?: { signature?: string } },
+): ToolLabel {
+  const sig = t.catalog?.signature?.trim();
+  if (t.kind === "sound") {
+    const alias = /^([\w-]+)\s*\(/.exec(t.code)?.[1];
+    return { text: sig || (alias ? `.s("${alias}")` : t.code), mono: true };
+  }
+  if (t.kind === "scale") {
+    const name =
+      t.code
+        .split(",")[0]
+        ?.trim()
+        .replace(/^X\d?:/, "") ?? "";
+    if (name) return { text: `the ${name} scale`, mono: false };
+  }
+  return toolLabel(t);
+}

@@ -1282,9 +1282,12 @@ export type ParamGen =
 ```ts
 export type SectionRef = { section: string; nth?: number } | { bars: [number, number] } | 'last';
   // rules below are added to the RubricRule union
-  | { rule: 'motif-reuse'; track: TrackRef; minRatio: number; unitBars?: number }
+  | { rule: 'motif-reuse'; track: TrackRef; minRatio: number; unitBars?: number; shape?: 'semitones' | 'steps' | 'either' }
       // share of melody units (default 1 bar) whose interval sequence matches an earlier unit, exactly or transposed,
       // by edit similarity ≥ 0.75. Replaces 'motif-repetition' and the curriculum's motifReuse≥x.
+      // Measured over one period of the learner's loop, not over the rendered bars. `shape` (default 'semitones')
+      // says how intervals are compared: by half steps, by scale steps in the rule's key (a diatonic sequence
+      // then counts), or whichever matches.
   | { rule: 'contrast'; a: SectionRef; b: SectionRef; axes: ('pitch'|'density'|'harmony'|'register'|'energy')[]; minAxes: number;
       thresholds?: { pitchSemis?: number; densityRatio?: number; registerSemis?: number; energyDelta?: number } }
       // pitch: mean melody pitch differs ≥ 3 st; density: onsets per bar differ ≥ 25%; harmony: RN sequences differ;
@@ -1742,7 +1745,7 @@ Ear stages of the plan: A = `rhy.pulse`, `rhy.echo`, `pit.match`, `pit.compare`,
 
 **Budgets.** Warm-up on a session day: **4 / 5 / 6 minutes** at the 15 / 20 / 25-minute target (3 minutes on checkpoint and capstone days). The planner fills the warm-up with sets and fact mini-sets (up to 10 due cards) until the estimated time reaches the budget. Leftovers stay due without any penalty or display. On a day with no lesson, `/practice/review` plans the same budget and then offers "a little more" in budget-sized blocks, up to **12 minutes** in total.
 
-**Warm-up order.** (1) An anchor: the highest-R due item, or 4 trials one level down from the highest-R mastered family (evidence 0.5, no FSRS rating). (2) Repair-queue families (failed checkpoint skills). (3) By priority `2·(1 − R) + 1·blockedIntroPending + 0.5·linkedToNextLesson + 0.5·debt`. Constraints: no two consecutive sets from one domain; at most 2 mic sets (0 in Quiet mode); a 15–20 s listen-only block after every second perceptual set; first drill and first sing of a new family arrive here as blocked-intro sets on the day after the lesson that seeded them, not inside the lesson.
+**Warm-up order.** (1) An anchor: the highest-R due item, or 4 trials one level down from the highest-R mastered family (evidence 0.5, no FSRS rating). (2) Repair-queue families (failed checkpoint skills). (3) By priority `2·(1 − R) + 1·blockedIntroPending + 0.5·linkedToNextLesson + 0.5·debt`. Constraints: no two consecutive sets from one domain; at most 2 mic sets (0 in Quiet mode); a 15–20 s listen-only block after every second perceptual set; first drill and first sing of a new family arrive here as blocked-intro sets on the day after the lesson that seeded them, not inside the lesson; a family's first set is planned before the opener and the priority order, after a gap too.
 
 **Active-family cap.** At most **12** family cards of kind P or Pr are active (scheduled) at once.
 
@@ -1750,9 +1753,11 @@ Ear stages of the plan: A = `rhy.pulse`, `rhy.echo`, `pit.match`, `pit.compare`,
 
 **Gated ladders.** A family whose next level is closed by a lesson the learner has not completed counts as being at its mastery level, for graduation only, while it sits at its highest open level with stability ≥ 21 days and two Good-or-better ratings. (Otherwise `fam.rhy.read`, whose dotted figures wait for U13.L03, would hold one of the 12 slots for months.) When the gating lesson is completed the family is recalled like any other member and climbs on.
 
-**When the cap is hit.** A new family seeded by a lesson while 12 are active is created `deferred`. If no active family is ready to graduate, the one with the highest stability at or above its mastery level graduates early; if none qualifies, the new family waits in the deferred queue and the lesson's own in-lesson practice still counts as evidence.
+**When the cap is hit.** A new family seeded by a lesson while 12 are active is created `deferred`. If no active family is ready to graduate, the one with the highest stability at or above its mastery level graduates early; if none qualifies, the new family waits in the deferred queue (see the first-review bound) and the lesson's own in-lesson practice still counts as evidence. No family graduates, early or not, before its own first review set.
 
 **Intake throttle.** Before any new card gets its first review, the planner computes the 7-day forecast (seconds of review due per day, sets × `trialsPerSet·estTrialSec`). New cards are created `deferred` while the forecast mean exceeds 0.85 × budget or any single day exceeds 1.25 × budget. Deferred cards are released oldest first, at most 1 family and 4 fact cards per day, when the forecast mean is below 0.70 × budget. Independent caps: at most 2 new families and 6 new fact cards per day.
+
+**First-review bound** (decisions 27 and 30). A perceptual or production family still deferred 2 days after the lesson that seeded it is released that day whatever the forecast says: longest wait first, at most 2 a day, also while a backlog is being cleared. Room is made for it when no slot is free, the set forecast is not below 0.70 × budget, or it needs the mic and the mic sets are full. An active family at its mastery level graduates early (highest stability first); otherwise the active family with the highest stability that has had at least 3 sets of its own, its blocked-intro sets done and a last rating of Good or Easy **rests** in its composite (for a sung family, a sung one). A resting family is a composite member like any other: 2 trials when drawn, recalled below 0.65. Once no perceptual or production family is waiting, a slot is free and the set forecast is below 0.70 × budget, the family that has rested longest returns to its own card where it left off, at most one a day. A family in its composite whose next level opens comes back this way, not by the gated-ladder recall.
 
 **Terms.** A new term becomes a glossary entry. It becomes a fact card only if `TermDef.card.testedIn` names a later lesson that tests it; CI checks that lesson exists and uses the term in a graded step.
 
@@ -1760,7 +1765,7 @@ Ear stages of the plan: A = `rhy.pulse`, `rhy.echo`, `pit.match`, `pit.compare`,
 
 **Display.** Raw due counts are never shown anywhere. Today says "Today's review ≈ 5 min". The Practice nav item shows a plain dot only when today's planned review is not yet done. Overflow is invisible.
 
-**CI gate.** `bun test packages/srs` runs a 300-day simulation with the full family and deck catalog introduced in default course order, 5 sessions a week, a simulated learner at 85% mean credit (10% of sets below 0.65), for each target. It must hold: p95 planned warm-up ≤ **240 / 300 / 360 s** for 15 / 20 / 25; active P/Pr family cards ≤ 12 on every day; p95 age of the oldest undelivered due card ≤ 7 days; deferred queue p95 ≤ 4 cards; p95 of a planned reviews-only day ≤ 720 s. A failing simulation blocks the merge of any change to families, decks, schedulers or constants.
+**CI gate.** `bun test packages/srs` runs a 300-day simulation with the full family and deck catalog introduced in default course order, 5 sessions a week, a simulated learner at 85% mean credit (10% of sets below 0.65), for each target. It must hold: p95 planned warm-up ≤ **240 / 300 / 360 s** for 15 / 20 / 25; active P/Pr family cards ≤ 12 on every day; p95 age of the oldest undelivered due card ≤ 7 days; every perceptual and production family has its first review set within **7 days** of the lesson that seeded it, on every run and target (the learner's own breaks not counted; a family still unreviewed at the end counts the days it has waited), and no family is left unreviewed; p95 of a planned reviews-only day ≤ 720 s. A failing simulation blocks the merge of any change to families, decks, schedulers or constants.
 
 ### 7.5 Mastery
 
@@ -1876,7 +1881,7 @@ Every one of the 143 nodes is in exactly one checkpoint as a first listing. A br
 | ≥ 10 | as above, but the New block is a **Light lesson**: the last completed lesson's Make with one new constraint, no new skill nodes. The next session continues the course. |
 | ≥ 21 | as ≥ 10, plus a one-tap offer to loosen the sing tolerance one step. Nothing loosens by itself. |
 
-Backlog handling after any gap ≥ 3: the overdue backlog is spread over `N = clamp(ceil(overdueSeconds / budget), 5, 7)` days by the planner (FSRS state is untouched; ratings use real elapsed time); at most **3** cards a day may enter relearning (after the third Again, remaining items with R < 0.60 wait for tomorrow); no new cards are released until the backlog is cleared. A checkpoint attempt older than 3 days restarts. A capstone resumes by playing the draft from the top, then opening the session where it stopped. Gap lengths are never shown.
+Backlog handling after any gap ≥ 3: the overdue backlog is spread over `N = clamp(ceil(overdueSeconds / budget), 5, 7)` days by the planner (FSRS state is untouched; ratings use real elapsed time); at most **3** cards a day may enter relearning (after the third Again, remaining items with R < 0.60 wait for tomorrow; a family's first set is excepted); no new cards are released until the backlog is cleared. A checkpoint attempt older than 3 days restarts. A capstone resumes by playing the draft from the top, then opening the session where it stopped. Gap lengths are never shown.
 
 ### 7.10 Skill-map shading
 
@@ -1930,7 +1935,7 @@ Pipeline (worklet → `pitchFramesToNotes` → `gradeSung`):
 | 35 → 25 | ≤ 20¢ |
 
 - Performance-based only: never by unit, never by date.
-- It **never tightens while a checkpoint is pending**: from the completion of a unit's second-to-last lesson until that unit's checkpoint is passed or soft-passed.
+- It **never tightens while a checkpoint is pending**: from the day the planner first offers a checkpoint until that checkpoint is passed or soft-passed (decision 29). A checkpoint the planner has stopped offering, such as one on a track the learner left, lets go of the hold after 14 days with a session on which it was not offered; a break does not count toward those days (decision 31).
 - It never loosens by itself. Settings → Voice offers Auto / ±70 / ±50 / ±35 / ±25; choosing a fixed value sets `singTolMode: 'fixed'`. After a gap of 21 days or more a one-tap loosen is offered.
 - A change is announced once in the Coda ("Your ear-to-voice aim got finer: ±35¢ now"), never mid-session.
 
@@ -2507,3 +2512,4 @@ Every issue and every MISSING item in `docs/design/critiques.md`, with where thi
 | 1 | 2026-11-11 | First binding version, written in Wave 0 from the plan's resolutions and the two critiques. |
 | 1.1 | 2026-11-11 | Adversarial edit pass before the freeze. By execution: `Caug` is wrong in `triads` and `C69` in `lefthand` (§0.13, §0.14); `n` goes before `chord().voicing()` (§0.15); fraction strings in `late`/`off` (§0.16); control patterns take their rhythm from the left (§0.17); sections restart inside `arrange()`, so the key plan follows it (§0.18, §6.3, §6.8); straightening swing (§0.26, §6.10). By checking the tables: `tb.note.names` and `tb.s.pitched` move to U02.L01; `tb.meter.2-4` added; alternative unlock sites and the C1 fallback (§3.1 rules 11–12); AC1 gated on U11.CP; RC1 freed from Dorian and the `horns` sound; J03 only in J.CP2; U07.CP gains M09 and drops M01; R.CP drops R13; U02.CP gains D01. Decided: the legal orders (§7.6); level and category gates and graduation of gated ladders (§7.3, §7.4); `fam.har.schema` and `fam.har.cadence` ladders re-cut; `inferRoles` tie-breaks (§6.2); which track a `swing` rule measures (§6.6); starter sounds follow the unlock table (§5.10); per-target capstone, gym and checkpoint days (§9.1); supported browsers (§11.12); ID grammar for fact cards and three-part feedback codes (§1.2). |
 | 1.2 | 2026-11-11 | §10.9: the optional hard monthly cap (`tutor.hardMonthlyUsd`, error kind `budget`) is removed by the owner's decision; only the soft warning remains. |
+| 1.3 | 2026-11-12 | Wave 3. §7.4: the CI criterion "deferred queue p95 ≤ 4 cards" is replaced by the first-review bound of 7 days (decisions 27 and 30), with the release, resting and return rules that meet it; a family's first set is planned first and is exempt from the Again cascade (§7.9); no family graduates before its first review set. §8.2: the tolerance hold starts when a checkpoint is offered and lapses after 14 practised days without an offer (decisions 29 and 31). §5.6: `motif-reuse` gains `shape` and is measured over one period of the loop. |

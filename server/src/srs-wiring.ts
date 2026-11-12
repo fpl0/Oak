@@ -37,6 +37,7 @@ import {
   type SessionPlanCoursePort,
   type SessionPlanLearnerPort,
   SessionPlanService,
+  SPLIT_ABOVE_MIN,
   warmupLabel,
 } from "./services/session-plan.ts";
 import {
@@ -49,6 +50,8 @@ import {
 } from "./services/srs.ts";
 
 const STATE_KEY = "srs.state";
+/** The family sung resolutions are evidence for (contracts §7.3, §8.3). */
+export const RESOLVE_FAMILY = "fam.deg.resolve" as FamilyId;
 
 /** The governor's working state as one JSON value in `settings` (not a learner setting: `SettingsRepo.all` skips it). */
 export function settingsStatePort(repos: Repos, clock: Clock): SrsStatePort {
@@ -137,7 +140,8 @@ export class LearnerAdapter implements SrsLearnerPort {
       targetMinutes: p.targetMinutes,
       timeZone: p.timezone,
       rolloverHour: p.rolloverHour,
-      quiet: p.quiet,
+      // Quiet mode as the server decides it today (wave3.md §5.3): for today, always, or no usable mic.
+      quiet: this.services.voice.quiet(),
       weeklyGoal: p.weeklyGoal,
       singToleranceCents: p.singToleranceCents,
     };
@@ -153,6 +157,30 @@ export class LearnerAdapter implements SrsLearnerPort {
   }
   debtSkills(): SkillId[] {
     return this.services.mastery.debts() as SkillId[];
+  }
+  dayFloor(): string | null {
+    return this.services.streak.time.activityFloor();
+  }
+  /** The next `n` sessions of the default order still to do (a split lesson at 15 minutes is two). */
+  upcomingSessions(n: number): ("lesson" | "checkpoint" | "capstone" | "gym")[] {
+    const out: ("lesson" | "checkpoint" | "capstone" | "gym")[] = [];
+    const g = this.services.gates;
+    const target = this.repos.profile.get().targetMinutes;
+    for (const id of this.content.defaultOrder()) {
+      if (out.length >= n) break;
+      if (g.sessionDone(id)) continue;
+      if (id.startsWith("GYM.") || id.startsWith("CF-T.")) out.push("gym");
+      else if (this.content.checkpointMeta(id) !== null) out.push("checkpoint");
+      else if (this.content.lessonSite(id) === null) out.push("capstone");
+      else {
+        const def = this.content.lessonDef(id);
+        const split = target === 15 && def !== null && lessonBudget(def).scaledMinutes > SPLIT_ABOVE_MIN;
+        const part = this.services.gates.lessonProgress(id).splitPart;
+        out.push("lesson");
+        if (split && part !== "A") out.push("lesson");
+      }
+    }
+    return out.slice(0, n);
   }
   nextLessonSkills(): SkillId[] {
     const next = this.services.gates.nextMapItem();
@@ -193,9 +221,24 @@ export class SrsAdapter implements SrsPort {
     this.#recall = null;
   }
 
+  /**
+   * The scheduler counts days in the learner's zone: after a time-zone or rollover change in the profile it
+   * is rebuilt before the next scheduling call (cards keep their instants; only the day arithmetic moves).
+   */
+  async ensureZone(): Promise<void> {
+    if (await this.service.rezone()) this.#touched();
+  }
+  /**
+   * Runs `fn` now when the scheduler's zone is current (the usual case: synchronous, so a request's whole
+   * write happens before another request reads), after rebuilding it otherwise.
+   */
+  #zoned<T>(fn: () => T): T | Promise<T> {
+    return this.service.zoneCurrent() ? fn() : this.ensureZone().then(fn);
+  }
+
   /** One transaction: a failure part-way leaves no card without its revlog, no half-recorded set. */
-  due(input: { budgetSec: number | null; more: boolean }): DueBatch {
-    return tx(this.repos.db, () => this.#due(input));
+  due(input: { budgetSec: number | null; more: boolean }): DueBatch | Promise<DueBatch> {
+    return this.#zoned(() => tx(this.repos.db, () => this.#due(input)));
   }
   #due(input: { budgetSec: number | null; more: boolean }): DueBatch {
     const now = this.#now();
@@ -209,7 +252,7 @@ export class SrsAdapter implements SrsPort {
       });
     // "A little more" stops at 12 minutes of review in the day (contracts §7.4), counted from the sets and
     // fact cards already done today, so a reload of /practice/review cannot start the count again.
-    const done = this.reviewedTodaySec(now);
+    const done = this.reviewedTodaySec();
     const left = REVIEW_DAY_MAX_SEC - done;
     let { plan, items } = plan1(input.budgetSec, input.more);
     if (input.more) {
@@ -250,10 +293,10 @@ export class SrsAdapter implements SrsPort {
   }
 
   /** Estimated seconds of review done today: finished review sets (trials × the family's trial time) and fact cards. */
-  reviewedTodaySec(now: Date = this.#now()): number {
+  reviewedTodaySec(): number {
     const time = this.services.streak.time;
     const p = time.profile();
-    const since = dayStartInstant(time.day(now), p.timezone, p.rolloverHour).toISOString();
+    const since = dayStartInstant(time.day(), p.timezone, p.rolloverHour).toISOString();
     const sets = this.repos.db
       .query(
         "SELECT family_ids, trials_total FROM drill_sessions WHERE finished_at >= ? AND purpose NOT IN ('lesson', 'checkpoint')",
@@ -278,8 +321,8 @@ export class SrsAdapter implements SrsPort {
   }
 
   /** One transaction: a failure part-way leaves no card without its revlog, no half-recorded set. */
-  review(req: Parameters<SrsPort["review"]>[0]): SrsReviewResult {
-    return tx(this.repos.db, () => this.#review(req));
+  review(req: Parameters<SrsPort["review"]>[0]): SrsReviewResult | Promise<SrsReviewResult> {
+    return this.#zoned(() => tx(this.repos.db, () => this.#review(req)));
   }
   #review(req: Parameters<SrsPort["review"]>[0]): SrsReviewResult {
     const trials =
@@ -304,7 +347,7 @@ export class SrsAdapter implements SrsPort {
           })),
         );
     }
-    return r;
+    return r.familyState === null ? r : { ...r, familyState: this.#withResting(r.familyState) };
   }
 
   #familyDto(id: string): FamilyState | null {
@@ -320,13 +363,26 @@ export class SrsAdapter implements SrsPort {
       graduatedAt: null,
       updatedAt: this.#now().toISOString(),
     };
-    return this.service.familyDto(row);
+    return this.#withResting(this.service.familyDto(row));
+  }
+
+  /** Families resting in their composite (decision 27): family → the learner day it began resting. */
+  #resting(): Record<string, string> {
+    const state = settingsStatePort(this.repos, this.clock).get() as { resting?: unknown } | null;
+    const r = state?.resting;
+    return r !== null && typeof r === "object" && !Array.isArray(r) ? (r as Record<string, string>) : {};
+  }
+  /** The DTO with `restingSince` (wave3: the app says "resting in mixed practice" from it). */
+  #withResting(dto: FamilyState, resting: Record<string, string> = this.#resting()): FamilyState {
+    const since = resting[dto.familyId];
+    return { ...dto, restingSince: typeof since === "string" ? since : null };
   }
 
   families(): { families: FamilyState[]; cards: SrsCard[] } {
     const now = this.#now();
+    const resting = this.#resting();
     return {
-      families: this.repos.srs.families().map((r) => this.service.familyDto(r)),
+      families: this.repos.srs.families().map((r) => this.#withResting(this.service.familyDto(r), resting)),
       cards: this.repos.srs.cards().map((c) => this.service.cardDto(c, now)),
     };
   }
@@ -340,6 +396,19 @@ export class SrsAdapter implements SrsPort {
     return tx(this.repos.db, () => this.#startDrill(req));
   }
   #startDrill(req: DrillSessionCreate): DrillSession {
+    // One set per warm-up item: a second browser, or a double click, gets the set already open for this item of
+    // this session (the client reads its trials back with drills.get), never a second set that would also count.
+    if (req.sessionId !== null && req.warmupItemId !== null) {
+      const open = this.repos.srs.openDrillFor(req.sessionId, req.warmupItemId);
+      if (
+        open !== null &&
+        open.purpose === req.purpose &&
+        open.familyIds.join(",") === req.familyIds.join(",")
+      ) {
+        const { warmupItemId: _w, meanCredit: _m, ...session } = open;
+        return session;
+      }
+    }
     const levels: Record<string, number> = {};
     const openCategories: Record<string, string[]> = {};
     const focus: Record<string, string | null> = {};
@@ -391,12 +460,17 @@ export class SrsAdapter implements SrsPort {
     for (const t of trials)
       if (!drill.familyIds.includes(t.familyId))
         throw badRequest(`trial ${t.idx} is not of this set's families`);
-    this.repos.srs.saveTrials(drillSessionId, trials);
+    // A revealed trial has credit 0 and gives no evidence (wave3.md §5.3), whatever the client sent.
+    const stored = trials.map((t) => (t.revealed === true ? { ...t, credit: 0, correct: false } : t));
+    this.repos.srs.saveTrials(drillSessionId, stored);
+    // Graded sung notes (sung trials, sung resolutions) feed the tolerance ladder; a re-post replaces them.
+    for (const t of stored)
+      this.services.voice.recordTrial(drillSessionId, t, this.content.family(t.familyId)?.mic ?? false);
   }
 
   /** One transaction: a failure part-way leaves no card without its revlog, no half-recorded set. */
-  finishDrill(drillSessionId: string): Omit<DrillFinish, "streak"> {
-    return tx(this.repos.db, () => this.#finishDrill(drillSessionId));
+  finishDrill(drillSessionId: string): Omit<DrillFinish, "streak"> | Promise<Omit<DrillFinish, "streak">> {
+    return this.#zoned(() => tx(this.repos.db, () => this.#finishDrill(drillSessionId)));
   }
   #finishDrill(drillSessionId: string): Omit<DrillFinish, "streak"> {
     const drill = this.repos.srs.drill(drillSessionId);
@@ -478,20 +552,64 @@ export class SrsAdapter implements SrsPort {
           }
         }
         // Evidence for the family's skills: SRS set 1.0 (+0.5 per category with ≥ 2 trials), gym and anchor sets 0.5.
-        const perCategory = new Map<string, number>();
-        for (const t of mine) perCategory.set(t.category, (perCategory.get(t.category) ?? 0) + 1);
-        const bonus = [...perCategory.values()].filter((n) => n >= 2).length;
-        const sourceKind: Evidence["sourceKind"] =
-          drill.purpose === "gym" ? "gym-set" : drill.purpose === "anchor" ? "anchor-set" : "srs-set";
-        for (const sw of def?.skills ?? [])
+        // A revealed trial gives none, and a mic family's trial taken in Quiet mode or as its fallback gives no
+        // voice evidence (contracts §8.5, wave3.md §5.3).
+        const informative = mine.filter(
+          (t) => t.revealed !== true && !(def?.mic === true && (t.modality ?? "normal") !== "normal"),
+        );
+        if (informative.length > 0) {
+          const score = informative.reduce((sum, t) => sum + t.credit, 0) / informative.length;
+          const perCategory = new Map<string, number>();
+          for (const t of informative) perCategory.set(t.category, (perCategory.get(t.category) ?? 0) + 1);
+          const bonus = [...perCategory.values()].filter((n) => n >= 2).length;
+          const sourceKind: Evidence["sourceKind"] =
+            drill.purpose === "gym" ? "gym-set" : drill.purpose === "anchor" ? "anchor-set" : "srs-set";
+          for (const sw of def?.skills ?? [])
+            evidence.push({
+              skillId: skillOf(sw.skill) as Evidence["skillId"],
+              category: sw.skill.includes("/") ? sw.skill : null,
+              score,
+              weight: evidenceWeight(sourceKind, sourceKind === "srs-set" ? bonus : 0) * sw.w,
+              sourceKind,
+              sourceId: `${drillSessionId}#${familyId}`,
+            });
+        }
+      }
+      // Sung resolutions of functional-ear trials (contracts §8.3): they never change a trial's credit; they are
+      // evidence for the resolution family (`fam.deg.resolve`) and, when its card is due, its review.
+      const sungPaths = trials.filter(
+        (t) =>
+          t.sungResolution != null &&
+          !t.sungResolution.skipped &&
+          !t.sungResolution.quiet &&
+          (t.modality ?? "normal") === "normal",
+      );
+      const resolve = this.content.family(RESOLVE_FAMILY);
+      if (sungPaths.length > 0 && resolve !== null) {
+        const credit =
+          sungPaths.reduce((sum, t) => sum + (t.sungResolution?.credit ?? 0), 0) / sungPaths.length;
+        for (const sw of resolve.skills)
           evidence.push({
             skillId: skillOf(sw.skill) as Evidence["skillId"],
             category: sw.skill.includes("/") ? sw.skill : null,
-            score: mean,
-            weight: evidenceWeight(sourceKind, sourceKind === "srs-set" ? bonus : 0) * sw.w,
-            sourceKind,
-            sourceId: `${drillSessionId}#${familyId}`,
+            score: credit,
+            weight: evidenceWeight("srs-set") * sw.w,
+            sourceKind: "srs-set",
+            sourceId: `${drillSessionId}#${RESOLVE_FAMILY}`,
           });
+        if (this.repos.srs.card(RESOLVE_FAMILY) !== null) {
+          const r = this.service.otherWork(
+            {
+              source: "practice",
+              familyId: RESOLVE_FAMILY,
+              meanCredit: credit,
+              medianRtMs: 0,
+              playedLevel: null,
+            },
+            now,
+          );
+          if (r.reviewed !== null) reviews.push(r.reviewed);
+        }
       }
       // A composite set reviews the composite card once, with each member's trial credits.
       if (drill.familyIds.length > 1 && drill.purpose === "srs") {
@@ -532,12 +650,25 @@ export class SrsAdapter implements SrsPort {
       meanCredit: number | null;
     };
     const { warmupItemId: _w, meanCredit: _m, ...dto } = session;
-    return { session: dto, meanCredit, medianRtMs, reviews, evidence: added };
+    const resting = this.#resting();
+    return {
+      session: dto,
+      meanCredit,
+      medianRtMs,
+      reviews: reviews.map((r) =>
+        r.familyState === null ? r : { ...r, familyState: this.#withResting(r.familyState, resting) },
+      ),
+      evidence: added,
+    };
   }
 
   /** One transaction: a failure part-way leaves no card without its revlog, no half-recorded set. */
-  seedLesson(lessonId: string): { cardId: string; status: SrsCard["status"] }[] {
-    return tx(this.repos.db, () => this.#seedLesson(lessonId));
+  seedLesson(
+    lessonId: string,
+  ):
+    | { cardId: string; status: SrsCard["status"] }[]
+    | Promise<{ cardId: string; status: SrsCard["status"] }[]> {
+    return this.#zoned(() => tx(this.repos.db, () => this.#seedLesson(lessonId)));
   }
   #seedLesson(lessonId: string): { cardId: string; status: SrsCard["status"] }[] {
     const now = this.#now();
@@ -578,8 +709,8 @@ export class SrsAdapter implements SrsPort {
   }
 
   /** One transaction: a failure part-way leaves no card without its revlog, no half-recorded set. */
-  afterStep(input: StepReviewInput): SrsReviewResult[] {
-    return tx(this.repos.db, () => this.#afterStep(input));
+  afterStep(input: StepReviewInput): SrsReviewResult[] | Promise<SrsReviewResult[]> {
+    return this.#zoned(() => tx(this.repos.db, () => this.#afterStep(input)));
   }
   #afterStep(input: StepReviewInput): SrsReviewResult[] {
     if (!input.firstAttempt || input.disputed) return [];
@@ -644,16 +775,53 @@ export class CourseAdapter implements SessionPlanCoursePort {
     if (this.content.checkpointMeta(id) !== null) return "checkpoint";
     return "capstone";
   }
+  /**
+   * The next item of the default order that can be offered today. When the course runs out of authored
+   * lessons (a unit still being written), Today never offers a lesson without its lesson file: the scan goes
+   * on to a checkpoint or capstone session that is open (U04.CP waits for U05.L01 in the default order; while
+   * U05 is not written, U04.CP comes the day after U04.L04), and otherwise there is nothing to offer and the day
+   * is a review day (`pause` says why). A checkpoint is never offered on the day its unit's last lesson was
+   * completed (contracts §2.5: it falls on a later day).
+   */
   next(): CourseItem | null {
+    this.#pause = null;
     const g = this.services.gates;
+    const today = this.services.streak.time.day();
+    let unwritten = false;
     for (const id of this.content.defaultOrder()) {
       if (isTranscriptionSlot(id) || g.sessionDone(id) || !g.sessionOpen(id)) continue;
+      if (this.content.lessonSite(id) !== null && this.content.lessonDef(id) === null) {
+        unwritten = true;
+        continue;
+      }
+      if (this.content.checkpointMeta(id) !== null && this.#unitEndedOn(id) === today) {
+        this.#pause = `${this.#title(id)} is ready tomorrow. Today: a review, then Studio.`;
+        return null;
+      }
       return { id: id as SessionId, kind: this.#kind(id), title: this.#title(id) };
     }
     const track = g.nextMapItem();
-    return track === null || isTranscriptionSlot(track)
-      ? null
-      : { id: track, kind: this.#kind(track), title: this.#title(track) };
+    if (track !== null && !isTranscriptionSlot(track)) {
+      if (this.content.lessonSite(track) === null || this.content.lessonDef(track) !== null)
+        return { id: track, kind: this.#kind(track), title: this.#title(track) };
+      unwritten = true;
+    }
+    if (unwritten) this.#pause = "The next lessons are still being written. Today: a review, then Studio.";
+    return null;
+  }
+  #pause: string | null = null;
+  /** Why `next()` had nothing to offer although the course is not finished, or `null`. */
+  pause(): string | null {
+    return this.#pause;
+  }
+  /** The learner day the last lesson a checkpoint covers was completed on, or `null`. */
+  #unitEndedOn(cpId: string): string | null {
+    let last: string | null = null;
+    for (const l of this.content.lessonsCovered(cpId)) {
+      const at = this.repos.lessons.progress(l)?.completedAt ?? null;
+      if (at !== null && (last === null || at > last)) last = at;
+    }
+    return last === null ? null : this.services.streak.time.day(new Date(last));
   }
   history(): SessionId[] {
     const done: { id: string; at: string }[] = [];
@@ -767,6 +935,14 @@ export async function createSrsWiring(d: {
   });
   return {
     srs,
-    planner: { today: ({ targetMinutes }) => plan.today(d.clock.now(), targetMinutes) },
+    planner: {
+      today: async ({ targetMinutes }) => {
+        if (!service.zoneCurrent()) await srs.ensureZone();
+        const today = plan.today(d.clock.now(), targetMinutes);
+        // Decision 29: a checkpoint the planner offers holds the sing-tolerance ladder until it is passed.
+        if (today.kind === "checkpoint") d.services.voice.recordOffer(today.mapItemId, today.day);
+        return today;
+      },
+    },
   };
 }

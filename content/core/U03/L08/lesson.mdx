@@ -1,0 +1,61 @@
+{/* U03.L08 Solfège: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+Numbers are good for code. For singing, "seven" takes two syllables and "one, three, five" blurs together. Here every degree also gets a short word to sing, shown under its number.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+The same line, the same numbers, in another key. Watch where the words go when home moves.
+
+<Example id="hook-in-c" views="code,roll" />
+
+<OnPass>Do stays on home, sol on 5, in C and in A alike. These singing names are **solfège**: one syllable for each degree, and because do moves with home, it is called movable do.</OnPass>
+</Step>
+
+<Step id="S3">
+The seven syllables, in order from home: do re mi fa sol la ti, for degrees 1 2 3 4 5 6 7. After ti comes do again, the 1 above.
+
+Do is always home, in every key on the circle. So do mi sol is 1 3 5 in C, in A, in E♭: the same sound, from a new home.
+
+The numbers do not go away: they stay on the labels, and when you sing, numbers and syllables both count. In code nothing changes: do is `n` 0, sol is `n` 4.
+
+<Example id="do-to-do" views="code,roll" />
+</Step>
+
+<Step id="S4">
+Your voice is analysed live on this computer. Nothing is recorded or sent.
+
+<Sing exercise="sing-on-syllables" />
+
+<OnPass>Do mi sol, ti up into do, re down into do. Syllables you can sing quickly, each one a degree.</OnPass>
+</Step>
+
+<Step id="S5">
+All seven degrees again, as in Leading Tone & Six, and now each one has a syllable. Sing the note on a syllable before you answer: your voice finds the way to do.
+
+<EarDrill family="fam.deg.fet-major" level={3} trials={7} />
+
+<Callout kind="tip">Do, mi and sol sound at rest. The others lean toward one of them.</Callout>
+
+<OnPass>Every degree by ear, each with a name to sing.</OnPass>
+</Step>
+
+<Step id="S6">
+The other way round: hear syllables, write numbers. The roll shows the target after one try.
+
+<Editor exercise="write-what-you-sing" />
+
+<OnPass>Do re mi re do is `0 1 2 1 0`: each syllable a degree, each degree one less in `n`.</OnPass>
+</Step>
+
+<Step id="S7">
+Your turn. Write a line that fits your voice, play it with the band, then sing it back on syllables.
+
+<Make exercise="a-line-to-sing" />
+
+<CanDo id="cd.sing.degrees" />
+
+<Recap />
+</Step>

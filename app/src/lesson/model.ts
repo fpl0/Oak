@@ -24,6 +24,7 @@ import {
   type TargetMinutes,
 } from "@oak/api";
 import type { AnswerSpec } from "../answers/types.ts";
+import { isSungStep } from "./rules.ts";
 
 export type SplitPart = "A" | "B";
 
@@ -109,6 +110,10 @@ export function editorStart(ex: Exercise | undefined, example: StepDef["example"
     return { code: clean.code, editable: clean.editable };
   }
   if (ex?.kind === "transcribe-step") return { code: "", editable: null };
+  if (ex?.kind === "dictation" && ex.byEar && ex.answer.ui === "code") {
+    const clean = stripMarkers(ex.answer.starter);
+    return { code: clean.code, editable: clean.editable };
+  }
   if (example) return { code: example.code, editable: [] };
   return null;
 }
@@ -118,9 +123,58 @@ export function showsWorkbench(step: StepDef): boolean {
   const ex = step.exercise;
   if (!ex) return step.example !== undefined;
   if (EDITOR_KINDS.has(ex.kind) || ex.kind === "code-fill" || ex.kind === "transcribe-step") return true;
+  if (ex.kind === "dictation" && ex.byEar) return true;
   if (ex.kind === "listen" || ex.kind === "predict") return true;
   if (ex.kind === "all") return ex.parts.some((p) => EDITOR_KINDS.has(p.kind) || p.kind === "code-fill");
   return step.example !== undefined;
+}
+
+/**
+ * A choice answer whose stimulus is a drawn trial that brings its own options (`params.options`, e.g. Find home's
+ * note names in the trial's key, with `optionLabels` and `choiceAudio` when given) shows those options, not the
+ * authored ones: the trial's expected answer is one of its own options (contracts §5.4, wave3 integration).
+ */
+export function withTrialOptions(
+  spec: AnswerSpec | null,
+  trial: { params: Record<string, unknown> } | null,
+): AnswerSpec | null {
+  // A drawn melody is as long as the trial draws it: the pad takes that many degrees (U03.L10 S2 drew three or
+  // four notes and the authored pad took one).
+  if (spec?.ui === "degree-pad" && trial) {
+    const len = trial.params.sequenceLen;
+    return typeof len === "number" && Number.isInteger(len) && len > 0 && len !== (spec.sequenceLen ?? 1)
+      ? { ...spec, sequenceLen: len }
+      : spec;
+  }
+  if (spec?.ui !== "choice" || !trial) return spec;
+  const own = trial.params.options;
+  if (!Array.isArray(own) || own.length === 0 || !own.every((o) => typeof o === "string")) return spec;
+  const labels =
+    trial.params.optionLabels && typeof trial.params.optionLabels === "object"
+      ? (trial.params.optionLabels as Record<string, unknown>)
+      : {};
+  const audio = new Map<string, string>();
+  if (Array.isArray(trial.params.choiceAudio))
+    for (const r of trial.params.choiceAudio as { id?: unknown; audio?: unknown }[])
+      if (typeof r?.id === "string" && typeof r.audio === "string") audio.set(r.id, r.audio);
+  const authored = new Map(spec.options.map((o) => [o.id, o]));
+  return {
+    ...spec,
+    options: (own as string[]).map((id) => {
+      const a = authored.get(id);
+      const label = typeof labels[id] === "string" ? (labels[id] as string) : (a?.label ?? noteLabel(id));
+      const sound = audio.get(id) ?? a?.audio;
+      return { id, label, ...(sound !== undefined ? { audio: sound } : {}) };
+    }),
+  };
+}
+
+/** `Bb` → `B♭`, `F#` → `F♯`; anything else as it is. */
+function noteLabel(id: string): string {
+  const m = /^([A-G])(bb|b|##|#)?$/.exec(id);
+  if (!m) return id;
+  const acc = { "": "", b: "♭", bb: "𝄫", "#": "♯", "##": "𝄪" }[m[2] ?? ""] ?? "";
+  return `${m[1]}${acc}`;
 }
 
 /** The answer surface of one non-code exercise (contracts §5.4), or `null` for editor and listen kinds. */
@@ -129,8 +183,10 @@ export function answerSpecOf(ex: Exercise): AnswerSpec | null {
     case "identify":
     case "fact":
     case "staff-read":
-    case "dictation":
       return ex.answer;
+    case "dictation":
+      // A by-ear transcription is written in the Workbench (its answer is the code there).
+      return ex.byEar ? null : ex.answer;
     case "keyboard":
     case "staff-write":
       return ex.answer;
@@ -190,6 +246,8 @@ export interface StepProgress {
 export function canContinue(step: StepDef, p: StepProgress): boolean {
   if (step.kind === "make") return false;
   if (!step.graded) return true;
+  // Singing never gates anything (contracts §7.6, §8): a sung step can always be left, a graded one too.
+  if (isSungStep(step)) return true;
   if (p.disputed) return true;
   if (p.state?.passed || (p.state?.rung ?? 0) >= 4) return true;
   return p.result?.status === "pass";
@@ -197,6 +255,7 @@ export function canContinue(step: StepDef, p: StepProgress): boolean {
 
 /** "Continue" on an ungraded step the learner did not finish reads "Skip" (it can always be skipped). */
 export function continueLabel(step: StepDef, p: StepProgress): "Continue" | "Skip" {
+  if (step.exercise && step.graded && isSungStep(step)) return stepDone(step, p) ? "Continue" : "Skip";
   if (!step.exercise || step.graded) return "Continue";
   return stepDone(step, p) ? "Continue" : "Skip";
 }

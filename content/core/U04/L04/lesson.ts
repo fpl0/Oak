@@ -1,0 +1,335 @@
+// U04.L04 Interval Ear Lab. No new idea: intervals inside a key become familiar by hearing many of them,
+// named as they play (passive blocks, AUTHORING §16.5), then by naming them: up, down, and together. A sung
+// pair (1 up to 3, 1 up to 5) seeds `fam.int.sing`. The Make answers a one-bar riff with the same shape a
+// named distance away; the grader hears the shape in half steps (`motif-reuse`). Spec: content/specs/U04.md.
+import { type AnswerUi, defineLesson, type HintLadder } from "@oak/content-kit";
+
+const BPM = 96;
+const TEMPO = `setcpm(${BPM}/4)\n\n`;
+const deg = (pattern: string) => `${TEMPO}mel: n("${pattern}").scale("C4:major").s("piano")`;
+const mel = (pattern: string, link = "") => `${TEMPO}mel: note("${pattern}")${link}.s("piano")`;
+
+const ladder = (nudge: string, pointer: string, partial: string): HintLadder => [
+  { text: nudge },
+  { text: pointer },
+  { text: partial },
+  "auto",
+];
+
+/** The hook: home, then a 5th, a 3rd, a 6th and the octave above it, one per bar. */
+const HOOK = deg("<[0 ~ 4 ~] [0 ~ 2 ~] [0 ~ 5 ~] [0 ~ 7 ~]>");
+
+/** The Make: a one-bar riff; bar 2 is empty. A 4th up (F A C A) fits the vamp's F chord note for note. */
+const MAKE_STARTER = mel("<[c4 e4 g4 e4] ~>");
+
+const BAND = { band: "band.two-chord-vamp" } as const;
+const NONE = { roll: false, staff: false, keyboard: false } as const;
+const ROLL = { roll: true, staff: false, keyboard: false } as const;
+/** Both notes of a pair, by degree, on syllables. */
+const PAD: AnswerUi = {
+  ui: "degree-pad",
+  set: ["1", "2", "3", "4", "5", "6", "7"],
+  sequenceLen: 2,
+  syllables: true,
+};
+
+export default defineLesson({
+  id: "U04.L04",
+  version: 1,
+  title: "Interval Ear Lab",
+  objective: "I can name the distance between two notes in a key, up, down and played together.",
+  key: { tonic: "C", mode: "major" },
+  meter: "4/4",
+  bpm: BPM,
+  introduces: [],
+  practises: ["E06"],
+  terms: [],
+  canDo: ["cd.hear.intervals"],
+  wrapAt: "S4",
+  steps: [
+    {
+      id: "S1",
+      kind: "listen",
+      title: "Hear them named",
+      minutes: 1.25,
+      ui: { panels: ROLL, rollLabels: "degree+solfege", band: BAND },
+      example: { id: "hook", code: HOOK, bars: 4 },
+      exercise: {
+        kind: "listen",
+        id: "hear-them-named",
+        version: 1,
+        role: "practice",
+        prompt:
+          "Press Play: home, then a 5th, a 3rd, a 6th and the octave. Then twelve pairs from anywhere in the key, each named as it plays. Nothing to answer: listen and let the names sink in.",
+        skills: [{ skill: "E06", w: 1 }],
+        hints: null,
+        tests: [],
+        items: [
+          { code: HOOK, caption: "Home, then a 5th, a 3rd, a 6th and the octave, over the band.", bars: 4 },
+        ],
+        passive: { family: "fam.int.in-key", level: 3, items: 12, reveal: "with", gapBeats: 2 },
+      },
+    },
+    {
+      id: "S2",
+      kind: "ear",
+      title: "Up",
+      minutes: 1.25,
+      graded: true,
+      ui: { panels: NONE },
+      exercise: {
+        kind: "identify",
+        id: "pairs-up",
+        version: 1,
+        role: "check",
+        prompt:
+          "Chords set home. Then two notes, the second higher, from anywhere in the key. Enter both degrees, in the order they play.",
+        skills: [{ skill: "E06", w: 1 }],
+        hints: [
+          {
+            text: "Find the first note against home: sing down from it to do. Which syllable did you start on?",
+          },
+          {
+            text: "Then count up from the first note to the second, both ends included: that is the distance.",
+          },
+          {
+            text: "Hear it again, slower, and sing the scale up between the two notes.",
+            replay: { rate: 0.75 },
+          },
+          "auto",
+        ],
+        stimulus: { src: "generator", family: "fam.int.in-key", level: 3 },
+        cue: { context: "cadence", countInBars: 0, click: false, replays: 2 },
+        answer: PAD,
+        correct: {},
+        srs: [{ family: "fam.int.in-key", mode: "review-if-due" }],
+        tests: [],
+      },
+    },
+    {
+      id: "S3",
+      kind: "listen",
+      title: "Guess, then hear",
+      minutes: 0.75,
+      ui: { panels: NONE },
+      exercise: {
+        kind: "listen",
+        id: "guess-then-hear",
+        version: 1,
+        role: "practice",
+        prompt:
+          "Now eight pairs going down. Name each one silently before Oak says it. Nobody keeps score here.",
+        skills: [{ skill: "E06", w: 1 }],
+        hints: null,
+        tests: [],
+        items: [],
+        passive: { family: "fam.int.in-key", level: 4, items: 8, reveal: "after", gapBeats: 2 },
+      },
+    },
+    {
+      id: "S4",
+      kind: "ear",
+      title: "Down",
+      minutes: 1.25,
+      graded: true,
+      ui: { panels: NONE },
+      exercise: {
+        kind: "identify",
+        id: "pairs-down",
+        version: 1,
+        role: "check",
+        prompt:
+          "Chords set home. Then two notes, the second lower, from anywhere in the key. Enter both degrees, in the order they play.",
+        skills: [{ skill: "E06", w: 1 }],
+        hints: [
+          { text: "Which of the two notes is closer to home? Start from that one." },
+          {
+            text: "Sing down from the first note to the second on syllables and count both ends: that is the distance.",
+          },
+          {
+            text: "Hear it again, slower, and sing the scale down between the two notes.",
+            replay: { rate: 0.75 },
+          },
+          "auto",
+        ],
+        stimulus: { src: "generator", family: "fam.int.in-key", level: 4 },
+        cue: { context: "cadence", countInBars: 0, click: false, replays: 2 },
+        answer: PAD,
+        correct: {},
+        srs: [{ family: "fam.int.in-key", mode: "review-if-due" }],
+        tests: [],
+      },
+    },
+    {
+      id: "S5",
+      kind: "sing",
+      title: "Sing up from do",
+      minutes: 1,
+      ui: { panels: NONE },
+      exercise: {
+        kind: "sing",
+        id: "sing-up-from-do",
+        version: 1,
+        role: "practice",
+        prompt:
+          "Chords set home. Sing do, up a 3rd to mi; then do again, up a 5th to sol. One syllable to two beats.",
+        skills: [
+          { skill: "V03", w: 0.6 },
+          { skill: "E06", w: 0.4 },
+        ],
+        hints: [
+          { text: "Hum do first, the note the chords end on. Hold it before you move." },
+          {
+            text: "Mi is two degrees above do, sol two more above mi. Pass through them quietly if the jump feels far.",
+          },
+          { text: "Hear the pattern on the piano once, then sing it back.", replay: { rate: 0.75 } },
+          "auto",
+        ],
+        // Quiet mode or no microphone: "hear it in your head" (contracts §8.5); singing never gates.
+        fallback: "skip",
+        mode: "degree",
+        stimulus: { src: "code", code: deg("<[0 2] [0 4]>"), bars: 2, showCode: false },
+        cue: { context: "cadence", countInBars: 1, click: false, replays: -1 },
+        target: { from: "degrees", degrees: ["1", "3", "1", "5"] },
+        labels: "syllables",
+        tol: { cents: "learner", octave: "global", driftCompCents: 30, minCoverage: 0.4, passHitRate: 0.8 },
+        showTrace: "live",
+        srs: [{ family: "fam.int.sing", mode: "seed" }],
+        tests: [],
+      },
+    },
+    {
+      id: "S6",
+      kind: "ear",
+      title: "Together",
+      minutes: 1,
+      graded: true,
+      ui: { panels: NONE },
+      exercise: {
+        kind: "identify",
+        id: "pairs-together",
+        version: 1,
+        role: "check",
+        prompt: "Chords set home. Then two notes at once. Enter both degrees, the lower one first.",
+        skills: [{ skill: "E06", w: 1 }],
+        hints: [
+          { text: "Hum the top note, then the bottom one. Which one is easier to hear?" },
+          {
+            text: "Find each note on its way down to do. Rest or clash tells you something too: 2nds and 7ths rub.",
+          },
+          { text: "Hear it again, slower, and hum both notes one after the other.", replay: { rate: 0.75 } },
+          "auto",
+        ],
+        stimulus: { src: "generator", family: "fam.int.in-key", level: 5 },
+        cue: { context: "cadence", countInBars: 0, click: false, replays: 2 },
+        answer: PAD,
+        correct: {},
+        srs: [{ family: "fam.int.in-key", mode: "review-if-due" }],
+        tests: [],
+      },
+    },
+    {
+      id: "S7",
+      kind: "make",
+      title: "Answer the riff",
+      minutes: 2.5,
+      ui: { panels: ROLL, rollLabels: "degree+solfege", band: BAND },
+      exercise: {
+        kind: "code-make",
+        id: "answer-the-riff",
+        version: 1,
+        role: "practice",
+        prompt:
+          "Write a one-bar riff, then answer it in bar 2 with the same shape moved by a named distance: every distance inside the riff keeps its size in half steps. Try a perfect 4th up: the starter's riff then lands on the band's F chord. Other distances work too; some leave C major, and you will hear it.",
+        skills: [{ skill: "E06", w: 1 }],
+        code: { starter: MAKE_STARTER },
+        bars: [1, 4],
+        saveAs: "sketch",
+        rubric: [
+          {
+            id: "same-shape",
+            label: "Bar 2 keeps bar 1's shape: every distance the same in half steps",
+            required: true,
+            skills: ["E06", "I01"],
+            rule: "motif-reuse",
+            track: "@melody",
+            // Measured over one pass of the 2-bar loop, in half steps: bar 2 in bar 1's shape scores 1 of 2;
+            // bar 2 in another shape, or the starter's rest, 0.
+            minRatio: 0.5,
+            unitBars: 1,
+          },
+          {
+            id: "named",
+            label: 'Moved with a named interval, `.transpose("…")`',
+            required: false,
+            skills: ["I02"],
+            rule: "uses",
+            tool: "tb.transpose.interval",
+          },
+          {
+            id: "home",
+            label: "Ends on 1, home",
+            required: false,
+            skills: ["E04"],
+            rule: "ends-on-degree",
+            track: "@melody",
+            degrees: ["1"],
+          },
+        ],
+        // The check compares half steps (an exact copy, moved). Moving the riff by degrees inside the key
+        // (`n` plus 2, as in U04.L01) turns C–E, a major 3rd, into E–G, a minor one: say so instead of the
+        // catalog's "14 of 16 bars reuse an earlier idea", which counts the loop's repeats.
+        // One text serves every unmet rule, so the teaching point lives in the rule's label and the hints.
+        feedbackText: { "rubric.unmet": "{label}: not yet." },
+        hints: ladder(
+          "Bar 2 is a rest now. What would make it sound like an answer to bar 1, not a new idea?",
+          "The same shape is the same distances between the notes, in half steps. Move every note of bar 1 by one named distance, up or down: a major 3rd stays a major 3rd.",
+          "A 4th above C is F: the answer starts on `f4`. Move the other three notes the same way, five half steps each.",
+        ),
+        tests: [
+          {
+            name: "the starter as it is",
+            response: { code: MAKE_STARTER },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "minimal: a 4th up, by hand",
+            response: { code: mel("<[c4 e4 g4 e4] [f4 a4 c5 a4]>") },
+            expect: "pass",
+          },
+          {
+            name: "beyond the brief: a 5th up, the last note bent home, hats",
+            response: {
+              code: `${TEMPO}hats: s("hh*8").gain(.35)\nmel: note("<[c4 e4 g4 [e4 d4]] [g4 b4 d5 [b4 c5]]>").s("piano")`,
+            },
+            expect: "pass",
+          },
+          {
+            name: "a patterned named move",
+            response: { code: mel("[c4 e4 g4 e4]", '.transpose("<1P 4P>")') },
+            expect: "pass",
+          },
+          {
+            name: "bar 2 a different shape",
+            response: { code: mel("<[c4 e4 g4 e4] [g4 f4 e4 d4]>") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            // A sequence by degrees: E–G is a minor 3rd where C–E is major, so the shape is not kept.
+            name: "moved up a 3rd inside the key, by degrees",
+            response: { code: mel("<[c4 e4 g4 e4] [e4 g4 b4 g4]>") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "a major 3rd up, named",
+            response: { code: mel("[c4 e4 g4 e4]", '.transpose("<1P 3M>")') },
+            expect: "pass",
+          },
+        ],
+      },
+    },
+  ],
+});

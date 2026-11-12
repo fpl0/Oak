@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { contract, ENDPOINT_NAMES, WAVE2_ENDPOINTS } from "@oak/api";
+import { contract, ENDPOINT_NAMES, WAVE2_ENDPOINTS, WAVE3_ENDPOINTS } from "@oak/api";
 import { gradeResult, type Harness, harness } from "../testing/harness.ts";
 
 let h: Harness;
@@ -39,7 +39,7 @@ describe("meta", () => {
     }>("GET", "/api/health");
     expect(r.status).toBe(200);
     expect(r.body.ok).toBe(true);
-    expect(r.body.schemaVersion).toBe(2);
+    expect(r.body.schemaVersion).toBe(3);
     expect(r.body.contentVersion).toBe("fixture-1");
     expect(r.body.tutor).toBe("unreachable");
     expect(r.body.dev).toBe(false);
@@ -575,6 +575,38 @@ describe("contract coverage", () => {
         const text = await res.text();
         const routerMiss = res.status === 404 && text.includes("no such endpoint");
         expect({ name, routerMiss }).toEqual({ name, routerMiss: false });
+      }
+    } finally {
+      await full.close();
+    }
+  });
+});
+
+/**
+ * The Wave 3 endpoints still answering their typed 501 stub (docs/design/wave3.md §5). The server engineer
+ * removes a name here as its handler lands; the second test then checks it no longer answers 501.
+ */
+const WAVE3_PENDING: readonly (typeof WAVE3_ENDPOINTS)[number][] = [];
+const WAVE3_BODIES: Partial<Record<(typeof WAVE3_ENDPOINTS)[number], unknown>> = {
+  "voice.quiet": { quiet: true, scope: "today" },
+  "voice.ladder": { mode: "auto" },
+};
+
+describe("Wave 3 endpoints", () => {
+  test("a pending endpoint answers the typed 501 stub; a built one never does", async () => {
+    const full = await harness({ dev: true });
+    try {
+      for (const name of WAVE3_ENDPOINTS) {
+        const def = contract[name] as { method: string; path: string };
+        const path = `/api${def.path.replace(/:([A-Za-z]+)/g, "x")}`;
+        const r = await full.json<{ error?: { code: string } }>(def.method, path, WAVE3_BODIES[name]);
+        if (WAVE3_PENDING.includes(name))
+          expect({ name, status: r.status, code: r.body?.error?.code }).toEqual({
+            name,
+            status: 501,
+            code: "not_implemented",
+          });
+        else expect({ name, status: r.status }).not.toEqual({ name, status: 501 });
       }
     } finally {
       await full.close();
