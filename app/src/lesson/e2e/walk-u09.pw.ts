@@ -2,6 +2,8 @@
 // (w5walk.ts), each graded step given one of the lesson's own pinned mistakes first, its feedback read (clean, the
 // pinned codes, not the answer), then the right answer; the lesson ends complete on the server. One test per
 // lesson, each walk under a minute.
+// U10.L01 is walked here, after U09.L05: its seed point (`after U09.L05`) is where the test before it leaves the
+// learner (chain.ts), so it costs no seed.
 import { walkSuiteW5 } from "./w5walk.ts";
 
-walkSuiteW5(["U09.L01", "U09.L02", "U09.L03", "U09.L04", "U09.L05"]);
+walkSuiteW5(["U09.L01", "U09.L02", "U09.L03", "U09.L04", "U09.L05", "U10.L01"]);

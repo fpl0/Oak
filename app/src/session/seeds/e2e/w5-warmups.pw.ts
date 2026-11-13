@@ -83,9 +83,11 @@ async function startDay(page: Page, item: string): Promise<void> {
 
 /**
  * Moves the warm-up to the first item of `familyId` (the ones before it are reported skipped, as the learner's
- * "skip" would) and returns it. Its first set is a blocked intro: the listening comes first, ended with Enter.
+ * "skip" would) and returns it. Its first set is a blocked intro: the listening comes first, ended with Enter. With
+ * `hear`, the listening is heard through (focus reaches "Start the set" once every example has played: asserted once
+ * in this file, by the first test); otherwise the set starts while it plays, as listening never gates.
  */
-async function toFamily(page: Page, familyId: string): Promise<WarmItem> {
+async function toFamily(page: Page, familyId: string, opts: { hear?: boolean } = {}): Promise<WarmItem> {
   const items = (await state(page)).plan?.warmup.items ?? [];
   const at = items.findIndex((i) => i.familyId === familyId);
   expect(
@@ -110,10 +112,13 @@ async function toFamily(page: Page, familyId: string): Promise<WarmItem> {
   const item = items[at] as WarmItem;
   expect(item.kind).toBe("blocked-intro");
   await expect(page.getByTestId("listen-block")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByRole("button", { name: /Start the set/ })).toBeFocused({ timeout: 60_000 });
+  const start = page.getByRole("button", { name: /Start the set/ });
+  if (opts.hear) await expect(start).toBeFocused({ timeout: 60_000 });
+  else await expect(start).toBeEnabled();
   await settle(page);
   await expectNoOverflow(page);
   await shoot(page, SHOTS, `w5-warmup-intro-${familyId.replace(/^fam\./, "")}`, "paper");
+  if (!opts.hear) await start.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("trial-counter")).toHaveText(/Trial 1 of \d+/, { timeout: 60_000 });
   return item;
@@ -187,7 +192,7 @@ test("a U08 day: the bass-and-kick set opens in the warm-up, answered by key, th
   expect(s.next).toBe("U08.L05");
   await useUiPrefs(page, { theme: "paper" });
   await startDay(page, "U08.L05");
-  const item = await toFamily(page, "fam.rhy.groove-lock");
+  const item = await toFamily(page, "fam.rhy.groove-lock", { hear: true });
   const before = (await state(page)).warmupIndex;
   const total = await totalOf(page);
   expect(total).toBe(item.trials);

@@ -8,6 +8,7 @@
 //   was asked about and has two revisions; release with the liner notes naming the song.
 import { expect, test } from "@playwright/test";
 import { useUiPrefs } from "../../../../e2e/support/ui.ts";
+import { seedTake } from "./seeded-take.ts";
 import { capstoneDef, editor, seedFirst, setCode, shots, watchErrors } from "./w5-support.ts";
 
 test.describe.configure({ mode: "serial" });
@@ -135,8 +136,10 @@ test("X2 session 2 from “X2.S1 done”: the melody line by line, a review of a
   const dialog = page.getByRole("dialog", { name: /Release/ });
   await expect(dialog).toBeVisible({ timeout: 30_000 });
   await expect(dialog.getByTestId("release-liner")).toContainText(song.title);
+  // A seeded take (seeded-take.ts): the recorder's own window, uploaded through the release path.
+  await seedTake(page);
   await dialog.getByTestId("record-take").click();
-  await expect(dialog.getByTestId("take-audio")).toBeVisible({ timeout: 120_000 });
+  await expect(dialog.getByTestId("take-audio")).toBeVisible({ timeout: 30_000 });
   await dialog.getByTestId("confirm-release").click();
   await expect(page.getByTestId("release-ceremony")).toBeVisible({ timeout: 30_000 });
   expect(errors).toEqual([]);

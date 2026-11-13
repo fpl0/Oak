@@ -9,7 +9,7 @@
 // With the gate unmet, U05.L08 opens on the second chance and Continue waits for a gate pass (the one hard gate).
 import { expect, setCode, snapshot, stepIs, test } from "./support.ts";
 import { api, reseedFresh, seed, setQuiet } from "./w3support.ts";
-import { expectHonestFeedback, lessonDef, walkLesson } from "./walk.ts";
+import { expectHonestFeedback, lessonDef, shownFrom, walkLesson } from "./walk.ts";
 
 test.describe.configure({ mode: "serial" });
 test.afterAll(async ({ request }) => {
@@ -110,7 +110,9 @@ test("U05.L07: a fail keeps voicing() locked and says what to fix; a pass opens 
   const first = l08.steps.find((s) => !s.gateCheck) as { id: string };
   await stepIs(page, first.id);
   await expect(page.getByTestId("gate-box")).toHaveCount(0);
-  await walkLesson(page, l08, { lessonId: "U05.L08", mic: false, quiet: false });
+  // U05.L08's only full walk (walk-u05.pw.ts stops at U05.L07): every shown step, a pinned mistake first, complete.
+  const seen = await walkLesson(page, l08, { lessonId: "U05.L08", mic: false, quiet: false });
+  for (const s of shownFrom(l08)) expect(seen, `U05.L08: ${s} walked`).toContain(s);
   const complete = page.getByTestId("lesson-complete");
   await expect(complete).toContainText("New in your toolbox");
   await expect(complete).toContainText("voicing");

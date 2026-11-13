@@ -83,9 +83,25 @@ export async function expectNoOverflow(page: Page): Promise<void> {
   expect(o.main, "<main> overflows horizontally").toBeLessThanOrEqual(1);
 }
 
+/**
+ * The page is settled for a shot or a layout check: fonts loaded, two frames painted, and no finite CSS animation or
+ * transition still running (a theme switch fades its colours), waited for as a condition, at most 1 s.
+ */
 export async function settle(page: Page): Promise<void> {
-  await page.evaluate(() => document.fonts.ready);
-  await page.waitForTimeout(400);
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    const frame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+    await frame();
+    await frame();
+    const moving = () =>
+      document
+        .getAnimations()
+        .some(
+          (a) => a.playState === "running" && Number.isFinite(a.effect?.getComputedTiming().endTime ?? 0),
+        );
+    const until = performance.now() + 1_000;
+    while (moving() && performance.now() < until) await frame();
+  });
 }
 
 /** Today, loaded and decided. */
@@ -95,15 +111,24 @@ export async function today(page: Page): Promise<void> {
   await expect(page.getByTestId("today-card")).toHaveAttribute("data-state", /.+/);
 }
 
-/** Screenshots of `open` at 1440×900 and 1280×800 in Paper and Bark, with the overflow check. */
+/**
+ * Screenshots of `open` at 1440×900 and 1280×800 in Paper and Bark, with the overflow check. `open` loads the screen
+ * once per theme (the theme is the learner's preference, applied as the page loads); the second size is the same
+ * screen resized in place.
+ */
 export async function matrix(page: Page, name: string, open: (page: Page) => Promise<void>): Promise<void> {
-  for (const m of SCREENSHOT_MATRIX) {
-    await page.setViewportSize({ width: m.width, height: m.height });
-    await useUiPrefs(page, { theme: m.theme });
-    await open(page);
-    await settle(page);
-    await expectNoOverflow(page);
-    await shoot(page, SHOTS, name, m.theme);
+  for (const theme of ["paper", "bark"] as const) {
+    for (const [i, m] of SCREENSHOT_MATRIX.filter((x) => x.theme === theme).entries()) {
+      await page.setViewportSize({ width: m.width, height: m.height });
+      if (i === 0) {
+        await useUiPrefs(page, { theme });
+        await open(page);
+      }
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      await settle(page);
+      await expectNoOverflow(page);
+      await shoot(page, SHOTS, name, m.theme);
+    }
   }
   await page.setViewportSize({ width: 1440, height: 900 });
 }

@@ -174,6 +174,9 @@ test("the Oak through U11: the bass, form, minor and blues strands and the sound
   await shoot(page, SHOTS, "w5-oak-panel-h10", "bark");
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0);
+  // Closing hands focus back to the leaf on the next frame (map/OakTree.tsx close): wait for it, so the next leaf's
+  // focus is not taken back from under it.
+  await expect(page.locator('[data-node="H10"]')).toBeFocused();
   // The sound branch (track A) has its own rows; its leaves are never the core's "what's next".
   await page.locator('[data-node="D03"]').focus();
   await page.keyboard.press("Enter");

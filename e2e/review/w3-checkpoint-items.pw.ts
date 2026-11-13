@@ -23,16 +23,28 @@ test("U03.CP: skips are counted as skips, and E♭ major's signature is written 
   const step = page.getByTestId("lesson-step");
   const progress = page.getByTestId("checkpoint-progress");
   let skipped = 0;
-  for (let n = 0; n < 30; n++) {
-    await expect(step).toBeVisible({ timeout: 60_000 });
-    if ((await step.getAttribute("data-exercise")) === "staff-write") break;
-    const id = await step.getAttribute("data-step");
-    await page.getByTestId("skip-item").click();
-    skipped++;
-    await expect(step).not.toHaveAttribute("data-step", id ?? "", { timeout: 30_000 });
+  /** The progress line names skips only once there is one ("1 of 26 answered", then "…, 2 skipped"). */
+  const progressLine = (answered: number) =>
+    new RegExp(`^${answered} of \\d+ answered${skipped > 0 ? `, ${skipped} skipped` : ""}$`);
+  /** Skips items until the key signature item is up (or `max` items are skipped). */
+  const skipUntilKeysig = async (max: number) => {
+    for (let n = 0; n < max; n++) {
+      await expect(step).toBeVisible({ timeout: 60_000 });
+      if ((await step.getAttribute("data-exercise")) === "staff-write") return;
+      const id = await step.getAttribute("data-step");
+      await page.getByTestId("skip-item").click();
+      skipped++;
+      await expect(step).not.toHaveAttribute("data-step", id ?? "", { timeout: 30_000 });
+    }
+  };
+  await skipUntilKeysig(30);
+  // The attempt's items are drawn in an order salted with the instant it starts (GatesService.composeCheckpoint),
+  // so the key signature can be the first item (about one attempt in twenty-six). Then the skips come after it.
+  const keysigFirst = skipped === 0;
+  if (!keysigFirst) {
+    expect(skipped).toBeGreaterThan(0);
+    await expect(progress).toHaveText(progressLine(0));
   }
-  expect(skipped).toBeGreaterThan(0);
-  await expect(progress).toHaveText(new RegExp(`^0 of \\d+ answered, ${skipped} skipped$`));
   // The key signature, from the keyboard only: flats, then B E A in order; Mod+Shift+Enter saves the answer.
   const surface = page.getByTestId("keysig-surface");
   await surface.focus();
@@ -42,7 +54,16 @@ test("U03.CP: skips are counted as skips, and E♭ major's signature is written 
   await shootAll(page, "w3-cp-keysig-written");
   await page.keyboard.press("ControlOrMeta+Shift+Enter");
   await expect(page.getByText("Answer saved.")).toBeVisible({ timeout: 30_000 });
-  await expect(progress).toHaveText(new RegExp(`^1 of \\d+ answered, ${skipped} skipped$`));
+  await expect(progress).toHaveText(progressLine(1));
   await expect(page.getByTestId("next-item")).toBeEnabled();
+  if (keysigFirst) {
+    // The same skips, after the answered item: each one counted as a skip, never as answered.
+    const id = await step.getAttribute("data-step");
+    await page.getByTestId("next-item").click();
+    await expect(step).not.toHaveAttribute("data-step", id ?? "", { timeout: 30_000 });
+    await skipUntilKeysig(2);
+    expect(skipped).toBeGreaterThan(0);
+    await expect(progress).toHaveText(progressLine(1));
+  }
   expect(problems).toEqual([]);
 });

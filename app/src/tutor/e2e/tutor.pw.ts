@@ -132,23 +132,13 @@ test("Esc stops a slow answer and keeps its text; Send again works", async ({ pa
 });
 
 test("errors: a rate limit cools down, overload offers Retry, auth points to Settings", async ({ page }) => {
+  // The page's clock runs as usual; it is only moved past the overload cool-down at the end (no audio plays here).
+  await page.clock.install();
   await openApp(page);
   await send(page, "Hello #error");
   await waitDone(page);
   await expect(lastMessage(page).getByTestId("turn-error")).toHaveAttribute("data-kind", "rate_limit");
   await expect(lastMessage(page)).toContainText(/Cooling down — 0:(1|2)\d/);
-
-  await send(page, "Hello #error:overloaded");
-  await waitDone(page);
-  const busy = lastMessage(page);
-  await expect(busy.getByTestId("turn-error")).toHaveAttribute("data-kind", "overloaded");
-  await expect(busy).toContainText("Claude was interrupted (overloaded)");
-  // The server asked for a pause (retryAfterSec): the cool-down runs out, then Retry sends the turn again.
-  await expect(busy).toContainText("Cooling down");
-  await expect(busy.getByRole("button", { name: "Retry" })).toBeVisible({ timeout: 45_000 });
-  await busy.getByRole("button", { name: "Retry" }).click();
-  await waitDone(page);
-  await expect(lastMessage(page).getByTestId("turn-error")).toHaveAttribute("data-kind", "overloaded");
 
   await send(page, "Hello #error:auth");
   await waitDone(page);
@@ -157,6 +147,30 @@ test("errors: a rate limit cools down, overload offers Retry, auth points to Set
   await send(page, "#empty");
   await waitDone(page);
   await expect(lastMessage(page)).toContainText("Claude had nothing to add");
+
+  // Last, because the clock jump below puts the page's time ahead of the server's for the turns after it.
+  await send(page, "Hello #error:overloaded");
+  await waitDone(page);
+  const busy = lastMessage(page);
+  await expect(busy.getByTestId("turn-error")).toHaveAttribute("data-kind", "overloaded");
+  await expect(busy).toContainText("Claude was interrupted (overloaded)");
+  // The server asked for a pause (retryAfterSec): the cool-down runs out, then Retry sends the turn again.
+  await expect(busy).toContainText("Cooling down");
+  // The cool-down is the panel's own timer (Date.now and a 1-s setTimeout): jump the page's clock past the
+  // server's 20-s pause instead of waiting it out, then Retry must be there.
+  await page.clock.fastForward(25_000);
+  await expect(busy.getByRole("button", { name: "Retry" })).toBeVisible({ timeout: 45_000 });
+  await busy.getByRole("button", { name: "Retry" }).click();
+  await waitDone(page);
+  await expect(lastMessage(page).getByTestId("turn-error")).toHaveAttribute("data-kind", "overloaded");
+
+  // HEAD sent the auth and empty turns after the retried one: the panel still sends after a retry. Counted, not read
+  // from the last message, because the page's clock is now ahead of the server's turn times.
+  const empties = panel(page).getByText("Claude had nothing to add");
+  const before = await empties.count();
+  await send(page, "#empty");
+  await waitDone(page);
+  await expect(empties).toHaveCount(before + 1);
 });
 
 /**

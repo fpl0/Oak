@@ -86,14 +86,11 @@ export async function coda(page: Page, o: { unlocks: boolean | "auto"; shots?: s
   await expect(page).toHaveURL(/\/session\/coda$/, { timeout: 60_000 });
   await expect(page.getByTestId("coda-title")).toBeVisible();
   const moment = page.getByTestId("coda-unlock-moment");
-  // "auto": the moment shows when the session granted tools (it appears with the Coda, or not at all).
-  const shows =
-    o.unlocks === "auto"
-      ? await moment
-          .waitFor({ state: "visible", timeout: 5_000 })
-          .then(() => true)
-          .catch(() => false)
-      : o.unlocks;
+  // "auto": the moment shows when the session granted tools the learner has not seen yet. The server says which
+  // (the ended session's summary and the unlock list), so a Coda that grants nothing is known at once and is
+  // held to it: no moment at all, rather than none seen within a few seconds.
+  const shows = o.unlocks === "auto" ? await momentDue(page) : o.unlocks;
+  if (o.unlocks === "auto" && !shows) await expect(moment).toHaveCount(0);
   if (shows) {
     await expect(moment).toBeVisible({ timeout: 30_000 });
     if (o.shots) await shootAll(page, o.shots);
@@ -103,6 +100,31 @@ export async function coda(page: Page, o: { unlocks: boolean | "auto"; shots?: s
   await page.getByTestId("done-for-today").click();
   await expect(page).toHaveURL(/\/$/, { timeout: 30_000 });
   await expect(page.getByTestId("today-card")).toHaveAttribute("data-state", "done");
+}
+
+/**
+ * Whether the Coda on screen owes the unlock moment: the session that just ended (this browser's record of it,
+ * `oak.session.ended.v1`, app/src/session/persist.ts) granted a tool the server still lists as not seen. The Coda
+ * plays the moment for exactly those (app/src/session/coda/CodaPage.tsx) and marks them seen only when it ends.
+ */
+async function momentDue(page: Page): Promise<boolean> {
+  const sessionId = await page.evaluate(() => {
+    const raw = localStorage.getItem("oak.session.ended.v1");
+    return raw ? ((JSON.parse(raw) as { sessionId?: string }).sessionId ?? null) : null;
+  });
+  expect(sessionId, "the ended session is recorded in this browser").toBeTruthy();
+  const summary = await api<{ unlocks: { itemId: string }[] }>(
+    page.request,
+    "GET",
+    `/api/session/${sessionId}/summary`,
+  );
+  const listed = await api<{ items: { itemId: string; seen: boolean }[] }>(
+    page.request,
+    "GET",
+    "/api/unlocks",
+  );
+  const seen = new Map(listed.items.map((u) => [u.itemId, u.seen]));
+  return summary.unlocks.some((u) => seen.get(u.itemId) === false);
 }
 
 /** A lesson day: the session is today's lesson `def`, walked from its references, then the Coda. */

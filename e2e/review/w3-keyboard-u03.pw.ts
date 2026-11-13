@@ -6,7 +6,18 @@
 import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
 import { lessonDef } from "../../app/src/lesson/e2e/walk.ts";
 import { textNow, useUiPrefs } from "../support/ui.ts";
-import { api, noHmr, openToday, resetClock, reviewMic, seed, shootAll, watch } from "./support.ts";
+import {
+  api,
+  noHmr,
+  openToday,
+  playsAndMoves,
+  resetClock,
+  reviewMic,
+  seed,
+  sessionEnd,
+  shootAll,
+  watch,
+} from "./support.ts";
 
 test.use({
   launchOptions: { args: reviewMic("hold-c4.wav") },
@@ -88,7 +99,8 @@ async function continueStep(page: Page) {
   await expect(page.getByTestId("lesson-step")).not.toHaveAttribute("data-step", from ?? "", {
     timeout: 30_000,
   });
-  await page.waitForTimeout(800);
+  // The new step takes focus on its title (in place of a fixed 800 ms before the next Tab).
+  await expect.poll(async () => (await active(page)).id, { timeout: 10_000 }).toBe("step-title");
   console.log(`[continue] ${from} -> ${await page.getByTestId("lesson-step").getAttribute("data-step")}`);
 }
 
@@ -117,17 +129,28 @@ async function pickOption(page: Page, scope: string, id: string) {
 
 type DrillTrial = { expected: { degrees?: string[]; choice?: string[]; text?: string[] }; seed: number };
 
-/** The warm-up, keys only. Returns how many set summaries were passed. */
+/**
+ * The warm-up, keys only. Returns how many sets were walked. A typed set (a scale to spell) is walked until two
+ * trials have been answered by typing and moved on with Enter, and a degree set until a way home has been sung
+ * (Enter on "Sing it home", the take) and the trial after it is up: each is then reported skipped (its further
+ * trials repeat the same keys; w3-fet-mic walks a whole degree set by keys to its summary). Any other set (the
+ * sung notes, Shift+S) is walked to its summary, which is left by keys.
+ */
 async function warmupByKeys(
   page: Page,
   budgetMs: number,
   maxSets: number,
 ): Promise<{ sets: number; sungHome: number }> {
   const deadline = Date.now() + budgetMs;
+  const t0 = Date.now();
   const warmup = page.getByTestId("warmup");
   await expect(warmup).toBeVisible({ timeout: 60_000 });
   const out = { sets: 0, sungHome: 0 };
   let lastTrial = "";
+  // This set's trials answered and ways home sung so far.
+  let answered = 0;
+  let sungHere = 0;
+  const since = () => `${((Date.now() - t0) / 1000).toFixed(1)} s`;
   while (Date.now() < deadline) {
     if (!(await warmup.isVisible().catch(() => false))) return out;
     if (out.sets >= maxSets) {
@@ -150,6 +173,9 @@ async function warmupByKeys(
       await page.keyboard.press("Enter");
     } else if (await vis("fact-summary")) {
       out.sets++;
+      answered = 0;
+      sungHere = 0;
+      console.log(`[warm-up] facts summary at ${since()}`);
       expect((await active(page)).tag, "the fact summary's button has focus").toBe("button");
       await page.keyboard.press("Enter");
     } else if (await vis("fact-card")) {
@@ -164,6 +190,12 @@ async function warmupByKeys(
       }
     } else if (await vis("set-summary")) {
       out.sets++;
+      const fam = await page.evaluate(
+        () => (globalThis as { __oakDrillTrial?: { family?: string } }).__oakDrillTrial?.family ?? "",
+      );
+      answered = 0;
+      sungHere = 0;
+      console.log(`[warm-up] ${fam} summary at ${since()}`);
       const a = await active(page);
       if (a.tag !== "button")
         await tabTo(page, byText(/^(Next set|On to|Continue|Done)/), "the summary's button");
@@ -172,7 +204,10 @@ async function warmupByKeys(
       const label = (
         (await page.getByTestId("next-trial").filter({ visible: true }).first().textContent()) ?? ""
       ).trim();
-      if (/Sing it home/.test(label)) out.sungHome++;
+      if (/Sing it home/.test(label)) {
+        out.sungHome++;
+        sungHere++;
+      }
       // Enter is "next" in the drill's scope (the way home, sung on the fake mic, then the next trial).
       await page.keyboard.press("Enter");
       if (/Sing it home/.test(label))
@@ -190,6 +225,20 @@ async function warmupByKeys(
           () => (globalThis as { __oakDrillTrial?: DrillTrial }).__oakDrillTrial ?? null,
         );
         const a = await active(page);
+        const typed = a.editable && !!t?.expected.text?.length;
+        if (answered >= 2 && ((t?.expected.degrees?.length && sungHere > 0) || typed)) {
+          // Every key path of this set taken: the rest of it reported skipped; the next set comes up.
+          out.sets++;
+          console.log(`[warm-up] ${await skipThisSet(page)} walked by keys to ${counter}, at ${since()}`);
+          answered = 0;
+          sungHere = 0;
+          lastTrial = "";
+          await expect(page.getByTestId("trial-counter").filter({ hasText: counter })).toHaveCount(0, {
+            timeout: 30_000,
+          });
+          continue;
+        }
+        answered++;
         if (t?.expected.degrees?.length) {
           lastTrial = counter;
           for (const d of t.expected.degrees) await page.keyboard.press(d.replace(/^b/, ""));
@@ -228,6 +277,7 @@ async function keyboardDay(
   await seed(request, "after U03.L02");
   await noHmr(page);
   const problems = watch(page);
+  const ended = sessionEnd(page);
   const plan = await api<{ kind: string; mapItemId: string }>(request, "GET", "/api/session/today");
   expect(plan).toMatchObject({ kind: "lesson", mapItemId: "U03.L03" });
   await openToday(page);
@@ -269,14 +319,16 @@ async function keyboardDay(
       continue;
     }
     if (ex.kind === "listen" || (ex.kind === "run-investigate" && (ex.questions ?? []).length === 0)) {
-      // Play from the keyboard, one loop, stop.
+      // Play from the keyboard: it plays and the transport moves on; then stop and go on. (Listening never gates;
+      // a whole loop heard through to "Continue" is the lesson walkers' check, once per walker file.)
       await tabTo(page, byId("play-toggle"), "Play");
       await page.keyboard.press("Enter");
-      await expect(page.getByTestId("continue")).toHaveText(/Continue/, { timeout: 30_000 });
+      await playsAndMoves(page);
       // Known (workbench, reported): the transport disables Play while it starts, and Chromium drops the focus
       // of a disabled button onto <body>. Tab back to Stop.
       await tabTo(page, byId("play-toggle"), "Stop");
       await page.keyboard.press("Enter");
+      await expect(page.getByTestId("play-toggle").first()).toHaveAttribute("aria-pressed", "false");
       await continueStep(page);
       continue;
     }
@@ -378,10 +430,14 @@ async function keyboardDay(
 
   await expect(page).toHaveURL(/\/session\/coda$/, { timeout: 60_000 });
   const moment = page.getByTestId("coda-unlock-moment");
-  const shows = await moment
-    .waitFor({ state: "visible", timeout: 5_000 })
-    .then(() => true)
-    .catch(() => false);
+  // The moment plays only for tools this session unlocked: with none, it is absent at once (no 5-s wait).
+  const shows =
+    (await ended()).unlocks.length > 0 &&
+    (await moment
+      .waitFor({ state: "visible", timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false));
+  if (!shows) await expect(moment).toHaveCount(0);
   if (shows) {
     await shootAll(page, "w3-kbd-coda-moment");
     await tabTo(page, byText(/See the rest of today/), "See the rest of today");
@@ -401,8 +457,27 @@ async function keyboardDay(
 
 type SessionHandle = {
   report(r: unknown): void;
-  state(): { plan: { warmup: { items: { id: string }[] } } | null };
+  state(): { plan: { warmup: { items: { id: string; familyId: string }[] } } | null; warmupIndex: number };
 };
+
+/** Reports the warm-up set on screen skipped (`__oakSession`); returns its family. */
+async function skipThisSet(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const o = (window as never as { __oakSession: SessionHandle }).__oakSession;
+    const st = o.state();
+    const item = st.plan?.warmup.items[st.warmupIndex];
+    if (!item) throw new Error("no warm-up set on screen");
+    o.report({
+      block: "warmup",
+      source: "drills",
+      warmupItemId: item.id,
+      drillSessionId: null,
+      meanCredit: null,
+      skipped: true,
+    });
+    return item.familyId;
+  });
+}
 
 /** Reports every warm-up set not done yet as skipped (`__oakSession`, the session runner's dev hook). */
 async function skipRestOfWarmup(page: Page): Promise<void> {

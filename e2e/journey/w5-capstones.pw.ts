@@ -1,4 +1,4 @@
-// Wave 5 journeys (d), (e: C4), (f: C5), (g) and (j: C4 in Quiet mode): the multi-session capstones as daily
+// Wave 5 journeys (d), (e and j: C4 in Quiet mode), (f: C5) and (g): the multi-session capstones as daily
 // sessions on the real stack (real server, real content, the scripted fake tutor, Chrome's fake microphone), each
 // from a dev seed, the dev clock moving one day between sessions. Every piece is the capstone suite's own
 // (app/src/capstone/e2e/w5-pieces.ts), graded against the briefs with the real grader in w5-pieces.test.ts.
@@ -7,14 +7,17 @@
 //       review, a recorded take of the whole 96-second demo, the release; the album track has its recording
 //       (≥ 90 s), cover, liner notes and review.
 //   (e) "C4 open": C4 Minor Indie Ballad — the Aeolian verse, then the chorus cadence with the major V; released.
+//       Walked in Quiet mode (j), the only C4 journey.
 //   (f) "C5 open": C5 12-Bar Shuffle — one swung chorus, then two with the riff answered; a review with two
 //       revisions; released.
 //   (g) "X2 open": X2 Blues Transcription — bass, then the changes, then the melody line by line the next day;
 //       released. The album then holds eight tracks: C0, C1, C2, X1, C3, C4, C5 and X2.
-//   (j) C4 again in Quiet mode.
-// These tests run longer than the suite's 90-second guide: each release records its take in real time (C3's is
-// 96 seconds by the brief), and each journey is several days of sessions.
+// (d) runs longer than the suite's 90-second guide: its release records the whole demo in real time (C3's brief
+// asks for 96 seconds; no other spec records it). The other releases take a seeded take of the same window
+// (app/src/capstone/e2e/seeded-take.ts); the real recorder is under test here (C3), in gate journey 5 (C0), in the
+// C1 journey and in the capstone suite.
 import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
+import { seedTake } from "../../app/src/capstone/e2e/seeded-take.ts";
 import {
   C3_FULL,
   C3_GROOVE,
@@ -131,8 +134,19 @@ async function review(page: Page, revisions: number): Promise<void> {
   await expect(r.getByTestId("review-heading")).toHaveText(/^Review of version \d+$/);
 }
 
-/** The release with a recorded take (real time), the ceremony, the Coda naming the album; "Done for today". */
-async function release(page: Page, title: string, liner: string, takeMs: number): Promise<void> {
+/**
+ * The release with a recorded take, the ceremony, the Coda naming the album; "Done for today". `take: "real"`
+ * records the whole piece in real time (C3's brief asks for its 96 seconds: this journey is the suite's only real
+ * C3 take); `"seeded"` gives the recorder a take of the same window at once (app/src/capstone/e2e/seeded-take.ts),
+ * uploaded through the same release path, as the capstone suite does for every piece whose brief needs no take.
+ */
+async function release(
+  page: Page,
+  title: string,
+  liner: string,
+  takeMs: number,
+  take: "real" | "seeded",
+): Promise<void> {
   const btn = page.getByTestId("release");
   await expect(btn).toBeEnabled({ timeout: 30_000 });
   await btn.click();
@@ -140,6 +154,7 @@ async function release(page: Page, title: string, liner: string, takeMs: number)
   await expect(dialog).toBeVisible({ timeout: 30_000 });
   await dialog.getByLabel("Title").fill(title);
   await dialog.getByLabel(/One line for the liner notes/).fill(liner);
+  if (take === "seeded") await seedTake(page);
   await dialog.getByTestId("record-take").click();
   await expect(dialog.getByTestId("take-audio")).toBeVisible({ timeout: takeMs });
   await dialog.getByTestId("confirm-release").click();
@@ -210,10 +225,10 @@ test("(d) C3 over its three sessions: groove and changes, melodies, the arrangem
   await expect(sheet.locator(".oak-section").first()).toBeVisible({ timeout: 30_000 });
   await review(page, 1);
   await shootAll(page, "w5-journey-c3-s3");
-  await release(page, "Two Rooms", "The verse waits low; the chorus climbs.", 150_000);
+  await release(page, "Two Rooms", "The verse waits low; the chorus climbs.", 150_000, "real");
   expect((await sessionsOf(request, "C3")).sessions.map((s) => s.status)).toEqual(["done", "done", "done"]);
   const detail = await trackOf(page, request, "C3", "Two Rooms", "w5-journey-c3-track");
-  expect(detail.versions[0]?.durationS ?? 0).toBeGreaterThanOrEqual(90);
+  expect(detail.versions[0]?.durationS ?? 0).toBeGreaterThan(90);
   await expect(page.getByTestId("liner-notes").first()).toContainText(
     "The verse waits low; the chorus climbs.",
   );
@@ -221,35 +236,34 @@ test("(d) C3 over its three sessions: groove and changes, melodies, the arrangem
   await resetClock(request);
 });
 
-for (const quiet of [false, true]) {
-  test(`(e${quiet ? ", j" : ""}) C4 over its two sessions${quiet ? " in Quiet mode" : ""}: the Aeolian verse, then the major V; released`, async ({
-    page,
-    request,
-  }) => {
-    test.setTimeout(240_000);
-    const w = await begin(page, request, "C4 open", { quiet, theme: quiet ? "bark" : "paper" });
-    await capstoneDay(page, "C4 Minor Indie Ballad · session 1 of 2", "C4.S1");
-    await firstSession(page, 2);
-    await setCapstoneCode(page, "C4", C4_VERSE);
-    await expect(page.getByTestId("form-letters")).toHaveText("A B A B", { timeout: 60_000 });
-    await finishSession(page);
+// C4 is walked once, in Quiet mode (Bark): the same two days, release and album title as a day with a microphone
+// (Quiet mode changes nothing in a capstone workspace), and the capstone days with a microphone are (d), (f), (g)
+// and the Wave 4 journeys.
+test("(e, j) C4 over its two sessions in Quiet mode: the Aeolian verse, then the major V; released", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(240_000);
+  const w = await begin(page, request, "C4 open", { quiet: true, theme: "bark" });
+  await capstoneDay(page, "C4 Minor Indie Ballad · session 1 of 2", "C4.S1");
+  await firstSession(page, 2);
+  await setCapstoneCode(page, "C4", C4_VERSE);
+  await expect(page.getByTestId("form-letters")).toHaveText("A B A B", { timeout: 60_000 });
+  await finishSession(page);
 
-    await advanceDays(request, 1);
-    await capstoneDay(page, "C4 Minor Indie Ballad · session 2 of 2", "C4.S2");
-    await resume(page, "Session 2 of 2");
-    await setCapstoneCode(page, "C4", C4_FULL);
-    await checkAllMet(page);
-    await shootAll(page, quiet ? "w5-journey-c4-quiet" : "w5-journey-c4");
-    await release(page, quiet ? "Low Light (quiet)" : "Low Light", "Home on A, after the bright E.", 120_000);
-    expect((await sessionsOf(request, "C4")).sessions.map((s) => s.status)).toEqual(["done", "done"]);
-    const album = await api<{ tracks: AlbumTrack[] }>(request, "GET", "/api/album");
-    expect(album.tracks.find((t) => t.capstoneId === "C4")?.title).toBe(
-      quiet ? "Low Light (quiet)" : "Low Light",
-    );
-    expectClean(w);
-    await resetClock(request);
-  });
-}
+  await advanceDays(request, 1);
+  await capstoneDay(page, "C4 Minor Indie Ballad · session 2 of 2", "C4.S2");
+  await resume(page, "Session 2 of 2");
+  await setCapstoneCode(page, "C4", C4_FULL);
+  await checkAllMet(page);
+  await shootAll(page, "w5-journey-c4-quiet");
+  await release(page, "Low Light (quiet)", "Home on A, after the bright E.", 120_000, "seeded");
+  expect((await sessionsOf(request, "C4")).sessions.map((s) => s.status)).toEqual(["done", "done"]);
+  const album = await api<{ tracks: AlbumTrack[] }>(request, "GET", "/api/album");
+  expect(album.tracks.find((t) => t.capstoneId === "C4")?.title).toBe("Low Light (quiet)");
+  expectClean(w);
+  await resetClock(request);
+});
 
 test("(f) C5 over its two sessions: one swung chorus, then two with the riff answered; a two-revision review; released", async ({
   page,
@@ -270,7 +284,7 @@ test("(f) C5 over its two sessions: one swung chorus, then two with the riff ans
   // From C5 on a review has two revisions (contracts §10).
   await review(page, 2);
   await shootAll(page, "w5-journey-c5-review");
-  await release(page, "Late Shuffle", "Two choruses; the riff asks, then answers.", 120_000);
+  await release(page, "Late Shuffle", "Two choruses; the riff asks, then answers.", 120_000, "seeded");
   await trackOf(page, request, "C5", "Late Shuffle", "w5-journey-c5-track");
   expectClean(w);
   await resetClock(request);
@@ -317,7 +331,7 @@ test("(g) X2 over its two sessions: bass, changes, then the melody; released; th
   const n = await rows.count();
   expect(n).toBeGreaterThan(0);
   for (let i = 0; i < n; i++) await check((await rows.nth(i).getAttribute("data-check")) as string);
-  await release(page, "Careless Love", "Written down by ear, bass first.", 120_000);
+  await release(page, "Careless Love", "Written down by ear, bass first.", 120_000, "seeded");
   expect((await sessionsOf(request, "X2")).sessions.map((s) => s.status)).toEqual(["done", "done"]);
 
   // The album: eight tracks, each with its cover; X2's names the song.

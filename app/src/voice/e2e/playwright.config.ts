@@ -10,6 +10,8 @@ export const stack = oakStack({
   vitePort: 5239,
   apiPort: 8839,
   dataDirName: "voice",
+  // gate.pw.ts imports /src/lib/oak.ts and /src/lib/mic.ts in the page.
+  bundle: false,
   extraEnv: { OAK_TUTOR_FAKE: "1" },
 });
 

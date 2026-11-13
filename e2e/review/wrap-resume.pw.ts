@@ -1,11 +1,12 @@
 // Save-and-wrap in the middle of a lesson, resumed the next day: Wrap up → Quick sketch → Coda → Done for today;
 // the next day Today says where the lesson picks up, and Start opens it at that step (not at step 1), after the
 // day's warm-up. (It wraps on a graded step: on an ungraded one the server counts the step on screen as visited
-// and resumes after it, reported to the server owner.)
+// and resumes after it, reported to the server owner.) Both days' warm-ups are reported skipped through the
+// session's dev hook: the subject is the wrap and the resume, and the warm-up sets are walked by the drill,
+// warm-up and journey suites.
 import { expect, test } from "@playwright/test";
 import u01l01 from "../../content/core/U01/L01/lesson.ts";
 import { stepIs, walkLesson } from "../journey/lesson-walk.ts";
-import { walkWarmup } from "../journey/warmup-walk.ts";
 import { useUiPrefs } from "../support/ui.ts";
 import {
   advanceDays,
@@ -16,6 +17,7 @@ import {
   reviewMic,
   seed,
   shootAll,
+  skipWarmup,
   watch,
 } from "./support.ts";
 
@@ -29,7 +31,7 @@ test("a wrapped lesson resumes the next day at the step it stopped on", async ({
   const problems = watch(page);
   await openToday(page);
   await page.getByTestId("start-session").click();
-  await walkWarmup(page);
+  await skipWarmup(page);
   await walkLesson(page, u01l01, { stopAt: "S6" });
   await page.getByRole("button", { name: "Wrap up" }).first().click();
   await expect(page.getByRole("heading", { name: "Quick sketch" }).first()).toBeVisible();
@@ -64,7 +66,7 @@ test("a wrapped lesson resumes the next day at the step it stopped on", async ({
   await expect(page.getByTestId("warmup").or(page.getByTestId("lesson-step")).first()).toBeVisible({
     timeout: 60_000,
   });
-  if (await page.getByTestId("warmup").isVisible()) await walkWarmup(page);
+  if (await page.getByTestId("warmup").isVisible()) await skipWarmup(page);
   await stepIs(page, "S6");
   expect(problems).toEqual([]);
 });

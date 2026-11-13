@@ -7,6 +7,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { capstones } from "../../../../content/capstones.ts";
 import { SCREENSHOT_MATRIX } from "../../../../e2e/support/stack.ts";
 import { shoot, useUiPrefs } from "../../../../e2e/support/ui.ts";
+import { seedTake } from "./seeded-take.ts";
 
 const SHOTS = fileURLToPath(new URL("./screenshots", import.meta.url));
 const C0 = capstones.find((c) => c.id === "C0");
@@ -159,6 +160,8 @@ test("C0 from the reference solution: check, review, record, release, album", as
   const errors = watchErrors(page);
   await page.goto("/capstone/C0");
   await expect(page.getByTestId("capstone-workspace")).toBeVisible();
+  // The draft the test before saved is loaded first (it would replace code typed before it arrives).
+  await expect(page.getByTestId("saved-state")).toContainText(/Version \d+ saved/);
   await setCode(page, REFERENCE);
   await expect(page.getByTestId("req-count")).toHaveText("6 of 6 met", { timeout: 30_000 });
   await page.getByTestId("check-track").click();
@@ -366,8 +369,10 @@ test("a revision releases version 2; the track page compares versions A/B and pl
   const dialog = page.getByRole("dialog", { name: "Release a new version" });
   await expect(dialog).toBeVisible({ timeout: 30_000 });
   await expect(dialog.getByLabel("Title")).toHaveValue("Intro");
+  // A seeded take (seeded-take.ts): the recorder's own window, uploaded through the release path.
+  await seedTake(page);
   await dialog.getByTestId("record-take").click();
-  await expect(dialog.getByTestId("take-audio")).toBeVisible({ timeout: 40_000 });
+  await expect(dialog.getByTestId("take-audio")).toBeVisible({ timeout: 30_000 });
   await dialog.getByTestId("confirm-release").click();
   const ceremony = page.getByTestId("release-ceremony");
   await expect(ceremony.getByText("Version 2 is on the album.")).toBeVisible({ timeout: 30_000 });

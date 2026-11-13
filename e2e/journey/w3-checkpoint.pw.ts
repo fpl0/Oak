@@ -135,7 +135,7 @@ test("U03.CP due: the checkpoint end to end to a pass; the sung item is left out
 }) => {
   test.setTimeout(240_000);
   const { w, started } = await begin(page, request, "U03.CP due");
-  const plan = await startToday(page, request, { warmupSets: 1 });
+  const plan = await startToday(page, request, { warmupSets: 0 });
   expect(plan).toMatchObject({ kind: "checkpoint", mapItemId: "U03.CP" });
   const taken = takeCheckpoint(page, () => false);
   const attempt = (await (await started).json()) as { attemptNo: number; items: StartItem[] };

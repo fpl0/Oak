@@ -41,6 +41,12 @@ export interface StackOptions {
    * `content/.generated/`, so parallel stacks should not all rebuild it; run `bun run content:build` once.
    */
   buildContent?: boolean;
+  /**
+   * May this stack serve the runner's prebuilt development bundle (`OAK_E2E_BUNDLE`, below) instead of the Vite dev
+   * server? Default true. Set false for an area whose specs need a page only the dev server has: a dev-only HTML
+   * entry (`/src/answers/dev/gallery.html`) or a module imported in the page by its source path (`import("/src/…")`).
+   */
+  bundle?: boolean;
 }
 
 export interface OakStack {
@@ -57,8 +63,20 @@ export interface OakStack {
 
 /** The repository root (this file is `<root>/e2e/support/stack.ts`). */
 export const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
+/**
+ * The dev-seed snapshot folder every stack's server shares (`OAK_SEED_CACHE_DIR`): keyed by the server's code, the
+ * content and the request, so stacks of any shift and any run on this checkout may share it.
+ */
+export const SEED_CACHE_DIR = `${REPO_ROOT}test-results/seed-cache`;
 
-const RESERVED = ["OAK_DEV", "OAK_PORT", "OAK_VITE_PORT", "OAK_API_PORT", "OAK_DATA_DIR"];
+const RESERVED = [
+  "OAK_DEV",
+  "OAK_PORT",
+  "OAK_VITE_PORT",
+  "OAK_API_PORT",
+  "OAK_DATA_DIR",
+  "OAK_SEED_CACHE_DIR",
+];
 
 /** Parses `OAK_E2E_SHIFT`: a non-negative multiple of 10 below 5000 (0 when unset). */
 export function parseShift(raw: string | undefined): number {
@@ -91,6 +109,25 @@ export function withFixtures(fixtureCommand: string, command: string): string {
   return PREBUILT ? command : `${fixtureCommand} && ${command}`;
 }
 
+/**
+ * `OAK_E2E_BUNDLE=<absolute dir>`: `bun run e2e` has built the app ONCE in development mode into that folder
+ * (`NODE_ENV=development vite build --mode development`: the same source with `import.meta.env.DEV` true, so every
+ * `__oak*` test hook, the /dev routes and React's development build are there). A stack that allows it serves that
+ * folder with `vite preview` (same ports, same /api and /sounds proxy) instead of a Vite dev server: no module is
+ * transformed per process, a page loads ~240 files instead of ~1 600, and the first page of a process is as fast as
+ * the others (measured in docs/design/wave5.md §7.1). Unset (an area run on its own): the Vite dev server, as before.
+ */
+export const BUNDLE_DIR = process.env.OAK_E2E_BUNDLE || null;
+
+/** The front-end command of a stack: `vite preview` of the runner's bundle when there is one and the area allows it. */
+export function frontEndCommand(bundleDir: string | null): string {
+  const vite = `node ${REPO_ROOT}node_modules/vite/bin/vite.js`;
+  // e2e/support/vite.e2e.config.ts: the app's config without a file watcher or HMR (no reload mid-test).
+  return bundleDir
+    ? `${vite} preview --config e2e/support/vite.e2e.config.ts --outDir "${bundleDir}"`
+    : `${vite} --config e2e/support/vite.e2e.config.ts`;
+}
+
 function checkPort(name: string, port: number): void {
   if (!Number.isInteger(port) || port < 1024 || port > 65535)
     throw new Error(`oakStack: ${name} must be an integer port in 1024–65535, got ${port}`);
@@ -118,8 +155,7 @@ export function oakStack(options: StackOptions): OakStack {
   const dataDir = `${REPO_ROOT}test-results/stacks/${o.dataDirName}`;
   const baseURL = `http://127.0.0.1:${o.vitePort}`;
   const apiURL = `http://127.0.0.1:${o.apiPort}`;
-  // e2e/support/vite.e2e.config.ts: the app's config without a file watcher or HMR (no reload mid-test).
-  const vite = `node ${REPO_ROOT}node_modules/vite/bin/vite.js --config e2e/support/vite.e2e.config.ts`;
+  const vite = frontEndCommand(o.bundle === false ? null : BUNDLE_DIR);
   const common = { cwd: REPO_ROOT, reuseExistingServer: false, stdout: "pipe", stderr: "pipe" } as const;
   return {
     baseURL,
@@ -139,6 +175,9 @@ export function oakStack(options: StackOptions): OakStack {
           OAK_PORT: String(o.apiPort),
           OAK_VITE_PORT: String(o.vitePort),
           OAK_DATA_DIR: dataDir,
+          // Dev seeds are built once and restored from a snapshot after that (server/src/services/dev-seed-cache.ts),
+          // in one folder every stack of the machine shares: a point one shard or project built, the others restore.
+          OAK_SEED_CACHE_DIR: SEED_CACHE_DIR,
         },
         // Ask the server to shut down cleanly (it closes SQLite and the grader hosts on SIGTERM).
         gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },

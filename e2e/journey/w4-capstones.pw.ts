@@ -3,12 +3,15 @@
 // between sessions:
 //   1. "C2 open": C2 Four-Chord Song over its two sessions. Day 1 writes the chords (the draft is the session's
 //      Make); day 2 resumes the draft from the top, adds the melody until every requirement is met, asks Claude
-//      for a review, records a take and releases it. The album then holds C0, C1 and C2, each with its tree-ring
-//      cover and liner notes; C2's track has its recording, its liner notes and the review.
+//      for a review, records a take (seeded: the recorder's own window at once) and releases it. The album then
+//      holds C0, C1 and C2, each with its tree-ring cover and liner notes; C2's track has its
+//      recording, its liner notes and the review.
 //   2. "X1 open": X1 Folk Transcription over its three sessions on Aura Lee. Day 1 hears phrases 1–2 by ear (the
 //      answer key stands in for the learner's ear), day 2 phrases 3–4, day 3 the chords bass first (bass, then
-//      qualities, then numerals) and the release; the album's X1 track names the song in its liner notes.
+//      qualities, then numerals) and the release (a seeded take); the album's X1 track names the song in its liner
+//      notes.
 import { expect, type Page, test } from "@playwright/test";
+import { seedTake } from "../../app/src/capstone/e2e/seeded-take.ts";
 import { fakeMic } from "../../app/src/onboarding/e2e/helpers.ts";
 import auraLee from "../../content/repertoire/aura-lee/song.ts";
 import { useUiPrefs as setUiPrefs } from "../support/ui.ts";
@@ -119,6 +122,10 @@ test("C2 over its two sessions: chords, then the melody, a review, a recorded re
   await expect(dialog).toBeVisible({ timeout: 30_000 });
   await dialog.getByLabel("Title").fill("Loop, Then Land");
   await dialog.getByLabel(/One line for the liner notes/).fill("Six bars of the loop, then home.");
+  // A seeded take of the recorder's own window (app/src/capstone/e2e/seeded-take.ts), uploaded through the same
+  // release path: C2's brief asks for no take, and the real recorder is under test in gate journey 5 (C0), the C1
+  // and C3 journeys and the capstone suite.
+  await seedTake(page);
   await dialog.getByTestId("record-take").click();
   await expect(dialog.getByTestId("take-audio")).toBeVisible({ timeout: 60_000 });
   await dialog.getByTestId("confirm-release").click();
@@ -251,6 +258,8 @@ test("X1 over its three sessions on Aura Lee: phrases by ear, then the chords ba
   const dialog = page.getByRole("dialog", { name: /Release/ });
   await expect(dialog).toBeVisible({ timeout: 30_000 });
   await expect(dialog.getByTestId("release-liner")).toContainText("Aura Lee");
+  // A seeded take of the recorder's own window, as for C2 above.
+  await seedTake(page);
   await dialog.getByTestId("record-take").click();
   await expect(dialog.getByTestId("take-audio")).toBeVisible({ timeout: 90_000 });
   await dialog.getByTestId("confirm-release").click();

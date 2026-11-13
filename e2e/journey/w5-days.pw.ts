@@ -1,12 +1,14 @@
 // Wave 5 journeys (a), (b), (c), (e: the day), (f: the day), (h), (i) and (j: the U08 and U10 days in Quiet mode):
 // real daily sessions on the real stack (real server, real content, the scripted fake tutor, Chrome's fake
-// microphone), each from a dev seed (wave5.md §6), each Today → the warm-up → the New block → the Coda.
+// microphone), each from a dev seed (wave5.md §6), each Today → the warm-up (reported skipped: gate journey 2 and
+// the session-seeds days walk the sets) → the New block → the Coda.
 //   (a) "after U07.L10": U08.L01 Roots Down Low (it comes before GYM.03, U07.CP and C2 in the default order). The Make is a bass line on the roots under the learner's four-chord loop.
 //   (b) "after U09.L01": U09.L02. The form map opens in the step, the sections read A B A B …, and a section loops
 //       from the map and from the ribbon by keyboard.
 //   (c) "U09.CP due": the Bass & form checkpoint to a pass (sung items left out: they never gate).
-//   (e) "after U10.L03": U10.L04 with the minor-degree warm-up (fam.deg.fet-minor, do-based: ♭3 is me); the way
-//       home sung on the fake microphone, or heard and imagined in Quiet mode.
+//   (e) "after U10.L03": U10.L04, with the minor-degree set (fam.deg.fet-minor, do-based: ♭3 is me) in today's
+//       warm-up plan. The set itself (its way home sung, or heard and imagined in Quiet mode) is walked by
+//       session-seeds w5-warmups.pw.ts from the same seed; here the warm-up is reported skipped.
 //   (f) "after U11.L06": U11.L07. The shuffle: the hats swing (the transport's "Swing 8ths" badge).
 //   (h) "side lesson offered": A1.L01 taken from Today's side offer at U03; its scope panel opens in the step and
 //       hears the wave; the core lesson stays today's.
@@ -29,7 +31,6 @@ import { coda, lessonDay, startToday } from "./day.ts";
 import { walkLesson } from "./lesson-walk.ts";
 import { api, expectClean, noHmr, resetClock, shootAll, type Watch, watch } from "./support.ts";
 import { sessionState, skipWarmup, startSession, today } from "./w4-day.ts";
-import { walkWarmup } from "./warmup-walk.ts";
 
 test.use({ launchOptions: { args: fakeMic("voice.wav") }, permissions: ["microphone"] });
 test.describe.configure({ mode: "serial" });
@@ -90,7 +91,7 @@ for (const quiet of [false, true]) {
     test.setTimeout(240_000);
     const { w, micAsks } = await begin(page, request, "after U07.L10", { quiet });
     const plan = await lessonDay(page, request, u08l01, {
-      warmupSets: 1,
+      warmupSets: 0,
       unlocks: "auto",
       shots: quiet ? "w5-journey-u08-coda-quiet" : "w5-journey-u08-coda",
     });
@@ -121,7 +122,7 @@ test("(b) a U09 day: the form map in the step, A B A B, a section looped from th
   const { w } = await begin(page, request, "after U09.L01", { theme: "bark" });
   let looped = false;
   await lessonDay(page, request, u09l02, {
-    warmupSets: 1,
+    warmupSets: 0,
     unlocks: "auto",
     shots: "w5-journey-u09-coda",
     async before(step) {
@@ -266,7 +267,7 @@ test("(c) U09.CP: the Bass & form checkpoint as a session, to a pass; the Coda f
 // --- (e) the U10 day with the minor-degree warm-up -----------------------------------------------------
 
 for (const quiet of [false, true]) {
-  test(`(e${quiet ? ", j" : ""}) a U10 day${quiet ? " in Quiet mode" : ""}: the minor-degree warm-up (do-based), then U10.L04`, async ({
+  test(`(e${quiet ? ", j" : ""}) a U10 day${quiet ? " in Quiet mode" : ""}: the minor-degree set in today's warm-up (do-based), then U10.L04`, async ({
     page,
     request,
   }) => {
@@ -285,33 +286,11 @@ for (const quiet of [false, true]) {
       at,
       `the minor degrees in today's warm-up: ${items.map((i) => i.familyId).join(", ")}`,
     ).toBeGreaterThanOrEqual(0);
-    // The sets before it are reported skipped (the learner's skip); the minor-degree set is walked in the runner.
-    await page.evaluate(
-      (skip) => {
-        const o = (window as never as { __oakSession: { report(r: unknown): void } }).__oakSession;
-        for (const item of skip)
-          o.report({
-            block: "warmup",
-            source: "drills",
-            warmupItemId: item.id,
-            drillSessionId: null,
-            meanCredit: null,
-            skipped: true,
-          });
-      },
-      items.slice(0, at),
-    );
-    const run = await walkWarmup(page, { until: (r) => r.sets >= 1 });
-    // Each minor-degree trial ends on its way home: sung on the fake microphone, or heard in the head in Quiet.
-    if (quiet) expect(run.heardHome).toBeGreaterThan(0);
-    else expect(run.sungHome + run.heardHome).toBeGreaterThan(0);
-    if (
-      await page
-        .getByTestId("warmup")
-        .isVisible()
-        .catch(() => false)
-    )
-      await skipWarmup(page);
+    // The warm-up is reported skipped (the learner's skip). The minor-degree set itself, with its way home sung on
+    // the fake microphone or heard in Quiet mode (the trials on the wire, the mic never asked), is walked by
+    // app/src/session/seeds/e2e/w5-warmups.pw.ts "a U10 day …" and its Quiet twin, from this same seed.
+    await skipWarmup(page);
+    await expect(page.getByTestId("warmup")).toBeHidden({ timeout: 30_000 });
     await walkLesson(page, u10l04);
     await coda(page, { unlocks: "auto", shots: quiet ? "w5-journey-u10-coda-quiet" : "w5-journey-u10-coda" });
     const progress = await api<{ lessons: { lessonId: string; status: string }[] }>(
@@ -333,7 +312,7 @@ test("(f) a U11 day: U11.L07, the shuffle — the hats swing, the transport says
   const { w } = await begin(page, request, "after U11.L06", { theme: "bark" });
   let swung = false;
   await lessonDay(page, request, u11l07, {
-    warmupSets: 1,
+    warmupSets: 0,
     unlocks: "auto",
     shots: "w5-journey-u11-coda",
     async before(step) {

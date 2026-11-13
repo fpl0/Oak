@@ -5,10 +5,11 @@
 // the answer itself below rung 4. Then the reference (the passing test, or the drawn trial's answer) passes.
 // Answers go through the widgets themselves (options, the degree pad, the text field, the key-signature staff
 // by keyboard, the Workbench editor through the same CODE event as typing); a sung take is sung through the
-// fake microphone when the browser has one, then the targets are submitted through the player's own grading
-// path. Ungraded steps are played (a listen loop, a passive stream, a run) and continued. The Make is solved from
-// its passing test and saved; the lesson must end complete on the server.
-import type { Locator, Page } from "@playwright/test";
+// fake microphone when the walk asks for one (`mic`, w3walk.ts TAKES), then the targets
+// are submitted through the player's own grading path. Ungraded steps are played (a listen loop, a passive stream, a run) and continued: one listening loop per spec
+// file is heard through, every other one is heard playing and moving, then skipped (listening never gates; see
+// `playUntilDone`). The Make is solved from its passing test and saved; the lesson must end complete on the server.
+import { type Locator, type Page, test as pwTest } from "@playwright/test";
 import { expect, setCode, snapshot, stepIs, submit } from "./support.ts";
 import { api } from "./w3support.ts";
 
@@ -160,17 +161,92 @@ async function next(page: Page) {
 }
 
 /**
- * Plays the Workbench of the step until it says the loop has been heard (Continue, no longer Skip). A long
- * listening item (U07.L10 S1 plays a hook 16 times, about 37 s) is heard playing and moving through its bars,
- * then skipped: listening never gates (the step offers Skip from the start).
+ * The spec files whose Workbench listening item has been heard through already (one per file: the spec file is
+ * `titlePath[0]`, also for the suites registered from w4walk.ts / w5walk.ts / chain.ts).
  */
-async function playUntilDone(page: Page, label: string) {
+const heardThrough = new Set<string>();
+
+/** Beats (tempo units) per bar of each meter the Workbench counts in (@oak/theory METERS `unitsPerBar`). */
+const UNITS_PER_BAR: Record<string, number> = {
+  "4/4": 4,
+  "3/4": 3,
+  "2/4": 2,
+  "6/8": 2,
+  "9/8": 3,
+  "12/8": 4,
+  "5/4": 5,
+  "5/8": 5,
+  "7/8": 7,
+  "9/8i": 9,
+};
+
+/** A loop this short (seconds, one pass) is the one a walk suite hears through (WalkOptions.listen "short"). */
+const SHORT_LOOP_S = 12;
+
+/** One pass of the playing loop in seconds, from the transport (`1.1 / 4` bars, `84 BPM · 4/4`); null if unread. */
+async function loopSeconds(page: Page): Promise<number | null> {
+  const bars = /\/ (\d+)$/.exec(((await page.getByTestId("bar-counter").first().textContent()) ?? "").trim());
+  const tempo = /([\d.]+) BPM · (\S+)/.exec((await page.getByTestId("tempo").first().textContent()) ?? "");
+  const units = tempo ? UNITS_PER_BAR[tempo[2] as string] : undefined;
+  if (!bars || !tempo || !units) return null;
+  return (Number(bars[1]) * units * 60) / Number(tempo[1]);
+}
+
+/**
+ * Plays the Workbench of a listening step. One such item per spec file is heard through: the step says the loop
+ * has been heard (Continue, no longer Skip). It is the file's first loop; with `listen: "short"` (the walk suites,
+ * every lesson but their last) a loop longer than SHORT_LOOP_S is passed over, so a suite hears through its first
+ * short loop (most last 10–11 s; some 20–34 s), or its last lesson's first loop when none was short. A long one
+ * (U07.L10 S1 plays a hook 16 times, about 37 s) is heard playing and moving through its bars, then skipped, as
+ * before; the next one is heard through instead. Every other item is heard playing (Stop pressed, Skip offered from
+ * the start: listening never gates) and moving (the bar.beat counter leaves its first reading: a frozen transport
+ * fails, a one-bar loop that wraps passes), then stopped and skipped.
+ * A run step without questions (`run`, U03.L04 S3) offers Continue from the start: it is heard playing and moving.
+ */
+async function playUntilDone(
+  page: Page,
+  label: string,
+  kind: "listen" | "run" = "listen",
+  listen: "first" | "short" = "first",
+) {
+  const file = pwTest.info().titlePath[0] ?? pwTest.info().file;
   const toggle = page.getByTestId("play-toggle").first();
+  const cont = page.getByTestId("continue");
+  const counter = page.getByTestId("bar-counter").first();
   await toggle.click();
   await expect(toggle, `${label}: it plays`).toHaveAttribute("aria-pressed", "true", { timeout: 30_000 });
-  const cont = page.getByTestId("continue");
+  let skip = kind === "run" || heardThrough.has(file);
+  let why = `heard through earlier in ${file}`;
+  if (!skip && listen === "short") {
+    // The tempo shows once the code has run (pressing play runs it); unread, the loop is heard through.
+    await expect(page.getByTestId("tempo").first())
+      .toContainText("BPM", { timeout: 5_000 })
+      .catch(() => undefined);
+    const s = await loopSeconds(page);
+    if (s !== null && s > SHORT_LOOP_S) {
+      skip = true;
+      why = `a loop of ${Math.round(s)} s: a shorter one of the file is heard through`;
+    }
+  }
+  if (skip) {
+    if (kind === "run") await expect(cont, `${label}: a run never gates`).toHaveText(/Continue/);
+    else await expect(cont, `${label}: listening never gates (Skip from the start)`).toHaveText(/Skip/);
+    const first = ((await counter.textContent()) ?? "").trim();
+    expect(first, `${label}: the bar counter`).toMatch(/^\d+\.\d+ \/ \d+$/);
+    await expect
+      .poll(async () => ((await counter.textContent()) ?? "").trim(), {
+        message: `${label}: the transport moves on from ${first}`,
+        timeout: 15_000,
+      })
+      .not.toBe(first);
+    if (kind === "listen") console.log(`[listen] ${label}: heard playing and moving, then skipped (${why})`);
+    await toggle.click();
+    return;
+  }
   try {
     await expect(cont, `${label}: one loop heard`).toHaveText(/Continue/, { timeout: 25_000 });
+    heardThrough.add(file);
+    console.log(`[listen] ${label}: one loop heard through`);
   } catch {
     await expect(page.getByTestId("bar-counter").first(), `${label}: the bars move on`).not.toHaveText(
       /^1\./,
@@ -327,6 +403,11 @@ export interface WalkOptions {
   until?: string;
   /** Played inside its own session (started from Today): it ends on the session's Coda, not its own end. */
   inSession?: boolean;
+  /**
+   * Which listening item of the spec file is heard through (see `playUntilDone`): the first one (default), or the
+   * first short one; a walk suite passes "short" for every lesson but its last.
+   */
+  listen?: "first" | "short";
 }
 
 /** Answers a single answer-kind part through its widget; `false` when the widget cannot enter this answer. */
@@ -601,6 +682,33 @@ export async function wrongFor(page: Page, part: PartLike, expected: Record<stri
   throw new Error(`walker: no wrong answer for ${ui}`);
 }
 
+/** A sung step: a `sing`, or an `all` whose every part is sung (the walker's own test, see `walkLesson`). */
+export function isSung(step: StepLike): boolean {
+  const ex = step.exercise;
+  return (
+    !!ex && (ex.kind === "sing" || (ex.kind === "all" && (ex.parts ?? []).every((p) => p.kind === "sing")))
+  );
+}
+
+/**
+ * The first sung step of a lesson: Quiet mode changes only sung steps (the sing widget's fallback; every other
+ * step kind reads nothing of it), so a Quiet walk starts there (`?step=`) and walks on to the end.
+ */
+export function firstSungStep(def: LessonLike): string {
+  const s = def.steps.find((x) => !x.optional && isSung(x));
+  if (!s) throw new Error(`${def.id} has no sung step`);
+  return s.id;
+}
+
+/** The steps a walk from `from` (or from the start) must show: not optional, not a gate's second chance. */
+export function shownFrom(def: LessonLike, from?: string): string[] {
+  const at = from === undefined ? 0 : def.steps.findIndex((s) => s.id === from);
+  return def.steps
+    .slice(Math.max(0, at))
+    .filter((s) => !s.optional && !s.gateCheck)
+    .map((s) => s.id);
+}
+
 /** Walks the whole lesson from the step on screen to completion. */
 export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): Promise<string[]> {
   const seen: string[] = [];
@@ -648,7 +756,7 @@ export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): P
       await page.getByTestId("save-sketch").click();
       continue;
     }
-    if (ex.kind === "sing" || (ex.kind === "all" && (ex.parts ?? []).every((p) => p.kind === "sing"))) {
+    if (isSung(step)) {
       await singStep(page, step, o);
       await next(page);
       continue;
@@ -663,7 +771,7 @@ export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): P
           timeout: 30_000,
         });
         await expect(page.getByTestId("passive-names")).not.toHaveText(RAW);
-      } else await playUntilDone(page, label);
+      } else await playUntilDone(page, label, "listen", o.listen);
       await next(page);
       continue;
     }
@@ -678,7 +786,7 @@ export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): P
       continue;
     }
     if (ex.kind === "run-investigate" && (ex.questions ?? []).length === 0) {
-      await playUntilDone(page, label);
+      await playUntilDone(page, label, "run");
       await next(page);
       continue;
     }

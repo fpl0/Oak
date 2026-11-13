@@ -44,29 +44,34 @@ for (const m of SCREENSHOT_MATRIX) {
   });
 }
 
-// Each widget on its own, in Paper at 1440×900 and Bark at 1280×800 (the other two pairs are in the overview).
-for (const [id, kind] of FIXTURE_IDS)
-  for (const m of [SCREENSHOT_MATRIX[0], SCREENSHOT_MATRIX[3]] as const) {
-    test(`${id}: ${m.theme} ${m.width}x${m.height}`, async ({ page }) => {
-      const errors = collectErrors(page);
-      await page.setViewportSize({ width: m.width, height: m.height });
-      await useUiPrefs(page, { theme: m.theme });
-      await openGallery(page, `?only=${id}`);
-      await expect(page.locator(`section[data-fixture="${id}"]`)).toBeVisible();
-      if (kind === "click-staff")
-        await expect(page.locator(".oak-staff[data-status='ready']").first()).toBeVisible({
-          timeout: 30_000,
-        });
-      if (kind === "staff-input")
-        await expect(page.locator("[data-answer='staff-input'] [data-status='ready']")).toHaveCount(6, {
-          timeout: 30_000,
-        });
-      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-      expect(overflow).toBeLessThanOrEqual(0);
-      await shoot(page, SHOTS, id, m.theme);
-      expect(errors).toEqual([]);
-    });
-  }
+// Each widget on its own, in Paper at 1440×900 and Bark at 1280×800 (the other two pairs are in the overview). The
+// widgets are independent pages (`?only=<id>`, a full load each), so one page per pair loads them one after another:
+// every widget keeps its own load, its own readiness, overflow and console checks and its own screenshot, without a
+// new browser context per widget. Nothing on these pages is interacted with or stored.
+for (const m of [SCREENSHOT_MATRIX[0], SCREENSHOT_MATRIX[3]] as const)
+  test(`every widget on its own: ${m.theme} ${m.width}x${m.height}`, async ({ page }) => {
+    test.setTimeout(FIXTURE_IDS.length * 15_000);
+    const errors = collectErrors(page);
+    await page.setViewportSize({ width: m.width, height: m.height });
+    await useUiPrefs(page, { theme: m.theme });
+    for (const [id, kind] of FIXTURE_IDS)
+      await test.step(`${id}: ${m.theme} ${m.width}x${m.height}`, async () => {
+        await openGallery(page, `?only=${id}`);
+        await expect(page.locator(`section[data-fixture="${id}"]`)).toBeVisible();
+        if (kind === "click-staff")
+          await expect(page.locator(".oak-staff[data-status='ready']").first()).toBeVisible({
+            timeout: 30_000,
+          });
+        if (kind === "staff-input")
+          await expect(page.locator("[data-answer='staff-input'] [data-status='ready']")).toHaveCount(6, {
+            timeout: 30_000,
+          });
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+        expect(overflow, `${id} overflows`).toBeLessThanOrEqual(0);
+        await shoot(page, SHOTS, id, m.theme);
+        expect(errors, `${id}: console errors`).toEqual([]);
+      });
+  });
 
 test("reduced motion: nothing animates longer than 120 ms", async ({ page }) => {
   await useUiPrefs(page, { theme: "paper", motion: "on" });

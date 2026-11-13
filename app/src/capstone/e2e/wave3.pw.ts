@@ -11,6 +11,7 @@ import { capstones } from "../../../../content/capstones.ts";
 import { SCREENSHOT_MATRIX } from "../../../../e2e/support/stack.ts";
 import { PREFS_KEY, shoot, useUiPrefs } from "../../../../e2e/support/ui.ts";
 import { stack } from "./playwright.config.ts";
+import { seedTake } from "./seeded-take.ts";
 
 const SHOTS = fileURLToPath(new URL("./screenshots", import.meta.url));
 const H = { "content-type": "application/json", origin: stack.baseURL, "x-oak": "1" };
@@ -161,8 +162,10 @@ test("in a session the check's notice stays on screen, and the first release nam
   const name = dialog.getByLabel("Album name");
   await expect(name).toHaveValue("Oak Sessions");
   await name.fill("Night Loops");
+  // A seeded take (seeded-take.ts): the recorder's own window, uploaded through the release path.
+  await seedTake(page);
   await dialog.getByTestId("record-take").click();
-  await expect(dialog.getByTestId("take-audio")).toBeVisible({ timeout: 60_000 });
+  await expect(dialog.getByTestId("take-audio")).toBeVisible({ timeout: 30_000 });
   await dialog.getByTestId("confirm-release").click();
   const ceremony = page.getByTestId("release-ceremony");
   await expect(ceremony).toBeVisible({ timeout: 30_000 });

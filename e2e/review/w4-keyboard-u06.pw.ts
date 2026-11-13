@@ -1,12 +1,21 @@
 // Wave 4 review (review:journey): a whole U06 day from the keyboard alone, with reduced motion, at 1280×800 in
-// Bark: Today → the warm-up (stage D sets by keys; the rest reported skipped to keep the test short) → U06.L02
-// "Roman Numerals" step by step (choices, the numerals typed into the RN palette, a chord symbol typed, code typed
-// into the region, the Make) → the Coda → Done for today. The page is only read (to know what a trial asks); every
-// action is a key press, and every control that takes focus shows a focus ring.
+// Bark: Today → the warm-up (a stage D set by keys until its key paths are taken; the rest reported skipped to keep
+// the test short) → U06.L02 "Roman Numerals" step by step (choices, the numerals typed into the RN palette, a chord
+// symbol typed, code typed into the region, the Make) → the Coda → Done for today. The page is only read (to know
+// what a trial asks); every action is a key press, and every control that takes focus shows a focus ring.
 import { expect, type Page, test } from "@playwright/test";
 import { lessonDef } from "../../app/src/lesson/e2e/walk.ts";
 import { textNow, useUiPrefs } from "../support/ui.ts";
-import { api, openToday, resetClock, reviewMic, shootAll, watch } from "./support.ts";
+import {
+  api,
+  openToday,
+  playsAndMoves,
+  resetClock,
+  reviewMic,
+  sessionEnd,
+  shootAll,
+  watch,
+} from "./support.ts";
 import {
   active,
   byId,
@@ -60,8 +69,11 @@ async function skipItems(page: Page, items: readonly WarmItem[]): Promise<void> 
 
 /**
  * The warm-up: the first stage D set (chord quality, inversions, numerals, function, bass degree…) is run by keys
- * to its summary, from the drawn trials; the sets before and after it are reported skipped, so the test stays
- * short (the drill and warm-up suites walk every family).
+ * from the drawn trials until its key paths are taken (a trial answered by its keys, Enter on the feedback, and
+ * the next trial answered the same way); the rest of it and the sets around it are reported skipped, so the test
+ * stays short (its further trials repeat the same keys; the drill and warm-up suites walk every family, and
+ * "Finish set" and the summary by keys are walked in w3-keyboard-u03's warm-up and w3-fet-mic). A set that ends
+ * first is left at its summary, as before.
  */
 async function stageDSetByKeys(page: Page): Promise<string> {
   const warmup = page.getByTestId("warmup");
@@ -87,6 +99,7 @@ async function stageDSetByKeys(page: Page): Promise<string> {
       .catch(() => false);
   const deadline = Date.now() + 120_000;
   let lastTrial = "";
+  let answered = 0;
   while (Date.now() < deadline) {
     if ((await vis("start-set")) || (await vis("listen-block"))) {
       if (await vis("start-set"))
@@ -104,8 +117,16 @@ async function stageDSetByKeys(page: Page): Promise<string> {
     } else {
       const stage = (await textNow(page.getByTestId("stage-text"))).trim();
       const counter = await textNow(page.getByTestId("trial-counter"));
+      if (/your turn/i.test(stage) && counter !== lastTrial && answered >= 2) {
+        // Two trials answered by keys, each moved on with Enter: the rest of the set reported skipped.
+        await skipItems(page, items.slice(at));
+        await expect(warmup).toBeHidden({ timeout: 30_000 });
+        console.log(`[warm-up] ${item.familyId}: ${answered} trials by keys, then skipped at ${counter}`);
+        return item.familyId;
+      }
       if (/your turn/i.test(stage) && counter !== lastTrial) {
         lastTrial = counter;
+        answered++;
         const t = await page.evaluate(
           () => (globalThis as { __oakDrillTrial?: DrillTrial }).__oakDrillTrial ?? null,
         );
@@ -141,6 +162,7 @@ test("a whole U06 day from the keyboard, with reduced motion", async ({ page, re
   await quietHmr(page);
   await useUiPrefs(page, { theme: "bark", motion: "system" });
   const problems = watch(page);
+  const ended = sessionEnd(page);
   const plan = await api<{ kind: string; mapItemId: string }>(request, "GET", "/api/session/today");
   expect(plan).toMatchObject({ kind: "lesson", mapItemId: "U06.L02" });
   await openToday(page);
@@ -177,11 +199,14 @@ test("a whole U06 day from the keyboard, with reduced motion", async ({ page, re
       continue;
     }
     if (ex.kind === "listen") {
+      // Play by key: it plays and moves on; then Stop by key and on (listening never gates; a whole loop heard
+      // through to "Continue" is the lesson walkers' check, once per walker file).
       await tabTo(page, byId("play-toggle"), "Play");
       await page.keyboard.press("Enter");
-      await expect(page.getByTestId("continue")).toHaveText(/Continue/, { timeout: 30_000 });
+      await playsAndMoves(page);
       await tabTo(page, byId("play-toggle"), "Stop");
       await page.keyboard.press("Enter");
+      await expect(page.getByTestId("play-toggle").first()).toHaveAttribute("aria-pressed", "false");
       await continueStep(page);
       continue;
     }
@@ -259,12 +284,15 @@ test("a whole U06 day from the keyboard, with reduced motion", async ({ page, re
 
   await expect(page).toHaveURL(/\/session\/coda$/, { timeout: 60_000 });
   const moment = page.getByTestId("coda-unlock-moment");
-  if (
-    await moment
+  // The moment plays only for tools this session unlocked: with none, it is absent at once (no 5-s wait).
+  const shows =
+    (await ended()).unlocks.length > 0 &&
+    (await moment
       .waitFor({ state: "visible", timeout: 5_000 })
       .then(() => true)
-      .catch(() => false)
-  ) {
+      .catch(() => false));
+  if (!shows) await expect(moment).toHaveCount(0);
+  if (shows) {
     await shootAll(page, "w4-kbd-coda-moment");
     await tabTo(page, byText(/See the rest of today/), "See the rest of today");
     await page.keyboard.press("Enter");

@@ -135,6 +135,8 @@ test("a code card that tries to run JavaScript never runs it", async ({ page }) 
 });
 
 test("an error storm: repeated failures, Retry is held while another turn streams", async ({ page }) => {
+  // The page's clock runs as usual; it is only moved past the cool-down below.
+  await page.clock.install();
   await openPanel(page);
   for (const kind of ["overloaded", "network", "server"]) {
     await send(page, `#error:${kind}`);
@@ -142,7 +144,9 @@ test("an error storm: repeated failures, Retry is held while another turn stream
   }
   const failed = panel(page).getByTestId("turn-error");
   await expect(failed).toHaveCount(3);
-  // The fake asks for a 20 s pause; then Retry appears.
+  // The fake asks for a 20 s pause; then Retry appears. The pause is the panel's own timer (Date.now and a 1-s
+  // setTimeout): the page's clock jumps past it instead of waiting it out.
+  await page.clock.fastForward(25_000);
   await expect(failed.first().getByRole("button", { name: "Retry" })).toBeVisible({ timeout: 40_000 });
   // A slow turn streams; the failed turns' Retry must wait for it rather than start a second stream.
   await send(page, "#slow tell me something");

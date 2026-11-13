@@ -79,12 +79,15 @@ test("a locked operator in the piece reads as locked, not as a typo, and the emp
   await useUiPrefs(page, { theme: "bark", motion: "off" });
   await page.goto("/capstone/C0");
   await expect(page.getByTestId("capstone-workspace")).toBeVisible({ timeout: 60_000 });
+  // The seeded draft is loaded first (it would replace code typed before it arrives).
+  await expect(page.getByTestId("saved-state")).toContainText(/Version \d+ saved/, { timeout: 30_000 });
   await setCode(page, 'drums: s("bd ~ sd ~, hh*8")');
   const banner = page.getByTestId("eval-banner");
   await expect(banner).toContainText("unlocks in", { timeout: 30_000 });
   await expect(banner).not.toContainText("typo");
   await page.reload();
   await expect(page.getByTestId("capstone-workspace")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("saved-state")).toContainText(/Version \d+ saved/, { timeout: 30_000 });
   await setCode(page, 'drums: s("bd ~ sd ~, hh*8")');
   await expect(page.getByTestId("eval-banner")).toBeVisible({ timeout: 30_000 });
   // The empty views say so once (never side by side). If the saved draft was analysed before the edit, the views

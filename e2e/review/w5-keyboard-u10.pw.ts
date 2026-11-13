@@ -1,12 +1,22 @@
 // Wave 5 review (review:journey): a whole U10 day from the keyboard alone, with reduced motion, at 1280×800 in
 // Bark: Today → the warm-up (the minor degrees, fam.deg.fet-minor, answered by keys with the way home sung on the
-// fake microphone; the other sets reported skipped to keep the test short) → U10.L04 "Minor-Key Chords" step by
-// step (a predict, a run-and-answer, code typed into the region, the numerals of a minor loop into the RN palette,
-// the minor bass by degree keys, the Make) → the Coda → Done for today. The page is only read (to know what a
-// trial asks); every action is a key press, and every control that takes focus shows a focus ring.
+// fake microphone until each of its key paths is taken; the rest reported skipped to keep the test short) →
+// U10.L04 "Minor-Key Chords" step by step (a predict, a run-and-answer, code typed into the region, the numerals
+// of a minor loop into the RN palette, the minor bass by degree keys, the Make) → the Coda → Done for today. The
+// page is only read (to know what a trial asks); every action is a key press, and every control that takes focus
+// shows a focus ring.
 import { expect, type Page, test } from "@playwright/test";
 import { textNow, useUiPrefs } from "../support/ui.ts";
-import { api, openToday, resetClock, reviewMic, shootAll, watch } from "./support.ts";
+import {
+  api,
+  openToday,
+  playsAndMoves,
+  resetClock,
+  reviewMic,
+  sessionEnd,
+  shootAll,
+  watch,
+} from "./support.ts";
 import {
   active,
   byId,
@@ -72,7 +82,13 @@ const vis = (page: Page, id: string) =>
     .isVisible()
     .catch(() => false);
 
-/** The minor-degree set by keys, to its summary; the sets around it reported skipped. */
+/**
+ * The minor-degree set by keys, the sets around it reported skipped. The set is walked by keys until every key path
+ * it has has been taken: a trial with a flat degree (♭3, ♭6, ♭7 by their digits), a way home sung (Enter on "Sing it
+ * home", the take, then Enter on Next) and the trial after it; the rest of the set is then reported skipped (its
+ * further trials repeat the same keys; "Finish set" and the summary by keys are walked in w3-keyboard-u03's warm-up
+ * and w3-fet-mic). A set that ends first is left at its summary, as before.
+ */
 async function minorSetByKeys(page: Page): Promise<void> {
   const warmup = page.getByTestId("warmup");
   await expect(warmup).toBeVisible({ timeout: 60_000 });
@@ -88,6 +104,8 @@ async function minorSetByKeys(page: Page): Promise<void> {
   const deadline = Date.now() + 150_000;
   let lastTrial = "";
   let sung = 0;
+  let flatAnswered = false;
+  let sungAndOn = false;
   while (Date.now() < deadline) {
     if ((await vis(page, "start-set")) || (await vis(page, "listen-block"))) {
       if (await vis(page, "start-set"))
@@ -112,9 +130,12 @@ async function minorSetByKeys(page: Page): Promise<void> {
     } else if (await vis(page, "trial-feedback")) {
       const a = await active(page);
       const next = await textNow(page.getByTestId("next-trial")).catch(() => "");
-      console.log(
-        `[trial] ${(await textNow(page.getByTestId("trial-feedback"))).slice(0, 80)} · next: ${next}`,
-      );
+      const said = await textNow(page.getByTestId("trial-feedback"));
+      console.log(`[trial] ${said.slice(0, 80)} · next: ${next}`);
+      if (/Sung home|Sung\. The trace|Singing skipped/.test(said)) {
+        sung++;
+        sungAndOn = true;
+      }
       expect(a.tag, "after the answer, focus is on a control (never lost to the page)").not.toBe("body");
       // The runner's own region holds focus (its keys work there, wave3 drills design), else a ringed control.
       if (a.id !== "drill-runner") expect(a.ring, `focus ring on ${a.id || a.text}`).toBe(true);
@@ -122,6 +143,13 @@ async function minorSetByKeys(page: Page): Promise<void> {
     } else {
       const stage = (await textNow(page.getByTestId("stage-text"))).trim();
       const counter = await textNow(page.getByTestId("trial-counter"));
+      if (/your turn/i.test(stage) && counter !== lastTrial && flatAnswered && sungAndOn) {
+        // Every key path of the set taken: the rest of it (and the sets after it) reported skipped.
+        await skipItems(page, items.slice(at));
+        await expect(warmup).toBeHidden({ timeout: 30_000 });
+        console.log(`[warm-up] minor degrees by keys to ${counter}; the way home sung ${sung} times`);
+        return;
+      }
       if (/your turn/i.test(stage) && counter !== lastTrial) {
         lastTrial = counter;
         const t = await page.evaluate(
@@ -137,6 +165,7 @@ async function minorSetByKeys(page: Page): Promise<void> {
         const a = await active(page);
         expect(a.tag, "the pad has focus when the trial is ready").toBe("button");
         for (const d of t?.expected.degrees ?? []) await page.keyboard.press(d.replace(/^[b#]/, ""));
+        if ((t?.expected.degrees ?? []).some((d) => d.startsWith("b"))) flatAnswered = true;
         await page.waitForTimeout(300);
         if (!(await vis(page, "trial-feedback"))) await page.keyboard.press("Enter");
       }
@@ -153,6 +182,7 @@ test("a whole U10 day from the keyboard, with reduced motion", async ({ page, re
   await quietHmr(page);
   await useUiPrefs(page, { theme: "bark", motion: "system" });
   const problems = watch(page);
+  const ended = sessionEnd(page);
   const plan = await api<{ kind: string; mapItemId: string }>(request, "GET", "/api/session/today");
   expect(plan).toMatchObject({ kind: "lesson", mapItemId: "U10.L04" });
   await openToday(page);
@@ -182,11 +212,14 @@ test("a whole U10 day from the keyboard, with reduced motion", async ({ page, re
       continue;
     }
     if (ex.kind === "listen") {
+      // Play by key: it plays and moves on; then Stop by key and on (listening never gates; a whole loop heard
+      // through to "Continue" is the lesson walkers' check, once per walker file).
       await tabTo(page, byId("play-toggle"), "Play");
       await page.keyboard.press("Enter");
-      await expect(page.getByTestId("continue")).toHaveText(/Continue/, { timeout: 40_000 });
+      await playsAndMoves(page);
       await tabTo(page, byId("play-toggle"), "Stop");
       await page.keyboard.press("Enter");
+      await expect(page.getByTestId("play-toggle").first()).toHaveAttribute("aria-pressed", "false");
       await continueStep(page);
       continue;
     }
@@ -263,12 +296,15 @@ test("a whole U10 day from the keyboard, with reduced motion", async ({ page, re
 
   await expect(page).toHaveURL(/\/session\/coda$/, { timeout: 60_000 });
   const moment = page.getByTestId("coda-unlock-moment");
-  if (
-    await moment
+  // The moment plays only for tools this session unlocked: with none, it is absent at once (no 5-s wait).
+  const shows =
+    (await ended()).unlocks.length > 0 &&
+    (await moment
       .waitFor({ state: "visible", timeout: 5_000 })
       .then(() => true)
-      .catch(() => false)
-  ) {
+      .catch(() => false));
+  if (!shows) await expect(moment).toHaveCount(0);
+  if (shows) {
     await shootAll(page, "w5-kbd-coda-moment");
     await tabTo(page, byText(/See the rest of today/), "See the rest of today");
     await page.keyboard.press("Enter");

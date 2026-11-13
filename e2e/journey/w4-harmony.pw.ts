@@ -1,7 +1,7 @@
 // Wave 4 journeys (b) and (c), U06 Diatonic Harmony on the real stack, each from a dev seed:
-//   1. "after U06.L05": today is U06.L06 (The Four-Chord Schema). The warm-up holds the bass-degree set (stage D):
-//      the first trial's roots are sung on Chrome's fake microphone, then every trial is picked on the degree pad;
-//      the other warm-up sets are skipped, as a learner may. The lesson is walked, the Coda follows, and in Studio
+//   1. "after U06.L05": today is U06.L06 (The Four-Chord Schema). The warm-up holds the bass-degree set (stage D),
+//      reported skipped here: the set itself is walked from the same seed by session-seeds w4-warmups.pw.ts (roots
+//      sung, then picked by key). The lesson is walked, the Coda follows, and in Studio
 //      the Make's sketch shows its chord band: the Roman-numeral lens is switched off and on again from the
 //      keyboard (Shift+R), and the numerals of I V vi IV come and go with it.
 //   2. "U06.CP due": a checkpoint day. After the warm-up the U06 checkpoint is taken item by item through the
@@ -50,20 +50,7 @@ async function skipItems(page: Page, items: readonly WarmItem[]): Promise<void> 
   }, items);
 }
 
-interface Trial {
-  seed?: number;
-  expected: { degrees?: string[] };
-}
-const currentTrial = (page: Page) =>
-  page.evaluate(() => (globalThis as { __oakDrillTrial?: unknown }).__oakDrillTrial) as Promise<Trial>;
-
-async function trialNo(page: Page, n: number, of: number): Promise<Trial> {
-  await expect(page.getByTestId("trial-counter")).toHaveText(`Trial ${n} of ${of}`, { timeout: 30_000 });
-  await expect.poll(async () => (await currentTrial(page))?.seed !== undefined).toBe(true);
-  return currentTrial(page);
-}
-
-test("a U06 day: the bass-degree set sung and picked, the Four-Chord Schema, the numeral lens switched on", async ({
+test("a U06 day: the bass-degree set in the warm-up, the Four-Chord Schema, the numeral lens switched on", async ({
   page,
   request,
 }) => {
@@ -73,15 +60,6 @@ test("a U06 day: the bass-degree set sung and picked, the Four-Chord Schema, the
   await noHmr(page);
   await setUiPrefs(page, { theme: "paper" });
   const w = watch(page);
-  // Every drill trial the runner posts, as the server receives it (by set and index: a batch may be resent).
-  type Posted = { idx: number; familyId: string; correct: boolean; response: { sung?: unknown[] | null } };
-  const sent = new Map<string, Posted>();
-  page.on("request", (r) => {
-    if (r.method() === "POST" && /\/api\/drills\/sessions\/[^/]+\/trials$/.test(r.url()))
-      for (const t of (r.postDataJSON() as { trials: Posted[] }).trials ?? [])
-        sent.set(`${r.url()}#${t.idx}`, t);
-  });
-  const posted = () => [...sent.values()];
 
   await openToday(page);
   await expect(page.getByTestId("today-card")).toHaveAttribute("data-state", /.+/, { timeout: 30_000 });
@@ -96,52 +74,11 @@ test("a U06 day: the bass-degree set sung and picked, the Four-Chord Schema, the
     at,
     `the bass-degree set in today's warm-up: ${items.map((i) => i.familyId)}`,
   ).toBeGreaterThanOrEqual(0);
-  await skipItems(page, items.slice(0, at));
-
-  // The bass-degree set: a blocked intro is heard first, then each trial.
-  if (items[at]?.kind === "blocked-intro") {
-    await expect(page.getByTestId("listen-block")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole("button", { name: /Start the set/ })).toBeFocused({ timeout: 60_000 });
-    await page.keyboard.press("Enter");
-  }
-  await expect(page.getByTestId("trial-counter")).toHaveText(/Trial 1 of \d+/, { timeout: 60_000 });
-  const total = Number((await page.getByTestId("trial-counter").textContent())?.match(/of (\d+)/)?.[1]);
-  await expect(page.getByTestId("trial-prompt")).toHaveText(
-    "Hear the bass first: which degree is each root?",
-  );
-  const pad = page.getByRole("group", { name: "Your answer: the degrees, in order" });
-  for (let i = 0; i < total; i++) {
-    const t = await trialNo(page, i + 1, total);
-    await expect(page.getByTestId("stage-text")).toHaveText(/Your turn/, { timeout: 40_000 });
-    if (i === 0) {
-      // The roots sung first (V), on the fake microphone; singing helps and never gates.
-      await expect(page.getByTestId("sing-part")).toBeVisible();
-      await page.keyboard.press("v");
-      await expect(page.getByTestId("pitch-lane")).toBeVisible({ timeout: 15_000 });
-      await expect(page.getByTestId("sung-part-line")).toBeVisible({ timeout: 40_000 });
-      await shootAll(page, "w4-journey-bass-sung");
-    }
-    await pad.locator("button").first().focus();
-    for (let k = 0; k < 4; k++) await page.keyboard.press("Backspace");
-    for (const d of t.expected.degrees ?? []) await page.keyboard.press(d.replace(/^[b#]/, ""));
-    await expect(page.getByTestId("trial-feedback")).toHaveAttribute("data-correct", "true");
-    await page.getByTestId("next-trial").focus();
-    await page.keyboard.press("Enter");
-  }
-  const summary = page.getByTestId("set-summary");
-  await expect(summary).toBeVisible({ timeout: 30_000 });
-  const before = (await sessionState(page)).warmupIndex;
-  await summary.getByRole("button", { name: /Next set|On to the lesson|Continue/ }).click();
-  await expect.poll(async () => (await sessionState(page)).warmupIndex).toBeGreaterThan(before);
-  const left = (await sessionState(page)).plan?.warmup.items.slice(at + 1) ?? [];
-  await skipItems(page, left);
-  // The set reached the server: every trial, the first with one sung note per root.
-  await expect.poll(() => posted().filter((t) => t.familyId === "fam.har.bass").length).toBe(total);
-  const bass = posted()
-    .filter((t) => t.familyId === "fam.har.bass")
-    .sort((a, b) => a.idx - b.idx);
-  expect(bass.every((t) => t.correct)).toBe(true);
-  expect((bass[0]?.response.sung ?? []).length).toBeGreaterThan(0);
+  // The warm-up is reported skipped, as a learner may. The bass-degree set itself (its roots sung on the fake
+  // microphone, then picked by key, every trial on the wire) is walked from this same seed by
+  // app/src/session/seeds/e2e/w4-warmups.pw.ts "a U06 day: the bass-degree set …" and its Quiet twin.
+  await skipItems(page, items);
+  await expect(page.getByTestId("warmup")).toBeHidden({ timeout: 30_000 });
 
   // The lesson, then the Coda (no tool arrives with U06.L06).
   await walkLesson(page, u06l06, { makeTitle: "U06.L06 four chords" });

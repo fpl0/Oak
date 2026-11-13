@@ -5,6 +5,7 @@
 // its trials read back from the wire with the warm-up item they belong to, and the session moves on after it.
 import type { DrillTrialRecord, Trial } from "@oak/api";
 import { expect, type Page, test } from "@playwright/test";
+import { SCREENSHOT_MATRIX } from "../../../../../e2e/support/stack.ts";
 import { shoot, useUiPrefs } from "../../../../../e2e/support/ui.ts";
 import { api, blockHmr, expectNoOverflow, matrix, SHOTS, seed, settle } from "./support.ts";
 
@@ -91,9 +92,12 @@ async function startDay(page: Page): Promise<void> {
 
 /**
  * Moves the warm-up to the first item of `familyId` (the ones before it are reported skipped, as the learner's
- * "skip" would) and returns it; a blocked intro's listening comes first and is ended with Enter.
+ * "skip" would) and returns it; a blocked intro's listening comes first and is ended with Enter. With `hear`, the
+ * listening is heard through: focus moves to "Start the set" only once every example has played (asserted once in
+ * this file, by the first test). Otherwise the learner starts the set while it plays (the button is there from the
+ * start, and listening never gates).
  */
-async function toFamily(page: Page, familyId: string): Promise<WarmItem> {
+async function toFamily(page: Page, familyId: string, opts: { hear?: boolean } = {}): Promise<WarmItem> {
   const st = await sessionState(page);
   const items = st.plan?.warmup.items ?? [];
   const at = items.findIndex((i) => i.familyId === familyId);
@@ -119,11 +123,21 @@ async function toFamily(page: Page, familyId: string): Promise<WarmItem> {
   const item = items[at] as WarmItem;
   if (item.kind === "blocked-intro") {
     await expect(page.getByTestId("listen-block")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole("button", { name: /Start the set/ })).toBeFocused({ timeout: 60_000 });
-    await page.keyboard.press("Enter");
+    await startTheSet(page, opts.hear === true);
   }
   await expect(page.getByTestId("trial-counter")).toHaveText(/Trial 1 of \d+/, { timeout: 60_000 });
   return item;
+}
+
+/** Ends a blocked intro's listening with Enter on "Start the set": heard through first, or at once. */
+async function startTheSet(page: Page, hear: boolean): Promise<void> {
+  const start = page.getByRole("button", { name: /Start the set/ });
+  if (hear) await expect(start).toBeFocused({ timeout: 60_000 });
+  else {
+    await expect(start).toBeEnabled();
+    await start.focus();
+  }
+  await page.keyboard.press("Enter");
 }
 
 async function currentTrial(page: Page): Promise<Trial> {
@@ -164,7 +178,7 @@ test("a U05 day: the chord-quality set in the warm-up, answered by key, then the
   await useUiPrefs(page, { theme: "paper" });
   await startDay(page);
   expect((await sessionState(page)).plan).toMatchObject({ kind: "lesson", mapItemId: "U05.L03" });
-  const item = await toFamily(page, "fam.chd.quality-triad");
+  const item = await toFamily(page, "fam.chd.quality-triad", { hear: true });
   const before = (await sessionState(page)).warmupIndex;
   await expect(page.getByTestId("trial-prompt")).toHaveText("After the key, one chord: what quality is it?");
   const total = await totalOf(page);
@@ -204,6 +218,29 @@ test("a U05 day: the chord-quality set in the warm-up, answered by key, then the
   expect(problems).toEqual([]);
 });
 
+/**
+ * Both themes at both sizes on the trial in view (the theme switched in place): the next action in view, no
+ * horizontal overflow of the document (none at all) or of <main>; back to Paper 1440×900.
+ */
+async function frameMatrix(page: Page, name: string): Promise<void> {
+  for (const m of SCREENSHOT_MATRIX) {
+    await page.setViewportSize({ width: m.width, height: m.height });
+    await page.evaluate((theme) => document.documentElement.setAttribute("data-theme", theme), m.theme);
+    await expect(page.getByTestId("next-trial")).toBeInViewport();
+    await settle(page);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+    await expectNoOverflow(page);
+    await shoot(page, SHOTS, name, m.theme);
+  }
+  await page.evaluate(() => document.documentElement.setAttribute("data-theme", "paper"));
+  await page.setViewportSize({ width: 1440, height: 900 });
+}
+
+// The bass-degree set's sung roots are walked once in the whole suite, here, inside a real session's warm-up: this
+// test and its Quiet twin also hold what the drills suite's practice-page copies asserted (moved from
+// app/src/drills/e2e/wave4.pw.ts: the Mic-live indicator, the answer in context by bar, a wrong last pick, a trial
+// with nothing sung, the frame in both themes and sizes, the indicator off in Quiet mode).
 test("a U06 day: the bass-degree set, its roots sung on the mic before they are picked", async ({
   page,
   request,
@@ -227,30 +264,45 @@ test("a U06 day: the bass-degree set, its roots sung on the mic before they are 
   await expect(page.getByTestId("sing-part")).toBeVisible();
   await page.keyboard.press("v");
   await expect(page.getByTestId("pitch-lane")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Microphone is live. Close it" })).toBeVisible({
+    timeout: 15_000,
+  });
   await expect(page.getByTestId("stage-text")).toHaveText("Your turn: sing now.", { timeout: 20_000 });
+  await shoot(page, SHOTS, "w4-bass-singing", "paper");
   await expect(page.getByTestId("sung-part-line")).toBeVisible({ timeout: 40_000 });
   expect(micAsked()).toBeGreaterThan(0);
   await settle(page);
   await expectNoOverflow(page);
   await shoot(page, SHOTS, "w4-warmup-bass-sung", "paper");
+  // The pick is the learner's: clear what was prefilled and enter the roots.
   const pad = page.getByRole("group", { name: "Your answer: the degrees, in order" });
+  await expect(pad).toBeVisible();
   await pad.locator("button").first().focus();
   for (let k = 0; k < 4; k++) await page.keyboard.press("Backspace");
   for (const d of t0.expected.degrees ?? []) await page.keyboard.press(d.replace(/^[b#]/, ""));
   await expect(page.getByTestId("trial-feedback")).toHaveAttribute("data-correct", "true");
+  await expect(page.getByTestId("answer-in-context")).toContainText("Bar 1");
   await nextTrial(page);
+  // The last pick is wrong on purpose (its first root off by one); the others are right, nothing sung.
+  expect(total).toBeGreaterThanOrEqual(3);
   for (let i = 1; i < total; i++) {
     const t = await trialNo(page, i + 1, total);
     await expect(pad).toBeVisible();
-    for (const d of t.expected.degrees ?? []) await page.keyboard.press(d.replace(/^[b#]/, ""));
-    await expect(page.getByTestId("trial-feedback")).toHaveAttribute("data-correct", "true");
+    const last = i === total - 1;
+    for (const [k, d] of (t.expected.degrees ?? []).entries())
+      await page.keyboard.press(last && k === 0 ? (d === "1" ? "2" : "1") : d.replace(/^[b#]/, ""));
+    await expect(page.getByTestId("trial-feedback")).toHaveAttribute("data-correct", last ? "false" : "true");
     await nextTrial(page);
   }
   await finishSet(page, before);
   // One sung note per root on the first trial (never audio); the picks are what is graded.
   expect(sent.trials.get(0)?.response.sung).toHaveLength(t0.expected.degrees?.length ?? 0);
   expect(sent.trials.get(0)?.correct).toBe(true);
+  expect(sent.trials.get(1)?.response.sung).toBeNull();
+  expect(sent.trials.get(total - 1)?.correct).toBe(false);
   expect(sent.trials.size).toBe(total);
+  // Every trial on the wire is this set's (moved from the journey's U06 day, e2e/journey/w4-harmony.pw.ts).
+  for (const r of sent.trials.values()) expect(r.familyId).toBe("fam.har.bass");
   expect(problems).toEqual([]);
 });
 
@@ -288,13 +340,17 @@ test("the same U06 day in Quiet mode: no sung part, the mic never opens, the set
       await settle(page);
       await expectNoOverflow(page);
       await shoot(page, SHOTS, "w4-warmup-bass-quiet", "bark");
+      await frameMatrix(page, "w4-bass-feedback");
     }
     await nextTrial(page);
   }
   await finishSet(page, before);
   expect(micAsked()).toBe(0);
+  await expect(page.getByRole("button", { name: "Microphone is live. Close it" })).toHaveCount(0);
   expect(sent.trials.size).toBe(total);
   for (const r of sent.trials.values()) expect(r.response.sung).toBeNull();
+  // Every trial on the wire is this set's and graded right (the journey's U06 day asserted this of its set).
+  for (const r of sent.trials.values()) expect(r).toMatchObject({ familyId: "fam.har.bass", correct: true });
   expect(problems).toEqual([]);
 });
 
@@ -380,15 +436,30 @@ test("the stage D warm-up set at both sizes in both themes", async ({ page, requ
   await useUiPrefs(page, { theme: "paper" });
   await startDay(page);
   await toFamily(page, "fam.chd.quality-triad");
+  // This browser keeps the open session's place at most every 2 s (session/runner.ts persist): before the reload,
+  // the kept place is this set's (the skips before it included).
+  const at = (await sessionState(page)).warmupIndex;
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            (
+              JSON.parse(localStorage.getItem("oak.session.active.v1") ?? "null") as {
+                state?: { warmupIndex?: number };
+              } | null
+            )?.state?.warmupIndex,
+        ),
+      { timeout: 10_000 },
+    )
+    .toBe(at);
   // A reload resumes the session at this set (its listening first, as a blocked intro always starts).
   await matrix(page, "w4-warmup-quality-trial", async (p) => {
     await p.reload();
     const listen = p.getByRole("button", { name: /Start the set/ });
     await expect(listen.or(p.getByTestId("trial-counter"))).toBeVisible({ timeout: 60_000 });
-    if (await listen.isVisible()) {
-      await expect(listen).toBeFocused({ timeout: 60_000 });
-      await p.keyboard.press("Enter");
-    }
+    // Its listening is heard through once in this file (the U05 day); here the set starts while it plays.
+    if (await listen.isVisible()) await startTheSet(p, false);
     await expect(p.getByTestId("trial-counter")).toBeVisible({ timeout: 30_000 });
     await expect(p.getByRole("group", { name: "Your answer: which chord quality?" })).toBeVisible();
   });

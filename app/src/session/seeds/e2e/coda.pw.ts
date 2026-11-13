@@ -148,15 +148,21 @@ for (const [id, name] of Object.entries(SHOWCASES)) {
     // The degree ceremony is seen (as after the test above); this tool is the one the Coda shows.
     const f: Fakes = { show: id, seen: [], milestone: true };
     await toCoda(page, request, f);
+    // The ceremony's length is this showcase's own (its demo's tempo, `ceremonyTimeline`): it is held once, in real
+    // time, to its 8 seconds where the Coda opens (Paper, 1440×900). Its end screen then holds still, and the other
+    // three cells prove its layout on that still screen: the size changed in place, the theme switched in place.
+    expect(page.viewportSize()).toEqual({ width: 1440, height: 900 });
+    await playsThrough(page);
     for (const m of SCREENSHOT_MATRIX) {
       await page.setViewportSize({ width: m.width, height: m.height });
-      await useUiPrefs(page, { theme: m.theme });
-      await page.reload();
-      await playsThrough(page);
+      await page.evaluate((theme) => document.documentElement.setAttribute("data-theme", theme), m.theme);
+      await expect(page.locator("html")).toHaveAttribute("data-theme", m.theme);
+      await expect(moment(page)).toHaveAttribute("data-phase", "done");
       await settle(page);
       await expectNoOverflow(page);
       await shoot(page, SHOTS, `coda-ceremony-${name}`, m.theme);
     }
+    await page.evaluate(() => document.documentElement.setAttribute("data-theme", "paper"));
     await page.setViewportSize({ width: 1440, height: 900 });
     if (id !== "tb.scale") return;
     await expect(page.getByTestId("ceremony-code").locator("mark")).toHaveText(["scale"]);

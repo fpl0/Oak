@@ -1,0 +1,37 @@
+{
+  "$comment": "Minutes of test time per project (the sum of every test's duration, as test-results/e2e-durations.json counts it), enforced by `bun run e2e` (scripts/e2e-parallel.ts): a budget exceeded by more than `tolerance`, the total exceeded, or a project with no budget fails the run. A new project adds its budget here; a budget is raised only in the change that argues for it (docs/design/wave5.md §7.1). Set on 2026-11-13 from the first whole run after the suite pass (idle machine, jobs 8, 19.3 min wall, 100.3 min of test time): lesson 20.4, journey 11.1, review 11.0, days 16.1, surfaces 28.2 measured. The pass aimed at 70 in all and did not reach it; these lines hold what was reached so that it cannot grow back unnoticed.",
+  "totalMinutes": 105,
+  "tolerance": 0.15,
+  "budgets": [
+    { "name": "lesson", "projects": ["lesson"], "minutes": 21 },
+    { "name": "journey", "projects": ["journey"], "minutes": 12 },
+    { "name": "review", "projects": ["review"], "minutes": 11.5 },
+    {
+      "name": "days",
+      "projects": ["session-seeds", "drills", "onboarding", "session", "map"],
+      "minutes": 16.5
+    },
+    {
+      "name": "surfaces",
+      "projects": [
+        "ui-review",
+        "capstone",
+        "answers",
+        "review-studio",
+        "tutor",
+        "studio",
+        "workbench-w3",
+        "kit",
+        "platform",
+        "app",
+        "notation"
+      ],
+      "minutes": 29
+    },
+    { "name": "strudel", "projects": ["strudel-autoplay", "strudel-gesture"], "minutes": 6.8 },
+    { "name": "audio", "projects": ["audio"], "minutes": 2.4 },
+    { "name": "voice", "projects": ["voice"], "minutes": 2.4 },
+    { "name": "transcribe", "projects": ["transcribe"], "minutes": 3.5 },
+    { "name": "workbench", "projects": ["workbench"], "minutes": 1.3 }
+  ]
+}

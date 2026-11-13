@@ -83,6 +83,30 @@ export async function throughTheLoop(page: Page, value: number, opts: { shots?: 
   if (opts.shots) await shootAll(page, "04-react");
 }
 
+/**
+ * The reaction screen from the dev seed "onboarding at react (edit <value>)": the welcome, the loop's build-up and the
+ * edit are the full onboarding's subject (e2e/journey/journey.pw.ts gate journey 1, the journeys' Quiet day and
+ * quiet.pw.ts walk them with `throughTheLoop`; the Quiet resume test edits and reloads); a spec about the screens after
+ * them starts here instead of waiting out the four bars of the build-up.
+ */
+export async function fromTheReaction(
+  page: Page,
+  request: import("@playwright/test").APIRequestContext,
+  apiURL: string,
+  value: number,
+) {
+  const h = { "x-oak": "1", "content-type": "application/json", origin: apiURL };
+  expect((await request.put(`${apiURL}/api/dev/clock`, { headers: h, data: { reset: true } })).ok()).toBe(
+    true,
+  );
+  const point = `onboarding at react (edit ${value})`;
+  expect((await request.post(`${apiURL}/api/dev/seed`, { headers: h, data: { point } })).ok()).toBe(true);
+  await page.goto("/onboarding/1");
+  await expectStep(page, "react");
+  await page.getByTestId("gate-start").click();
+  await expect(page.getByTestId("react-continue")).toBeVisible();
+}
+
 /** Wipes the stack's data between tests (the data dir is shared by every test of a run). */
 export async function resetData(request: import("@playwright/test").APIRequestContext, apiURL: string) {
   const h = { "x-oak": "1", "content-type": "application/json", origin: apiURL };

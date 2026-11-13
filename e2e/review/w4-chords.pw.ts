@@ -114,6 +114,9 @@ test("RN palette: numerals by digit, the wrong case named by bar and fixed with 
   await checkStep(page, /fail/);
   await page.keyboard.press("ControlOrMeta+A");
   await page.keyboard.type("am");
+  // The field reads the new symbol back before the check: a check sent in the same frame as the last key graded
+  // the old text beside other suites.
+  await expect(step(page)).toContainText("Reads as Am");
   await checkStep(page, /pass/);
   expect(problems).toEqual([]);
 });

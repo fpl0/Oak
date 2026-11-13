@@ -206,6 +206,11 @@ test("C2 session 2: resumed from the top, released, and the release Coda (Quiet 
   request,
 }) => {
   test.setTimeout(240_000);
+  // A browser without MediaRecorder releases without a recording: the take (record-take, take-audio) is the
+  // capstone suite's (app/src/capstone/e2e/wave4.pw.ts, C2 session 2); this day is about the release reaching the Coda.
+  await page.addInitScript(() => {
+    (globalThis as { MediaRecorder?: unknown }).MediaRecorder = undefined;
+  });
   await seed(request, "C2.S1 done");
   // Quiet mode: nothing on a capstone day waits for a voice.
   await api(request, "PUT", "/api/voice/quiet", { quiet: true, scope: "today" });
@@ -256,10 +261,7 @@ test("C2 session 2: resumed from the top, released, and the release Coda (Quiet 
   const dialog = page.getByRole("dialog", { name: /Release to the album|Release a new version/ });
   await expect(dialog).toBeVisible({ timeout: 30_000 });
   await dialog.getByLabel("Title").fill("Four-Chord Song");
-  await dialog.getByTestId("record-take").focus();
-  await page.keyboard.press("Enter");
-  await expect(dialog.getByTestId("take-audio")).toBeVisible({ timeout: 60_000 });
-  await dialog.getByTestId("confirm-release").focus();
+  await dialog.getByRole("button", { name: "Release without a recording" }).focus();
   await page.keyboard.press("Enter");
   const ceremony = page.getByTestId("release-ceremony");
   await expect(ceremony).toBeVisible({ timeout: 30_000 });

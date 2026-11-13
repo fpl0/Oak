@@ -116,6 +116,9 @@ test("the Oak from real progress: U03's leaves after U03.L02; voice leaves wait 
   await shoot(page, SHOTS, "oak-panel-s02", "paper");
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0);
+  // Closing hands focus back to the leaf on the next frame (map/OakTree.tsx close): wait for it, so the next leaf's
+  // focus is not taken back from under it.
+  await expect(page.locator('[data-node="S02"]')).toBeFocused();
 
   // A voice leaf in Quiet mode: waiting, nothing to fix, no Revive.
   await openLeaf(page, "V02");

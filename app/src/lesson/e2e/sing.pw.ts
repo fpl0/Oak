@@ -36,7 +36,15 @@ test("U03.L02 S8 with the fake microphone: the take, per-target marks, stored, n
   await expect(marks.nth(4)).toHaveAttribute("data-mark", "on");
   await expect(marks.nth(2)).not.toHaveAttribute("data-mark", "on");
   await page.getByTestId("check").click();
-  await expect(page.getByTestId("step-feedback")).toHaveAttribute("data-status", /fail|pass/);
+  const fb = page.getByTestId("step-feedback");
+  await expect(fb).toHaveAttribute("data-status", /fail|pass/);
+  // The take read back in words (the walk of U03.L02 no longer takes one: this is U03.L02 S8's take): clean, and a
+  // take that missed names the note that went wrong (walk.ts singStep's read-back).
+  const said = ((await fb.textContent()) ?? "").trim();
+  expect(said.length, "the take is read back").toBeGreaterThan(8);
+  expect(said, "no raw IDs").not.toMatch(/\btb\.|\bfam\.|\bcd\.|\bterm\.|[{}]|undefined|NaN|\[object/);
+  if ((await fb.getAttribute("data-status")) === "fail")
+    expect(said, "names the note").toMatch(/Note \d|note \d|Hold each note|noise|voice/);
   const s8 = await api<{ attempts: number }>(page, "GET", "/lessons/U03.L02/steps/S8");
   expect(s8.body?.attempts).toBe(1);
   await expect(page.getByTestId("continue")).toBeEnabled();

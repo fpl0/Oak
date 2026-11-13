@@ -238,6 +238,8 @@ async function bassLine(page: Page): Promise<BassLine> {
 async function writeLine(page: Page, line: BassLine, code: string, shot?: string): Promise<void> {
   if (line.staged) {
     await expect(page.getByTestId("step-prompt")).toHaveText("Step 1 · The root under each chord.");
+    // The roots step is answered on the pad: the line's modes are offered only once the line is asked for.
+    await expect(page.getByTestId("dictation-mode")).toHaveCount(0);
     for (const d of line.roots) await page.keyboard.press(digit(d));
     await page.getByTestId("check-answer").focus();
     await page.keyboard.press("Enter");
@@ -246,6 +248,7 @@ async function writeLine(page: Page, line: BassLine, code: string, shot?: string
     );
     await expect(page.getByTestId("roots-found")).toBeVisible();
   }
+  await expect(page.getByTestId("dictation-mode")).toBeVisible();
   await page.getByTestId("dictation-mode").locator('[data-mode="code"]').click();
   await expect(page.getByTestId("trial-prompt")).toHaveText(
     "Write the bass line as code: n is the degree − 1, in any octave.",
@@ -266,7 +269,9 @@ test("bass-line dictation: the line written as code, right and then wrong (root 
   await seed(page);
   await prepare(page);
   await startPractice(page, "fam.har.bass", 5);
-  await expect(page.getByTestId("dictation-mode")).toBeVisible();
+  // The mode switch ("Write it as") is asserted visible in `writeLine`, once the line is asked for: a staged trial
+  // (more notes than chords) asks for its roots first, and the switch is not offered on that step (a random draw;
+  // checking it here failed whenever trial 1 was staged).
   // Right.
   await trialNo(page, 1, 4);
   const first = await bassLine(page);
@@ -395,11 +400,19 @@ test("form by ear: the sections labelled on the form widget, right and then wron
   await expect(feedback).toHaveAttribute("data-correct", "false");
   await expect(feedback).toContainText(/It was A [AB] [AB] [AB]/);
   await page.keyboard.press("Enter");
-  for (const n of [3, 4]) {
-    await trialNo(page, n, 4);
-    await page.getByRole("button", { name: "Show me" }).click();
-    await page.keyboard.press("Enter");
-  }
+  // Trial 3 is answered by key while it plays (an answer never waits for the sections to finish).
+  const t3 = await trialNo(page, 3, 4);
+  // Level 1's forms are AABA and verse–chorus (ABAB), as for trial 1 (packages/drills/src/gen/form.ts).
+  expect(["AABA", "verse-chorus"]).toContain(t3.expected.choice?.[0]);
+  for (const l of (t3.expected.choice?.[0] === "AABA" ? "AABA" : "ABAB").split(""))
+    await page.keyboard.press(l.toLowerCase());
+  await page.keyboard.press("Enter");
+  await expect(feedback).toHaveAttribute("data-correct", "true");
+  await page.keyboard.press("Enter");
+  // Trial 4: the sections heard through (the file's one full hearing of a form), then "Show me" on the form widget.
+  await trialNo(page, 4, 4);
+  await page.getByRole("button", { name: "Show me" }).click();
+  await page.keyboard.press("Enter");
   await expect(page.getByTestId("set-summary")).toBeVisible({ timeout: 30_000 });
   const recs = [...posts.values()].sort((a, b) => a.idx - b.idx);
   expect(recs[0]?.correct).toBe(true);
@@ -407,6 +420,8 @@ test("form by ear: the sections labelled on the form widget, right and then wron
   expect(recs[0]?.response.answer?.choice).toEqual(t1.expected.choice);
   expect(recs[1]?.correct).toBe(false);
   expect(recs[1]?.response.answer?.choice).toEqual(["AAAA"]);
+  expect(recs[2]?.correct).toBe(true);
+  expect(recs[3]?.credit).toBe(0);
   expect(problems).toEqual([]);
 });
 

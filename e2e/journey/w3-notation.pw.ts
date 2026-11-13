@@ -81,7 +81,7 @@ test("U03.L06 as a daily session: D major's sharps on the staff by keyboard, the
 }) => {
   test.setTimeout(240_000);
   const w = await begin(page, request, "after U03.L05");
-  const plan = await startToday(page, request, { warmupSets: 1 });
+  const plan = await startToday(page, request, { warmupSets: 0 });
   expect(plan).toMatchObject({ kind: "lesson", mapItemId: "U03.L06" });
   await walkLesson(page, u03l06, {
     makeTitle: "Sharp keys make",
@@ -125,7 +125,7 @@ test("U03.L07 as a daily session: B♭ major's flats by keyboard, then the circl
 }) => {
   test.setTimeout(240_000);
   const w = await begin(page, request, "after U03.L06");
-  const plan = await startToday(page, request, { warmupSets: 1 });
+  const plan = await startToday(page, request, { warmupSets: 0 });
   expect(plan).toMatchObject({ kind: "lesson", mapItemId: "U03.L07" });
   await walkLesson(page, u03l07, {
     makeTitle: "Flat keys make",

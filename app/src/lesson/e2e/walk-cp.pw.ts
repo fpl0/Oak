@@ -3,7 +3,9 @@
 // pad's text field, the key-signature staff by keyboard), else through the player's own grading path (code
 // items, sung items on their targets, the Make from its passing test). The first widget item is answered wrong
 // first and saved again right (a checkpoint shows no verdict per item, only "Answer saved"). The hand-in must
-// pass, by skill, with no raw IDs anywhere on the result, and the attempt must be stored on the server.
+// pass, by skill, with no raw IDs anywhere on the result, and the attempt must be stored on the server. U03.CP also
+// holds what checkpoint-w3.pw.ts asked of a whole U03.CP (the key signature, sung items and the Make among the items,
+// nothing set aside out of Quiet mode, ear and voice skills only setting the practice level, N03's line).
 import type { Page } from "@playwright/test";
 import { expect, test } from "./support.ts";
 import { api, reseedFresh, seed, setQuiet } from "./w3support.ts";
@@ -155,6 +157,7 @@ async function walkCheckpoint(page: Page, unit: "U03" | "U04") {
   await page.getByTestId("start-checkpoint").click();
   await expect(page.getByTestId("hint")).toHaveCount(0);
   const kinds: string[] = [];
+  const ids: string[] = [];
   let wrongDone = false;
   for (let i = 0; i < 40; i++) {
     const review = page.getByTestId("checkpoint-review");
@@ -163,6 +166,7 @@ async function walkCheckpoint(page: Page, unit: "U03" | "U04") {
     const it = await info(page);
     const ex = it.ex;
     expect(ex, "an item on screen").not.toBeNull();
+    ids.push(ex?.id ?? "");
     expect(await visibleText(page, "lesson-step"), "no raw IDs on the item").not.toMatch(RAW);
     if (it.kind === "make") {
       const pass = def.make.tests.find((t) => t.expect === "pass" && typeof t.response.code === "string");
@@ -223,11 +227,22 @@ async function walkCheckpoint(page: Page, unit: "U03" | "U04") {
   );
   await expect(page.getByTestId("checkpoint-review")).toBeVisible();
   expect(await visibleText(page, "checkpoint-review")).not.toMatch(RAW);
+  if (unit === "U03") {
+    // Out of Quiet mode nothing is set aside; the key signature item and a sung item were among the items.
+    await expect(page.getByTestId("quiet-set-aside")).toHaveCount(0);
+    expect(ids, "U03.CP's key signature item").toContain("keysig-eb");
+    expect(kinds, "U03.CP's sung items").toContain("sing");
+  }
   await page.getByTestId("hand-in").click();
   const result = page.getByTestId("checkpoint-result");
   await expect(result).toBeVisible({ timeout: 30_000 });
   expect(await visibleText(page, "checkpoint-result")).not.toMatch(RAW);
   await expect(result).not.toContainText(/failed|debt/i);
+  if (unit === "U03") {
+    // Ear and voice skills only set the practice level; the notation skill N03 has its own line.
+    await expect(result).toContainText("sets your practice level");
+    await expect(page.locator('[data-skill="N03"]')).toBeVisible();
+  }
   const text = (await result.textContent()) ?? "";
   console.log(`[${unit}.CP result] ${text.replace(/\s+/g, " ").slice(0, 400)}`);
   // Every item was answered right in the end: every skill's meter is full.

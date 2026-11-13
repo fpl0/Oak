@@ -69,10 +69,14 @@ async function makeProject(page: Page): Promise<string> {
 /** Splits Oak's master output into a low band (the recording) and a high band (the code) and records both. */
 async function startCapture(page: Page): Promise<void> {
   await page.evaluate(async () => {
-    const { getOak } = (await import(/* @vite-ignore */ `${"/src/lib/oak.ts"}`)) as {
-      getOak(): Promise<{ ctx: AudioContext; master: { analyser: AudioNode } }>;
-    };
-    const oak = await getOak();
+    type Oak = { ctx: AudioContext; master: { analyser: AudioNode } };
+    // The app's own adapter: published by app/src/lib/oak.ts in a development build (the dev server and the runner's
+    // development bundle) once the transport has made it, which it has before Play is enabled.
+    const oak =
+      (globalThis as { __oakStrudel?: Oak }).__oakStrudel ??
+      (await (
+        (await import(/* @vite-ignore */ `${"/src/lib/oak.ts"}`)) as { getOak(): Promise<Oak> }
+      ).getOak());
     const ctx = oak.ctx;
     const src = `class OakDriftCapture extends AudioWorkletProcessor {
       constructor() { super(); this.on = true; this.port.onmessage = () => { this.on = false; this.port.postMessage({ done: true }); }; this.sent = false; }

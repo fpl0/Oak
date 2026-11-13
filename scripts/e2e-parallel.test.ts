@@ -1,7 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import { E2E_SUFFIX, oakStack, parseShift, shifted } from "../e2e/support/stack.ts";
+import { readFileSync } from "node:fs";
 import {
+  E2E_SUFFIX,
+  frontEndCommand,
+  oakStack,
+  parseShift,
+  REPO_ROOT,
+  shifted,
+} from "../e2e/support/stack.ts";
+import {
+  autoJobs,
+  type BudgetFile,
   balance,
+  checkBudgets,
   type Durations,
   type Listed,
   merge,
@@ -10,7 +21,10 @@ import {
   parseArgs,
   plan,
   projectsFor,
+  readBudgets,
   readReport,
+  rerunPlan,
+  SERIAL_RE,
   settle,
   tally,
 } from "./e2e-parallel.ts";
@@ -187,16 +201,24 @@ describe("outcomes", () => {
 
   test("load-sensitive only when it failed beside others and passed alone; a test failing alone never is", () => {
     const first = settle([a, b, c], report({ [a.key]: "failed", [b.key]: "failed", [c.key]: "passed" }));
-    const files = new Set(["a.pw.ts"]);
-    const fileOf = (k: string) => k.split(" › ")[1] as string;
-    const m = merge(first, settle([a, b], report({ [a.key]: "passed", [b.key]: "failed" })), files, fileOf);
+    const rerun = new Set([a.key, b.key]);
+    const m = merge(first, settle([a, b], report({ [a.key]: "passed", [b.key]: "failed" })), rerun);
     expect(m.loadSensitive).toEqual([a.key]);
     expect(m.outcomes.get(b.key)).toBe("failed");
     // Alone, its server could not start: not load-sensitive, and not passed.
-    const m2 = merge(first, settle([a, b], report({}, 1, ["webServer"])), files, fileOf);
+    const m2 = merge(first, settle([a, b], report({}, 1, ["webServer"])), rerun);
     expect(m2.loadSensitive).toEqual([]);
     expect(m2.outcomes.get(a.key)).toBe("notRun");
     expect(m2.errors).toEqual(["webServer"]);
+  });
+
+  test("only the tests run again are decided by the alone run; the others keep their first outcome", () => {
+    const first = settle([a, b, c], report({ [a.key]: "failed", [b.key]: "passed", [c.key]: "passed" }));
+    // The alone run of a.pw.ts:<line of a> reports only a.
+    const m = merge(first, settle([a], report({ [a.key]: "passed" }, 0)), new Set([a.key]));
+    expect(m.loadSensitive).toEqual([a.key]);
+    expect(m.outcomes.get(b.key)).toBe("passed");
+    expect(m.outcomes.get(c.key)).toBe("passed");
   });
 
   test("per-project counts add up to the listing", () => {
@@ -231,4 +253,167 @@ test("oakStack takes the standard ports and moves them by this process's shift",
   expect(s.dataDir.endsWith(`test-results/stacks/lesson${E2E_SUFFIX}`)).toBe(true);
   expect(s.webServer.map((w) => w.name)).toEqual([`oak-api:${shifted(8801)}`, `oak-vite:${shifted(5201)}`]);
   expect(s.webServer[1]?.command).toContain("e2e/support/vite.e2e.config.ts");
+});
+
+describe("the alone re-run", () => {
+  const T = (file: string, title: string, line: number): Listed => ({
+    key: `p › ${file} › ${title}`,
+    project: "p",
+    file,
+    line,
+  });
+  const x1 = T("x.pw.ts", "one", 10);
+  const x2 = T("x.pw.ts", "two", 20);
+  const x3 = T("x.pw.ts", "three", 30);
+  const loopA = T("y.pw.ts", "cell paper", 5);
+  const loopB = T("y.pw.ts", "cell bark", 5);
+  const s1 = T("s.pw.ts", "first", 3);
+  const s2 = T("s.pw.ts", "second", 9);
+  const tests = [x1, x2, x3, loopA, loopB, s1, s2];
+  const serial = (f: string) => f === "s.pw.ts";
+
+  test("a file whose tests stand alone: exactly the failed and not-run tests, by line", () => {
+    const r = rerunPlan([x2.key, x3.key], tests, serial);
+    expect(r.filters).toHaveLength(2);
+    expect(r.filters[0]?.endsWith("x\\.pw\\.ts$:20")).toBe(true);
+    expect(r.filters[1]?.endsWith("x\\.pw\\.ts$:30")).toBe(true);
+    expect(r.keys).toEqual(new Set([x2.key, x3.key]));
+  });
+  test("tests made in a loop share a line: all of them run again and are decided by it", () => {
+    const r = rerunPlan([loopB.key], tests, serial);
+    expect(r.filters).toHaveLength(1);
+    expect(r.keys).toEqual(new Set([loopA.key, loopB.key]));
+  });
+  test("a serial file runs again whole", () => {
+    const r = rerunPlan([s2.key], tests, serial);
+    expect(r.filters).toHaveLength(1);
+    expect(r.filters[0]?.endsWith("s\\.pw\\.ts$")).toBe(true);
+    expect(r.keys).toEqual(new Set([s1.key, s2.key]));
+  });
+  test("a test with no known line (not in the listing) runs its whole file", () => {
+    const r = rerunPlan(["p › z.pw.ts › ghost"], tests, serial);
+    expect(r.filters).toHaveLength(1);
+    expect(r.keys).toEqual(new Set(["p › z.pw.ts › ghost"]));
+  });
+  test("serial files are recognised by their source", () => {
+    expect(SERIAL_RE.test('test.describe.configure({ mode: "serial" });')).toBe(true);
+    expect(SERIAL_RE.test("test.describe.serial('x', () => {})")).toBe(true);
+    expect(SERIAL_RE.test('test.describe.configure({ mode: "parallel" });')).toBe(false);
+    expect(SERIAL_RE.test("test('serial numbers', () => {})")).toBe(false);
+  });
+});
+
+describe("budgets", () => {
+  const file: BudgetFile = {
+    totalMinutes: 20,
+    tolerance: 0.15,
+    budgets: [
+      { name: "lesson", projects: ["lesson"], minutes: 10 },
+      { name: "days", projects: ["drills", "map"], minutes: 6 },
+    ],
+  };
+  const verdicts = (r: ReturnType<typeof checkBudgets>) =>
+    Object.fromEntries([...r.rows, ...(r.total ? [r.total] : [])].map((x) => [x.name, x.verdict]));
+
+  test("under, within the 15 % tolerance, and over it", () => {
+    expect(verdicts(checkBudgets(file, { lesson: 9.9 }, new Set(["lesson"]), false))).toEqual({
+      lesson: "under",
+    });
+    const within = checkBudgets(file, { lesson: 11.4 }, new Set(["lesson"]), false);
+    expect(verdicts(within)).toEqual({ lesson: "within tolerance" });
+    expect(within.failed).toBe(false);
+    const over = checkBudgets(file, { lesson: 11.6 }, new Set(["lesson"]), false);
+    expect(verdicts(over)).toEqual({ lesson: "OVER" });
+    expect(over.failed).toBe(true);
+  });
+  test("a group is checked on the sum of its projects, and only when all of them ran", () => {
+    const all = checkBudgets(file, { drills: 4, map: 2.8 }, new Set(["drills", "map"]), false);
+    expect(all.rows[0]).toMatchObject({ name: "days", measured: 6.8, verdict: "within tolerance" });
+    const part = checkBudgets(file, { drills: 9 }, new Set(["drills"]), false);
+    expect(verdicts(part)).toEqual({ days: "partial" });
+    expect(part.failed).toBe(false);
+  });
+  test("a partial run checks only what it ran and never the total; a full run checks the total", () => {
+    expect(checkBudgets(file, { lesson: 5 }, new Set(["lesson"]), false).total).toBeNull();
+    const full = checkBudgets(
+      file,
+      { lesson: 10, drills: 6, map: 5 },
+      new Set(["lesson", "drills", "map"]),
+      true,
+    );
+    expect(full.total).toMatchObject({ measured: 21, verdict: "OVER" });
+    expect(full.failed).toBe(true);
+    const ok = checkBudgets(
+      file,
+      { lesson: 10, drills: 5, map: 1 },
+      new Set(["lesson", "drills", "map"]),
+      true,
+    );
+    expect(ok.failed).toBe(false);
+  });
+  test("a project that ran with no budget fails the run", () => {
+    const r = checkBudgets(file, { lesson: 1, novel: 0.1 }, new Set(["lesson", "novel"]), false);
+    expect(verdicts(r)).toEqual({ lesson: "under", novel: "no budget" });
+    expect(r.failed).toBe(true);
+  });
+  test("a project may not sit in two budgets; e2e/budgets.json is valid and covers every project", () => {
+    expect(() =>
+      readBudgets({ ...file, budgets: [...file.budgets, { name: "x", projects: ["map"], minutes: 1 }] }),
+    ).toThrow();
+    const real = readBudgets(JSON.parse(readFileSync(`${REPO_ROOT}e2e/budgets.json`, "utf8")));
+    expect(real.totalMinutes).toBe(105);
+    const covered = new Set(real.budgets.flatMap((b) => b.projects));
+    for (const p of [
+      "lesson",
+      "journey",
+      "review",
+      "session-seeds",
+      "drills",
+      "onboarding",
+      "session",
+      "map",
+      "ui-review",
+      "capstone",
+      "answers",
+      "review-studio",
+      "tutor",
+      "studio",
+      "workbench-w3",
+      "kit",
+      "platform",
+      "app",
+      "notation",
+      "strudel-autoplay",
+      "strudel-gesture",
+      "audio",
+      "voice",
+      "transcribe",
+      "workbench",
+    ])
+      expect(covered.has(p)).toBe(true);
+  });
+  test("flags: --no-budget, --no-bundle; quiet streams default to 2", () => {
+    expect(parseArgs([])).toMatchObject({ budget: true, bundle: true, quietJobs: 2 });
+    expect(parseArgs(["--no-budget", "--no-bundle", "--quiet-jobs", "1"])).toMatchObject({
+      budget: false,
+      bundle: false,
+      quietJobs: 1,
+    });
+  });
+});
+
+test("jobs from the machine's size: 8 on 12 cores and 32 GB; memory caps it; never under 2 or over 10", () => {
+  const GB = 2 ** 30;
+  expect(autoJobs(12, 32 * GB)).toBe(8);
+  expect(autoJobs(12, 16 * GB)).toBe(5);
+  expect(autoJobs(2, 4 * GB)).toBe(2);
+  expect(autoJobs(32, 128 * GB)).toBe(10);
+});
+
+test("a stack serves the runner's development bundle with vite preview when it has one, else the dev server", () => {
+  expect(frontEndCommand("/tmp/bundle")).toContain(
+    'preview --config e2e/support/vite.e2e.config.ts --outDir "/tmp/bundle"',
+  );
+  expect(frontEndCommand(null)).not.toContain("preview");
+  expect(frontEndCommand(null)).toContain("--config e2e/support/vite.e2e.config.ts");
 });

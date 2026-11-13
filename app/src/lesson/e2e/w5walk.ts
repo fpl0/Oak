@@ -3,9 +3,10 @@
 // step by walk.ts — every graded step gets one of the lesson's own pinned mistakes first and its feedback is read,
 // then the right answer; the lesson must end complete on the server. One test per lesson, each under a minute.
 // The integrator extends `W5_BEFORE` and the suites to all 31 lessons as they are authored.
+import { lessonBefore, seedOrChain } from "./chain.ts";
 import { expect, test } from "./support.ts";
-import { api, reseedFresh, seed, setQuiet } from "./w3support.ts";
-import { type LessonLike, walkLesson } from "./walk.ts";
+import { api, reseedFresh, setQuiet } from "./w3support.ts";
+import { firstSungStep, type LessonLike, shownFrom, walkLesson } from "./walk.ts";
 
 /**
  * The seed point before each Wave 5 lesson: the session just before it in the default order (contracts §2.5),
@@ -66,6 +67,17 @@ export async function lessonDefW5(id: string): Promise<LessonLike> {
   return mod.default;
 }
 
+/**
+ * The lesson a side lesson's seed point stands for when the test before it has just completed it: after A1.L01
+ * the learner is where "side lesson offered" + A1.L01 leaves them, which A1.L02 needs; after A1.L02 (and A1.L03),
+ * where "A1.L02 done" (+ A1.L03) does. Then no seed and no earlier side lesson walked again (chain.ts).
+ */
+export const SIDE_CHAIN: Record<string, string> = {
+  "A1.L02": "A1.L01",
+  "A1.L03": "A1.L02",
+  "A1.L04": "A1.L03",
+};
+
 export interface W5WalkOptions {
   quiet?: boolean;
 }
@@ -76,29 +88,47 @@ export function walkSuiteW5(ids: readonly string[], o: W5WalkOptions = {}): void
   test.afterAll(async ({ request }) => {
     await reseedFresh(request);
   });
-  for (const id of ids) {
+  for (const [i, id] of ids.entries()) {
     const name = o.quiet ? `${id} in Quiet mode` : id;
-    test(`${name}: every step, a pinned mistake first on each graded one, complete`, async ({ page }) => {
+    const title = o.quiet
+      ? `${name}: from its first sung step, each sung step its fallback, a pinned mistake first on each graded one, complete`
+      : `${name}: every step, a pinned mistake first on each graded one, complete`;
+    test(title, async ({ page }) => {
       test.setTimeout(120_000);
       const t0 = Date.now();
       const point = W5_BEFORE[id];
       expect(point, `${id}: a seed point`).toBeDefined();
-      await seed(page, point as string);
+      const seeded = await seedOrChain(
+        page,
+        id,
+        point as string,
+        ids[i - 1] ?? null,
+        SIDE_CHAIN[id] ?? lessonBefore(point as string),
+      );
       expect((await api(page, "PUT", "/profile", { targetMinutes: 20 })).status).toBe(200);
       await setQuiet(page, o.quiet === true);
-      for (const before of SIDE_BEFORE[id] ?? []) {
+      for (const before of seeded ? (SIDE_BEFORE[id] ?? []) : []) {
         await page.goto(`/learn/${before}`);
         await walkLesson(page, await lessonDefW5(before), {
           lessonId: before,
           mic: false,
           quiet: o.quiet === true,
+          listen: "short",
         });
       }
       const tSeed = Date.now();
-      await page.goto(`/learn/${id}`);
       const def = await lessonDefW5(id);
-      const seen = await walkLesson(page, def, { lessonId: id, mic: false, quiet: o.quiet === true });
-      const shown = def.steps.filter((s) => !s.optional && !s.gateCheck).map((s) => s.id);
+      // Quiet mode changes only the sung steps: the walk starts at the first of them (walk.ts firstSungStep).
+      const from = o.quiet ? firstSungStep(def) : undefined;
+      await page.goto(from ? `/learn/${id}?step=${from}` : `/learn/${id}`);
+      const seen = await walkLesson(page, def, {
+        lessonId: id,
+        mic: false,
+        quiet: o.quiet === true,
+        listen: i < ids.length - 1 ? "short" : "first",
+        ...(from ? { from } : {}),
+      });
+      const shown = shownFrom(def, from);
       for (const s of shown) expect(seen, `${id}: ${s} walked`).toContain(s);
       const walkS = Math.round((Date.now() - tSeed) / 1000);
       console.log(

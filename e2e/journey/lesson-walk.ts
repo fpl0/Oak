@@ -80,9 +80,13 @@ export async function walkLesson(page: Page, def: LessonDef, o: WalkOptions = {}
     if (step.kind === "make") {
       const code = o.makeCode ?? codeOf(passingResponse(step)) ?? null;
       if (code) await setCode(page, code);
+      // The Make is heard: it plays and the transport moves past where it started, then it stops.
       const run = page.getByTestId("play-toggle").first();
+      const counter = page.getByTestId("bar-counter").first();
+      const at = await counter.textContent();
       await run.click();
-      await page.waitForTimeout(1500);
+      await expect(run).toHaveAttribute("aria-pressed", "true", { timeout: 30_000 });
+      await expect(counter).not.toHaveText(at ?? "", { timeout: 30_000 });
       await run.click();
       if (o.makeTitle) await page.getByTestId("sketch-title").fill(o.makeTitle);
       await page.getByTestId("save-sketch").click();

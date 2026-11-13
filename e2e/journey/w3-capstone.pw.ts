@@ -33,6 +33,9 @@ test("C1 from Today: the loop made, checked and released; the album holds two tr
   if (!ref) throw new Error("C1's passing loop is not in content/capstones.ts");
   const rules = brief.rubric.filter((r) => r.required).length;
 
+  // One warm-up set is walked before C1, as in HEAD: with the whole warm-up reported skipped at once, the capstone
+  // workspace opened with the unlock list read before the session start granted ebass and .lpf(), and refused the
+  // piece ("The sound "ebass" unlocks in C1.S1"). That is the app's to fix (cut:journey apiNotes), not this test's.
   const plan = await startToday(page, request, { warmupSets: 1 });
   expect(plan).toMatchObject({ kind: "capstone", mapItemId: "C1.S1" });
   await walkCapstone(page, {

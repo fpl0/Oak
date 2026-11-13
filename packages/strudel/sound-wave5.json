@@ -98,9 +98,9 @@
         "code": "note(\"c3*8\").s(\"sawtooth\").lpf(saw.range(200, 4000).segment(2))",
         "audible": true,
         "diffDb": -4.4,
-        "repeatDb": -124.7,
+        "repeatDb": "-Infinity",
         "spectralDb": -15.1,
-        "spectralRepeatDb": -142.3,
+        "spectralRepeatDb": "-Infinity",
         "width": [
           0,
           0
@@ -156,9 +156,9 @@
         "code": "s(\"hh*8\").swingBy(1/3, 4)",
         "audible": true,
         "diffDb": 0,
-        "repeatDb": -150.4,
+        "repeatDb": -154.8,
         "spectralDb": -16.2,
-        "spectralRepeatDb": -168.1,
+        "spectralRepeatDb": -169.7,
         "width": [
           0,
           0
@@ -185,9 +185,9 @@
         "code": "s(\"hh*8\").swing(4)",
         "audible": true,
         "diffDb": 0,
-        "repeatDb": -150.5,
+        "repeatDb": -148.7,
         "spectralDb": -16.2,
-        "spectralRepeatDb": -169,
+        "spectralRepeatDb": -163.5,
         "width": [
           0,
           0
@@ -214,9 +214,9 @@
         "code": "chord(\"C7\").voicing().s(\"piano\")",
         "audible": true,
         "diffDb": -4,
-        "repeatDb": -144.9,
+        "repeatDb": -145.7,
         "spectralDb": -7,
-        "spectralRepeatDb": -162.3,
+        "spectralRepeatDb": -162.8,
         "width": [
           0.696,
           0.785
@@ -243,9 +243,9 @@
         "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:minor\").s(\"piano\")",
         "audible": true,
         "diffDb": -1.5,
-        "repeatDb": -144.8,
+        "repeatDb": -145.1,
         "spectralDb": -5.6,
-        "spectralRepeatDb": -162,
+        "spectralRepeatDb": -161.9,
         "width": [
           0.86,
           0.817
@@ -272,9 +272,9 @@
         "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:harmonic:minor\").s(\"piano\")",
         "audible": true,
         "diffDb": -3.2,
-        "repeatDb": -144.3,
+        "repeatDb": -144.9,
         "spectralDb": -6.5,
-        "spectralRepeatDb": -161,
+        "spectralRepeatDb": -161.9,
         "width": [
           0.86,
           0.862
@@ -301,9 +301,9 @@
         "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:melodic:minor\").s(\"piano\")",
         "audible": true,
         "diffDb": -6.5,
-        "repeatDb": -144.4,
+        "repeatDb": -144.5,
         "spectralDb": -8.1,
-        "spectralRepeatDb": -161,
+        "spectralRepeatDb": -161.1,
         "width": [
           0.86,
           0.861
@@ -330,7 +330,7 @@
         "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:major:pentatonic\").s(\"piano\")",
         "audible": true,
         "diffDb": -1,
-        "repeatDb": -144.5,
+        "repeatDb": -144.8,
         "spectralDb": -6.8,
         "spectralRepeatDb": -161,
         "width": [
@@ -359,9 +359,9 @@
         "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:minor:pentatonic\").s(\"piano\")",
         "audible": true,
         "diffDb": 1.7,
-        "repeatDb": -144.8,
+        "repeatDb": -145.8,
         "spectralDb": -3.7,
-        "spectralRepeatDb": -161.6,
+        "spectralRepeatDb": -162.1,
         "width": [
           0.86,
           0.891
@@ -388,9 +388,9 @@
         "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:blues\").s(\"piano\")",
         "audible": true,
         "diffDb": 2.1,
-        "repeatDb": -145.4,
+        "repeatDb": -145.6,
         "spectralDb": -3,
-        "spectralRepeatDb": -162.5,
+        "spectralRepeatDb": -162.8,
         "width": [
           0.86,
           0.798
@@ -700,9 +700,9 @@
         "code": "note(\"<[c2 ~ c2 g1] [f1 ~ f1 c2]>\").s(\"sawtooth\").lpf(400).lpq(4)",
         "audible": true,
         "diffDb": -18.1,
-        "repeatDb": -167.7,
+        "repeatDb": "-Infinity",
         "spectralDb": -19.9,
-        "spectralRepeatDb": -187.9,
+        "spectralRepeatDb": "-Infinity",
         "width": [
           0,
           0
@@ -731,9 +731,9 @@
         "code": "n(\"<[4 4 2 4 ~ 2 0 ~] [5 5 3 5 ~ 3 0 ~]>\").scale(\"C4:major\").s(\"sawtooth\").lpf(800).lpq(10)",
         "audible": true,
         "diffDb": -1.6,
-        "repeatDb": "-Infinity",
+        "repeatDb": -146.6,
         "spectralDb": -2.1,
-        "spectralRepeatDb": "-Infinity",
+        "spectralRepeatDb": -164.5,
         "width": [
           0,
           0
@@ -1134,9 +1134,9 @@
         "code": "n(\"<[4 4 2 4 ~ 2 0 ~] [5 5 3 5 ~ 3 0 ~]>\").scale(\"C4:major\").s(\"square\").lpf(2000).delay(.4)",
         "audible": true,
         "diffDb": -6.6,
-        "repeatDb": -159.5,
+        "repeatDb": -157.3,
         "spectralDb": -4.7,
-        "spectralRepeatDb": -178.5,
+        "spectralRepeatDb": -176.4,
         "width": [
           0,
           0
@@ -1165,9 +1165,9 @@
         "code": "n(\"<[4 4 2 4 ~ 2 0 ~] [5 5 3 5 ~ 3 0 ~]>\").scale(\"C4:major\").s(\"square\").lpf(2000).delay(.4).delaytime(.3)",
         "audible": true,
         "diffDb": -5.6,
-        "repeatDb": -160.5,
+        "repeatDb": -158.7,
         "spectralDb": -27.9,
-        "spectralRepeatDb": -178,
+        "spectralRepeatDb": -176.2,
         "width": [
           0,
           0
@@ -1196,9 +1196,9 @@
         "code": "n(\"<[4 4 2 4 ~ 2 0 ~] [5 5 3 5 ~ 3 0 ~]>\").scale(\"C4:major\").s(\"square\").delay(.4).delaytime(.3).delayfeedback(.3)",
         "audible": true,
         "diffDb": -7.3,
-        "repeatDb": -165,
+        "repeatDb": -158.8,
         "spectralDb": -29.3,
-        "spectralRepeatDb": -181.6,
+        "spectralRepeatDb": -176.2,
         "width": [
           0,
           0
@@ -1227,9 +1227,9 @@
         "code": "n(\"<[4 4 2 4 ~ 2 0 ~] [5 5 3 5 ~ 3 0 ~]>\").scale(\"C4:major\").s(\"square\").delay(.4).delaytime(.3).delayfeedback(.3)",
         "audible": true,
         "diffDb": -12.6,
-        "repeatDb": -161.4,
+        "repeatDb": -159.9,
         "spectralDb": -14.1,
-        "spectralRepeatDb": -178,
+        "spectralRepeatDb": -176.2,
         "width": [
           0,
           0
@@ -1258,9 +1258,9 @@
         "code": "n(\"<[4 4 2 4 ~ 2 0 ~] [5 5 3 5 ~ 3 0 ~]>\").scale(\"C4:major\").s(\"square\").delay(.5).delaytime(.3).delayfeedback(.7)",
         "audible": true,
         "diffDb": -9.4,
-        "repeatDb": -157.4,
+        "repeatDb": -159.3,
         "spectralDb": -9.8,
-        "spectralRepeatDb": -175.7,
+        "spectralRepeatDb": -177.4,
         "width": [
           0,
           0
@@ -1290,7 +1290,7 @@
         "audible": true,
         "diffDb": -7.3,
         "repeatDb": "-Infinity",
-        "spectralDb": -21.7,
+        "spectralDb": -21.8,
         "spectralRepeatDb": "-Infinity",
         "width": [
           0.241,
@@ -1298,7 +1298,7 @@
         ],
         "levelDb": 0.1,
         "centroidHz": [
-          5002,
+          5005,
           4997
         ],
         "balance": [
@@ -1306,7 +1306,7 @@
           0.03
         ],
         "tail": [
-          0.2825,
+          0.283,
           0.2558
         ]
       },
@@ -1318,10 +1318,10 @@
         "base": "stack(s(\"~ sd ~ sd\").room(.5).roomsize(6), n(\"<[4 4 2 4 ~ 2 0 ~] [5 5 3 5 ~ 3 0 ~]>\").scale(\"C4:major\").s(\"square\").lpf(2000).delay(.4).delaytime(.3).delayfeedback(.4))",
         "code": "stack(s(\"~ sd ~ sd\").room(.5).roomsize(6), n(\"<[4 4 2 4 ~ 2 0 ~] [5 5 3 5 ~ 3 0 ~]>\").scale(\"C4:major\").s(\"square\").lpf(2000).delay(.4).delaytime(.3).delayfeedback(.4).orbit(2))",
         "audible": false,
-        "diffDb": -146.7,
-        "repeatDb": -158.2,
-        "spectralDb": -166.6,
-        "spectralRepeatDb": -176.3,
+        "diffDb": -148.1,
+        "repeatDb": -160.1,
+        "spectralDb": -168.3,
+        "spectralRepeatDb": -178.4,
         "width": [
           0.154,
           0.154
@@ -3161,22 +3161,22 @@
     "rule": "live (what decides): 8 s of the chorus at its tempo and 10 s of the whole piece at twice its tempo, with no audio underrun (AudioContext.playbackStats), no main-thread stall over 200 ms and, where Chrome reports AudioContext.renderCapacity, an audio-thread peak load under 0.7; offline: 90 s renders faster than real time (recorded with a kick-only baseline; an offline render keeps ended voices connected until the main thread can release them, so its cost grows with length and is not the live headroom)",
     "audioSec": 90,
     "haps": 1278,
-    "wallMs": 40064,
+    "wallMs": 51408,
     "timings": {
-      "scheduleMs": 290,
-      "renderMs": 39656
+      "scheduleMs": 397,
+      "renderMs": 50952
     },
-    "realtimeFactor": 2.3,
-    "baselineRealtimeFactor": 47.5,
-    "peakDbfsBeforeLimiter": 2.3,
+    "realtimeFactor": 1.8,
+    "baselineRealtimeFactor": 39.2,
+    "peakDbfsBeforeLimiter": 3.5,
     "playbackStats": true,
     "live": {
       "chorus": {
         "loads": [],
         "ok": true,
-        "rms": 0.3707597505709997,
+        "rms": 0.38480330395576295,
         "longTasks": [
-          55
+          57
         ],
         "late": 0,
         "underruns": 0
@@ -3184,7 +3184,7 @@
       "double": {
         "loads": [],
         "ok": true,
-        "rms": 0.411702190514219,
+        "rms": 0.40387272266123825,
         "longTasks": [],
         "late": 0,
         "underruns": 0
@@ -3193,33 +3193,33 @@
   },
   "preload": {
     "rule": "the C3 arrangement at 4× speed on a pack that answers every audio file 700 ms late: every sound the chorus brings is fetched and decoded before bar 9; no skipped note; nothing leaves 127.0.0.1",
-    "playStartMs": 2206,
-    "chorusAtMs": 7206,
+    "playStartMs": 2211,
+    "chorusAtMs": 7211,
     "chorusFiles": [
       {
         "file": "v3/uzu-drumkit/oh/10_oh_switchangel.wav",
-        "requestedMs": 2224,
-        "doneMs": 2931
+        "requestedMs": 2228,
+        "doneMs": 2936
       },
       {
         "file": "v3/uzu-drumkit/cr/10_cr_switchangel.wav",
-        "requestedMs": 2224,
-        "doneMs": 2931
+        "requestedMs": 2228,
+        "doneMs": 2936
       },
       {
         "file": "v3/uzu-drumkit/tb/10_tb.wav",
-        "requestedMs": 2224,
-        "doneMs": 2931
+        "requestedMs": 2229,
+        "doneMs": 2936
       },
       {
         "file": "v3/webaudiofontdata/sound/0480_Aspirin_sf2_file.js",
-        "requestedMs": 2237,
-        "doneMs": 2940
+        "requestedMs": 2241,
+        "doneMs": 2945
       },
       {
         "file": "v3/webaudiofontdata/sound/0290_FluidR3_GM_sf2_file.js",
-        "requestedMs": 2945,
-        "doneMs": 3653
+        "requestedMs": 2951,
+        "doneMs": 3661
       }
     ],
     "skips": []
@@ -3497,28 +3497,28 @@
       },
       "low": -33.3,
       "high": -33.8,
-      "waveRms": 0.10806894033983024,
-      "masterRms": 0.16307717946591094
+      "waveRms": 0.10864756335245516,
+      "masterRms": 0.1666374162036719
     },
     "mel": {
       "source": {
         "kind": "track",
         "label": "mel"
       },
-      "low": -137.6,
+      "low": -139.4,
       "high": -33.8,
-      "waveRms": 0.07640817162649045,
-      "masterRms": 0.1657998718043678
+      "waveRms": 0.07641437289928275,
+      "masterRms": 0.16507866922015166
     },
     "bass": {
       "source": {
         "kind": "track",
         "label": "bass"
       },
-      "low": -31.8,
-      "high": -132.2,
-      "waveRms": 0.08800206732390867,
-      "masterRms": 0.16600440839294178
+      "low": -29.7,
+      "high": -77.5,
+      "waveRms": 0.11159855486718047,
+      "masterRms": 0.16550670081314056
     },
     "none": {
       "source": {
@@ -3528,16 +3528,16 @@
       "low": null,
       "high": null,
       "waveRms": 0,
-      "masterRms": 0.16311744386260085
+      "masterRms": 0.16557165422546652
     },
     "back": {
       "source": {
         "kind": "master"
       },
-      "low": -29.8,
-      "high": -30.4,
-      "waveRms": 0.1655331395043736,
-      "masterRms": 0.1646468714503269
+      "low": -30.5,
+      "high": -31,
+      "waveRms": 0.16550670062200828,
+      "masterRms": 0.1615984679449021
     }
   }
 }

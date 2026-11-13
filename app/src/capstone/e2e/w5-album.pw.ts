@@ -5,6 +5,7 @@
 // confirmed (c11). Screenshots in both themes at both sizes.
 import { expect, test } from "@playwright/test";
 import { useUiPrefs } from "../../../../e2e/support/ui.ts";
+import { seedTake } from "./seeded-take.ts";
 import { api, seedFirst, shots, watchErrors } from "./w5-support.ts";
 
 test.describe.configure({ mode: "serial" });
@@ -125,9 +126,11 @@ test("re-recording an album version asks first; keeping the earlier take changes
     if (r.method() === "PUT" && /\/api\/album\/tracks\/[^/]+\/versions\/1\/audio/.test(r.url()))
       puts.push(r.headers()["x-oak-confirm"] ?? "");
   });
+  // A seeded take (seeded-take.ts): the recorder's own window, uploaded through the album's re-record path.
+  await seedTake(page);
   await again.click();
   await dialog.getByTestId("confirm-replace").click();
-  await expect(page.getByText("Version 1 recorded again")).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByText("Version 1 recorded again")).toBeVisible({ timeout: 30_000 });
   expect(puts.length).toBe(1);
   expect((puts[0] ?? "").length).toBeGreaterThanOrEqual(16);
   expect(errors).toEqual([]);

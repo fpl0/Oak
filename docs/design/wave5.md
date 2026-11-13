@@ -609,6 +609,23 @@ authored the point answers 400 naming the missing lesson. `GET /api/dev/seed` li
 
 The own-audio gym Coda (c10) uses the existing Wave 4 point `own-audio project`.
 
+Added by the test-speed work (dev-only, like every point):
+
+| Point | Must contain | Today |
+|---|---|---|
+| `onboarding at react (edit <N>)` (`onboarding at react` = edit 3) | a fresh learner who began onboarding today: the welcome, the loop's build-up and the edit done (`firstEdit` N, 0–7), nothing after them (no preferences, no mic, no sketch, not onboarded) | the onboarding's reaction screen (`/onboarding/react`) |
+
+**Snapshots (server/src/services/dev-seed-cache.ts).** The first seed of a request (the point and every option:
+`mic`, `gapDays`, `targetMinutes`, `practice`, `recordings`) builds the learner by replaying the default order as
+above and keeps a snapshot (`VACUUM INTO` of oak.db plus the audio and album folders, under
+`<dataDir>/dev-seed-cache/`). The same request again on that server restores the snapshot in one transaction instead
+of replaying: 4–30 ms instead of 0.5–4.4 s for a Wave 5 point on an idle machine. A snapshot is used only for the same
+content version and schema, on the learner day it was built, and for one hour of the dev clock after its build (a
+restored learner is the built one who waited up to an hour longer); otherwise the point is built again. A restore
+equals its build table by table and file by file, never carries a test's writes into the next seed, keeps the
+/dev/listen verdicts as a build does, and makes no pre-reset safety copy. `OAK_SEED_CACHE=0` turns it off. Specs need
+no change: seed as before, as often as a test needs.
+
 ## 7. Ports, environment, browser suites
 
 Environment variables are unchanged (`OAK_PORT`, `OAK_DEV`, `OAK_VITE_PORT`, `OAK_API_PORT`, `OAK_DATA_DIR`,
@@ -645,28 +662,104 @@ Environment variables are unchanged (`OAK_PORT`, `OAK_DEV`, `OAK_VITE_PORT`, `OA
   and U10 days again in Quiet mode) and `e2e/journey/w5-capstones.pw.ts` (C3, C4 also in Quiet mode, C5, X2 and the
   eight-track album); `prod.pw.ts` adds a U10 session and the C4 workspace on the production build, offline.
 
-### 7.1 Browser tests (the reworked runner; test-speed, Build)
+### 7.1 Browser tests: the runner, the budget, the rules (test-speed)
 
-- **The command.** `bun run e2e` (`scripts/e2e-parallel.ts`) builds once, writes the fake-microphone fixtures once,
-  runs the quiet files alone first, runs everything else `--jobs` processes at once (auto: 2–6 from the free cores),
-  re-runs each failure alone, and prints `E2E TOTAL`, the ten slowest files and every test over 90 s. `bun run
-  e2e:serial` is the old single process; `bun run e2e --plan` shows units, shards and files without running anything.
-- **One project or a few:** `bun run e2e --project lesson [--project review]`, or `OAK_E2E_SHIFT=300 bunx playwright
-  test --project=lesson [file]` (the `=` form: the space form eats file arguments). **Changed only:** `bun run e2e
-  --since origin/main` (the path → project table is `SINCE_MAP`; shared paths select everything).
-- **The shift.** `OAK_E2E_SHIFT=<multiple of 10>` (or `--shift`) moves every port of every e2e server and suffixes data
-  and output dirs with `-s<n>`; shards take base + 100·k. Specs read ports from their config's `stack` or
-  `shifted()`, never literals.
-- **Groups.** Quiet files (audio measuring specs, strudel sounds/editors, voice gate/settings/bleed, transcribe
-  ab-drift/hum/own-audio, review-studio transcribe, workbench loop/workbench) run alone; projects with more than 7
-  minutes of tests are sharded, so a spec file never depends on another file having run first.
-- **Outcomes.** Every listed test is accounted for (passed, failed, flaky, skipped by the spec, did not run); a test
-  that fails beside others and passes alone is **load-sensitive** and fails the run, named. Durations go to
-  `test-results/e2e-durations.json` and balance the next run's shards.
-- **The rules.** No test over 90 s (the capstone journeys and C3's take are the documented exceptions: real-time
-  recording); every test starts from a dev seed; never `.catch()` an auto-waiting read without a short timeout
-  (`textNow()` in `e2e/support/ui.ts`); the test Vite (`e2e/support/vite.e2e.config.ts`) has no HMR and watches
-  nothing; never loosen an assertion to pass under load — move the file to QUIET with the evidence.
+The browser suite is the slowest thing in the repo and grows with every lesson. Its target is **`bun run e2e` in 20
+minutes or less on an idle 12-core machine, every test green**. Measured on 2026-11-13 after the suite pass: **19.3 minutes** at 8 jobs, with **100 minutes of test time** (it was 63 minutes and 194 before; the pass aimed at 70 of test time and did not reach it). The budget is 105 minutes for the
+whole suite. Every engineer who adds or edits a `*.pw.ts` keeps their project inside its budget.
+
+**The command.** `bun run e2e` (`scripts/e2e-parallel.ts`):
+1. builds once: the content, the production app (`dist/`), and the app again in development mode
+   (`test-results/e2e-bundle`, `import.meta.env.DEV` true, so every `__oak*` hook and `/dev` route is there), and
+   writes the fake-microphone fixtures;
+2. runs the quiet files (below) with nothing loud beside them: review-studio's alone, the others in 2 streams;
+3. runs everything else in a pool of `--jobs` processes (default from the machine: two thirds of the cores, one per
+   3 GB, 8 on 12 cores / 32 GB; test times did not stretch up to a load of 14 on 12 cores, and stretched 43–57 % at
+   26–28), longest first; projects over 7 minutes are cut into shards on shifted ports. Every
+   stack that allows it serves the development bundle with `vite preview` instead of starting a Vite dev server, and
+   this pass records **no Playwright trace**;
+4. runs every failed or not-run test again, alone and **traced** (`retain-on-failure`): exactly those tests, or the
+   whole file when it is serial. The alone outcome counts; a test that failed beside others and passed alone is
+   **load-sensitive** and fails the run, named;
+5. prints the units, the ten slowest files, every test over 60 s, the per-project counts (which must add up to the
+   listing) and **the budget table**, then `E2E TOTAL`. Exit 0 only when nothing failed, nothing was left unrun,
+   nothing was load-sensitive and no budget was exceeded.
+
+| Command | What it does |
+|---|---|
+| `bun run e2e` | everything, budgets enforced |
+| `bun run e2e --project lesson [--project review]` | those projects; their budgets are checked (a group budget only when all its projects ran) |
+| `bun run e2e --project lesson --no-budget` | the same, the budget table printed but not enforced |
+| `bun run e2e --since origin/main` | the projects that cover the changed paths (`SINCE_MAP`; a shared path selects everything) |
+| `bun run e2e --jobs 3` / `--quiet-jobs 1` | fewer processes (a shared machine) / the quiet units one at a time |
+| `bun run e2e --shift 300` | every port and data dir moved by 300; logs, reports and durations go to `-s300` files |
+| `bun run e2e --no-bundle` | every stack on its Vite dev server |
+| `bun run e2e --plan` | the units, shards and files, without running |
+| `bun run e2e -- --grep foo` | anything after `--` goes to every Playwright process |
+| `OAK_E2E_SHIFT=300 bunx playwright test --project=lesson [file]` | one project directly, on the Vite dev server, traced on failure (`--project=x`: the space form eats file arguments) |
+| `bun run e2e:serial` | the old single process |
+
+**The budget.** `e2e/budgets.json` holds minutes of test time (the sum of every test's duration, as
+`test-results/e2e-durations.json` counts it) per project or group, and the total (105). The runner fails the run when
+a budget is exceeded by more than 15 %, when the total is exceeded, or when a project that ran has no budget. A new
+project adds its line; a budget is raised only in the change that argues for it. Check yours before you hand over:
+`bun run e2e --project <yours>` prints the table. To stay under it, cut waste (the rules below) before anything else.
+
+**What belongs in a browser test, and what in a bun test.** A browser test proves what only a browser can: that a
+screen renders, that its widget takes input from the keyboard and pointer, that it reaches the real server and comes
+back, that it sounds and moves in time, that it lays out at both sizes and themes. Everything that can be decided
+without a page is a `bun test`: grading every exercise and every wrong variant (`bun run content:check` does it for
+every lesson with the real grader), the text of feedback (clean, no raw IDs, no leaked answer), the shape of a plan,
+a seed, a payload, a reducer. Decide per assertion which suite owns it, and never prove the same thing twice: a lesson
+walk proves that each step KIND renders, takes its answer through the real widget and moves on; it does not re-grade
+every exercise.
+
+**Real time.** Listening never gates (every step offers Skip from the start), so a walker hears **one** item through
+per widget kind per spec file; everywhere else it asserts that the item plays (`aria-pressed`) and that its position
+moves (compare beats, not bars: one-bar loops wrap), then skips. A take, a drift gate, a pitch gate, a sung trial
+through the fake microphone are real time on purpose: keep them, once per thing they prove. No `waitForTimeout`
+except inside a real-time measurement: wait for the condition (`expect(...).toHave…`, `waitForResponse`,
+`document.fonts.ready` plus two animation frames). Never `.catch()` an auto-waiting read or click without a short
+timeout (journey and review have a 60-s action timeout); read what is on screen now with `textNow()`
+(`e2e/support/ui.ts`). Timers that are not the subject (a cool-down, "nothing polls for 9 s") run on
+`page.clock`, where no audio plays.
+
+**Seeds.** Every test starts from a dev seed (`POST /api/dev/seed`, §6, wave3.md and wave4.md §6), never by replaying
+a warm-up, a lesson or a day to reach the screen under test. A seed may not already hold the state the test is meant
+to produce. A missing point is a request to the server owner, not a replayed day.
+
+**One page per state.** Reach a state once and assert everything about it there: a screenshot matrix seeds and loads
+once, then changes the size in place (`setViewportSize`) and reloads only to change the theme; the tests of a serial
+file may share a page set up in `beforeAll` when each starts where the last left it. A new context costs 0.1 s; a
+seed up to 15 s; a reload of the dev app 1 s.
+
+**No test over 60 s** unless it measures real time (a take the brief requires, the drift or pitch gate); the runner
+lists every one. A long test is split from a seed, never given a longer timeout.
+
+**The bundle.** Specs reach the app through its `__oak*` dev hooks (present in the development bundle) and its UI,
+never by `import("/src/…")` in the page: the bundle has no source paths. An area that needs a page only the dev
+server has (answers' gallery, kit's galleries, the specs that import `/src/…`: voice, review-studio) passes
+`bundle: false` to `oakStack`. Measured on map, studio and tutor (the same 66–81 tests side by side, swapped): the
+bundle alone −36 %, tracing off alone −18 %, both −42 %. A faster page exposes races a slow one hid: wait for the
+state your key press needs (the data loaded, the handler mounted), never for time.
+
+**Quiet files** measure milliseconds or cents on real audio, so nothing loud runs beside them: audio's measuring specs,
+strudel sounds/editors, voice gate/settings/bleed, transcribe ab-drift/hum/own-audio, review-studio's
+`transcribe.pw.ts`, workbench loop/workbench (`QUIET` in the runner). They run before the loud pool, in 2 streams,
+except a project in `QUIET_ALONE` (review-studio: its 0.25× drift at bar 0 went from −7.6 ms alone to −15.6 ms beside a
+second quiet stream, gate 20 ms), which runs with nothing beside it. The audio A/B gate (2.73 → 2.75 ms), the pitch
+gate (recall 99.9 %, p95 5.8 → 6.2¢) and the 1× and loop drifts did not move with a second stream. A file moves into
+QUIET, or a project into QUIET_ALONE, only with evidence (a number that moves toward its gate beside other suites),
+never to hide a flake; never loosen a gate or a tolerance to pass under load. A late start is a fact of a busy page:
+a spec reads where the audio actually started (ab-drift reads the file's join from the capture) instead of assuming.
+
+**Traces.** The pool records none (they cost 5–80 % of a test's time and are thrown away when it passes); every
+failure is re-run alone with a trace in `test-results/e2e-out/<unit>.alone/`. Locally, `--trace on` traces anything.
+
+**Shards and ports.** `OAK_E2E_SHIFT=<multiple of 10>` moves every port of every e2e server and suffixes data and
+output dirs with `-s<n>`; shards take base + 100·k, so a spec file never depends on another file having run first.
+Specs read ports from their config's `stack` or `shifted()`, never literals. The test front end (`vite preview` of the
+bundle, or `e2e/support/vite.e2e.config.ts` without HMR and watcher) never reloads a page mid-test.
 
 ## 8. What is frozen
 

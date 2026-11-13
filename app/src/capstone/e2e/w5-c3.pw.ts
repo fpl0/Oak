@@ -4,11 +4,14 @@
 //   already differs on; the length is read from the code; the session finishes;
 // - S3 from "C3.S2 done" (the melodies written): the demo too fast is too short, with the bars still to add; at
 //   80 BPM every requirement is met; the lead sheet of the arranged piece shows its sections; an edit after the
-//   check says "check again before you release" (c1); release by keyboard with a recorded 96-second take; the
-//   album track plays it and offers the download.
+//   check says "check again before you release" (c1); release by keyboard with a 96-second take; the album track
+//   plays it and offers the download. The take is seeded (seeded-take.ts: the recorder's own 96-second window,
+//   uploaded through the app's release path); the real 96-second recording is the journey's (e2e/journey/
+//   w5-capstones.pw.ts (d)).
 // Screenshots: both themes at 1440×900 and 1280×800, reduced motion on.
 import { expect, test } from "@playwright/test";
 import { useUiPrefs } from "../../../../e2e/support/ui.ts";
+import { seedTake } from "./seeded-take.ts";
 import { C3_FAST, C3_FULL, C3_GROOVE } from "./w5-pieces.ts";
 import {
   api,
@@ -105,7 +108,7 @@ test("C3 session 1 from “C3 open”: groove and changes, the form strip, contr
 test("C3 session 3 from “C3.S2 done”: too short, then 96 seconds; the lead sheet; check again after an edit; release", async ({
   page,
 }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(150_000);
   const errors = watchErrors(page);
   await seedFirst(page, ["C3.S2 done", "after C3.S2"]);
   await useUiPrefs(page, { theme: "bark", motion: "off" });
@@ -113,6 +116,7 @@ test("C3 session 3 from “C3.S2 done”: too short, then 96 seconds; the lead s
   await expect(page.getByTestId("capstone-workspace")).toBeVisible({ timeout: 60_000 });
   await editor(page, "C3");
   await expect(page.locator('[data-session="C3.S3"]')).toHaveAttribute("aria-current", "step");
+  await seedTake(page);
 
   // At 120 BPM the 32 bars last 64 seconds: the row says how many bars are missing at this tempo.
   await setCode(page, "C3", C3_FAST);
@@ -164,7 +168,7 @@ test("C3 session 3 from “C3.S2 done”: too short, then 96 seconds; the lead s
   await expect(page.getByTestId("check-again")).toHaveCount(0, { timeout: 30_000 });
   await expect(release).toBeEnabled();
 
-  // Release, keyboard only; the take is the whole 96-second demo.
+  // Release, keyboard only; the take is the whole 96-second demo (seeded: the recorder's window for 32 bars at 80 BPM).
   await release.focus();
   await page.keyboard.press("Enter");
   const dialog = page.getByRole("dialog", { name: "Release to the album" });
@@ -174,7 +178,7 @@ test("C3 session 3 from “C3.S2 done”: too short, then 96 seconds; the lead s
   await dialog.getByTestId("record-take").focus();
   await page.keyboard.press("Enter");
   await expect(dialog.getByText(/Recording \d:\d\d of 1:3\d/)).toBeVisible({ timeout: 15_000 });
-  await expect(dialog.getByTestId("take-audio")).toBeVisible({ timeout: 130_000 });
+  await expect(dialog.getByTestId("take-audio")).toBeVisible({ timeout: 30_000 });
   await dialog.getByTestId("confirm-release").focus();
   await page.keyboard.press("Enter");
   const ceremony = page.getByTestId("release-ceremony");

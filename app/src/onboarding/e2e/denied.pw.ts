@@ -1,7 +1,7 @@
 // The browser refuses the microphone: Oak says so plainly, offers Try again, and Quiet mode carries on.
 import { expect, test } from "@playwright/test";
 import { useUiPrefs } from "../../../../e2e/support/ui.ts";
-import { expectStep, fakeMic, noHmr, resetData, shootAll, throughTheLoop } from "./helpers.ts";
+import { expectStep, fakeMic, fromTheReaction, noHmr, resetData, shootAll } from "./helpers.ts";
 import { stack } from "./playwright.config.ts";
 
 test.use({ launchOptions: { args: fakeMic("voice.wav", "deny") } });
@@ -10,7 +10,7 @@ test.beforeEach(async ({ request }) => resetData(request, stack.apiURL));
 test("denied permission: explained, retryable, and Quiet mode continues", async ({ page, request }) => {
   await noHmr(page);
   await useUiPrefs(page, { theme: "paper" });
-  await throughTheLoop(page, 5);
+  await fromTheReaction(page, request, stack.apiURL, 5);
   await page.getByTestId("react-continue").click();
   await page.getByTestId("prefs-continue").click();
   await expectStep(page, "tutor");

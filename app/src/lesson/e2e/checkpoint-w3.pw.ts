@@ -1,8 +1,7 @@
-// U03.CP end to end against the real server (contracts §7.6): seeded to after U04.L01, the checkpoint opens with
-// the tutor closed; every item is answered through the player's own grading path (the key signature in order,
-// the tune moved to D, sung items with their targets, family items with the drawn answer), the Make over the
-// unit's Band is saved, the hand-in gives per-skill lines where ear and voice skills only "set your practice
-// level". In Quiet mode the sung items are set aside, said so calmly, and never count.
+// U03.CP in Quiet mode against the real server (contracts §7.6): seeded to after U04.L01, every item is answered
+// through the player's own grading path (the key signature in order, the tune moved to D, family items with the
+// drawn answer, the Make over the unit's Band); the sung items are set aside, said so calmly, and never count.
+// The whole U03.CP out of Quiet mode (every item, the Make, the result by skill) is walk-cp.pw.ts.
 import type { Page } from "@playwright/test";
 import { expect, test } from "./support.ts";
 import { reseedFresh, seed, setQuiet } from "./w3support.ts";
@@ -59,35 +58,6 @@ async function answerItem(page: Page): Promise<string> {
 }
 
 test.describe.configure({ mode: "serial" });
-
-test("U03.CP: every item answered, the Make over the Band, the result by skill", async ({ page }) => {
-  test.setTimeout(240_000);
-  await seed(page, "after U04.L01");
-  await setQuiet(page, false);
-  await page.goto("/checkpoint/U03");
-  await expect(page.getByTestId("checkpoint-intro")).toBeVisible();
-  await page.getByTestId("start-checkpoint").click();
-  // No hints and no tutor until the result.
-  await expect(page.getByTestId("hint")).toHaveCount(0);
-  const kinds: string[] = [];
-  for (let i = 0; i < 40; i++) {
-    if (await page.getByTestId("checkpoint-review").isVisible()) break;
-    await expect(page.getByTestId("lesson-step")).toBeVisible();
-    kinds.push(await answerItem(page));
-    await page.waitForTimeout(150);
-  }
-  expect(kinds).toContain("keysig");
-  expect(kinds).toContain("make");
-  expect(kinds).toContain("sing");
-  await expect(page.getByTestId("checkpoint-review")).toBeVisible();
-  await expect(page.getByTestId("quiet-set-aside")).toHaveCount(0);
-  await page.getByTestId("hand-in").click();
-  const result = page.getByTestId("checkpoint-result");
-  await expect(result).toBeVisible({ timeout: 30_000 });
-  await expect(result).toContainText("sets your practice level");
-  await expect(result).not.toContainText(/failed|debt/i);
-  await expect(page.locator('[data-skill="N03"]')).toBeVisible();
-});
 
 test("U03.CP in Quiet mode: the sung items are set aside and never count", async ({ page }) => {
   test.setTimeout(240_000);

@@ -1,7 +1,8 @@
 // Wave 3 journey (b) and (f): U03's first two lessons as real daily sessions, then the first functional-ear set
-// with its way home sung — and the same three days again in Quiet mode, where nothing opens the microphone and the
-// way home is heard in the head instead. Each test starts from a dev seed (POST /api/dev/seed) on the real stack:
-// real server, real content, the scripted fake tutor, Chrome's fake microphone.
+// with its way home sung — and the two days with something to sing (U03.L02, the set) again in Quiet mode, where
+// nothing opens the microphone and the way home is heard in the head instead (U03.L01 sings nothing). Each test
+// starts from a dev seed (POST /api/dev/seed) on the real stack: real server, real content, the scripted fake
+// tutor, Chrome's fake microphone.
 //   1. "after U02.L08": today is U03.L01 (Major Scale). No degree labels yet (they arrive with U03.L02).
 //   2. "after C1.S1": today is U03.L02 (Degrees in Code). Its Coda grants the Degrees lens; in Studio the lens bar
 //      now offers Degrees (not Solfège), and switching it on labels the roll with degrees.
@@ -62,43 +63,43 @@ async function openMakeSketch(page: Page, title: RegExp): Promise<void> {
 
 const makeTitle = (def: LessonDef) => `${def.id} make`;
 
+// U03.L01 holds no sung step, so Quiet mode changes nothing in it: it is walked once. The Quiet days below are
+// the ones with something to sing (U03.L02's sung steps, the functional-ear set's way home).
+test("U03.L01 as a daily session: the major scale, no degree labels yet", async ({ page, request }) => {
+  test.setTimeout(240_000);
+  const { w } = await begin(page, request, "after U02.L08", false);
+  const plan = await lessonDay(page, request, u03l01, {
+    unlocks: "auto",
+    // The warm-up is reported skipped: the first functional-ear set has its own test below, and a whole
+    // warm-up is walked by gate journey 2.
+    warmupSets: 0,
+    makeTitle: makeTitle(u03l01),
+    shots: "w3-coda-U03.L01",
+  });
+  expect(plan.mapItemId).toBe("U03.L01");
+  const progress = await api<{ lessons: { lessonId: string; status: string }[] }>(
+    request,
+    "GET",
+    "/api/lessons/progress",
+  );
+  expect(progress.lessons.find((l) => l.lessonId === "U03.L01")?.status).toBe("completed");
+  // Degree labels wait for U03.L02: the Workbench offers no Degrees lens yet.
+  await openMakeSketch(page, new RegExp(makeTitle(u03l01)));
+  await expect(page.getByTestId("lens-degrees")).toHaveCount(0);
+  expectClean(w);
+});
+
 for (const quiet of [false, true]) {
   const mode = quiet ? " (Quiet mode)" : "";
-
-  test(`U03.L01 as a daily session: the major scale, no degree labels yet${mode}`, async ({
-    page,
-    request,
-  }) => {
-    test.setTimeout(240_000);
-    const { w, micAsks } = await begin(page, request, "after U02.L08", quiet);
-    const plan = await lessonDay(page, request, u03l01, {
-      unlocks: "auto",
-      // One warm-up set walked for real; the first functional-ear set has its own test below.
-      warmupSets: 1,
-      makeTitle: makeTitle(u03l01),
-      shots: quiet ? "w3-quiet-coda-U03.L01" : "w3-coda-U03.L01",
-    });
-    expect(plan.mapItemId).toBe("U03.L01");
-    const progress = await api<{ lessons: { lessonId: string; status: string }[] }>(
-      request,
-      "GET",
-      "/api/lessons/progress",
-    );
-    expect(progress.lessons.find((l) => l.lessonId === "U03.L01")?.status).toBe("completed");
-    // Degree labels wait for U03.L02: the Workbench offers no Degrees lens yet.
-    await openMakeSketch(page, new RegExp(makeTitle(u03l01)));
-    await expect(page.getByTestId("lens-degrees")).toHaveCount(0);
-    if (quiet) expect(await micAsks()).toBe(0);
-    expectClean(w);
-  });
 
   test(`U03.L02 as a daily session: degree labels switch on${mode}`, async ({ page, request }) => {
     test.setTimeout(240_000);
     const { w, micAsks } = await begin(page, request, "after C1.S1", quiet);
     await lessonDay(page, request, u03l02, {
       unlocks: true,
-      // One warm-up set walked for real; the first functional-ear set has its own test below.
-      warmupSets: 1,
+      // The warm-up is reported skipped: the first functional-ear set has its own test below, and a whole
+      // warm-up is walked by gate journey 2.
+      warmupSets: 0,
       makeTitle: makeTitle(u03l02),
       shots: quiet ? "w3-quiet-coda-U03.L02" : "w3-coda-U03.L02",
     });

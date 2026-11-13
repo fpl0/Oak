@@ -6,7 +6,13 @@ import { fileURLToPath } from "node:url";
 import { type Area, areaConfig, oakStack, PREBUILT, stackUse } from "../../../../e2e/support/stack.ts";
 import { writeMicFixtures } from "./fixtures.ts";
 
-export const stack = oakStack({ vitePort: 5202, apiPort: 8802, dataDirName: "answers" });
+export const stack = oakStack({
+  vitePort: 5202,
+  apiPort: 8802,
+  dataDirName: "answers",
+  // The gallery is a dev-only HTML entry (/src/answers/dev/gallery.html): always the Vite dev server.
+  bundle: false,
+});
 // `bun run e2e` writes them once before any process starts (PREBUILT); a run of this suite alone writes them here.
 if (!PREBUILT) writeMicFixtures();
 

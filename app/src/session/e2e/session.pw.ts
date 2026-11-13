@@ -96,6 +96,9 @@ test("a whole session: Start (Enter) → New → Wrap up → Quick sketch → Co
 }) => {
   await useUiPrefs(page, { theme: "paper" });
   await today(page);
+  // Today's Enter starts the plan once it is loaded (TodayPage's hotkey does nothing before): the setlist is the
+  // plan on screen. Without this wait a fast page took the Enter while the plan was still in flight.
+  await expect(page.getByTestId("setlist").locator("[data-row]").first()).toBeVisible();
   // Keyboard only: Enter starts the session from Today.
   await page.locator("main").focus();
   await page.keyboard.press("Enter");

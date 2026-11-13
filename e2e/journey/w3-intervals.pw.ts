@@ -25,7 +25,7 @@ test("U04.L04 as a daily session: named pairs, a harmonic interval step, then th
   let sawTogether = false;
   await lessonDay(page, request, u04l04, {
     unlocks: "auto",
-    warmupSets: 1,
+    warmupSets: 0,
     makeTitle: "Interval ear lab make",
     before: async (step) => {
       if (step.id === "S1") {

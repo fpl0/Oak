@@ -33,8 +33,12 @@ async function keyThenTurn(page: Page): Promise<void> {
   await expect(page.getByRole("button", { name: /^Cadence/ })).toBeVisible();
 }
 
-test("bass degrees: the bass alone, by key and by button, while answering; it counts as a replay", async ({
+// One bass set, two trials (Wave 5 test speed: they were two tests from the same seed and the same set start):
+// trial 1 answered with the mic on, the bass alone by key and by button; trial 2 with Quiet mode switched on in
+// another tab while it is open.
+test("bass degrees: the bass alone, by key and by button, while answering; it counts as a replay; then Quiet mode switched on in another tab mid-set: the sung roots go, the set goes on", async ({
   page,
+  context,
   request,
 }) => {
   test.setTimeout(200_000);
@@ -69,6 +73,35 @@ test("bass degrees: the bass alone, by key and by button, while answering; it co
   const ctx = (await page.getByTestId("answer-in-context").textContent()) ?? "";
   console.log(`[context] ${ctx}`);
   expect(ctx).not.toMatch(/[A-G](#|b)/);
+
+  // Trial 2, mid-set: its key set, the sung roots offered; then Quiet mode switched on in another tab.
+  await page.getByTestId("next-trial").click();
+  await expect(page.getByTestId("trial-counter")).toHaveText(/Trial 2 of/, { timeout: 60_000 });
+  await keyThenTurn(page);
+  await expect(page.getByTestId("sing-part")).toBeVisible();
+  const other = await context.newPage();
+  await quietHmr(other);
+  await other.goto("/settings/voice");
+  const control = other.getByTestId("quiet-control");
+  await expect(control).toBeVisible({ timeout: 60_000 });
+  await control.getByRole("switch").click();
+  await expect(control).toHaveAttribute("data-quiet", "1", { timeout: 20_000 });
+  await other.close();
+  await expect(page.getByTestId("sing-part"), "no sung part in Quiet mode").toHaveCount(0, {
+    timeout: 20_000,
+  });
+  await expect(page.getByTestId("hear-bass-now")).toBeVisible();
+  const t2 = await trialNow(page);
+  await page.locator("[data-degree]").first().focus();
+  for (const d of t2.expected.degrees ?? []) await page.keyboard.press(d.replace(/^[b#]/, ""));
+  // A full pad checks itself; Enter only when it has not.
+  await page.waitForTimeout(400);
+  if (!(await page.getByTestId("trial-feedback").isVisible())) await page.keyboard.press("Enter");
+  await expect(page.getByTestId("trial-feedback")).toHaveAttribute("data-correct", "true", {
+    timeout: 30_000,
+  });
+  await shootAll(page, "w4-ear-bass-quiet-mid-set");
+  await setQuiet(request, false);
   expect(problems).toEqual([]);
 });
 
@@ -95,45 +128,5 @@ test("staged chord dictation: the bass alone on the bass step only", async ({ pa
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("step-prompt")).not.toHaveText(/Step 1/, { timeout: 20_000 });
   await expect(page.getByTestId("hear-bass-now")).toHaveCount(0);
-  expect(problems).toEqual([]);
-});
-
-test("Quiet mode switched on in another tab mid-set: the sung roots go, the set goes on", async ({
-  page,
-  context,
-  request,
-}) => {
-  test.setTimeout(200_000);
-  await seedPoint(request, "U06.CP due");
-  await setQuiet(request, false);
-  await quietHmr(page);
-  await useUiPrefs(page, { theme: "paper" });
-  const problems = watch(page);
-  await firstTrial(page, "fam.har.bass");
-  await keyThenTurn(page);
-  await expect(page.getByTestId("sing-part")).toBeVisible();
-  const other = await context.newPage();
-  await quietHmr(other);
-  await other.goto("/settings/voice");
-  const control = other.getByTestId("quiet-control");
-  await expect(control).toBeVisible({ timeout: 60_000 });
-  await control.getByRole("switch").click();
-  await expect(control).toHaveAttribute("data-quiet", "1", { timeout: 20_000 });
-  await other.close();
-  await expect(page.getByTestId("sing-part"), "no sung part in Quiet mode").toHaveCount(0, {
-    timeout: 20_000,
-  });
-  await expect(page.getByTestId("hear-bass-now")).toBeVisible();
-  const t = await trialNow(page);
-  await page.locator("[data-degree]").first().focus();
-  for (const d of t.expected.degrees ?? []) await page.keyboard.press(d.replace(/^[b#]/, ""));
-  // A full pad checks itself; Enter only when it has not.
-  await page.waitForTimeout(400);
-  if (!(await page.getByTestId("trial-feedback").isVisible())) await page.keyboard.press("Enter");
-  await expect(page.getByTestId("trial-feedback")).toHaveAttribute("data-correct", "true", {
-    timeout: 30_000,
-  });
-  await shootAll(page, "w4-ear-bass-quiet-mid-set");
-  await setQuiet(request, false);
   expect(problems).toEqual([]);
 });

@@ -6,6 +6,11 @@ import type { Page, Route } from "@playwright/test";
 import { completeLessons, expect, resetLessons, test } from "./support.ts";
 
 test.describe.configure({ mode: "serial" });
+// The mocked progress route fetches the real response: one still in flight when its test ends (the page polls
+// progress) must not fail the test after it ("route.fetch: Test ended", "Response has been disposed").
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
 
 const U01 = ["U00.L01", "U00.L02", ...Array.from({ length: 9 }, (_, i) => `U01.L0${i + 1}`)];
 

@@ -6,9 +6,12 @@
 //   open, anchored to bar 12; the full two choruses meet the brief; Claude's review (two revisions from C5 on)
 //   with "Mark done" on each; released.
 // - C4 written in D minor first: the workspace names the key the piece reads in (decision 54).
+// Both releases use a seeded take (seeded-take.ts: the recorder's own window, uploaded through the release path);
+// the real recorder is under test in capstone.pw.ts (C0), ui-review capstone-silent.pw.ts and the journey's C3.
 // Screenshots: both themes at 1440×900 and 1280×800, reduced motion on.
 import { expect, test } from "@playwright/test";
 import { useUiPrefs } from "../../../../e2e/support/ui.ts";
+import { seedTake } from "./seeded-take.ts";
 import { C4_FULL, C4_VERSE, C5_FULL, C5_NO_TURNAROUND, C5_STRAIGHT } from "./w5-pieces.ts";
 import {
   api,
@@ -35,9 +38,10 @@ async function releaseByKeyboard(page: import("@playwright/test").Page, title: s
   const dialog = page.getByRole("dialog", { name: /Release to the album|Release a new version/ });
   await expect(dialog).toBeVisible({ timeout: 30_000 });
   await dialog.getByLabel("Title").fill(title);
+  await seedTake(page);
   await dialog.getByTestId("record-take").focus();
   await page.keyboard.press("Enter");
-  await expect(dialog.getByTestId("take-audio")).toBeVisible({ timeout: 90_000 });
+  await expect(dialog.getByTestId("take-audio")).toBeVisible({ timeout: 30_000 });
   await dialog.getByTestId("confirm-release").focus();
   await page.keyboard.press("Enter");
   const ceremony = page.getByTestId("release-ceremony");

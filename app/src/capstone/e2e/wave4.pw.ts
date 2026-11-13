@@ -16,6 +16,7 @@ import { capstones } from "../../../../content/capstones.ts";
 import { SCREENSHOT_MATRIX } from "../../../../e2e/support/stack.ts";
 import { shoot, useUiPrefs } from "../../../../e2e/support/ui.ts";
 import { stack } from "./playwright.config.ts";
+import { seedTake } from "./seeded-take.ts";
 
 const SHOTS = fileURLToPath(new URL("./screenshots", import.meta.url));
 const H = { "content-type": "application/json", origin: stack.baseURL, "x-oak": "1" };
@@ -225,9 +226,11 @@ test("C2 session 2 from “C2.S1 done”: from the top, review with bar links, r
   const n = Number(/(\d+) of 60 words/.exec(words)?.[1] ?? "999");
   expect(n).toBeLessThanOrEqual(60);
   await shots(page, "c2-release-dialog");
+  // A seeded take (seeded-take.ts): the recorder's own window, uploaded through the release path.
+  await seedTake(page);
   await dialog.getByTestId("record-take").focus();
   await page.keyboard.press("Enter");
-  await expect(dialog.getByTestId("take-audio")).toBeVisible({ timeout: 60_000 });
+  await expect(dialog.getByTestId("take-audio")).toBeVisible({ timeout: 30_000 });
   await dialog.getByTestId("confirm-release").focus();
   await page.keyboard.press("Enter");
   const ceremony = page.getByTestId("release-ceremony");
@@ -400,8 +403,10 @@ test("X1 session 3 from “X1.S2 done”: chords bass-first, release, the reveal
   const dialog = page.getByRole("dialog", { name: /Release/ });
   await expect(dialog).toBeVisible({ timeout: 30_000 });
   await expect(dialog.getByTestId("release-liner")).toContainText("Aura Lee");
+  // A seeded take (seeded-take.ts): the recorder's own window, uploaded through the release path.
+  await seedTake(page);
   await dialog.getByTestId("record-take").click();
-  await expect(dialog.getByTestId("take-audio")).toBeVisible({ timeout: 90_000 });
+  await expect(dialog.getByTestId("take-audio")).toBeVisible({ timeout: 30_000 });
   await dialog.getByTestId("confirm-release").click();
   await expect(page.getByTestId("release-ceremony")).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("release-ceremony").getByRole("link", { name: "Open the track" }).click();

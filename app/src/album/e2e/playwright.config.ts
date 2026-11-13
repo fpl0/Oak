@@ -10,6 +10,8 @@ export const stack = oakStack({
   vitePort: 5223,
   apiPort: 8823,
   dataDirName: "review-studio",
+  // transcribe.pw.ts imports /src/transcribe/stimulus-code.ts in the page.
+  bundle: false,
   extraEnv: { OAK_TUTOR_FAKE: "1" },
 });
 

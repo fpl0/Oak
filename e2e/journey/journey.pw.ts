@@ -7,7 +7,12 @@
 // learner-error line) and zero requests off this machine. A last test does onboarding in Quiet mode (no microphone)
 // and one session.
 import { expect, type Page, test } from "@playwright/test";
-import { expectStep, fakeMic, throughTheLoop } from "../../app/src/onboarding/e2e/helpers.ts";
+import {
+  expectStep,
+  fakeMic,
+  shootAll as shootOnboarding,
+  throughTheLoop,
+} from "../../app/src/onboarding/e2e/helpers.ts";
 import { capstones } from "../../content/capstones.ts";
 import u00l02 from "../../content/core/U00/L02/lesson.ts";
 import u01l01 from "../../content/core/U01/L01/lesson.ts";
@@ -69,45 +74,107 @@ test("gate journey 1: a fresh learner goes through onboarding with a microphone"
   await openToday(page);
   await expect(page.getByTestId("today-card")).toHaveAttribute("data-state", "first-run");
   await page.getByTestId("begin-onboarding").click();
-  await throughTheLoop(page, 6);
+  // The onboarding area's own walk of every screen (merged from app/src/onboarding/e2e/onboarding.pw.ts, which
+  // walked these same screens in real time): its choices, checks and reference screenshots
+  // (app/src/onboarding/e2e/screenshots, both themes at both sizes) are made here.
+  await throughTheLoop(page, 6, { shots: true });
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("6 plays B, leaning up toward home", {
+    timeout: 5_000,
+  });
   await page.getByTestId("react-continue").click();
+
+  // Preferences: a flavour previewed and chosen, 25 minutes a day.
   await expectStep(page, "prefs");
+  await page.getByTestId("flavour-jazz-soul").click();
+  await page.getByTestId("preview-jazz-soul").click();
+  await expect(page.getByTestId("preview-jazz-soul")).toHaveText("Stop", { timeout: 15_000 });
+  await shootOnboarding(page, "05-prefs");
+  await page.getByRole("radio", { name: "25 min" }).click();
   await page.getByTestId("prefs-continue").click();
+
+  // The tutor (scripted fake backend: ready through the "Claude login").
   await expectStep(page, "tutor");
-  await expect(page.getByTestId("tutor-ready")).toBeVisible();
+  await expect(page.getByTestId("tutor-ready")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("tutor-sends")).toContainText("Never your voice", { timeout: 5_000 });
+  await page.getByTestId("tutor-ask").click();
+  await expect(page.getByTestId("tutor-ask")).toBeDisabled({ timeout: 5_000 });
+  await shootOnboarding(page, "06-tutor");
   await page.getByTestId("tutor-continue").click();
+
+  // Headphones: left/right.
   await expectStep(page, "headphones");
   await page.getByTestId("lr-play").click();
   await page.getByTestId("lr-left").click({ timeout: 10_000 });
+  await shootOnboarding(page, "07-headphones");
   await page.getByTestId("part-continue").click();
+
+  // Microphone: the privacy line, permission, a live signal, the quiet room, no bleed.
   await expectStep(page, "mic");
+  await expect(page.getByTestId("privacy-line")).toHaveText(
+    "Your voice is analysed live on this computer. Nothing is recorded or sent.",
+    { timeout: 5_000 },
+  );
+  await expect(page.getByRole("button", { name: /Microphone is live/ })).toHaveCount(0, { timeout: 5_000 });
+  await shootOnboarding(page, "08-mic-ask");
   await page.getByTestId("mic-allow").click();
-  await expect(page.getByTestId("mic-live")).toBeVisible();
+  await expect(page.getByTestId("mic-live")).toBeVisible({ timeout: 15_000 });
+  // The shell's indicator is truthful: on while the stream is open.
+  await expect(page.getByRole("button", { name: /Microphone is live/ })).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText("Oak can hear you.")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("mic-note")).toHaveText(/^C4 /, { timeout: 5_000 });
+  await shootOnboarding(page, "09-mic-live");
   await page.getByTestId("part-continue").click();
   await page.getByTestId("noise-start").click();
-  await expect(page.getByText("Quiet enough")).toBeVisible();
+  await expect(page.getByText("Quiet enough")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: /Microphone is live/ })).toHaveCount(0, { timeout: 5_000 });
   await page.getByTestId("part-continue").click();
   await page.getByTestId("bleed-start").click();
-  await expect(page.getByText("No bleed")).toBeVisible();
+  await expect(page.getByText("No bleed")).toBeVisible({ timeout: 15_000 });
+  await shootOnboarding(page, "10-mic-done");
   await page.getByTestId("part-continue").click();
+
+  // Range: the sweep hears A2 and E4.
   await expectStep(page, "range");
   await page.getByTestId("range-start").click();
-  await expect(page.getByText(/Your singing zone: A2–E4/)).toBeVisible();
+  await expect(page.getByTestId("range-sweeping")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText(/Your singing zone: A2–E4/)).toBeVisible({ timeout: 20_000 });
+  await shootOnboarding(page, "11-range");
   await page.getByTestId("part-continue").click();
+
+  // Timing: 16 taps (dispatched on each click as the dots light), then 8 sung "da"s from the fake mic.
   await expectStep(page, "latency");
   await tapAlong(page);
-  await expect(page.getByText(/Your taps land \d+ ms (after|before) the click/)).toBeVisible();
+  await expect(page.getByText(/Your taps land \d+ ms (after|before) the click/)).toBeVisible({
+    timeout: 20_000,
+  });
   await page.getByTestId("sing-start").click();
-  await expect(page.getByText(/Your voice lands \d+ ms/)).toBeVisible();
+  await expect(page.getByText(/Your voice lands \d+ ms/)).toBeVisible({ timeout: 20_000 });
+  await shootOnboarding(page, "12-latency");
   await page.getByTestId("part-continue").click();
+
+  // The first sung note: C, any octave.
   await expectStep(page, "first-sing");
   await page.getByTestId("first-sing-start").click();
   await expect(page.getByText("That note is 1: home.")).toBeVisible({ timeout: 25_000 });
+  await expect(page.getByRole("button", { name: /Microphone is live/ })).toHaveCount(0, { timeout: 5_000 });
+  await shootOnboarding(page, "13-first-sing");
   await page.getByTestId("part-continue").click();
+
+  // Sketch 001.
   await expectStep(page, "sketch");
   await expect(page.getByTestId("workbench")).toBeVisible({ timeout: 30_000 });
+  await shootOnboarding(page, "14-sketch");
   await page.getByTestId("sketch-save").click();
   await expectStep(page, "coda");
+  await expect(page.getByTestId("coda-rows")).toContainText("You changed the last note to 6", {
+    timeout: 5_000,
+  });
+  await expect(page.getByTestId("coda-rows")).toContainText("Jazz-soul · 25 minutes a day", {
+    timeout: 5_000,
+  });
+  await expect(page.getByTestId("coda-rows")).toContainText("Comfortable", { timeout: 5_000 });
+  await expect(page.getByTestId("coda-rows")).toContainText("Sung: that note is home", { timeout: 5_000 });
+  await shootOnboarding(page, "15-coda");
   // The review's first-day regressions (merged from e2e/review/onboarding-day.pw.ts, which walked these same
   // screens): the Coda's toolbox uses plain tool names and leaves out the Sing panel (it arrives with U00.L02),
   // and its "Next time" names the lesson Today will offer (it said "Heartbeat", which is U01.L01).
@@ -128,8 +195,29 @@ test("gate journey 1: a fresh learner goes through onboarding with a microphone"
     "/api/lessons/progress",
   );
   expect(p1.lessons.find((l) => l.lessonId === "U00.L01")?.status).toBe("completed");
-  const profile = await api<{ tapLatencyMs: number | null; quiet: boolean }>(request, "GET", "/api/profile");
+  // Everything was stored through the API.
+  const profile = await api<{
+    onboardedAt: string | null;
+    flavour: string;
+    targetMinutes: number;
+    vocalLowMidi: number | null;
+    vocalHighMidi: number | null;
+    noiseFloorDb: number | null;
+    tapLatencyMs: number | null;
+    singLatencyMs: number | null;
+    quiet: boolean;
+  }>(request, "GET", "/api/profile");
+  expect(profile.onboardedAt).not.toBeNull();
+  expect(profile.flavour).toBe("flavour.jazz-soul");
+  expect(profile.targetMinutes).toBe(25);
+  expect(profile.vocalLowMidi).toBe(45);
+  expect(profile.vocalHighMidi).toBe(64);
+  expect(profile.noiseFloorDb).toBeLessThan(-45);
+  expect(profile.tapLatencyMs).not.toBeNull();
+  expect(profile.singLatencyMs).not.toBeNull();
   expect(profile.quiet).toBe(false);
+  const sketches = await api<{ items: { title: string }[] }>(request, "GET", "/api/sketches");
+  expect(sketches.items.map((s) => s.title)).toContain("Sketch 001");
   // The first day ends done and counted (not a full 20-minute session offered again; the onboarding day on the
   // week strip), and Today names the next unlock plainly.
   const card = page.getByTestId("today-card");
@@ -191,7 +279,9 @@ test("gate journey 3: U01.L02 with a tutor hint and an explanation, then Studio,
   const w = watch(page);
 
   // --- day 4: U01.L02 with a tutor hint and an explanation on its first graded step ----------------------------
+  // The warm-up is reported skipped (gate journey 2 walks whole warm-ups): this day is about the tutor.
   await lessonDay(page, request, u01l02, {
+    warmupSets: 0,
     makeTitle: "Count to four",
     before: async (step) => {
       if (step.id !== "S5") return;
@@ -250,7 +340,8 @@ test("gate journey 4: the U01 checkpoint day, passed", async ({ page, request })
 
   // --- skip ahead (dev seeder): U01.L03 … U02.L01 done one day each, today's New block is the U01 checkpoint -----
   // The seed replays the course one day per session up to yesterday on the real clock.
-  const cpPlan = await startToday(page, request);
+  // The warm-up is reported skipped (gate journey 2 walks whole warm-ups): this day is about the checkpoint.
+  const cpPlan = await startToday(page, request, { warmupSets: 0 });
   expect(cpPlan).toMatchObject({ kind: "checkpoint", mapItemId: "U01.CP" });
   const tap = (await api<{ tapLatencyMs: number | null }>(request, "GET", "/api/profile")).tapLatencyMs ?? 0;
   expect(await walkCheckpoint(page, tap)).toEqual({ passed: true });
@@ -269,7 +360,8 @@ test("gate journey 5: C0 made, released and found on the album", async ({ page, 
   const w = watch(page);
 
   // --- the next day: C0, checked and released to the album -------------------------------------------------------
-  const c0Plan = await startToday(page, request);
+  // The warm-up is reported skipped (gate journey 2 walks whole warm-ups): this day is about C0.
+  const c0Plan = await startToday(page, request, { warmupSets: 0 });
   expect(c0Plan).toMatchObject({ kind: "capstone", mapItemId: "C0.S1" });
   const ref = capstones
     .find((c) => c.id === "C0")

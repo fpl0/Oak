@@ -8,6 +8,8 @@ export const stack = oakStack({
   vitePort: 5214,
   apiPort: 8814,
   dataDirName: "kit",
+  // The Wave 4/5 kit galleries are imported in the page by source path (/src/ui/kit/gallery/*.tsx).
+  bundle: false,
   extraEnv: { OAK_TUTOR_FAKE: "1" },
 });
 

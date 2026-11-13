@@ -78,6 +78,36 @@ export async function matrix(
   }
 }
 
+/**
+ * The page has settled: its fonts are loaded, nothing in it is marked busy, and the network has been idle for
+ * 500 ms. A condition instead of a fixed sleep before reading the page (contrast.pw.ts): on a warm page it holds
+ * sooner than the old 1.5 s, and on a cold first load it waits as long as the page needs.
+ */
+export async function settled(page: Page): Promise<void> {
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  await expect(page.locator("[aria-busy=true]")).toHaveCount(0, { timeout: 30_000 });
+  // QueryState's skeleton (role=status, data-state=loading) carries no aria-busy.
+  await expect(page.locator("[data-state=loading]")).toHaveCount(0, { timeout: 30_000 });
+  await page.waitForLoadState("networkidle");
+  // The old 1.5 s let fades end before colours were read.
+  await animationsDone(page);
+}
+
+/**
+ * Every finite animation or transition on the page has finished: colours and opacity are read at rest, never part-way
+ * through a fade (a popover fading in reads as low contrast).
+ */
+export async function animationsDone(page: Page): Promise<void> {
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => Number.isFinite(Number(a.effect?.getComputedTiming().endTime)))
+        .map((a) => a.finished.catch(() => undefined)),
+    ).then(() => undefined),
+  );
+}
+
 /** No element wider than the viewport: a horizontal scrollbar on the document or on `#main`. */
 export async function expectNoHorizontalOverflow(page: Page): Promise<void> {
   const over = await page.evaluate(() => {

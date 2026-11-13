@@ -435,8 +435,7 @@ test("C3 day 3, Today to the Coda: resumed from the top, released; the album gro
 
 // C4 as session 2 writes it (the capstones author's "pop" reference, content/capstones.ts): verse on the Aeolian loop
 // i–VI–III–VII with a tune that sings C (♭3) and F (♭6), the chorus iv–VII–V–i (Dm G E Am, E with its G♯) landing
-// on A over Am, one arrange() per labelled track, 80 BPM; verse and chorus once each (the author's "minimal" plan),
-// so the release's real-time take lasts 48 seconds.
+// on A over Am, one arrange() per labelled track, 80 BPM; verse and chorus once each (the author's "minimal" plan).
 const C4_FULL =
   'setcpm(80/4)\n\nconst kickVerse = s("bd ~ ~ ~")\nconst kickChorus = s("bd ~ bd ~")\nconst snareVerse = s("~ ~ sd ~")\nconst snareChorus = s("~ sd ~ sd")\nconst hatsVerse = s("hh*4").gain(.4)\nconst hatsChorus = s("hh*8").gain(.45)\nconst chordsVerse = chord("<Am F C G>").voicing()\nconst chordsChorus = chord("<Dm G E Am>").voicing()\nconst bassVerse = n("<0 5 2 6>").scale("A1:minor")\nconst bassChorus = n("<3 6 4 0>").scale("A1:minor")\nconst melVerse = n("<[4 ~ 2 ~] [5 ~ 7 ~] [4 ~ 2 ~] [1 ~ ~ ~]>").scale("A3:minor")\nconst melChorus = n("<[3 5 7 5] [6 8 10 8] [8 ~ 4 ~] [7 ~ ~ ~]>").scale("A3:minor")\n\nkick: arrange([8, kickVerse], [8, kickChorus])\nsnare: arrange([8, snareVerse], [8, snareChorus])\nhats: arrange([8, hatsVerse], [8, hatsChorus])\nchords: arrange([8, chordsVerse], [8, chordsChorus]).s("piano")\nbass: arrange([8, bassVerse], [8, bassChorus]).s("ebass").lpf(600)\nmel: arrange([8, melVerse], [8, melChorus]).s("piano")';
 
@@ -465,6 +464,12 @@ test("a C4 release: the album grows, and the Coda names the next track and what 
 }) => {
   test.setTimeout(240_000);
   const errors = watch(page, [/\/api\/tutor/]);
+  // A browser without MediaRecorder releases without a recording, as C3 day 3 does: the take (record-take,
+  // take-audio) is the capstone suite's (app/src/capstone/e2e/w5-c4-c5.pw.ts, C4); this day is about the release
+  // reaching the Coda.
+  await page.addInitScript(() => {
+    (globalThis as { MediaRecorder?: unknown }).MediaRecorder = undefined;
+  });
   await seed(request, "after C4.S1");
   await useUiPrefs(page, { theme: "paper", motion: "off" });
   await openToday(page);
@@ -492,10 +497,7 @@ test("a C4 release: the album grows, and the Coda names the next track and what 
   const dialog = page.getByRole("dialog", { name: /Release to the album|Release a new version/ });
   await expect(dialog).toBeVisible({ timeout: 30_000 });
   await dialog.getByLabel("Title").fill("Minor Indie Ballad");
-  await dialog.getByTestId("record-take").click();
-  // The take records the piece in real time: 16 bars at 80 BPM, 48 seconds.
-  await expect(dialog.getByTestId("take-audio")).toBeVisible({ timeout: 90_000 });
-  await dialog.getByTestId("confirm-release").click();
+  await dialog.getByRole("button", { name: "Release without a recording" }).click();
   const ceremony = page.getByTestId("release-ceremony");
   await expect(ceremony).toBeVisible({ timeout: 30_000 });
   await ceremony.getByRole("button", { name: "Continue to the coda" }).click();

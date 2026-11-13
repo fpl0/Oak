@@ -2,7 +2,7 @@
 // at 1280×800 (the narrowest supported layout: nothing may overflow sideways either).
 import { expect, test } from "@playwright/test";
 import { useUiPrefs } from "../../../../../e2e/support/ui.ts";
-import { api, contrastIssues, createSketch, expectNoHorizontalOverflow, seed } from "./support.ts";
+import { api, contrastIssues, createSketch, expectNoHorizontalOverflow, seed, settled } from "./support.ts";
 
 test.describe.configure({ mode: "serial" });
 test.beforeEach(async ({ page }) => {
@@ -49,7 +49,7 @@ for (const theme of ["paper", "bark"] as const)
     for (const path of paths) {
       await page.goto(path);
       await expect(page.locator("#main")).toBeVisible();
-      await page.waitForTimeout(1500);
+      await settled(page);
       await expectNoHorizontalOverflow(page);
       const bad = await contrastIssues(page);
       if (bad.length) problems[path] = bad;

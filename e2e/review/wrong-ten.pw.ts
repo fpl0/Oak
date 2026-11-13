@@ -18,7 +18,14 @@ test("ten wrong checks read calm, offer help, and a double click counts once", a
   const lines: string[] = [];
   for (let i = 0; i < 10; i++) {
     await setCode(page, WRONG);
+    // Each check's attempt reaches the server before the next one (the feedback's "fail" from the check before is
+    // already on screen, so it alone cannot tell this check's answer has come back).
+    const saved = page.waitForResponse(
+      (r) =>
+        r.request().method() === "POST" && /\/api\/lessons\/U01\.L01\/steps\/S6\/attempts$/.test(r.url()),
+    );
     await page.getByTestId("check").click();
+    expect((await saved).ok()).toBe(true);
     await expect(page.getByTestId("step-feedback")).toHaveAttribute("data-status", "fail");
     lines.push((await page.getByTestId("step-feedback").textContent()) ?? "");
   }

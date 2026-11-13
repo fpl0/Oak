@@ -29,12 +29,18 @@ import { markForReview } from "./backup.ts";
 import { checkSlots } from "./capstone-sessions.ts";
 import { LearnerTime } from "./context.ts";
 import type { DevClock } from "./dev-clock.ts";
+import { seedCacheOf } from "./dev-seed-cache.ts";
 import { CAPSTONE_DRAFTS, CAPSTONE_KEYS, pickStandIn, WAVE5_SEED_DESCRIPTIONS } from "./seed-wave5.ts";
 
 const DAY_MS = 86_400_000;
 
 export const SEED_POINTS: readonly DevSeedPoint[] = [
   { point: "fresh", description: "No data at all: the welcome screen and onboarding from the start." },
+  {
+    point: "onboarding at react (edit <N>)",
+    description:
+      "A fresh learner who began onboarding today: the welcome, the loop's build-up and the edit are done (the last note changed to N, 0–7; 3 without the suffix), the reaction is next. No mic, no choices, no sketch.",
+  },
   { point: "onboarded", description: "Onboarding (U00.L01) finished yesterday; today's lesson is U00.L02." },
   {
     point: "after <SessionId>",
@@ -197,6 +203,7 @@ interface SeedPlan {
     | { kind: "gate-open" }
     | { kind: "ladder-l3" }
     | { kind: "own-audio"; imported?: true }
+    | { kind: "onboarding-at"; step: "react"; firstEdit: number }
     // Wave 5
     | { kind: "side"; lessons: string[] }
     | { kind: "ladder-song"; level: 5 | 6; realism: number }
@@ -239,6 +246,13 @@ export function planSeed(point: string, order: readonly string[]): SeedPlan {
     return id;
   };
   if (lower === "fresh") return { upTo: null, extra: null, gapDays: null };
+  const onb = /^onboarding at react(?: \(edit ([0-7])\))?$/.exec(lower.replace(/\s+/g, " "));
+  if (onb !== null)
+    return {
+      upTo: null,
+      extra: { kind: "onboarding-at", step: "react", firstEdit: Number(onb[1] ?? 3) },
+      gapDays: null,
+    };
   // Wave 4 points whose names do not follow the Wave 2 patterns (wave4.md §6).
   const named: Record<string, () => SeedPlan> = {
     "u05.l07 gate open": () => ({ upTo: before("U05.L07"), extra: { kind: "gate-open" }, gapDays: null }),
@@ -1033,7 +1047,21 @@ class Seeder {
   }
 }
 
+/**
+ * `POST /api/dev/seed`: the learner at `body.point`. The first request of a kind builds it (`buildSeed`); a repeat
+ * restores that build's snapshot (dev-seed-cache.ts) while it may stand for a fresh build (same day, within the hour).
+ */
 export async function seedLearner(d: AppDeps, body: DevSeedRequest): Promise<DevSeedResult> {
+  needDevClock(d);
+  const cache = seedCacheOf(d);
+  if (cache === null) return buildSeed(d, body);
+  // An unknown point answers 400 before anything is wiped or restored, as the build does.
+  planSeed(body.point, d.content.defaultOrder());
+  return cache.seed(body, () => buildSeed(d, body));
+}
+
+/** Builds the learner at `body.point` by replaying the default order through the real services. */
+export async function buildSeed(d: AppDeps, body: DevSeedRequest): Promise<DevSeedResult> {
   const clock = needDevClock(d);
   const order = d.content.defaultOrder();
   const plan = planSeed(body.point, order);
@@ -1112,6 +1140,15 @@ export async function seedLearner(d: AppDeps, body: DevSeedRequest): Promise<Dev
     if (plan.extra.imported === true) markForReview(d.repos.db);
   }
   const extra = plan.extra;
+  // Onboarding begun today: what the learner's own screens save after the welcome, the loop and the edit.
+  if (extra?.kind === "onboarding-at")
+    await d.services.onboarding.put({
+      step: extra.step,
+      completed: ["welcome", "loop", "edit"],
+      skipped: [],
+      firstEdit: extra.firstEdit,
+      sketchId: null,
+    });
   if (extra?.kind === "ladder-song")
     await clock.at(lastDay, () => seeder.ladderSong(extra.level, extra.realism));
 

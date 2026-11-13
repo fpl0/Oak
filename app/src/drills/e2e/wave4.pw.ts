@@ -1,7 +1,6 @@
 // Wave 4 stage D ear training on the real Oak server (own stack, throwaway data), each test from a dev seed: a
 // chord-quality set (the key first, then the chord; bass alone, broken chords, in its key; yours then it), a
-// bass-degree set whose roots are sung on Chromium's fake microphone before they are picked, the same family in
-// Quiet mode (the mic never opens), a staged chord dictation answered right and then wrong (bass → quality →
+// staged chord dictation answered right and then wrong (bass → quality →
 // numerals), a schema set, melodic dictation from level 4 as degrees, code or staff, and the hub's stage D.
 // Every trial record the runner posts is read back from the wire.
 //
@@ -39,24 +38,6 @@ function trialPosts(page: Page): Map<number, DrillTrialRecord> {
     for (const t of body.trials) out.set(t.idx, t);
   });
   return out;
-}
-
-/** Counts microphone requests (getUserMedia) from the page. */
-async function countMic(page: Page): Promise<() => number> {
-  let asked = 0;
-  await page.exposeFunction("__w4MicAsked", () => {
-    asked++;
-  });
-  await page.addInitScript(() => {
-    const md = navigator.mediaDevices;
-    if (!md) return;
-    const orig = md.getUserMedia.bind(md);
-    md.getUserMedia = (c) => {
-      (window as unknown as { __w4MicAsked(): void }).__w4MicAsked();
-      return orig(c);
-    };
-  });
-  return () => asked;
 }
 
 async function seed(page: Page, point = "after U06.L10"): Promise<void> {
@@ -203,99 +184,9 @@ test("a chord-quality set: the key first, the chord, then the bass alone, broken
   expect(problems).toEqual([]);
 });
 
-test("a bass-degree set: the roots sung on the mic prefill the pad, the pick is graded, the notes are kept", async ({
-  page,
-}) => {
-  test.setTimeout(240_000);
-  const problems = watch(page);
-  const posts = trialPosts(page);
-  const micAsked = await countMic(page);
-  await seed(page);
-  await prepare(page, { quiet: false });
-  await startPractice(page, "fam.har.bass");
-  const t0 = await trialNo(page, 1, 4);
-  await expect(page.getByTestId("trial-prompt")).toHaveText(
-    "Hear the bass first: which degree is each root?",
-  );
-  // The loop plays once; then the roots can be sung.
-  await expect(page.getByTestId("stage-text")).toHaveText("Your turn.", { timeout: 40_000 });
-  await expect(page.getByTestId("sing-part")).toBeVisible();
-  await page.keyboard.press("v");
-  await expect(page.getByTestId("pitch-lane")).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole("button", { name: "Microphone is live. Close it" })).toBeVisible({
-    timeout: 15_000,
-  });
-  await expect(page.getByTestId("stage-text")).toHaveText("Your turn: sing now.", { timeout: 20_000 });
-  await shoot(page, SHOTS, "w4-bass-singing", "paper");
-  await expect(page.getByTestId("sung-part-line")).toBeVisible({ timeout: 40_000 });
-  await shoot(page, SHOTS, "w4-bass-sung", "paper");
-  expect(micAsked()).toBeGreaterThan(0);
-  // The pick is the learner's: clear what was prefilled and enter the roots.
-  const pad = page.getByRole("group", { name: "Your answer: the degrees, in order" });
-  await expect(pad).toBeVisible();
-  await pad.locator("button").first().focus();
-  for (let k = 0; k < 4; k++) await page.keyboard.press("Backspace");
-  for (const d of t0.expected.degrees ?? []) await page.keyboard.press(d.replace(/^[b#]/, ""));
-  const feedback = page.getByTestId("trial-feedback");
-  await expect(feedback).toHaveAttribute("data-correct", "true");
-  await expect(page.getByTestId("answer-in-context")).toContainText("Bar 1");
-  await page.getByTestId("next-trial").focus();
-  await page.keyboard.press("Enter");
-  for (let i = 1; i < 4; i++) {
-    const t = await trialNo(page, i + 1, 4);
-    await expect(pad).toBeVisible();
-    const want = t.expected.degrees ?? [];
-    for (const [k, d] of want.entries())
-      await page.keyboard.press(i === 3 && k === 0 ? (d === "1" ? "2" : "1") : d.replace(/^[b#]/, ""));
-    await expect(feedback).toHaveAttribute("data-correct", i === 3 ? "false" : "true");
-    await page.getByTestId("next-trial").focus();
-    await page.keyboard.press("Enter");
-  }
-  await expect(page.getByTestId("set-summary")).toBeVisible({ timeout: 30_000 });
-  const first = posts.get(0);
-  expect(first?.correct).toBe(true);
-  // Per-degree results: one sung note per root.
-  expect(first?.response.sung).toHaveLength(t0.expected.degrees?.length ?? 0);
-  expect(posts.get(3)?.correct).toBe(false);
-  expect(posts.get(1)?.response.sung).toBeNull();
-  expect(problems).toEqual([]);
-});
-
-test("the bass-degree set in Quiet mode: no sung part is offered and the mic never opens", async ({
-  page,
-}) => {
-  test.setTimeout(240_000);
-  const problems = watch(page);
-  const posts = trialPosts(page);
-  const micAsked = await countMic(page);
-  await seed(page);
-  await prepare(page, { quiet: true, theme: "bark" });
-  await startPractice(page, "fam.har.bass");
-  const pad = page.getByRole("group", { name: "Your answer: the degrees, in order" });
-  for (let i = 0; i < 4; i++) {
-    const t = await trialNo(page, i + 1, 4);
-    await expect(pad).toBeVisible();
-    if (i === 0) {
-      await expect(page.getByTestId("stage-text")).toHaveText("Your turn.", { timeout: 40_000 });
-      await expect(page.getByTestId("sing-part")).toHaveCount(0);
-      await page.keyboard.press("v");
-      await expect(page.getByTestId("pitch-lane")).toHaveCount(0);
-      await shoot(page, SHOTS, "w4-bass-quiet", "bark");
-      await pad.locator("button").first().focus();
-    }
-    for (const d of t.expected.degrees ?? []) await page.keyboard.press(d.replace(/^[b#]/, ""));
-    await expect(page.getByTestId("trial-feedback")).toHaveAttribute("data-correct", "true");
-    if (i === 0) await frameMatrix(page, "w4-bass-feedback");
-    await page.getByTestId("next-trial").focus();
-    await page.keyboard.press("Enter");
-  }
-  await expect(page.getByTestId("set-summary")).toBeVisible({ timeout: 30_000 });
-  expect(micAsked()).toBe(0);
-  await expect(page.getByRole("button", { name: "Microphone is live. Close it" })).toHaveCount(0);
-  expect(posts.size).toBe(4);
-  for (const r of posts.values()) expect(r.response.sung).toBeNull();
-  expect(problems).toEqual([]);
-});
+// The bass-degree set (its roots sung on the mic, and the same set in Quiet mode) is walked once in the suite, inside
+// a real session's warm-up: app/src/session/seeds/e2e/w4-warmups.pw.ts, "a U06 day: the bass-degree set …" and its
+// Quiet twin, which hold every assertion the two practice-page copies made here.
 
 /** Picks a quality for each chord of the quality step (one pad per chord; a pick moves to the next). */
 async function pickQualities(page: Page, qualities: readonly string[]): Promise<void> {

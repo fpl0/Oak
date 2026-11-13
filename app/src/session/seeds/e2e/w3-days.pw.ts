@@ -338,4 +338,7 @@ test("a session that crosses the 04:00 rollover: the ceremony and the Coda play,
   await page.waitForURL((u) => u.pathname === "/");
   await expect(page.getByTestId("today-card")).toHaveAttribute("data-state", "done");
   await expect(page.getByTestId("see-coda")).toBeVisible();
+  // Today's own reads may still be inside the routes above: let them finish here, so none ends inside the next test
+  // of this file (seen once with tracing off: "route.fetch: Test ended" reported against the next test).
+  await page.unrouteAll({ behavior: "wait" });
 });

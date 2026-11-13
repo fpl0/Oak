@@ -1,7 +1,7 @@
 // Helpers of the review suite: API calls against this suite's own server (8821), the dev clock and seeder, a watch
 // on console errors, and screenshots of every screen in both themes and both sizes (`e2e/review/screenshots/`).
 import { resolve } from "node:path";
-import { type APIRequestContext, type Browser, expect, type Page } from "@playwright/test";
+import { type APIRequestContext, type Browser, expect, type Page, type Request } from "@playwright/test";
 import { SCREENSHOT_MATRIX } from "../support/stack.ts";
 import { shoot } from "../support/ui.ts";
 import { stack } from "./playwright.config.ts";
@@ -56,8 +56,111 @@ export function watch(page: Page, allow: RegExp[] = []): string[] {
   return problems;
 }
 
+/** The page's requests still in flight (long-lived streams excepted), counted from the moment this is called. */
+export function inFlight(page: Page): { readonly count: number } {
+  const pending = new Set<Request>();
+  page.on("request", (r) => {
+    if (!["websocket", "eventsource"].includes(r.resourceType())) pending.add(r);
+  });
+  page.on("requestfinished", (r) => pending.delete(r));
+  page.on("requestfailed", (r) => pending.delete(r));
+  return {
+    get count() {
+      return pending.size;
+    },
+  };
+}
+
+/**
+ * Waits until the page has settled, in place of a fixed sleep before a layout read: no request in flight, the
+ * fonts loaded, no region marked busy, then two animation frames (the layout of the last change is painted).
+ */
+export async function settled(page: Page, requests: { readonly count: number }): Promise<void> {
+  await expect.poll(() => requests.count, { message: "requests still in flight", timeout: 20_000 }).toBe(0);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          await document.fonts.ready;
+          return document.querySelectorAll('[aria-busy="true"]').length;
+        }),
+      { message: "a region still busy", timeout: 20_000 },
+    )
+    .toBe(0);
+  await page.evaluate(
+    () => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
+  );
+}
+
 export async function noHmr(page: Page): Promise<void> {
   await page.routeWebSocket(/\/(\?token=|@vite)/, () => {});
+}
+
+type SessionHandle = {
+  report(r: unknown): void;
+  state(): { plan: { warmup: { items: { id: string }[] } } | null };
+};
+
+/**
+ * Reports every set of the warm-up on screen skipped through the session's dev hook (`__oakSession`), as the
+ * learner's own skip would, and waits for the hand-over: for specs whose subject comes after the warm-up (the
+ * warm-up's sets are walked by the drill, warm-up and journey suites).
+ */
+export async function skipWarmup(page: Page): Promise<void> {
+  const warmup = page.getByTestId("warmup");
+  await expect(warmup).toBeVisible({ timeout: 60_000 });
+  await page.evaluate(() => {
+    const o = (window as never as { __oakSession: SessionHandle }).__oakSession;
+    for (const item of o.state().plan?.warmup.items ?? [])
+      o.report({
+        block: "warmup",
+        source: "drills",
+        warmupItemId: item.id,
+        drillSessionId: null,
+        meanCredit: null,
+        skipped: true,
+      });
+  });
+  await expect(warmup).toBeHidden({ timeout: 30_000 });
+}
+
+/**
+ * The body of the session's `POST /api/session/:id/end` once it comes, so a Coda can know at once whether its
+ * unlock moment is due (the tools unlocked since the session began) instead of waiting to see if it appears.
+ */
+export function sessionEnd(page: Page): () => Promise<{ unlocks: unknown[] }> {
+  const ends: Promise<{ unlocks: unknown[] }>[] = [];
+  page.on("response", (r) => {
+    if (r.request().method() === "POST" && /\/api\/session\/[^/]+\/end$/.test(new URL(r.url()).pathname))
+      ends.push(r.json() as Promise<{ unlocks: unknown[] }>);
+  });
+  return async () => {
+    await expect
+      .poll(() => ends.length, { message: "the session ended", timeout: 30_000 })
+      .toBeGreaterThan(0);
+    return (await ends.at(-1)) as { unlocks: unknown[] };
+  };
+}
+
+/**
+ * A listening step just started: it plays (the toggle is pressed), listening never gates (Skip is offered from
+ * the start), and the transport moves on from its first reading (beat-level, so a one-bar loop moves too).
+ */
+export async function playsAndMoves(page: Page): Promise<void> {
+  const toggle = page.getByTestId("play-toggle").first();
+  await expect(toggle, "it plays").toHaveAttribute("aria-pressed", "true", { timeout: 30_000 });
+  await expect(page.getByTestId("continue"), "listening never gates (Skip from the start)").toHaveText(
+    /Skip/,
+  );
+  const counter = page.getByTestId("bar-counter").first();
+  const first = ((await counter.textContent()) ?? "").trim();
+  expect(first, "the bar counter").toMatch(/^\d+\.\d+ \/ \d+$/);
+  await expect
+    .poll(async () => ((await counter.textContent()) ?? "").trim(), {
+      message: `the transport moves on from ${first}`,
+      timeout: 15_000,
+    })
+    .not.toBe(first);
 }
 
 export async function openToday(page: Page): Promise<void> {
@@ -74,7 +177,10 @@ export async function shootAll(page: Page, name: string): Promise<void> {
     await page.evaluate((t) => {
       document.documentElement.dataset.theme = t;
     }, m.theme);
-    await page.waitForTimeout(150);
+    // The new size and theme laid out and painted (two frames), in place of a fixed 150 ms per shot.
+    await page.evaluate(
+      () => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
+    );
     await shoot(page, SHOTS, name, m.theme);
   }
   if (size) await page.setViewportSize(size);

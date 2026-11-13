@@ -22,7 +22,15 @@ import { SCREENSHOT_MATRIX } from "../../../../../e2e/support/stack.ts";
 import { PREFS_KEY, shoot, useUiPrefs } from "../../../../../e2e/support/ui.ts";
 import { stack } from "./playwright.config.ts";
 import { readStaff, verify } from "./staff-read.ts";
-import { api, contrastIssues, createSketch, expectNoHorizontalOverflow, SHOTS, seed } from "./support.ts";
+import {
+  animationsDone,
+  api,
+  contrastIssues,
+  createSketch,
+  expectNoHorizontalOverflow,
+  SHOTS,
+  seed,
+} from "./support.ts";
 
 const WB = "[data-testid=workbench]";
 const STAFF = "[data-testid=staff-view]";
@@ -75,7 +83,12 @@ test.beforeAll(async ({ browser }) => {
 function watchErrors(page: Page): string[] {
   const errors: string[] = [];
   page.on("console", (m) => {
-    if (m.type() === "error" && !/\[eval\]|strudel|Failed to load resource/i.test(m.text()))
+    // Strudel's REPL logs the learner's own evaluation error (repl.mjs `console.error(err)`): on the Vite dev server
+    // its stack names `@strudel_core.js`, in the runner's bundle a hashed chunk, so the eval frame is matched too.
+    if (
+      m.type() === "error" &&
+      !/\[eval\]|strudel|Failed to load resource|\n\s+at eval \(eval at /i.test(m.text())
+    )
       errors.push(m.text());
   });
   page.on("pageerror", (e) => errors.push(e.message));
@@ -729,6 +742,8 @@ test("a tutor turn and review full of sections and numerals, hostile: chips sele
     await b.click();
     await expect(page.locator(WB)).toHaveAttribute("data-loop", "5-6");
     await b.click();
+    // The chip's definition opens on focus with a fade: read the colours once it has finished.
+    await animationsDone(page);
     expect(await contrastIssues(page), `${m.theme} ${m.width}`).toEqual([]);
     await shoot(page, SHOTS, "w5s-tutor-sections", m.theme);
     await page.unroute("**/api/tutor/chat");
