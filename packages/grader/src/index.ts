@@ -69,6 +69,11 @@ import { toTutorEvalView as toTutorEvalViewImpl } from "./analyze/tutor-view.ts"
 import { FEEDBACK_CATALOG as CATALOG, renderFeedback as renderFeedbackImpl } from "./feedback/catalog.ts";
 import { compareWith } from "./grade/compare.ts";
 import { type GradeDeps, gradeWith } from "./grade/index.ts";
+import { type LadderGradeRequest, ladderGradeRequest as ladderGradeRequestImpl } from "./grade/ladder.ts";
+import {
+  type PhraseCheckGradeRequest,
+  phraseCheckRequest as phraseCheckRequestImpl,
+} from "./grade/phrase-check.ts";
 import { toolsUsed as toolsUsedImpl } from "./lint/index.ts";
 import { runMatcher as runMatcherImpl } from "./match/index.ts";
 import { normalize as normalizeImpl } from "./normalize/nevent.ts";
@@ -180,4 +185,79 @@ export function runRubric(
 /** `evaluate_strudel` output (≤ 64 events per track), before redaction. */
 export function toTutorEvalView(result: EvalResult, ctx: NormalizeContext): TutorEvalView {
   return toTutorEvalViewImpl(result, ctx);
+}
+
+// --- Wave 4 seams (docs/design/wave4.md §3.2) ------------------------------------------------------
+
+export {
+  type BeatHarmony,
+  type FunctionBand,
+  type HarmonyView,
+  harmonyView,
+  type MelodyNoteRelation,
+  type MelodyNoteRole,
+  type SoundingChord,
+} from "./analyze/harmony-view.ts";
+export { STAGE_PASS, stagePassed } from "./grade/index.ts";
+export {
+  type CapstoneLength,
+  capstoneLength,
+  LADDER_MATCHERS,
+  LADDER_PASS,
+  type LadderGradeRequest,
+  type LadderItemSpec,
+  type LadderLevel,
+  type LadderSessionScore,
+  type LadderStage,
+  ladderExercise,
+  ladderGradedPass,
+  ladderGradeRequest,
+  ladderMatcher,
+  nextRealism,
+  REALISM_DOWN_BELOW,
+  REALISM_UP_AFTER,
+  REALISM_UP_AT,
+  type RealismLevel,
+} from "./grade/ladder.ts";
+export {
+  PHRASE_PASS,
+  PHRASE_STAGE_PASS,
+  type PhraseCheckGradeRequest,
+  phraseCheckExercise,
+  phraseCheckPassed,
+  phraseCheckRequest,
+  phraseMatcher,
+  phraseReference,
+  phraseWindow,
+} from "./grade/phrase-check.ts";
+export { staffChordsCheck } from "./grade/staff-chords.ts";
+export {
+  type GateCheck,
+  type GateFault,
+  trackChords,
+  type VoicedChord,
+  voicedChords,
+  voicingGateCheck,
+} from "./rubric/harmony-rules.ts";
+
+/**
+ * Grades one phrase check of a transcribe capstone (X1) in the browser grader host, capstone mode: the
+ * phrase's window of the learner's draft against the chosen song's answer key (pass 0.85; chord stages 0.80).
+ */
+export function gradePhraseCheck(req: PhraseCheckGradeRequest): Promise<GradeResult> {
+  return gradeExercise(phraseCheckRequestImpl(req));
+}
+
+/** Grades a ladder submission exactly against the hidden reference (contracts §6.12; pass ≥ 0.85). */
+export function gradeLadder(req: LadderGradeRequest): Promise<GradeResult> {
+  return gradeExercise(ladderGradeRequestImpl(req));
+}
+/**
+ * Grades a capstone draft in `capstone` mode (contracts §6.4: the whole piece up to 128 bars, 5 s, 60 000 haps,
+ * `durationSec` from the AST). Same pipeline as `gradeExercise`; only the mode is fixed.
+ */
+export function gradeCapstone(
+  req: Omit<GradeRequest, "ctx"> & { ctx: Omit<GradeRequest["ctx"], "mode"> },
+): Promise<GradeResult> {
+  return gradeExercise({ ...req, ctx: { ...req.ctx, mode: "capstone" } });
 }

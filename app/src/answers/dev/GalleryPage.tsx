@@ -25,6 +25,7 @@ import {
   STATES,
   stateOf,
 } from "./fixtures.ts";
+import { StagedSection } from "./StagedGallery.tsx";
 
 const STATE_LABEL: Record<GalleryState, string> = {
   idle: "Idle",
@@ -162,6 +163,7 @@ const WIDE = new Set([
   "blanks",
   "code",
   "click-code",
+  "slot-choice",
 ]);
 
 function Section({ f, env, states }: { f: Fixture; env: AnswerEnv; states: readonly GalleryState[] }) {
@@ -230,9 +232,24 @@ export function Gallery() {
     return { ...f, expected: top.id, sample: events[0]?.id ?? null } as Fixture;
   }).filter((f) => !only || f.id === only);
 
+  // `?verb=save` draws every widget as a checkpoint does (Enter saves); `?lenses=off` turns every lens off.
+  const save = params.get("verb") === "save";
+  const lensesOff = params.get("lenses") === "off";
   const envFor = (f: Fixture): AnswerEnv => ({
     profile: NEUTRAL_PROFILE,
     audio: appAudio,
+    ...(save ? { submitVerb: "save" as const } : {}),
+    ...(lensesOff
+      ? {
+          lenses: {
+            degrees: false,
+            solfege: false,
+            noteNames: false,
+            chordSymbols: false,
+            romanNumerals: false,
+          },
+        }
+      : {}),
     ...(f.env ?? {}),
     ...(f.kind === "click-staff" || f.kind === "click-roll" ? { music: music.model } : {}),
   });
@@ -261,6 +278,16 @@ export function Gallery() {
             {f.title}
           </a>
         ))}
+        <a
+          href="?only=staged"
+          aria-current={only === "staged" ? "page" : undefined}
+          className={clsx(
+            "rounded-control px-2 py-1 text-sm no-underline hover:bg-surface-2",
+            only === "staged" ? "bg-surface-2 text-text" : "text-text-2",
+          )}
+        >
+          Staged chord dictation
+        </a>
       </nav>
       <main id="main" className="h-dvh min-w-0 flex-1 overflow-y-auto" data-ready={ready ? "1" : "0"}>
         <div className="mx-auto flex max-w-[72rem] flex-col gap-8 px-6 py-6">
@@ -299,10 +326,17 @@ export function Gallery() {
           {music.error && !ready ? (
             <p className="text-sm text-text-2">The melody did not analyse: {music.error}</p>
           ) : null}
-          {fixtures.length === 0 ? <p className="text-text-2">No widget is called “{only}”.</p> : null}
+          {fixtures.length === 0 && only !== "staged" ? (
+            <p className="text-text-2">No widget is called “{only}”.</p>
+          ) : null}
           {fixtures.map((f) => (
             <Section key={`${f.id}-${String(f.expected)}`} f={f} env={envFor(f)} states={states} />
           ))}
+          {!only || only === "staged" ? (
+            <AnswerEnvProvider value={save ? { submitVerb: "save" } : {}}>
+              <StagedSection />
+            </AnswerEnvProvider>
+          ) : null}
         </div>
       </main>
     </div>

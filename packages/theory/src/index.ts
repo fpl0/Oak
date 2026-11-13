@@ -127,3 +127,22 @@ import type { ScaleId, ScaleMode } from "@oak/content-kit";
 export function scaleIdOf(mode: ScaleMode): ScaleId {
   return `scale.${mode.replace(/ /g, "-")}`;
 }
+// Wave 4 seam (docs/design/wave4.md §3.1): harmony questions of U05–U07 in one call each.
+export {
+  type ChordDialect,
+  type ChordReading,
+  cadenceOf,
+  chordOfRoman,
+  chordSymbol,
+  diatonicChordOn,
+  harmonicFunction,
+  READABLE_QUALITIES,
+  readChord,
+  romanParts,
+  romanText,
+  schemaOf,
+  type ToneContext,
+  type ToneRole,
+  toneRole,
+} from "./harmony.ts";
+export { inversionOf } from "./roman.ts";

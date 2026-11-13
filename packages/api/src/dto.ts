@@ -3,7 +3,15 @@
 // docs/design/interfaces.md. Absent values are `null` in responses (never a missing key).
 import { DEGREES, FLAVOUR_IDS, type LearnerProfile, schemas } from "@oak/content-kit";
 import { z } from "zod";
-import { BACKEND_IDS, RungSchema, TUTOR_HEALTH, TutorSettingsSchema } from "./tutor.ts";
+import {
+  BACKEND_IDS,
+  CapstoneReviewSchema,
+  RungSchema,
+  SubjectRefSchema,
+  TranscriptionReviewSchema,
+  TUTOR_HEALTH,
+  TutorSettingsSchema,
+} from "./tutor.ts";
 
 const {
   idSchema,
@@ -13,6 +21,7 @@ const {
   KeySpecSchema,
   NEventSchema,
   AnalysisSummarySchema,
+  PickupSpecSchema,
 } = schemas;
 
 // --- primitives ---------------------------------------------------------------------------------
@@ -150,10 +159,20 @@ export const LensPrefsSchema = z.strictObject({
   solfege: z.boolean(),
   /** Spelled note names ("F♯4"). Never gated. */
   noteNames: z.boolean(),
+  /**
+   * Wave 4 (docs/design/wave4.md §4.3): lead-sheet chord symbols on the roll's chord band and above the staff.
+   * Absent = on. Gated by the chord-symbol unlock of U05.L04.
+   */
+  chordSymbols: z.boolean().optional(),
+  /** Wave 4: Roman numerals under the staff and on the chord band. Absent = on. Gated by tb.feature.rn (U06.L02). */
+  romanNumerals: z.boolean().optional(),
 });
 export type LensPrefs = z.infer<typeof LensPrefsSchema>;
 export const LENS_IDS = ["degrees", "solfege", "noteNames"] as const;
 export type LensId = (typeof LENS_IDS)[number];
+/** Wave 4: the chord-label lenses, kept apart from the note-label ones so note-lens switches stay as they are. */
+export const CHORD_LENS_IDS = ["chordSymbols", "romanNumerals"] as const;
+export type ChordLensId = (typeof CHORD_LENS_IDS)[number];
 
 /** `settings` rows by key. `PUT /api/settings/:key` validates the value with this shape's entry. */
 export const SettingsSchema = z.object({
@@ -432,6 +451,12 @@ export const FamilyStateSchema = z.object({
    * server older than Wave 3.
    */
   restingSince: Day.nullable().optional(),
+  /**
+   * Wave 4 (docs/design/wave4.md §5): per-category hits of the learner's sung resolutions (a passed resolution is a
+   * hit), the drill engine's `SetPlanInput.sungStats`. Only on FET families with sung resolutions; absent from a
+   * server older than Wave 4 (the drills then fall back to `categoryStats`).
+   */
+  sungStats: z.record(z.string(), z.object({ n: z.number().int(), hits: z.number() })).optional(),
 });
 export type FamilyState = z.infer<typeof FamilyStateSchema>;
 
@@ -1127,6 +1152,8 @@ export const AlbumTrackVersionSchema = z.object({
   band: bandState.nullable(),
   flags: sketchFlags,
   createdAt: Instant,
+  /** Wave 4: whether the review's liner note shows in the album for this version (absent: not chosen yet). */
+  includeReviewNote: z.boolean().optional(),
 });
 export type AlbumTrackVersion = z.infer<typeof AlbumTrackVersionSchema>;
 /** `album_tracks` row. Side A: core capstones; side B: advanced capstones; Bside: promoted sketches. */
@@ -1185,6 +1212,28 @@ const region = z.strictObject({
   endS: z.number(),
   kind: z.enum(["loop", "section"]),
 });
+/**
+ * Wave 4 (docs/design/wave4.md §5.3): what Transcribe remembers of a project between visits: the player's rate,
+ * transposition, fine-tune and A–B loop, and the learner's own notes. Rate is 25–100 % (contracts §6.12); a
+ * pattern source ignores `fineTuneCents` and rounds its loop to whole bars.
+ */
+export const TranscriptionSettingsSchema = z.strictObject({
+  rate: z.number().min(0.25).max(1),
+  semitones: z.number().int().min(-12).max(12),
+  fineTuneCents: z.number().min(-50).max(50),
+  loop: z.strictObject({ startS: z.number().nonnegative(), endS: z.number().nonnegative() }).nullable(),
+  /** The learner's own notes on the project (never sent to the tutor without the learner asking). */
+  notes: z.string().max(4000),
+});
+export type TranscriptionSettings = z.infer<typeof TranscriptionSettingsSchema>;
+export const DEFAULT_TRANSCRIPTION_SETTINGS: TranscriptionSettings = {
+  rate: 1,
+  semitones: 0,
+  fineTuneCents: 0,
+  loop: null,
+  notes: "",
+};
+
 /** `transcriptions` row. `hiddenCode` (pattern sources) never reaches the browser's editors or DOM. */
 export const TranscriptionSchema = z.object({
   id: z.string(),
@@ -1211,6 +1260,19 @@ export const TranscriptionSchema = z.object({
   review: z.unknown().nullable(),
   createdAt: Instant,
   updatedAt: Instant,
+  /** Wave 4: the player settings and notes (absent from a server older than Wave 4: use the defaults). */
+  settings: TranscriptionSettingsSchema.optional(),
+  /**
+   * Wave 4: a graded ladder pass (status pass at ≥ 0.85, not revealed) — what ladder milestones count
+   * (wave3.md known gap: a finished generated transcription is no longer enough). Absent = false.
+   */
+  gradedPass: z.boolean().optional(),
+  /** Wave 4: the gym session (`GYM.nn`) this project was worked in, if any. */
+  gymId: z
+    .string()
+    .regex(/^GYM\.\d{2}$/)
+    .nullable()
+    .optional(),
 });
 export type Transcription = z.infer<typeof TranscriptionSchema>;
 export const TranscriptionVersionSchema = z.object({
@@ -1228,6 +1290,18 @@ export const TranscriptionDetailSchema = TranscriptionSchema.extend({
       cps: z.number(),
       bars: z.number(),
       preload: z.array(z.string()),
+      /**
+       * Wave 4 integration (additive): a generated ladder item's performance hints, as `@oak/drills`
+       * `LadderPiece.performance` made them — the part realism buries (R3), whether the comping swings (R2, jazz-soul)
+       * and the vocal-like lead at R4. The browser passes them to `@oak/strudel` `realismSpec`. Absent on PD songs.
+       */
+      performance: z
+        .object({
+          target: z.string(),
+          swung: z.boolean(),
+          vocalLead: z.enum(["tenor", "choir"]).nullable(),
+        })
+        .optional(),
     })
     .nullable(),
 });
@@ -1251,7 +1325,8 @@ export const TranscriptionPatchSchema = z
     downbeatS: z.number().nullable(),
     fineTuneCents: z.number().min(-50).max(50),
     regions: z.array(region),
-    checklist: z.record(z.string(), z.number()),
+    /** Self-assessment, 0 to 2 per item (contracts §6.12): each change is self-reported evidence, so out of range is refused. */
+    checklist: z.record(z.string().max(64), z.number().min(0).max(2)),
     selfScore: z.number().nullable(),
     status: z.enum(["in_progress", "done"]),
   })
@@ -1261,6 +1336,11 @@ export const TranscriptionVersionCreateSchema = z.strictObject({
   code: z.string().max(60_000),
   result: GradeResultSchema.nullable(),
   ranOk: z.boolean(),
+  /**
+   * Wave 4: the code is a "Hum it, Oak drafts it" draft the learner has not edited yet (contracts §6.12): it gives
+   * no evidence until a corrected version is checked. Default false.
+   */
+  machineDraft: z.boolean().optional(),
 });
 
 // --- telemetry and QA (contracts §9.7, §11.8) ---------------------------------------------------
@@ -1447,7 +1527,22 @@ export const BackupInfoSchema = z.object({
   bytesWithAudio: z.number().int(),
   bytesWithoutAudio: z.number().int(),
   lastAutomatic: Day.nullable(),
+  /**
+   * Wave 4 integration (additive): the learner's own recordings (`audio.upload`) — all of them, and those no
+   * transcription project uses any more (left behind by a deleted project). Absent from older servers.
+   */
+  ownAudio: z
+    .object({
+      files: z.number().int().nonnegative(),
+      bytes: z.number().int().nonnegative(),
+      unusedFiles: z.number().int().nonnegative(),
+      unusedBytes: z.number().int().nonnegative(),
+    })
+    .optional(),
+  /** Wave 4 integration (additive): bytes of the album's recordings (every version). */
+  albumAudioBytes: z.number().int().nonnegative().optional(),
 });
+export type BackupInfo = z.infer<typeof BackupInfoSchema>;
 export const BackupImportResultSchema = z.object({
   ok: z.literal(true),
   tables: z.number().int(),
@@ -1666,6 +1761,11 @@ export const DevSeedRequestSchema = z.strictObject({
    * mic and range steps). `false`: no microphone (`inputKind: "none"`, Quiet mode with reason `no-mic`).
    */
   mic: z.boolean().optional(),
+  /**
+   * Wave 4 (additive): each capstone release the seeder makes gets a recording (default true). `false`: the album
+   * holds released tracks with no recording yet, as before Wave 4.
+   */
+  recordings: z.boolean().optional(),
 });
 export type DevSeedRequest = z.infer<typeof DevSeedRequestSchema>;
 export const DevSeedResultSchema = z.object({
@@ -1847,3 +1947,357 @@ export const WAVE3_SEED_POINTS = [
   "after U04.CP",
 ] as const;
 export type Wave3SeedPoint = (typeof WAVE3_SEED_POINTS)[number];
+
+// --- Wave 4 additions (docs/design/wave4.md §5) ----------------------------------------------------
+// Harmony, album and transcription. Additive: existing shapes only gained optional fields (above); every new
+// endpoint answers a typed 501 until the server engineer builds it (`WAVE4_ENDPOINTS` in contract.ts).
+
+const gymId = z.string().regex(/^GYM\.\d{2}$/);
+const capstoneSessionId = idSchema("capstoneSession");
+const ladderLevel = z.number().int().min(1).max(4);
+const realismLevel = z.number().int().min(0).max(4);
+
+// capstones: one capstone over several sessions (C2.S1–S2, X1.S1–S3; contracts §2.4, §6.6) -----------------
+
+export const CAPSTONE_SESSION_STATUSES = ["locked", "open", "in_progress", "done"] as const;
+/**
+ * The state of one graded check of a transcribe capstone session (content-kit `CapstoneSessionDef.checks`,
+ * `PhraseCheck`): a phrase's melody by ear (X1: `melody`, key-relative, ≥ 0.85), or one stage of its chords
+ * bass-first (`bass` → `quality` → `rn`, each ≥ 0.80, in order). One row per check, and per stage for staged ones.
+ */
+export const CapstoneCheckStateSchema = z.object({
+  /** `PhraseCheck.id` (slug, unique in the capstone). */
+  checkId: z.string(),
+  /** 1-based phrase, or `[from, to]` for several phrases checked together. */
+  phrase: z.union([z.number().int().min(1), z.tuple([z.number().int().min(1), z.number().int().min(1)])]),
+  layer: z.enum(["melody", "bass", "chords"]),
+  /** The stage of a staged chords check; `null` otherwise. */
+  stage: z.enum(["bass", "quality", "rn"]).nullable(),
+  /** Locked until the stage before it passed. */
+  open: z.boolean(),
+  /** Best score so far; `null` before the first check. */
+  score: z.number().min(0).max(1).nullable(),
+  passed: z.boolean(),
+  /** Revealed with hint 4: no evidence, named in the liner notes. */
+  revealed: z.boolean(),
+  attempts: z.number().int().nonnegative(),
+  lastAt: Instant.nullable(),
+});
+export type CapstoneCheckState = z.infer<typeof CapstoneCheckStateSchema>;
+/** One session of a capstone (`C2.S1`): its status, its draft and, for X1, its phrase and stage checks. */
+export const CapstoneSessionStateSchema = z.object({
+  capstoneSessionId,
+  status: z.enum(CAPSTONE_SESSION_STATUSES),
+  /** The Oak session (`sessions` row) it was worked in, when started from Today. */
+  sessionId: z.string().nullable(),
+  /** The latest saved draft (a sketch version; "the draft save is the Make", contracts §9.1). */
+  draft: z
+    .object({ sketchId: z.string(), sketchVersion: z.number().int().positive(), savedAt: Instant })
+    .nullable(),
+  /** Transcribe capstones: the session's checks (X1.S1: phrases 1–2; S2: 3–4; S3: chords by stage). Empty for compositions. */
+  checks: z.array(CapstoneCheckStateSchema),
+  startedAt: Instant.nullable(),
+  completedAt: Instant.nullable(),
+});
+export type CapstoneSessionState = z.infer<typeof CapstoneSessionStateSchema>;
+/** `GET /capstones/:id/sessions`. */
+export const CapstoneSessionsSchema = z.object({
+  capstoneId,
+  sessions: z.array(CapstoneSessionStateSchema),
+  /** The session to work in next (`X1.S2`), `null` once all are done. */
+  current: capstoneSessionId.nullable(),
+});
+export type CapstoneSessions = z.infer<typeof CapstoneSessionsSchema>;
+/** `POST /capstones/:id/drafts`: a draft saved in a capstone session (also counts as the session's Make). */
+export const CapstoneDraftSaveSchema = z.strictObject({
+  capstoneSessionId,
+  sessionId: z.string().nullable(),
+  sketchId: z.string(),
+  sketchVersion: z.number().int().positive(),
+});
+export type CapstoneDraftSave = z.infer<typeof CapstoneDraftSaveSchema>;
+/** `POST /capstones/:id/checks/:checkId`: one transcribe-capstone check (or stage) graded in the browser. */
+export const CapstoneCheckRecordSchema = z.strictObject({
+  capstoneSessionId,
+  /** For a staged chords check: the stage this result answers. */
+  stage: z.enum(["bass", "quality", "rn"]).nullable(),
+  sketchId: z.string(),
+  sketchVersion: z.number().int().positive(),
+  result: GradeResultSchema,
+  idempotencyKey: IdempotencyKeySchema.optional(),
+});
+export type CapstoneCheckRecord = z.infer<typeof CapstoneCheckRecordSchema>;
+/** What a capstone needs to open, and what is met (contracts §2.4; X1: U07.CP, C2 released, `fam.mel.dictation` ≥ 4). */
+export const CapstoneGateConditionSchema = z.object({
+  /** `lesson` (build phase, additive): a lesson that must be completed (CF-T opens at U15.L01). */
+  kind: z.enum(["checkpoint", "capstone", "family-level", "lesson"]),
+  /** `U07.CP`, `C2`, `fam.mel.dictation`, `U15.L01`. */
+  ref: z.string(),
+  /** Plain copy: "U07 checkpoint passed", "C2 released", "Melodic dictation at level 4". */
+  label: z.string(),
+  met: z.boolean(),
+  /** Family level now and needed (`family-level` only). */
+  have: z.number().int().nullable(),
+  need: z.number().int().nullable(),
+});
+export const CapstoneGateSchema = z.object({
+  capstoneId,
+  open: z.boolean(),
+  conditions: z.array(CapstoneGateConditionSchema),
+  /** X1 only: gym sets the planner schedules to reach the family level ("Two more gym sets open X1"); else `null`. */
+  gymSetsToOpen: z.number().int().nonnegative().nullable(),
+  /** The one line Today and the capstone page show while closed ("Two more gym sets open X1"); `null` when open. */
+  message: z.string().nullable(),
+});
+export type CapstoneGate = z.infer<typeof CapstoneGateSchema>;
+
+// album: versions, liner notes, recordings, reviews (contracts §10.6, §10.7, §11.10) ------------------------
+
+/** `PATCH /album/tracks/:id/versions/:v`: edit a version's liner notes and whether the review's note shows. */
+export const AlbumVersionPatchSchema = z
+  .strictObject({
+    linerNotesMd: z.string().max(4000),
+    includeReviewNote: z.boolean(),
+  })
+  .partial()
+  .refine((b) => Object.keys(b).length > 0, { message: "nothing to change" });
+export type AlbumVersionPatch = z.infer<typeof AlbumVersionPatchSchema>;
+/**
+ * `PUT /album/tracks/:id/versions/:v/review`: attach the tutor's submitted capstone review to a version
+ * (`album_track_versions.review_json`). The review comes from a finished `review` conversation; the server
+ * checks the conversation's subject is this track's capstone and that its `submit_capstone_review` was accepted.
+ */
+export const AlbumReviewAttachSchema = z.strictObject({
+  conversationId: z.string(),
+  review: CapstoneReviewSchema,
+  includeReviewNote: z.boolean(),
+});
+export type AlbumReviewAttach = z.infer<typeof AlbumReviewAttachSchema>;
+
+// tutor reviews as records (one schema per kind, contracts §10.6) -------------------------------------------
+
+/** A submitted review as stored, with what it reviewed. `GET /tutor/reviews?subjectKind&subjectId`. */
+export const ReviewRecordSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("capstone"),
+    subject: SubjectRefSchema,
+    conversationId: z.string(),
+    /** The album version it is attached to, when attached. */
+    track: z.object({ trackId: z.string(), version: z.number().int().positive() }).nullable(),
+    review: CapstoneReviewSchema,
+    at: Instant,
+  }),
+  z.object({
+    kind: z.literal("transcription"),
+    subject: SubjectRefSchema,
+    conversationId: z.string(),
+    /** The transcription version reviewed. */
+    version: z.number().int().nullable(),
+    review: TranscriptionReviewSchema,
+    at: Instant,
+  }),
+]);
+export type ReviewRecord = z.infer<typeof ReviewRecordSchema>;
+
+// audio and own-audio projects (contracts §2.8, §6.12, §11.10) ---------------------------------------------
+
+/** The server's upload limit (`server/src/services/audio-store.ts` MAX_AUDIO_BYTES), for a check before upload. */
+export const AUDIO_UPLOAD_MAX_BYTES = 300 * 1024 * 1024;
+/** Containers the audio store recognises by their first bytes (anything else is refused with 400). */
+export const AUDIO_UPLOAD_TYPES = [
+  "audio/wav",
+  "audio/flac",
+  "audio/ogg",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/webm",
+  "audio/aiff",
+] as const;
+/**
+ * The default self-assessed checklist of an own-audio project (contracts §6.12: `grading.mode: 'self'`, a
+ * 0 to 2 score per item, evidence weight 0.3 flagged `selfReported`). Item IDs are stable.
+ */
+export const OWN_AUDIO_CHECKLIST = [
+  { id: "contour", label: "The melody goes up and down where the recording does" },
+  { id: "rhythm", label: "The notes land where the recording's notes land" },
+  { id: "landing", label: "Phrases end on the same notes as the recording" },
+  { id: "bass", label: "The bass notes match the recording's bass" },
+  { id: "chords", label: "The chords change where the recording's chords change" },
+] as const;
+/** `PUT /transcriptions/:id/settings`: remember the player and the notes (partial). */
+export const TranscriptionSettingsPatchSchema = TranscriptionSettingsSchema.partial().refine(
+  (b) => Object.keys(b).length > 0,
+  { message: "nothing to change" },
+);
+export type TranscriptionSettingsPatch = z.infer<typeof TranscriptionSettingsPatchSchema>;
+
+// the transcription ladder L1–L4 (contracts §2.9, §6.12) --------------------------------------------------
+
+export const LadderSessionScoreSchema = z.object({
+  level: ladderLevel,
+  realism: realismLevel,
+  score: z.number().min(0).max(1),
+  passed: z.boolean(),
+  day: Day,
+  gymId: gymId.nullable(),
+});
+export type LadderSessionScore = z.infer<typeof LadderSessionScoreSchema>;
+/** `GET /ladder`: where the learner stands on the generated ladder. */
+export const LadderStateSchema = z.object({
+  /** The level graded items are drawn at (1–4 in Wave 4; L5+ are songs and capstones). */
+  level: ladderLevel,
+  /** R0–R4: raised after two consecutive sessions ≥ 0.9, lowered after one below 0.6 (contracts §6.12). */
+  realism: realismLevel,
+  /** Last 10 ladder sessions, oldest first. */
+  history: z.array(LadderSessionScoreSchema),
+  /** Graded passes per level (`"1"`…`"4"` → count): the evidence for a level-up and for ladder milestones. */
+  gradedPasses: z.record(z.string(), z.number().int().nonnegative()),
+  /** A level-up the learner may take (wave4.md §5.4: two graded passes at R2 or higher on two days). */
+  levelUp: z.object({ to: ladderLevel, reason: z.string() }).nullable(),
+});
+export type LadderState = z.infer<typeof LadderStateSchema>;
+/** `POST /ladder/items`: the next generated item, created as a `generated` transcription project. */
+export const LadderNextSchema = z.strictObject({
+  sessionId: z.string().nullable(),
+  gymId: gymId.nullable(),
+  /** Default: the learner's level. A lower level is allowed (practice); a higher one only when offered. */
+  level: ladderLevel.optional(),
+  /** Default: a fresh seed. A seed replays the same item (tests, "try this one again"). */
+  seed: z.number().int().nonnegative().optional(),
+});
+export type LadderNext = z.infer<typeof LadderNextSchema>;
+/** The item: its project (hidden code stays on the server) and what the learner is told. */
+export const LadderItemSchema = z.object({
+  /** = the transcription project ID; submissions go to `/ladder/items/:id/submissions`. */
+  itemId: z.string(),
+  level: ladderLevel,
+  realism: realismLevel,
+  seed: z.number().int().nonnegative(),
+  /** L3 is staged: `bass`, then `quality`, then `rn` (each its own submission). `null` for the other levels. */
+  stages: z.array(z.enum(["bass", "quality", "rn"])).nullable(),
+  /** Given to the learner (contracts §6.12): tempo, meter, key, pickup. */
+  given: z.object({
+    bpm: z.number(),
+    meter: meterId,
+    key: KeySpecSchema,
+    pickup: PickupSpecSchema.nullable(),
+    bars: z.number().int().positive(),
+  }),
+  project: TranscriptionDetailSchema,
+});
+export type LadderItem = z.infer<typeof LadderItemSchema>;
+/** `POST /ladder/items/:id/submissions`: the learner's code, graded exactly on the server. */
+export const LadderSubmitSchema = z.strictObject({
+  sessionId: z.string().nullable(),
+  code: z.string().max(60_000),
+  /** L3 only: which stage this submission answers. */
+  stage: z.enum(["bass", "quality", "rn"]).optional(),
+  /** Hint ladder state of the item (rung 4 = revealed: no graded pass). */
+  rung: RungSchema,
+  idempotencyKey: IdempotencyKeySchema.optional(),
+});
+export type LadderSubmit = z.infer<typeof LadderSubmitSchema>;
+export const LadderSubmitResultSchema = z.object({
+  result: GradeResultSchema,
+  /** status pass and score ≥ 0.85. */
+  passed: z.boolean(),
+  /** A pass that counts for milestones and level-ups: passed, not revealed, every stage of L3 passed. */
+  gradedPass: z.boolean(),
+  ladder: LadderStateSchema,
+  /** Announced once (in the Coda), never mid-item. */
+  realismChange: z.object({ from: realismLevel, to: realismLevel }).nullable(),
+  /** The saved transcription version. */
+  version: z.number().int(),
+});
+export type LadderSubmitResult = z.infer<typeof LadderSubmitResultSchema>;
+/** `PUT /ladder`: take an offered level-up, or move down a level. */
+export const LadderLevelSetSchema = z.strictObject({ level: ladderLevel });
+export type LadderLevelSet = z.infer<typeof LadderLevelSetSchema>;
+
+// the Transcription Gym (contracts §2.5, §9.1) ---------------------------------------------------------
+
+/** `GET /gym`: the slot rule's state and what the next gym session is. */
+export const GymPlanSchema = z.object({
+  /** True from U07.L01 on (the slot rule runs). */
+  active: z.boolean(),
+  /** Completed core sessions since the last transcription session (gym, X#.S#, CF-T.S#). */
+  sinceLast: z.number().int().nonnegative(),
+  /** True when the next session's New block is a transcription slot (count reached 4, nothing in progress). */
+  slotDue: z.boolean(),
+  /** What the slot holds next (`null` while the rule is off or an `X#` session takes the slot). */
+  next: z
+    .object({
+      gymId,
+      /** Odd: graded ladder; even: own audio (contracts §2.5). */
+      kind: z.enum(["ladder", "own-audio"]),
+      ladderLevel: ladderLevel.nullable(),
+      realism: realismLevel.nullable(),
+      /** An even slot with no audio project: a ladder session one realism level up. */
+      ownAudioFallback: z.boolean(),
+      /** The own-audio project to continue, when there is one. */
+      transcriptionId: z.string().nullable(),
+    })
+    .nullable(),
+  /** Gym sessions taken, oldest first. */
+  history: z.array(GymSessionSchema),
+  /** X1's gate, while X1 is not open (Today: "Two more gym sets open X1"). */
+  x1: CapstoneGateSchema.nullable(),
+});
+export type GymPlan = z.infer<typeof GymPlanSchema>;
+
+// the voicing gate (contracts §3.1 rule 6; content/toolbox.ts VOICING_GATE) ------------------------------
+
+/**
+ * `GET /gates/voicing`: the U05.L07 hand-voiced cadence check that unlocks `voicing()`, `chord()`, `rhodes`,
+ * `organ` and the rest of the gated rows at ≥ 0.9, unrevealed, from the learner's own typing only (a
+ * tutor-applied card gives no evidence). Evaluated by the server on `steps.attempt` of that exercise or a variant.
+ */
+export const VoicingGateSchema = z.object({
+  exerciseId: z.string(),
+  /**
+   * Regenerated variants that also count (`VOICING_GATE.variants`: U05.L08's `gateCheck` step,
+   * `U05.L08/hand-voiced-cadence-again`, shown only while the gate is unmet).
+   */
+  variants: z.array(z.string()),
+  minScore: z.number(),
+  /** Best unrevealed, learner-typed score; `null` before the first attempt. */
+  best: z.number().min(0).max(1).nullable(),
+  passed: z.boolean(),
+  passedAt: Instant.nullable(),
+  attempts: z.number().int().nonnegative(),
+  /**
+   * Wave 4 integration (additive): the code of the first qualifying attempt, as the learner typed it — the voicing
+   * the Workbench compares `voicing()` against. `null` until the gate passes; absent from older servers.
+   */
+  passedCode: z.string().nullable().optional(),
+  /** The unlocks the gate holds (tool and sound IDs), granted at U05.L08 once passed. */
+  holds: z.array(unlockable),
+});
+export type VoicingGate = z.infer<typeof VoicingGateSchema>;
+
+// dev seeds (docs/design/wave4.md §6) ---------------------------------------------------------------------
+
+/**
+ * Dev seed points Wave 4 e2e needs (`POST /dev/seed`, `point`). The server engineer implements them FIRST;
+ * `GET /dev/seed` lists what exists; wave4.md §6 says what each must contain.
+ */
+export const WAVE4_SEED_POINTS = [
+  "after U05.L04",
+  "U05.L07 gate open",
+  "after U05.L08",
+  "U05.CP due",
+  "after U06.L05",
+  "U06.CP due",
+  "after U07.L03 (gym due)",
+  "after U07.L07",
+  "U07.CP due",
+  "C2 open",
+  "C2.S1 done",
+  "C2 released",
+  "X1 open",
+  "X1.S2 done",
+  "X1 released",
+  "ladder L3",
+  "own-audio project",
+] as const;
+export type Wave4SeedPoint = (typeof WAVE4_SEED_POINTS)[number];

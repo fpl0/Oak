@@ -372,10 +372,16 @@ export class SrsAdapter implements SrsPort {
     const r = state?.resting;
     return r !== null && typeof r === "object" && !Array.isArray(r) ? (r as Record<string, string>) : {};
   }
-  /** The DTO with `restingSince` (wave3: the app says "resting in mixed practice" from it). */
+  /**
+   * The DTO with `restingSince` (wave3: the app says "resting in mixed practice" from it) and, for families whose
+   * sets ask for sung resolutions (`degree-id`, the FET families), `sungStats` (Wave 4, wave4.md §5.6).
+   */
   #withResting(dto: FamilyState, resting: Record<string, string> = this.#resting()): FamilyState {
     const since = resting[dto.familyId];
-    return { ...dto, restingSince: typeof since === "string" ? since : null };
+    const out: FamilyState = { ...dto, restingSince: typeof since === "string" ? since : null };
+    if (this.content.family(dto.familyId)?.generator === "degree-id")
+      out.sungStats = this.repos.srs.sungStats(dto.familyId);
+    return out;
   }
 
   families(): { families: FamilyState[]; cards: SrsCard[] } {
@@ -745,6 +751,27 @@ export class SrsAdapter implements SrsPort {
     return this.#recall.map.get(cardId) ?? null;
   }
 
+  /** Wave 4: a graded transcription (a ladder item) as other work on its family (contracts §7.4). */
+  otherWork(input: { source: "gym" | "practice" | "lesson"; familyId: string; meanCredit: number }) {
+    return this.#zoned(() =>
+      tx(this.repos.db, () => {
+        if (this.content.family(input.familyId) === null) return { reviewed: false, levelChange: null };
+        const r = this.service.otherWork(
+          {
+            source: input.source,
+            familyId: input.familyId as FamilyId,
+            meanCredit: input.meanCredit,
+            medianRtMs: 0,
+            playedLevel: null,
+          },
+          this.#now(),
+        );
+        this.#touched();
+        return { reviewed: r.reviewed !== null, levelChange: r.levelChange };
+      }),
+    );
+  }
+
   forecast(): number[] {
     const now = this.#now();
     return forecastLoad(this.service.reviewItems(now), this.service.srs.dayOf(now), 7);
@@ -823,6 +850,26 @@ export class CourseAdapter implements SessionPlanCoursePort {
     }
     return last === null ? null : this.services.streak.time.day(new Date(last));
   }
+  /**
+   * Wave 4 (contracts §6.6): X1 (any capstone opened by a family level) waits only for gym sets: its other opening
+   * conditions are met, it is not started, and the gym rule runs. Today then says "Two more gym sets open X1".
+   */
+  capstoneGymNote(): string | null {
+    if (!this.services.gates.lessonCompleted("U07.L01")) return null;
+    // The sets count on different days (contracts §7.3): after a gym day, the next one comes a day later.
+    const time = this.services.streak.time;
+    const last = this.repos.gym.list().at(-1);
+    if (last !== undefined && dayIndex(time.day()) - dayIndex(time.day(new Date(last.at))) <= 1) return null;
+    for (const c of this.content.capstones()) {
+      if ((c.opensAfter.familyLevels ?? []).length === 0) continue;
+      if (this.repos.capstones.get(c.id) !== null) continue;
+      const gate = this.services.capstoneSessions.gate(c.id);
+      if (gate.open) continue;
+      const others = gate.conditions.filter((x) => !x.met && x.kind !== "family-level");
+      if (others.length === 0 && (gate.gymSetsToOpen ?? 0) > 0) return gate.message;
+    }
+    return null;
+  }
   history(): SessionId[] {
     const done: { id: string; at: string }[] = [];
     for (const p of this.repos.lessons.allProgress())
@@ -830,7 +877,8 @@ export class CourseAdapter implements SessionPlanCoursePort {
     for (const a of this.repos.checkpoints.allAttempts())
       if ((a.passed || a.softPass) && a.finishedAt !== null) done.push({ id: a.cpId, at: a.finishedAt });
     for (const c of this.repos.capstones.all())
-      for (const [i, s] of c.sessions.entries()) done.push({ id: s, at: `${c.updatedAt}#${i}` });
+      for (const [i, s] of c.sessions.entries())
+        done.push({ id: s, at: this.repos.capstoneSessions.get(s)?.completedAt ?? `${c.updatedAt}#${i}` });
     for (const g of this.repos.gym.list()) done.push({ id: g.gymId, at: g.at });
     const seen = new Set<string>();
     return done

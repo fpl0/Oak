@@ -156,3 +156,80 @@ test("production: a mid-U03 learner from a backup starts the day's U03 session, 
   await context.setOffline(false);
   await context.close();
 });
+
+test("production: a U06 learner from a backup starts the day's U06 session and opens Transcribe, then both reload offline", async ({
+  browser,
+  request,
+}) => {
+  test.setTimeout(240_000);
+  const up = await fetch(`${PROD_URL}/api/health`, { headers: { "X-Oak": "1" } }).catch(() => null);
+  test.skip(up === null, `no production server on ${PROD_URL}`);
+  // The learner on the dev stack: U06.L05 done yesterday, so today is U06.L06. Exported with its own audio.
+  await resetClock(request);
+  await seed(request, "after U06.L05");
+  const exported = await request.get(`${stack.apiURL}/api/backup/export?audio=1`, {
+    headers: { "x-oak": "1", origin: stack.apiURL },
+  });
+  expect(exported.ok()).toBe(true);
+  const prodHeaders = { "x-oak": "1", origin: PROD_URL };
+  const nonce = await request.post(`${PROD_URL}/api/confirm`, {
+    headers: { ...prodHeaders, "content-type": "application/json" },
+    data: JSON.stringify({ action: "backup.import", target: "*" }),
+  });
+  expect(nonce.ok()).toBe(true);
+  const imported = await request.post(`${PROD_URL}/api/backup/import`, {
+    headers: {
+      ...prodHeaders,
+      "content-type": "application/octet-stream",
+      "x-oak-confirm": ((await nonce.json()) as { nonce: string }).nonce,
+    },
+    data: await exported.body(),
+  });
+  expect(imported.ok(), await imported.text()).toBe(true);
+
+  const context = await browser.newContext({ baseURL: PROD_URL, viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  const w = watch(page);
+  await page.goto("/");
+  const today = page.getByTestId("today-card");
+  await expect(today).toBeVisible({ timeout: 30_000 });
+  await expect(today).not.toHaveAttribute("data-state", /first-run|done/);
+  await expect(today).toContainText("The Four-Chord Schema");
+  await page.getByTestId("start-session").click();
+  await expect(page).toHaveURL(/\/session\/?$/);
+  await expect(page.getByTestId("warmup").or(page.getByTestId("lesson-step")).first()).toBeVisible({
+    timeout: 60_000,
+  });
+  await expect(page.getByRole("list", { name: "Today's setlist" })).toBeVisible();
+
+  // The Transcription Studio on the production build: the own-audio entry, nothing sent off this machine.
+  await page.goto("/transcribe");
+  await expect(page.getByRole("heading", { level: 1, name: "Transcribe" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("Drop an audio file — it stays on this device.")).toBeVisible();
+
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => (await navigator.serviceWorker.getRegistration())?.active?.scriptURL ?? ""),
+      { timeout: 30_000 },
+    )
+    .toMatch(/\/sw\.js/);
+  await page.reload();
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 30_000 });
+  expectClean(w);
+
+  // Offline: the Service Worker serves the shell; Transcribe and the session page still render.
+  await context.setOffline(true);
+  w.problems.length = 0;
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 1, name: "Transcribe" })).toBeVisible({ timeout: 30_000 });
+  await page.goto("/session");
+  await expect(page.locator("#main")).toBeVisible({ timeout: 30_000 });
+  const offlineProblems = w.problems.filter(
+    (p) => !/Failed to load resource|net::ERR_INTERNET_DISCONNECTED|fetch/i.test(p),
+  );
+  expect(offlineProblems).toEqual([]);
+  expect(w.remote).toEqual([]);
+  await context.setOffline(false);
+  await context.close();
+});

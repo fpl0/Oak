@@ -9,6 +9,7 @@ import { METERS } from "@oak/theory";
 import { useEffect, useRef, useState } from "react";
 import { analyzeCode } from "../lib/grader-client.ts";
 import { getOak } from "../lib/oak.ts";
+import { slicePlan } from "./plan-span.ts";
 import { cadenceChords, tonicPc } from "./rules.ts";
 
 export interface StimulusSource {
@@ -24,6 +25,11 @@ export interface StimulusSource {
    * home" for `cadence`/`short-cadence`, the tonic chord for `tonic-chord` and `drone`. Default none.
    */
   context?: Cue["context"];
+  /**
+   * Plays only these bars of the stimulus (`fromBar` 0-based, may be fractional): "hear this slot" on a slot strip.
+   * No count-in or home cue is played before a span.
+   */
+  span?: { fromBar: number; bars: number };
 }
 
 /** One bar of ii–V–I (or the tonic chord) in the key at `cps`: the cue a code stimulus plays first. */
@@ -80,9 +86,12 @@ export function joinPlans(a: AudioPlan, b: AudioPlan): AudioPlan {
 export async function playStimulus(src: StimulusSource): Promise<Playing> {
   const oak = await getOak();
   await oak.unlock();
-  const { plan, cue, cps } = await planOf(src);
+  const whole = await planOf(src);
+  const { cps } = whole;
+  const plan = src.span ? slicePlan(whole.plan, src.span.fromBar / cps, src.span.bars / cps) : whole.plan;
+  const cue = src.span ? null : whole.cue;
   const units = METERS[src.meter].unitsPerBar;
-  const countIn = src.countInBars ?? 0;
+  const countIn = src.span ? 0 : (src.countInBars ?? 0);
   // The chords that set home, then the count-in clicks (both when asked: a sung take after a cadence).
   const clicks = countIn > 0 ? clickPlan(countIn, cps, units) : null;
   const lead = cue && clicks && !src.trial ? joinPlans(cue, clicks) : (cue ?? clicks);

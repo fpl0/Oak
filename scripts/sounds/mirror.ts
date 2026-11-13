@@ -3,6 +3,10 @@
 //   bun scripts/sounds/mirror.ts            # lock present: reproduce it exactly (frozen); else resolve
 //   bun scripts/sounds/mirror.ts --update   # re-resolve from upstream + pack.config.ts, rewrite the lock
 //   bun scripts/sounds/mirror.ts --dry-run  # resolve and print the plan/sizes (HEAD only), write nothing
+//   add --offline to any of them: the upstream maps are read from the locked pack on disk (they were pruned
+//   with the same rules, so pruning again is a no-op), files come from the previous version's directory, and
+//   nothing is fetched; a file that would need a download is an error. A version bump that only adds Oak's
+//   own derived files (the rendered break) needs no network.
 //
 // On --update after a PACK_VERSION bump, a file whose source URL is unchanged is copied from the previous
 // version's directory when its bytes still match the previous lock (no re-download of an immutable upstream).
@@ -16,6 +20,7 @@ import { existsSync } from "node:fs";
 import { copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import gm from "@strudel/soundfonts/gm.mjs";
+import { BRK_DIR, BRK_FILE, BRK_JSON, BRK_LICENCE, renderBreakWav } from "./brk.ts";
 import {
   BANK_ALIAS_JSON,
   DRUM_BANKS,
@@ -44,6 +49,7 @@ const BUDGET_BYTES = 30 * 1024 * 1024;
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has("--dry-run");
 const update = args.has("--update");
+const offline = args.has("--offline");
 
 const sha256 = (data: Uint8Array | string) => createHash("sha256").update(data).digest("hex");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -111,13 +117,23 @@ interface Planned {
   sourceUrl: string;
   group: string;
   /** set for derived files: the bytes to write */
-  content?: string;
+  content?: string | Uint8Array;
 }
 
 type SampleMap = Record<string, string | string[] | Record<string, string | string[]>>;
 
+/** The pack on disk the lock describes (offline source of the upstream maps and of the break's one-shots). */
+async function lockedFile(lock: PackLock | undefined, rel: string): Promise<Uint8Array | null> {
+  for (const v of [lock?.packVersion, PACK_VERSION]) {
+    if (!v) continue;
+    const abs = insideRoot(PACK_DIR, `${v}/${rel}`);
+    if (existsSync(abs)) return new Uint8Array(await readFile(abs));
+  }
+  return null;
+}
+
 /** Resolve the full file plan from upstream JSON + pack.config.ts. */
-async function resolvePlan(): Promise<{ plan: Planned[]; manifest: PackManifest }> {
+async function resolvePlan(lock: PackLock | undefined): Promise<{ plan: Planned[]; manifest: PackManifest }> {
   const plan: Planned[] = [];
   const v = PACK_VERSION;
   const manifest: PackManifest = {
@@ -131,10 +147,19 @@ async function resolvePlan(): Promise<{ plan: Planned[]; manifest: PackManifest 
   };
 
   const upstreamCache = new Map<string, Promise<SampleMap>>();
+  const localJson = async <T>(rel: string): Promise<T> => {
+    const bytes = await lockedFile(lock, rel);
+    if (!bytes) throw new Error(`--offline: ${rel} is not in the locked pack`);
+    const json = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
+    delete json._base;
+    return json as T;
+  };
   const upstreamMap = (json: string): Promise<SampleMap> => {
     let p = upstreamCache.get(json);
     if (!p) {
-      p = fetchRetry(`${SAMPLE_CDN}/${json}`).then((r) => r.json() as Promise<SampleMap>);
+      p = offline
+        ? localJson<SampleMap>(json)
+        : fetchRetry(`${SAMPLE_CDN}/${json}`).then((r) => r.json() as Promise<SampleMap>);
       upstreamCache.set(json, p);
     }
     return p;
@@ -196,6 +221,10 @@ async function resolvePlan(): Promise<{ plan: Planned[]; manifest: PackManifest 
         typeof value === "string" ? [value] : Array.isArray(value) ? value : Object.values(value).flat();
       for (const f of files) listed.add(f);
     }
+    // Offline, the local copy of the upstream map is pruned to Oak's banks: the kit's own map lists the rest.
+    if (offline)
+      for (const [key, value] of Object.entries(await localJson<SampleMap>(kitJson(kit))))
+        if (!key.startsWith("_") && Array.isArray(value)) for (const f of value) listed.add(f);
     const base = `${PUBLIC_ROOT}/${spec.dir}`;
     const out: SampleMap = { _base: base };
     for (const [role, def] of Object.entries(spec.roles)) {
@@ -223,7 +252,9 @@ async function resolvePlan(): Promise<{ plan: Planned[]; manifest: PackManifest 
 
   // bank aliases (RolandTR909 -> TR909 ...), pruned to our banks
   const aliasUrl = `${SAMPLE_CDN}/${BANK_ALIAS_JSON}`;
-  const aliasUpstream = (await (await fetchRetry(aliasUrl)).json()) as Record<string, string | string[]>;
+  const aliasUpstream = offline
+    ? await localJson<Record<string, string | string[]>>(BANK_ALIAS_JSON)
+    : ((await (await fetchRetry(aliasUrl)).json()) as Record<string, string | string[]>);
   const aliasOut = Object.fromEntries(
     DRUM_BANKS.filter((b) => aliasUpstream[b]).map((b) => [b, aliasUpstream[b]]),
   );
@@ -232,6 +263,35 @@ async function resolvePlan(): Promise<{ plan: Planned[]; manifest: PackManifest 
     sourceUrl: aliasUrl,
     group: "tidal-drum-machines",
     content: `${JSON.stringify(aliasOut, null, 2)}\n`,
+  });
+
+  // Oak's rendered sounds: the break (`s("brk")`), from the uzu-drumkit one-shots the pack already holds.
+  const uzu = SAMPLE_MAPS.find((m) => m.json === "uzu-drumkit.json");
+  if (!uzu) throw new Error("pack.config: the break needs the uzu-drumkit map");
+  const brk = await renderBreakWav(async (file) => {
+    const local = await lockedFile(lock, `${uzu.dir}${file}`);
+    if (local) return local;
+    if (offline) throw new Error(`--offline: ${uzu.dir}${file} is not in the locked pack`);
+    return new Uint8Array(
+      await (await fetchRetry(`${SAMPLE_CDN}/${uzu.dir}${encodePath(file)}`)).arrayBuffer(),
+    );
+  });
+  plan.push({
+    path: `${v}/${BRK_DIR}${BRK_FILE}`,
+    sourceUrl: `generated:scripts/sounds/brk.ts (${BRK_LICENCE})`,
+    group: "oak-rendered",
+    content: brk,
+  });
+  plan.push({
+    path: `${v}/${BRK_JSON}`,
+    sourceUrl: "generated:scripts/sounds/brk.ts",
+    group: "oak-rendered",
+    content: `${JSON.stringify({ _base: `${PUBLIC_ROOT}/${BRK_DIR}`, brk: [BRK_FILE] }, null, 2)}\n`,
+  });
+  manifest.sampleMaps.push({
+    json: `${PUBLIC_ROOT}/${BRK_JSON}`,
+    base: `${PUBLIC_ROOT}/${BRK_DIR}`,
+    tag: "oak-rendered",
   });
 
   // gm_* soundfonts
@@ -316,7 +376,7 @@ async function main() {
     `[mirror] pack ${PACK_VERSION} -> ${relative(process.cwd(), PACK_DIR)} (${frozen ? "frozen" : "resolve"})`,
   );
 
-  const { plan } = await resolvePlan();
+  const { plan } = await resolvePlan(lock);
   const locked = new Map((lock?.files ?? []).map((f) => [f.path, f]));
   // After a version bump: the previous version's files by source URL (byte-identical upstream, no download).
   const previous =
@@ -327,7 +387,9 @@ async function main() {
 
   if (dryRun) {
     const sizes = await pool(plan, CONCURRENCY, async (p) => {
-      if (p.content !== undefined) return Buffer.byteLength(p.content);
+      if (p.content !== undefined)
+        return typeof p.content === "string" ? Buffer.byteLength(p.content) : p.content.byteLength;
+      if (offline) return (locked.get(p.path) ?? previous.get(p.sourceUrl))?.bytes ?? 0;
       const res = await fetchRetry(p.sourceUrl, {
         method: "HEAD",
         headers: { "accept-encoding": "identity" },
@@ -345,7 +407,7 @@ async function main() {
     const want = locked.get(p.path);
     let body: Uint8Array;
     if (p.content !== undefined) {
-      body = new TextEncoder().encode(p.content);
+      body = typeof p.content === "string" ? new TextEncoder().encode(p.content) : p.content;
     } else if (want && existsSync(dest) && sha256(await readFile(dest)) === want.sha256) {
       reused++;
       return { path: p.path, sourceUrl: p.sourceUrl, bytes: want.bytes, sha256: want.sha256, group: p.group };
@@ -361,6 +423,7 @@ async function main() {
       copied++;
       return { path: p.path, sourceUrl: p.sourceUrl, bytes: prev.bytes, sha256: prev.sha256, group: p.group };
     } else {
+      if (offline) throw new Error(`--offline: ${p.path} would need a download from ${p.sourceUrl}`);
       body = new Uint8Array(await (await fetchRetry(p.sourceUrl)).arrayBuffer());
       validate(p.path, body);
       downloaded++;

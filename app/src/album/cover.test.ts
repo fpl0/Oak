@@ -197,4 +197,18 @@ describe("small covers", () => {
       m.groups.flatMap((g) => g.items).filter((p) => p.t === "path" && p.role === "latewood"),
     ).toHaveLength(5);
   });
+  test("a piece that runs but plays nothing has a plain pith, not Strudel's default tempo", () => {
+    const m = coverModel({
+      events: [],
+      bars: 1,
+      key: null,
+      bpm: 120,
+      flavour: null,
+      title: "Empty",
+      seed: "s",
+      albumTitle: "A",
+    });
+    expect(m.groups.find((g) => g.kind === "pith")?.items.filter((p) => p.t === "text")).toHaveLength(0);
+    expect(m.summary).not.toContain("BPM");
+  });
 });

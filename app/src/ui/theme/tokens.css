@@ -19,11 +19,16 @@
   --oak-on-accent: #ffffff;
   --oak-accent-2: #b7791f;
   --oak-link: #2f6b45;
-  --oak-issue: #b4532a;
+  /* ux §7.2 lists #B4532A; darkened a step for AA (4.5:1) as small text on --oak-bg and --oak-surface-2. */
+  --oak-issue: #a84c25;
   --oak-lane-in: rgba(47, 107, 69, 0.06);
   --oak-danger: #a4262c;
   --oak-on-danger: #ffffff;
   --oak-mic: #c62828;
+  /* Secondary controls (buttons, steppers, selects): a fill and a border that set them off from a card. */
+  --oak-control: #fffdf8;
+  --oak-control-hover: #efe9de;
+  --oak-control-border: #cdbfa9;
   --oak-selection: rgba(47, 107, 69, 0.18);
   --oak-scrim: rgba(31, 26, 20, 0.32);
   --oak-shadow: 0 1px 2px rgba(31, 26, 20, 0.06), 0 4px 12px rgba(31, 26, 20, 0.05);
@@ -62,9 +67,15 @@
   --oak-link: #6fbf8a;
   --oak-issue: #e07b4f;
   --oak-lane-in: rgba(111, 191, 138, 0.07);
-  --oak-danger: #e5484d;
+  /* Lifted from #E5484D for AA as text on --oak-surface-2 (danger chips, "Delete" labels). */
+  --oak-danger: #ec6468;
   --oak-on-danger: #14110e;
   --oak-mic: #ff5a52;
+  /* Wave 4: a secondary button on a Bark card had the card's own fill and a 1.4:1 border, so it read as
+     disabled. Controls now sit a step above the surface with a border that holds at ~2:1. */
+  --oak-control: #2a231c;
+  --oak-control-hover: #342b22;
+  --oak-control-border: #4f4336;
   --oak-selection: rgba(111, 191, 138, 0.22);
   --oak-scrim: rgba(0, 0, 0, 0.5);
   /* Bark uses borders, not shadows (ux §7.5). */
@@ -89,11 +100,13 @@
 /* High contrast (Settings → Appearance). */
 :root[data-contrast="high"][data-theme="paper"] {
   --oak-border: #a89a86;
+  --oak-control-border: #8f8170;
   --oak-text-2: #3e362d;
   --oak-text-3: #514839;
 }
 :root[data-contrast="high"][data-theme="bark"] {
   --oak-border: #6a5c4c;
+  --oak-control-border: #7d6d5b;
   --oak-text-2: #e0d6c7;
   --oak-text-3: #c4b8a6;
 }

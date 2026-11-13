@@ -14,11 +14,19 @@ import type {
   SoundId,
   StepLocalId,
   TermId,
+  ToolId,
   TrackId,
   UnitId,
 } from "../ids.ts";
-import type { KeySpec, Layer, Md, MeterId, PickupSpec, SwingSpec } from "./common.ts";
-import type { CodeMakeEx, ComposeBriefEx, Exercise, TranscribeStepEx } from "./exercise.ts";
+import type { KeySpec, Layer, Md, MeterId, PickupSpec, SwingSpec, TrackRef } from "./common.ts";
+import type {
+  CodeMakeEx,
+  ComposeBriefEx,
+  Exercise,
+  Matcher,
+  TranscribeGiven,
+  TranscribeStepEx,
+} from "./exercise.ts";
 
 /** Presentation only (UX §3.2). The warm-up and the Coda are engine-driven and never authored as steps. */
 export const STEP_KINDS = [
@@ -54,6 +62,49 @@ export interface StepUi {
   loopBars?: number;
   /** From U01 every Make declares a Band; `false` only when silence around the part is the point. */
   band?: BandRef | false;
+  /**
+   * Wave 4. Workbench panels open when the step starts, so a feature is shown inside a lesson (the key
+   * panel in a key lesson, the chord band once Roman numerals are taught). Each one must be unlocked at the
+   * lesson in every legal order (`WORKBENCH_PANEL_TOOLS`; content check 4). The learner can close it.
+   */
+  initialPanels?: WorkbenchPanelId[];
+  /**
+   * Wave 4. The staff panel shows a lead sheet (`panels.staff: "lead"`, `lead-sheet.staff-panel`): the
+   * melody on one treble staff with the chord symbols above it, in the lesson's meter, with the pickup bar
+   * when the lesson or exercise declares `pickup`. Used for "play / sing from the page" (U07.L09).
+   */
+  leadSheet?: LeadSheetSpec;
+}
+/**
+ * Wave 4. A Workbench panel a step can open (`StepUi.initialPanels`). `key`: the key-signature panel;
+ * `circle`: the circle of fifths; `chords`: the chord band over the roll (symbols, and numerals from
+ * U06.L02); `function`: the T/PD/D bands; `range`: the range lens; `chord-tones`: the chord-tone lens.
+ */
+export const WORKBENCH_PANELS = ["key", "circle", "chords", "function", "range", "chord-tones"] as const;
+export type WorkbenchPanelId = (typeof WORKBENCH_PANELS)[number];
+/** The toolbox row each panel needs (contracts §3.2 group A). */
+export const WORKBENCH_PANEL_TOOLS: Readonly<Record<WorkbenchPanelId, ToolId>> = {
+  key: "tb.feature.keysig",
+  circle: "tb.feature.circle",
+  chords: "tb.feature.rn",
+  function: "tb.lens.function",
+  range: "tb.lens.range",
+  "chord-tones": "tb.lens.chord-tones",
+};
+/** Wave 4. What a lead sheet shows (`StepUi.leadSheet`). */
+export interface LeadSheetSpec {
+  /** The melody track of the step's code (default `@melody`). */
+  melody?: TrackRef;
+  /**
+   * Where the chord symbols come from: a chord track of the code (`chords`, `band.chords`), read from its
+   * `chord()` symbols or named from its stacked notes, or a fixed chart (code spellings, slash chords
+   * allowed), one entry per change: bar 1-based (0 = the pickup bar), beat 1-based.
+   */
+  chords: TrackRef | { chart: { bar: number; beat: number; symbol: string }[] };
+  /** The song or sketch title printed above the first line. */
+  title?: string;
+  /** Degree numbers under the melody (the U07 default is off). */
+  degrees?: boolean;
 }
 export interface BandRef {
   band: BandId;
@@ -91,6 +142,13 @@ export interface StepDef {
   optional?: boolean;
   /** Contracts §9.5: a pure code-mechanics `modify` step may let the learner skip scaffold steps. */
   testOut?: { skips: StepLocalId[] };
+  /**
+   * Wave 4. The voicing gate's second chance (contracts §3.1 rule 6): this step runs only while the gate
+   * condition of the gated tools is unmet, and the lesson cannot complete until its exercise passes at the
+   * condition's `minScore`, unrevealed. Its exercise is one of the condition's `variants`. Only U05.L08 S1
+   * (content check 4, `step.gate-check`); the gated tools stay locked in the lesson until it passes.
+   */
+  gateCheck?: true;
 }
 export interface LessonDef {
   id: LessonId;
@@ -235,6 +293,39 @@ export interface CapstoneSessionDef {
   /** Compose capstones: which rubric rules this session works towards. Transcribe: the stage exercises. */
   focusRules?: string[];
   stages?: TranscribeStepEx[];
+  /**
+   * Wave 4. Transcribe capstones whose learner picks the song (X1): the checks of this session, phrase by
+   * phrase, resolved against the chosen song's answer key (`SongDef.answerKey.phrases` and `layers`).
+   */
+  checks?: PhraseCheck[];
+  /**
+   * Wave 4. The session's work is a draft of the piece (compose) or of the transcription; `starter` is the
+   * code a first session opens with (default: the brief's starter). A later session opens the draft the
+   * session before saved.
+   */
+  starter?: string;
+  /** Wave 4. The tutor review is offered at the end of this session (contracts §10.6). */
+  review?: boolean;
+  /** Wave 4. This session ends by releasing the piece to the album (cover, liner notes, version). */
+  release?: boolean;
+}
+/**
+ * Wave 4. One graded check of a transcribe capstone, against the song the learner picked: a phrase's
+ * melody by ear (`melody`, `pitch: "key-relative"`, pass 0.85 in X1), or its chords bass-first (`chords`
+ * with `stages`, pass 0.80 per stage). A revealed check earns no evidence and is named in the liner notes.
+ */
+export interface PhraseCheck {
+  /** Slug, unique in the capstone. */
+  id: string;
+  /** 1-based phrase of `SongDef.answerKey.phrases`; `[from, to]` for several phrases checked together. */
+  phrase: number | [number, number];
+  layer: "melody" | "bass" | "chords";
+  matcher: Matcher;
+  pass: number;
+  /** Chords only: bass → quality → rn, each graded and passed in order before the next opens. */
+  stages?: ("bass" | "quality" | "rn")[];
+  /** What the learner is told first (X1: meter, key, tonic, pickup, the rhythm skeleton of phrase 1). */
+  given?: TranscribeGiven;
 }
 /** `content/core/capstones/C2/capstone.ts`: brief, rubric, sessions. Prose lives in `brief.mdx`. */
 export interface CapstoneDef extends CapstoneMeta {

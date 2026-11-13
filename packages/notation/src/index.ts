@@ -15,6 +15,7 @@ export {
   clefOfTrack,
   estimateKey,
   keyAtBar,
+  keyAtOnset,
   straightenSwing,
 } from "./build.ts";
 export { DRUM_NAMES } from "./drums.ts";
@@ -54,6 +55,22 @@ export {
   staffAt,
   stepY,
 } from "./geometry.ts";
+// Wave 4 seam (docs/design/wave4.md §3.3): chord labels and the lead-sheet layout.
+export {
+  CHORD_LABEL_CLASSES,
+  type ChordLabel,
+  type ChordLabelSet,
+  chordLabelInput,
+  chordLabelTexts,
+  LEAD_SHEET_BAR_PX,
+  type LeadSheetInput,
+  type LeadSheetLayout,
+  type LeadSheetPage,
+  leadSheetInput,
+  leadSheetLayout,
+  leadSheetPages,
+  stepStaffInput,
+} from "./lead-sheet.ts";
 export { ABCJS_LIMITS, type AbcjsLimit, abcjsLimitWarnings } from "./limits.ts";
 export { type Grid, gridOf } from "./meter.ts";
 export { activeNotes, scoreToEvents } from "./model.ts";
@@ -69,6 +86,10 @@ export {
   noteAnnotations,
   resolveKeySignature,
 } from "./options.ts";
+export {
+  chordDisplay as chordSymbolDisplay,
+  romanDisplay as numeralDisplay,
+} from "./theory-port.ts";
 export * from "./types.ts";
 
 /** `buildScore` + `toAbc`. */

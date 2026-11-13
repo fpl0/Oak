@@ -9,7 +9,7 @@ import { IS_MAC } from "../ui/keys/KeymapProvider.tsx";
 import { Button } from "../ui/kit/Button.tsx";
 import { Kbd } from "../ui/kit/basics.tsx";
 import { issueLines, shapeOf, summaryOf, viewFor } from "./feedback.ts";
-import { useStepHost } from "./frame.tsx";
+import { InlineMd, useStepHost } from "./frame.tsx";
 import type { InputRuntime } from "./inputs.tsx";
 import { firstWrongBar, isByEar } from "./rules.ts";
 import type { ExerciseRendererProps } from "./types.ts";
@@ -107,7 +107,12 @@ export function StepFeedback({ detail }: { detail: boolean }) {
   const shape = shapeOf(h.exercise);
   // What the pitch tracker made of a sung take it could not grade cleanly (no voice, noise, blips, clipping).
   const take = takeProblem(r.diagnostics as { id: string; params?: Record<string, unknown> }[]);
-  const lines = (detail || r.status === "error") && !unheard ? issueLines(view, shape) : [];
+  const summary = r.status === "ungraded" ? "Noted." : summaryOf(view, r, shape);
+  // A line the summary already says (a locked tool leads the verdict) is not said twice.
+  const lines =
+    (detail || r.status === "error") && !unheard
+      ? issueLines(view, shape).filter((l) => !(l.what === summary && !l.fix))
+      : [];
   // A by-ear transcription says where to listen again: the first bar that differs (wave3.md §10).
   const firstBar = isByEar(h.exercise) ? firstWrongBar(r) : null;
   const tone =
@@ -127,7 +132,7 @@ export function StepFeedback({ detail }: { detail: boolean }) {
       data-take={take?.kind}
     >
       <p className="font-medium" data-testid="step-feedback-summary">
-        {r.status === "ungraded" ? "Noted." : summaryOf(view, r, shape)}
+        <InlineMd text={summary} />
       </p>
       {firstBar !== null && (
         <p className="mt-1 text-sm" data-testid="first-wrong-bar" data-bar={firstBar}>
@@ -139,8 +144,18 @@ export function StepFeedback({ detail }: { detail: boolean }) {
           {lines.map((l) => (
             <li key={l.key} data-testid="feedback-line">
               {l.where && <span className="text-text-2">{l.where}</span>}
-              {l.what && <span>{l.where ? `: ${l.what}` : l.what}</span>}
-              {l.fix && <span className="text-accent"> → {l.fix}</span>}
+              {l.what && (
+                <span>
+                  {l.where ? ": " : ""}
+                  <InlineMd text={l.what} />
+                </span>
+              )}
+              {l.fix && (
+                <span className="text-accent">
+                  {" → "}
+                  <InlineMd text={l.fix} />
+                </span>
+              )}
             </li>
           ))}
         </ul>

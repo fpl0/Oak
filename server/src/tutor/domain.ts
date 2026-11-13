@@ -102,6 +102,17 @@ export interface StepSource {
   knownMistakes: { feedback: string; description: string; variantCode: string | null }[];
   /** Reference solutions. Empty for Make steps and compositions. */
   solutions: string[];
+  /**
+   * Wave 4: the key the step is in (`"G major"`): the step exercise's own key, else the lesson's. `undefined`
+   * or `null`: the lesson's key applies (contracts §10.3 `get_lesson_context`; wave4.md §5.6).
+   */
+  key?: string | null;
+  /**
+   * Wave 4: how the learner answers the step, when it is not plain code (`rn-palette`, `quality-pad`,
+   * `slot-choice`, `degree-pad`, `staff-chords`, `chord-dictation`, `dictation`, `voice-leading`, ...). The
+   * answer guard reads it to know which forms of the answer to hold back below the reveal rung.
+   */
+  answerKind?: string | null;
 }
 
 /** Server-side state of the learner on one step. The hint rung lives here and nowhere else. */
@@ -142,6 +153,68 @@ export interface ReviewSource {
   reference: string | null;
   totalBars: number | null;
   revisions: 1 | 2;
+  /**
+   * Wave 4: the piece's analysed facts (chords per bar, cadences, motif reuse, range), so every comment can be
+   * anchored to a real bar. Build it with `reviewFactsFrom` (review-facts.ts) from `harmonyView` and the
+   * `AnalysisSummary`. Absent: only `analysis` (text) is sent.
+   */
+  facts?: ReviewFacts | null;
+  /** Wave 4: what exactly is being reviewed: one album version, or one transcription version. */
+  target?: ReviewTarget | null;
+}
+
+/** Wave 4: the version a review is about (contracts §10.6 storage; wave4.md §5.2). */
+export type ReviewTarget =
+  | { kind: "album"; trackId: string; version: number }
+  | { kind: "transcription"; version: number };
+
+/** One chord as the analysis reads it in one bar. */
+export interface FactChord {
+  /** 1-based display bar (0 is a pickup bar). */
+  bar: number;
+  /** 1-based beat in tempo units. */
+  beat: number;
+  /** Lead-sheet symbol, e.g. `G/B`. */
+  symbol: string;
+  /** Oak's numeral, e.g. `V6`; `null` without a key. */
+  rn: string | null;
+  /** `T`, `PD`, `D`, `chromatic`; `null` without a key. */
+  fn: string | null;
+}
+
+/** A recurrence of a melodic idea: `bars` comes back at `at`, exactly, transposed or as rhythm only. */
+export interface FactMotif {
+  track: string;
+  bars: [number, number];
+  at: [number, number][];
+  how: "exact" | "transposed" | "rhythm";
+}
+
+export interface FactRange {
+  track: string;
+  /** Note names with octave, e.g. `C4`. */
+  low: string;
+  high: string;
+  semitones: number;
+  /** Bar of the highest note (the climax), 1-based. */
+  highBar: number;
+}
+
+/** What Oak's analysis found in a piece, for a review (all deterministic; nothing here is a judgement). */
+export interface ReviewFacts {
+  key: string | null;
+  meter: string | null;
+  bars: number;
+  pickup: boolean;
+  chords: FactChord[];
+  /** Chord changes per bar, index 0 = the first bar analysed. */
+  harmonicRhythm: number[];
+  cadences: { bar: number; type: string }[];
+  schemas: { schema: string; bars: [number, number] }[];
+  motifs: FactMotif[];
+  ranges: FactRange[];
+  /** Share of strong-beat melody notes that are chord tones, 0..1; `null` when there is no melody over chords. */
+  chordToneShare: number | null;
 }
 
 // --- learner -----------------------------------------------------------------------------------
@@ -162,6 +235,12 @@ export interface IntroducedTerms {
   count: number;
   /** Most recent first. */
   recent: string[];
+  /**
+   * Wave 4: every introduced term ID, when the adapter provides it. The vocabulary rules (solfège, chord
+   * symbols, numerals) read it, because `recent` drops early terms such as `term.solfege` after 30 more.
+   * Absent: `recent` is all that is known.
+   */
+  all?: readonly string[];
 }
 
 export type NoteSource = "listening" | "review" | "observation";

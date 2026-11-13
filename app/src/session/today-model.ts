@@ -2,7 +2,9 @@
 // and return state is unit-tested from fixture plans (today-model.test.ts). The page (TodayPage.tsx) renders it.
 import type { Bootstrap, SessionDay, SessionPlan, WarmupItem } from "@oak/api";
 import { learnerDay } from "@oak/srs";
+import type { CapstoneDay } from "./capstone-day.ts";
 import { type CourseEdge, edgeLead } from "./edge.ts";
+import type { GymDay } from "./gym-day.ts";
 import { blockBudget } from "./store.ts";
 import { isRestDay } from "./streak-model.ts";
 
@@ -75,6 +77,12 @@ export interface TodayInput {
   stepsOf?: (lessonId: string) => number | null;
   /** The written course is used up (edge.ts): review days until the next unit is written. */
   edge?: CourseEdge | null;
+  /** A capstone session day (capstone-day.ts): which session of how many, and whether the draft resumes. */
+  capstone?: CapstoneDay | null;
+  /** A transcription slot (gym-day.ts): ladder or own audio, level and realism, explained. */
+  gym?: GymDay | null;
+  /** The Transcription Gym is open (from U07.L01): the edge names it among the ways on. */
+  gymOpen?: boolean;
   /**
    * The tolerance ladder (`voice.get`, wave3.md §5.3): the one-tap loosen is offered when the server offers it.
    * `null` while it loads; then the plan's return note and the profile decide, as in Wave 2.
@@ -107,7 +115,11 @@ const stepNo = (stepId: string) => stepId.replace(/^S/, "");
 const round = (x: number) => Math.max(1, Math.round(x));
 
 /** The rows of the setlist (contracts §9.1 budgets; capstone, gym and light days have no separate Make). */
-export function setlistRows(plan: SessionPlan, titleOf: (id: string) => string): SetlistRow[] {
+export function setlistRows(
+  plan: SessionPlan,
+  titleOf: (id: string) => string,
+  days: { capstone?: CapstoneDay | null; gym?: GymDay | null } = {},
+): SetlistRow[] {
   const b = blockBudget(plan.kind, plan.targetMinutes);
   const rows: SetlistRow[] = [];
   if (plan.warmup.items.length > 0)
@@ -190,11 +202,19 @@ export function setlistRows(plan: SessionPlan, titleOf: (id: string) => string):
         label: "Capstone",
         amount: b.new,
         unit: "min",
-        detail: `${title} · the draft is the Make`,
+        detail: days.capstone
+          ? `${days.capstone.detail} · the draft is the Make`
+          : `${title} · the draft is the Make`,
       });
       break;
     case "gym":
-      rows.push({ key: "new", label: "Transcribe", amount: b.new, unit: "min", detail: plan.title });
+      rows.push({
+        key: "new",
+        label: "Transcribe",
+        amount: b.new,
+        unit: "min",
+        detail: days.gym ? `${days.gym.detail} · the saved version is the Make` : plan.title,
+      });
       break;
     case "light":
       if (main?.light)
@@ -289,13 +309,15 @@ function leadOf(state: TodayState, input: TodayInput): string | null {
     case "checkpoint":
       return plan.note ? `No hints, no rush. ${plan.note}.` : "No hints, no rush.";
     case "capstone":
-      return plan.note ?? "Today's work is a draft for your album. It saves as you go.";
+      return (
+        input.capstone?.lead ?? plan.note ?? "Today's work is a draft for your album. It saves as you go."
+      );
     case "gym":
-      return plan.note ?? "Listen, then write down what you hear.";
+      return input.gym?.lead ?? plan.note ?? "Listen, then write down what you hear.";
     case "review":
       return plan.note ?? "Nothing new is open right now. Today keeps what you know fresh.";
     case "edge":
-      return input.edge ? edgeLead(input.edge) : plan.note;
+      return input.edge ? edgeLead(input.edge, { gym: input.gymOpen === true }) : plan.note;
     default:
       return plan.note;
   }
@@ -334,7 +356,7 @@ function activeState({ plan, boot, edge }: TodayInput): TodayState {
 
 export function todayView(input: TodayInput): TodayView {
   const { plan, boot } = input;
-  const rows = setlistRows(plan, input.titleOf);
+  const rows = setlistRows(plan, input.titleOf, { capstone: input.capstone ?? null, gym: input.gym ?? null });
   // A review day is as long as its sets, not the day's target (the server plans what is due, nothing more).
   const rowMinutes = rows.reduce((sum, r) => sum + (r.unit === "min" ? r.amount : r.amount / 60), 0);
   const length =

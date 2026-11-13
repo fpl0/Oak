@@ -80,6 +80,10 @@ test("every rule name of the content contract has an analyzer", () => {
     "distinct-pitches",
     "device-count",
     "matches",
+    "pickup",
+    "chord-qualities",
+    "chord-inversions",
+    "non-chord-tones",
   ];
   expect(Object.keys(RULES).sort()).toEqual([...names].sort());
   expect(Object.keys(CUSTOM_RULES).sort()).toEqual(["allowed-tensions", "ii-v-chain", "walking-bass"]);
@@ -145,6 +149,11 @@ describe("form-free rules", () => {
       'chords: note("[c3,e3,g3]").s("rhodes")',
     );
     await fails(rule({ rule: "sounds", contains: ["snd.rhodes"] }), 'chords: note("[c3,e3,g3]").s("piano")');
+    // anyOf (U05.L08: Rhodes or organ): one of them is enough; neither fails.
+    const either = rule({ rule: "sounds", anyOf: ["snd.rhodes", "snd.organ"] });
+    await passes(either, 'chords: note("[c3,e3,g3]").s("organ")');
+    await passes(either, 'chords: note("[c3,e3,g3]").s("rhodes")\nmel: note("e4").s("piano")');
+    await fails(either, 'chords: note("[c3,e3,g3]").s("piano")');
     await passes(rule({ rule: "uses", tool: "tb.mini.euclid" }), 'perc: s("rim(3,8)")');
     await fails(rule({ rule: "uses", tool: "tb.mini.euclid" }), 'perc: s("rim*3")');
     await passes(rule({ rule: "uses", tool: "tb.mini.euclid" }), 'perc: s("rim*3")', 1, {

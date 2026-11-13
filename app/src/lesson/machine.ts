@@ -17,6 +17,7 @@ import type {
 } from "@oak/api";
 import { assign, fromPromise, type SnapshotFrom, setup } from "xstate";
 import { idempotencyKey } from "../lib/idempotency.ts";
+import { type GateState, gateMetBy, stepsForGate } from "./gate.ts";
 import {
   canContinue,
   type EditorStart,
@@ -113,6 +114,8 @@ export interface LessonContext extends LessonInput {
   wrapReason: "wrap-up" | "split" | null;
   sketchId: string | null;
   completion: LessonCompleteResult | null;
+  /** Wave 4: the voicing gate, for U05.L07 and U05.L08 (`null` for every other lesson). */
+  gate: GateState | null;
 }
 
 /** Events the player sends besides the public `LessonEvent`s. */
@@ -224,7 +227,7 @@ export const lessonMachine = setup({
   guards: {
     canContinue: ({ context }) => {
       const s = current(context);
-      return s !== null && canContinue(s, progressOf(context, s.id));
+      return s !== null && canContinue(s, progressOf(context, s.id), context.gate);
     },
     endsPartA: ({ context }) => context.splitPart === "A" && context.index >= context.range[1],
     beforeMake: ({ context }) => {
@@ -272,6 +275,7 @@ export const lessonMachine = setup({
     wrapReason: null,
     sketchId: null,
     completion: null,
+    gate: null,
   }),
   initial: "loading",
   on: {
@@ -282,6 +286,12 @@ export const lessonMachine = setup({
       }),
     },
     DISMISS_NOTICE: { actions: assign({ notice: null }) },
+    GATE: {
+      actions: assign({
+        gate: ({ context, event }) =>
+          context.gate ? { ...context.gate, passed: context.gate.passed || event.passed } : null,
+      }),
+    },
   },
   states: {
     loading: {
@@ -289,7 +299,9 @@ export const lessonMachine = setup({
         LOADED: {
           target: "active",
           actions: assign(({ context, event }) => {
-            const steps = visibleSteps(event.lesson, context.target);
+            const gate = event.gate ?? null;
+            // A met gate drops U05.L08's second chance; an unknown or unmet one keeps it (the server decides).
+            const steps = stepsForGate(visibleSteps(event.lesson, context.target), gate ? gate.passed : null);
             const range = partRange(steps, event.lesson.wrapAt, event.splitPart);
             const index = startIndex(steps, { currentStep: event.resumeStep, range });
             const reached = event.reachedStep ? steps.findIndex((s) => s.id === event.reachedStep) : -1;
@@ -301,6 +313,7 @@ export const lessonMachine = setup({
               index,
               furthest: Math.min(range[1], Math.max(index, reached)),
               error: null,
+              gate,
             };
           }),
         },
@@ -485,9 +498,15 @@ export const lessonMachine = setup({
             const sig = attemptSig(event);
             const held = context.attemptKeys[s.id];
             const key = held && held.sig === sig ? held.key : newKeyOf(context);
+            // A gate pass in U05.L08's second chance opens the gate for the rest of this visit at once.
+            const opens =
+              s.gateCheck === true &&
+              context.gate !== null &&
+              gateMetBy(event.result, context.gate.rule.minScore);
             return {
               results: { ...context.results, [s.id]: event.result },
               attemptKeys: { ...context.attemptKeys, [s.id]: { sig, key } },
+              ...(opens && context.gate ? { gate: { ...context.gate, passed: true } } : {}),
             };
           }),
         },

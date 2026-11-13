@@ -1,18 +1,26 @@
 // Chord answers: the quality pad (`quality-pad`) and the Roman numeral palette (`rn-palette`, ux §4.5 RomanPad):
 // three columns T | PD | D in the function colours, applied and borrowed rows when the step allows them. RN keys:
 // `1`–`7` the diatonic triad, `Shift+digit` the seventh, `-` then a digit a flat-degree chord (`-7` → ♭VII),
-// `M` swaps the case of the current slot, `Backspace` clears the last slot, `←`/`→` choose a slot.
+// `M` swaps the case of the current slot, `I` steps its inversion figure (when the step allows inversions),
+// `Backspace` clears, `←`/`→` choose a slot, `P` plays the progression. Wave 4: one slot per bar or per half bar
+// (`AnswerEnv.harmony.slotsPerBar`); with the step's key every numeral sounds as it is placed and each button
+// shows its chord in the key ("IV · F", only with the chord-symbol lens on); figures print as figured bass.
 import type { ChordQuality } from "@oak/api";
 import { clsx } from "clsx";
+import { Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { SegmentedControl } from "../../ui/kit/index.ts";
+import { Button, SegmentedControl } from "../../ui/kit/index.ts";
 import { functionStyle, type HarmonicFn } from "../../ui/theme/palette.ts";
+import { appAudio, useAnswerEnv } from "../env.tsx";
+import { progressionHits, rnHasDegree, rnMidis, rnSymbol, slotLabels } from "../harmony.ts";
 import {
+  cycleInversion,
   qualityLabel,
   type RnAllow,
   type RnButton,
   rnDisplay,
   rnForKey,
+  rnGlyph,
   rnPalette,
   toggleCase,
   withInversion,
@@ -27,6 +35,7 @@ import {
   markOf,
   markRing,
   revealedOf,
+  SubmitHint,
   useThemeName,
 } from "../ui.tsx";
 
@@ -75,7 +84,7 @@ export function QualityPadAnswer(p: AnswerWidgetProps<"quality-pad">) {
       keys={
         <>
           <KeyHint keys={[`1–${spec.set.length}`]}>pick</KeyHint>
-          <KeyHint keys={["Enter"]}>check</KeyHint>
+          <SubmitHint />
         </>
       }
     >
@@ -121,54 +130,177 @@ export function QualityPadAnswer(p: AnswerWidgetProps<"quality-pad">) {
 
 const INVERSIONS = [
   { value: "0", label: "Root" },
-  { value: "1", label: "1st inv" },
-  { value: "2", label: "2nd inv" },
-  { value: "3", label: "3rd inv" },
+  { value: "1", label: "6 · 1st" },
+  { value: "2", label: "6/4 · 2nd" },
+  { value: "3", label: "4/2 · 3rd" },
 ] as const;
 
 function roleFn(role: RnButton["role"]): HarmonicFn | null {
   return role === "chromatic" ? null : role;
 }
 
+/** A numeral as printed: case and quality mark, figures as figured bass (6 over 4), the applied part after. */
+export function RnGlyph({ rn }: { rn: string }) {
+  const g = rnGlyph(rn);
+  if (!g) return <span>{rnDisplay(rn)}</span>;
+  return (
+    <span className="inline-flex items-center leading-none" aria-hidden>
+      <span>
+        {g.acc}
+        {g.numeral}
+      </span>
+      {g.mark === "maj" ? (
+        <span className="text-[0.7em]">maj</span>
+      ) : g.mark ? (
+        <span className="-translate-y-[0.35em] text-[0.75em]">{g.mark}</span>
+      ) : null}
+      {g.figures.length === 1 ? (
+        <span className="-translate-y-[0.4em] text-[0.62em]">{g.figures[0]}</span>
+      ) : g.figures.length === 2 ? (
+        <span className="ml-px inline-flex flex-col text-[0.56em] leading-[1.05]">
+          <span>{g.figures[0]}</span>
+          <span>{g.figures[1]}</span>
+        </span>
+      ) : null}
+      {g.of ? <span>{g.of}</span> : null}
+    </span>
+  );
+}
+
+/** "V six-five", "vii diminished": what a screen reader hears for a numeral. */
+function rnSpoken(rn: string): string {
+  const g = rnGlyph(rn);
+  if (!g) return rnDisplay(rn);
+  const mark =
+    g.mark === "°"
+      ? " diminished"
+      : g.mark === "ø"
+        ? " half-diminished"
+        : g.mark === "+"
+          ? " augmented"
+          : g.mark === "maj"
+            ? " major 7"
+            : "";
+  const acc = g.acc === "♭" ? "flat " : g.acc === "♯" ? "sharp " : "";
+  const fig = g.figures.length ? ` ${g.figures.join("-")}` : "";
+  return `${acc}${g.numeral}${mark}${fig}${g.of ? ` of ${g.of.slice(1)}` : ""}`;
+}
+
+/** "Bar 3" → "bar 3" inside a sentence; an authored label stays as written. */
+const slotPhrase = (spoken: string | undefined) =>
+  spoken ? (/^Bar \d/.test(spoken) ? `b${spoken.slice(1)}` : spoken) : "this slot";
+
 export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
   const { spec, value, onChange, disabled, feedback } = p;
   const theme = useThemeName();
+  const env = useAnswerEnv();
+  const audio = env.audio ?? appAudio;
+  const h = env.harmony;
+  const key = h?.key;
+  const symbols = key !== undefined && env.lenses?.chordSymbols !== false;
   const root = useRef<HTMLDivElement>(null);
+  const timers = useRef<number[]>([]);
   const allow = spec.allow as readonly RnAllow[];
   const groups = rnPalette(allow);
   const [flat, setFlat] = useState(false);
   const [slot, setSlot] = useState<number | null>(null);
   const [inversion, setInversion] = useState<"0" | "1" | "2" | "3">("0");
   const correct = revealedOf<string[]>(feedback);
-  const filled = value.filter((x) => x !== "").length;
+  const slots = Array.from({ length: spec.slots }, (_, k) => value[k] ?? "");
+  const filled = slots.filter((x) => x !== "").length;
+  const labels = slotLabels(spec.slots, {
+    ...(h?.slotsPerBar ? { slotsPerBar: h.slotsPerBar } : {}),
+    ...(h?.beatsPerBar ? { beatsPerBar: h.beatsPerBar } : {}),
+  });
+  const half = (h?.slotsPerBar ?? 1) === 2;
+  const canPlay = Boolean(h?.playProgression) || key !== undefined;
+  /** The slot the next numeral goes into: the chosen one, else the first empty one. */
+  const target = slot ?? (slots.indexOf("") < 0 ? null : slots.indexOf(""));
+  /** The bass under the target slot, from a staged dictation's bass stage (ux §4.5), when there is one. */
+  const bassHere = target !== null && !disabled ? (h?.bassDegrees?.[target] ?? null) : null;
+  const offBass = (rn: string) => bassHere !== null && bassHere !== "" && !rnHasDegree(rn, bassHere, key);
 
   useEffect(() => {
     if (p.autoFocus) focusFirst(root.current);
   }, [p.autoFocus]);
+  useEffect(
+    () => () => {
+      for (const t of timers.current) window.clearTimeout(t);
+    },
+    [],
+  );
+  // Focus follows the slot the next numeral goes into while it is in the strip.
+  useEffect(() => {
+    const active = document.activeElement as HTMLElement | null;
+    if (target === null || !active?.closest("[data-rn-slots]") || !root.current?.contains(active)) return;
+    root.current.querySelector<HTMLButtonElement>(`[data-rn-slot="${target}"]`)?.focus();
+  }, [target]);
+
+  const sound = (rn: string) => {
+    if (!key) return;
+    const m = rnMidis(rn, key);
+    if (m) audio.playNote(m, { sound: h?.sound ?? "piano", dur: 0.9 });
+  };
+  const playAll = () => {
+    if (h?.playProgression) {
+      h.playProgression(slots);
+      return;
+    }
+    if (!key) return;
+    for (const t of timers.current) window.clearTimeout(t);
+    timers.current = progressionHits(slots, key, {
+      ...(h?.bpm ? { bpm: h.bpm } : {}),
+      ...(h?.beatsPerBar ? { beatsPerBar: h.beatsPerBar } : {}),
+      ...(h?.slotsPerBar ? { slotsPerBar: h.slotsPerBar } : {}),
+    }).map((hit) =>
+      window.setTimeout(
+        () => audio.playNote(hit.midis, { sound: h?.sound ?? "piano", dur: hit.dur }),
+        hit.at * 1000,
+      ),
+    );
+  };
 
   const place = (rn: string) => {
     if (disabled) return;
     const inv = Number(inversion) as 0 | 1 | 2 | 3;
     const text = inv === 0 ? rn : (withInversion(rn, inv) ?? rn);
-    const slots = Array.from({ length: spec.slots }, (_, k) => value[k] ?? "");
-    const at = slot ?? slots.indexOf("");
-    slots[at < 0 ? spec.slots - 1 : at] = text;
-    onChange(slots);
+    const next = [...slots];
+    const at = slot ?? next.indexOf("");
+    next[at < 0 ? spec.slots - 1 : at] = text;
+    onChange(next);
+    sound(text);
     setSlot(null);
     setFlat(false);
   };
   const clearLast = () => {
     if (disabled) return;
-    const slots = Array.from({ length: spec.slots }, (_, k) => value[k] ?? "");
-    let i = -1;
-    for (let k = slots.length - 1; k >= 0; k--)
-      if (slots[k] !== "") {
-        i = k;
-        break;
-      }
-    if (i >= 0) slots[i] = "";
-    onChange(slots);
+    const next = [...slots];
+    let i = slot !== null && next[slot] !== "" ? slot : -1;
+    if (i < 0)
+      for (let k = next.length - 1; k >= 0; k--)
+        if (next[k] !== "") {
+          i = k;
+          break;
+        }
+    if (i >= 0) next[i] = "";
+    onChange(next);
     setSlot(null);
+  };
+  /** Changes the chosen slot, else the last filled one (M, I). */
+  const editCurrent = (f: (rn: string) => string) => {
+    let i = slot !== null && slots[slot] !== "" ? slot : -1;
+    if (i < 0)
+      for (let k = slots.length - 1; k >= 0; k--)
+        if (slots[k] !== "") {
+          i = k;
+          break;
+        }
+    const cur = i >= 0 ? slots[i] : "";
+    if (!cur || disabled) return;
+    const next = [...slots];
+    next[i] = f(cur);
+    onChange(next);
+    sound(next[i] as string);
   };
 
   const onKey = (e: React.KeyboardEvent<HTMLElement>): boolean => {
@@ -183,24 +315,30 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
       if (rn) place(rn);
       return n >= 1 && n <= 7;
     }
-    if ((e.key === "m" || e.key === "M") && !e.metaKey && !e.ctrlKey) {
-      const i = slot ?? Math.max(0, filled - 1);
-      const cur = value[i];
-      if (cur && !disabled) {
-        const slots = [...value];
-        slots[i] = toggleCase(cur);
-        onChange(slots);
-      }
+    if (e.metaKey || e.ctrlKey || e.altKey) return false;
+    if (e.key === "m" || e.key === "M") {
+      editCurrent(toggleCase);
+      return true;
+    }
+    if ((e.key === "i" || e.key === "I") && allow.includes("inversions")) {
+      editCurrent(cycleInversion);
+      return true;
+    }
+    if ((e.key === "p" || e.key === "P") && canPlay) {
+      playAll();
       return true;
     }
     if (e.key === "Backspace" || e.key === "Delete") {
       clearLast();
       return true;
     }
-    if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !e.altKey && spec.slots > 1) {
+    if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && spec.slots > 1) {
       if ((e.target as HTMLElement).closest("[role=radiogroup]")) return false;
       const cur = slot ?? Math.min(filled, spec.slots - 1);
-      setSlot(Math.max(0, Math.min(spec.slots - 1, cur + (e.key === "ArrowLeft" ? -1 : 1))));
+      const next = Math.max(0, Math.min(spec.slots - 1, cur + (e.key === "ArrowLeft" ? -1 : 1)));
+      setSlot(next);
+      if ((e.target as HTMLElement).closest("[data-rn-slots]"))
+        root.current?.querySelector<HTMLButtonElement>(`[data-rn-slot="${next}"]`)?.focus();
       return true;
     }
     return false;
@@ -221,60 +359,93 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
           {allow.includes("sevenths") ? <KeyHint keys={["⇧ + digit"]}>seventh</KeyHint> : null}
           {allow.includes("borrowed") ? <KeyHint keys={["- then digit"]}>♭ degree</KeyHint> : null}
           <KeyHint keys={["M"]}>major/minor</KeyHint>
-          <KeyHint keys={["⌫"]}>clear last</KeyHint>
-          <KeyHint keys={["Enter"]}>check</KeyHint>
+          {allow.includes("inversions") ? <KeyHint keys={["I"]}>inversion</KeyHint> : null}
+          <KeyHint keys={["←", "→"]}>slot</KeyHint>
+          <KeyHint keys={["⌫"]}>clear</KeyHint>
+          {canPlay ? <KeyHint keys={["P"]}>play</KeyHint> : null}
+          <SubmitHint />
         </>
       }
     >
       <div ref={root} className="flex flex-col gap-3">
-        <ol aria-label="Your numerals" className="flex flex-wrap gap-2">
-          {Array.from({ length: spec.slots }, (_, i) => {
-            const rn = value[i] ?? "";
-            const mark = markOf(feedback, i);
-            const active = !disabled && (slot === i || (slot === null && i === value.indexOf("")));
-            return (
-              <li
-                key={i}
-                className="flex flex-col items-center gap-1"
-                aria-label={`Bar ${i + 1}: ${rn ? rnDisplay(rn) : "empty"}${mark ? (mark.ok ? ", right" : ", not this one") : ""}`}
-              >
-                <span aria-hidden className="text-[0.7rem] text-text-3">
-                  bar {i + 1}
-                </span>
-                <span
-                  className={clsx(
-                    "relative inline-flex h-11 min-w-16 items-center justify-center rounded-control border-2 px-2 text-lg font-semibold",
-                    rn ? "border-border bg-surface" : "border-dashed border-border text-text-3",
-                    active && "border-text-3",
-                    markRing(mark ? (mark.ok ? "ok" : "bad") : null),
-                  )}
+        <div className="flex flex-wrap items-end gap-3">
+          <ol data-rn-slots aria-label="Your numerals" className="flex flex-wrap gap-2">
+            {labels.map((l, i) => {
+              const rn = slots[i] ?? "";
+              const mark = markOf(feedback, i);
+              const active = !disabled && target === i;
+              return (
+                <li
+                  key={l.spoken}
+                  className={clsx("flex flex-col items-center gap-1", half && l.barStart && i > 0 && "ml-2")}
                 >
-                  {rn ? rnDisplay(rn) : "·"}
-                  <MarkBadge mark={mark ? (mark.ok ? "ok" : "bad") : null} note={mark?.note} />
-                </span>
-                {/* Reserved height, so a reveal never moves the palette. */}
-                {correct ? (
-                  <span className="inline-flex h-8 min-w-16 items-center justify-center rounded-control border-2 border-dashed border-accent-2 px-2 font-medium">
-                    <span className="sr-only">Answer: </span>
-                    {correct[i] ? rnDisplay(correct[i] as string) : "—"}
+                  <span aria-hidden className="text-[0.7rem] whitespace-nowrap text-text-3">
+                    {half && l.barStart ? `bar ${l.bar}` : l.short}
                   </span>
-                ) : (
-                  <span aria-hidden className="h-8" />
-                )}
-              </li>
-            );
-          })}
-        </ol>
+                  <button
+                    type="button"
+                    data-rn-slot={i}
+                    aria-pressed={active}
+                    aria-disabled={disabled || undefined}
+                    aria-label={`${l.spoken}: ${rn ? rnSpoken(rn) : "empty"}${mark ? (mark.ok ? ", right" : ", not this one") : ""}`}
+                    tabIndex={i === (target ?? 0) ? 0 : -1}
+                    onFocus={() => setSlot(i)}
+                    onClick={() => setSlot(i)}
+                    className={clsx(
+                      "relative inline-flex h-11 min-w-16 items-center justify-center rounded-control border-2 px-2 text-lg font-semibold",
+                      rn ? "border-border bg-surface" : "border-dashed border-border text-text-3",
+                      active && "border-text-3 bg-surface-2",
+                      markRing(mark ? (mark.ok ? "ok" : "bad") : null),
+                    )}
+                  >
+                    {rn ? <RnGlyph rn={rn} /> : <span aria-hidden>·</span>}
+                    <MarkBadge mark={mark ? (mark.ok ? "ok" : "bad") : null} note={mark?.note} />
+                  </button>
+                  {/* Reserved height, so a reveal never moves the palette. */}
+                  {correct ? (
+                    <span className="inline-flex h-8 min-w-16 items-center justify-center rounded-control border-2 border-dashed border-accent-2 px-2 font-medium">
+                      <span className="sr-only">
+                        Answer: {correct[i] ? rnSpoken(correct[i] as string) : "none"}
+                      </span>
+                      {correct[i] ? <RnGlyph rn={correct[i] as string} /> : "—"}
+                    </span>
+                  ) : (
+                    <span aria-hidden className="h-8" />
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+          {canPlay ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              data-enter="native"
+              className="mb-9"
+              icon={<Play aria-hidden className="size-4" />}
+              disabled={filled === 0}
+              onClick={playAll}
+            >
+              Play
+            </Button>
+          ) : null}
+        </div>
         {allow.includes("inversions") ? (
           <div className="w-fit">
             <SegmentedControl
               label="Inversion of the next chord"
               value={inversion}
-              options={INVERSIONS}
+              options={allow.includes("sevenths") ? INVERSIONS : INVERSIONS.slice(0, 3)}
               onChange={(v) => setInversion(v)}
               size="sm"
             />
           </div>
+        ) : null}
+        {bassHere ? (
+          <p className="text-sm text-text-2" data-testid="rn-bass-filter">
+            Lit: the chords with bass degree {bassHere} in them, for {slotPhrase(labels[target ?? 0]?.spoken)}
+            .
+          </p>
         ) : null}
         <div className="flex flex-wrap gap-3">
           {groups.map((g) => {
@@ -310,21 +481,32 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
                   {g.buttons.map((b) => {
                     const f = roleFn(b.role);
                     const bs = f ? functionStyle(f, theme) : null;
+                    const sym = symbols && key ? rnSymbol(b.rn, key) : null;
+                    const off = offBass(b.rn);
                     return (
                       <button
                         key={b.rn}
                         type="button"
                         data-rn={b.rn}
+                        data-off-bass={off || undefined}
                         aria-disabled={disabled || undefined}
-                        aria-label={`${b.display}${b.key ? `, key ${b.key}` : ""}`}
+                        aria-label={`${rnSpoken(b.rn)}${sym ? `, ${sym}` : ""}${off ? ", not over this bass" : ""}${b.key ? `, key ${b.key}` : ""}`}
                         onClick={() => place(b.rn)}
                         className={clsx(
                           "inline-flex h-9 min-w-16 items-center justify-between gap-2 rounded-control border border-border bg-surface px-2 font-medium hover:bg-surface-2",
                           !bs && "border-dashed",
+                          off && "opacity-60",
                         )}
                         style={bs ? { borderLeft: `4px solid ${bs.fill}` } : undefined}
                       >
-                        <span>{b.display}</span>
+                        <span className="inline-flex items-center gap-1.5">
+                          <RnGlyph rn={b.rn} />
+                          {sym ? (
+                            <span aria-hidden className="text-[0.75rem] font-normal text-text-2">
+                              · {sym}
+                            </span>
+                          ) : null}
+                        </span>
                         {b.key ? (
                           <span aria-hidden className="font-sans text-[0.7rem] text-text-3">
                             {b.key}

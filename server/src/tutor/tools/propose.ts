@@ -6,6 +6,7 @@
 //
 // Whether a card can be applied is decided here from server state (contracts §10.7). The tool
 // input has no field for it, so the model cannot ask.
+import { answerForms, answerLeaks } from "../answer-guard.ts";
 import type { StepSource, SubjectFacts } from "../domain.ts";
 import type { CardData } from "../events.ts";
 import { formatLintIssues, lintStrict } from "../lint/strict.ts";
@@ -75,7 +76,8 @@ export interface ProposeResult {
 }
 
 export interface ProposeDeps {
-  ctx: Pick<TurnContext, "conversationId" | "apply" | "gradedContext" | "limits" | "lesson">;
+  ctx: Pick<TurnContext, "conversationId" | "apply" | "gradedContext" | "limits" | "lesson"> &
+    Partial<Pick<TurnContext, "step" | "answerPolicy" | "disclosure" | "learnerCode">>;
   grader: GraderPort;
   conversations: ConversationStore;
   /** Cards already shown in this turn. */
@@ -110,8 +112,22 @@ export async function proposeCode(
   const lint = lintStrict(input.code);
   if (lint.length > 0) return rejected(formatLintIssues(lint));
 
+  // Below the reveal rung a card may model the idea, never spell out the step's own answer (wave4.md §5.6).
+  if (ctx.answerPolicy === "socratic" && ctx.step) {
+    const leaks = answerLeaks(
+      [input.title, input.code, input.explanation].join("\n"),
+      answerForms(ctx.step, ctx.learnerCode ?? null),
+      ctx.disclosure ?? 0,
+    );
+    if (leaks.length > 0)
+      return rejected([
+        "the card spells out this step's answer: model the idea in another key or on other bars, or offer [[reveal]] when the learner asks for the answer",
+      ]);
+  }
+
+  const key = ctx.step?.key ?? ctx.lesson?.key ?? null;
   const run = await deps.grader.evaluate(
-    { code: input.code, fromBar: 1, bars: CARD_EVAL_BARS, key: ctx.lesson?.key ?? null, origin: "tutor" },
+    { code: input.code, fromBar: 1, bars: CARD_EVAL_BARS, key, origin: "tutor" },
     signal,
   );
   if (!run.ok) return rejected([run.error?.message ?? "the code did not run"], run.lockedTools);

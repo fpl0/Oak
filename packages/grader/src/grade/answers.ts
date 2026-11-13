@@ -1,14 +1,29 @@
 // Graders for answers that are not code: choices, degrees, qualities, Roman numerals, text, numbers,
 // keyboard notes, spelled staff notes and key signatures (exercises §1, §3.9). Pure and synchronous.
-import type { Answer, AnswerUi, Diagnostic, KeySpec, NEvent, PartialMap, PitchMode } from "@oak/content-kit";
+import type {
+  Answer,
+  AnswerUi,
+  Choice,
+  ChordQuality,
+  Diagnostic,
+  KeySpec,
+  NEvent,
+  PartialMap,
+  PitchMode,
+} from "@oak/content-kit";
+import { CADENCE_TYPES, HARMONIC_FUNCTIONS } from "@oak/content-kit";
+import type { ChordId, RomanNumeral } from "@oak/theory";
 import {
+  displayRN,
   keySignature,
   normalizeText,
+  parseChordWithBass,
   parseInterval,
   parseRN,
   pcOf,
   rnToChord,
   spellMidi,
+  toLeadSheet,
   triadCore,
 } from "@oak/theory";
 import { mod12 } from "../analyze/events.ts";
@@ -29,18 +44,25 @@ const norm = (kind: "note" | "chord" | "rn" | "interval" | "key" | "free", s: st
   }
 };
 
-/** Two Roman numerals in a key name the same chord (triad core and applied target), or the same text. */
-export function sameRn(a: string, b: string, key: KeySpec | null): boolean {
-  if (norm("rn", a) === norm("rn", b)) return true;
-  if (!key) return false;
+/**
+ * Two Roman numerals in a key name the same chord: compared as (degree, quality, applied target) and, with
+ * `inversion`, the bass too; never as strings (contracts §6.6, wave4.md §3.1). Without a key only the
+ * normalized text can be compared.
+ */
+export function sameRn(a: string, b: string, key: KeySpec | null, o: { inversion?: boolean } = {}): boolean {
+  if (!key) return norm("rn", a) === norm("rn", b);
   const ra = parseRN(a, key);
   const rb = parseRN(b, key);
-  if (!ra || !rb) return false;
+  if (!ra || !rb) return norm("rn", a) === norm("rn", b);
   const ca = rnToChord(ra, key);
   const cb = rnToChord(rb, key);
   const ta = triadCore(ca);
   const tb = triadCore(cb);
-  return ta.rootPc === tb.rootPc && ta.quality === tb.quality && ra.quality === rb.quality;
+  const same = ta.rootPc === tb.rootPc && ta.quality === tb.quality && ra.quality === rb.quality;
+  const sameTarget =
+    !ra.of === !rb.of && (!ra.of || !rb.of || rnToChord(ra.of, key).rootPc === rnToChord(rb.of, key).rootPc);
+  if (!same || !sameTarget) return false;
+  return !o.inversion || ca.bassPc === cb.bassPc;
 }
 /** Same numeral but the case (major vs minor) differs. */
 const rnCaseOnly = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase() && a !== b;
@@ -147,7 +169,9 @@ export function gradeAnswer(
 ): AnswerCheck {
   const parts: AnswerCheck[] = [];
   const order = o.order ?? (ui.ui === "choice" && ui.multi ? "set" : "sequence");
-  if (correct.choice)
+  if (correct.choice && ui.ui === "slot-choice")
+    parts.push(slotChoices(ui, correct.choice, got.choice ?? [], o.partial));
+  else if (correct.choice)
     parts.push(
       compareSlots(correct.choice, got.choice ?? [], (e, g) => e === g, {
         ...(o.partial ? { partial: o.partial } : {}),
@@ -163,17 +187,17 @@ export function gradeAnswer(
     );
   if (correct.qualities)
     parts.push(
-      compareSlots(correct.qualities, got.qualities ?? [], (e, g) => e === g, {
-        ...(o.partial ? { partial: o.partial } : {}),
+      qualitySlots(correct.qualities, got.qualities ?? [], {
         order,
+        ...(o.partial ? { partial: o.partial } : {}),
       }),
     );
   if (correct.rn)
     parts.push(
-      compareSlots(correct.rn, got.rn ?? [], (e, g) => sameRn(e, g, o.key ?? null), {
-        ...(o.partial ? { partial: o.partial } : {}),
+      rnSlots(correct.rn, got.rn ?? [], o.key ?? null, {
+        inversion: ui.ui === "rn-palette" && ui.allow.includes("inversions"),
         order,
-        rnKey: o.key ?? null,
+        ...(o.partial ? { partial: o.partial } : {}),
       }),
     );
   if (correct.text) {
@@ -193,6 +217,15 @@ export function gradeAnswer(
           ...(o.partial ? { partial: o.partial } : {}),
           ...(o.spelledIntervals ? { spelled: o.spelledIntervals } : {}),
           order,
+        }),
+      );
+    else if (kind === "chord")
+      parts.push(
+        chordNameSlots(correct.text, got.text ?? [], {
+          strict: (o.spelling ?? "enharmonic") === "strict",
+          order,
+          key: o.key ?? null,
+          ...(o.partial ? { partial: o.partial } : {}),
         }),
       );
     else
@@ -701,4 +734,271 @@ export function keySignatureCheck(
     diagnostics,
     slots: want.map((n, i) => (order === "sequence" ? (g[i] === n ? 1 : 0) : g.includes(n) ? 1 : 0)),
   };
+}
+
+// --- Wave 4: chords, qualities, numerals, slot strips ---------------------------------------------
+
+const QUALITY_TEXT: Partial<Record<ChordQuality, { word: string; tip: string }>> = {
+  maj: { word: "major", tip: "major is a major 3rd (4 half steps) with a minor 3rd on top" },
+  min: { word: "minor", tip: "minor is a minor 3rd (3 half steps) with a major 3rd on top" },
+  dim: { word: "diminished", tip: "diminished is two minor 3rds stacked: tense, narrow" },
+  aug: { word: "augmented", tip: "augmented is two major 3rds stacked: bright and unresolved" },
+  maj7: {
+    word: "major 7th",
+    tip: "a major 7th chord is a major triad with the note a half step below the octave",
+  },
+  "7": { word: "dominant 7th", tip: "a dominant 7th is a major triad with a minor 7th: it wants to move" },
+  m7: { word: "minor 7th", tip: "a minor 7th is a minor triad with a minor 7th" },
+  m7b5: { word: "half-diminished", tip: "half-diminished is a diminished triad with a minor 7th" },
+  dim7: { word: "diminished 7th", tip: "a diminished 7th is minor 3rds all the way up" },
+  sus2: { word: "sus2", tip: "sus2 has the 2nd in place of the 3rd" },
+  sus4: { word: "sus4", tip: "sus4 has the 4th in place of the 3rd" },
+};
+const qWord = (q: string): string => QUALITY_TEXT[q as ChordQuality]?.word ?? q;
+
+/** Rewrites the `id.wrong` / `id.partial` findings of `compareSlots` with a specific one, slot by slot. */
+function refine(
+  base: AnswerCheck,
+  expected: readonly string[],
+  got: readonly string[],
+  specific: (e: string, g: string, slot: number) => Diagnostic | null,
+): AnswerCheck {
+  const diagnostics = base.diagnostics.flatMap((d): Diagnostic[] => {
+    if (d.id !== "id.wrong" && d.id !== "id.partial") return [d];
+    const i = (d.where?.slot ?? 1) - 1;
+    const e = expected[i];
+    const g = got[i];
+    if (e === undefined || g === undefined) return [d];
+    const x = specific(e, g, i + 1);
+    if (!x) return [d];
+    // The terse finding follows as its twin (`params.refines`): `foldRefined` keeps exactly one of the two.
+    return [
+      { ...x, ...(d.id === "id.partial" ? { severity: "warn" as const } : {}) },
+      { ...d, severity: "info", params: { ...d.params, refines: x.id } },
+    ];
+  });
+  return { ...base, diagnostics };
+}
+
+/**
+ * Keeps one finding per refined slot. The specific one ("the chord is built on A, not E") by default; the
+ * terse `id.wrong` / `id.partial` when the exercise overrides that text in `feedbackText`, because then the
+ * author has chosen the message (and content tests name it).
+ */
+export function foldRefined(
+  ds: readonly Diagnostic[],
+  overrides?: Partial<Record<string, string>>,
+): Diagnostic[] {
+  const out: Diagnostic[] = [];
+  for (let i = 0; i < ds.length; i++) {
+    const d = ds[i] as Diagnostic;
+    const twin = ds[i + 1];
+    if (twin && typeof twin.params.refines === "string" && twin.params.refines === d.id) {
+      const { refines: _r, ...params } = twin.params;
+      const terse: Diagnostic = { ...twin, params, severity: d.severity };
+      out.push(overrides?.[twin.id] !== undefined ? terse : d);
+      i++;
+      continue;
+    }
+    out.push(d);
+  }
+  return out;
+}
+const slotWhere = (n: number, slot: number) => (n > 1 ? { slot } : undefined);
+
+/** Quality-pad answers: a miss says what each quality is made of. */
+export function qualitySlots(
+  expected: readonly string[],
+  got: readonly string[],
+  o: { order?: "sequence" | "set"; partial?: PartialMap } = {},
+): AnswerCheck {
+  const base = compareSlots(expected, got, (e, g) => e === g, {
+    ...(o.partial ? { partial: o.partial } : {}),
+    order: o.order ?? "sequence",
+  });
+  if (o.order === "set") return base;
+  return refine(base, expected, got, (e, g, slot) =>
+    diag(
+      "id.quality",
+      {
+        exp: qWord(e),
+        got: qWord(g),
+        tip: QUALITY_TEXT[e as ChordQuality]?.tip ?? `listen for the ${qWord(e)} colour`,
+      },
+      slotWhere(expected.length, slot),
+      "quality",
+    ),
+  );
+}
+
+const degreeText = (rn: RomanNumeral): string =>
+  `${rn.alt === -1 ? "♭" : rn.alt === 1 ? "♯" : ""}${rn.degree}`;
+const MEMBER_NAME = ["root", "3rd", "5th", "7th"] as const;
+
+/**
+ * Roman-numeral answers (`rn-palette`, a typed numeral): by degree, quality and (with `inversion`) the bass,
+ * never by string. A miss names the actual mistake: another degree, the case (major vs minor), another
+ * quality, or the right chord with another bass.
+ */
+export function rnSlots(
+  expected: readonly string[],
+  got: readonly string[],
+  key: KeySpec | null,
+  o: { inversion?: boolean; order?: "sequence" | "set"; partial?: PartialMap } = {},
+): AnswerCheck {
+  const inv = o.inversion ?? false;
+  const base = compareSlots(expected, got, (e, g) => sameRn(e, g, key, { inversion: inv }), {
+    ...(o.partial ? { partial: o.partial } : {}),
+    order: o.order ?? "sequence",
+    rnKey: key,
+  });
+  if (!key || o.order === "set") return base;
+  return refine(base, expected, got, (e, g, slot) => {
+    const re = parseRN(e, key);
+    const rg = parseRN(g, key);
+    const where = { slot };
+    if (!re || !rg) return null;
+    const shown = (rn: RomanNumeral): string => displayRN(inv ? rn : { ...rn, inversion: 0 });
+    const ce = rnToChord(re, key);
+    const cg = rnToChord(rg, key);
+    if (re.degree !== rg.degree || re.alt !== rg.alt || !re.of !== !rg.of)
+      return diag(
+        "harmony.rn-degree",
+        {
+          got: shown(rg),
+          exp: shown(re),
+          gotDeg: degreeText(rg),
+          expDeg: degreeText(re),
+          gotChord: toLeadSheet({ ...cg, bassPc: cg.rootPc }),
+          expChord: toLeadSheet({ ...ce, bassPc: ce.rootPc }),
+        },
+        where,
+        "rn",
+      );
+    if (triadCore(ce).quality !== triadCore(cg).quality || re.quality !== rg.quality) {
+      const caseOnly =
+        ["maj", "min"].includes(triadCore(ce).quality) && ["maj", "min"].includes(triadCore(cg).quality);
+      if (caseOnly && re.quality.length <= 3 && rg.quality.length <= 3)
+        return diag("harmony.rn-case", { got: shown(rg), exp: shown(re) }, where, "rn");
+      return diag(
+        "harmony.rn-quality",
+        { got: shown(rg), exp: shown(re), gotQ: qWord(rg.quality), expQ: qWord(re.quality) },
+        where,
+        "quality",
+      );
+    }
+    if (inv && ce.bassPc !== cg.bassPc)
+      return diag(
+        "harmony.rn-inversion",
+        {
+          got: displayRN(rg),
+          exp: displayRN(re),
+          member: MEMBER_NAME[re.inversion] ?? "root",
+          gotMember: MEMBER_NAME[rg.inversion] ?? "root",
+        },
+        where,
+        "inversion",
+      );
+    return null;
+  });
+}
+
+const chordRootName = (c: ChordId): string => c.root;
+/**
+ * Typed chord names (`text` with `normalize: "chord"`): C°, Co and Cdim are one answer, C+ and Caug one,
+ * slash chords name the bass. With `strict` the root's spelling must match too (C♯ is not D♭ in A major).
+ * A miss names the root, the quality or the bass apart.
+ */
+export function chordNameSlots(
+  expected: readonly string[],
+  got: readonly string[],
+  o: { strict: boolean; order?: "sequence" | "set"; key: KeySpec | null; partial?: PartialMap },
+): AnswerCheck {
+  const parse = (s: string): ChordId | null => {
+    const n = norm("chord", s);
+    return parseChordWithBass(n) ?? parseChordWithBass(s.trim());
+  };
+  const same = (e: string, g: string): boolean => {
+    if (norm("chord", e) === norm("chord", g)) return true;
+    if (o.strict) return false;
+    const ce = parse(e);
+    const cg = parse(g);
+    return !!ce && !!cg && ce.rootPc === cg.rootPc && ce.quality === cg.quality && ce.bassPc === cg.bassPc;
+  };
+  const base = compareSlots(expected, got, same, {
+    ...(o.partial ? { partial: o.partial } : {}),
+    order: o.order ?? "sequence",
+  });
+  if (o.order === "set") return base;
+  return refine(base, expected, got, (e, g, slot) => {
+    const ce = parse(e);
+    const cg = parse(g);
+    if (!ce || !cg) return null;
+    const where = slotWhere(expected.length, slot);
+    const exp = toLeadSheet(ce);
+    const gotS = toLeadSheet(cg);
+    if (ce.rootPc !== cg.rootPc)
+      return diag(
+        "id.chord-root",
+        { exp, got: gotS, expRoot: chordRootName(ce), gotRoot: chordRootName(cg) },
+        where,
+        "root",
+      );
+    if (triadCore(ce).quality !== triadCore(cg).quality || ce.quality !== cg.quality)
+      return diag(
+        "id.chord-quality",
+        { exp, got: gotS, expQ: qWord(ce.quality), gotQ: qWord(cg.quality) },
+        where,
+        "quality",
+      );
+    if (ce.bassPc !== cg.bassPc) {
+      const bassName = (c: ChordId): string =>
+        c.bassPc === c.rootPc
+          ? c.root
+          : (c.bass ?? spellMidi(60 + c.bassPc, { key: o.key }).name.replace(/-?\d+$/, ""));
+      return diag(
+        "id.chord-inversion",
+        { exp, got: gotS, expBass: bassName(ce), gotBass: bassName(cg) },
+        where,
+        "inversion",
+      );
+    }
+    return diag("id.chord-spelling", { exp, got: gotS }, where, "spelling");
+  });
+}
+
+const FUNCTION_IDS = new Set<string>(HARMONIC_FUNCTIONS);
+const CADENCE_IDS = new Set<string>(CADENCE_TYPES);
+/**
+ * A strip of per-slot choices (`slot-choice`: a function strip, the cadence of each phrase, "chord tone or
+ * not"): slot by slot, with `partial` credit; a miss names the slot and the options by their labels.
+ */
+export function slotChoices(
+  ui: Extract<AnswerUi, { ui: "slot-choice" }>,
+  expected: readonly string[],
+  got: readonly string[],
+  partial?: PartialMap,
+): AnswerCheck {
+  const base = compareSlots(expected, got, (e, g) => e === g, {
+    ...(partial ? { partial } : {}),
+    order: "sequence",
+  });
+  const label = (id: string): string => ui.options.find((c: Choice) => c.id === id)?.label ?? id;
+  const ids = ui.options.map((c) => c.id);
+  const kind = ids.every((id) => FUNCTION_IDS.has(id))
+    ? "function"
+    : ids.every((id) => CADENCE_IDS.has(id))
+      ? "cadence"
+      : "slot";
+  const slotName = (i: number): string =>
+    ui.labels?.[i - 1] ??
+    (kind === "function" ? `Bar ${i}` : kind === "cadence" ? `Phrase ${i}` : `Slot ${i}`);
+  return refine(base, expected, got, (e, g, slot) =>
+    diag(
+      kind === "function" ? "harmony.function" : kind === "cadence" ? "harmony.cadence" : "id.slot",
+      { at: slotName(slot), exp: label(e), got: label(g) },
+      { slot },
+      "choice",
+    ),
+  );
 }

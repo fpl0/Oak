@@ -115,7 +115,7 @@ export const useCourseProgress = () => useQuery(apiQuery("lessons.progress"));
 export const useStepState = (id: string, stepId: string, enabled = true) =>
   useQuery({ ...apiQuery("steps.state", { params: { id, stepId } }), enabled });
 export const useStepAttempt = () =>
-  useApiMutation("steps.attempt", ["steps.state", "skills.map", "voice.get"]);
+  useApiMutation("steps.attempt", ["steps.state", "skills.map", "voice.get", "gates.voicing"]);
 export const useStepHint = () => useApiMutation("steps.hint", ["steps.state"]);
 export const useStepNewSeries = () => useApiMutation("steps.newSeries", ["steps.state"]);
 export const useLessonComplete = () =>
@@ -126,8 +126,14 @@ export const useCheckpointAttempt = () =>
 export const useCapstone = (id: string) => useQuery(apiQuery("capstones.get", { params: { id } }));
 export const useCapstoneCheck = () => useApiMutation("capstones.check", ["capstones.get"]);
 export const useCapstoneSessionComplete = () =>
-  useApiMutation("capstones.completeSession", ["capstones.get", "lessons.progress", "session.today"]);
-export const useGymStart = () => useApiMutation("gym.start", ["lessons.progress", "session.today"]);
+  useApiMutation("capstones.completeSession", [
+    "capstones.get",
+    "capstones.sessions",
+    "lessons.progress",
+    "session.today",
+  ]);
+export const useGymStart = () =>
+  useApiMutation("gym.start", ["lessons.progress", "session.today", "gym.plan", "ladder.get"]);
 export const useTermsIntroduced = () => useQuery(apiQuery("terms.introduced"));
 
 // --- skills, SRS, drills ------------------------------------------------------------------------
@@ -209,7 +215,7 @@ export const useTranscriptionCreate = () => useApiMutation("transcriptions.creat
 export const useTranscriptionPatch = () =>
   useApiMutation("transcriptions.patch", ["transcriptions.get", "transcriptions.list"]);
 export const useTranscriptionAddVersion = () =>
-  useApiMutation("transcriptions.addVersion", ["transcriptions.get", "transcriptions.list"]);
+  useApiMutation("transcriptions.addVersion", ["transcriptions.get", "transcriptions.list", "gym.plan"]);
 export const useTranscriptionDelete = () =>
   useDestructiveMutation("transcriptions.delete", ["transcriptions.list"]);
 
@@ -265,6 +271,9 @@ export const useLessonPosition = () =>
 export const useCapstoneRelease = () =>
   useApiMutation("capstones.release", [
     "capstones.get",
+    "capstones.sessions",
+    "capstones.gate",
+    "gym.plan",
     "album.get",
     "album.track",
     "lessons.progress",
@@ -308,3 +317,58 @@ export const useVoiceLadder = () => useApiMutation("voice.ladder", ["voice.get",
 /** One drill set with its stored trials. */
 export const useDrillSession = (id: string | null) =>
   useQuery({ ...apiQuery("drills.get", { params: { id: id ?? "none" } }), enabled: id !== null });
+
+// --- Wave 4 additions (docs/design/wave4.md §5) -------------------------------------------------------
+// Until the server engineer builds them these answer 501 (`OakApiError.code === "not_implemented"`, never
+// retried); a surface shows its own "not built yet" copy through `ErrorState`.
+
+/** A multi-session capstone's sessions: status, draft, X1's checks. */
+export const useCapstoneSessions = (id: string | null) =>
+  useQuery({ ...apiQuery("capstones.sessions", { params: { id: id ?? "none" } }), enabled: id !== null });
+/** Save a capstone session's draft (its Make). */
+export const useCapstoneSaveDraft = () =>
+  useApiMutation("capstones.saveDraft", ["capstones.sessions", "capstones.get", "streak.get"]);
+/** Record one X1 phrase or stage check graded in the browser. */
+export const useCapstoneRecordCheck = () =>
+  useApiMutation("capstones.recordCheck", ["capstones.sessions", "capstones.get"]);
+/** What a capstone needs to open (X1: "Two more gym sets open X1"). */
+export const useCapstoneGate = (id: string | null) =>
+  useQuery({ ...apiQuery("capstones.gate", { params: { id: id ?? "none" } }), enabled: id !== null });
+/** Edit a release's liner notes or whether the review's note shows. */
+export const useAlbumPatchVersion = () => useApiMutation("album.patchVersion", ["album.track", "album.get"]);
+/** Attach a submitted capstone review to an album version. */
+export const useAlbumAttachReview = () =>
+  useApiMutation("album.attachReview", ["album.track", "tutor.reviews"]);
+/** Submitted reviews of a capstone or transcription, newest first. */
+export const useTutorReviews = (
+  subject: { subjectKind: "capstone" | "transcription"; subjectId: string } | null,
+) =>
+  useQuery({
+    ...apiQuery("tutor.reviews", {
+      query: subject ?? { subjectKind: "capstone", subjectId: "none" },
+    }),
+    enabled: subject !== null,
+  });
+/** Remember a transcription project's player settings and notes. */
+export const useTranscriptionSettings = () =>
+  useApiMutation("transcriptions.putSettings", ["transcriptions.get", "transcriptions.list"]);
+/** The generated ladder: level, realism, history, an offered level-up. */
+export const useLadder = () => useQuery(apiQuery("ladder.get"));
+/** Take an offered level-up or move down a level. */
+export const useLadderSetLevel = () => useApiMutation("ladder.setLevel", ["ladder.get", "gym.plan"]);
+/** The next generated ladder item (creates its project). */
+export const useLadderNext = () => useApiMutation("ladder.next", ["transcriptions.list"]);
+/** Grade a ladder answer on the server. */
+export const useLadderSubmit = () =>
+  useApiMutation("ladder.submit", [
+    "ladder.get",
+    "gym.plan",
+    "transcriptions.get",
+    "transcriptions.list",
+    "progress.get",
+    "skills.map",
+  ]);
+/** The gym slot rule and the next gym session. */
+export const useGymPlan = () => useQuery(apiQuery("gym.plan"));
+/** The U05.L07 voice-leading gate (`voicing()`, `rhodes`, `organ`). */
+export const useVoicingGate = () => useQuery(apiQuery("gates.voicing"));

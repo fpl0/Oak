@@ -25,7 +25,7 @@ import {
   stripMarkers,
   substituteParams,
 } from "@oak/content-kit";
-import { intervalOf, labelPitch, romanOf, triadCore } from "@oak/theory";
+import { intervalOf, labelPitch, romanOf, spellMidi, triadCore } from "@oak/theory";
 import { romanText } from "../analyze/chords.ts";
 import { firstBars, mod12 } from "../analyze/events.ts";
 import { keyOf } from "../analyze/key.ts";
@@ -35,7 +35,6 @@ import { sectionsFromAst } from "../analyze/sections.ts";
 import { normalizedFromEvents, periodOf, resolveTarget, selectTrack } from "../analyze/tracks.ts";
 import { diag, messagesOf, sortDiagnostics } from "../feedback/catalog.ts";
 import { miniErrorDetail } from "../lint/mini.ts";
-import { pitchLabel } from "../match/common.ts";
 import { slotsOf } from "../match/harmony.ts";
 import { runMatcher } from "../match/index.ts";
 import { melodyEvents } from "../match/melody.ts";
@@ -58,11 +57,21 @@ import type {
 } from "../types.ts";
 import { MODE_LIMITS } from "../types.ts";
 import type { AnswerCheck } from "./answers.ts";
-import { gradeAnswer, keyboardCheck, keySignatureCheck, spelledNotes, staffName } from "./answers.ts";
+import {
+  foldRefined,
+  gradeAnswer,
+  keyboardCheck,
+  keySignatureCheck,
+  qualitySlots,
+  rnSlots,
+  spelledNotes,
+  staffName,
+} from "./answers.ts";
 import type { ConstraintRow } from "./constraints.ts";
 import { checkConstraints } from "./constraints.ts";
 import { judgeSungPattern } from "./sing.ts";
 import { refineStaffResult } from "./staff.ts";
+import { staffChordsCheck } from "./staff-chords.ts";
 
 /** What the pipeline needs from the realm. `evaluateForGrading` and `normalize` in production. */
 export interface GradeDeps {
@@ -285,7 +294,7 @@ async function gradeAgainstReference(
   const { res, n: nAll } = answer.ev;
   const period = periodOf(nAll.all, MODE_LIMITS[ctx.mode].periodCap, probeBars);
   const bars = barsToQuery(ctx.mode, ref.bars, period);
-  const nAns = window(nAll, bars);
+  const nAns = ctx.window ? onsetWindow(window(nAll, bars), ctx.window) : window(nAll, bars);
   const nc = nctx(ex, ctx);
   const constraintRows = runConstraints(spec.constraints ?? [], spec, ctx, deps, res);
   const extra = lintNotes(res);
@@ -310,12 +319,24 @@ async function gradeAgainstReference(
       ...(deps.toolCode ? { toolCode: deps.toolCode } : {}),
       ...(spec.transcription ? { transcription: true } : {}),
     };
-    const m = runMatcher(matcher, scoped(refEv.n, ref), scoped(nAns, ref), rctx);
+    const refN = ctx.window ? onsetWindow(refEv.n, ctx.window) : refEv.n;
+    const m = runMatcher(matcher, scoped(refN, ref), scoped(nAns, ref), rctx);
     if (!best || m.score > best.score) best = m;
     if (m.score >= 1) break;
   }
   const m = best as MatchResult;
   return foldCode(ex, ctx, m, constraintRows, extra, res);
+}
+/** Events with an onset in `[from, to)` cycles (a phrase window, `GradeContext.window`). */
+function onsetWindow(
+  n: Normalized,
+  w: { from: import("@oak/content-kit").Rat; to: import("@oak/content-kit").Rat },
+): Normalized {
+  const keep = (ev: readonly NEvent[]): NEvent[] =>
+    ev.filter((e) => R.lte(w.from, e.onset) && R.lt(e.onset, w.to));
+  const byTrack: Record<string, NEvent[]> = {};
+  for (const [t, ev] of Object.entries(n.byTrack)) byTrack[t] = keep(ev);
+  return { ...n, byTrack, all: keep(n.all), band: keep(n.band) };
 }
 /** `Reference.tracks` limits what both sides are graded on (default '*'). */
 function scoped(n: Normalized, ref: Reference): Normalized {
@@ -362,9 +383,14 @@ function foldCode(
     dims.constraints = { score: share, weight: 0, n: rows.length };
     if (failed.length) score *= 0.5 + 0.5 * share;
   }
+  // Every member of an `all` matcher must pass as well as their mean (content-kit `Matcher`): below the mark,
+  // the weakest member is the score, so a failed attempt never reports a passing score (the voicing gate
+  // reads the score, contracts §3.1 rule 6).
+  const mark = (passThreshold(ex) ?? 1) - 1e-9;
+  if (m.floor !== undefined && m.floor < mark) score = Math.min(score, m.floor);
   return finish(ex, ctx, {
     score,
-    pass: failed.length === 0 && score >= (passThreshold(ex) ?? 1) - 1e-9,
+    pass: failed.length === 0 && score >= mark,
     dims,
     diagnostics: [...extra, ...failed.map((r) => r.diag as Diagnostic), ...m.diagnostics],
     constraints: rows,
@@ -640,7 +666,13 @@ const answerFold = (
   ctx: GradeContext,
   a: AnswerCheck,
   extra: Partial0 = { score: 0 },
-): GradeResult => finish(ex, ctx, { ...extra, score: a.score, dims: a.dims, diagnostics: a.diagnostics });
+): GradeResult =>
+  finish(ex, ctx, {
+    ...extra,
+    score: a.score,
+    dims: a.dims,
+    diagnostics: foldRefined(a.diagnostics, ex.feedbackText as Partial<Record<string, string>> | undefined),
+  });
 
 async function gradeInvestigate(
   ex: ExerciseOf<"run-investigate">,
@@ -755,7 +787,15 @@ async function gradeParsons(
   return finish(ex, ctx, { score, pass: false, dims: { order: { score, weight: 1 } }, diagnostics: ds });
 }
 
-/** Staged dictation answers (bass → quality → RN, tonic, rhythm, pitch) against the evaluated reference. */
+/**
+ * Staged dictation answers (bass → quality → RN, tonic, rhythm, pitch) against the evaluated reference.
+ * Wave 4 (`dictation.stage-answers`): the bass stage may be answered as degrees (a degree pad, 1-based) or
+ * as note names; qualities at the depth the widget offers; numerals by degree, quality and (when the
+ * widget allows inversions) bass. Each stage's score is reported in its own dimension (`bass`, `quality`,
+ * `rn`, `pitch`, `rhythm`, `choice` for the tonic) so a sequential host opens the next stage when the one
+ * before reaches `stagePass` (`stagePassed`). The step passes when every listed stage is answered and
+ * reaches `stagePass` (default 0.8) with `stageAnswers`, else on the weighted mean.
+ */
 async function gradeStages(
   ex: ExerciseOf<"dictation">,
   ctx: GradeContext,
@@ -770,60 +810,163 @@ async function gradeStages(
   const slots = slotsOf(ref.n, nc).filter((s) => s.chord);
   const ds: Diagnostic[] = [];
   const stageScores: number[] = [];
+  const dims: GradeResult["dims"] = {};
   const mel = melodyLine(melodyEvents(ref.n));
+  const barOfSlot = (i: number): number | undefined => {
+    const slot = slots[i];
+    return slot ? R.floor(slot.span[0]) + 1 : undefined;
+  };
+  const withBar = (d: Diagnostic): Diagnostic => {
+    const i = (d.where?.slot ?? 1) - 1;
+    const bar = barOfSlot(i);
+    return bar === undefined ? d : { ...d, where: { ...(d.where ?? {}), slot: i + 1, bar } };
+  };
+  const answered = order.filter((st) => (stages[st]?.length ?? 0) > 0);
+  const staged = ex.stageAnswers !== undefined;
   for (const stage of order) {
     const got = stages[stage] ?? [];
-    let expected: string[] = [];
-    if (stage === "bass")
-      expected = slots.map((s) => (key && s.chord ? pitchLabel(60 + s.chord.bassPc, key).name : "?"));
-    else if (stage === "quality") expected = slots.map((s) => (s.chord ? triadCore(s.chord).quality : "?"));
-    else if (stage === "rn")
-      expected = slots.map((s, i) =>
+    const widget = ex.stageAnswers?.[stage];
+    let check: AnswerCheck;
+    if (stage === "bass") {
+      // A degree pad sends degrees (1-based); a typed or note answer sends note names.
+      const asDegrees =
+        got.length > 0 ? got.every((g) => /^[b#♭♯]?[1-7]$/.test(g.trim())) : widget?.ui === "degree-pad";
+      const expected = slots.map((s) =>
         key && s.chord
-          ? romanText({ ...romanOf(s.chord, key, slots[i + 1]?.chord ?? undefined), inversion: 0 })
+          ? asDegrees
+            ? labelPitch(60 + s.chord.bassPc, key).degree
+            : spellMidi(60 + s.chord.bassPc, { key }).name.replace(/-?\d+$/, "")
           : "?",
       );
-    else if (stage === "tonic") expected = key ? [key.tonic] : [];
-    else if (stage === "pitch") expected = key ? degreeSequence(mel, key) : [];
-    else if (stage === "rhythm") expected = [...new Set(mel.map((x) => R.str(x.onset)))];
-    const n = Math.max(expected.length, got.length);
-    let ok = 0;
-    for (let i = 0; i < n; i++) {
-      const e = expected[i];
-      const g = got[i];
-      const same =
-        e !== undefined &&
-        g !== undefined &&
-        (stage === "tonic" ? mod12(pcOfSafe(e)) === mod12(pcOfSafe(g)) : stage === "rn" ? e === g : e === g);
-      if (same) {
-        ok++;
-        continue;
-      }
-      const slot = slots[i];
-      const where = slot ? { slot: i + 1, bar: R.floor(slot.span[0]) + 1 } : { slot: i + 1 };
-      const params = { got: g ?? "nothing", exp: e ?? "nothing" };
-      if (stage === "bass")
-        ds.push(diag("harmony.bass", { ...params, bar: where.bar ?? i + 1 }, where, "bass"));
-      else if (stage === "quality")
-        ds.push(diag("harmony.quality", { ...params, root: "" }, where, "quality"));
-      else if (stage === "rn")
-        ds.push(
+      const normDeg = (x: string): string => x.trim().replace("♭", "b").replace("♯", "#");
+      const same = (e: string, g: string): boolean =>
+        asDegrees ? normDeg(e) === normDeg(g) : mod12(pcOfSafe(e)) === mod12(pcOfSafe(g)) && pcOfSafe(g) >= 0;
+      const n = Math.max(expected.length, got.length);
+      let ok = 0;
+      const cd: Diagnostic[] = [];
+      for (let i = 0; i < n; i++) {
+        const e = expected[i];
+        const g = got[i];
+        if (e !== undefined && g !== undefined && same(e, g)) {
+          ok++;
+          continue;
+        }
+        const bar = barOfSlot(i) ?? i + 1;
+        cd.push(
           diag(
-            e && g && e.toLowerCase() === g.toLowerCase() ? "harmony.rn-case" : "harmony.rn",
-            params,
-            where,
-            "rn",
+            "harmony.bass",
+            { got: g ?? "nothing", exp: e ?? "nothing", bar },
+            { slot: i + 1, bar },
+            "bass",
           ),
         );
-      else if (stage === "pitch")
-        ds.push(diag("melody.wrong-degree", { ...params, gotSyl: "", expSyl: "" }, { slot: i + 1 }, "pitch"));
-      else ds.push(diag("id.wrong", params, { slot: i + 1 }, "stage"));
+      }
+      check = { score: n === 0 ? 1 : ok / n, dims: {}, diagnostics: cd, slots: [] };
+    } else if (stage === "quality") {
+      const offered = widget?.ui === "quality-pad" ? widget.set : null;
+      const expected = slots.map((s) =>
+        s.chord ? (offered?.includes(s.chord.quality) ? s.chord.quality : triadCore(s.chord).quality) : "?",
+      );
+      check = qualitySlots(expected, got);
+    } else if (stage === "rn") {
+      const inversion = widget?.ui === "rn-palette" && widget.allow.includes("inversions");
+      const expected = slots.map((s, i) =>
+        key && s.chord
+          ? romanText({
+              ...romanOf(s.chord, key, slots[i + 1]?.chord ?? undefined),
+              ...(inversion ? {} : { inversion: 0 as const }),
+            })
+          : "?",
+      );
+      check = rnSlots(expected, got, key, { inversion });
+    } else if (stage === "tonic") {
+      const expected = key ? [key.tonic] : [];
+      const ok =
+        expected.length > 0 &&
+        got[0] !== undefined &&
+        mod12(pcOfSafe(expected[0] as string)) === mod12(pcOfSafe(got[0]));
+      check = {
+        score: ok ? 1 : 0,
+        dims: {},
+        diagnostics: ok
+          ? []
+          : [diag("id.wrong", { got: got[0] ?? "nothing", exp: expected[0] ?? "?" }, undefined, "stage")],
+        slots: [],
+      };
+    } else {
+      const expected =
+        stage === "pitch"
+          ? key
+            ? degreeSequence(mel, key)
+            : []
+          : [...new Set(mel.map((x) => R.str(x.onset)))];
+      const n = Math.max(expected.length, got.length);
+      let ok = 0;
+      const cd: Diagnostic[] = [];
+      for (let i = 0; i < n; i++) {
+        const e = expected[i];
+        const g = got[i];
+        if (e !== undefined && g !== undefined && e === g) {
+          ok++;
+          continue;
+        }
+        const params = { got: g ?? "nothing", exp: e ?? "nothing" };
+        cd.push(
+          stage === "pitch"
+            ? diag(
+                "melody.wrong-degree",
+                { ...params, gotSyl: "", expSyl: "", line: "melody" },
+                { slot: i + 1 },
+                "pitch",
+              )
+            : diag("id.wrong", params, { slot: i + 1 }, "stage"),
+        );
+      }
+      check = { score: n === 0 ? 1 : ok / n, dims: {}, diagnostics: cd, slots: [] };
     }
-    stageScores.push(n === 0 ? 1 : ok / n);
+    // A sequential host sends the stages one at a time: a stage not sent yet is open, not wrong.
+    check = {
+      ...check,
+      diagnostics: foldRefined(
+        check.diagnostics,
+        ex.feedbackText as Partial<Record<string, string>> | undefined,
+      ),
+    };
+    if (got.length > 0 || !staged)
+      ds.push(
+        ...(stage === "bass" || stage === "quality" || stage === "rn"
+          ? check.diagnostics.map(withBar)
+          : check.diagnostics),
+      );
+    stageScores.push(check.score);
+    const dim = STAGE_DIM[stage];
+    dims[dim] = { score: check.score, weight: 0, n: Math.max(slots.length, got.length) };
   }
   const wSum = weights.reduce((a, b) => a + b, 0) || 1;
   const score = stageScores.reduce((a, s, i) => a + s * (weights[i] ?? 0), 0) / wSum;
-  return finish(ex, ctx, { score, dims: { stage: { score, weight: 1, n: order.length } }, diagnostics: ds });
+  dims.stage = { score, weight: 1, n: order.length };
+  const pass = staged
+    ? answered.length === order.length && stageScores.every((x) => x >= (ex.stagePass ?? STAGE_PASS) - 1e-9)
+    : undefined;
+  return finish(ex, ctx, { score, ...(pass !== undefined ? { pass } : {}), dims, diagnostics: ds });
+}
+/** Default pass mark of a stage in a sequential staged dictation (contracts §6.6 X1: 0.80). */
+export const STAGE_PASS = 0.8;
+const STAGE_DIM: Record<
+  import("@oak/content-kit").DictationStage,
+  "bass" | "quality" | "rn" | "pitch" | "rhythm" | "choice"
+> = { bass: "bass", quality: "quality", rn: "rn", pitch: "pitch", rhythm: "rhythm", tonic: "choice" };
+/**
+ * Whether one stage of a staged dictation passed (the host opens the next stage then): its dimension score
+ * reaches the exercise's `stagePass` (default 0.8).
+ */
+export function stagePassed(
+  result: GradeResult,
+  stage: import("@oak/content-kit").DictationStage,
+  stagePass = STAGE_PASS,
+): boolean {
+  const d = result.dims[STAGE_DIM[stage]];
+  return !!d && d.score >= stagePass - 1e-9;
 }
 function pcOfSafe(name: string): number {
   const m = /^([A-Ga-g])([#b]*)/.exec(name.trim());
@@ -979,6 +1122,18 @@ export async function gradeWith(req: GradeRequest, deps: GradeDeps): Promise<Gra
         return answerFold(ex, ctx, keySignatureCheck(e.key, resp.answer.text ?? [], e.order ?? "set"));
       }
       if (!("staff" in resp)) return wrongShape();
+      if (e.e === "chords") {
+        const nc = nctx(ex, ctx);
+        return answerFold(
+          ex,
+          ctx,
+          staffChordsCheck(e, resp.staff, {
+            key: ex.answer.key ?? nc.key ?? null,
+            meter: nc.meter,
+            ...(nc.pickup ? { pickup: nc.pickup } : {}),
+          }),
+        );
+      }
       if (e.e === "pitches") {
         // The staff's own key signature (Wave 3) is the key the notes are written in.
         const key = ex.answer.key ?? ex.key ?? ctx.key;
@@ -1041,6 +1196,20 @@ export async function gradeWith(req: GradeRequest, deps: GradeDeps): Promise<Gra
     }
     case "dictation": {
       if ("answer" in resp && resp.answer.stages) return gradeStages(ex, ctx, deps, resp.answer.stages);
+      const partOf = "code" in resp && "part" in resp ? resp.part : undefined;
+      if ("code" in resp && typeof resp.code === "string" && partOf !== undefined && ex.byEar?.parts) {
+        // One part of a by-ear transcription (`by-ear.parts`): its own track, matcher and pass mark.
+        const part = ex.byEar.parts.find((p) => p.track === partOf);
+        if (!part) return wrongShape();
+        const partEx = { ...ex, pass: part.pass ?? DEFAULT_PASS.dictation ?? 0.85 } as typeof ex;
+        return gradeAgainstReference(partEx, ctx, deps, {
+          code: resp.code,
+          starter: ex.answer.ui === "code" ? ex.answer.starter : "",
+          reference: { ...ex.reference, tracks: [part.track] },
+          matcher: byEarMatcher(part.matcher, ex.byEar.accepts),
+          transcription: true,
+        });
+      }
       if ("code" in resp)
         // A code answer starts from the step's starter: handing it back unchanged is `code.unchanged`
         // (AUTHORING §9), not a list of every missing note.
@@ -1076,6 +1245,18 @@ export async function gradeWith(req: GradeRequest, deps: GradeDeps): Promise<Gra
     case "transcribe-step": {
       if (ex.grading.mode === "self") return finish(ex, ctx, { status: "ungraded", score: 0 });
       if (!("code" in resp)) return wrongShape();
+      const stageOf = "stage" in resp ? resp.stage : undefined;
+      if (stageOf !== undefined && ex.grading.stages) {
+        // One stage of a staged chord transcription (`transcribe.stages`): bass, then quality, then numerals.
+        const st = ex.grading.stages.find((x) => x.stage === stageOf);
+        if (!st) return wrongShape();
+        return gradeAgainstReference({ ...ex, pass: st.pass }, ctx, deps, {
+          code: resp.code,
+          starter: "",
+          reference: ex.grading.reference,
+          matcher: st.matcher,
+        });
+      }
       return gradeAgainstReference(ex, ctx, deps, {
         code: resp.code,
         starter: "",
@@ -1151,8 +1332,9 @@ async function gradeStaffEvents(
     meter: nc.meter,
     ...(nc.pickup ? { pickup: nc.pickup } : {}),
   });
+  const mark = (passThreshold(ex) ?? 1) - 1e-9;
   return finish(ex, ctx, {
-    score: m.score,
+    score: m.floor !== undefined && m.floor < mark ? Math.min(m.score, m.floor) : m.score,
     dims: m.dims,
     diagnostics: m.diagnostics,
     ...(m.overlay ? { overlay: m.overlay } : {}),

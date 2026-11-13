@@ -42,6 +42,8 @@ import { Callout, SegmentedControl } from "../ui/kit/Controls.tsx";
 import { toast } from "../ui/kit/Toast.tsx";
 import "../workbench/index.ts";
 import { appWorkbenchServices } from "../lib/workbench-services.ts";
+import { sitesOf, siteText } from "../toolbox/model.ts";
+import { useSubjectHarmony } from "../tutor/use-subject-harmony.ts";
 import { ServicesGate } from "../workbench/ServicesGate.tsx";
 import { Workbench } from "../workbench/Workbench.tsx";
 import { clearDraft, readDraft, readLength, writeDraft, writeLength } from "./draft.ts";
@@ -51,6 +53,7 @@ import {
   bandSetupFor,
   bandsForMeter,
   differsFrom,
+  harmonyViewHints,
   LENGTHS,
   type LockedHint,
   linerFlags,
@@ -252,9 +255,19 @@ export function SketchEditor({ sketch }: { sketch: SketchDetail }) {
     };
   }, [lintKey]);
   const hints = lockedHints(lint, toolbox, titles);
+  // Wave 4: a sketch with chords hears when its harmony views arrive (a hint, never a block).
+  const [hasChords, setHasChords] = useState(false);
+  const harmonyHints = harmonyViewHints(hasChords, unlocked as ReadonlySet<string>, (tid) => {
+    const t = toolbox.find((x) => x.id === tid);
+    if (!t) return null;
+    return sitesOf(t)
+      .map((s) => siteText(s, titles))
+      .join(" or ");
+  }).slice(0, 2);
 
   // --- the tutor's subject: this sketch -----------------------------------------------------------------
   const thread = { subjectKind: "sketch" as const, subjectId: id };
+  const onHarmony = useSubjectHarmony(thread);
   useEffect(() => {
     setSubject({ thread, title: sketch.title, tutorOpen: true, sketchId: id, code: liveRef.current });
     return () => clearSubject(thread);
@@ -503,11 +516,15 @@ export function SketchEditor({ sketch }: { sketch: SketchDetail }) {
             }}
             className="h-8 rounded-control border border-border bg-surface px-1.5 text-text"
           >
-            {LENGTHS.map((n) => (
-              <option key={n} value={n}>
-                {n} {n === 1 ? "bar" : "bars"}
-              </option>
-            ))}
+            {/* The loop's own length is always an option (a 12-bar Band's default, a stored 5), or the select
+                would show "1 bar" for it. */}
+            {[...new Set<number>([...LENGTHS, length])]
+              .sort((a, b) => a - b)
+              .map((n) => (
+                <option key={n} value={n}>
+                  {n} {n === 1 ? "bar" : "bars"}
+                </option>
+              ))}
           </select>
         </label>
         <span className="mx-1 hidden h-6 w-px bg-border sm:block" aria-hidden />
@@ -605,6 +622,10 @@ export function SketchEditor({ sketch }: { sketch: SketchDetail }) {
                 abLabels={compare ? { a: "now", b: versionLabel(compare) } : { a: "now", b: "earlier" }}
                 onChange={onChange}
                 onEvaluated={onEvaluated}
+                onModel={(m) => {
+                  setHasChords(m.harmony !== null && m.harmony.source === "learner");
+                  onHarmony(m);
+                }}
                 tutorBars
               />
             </ServicesGate>
@@ -619,6 +640,17 @@ export function SketchEditor({ sketch }: { sketch: SketchDetail }) {
             onOpen={onOpen}
           />
           {hints.length > 0 && !review ? <LockedHints hints={hints} /> : null}
+          {harmonyHints.length > 0 && !review ? (
+            <Callout tone="info" title="Coming for your chords" className="text-sm">
+              <ul className="flex flex-col gap-0.5" data-testid="harmony-hints">
+                {harmonyHints.map((h) => (
+                  <li key={h.id}>
+                    {h.what}: from {h.at}.
+                  </li>
+                ))}
+              </ul>
+            </Callout>
+          ) : null}
           {lastNote ? (
             <Card className="p-4" data-testid="listening-note">
               <h2 className="mb-1 font-sans text-sm font-semibold text-text-2">Claude's listening note</h2>

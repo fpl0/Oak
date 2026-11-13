@@ -157,22 +157,37 @@ export class AudioStore {
 }
 
 /**
+ * The type a media GET is served with: an `audio/…` type, else the one its extension names, else opaque bytes.
+ * A stored type comes from the database, which an imported backup writes: `text/html` or `text/javascript` there
+ * must never turn a same-origin media URL into a page or a script.
+ */
+export function mediaType(stored: string, abs: string): string {
+  const t = stored.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (/^audio\/[a-z0-9][a-z0-9.+-]*$/.test(t)) return t;
+  const ext = /\.([a-z0-9]{2,5})$/i.exec(abs)?.[1] ?? "";
+  return mimeFor(ext);
+}
+
+/**
  * A file response with single-range support (`<audio>` seeks with `Range: bytes=a-b`). Multi-range
  * requests and invalid ranges get the whole file; an unsatisfiable range gets 416.
  */
 export function serveFile(
   abs: string,
   req: Request,
-  opts: { mime: string; cacheControl?: string },
+  opts: { mime: string; cacheControl?: string; media?: boolean },
 ): Response {
   const file = Bun.file(abs);
   const size = file.size;
   const headers = new Headers({
-    "content-type": opts.mime,
+    "content-type":
+      opts.media && opts.mime !== "application/octet-stream" ? mediaType(opts.mime, abs) : opts.mime,
     "accept-ranges": "bytes",
     "cache-control": opts.cacheControl ?? "no-store",
     "x-content-type-options": "nosniff",
   });
+  // The learner's media is never a document: opened on its own it gets no script, no plugin, no same-origin access.
+  if (opts.media) headers.set("content-security-policy", "default-src 'none'; sandbox");
   const range = req.headers.get("range");
   const m = range === null ? null : /^bytes=(\d*)-(\d*)$/.exec(range.trim());
   // `bytes=5-3` is not a valid range (RFC 9110 §14.1.1): the header is ignored, the whole file is sent.

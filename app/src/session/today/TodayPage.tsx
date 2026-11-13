@@ -2,13 +2,15 @@
 // setlist from the server's plan, the weekly rhythm (rests, ties, goal weeks), the next unlock, the Oak and the
 // album at a glance, the last sketch and Claude's one-line note. States: first run, a session open, done for
 // today, a paused week, a free rest day, welcome back (3+ days), a light session (10+), checkpoint, capstone,
-// gym and review days (today-model.ts).
+// gym and review days (today-model.ts). Wave 4: a capstone day names its session ("session 2 of 2: Melody",
+// capstone-day.ts); a gym day explains the transcription slot (gym-day.ts); "Two more gym sets open X1" while X1
+// waits on melodic dictation; an extra gym session and an open capstone start from "Other ways today".
 import { OakApiError, type SessionPlan } from "@oak/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Leaf, Play } from "lucide-react";
+import { ArrowRight, Ear, Leaf, Play } from "lucide-react";
 import { useContent } from "../../lib/content.ts";
-import { lessonTitles, titleOf } from "../../lib/content-model.ts";
+import { lessonTitles } from "../../lib/content-model.ts";
 import { usePageTitle } from "../../lib/nav.ts";
 import {
   useBootstrap,
@@ -29,10 +31,14 @@ import { Card, Chip, Page, Skeleton } from "../../ui/kit/basics.tsx";
 import { Callout } from "../../ui/kit/Controls.tsx";
 import { ErrorState, LoadingState } from "../../ui/kit/QueryState.tsx";
 import { toast } from "../../ui/kit/Toast.tsx";
+import { keepCapstone } from "../capstone-day.ts";
+import { useCapstoneDay, useCapstoneInProgress, useGymDay, useGymOpen, useX1Gate } from "../day-hooks.ts";
 import { type CourseEdge, courseEdge, edgeShort } from "../edge.ts";
+import { alternativePlan, extraGym, type GymDay, x1Line } from "../gym-day.ts";
 import { useLastEnded, useRunnerNavigator, useRunnerView } from "../hooks.ts";
 import { sessionRunner } from "../live.ts";
 import { daysLine, goalLine, repairLine, restsLine, streakLine } from "../streak-model.ts";
+import { itemTitle as titleOf } from "../titles.ts";
 import {
   keepAlivePlan,
   looserTolerance,
@@ -64,6 +70,24 @@ function Setlist({ rows }: { rows: SetlistRow[] }) {
         </li>
       ))}
     </ol>
+  );
+}
+
+/** A transcription slot, explained plainly (contracts §2.5, §6.12): what you will hear and how it is judged. */
+function GymExplain({ gym }: { gym: GymDay }) {
+  return (
+    <div
+      className="mt-1 flex gap-3 rounded-control border border-border bg-surface-2 px-3 py-2.5 text-sm"
+      data-testid="gym-explain"
+      data-kind={gym.kind}
+    >
+      <Ear aria-hidden className="mt-0.5 size-4 shrink-0 text-text-3" />
+      <ul className="flex flex-col gap-1 text-text-2">
+        {gym.explain.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -148,6 +172,7 @@ function DoneCard({
   edge,
   hasCoda,
   onStart,
+  extraGym,
 }: {
   plan: SessionPlan;
   titles: Map<string, string>;
@@ -155,6 +180,8 @@ function DoneCard({
   /** Today's Coda can be shown (a session ended today has a summary; onboarding's Coda was its own). */
   hasCoda: boolean;
   onStart(): void;
+  /** Starts an extra gym session (from U07.L01), or null. */
+  extraGym: (() => void) | null;
 }) {
   const next = plan.mapItemId
     ? titleOf(plan.mapItemId, titles)
@@ -186,6 +213,11 @@ function DoneCard({
         <Link to="/practice" className={buttonClass("secondary", "md")}>
           Free practice
         </Link>
+        {extraGym && (
+          <Button variant="secondary" onClick={extraGym} data-testid="extra-gym">
+            An extra gym session
+          </Button>
+        )}
         <Button variant="ghost" onClick={onStart}>
           Start another session
         </Button>
@@ -211,19 +243,26 @@ export function TodayPage() {
   const qc = useQueryClient();
   const titles = lessonTitles(content.data?.syllabus ?? null);
   const stepsOf = (id: string) => content.data?.lessons.find((l) => l.id === id)?.steps.length ?? null;
+  // A capstone in progress is never interrupted by a gym slot (contracts §2.5): the plan Today runs keeps it.
+  const inProgress = useCapstoneInProgress();
+  const planData = plan.data ? keepCapstone(plan.data, inProgress, (id) => titleOf(id, titles)) : undefined;
+  const capstone = useCapstoneDay(planData ?? null);
+  const gym = useGymDay(planData ?? null);
+  const gymOpen = useGymOpen(planData ?? null);
+  const x1 = x1Line(useX1Gate());
   const edge = courseEdge(
     progress.data,
     content.data?.syllabus ?? null,
     new Set((content.data?.lessons ?? []).map((l) => l.id as string)),
-    plan.data ?? null,
+    planData ?? null,
   );
   const ladder = voice.data?.ladder ?? null;
   const lastEnded = ended ? { ...ended, endedAt: ended.summary?.session.endedAt ?? null } : null;
 
   const view =
-    plan.data && boot.data
+    planData && boot.data
       ? todayView({
-          plan: plan.data,
+          plan: planData,
           boot: boot.data,
           lastEnded,
           // The server's record of today (wave3.md §5.1); while it loads (or offline) the bootstrap and this
@@ -233,8 +272,12 @@ export function TodayPage() {
           stepsOf,
           edge,
           ladder: ladder ? { cents: ladder.cents, offerLoosen: ladder.offerLoosen } : null,
+          capstone,
+          gym,
+          gymOpen,
         })
       : null;
+  const extra = planData ? extraGym(planData) : null;
   // Today's Coda exists when a session with a summary ended today: the server's record, or this browser's.
   const hasCoda =
     !!sessionDay.data?.summarySessionId ||
@@ -257,9 +300,9 @@ export function TodayPage() {
   };
   const onResume = async () => {
     const open = sessionDay.data?.open ?? boot.data?.openSession;
-    if (!open || !plan.data) return;
+    if (!open || !planData) return;
     try {
-      await sessionRunner.resume(open, plan.data);
+      await sessionRunner.resume(open, planData);
     } catch (e) {
       toast.error("The session didn't resume", e instanceof Error ? e.message : undefined);
     }
@@ -300,9 +343,9 @@ export function TodayPage() {
         view.primary.action !== "onboarding" &&
         !starting,
       run: () => {
-        if (!view?.primary || !plan.data) return;
+        if (!view?.primary || !planData) return;
         if (view.primary.action === "resume") void onResume();
-        else void onStart(plan.data);
+        else void onStart(planData);
       },
     },
   ]);
@@ -323,7 +366,7 @@ export function TodayPage() {
           <Card className="p-5" data-testid="today-card" data-state={view?.state}>
             {plan.isError ? (
               <ErrorState error={plan.error} onRetry={() => void plan.refetch()} />
-            ) : !view || !plan.data ? (
+            ) : !view || !planData ? (
               <LoadingState rows={4} label="Planning today" />
             ) : (
               <>
@@ -338,17 +381,20 @@ export function TodayPage() {
                 {view.lead && <p className="mb-2 max-w-[62ch] text-text-2">{view.lead}</p>}
                 {view.state === "done" ? (
                   <DoneCard
-                    plan={plan.data}
+                    plan={planData}
                     titles={titles}
                     edge={edge}
                     hasCoda={hasCoda}
-                    onStart={() => void onStart(plan.data)}
+                    onStart={() => void onStart(planData)}
+                    extraGym={
+                      extra ? () => void onStart(alternativePlan(planData, { kind: "gym", ...extra })) : null
+                    }
                   />
                 ) : view.state === "first-run" ? (
                   <div className="mt-4">
                     <PrimaryAction
                       view={view}
-                      plan={plan.data}
+                      plan={planData}
                       onStart={onStart}
                       onResume={onResume}
                       starting={starting}
@@ -357,10 +403,16 @@ export function TodayPage() {
                 ) : (
                   <>
                     {view.state !== "in-session" && <Setlist rows={view.rows} />}
+                    {view.state === "gym" && gym && <GymExplain gym={gym} />}
+                    {view.state === "capstone" && capstone?.checksLine && (
+                      <p className="text-sm text-text-2" data-testid="capstone-checks">
+                        So far: {capstone.checksLine}.
+                      </p>
+                    )}
                     <div className="mt-4 flex flex-col items-center gap-2">
                       <PrimaryAction
                         view={view}
-                        plan={plan.data}
+                        plan={planData}
                         onStart={(p) => void onStart(p)}
                         onResume={() => void onResume()}
                         starting={starting}
@@ -369,7 +421,7 @@ export function TodayPage() {
                         <button
                           type="button"
                           className="text-sm text-link underline-offset-2 hover:underline"
-                          onClick={() => void onStart(keepAlivePlan(plan.data))}
+                          onClick={() => void onStart(keepAlivePlan(planData))}
                           data-testid="keep-alive"
                         >
                           Short on time? A Keep-alive: one easy set, about 2 minutes
@@ -410,31 +462,57 @@ export function TodayPage() {
               choose it.
             </Callout>
           )}
+          {x1 && view && view.state !== "first-run" && (
+            <div data-testid="x1-gate">
+              <Callout tone="info" title={x1.title}>
+                {x1.body}
+              </Callout>
+            </div>
+          )}
           {/* The done card carries its own ways on (Studio, free practice): never twice. */}
-          {plan.data &&
+          {planData &&
             view &&
             view.state !== "first-run" &&
             view.state !== "in-session" &&
             view.state !== "done" && (
-              <nav aria-label="Other ways today" className="flex flex-wrap items-center gap-2">
+              <nav
+                aria-label="Other ways today"
+                className="flex flex-wrap items-center gap-2"
+                data-testid="other-ways"
+              >
                 <span className="text-sm text-text-2">Other ways today:</span>
-                {plan.data.alternatives
+                {planData.alternatives
                   // The main item itself is not "another way" (a capstone day listed its own capstone again).
-                  .filter((a) => !(a.mapItemId !== null && a.mapItemId === plan.data.mapItemId))
-                  .map((a) => (
-                    <Link
-                      key={`${a.kind}:${a.mapItemId ?? ""}`}
-                      {...(a.kind === "studio" ? { to: "/studio" as const } : routeOfItem(a.mapItemId))}
-                      className={buttonClass("secondary", "sm")}
-                    >
-                      {a.title}
-                    </Link>
-                  ))}
+                  .filter((a) => !(a.mapItemId !== null && a.mapItemId === planData.mapItemId))
+                  .map((a) =>
+                    // An extra gym session or an open capstone is a session of its own: it starts here, with
+                    // today's warm-up, and takes the next GYM.nn (contracts §2.5).
+                    a.kind === "gym" || a.kind === "capstone" ? (
+                      <Button
+                        key={`${a.kind}:${a.mapItemId ?? ""}`}
+                        variant="secondary"
+                        size="sm"
+                        disabled={starting}
+                        onClick={() => void onStart(alternativePlan(planData, a))}
+                        data-testid={a.kind === "gym" ? "extra-gym" : "alt-capstone"}
+                      >
+                        {a.kind === "gym" ? "An extra gym session" : `Continue ${a.title}`}
+                      </Button>
+                    ) : (
+                      <Link
+                        key={`${a.kind}:${a.mapItemId ?? ""}`}
+                        {...(a.kind === "studio" ? { to: "/studio" as const } : routeOfItem(a.mapItemId))}
+                        className={buttonClass("secondary", "sm")}
+                      >
+                        {a.title}
+                      </Link>
+                    ),
+                  )}
                 <Link to="/practice" className={buttonClass("ghost", "sm")}>
                   Practice
                 </Link>
                 {/* A review day's plan names Studio itself (the server's alternative); never twice. */}
-                {!plan.data.alternatives.some((a) => a.kind === "studio") && (
+                {!planData.alternatives.some((a) => a.kind === "studio") && (
                   <Link to="/studio" className={buttonClass("ghost", "sm")}>
                     Studio
                   </Link>
@@ -448,7 +526,7 @@ export function TodayPage() {
           <OakGlanceCard />
           <AlbumStrip />
           <LastSketchCard />
-          {plan.data?.tutorNote && <TutorNoteCard note={plan.data.tutorNote} />}
+          {planData?.tutorNote && <TutorNoteCard note={planData.tutorNote} />}
           {!b && <Skeleton className="h-24 w-full" />}
           <p className="flex items-center gap-1.5 text-sm text-text-3">
             <Leaf aria-hidden className="size-3.5" /> Spacing beats cramming: a little most days grows the

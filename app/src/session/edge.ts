@@ -11,6 +11,8 @@ export interface CourseEdge {
   nextUnit: { id: string; title: string } | null;
   /** The last unit before it ("Intervals"), when there is one. */
   doneUnit: { id: string; title: string } | null;
+  /** The unwritten lesson is not its unit's first: part of the unit is written (and done), the rest is not. */
+  partial?: boolean;
 }
 
 const isLessonId = (id: string): boolean => /\.L\d+$/.test(id);
@@ -37,6 +39,21 @@ function unitOfLesson(
  * Where the written course ends for this learner, or null while there is still written work ahead. The edge is
  * reached when the next item of the default order is a lesson nobody has written yet (or nothing is next).
  */
+const isSlot = (id: string): boolean => /^(GYM\.|CF-T\.)/.test(id);
+
+/**
+ * A gym or CF-T slot is scheduling, not a map item: the course's next item after one is the first item of the
+ * default order past it that is not a slot. Any other ID (and null) is returned as it is.
+ */
+export function pastSlots(id: string | null, order: readonly string[] | null | undefined): string | null {
+  if (id === null || !isSlot(id)) return id;
+  const list = order ?? [];
+  const at = list.indexOf(id);
+  if (at < 0) return null;
+  for (let i = at + 1; i < list.length; i++) if (!isSlot(list[i] as string)) return list[i] as string;
+  return null;
+}
+
 export function courseEdge(
   progress: Pick<CourseProgress, "next"> | null | undefined,
   syllabus: SyllabusDef | null,
@@ -49,7 +66,7 @@ export function courseEdge(
 ): CourseEdge | null {
   if (!progress || !syllabus) return null;
   if (plan && plan.mapItemId !== null && isWritten(plan.mapItemId, authored)) return null;
-  const next = progress.next;
+  const next = pastSlots(progress.next, syllabus.defaultOrder as readonly string[]);
   if (next !== null && isWritten(next, authored)) return null;
   const units = syllabus.units.filter((u) => u.track === "core");
   if (next === null) {
@@ -59,10 +76,12 @@ export function courseEdge(
   const at = unitOfLesson(syllabus, next);
   const coreAt = at ? units.findIndex((u) => u.id === at.id) : -1;
   const before = coreAt > 0 ? units[coreAt - 1] : null;
+  const first = at ? syllabus.units.find((u) => u.id === at.id)?.lessons[0]?.id : undefined;
   return {
     nextId: next,
     nextUnit: at ? { id: at.id, title: at.title } : null,
     doneUnit: before ? { id: before.id, title: before.title } : null,
+    ...(first !== undefined && first !== next ? { partial: true } : {}),
   };
 }
 
@@ -71,16 +90,44 @@ export function unitTitleOf(syllabus: SyllabusDef | null, lessonId: string): str
   return unitOfLesson(syllabus, lessonId)?.title ?? lessonId;
 }
 
-/** "Intervals" → "You have finished every lesson written so far, through Intervals." */
-export function edgeLead(edge: CourseEdge): string {
-  const through = edge.doneUnit ? `, through ${edge.doneUnit.title}` : "";
+/**
+ * "Intervals" → "You have finished every lesson written so far, through Intervals." With `gym` (the gym is open,
+ * from U07.L01), the Transcription Gym is named among the ways on, so the edge is never a dead end.
+ */
+export function edgeLead(edge: CourseEdge, opts: { gym?: boolean } = {}): string {
+  const through = edge.partial ? "" : edge.doneUnit ? `, through ${edge.doneUnit.title}` : "";
   const next = edge.nextUnit
-    ? `${edge.nextUnit.title}, the next unit, is still being written.`
+    ? edge.partial
+      ? `The rest of ${edge.nextUnit.title} is still being written.`
+      : `${edge.nextUnit.title}, the next unit, is still being written.`
     : "The rest of the course is still being written.";
-  return `You have finished every lesson written so far${through}. ${next} Until it arrives, a short review keeps what you know fresh, and Studio is yours.`;
+  const yours = opts.gym ? "Studio and the Transcription Gym are yours" : "Studio is yours";
+  return `You have finished every lesson written so far${through}. ${next} Until it arrives, a short review keeps what you know fresh, and ${yours}.`;
+}
+
+/**
+ * The map item the Oak and Today point at as "next": the default order's next item, unless that is a lesson nobody
+ * has written yet and today's plan offers a written item instead (U07.CP is planned while U08.L01, before it in the
+ * default order, is not written; U04.CP waited for U05.L01 the same way). A gym or CF-T slot is scheduling, not a
+ * map item: the order's next item stays the next one then.
+ */
+export function mapNextId(
+  orderNext: string | null,
+  planned: string | null,
+  authored: ReadonlySet<string>,
+  /** The default order: a slot as the order's next item is read past (`pastSlots`). */
+  order?: readonly string[] | null,
+): string | null {
+  const next = order ? pastSlots(orderNext, order) : orderNext;
+  if (next !== null && isWritten(next, authored)) return next;
+  if (planned === null || isSlot(planned)) return next;
+  return isWritten(planned, authored) ? planned : next;
 }
 
 /** The line for an unwritten next item ("still being written"), short enough for a chip or a toolbar. */
 export function edgeShort(edge: CourseEdge): string {
-  return edge.nextUnit ? `${edge.nextUnit.title} is still being written` : "The rest is still being written";
+  if (!edge.nextUnit) return "The rest is still being written";
+  return edge.partial
+    ? `The rest of ${edge.nextUnit.title} is still being written`
+    : `${edge.nextUnit.title} is still being written`;
 }

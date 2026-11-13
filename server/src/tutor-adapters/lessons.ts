@@ -1,15 +1,24 @@
 // LessonContextPort over the content index and the learner's library. Step sources are UNREDACTED
 // (solutions, wrong variants from `tests` with `expect: 'fail'`, the four hint texts); the tutor redacts.
 // Checkpoint items and the current drill trial are never given to the tutor (contracts §10.4).
-import type { AnalysisSummary, Answer, Exercise, KeySpec, StepDef, TestCase } from "@oak/content-kit";
+import type {
+  AnalysisSummary,
+  Answer,
+  Exercise,
+  KeySpec,
+  MeterId,
+  StepDef,
+  TestCase,
+} from "@oak/content-kit";
 import { stripMarkers } from "@oak/content-kit";
 import { signatureOf } from "@oak/theory";
 import type { ContentIndex } from "../content/index.ts";
 import type { Repos } from "../db/repos/index.ts";
-import type { LessonSource, ReviewSource, StepSource, SubjectFacts } from "../tutor/domain.ts";
+import type { LessonSource, ReviewSource, ReviewTarget, StepSource, SubjectFacts } from "../tutor/domain.ts";
 import type { LessonContextPort } from "../tutor/ports.ts";
 import { revisionCountFor } from "../tutor/reviews.ts";
 import type { SubjectRef } from "../tutor/types.ts";
+import type { ReviewFactsPort } from "./review-facts.ts";
 
 /**
  * A step ID as the tool schema documents it (`U03.L02/S5`) or as the app sends it (`S5`): the local ID.
@@ -70,7 +79,34 @@ function answerTexts(answer: Partial<Answer> | undefined, choices: readonly Choi
   if (answer.rn !== undefined && answer.rn.length > 0) out.push(answer.rn.join(" "));
   if (answer.degrees !== undefined && answer.degrees.length > 0) out.push(answer.degrees.join(" "));
   if (answer.qualities !== undefined && answer.qualities.length > 0) out.push(answer.qualities.join(" "));
+  // Wave 4: chord dictation stage by stage (bass degrees, then qualities, then numerals).
+  for (const stage of ["bass", "quality", "rn"] as const) {
+    const st = answer.stages?.[stage];
+    if (st !== undefined && st.length > 0) out.push(st.join(" "));
+  }
+  if (answer.midi !== undefined && answer.midi.length > 0) out.push(answer.midi.join(" "));
   return out;
+}
+
+/**
+ * Wave 4: how the learner answers a step when it is not plain code (`StepSource.answerKind`), so the answer guard
+ * knows which forms of the answer to hold back below the reveal rung: the answer widget (`rn-palette`,
+ * `quality-pad`, `slot-choice`, `degree-pad`, …), `staff-chords`, `chord-dictation`, `dictation`, `voice-leading`.
+ */
+export function answerKindOf(step: StepDef, ex: Exercise | undefined): string | null {
+  if (ex === undefined) return null;
+  // A staged chord dictation is answered stage by stage (bass degrees, qualities, numerals), whatever its
+  // single-stage fallback widget is.
+  if (ex.kind === "dictation" && (ex as { stageAnswers?: unknown }).stageAnswers !== undefined)
+    return "chord-dictation";
+  const ui = (ex as { answer?: { ui?: unknown } }).answer?.ui;
+  if (typeof ui === "string") return ui;
+  if (ex.kind === "staff-write" && ex.expect.e === "chords") return "staff-chords";
+  if (ex.kind === "dictation")
+    return (ex as { stageAnswers?: unknown }).stageAnswers !== undefined ? "chord-dictation" : "dictation";
+  const rubric = (ex as { rubric?: { rule?: string }[] }).rubric ?? [];
+  if (step.gateCheck === true || rubric.some((r) => r.rule === "voice-leading")) return "voice-leading";
+  return null;
 }
 
 /**
@@ -110,12 +146,20 @@ export function referenceAnswers(ex: Exercise | undefined): string[] {
         const sig = signatureOf(e.key);
         const acc = sig.sharps.length > 0 ? sig.sharps : sig.flats;
         if (acc.length > 0) out.push(acc.join(" "));
-      } else if ("solutions" in e.reference) out.push(...(e.reference as { solutions: string[] }).solutions);
+      } else if (e.e === "chords") out.push(e.symbols.join(" "));
+      else if ("solutions" in e.reference) out.push(...(e.reference as { solutions: string[] }).solutions);
       break;
     }
     case "dictation":
       // By ear (Wave 3): the hidden source is the answer as much as the reference is.
       if (ex.byEar !== undefined && ex.stimulus.src === "code") out.push(ex.stimulus.code);
+      // Wave 4 staged chord dictation: the reference is code, but the learner answers in bass degrees,
+      // qualities and numerals — the answer guard needs those forms. They are the exercise's first passing test.
+      if (ex.stageAnswers !== undefined) {
+        const pass = (ex.tests ?? []).find((t) => t.expect === "pass" && "answer" in t.response);
+        if (pass !== undefined && "answer" in pass.response)
+          out.push(...answerTexts(pass.response.answer as Partial<Answer>));
+      }
       break;
     case "run-investigate":
       for (const q of ex.questions)
@@ -184,6 +228,7 @@ export function stepSource(lessonId: string, step: StepDef): StepSource {
           variantCode: responseText(t.response),
         })) ?? [],
     solutions: step.kind === "make" ? [] : solutions,
+    answerKind: answerKindOf(step, ex),
   };
 }
 
@@ -191,6 +236,8 @@ export class LessonContextAdapter implements LessonContextPort {
   constructor(
     private readonly content: ContentIndex,
     private readonly repos: Repos,
+    /** Wave 4: the reviewed piece's analysed facts (`ReviewSource.facts`); absent: the text analysis only. */
+    private readonly facts?: ReviewFactsPort,
   ) {}
 
   async lesson(lessonId: string): Promise<LessonSource | null> {
@@ -221,7 +268,9 @@ export class LessonContextAdapter implements LessonContextPort {
     if (this.content.checkpointMeta(lessonId) !== null) return null;
     const step = this.content.stepDef(lessonId, localStepId(lessonId, stepId));
     if (step === null) return null;
-    return stepSource(lessonId, step);
+    // Wave 4 (wave4.md §5.6): the key the step is in, the exercise's own, else the lesson's.
+    const key = keyText(step.exercise?.key ?? this.content.lessonDef(lessonId)?.key ?? null);
+    return { ...stepSource(lessonId, step), key };
   }
 
   async resolveExercise(ref: string): Promise<{ lessonId: string; stepId: string } | null> {
@@ -278,19 +327,53 @@ export class LessonContextAdapter implements LessonContextPort {
     }
   }
 
-  async review(ref: SubjectRef): Promise<ReviewSource | null> {
-    if (ref.subjectKind === "capstone") return this.#capstoneReview(ref.subjectId);
-    if (ref.subjectKind === "transcription") return this.#transcriptionReview(ref.subjectId);
-    return null;
+  async review(ref: SubjectRef, target: ReviewTarget | null = null): Promise<ReviewSource | null> {
+    const source =
+      ref.subjectKind === "capstone"
+        ? this.#capstoneReview(ref.subjectId, target?.kind === "album" ? target : null)
+        : ref.subjectKind === "transcription"
+          ? this.#transcriptionReview(ref.subjectId, target?.kind === "transcription" ? target.version : null)
+          : null;
+    if (source === null) return null;
+    // Wave 4: what Oak's analysis found in the reviewed code, so every comment can point at a real bar.
+    const facts =
+      this.facts === undefined
+        ? null
+        : await this.facts(source.source.code, { key: source.key, meter: source.meter });
+    return { ...source.source, facts, target: source.target };
   }
 
-  #capstoneReview(id: string): ReviewSource | null {
+  /**
+   * The capstone's piece: the album version the review is about (Wave 4: `albumTrackId` + `albumVersion`), else
+   * the capstone's current draft.
+   */
+  #capstoneReview(
+    id: string,
+    target: { trackId: string; version: number } | null,
+  ): {
+    source: ReviewSource;
+    key: KeySpec | null;
+    meter: MeterId | null;
+    target: ReviewTarget | null;
+  } | null {
     const meta = this.content.capstoneMeta(id);
     const row = this.repos.capstones.get(id);
-    if (meta === null || row === null || row.sketchId === null) return null;
-    const sketch = this.repos.sketches.get(row.sketchId);
+    if (meta === null || row === null) return null;
+    let sketchId = row.sketchId;
+    let sketchVersion: number | null = null;
+    let reviewTarget: ReviewTarget | null = null;
+    if (target !== null) {
+      const track = this.repos.album.track(target.trackId);
+      const v = track?.capstoneId === id ? this.repos.album.version(target.trackId, target.version) : null;
+      if (v === null || v === undefined) return null;
+      sketchId = v.sketchId;
+      sketchVersion = v.sketchVersion;
+      reviewTarget = { kind: "album", trackId: target.trackId, version: target.version };
+    }
+    if (sketchId === null) return null;
+    const sketch = this.repos.sketches.get(sketchId);
     if (sketch === null) return null;
-    const version = this.repos.sketches.version(sketch.id, sketch.currentVersion);
+    const version = this.repos.sketches.version(sketch.id, sketchVersion ?? sketch.currentVersion);
     if (version === null) return null;
     const def = this.content.capstoneDef(id);
     const authored = def?.brief?.rubric ?? [];
@@ -302,30 +385,57 @@ export class LessonContextAdapter implements LessonContextPort {
     }));
     const analysis = version.analysis ?? row.lastResult?.analysis ?? null;
     return {
-      title: sketch.title,
-      code: version.code,
-      brief: def?.brief?.prompt ?? meta.objective,
-      analysis: analysisText(analysis),
-      rubric,
-      learnerNote: version.note,
-      checklist: [],
-      reference: null,
-      totalBars: analysis?.bars ?? null,
-      revisions: revisionCountFor(id),
+      source: {
+        title: sketch.title,
+        code: version.code,
+        brief: def?.brief?.prompt ?? meta.objective,
+        analysis: analysisText(analysis),
+        rubric,
+        learnerNote: version.note,
+        checklist: [],
+        reference: null,
+        totalBars: analysis?.bars ?? null,
+        revisions: revisionCountFor(id),
+      },
+      key: version.key ?? def?.key ?? null,
+      meter: version.meter ?? def?.meter ?? null,
+      target: reviewTarget,
     };
   }
 
-  #transcriptionReview(id: string): ReviewSource | null {
+  /** A transcription: the version named (Wave 4: `transcriptionVersion`), else the latest. */
+  #transcriptionReview(
+    id: string,
+    wanted: number | null,
+  ): {
+    source: ReviewSource;
+    key: KeySpec | null;
+    meter: MeterId | null;
+    target: ReviewTarget | null;
+  } | null {
     const t = this.repos.transcriptions.get(id);
     if (t === null) return null;
     const versions = this.repos.transcriptions.versions(id);
-    const latest = versions.at(-1);
+    const latest = wanted === null ? versions.at(-1) : versions.find((v) => v.version === wanted);
     if (latest === undefined) return null;
     // The reference is shown only once a graded ladder piece has passed; never for the learner's own audio.
-    const passed = versions.some((v) => v.result?.status === "pass");
+    // Wave 4: a graded pass (≥ 0.85, not revealed, every stage), not a version a reveal made pass.
+    // A generated ladder item counts only its graded pass: one passed L3 stage (the bass) must not hand the tutor the
+    // whole hidden source, chords included, while the later stages are still to be heard.
+    const ladderItem = t.ladder !== undefined && t.ladder !== null;
+    const passed =
+      t.gradedPass === true ||
+      (!ladderItem &&
+        versions.some(
+          (v) =>
+            v.result?.status === "pass" &&
+            v.result.assist.revealed !== true &&
+            v.result.assist.rung < 4 &&
+            v.machineDraft !== true,
+        ));
     const reference = t.sourceKind !== "own-audio" && passed ? t.hiddenCode : null;
     const checklist = Object.entries(t.checklist).map(([item, score]) => `${item}: ${score}/2`);
-    return {
+    const source: ReviewSource = {
       title: t.title,
       code: latest.code,
       brief:
@@ -343,6 +453,12 @@ export class LessonContextAdapter implements LessonContextPort {
       reference,
       totalBars: latest.result?.analysis?.bars ?? null,
       revisions: 1,
+    };
+    return {
+      source,
+      key: t.key,
+      meter: t.meter,
+      target: { kind: "transcription", version: latest.version },
     };
   }
 

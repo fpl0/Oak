@@ -56,6 +56,7 @@ export function SingPanel({
   micOpen,
   label,
   labels,
+  blind,
 }: {
   trial: Trial;
   targets: readonly SingTarget[];
@@ -67,14 +68,22 @@ export function SingPanel({
   /** The microphone is open (the level meter is live). */
   micOpen: boolean;
   label: string;
+  /**
+   * Singing what is still to be answered (the roots before they are picked): the lane shows only when each
+   * note is sung (one column per chord, "Chord 1" …) over the learner's range, never the target pitches, and
+   * the trace is not folded toward a target. `[low, high]` is the range drawn.
+   */
+  blind?: readonly [number, number] | undefined;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  const labelText = labels ?? targets.map((t) => noteName(t.midi));
+  const labelText = blind
+    ? targets.map((_, i) => `Chord ${i + 1}`)
+    : (labels ?? targets.map((t) => noteName(t.midi)));
   const [needle, setNeedle] = useState<string | null>(null);
   const levelDb = useLive((s) => s.levelDb);
   const span = Math.max(1, ...targets.map((t) => t.off)) + 0.4;
-  const lo = Math.min(...targets.map((t) => t.midi)) - 3;
-  const hi = Math.max(...targets.map((t) => t.midi)) + 3;
+  const lo = blind ? blind[0] : Math.min(...targets.map((t) => t.midi)) - 3;
+  const hi = blind ? blind[1] : Math.max(...targets.map((t) => t.midi)) + 3;
 
   useEffect(() => {
     const el = canvas.current;
@@ -95,8 +104,17 @@ export function SingPanel({
       const accent = cssVar("--oak-accent", "#2f6b45");
       const text2 = cssVar("--oak-text-3", "#6e6457");
       const lane = cssVar("--oak-lane-in", "rgba(47,107,69,0.08)");
+      // Blind: one column per note to sing, no pitch shown.
+      if (blind)
+        for (const [i, g] of targets.entries()) {
+          ctx.fillStyle = lane;
+          ctx.fillRect(x(g.on), 0, x(g.off) - x(g.on), h);
+          ctx.fillStyle = text2;
+          ctx.font = "12px var(--oak-font-sans, system-ui)";
+          ctx.fillText(labelText[i] ?? "", x(g.on) + 4, 14);
+        }
       // Ribbons: ±tolerance around each target.
-      for (const g of targets) {
+      for (const g of blind ? [] : targets) {
         const band = tolCents / 100;
         ctx.fillStyle = lane;
         ctx.strokeStyle = accent;
@@ -122,7 +140,7 @@ export function SingPanel({
           pen = false;
           continue;
         }
-        const g = targetAt(targets, f.t);
+        const g = blind ? null : targetAt(targets, f.t);
         const m = g ? fold(f.midi, g.midi) : f.midi;
         const px = x(f.t);
         const py = y(Math.max(lo, Math.min(hi, m)));
@@ -133,7 +151,7 @@ export function SingPanel({
       }
       ctx.stroke();
       const now = performance.now();
-      if (latest && now - last > 250) {
+      if (latest && !blind && now - last > 250) {
         last = now;
         const g = targetAt(targets, latest.t);
         if (g) setNeedle(needleText((latest.m - g.midi) * 100, tolCents));
@@ -147,7 +165,7 @@ export function SingPanel({
       unsub();
       window.removeEventListener("resize", onResize);
     };
-  }, [targets, tolCents, span, lo, hi, labelText]);
+  }, [targets, tolCents, span, lo, hi, labelText, blind]);
 
   const first = targets[0];
   return (
@@ -160,9 +178,11 @@ export function SingPanel({
       />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-text-2" aria-live="polite" data-testid="sing-needle">
-          {first
-            ? `Target ${targets.length > 1 ? labelText.join(", ") : (labelText[0] ?? noteName(first.midi))}.`
-            : label}{" "}
+          {blind
+            ? `${label} ${targets.length} ${targets.length === 1 ? "note" : "notes"}, one per chord.`
+            : first
+              ? `Target ${targets.length > 1 ? labelText.join(", ") : (labelText[0] ?? noteName(first.midi))}.`
+              : label}{" "}
           {active && needle ? `You are ${needle}.` : ""}
         </p>
         <MicLevelMeter

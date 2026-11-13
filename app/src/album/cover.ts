@@ -442,8 +442,10 @@ export function coverModel(input: CoverInput): CoverModel {
   // Pith: degree 1 of the key, labelled with the key (or the tempo of a piece without pitches).
   const one = DEGREE_COLOURS[wood.theme][1];
   const label = pithLabel(input.key, pitched.length > 0, input.bpm);
-  // A cover grown from its seed alone (no music: the code did not run) has a plain pith, not "— BPM".
-  const plainPith = input.events === null && !input.bpm && !input.key;
+  // A cover grown from its seed alone (no music: the code did not run) has a plain pith, not "— BPM"; so does a
+  // piece that ran but plays nothing (an empty sketch read Strudel's default "120 BPM", review:studio).
+  const silent = input.events !== null && input.events.length === 0;
+  const plainPith = (input.events === null && !input.bpm && !input.key) || silent;
   groups.push({
     kind: "pith",
     items: [
@@ -529,7 +531,7 @@ export function coverModel(input: CoverInput): CoverModel {
   const summary = [
     `${bars} ${bars === 1 ? "ring" : "rings"}, one per bar`,
     keyText,
-    input.bpm ? `${Math.round(input.bpm)} BPM` : null,
+    input.bpm && !silent ? `${Math.round(input.bpm)} BPM` : null,
   ]
     .filter(Boolean)
     .join(", ");

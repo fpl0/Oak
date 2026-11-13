@@ -1,7 +1,16 @@
 // What the Coda shows (contracts §9.3, ux §1.5): only cards whose state changed today — what you can now do,
 // tools unlocked, skills that moved on the map, the sketch saved, a tolerance change, the weekly rhythm — then
 // tomorrow's preview and "Done for today". Pure; the page renders it (CodaPage.tsx).
-import type { CanDoEntry, NextUnlock, SessionPlan, SessionSummary, SkillState, Unlock } from "@oak/api";
+import type {
+  AlbumTrack,
+  AlbumTrackDetail,
+  CanDoEntry,
+  NextUnlock,
+  SessionPlan,
+  SessionSummary,
+  SkillState,
+  Unlock,
+} from "@oak/api";
 import type { CanDoDef, ToolEntry } from "@oak/content-kit";
 import type { BlockReport } from "./types.ts";
 
@@ -149,4 +158,99 @@ export function nextKindLabel(plan: Pick<SessionPlan, "kind">): string {
     default:
       return "Lesson";
   }
+}
+
+// --- Wave 4: a capstone release and the ladder in the Coda ------------------------------------------------------
+
+/** The capstone a session worked on (`C2.S2` → `C2`), or null for any other session. */
+export function capstoneOfSession(s: Pick<SessionSummary["session"], "kind" | "mapItemId">): string | null {
+  if (s.kind !== "capstone" || !s.mapItemId) return null;
+  return /^(.+)\.S\d+$/.exec(s.mapItemId)?.[1] ?? null;
+}
+
+export interface ReleaseView {
+  track: AlbumTrack;
+  version: AlbumTrackDetail["versions"][number];
+  /** "Side A · track 3" */
+  place: string;
+  /** A later version of a track already on the album. */
+  revision: boolean;
+}
+
+/**
+ * The release a capstone session made: the capstone's album track with a version created at or after the session
+ * started. `null` while the album is loading, or when the session saved a draft without releasing.
+ */
+export function releaseOf(
+  capstoneId: string | null,
+  tracks: readonly AlbumTrack[],
+  detail: AlbumTrackDetail | null,
+  since: string,
+): ReleaseView | null {
+  if (!capstoneId) return null;
+  const track = tracks.find((t) => t.capstoneId === capstoneId);
+  if (!track || !detail || detail.id !== track.id) return null;
+  const fresh = detail.versions.filter((v) => v.createdAt >= since);
+  const version = fresh.at(-1);
+  if (!version) return null;
+  const side = track.side === "Bside" ? "B-side" : `Side ${track.side}`;
+  return { track, version, place: `${side} · track ${track.trackNo}`, revision: version.version > 1 };
+}
+
+/** "What you used" on a release: the version's theory tags, then the code tools it uses, without repeats. */
+export function usedOnRelease(
+  theoryTags: readonly string[],
+  tools: readonly { id: string; label: string; mono: boolean }[],
+  limit = 12,
+): { theory: string[]; tools: { id: string; label: string; mono: boolean }[] } {
+  const seen = new Set<string>();
+  const out: { id: string; label: string; mono: boolean }[] = [];
+  for (const t of tools) {
+    if (seen.has(t.id)) continue;
+    seen.add(t.id);
+    out.push(t);
+  }
+  return { theory: [...new Set(theoryTags)].slice(0, limit), tools: out.slice(0, limit) };
+}
+
+const BASIC_TOOL = /^tb\.(mini\.|label$|setcpm$|s$|s\.pitched$|note$|gain$)/;
+
+/**
+ * The code tools a release names under "What you used": code tools (not sounds, chord or scale tables, nor the
+ * basic syntax every loop has), those learned since the previous album track first, at most `limit`.
+ */
+export function releaseTools<
+  T extends { id: string; kind: string; unlock: { at: string | readonly string[] } },
+>(
+  used: readonly string[],
+  toolbox: readonly T[],
+  order: readonly string[],
+  capstoneId: string,
+  limit = 8,
+): T[] {
+  const first = order.indexOf(`${capstoneId}.S1`);
+  let prev = -1;
+  for (let i = first - 1; i >= 0; i--)
+    if (/^[A-Z]+[A-Z0-9-]*\.S\d+$/.test(order[i] as string)) {
+      prev = i;
+      break;
+    }
+  const rank = (t: T) => {
+    const sites = typeof t.unlock.at === "string" ? [t.unlock.at] : [...t.unlock.at];
+    const r = sites.map((s) => order.indexOf(s)).filter((i) => i >= 0);
+    return r.length > 0 ? Math.min(...r) : -1;
+  };
+  const seen = new Set<string>();
+  const picked: T[] = [];
+  for (const id of used) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const t = toolbox.find((x) => x.id === id);
+    // Chord and scale rows read as tables ("C Cm Co Caug"); the theory tags name what they are for.
+    if (t?.kind !== "tool" || BASIC_TOOL.test(t.id)) continue;
+    picked.push(t);
+  }
+  const fresh = picked.filter((t) => rank(t) > prev);
+  const rest = picked.filter((t) => rank(t) <= prev);
+  return [...fresh, ...rest].slice(0, limit);
 }

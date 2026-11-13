@@ -263,6 +263,64 @@ export class SimLearner {
     return { start, outcome };
   }
 
+  /**
+   * A gym day as Transcribe runs it (Wave 4, contracts §2.5): the session takes its ordinal, the ladder item is drawn
+   * at the session's level and realism, and the learner's answer is graded on the server.
+   */
+  async gymDay(
+    sessionId: string,
+    opts: { code?: string; note?: string | null } = {},
+  ): Promise<{ gymId: string; itemId: string }> {
+    const code = opts.code ?? 'drums: s("bd sd")';
+    const g = await this.api<{ gymId: string }>("POST", "/api/gym/sessions", {
+      sessionId,
+      kind: "ladder",
+      transcriptionId: null,
+    });
+    const item = await this.api<{ itemId: string; stages: string[] | null }>("POST", "/api/ladder/items", {
+      sessionId,
+      gymId: g.gymId,
+    });
+    await this.api("POST", `/api/ladder/items/${item.itemId}/submissions`, {
+      sessionId,
+      code,
+      rung: 0,
+      ...(item.stages === null ? {} : { stage: item.stages[0] }),
+    });
+    // "Two more gym sets open X1" (contracts §6.6): the day's strong melodic-dictation set.
+    if (opts.note !== null && opts.note !== undefined && /gym sets? opens? X1/.test(opts.note))
+      await this.strongSet(sessionId, "fam.mel.dictation", "gym");
+    return { gymId: g.gymId, itemId: item.itemId };
+  }
+
+  /** One drill set of a family with every trial right (≥ 0.90: a strong set for the level staircase). */
+  async strongSet(sessionId: string | null, familyId: string, purpose: "gym" | "practice"): Promise<void> {
+    const set = await this.api<DrillSession>("POST", "/api/drills/sessions", {
+      sessionId,
+      purpose,
+      familyIds: [familyId],
+      warmupItemId: null,
+    });
+    const trials = Array.from({ length: Math.max(1, set.trialsPlanned) }, (_, idx) => ({
+      idx,
+      familyId,
+      seed: idx + 1,
+      level: set.levels[familyId] ?? 1,
+      category: set.openCategories[familyId]?.[0] ?? "all",
+      params: {},
+      response: { answer: null, taps: null, sung: null, skipped: false },
+      credit: 1,
+      correct: true,
+      rtMs: 1800,
+      replays: 0,
+      confusion: null,
+      centsError: null,
+      at: this.h.clock.now().toISOString(),
+    }));
+    await this.api("POST", `/api/drills/sessions/${set.id}/trials`, { trials });
+    await this.api("POST", `/api/drills/sessions/${set.id}/finish`);
+  }
+
   async endSession(
     sessionId: string,
     minutes = { warmup: 4, main: 9, make: 4, coda: 1 },

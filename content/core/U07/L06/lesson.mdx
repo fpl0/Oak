@@ -1,0 +1,55 @@
+{/* U07.L06 Question & Answer: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+In Melody Workshop a tune paused half-way and came home at the end. Here the second half starts exactly like the first, and only its ending differs.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+Just the first four bars, and nothing under them. Before you press Play, read where the tune is going to stop.
+
+<Predict exercise="stop-or-end" />
+</Step>
+
+<Step id="S3">
+Now all eight bars again, with the band. Two halves, the same start, different endings.
+
+<Example id="two-endings" views="code,roll" />
+
+<OnPass>Bar 4 stops on 2 over V: a half cadence, and the tune wants more. Bar 8 lands on 1 over I. Four bars that end open, asking for more, are the **antecedent**; four bars that start the same way and close on home are the **consequent**. A question and its answer make one eight-bar unit, and most song sections are built from units like it.</OnPass>
+</Step>
+
+<Step id="S4">
+Two questions in a row never settle. Answer the second one in its last two bars. The phrase's chords are written out in the code this time, one a bar, so you can read which notes sit on them.
+
+<Editor exercise="answer-the-question" />
+
+<OnPass>Degree 5 (G) on beat 1 of bar 7 over V, down through 4 to 2 (D) on beat 3, then home on beat 1 of bar 8. The same opening, a new ending: that is what makes it sound like an answer and not a repeat.</OnPass>
+</Step>
+
+<Step id="S5">
+Writing the question twice is one way. Code gives another: write it once, and change only the bar that has to answer. Just the tune this time, no band.
+
+<Example id="last-of" views="code,roll" />
+
+<OnPass>Bar 8 only: the first time through, bar 4 still stops on 2. `.lastOf(8, …)` reaches the eighth bar of every eight, so the question stays a question and the answer closes. Bar 7, though, is still the question's bar 3: notes of I where the phrase has moved to V. A quick answer in code, and a good one written out by hand: both have their place.</OnPass>
+</Step>
+
+<Step id="S6">
+Short phrases in different keys. Each one either stops open or comes home. Listen to the last chord first, then to the tune's last note.
+
+<EarDrill family="fam.har.cadence" level={2} trials={6} />
+
+<OnPass>Open on V, or home on I: in any key, the chords decide whether a phrase asks or answers, and the tune decides how firmly it answers.</OnPass>
+</Step>
+
+<Step id="S7">
+Over the band's eight bars: keep this question or write your own, then make bars 5–8 answer it.
+
+<Make exercise="ask-and-answer" />
+
+<CanDo id="cd.compose.question-answer" />
+
+<Recap />
+</Step>

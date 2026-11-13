@@ -297,7 +297,15 @@ describe("reviews through the composed app", () => {
     const argv = c.starts()[0]?.argv ?? [];
     expect(argv[argv.indexOf("--effort") + 1]).toBe("high");
     expect(argv).toContain("--json-schema");
-    expect(stored).toEqual([{ subject: REVIEW.thread, reviewKind: "capstone", review: CAPSTONE_REVIEW }]);
+    expect(stored).toEqual([
+      {
+        subject: REVIEW.thread,
+        reviewKind: "capstone",
+        review: CAPSTONE_REVIEW,
+        conversationId: expect.stringContaining("capstone:C2:") as unknown as string,
+        target: null,
+      },
+    ]);
     expect(c.ports.notes.notes.map((n) => n.source)).toEqual(["review"]);
   });
 

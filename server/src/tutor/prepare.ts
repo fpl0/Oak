@@ -24,6 +24,7 @@ import {
   limitsFor,
   type Prefix,
   reviewKindOf,
+  reviewTargetOf,
   type TranscriptEntry,
   type TurnContext,
   type TurnRequest,
@@ -75,9 +76,14 @@ export async function prepareTurn(request: TurnRequest, ports: TutorPorts): Prom
   }
 
   const reviewKind = reviewKindOf(kind);
-  const review = reviewKind === null ? null : await ports.lessons.review(thread);
-  if (reviewKind !== null && review === null)
+  const target = reviewKind === null ? null : reviewTargetOf(request);
+  if (target !== null && (target.kind === "album") !== (reviewKind === "capstone"))
+    throw new TutorError("bad_request", { detail: "the review target does not match the review kind" });
+  const found = reviewKind === null ? null : await ports.lessons.review(thread, target);
+  if (reviewKind !== null && found === null)
     throw new TutorError("bad_request", { detail: "nothing to review" });
+  // The version reviewed is the one asked for; an adapter that does not say so is told here.
+  const review = found === null ? null : { ...found, target: found.target ?? target };
 
   const prefix = buildPrefix(await ports.lessons.prefixSources());
   const version = prefixVersion(prefix);

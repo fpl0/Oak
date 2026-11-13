@@ -4,13 +4,19 @@ import { describe, expect, test } from "bun:test";
 import { AttemptResponseSchema } from "@oak/api";
 import { evalHeadless } from "@oak/grader/testing";
 import {
+  cadenceOf,
+  chordOfRoman,
   chordPcs,
+  chordSymbol,
+  diatonicChordOn,
+  harmonicFunction,
   identifyChord,
   intervalBetween,
   labelPitch,
   noteToMidi,
   parseChordSymbol,
   parseRN,
+  readChord,
   rnToChord,
   signatureOf,
   toLeadSheet,
@@ -19,7 +25,7 @@ import { fillStarter } from "../code-tokens.ts";
 import { NEUTRAL_PROFILE } from "../env.tsx";
 import { responseOf } from "../response.ts";
 import { fitNotes } from "../sing.ts";
-import { engrave, staffContext, staffNotes } from "../staff/model.ts";
+import { engrave, staffChords, staffContext, staffNotes } from "../staff/model.ts";
 import type { AnswerSpec, AnswerValue } from "../types.ts";
 import { FIXTURE_IDS } from "./fixture-ids.ts";
 import {
@@ -32,6 +38,8 @@ import {
   SING_PATTERN,
   STAFF_C_MAJOR,
   STAFF_G_MAJOR,
+  STAGED_ANSWER,
+  STAGED_CODE,
   STATES,
   stateOf,
   TAP_RHYTHM,
@@ -235,5 +243,76 @@ describe("the Wave 3 fixtures' music", () => {
     const a = { tonic: "A", mode: "major" } as const;
     expect(labelPitch(66, a).degree).toBe("6");
     expect(intervalBetween("E4", "F#4")).toBe("M2");
+  });
+});
+
+describe("the Wave 4 fixtures' music", () => {
+  const F_MAJOR = { tonic: "F", mode: "major" } as const;
+  test("C F G C is T PD D T; the chord under each bar is the loop's numeral", async () => {
+    const fx = byId("slot-function");
+    const fns = ["I", "IV", "V", "I"].map((rn) => harmonicFunction(must(chordOfRoman(rn, C_MAJOR)), C_MAJOR));
+    expect(fns).toEqual(fx.expected as string[]);
+  });
+  test("cadences: ending on V is a half cadence; V–I with the tune on 1 is a PAC", async () => {
+    const I = must(chordOfRoman("I", C_MAJOR));
+    const IV = must(chordOfRoman("IV", C_MAJOR));
+    const V = must(chordOfRoman("V", C_MAJOR));
+    expect(cadenceOf(IV, V, C_MAJOR)).toBe("HC");
+    expect(cadenceOf(V, I, C_MAJOR, { melodyMidi: 72 })).toBe("PAC");
+    expect(byId("slot-cadence").expected).toEqual(["HC", "PAC"]);
+  });
+  test("E G C with E lowest is C/E (first inversion); the sample Em is another chord", async () => {
+    expect(readChord([64, 67, 72], 64)?.leadSheet).toBe("C/E");
+    expect(chordSymbol(byId("text-chord").expected as string, "lead-sheet")).toBe("C/E");
+    expect(readChord([64, 67, 71], 64)?.leadSheet).toBe("Em");
+  });
+  test("staff chords: C, then G/B; the sample's second chord has F for G (B D F is B°)", async () => {
+    const read = (list: string) => {
+      const f = byId("staff-chords");
+      const r = engrave(list, staffContext(f.spec as never));
+      if (!r.ok) throw new Error(r.error);
+      return staffChords(staffNotes(r.score)).map((c) => {
+        const ms = c.pitches.map((p) => p.midi);
+        return readChord(ms, Math.min(...ms))?.leadSheet;
+      });
+    };
+    expect(read(byId("staff-chords").expected as string)).toEqual(["C", "G/B"]);
+    expect(read(byId("staff-chords").sample as string)).toEqual(["C", "B°"]);
+    const g = byId("staff-grand-chords");
+    const r = engrave(g.expected as string, staffContext(g.spec as never));
+    if (!r.ok) throw new Error(r.error);
+    const cs = staffChords(staffNotes(r.score));
+    expect(cs).toHaveLength(1);
+    expect(
+      readChord(
+        must(cs[0]).pitches.map((p) => p.midi),
+        52,
+      )?.leadSheet,
+    ).toBe("C/E");
+  });
+  test("the triad on degree 2 of C is D F A (D minor); the sample D F♯ A is D major", async () => {
+    const ii = diatonicChordOn(C_MAJOR, 2);
+    expect((byId("keyboard-build").expected as number[]).map((m) => m % 12).sort()).toEqual(
+      [...chordPcs(ii)].sort(),
+    );
+    expect(readChord(byId("keyboard-build").sample as number[], 62)?.leadSheet).toBe("D");
+  });
+  test("in F: F, C/E, Dm, B♭ are I V6 vi IV", async () => {
+    const names = (byId("rn-key").expected as string[]).map((rn) =>
+      toLeadSheet(must(chordOfRoman(rn, F_MAJOR))),
+    );
+    expect(names).toEqual(["F", "C/E", "Dm", "B♭"]);
+  });
+  test("the staged loop is I V vi IV in C with the bass on 1 5 6 4", async () => {
+    const r = await evalHeadless(STAGED_CODE, 4);
+    const bars = [0, 1, 2, 3].map((c) =>
+      r.events.filter((e) => Math.floor(e.onset) === c).map((e) => e.midi as number),
+    );
+    const read = bars.map((ms) => readChord(ms, Math.min(...ms)));
+    expect(read.map((x) => x?.quality)).toEqual(STAGED_ANSWER.quality);
+    expect(STAGED_ANSWER.rn.map((rn) => chordOfRoman(rn, C_MAJOR)?.root)).toEqual(read.map((x) => x?.root));
+    const bass = bars.map((ms) => Math.min(...ms) % 12);
+    expect(bass).toEqual([0, 7, 9, 5]);
+    expect(STAGED_ANSWER.bass).toEqual(["1", "5", "6", "4"]);
   });
 });

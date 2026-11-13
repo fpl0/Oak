@@ -13,6 +13,7 @@ import { apiQuery } from "../../lib/queries.ts";
 import { useHotkeys } from "../../ui/keys/KeymapProvider.tsx";
 import { Button } from "../../ui/kit/Button.tsx";
 import { Card } from "../../ui/kit/basics.tsx";
+import { playbackLint } from "../playback.ts";
 
 export const RECAP_MS = 30_000;
 
@@ -54,7 +55,11 @@ export function RecapCard({ plan, onContinue }: { plan: SessionPlan; onContinue(
       await oak.unlock();
       player.current ??= oak.createPatternPlayer();
       const bpm = playable.bpm ?? 90;
-      const out = await player.current.load(playable.code, { bars: 8, cps: bpm / 60 / 4 });
+      const out = await player.current.load(playable.code, {
+        bars: 8,
+        cps: bpm / 60 / 4,
+        lint: playbackLint(playable),
+      });
       if (!out.ok) {
         setError("This sketch doesn't run as it is; open it in Studio to look at it.");
         return;

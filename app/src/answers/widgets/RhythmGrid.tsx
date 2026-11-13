@@ -10,7 +10,7 @@ import { useAnswerEnv } from "../env.tsx";
 import { gridCounts, gridToCode, rowLabel } from "../keys.ts";
 import { gridSteps } from "../response.ts";
 import type { AnswerWidgetProps } from "../types.ts";
-import { AnswerFrame, KeyHint, markOf, revealedOf } from "../ui.tsx";
+import { AnswerFrame, KeyHint, markOf, revealedOf, SubmitHint } from "../ui.tsx";
 
 export function RhythmGridAnswer(p: AnswerWidgetProps<"grid">) {
   const { spec, value, onChange, disabled, feedback } = p;
@@ -97,7 +97,7 @@ export function RhythmGridAnswer(p: AnswerWidgetProps<"grid">) {
           <KeyHint keys={["←", "→", "↑", "↓"]}>move</KeyHint>
           <KeyHint keys={["Space", "X"]}>toggle</KeyHint>
           {p.audition ? <KeyHint keys={["P"]}>play</KeyHint> : null}
-          <KeyHint keys={["Enter"]}>check</KeyHint>
+          <SubmitHint />
         </>
       }
     >

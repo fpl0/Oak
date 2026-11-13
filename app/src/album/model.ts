@@ -108,3 +108,22 @@ export function changeSummary(before: string | null, after: string): string {
   if (removed - changed) parts.push(`${removed - changed} removed`);
   return parts.length ? parts.join(", ") : "Whitespace only";
 }
+
+/** "four-chord-song-v2.webm": the recording's file name for a download. */
+export function audioFileName(title: string, version: number, mime: string | null): string {
+  const slug =
+    title
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60) || "track";
+  const ext = mime?.includes("ogg")
+    ? "ogg"
+    : mime?.includes("wav")
+      ? "wav"
+      : mime?.includes("mp4")
+        ? "m4a"
+        : "webm";
+  return `${slug}-v${version}.${ext}`;
+}

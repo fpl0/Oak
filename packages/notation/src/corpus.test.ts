@@ -46,15 +46,19 @@ describe("the independent read-back", () => {
 });
 
 describe("golden corpus", () => {
-  test("has at least 100 patterns", () => {
-    expect(CORPUS.length).toBeGreaterThanOrEqual(100);
+  test("has at least 170 patterns (Wave 4: 40 more for harmony, lead sheets and pickups)", () => {
+    expect(CORPUS.length).toBeGreaterThanOrEqual(171);
     expect(new Set(CORPUS.map((e) => e.name)).size).toBe(CORPUS.length);
   });
 
   for (const entry of CORPUS) {
     test(entry.name, async () => {
       const r = await runEntry(entry);
-      const { score, abc, check, events } = r;
+      const { score, abc, check } = r;
+      // The engraved span only (a later page starts at `startBar`).
+      const events = r.events.filter(
+        (e) => R.toNum(e.onset) >= score.startBar && R.toNum(e.onset) < score.startBar + score.bars,
+      );
       const W = score.meter.num / score.meter.den;
       const x = entry.expect;
 
@@ -70,6 +74,11 @@ describe("golden corpus", () => {
       if (x.warnings) expect(score.warnings.map((w) => w.code)).toEqual(x.warnings);
       for (const s of x.abc ?? []) expect(abc.abc).toContain(s);
       if (x.chordTexts) expect(check.chordTexts).toEqual(x.chordTexts);
+      if (x.romanTexts)
+        expect(check.labels.filter((l) => l.position === "below").map((l) => l.text)).toEqual(x.romanTexts);
+      if (x.barNumbers) expect(check.barNumbers).toEqual(x.barNumbers);
+      // No repeat signs, ever: Oak writes every bar out.
+      expect(abc.abc).not.toMatch(/:\||\|:|::/);
       if (x.staves) expect(score.staves.map((s) => `${s.id}:${s.clef}`)).toEqual(x.staves);
 
       // abcjs reads it cleanly ...
@@ -123,14 +132,32 @@ describe("golden corpus", () => {
       }) =>
         `${num(R.toNum(e.onset as [number, number]))}+${num(R.toNum(e.dur as [number, number]))}:${e.midi}`;
       const engraved = scoreToEvents(score).filter((e) => e.midi !== null);
+      const lead = (entry.staff ?? "auto") === "lead";
+      // A lead sheet engraves the melody only: the events with no chord symbol.
       const truth =
-        !score.approximate &&
-        !entry.swing &&
-        (entry.staff ?? "auto") !== "lead" &&
-        (entry.staff ?? "auto") !== "rhythm"
-          ? events.filter((e) => e.midi !== null)
+        !score.approximate && !entry.swing && (entry.staff ?? "auto") !== "rhythm"
+          ? events.filter((e) => e.midi !== null && (!lead || e.chordSymbol === undefined))
           : engraved;
       expect(pitchedBack).toEqual(truth.map(asNum).sort());
+
+      // Chord labels read back from the ABC where they stand: symbols over the top staff's first voice, Roman
+      // numerals under the bottom pitched staff's first voice, at their onsets (or the item they are drawn on).
+      const glyphs = (t: string) => t.replace(/♭/g, "b").replace(/♯/g, "#").replace(/°/g, "o");
+      const romanStaff = score.staves.reduce((acc, st, i) => (st.clef !== "perc" ? i : acc), 0);
+      const labelsBack = (position: string, si: number) =>
+        check.labels
+          .filter((l) => l.position === position)
+          .map((l) => {
+            expect([l.si, l.vi]).toEqual([si, 0]);
+            return `${num(t0 + l.onset / W)}:${glyphs(l.text)}`;
+          });
+      const labelsWant = (list: typeof score.chords) =>
+        (list ?? []).map((a) => `${num(R.toNum(a.drawnAt ?? a.at))}:${glyphs(a.text)}`);
+      expect(labelsBack("default", 0)).toEqual(labelsWant(score.chords));
+      expect(labelsBack("below", romanStaff)).toEqual(labelsWant(score.romans));
+      // ... and every label stands where it was asked for, unless the Score says why not.
+      if (!score.warnings.some((w) => w.code === "abcjs-limit"))
+        for (const a of [...(score.chords ?? []), ...(score.romans ?? [])]) expect(a.drawnAt).toBeUndefined();
       // Percussion: every stroke at its time with its heads.
       const percBack = rb.staves
         .filter((s) => s.perc)
@@ -162,12 +189,11 @@ describe("golden corpus", () => {
       const exact =
         !score.approximate &&
         !entry.swing &&
-        (entry.staff ?? "auto") !== "lead" &&
         (entry.staff ?? "auto") !== "rhythm" &&
         score.staves.every((s) => s.clef !== "perc");
       if (exact) {
         const want = events
-          .filter((e) => e.midi !== null)
+          .filter((e) => e.midi !== null && (!lead || e.chordSymbol === undefined))
           .map(key3)
           .sort();
         expect(scoreToEvents(score).map(key3).sort()).toEqual(want);

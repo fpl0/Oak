@@ -200,7 +200,7 @@ Templates are deterministic, use `{param}` interpolation, and can be overridden 
 | code.n-without-scale | E | `n("…")` gives numbers, not pitches. Add `.scale("{key}")`, where 0 = degree 1. |
 | code.bare-value | E | Values with no sound control. Use `note("…")` or `s("…")`. |
 | code.no-pitch | W | `{s}` needs a pitch: add `note(…)` or `n(…).scale(…)`. |
-| code.unknown-chord | E | "{sym}" isn't a Strudel chord name. Write "{suggest}" (lead sheet: {display}). |
+| code.unknown-chord | E | "{sym}" {why}. Write "{suggest}". (`why`: "isn't a Strudel chord name", or, for an alias Strudel voices such as `CM`, "plays, but Oak writes this chord another way" at info severity in graded steps.) |
 | code.lowercase-chord-root | E | Chord roots are capitals: "{suggest}". |
 | code.locked-fn | E | `{fn}()` unlocks in {lesson}. For now use {alt}. |
 | code.must-call / code.must-not-call | E | Use `{fn}()` here. / Solve this without `{fn}()`: {why} |

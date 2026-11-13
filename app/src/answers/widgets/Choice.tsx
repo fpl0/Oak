@@ -16,6 +16,7 @@ import {
   markOf,
   markRing,
   revealedOf,
+  SubmitHint,
 } from "../ui.tsx";
 import { InlineMd, plainMd } from "./InlineMd.tsx";
 
@@ -84,7 +85,7 @@ export function ChoiceAnswer(p: AnswerWidgetProps<"choice">) {
         <>
           <KeyHint keys={[`1–${Math.min(9, spec.options.length)}`]}>{multi ? "toggle" : "pick"}</KeyHint>
           {canPlay ? <KeyHint keys={["⇧ + digit"]}>play</KeyHint> : null}
-          <KeyHint keys={["Enter"]}>check</KeyHint>
+          <SubmitHint />
         </>
       }
     >

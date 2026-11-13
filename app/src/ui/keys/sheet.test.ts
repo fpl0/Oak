@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { CORE_SECTIONS, registerShortcutSection, sheetSections, useSheetSections } from "./sheet.ts";
+import { TRANSCRIBE_KEYS } from "../../transcribe/keys.ts";
+import {
+  CORE_SECTIONS,
+  formatSheetKeys,
+  registerShortcutSection,
+  sheetSections,
+  useSheetSections,
+} from "./sheet.ts";
 
 afterEach(() => useSheetSections.setState({ sections: [] }));
 
@@ -11,6 +18,8 @@ describe("shortcut sheet sections", () => {
       "answers",
       "staff-input",
       "keys-intervals",
+      "harmony",
+      "transcribe",
       "tutor",
     ]);
     expect(CORE_SECTIONS.find((s) => s.id === "workbench")?.rows.some(([k]) => k === "L")).toBe(true);
@@ -51,7 +60,16 @@ describe("shortcut sheet sections", () => {
     });
     let ids = sheetSections(useSheetSections.getState().sections).map((s) => s.id);
     // The registered section replaces the core one of the same id, at its own order (35: after 34).
-    expect(ids).toEqual(["editor", "workbench", "answers", "keys-intervals", "staff-input", "tutor"]);
+    expect(ids).toEqual([
+      "editor",
+      "workbench",
+      "answers",
+      "keys-intervals",
+      "staff-input",
+      "harmony",
+      "transcribe",
+      "tutor",
+    ]);
     registerShortcutSection({ id: "staff-input", title: "Staff input", order: 35, rows: [["0", "Rest"]] });
     expect(useSheetSections.getState().sections).toHaveLength(1);
     expect(
@@ -81,6 +99,27 @@ describe("shortcut sheet sections", () => {
       "answers",
       "staff-input",
       "keys-intervals",
+      "harmony",
+      "transcribe",
     ]);
+  });
+
+  test("Wave 4: every Transcribe key and the harmony answers' keys are listed from any page", () => {
+    const rows = (id: string) => CORE_SECTIONS.find((s) => s.id === id)?.rows ?? [];
+    expect(rows("transcribe").map(([k]) => k)).toEqual(TRANSCRIBE_KEYS.map((k) => k.keys));
+    expect(rows("harmony").map(([k]) => k)).toEqual(
+      expect.arrayContaining(["M", "I", "Shift+5", "-", "P", "Backspace", "ArrowRight"]),
+    );
+    // A live Transcribe page group lists the same rows: the static copy steps aside.
+    const live = new Set(TRANSCRIBE_KEYS.map((k) => `${k.keys}|${k.description}`));
+    expect(sheetSections([], live).some((s) => s.id === "transcribe")).toBe(false);
+  });
+
+  test("rows that list several keys are shown as keys, sequences as sequences", () => {
+    expect(formatSheetKeys("G T", false)).toBe("G then T");
+    expect(formatSheetKeys("Mod+Enter", false)).toBe("Ctrl+Enter");
+    expect(formatSheetKeys("A B C D E F G", false)).toBe("A B C D E F G");
+    expect(formatSheetKeys("ArrowRight / ArrowLeft", false)).toBe("→ / ←");
+    expect(formatSheetKeys("Shift+A … Shift+G", true)).toBe("⇧A … ⇧G");
   });
 });

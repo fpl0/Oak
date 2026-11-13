@@ -149,6 +149,15 @@ export function createWaveView(opts: WaveViewOptions): WaveView {
       });
     }
   }
+  /** A section's name sits at the foot of its span, clear of the bar numbers along the top. */
+  function sectionLabel(label: string): string | HTMLElement {
+    if (typeof document === "undefined") return label;
+    const el = document.createElement("span");
+    el.textContent = label;
+    el.style.cssText =
+      "position:absolute;left:4px;bottom:4px;padding:1px 4px;border-radius:3px;font-size:12px;line-height:1.2;white-space:nowrap;pointer-events:none;background:var(--oak-surface, rgba(255,255,255,0.85));color:var(--oak-text, #222)";
+    return el;
+  }
   function setSectionList(list: readonly SectionMarker[]): void {
     for (const r of sections.values()) r.remove();
     sections.clear();
@@ -161,7 +170,7 @@ export function createWaveView(opts: WaveViewOptions): WaveView {
           end: s.endS,
           drag: false,
           resize: false,
-          content: s.label,
+          content: sectionLabel(s.label),
           color: colors.section ?? "rgba(138, 143, 152, 0.12)",
         }),
       );

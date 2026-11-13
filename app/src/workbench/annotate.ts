@@ -74,8 +74,9 @@ function lyricLine(
 }
 
 /**
- * `toAbc(score, opts)` with one lyric line per active annotation kind under the first voice of every pitched
- * staff. The idMap is untouched (links stay exact). If the ABC is not laid out as expected, the staff is
+ * `toAbc(score, opts)` with one lyric line per active annotation kind under every voice of every pitched staff
+ * (but a second voice on the numerals' staff), systems grouped as `toAbc` lays them out (a pickup bar rides on
+ * the first). The idMap is untouched (links stay exact). If the ABC is not laid out as expected, the staff is
  * returned without annotations rather than misaligned.
  */
 export function annotateAbc(
@@ -96,14 +97,17 @@ export function annotateAbc(
   if (!head.some((l) => l.startsWith("%%vocalfont"))) head.splice(kIdx, 0, "%%vocalfont Helvetica 12");
   const body = lines.slice(kIdx + 1);
   const voices = score.staves.flatMap((s, si) => s.voices.map((v, vi) => ({ s, si, v, vi })));
+  const romanStaff = score.staves.reduce((acc, s, i) => (s.clef !== "perc" ? i : acc), 0);
   const multi = voices.length > 1;
   const perLine = Math.max(1, opts.barsPerLine ?? 4);
   const nBars = score.staves[0]?.voices[0]?.bars.length ?? 0;
   const out: string[] = [];
   let i = 0;
-  for (let from = 0; from < nBars; from += perLine) {
-    const to = Math.min(nBars, from + perLine);
-    for (const { s, v, vi } of voices) {
+  // Systems as `toAbc` lays them out: a pickup bar does not count towards the first system's bars.
+  const span = (from: number) => (from === 0 && score.pickup ? perLine + 1 : perLine);
+  for (let from = 0; from < nBars; from += span(from)) {
+    const to = Math.min(nBars, from + span(from));
+    for (const { s, si, v, vi } of voices) {
       if (multi) {
         if (body[i] !== `V:${v.id}`) return abc;
         out.push(body[i++] as string);
@@ -112,7 +116,11 @@ export function annotateAbc(
       if (music === undefined || music.startsWith("w:") || music.startsWith("V:")) return abc;
       out.push(music);
       while (body[i]?.startsWith("w:")) out.push(body[i++] as string);
-      if (vi === 0 && s.clef !== "perc")
+      // Every voice of a staff gets its lines (a chord under a tune is labelled too), except a second voice on
+      // the staff that carries the numerals: abcjs sets a numeral under the first voice's lines only, so it would
+      // print over the second voice's (seen in the Wave 4 review; app/src/ui/review/e2e/wave4-notation.pw.ts).
+      const numeralsHere = (score.romans?.length ?? 0) > 0 && si === romanStaff;
+      if (s.clef !== "perc" && (vi === 0 || !numeralsHere))
         for (const k of active) {
           const w = lyricLine(v, from, to, k, textOf);
           if (w) out.push(w);

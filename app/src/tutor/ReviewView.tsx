@@ -9,11 +9,15 @@ import {
   type TranscriptionReview,
   TranscriptionReviewSchema,
 } from "@oak/api";
-import { Ear, Feather, Repeat, Sparkles, TriangleAlert, Wrench } from "lucide-react";
-import type { ReactNode } from "react";
+import { Check, Ear, Feather, Repeat, Sparkles, TriangleAlert, Wrench } from "lucide-react";
+import { type ReactNode, useState } from "react";
+import { Button } from "../ui/kit/index.ts";
 import { CodeCard } from "./CodeCard.tsx";
 import { showBars, type TutorSubject } from "./context.ts";
+import { InlineMarkdown } from "./Markdown.tsx";
+import { parseMarkdown, plainText } from "./markdown.ts";
 import type { TokenContext } from "./music-tokens.ts";
+import { readDone, writeDone } from "./review-done.ts";
 
 export type ReviewData =
   | { reviewKind: "capstone"; review: CapstoneReview }
@@ -64,14 +68,32 @@ export function ReviewView({
   thread,
   ctx,
   id,
+  compact = false,
+  heading,
 }: {
   data: ReviewData;
   subject: TutorSubject;
   thread: SubjectRef;
   ctx: TokenContext;
   id: string;
+  /**
+   * Wave 4: the card form other pages embed (the album track page, a transcription's history): no `tryCode`
+   * cards, the liner note left to the page that shows it.
+   */
+  compact?: boolean;
+  /** A line above the review ("Review of version 2 · 12 Nov"), for the card form. */
+  heading?: string;
 }) {
   const r = data.review;
+  // "Mark done" on each revision (ux §6.5): the learner's own checklist, never sent anywhere.
+  const [done, setDone] = useState<number[]>(() => readDone(id));
+  const toggleDone = (i: number) => {
+    const next = done.includes(i) ? done.filter((x) => x !== i) : [...done, i].sort((a, b) => a - b);
+    setDone(next);
+    writeDone(id, next);
+  };
+  // Review prose may carry music tokens ([[chord:Am]], [[rn:V]], [[bars:7-8]]): drawn as chips, never raw.
+  const md = (text: string) => <InlineMarkdown text={text} ctx={ctx} thread={thread} />;
   // Review `tryCode` is Preview-only before a capstone's first release; after it (revision mode) it applies like
   // any card (contracts §10.7 table).
   const revising = data.reviewKind === "capstone" && subject.released === true;
@@ -79,7 +101,8 @@ export function ReviewView({
     cardId: `${id}-rev-${i}`,
     toolUseId: `${id}-rev-${i}`,
     kind: "variation",
-    title: `Try: ${title}`,
+    // The card's title is plain text: tokens read as their values ("Try ii before V"), never as brackets.
+    title: `Try: ${plainText(parseMarkdown(title))}`,
     code,
     explanation: "",
     bars: Math.max(1, Math.min(16, Math.abs(bars[1] - bars[0]) + 1, 4)),
@@ -91,8 +114,10 @@ export function ReviewView({
     <article
       aria-label={data.reviewKind === "capstone" ? "Capstone review" : "Transcription review"}
       data-testid="review"
+      data-compact={compact ? "true" : undefined}
       className="flex flex-col gap-4 rounded-card border border-border bg-surface p-3"
     >
+      {heading && <h3 className="font-sans text-sm font-semibold text-text">{heading}</h3>}
       <p className="text-xs text-text-3">Claude's comments never affect pass or fail.</p>
       <Part icon={<Sparkles aria-hidden className="size-3.5" />} title="What works">
         <ul className="flex flex-col gap-2" data-testid="review-strengths">
@@ -101,7 +126,7 @@ export function ReviewView({
               <BarsChip bars={s.bars} thread={thread} />
               <span>
                 {"layer" in s && <span className="mr-1 font-medium capitalize">{s.layer}:</span>}
-                {s.text}
+                {md(s.text)}
               </span>
             </li>
           ))}
@@ -113,19 +138,38 @@ export function ReviewView({
       >
         <ol className="flex flex-col gap-3" data-testid="review-revisions">
           {r.revisions.map((v, i) => (
-            <li key={v.title} className="flex flex-col gap-2 rounded-control border border-border p-2.5">
+            <li
+              key={`${i}-${v.title}`}
+              data-done={done.includes(i) || undefined}
+              className="flex flex-col gap-2 rounded-control border border-border p-2.5 data-[done]:bg-surface-2"
+            >
               <div className="flex items-center gap-2">
                 <BarsChip bars={v.bars} thread={thread} />
-                <span className="font-medium">{v.title}</span>
+                {/* A title carries tokens too ("Try [[rn:ii]] before [[rn:V]]"); a long word wraps, never runs out. */}
+                <span className="min-w-0 flex-1 font-medium [overflow-wrap:anywhere]">{md(v.title)}</span>
+                {"layer" in v && <span className="text-xs text-text-3 capitalize">{v.layer}</span>}
+                {!compact && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="shrink-0"
+                    aria-pressed={done.includes(i)}
+                    icon={done.includes(i) ? <Check aria-hidden className="size-3.5" /> : undefined}
+                    onClick={() => toggleDone(i)}
+                    data-testid="review-mark-done"
+                  >
+                    {done.includes(i) ? "Done" : "Mark done"}
+                  </Button>
+                )}
               </div>
-              <p className="text-sm text-text-2">{v.why}</p>
+              <p className="text-sm text-text-2">{md(v.why)}</p>
               {"listenFor" in v && (
                 <p className="flex items-start gap-1.5 text-sm">
                   <Ear aria-hidden className="mt-0.5 size-3.5 shrink-0 text-text-3" />
-                  {v.listenFor}
+                  <span>{md(v.listenFor)}</span>
                 </p>
               )}
-              {"tryCode" in v && v.tryCode.trim() && (
+              {!compact && "tryCode" in v && v.tryCode.trim() && (
                 <CodeCard
                   card={tryCard(i, v.title, v.tryCode, v.bars)}
                   subject={subject}
@@ -144,7 +188,7 @@ export function ReviewView({
             {r.plausibilityFlags.map((f) => (
               <li key={`${f.bars[0]}-${f.issue}`} className="flex items-start gap-2 text-sm">
                 <BarsChip bars={f.bars} thread={thread} />
-                <span>{f.issue}</span>
+                <span>{md(f.issue)}</span>
               </li>
             ))}
           </ul>
@@ -152,17 +196,19 @@ export function ReviewView({
       )}
       <Part icon={<Ear aria-hidden className="size-3.5" />} title="Listen for">
         <p className="text-sm" data-testid="review-question">
-          {r.listeningQuestion}
+          {md(r.listeningQuestion)}
         </p>
       </Part>
-      <Part icon={<Feather aria-hidden className="size-3.5" />} title="Liner note">
-        <blockquote
-          className="border-l-2 border-accent/50 pl-3 font-display text-sm italic"
-          data-testid="review-liner"
-        >
-          {r.linerNote}
-        </blockquote>
-      </Part>
+      {!compact && (
+        <Part icon={<Feather aria-hidden className="size-3.5" />} title="Liner note">
+          <blockquote
+            className="border-l-2 border-accent/50 pl-3 font-display text-sm italic"
+            data-testid="review-liner"
+          >
+            {md(r.linerNote)}
+          </blockquote>
+        </Part>
+      )}
     </article>
   );
 }

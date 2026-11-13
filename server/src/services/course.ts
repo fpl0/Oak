@@ -10,7 +10,6 @@ import type {
   CheckpointSubmit,
   Evidence,
   ExerciseResult,
-  GymSession,
   LessonCompleteResult,
   LessonProgress,
   LessonSteps,
@@ -38,6 +37,7 @@ import { tx } from "../db/index.ts";
 import type { StepStateRow } from "../db/repos/lessons.ts";
 import { conflict, notFound } from "../errors.ts";
 import type { CanDoService } from "./cando.ts";
+import type { CapstoneSessionsService } from "./capstone-sessions.ts";
 import { LearnerTime, type ServiceContext } from "./context.ts";
 import { GatesService } from "./gates.ts";
 import { evidenceWeight, type MasteryService } from "./mastery.ts";
@@ -57,6 +57,8 @@ export interface CourseDeps {
   streak: StreakService;
   voice: VoiceService;
   srs: () => SrsPort | null;
+  /** Wave 4: capstone sessions remember when each was completed. */
+  capstoneSessions?: CapstoneSessionsService;
 }
 
 type EvidenceInput = Omit<Evidence, "at" | "day">;
@@ -766,6 +768,7 @@ export class CourseService {
         status: row.status === "released" ? "released" : "in_progress",
         sketchId: body.sketchId,
         lastResult: body.result,
+        checked: { sketchId: body.sketchId, version: body.sketchVersion },
         startedAt: row.startedAt ?? now,
         updatedAt: now,
       });
@@ -795,6 +798,11 @@ export class CourseService {
       const row = this.#capstoneRow(id);
       const now = this.time.iso();
       if (this.#repos.sketches.get(body.sketchId) === null) throw notFound(`sketch ${body.sketchId}`);
+      // Capstone sessions are worked in order (wave4.md §5.1): a session opens once the one before it is done.
+      const order = this.#content.capstoneSessionIds(id);
+      const before = order[order.indexOf(body.capstoneSessionId) - 1];
+      if (before !== undefined && !row.sessions.includes(before))
+        throw conflict(`${body.capstoneSessionId} opens after ${before}; finish ${before} first`);
       const sessions = row.sessions.includes(body.capstoneSessionId)
         ? row.sessions
         : [...row.sessions, body.capstoneSessionId];
@@ -809,40 +817,9 @@ export class CourseService {
         updatedAt: now,
       });
       this.d.unlocks.onComplete(body.capstoneSessionId);
+      this.d.capstoneSessions?.onSessionDone(body.capstoneSessionId);
       void meta;
     });
     return this.capstoneState(id);
-  }
-
-  // --- gym --------------------------------------------------------------------------------------
-
-  gymStart(body: {
-    sessionId: string | null;
-    kind: "ladder" | "own-audio";
-    transcriptionId: string | null;
-  }): GymSession {
-    return tx(this.#repos.db, () => {
-      const list = this.#repos.gym.list();
-      const n = list.reduce((m, g) => Math.max(m, Number(g.gymId.slice(4))), 0) + 1;
-      if (body.transcriptionId !== null && this.#repos.transcriptions.get(body.transcriptionId) === null)
-        throw notFound(`transcription ${body.transcriptionId}`);
-      // The ladder climbs one level per finished ladder transcription (contracts §2.9); realism starts at R0.
-      const done = this.#repos.transcriptions
-        .list()
-        .filter((t) => t.sourceKind === "generated" && t.status === "done");
-      const ladderLevel = body.kind === "ladder" ? Math.min(8, 1 + done.length) : null;
-      return this.#repos.gym.insert({
-        gymId: `GYM.${String(n).padStart(2, "0")}`,
-        sessionId:
-          body.sessionId !== null && this.#repos.sessions.get(body.sessionId) !== null
-            ? body.sessionId
-            : null,
-        kind: body.kind,
-        ladderLevel,
-        realism: body.kind === "ladder" ? 0 : null,
-        transcriptionId: body.transcriptionId,
-        at: this.time.iso(),
-      });
-    });
   }
 }

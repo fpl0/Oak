@@ -196,7 +196,13 @@ export function createTutorService(deps: TutorServiceDeps): TutorService {
           : await runReview(prep, backend, inner, signal, ports);
       if (reviewKind !== null && result.review !== null && deps.onReview) {
         try {
-          await deps.onReview({ subject: thread, reviewKind, review: result.review });
+          await deps.onReview({
+            subject: thread,
+            reviewKind,
+            review: result.review,
+            conversationId: prep.ctx.conversationId,
+            target: prep.ctx.review?.target ?? null,
+          });
         } catch (e) {
           log({ level: "error", msg: "an accepted review could not be stored", detail: describe(e) });
         }

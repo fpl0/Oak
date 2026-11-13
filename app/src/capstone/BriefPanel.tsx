@@ -2,18 +2,28 @@
 // living Requirements checklist, going past the brief, Claude's review, and a quiet "Report a grading problem".
 import type { CapstoneDef, CapstoneReview, CapstoneState, FlavourId } from "@oak/api";
 import { clsx } from "clsx";
-import { Check, Circle, MessageSquareText, Sparkles } from "lucide-react";
+import { Check, Circle, Lock, MessageSquareText, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { Button } from "../ui/kit/Button.tsx";
 import { SegmentedControl } from "../ui/kit/Controls.tsx";
-import { anchorText } from "./anchors.ts";
 import { Checklist } from "./Checklist.tsx";
 import type { ChecklistRow, Readiness } from "./checklist.ts";
 import { FLAVOUR_TITLE } from "./content.ts";
+import type { ReviewWait } from "./queries.ts";
+import { ReviewCard } from "./ReviewCard.tsx";
+import type { SessionView } from "./sessions.ts";
 
 export interface BriefPanelProps {
   def: CapstoneDef;
   state: CapstoneState;
+  views: readonly SessionView[];
+  /** The session being worked in; `null` once every session is done. */
+  current: SessionView | null;
+  /** Lights bars on the roll and the staff (a checklist anchor, a review's bars). */
+  onBars(from: number, to: number): void;
+  released: boolean;
+  onTryRevision?: ((i: number) => void) | undefined;
+  tryPending?: boolean;
   rows: readonly ChecklistRow[];
   ready: Readiness;
   checking: boolean;
@@ -24,15 +34,15 @@ export interface BriefPanelProps {
   onFlavour(f: FlavourId): void;
   flavourLocked: boolean;
   review: CapstoneReview | null;
-  reviewRequested: boolean;
+  /** Where the last review request stands (`useCapstoneReview`). */
+  reviewWait: ReviewWait;
   canRequestReview: boolean;
   onRequestReview(): void;
   onReport(note: string | null): Promise<void>;
 }
 
 export function BriefPanel(p: BriefPanelProps) {
-  const { def, state } = p;
-  const total = def.sessionDefs.length;
+  const { def } = p;
   return (
     <aside
       aria-label="Brief"
@@ -44,40 +54,7 @@ export function BriefPanel(p: BriefPanelProps) {
         <p className="mt-2 text-sm leading-relaxed text-text-2">{def.brief?.prompt ?? def.objective}</p>
       </header>
 
-      <section aria-labelledby="cap-sessions">
-        <h2 id="cap-sessions" className="mb-2 font-sans text-sm font-semibold text-text-2">
-          Sessions
-        </h2>
-        <ol className="flex flex-col gap-1.5">
-          {def.sessionDefs.map((sd, i) => {
-            const done = state.sessions.includes(sd.id);
-            const current = !done && i === Math.min(state.sessionsDone, total - 1);
-            return (
-              <li
-                key={sd.id}
-                aria-current={current ? "step" : undefined}
-                className={clsx("flex gap-2 rounded-control px-2 py-1 text-sm", current && "bg-lane-in")}
-              >
-                {done ? (
-                  <Check aria-hidden className="mt-0.5 size-4 shrink-0 text-accent" />
-                ) : (
-                  <Circle
-                    aria-hidden
-                    className={clsx("mt-0.5 size-4 shrink-0", current ? "text-accent" : "text-text-3")}
-                  />
-                )}
-                <span className="min-w-0">
-                  <span className="font-mono text-text-3 tabular-nums">
-                    {i + 1}/{total}
-                  </span>{" "}
-                  <span className={clsx(current ? "font-medium" : "text-text-2")}>{sd.title}</span>
-                  <span className="sr-only">{done ? " (done)" : current ? " (now)" : ""}</span>
-                </span>
-              </li>
-            );
-          })}
-        </ol>
-      </section>
+      <SessionList views={p.views} current={p.current} />
 
       <section aria-labelledby="cap-flavour">
         <h2 id="cap-flavour" className="mb-2 font-sans text-sm font-semibold text-text-2">
@@ -96,7 +73,7 @@ export function BriefPanel(p: BriefPanelProps) {
         )}
       </section>
 
-      <Checklist rows={p.rows} ready={p.ready} checking={p.checking} stale={p.stale} />
+      <Checklist rows={p.rows} ready={p.ready} checking={p.checking} stale={p.stale} onBars={p.onBars} />
 
       {p.beyond.length > 0 && (
         <div role="status" className="flex gap-2 rounded-card border border-accent/30 bg-lane-in p-3 text-sm">
@@ -119,6 +96,65 @@ export function BriefPanel(p: BriefPanelProps) {
   );
 }
 
+/** The plan with each session's state, and what this session is for (contracts §2.4 "goal"). */
+export function SessionList({
+  views,
+  current,
+}: {
+  views: readonly SessionView[];
+  current: SessionView | null;
+}) {
+  const total = views.length;
+  return (
+    <section aria-labelledby="cap-sessions" data-testid="session-plan">
+      <h2 id="cap-sessions" className="mb-2 font-sans text-sm font-semibold text-text-2">
+        Sessions
+      </h2>
+      <ol className="flex flex-col gap-1.5">
+        {views.map((v) => {
+          const now = current?.id === v.id;
+          return (
+            <li
+              key={v.id}
+              aria-current={now ? "step" : undefined}
+              data-session={v.id}
+              data-status={v.status}
+              className={clsx("flex gap-2 rounded-control px-2 py-1 text-sm", now && "bg-lane-in")}
+            >
+              {v.status === "done" ? (
+                <Check aria-hidden className="mt-0.5 size-4 shrink-0 text-accent" />
+              ) : v.status === "locked" && !now ? (
+                <Lock aria-hidden className="mt-0.5 size-3.5 shrink-0 text-text-3" />
+              ) : (
+                <Circle
+                  aria-hidden
+                  className={clsx("mt-0.5 size-4 shrink-0", now ? "text-accent" : "text-text-3")}
+                />
+              )}
+              <span className="min-w-0">
+                <span className="font-mono text-text-3 tabular-nums">
+                  {v.index + 1}/{total}
+                </span>{" "}
+                <span className={clsx(now ? "font-medium" : "text-text-2")}>{v.title}</span>
+                <span className="sr-only">
+                  {v.status === "done"
+                    ? " (done)"
+                    : now
+                      ? " (now)"
+                      : v.status === "locked"
+                        ? " (after the one before)"
+                        : ""}
+                </span>
+                {now && <span className="mt-0.5 block text-text-2">{v.goal}</span>}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
 function ReviewSection(p: BriefPanelProps) {
   const r = p.review;
   return (
@@ -127,51 +163,38 @@ function ReviewSection(p: BriefPanelProps) {
         Claude's review
       </h2>
       {r ? (
-        <div className="flex flex-col gap-2 text-sm" data-testid="review-summary">
-          <p className="text-text-3">Claude's comments never affect pass or fail.</p>
-          <ul className="flex flex-col gap-1.5">
-            {r.strengths.map((s) => (
-              <li key={s.text} className="flex gap-2">
-                <span className="shrink-0 font-mono text-[0.75rem] text-text-3">
-                  {anchorText({ from: s.bars[0], to: s.bars[1] })}
-                </span>
-                <span>{s.text}</span>
-              </li>
-            ))}
-          </ul>
-          {r.revisions.map((v) => (
-            <div key={v.title} className="rounded-control border border-border p-2">
-              <p className="font-medium">
-                {v.title}{" "}
-                <span className="font-mono text-[0.75rem] text-text-3">
-                  {anchorText({ from: v.bars[0], to: v.bars[1] })}
-                </span>
-              </p>
-              <p className="text-text-2">{v.why}</p>
-            </div>
-          ))}
-          <p className="italic text-text-2">{r.listeningQuestion}</p>
-          <p className="text-text-3">
-            The suggested code is in the tutor panel
-            {p.state.status === "released" ? "." : ", as a preview until the first release."}
+        <div data-testid="review-summary">
+          <ReviewCard
+            review={r}
+            onBars={p.onBars}
+            {...(p.onTryRevision ? { onTry: p.onTryRevision } : {})}
+            tryPending={p.tryPending ?? false}
+            headingLevel={3}
+            compact
+          />
+          <p className="mt-2 text-sm text-text-3">
+            {p.released
+              ? "“Try the revision” opens a copy in the Studio; the released version stays as it is."
+              : "The suggested code is in the tutor panel, as a preview until the first release."}
           </p>
         </div>
-      ) : p.reviewRequested ? (
-        <p className="text-sm text-text-2">Requested. It appears in the tutor panel when it is ready.</p>
+      ) : p.reviewWait.kind !== "idle" ? (
+        <ReviewWaitNote wait={p.reviewWait} />
       ) : (
         <p className="text-sm text-text-2">
           A short structured review: what works, one revision to try, one question to listen for. It never
           affects pass or fail.
         </p>
       )}
+      {r && p.reviewWait.kind !== "idle" ? <ReviewWaitNote wait={p.reviewWait} /> : null}
       <Button
         size="sm"
         icon={<MessageSquareText aria-hidden className="size-4" />}
-        disabled={!p.canRequestReview}
+        disabled={!p.canRequestReview || p.reviewWait.kind === "pending"}
         onClick={p.onRequestReview}
         data-testid="request-review"
       >
-        {r ? "Ask for a new review" : "Request review"}
+        {p.reviewWait.kind === "pending" ? "Review requested" : r ? "Ask for a new review" : "Request review"}
       </Button>
       {!p.canRequestReview && (
         <p className="text-sm text-text-3">Check your track once first: the review reads that check.</p>
@@ -180,7 +203,7 @@ function ReviewSection(p: BriefPanelProps) {
   );
 }
 
-function Report({ onReport }: { onReport(note: string | null): Promise<void> }) {
+export function Report({ onReport }: { onReport(note: string | null): Promise<void> }) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -230,5 +253,19 @@ function Report({ onReport }: { onReport(note: string | null): Promise<void> }) 
         </Button>
       </div>
     </form>
+  );
+}
+
+/** A requested review on its way, failed, or not arrived (polling stops after `REVIEW_WAIT_MS`). */
+export function ReviewWaitNote({ wait }: { wait: ReviewWait }) {
+  if (wait.kind === "idle") return null;
+  return (
+    <p className="text-sm text-text-2" aria-live="polite" data-testid="review-wait" data-state={wait.kind}>
+      {wait.kind === "pending"
+        ? "Requested. It appears in the tutor panel and here when it is ready."
+        : wait.kind === "failed"
+          ? "The review didn't come through. The tutor panel says why; you can ask again."
+          : "The review hasn't arrived. Ask again, or look in the tutor panel."}
+    </p>
   );
 }

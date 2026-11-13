@@ -10,7 +10,16 @@ import { Button } from "../../ui/kit/index.ts";
 import { codeTokens, starterParts, tokenAt, tokenOnLine } from "../code-tokens.ts";
 import { useAnswerEnv } from "../env.tsx";
 import type { AnswerWidgetProps } from "../types.ts";
-import { AnswerFrame, focusFirst, isMod, KeyHint, MarkBadge, markOf, revealedOf } from "../ui.tsx";
+import {
+  AnswerFrame,
+  focusFirst,
+  isMod,
+  KeyHint,
+  MarkBadge,
+  markOf,
+  revealedOf,
+  SubmitHint,
+} from "../ui.tsx";
 
 const CODE_BOX =
   "rounded-card border border-border bg-surface p-3 font-mono text-[0.875rem] leading-7 text-text";
@@ -39,7 +48,7 @@ export function BlanksAnswer(p: AnswerWidgetProps<"blanks">) {
       keys={
         <>
           <KeyHint keys={["Tab"]}>next blank</KeyHint>
-          <KeyHint keys={["Enter"]}>check</KeyHint>
+          <SubmitHint />
         </>
       }
     >
@@ -152,7 +161,7 @@ export function CodeAnswer(p: AnswerWidgetProps<"code">) {
       keys={
         <>
           {p.audition ? <KeyHint keys={["⌘/Ctrl Enter"]}>play</KeyHint> : null}
-          <KeyHint keys={["⌘/Ctrl ⇧ Enter"]}>check</KeyHint>
+          <SubmitHint keys={["⌘/Ctrl ⇧ Enter"]} />
         </>
       }
     >
@@ -283,7 +292,7 @@ export function ClickCodeAnswer(p: AnswerWidgetProps<"click-code">) {
       keys={
         <>
           <KeyHint keys={["←", "→", "↑", "↓"]}>point</KeyHint>
-          <KeyHint keys={["Enter"]}>check</KeyHint>
+          <SubmitHint />
         </>
       }
     >

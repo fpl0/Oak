@@ -50,6 +50,15 @@ export type TranscriptionReview = z.infer<typeof TranscriptionReviewSchema>;
 
 export type ReviewValue = CapstoneReview | TranscriptionReview;
 
+/**
+ * The third kind (contracts §10.2, §10.10): a listening note on a saved sketch, or a comment on one. It is
+ * streamed prose, not a tool call, so the schema is checked after the turn: 2–3 sentences, at least one concrete
+ * bar, degree, chord or rhythm (2–3 sentences asked, 1–4 kept), at most one question, no verdict and no claim to have heard audio. A note that
+ * fails it is still shown (it was already streamed) but is not kept as a tutor note.
+ */
+export const ListeningNoteSchema = z.strictObject({ text: z.string().min(1).max(1_200) });
+export type ListeningNote = z.infer<typeof ListeningNoteSchema>;
+
 export const REVIEW_LIMITS = {
   strengths: [2, 3],
   strengthWords: 40,
@@ -156,6 +165,30 @@ export function revisionCountFor(capstoneId: string): 1 | 2 {
   return ONE_REVISION.has(capstoneId) ? 1 : 2;
 }
 
+/** Verdict language: "this passes", "would fail the check", "a passing grade" (not "passing tone", "passes through"). */
+export const VERDICT =
+  /\b(?:(?:you|it|this|that|the (?:piece|track|draft|song|transcription|loop))\s+(?:would\s+|will\s+|should\s+|now\s+)?(?:pass(?:es|ed)?|fail(?:s|ed)?)\b(?!\s+(?:through|over|under|by|from|to|into))|\b(?:pass(?:es|ed)?|fail(?:s|ed)?)\s+(?:the|Oak's|this)\s+(?:check(?:er)?|rubric|capstone|test|grade)\b|\b(?:passing|failing)\s+grade\b)/i;
+
+/** "I heard", "it sounds like" said as if the tutor listened: the tutor reads code, never audio (§10.11). */
+const HEARD = /\b(?:I\s+(?:heard|hear|listened)|(?:I|we)\s+can\s+hear)\b/i;
+const CITES =
+  /\[\[(?:deg|chord|rn|bars|note):|\bbars?\s+\d|\bbeat\s+\d|\bdegree\s+[b#]?\d|\b(?:rhythm|syncopat\w*|offbeat|downbeat|backbeat)\b/i;
+
+export function validateListeningNote(raw: unknown): StructuredCheck<ListeningNote> {
+  const parsed = ListeningNoteSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, problems: zodProblems(parsed.error) };
+  const text = parsed.data.text.trim();
+  const problems: string[] = [];
+  const sentences = text.split(/(?<=[.!?])\s+(?=\S)/).filter((x) => /\w/.test(x)).length;
+  // The persona asks for 2 or 3 sentences; one short sentence or a fourth is tolerated, a paragraph is not a note.
+  if (sentences < 1 || sentences > 4) problems.push(`text: ${sentences} sentences, a note has 2 or 3`);
+  if (!CITES.test(text)) problems.push("text: cite at least one concrete bar, degree, chord or rhythm");
+  if ((text.match(/\?/g) ?? []).length > 1) problems.push("text: at most one question");
+  if (VERDICT.test(text)) problems.push("text: do not say or imply pass or fail");
+  if (HEARD.test(text)) problems.push("text: the tutor reads code and score, never audio");
+  return problems.length === 0 ? { ok: true, value: { text } } : { ok: false, problems };
+}
+
 function zodProblems(error: z.ZodError): string[] {
   return error.issues.map((i) => `${i.path.join(".") || "review"}: ${i.message}`);
 }
@@ -184,7 +217,15 @@ class Checker {
       this.problems.push(`${path}: bar ${to} is past the end (${total} bars)`);
   }
 
+  /** Contracts §10.6: a review never states or implies pass or fail. */
+  verdict(path: string, text: string): void {
+    if (VERDICT.test(text))
+      this.problems.push(`${path}: do not say or imply pass or fail; Oak's checker decides`);
+  }
+
   common(review: { listeningQuestion: string; linerNote: string }): void {
+    this.verdict("listeningQuestion", review.listeningQuestion);
+    this.verdict("linerNote", review.linerNote);
     const q = review.listeningQuestion.trim();
     this.words("listeningQuestion", q, REVIEW_LIMITS.questionWords);
     if ((q.match(/\?/g) ?? []).length !== 1 || !q.endsWith("?")) {
@@ -205,6 +246,7 @@ export function validateCapstoneReview(raw: unknown, rules: ReviewRules): Struct
   c.count("strengths", r.strengths.length, REVIEW_LIMITS.strengths[0], REVIEW_LIMITS.strengths[1]);
   r.strengths.forEach((s, i) => {
     c.words(`strengths[${i}].text`, s.text, REVIEW_LIMITS.strengthWords);
+    c.verdict(`strengths[${i}].text`, s.text);
     c.bars(`strengths[${i}].bars`, s.bars);
   });
   c.count("revisions", r.revisions.length, rules.revisions, rules.revisions);
@@ -212,6 +254,7 @@ export function validateCapstoneReview(raw: unknown, rules: ReviewRules): Struct
     const at = `revisions[${i}]`;
     c.words(`${at}.title`, rev.title, REVIEW_LIMITS.titleWords);
     c.words(`${at}.why`, rev.why, REVIEW_LIMITS.whyWords);
+    c.verdict(`${at}.why`, rev.why);
     c.bars(`${at}.bars`, rev.bars);
     if (rev.skills.length > REVIEW_LIMITS.skills)
       c.problems.push(`${at}.skills: at most ${REVIEW_LIMITS.skills}`);
@@ -238,6 +281,7 @@ export function validateTranscriptionReview(
   c.count("strengths", r.strengths.length, REVIEW_LIMITS.strengths[0], REVIEW_LIMITS.strengths[1]);
   r.strengths.forEach((s, i) => {
     c.words(`strengths[${i}].text`, s.text, REVIEW_LIMITS.strengthWords);
+    c.verdict(`strengths[${i}].text`, s.text);
     c.bars(`strengths[${i}].bars`, s.bars);
   });
   c.count("revisions", r.revisions.length, rules.revisions, rules.revisions);
@@ -245,6 +289,7 @@ export function validateTranscriptionReview(
     const at = `revisions[${i}]`;
     c.words(`${at}.title`, rev.title, REVIEW_LIMITS.titleWords);
     c.words(`${at}.why`, rev.why, REVIEW_LIMITS.whyWords);
+    c.verdict(`${at}.why`, rev.why);
     c.words(`${at}.listenFor`, rev.listenFor, REVIEW_LIMITS.listenForWords);
     c.bars(`${at}.bars`, rev.bars);
   });

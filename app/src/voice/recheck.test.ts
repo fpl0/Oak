@@ -1,7 +1,15 @@
 // The "re-run the quiet check" suggestion a take leaves behind (ux §4.7; Wave 2 known gap 9).
 import { describe, expect, test } from "bun:test";
 import type { PitchFrame } from "@oak/pitch";
-import { clearRecheck, noisyShare, recheckNow, reportTake, takeAdvice } from "./recheck.ts";
+import {
+  BLEED_ADVICE,
+  clearRecheck,
+  noisyShare,
+  recheckNow,
+  reportBleed,
+  reportTake,
+  takeAdvice,
+} from "./recheck.ts";
 
 const frames = (n: number, f: Partial<PitchFrame>): PitchFrame[] =>
   Array.from({ length: n }, (_, i) => ({ t: i * 0.0107, hz: 220, clarity: 0.97, rms: 0.05, ...f }));
@@ -44,4 +52,19 @@ test("reportTake keeps the suggestion until the quiet check is run again", () =>
   expect(recheckNow()?.kind).toBe("high-floor"); // a good take does not erase it
   clearRecheck();
   expect(recheckNow()).toBeNull();
+});
+
+test("sing.bleed (contracts §8.6) leaves the bleed hint with its fallback; so does a live trip of the session", () => {
+  clearRecheck();
+  expect(takeAdvice({ diagnostics: [{ id: "sing.bleed", params: { ms: 900 } }], floorDb: -60 })).toEqual(
+    BLEED_ADVICE,
+  );
+  // Bleed wins over "no voice": the mic heard something, and it was the playback.
+  expect(
+    takeAdvice({ diagnostics: [{ id: "sing.bleed" }, { id: "sing.no-voice" }], floorDb: -30 })?.kind,
+  ).toBe("bleed");
+  expect(BLEED_ADVICE.body.startsWith("The mic hears the playback; use wired headphones.")).toBe(true);
+  reportBleed();
+  expect(recheckNow()?.kind).toBe("bleed");
+  clearRecheck();
 });

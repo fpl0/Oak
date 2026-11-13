@@ -10,6 +10,7 @@ import type {
   NoteSource,
   ProgressSnapshot,
   ReviewSource,
+  ReviewTarget,
   Rung,
   StepSource,
   StepState,
@@ -80,7 +81,12 @@ export interface LessonContextPort {
   /** Map an exercise ID (`U05.L07/hand-voiced-cadence`) to its step. */
   resolveExercise(ref: string): Promise<{ lessonId: string; stepId: string } | null>;
   subject(ref: SubjectRef): Promise<SubjectFacts>;
-  review(ref: SubjectRef): Promise<ReviewSource | null>;
+  /**
+   * What a review receives. Wave 4: `target` names one album version (its code, analysis and facts) or one
+   * transcription version; `null`/absent is the subject's current piece. Fill `ReviewSource.facts` with
+   * `reviewFactsFrom` (review-facts.ts) so the review can anchor its comments to real bars.
+   */
+  review(ref: SubjectRef, target?: ReviewTarget | null): Promise<ReviewSource | null>;
   /** The generated syllabus and Strudel catalog for the system prefix, as built with the content. */
   prefixSources(): Promise<{ syllabus: string; catalog: string }>;
 }

@@ -30,6 +30,17 @@ export function roleOfTrack(n: Normalized, track: string): RoleName | null {
   return null;
 }
 
+/**
+ * What a finding calls the line a note belongs to ("the bass has 5 (sol)", "the melody has …"): "bass" for a
+ * track whose role is bass (or a `@bass` / `band.bass` ref), else "melody".
+ */
+export function lineWord(n: Normalized, track: string | undefined): "bass" | "melody" {
+  if (!track) return "melody";
+  if (track === "@bass" || track === "band.bass") return "bass";
+  if (track.startsWith("@") || track.startsWith("band.")) return "melody";
+  return roleOfTrack(n, track) === "bass" ? "bass" : "melody";
+}
+
 /** Events a `TrackRef` selects: a label, '*', '@role' or 'band.<label>'. Sorted by (onset, midi). */
 export function selectTrack(n: Normalized, ref: TrackRef): NEvent[] {
   if (ref === "*") return sortEvents(n.all);

@@ -4,6 +4,7 @@
 import type { Rat } from "@oak/content-kit";
 import type { AbcElem, AbcVisualParams, OakClickListener, TuneObject } from "abcjs";
 import type { Box, NoteGeometry, StaffBandGeometry, StaffGeometry } from "./geometry.ts";
+import { CHORD_LABEL_CLASSES } from "./lead-sheet.ts";
 import { ANNOTATION_CLASSES, type AnnotationSet, type NoteAnnotation } from "./options.ts";
 import type { AbcResult, Score, Staff } from "./types.ts";
 
@@ -419,4 +420,43 @@ export function placeAnnotations(
     });
   }
   fitDrawn(svg);
+}
+
+/** Text as compared between the Score and abcjs's SVG (abcjs draws b, # and o of a chord symbol as glyphs). */
+const labelKey = (t: string | null | undefined) =>
+  (t ?? "").replace(/♭/g, "b").replace(/♯/g, "#").replace(/°/g, "o").replace(/\s+/g, "");
+
+/**
+ * Wave 4 (docs/design/wave4.md §3.3): gives the chord symbols (`abcjs-chord` texts above the top staff) and Roman
+ * numerals (`abcjs-annotation` texts below the bottom pitched staff) of a rendered score the stable classes of
+ * `CHORD_LABEL_CLASSES`: `oak-ann-chord` / `oak-ann-rn` and `oak-ann-at{i}`, `i` the index in `score.chords` /
+ * `score.romans`. Replaces what an earlier call tagged. abcjs draws the labels in time order, so each label is the
+ * next drawn text with its words (other texts, such as the lens lines over the notes or "Swing 8ths", are passed
+ * over). A label abcjs did not draw is left untagged.
+ */
+export function tagChordLabels(el: HTMLElement, score: Score): void {
+  const svg = el.querySelector("svg");
+  if (!svg) return;
+  const { symbol, roman, at } = CHORD_LABEL_CLASSES;
+  for (const old of [...svg.querySelectorAll(`.${symbol}, .${roman}`)]) {
+    const keep = (old.getAttribute("class") ?? "")
+      .split(/\s+/)
+      .filter((c) => c && c !== symbol && c !== roman && !c.startsWith(at));
+    old.setAttribute("class", keep.join(" "));
+  }
+  const tag = (texts: readonly Element[], labels: Score["chords"], cls: string) => {
+    let j = 0;
+    (labels ?? []).forEach((label, i) => {
+      const want = labelKey(label.text);
+      for (let k = j; k < texts.length; k++) {
+        const t = texts[k] as Element;
+        if (labelKey(t.textContent) !== want) continue;
+        t.setAttribute("class", `${t.getAttribute("class") ?? ""} ${cls} ${at}${i}`.trim());
+        j = k + 1;
+        return;
+      }
+    });
+  };
+  tag([...svg.querySelectorAll("text.abcjs-chord")], score.chords, symbol);
+  tag([...svg.querySelectorAll("text.abcjs-annotation")], score.romans, roman);
 }

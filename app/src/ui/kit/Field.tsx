@@ -120,7 +120,7 @@ export function Select<V extends string | number>({
         const hit = options.find((o) => String(o.value) === e.target.value);
         if (hit) onChange(hit.value);
       }}
-      className="h-8 rounded-control border border-border bg-surface px-2 text-text disabled:opacity-50"
+      className="h-8 rounded-control border border-control-border bg-control px-2 text-text hover:bg-control-hover disabled:opacity-50"
     >
       {options.map((o) => (
         <option key={String(o.value)} value={String(o.value)}>

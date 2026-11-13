@@ -4,6 +4,8 @@
 import type { AttemptResponse } from "@oak/api";
 import type { Exercise, KeySpec, StepDef } from "@oak/content-kit";
 import { create } from "zustand";
+import { noteName } from "../answers/harmony.ts";
+import { qualityLabel } from "../answers/keys.ts";
 import type { LabelState, TutorAnswer, TutorSubject } from "../tutor/context.ts";
 import type { LessonEvent, LessonSnapshot } from "./types.ts";
 
@@ -102,6 +104,8 @@ export function tutorAnswerOf(
         mode: "key-signature",
       };
   }
+  const w4 = "answer" in response ? wave4Answer(ex, response.answer as Wave4Answer, o.key ?? null) : null;
+  if (w4) return w4;
   if ("answer" in response && response.answer.text && response.answer.text.length > 0)
     return { kind: "text", prompt: ex.prompt, value: response.answer.text.join(" ") };
   // An ear step's degrees, a picked option (by its label, never its ID: an ID can be code or the answer key's
@@ -120,6 +124,88 @@ export function tutorAnswerOf(
       return { kind: "text", prompt: ex.prompt, value: labels.join(", ") };
     }
     if (typeof a.number === "number") return { kind: "text", prompt: ex.prompt, value: String(a.number) };
+  }
+  return null;
+}
+
+interface Wave4Answer {
+  text?: string[];
+  choice?: string[];
+  rn?: string[];
+  qualities?: string[];
+  midi?: number[];
+  stages?: Partial<Record<"bass" | "quality" | "rn", string[]>>;
+}
+
+const STAGES = ["bass", "quality", "rn"] as const;
+
+/**
+ * The Wave 4 answers in the tutor's own shapes (wave4.md §5.6, app/src/tutor/context.ts): numerals placed, chords
+ * named, built or given a quality, a strip of per-slot choices, a staged chord dictation so far. Only what the
+ * learner entered, bar by bar; never the step's `correct`.
+ */
+function wave4Answer(ex: Exercise, a: Wave4Answer, key: KeySpec | null): TutorAnswer | null {
+  const spec = "answer" in ex && ex.answer && typeof ex.answer === "object" ? ex.answer : null;
+  const ui = spec && "ui" in spec ? spec.ui : null;
+  const exKey = ("key" in ex && ex.key) || key;
+  if (a.stages && Object.keys(a.stages).length > 0) {
+    const answers = STAGES.filter((st) => (a.stages?.[st]?.length ?? 0) > 0).map((st) => ({
+      stage: st,
+      values: [...(a.stages?.[st] ?? [])],
+    }));
+    const stage = answers[answers.length - 1]?.stage ?? "bass";
+    return { kind: "stages", stage, answers };
+  }
+  if (a.rn && a.rn.length > 0)
+    return {
+      kind: "numerals",
+      prompt: ex.prompt,
+      key: exKey || null,
+      numerals: a.rn.map((rn, i) => ({ bar: i + 1, rn })),
+    };
+  if (a.qualities && a.qualities.length > 0)
+    return {
+      kind: "chords",
+      prompt: ex.prompt,
+      chords: a.qualities.map((q, i) => ({
+        ...(a.qualities && a.qualities.length > 1 ? { bar: i + 1 } : {}),
+        symbol: qualityLabel(q as never).long,
+      })),
+    };
+  if (ui === "keyboard" && a.midi && a.midi.length > 0)
+    return {
+      kind: "text",
+      prompt: ex.prompt,
+      value: `notes ${a.midi.map((m) => noteName(m, exKey || null)).join(" ")}`,
+    };
+  if (
+    ui === "text" &&
+    spec &&
+    "normalize" in spec &&
+    spec.normalize === "chord" &&
+    a.text &&
+    a.text.length > 0
+  )
+    return {
+      kind: "chords",
+      prompt: ex.prompt,
+      key: exKey || null,
+      chords: a.text.map((symbol) => ({ symbol })),
+    };
+  if (ui === "slot-choice" && spec && "slots" in spec && a.choice) {
+    const options = "options" in spec ? spec.options : [];
+    const labels = "labels" in spec && spec.labels ? spec.labels : [];
+    return {
+      kind: "slots",
+      prompt: ex.prompt,
+      slots: Array.from({ length: spec.slots }, (_, i) => {
+        const id = a.choice?.[i] ?? "";
+        return {
+          label: labels[i] ?? `Slot ${i + 1}`,
+          value: id === "" ? null : (options.find((o) => o.id === id)?.label ?? id),
+        };
+      }),
+    };
   }
   return null;
 }

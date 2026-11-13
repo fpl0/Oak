@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AlbumTrack, CapstoneStatus } from "@oak/api";
-import { albumSides, changeSummary, runtime, sideOfCapstone, tidyReason } from "./model.ts";
+import { albumSides, audioFileName, changeSummary, runtime, sideOfCapstone, tidyReason } from "./model.ts";
 
 const cap = (id: string, title: string) => ({ id: id as never, title, objective: `${title}.`, sessions: 1 });
 const capstones = [
@@ -82,5 +82,13 @@ describe("the record", () => {
     expect(changeSummary("a\nb", "a\nb")).toBe("Same code, new recording");
     expect(changeSummary("a\nb\nc", "a\nB\nc\nd")).toBe("1 line changed, 1 added");
     expect(changeSummary("a\nb\nc", "a")).toBe("2 removed");
+  });
+});
+
+describe("audioFileName", () => {
+  test("a slug of the title, the version and the recording's own extension", () => {
+    expect(audioFileName("Four-Chord Song", 2, "audio/webm;codecs=opus")).toBe("four-chord-song-v2.webm");
+    expect(audioFileName("Aura Lee (1861)", 1, "audio/ogg")).toBe("aura-lee-1861-v1.ogg");
+    expect(audioFileName("!!!", 3, null)).toBe("track-v3.webm");
   });
 });

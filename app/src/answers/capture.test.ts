@@ -162,6 +162,11 @@ describe("sing capture (gradeSung)", () => {
       kind: "clipped",
       text: expect.stringMatching(/Turn the input down/),
     });
+    // The mic hearing the playback says so, with the fix and the Quiet fallback (never ".").
+    expect(takeProblem([{ id: "sing.bleed", params: {} }])).toMatchObject({
+      kind: "bleed",
+      text: expect.stringMatching(/headphones.*Quiet mode/),
+    });
     expect(takeProblem([{ id: "sing.wrong-note", params: {} }])).toBeNull();
     for (const r of ["none", "noisy", "short"])
       expect(say({ reason: r })?.text).toMatch(/then try again|instead/);

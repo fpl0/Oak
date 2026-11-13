@@ -3,7 +3,7 @@
 import type { SubjectRef } from "@oak/api";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { type Block, type Inline, parseMarkdown } from "./markdown.ts";
+import { type Block, type Inline, parseInline, parseMarkdown } from "./markdown.ts";
 import type { TokenContext } from "./music-tokens.ts";
 import { TokenChip } from "./TokenChip.tsx";
 
@@ -108,4 +108,12 @@ function blocks(bs: Block[], p: MarkdownProps, key: string): ReactNode[] {
 export function Markdown(props: MarkdownProps) {
   const doc = parseMarkdown(props.text);
   return <div className="flex flex-col gap-2 leading-relaxed break-words">{blocks(doc, props, "m")}</div>;
+}
+
+/**
+ * One line of tutor markup inside other text (a review's strength, a revision's reason): music tokens become chips,
+ * emphasis and inline code render, nothing becomes a block.
+ */
+export function InlineMarkdown(props: MarkdownProps) {
+  return <>{inlines(parseInline(props.text), props, "i")}</>;
 }

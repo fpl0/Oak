@@ -1,7 +1,9 @@
 // The golden corpus of @oak/notation: Strudel patterns with the notation a musician expects, stated
 // by hand (note-list DSL: value 4 = quarter, `.` dot, `~` tie, `(p:q …)` tuplet, `|` bar line).
 // Entries 01–10 are the ten patterns spike S4 required; the rest cover meters, ties, tuplets, swing,
-// pickups, staves, keys, chromatic spelling, voicings and lead sheets.
+// pickups, staves, keys, chromatic spelling, voicings and lead sheets; 132–181 (Wave 4) cover triads and
+// inversions, chord symbols and Roman numerals, chords on the grand staff, lead sheets with pickups, key changes
+// inside a bar and two keys on one staff, much of it the U05–U07 material of content/specs.
 import type { CorpusEntry } from "./harness.ts";
 
 export const CORPUS: CorpusEntry[] = [
@@ -1025,5 +1027,2633 @@ export const CORPUS: CorpusEntry[] = [
     bars: 1,
     annotations: { solfege: true },
     expect: { voices: { S1: "C4:4 E4:4 C4:4 G4:4" }, abc: ["w:do mi do sol"] },
+  },
+  // --- Wave 4: triads and inversions, chord symbols and numerals, the grand staff with chords, lead sheets
+  // with pickups, key changes inside a bar, two keys on one staff (U05–U07 material from content/specs) ---
+  {
+    name: "132 U05.L01 stacking thirds: I V vi IV as whole-bar triads, symbols and numerals",
+    code: 'chords: n("<[0,2,4] [4,6,8] [5,7,9] [3,5,7]>").scale("C3:major")',
+    bars: 4,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "G",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "Am",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "F",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        rn: "V",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        rn: "vi",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        rn: "IV",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "[C3,E3,G3]:1 | [G3,B3,D4]:1 | [A3,C4,E4]:1 | [F3,A3,C4]:1",
+      },
+      staves: ["S1:bass"],
+      chordTexts: ["C", "G", "Am", "F"],
+      romanTexts: ["I", "V", "vi", "IV"],
+    },
+  },
+  {
+    name: "133 U05.L01 hook on the grand staff: left-hand triads under the tune",
+    code: 'chords: n("<[0,2,4] [4,6,8] [5,7,9] [3,5,7]>").scale("C3:major")\nmel: n("<[4 ~ 2 4] [6 ~ 4 ~] [5 ~ 7 5] [5 ~ 3 ~]>").scale("C4:major")',
+    bars: 4,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    staff: "grand",
+    split: "track",
+    trackClefs: {
+      chords: "bass",
+      mel: "treble",
+    },
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "G",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "Am",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "F",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        rn: "V",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        rn: "vi",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        rn: "IV",
+      },
+    ],
+    expect: {
+      voices: {
+        RH: "G4:4 r:4 E4:4 G4:4 | B4:4 r:4 G4:4 r:4 | A4:4 r:4 C5:4 A4:4 | A4:4 r:4 F4:4 r:4",
+        LH: "[C3,E3,G3]:1 | [G3,B3,D4]:1 | [A3,C4,E4]:1 | [F3,A3,C4]:1",
+      },
+      staves: ["RH:treble", "LH:bass"],
+      chordTexts: ["C", "G", "Am", "F"],
+      romanTexts: ["I", "V", "vi", "IV"],
+    },
+  },
+  {
+    name: "134 U05.L02 A minor then A major: the C sharp in the chord",
+    code: 'chords: note("<[a3,c4,e4]!2 [a3,c#4,e4]!2>")',
+    bars: 4,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "Am",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "Am",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "A",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "A",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "[A3,C4,E4]:1 | [A3,C4,E4]:1 | [A3,C#4,E4]:1 | [A3,C#4,E4]:1",
+      },
+      chordTexts: ["Am", "Am", "A", "A"],
+    },
+  },
+  {
+    name: "135 U05.L03 augmented and diminished: C, C+, F, B°",
+    code: 'chords: note("<[c4,e4,g4] [c4,e4,g#4] [c4,f4,a4] [b3,d4,f4]>")',
+    bars: 4,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "Caug",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "Bo",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        rn: "I+",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        rn: "IV",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        rn: "viio",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "[C4,E4,G4]:1 | [C4,E4,G#4]:1 | [C4,F4,A4]:1 | [B3,D4,F4]:1",
+      },
+      chordTexts: ["C", "C+", "F", "B°"],
+      romanTexts: ["I", "I+", "IV", "vii°"],
+      abc: ['"Bo"', '"_vii°"'],
+    },
+  },
+  {
+    name: "136 U05.L05 inversions: I V6 vi IV, the bass walking down",
+    code: 'chords: n("<[0,2,4] [-1,1,4] [-2,0,2] [-4,-2,0]>").scale("C3:major")',
+    bars: 4,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    staff: "bass",
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "G/B",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "Am",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "F",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        rn: "V6",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        rn: "vi",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        rn: "IV",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "[C3,E3,G3]:1 | [B2,D3,G3]:1 | [A2,C3,E3]:1 | [F2,A2,C3]:1",
+      },
+      staves: ["S1:bass"],
+      chordTexts: ["C", "G/B", "Am", "F"],
+      romanTexts: ["I", "V6", "vi", "IV"],
+      abc: ['"G/B"', '"_V6"'],
+    },
+  },
+  {
+    name: "137 one triad in three positions in G: I, I6, I64",
+    code: 'n("[0,2,4] [2,4,7] [4,7,9] [7,9,11]").scale("G3:major")',
+    bars: 1,
+    key: {
+      tonic: "G",
+      mode: "major",
+    },
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "G",
+      },
+      {
+        bar: 0,
+        beat: 2,
+        symbol: "G/B",
+      },
+      {
+        bar: 0,
+        beat: 3,
+        symbol: "G/D",
+      },
+      {
+        bar: 0,
+        beat: 4,
+        symbol: "G",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 0,
+        beat: 2,
+        rn: "I6",
+      },
+      {
+        bar: 0,
+        beat: 3,
+        rn: "I64",
+      },
+      {
+        bar: 0,
+        beat: 4,
+        rn: "I",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "[G3,B3,D4]:4 [B3,D4,G4]:4 [D4,G4,B4]:4 [G4,B4,D5]:4",
+      },
+      chordTexts: ["G", "G/B", "G/D", "G"],
+      romanTexts: ["I", "I6", "I64", "I"],
+    },
+  },
+  {
+    name: "138 triads of D major: D, G, A and C sharp diminished",
+    code: 'n("<[0,2,4] [3,5,7] [4,6,8] [6,8,10]>").scale("D4:major")',
+    bars: 4,
+    key: {
+      tonic: "D",
+      mode: "major",
+    },
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "D",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "G",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "A",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "C#o",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        rn: "IV",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        rn: "V",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        rn: "viio",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "[D4,F#4,A4]:1 | [G4,B4,D5]:1 | [A4,C#5,E5]:1 | [C#5,E5,G5]:1",
+      },
+      chordTexts: ["D", "G", "A", "C♯°"],
+      romanTexts: ["I", "IV", "V", "vii°"],
+    },
+  },
+  {
+    name: "139 B flat major triads in the bass clef: I ii V I",
+    code: 'n("<[0,2,4] [1,3,5] [4,6,8] [0,2,4]>").scale("Bb2:major")',
+    bars: 4,
+    key: {
+      tonic: "Bb",
+      mode: "major",
+    },
+    staff: "bass",
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "Bb",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "Cm",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "Bb",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        rn: "ii",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        rn: "V",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        rn: "I",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "[Bb2,D3,F3]:1 | [C3,Eb3,G3]:1 | [F3,A3,C4]:1 | [Bb2,D3,F3]:1",
+      },
+      staves: ["S1:bass"],
+      chordTexts: ["B♭", "Cm", "F", "B♭"],
+      romanTexts: ["I", "ii", "V", "I"],
+    },
+  },
+  {
+    name: "140 E major: four sharps held by the signature in stacked chords",
+    code: 'note("[e4,g#4,b4] [a4,c#5,e5] [b3,d#4,f#4] [e4,g#4,b4]")',
+    bars: 1,
+    key: {
+      tonic: "E",
+      mode: "major",
+    },
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "E",
+      },
+      {
+        bar: 0,
+        beat: 2,
+        symbol: "A",
+      },
+      {
+        bar: 0,
+        beat: 3,
+        symbol: "B",
+      },
+      {
+        bar: 0,
+        beat: 4,
+        symbol: "E",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "[E4,G#4,B4]:4 [A4,C#5,E5]:4 [B3,D#4,F#4]:4 [E4,G#4,B4]:4",
+      },
+      chordTexts: ["E", "A", "B", "E"],
+    },
+  },
+  {
+    name: "141 A flat major in the bass clef: four flats, a second inversion",
+    code: 'note("<[ab2,c3,eb3] [ab2,db3,f3] [bb2,eb3,g3] [ab2,c3,eb3]>")',
+    bars: 4,
+    key: {
+      tonic: "Ab",
+      mode: "major",
+    },
+    staff: "bass",
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "Ab",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "Db/Ab",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "Eb/Bb",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "Ab",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        rn: "IV64",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        rn: "V64",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        rn: "I",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "[Ab2,C3,Eb3]:1 | [Ab2,Db3,F3]:1 | [Bb2,Eb3,G3]:1 | [Ab2,C3,Eb3]:1",
+      },
+      staves: ["S1:bass"],
+      chordTexts: ["A♭", "D♭/A♭", "E♭/B♭", "A♭"],
+      romanTexts: ["I", "IV64", "V64", "I"],
+      abc: ['"_IV64"', '"Db/Ab"'],
+    },
+  },
+  {
+    name: "142 seconds in a chord: Cadd9 and a Cmaj7 over G, heads offset",
+    code: 'note("[c4,d4,e4,g4]@2 [g3,b3,c4,e4]@2")',
+    bars: 1,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "Cadd9",
+      },
+      {
+        bar: 0,
+        beat: 3,
+        symbol: "Cmaj7/G",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "[C4,D4,E4,G4]:2 [G3,B3,C4,E4]:2",
+      },
+      chordTexts: ["Cadd9", "Cmaj7/G"],
+    },
+  },
+  {
+    name: "143 U06.L10 neo-soul sevenths: Cmaj7 Am7 Dm7 G7 stacked in thirds, bass clef",
+    code: 'chords: n("[0,2,4,6]").add(n("<0 5 1 4>")).scale("C3:major")',
+    bars: 4,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    staff: "bass",
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "Cmaj7",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "Am7",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "Dm7",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "G7",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "Imaj7",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        rn: "vi7",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        rn: "ii7",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        rn: "V7",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "[C3,E3,G3,B3]:1 | [A3,C4,E4,G4]:1 | [D3,F3,A3,C4]:1 | [G3,B3,D4,F4]:1",
+      },
+      staves: ["S1:bass"],
+      chordTexts: ["Cmaj7", "Am7", "Dm7", "G7"],
+      romanTexts: ["Imaj7", "vi7", "ii7", "V7"],
+    },
+  },
+  {
+    name: "144 V7 in its inversions resolving: V65 V43 V42 I6, seconds on the staff",
+    code: 'note("[b3,d4,f4,g4] [d4,f4,g4,b4] [f4,g4,b4,d5] [e4,g4,c5]")',
+    bars: 1,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "G7/B",
+      },
+      {
+        bar: 0,
+        beat: 2,
+        symbol: "G7/D",
+      },
+      {
+        bar: 0,
+        beat: 3,
+        symbol: "G7/F",
+      },
+      {
+        bar: 0,
+        beat: 4,
+        symbol: "C/E",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "V65",
+      },
+      {
+        bar: 0,
+        beat: 2,
+        rn: "V43",
+      },
+      {
+        bar: 0,
+        beat: 3,
+        rn: "V42",
+      },
+      {
+        bar: 0,
+        beat: 4,
+        rn: "I6",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "[B3,D4,F4,G4]:4 [D4,F4,G4,B4]:4 [F4,G4,B4,D5]:4 [E4,G4,C5]:4",
+      },
+      chordTexts: ["G7/B", "G7/D", "G7/F", "C/E"],
+      romanTexts: ["V65", "V43", "V42", "I6"],
+    },
+  },
+  {
+    name: "145 A minor: i iv V i, the raised 7th G sharp as an accidental",
+    code: 'note("<[a3,c4,e4] [d4,f4,a4] [e4,g#4,b4] [a3,c4,e4]>")',
+    bars: 4,
+    key: {
+      tonic: "A",
+      mode: "minor",
+    },
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "Am",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "Dm",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "E",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "Am",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "i",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        rn: "iv",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        rn: "V",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        rn: "i",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "[A3,C4,E4]:1 | [D4,F4,A4]:1 | [E4,G#4,B4]:1 | [A3,C4,E4]:1",
+      },
+      chordTexts: ["Am", "Dm", "E", "Am"],
+      romanTexts: ["i", "iv", "V", "i"],
+    },
+  },
+  {
+    name: "146 C minor: three flats, B natural in the V chord",
+    code: 'note("[c4,eb4,g4] [f4,ab4,c5] [g4,b4,d5] [c4,eb4,g4]")',
+    bars: 1,
+    key: {
+      tonic: "C",
+      mode: "minor",
+    },
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "Cm",
+      },
+      {
+        bar: 0,
+        beat: 2,
+        symbol: "Fm",
+      },
+      {
+        bar: 0,
+        beat: 3,
+        symbol: "G",
+      },
+      {
+        bar: 0,
+        beat: 4,
+        symbol: "Cm",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "i",
+      },
+      {
+        bar: 0,
+        beat: 2,
+        rn: "iv",
+      },
+      {
+        bar: 0,
+        beat: 3,
+        rn: "V",
+      },
+      {
+        bar: 0,
+        beat: 4,
+        rn: "i",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "[C4,Eb4,G4]:4 [F4,Ab4,C5]:4 [G4,B4,D5]:4 [C4,Eb4,G4]:4",
+      },
+      chordTexts: ["Cm", "Fm", "G", "Cm"],
+      romanTexts: ["i", "iv", "V", "i"],
+    },
+  },
+  {
+    name: "147 U05.L06 grand staff: the bass walking the roots, the four-chord loop above",
+    code: 'bass: n("<[0 ~ 0 4] [4 ~ 4 1] [5 ~ 5 2] [3 ~ 3 0]>").scale("C2:major")\nchords: n("<[0,2,4] [4,6,8] [5,7,9] [3,5,7]>").scale("C3:major")',
+    bars: 4,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    staff: "grand",
+    split: "track",
+    trackClefs: {
+      bass: "bass",
+      chords: "treble",
+    },
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "G",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "Am",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "F",
+      },
+    ],
+    expect: {
+      voices: {
+        RH: "[C3,E3,G3]:1 | [G3,B3,D4]:1 | [A3,C4,E4]:1 | [F3,A3,C4]:1",
+        LH: "C2:4 r:4 C2:4 G2:4 | G2:4 r:4 G2:4 D2:4 | A2:4 r:4 A2:4 E2:4 | F2:4 r:4 F2:4 C2:4",
+      },
+      staves: ["RH:treble", "LH:bass"],
+      chordTexts: ["C", "G", "Am", "F"],
+    },
+  },
+  {
+    name: "148 grand staff split by register: one chord across both staves",
+    code: 'note("[c3,g3,e4,c5] [b2,g3,d4,g4] [a2,e3,c4,a4] [f2,c3,a3,f4]")',
+    bars: 1,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    staff: "grand",
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 0,
+        beat: 2,
+        symbol: "G/B",
+      },
+      {
+        bar: 0,
+        beat: 3,
+        symbol: "Am",
+      },
+      {
+        bar: 0,
+        beat: 4,
+        symbol: "F",
+      },
+    ],
+    expect: {
+      voices: {
+        RH: "[E4,C5]:4 [D4,G4]:4 [C4,A4]:4 F4:4",
+        LH: "[C3,G3]:4 [B2,G3]:4 [A2,E3]:4 [F2,C3,A3]:4",
+      },
+      staves: ["RH:treble", "LH:bass"],
+      chordTexts: ["C", "G/B", "Am", "F"],
+    },
+  },
+  {
+    name: "149 U06.L11 slash chords over a walking bass: C G/B Am Am/G F C/E Dm G",
+    code: 'chords: chord("<C G Am Am F C Dm G>").voicing()\nbass: note("<c3 b2 a2 g2 f2 e2 d2 g2>")',
+    bars: 8,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    staff: "grand",
+    split: "track",
+    trackClefs: {
+      chords: "treble",
+      bass: "bass",
+    },
+    chordByBar: ["C", "G", "Am", "Am", "F", "C", "Dm", "G"],
+    chordTracks: ["chords"],
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "G/B",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "Am",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "Am/G",
+      },
+      {
+        bar: 4,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 5,
+        beat: 1,
+        symbol: "C/E",
+      },
+      {
+        bar: 6,
+        beat: 1,
+        symbol: "Dm",
+      },
+      {
+        bar: 7,
+        beat: 1,
+        symbol: "G",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        rn: "V6",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        rn: "vi",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        rn: "vi42",
+      },
+      {
+        bar: 4,
+        beat: 1,
+        rn: "IV",
+      },
+      {
+        bar: 5,
+        beat: 1,
+        rn: "I6",
+      },
+      {
+        bar: 6,
+        beat: 1,
+        rn: "ii",
+      },
+      {
+        bar: 7,
+        beat: 1,
+        rn: "V",
+      },
+    ],
+    expect: {
+      voices: {
+        RH: "[E3,C4,E4,G4,C5]:1 | [G3,D4,G4,B4]:1 | [A3,C4,E4,A4,C5]:1 | [A3,C4,E4,A4,C5]:1 | [F3,C4,F4,A4,C5]:1 | [E3,C4,E4,G4,C5]:1 | [D3,A3,D4,F4,A4]:1 | [G3,D4,G4,B4]:1",
+        LH: "C3:1 | B2:1 | A2:1 | G2:1 | F2:1 | E2:1 | D2:1 | G2:1",
+      },
+      staves: ["RH:treble", "LH:bass"],
+      chordTexts: ["C", "G/B", "Am", "Am/G", "F", "C/E", "Dm", "G"],
+      romanTexts: ["I", "V6", "vi", "vi42", "IV", "I6", "ii", "V"],
+    },
+  },
+  {
+    name: "150 U07.L09 Amazing Grace lead sheet: 3/4, one-beat pickup, F F B♭ F F F C",
+    code: 'chords: n("<~ [0,2,4] [0,2,4] [3,5,7] [0,2,4] [0,2,4] [0,2,4] [4,6,8]>").scale("F3:major")\nmel: n("<[~ ~ -3] [0@2 [2 0]] [2@2 1] [0@2 -2] [-3@2 -3] [0@2 [2 0]] [2@2 1] [4@2 ~]>").scale("F4:major")',
+    tracks: ["mel"],
+    bars: 8,
+    meter: "3/4",
+    key: {
+      tonic: "F",
+      mode: "major",
+    },
+    staff: "lead",
+    pickup: {
+      units: [1, 1],
+    },
+    chords: [
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "Bb",
+      },
+      {
+        bar: 4,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 5,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 6,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 7,
+        beat: 1,
+        symbol: "C",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "C4:4 | F4:2 A4:8 F4:8 | A4:2 G4:4 | F4:2 D4:4 | C4:2 C4:4 | F4:2 A4:8 F4:8 | A4:2 G4:4 | C5:2",
+      },
+      chordTexts: ["F", "F", "B♭", "F", "F", "F", "C"],
+      barNumbers: [5],
+      abc: ["%%barnumbers 0\n%%setbarnb 0\n", '"Bb"!class=oak-e6!F8'],
+    },
+  },
+  {
+    name: "151 U07.L09 Amazing Grace with the numeral lens: I I IV I I I V under the tune",
+    code: 'chords: n("<~ [0,2,4] [0,2,4] [3,5,7] [0,2,4] [0,2,4] [0,2,4] [4,6,8]>").scale("F3:major")\nmel: n("<[~ ~ -3] [0@2 [2 0]] [2@2 1] [0@2 -2] [-3@2 -3] [0@2 [2 0]] [2@2 1] [4@2 ~]>").scale("F4:major")',
+    tracks: ["mel"],
+    bars: 8,
+    meter: "3/4",
+    key: {
+      tonic: "F",
+      mode: "major",
+    },
+    staff: "lead",
+    pickup: {
+      units: [1, 1],
+    },
+    chords: [
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "Bb",
+      },
+      {
+        bar: 4,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 5,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 6,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 7,
+        beat: 1,
+        symbol: "C",
+      },
+    ],
+    romans: [
+      {
+        bar: 1,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        rn: "IV",
+      },
+      {
+        bar: 4,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 5,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 6,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 7,
+        beat: 1,
+        rn: "V",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "C4:4 | F4:2 A4:8 F4:8 | A4:2 G4:4 | F4:2 D4:4 | C4:2 C4:4 | F4:2 A4:8 F4:8 | A4:2 G4:4 | C5:2",
+      },
+      chordTexts: ["F", "F", "B♭", "F", "F", "F", "C"],
+      romanTexts: ["I", "I", "IV", "I", "I", "I", "V"],
+      barNumbers: [5],
+    },
+  },
+  {
+    name: "152 U07.L09 Amazing Grace, page 2 of a narrow lead sheet: bars 5–7, numbered from 5, last bar short",
+    code: 'chords: n("<~ [0,2,4] [0,2,4] [3,5,7] [0,2,4] [0,2,4] [0,2,4] [4,6,8]>").scale("F3:major")\nmel: n("<[~ ~ -3] [0@2 [2 0]] [2@2 1] [0@2 -2] [-3@2 -3] [0@2 [2 0]] [2@2 1] [4@2 ~]>").scale("F4:major")',
+    tracks: ["mel"],
+    bars: 3,
+    startBar: 5,
+    meter: "3/4",
+    key: {
+      tonic: "F",
+      mode: "major",
+    },
+    staff: "lead",
+    pickup: {
+      units: [1, 1],
+    },
+    chords: [
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "Bb",
+      },
+      {
+        bar: 4,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 5,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 6,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 7,
+        beat: 1,
+        symbol: "C",
+      },
+    ],
+    abcOptions: {
+      barsPerLine: 2,
+    },
+    expect: {
+      voices: {
+        S1: "F4:2 A4:8 F4:8 | A4:2 G4:4 | C5:2",
+      },
+      chordTexts: ["F", "F", "C"],
+      barNumbers: [5, 7],
+      abc: ["%%setbarnb 5\n"],
+    },
+  },
+  {
+    name: "153 U07.L09 Amazing Grace, page 1 of a narrow lead sheet: the pickup and bars 1–4, not the end",
+    code: 'chords: n("<~ [0,2,4] [0,2,4] [3,5,7] [0,2,4] [0,2,4] [0,2,4] [4,6,8]>").scale("F3:major")\nmel: n("<[~ ~ -3] [0@2 [2 0]] [2@2 1] [0@2 -2] [-3@2 -3] [0@2 [2 0]] [2@2 1] [4@2 ~]>").scale("F4:major")',
+    tracks: ["mel"],
+    bars: 5,
+    meter: "3/4",
+    key: {
+      tonic: "F",
+      mode: "major",
+    },
+    staff: "lead",
+    pickup: {
+      units: [1, 1],
+    },
+    endsPiece: false,
+    chords: [
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "Bb",
+      },
+      {
+        bar: 4,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 5,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 6,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 7,
+        beat: 1,
+        symbol: "C",
+      },
+    ],
+    abcOptions: {
+      barsPerLine: 2,
+    },
+    expect: {
+      voices: {
+        S1: "C4:4 | F4:2 A4:8 F4:8 | A4:2 G4:4 | F4:2 D4:4 | C4:2 C4:4",
+      },
+      chordTexts: ["F", "F", "B♭", "F"],
+      barNumbers: [3],
+      abc: ['"F"!class=oak-e8!C8 !class=oak-e9!C4 |]'],
+    },
+  },
+  {
+    name: "154 U07.L08 Auld Lang Syne lead sheet: 4/4, one-beat pickup, C G C F",
+    code: 'chords: n("<~ [0,2,4] [4,6,8] [0,2,4] [3,5,7]>").scale("C3:major")\nmel: n("<[~ ~ ~ -3] [0 0 0 2] [1 0 1 2] [0 0 2 4] [5@4]>").scale("C4:major")',
+    tracks: ["mel"],
+    bars: 5,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    staff: "lead",
+    pickup: {
+      units: [1, 1],
+    },
+    chords: [
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "G",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 4,
+        beat: 1,
+        symbol: "F",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "G3:4 | C4:4 C4:4 C4:4 E4:4 | D4:4 C4:4 D4:4 E4:4 | C4:4 C4:4 E4:4 G4:4 | A4:1",
+      },
+      chordTexts: ["C", "G", "C", "F"],
+    },
+  },
+  {
+    name: "155 U07.L08 a two-beat pickup climbing 3 4 into 5, the last bar shortened by two beats",
+    code: 'mel: n("<[~ ~ 2 3] [4 ~ 2 ~] [1 ~ 0 ~] [1 2 ~ ~]>").scale("C4:major")',
+    bars: 4,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    staff: "lead",
+    pickup: {
+      units: [2, 1],
+    },
+    chords: [
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "G",
+      },
+      {
+        bar: 2,
+        beat: 3,
+        symbol: "C",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "G",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "E4:4 F4:4 | G4:4 r:4 E4:4 r:4 | D4:4 r:4 C4:4 r:4 | D4:4 E4:4",
+      },
+      chordTexts: ["C", "G", "C", "G"],
+    },
+  },
+  {
+    name: "156 3/4 pickup of two eighths with two chords in a bar",
+    code: 'mel: n("<[~ ~ [3 4]] [5 4 2] [3@2 1] [0 ~ ~]>").scale("G4:major")',
+    bars: 4,
+    meter: "3/4",
+    key: {
+      tonic: "G",
+      mode: "major",
+    },
+    staff: "lead",
+    pickup: {
+      units: [1, 1],
+    },
+    chords: [
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "G",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 2,
+        beat: 3,
+        symbol: "D",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "G",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "C5:8 D5:8 | E5:4 D5:4 B4:4 | C5:2 A4:4 | G4:4 r:4",
+      },
+      chordTexts: ["G", "C", "D", "G"],
+    },
+  },
+  {
+    name: "157 lead sheet with slash, seventh and half-diminished symbols",
+    code: 'mel: n("<[4 2 0 2] [5 3 1 3] [6 4 1 4] [7 ~ ~ ~]>").scale("C5:major")',
+    bars: 4,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    staff: "lead",
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "C/E",
+      },
+      {
+        bar: 0,
+        beat: 3,
+        symbol: "Cmaj7",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "Dm7",
+      },
+      {
+        bar: 1,
+        beat: 3,
+        symbol: "F/A",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "Bm7b5",
+      },
+      {
+        bar: 2,
+        beat: 3,
+        symbol: "G7",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "C",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "G5:4 E5:4 C5:4 E5:4 | A5:4 F5:4 D5:4 F5:4 | B5:4 G5:4 D5:4 G5:4 | C6:4 r:4 r:2",
+      },
+      chordTexts: ["C/E", "Cmaj7", "Dm7", "F/A", "Bm7♭5", "G7", "C"],
+    },
+  },
+  {
+    name: "158 U06.L08 harmonic rhythm: one chord a bar, then two (roots first, so .add keeps their rhythm)",
+    code: 'chords: n("<0 4 5 3 [0 4] [5 3] [1 4] 0>").add(n("[0,2,4]")).scale("C3:major")',
+    bars: 8,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    staff: "bass",
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "G",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "Am",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 4,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 4,
+        beat: 3,
+        symbol: "G",
+      },
+      {
+        bar: 5,
+        beat: 1,
+        symbol: "Am",
+      },
+      {
+        bar: 5,
+        beat: 3,
+        symbol: "F",
+      },
+      {
+        bar: 6,
+        beat: 1,
+        symbol: "Dm",
+      },
+      {
+        bar: 6,
+        beat: 3,
+        symbol: "G",
+      },
+      {
+        bar: 7,
+        beat: 1,
+        symbol: "C",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        rn: "V",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        rn: "vi",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        rn: "IV",
+      },
+      {
+        bar: 4,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 4,
+        beat: 3,
+        rn: "V",
+      },
+      {
+        bar: 5,
+        beat: 1,
+        rn: "vi",
+      },
+      {
+        bar: 5,
+        beat: 3,
+        rn: "IV",
+      },
+      {
+        bar: 6,
+        beat: 1,
+        rn: "ii",
+      },
+      {
+        bar: 6,
+        beat: 3,
+        rn: "V",
+      },
+      {
+        bar: 7,
+        beat: 1,
+        rn: "I",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "[C3,E3,G3]:1 | [G3,B3,D4]:1 | [A3,C4,E4]:1 | [F3,A3,C4]:1 | [C3,E3,G3]:2 [G3,B3,D4]:2 | [A3,C4,E4]:2 [F3,A3,C4]:2 | [D3,F3,A3]:2 [G3,B3,D4]:2 | [C3,E3,G3]:1",
+      },
+      staves: ["S1:bass"],
+      chordTexts: ["C", "G", "Am", "F", "C", "G", "Am", "F", "Dm", "G", "C"],
+      romanTexts: ["I", "V", "vi", "IV", "I", "V", "vi", "IV", "ii", "V", "I"],
+    },
+  },
+  {
+    name: "159 U06.L07 doo-wop: triplet arpeggios, a label on each bar's first triplet",
+    code: 'chords: n("[0,2,4]").add(n("<0 5 3 4>")).arp("[0 1 2]*4").scale("C3:major")',
+    bars: 4,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    staff: "bass",
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "Am",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "G",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        rn: "vi",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        rn: "IV",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        rn: "V",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "(3:2 C3:8 E3:8 G3:8) (3:2 C3:8 E3:8 G3:8) (3:2 C3:8 E3:8 G3:8) (3:2 C3:8 E3:8 G3:8) | (3:2 A3:8 C4:8 E4:8) (3:2 A3:8 C4:8 E4:8) (3:2 A3:8 C4:8 E4:8) (3:2 A3:8 C4:8 E4:8) | (3:2 F3:8 A3:8 C4:8) (3:2 F3:8 A3:8 C4:8) (3:2 F3:8 A3:8 C4:8) (3:2 F3:8 A3:8 C4:8) | (3:2 G3:8 B3:8 D4:8) (3:2 G3:8 B3:8 D4:8) (3:2 G3:8 B3:8 D4:8) (3:2 G3:8 B3:8 D4:8)",
+      },
+      staves: ["S1:bass"],
+      chordTexts: ["C", "Am", "F", "G"],
+      romanTexts: ["I", "vi", "IV", "V"],
+    },
+  },
+  {
+    name: "160 U05.L04 arpeggios: the four-chord loop broken 1 3 5 3, the symbol over each bar",
+    code: 'chords: n("<[0,2,4] [4,6,8] [5,7,9] [3,5,7]>").arp("0 1 2 1").scale("C3:major")',
+    bars: 4,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    staff: "bass",
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "G",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "Am",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "F",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "C3:4 E3:4 G3:4 E3:4 | G3:4 B3:4 D4:4 B3:4 | A3:4 C4:4 E4:4 C4:4 | F3:4 A3:4 C4:4 A3:4",
+      },
+      staves: ["S1:bass"],
+      chordTexts: ["C", "G", "Am", "F"],
+    },
+  },
+  {
+    name: "161 U06.L12 off-beat stabs: the bar's symbol stands on the opening rest",
+    code: 'chords: n("[0,2,4]").add(n("<0 4 5 3>")).scale("C4:major").struct("~ x ~ [~ x]")',
+    bars: 4,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "G",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "Am",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "F",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        rn: "V",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        rn: "vi",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        rn: "IV",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "r:4 [C4,E4,G4]:4 r:4 r:8 [C4,E4,G4]:8 | r:4 [G4,B4,D5]:4 r:4 r:8 [G4,B4,D5]:8 | r:4 [A4,C5,E5]:4 r:4 r:8 [A4,C5,E5]:8 | r:4 [F4,A4,C5]:4 r:4 r:8 [F4,A4,C5]:8",
+      },
+      chordTexts: ["C", "G", "Am", "F"],
+      romanTexts: ["I", "V", "vi", "IV"],
+    },
+  },
+  {
+    name: "162 numerals with figures, applied chords and glyphs: V65/V, vii°7, ii ø7, ♭VII",
+    code: 'note("<[f#3,a3,c4,d4] [g3,b3,d4] [b3,d4,f4,ab4] [c4,e4,g4]>")',
+    bars: 4,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "D7/F#",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "G",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "Bo7",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "C",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "V65/V",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        rn: "V",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        rn: "viio7",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        rn: "I",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "[F#3,A3,C4,D4]:1 | [G3,B3,D4]:1 | [B3,D4,F4,Ab4]:1 | [C4,E4,G4]:1",
+      },
+      chordTexts: ["D7/F♯", "G", "B°7", "C"],
+      romanTexts: ["V65/V", "V", "vii°7", "I"],
+      abc: ['"_V65/V"', '"_vii°7"'],
+    },
+  },
+  {
+    name: "163 ♭VII and iiø7 in C: numeral glyphs",
+    code: 'note("<[d4,f4,ab4,c5] [g3,b3,d4,f4] [bb3,d4,f4] [c4,e4,g4]>")',
+    bars: 4,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "Dm7b5",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "G7",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "Bb",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "C",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "iih7",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        rn: "V7",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        rn: "bVII",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        rn: "I",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "[D4,F4,Ab4,C5]:1 | [G3,B3,D4,F4]:1 | [Bb3,D4,F4]:1 | [C4,E4,G4]:1",
+      },
+      chordTexts: ["Dm7♭5", "G7", "B♭", "C"],
+      romanTexts: ["iiø7", "V7", "♭VII", "I"],
+      abc: ['"_iiø7"', '"_♭VII"'],
+    },
+  },
+  {
+    name: "164 a label inside a triplet is drawn at the note sounding there (warns), the triplet stays whole",
+    code: 'note("[c4 d4 e4]@2 f4@2")',
+    bars: 1,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 0,
+        beat: 2,
+        symbol: "Dm",
+      },
+      {
+        bar: 0,
+        beat: 3,
+        symbol: "F",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "(3:2 C4:4 D4:4 E4:4) F4:2",
+      },
+      chordTexts: ["C", "Dm", "F"],
+      warnings: ["abcjs-limit"],
+    },
+  },
+  {
+    name: "165 a numeral inside a bar-wide quintuplet does not break it into a snapped figure",
+    code: 'note("c4 d4 e4 f4 g4")',
+    bars: 1,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 0,
+        beat: 2,
+        rn: "ii",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "(5:4 C4:4 D4:4 E4:4 F4:4 G4:4)",
+      },
+      romanTexts: ["I", "ii"],
+      warnings: ["abcjs-limit"],
+    },
+  },
+  {
+    name: "166 chord symbols spell the chord: C sharp major with E sharp, D augmented with A sharp",
+    code: 'note("[61,65,68]@2 [62,66,70]@2")',
+    bars: 1,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "C#",
+      },
+      {
+        bar: 0,
+        beat: 3,
+        symbol: "Daug",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "[C#4,E#4,G#4]:2 [D4,F#4,A#4]:2",
+      },
+      chordTexts: ["C♯", "D+"],
+    },
+  },
+  {
+    name: "167 a cluster with seconds and accidentals in the bass clef: F sharp, G sharp, A, B",
+    code: 'note("[f#2,g#2,a2,b2] [e2,f#2,g2,b2]")',
+    bars: 1,
+    key: {
+      tonic: "E",
+      mode: "minor",
+    },
+    staff: "bass",
+    expect: {
+      voices: {
+        S1: "[F#2,G#2,A2,B2]:2 [E2,F#2,G2,B2]:2",
+      },
+      staves: ["S1:bass"],
+    },
+  },
+  {
+    name: "168 a key change on beat 3: the G major signature written inside the bar",
+    code: 'note("<[c4 d4 e4 f4] [g4 a4 b4 c5 d5 e5 f#5 g5]>")',
+    bars: 2,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    keyChanges: [
+      {
+        bar: 1,
+        beat: 3,
+        key: {
+          tonic: "G",
+          mode: "major",
+        },
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "C4:4 D4:4 E4:4 F4:4 | G4:8 A4:8 B4:8 C5:8 D5:8 E5:8 F#5:8 G5:8",
+      },
+      abc: ["!class=oak-e7!c2 [K:G] !class=oak-e8!d2"],
+    },
+  },
+  {
+    name: "169 a key change inside a bar restates a letter altered before it (F sharp, then F in F major)",
+    code: 'note("<[c4 f#4 g4 f4] [g4 f#4 f4 bb4]>")',
+    bars: 2,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    keyChanges: [
+      {
+        bar: 1,
+        beat: 3,
+        key: {
+          tonic: "F",
+          mode: "major",
+        },
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "C4:4 F#4:4 G4:4 F4:4 | G4:4 F#4:4 F4:4 Bb4:4",
+      },
+      abc: ["!class=oak-e5!^F4 [K:F] !class=oak-e6!=F4 !class=oak-e7!B4 |]"],
+    },
+  },
+  {
+    name: "170 a key change inside a bar splits a held note and moves both staves of a grand staff",
+    code: 'mel: note("<[e4 f4 g4@2] [a4@2 f#4 g4]>")\nbass: note("<c3 [c3@3 d3]>")',
+    bars: 2,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    staff: "grand",
+    split: "track",
+    keyChanges: [
+      {
+        bar: 1,
+        beat: 3,
+        key: {
+          tonic: "G",
+          mode: "major",
+        },
+      },
+    ],
+    expect: {
+      voices: {
+        RH: "E4:4 F4:4 G4:2 | A4:2 F#4:4 G4:4",
+        LH: "C3:1 | C3:2~ C3:4 D3:4",
+      },
+      staves: ["RH:treble", "LH:bass"],
+      abc: ["!class=oak-e3!A8 [K:G] !class=oak-e4!F4", "!class=oak-e7!C,8- [K:G] !class=oak-e7!C,4"],
+    },
+  },
+  {
+    name: "171 two tracks in two keys on one staff: the majority's signature, the other key's notes spelled in it",
+    code: 'mel: n("0 1 2 3 4 3 2 1").scale("Db4:major")\nharm: n("[2 ~ ~ ~] [2 ~ ~ ~]").scale("D4:major")',
+    bars: 1,
+    staff: "treble",
+    key: {
+      tonic: "Db",
+      mode: "major",
+    },
+    trackKeys: {
+      harm: {
+        key: {
+          tonic: "D",
+          mode: "major",
+        },
+      },
+    },
+    expect: {
+      voices: {
+        S1: "[Db4,F#4]:8 Eb4:8 F4:8 Gb4:8 [F#4,Ab4]:8 Gb4:8 F4:8 Eb4:8",
+      },
+      abc: ["K:Db\n", "[D^F]2", "[^FA]2"],
+    },
+  },
+  {
+    name: "172 two tracks in two keys, the other key in the majority: the staff takes its signature",
+    code: 'mel: n("0 3 4 0").scale("C5:major")\nharm: n("[0,2] [6,8] [4,6] [0,2]").scale("G3:major")',
+    bars: 1,
+    staff: "treble",
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    trackKeys: {
+      harm: {
+        key: {
+          tonic: "G",
+          mode: "major",
+        },
+      },
+    },
+    expect: {
+      voices: {
+        S1: "[G3,B3,C5]:4 [F#4,A4,F5]:4 [D4,F#4,G5]:4 [G3,B3,C5]:4",
+      },
+      abc: ["K:G\n", "[FA=f]4"],
+    },
+  },
+  {
+    name: "173 a drum count-in before the pickup is not engraved; bar 0 is short on both staves",
+    code: 'drums: s("<[hh hh hh ~] [bd hh sd hh]!3>")\nmel: n("<[~ ~ ~ 4] [7 ~ 6 ~] [5 4 2 ~] [0@4]>").scale("C4:major")',
+    bars: 4,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    pickup: {
+      units: [1, 1],
+    },
+    expect: {
+      voices: {
+        S1: "G4:4 | C5:4 r:4 B4:4 r:4 | A4:4 G4:4 E4:4 r:4 | C4:1",
+        DR: "r:4 | r:4 hh:4 sd:4 hh:4 | r:4 hh:4 sd:4 hh:4 | r:4 hh:4 sd:4 hh:4",
+        DRv2: " | bd:4 r:4 r:2 | bd:4 r:4 r:2 | bd:4 r:4 r:2",
+      },
+      staves: ["S1:treble", "DR:perc"],
+    },
+  },
+  {
+    name: "174 pickup on a grand staff: the bass rests through bar 0, both hands start short",
+    code: 'mel: n("<[~ ~ 4 5] [7@2 4@2] [5 4 2 1] [0@4]>").scale("C4:major")\nbass: n("<~ [0,4] [3,5] [0,4]>").scale("C3:major")',
+    bars: 4,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    staff: "grand",
+    split: "track",
+    pickup: {
+      units: [2, 1],
+    },
+    chords: [
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "C",
+      },
+    ],
+    romans: [
+      {
+        bar: 1,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        rn: "IV",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        rn: "I",
+      },
+    ],
+    expect: {
+      voices: {
+        RH: "G4:4 A4:4 | C5:2 G4:2 | A4:4 G4:4 E4:4 D4:4 | C4:1",
+        LH: "r:2 | [C3,G3]:1 | [F3,A3]:1 | [C3,G3]:1",
+      },
+      staves: ["RH:treble", "LH:bass"],
+      chordTexts: ["C", "F", "C"],
+      romanTexts: ["I", "IV", "I"],
+    },
+  },
+  {
+    name: "175 6/8 with a one-eighth pickup",
+    code: 'mel: n("<[~ ~ ~ ~ ~ 4] [7 ~ 6 5 ~ 4] [2 ~ ~ 0 ~ ~]>").scale("D4:major")',
+    bars: 3,
+    meter: "6/8",
+    key: {
+      tonic: "D",
+      mode: "major",
+    },
+    staff: "lead",
+    pickup: {
+      units: [1, 3],
+    },
+    chords: [
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "D",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "A",
+      },
+      {
+        bar: 2,
+        beat: 2,
+        symbol: "D",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "A4:8 | D5:8 r:8 C#5:8 B4:8 r:8 A4:8 | F#4:8 r:8 r:8 D4:8 r:8",
+      },
+      chordTexts: ["D", "A", "D"],
+    },
+  },
+  {
+    name: "176 U07.L03 chord tones on the strong beats: a lead sheet over I V vi IV",
+    code: 'mel: n("<[4 3 2 3] [4 ~ 1 2] [2 1 0 1] [0 ~ ~ ~]>").scale("C4:major")',
+    bars: 4,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    staff: "lead",
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "G",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "Am",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "F",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "G4:4 F4:4 E4:4 F4:4 | G4:4 r:4 D4:4 E4:4 | E4:4 D4:4 C4:4 D4:4 | C4:4 r:4 r:2",
+      },
+      chordTexts: ["C", "G", "Am", "F"],
+    },
+  },
+  {
+    name: "177 U07.L02 a motif in sequence over I V vi IV (scaleTranspose)",
+    code: 'mel: n("0 2 4 2").scale("C4:major").scaleTranspose("<0 4 5 3>")',
+    bars: 4,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    staff: "lead",
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "G",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "Am",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "F",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "C4:4 E4:4 G4:4 E4:4 | G4:4 B4:4 D5:4 B4:4 | A4:4 C5:4 E5:4 C5:4 | F4:4 A4:4 C5:4 A4:4",
+      },
+      chordTexts: ["C", "G", "Am", "F"],
+    },
+  },
+  {
+    name: "178 U06.L04 cadences: I IV I V | I IV V I on the grand staff, numerals under the bass",
+    code: 'chords: n("<0 3 0 4 0 3 4 0>").add(n("[0,2,4]")).scale("C3:major")\nmel: n("<[2 ~ 4 ~] [5 ~ 3 ~] [4 ~ 2 ~] [1 ~ ~ ~] [2 ~ 4 ~] [5 ~ 3 ~] [1 ~ 4 ~] [0 ~ ~ ~]>").scale("C4:major")',
+    bars: 8,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    staff: "grand",
+    split: "track",
+    trackClefs: {
+      chords: "bass",
+      mel: "treble",
+    },
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "G",
+      },
+      {
+        bar: 4,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 5,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 6,
+        beat: 1,
+        symbol: "G",
+      },
+      {
+        bar: 7,
+        beat: 1,
+        symbol: "C",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        rn: "IV",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        rn: "V",
+      },
+      {
+        bar: 4,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 5,
+        beat: 1,
+        rn: "IV",
+      },
+      {
+        bar: 6,
+        beat: 1,
+        rn: "V",
+      },
+      {
+        bar: 7,
+        beat: 1,
+        rn: "I",
+      },
+    ],
+    expect: {
+      voices: {
+        RH: "E4:4 r:4 G4:4 r:4 | A4:4 r:4 F4:4 r:4 | G4:4 r:4 E4:4 r:4 | D4:4 r:4 r:2 | E4:4 r:4 G4:4 r:4 | A4:4 r:4 F4:4 r:4 | D4:4 r:4 G4:4 r:4 | C4:4 r:4 r:2",
+        LH: "[C3,E3,G3]:1 | [F3,A3,C4]:1 | [C3,E3,G3]:1 | [G3,B3,D4]:1 | [C3,E3,G3]:1 | [F3,A3,C4]:1 | [G3,B3,D4]:1 | [C3,E3,G3]:1",
+      },
+      staves: ["RH:treble", "LH:bass"],
+      chordTexts: ["C", "F", "C", "G", "C", "F", "G", "C"],
+      romanTexts: ["I", "IV", "I", "V", "I", "IV", "V", "I"],
+    },
+  },
+  {
+    name: "179 U06.L02 numerals in G: I vi ii V, the F sharp in V",
+    code: 'chords: n("<0 5 1 4>").add(n("[0,2,4]")).scale("G3:major")',
+    bars: 4,
+    key: {
+      tonic: "G",
+      mode: "major",
+    },
+    staff: "bass",
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "G",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "Em",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "Am",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "D",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "I",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        rn: "vi",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        rn: "ii",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        rn: "V",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "[G3,B3,D4]:1 | [E4,G4,B4]:1 | [A3,C4,E4]:1 | [D4,F#4,A4]:1",
+      },
+      staves: ["S1:bass"],
+      chordTexts: ["G", "Em", "Am", "D"],
+      romanTexts: ["I", "vi", "ii", "V"],
+    },
+  },
+  {
+    name: "180 E flat major sevenths: Ebmaj7 Cm7 Fm7 Bb7, flats in the symbols",
+    code: 'chords: n("<0 5 1 4>").add(n("[0,2,4,6]")).scale("Eb3:major")',
+    bars: 4,
+    key: {
+      tonic: "Eb",
+      mode: "major",
+    },
+    staff: "bass",
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "Ebmaj7",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "Cm7",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "Fm7",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "Bb7",
+      },
+    ],
+    romans: [
+      {
+        bar: 0,
+        beat: 1,
+        rn: "Imaj7",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        rn: "vi7",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        rn: "ii7",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        rn: "V7",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "[Eb3,G3,Bb3,D4]:1 | [C4,Eb4,G4,Bb4]:1 | [F3,Ab3,C4,Eb4]:1 | [Bb3,D4,F4,Ab4]:1",
+      },
+      staves: ["S1:bass"],
+      chordTexts: ["E♭maj7", "Cm7", "Fm7", "B♭7"],
+      romanTexts: ["Imaj7", "vi7", "ii7", "V7"],
+    },
+  },
+  {
+    name: "181 U07.L06 question and answer: two phrases, half cadence then full",
+    code: 'mel: n("<[0 2 4 5] [5 ~ 3 ~] [2 4 2 0] [1 ~ ~ ~] [0 2 4 5] [5 ~ 3 ~] [4 3 1 ~] [0 ~ ~ ~]>").scale("C4:major")',
+    bars: 8,
+    key: {
+      tonic: "C",
+      mode: "major",
+    },
+    staff: "lead",
+    chords: [
+      {
+        bar: 0,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 1,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 2,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 3,
+        beat: 1,
+        symbol: "G",
+      },
+      {
+        bar: 4,
+        beat: 1,
+        symbol: "C",
+      },
+      {
+        bar: 5,
+        beat: 1,
+        symbol: "F",
+      },
+      {
+        bar: 6,
+        beat: 1,
+        symbol: "G",
+      },
+      {
+        bar: 7,
+        beat: 1,
+        symbol: "C",
+      },
+    ],
+    expect: {
+      voices: {
+        S1: "C4:4 E4:4 G4:4 A4:4 | A4:4 r:4 F4:4 r:4 | E4:4 G4:4 E4:4 C4:4 | D4:4 r:4 r:2 | C4:4 E4:4 G4:4 A4:4 | A4:4 r:4 F4:4 r:4 | G4:4 F4:4 D4:4 r:4 | C4:4 r:4 r:2",
+      },
+      chordTexts: ["C", "F", "C", "G", "C", "F", "G", "C"],
+      barNumbers: [5],
+    },
   },
 ];

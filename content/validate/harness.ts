@@ -198,7 +198,8 @@ export async function grade(
       meter: ex.meter ?? lesson.meter,
       bpm: lesson.bpm,
       ...(lesson.swing ? { swing: lesson.swing } : {}),
-      ...(lesson.pickup ? { pickup: lesson.pickup } : {}),
+      // The exercise's own pickup first, as the app grades (app/src/lesson/grading.ts).
+      ...((ex.pickup ?? lesson.pickup) ? { pickup: ex.pickup ?? lesson.pickup } : {}),
       params: test.params ?? {},
       attemptNo: 1,
       firstAttempt: true,
@@ -209,8 +210,9 @@ export async function grade(
         profile: "graded",
         unlocked: unlockedFor(session),
         allowPreview: ONBOARDING_PREVIEW.has(lesson.id),
-        meter: lesson.meter,
-        key: lesson.key,
+        // An item in its own meter (a 3/4 dictation inside a 4/4 checkpoint) is linted in that meter.
+        meter: ex.meter ?? lesson.meter,
+        key: ex.key ?? lesson.key,
       },
       profile: NEUTRAL_PROFILE,
     },

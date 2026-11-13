@@ -13,7 +13,7 @@ import type {
   LearnerProfile,
   Trial,
 } from "@oak/api";
-import { type AudioPlan, type DrillRegistry, gradeSungResolution, gradeTrial, setPreload } from "@oak/drills";
+import { type AudioPlan, type DrillRegistry, gradeSungResolution, setPreload } from "@oak/drills";
 import { gradeSung, type PitchFrame, type SungTarget } from "@oak/pitch";
 import type { OakStrudel, PlaybackHandle } from "@oak/strudel";
 import { freqToMidi } from "@oak/theory";
@@ -23,6 +23,19 @@ import type { SungSummary } from "../answers/types.ts";
 import { callApi } from "../lib/api.ts";
 import { openMic } from "../lib/mic.ts";
 import { getOak } from "../lib/oak.ts";
+import {
+  alignNotes,
+  arpeggioPlan,
+  bassPlan,
+  bassSingTargets,
+  chordsOnlyPlan,
+  contextPlan,
+  gradeStep,
+  isBassTrial,
+  singCuePlan,
+  stagedKeyOf,
+  sungBassDegrees,
+} from "./harmony.ts";
 import { clearInflight, resumeFromServer, saveInflight } from "./inflight.ts";
 import type {
   AuditionInput,
@@ -33,8 +46,10 @@ import type {
   PresentInput,
   ResolveInput,
   ResumeState,
+  SingPartInput,
   TrialSource,
 } from "./machine.ts";
+import { gradeDrillTrial } from "./model.ts";
 import {
   answerPlan,
   comparePlan,
@@ -197,17 +212,36 @@ export function sungNotes(
   profile: LearnerProfile,
   targetsKey: "singTargets" | "resolutionTargets" = "singTargets",
   modeKey: "singMode" | "resolutionMode" = "singMode",
+  own?: { targets: SungTarget[]; mode: Parameters<typeof gradeSung>[3]; octave?: "per-note" | "global" },
 ): SungSummary[] {
-  const targets = (trial.params[targetsKey] as SungTarget[] | undefined) ?? [];
+  const targets = own?.targets ?? (trial.params[targetsKey] as SungTarget[] | undefined) ?? [];
   if (targets.length === 0) return framesToSummary(frames);
+  // Per-degree results: one summary per target, in order (a note never reached is a miss, not dropped).
+  const octave = own?.octave ?? (targets.length > 1 ? "global" : "per-note");
+  return alignNotes(
+    gradeNotes(frames, profile, targets, own?.mode ?? modeOf(trial, modeKey), octave),
+    targets.length,
+  );
+}
+
+function modeOf(trial: Trial, modeKey: "singMode" | "resolutionMode"): Parameters<typeof gradeSung>[3] {
+  return (trial.params[modeKey] as Parameters<typeof gradeSung>[3] | undefined) ?? "pitch";
+}
+
+function gradeNotes(
+  frames: readonly PitchFrame[],
+  profile: LearnerProfile,
+  targets: SungTarget[],
+  mode: Parameters<typeof gradeSung>[3],
+  octave: "per-note" | "global",
+): SungSummary[] {
   try {
-    const mode = (trial.params[modeKey] as Parameters<typeof gradeSung>[3] | undefined) ?? "pitch";
     const res = gradeSung(
       frames,
       targets,
       {
         cents: "learner",
-        octave: targets.length > 1 ? "global" : "per-note",
+        octave,
         driftCompCents: 30,
         minCoverage: 0.4,
         passHitRate: 0.8,
@@ -227,7 +261,21 @@ export function sungNotes(
 
 export function drillDeps(env: Pick<DrillEnv, "registry" | "profile">): DrillDeps {
   return {
-    grade: (trial, response) => gradeTrial(env.registry.family(trial.family), trial, response, env.profile),
+    grade: (trial, response) =>
+      gradeDrillTrial(env.registry.family(trial.family), trial, response, env.profile),
+    stepsOf: (trial) => (stagedKeyOf(trial) ? ["bass", "quality", "rn"] : null),
+    gradeStep: (trial, step, answer) => gradeStep(trial, step, answer),
+    hasSungPart: (trial) => isBassTrial(trial),
+    gradeSungPart: (trial, frames) => {
+      const targets = bassSingTargets(trial, env.profile);
+      // Each root is its own note: folded to the nearest octave one by one (a bass line leaps).
+      const notes = sungNotes(trial, frames, env.profile, "singTargets", "singMode", {
+        targets,
+        mode: "bassline",
+        octave: "per-note",
+      });
+      return { notes, degrees: sungBassDegrees(trial, notes) };
+    },
     gradeResolution: (trial, frames) => {
       const r = gradeSungResolution(trial, { frames, rtMs: 0, replays: 0 }, env.profile);
       return {
@@ -318,7 +366,7 @@ function presentActor(env: DrillEnv) {
       await preload(oak, trial.preload);
       if (cancelled) return;
       if (mode === "cue") {
-        const plan = cuePlan(trial);
+        const plan = cuePlan(trial, env.profile);
         const h = play(oak, plan, oak.ctx.currentTime + LEAD_S);
         handles.push(h);
         sendBack({ type: "STAGE", stage: "cue" });
@@ -326,7 +374,7 @@ function presentActor(env: DrillEnv) {
         if (!cancelled) sendBack({ type: "PRESENTED" });
         return;
       }
-      const st = stagingOf(trial);
+      const st = stagingOf(trial, env.profile);
       const t0 = oak.ctx.currentTime + LEAD_S;
       const kind = trial.params.mode;
       if (kind === "tap") {
@@ -386,6 +434,8 @@ function presentActor(env: DrillEnv) {
         cleanups.push(() => mic.close());
         const t1 = oak.ctx.currentTime + LEAD_S;
         const origin = t1 + st.responseAt;
+        // The take window: the session's live bleed check never calls singing along there bleed.
+        mic.singing?.({ on: origin, off: origin + st.responseSec });
         live.reset();
         useLive.setState({
           windowSec: st.responseSec,
@@ -449,36 +499,55 @@ function presentActor(env: DrillEnv) {
   });
 }
 
-function auditionActor() {
+/** The plan of an after-answer audition (pure apart from the profile's comfort range). */
+export function auditionPlan(
+  trial: Trial,
+  what: AuditionInput["what"],
+  captured: AuditionInput["captured"],
+  profile: LearnerProfile,
+): AudioPlan | null {
+  switch (what) {
+    case "answer":
+      return answerPlan(trial);
+    case "resolve": {
+      // "Hear it resolve": the asked degree walks home to 1 in the trial's register.
+      const own = resolutionOf(trial).plan;
+      const tonic = trialTonicMidi(trial);
+      const d = (trial.expected as { degrees?: string[] }).degrees?.at(-1);
+      return own && own.events.length > 0
+        ? own
+        : tonic !== null && d
+          ? homePlan(tonic, d as never, keyOfTrial(trial)?.mode ?? "major")
+          : null;
+    }
+    case "cue":
+      return cuePlan(trial, profile);
+    case "compare":
+      return comparePlan(trial, captured, null);
+    case "bass":
+      return bassPlan(trial);
+    case "arpeggio":
+      return arpeggioPlan(trial);
+    case "context":
+      return contextPlan(trial);
+    default: {
+      const st = stagingOf(trial, profile);
+      return sequence(
+        [st.cue, st.stimulus ?? answerPlan(trial)],
+        st.cue ? Math.max(0, st.stimulusAt - (st.cue.durationSec ?? 0)) : 0,
+      );
+    }
+  }
+}
+
+function auditionActor(env: DrillEnv) {
   return fromCallback<DrillEvent, AuditionInput>(({ input, sendBack }) => {
     let cancelled = false;
     let handle: PlaybackHandle | null = null;
     void (async () => {
       const oak = await getOak();
       if (cancelled) return;
-      const { trial, what, captured } = input;
-      let plan: AudioPlan | null = null;
-      if (what === "answer") plan = answerPlan(trial);
-      else if (what === "resolve") {
-        // "Hear it resolve": the asked degree walks home to 1 in the trial's register.
-        const own = resolutionOf(trial).plan;
-        const tonic = trialTonicMidi(trial);
-        const d = (trial.expected as { degrees?: string[] }).degrees?.at(-1);
-        plan =
-          own && own.events.length > 0
-            ? own
-            : tonic !== null && d
-              ? homePlan(tonic, d as never, keyOfTrial(trial)?.mode ?? "major")
-              : null;
-      } else if (what === "cue") plan = cuePlan(trial);
-      else if (what === "compare") plan = comparePlan(trial, captured, null);
-      else {
-        const st = stagingOf(trial);
-        plan = sequence(
-          [st.cue, st.stimulus ?? answerPlan(trial)],
-          st.cue ? Math.max(0, st.stimulusAt - (st.cue.durationSec ?? 0)) : 0,
-        );
-      }
+      const plan = auditionPlan(input.trial, input.what, input.captured, env.profile);
       if (plan) await preload(oak, plan.preload);
       if (cancelled) return;
       handle = play(oak, plan, oak.ctx.currentTime + LEAD_S);
@@ -494,7 +563,7 @@ function auditionActor() {
   });
 }
 
-function resolveActor() {
+function resolveActor(env: DrillEnv) {
   return fromCallback<DrillEvent, ResolveInput>(({ input, sendBack }) => {
     let cancelled = false;
     const handles: (PlaybackHandle | null)[] = [];
@@ -528,8 +597,16 @@ function resolveActor() {
       const pathSec = plan?.durationSec ?? 0;
       const singSec = Math.max(...targets.map((t) => t.off)) + 0.6;
       const start = oak.ctx.currentTime + LEAD_S;
-      const origin = playFirst ? start + pathSec + 0.3 : start;
+      // Singing first (level 3+), home is set again by the reference cadence in the octave to sing in
+      // (`@oak/strudel/reference`); played first, the path itself ends at home.
+      const reference = playFirst ? null : singCuePlan(input.trial, env.profile, "resolutionTargets");
+      if (reference) await preload(oak, reference.preload);
+      if (cancelled) return;
+      const refSec = reference ? reference.durationSec + 0.4 : 0;
+      const origin = playFirst ? start + pathSec + 0.3 : start + refSec;
+      mic.singing?.({ on: origin, off: origin + singSec });
       if (playFirst) handles.push(play(oak, plan, start));
+      else if (reference) handles.push(play(oak, reference, start));
       useLive.getState().reset();
       useLive.setState({ windowSec: singSec, windowStart: origin, clock: () => oak.ctx.currentTime });
       cleanups.push(
@@ -542,8 +619,12 @@ function resolveActor() {
             }));
         }),
       );
-      sendBack({ type: "STAGE", stage: playFirst ? "resolution" : "sing", startedAt: origin });
-      if (playFirst)
+      sendBack({
+        type: "STAGE",
+        stage: playFirst ? "resolution" : reference ? "cue" : "sing",
+        startedAt: origin,
+      });
+      if (playFirst || reference)
         timers.push(atTime(oak, origin, () => sendBack({ type: "STAGE", stage: "sing", startedAt: origin })));
       timers.push(
         atTime(oak, origin + singSec, () => {
@@ -554,6 +635,91 @@ function resolveActor() {
           mic.close();
           // From level 3 the learner sings first, then hears the path (audiation).
           if (!playFirst) handles.push(play(oak, plan, oak.ctx.currentTime + LEAD_S));
+          sendBack({ type: "CAPTURED", frames });
+        }),
+      );
+    })().catch((e: unknown) => {
+      if (!cancelled) sendBack({ type: "MIC_ERROR", message: micMessage(e) });
+    });
+    return () => {
+      cancelled = true;
+      for (const t of timers) clearTimeout(t);
+      for (const h of handles) h?.stop();
+      for (const c of cleanups.splice(0)) c();
+    };
+  });
+}
+
+/**
+ * Singing the bass line before picking it: the key (the reference cadence, in the octave to sing in), then the
+ * chords without their bass while the learner sings the roots, one per chord. Quiet mode never opens the mic.
+ */
+function singPartActor(env: DrillEnv) {
+  return fromCallback<DrillEvent, SingPartInput>(({ input, sendBack }) => {
+    let cancelled = false;
+    const handles: (PlaybackHandle | null)[] = [];
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const cleanups: (() => void)[] = [];
+    const targets = bassSingTargets(input.trial, env.profile);
+    if (input.quiet || targets.length === 0) {
+      queueMicrotask(() => {
+        if (!cancelled) sendBack({ type: "PRESENTED" });
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    void (async () => {
+      const oak = await getOak();
+      if (cancelled) return;
+      const cue = singCuePlan(
+        input.trial,
+        env.profile,
+        "singTargets",
+        targets.map((t) => t.midi),
+      );
+      const chords = chordsOnlyPlan(input.trial);
+      await preload(oak, [...(cue?.preload ?? []), ...chords.preload]);
+      if (cancelled) return;
+      let mic: Awaited<ReturnType<typeof openMic>>;
+      try {
+        mic = await openMic({ deviceId: null });
+      } catch (e) {
+        if (!cancelled) sendBack({ type: "MIC_ERROR", message: micMessage(e) });
+        return;
+      }
+      if (cancelled) {
+        mic.close();
+        return;
+      }
+      cleanups.push(() => mic.close());
+      const t0 = oak.ctx.currentTime + LEAD_S;
+      const origin = t0 + (cue ? cue.durationSec + 0.5 : 0);
+      const windowSec = Math.max(...targets.map((t) => t.off)) + 0.6;
+      mic.singing?.({ on: origin, off: origin + windowSec });
+      useLive.getState().reset();
+      useLive.setState({ windowSec, windowStart: origin, clock: () => oak.ctx.currentTime });
+      cleanups.push(
+        mic.onFrame((f) => {
+          const voiced = f.hz > 0 && f.clarity >= 0.85;
+          if (f.t >= origin - 0.2)
+            useLive.setState((s) => ({
+              frames: [...s.frames.slice(-600), { t: f.t - origin, midi: voiced ? freqToMidi(f.hz) : null }],
+              levelDb: mic.levelDb(),
+            }));
+        }),
+      );
+      handles.push(play(oak, cue, t0));
+      handles.push(play(oak, chords, origin));
+      sendBack({ type: "STAGE", stage: cue ? "cue" : "sing", startedAt: origin });
+      timers.push(atTime(oak, origin, () => sendBack({ type: "STAGE", stage: "sing", startedAt: origin })));
+      timers.push(
+        atTime(oak, origin + windowSec, () => {
+          const frames = mic
+            .frames()
+            .filter((f) => f.t >= origin - 0.2 && f.t <= origin + windowSec)
+            .map((f) => ({ ...f, t: f.t - origin }));
+          mic.close();
           sendBack({ type: "CAPTURED", frames });
         }),
       );
@@ -584,8 +750,9 @@ export function drillImplementations(env: DrillEnv) {
     actors: {
       start: startActor(env),
       present: presentActor(env),
-      audition: auditionActor(),
-      resolve: resolveActor(),
+      audition: auditionActor(env),
+      resolve: resolveActor(env),
+      singPart: singPartActor(env),
       finish: finishActor(env),
     },
     actions: {

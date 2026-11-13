@@ -133,13 +133,46 @@ export class BackupService {
     return out;
   }
 
-  info(): { bytesWithAudio: number; bytesWithoutAudio: number; lastAutomatic: string | null } {
+  info(): {
+    bytesWithAudio: number;
+    bytesWithoutAudio: number;
+    lastAutomatic: string | null;
+    ownAudio: { files: number; bytes: number; unusedFiles: number; unusedBytes: number };
+    albumAudioBytes: number;
+  } {
     const json = new TextEncoder().encode(JSON.stringify(dumpTables(this.db))).length + 512;
     const files = this.#files().reduce((s, f) => s + statSync(f.abs).size + 76 + 2 * f.name.length, 0);
+    // Wave 4 (kit's Settings › Data): the learner's own recordings, and those no transcription project uses any more.
+    const own = this.db
+      .query(
+        `SELECT a.bytes AS bytes, EXISTS (SELECT 1 FROM transcriptions t WHERE t.audio_id = a.id) AS used
+         FROM audio_files a`,
+      )
+      .all() as { bytes: number; used: number }[];
+    const album = this.db
+      .query("SELECT audio_path FROM album_track_versions WHERE audio_path IS NOT NULL")
+      .all() as { audio_path: string }[];
+    let albumAudioBytes = 0;
+    for (const a of album) {
+      try {
+        const abs = this.paths.store.resolveStored(a.audio_path);
+        if (this.paths.store.exists(abs)) albumAudioBytes += statSync(abs).size;
+      } catch {
+        // A stored path outside the audio folders is never followed (as in the export).
+      }
+    }
+    const unused = own.filter((a) => a.used === 0);
     return {
       bytesWithAudio: json + files,
       bytesWithoutAudio: json,
       lastAutomatic: lastAutomatic(this.paths.backupsDir),
+      ownAudio: {
+        files: own.length,
+        bytes: own.reduce((s, a) => s + a.bytes, 0),
+        unusedFiles: unused.length,
+        unusedBytes: unused.reduce((s, a) => s + a.bytes, 0),
+      },
+      albumAudioBytes,
     };
   }
 
@@ -263,6 +296,11 @@ export class BackupService {
       if (data === undefined) throw badRequest(`${f.path} is listed but missing`);
       if (sha256(data) !== f.sha256) throw badRequest(`${f.path} is damaged`);
       if (!ARCHIVE_AUDIO_PATH.test(f.path)) throw badRequest(`${f.path} is not an audio path`);
+      // The learner's own files are stored by their content hash: `audio/<sha256>.<ext>` must hold those bytes
+      // (peaks are named after the audio they draw, so they are exempt).
+      const own = /^audio\/([0-9a-f]{64})\.([a-z0-9]{2,5})$/.exec(f.path);
+      if (own !== null && own[2] !== "peaks" && own[1] !== f.sha256)
+        throw badRequest(`${f.path} does not hold the audio its name says`);
       audio.push({ name: f.path, data });
     }
     const tables = this.#forward(manifest);

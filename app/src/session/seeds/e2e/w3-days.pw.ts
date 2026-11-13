@@ -89,15 +89,34 @@ test("the edge of what's written: Today, the Oak and Progress say so; review, St
   page,
   request,
 }) => {
+  // Wave 3 ended at U04.CP with U05 unwritten; Wave 4 authors U05 lesson by lesson (U05.L01 first), so the seed
+  // completes what is written and the edge is the first U05 lesson nobody has written yet.
   const s = await seed(request, "after U04.CP");
-  expect(s.next).toBe("U05.L01");
+  expect(s.next ?? "").toMatch(/^U05\.L0\d$/);
+  const plan = await api<{ kind: string }>(request, "GET", "/api/session/today");
+  test.skip(
+    plan.kind !== "review",
+    `${s.next} is written: the edge moved on (w4-days.pw.ts covers it past X1)`,
+  );
+  const next = s.next as string;
+  /** The leaf the next lesson introduces (contracts §4). */
+  const leaf =
+    {
+      "U05.L01": "C01",
+      "U05.L02": "C02",
+      "U05.L03": "C03",
+      "U05.L04": "N05",
+      "U05.L05": "C04",
+      "U05.L06": "N04",
+      "U05.L07": "C05",
+    }[next] ?? "C05";
   await useUiPrefs(page, { theme: "paper" });
   await today(page);
   const card = page.getByTestId("today-card");
   await expect(card).toHaveAttribute("data-state", "edge");
   await expect(card.getByRole("heading", { name: "The edge of what's written" })).toBeVisible();
   await expect(card).toContainText("still being written");
-  await expect(card).toContainText("through Intervals");
+  await expect(card).toContainText(next === "U05.L01" ? "through Intervals" : "The rest of Triads");
   await expect(page.getByTestId("setlist").locator('[data-row="warmup"]')).toBeVisible();
   // No dead doors: the next unlock names where it comes from, the Studio chip is the server's, once.
   await expect(page.getByTestId("goal-gradient")).toContainText("still being written");
@@ -110,20 +129,20 @@ test("the edge of what's written: Today, the Oak and Progress say so; review, St
 
   // The Oak: what's next is named, and still being written; its lesson is never a link.
   await page.goto("/oak?view=tree");
-  await expect(page.getByTestId("whats-next")).toContainText("U05.L01");
+  await expect(page.getByTestId("whats-next")).toContainText(next);
   await expect(page.getByTestId("whats-next")).toContainText("still being written");
-  await page.locator('[data-node="C01"]').focus();
+  await page.locator(`[data-node="${leaf}"]`).focus();
   await page.keyboard.press("Enter");
   const panel = page.getByTestId("oak-panel");
   await expect(panel).toContainText("still being written");
-  await expect(panel.locator('a[href="/learn/U05.L01"]')).toHaveCount(0);
+  await expect(panel.locator(`a[href="/learn/${next}"]`)).toHaveCount(0);
   await settle(page);
   await expectNoOverflow(page);
   await shoot(page, SHOTS, "oak-edge-panel", "paper");
   await page.goto("/oak?view=course");
   const u05 = page.getByRole("heading", { name: /U05/ }).locator("..");
   await expect(u05.getByText("being written").first()).toBeVisible();
-  await expect(page.locator('a[href="/learn/U05.L01"]')).toHaveCount(0);
+  await expect(page.locator(`a[href="/learn/${next}"]`)).toHaveCount(0);
   await expect(page.locator('a[href="/learn/U04.L04"]')).toHaveCount(1);
 
   // Progress: the same plain fact, with Practice and Studio.

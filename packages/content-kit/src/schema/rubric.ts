@@ -3,6 +3,7 @@
 import type { SoundId, ToolId } from "../ids.ts";
 import type {
   CadenceType,
+  ChordQuality,
   Degree,
   DrumRole,
   KeySpec,
@@ -42,7 +43,18 @@ export type RubricRuleBody =
       harmony: TrackRef;
       strength: "downbeat" | "strong" | "beat";
     }
-  | { rule: "progression"; schema?: string; rn?: string[]; allowRotation?: boolean; track?: TrackRef }
+  /**
+   * `bars` (Wave 4): only bars `[from, to]` (1-based, inclusive) are compared, so "bars 1–6 are the loop"
+   * leaves the cadence bars to a `cadence` rule (C2). Default: the whole piece.
+   */
+  | {
+      rule: "progression";
+      schema?: string;
+      rn?: string[];
+      allowRotation?: boolean;
+      track?: TrackRef;
+      bars?: [number, number];
+    }
   | { rule: "contains-rn"; rn: string[]; min: number; mustResolve?: boolean }
   | { rule: "range"; track: TrackRef; maxSpan?: number; within?: [string, string] | "learner-voice" }
   | { rule: "step-ratio"; track: TrackRef; min: number }
@@ -59,7 +71,26 @@ export type RubricRuleBody =
   | { rule: "syncopation"; track: TrackRef; min: number }
   /** Section names ('verse chorus verse chorus') or letters by first appearance ('ABAB'); `?` matches any section. */
   | { rule: "form"; pattern: string; phraseBars?: number }
-  | { rule: "voice-leading"; track: TrackRef; maxMovePerVoice: number; maxTotal?: number }
+  /**
+   * Smooth chord-to-chord motion of a hand-voiced chord track (contracts §6.7 item 4). Each chord (the
+   * notes that start together) is a set of voices, lowest first; at each change every voice moves at most
+   * `maxMovePerVoice` semitones (the total at most `maxTotal`). Wave 4 adds the U05.L07 gate check:
+   * `voices`: every chord has exactly this many notes; `commonTones`: a pitch class two neighbouring chords
+   * share stays at the same pitch in the same voice; `noCrossing`: no voice moves above the voice that was
+   * above it (they stay in order, lowest to highest). `bassFree`: the lowest voice is left out of the
+   * motion limits (a bass track or a root bass that leaps by 4ths and 5ths); it still counts for
+   * `noCrossing`.
+   */
+  | {
+      rule: "voice-leading";
+      track: TrackRef;
+      maxMovePerVoice: number;
+      maxTotal?: number;
+      voices?: number;
+      commonTones?: boolean;
+      noCrossing?: boolean;
+      bassFree?: boolean;
+    }
   | { rule: "guide-tones"; track: TrackRef; harmony: TrackRef; minRatio: number }
   /** Kept, for pivot modulations. Lifts use `key-change`. */
   | { rule: "modulation"; to: "up-step" | "up-half" | "relative" | "dominant" | KeySpec; atBar?: number }
@@ -115,12 +146,67 @@ export type RubricRuleBody =
   | { rule: "velocity-ghosts"; track: TrackRef; min: number; maxGain?: number; on?: "16th-offbeat" | "any" }
   | { rule: "onsets"; track: TrackRef; drum?: DrumRole; contains?: Rat[]; equals?: Rat[]; perBar: boolean }
   | { rule: "degree-set"; track: TrackRef; subsetOf?: Degree[]; contains?: Degree[]; minCount?: number }
-  | { rule: "sounds"; subsetOf?: SoundId[]; contains?: SoundId[] }
+  /** `contains`: every one listed; `anyOf` (Wave 4, U05.L08 "Rhodes or organ"): at least one of them. */
+  | { rule: "sounds"; subsetOf?: SoundId[]; contains?: SoundId[]; anyOf?: SoundId[] }
   | { rule: "distinct-pitches"; track: TrackRef; min: number }
   /** Device names come from `AnalysisSummary.devices`. */
   | { rule: "device-count"; devices: string[]; min: number }
   /** For example "melody identical to the reference" (JC4, AC1). */
-  | { rule: "matches"; reference: Reference; matcher: Matcher; min: number };
+  | { rule: "matches"; reference: Reference; matcher: Matcher; min: number }
+  /**
+   * Wave 4. The line starts with a pickup (contracts §6.11, U07.L08): bar 0 begins with rests and holds
+   * at least one note, and the next bar starts on its downbeat. With `units`, the pickup (from its first
+   * note to the bar line) is exactly that many tempo units long. Read on one period of the learner's loop.
+   */
+  | { rule: "pickup"; track: TrackRef; units?: Rat }
+  /**
+   * Wave 4. Chord qualities in a chord track (U05 Makes): every chord (the notes that start together,
+   * named from its pitch classes for hand-stacked notes and from its symbol for `chord()`) is read as a
+   * triad core. `contains`: each listed quality occurs at least once; `anyOf`: at least `min` (default 1)
+   * chords are of one of these qualities ("a diminished or an augmented triad"); `subsetOf`: every chord
+   * is one of these; `min` alone: at least this many chords are triads (stacked in 3rds: maj, min, dim or
+   * aug; a cluster such as C D E is not). Two-note dyads and single notes are not chords. Default track
+   * `@chords`.
+   */
+  | {
+      rule: "chord-qualities";
+      track?: TrackRef;
+      contains?: ChordQuality[];
+      anyOf?: ChordQuality[];
+      subsetOf?: ChordQuality[];
+      min?: number;
+    }
+  /**
+   * Wave 4. Inversions (U05.L05, U06.L11): at least `min` chords whose lowest sounding note, across every
+   * pitched learner track at the chord's onset (contracts §6.7 item 5), is not the root. `of` limits which
+   * count: 1 = the 3rd in the bass (first inversion), 2 = the 5th (second inversion). Default track
+   * `@chords` for the chords; the bass is read from all learner tracks.
+   */
+  | { rule: "chord-inversions"; track?: TrackRef; min: number; of?: (1 | 2)[] }
+  /**
+   * Wave 4 Build (U07.L04–L05): at least `min` notes of the melody (one pass of the line) are non-chord
+   * tones of these kinds against the chord under them (`harmony`: a chord track such as `@chords` or
+   * `band.chords`; default the piece's chords). `roles` default: every kind (passing, neighbour,
+   * appoggiatura, suspension, anticipation, escape). The roles are the harmony view's (`MelodyNoteRole`).
+   */
+  | {
+      rule: "non-chord-tones";
+      track: TrackRef;
+      harmony?: TrackRef;
+      roles?: NonChordToneRole[];
+      min: number;
+    };
+
+/** The kinds of non-chord tone a melody note can be (U07.L03–L05; the harmony view's roles). */
+export const NON_CHORD_TONE_ROLES = [
+  "passing",
+  "neighbour",
+  "appoggiatura",
+  "suspension",
+  "anticipation",
+  "escape",
+] as const;
+export type NonChordToneRole = (typeof NON_CHORD_TONE_ROLES)[number];
 
 export type RubricRule = RubricRuleBase & RubricRuleBody;
 export type RubricRuleName = RubricRuleBody["rule"];
@@ -165,6 +251,10 @@ export const RUBRIC_RULE_NAMES = [
   "distinct-pitches",
   "device-count",
   "matches",
+  "pickup",
+  "chord-qualities",
+  "chord-inversions",
+  "non-chord-tones",
 ] as const satisfies readonly RubricRuleName[];
 
 /** What a rule evaluation returns. Numeric rules give partial credit `min(1, value / target)`. */

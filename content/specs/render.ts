@@ -5,9 +5,11 @@ import { BEGINNER_FACTOR, type LessonMeta, lessonBudget } from "@oak/content-kit
 import { candoById } from "../candos.ts";
 import { capstones } from "../capstones.ts";
 import { checkpointMetas } from "../checkpoints.ts";
+import { ladder as ladderLevels } from "../gym/ladder.ts";
+import { GYM_SLOT_RULE, gymSlotKind, LADDER_OPENS } from "../gym/slots.ts";
 import { registries } from "../index.ts";
 import { termById } from "../terms.ts";
-import type { LessonSpec, StepSpec, UnitSpec } from "./types.ts";
+import type { CapstoneSpec, GymSpec, LessonSpec, StepSpec, UnitSpec } from "./types.ts";
 
 const skillName = new Map(registries.skills.map((s) => [s.id as string, s] as const));
 const metaOf = (id: string): LessonMeta | undefined =>
@@ -90,7 +92,10 @@ function lesson(l: LessonSpec): string {
   );
   l.steps.forEach((s, i) => {
     const kind = s.exercise ? (s.parts ? `${s.exercise} (${s.parts.join(", ")})` : s.exercise) : "—";
-    const ex = s.wave3?.length ? `${kind}; Wave 3: ${s.wave3.join(", ")}` : kind;
+    const w3 = s.wave3?.length ? `; Wave 3: ${s.wave3.join(", ")}` : "";
+    const w4 = s.features?.length ? `; Wave 4: ${s.features.join(", ")}` : "";
+    const panels = s.panels?.length ? `; opens ${s.panels.join(", ")}` : "";
+    const ex = `${kind}${w3}${w4}${panels}`;
     out.push(
       `| S${i + 1}${i + 1 === l.wrapAt ? " (wrap)" : ""} | ${s.kind}${s.optional ? " (optional)" : ""} | ${ex} | ${(s.answer ?? []).join(", ") || "—"} | ${fmt(s.minutes)} | ${s.graded ? "yes" : ""} | ${cell(s.what)} | ${termsOf(s).join(", ")} |`,
     );
@@ -190,6 +195,84 @@ function rubricTable(id: string): string {
   ].join("\n");
 }
 
+/** Wave 4: when a capstone opens, its Band, its sessions, its liner notes and its tests (CapstoneSpec). */
+function capstoneDetail(c: CapstoneSpec): string {
+  const out: string[] = [];
+  const def = capstones.find((x) => x.id === c.id);
+  if (c.opens) out.push(`**Opens.** ${c.opens}`, "");
+  if (c.band) out.push(`**Band.** ${c.band}`, "");
+  for (const s of c.sessions ?? []) {
+    const sd = def?.sessionDefs.find((x) => x.id === s.id);
+    const flags = sd ? [sd.review ? "review" : "", sd.release ? "release" : ""].filter(Boolean) : [];
+    out.push(`### ${s.id}: ${s.goal}${flags.length ? ` (${flags.join(", ")})` : ""}`, "");
+    if (sd && sd.goal !== s.goal) out.push(`> content/capstones.ts says: "${sd.goal}"`, "");
+    out.push(`- **Opens with.** ${s.opens}`);
+    out.push(`- **Hears.** ${s.hear}`);
+    out.push(`- **Sees.** ${s.see}`);
+    out.push("- **Work.**");
+    for (const [i, w] of s.work.entries()) out.push(`  ${i + 1}. ${w}`);
+    out.push("- **Checks.**");
+    for (const x of s.checks) out.push(`  - ${x}`);
+    out.push(`- **Ends.** ${s.ends}`, "");
+  }
+  if (c.linerNotes?.length) {
+    out.push("**Liner notes.**", "");
+    for (const x of c.linerNotes) out.push(`- ${x}`);
+    out.push("");
+  }
+  if (c.tests?.length) {
+    out.push("**Tests the brief or the checks must carry.**", "");
+    for (const x of c.tests) out.push(`- ${x}`);
+    out.push("");
+  }
+  return out.join("\n");
+}
+
+/** Wave 4: the Transcription Gym. The slot rule, the default-order slots and the ladder are read from content/gym. */
+function gymSection(g: GymSpec): string {
+  const order = registries.syllabus.defaultOrder as readonly string[];
+  const slots = order
+    .map((id, i) => ({ id, i }))
+    .filter((x) => x.id.startsWith("GYM."))
+    .map((x) => `${x.id} (session ${x.i + 1}, after ${order[x.i - 1]}; ${gymSlotKind(x.id)})`);
+  const out: string[] = ["## Transcription Gym", "", g.summary, ""];
+  out.push(
+    `**The slot rule (content/gym/slots.ts).** From ${GYM_SLOT_RULE.startsAt}, after ${GYM_SLOT_RULE.afterCoreSessions} completed core sessions since the last transcription session, the next session's New block is a transcription slot.`,
+    "",
+  );
+  for (const x of g.slots) out.push(`- ${x}`);
+  out.push("", `**Slots in the default order.** ${slots.join("; ")}.`, "");
+  out.push(
+    "**A gym session (contracts §9.1).**",
+    "",
+    "| Target | Transcription minutes | What it contains |",
+    "|---|---|---|",
+  );
+  for (const b of g.budget) out.push(`| ${b.target} | ${b.minutes} | ${cell(b.contains)} |`);
+  out.push("", "**The ladder (contracts §2.9; content/gym/ladder.ts).**", "");
+  out.push(
+    "| Level | Title | First available | Material | Source | Given | Grading |",
+    "|---|---|---|---|---|---|---|",
+  );
+  for (const l of g.ladder) {
+    const def = ladderLevels.find((x) => x.level === l.level);
+    const opens = LADDER_OPENS[l.level as keyof typeof LADDER_OPENS] ?? "?";
+    out.push(
+      `| L${l.level} | ${def?.title ?? "?"} | ${opens} | ${cell(l.material)} | ${cell(l.source)} | ${cell(l.given)} | ${cell(l.grading)}${def?.grading === "auto" ? ` (pass ${def.pass})` : ""} |`,
+    );
+  }
+  out.push("", "**Realism.**", "");
+  for (const x of g.realism) out.push(`- ${x}`);
+  out.push("", "**Moving up the ladder.**", "");
+  for (const x of g.levelUp) out.push(`- ${x}`);
+  out.push("", "**Own audio (even slots).**", "");
+  for (const x of g.ownAudio) out.push(`- ${x}`);
+  out.push("", "**Notes.**", "");
+  for (const x of g.notes) out.push(`- ${x}`);
+  out.push("");
+  return out.join("\n");
+}
+
 export function renderUnit(u: UnitSpec): string {
   const unit = registries.syllabus.units.find((x) => x.id === u.unit);
   const out: string[] = [
@@ -240,9 +323,11 @@ export function renderUnit(u: UnitSpec): string {
     out.push(`## ${c.id} ${def?.title.replace(/^\S+\s/, "") ?? ""}`, "");
     out.push(`Author: **${c.author}**. ${c.intent}`, "");
     out.push(rubricTable(c.id), "");
+    out.push(capstoneDetail(c));
     for (const n of c.notes) out.push(`- ${n}`);
     out.push("");
   }
+  if (u.gym) out.push(gymSection(u.gym));
   return `${out
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")

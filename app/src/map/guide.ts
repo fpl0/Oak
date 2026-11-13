@@ -66,7 +66,8 @@ export function whatsNext(
     title = cp ? `${cp.id} · ${cp.title}` : next;
     targets = checkpointSkills(checkpoints, next);
   } else {
-    const cap = /^(C\d+|[A-Z]+C\d+)\./.exec(next)?.[1] ?? next;
+    // C2.S1, X1.S2, JC1.S1, CF-T.S3: the capstone is everything before the session number.
+    const cap = /^(.+)\.S\d+$/.exec(next)?.[1] ?? next;
     const meta = syllabus?.capstones.find((c) => c.id === cap);
     kind = "capstone";
     title = meta ? `${meta.id} · ${meta.title}` : next;

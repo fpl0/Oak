@@ -475,7 +475,7 @@ describe("by-ear transcription (DictationEx.byEar)", () => {
     expect(ids(exact)).toContain("melody.wrong-key");
     expect(ids(exact)).not.toContain("melody.wrong-degree");
     expect(text(exact, "melody.wrong-key")).toBe(
-      "Right tune, but in D major. This step wants it as it plays, in C major: move every note 2 semitones down.",
+      "Right tune, but in D major. This step wants it as it plays, in C major: move every note 2 half steps down.",
     );
     expect((await grade(ex("any-key"), { code: inD })).status).toBe("pass");
     const octave = code("<[0 2 4 2] [4 2 1 0]>", "C5:major");
@@ -513,7 +513,7 @@ describe("interval answers", () => {
     const q = await grade(ex, { answer: { text: ["m3"] } });
     expect(ids(q)).toEqual(["id.interval-quality"]);
     expect(text(q, "id.interval-quality")).toBe(
-      "Right size, a 3rd, but M3 (major 3rd), not m3. Count the semitones: 4, not 3.",
+      "Right size, a 3rd, but M3 (major 3rd), not m3. Count the half steps: 4, not 3.",
     );
     const n = await grade(ex, { answer: { text: ["P4"] } });
     expect(ids(n)).toEqual(["id.interval-number"]);

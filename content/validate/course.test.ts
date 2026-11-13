@@ -167,6 +167,83 @@ describe("U03 and U04 are complete (contracts §2.3, §2.5)", () => {
   });
 });
 
+/** Wave 4's units, U05–U07 with their checkpoints, gym slots and C2/X1: sessions 42–82 of the default order. */
+const WAVE4 = ORDER.slice(ORDER.indexOf("U05.L02" as SessionId), ORDER.indexOf("X1.S3" as SessionId) + 1);
+const W4_LESSONS = ["U05.L01", ...WAVE4.filter((s) => /^U0[5-7]\.L\d{2}$/.test(s))] as SessionId[];
+const w4course = W4_LESSONS.map((id) => byId.get(id)).filter((l): l is LoadedLesson => Boolean(l));
+
+describe("U05–U07, C2 and X1 are complete (contracts §2.3–§2.5)", () => {
+  test("the default order runs U05.L02 … X1.S3 as §2.5 prints it, gym slots and capstone sessions included", () => {
+    expect(ORDER.slice(41, 82)).toEqual([
+      ...["U05.L02", "U05.L03", "U05.L04", "U05.L05", "U05.L06", "U05.L07", "U05.L08", "U06.L01", "U05.CP"],
+      ...["U06.L02", "U06.L03", "U06.L04", "U06.L05", "U06.L06", "U06.L07", "U06.L08", "U06.L09", "U06.L10"],
+      ...["U06.L11", "U06.L12", "U07.L01", "U06.CP", "U07.L02", "U07.L03", "GYM.01", "U07.L04", "U07.L05"],
+      ...["U07.L06", "U07.L07", "GYM.02", "U07.L08", "U07.L09", "U07.L10", "U08.L01", "GYM.03", "U07.CP"],
+      ...["C2.S1", "C2.S2", "X1.S1", "X1.S2", "X1.S3"],
+    ] as SessionId[]);
+  });
+  test("all 30 lessons of U05–U07 are authored and load", () => {
+    expect(errors.filter((e) => e.folderId && W4_LESSONS.includes(e.folderId as SessionId))).toEqual([]);
+    expect(W4_LESSONS.filter((id) => !byId.has(id))).toEqual([]);
+    expect(W4_LESSONS.length).toBe(30);
+  });
+  test("U05.CP, U06.CP and U07.CP have two or three authored items and a Make", async () => {
+    const { defs } = await loadCheckpointFiles();
+    for (const id of ["U05.CP", "U06.CP", "U07.CP"]) {
+      const d = defs.find((x) => x.id === id);
+      const n = d?.authored.length ?? 0;
+      expect([id, Boolean(d), n >= 2 && n <= 3, Boolean(d?.make)]).toEqual([id, true, true, true]);
+    }
+  });
+  test("C2 has a tested brief and two sessions; every X1 session has its phrase checks", () => {
+    const c2 = capstones.find((x) => x.id === "C2");
+    const x1 = capstones.find((x) => x.id === "X1");
+    expect([(c2?.brief?.tests ?? []).length >= 8, c2?.sessionDefs.length]).toEqual([true, 2]);
+    expect(x1?.sessionDefs.map((sd) => (sd.checks ?? []).length > 0)).toEqual([true, true, true]);
+    for (const c of [c2, x1]) expect([c?.id, c?.sessionDefs.at(-1)?.release]).toEqual([c?.id, true]);
+  });
+  test("every lesson, step, example and exercise ID of U05–U07 is in ids.lock.json", () => {
+    const lock = new Set(
+      (
+        JSON.parse(readFileSync(join(CONTENT_ROOT, "ids.lock.json"), "utf8")) as { ids: { id: string }[] }
+      ).ids.map((x) => x.id),
+    );
+    const missing: string[] = [];
+    for (const l of w4course) {
+      const ids = [
+        l.def.id,
+        ...l.def.steps.flatMap((s) => [
+          `${l.def.id}/${s.id}`,
+          ...(s.example ? [`${l.def.id}@${s.example.id}`] : []),
+        ]),
+        ...exercisesOf(l).map(({ e }) => `${l.def.id}/${e.id}`),
+      ];
+      missing.push(...ids.filter((id) => !lock.has(id)));
+    }
+    expect(missing).toEqual([]);
+  });
+  test("each can-do of U05–U07 is awarded once, by the lesson the registry names", () => {
+    const problems: string[] = [];
+    for (const c of candos) {
+      if (!W4_LESSONS.includes(c.source as SessionId)) continue;
+      const by = w4course.filter((l) => (l.def.canDo as string[]).includes(c.id)).map((l) => l.def.id);
+      if (by.join() !== c.source) problems.push(`${c.id}: source ${c.source}, awarded by [${by.join(" ")}]`);
+    }
+    expect(problems).toEqual([]);
+  });
+  test("no graded step before U05.L08 accepts chord() or voicing() (contracts §3.1 rule 6)", () => {
+    const gated = /\bchord\(|\.voicing\(/;
+    const before = w4course.filter((l) => ORDER.indexOf(l.def.id as SessionId) < ORDER.indexOf("U05.L08"));
+    const found: string[] = [];
+    for (const l of before)
+      for (const { s, e } of exercisesOf(l))
+        if (s.graded && "reference" in e)
+          for (const sol of e.reference?.solutions ?? [])
+            if (gated.test(sol)) found.push(`${l.def.id}/${e.id}`);
+    expect(found).toEqual([]);
+  });
+});
+
 describe("prerequisite order (contracts §4)", () => {
   test("a lesson introduces the skills the graph says it does, after their prerequisites, in every legal order", () => {
     const problems: string[] = [];
@@ -379,19 +456,24 @@ describe("music over the Band", () => {
   test("no shown example or reference sounds a half step above the Band's chord for a beat", async () => {
     const found: string[] = [];
     for (const l of authored) {
-      const beats = Number(l.def.meter.split("/")[0]);
-      const key = `${l.def.key.tonic}4:${l.def.key.mode}`;
-      const band = l.def.steps.find((s) => s.ui.band)?.ui.band;
-      const b = band ? bandById.get(band.band) : undefined;
-      if (!b || bandMeter(b.id) !== l.def.meter) continue;
-      const harmony = (b.code["flavour.pop"] ?? "")
-        .replaceAll("{{key}}", key)
-        .split("\n")
-        .filter((ln) => /^(bass|chords):/.test(ln))
-        .map((ln) => `band_${ln}`)
-        .join("\n");
       for (const s of l.def.steps) {
-        if (!s.ui.band) continue; // the Band plays only where the step declares it
+        // The Band plays only where the step declares it, with the tracks that step lists (`tracks:
+        // ["drums"]` leaves no harmony to clash with), in the key of the step's exercise.
+        const band = s.ui.band;
+        const b = band ? bandById.get(band.band) : undefined;
+        if (!band || !b || bandMeter(b.id) !== l.def.meter) continue;
+        const beats = Number(l.def.meter.split("/")[0]);
+        const exKey = s.exercise && "key" in s.exercise ? s.exercise.key : undefined;
+        const k = exKey ?? l.def.key;
+        const key = `${k.tonic}4:${k.mode}`;
+        const plays = (t: string) => !band.tracks || band.tracks.includes(t as "bass" | "chords");
+        const harmony = (b.code["flavour.pop"] ?? "")
+          .replaceAll("{{key}}", key)
+          .split("\n")
+          .filter((ln) => /^(bass|chords):/.test(ln) && plays(ln.split(":")[0] as string))
+          .map((ln) => `band_${ln}`)
+          .join("\n");
+        if (!harmony) continue;
         const shown: { id: string; code: string }[] = [];
         if (s.example) shown.push({ id: s.example.id, code: s.example.code });
         for (const e of s.exercise ? flattenExercise(s.exercise) : []) {

@@ -1,12 +1,13 @@
 // sketches, sketch_versions, album_tracks, album_track_versions, audio_files, transcriptions,
 // transcription_versions.
-import type {
-  AlbumTrack,
-  AlbumTrackVersion,
-  AudioFile,
-  Sketch,
-  SketchVersion,
-  Transcription,
+import {
+  type AlbumTrack,
+  type AlbumTrackVersion,
+  type AudioFile,
+  DEFAULT_TRANSCRIPTION_SETTINGS,
+  type Sketch,
+  type SketchVersion,
+  type Transcription,
 } from "@oak/api";
 import type { GradeResult } from "@oak/content-kit";
 import { all, bool, type Db, fromJson, get, int, run, toJson, toJsonOrNull } from "../index.ts";
@@ -226,6 +227,7 @@ interface TrackVersionRow {
   band_json: string | null;
   flags_json: string | null;
   created_at: string;
+  include_review_note?: number | null;
 }
 const toTrackVersion = (r: TrackVersionRow): AlbumTrackVersion => ({
   trackId: r.track_id,
@@ -243,6 +245,10 @@ const toTrackVersion = (r: TrackVersionRow): AlbumTrackVersion => ({
   band: fromJson<AlbumTrackVersion["band"]>(r.band_json, null),
   flags: fromJson<AlbumTrackVersion["flags"]>(r.flags_json, NO_FLAGS),
   createdAt: r.created_at,
+  // Wave 4: absent until the learner (or a release) chose.
+  ...(r.include_review_note === null || r.include_review_note === undefined
+    ? {}
+    : { includeReviewNote: r.include_review_note === 1 }),
 });
 
 export class AlbumRepo {
@@ -326,8 +332,8 @@ export class AlbumRepo {
     run(
       this.db,
       `INSERT INTO album_track_versions (track_id, version, sketch_id, sketch_version, liner_notes_md, theory_tags_json,
-         review_json, tutor_assisted, attribution, band_json, flags_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         review_json, tutor_assisted, attribution, band_json, flags_json, created_at, include_review_note)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       v.trackId,
       v.version,
       v.sketchId,
@@ -340,8 +346,43 @@ export class AlbumRepo {
       toJsonOrNull(v.band),
       toJson(v.flags),
       v.createdAt,
+      v.includeReviewNote === undefined ? null : int(v.includeReviewNote),
     );
     run(this.db, "UPDATE album_tracks SET current_version = ? WHERE id = ?", v.version, v.trackId);
+  }
+  /** Wave 4: edit a version's liner notes and whether the review's liner note shows (album.patchVersion). */
+  patchVersion(
+    trackId: string,
+    version: number,
+    patch: { linerNotesMd?: string; includeReviewNote?: boolean },
+  ): void {
+    if (patch.linerNotesMd !== undefined)
+      run(
+        this.db,
+        "UPDATE album_track_versions SET liner_notes_md = ? WHERE track_id = ? AND version = ?",
+        patch.linerNotesMd,
+        trackId,
+        version,
+      );
+    if (patch.includeReviewNote !== undefined)
+      run(
+        this.db,
+        "UPDATE album_track_versions SET include_review_note = ? WHERE track_id = ? AND version = ?",
+        int(patch.includeReviewNote),
+        trackId,
+        version,
+      );
+  }
+  /** Wave 4: the conversation whose accepted review is attached to a version, or `null`. */
+  reviewConversation(trackId: string, version: number): string | null {
+    return (
+      get<{ review_conversation_id: string | null }>(
+        this.db,
+        "SELECT review_conversation_id FROM album_track_versions WHERE track_id = ? AND version = ?",
+        trackId,
+        version,
+      )?.review_conversation_id ?? null
+    );
   }
   setAudio(trackId: string, version: number, path: string, mime: string, durationS: number | null): void {
     run(
@@ -354,11 +395,12 @@ export class AlbumRepo {
       version,
     );
   }
-  setReview(trackId: string, version: number, review: unknown): void {
+  setReview(trackId: string, version: number, review: unknown, conversationId: string | null = null): void {
     run(
       this.db,
-      "UPDATE album_track_versions SET review_json = ? WHERE track_id = ? AND version = ?",
+      "UPDATE album_track_versions SET review_json = ?, review_conversation_id = COALESCE(?, review_conversation_id) WHERE track_id = ? AND version = ?",
       toJsonOrNull(review),
+      conversationId,
       trackId,
       version,
     );
@@ -460,10 +502,42 @@ interface TrRow {
   review_json: string | null;
   created_at: string;
   updated_at: string;
+  settings_json?: string | null;
+  graded_pass?: number;
+  gym_id?: string | null;
+  ladder_seed?: number | null;
+  ladder_json?: string | null;
+}
+/** Wave 4: what a generated ladder item keeps besides its hidden code (never sent to the browser). */
+export interface StoredLadderItem {
+  seed: number;
+  given: {
+    bpm: number;
+    meter: NonNullable<Transcription["meter"]>;
+    key: NonNullable<Transcription["key"]>;
+    pickup: { units: [number, number] } | null;
+    bars: number;
+  };
+  /** Cycles the reference plays (given bars, plus a pickup bar). */
+  cycles: number;
+  stages: ("bass" | "quality" | "rn")[] | null;
+  swing: { subdivision: number; amount: number } | null;
+  title: string;
+  /** The stimulus as the pattern source plays it. */
+  stimulus: {
+    events: unknown[];
+    cps: number;
+    bars: number;
+    preload: string[];
+    /** The generator's performance hints (Wave 4 integration; absent on items stored before it). */
+    performance?: { target: string; swung: boolean; vocalLead: "tenor" | "choir" | null };
+  } | null;
 }
 export interface StoredTranscription extends Transcription {
   /** Never sent to the browser (contracts §11.11). */
   hiddenCode: string | null;
+  /** Wave 4: generated ladder items only; never sent to the browser. */
+  ladder?: StoredLadderItem | null;
 }
 const toTranscription = (r: TrRow): StoredTranscription => ({
   id: r.id,
@@ -489,6 +563,17 @@ const toTranscription = (r: TrRow): StoredTranscription => ({
   createdAt: r.created_at,
   updatedAt: r.updated_at,
   hiddenCode: r.hidden_code,
+  ...(r.settings_json === null || r.settings_json === undefined
+    ? {}
+    : {
+        settings: fromJson<NonNullable<Transcription["settings"]>>(
+          r.settings_json,
+          DEFAULT_TRANSCRIPTION_SETTINGS,
+        ),
+      }),
+  gradedPass: r.graded_pass === 1,
+  gymId: (r.gym_id ?? null) as Transcription["gymId"],
+  ladder: fromJson<StoredLadderItem | null>(r.ladder_json ?? null, null),
 });
 
 export interface TranscriptionVersionRow {
@@ -497,6 +582,10 @@ export interface TranscriptionVersionRow {
   code: string;
   result: GradeResult | null;
   createdAt: string;
+  /** Wave 4: a "Hum it, Oak drafts it" draft not yet edited (no evidence). */
+  machineDraft?: boolean;
+  /** Wave 4: the L3 stage this version answered. */
+  stage?: "bass" | "quality" | "rn" | null;
 }
 
 export class TranscriptionsRepo {
@@ -520,8 +609,8 @@ export class TranscriptionsRepo {
       this.db,
       `INSERT INTO transcriptions (id, source_kind, player, audio_id, song_id, title, artist, key, bpm, meter, downbeat_s,
          fine_tune_cents, ladder_level, realism, hidden_code, regions_json, checklist_json, self_score, current_version,
-         status, review_json, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         status, review_json, created_at, updated_at, settings_json, graded_pass, gym_id, ladder_seed, ladder_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       t.id,
       t.sourceKind,
       t.player,
@@ -545,13 +634,19 @@ export class TranscriptionsRepo {
       toJsonOrNull(t.review),
       t.createdAt,
       t.updatedAt,
+      t.settings === undefined ? null : toJson(t.settings),
+      int(t.gradedPass === true),
+      t.gymId ?? null,
+      t.ladder?.seed ?? null,
+      t.ladder === undefined || t.ladder === null ? null : toJson(t.ladder),
     );
   }
   update(t: StoredTranscription): void {
     run(
       this.db,
       `UPDATE transcriptions SET title = ?, artist = ?, key = ?, bpm = ?, meter = ?, downbeat_s = ?, fine_tune_cents = ?,
-         regions_json = ?, checklist_json = ?, self_score = ?, current_version = ?, status = ?, review_json = ?, updated_at = ?
+         regions_json = ?, checklist_json = ?, self_score = ?, current_version = ?, status = ?, review_json = ?, updated_at = ?,
+         settings_json = ?, graded_pass = ?, gym_id = ?, ladder_level = ?, realism = ?
        WHERE id = ?`,
       t.title,
       t.artist,
@@ -567,6 +662,11 @@ export class TranscriptionsRepo {
       t.status,
       toJsonOrNull(t.review),
       t.updatedAt,
+      t.settings === undefined ? null : toJson(t.settings),
+      int(t.gradedPass === true),
+      t.gymId ?? null,
+      t.ladderLevel,
+      t.realism,
       t.id,
     );
   }
@@ -577,6 +677,8 @@ export class TranscriptionsRepo {
       code: string;
       result_json: string | null;
       created_at: string;
+      machine_draft: number;
+      stage: string | null;
     }>(this.db, "SELECT * FROM transcription_versions WHERE transcription_id = ? ORDER BY version", id).map(
       (r) => ({
         transcriptionId: r.transcription_id,
@@ -584,18 +686,22 @@ export class TranscriptionsRepo {
         code: r.code,
         result: fromJson<GradeResult | null>(r.result_json, null),
         createdAt: r.created_at,
+        machineDraft: r.machine_draft === 1,
+        stage: (r.stage ?? null) as "bass" | "quality" | "rn" | null,
       }),
     );
   }
   insertVersion(v: TranscriptionVersionRow): void {
     run(
       this.db,
-      "INSERT INTO transcription_versions (transcription_id, version, code, result_json, created_at) VALUES (?, ?, ?, ?, ?)",
+      "INSERT INTO transcription_versions (transcription_id, version, code, result_json, created_at, machine_draft, stage) VALUES (?, ?, ?, ?, ?, ?, ?)",
       v.transcriptionId,
       v.version,
       v.code,
       toJsonOrNull(v.result),
       v.createdAt,
+      int(v.machineDraft === true),
+      v.stage ?? null,
     );
   }
   delete(id: string): boolean {

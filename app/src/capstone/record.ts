@@ -14,7 +14,7 @@ export async function recordPerformance(
   await oak.unlock();
   if (handle.playing) handle.stop();
   const ran = await handle.evaluate({ autostart: false });
-  if (!ran.ok) throw new Error("the piece does not run; run it and fix the error first");
+  if (!ran.ok) throw new Error(PIECE_DOES_NOT_RUN);
   const recording = oak.recorder.record({ bars, tailSec: 1.5 });
   // The recorder taps the master bus where its analyser listens: a take whose peak never leaves the noise floor
   // is silent (every part muted, a sample bank that did not load) and is not released as the learner's track.
@@ -36,6 +36,9 @@ export async function recordPerformance(
     if (!handle.disposed) handle.stop();
   }
 }
+
+/** A take of code that does not evaluate (the editor shows the error). */
+export const PIECE_DOES_NOT_RUN = "The piece doesn't run. Run it, fix the error it shows, then record again.";
 
 /** Peak (linear, post-limiter) below which a take counts as silence: −70 dBFS. */
 export const SILENT_PEAK = 10 ** (-70 / 20);

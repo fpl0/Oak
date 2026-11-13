@@ -214,6 +214,59 @@ export function withInversion(rn: string, inversion: 0 | 1 | 2 | 3): string | nu
   return `${acc}${numeral}${mark}${figure}${of}`;
 }
 
+/** A numeral split for drawing: `♭`, `VII`, the quality mark (°, ø, +, maj), the figures (`65`), the applied part. */
+export interface RnGlyphParts {
+  acc: "" | "♭" | "♯";
+  numeral: string;
+  mark: "" | "°" | "ø" | "+" | "maj";
+  /** Figured-bass digits, top first: `["6", "5"]`; one entry is a single superscript. */
+  figures: string[];
+  /** The applied target (`/V`), displayed. */
+  of: string;
+}
+
+const FIGURE_SPLIT: Record<string, string[]> = {
+  "": [],
+  "6": ["6"],
+  "64": ["6", "4"],
+  "7": ["7"],
+  "65": ["6", "5"],
+  "43": ["4", "3"],
+  "42": ["4", "2"],
+};
+
+export function rnGlyph(rn: string): RnGlyphParts | null {
+  const slash = rn.indexOf("/");
+  const primary = slash < 0 ? rn : rn.slice(0, slash);
+  const of = slash < 0 ? "" : rnDisplay(rn.slice(slash));
+  const m = /^([b#]?)(i{1,3}|iv|v|vi{0,2}|I{1,3}|IV|V|VI{0,2})(maj|o|ø|\+)?(7|65|43|42|6|64)?$/.exec(primary);
+  if (!m) return null;
+  const mark = m[3] === "o" ? "°" : ((m[3] ?? "") as RnGlyphParts["mark"]);
+  return {
+    acc: m[1] === "b" ? "♭" : m[1] === "#" ? "♯" : "",
+    numeral: m[2] as string,
+    mark,
+    figures: FIGURE_SPLIT[m[4] ?? ""] ?? [],
+    of,
+  };
+}
+
+/** The inversion a numeral's figures name: none or 7 → 0, 6 or 65 → 1, 64 or 43 → 2, 42 → 3. */
+export function rnInversion(rn: string): 0 | 1 | 2 | 3 {
+  const fig = /(65|43|42|64|6|7)?(?:\/.*)?$/.exec(rn.replace(/\/.*$/, ""))?.[1] ?? "";
+  if (fig === "6" || fig === "65") return 1;
+  if (fig === "64" || fig === "43") return 2;
+  if (fig === "42") return 3;
+  return 0;
+}
+
+/** `I`: the next inversion of a numeral (triads root → 6 → 64 → root; sevenths 7 → 65 → 43 → 42 → 7). */
+export function cycleInversion(rn: string): string {
+  const seventh = /(7|65|43|42)(\/.*)?$/.test(rn);
+  const next = ((rnInversion(rn) + 1) % (seventh ? 4 : 3)) as 0 | 1 | 2 | 3;
+  return withInversion(rn, next) ?? rn;
+}
+
 /** `M`: swaps the case of a numeral (I ↔ i) where that names a real chord (not ø or °). */
 export function toggleCase(rn: string): string {
   const slash = rn.indexOf("/");
@@ -271,6 +324,20 @@ export function pickKey(
   if (mode === "chord")
     return value.includes(midi) ? value.filter((m) => m !== midi) : [...value, midi].sort((a, b) => a - b);
   return [...value, midi];
+}
+
+/**
+ * Backspace on the piano: takes back the last note picked. A chord is kept low to high, so the order of the picks
+ * (`picks`, oldest first) says which that was; without it (a value restored from elsewhere) the last one goes.
+ */
+export function undoPick(
+  value: readonly number[],
+  picks: readonly number[],
+  mode: "single" | "chord" | "sequence",
+): number[] {
+  if (mode !== "chord") return value.slice(0, -1);
+  const last = [...picks].reverse().find((m) => value.includes(m));
+  return last === undefined ? value.slice(0, -1) : value.filter((m) => m !== last);
 }
 
 // --- ordering (Parsons) -------------------------------------------------------------------------
@@ -441,3 +508,15 @@ export function sliderText(
 
 /** The degrees a sequence answer shows in its slots: `♭3` etc. (re-exported for widgets). */
 export const slotText = degreeDisplay;
+
+/** The digit keys a pad answers to, as printed: "1–7", "1–6" for a pad without 7, "1, 4, 5" for a few. */
+export function digitRange(set: readonly string[]): string {
+  const ds = [...new Set(set.map((d) => Number(d.replace(/^[b#]/, ""))))]
+    .filter((n) => n >= 1 && n <= 7)
+    .sort((a, b) => a - b);
+  if (ds.length === 0) return "1–7";
+  const lo = ds[0] as number;
+  const hi = ds[ds.length - 1] as number;
+  if (ds.length === 1) return String(lo);
+  return hi - lo + 1 === ds.length && ds.length > 2 ? `${lo}–${hi}` : ds.join(", ");
+}

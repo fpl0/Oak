@@ -29,7 +29,8 @@ export interface Device {
   text: string;
 }
 
-function harmonySlots(n: Normalized): ChordSlot[] {
+/** Chord slots of a piece: chord symbols when the events carry them, else the chord-role tracks; the bass is the lowest pitched learner note. */
+export function harmonySlots(n: Normalized): ChordSlot[] {
   const symbolic = n.all.filter((e) => e.chordSymbol !== undefined);
   const chords =
     symbolic.length > 0 ? symbolic : tracksOfRole(n, "chords").flatMap((t) => n.byTrack[t] ?? []);

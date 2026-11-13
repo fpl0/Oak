@@ -9,7 +9,7 @@ import { PianoRoll, StaffView, WorkbenchClock, type WorkbenchModel } from "../..
 import { useAnswerEnv } from "../env.tsx";
 import { degreeDisplay } from "../normalize.ts";
 import type { AnswerWidgetProps } from "../types.ts";
-import { AnswerFrame, KeyHint, MarkBadge, markOf, revealedOf } from "../ui.tsx";
+import { AnswerFrame, KeyHint, MarkBadge, markOf, revealedOf, SubmitHint } from "../ui.tsx";
 
 function useBus(model: WorkbenchModel | null | undefined): HighlightBus {
   const [bus] = useState(() => new HighlightBus());
@@ -224,7 +224,7 @@ export function ClickRollAnswer(p: AnswerWidgetProps<"click-roll">) {
       keys={
         <>
           <KeyHint keys={["←", "→"]}>walk the notes</KeyHint>
-          <KeyHint keys={["Enter"]}>check</KeyHint>
+          <SubmitHint />
         </>
       }
     >

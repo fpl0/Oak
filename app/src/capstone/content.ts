@@ -5,6 +5,7 @@ import type { BandDef, CanDoDef, CapstoneDef, FlavourId, FlavourKit, KeySpec } f
 import type { BandSetup } from "@oak/strudel";
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { bandCodeAt } from "../../../content/bands/index.ts";
+import type { RepertoireEntry } from "../../../content/repertoire/index.ts";
 
 export interface CapstoneContent {
   capstones: readonly CapstoneDef[];
@@ -14,23 +15,38 @@ export interface CapstoneContent {
   bands: readonly BandDef[];
   candos: readonly CanDoDef[];
   skillNames: ReadonlyMap<string, string>;
+  /** The repertoire registry (titles, years, sources) for the songs a transcribe capstone offers. */
+  repertoire: readonly RepertoireEntry[];
+}
+
+/** The registry with folder files in place of their registry entries. */
+export function mergeCapstones(
+  registry: readonly CapstoneDef[],
+  folders: readonly CapstoneDef[],
+): CapstoneDef[] {
+  const byId = new Map(folders.map((c) => [c.id, c] as const));
+  const out = registry.map((c) => byId.get(c.id) ?? c);
+  for (const c of folders) if (!registry.some((r) => r.id === c.id)) out.push(c);
+  return out;
 }
 
 async function load(): Promise<CapstoneContent> {
-  const [{ registries }, { FLAVOUR_RULES }] = await Promise.all([
+  const [{ registries }, { FLAVOUR_RULES }, folders] = await Promise.all([
     import("@content/index.ts"),
     import("@content/flavours.ts"),
+    import("./capstone-files.ts").then((m) => m.folderCapstones()),
   ]);
   const shipping = (Object.keys(FLAVOUR_RULES) as FlavourId[]).filter(
     (id) => FLAVOUR_RULES[id].ships === "W2",
   );
   return {
-    capstones: registries.capstones,
+    capstones: mergeCapstones(registries.capstones, folders),
     flavours: registries.flavours,
     shipping,
     bands: registries.bands,
     candos: registries.candos,
     skillNames: new Map(registries.skills.map((s) => [String(s.id), s.name] as const)),
+    repertoire: registries.repertoire,
   };
 }
 

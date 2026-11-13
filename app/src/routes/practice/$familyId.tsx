@@ -10,6 +10,7 @@ import { useId, useState } from "react";
 import { DrillRunner } from "../../drills/DrillRunner.tsx";
 import { inflightKey, loadInflight } from "../../drills/inflight.ts";
 import {
+  categoryLabel,
   familyAccuracy,
   familyStatus,
   isResting,
@@ -243,7 +244,7 @@ function Setup({
             />
           </div>
           <p id={`${id}-cats`} className="text-sm text-text-2">
-            Level {level}: {cats.map(optionLabel).join(", ")}
+            Level {level}: {cats.map(categoryLabel).join(", ")}
             {maxLevel < def.levels.length && (
               <span className="block text-text-3">Higher levels open with later lessons.</span>
             )}

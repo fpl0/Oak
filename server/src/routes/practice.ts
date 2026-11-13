@@ -28,18 +28,25 @@ export function progressReport(d: AppDeps): ProgressReport {
       doneAt.set(a.cpId, a.finishedAt);
   for (const c of d.repos.capstones.all()) {
     if (c.releasedAt !== null) doneAt.set(c.capstoneId, c.releasedAt);
-    for (const sid of c.sessions) if (!doneAt.has(sid)) doneAt.set(sid, c.updatedAt);
+    for (const sid of c.sessions)
+      if (!doneAt.has(sid)) doneAt.set(sid, d.repos.capstoneSessions.get(sid)?.completedAt ?? c.updatedAt);
   }
   for (const g of d.repos.gym.list()) doneAt.set(g.gymId, g.at);
   const canDo = d.repos.cando.current();
   const canDoAt = new Map(
     canDo.map((c) => [c.candoId as string, d.repos.cando.history(c.candoId)[0]?.at ?? c.at]),
   );
-  // A graded transcription-ladder pass (gym, X1, X2, CF-T): a finished generated transcription, at its level.
+  // A graded transcription-ladder pass (gym, X1, X2, CF-T): Wave 4 counts only a graded pass (≥ 0.85, not revealed,
+  // every L3 stage; `TranscriptionSchema.gradedPass`), never a merely finished project. A released transcribe
+  // capstone is a pass at its level (X1: L5, X2: L6, CF-T: L8, contracts §2.9).
   const ladderPasses = d.repos.transcriptions
     .list()
-    .filter((t) => t.sourceKind === "generated" && t.status === "done" && t.ladderLevel !== null)
+    .filter((t) => t.sourceKind === "generated" && t.gradedPass === true && t.ladderLevel !== null)
     .map((t) => ({ level: t.ladderLevel as number, at: t.updatedAt }));
+  const CAPSTONE_LADDER: Record<string, number> = { X1: 5, X2: 6, "CF-T": 8 };
+  for (const c of d.repos.capstones.all())
+    if (c.releasedAt !== null && CAPSTONE_LADDER[c.capstoneId] !== undefined)
+      ladderPasses.push({ level: CAPSTONE_LADDER[c.capstoneId] as number, at: c.releasedAt });
   const milestones = d.content.source.milestones.map((m) => {
     const anyOf = m.when.anyOf ?? [];
     const at = conditionReachedAt(m.when, doneAt, canDoAt, ladderPasses);
@@ -295,5 +302,17 @@ export function practiceRoutes(mount: Mounter, d: AppDeps): void {
     if (drill === null) throw notFound(`drill session ${params.id}`);
     const { warmupItemId: _w, meanCredit: _m, ...session } = drill;
     return { session, trials: d.repos.srs.trials(params.id) };
+  });
+
+  // Wave 4 (docs/design/wave4.md §5.4): the generated ladder, graded exactly on the server.
+  mount("ladder.get", () => s.ladder.state());
+  mount("ladder.setLevel", ({ body }) => s.ladder.setLevel(body.level));
+  mount("ladder.next", ({ body }) => s.ladder.next(body));
+  // A retried or double-submitted answer with the same key is graded and counted once (wave3.md §5.2).
+  mount("ladder.submit", ({ params, body }) => {
+    const { idempotencyKey, ...rest } = body;
+    return idempotent(d, "ladder.submit", idempotencyKey, { itemId: params.id, body: rest }, () =>
+      s.ladder.submit(params.id, rest),
+    );
   });
 }

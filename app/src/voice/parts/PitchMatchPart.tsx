@@ -21,6 +21,7 @@ import {
   matchWords,
 } from "../logic.ts";
 import { PitchTrace } from "../PitchTrace.tsx";
+import { RecheckHint } from "../panels.tsx";
 import { reportTake } from "../recheck.ts";
 import { closeInput, openInput, playAt, voiceAudio } from "../services.ts";
 import { PartFooter, PartFrame, type PartProps, useSaveRun } from "./common.tsx";
@@ -34,7 +35,7 @@ const MATCH_TOL: SingTolerance = {
   passHitRate: 1,
 };
 
-type Phase = "intro" | "playing" | "listening" | "between" | "done" | "error";
+type Phase = "intro" | "playing" | "listening" | "between" | "done" | "bleed" | "error";
 
 export function PitchMatchPart({ profile, onDone, onSkip }: PartProps) {
   const targets = matchTargets(profile);
@@ -63,31 +64,33 @@ export function PitchMatchPart({ profile, onDone, onSkip }: PartProps) {
 
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-  /** One trial: play, then listen for MATCH_SING_SEC with the mic open, then grade. */
+  /**
+   * One trial: the mic opens, the note plays (a playback-only span: the learner listens), then the learner sings
+   * for MATCH_SING_SEC; graded by the one rule. A mic that heard the note itself (contracts §8.6) makes the trial
+   * `bleed` instead of a pitch: speakers or leaky headphones would otherwise sing back for the learner.
+   */
   const one = async (midi: number): Promise<MatchTrial> => {
     const { oak } = await voiceAudio();
     await oak.unlock();
     frames.current = [];
-    setPhase("playing");
-    playAt(oak, { s: "piano", note: midi, gain: 0.7 }, oak.ctx.currentTime + 0.05, NOTE_SEC);
-    await wait(NOTE_SEC * 1000 + 150);
-    if (!alive.current) return { midi, cents: null };
     const s = await openInput();
     session.current = s;
     const off = s.onFrame((f) => frames.current.push(f));
+    setPhase("playing");
+    const noteAt = oak.ctx.currentTime + 0.05;
+    playAt(oak, { s: "piano", note: midi, gain: 0.7 }, noteAt, NOTE_SEC);
+    await wait(NOTE_SEC * 1000 + 150);
+    if (!alive.current) return { midi, cents: null };
     const from = oak.ctx.currentTime;
+    const window = { midi, on: from + 0.15, off: from + MATCH_SING_SEC - 0.1 };
+    s.singing?.({ on: from, off: from + MATCH_SING_SEC });
     setPhase("listening");
     await wait(MATCH_SING_SEC * 1000);
     off();
     close();
-    const r = gradeSung(
-      frames.current,
-      [{ midi, on: from + 0.15, off: from + MATCH_SING_SEC - 0.1 }],
-      MATCH_TOL,
-      "pitch",
-      learner,
-    );
+    const r = gradeSung(frames.current, [window], MATCH_TOL, "pitch", learner);
     reportTake({ diagnostics: r.diagnostics, frames: frames.current, floorDb: profile.noiseFloorDb });
+    if (r.diagnostics.some((d) => d.id === "sing.bleed")) return { midi, cents: null, bleed: true };
     const note = r.notes[0];
     const cents = note && note.cents !== null && note.coverage >= MATCH_TOL.minCoverage ? note.cents : null;
     return { midi, cents: cents === null ? null : Math.round(cents) };
@@ -104,6 +107,11 @@ export function PitchMatchPart({ profile, onDone, onSkip }: PartProps) {
         if (!alive.current) return;
         got.push(t);
         setTrials([...got]);
+        if (t.bleed) {
+          // Nothing is saved from a run the playback spoke over: the hint offers the fallback.
+          setPhase("bleed");
+          return;
+        }
         if (i < targets.length - 1) {
           setPhase("between");
           await wait(900);
@@ -152,6 +160,7 @@ export function PitchMatchPart({ profile, onDone, onSkip }: PartProps) {
         {phase === "playing" && `Note ${trial + 1} of 3: listen…`}
         {phase === "listening" && `Note ${trial + 1} of 3: now sing it back.`}
         {phase === "between" && "Next note…"}
+        {phase === "bleed" && `Stopped at note ${trial + 1}: the mic heard Oak's note, not you.`}
       </div>
       {trials.length > 0 && (
         <ol className="flex flex-col rounded-card border border-border px-3" data-testid="match-trials">
@@ -163,7 +172,7 @@ export function PitchMatchPart({ profile, onDone, onSkip }: PartProps) {
               <span className="text-text-2">
                 Note {i + 1} · {formatNoteMidi(t.midi)}
               </span>
-              <span className="font-medium tabular-nums">{matchWords(t.cents)}</span>
+              <span className="font-medium tabular-nums">{matchWords(t.cents, t.bleed === true)}</span>
             </li>
           ))}
         </ol>
@@ -173,6 +182,7 @@ export function PitchMatchPart({ profile, onDone, onSkip }: PartProps) {
           <span data-testid="match-verdict">{verdict.body}</span>
         </Callout>
       )}
+      {phase === "bleed" && <RecheckHint />}
       {error && (
         <Callout tone="issue" title="The microphone didn't open">
           {error}

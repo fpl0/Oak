@@ -5,7 +5,7 @@ import type { AlbumTrack, AlbumTrackDetail } from "@oak/api";
 import { useQueries } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { clsx } from "clsx";
-import { Check, ChevronDown, Lock, Pause, Pencil, Play, X } from "lucide-react";
+import { Check, ChevronDown, Download, Lock, Pause, Pencil, Play, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import "./cover.css";
 import { useCapstoneContent } from "../capstone/content.ts";
@@ -16,7 +16,7 @@ import { AlbumCover } from "../ui/AlbumCover.tsx";
 import { Button, buttonClass, IconButton } from "../ui/kit/Button.tsx";
 import { Chip, Page, Skeleton } from "../ui/kit/basics.tsx";
 import { ErrorState } from "../ui/kit/QueryState.tsx";
-import { albumSides, runtime, type Slot } from "./model.ts";
+import { albumSides, audioFileName, runtime, type Slot } from "./model.ts";
 import { useCoverMusic } from "./music.ts";
 import { ALBUM_TITLE_MAX, cleanAlbumTitle, DEFAULT_ALBUM_TITLE, useAlbumTitle } from "./title.ts";
 import { Vinyl } from "./Vinyl.tsx";
@@ -478,6 +478,17 @@ function SlotRow({
           }
           onClick={() => onPlay(isPlaying || !v ? null : { trackId: t.id, version: v.version })}
         />
+        {v?.hasAudio ? (
+          <a
+            href={albumAudioUrl(t.id, v.version)}
+            download={audioFileName(t.title, v.version, v.audioMime)}
+            aria-label="Download the recording"
+            title="Download the recording"
+            className={buttonClass("ghost", "sm")}
+          >
+            <Download aria-hidden className="size-4" />
+          </a>
+        ) : null}
         <Button
           size="sm"
           variant="ghost"

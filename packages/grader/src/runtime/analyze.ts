@@ -218,7 +218,11 @@ function evalDiagnostics(
       // the bare root, which always voices.
       const parts = splitChord(sym);
       const suggest = checkChord(sym).suggest ?? (parts ? parts.root.toUpperCase() : "C");
-      out.push({ id: "code.unknown-chord", severity: "error", params: { sym, suggest } });
+      out.push({
+        id: "code.unknown-chord",
+        severity: "error",
+        params: { sym, why: "isn't a Strudel chord name", suggest },
+      });
     } else out.push({ id: "eval.runtime", severity: "warn", params: { fn: l.tag, detail: l.message } });
   }
   for (const fn of tempoProblems) {

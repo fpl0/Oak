@@ -111,6 +111,14 @@ export const TutorTurnRequestSchema = z.strictObject({
   graderResult: GradeSnapshotSchema.exactOptional(),
   lessonId: z.string().exactOptional(),
   stepId: z.string().exactOptional(),
+  /**
+   * Wave 4 (docs/design/wave4.md §5.6): a capstone review of one album version. With both set, the accepted
+   * `submit_capstone_review` is attached to that version (`album_track_versions.review_json`).
+   */
+  albumTrackId: z.string().exactOptional(),
+  albumVersion: z.number().int().positive().exactOptional(),
+  /** Wave 4: a transcription review of one version of the subject's project (default: its current version). */
+  transcriptionVersion: z.number().int().nonnegative().exactOptional(),
 });
 export type TutorTurnRequest = z.infer<typeof TutorTurnRequestSchema>;
 

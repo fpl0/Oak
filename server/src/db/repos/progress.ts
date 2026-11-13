@@ -327,6 +327,11 @@ export interface CapstoneRow {
   trackId: string | null;
   flavour: string | null;
   lastResult: GradeResult | null;
+  /**
+   * The sketch version `lastResult` was graded on (migration 0005). Left out of a save, the stored value is kept;
+   * `null` for a row checked before the column existed.
+   */
+  checked?: { sketchId: string; version: number } | null;
   startedAt: string | null;
   releasedAt: string | null;
   updatedAt: string;
@@ -343,6 +348,8 @@ export class CapstonesRepo {
       track_id: string | null;
       flavour: string | null;
       last_result_json: string | null;
+      checked_sketch_id: string | null;
+      checked_sketch_version: number | null;
       started_at: string | null;
       released_at: string | null;
       updated_at: string;
@@ -356,6 +363,10 @@ export class CapstonesRepo {
       trackId: r.track_id,
       flavour: r.flavour,
       lastResult: fromJson<GradeResult | null>(r.last_result_json, null),
+      checked:
+        r.checked_sketch_id !== null && r.checked_sketch_version !== null
+          ? { sketchId: r.checked_sketch_id, version: r.checked_sketch_version }
+          : null,
       startedAt: r.started_at,
       releasedAt: r.released_at,
       updatedAt: r.updated_at,
@@ -389,6 +400,14 @@ export class CapstonesRepo {
       c.releasedAt,
       c.updatedAt,
     );
+    if (c.checked !== undefined)
+      run(
+        this.db,
+        "UPDATE capstone_state SET checked_sketch_id = ?, checked_sketch_version = ? WHERE capstone_id = ?",
+        c.checked?.sketchId ?? null,
+        c.checked?.version ?? null,
+        c.capstoneId,
+      );
     return c;
   }
   releasedIds(): Set<string> {

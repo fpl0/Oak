@@ -32,6 +32,20 @@ export interface MicSession {
   readonly sampleRate: number;
   /** Stops the tracks and disconnects the source. The worklet node stays for the next session. */
   close(): void;
+  /**
+   * Wave 4 (contracts §8.6): when the graph listens to Oak's output too (`MicGraphOptions.playback`), every frame
+   * carries `playing` and this is the live bleed check over the whole session: voiced frames on what the output
+   * played, in spans where it played. `null` when the graph does not listen to the output.
+   */
+  bleed?(): import("@oak/pitch").BleedReport | null;
+  /** Called once, the moment the session's bleed check trips. Returns the remover. */
+  onBleed?(cb: (report: import("@oak/pitch").BleedReport) => void): () => void;
+  /**
+   * Marks the spans in which the learner is asked to sing (AudioContext seconds): the live bleed check skips
+   * them, so singing along with the playback is never called bleed. Optional: a host that never plays while
+   * the learner sings need not call it.
+   */
+  singing?(window: { on: number; off: number }): void;
 }
 /**
  * The microphone path. The AudioWorkletNode is created ONCE (at audio unlock or calibration: its

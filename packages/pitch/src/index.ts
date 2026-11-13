@@ -3,10 +3,30 @@
 // @oak/audio feeds it frames (through `@oak/pitch/detector`, which imports nothing else of this package
 // but the maths); the graders run on the main thread or the server.
 
+export {
+  annotatePlayback,
+  BLEED_CENTS,
+  BLEED_MIN_SEC,
+  BLEED_VOICED_CLARITY,
+  type BleedOptions,
+  type BleedReport,
+  BleedWatch,
+  bleedReport,
+  PLAYBACK_CLARITY,
+  PLAYBACK_LAG_SEC,
+  PLAYBACK_MIN_DB,
+  PlaybackHistory,
+  playbackPitch,
+  SINGING_MARGIN_SEC,
+} from "./bleed.ts";
 export { createDetector, MIN_VOLUME_DB, PitchFrameAnalyzer } from "./detector.ts";
 export {
   defaultSlotsPerBar,
   draftFromHum,
+  HUM_MIN_NOTE_SEC,
+  type HumToDraftOptions,
+  type HumToDraftResult,
+  humToDraft,
   SCALE_INTERVALS,
   scaleName,
   stepMidi,
@@ -49,6 +69,14 @@ export {
   rmsOf,
 } from "./math.ts";
 export {
+  isSungEvidence,
+  SUNG_STATS_WINDOW,
+  type SungResolutionRecord,
+  type SungStats,
+  sungAccuracy,
+  sungStatsOf,
+} from "./stats.ts";
+export {
   alignSung,
   calibrateRange,
   DRIFT_MIN_NOTES,
@@ -56,6 +84,7 @@ export {
   estimateRange,
   firstSingPasses,
   fitToRange,
+  type GradeSungOptions,
   gradeSung,
   gradeSungLive,
   LENIENT_CENTS,

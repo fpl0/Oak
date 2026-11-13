@@ -1,5 +1,7 @@
 // The tutor service's public types: what the routes call and what crosses to the browser.
 // Type-only, so the browser client can import the event and view shapes from here.
+
+import type { ReviewTarget } from "./domain.ts";
 import type { TutorErrorKind } from "./errors.ts";
 import type { TutorEvent } from "./events.ts";
 import type { MonthUsage, TutorPorts, TutorSettings } from "./ports.ts";
@@ -15,6 +17,13 @@ export interface AcceptedReview {
   subject: SubjectRef;
   reviewKind: ReviewKind;
   review: ReviewValue;
+  /** Wave 4: the review conversation (`album.attachReview` names it). */
+  conversationId: string;
+  /**
+   * Wave 4: the version the review is about: an album version (store it on `album_track_versions.review_json`)
+   * or a transcription version. `null`: the subject's current piece, as in Wave 3.
+   */
+  target: ReviewTarget | null;
 }
 
 export interface TutorLogEntry {

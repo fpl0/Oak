@@ -300,7 +300,8 @@ test("music tokens: every kind renders as a chip with a definition; bars loop in
   const msg = lastMessage(page);
   for (const kind of ["deg", "rn", "note", "chord", "bars", "tool", "term"])
     await expect(msg.locator(`[data-token="${kind}"]`).first()).toBeVisible();
-  await expect(msg.locator('[data-token="rn"]').nth(2)).toHaveText("V7");
+  // Wave 4: numerals before U06.L02 (a fresh learner) wear the preview badge.
+  await expect(msg.locator('[data-token="rn"]').nth(2)).toHaveText("V7preview");
   await expect(msg.locator('[data-token="note"]')).toHaveText("E4");
   // A term beyond the learner's vocabulary carries the preview badge; hover shows its definition.
   const term = msg.locator('[data-token="term"]');
@@ -388,6 +389,16 @@ test("listening note on a sketch and a capstone review rendered from the schema"
   );
   await expect(review.getByTestId("review-question")).toContainText("?");
   await expect(review.getByTestId("review-liner")).not.toBeEmpty();
+  // "Mark done" on a revision (ux §6.5): a toggle, kept in this browser.
+  const done = review.getByTestId("review-mark-done");
+  await expect(done).toHaveText("Mark done");
+  await done.click();
+  await expect(done).toHaveAttribute("aria-pressed", "true");
+  await expect(done).toHaveText("Done");
+  await expect(review.getByTestId("review-revisions").getByRole("listitem").first()).toHaveAttribute(
+    "data-done",
+    "true",
+  );
   for (const m of SCREENSHOT_MATRIX.slice(0, 2)) {
     await page.evaluate((t) => document.documentElement.setAttribute("data-theme", t), m.theme);
     await panel(page)

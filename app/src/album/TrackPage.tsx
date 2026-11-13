@@ -1,36 +1,46 @@
 // `/album/$trackId?v=` (ux §5.3): the cover (360) and liner notes on the left; the recording, the live code, the
 // version timeline with A/B and the revision path on the right. Each version has its own cover.
 import type { AlbumTrackDetail, AlbumTrackVersion, CapstoneReview, MeterId, SketchDetail } from "@oak/api";
-import { CapstoneReviewSchema } from "@oak/api";
+import { CapstoneReviewSchema, OakApiError } from "@oak/api";
 import { editorId } from "@oak/strudel";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { clsx } from "clsx";
-import { Code2, Mic2, Pencil, Square, Trash2 } from "lucide-react";
+import { Code2, Download, MessageSquareText, Mic2, Pencil, Square, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { recordingSeconds, recordPerformance } from "../capstone/engine.ts";
+import { PIECE_DOES_NOT_RUN } from "../capstone/record.ts";
 import { WorkbenchServicesLoader } from "../capstone/WorkbenchServicesLoader.tsx";
 import { FLAVOUR_LABEL, formatDate, formatDuration } from "../lib/format.ts";
 import { usePageTitle } from "../lib/nav.ts";
 import {
   albumAudioUrl,
+  useAlbumAttachReview,
   useAlbumDeleteTrack,
+  useAlbumPatchVersion,
   useAlbumPutAudio,
   useAlbumTrack,
   useSketch,
+  useTutorReviews,
 } from "../lib/queries.ts";
-import { clearSubject, setSubject } from "../tutor/context.ts";
+import { askReview, clearSubject, openTutor, setSubject, showBars } from "../tutor/context.ts";
+import { useSubjectHarmony } from "../tutor/use-subject-harmony.ts";
 import { AlbumCover } from "../ui/AlbumCover.tsx";
 import { Button, buttonClass } from "../ui/kit/Button.tsx";
 import { Card, Chip, Page, Skeleton } from "../ui/kit/basics.tsx";
 import { Callout } from "../ui/kit/Controls.tsx";
+import { Switch } from "../ui/kit/Field.tsx";
 import { ErrorState } from "../ui/kit/QueryState.tsx";
 import { toast } from "../ui/kit/Toast.tsx";
+import type { WorkbenchModel } from "../workbench/model.ts";
 import { useWorkbenchServices } from "../workbench/services.tsx";
 import { Workbench } from "../workbench/Workbench.tsx";
 import "../workbench/index.ts";
 import { sideLabel } from "../capstone/Ceremony.tsx";
+import { LINER_MAX_WORDS, wordCount } from "../capstone/liner.ts";
+import { ReviewCard } from "../capstone/ReviewCard.tsx";
+import { useTryRevision } from "../capstone/revision.ts";
 import { LinerNotes } from "./AlbumPage.tsx";
-import { changeSummary } from "./model.ts";
+import { audioFileName, changeSummary } from "./model.ts";
 import { useCoverMusic } from "./music.ts";
 
 export function TrackPage({ trackId, v }: { trackId: string; v: number | undefined }) {
@@ -76,12 +86,44 @@ function Track({ t, v }: { t: AlbumTrackDetail; v: number | undefined }) {
     t.flavour,
   );
   const review = parseReview(version?.review);
+  const [codeOpen, setCodeOpen] = useState(false);
+  const tryRevision = useTryRevision();
+  const thread = { subjectKind: "track" as const, subjectId: t.id };
+  const versionNo = version?.version ?? null;
 
+  // The tutor's subject is this version: a review asked here is about it and is kept with it (contracts §10.6).
   useEffect(() => {
-    const thread = { subjectKind: "track" as const, subjectId: t.id };
-    setSubject({ thread, title: t.title, tutorOpen: true, ...(code ? { code } : {}) });
+    setSubject({
+      thread,
+      title: t.title,
+      tutorOpen: true,
+      ...(code ? { code } : {}),
+      ...(versionNo !== null ? { albumTrackId: t.id, albumVersion: versionNo } : {}),
+    });
     return () => clearSubject(thread);
-  }, [t.id, t.title, code]);
+  }, [t.id, t.title, code, versionNo]);
+  const onModel = useSubjectHarmony(thread);
+
+  // A bar link opens the code (roll and staff) and lights those bars there once the Workbench has read the piece.
+  const pendingBars = useRef<[number, number] | null>(null);
+  const modelReady = useRef(false);
+  const onBars = (from: number, to: number) => {
+    if (codeOpen && modelReady.current) {
+      showBars(thread, from, to);
+      return;
+    }
+    pendingBars.current = [from, to];
+    setCodeOpen(true);
+  };
+  const onLiveModel = (m: Parameters<typeof onModel>[0]) => {
+    onModel(m);
+    modelReady.current = true;
+    const p = pendingBars.current;
+    if (!p) return;
+    pendingBars.current = null;
+    // The roll and the staff draw on the next frame; the highlight then has notes to light.
+    setTimeout(() => showBars(thread, p[0], p[1]), 50);
+  };
 
   if (!version) return null;
   return (
@@ -98,11 +140,26 @@ function Track({ t, v }: { t: AlbumTrackDetail; v: number | undefined }) {
               ))}
             </ul>
           )}
-          <Card className="p-4">
-            <h2 className="mb-2 text-h3">Liner notes</h2>
-            <LinerNotes text={version.linerNotesMd} attribution={version.attribution} />
-          </Card>
-          {review && <ReviewCard review={review} />}
+          <LinerCard track={t} version={version} review={review} />
+          <ReviewPanel
+            track={t}
+            version={version}
+            review={review}
+            code={code}
+            onBars={onBars}
+            tryPending={tryRevision.pending}
+            onTry={(i) => {
+              const rev = review?.revisions[i];
+              if (rev && code)
+                void tryRevision.open({
+                  trackTitle: t.title,
+                  code,
+                  meter:
+                    sketch.data?.versions.find((x) => x.version === version.sketchVersion)?.meter ?? null,
+                  rev,
+                });
+            }}
+          />
         </div>
 
         <div className="flex min-w-0 flex-col gap-6">
@@ -127,22 +184,46 @@ function Track({ t, v }: { t: AlbumTrackDetail; v: number | undefined }) {
               Listen
             </h2>
             {version.hasAudio ? (
-              // biome-ignore lint/a11y/useMediaCaption: an instrumental recording of the learner's own piece.
-              <audio
-                controls
-                preload="metadata"
-                src={albumAudioUrl(t.id, version.version)}
-                className="w-full"
-                data-testid="track-audio"
-              />
+              <>
+                {/* biome-ignore lint/a11y/useMediaCaption: an instrumental recording of the learner's own piece. */}
+                <audio
+                  controls
+                  preload="metadata"
+                  src={albumAudioUrl(t.id, version.version)}
+                  className="w-full"
+                  data-testid="track-audio"
+                />
+                <a
+                  href={albumAudioUrl(t.id, version.version)}
+                  download={audioFileName(t.title, version.version, version.audioMime)}
+                  className={buttonClass("ghost", "sm", "self-start")}
+                  data-testid="download-audio"
+                >
+                  <Download aria-hidden className="size-4" /> Download the recording
+                </a>
+              </>
             ) : (
               <p className="text-text-2">
-                No recording of this version yet. Open the code below to play it live and record it.
+                {!pending &&
+                music === null &&
+                code !== null &&
+                !sketch.data?.versions.find((x) => x.version === version?.sketchVersion)?.flags
+                  .reviewBeforeRun
+                  ? "No recording of this version, and its code no longer runs (below)."
+                  : "No recording of this version yet. Open the code below to play it live and record it."}
               </p>
             )}
           </section>
 
-          <CodeSection track={t} version={version} code={code} sketch={sketch.data} />
+          <CodeSection
+            track={t}
+            version={version}
+            code={code}
+            sketch={sketch.data}
+            open={codeOpen}
+            onOpen={() => setCodeOpen(true)}
+            onModel={onLiveModel}
+          />
 
           <Versions track={t} selected={version.version} sketch={sketch.data} />
 
@@ -196,26 +277,242 @@ function parseReview(raw: unknown): CapstoneReview | null {
   return r.success ? r.data : null;
 }
 
-function ReviewCard({ review }: { review: CapstoneReview }) {
-  const bars = (b: [number, number]) => (b[0] === b[1] ? `bar ${b[0]}` : `bars ${b[0]}–${b[1]}`);
+const notBuilt = (e: unknown) => e instanceof OakApiError && e.code === "not_implemented";
+
+/**
+ * The version's liner notes (ux §5.3): written from the music at release, editable here (≤ 60 words is the
+ * guide), and Claude's liner note shown only when the learner chooses it for this version (contracts §10.6).
+ */
+function LinerCard({
+  track,
+  version,
+  review,
+}: {
+  track: AlbumTrackDetail;
+  version: AlbumTrackVersion;
+  review: CapstoneReview | null;
+}) {
+  const patch = useAlbumPatchVersion();
+  const note = review?.linerNote ?? null;
+  const inNotes = note !== null && version.linerNotesMd.includes(note);
+  // A release with Claude's note appends it to the notes; it is shown apart, labelled as Claude's.
+  const own = inNotes && note ? version.linerNotesMd.replace(note, "").trim() : version.linerNotesMd;
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(own);
+  const [include, setInclude] = useState<boolean>(version.includeReviewNote ?? false);
+  useEffect(() => {
+    setText(own);
+    setInclude(version.includeReviewNote ?? false);
+    setEditing(false);
+  }, [version.version, own, version.includeReviewNote]);
+  const words = wordCount(text);
+  const save = async (body: { linerNotesMd?: string; includeReviewNote?: boolean }) => {
+    try {
+      await patch.mutateAsync({ params: { id: track.id, v: String(version.version) }, body });
+      return true;
+    } catch (e) {
+      toast.error(
+        notBuilt(e) ? "Editing liner notes is not built yet" : "Couldn't save the liner notes",
+        notBuilt(e) ? "The notes stay as they were released." : e instanceof Error ? e.message : undefined,
+      );
+      return false;
+    }
+  };
   return (
-    <Card className="p-4 text-sm">
-      <h2 className="text-h3">Claude's review</h2>
-      <p className="mb-2 text-text-3">Claude's comments never affect pass or fail.</p>
-      <ul className="flex flex-col gap-1.5">
-        {review.strengths.map((s) => (
-          <li key={s.text}>
-            <span className="font-mono text-[0.75rem] text-text-3">{bars(s.bars)}</span> {s.text}
-          </li>
-        ))}
-      </ul>
-      {review.revisions.map((r) => (
-        <p key={r.title} className="mt-2">
-          <span className="font-medium">{r.title}</span>{" "}
-          <span className="font-mono text-[0.75rem] text-text-3">{bars(r.bars)}</span> — {r.why}
+    <Card className="p-4">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h2 className="text-h3">Liner notes</h2>
+        {!editing && (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<Pencil aria-hidden className="size-3.5" />}
+            onClick={() => setEditing(true)}
+          >
+            Edit
+          </Button>
+        )}
+      </div>
+      {editing ? (
+        <form
+          className="flex flex-col gap-2"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const body = inNotes && note ? `${text.trim()}\n\n${note}` : text.trim();
+            if (await save({ linerNotesMd: body })) setEditing(false);
+          }}
+        >
+          <label htmlFor="liner-edit" className="sr-only">
+            Liner notes for version {version.version}
+          </label>
+          <textarea
+            id="liner-edit"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={7}
+            maxLength={4000}
+            className="rounded-control border border-border bg-surface p-2 text-sm leading-relaxed"
+            data-testid="liner-edit"
+          />
+          <p
+            className={clsx("text-sm", words > LINER_MAX_WORDS ? "text-accent-2" : "text-text-3")}
+            aria-live="polite"
+          >
+            {words} words
+            {words > LINER_MAX_WORDS ? `; liner notes read best at ${LINER_MAX_WORDS} or fewer` : ""}
+          </p>
+          <div className="flex gap-2">
+            <Button type="submit" size="sm" variant="primary" loading={patch.isPending}>
+              Save notes
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setText(own);
+                setEditing(false);
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <LinerNotes text={own} attribution={version.attribution} />
+      )}
+      {note && (inNotes || include) && (
+        <p className="mt-2 text-text-2" data-testid="claude-liner-note">
+          <span className="text-text-3">Claude's listening note: </span>“{note}”
         </p>
-      ))}
-      <p className="mt-2 italic text-text-2">{review.listeningQuestion}</p>
+      )}
+      {note && !inNotes && (
+        <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3 text-sm">
+          <label htmlFor="liner-claude" className="text-text-2">
+            Show Claude's liner note on this version
+          </label>
+          <Switch
+            id="liner-claude"
+            checked={include}
+            onChange={async (v: boolean) => {
+              setInclude(v);
+              if (!(await save({ includeReviewNote: v }))) setInclude(!v);
+            }}
+          />
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * Claude's review of this version (contracts §10.6), beside the piece: bar links light the roll and the staff,
+ * "Try the revision" opens a copy. A version without one can take the capstone's latest unattached review, or
+ * ask for one.
+ */
+function ReviewPanel({
+  track,
+  version,
+  review,
+  code,
+  onBars,
+  onTry,
+  tryPending,
+}: {
+  track: AlbumTrackDetail;
+  version: AlbumTrackVersion;
+  review: CapstoneReview | null;
+  code: string | null;
+  onBars(from: number, to: number): void;
+  onTry(i: number): void;
+  tryPending: boolean;
+}) {
+  const reviews = useTutorReviews(
+    track.capstoneId && !review ? { subjectKind: "capstone", subjectId: track.capstoneId } : null,
+  );
+  const attach = useAlbumAttachReview();
+  const candidate =
+    (reviews.data?.items ?? []).find(
+      (r) => r.kind === "capstone" && r.track === null && r.at >= version.createdAt,
+    ) ?? null;
+  if (review)
+    return (
+      <Card className="p-4" data-testid="track-review">
+        <h2 className="mb-2 text-h3">Claude's review</h2>
+        <ReviewCard
+          review={review}
+          onBars={onBars}
+          {...(code ? { onTry } : {})}
+          tryPending={tryPending}
+          headingLevel={3}
+          showLinerNote={false}
+        />
+        <p className="mt-2 text-sm text-text-3">
+          “Try the revision” opens a copy in the Studio; this version stays as it is.
+        </p>
+      </Card>
+    );
+  if (!track.capstoneId) return null;
+  return (
+    <Card className="flex flex-col gap-2 p-4 text-sm" data-testid="track-review">
+      <h2 className="text-h3">Claude's review</h2>
+      {candidate && candidate.kind === "capstone" ? (
+        <>
+          <p className="text-text-2">
+            Claude reviewed this piece after version {version.version} was released. Keep that review with
+            this version?
+          </p>
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={attach.isPending}
+            onClick={async () => {
+              try {
+                await attach.mutateAsync({
+                  params: { id: track.id, v: String(version.version) },
+                  body: {
+                    conversationId: candidate.conversationId,
+                    review: candidate.review,
+                    includeReviewNote: version.includeReviewNote ?? false,
+                  },
+                });
+                toast.success(`The review is kept with version ${version.version}`);
+              } catch (e) {
+                toast.error("The review wasn't attached", e instanceof Error ? e.message : undefined);
+              }
+            }}
+            data-testid="attach-review"
+          >
+            Keep it with version {version.version}
+          </Button>
+        </>
+      ) : (
+        <>
+          <p className="text-text-2">
+            No review of this version yet. A review names what works, one revision to try and one question to
+            listen for. It never affects pass or fail.
+          </p>
+          <Button
+            size="sm"
+            icon={<MessageSquareText aria-hidden className="size-4" />}
+            disabled={!code}
+            onClick={() => {
+              if (!code || !track.capstoneId) return;
+              const r = askReview({
+                capstoneId: track.capstoneId,
+                title: track.title,
+                code,
+                albumTrackId: track.id,
+                albumVersion: version.version,
+                released: true,
+              });
+              if (!r.ok) openTutor();
+            }}
+            data-testid="track-request-review"
+          >
+            Ask Claude to review it
+          </Button>
+        </>
+      )}
     </Card>
   );
 }
@@ -225,13 +522,18 @@ function CodeSection({
   version,
   code,
   sketch,
+  open,
+  onOpen,
+  onModel,
 }: {
   track: AlbumTrackDetail;
   version: AlbumTrackVersion;
   code: string | null;
   sketch: SketchDetail | undefined;
+  open: boolean;
+  onOpen(): void;
+  onModel(m: WorkbenchModel): void;
 }) {
-  const [open, setOpen] = useState(false);
   const sv = sketch?.versions.find((s) => s.version === version.sketchVersion);
   const reviewFirst = sv?.flags.reviewBeforeRun === true;
   return (
@@ -241,11 +543,7 @@ function CodeSection({
           The code
         </h2>
         {!open && (
-          <Button
-            icon={<Code2 aria-hidden className="size-4" />}
-            disabled={!code}
-            onClick={() => setOpen(true)}
-          >
+          <Button icon={<Code2 aria-hidden className="size-4" />} disabled={!code} onClick={onOpen}>
             Play it live
           </Button>
         )}
@@ -261,7 +559,13 @@ function CodeSection({
               </pre>
             </Callout>
           ) : (
-            <LiveCode track={track} version={version} code={code} meter={sv.meter ?? "4/4"} />
+            <LiveCode
+              track={track}
+              version={version}
+              code={code}
+              meter={sv.meter ?? "4/4"}
+              onModel={onModel}
+            />
           )}
         </WorkbenchServicesLoader>
       )}
@@ -269,23 +573,32 @@ function CodeSection({
   );
 }
 
+/** A released version whose code no longer evaluates: what stays, and what to do. */
+const BROKEN_VERSION_TEXT =
+  "Its code stops at the error shown below, so it can't be played or recorded here. The cover, the liner notes and any recording stay as they are. To hear it again, use Revise: fix the code and release a new version.";
+
 function LiveCode({
   track,
   version,
   code,
   meter,
+  onModel,
 }: {
   track: AlbumTrackDetail;
   version: AlbumTrackVersion;
   code: string;
   meter: MeterId;
+  onModel(m: WorkbenchModel): void;
 }) {
   const { oak } = useWorkbenchServices();
   const put = useAlbumPutAudio();
-  const { music } = useCoverMusic(
+  const { music, pending } = useCoverMusic(
     { sketchId: version.sketchId, sketchVersion: version.sketchVersion },
     track.flavour,
   );
+  // The piece's length comes from its analysis: a take started before it is known would be cut at 4 bars. Code that
+  // no longer evaluates (a function Oak no longer has) cannot be played or recorded here, only revised.
+  const broken = !pending && music === null;
   const [recording, setRecording] = useState(false);
   const slug = `track-${track.id}-v${version.version}`;
   const bars = music?.bars ?? 4;
@@ -317,7 +630,7 @@ function LiveCode({
   };
   const record = async () => {
     const h = oak.editors.get(editorId(slug));
-    if (!h) return;
+    if (!h || pending || broken) return;
     setRecording(true);
     live.current.recording = true;
     live.current.stopped = false;
@@ -334,6 +647,8 @@ function LiveCode({
     } catch (e) {
       if (live.current.gone) return;
       if (live.current.stopped) toast.info("Recording stopped. Nothing was saved.");
+      else if (e instanceof Error && e.message === PIECE_DOES_NOT_RUN)
+        toast.error("This version doesn't run", BROKEN_VERSION_TEXT);
       else toast.error("The recording didn't work", e instanceof Error ? e.message : undefined);
     } finally {
       live.current.recording = false;
@@ -343,6 +658,13 @@ function LiveCode({
   const expected = music?.bpm ? recordingSeconds(bars, music.bpm / 240) : null;
   return (
     <div className="flex flex-col gap-2">
+      {broken ? (
+        <div data-testid="version-broken">
+          <Callout tone="attention" title="This version doesn't run in Oak today">
+            {BROKEN_VERSION_TEXT}
+          </Callout>
+        </div>
+      ) : null}
       <Workbench
         id={slug}
         code={code}
@@ -355,13 +677,17 @@ function LiveCode({
           loopBars: Math.max(1, Math.min(64, bars)),
         }}
         lint={{ profile: "studio", unlocked: new Set(), allowPreview: true, meter, key: null }}
-        views={["roll"]}
+        views={["roll", "staff"]}
+        onModel={onModel}
+        tutorBars
         toolbar={
           <span className="inline-flex items-center gap-2">
             <Button
               size="sm"
               icon={<Mic2 aria-hidden className="size-4" />}
               loading={recording}
+              disabled={pending || broken}
+              title={pending ? "Reading the piece…" : broken ? "This version's code doesn't run" : undefined}
               onClick={() => void record()}
               className={clsx(!version.hasAudio && "border-accent")}
             >

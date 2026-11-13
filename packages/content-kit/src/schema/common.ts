@@ -164,6 +164,13 @@ export const CADENCE_TYPES = [
   "none",
 ] as const satisfies readonly CadenceType[];
 
+/**
+ * Wave 4. Harmonic function (contracts §4 H02): tonic, predominant, dominant. Used as the option ids of a
+ * function strip (`slot-choice` with `FUNCTION_OPTIONS`) so every lesson and drill names them the same way.
+ */
+export const HARMONIC_FUNCTIONS = ["T", "PD", "D"] as const;
+export type HarmonicFunction = (typeof HARMONIC_FUNCTIONS)[number];
+
 export type Severity = "error" | "warn" | "info" | "praise";
 
 /** Per-exercise override of a catalog template: the text may change, never the code. */

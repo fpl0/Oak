@@ -604,7 +604,115 @@ export const contract = {
     params: p("id"),
     res: D.DrillSessionDetailSchema,
   },
+
+  // --- Wave 4 additions (docs/design/wave4.md §5). Until the server engineer builds a handler, each answers
+  // 501 `not_implemented` (`WAVE4_ENDPOINTS`; routes.test.ts keeps the list of those still pending). ---
+  /** A multi-session capstone's sessions: status, draft, X1's phrase and stage checks. */
+  "capstones.sessions": {
+    method: "GET",
+    path: "/capstones/:id/sessions",
+    params: p("id"),
+    res: D.CapstoneSessionsSchema,
+  },
+  /** Save the draft of a capstone session (the session's Make). */
+  "capstones.saveDraft": {
+    method: "POST",
+    path: "/capstones/:id/drafts",
+    params: p("id"),
+    body: D.CapstoneDraftSaveSchema,
+    res: D.CapstoneSessionsSchema,
+  },
+  /** Record one transcribe-capstone check (an X1 phrase, or a stage of its chords) graded in the browser. */
+  "capstones.recordCheck": {
+    method: "POST",
+    path: "/capstones/:id/checks/:checkId",
+    params: p("id", "checkId"),
+    body: D.CapstoneCheckRecordSchema,
+    res: D.CapstoneSessionsSchema,
+  },
+  /** What a capstone needs to open and what is met (X1: "Two more gym sets open X1"). */
+  "capstones.gate": {
+    method: "GET",
+    path: "/capstones/:id/gate",
+    params: p("id"),
+    res: D.CapstoneGateSchema,
+  },
+  /** Edit a release's liner notes; choose whether the review's liner note shows. */
+  "album.patchVersion": {
+    method: "PATCH",
+    path: "/album/tracks/:id/versions/:v",
+    params: p("id", "v"),
+    body: D.AlbumVersionPatchSchema,
+    res: D.AlbumTrackVersionSchema,
+  },
+  /** Attach a submitted capstone review to a version. */
+  "album.attachReview": {
+    method: "PUT",
+    path: "/album/tracks/:id/versions/:v/review",
+    params: p("id", "v"),
+    body: D.AlbumReviewAttachSchema,
+    res: D.AlbumTrackVersionSchema,
+  },
+  /** Submitted reviews of a subject (capstone or transcription), newest first. */
+  "tutor.reviews": {
+    method: "GET",
+    path: "/tutor/reviews",
+    query: SubjectRefSchema,
+    res: list(D.ReviewRecordSchema),
+  },
+  /** Remember a project's player settings (rate, transposition, fine-tune, loop) and notes. */
+  "transcriptions.putSettings": {
+    method: "PUT",
+    path: "/transcriptions/:id/settings",
+    params: p("id"),
+    body: D.TranscriptionSettingsPatchSchema,
+    res: D.TranscriptionSchema,
+  },
+  /** The ladder: level, realism, history, graded passes, an offered level-up. */
+  "ladder.get": { method: "GET", path: "/ladder", res: D.LadderStateSchema },
+  /** Take an offered level-up or move down a level. */
+  "ladder.setLevel": {
+    method: "PUT",
+    path: "/ladder",
+    body: D.LadderLevelSetSchema,
+    res: D.LadderStateSchema,
+  },
+  /** The next generated item (L1–L4 from a seed), created as a `generated` project. */
+  "ladder.next": { method: "POST", path: "/ladder/items", body: D.LadderNextSchema, res: D.LadderItemSchema },
+  /** Grade a ladder answer exactly on the server; updates realism and graded passes. */
+  "ladder.submit": {
+    method: "POST",
+    path: "/ladder/items/:id/submissions",
+    params: p("id"),
+    body: D.LadderSubmitSchema,
+    res: D.LadderSubmitResultSchema,
+  },
+  /** The gym slot rule's state and the next gym session. */
+  "gym.plan": { method: "GET", path: "/gym", res: D.GymPlanSchema },
+  /** The U05.L07 voice-leading gate that unlocks `voicing()`, `rhodes` and `organ`. */
+  "gates.voicing": { method: "GET", path: "/gates/voicing", res: D.VoicingGateSchema },
 } as const satisfies Record<string, EndpointDef>;
+
+/**
+ * The Wave 4 endpoints of docs/design/wave4.md §5. Each answers a typed 501 until built; `routes.test.ts`
+ * lists the ones still pending (`WAVE4_PENDING`), and the server engineer removes a name there as each lands.
+ */
+export const WAVE4_ENDPOINTS = [
+  "capstones.sessions",
+  "capstones.saveDraft",
+  "capstones.recordCheck",
+  "capstones.gate",
+  "album.patchVersion",
+  "album.attachReview",
+  "tutor.reviews",
+  "transcriptions.putSettings",
+  "ladder.get",
+  "ladder.setLevel",
+  "ladder.next",
+  "ladder.submit",
+  "gym.plan",
+  "gates.voicing",
+] as const satisfies readonly (keyof typeof contract)[];
 
 /**
  * The Wave 3 endpoints of docs/design/wave3.md §5. Each answers a typed 501 until built; `routes.test.ts`

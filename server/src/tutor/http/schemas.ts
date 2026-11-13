@@ -49,8 +49,20 @@ const reviewBody = (...kinds: [(typeof SUBJECT_KINDS)[number], ...(typeof SUBJEC
     thread: z.strictObject({ subjectKind: z.enum(kinds), subjectId: id }),
     userText: z.string().max(MAX_USER_TEXT_CHARS).default(""),
   });
-export const CapstoneReviewBody = reviewBody("capstone", "track");
-export const TranscriptionReviewBody = reviewBody("transcription");
+/** Wave 4: a capstone review may name the album version it is about (both fields, or neither). */
+export const CapstoneReviewBody = reviewBody("capstone", "track")
+  .extend({
+    albumTrackId: id.optional(),
+    albumVersion: z.number().int().positive().optional(),
+  })
+  .refine((b) => (b.albumTrackId === undefined) === (b.albumVersion === undefined), {
+    path: ["albumVersion"],
+    message: "albumTrackId and albumVersion go together",
+  });
+/** Wave 4: a transcription review may name the version it is about (default: the latest). */
+export const TranscriptionReviewBody = reviewBody("transcription").extend({
+  transcriptionVersion: z.number().int().nonnegative().optional(),
+});
 
 export const ThreadParams = z.strictObject({ subjectKind: z.enum(SUBJECT_KINDS), subjectId: id });
 export const ThreadQuery = z.strictObject({

@@ -149,7 +149,7 @@ test("staff writing: the hint carries the placed notes and the key, never the ex
   // Before U03.L02 no label lens is unlocked: the chip says what the learner sees.
   await expect(chips.locator('[data-chip="labels"]')).toHaveText("Labels · none");
   await panel(page).getByRole("button", { name: "What Claude sees" }).click();
-  await expect(panel(page)).toContainText("Never the expected answer.");
+  await expect(panel(page)).toContainText("Never the expected answer or the hidden source.");
 
   const body = nextTurnBody(page);
   await panel(page).getByTestId("quick-actions").getByRole("button", { name: "Hint 1 of 4" }).click();

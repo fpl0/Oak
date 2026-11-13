@@ -395,7 +395,10 @@ describe("honest levels", () => {
   test("where the family is, of how many, and how far the lessons let it go", () => {
     const d = def("fam.deg.fet-major");
     const st = (level: number, maxOpenLevel: number) => ({ level, maxOpenLevel }) as FamilyState;
-    expect(levelLine(d, undefined)).toBe("Level 1 of 7 · up to level 1 for now");
+    // At the highest open level, the line names the lesson that opens the next one.
+    expect(levelLine(d, undefined)).toMatch(
+      /^Level 1 of 7 · (level 2 opens with U\d\d\.L\d\d|up to level 1 for now)$/,
+    );
     expect(levelLine(d, st(2, 3))).toBe("Level 2 of 7 · up to level 3 for now");
     expect(levelLine(d, st(7, 7))).toBe("Level 7 of 7");
   });

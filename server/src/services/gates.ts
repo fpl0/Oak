@@ -59,7 +59,7 @@ export class GatesService {
     const out: string[] = [];
     for (const cp of gate.checkpoints ?? [])
       if (!this.checkpointPassed(cp))
-        out.push(`the ${this.#content.checkpointMeta(cp)?.title ?? cp} checkpoint`);
+        out.push(`the ${checkpointName(this.#content.checkpointMeta(cp)?.title ?? cp)}`);
     for (const l of gate.lessonsCompleted ?? [])
       if (!this.lessonCompleted(l)) out.push(`the lesson “${this.#content.lessonTitle(l)}”`);
     for (const c of gate.capstones ?? [])
@@ -277,17 +277,28 @@ export class GatesService {
       const sk = this.#content.skill(skill);
       if (sk === null || sk.kind !== "production") return false;
       if (sk.category === "voice") return true;
-      const fams = ((def?.recipe.families[skill as SkillId] ?? []) as string[]).map((f) =>
-        this.#content.family(f),
-      );
+      const fams = familiesFor(skill).map((f) => this.#content.family(f));
       return fams.length > 0 && fams.every((f) => f?.mic === true);
     };
     const skip = (skill: string) => opts.quiet && needsMic(skill);
     type Draft = Omit<CheckpointItemSpec, "idx">;
     const drafts: Draft[] = [];
     let n = 0;
+    // The recipe's families for a skill that exist in the catalog (a recipe may name a planned family). A checkpoint
+    // with no definition yet (its items are still being written) draws on the catalog's own families of each skill,
+    // so an attempt never ends up without the gating items that decide it.
+    const familiesFor = (skill: string): string[] => {
+      const listed = ((def?.recipe.families[skill as SkillId] ?? []) as string[]).filter(
+        (f) => this.#content.family(f) !== null,
+      );
+      if (def !== null) return listed;
+      return this.#content
+        .familiesOfSkill(skill)
+        .filter((f) => !f.id.startsWith("fam.mix."))
+        .map((f) => f.id as string);
+    };
     const familyItem = (skill: string, debt: boolean): Draft | null => {
-      const fams = (def?.recipe.families[skill as SkillId] ?? []) as string[];
+      const fams = familiesFor(skill);
       const familyId = fams[n % Math.max(1, fams.length)];
       n += 1;
       if (familyId === undefined) return null;
@@ -460,4 +471,9 @@ export function interleave<T extends { skillId: string }>(items: readonly T[], s
 function joinWords(parts: readonly string[]): string {
   if (parts.length <= 1) return parts[0] ?? "";
   return `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+}
+
+/** "the U07 checkpoint" from a checkpoint title: "Melody checkpoint" stays as it is, "Melody" gains the word. */
+export function checkpointName(title: string): string {
+  return /checkpoint/i.test(title) ? title : `${title} checkpoint`;
 }

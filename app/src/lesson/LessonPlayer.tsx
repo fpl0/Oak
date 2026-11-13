@@ -31,6 +31,7 @@ import { useContent } from "../lib/content.ts";
 import type { ContentBundle } from "../lib/content-model.ts";
 import { applyToEditor } from "../lib/editors.ts";
 import { usePageTitle } from "../lib/nav.ts";
+import { initialPanelsOf } from "../lib/panels.ts";
 import { useCourseProgress, useHealth, useProfile, useUnlocks, useVoiceState } from "../lib/queries.ts";
 import { ActivityClock, logStep } from "../lib/telemetry.ts";
 import { currentSessionId, reportBlockDone, useSession } from "../session/store.ts";
@@ -53,11 +54,13 @@ import { useVoiceSync } from "../voice/sync.ts";
 import { ServicesGate } from "../workbench/ServicesGate.tsx";
 import "../workbench/workbench.css";
 import { lessonWidgetFor } from "./answers.tsx";
-import { bandSetupOf } from "./band.ts";
+import { bandMutesOf, bandSetupOf } from "./band.ts";
 import { type LoadedLesson, useLessonContent } from "./content.ts";
 import { FeatureMoment, useFeatureSwitch } from "./feature-moment.tsx";
 import { renderer as feedbackRenderer } from "./feedback.ts";
 import { InlineMd, type StepHost, StepHostContext, StepLayout, useStepHost } from "./frame.tsx";
+import { continueNote, gatedIds, gateNeedsFreshTry, withoutGated } from "./gate.ts";
+import { CONTENT_GATE, gateBoxFor, lessonHasGate, useGateState } from "./gate-ui.tsx";
 import {
   type GradeEnv,
   gradedLint,
@@ -67,11 +70,13 @@ import {
   stimulusTrial,
 } from "./grading.ts";
 import { devSingTargets, lessonTakes, starterOf } from "./inputs.tsx";
-import { type LessonDeps, latestCode, lessonMachine, progressOf, snapshotOf } from "./machine.ts";
+import { codeOf, type LessonDeps, latestCode, lessonMachine, progressOf, snapshotOf } from "./machine.ts";
 import { lessonMdxComponents, MdxStepProvider } from "./mdx.tsx";
 import {
   canContinue,
   continueLabel,
+  globalExerciseId,
+  initialTabOf,
   ladderOf,
   partsOf,
   railOf,
@@ -275,6 +280,12 @@ function PlayerCore(props: CoreProps) {
   const splitPart = preview ? null : splitPartFor(def, target, lp);
   const states = useStepStates(def, !preview);
   const tutorAvailable = useTutorContext((s) => s.availability) !== "off";
+  // The voicing gate (contracts §3.1 rule 6), for U05.L07 and U05.L08 only.
+  const hasGate = lessonHasGate(def, loaded.gate);
+  const secondChance = def.steps.some((s) => s.gateCheck === true);
+  const gateQ = useGateState(hasGate, preview, loaded.gate ?? null);
+  const [gateOpenHere, setGateOpenHere] = useState(false);
+  const gateOpen = gateQ.data?.passed === true || gateOpenHere;
 
   // --- the step clock (telemetry and attempt activeMs) ------------------------------------------------
   const clock = useRef(new ActivityClock());
@@ -297,7 +308,7 @@ function PlayerCore(props: CoreProps) {
   const ref = useRef({ splitPart, profile, flavour: props.flavour });
   ref.current = { splitPart, profile, flavour: props.flavour };
 
-  const unlocked = new Set<UnlockableId>([
+  const held = new Set<UnlockableId>([
     ...props.serverUnlocked,
     ...unlockedAt(
       courseGraph(),
@@ -305,6 +316,8 @@ function PlayerCore(props: CoreProps) {
       (loaded.context ?? (loaded.sample ? SAMPLE_CONTEXT : def.id)) as never,
     ),
   ]);
+  // Inside U05.L08 the gated tools are usable only once the gate is met (rule 2 does not apply before that).
+  const unlocked = secondChance ? withoutGated(held, gatedIds(bundle?.toolbox ?? []), gateOpen) : held;
   const env: GradeEnv = {
     ownerId: def.id,
     key: def.key,
@@ -340,7 +353,8 @@ function PlayerCore(props: CoreProps) {
           activeMs: () => clock.current.peek(),
           band: (stepId) => {
             const b = bandOf(def.steps.find((s) => s.id === stepId));
-            return b ? { bandId: b.band, flavour: b.flavour } : null;
+            // The parts the step leaves out stay muted in the sketch (Studio plays what the lesson played).
+            return b ? { bandId: b.band, flavour: b.flavour, mutes: bandMutesOf(b) } : null;
           },
           ranOk: (stepId) => actorRef.current?.getSnapshot().context.done[stepId] === true,
           gradeMake: async (code) => {
@@ -398,6 +412,8 @@ function PlayerCore(props: CoreProps) {
   useEffect(() => {
     if (loadedOnce.current) return;
     if (!preview && !states.isSuccess) return;
+    // A lesson that holds the gate waits for it (an error reads as unmet: the server still guards completion).
+    if (hasGate && gateQ.isPending) return;
     loadedOnce.current = true;
     const steps = def.steps.filter((s) => target === 25 || !s.optional);
     const reached = lp?.status === "completed" ? (steps.at(-1)?.id ?? null) : (lp?.currentStep ?? null);
@@ -407,9 +423,27 @@ function PlayerCore(props: CoreProps) {
       resumeStep: props.searchStep ?? lp?.currentStep ?? null,
       splitPart,
       reachedStep: reached,
+      gate: hasGate ? (gateQ.data ?? { rule: loaded.gate ?? CONTENT_GATE, passed: false }) : null,
     });
     for (const st of states.data ?? []) actor.send({ type: "STATE", state: st });
-  }, [preview, states.isSuccess, states.data, actor, def, lp, props.searchStep, splitPart, target]);
+  }, [
+    preview,
+    states.isSuccess,
+    states.data,
+    actor,
+    def,
+    lp,
+    props.searchStep,
+    splitPart,
+    target,
+    hasGate,
+    gateQ.isPending,
+    gateQ.data,
+  ]);
+  // The server's word that the gate is met (a refetch after a pass) reaches the machine.
+  useEffect(() => {
+    if (gateQ.data?.passed) actor.send({ type: "GATE", passed: true });
+  }, [gateQ.data?.passed, actor]);
 
   // Publish the step for the session and the tutor; clear on leave.
   const snap = useSelector(
@@ -463,6 +497,11 @@ function PlayerCore(props: CoreProps) {
   }, [actor, def.id]);
 
   const ctx = useSelector(actor, (s) => s.context);
+  // A gate pass in this visit opens the gated tools at once (the server grants them with the attempt).
+  const gatePassedHere = ctx.gate?.passed === true;
+  useEffect(() => {
+    if (gatePassedHere) setGateOpenHere(true);
+  }, [gatePassedHere]);
   const status = useSelector(actor, (s) =>
     s.matches("error")
       ? "error"
@@ -661,14 +700,22 @@ function PlayerCore(props: CoreProps) {
     const staffLabels = staffLabelsOf(s, def.id);
     return {
       ...(wide ? { variant: "compact" as const } : {}),
+      // A step in its own key or meter (a 3/4 tune in a 4/4 lesson) is read, labelled and linted in it, as
+      // it is graded (grading.ts) and as content CI lints it.
       lessonCtx: {
-        key: def.key,
-        meter: def.meter,
+        key: ex?.key ?? def.key,
+        meter: ex?.meter ?? def.meter,
         defaultBpm: def.bpm,
         loopBars: s.ui.loopBars ?? s.example?.bars ?? refBars ?? makeBars ?? (band ? 2 : 1),
       },
-      lint: gradedLint(env),
+      lint: gradedLint({ ...env, key: ex?.key ?? env.key, meter: ex?.meter ?? env.meter }),
+      ...((ex?.pickup ?? def.pickup) ? { pickup: ex?.pickup ?? def.pickup } : {}),
       views: viewsOf(s),
+      // A step that asks for the roll and the bass clef or grand staff wants both read ("watch the bass on the
+      // lower staff"): when the Workbench has to tab them (the height rule), it opens on Both, not the roll alone.
+      ...(initialTabOf(s) === "both" ? { initialTab: "both" as const } : {}),
+      // Wave 4: a step may open Workbench panels (the key panel, the chord band …); its choice wins.
+      ...(initialPanelsOf(s.ui) ? { initialPanels: initialPanelsOf(s.ui) ?? {} } : {}),
       unit: def.id,
       band,
       roll: {
@@ -738,6 +785,8 @@ function PlayerCore(props: CoreProps) {
   const generator = trials.some((t) => t !== null);
   const trial = ex && ex.kind !== "all" ? (trials[0] ?? null) : null;
   const rung = st?.rung ?? 0;
+  // A revealed voicing-gate check never opens the gate: offer a fresh series (rung 0) to write it again.
+  const freshGateTry = gateNeedsFreshTry(ctx.gate, ex ? globalExerciseId(def.id, ex) : null, rung);
   const passed = st?.passed === true || p.result?.status === "pass";
   const review = ctx.index < ctx.furthest && (passed || p.done);
   const render = feedbackRenderer(
@@ -771,9 +820,17 @@ function PlayerCore(props: CoreProps) {
       return null;
     }
   };
-  const gradeQuiet = async (response: AttemptResponse) => {
-    if (!ex) return null;
-    return gradeStep(browserGrader, env, ex, response, {
+  const gradeQuiet = async (response: AttemptResponse, override?: Exercise) => {
+    const target = override ?? ex;
+    if (!target) return null;
+    // A stage checked on its own (a staged chord dictation) is what the learner has answered so far: the tutor
+    // reads it as such. A Make's live check (code) is not an answer.
+    if ("answer" in response)
+      publishStepAnswer(
+        step.id,
+        tutorAnswerOf(target, response, { key: env.key, tolCents: profile.singTolCents }),
+      );
+    return gradeStep(browserGrader, env, target, response, {
       params,
       attemptNo: 1,
       rung,
@@ -840,8 +897,17 @@ function PlayerCore(props: CoreProps) {
   };
 
   const testOutTarget = ctx.steps.find((s) => s.testOut?.skips.includes(step.id));
+  const gateBox = gateBoxFor({
+    ownerId: def.id,
+    step,
+    exercise: ex,
+    gate: ctx.gate,
+    result: p.result,
+    code: codeOf(ctx, step),
+  });
   const banner: ReactNode = (
     <>
+      {gateBox}
       {moment.length > 0 && (
         <FeatureMoment
           tools={moment}
@@ -979,10 +1045,12 @@ function PlayerCore(props: CoreProps) {
             : null
         }
         onNewSeries={
-          (Object.keys(params).length > 0 || generator) && !checking
+          (Object.keys(params).length > 0 || generator || freshGateTry) && !checking
             ? () => actor.send({ type: "NEW_SERIES" })
             : null
         }
+        {...(freshGateTry ? { newSeriesLabel: "Start a fresh try" } : {})}
+        continueNote={continueNote(step, ctx.gate)}
         onWrapUp={step.kind !== "make" && !preview ? () => actor.send({ type: "WRAP_UP" }) : null}
         onDismissNotice={() => actor.send({ type: "DISMISS_NOTICE" })}
       />

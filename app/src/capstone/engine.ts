@@ -23,6 +23,7 @@ import { anchorsOf, type BarAnchor } from "./anchors.ts";
 export { isSilentTake, recordPerformance, SILENT_PEAK, SILENT_TAKE } from "./record.ts";
 
 import { hasPitches, MAX_CAPSTONE_BARS, pieceAnalysis, pieceBars, truncate } from "./piece.ts";
+import { audioErrorText } from "./release-text.ts";
 
 export interface CheckOutcome {
   code: string;
@@ -94,15 +95,54 @@ export async function checkPiece(
   );
   const analysis = n ? pieceAnalysis(n, { code, meter: def.meter, key, bars }) : null;
   const unmet = new Set((result.rubric ?? []).filter((r) => !r.ok).map((r) => r.ruleId));
+  const details: Record<string, string | null> = {};
+  for (const r of result.rubric ?? [])
+    details[r.ruleId] = typeof r.diag?.params.detail === "string" ? r.diag.params.detail : null;
   return {
     code,
     result: analysis ? { ...result, analysis } : result,
     n,
     bars,
     analysis,
-    anchors: anchorsOf(brief.rubric, unmet, n, bars),
+    anchors: anchorsOf(brief.rubric, unmet, n, bars, details),
     key,
   };
+}
+
+/** The piece without a rubric (a transcription's release): its first pass, length, analysis and key. */
+export async function analyzeDraft(
+  code: string,
+  o: { meter: CapstoneDef["meter"]; key: KeySpec | null; unlocked: ReadonlySet<UnlockableId> },
+  signal?: AbortSignal,
+): Promise<Pick<CheckOutcome, "code" | "n" | "bars" | "analysis" | "key"> & { error: string | null }> {
+  const host = await graderHost();
+  const lint = {
+    profile: "graded" as const,
+    unlocked: o.unlocked,
+    allowPreview: false,
+    meter: o.meter,
+    key: o.key,
+  };
+  const ev = await host.analyze(
+    code,
+    { mode: "capstone", bars: MAX_CAPSTONE_BARS, lint, meter: o.meter },
+    signal,
+  );
+  if (!ev.ok) {
+    return {
+      code,
+      n: null,
+      bars: 1,
+      analysis: null,
+      key: o.key,
+      error: ev.error.message || "The code doesn't run.",
+    };
+  }
+  const full = normalize(ev, { meter: o.meter });
+  const bars = pieceBars(code, full.all);
+  const n = truncate(full, bars);
+  const key = o.key ?? (hasPitches(n) ? (keyEstimate(n.all)[0]?.key ?? null) : null);
+  return { code, n, bars, analysis: pieceAnalysis(n, { code, meter: o.meter, key, bars }), key, error: null };
 }
 
 // --- recording ------------------------------------------------------------------------------------
@@ -204,7 +244,7 @@ export async function releaseTrack(i: ReleaseInput): Promise<ReleaseOutcome> {
         contentType: i.recording.mime.split(";")[0],
       } as never);
     } catch (e) {
-      audioError = e instanceof Error ? e.message : String(e);
+      audioError = audioErrorText(e);
     }
   }
   return { track, version, result, audioError };

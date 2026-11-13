@@ -138,7 +138,8 @@ describe("the Wave 3 dev seeds on the real content (wave3.md §5.5)", () => {
             break;
           case "U04.CP due":
             for (let n = 1; n <= 4; n++) expect(done.has(`U04.L0${n}`)).toBe(true);
-            expect(done.has("U05.L01")).toBe(false);
+            // U05.L01 (written in Wave 4) comes before U04.CP in the default order.
+            expect(done.has("U05.L01")).toBe(written(real, "U05.L01"));
             expect(plan).toMatchObject({ kind: "checkpoint", mapItemId: "U04.CP" });
             break;
           case "after U04.CP": {
@@ -146,7 +147,12 @@ describe("the Wave 3 dev seeds on the real content (wave3.md §5.5)", () => {
             // never a repeat of the last lesson.
             expect(seeded.done.at(-1)).toBe("U04.CP");
             for (let n = 1; n <= 4; n++) expect(done.has(`U04.L0${n}`)).toBe(true);
-            expect(done.has("U05.L01")).toBe(false);
+            expect(done.has("U05.L01")).toBe(written(real, "U05.L01"));
+            // Wave 4 lessons are being written: the next written one, else a review day with its note.
+            if (written(real, "U05.L02")) {
+              expect(plan).toMatchObject({ kind: "lesson", mapItemId: "U05.L02" });
+              break;
+            }
             expect(plan).toMatchObject({ kind: "review", mapItemId: null, main: null });
             expect(plan.note).toBe("The next lessons are still being written. Today: a review, then Studio.");
             expect(plan.alternatives).toContainEqual({ kind: "studio", mapItemId: null, title: "Studio" });
@@ -359,18 +365,27 @@ describe("when the course runs out of authored lessons", () => {
       const ses = await me.startSession(plan);
       await me.completeLesson("U04.L04", ses.id);
       await me.endSession(ses.id);
-      // More practice the same day: U05.L01 is not written and U04.CP is for tomorrow.
       plan = await me.today();
-      expect(plan).toMatchObject({ kind: "review", mapItemId: null, main: null });
-      expect(plan.note).toBe("Interval checkpoint is ready tomorrow. Today: a review, then Studio.");
-      expect(plan.alternatives).toContainEqual({ kind: "studio", mapItemId: null, title: "Studio" });
-      const review = await me.api<{ id: string }>("POST", "/api/session/start", {
-        kind: "review",
-        mapItemId: null,
-        targetMinutes: 20,
-      });
-      for (const item of plan.warmup.items) await me.doItem(review.id, item);
-      await me.endSession(review.id);
+      if (written(course, "U05.L01")) {
+        // Wave 4 wrote U05.L01: the default order puts it before U04.CP (contracts §2.5), a day later.
+        expect(plan).toMatchObject({ kind: "lesson", mapItemId: "U05.L01" });
+        h.clock.advance(DAY);
+        const l = await me.startSession(await me.today());
+        await me.completeLesson("U05.L01", l.id);
+        await me.endSession(l.id);
+      } else {
+        // More practice the same day: U05.L01 is not written and U04.CP is for tomorrow.
+        expect(plan).toMatchObject({ kind: "review", mapItemId: null, main: null });
+        expect(plan.note).toBe("Interval checkpoint is ready tomorrow. Today: a review, then Studio.");
+        expect(plan.alternatives).toContainEqual({ kind: "studio", mapItemId: null, title: "Studio" });
+        const review = await me.api<{ id: string }>("POST", "/api/session/start", {
+          kind: "review",
+          mapItemId: null,
+          targetMinutes: 20,
+        });
+        for (const item of plan.warmup.items) await me.doItem(review.id, item);
+        await me.endSession(review.id);
+      }
 
       h.clock.advance(DAY);
       plan = await me.today();
@@ -381,7 +396,7 @@ describe("when the course runs out of authored lessons", () => {
       ).toBe(true);
       await me.endSession(cpSes.id);
 
-      for (let d = 0; d < 5; d++) {
+      for (let d = 0; d < 5 && !written(course, "U05.L02"); d++) {
         h.clock.advance(DAY);
         plan = await me.today();
         expect(plan).toMatchObject({ kind: "review", mapItemId: null });

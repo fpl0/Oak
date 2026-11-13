@@ -53,6 +53,15 @@ export interface SrsPort {
   recall(cardId: string): { retrievability: number; desiredRetention: number } | null;
   /** Seconds of review due per day for the next 7 days (`/dev/telemetry`). */
   forecast?(): MaybePromise<number[]>;
+  /**
+   * Wave 4: work outside a drill set that reviews a family's card when it is due within 2 days, else moves only its
+   * level staircase (contracts §7.4 "Evidence from other work": a gym set, a graded transcription step).
+   */
+  otherWork?(input: {
+    source: "gym" | "practice" | "lesson";
+    familyId: string;
+    meanCredit: number;
+  }): MaybePromise<{ reviewed: boolean; levelChange: "promoted" | "demoted" | null }>;
 }
 
 export interface SessionPlannerPort {

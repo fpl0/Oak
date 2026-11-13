@@ -1,0 +1,57 @@
+{/* U06.L02 Roman Numerals: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+The loop from Stacking Thirds, now written with the `.add()` you used in the last lesson: one stack, moved onto four roots.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+Keep every number. Change only the scale, from C to G.
+
+<Predict exercise="same-numbers-new-key" />
+</Step>
+
+<Step id="S3">
+Every degree of a major key carries one triad. Run all seven, then home again, and listen to each one's colour.
+
+<Example id="the-seven" views="code,roll" />
+
+<OnPass>Major on 1, 4 and 5; minor on 2, 3 and 6; diminished on 7. The same pattern holds in every major key. So a chord can be named by the degree of its root, written in Roman figures: upper case for major, lower case for minor, a small circle for diminished. I ii iii IV V vi vii°: each one is a **Roman numeral**.</OnPass>
+</Step>
+
+<Step id="S4">
+The seven triads on the staff, each stacked on its root. From here, the numerals can sit under chords wherever you see them: I under C, ii under Dm, vii° under B°.
+
+<Staff example="seven-on-the-page" />
+</Step>
+
+<Step id="S5">
+The numbers in `.add()` count from 0, like every `n`. The numerals count from 1, like the degrees.
+
+<OnPass>I V vi IV. In C that is C, G, Am, F; in G it is G, D, Em, C. The numerals stay the same, because they name each chord by its place in the key.</OnPass>
+</Step>
+
+<Step id="S6">
+Numerals travel between keys. To play one, find its degree in the key you are in, then stack the triad.
+
+<OnPass>Am: degree 2 of G is A, and ii is minor. The same ii in C is Dm.</OnPass>
+</Step>
+
+<Step id="S7">
+Now the other way: from numerals on paper to numbers in code.
+
+<Editor exercise="numerals-into-code" />
+
+<OnPass>I vi ii V in G: G, Em, Am, D. Each number in `.add()` is the numeral's degree minus one.</OnPass>
+</Step>
+
+<Step id="S8">
+This loop starts on the minor chord, so it begins in a darker place than I V vi IV. The drums keep time; the key and the chords are yours.
+
+<Make exercise="loop-from-numerals" />
+
+<CanDo id="cd.read.roman" />
+
+<Recap />
+</Step>

@@ -2,7 +2,7 @@
 // learner's calibration for taps and singing, the music a click question points into, the notes to sing, the
 // take's timing. A host wraps the widget in `<AnswerEnvProvider value={…}>`; every field is optional and a
 // widget that lacks what it needs says so in words instead of showing a dead control.
-import type { Choice, LearnerProfile, MeterSpec, SingMode, SingTolerance } from "@oak/content-kit";
+import type { Choice, KeySpec, LearnerProfile, MeterSpec, SingMode, SingTolerance } from "@oak/content-kit";
 import type { PitchFrame, SungResult } from "@oak/pitch";
 import { createContext, type ReactNode, useContext } from "react";
 import type { WorkbenchModel } from "../workbench/model.ts";
@@ -112,6 +112,35 @@ export interface QuietEvidence {
   at: number;
 }
 
+/**
+ * What the chord widgets need beyond the spec (Wave 4): the step's key (numerals sound and print their symbol in
+ * it; the builder spells in it), the slot grid, playback, and whether the chord builder names what was built.
+ */
+export interface HarmonyEnv {
+  /** The step's key (else the lesson's). Without it the RN palette plays nothing and prints no symbols. */
+  key?: KeySpec;
+  /** RN palette and slot strips: one slot per bar (default) or per half bar. */
+  slotsPerBar?: 1 | 2;
+  /** Default 4. */
+  beatsPerBar?: number;
+  /** Progression playback tempo (default 90). */
+  bpm?: number;
+  /** Default "piano". */
+  sound?: string;
+  /**
+   * The chord builder (staff with `palette.chords`, keyboard in `chord` mode) names the chord and its inversion:
+   * `live` while building (a step that teaches naming), `after` once checked (default), `never`.
+   */
+  nameChords?: "live" | "after" | "never";
+  /** Plays the numerals in the host's own sound (the Band); without it the widget plays a piano voicing. */
+  playProgression?: (rns: readonly string[]) => void;
+  /**
+   * Staged dictation (ux §4.5): the bass degree under each slot, known from the bass stage. The RN palette lights
+   * the numerals whose chord contains the target slot's bass and dims the rest (they stay pickable).
+   */
+  bassDegrees?: readonly string[];
+}
+
 export interface AnswerEnv {
   profile?: LearnerProfile;
   /** Quiet mode for today, or no usable microphone. */
@@ -140,7 +169,21 @@ export interface AnswerEnv {
    * The note-label lenses the learner has on (wave3.md §4.3: the host passes `useLenses().shown`). Widgets only
    * read them: a degree pad shows syllables when the solfège lens is on. Absent: no lens.
    */
-  lenses?: { degrees: boolean; solfege: boolean; noteNames: boolean };
+  lenses?: {
+    degrees: boolean;
+    solfege: boolean;
+    noteNames: boolean;
+    /**
+     * Wave 4 chord lenses (`useLenses().chords.shown`, wave4.md §4.3): the RN palette prints each numeral's
+     * chord symbol in the key ("IV · F") only with `chordSymbols` on. Absent: on.
+     */
+    chordSymbols?: boolean;
+    romanNumerals?: boolean;
+  };
+  /** Wave 4: chords, numerals and slot strips. */
+  harmony?: HarmonyEnv;
+  /** Wave 4: a slot strip (`slot-choice`) can play the music under one slot ("Hear bar 2"). */
+  slots?: { play?: (slot: number) => void };
   /**
    * What Enter does to the answer, as a verb for the key hints: "check" (default), or "save" in a checkpoint,
    * which stores the answer without grading it.

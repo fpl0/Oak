@@ -7,6 +7,7 @@
 //    solution-bearing field cannot leak by default;
 //  - a withheld field is ABSENT, not null, so "no `expected` field below its rung" can be tested;
 //  - the level comes from server state (`disclosureLevel`). It is never model or browser input.
+import { type AnswerForm, answerLeaks, maskAnswers } from "./answer-guard.ts";
 import type { GradeSnapshot, LessonSource, RawIssue, Rung, StepSource, StepState } from "./domain.ts";
 import type { AnswerPolicy } from "./types.ts";
 
@@ -62,7 +63,17 @@ export interface IssueView {
   got?: string | null;
 }
 
-export function redactIssue(issue: RawIssue, level: Rung, index: number): IssueView {
+/**
+ * `forms`: the step's answer forms (answer-guard.ts). On a chord, numeral, voice-leading or dictation step the
+ * first issue's fix and expected value at rung 3 would name the answer itself: they are withheld (absent) when
+ * they do, and catalog sentences mask it.
+ */
+export function redactIssue(
+  issue: RawIssue,
+  level: Rung,
+  index: number,
+  forms: readonly AnswerForm[] = [],
+): IssueView {
   const view: IssueView = {
     n: index + 1,
     severity: issue.severity,
@@ -71,15 +82,28 @@ export function redactIssue(issue: RawIssue, level: Rung, index: number): IssueV
     beat: issue.where.beat,
     code_range: issue.where.code ? [issue.where.code.from, issue.where.code.to] : null,
   };
+  // A degree answer (a dictation answered on a degree pad) is short digits: any fix or expected value with a digit in it may name one.
+  const degreeAnswer = forms.some(
+    (f) =>
+      f.label.startsWith("answer sequence") &&
+      f.tokens.every((t) => /^[b#]?\d$/.test(t)) &&
+      level < f.minLevel,
+  );
+  const names = (t: string | null) =>
+    t !== null && (answerLeaks(t, forms, level).length > 0 || (degreeAnswer && /\d/.test(t)));
   if (level >= MIN_LEVEL.what) {
     view.feedback = issue.feedback;
     view.direction = issue.direction;
-    view.what = issue.what;
+    view.what = forms.length > 0 ? maskAnswers(issue.what, forms, level) : issue.what;
   }
-  if (level >= MIN_LEVEL.concept) view.concept = issue.concept;
+  if (level >= MIN_LEVEL.concept)
+    view.concept =
+      issue.concept !== null && forms.length > 0 ? maskAnswers(issue.concept, forms, level) : issue.concept;
   if (level >= MIN_LEVEL.fixAll || (level >= MIN_LEVEL.fixFirst && index === 0)) {
-    view.fix = issue.fix;
-    view.expected = issue.expected;
+    if (!names(issue.fix) && !names(issue.expected)) {
+      view.fix = issue.fix;
+      view.expected = issue.expected;
+    }
     view.got = issue.got;
   }
   return view;
@@ -105,14 +129,14 @@ function sortedRecord(rec: Record<string, number>): Record<string, number> {
 }
 
 /** `toIssueView(result, rung)` of the contracts, for the tutor's reduced grade. */
-export function redactGrade(grade: GradeSnapshot, level: Rung): GradeView {
+export function redactGrade(grade: GradeSnapshot, level: Rung, forms: readonly AnswerForm[] = []): GradeView {
   const shown = grade.issues.slice(0, MAX_ISSUES);
   return {
     status: grade.status,
     score: grade.score,
     dims: sortedRecord(grade.dims),
     counts: { missing: grade.counts.missing, extra: grade.counts.extra, wrong: grade.counts.wrong },
-    issues: shown.map((issue, i) => redactIssue(issue, level, i)),
+    issues: shown.map((issue, i) => redactIssue(issue, level, i, forms)),
     issues_omitted: grade.issues.length - shown.length,
     warnings: [...grade.warnings],
     ab_target_allowed: level >= MIN_LEVEL.abTarget,
@@ -124,8 +148,13 @@ export function redactGrade(grade: GradeSnapshot, level: Rung): GradeView {
  * `compare_haps`: against an exercise the result is cut to the learner's level; against code
  * (two pieces of the learner's or the tutor's own code) there is no secret, so nothing is cut.
  */
-export function compareView(grade: GradeSnapshot, level: Rung, targetKind: "exercise" | "code"): GradeView {
-  return redactGrade(grade, targetKind === "code" ? 4 : level);
+export function compareView(
+  grade: GradeSnapshot,
+  level: Rung,
+  targetKind: "exercise" | "code",
+  forms: readonly AnswerForm[] = [],
+): GradeView {
+  return targetKind === "code" ? redactGrade(grade, 4) : redactGrade(grade, level, forms);
 }
 
 /** Authored hint texts: nudge at 1, + pointer at 2, + partial at 3, all at 4. */
@@ -147,6 +176,8 @@ export interface LessonContextView {
     id: string;
     kind: string;
     grading: StepSource["grading"];
+    /** Wave 4: the step's own key, else the lesson's. */
+    key: string | null;
     prompt: string;
     starter_code: string | null;
     constraints: string[];
@@ -199,6 +230,7 @@ export function lessonContextView(
     id: step.id,
     kind: step.kind,
     grading: step.grading,
+    key: step.key ?? lesson.key,
     prompt: step.prompt,
     starter_code: step.starterCode,
     constraints: [...step.constraints],

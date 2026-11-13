@@ -14,7 +14,13 @@ export function auditionCode(code: string, bars = 2): void {
     const p = await player;
     p.stop();
     window.clearTimeout(stopTimer);
-    const out = await p.load(code, { bars, cps: 0 });
+    // Linted as Studio lints: an audition plays a learner's voicing (the gate moment) as well as content code, and
+    // the pattern player's default content profile refuses a learner part named `melody:` (review:journey).
+    const out = await p.load(code, {
+      bars,
+      cps: 0,
+      lint: { profile: "studio", unlocked: new Set(), allowPreview: true, meter: "4/4", key: null },
+    });
     if (!out.ok) return;
     await p.play();
     const cps = /setcpm\(\s*([\d.]+)\s*\/\s*([\d.]+)\s*\)/.exec(code);

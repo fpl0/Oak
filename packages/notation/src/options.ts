@@ -1,7 +1,7 @@
 // Public options of a staff render (Wave 3 seam, docs/design/wave3.md §3.1): clef, key signature and the
 // per-note annotations (degree number, solfège syllable, note name) the lenses switch on. Pure: the text of
 // each annotation is computed here from the Score; the ABC emitter and the DOM layer place it.
-import type { KeySpec } from "@oak/content-kit";
+import type { KeySpec, Rat } from "@oak/content-kit";
 import { R } from "@oak/content-kit";
 import {
   type Degree,
@@ -12,7 +12,8 @@ import {
   type SpelledPitch,
   syllableOf,
 } from "@oak/theory";
-import type { NoteItem, Score, StaffKind } from "./types.ts";
+import { toRat } from "./q.ts";
+import type { KeyChange, NoteItem, Score, Staff, StaffKind } from "./types.ts";
 
 /** The clefs a staff can show. `grand` = treble over bass, split by register (NotationInput.splitMidi). */
 export type Clef = Extract<StaffKind, "treble" | "bass" | "grand" | "percussion">;
@@ -68,10 +69,10 @@ export const ANNOTATION_CLASSES = {
 
 const SEP = " ";
 
-function* noteItems(score: Score): Generator<NoteItem> {
+function* noteItems(score: Score): Generator<{ it: NoteItem; staff: Staff }> {
   for (const s of score.staves) {
     if (s.clef === "perc") continue;
-    for (const v of s.voices) for (const b of v.bars) yield* b.items;
+    for (const v of s.voices) for (const b of v.bars) for (const it of b.items) yield { it, staff: s };
   }
 }
 
@@ -100,10 +101,18 @@ export function labelSpelled(p: SpelledPitch, key: KeySpec): { degree: string; s
     syllable: syl === "?" ? l.syllable : syl,
   };
 }
-/** The key signature in force at cycle `bar` (build.ts `keyAtBar`; kept here to avoid an import cycle). */
-function signatureAt(score: Pick<Score, "key" | "keyChanges">, bar: number): KeySpec | null {
-  let key = score.key;
-  for (const c of score.keyChanges ?? []) if (c.bar <= bar) key = c.key;
+/**
+ * The key in force at an onset on a staff: the staff's own plan (`Staff.key`) or the score's, changes inside a bar
+ * from their beat (build.ts `keyAtOnset`; kept here to avoid an import cycle).
+ */
+function signatureAt(score: Score, staff: Staff, onset: Rat): KeySpec | null {
+  const own = staff.key !== undefined;
+  let key = own ? (staff.key ?? null) : score.key;
+  const changes: readonly KeyChange[] = (own ? staff.keyChanges : score.keyChanges) ?? [];
+  for (const c of changes) {
+    const at = R.add([c.bar, 1], R.div(toRat((c.beat ?? 1) - 1), [score.meter.unitsPerBar, 1]));
+    if (R.lte(at, onset)) key = c.key;
+  }
   return key;
 }
 const LETTERS = "CDEFGAB";
@@ -121,13 +130,14 @@ export function noteAnnotations(
 ): NoteAnnotation[] {
   const out: NoteAnnotation[] = [];
   const seen = new Set<number>();
-  for (const it of noteItems(score)) {
+  for (const { it, staff } of noteItems(score)) {
     if (it.n === null || it.kind === "rest" || it.hidden || it.tieFromPrev || seen.has(it.n)) continue;
     if (it.pitches.length === 0) continue;
     seen.add(it.n);
     const a: NoteAnnotation = { n: it.n };
-    // Each note is read in the key in force at its bar (a `keyChanges` score), unless a key is given.
-    const k = key === score.key && score.keyChanges?.length ? signatureAt(score, R.floor(it.onset)) : key;
+    // Each note is read in the key in force where it starts on its staff (`keyChanges`, a staff's own key),
+    // unless a key is given.
+    const k = key === score.key ? signatureAt(score, staff, it.onset) : key;
     if (k && (which.degree || which.solfege)) {
       const labels = it.pitches.map((p) => labelSpelled(p, k));
       if (which.degree) a.degree = labels.map((l) => l.degree).join(SEP);

@@ -4,6 +4,11 @@ import { badRequest } from "../errors.ts";
 import { serveFile } from "../services/audio-store.ts";
 import type { Mounter } from "./define.ts";
 
+/** A partial body without its absent keys (`exactOptionalPropertyTypes`). */
+function stripUndefined<T extends object>(o: T): { [K in keyof T]?: Exclude<T[K], undefined> } {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as never;
+}
+
 function versionParam(v: string): number {
   const n = Number(v);
   if (!Number.isInteger(n) || n < 1) throw badRequest("version must be a positive integer");
@@ -40,7 +45,7 @@ export function libraryRoutes(mount: Mounter, d: AppDeps): void {
   });
   mount("album.getAudio", ({ params }, c) => {
     const a = lib.trackAudio(params.id, versionParam(params.v));
-    return serveFile(a.abs, c.req.raw, { mime: a.mime });
+    return serveFile(a.abs, c.req.raw, { mime: a.mime, media: true });
   });
   mount("album.deleteTrack", ({ params }) => {
     lib.deleteTrack(params.id);
@@ -52,6 +57,7 @@ export function libraryRoutes(mount: Mounter, d: AppDeps): void {
     const a = lib.audio(params.id);
     return serveFile(a.abs, c.req.raw, {
       mime: a.mime,
+      media: true,
       cacheControl: "private, max-age=31536000, immutable",
     });
   });
@@ -60,7 +66,7 @@ export function libraryRoutes(mount: Mounter, d: AppDeps): void {
     return { ok: true as const };
   });
   mount("audio.getPeaks", ({ params }, c) =>
-    serveFile(lib.peaks(params.id), c.req.raw, { mime: "application/octet-stream" }),
+    serveFile(lib.peaks(params.id), c.req.raw, { mime: "application/octet-stream", media: true }),
   );
   mount("audio.delete", ({ params }) => {
     lib.deleteAudio(params.id);
@@ -71,9 +77,30 @@ export function libraryRoutes(mount: Mounter, d: AppDeps): void {
   mount("transcriptions.create", ({ body }) => lib.createTranscription(body));
   mount("transcriptions.get", ({ params }) => lib.transcription(params.id));
   mount("transcriptions.patch", ({ params, body }) => lib.patchTranscription(params.id, body as never));
-  mount("transcriptions.addVersion", ({ params, body }) => lib.addTranscriptionVersion(params.id, body));
+  mount("transcriptions.addVersion", ({ params, body }) =>
+    lib.addTranscriptionVersion(params.id, {
+      code: body.code,
+      result: body.result,
+      ranOk: body.ranOk,
+      ...(body.machineDraft === undefined ? {} : { machineDraft: body.machineDraft }),
+    }),
+  );
   mount("transcriptions.delete", ({ params }) => {
     lib.deleteTranscription(params.id);
     return { ok: true as const };
   });
+
+  // Wave 4 (docs/design/wave4.md §5.2, §5.3): album versions, reviews attached, transcription settings.
+  mount("album.patchVersion", ({ params, body }) =>
+    lib.patchTrackVersion(params.id, versionParam(params.v), {
+      ...(body.linerNotesMd === undefined ? {} : { linerNotesMd: body.linerNotesMd }),
+      ...(body.includeReviewNote === undefined ? {} : { includeReviewNote: body.includeReviewNote }),
+    }),
+  );
+  mount("album.attachReview", ({ params, body }) =>
+    lib.attachTrackReview(params.id, versionParam(params.v), body),
+  );
+  mount("transcriptions.putSettings", ({ params, body }) =>
+    lib.putTranscriptionSettings(params.id, stripUndefined(body)),
+  );
 }

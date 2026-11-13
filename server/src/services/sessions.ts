@@ -5,6 +5,7 @@ import { STREAK } from "@oak/srs";
 import { tx } from "../db/index.ts";
 import { conflict, notFound } from "../errors.ts";
 import { addDays, dayIndex } from "../lib/days.ts";
+import type { CapstoneSessionsService } from "./capstone-sessions.ts";
 import { LearnerTime, newId, type ServiceContext } from "./context.ts";
 import type { CourseService } from "./course.ts";
 import type { GatesService } from "./gates.ts";
@@ -18,6 +19,8 @@ export interface SessionsDeps {
   streak: StreakService;
   course: CourseService;
   voice: VoiceService;
+  /** Wave 4: a capstone session remembers the Oak session it was started in. */
+  capstoneSessions?: CapstoneSessionsService;
   /** Whether the tutor is switched off in Settings (then the Coda never offers a listening note). */
   tutorOff: () => boolean;
 }
@@ -132,6 +135,7 @@ export class SessionsService {
             releasedAt: row?.releasedAt ?? null,
             updatedAt: now,
           });
+          this.d.capstoneSessions?.onSessionStart(id, session.id);
         }
       }
       return session;

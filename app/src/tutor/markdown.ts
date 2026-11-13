@@ -137,11 +137,18 @@ export function parseInline(src: string, depth = 0): Inline[] {
       if (end > 0 && end - i <= 80) {
         const raw = src.slice(i, end + 2);
         // `[[deg:♭3]]` and `[[deg:me]]` are read as `[[deg:b3]]` (music-tokens.ts); the raw text is kept.
-        const parts = parseTutorText(canonicalTokenRaw(raw));
+        const canonical = canonicalTokenRaw(raw);
+        const parts = parseTutorText(canonical);
         const only = parts.length === 1 ? parts[0] : undefined;
         if (only?.type === "token") {
           flush();
           out.push({ t: "token", token: only.token, raw });
+          i = end + 2;
+          continue;
+        }
+        // A token canonicalTokenRaw reads as plain text (a slash chord): its text, without the brackets.
+        if (!canonical.startsWith("[[")) {
+          buf += canonical;
           i = end + 2;
           continue;
         }

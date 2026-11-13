@@ -23,11 +23,21 @@ import { Dialog } from "../ui/kit/Dialog.tsx";
 import { LoadingState } from "../ui/kit/QueryState.tsx";
 import { toast } from "../ui/kit/Toast.tsx";
 import "../workbench/index.ts";
+import type { PanelId } from "../workbench/panels.ts";
 import { ServicesGate } from "../workbench/ServicesGate.tsx";
 import { Workbench } from "../workbench/Workbench.tsx";
 import { FeatureGlimpse } from "./Glimpse.tsx";
 import { glimpseOf } from "./glimpse.ts";
-import { demoKey, demoMeter, KIND_LABEL, sitesOf, siteText, toolSketchBody, unlockText } from "./model.ts";
+import {
+  demoBars,
+  demoKey,
+  demoMeter,
+  KIND_LABEL,
+  sitesOf,
+  siteText,
+  toolSketchBody,
+  unlockText,
+} from "./model.ts";
 import { UnlockMoment } from "./UnlockMoment.tsx";
 import { useToolUsage } from "./usage.ts";
 
@@ -176,8 +186,8 @@ function ToolDetail({ tool, unlockedAt }: { tool: ToolEntry; unlockedAt: string 
   );
 }
 
-/** How a feature's own page shows it at work (Wave 3 features). */
-const FEATURE_DEMOS: Record<string, { panels?: { key?: boolean; circle?: boolean }; hint: string }> = {
+/** How a feature's own page shows it at work (Wave 3 and Wave 4 features). */
+const FEATURE_DEMOS: Record<string, { panels?: Partial<Record<PanelId, boolean>>; hint: string }> = {
   "tb.feature.degree-labels": {
     hint: "Every note carries its degree on the roll and under the staff. D in the Workbench turns them off and on.",
   },
@@ -192,7 +202,46 @@ const FEATURE_DEMOS: Record<string, { panels?: { key?: boolean; circle?: boolean
     panels: { circle: true },
     hint: "Choose a key on the ring to hear this code in it; nothing in the code changes until you press Use. Shift+C opens it anywhere.",
   },
+  "tb.feature.grand-staff": {
+    hint: "The chords sit on the treble staff and the bass track on the bass clef below; middle C lies between the two.",
+  },
+  "tb.feature.rn": {
+    hint: "The band under the roll names each chord and its numeral in C; the staff prints the numerals under the notes. Shift+R turns the numerals off and on, Shift+H the chord names.",
+  },
+  "tb.lens.function": {
+    panels: { function: true },
+    hint: "Home chords are T, chords that lead away are PD, chords that want home are D. Change a chord in the code and press Run to see its colour change. Shift+F turns the bands off and on.",
+  },
+  "tb.lens.range": {
+    panels: { range: true },
+    hint: "The flag marks the highest note, the mark under the roll the lowest; the line above the roll gives the span in half steps. Shift+G turns it off and on.",
+  },
+  "tb.lens.chord-tones": {
+    panels: { "chord-tones": true },
+    hint: "Ringed notes belong to the chord under them; dashed ones do not, tagged P for passing or N for neighbour. Shift+T turns it off and on.",
+  },
+  "tb.feature.leadsheet": {
+    panels: { lead: true },
+    hint: "The melody on one staff with the chord names above it. Save it as SVG from the staff, or Shift+L to switch back to the full staff.",
+  },
 };
+
+/** Code tools that play chords: their example shows the roll with the chord band, not the mini view. */
+const CHORD_TOOLS = new Set([
+  "tb.arp",
+  "tb.chord",
+  "tb.voicing",
+  "tb.anchor",
+  "tb.mode.below",
+  "tb.dict.triads",
+  "tb.add",
+  "tb.mode.root",
+  "tb.struct",
+  "chord.triad",
+  "snd.rhodes",
+  "snd.organ",
+  "snd.pad",
+]);
 
 /** A small Workbench with the tool's two-bar example: editable, played and drawn like any other code. */
 function LiveExample({ tool }: { tool: ToolEntry }) {
@@ -204,6 +253,7 @@ function LiveExample({ tool }: { tool: ToolEntry }) {
   const key = demoKey(tool.catalog.demo) as { tonic: string; mode: "major" } | null;
   // A feature's page shows the feature at work: roll and staff side by side, its panel open, its lens switch.
   const feature = FEATURE_DEMOS[tool.id] ?? null;
+  const chordTool = CHORD_TOOLS.has(tool.id);
 
   const openInStudio = async () => {
     try {
@@ -241,8 +291,10 @@ function LiveExample({ tool }: { tool: ToolEntry }) {
                 initialTab: "both" as const,
                 ...(feature.panels ? { initialPanels: feature.panels } : {}),
               }
-            : { variant: "mini" as const })}
-          lessonCtx={{ key, meter, defaultBpm: 90, loopBars: 2 }}
+            : chordTool
+              ? { variant: "compact" as const, views: ["roll"] as "roll"[] }
+              : { variant: "mini" as const })}
+          lessonCtx={{ key, meter, defaultBpm: 90, loopBars: demoBars(tool.catalog.demo) }}
           lint={{
             profile: "studio",
             unlocked: unlocked as ReadonlySet<UnlockableId>,

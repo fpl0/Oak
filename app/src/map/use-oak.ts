@@ -1,11 +1,11 @@
 // Everything the map, its panel and the thumbnail read, joined once: content (skill graph, syllabus,
 // families), the learner's skill states, course progress and drill cards. Queries come from the shared
 // `lib/queries.ts`; nothing here writes.
-import type { SkillState } from "@oak/api";
+import type { CourseProgress, SkillState } from "@oak/api";
 import { useContent } from "../lib/content.ts";
 import { lessonTitles } from "../lib/content-model.ts";
 import { useCourseProgress, useFamilies, useSkillMap, useTodayPlan, useVoiceState } from "../lib/queries.ts";
-import { isWritten } from "../session/edge.ts";
+import { mapNextId } from "../session/edge.ts";
 import { buildMapGraph, type MapGraph } from "./graph.ts";
 import { type NextPath, unitProgress, whatsNext } from "./guide.ts";
 import { layoutOak, type MapLayout } from "./layout.ts";
@@ -52,8 +52,7 @@ export function useOak() {
     // moved on to a written one (U04.CP is planned while U05.L01, before it in the order, is being written).
     const orderNext = progress.data?.next ?? null;
     const planned = plan.data?.mapItemId ?? null;
-    const nextId =
-      orderNext !== null && !isWritten(orderNext, authored) && planned !== null ? planned : orderNext;
+    const nextId = mapNextId(orderNext, planned, authored, bundle.syllabus?.defaultOrder);
     const lessonStatus = new Map((progress.data?.lessons ?? []).map((l) => [l.lessonId, l.status as string]));
     model = {
       ...cached,
@@ -63,7 +62,7 @@ export function useOak() {
       ),
       quiet: { on: voice.data?.quiet === true, reason: voice.data?.quietReason ?? null },
       next: whatsNext(
-        nextId === null ? progress.data : { next: nextId },
+        nextId === null ? progress.data : { next: nextId as CourseProgress["next"] },
         bundle.syllabus,
         cached.graph,
         authored,

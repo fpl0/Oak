@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { bandById } from "../../../content/bands/index.ts";
-import { bandSetupOf, checkpointMakeBand } from "./band.ts";
+import { bandMutesOf, bandSetupOf, checkpointMakeBand } from "./band.ts";
 
 const C = { tonic: "C", mode: "major" } as const;
 const jazz = (at: string | null) =>
@@ -25,5 +25,24 @@ describe("the Band a lesson plays (contracts §5.10 stages)", () => {
   test("a checkpoint's Make plays the Band content names for it", () => {
     expect(checkpointMakeBand("U03.CP", null)?.band).toBe("band.phrase-8bar");
     expect(checkpointMakeBand("U99.CP", { steps: [] })).toBeNull();
+  });
+});
+
+describe("the Band a Make's sketch keeps", () => {
+  test("parts the step leaves out are muted in the sketch, so Studio plays what the lesson played", () => {
+    const drumsOnly = bandSetupOf({ band: "band.axis-4bar", tracks: ["drums"] } as never, {
+      flavour: "flavour.pop" as never,
+      key: C,
+      bpm: 96,
+      at: "U06.L06" as never,
+    });
+    expect(drumsOnly && bandMutesOf(drumsOnly)).toEqual(["bass", "chords"]);
+    const whole = bandSetupOf({ band: "band.axis-4bar" } as never, {
+      flavour: "flavour.pop" as never,
+      key: C,
+      bpm: 96,
+      at: "U06.L06" as never,
+    });
+    expect(whole && bandMutesOf(whole)).toEqual([]);
   });
 });

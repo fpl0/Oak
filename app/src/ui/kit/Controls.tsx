@@ -127,10 +127,10 @@ export function Stepper({
 }) {
   const clampTo = (v: number) => Math.min(max, Math.max(min, Math.round(v / step) * step));
   const btn =
-    "inline-flex size-8 items-center justify-center border-border bg-surface text-text-2 hover:bg-surface-2 hover:text-text disabled:opacity-40 disabled:pointer-events-none";
+    "inline-flex size-8 items-center justify-center border-control-border bg-control text-text-2 hover:bg-control-hover hover:text-text disabled:opacity-40 disabled:pointer-events-none";
   return (
     <div className="inline-flex items-center gap-2">
-      <div className="inline-flex items-stretch overflow-hidden rounded-control border border-border">
+      <div className="inline-flex items-stretch overflow-hidden rounded-control border border-control-border">
         <button
           type="button"
           className={clsx(btn, "border-r")}
@@ -155,7 +155,7 @@ export function Stepper({
             const n = Number(e.target.value);
             if (e.target.value !== "" && Number.isFinite(n)) onChange(clampTo(n));
           }}
-          className="w-12 bg-surface text-center tabular-nums text-text [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+          className="w-12 bg-control text-center tabular-nums text-text [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
         />
         <button
           type="button"

@@ -165,4 +165,15 @@ describe("titles of map items", () => {
     expect(titleOf("C0.S2", titles)).toBe("C0 Intro · session 2");
     expect(titleOf("C9.S1", titles)).toBe("C9.S1");
   });
+
+  test("a transcription capstone's session reads the same way (X1.S2, CF-T.S1)", () => {
+    const titles = new Map([
+      ["X1", "X1 Folk Transcription"],
+      ["CF-T", "CF-T Transcribe a Song"],
+    ]);
+    expect(titleOf("X1.S1", titles)).toBe("X1 Folk Transcription");
+    expect(titleOf("X1.S2", titles)).toBe("X1 Folk Transcription · session 2");
+    expect(titleOf("CF-T.S1", titles)).toBe("CF-T Transcribe a Song");
+    expect(titleOf("GYM.01", titles)).toBe("GYM.01");
+  });
 });

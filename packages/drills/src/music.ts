@@ -4,6 +4,7 @@
 import type { ChordQuality, Degree, KeySpec } from "@oak/content-kit";
 import {
   CHORD_TONES,
+  chordPcs,
   degreeSemis,
   MODE_STEPS,
   mod,
@@ -189,6 +190,40 @@ export function voiceProgression(
     const chosen = best as Voiced;
     const upper = chosen.midis.slice(1);
     center = upper.reduce((s, m) => s + m, 0) / upper.length;
+    return chosen;
+  });
+}
+
+/**
+ * Close triads (three notes, no doubling, no bass) led smoothly: each chord takes the inversion and octave
+ * that moves its voices least from the last chord while staying near `center` (MIDI), so a loop sounds like
+ * a pianist's left hand, not a block of root positions jumping around.
+ */
+export function closeVoices(chords: readonly RnChord[], key: KeySpec, center: number): Voiced[] {
+  let prev: number[] | null = null;
+  return chords.map((c) => {
+    const rootPc = rnRootPc(c, key);
+    const pcs = chordPcs(rootPc, c.quality).slice(0, 3);
+    let best: Voiced | null = null;
+    let bestCost = Number.POSITIVE_INFINITY;
+    for (let inversion = 0; inversion < 3; inversion++)
+      for (let low = center - 9; low <= center + 2; low++) {
+        if (mod(low, 12) !== pcs[inversion]) continue;
+        const midis = [low];
+        for (let k = 1; k < 3; k++)
+          midis.push(above(pcs[(inversion + k) % 3] as number, (midis[k - 1] as number) + 1));
+        const mean = midis.reduce((a, b) => a + b, 0) / 3;
+        const move = prev
+          ? midis.reduce((sum, m, i) => sum + Math.abs(m - ((prev as number[])[i] ?? m)), 0)
+          : 0;
+        const cost = move + 0.75 * Math.abs(mean - center);
+        if (cost < bestCost) {
+          bestCost = cost;
+          best = { midis, rootPc, quality: c.quality, inversion };
+        }
+      }
+    const chosen = best as Voiced;
+    prev = chosen.midis;
     return chosen;
   });
 }

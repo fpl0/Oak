@@ -21,6 +21,7 @@ import {
 } from "@oak/api";
 import { type KeySpec, keyOf } from "@oak/theory";
 import { create } from "zustand";
+import type { ChordAt } from "./harmony-chips.ts";
 
 /** One context chip: exactly what the next turn will carry (contracts §10.2, ux §6.2). */
 export interface ContextChip {
@@ -76,7 +77,43 @@ export type TutorAnswer =
       quiet?: boolean;
     }
   | { kind: "by-ear"; code: string; rate?: number }
-  | { kind: "text"; prompt?: string; value: string };
+  | { kind: "text"; prompt?: string; value: string }
+  // --- Wave 4 ---
+  /** Chords the learner named, built or picked (quality pad, chord symbols, a staff of chords), bar by bar. */
+  | { kind: "chords"; chords: { bar?: number; symbol: string }[]; key?: KeySpec | null; prompt?: string }
+  /** Numerals the learner placed (rn palette), bar by bar, and the key they are read in. */
+  | { kind: "numerals"; numerals: { bar?: number; rn: string }[]; key?: KeySpec | null; prompt?: string }
+  /** A strip of per-slot choices (function per chord, cadence per phrase, chord tone or not), as labels. */
+  | { kind: "slots"; prompt?: string; slots: { label: string; value: string | null }[] }
+  /**
+   * Chord dictation stage by stage (bass first): what the learner answered at each stage so far. `stage` is the
+   * one being worked on.
+   */
+  | {
+      kind: "stages";
+      stage: "bass" | "quality" | "rn";
+      answers: { stage: "bass" | "quality" | "rn"; values: string[]; passed?: boolean }[];
+    }
+  /** A hand voicing (U05.L07–L08): the code and, when known, the notes of each chord as voiced. */
+  | { kind: "voicing"; code: string; chords?: string[][] }
+  /**
+   * A transcription: the learner's code and Oak's per-bar comparison. Only the learner's side and the verdict per
+   * bar: the hidden source is never part of this type, so it cannot be sent before the reveal rung.
+   */
+  | {
+      kind: "transcription";
+      code: string;
+      layer?: string;
+      diff: { bar: number; status: "match" | "differs" | "missing" | "extra" | "unchecked"; note?: string }[];
+      /** The learner has taken the reveal for this piece (then the tutor may discuss the source). */
+      revealed?: boolean;
+    }
+  /** A finished drill set (the tutor opens at its summary): each trial as asked, answered and checked. */
+  | {
+      kind: "drill-set";
+      family: string;
+      trials: { n: number; asked?: string; answered: string; ok: boolean }[];
+    };
 
 /** What the learner is looking at. Set by the surface that owns the screen. */
 export interface TutorSubject {
@@ -112,6 +149,16 @@ export interface TutorSubject {
   labels?: LabelState | null;
   /** A capstone after its first release (revision mode): review `tryCode` may be applied (contracts §10.7). */
   released?: boolean;
+  /**
+   * Wave 4: the chords of the music on screen, bar by bar, from the surface's analysis (`harmonyView` in the
+   * Workbench). Chord and numeral chips light the bars they sound in. Absent: read from the code's `chord("…")`.
+   */
+  harmony?: ChordAt[];
+  /** Wave 4: the album version a capstone or track subject shows (a review requested here is about it). */
+  albumTrackId?: string;
+  albumVersion?: number;
+  /** Wave 4: the transcription project version on screen (a review requested here is about it). */
+  transcriptionVersion?: number;
 }
 
 export interface TutorAsk {
@@ -205,11 +252,15 @@ export function highlightReference(ref: HighlightInput): TutorHighlight {
   return h;
 }
 
-/** Bar numbers (1-based, inclusive) to the half-open cycle span the Workbench uses: bars 3–4 → [2, 4). */
-export function barsToCycles(from: number, to: number): [number, number] {
-  const a = Math.max(1, Math.min(from, to));
+/**
+ * Bar numbers (inclusive) to the half-open cycle span the Workbench uses: bars 3–4 → [2, 4). With a declared
+ * pickup (contracts §6.11) the pickup is bar 0 in cycle 0 and bar N is cycle N: bars 0–1 → [0, 2).
+ */
+export function barsToCycles(from: number, to: number, pickup = false): [number, number] {
+  const first = pickup ? 0 : 1;
+  const a = Math.max(first, Math.min(from, to));
   const b = Math.max(a, Math.max(from, to));
-  return [a - 1, b];
+  return pickup ? [a, b + 1] : [a - 1, b];
 }
 
 interface TutorContextState {
@@ -425,8 +476,27 @@ function answerChip(a: TutorAnswer): string {
       return `Your code by ear · ${lineCount(a.code)} lines`;
     case "text":
       return "Your answer";
+    case "chords":
+      return `Your chords · ${plural(a.chords.length, "chord", "chords")}`;
+    case "numerals":
+      return `Your numerals · ${plural(a.numerals.length, "numeral", "numerals")}`;
+    case "slots":
+      return `Your answers · ${a.slots.filter((s) => s.value !== null).length} of ${a.slots.length}`;
+    case "stages":
+      return `Your ${a.stage === "rn" ? "numerals" : a.stage === "quality" ? "chord qualities" : "bass"} stage`;
+    case "voicing":
+      return `Your voicing · ${lineCount(a.code)} lines`;
+    case "transcription": {
+      const off = a.diff.filter((d) => d.status !== "match" && d.status !== "unchecked").length;
+      return `Your transcription · ${plural(a.diff.length, "bar", "bars")}${off > 0 ? `, ${off} to recheck` : ""}`;
+    }
+    case "drill-set":
+      return `Your set · ${a.trials.filter((t) => t.ok).length} of ${a.trials.length}`;
   }
 }
+
+const bar = (b: number | undefined) => (b === undefined ? "" : `bar ${b}: `);
+const STAGE_NAME = { bass: "bass notes", quality: "chord qualities", rn: "Roman numerals" } as const;
 
 const signedCents = (c: number) => `${c > 0 ? "+" : c < 0 ? "−" : "±"}${Math.abs(Math.round(c))}¢`;
 
@@ -457,6 +527,50 @@ export function answerText(a: TutorAnswer): string {
       return a.rate && a.rate !== 1 ? `// written by ear, listening at ${a.rate}× speed\n${a.code}` : a.code;
     case "text":
       return a.prompt ? `${a.prompt}\nMy answer: ${a.value}` : `My answer: ${a.value}`;
+    case "chords": {
+      const head = `${a.prompt ? `${a.prompt}\n` : ""}Chords I wrote${a.key ? ` (in ${keyLabel(a.key)})` : ""}:`;
+      return `${head}\n${a.chords.map((c) => `${bar(c.bar)}${c.symbol}`).join("\n") || "(none yet)"}`;
+    }
+    case "numerals": {
+      const head = `${a.prompt ? `${a.prompt}\n` : ""}Numerals I placed${a.key ? ` (in ${keyLabel(a.key)})` : ""}:`;
+      return `${head}\n${a.numerals.map((n) => `${bar(n.bar)}${n.rn}`).join("\n") || "(none yet)"}`;
+    }
+    case "slots":
+      return `${a.prompt ? `${a.prompt}\n` : ""}My answers, slot by slot:\n${a.slots
+        .map((s, i) => `${i + 1}. ${s.label}: ${s.value ?? "(not answered)"}`)
+        .join("\n")}`;
+    case "stages":
+      return [
+        `Chord dictation, bass first. I am on the ${STAGE_NAME[a.stage]}.`,
+        ...a.answers.map(
+          (s) =>
+            `${STAGE_NAME[s.stage]}: ${s.values.join(" ") || "(none yet)"}${s.passed === true ? " (passed)" : ""}`,
+        ),
+      ].join("\n");
+    case "voicing":
+      return a.chords && a.chords.length > 0
+        ? `${a.code}\n// as voiced, chord by chord: ${a.chords.map((c) => c.join(" ")).join(" | ")}`
+        : a.code;
+    case "transcription": {
+      const rows = a.diff.map(
+        (d) =>
+          `bar ${d.bar}: ${d.status === "unchecked" ? "not checked yet" : d.status}${d.note ? ` (${d.note})` : ""}`,
+      );
+      return [
+        a.code,
+        "",
+        `// Oak's check of my transcription${a.layer ? ` (${a.layer})` : ""}, bar by bar:`,
+        ...rows.map((r) => `// ${r}`),
+      ].join("\n");
+    }
+    case "drill-set":
+      return [
+        `The drill set I just finished (${a.family}), trial by trial:`,
+        ...a.trials.map(
+          (t) =>
+            `${t.n}. ${t.asked ? `${t.asked}: ` : ""}I answered ${t.answered}, ${t.ok ? "right" : "not right"}`,
+        ),
+      ].join("\n");
   }
 }
 
@@ -573,6 +687,17 @@ export function buildTurnRequest(
   if (subject.lastResult && !off("result")) req.graderResult = gradeSnapshotOf(subject.lastResult);
   if (subject.lessonId) req.lessonId = subject.lessonId;
   if (subject.stepId) req.stepId = subject.stepId;
+  // Wave 4: a review names the version it is about.
+  if (
+    kind === "review-capstone" &&
+    subject.albumTrackId !== undefined &&
+    subject.albumVersion !== undefined
+  ) {
+    req.albumTrackId = subject.albumTrackId;
+    req.albumVersion = subject.albumVersion;
+  }
+  if (kind === "review-transcription" && subject.transcriptionVersion !== undefined)
+    req.transcriptionVersion = subject.transcriptionVersion;
   return req;
 }
 
@@ -652,13 +777,64 @@ export function askReview(capstone: {
   title: string;
   code: string;
   note?: string;
+  /** Wave 4: review one album version (the accepted review is attached to it). Both or neither. */
+  albumTrackId?: string;
+  albumVersion?: number;
+  /** After the first release (revision mode): the review's try-it code may be applied (contracts §10.7). */
+  released?: boolean;
 }): AskResult {
-  return ask("review-capstone", capstone.note ?? "Please review my draft.", "Request review", {
+  const subject: TutorSubject = {
     thread: { subjectKind: "capstone", subjectId: capstone.capstoneId },
     title: capstone.title,
     tutorOpen: true,
     capstoneId: capstone.capstoneId,
     code: capstone.code,
+    ...(capstone.released ? { released: true } : {}),
+  };
+  if (capstone.albumTrackId !== undefined && capstone.albumVersion !== undefined) {
+    subject.albumTrackId = capstone.albumTrackId;
+    subject.albumVersion = capstone.albumVersion;
+  }
+  return ask("review-capstone", capstone.note ?? "Please review my draft.", "Request review", subject);
+}
+
+/**
+ * "Request review" on a transcription (Wave 4, contracts §10.6): the server sends the code, the checklist and Oak's
+ * analysis; never audio, and the source only once a ladder piece has passed.
+ */
+export function askTranscriptionReview(project: {
+  projectId: string;
+  title: string;
+  code: string;
+  version?: number;
+  note?: string;
+}): AskResult {
+  const subject: TutorSubject = {
+    thread: { subjectKind: "transcription", subjectId: project.projectId },
+    title: project.title,
+    tutorOpen: true,
+    code: project.code,
+  };
+  if (project.version !== undefined) subject.transcriptionVersion = project.version;
+  return ask(
+    "review-transcription",
+    project.note ?? "Please review my transcription.",
+    "Request review",
+    subject,
+  );
+}
+
+/**
+ * After a drill set (the summary screen): the tutor opens again and the subject carries what happened in the
+ * set, now that no trial is in progress (contracts §10.4). Drills call this from their summary.
+ */
+export function debriefDrill(
+  thread: SubjectRef,
+  set: { family: string; trials: { n: number; asked?: string; answered: string; ok: boolean }[] },
+): void {
+  patchSubject(thread, {
+    tutorOpen: true,
+    answer: { kind: "drill-set", family: set.family, trials: set.trials },
   });
 }
 

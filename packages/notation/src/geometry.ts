@@ -209,7 +209,7 @@ export function barFraction(bar: BarGeometry, x: number): number {
 export class NotationNotBuiltError extends Error {
   readonly code = "notation_not_built";
   constructor(what: string) {
-    super(`@oak/notation: ${what} is not built yet (Wave 3, docs/design/wave3.md §3.1)`);
+    super(`@oak/notation: ${what} is not built yet (docs/design/wave4.md §3.3)`);
     this.name = "NotationNotBuiltError";
   }
 }

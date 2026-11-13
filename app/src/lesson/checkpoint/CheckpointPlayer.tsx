@@ -36,6 +36,7 @@ import { callApi } from "../../lib/api.ts";
 import { useContent } from "../../lib/content.ts";
 import { formatDate, pct } from "../../lib/format.ts";
 import { usePageTitle } from "../../lib/nav.ts";
+import { initialPanelsOf } from "../../lib/panels.ts";
 import { useCourseProgress, useProfile, useUnlocks, useVoiceState } from "../../lib/queries.ts";
 import { currentSessionId, reportBlockDone, useSession } from "../../session/store.ts";
 import { askChat, clearSubject, setSubject } from "../../tutor/context.ts";
@@ -49,7 +50,7 @@ import { useFocusHeader, useFocusHeaderContent } from "../../ui/shell/focus-head
 import { ServicesGate } from "../../workbench/ServicesGate.tsx";
 import "../../workbench/workbench.css";
 import { promptOf } from "../../drills/copy.ts";
-import { bandSetupOf, checkpointMakeBand } from "../band.ts";
+import { bandMutesOf, bandSetupOf, checkpointMakeBand } from "../band.ts";
 import { useCheckpointDef, useLessonContent } from "../content.ts";
 import { renderer as feedbackRenderer } from "../feedback.ts";
 import { type StepHost, StepHostContext } from "../frame.tsx";
@@ -362,6 +363,11 @@ function buildItems(
       if (ex) {
         // A staff item (a key signature to write, notes to place) shows the staff; a code item the roll.
         const staffy = ex.kind === "staff-write" || ex.kind === "staff-read";
+        // The staff in the item's own clef (a bass-clef or grand-staff answer, U05.L06 on), else treble.
+        const clef =
+          staffy && "answer" in ex && ex.answer && "clef" in ex.answer && ex.answer.clef
+            ? ex.answer.clef
+            : "treble";
         return {
           idx: spec.idx,
           step: {
@@ -370,7 +376,7 @@ function buildItems(
             title: ex.title ?? authoredTitle(ex),
             minutes: 1,
             ui: staffy
-              ? { ...base, panels: { ...base.panels, staff: "treble" as const } }
+              ? { ...base, panels: { ...base.panels, staff: clef } }
               : { ...base, panels: { ...base.panels, roll: true } },
           },
           exercise: ex,
@@ -641,10 +647,12 @@ function Runner(p: {
     bpm: cpBpm,
     at: p.cpId as SessionId,
   });
+  // An item in its own meter (U07.CP's 3/4 tune from the page) is read, linted and graded in it.
+  const itemMeter = item?.exercise.meter ?? "4/4";
   const env: GradeEnv = {
     ownerId: p.cpId,
     key: item ? itemKey(item.exercise, item.trial, cpKey) : cpKey,
-    meter: "4/4",
+    meter: itemMeter,
     bpm: cpBpm,
     unlocked: new Set(p.unlocked),
     allowPreview: false,
@@ -751,7 +759,7 @@ function Runner(p: {
   const done = rec.get(item.idx);
   const ex = item.exercise;
   devItem.current = item;
-  const grade = async (response: AttemptResponse): Promise<GradeResult | null> => {
+  const grade = async (response: AttemptResponse, override?: Exercise): Promise<GradeResult | null> => {
     setChecking(true);
     try {
       if (item.sung && item.trial) {
@@ -765,12 +773,12 @@ function Runner(p: {
         const tr = gradeTrial(
           fam,
           item.trial,
-          familyResponse(response, Date.now() - started.current, 1, at, item.trial.expected),
+          familyResponse(response, Date.now() - started.current, 1, at, item.trial.expected, item.trial),
           p.profile,
         );
         return asResult(ex.id, tr.credit, tr.diagnostics);
       }
-      return await gradeStep(browserGrader, env, ex, response, {
+      return await gradeStep(browserGrader, env, override ?? ex, response, {
         params: {},
         attemptNo: 1,
         rung: 0,
@@ -789,7 +797,7 @@ function Runner(p: {
     title: p.title,
     objective: "",
     key: env.key,
-    meter: "4/4",
+    meter: env.meter,
     bpm: cpBpm,
     introduces: [],
     practises: [],
@@ -819,13 +827,20 @@ function Runner(p: {
     workbench: {
       lessonCtx: {
         key: env.key,
-        meter: "4/4",
+        meter: env.meter,
         defaultBpm: cpBpm,
-        loopBars: item.kind === "make" && ex.kind === "code-make" ? ex.bars[1] : 2,
+        loopBars:
+          item.kind === "make" && ex.kind === "code-make"
+            ? ex.bars[1]
+            : "reference" in ex && ex.reference && "bars" in ex.reference
+              ? (ex.reference.bars as number)
+              : 2,
       },
       lint: gradedLint(env),
       views: viewsOf(item.step),
       unit: p.cpId,
+      // Wave 4: an item may open a Workbench panel (the chord band, the key panel), as a lesson step does.
+      ...(initialPanelsOf(item.step.ui) ? { initialPanels: initialPanelsOf(item.step.ui) ?? {} } : {}),
       band: item.kind === "make" ? makeBand : null,
       roll: { labels: "none", color: "part" },
     },
@@ -834,7 +849,7 @@ function Runner(p: {
     code: code[item.idx] ?? null,
     setCode: (c) => setCode((m) => ({ ...m, [item.idx]: c })),
     grade,
-    gradeQuiet: async (r) => grade(r),
+    gradeQuiet: async (r, over) => grade(r, over),
     preview: () => {},
     setCheck: (fn) => {
       check.current = fn;
@@ -859,12 +874,19 @@ function Runner(p: {
               sessionId: currentSessionId(),
               code: src,
               bpm: cpBpm,
-              meter: "4/4",
+              meter: env.meter,
               key: env.key,
               analysis: null,
               note: null,
               tutorAssisted: false,
-              band: makeBand ? { bandId: makeBand.band, flavour: makeBand.flavour, mutes: [] } : null,
+              // The Band's parts the Make leaves out stay muted in the sketch (Studio plays what was heard).
+              band: makeBand
+                ? {
+                    bandId: makeBand.band,
+                    flavour: makeBand.flavour,
+                    mutes: bandMutesOf(makeBand),
+                  }
+                : null,
               flags: { lockedTools: [], previewTools: [] },
               ranOk: result.status !== "error",
             },

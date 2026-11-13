@@ -4,6 +4,7 @@ import { clsx } from "clsx";
 import { Check, Eye, Loader2, X } from "lucide-react";
 import type { KeyboardEvent, ReactNode } from "react";
 import { Kbd } from "../ui/kit/index.ts";
+import { useSubmitVerb } from "./env.tsx";
 import type { AnswerFeedback, AnswerValue, PartMark } from "./types.ts";
 import { InlineMd } from "./widgets/InlineMd.tsx";
 
@@ -65,8 +66,9 @@ const STATUS_DEFAULT: Record<Exclude<AnswerFeedback["state"], "idle">, string> =
   revealed: "The answer is shown next to yours.",
 };
 
-function statusText(feedback: AnswerFeedback): string {
+function statusText(feedback: AnswerFeedback, verb: "check" | "save" = "check"): string {
   if (feedback.state === "idle") return "";
+  if (feedback.state === "pending" && verb === "save") return "Saving…";
   if (feedback.state === "wrong") {
     if (feedback.message) return feedback.message;
     const bad = feedback.marks?.filter((m) => !m.ok).length ?? 0;
@@ -77,7 +79,7 @@ function statusText(feedback: AnswerFeedback): string {
 
 /** The one-line feedback under a widget: reserved height, polite live region, icon plus words. */
 export function FeedbackLine({ feedback, id }: { feedback: AnswerFeedback; id: string }) {
-  const text = statusText(feedback);
+  const text = statusText(feedback, useSubmitVerb());
   const icon =
     feedback.state === "pending" ? (
       <Loader2 aria-hidden className="size-4 animate-spin reduced:animate-none" />
@@ -193,6 +195,14 @@ export function KeyHint({ keys, children }: { keys: string[]; children: ReactNod
       <span>{children}</span>
     </span>
   );
+}
+
+/**
+ * The Enter hint with the host's verb ("check", or "save" in a checkpoint: `AnswerEnv.submitVerb`). Every widget
+ * names its submit key through this, so a checkpoint never says "check".
+ */
+export function SubmitHint({ keys = ["Enter"] }: { keys?: string[] }) {
+  return <KeyHint keys={keys}>{useSubmitVerb()}</KeyHint>;
 }
 
 /** A digit key (top row or numpad) as a number, ignoring modifiers other than Shift. */

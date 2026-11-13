@@ -12,7 +12,9 @@
 //    segmented into 5–9 alternating notes. Splits now read the mean over ~130 ms and wait for a held pitch.
 import { describe, expect, test } from "bun:test";
 import type { LearnerProfile, SingTolerance } from "@oak/content-kit";
+import { annotatePlayback } from "./bleed.ts";
 import {
+  backingTrack,
   type ClipPart,
   type ClipSpec,
   type CorpusClip,
@@ -21,7 +23,7 @@ import {
   renderClip,
   TRUTH_STEP,
 } from "./corpus.ts";
-import { PROFILE, SING_TOL } from "./fixtures.test-data.ts";
+import { analyze, PROFILE, SING_TOL } from "./fixtures.test-data.ts";
 import { analyzeClip, GATE, gateReport, isWithheld, scoreClip } from "./gate.ts";
 import { detectBleed, gradeSung } from "./sung.ts";
 import { mulberry32 } from "./synth.ts";
@@ -564,11 +566,12 @@ describe("second pass: scoops, drift, breathy and soft voices, short notes, main
       }
   }, 120_000);
 
-  test("a silent learner under leaky headphones: the graders hear the backing's bass as a sung 1; detectBleed catches it", () => {
-    // Known limit, pinned so it is not forgotten: with the per-note octave fold of contracts §8.1, the
-    // backing's C2 leaking at −40 dBFS passes a 'sing 1' step and gives the ladder a ~2¢ note. The protection
-    // is contracts §8.6's bleed detection during sing steps (voiced frames within 30¢ of what is playing for
-    // more than 300 ms), which `detectBleed` implements: the host must call it with what it played.
+  test("a silent learner under leaky headphones: the take used to pass on the backing's bass; it now fails with sing.bleed", () => {
+    // Wave 3 pinned this limit: with the per-note octave fold of contracts §8.1, the backing's C2 leaking at
+    // −40 dBFS passed a 'sing 1' step and gave the ladder a ~2¢ note. Wave 4 closes it (contracts §8.6): the mic
+    // session also listens to Oak's own output (`@oak/audio` `MicGraphOptions.playback`) and marks every mic
+    // frame with what the output had (`PitchFrame.playing`); `gradeSung` judges the playback-only spans (outside
+    // the target windows) and fails a take that heard the playback there for more than 300 ms.
     const bar = 2.4; // the corpus backing: one chord a bar at 100 bpm, bass on beats 1 and 3
     const roots = [36, 33, 29, 31, 36, 33];
     const chords = [
@@ -581,6 +584,11 @@ describe("second pass: scoops, drift, breathy and soft voices, short notes, main
       ...roots.map((midi, i) => ({ midi, on: i * bar, off: (i + 1) * bar })),
       ...chords.flatMap((c, i) => c.map((midi) => ({ midi, on: i * bar, off: (i + 1) * bar }))),
     ];
+    const profile48 = (floor: number): LearnerProfile => ({ ...PROFILE, rangeLow: 48, noiseFloorDb: floor });
+    const target = [{ midi: 60, on: 0.5, off: 1.5 }];
+    // What Oak's output played, through the output's own analyser: the backing before it leaks.
+    const sr = 48000;
+    const output = analyze(backingTrack(6, sr, 1), sr);
     for (const db of [-46, -40]) {
       const clip = renderClip({
         id: `silent-bleed/${db}`,
@@ -592,14 +600,21 @@ describe("second pass: scoops, drift, breathy and soft voices, short notes, main
       });
       const frames = analyzeClip(clip);
       expect({ db, bleed: detectBleed(frames, playing) }).toEqual({ db, bleed: true });
+      const profile = profile48(clip.profile.noiseFloorDb);
       if (db === -40) {
-        // The limit itself: on its own, the grader credits the leak (a fix here must update this line).
-        const r = gradeSung(frames, [{ midi: 60, on: 0.5, off: 1.5 }], SING_TOL, "pitch", {
-          ...PROFILE,
-          rangeLow: 48,
-          noiseFloorDb: clip.profile.noiseFloorDb,
-        });
-        expect(r.pass).toBe(true);
+        // The limit itself, still true of the frames alone: the grader on its own credits the leak.
+        expect(gradeSung(frames, target, SING_TOL, "pitch", profile).pass).toBe(true);
+      }
+      // The host's own list of what it played closes it, and so do frames the mic session annotated from the
+      // output's analyser, with no list at all. (At −46 dBFS the leak is too weak to pass a note anyway.)
+      const listed = gradeSung(frames, target, SING_TOL, "pitch", profile, { playing });
+      const heard = gradeSung(annotatePlayback(frames, output), target, SING_TOL, "pitch", profile);
+      for (const r of [listed, heard]) {
+        expect({ db, pass: r.pass }).toEqual({ db, pass: false });
+        if (db === -40) {
+          expect(r.diagnostics[0]?.id).toBe("sing.bleed");
+          expect(r.medianAbsCents).toBeNull();
+        }
       }
     }
     const quiet = analyzeClip(
@@ -612,10 +627,34 @@ describe("second pass: scoops, drift, breathy and soft voices, short notes, main
         parts: [{ kind: "gap", sec: 6 }],
       }),
     );
-    const r = gradeSung(quiet, [{ midi: 60, on: 0.5, off: 1.5 }], SING_TOL, "pitch", {
+    const r = gradeSung(quiet, target, SING_TOL, "pitch", { ...PROFILE, rangeLow: 48 });
+    expect({ score: r.score, ladder: r.medianAbsCents }).toEqual({ score: 0, ladder: null });
+  }, 60_000);
+
+  test("a real singer under the same leak, singing 1 in the window: still passes (the window is never playback-only)", () => {
+    const sr = 48000;
+    const output = analyze(backingTrack(4, sr, 1), sr);
+    // A clean room (no leak): the output plays throughout, the learner sings C4 from 0.5 s to 1.5 s.
+    const clip = renderClip({
+      id: "singer-over-backing",
+      cls: "bleed",
+      rangeLow: 48,
+      timbre: { vowel: "a" },
+      parts: [
+        { kind: "gap", sec: 0.5 },
+        { kind: "phrase", notes: [{ midi: 60, dur: 1 }] },
+        { kind: "gap", sec: 2.5 },
+      ],
+    });
+    const frames = annotatePlayback(analyzeClip(clip), output);
+    const r = gradeSung(frames, [{ midi: 60, on: 0.5, off: 1.5 }], SING_TOL, "pitch", {
       ...PROFILE,
       rangeLow: 48,
+      noiseFloorDb: clip.profile.noiseFloorDb,
     });
-    expect({ score: r.score, ladder: r.medianAbsCents }).toEqual({ score: 0, ladder: null });
+    expect({ pass: r.pass, bleed: r.diagnostics.some((d) => d.id === "sing.bleed") }).toEqual({
+      pass: true,
+      bleed: false,
+    });
   }, 60_000);
 });

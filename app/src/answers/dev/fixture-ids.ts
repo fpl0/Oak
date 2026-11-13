@@ -40,4 +40,11 @@ export const FIXTURE_IDS: readonly (readonly [id: string, kind: string])[] = [
   ["keysig-bass", "staff-input"],
   ["sing-degrees", "mic"],
   ["sing-quiet", "mic"],
+  ["slot-function", "slot-choice"],
+  ["slot-cadence", "slot-choice"],
+  ["text-chord", "text"],
+  ["staff-chords", "staff-input"],
+  ["staff-grand-chords", "staff-input"],
+  ["keyboard-build", "keyboard"],
+  ["rn-key", "rn-palette"],
 ];

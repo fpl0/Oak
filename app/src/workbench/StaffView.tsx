@@ -5,9 +5,9 @@
 // selects their code range. Loops longer than a page (8 bars) are engraved one page at a time; the page
 // follows the playhead while playing (so the lit note is always on screen); when stopped it turns by hand, or to
 // the notes pointed at from elsewhere (a tutor reference, a feedback row, a note selected in the code or the roll).
-import type { KeySpec } from "@oak/content-kit";
-import type { AbcResult } from "@oak/notation";
-import { nsFromClasses, type RenderedStaff, renderStaff } from "@oak/notation/render";
+import type { KeySpec, NEvent } from "@oak/content-kit";
+import { type AbcResult, type ChordLabelSet, chordLabelTexts } from "@oak/notation";
+import { nsFromClasses, type RenderedStaff, renderStaff, tagChordLabels } from "@oak/notation/render";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type AnnotationKinds, anyAnnotation } from "./annotate.ts";
 import type { BusState, HighlightBus } from "./highlight-bus.ts";
@@ -16,6 +16,7 @@ import {
   barsPerLineFor,
   busiestBar,
   pageBarsFor,
+  type StaffSource,
   staffPage,
   staffPageCount,
   type WorkbenchModel,
@@ -30,6 +31,10 @@ export interface StaffViewProps {
   hover?: { degree: boolean; solfege: boolean };
   /** The lines under the staff (lenses, or a lesson step's `staffLabels`); default: the model's own. */
   annotations?: AnnotationKinds;
+  /** Wave 4: chord symbols above and Roman numerals below (the chord lenses, or a step's chords panel). */
+  chordSet?: ChordLabelSet;
+  /** Wave 4: show a lead sheet of these melody events (with the chord symbols above) instead of the full staff. */
+  lead?: readonly NEvent[];
 }
 
 const PREFIX = "oak-e";
@@ -65,7 +70,7 @@ function rove(host: HTMLElement, to: SVGElement | null): void {
   if (to) target.focus();
 }
 
-export function StaffView({ model, bus, stale, hover, annotations }: StaffViewProps) {
+export function StaffView({ model, bus, stale, hover, annotations, chordSet, lead }: StaffViewProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const rendered = useRef<RenderedStaff | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -91,18 +96,47 @@ export function StaffView({ model, bus, stale, hover, annotations }: StaffViewPr
     measure();
     return () => ro.disconnect();
   }, []);
+  // A lead sheet engraves the melody alone on one staff: its busiest bar and its staff count are the melody's,
+  // not the full score's (a waltz's chords under its tune paged the lead sheet one bar at a time).
+  const leadOn = !!lead && lead.length > 0;
   const busiest = useMemo(
-    () => (model.staffSource ? busiestBar(model.staffSource.events) : 0),
-    [model.staffSource],
+    () =>
+      leadOn
+        ? busiestBar(lead)
+        : model.staffSource
+          ? busiestBar(model.staffSource.events, {
+              grand: (model.score?.staves.filter((st) => st.clef !== "perc").length ?? 1) >= 2,
+            })
+          : 0,
+    [model.staffSource, model.score, lead, leadOn],
   );
   const lines0 = ann ?? model.staffSource?.annotations ?? null;
   const perLine =
     hostWidth > 0 && lines0 && anyAnnotation(lines0) ? barsPerLineFor(busiest, lines0, hostWidth) : null;
+  const wantSymbols = (chordSet?.symbols ?? false) && (model.harmony?.labels.length ?? 0) > 0;
+  const wantRomans = (chordSet?.romans ?? false) && (model.harmony?.labels.length ?? 0) > 0;
+  const chordKey = `${+wantSymbols}${+wantRomans}`;
+  const leadKey = lead ? lead.map((e) => e.id).join(",") : "";
   const src = useMemo(() => {
-    const base = model.staffSource;
-    if (!base) return base;
+    const base0 = model.staffSource;
+    if (!base0) return base0;
+    const chorded = wantSymbols || wantRomans;
+    // A lead sheet: the melody alone on one treble staff, the changes above it (wave4.md §3.3).
+    const { trackKeySpans: _own, ...single } = base0;
+    const base: StaffSource =
+      lead && lead.length > 0
+        ? {
+            ...single,
+            events: [...lead],
+            staff: "lead" as const,
+            split: "register" as const,
+            chordSet: { symbols: (model.harmony?.labels.length ?? 0) > 0, romans: wantRomans },
+          }
+        : chorded
+          ? { ...base0, chordSet: { symbols: wantSymbols, romans: wantRomans } }
+          : base0;
     if (!ann && perLine === null) return base;
-    const staves = model.score?.staves.length ?? 1;
+    const staves = leadOn ? 1 : (model.score?.staves.length ?? 1);
     const textLines = lines0 ? +lines0.degree + +lines0.solfege + +lines0.noteName : 0;
     return {
       ...base,
@@ -114,8 +148,8 @@ export function StaffView({ model, bus, stale, hover, annotations }: StaffViewPr
           }
         : {}),
     };
-    // `ann` is read through its key: a new object with the same lines engraves nothing new.
-  }, [model.staffSource, model.score, annKey, perLine]);
+    // `ann`, the chord labels and the lead melody are read through their keys: same keys, nothing new to engrave.
+  }, [model.staffSource, model.score, annKey, perLine, chordKey, leadKey]);
   const same = src === model.staffSource;
   const pages = src ? staffPageCount(src) : 1;
   const [pageWanted, setPage] = useState(0);
@@ -136,6 +170,10 @@ export function StaffView({ model, bus, stale, hover, annotations }: StaffViewPr
   const pageAbc = useRef<AbcResult | null>(sheet.abc);
   pageAbc.current = sheet.abc;
   const abc = sheet.abc?.abc ?? null;
+  // Which events the drawing stands for, and from which bar: a loop repeats, so page 2 of a song can engrave the
+  // very same ABC as page 1 (classes count from 0 on every page). The drawing is labelled and linked again then,
+  // or its notes would keep page 1's events and bar numbers (the playhead and a click would land on page 1).
+  const linkKey = `${sheet.startBar}|${(sheet.abc?.idMap ?? []).map((e) => e.eventIds.join(",")).join(";")}`;
   const modelRef = useRef(model);
   modelRef.current = model;
   const hoverRef = useRef(hover ?? { degree: true, solfege: true });
@@ -219,7 +257,9 @@ export function StaffView({ model, bus, stale, hover, annotations }: StaffViewPr
     setStatus("loading");
     renderStaff(host, abc, {
       prefix: PREFIX,
-      params: { staffwidth: Math.max(280, host.clientWidth - 30), jazzchords: true } as never,
+      // Plain lead-sheet symbols (ux §3.4: "Am7", "Bø7"), as the chord band prints them: abcjs's jazz style
+      // set the minor "m" as a superscript and spaced the sharp ("C ♯ ᵐ").
+      params: { staffwidth: Math.max(280, host.clientWidth - 30), jazzchords: false } as never,
       onClick: (hit) => {
         const ns = hit.member !== null ? [hit.member] : hit.ns;
         const events = bus.eventsOfStaffNs(ns, pageAbc.current);
@@ -268,6 +308,15 @@ export function StaffView({ model, bus, stale, hover, annotations }: StaffViewPr
                 .filter((d) => d > 0),
             })),
           );
+        // The chord labels' stable classes (wave4.md §3.3); until notation tags them they render untagged.
+        const drawn = sheetRef.current.score;
+        if (drawn && (drawn.chords?.length || drawn.romans?.length)) {
+          try {
+            tagChordLabels(host, drawn);
+          } catch {
+            // NotationNotBuiltError: the labels are drawn, only their classes are missing
+          }
+        }
         // One tab stop for the whole staff (roving tabindex): abcjs makes every note and rest a stop, which
         // puts hundreds of stops between the transport and the rest of the page on a long loop.
         rove(host, null);
@@ -290,7 +339,8 @@ export function StaffView({ model, bus, stale, hover, annotations }: StaffViewPr
       delete host.dataset.activeEvents;
       delete host.dataset.activeNs;
     };
-  }, [abc, bus]);
+    // `linkKey`: the same drawing standing for other events (the next page of a loop) is labelled again.
+  }, [abc, bus, linkKey]);
 
   useEffect(() => bus.subscribe((s) => applyRef.current(s)), [bus]);
 
@@ -363,12 +413,17 @@ export function StaffView({ model, bus, stale, hover, annotations }: StaffViewPr
       return `${st.clef === "bass" ? "bass staff" : "treble staff"} in ${shown.join(" → ")}`;
     });
   const lines: AnnotationKinds | null = src?.annotations ?? null;
+  const labelTexts = sheet.score ? chordLabelTexts(sheet.score) : { symbols: [], romans: [] };
+  const isLead = !!lead && lead.length > 0;
   return (
     <div
       className="oak-staff"
       data-testid="staff-view"
       data-status={status}
       data-page={page}
+      data-lead={isLead ? "1" : undefined}
+      data-chord-symbols={labelTexts.symbols.join(" ") || undefined}
+      data-romans={labelTexts.romans.join(" ") || undefined}
       data-annotations={
         lines && anyAnnotation(lines)
           ? (["degree", "solfege", "noteName"] as const).filter((k) => lines[k]).join(" ")
@@ -406,7 +461,7 @@ export function StaffView({ model, bus, stale, hover, annotations }: StaffViewPr
               ‹
             </button>
             <span aria-live="polite">
-              Bars {first}–{last} of {src?.bars ?? last}
+              {first === last ? `Bar ${first}` : `Bars ${first}–${last}`} of {src?.bars ?? last}
             </span>
             <button
               type="button"
@@ -418,6 +473,21 @@ export function StaffView({ model, bus, stale, hover, annotations }: StaffViewPr
               ›
             </button>
           </span>
+        ) : null}
+        {isLead ? (
+          <span className="oak-badge" data-testid="lead-badge">
+            lead sheet{model.pickup ? " · pickup" : ""}
+          </span>
+        ) : null}
+        {isLead && abc ? (
+          <button
+            type="button"
+            className="oak-link-button"
+            onClick={() => saveSvg(hostRef.current)}
+            data-testid="lead-save"
+          >
+            Save as SVG
+          </button>
         ) : null}
         {stale ? <span className="oak-badge">preview · not playing</span> : null}
         {model.score?.approximate ? (
@@ -445,4 +515,31 @@ export function StaffView({ model, bus, stale, hover, annotations }: StaffViewPr
       />
     </div>
   );
+}
+
+/** The lead sheet as an SVG file (tb.feature.leadsheet: "view and export"). */
+function saveSvg(host: HTMLElement | null): void {
+  const svgs = host ? [...host.querySelectorAll("svg")] : [];
+  if (svgs.length === 0) return;
+  // One file: every drawn system nested in one SVG, one under the other.
+  let y = 0;
+  let width = 0;
+  const parts = svgs.map((svg) => {
+    const box = svg.getBoundingClientRect();
+    const copy = svg.cloneNode(true) as SVGElement;
+    copy.setAttribute("y", String(y));
+    y += Math.ceil(box.height);
+    width = Math.max(width, Math.ceil(box.width));
+    return new XMLSerializer().serializeToString(copy);
+  });
+  const file = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${y}">${parts.join("")}</svg>`;
+  const blob = new Blob([file], { type: "image/svg+xml" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "lead-sheet.svg";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

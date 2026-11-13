@@ -4,9 +4,18 @@
 import type { ChordQuality, Diagnostic, KeySpec, Matcher, NEvent, Rat } from "@oak/content-kit";
 import { R } from "@oak/content-kit";
 import type { ChordId, RomanNumeral } from "@oak/theory";
-import { romanOf, schemaMatch, spellMidi, triadCore } from "@oak/theory";
+import {
+  chordNotes,
+  chordOf,
+  chordPcs,
+  readChord,
+  romanOf,
+  schemaMatch,
+  spellMidi,
+  triadCore,
+} from "@oak/theory";
 import type { ChordSlot } from "../analyze/chords.ts";
-import { chordSlots, romanText, slotLabel } from "../analyze/chords.ts";
+import { chordSlots, romanShown, romanText, slotLabel } from "../analyze/chords.ts";
 import { locAt, mod12, num, pitched, simultaneities, sounding } from "../analyze/events.ts";
 import { keyOf } from "../analyze/key.ts";
 import { selectTrack, selectTracks, tracksOfRole } from "../analyze/tracks.ts";
@@ -102,6 +111,26 @@ export const qualityWord = (q: ChordQuality): string => QUALITY_WORDS[q] ?? q;
 const pcName = (pc: number, key: KeySpec | null): string =>
   spellMidi(60 + mod12(pc), { key }).name.replace(/-?\d+$/, "");
 
+/**
+ * The notes of a sounding chord, named as the chord they make: root first and spelled by that chord (C E G♯
+ * for C+, B D♯ F♯ for B major), the root spelled by the key. Pitch classes that make no readable chord are
+ * spelled by the key, in ascending order. "nothing" for an empty set.
+ */
+export function spellChordPcs(pcs: readonly number[], bassPc: number | null, key: KeySpec | null): string {
+  const set = [...new Set(pcs.map(mod12))].sort((a, b) => a - b);
+  if (set.length === 0) return "nothing";
+  const reading = set.length >= 2 ? readChord(set, bassPc ?? (set[0] as number)) : null;
+  if (reading) {
+    const chord = chordOf(pcName(reading.chord.rootPc, key), reading.quality);
+    const names = chordNotes(chord);
+    const pcsOf = chordPcs(chord) as number[];
+    const ordered = pcsOf.map((pc, i) => ({ pc, name: names[i] })).filter((x) => set.includes(x.pc));
+    if (ordered.length === set.length && ordered.every((x) => x.name !== undefined))
+      return ordered.map((x) => x.name).join(" ");
+  }
+  return set.map((p) => pcName(p, key)).join(" ");
+}
+
 const LEVEL_WEIGHTS: Record<
   HarmonyMatcher["level"],
   Partial<Record<"bass" | "root" | "quality" | "inversion", number>>
@@ -135,7 +164,7 @@ export function compareSlots(
   if (!cfg.inversion) delete base.inversion;
   const pos = { meter: ctx.meter, ...(ctx.pickup ? { pickup: ctx.pickup } : {}) };
   // Numerals in messages carry inversion figures only when the inversion is graded.
-  const rnLabel = (rn: RomanNumeral): string => romanText(cfg.inversion ? rn : { ...rn, inversion: 0 });
+  const rnLabel = (rn: RomanNumeral): string => romanShown(cfg.inversion ? rn : { ...rn, inversion: 0 });
   const diagnostics: Diagnostic[] = [];
   const sums = { bass: 0, root: 0, quality: 0, inversion: 0, rn: 0 };
   let totalDur = 0;
@@ -371,8 +400,8 @@ export function pcsetMatch(
         diag(
           "harmony.pcset",
           {
-            got: got.map((p) => pcName(p, key)).join(" ") || "nothing",
-            exp: want.map((p) => pcName(p, key)).join(" "),
+            got: spellChordPcs(got, bassAt(ap, at), key),
+            exp: spellChordPcs(want, bassAt(tp, at), key),
           },
           { ...where, ...(ids.length ? { noteIds: ids } : {}) },
           "quality",

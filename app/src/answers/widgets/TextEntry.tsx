@@ -5,7 +5,7 @@ import { clsx } from "clsx";
 import { useEffect, useRef, useState } from "react";
 import { expectedText, formatNumber, parseNumberText, readsAs, type TextKind } from "../normalize.ts";
 import type { AnswerWidgetProps } from "../types.ts";
-import { AnswerFrame, KeyHint, MarkBadge, markOf, markRing, revealedOf } from "../ui.tsx";
+import { AnswerFrame, KeyHint, MarkBadge, markOf, markRing, revealedOf, SubmitHint } from "../ui.tsx";
 
 const INPUT =
   "h-10 w-full max-w-[22rem] rounded-control border-2 bg-surface px-3 text-base text-text placeholder:text-text-3 focus-visible:outline-offset-2 disabled:opacity-80";
@@ -39,7 +39,7 @@ export function TextAnswer(p: AnswerWidgetProps<"text">) {
       feedback={feedback}
       disabled={disabled}
       onSubmit={p.onSubmit}
-      keys={<KeyHint keys={["Enter"]}>check</KeyHint>}
+      keys={<SubmitHint />}
     >
       <div className="relative w-fit max-w-full">
         <input
@@ -125,7 +125,7 @@ export function NumberAnswer(p: AnswerWidgetProps<"number">) {
       keys={
         <>
           <KeyHint keys={["↑", "↓"]}>±1</KeyHint>
-          <KeyHint keys={["Enter"]}>check</KeyHint>
+          <SubmitHint />
         </>
       }
     >

@@ -11,6 +11,7 @@ import { createWaveView, type WaveView } from "@oak/audio/waveview";
 import { createDetector, type PitchFrame } from "@oak/pitch";
 import { concat, encodeWav16, silence, tone } from "@oak/pitch/synth";
 import iifeWorklet from "./.generated/pitch.worklet.iife.js?raw";
+import { wave4 } from "./wave4.ts";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -215,6 +216,7 @@ declare global {
       waveMount: typeof waveMount;
       waveState: typeof waveState;
       waveDispose: typeof waveDispose;
+      wave4: typeof wave4;
     };
   }
 }
@@ -227,4 +229,5 @@ window.oakAudioE2E = {
   waveMount,
   waveState,
   waveDispose,
+  wave4,
 };

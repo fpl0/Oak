@@ -15,18 +15,21 @@ import { R, rat } from "@oak/content-kit";
 import type { ChordId } from "@oak/theory";
 import {
   degreeOf,
+  METERS,
   noteToMidi,
   parseRN,
   pcOf,
   relativeKey,
   rnToChord,
   romanOf,
+  toLeadSheet,
   transposeKey,
   triadCore,
 } from "@oak/theory";
 import type { ChordSlot } from "../analyze/chords.ts";
 import {
   bluesForm,
+  brokenChordSlots,
   cadenceAt,
   chordChanges,
   chordPerBar,
@@ -37,12 +40,14 @@ import {
   harmonicRhythm,
   lowIntervalViolations,
   matchProgression,
+  romanShown,
   romanText,
   schemaRomans,
   slotAt,
+  unclustered,
   voiceLeadingOfSlots,
 } from "../analyze/chords.ts";
-import { locAt, mean, mod12, onsets, pitched, ratKey } from "../analyze/events.ts";
+import { locAt, mean, mod12, onsets, pitched, ratKey, sounding } from "../analyze/events.ts";
 import { energyCurve, formMatches, registerSeparation, spanStats } from "../analyze/form.ts";
 import { claveType, euclidMatch, grooveLock, polyRatio, velocityGhosts } from "../analyze/groove.ts";
 import { keyFromContext, keyOf } from "../analyze/key.ts";
@@ -60,11 +65,19 @@ import { syncopation } from "../analyze/meter.ts";
 import { detectDevices } from "../analyze/piece.ts";
 import { resolveSection, sectionsFromAst } from "../analyze/sections.ts";
 import { pickSwingTrack } from "../analyze/swing.ts";
-import { periodOf, selectTrack, selectTracks, tracksOfRole } from "../analyze/tracks.ts";
+import { periodOf, selectTrack, selectTracks, sliceNormalized, tracksOfRole } from "../analyze/tracks.ts";
 import { diag, toolText } from "../feedback/catalog.ts";
 import { runMatcher } from "../match/index.ts";
 import type { Normalized } from "../types.ts";
 import type { RubricContext } from "./context.ts";
+import {
+  chordInversionsRule,
+  chordQualitiesRule,
+  isGateRule,
+  nonChordTonesRule,
+  pickupRule,
+  voiceLeadingGateRule,
+} from "./harmony-rules.ts";
 
 export interface RuleEval {
   ok: boolean;
@@ -102,17 +115,34 @@ const windowBars = (n: Normalized, ctx: RubricContext): number =>
 export function pieceKey(n: Normalized, ctx: RubricContext): KeySpec | null {
   return keyOf(n.all, ctx.key ?? null);
 }
-/** Chord slots of the piece: the harmony tracks (symbols first), bass from every pitched learner track. */
-export function pieceSlots(n: Normalized, track?: string): ChordSlot[] {
-  const all = selectTrack(n, track ?? "*");
+/**
+ * Chord slots of the piece: the harmony tracks (symbols first), bass from every pitched learner track.
+ * `exclude` leaves a line out of both (the line a rule checks against the chords, such as
+ * `chord-tones-strong` with `melody: "bass"`), so it never takes part in naming the chord it is checked
+ * against.
+ */
+export function pieceSlots(n: Normalized, track?: string, opts: { exclude?: string } = {}): ChordSlot[] {
+  const out = opts.exclude ? new Set(selectTrack(n, opts.exclude).map((e) => e.id)) : null;
+  const keep = (es: readonly NEvent[]): NEvent[] => (out ? es.filter((e) => !out.has(e.id)) : [...es]);
+  const all = keep(selectTrack(n, track ?? "*"));
   const symbolic = all.filter((e) => e.chordSymbol !== undefined);
   const chords =
     symbolic.length > 0
       ? symbolic
       : track
         ? all
-        : tracksOfRole(n, "chords").flatMap((t) => n.byTrack[t] ?? []);
-  return chordSlots(chords.length > 0 ? chords : all, { bass: pitched(n.all) });
+        : keep(tracksOfRole(n, "chords").flatMap((t) => n.byTrack[t] ?? []));
+  const bass = pitched(keep(n.all));
+  const slots = chordSlots(chords.length > 0 ? chords : all, { bass }).map(unclustered);
+  // A chord track played as a broken chord (`.arp()`) sounds one note at a time: read it bar by bar.
+  if (symbolic.length === 0 && chords.length > 0 && slots.every((sl) => !sl.chord) && isBroken(chords))
+    return brokenChordSlots(chords, { bass });
+  return slots;
+}
+/** No two notes of the line ever sound together: a broken chord (or a melody), never a block chord. */
+function isBroken(events: readonly NEvent[]): boolean {
+  const notes = pitched(events);
+  return notes.length >= 3 && notes.every((e) => sounding(notes, e.onset).length <= 1);
 }
 const coreEq = (a: ChordId | null, b: ChordId | null): boolean =>
   !!a && !!b && triadCore(a).rootPc === triadCore(b).rootPc && triadCore(a).quality === triadCore(b).quality;
@@ -194,7 +224,21 @@ const inKey: Impl<"in-key"> = (r, n, ctx) => {
   };
 };
 const endsOnDegree: Impl<"ends-on-degree"> = (r, n, ctx) => {
-  const line = melodyLine(selectTrack(n, r.track));
+  // One pass of the learner's line: a loop's next turn (and its pickup) is not where the tune ends (Wave 4).
+  const all = selectTrack(n, r.track);
+  const reach = all.reduce((m, e) => Math.max(m, R.floor(e.onset) + 1), 0);
+  const window = Math.max(1, Math.min(ctx.bars ?? reach, reach || 1));
+  const period = periodOf(all, MOTIF_PERIOD_CAP, window);
+  let events = period < window ? all.filter((e) => R.floor(e.onset) < period) : all;
+  if (ctx.pickup) {
+    // With a pickup, notes at the end of the last bar from the pickup's position on lead into the next turn.
+    const p = R.div(ctx.pickup.units, rat(METERS[ctx.meter].unitsPerBar));
+    const lastBar = events.reduce((m, e) => Math.max(m, R.floor(e.onset)), 0);
+    const from = R.add(rat(lastBar), R.sub(rat(1), p));
+    const before = events.filter((e) => R.lt(e.onset, from));
+    if (lastBar > 0 && before.some((e) => e.midi !== null)) events = before;
+  }
+  const line = melodyLine(events);
   const key = keyOf(
     line.map((x) => x.event),
     ctx.key ?? null,
@@ -240,13 +284,58 @@ const cadence: Impl<"cadence"> = (r, n, ctx) => {
     detail:
       bad.length === 0
         ? `${found.join(", ")} at bar ${ends.join(", ")}`
-        : `bar ${bad[0]} ends with ${found[ends.indexOf(bad[0] as number)]}; the brief asks for ${r.types.join(" or ")}`,
+        : `bar ${bad[0]} ends ${endingWords(slots, key, bad[0] as number)}: ${CADENCE_WORDS[found[ends.indexOf(bad[0] as number)] as CadenceType]}; the brief asks for ${[...new Set(r.types.map((t) => CADENCE_ASK[t]))].join(" or ")}`,
     ...(bad.length ? { where: { bar: bad[0] as number } } : {}),
   };
 };
+/** What a cadence type is, in the course's words (U06.L04). */
+const CADENCE_WORDS: Record<CadenceType, string> = {
+  PAC: "a perfect authentic cadence",
+  IAC: "an imperfect authentic cadence",
+  PC: "a plagal cadence",
+  HC: "a half cadence, which stops on V",
+  DC: "a deceptive cadence, V to vi",
+  "bVII-I": "♭VII to I, not a cadence the brief lists",
+  none: "no cadence",
+};
+const CADENCE_ASK: Record<CadenceType, string> = {
+  PAC: "V → I",
+  IAC: "V → I",
+  PC: "IV → I",
+  HC: "a stop on V (half)",
+  DC: "V → vi (deceptive)",
+  "bVII-I": "♭VII → I",
+  none: "no cadence",
+};
+/**
+ * The last two chords before `endBar` as numerals ("ii → I", "V → Csus4 (no chord)"): what the learner wrote,
+ * so a failed cadence names the chords and not only the type it missed.
+ */
+function endingWords(slots: readonly ChordSlot[], key: KeySpec, endBar: number): string {
+  const sounding = slots.filter((s) => R.lt(s.span[0], rat(endBar)) && s.midis.length > 0);
+  const name = (s: ChordSlot | undefined): string =>
+    s === undefined
+      ? "nothing"
+      : s.chord
+        ? romanShown(romanOf({ ...s.chord, bassPc: s.chord.rootPc }, key))
+        : s.symbol !== undefined
+          ? `${s.symbol} (a chord with no numeral)`
+          : "no chord";
+  const last = sounding[sounding.length - 1];
+  let i = sounding.length - 2;
+  while (
+    i >= 0 &&
+    last?.chord &&
+    (sounding[i] as ChordSlot).chord &&
+    coreEq((sounding[i] as ChordSlot).chord as ChordId, last.chord)
+  )
+    i--;
+  const prev = i >= 0 ? sounding[i] : undefined;
+  return prev === undefined ? `on ${name(last)}` : `${name(prev)} → ${name(last)}`;
+}
 const chordTonesStrong: Impl<"chord-tones-strong"> = (r, n, ctx) => {
   const line = melodyLine(selectTrack(n, r.melody));
-  const slots = pieceSlots(n, r.harmony);
+  const slots = pieceSlots(n, r.harmony, { exclude: r.melody });
   const res = chordToneRatio(line, slots, ctx.meter, r.strength);
   if (res.n === 0)
     return {
@@ -275,20 +364,89 @@ const progression: Impl<"progression"> = (r, n, ctx) => {
   const romans = schema ? schemaRomans(schema) : { rn: r.rn ?? [], perBar: false };
   const want = chordsOfRomans(romans.rn, key);
   const slots = pieceSlots(n, r.track);
+  const rotate = r.allowRotation ?? schema?.rotations ?? false;
+  const k = key;
+  const rn = (c: ChordId | null): string => (c ? romanShown(romanOf(c, k)) : "no chord");
+  // A chord named for the learner: its numeral in root position and its symbol ("vi (Am)", "VI (A)"), so a
+  // wrong quality reads as such and never as an applied chord the course has not taught yet.
+  const named = (c: ChordId | null): string => {
+    if (!c) return "no chord";
+    const root = { ...c, bassPc: c.rootPc };
+    const core = { ...triadCore(root), bassPc: c.rootPc };
+    return `${romanShown(romanOf(core as ChordId, k))} (${toLeadSheet(root)})`;
+  };
+  if (r.bars) {
+    // Wave 4 (C2): only bars [from, to], one chord per bar, the loop in any rotation the rule allows. A
+    // pickup bar is bar 0, so bar 1 is cycle 1 when the piece declares one.
+    const [from, to] = r.bars;
+    const offset = ctx.pickup ? 0 : -1;
+    const perBar = chordPerBar(slots, to + offset + 1).slice(from + offset, to + offset + 1);
+    const span = to - from + 1;
+    const loop = want;
+    let best = { matched: -1, rotation: 0 };
+    for (let rot = 0; rot < (rotate ? loop.length : 1); rot++) {
+      let m = 0;
+      while (m < perBar.length && coreEq(perBar[m] ?? null, loop[(m + rot) % loop.length] ?? null)) m++;
+      if (m > best.matched) best = { matched: m, rotation: rot };
+    }
+    // One chord a bar (contracts §6.6): a second chord inside a bar breaks the loop even when every downbeat
+    // follows it (C F | G C | Am G | F G … reads C G Am F on the downbeats).
+    const crowded = Array.from({ length: span }, (_, i) => from + i).find((bar) => {
+      const c = bar + offset;
+      const cores = slots
+        .filter((sl) => sl.chord && R.lte(rat(c), sl.span[0]) && R.lt(sl.span[0], rat(c + 1)))
+        .map((sl) => sl.chord as ChordId);
+      const first = slotAt(slots, rat(c))?.chord ?? null;
+      return cores.some((x) => !coreEq(x, first));
+    });
+    if (crowded !== undefined && crowded < from + Math.min(best.matched, span)) {
+      const c = crowded + offset;
+      const inBar = [
+        slotAt(slots, rat(c))?.chord ?? null,
+        ...slots
+          .filter((sl) => sl.chord && R.lt(rat(c), sl.span[0]) && R.lt(sl.span[0], rat(c + 1)))
+          .map((sl) => sl.chord as ChordId),
+      ];
+      return {
+        ok: false,
+        value: crowded - from,
+        target: span,
+        detail: `bar ${crowded} has ${inBar.length} chords (${inBar.map(named).join(", ")}); the loop takes one chord a bar in bars ${from}–${to}`,
+        where: { bar: crowded },
+      };
+    }
+    const ok = best.matched >= span;
+    const badBar = from + best.matched;
+    const exp = loop[(best.matched + best.rotation) % loop.length] ?? null;
+    return {
+      ok,
+      value: Math.min(best.matched, span),
+      target: span,
+      detail: ok
+        ? `bars ${from}–${to}: ${perBar.map(rn).join(" ")}${best.rotation ? " (the loop from another chord)" : ""}`
+        : `bar ${badBar} is ${named(perBar[best.matched] ?? null)}; the loop wants ${named(exp)} there (bars ${from}–${to}: ${romans.rn.join(" ")}${rotate ? ", from any chord" : ""}, one chord per bar)`,
+      ...(!ok ? { where: { bar: badBar } } : {}),
+    };
+  }
   const got = romans.perBar ? chordPerBar(slots, pieceBars(n, ctx)) : chordChanges(slots);
-  const m = matchProgression(got, want, r.allowRotation ?? schema?.rotations ?? false);
+  const m = matchProgression(got, want, rotate);
   const ok = m.matched >= m.length && m.length > 0;
   const gotText = got
     .slice(0, Math.max(m.length, 1))
-    .map((c) => (c ? romanText(romanOf(c, key)) : "?"))
+    .map((c) => (c ? romanShown(romanOf(c, k)) : "?"))
     .join(" ");
+  const miss = got[m.matched];
+  const expMiss = want[(m.matched + m.rotation) % Math.max(1, want.length)] ?? null;
+  const unit = romans.perBar ? "bar" : "chord";
   return {
     ok,
     value: Math.min(m.matched, m.length),
     target: m.length,
     detail: ok
       ? `${romans.rn.join(" ")}${m.rotation ? " (rotated)" : ""}`
-      : `chords go ${gotText}; the brief asks for ${romans.rn.join(" ")}`,
+      : got.length > m.matched && miss !== undefined
+        ? `chords go ${gotText}: ${unit} ${m.matched + 1} is ${rn(miss)}, the brief wants ${rn(expMiss)} (${romans.rn.join(" ")})`
+        : `chords go ${gotText}; the brief asks for ${romans.rn.join(" ")}`,
     ...(!ok && got.length > m.matched ? { where: { slot: m.matched + 1 } } : {}),
   };
 };
@@ -344,7 +502,7 @@ const range: Impl<"range"> = (r, n, ctx) => {
   const pr = pitchRange(ev);
   if (!pr) return { ok: false, detail: "no pitched notes" };
   let ok = true;
-  const parts: string[] = [`span ${pr.span} semitones`];
+  const parts: string[] = [`span ${pr.span} half steps`];
   let credit = 1;
   if (r.maxSpan !== undefined) {
     if (pr.span > r.maxSpan) {
@@ -499,7 +657,8 @@ const form: Impl<"form"> = (r, _n, ctx) => {
   const got = s.sections.map((x) => x.tag).join(" ");
   return { ok, detail: ok ? got : `the form is ${got}; the brief asks for ${r.pattern}` };
 };
-const voiceLeadingRule: Impl<"voice-leading"> = (r, n) => {
+const voiceLeadingRule: Impl<"voice-leading"> = (r, n, ctx) => {
+  if (isGateRule(r)) return voiceLeadingGateRule(r, n, ctx);
   const slots = chordSlots(selectTrack(n, r.track));
   const moves = voiceLeadingOfSlots(slots);
   if (moves.length === 0) return { ok: false, detail: "no chord changes to lead" };
@@ -512,13 +671,16 @@ const voiceLeadingRule: Impl<"voice-leading"> = (r, n) => {
     value: good.length / moves.length,
     target: 1,
     detail: bad
-      ? `a voice moves ${bad.vl.maxMove} semitones (total ${bad.vl.total}); at most ${r.maxMovePerVoice}${r.maxTotal !== undefined ? ` (total ${r.maxTotal})` : ""}`
+      ? `a voice moves ${bad.vl.maxMove} half steps (total ${bad.vl.total}); at most ${r.maxMovePerVoice}${r.maxTotal !== undefined ? ` (total ${r.maxTotal})` : ""}`
       : `smooth: every voice moves ≤ ${r.maxMovePerVoice}`,
     ...(bad ? { where: { bar: R.floor(bad.at) + 1 } } : {}),
   };
 };
 const guideTones: Impl<"guide-tones"> = (r, n) => {
-  const g = guideToneLine(melodyLine(selectTrack(n, r.track)), pieceSlots(n, r.harmony));
+  const g = guideToneLine(
+    melodyLine(selectTrack(n, r.track)),
+    pieceSlots(n, r.harmony, { exclude: r.track }),
+  );
   const ok = g.ratio >= r.minRatio && g.maxMove <= 2;
   return {
     ok,
@@ -652,7 +814,7 @@ const registerSep: Impl<"register-separation"> = (r, n) => {
     ok: s.gap >= r.minGapSemis,
     value: s.gap,
     target: r.minGapSemis,
-    detail: `${s.gap} semitones apart; at least ${r.minGapSemis}`,
+    detail: `${s.gap} half steps apart; at least ${r.minGapSemis}`,
   };
 };
 const noMuddyLow: Impl<"no-muddy-low"> = (r, n, ctx) => {
@@ -663,7 +825,7 @@ const noMuddyLow: Impl<"no-muddy-low"> = (r, n, ctx) => {
     value: v.length,
     credit: v.length === 0 ? 1 : 0,
     detail: first
-      ? `a ${first.interval}-semitone interval low down (bass note ${first.low}) sounds muddy`
+      ? `a ${first.interval}-half-step interval low down (bass note ${first.low}) sounds muddy`
       : "the low end is clear",
     ...(first ? { where: locAt(first.at, ctx) } : {}),
   };
@@ -938,6 +1100,8 @@ const sounds: Impl<"sounds"> = (r, n) => {
     const missing = r.contains.filter((id) => !used.has(soundName(id)));
     if (missing.length) problems.push(`no ${missing.map(soundName).join(", ")}`);
   }
+  if (r.anyOf && !r.anyOf.some((id) => used.has(soundName(id))))
+    problems.push(`none of ${r.anyOf.map(soundName).join(", ")}`);
   if (r.subsetOf) {
     const allowed = new Set(r.subsetOf.map(soundName));
     const extra = [...used].filter((s) => !allowed.has(s));
@@ -962,7 +1126,9 @@ const deviceCount: Impl<"device-count"> = (r, n, ctx) => {
 const matches: Impl<"matches"> = (r, n, ctx) => {
   const ref = ctx.resolveReference?.(r.reference);
   if (!ref) return { ok: false, detail: "the reference could not be evaluated" };
-  const m = runMatcher(r.matcher, ref, n, ctx);
+  // The piece is queried longer than the reference (a Make reads 16 bars, a capstone more): compare the
+  // reference's bars only, so a 4-bar loop played for 16 bars is not 12 bars of "extra" chords (Wave 4 fix).
+  const m = runMatcher(r.matcher, ref, sliceNormalized(n, 0, Math.max(1, r.reference.bars)), ctx);
   return {
     ok: m.score >= r.min - 1e-9,
     value: m.score,
@@ -982,8 +1148,9 @@ const strParam = (p: Record<string, unknown>, k: string, d: string): string =>
 
 /** Walking bass (JC2): 4 onsets per bar, the chord root on beat 1 ≥ 75%, a step or 5th approach on beat 4 ≥ 50%. */
 const walkingBass: CustomRule = (n, ctx, p) => {
-  const bass = pitched(selectTrack(n, strParam(p, "track", "@bass")));
-  const slots = pieceSlots(n, typeof p.harmony === "string" ? p.harmony : undefined);
+  const bassRef = strParam(p, "track", "@bass");
+  const bass = pitched(selectTrack(n, bassRef));
+  const slots = pieceSlots(n, typeof p.harmony === "string" ? p.harmony : undefined, { exclude: bassRef });
   const total = windowBars(n, ctx);
   let four = 0;
   let rootOn1 = 0;
@@ -1130,6 +1297,10 @@ export const RULES: { [K in RubricRule["rule"]]: Impl<K> } = {
   "distinct-pitches": distinctPitches,
   "device-count": deviceCount,
   matches,
+  pickup: pickupRule,
+  "chord-qualities": chordQualitiesRule,
+  "chord-inversions": chordInversionsRule,
+  "non-chord-tones": (r, n, ctx) => nonChordTonesRule(r, n, ctx, pieceSlots),
 };
 
 /** Evaluates one rule. Unknown rule names (content from a newer version) fail with `rubric.unknown`. */

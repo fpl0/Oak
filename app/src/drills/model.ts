@@ -25,16 +25,19 @@ import {
   type DrillFamilyRuntime,
   type DrillTrialResult,
   generateSet,
+  gradeTrial,
   isCompositeGenerator,
   isPendingGenerator,
   planSet,
   type SetPlan,
   type SetSummary,
   summarizeSet,
+  type TrialResponse,
   type TrialSpec,
 } from "@oak/drills";
 import { gradeFor } from "@oak/srs";
 import { degreeSemitones, syllableOf } from "@oak/theory";
+import { qualityLabel, rnDisplay } from "../answers/keys.ts";
 import type { AnswerSpec, AnswerValue, SungSummary } from "../answers/types.ts";
 import { isResting, RESTING_LINE } from "./resting.ts";
 import { staffSpecOf } from "./staff.ts";
@@ -79,11 +82,52 @@ const OPTION_LABELS: Record<string, string> = {
   blues12: "12-bar blues",
   first: "First inversion",
   second: "Second inversion",
+  third: "Third inversion",
   root: "Root position",
+  maj: "Major",
+  min: "Minor",
+  dim: "Diminished",
+  aug: "Augmented",
+  PC: "Plagal (IV–I)",
+  DC: "Deceptive (V–vi)",
+  "bVII-I": "♭VII–I",
+  "minor-PAC": "Perfect authentic, minor",
+  "minor-HC": "Half cadence, minor",
+  mixolydian: "I–♭VII–IV–I",
+  "dorian-vamp": "i–IV vamp",
+  "ii-V-I": "ii–V–I",
+
   PD: "Predominant",
   T: "Tonic",
   D: "Dominant",
 };
+
+/**
+ * Category names that are levels of material rather than answers (shown in the level picker and in "what a level
+ * adds"): never used as choice labels, where the same ID may mean something else ("minor" the mode).
+ */
+const CATEGORY_WORDS: Record<string, string> = {
+  "schema-roots": "loop roots",
+  "diatonic-roots": "any diatonic roots",
+  inversions: "inverted chords",
+  "two-per-bar": "two chords a bar",
+  diatonic: "diatonic triads",
+  cadential: "eight chords to a cadence",
+  sevenths: "seventh chords",
+  spot: "the inverted chord in a loop",
+  stepwise: "stepwise tunes",
+  sixths: "tunes up to a sixth",
+  leaps: "leaps, rhythm by ear",
+  "two-bars": "two bars",
+  nct: "non-chord tones",
+};
+
+/** A category as the level picker and the level news name it. */
+export function categoryLabel(id: string): string {
+  const own = CATEGORY_WORDS[id];
+  if (own) return own.charAt(0).toUpperCase() + own.slice(1);
+  return optionLabel(id);
+}
 
 export function optionLabel(id: string): string {
   // Degree categories ("deg.5", "deg.b6") read as the learner's word for them, never as an ID.
@@ -253,6 +297,74 @@ export function surfaceOf(
   };
 }
 
+// --- melodic dictation: degrees, code or the staff ----------------------------------------------------
+
+/** How a written dictation trial may be answered (level 4 and beyond: the tune as degrees, in code, on the staff). */
+export type DictationMode = "degrees" | "code" | "staff";
+export const DICTATION_MODE_LABELS: Readonly<Record<DictationMode, string>> = {
+  degrees: "Degrees",
+  code: "Code",
+  staff: "Staff",
+};
+
+/**
+ * The answer modes a melodic dictation trial offers: from the code levels on (level 4, what X1 needs) the
+ * learner may write the tune as degrees, as code, or on the staff; earlier levels keep their one surface.
+ */
+export function dictationModesOf(trial: Trial<unknown>, def: Pick<FamilyDef, "generator">): DictationMode[] {
+  if (def.generator !== "melody-dictation") return [];
+  const ui = trial.params.ui;
+  if (trial.params.mode !== "code" || (ui !== "code" && ui !== "staff-input")) return [];
+  if (!Array.isArray((trial.expected as Answer).degrees))
+    return ui === "code" ? ["code", "staff"] : ["staff", "code"];
+  return ui === "staff-input" ? ["staff", "code", "degrees"] : ["code", "staff", "degrees"];
+}
+
+/** The surface of a dictation trial in the chosen mode (the trial's own one when the mode is not offered). */
+export function dictationSurface(
+  trial: Trial<unknown>,
+  def: FamilyDef,
+  mode: DictationMode,
+  opts: { solfege?: "numbers" | "syllables" } = {},
+): Surface {
+  const modes = dictationModesOf(trial, def);
+  if (!modes.includes(mode)) return surfaceOf(trial, def, opts);
+  if (mode === "staff") return { kind: "widget", spec: staffSpecOf(trial) };
+  if (mode === "code") return { kind: "widget", spec: { ui: "code", starter: codeStarterOf(trial) } };
+  const degrees = ((trial.expected as Answer).degrees ?? []) as Degree[];
+  return {
+    kind: "widget",
+    spec: {
+      ui: "degree-pad",
+      set: degreeSetOf(trial, def),
+      sequenceLen: degrees.length,
+      syllables: opts.solfege === "syllables",
+    },
+  };
+}
+
+/**
+ * Grades a trial with its family (`@oak/drills`), with one Wave 4 addition: a written dictation trial answered
+ * as degrees (the tune's pitches in its own rhythm) is graded on the degrees, slot by slot, like the degree-pad
+ * levels, since the code grader reads only code.
+ */
+export function gradeDrillTrial(
+  family: DrillFamilyRuntime,
+  trial: Trial,
+  response: TrialResponse,
+  profile: LearnerProfile,
+): DrillTrialResult {
+  const degreesAnswer =
+    trial.params.mode === "code" &&
+    Array.isArray(response.answer?.degrees) &&
+    Array.isArray((trial.expected as Answer).degrees);
+  if (degreesAnswer) {
+    const asPad = { ...trial, params: { ...trial.params, mode: "choice", ui: "degree-pad" } } as Trial;
+    return gradeTrial(family, asPad, response, profile) as DrillTrialResult;
+  }
+  return gradeTrial(family, trial, response, profile) as DrillTrialResult;
+}
+
 /**
  * The editor's starting text of a code trial: the generator's own `starter`, else (melodic dictation in code)
  * an empty `n("")` already in the trial's key and octave, so the learner writes only the steps (degree − 1).
@@ -385,14 +497,14 @@ export function expectedText(spec: AnswerSpec | null, expected: Answer, solfege 
   if (expected.degrees)
     return expected.degrees
       .map((d) => (solfege ? `${optionLabel(d)} · ${syllableOf(d)}` : optionLabel(d)))
-      .join(" ");
+      .join(solfege ? ", " : " ");
   if (expected.choice && spec?.ui === "choice")
     return expected.choice
       .map((id) => spec.options.find((o) => o.id === id)?.label ?? optionLabel(id))
       .join(", ");
   if (expected.choice) return expected.choice.map(optionLabel).join(", ");
-  if (expected.qualities) return expected.qualities.join(", ");
-  if (expected.rn) return expected.rn.join(" ");
+  if (expected.qualities) return expected.qualities.map((q) => qualityLabel(q).long).join(", ");
+  if (expected.rn) return expected.rn.map(rnDisplay).join(" ");
   if (expected.text) return expected.text.map((t) => t.replace(/b/g, "♭").replace(/#/g, "♯")).join(" ");
   if (expected.number !== undefined) return String(expected.number);
   return null;
@@ -456,6 +568,42 @@ export function trialRecord(
     modality: extra.modality ?? "normal",
     sungResolution: extra.sungResolution ?? null,
   };
+}
+
+/** One finished trial as the tutor reads it at the set summary (`debriefDrill`, tutor/context.ts). */
+export interface DebriefTrial {
+  n: number;
+  asked?: string;
+  answered: string;
+  ok: boolean;
+}
+
+/**
+ * The finished set for the tutor's debrief (contracts §10.4: the tutor opens only at the summary, so each trial may
+ * now be named with its answer). `asked` is the answer the trial wanted; `answered` what the learner gave, or how
+ * the trial was taken when nothing was picked (skipped, shown, sung, tapped).
+ */
+export function debriefTrials(
+  trials: readonly (Trial<unknown> | undefined)[],
+  records: readonly DrillTrialRecord[],
+): DebriefTrial[] {
+  return records.map((r) => {
+    const trial = trials[r.idx];
+    const want = trial ? expectedText(null, trial.expected as Answer) : null;
+    const given = r.response.answer ? expectedText(null, r.response.answer) : null;
+    const answered = r.revealed
+      ? "nothing yet (I asked to be shown)"
+      : r.response.skipped
+        ? "nothing (skipped)"
+        : given
+          ? given
+          : r.response.sung
+            ? `by singing (${pctText(r.credit)} in tune)`
+            : r.response.taps
+              ? `by tapping (${pctText(r.credit)} on time)`
+              : "nothing";
+    return { n: r.idx + 1, ...(want ? { asked: `answer ${want}` } : {}), answered, ok: r.correct };
+  });
 }
 
 /** The nearest rung of the tolerance ladder (contracts §8.2) for a tolerance in cents. */
@@ -528,7 +676,7 @@ export interface PlannedTrial {
 export function planDrillSet(
   family: DrillFamilyRuntime,
   session: Pick<DrillSession, "setId" | "levels" | "openCategories" | "trialsPlanned">,
-  state: Pick<FamilyState, "categoryStats" | "blockedRemaining"> | null,
+  state: Pick<FamilyState, "categoryStats" | "blockedRemaining" | "sungStats"> | null,
   profile: LearnerProfile,
   opts: { easyFirst?: boolean; sungResolutions?: number; trials?: number } = {},
 ): { plan: SetPlan; trials: PlannedTrial[] } {
@@ -546,6 +694,9 @@ export function planDrillSet(
     blockedRemaining: state?.blockedRemaining ?? 0,
     trials: opts.trials ?? session.trialsPlanned,
     sungResolutions: opts.sungResolutions ?? 2,
+    // The trials that sing their way home cover the weakest sung degrees first (contracts §8.3): the server's
+    // per-degree record of sung resolutions (wave4.md §5.6), else the identification stats.
+    ...(state?.sungStats ? { sungStats: state.sungStats } : {}),
     quiet: profile.quiet && !fet,
   });
   if (opts.easyFirst) {
@@ -585,16 +736,50 @@ export function nextDueText(dueAt: string, now: Date = new Date()): string {
   return `Comes back in about ${Math.round(days / 30)} months`;
 }
 
-/** Calm level-change copy (ux §7.11: no blame, no hype). */
+/** Calm level-change copy (ux §7.11: no blame, no hype). With the family, it says what the new level asks. */
 export function levelChangeText(
   change: "promoted" | "demoted" | null,
   level: number,
   of: number,
+  def?: Pick<FamilyDef, "levels">,
 ): string | null {
-  if (change === "promoted") return `Level ${level} of ${of} opens next time: a little more to tell apart.`;
+  const news = def ? levelNews(def, level) : null;
+  if (change === "promoted")
+    return news
+      ? `Level ${level} of ${of} opens next time: ${news}.`
+      : `Level ${level} of ${of} opens next time: a little more to tell apart.`;
   if (change === "demoted")
     return `Next time starts at level ${level} of ${of}. The ear settles faster there, then climbs again.`;
   return null;
+}
+
+/** Level knobs worth naming to the learner, in plain words. */
+const LEVEL_KNOBS: readonly [string, string][] = [
+  ["inversions", "chords in any inversion"],
+  ["arpeggiate", "some chords broken into single notes"],
+  ["full", "a full band with drums"],
+  ["heard", "the chords heard in a loop"],
+  ["minor", "minor keys too"],
+  ["sevenths", "seventh chords"],
+];
+
+/** "Diminished" → "diminished"; numerals and symbols ("I–vi–IV–V", "PAC") keep their case. */
+const lowerWord = (label: string): string =>
+  /^[A-Z][a-z]/.test(label) ? label[0]?.toLowerCase() + label.slice(1) : label;
+
+/** What a level adds over the one below ("Diminished joins the others"), or null when it adds nothing nameable. */
+export function levelNews(def: Pick<FamilyDef, "levels">, level: number): string | null {
+  const cur = def.levels[level - 1];
+  if (!cur) return null;
+  const prev = level > 1 ? def.levels[level - 2] : undefined;
+  const added = cur.categories.filter((c) => !c.startsWith("ctx.") && !(prev?.categories ?? []).includes(c));
+  const parts: string[] = [];
+  if (added.length > 0)
+    parts.push(
+      `${added.map((c) => CATEGORY_WORDS[c] ?? lowerWord(optionLabel(c))).join(", ")} join${added.length === 1 ? "s" : ""} in`,
+    );
+  for (const [knob, words] of LEVEL_KNOBS) if (cur[knob] === true && prev?.[knob] !== true) parts.push(words);
+  return parts.length > 0 ? parts.join("; ") : null;
 }
 
 export interface SummaryView {
@@ -630,7 +815,7 @@ export function summaryView(input: {
   const review: SrsReviewResult | undefined = finish?.reviews.find((r) => r.cardId === def.id);
   const moved: string[] = [];
   const level = review?.familyState?.level ?? input.cardLevel;
-  const change = levelChangeText(review?.levelChange ?? null, level, def.levels.length);
+  const change = levelChangeText(review?.levelChange ?? null, level, def.levels.length, def);
   if (change) moved.push(change);
   // Categories that went up against their running accuracy.
   for (const [cat, s] of Object.entries(summary.perCategory)) {
@@ -711,8 +896,30 @@ export function familyStatus(
   if (!completed.has(def.unlock.lesson) && !state) return "locked";
   if (state && state.level >= def.masteryLevel) return "mastered";
   if (state && isResting(def, state)) return "resting";
-  if (state && state.graduatedAt !== null) return "mastered";
+  // Graduated below its mastery level (a gated ladder at its highest open level, contracts §7.4): it is in mixed
+  // practice and comes back to its own sets when its next level opens — not mastered.
+  if (state && state.graduatedAt !== null) return "resting";
   return "unlocked";
+}
+
+/**
+ * Where a graduated or resting family is practised now (contracts §7.4: two trials whenever its composite is
+ * drawn, recalled to its own sets below 0.65), with how many families share that mixed review. Null for a family
+ * still on its own card.
+ */
+export function compositeLine(
+  state: FamilyState | undefined,
+  states: ReadonlyMap<string, FamilyState>,
+  defs: ReadonlyMap<string, Pick<FamilyDef, "title">>,
+): string | null {
+  if (!state || state.graduatedAt === null || !state.compositeId) return null;
+  const title = defs.get(state.compositeId)?.title ?? "mixed practice";
+  const members = [...states.values()].filter(
+    (s) => s.compositeId === state.compositeId && s.graduatedAt !== null,
+  ).length;
+  const others = Math.max(0, members - 1);
+  const company = others === 0 ? "" : ` with ${others} other ${others === 1 ? "family" : "families"}`;
+  return `In ${title}${company}: two trials whenever it comes up, back to its own sets if it slips.`;
 }
 
 /** Composite reviews are not practised by hand: they appear only through the warm-up. */
@@ -747,6 +954,17 @@ export interface StageGroup {
   families: FamilyDef[];
 }
 
+/**
+ * Ear families the stage table of contracts §7.3 does not list but that are heard with their stage: chord
+ * dictation and "home, away, tension" with the stage D chord work, non-chord tones with melody (stage C).
+ * They follow the stage's own families.
+ */
+export const HUB_STAGE_EXTRAS: Readonly<Record<string, StageKey>> = {
+  "fam.har.function": "D",
+  "fam.har.progression": "D",
+  "fam.mel.nct": "C",
+};
+
 /** Families grouped by ear-training stage (contracts §7.3), concept families after them. */
 export function groupByStage(
   defs: readonly FamilyDef[],
@@ -755,6 +973,7 @@ export function groupByStage(
   const stageOf = new Map<string, StageKey>();
   for (const [k, ids] of Object.entries(stages) as [StageKey, readonly string[]][])
     for (const id of ids) stageOf.set(id, k);
+  for (const [id, k] of Object.entries(HUB_STAGE_EXTRAS)) if (!stageOf.has(id)) stageOf.set(id, k);
   const groups = new Map<StageKey | "concepts", FamilyDef[]>();
   for (const d of defs) {
     if (isCompositeFamily(d)) continue;
@@ -767,7 +986,9 @@ export function groupByStage(
     .map((k) => {
       const fams = groups.get(k) as FamilyDef[];
       const ids = k === "concepts" ? [] : (stages[k] ?? []);
-      fams.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+      // The stage's own families in the table's order, then the extras.
+      const rank = (id: string) => (ids.includes(id) ? ids.indexOf(id) : ids.length + 1);
+      fams.sort((a, b) => rank(a.id) - rank(b.id));
       return { key: k, ...STAGE_TITLES[k], families: fams };
     });
 }
@@ -795,7 +1016,27 @@ export function levelLine(def: FamilyDef, state: FamilyState | undefined): strin
   const open = Math.max(level, Math.min(total, state?.maxOpenLevel ?? 1));
   const head = `Level ${level} of ${total}`;
   if (total === 1 || open >= total) return head;
-  return `${head} · up to level ${open} for now`;
+  if (open > level) return `${head} · up to level ${open} for now`;
+  // At the highest open level: say which lesson opens the next one.
+  const lesson = nextLevelLesson(def, open + 1);
+  return lesson
+    ? `${head} · level ${open + 1} opens with ${lesson}`
+    : `${head} · up to level ${open} for now`;
+}
+
+/** The lesson that opens level `n`: its gate, else the latest lesson among the categories it adds. */
+export function nextLevelLesson(def: FamilyDef, n: number): string | null {
+  const gate = def.unlock.levelGates?.[n];
+  if (gate) return Array.isArray(gate) ? (gate[0] ?? null) : gate;
+  const cur = def.levels[n - 1]?.categories ?? [];
+  const prev = def.levels[n - 2]?.categories ?? [];
+  const lessons = cur
+    .filter((c) => !prev.includes(c))
+    .map((c) => def.categories.find((x) => x.id === c)?.unlockAt)
+    .filter((l): l is NonNullable<typeof l> => typeof l === "string")
+    .sort();
+  const last = lessons.at(-1);
+  return last && last !== def.unlock.lesson ? last : null;
 }
 
 /** The status line of a pending family: honest about when its drills arrive. */

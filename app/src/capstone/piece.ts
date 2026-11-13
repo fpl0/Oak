@@ -5,6 +5,7 @@
 import type { AnalysisSummary, GradeResult, KeySpec, MeterId, NEvent, RubricRule } from "@oak/content-kit";
 import { R } from "@oak/content-kit";
 import { analyzePiece, linerNotes, type Normalized, periodOf, sectionsFromAst } from "@oak/grader";
+import { SCHEMAS } from "@oak/theory";
 
 /** Capstone mode never queries more than this (contracts §6.4). */
 export const MAX_CAPSTONE_BARS = 128;
@@ -83,7 +84,9 @@ export function theoryTags(
     if (t && !out.includes(t)) out.push(t);
   };
   for (const r of rules) if (met.has(r.id)) for (const s of r.skills) add(skillName(String(s)));
-  for (const s of analysis?.schemas ?? []) add(s.schema.replace(/^schema\./, ""));
+  // A schema by its title ("Four-chord (I–V–vi–IV)"), never its ID ("axis").
+  for (const s of analysis?.schemas ?? [])
+    add(SCHEMAS.find((d) => d.id === s.schema)?.title ?? s.schema.replace(/^schema\./, ""));
   for (const d of analysis?.devices ?? []) add(d.replace(/ bar \d+.*$/, "").replace(/ \(.*\)$/, ""));
   return out.slice(0, 12);
 }

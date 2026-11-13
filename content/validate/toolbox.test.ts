@@ -52,6 +52,7 @@ describe("rows", () => {
         exercise: "U05.L07/hand-voiced-cadence",
         minScore: 0.9,
         unrevealed: true,
+        variants: ["U05.L08/hand-voiced-cadence-again"],
       });
     }
   });

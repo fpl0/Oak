@@ -2,7 +2,7 @@
 // exemplar lessons, sent through `gradeStep` exactly as the player sends a learner's response (wire shape →
 // grader shape, params, unlocked tools, the onboarding preview context), must come out as the author pinned it.
 import { beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import type { AttemptResponse, Exercise, LessonDef, SessionId, TestCase } from "@oak/api";
+import type { AttemptResponse, ByEarPart, Exercise, LessonDef, SessionId, TestCase } from "@oak/api";
 import { evaluateForGrading, gradeExercise, initRealm } from "@oak/grader";
 import sample from "../../../content/core/_sample/L00/lesson.ts";
 import u00l02 from "../../../content/core/U00/L02/lesson.ts";
@@ -40,8 +40,36 @@ import {
 } from "./grading.ts";
 import { partsOf } from "./model.ts";
 import { firstWrongBar } from "./rules.ts";
+import {
+  hasParts,
+  isStaged,
+  partExercise,
+  partPassed,
+  partResponse,
+  revealedStages,
+  stageExercise,
+  stageOrder,
+  stagePassed,
+} from "./stages.ts";
 
 setDefaultTimeout(60_000);
+
+/** The 30 lessons of U05–U07, in course order (U05 has 8, U06 12, U07 10). */
+const W4_LESSON_IDS: readonly string[] = (
+  [
+    ["U05", 8],
+    ["U06", 12],
+    ["U07", 10],
+  ] as const
+).flatMap(([u, n]) => Array.from({ length: n }, (_, i) => `${u}.L${String(i + 1).padStart(2, "0")}`));
+
+const W4_LESSONS: LessonDef[] = await Promise.all(
+  W4_LESSON_IDS.map(async (id) => {
+    const [unit, lesson] = id.split(".") as [string, string];
+    const mod = (await import(`../../../content/core/${unit}/${lesson}/lesson.ts`)) as { default: LessonDef };
+    return mod.default;
+  }),
+);
 
 const deps: GraderDeps = {
   grade: (req) => gradeExercise(req),
@@ -81,6 +109,8 @@ const LESSONS: [LessonDef, string][] = [
     (d) => [d, d.id] as [LessonDef, string],
   ),
   ...[u04l01, u04l02, u04l03, u04l04].map((d) => [d, d.id] as [LessonDef, string]),
+  // Every Wave 4 lesson (U05 Triads, U06 Diatonic Harmony, U07 Melody), each in its own context.
+  ...W4_LESSONS.map((d) => [d, d.id] as [LessonDef, string]),
 ];
 
 for (const [def, session] of LESSONS) {
@@ -286,5 +316,59 @@ describe("Wave 3 shapes through the player's grading path", () => {
     expect((await gradeStep(deps, e, s8, { sung: sung([60, 65, 69, 65, 60]) }, opts)).status).not.toBe(
       "pass",
     );
+  });
+});
+
+describe("Wave 4 stages and parts through the player's grading path (U06.L09)", () => {
+  const l09 = W4_LESSONS.find((d) => d.id === "U06.L09") as LessonDef;
+  const env = () => envOf(l09, "U06.L09");
+  const opts = { params: {}, attemptNo: 1, rung: 0 as const, extraReplays: 0 };
+  const exOf = (id: string) => l09.steps.find((s) => s.id === id)?.exercise as Exercise;
+
+  test("S2: each stage graded alone passes on the right answer and fails on its own pinned mistake", async () => {
+    const ex = exOf("S2");
+    if (!isStaged(ex)) throw new Error("U06.L09 S2 is not staged");
+    const right = (
+      (ex.tests.find((t) => t.expect === "pass")?.response ?? {}) as { answer: { stages: never } }
+    ).answer.stages as Record<string, string[]>;
+    // A reveal shows these very stages (the first passing test's).
+    expect(revealedStages(ex)).toEqual(right);
+    for (const stage of stageOrder(ex)) {
+      const only = { answer: { stages: { [stage]: right[stage] } } } as AttemptResponse;
+      const r = await gradeStep(deps, env(), stageExercise(ex, stage), only, opts);
+      expect(stagePassed(ex, r), `${stage} right`).toBe(true);
+    }
+    // Each pinned mistake lives in one stage: graded alone, that stage fails and names it.
+    for (const t of ex.tests.filter((x) => x.expect === "fail")) {
+      const stages = (t.response as { answer: { stages: Record<string, string[]> } }).answer.stages;
+      const bad = stageOrder(ex).find((s) => JSON.stringify(stages[s]) !== JSON.stringify(right[s]));
+      if (!bad) throw new Error(`${t.name}: no stage differs`);
+      const only = { answer: { stages: { [bad]: stages[bad] } } } as AttemptResponse;
+      const r = await gradeStep(deps, env(), stageExercise(ex, bad), only, opts);
+      expect(stagePassed(ex, r), `${t.name}: the ${bad} stage fails`).toBe(false);
+      for (const code of t.feedback ?? []) expect(r.diagnostics.map((d) => d.id)).toContain(code);
+    }
+  });
+
+  test("S3: each part graded on its own track; the bass part passes while the chords are still wrong", async () => {
+    const ex = exOf("S3");
+    if (!hasParts(ex)) throw new Error("U06.L09 S3 has no parts");
+    const ref = ex.reference.solutions[0] as string;
+    const chordsWrong = ex.tests.find((t) => t.name.includes("last chord a degree off"))?.response as {
+      code: string;
+    };
+    const bassWrong = ex.tests.find((t) => t.name.includes("bass heard a step low"))?.response as {
+      code: string;
+    };
+    const [bass, chords] = ex.byEar.parts as [ByEarPart, ByEarPart];
+    const grade = (part: ByEarPart, code: string) =>
+      gradeStep(deps, env(), partExercise(ex, part) as Exercise, partResponse(code, part), opts);
+    expect(partPassed(bass, await grade(bass, ref))).toBe(true);
+    expect(partPassed(chords, await grade(chords, ref))).toBe(true);
+    expect(partPassed(bass, await grade(bass, chordsWrong.code))).toBe(true);
+    expect(partPassed(chords, await grade(chords, chordsWrong.code))).toBe(false);
+    const b = await grade(bass, bassWrong.code);
+    expect(partPassed(bass, b)).toBe(false);
+    expect(b.diagnostics.map((d) => d.id)).toContain("melody.wrong-degree");
   });
 });

@@ -20,7 +20,15 @@ export { LatencyPart } from "./parts/LatencyPart.tsx";
 export { MicPart, PRIVACY_LINE } from "./parts/MicPart.tsx";
 export { PitchMatchPart } from "./parts/PitchMatchPart.tsx";
 export { RangePart } from "./parts/RangePart.tsx";
-export { clearRecheck, type RecheckAdvice, reportTake, takeAdvice, useRecheck } from "./recheck.ts";
+export {
+  BLEED_ADVICE,
+  clearRecheck,
+  type RecheckAdvice,
+  reportBleed,
+  reportTake,
+  takeAdvice,
+  useRecheck,
+} from "./recheck.ts";
 export { RENDERABLE_PARTS, type RenderablePart, SETUP_PARTS, type SetupPartId } from "./setup-parts.ts";
 export { isNotBuilt, type LadderView, ladderViewOf, type QuietView, quietViewOf } from "./state.ts";
 export { useVoice, type Voice } from "./use-voice.ts";

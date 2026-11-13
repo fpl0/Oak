@@ -91,7 +91,10 @@ export interface AnswerValueMap {
   number: number | null;
   /** MIDI notes picked, in order (`mode: 'sequence'`) or as a set. */
   keyboard: number[];
-  /** The staff-input text (`@oak/notation` staff-input helpers). */
+  /**
+   * The staff-input text (`@oak/notation` staff-input helpers). With `palette.chords` (Wave 4) notes that start
+   * together are one chord: `[C4,E4,G4]:2`.
+   */
   "staff-input": string;
   /** Sounding cells, `row × (stepsPerBar × bars)`; row order is `spec.rows`. */
   grid: boolean[][];
@@ -102,6 +105,11 @@ export interface AnswerValueMap {
   mic: SungSummary[];
   /** 1-based bars, in click order. */
   "bar-buttons": number[];
+  /**
+   * Wave 4: one option ID per slot, `""` for an empty slot (a function strip, a cadence per phrase). Sent as
+   * `answer.choice` in slot order, graded slot by slot.
+   */
+  "slot-choice": string[];
   "click-code": CodeRange | null;
   /** Engraved element ID (`oak-e12`). */
   "click-staff": string | null;

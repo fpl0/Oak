@@ -3,9 +3,12 @@
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { SCALE_MODES, type ScaleMode } from "@oak/content-kit";
 import { evalHeadless, midisOf } from "@oak/grader/testing";
+import { type ClipPart, renderClip } from "./corpus.ts";
 import { analyze, SR } from "./fixtures.test-data.ts";
+import { analyzeClip } from "./gate.ts";
 import {
   draftFromHum,
+  humToDraft,
   SCALE_INTERVALS,
   scaleName,
   stepMidi,
@@ -268,4 +271,134 @@ test("tuningOffsetCents is circular", () => {
   expect(tuningOffsetCents([60.3, 62.3, 64.28])).toBeCloseTo(29.3, 0);
   expect(tuningOffsetCents([59.6, 61.6])).toBeCloseTo(-40, 6);
   expect(tuningOffsetCents([])).toBe(0);
+});
+
+// Wave 4: from the microphone's frames (the synthetic voice corpus) to degrees and `n()` code.
+describe("humToDraft on the synthetic corpus", () => {
+  /** A sung line on a beat grid: `[midi, beats]` each, articulated, rendered by the corpus voice. */
+  function clipOf(
+    id: string,
+    line: [number, number][],
+    bpm: number,
+    o: { rangeLow?: number; cents?: number; vowel?: "a" | "o" | "u"; lead?: number } = {},
+  ) {
+    const beat = 60 / bpm;
+    const parts: ClipPart[] = [{ kind: "gap", sec: o.lead ?? 0.4 }];
+    for (const [midi, beats] of line) {
+      parts.push({
+        kind: "phrase",
+        notes: [{ midi: midi + (o.cents ?? 0) / 100, dur: beats * beat - 0.07 }],
+      });
+      parts.push({ kind: "gap", sec: 0.07 });
+    }
+    parts.push({ kind: "gap", sec: 0.4 });
+    const clip = renderClip({
+      id,
+      cls: "steady",
+      rangeLow: o.rangeLow ?? 48,
+      timbre: { vowel: o.vowel ?? "a" },
+      parts,
+    });
+    return { clip, frames: analyzeClip(clip) };
+  }
+  const profileOf = (clip: { profile: { noiseFloorDb: number; rangeLow: number } }) => ({
+    rangeLow: clip.profile.rangeLow,
+    noiseFloorDb: clip.profile.noiseFloorDb,
+    singLatencyMs: 0,
+  });
+
+  test("a hummed line in G becomes degrees 1 2 3 5 | 5 3 1 and code that plays it", async () => {
+    const { clip, frames } = clipOf(
+      "hum/g-major",
+      [
+        [67, 1],
+        [69, 1],
+        [71, 1],
+        [74, 1],
+        [74, 1],
+        [71, 1],
+        [67, 2],
+      ],
+      96,
+    );
+    const d = humToDraft(frames, { key: { tonic: "G", mode: "major" }, bpm: 96, profile: profileOf(clip) });
+    expect(d.machineMade).toBe(true);
+    expect(d.sung.length).toBe(7);
+    expect(d.degrees.map((x) => x.degree)).toEqual(["1", "2", "3", "5", "5", "3", "1"]);
+    expect(d.degrees.every((x) => x.octave === 0)).toBe(true);
+    // n() is degree − 1.
+    expect(d.notes.map((n) => n.step)).toEqual(["0", "1", "2", "4", "4", "2", "0"]);
+    expect(d.pattern).toBe("<[0 1 2 4] [4 2 0 _]>");
+    expect(d.scale).toBe("G4:major");
+    const midis = (await midisOf(d.code, 2)) as number[];
+    expect(midis).toEqual([67, 69, 71, 74, 74, 71, 67]);
+  });
+
+  test("minor key, eighth notes and a flat singer: degrees in the key, onsets on the eighth grid", async () => {
+    // A minor: 1 b3 4 5 (eighths) | b6 5 b3 1 — sung 30¢ flat.
+    const line: [number, number][] = [
+      [57, 0.5],
+      [60, 0.5],
+      [62, 0.5],
+      [64, 0.5],
+      [65, 1],
+      [64, 1],
+      [60, 1],
+      [57, 2],
+    ];
+    const { clip, frames } = clipOf("hum/a-minor", line, 100, { cents: -30, vowel: "o" });
+    const key = { tonic: "A", mode: "minor" as const };
+    const d = humToDraft(frames, { key, bpm: 100, profile: profileOf(clip) });
+    expect(d.tuningCents).toBeLessThan(-15);
+    expect(d.degrees.map((x) => x.degree)).toEqual(["1", "b3", "4", "5", "b6", "5", "b3", "1"]);
+    expect(d.notes.map((n) => n.onset)).toEqual([
+      [0, 1],
+      [1, 8],
+      [1, 4],
+      [3, 8],
+      [1, 2],
+      [3, 4],
+      [0, 1],
+      [1, 4],
+    ]);
+    expect((await midisOf(d.code, d.bars)) as number[]).toEqual([57, 60, 62, 64, 65, 64, 60, 57]);
+  });
+
+  test("a low voice hums a line an octave down: the octave is chosen from where it sits, or moved onto the tonic", () => {
+    const { clip, frames } = clipOf(
+      "hum/low-voice",
+      [
+        [48, 1],
+        [52, 1],
+        [55, 1],
+        [60, 1],
+      ],
+      90,
+      { rangeLow: 40, vowel: "u" },
+    );
+    const sat = humToDraft(frames, { key: { tonic: "C", mode: "major" }, bpm: 90, profile: profileOf(clip) });
+    expect(sat.scale).toBe("C3:major");
+    expect(sat.degrees).toEqual([
+      { degree: "1", octave: 0 },
+      { degree: "3", octave: 0 },
+      { degree: "5", octave: 0 },
+      { degree: "1", octave: 1 },
+    ]);
+    const moved = humToDraft(frames, {
+      key: { tonic: "C", mode: "major" },
+      bpm: 90,
+      tonicOctave: 4,
+      profile: profileOf(clip),
+    });
+    expect(moved.scale).toBe("C4:major");
+    expect(moved.octaveShift).toBe(1);
+    expect(moved.notes.map((n) => n.midi)).toEqual([60, 64, 67, 72]);
+  });
+
+  test("silence drafts a rest and warns", () => {
+    const empty = humToDraft(analyze(silence(2, SR, -70)), { key: { tonic: "C", mode: "major" }, bpm: 100 });
+    expect(empty.pattern).toBe("~");
+    expect(empty.warnings).toContainEqual({ code: "empty" });
+    expect(empty.degrees).toEqual([]);
+  });
 });

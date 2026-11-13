@@ -1,18 +1,21 @@
 // The learner's own things: sketches, the album (tracks, versions, liner-note data, recorded audio),
 // their audio files, and transcription projects. Saving a sketch version after a successful Run
 // qualifies the streak day (contracts §7.8 b).
-import type {
-  AlbumTrackDetail,
-  AlbumTrackVersion,
-  AudioFile,
-  Sketch,
-  SketchDetail,
-  SketchSaved,
-  SketchVersion,
-  Transcription,
-  TranscriptionDetail,
+import {
+  type AlbumTrackDetail,
+  type AlbumTrackVersion,
+  type AudioFile,
+  DEFAULT_TRANSCRIPTION_SETTINGS,
+  type Sketch,
+  type SketchDetail,
+  type SketchSaved,
+  type SketchVersion,
+  type Transcription,
+  type TranscriptionDetail,
+  type TranscriptionSettings,
 } from "@oak/api";
-import type { GradeResult, NEvent } from "@oak/content-kit";
+import { type GradeResult, skillOf } from "@oak/content-kit";
+import type { LadderPiece } from "@oak/drills";
 import { tx } from "../db/index.ts";
 import type { StoredTranscription } from "../db/repos/library.ts";
 import { ApiError, badRequest, conflict, notFound } from "../errors.ts";
@@ -26,7 +29,9 @@ import {
   sniffAudio,
   wavInfo,
 } from "./audio-store.ts";
+import { familyForLayer } from "./capstone-sessions.ts";
 import { LearnerTime, newId, type ServiceContext } from "./context.ts";
+import { evidenceWeight, type MasteryService } from "./mastery.ts";
 import type { StreakService } from "./streak.ts";
 
 type VersionInput = Omit<SketchVersion, "sketchId" | "version" | "createdAt"> & {
@@ -36,18 +41,30 @@ type VersionInput = Omit<SketchVersion, "sketchId" | "version" | "createdAt"> & 
 
 /** Events of hidden pattern code for the Transcribe player, computed by the server grader. */
 export type PatternStimulus = (code: string, bars: number) => Promise<TranscriptionDetail["stimulus"]>;
-/** A ladder piece (`@oak/drills` `generateLadderPiece`), behind a seam because it may be unfinished. */
+/**
+ * A ladder piece (`@oak/drills` `generateLadderPiece`), behind a seam because it may be unfinished. `completed`
+ * (lesson IDs) turns on the generator's later vocabulary (a pickup from U07.L08).
+ */
 export type LadderGenerator = (
   level: number,
   realism: number,
   seed: number,
-) => { code: string; events: NEvent[]; cps: number; bars: number; preload: string[] };
+  opts?: { completed?: ReadonlySet<string> },
+) => LadderPiece;
 
 export interface LibraryDeps {
   streak: StreakService;
+  /** Wave 4: own-audio checklists are self-reported evidence (weight 0.3, contracts §6.12). */
+  mastery?: MasteryService;
   store: AudioStore;
   stimulus?: PatternStimulus;
   ladder?: LadderGenerator;
+}
+
+/** A project as the browser sees it: never the hidden code or the stored ladder item (contracts §11.11). */
+export function publicTranscription(t: StoredTranscription): Transcription {
+  const { hiddenCode: _h, ladder: _l, ...out } = t;
+  return out;
 }
 
 export class LibraryService {
@@ -158,6 +175,7 @@ export class LibraryService {
       linerNotesMd: string;
       theoryTags: string[];
       attribution: string | null;
+      includeReviewNote?: boolean;
     },
   ): AlbumTrackVersion {
     const sv = this.#repos.sketches.version(body.sketchId, body.sketchVersion);
@@ -178,6 +196,7 @@ export class LibraryService {
       band: sv.band,
       flags: sv.flags,
       createdAt: this.time.iso(),
+      ...(body.includeReviewNote === undefined ? {} : { includeReviewNote: body.includeReviewNote }),
     };
   }
 
@@ -191,6 +210,7 @@ export class LibraryService {
     linerNotesMd: string;
     theoryTags: string[];
     attribution: string | null;
+    includeReviewNote?: boolean;
   }): AlbumTrackDetail {
     const id = newId("trk");
     tx(this.#repos.db, () => {
@@ -230,6 +250,7 @@ export class LibraryService {
       linerNotesMd: string;
       theoryTags: string[];
       attribution: string | null;
+      includeReviewNote?: boolean;
     },
   ): AlbumTrackDetail {
     tx(this.#repos.db, () => {
@@ -286,12 +307,65 @@ export class LibraryService {
     this.d.store.removeDir(id);
   }
 
-  /** An accepted capstone review lands on the capstone's track, latest version (contracts §10.6). */
-  saveCapstoneReview(capstoneId: string, review: unknown): boolean {
+  /**
+   * An accepted capstone review lands on the capstone's track (contracts §10.6): on the version the review was
+   * about when the turn named one (`albumTrackId` + `albumVersion`, Wave 4), else the latest version.
+   */
+  saveCapstoneReview(
+    capstoneId: string,
+    review: unknown,
+    opts: { trackId?: string; version?: number; conversationId?: string } = {},
+  ): boolean {
     const t = this.#repos.album.trackOfCapstone(capstoneId);
     if (t === null) return false;
-    this.#repos.album.setReview(t.id, t.currentVersion, review);
+    if (opts.trackId !== undefined && opts.trackId !== t.id) return false;
+    const version = opts.version ?? t.currentVersion;
+    if (this.#repos.album.version(t.id, version) === null) return false;
+    this.#repos.album.setReview(t.id, version, review, opts.conversationId ?? null);
     return true;
+  }
+
+  /** `PATCH /album/tracks/:id/versions/:v` (Wave 4): edit the liner notes; choose whether the review's note shows. */
+  patchTrackVersion(
+    id: string,
+    version: number,
+    patch: { linerNotesMd?: string; includeReviewNote?: boolean },
+  ): AlbumTrackVersion {
+    return tx(this.#repos.db, () => {
+      if (this.#repos.album.version(id, version) === null) throw notFound(`track ${id} v${version}`);
+      this.#repos.album.patchVersion(id, version, patch);
+      return this.#repos.album.version(id, version) as AlbumTrackVersion;
+    });
+  }
+
+  /**
+   * `PUT /album/tracks/:id/versions/:v/review` (Wave 4): attach a submitted capstone review to a version. The review
+   * must come from a `review` conversation about this track's capstone, and be one that conversation accepted.
+   */
+  attachTrackReview(
+    id: string,
+    version: number,
+    body: { conversationId: string; review: unknown; includeReviewNote: boolean },
+  ): AlbumTrackVersion {
+    return tx(this.#repos.db, () => {
+      const t = this.#repos.album.track(id);
+      if (t === null) throw notFound(`track ${id}`);
+      if (this.#repos.album.version(id, version) === null) throw notFound(`track ${id} v${version}`);
+      const conv = this.#repos.tutor.conversation(body.conversationId);
+      if (conv === null) throw notFound(`conversation ${body.conversationId}`);
+      if (
+        conv.key.lane !== "review" ||
+        conv.key.subjectKind !== "capstone" ||
+        conv.key.subjectId !== t.capstoneId
+      )
+        throw conflict("that conversation is not a review of this track's capstone");
+      const submitted = this.#repos.tutor.reviewsOfConversation(body.conversationId);
+      const same = submitted.some((r) => stableJson(r) === stableJson(body.review));
+      if (!same) throw conflict("that review was not submitted in that conversation");
+      this.#repos.album.setReview(id, version, body.review, body.conversationId);
+      this.#repos.album.patchVersion(id, version, { includeReviewNote: body.includeReviewNote });
+      return this.#repos.album.version(id, version) as AlbumTrackVersion;
+    });
   }
 
   // --- audio files ------------------------------------------------------------------------------
@@ -371,13 +445,14 @@ export class LibraryService {
   // --- transcriptions ---------------------------------------------------------------------------
 
   transcriptions(): Transcription[] {
-    return this.#repos.transcriptions.list().map(({ hiddenCode: _h, ...t }) => t);
+    return this.#repos.transcriptions.list().map(publicTranscription);
   }
 
   async transcription(id: string): Promise<TranscriptionDetail> {
     const t = this.#repos.transcriptions.get(id);
     if (t === null) throw notFound(`transcription ${id}`);
-    const { hiddenCode, ...rest } = t;
+    const { hiddenCode } = t;
+    const rest = publicTranscription(t);
     const versions = this.#repos.transcriptions.versions(id).map((v) => ({
       transcriptionId: v.transcriptionId,
       version: v.version,
@@ -389,6 +464,10 @@ export class LibraryService {
 
   async #stimulus(t: StoredTranscription, code: string | null): Promise<TranscriptionDetail["stimulus"]> {
     if (t.player !== "pattern" || code === null) return null;
+    // A generated ladder item carries its stimulus (Wave 4): a restart needs no grader to play it.
+    const stored = t.ladder?.stimulus;
+    if (stored !== undefined && stored !== null)
+      return stored as NonNullable<TranscriptionDetail["stimulus"]>;
     const key = `${t.id}:${sha256(new TextEncoder().encode(code))}`;
     const cached = this.#stimulusCache.get(key);
     if (cached !== undefined) return cached;
@@ -493,31 +572,120 @@ export class LibraryService {
       hiddenCode: t.hiddenCode,
       updatedAt: this.time.iso(),
     };
-    this.#repos.transcriptions.update(next);
-    const { hiddenCode: _h, ...out } = next;
-    return out;
+    tx(this.#repos.db, () => {
+      this.#repos.transcriptions.update(next);
+      if (t.sourceKind === "own-audio" && patch.checklist !== undefined)
+        this.#selfEvidence(id, t.checklist, patch.checklist);
+    });
+    return publicTranscription(next);
+  }
+
+  /**
+   * An own-audio project is graded by the learner (`grading.mode: 'self'`, contracts §6.12): each checklist item
+   * set or changed (0–2) is evidence at weight 0.3, flagged self-reported by its source kind, for the skills of the
+   * layer it describes (contour, rhythm and landing: the melody; bass; chords).
+   */
+  #selfEvidence(id: string, before: Record<string, number>, after: Record<string, number>): void {
+    if (this.d.mastery === undefined) return;
+    const LAYER: Record<string, "melody" | "bass" | "chords"> = {
+      contour: "melody",
+      rhythm: "melody",
+      landing: "melody",
+      bass: "bass",
+      chords: "chords",
+    };
+    const items: Parameters<MasteryService["addEvidence"]>[0][number][] = [];
+    for (const [item, value] of Object.entries(after)) {
+      const layer = LAYER[item];
+      if (layer === undefined || before[item] === value || !Number.isFinite(value)) continue;
+      const fam = familyForLayer(this.ctx.content, layer);
+      for (const skillId of new Set(fam?.skills.map((x) => skillOf(x.skill)) ?? []))
+        items.push({
+          skillId: skillId as never,
+          category: null,
+          score: Math.max(0, Math.min(1, value / 2)),
+          weight: evidenceWeight("self-transcription"),
+          sourceKind: "self-transcription",
+          sourceId: `${id}/${item}`,
+        });
+    }
+    if (items.length > 0) this.d.mastery.addEvidence(items);
+  }
+
+  /**
+   * `PUT /transcriptions/:id/settings` (Wave 4): the player's rate, transposition, fine-tune and A–B loop, and the
+   * learner's notes. A pattern source has no fine-tune (contracts §6.12), so it stays 0 there.
+   */
+  putTranscriptionSettings(id: string, patch: Partial<TranscriptionSettings>): Transcription {
+    return tx(this.#repos.db, () => {
+      const t = this.#repos.transcriptions.get(id);
+      if (t === null) throw notFound(`transcription ${id}`);
+      const settings: TranscriptionSettings = {
+        ...DEFAULT_TRANSCRIPTION_SETTINGS,
+        ...(t.settings ?? { fineTuneCents: t.fineTuneCents }),
+        ...patch,
+      };
+      if (t.player === "pattern") settings.fineTuneCents = 0;
+      if (settings.loop !== null && settings.loop.endS <= settings.loop.startS)
+        throw badRequest("the loop must end after it starts");
+      const next: StoredTranscription = {
+        ...t,
+        settings,
+        fineTuneCents: settings.fineTuneCents,
+        updatedAt: this.time.iso(),
+      };
+      this.#repos.transcriptions.update(next);
+      return publicTranscription(next);
+    });
   }
 
   addTranscriptionVersion(
     id: string,
-    body: { code: string; result: GradeResult | null; ranOk: boolean },
+    body: {
+      code: string;
+      result: GradeResult | null;
+      ranOk: boolean;
+      machineDraft?: boolean;
+      stage?: "bass" | "quality" | "rn" | null;
+    },
   ): Promise<TranscriptionDetail> {
-    tx(this.#repos.db, () => {
+    this.saveTranscriptionVersion(id, body);
+    return this.transcription(id);
+  }
+
+  /** One version, in the caller's transaction or its own. Returns the version number. */
+  saveTranscriptionVersion(
+    id: string,
+    body: {
+      code: string;
+      result: GradeResult | null;
+      ranOk: boolean;
+      machineDraft?: boolean;
+      stage?: "bass" | "quality" | "rn" | null;
+    },
+  ): number {
+    return tx(this.#repos.db, () => {
       const t = this.#repos.transcriptions.get(id);
       if (t === null) throw notFound(`transcription ${id}`);
       const at = this.time.iso();
       const version = t.currentVersion + 1;
+      // A machine draft ("Hum it, Oak drafts it", contracts §6.12) is stored without its grade: it gives no evidence
+      // and no pass until the learner's corrected version is checked.
+      const machineDraft = body.machineDraft === true;
       this.#repos.transcriptions.insertVersion({
         transcriptionId: id,
         version,
         code: body.code,
-        result: body.result,
+        result: machineDraft ? null : body.result,
         createdAt: at,
+        machineDraft,
+        stage: body.stage ?? null,
       });
       this.#repos.transcriptions.update({ ...t, currentVersion: version, updatedAt: at });
-      if (body.ranOk) this.d.streak.qualify("sketch");
+      // The saved transcription version is the gym day's Make (contracts §9.1) and a sketch for the streak.
+      if (body.ranOk && !machineDraft) this.d.streak.qualify("sketch");
+      return version;
     });
-    return this.transcription(id);
   }
 
   deleteTranscription(id: string): void {
@@ -530,4 +698,15 @@ export class LibraryService {
     this.#repos.transcriptions.update({ ...t, review, updatedAt: this.time.iso() });
     return true;
   }
+}
+
+/** JSON with sorted keys, to compare two parsed values for equality. */
+export function stableJson(v: unknown): string {
+  return JSON.stringify(v, (_k, x: unknown) =>
+    x !== null && typeof x === "object" && !Array.isArray(x)
+      ? Object.fromEntries(
+          Object.entries(x as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)),
+        )
+      : x,
+  );
 }

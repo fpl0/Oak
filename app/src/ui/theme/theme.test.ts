@@ -72,6 +72,20 @@ describe("tokens.css (ux §7.2, §7.9: WCAG 2.2 AA in both themes)", () => {
         expect(contrast(t[c] as string, t.bg as string)).toBeGreaterThanOrEqual(3);
       expect(contrast(t["on-accent"] as string, t.accent as string)).toBeGreaterThanOrEqual(4.5);
     });
+    test(`${theme}: link, issue and danger also pass 4.5:1 as small text on every surface (Wave 4)`, () => {
+      for (const fg of ["link", "issue", "danger", "accent"])
+        for (const bg of ["bg", "surface", "surface-2"])
+          expect(contrast(t[fg] as string, t[bg] as string), `${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(t["on-danger"] as string, t.danger as string)).toBeGreaterThanOrEqual(4.5);
+    });
+    test(`${theme}: a secondary control stands off a card (border ≥ 1.75:1) and its label reads (Wave 4)`, () => {
+      for (const bg of ["surface", "bg"])
+        expect(contrast(t["control-border"] as string, t[bg] as string)).toBeGreaterThanOrEqual(1.6);
+      expect(contrast(t["control-border"] as string, t.surface as string)).toBeGreaterThanOrEqual(1.75);
+      for (const fg of ["text", "text-2"])
+        for (const bg of ["control", "control-hover"])
+          expect(contrast(t[fg] as string, t[bg] as string)).toBeGreaterThanOrEqual(4.5);
+    });
   }
   test("the spec colours of ux §7.2 are kept where they pass", () => {
     expect(tokens("paper").bg).toBe("#f6f2ea");

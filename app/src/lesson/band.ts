@@ -35,6 +35,14 @@ export function bandSetupOf(
   };
 }
 
+/**
+ * The Band parts a step leaves out (`ui.band.tracks`), as a sketch's `band.mutes`: a Make saved over the drums
+ * alone opens in Studio with the Band's bass and chords still muted, so it sounds as it did in the lesson.
+ */
+export function bandMutesOf(setup: Pick<BandSetup, "tracks">): ("drums" | "bass" | "chords")[] {
+  return (["drums", "bass", "chords"] as const).filter((r) => !setup.tracks.includes(r));
+}
+
 /** The Band of a lesson's Make (its last step that declares one). */
 export function makeBandOf(lesson: Pick<LessonDef, "steps"> | null | undefined): BandRef | null {
   if (!lesson) return null;

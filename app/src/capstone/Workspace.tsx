@@ -1,27 +1,26 @@
-// The capstone workspace (ux §2.3): the Brief panel (300 px) beside the full Workbench. The checklist is live: the
-// rubric runs in capstone mode on every edit; "Check my track" records the check on the server (evidence and the
-// tutor's review source); every successful Run and every pause in typing saves a version of the draft. Release
-// names the track, records the performance and puts it on the album; a released capstone stays open for revision.
-import {
-  type CapstoneDef,
-  type CapstoneState,
-  type FlavourId,
-  type SketchVersion,
-  stripMarkers,
-  type UnlockableId,
-} from "@oak/api";
+// The capstone workspace (ux §2.3): the Brief panel (300 px) beside the full Workbench. A compose capstone runs over
+// one or more sessions (C2: chords, then melody; contracts §2.4); the panel names this session and what it is for.
+// The checklist is live: the rubric runs in capstone mode on every edit with bar-anchored feedback (a bar chip
+// lights those bars on the roll and the staff); "Check my track" records the check on the server. Every
+// successful Run and every pause in typing saves a version of the draft, bound to the session (`useDraftSaver`).
+// Opened again outside Today's runner, the draft is offered from the top. Release names the track, records the
+// performance and puts it on the album; a released capstone stays open for revision.
+import type { CapstoneDef, CapstoneState, FlavourId, SketchVersion, UnlockableId } from "@oak/api";
+import { toolsUsed } from "@oak/grader";
 import { editorId } from "@oak/strudel";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { clsx } from "clsx";
-import { Check, CheckCheck, CircleDot, Disc3, Music4, Save } from "lucide-react";
+import { Check, CheckCheck, CircleDot, Disc3, Music4, Play, Save, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useContent } from "../lib/content.ts";
 import {
   apiQuery,
   useApiMutation,
   useBootstrap,
   useCapstoneCheck,
   useCapstoneSessionComplete,
+  useCapstoneSessions,
   useCourseProgress,
   useUnlocks,
 } from "../lib/queries.ts";
@@ -33,7 +32,9 @@ import {
   patchSubject,
   registerTutorHost,
   setSubject,
+  showBars,
 } from "../tutor/context.ts";
+import { useSubjectHarmony } from "../tutor/use-subject-harmony.ts";
 import { useHotkeys } from "../ui/keys/KeymapProvider.tsx";
 import { Button } from "../ui/kit/Button.tsx";
 import { Chip, Kbd } from "../ui/kit/basics.tsx";
@@ -47,24 +48,19 @@ import { BriefPanel } from "./BriefPanel.tsx";
 import { trackTitleOf } from "./CapstoneScreen.tsx";
 import { Ceremony, type CeremonyData } from "./Ceremony.tsx";
 import { beyondBrief, checklistOf, readiness } from "./checklist.ts";
-import { bandSetupFor, type CapstoneContent } from "./content.ts";
+import type { CapstoneContent } from "./content.ts";
+import { bandSetupFor as bandFor } from "./content.ts";
+import { useDraftSaver } from "./draft.ts";
 import { type CheckOutcome, checkPiece, lintFor } from "./engine.ts";
-import {
-  latestVersion,
-  useAddDraftVersion,
-  useCapstoneReview,
-  useCreateDraft,
-  useDraft,
-  useDraftSketchId,
-  usePatchDraft,
-  usePutDraft,
-} from "./queries.ts";
+import { analysisTheory, composeLiner, dedupe } from "./liner.ts";
+import { theoryTags } from "./piece.ts";
+import { latestVersion, useCapstoneReview, useDraft, useDraftSketchId, usePatchDraft } from "./queries.ts";
 import { ReleaseDialog } from "./ReleaseDialog.tsx";
+import { useTryRevision } from "./revision.ts";
+import { currentSession, isResume, sessionsDone, sessionViews, starterOf } from "./sessions.ts";
 import { WorkbenchServicesLoader } from "./WorkbenchServicesLoader.tsx";
 
-export function starterOf(def: CapstoneDef): string {
-  return stripMarkers(def.brief?.code.starter ?? "").code;
-}
+export { starterOf };
 
 /** The workbench slug of a capstone's editor (`oak_capstone-C0_0_`). */
 export const wbSlug = (id: string) => `capstone-${id}`;
@@ -131,17 +127,25 @@ function Loaded({
   const { oak } = useWorkbenchServices();
   const qc = useQueryClient();
   const boot = useBootstrap();
+  const shared = useContent();
   const unlocksQ = useUnlocks();
   const progress = useCourseProgress();
+  const sessionsQ = useCapstoneSessions(def.id);
   const brief = def.brief as NonNullable<CapstoneDef["brief"]>;
   const released = state.status === "released" && state.trackId !== null;
   const total = def.sessionDefs.length;
-  const nextIndex = Math.min(state.sessionsDone, total - 1);
+  const views = sessionViews(def, state, sessionsQ.data ?? null);
+  const current = currentSession(views, sessionsQ.data ?? null);
+  const done = sessionsDone(views);
+  const nextIndex = current?.index ?? Math.min(state.sessionsDone, total - 1);
   const nextSession = def.sessionDefs[nextIndex];
-  const allDone = state.sessionsDone >= total;
+  const allDone = done >= total || state.sessionsDone >= total;
+  const lastSession = current?.release === true || state.sessionsDone >= total - 1;
   const sessionId =
     currentSessionId() ??
     (boot.data?.openSession?.mapItemId?.startsWith(`${def.id}.`) ? boot.data.openSession.id : null);
+  const currentRef = useRef(current?.id ?? null);
+  currentRef.current = allDone ? null : (current?.id ?? null);
 
   // --- unlocked set and flavour ------------------------------------------------------------------
   const unlockIds = (unlocksQ.data?.items ?? []).map((u) => u.itemId as UnlockableId);
@@ -163,35 +167,21 @@ function Loaded({
   const [flavour, setFlavour] = useState<FlavourId>(
     state.flavour ?? tagFlavour ?? boot.data?.profile.flavour ?? content.shipping[0] ?? "flavour.pop",
   );
+  const flavourRef = useRef(flavour);
+  flavourRef.current = flavour;
 
-  // --- code, saving -------------------------------------------------------------------------------
-  const initialCode = latest?.code ?? starterOf(def);
+  // --- code ----------------------------------------------------------------------------------------
+  const initialCode = latest?.code ?? starterOf(def, nextIndex);
   const [code, setCode] = useState(initialCode);
   const codeRef = useRef(code);
   codeRef.current = code;
-  const saved = useRef<{ sketchId: string | null; version: number | null; code: string | null }>({
-    sketchId: initialSketch,
-    version: latest?.version ?? null,
-    code: latest?.code ?? null,
-  });
-  const [savedInfo, setSavedInfo] = useState<{ version: number; at: number } | null>(
-    latest ? { version: latest.version, at: Date.parse(latest.createdAt) } : null,
-  );
   const [bandOn, setBandOn] = useState(latest?.band != null);
   const assisted = useRef<string | null>(null);
-  const create = useCreateDraft();
-  const addVersion = useAddDraftVersion();
   const patch = usePatchDraft();
-  const putDraft = usePutDraft();
-  const chain = useRef<Promise<unknown>>(Promise.resolve());
 
   // --- live rubric ---------------------------------------------------------------------------------
   const [live, setLive] = useState<{ outcome: CheckOutcome | null; checking: boolean; error: string | null }>(
-    {
-      outcome: null,
-      checking: true,
-      error: null,
-    },
+    { outcome: null, checking: true, error: null },
   );
   const liveRef = useRef(live);
   liveRef.current = live;
@@ -217,7 +207,7 @@ function Loaded({
   }, [def, code, unlocked, unlocksQ.isPending]);
 
   const band = bandOn
-    ? bandSetupFor(
+    ? bandFor(
         def,
         flavour,
         content.bands,
@@ -225,75 +215,53 @@ function Loaded({
         bandReached(progress.data),
       )
     : null;
+  const bandRef = useRef(band);
+  bandRef.current = band;
 
-  const versionBody = (src: string, ranOk: boolean) => {
-    const o = liveRef.current.outcome;
-    const fresh = o && o.code === src ? o : null;
-    const note = assisted.current;
-    return {
-      code: src,
-      bpm: fresh?.analysis?.bpm ?? null,
-      meter: def.meter,
-      key: fresh?.key ?? def.key ?? null,
-      analysis: fresh?.analysis ?? null,
-      note,
-      tutorAssisted: note !== null,
-      band: band ? { bandId: band.band, flavour, mutes: [] as ("drums" | "bass" | "chords")[] } : null,
-      flags: { lockedTools: [] as string[], previewTools: [] as string[] },
-      ranOk,
-    };
-  };
-
-  /** Saves the code as a new version unless it is already the latest. Serialized: one save at a time. */
-  const save = (src: string, ranOk: boolean): Promise<{ sketchId: string; version: number }> => {
-    const run = async () => {
-      const s = saved.current;
-      if (s.sketchId && s.version !== null && s.code === src)
-        return { sketchId: s.sketchId, version: s.version };
-      const body = versionBody(src, ranOk);
-      const out = s.sketchId
-        ? await addVersion.mutateAsync({ params: { id: s.sketchId }, body: { sessionId, ...body } })
-        : await create.mutateAsync({
-            body: { title: def.title, originKind: "capstone", originId: def.id, sessionId, ...body },
-          });
-      if (!s.sketchId) await patch.mutateAsync({ params: { id: out.sketch.id }, body: { tags: [flavour] } });
-      putDraft(out.sketch);
-      saved.current = { sketchId: out.sketch.id, version: out.sketch.currentVersion, code: src };
-      assisted.current = null;
-      setSavedInfo({ version: out.sketch.currentVersion, at: Date.now() });
-      return { sketchId: out.sketch.id, version: out.sketch.currentVersion };
-    };
-    const next = chain.current.then(run, run);
-    chain.current = next.catch(() => {});
-    return next;
-  };
-  const saveQuietly = (src: string, ranOk: boolean) => {
-    save(src, ranOk).catch((e: unknown) =>
-      toast.error("Couldn't save the draft", e instanceof Error ? e.message : undefined),
+  // Tools used before their unlock: allowed only as previews, and named in the liner notes (§3.1 rule 4).
+  const previewToolsOf = (src: string): string[] => {
+    const toolbox = shared.data?.toolbox ?? [];
+    if (toolbox.length === 0) return [];
+    const ids = dedupe(toolsUsed(src, toolbox).map((t) => t.id)).filter(
+      (id) => !unlocked.has(id as UnlockableId),
     );
+    return ids.map((id) => toolbox.find((t) => t.id === id)?.code ?? id);
   };
 
-  // A pause in typing saves; leaving the page saves what is there.
-  useEffect(() => {
-    if (code === saved.current.code || (saved.current.code === null && code === initialCode)) return;
-    const t = setTimeout(() => saveQuietly(code, false), 4000);
-    return () => clearTimeout(t);
+  const draftSaver = useDraftSaver({
+    capstoneId: def.id,
+    title: def.title,
+    initialSketch,
+    latest: latest ? { version: latest.version, code: latest.code, createdAt: latest.createdAt } : null,
+    initialCode,
+    sessionId,
+    capstoneSessionId: () => currentRef.current,
+    tags: () => [flavourRef.current],
+    body: (src, ranOk) => {
+      const o = liveRef.current.outcome;
+      const fresh = o && o.code === src ? o : null;
+      const note = assisted.current;
+      assisted.current = null;
+      const b = bandRef.current;
+      return {
+        code: src,
+        bpm: fresh?.analysis?.bpm ?? null,
+        meter: def.meter,
+        key: fresh?.key ?? def.key ?? null,
+        analysis: fresh?.analysis ?? null,
+        note,
+        tutorAssisted: note !== null,
+        band: b
+          ? { bandId: b.band, flavour: flavourRef.current, mutes: [] as ("drums" | "bass" | "chords")[] }
+          : null,
+        flags: { lockedTools: [] as string[], previewTools: previewToolsOf(src) },
+        ranOk,
+      };
+    },
   });
-  useEffect(() => {
-    const flush = () => {
-      if (codeRef.current !== saved.current.code && codeRef.current !== initialCode)
-        saveQuietly(codeRef.current, false);
-    };
-    const onHide = () => {
-      if (document.visibilityState === "hidden") flush();
-    };
-    document.addEventListener("visibilitychange", onHide);
-    return () => {
-      document.removeEventListener("visibilitychange", onHide);
-      flush();
-    };
-    // Mount/unmount only: the refs carry the latest code.
-  }, []);
+  const save = draftSaver.save;
+  const saveQuietly = draftSaver.saveQuietly;
+  const savedInfo = draftSaver.saved;
 
   // --- official check, sessions, release -------------------------------------------------------------
   const check = useCapstoneCheck();
@@ -308,11 +276,12 @@ function Loaded({
   } | null>(null);
   const [releaseOpen, setReleaseOpen] = useState(false);
   const [ceremony, setCeremony] = useState<CeremonyData | null>(null);
-  const review = useCapstoneReview(def.id, state.reviewRequested);
+  const review = useCapstoneReview(def.id);
   const track = useQuery({
     ...apiQuery("album.track", { params: { id: state.trackId ?? "none" } }),
     enabled: state.trackId !== null,
   });
+  const tryRevision = useTryRevision();
 
   const outcomeFor = async (src: string): Promise<CheckOutcome> => {
     const o = liveRef.current.outcome;
@@ -362,7 +331,6 @@ function Loaded({
     }
   };
 
-  const lastSession = state.sessionsDone >= total - 1;
   const finishSession = async () => {
     if (!nextSession) return;
     try {
@@ -375,7 +343,7 @@ function Loaded({
         tone: "success",
         title: `Session ${nextIndex + 1} of ${total} done.`,
         body: def.sessionDefs[nextIndex + 1]
-          ? `Next time: ${def.sessionDefs[nextIndex + 1]?.title}. Your draft waits here.`
+          ? `Next time: ${def.sessionDefs[nextIndex + 1]?.title}. Your draft waits here and plays from the top when you come back.`
           : undefined,
       });
       reportBlockDone({ block: "new", source: "capstone", itemId: nextSession.id, completed: true });
@@ -392,8 +360,43 @@ function Loaded({
     setReleaseOpen(true);
   };
 
+  // --- play from the top (a return outside Today's runner; the runner plays it itself) ----------------
+  const editorHandle = () => {
+    const h = oak.editors.get(editorId(wbSlug(def.id)));
+    return h && !h.disposed ? h : null;
+  };
+  const [resume, setResume] = useState(
+    () =>
+      currentSessionId() === null &&
+      isResume(views, latest ? { version: latest.version, createdAt: latest.createdAt } : null),
+  );
+  const [fromTop, setFromTop] = useState(false);
+  const playFromTop = async () => {
+    const h = editorHandle();
+    if (!h) return;
+    try {
+      await oak.unlock();
+      if (h.playing) h.stop();
+      const ran = await h.evaluate({ autostart: false });
+      if (!ran.ok) {
+        toast.error("The draft doesn't run yet", "Fix the error the editor shows, then play it.");
+        return;
+      }
+      await h.play();
+      setFromTop(true);
+    } catch (e) {
+      toast.error("It didn't play", e instanceof Error ? e.message : undefined);
+    }
+  };
+  const stopFromTop = () => {
+    editorHandle()?.stop();
+    setFromTop(false);
+  };
+
   // --- tutor ---------------------------------------------------------------------------------------
   const thread = { subjectKind: "capstone" as const, subjectId: def.id };
+  const onHarmony = useSubjectHarmony(thread);
+  const onBars = (from: number, to: number) => showBars(thread, from, to);
   useEffect(() => {
     setSubject({
       thread,
@@ -403,13 +406,12 @@ function Loaded({
       code: codeRef.current,
       released,
       ...(def.key ? { key: def.key } : {}),
-      ...(saved.current.sketchId ? { sketchId: saved.current.sketchId } : {}),
+      ...(draftSaver.sketchId ? { sketchId: draftSaver.sketchId } : {}),
     });
     return () => clearSubject(thread);
     // The thread is fixed for this workspace.
   }, [def.id]);
   const lastResult = live.outcome?.result ?? state.lastResult ?? null;
-  // The brief's key, else the piece's own (its `.scale()`, read by the subject) — the tutor's Key chip.
   useEffect(() => {
     patchSubject({ subjectKind: "capstone", subjectId: def.id }, { code, lastResult, released });
   }, [def.id, code, lastResult, released]);
@@ -418,7 +420,7 @@ function Loaded({
     () =>
       registerTutorHost({
         thread,
-        sketchId: saved.current.sketchId,
+        sketchId: draftSaver.sketchId,
         ...(released
           ? {
               applyCode: (next: string, card: { cardId: string; title: string }) => {
@@ -484,12 +486,31 @@ function Loaded({
       ? (outcome.result.messages[0]?.text ?? "The piece doesn't run.")
       : null;
   const canRelease = (lastSession || allDone) && ready.ready && !stale && !live.checking;
+  const skillName = (id: string) => content.skillNames.get(id) ?? null;
+  const bandTitle = band ? `${content.bands.find((b) => b.id === band.band)?.title ?? "the Band"}` : null;
+  const releaseTheory = (o: CheckOutcome) =>
+    dedupe([...theoryTags(brief.rubric, o.result, null, skillName), ...analysisTheory(o.analysis)]);
+  const notesFor = (o: CheckOutcome) => (line: string) =>
+    composeLiner({
+      learnerLine: line,
+      bars: o.bars,
+      bpm: o.analysis?.bpm ?? null,
+      key: o.analysis && o.analysis.key.length > 0 ? o.key : null,
+      meter: def.meter,
+      theory: releaseTheory(o),
+      previewTools: previewToolsOf(o.code),
+      revealed: [],
+      band: bandTitle ? `Played with ${bandTitle}` : null,
+      attribution: latest?.tutorAssisted && latest.note ? latest.note : null,
+    });
 
   return (
     <>
       <BriefPanel
         def={def}
         state={state}
+        views={views}
+        current={allDone ? null : current}
         rows={rows}
         ready={ready}
         checking={live.checking || checkingNow}
@@ -499,24 +520,41 @@ function Loaded({
         shipping={content.shipping}
         onFlavour={(f) => {
           setFlavour(f);
-          if (saved.current.sketchId)
-            patch.mutate({ params: { id: saved.current.sketchId }, body: { tags: [f] } });
+          if (draftSaver.sketchId) patch.mutate({ params: { id: draftSaver.sketchId }, body: { tags: [f] } });
         }}
-        flavourLocked={state.sessionsDone > 0 || released}
+        flavourLocked={done > 0 || state.sessionsDone > 0 || released}
+        onBars={onBars}
         review={review.review}
-        reviewRequested={state.reviewRequested}
+        reviewWait={review.wait}
         canRequestReview={state.sketchId !== null || official !== null}
         onRequestReview={() => {
-          const r = askReviewFor(def, codeRef.current);
+          const r = askReviewFor(def, codeRef.current, released);
           if (r.ok) {
+            review.asked();
             setNotice({
               tone: "info",
               title: "Review requested",
-              body: "Claude's comments appear in the tutor panel. They never affect pass or fail.",
+              body: "Claude's comments appear in the tutor panel and here. They never affect pass or fail.",
             });
             void qc.invalidateQueries({ queryKey: ["api", "capstones.get"] });
           }
         }}
+        released={released}
+        tryPending={tryRevision.pending}
+        onTryRevision={
+          released && review.review
+            ? (i) => {
+                const rev = review.review?.revisions[i];
+                if (rev)
+                  void tryRevision.open({
+                    trackTitle: track.data?.title ?? trackTitleOf(def),
+                    code: codeRef.current,
+                    meter: def.meter,
+                    rev,
+                  });
+              }
+            : undefined
+        }
         onReport={async (note) => {
           const o = liveRef.current.outcome;
           await qa.mutateAsync({
@@ -541,7 +579,7 @@ function Loaded({
       />
       <section aria-label="Workbench" className="flex min-w-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center gap-2 border-b border-border bg-bg px-4 py-2">
-          <StatusChip state={state} released={released} total={total} nextIndex={nextIndex} />
+          <StatusChip released={released} allDone={allDone} total={total} nextIndex={nextIndex} />
           <span className="text-sm text-text-3" aria-live="polite" data-testid="saved-state">
             {savedInfo ? (
               <>
@@ -554,7 +592,7 @@ function Loaded({
           </span>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             {content.bands.length > 0 &&
-              bandSetupFor(def, flavour, content.bands, def.key ?? { tonic: "C", mode: "major" }) && (
+              bandFor(def, flavour, content.bands, def.key ?? { tonic: "C", mode: "major" }) && (
                 <Button
                   size="md"
                   variant="ghost"
@@ -579,7 +617,12 @@ function Loaded({
               </span>
             </Button>
             {!lastSession && !allDone && nextSession && (
-              <Button variant="primary" loading={complete.isPending} onClick={() => void finishSession()}>
+              <Button
+                variant="primary"
+                loading={complete.isPending}
+                onClick={() => void finishSession()}
+                data-testid="finish-session"
+              >
                 Finish session {nextIndex + 1} of {total}
               </Button>
             )}
@@ -599,6 +642,42 @@ function Loaded({
         </div>
         <div className="min-h-0 flex-1 overflow-auto px-4 py-3">
           <div className="flex flex-col gap-3">
+            {resume && (
+              <Callout
+                tone="info"
+                title={`Welcome back. Your draft is as you left it${savedInfo ? ` (version ${savedInfo.version})` : ""}.`}
+                onDismiss={() => {
+                  stopFromTop();
+                  setResume(false);
+                }}
+                actions={
+                  fromTop ? (
+                    <Button
+                      size="sm"
+                      icon={<Square aria-hidden className="size-4" />}
+                      onClick={stopFromTop}
+                      data-testid="stop-from-top"
+                    >
+                      Stop
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      icon={<Play aria-hidden className="size-4" />}
+                      onClick={() => void playFromTop()}
+                      data-testid="play-from-top"
+                    >
+                      Play from the top
+                    </Button>
+                  )
+                }
+              >
+                {current && !allDone
+                  ? `Hear where it stands, then carry on with session ${current.index + 1}: ${current.title.toLowerCase()}.`
+                  : "Hear where it stands, then revise."}
+              </Callout>
+            )}
             {released && (
               <Callout
                 tone="success"
@@ -613,7 +692,8 @@ function Loaded({
                   </Link>
                 }
               >
-                You are revising it. When you release again, this becomes its next version.
+                You are revising it. When you release again, this becomes its next version; the released ones
+                stay as they are.
               </Callout>
             )}
             {notice && (
@@ -634,6 +714,7 @@ function Loaded({
             <Workbench
               tutorBars
               id={wbSlug(def.id)}
+              onModel={onHarmony}
               code={initialCode}
               lessonCtx={{
                 key: def.key ?? outcome?.key ?? null,
@@ -645,7 +726,10 @@ function Loaded({
               views={["roll", "staff"]}
               band={band}
               staff={{ kind: def.id === "C0" ? "percussion" : "auto" }}
-              onChange={setCode}
+              onChange={(c) => {
+                setCode(c);
+                draftSaver.changed(c);
+              }}
               onEvaluated={(o) => {
                 if (o.ok) saveQuietly(o.code, true);
               }}
@@ -657,24 +741,29 @@ function Loaded({
         <ReleaseDialog
           def={def}
           state={state}
-          official={official}
+          official={{
+            code: official.code,
+            version: official.version,
+            bars: official.outcome.bars,
+            n: official.outcome.n,
+            analysis: official.outcome.analysis,
+            key: official.outcome.key,
+          }}
           flavour={flavour}
+          shipping={content.shipping}
           sessionId={sessionId}
-          sketchId={saved.current.sketchId as string}
+          sketchId={draftSaver.sketchId as string}
           review={review.review}
           includeReviewDefault={boot.data?.settings.linerNotesInAlbum ?? true}
-          canDos={def.canDo
-            .map((c) => content.candos.find((x) => x.id === c)?.statement)
-            .filter((x): x is string => !!x)}
-          skillName={(id) => content.skillNames.get(id) ?? null}
-          band={band ? `${content.bands.find((b) => b.id === band.band)?.title ?? "the Band"}` : null}
+          notesFor={notesFor(official.outcome)}
+          tags={theoryTags(brief.rubric, official.outcome.result, official.outcome.analysis, skillName)}
           defaultTitle={track.data?.title ?? trackTitleOf(def)}
           editor={() => oak.editors.get(editorId(wbSlug(def.id))) ?? null}
           onClose={() => setReleaseOpen(false)}
           onReleased={(data) => {
             setReleaseOpen(false);
             setCeremony(data);
-            void qc.invalidateQueries({ queryKey: ["api"] });
+            refreshAfterRelease(qc, currentSessionId() !== null);
           }}
         />
       )}
@@ -685,29 +774,33 @@ function Loaded({
           onContinue={() => {
             const last = def.sessionDefs.at(-1)?.id;
             setCeremony(null);
+            refreshAfterRelease(qc, false);
             if (last) reportBlockDone({ block: "new", source: "capstone", itemId: last, completed: true });
           }}
-          onClose={() => setCeremony(null)}
+          onClose={() => {
+            setCeremony(null);
+            refreshAfterRelease(qc, false);
+          }}
         />
       )}
     </>
   );
 }
 
-function askReviewFor(def: CapstoneDef, code: string) {
-  const r = askReview({ capstoneId: def.id, title: def.title, code });
+function askReviewFor(def: CapstoneDef, code: string, released: boolean) {
+  const r = askReview({ capstoneId: def.id, title: def.title, code, released });
   if (!r.ok) openTutor();
   return r;
 }
 
-function StatusChip({
-  state,
+export function StatusChip({
   released,
+  allDone,
   total,
   nextIndex,
 }: {
-  state: CapstoneState;
   released: boolean;
+  allDone: boolean;
   total: number;
   nextIndex: number;
 }) {
@@ -717,7 +810,7 @@ function StatusChip({
         <Check aria-hidden className="size-3.5" /> Released · revising
       </Chip>
     );
-  if (state.sessionsDone >= total)
+  if (allDone)
     return (
       <Chip tone="amber">
         <CircleDot aria-hidden className="size-3.5" /> Sessions done · ready to release
@@ -728,4 +821,17 @@ function StatusChip({
       <CircleDot aria-hidden className="size-3.5" /> Session {nextIndex + 1} of {total}
     </Chip>
   );
+}
+
+/**
+ * After a release, everything the album shows is refetched. Inside Today's runner the capstone's own state waits
+ * until the ceremony is dismissed: the runner reads it (and course progress) to decide whether the block opens "from the top", and a
+ * refetch mid-ceremony would swap the workspace (and the ceremony) for that card.
+ */
+export function refreshAfterRelease(qc: QueryClient, inSession: boolean): void {
+  void qc.invalidateQueries({
+    queryKey: ["api"],
+    predicate: (q) =>
+      !inSession || !/^(capstones\.|session\.|lessons\.progress)/.test(String(q.queryKey[1] ?? "")),
+  });
 }

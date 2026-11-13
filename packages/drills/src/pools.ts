@@ -5,6 +5,8 @@ import type { SoundId } from "@oak/content-kit";
 
 export const KEYS1: SoundId[] = ["snd.piano"];
 export const KEYS2: SoundId[] = [...KEYS1, "snd.rhodes", "snd.organ"];
+/** The chord keyboards of the two flavours the course is written in (content/flavours.ts): pop and jazz-soul. */
+export const POP_SOUL: SoundId[] = ["snd.piano", "snd.rhodes"];
 export const KEYS3: SoundId[] = [...KEYS2, "snd.cleangtr", "snd.jazzgtr", "snd.wave.triangle"];
 export const BASS: SoundId[] = ["snd.ebass", "snd.upright"];
 export const LEAD: SoundId[] = ["snd.piano", "snd.tenor", "snd.horns", "snd.cleangtr", "snd.wave.square"];

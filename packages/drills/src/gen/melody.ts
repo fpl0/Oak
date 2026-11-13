@@ -11,6 +11,8 @@ import {
   stepToMidi,
   tonicMidi,
 } from "../kernel.ts";
+import { composeTune, melodyBarNode, type Tune } from "../ladder.ts";
+import { closeVoices, type Voiced } from "../music.ts";
 import { atom, line, type Node, rest, seq } from "../pat.ts";
 import type { Rng } from "../types.ts";
 import {
@@ -193,6 +195,7 @@ function melodyMaterial(ctx: GenCtx, withContext: boolean): MelodyMaterial {
   }
   if (ctx.level.arpeggio === true) steps = plain.map((s) => [0, 2, 4, 6, 7, 9][Math.abs(s) % 6] as number);
   const bars = num(ctx.level, "bars", 1);
+  if (ctx.level.overChords === true && withContext) return tuneMaterial(ctx, key, octave);
   const varied = ctx.level.rhythm === "dictated";
   const sound = pickSound(ctx);
   const bpm = pickTempo(ctx);
@@ -210,6 +213,46 @@ function melodyMaterial(ctx: GenCtx, withContext: boolean): MelodyMaterial {
   const midis = steps.map((s) => stepToMidi(s, key, octave));
   const degrees = midis.map((m) => degreeOfMidi(m, { tonic: key.tonic, mode: "major" }));
   return { key, octave, steps, degrees, midis, bars, cueBars, tracks, bpm, sound };
+}
+
+/**
+ * Melodic dictation over chords (U07's vocabulary, levels 5–6): a two-bar tune composed like a ladder L4
+ * item (`composeTune`): a chord tone on beats 1 and 3, steps and small leaps that turn back, eighth pairs,
+ * an ending on 1 over I, and at level 6 at least one passing or neighbour tone on a weak eighth. The cue bar
+ * sets the key; the chords keep sounding, softly and below the tune, while it plays.
+ */
+function tuneMaterial(ctx: GenCtx, key: KeySpec, octave: number): MelodyMaterial {
+  const nct = ctx.level.nct === true;
+  const tune = composeTune(ctx.rng, 2, nct ? 3 : 2, { requireNct: nct }) as Tune;
+  const melodyBars: Node[] = [];
+  let i = 0;
+  for (const r of tune.rhythms) {
+    melodyBars.push(melodyBarNode(tune.steps.slice(i, i + r.length), r));
+    i += r.length;
+  }
+  const context = contextBar(ctx, key, ctx.level.context ?? "cadence") as Voiced[];
+  const under = closeVoices(tune.harmony.flat(), key, Math.max(50, tonicMidi(key.tonic, octave) - 8));
+  let k = 0;
+  const chordBars = tune.harmony.map((h) => h.map(() => under[k++] as Voiced));
+  const sound = pickSound(ctx);
+  const tracks = [
+    chordTrack(ctx, key, [context, ...chordBars], { gain: 0.4 }),
+    stepTrack(key, octave, [null, ...melodyBars], sound),
+  ];
+  const midis = tune.steps.map((st) => stepToMidi(st, key, octave));
+  const degrees = midis.map((m) => degreeOfMidi(m, { tonic: key.tonic, mode: "major" }));
+  return {
+    key,
+    octave,
+    steps: tune.steps,
+    degrees,
+    midis,
+    bars: 2,
+    cueBars: 1,
+    tracks,
+    bpm: pickTempo(ctx),
+    sound,
+  };
 }
 
 function contour(midis: readonly number[]): "up" | "down" | "arch" | "valley" {

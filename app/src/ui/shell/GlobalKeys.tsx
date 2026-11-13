@@ -11,7 +11,7 @@ import { useBootstrap } from "../../lib/queries.ts";
 import { useShell } from "../../lib/shell-store.ts";
 import { IS_MAC, useHotkeys, useKeymap } from "../keys/KeymapProvider.tsx";
 import { type Binding, formatKeys } from "../keys/keymap.ts";
-import { sheetSections, useSheetSections } from "../keys/sheet.ts";
+import { formatSheetKeys, sheetSections, useSheetSections } from "../keys/sheet.ts";
 import { Kbd } from "../kit/basics.tsx";
 import { Dialog } from "../kit/Dialog.tsx";
 import { resolveTheme, usePrefs } from "../theme/prefs.ts";
@@ -249,7 +249,7 @@ function ShortcutSheet() {
               {s.rows.map(([k, d]) => (
                 <div key={k + d} className="contents">
                   <dt>
-                    <Kbd>{formatKeys(k, IS_MAC)}</Kbd>
+                    <Kbd>{formatSheetKeys(k, IS_MAC)}</Kbd>
                   </dt>
                   <dd>{d}</dd>
                 </div>

@@ -1,6 +1,7 @@
 // The one rule for a sung note (contracts §8.1). `gradeSung` and `gradeSungLive` share one core, so the
 // PitchLane fill, the per-note tick and the grade can never disagree.
 import type { Diagnostic, LearnerProfile, SingMode, SingTolCents, SingTolerance } from "@oak/content-kit";
+import { bleedReport } from "./bleed.ts";
 import { centsFrom, mean, median, midiName, quantile, rmsDb } from "./math.ts";
 import { type TakeQuality, takeQuality } from "./take.ts";
 import { hopSecOf, PitchTracker, trackerOptionsFor } from "./tracker.ts";
@@ -740,8 +741,56 @@ export function gradeSung(
   tol: SingTolerance,
   mode: SingMode,
   profile: LearnerProfile,
+  opts: GradeSungOptions = {},
 ): SungResult {
-  return grade(frames, targets, tol, mode, profile, null);
+  const result = grade(frames, targets, tol, mode, profile, null);
+  return withBleed(result, frames, targets, profile, opts);
+}
+
+/** What a host knows about the take beyond its frames. */
+export interface GradeSungOptions {
+  /** Notes the host played around the take (AudioContext seconds): the bleed check reads them. */
+  playing?: readonly SungTarget[];
+}
+
+/**
+ * Contracts §8.6: a take whose playback-only spans the mic heard as the playback (`bleedReport`) is not the
+ * learner's voice. It fails with `sing.bleed` (an error: not an attempt), scores 0 and feeds no ladder; the host
+ * shows the line and offers the fallback. Without annotated frames or listed notes nothing changes.
+ */
+function withBleed(
+  result: SungResult,
+  frames: readonly PitchFrame[],
+  targets: readonly SungTarget[],
+  profile: LearnerProfile,
+  opts: GradeSungOptions,
+): SungResult {
+  const listened = (opts.playing?.length ?? 0) > 0 || frames.some((f) => f.playing !== undefined);
+  if (!listened) return result;
+  const latencySec = Number.isFinite(profile.singLatencyMs) ? profile.singLatencyMs / 1000 : 0;
+  const report = bleedReport(frames, {
+    ...(opts.playing ? { playing: opts.playing } : {}),
+    singing: targets,
+    latencySec,
+  });
+  if (!report.bleed) return result;
+  return {
+    ...result,
+    score: 0,
+    pass: false,
+    medianAbsCents: null,
+    diagnostics: [
+      {
+        id: "sing.bleed",
+        severity: "error",
+        params: {
+          ms: Math.round(report.heardSec * 1000),
+          playbackMs: Math.round(report.playbackOnlySec * 1000),
+        },
+      },
+      ...result.diagnostics.filter((d) => d.id !== "sing.no-voice"),
+    ],
+  };
 }
 
 /**
@@ -827,27 +876,13 @@ function lexLess(a: readonly number[], b: readonly number[]): boolean {
   return false;
 }
 
-/** Voiced frames within 30¢ of the playing note for more than 300 ms in playback-only spans: the mic hears the speakers. */
+/**
+ * Voiced frames within 30¢ of the playing note for more than 300 ms in playback-only spans: the mic hears the
+ * speakers. `playing` lists what the host played; frames the mic session annotated (`PitchFrame.playing`) count
+ * too. The rule lives in `bleed.ts` (`bleedReport`).
+ */
 export function detectBleed(frames: readonly PitchFrame[], playing: readonly SungTarget[]): boolean {
-  if (frames.length === 0 || playing.length === 0) return false;
-  const hop = hopSecOf(frames);
-  const half = ((WINDOW_SIZE / HOP_SIZE) * hop) / 2;
-  // The speakers are late by the output latency and ring on a little: accept frames up to 150 ms after the note.
-  const tail = 0.15;
-  let heard = 0;
-  for (const frame of frames) {
-    if (frame.clarity < 0.9 || frame.hz <= 0) continue;
-    const t = frame.t - half;
-    const midi = 69 + 12 * Math.log2(frame.hz / 440);
-    for (const note of playing) {
-      if (t >= note.on && t <= note.off + tail && Math.abs(centsFrom(midi, note.midi, true)) <= 30) {
-        heard += hop;
-        break;
-      }
-    }
-    if (heard > 0.3) return true;
-  }
-  return false;
+  return bleedReport(frames, { playing }).bleed;
 }
 
 /**

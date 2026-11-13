@@ -6,17 +6,23 @@
 import { fileURLToPath } from "node:url";
 import { type Area, areaConfig, oakStack, REPO_ROOT, stackUse } from "../support/stack.ts";
 
+/**
+ * `OAK_JOURNEY_ALT=1` moves the journey to a second set of ports and data dirs (Vite 5242, API 8842, production
+ * 8794), so the journeys can be run alone while a full `bun run e2e` holds the gate ports. Never set in `bun run e2e`.
+ */
+const ALT = process.env.OAK_JOURNEY_ALT === "1";
+
 export const stack = oakStack({
-  vitePort: 5212,
-  apiPort: 8812,
-  dataDirName: "journey",
+  vitePort: ALT ? 5242 : 5212,
+  apiPort: ALT ? 8842 : 8812,
+  dataDirName: ALT ? "journey-alt" : "journey",
   extraEnv: { OAK_TUTOR_FAKE: "1" },
 });
 
 /** The production build on its own port and data dir (no OAK_DEV: the real security rules, no fake tutor). */
-export const PROD_PORT = 8792;
+export const PROD_PORT = ALT ? 8794 : 8792;
 export const PROD_URL = `http://127.0.0.1:${PROD_PORT}`;
-const prodData = `${REPO_ROOT}test-results/stacks/journey-prod`;
+const prodData = `${REPO_ROOT}test-results/stacks/${ALT ? "journey-alt-prod" : "journey-prod"}`;
 
 const webServer = [
   ...stack.webServer.map((w) =>

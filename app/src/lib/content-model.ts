@@ -317,8 +317,8 @@ export function titleOf(id: string | null | undefined, titles: Map<string, strin
   if (!id) return "";
   const own = titles.get(id);
   if (own) return own;
-  // A capstone session (`C0.S1`) reads as its capstone, with the session number past the first.
-  const m = /^(C\w*?)\.S(\d+)$/.exec(id);
+  // A capstone session (`C0.S1`, `X1.S2`, `CF-T.S1`) reads as its capstone, with the session number past the first.
+  const m = /^([A-Z][A-Z0-9-]*?)\.S(\d+)$/.exec(id);
   const cap = m ? titles.get(m[1] as string) : undefined;
   if (m && cap) return m[2] === "1" ? cap : `${cap} · session ${m[2]}`;
   return id;

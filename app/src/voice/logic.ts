@@ -234,10 +234,13 @@ export interface MatchTrial {
   midi: number;
   /** Signed cents, folded to the nearest octave; null when no steady note was heard. */
   cents: number | null;
+  /** Wave 4 (contracts §8.6): the mic heard the note being played, so the trial says nothing about the voice. */
+  bleed?: true;
 }
 
 /** One trial in words and arrows (ux §4.3: no red or green): "spot on (+4¢)", "↓ a little low (−32¢)", "↑ 5 semitones high". */
-export function matchWords(cents: number | null): string {
+export function matchWords(cents: number | null, bleed = false): string {
+  if (bleed) return "the mic heard the playback";
   if (cents === null) return "no steady note heard";
   const arrow = cents > 0 ? "↑ " : "↓ ";
   if (Math.abs(cents) <= 10) return `spot on (${cents > 0 ? "+" : cents < 0 ? "−" : "±"}${Math.abs(cents)}¢)`;

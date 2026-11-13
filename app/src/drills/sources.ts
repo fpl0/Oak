@@ -53,6 +53,7 @@ export function compositeSource(env: SourceEnv, session: DrillSession): TrialSou
         level: session.levels[id] ?? 1,
         openCategories: session.openCategories[id] ?? [],
         categoryStats: st?.categoryStats ?? {},
+        ...(st?.sungStats ? { sungStats: st.sungStats } : {}),
         blockedRemaining: 0,
         quiet: env.profile.quiet,
       },

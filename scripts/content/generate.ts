@@ -151,7 +151,7 @@ export function idsModule(byKind: Record<string, string[]>): string {
  * again). Lessons of later units are still being written, and their authors may rename those IDs freely
  * until the unit is added here.
  */
-export const RELEASED_UNITS: readonly string[] = ["U00", "U01", "U02", "U03", "U04"];
+export const RELEASED_UNITS: readonly string[] = ["U00", "U01", "U02", "U03", "U04", "U05", "U06", "U07"];
 const LESSON_SCOPED = ["step", "exercise", "example"];
 const released = (id: string) => RELEASED_UNITS.includes(id.slice(0, 3));
 
@@ -303,6 +303,9 @@ export function exerciseCode(e: Exercise): { what: string; code: string; bars: n
   if (e.kind === "transcribe-step" && e.grading.mode === "auto")
     for (const [i, c] of e.grading.reference.solutions.entries())
       out.push({ what: `solution:${i}`, code: c, bars: e.grading.reference.bars });
+  // Wave 4: the rhythm skeleton a transcription step gives the learner is code they hear and see.
+  if (e.kind === "transcribe-step" && e.given?.rhythmSkeleton)
+    out.push({ what: "given", code: e.given.rhythmSkeleton, bars: e.bars[1] - e.bars[0] || 1 });
   if ("stimulus" in e && e.stimulus && e.stimulus.src === "code")
     out.push({ what: "stimulus", code: e.stimulus.code, bars: e.stimulus.bars });
   if (e.kind === "listen")

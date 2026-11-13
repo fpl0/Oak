@@ -4,10 +4,10 @@
 // only from the current one reporting (contracts §9.3). A reload or a visit elsewhere resumes here.
 import { useNavigate } from "@tanstack/react-router";
 import { Play } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLessonPublic } from "../../lesson/public.ts";
 import { useContent } from "../../lib/content.ts";
-import { lessonTitles, titleOf } from "../../lib/content-model.ts";
+import { lessonTitles } from "../../lib/content-model.ts";
 import { usePageTitle } from "../../lib/nav.ts";
 import { useBootstrap, useTodayPlan } from "../../lib/queries.ts";
 import { useHotkeys } from "../../ui/keys/KeymapProvider.tsx";
@@ -15,12 +15,17 @@ import { Button } from "../../ui/kit/Button.tsx";
 import { Card, Kbd, Page } from "../../ui/kit/basics.tsx";
 import { ErrorState, LoadingState } from "../../ui/kit/QueryState.tsx";
 import { useRunnerNavigator, useRunnerView } from "../hooks.ts";
+import { itemTitle as titleOf } from "../titles.ts";
 
 const useRunnerViewState = () => sessionRunner.view.getState();
 
+import { useCapstoneDay, useCapstoneDaySettled, useCapstoneDef } from "../day-hooks.ts";
 import { sessionRunner } from "../live.ts";
+import { resumeDecision } from "../resume-once.ts";
 import { useSession } from "../store.ts";
-import { CapstoneView, CheckpointView, LessonView, RouteHandoff, WarmupView } from "./BlockViews.tsx";
+import { CapstoneView, CheckpointView, LessonView, WarmupView } from "./BlockViews.tsx";
+import { CapstoneResume } from "./CapstoneResume.tsx";
+import { GymBlock } from "./GymBlock.tsx";
 import { RecapCard } from "./RecapCard.tsx";
 import { PAUSE_KEY_LABEL, PAUSE_KEYS, SessionHeader } from "./SessionHeader.tsx";
 import { SketchBlock } from "./SketchBlock.tsx";
@@ -58,6 +63,11 @@ function Body() {
   const warmupIndex = useSession((s) => s.warmupIndex);
   const last = useSession((s) => s.reports.at(-1));
   const recapDone = useRunnerView((v) => v.recapDone);
+  // A later capstone session resumes by playing the draft from the top (CapstoneResume), once per session.
+  const capstone = useCapstoneDay(plan);
+  const capDef = useCapstoneDef(capstone?.capstoneId ?? null);
+  const capstoneSettled = useCapstoneDaySettled(plan);
+  const [resumed, setResumed] = useState(false);
   if (!plan || !session || !block) return null;
   const sessionId = session.id;
   switch (block) {
@@ -71,10 +81,22 @@ function Body() {
           return <LessonView plan={plan} />;
         case "checkpoint":
           return <CheckpointView plan={plan} />;
-        case "capstone":
+        case "capstone": {
+          const showResume = resumeDecision(session.id, capstoneSettled, capstone?.resume === true);
+          if (showResume === null) return <LoadingState rows={2} label="Opening the capstone" />;
+          if (showResume && capstone && !resumed)
+            return (
+              <CapstoneResume
+                day={capstone}
+                sessionId={session.id}
+                kind={capDef?.kind ?? null}
+                onContinue={() => setResumed(true)}
+              />
+            );
           return <CapstoneView plan={plan} />;
+        }
         case "gym":
-          return <RouteHandoff to={{ to: "/transcribe" }} what="the Transcription Gym" />;
+          return <GymBlock plan={plan} session={session} />;
         case "light":
           return (
             <SketchBlock

@@ -4,6 +4,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { KeymapProvider } from "../../ui/keys/KeymapProvider.tsx";
 import { Playground } from "../dev/Playground.tsx";
+import { StepHarness } from "../dev/StepHarness.tsx";
 import "../index.ts";
 import { ServicesGate } from "../ServicesGate.tsx";
 import { standaloneServices } from "../standalone-services.ts";
@@ -16,7 +17,7 @@ createRoot(root).render(
     <KeymapProvider focusRoute={() => false}>
       <h1 style={{ fontSize: 18 }}>Oak workbench (e2e)</h1>
       <ServicesGate load={() => standaloneServices()} auto>
-        <Playground />
+        {new URLSearchParams(location.search).get("w4") === "step" ? <StepHarness /> : <Playground />}
       </ServicesGate>
     </KeymapProvider>
   </StrictMode>,

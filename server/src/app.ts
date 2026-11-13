@@ -143,6 +143,8 @@ export async function createServer(o: ServerOptions): Promise<OakServer> {
     srs: () => srs,
     stimulus: patternStimulus(o.graders, content),
     ladder: ladderGenerator(repos),
+    // Ladder answers are the learner's own code: graded on the learner host, never in the server's realm.
+    grade: (req) => o.graders.learner().grade(req),
   });
   if (o.srsWiring !== false && (srs === null || planner === null)) {
     const wired = await createSrsWiring({ repos, content, services, clock });

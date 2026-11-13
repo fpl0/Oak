@@ -11,6 +11,15 @@ import type { MicGraph } from "./types.ts";
 import pitchWorkletUrl from "./worklets/pitch.worklet.ts?worker&url";
 
 export {
+  AB_LEAD_SEC,
+  AB_PASS_AHEAD_SEC,
+  AB_PRE_ROLL_SEC,
+  type AbSwitchDeps,
+  createAbSwitchWith,
+  mineRateFor,
+  sideGains,
+} from "./ab-switch.ts";
+export {
   CALIBRATION,
   type CalibrationExtras,
   createCalibration,
@@ -29,6 +38,16 @@ export {
   outputKindOf,
 } from "./devices.ts";
 export {
+  createMasterRecorderWith,
+  type ExactRecording,
+  encodeWavSlice,
+  type MasterRecorderDeps,
+  type MediaRecorderLike,
+  RECORDER_PRE_ROLL_SEC,
+  RECORDER_START_OFFSET_SEC,
+  RECORDER_TAIL_SEC,
+} from "./master-recorder.ts";
+export {
   bindMicShortcut,
   createMicGraphWith,
   type MicGraphOptions,
@@ -44,6 +63,47 @@ export {
   type TranscribeSource,
   type TranscribeSourceState,
 } from "./pattern-source.ts";
+// Wave 4 seam (docs/design/wave4.md §3.4): the Transcribe engine, the A/B switch and the master recorder.
+export {
+  AB_DRIFT_GATE_BARS,
+  AB_DRIFT_GATE_MS,
+  AB_DRIFT_GATE_RATE,
+  type AbSide,
+  type AbState,
+  type AbSwitch,
+  AudioNotBuiltError,
+  abDriftMs,
+  clampCents,
+  clampSemitones,
+  clampStretchRate,
+  createAbSwitch,
+  createMasterRecorder,
+  createStretchPlayer,
+  fakeMasterRecorder,
+  fakeStretchPlayer,
+  type LoopSpan,
+  type MasterRecorder,
+  type MasterRecording,
+  type PatternSideLike,
+  type SourceGrid,
+  STRETCH_CENTS_RANGE,
+  STRETCH_RATE_RANGE,
+  STRETCH_SEMITONE_RANGE,
+  type StretchClock,
+  type StretchPlayer,
+  type StretchPlayerDeps,
+  type StretchPlayerState,
+  sourceBarTimes,
+  TRANSCRIBE_RATE_RANGE,
+} from "./stretch.ts";
+export {
+  createStretchEngine,
+  ctxTimeAt,
+  positionAt,
+  STRETCH_LEAD_SEC,
+  STRETCH_MIN_LOOP_SEC,
+  type StretchEngineDeps,
+} from "./stretch-player.ts";
 export { createTapInput, eventTimeToContextTime, type TapInputExtras, tapsToOnsets } from "./tap.ts";
 export {
   computePeaks,

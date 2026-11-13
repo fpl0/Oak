@@ -84,6 +84,38 @@ export const ABCJS_LIMITS: readonly AbcjsLimit[] = [
     warns: null,
   },
   {
+    id: "mid-bar-key-change",
+    abcjs:
+      "an inline [K:…] inside a bar draws the new signature there, but every barline (||, .|, [|]) is counted as a measure, so the double barline engravers put before a key change inside a bar cannot be drawn without splitting the bar.",
+    fallback:
+      "the new signature is written inside the bar with no barline (KeyChange.beat > 1); the bar's accidentals start again under it and a letter altered earlier in the bar is restated.",
+    warns: null,
+  },
+  {
+    id: "stacked-figures",
+    abcjs:
+      "an annotation is one line of text: inversion figures cannot be stacked (V with 6 over 5), and abcjs turns b, # and o into glyphs only in chord symbols, not in annotations.",
+    fallback:
+      "Roman numerals are printed with the figures as digits after the numeral (V65, I64, as the learner types them) and the glyphs written in Unicode (vii°7, iiø7, ♭VII).",
+    warns: null,
+  },
+  {
+    id: "label-in-tuplet",
+    abcjs:
+      "a chord symbol or numeral attaches to a note or rest; one that starts inside a tuplet would need the tuplet split into smaller tied tuplets ((5:4:3 … E/2- (5:4:3 E/2 …), which no reader can follow.",
+    fallback:
+      "the tuplet stays whole and the label is drawn at the note sounding where it starts (ScoreAnnotation.drawnAt); the Score warns so content moves the label or the rhythm.",
+    warns: "abcjs-limit",
+  },
+  {
+    id: "pickup-bar-numbers",
+    abcjs:
+      "bar numbers (%%barnumbers) count every bar from 1, so after a pickup the first full bar would be numbered 2.",
+    fallback:
+      "%%setbarnb starts the count at the engraved first bar's number: 0 for a pickup bar, so the first full bar is 1 (contracts §6.11).",
+    warns: null,
+  },
+  {
     id: "annotation-above",
     abcjs: 'several "^text" annotations on one note are joined into one text, stacked with line breaks.',
     fallback: "annotations above the staff are one stacked text per note (degree, solfège, name).",

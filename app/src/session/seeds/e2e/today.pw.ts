@@ -63,7 +63,8 @@ test("C1 ready: a capstone day whose warm-up sings; Alt+P pauses; a second brows
   await page.locator("main").focus();
   await page.keyboard.press("Enter");
   await page.waitForURL(/\/session\/?$/);
-  await expect(page.getByTestId("session-block")).toContainText("Warm-up");
+  // The first open of the session page compiles the session, lesson, capstone and drill modules: give it time.
+  await expect(page.getByTestId("session-block")).toContainText("Warm-up", { timeout: 30_000 });
   await expect(page.getByTestId("pause")).toContainText(/⌥P|Alt\+P/);
   const first = await sessionState(page);
   expect(first.id).not.toBeNull();
@@ -92,7 +93,7 @@ test("C1 ready: a capstone day whose warm-up sings; Alt+P pauses; a second brows
       await page.setViewportSize(size);
       await useUiPrefs(page, { theme });
       await page.reload();
-      await expect(page.getByTestId("session-header")).toBeVisible();
+      await expect(page.getByTestId("session-header")).toBeVisible({ timeout: 30_000 });
       await settle(page);
       await expectNoOverflow(page);
       await shoot(page, SHOTS, "session-warmup-sing", theme);

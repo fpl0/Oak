@@ -93,14 +93,43 @@ export function anchorFor(rule: RubricRule, n: Normalized, totalBars: number): B
   }
 }
 
-/** Anchors for every unmet rule of a result; met rules and whole-piece rules map to `null`. */
+/**
+ * The bars a rubric detail line names ("bar 3 is a cluster", "bars 7–8 end on V"): the harmony rules (progression,
+ * cadence, chord qualities, voice leading) say where in words. `null` when the line names no bar.
+ */
+export function anchorFromText(text: string | null | undefined, totalBars?: number): BarAnchor | null {
+  if (!text) return null;
+  const bars: number[] = [];
+  const re = /\bbars? (\d+)(?:\s*(?:–|-|to|and)\s*(\d+))?/gi;
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    const a = Number(m[1]);
+    const b = m[2] ? Number(m[2]) : a;
+    if (Number.isFinite(a)) bars.push(a);
+    if (Number.isFinite(b)) bars.push(b);
+  }
+  const span = spanOf(bars.filter((b) => b >= 0 && (totalBars === undefined || b <= Math.max(totalBars, 1))));
+  return span;
+}
+
+/**
+ * Anchors for every unmet rule of a result; met rules and whole-piece rules map to `null`. Where the events say
+ * nothing precise, the rubric's own detail line may name the bars.
+ */
 export function anchorsOf(
   rules: readonly RubricRule[],
   unmet: ReadonlySet<string>,
   n: Normalized | null,
   totalBars: number,
+  details: Readonly<Record<string, string | null | undefined>> = {},
 ): Record<string, BarAnchor | null> {
   const out: Record<string, BarAnchor | null> = {};
-  for (const r of rules) out[r.id] = n && unmet.has(r.id) ? anchorFor(r, n, totalBars) : null;
+  for (const r of rules) {
+    if (!unmet.has(r.id)) {
+      out[r.id] = null;
+      continue;
+    }
+    const fromEvents = n ? anchorFor(r, n, totalBars) : null;
+    out[r.id] = fromEvents ?? anchorFromText(details[r.id], totalBars);
+  }
   return out;
 }

@@ -22,9 +22,6 @@ import { flavourById } from "../flavours.ts";
 const TWO_TRIADS = '"<[-7,-5,-3] [-4,-2,0]>"';
 const TWO_SEVENTHS = '"<[-7,-5,-3,-1] [-4,-2,0,2]>"';
 const AXIS_TRIADS = '"<[-7,-5,-3] [-3,-1,1] [-2,0,2] [-4,-2,0]>"';
-// The loop's sevenths voiced close and low (Cmaj7 C E G B, G7 B D F G, Am7 A C E G, Fmaj7 F A C E), so
-// even in B, where the tonic sits highest, the top voice stays under the tune's register.
-const AXIS_SEVENTHS = '"<[-7,-5,-3,-1] [-8,-6,-4,-3] [-9,-7,-5,-3] [-4,-2,0,2]>"';
 // The four-note chords of jazz-soul (U03 on) and funk (U06 on) over I and IV are sixth chords: C6 is
 // C E G A, F6 is F A C D (voiced D F A C over the F in the bass). A major seventh would put B under a
 // melody resting on 1 and E under one resting on 4: a half step below the tune's note, the harshest clash
@@ -32,6 +29,16 @@ const AXIS_SEVENTHS = '"<[-7,-5,-3,-1] [-8,-6,-4,-3] [-9,-7,-5,-3] [-4,-2,0,2]>"
 // colour for that reason. V keeps its seventh (G7: B D F G), the chord that leans home.
 const [I6, IV6] = ["[-7,-5,-3,-2]", "[-6,-4,-2,0]"];
 const TWO_SIXTHS = `"<${I6} ${IV6}>"`;
+// The four-chord loop with four notes, voiced close and low so that even in B, where the tonic sits highest,
+// the top voice stays under the tune's register: C6 (C E G A), G7 (B D F G), Am7 (A C E G), F6 (D F A C over
+// the F in the bass, voiced C D F A here). I and IV take the 6th for the reason above: Cmaj7 and Fmaj7 put B
+// under a tune on 1 and E under a tune on 4, and the U07 hooks land on exactly those notes. Every change,
+// the turn from F6 back to C6 included, moves each voice by three half steps at most.
+/** F6 voiced low and close, C D F A: it shares C and A with C6 and three notes with G7. */
+const IV6_LOW = "[-7,-6,-4,-2]";
+const AXIS_FOURS = `"<${I6} [-8,-6,-4,-3] [-9,-7,-5,-3] ${IV6_LOW}>"`;
+/** The major-seventh loop the Band does not use under a tune (see above): Cmaj7 G7 Am7 Fmaj7. */
+const AXIS_MAJOR_SEVENTHS = '"<[-7,-5,-3,-1] [-8,-6,-4,-3] [-9,-7,-5,-3] [-4,-2,0,2]>"';
 // An eight-bar phrase that closes: I IV I V (an open half) | I IV V I (home). Voiced close to I so every
 // chord change moves each note by a step at most: IV is C F A (C stays), V is B D G (G stays, B leans up
 // to C). With four notes: C6 C E G A, F6 D F A C, G7 B D F G.
@@ -40,6 +47,14 @@ const V7 = "[-8,-6,-4,-3]";
 const PHRASE_TRIADS = `"<${I3} ${IV3} ${I3} ${V3} ${I3} ${IV3} ${V3} ${I3}>"`;
 const PHRASE_FOURS = `"<${I6} ${IV6} ${I6} ${V7} ${I6} ${IV6} ${V7} ${I6}>"`;
 const PHRASE_ROOTS = '"<-14 -11 -14 -10 -14 -11 -10 -14>"';
+// Doo-wop, I vi IV V, and three-chord rock, I IV V IV (U06.L07, C2), voiced close to I so each change moves a
+// voice by a step at most: vi is C E A (E and C stay), IV is C F A, V is B D G. With four notes, vi is Am7
+// voiced from its root (A C E G; voiced from C it would be C6 note for note) and the rest as above.
+const [VI3, VI7] = ["[-7,-5,-2]", "[-9,-7,-5,-3]"];
+const DOOWOP_TRIADS = `"<${I3} ${VI3} ${IV3} ${V3}>"`;
+const DOOWOP_FOURS = `"<${I6} ${VI7} ${IV6_LOW} ${V7}>"`;
+const ROCK_TRIADS = `"<${I3} ${IV3} ${V3} ${IV3}>"`;
+const ROCK_FOURS = `"<${I6} ${IV6_LOW} ${V7} ${IV6_LOW}>"`;
 
 // Production defaults (contracts §5.10): room, the bass low-pass and the chords' pan come from the kit
 // (content/flavours.ts), so a Band and its flavour never disagree; the bass stays centred. Velocities move
@@ -56,6 +71,8 @@ const PUMP_4 = '"1 .86 .92 .86"';
 const PUSH = '"1 .86"';
 /** One, two, three: the downbeat carries the waltz. */
 const WALTZ_3 = '"1 .86 .9"';
+/** Triplets (doo-wop's 12/8): each beat's first of three leans, the other two lighter. */
+const TRIPLETS = '"[1 .86 .9]*4"';
 /** Swung eighths (contracts §5.10: amount 1/3): the second eighth of each beat lands on the last triplet. */
 const SWING_4 = ".swingBy(1/3, 4)";
 const SWING_3 = ".swingBy(1/3, 3)";
@@ -228,8 +245,11 @@ const phrase = (f: Flavour, funkChords: string): string => {
       return layers(f, { ...FUNK_4, ...STAB, bass: PHRASE_ROOTS, chords: funkChords });
   }
 };
-/** The four-chord loop (schema lessons, U06 on): sevenths and swing in jazz-soul, sevenths in funk. */
-const axis = (f: Flavour): string => {
+/**
+ * The four-chord loop (schema lessons, U06 on; its drums and bass from U05). `fours` are the jazz-soul and funk
+ * chords and `swing` the jazz-soul feel of the stage being written (FLAVOUR_RULES).
+ */
+const axis = (f: Flavour, fours: { jazz: string; funk: string } = AXIS_EARLY, swing = SWING_4): string => {
   switch (f) {
     case "flavour.pop":
       return layers(f, { ...POP_4, ...PIANO_4, bass: '"<-14 -10 -9 -11>"', chords: AXIS_TRIADS });
@@ -238,10 +258,10 @@ const axis = (f: Flavour): string => {
         drums: "bd ~ sd ~, rd*8",
         drumsVelocity: HUMAN_8THS,
         bass: '"<-14 -10 -9 -11>"',
-        chords: AXIS_SEVENTHS,
+        chords: fours.jazz,
         struct: "~ x ~ x",
         chordsVelocity: '"1 .86"',
-        swing: SWING_4,
+        swing,
       });
     case "flavour.indie":
       return layers(f, { ...INDIE_4, ...PIANO_4, bass: '"<-14 -10 -9 -11>"', chords: AXIS_TRIADS });
@@ -251,10 +271,81 @@ const axis = (f: Flavour): string => {
         ...STAB,
         // Octave pop on I, then root and fifth: an octave pop on vi would climb past E4 in B.
         bass: '"<[-14 ~ -14 -7] [-10 ~ -10 -6] [-9 ~ -9 -5] [-11 ~ -11 -7]>"',
-        chords: AXIS_SEVENTHS,
+        chords: fours.funk,
       });
   }
 };
+// The first stage keeps the loop as Wave 2 wrote it (content/validate/bands.test.ts pins it): jazz-soul swung
+// with major sevenths, which no lesson plays (the loop arrives in U05, after the U03 stage below); funk in
+// triads until U06.
+const AXIS_EARLY = { jazz: AXIS_MAJOR_SEVENTHS, funk: AXIS_TRIADS };
+
+/** Doo-wop, I vi IV V: a fifties ballad's 12/8, the piano striking every triplet, the bass on 1 and 3. */
+const DOOWOP_DRUMS = { drums: "bd ~ sd ~, [hh hh hh]*4", drumsVelocity: TRIPLETS };
+const DOOWOP_COMP = { struct: "[x x x]*4", chordsVelocity: TRIPLETS };
+const DOOWOP_BASS = '"<[-14 -14] [-9 -9] [-11 -11] [-10 -10]>"';
+const doowop = (f: Flavour, fours: { jazz: string; funk: string } = DOOWOP_EARLY): string => {
+  switch (f) {
+    case "flavour.pop":
+      return layers(f, { ...DOOWOP_DRUMS, ...DOOWOP_COMP, bass: DOOWOP_BASS, chords: DOOWOP_TRIADS });
+    case "flavour.jazz-soul":
+      // Already in threes: the triplets are the lilt, so no swing is added on top.
+      return layers(f, {
+        drums: "bd ~ sd ~, [rd rd rd]*4",
+        drumsVelocity: TRIPLETS,
+        ...DOOWOP_COMP,
+        bass: DOOWOP_BASS,
+        chords: fours.jazz,
+      });
+    case "flavour.indie":
+      return layers(f, { ...DOOWOP_DRUMS, ...DOOWOP_COMP, bass: DOOWOP_BASS, chords: DOOWOP_TRIADS });
+    case "flavour.funk":
+      return layers(f, {
+        ...DOOWOP_DRUMS,
+        struct: "[~ x x]*4",
+        chordsVelocity: TRIPLETS,
+        bass: '"<[-14 ~ -14 -7] [-9 ~ -9 -5] [-11 ~ -11 -7] [-10 ~ -10 -6]>"',
+        chords: fours.funk,
+      });
+  }
+};
+const DOOWOP_EARLY = { jazz: DOOWOP_TRIADS, funk: DOOWOP_TRIADS };
+
+/** Three-chord rock, I IV V IV: straight eighths, the bass pumping the root. */
+const ROCK_BASS = '"<[-14*8] [-11*8] [-10*8] [-11*8]>"';
+const rock = (f: Flavour, fours: { jazz: string; funk: string } = ROCK_EARLY, swing = ""): string => {
+  switch (f) {
+    case "flavour.pop":
+      return layers(f, { ...POP_4, ...PIANO_4, bass: ROCK_BASS, chords: ROCK_TRIADS });
+    case "flavour.jazz-soul":
+      return layers(f, {
+        ...JAZZ_4,
+        ...(swing ? COMP_SWUNG : COMP),
+        // Root, then the 5th; under V the 5th is taken below, so the bass never climbs into G7's B.
+        bass: '"<[-14 -10] [-11 -7] [-10 -13] [-11 -7]>"',
+        chords: fours.jazz,
+        swing,
+      });
+    case "flavour.indie":
+      // The guitar strums eighths with the hats; the bass holds the roots under it.
+      return layers(f, {
+        ...INDIE_4,
+        struct: "x*8",
+        chordsVelocity: HUMAN_8THS,
+        bass: ROCK_BASS,
+        chords: ROCK_TRIADS,
+      });
+    case "flavour.funk":
+      return layers(f, {
+        ...FUNK_4,
+        ...STAB,
+        // Octave pop on I, then root and fifth: an octave pop on V would climb past E4 in B.
+        bass: '"<[-14 ~ -14 -7] [-11 ~ -11 -7] [-10 ~ -10 -6] [-11 ~ -11 -7]>"',
+        chords: fours.funk,
+      });
+  }
+};
+const ROCK_EARLY = { jazz: ROCK_TRIADS, funk: ROCK_TRIADS };
 
 const FLAVOURS: readonly Flavour[] = ["flavour.pop", "flavour.jazz-soul", "flavour.indie", "flavour.funk"];
 const each = (code: (f: Flavour) => string): Record<FlavourId, string> =>
@@ -276,7 +367,7 @@ export const bands: readonly BandDef[] = [
     bars: 4,
     roles: ["drums", "bass", "chords"],
     params: { key: true, bpm: false },
-    code: each(axis),
+    code: each((f) => axis(f)),
   }),
   // U03.L11 and the U03 checkpoint: an 8-bar melody that pauses on the open half (bar 4, V) and lands home
   // on I in bar 8, so a melody's ending can be heard against the harmony that ends the phrase.
@@ -290,6 +381,23 @@ export const bands: readonly BandDef[] = [
   }),
   // 3/4 (U01.L08 and later waltzes): the tempo line is the lesson's `setcpm(bpm/3)`, so one cycle is a bar
   // of three beats. Bass on 1, chords on 2 and 3: the "oom-pah-pah" a waltz is named by.
+  // U06.L07 and C2: the two other loops from the records, each one chord a bar.
+  defineBand({
+    id: "band.doo-wop",
+    title: "Doo-wop (I–vi–IV–V, in threes)",
+    bars: 4,
+    roles: ["drums", "bass", "chords"],
+    params: { key: true, bpm: false },
+    code: each((f) => doowop(f)),
+  }),
+  defineBand({
+    id: "band.three-chord",
+    title: "Three-chord rock (I–IV–V–IV)",
+    bars: 4,
+    roles: ["drums", "bass", "chords"],
+    params: { key: true, bpm: false },
+    code: each((f) => rock(f)),
+  }),
   defineBand({
     id: "band.waltz-vamp",
     title: "Waltz vamp (I–IV, 3/4)",
@@ -347,6 +455,54 @@ export const BAND_STAGES: Readonly<Record<string, Partial<Record<FlavourId, read
       },
     ],
   },
+  "band.axis-4bar": {
+    "flavour.jazz-soul": [
+      {
+        from: JAZZ_FROM,
+        code: axis("flavour.jazz-soul", { jazz: AXIS_FOURS, funk: AXIS_TRIADS }, SWING_4),
+        what: "four-note chords (C6, G7, Am7, F6) and swung eighths",
+      },
+    ],
+    "flavour.funk": [
+      {
+        from: FUNK_FROM,
+        code: axis("flavour.funk", { jazz: AXIS_TRIADS, funk: AXIS_FOURS }),
+        what: "four-note chords (C6, G7, Am7, F6)",
+      },
+    ],
+  },
+  "band.doo-wop": {
+    "flavour.jazz-soul": [
+      {
+        from: JAZZ_FROM,
+        code: doowop("flavour.jazz-soul", { jazz: DOOWOP_FOURS, funk: DOOWOP_TRIADS }),
+        what: "four-note chords (C6, Am7, F6, G7)",
+      },
+    ],
+    "flavour.funk": [
+      {
+        from: FUNK_FROM,
+        code: doowop("flavour.funk", { jazz: DOOWOP_TRIADS, funk: DOOWOP_FOURS }),
+        what: "four-note chords (C6, Am7, F6, G7)",
+      },
+    ],
+  },
+  "band.three-chord": {
+    "flavour.jazz-soul": [
+      {
+        from: JAZZ_FROM,
+        code: rock("flavour.jazz-soul", { jazz: ROCK_FOURS, funk: ROCK_TRIADS }, SWING_4),
+        what: "four-note chords (C6, F6, G7) and swung eighths",
+      },
+    ],
+    "flavour.funk": [
+      {
+        from: FUNK_FROM,
+        code: rock("flavour.funk", { jazz: ROCK_TRIADS, funk: ROCK_FOURS }),
+        what: "four-note chords (C6, F6, G7)",
+      },
+    ],
+  },
   "band.phrase-8bar": {
     "flavour.funk": [
       { from: FUNK_FROM, code: phrase("flavour.funk", PHRASE_FOURS), what: "four-note chords (C6, F6, G7)" },
@@ -377,6 +533,10 @@ export function bandCodeAt(
 export const SEVENTH_VAMP_CHORDS = TWO_SIXTHS;
 /** The major-seventh vamp the jazz-soul Band does not use under a tune that rests on 1 and 4 (see above). */
 export const MAJOR_SEVENTH_VAMP_CHORDS = TWO_SEVENTHS;
+/** The four-chord loop with four notes, as the jazz-soul (U03 on) and funk (U06 on) Bands play it. */
+export const AXIS_FOUR_CHORDS = AXIS_FOURS;
+/** The major-seventh loop those Bands do not use under a tune (Cmaj7 G7 Am7 Fmaj7). */
+export const AXIS_MAJOR_SEVENTH_CHORDS = AXIS_MAJOR_SEVENTHS;
 /**
  * Bands whose bar is not four beats. BandDef carries no meter (contracts §5.10): the Band takes the
  * session's tempo line, so a lesson in 3/4 must pick a Band written in three. Content CI checks the match.

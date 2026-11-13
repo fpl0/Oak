@@ -135,3 +135,80 @@ export function framesBetween(
   }
   return out;
 }
+
+/** A signalsmith-stretch node with no audio: it records what it is told (schedules, buffers). */
+export class FakeStretchNode extends FakeNode {
+  schedules: Record<string, unknown>[] = [];
+  buffers: Float32Array[][] = [];
+  dropped = 0;
+  inputTime = 0;
+  interval: ((t: number) => void) | null = null;
+  async schedule(change: Record<string, unknown>): Promise<unknown> {
+    this.schedules.push({ ...change });
+    return change;
+  }
+  async setUpdateInterval(_s: number, cb?: (t: number) => void): Promise<void> {
+    this.interval = cb ?? null;
+  }
+  async addBuffers(b: Float32Array[]): Promise<number> {
+    this.buffers.push(b);
+    return (b[0]?.length ?? 0) / 48000;
+  }
+  async dropBuffers(): Promise<{ start: number; end: number }> {
+    this.dropped++;
+    this.buffers = [];
+    return { start: 0, end: 0 };
+  }
+  last(): Record<string, unknown> {
+    return this.schedules[this.schedules.length - 1] ?? {};
+  }
+}
+
+/** An AudioBuffer stand-in of `seconds` of silence (or a ramp) at 48 kHz. */
+export function fakeBuffer(seconds: number, channels = 2, sr = 48000): AudioBuffer {
+  const length = Math.round(seconds * sr);
+  const data = Array.from({ length: channels }, () => {
+    const x = new Float32Array(length);
+    for (let i = 0; i < length; i++) x[i] = i / sr / 100;
+    return x;
+  });
+  return {
+    duration: seconds,
+    length,
+    sampleRate: sr,
+    numberOfChannels: channels,
+    getChannelData: (c: number) => data[c] as Float32Array,
+  } as unknown as AudioBuffer;
+}
+
+/** Timers driven by hand: `run()` fires every timer that is due on the fake clock. */
+export class ManualTimers {
+  private next = 1;
+  private readonly pending = new Map<number, { at: number; cb: () => void }>();
+  constructor(private readonly ctx: { currentTime: number }) {}
+  setTimeout = (cb: () => void, ms: number): unknown => {
+    const id = this.next++;
+    this.pending.set(id, { at: this.ctx.currentTime + ms / 1000, cb });
+    return id;
+  };
+  clearTimeout = (id: unknown): void => {
+    this.pending.delete(id as number);
+  };
+  /** Advances the clock to `t`, firing due timers in order (timers they set fire too, when due). */
+  async runTo(t: number): Promise<void> {
+    for (;;) {
+      let first: [number, { at: number; cb: () => void }] | null = null;
+      for (const e of this.pending) if (e[1].at <= t + 1e-9 && (!first || e[1].at < first[1].at)) first = e;
+      if (!first) break;
+      this.pending.delete(first[0]);
+      this.ctx.currentTime = Math.max(this.ctx.currentTime, first[1].at);
+      first[1].cb();
+      for (let i = 0; i < 5; i++) await Promise.resolve();
+    }
+    this.ctx.currentTime = t;
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  }
+  get size(): number {
+    return this.pending.size;
+  }
+}

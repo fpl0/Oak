@@ -157,6 +157,12 @@ describe("liner notes and theory tags", () => {
     expect(tags).toEqual(["Meter 4/4", "Backbeat", "Eighths", "Sixteenths", "Tempo / BPM"]);
   });
 
+  test("a schema is tagged by its title, never by its ID", () => {
+    const analysis = { schemas: [{ schema: "schema.axis" }], devices: [] } as never;
+    const tags = theoryTags([], { rubric: [] } as never, analysis, () => null);
+    expect(tags).toEqual(["Four-chord (I–V–vi–IV)"]);
+  });
+
   test("clock", () => {
     expect(clock(9.6)).toBe("0:10");
     expect(clock(125)).toBe("2:05");

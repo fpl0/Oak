@@ -210,7 +210,11 @@ export interface NormalizeContext {
 
 /** What the learner answered, by exercise kind. Performance kinds arrive already measured by @oak/pitch. */
 export type ExerciseResponse =
-  | { code: string }
+  /**
+   * `part` (Wave 4, `by-ear.parts`): grade one part of a by-ear transcription, by its track label. `stage`
+   * (Wave 4, `transcribe.stages`): grade one stage of a staged chord transcription.
+   */
+  | { code: string; part?: string; stage?: "bass" | "quality" | "rn" }
   | { blanks: Record<string, string> }
   | { order: string[] }
   | { answer: Answer }
@@ -241,6 +245,11 @@ export interface GradeContext {
   lint: LintContext;
   band?: string;
   profile?: LearnerProfile;
+  /**
+   * Wave 4: only notes with an onset in `[from, to)` cycles are compared, on both sides (a phrase of an X1
+   * draft, `phraseCheckRequest`). Absent: the whole query.
+   */
+  window?: { from: Rat; to: Rat };
 }
 
 export interface GradeRequest {
@@ -268,6 +277,12 @@ export interface MatchResult {
   dims: Partial<Record<Dimension, DimScore>>;
   diagnostics: Diagnostic[];
   overlay?: GradeResult["overlay"];
+  /**
+   * `all` matchers: the lowest score of any member (nested `all`s included). "Every member must pass"
+   * (content-kit `Matcher`): the step passes only when this floor reaches the pass mark too, so a perfect
+   * rhythm can never carry a third of the notes wrong past 0.85 (X1), nor a right voice leading a wrong chord.
+   */
+  floor?: number;
 }
 
 /** A matcher: reference events against answer events. Registered by `Matcher["m"]`. */

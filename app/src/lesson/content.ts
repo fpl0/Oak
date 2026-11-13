@@ -5,6 +5,7 @@
 import type { CheckpointDef, LessonDef } from "@oak/api";
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import type { ComponentType } from "react";
+import type { GateRule } from "./gate.ts";
 
 export type MdxComponents = Record<string, ComponentType<Record<string, unknown>>>;
 export type LessonMdx = ComponentType<{ components?: MdxComponents }>;
@@ -47,11 +48,24 @@ export interface LoadedLesson {
   context?: string;
   /** The preview banner's line, for a fixture. */
   note?: string;
+  /** A dev fixture's own voicing gate (the content's is `VOICING_GATE`). */
+  gate?: GateRule;
 }
 
 /** The dev-only fixture of the Wave 3 step kinds (`app/src/lesson/dev/wave3-fixture.ts`); never in a build. */
 async function devFixture(id: string): Promise<LoadedLesson | null> {
   if (!import.meta.env.DEV) return null;
+  if (id === "U05.L99") {
+    const w4 = await import("./dev/wave4-fixture.ts");
+    return {
+      def: w4.default,
+      Mdx: null,
+      sample: true,
+      context: w4.FIXTURE4_CONTEXT,
+      gate: w4.FIXTURE4_GATE,
+      note: "A dev fixture of the Wave 4 step kinds, played with the tools of U05.L06. Nothing here is saved.",
+    };
+  }
   const mod = await import("./dev/wave3-fixture.ts");
   if (id !== mod.FIXTURE_ID) return null;
   return {

@@ -4,14 +4,18 @@
 //   - capstone briefs in content/capstones.ts (`compose(...)`), against §2.4 and §6.6.
 // Both reuse the lesson machinery: the content-profile lint in the session's unlock context (every legal
 // order), headless evaluation, the real grader on every test, the hint and test-shape rules.
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import {
   type CapstoneDef,
   type CheckpointDef,
   type Exercise,
   flattenExercise,
   type KeySpec,
+  type Matcher,
   type MeterId,
   type SessionId,
+  type SongDef,
   stripMarkers,
   type UnlockableId,
   unimplementedIn,
@@ -21,6 +25,7 @@ import { CHECKPOINT_RULES, checkpointMetas } from "../checkpoints.ts";
 import { familyById } from "../families.ts";
 import { courseGraph, registries } from "../index.ts";
 import { atOrBefore } from "../lib/course.ts";
+import { songById } from "../repertoire/index.ts";
 import { toolboxById } from "../toolbox.ts";
 import { exerciseTexts, testShapeIssues, voiceIssues } from "./authoring.ts";
 import { type CheckSection, describeOutcome, rubricToolIds } from "./checks.ts";
@@ -212,11 +217,86 @@ export async function checkCheckpoint(def: CheckpointDef): Promise<CheckSection[
   ];
 }
 
-/** A compose capstone's brief: starter, rubric tests, unlocks at its first session in every legal order. */
+/** The answer key of a repertoire song, if its `content/repertoire/<slug>/song.ts` is written. */
+async function songDef(id: string): Promise<SongDef | null> {
+  const file = join(import.meta.dir, "..", "repertoire", id.replace(/^song\./, ""), "song.ts");
+  if (!existsSync(file)) return null;
+  const mod = (await import(file)) as { default?: SongDef };
+  return mod.default ?? null;
+}
+const pitchOf = (m: Matcher): string | null =>
+  m.m === "melody" || m.m === "events"
+    ? m.pitch
+    : m.m === "all"
+      ? (m.of.map(pitchOf).find(Boolean) ?? null)
+      : null;
+
+/**
+ * Wave 4: the sessions of a capstone (contracts §2.4, §6.6). Every session's starter lints and plays in that
+ * session's unlock context; only the last session releases; a transcribe capstone's phrase checks resolve
+ * against every song the learner may pick (the phrase exists in the answer key, the layer is written, the
+ * rhythm skeleton plays), melody checks compare key-relative (§6.6 X1), chord checks are staged bass first.
+ * A song whose answer key is not written yet is pending, not a failure.
+ */
+export async function capstoneSessionSections(c: CapstoneDef): Promise<CheckSection> {
+  const issues: string[] = [];
+  const pending: string[] = [];
+  const key = c.key ?? DEFAULT_KEY;
+  const songs: { id: string; def: SongDef | null }[] = [];
+  for (const id of c.song ?? []) {
+    if (!songById.has(id)) issues.push(`song ${id} is not in content/repertoire/index.ts`);
+    songs.push({ id, def: await songDef(id) });
+  }
+  for (const s of songs)
+    if (!s.def && c.sessionDefs.some((x) => x.checks?.length))
+      pending.push(`${s.id}: no answer key yet (content/repertoire/${s.id.replace(/^song\./, "")}/song.ts)`);
+  const last = c.sessionDefs.length - 1;
+  for (const [i, s] of c.sessionDefs.entries()) {
+    if (s.release && i !== last) issues.push(`${s.id}: only the last session releases the piece`);
+    if (s.starter) {
+      for (const d of lint(stripMarkers(s.starter).code, { session: s.id as SessionId, meter: c.meter, key })
+        .diagnostics)
+        if (d.severity === "error") issues.push(`${s.id} starter:${d.line} ${d.id}: ${d.message}`);
+      const r = await evaluate(stripMarkers(s.starter).code, 4);
+      if (!r.ok) issues.push(`${s.id} starter: ${r.error}`);
+      else if (r.events.length === 0) issues.push(`${s.id} starter: silent`);
+    }
+    for (const x of s.checks ?? []) {
+      const where = `${s.id}/${x.id}`;
+      if (c.kind !== "transcribe") issues.push(`${where}: phrase checks belong to a transcribe capstone`);
+      if (x.layer === "melody" && pitchOf(x.matcher) && pitchOf(x.matcher) !== "key-relative")
+        issues.push(
+          `${where}: a melody check compares key-relative (contracts §6.6 X1), not ${pitchOf(x.matcher)}`,
+        );
+      if (x.layer === "chords" && x.stages && x.stages[0] !== "bass")
+        issues.push(`${where}: chords are taken down bass first`);
+      const [from, to] = Array.isArray(x.phrase) ? x.phrase : [x.phrase, x.phrase];
+      for (const song of songs) {
+        if (!song.def) continue;
+        const phrases = song.def.answerKey.phrases ?? [];
+        if (to > phrases.length)
+          issues.push(`${where}: ${song.id} has ${phrases.length} phrases, the check needs phrase ${to}`);
+        if (!song.def.answerKey.layers[x.layer])
+          issues.push(`${where}: ${song.id}'s answer key has no ${x.layer} layer`);
+        if (from > to) issues.push(`${where}: phrase [${from}, ${to}]`);
+      }
+      const skeleton = x.given?.rhythmSkeleton;
+      if (skeleton) {
+        const r = await evaluate(skeleton, 4);
+        if (!r.ok || r.events.length === 0) issues.push(`${where}: the rhythm skeleton does not play`);
+      }
+    }
+  }
+  if (c.kind === "transcribe" && !c.sessionDefs.some((s) => s.checks?.length || s.stages?.length))
+    pending.push("no phrase checks or stage exercises authored yet");
+  return { n: 5, name: "Sessions (contracts §2.4, §6.6)", issues, pending };
+}
+
+/** A capstone: the brief (starter, rubric tests, unlocks at its first session in every legal order) and its sessions. */
 export async function checkCapstone(c: CapstoneDef): Promise<CheckSection[]> {
   const brief: string[] = [];
   if (c.kind === "compose" && !c.brief) brief.push("a compose capstone has a brief");
-  if (!c.brief) return [{ n: 1, name: "Brief", issues: brief }];
+  if (!c.brief) return [{ n: 1, name: "Brief", issues: brief }, await capstoneSessionSections(c)];
   const b = c.brief;
   if (!b.rubric.some((r) => r.required)) brief.push("the rubric has no required rule");
   const starter = stripMarkers(b.code.starter).code;
@@ -239,6 +319,7 @@ export async function checkCapstone(c: CapstoneDef): Promise<CheckSection[]> {
   const items: Item[] = [{ where: "brief", e: b }];
   return [
     { n: 1, name: "Brief and tests", issues: brief },
+    await capstoneSessionSections(c),
     ...(await exerciseSections(owner, items, 4)),
     voiceAndShape(items),
   ];

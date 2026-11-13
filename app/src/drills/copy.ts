@@ -28,19 +28,27 @@ const PROMPTS: Record<string, string> = {
   "interval-in-key": "Which two degrees did you hear?",
   "interval-sing": "Sing the interval above the note.",
   "interval-isolated": "Which interval?",
-  "chord-quality": "What colour is the chord?",
-  "chord-inversion": "Which note is in the bass?",
+  "chord-quality": "After the key, one chord: what quality is it?",
+  "chord-inversion": "Which chord tone is in the bass: which inversion?",
+  "chord-spell": "Spell the chord from the root up.",
   "harmony-cadence": "How does the phrase end?",
-  "harmony-bass": "Which degrees does the bass walk through?",
-  "harmony-schema": "Which progression is it?",
+  "harmony-bass": "Hear the bass first: which degree is each root?",
+  "harmony-schema": "Which loop is it?",
+  "harmony-function": "Home, away or tension: what is the chord's job?",
+  "harmony-progression": "Bass first, then each chord's quality, then the numerals.",
   "key-mode": "Which mode?",
   "notation-read": "Write these bars as code.",
 };
 
 export function promptOf(trial: Trial<unknown>, def: FamilyDef): string {
-  const own = trial.params.prompt;
-  if (typeof own === "string" && own.trim() !== "") return own;
   const p = trial.params;
+  // Chord dictation names its key in its own prompt; the runner says how it is answered (bass first).
+  if (def.generator === "harmony-progression" && p.key && typeof p.key === "object") {
+    const k = p.key as { tonic: string; mode: string };
+    return `In ${k.tonic.replace(/b$/, "♭").replace(/#$/, "♯")} ${k.mode}: bass first, then each chord's quality, then the numerals.`;
+  }
+  const own = p.prompt;
+  if (typeof own === "string" && own.trim() !== "") return own;
   if (def.generator === "melody-dictation") {
     if (p.ui === "degree-pad") return "Write the tune as degrees, in order.";
     if (p.ui === "code") return "Write the tune as code: n is the degree − 1.";
@@ -74,6 +82,27 @@ export function stageText(stage: Stage, mode: unknown): string | null {
     default:
       return null;
   }
+}
+
+/** What a written dictation asks in each answer mode (level 4 and beyond). */
+export const DICTATION_PROMPTS: Readonly<Record<"degrees" | "code" | "staff", string>> = {
+  degrees: "Write the tune as degrees, in order.",
+  code: "Write the tune as code: n is the degree − 1.",
+  staff: "Write the tune on the staff: the pitches and how long each one lasts.",
+};
+
+/** What a staged trial's open step asks. */
+export const STEP_PROMPTS: Readonly<Record<"bass" | "quality" | "rn", string>> = {
+  bass: "Step 1 · The bass: the degree under each chord.",
+  quality: "Step 2 · The quality of each chord.",
+  rn: "Step 3 · The Roman numerals.",
+};
+
+/** The line after a step check that did not pass yet (never shaming: what is right, and what to do). */
+export function stepRetryText(step: "bass" | "quality" | "rn", marks: readonly boolean[]): string {
+  const right = marks.filter(Boolean).length;
+  const what = step === "bass" ? "bass notes" : step === "quality" ? "qualities" : "numerals";
+  return `${right} of ${marks.length} ${what} right so far. Hear it again, change the marked ones, and check again.`;
 }
 
 /** Calm copy when free practice moves the level (never shaming). */

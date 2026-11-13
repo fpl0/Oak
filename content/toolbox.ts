@@ -38,11 +38,16 @@ interface Opts {
   strudelCc?: string;
 }
 
-/** The voicing gate (contracts §3.1 rule 6): rows marked `*` in §3.2. */
+/**
+ * The voicing gate (contracts §3.1 rule 6): rows marked `*` in §3.2. The check is U05.L07's
+ * `hand-voiced-cadence`; if it has not passed at 0.9 when U05.L08 starts, U05.L08's first step
+ * (`gateCheck`) is the same check regenerated in another key, and a pass there counts too.
+ */
 export const VOICING_GATE = {
   exercise: "U05.L07/hand-voiced-cadence" as ExerciseId,
   minScore: 0.9,
   unrevealed: true as const,
+  variants: ["U05.L08/hand-voiced-cadence-again" as ExerciseId],
 };
 
 function row(
@@ -202,13 +207,34 @@ export const toolbox: readonly ToolEntry[] = defineToolbox([
     meaning: "Adds do re mi fa sol la ti under the degree numbers. Do is home in every key, so a tune keeps its syllables when it moves.",
     demo: ex(80, 'mel: n("<[0 1 2 [3 2]] [4 2 0 ~]>").scale("C4:major").s("piano")'),
   }),
-  feature("tb.feature.grand-staff", "Bass clef and grand staff", "U05.L06", "low register on paper"),
-  feature("tb.feature.rn", "Roman-numeral overlay (chord band, RN under staff)", "U06.L02", "Roman numerals"),
-  feature("tb.lens.function", "Lens: function bands (T / PD / D)", "U06.L03", "harmonic function"),
-  feature("tb.lens.range", "Lens: range", "U07.L01", "melodic range"),
-  feature("tb.lens.chord-tones", "Lens: chord-tone %", "U07.L03", "chord tones on strong beats"),
-  feature("tb.feature.transcribe", "Transcribe (ladder pattern-source, melody mode, own audio, ±50¢ fine-tune, \"hum it, Oak drafts it\")", "U07.L01", "transcription gym starts"),
-  feature("tb.feature.leadsheet", "Lead-sheet view and export", "U07.L09", "reading lead sheets"),
+  feature("tb.feature.grand-staff", "Bass clef and grand staff", "U05.L06", "low register on paper", {
+    meaning: "The staff panel shows low notes on the bass clef, and chords and bass lines on a grand staff: treble on top, bass below, middle C between them. A bass track goes to the bass staff by itself.",
+    demo: ex(84, 'chords: note("<[e3,g3,c4] [f3,a3,c4]>").s("piano")', 'bass: note("<c2 f2>").s("piano")'),
+  }),
+  feature("tb.feature.rn", "Roman-numeral overlay (chord band, RN under staff)", "U06.L02", "Roman numerals", {
+    meaning: "A chord band under the roll names each chord as it sounds, by symbol and by Roman numeral in the key (I ii iii IV V vi vii°); the staff shows the numeral under each chord. Inversions show their bass after a slash.",
+    demo: ex(90, 'chords: n("<[0,2,4] [5,7,9] [3,5,7] [4,6,8]>").scale("C3:major").s("piano")'),
+  }),
+  feature("tb.lens.function", "Lens: function bands (T / PD / D)", "U06.L03", "harmonic function", {
+    meaning: "Colours each chord by the job it does: home (T), away (PD) or tension that wants home (D), so a progression's journey is visible at a glance.",
+    demo: ex(90, 'chords: n("<[0,2,4] [3,5,7] [4,6,8] [0,2,4]>").scale("C3:major").s("piano")'),
+  }),
+  feature("tb.lens.range", "Lens: range", "U07.L01", "melodic range", {
+    meaning: "Marks the lowest and highest note of each melody line and the span between them in half steps, with the high point flagged.",
+    demo: ex(90, 'mel: n("<[0 2 4 2] [4 5 7 ~] [5 4 2 1] [0 ~ ~ ~]>").scale("C4:major").s("piano")'),
+  }),
+  feature("tb.lens.chord-tones", "Lens: chord-tone %", "U07.L03", "chord tones on strong beats", {
+    meaning: "Rings every melody note that belongs to the chord under it and shows the share of strong-beat notes that do.",
+    demo: ex(90, 'chords: n("<[0,2,4] [3,5,7]>").scale("C3:major").s("piano")', 'mel: n("<[4 2 0 2] [5 3 5 7]>").scale("C4:major").s("piano")'),
+  }),
+  feature("tb.feature.transcribe", "Transcribe (ladder pattern-source, melody mode, own audio, ±50¢ fine-tune, \"hum it, Oak drafts it\")", "U07.L01", "transcription gym starts", {
+    meaning: "Transcribe opens a piece to write down by ear: a hidden ladder loop or your own audio file, with slower playback, transposition, an A–B loop, and A/B between the original and your code at the same bar. Humming a line drafts it as code for you to correct.",
+    demo: ex(90, 'mel: n("<[0 2 4 2] [4 ~ 2 ~]>").scale("C4:major").s("piano")'),
+  }),
+  feature("tb.feature.leadsheet", "Lead-sheet view and export", "U07.L09", "reading lead sheets", {
+    meaning: "Shows a piece as a lead sheet: the melody on one staff, chord symbols above it, the pickup bar when there is one. Export it with your sketch or album track.",
+    demo: ex(90, 'chords: n("<[0,2,4] [3,5,7]>").scale("C3:major").s("piano")', 'mel: n("<[4 2 0 2] [5 ~ 3 ~]>").scale("C4:major").s("piano")'),
+  }),
   feature("tb.lens.form", "Lens: form map", "U09.L02", "sections"),
   feature("tb.feature.transcribe.chords", "Transcribe: chords mode", "C4.S1", "chords by ear in your own songs"),
   feature("tb.feature.transcribe.bass", "Transcribe: bass mode", "X2.S1", "bass first"),

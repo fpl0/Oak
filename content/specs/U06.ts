@@ -1,0 +1,1339 @@
+// U06 Diatonic Harmony: the unit spec (rendered to content/specs/U06.md by `bun scripts/content/spec.ts`).
+// Every hook was evaluated with headless Strudel and linted in its lesson; U06.L02 is the exemplar, written
+// and passing with the real grader (content/core/U06/L02).
+import type { UnitSpec } from "./types.ts";
+
+const C = { tonic: "C", mode: "major" } as const;
+const T = (bpm: number) => `setcpm(${bpm}/4)\n\n`;
+
+/** What every U06 lesson has from U03–U05 (the voicing gate of U05.L07 is met: U05.L08 cannot be completed without it). */
+const BASE = [
+  "tb.setcpm",
+  "tb.label",
+  "tb.mini.seq",
+  "tb.mini.rest",
+  "tb.mini.sub",
+  "tb.mini.alt",
+  "tb.mini.elongate",
+  "tb.mini.replicate",
+  "tb.mini.stack",
+  "tb.gain",
+  "tb.room",
+  "tb.n",
+  "tb.n.range",
+  "tb.scale",
+  "scale.major",
+  "tb.s.pitched",
+  "snd.piano",
+  "snd.ebass",
+  "tb.lpf",
+  "snd.upright",
+  "tb.arp",
+  "tb.feature.degree-labels",
+  "tb.feature.grand-staff",
+  "tb.add",
+] as const;
+/** Note names with accidentals: chords outside the key (the line cliché's B♭). */
+const NAMES = ["tb.note", "tb.note.names", "tb.note.accidentals"] as const;
+/** The tools behind the voicing gate, open since U05.L08. */
+const VOICED = ["tb.chord", "tb.voicing", "tb.anchor", "chord.triad", "snd.rhodes", "snd.organ"] as const;
+/** From U06.L02: the Roman-numeral overlay (the chord band, numerals under the staff). */
+const RN = "tb.feature.rn";
+const DRUMS = ["snd.drum.bd", "snd.drum.sd", "snd.drum.hh"] as const;
+
+/** A triad on each root of `roots` (n values), stacked with U06.L01's `.add()`. */
+const triads = (roots: string, scale = "C3:major", sound = "piano") =>
+  `n("[0,2,4]").add(n("${roots}")).scale("${scale}").s("${sound}")`;
+/**
+ * Two chords in a bar: the roots come first and the stack is added to them. `.add()` keeps the structure of
+ * the pattern on its left, so `n("[0,2,4]").add(n("<[5 3]>"))` plays only vi; `n("<[5 3]>").add(n("[0,2,4]"))`
+ * plays vi then IV (U06.L08 teaches this order).
+ */
+const rootsFirst = (roots: string, scale = "C3:major", sound = "piano") =>
+  `n("${roots}").add(n("[0,2,4]")).scale("${scale}").s("${sound}")`;
+/** The U05.L01 tune over I V vi IV: chord notes on every beat it plays. */
+const AXIS_TUNE = 'mel: n("<[4 ~ 2 4] [6 ~ 4 ~] [5 ~ 7 5] [5 ~ 3 ~]>").scale("C4:major").s("piano")';
+
+export const U06: UnitSpec = {
+  unit: "U06",
+  title: "Diatonic Harmony",
+  summary:
+    "Twelve lessons on the chords of a key and what they do. The seven triads stacked on the seven degrees (`.add(n(\"…\"))` moves one stack onto any root) are the key's diatonic chords; they get Roman numerals, graded by degree and quality, never by string; they have jobs (home, away, tension) and phrases end with cadences. The ear learns to hear the bass first and to sing the roots, and then takes down whole loops in stages: bass, quality, numeral. The schemas the learner's genres run on are met as loops over the pop and jazz-soul Bands before they are named: the four-chord loop and its rotations (with the deceptive V→vi), doo-wop and three-chord rock (with the plagal IV→I). Then the pace of the changes (harmonic rhythm), a first taste of sevenths for the neo-soul loop, slash chords and the walking-down bass, and comping with `.struct()`. Ear-training stage D continues (`fam.har.rn`, `fam.har.function`, `fam.har.cadence`, `fam.har.bass`, `fam.har.schema`, `fam.har.progression`). U06.CP follows U07.L01 in the default order; U06.L03 and later need U05.CP (contracts §7.6 rule 2).",
+  conventions: [
+    'Chords in learner code are degree stacks moved with `.add(n("…"))`, written before `.scale()`: `n("[0,2,4]").add(n("<0 4 5 3>")).scale("C3:major")` is I V vi IV (contracts §0.4: `.add("…")` without `n()` changes nothing, and `.add(n(…))` after `.scale()` changes nothing). The number in `.add()` is the root\'s `n`, so a numeral\'s number is its degree minus one: "`n` counts from 0, so V is 4". That off-by-one (V written as 5) is the realistic mistake of the unit; every graded code step that turns numerals into code pins it.',
+    '`chord()` and `.voicing()` are open (the U05.L07 gate is met by U05.L08). Learner code may use symbols anywhere a stack would do; tests include one passing answer in symbols where a step allows it. A voicing is graded only by pitch classes and the bass (contracts §6.7): never author a check on its octave, top note or note count. `chord("C/E")` is a lint error (STYLE §5.3): a slash chord is a stack whose lowest note is not the root, or a `bass:` track (U06.L11).',
+    'Roman numerals from U06.L02: upper case major, lower case minor, ° diminished (`vii°`, also accepted as `viio`). Graded by degree, quality and (with `allow: ["inversions"]`, U06.L11) bass, never as strings: `rn-palette` answers, the `progression` and `contains-rn` rules, the `harmony` matcher. I against i is `harmony.rn-case`. Before U06.L02 a rule detail that prints numerals is overridden ("{label}: not yet.", U05.L01 S8); from U06.L02 the catalog text may stand. The grader prints vii° as `viio` today (reported); override where the learner reads it.',
+    'Words that wait: "function", "tonic/predominant/dominant" as jobs (U06.L03; "tonic" as the home note is U03\'s), "cadence" and its kinds (U06.L04, deceptive U06.L06, plagal U06.L07), "schema" (U06.L06), "harmonic rhythm" (U06.L08), "seventh chord" (U06.L10), "pedal", "line cliché" (U06.L11), "comping" (U06.L12), "lead sheet" (U07.L09), "chord tone" (U07.L03). Seventh-chord names (Cmaj7, Dm7, G7) and their numerals (Imaj7) are U12\'s: U06.L10 says "one more 3rd" and "the 7th", and its code is `n("[0,2,4,6]")`.',
+    'Genres first: every schema is met as a loop that sounds like a record before it is named (contracts L5). `band.axis-4bar` carries the pop and jazz-soul feel (jazz-soul swings and plays sevenths, funk plays four-note chords from U06.L01). Its tracks: `["drums", "bass"]` when the learner\'s chords sit on its I V vi IV roots (U06.L02 S1, U06.L06, U06.L12); `["drums", "chords"]` when the learner writes the bass (U06.L05); `["drums"]` when the learner picks the chords (every other Make). A hook whose chords are not I V vi IV plays over the drums alone. A learner\'s chords never sound together with the Band\'s chords.',
+    "Keys: C major except where a step moves a loop to show that numerals travel (U06.L02 S2, S6–S8 in G). A step in another key declares the exercise `key`; the Make's `progression` is judged in that declared key (the grader does not yet read the learner's `.scale()`), so a Make never invites \"any key\".",
+    "Staff and scaffolds (AUTHORING §6, U06 row): degree labels on the roll; the staff `grand` for chords over a bass, treble for chords alone; numerals under the staff and in the chord band from U06.L02 (`tb.feature.rn`), the function bands from U06.L03 (`tb.lens.function`). A step that opens a panel lists it in `ui.initialPanels` (planned feature `step.initial-panels`): `chords` from U06.L02, `function` from U06.L03.",
+    "Ear training stage D (contracts §7.3): `fam.har.rn` seeds in U06.L02 (concept), `fam.har.function` U06.L03, `fam.har.cadence` U06.L04 (level 2 adds IAC, level 3 PC and DC from U06.L07), `fam.har.bass` U06.L05, `fam.har.schema` U06.L06 (level 2 adds axis-vi and doo-wop from U06.L07), `fam.har.progression` U06.L09. A lesson seeds a family and plays at most one generator step of it; the engine runs the blocked-intro sets in the warm-ups.",
+    'Singing (U06.L05): the roots, on syllables with numbers shown (contracts §8.3). A sing step is never graded, never gates and declares `fallback: "identify"`; in Quiet mode it is skipped or replaced by the identify fallback.',
+    'U06\'s "Play from the page" step is U06.L11 S4: the walking bass under C G/B Am Am/G is shown on the bass staff of the grand staff only (no code, no roll), and written in code.',
+    "Wave 4 shapes (AUTHORING §17) that U06 needs before some lessons can pass: `slot-choice` (U06.L03 S6, U06.L04 S5), `step.initial-panels` (U06.L03 S3, U06.L09 S2), `dictation.stage-answers` (U06.L09 S2), `by-ear.parts` (U06.L09 S3), `chord-qualities` (U06.L10 Make), `chord-inversions` (U06.L11 Make) and rn-palette inversions graded with the bass (U06.L11 S5; the grader's `sameRn` drops the inversion today). Until they move into `IMPLEMENTED`, content:check reports them; U06.L01, L02, L05–L08 and L12 use only implemented kinds.",
+    'Feedback the grader emits on U06 steps (pin what `bun run content:check <id> --verbose` prints): `harmony.pcset` (a chord with other notes, the numeral read as `n`), `harmony.bass` / `harmony.inversion` (the lowest note), `harmony.rn-case` (VI for vi), `id.wrong` (override where the catalog says "Listen to both" on a reading item, U06.L02 S5), `code.unchanged`, `code.edit-outside`, `kb.missing-note` / `kb.extra-note` / `kb.bass`, `rhythm.displaced` / `rhythm.missing` (the comping steps), `melody.wrong-degree` (a bass line by ear), `rubric.unmet` (its detail names the chords in numerals from U06.L02).',
+  ],
+  lessons: [
+    {
+      id: "U06.L01",
+      author: "U06a",
+      idea: 'Every degree of a key carries a triad, stacked "+2, +2" from it: seven chords, all made of the key\'s own notes. `.add(n("…"))` moves one stack `[0,2,4]` onto any root, so a whole loop is one stack and a line of roots. Major on 1, 4 and 5, minor on 2, 3 and 6, diminished on 7: the key\'s diatonic chords.',
+      hook: {
+        hear: "Over the Band's drums, the chords climb the scale a step a bar, C Dm Em F G, and fall back F Dm G, with the bass doubling each root: every chord of the key in one loop.",
+        code: `${T(92)}chords: ${triads("<0 1 2 3 4 3 1 4>")}\nbass: n("<0 1 2 3 4 3 1 4>").scale("C2:major").s("ebass").lpf(600)`,
+      },
+      key: C,
+      meter: "4/4",
+      bpm: 92,
+      canDo: ["cd.write.triads"],
+      uses: [...BASE],
+      steps: [
+        {
+          kind: "listen",
+          exercise: "listen",
+          minutes: 0.5,
+          what: "The hook: the chords climb, then turn back.",
+        },
+        {
+          kind: "predict",
+          exercise: "predict",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: '`n("[0,2,4]").add(n("<0 3>")).scale("C3:major")`: C, then F (the whole stack moved up three degrees), or C, then C with a fourth note, or the same C twice? (`choose`)',
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["choice", "number"],
+          minutes: 1,
+          what: 'The seven stacks, `.add(n("<0 1 2 3 4 5 6>"))`, with degree labels: what `.add()` does to the stack each bar (choice: moves every note up one degree); the root\'s degree in bar 5 (number: 5).',
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          what: 'Bars 3 and 4 still sit on the root: `.add(n("<0 4 ⟪0 0⟫>"))`. Put them on degrees 6 and 4 (`5 3`; `pcset` with bass; edit-only-regions; the target\'s roll after one failed try). Equivalent: `-2 3` (vi below).',
+        },
+        {
+          kind: "quiz",
+          exercise: "keyboard",
+          answer: ["keyboard"],
+          minutes: 1,
+          graded: true,
+          what: 'The triad on degree 2 of C on the keyboard, `mode: "chord"`: D F A, D lowest, any octave.',
+        },
+        {
+          kind: "compare",
+          exercise: "identify",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: 'Two audio cards after a bar of C: D minor `[1,3,5]` against D major `note("[d3,f#3,a3]")`. Which one is made only of the notes of C major?',
+          term: "term.diatonic",
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          what: "A loop of four chords of the key, one of them a chord the four-chord loop never had.",
+        },
+      ],
+      wrapAt: 5,
+      make: {
+        brief:
+          "Write a four-bar loop from the seven chords of C with `.add()`, over the drums. Use at least one chord the four-chord loop never had: the one on degree 2, 3 or 7.",
+        required: {
+          rule: "contains-rn",
+          label: "A chord on degree 2, 3 or 7",
+          why: '`contains-rn` with `rn: ["ii", "iii", "viio"]`, `min: 1`. The starter is the U05 loop (1 5 6 4) in `.add()` form. The rule\'s detail names numerals (U06.L02\'s): override `rubric.unmet` with "{label}: not yet."',
+        },
+        suggestions: [
+          'a bass line on the roots (`tracks` with `roles: ["bass"]`)',
+          'the chords between C3 and C5 (`range` `within: ["c3", "c5"]`)',
+        ],
+        band: "band.axis-4bar",
+        tracks: ["drums"],
+        flavours:
+          "Drums only from the Band, in the flavour's kit; a jazz-soul learner's starter swaps `piano` for `rhodes` (unlocked at U05.L08).",
+      },
+      srs: [
+        { family: "fam.chd.spell", mode: "review-if-due", level: 2 },
+        { family: "fam.chd.quality-triad", mode: "review-if-due", level: 3 },
+      ],
+      singOn: "syllables",
+      mistakes: [
+        "the degrees written as numbers (`6 4` for degrees 6 and 4): `harmony.pcset` (bars 3 and 4 a degree too high)",
+        "another bar edited too: `code.edit-outside`",
+        "the unchanged starter: `code.unchanged`",
+        "`.add()` written after `.scale()`: nothing moves (contracts §0.4); pin what the grader says (`harmony.pcset` expected)",
+        "keyboard D F♯ A (D major): `kb.extra-note` + `kb.missing-note`; F under D A: `kb.bass`",
+        "Make starter (only 1 5 6 4): `rubric.unmet`",
+      ],
+      connects: {
+        back: "U05.L01 stacked triads one by one; U05.L02–L03 heard their qualities; now one stack walks through the whole key.",
+        forward: "U06.L02 names the seven by their degree, in Roman numerals: I ii iii IV V vi vii°.",
+      },
+      notes: [
+        "U05.CP follows this lesson in the default order: `chord()` is open, but the unit's own code stays in stacks.",
+        "The diminished triad on 7 sounds tense on its own; in the Make it is best followed by I. Say so in a hint, not as a rule: the Make does not require it.",
+      ],
+    },
+    {
+      id: "U06.L02",
+      author: "spec-U06",
+      idea: "A Roman numeral names a chord by the degree of its root: upper case for major, lower case for minor, ° for diminished. Every major key has the same pattern, I ii iii IV V vi vii°, so a loop in numerals (I V vi IV) is the same loop in any key. In code, a numeral's number in `.add()` is its degree minus one.",
+      hook: {
+        hear: "The four-chord loop of U05, now one stack moved by `.add()`, with the Band's drums and bass and the U05.L01 tune on top. The predict step plays the same numbers in G.",
+        code: `${T(90)}chords: ${triads("<0 4 5 3>")}.gain(.7)\n${AXIS_TUNE}`,
+      },
+      key: C,
+      meter: "4/4",
+      bpm: 90,
+      canDo: ["cd.read.roman"],
+      uses: [...BASE, ...VOICED, RN],
+      steps: [
+        {
+          kind: "listen",
+          exercise: "listen",
+          minutes: 0.5,
+          what: "The hook, then the chords alone over the Band's drums and bass (two items).",
+        },
+        {
+          kind: "predict",
+          exercise: "predict",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: 'The same `.add(n("<0 4 5 3>"))` over `.scale("G3:major")` (`key` G): the same loop with a new home note, a different loop, or chords that clash?',
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["choice", "number"],
+          minutes: 1,
+          what: "The seven triads of C and home (eight bars): on which degrees are the major triads (choice: 1, 4 and 5); on which degree is the diminished one (number: 7).",
+          term: "term.roman-numeral",
+        },
+        {
+          kind: "see",
+          minutes: 0.5,
+          what: "The seven triads on the treble staff an octave up, with degree labels; the prose sets I ii iii IV V vi vii° under them.",
+        },
+        {
+          kind: "quiz",
+          exercise: "identify",
+          answer: ["rn-palette"],
+          minutes: 1,
+          graded: true,
+          what: 'The hook\'s chords, code shown and audible: write the four numerals (`rn-palette`, `slots: 4`, `allow: ["triads"]`): I V vi IV. Seeds `fam.har.rn`.',
+        },
+        {
+          kind: "quiz",
+          exercise: "fact",
+          answer: ["text"],
+          minutes: 0.75,
+          graded: true,
+          what: 'In G major, which chord is ii? (`text`, `normalize: "chord"`, `key` G): Am; "am" passes too.',
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          what: 'I vi ii V in G: `.add(n("<0 5 ⟪0 0⟫>"))` → `1 4` (`pcset` with bass; edit-only-regions; `key` G). Equivalent: `1 -3` (V an octave down).',
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          what: "vi IV I V in G over the drums, written any way the learner likes.",
+        },
+      ],
+      wrapAt: 5,
+      make: {
+        brief:
+          "Many songs open on this loop: vi IV I V. Play it in G over the drums, with stacks, `.add()` or chord names, then make it yours: a rhythm for the chords, a tune on top.",
+        required: {
+          rule: "progression",
+          label: "The chords go vi IV I V in G",
+          why: '`progression` with `rn: ["vi", "IV", "I", "V"]` on `track: "chords"`, judged in the exercise\'s `key` (G major): stacks, `.add()` and `chord("<Em C G D>").voicing()` all pass. The starter plays only vi.',
+        },
+        suggestions: [
+          'a tune on top (`tracks` with `roles: ["melody"]`)',
+          'the chords between C3 and C5 (`range` `within: ["c3", "c5"]`)',
+        ],
+        band: "band.axis-4bar",
+        tracks: ["drums"],
+        flavours:
+          "Drums only from the Band (they fit any key); the chords stay the learner's `piano` (the rich test plays them on `rhodes`).",
+      },
+      srs: [{ family: "fam.har.rn", mode: "seed", level: 1 }],
+      singOn: "syllables",
+      mistakes: [
+        'S5: vi written as VI: `harmony.rn-case`; the `.add()` numbers read as degrees (I IV V iii): `id.wrong`, overridden (the catalog says "Listen to both")',
+        "S6: A (major) for Am, or Dm (ii in C): `id.wrong`",
+        "S7: the numerals written as numbers (`2 5` for ii and V): `harmony.pcset`; bar 2 changed: `code.edit-outside`; the unchanged starter: `code.unchanged`",
+        "Make: the numerals written as numbers (`<6 4 1 5>`: vii° V ii vi) or the right numbers over C: `rubric.unmet`",
+      ],
+      connects: {
+        back: "U06.L01 stacked the seven triads with `.add()` and called them diatonic; U05.L02–L03 heard their qualities.",
+        forward:
+          "U06.L03 gives the numerals jobs: I is home, IV and ii lead away, V is tension that wants home.",
+      },
+      notes: [
+        "The exemplar of U06: written and passing every content-CI check with the real grader (content/core/U06/L02).",
+        "No `initialPanels` in the exemplar: the chord band (`chords` panel) is planned (`step.initial-panels`). Later lessons may open it; the RN overlay itself is the default scaffold from here.",
+        "The Make is in G on purpose: the numerals are the point, and the drums-only Band fits any key. The `progression` rule reads the declared `key`, so the rich test (symbols on a Rhodes, a bass, a tune) passes and the right numbers over C fail.",
+      ],
+    },
+    {
+      id: "U06.L03",
+      author: "U06a",
+      idea: "Chords have jobs. I is home (and vi can stand in for it); IV and ii lead away; V (and vii°) is tension that wants to go home. A phrase usually travels home, away, tension, home: T, PD, D, T.",
+      hook: {
+        hear: "A gospel-tinged phrase over the Band's drums: home, away, tension, home again, the tune climbing to the top note just as the last chord lands.",
+        code: `${T(84)}chords: ${triads("<0 3 4 0>")}\nmel: n("<[4 ~ 2 ~] [5 ~ 3 ~] [6 ~ 4 ~] [7 ~ ~ ~]>").scale("C4:major").s("piano")`,
+      },
+      key: C,
+      meter: "4/4",
+      bpm: 84,
+      canDo: ["cd.hear.function"],
+      uses: [...BASE, ...VOICED, RN, "tb.lens.function"],
+      steps: [
+        { kind: "listen", exercise: "listen", minutes: 0.5, what: "The hook: I IV V I with the tune." },
+        {
+          kind: "predict",
+          exercise: "predict",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: "Stop the loop after one of its bars: after which one do you most want to hear the next chord? (`choose`: bar 3, V)",
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["choice", "number"],
+          minutes: 1,
+          features: ["step.initial-panels"],
+          panels: ["function"],
+          what: "The seven triads with the function bands under the roll: which chord shares the home band with I (choice: vi); how many chords sit in the tension band (number: 2, V and vii°).",
+          term: ["term.harmonic-function", "term.dominant", "term.predominant"],
+        },
+        {
+          kind: "ear",
+          exercise: "identify",
+          answer: ["choice"],
+          minutes: 1.5,
+          graded: true,
+          what: "Home, away or tension? Generator `fam.har.function` level 1 (T, PD, D for a numeral in a key). Seeds the family.",
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          what: 'Bar 2 of `.add(n("<0 ⟪0⟫ 4 0>"))` stays home. Send it away: IV or ii (`3` or `1`; two reference solutions, `pcset` with bass; edit-only-regions).',
+        },
+        {
+          kind: "quiz",
+          exercise: "identify",
+          answer: ["slot-choice"],
+          minutes: 1,
+          graded: true,
+          what: "A four-bar loop, I ii V I, played with its code: mark each bar's job (`slot-choice`, `slots: 4`, `FUNCTION_OPTIONS`): T PD D T.",
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          what: "A phrase that goes away and comes home through tension.",
+        },
+      ],
+      wrapAt: 4,
+      make: {
+        brief:
+          "Write a four- or eight-bar phrase over the drums: start at home, go away, build tension, come home. Your choice of chords for each job.",
+        required: {
+          rule: "contains-rn",
+          label: "The tension chord goes home: V then I",
+          why: '`contains-rn` with `rn: ["V"]`, `min: 1`, `mustResolve: true`: a V followed by I. The starter is I IV I IV, which never builds tension.',
+        },
+        suggestions: [
+          'something away before the tension (`contains-rn` `rn: ["ii", "IV"]`, `min: 1`)',
+          'a tune that ends on 1 (`ends-on-degree` `["1"]`)',
+        ],
+        band: "band.axis-4bar",
+        tracks: ["drums"],
+        flavours: "Drums only from the Band; the jazz-soul starter plays on `rhodes`.",
+      },
+      srs: [
+        { family: "fam.har.function", mode: "seed", level: 1 },
+        { family: "fam.har.rn", mode: "review-if-due", level: 2 },
+      ],
+      singOn: "syllables",
+      mistakes: [
+        "S5: V in bar 2 (`4`), tension too early: `harmony.pcset`; vi (`5`), still home: `harmony.pcset`; another bar edited: `code.edit-outside`; the unchanged starter: `code.unchanged`",
+        "S6: PD for V, or T for vi read as away: `id.wrong` per slot",
+        "Make starter (I IV I IV): `rubric.unmet`; V that goes to vi instead of I: `rubric.unmet` (that swerve is U06.L06's)",
+      ],
+      connects: {
+        back: "U03.L04 heard 7 lean to 1 and U03.L11 ended a phrase at home; U06.L02 named the chords.",
+        forward: "U06.L04 looks at the end of the phrase: V to I closes it, stopping on V leaves it open.",
+      },
+      notes: [
+        '"Tonic" is U03\'s word for the home note; here the pass text extends it to the home chord\'s job, in the sentence that introduces `term.harmonic-function`. FUNCTION_OPTIONS labels read "T: home (tonic)", "PD: away (predominant)", "D: tension (dominant)": every step that shows them comes after S3.',
+        'S3 opens the function bands (`initialPanels: ["function"]`, planned) and S6 needs `slot-choice` (planned): until both land, S3 runs without the panel and S6 is the lesson\'s only planned step.',
+        "iii is left out of every graded answer: its function is ambiguous (home or leading to vi); the generator's level 1 asks only for I vi ii IV V vii°.",
+      ],
+    },
+    {
+      id: "U06.L04",
+      author: "U06a",
+      idea: "A phrase ends with a cadence. V to I closes it (authentic: perfect when the tune lands on 1 over root-position chords, imperfect when it lands on 3 or 5); stopping on V leaves it open (a half cadence), like a comma before the answer.",
+      hook: {
+        hear: "Eight bars over the Band's drums and bass: a phrase that stops on V in bar 4, waiting, and an answer that lands V–I with the tune on 1 in bar 8.",
+        code: `${T(88)}chords: ${triads("<0 3 0 4 0 3 4 0>")}\nmel: n("<[2 ~ 4 ~] [5 ~ 3 ~] [4 ~ 2 ~] [1 ~ ~ ~] [2 ~ 4 ~] [5 ~ 3 ~] [1 ~ 4 ~] [0 ~ ~ ~]>").scale("C4:major").s("piano")`,
+      },
+      key: C,
+      meter: "4/4",
+      bpm: 88,
+      canDo: ["cd.hear.cadences"],
+      uses: [...BASE, ...VOICED, RN, "tb.lens.function"],
+      steps: [
+        {
+          kind: "listen",
+          exercise: "listen",
+          minutes: 0.5,
+          what: "The hook over `band.phrase-8bar` (drums and bass: its roots are the hook's, I IV I V | I IV V I).",
+        },
+        {
+          kind: "compare",
+          exercise: "identify",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: "Two audio cards: bars 1–4 and bars 5–8 of the hook. Which phrase sounds finished?",
+          term: ["term.cadence", "term.half-cadence"],
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["choice", "number"],
+          minutes: 1,
+          what: "The last two bars twice, the tune ending on 1 and then on 3 over the same V–I: which ending is more final (choice: on 1); the degree of the tune's last note in the first one (number: 1).",
+          term: "term.authentic-cadence",
+        },
+        {
+          kind: "ear",
+          exercise: "identify",
+          answer: ["choice"],
+          minutes: 1.5,
+          graded: true,
+          what: "Closed or open? Generator `fam.har.cadence` level 1 (PAC against HC). Seeds the family.",
+        },
+        {
+          kind: "quiz",
+          exercise: "identify",
+          answer: ["slot-choice"],
+          minutes: 1,
+          graded: true,
+          what: "Two four-bar phrases played with their code: mark each ending (`slot-choice`, `slots: 2`, `CADENCE_OPTIONS` limited to PAC, IAC, HC; `partial` gives IAC half credit for PAC): HC, PAC.",
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          what: 'Close the open phrase: `.add(n("<0 3 ⟪0 4⟫>"))` ends on V; make bars 3–4 V then I (`4 0`; `pcset` with bass; edit-only-regions).',
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          what: "An eight-bar phrase that waits in bar 4 and comes home in bar 8.",
+        },
+      ],
+      wrapAt: 4,
+      make: {
+        brief:
+          "Write eight bars of chords over the drums: let bar 4 wait on V, and bring bar 8 home with V to I. Add a tune that lands on 1 if you like.",
+        required: {
+          rule: "cadence",
+          label: "Bar 8 comes home: V to I",
+          why: '`cadence` with `types: ["PAC", "IAC"]`, `at: "last"`. The starter is the hook\'s first four bars twice, which ends on V.',
+        },
+        suggestions: [
+          'bar 4 waits on V (`cadence` `types: ["HC"]`, `at: { bar: 4 }`)',
+          "a tune that ends on 1 over the last I (`ends-on-degree`)",
+        ],
+        band: "band.axis-4bar",
+        tracks: ["drums"],
+        flavours:
+          "Drums only from the Band; the hook's step uses `band.phrase-8bar` (drums and bass), whose roots match the hook.",
+      },
+      srs: [{ family: "fam.har.cadence", mode: "seed", level: 1 }],
+      singOn: "syllables",
+      mistakes: [
+        "S6: IV then I (`3 0`, a softer close that is U06.L07's): `harmony.pcset`; I then V (`0 4`, the starter's order kept): `code.unchanged` or `harmony.pcset`; another bar edited: `code.edit-outside`",
+        "S5: PAC for HC: `id.wrong`; IAC for PAC: `id.partial`",
+        "Make starter (ends on V): `rubric.unmet`; ending IV–I: `rubric.unmet` (a suggestion for U06.L07)",
+      ],
+      connects: {
+        back: "U03.L11 heard a phrase pause on V and land home over `band.phrase-8bar`; U06.L03 called V the tension.",
+        forward:
+          "U06.L05 turns to the bass, the line that makes a cadence easy to hear; U06.L06 swerves V to vi, U06.L07 ends IV to I.",
+      },
+      notes: [
+        "Perfect and imperfect are the two kinds of `term.authentic-cadence` (one term, its definition names both); the glossary has no separate entries.",
+        "S5 needs `slot-choice` (planned). Its options are only PAC, IAC and HC: DC and PC arrive with U06.L06–L07 and their labels name those words.",
+        "The `cadence` rule reads the melody for PAC against IAC: with no melody track a root-position V–I is reported as PAC; the required rule accepts both.",
+      ],
+    },
+    {
+      id: "U06.L05",
+      author: "U06b",
+      idea: "The bass is the easiest line to hear in a loop, and it spells the chords: hear it first, sing its roots, and you know the progression. A root bass plays degrees 1 5 6 4 under I V vi IV.",
+      hook: {
+        hear: "A pick bass driving eighths under the four-chord loop, over the Band's drums: roots on the beat, a pickup into each change. The second item is the bass alone.",
+        code: `${T(88)}bass: n("<[0 0 ~ 0 ~ 0 4 ~] [4 4 ~ 4 ~ 4 1 ~] [5 5 ~ 5 ~ 5 2 ~] [3 3 ~ 3 ~ 3 4 ~]>").scale("C2:major").s("ebass").lpf(800)\nchords: ${triads("<0 4 5 3>")}.gain(.5)`,
+      },
+      key: C,
+      meter: "4/4",
+      bpm: 88,
+      canDo: ["cd.hear.bass", "cd.sing.bass"],
+      uses: [...BASE, ...VOICED, RN, "tb.lens.function"],
+      steps: [
+        {
+          kind: "listen",
+          exercise: "listen",
+          minutes: 0.5,
+          what: "The hook, then the bass alone (two items).",
+        },
+        {
+          kind: "sing",
+          exercise: "sing",
+          answer: ["mic"],
+          minutes: 1.5,
+          wave3: ["sing-degrees"],
+          what: 'Sing the roots with the loop: degrees 1 5 6 4, one a bar (`mode: "degree"`, `labels: "syllables"`, `cents: "learner"`, `fallback: "identify"`). Not graded.',
+        },
+        {
+          kind: "ear",
+          exercise: "identify",
+          answer: ["degree-pad"],
+          minutes: 1.5,
+          graded: true,
+          what: "Which degrees does the bass play? Generator `fam.har.bass` level 1 (schema roots, `degree-pad` `sequenceLen: 4`). Seeds the family.",
+        },
+        {
+          kind: "dictate",
+          exercise: "dictation",
+          answer: ["code"],
+          minutes: 1.5,
+          graded: true,
+          wave3: ["by-ear"],
+          what: 'By ear: the root bass of a new loop, I vi IV V, written as `bass: n("<⟪0 0 0 0⟫>")` (`byEar`, `accepts: "any-octave"`, `melody` matcher `octave-free` on `track: "bass"`).',
+        },
+        {
+          kind: "see",
+          minutes: 0.5,
+          what: "The bass just taken down on the bass staff under the chords (grand staff), degree labels on.",
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          what: "A bass line of your own under the Band's chords.",
+        },
+      ],
+      wrapAt: 3,
+      make: {
+        brief:
+          "The Band plays drums and the four-chord loop. Write its bass line: a note of the chord on every downbeat (the root is the safe one), anything you like between.",
+        required: {
+          rule: "chord-tones-strong",
+          label: "A note of the chord on every downbeat",
+          why: '`chord-tones-strong` with `melody: "bass"`, `harmony: "band.chords"`, `strength: "downbeat"`, `minRatio: 1`. The starter plays C under every bar.',
+        },
+        suggestions: [
+          'the line stays low (`range` on `bass`, `within: ["c1", "c3"]`)',
+          "at least four different notes (`distinct-pitches` ≥ 4)",
+        ],
+        band: "band.axis-4bar",
+        tracks: ["drums", "chords"],
+        flavours:
+          "The Band's drums and chords follow the flavour (jazz-soul: sevenths, swung; a 7th on a downbeat is a chord note too); the bass is the learner's `ebass` or `upright`.",
+      },
+      srs: [{ family: "fam.har.bass", mode: "seed", level: 1 }],
+      singOn: "syllables",
+      mistakes: [
+        "S4: a root a degree off (5 for 6): `melody.wrong-degree`; the right roots in a higher octave: passes (`any-octave`); the unchanged starter: `code.unchanged`",
+        "Make starter (C throughout): `rubric.unmet` (C is a note of Am and F, but not of G: bar 2 misses)",
+      ],
+      connects: {
+        back: "U05.L06 read bass lines on the bass clef; U03.L02 sang degrees; U06.L02 named the chords from their roots.",
+        forward:
+          "U06.L06 hears the four-chord loop as one thing, a schema; U06.L09 takes down whole loops, bass first.",
+      },
+      notes: [
+        'Contracts §7.6 and §8: the sing step never gates and is not graded; Quiet mode replaces it with the identify fallback ("Which degrees did the bass play?").',
+        "S4's stimulus is fixed code (I vi IV V in C, roots only plus the chords), so it has tests: the reference, the roots an octave up (pass), a wrong degree, the unchanged starter.",
+        "The Make reads the Band's chords (`band.chords`), so it is the first Make whose required rule depends on the Band; every flavour's chords are I V vi IV, so the rule does not change with the flavour (AUTHORING §8 rule 6).",
+      ],
+    },
+    {
+      id: "U06.L06",
+      author: "U06b",
+      idea: "I V vi IV is a schema: a loop so common that you hear it before you know the song. Start it on another chord (vi IV I V, IV I V vi) and it is the same loop rotated. When V goes to vi instead of home, the ending swerves: a deceptive cadence.",
+      hook: {
+        hear: "The loop under a thousand pop songs: the Band's drums and bass, a warm pad on the four chords, the tune on top. In jazz-soul the Band swings and plays sevenths under it.",
+        code: `${T(96)}pad: chord("<C G Am F>").voicing().s("pad")\n${AXIS_TUNE}`,
+      },
+      key: C,
+      meter: "4/4",
+      bpm: 96,
+      canDo: [],
+      uses: [...BASE, ...VOICED, RN, "tb.lens.function", "snd.pad"],
+      steps: [
+        { kind: "listen", exercise: "listen", minutes: 0.5, what: "The hook." },
+        {
+          kind: "predict",
+          exercise: "predict",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: "The same four chords started on Am (`<5 3 0 4>`): the same song from another place, a different song, or a mistake? (`choose`)",
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["choice", "number"],
+          minutes: 1,
+          what: "I V vi IV against vi IV I V, the numerals under the roll: what changed (choice: the same chords, starting elsewhere); how many different chords (number: 4).",
+          term: "term.schema",
+        },
+        {
+          kind: "ear",
+          exercise: "identify",
+          answer: ["choice"],
+          minutes: 1.5,
+          graded: true,
+          what: "The four-chord loop or three-chord rock? Generator `fam.har.schema` level 1. Seeds the family.",
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          what: 'Rotate the loop to start on vi: `.add(n("<⟪0 4 5 3⟫>"))` → `<5 3 0 4>` (`pcset` with bass). Equivalent: `<-2 3 0 4>` (vi below).',
+        },
+        {
+          kind: "compare",
+          exercise: "identify",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: "Two audio cards, the last two bars of a phrase: V to I and V to vi. Which ending swerves?",
+          term: "term.deceptive-cadence",
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          what: "The four-chord loop in a rotation of your choice, on the pad.",
+        },
+      ],
+      wrapAt: 4,
+      make: {
+        brief:
+          "Make the loop yours: the four chords in any rotation (start where you like), a rhythm, a pad, a tune. The drums keep the time.",
+        required: {
+          rule: "progression",
+          label: "The four-chord loop, in any rotation",
+          why: '`progression` with `schema: "schema.axis"`, `allowRotation: true`, on `track: "chords"` (the starter labels its chords `chords:`). The starter plays I and V only.',
+        },
+        suggestions: [
+          "the chords on the pad (`sounds` contains `snd.pad`)",
+          'a tune on top (`tracks` with `roles: ["melody"]`)',
+        ],
+        band: "band.axis-4bar",
+        tracks: ["drums"],
+        flavours:
+          "Drums only from the Band: a rotation would fight its bass. `pad` unlocks here and is the starter's sound in every flavour.",
+      },
+      srs: [
+        { family: "fam.har.schema", mode: "seed", level: 1 },
+        { family: "fam.har.cadence", mode: "review-if-due", level: 2 },
+      ],
+      singOn: "syllables",
+      mistakes: [
+        "S5: the numerals as numbers (`<6 4 1 5>`): `harmony.pcset`; the right chords in the wrong order (`<5 4 0 3>`): `harmony.pcset`; the unchanged starter: `code.unchanged`",
+        "Make starter (I V only): `rubric.unmet`; doo-wop I vi IV V: `rubric.unmet` (U06.L07's)",
+      ],
+      connects: {
+        back: "The four-chord loop has been the Band's since U05; U06.L02 numbered it and U06.L04 heard V go home.",
+        forward:
+          "U06.L07 meets the other loops of the learner's records: doo-wop and three-chord rock, and the IV–I ending.",
+      },
+      notes: [
+        "`pad` unlocks here (contracts §3.2, `snd.pad`). Its demo uses `chord().voicing()`, which is open since U05.L08.",
+        "The deceptive move is met here, as contracts §2.1 says; the cadence family's DC category opens at U06.L07 (`fam.har.cadence` level 3), so S6 is a fixed compare, not a generator step.",
+        "Over the Band's axis bass (S1) the pad and the tune follow I V vi IV; rotated loops play over the drums only.",
+      ],
+    },
+    {
+      id: "U06.L07",
+      author: "U06c",
+      idea: 'Two more loops from the records: doo-wop, I vi IV V, the fifties ballad that broken triplet chords make; and three-chord rock, I IV V, the loop of a garage band. IV going to I at the end is the soft "amen" close: a plagal cadence.',
+      hook: {
+        hear: "A fifties ballad: triplet broken chords on I vi IV V, a slow backbeat with the hats in threes, the bass on each root.",
+        code: `${T(76)}drums: s("bd ~ sd ~, [hh hh hh]*4")\nchords: n("[0,2,4]").add(n("<0 5 3 4>")).arp("[0 1 2]*4").scale("C3:major").s("piano")\nbass: n("<0 5 3 4>").scale("C2:major").s("ebass").lpf(600)`,
+      },
+      key: C,
+      meter: "4/4",
+      bpm: 76,
+      canDo: ["cd.hear.schemas"],
+      uses: [...BASE, ...VOICED, ...DRUMS, RN, "tb.lens.function", "snd.pad", "tb.mini.repeat"],
+      steps: [
+        {
+          kind: "listen",
+          exercise: "listen",
+          minutes: 0.5,
+          what: 'The hook, then three-chord rock: `n("[0,2,4]*8").add(n("<0 3 4 3>"))`, eighth-note chords, I IV V IV (two items).',
+        },
+        {
+          kind: "compare",
+          exercise: "identify",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: "Two audio cards on the same piano: I vi IV V and I V vi IV. Which one is the doo-wop loop?",
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["choice", "number"],
+          minutes: 1,
+          what: "The rock loop with numerals under the roll: how many different chords (number: 3); which ones (choice: I, IV and V).",
+        },
+        {
+          kind: "ear",
+          exercise: "identify",
+          answer: ["choice"],
+          minutes: 1.5,
+          graded: true,
+          what: "Name the loop: generator `fam.har.schema` level 2 (adds vi IV I V and doo-wop). Review.",
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          what: 'End the rock phrase with the amen: `.add(n("<0 4 ⟪4 4⟫>"))` → `<0 4 3 0>` (I V IV I; `pcset` with bass; edit-only-regions).',
+          term: "term.plagal-cadence",
+        },
+        {
+          kind: "quiz",
+          exercise: "identify",
+          answer: ["choice"],
+          minutes: 1,
+          graded: true,
+          what: "Which ending? Generator `fam.har.cadence` level 3 (adds plagal and deceptive). Review.",
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          what: "A doo-wop loop with broken chords of your own.",
+        },
+      ],
+      wrapAt: 4,
+      make: {
+        brief:
+          "Write a doo-wop loop over the drums: I vi IV V, in any rotation, broken into a rhythm of your own with `.arp()`. Add a tune or a bass if you like.",
+        required: {
+          rule: "progression",
+          label: "The doo-wop loop: I vi IV V",
+          why: '`progression` with `schema: "schema.doo-wop"`, `allowRotation: true`, on `track: "chords"`. The starter is the four-chord loop of U06.L06.',
+        },
+        suggestions: [
+          "broken chords (`uses tb.arp`)",
+          'an ending that goes IV to I or V to I (`cadence` `types: ["PC", "PAC", "IAC"]`, `at: "last"`)',
+        ],
+        band: "band.axis-4bar",
+        tracks: ["drums"],
+        flavours:
+          "Drums only from the Band (straight in pop, swung in jazz-soul: triplet arps sit well on both).",
+      },
+      srs: [
+        { family: "fam.har.schema", mode: "review-if-due", level: 2 },
+        { family: "fam.har.cadence", mode: "review-if-due", level: 3 },
+      ],
+      singOn: "syllables",
+      mistakes: [
+        "S5: V then I (`4 0`, the authentic close of U06.L04): `harmony.pcset`; the numeral as number (`4 1` for IV I): `harmony.pcset`; the unchanged starter: `code.unchanged`",
+        "Make starter (I V vi IV): `rubric.unmet`; three-chord rock: `rubric.unmet`",
+      ],
+      connects: {
+        back: "U06.L06 named the four-chord loop and its rotations; U06.L04's V–I close.",
+        forward: "U06.L08 keeps the loops and changes their pace: one chord a bar, or two.",
+      },
+      notes: [
+        'Doo-wop is usually in 12/8; Oak stays in 4/4 and gets the feel from triplets (`.arp("[0 1 2]*4")`: twelve notes a bar, evaluated: C E G C E G … then A C E …). Swing as a term waits for U11; say "in threes".',
+        "No `band.doo-wop` exists; the hook writes its own drums (`snd.drum.*` are U01's). A doo-wop and a three-chord Band (I vi IV V, I IV V IV) are requested from author:CP for U06.L07 and C2.",
+        "`fam.har.cadence` level 3 is gated on U06.L07 (contracts §7.3) and `fam.har.schema` level 2 likewise: both are open in this lesson.",
+      ],
+    },
+    {
+      id: "U06.L08",
+      author: "U06c",
+      idea: "How often the chords change sets the pace of a song: one chord a bar is relaxed, two a bar pushes forward. Speed up the changes towards the end of a phrase and it drives home.",
+      hook: {
+        hear: "Eight bars over the Band's drums: four bars of the four-chord loop, one chord a bar; then two a bar, I V, vi IV, ii V and home: the same tempo, but it runs.",
+        code: `${T(100)}chords: ${rootsFirst("<0 4 5 3 [0 4] [5 3] [1 4] 0>")}\nbass: n("<0 4 5 3 [0 4] [5 3] [1 4] 0>").scale("C2:major").s("ebass").lpf(600)`,
+      },
+      key: C,
+      meter: "4/4",
+      bpm: 100,
+      canDo: ["cd.compose.harmonic-rhythm"],
+      uses: [...BASE, ...VOICED, RN, "tb.lens.function", "snd.pad"],
+      steps: [
+        { kind: "listen", exercise: "listen", minutes: 0.5, what: "The hook." },
+        {
+          kind: "predict",
+          exercise: "predict",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: '`n("<[0 3] [4 0]>").add(n("[0,2,4]"))`, roots first: how many chords will each bar hold? (`choose`: two)',
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["number", "choice"],
+          minutes: 1,
+          what: "The hook with numerals under the roll: how many chords in bar 5 (number: 2); which half of the hook moves faster (choice: the second).",
+          term: "term.harmonic-rhythm",
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          what: 'Speed up the ending: bars 3 and 4 of `n("<0 4 ⟪5 1⟫>").add(n("[0,2,4]"))` hold two chords each, vi IV and ii V → `<0 4 [5 3] [1 4]>` (`pcset` per onset with bass). Roots first: written stack-first, the brackets fold to one chord a bar, and the pass text says why.',
+        },
+        {
+          kind: "compare",
+          exercise: "identify",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: "Two audio cards: the same eight bars with the changes at one a bar throughout, and doubling in the last two bars. Which one pushes into the ending?",
+        },
+        {
+          kind: "quiz",
+          exercise: "identify",
+          answer: ["bar-buttons"],
+          minutes: 1,
+          graded: true,
+          what: "A four-bar loop played with its chords hidden: click the bars that hold two chords (`bar-buttons`, `bars: 4`; the fixed stimulus `<0 [3 4] 5 [1 4]>`: bars 2 and 4).",
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          what: "A loop whose chords change twice in some bars.",
+        },
+      ],
+      wrapAt: 4,
+      make: {
+        brief:
+          "Write a four- or eight-bar loop over the drums and set its pace: one chord in some bars, two in others. Try the faster changes just before the end.",
+        required: {
+          rule: "harmonic-rhythm",
+          label: "Some bars change chord twice",
+          why: "`harmonic-rhythm` with `changesPerBar: [1.25, 2]`: the average over the loop. The starter changes once a bar (1.0); two in half the bars is 1.5.",
+        },
+        suggestions: [
+          'the loop ends home (`cadence` `types: ["PAC", "IAC", "PC"]`, `at: "last"`)',
+          'a bass that follows the changes (`tracks` with `roles: ["bass"]`)',
+        ],
+        band: "band.axis-4bar",
+        tracks: ["drums"],
+        flavours: "Drums only from the Band.",
+      },
+      srs: [{ family: "fam.har.bass", mode: "review-if-due", level: 2 }],
+      singOn: "syllables",
+      mistakes: [
+        "S4: the four chords without brackets (`<0 4 5 3 1 4>`): six bars of one chord, `harmony.pcset` from bar 3; ii IV for vi IV (`[1 3]`): `harmony.pcset`; the unchanged starter: `code.unchanged`",
+        "S6: bar 3 clicked (one chord held): `id.wrong`",
+        "Make starter (one a bar): `rubric.unmet`; every bar changing four times (a chord a beat, 4.0): `rubric.unmet`",
+      ],
+      connects: {
+        back: "U01.L04's `[ ]` squeezed hits into a beat; now chords share a bar the same way.",
+        forward:
+          "U06.L09 takes loops down by ear, two chords a bar included; U06.L12 sets the rhythm of each chord's hits.",
+      },
+      notes: [
+        "`harmonic-rhythm` counts a change where the chord differs from the one before (repeats merge), averaged over the bars.",
+        'Two chords in a bar are two halves (`[5 3]`); a learner who writes `[5 3 3 3]` (vi for a beat, IV for three) has the same changes and passes S4 only if its onsets match: the prompt says "two chords each, half a bar each".',
+      ],
+    },
+    {
+      id: "U06.L09",
+      author: "U06c",
+      idea: "A chord loop is taken down in stages: first the bass (the degrees), then each chord's quality (major or minor), and the numerals follow from both. Bass + quality = numeral.",
+      hook: {
+        hear: "A loop to take down over the Band's drums: C, Em, Am, F, a bar each, piano over a root bass.",
+        code: `${T(84)}chords: ${triads("<0 2 5 3>")}\nbass: n("<0 2 5 3>").scale("C2:major").s("ebass").lpf(600)`,
+      },
+      key: C,
+      meter: "4/4",
+      bpm: 84,
+      canDo: ["cd.transcribe.chords"],
+      uses: [...BASE, ...VOICED, RN, "tb.lens.function", "snd.pad"],
+      steps: [
+        { kind: "listen", exercise: "listen", minutes: 0.5, what: "The hook, with its code hidden." },
+        {
+          kind: "ear",
+          exercise: "dictation",
+          answer: ["degree-pad", "quality-pad", "rn-palette"],
+          minutes: 2,
+          graded: true,
+          features: ["dictation.stage-answers", "step.initial-panels"],
+          panels: ["chords"],
+          what: 'The hook in stages (`domain: "harmony"`, `stages: ["bass", "quality", "rn"]`): bass `degree-pad` 1–6, `sequenceLen: 4` (1 3 6 4); quality `quality-pad` maj/min (maj min min maj); numerals `rn-palette` 4 slots (I iii vi IV). `stagePass: 0.8`, sequential; the chord band shows each stage once it passes.',
+        },
+        {
+          kind: "dictate",
+          exercise: "dictation",
+          answer: ["code"],
+          minutes: 1.75,
+          graded: true,
+          wave3: ["by-ear"],
+          features: ["by-ear.parts"],
+          what: 'By ear, in parts: a new loop (I V vi iii), the bass first (`melody` `octave-free` on `bass`), then the chords (`pcset` per onset on `chords`, `bass: false`), written as `.add()` stacks or symbols (`accepts: "any-octave"`).',
+        },
+        {
+          kind: "ear",
+          exercise: "identify",
+          answer: ["rn-palette"],
+          minutes: 1.5,
+          graded: true,
+          what: "Generated four-chord loops: write the numerals. Generator `fam.har.progression` level 1 (diatonic). Seeds the family.",
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          what: "The loop you took down, made into a track.",
+        },
+      ],
+      wrapAt: 3,
+      make: {
+        brief:
+          "Play the loop you took down in step 3, I V vi iii, over the drums, and make it a track: a rhythm for the chords, a bass, a tune.",
+        required: {
+          rule: "progression",
+          label: "The loop you took down: I V vi iii",
+          why: '`progression` with `rn: ["I", "V", "vi", "iii"]` on `track: "chords"`. The starter is bar 1 only.',
+        },
+        suggestions: [
+          'a bass line (`tracks` with `roles: ["bass"]`)',
+          'a tune (`tracks` with `roles: ["melody"]`)',
+        ],
+        band: "band.axis-4bar",
+        tracks: ["drums"],
+        flavours: "Drums only from the Band.",
+      },
+      srs: [
+        { family: "fam.har.progression", mode: "seed", level: 1 },
+        { family: "fam.har.bass", mode: "review-if-due", level: 2 },
+      ],
+      singOn: "syllables",
+      mistakes: [
+        "S2 bass: 5 for 6 (A heard as G): `harmony.bass`; quality: min for maj: `harmony.quality`; numerals: III for iii: `harmony.rn-case`",
+        "S3: the bass right, a chord a degree off: `harmony.pcset`; the bass an octave up: passes (`any-octave`); the unchanged starter: `code.unchanged`",
+        "Make starter (bar 1 only): `rubric.unmet`; the loop rotated (V vi iii I): `rubric.unmet` (no rotation)",
+      ],
+      connects: {
+        back: "U06.L05 heard the bass first; U05.L02 heard major against minor; U06.L02 turned both into numerals.",
+        forward:
+          "U06.L10 adds a fourth note to the stacks; ladder level L3 (generated four-chord loops) uses the same three stages in the gym from GYM.01.",
+      },
+      notes: [
+        'Contracts §2.9: ladder L3 is "generated four-chord loops, bass first, staged"; this lesson is its first in-lesson use and its widgets are the ladder\'s.',
+        "S2 and S3 need `dictation.stage-answers`, `by-ear.parts` and `step.initial-panels` (all planned). With a `degree-pad` the bass stage is answered in degrees; the grader's `gradeStages` expects note names for `bass` today (reported by the content lead).",
+        "iii is in the hook and the S3 loop on purpose: the four-chord loop alone would let the learner answer from memory.",
+      ],
+    },
+    {
+      id: "U06.L10",
+      author: "U06d",
+      idea: 'Stack one more 3rd and a triad becomes a seventh chord: `n("[0,2,4,6]")` is root, 3rd, 5th and 7th. On every chord of a loop it turns pop into neo-soul. (Their names and kinds wait for U12; here they are a colour.)',
+      hook: {
+        hear: "A neo-soul loop on the Rhodes: four-note chords on 1, 6, 2 and 5 over an upright bass and the Band's drums (swung in jazz-soul), a tune made of their notes on top.",
+        code: `${T(80)}chords: n("[0,2,4,6]").add(n("<0 5 1 4>")).scale("C3:major").s("rhodes")\nbass: n("<0 5 1 4>").scale("C2:major").s("upright")\nmel: n("<[2 ~ 4 6] [5 ~ 4 2] [3 ~ 1 5] [4 ~ 3 ~]>").scale("C4:major").s("piano")`,
+      },
+      key: C,
+      meter: "4/4",
+      bpm: 80,
+      canDo: ["cd.compose.seventh-colour"],
+      uses: [...BASE, ...VOICED, RN, "tb.lens.function", "snd.pad"],
+      steps: [
+        {
+          kind: "listen",
+          exercise: "listen",
+          minutes: 0.5,
+          what: "The hook, then the same loop in plain triads (two items).",
+        },
+        {
+          kind: "predict",
+          exercise: "predict",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: '`n("[0,2,4,6]")` in C: which degrees sound together? (`choose`: 1 3 5 7; 1 2 3 4; 1 3 5 and 1 an octave up)',
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["number", "choice"],
+          minutes: 1,
+          what: "The four stacks with degree labels: how many notes in each (number: 4); where the new note sits (choice: a 3rd above the 5th, a step under the octave).",
+          term: "term.seventh-chord",
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          what: 'Colour the loop: `n("⟪[0,2,4]⟫").add(n("<0 5 1 4>"))` → `[0,2,4,6]` (`pcset` with bass; edit-only-regions).',
+        },
+        {
+          kind: "compare",
+          exercise: "identify",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: "Two audio cards: the loop in triads and with sevenths, both on the Rhodes. Which one has the extra 3rd?",
+        },
+        {
+          kind: "quiz",
+          exercise: "keyboard",
+          answer: ["keyboard"],
+          minutes: 1,
+          graded: true,
+          what: 'The four-note chord on degree 2 of C: D F A C, D lowest (`mode: "chord"`, `pcs` + `bassPc`).',
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          what: "A loop with the seventh colour on at least two chords.",
+        },
+      ],
+      wrapAt: 4,
+      make: {
+        brief:
+          "Write a four-bar loop over the drums and give at least two of its chords the extra 3rd. The Rhodes suits it; so does a slow tempo.",
+        required: {
+          rule: "chord-qualities",
+          label: "At least two chords with a 7th on top",
+          why: '`chord-qualities` with `anyOf: ["maj7", "7", "m7", "m7b5"]`, `min: 2` (Wave 4, planned): the starter is the hook in triads. `contains-rn` cannot test it (it reads the triad core).',
+        },
+        suggestions: [
+          "the chords on the Rhodes (`sounds` contains `snd.rhodes`)",
+          'a bass on the roots (`tracks` with `roles: ["bass"]`)',
+        ],
+        band: "band.axis-4bar",
+        tracks: ["drums"],
+        flavours:
+          "Drums only from the Band (jazz-soul swings them); the starter's chords are `rhodes` in every flavour.",
+      },
+      srs: [{ family: "fam.har.rn", mode: "review-if-due", level: 2 }],
+      singOn: "syllables",
+      mistakes: [
+        "S4: `[0,2,4,7]` (the root doubled an octave up, not a 7th): `harmony.pcset`; `[0,2,4,5]` (the 6th): `harmony.pcset`; the unchanged starter: `code.unchanged`",
+        "S6 keyboard: D F A (no 7th): `kb.missing-note`; D F A B: `kb.extra-note` + `kb.missing-note`",
+        "Make starter (triads): `rubric.unmet`; a single seventh chord: `rubric.unmet`",
+      ],
+      connects: {
+        back: "U05.L01 stacked two 3rds; the jazz-soul Band has played sevenths under the learner since U03.",
+        forward:
+          "U12 names the seventh chords (maj7, 7, m7, m7♭5) and trains them by ear; U06.L11 moves the bass under the chords instead.",
+      },
+      notes: [
+        'A preview lesson (contracts §2.1): no seventh-chord symbols in prose or answers, no `C^7` in code. `chord("<C^7 …>")` is the `ext`/7th family, unlocked in U12; `n("[0,2,4,6]")` needs nothing new.',
+        "The four kinds the Make accepts are exactly the diatonic sevenths of a major key: maj7 on 1 and 4, m7 on 2, 3 and 6, 7 on 5, m7♭5 on 7. A diminished seventh (`dim7`) cannot be stacked in the key.",
+        "`chord-qualities` is planned; the Make cannot pass content:check until the grader implements it.",
+      ],
+    },
+    {
+      id: "U06.L11",
+      author: "U06d",
+      idea: "The bass decides which way up a chord stands: under C G Am the bass can walk down C B A, making the middle chord G with B at the bottom (G/B). A held bass under moving chords is a pedal; one voice sliding down by half steps through a held chord is a line cliché.",
+      hook: {
+        hear: "A walking-down ballad over the Band's drums: the bass steps down C B A G F E D, then G, under C G Am Am F C Dm G, so the chords become C, G/B, Am, Am/G, F, C/E.",
+        code: `${T(76)}chords: chord("<C G Am Am F C Dm G>").voicing().s("piano")\nbass: note("<c3 b2 a2 g2 f2 e2 d2 g2>").s("ebass").lpf(600)`,
+      },
+      key: C,
+      meter: "4/4",
+      bpm: 76,
+      canDo: ["cd.compose.walking-down"],
+      uses: [...BASE, ...VOICED, ...NAMES, RN, "tb.lens.function", "snd.pad", "tb.mode.root"],
+      steps: [
+        { kind: "listen", exercise: "listen", minutes: 0.5, what: "The hook, on the grand staff." },
+        {
+          kind: "predict",
+          exercise: "predict",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: 'Under `chord("<C G>")` the bass plays `c3 b2`: what is the second chord? (`choose`: G with B at the bottom; B minor; C again)',
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["number", "choice"],
+          minutes: 1,
+          what: "The hook's first four bars: how many half steps from the bass's C to its B (number: 1); which bar is Am with G at the bottom (choice: bar 4). `.mode(\"root:g2\")` puts every chord's root at the bottom instead: the same chords, the bass leaping.",
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          what: 'Play from the page: the bass under C G Am Am is shown on the bass staff only (C3 B2 A2 G2); write it as `bass: note("<…>")` under the given chords (`pcset` per onset, `bass: true`, `tracks: ["chords", "bass"]`).',
+        },
+        {
+          kind: "quiz",
+          exercise: "identify",
+          answer: ["rn-palette"],
+          minutes: 1,
+          graded: true,
+          what: 'Number the walk, figures included: I V⁶ vi (`rn-palette`, `slots: 3`, `allow: ["triads", "inversions"]`; the grader must grade the inversion: today `sameRn` drops it).',
+        },
+        {
+          kind: "compare",
+          exercise: "identify",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: "Two audio cards under C F G C: a bass that moves with the roots, and a bass that holds C throughout. Which one stays put?",
+          term: "term.pedal",
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["number", "choice"],
+          minutes: 0.75,
+          what: 'C, C/B, C/B♭, F/A (`note("<[c3,e3,g3] [b2,e3,g3] [bb2,e3,g3] [a2,c3,f3]>")`): how many half steps each move of the bass (number: 1); what holds still above it (choice: E and G).',
+          term: "term.line-cliche",
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          what: "A loop with a bass that walks down under it.",
+        },
+      ],
+      wrapAt: 5,
+      make: {
+        brief:
+          "Write a four- or eight-bar loop over the drums with a bass line that walks down by step, so at least one chord stands on its 3rd or 5th. Chords and bass are yours.",
+        required: {
+          rule: "chord-inversions",
+          label: "At least one chord with its 3rd or 5th in the bass",
+          why: "`chord-inversions` with `min: 1` (Wave 4, planned): the lowest sounding note across the learner's tracks at a chord's onset is not its root. The starter has a root bass.",
+        },
+        suggestions: [
+          "the bass moves by step (`step-ratio` on `bass` ≥ 0.75)",
+          "a pedal or a line cliché somewhere (no rule: listen for it)",
+        ],
+        band: "band.axis-4bar",
+        tracks: ["drums"],
+        flavours: "Drums only from the Band; the chords may be `piano`, `rhodes`, `organ` or `pad`.",
+      },
+      srs: [
+        { family: "fam.chd.inversion", mode: "review-if-due", level: 2 },
+        { family: "fam.har.bass", mode: "review-if-due", level: 3 },
+      ],
+      singOn: "syllables",
+      mistakes: [
+        "S4: B written an octave above the chords (`b3`): `harmony.bass`; G under the second chord (root position): `harmony.bass`; the unchanged starter: `code.unchanged`",
+        "S5: V for V⁶: `id.wrong` once inversions are graded (passes today: reported)",
+        "Make starter (root bass): `rubric.unmet`",
+      ],
+      connects: {
+        back: "U05.L05 named inversions and slash chords; U06.L05 heard the bass first; U05.L08's `.voicing()` places the upper notes.",
+        forward: "U06.L12 sets the chords in a rhythm with `.struct()`; U08 writes whole bass lines.",
+      },
+      notes: [
+        '`chord("C/E")` is a lint error (contracts §0.3): every slash chord here is a symbol over a `bass:` track, or a note list. `C/E`, `G/B` appear only as display strings (prose, answers, chord band).',
+        'The "Play from the page" step of U06 is S4 (staff only: the bass on the bass staff of the grand staff; the chords play from given code).',
+        '`.mode("root:g2")` unlocks here (`tb.mode.root`; evaluated: C2 G2 C3 E3, G2 D3 G3 B3, A1 C2 E2 A2 C3, F2 C3 F3 A3). It belongs in S3 as the contrast, not in a graded check (contracts §6.7: never grade a voicing\'s octave).',
+        "S5's `rn-palette` with `inversions` needs the grader's fix to `sameRn` (content lead's note); until then its V-for-V⁶ test would pass and the step should be authored with a `choice` fallback (C/E, G/B, Am, F) if the fix has not landed.",
+      ],
+    },
+    {
+      id: "U06.L12",
+      author: "U06d",
+      idea: 'Comping is playing the chords in a rhythm that locks with the drums and leaves room for the tune. `.struct("~ x ~ x")` lays a stack onto a rhythm: here, with the snare on 2 and 4; a push on the "and" of 4 leans into the next bar.',
+      hook: {
+        hear: "A soul groove: the Band's drums and bass, piano chords hitting with the snare and pushing on the last eighth, the four-chord loop.",
+        code: `${T(100)}chords: ${triads("<0 4 5 3>", "C4:major")}.struct("~ x ~ [~ x]")`,
+      },
+      key: C,
+      meter: "4/4",
+      bpm: 100,
+      canDo: ["cd.code.comping"],
+      uses: [...BASE, ...VOICED, RN, "tb.lens.function", "snd.pad", "tb.struct"],
+      steps: [
+        {
+          kind: "listen",
+          exercise: "listen",
+          minutes: 0.5,
+          what: "The hook over `band.axis-4bar` (drums and bass).",
+        },
+        {
+          kind: "predict",
+          exercise: "predict",
+          answer: ["number"],
+          minutes: 0.5,
+          what: '`.struct("x ~ x ~")` on one stack: how many chord hits in a bar? (`count`: 2)',
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["choice", "number"],
+          minutes: 1,
+          what: 'Three structs against the drums: which one hits with the snare (choice: `"~ x ~ x"`); how many hits does `"~ x ~ [~ x]"` play (number: 2).',
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          what: 'Lock the chords to the snare: `.struct("⟪x x x x⟫")` → `"~ x ~ x"` (`events`, `pitch: "octave-free"`, `rhythm: "onsets"` on `chords`; `must-use tb.struct`).',
+          term: "term.comping",
+        },
+        {
+          kind: "compare",
+          exercise: "identify",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: "Two audio cards under the same tune: chords on every beat, and comped on 2 and 4. In which one is the tune easier to hear?",
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1,
+          graded: true,
+          what: 'Push into the next bar: move the second hit to the "and" of 4, `"~ x ~ ⟪x⟫"` → `"~ x ~ [~ x]"` (`events` as above).',
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          what: "Comp the Band's four chords in a rhythm of your own.",
+        },
+      ],
+      wrapAt: 4,
+      make: {
+        brief:
+          "The Band plays drums and the 1 5 6 4 bass. Comp its four chords with `.struct()`: a rhythm that locks with the drums and leaves room for a tune.",
+        required: {
+          rule: "uses",
+          label: "The chords play a rhythm set with `.struct()`",
+          why: "`uses tb.struct`: the starter holds each chord for the whole bar.",
+        },
+        suggestions: [
+          "the chords sit on the bass (`progression` I V vi IV on `chords`)",
+          'a tune on top (`tracks` with `roles: ["melody"]`)',
+        ],
+        band: "band.axis-4bar",
+        tracks: ["drums", "bass"],
+        flavours:
+          "The Band's drums and bass follow the flavour (funk's sixteenths invite pushes; jazz-soul swings); the chords are the learner's `piano`, `rhodes` or `organ`.",
+      },
+      srs: [{ family: "fam.har.schema", mode: "review-if-due", level: 2 }],
+      singOn: "syllables",
+      mistakes: [
+        'S4: `"x ~ x ~"` (with the kick): `rhythm.displaced`; `"~ x ~ x ~"` (five steps): `rhythm.displaced`; the unchanged starter: `code.unchanged`',
+        'S6: `"~ x ~ x ~ x"`-style extra hits: `rhythm.extra`; the push on the "and" of 3: `rhythm.displaced`',
+        "Make starter (held chords): `rubric.unmet`",
+      ],
+      connects: {
+        back: "U01's grooves locked kick and snare; U06.L08 set how often the chords change; `.struct()` sets when each one sounds.",
+        forward:
+          "U06.CP checks the unit; U07 writes melodies over these chords, chord tones on the strong beats.",
+      },
+      notes: [
+        '`.struct()` takes the rhythm from its pattern and the notes from the chain: on a stack, every hit plays the whole chord (evaluated: `"~ x ~ [~ x]"` hits at 1/4 and 7/8 of the bar).',
+        "Comping rhythm is checked with the `events` matcher on onsets only: the chords themselves are given, so pitch is octave-free and never the point.",
+        "The Make's rule is `uses`, as in U05.L04 (`.arp()`): the idea is the tool's rhythm, and any comping rhythm the learner picks is good music.",
+      ],
+    },
+  ],
+  checkpoint: {
+    id: "U06.CP",
+    author: "CP",
+    authored: [
+      {
+        id: "numerals-to-code",
+        kind: "code-modify",
+        skills: ["H01", "N06", "C10"],
+        what: 'In F major (`key` F): the numerals I vi ii V with the 7th on ii and V, written as stacks moved by `.add()` (`pcset` per onset with bass): `n("<[0,2,4] [5,7,9] [1,3,5,7] [4,6,8,10]>")` or the `.add()` form. Tests pin the off-by-one (`2 5` for ii V).',
+      },
+      {
+        id: "walk-it-down",
+        kind: "code-modify",
+        skills: ["H15"],
+        what: "Under C G Am Am the bass is C C A A: make it walk down by step (C B A G), so the second chord stands on its 3rd (`pcset` per onset, `bass: true`, chords and bass tracks).",
+      },
+      {
+        id: "change-the-pace",
+        kind: "code-modify",
+        skills: ["H06"],
+        what: 'Double the harmonic rhythm of the last two bars of a four-bar loop (vi IV, ii V) and lock the chords to the snare with `.struct("~ x ~ x")` (`all`: `pcset` per onset + `events` onsets on `chords`).',
+      },
+    ],
+    recipe: {
+      items: [12, 16],
+      families: {
+        N06: ["fam.har.rn"],
+        H02: ["fam.har.function"],
+        H03: ["fam.har.cadence"],
+        H04: ["fam.har.schema"],
+        H05: ["fam.har.schema"],
+        E09: ["fam.har.bass", "fam.har.progression"],
+        V05: ["fam.har.bass"],
+      },
+      why: "H01, H06, H15 and C10 have no family: the authored code items measure them (C10 with H01 and N06 in `numerals-to-code`). H04 and H05 are concept skills drawn from `fam.har.schema` items (levels 1–2: axis, three-chord, axis-vi, doo-wop), so they gate; E09 and V05 are perceptual and production and only set levels (contracts §7.6). V05's sung items are skipped in Quiet mode.",
+    },
+    make: {
+      brief:
+        "A loop using this unit's tools over the drums: the four-chord loop in a rotation of your choice, comped or broken into a rhythm, with a cadence at the end.",
+      required:
+        'H04: `progression` with `schema: "schema.axis"`, `allowRotation: true` on the chords track (the loop the C2 capstone builds on).',
+    },
+    notes: [
+      "U06.CP follows U07.L01 in the default order and opens when U06.L12 is completed. Authored items use only implemented kinds: no `slot-choice`, no staged dictation (the families cover function and cadences).",
+      '`numerals-to-code` is in F major so the numerals, not the letters of C, carry the answer; its reference is written in F (`.scale("F3:major")`, the exercise `key`), not params (AUTHORING §13).',
+      "The Make's required rule names H04 so the checkpoint check counts it; three-chord and doo-wop loops pass the authored and family items but not this rule, so the brief says the four-chord loop is the one asked for.",
+    ],
+  },
+  capstones: [],
+};

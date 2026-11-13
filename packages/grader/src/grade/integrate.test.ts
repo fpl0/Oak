@@ -167,7 +167,7 @@ describe("interval names: the spelling on the page decides (U04.CP name-the-qual
     const p4 = intervalSlots(["TT"], ["P4"], { spelled: ["A4"] });
     expect(ids(p4)).toEqual(["id.interval-quality"]);
     expect(renderFeedback(p4.diagnostics[0] as Diagnostic)).toBe(
-      "Right size, a 4th, but TT (tritone), not P4. Count the semitones: 6, not 5.",
+      "Right size, a 4th, but TT (tritone), not P4. Count the half steps: 6, not 5.",
     );
     // Without the page's spelling the tritone keeps both names.
     expect(intervalSlots(["TT"], ["d5"]).score).toBe(1);

@@ -3,10 +3,11 @@
 // lanes for unpitched tracks, the meter's bar/beat grid, the playhead from the adapter's clock, hover
 // tooltips and the link to code and staff through the HighlightBus. Layout maths: ./roll-layout.ts.
 import type { KeySpec, MeterSpec } from "@oak/content-kit";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { degreeCanvasFill } from "../ui/theme/palette.ts";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { degreeCanvasFill, functionStyle } from "../ui/theme/palette.ts";
 import type { AnnotationKinds } from "./annotate.ts";
 import type { WorkbenchClock } from "./clock.ts";
+import { type ChordRegion, type MelodyMark, type RangeLine, ROLE_TAG, ROLE_WORDS } from "./harmony.ts";
 import type { BusState, HighlightBus } from "./highlight-bus.ts";
 import { noteText, type RollColorMode, type RollLabelMode } from "./lens-view.ts";
 import type { ViewEvent, WorkbenchModel } from "./model.ts";
@@ -57,8 +58,35 @@ export interface PianoRollProps {
    * stopped) instead of squeezing the whole loop into the panel. Off when absent.
    */
   followBars?: number;
+  /**
+   * Wave 4: the chord band under the roll (ux §3.4 "Chord band"): one region per chord, labelled with its
+   * symbol and (with the numeral lens) its Roman numeral, coloured by function with the function lens.
+   */
+  chordBand?: ChordBandProps;
+  /** Wave 4: the chord-tone lens: chord tones of the melody ringed, non-chord tones dashed and tagged. */
+  chordTones?: {
+    marks: ReadonlyMap<string, MelodyMark>;
+    percent: number | null;
+    strong: { total: number; chordTones: number } | null;
+  };
+  /** Wave 4: the range lens: each line's lowest and highest note marked, its span in half steps. */
+  ranges?: readonly RangeLine[];
 }
 
+export interface ChordBandProps {
+  regions: readonly ChordRegion[];
+  /** The learner's chords, or the Band's under a learner melody. */
+  source: "learner" | "band";
+  symbols: boolean;
+  romans: boolean;
+  fn: boolean;
+  /** A declared pickup: cycle 0 is bar 0, so a region's bar number is its cycle (contracts §6.11). */
+  pickup?: boolean;
+}
+
+/** Height of the chord band (ux §3.4: 28 px at the bottom of the roll). */
+export const CHORD_BAND_PX = 28;
+const FN_WORDS = { T: "tonic", PD: "predominant", D: "dominant", chromatic: "chromatic" } as const;
 interface Colors {
   surface: string;
   surface2: string;
@@ -487,6 +515,62 @@ export function PianoRoll(props: PianoRollProps) {
       }
     }
 
+    // the chord-tone lens: chord tones ringed, non-chord tones dashed with their kind above
+    if (p.chordTones) {
+      for (const r of L.rects) {
+        const m = p.chordTones.marks.get(r.id);
+        if (!m || m.role === "no-chord" || r.kind !== "note") continue;
+        g.save();
+        if (m.role === "chord-tone") {
+          g.strokeStyle = c.accent;
+          g.lineWidth = 2;
+          roundRect(g, r.x - 2.5, r.y - 2.5, r.w + 5, r.h + 5, 4.5);
+          g.stroke();
+        } else {
+          g.strokeStyle = c.text2;
+          g.lineWidth = 1.5;
+          g.setLineDash([3, 2]);
+          roundRect(g, r.x - 2.5, r.y - 2.5, r.w + 5, r.h + 5, 4.5);
+          g.stroke();
+          const tag = ROLE_TAG[m.role];
+          if (tag && r.y - L.rulerHeight >= 12) {
+            g.setLineDash([]);
+            g.fillStyle = c.text;
+            g.font = "bold 9px ui-monospace, monospace";
+            g.textBaseline = "bottom";
+            g.fillText(tag, r.x, r.y - 3);
+            g.textBaseline = "middle";
+          }
+        }
+        g.restore();
+      }
+    }
+
+    // the range lens: a flag over each line's high point, a mark under its low point
+    for (const line of p.ranges ?? []) {
+      const hi = L.rects.find((r) => r.id === line.high.id);
+      const lo = L.rects.find((r) => r.id === line.low.id);
+      g.save();
+      g.fillStyle = c.accent;
+      if (hi) {
+        g.beginPath();
+        g.moveTo(hi.x + hi.w / 2 - 5, hi.y - 3);
+        g.lineTo(hi.x + hi.w / 2 + 5, hi.y - 3);
+        g.lineTo(hi.x + hi.w / 2, hi.y - 9);
+        g.closePath();
+        g.fill();
+      }
+      if (lo && line.span > 0) {
+        g.beginPath();
+        g.moveTo(lo.x + lo.w / 2 - 5, lo.y + lo.h + 3);
+        g.lineTo(lo.x + lo.w / 2 + 5, lo.y + lo.h + 3);
+        g.lineTo(lo.x + lo.w / 2, lo.y + lo.h + 9);
+        g.closePath();
+        g.fill();
+      }
+      g.restore();
+    }
+
     // bar-level issue markers on the ruler
     for (const m of p.barMarks ?? []) {
       const at = m.bar - 1 + ((m.beat ?? 1) - 1) / model.meter.unitsPerBar;
@@ -536,6 +620,8 @@ export function PianoRoll(props: PianoRollProps) {
     props.labels,
     props.noteLabels,
     props.silenced,
+    props.chordTones,
+    props.ranges,
   ]);
   useEffect(
     () =>
@@ -606,7 +692,12 @@ export function PianoRoll(props: PianoRollProps) {
           model.key,
           props.hover ?? { degree: true, solfege: true },
         );
-        setTip({ x: pt.x, y: pt.y, text });
+        const role = props.chordTones?.marks.get(id)?.role;
+        setTip({
+          x: pt.x,
+          y: pt.y,
+          text: role && role !== "no-chord" ? `${text} · ${ROLE_WORDS[role]}` : text,
+        });
       }
     } else {
       if (bus.get().hover.source === "roll") bus.hover(null, "roll");
@@ -660,6 +751,22 @@ export function PianoRoll(props: PianoRollProps) {
             </button>
           </span>
         ) : null}
+        {props.chordTones ? (
+          <span className="oak-roll-fact" data-testid="chord-tone-pct">
+            {props.chordTones.percent === null
+              ? "No melody notes on strong beats under a chord yet"
+              : `Chord tones on strong beats: ${props.chordTones.strong?.chordTones ?? 0} of ${props.chordTones.strong?.total ?? 0} · ${props.chordTones.percent}%`}
+          </span>
+        ) : null}
+        {props.ranges && props.ranges.length > 0 ? (
+          <span className="oak-roll-fact" data-testid="range-facts">
+            {props.ranges.map((r) => rangeText(r, model)).join(" · ")}
+          </span>
+        ) : props.ranges ? (
+          <span className="oak-roll-fact" data-testid="range-facts">
+            No melody line to measure yet
+          </span>
+        ) : null}
         {props.stale ? (
           <span className="oak-badge" data-testid="roll-stale">
             preview · not playing
@@ -686,6 +793,7 @@ export function PianoRoll(props: PianoRollProps) {
         data-notes={layout.rects.length}
         data-window={`${layout.from}-${layout.to}`}
       />
+      {props.chordBand ? <ChordBand band={props.chordBand} layout={layout} /> : null}
       {tip ? (
         <div
           className="oak-tooltip"
@@ -700,6 +808,87 @@ export function PianoRoll(props: PianoRollProps) {
         <NotesTable model={model} bus={bus} show={props.hover ?? { degree: true, solfege: true }} />
       ) : null}
     </div>
+  );
+}
+
+function rangeText(r: RangeLine, model: WorkbenchModel): string {
+  const name = (midi: number) => pitchLabel(midi, model.key).display;
+  return `${r.track}: ${name(r.low.midi)}–${name(r.high.midi)}, ${r.span} half step${r.span === 1 ? "" : "s"}, high point bar ${r.high.bar}`;
+}
+
+/** The chord band (DOM, so its labels are text): regions placed with the roll's own time axis. */
+function ChordBand({ band, layout }: { band: ChordBandProps; layout: RollLayout }) {
+  const [theme, setTheme] = useState<ThemeName>(() => themeOf(document.documentElement));
+  useEffect(() => {
+    const mo = new MutationObserver(() => setTheme(themeOf(document.documentElement)));
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => mo.disconnect();
+  }, []);
+  const visible = band.regions.filter((r) => r.to > layout.from + 1e-9 && r.from < layout.to - 1e-9);
+  // A label is shown whole or not at all: a region too narrow for "C♯m7 iii7" drops the numeral, then the symbol
+  // (its title and accessible name still say both). Clipped text would read as another chord ("C♯m7" as "C").
+  const ref = useRef<HTMLUListElement>(null);
+  useLayoutEffect(() => {
+    for (const li of ref.current?.querySelectorAll<HTMLElement>("li.oak-chord-region") ?? []) {
+      li.dataset.fit = "all";
+      if (li.scrollWidth <= li.clientWidth + 0.5) continue;
+      li.dataset.fit = "symbol";
+      if (li.scrollWidth > li.clientWidth + 0.5) li.dataset.fit = "none";
+    }
+  });
+  return (
+    <ul
+      ref={ref}
+      className="oak-chord-band"
+      style={{ height: CHORD_BAND_PX, width: layout.width }}
+      aria-label={band.source === "band" ? "Chords of the Band" : "Chords"}
+      data-testid="chord-band"
+      data-source={band.source}
+    >
+      <li className="oak-chord-band-gutter" style={{ width: layout.gutter }} aria-hidden>
+        {band.source === "band" ? "Band" : "Chords"}
+      </li>
+      {visible.map((r) => {
+        const left = Math.max(layout.gutter, xOfCycle(layout, r.from));
+        const right = Math.min(layout.width, xOfCycle(layout, r.to));
+        const fn = band.fn && r.fn ? r.fn : null;
+        const st = fn && fn !== "chromatic" ? functionStyle(fn, theme) : null;
+        const text = [band.symbols ? r.symbol : null, band.romans ? r.rn : null].filter(Boolean);
+        const said = [
+          band.symbols ? r.symbol : null,
+          band.romans && r.rn ? r.rn : null,
+          fn ? FN_WORDS[fn] : null,
+        ]
+          .filter(Boolean)
+          .join(", ");
+        return (
+          <li
+            key={`${r.slot}-${r.from}`}
+            className={`oak-chord-region${fn ? ` oak-chord-region--fn` : ""}${fn === "chromatic" ? " oak-chord-region--chromatic" : ""}`}
+            style={{
+              left,
+              width: Math.max(2, right - left - 1),
+              ...(st ? { background: st.fill, color: st.label, borderColor: st.outline ?? st.fill } : {}),
+            }}
+            title={said}
+            aria-label={`Bar ${Math.floor(r.from) + (band.pickup ? 0 : 1)}: ${said}`}
+            data-symbol={r.symbol}
+            data-rn={r.rn ?? undefined}
+            data-fn={r.fn ?? undefined}
+          >
+            {text.length > 0 ? (
+              <>
+                {band.symbols ? <b className="oak-chord-symbol">{r.symbol}</b> : null}
+                {band.romans && r.rn ? <span className="oak-chord-rn">{r.rn}</span> : null}
+              </>
+            ) : fn ? (
+              <b className="oak-chord-symbol">{fn === "chromatic" ? "·" : fn}</b>
+            ) : null}
+            {fn && text.length > 0 && fn !== "chromatic" ? <span className="oak-chord-fn">{fn}</span> : null}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

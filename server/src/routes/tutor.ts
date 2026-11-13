@@ -3,7 +3,10 @@
 // hint, note, reviews) and warm-up are the tutor app's, mounted after these (tutor-wiring.ts).
 import {
   API_PREFIX,
+  CapstoneReviewSchema,
   contract,
+  type ReviewRecord,
+  TranscriptionReviewSchema,
   TUTOR_ROUTE_OF,
   type TutorTurnRequest,
   TutorTurnRequestSchema,
@@ -12,8 +15,61 @@ import {
 import type { Hono } from "hono";
 import type { AppDeps } from "../deps.ts";
 import { ApiError, badRequest, conflict, errorResponse, notFound } from "../errors.ts";
+import { stableJson } from "../services/library.ts";
 import { LANES } from "../tutor/types.ts";
 import { MAX_JSON_BYTES, type Mounter, readBounded } from "./define.ts";
+
+/**
+ * The stored reviews of a subject as records (one schema per kind, contracts §10.6). A capstone review names the
+ * album version it is attached to; a transcription review names the version that was current when it was given.
+ * Rows that no longer parse (an older review shape) are left out rather than failing the list.
+ */
+export function reviewRecords(d: AppDeps, subjectKind: string, subjectId: string): ReviewRecord[] {
+  if (subjectKind !== "capstone" && subjectKind !== "transcription") return [];
+  const subject = { subjectKind, subjectId } as ReviewRecord["subject"];
+  const out: ReviewRecord[] = [];
+  const rows = d.repos.tutor.reviewsOf(subjectKind, subjectId);
+  if (subjectKind === "capstone") {
+    const track = d.repos.album.trackOfCapstone(subjectId);
+    const versions = track === null ? [] : d.repos.album.versions(track.id);
+    for (const r of rows) {
+      const review = CapstoneReviewSchema.safeParse(r.review);
+      if (!review.success) continue;
+      const json = stableJson(review.data);
+      const attached =
+        versions.find(
+          (v) =>
+            d.repos.album.reviewConversation(v.trackId, v.version) === r.conversationId &&
+            v.review !== null &&
+            stableJson(v.review) === json,
+        ) ?? versions.find((v) => v.review !== null && stableJson(v.review) === json);
+      out.push({
+        kind: "capstone",
+        subject,
+        conversationId: r.conversationId,
+        track: attached === undefined ? null : { trackId: attached.trackId, version: attached.version },
+        review: review.data,
+        at: r.at,
+      });
+    }
+    return out;
+  }
+  const versions = d.repos.transcriptions.versions(subjectId);
+  for (const r of rows) {
+    const review = TranscriptionReviewSchema.safeParse(r.review);
+    if (!review.success) continue;
+    const before = versions.filter((v) => v.createdAt <= r.at).at(-1) ?? null;
+    out.push({
+      kind: "transcription",
+      subject,
+      conversationId: r.conversationId,
+      version: before?.version ?? null,
+      review: review.data,
+      at: r.at,
+    });
+  }
+  return out;
+}
 
 export function tutorRoutes(mount: Mounter, d: AppDeps): void {
   const tutor = () => {
@@ -103,6 +159,9 @@ export function tutorRoutes(mount: Mounter, d: AppDeps): void {
     if (note === null) throw notFound(`note ${params.id}`);
     return note;
   });
+
+  // Wave 4 (docs/design/wave4.md §5.2): the submitted reviews of a subject, newest first, with what they reviewed.
+  mount("tutor.reviews", ({ query }) => ({ items: reviewRecords(d, query.subjectKind, query.subjectId) }));
 }
 
 /** Where the tutor's own app serves each request kind (server/src/tutor/http/routes.ts `TURN_ROUTES`). */
@@ -115,6 +174,32 @@ const TUTOR_PATH_OF: Readonly<Record<TutorTurnRequest["kind"], string>> = {
   "review-transcription": "/tutor/reviews/transcription",
 };
 const REVIEW_KINDS = new Set<TutorTurnRequest["kind"]>(["review-capstone", "review-transcription"]);
+
+/**
+ * Wave 4 (wave4.md §5.2): the review target a turn names, forwarded to the tutor's review route of its kind — a
+ * capstone review takes `albumTrackId` + `albumVersion` (both or neither), a transcription review takes
+ * `transcriptionVersion`. A target on the wrong kind (or on a non-review turn) is a problem string (400).
+ */
+export function reviewTargetOf(
+  kind: TutorTurnRequest["kind"],
+  req: Pick<TutorTurnRequest, "albumTrackId" | "albumVersion" | "transcriptionVersion">,
+): Record<string, string | number> | string {
+  const album = req.albumTrackId !== undefined || req.albumVersion !== undefined;
+  const transcription = req.transcriptionVersion !== undefined;
+  if (kind === "review-capstone") {
+    if (transcription) return "transcriptionVersion belongs to a transcription review";
+    if (!album) return {};
+    if (req.albumTrackId === undefined || req.albumVersion === undefined)
+      return "albumTrackId and albumVersion go together";
+    return { albumTrackId: req.albumTrackId, albumVersion: req.albumVersion };
+  }
+  if (kind === "review-transcription") {
+    if (album) return "albumTrackId and albumVersion belong to a capstone review";
+    return transcription ? { transcriptionVersion: req.transcriptionVersion as number } : {};
+  }
+  if (album || transcription) return `a ${kind} turn takes no review target`;
+  return {};
+}
 
 /**
  * The SSE turn endpoints of the contract. The browser sends `TutorTurnRequest` (with `kind`, and
@@ -155,7 +240,11 @@ export function tutorTurnRoutes(app: Hono, d: AppDeps): void {
       const { kind, ...rest } = parsed.data;
       if (TUTOR_ROUTE_OF[kind] !== name)
         return errorResponse(badRequest(`a ${kind} request does not belong on ${contract[name].path}`));
-      const body = REVIEW_KINDS.has(kind) ? { thread: rest.thread, userText: rest.userText } : rest;
+      const target = reviewTargetOf(kind, rest);
+      if (typeof target === "string") return errorResponse(badRequest(target));
+      const body = REVIEW_KINDS.has(kind)
+        ? { thread: rest.thread, userText: rest.userText, ...target }
+        : rest;
       const headers = new Headers(c.req.raw.headers);
       headers.delete("content-length");
       headers.set("content-type", "application/json");

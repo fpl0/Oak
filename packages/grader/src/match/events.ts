@@ -5,7 +5,7 @@ import { R } from "@oak/content-kit";
 import { degreeOf } from "@oak/theory";
 import { effectiveDur, locAt, locOf, mod12, ratKey, sortEvents } from "../analyze/events.ts";
 import { keyOf } from "../analyze/key.ts";
-import { selectTracks } from "../analyze/tracks.ts";
+import { lineWord, selectTracks } from "../analyze/tracks.ts";
 import { diag } from "../feedback/catalog.ts";
 import type { MatchResult, NormalizeContext, Normalized } from "../types.ts";
 import { alignFeel, clampScore, f1, lengthLabel, pitchLabel } from "./common.ts";
@@ -112,7 +112,7 @@ export function eventsMatch(
           )
         : diag(
             "melody.wrong-degree",
-            { got: g.name, gotSyl: g.syl, exp: e.name, expSyl: e.syl },
+            { got: g.name, gotSyl: g.syl, exp: e.name, expSyl: e.syl, line: lineWord(reference, t.track) },
             locOf(a, pos),
             "pitch",
           );

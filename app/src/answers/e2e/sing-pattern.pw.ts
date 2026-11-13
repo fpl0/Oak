@@ -27,6 +27,8 @@ test("singing 1 3 5 in tune passes every target", async ({ page }) => {
       1,
     );
   await expect(w.getByRole("button", { name: "Hear my take" })).toBeVisible();
+  // The trace wore each target's degree colour while in tune (wave3.md §0 carry-over, ux §4.3).
+  await expect(w.locator("canvas")).toHaveAttribute("data-trace-degrees", "1 3 5");
   await w.getByRole("button", { name: "Check" }).focus();
   await page.keyboard.press("Enter");
   await expect(w.getByTestId("answer-status")).toHaveText("That's it.");

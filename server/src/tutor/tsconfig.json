@@ -6,5 +6,5 @@
     "skipLibCheck": true
   },
   "include": ["./**/*.ts"],
-  "exclude": []
+  "exclude": ["./**/*.music.test.ts"]
 }

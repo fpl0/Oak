@@ -9,7 +9,7 @@ import { clsx } from "clsx";
 import { ArrowRight, Ear } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useContent } from "../../lib/content.ts";
-import { lessonTitles, titleOf } from "../../lib/content-model.ts";
+import { lessonTitles } from "../../lib/content-model.ts";
 import { usePageTitle } from "../../lib/nav.ts";
 import {
   apiQuery,
@@ -41,16 +41,19 @@ import {
   tomorrowLine,
   toolCards,
 } from "../coda-model.ts";
+import { courseEdge, edgeShort, mapNextId } from "../edge.ts";
 import { useLastEnded, useRunnerNavigator, useRunnerView } from "../hooks.ts";
 import { sessionRunner } from "../live.ts";
 import type { EndedRecord } from "../persist.ts";
 import { milestonesReached, statusesBefore } from "../progress-model.ts";
 import { useSession } from "../store.ts";
 import { goalLine, streakLine } from "../streak-model.ts";
+import { itemTitle as titleOf } from "../titles.ts";
 import { useNextUnlockList } from "../today/Glance.tsx";
 import { WeeklyRhythm } from "../today/WeeklyRhythm.tsx";
 import { toolName as toolLabel } from "../tool-name.ts";
 import { CodaUnlock } from "./CodaUnlock.tsx";
+import { LadderCard, ReleaseCard } from "./CodaWave4.tsx";
 
 /** Server reads that a finished session changes. */
 const SESSION_ENDED_KEYS = [
@@ -66,6 +69,14 @@ const SESSION_ENDED_KEYS = [
   "unlocks.list",
   "unlocks.next",
   "cando.list",
+  // Wave 4: a release fills an album slot; a gym session moves the ladder and the slot rule.
+  "album.get",
+  "album.track",
+  "capstones.get",
+  "capstones.sessions",
+  "capstones.gate",
+  "gym.plan",
+  "ladder.get",
 ];
 
 const STATUS_TONE = { emerging: "amber", solid: "accent", strong: "accent", fading: "neutral" } as const;
@@ -166,8 +177,21 @@ function CodaBody({ summary, ended }: { summary: SessionSummary; ended: EndedRec
   const moves = map.data && own ? skillMoves(new Map(own.baseline.levels), map.data.nodes, name) : [];
   const report = useProgressReport();
   const reached = report.data ? milestonesReached(report.data.milestones, summary.session.startedAt) : [];
-  const nextId = course.data?.next ?? null;
-  const tomorrow = tomorrowLine(summary, nextId ? { id: nextId, title: titleOf(nextId, titles) } : null);
+  // The next map item, never a lesson nobody has written yet: past the written course the next day is a review
+  // day, and the Coda says so (edge.ts).
+  const plan = useTodayPlan();
+  const authored = new Set((content.data?.lessons ?? []).map((l) => l.id as string));
+  const nextId = mapNextId(
+    course.data?.next ?? null,
+    plan.data?.mapItemId ?? null,
+    authored,
+    content.data?.syllabus?.defaultOrder,
+  );
+  const edge = courseEdge(course.data, content.data?.syllabus ?? null, authored, plan.data ?? null);
+  const tomorrow =
+    edge && !summary.teaser
+      ? `Next time: a review day. ${edgeShort(edge)}.`
+      : tomorrowLine(summary, nextId ? { id: nextId, title: titleOf(nextId, titles) } : null);
   const gradient = next.items?.[0];
   const gradientTool = gradient ? content.data?.toolbox.find((t) => t.id === gradient.itemId) : undefined;
   const wrapped = own?.wrappedEarly === true || reports.some((r) => r.block === "new" && !r.completed);
@@ -203,7 +227,11 @@ function CodaBody({ summary, ended }: { summary: SessionSummary; ended: EndedRec
         )}
       </header>
 
+      <ReleaseCard session={summary.session} />
+
       {summary.sketchesSaved[0] && <SketchCard sketchId={summary.sketchesSaved[0]} />}
+
+      <LadderCard session={summary.session} />
 
       {cando.length > 0 && (
         <Section title="What you can do now" testId="coda-cando">

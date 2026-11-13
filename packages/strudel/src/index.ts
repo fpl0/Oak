@@ -28,6 +28,22 @@ export { buildVocabulary, completionSiteAt, completionsFor } from "./completion.
 export type { InternalEditor } from "./editor.ts";
 export { type FriendlyError, friendlyEvalError } from "./friendly.ts";
 export { isMuted, NO_MUTES } from "./mutes.ts";
+// Wave 4 seam (docs/design/wave4.md §3.5): realism levels of ladder stimuli.
+export {
+  isCleanRealism,
+  type RealismLevelId,
+  type RealismSpec,
+  realismSpec,
+  StrudelNotBuiltError,
+} from "./realism.ts";
+export {
+  applyRealism,
+  DETUNE_STEP_CENTS,
+  detuneAt,
+  isTargetTrack,
+  REFERENCE_PREFIX,
+  realismScope,
+} from "./realism-pattern.ts";
 export {
   cadencePlan,
   dronePlan,

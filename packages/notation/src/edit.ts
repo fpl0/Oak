@@ -85,7 +85,13 @@ export type StaffEdit =
   /** Move a note to another onset (and optionally another pitch), keeping its length; replaces what it lands on. */
   | { op: "move"; eventId: string; onset: Rat; pitch?: string }
   /** Set the written accidental of a note's letter: −1 flat, 0 natural, 1 sharp (the letter and octave stay). */
-  | { op: "accidental"; eventId: string; alt: -2 | -1 | 0 | 1 | 2 };
+  | { op: "accidental"; eventId: string; alt: -2 | -1 | 0 | 1 | 2 }
+  /**
+   * Stack a note on a note or chord (staff-expect `chords`): the new pitch sounds with the target, same onset, length
+   * and track. A pitch already in the chord changes nothing; a pitch on a staff step the chord already uses (F♯ on
+   * an F) replaces that member, so a chord never holds two notes on one step. Remove a member with `delete`.
+   */
+  | { op: "stack"; eventId: string; pitch: string };
 
 /**
  * Cuts `[from, to)` out of the notes of `track` that `within` accepts (default: all of them). On a grand
@@ -188,6 +194,28 @@ export function applyEdit(input: NotationInput, edit: StaffEdit): NotationInput 
       if (!target || !p) return input;
       const acc = edit.alt > 0 ? "#".repeat(edit.alt) : "b".repeat(-edit.alt);
       return applyEdit(input, { op: "repitch", eventId: edit.eventId, pitch: `${p.letter}${acc}${p.oct}` });
+    }
+    case "stack": {
+      const target = events.find((e) => e.id === edit.eventId);
+      const p = parseNoteName(edit.pitch);
+      if (!target || !p || target.midi === null) return input;
+      const chord = events.filter(
+        (e) =>
+          e.track === target.track &&
+          R.eq(e.onset, target.onset) &&
+          R.eq(e.dur, target.dur) &&
+          e.midi !== null,
+      );
+      if (chord.some((e) => e.midi === p.midi)) return input;
+      const step = (e: NEvent) => {
+        const q = e.written ? parseNoteName(e.written) : null;
+        return q ? `${q.letter}${q.oct}` : null;
+      };
+      const same = chord.find((e) => step(e) === `${p.letter}${p.oct}`);
+      if (same) return applyEdit(input, { op: "repitch", eventId: same.id, pitch: edit.pitch });
+      const { id: _id, ...rest } = target;
+      const ev: Omit<NEvent, "id"> = { ...rest, ...pitchEvent(edit.pitch) };
+      return { ...input, events: sortEv([...strip(events), ev]) };
     }
     case "resize": {
       const target = events.find((e) => e.id === edit.eventId);

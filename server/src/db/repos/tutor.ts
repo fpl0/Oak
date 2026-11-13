@@ -380,6 +380,34 @@ export class TutorRepo {
     return r === null ? null : fromJson<unknown>(r.review_json, null);
   }
 
+  /** Wave 4 (`tutor.reviews`): every submitted review of a subject, newest first, with its conversation. */
+  reviewsOf(
+    subjectKind: string,
+    subjectId: string,
+  ): { conversationId: string; review: unknown; at: string }[] {
+    return all<{ conversation_id: string; review_json: string; at: string }>(
+      this.db,
+      `SELECT m.conversation_id, m.review_json, m.at FROM tutor_messages m JOIN tutor_conversations c ON c.id = m.conversation_id
+       WHERE c.subject_kind = ? AND c.subject_id = ? AND m.review_json IS NOT NULL AND m.excluded = 0
+       ORDER BY m.at DESC, m.id DESC`,
+      subjectKind,
+      subjectId,
+    ).map((r) => ({
+      conversationId: r.conversation_id,
+      review: fromJson<unknown>(r.review_json, null),
+      at: r.at,
+    }));
+  }
+  /** Wave 4 (`album.attachReview`): the reviews submitted in one conversation, newest first. */
+  reviewsOfConversation(conversationId: string): unknown[] {
+    return all<{ review_json: string }>(
+      this.db,
+      `SELECT review_json FROM tutor_messages WHERE conversation_id = ? AND review_json IS NOT NULL AND excluded = 0
+       ORDER BY at DESC, id DESC`,
+      conversationId,
+    ).map((r) => fromJson<unknown>(r.review_json, null));
+  }
+
   // --- notes ---
   addNote(n: Omit<TutorNote, "retractedAt"> & { conversationId: string | null; at: string }): TutorNote {
     run(

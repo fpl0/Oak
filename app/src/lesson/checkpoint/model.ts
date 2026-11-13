@@ -15,6 +15,7 @@ import type { TrialResponse } from "@oak/drills";
 import { CHECKPOINT } from "@oak/srs";
 import type { AnswerSpec, SungSummary } from "../../answers/types.ts";
 import { surfaceOf } from "../../drills/model.ts";
+import { staffAnswer } from "../../drills/staff.ts";
 import { sungPerformance } from "../grading.ts";
 
 export interface ItemRecord {
@@ -160,6 +161,8 @@ export function familyResponse(
   responseAt = 0,
   /** The trial's expected answer: a typed answer of several parts ("C D E F G A B") is split to match it. */
   expected?: Answer,
+  /** The trial itself: a tune written on the staff (melodic dictation from level 7) is graded as its code. */
+  trial?: Trial<unknown>,
 ): TrialResponse {
   if ("answer" in response) {
     const a = response.answer as Answer;
@@ -172,6 +175,10 @@ export function familyResponse(
   }
   // A code answer (reading the staff into code) goes to the drill engine as text, as the drill runner sends it.
   if ("code" in response) return { answer: { text: [response.code.trim()] }, rtMs, replays };
+  if ("staff" in response && trial) {
+    const a = staffAnswer(trial, response.staff);
+    return a ? { answer: a, rtMs, replays } : { skipped: true, rtMs, replays };
+  }
   if ("taps" in response) return { taps: response.taps.map((t) => t - responseAt), rtMs, replays };
   return { skipped: true, rtMs, replays };
 }

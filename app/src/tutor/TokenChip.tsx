@@ -87,7 +87,7 @@ function Bubble({ id, pos, info }: { id: string; pos: PopPos; info: TokenInfo })
 
 function PreviewBadge() {
   return (
-    <span className="ml-1 rounded-full border border-accent-2/60 px-1.5 text-[0.6875rem] leading-4 font-medium text-text-2">
+    <span className="ml-1 rounded-full border border-accent-2/60 px-1.5 font-sans text-[0.6875rem] leading-4 font-medium text-text-2">
       preview
     </span>
   );
@@ -174,6 +174,8 @@ export function TokenChip({
     }
     const onClick = () => {
       if (info.midi !== undefined) highlightReference({ kind: "note", thread, midi: info.midi });
+      // A chord or numeral lights the bars it sounds in, without moving the loop (Wave 4).
+      if (info.highlight) highlightReference({ kind: "bars", thread, ...info.highlight });
       if (info.play) void playChords(info.play);
       else if (info.bars) showBars(thread, info.bars.from, info.bars.to);
       else if (info.kind === "term") def.pinned ? def.close() : def.pin();
@@ -193,6 +195,7 @@ export function TokenChip({
           (info.kind === "note" || info.kind === "chord") && "font-mono text-[0.8125rem]",
         )}
         data-variant={info.variant}
+        data-bars={info.where && info.where.length > 0 ? info.where.join(" ") : undefined}
         {...handlers}
       >
         {info.kind === "bars" && <Repeat aria-hidden className="size-3" />}
@@ -203,7 +206,9 @@ export function TokenChip({
             {info.sub}
           </span>
         )}
-        {info.kind === "term" && info.preview && <PreviewBadge />}
+        {(info.kind === "term" || info.kind === "chord" || info.kind === "rn") && info.preview && (
+          <PreviewBadge />
+        )}
       </button>
     );
   }

@@ -473,6 +473,9 @@ class Sim {
       await this.checkpoint(plan, id, ses.id);
     } else if (plan.kind === "capstone" && id !== null) {
       await this.capstone(id, ses.id);
+    } else if (plan.kind === "gym" && id !== null) {
+      // Wave 4: the transcription slot (contracts §2.5) takes its ordinal and a ladder item.
+      await this.me.gymDay(ses.id, { note: plan.note });
     }
     // Sometimes the tab is closed before the Coda: the session stays open and the next day starts afresh.
     if (plan.kind !== "checkpoint" && this.r() < 0.06) {

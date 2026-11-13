@@ -5,7 +5,9 @@ import { parseRN, rnToChord, toLeadSheet } from "@oak/theory";
 import {
   beatSyllables,
   chromaticMidi,
+  cycleInversion,
   degreeForDigit,
+  digitRange,
   gridCounts,
   gridToCode,
   insertItem,
@@ -18,11 +20,14 @@ import {
   removeItem,
   rnDisplay,
   rnForKey,
+  rnGlyph,
+  rnInversion,
   rnPalette,
   sliderText,
   snapToStep,
   toggleCase,
   typingLetter,
+  undoPick,
   withInversion,
 } from "./keys.ts";
 
@@ -226,5 +231,46 @@ describe("slider", () => {
     expect(sliderText(1 / 3, { format: "swing" })).toBe("1/3 (triplet swing)");
     expect(sliderText(0.2, { format: "swing" })).toBe("0.2");
     expect(sliderText(null, {})).toBe("Not set");
+  });
+});
+
+describe("numeral glyphs and inversion figures (Wave 4)", () => {
+  test("glyph parts", () => {
+    expect(rnGlyph("viio")).toEqual({ acc: "", numeral: "vii", mark: "°", figures: [], of: "" });
+    expect(rnGlyph("V65")).toEqual({ acc: "", numeral: "V", mark: "", figures: ["6", "5"], of: "" });
+    expect(rnGlyph("bVII")).toEqual({ acc: "♭", numeral: "VII", mark: "", figures: [], of: "" });
+    expect(rnGlyph("V7/V")).toEqual({ acc: "", numeral: "V", mark: "", figures: ["7"], of: "/V" });
+    expect(rnGlyph("Imaj7")?.mark).toBe("maj");
+    expect(rnGlyph("nonsense")).toBeNull();
+  });
+  test("inversion from figures, and the I key's cycle", () => {
+    expect(["I", "I6", "I64", "V7", "V65", "V43", "V42"].map(rnInversion)).toEqual([0, 1, 2, 0, 1, 2, 3]);
+    expect(cycleInversion("I")).toBe("I6");
+    expect(cycleInversion("I6")).toBe("I64");
+    expect(cycleInversion("I64")).toBe("I");
+    expect(cycleInversion("V42")).toBe("V7");
+    expect(cycleInversion("viio")).toBe("viio6");
+  });
+});
+
+describe("the degree pad's key hint (review:journey)", () => {
+  test("names the digits the pad answers to", () => {
+    expect(digitRange(["1", "2", "3", "4", "5", "6", "7"])).toBe("1–7");
+    expect(digitRange(["1", "2", "3", "4", "5", "6"])).toBe("1–6");
+    expect(digitRange(["1", "4", "5"])).toBe("1, 4, 5");
+    expect(digitRange(["1", "b3", "4", "5", "b7"])).toBe("1, 3, 4, 5, 7");
+    expect(digitRange(["5"])).toBe("5");
+  });
+});
+
+describe("Backspace on the piano (review:journey)", () => {
+  test("a chord takes back the last note picked, not the top one", () => {
+    // Picked A4, C5, then F3: the chord reads F3 A4 C5; undo takes F3 away.
+    expect(undoPick([53, 69, 72], [69, 72, 53], "chord")).toEqual([69, 72]);
+    // A note picked twice is gone: the one before it is the last pick still down.
+    expect(undoPick([69, 72], [69, 72, 53], "chord")).toEqual([69]);
+    // No memory of the picks: the last of the value.
+    expect(undoPick([53, 69, 72], [], "chord")).toEqual([53, 69]);
+    expect(undoPick([60, 64, 62], [60, 64, 62], "sequence")).toEqual([60, 64]);
   });
 });

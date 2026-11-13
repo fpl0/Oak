@@ -7,7 +7,16 @@ import { Button, Progress } from "../../ui/kit/index.ts";
 import { useAnswerEnv } from "../env.tsx";
 import { sliderText, snapToStep } from "../keys.ts";
 import type { AnswerWidgetProps } from "../types.ts";
-import { AnswerFrame, digitOf, focusFirst, KeyHint, MarkBadge, markOf, revealedOf } from "../ui.tsx";
+import {
+  AnswerFrame,
+  digitOf,
+  focusFirst,
+  KeyHint,
+  MarkBadge,
+  markOf,
+  revealedOf,
+  SubmitHint,
+} from "../ui.tsx";
 
 function radioKeys(
   root: HTMLElement | null,
@@ -66,7 +75,7 @@ export function BarButtonsAnswer(p: AnswerWidgetProps<"bar-buttons">) {
       keys={
         <>
           <KeyHint keys={[`1–${Math.min(9, spec.bars)}`]}>bar</KeyHint>
-          <KeyHint keys={["Enter"]}>check</KeyHint>
+          <SubmitHint />
         </>
       }
     >
@@ -157,7 +166,7 @@ export function SameDifferentAnswer(p: AnswerWidgetProps<"same-different">) {
         <>
           {p.audition ? <KeyHint keys={["A", "B"]}>play</KeyHint> : null}
           <KeyHint keys={["1", "2"]}>same / different</KeyHint>
-          <KeyHint keys={["Enter"]}>check</KeyHint>
+          <SubmitHint />
         </>
       }
     >
@@ -245,7 +254,7 @@ export function SliderAnswer(p: AnswerWidgetProps<"slider">) {
         <>
           <KeyHint keys={["←", "→"]}>adjust</KeyHint>
           <KeyHint keys={["PgUp", "PgDn"]}>by ten</KeyHint>
-          <KeyHint keys={["Enter"]}>check</KeyHint>
+          <SubmitHint />
         </>
       }
     >

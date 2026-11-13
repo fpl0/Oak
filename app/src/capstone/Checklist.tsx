@@ -26,12 +26,15 @@ export function Checklist({
   ready,
   checking,
   stale,
+  onBars,
 }: {
   rows: readonly ChecklistRow[];
   ready: Readiness;
   checking: boolean;
   /** The rows describe an earlier version of the code (an edit is being checked). */
   stale: boolean;
+  /** A bar anchor lights those bars on the roll and the staff. */
+  onBars?: (from: number, to: number) => void;
 }) {
   const required = rows.filter((r) => r.required);
   const suggestions = rows.filter((r) => !r.required);
@@ -50,7 +53,7 @@ export function Checklist({
       </div>
       <ul className={clsx("flex flex-col gap-1", stale && "opacity-70")} aria-busy={checking || undefined}>
         {required.map((r) => (
-          <Row key={r.id} row={r} />
+          <Row key={r.id} row={r} onBars={onBars} />
         ))}
       </ul>
       {suggestions.length > 0 && (
@@ -58,7 +61,7 @@ export function Checklist({
           <h3 className="mt-2 font-sans text-sm font-medium text-text-3">Suggestions</h3>
           <ul className="flex flex-col gap-1">
             {suggestions.map((r) => (
-              <Row key={r.id} row={r} />
+              <Row key={r.id} row={r} onBars={onBars} />
             ))}
           </ul>
         </>
@@ -67,7 +70,13 @@ export function Checklist({
   );
 }
 
-function Row({ row }: { row: ChecklistRow }) {
+function Row({
+  row,
+  onBars,
+}: {
+  row: ChecklistRow;
+  onBars?: ((from: number, to: number) => void) | undefined;
+}) {
   const icon =
     row.state === "met" ? (
       <Check aria-hidden className="size-4 text-accent" strokeWidth={2.5} />
@@ -95,14 +104,25 @@ function Row({ row }: { row: ChecklistRow }) {
         </p>
         {(row.detail || row.anchor) && (
           <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-text-2">
-            {row.anchor && (
-              <span
-                data-testid="bar-anchor"
-                className="inline-flex h-5 items-center rounded-full border border-accent-2/50 bg-surface px-1.5 font-mono text-[0.75rem] text-text"
-              >
-                {anchorText(row.anchor)}
-              </span>
-            )}
+            {row.anchor &&
+              (onBars ? (
+                <button
+                  type="button"
+                  data-testid="bar-anchor"
+                  onClick={() => row.anchor && onBars(row.anchor.from, row.anchor.to)}
+                  aria-label={`${anchorText(row.anchor)}: show on the roll and the staff`}
+                  className="inline-flex h-5 items-center rounded-full border border-accent-2/50 bg-surface px-1.5 font-mono text-[0.75rem] text-text hover:border-accent hover:text-accent"
+                >
+                  {anchorText(row.anchor)}
+                </button>
+              ) : (
+                <span
+                  data-testid="bar-anchor"
+                  className="inline-flex h-5 items-center rounded-full border border-accent-2/50 bg-surface px-1.5 font-mono text-[0.75rem] text-text"
+                >
+                  {anchorText(row.anchor)}
+                </span>
+              ))}
             {row.detail && <span>{row.detail}</span>}
           </p>
         )}

@@ -81,6 +81,13 @@ Bun.serve({ hostname: "127.0.0.1", port: 8787, fetch: root.fetch }); // c.env is
 
 ### What else the server must do
 
+- **Wave 4 adapters** (`server/src/tutor-adapters`): fill `StepSource.key` (the step exercise's key, else the
+  lesson's) and `StepSource.answerKind`; `IntroducedTerms.all` (every introduced term, so solfège stays known after
+  30 more terms); `review(ref, target)` reads the album version or transcription version named and fills
+  `ReviewSource.facts` with `reviewFactsFrom`; `onReview` receives `conversationId` and `target` and stores the
+  review on that version. The contract routes must forward `albumTrackId`, `albumVersion` and
+  `transcriptionVersion` in review bodies.
+
 - **Store reviews** in `onReview`. **Attribution**: when a sketch version is saved from an applied
   card (`ConversationStore.card(id).applied`), set `tutor_assisted = 1` (contracts §10.7). Review
   `tryCode` has no card and no Apply route: the UI shows it preview-only before the first release.
@@ -126,6 +133,9 @@ browser ──POST──▶ route
 | `usage.ts`, `pricing.ts`                   | Token accounting for both backends; list-price estimate for the API.                                                                                |
 | `redaction.ts`                             | The rung matrix of §10.5 for `get_lesson_context`, `compare_haps` and `<oak_context>`.                                                              |
 | `leak-markers.ts`                          | `leakMarkers`, `findLeaks`, `forbiddenKeys`: what must not appear below which rung. Leak tests; grader error messages.                              |
+| `answer-guard.ts`                          | Wave 4: the answer forms of a graded step (numerals, chord symbols, notes, degree lines) and the streaming guard that withholds them below hint 4 in text, thinking and cards. |
+| `vocabulary.ts`                            | Wave 4: which singing names, chord and numeral forms the learner has met (from the introduced terms); the `vocabulary:` and `forms:` context lines. |
+| `review-facts.ts`                          | Wave 4: `reviewFactsFrom(harmonyView, AnalysisSummary, notes)`: chords per bar, cadences, schemas, motif reuse, ranges; `factLines` for the review context. |
 | `context.ts`                               | `buildOakContext`, `userTurnBlocks`, `renderUserTurn`, `escapeReserved`.                                                                            |
 | `prompt/persona.ts`                        | `PERSONA`, `buildPrefix`, `systemBlocks`, `systemText`, `prefixBytes`, `prefixVersion`.                                                             |
 | `lint/strict.ts`                           | Base and strict lint profiles (§11.3) on an acorn AST.                                                                                              |

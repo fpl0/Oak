@@ -15,7 +15,7 @@ import { clearRecheck, useRecheck } from "./recheck.ts";
 import type { LadderView, TolChoice } from "./state.ts";
 import { tolChoiceOf } from "./state.ts";
 import { useVoiceSync } from "./sync.ts";
-import type { Voice } from "./use-voice.ts";
+import { useVoice, type Voice } from "./use-voice.ts";
 
 // --- Quiet mode ------------------------------------------------------------------------------------
 
@@ -230,10 +230,16 @@ export function LadderCard({ voice }: { voice: Voice }) {
 
 // --- re-run the quiet check -----------------------------------------------------------------------
 
-/** The non-modal suggestion a take that heard no voice (or mostly noise) leaves behind. */
+/**
+ * The non-modal suggestion a take that heard no voice (or mostly noise) leaves behind; and, when the mic heard
+ * Oak's own playback (contracts §8.6, `sing.bleed`), the line with its fallback: Quiet mode for today in one
+ * press, or the bleed check of the set-up.
+ */
 export function RecheckHint({ className }: { className?: string }) {
   const advice = useRecheck();
   if (!advice) return null;
+  if (advice.kind === "bleed")
+    return <BleedHint className={className} body={advice.body} title={advice.title} />;
   return (
     <Callout
       tone="attention"
@@ -252,6 +258,61 @@ export function RecheckHint({ className }: { className?: string }) {
       }
     >
       <span data-testid="recheck-hint">{advice.body}</span>
+    </Callout>
+  );
+}
+
+/** `sing.bleed` and the fallback (contracts §8.6): Quiet mode for today, or the bleed check. */
+function BleedHint({
+  className,
+  title,
+  body,
+}: {
+  className?: string | undefined;
+  title: string;
+  body: string;
+}) {
+  const voice = useVoice();
+  const quiet = voice.quiet.quiet;
+  return (
+    <Callout
+      tone="attention"
+      title={title}
+      onDismiss={clearRecheck}
+      {...(className ? { className } : {})}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          {quiet ? (
+            <span className="text-sm text-text-2" data-testid="bleed-quiet-on">
+              Quiet mode is on for today.
+            </span>
+          ) : (
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<MicOff aria-hidden className="size-4" />}
+              loading={voice.pending}
+              disabled={!voice.ready}
+              onClick={() => void voice.setQuiet(true, "today").then(clearRecheck)}
+              data-testid="bleed-quiet"
+            >
+              Quiet mode for today
+            </Button>
+          )}
+          <Link
+            to="/settings/voice/setup"
+            search={{ part: "bleed" }}
+            className={buttonClass("ghost", "sm")}
+            data-testid="bleed-check"
+          >
+            Run the bleed check
+          </Link>
+        </div>
+      }
+    >
+      <span data-testid="recheck-hint" data-kind="bleed">
+        {body}
+      </span>
     </Callout>
   );
 }

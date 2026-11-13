@@ -8,6 +8,7 @@
 //  - a lint or evaluation failure is data (`ok: false`); `isError` is for calls that could not be
 //    understood at all (unknown tool, invalid input) or that broke.
 
+import { answerForms } from "../answer-guard.ts";
 import type { StepSource } from "../domain.ts";
 import { lintStrict } from "../lint/strict.ts";
 import type { TutorPorts } from "../ports.ts";
@@ -144,7 +145,7 @@ export function createToolSession(deps: ToolSessionDeps): ToolSession {
       const error = quoted && quoted.length > 0 ? { ...res.error, message: WITHHELD } : res.error;
       return data({ ok: false, error }, "did not run");
     }
-    const view = compareView(res.grade, level, input.target.kind);
+    const view = compareView(res.grade, level, input.target.kind, targetStep ? answerForms(targetStep) : []);
     return data({ ok: true, error: null, ...view }, `${view.status}, score ${view.score.toFixed(2)}`);
   }
 

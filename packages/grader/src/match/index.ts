@@ -55,8 +55,10 @@ export function runMatcher(
             : d;
         }
       const overlays = parts.map((p) => p.overlay).filter((o) => o !== undefined);
+      const floor = Math.min(...parts.map((p) => p.floor ?? p.score));
       return {
         score: clampScore(score),
+        floor: clampScore(floor),
         dims,
         diagnostics: parts.flatMap((p) => p.diagnostics),
         ...(overlays[0] ? { overlay: overlays[0] } : {}),

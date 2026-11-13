@@ -179,3 +179,67 @@ test("annotation-above: several ^ texts on one note become one stacked text; ♭
   expect(notes[0].chord).toEqual([{ name: "♭3\nme", position: "above" }]);
   expect(notes[0].extraClass).toBe("oak-e0");
 });
+
+// --- Wave 4: chord labels, bar numbers with a pickup, key changes inside a bar ---------------------------
+
+// biome-ignore lint/suspicious/noExplicitAny: abcjs element
+const els = (t: any, s = 0, v = 0): any[] => t.lines.flatMap((l: any) => l.staff?.[s]?.voices[v] ?? []);
+
+test("chord symbols: o becomes °, a slash chord keeps its bass; annotations below are printed as written", () => {
+  const { warnings, notes } = parse('"Bo""_viio"B4 "G/B""_V65"B4 "Bbm7b5/Fb""_♭VII"C4 "_V64"C4 |]');
+  expect(warnings).toEqual([]);
+  // biome-ignore lint/suspicious/noExplicitAny: abcjs chord
+  expect(notes.map((n) => n.chord.map((c: any) => `${c.name}@${c.position}`))).toEqual([
+    ["B°@default", "viio@below"],
+    ["G/B@default", "V65@below"],
+    ["B♭m7♭5/F♭@default", "♭VII@below"],
+    ["V64@below"],
+  ]);
+});
+
+test("mid-bar-key-change: an inline [K:] inside a bar is a key element, and any barline before it is a measure", () => {
+  const inline = tune(`${HEAD}C4 D4 [K:G] E4 F4 | G16 |]`);
+  expect(inline.warnings).toBeUndefined();
+  const types = els(inline).map((e) => e.el_type);
+  expect(types).toEqual(["note", "note", "key", "note", "note", "bar", "note", "bar"]);
+  expect(
+    els(inline)
+      .find((e) => e.el_type === "key")
+      .accidentals.map((a: { note: string }) => a.note),
+  ).toEqual(["f"]);
+  // A double (or dotted, or invisible) barline before the change ends a measure: the bar would be split in two.
+  for (const bar of ["||", ".|", "[|]"]) {
+    const t = tune(`X:1\nM:4/4\nL:1/16\n%%barnumbers 1\nK:C\nC4 D4 ${bar}[K:G] E4 F4 | G16 |]`);
+    expect(els(t).filter((e) => e.el_type === "bar").length).toBe(3);
+  }
+});
+
+test("pickup-bar-numbers: %%barnumbers 0 numbers each system after the first; %%setbarnb 0 makes a pickup bar 0", () => {
+  const body = "C4 | C16 | D16 | E16 |\nF16 | G16 |]";
+  const plain = tune(`X:1\nM:4/4\nL:1/16\n%%barnumbers 0\nK:C\n${body}`);
+  expect(plain.lines.map((l: { staff: { barNumber?: number }[] }) => l.staff[0]?.barNumber)).toEqual([
+    undefined,
+    5,
+  ]);
+  const pickup = tune(`X:1\nM:4/4\nL:1/16\n%%barnumbers 0\n%%setbarnb 0\nK:C\n${body}`);
+  expect(pickup.warnings).toBeUndefined();
+  expect(pickup.lines.map((l: { staff: { barNumber?: number }[] }) => l.staff[0]?.barNumber)).toEqual([
+    undefined,
+    4,
+  ]);
+  // A later page starts the count where it starts (and shows it on its first system).
+  const page = tune(
+    `X:1\nM:4/4\nL:1/16\n%%barnumbers 0\n%%setbarnb 5\n%%stretchlast 1\nK:C\nC16 | D16 |\nE16 |]`,
+  );
+  expect(page.warnings).toBeUndefined();
+  expect(page.lines.map((l: { staff: { barNumber?: number }[] }) => l.staff[0]?.barNumber)).toEqual([5, 7]);
+});
+
+test("label-in-tuplet: the labels inside a tuplet ride on its notes; splitting the tuplet would need tied sub-tuplets", () => {
+  const whole = parse('(5:4:5"C"C4 D4 "Dm"E4 F4 G4 |]');
+  expect(whole.warnings).toEqual([]);
+  expect(whole.notes.filter((n) => n.chord).map((n) => n.chord[0].name)).toEqual(["C", "Dm"]);
+  // The split form parses, but as two five-in-four groups of three written items with a tie between them.
+  const split = parse('(5:4:3"C"C D E/2- (5:4:3"Dm"E/2 F G z12 |]');
+  expect(split.notes.filter((n) => n.startTriplet).map((n) => n.tripletR)).toEqual([3, 3]);
+});

@@ -1,6 +1,6 @@
 // The tutor panel's content (ux §6.1–§6.3, contracts §10): status and thread, the context chips that show exactly
 // what the next turn carries, the merged timeline with live turns, the quick actions (the hint ladder, Explain my
-// mistake, a listening note, a capstone review), suggested prompts and the composer. It runs the asks other
+// mistake, a listening note, a capstone or transcription review), suggested prompts and the composer. It runs the asks other
 // surfaces queue (context.ts) one at a time, and is never a dead panel: when the tutor is off, closed for a
 // checkpoint or a drill trial, or the server is down, it says why and what to do.
 import type { SubjectRef, TutorNote } from "@oak/api";
@@ -20,6 +20,7 @@ import {
   askHint,
   askListeningNote,
   askReview,
+  askTranscriptionReview,
   type ContextChip,
   chipRemovable,
   chipsOf,
@@ -76,7 +77,12 @@ function useTurnEffects(): void {
         finished(turn) {
           void qc.invalidateQueries({ queryKey: ["api", "tutor.timeline"] });
           void qc.invalidateQueries({ queryKey: ["api", "tutor.notes"] });
-          if (turn.state.review) void qc.invalidateQueries({ queryKey: ["api", "capstones.get"] });
+          // Every turn is counted in this month's usage (reviews included); a review lands on its version.
+          void qc.invalidateQueries({ queryKey: ["api", "tutor.usage"] });
+          void qc.invalidateQueries({ queryKey: ["api", "tutor.status"] });
+          if (turn.state.review)
+            for (const name of ["capstones.get", "tutor.reviews", "album.track", "transcriptions.get"])
+              void qc.invalidateQueries({ queryKey: ["api", name] });
         },
       }),
     [qc],
@@ -162,7 +168,7 @@ const CHIP_SEES: Record<ContextChip["id"], string> = {
   step: "Which lesson and step you are on. The server adds the prompt, never an answer you have not reached.",
   code: "The code in your editor now.",
   answer:
-    "Your answer on this step as you gave it: the notes you placed, how close each sung note was, or the code you wrote by ear. Never the expected answer.",
+    "Your answer as you gave it: the notes or chords you placed, the numerals or choices you picked, how close each sung note was, the code you wrote by ear, or your transcription with Oak's bar-by-bar check. Never the expected answer or the hidden source.",
   key: "The key the music on screen is in, so degrees and numerals mean the same to Claude as to you.",
   labels:
     "Which note labels you see (degrees, solfège, note names), so Claude names notes the way you read them.",
@@ -385,6 +391,23 @@ function QuickActions({ subject, disabled }: { subject: TutorSubject; disabled: 
           capstoneId: subject.capstoneId as string,
           title: subject.title,
           code: subject.code ?? "",
+          ...(subject.albumTrackId !== undefined && subject.albumVersion !== undefined
+            ? { albumTrackId: subject.albumTrackId, albumVersion: subject.albumVersion }
+            : {}),
+        }),
+    });
+  if (subject.thread.subjectKind === "transcription" && subject.code)
+    actions.push({
+      key: "review-transcription",
+      icon: <MessageSquareText aria-hidden className="size-3.5" />,
+      label: "Request review",
+      cost: "Reviews your saved transcription from its code and checklist, never audio. It never affects pass or fail.",
+      run: () =>
+        void askTranscriptionReview({
+          projectId: subject.thread.subjectId,
+          title: subject.title,
+          code: subject.code as string,
+          ...(subject.transcriptionVersion !== undefined ? { version: subject.transcriptionVersion } : {}),
         }),
     });
   if (actions.length === 0) return null;

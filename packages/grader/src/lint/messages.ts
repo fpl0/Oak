@@ -37,7 +37,7 @@ export const LINT_TEMPLATES = {
   "code.scale-no-octave": '"{scale}" has no octave, so it starts in octave 3. Write "{suggest}".',
   "code.scale-spaces": 'Scale names use ":" instead of spaces: write "{suggest}".',
   "code.n-without-scale": '`n("…")` gives numbers, not pitches. Add `.scale("{key}")`, where 0 = degree 1.',
-  "code.unknown-chord": '"{sym}" isn\'t a Strudel chord name. Write "{suggest}".',
+  "code.unknown-chord": '"{sym}" {why}. Write "{suggest}".',
   "code.lowercase-chord-root": 'Chord roots are capitals: "{suggest}".',
   "code.chord-not-in-dict": '"{sym}" {problem} in the "{dict}" dictionary. {fix}',
   "code.slash-chord": 'No "/" inside chord(): give the bass note "{bass}" to the bass: track.',

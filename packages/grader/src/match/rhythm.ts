@@ -1,7 +1,7 @@
 // The rhythm matcher (exercises §3.3, contracts §6.10–§6.11): onset sets compared with a tolerance,
 // per-role F-measure, durations of monophonic lines, displacement and pickup detection, subdivision,
 // period and swing findings.
-import type { Diagnostic, Matcher, MeterId, NEvent, Rat } from "@oak/content-kit";
+import type { Diagnostic, Matcher, MeterId, NEvent, PickupSpec, Rat } from "@oak/content-kit";
 import { R, rat } from "@oak/content-kit";
 import { METERS } from "@oak/theory";
 import { effectiveDur, isMonophonic, locAt, locOf, pitched, ratKey, sortEvents } from "../analyze/events.ts";
@@ -83,7 +83,7 @@ export function bestDisplacement(
 }
 
 /** F1 of the answer shifted linearly (not circularly) by `shift` cycles. */
-function linearShiftF1(t: readonly Rat[], a: readonly Rat[], shift: Rat): number {
+export function linearShiftF1(t: readonly Rat[], a: readonly Rat[], shift: Rat): number {
   const m = matchOnsets(
     t,
     a.map((x) => R.sub(x, shift)),
@@ -175,7 +175,7 @@ export function rhythmMatch(
       aOn.map((e) => e.onset),
       tol,
     );
-    const w = Math.max(tOn.length, aOn.length);
+    const w = cfg.perRole && cfg.roleWeight === "equal" ? 1 : Math.max(tOn.length, aOn.length);
     weighted += f1(m.pairs.length, tOn.length, aOn.length) * w;
     totalW += w;
     const role = cfg.perRole || g.key.startsWith("drum:") ? ` (${g.label})` : "";
@@ -287,6 +287,23 @@ export function rhythmMatch(
 }
 
 const ctxUnits = (meter: MeterId): number => METERS[meter].unitsPerBar;
+
+/**
+ * The shift (in cycles) that turns the answer's onsets into the reference's when the answer put the declared
+ * pickup on a downbeat (contracts §6.11 item 5): `p` (the answer is late by the pickup) or `−(1 − p)` (the
+ * pickup landed on the downbeat before it). `null` when neither fits exactly.
+ */
+export function pickupShift(
+  t: readonly Rat[],
+  a: readonly Rat[],
+  pickup: PickupSpec,
+  meter: MeterId,
+): Rat | null {
+  if (t.length === 0 || a.length === 0) return null;
+  const p = R.div(pickup.units, [ctxUnits(meter), 1]);
+  for (const shift of [p, R.neg(R.sub(rat(1), p))]) if (linearShiftF1(t, a, shift) >= 0.999) return shift;
+  return null;
+}
 const feelWord = (f: string): string =>
   f === "ternary" ? "triplets" : f === "binary" ? "straight 8ths and 16ths" : f;
 

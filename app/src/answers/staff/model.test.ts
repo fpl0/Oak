@@ -4,6 +4,7 @@ import type { StaffGeometry } from "@oak/notation";
 import { intervalOf } from "@oak/theory";
 import {
   applyStaffEdit,
+  describeChord,
   describeNote,
   engrave,
   initialCursor,
@@ -19,6 +20,7 @@ import {
   type StaffSpec,
   snapGrid,
   snapX,
+  staffChords,
   staffContext,
   staffEditOutcome,
   staffKey,
@@ -291,5 +293,61 @@ describe("an edit that does not fit says why", () => {
     const dotted = spec({ palette: { durations: ["4.", "8"], accidentals: false, ties: true, rests: true } });
     expect(staffContext(dotted)).toMatchObject({ ties: true, dots: true });
     expect(refusalText({ refused: null, clipped: false })).toBeNull();
+  });
+});
+
+describe("chords on the staff (Wave 4, palette.chords)", () => {
+  const chords = (over: Partial<StaffSpec> = {}) =>
+    spec({
+      bars: 1,
+      palette: { durations: ["2", "4"], accidentals: true, ties: false, rests: true, chords: true },
+      ...over,
+    });
+  const half = { key: "5" };
+
+  test("letters stack upward on the chord at the cursor and keep its length", () => {
+    const r = typeKeys(chords(), [half, "C", "E", "G"]);
+    // C nearest to the B4 ghost is C5; E and G stack above it.
+    expect(r.value).toBe("[C5,E5,G5]:2 r:2");
+    expect(r.said.at(-1)).toBe("G5 added. The chord: C5 E5 G5");
+    expect(r.played.slice(-3)).toEqual([72, 76, 79]);
+  });
+  test("Shift+letter goes under the bass: an inversion", () => {
+    const r = typeKeys(chords(), [half, "C", "E", "G", { key: "E", shift: true }]);
+    expect(r.value).toBe("[E4,C5,E5,G5]:2 r:2");
+  });
+  test("→ steps past the chord; the next chord starts on beat 3", () => {
+    const r = typeKeys(chords(), [half, "C", "E", "G", "ArrowRight", "B", "D", "G"]);
+    expect(r.value).toBe("[C5,E5,G5]:2 [B5,D6,G6]:2");
+    const back = typeKeys(chords(), [half, "C", "E", "G", "ArrowRight", "B", "ArrowLeft"]);
+    expect(back.cursor.onset).toEqual([0, 1]);
+  });
+  test("a note already in the chord is refused; Backspace removes the top note", () => {
+    const r = typeKeys(chords(), [half, "C", "E", "G", "ArrowDown", "ArrowDown"]);
+    // ↓ moves the selected (top) note: G5 → F5 → E5 is refused (E5 is in the chord).
+    expect(r.value).toBe("[C5,E5,F5]:2 r:2");
+    expect(r.said.at(-1)).toBe("E5 is already in the chord.");
+    const del = typeKeys(chords(), [half, "C", "E", "G", "Backspace"]);
+    expect(del.value).toBe("[C5,E5]:2 r:2");
+  });
+  test("a sharp lands on the note just added, not on the bass", () => {
+    const r = typeKeys(chords({ key: { tonic: "C", mode: "major" } }), [half, "D", "F", "#", "A"]);
+    expect(r.value).toBe("[D5,F#5,A5]:2 r:2");
+  });
+  test("grand staff: one chord across both hands", () => {
+    const s = chords({ clef: "grand" });
+    const r = typeKeys(s, [half, "C", "E", "G", { key: "C", shift: true }, { key: "C", shift: true }]);
+    expect(r.value).toBe("[C3,C4,C5,E5,G5]:2 r:2");
+    const e = engrave(r.value, staffContext(s));
+    if (!e.ok) throw new Error(e.error);
+    const cs = staffChords(staffNotes(e.score));
+    expect(cs).toHaveLength(1);
+    expect(cs[0]?.pitches.map((p) => p.name)).toEqual(["C3", "C4", "C5", "E5", "G5"]);
+    expect(cs[0]?.items).toHaveLength(2);
+    expect(describeChord(cs[0] as NonNullable<(typeof cs)[0]>)).toBe("C3 C4 C5 E5 G5, bar 1 beat 1");
+  });
+  test("without palette.chords a letter still replaces and steps on", () => {
+    const r = typeKeys(spec(), ["C", "E"]);
+    expect(r.value).toBe("C5:4 E5:4 r:2");
   });
 });

@@ -7,6 +7,7 @@ import type {
   LessonSource,
   ProgressSnapshot,
   ReviewSource,
+  ReviewTarget,
   Rung,
   StepSource,
   StepState,
@@ -132,6 +133,23 @@ export interface TurnRequest {
   graderResult?: GradeSnapshot;
   lessonId?: string;
   stepId?: string;
+  /**
+   * Wave 4 (`TutorTurnRequestSchema`): a capstone review of one album version. With both set, the review reads
+   * that version and the accepted review is attached to it.
+   */
+  albumTrackId?: string;
+  albumVersion?: number;
+  /** Wave 4: a transcription review of one version of the project (default: its latest). */
+  transcriptionVersion?: number;
+}
+
+/** The version a review request names, if any (both album fields, or the transcription version). */
+export function reviewTargetOf(request: TurnRequest): ReviewTarget | null {
+  if (request.albumTrackId !== undefined && request.albumVersion !== undefined)
+    return { kind: "album", trackId: request.albumTrackId, version: request.albumVersion };
+  if (request.transcriptionVersion !== undefined)
+    return { kind: "transcription", version: request.transcriptionVersion };
+  return null;
 }
 
 export type ApplyState = "preview_only" | "applicable";

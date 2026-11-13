@@ -102,7 +102,8 @@ function rnDegree(chord: ChordId, key: KeySpec): { degree: number; alt: -1 | 0 |
   return table;
 }
 
-function inversionOf(chord: ChordId): 0 | 1 | 2 | 3 {
+/** The inversion a chord's bass makes: 0 root, 1 the 3rd (or the sus tone), 2 the 5th, 3 the 7th (or 6th). */
+export function inversionOf(chord: ChordId): 0 | 1 | 2 | 3 {
   if (chord.bassPc === chord.rootPc) return 0;
   const row = rowOf(chord.quality);
   const bassSemis = mod(chord.bassPc - chord.rootPc, 12);

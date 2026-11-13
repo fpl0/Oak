@@ -5,14 +5,16 @@
 // syllables (`SingEnv.labels`), the tolerance from the server's ladder (`tolCents`), a count-in with numerals, the
 // reference (home, and a few chords that set it), "Hear it" (after the take in sight mode) and "Hear my take" (the
 // tracked pitches played back; never audio). Quiet mode or no usable mic: "listen and self-check" (contracts §8.5),
-// which reports quiet evidence and records nothing.
+// which reports quiet evidence and records nothing. Wave 4: the live trace wears the degree colour of the target it is
+// in band of (neutral out of band), each coloured run labelled with its degree.
 import type { MicSession } from "@oak/audio";
-import type { LearnerProfile } from "@oak/content-kit";
+import type { KeySpec, LearnerProfile } from "@oak/content-kit";
 import type { PitchFrame, SungResult } from "@oak/pitch";
 import { clsx } from "clsx";
 import { Check, Ear, Home, Mic, Music2, Play, RotateCcw, Square, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, dbToLevel, MicLevelMeter } from "../../ui/kit/index.ts";
+import { degreeStyle, type ThemeName } from "../../ui/theme/palette.ts";
 import { useThemeName } from "../../ui/theme/use-theme-name.ts";
 import { appAudio, NEUTRAL_PROFILE, type QuietEvidence, useAnswerEnv } from "../env.tsx";
 import {
@@ -31,10 +33,12 @@ import {
   takeSeconds,
   targetLabel,
   targetSpoken,
+  traceKey,
   traceOf,
+  traceSegments,
 } from "../sing.ts";
 import type { AnswerWidgetProps } from "../types.ts";
-import { AnswerFrame, KeyHint } from "../ui.tsx";
+import { AnswerFrame, KeyHint, SubmitHint } from "../ui.tsx";
 
 type Phase = "idle" | "cue" | "opening" | "singing" | "done" | "quiet";
 
@@ -53,6 +57,8 @@ function drawLane(
   span: number,
   now: number | null,
   showTrace: boolean,
+  key: KeySpec | null,
+  theme: ThemeName,
 ) {
   const dpr = window.devicePixelRatio || 1;
   const w = canvas.clientWidth;
@@ -117,25 +123,65 @@ function drawLane(
     g.font = "600 12px Inter Variable, system-ui, sans-serif";
     g.fillText(n.label ?? "", x0 + 4, top - 4);
   });
-  // The live trace: 3 px, degree-neutral text colour, gaps for unvoiced frames.
+  // The live trace (ux §4.3): 3 px, in the degree colour while the voice is in a target's band, `--text-3` out of
+  // it, gaps for unvoiced frames. A thin ink underlay keeps the light colours (3 on Paper) on their edge, and each
+  // coloured run ends in its degree label: a degree colour never appears without its number.
   if (showTrace) {
-    g.strokeStyle = c.text;
-    g.lineWidth = 3;
-    g.lineJoin = "round";
-    g.beginPath();
-    let pen = false;
-    for (const pt of trace) {
-      if (pt.midi === null || pt.t < 0 || pt.t > span) {
-        pen = false;
-        continue;
+    const segs = traceSegments(trace, notes, tolCents, key);
+    const path = (pts: readonly { t: number; midi: number }[]) => {
+      g.beginPath();
+      let pen = false;
+      for (const pt of pts) {
+        if (pt.t < 0 || pt.t > span) {
+          pen = false;
+          continue;
+        }
+        const px = x(pt.t);
+        const py = y(Math.max(lo, Math.min(hi, pt.midi)));
+        if (pen) g.lineTo(px, py);
+        else g.moveTo(px, py);
+        pen = true;
       }
-      const px = x(pt.t);
-      const py = y(Math.max(lo, Math.min(hi, pt.midi)));
-      if (pen) g.lineTo(px, py);
-      else g.moveTo(px, py);
-      pen = true;
+    };
+    g.lineJoin = "round";
+    g.lineCap = "round";
+    for (const seg of segs) {
+      const st = seg.degree ? degreeStyle(seg.degree, theme) : null;
+      if (st) {
+        path(seg.points);
+        g.strokeStyle = c.text;
+        g.globalAlpha = 0.55;
+        g.lineWidth = 5;
+        g.stroke();
+        g.globalAlpha = 1;
+      }
+      path(seg.points);
+      g.strokeStyle = st ? st.fill : c.text3;
+      g.lineWidth = 3;
+      g.stroke();
     }
-    g.stroke();
+    // The degrees drawn in colour, in order, for tests and for the text alternative's consistency.
+    canvas.dataset.traceDegrees = [
+      ...new Set(segs.filter((x) => x.degree && x.points.length > 1).map((x) => x.degree)),
+    ].join(" ");
+    g.font = "600 11px Inter Variable, system-ui, sans-serif";
+    for (const seg of segs) {
+      const end = seg.points[seg.points.length - 1];
+      const start = seg.points[0];
+      if (!seg.degree || !end || !start || end.t - start.t < 0.2 || end.t > span) continue;
+      const st = degreeStyle(seg.degree, theme);
+      const label = st.text;
+      const w = g.measureText(label).width + 8;
+      const lx = Math.min(x(end.t) + 4, canvas.clientWidth - w - 2);
+      const ly = y(Math.max(lo, Math.min(hi, end.midi))) - 8;
+      g.fillStyle = st.fill;
+      g.fillRect(lx, ly, w, 16);
+      g.strokeStyle = st.outline ?? c.text;
+      g.lineWidth = 1;
+      g.strokeRect(lx + 0.5, ly + 0.5, w - 1, 15);
+      g.fillStyle = st.label;
+      g.fillText(label, lx + 4, ly + 12);
+    }
   }
   if (now !== null && now >= 0) {
     g.strokeStyle = c.amber;
@@ -170,6 +216,11 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
   const sight = setup?.mode === "sight";
   const ref = setup?.reference;
   const refTonic = ref ? ref.tonic + fitted.shift : null;
+  // The key the trace is coloured in: the reference's home (moved with the notes), else read from a target.
+  const laneKey = traceKey(
+    notes,
+    ref && refTonic !== null ? { tonic: refTonic, mode: ref.mode ?? "major" } : null,
+  );
 
   const [phase, setPhase] = useState<Phase>(env.quiet ? "quiet" : value.length > 0 ? "done" : "idle");
   // Why the self-check is showing: Quiet mode (server state), the learner's choice, or the mic.
@@ -262,6 +313,8 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
       span,
       phase === "singing" ? now : null,
       showTrace === "live" || (showTrace === "after" && phase === "done"),
+      laneKey,
+      theme,
     );
   });
 
@@ -466,7 +519,7 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
       keys={
         <>
           {quiet ? null : <KeyHint keys={["⌘/Ctrl ⇧ M"]}>close the mic</KeyHint>}
-          <KeyHint keys={["Enter"]}>check</KeyHint>
+          <SubmitHint />
         </>
       }
     >

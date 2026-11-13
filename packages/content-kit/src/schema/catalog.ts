@@ -38,8 +38,12 @@ export interface UnlockSpec {
   at: SessionId | SessionId[];
   /** `complete`: when the Make is saved. `start`: START rows, granted when the session starts. */
   when: "complete" | "start";
-  /** The voicing gate (rule 6): a graded attempt of this exercise with `score ≥ minScore`, unrevealed. */
-  condition?: { exercise: ExerciseId; minScore: number; unrevealed: true };
+  /**
+   * The voicing gate (rule 6): a graded attempt of this exercise with `score ≥ minScore`, unrevealed.
+   * `variants` (Wave 4): regenerated variants of the same check in a later session (U05.L08's first step,
+   * shown only while the condition is unmet, `StepDef.gateCheck`); a graded attempt of any one counts.
+   */
+  condition?: { exercise: ExerciseId; minScore: number; unrevealed: true; variants?: ExerciseId[] };
   /** Rule 12: granted silently when this session is completed if the START site has not happened yet. */
   fallbackAt?: SessionId;
 }

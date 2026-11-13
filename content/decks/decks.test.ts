@@ -9,10 +9,13 @@ import { evalHeadless } from "@oak/grader/testing";
 import * as theory from "@oak/theory";
 import { units } from "../syllabus.ts";
 import {
+  CADENCE_NAMES,
+  CADENCE_ROWS,
   CHORD_ROOTS,
   CHORD_SYMBOL_ROWS,
   CHORD_SYMBOLS,
   chordCardId,
+  DIATONIC_TRIADS,
   decks,
   FLAT_ORDER,
   INTERVAL_NAMES,
@@ -20,10 +23,14 @@ import {
   KEY_SIGNATURES,
   MAJOR_SIGNATURES,
   MINOR_SIGNATURES,
+  NUMERAL_CHORDS,
+  NUMERALS,
   PENDING_DECKS,
   SHARP_ORDER,
   STAFF_NAMES,
   signatureText,
+  TRIAD_ROWS,
+  TRIAD_SPELLINGS,
 } from "./index.ts";
 
 const lessons = new Set(units.flatMap((u) => u.lessons.map((l) => l.id as string)));
@@ -220,5 +227,86 @@ describe("fact decks", () => {
     expect(grade(STAFF_NAMES, 0, "c")).toBe(1);
     expect(grade(STAFF_NAMES, 0, "D")).toBe(0);
     expect(grade(KEY_SIGNATURES, 0, "2#")).toBe(0);
+  });
+});
+
+describe("U05–U07 fact decks (pending their contracts §7.3 rows and ledger IDs)", () => {
+  const C = { tonic: "C", mode: "major" } as const;
+  const credit = (deck: FactDeck, id: string, text: string[]) => {
+    const card = deck.cards.find((c) => c.id === id) as FactDeck["cards"][number];
+    return bindDeck(deck).grade(card, { text }, 1000).credit;
+  };
+  test("they are pending: valid, gated on real lessons at or after their unlock, IDs unique and new", () => {
+    const pending = [TRIAD_SPELLINGS, NUMERALS, CADENCE_NAMES];
+    const ids = pending.flatMap((d) => d.cards.map((c) => c.id as string));
+    expect(new Set(ids).size).toBe(ids.length);
+    const live = new Set(decks.flatMap((d) => d.cards.map((c) => c.id as string)));
+    for (const d of pending) {
+      expect(() => defineDeck(d)).not.toThrow();
+      expect(decks.map((x) => x.id as string)).not.toContain(d.id);
+      for (const c of d.cards) {
+        expect(live.has(c.id as string)).toBe(false);
+        if (c.gate) expect([c.id, lessons.has(c.gate)]).toEqual([c.id, true]);
+      }
+    }
+  });
+  test("triad spellings: stacked letters, and @oak/theory reads each as the asked quality on the asked root", () => {
+    for (const [root, q, notes] of TRIAD_ROWS) {
+      const id = theory.parseChordSymbol(
+        `${root}${{ maj: "", min: "m", dim: "dim", aug: "aug" }[q]}`,
+      ) as theory.ChordId;
+      const pcs = notes.map((n) => theory.pcOf(n));
+      expect([root, q, [...pcs].sort()]).toEqual([root, q, [...theory.chordPcs(id)].sort()]);
+      const letters = notes.map((n) => "CDEFGAB".indexOf(n[0] as string));
+      expect(
+        [
+          root,
+          q,
+          (letters[1] as number) - (letters[0] as number),
+          (letters[2] as number) - (letters[1] as number),
+        ].map((x) => (typeof x === "number" ? (x + 7) % 7 : x)),
+      ).toEqual([root, q, 2, 2].map((x) => (typeof x === "number" ? (x + 7) % 7 : x)));
+    }
+    expect(credit(TRIAD_SPELLINGS, "fact.triad.C-min", ["C E♭ G"])).toBe(1);
+    expect(credit(TRIAD_SPELLINGS, "fact.triad.C-min", ["c, eb, g"])).toBe(1);
+    expect(credit(TRIAD_SPELLINGS, "fact.triad.C-min", ["C D# G"])).toBeLessThan(1);
+  });
+  test("numerals and qualities: as @oak/theory names the diatonic triads; numerals graded case-sensitively", () => {
+    for (const [degree, numeral, q] of DIATONIC_TRIADS) {
+      const chord = theory.diatonicChordOn(C, degree);
+      expect([degree, theory.romanText(chord, C), chord.quality]).toEqual([degree, numeral, q]);
+    }
+    for (const [tonic, numeral, symbol] of NUMERAL_CHORDS) {
+      const key = { tonic, mode: "major" } as const;
+      const want = theory.chordOfRoman(numeral, key) as theory.ChordId;
+      const got = theory.parseChordSymbol(symbol.replace(/o$/, "dim")) as theory.ChordId;
+      expect([tonic, numeral, got.rootPc, got.quality]).toEqual([tonic, numeral, want.rootPc, want.quality]);
+    }
+    expect(credit(NUMERALS, "fact.rn.C-6", ["vi"])).toBe(1);
+    expect(credit(NUMERALS, "fact.rn.C-6", ["VI"])).toBe(0);
+    expect(credit(NUMERALS, "fact.rn.C-7", ["vii°"])).toBe(1);
+    expect(credit(NUMERALS, "fact.rn.G-vi", ["E minor"])).toBe(1);
+    expect(credit(NUMERALS, "fact.rn.G-vi", ["em"])).toBe(1);
+    expect(credit(NUMERALS, "fact.rn.F-IV", ["bb"])).toBe(1);
+    expect(credit(NUMERALS, "fact.rn.quality-2", ["m"])).toBe(1);
+    expect(credit(NUMERALS, "fact.rn.quality-7", ["minor"])).toBe(0);
+  });
+  test("cadence names: as @oak/theory classifies the two chords (and the tune's last note)", () => {
+    const sym = (s: string) => theory.parseChordSymbol(s) as theory.ChordId;
+    const cases: Record<string, string> = {
+      pac: theory.cadenceOf(sym("G"), sym("C"), C, { melodyMidi: 72 }),
+      iac: theory.cadenceOf(sym("G"), sym("C"), C, { melodyMidi: 76 }),
+      hc: theory.cadenceOf(sym("F"), sym("G"), C),
+      dc: theory.cadenceOf(sym("G"), sym("Am"), C),
+      pc: theory.cadenceOf(sym("F"), sym("C"), C),
+    };
+    for (const [id, , answer] of CADENCE_ROWS) expect([id, answer[0]]).toEqual([id, cases[id]]);
+    expect(credit(CADENCE_NAMES, "fact.cadence.dc", ["deceptive"])).toBe(1);
+    expect(credit(CADENCE_NAMES, "fact.cadence.pac", ["IAC"])).toBe(0);
+    expect(credit(CADENCE_NAMES, "fact.cadence.plagal-chords", ["IV I"])).toBe(1);
+    expect(credit(CADENCE_NAMES, "fact.cadence.plagal-chords", ["I IV"])).toBe(0);
+    // Terms before they are taught: deceptive (U06.L06) and plagal (U06.L07) cards wait for their lessons.
+    for (const c of CADENCE_NAMES.cards.filter((x) => /dc|pc|deceptive|plagal/.test(x.id)))
+      expect([c.id, c.gate]).toEqual([c.id, /dc|deceptive/.test(c.id) ? "U06.L06" : "U06.L07"]);
   });
 });

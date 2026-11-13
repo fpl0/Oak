@@ -25,9 +25,9 @@ export async function api<T>(
 }
 
 /** Wipes the learner and fast-forwards to `point` (server/src/services/dev-seed.ts SEED_POINTS). */
-export async function seed(page: Page, point: string): Promise<void> {
+export async function seed(page: Page, point: string, opts: { recordings?: boolean } = {}): Promise<void> {
   await api(page, "PUT", "/dev/clock", { reset: true });
-  const r = await api(page, "POST", "/dev/seed", { point });
+  const r = await api(page, "POST", "/dev/seed", { point, ...opts });
   expect(r.status, JSON.stringify(r.body)).toBe(200);
 }
 

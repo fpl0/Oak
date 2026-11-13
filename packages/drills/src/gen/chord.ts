@@ -2,7 +2,7 @@
 // Oak's voicer (code V), never by Strudel's `voicing()`.
 import type { ChordQuality } from "@oak/content-kit";
 import { buildPiece } from "../build.ts";
-import { CHORD_TONES, chordDisplay, LETTERS, spellChord } from "../kernel.ts";
+import { CHORD_TONES, chordDisplay, mod, parsePc, spellChord } from "../kernel.ts";
 import {
   lowIntervalOk,
   spellVoiced,
@@ -32,18 +32,22 @@ function randomVoiced(
   quality: ChordQuality,
   opts: { inversion?: number; rootless?: boolean } = {},
 ): Voiced {
-  const [lo] = register(ctx, [43, 60]);
+  const [lo, hi] = register(ctx, [43, 60]);
   const kinds = list<VoicingKind>(ctx.level, "voicings", ["close"]);
   const members = CHORD_TONES[quality].semis.length;
   const randomInv = ctx.level.inversions === true;
   for (let attempt = 0; attempt < 20; attempt++) {
     const rootPc = ctx.rng.int(0, 11);
     const inversion = opts.inversion ?? (randomInv ? ctx.rng.int(0, Math.min(3, members - 1)) : 0);
-    const bassLo = ctx.rng.int(lo, lo + 9);
+    // The bass note inside the level's register (the comfortable middle of a keyboard), never above it.
+    const bassPc = mod(rootPc + (CHORD_TONES[quality].semis[inversion] as number), 12);
+    const choices: number[] = [];
+    for (let m = lo; m <= hi; m++) if (mod(m, 12) === bassPc) choices.push(m);
+    const bass = choices.length > 0 ? ctx.rng.pick(choices) : lo + mod(bassPc - lo, 12);
     const v = voiceChord(rootPc, quality, {
       inversion,
       kind: ctx.rng.pick(kinds),
-      bass: [bassLo, bassLo + 11],
+      bass: [bass, bass],
       ...(opts.rootless ? { rootless: true } : {}),
     });
     const midis = opts.rootless ? v.midis.filter((_m, i) => i > 0 || inversion !== 0) : v.midis;
@@ -53,8 +57,51 @@ function randomVoiced(
   return voiceChord(0, quality, { inversion: opts.inversion ?? 0, bass: [48, 59] });
 }
 
+/** Root names a pitch class can take, the usual one first (it wins a tie): D♭ before C♯, F♯ before G♭. */
+const ROOT_NAMES: readonly string[] = [
+  "C",
+  "Db",
+  "C#",
+  "D",
+  "Eb",
+  "D#",
+  "E",
+  "F",
+  "F#",
+  "Gb",
+  "G",
+  "Ab",
+  "G#",
+  "A",
+  "Bb",
+  "A#",
+  "B",
+];
+/**
+ * The spelling of a chord's root that spells the whole chord with the fewest accidentals (no double
+ * accidentals): D♭ major, not C♯ major; C♯ minor, not D♭ minor; A♯°, not B♭° (B♭ D♭ F♭).
+ */
+export function readableRoot(rootPc: number, quality: ChordQuality): string {
+  let best = "C";
+  let bestCost = Number.POSITIVE_INFINITY;
+  for (const name of ROOT_NAMES) {
+    if (parsePc(name).pc !== rootPc) continue;
+    const notes = spellChord(name, quality);
+    const cost = notes.reduce(
+      (sum, n) => sum + (/^[A-G](bb|##)/.test(n) ? 10 : /[#b]/.test(n.slice(1)) ? 1 : 0),
+      0,
+    );
+    if (cost < bestCost) {
+      best = name;
+      bestCost = cost;
+    }
+  }
+  return best;
+}
+
 function chordPiece(ctx: Parameters<Generator["generate"]>[0], v: Voiced) {
-  const names = spellVoiced(v, null);
+  // Spelled as a musician would write the chord: its root chosen so the chord reads with fewest accidentals.
+  const names = spellVoiced(v, { tonic: readableRoot(v.rootPc, v.quality), mode: "major" });
   const arpeggiate = ctx.level.arpeggiate === true && ctx.rng.next() < 0.5;
   const pat = arpeggiate
     ? seq([...names.map((n) => atom(n)), chordOf(names)], [...names.map(() => 1), names.length])
@@ -143,7 +190,14 @@ export const inversion: Generator = {
   },
 };
 
-const NATURAL_ROOTS = LETTERS as unknown as string[];
+/**
+ * Level 1 (U05.L02, "all natural notes (D F A)"): the major and minor triads on the degrees of C major — C,
+ * F, G major; D, E, A minor — so every answer is three natural notes (B° waits for the diminished category).
+ */
+const NATURAL_TRIADS: Readonly<Partial<Record<ChordQuality, readonly string[]>>> = {
+  maj: ["C", "F", "G"],
+  min: ["D", "E", "A"],
+};
 const ALL_ROOTS = ["C", "C#", "Db", "D", "Eb", "E", "F", "F#", "Gb", "G", "Ab", "A", "Bb", "B"];
 const SPELL_QUALITIES: Readonly<Record<string, ChordQuality[]>> = {
   "triad-naturals": ["maj", "min"],
@@ -157,7 +211,9 @@ export const spell: Generator = {
     const qualities = SPELL_QUALITIES[ctx.category] ?? ["maj"];
     const quality = ctx.rng.pick(qualities);
     for (;;) {
-      const root = ctx.rng.pick(ctx.category === "triad-naturals" ? NATURAL_ROOTS : ALL_ROOTS);
+      const root = ctx.rng.pick(
+        ctx.category === "triad-naturals" ? [...(NATURAL_TRIADS[quality] ?? ["C"])] : ALL_ROOTS,
+      );
       const notes = spellChord(root, quality);
       // Triple accidentals never; double accidentals only from the 7th level on.
       if (notes.some((n) => /bbb|###/.test(n))) continue;
@@ -168,9 +224,26 @@ export const spell: Generator = {
         textKind: "note",
         root,
         quality,
-        prompt: `Spell ${chordDisplay(root, quality)} from the root up.`,
+        prompt: `Spell ${spellPromptName(root, quality)} from the root up.`,
       });
     }
   },
 };
+/**
+ * The chord a spelling prompt names. Triads come in words, with the sign after them ("D minor (Dm)"), because
+ * the spelling levels open in U05.L02–L03 and chord symbols are U05.L04's term; sevenths and extensions
+ * (U12 on) use the symbol alone.
+ */
+export function spellPromptName(root: string, quality: ChordQuality): string {
+  const words: Partial<Record<ChordQuality, string>> = {
+    maj: "major",
+    min: "minor",
+    dim: "diminished",
+    aug: "augmented",
+  };
+  const w = words[quality];
+  if (!w) return chordDisplay(root, quality);
+  const name = root.replace(/#/g, "♯").replace(/(?<=[A-G])b/g, "♭");
+  return quality === "maj" ? `${name} major` : `${name} ${w} (${chordDisplay(root, quality)})`;
+}
 export { voicedNode };

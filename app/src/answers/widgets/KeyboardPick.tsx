@@ -1,13 +1,19 @@
 // On-screen piano pick (contracts §5.4 `keyboard`): one key, a chord (a set) or a sequence, octave aware (MIDI
 // 60 = C4). The computer's typing row plays and picks (`A W S E D F T G Y H U J K` = C to C′ of the typing
 // octave, `Z`/`X` move that octave), arrows walk the keys (one tab stop), `Backspace` clears the last pick.
+// Wave 4, `chord` mode (the chord builder): every pick plays the whole chord so far, "Hear the chord" replays it, and
+// the line under the keys spells it from the bottom up; the chord's name and inversion show as
+// `AnswerEnv.harmony.nameChords` says.
 import { clsx } from "clsx";
+import { Play, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Button } from "../../ui/kit/index.ts";
 import { appAudio, useAnswerEnv } from "../env.tsx";
-import { chromaticMidi, pickKey, typingLetter } from "../keys.ts";
+import { buildChord, describeBuilt } from "../harmony.ts";
+import { chromaticMidi, pickKey, typingLetter, undoPick } from "../keys.ts";
 import { keyName, keySpoken, midiRange } from "../normalize.ts";
 import type { AnswerWidgetProps } from "../types.ts";
-import { AnswerFrame, KeyHint, markOf, revealedOf } from "../ui.tsx";
+import { AnswerFrame, KeyHint, markOf, revealedOf, SubmitHint } from "../ui.tsx";
 
 const BLACK = new Set([1, 3, 6, 8, 10]);
 const isBlack = (m: number) => BLACK.has(((m % 12) + 12) % 12);
@@ -39,12 +45,29 @@ export function KeyboardAnswer(p: AnswerWidgetProps<"keyboard">) {
     return isBlack(m) ? whiteIndex * WHITE_W - BLACK_W / 2 : whiteIndex * WHITE_W;
   };
 
+  const chordMode = spec.mode === "chord";
+  const sound = env.keyboard?.sound ? { sound: env.keyboard.sound } : {};
+  // The order the notes were picked in: a chord is kept low to high, so "undo" needs its own memory of the last
+  // pick (Backspace took away the top note, not the one just played: review:journey).
+  const picks = useRef<number[]>([]);
   const pick = (m: number) => {
     if (disabled || m < lo || m > hi) return;
-    audio.playNote(m, env.keyboard?.sound ? { sound: env.keyboard.sound } : {});
-    onChange(pickKey(value, m, spec.mode));
+    const next = pickKey(value, m, spec.mode);
+    picks.current = next.includes(m)
+      ? [...picks.current.filter((x) => x !== m), m]
+      : picks.current.filter((x) => x !== m);
+    // A chord sounds as a whole: the new note with the ones already down (a removed note just leaves it).
+    if (chordMode && next.length > 0) audio.playNote(next, { ...sound, dur: 1 });
+    else audio.playNote(m, sound);
+    onChange(next);
     setFocusMidi(m);
   };
+  const built = chordMode ? buildChord(value, env.harmony?.key ?? null) : null;
+  const nameChords = env.harmony?.nameChords ?? "after";
+  const naming =
+    nameChords === "live" ||
+    (nameChords === "after" && feedback.state !== "idle" && feedback.state !== "pending");
+  const line = built ? describeBuilt(built, naming) : null;
   const focusKey = (m: number) => {
     const c = Math.max(lo, Math.min(hi, m));
     setFocusMidi(c);
@@ -74,7 +97,7 @@ export function KeyboardAnswer(p: AnswerWidgetProps<"keyboard">) {
       return true;
     }
     if (e.key === "Backspace" || e.key === "Delete") {
-      if (!disabled) onChange(value.slice(0, -1));
+      if (!disabled) onChange(undoPick(value, picks.current, spec.mode));
       return true;
     }
     return false;
@@ -121,7 +144,7 @@ export function KeyboardAnswer(p: AnswerWidgetProps<"keyboard">) {
           <KeyHint keys={["A W S E D F T G Y H U J K"]}>play</KeyHint>
           <KeyHint keys={["Z", "X"]}>octave {octave}</KeyHint>
           {spec.mode !== "single" ? <KeyHint keys={["⌫"]}>undo</KeyHint> : null}
-          <KeyHint keys={["Enter"]}>check</KeyHint>
+          <SubmitHint />
         </>
       }
     >
@@ -159,6 +182,43 @@ export function KeyboardAnswer(p: AnswerWidgetProps<"keyboard">) {
           })}
         </div>
       </div>
+      {chordMode ? (
+        <div className="flex min-h-8 flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            data-enter="native"
+            icon={<Play aria-hidden className="size-4" />}
+            disabled={value.length === 0}
+            onClick={() => audio.playNote(value, { ...sound, dur: 1.2 })}
+          >
+            Hear the chord
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            data-enter="native"
+            icon={<RotateCcw aria-hidden className="size-4" />}
+            disabled={disabled || value.length === 0}
+            onClick={() => {
+              picks.current = [];
+              onChange([]);
+            }}
+          >
+            Clear
+          </Button>
+          <span className="text-sm text-text-2" data-testid="keyboard-chord" aria-live="polite">
+            {built && line ? (
+              <>
+                <span className="font-medium text-text">
+                  {built.bassName.replace(/-?\d+$/, "")} at the bottom
+                </span>
+                {line.name ? <span data-testid="chord-name">. {line.name}</span> : null}
+              </>
+            ) : null}
+          </span>
+        </div>
+      ) : null}
       <p className="min-h-6 text-sm text-text-2" aria-live="polite">
         {value.length === 0 ? (
           <span className="text-text-3">

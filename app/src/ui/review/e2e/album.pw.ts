@@ -15,7 +15,8 @@ interface Detail {
 
 test("an album with no recordings yet, and a take abandoned mid-way", async ({ page }) => {
   test.setTimeout(240_000);
-  await seed(page, "C0 released");
+  // Since Wave 4 the seeder records every release; this album has none yet.
+  await seed(page, "C0 released", { recordings: false });
   const album = await api<{ tracks: { id: string }[] }>(page, "GET", "/album");
   const trackId = album.body.tracks[0]?.id as string;
   const hasAudio = async () =>

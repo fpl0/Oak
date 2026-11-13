@@ -64,7 +64,8 @@ describe("the transcription slot rule (contracts §2.5)", () => {
     expect(transcriptionSlotDue(four, "C2.S2")).toBe(false);
     expect(transcriptionSlotDue(four, "X1.S1")).toBe(false);
     expect(transcriptionSlotDue(four, "J1.L01")).toBe(false);
-    expect(transcriptionSlotDue(four, null)).toBe(false);
+    // Wave 4: a day with no other map item (the next lessons are not written yet) still takes the slot.
+    expect(transcriptionSlotDue(four, null)).toBe(true);
   });
 });
 

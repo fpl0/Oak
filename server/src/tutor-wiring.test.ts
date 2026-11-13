@@ -126,7 +126,11 @@ describe("ProgressPort", () => {
     const snap = await ports().progress.snapshot();
     expect(snap.current.lesson).toBe("U01.L02");
     expect(snap.unlocked.count).toBe(2);
-    expect(await ports().progress.termsIntroduced()).toEqual({ count: 1, recent: ["term.pulse"] });
+    expect(await ports().progress.termsIntroduced()).toEqual({
+      count: 1,
+      recent: ["term.pulse"],
+      all: ["term.pulse"],
+    });
   });
 });
 

@@ -385,3 +385,34 @@ export function ringsOf(seed: string, versions: number, size = 64): Ring[] {
   }
   return rings;
 }
+
+/** A harmony view the sketch could use but the learner has not unlocked yet (Wave 4: hint, never block). */
+export interface HarmonyViewHint {
+  id: string;
+  what: string;
+  at: string;
+}
+
+/**
+ * The harmony views still locked for a sketch that plays chords: chord names (with `.arp()`, U05.L04), Roman
+ * numerals (U06.L02), function bands, chord tones and the lead sheet. Nothing when the sketch has no chords.
+ */
+export function harmonyViewHints(
+  hasChords: boolean,
+  unlocked: ReadonlySet<string>,
+  sites: (id: string) => string | null,
+): HarmonyViewHint[] {
+  if (!hasChords) return [];
+  const rows: [string, string][] = [
+    ["tb.arp", "Chord names on the roll and the staff"],
+    ["tb.feature.rn", "Roman numerals"],
+    ["tb.lens.function", "Function bands"],
+    ["tb.lens.chord-tones", "Chord tones in the melody"],
+    ["tb.feature.leadsheet", "The lead sheet"],
+  ];
+  return rows.flatMap(([id, what]) => {
+    if (unlocked.has(id)) return [];
+    const at = sites(id);
+    return at ? [{ id, what, at }] : [];
+  });
+}

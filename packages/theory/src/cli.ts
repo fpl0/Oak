@@ -2,6 +2,16 @@
 // and schema claim with it. Pure: `runTheoryCli(args)` returns the text; `cli.bun.ts` is the process host.
 import { type KeySpec, METER_IDS, type MeterId, parseRat } from "@oak/content-kit";
 import {
+  cadenceOf,
+  chordOfRoman,
+  chordSymbol,
+  harmonicFunction,
+  readChord,
+  romanParts,
+  romanText,
+  toneRole,
+} from "./harmony.ts";
+import {
   barPosition,
   bpmToCpm,
   CHORD_TABLE,
@@ -66,6 +76,9 @@ import {
   VOICING_DICTS,
   type VoicingDict,
 } from "./index.ts";
+
+const mod12 = (x: number): number => ((Math.round(x) % 12) + 12) % 12;
+
 import type { ChordId, NoteTextKind, RomanNumeral } from "./types.ts";
 
 export const CLI_HELP = `theory <op> [args]   (keys: C:major, Eb, F#m, A:harmonic:minor, D_dorian; output is JSON)
@@ -91,12 +104,18 @@ chords
   chord <symbol>                 every dialect, tones, pitch classes, family, dictionary matrix
   dict <symbol> [dict]           ok | missing | wrong | unknown-chord
   identify <note|midi...> [--bass X] [--rootless]   name sounding notes (hand voicings only)
+  read <note|midi...> [--bass X] [--key K]   a triad or seventh stacked in 3rds: root, quality, inversion,
+                                 names; null for a cluster ("C4 E4 G4 --bass E" → C/E, I6 in C)
+  symbol <text> [--dict D]       one chord symbol in every dialect (C° Co Cdim → C°, Co; G/B → code G)
   diatonic <key> [--sevenths]
 Roman numerals, function, cadences, schemas
   rn <chord> <key> [next]        Roman numeral of a chord (C/E for inversions)
   chord-of <rn> <key>            the chord of a numeral ("V65/V" C)
   function <rn> <key>
   cadence <rn> <rn> <key> [--melody-not-tonic]
+  cadence-of <chord> <chord> <key> [--melody X]   the cadence two chords make (PAC needs the melody on 1)
+  rn-parts <rn> <key>            the (degree, quality, inversion) an RN answer is graded by
+  tone <note|midi> <chord> [--prev X] [--next X] [--strong] [--next-chord Y]   chord tone or which NCT
   progression <key> <chord...>   numerals, functions, schema
   schema <key> <rn...>  |  schemas
 time
@@ -341,6 +360,79 @@ function run(op: string, a: string[], flags: Set<string>, opts: Map<string, stri
         .slice(0, 5)
         .map((c) => ({ chord: toLeadSheet(c), code: toCode(c), fit: c.fit }));
     }
+    case "read": {
+      const midis = a.map(midiArg);
+      if (midis.length === 0) fail("missing notes");
+      const bass = opts.get("bass");
+      const bassPc = bass ? mod12(midiArg(/\d/.test(bass) ? bass : `${bass}3`)) : mod12(Math.min(...midis));
+      const r = readChord(
+        midis.map((m) => mod12(m)),
+        bassPc,
+      );
+      if (!r) return null;
+      const k = opts.get("key");
+      const key = k ? keyArg(k) : null;
+      return {
+        leadSheet: r.leadSheet,
+        code: r.code,
+        root: r.root,
+        quality: r.quality,
+        inversion: r.inversion,
+        slash: r.slash,
+        ...(key
+          ? { key: keyText(key), rn: romanText(r.chord, key), function: harmonicFunction(r.chord, key) }
+          : {}),
+      };
+    }
+    case "symbol": {
+      const text = a.join(" ");
+      if (!text) fail("missing chord symbol");
+      const dict = opts.get("dict") as VoicingDict | undefined;
+      if (dict && !(VOICING_DICTS as readonly string[]).includes(dict))
+        fail(`dict must be one of ${VOICING_DICTS.join(" ")}`);
+      const out = {
+        input: text,
+        leadSheet: chordSymbol(text, "lead-sheet"),
+        code: chordSymbol(text, "code", dict ? { dict } : {}),
+        jazz: chordSymbol(text, "jazz"),
+        abc: chordSymbol(text, "abc"),
+        ...(dict ? { dict, inDict: chordInDict(chordSymbol(text, "code") ?? text, dict) } : {}),
+      };
+      return out.leadSheet === null ? fail(`not a chord symbol: ${text}`) : out;
+    }
+    case "cadence-of": {
+      const k = keyArg(a[2]);
+      const m = opts.get("melody");
+      return {
+        key: keyText(k),
+        rn: [romanText(chordArg(a[0]), k, chordArg(a[1])), romanText(chordArg(a[1]), k)],
+        cadence: cadenceOf(chordArg(a[0]), chordArg(a[1]), k, m ? { melodyMidi: midiArg(m) } : {}),
+      };
+    }
+    case "rn-parts": {
+      const k = keyArg(a[1]);
+      const parts = romanParts(a[0] ?? fail("missing Roman numeral"), k);
+      if (!parts) fail(`not a plain Roman numeral: ${a[0]}`);
+      const c = chordOfRoman(a[0] as string, k) as ChordId;
+      return { rn: a[0], key: keyText(k), ...parts, chord: toLeadSheet(c), function: harmonicFunction(c, k) };
+    }
+    case "tone": {
+      const midi = midiArg(a[0]);
+      const c = chordArg(a[1]);
+      const prev = opts.get("prev");
+      const next = opts.get("next");
+      const nextChord = opts.get("next-chord");
+      return {
+        note: spellMidi(midi, { key: null }).name,
+        chord: toLeadSheet(c),
+        role: toneRole(midi, c, {
+          strong: flags.has("strong"),
+          ...(prev ? { prev: midiArg(prev) } : {}),
+          ...(next ? { next: midiArg(next) } : {}),
+          ...(nextChord ? { nextChord: chordArg(nextChord) } : {}),
+        }),
+      };
+    }
     case "diatonic": {
       const k = keyArg(a[0]);
       return diatonicChords(k, flags.has("sevenths")).map((c) => ({
@@ -473,7 +565,9 @@ export function runTheoryCli(argv: readonly string[]): { code: number; out: stri
   const args: string[] = [];
   for (let i = 0; i < rest.length; i++) {
     const t = rest[i] as string;
-    if (t === "--chord" || t === "--bass") {
+    if (
+      ["--chord", "--bass", "--key", "--melody", "--prev", "--next", "--next-chord", "--dict"].includes(t)
+    ) {
       opts.set(t.slice(2), rest[++i] ?? "");
     } else if (t.startsWith("--")) flags.add(t.slice(2));
     else args.push(t);

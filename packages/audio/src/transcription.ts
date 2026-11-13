@@ -123,7 +123,7 @@ export async function createTranscriptionPlayer(
       const channels = Array.from({ length: decoded.numberOfChannels }, (_, c) =>
         decoded.getChannelData(c).slice(),
       );
-      await stretch.addBuffers(channels);
+      await addChannels(stretch, channels);
       buffer = decoded;
       peaksCache = null;
       set({ loaded: true, playing: false, time: 0, durationS: decoded.duration, loop: null });
@@ -234,4 +234,18 @@ export async function createTranscriptionPlayer(
       state = { ...state, playing: false, loaded: false };
     },
   };
+}
+
+/**
+ * Hands the channel copies to the stretch worklet by transfer, not by structured clone: a 40-minute stereo file is
+ * about 0.9 GB per copy, and a clone held a second one on this thread until it was collected. signalsmith-stretch
+ * takes a transfer list as the extra last argument of any remote method.
+ */
+function addChannels(stretch: StretchNode, channels: Float32Array[]): Promise<number> {
+  const add = stretch.addBuffers as (b: Float32Array[], transfer: Transferable[]) => Promise<number>;
+  return add.call(
+    stretch,
+    channels,
+    channels.map((c) => c.buffer as ArrayBuffer),
+  );
 }

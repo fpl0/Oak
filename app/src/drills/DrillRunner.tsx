@@ -5,6 +5,8 @@
 // replays the cadence, Enter checks or moves on, A plays the answer, P compares, Shift+S skips a sung part.
 import {
   type Answer,
+  type ChordQuality,
+  type Degree,
   type DrillFinish,
   type FamilyDef,
   type FamilyId,
@@ -17,12 +19,13 @@ import { useMachine } from "@xstate/react";
 import { clsx } from "clsx";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { AnswerEnvProvider } from "../answers/env.tsx";
+import { rnDisplay } from "../answers/keys.ts";
 import { emptyValue, isComplete } from "../answers/response.ts";
 import { type AnswerFeedback, type AnswerValue, AUTO_SUBMIT_KINDS } from "../answers/types.ts";
 import { useLenses } from "../lib/lenses.ts";
 import { useDrillSession } from "../lib/queries.ts";
 import { useRunnerView } from "../session/hooks.ts";
-import { clearSubject, patchSubject, setSubject } from "../tutor/context.ts";
+import { clearSubject, debriefDrill, patchSubject, setSubject } from "../tutor/context.ts";
 import { keyScope, useHotkeys } from "../ui/keys/KeymapProvider.tsx";
 import type { Binding } from "../ui/keys/keymap.ts";
 import { Button } from "../ui/kit/Button.tsx";
@@ -35,13 +38,41 @@ import { useVoiceSync } from "../voice/sync.ts";
 import { useVoice } from "../voice/use-voice.ts";
 import { answerWidgetLabel } from "./answer-label.ts";
 import { drillWidgetFor } from "./answer-widget.tsx";
-import { levelMoveText, promptOf, stageText } from "./copy.ts";
+import {
+  DICTATION_PROMPTS,
+  levelMoveText,
+  promptOf,
+  STEP_PROMPTS,
+  stageText,
+  stepRetryText,
+} from "./copy.ts";
 import { DictationTools, isDictation, mineOf } from "./DictationTools.tsx";
+import { ChordStrip, QualityRow, StepsSoFar, StepTrack } from "./HarmonyPanels.tsx";
+import {
+  bassAloneWhileAnswering,
+  bassSingTargets,
+  type ChordStep,
+  chordSlotsOf,
+  contextKeyOf,
+  gradeStep,
+  isBassTrial,
+  isHarmonyTrial,
+  slotLabels,
+  slotRn,
+  slotSymbol,
+  stagedKeyOf,
+  stepSpecOf,
+} from "./harmony.ts";
 import { clearInflight, inflightKey, loadInflight, resumeFromServer } from "./inflight.ts";
 import { LensSwitches } from "./LensSwitches.tsx";
-import { type DrillPurpose, drillMachine, type ResumeState } from "./machine.ts";
+import { type DrillPurpose, drillMachine, onInnerStep, type ResumeState } from "./machine.ts";
 import {
   answerOf,
+  DICTATION_MODE_LABELS,
+  type DictationMode,
+  debriefTrials,
+  dictationModesOf,
+  dictationSurface,
   expectedText,
   expectedValueOf,
   type Surface,
@@ -197,8 +228,11 @@ function RunnerCore(props: DrillRunnerProps & { inflight: string; resume: Resume
     return () => clearSubject(thread);
   }, []);
   const atSummary = snap.matches("summary");
+  // At the summary the tutor gets the finished set, trial by trial (tutor/context.ts `debriefDrill`).
   useEffect(() => {
-    patchSubject(thread, { tutorOpen: atSummary });
+    if (atSummary)
+      debriefDrill(thread, { family: props.title, trials: debriefTrials(ctx.trials, ctx.records) });
+    else patchSubject(thread, { tutorOpen: false });
   }, [atSummary]);
 
   if (snap.matches("loading"))
@@ -298,17 +332,49 @@ function TrialView({
   const def = data.defs.get(trial.family) as FamilyDef;
   // Pads show syllables when the solfège lens is shown (wave3.md §4.3); the degree number is always printed.
   const solfegeShown = lenses.shown.solfege;
-  const surface: Surface = surfaceOf(trial, def, { solfege: solfegeShown ? "syllables" : "numbers" });
-  const spec = surface.kind === "widget" ? surface.spec : null;
-  const [value, setValue] = useState<AnswerValue | null>(() => (spec ? emptyValue(spec as never) : null));
+  const solfege = solfegeShown ? ("syllables" as const) : ("numbers" as const);
   const outcome = ctx.outcomes[ctx.index];
   const inFeedback = snap.matches("feedback") || snap.matches("resolution");
-  const presenting = snap.matches({ trial: "presenting" }) || snap.matches({ trial: "cueing" });
+  const presenting =
+    snap.matches({ trial: "presenting" }) ||
+    snap.matches({ trial: "cueing" }) ||
+    snap.matches({ trial: "bassAlone" });
   const answering = snap.matches({ trial: "answering" });
+  const singingPart = snap.matches({ trial: "singingPart" });
   const auditioning = snap.matches({ feedback: "auditioning" });
   const resolving = snap.matches({ resolution: "running" });
   const imagining = snap.matches({ resolution: "imagining" });
   const fet = isFetTrial(trial);
+  const harmony = isHarmonyTrial(trial);
+  // Stage D chord dictation: bass → quality → numerals, one step open at a time (the last one is the answer).
+  const steps = ctx.steps;
+  const lastStep = steps ? steps.order.length - 1 : 0;
+  const step: ChordStep | null = steps
+    ? ((inFeedback ? steps.order[lastStep] : steps.order[Math.min(steps.at, lastStep)]) as ChordStep)
+    : null;
+  const innerStep = !inFeedback && onInnerStep(steps);
+  // Melodic dictation from level 4: written as degrees, in code or on the staff (the learner's choice).
+  const dictModes = dictationModesOf(trial, def);
+  const [dictMode, setDictMode] = useState<DictationMode>(() => preferredDictationMode(dictModes));
+  const surface: Surface =
+    steps && step
+      ? {
+          kind: "widget",
+          spec: stepSpecOf(trial, step, { syllables: solfegeShown }) as NonNullable<
+            ReturnType<typeof stepSpecOf>
+          >,
+        }
+      : dictModes.length > 0
+        ? dictationSurface(trial, def, dictMode, { solfege })
+        : surfaceOf(trial, def, { solfege });
+  const spec = surface.kind === "widget" ? surface.spec : null;
+  // One value per step (or per dictation mode), so moving on keeps what was written.
+  const slotKey = step ?? (dictModes.length > 0 ? dictMode : "main");
+  const [values, setValues] = useState<Record<string, AnswerValue>>({});
+  const value: AnswerValue | null =
+    values[slotKey] ?? (spec ? (emptyValue(spec as never) as AnswerValue) : null);
+  const setValue = (v: AnswerValue) => setValues((prev) => ({ ...prev, [slotKey]: v }));
+  const qualityCount = step === "quality" ? chordSlotsOf(trial).length : 0;
   const dictation = isDictation(trial, def.generator);
   // A staff answer is graded (and played back as "mine") as the code it spells (staff.ts).
   const staffTrial = spec?.ui === "staff-input";
@@ -316,16 +382,24 @@ function TrialView({
     dictation && !inFeedback
       ? mineOf(trial, staffTrial ? staffAnswer(trial, String(value ?? ""))?.text?.[0] : value)
       : null;
-  // A full pad checks itself, except in dictation: there the learner plays theirs back before checking.
-  const autoSubmit = spec !== null && AUTO_SUBMIT_KINDS.includes(spec.ui) && !dictation;
+  // A full pad checks itself, except in dictation (the learner plays theirs back first) and in a staged trial
+  // (each step is checked with Enter).
+  const autoSubmit = spec !== null && AUTO_SUBMIT_KINDS.includes(spec.ui) && !dictation && !steps;
   const isSing = surface.kind === "sing";
   const isTap = surface.kind === "tap";
   const total = ctx.source?.total ?? 0;
-  const hasCue = !isTap && !isSing && cuePlan(trial) !== null;
-  const cueLabel = Number(trial.params.cueBars ?? 0) > 0 ? "Cadence" : "Hear the key";
+  const hasCue = !isTap && !isSing && cuePlan(trial, data.profile) !== null;
+  const cueLabel = Number(trial.params.cueBars ?? 0) > 0 || harmony ? "Cadence" : "Hear the key";
+  // A sung part before the pick (the roots of a bass-degree trial): never in Quiet mode.
+  const sungPartOffered = isBassTrial(trial) && !quietNow;
+  // The bass line by itself before the answer (a bass trial, a staged bass step): counts as a replay.
+  const bassAloneNow =
+    answering && bassAloneWhileAnswering(trial, steps ? (steps.order[steps.at] ?? null) : null);
+  const sungPart = ctx.sungPart;
   // A trial read from the page (playFirst: false) is not played before the answer: its sound is the reveal.
-  const staged = stagingOf(trial);
-  const audibleAnswer = answerPlan(trial).events.length > 0;
+  const staged = stagingOf(trial, data.profile);
+  // A chord trial's "answer" is the passage itself (Hear it again): its own listening is bass, broken, in its key.
+  const audibleAnswer = !harmony && answerPlan(trial).events.length > 0;
   const canReplay = inFeedback
     ? !resolving && (staged.stimulus !== null || audibleAnswer)
     : answering && (isTap || isSing || staged.stimulus !== null);
@@ -346,6 +420,8 @@ function TrialView({
       (globalThis as { __oakDrillStaffAnswer?: string | null }).__oakDrillStaffAnswer = isStaffTrial(trial)
         ? expectedStaffValue(trial)
         : null;
+      // A staged trial's three answers as @oak/theory reads them (bass degrees, qualities, numerals).
+      (globalThis as { __oakDrillSteps?: unknown }).__oakDrillSteps = stagedKeyOf(trial);
     }
   }, [trial]);
 
@@ -388,7 +464,7 @@ function TrialView({
   // The session's Pause (Alt+P) puts the page under an overlay: a sung part listening then stops at once (it
   // counts as skipped, no penalty), so the mic is never live behind "Paused".
   const sessionPaused = useRunnerView((v) => v.paused);
-  const listening = (isSing && (presenting || answering)) || resolving;
+  const listening = (isSing && (presenting || answering)) || resolving || singingPart;
   useEffect(() => {
     if (sessionPaused && listening) {
       player.stop();
@@ -411,20 +487,44 @@ function TrialView({
       });
   }, [outcome, isSing, ctx.captured.frames, data.profile.noiseFloorDb]);
 
+  // The sung roots prefill the pad (up to the first one no steady note reached); the learner checks them.
+  const prefilled = useRef<unknown>(null);
+  useEffect(() => {
+    if (!sungPart || sungPart.skipped || prefilled.current === sungPart) return;
+    prefilled.current = sungPart;
+    const heard: Degree[] = [];
+    for (const d of sungPart.degrees) {
+      if (d === null) break;
+      heard.push(d);
+    }
+    if (heard.length > 0) setValues((prev) => ({ ...prev, main: heard }));
+  }, [sungPart]);
+
+  const complete = (v: AnswerValue | null): boolean => {
+    if (!spec || v === null) return false;
+    if (step === "quality") {
+      const qs = v as (ChordQuality | undefined)[];
+      return qs.length === qualityCount && qs.every((q) => q !== undefined);
+    }
+    return isComplete(spec, v);
+  };
   const submit = (v: AnswerValue | null = value) => {
     if (!spec || v === null) return;
-    if (!isComplete(spec, v)) return;
+    if (!complete(v)) return;
     player.stop();
     const answer =
-      spec.ui === "staff-input"
-        ? staffAnswer(trial, v as string)
-        : answerOf(spec, v, (trial.expected as Answer).text?.length ?? 1, trial.expected as Answer);
+      step === "quality"
+        ? { qualities: v as ChordQuality[] }
+        : spec.ui === "staff-input"
+          ? staffAnswer(trial, v as string)
+          : answerOf(spec, v, (trial.expected as Answer).text?.length ?? 1, trial.expected as Answer);
     if (answer === null) return;
-    send({ type: "SUBMIT", answer });
+    // An inner step (bass, quality) is checked on its own; the last step is the trial's answer.
+    send(innerStep ? { type: "STEP_CHECK", answer } : { type: "SUBMIT", answer });
   };
   const change = (v: AnswerValue) => {
     setValue(v);
-    if (autoSubmit && spec && isComplete(spec, v)) submit(v);
+    if (autoSubmit && spec && complete(v)) submit(v);
   };
 
   const bindings: Binding[] = [
@@ -485,6 +585,43 @@ function TrialView({
       },
     },
     {
+      id: "drill-sing-part",
+      keys: "V",
+      scope: "answer-pad",
+      group: "Drills",
+      description: "Sing the roots before you pick them",
+      when: (k) => !k.inEditable && answering && sungPartOffered,
+      run: () => send({ type: "SING_PART" }),
+    },
+    {
+      id: "drill-bass",
+      keys: "B",
+      scope: "answer-pad",
+      group: "Drills",
+      description: "Hear the bass alone",
+      when: () => (snap.matches("feedback") && harmony) || bassAloneNow,
+      run: () =>
+        snap.matches("feedback") ? send({ type: "AUDITION", what: "bass" }) : send({ type: "BASS_ALONE" }),
+    },
+    {
+      id: "drill-arpeggio",
+      keys: "G",
+      scope: "answer-pad",
+      group: "Drills",
+      description: "Hear the chords broken, note by note",
+      when: () => snap.matches("feedback") && harmony,
+      run: () => send({ type: "AUDITION", what: "arpeggio" }),
+    },
+    {
+      id: "drill-context",
+      keys: "K",
+      scope: "answer-pad",
+      group: "Drills",
+      description: "Hear it in its key",
+      when: () => snap.matches("feedback") && harmony,
+      run: () => send({ type: "AUDITION", what: "context" }),
+    },
+    {
       id: "drill-heard",
       keys: "Space",
       scope: "answer-pad",
@@ -508,7 +645,7 @@ function TrialView({
       scope: "answer-pad",
       group: "Drills",
       description: "Skip the sung part (no penalty)",
-      when: () => (isSing && (presenting || answering)) || resolving || imagining,
+      when: () => (isSing && (presenting || answering)) || resolving || imagining || singingPart,
       run: () => send({ type: "SKIP_SUNG" }),
     },
   ];
@@ -518,8 +655,10 @@ function TrialView({
       (b) =>
         (b.id !== "drill-cue" || hasCue) &&
         (b.id !== "drill-compare" || compare !== null) &&
-        (b.id !== "drill-skip-sung" || isSing || trial.params.sungResolution === true) &&
+        (b.id !== "drill-skip-sung" || isSing || trial.params.sungResolution === true || sungPartOffered) &&
         (b.id !== "drill-play-mine" || dictation) &&
+        (b.id !== "drill-sing-part" || sungPartOffered) &&
+        (!["drill-bass", "drill-arpeggio", "drill-context"].includes(b.id) || harmony) &&
         (b.id !== "drill-heard" || imagining),
     ),
   );
@@ -530,18 +669,24 @@ function TrialView({
     : spec.ui === "staff-input"
       ? expectedStaffValue(trial)
       : expectedValueOf(spec, expected);
-  const feedback: AnswerFeedback = !outcome
-    ? { state: "idle" }
-    : outcome.result.correct
-      ? { state: "correct" }
-      : spec && expectedValue !== null
-        ? {
-            state: "revealed",
-            correct: expectedValue as AnswerValue,
-            ...(spec.ui === "staff-input" ? {} : { marks: wrongMarks(spec, value, expectedValue) }),
-          }
-        : { state: "wrong" };
+  const stepResult = steps && step ? steps.results[step] : undefined;
+  const feedback: AnswerFeedback = innerStep
+    ? stepResult && !stepResult.passed && stepResult.tries > 0
+      ? { state: "wrong", marks: stepResult.marks.map((ok, part) => ({ part, ok })) }
+      : { state: "idle" }
+    : !outcome
+      ? { state: "idle" }
+      : outcome.result.correct
+        ? { state: "correct" }
+        : spec && expectedValue !== null
+          ? {
+              state: "revealed",
+              correct: expectedValue as AnswerValue,
+              ...(spec.ui === "staff-input" ? {} : { marks: wrongMarks(spec, value, expectedValue) }),
+            }
+          : { state: "wrong" };
   const Widget = spec ? drillWidgetFor(spec) : null;
+  const chordLabels = harmony && inFeedback ? slotLabels(trial, lenses.chords.shown) : [];
   const stage = imagining
     ? "Hear it in your head, then press Space."
     : stageText(ctx.stage, trial.params.mode);
@@ -554,7 +699,9 @@ function TrialView({
   const showKey = typeof trial.params.showKey === "number" ? trial.params.showKey : null;
   const singTargets = resolving
     ? resolutionOf(trial).targets
-    : ((trial.params.singTargets as { midi: number; on: number; off: number }[] | undefined) ?? []);
+    : singingPart
+      ? bassSingTargets(trial, data.profile)
+      : ((trial.params.singTargets as { midi: number; on: number; off: number }[] | undefined) ?? []);
 
   return (
     <div className="flex flex-col gap-4">
@@ -565,8 +712,13 @@ function TrialView({
             {props.title}
           </p>
           <h2 className="text-h3" data-testid="trial-prompt">
-            {promptOf(trial, def)}
+            {dictModes.length > 0 ? DICTATION_PROMPTS[dictMode] : promptOf(trial, def)}
           </h2>
+          {steps && step && !inFeedback && (
+            <p className="mt-0.5 text-sm text-text-2" data-testid="step-prompt">
+              {STEP_PROMPTS[step]}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <Chip title={props.purpose === "practice" ? "Free practice adapts the level as you go" : undefined}>
@@ -600,15 +752,22 @@ function TrialView({
                   ? isTap || isSing
                     ? "Ready."
                     : "Your turn."
-                  : "Getting ready…")}
+                  : snap.matches({ trial: "bassAlone" })
+                    ? "The bass alone…"
+                    : "Getting ready…")}
           </span>
         </div>
         {trial.params.showStaff === true && <TrialStaff trial={trial} />}
         {showKey !== null && <KeyHighlight highlight={showKey} />}
-        {inFeedback && (keyText(trial) || instrumentsOf(trial).length > 0) && (
+        {inFeedback && (keyText(trial) || harmony || instrumentsOf(trial).length > 0) && (
           <p className="text-sm text-text-3" data-testid="trial-details">
             {[
-              keyText(trial) ? `In ${keyText(trial)}` : null,
+              keyText(trial)
+                ? `In ${keyText(trial)}`
+                : harmony && contextKeyOf(trial)
+                  ? `Heard in ${keyName(contextKeyOf(trial) as KeySpec)}`
+                  : null,
+              harmony ? loneChordText(trial, lenses.chords.shown) : null,
               noteNamesText(trial, lenses.shown),
               instrumentsOf(trial).join(", ") || null,
             ]
@@ -619,7 +778,26 @@ function TrialView({
         {levelMove && <p className="text-sm text-text-2">{levelMove}</p>}
       </Card>
 
-      <section aria-label="Your answer" className="min-h-28">
+      <section
+        aria-label="Your answer"
+        className={clsx("flex flex-col gap-3", !(steps && inFeedback) && "min-h-28")}
+      >
+        {steps && (
+          <div className="flex flex-col gap-2">
+            <StepTrack steps={steps} done={inFeedback} lastRight={outcome?.result.correct ?? true} />
+            {!inFeedback && step !== "quality" && <StepsSoFar trial={trial} steps={steps} />}
+          </div>
+        )}
+        {dictModes.length > 0 && !inFeedback && (
+          <DictationModeSwitch
+            modes={dictModes}
+            mode={dictMode}
+            onChange={(m) => {
+              setDictMode(m);
+              rememberDictationMode(m);
+            }}
+          />
+        )}
         {ctx.micError && !inFeedback && (
           <Callout
             tone="attention"
@@ -657,7 +835,7 @@ function TrialView({
             </Button>
           </Card>
         )}
-        {(isSing || (resolving && !quietNow)) && (
+        {(isSing || (resolving && !quietNow) || singingPart) && (
           <SingPanel
             trial={trial}
             targets={singTargets}
@@ -665,20 +843,68 @@ function TrialView({
             labels={singLabelsOf(trial, singTargets, data.solfege)}
             active={ctx.stage === "sing"}
             micOpen={
-              (presenting || resolving) &&
+              (presenting || resolving || singingPart) &&
               !ctx.micError &&
               (ctx.stage === "sing" || ctx.stage === "listen" || ctx.stage === "resolution")
             }
-            label={resolving ? "Sing the way home." : "Sing the note."}
+            label={
+              resolving
+                ? "Sing the way home."
+                : singingPart
+                  ? "Sing each root while its chord plays:"
+                  : "Sing the note."
+            }
+            blind={singingPart ? [data.profile.comfLow - 3, data.profile.comfHigh + 3] : undefined}
           />
+        )}
+        {sungPart && !inFeedback && !singingPart && (
+          <p className="text-sm text-text-2" data-testid="sung-part-line">
+            {sungPart.skipped
+              ? "Singing skipped. Pick the roots on the pad."
+              : sungPart.degrees.some((d) => d !== null)
+                ? `You sang ${sungPart.degrees.map((d) => (d === null ? "–" : d.replace(/^b/, "♭").replace(/^#/, "♯"))).join(" ")}. Check them on the pad, then press Enter.`
+                : "No steady note reached the mic. Pick the roots on the pad."}
+          </p>
+        )}
+        {step === "quality" && spec?.ui === "quality-pad" && !inFeedback && (
+          <QualityRow
+            spec={spec}
+            count={qualityCount}
+            value={(Array.isArray(value) ? value : []) as (ChordQuality | undefined)[]}
+            onChange={(v) => setValue(v as unknown as AnswerValue)}
+            onSubmit={() => submit()}
+            disabled={!(answering || presenting)}
+            marks={feedback.state === "wrong" ? (stepResult?.marks ?? null) : null}
+            captions={qualityCaptions(trial)}
+            idBase={`drill-${ctx.index}-quality`}
+            autoFocus
+          />
+        )}
+        {innerStep && stepResult && !stepResult.passed && stepResult.tries > 0 && step && (
+          <p className="text-sm text-text-2" data-testid="step-retry" role="status">
+            {stepRetryText(step, stepResult.marks)}
+          </p>
         )}
         {spec &&
           !resolving &&
+          !singingPart &&
+          step !== "quality" &&
+          // A staged trial, once answered, is read in the strip below (bar by bar, yours where it differs).
+          !(steps && inFeedback) &&
           (Widget ? (
             <AnswerEnvProvider
               value={{
-                lenses: lenses.shown,
+                lenses: {
+                  degrees: lenses.shown.degrees,
+                  solfege: lenses.shown.solfege,
+                  noteNames: lenses.shown.noteNames,
+                  chordSymbols: lenses.chords.shown.chordSymbols,
+                  romanNumerals: lenses.chords.shown.romanNumerals,
+                },
                 ...(staffTrial ? { staff: { meter: meterOf(trial), sound: "piano" } } : {}),
+                ...(harmony && keyOfTrial(trial)
+                  ? { harmony: { key: keyOfTrial(trial) as KeySpec, bpm: Number(trial.params.bpm ?? 90) } }
+                  : {}),
               }}
             >
               <Widget
@@ -686,7 +912,7 @@ function TrialView({
                 value={value as never}
                 onChange={(v) => change(v as AnswerValue)}
                 onSubmit={() => submit()}
-                disabled={inFeedback}
+                disabled={inFeedback || singingPart}
                 feedback={feedback}
                 autoFocus={!inFeedback}
                 label={answerWidgetLabel(spec)}
@@ -728,6 +954,13 @@ function TrialView({
         />
       )}
       {outcome && isSing && inFeedback && <RecheckHint />}
+      {chordLabels.length > 0 && (
+        <ChordStrip
+          labels={chordLabels}
+          title="The answer in context"
+          {...(steps ? { yours: yoursOf(trial, ctx.captured.answer) } : {})}
+        />
+      )}
 
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -757,12 +990,40 @@ function TrialView({
               Compare <Kbd>P</Kbd>
             </Button>
           )}
-          {answering && spec && (
+          {snap.matches("feedback") && harmony && (
+            <>
+              <Button onClick={() => send({ type: "AUDITION", what: "bass" })} data-testid="hear-bass">
+                Bass alone <Kbd>B</Kbd>
+              </Button>
+              <Button onClick={() => send({ type: "AUDITION", what: "arpeggio" })} data-testid="hear-broken">
+                Broken chords <Kbd>G</Kbd>
+              </Button>
+              <Button onClick={() => send({ type: "AUDITION", what: "context" })} data-testid="hear-context">
+                In its key <Kbd>K</Kbd>
+              </Button>
+            </>
+          )}
+          {bassAloneNow && (
+            <Button onClick={() => send({ type: "BASS_ALONE" })} data-testid="hear-bass-now">
+              Bass alone <Kbd>B</Kbd>
+            </Button>
+          )}
+          {answering && sungPartOffered && (
+            <Button onClick={() => send({ type: "SING_PART" })} data-testid="sing-part">
+              Sing the roots <Kbd>V</Kbd>
+            </Button>
+          )}
+          {(answering || presenting) && innerStep && step && (
+            <Button variant="ghost" onClick={() => send({ type: "STEP_REVEAL" })} data-testid="show-step">
+              Show the {step === "bass" ? "bass" : "qualities"}
+            </Button>
+          )}
+          {answering && spec && !innerStep && (
             <Button variant="ghost" onClick={() => send({ type: "REVEAL" })}>
               Show me
             </Button>
           )}
-          {((isSing && (presenting || answering)) || resolving || imagining) && (
+          {((isSing && (presenting || answering)) || resolving || imagining || singingPart) && (
             <Button variant="ghost" onClick={() => send({ type: "SKIP_SUNG" })}>
               Skip singing <Kbd>⇧S</Kbd>
             </Button>
@@ -776,14 +1037,16 @@ function TrialView({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <LensSwitches lenses={lenses} />
-          {answering && spec && !autoSubmit && (
+          <LensSwitches lenses={lenses} chords={harmony} />
+          {(answering || (presenting && steps !== null)) && spec && !autoSubmit && (
             <Button
               variant="primary"
-              disabled={value === null || !isComplete(spec, value)}
+              disabled={value === null || !complete(value)}
               onClick={() => submit()}
+              data-testid="check-answer"
             >
-              Check {spec.ui === "code" ? null : <Kbd tone="inverse">Enter</Kbd>}
+              {innerStep && step ? `Check the ${step === "bass" ? "bass" : "qualities"}` : "Check"}{" "}
+              {spec.ui === "code" ? null : <Kbd tone="inverse">Enter</Kbd>}
             </Button>
           )}
           {inFeedback && (
@@ -967,4 +1230,100 @@ function singLabelsOf(
     const l = labelPitch(t.midi, key);
     return labels === "syllables" ? `${l.degreeDisplay} · ${l.syllable}` : l.degreeDisplay;
   });
+}
+
+/** "B♭ major". */
+function keyName(k: KeySpec): string {
+  return `${k.tonic.replace(/b$/, "♭").replace(/#$/, "♯")} ${k.mode}`;
+}
+
+/** A lone chord's name and its numeral in the key it was heard in, as the chord lenses allow ("Bm · vi"). */
+function loneChordText(
+  trial: Trial,
+  shown: { chordSymbols: boolean; romanNumerals: boolean },
+): string | null {
+  const slots = chordSlotsOf(trial);
+  const key = contextKeyOf(trial);
+  if (slots.length !== 1 || !key) return null;
+  const parts = [
+    shown.chordSymbols ? slotSymbol(slots, 0, key) : null,
+    shown.romanNumerals ? slotRn(slots, 0, key) : null,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+const DICTATION_MODE_KEY = "oak.drills.dictation-mode";
+
+/** The learner's last dictation mode (a per-viewer convenience; storage may be unavailable). */
+function preferredDictationMode(modes: readonly DictationMode[]): DictationMode {
+  let saved: string | null = null;
+  try {
+    saved = typeof localStorage === "undefined" ? null : localStorage.getItem(DICTATION_MODE_KEY);
+  } catch {
+    saved = null;
+  }
+  return modes.includes(saved as DictationMode) ? (saved as DictationMode) : (modes[0] ?? "code");
+}
+function rememberDictationMode(mode: DictationMode): void {
+  try {
+    localStorage.setItem(DICTATION_MODE_KEY, mode);
+  } catch {
+    // Not remembered: the next trial starts on its own mode.
+  }
+}
+
+/** Degrees, code or the staff: how a written dictation is answered (from level 4). */
+function DictationModeSwitch({
+  modes,
+  mode,
+  onChange,
+}: {
+  modes: readonly DictationMode[];
+  mode: DictationMode;
+  onChange(m: DictationMode): void;
+}) {
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: a labelled group of toggle buttons
+    <div
+      role="group"
+      aria-label="Write it as"
+      className="flex flex-wrap items-center gap-1.5"
+      data-testid="dictation-mode"
+    >
+      <span aria-hidden className="text-sm text-text-2">
+        Write it as
+      </span>
+      {modes.map((m) => (
+        <button
+          key={m}
+          type="button"
+          aria-pressed={m === mode}
+          onClick={() => onChange(m)}
+          data-mode={m}
+          className={clsx(
+            "h-7 rounded-control border px-2.5 text-sm font-medium transition-colors duration-150",
+            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+            m === mode
+              ? "border-accent bg-lane-in text-text"
+              : "border-border bg-surface text-text-2 hover:text-text",
+          )}
+        >
+          {DICTATION_MODE_LABELS[m]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** "Chord 1 · bass 1": the quality step builds on the bass that is settled. */
+function qualityCaptions(trial: Trial): string[] {
+  const bass = stagedKeyOf(trial)?.bass ?? [];
+  return bass.map((d, i) => `Chord ${i + 1} · bass ${d.replace(/^b/, "♭").replace(/^#/, "♯")}`);
+}
+
+/** The learner's numerals where they differ from the chords (by degree, quality and inversion), for the strip. */
+function yoursOf(trial: Trial, answer: Answer | null): (string | null)[] {
+  const got = answer?.rn ?? [];
+  const marks = gradeStep(trial, "rn", { rn: got }).marks;
+  return marks.map((ok, i) => (ok ? null : got[i] ? rnDisplay(got[i] as string) : "—"));
 }

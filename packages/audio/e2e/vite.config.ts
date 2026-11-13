@@ -20,6 +20,7 @@ export default defineConfig({
     include: [
       "pitchy",
       "signalsmith-stretch",
+      "@strudel/core",
       "zod",
       "tonal",
       "wavesurfer.js",

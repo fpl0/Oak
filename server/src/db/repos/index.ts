@@ -12,6 +12,7 @@ import { SrsRepo } from "./srs.ts";
 import { StreakRepo } from "./streak.ts";
 import { TutorRepo } from "./tutor.ts";
 import { IdempotencyRepo, SungNotesRepo, VoiceRepo } from "./voice.ts";
+import { CapstoneSessionsRepo, LadderRepo } from "./wave4.ts";
 
 export interface Repos {
   db: Db;
@@ -39,6 +40,9 @@ export interface Repos {
   idempotency: IdempotencyRepo;
   voice: VoiceRepo;
   sung: SungNotesRepo;
+  /** Wave 4. */
+  capstoneSessions: CapstoneSessionsRepo;
+  ladder: LadderRepo;
 }
 
 export function createRepos(db: Db, defaults: { timezone: string; now: () => Date }): Repos {
@@ -68,6 +72,8 @@ export function createRepos(db: Db, defaults: { timezone: string; now: () => Dat
     idempotency: new IdempotencyRepo(db),
     voice: new VoiceRepo(db),
     sung: new SungNotesRepo(db),
+    capstoneSessions: new CapstoneSessionsRepo(db),
+    ladder: new LadderRepo(db),
   };
 }
 

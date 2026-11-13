@@ -18,6 +18,7 @@ import { FakeTutorBackend, type FakeTutorOptions } from "./tutor-adapters/fake-b
 import { GraderAdapter } from "./tutor-adapters/grader.ts";
 import { LessonContextAdapter } from "./tutor-adapters/lessons.ts";
 import { ProgressAdapter } from "./tutor-adapters/progress.ts";
+import { reviewFactsPort } from "./tutor-adapters/review-facts.ts";
 import {
   learnerClock,
   SettingsAdapter,
@@ -59,7 +60,7 @@ export interface TutorWiringDeps {
 
 export function createTutorWiring(d: TutorWiringDeps): TutorWiring {
   const clock = learnerClock(d.repos, d.now);
-  const lessons = new LessonContextAdapter(d.content, d.repos);
+  const lessons = new LessonContextAdapter(d.content, d.repos, reviewFactsPort(d.graders, d.repos));
   const ports: TutorPorts = {
     grader: new GraderAdapter(d.graders.tutor, d.repos, d.content),
     conversations: new SqliteConversationStore(d.repos, clock),
@@ -75,9 +76,15 @@ export function createTutorWiring(d: TutorWiringDeps): TutorWiring {
     usage: new SqliteUsageSink(d.repos),
     clock,
   };
+  // Wave 4 (wave4.md §5.2): an accepted capstone review lands on the album version it was about (the turn's
+  // `albumTrackId` + `albumVersion`), else on the latest; its conversation is kept for `tutor.reviews`.
   const onReview: NonNullable<DefaultTutorDeps["onReview"]> = (accepted) => {
+    const target = accepted.target ?? null;
     if (accepted.reviewKind === "capstone")
-      d.services.library.saveCapstoneReview(accepted.subject.subjectId, accepted.review);
+      d.services.library.saveCapstoneReview(accepted.subject.subjectId, accepted.review, {
+        ...(target?.kind === "album" ? { trackId: target.trackId, version: target.version } : {}),
+        ...(accepted.conversationId === undefined ? {} : { conversationId: accepted.conversationId }),
+      });
     else d.services.library.saveTranscriptionReview(accepted.subject.subjectId, accepted.review);
   };
   const tutor = d.fake

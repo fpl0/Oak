@@ -221,3 +221,100 @@ export const EVIDENCE_LABEL: Record<CanDoEntry["evidenceKind"], string> = {
   set: "a review set",
   transcription: "a transcription",
 };
+
+// --- Wave 4: the transcription ladder and the can-dos by place in the course ------------------------------------
+
+/**
+ * What each generated rung lets the learner say (contracts §2.9; PLAN "You can now transcribe a bass line").
+ * Reached by a graded pass at that level or higher: passed at 85% or better, nothing revealed (wave4.md §5.4,
+ * `TranscriptionSchema.gradedPass`). A finished, revealed or self-assessed transcription never counts.
+ */
+export const LADDER_CLAIMS: Readonly<Record<1 | 2 | 3 | 4, { name: string; claim: string }>> = {
+  1: { name: "Drum loops", claim: "You can transcribe a drum loop." },
+  2: { name: "Bass lines", claim: "You can now transcribe a bass line." },
+  3: { name: "Four-chord loops", claim: "You can take down a chord loop, bass first." },
+  4: { name: "Short melodies", claim: "You can transcribe a short melody." },
+};
+
+export interface LadderRung {
+  level: 1 | 2 | 3 | 4;
+  name: string;
+  claim: string;
+  /** Graded passes at exactly this level. */
+  passes: number;
+  /** A graded pass at this level or higher. */
+  reached: boolean;
+  /** The learner's current level. */
+  current: boolean;
+}
+
+export function ladderRungs(ladder: { level: number; gradedPasses: Record<string, number> }): LadderRung[] {
+  const passes = (l: number) => Math.max(0, ladder.gradedPasses[String(l)] ?? 0);
+  return ([1, 2, 3, 4] as const).map((level) => {
+    let higher = 0;
+    for (let l = level; l <= 4; l++) higher += passes(l);
+    return {
+      level,
+      ...LADDER_CLAIMS[level],
+      passes: passes(level),
+      reached: higher > 0,
+      current: ladder.level === level,
+    };
+  });
+}
+
+/** The default-order position of a can-do's source (a capstone by its first session); -1 when not in the order. */
+export function sourceRank(source: string, order: readonly string[]): number {
+  const i = order.indexOf(source);
+  if (i >= 0) return i;
+  return order.indexOf(`${source}.S1`);
+}
+
+/**
+ * The ledger's split (ux §5.5): statements already shown, or whose lesson, checkpoint or capstone is done or comes
+ * up next in the course, stay in view; the rest wait under "Later in the course". A statement from a track
+ * outside the default order is later until it has evidence.
+ */
+export function ledgerNow(
+  defs: readonly { id: string; source: string }[],
+  shown: ReadonlySet<string>,
+  order: readonly string[],
+  done: ReadonlySet<string>,
+  next: string | null,
+): { now: string[]; later: string[] } {
+  const nextRank = next === null ? Number.POSITIVE_INFINITY : sourceRank(next, order);
+  const now: string[] = [];
+  const later: string[] = [];
+  for (const d of defs) {
+    const rank = sourceRank(d.source, order);
+    const isDone = done.has(d.source) || done.has(`${d.source}.S1`);
+    const near = rank >= 0 && rank <= (nextRank < 0 ? Number.POSITIVE_INFINITY : nextRank);
+    (shown.has(d.id) || isDone || near ? now : later).push(d.id);
+  }
+  return { now, later };
+}
+
+/** "U05.L03" → "U05"; "C2" → "C2"; "U06.CP" → "U06". */
+export function sourceUnit(source: string): string {
+  return /^([A-Z]+\d+)\./.exec(source)?.[1] ?? source;
+}
+
+/**
+ * Today's album strip: the core capstones in course order (C0, C1, C2, X1, C3 …), a window of `size` slots that
+ * ends with the next one to release, so the newest tracks and the next empty slot are in view.
+ */
+export function albumWindow<T extends { id: string }>(
+  capstones: readonly T[],
+  order: readonly string[],
+  released: ReadonlySet<string | null>,
+  size = 4,
+): T[] {
+  const at = (c: T) => {
+    const i = order.indexOf(`${c.id}.S1`);
+    return i < 0 ? Number.POSITIVE_INFINITY : i;
+  };
+  const sorted = [...capstones].sort((a, b) => at(a) - at(b) || a.id.localeCompare(b.id));
+  const next = sorted.findIndex((c) => !released.has(c.id));
+  const end = next < 0 ? sorted.length : next + 1;
+  return sorted.slice(Math.max(0, end - size), Math.max(end, Math.min(size, sorted.length)));
+}

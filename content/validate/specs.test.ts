@@ -4,7 +4,13 @@
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { AUTHORING_CAPS, IMPLEMENTED, type SessionId, STEP_EXERCISE_KINDS } from "@oak/content-kit";
+import {
+  AUTHORING_CAPS,
+  plannedOrImplemented,
+  type SessionId,
+  STEP_EXERCISE_KINDS,
+  WORKBENCH_PANEL_TOOLS,
+} from "@oak/content-kit";
 import { bandById, bandMeter } from "../bands/index.ts";
 import { candoById } from "../candos.ts";
 import { checkpointMetas } from "../checkpoints.ts";
@@ -20,6 +26,9 @@ import { BAD_LOG, evaluate, lint, ONBOARDING_PREVIEW, unlockedFor } from "./harn
 
 setDefaultTimeout(60_000);
 const g = courseGraph();
+// A spec plans the lessons the Build phase writes: it may use what this wave implements or plans to
+// (contracts §5.1, content-kit `PLANNED`); the lessons themselves are held to `IMPLEMENTED` by content:check.
+const IMPLEMENTED = plannedOrImplemented();
 const meta = new Map(
   registries.syllabus.units.flatMap((u) => u.lessons.map((l) => [l.id as string, l] as const)),
 );
@@ -95,8 +104,11 @@ for (const u of unitSpecs)
         test("can-dos exist", () => {
           for (const c of l.canDo) expect([c, candoById.has(c)]).toEqual([c, true]);
         });
-        test("every tool the code uses is unlocked here in every legal order", () => {
+        test("every tool the code uses, and every panel a step opens, is unlocked here in every legal order", () => {
           const unlocked = unlockedFor(l.id as SessionId);
+          for (const s of l.steps)
+            for (const p of s.panels ?? [])
+              expect([p, unlocked.has(WORKBENCH_PANEL_TOOLS[p])]).toEqual([p, true]);
           for (const t of l.uses) {
             expect([t, toolboxById.has(t)]).toEqual([t, true]);
             if (!preview || !t.startsWith("tb.feature")) expect([t, unlocked.has(t)]).toEqual([t, true]);
@@ -167,6 +179,7 @@ for (const u of unitSpecs)
               ]);
             if (s.exercise) expect(IMPLEMENTED.exerciseKinds).toContain(s.exercise);
             for (const a of s.answer ?? []) expect(IMPLEMENTED.answerUis).toContain(a);
+            for (const f of s.features ?? []) expect(IMPLEMENTED.features ?? []).toContain(f);
           }
           expect(IMPLEMENTED.rubricRules).toContain(l.make.required.rule);
         });

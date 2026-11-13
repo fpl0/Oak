@@ -8,21 +8,31 @@
 // fake microphone when the browser has one, then the targets are submitted through the player's own grading
 // path. Ungraded steps are played (a listen loop, a passive stream, a run) and continued. The Make is solved from
 // its passing test and saved; the lesson must end complete on the server.
-import type { Page } from "@playwright/test";
-import { expect, setCode, stepIs, submit } from "./support.ts";
+import type { Locator, Page } from "@playwright/test";
+import { expect, setCode, snapshot, stepIs, submit } from "./support.ts";
 import { api } from "./w3support.ts";
 
 /** The lesson file's shape as far as the walker reads it (content-kit types stay out of the e2e project). */
-interface TestCaseLike {
+export interface TestCaseLike {
   name: string;
   expect: "pass" | "fail" | "error";
   response: Record<string, unknown>;
   feedback?: string[];
 }
-interface PartLike {
+export interface PartLike {
   kind: string;
   id: string;
-  answer?: { ui?: string; mode?: string; normalize?: string; options?: { id: string }[] };
+  answer?: {
+    ui?: string;
+    mode?: string;
+    normalize?: string;
+    options?: { id: string }[];
+    set?: string[];
+    allow?: string[];
+    multi?: boolean;
+  };
+  stageAnswers?: Record<string, unknown>;
+  stages?: string[];
   stimulus?: { src: string; family?: string };
   correct?: { text?: string[]; choice?: string[]; number?: number; degrees?: string[] };
   reference?: { solutions: string[] };
@@ -30,7 +40,7 @@ interface PartLike {
   questions?: { q: string; options?: { id: string }[]; correct?: unknown }[];
   passive?: unknown;
   rubric?: { id: string; required?: boolean }[];
-  byEar?: unknown;
+  byEar?: { parts?: { track: string; label: string }[] };
   mode?: string;
   target?: { from: string; degrees?: string[] };
   tests: TestCaseLike[];
@@ -40,6 +50,8 @@ interface StepLike {
   kind: string;
   graded?: boolean;
   optional?: boolean;
+  /** U05.L08's second chance at the voicing gate: shown only while the gate is unmet. */
+  gateCheck?: boolean;
   exercise?: PartLike & { parts?: PartLike[] };
 }
 export interface LessonLike {
@@ -111,6 +123,27 @@ export async function expectHonestFeedback(page: Page, leaks: readonly string[],
   return text;
 }
 
+/**
+ * The verdict is the author's own: the result the player graded and stored carries every feedback code the
+ * lesson pins on this mistake (the words themselves wait for the hint ladder, contracts §10.5).
+ */
+export async function expectPinned(page: Page, wrong: TestCaseLike, label: string) {
+  const codes = wrong.feedback ?? [];
+  if (codes.length === 0) return;
+  await expect
+    .poll(
+      async () => {
+        const snap = (await snapshot(page)) as {
+          lastResult?: { diagnostics: { id: string }[] } | null;
+        } | null;
+        const ids = (snap?.lastResult?.diagnostics ?? []).map((d) => d.id);
+        return codes.filter((c) => !ids.includes(c));
+      },
+      { message: `${label}: the pinned feedback ${codes.join(", ")}`, timeout: 15_000 },
+    )
+    .toEqual([]);
+}
+
 async function expectPass(page: Page, label: string) {
   await expect(page.getByTestId("step-feedback"), `${label}: passes`).toHaveAttribute("data-status", "pass", {
     timeout: 30_000,
@@ -123,13 +156,25 @@ async function next(page: Page) {
   await c.click();
 }
 
-/** Plays the Workbench of the step until it says the loop has been heard (Continue, no longer Skip). */
+/**
+ * Plays the Workbench of the step until it says the loop has been heard (Continue, no longer Skip). A long
+ * listening item (U07.L10 S1 plays a hook 16 times, about 37 s) is heard playing and moving through its bars,
+ * then skipped: listening never gates (the step offers Skip from the start).
+ */
 async function playUntilDone(page: Page, label: string) {
   const toggle = page.getByTestId("play-toggle").first();
   await toggle.click();
-  await expect(page.getByTestId("continue"), `${label}: one loop heard`).toHaveText(/Continue/, {
-    timeout: 30_000,
-  });
+  await expect(toggle, `${label}: it plays`).toHaveAttribute("aria-pressed", "true", { timeout: 30_000 });
+  const cont = page.getByTestId("continue");
+  try {
+    await expect(cont, `${label}: one loop heard`).toHaveText(/Continue/, { timeout: 25_000 });
+  } catch {
+    await expect(page.getByTestId("bar-counter").first(), `${label}: the bars move on`).not.toHaveText(
+      /^1\./,
+    );
+    await expect(cont).toHaveText(/Skip/);
+    console.log(`[listen] ${label}: a long item, heard playing, then skipped`);
+  }
   await toggle.click();
 }
 
@@ -165,21 +210,19 @@ async function typeKeySignature(page: Page, accidentals: readonly string[]) {
 }
 
 /** Clicks the option with this ID (IDs can be code, with quotes no CSS selector takes). */
-export async function clickOption(page: Page, id: string) {
-  const options = page.getByTestId("lesson-step").locator("[data-option]");
+export async function clickOption(page: Page, id: string, scope: Locator = page.getByTestId("lesson-step")) {
+  const options = scope.locator("[data-option]");
   const ids = await options.evaluateAll((els) => els.map((e) => e.getAttribute("data-option")));
   const at = ids.indexOf(id);
   expect(at, `the option "${id}" is shown`).toBeGreaterThanOrEqual(0);
   await options.nth(at).click();
 }
 
-async function typeText(page: Page, text: string) {
-  const field = page.getByTestId("lesson-step").locator('input[type="text"]').first();
-  await field.fill(text);
-}
-
-async function pickDegrees(page: Page, degrees: readonly string[]) {
-  const step = page.getByTestId("lesson-step");
+async function pickDegrees(
+  page: Page,
+  degrees: readonly string[],
+  step: Locator = page.getByTestId("lesson-step"),
+) {
   // Clear what an earlier attempt left on the pad.
   const pad = step.locator("[data-degree]").first();
   await pad.focus();
@@ -230,6 +273,16 @@ async function singStep(page: Page, step: StepLike, o: WalkOptions) {
     }
   }
   // The targets themselves, through the player's own path: in tune passes, a wrong first note does not.
+  // Targets read from music (`from: "stimulus"`) are evaluated after the step renders: wait for them.
+  await expect
+    .poll(
+      async () => {
+        const t = await singTargetsOf(page);
+        return parts.every((p) => (t[p.id] ?? []).length > 0);
+      },
+      { message: `${label}: the sung targets are read`, timeout: 15_000 },
+    )
+    .toBe(true);
   const targets = await singTargetsOf(page);
   const sung = (ms: readonly number[]) => ms.map((midi) => ({ midi, cents: 4, credit: 1 }));
   const each = parts.map((p) => targets[p.id] ?? []);
@@ -260,32 +313,122 @@ export interface WalkOptions {
   mic: boolean;
   /** Quiet mode is on for today: sung steps are their fallbacks. */
   quiet: boolean;
+  /**
+   * The lesson is played as a preview (nothing saved): the walk ends on the complete screen and the server is
+   * not asked. Only while a dev seed the lesson needs is not built yet.
+   */
+  preview?: boolean;
+  /** Walks from this step on (the earlier ones are already done). */
+  from?: string;
 }
 
-/** Answers a single answer-kind part through its widget. */
-async function answerWidget(page: Page, part: PartLike, response: Record<string, unknown>) {
+/** Answers a single answer-kind part through its widget; `false` when the widget cannot enter this answer. */
+export async function answerWidget(
+  page: Page,
+  part: PartLike,
+  response: Record<string, unknown>,
+  scope: Locator = page.getByTestId("lesson-step"),
+): Promise<boolean> {
   const a = (response.answer ?? {}) as {
     choice?: string[];
     text?: string[];
     number?: number;
     degrees?: string[];
+    midi?: number[];
+    rn?: string[];
+    qualities?: string[];
   };
   const ui = part.answer?.ui;
-  if (ui === "choice") {
-    await clickOption(page, a.choice?.[0] as string);
+  const step = scope;
+  if (typeof response.staff === "string") {
+    // A note list on the staff, through the staff's typed alternative (keyboard and screen-reader users).
+    const typed = step.locator('input[aria-label$="(as text)"]').first();
+    if ((await typed.count()) === 0 || !(await typed.isVisible()))
+      await step.getByText("Type the notes instead").click();
+    await typed.fill(response.staff);
+    return true;
+  }
+  if (ui === "keyboard") {
+    // Wave 4: a chord built on the keyboard (U05.L01 S5), cleared first.
+    for (const m of a.midi ?? []) if ((await step.locator(`[data-midi="${m}"]`).count()) === 0) return false;
+    const clear = step.getByRole("button", { name: "Clear", exact: true });
+    if ((await clear.count()) > 0 && (await clear.isEnabled())) await clear.click();
+    for (const m of a.midi ?? []) await step.locator(`[data-midi="${m}"]`).first().click();
+    return true;
+  }
+  if (ui === "rn-palette") return enterNumerals(page, step, a.rn ?? []);
+  if (ui === "quality-pad") {
+    const q = a.qualities?.[0];
+    if (!q || (await step.locator(`[data-quality="${q}"]`).count()) === 0) return false;
+    await step.locator(`[data-quality="${q}"]`).first().click();
+    return true;
+  }
+  if (ui === "slot-choice") {
+    // One option per slot (U06.L03 S6 the function strip, U06.L04 S5 the cadence per phrase).
+    const choice = a.choice ?? [];
+    for (const c of choice) if ((await step.locator(`[data-option="${c}"]`).count()) === 0) return false;
+    for (const [i, c] of choice.entries()) {
+      if (c === "") continue;
+      await step.locator(`[data-slot="${i}"]`).first().click();
+      await step.locator(`[data-option="${c}"]`).first().click();
+    }
+    return true;
+  }
+  if (ui === "choice" && part.answer?.multi) {
+    // Several boxes ticked (U06.L08 S6 "which bars hold two chords"): exactly these, the others cleared.
+    const want = new Set(a.choice ?? []);
+    const options = step.locator("[data-option]");
+    for (let i = 0; i < (await options.count()); i++) {
+      const o = options.nth(i);
+      const on = (await o.getAttribute("aria-checked")) === "true";
+      if (on !== want.has((await o.getAttribute("data-option")) ?? "")) await o.click();
+    }
+  } else if (ui === "choice") {
+    await clickOption(page, a.choice?.[0] as string, step);
   } else if (ui === "number") {
-    await page.getByTestId("lesson-step").locator("input").first().fill(String(a.number));
+    await step.locator("input").first().fill(String(a.number));
   } else if (ui === "staff-input" && part.answer?.mode === "key-signature") {
     await typeKeySignature(page, a.text ?? []);
   } else if (ui === "degree-pad") {
-    await pickDegrees(page, a.degrees ?? []);
+    await pickDegrees(page, a.degrees ?? [], step);
   } else if (ui === "text") {
-    await typeText(page, (a.text ?? []).join(" "));
+    await step
+      .locator('input[type="text"]')
+      .first()
+      .fill((a.text ?? []).join(" "));
   } else throw new Error(`walker: no way to answer ${ui}`);
+  return true;
+}
+
+/**
+ * Numerals into the RN palette, one per slot: a numeral the palette offers is clicked; an inverted one (`V6`,
+ * `I64`) is its root-position button, then the slot's `I` key steps the figure. `false` when a numeral cannot be
+ * entered at all (a case the palette does not offer, such as `VI` in a major key).
+ */
+export async function enterNumerals(page: Page, step: Locator, rns: readonly string[]): Promise<boolean> {
+  const plan: { base: string; steps: number }[] = [];
+  for (const rn of rns) {
+    if ((await step.locator(`[data-rn="${rn}"]`).count()) > 0) {
+      plan.push({ base: rn, steps: 0 });
+      continue;
+    }
+    const m = /^(.*?)(64|6)$/.exec(rn);
+    if (!m || (await step.locator(`[data-rn="${m[1]}"]`).count()) === 0) return false;
+    plan.push({ base: m[1] as string, steps: m[2] === "6" ? 1 : 2 });
+  }
+  for (const [i, p] of plan.entries()) {
+    await step.locator(`[data-rn-slot="${i}"]`).first().click();
+    await step.locator(`[data-rn="${p.base}"]`).first().click();
+    if (p.steps > 0) {
+      await step.locator(`[data-rn-slot="${i}"]`).first().click();
+      for (let k = 0; k < p.steps; k++) await page.keyboard.press("i");
+    }
+  }
+  return true;
 }
 
 /** A wrong answer to a drawn trial: another option, another first degree, another letter. */
-async function wrongFor(page: Page, part: PartLike, expected: Record<string, unknown>) {
+export async function wrongFor(page: Page, part: PartLike, expected: Record<string, unknown>) {
   const ui = part.answer?.ui;
   if (ui === "choice") {
     const right = (expected.choice as string[])[0];
@@ -305,6 +448,22 @@ async function wrongFor(page: Page, part: PartLike, expected: Record<string, unk
     const other = shown.find((d) => d !== right[0]) as string;
     return { answer: { degrees: [other, ...right.slice(1)] } };
   }
+  if (ui === "quality-pad") {
+    const right = (expected.qualities as string[])[0];
+    const shown = await page
+      .getByTestId("lesson-step")
+      .locator("[data-quality]")
+      .evaluateAll((els) => els.map((e) => e.getAttribute("data-quality") ?? ""));
+    return { answer: { qualities: [shown.find((q) => q !== right) as string] } };
+  }
+  if (ui === "rn-palette") {
+    const right = expected.rn as string[];
+    const shown = await page
+      .getByTestId("lesson-step")
+      .locator("[data-rn]")
+      .evaluateAll((els) => els.map((e) => e.getAttribute("data-rn") ?? ""));
+    return { answer: { rn: [shown.find((r) => r !== right[0]) as string, ...right.slice(1)] } };
+  }
   if (ui === "text") {
     const right = expected.text as string[];
     const first = right[0] ?? "C";
@@ -317,8 +476,20 @@ async function wrongFor(page: Page, part: PartLike, expected: Record<string, unk
 /** Walks the whole lesson from the step on screen to completion. */
 export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): Promise<string[]> {
   const seen: string[] = [];
+  let started = o.from === undefined;
   for (const step of def.steps) {
+    if (!started && step.id !== o.from) continue;
+    started = true;
     if (step.optional) continue;
+    if (step.gateCheck) {
+      // U05.L08's second chance shows only while the voicing gate is unmet (the seed may have passed it).
+      const at = page.getByTestId("lesson-step");
+      await expect(at).toHaveAttribute("data-step", /.+/, { timeout: 30_000 });
+      if ((await at.getAttribute("data-step")) !== step.id) {
+        console.log(`[gate] ${def.id} ${step.id}: the gate is already met, the second chance is not shown`);
+        continue;
+      }
+    }
     await stepIs(page, step.id);
     seen.push(step.id);
     const label = `${def.id} ${step.id}`;
@@ -386,6 +557,7 @@ export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): P
         await answerQuestions(page, ex, wrong.response);
         await check(page);
         await expectHonestFeedback(page, [], `${label} wrong`);
+        await expectPinned(page, wrong, label);
       }
       if (pass) await answerQuestions(page, ex, pass.response);
       await check(page);
@@ -403,10 +575,16 @@ export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): P
       const wrong =
         fails.find((t) => !(t.feedback ?? []).includes("code.unchanged") && !/unchanged/i.test(t.name)) ??
         fails[0];
+      if (ex.byEar?.parts && ex.byEar.parts.length > 0) {
+        await partsStep(page, ex, wrong ?? null, leaks, label);
+        await next(page);
+        continue;
+      }
       if (wrong) {
         await setCode(page, wrong.response.code as string);
         await check(page);
         await expectHonestFeedback(page, leaks, `${label} wrong (${wrong.name})`);
+        await expectPinned(page, wrong, label);
         // The Workbench's own list says what and where: read it with the same rules.
         const panel = page.getByTestId("feedback-panel").first();
         if ((await panel.count()) > 0) {
@@ -420,6 +598,16 @@ export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): P
       await setCode(page, passingCode(ex) as string);
       await check(page);
       await expectPass(page, label);
+      await next(page);
+      continue;
+    }
+    if (ex.kind === "dictation" && ex.stageAnswers) {
+      await stagedStep(page, ex, label);
+      await next(page);
+      continue;
+    }
+    if (ex.kind === "all") {
+      await allAnswersStep(page, ex.parts ?? [], label);
       await next(page);
       continue;
     }
@@ -445,20 +633,25 @@ export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): P
       await next(page);
       continue;
     }
-    const wrong = ex.tests.find((t) => t.expect === "fail");
     const pass = ex.tests.find((t) => t.expect === "pass");
     expect(pass, `${label}: a passing test`).toBeDefined();
-    if (wrong) {
-      await answerWidget(page, ex, wrong.response);
+    // The lesson's own pinned mistake: the first failing test the widget can enter.
+    for (const wrong of ex.tests.filter((t) => t.expect === "fail")) {
+      if (!(await answerWidget(page, ex, wrong.response))) continue;
       await check(page);
       await expectHonestFeedback(page, answerLeaks(ex, null), `${label} wrong (${wrong.name})`);
+      await expectPinned(page, wrong, label);
+      break;
     }
-    await answerWidget(page, ex, (pass as TestCaseLike).response);
+    expect(await answerWidget(page, ex, (pass as TestCaseLike).response), `${label}: the right answer`).toBe(
+      true,
+    );
     await check(page);
     await expectPass(page, label);
     await next(page);
   }
   await expect(page.getByTestId("lesson-complete"), `${def.id}: complete`).toBeVisible({ timeout: 30_000 });
+  if (o.preview) return seen;
   const prog = await api<{ lessons: { lessonId: string; status: string }[] }>(
     page,
     "GET",
@@ -471,8 +664,180 @@ export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): P
   return seen;
 }
 
-/** The session before each U03–U04 lesson in the default order (the dev seed `after <it>`). */
+/** Enters one stage of a staged chord dictation through its own widget (degree pad, quality strip, numerals). */
+export async function enterStage(page: Page, ex: PartLike, id: string, values: readonly string[]) {
+  const ui = (ex.stageAnswers?.[id] as { ui?: string } | undefined)?.ui;
+  const box = page.getByTestId("lesson-step").locator(`li[data-stage="${id}"]`);
+  if (ui === "degree-pad") {
+    await box.locator("[data-degree]").first().focus();
+    for (let i = 0; i < values.length + 2; i++) await page.keyboard.press("Backspace");
+    for (const d of values) await box.locator(`[data-degree="${d}"]`).first().click();
+  } else if (ui === "quality-pad") {
+    for (const [c, q] of values.entries()) {
+      if (values.length > 1) await box.locator(`[data-slot="${c}"]`).click();
+      await box.locator(`[data-quality="${q}"], [data-option="${q}"]`).first().click();
+    }
+  } else if (ui === "rn-palette") {
+    expect(await enterNumerals(page, box, values), `${id}: numerals entered`).toBe(true);
+  } else throw new Error(`walker: no way to answer the ${id} stage (${ui})`);
+}
+
+/**
+ * A staged chord dictation (U06.L09 S2): the bass first on the degree pad, then a quality per chord, then the
+ * numerals. The bass stage gets the lesson's own pinned mistake first (its stage check fails and says where to
+ * listen; the quality stage stays shut), then the right bass; each later stage is answered right, and the last
+ * stage is the step's own Check.
+ */
+async function stagedStep(page: Page, ex: PartLike, label: string) {
+  const step = page.getByTestId("lesson-step");
+  const stage = (id: string) => step.locator(`li[data-stage="${id}"]`);
+  const stagesOf = (t: TestCaseLike) =>
+    ((t.response.answer as { stages?: Record<string, string[]> } | undefined)?.stages ?? {}) as Record<
+      string,
+      string[]
+    >;
+  const pass = ex.tests.find((t) => t.expect === "pass") as TestCaseLike;
+  const right = stagesOf(pass);
+  const order = ex.stages && ex.stages.length > 0 ? ex.stages : Object.keys(ex.stageAnswers ?? {});
+  const first = order[0] as string;
+  const wrong = ex.tests.find(
+    (t) => t.expect === "fail" && JSON.stringify(stagesOf(t)[first]) !== JSON.stringify(right[first]),
+  );
+  const enter = (id: string, values: readonly string[]) => enterStage(page, ex, id, values);
+  await expect(stage(first)).toHaveAttribute("data-status", "open", { timeout: 30_000 });
+  for (const later of order.slice(1)) await expect(stage(later)).toHaveAttribute("data-status", "locked");
+  if (wrong) {
+    await enter(first, stagesOf(wrong)[first] ?? []);
+    await page.getByTestId("check-stage").click();
+    const v = page.getByTestId("stage-verdict");
+    await expect(v, `${label}: the ${first} stage fails`).toHaveAttribute("data-status", /fail|error/, {
+      timeout: 30_000,
+    });
+    const text = ((await v.textContent()) ?? "").trim();
+    expect(text, `${label}: the stage says where to listen`).toMatch(/bar \d|Bar \d/);
+    expect(text).not.toMatch(RAW);
+    console.log(`[stage] ${label} wrong (${wrong.name}): ${text.replace(/\s+/g, " ")}`);
+    if (order[1])
+      await expect(stage(order[1]), `${label}: the next stage stays shut`).toHaveAttribute(
+        "data-status",
+        "locked",
+      );
+  }
+  for (const id of order) {
+    await expect(stage(id)).toHaveAttribute("data-status", "open", { timeout: 30_000 });
+    await enter(id, right[id] ?? []);
+    await page.getByTestId("check-stage").click();
+  }
+  await expectPass(page, label);
+}
+
+/**
+ * A by-ear step in parts (U06.L09 S3): the lesson's pinned mistake is checked part by part until a part says
+ * what is wrong (the step's own Check stays shut meanwhile); then the reference passes every part and the step.
+ */
+async function partsStep(
+  page: Page,
+  ex: PartLike,
+  wrong: TestCaseLike | null,
+  leaks: readonly string[],
+  label: string,
+) {
+  const parts = ex.byEar?.parts ?? [];
+  const box = page.getByTestId("by-ear-parts");
+  const mark = (track: string) => box.locator(`[data-part-track="${track}"]`);
+  await expect(page.getByTestId("check"), `${label}: Check waits for the parts`).toBeDisabled();
+  if (wrong) {
+    await setCode(page, wrong.response.code as string);
+    for (const part of parts) {
+      if ((await mark(part.track).getAttribute("data-mark")) !== "open") continue;
+      await page.getByTestId("check-part").click();
+      const v = mark(part.track).getByTestId("part-verdict");
+      await expect(v).toHaveAttribute("data-status", /pass|fail|error/, { timeout: 30_000 });
+      if ((await v.getAttribute("data-status")) === "pass") continue;
+      const text = ((await mark(part.track).textContent()) ?? "").trim();
+      expect(text, `${label}: the part's verdict`).not.toMatch(RAW);
+      for (const l of leaks) expect(text, `${label}: the part does not print the answer`).not.toContain(l);
+      expect(text, `${label}: says where`).toMatch(/[Bb]ar \d/);
+      console.log(`[part] ${label} ${part.track} wrong (${wrong.name}): ${text.replace(/\s+/g, " ")}`);
+      break;
+    }
+  }
+  await setCode(page, passingCode(ex) as string);
+  for (const part of parts) {
+    if ((await mark(part.track).getAttribute("data-mark")) === "passed") continue;
+    await page.getByTestId("check-part").click();
+    await expect(mark(part.track), `${label}: the ${part.track} part`).toHaveAttribute(
+      "data-mark",
+      "passed",
+      {
+        timeout: 30_000,
+      },
+    );
+  }
+  await expect(page.getByTestId("check")).toBeEnabled();
+  await check(page);
+  await expectPass(page, label);
+}
+
+/**
+ * An `all` of answer parts (U07.L01 S6, U07.L03 S4, U07.L09 S6): the first part takes its own pinned mistake
+ * while the others are right, the step fails and says so; then the first part is put right and the step passes.
+ */
+async function allAnswersStep(page: Page, parts: readonly PartLike[], label: string) {
+  const box = (i: number) => page.getByTestId("lesson-step").locator(`li[data-part="${i + 1}"]`);
+  const passOf = (p: PartLike) => (p.tests.find((t) => t.expect === "pass") as TestCaseLike).response;
+  for (const [i, p] of parts.entries()) {
+    const play = box(i).getByTestId("play-stimulus");
+    if ((await play.count()) > 0) await play.first().click();
+    if (i > 0) expect(await answerWidget(page, p, passOf(p), box(i)), `${label} part ${i + 1}`).toBe(true);
+  }
+  const first = parts[0] as PartLike;
+  for (const wrong of first.tests.filter((t) => t.expect === "fail")) {
+    if (!(await answerWidget(page, first, wrong.response, box(0)))) continue;
+    await check(page);
+    await expectHonestFeedback(page, answerLeaks(first, null), `${label} part 1 wrong (${wrong.name})`);
+    await expectPinned(page, wrong, label);
+    break;
+  }
+  expect(await answerWidget(page, first, passOf(first), box(0)), `${label} part 1`).toBe(true);
+  await check(page);
+  await expectPass(page, label);
+}
+
+/** The session before each U03–U07 lesson in the default order (the dev seed `after <it>`). */
 export const BEFORE: Record<string, string> = {
+  // Wave 4 (contracts §2.5's default order: U04.CP sits after U05.L01, U05.CP after U06.L01, U06.CP after
+  // U07.L01, the gym slots inside U07).
+  "U05.L01": "U04.L04",
+  "U05.L02": "U04.CP",
+  "U05.L03": "U05.L02",
+  "U05.L04": "U05.L03",
+  "U05.L05": "U05.L04",
+  "U05.L06": "U05.L05",
+  "U05.L07": "U05.L06",
+  "U05.L08": "U05.L07",
+  "U06.L01": "U05.L08",
+  "U06.L02": "U05.CP",
+  "U06.L03": "U06.L02",
+  "U06.L04": "U06.L03",
+  "U06.L05": "U06.L04",
+  "U06.L06": "U06.L05",
+  "U06.L07": "U06.L06",
+  "U06.L08": "U06.L07",
+  "U06.L09": "U06.L08",
+  "U06.L10": "U06.L09",
+  "U06.L11": "U06.L10",
+  "U06.L12": "U06.L11",
+  "U07.L01": "U06.L12",
+  "U07.L02": "U06.CP",
+  "U07.L03": "U07.L02",
+  "U07.L04": "GYM.01",
+  "U07.L05": "U07.L04",
+  "U07.L06": "U07.L05",
+  "U07.L07": "U07.L06",
+  "U07.L08": "U07.L07",
+  "U07.L09": "U07.L08",
+  "U07.L10": "U07.L09",
   "U03.L01": "U02.L08",
   "U03.L02": "C1.S1",
   "U03.L03": "U03.L02",

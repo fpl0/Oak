@@ -4,6 +4,9 @@
 // The server does not assemble these by hand: `createDefaultTutor` in compose.ts builds both
 // backends, the service and the Hono app (README, "Integration"). compose.ts is not re-exported
 // here, so that importing this file never loads the Anthropic SDK or the CLI backend.
+
+// Wave 4: the answer guard, the vocabulary lines and the review facts.
+export * from "./answer-guard.ts";
 export * from "./context.ts";
 export * from "./domain.ts";
 export * from "./errors.ts";
@@ -49,6 +52,7 @@ export {
 } from "./prompt/persona.ts";
 export * from "./redaction.ts";
 export * from "./request.ts";
+export * from "./review-facts.ts";
 export * from "./reviews.ts";
 export { type RunOptions, type RunResult, runTurn } from "./run.ts";
 export { runReview } from "./run-review.ts";
@@ -70,3 +74,4 @@ export { acceptReview } from "./tools/review-submit.ts";
 export * from "./tools/schemas.ts";
 export * from "./types.ts";
 export * from "./usage.ts";
+export * from "./vocabulary.ts";

@@ -5,6 +5,12 @@
 // set the length, `#`/`+`/`-`/`=` alter, Backspace deletes, Enter checks). Every placement sounds. Per-note marks
 // come from the host's feedback; a reveal draws the answer as dashed heads. The typed note list stays as the
 // accessible alternative (and the fallback when the staff cannot draw).
+//
+// Wave 4, `palette.chords`: notes that start together are one chord (`[C4,E4,G4]:2`, across both hands of a grand
+// staff). The cursor stays on a chord while it is built: letters stack above its top note (`Shift`: under its
+// bass), `→` steps past it, and every change plays the whole chord. Marks are per chord (the `part` is the chord's
+// index), and under the staff each chord is spelled out with its lowest note; the chord's name and inversion
+// appear as `AnswerEnv.harmony.nameChords` says (live, after a check, or never).
 import "./staff.css";
 import { R, type Rat } from "@oak/content-kit";
 import { noteAt, type StaffGeometry, stepY } from "@oak/notation";
@@ -16,14 +22,17 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { registerShortcutSection } from "../../ui/keys/sheet.ts";
 import { Button, Skeleton } from "../../ui/kit/index.ts";
 import { appAudio, useAnswerEnv, useSubmitVerb } from "../env.tsx";
+import { buildChord, describeBuilt } from "../harmony.ts";
 import type { AnswerWidgetProps, PartMark } from "../types.ts";
 import { AnswerFrame, isMod, KeyHint, markOf, revealedOf } from "../ui.tsx";
 import { KeySignatureAnswer } from "./KeySignature.tsx";
 import { localAnchors, measure, measureAnchors } from "./measure.ts";
 import {
   bandFor,
+  chordAt,
   clefFor,
   DIGIT_DURATION,
+  describeChord,
   describeNote,
   durationName,
   type Engraved,
@@ -39,9 +48,11 @@ import {
   pitchAt,
   pointerHit,
   refusalText,
+  type StaffChord,
   type StaffCursor,
   type StaffKeyInput,
   type StaffNote,
+  staffChords,
   staffContext,
   staffEditOutcome,
   staffKey,
@@ -73,6 +84,20 @@ const STAFF_SHEET = {
   ],
 } as const;
 
+/** The chord rows of the shortcut sheet, while a chord staff is on screen. */
+const CHORD_SHEET = {
+  id: "staff-chords",
+  title: "Staff input: chords",
+  order: 46,
+  rows: [
+    ["A B C D E F G", "Add that note above the chord at the cursor (on an empty beat: start a chord)"],
+    ["Shift+A … Shift+G", "Add that note under the chord's lowest note"],
+    ["ArrowRight / ArrowLeft", "Next chord / the chord before"],
+    ["ArrowUp / ArrowDown", "Move the chord's selected note (Shift: a half step, Mod: an octave)"],
+    ["Backspace", "Remove the selected note from the chord"],
+  ],
+} as const;
+
 export function StaffInputAnswer(p: AnswerWidgetProps<"staff-input">) {
   if (p.spec.mode === "key-signature") return <KeySignatureAnswer {...p} />;
   return <StaffNotesAnswer {...p} />;
@@ -94,6 +119,8 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
   // Its keys are in the shortcut sheet while a staff is on screen.
   useEffect(() => registerShortcutSection(STAFF_SHEET), []);
   const { spec, value, onChange, disabled, feedback } = p;
+  const chordMode = spec.palette.chords === true;
+  useEffect(() => (chordMode ? registerShortcutSection(CHORD_SHEET) : undefined), [chordMode]);
   const env = useAnswerEnv();
   const verb = useSubmitVerb();
   const audio = env.audio ?? appAudio;
@@ -106,6 +133,7 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
   if (engraved.ok) good.current = engraved;
   const shown = engraved.ok ? engraved : good.current;
   const notes = useMemo(() => (shown ? staffNotes(shown.score) : []), [shown]);
+  const chords = useMemo(() => (chordMode ? staffChords(notes) : []), [chordMode, notes]);
   const durations = paletteDurations(spec);
 
   const wrap = useRef<HTMLDivElement>(null);
@@ -130,6 +158,10 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
   const revealed = revealedOf<string>(feedback);
   const revealEngraved = useMemo(() => (revealed ? engrave(revealed, ctx) : null), [revealed, ctx]);
   const revealNotes = revealEngraved?.ok ? staffNotes(revealEngraved.score) : [];
+  const nameChords = env.harmony?.nameChords ?? "after";
+  const naming =
+    nameChords === "live" ||
+    (nameChords === "after" && feedback.state !== "idle" && feedback.state !== "pending");
 
   // The host's width decides the scale; abcjs's responsive mode keeps the drawing inside it.
   const maxWidth = 170 + spec.bars * 210;
@@ -198,7 +230,11 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
 
   // Selection and marks as classes on the engraved notes (re-applied after every render).
   const under = noteAtOnset(notes, cursor.onset);
-  const marks = notes.map((n) => markOf(feedback, n.index));
+  const underChord: StaffChord | null = chordMode ? chordAt(notes, cursor.onset) : null;
+  // Marks are per note, or per chord with `palette.chords` (every item of a chord wears its chord's mark).
+  const chordOfItem = new Map<number, number>();
+  for (const c of chords) for (const i of c.items) chordOfItem.set(i, c.index);
+  const marks = notes.map((n) => markOf(feedback, chordMode ? (chordOfItem.get(n.index) ?? -1) : n.index));
   const markKey = marks.map((m) => (m ? (m.ok ? "1" : "0") : "-")).join("");
   useEffect(() => {
     const h = host.current;
@@ -213,12 +249,14 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
           ? "oak-si-ok"
           : m === "0"
             ? "oak-si-bad"
-            : focused && under?.index === n.index && !disabled
+            : focused &&
+                !disabled &&
+                (chordMode ? underChord?.items.includes(n.index) === true : under?.index === n.index)
               ? "oak-si-sel"
               : null;
       if (cls) for (const el of h.querySelectorAll(`.oak-e${n.n}`)) el.classList.add(cls);
     });
-  }, [rendered, notes, markKey, under?.index, focused, disabled]);
+  }, [rendered, notes, markKey, under?.index, underChord, chordMode, focused, disabled]);
 
   const play = (midis: readonly number[]) => {
     for (const m of midis) audio.playNote(m, { sound, dur: 0.5 });
@@ -276,7 +314,7 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
     setHover(hitAt(pt));
     setOverNote(noteAt(measured.geom, pt, 3) !== null);
     const d = drag.current;
-    if (d?.note && !d.moved && Math.hypot(pt.x - d.x, pt.y - d.y) > 4) {
+    if (d?.note && !chordMode && !d.moved && Math.hypot(pt.x - d.x, pt.y - d.y) > 4) {
       d.moved = true;
       setDragging(true);
     }
@@ -297,6 +335,17 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
     if (!d || !measured || disabled) return;
     const hit = hitAt(local(e));
     const total = totalCycles(ctx);
+    if (d.note && chordMode) {
+      // A click on a chord's note selects that note (arrows move it, Backspace removes it).
+      const c = chordAt(notes, d.note.onset);
+      const picked = c?.pitches.find((x) => hit && x.dia === hit.pitch.dia) ?? c?.pitches.at(-1);
+      if (c && picked) {
+        setCursor({ ...cursor, onset: c.onset, dia: picked.dia, last: null });
+        play(c.pitches.map((x) => x.midi));
+        setSay(`Selected ${picked.display} in ${describeChord(c)}`);
+      }
+      return;
+    }
     if (d.note) {
       const first = d.note.pitches[0];
       const id = d.note.eventIds[0];
@@ -321,6 +370,18 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
       return;
     }
     if (!hit) return;
+    const at = chordMode ? chordAt(notes, hit.onset) : null;
+    if (at) {
+      // Clicking above or below a chord adds that exact note to it.
+      if (at.pitches.some((x) => x.midi === hit.pitch.midi)) return;
+      apply({
+        cursor: { ...cursor, onset: at.onset, dia: hit.pitch.dia, last: at.onset },
+        edit: { op: "insert", onset: at.onset, dur: at.dur, pitch: hit.pitch.name, keep: true },
+        play: [...at.pitches.map((x) => x.midi), hit.pitch.midi],
+        say: `${hit.pitch.display} added to ${describeChord(at)}`,
+      });
+      return;
+    }
     const dur = parseDuration(cursor.dur) ?? durations[0];
     if (!dur) return;
     apply(
@@ -350,9 +411,15 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
   })();
 
   const marksDrawn: { x: number; y: number; ok: boolean; note?: string | undefined }[] = [];
+  const drawnChords = new Set<number>();
   if (measured)
     notes.forEach((n, i) => {
       const m = marks[i];
+      if (chordMode) {
+        const ci = chordOfItem.get(n.index) ?? -1;
+        if (drawnChords.has(ci)) return;
+        drawnChords.add(ci);
+      }
       const g = measured.geom.notes.find((x) => x.n === n.n);
       if (!m || !g) return;
       const band = measured.geom.staves.find((s) => s.staff === n.staff) ?? measured.geom.staves[0];
@@ -387,8 +454,9 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
   };
 
   const hasRhythm = durations.length > 1;
-  const markList: (PartMark | null)[] = marks;
+  const markList: (PartMark | null)[] = chordMode ? chords.map((c) => markOf(feedback, c.index)) : marks;
   const wrongCount = markList.filter((m) => m && !m.ok).length;
+  const revealChords = chordMode ? staffChords(revealNotes) : [];
 
   return (
     <AnswerFrame
@@ -404,13 +472,23 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
       onKey={onKey}
       keys={
         <>
-          <KeyHint keys={["A–G"]}>place a note</KeyHint>
-          <KeyHint keys={["←", "→"]}>move</KeyHint>
+          {chordMode ? (
+            <>
+              <KeyHint keys={["A–G"]}>add a note</KeyHint>
+              <KeyHint keys={["⇧ A–G"]}>add below</KeyHint>
+              <KeyHint keys={["←", "→"]}>chord</KeyHint>
+            </>
+          ) : (
+            <>
+              <KeyHint keys={["A–G"]}>place a note</KeyHint>
+              <KeyHint keys={["←", "→"]}>move</KeyHint>
+            </>
+          )}
           <KeyHint keys={["↑", "↓"]}>step</KeyHint>
           {spec.palette.accidentals ? <KeyHint keys={["#", "-"]}>sharp / flat</KeyHint> : null}
           {hasRhythm ? <KeyHint keys={["2–6"]}>length</KeyHint> : null}
           {spec.palette.rests ? <KeyHint keys={["0"]}>rest</KeyHint> : null}
-          <KeyHint keys={["⌫"]}>delete</KeyHint>
+          <KeyHint keys={["⌫"]}>{chordMode ? "remove" : "delete"}</KeyHint>
           <KeyHint keys={["Enter"]}>{verb}</KeyHint>
         </>
       }
@@ -503,7 +581,7 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
               surface.current?.focus({ preventScroll: true });
             }}
           >
-            Delete note
+            {chordMode ? "Remove note" : "Delete note"}
           </Button>
           <Button
             size="sm"
@@ -645,8 +723,10 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
           />
         </div>
         <p id={helpId} className="sr-only">
-          Letters A to G place a note at the cursor; hash sharpens and minus flattens it; arrows move the
-          cursor or the selected note; Backspace deletes; Enter {verb === "save" ? "saves" : "checks"}.
+          {chordMode
+            ? "Letters A to G add that note above the chord at the cursor, Shift with a letter adds it under the lowest note; right arrow goes to the next chord; up and down move the selected note; Backspace removes it; "
+            : "Letters A to G place a note at the cursor; hash sharpens and minus flattens it; arrows move the cursor or the selected note; Backspace deletes; "}
+          Enter {verb === "save" ? "saves" : "checks"}.
         </p>
         <p className="sr-only" aria-live="polite" data-testid="staff-say">
           {say}
@@ -655,6 +735,41 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
           <p className="text-sm text-text-2" data-testid="staff-notice">
             {notice}
           </p>
+        ) : null}
+        {chordMode ? (
+          <ol
+            aria-label="Your chords"
+            data-testid="staff-chords"
+            className="flex min-h-6 flex-col gap-0.5 text-sm"
+          >
+            {chords.length === 0 ? <li className="text-text-3">No chords yet.</li> : null}
+            {chords.map((c) => {
+              const built = buildChord(
+                c.pitches.map((x) => x.midi),
+                spec.key ?? null,
+              );
+              const line = built ? describeBuilt(built, naming) : null;
+              const m = markOf(feedback, c.index);
+              return (
+                <li
+                  key={`${c.index}-${c.eventIds.join()}`}
+                  className="flex flex-wrap items-baseline gap-x-2 text-text-2"
+                >
+                  <span className="text-[0.8125rem] text-text-3 tabular-nums">
+                    bar {c.bar}, beat {Math.round(c.beat * 100) / 100}
+                  </span>
+                  <span className="font-medium text-text">{line?.notes}</span>
+                  {line?.name ? <span data-testid="chord-name">{line.name}</span> : null}
+                  {m ? (
+                    <span className={m.ok ? "text-accent" : "text-issue"}>
+                      {m.ok ? "right" : `not this one${m.note ? `: ${m.note}` : ""}`}
+                    </span>
+                  ) : null}
+                  <span className="sr-only">{describeChord(c)}</span>
+                </li>
+              );
+            })}
+          </ol>
         ) : null}
         <ol className="sr-only" aria-label="Your notes">
           {notes.length === 0 ? <li>No notes yet.</li> : null}
@@ -673,13 +788,16 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
             <>
               <span>Answer: </span>
               <span className="rounded-control border-2 border-dashed border-accent-2 px-1.5 font-semibold text-text">
-                {revealNotes.map((n) => n.pitches.map((x) => x.display).join("+")).join(" ")}
+                {chordMode
+                  ? revealChords.map((c) => c.pitches.map((x) => x.display).join("+")).join("  ")
+                  : revealNotes.map((n) => n.pitches.map((x) => x.display).join("+")).join(" ")}
               </span>
             </>
           ) : wrongCount > 0 ? (
             <span>
-              {wrongCount === 1 ? "One note is marked." : `${wrongCount} notes are marked.`} Select it and
-              move it, or place another.
+              {chordMode
+                ? `${wrongCount === 1 ? "One chord is marked." : `${wrongCount} chords are marked.`} Select a note in it and move it, or add the missing one.`
+                : `${wrongCount === 1 ? "One note is marked." : `${wrongCount} notes are marked.`} Select it and move it, or place another.`}
             </span>
           ) : status === "error" ? (
             <span>
@@ -709,7 +827,7 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
               value={value}
               autoComplete="off"
               spellCheck={false}
-              placeholder="C4:4 E4:4 G4:4"
+              placeholder={chordMode ? "[C4,E4,G4]:2 [B3,D4,G4]:2" : "C4:4 E4:4 G4:4"}
               onChange={(e) => onChange(e.target.value)}
               className="h-10 w-full max-w-md rounded-control border border-border bg-surface px-3 font-mono text-base text-text"
             />
@@ -719,6 +837,12 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
                   One note per word: letter, octave, length (4 = a quarter), as in{" "}
                   <code className="font-mono">C4:4 E4:4</code>; <code className="font-mono">r:4</code> is a
                   rest.
+                  {chordMode ? (
+                    <>
+                      {" "}
+                      A chord is its notes in brackets: <code className="font-mono">[C4,E4,G4]:2</code>.
+                    </>
+                  ) : null}
                 </>
               ) : (
                 <>Oak can't read that yet: {engraved.error.replace(/^note list: /, "")}.</>

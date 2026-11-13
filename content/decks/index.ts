@@ -308,8 +308,203 @@ export const INTERVAL_NAMES: FactDeck = defineDeck({
   fastRtMs: 4000,
   answer: "text",
 });
+// --- U05–U07: triad spellings, numerals and qualities in a key, cadence names ----------------------
+
+const lead = (name: string): string => name.replace("#", "♯").replace(/^([A-G])b/, "$1♭");
+const QUALITY_WORDS: Readonly<Record<"maj" | "min" | "dim" | "aug", string>> = {
+  maj: "major",
+  min: "minor",
+  dim: "diminished",
+  aug: "augmented",
+};
+/**
+ * [root, quality, the notes from the root up, gate]: the major and minor triads of the keys the course plays in
+ * (U05.L02), and the diminished and augmented triads U05.L03 builds (B°, C+). Small on purpose: the spelling of
+ * any triad is `fam.chd.spell`'s; these are the ones worth knowing by heart. Spelled by stacked letters (@oak/theory
+ * checks each in decks.test.ts).
+ */
+export const TRIAD_ROWS: readonly [string, "maj" | "min" | "dim" | "aug", string[], LessonId | undefined][] =
+  [
+    ["C", "maj", ["C", "E", "G"], undefined],
+    ["D", "maj", ["D", "F#", "A"], undefined],
+    ["F", "maj", ["F", "A", "C"], undefined],
+    ["G", "maj", ["G", "B", "D"], undefined],
+    ["A", "maj", ["A", "C#", "E"], undefined],
+    ["A", "min", ["A", "C", "E"], undefined],
+    ["D", "min", ["D", "F", "A"], undefined],
+    ["E", "min", ["E", "G", "B"], undefined],
+    ["C", "min", ["C", "Eb", "G"], undefined],
+    ["B", "dim", ["B", "D", "F"], "U05.L03"],
+    ["C", "aug", ["C", "E", "G#"], "U05.L03"],
+  ];
+const triadId = (root: string, q: string): FactId => `fact.triad.${root.replace("#", "s")}-${q}` as FactId;
+export const TRIAD_SPELLINGS: FactDeck = defineDeck({
+  id: "deck.chd.triads" as DeckId,
+  title: "Triad spellings",
+  unlock: { skill: "C02", lesson: "U05.L02" },
+  cards: TRIAD_ROWS.map(([root, q, notes, gate]) => ({
+    id: triadId(root, q),
+    ...(gate ? { gate } : {}),
+    prompt: {
+      text: `Spell ${lead(root)} ${QUALITY_WORDS[q]} from the root up. Write its three note names, separated by spaces.`,
+    },
+    answer: { text: notes },
+  })),
+  newPerDay: 2,
+  fastRtMs: 6000,
+  answer: "text",
+});
+
+/** Diatonic triads of a major key: [degree, numeral, quality]. */
+export const DIATONIC_TRIADS: readonly [number, string, "maj" | "min" | "dim"][] = [
+  [1, "I", "maj"],
+  [2, "ii", "min"],
+  [3, "iii", "min"],
+  [4, "IV", "maj"],
+  [5, "V", "maj"],
+  [6, "vi", "min"],
+  [7, "viio", "dim"],
+];
+const NUMERAL_FORMAT =
+  "Write the Roman numeral: upper case for a major triad, lower case for minor, lower case with o after it for diminished.";
+const SYMBOL_FORMAT = "Write its chord symbol: the root, then m for minor or o for diminished.";
+/** [key, numeral, the chord's symbol] for the numeral-to-chord cards (the keys U06 moves the loops into). */
+export const NUMERAL_CHORDS: readonly [string, string, string][] = [
+  ["G", "ii", "Am"],
+  ["G", "vi", "Em"],
+  ["F", "IV", "Bb"],
+  ["F", "ii", "Gm"],
+  ["D", "V", "A"],
+  ["D", "vi", "Bm"],
+];
+const symbolWords = (symbol: string): string[] => {
+  const m = /^([A-G][#b]?)(m|o)?$/.exec(symbol) as RegExpExecArray;
+  const root = m[1] as string;
+  if (m[2] === "m") return [`${root}min`, `${root} minor`];
+  if (m[2] === "o") return [`${root}dim`, `${root}°`, `${root} diminished`];
+  return [`${root}maj`, `${root} major`];
+};
+export const NUMERALS: FactDeck = defineDeck({
+  id: "deck.har.rn" as DeckId,
+  title: "Roman numerals in a key",
+  unlock: { skill: "N06", lesson: "U06.L02" },
+  cards: [
+    // The triad on each degree of C major, as a numeral.
+    ...DIATONIC_TRIADS.map(([degree, numeral]) => ({
+      id: `fact.rn.C-${degree}` as FactId,
+      prompt: {
+        text: `In C major, which numeral names the triad built on degree ${degree}? ${NUMERAL_FORMAT}`,
+      },
+      answer: { text: [numeral] },
+      ...(numeral === "viio" ? { accept: [{ text: ["vii°"] }] } : {}),
+    })),
+    // The quality on each degree of any major key.
+    ...DIATONIC_TRIADS.map(([degree, , q]) => ({
+      id: `fact.rn.quality-${degree}` as FactId,
+      prompt: {
+        text: `In any major key, what quality is the triad on degree ${degree}? Write major, minor or diminished.`,
+      },
+      answer: { text: [QUALITY_WORDS[q]] },
+      accept:
+        q === "maj"
+          ? [{ text: ["maj"] }]
+          : q === "min"
+            ? [{ text: ["min"] }, { text: ["m"] }]
+            : [{ text: ["dim"] }],
+    })),
+    // A numeral in G, F or D as the chord it names.
+    ...NUMERAL_CHORDS.map(([key, numeral, symbol]) => ({
+      id: `fact.rn.${key}-${numeral}` as FactId,
+      prompt: {
+        text: `In ${lead(key)} major, which chord is ${numeral === "viio" ? "vii°" : numeral}? ${SYMBOL_FORMAT}`,
+      },
+      answer: { text: [symbol] },
+      accept: symbolWords(symbol).map((t) => ({ text: [t] })),
+    })),
+  ],
+  newPerDay: 2,
+  fastRtMs: 5000,
+  answer: "text",
+});
+
+const CADENCE_FORMAT = "Write its abbreviation (PAC, IAC, HC, PC or DC) or its name.";
+/** [id, prompt, answer, accepted names, gate]: deceptive from U06.L06, plagal from U06.L07. */
+export const CADENCE_ROWS: readonly [string, string, string[], string[], LessonId | undefined][] = [
+  [
+    "pac",
+    "A phrase ends V to I, both in root position, with the tune on 1. Which cadence is it?",
+    ["PAC"],
+    ["perfect authentic", "perfect authentic cadence"],
+    undefined,
+  ],
+  [
+    "iac",
+    "A phrase ends V to I with the tune on 3. Which cadence is it?",
+    ["IAC"],
+    ["imperfect authentic", "imperfect authentic cadence"],
+    undefined,
+  ],
+  [
+    "hc",
+    "A phrase stops on V, as if asking a question. Which cadence is it?",
+    ["HC"],
+    ["half", "half cadence"],
+    undefined,
+  ],
+  [
+    "dc",
+    "A phrase goes V to vi where you expected I. Which cadence is it?",
+    ["DC"],
+    ["deceptive", "deceptive cadence"],
+    "U06.L06",
+  ],
+  [
+    "pc",
+    "A phrase ends IV to I, the soft amen. Which cadence is it?",
+    ["PC"],
+    ["plagal", "plagal cadence"],
+    "U06.L07",
+  ],
+];
+export const CADENCE_NAMES: FactDeck = defineDeck({
+  id: "deck.har.cadence" as DeckId,
+  title: "Cadence names",
+  unlock: { skill: "H03", lesson: "U06.L04" },
+  cards: [
+    ...CADENCE_ROWS.map(([id, text, answer, names, gate]) => ({
+      id: `fact.cadence.${id}` as FactId,
+      ...(gate ? { gate } : {}),
+      prompt: { text: `${text} ${CADENCE_FORMAT}` },
+      answer: { text: answer },
+      accept: names.map((n) => ({ text: [n] })),
+    })),
+    {
+      id: "fact.cadence.half-chord" as FactId,
+      prompt: { text: `A half cadence ends on which chord? ${NUMERAL_FORMAT}` },
+      answer: { text: ["V"] },
+    },
+    {
+      id: "fact.cadence.deceptive-chord" as FactId,
+      gate: "U06.L06",
+      prompt: { text: `In a deceptive cadence, V goes to which chord? ${NUMERAL_FORMAT}` },
+      answer: { text: ["vi"] },
+    },
+    {
+      id: "fact.cadence.plagal-chords" as FactId,
+      gate: "U06.L07",
+      prompt: {
+        text: `Which two chords make a plagal cadence, in order? Write their numerals, separated by a space.`,
+      },
+      answer: { text: ["IV", "I"] },
+    },
+  ],
+  newPerDay: 2,
+  fastRtMs: 5000,
+  answer: "text",
+});
+
 /** Decks written and tested but waiting for their contracts row (see INTERVAL_NAMES). */
-export const PENDING_DECKS: readonly FactDeck[] = [INTERVAL_NAMES];
+export const PENDING_DECKS: readonly FactDeck[] = [INTERVAL_NAMES, TRIAD_SPELLINGS, NUMERALS, CADENCE_NAMES];
 
 export const decks: readonly FactDeck[] = [STAFF_NAMES, KEY_SIGNATURES, CHORD_SYMBOLS];
 export const deckById: ReadonlyMap<string, FactDeck> = new Map(decks.map((d) => [d.id, d] as const));

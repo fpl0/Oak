@@ -14,11 +14,14 @@ import {
   type GateSpec,
   type HintLadder,
   type KeySpec,
+  type Matcher,
   type MeterId,
+  type PhraseCheck,
   type RubricRule,
   type SkillRef,
   type SongId,
   type SwingSpec,
+  stripMarkers,
   type TestCase,
 } from "@oak/content-kit";
 
@@ -34,11 +37,24 @@ const opt = (id: string, label: string, skills: SkillRef[], body: Body): RubricR
 const custom = (fn: string, params?: Record<string, unknown>): Body =>
   (params ? { rule: "custom", fn, params } : { rule: "custom", fn }) as Body;
 
-const S = (cap: CapstoneId, titles: string[], goals: string[]): CapstoneSessionDef[] =>
+/**
+ * The sessions of a capstone (contracts §2.4, §2.6). The last one offers the tutor review (§10.6: every
+ * capstone gets one) and releases the piece to the album (Wave 4 `review`, `release`); a learner's draft
+ * carries from one session to the next.
+ */
+type SessionExtra = Pick<CapstoneSessionDef, "starter" | "checks" | "focusRules">;
+const S = (
+  cap: CapstoneId,
+  titles: string[],
+  goals: string[],
+  extras: (SessionExtra | undefined)[] = [],
+): CapstoneSessionDef[] =>
   titles.map((title, i) => ({
     id: `${cap}.S${i + 1}` as CapstoneSessionDef["id"],
     title,
     goal: goals[i] ?? title,
+    ...(extras[i] ?? {}),
+    ...(i === titles.length - 1 ? { review: true, release: true } : {}),
   }));
 
 const ladder = (concept: string, place: string, partial: string): HintLadder => [
@@ -62,6 +78,8 @@ interface ComposeSpec {
   rubric: RubricRule[];
   skills: SkillRef[];
   sessions: [string, string][];
+  /** Per session: its own starter (a first session's template), checks, or the rubric rules it works on. */
+  sessionExtras?: (SessionExtra | undefined)[];
   canDo: CanDoId[];
   album?: string;
   minDurationSec?: number;
@@ -107,6 +125,7 @@ function compose(c: ComposeSpec): CapstoneDef {
       c.id,
       c.sessions.map((s) => s[0]),
       c.sessions.map((s) => s[1]),
+      c.sessionExtras,
     ),
     reviewRevisions: early ? 1 : 2,
     canDo: c.canDo,
@@ -121,6 +140,8 @@ interface TranscribeSpec {
   meter: MeterId;
   song: SongId[];
   sessions: [string, string][];
+  /** Per session: the phrase checks graded against the chosen song's answer key (X1). */
+  sessionExtras?: (SessionExtra | undefined)[];
   canDo: CanDoId[];
   inGymSlots?: boolean;
 }
@@ -140,6 +161,7 @@ function transcribe(t: TranscribeSpec): CapstoneDef {
       t.id,
       t.sessions.map((s) => s[0]),
       t.sessions.map((s) => s[1]),
+      t.sessionExtras,
     ),
     reviewRevisions: t.id === "X1" ? 1 : 2,
     canDo: t.canDo,
@@ -196,9 +218,6 @@ export const CUSTOM_RUBRIC_FNS = {
   "extended-chord-share": "a 9th or 11th in at least `min` of the bars",
 } as const;
 
-const PIANO_LOOP = (bpm: number) =>
-  `setcpm(${bpm}/4)\n\ndrums: s("bd ~ sd ~, hh*8")\nchords: chord("<C G Am F>").voicing().s("piano")\nmel: n("⟪0 2 4 2⟫").scale("C4:major").s("piano")`;
-
 /** C0's reference intro (tests and the release preview): four bars, the fill a sixteenth-note snare-tom run. */
 const C0_REFERENCE =
   'setcpm(100/4)\n\nkick: s("<[bd ~ bd ~] [bd ~ bd [~ bd]] [bd ~ bd ~] [bd ~ ~ ~]>")\nsnare: s("<[~ sd ~ sd]!3 [~ sd [sd sd sd sd] [ht ht lt lt]]>")\nhats: s("<hh*8!3 [hh hh hh hh ~ ~ ~ ~]>").gain(.6)';
@@ -219,6 +238,117 @@ const c1Loop = (o: { bpm?: number; snare?: string; bass?: string; mel?: string }
     `mel: note("${o.mel ?? "<[c5 ~ g4 a4] [g4 e4 ~ d4]>"}").s("piano")`,
   ].join("\n");
 
+// --- C2 Four-Chord Song ---------------------------------------------------------------------------
+
+/**
+ * C2's "loop, then land" template (content/specs/U07.md, C2.S1): drums, a root bass and the chords, bars 1–4
+ * the loop I V vi IV, bars 5–6 its first two chords again, bars 7–8 empty for the landing. No tune yet: C2.S2
+ * adds it. It fails the brief as it comes (no cadence, no melody), so it is also the brief's starter.
+ */
+const C2_TEMPLATE = [
+  "setcpm(96/4)",
+  "",
+  "// Bars 1–4 loop; bars 5–6 are its first two chords again; bars 7–8 land on I.",
+  'drums: s("bd ~ sd ~, hh*8")',
+  'bass: n("<0 4 5 3 0 4 ⟪~ ~⟫>").scale("C2:major").s("ebass").lpf(600)',
+  'chords: chord("<C G Am F C G ⟪~ ~⟫>").voicing().s("piano")',
+].join("\n");
+
+interface C2Parts {
+  bpm?: number;
+  drums?: string;
+  /** Chord symbols, one a bar (`chord("<…>").voicing()`). */
+  chords?: string;
+  /** A whole `chords:` line in place of the symbols (hand-stacked sevenths). */
+  chordsLine?: string;
+  bassSound?: string;
+  /** Roots for the bass, as `n` over C2 (0 = C, 4 = G, 5 = A, 3 = F). */
+  bass?: string;
+  /** The tune, as `n` over C4 (0 = C, 7 = the C above). */
+  mel?: string | null;
+  chordSound?: string;
+  bassTail?: string;
+  melSound?: string;
+}
+/** A C2 piece: drums, a root bass, chords and a tune, in C. Defaults: the pop reference. */
+const c2Song = (o: C2Parts = {}): string =>
+  [
+    `setcpm(${o.bpm ?? 96}/4)`,
+    "",
+    `drums: s("${o.drums ?? "bd ~ sd ~, hh*8"}")`,
+    `bass: n("${o.bass ?? "<0 4 5 3 0 4 4 0>"}").scale("C2:major")${o.bassTail ?? ""}.s("${o.bassSound ?? "ebass"}").lpf(600)`,
+    o.chordsLine ??
+      `chords: chord("${o.chords ?? "<C G Am F C G G C>"}").voicing().s("${o.chordSound ?? "piano"}")`,
+    ...(o.mel === null
+      ? []
+      : [`mel: n("${o.mel ?? C2_TUNE}").scale("C4:major").s("${o.melSound ?? "piano"}")`]),
+  ].join("\n");
+
+/**
+ * The pop reference tune over C G Am F C G | G C. The bar-1 idea climbs the chord and steps back (1 3 5 3);
+ * each bar plays it again from its own chord's root (a sequence: G B D B, A C E C up to the high point,
+ * F A C A), bars 5–6 bring bars 1–2 back, and bars 7–8 turn it round (2' 7 5) and land on 1'. Beats 1 and 3
+ * of every bar are chord notes.
+ */
+const C2_TUNE = "<[0 2 4 2] [4 6 8 6] [5 7 9 7] [3 5 7 5] [0 2 4 2] [4 6 8 6] [8 6 4 ~] [7 ~ ~ ~]>";
+/**
+ * Indie over the rotation Am F C G, then F–C: the idea falls through the chord (E C A C over Am) and each
+ * bar plays it from its own chord, ending 1' 6 4 over F and home on 1.
+ */
+const C2_INDIE_TUNE = "<[9 7 5 7] [7 5 3 5] [4 2 0 2] [8 6 4 6] [9 7 5 7] [7 5 3 5] [7 5 3 ~] [0 ~ ~ ~]>";
+/** The minimal piece: two notes a bar, both chord notes, the first two bars coming back as bars 5–6. */
+const C2_MINIMAL_TUNE = "<[0 ~ 2 ~] [1 ~ 4 ~] [0 ~ 2 ~] [0 ~ 3 ~] [0 ~ 2 ~] [1 ~ 4 ~] [1 ~ 4 ~] [0 ~ ~ ~]>";
+
+// --- X1 Folk Transcription --------------------------------------------------------------------------
+
+/**
+ * A phrase of melody by ear (contracts §6.6 X1): key-relative, so a learner who writes it in another key
+ * still passes, at 0.85. The rhythm matcher beside it turns a phrase written from the bar line, where the
+ * song has a pickup, into `rhythm.pickup-missing` instead of a list of wrong rhythms (U07.L08 S5).
+ */
+export const X1_MELODY: Matcher = {
+  m: "all",
+  of: [
+    { m: "melody", pitch: "key-relative", wPitch: 0.8, wRhythm: 0.2, rhythmTol: [1, 16], track: "mel" },
+    { m: "rhythm", tol: [1, 16], durations: false, perRole: false, displacementCredit: 0.5, tracks: ["mel"] },
+  ],
+};
+/**
+ * What X1 tells the learner first (contracts §6.6 X1): meter, key, tonic and the pickup. The rhythm of
+ * phrase 1 is given too, but it differs between the two songs, so it comes from the chosen song's answer
+ * key (`phrase1Rhythm` in content/repertoire/<slug>/song.ts), not from one skeleton here.
+ */
+const X1_GIVEN = { meter: true, key: true, tonic: true, pickup: true } as const;
+const phrase = (n: number): PhraseCheck => ({
+  id: `phrase-${n}`,
+  phrase: n,
+  layer: "melody",
+  pass: TRANSCRIBE_PASS.X1.melodyPerPhrase,
+  matcher: X1_MELODY,
+  ...(n === 1 ? { given: X1_GIVEN } : {}),
+});
+/** X1's checks by session: phrases 1–2, phrases 3–4, then the chords of all four, bass first (§6.6). */
+export const X1_CHECKS: readonly PhraseCheck[][] = [
+  [phrase(1), phrase(2)],
+  [phrase(3), phrase(4)],
+  [
+    {
+      id: "chords",
+      phrase: [1, 4],
+      layer: "chords",
+      pass: TRANSCRIBE_PASS.X1.chordsPerStage,
+      stages: ["bass", "quality", "rn"],
+      matcher: {
+        m: "harmony",
+        level: "rn",
+        qualityDepth: "triad",
+        inversion: false,
+        harmonicRhythm: "given",
+      },
+    },
+  ],
+];
+
 /**
  * Liner-note seeds for the release dialog (ux §5, "write a one-line liner note"): first lines the learner
  * can take, edit or ignore. `{bars}` and `{bpm}` are filled from the released piece. They describe what
@@ -234,6 +364,16 @@ export const CAPSTONE_LINER_SEEDS: Readonly<Partial<Record<CapstoneId, readonly 
     "Four bars at {bpm} BPM: a groove, a bass line written note by note, and a two-bar riff on top.",
     "The bass walks underneath; the riff says its line twice.",
     "The first loop with notes in it. Drums from the intro, a bass and a riff of my own.",
+  ],
+  C2: [
+    "Eight bars at {bpm} BPM: four chords go round for six bars, then the last two land on home.",
+    "The tune starts with one idea in bar 1 and brings it back later in the song.",
+    "My first song with chords and a tune: loop, then land.",
+  ],
+  X1: [
+    "A folk song taken down by ear, phrase by phrase, then its chords from the bass up.",
+    "Four phrases and their chords, written from listening. The arrangement around them is mine.",
+    "The tune came first, one phrase at a time; the bass line told me the chords.",
   ],
 };
 
@@ -494,36 +634,48 @@ export const capstones: readonly CapstoneDef[] = [
     key: { tonic: "C", mode: "major" },
     bpm: [70, 140],
     brief:
-      "Loop, then land: a four-chord schema in bars 1–6, a cadence in bars 7–8, and a melody that repeats or varies its bar-1 idea.",
-    starter: PIANO_LOOP(96),
+      "Loop, then land: a four-chord schema in bars 1–6, a cadence in bars 7–8, and a melody built on its bar-1 idea, which comes back, the same or moved onto another chord, in half the bars or more.",
+    starter: C2_TEMPLATE,
     skills: ["H04", "H03", "M03", "M02"],
+    // The binding rubric of contracts §6.6. `schema` reads bars 1–6 only (`bars`), so the landing in bars
+    // 7–8 belongs to the `cadence` rule; any rotation of I V vi IV counts, bars 5–6 being its first two
+    // chords again. Chords compare on the triad core, so sevenths pass.
     rubric: [
       req("bars", "8 bars", ["F01"], { rule: "bars", min: 8, max: 8 }),
-      req("roles", "Chords and melody", ["H04"], { rule: "tracks", min: 2, roles: ["chords", "melody"] }),
-      req("schema", "Bars 1–6: a four-chord schema loop, one chord per bar", ["H04"], {
+      req("roles", "Chords and a melody", ["H04"], { rule: "tracks", min: 2, roles: ["chords", "melody"] }),
+      req("schema", "Bars 1–6: a four-chord loop, one chord a bar", ["H04"], {
         rule: "progression",
         schema: "schema.axis",
         allowRotation: true,
+        bars: [1, 6],
       }),
-      req("cadence", "Bars 7–8 land on I (authentic or plagal)", ["H03"], {
+      req("cadence", "Bars 7–8 land on I: V then I, or IV then I", ["H03"], {
         rule: "cadence",
         types: ["PAC", "IAC", "PC"],
         at: "last",
       }),
-      req("chord-tones", "Chord tones on beats 1 and 3", ["M03"], {
+      req("chord-tones", "Chord notes on beats 1 and 3", ["M03"], {
         rule: "chord-tones-strong",
         minRatio: 0.6,
         melody: "@melody",
         harmony: "@chords",
         strength: "strong",
       }),
-      req("range", "Melody within 19 semitones", ["M01"], { rule: "range", track: "@melody", maxSpan: 19 }),
+      req("range", "The tune within 19 half steps", ["M01"], {
+        rule: "range",
+        track: "@melody",
+        maxSpan: 19,
+      }),
+      // `shape: "either"`: a bar that moves the idea by degrees (the sequence of U07.L02, C E G over C, then
+      // A C E over Am) counts as the idea, as it does in U07.L10; in half steps only, every move onto a chord
+      // of the other quality was refused, so a tune built the way the course teaches it failed (review).
       req("motif", "Repeat or vary your bar-1 idea at least once", ["M02"], {
         rule: "motif-reuse",
         track: "@melody",
         minRatio: 0.5,
+        shape: "either",
       }),
-      opt("ends-home", "The melody ends on 1", ["M01"], {
+      opt("ends-home", "The tune ends on 1", ["M01"], {
         rule: "ends-on-degree",
         degrees: ["1"],
         track: "@melody",
@@ -533,12 +685,151 @@ export const capstones: readonly CapstoneDef[] = [
       ["Chords", 'Chords: schema loop in bars 1–6, cadence in bars 7–8 ("loop, then land").'],
       ["Melody", "Melody over the changes; vary the bar-1 idea; release."],
     ],
+    sessionExtras: [
+      { starter: C2_TEMPLATE, focusRules: ["bars", "schema", "cadence"] },
+      { focusRules: ["roles", "chord-tones", "range", "motif", "ends-home"] },
+    ],
     canDo: ["cd.compose.fourchord"],
+    // One ladder serves both sessions, so each rung speaks to the chords (C2.S1) and to the tune (C2.S2).
     hints: ladder(
-      "Where does the loop stop looping?",
-      "Bars 7 and 8 carry the ending: V to I or IV to I.",
-      "Keep the loop for six bars, then `<… G C>` for the last two.",
+      "Where does the loop stop looping? And where does your tune play its first bar again?",
+      "Bars 7 and 8 carry the ending: the chord on 5 then the chord on 1, or the chord on 4 then the chord on 1. For the tune, play bar 1's shape again from the next chord's notes, the way a sequence did in Motif & Variation, in at least half the bars.",
+      "Keep the loop for six bars, then two new chords for bars 7 and 8; under C G Am F that means `… G C>`. A tune that starts `[0 2 4 2]` can go on `[4 6 8 6] [5 7 9 7] [3 5 7 5]`: bar 1, moved onto each chord.",
     ),
+    tests: [
+      {
+        name: "the starter: the loop, no landing, no tune",
+        response: { code: stripMarkers(C2_TEMPLATE).code },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      // One passing piece per shipped flavour (contracts §6.6); a flavour never changes the rubric.
+      {
+        name: "pop: I V vi IV, I V, then V–I; bar 1 returns in bar 5",
+        response: { code: c2Song() },
+        expect: "pass",
+      },
+      {
+        name: "minimal: the template landed on G C, two chord notes a bar",
+        response: { code: c2Song({ mel: C2_MINIMAL_TUNE }) },
+        expect: "pass",
+      },
+      {
+        name: "indie: the rotation vi IV I V, then IV–I (plagal), on guitar",
+        response: {
+          code: c2Song({
+            chords: "<Am F C G Am F F C>",
+            bass: "<5 3 0 4 5 3 3 0>",
+            mel: C2_INDIE_TUNE,
+            chordSound: "acgtr",
+            drums: "bd ~ [~ bd] ~, ~ sd ~ sd, hh*8",
+          }),
+        },
+        expect: "pass",
+      },
+      {
+        // Seventh-chord symbols in `chord()` unlock later (U11–U12); stacked in `n` they are open since
+        // U06.L10: Cmaj7 G7 Am7 Fmaj7 Cmaj7 G7 G7 Cmaj7.
+        name: "jazz-soul: hand-stacked sevenths on rhodes, upright bass (the triad core is what counts)",
+        response: {
+          code: c2Song({
+            bpm: 84,
+            bassSound: "upright",
+            chordsLine:
+              'chords: n("<[0,2,4,6] [4,6,8,10] [5,7,9,11] [3,5,7,9] [0,2,4,6] [4,6,8,10] [4,6,8,10] [0,2,4,6]>").scale("C3:major").s("rhodes")',
+          }),
+        },
+        expect: "pass",
+      },
+      {
+        name: "funk: 112 BPM, a sixteenth-note bass on the roots, beyond the brief",
+        response: {
+          code: c2Song({
+            bpm: 112,
+            drums: "bd ~ ~ bd ~ ~ bd ~, ~ sd ~ sd, hh*16",
+            bassTail: '.struct("x ~ x x ~ x ~ x x ~ x x ~ x ~ x")',
+            chordSound: "organ",
+          }),
+        },
+        expect: "pass",
+      },
+      {
+        // Review: bar 1 (C E G over C) comes back moved by degrees over Am in bar 3 (A C E), whose 3rds
+        // differ in half steps; with bars 4, 5 and 7 that is half the bars. Passed only once the rule read
+        // shapes in degrees as well as in half steps (`shape: "either"`); before, it counted 3 of 8.
+        name: "a sequence by degrees: bar 1 back over Am, F, C and G, then home",
+        response: {
+          code: c2Song({
+            mel: "<[0 ~ 2 4] [4 ~ 1 ~] [5 ~ 7 9] [3 ~ 5 7] [0 ~ 2 4] [6 ~ 4 ~] [4 ~ 6 8] [7 ~ ~ ~]>",
+          }),
+        },
+        expect: "pass",
+      },
+      // Known-weak pieces, one per required rule (the others hold).
+      {
+        name: "weak: the loop broken in bar 3 (ii for vi)",
+        response: { code: c2Song({ chords: "<C G Dm F C G G C>", bass: "<0 4 1 3 0 4 4 0>" }) },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: bars 7–8 still loop, no landing",
+        response: { code: c2Song({ chords: "<C G Am F C G Am F>", bass: "<0 4 5 3 0 4 5 3>" }) },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: no idea comes back",
+        response: {
+          code: c2Song({
+            mel: "<[0 2 4 2] [6 ~ 4 1] [5 9 ~ 7] [7 ~ 3 5] [4 7 2 ~] [1 ~ 8 4] [4 1 6 ~] [7 ~ ~ ~]>",
+          }),
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: a tune that leaps over two octaves",
+        response: { code: c2Song({ mel: C2_TUNE.replace("[5 7 9 7]", "[5 -7 16 7]") }) },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: a step off the chord on beats 1 and 3",
+        response: {
+          code: c2Song({
+            mel: "<[1 3 5 3] [5 7 9 7] [6 8 10 8] [4 6 8 6] [1 3 5 3] [5 7 9 7] [9 7 5 ~] [8 ~ ~ ~]>",
+          }),
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        // Clusters (C D E for C) are not triads: the progression reads no chord in bar 1 (pinned since the
+        // grader learned to refuse them; before, `progression` took a cluster for its triad core).
+        name: "weak: the loop played as clusters of neighbouring notes",
+        response: {
+          code: c2Song({
+            chordsLine:
+              'chords: n("<[0,1,2] [4,5,6] [5,6,7] [3,4,5] [0,1,2] [4,5,6] [4,5,6] [0,1,2]>").scale("C3:major").s("piano")',
+          }),
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: twelve bars",
+        response: {
+          code: c2Song({
+            chords: "<C G Am F C G Am F C G G C>",
+            bass: "<0 4 5 3 0 4 5 3 0 4 4 0>",
+            mel: "<[0 2 4 2] [4 6 8 6] [5 7 9 7] [3 5 7 5] [0 2 4 2] [4 6 8 6] [5 7 9 7] [3 5 7 5] [0 2 4 2] [4 6 8 6] [8 6 4 ~] [7 ~ ~ ~]>",
+          }),
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+    ],
   }),
   transcribe({
     id: "X1",
@@ -556,6 +847,7 @@ export const capstones: readonly CapstoneDef[] = [
       ["Phrases 3–4", "Phrases 3–4."],
       ["Chords", "Chords bass-first, arrange, review, release."],
     ],
+    sessionExtras: X1_CHECKS.map((checks) => ({ checks: [...checks] })),
     canDo: ["cd.transcribe.folk-tune"],
   }),
   compose({

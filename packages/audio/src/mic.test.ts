@@ -1,14 +1,22 @@
 import { describe, expect, test } from "bun:test";
-import { FakeContext, FakeStream, FakeWorkletNode } from "./fakes.test-data.ts";
+import type { BleedReport } from "@oak/pitch";
+import { FakeContext, FakeNode, FakeStream, FakeWorkletNode, framesBetween } from "./fakes.test-data.ts";
 import { bindMicShortcut, createMicGraphWith, micConstraints, PITCH_PROCESSOR } from "./mic.ts";
 import { MicError, type MicState } from "./types.ts";
 
-function setup(over: { getUserMedia?: () => Promise<MediaStream>; createNodeThrowsFor0?: boolean } = {}) {
+function setup(
+  over: {
+    getUserMedia?: () => Promise<MediaStream>;
+    createNodeThrowsFor0?: boolean;
+    playback?: FakeNode;
+  } = {},
+) {
   const ctx = new FakeContext();
   const nodes: FakeWorkletNode[] = [];
   const streams: FakeStream[] = [];
   const graph = createMicGraphWith(ctx as unknown as AudioContext, {
     workletUrl: "/pitch.worklet.js",
+    ...(over.playback ? { playback: () => over.playback as unknown as AudioNode } : {}),
     mediaDevices: {
       getUserMedia:
         over.getUserMedia ??
@@ -152,6 +160,61 @@ describe("MicGraph", () => {
     expect(nodes[0]?.port.sent).toContainEqual({ type: "dispose" });
     expect(graph.state).toBe("closed");
     await expect(graph.open()).rejects.toBeInstanceOf(MicError);
+  });
+
+  test("listening to Oak's output: frames carry what played, the session's bleed check trips once", async () => {
+    const output = new FakeNode();
+    const { ctx, graph, nodes } = setup({ playback: output });
+    await graph.prepare();
+    expect(nodes.length).toBe(2);
+    expect(output.connected).toEqual([]);
+    ctx.currentTime = 1;
+    const s = await graph.open();
+    // The output node feeds the second pitch node only while a session is open.
+    expect(output.connected).toContain(nodes[1]);
+    const mic = nodes[0]?.port;
+    const out = nodes[1]?.port;
+    const trips: BleedReport[] = [];
+    s.onBleed?.((r) => trips.push(r));
+    // A cue plays C4 from 1.0 to 2.0 s; the learner sings E4 in the window 2.5–3.5 s (marked as singing) while
+    // the cue leaks into the mic at 1.0–2.0 s.
+    s.singing?.({ on: 2.5, off: 3.5 });
+    const cue = framesBetween(1, 2.2, (tc) => ({ midi: tc >= 1 && tc < 2 ? 60 : null, rms: 0.2 }));
+    const leak = framesBetween(1, 2.2, (tc) => ({ midi: tc >= 1.05 && tc < 2.05 ? 60.1 : null }));
+    for (let i = 0; i < cue.length; i++) {
+      out?.emit(cue[i]);
+      if (leak[i]) mic?.emit(leak[i]);
+    }
+    expect(s.frames().some((f) => (f.playing ?? []).length > 0)).toBe(true);
+    expect(trips.length).toBe(1);
+    expect(s.bleed?.()?.bleed).toBe(true);
+    // Singing over a later playback, in the marked window, never trips anything (already tripped: once only).
+    for (const f of framesBetween(2.5, 3.5, () => ({ midi: 64 }))) mic?.emit(f);
+    expect(trips.length).toBe(1);
+    s.close();
+    expect(output.connected).toEqual([]);
+  });
+
+  test("singing along in the marked window with the output playing the same note is not bleed", async () => {
+    const output = new FakeNode();
+    const { ctx, graph, nodes } = setup({ playback: output });
+    ctx.currentTime = 1;
+    const s = await graph.open();
+    s.singing?.({ on: 1.2, off: 2.8 });
+    const both = framesBetween(1, 3, (tc) => ({ midi: tc >= 1.3 && tc < 2.7 ? 62 : null, rms: 0.2 }));
+    for (const f of both) {
+      nodes[1]?.port.emit(f);
+      nodes[0]?.port.emit(f);
+    }
+    expect(s.bleed?.()?.bleed).toBe(false);
+    expect(s.bleed?.()?.heardSec).toBe(0);
+  });
+
+  test("without a playback node there is no second node and no bleed check", async () => {
+    const { graph, nodes } = setup();
+    const s = await graph.open();
+    expect(nodes.length).toBe(1);
+    expect(s.bleed?.()).toBeNull();
   });
 
   test("Cmd/Ctrl+Shift+M closes the mic", () => {

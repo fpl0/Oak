@@ -40,11 +40,21 @@ describe("audibility table", () => {
     expect(table.audible["snd.jazzkit"]).toBe(true);
   });
 
-  test("every catalog sound is audible but the break (A2.L04), and the silent no-ops stay silent", () => {
-    expect(sounds.filter((t) => table.audible[t.id] !== true).map((t) => t.id)).toEqual(["snd.brk"]);
+  test("every catalog sound is audible, the break (A2.L04) included, and the silent no-ops stay silent", () => {
+    expect(sounds.filter((t) => table.audible[t.id] !== true).map((t) => t.id)).toEqual([]);
     const noops = Object.keys(table.audible).filter((id) => id.startsWith("noop."));
     expect(noops.length).toBeGreaterThan(0);
     for (const id of noops) expect([id, table.audible[id]]).toEqual([id, false]);
+  });
+
+  test("every tool and sound U05–U07 unlock has a case and is proven audible", () => {
+    const wave4 = toolbox.filter(
+      (t) => /^U0[567]\./.test(String(t.unlock.at)) && ["sound", "tool", "chord"].includes(t.kind),
+    );
+    expect(wave4.length).toBeGreaterThan(15);
+    const cased = new Set([...CONTROL_CASES, ...SOUND_CASES].map((c) => c.id));
+    expect(wave4.map((t) => t.id).filter((id) => !cased.has(id))).toEqual([]);
+    expect(wave4.map((t) => t.id).filter((id) => table.audible[id] !== true)).toEqual([]);
   });
 
   test("every group-H row the harness proves audible is flagged audible in content/toolbox.ts", () => {

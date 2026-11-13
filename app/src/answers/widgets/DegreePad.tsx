@@ -9,7 +9,7 @@ import { clsx } from "clsx";
 import { useEffect, useRef, useState } from "react";
 import { degreeBackgroundCss, degreeStyle } from "../../ui/theme/palette.ts";
 import { useAnswerEnv } from "../env.tsx";
-import { degreeForDigit, padOrder, popSlot, putSlot } from "../keys.ts";
+import { degreeForDigit, digitRange, padOrder, popSlot, putSlot } from "../keys.ts";
 import { degreeDisplay, degreeSpoken, SYLLABLES } from "../normalize.ts";
 import type { AnswerWidgetProps } from "../types.ts";
 import {
@@ -21,6 +21,7 @@ import {
   markOf,
   markRing,
   revealedOf,
+  SubmitHint,
   useThemeName,
 } from "../ui.tsx";
 
@@ -148,11 +149,11 @@ export function DegreePadAnswer(p: AnswerWidgetProps<"degree-pad">) {
       onKey={onKey}
       keys={
         <>
-          <KeyHint keys={["1–7"]}>degree</KeyHint>
+          <KeyHint keys={[digitRange(set)]}>degree</KeyHint>
           {set.some((d) => d.length > 1) ? <KeyHint keys={["-", "+"]}>♭ / ♯ first</KeyHint> : null}
           {!single ? <KeyHint keys={["⌫"]}>clear last</KeyHint> : null}
           {!single ? <KeyHint keys={["←", "→"]}>pick a slot</KeyHint> : null}
-          <KeyHint keys={["Enter"]}>check</KeyHint>
+          <SubmitHint />
         </>
       }
     >

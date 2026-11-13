@@ -1,7 +1,15 @@
 // Release to album (ux §2.3, §5.3): the track's title, the learner's one line, Claude's liner note (only with
 // consent), the liner notes the analysis writes, then the performance recorded in real time through the
 // @oak/strudel recorder, a listen-back, and the release. The flow is `releaseMachine`.
-import type { CapstoneDef, CapstoneReview, CapstoneState, FlavourId } from "@oak/api";
+import type {
+  AnalysisSummary,
+  CapstoneDef,
+  CapstoneReview,
+  CapstoneState,
+  FlavourId,
+  KeySpec,
+} from "@oak/api";
+import type { Normalized } from "@oak/grader";
 import type { EditorHandle } from "@oak/strudel";
 import { useMachine } from "@xstate/react";
 import { Disc3, Mic2, RotateCcw, Square } from "lucide-react";
@@ -10,27 +18,44 @@ import { fromPromise } from "xstate";
 import { ALBUM_TITLE_MAX, DEFAULT_ALBUM_TITLE, useAlbumTitle } from "../album/title.ts";
 import { Button } from "../ui/kit/Button.tsx";
 import { Progress } from "../ui/kit/basics.tsx";
-import { Callout } from "../ui/kit/Controls.tsx";
+import { Callout, SegmentedControl } from "../ui/kit/Controls.tsx";
 import { Dialog } from "../ui/kit/Dialog.tsx";
 import { Switch } from "../ui/kit/Field.tsx";
 import { useWorkbenchServices } from "../workbench/services.tsx";
 import type { CeremonyData } from "./Ceremony.tsx";
-import { type CheckOutcome, recordPerformance, releaseTrack } from "./engine.ts";
-import { clock, composeLinerNotes, theoryTags } from "./piece.ts";
+import { FLAVOUR_TITLE } from "./content.ts";
+import { recordPerformance, releaseTrack } from "./engine.ts";
+import { LINER_MAX_WORDS, wordCount } from "./liner.ts";
+import { clock } from "./piece.ts";
 import { type ReleaseActorInput, releaseMachine } from "./release-machine.ts";
+import { releaseErrorText } from "./release-text.ts";
+
+/** The checked piece being released: its code and saved version, its first pass and its analysis. */
+export interface ReleasePiece {
+  code: string;
+  version: number;
+  bars: number;
+  n: Normalized | null;
+  analysis: AnalysisSummary | null;
+  key: KeySpec | null;
+}
 
 export interface ReleaseDialogProps {
   def: CapstoneDef;
   state: CapstoneState;
-  official: { code: string; version: number; outcome: CheckOutcome };
-  flavour: FlavourId;
+  official: ReleasePiece;
+  /** The flavour the track carries on the album (its cover's wood); `null` for a transcription. */
+  flavour: FlavourId | null;
+  /** Flavours the learner may choose at release; absent or one: no choice shown. */
+  shipping?: readonly FlavourId[];
   sessionId: string | null;
   sketchId: string;
   review: CapstoneReview | null;
   includeReviewDefault: boolean;
-  canDos: readonly string[];
-  skillName(id: string): string | null;
-  band: string | null;
+  /** The liner notes (≤ 60 words) for the learner's one line. */
+  notesFor(line: string): string;
+  /** Theory tags for the album (≤ 12). */
+  tags: readonly string[];
   defaultTitle: string;
   editor(): EditorHandle | null;
   onClose(): void;
@@ -41,24 +66,17 @@ const canRecord = () => typeof MediaRecorder !== "undefined";
 
 export function ReleaseDialog(p: ReleaseDialogProps) {
   const { oak } = useWorkbenchServices();
-  const outcome = p.official.outcome;
+  const outcome = p.official;
   const analysis = outcome.analysis;
-  const brief = p.def.brief as NonNullable<CapstoneDef["brief"]>;
-  const notesFor = (line: string) =>
-    analysis
-      ? composeLinerNotes({
-          analysis,
-          result: outcome.result,
-          learnerLine: line,
-          canDos: p.canDos,
-          ...(p.band ? { band: p.band } : {}),
-        })
-      : line;
-  const tags = theoryTags(brief.rubric, outcome.result, analysis, p.skillName);
+  const notesFor = p.notesFor;
+  const tags = [...p.tags];
   // The album gets its name at its first release (ux §5.3), editable later on /album.
   const album = useAlbumTitle();
   const namesAlbum = p.state.trackId === null && !album.named;
   const [albumName, setAlbumName] = useState(album.title);
+  const [flavour, setFlavour] = useState<FlavourId | null>(p.flavour);
+  const flavourRef = useRef(flavour);
+  flavourRef.current = flavour;
   const albumNameRef = useRef<string | null>(null);
   albumNameRef.current = namesAlbum ? albumName : null;
 
@@ -91,12 +109,14 @@ export function ReleaseDialog(p: ReleaseDialogProps) {
             sketchId: p.sketchId,
             sketchVersion: p.official.version,
             title: input.title,
-            flavour: p.flavour,
+            flavour: flavourRef.current,
             linerNotesMd: notesFor(input.line),
             theoryTags: tags,
             includeReviewNote: input.includeReviewNote && p.review !== null,
             reviewNote: p.review?.linerNote ?? null,
             recording: input.recording,
+          }).catch((e: unknown) => {
+            throw new Error(releaseErrorText(e, input.recording !== null));
           });
           const name = albumNameRef.current?.trim();
           if (name && name !== DEFAULT_ALBUM_TITLE) await album.set(name).catch(() => {});
@@ -106,7 +126,7 @@ export function ReleaseDialog(p: ReleaseDialogProps) {
                 bars: outcome.bars,
                 key: outcome.key,
                 bpm: analysis?.bpm ?? null,
-                flavour: p.flavour,
+                flavour: flavourRef.current,
                 slots: analysis?.slots ?? [],
               }
             : null;
@@ -256,6 +276,23 @@ export function ReleaseDialog(p: ReleaseDialogProps) {
             className="h-9 rounded-control border border-border bg-surface px-2"
           />
         </div>
+        {flavour !== null && (p.shipping?.length ?? 0) > 1 && (
+          <div className="grid gap-1.5">
+            <span className="font-medium" id="rel-flavour-label">
+              Flavour
+            </span>
+            <SegmentedControl<FlavourId>
+              label="Flavour"
+              size="sm"
+              value={flavour}
+              options={(p.shipping ?? []).map((f) => ({ value: f, label: FLAVOUR_TITLE[f] }))}
+              onChange={(f) => setFlavour(f)}
+            />
+            <p className="text-sm text-text-3">
+              The wood of the cover and the label on the album. The music stays as it is.
+            </p>
+          </div>
+        )}
         {namesAlbum && (
           <div className="grid gap-1.5">
             <label htmlFor="rel-album" className="font-medium">
@@ -305,8 +342,16 @@ export function ReleaseDialog(p: ReleaseDialogProps) {
             />
           </div>
         ) : null}
-        <details className="rounded-card border border-border bg-surface-2/50 p-3 text-sm">
-          <summary className="cursor-pointer font-medium">Liner notes</summary>
+        <details
+          className="rounded-card border border-border bg-surface-2/50 p-3 text-sm"
+          data-testid="release-liner"
+        >
+          <summary className="cursor-pointer font-medium">
+            Liner notes{" "}
+            <span className="font-normal text-text-3">
+              ({wordCount(notesFor(ctx.line))} of {LINER_MAX_WORDS} words; written from the music)
+            </span>
+          </summary>
           <pre className="mt-2 whitespace-pre-wrap font-sans leading-relaxed text-text-2">
             {notesFor(ctx.line)}
           </pre>

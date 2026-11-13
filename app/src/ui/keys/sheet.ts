@@ -6,7 +6,9 @@
 // sheet shows them from any page, the way it lists the editor's keys) or on mount (only while it is on screen).
 // Registering the same `id` again replaces the section. Pure store, no DOM.
 import { create } from "zustand";
+import { TRANSCRIBE_KEYS } from "../../transcribe/keys.ts";
 import { WORKBENCH_LOOP_SHORTCUTS } from "../../workbench/shortcuts.ts";
+import { formatKeys } from "./keymap.ts";
 
 /** [keys in the keymap's syntax ("Mod+Enter", "Shift+1", "G T"), what they do]. */
 export type SheetRow = readonly [keys: string, description: string];
@@ -116,6 +118,30 @@ export const CORE_SECTIONS: readonly SheetSection[] = [
     ],
   },
   {
+    // Wave 4: chord quality, Roman numerals and slot strips (app/src/answers/widgets/Harmony.tsx, SlotChoice.tsx).
+    id: "harmony",
+    title: "Chords and numerals",
+    order: 36,
+    rows: [
+      ["1", "Quality pad: pick a quality (1 to the number of qualities)"],
+      ["5", "Numerals: the triad on that degree (1 to 7)"],
+      ["Shift+5", "Numerals: the seventh chord on that degree, when sevenths are allowed"],
+      ["-", "Numerals: flat the next degree (borrowed chords)"],
+      ["M", "Numerals: major / minor"],
+      ["I", "Numerals: next inversion, when inversions are allowed"],
+      ["ArrowRight", "Numerals and slot strips: next slot (ArrowLeft: back)"],
+      ["Backspace", "Clear the slot"],
+      ["P", "Play the chords or the phrase"],
+    ],
+  },
+  {
+    // Wave 4: Transcribe (app/src/transcribe/keys.ts); live on the project page, listed here from any page.
+    id: "transcribe",
+    title: "Transcribe",
+    order: 38,
+    rows: TRANSCRIBE_KEYS.map((k) => [k.keys, k.description] as const),
+  },
+  {
     id: "tutor",
     title: "Tutor composer",
     order: 40,
@@ -154,4 +180,16 @@ export function sheetSections(
     .sort((a, b) => (a.s.order ?? 50) - (b.s.order ?? 50) || a.i - b.i)
     .map(({ s }) => ({ ...s, rows: s.rows.filter(([k, d]) => !liveKeys.has(`${k}|${d}`)) }))
     .filter((s) => s.rows.length > 0);
+}
+
+/**
+ * A sheet row's keys for display. The keymap syntax reads "G T" as a sequence ("G then T"), but a sheet row may
+ * also list several keys ("A B C D E F G", "ArrowRight / ArrowLeft", "Shift+A … Shift+G"): a row of more than two
+ * keys, or one with "/" or "…" between them, shows each key on its own, separated by spaces.
+ */
+export function formatSheetKeys(keys: string, isMac: boolean): string {
+  const tokens = keys.trim().split(/\s+/);
+  const listed = tokens.length > 2 || tokens.some((t) => t === "/" || t === "…" || t === "...");
+  if (!listed) return formatKeys(keys, isMac);
+  return tokens.map((t) => (t === "/" || t === "…" || t === "..." ? t : formatKeys(t, isMac))).join(" ");
 }

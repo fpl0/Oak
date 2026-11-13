@@ -75,6 +75,13 @@ export interface AnswerShape {
   /** `notes`: notes written on a staff, each answer slot a note. */
   kind: "code" | "notes" | "answer" | "questions" | "sung";
   listen?: boolean;
+  /** An answer of several slots (a numeral or a function per bar): one wrong slot is named, not "this one". */
+  slotted?: boolean;
+  /**
+   * What a slot is called: "bar" for the RN palette, one numeral a bar in a lesson or a checkpoint, whose slots
+   * read "bar 1" … (review:journey: the verdict said "Answer 3" under a slot labelled "bar 3"); else "answer".
+   */
+  slotNoun?: "bar";
 }
 
 export function shapeOf(ex: Exercise | undefined): AnswerShape {
@@ -96,7 +103,16 @@ export function shapeOf(ex: Exercise | undefined): AnswerShape {
     ex.kind === "dictation" ||
     stim?.src === "code" ||
     (stim?.src === "generator" && ui !== "text" && ui !== "number");
-  return { kind: "answer", listen: heard };
+  const slots =
+    "answer" in ex && ex.answer && typeof ex.answer === "object" && "slots" in ex.answer
+      ? ex.answer.slots
+      : 1;
+  return {
+    kind: "answer",
+    listen: heard,
+    ...(typeof slots === "number" && slots > 1 ? { slotted: true } : {}),
+    ...(ui === "rn-palette" && typeof slots === "number" && slots > 1 ? { slotNoun: "bar" as const } : {}),
+  };
 }
 
 /** "answers 2 and 3", "question 1". */
@@ -160,8 +176,8 @@ export function summaryOf(
       return `Not there yet: ${n} ${n === 1 ? "note" : "notes"} to sing again.`;
     }
     const slots = wrongSlots(view);
-    const noun = shape.kind === "questions" ? "question" : "answer";
-    if (slots.length > 1 || (shape.kind === "questions" && slots.length === 1)) {
+    const noun = shape.kind === "questions" ? "question" : (shape.slotNoun ?? "answer");
+    if (slots.length > 1 || (slots.length === 1 && (shape.kind === "questions" || shape.slotted))) {
       const list = slotList(noun, slots);
       return `${list.charAt(0).toUpperCase()}${list.slice(1)} ${slots.length === 1 ? "is" : "are"} not right yet.`;
     }
@@ -172,6 +188,12 @@ export function summaryOf(
   // A code step whose one finding is about the code, not the notes ("Nothing changed yet. Edit the highlighted
   // part…", a locked tool, an edit outside the region) says that finding in the step's verdict: "1 thing to look
   // at." alone sent the learner hunting for the Workbench's list. The Workbench list says it too, at every rung.
+  if (view.status !== "pass" && shape.kind === "code") {
+    // A tool that is not open yet comes first (contracts §3.3: an error in a graded step): "8 notes differ" or
+    // "Code didn't run" would send the learner to the notes when the fix is to use the tools they have.
+    const locked = view.issues.find((i) => (i.id as string | undefined)?.startsWith("code.locked") && i.what);
+    if (locked?.what) return locked.what;
+  }
   if (view.status === "fail" && shape.kind === "code") {
     const notes = view.counts.missing + view.counts.extra + view.counts.wrong;
     const said = view.issues.filter((i) => i.severity !== "praise" && i.what);
@@ -190,7 +212,12 @@ export function issueLines(
   // A sung note names itself ("Note 2: …"), so it carries no "Answer n" in front, and the notes come in order.
   // An answer slot with nothing to say yet (rung 0 hides the words) is already named by the summary.
   const sung = shape.kind === "sung";
-  const issues = view.issues.filter((i) => !(view.status === "pass" && i.severity === "praise"));
+  // `chord()` itself locked says it once: a line per chord name it was given would only repeat it.
+  const chordLocked = view.issues.some((i) => i.id === "code.locked-tool" && /\bchord\b/.test(i.what ?? ""));
+  const issues = view.issues.filter(
+    (i) =>
+      !(view.status === "pass" && i.severity === "praise") && !(chordLocked && i.id === "code.locked-chord"),
+  );
   const ordered = sung ? [...issues].sort((a, b) => (a.where.slot ?? 0) - (b.where.slot ?? 0)) : issues;
   return ordered
     .filter(

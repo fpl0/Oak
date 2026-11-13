@@ -3,7 +3,7 @@
 // key" is the one explicit edit: the moved arguments go into the editor as a single undoable change (the next
 // Run plays and, in the Studio, saves it). Nothing here edits code by itself.
 import type { KeySpec, LintContext } from "@oak/content-kit";
-import type { EditorHandle, OakStrudel, PatternPlayer } from "@oak/strudel";
+import type { BandSetup, EditorHandle, EvalOutcome, MuteMap, OakStrudel, PatternPlayer } from "@oak/strudel";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { keyName, moveKey, scaleTokens } from "./key-tools.ts";
 
@@ -16,6 +16,13 @@ export interface KeyPreviewOptions {
   cps: number;
   lint: LintContext;
   readOnly: boolean;
+  /**
+   * The Band under the code (Wave 4, wave4.md §3.5): the preview plays it too, following the moved key, through
+   * `PatternPlayer.load({ band })`. Until the pattern player takes a Band, the preview plays the learner's tracks.
+   */
+  band?: BandSetup | null;
+  /** The mute and solo chips: a muted track stays muted in the preview. */
+  mutes?: MuteMap;
 }
 
 export interface KeyPreview {
@@ -29,6 +36,8 @@ export interface KeyPreview {
   why: string | null;
   /** The last thing that went wrong, said plainly. */
   error: string | null;
+  /** The last preview played the Band as well (false: the learner's tracks only). */
+  withBand: boolean;
   canUse: boolean;
   preview(key: KeySpec): void;
   stop(): void;
@@ -40,6 +49,7 @@ export function useKeyPreview(o: KeyPreviewOptions): KeyPreview {
   const [playing, setPlaying] = useState<KeySpec | null>(null);
   const [pending, setPending] = useState<KeySpec | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [withBand, setWithBand] = useState(false);
   const player = useRef<PatternPlayer | null>(null);
   const seq = useRef(0);
   const ref = useRef(o);
@@ -72,11 +82,22 @@ export function useKeyPreview(o: KeyPreviewOptions): KeyPreview {
       try {
         await cur.oak.unlock();
         player.current ??= cur.oak.createPatternPlayer();
-        const out = await player.current.load(moved.code as string, {
-          bars: Math.max(1, cur.bars),
-          cps: cur.cps,
-          lint: cur.lint,
-        });
+        const p = player.current;
+        const base = { bars: Math.max(1, cur.bars), cps: cur.cps, lint: cur.lint };
+        let out: EvalOutcome;
+        let banded = false;
+        if (cur.band) {
+          try {
+            out = await p.load(moved.code as string, { ...base, band: cur.band });
+            banded = true;
+          } catch (e) {
+            // The pattern player cannot take a Band yet (StrudelNotBuiltError): the learner's tracks alone.
+            if ((e as { code?: string } | null)?.code !== "strudel_not_built") throw e;
+            out = await p.load(moved.code as string, base);
+          }
+        } else out = await p.load(moved.code as string, base);
+        if (cur.mutes) p.setMutes(cur.mutes);
+        setWithBand(banded);
         if (my !== seq.current) return;
         if (!out.ok) {
           setPending(null);
@@ -129,6 +150,7 @@ export function useKeyPreview(o: KeyPreviewOptions): KeyPreview {
     movable,
     why,
     error,
+    withBand,
     canUse: movable && !o.readOnly,
     preview,
     stop,

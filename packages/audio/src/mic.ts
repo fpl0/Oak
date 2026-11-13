@@ -3,8 +3,8 @@
 // opens and closes the MediaStream and its source node. The mic is never connected to the destination.
 // This module takes the worklet URL as an argument; `createMicGraph` in index.ts supplies the default
 // `?worker&url` one, so this file also loads outside Vite (bun tests).
-import type { PitchFrame } from "@oak/pitch";
-import { rmsDb } from "@oak/pitch";
+import type { BleedReport, PitchFrame } from "@oak/pitch";
+import { BleedWatch, PlaybackHistory, rmsDb, SINGING_MARGIN_SEC, WINDOW_SIZE } from "@oak/pitch";
 import { MicError, type MicGraph, type MicSession, type MicState } from "./types.ts";
 
 /** Name the worklet registers under. */
@@ -32,6 +32,13 @@ export interface MicGraphOptions {
   outputs?: 0 | 1;
   /** Detector warm-up runs in the processor constructor. Default 8. */
   warmUp?: number;
+  /**
+   * Wave 4 (contracts §8.6, runtime bleed detection): Oak's own output (the master bus, post-limiter). While a
+   * session is open a second pitch node listens to it, every mic frame gets `playing` (what the output had over
+   * the last `PLAYBACK_LAG_SEC`) and the session runs the bleed check (`MicSession.bleed`). A function is read
+   * at each `open`, so an output created after the graph still counts.
+   */
+  playback?: AudioNode | (() => AudioNode | null);
   /** Injection points for tests. */
   mediaDevices?: Pick<MediaDevices, "getUserMedia">;
   createNode?: (ctx: BaseAudioContext, name: string, options: AudioWorkletNodeOptions) => AudioWorkletNode;
@@ -47,6 +54,8 @@ export function createMicGraphWith(
   let state: MicState = "closed";
   const listeners = new Set<(s: MicState) => void>();
   let node: AudioWorkletNode | null = null;
+  /** Wave 4: the second pitch node, on Oak's output (`opts.playback`), connected only while a session is open. */
+  let playNode: AudioWorkletNode | null = null;
   let sink: GainNode | null = null;
   let outputs: 0 | 1 = opts.outputs ?? 0;
   let preparing: Promise<void> | null = null;
@@ -71,22 +80,54 @@ export function createMicGraphWith(
     private readonly all: PitchFrame[] = [];
     private readonly subs = new Set<(f: PitchFrame) => void>();
     private lastRms = 0;
+    private readonly history: PlaybackHistory | null;
+    private readonly watch: BleedWatch | null;
+    private readonly bleedSubs = new Set<(r: BleedReport) => void>();
+    private readonly windows: { on: number; off: number }[] = [];
     closed = false;
     constructor(
       private readonly stream: MediaStream,
       private readonly source: MediaStreamAudioSourceNode,
+      private readonly output: AudioNode | null,
     ) {
+      this.history = output ? new PlaybackHistory() : null;
+      this.watch = output ? new BleedWatch() : null;
       const track = stream.getAudioTracks()[0];
       this.deviceId = track?.getSettings().deviceId ?? null;
       this.openedAt = ctx.currentTime;
       // A device that disappears (unplugged, revoked) ends the session.
       track?.addEventListener("ended", () => this.close());
     }
-    receive(frame: PitchFrame): void {
-      if (this.closed || frame.t < this.openedAt - STALE_SEC) return;
+    receive(raw: PitchFrame): void {
+      if (this.closed || raw.t < this.openedAt - STALE_SEC) return;
+      const frame = this.history ? { ...raw, playing: this.history.at(raw.t) } : raw;
       this.all.push(frame);
       this.lastRms = frame.rms;
+      if (this.watch) {
+        const was = this.watch.report.bleed;
+        const centre = frame.t - WINDOW_SIZE / 2 / ctx.sampleRate;
+        const singing = this.windows.some(
+          (w) => centre >= w.on - SINGING_MARGIN_SEC && centre <= w.off + SINGING_MARGIN_SEC,
+        );
+        if (this.watch.push(frame, singing) && !was) {
+          const report = this.watch.report;
+          for (const cb of [...this.bleedSubs]) cb(report);
+        }
+      }
       for (const cb of [...this.subs]) cb(frame);
+    }
+    hearOutput(frame: PitchFrame): void {
+      if (!this.closed) this.history?.push(frame);
+    }
+    bleed(): BleedReport | null {
+      return this.watch ? this.watch.report : null;
+    }
+    onBleed(cb: (report: BleedReport) => void): () => void {
+      this.bleedSubs.add(cb);
+      return () => this.bleedSubs.delete(cb);
+    }
+    singing(window: { on: number; off: number }): void {
+      if (window.off > window.on) this.windows.push({ on: window.on, off: window.off });
     }
     onFrame(cb: (frame: PitchFrame) => void): () => void {
       this.subs.add(cb);
@@ -108,6 +149,14 @@ export function createMicGraphWith(
         // already disconnected
       }
       this.subs.clear();
+      this.bleedSubs.clear();
+      if (this.output && playNode) {
+        try {
+          this.output.disconnect(playNode);
+        } catch {
+          // already disconnected
+        }
+      }
       if (session === this) {
         session = null;
         setState("closed");
@@ -151,6 +200,14 @@ export function createMicGraphWith(
           const f = event.data as PitchFrame | { type: string };
           if ("t" in f) session?.receive(f);
         };
+        if (opts.playback) {
+          playNode = makeNode(ctx, PITCH_PROCESSOR, options(outputs));
+          if (outputs === 1 && sink) playNode.connect(sink);
+          playNode.port.onmessage = (event: MessageEvent) => {
+            const f = event.data as PitchFrame | { type: string };
+            if ("t" in f) session?.hearOutput(f);
+          };
+        }
       })();
       // A failure is not memoized: the next call tries again.
       preparing.catch(() => {
@@ -192,7 +249,10 @@ export function createMicGraphWith(
       }
       const source = ctx.createMediaStreamSource(stream);
       source.connect(node as AudioWorkletNode);
-      session = new Session(stream, source);
+      const output = typeof opts.playback === "function" ? opts.playback() : (opts.playback ?? null);
+      const listening = output && playNode ? output : null;
+      if (listening) listening.connect(playNode as AudioWorkletNode);
+      session = new Session(stream, source, listening);
       setState("live");
       return session;
     } catch (err) {
@@ -229,11 +289,13 @@ export function createMicGraphWith(
       if (disposed) return;
       session?.close();
       disposed = true;
-      if (node) {
-        node.port.postMessage({ type: "dispose" });
-        node.port.onmessage = null;
-        node.disconnect();
+      for (const n of [node, playNode]) {
+        if (!n) continue;
+        n.port.postMessage({ type: "dispose" });
+        n.port.onmessage = null;
+        n.disconnect();
       }
+      playNode = null;
       sink?.disconnect();
       node = null;
       setState("closed");

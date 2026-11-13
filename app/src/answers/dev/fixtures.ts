@@ -1,12 +1,15 @@
 // The answer gallery's examples: one or two per kind, each with the expected answer and a partly wrong sample, so
 // every state (idle, pending, correct, wrong, revealed) can be drawn from real data. Musical claims are checked
 // in `fixtures.test.ts` with headless Strudel and @oak/theory.
-import { type AnswerEnv, NEUTRAL_PROFILE } from "../env.tsx";
+import type { KeySpec } from "@oak/api";
+import { CADENCE_OPTIONS, FUNCTION_OPTIONS } from "@oak/content-kit";
+import { type AnswerEnv, appAudio, NEUTRAL_PROFILE } from "../env.tsx";
+import { rnMidis } from "../harmony.ts";
 import { parseSignatureValue } from "../keys/circle.ts";
 import { readsAs, type TextKind } from "../normalize.ts";
 import { emptyValue } from "../response.ts";
 import { centsText, degreeNotes } from "../sing.ts";
-import { engrave, staffContext, staffNotes } from "../staff/model.ts";
+import { engrave, staffChords, staffContext, staffNotes } from "../staff/model.ts";
 import { tapReport, targetSeconds } from "../tap.ts";
 import type {
   AnswerFeedback,
@@ -50,6 +53,18 @@ export const STAFF_G_MAJOR = "G4:4 A4:4 B4:4 G4:4 | D5:2 G4:2";
 /** 1 3 5 in A major from A3, one per second after a four-beat count-in at 120 (the fake-mic WAVs sing it). */
 export const SING_TONIC = 57;
 export const SING_PATTERN = degreeNotes(SING_TONIC, ["1", "3", "5"], { beat: 1, start: 0 });
+/** Wave 4: C, then G/B, as staff chords. */
+export const STAFF_CHORDS = "[C4,E4,G4]:2 [B3,D4,G4]:2";
+export const C_MAJOR: KeySpec = { tonic: "C", mode: "major" };
+export const F_MAJOR: KeySpec = { tonic: "F", mode: "major" };
+/** The function strip's loop, one numeral per bar. */
+export const FUNCTION_LOOP = ["I", "IV", "V", "I"] as const;
+
+/** Plays a numeral in a key on the app's piano (the gallery's stand-in for a host's Band). */
+export function playNumeral(rn: string, key: KeySpec): void {
+  const m = rnMidis(rn, key);
+  if (m) appAudio.playNote(m, { dur: 1 });
+}
 
 export const FIXTURES: Fixture[] = [
   fx({
@@ -558,7 +573,107 @@ export const FIXTURES: Fixture[] = [
       },
     },
   }),
+  // --- Wave 4: chords, numerals, function and cadence -------------------------------------------------
+  fx({
+    id: "slot-function",
+    kind: "slot-choice",
+    title: "Function strip",
+    prompt: "C F G C, one chord per bar: tonic, predominant or dominant?",
+    spec: { ui: "slot-choice", slots: 4, options: [...FUNCTION_OPTIONS] },
+    expected: ["T", "PD", "D", "T"],
+    sample: ["T", "D", "D", "T"],
+    wrongMessage: "Bar 2 is F, IV: it leads away from home, towards V. That is predominant.",
+    env: {
+      harmony: { key: C_MAJOR },
+      slots: { play: (i) => playNumeral(FUNCTION_LOOP[i] ?? "I", C_MAJOR) },
+    },
+  }),
+  fx({
+    id: "slot-cadence",
+    kind: "slot-choice",
+    title: "Cadence per phrase",
+    prompt: "Phrase 1 stops on V; phrase 2 ends V–I with the tune on 1. Name each ending.",
+    spec: {
+      ui: "slot-choice",
+      slots: 2,
+      options: CADENCE_OPTIONS.filter((o) => ["PAC", "IAC", "HC"].includes(o.id)),
+      labels: ["Phrase 1", "Phrase 2"],
+    },
+    expected: ["HC", "PAC"],
+    sample: ["IAC", "PAC"],
+    wrongMessage: "Phrase 1 ends on V itself: it stops on the tension, a half cadence.",
+  }),
+  fx({
+    id: "text-chord",
+    kind: "text",
+    title: "Chord name: type or build",
+    prompt: "E G C, with E at the bottom. Name the chord.",
+    spec: { ui: "text", normalize: "chord" },
+    expected: "C/E",
+    sample: "Em",
+    wrongMessage: "E G C stacks into C E G: a C chord. E at the bottom makes it C/E.",
+  }),
+  fx({
+    id: "staff-chords",
+    kind: "staff-input",
+    title: "Staff: build chords",
+    prompt: "Write C, then G with B at the bottom (G/B), each a half note.",
+    spec: {
+      ui: "staff-input",
+      clef: "treble",
+      bars: 1,
+      palette: { durations: ["2"], accidentals: true, ties: false, rests: false, chords: true },
+    },
+    expected: STAFF_CHORDS,
+    sample: "[C4,E4,G4]:2 [B3,D4,F4]:2",
+    env: { harmony: { key: C_MAJOR } },
+  }),
+  fx({
+    id: "staff-grand-chords",
+    kind: "staff-input",
+    title: "Grand staff: a chord in two hands",
+    prompt: "C/E on the grand staff: E3 in the left hand, C E G from middle C in the right, a whole note.",
+    spec: {
+      ui: "staff-input",
+      clef: "grand",
+      bars: 1,
+      palette: { durations: ["1"], accidentals: true, ties: false, rests: false, chords: true },
+    },
+    expected: "[E3,C4,E4,G4]:1",
+    sample: "[C3,C4,E4,G4]:1",
+    env: { harmony: { key: C_MAJOR, nameChords: "live" } },
+  }),
+  fx({
+    id: "keyboard-build",
+    kind: "keyboard",
+    title: "Keyboard: build and hear a chord",
+    prompt: "Build the triad on degree 2 of C, D at the bottom.",
+    spec: { ui: "keyboard", range: ["C4", "B5"], mode: "chord" },
+    expected: [62, 65, 69],
+    sample: [62, 66, 69],
+    env: { harmony: { key: C_MAJOR, nameChords: "live" } },
+  }),
+  fx({
+    id: "rn-key",
+    kind: "rn-palette",
+    title: "Roman numerals in F, two per bar",
+    prompt: "F, C/E | Dm, B♭: name each chord in F.",
+    spec: { ui: "rn-palette", slots: 4, allow: ["triads", "inversions"] },
+    expected: ["I", "V6", "vi", "IV"],
+    sample: ["I", "V", "vi", "IV"],
+    wrongMessage: "Chord 2 has E at the bottom: the 3rd of C. That is V in first inversion, V6.",
+    env: { harmony: { key: F_MAJOR, slotsPerBar: 2 } },
+  }),
 ];
+
+/** The staged-dictation gallery's loop: I V vi IV in C, chords and a root bass (checked in fixtures.test.ts). */
+export const STAGED_CODE =
+  'setcpm(90/4)\nchords: n("<[0,2,4] [4,6,8] [5,7,9] [3,5,7]>").scale("C4:major").s("piano")\nbass: n("<0 4 5 3>").scale("C2:major").s("piano")';
+export const STAGED_ANSWER = {
+  bass: ["1", "5", "6", "4"],
+  quality: ["maj", "maj", "min", "maj"],
+  rn: ["I", "V", "vi", "IV"],
+};
 
 // --- the gallery's stand-in host: shows what a host does with a GradeResult ------------------------
 
@@ -573,6 +688,7 @@ export function demoMarks(spec: AnswerSpec, value: AnswerValue, expected: Answer
     case "degree-pad":
     case "quality-pad":
     case "rn-palette":
+    case "slot-choice":
     case "keyboard":
     case "order":
       return (value as unknown[]).map((v, i) => ({
@@ -615,7 +731,11 @@ export function demoMarks(spec: AnswerSpec, value: AnswerValue, expected: Answer
       }
       const names = (v: string) => {
         const r = engrave(v, staffContext(spec));
-        return r.ok ? staffNotes(r.score).map((n) => n.pitches.map((x) => x.name).join("+")) : [];
+        if (!r.ok) return [];
+        // Chords are marked per chord (the notes that start together), notes per note.
+        if (spec.palette.chords)
+          return staffChords(staffNotes(r.score)).map((c) => c.pitches.map((x) => x.name).join("+"));
+        return staffNotes(r.score).map((n) => n.pitches.map((x) => x.name).join("+"));
       };
       const want = names(expected as string);
       return names(value as string).map((n, i) => ({ part: i, ok: n === want[i] }));

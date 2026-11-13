@@ -7,7 +7,7 @@ import { ArrowDown, ArrowUp, Play, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { insertItem, moveItem, poolOrder, removeItem } from "../keys.ts";
 import type { AnswerWidgetProps } from "../types.ts";
-import { AnswerFrame, KeyHint, MarkBadge, markOf, revealedOf } from "../ui.tsx";
+import { AnswerFrame, KeyHint, MarkBadge, markOf, revealedOf, SubmitHint } from "../ui.tsx";
 
 const MINI =
   "inline-flex size-7 shrink-0 items-center justify-center rounded-control text-text-3 hover:bg-surface-2 hover:text-text";
@@ -215,7 +215,7 @@ export function OrderAnswer(p: AnswerWidgetProps<"order">) {
           <KeyHint keys={["Alt →"]}>place</KeyHint>
           <KeyHint keys={["Alt ↑", "Alt ↓"]}>move</KeyHint>
           <KeyHint keys={["⌫"]}>take out</KeyHint>
-          <KeyHint keys={["Enter"]}>check</KeyHint>
+          <SubmitHint />
         </>
       }
     >

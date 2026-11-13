@@ -1,0 +1,59 @@
+{/* U05.L04 Chord Names & Arpeggios: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+The four chords from Stacking Thirds, over the same drums and bass. Nothing about the notes has changed, only when each one sounds.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+The new method sits between the stacks and `.scale()`. Its numbers are not degrees: they point into the stack, lowest note first.
+
+<Predict exercise="which-order" />
+</Step>
+
+<Step id="S3">
+Four positions a bar: lowest, middle, highest, middle. Change them and listen.
+
+<Example id="the-loop" views="code,roll" />
+
+<OnPass>One number, one note, sharing the bar like any pattern. `0 1 2` climbs, `2 1 0` falls, and `0 2 1` skips past the middle and comes back to it.</OnPass>
+</Step>
+
+<Step id="S4">
+Same chords, same shape, twice as many notes. This is how a pianist keeps a slow song moving.
+
+<Editor exercise="twice-as-fast" />
+
+<OnPass>Up and back down, twice a bar. A chord played one note at a time is an **arpeggio**: the notes of the triad, spread out in time instead of stacked.</OnPass>
+</Step>
+
+<Step id="S5">
+Every triad has a short name: the root's letter, then a sign for its kind. Nothing means major (C), m means minor (Cm), ° means diminished (C°) and + means augmented (C+).
+
+Strudel reads the same names in code, with two changes of spelling: ° is written `o` (`Co`), and + is written `aug` (`Caug`), since + cannot be written inside a pattern string.
+
+Each bar plays a stack you could write by hand, then the same chord asked for by name. Strudel spaces the named one its own way, with notes doubled and not always the root lowest (under C, E is lowest), but it is the same three notes. For now you read these names; your own chords stay stacked by hand.
+
+<Example id="by-name" views="code,roll" />
+</Step>
+
+<Step id="S6">
+The name comes from the stack: find the root, then measure the two 3rds above it.
+
+<Choice exercise="name-the-stack" />
+
+<OnPass>B, D, F: three half steps, then three more. B°, written `Bo` in code. A name like this, written above the music, is a **chord symbol**: a guitarist or pianist reads it and plays the chord.</OnPass>
+</Step>
+
+<Step id="S7">
+The band keeps the drums and the bass line going. Your chords are blocks for now. Make them move.
+
+<Make exercise="broken-chords-on-the-bass" />
+
+<CanDo id="cd.read.chord-symbols" />
+
+<CanDo id="cd.code.arpeggio" />
+
+<Recap />
+</Step>

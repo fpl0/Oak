@@ -30,6 +30,16 @@ describe("normalizeText (exercises §3.9)", () => {
     expect(c("E♭maj7")).toBe("Eb^7");
     expect(c("C+")).toBe("Caug");
     expect(c("nope")).toBeNull();
+    // Lower-case slash basses (answers seam, Wave 4): the bass letter is read as a note name.
+    expect(["g/b", "c/e", "G/b", "bb/d", "c#m/e", "Cmaj7/g"].map(c)).toEqual([
+      "G/B",
+      "C/E",
+      "G/B",
+      "Bb/D",
+      "C#m/E",
+      "C^7/G",
+    ]);
+    expect(c("C/x")).toBeNull();
   });
   test("Roman numerals (case-sensitive)", () => {
     const r = (t: string) => normalizeText("rn", t);

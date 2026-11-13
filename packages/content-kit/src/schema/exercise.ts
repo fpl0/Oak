@@ -132,11 +132,24 @@ export type Stimulus =
       showCode: boolean;
       showStaff?: boolean;
       showRoll?: boolean;
+      /**
+       * Wave 4. Show the stimulus as a lead sheet (melody on one treble staff, chord symbols above it,
+       * the meter and pickup of the exercise or lesson), for "play / sing from the page" (U07.L09). The
+       * layout comes from `StepUi.leadSheet` when the step has one, else melody = `@melody`, chords =
+       * `@chords`.
+       */
+      showLeadSheet?: boolean;
     }
   /** A lesson step reusing a drill generator. */
   | { src: "generator"; family: FamilyId; level: number; seed?: number }
   /** `content/repertoire/<song-id>/song.ts` (public domain). */
   | { src: "tune"; tuneId: SongId; bars: [number, number]; layers?: Layer[] }
+  /**
+   * Wave 4. The song the learner picked for this capstone (X1: Aura Lee or Red River Valley, from
+   * `CapstoneDef.song`), bars `[from, to)` of its answer key (cycle 0 is the pickup bar), these layers.
+   * Only inside a capstone; resolved by the capstone flow, which also derives the reference.
+   */
+  | { src: "capstone-song"; bars: [number, number]; layers?: Layer[] }
   /** The learner's own audio; never leaves the machine. */
   | { src: "learner-audio" };
 
@@ -171,7 +184,11 @@ export type AnswerUi =
       ui: "staff-input";
       clef: "treble" | "bass" | "grand";
       bars: number;
-      palette: { durations: string[]; accidentals: boolean; ties: boolean; rests: boolean };
+      /**
+       * `chords` (Wave 4): notes entered at the same position stack into one chord (the note-list DSL writes
+       * it `[C4,E4,G4]:2`). Needed by `StaffExpect` `chords`.
+       */
+      palette: { durations: string[]; accidentals: boolean; ties: boolean; rests: boolean; chords?: boolean };
       /**
        * Wave 3. The key signature printed at the start of every line. A note entered on a line or space
        * takes the signature's sharp or flat, as on paper; the value is the sounding spelling (`F#4:4` in
@@ -186,6 +203,14 @@ export type AnswerUi =
       mode?: "notes" | "key-signature";
     }
   | { ui: "grid"; rows: DrumRole[] | ["hit"]; stepsPerBar: 8 | 12 | 16; bars: number }
+  /**
+   * Wave 4. One choice per slot, in order: a function strip under four bars (T PD D T), the cadence at the
+   * end of each phrase, "chord tone or not" per marked note. Every slot offers the same `options`; the
+   * response is `answer.choice` with one option id per slot, graded slot by slot (a `partial` map gives
+   * credit for near misses such as IAC for PAC). `labels` names the slots ("Bar 1" …; default "1", "2" …).
+   * Use `FUNCTION_OPTIONS` and `CADENCE_OPTIONS` for the standard ids.
+   */
+  | { ui: "slot-choice"; slots: number; options: Choice[]; labels?: string[] }
   | { ui: "code"; starter: string; constraints?: AstConstraint[] }
   | { ui: "tap" }
   | { ui: "mic" }
@@ -279,6 +304,12 @@ export type Matcher =
       perRole: boolean;
       displacementCredit: number;
       tracks?: TrackRef[];
+      /**
+       * Wave 4. With `perRole`, how the roles' onset F1s are folded: `onsets` (default) weighs each role by
+       * its number of onsets; `equal` gives every role the same weight, so a whole part left out (the
+       * snare's backbeat under sixteen hi-hats) fails. The ladder's L1 uses `equal` (contracts §2.9).
+       */
+      roleWeight?: "onsets" | "equal";
     }
   | { m: "melody"; pitch: PitchMode; wPitch: number; wRhythm: number; rhythmTol: Rat; track?: TrackRef }
   | {
@@ -501,7 +532,17 @@ export type StaffExpect =
    * `set`.
    */
   | { e: "key-signature"; key: KeySpec; order?: "sequence" | "set" }
-  | { e: "events"; reference: Reference; matcher: Matcher };
+  | { e: "events"; reference: Reference; matcher: Matcher }
+  /**
+   * Wave 4. Chords built on the staff, one per symbol in order (a chord = the notes that start together).
+   * `symbols` are code spellings, slash chords allowed (`C`, `Am`, `Bo`, `Caug`, `C/E`): each chord must
+   * hold exactly the symbol's pitch classes, in any octave and any order of stacking. `spelling: "strict"`
+   * also checks the letters (`C E G`, never `C F♭ G`; `staff.enharmonic` otherwise). `bass: true` checks
+   * the lowest note: the root, or the note after the slash (`harmony.inversion`). Wrong notes are
+   * `harmony.pcset`, a chord missing or extra `harmony.missing-chord` / `harmony.extra-chord`. Needs
+   * `palette.chords` (`staff.chords-palette`). Tests answer with `{ staff: "[C4,E4,G4]:2 [B3,D4,G4]:2" }`.
+   */
+  | { e: "chords"; symbols: string[]; spelling: "strict" | "enharmonic"; bass: boolean };
 export interface TapEx extends ExBase<"tap"> {
   mode: "along" | "echo" | "read";
   stimulus: Stimulus;
@@ -554,6 +595,22 @@ export interface DictationEx extends ExBase<"dictation"> {
   given?: { rhythm?: boolean; firstNote?: boolean; harmonicRhythm?: boolean };
   /** Wave 3. A by-ear transcription step: see `ByEarSpec`. Needs `answer: { ui: "code" }`. */
   byEar?: ByEarSpec;
+  /**
+   * Wave 4. Staged chord dictation (bass, then quality, then numeral): the widget each stage is answered
+   * with, keyed by the stages listed in `stages` (`dictation.stage-answers`). Usual widgets: `bass` →
+   * `degree-pad` (the bass degree under each chord, 1-based), `quality` → `quality-pad`, `rn` →
+   * `rn-palette`, `tonic` → `choice` or `text`. The response is `answer.stages`, one list per stage with
+   * one entry per chord (degrees for `bass` when its widget is a degree pad, quality ids, numerals).
+   * `answer` stays the widget of a single-stage step and the fallback.
+   */
+  stageAnswers?: Partial<Record<DictationStage, AnswerUi>>;
+  /**
+   * Wave 4. `sequential` (the default with `stageAnswers`): a stage opens when the one before passes at
+   * `stagePass` or is revealed, so the bass is always heard first. `together`: all stages at once.
+   */
+  stageFlow?: "sequential" | "together";
+  /** Wave 4. Pass mark of each stage in a sequential flow. Default 0.8 (contracts §6.6 X1). */
+  stagePass?: number;
 }
 /**
  * By-ear transcription inside a lesson (U03.L10 on): the source plays with its code, roll and staff
@@ -571,6 +628,43 @@ export interface ByEarSpec {
    * `any-key` = `transposition-invariant` (the tune in any key; degrees and rhythm decide).
    */
   accepts: "exact" | "any-octave" | "any-key";
+  /**
+   * Wave 4. A by-ear transcription in parts, one track at a time and in this order: the bass first, then
+   * the chords (bass-first, contracts §2.9 L3), or the melody then its chords. Each part is graded on its
+   * own track of the learner's code against the same track of the reference (`track`), with its own
+   * matcher and pass mark; the next part opens when the one before passes or is revealed. The step's
+   * `matcher` grades the whole answer at the end. A part with a harmony or pcset matcher needs a bass part
+   * before it (`by-ear.bass-first`).
+   */
+  parts?: ByEarPart[];
+}
+export interface ByEarPart {
+  /** The track label in both the reference and the learner's code: `bass`, `chords`, `mel`. */
+  track: TrackRef;
+  /** What the learner is asked for: "The bass: one note per bar". */
+  label: Md;
+  matcher: Matcher;
+  /** Default: the kind's pass mark (0.85). */
+  pass?: number;
+}
+/**
+ * Wave 4. What a transcription step or phrase check tells the learner before they start (contracts §6.6
+ * X1, §6.11 rule 6): the meter, the key and its tonic, where the pickup falls, and the rhythm skeleton of a
+ * phrase (code, played and shown as rhythm only).
+ */
+export interface TranscribeGiven {
+  meter?: boolean;
+  key?: boolean;
+  tonic?: boolean;
+  pickup?: boolean;
+  /** Code whose onsets are the phrase's rhythm (one pitch); shown on a rhythm staff and playable. */
+  rhythmSkeleton?: string;
+}
+/** Wave 4. One stage of a staged chord transcription (bass, then quality, then numerals). */
+export interface TranscribeStage {
+  stage: "bass" | "quality" | "rn";
+  matcher: Matcher;
+  pass: number;
 }
 export interface TranscribeStepEx extends ExBase<"transcribe-step"> {
   projectId: string;
@@ -579,9 +673,17 @@ export interface TranscribeStepEx extends ExBase<"transcribe-step"> {
   layer: Layer | "form";
   bars: [number, number];
   grading:
-    | { mode: "auto"; reference: Reference; matcher: Matcher }
+    | {
+        mode: "auto";
+        reference: Reference;
+        matcher: Matcher;
+        /** Wave 4. Staged chords, in order (bass → quality → rn); each must reach its pass mark. */
+        stages?: TranscribeStage[];
+      }
     | { mode: "self"; checklist: { id: string; label: Md }[] };
   studio: { minRate: number; transposeSemis?: boolean; overlay: boolean };
+  /** Wave 4. What the learner is told before starting. */
+  given?: TranscribeGiven;
 }
 export interface ComposeBriefEx extends ExBase<"compose-brief"> {
   brief: Md;
@@ -697,6 +799,29 @@ export const CODE_KINDS = [
 ] as const satisfies readonly ExerciseKind[];
 /** Kinds allowed to have `hints: null` regardless of role. */
 export const HINTLESS_KINDS = ["predict", "listen"] as const satisfies readonly ExerciseKind[];
+
+// --- Wave 4 standard options ---------------------------------------------------------------------
+
+/**
+ * The function strip's options (`slot-choice`, contracts §4 H02). Labels are the words U06.L03 teaches; a
+ * lesson that comes earlier must not show them (check 14 reads choice labels).
+ */
+export const FUNCTION_OPTIONS: readonly Choice[] = [
+  { id: "T", label: "T: home (tonic)" },
+  { id: "PD", label: "PD: away (predominant)" },
+  { id: "D", label: "D: tension (dominant)" },
+];
+/**
+ * The cadence options (contracts §6.6 C2 and §7.3 `fam.har.cadence`), ids from `CADENCE_TYPES`. A lesson
+ * offers only the ones taught by then: PAC, IAC and HC from U06.L04, PC and DC from U06.L06–L07.
+ */
+export const CADENCE_OPTIONS: readonly Choice[] = [
+  { id: "PAC", label: "Perfect authentic (V–I, melody on 1)" },
+  { id: "IAC", label: "Imperfect authentic (V–I, melody not on 1)" },
+  { id: "HC", label: "Half cadence (ends on V)" },
+  { id: "PC", label: "Plagal (IV–I)" },
+  { id: "DC", label: "Deceptive (V–vi)" },
+];
 
 // --- tests --------------------------------------------------------------------------------------
 

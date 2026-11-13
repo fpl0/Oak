@@ -1,13 +1,21 @@
 // Builds every service over one context, in dependency order.
+
+import type { GradeResult } from "@oak/content-kit";
+import type { GradeRequest } from "@oak/grader";
 import { freshness as cardFreshness } from "@oak/srs";
 import type { OakConfig } from "../config.ts";
+import { ApiError } from "../errors.ts";
+import { CourseAdapter } from "../srs-wiring.ts";
 import { AudioStore } from "./audio-store.ts";
 import { BackupService } from "./backup.ts";
 import { CanDoService } from "./cando.ts";
 import { CapstoneReleaseService } from "./capstone-release.ts";
+import { CapstoneSessionsService } from "./capstone-sessions.ts";
 import type { ServiceContext } from "./context.ts";
 import { CourseService } from "./course.ts";
 import { GatesService } from "./gates.ts";
+import { GymService } from "./gym.ts";
+import { LadderService } from "./ladder.ts";
 import { type LadderGenerator, LibraryService, type PatternStimulus } from "./library.ts";
 import { MasteryService } from "./mastery.ts";
 import { OnboardingService } from "./onboarding.ts";
@@ -34,6 +42,10 @@ export interface Services {
   backup: BackupService;
   store: AudioStore;
   voice: VoiceService;
+  /** Wave 4. */
+  capstoneSessions: CapstoneSessionsService;
+  ladder: LadderService;
+  gym: GymService;
 }
 
 export interface ServiceOptions {
@@ -41,6 +53,8 @@ export interface ServiceOptions {
   srs: () => SrsPort | null;
   stimulus?: PatternStimulus;
   ladder?: LadderGenerator;
+  /** The learner host's grade (ladder submissions are graded exactly on the server, wave4.md §5.4). */
+  grade?: (req: GradeRequest) => Promise<GradeResult>;
 }
 
 export function createServices(ctx: ServiceContext, opts: ServiceOptions): Services {
@@ -68,7 +82,17 @@ export function createServices(ctx: ServiceContext, opts: ServiceOptions): Servi
     );
   };
   const cando = new CanDoService(ctx, { sourceDone, freshness });
-  const course = new CourseService(ctx, { gates, unlocks, mastery, cando, streak, voice, srs: opts.srs });
+  const capstoneSessions = new CapstoneSessionsService(ctx, { gates, mastery, streak });
+  const course = new CourseService(ctx, {
+    gates,
+    unlocks,
+    mastery,
+    cando,
+    streak,
+    voice,
+    srs: opts.srs,
+    capstoneSessions,
+  });
   const store = new AudioStore(opts.config.audioDir, opts.config.albumDir);
   const sessions = new SessionsService(ctx, {
     gates,
@@ -76,15 +100,38 @@ export function createServices(ctx: ServiceContext, opts: ServiceOptions): Servi
     streak,
     course,
     voice,
+    capstoneSessions,
     tutorOff: () => ctx.repos.settings.get("tutor").backend === "off",
   });
   const library = new LibraryService(ctx, {
     streak,
+    mastery,
     store,
     ...(opts.stimulus === undefined ? {} : { stimulus: opts.stimulus }),
     ...(opts.ladder === undefined ? {} : { ladder: opts.ladder }),
   });
-  const release = new CapstoneReleaseService(ctx, { course, gates, library, unlocks, cando, streak });
+  const release = new CapstoneReleaseService(ctx, {
+    course,
+    gates,
+    library,
+    unlocks,
+    cando,
+    streak,
+    capstoneSessions,
+  });
+  const ladder = new LadderService(ctx, {
+    library,
+    mastery,
+    streak,
+    unlocks,
+    srs: opts.srs,
+    grade:
+      opts.grade ??
+      (() => {
+        throw new ApiError("unavailable", "the grader is not available");
+      }),
+    ...(opts.ladder === undefined ? {} : { generator: opts.ladder }),
+  });
   const onboarding = new OnboardingService(ctx, course);
   const ops = new OpsService(ctx, mastery);
   const backup = new BackupService(
@@ -92,7 +139,14 @@ export function createServices(ctx: ServiceContext, opts: ServiceOptions): Servi
     { backupsDir: opts.config.backupsDir, store },
     { contentVersion: () => ctx.content.contentVersion, now: () => ctx.clock.now() },
   );
-  return {
+  let services: Services;
+  const gym = new GymService(ctx, {
+    gates,
+    ladder,
+    capstoneSessions,
+    course: () => new CourseAdapter(ctx.repos, ctx.content, services),
+  });
+  services = {
     ctx,
     gates,
     unlocks,
@@ -108,5 +162,9 @@ export function createServices(ctx: ServiceContext, opts: ServiceOptions): Servi
     backup,
     store,
     voice,
+    capstoneSessions,
+    ladder,
+    gym,
   };
+  return services;
 }

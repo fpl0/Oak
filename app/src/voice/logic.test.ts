@@ -155,6 +155,9 @@ describe("the pitch match and the output-change advice", () => {
   });
   test("each trial in words and arrows", () => {
     expect(matchWords(1)).toBe("spot on (+1¢)");
+    // Wave 4 (contracts §8.6): a trial the playback spoke over says so, whatever was measured.
+    expect(matchWords(3, true)).toBe("the mic heard the playback");
+    expect(matchWords(null, true)).toBe("the mic heard the playback");
     expect(matchWords(-32)).toBe("↓ a little low (−32¢)");
     expect(matchWords(-399)).toBe("↓ 4 semitones low");
     expect(matchWords(100)).toBe("↑ 1 semitone high");

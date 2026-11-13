@@ -3,6 +3,13 @@
 //   loading → trial.presenting → trial.answering ⇄ trial.replaying → feedback (⇄ auditioning)
 //           → [sung resolution] → next trial … → finishing → summary
 //
+// Wave 4 (stage D): a staged trial (chord dictation) is answered step by step inside `answering` — the bass,
+// then the quality, then the numerals (`STEP_CHECK` checks the open step, which opens the next one when it
+// passes; `STEP_REVEAL` shows it, counted as help); the numerals are the trial's own answer (`SUBMIT`). A
+// trial with a sung part (the bass line of a bass-degree trial) may be sung before it is picked
+// (`SING_PART` → `trial.singingPart`, never in Quiet mode): the sung notes prefill the pad and are recorded
+// note by note; the pick is what is graded.
+//
 // Side effects are actors the runtime provides (`drillActors` in runtime.ts); the machine itself only decides.
 // `start` resolves the server's drill session and the trial source (a resumed set keeps its session and its
 // recorded trials); `present` plays a trial and, for tap and sing trials, captures the response; `audition`
@@ -11,6 +18,7 @@
 // (`@oak/drills` through `deps.grade`), so the unit tests drive the whole flow with fakes.
 import type {
   Answer,
+  Degree,
   DrillFinish,
   DrillSession,
   DrillTrialRecord,
@@ -22,6 +30,7 @@ import type { DrillTrialResult, TrialResponse } from "@oak/drills";
 import type { PitchFrame } from "@oak/pitch";
 import { assign, fromCallback, fromPromise, setup } from "xstate";
 import type { SungSummary } from "../answers/types.ts";
+import { bassAloneWhileAnswering } from "./harmony.ts";
 import {
   type Modality,
   type PlannedTrial,
@@ -47,8 +56,44 @@ export interface ResumeState {
   records: DrillTrialRecord[];
 }
 
+/** One step of a staged trial (chord dictation: the bass, the quality, then the numerals). */
+export type TrialStep = "bass" | "quality" | "rn";
+export interface StepRecord {
+  answer: Answer | null;
+  credit: number;
+  passed: boolean;
+  marks: boolean[];
+  /** Shown instead of found ("Show the bass"): help, like a replay beyond the limit. */
+  revealed: boolean;
+  tries: number;
+}
+export interface StepsState {
+  order: TrialStep[];
+  /** Index of the open step. */
+  at: number;
+  results: Partial<Record<TrialStep, StepRecord>>;
+}
+/** A sung part taken before the pick: the notes, one per target, and the degrees they were heard as. */
+export interface SungPart {
+  notes: SungSummary[];
+  degrees: (Degree | null)[];
+  skipped: boolean;
+}
+
 export interface DrillDeps {
   grade(trial: Trial, response: TrialResponse): DrillTrialResult;
+  /** The steps of a staged trial in order, or null for a trial with one answer (default: none). */
+  stepsOf?(trial: Trial): TrialStep[] | null;
+  /** One step checked on its own (pass mark 0.8). */
+  gradeStep?(
+    trial: Trial,
+    step: TrialStep,
+    answer: Answer,
+  ): { credit: number; passed: boolean; marks: boolean[] };
+  /** Whether a trial has a part that may be sung before it is picked (default: none). */
+  hasSungPart?(trial: Trial): boolean;
+  /** The sung part graded note by note (contracts §8.1) and read as degrees. */
+  gradeSungPart?(trial: Trial, frames: PitchFrame[]): { notes: SungSummary[]; degrees: (Degree | null)[] };
   /** An FET trial's sung resolution (feeds `fam.deg.resolve`; never the identification credit). */
   gradeResolution(
     trial: Trial,
@@ -76,7 +121,9 @@ export interface DrillInput {
 }
 
 export type Stage = "cue" | "count-in" | "listen" | "respond" | "sing" | "resolution" | null;
-export type Audition = "again" | "answer" | "compare" | "cue" | "resolve";
+/** After the answer: again, the answer, yours then it, the key, the way home; and for chords the bass alone,
+ * the chords broken (arpeggiated), and the passage in its key. */
+export type Audition = "again" | "answer" | "compare" | "cue" | "resolve" | "bass" | "arpeggio" | "context";
 
 export type DrillEvent =
   | { type: "PRESENTED" }
@@ -98,7 +145,15 @@ export type DrillEvent =
   | { type: "QUIET"; quiet: boolean }
   /** A dictation A/B or bar replay while answering: counts as a replay, no state change. */
   | { type: "LISTENED" }
+  /** A staged trial: check the open step (not the last one, which is `SUBMIT`). */
+  | { type: "STEP_CHECK"; answer: Answer }
+  /** A staged trial: show the open step's answer and go on (counted as help). */
+  | { type: "STEP_REVEAL" }
+  /** Sing the part before picking it (the bass line); never in Quiet mode. */
+  | { type: "SING_PART" }
   | { type: "AUDITION"; what: Audition }
+  /** While answering a bass trial or a staged bass step: the bass line by itself (counts as a replay). */
+  | { type: "BASS_ALONE" }
   | { type: "AUDITION_DONE" }
   | { type: "NEXT" }
   | { type: "RETRY" };
@@ -121,6 +176,10 @@ export interface DrillContext {
   stageAt: number | null;
   /** Taps or frames of the current trial (compare plays them back). */
   captured: { taps: number[] | null; frames: PitchFrame[] | null; answer: Answer | null };
+  /** A staged trial's steps (null: one answer). */
+  steps: StepsState | null;
+  /** The part sung before the pick (null: none sung). */
+  sungPart: SungPart | null;
   micError: string | null;
   audition: Audition | null;
   finish: DrillFinish | null;
@@ -138,6 +197,10 @@ export interface AuditionInput {
   captured: DrillContext["captured"];
 }
 export interface ResolveInput {
+  trial: Trial;
+  quiet: boolean;
+}
+export interface SingPartInput {
   trial: Trial;
   quiet: boolean;
 }
@@ -183,6 +246,33 @@ function outcomeFrom(
 
 function rtOf(ctx: DrillContext): number {
   return ctx.answerAt === null ? 0 : Math.max(0, ctx.deps.now() - ctx.answerAt);
+}
+
+/** The steps of a trial as the machine starts it (null: a trial with one answer). */
+export function initialSteps(deps: DrillDeps, trial: Trial): StepsState | null {
+  const order = deps.stepsOf?.(trial) ?? null;
+  return order && order.length > 1 ? { order, at: 0, results: {} } : null;
+}
+
+/** Whether the open step of a staged trial is one checked on its own (every step but the last). */
+export const onInnerStep = (steps: StepsState | null): boolean =>
+  steps !== null && steps.at < steps.order.length - 1;
+
+/** A step shown instead of found counts as help, like a replay past the limit (exercises §4.2 item 5). */
+export function replaysWithHelp(replays: number, limit: number, shownSteps: number): number {
+  return shownSteps <= 0 ? replays : Math.max(replays, Math.max(0, limit) + shownSteps);
+}
+
+/** The staged answers so far, as `Answer.stages` (one list per step, one entry per chord). */
+export function stagesAnswer(steps: StepsState, last: Answer | null): NonNullable<Answer["stages"]> {
+  const out: NonNullable<Answer["stages"]> = {};
+  const listOf = (step: TrialStep, a: Answer | null | undefined): string[] =>
+    ((step === "bass" ? a?.degrees : step === "quality" ? a?.qualities : a?.rn) ?? []).map(String);
+  for (const step of steps.order) {
+    const a = step === steps.order[steps.order.length - 1] ? last : steps.results[step]?.answer;
+    out[step] = listOf(step, a);
+  }
+  return out;
 }
 
 /** Folds the taken resolution into the current outcome and record (identification credit unchanged). */
@@ -241,6 +331,7 @@ export const drillMachine = setup({
     present: fromCallback<DrillEvent, PresentInput>(() => () => {}),
     audition: fromCallback<DrillEvent, AuditionInput>(() => () => {}),
     resolve: fromCallback<DrillEvent, ResolveInput>(() => () => {}),
+    singPart: fromCallback<DrillEvent, SingPartInput>(() => () => {}),
     finish: fromPromise<DrillFinish | null, FinishInput>(async () => null),
   },
   actions: {
@@ -253,14 +344,61 @@ export const drillMachine = setup({
     gradeAnswer: assign(({ context, event }) => {
       if (event.type !== "SUBMIT") return {};
       const trial = (context.current as PlannedTrial).trial;
+      const steps = context.steps;
+      // A staged trial is graded on its last step (the numerals); the earlier steps travel with it in
+      // `answer.stages`, and a step that was shown counts as help.
+      const answer =
+        steps && event.answer ? { ...event.answer, stages: stagesAnswer(steps, event.answer) } : event.answer;
+      const shown = steps ? steps.order.filter((s) => steps.results[s]?.revealed === true).length : 0;
       const response: TrialResponse = {
-        ...(event.answer ? { answer: event.answer } : {}),
+        ...(answer ? { answer } : {}),
         rtMs: rtOf(context),
-        replays: context.replays,
+        replays: replaysWithHelp(context.replays, trial.cue.replays, shown),
       };
       const result = context.deps.grade(trial, response);
-      const captured = { ...context.captured, answer: event.answer };
-      return { captured, ...outcomeFrom({ ...context, captured }, result, false, null) };
+      const captured = { ...context.captured, answer };
+      const sung = context.sungPart && !context.sungPart.skipped ? context.sungPart.notes : null;
+      return { captured, ...outcomeFrom({ ...context, captured }, result, false, sung) };
+    }),
+    checkStep: assign(({ context, event }) => {
+      if (event.type !== "STEP_CHECK" || !context.steps) return {};
+      const trial = (context.current as PlannedTrial).trial;
+      const steps = context.steps;
+      const step = steps.order[steps.at] as TrialStep;
+      const graded = context.deps.gradeStep?.(trial, step, event.answer) ?? {
+        credit: 0,
+        passed: false,
+        marks: [],
+      };
+      const prev = steps.results[step];
+      const record: StepRecord = {
+        answer: event.answer,
+        ...graded,
+        revealed: false,
+        tries: (prev?.tries ?? 0) + 1,
+      };
+      return {
+        steps: {
+          ...steps,
+          at: graded.passed ? steps.at + 1 : steps.at,
+          results: { ...steps.results, [step]: record },
+        },
+      };
+    }),
+    revealStep: assign(({ context }) => {
+      if (!context.steps) return {};
+      const steps = context.steps;
+      const step = steps.order[steps.at] as TrialStep;
+      const prev = steps.results[step];
+      const record: StepRecord = {
+        answer: prev?.answer ?? null,
+        credit: 0,
+        passed: false,
+        marks: prev?.marks ?? [],
+        revealed: true,
+        tries: prev?.tries ?? 0,
+      };
+      return { steps: { ...steps, at: steps.at + 1, results: { ...steps.results, [step]: record } } };
     }),
     gradeCaptured: assign(({ context, event }) => {
       if (event.type !== "CAPTURED") return {};
@@ -284,6 +422,12 @@ export const drillMachine = setup({
     ),
   },
   guards: {
+    bassAlone: ({ context }) =>
+      context.current !== null &&
+      bassAloneWhileAnswering(
+        context.current.trial,
+        context.steps ? (context.steps.order[context.steps.at] ?? null) : null,
+      ),
     capturesResponse: ({ context }) => capturesResponse(context.current?.trial),
     sing: ({ context }) => isSing(context.current?.trial),
     needsResolution: ({ context }) =>
@@ -291,6 +435,11 @@ export const drillMachine = setup({
       context.outcomes[context.index]?.revealed !== true &&
       context.outcomes[context.index]?.result.skipped !== true,
     hasMore: ({ context }) => context.source !== null && context.index + 1 < context.source.total,
+    innerStep: ({ context }) => onInnerStep(context.steps),
+    canSingPart: ({ context }) =>
+      !context.input.quiet &&
+      context.current !== null &&
+      context.deps.hasSungPart?.(context.current.trial) === true,
     resumedComplete: ({ context }) => context.source !== null && context.index >= context.source.total,
   },
 }).createMachine({
@@ -313,6 +462,8 @@ export const drillMachine = setup({
       stage: null,
       stageAt: null,
       captured: { taps: null, frames: null, answer: null },
+      steps: null,
+      sungPart: null,
       micError: null,
       audition: null,
       finish: null,
@@ -377,6 +528,8 @@ export const drillMachine = setup({
             stage: null,
             stageAt: null,
             captured: { taps: null, frames: null, answer: null },
+            steps: initialSteps(context.deps, current.trial),
+            sungPart: null,
             micError: null,
             audition: null,
           };
@@ -410,10 +563,13 @@ export const drillMachine = setup({
               actions: assign({ micError: ({ event }) => event.message }),
             },
             SUBMIT: {
-              guard: ({ context }) => !capturesResponse(context.current?.trial),
+              guard: ({ context }) =>
+                !capturesResponse(context.current?.trial) && !onInnerStep(context.steps),
               target: "#drill.feedback",
               actions: "gradeAnswer",
             },
+            STEP_CHECK: { guard: "innerStep", actions: "checkStep" },
+            STEP_REVEAL: { guard: "innerStep", actions: "revealStep" },
             SKIP_SUNG: { guard: "capturesResponse", target: "#drill.feedback", actions: "gradeSkipped" },
           },
         },
@@ -424,10 +580,14 @@ export const drillMachine = setup({
           })),
           on: {
             SUBMIT: {
-              guard: ({ context }) => !capturesResponse(context.current?.trial),
+              guard: ({ context }) =>
+                !capturesResponse(context.current?.trial) && !onInnerStep(context.steps),
               target: "#drill.feedback",
               actions: "gradeAnswer",
             },
+            STEP_CHECK: { guard: "innerStep", actions: "checkStep" },
+            STEP_REVEAL: { guard: "innerStep", actions: "revealStep" },
+            SING_PART: { guard: "canSingPart", target: "singingPart" },
             REVEAL: { target: "#drill.feedback", actions: "gradeRevealed" },
             REPLAY: {
               target: "presenting",
@@ -435,6 +595,11 @@ export const drillMachine = setup({
               actions: assign({ replays: ({ context }) => context.replays + 1, micError: null }),
             },
             CUE: { guard: ({ context }) => !capturesResponse(context.current?.trial), target: "cueing" },
+            BASS_ALONE: {
+              guard: "bassAlone",
+              target: "bassAlone",
+              actions: assign({ replays: ({ context }) => context.replays + 1 }),
+            },
             LISTENED: { actions: assign({ replays: ({ context }) => context.replays + 1 }) },
             SKIP_SUNG: { guard: "capturesResponse", target: "#drill.feedback", actions: "gradeSkipped" },
           },
@@ -450,8 +615,80 @@ export const drillMachine = setup({
           },
           on: {
             PRESENTED: { target: "answering" },
-            SUBMIT: { target: "#drill.feedback", actions: "gradeAnswer" },
+            SUBMIT: {
+              guard: ({ context }) => !onInnerStep(context.steps),
+              target: "#drill.feedback",
+              actions: "gradeAnswer",
+            },
+            STEP_CHECK: { guard: "innerStep", target: "answering", actions: "checkStep" },
+            STEP_REVEAL: { guard: "innerStep", target: "answering", actions: "revealStep" },
             REVEAL: { target: "#drill.feedback", actions: "gradeRevealed" },
+          },
+        },
+        // The bass line by itself, while the pad stays answerable (as during the cadence).
+        bassAlone: {
+          invoke: {
+            src: "audition",
+            input: ({ context }) => ({
+              trial: (context.current as PlannedTrial).trial,
+              what: "bass" as const,
+              captured: context.captured,
+            }),
+          },
+          on: {
+            AUDITION_DONE: { target: "answering" },
+            SUBMIT: {
+              guard: ({ context }) => !onInnerStep(context.steps),
+              target: "#drill.feedback",
+              actions: "gradeAnswer",
+            },
+            STEP_CHECK: { guard: "innerStep", target: "answering", actions: "checkStep" },
+            STEP_REVEAL: { guard: "innerStep", target: "answering", actions: "revealStep" },
+            REVEAL: { target: "#drill.feedback", actions: "gradeRevealed" },
+          },
+        },
+        // The part sung before it is picked (the bass line): the chords play without it while the learner sings.
+        // The notes prefill the pad; the pick is still the learner's, and nothing here is graded as the answer.
+        singingPart: {
+          invoke: {
+            src: "singPart",
+            input: ({ context }) => ({
+              trial: (context.current as PlannedTrial).trial,
+              quiet: context.input.quiet,
+            }),
+          },
+          on: {
+            CAPTURED: {
+              target: "answering",
+              actions: assign(({ context, event }) => {
+                const trial = (context.current as PlannedTrial).trial;
+                const graded = context.deps.gradeSungPart?.(trial, event.frames ?? []) ?? {
+                  notes: [],
+                  degrees: [],
+                };
+                return { sungPart: { ...graded, skipped: false }, stage: null };
+              }),
+            },
+            // Nothing to sing (no targets): straight back to the pad.
+            PRESENTED: { target: "answering", actions: assign({ stage: null }) },
+            SKIP_SUNG: {
+              target: "answering",
+              actions: assign({ sungPart: { notes: [], degrees: [], skipped: true }, stage: null }),
+            },
+            MIC_ERROR: {
+              target: "answering",
+              actions: assign({ micError: ({ event }) => event.message, stage: null }),
+            },
+            // Quiet mode switched on while singing: the mic closes at once (the actor stops), nothing counts.
+            QUIET: {
+              guard: ({ event }) => event.quiet,
+              target: "answering",
+              actions: assign({
+                input: ({ context }) => ({ ...context.input, quiet: true }),
+                sungPart: { notes: [], degrees: [], skipped: true },
+                stage: null,
+              }),
+            },
           },
         },
       },

@@ -21,6 +21,7 @@ import { Kbd } from "../ui/kit/basics.tsx";
 import { FeatureGlimpse } from "./Glimpse.tsx";
 import { glimpseOf } from "./glimpse.ts";
 import { KIND_LABEL, sitesOf, unlockArpeggio } from "./model.ts";
+import { VoicingCompare } from "./VoicingCompare.tsx";
 
 /** The whole moment never runs longer than this (contracts §9.3). */
 export const UNLOCK_MOMENT_MAX_MS = 8000;
@@ -199,7 +200,10 @@ export function UnlockMoment({
           </li>
         ))}
       </ul>
-      <div className="flex items-center justify-end gap-3">
+      {/* voicing() arrives after voicing by hand (contracts §3.1 rule 6): the two side by side. */}
+      {toolIds.includes("tb.voicing") ? <VoicingCompare /> : null}
+      {/* Kept in view while a long moment (the voicing comparison) scrolls. */}
+      <div className="sticky -bottom-5 -mb-5 flex items-center justify-end gap-3 bg-surface pt-2 pb-5">
         <span className="text-sm text-text-3">
           <Kbd>Esc</Kbd> skips
         </span>

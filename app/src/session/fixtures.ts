@@ -185,7 +185,7 @@ export function fixtureBootstrap(over: Partial<Bootstrap> = {}): Bootstrap {
     health: {
       ok: true,
       appVersion: "0.0.0",
-      contractsVersion: "1.3",
+      contractsVersion: "1.4",
       schemaVersion: 1,
       contentVersion: null,
       tutor: "ready",

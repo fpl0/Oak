@@ -1,10 +1,14 @@
 // AudioPlans the runner builds itself (pure): how a trial is staged in time (cue, stimulus, response window),
 // "hear the answer", and "compare" (yours, then it). `@oak/drills` gives the trial's own plans
 // (`trialAudio`); this file only arranges them and adds the learner's side. Tested without audio.
-import type { Answer, Degree, KeySpec, MeterId, Trial } from "@oak/api";
+import type { Answer, Degree, KeySpec, LearnerProfile, MeterId, Trial } from "@oak/api";
 import { type AudioPlan, clickPlan, eventsToAudioPlan, parseMiniCode, trialAudio } from "@oak/drills";
 import { degreeSemitones, labelPitch, METERS } from "@oak/theory";
 import type { SungSummary } from "../answers/types.ts";
+import { chordComparePlan, harmonyCuePlan, isHarmonyTrial, singCuePlan } from "./harmony.ts";
+
+/** The comfortable range the reference cadence of a sung part is placed in (contracts §8.1 rule 3). */
+export type ComfortRange = Pick<LearnerProfile, "comfLow" | "comfHigh">;
 
 const EMPTY: AudioPlan = { events: [], durationSec: 0, preload: [] };
 
@@ -71,16 +75,42 @@ const unitsPerBar = (trial: Trial<unknown>): number =>
   (METERS[(trial.params.meter as MeterId | undefined) ?? "4/4"] ?? METERS["4/4"]).unitsPerBar;
 
 /**
+ * The reference cadence (`@oak/strudel/reference`) a trial opens with, when it has one: a sung trial in a key
+ * hears it in the octave it sings in (its count-in, if any, follows); a harmony trial (stage D and the chord
+ * families) always hears its key first. Null: the trial keeps its own cue.
+ */
+export function referenceCueOf(trial: Trial<unknown>, comfort?: ComfortRange | null): AudioPlan | null {
+  if (trial.params.mode === "sing") {
+    const ref = singCuePlan(trial, comfort);
+    if (!ref) return null;
+    if (trial.cue.countInBars > 0) {
+      const own = trialAudio(trial, keyOfTrial(trial)).cue;
+      return own ? sequence([ref, own], 0.4) : ref;
+    }
+    return ref;
+  }
+  // A harmony trial always hears its key first through the reference cadence, unless its own events carry the
+  // cadence bars (then those are the cue) or it counts in.
+  if (isHarmonyTrial(trial) && !(Number(trial.params.cueBars ?? 0) > 0) && trial.cue.countInBars === 0)
+    return harmonyCuePlan(trial);
+  return null;
+}
+
+/**
  * How a trial unfolds in time. Tap targets and sung targets are seconds from the start of the response
  * window (`@oak/drills` grade.ts); the window starts `responseAt` after the stimulus, or after the count-in
  * when the trial is read from the page (`playFirst: false`).
  */
-export function stagingOf(trial: Trial<unknown>): Staging {
+export function stagingOf(trial: Trial<unknown>, comfort?: ComfortRange | null): Staging {
   const audio = trialAudio(trial, keyOfTrial(trial));
-  const cue = audio.cue;
-  // A tonic-chord cue leaves a short breath before the target (ux §4.2: a gap, then the target).
-  const tonicCue = cue !== null && !(Number(trial.params.cueBars ?? 0) > 0) && trial.cue.countInBars === 0;
-  const cueDur = cue ? cue.durationSec + (tonicCue ? 0.4 : 0) : 0;
+  const reference = referenceCueOf(trial, comfort);
+  const cue = reference ?? audio.cue;
+  // A tonic-chord or reference cue leaves a short breath before the target (ux §4.2: a gap, then the target).
+  const tonicCue =
+    reference !== null
+      ? trial.cue.countInBars === 0
+      : cue !== null && !(Number(trial.params.cueBars ?? 0) > 0) && trial.cue.countInBars === 0;
+  const cueDur = cue ? cue.durationSec + (tonicCue ? (reference ? 0.5 : 0.4) : 0) : 0;
   const shown = trial.params.playFirst === false;
   const hasStimulus = !shown && audio.stimulus.events.length > 0;
   const stimulusAt = cueDur;
@@ -182,6 +212,9 @@ export function comparePlan(
 ): AudioPlan | null {
   const expected = trial.expected as Answer;
   const mode = trial.params.mode;
+  // A lone chord: your quality (or inversion) on the same voicing, then the chord itself.
+  if (isHarmonyTrial(trial) && Array.isArray(trial.params.midis))
+    return chordComparePlan(trial, captured.answer);
   if (mode === "tap") {
     const taps = captured.taps ?? [];
     const targets = (trial.params.tapTargets as number[] | undefined) ?? [];
@@ -403,7 +436,9 @@ export function resolutionOf(trial: Trial<unknown>): {
 }
 
 /** A plan from absolute note events (used for the cue-only replay). */
-export function cuePlan(trial: Trial<unknown>): AudioPlan | null {
+export function cuePlan(trial: Trial<unknown>, comfort?: ComfortRange | null): AudioPlan | null {
+  const reference = referenceCueOf(trial, comfort);
+  if (reference) return reference;
   const audio = trialAudio(trial, keyOfTrial(trial));
   if (audio.cue) return audio.cue;
   const key = keyOfTrial(trial);

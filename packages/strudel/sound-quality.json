@@ -100,8 +100,8 @@
       ],
       "loudness": {
         "code": "note(\"c4 e4 g4 c5\").s(\"rhodes\")",
-        "lufs": -22,
-        "peakDb": -16.1
+        "lufs": -21.4,
+        "peakDb": -15.5
       }
     },
     {
@@ -151,8 +151,8 @@
       ],
       "loudness": {
         "code": "note(\"c4 e4 g4 c5\").s(\"acgtr\")",
-        "lufs": -22,
-        "peakDb": -8.7
+        "lufs": -23.3,
+        "peakDb": -10
       }
     },
     {

@@ -105,6 +105,9 @@ export function spokenChord(display: string): string {
   const m = /^([A-G][♭♯]?)(.*)$/.exec(head);
   if (!m) return display;
   const suffix = (m[2] ?? "")
+    .replace(/^°/, " diminished ")
+    .replace(/^ø/, " half-diminished ")
+    .replace(/^\+/, " augmented ")
     .replace(/^maj/, " major ")
     .replace(/^m(?!aj)/, " minor ")
     .replace(/^dim/, " diminished ")

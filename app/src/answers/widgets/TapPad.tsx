@@ -12,7 +12,7 @@ import { appAudio, NEUTRAL_PROFILE, useAnswerEnv } from "../env.tsx";
 import { beatSyllables } from "../keys.ts";
 import { padPoint } from "../tap.ts";
 import type { AnswerWidgetProps } from "../types.ts";
-import { AnswerFrame, KeyHint, markOf } from "../ui.tsx";
+import { AnswerFrame, KeyHint, markOf, SubmitHint } from "../ui.tsx";
 
 type Phase = "idle" | "starting" | "count-in" | "taking" | "done";
 
@@ -168,7 +168,7 @@ export function TapPadAnswer(p: AnswerWidgetProps<"tap">) {
       keys={
         <>
           <KeyHint keys={twoVoices ? ["F", "J"] : ["Space"]}>tap</KeyHint>
-          <KeyHint keys={["Enter"]}>check</KeyHint>
+          <SubmitHint />
         </>
       }
     >

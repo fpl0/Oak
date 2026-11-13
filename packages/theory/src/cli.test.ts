@@ -102,4 +102,31 @@ describe("theory CLI", () => {
     expect(json("normalize", "key", "f#", "minor").normalized).toBe("F# minor");
     expect(json("table")).toHaveLength(28);
   });
+  test("Wave 4: read, symbol, cadence-of, rn-parts, tone", () => {
+    expect(json("read", "C4", "E4", "G4", "--bass", "E", "--key", "C")).toMatchObject({
+      leadSheet: "C/E",
+      code: "C",
+      inversion: 1,
+      rn: "I6",
+      function: "T",
+    });
+    expect(json("read", "C4", "D4", "E4")).toBeNull();
+    expect(json("read", "B3", "D4", "F4")).toMatchObject({ leadSheet: "B°", code: "Bo", quality: "dim" });
+    expect(json("symbol", "Cdim")).toMatchObject({ leadSheet: "C°", code: "Co" });
+    expect(json("symbol", "G/B")).toMatchObject({ leadSheet: "G/B", code: "G" });
+    expect(json("symbol", "Caug", "--dict", "triads")).toMatchObject({ code: "Caug", inDict: "wrong" });
+    expect(runTheoryCli(["symbol", "Hxyz"]).code).toBe(1);
+    expect(json("cadence-of", "G", "C", "C", "--melody", "C5").cadence).toBe("PAC");
+    expect(json("cadence-of", "G", "C", "C", "--melody", "E5").cadence).toBe("IAC");
+    expect(json("cadence-of", "F", "C", "C").cadence).toBe("PC");
+    expect(json("rn-parts", "V6", "G")).toMatchObject({
+      degree: 5,
+      quality: "maj",
+      inversion: 1,
+      chord: "D/F♯",
+    });
+    expect(json("tone", "F4", "C", "--prev", "E4", "--next", "G4").role).toBe("passing");
+    expect(json("tone", "F4", "C", "--prev", "F4", "--next", "E4", "--strong").role).toBe("suspension");
+    expect(json("tone", "E4", "C").role).toBe("chord-tone");
+  });
 });

@@ -8,6 +8,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { clsx } from "clsx";
 import { Check, Hourglass, Lock, Mic } from "lucide-react";
 import {
+  compositeLine,
   type FamilyStatus,
   familyAccuracy,
   familyStatus,
@@ -59,6 +60,7 @@ function FamilyCard({ def, data }: { def: FamilyDef; data: DrillData }) {
   const playable = status === "unlocked" || status === "resting" || status === "mastered";
   const quietBlocked = playable && def.mic === true && data.profile.quiet;
   const chip = STATUS_CHIP[status];
+  const mix = compositeLine(state, data.states, data.defs);
   return (
     <Card
       className={clsx("flex flex-col gap-2 p-4", !playable && "bg-surface-2/60")}
@@ -103,6 +105,11 @@ function FamilyCard({ def, data }: { def: FamilyDef; data: DrillData }) {
           {status === "resting" && (
             <p className="text-sm text-text-2" data-testid="family-resting">
               {RESTING_LINE}
+            </p>
+          )}
+          {mix && status !== "resting" && (
+            <p className="text-sm text-text-3" data-testid="family-composite">
+              {mix}
             </p>
           )}
           {quietBlocked ? (

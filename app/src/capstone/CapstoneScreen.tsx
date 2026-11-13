@@ -1,13 +1,21 @@
 // `/capstone/$id` (ux §2.3, contracts §2.4): the capstone workspace. Locked → why and what opens it; open → the
 // start of its first session (flavour choice, what unlocks now); in progress or released → the workspace.
-import { type CapstoneDef, type CapstoneState, type FlavourId, isCapstoneId, type ToolEntry } from "@oak/api";
+import {
+  type CapstoneDef,
+  type CapstoneGate,
+  type CapstoneState,
+  type FlavourId,
+  isCapstoneId,
+  type SongId,
+  type ToolEntry,
+} from "@oak/api";
 import { Link } from "@tanstack/react-router";
-import { Lock, Sparkles } from "lucide-react";
+import { Check, Lock, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { tidyReason } from "../album/model.ts";
 import { useContent } from "../lib/content.ts";
 import { usePageTitle } from "../lib/nav.ts";
-import { useBootstrap, useCapstone } from "../lib/queries.ts";
+import { useBootstrap, useCapstone, useCapstoneGate } from "../lib/queries.ts";
 import { currentSessionId } from "../session/store.ts";
 import { Button, buttonClass } from "../ui/kit/Button.tsx";
 import { Card, Chip, EmptyState, Page, Skeleton } from "../ui/kit/basics.tsx";
@@ -17,6 +25,9 @@ import { toast } from "../ui/kit/Toast.tsx";
 import { FLAVOUR_TITLE, useCapstoneContent } from "./content.ts";
 import { useCreateDraft, usePatchDraft, useStartCapstoneSession } from "./queries.ts";
 import { starterOf, Workspace } from "./Workspace.tsx";
+import { x1Starter } from "./x1/phrases.ts";
+import { useSongs } from "./x1/songs.ts";
+import { X1Workspace } from "./x1/X1Workspace.tsx";
 
 /** "C0 Intro" → "Intro": the track's default title. */
 export function trackTitleOf(def: Pick<CapstoneDef, "id" | "title">): string {
@@ -64,7 +75,12 @@ export function CapstoneScreen({ id }: { id: string }) {
     );
   const s = state.data;
   if (s.status === "locked") return <Locked def={def} state={s} />;
-  if (def.kind === "transcribe" || !def.brief) return <TranscribeElsewhere def={def} />;
+  if (def.kind === "transcribe") {
+    if (!def.song?.length) return <TranscribeElsewhere def={def} />;
+    if (s.status === "open") return <Start def={def} state={s} />;
+    return <X1Workspace key={def.id} def={def} state={s} content={content.data} />;
+  }
+  if (!def.brief) return <TranscribeElsewhere def={def} />;
   if (s.status === "open") return <Start def={def} state={s} />;
   return <Workspace key={def.id} def={def} state={s} content={content.data} />;
 }
@@ -107,7 +123,33 @@ function SessionPlan({ def, state }: { def: CapstoneDef; state: Pick<CapstoneSta
   );
 }
 
+/** What a closed capstone waits for (`capstones.gate`, contracts §2.4): each condition, met or not. */
+function GateList({ gate }: { gate: CapstoneGate }) {
+  return (
+    <ul className="mt-3 flex flex-col gap-1 text-sm" data-testid="capstone-gate">
+      {gate.conditions.map((c) => (
+        <li key={`${c.kind}:${c.ref}`} className="flex items-start gap-2">
+          {c.met ? (
+            <Check aria-hidden className="mt-0.5 size-4 shrink-0 text-accent" />
+          ) : (
+            <Lock aria-hidden className="mt-0.5 size-3.5 shrink-0 text-text-3" />
+          )}
+          <span className={c.met ? "text-text-2" : "text-text"}>
+            {c.label}
+            {c.kind === "family-level" && c.have !== null && c.need !== null && !c.met
+              ? ` (level ${c.have} of ${c.need})`
+              : ""}
+            <span className="sr-only">{c.met ? " (met)" : " (not yet)"}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Locked({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
+  const gate = useCapstoneGate(def.id);
+  const g = gate.data ?? null;
   return (
     <Page width="narrow">
       <p className="font-mono text-sm text-text-3">{def.id}</p>
@@ -118,9 +160,12 @@ function Locked({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
         <div>
           <p className="font-medium">Not open yet</p>
           <p className="mt-1 text-text-2">
-            {tidyReason(state.lockedReason) ?? "It opens when the checkpoint before it is passed."} A capstone
-            never holds back a lesson; it waits here until you are ready.
+            {g?.message ??
+              tidyReason(state.lockedReason) ??
+              "It opens when the checkpoint before it is passed."}{" "}
+            A capstone never holds back a lesson; it waits here until you are ready.
           </p>
+          {g && g.conditions.length > 0 && <GateList gate={g} />}
           <div className="mt-3 flex flex-wrap gap-2">
             <Link to="/oak" search={{ view: "course" }} className={buttonClass("secondary", "sm")}>
               See the course map
@@ -178,12 +223,22 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
   );
   const first = def.sessionDefs[0];
   const unlocks = first ? startUnlocks(shared.data?.toolbox ?? [], first.id) : [];
+  const transcribe = def.kind === "transcribe";
+  const songs = useSongs(transcribe ? (def.song ?? []) : []);
+  const offered = (def.song ?? []).map((id) => ({
+    id,
+    entry: capContent.data?.repertoire.find((r) => r.id === id) ?? null,
+    song: songs.data?.find((x) => x.id === id) ?? null,
+  }));
+  const [songId, setSongId] = useState<SongId | null>(null);
+  const chosenSong = offered.find((o) => o.id === songId && o.song) ?? offered.find((o) => o.song) ?? null;
   // A learner day holds one open session (decision 28): started from the map while another is open, the server
   // would hand that one back. Say so, and send the learner to finish it, instead of a button that does nothing.
   const open = boot.data?.openSession ?? null;
   const blocked = !currentSessionId() && open !== null && open.mapItemId !== first?.id;
   const onStart = async () => {
     if (!first || !boot.data || blocked) return;
+    if (transcribe && !chosenSong?.song) return;
     try {
       // The draft first, so the flavour chosen here stays with it (the server stores it at completion) and the
       // workspace opens on it; then the session, which flips the capstone to "in progress" and grants its START
@@ -194,10 +249,10 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
           originKind: "capstone",
           originId: def.id,
           sessionId: currentSessionId(),
-          code: starterOf(def),
-          bpm: null,
-          meter: def.meter,
-          key: def.key ?? null,
+          code: transcribe && chosenSong?.song ? x1Starter(chosenSong.song) : starterOf(def),
+          bpm: transcribe && chosenSong?.song ? chosenSong.song.bpm : null,
+          meter: transcribe && chosenSong?.song ? chosenSong.song.meter : def.meter,
+          key: transcribe && chosenSong?.song ? chosenSong.song.key : (def.key ?? null),
           analysis: null,
           note: null,
           tutorAssisted: false,
@@ -206,7 +261,10 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
           ranOk: false,
         },
       });
-      await patch.mutateAsync({ params: { id: draft.sketch.id }, body: { tags: [flavour] } });
+      await patch.mutateAsync({
+        params: { id: draft.sketch.id },
+        body: { tags: transcribe && chosenSong ? [chosenSong.id] : [flavour] },
+      });
       if (!currentSessionId())
         await start.mutateAsync({
           body: {
@@ -229,19 +287,57 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
           <h2 className="mb-2 text-h3">The plan</h2>
           <SessionPlan def={def} state={state} />
         </div>
-        <div>
-          <h2 className="mb-1 text-h3">Flavour</h2>
-          <p className="mb-2 text-sm text-text-2">
-            The sound world of the brief and of the Band you can play along with. It never changes what is
-            checked.
-          </p>
-          <SegmentedControl<FlavourId>
-            label="Flavour"
-            value={flavour}
-            options={shipping.map((f) => ({ value: f, label: FLAVOUR_TITLE[f] }))}
-            onChange={setFlavour}
-          />
-        </div>
+        {transcribe ? (
+          <div>
+            <h2 className="mb-1 text-h3">The song</h2>
+            <p className="mb-2 text-sm text-text-2">
+              Pick one; you transcribe it by ear. Its meter, key, tonic, pickup and the rhythm of the first
+              phrase are given.
+            </p>
+            {songs.isPending ? (
+              <p className="text-sm text-text-3">Loading the songs…</p>
+            ) : offered.some((o) => o.song) ? (
+              <SegmentedControl<string>
+                label="The song"
+                value={chosenSong?.id ?? ""}
+                options={offered.map((o) => ({
+                  value: o.id,
+                  label: o.entry?.title ?? o.song?.title ?? o.id,
+                  disabled: !o.song,
+                }))}
+                onChange={(v) => setSongId(v as SongId)}
+              />
+            ) : (
+              <p className="text-sm text-text-2" data-testid="no-answer-keys">
+                Oak's renditions of these songs are still being written and checked against their sources.
+                This capstone starts once one is ready; nothing else waits on it.
+              </p>
+            )}
+            {offered.some((o) => !o.song) && offered.some((o) => o.song) && (
+              <p className="mt-1 text-sm text-text-3">
+                {offered
+                  .filter((o) => !o.song)
+                  .map((o) => o.entry?.title ?? o.id)
+                  .join(" and ")}{" "}
+                is not ready yet.
+              </p>
+            )}
+          </div>
+        ) : (
+          <div>
+            <h2 className="mb-1 text-h3">Flavour</h2>
+            <p className="mb-2 text-sm text-text-2">
+              The sound world of the brief and of the Band you can play along with. It never changes what is
+              checked.
+            </p>
+            <SegmentedControl<FlavourId>
+              label="Flavour"
+              value={flavour}
+              options={shipping.map((f) => ({ value: f, label: FLAVOUR_TITLE[f] }))}
+              onChange={setFlavour}
+            />
+          </div>
+        )}
         {unlocks.length > 0 && (
           <div className="flex items-start gap-3 rounded-card bg-lane-in p-3">
             <Sparkles aria-hidden className="mt-0.5 size-4 shrink-0 text-accent" />
@@ -281,6 +377,7 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
               variant="primary"
               size="lg"
               loading={start.isPending || create.isPending || patch.isPending}
+              disabled={transcribe && !chosenSong?.song}
               onClick={() => void onStart()}
               autoFocus
             >
@@ -296,7 +393,9 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
         {def.id === "C0" && <Chip tone="accent">Side A · track 1</Chip>}
         {def.id === "C0"
           ? "This is the track that opens your album."
-          : "When you release it, it joins your album with a cover grown from the music."}
+          : transcribe
+            ? "When you release it, your transcription joins your album with a cover grown from the music."
+            : "When you release it, it joins your album with a cover grown from the music."}
       </p>
     </Page>
   );

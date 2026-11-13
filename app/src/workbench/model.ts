@@ -1,21 +1,32 @@
 // The analysis path (architecture §2.2): an `EvalResult` from the grader host → `NEvent`s (`normalize`)
 // → view events with location roles, degrees and bar/beat positions → the NotationModel and ABC
 // (`@oak/notation`). Pure and synchronous, so it runs the same in the browser and in bun tests.
-import type { CodeRange, KeySpec, MeterId, MeterSpec, NEvent, Rat } from "@oak/content-kit";
+import type { CodeRange, KeySpec, MeterId, MeterSpec, NEvent, PickupSpec, Rat } from "@oak/content-kit";
 import { R } from "@oak/content-kit";
 import {
   type EvalResult,
   type EvalSuccess,
   type GraderErrorInfo,
   keyAt,
+  type Normalized,
   normalize,
   type TrackKeyContext,
   trackKeyContexts,
 } from "@oak/grader";
-import { type AbcResult, buildScore, type Score, type StaffKind } from "@oak/notation";
+import {
+  type AbcResult,
+  buildScore,
+  type ChordLabel,
+  type ChordLabelSet,
+  chordLabelInput,
+  clefOfTrack,
+  type Score,
+  type StaffKind,
+} from "@oak/notation";
 import { barPosition, keyFromScaleCtx, METERS, parseChordSymbol, parseNote } from "@oak/theory";
 import { type AnnotationKinds, annotateAbc, annotationText, NO_ANNOTATIONS } from "./annotate.ts";
 import { primaryRanges } from "./code-roles.ts";
+import { type WorkbenchHarmony, workbenchHarmony } from "./harmony.ts";
 import { type ChordRole, chordRoleOf, type PitchLabel, pitchLabel } from "./music.ts";
 
 export interface ViewEvent {
@@ -77,6 +88,13 @@ export interface WorkbenchModel {
   diagnostics: EvalSuccess["diagnostics"];
   /** What the staff pages are engraved from (`staffPage`); null when there is no staff. `score`/`abc` are page 0. */
   staffSource: StaffSource | null;
+  /**
+   * Wave 4: the chords as they sound (the grader's `harmonyView`, wave4.md §3.2), with what the chord band, the
+   * chord lenses and the lead sheet show; null when the piece plays no chords.
+   */
+  harmony: WorkbenchHarmony | null;
+  /** The declared pickup (cycle 0 is the pickup bar, contracts §6.11), when the host gave one. */
+  pickup: PickupSpec | null;
 }
 
 /** The staff engraves at most this many bars at a time; longer loops turn pages with the playhead. */
@@ -183,6 +201,11 @@ export interface StaffSource {
   pageBars: number;
   /** Bars per staff line, when the view knows its width (`barsPerLineFor`); else `barsPerLineOf` decides. */
   barsPerLine?: number;
+  /** Wave 4: chord labels (absolute bars) and which of them show (symbols above, numerals below). */
+  chordLabels?: readonly ChordLabel[];
+  chordSet?: ChordLabelSet;
+  /** Bar 0 is a pickup (engraved as a partial measure on the first page). */
+  pickup?: PickupSpec;
 }
 
 export interface StaffPage {
@@ -230,9 +253,20 @@ export function staffPage(src: StaffSource, page: number): StaffPage {
         return k ? [[track, { key: k, keyChanges: changesIn(spans) }] as const] : [];
       }),
     );
+    const labels =
+      src.chordLabels && src.chordSet
+        ? chordLabelInput(
+            src.chordLabels
+              .filter((l) => l.bar >= startBar && l.bar < startBar + bars)
+              .map((l) => ({ ...l, bar: l.bar - startBar })),
+            src.chordSet,
+          )
+        : {};
     const score = buildScore({
       events,
       meter: src.meter,
+      ...labels,
+      ...(src.pickup && startBar === 0 ? { pickup: src.pickup } : {}),
       key,
       ...(keyChanges.length ? { keyChanges } : {}),
       ...(Object.keys(trackKeys).length ? { trackKeys } : {}),
@@ -282,19 +316,41 @@ export function barsPerLineOf(score: Score, lines: AnnotationKinds): number {
   return most > (words ? 3 : 5) ? 2 : 4;
 }
 
-/** The most notes (distinct onsets of one track) in any bar of a staff source. */
-export function busiestBar(events: readonly NEvent[]): number {
-  const per = new Map<string, Set<number>>();
-  for (const e of events) {
-    if (e.midi === null) continue;
-    const on = R.toNum(e.onset);
-    const k = `${e.track}|${Math.floor(on)}`;
-    const set = per.get(k) ?? new Set<number>();
-    set.add(on);
-    per.set(k, set);
+/**
+ * The most text a bar carries under its notes on one staff, in note texts: every note that starts in the bar on
+ * that staff, so a chord's three names count three ("E♭4 G♭4 B♭4" is as wide as three single notes' names) and a
+ * chord under a tune on the same staff adds its own (Wave 4 review: a chord on every beat under a tune printed its
+ * names over each other). On a grand staff (`grand`) the treble and bass staves have their own text lines, so each
+ * is counted alone and the busier one decides (the gate: a tune over a chord a bar on the bass staff paged one bar
+ * at a time). Notes go to staves as `@oak/notation` puts them: whole tracks by clef when the tracks divide, else by
+ * register at middle C.
+ */
+export function busiestBar(events: readonly NEvent[], opts: { grand?: boolean } = {}): number {
+  const pitched = events.filter((e) => e.midi !== null);
+  let staffOf = (_e: NEvent) => 0;
+  if (opts.grand) {
+    const tracks = [...new Set(pitched.map((e) => e.track))];
+    const low = new Set(
+      tracks.filter(
+        (t) =>
+          clefOfTrack(
+            t,
+            pitched.filter((e) => e.track === t).map((e) => e.midi as number),
+          ) === "bass",
+      ),
+    );
+    staffOf =
+      low.size > 0 && low.size < tracks.length
+        ? (e) => (low.has(e.track) ? 1 : 0)
+        : (e) => ((e.midi as number) < 60 ? 1 : 0);
+  }
+  const per = new Map<string, number>();
+  for (const e of pitched) {
+    const key = `${staffOf(e)}:${Math.floor(R.toNum(e.onset))}`;
+    per.set(key, (per.get(key) ?? 0) + 1);
   }
   let most = 0;
-  for (const s of per.values()) most = Math.max(most, s.size);
+  for (const n of per.values()) most = Math.max(most, n);
   return most;
 }
 
@@ -346,6 +402,14 @@ export interface ModelOptions {
   keyPrefer?: "code" | "declared";
   /** Most bars engraved at a time (the staff is the slow view; longer loops page). Default 8. */
   maxStaffBars?: number;
+  /** A declared pickup: the harmony's bar numbers and the staff's first bar follow it. */
+  pickup?: PickupSpec | null;
+  /**
+   * The Band parts the learner hears (a step's `ui.band.tracks`, less the parts muted in the Workbench). The
+   * harmony (chord band, numerals, function) reads only these: a Band bass that does not play must not turn the
+   * learner's IV into IV⁶₄ on the chord band. The roll still draws every Band part. Absent: all of them.
+   */
+  bandHeard?: readonly ("drums" | "bass" | "chords")[] | null;
 }
 
 function meterSpec(m: MeterId | MeterSpec): MeterSpec {
@@ -362,6 +426,18 @@ export function keyContext(declared: KeySpec | null, events: readonly NEvent[]):
     }
   }
   return null;
+}
+
+/** The normalized piece with only the Band parts the learner hears (`null`: all of them). */
+export function heardBand(n: Normalized, heard: readonly string[] | null): Normalized {
+  if (heard === null) return n;
+  const keep = new Set(heard.map((r) => `band.${r}`));
+  const band = n.band.filter((e) => keep.has(e.track));
+  if (band.length === n.band.length) return n;
+  const byTrack = Object.fromEntries(
+    Object.entries(n.byTrack).filter(([t]) => !t.startsWith("band.") || keep.has(t)),
+  );
+  return { ...n, band, byTrack };
 }
 
 export function buildModel(code: string, result: EvalResult, opts: ModelOptions): ModelOutcome {
@@ -425,6 +501,18 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
   });
   events.sort((a, b) => a.onset - b.onset || a.trackIndex - b.trackIndex || (a.midi ?? -1) - (b.midi ?? -1));
 
+  let harmony: WorkbenchHarmony | null = null;
+  try {
+    harmony = workbenchHarmony(heardBand(n, opts.bandHeard ?? null), {
+      meter: meter.id,
+      key,
+      bars: Math.max(1, result.bars),
+      ...(opts.pickup ? { pickup: opts.pickup } : {}),
+    });
+  } catch {
+    harmony = null;
+  }
+
   let score: Score | null = null;
   let abc: AbcResult | null = null;
   let notationError: string | null = null;
@@ -457,6 +545,8 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
       tempoBpm: Math.round(result.bpm),
       bars: Math.max(1, result.bars),
       pageBars: Math.max(1, opts.maxStaffBars ?? STAFF_PAGE_BARS),
+      ...(harmony ? { chordLabels: harmony.labels } : {}),
+      ...(opts.pickup ? { pickup: opts.pickup } : {}),
     };
     const first = staffPage(staffSource, 0);
     score = first.score;
@@ -487,6 +577,8 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
       notationError,
       diagnostics: result.diagnostics,
       staffSource,
+      harmony,
+      pickup: opts.pickup ?? null,
     },
   };
 }
@@ -536,6 +628,32 @@ export function spellingOf(events: readonly NEvent[]): Map<string, { direction?:
     });
   }
   return out;
+}
+
+/**
+ * The melody of a lead sheet (Wave 4): the analysed melody line (the skyline of the melody track, wave4.md §3.2),
+ * else every learner line that plays one note at a time, else every pitched learner note. Normalized events, so the
+ * lead sheet keeps the IDs that link it to the roll and the code.
+ */
+export function leadEvents(model: Pick<WorkbenchModel, "staffSource" | "harmony">): NEvent[] {
+  const all = (model.staffSource?.events ?? []).filter((e) => e.midi !== null);
+  const melody = model.harmony?.melody;
+  if (melody && melody.size > 0) {
+    const line = all.filter((e) => melody.has(e.id));
+    if (line.length > 0) return line;
+  }
+  const perTrack = new Map<string, Map<string, number>>();
+  for (const e of all) {
+    const m = perTrack.get(e.track) ?? new Map<string, number>();
+    const k = `${e.onset[0]}/${e.onset[1]}`;
+    m.set(k, (m.get(k) ?? 0) + 1);
+    perTrack.set(e.track, m);
+  }
+  const lines = new Set(
+    [...perTrack].filter(([, m]) => [...m.values()].every((c) => c === 1)).map(([t]) => t),
+  );
+  const first = all.find((e) => lines.has(e.track))?.track;
+  return first ? all.filter((e) => e.track === first) : all;
 }
 
 /** Events sounding at `cycle` (wrapped into the analysed bars): the clock → roll/staff highlight. */

@@ -8,6 +8,7 @@
 // `NOT_REACHED` with the reason; a new code must join one or the other.
 import { beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import type {
+  AnswerUi,
   Diagnostic,
   ExBase,
   Exercise,
@@ -18,7 +19,7 @@ import type {
   RubricRule,
   SingTolerance,
 } from "@oak/content-kit";
-import { rat } from "@oak/content-kit";
+import { CADENCE_OPTIONS, FUNCTION_OPTIONS, rat } from "@oak/content-kit";
 import { gradeSung, gradeTaps } from "@oak/pitch";
 import { PROFILE as PITCH_PROFILE } from "../../../pitch/src/fixtures.test-data.ts";
 import { ev, line, norm, strudel } from "../analyze/__support__/fixtures.ts";
@@ -32,6 +33,7 @@ import {
 import { checkConstraints } from "../grade/constraints.ts";
 import { evalFailureDiagnostics } from "../grade/index.ts";
 import { judgeSungPattern } from "../grade/sing.ts";
+import { staffChordsCheck } from "../grade/staff-chords.ts";
 import { gradeExercise, initRealm } from "../index.ts";
 import { lintOak } from "../lint/oak.ts";
 import { ALL_UNLOCKED, TOOLBOX, unlockedAt } from "../lint/toolbox.test-data.ts";
@@ -52,8 +54,6 @@ const NOT_REACHED: Record<string, string> = {
   "eval.truncated": "needs a piece past the mode's bar cap (runtime.test reaches it)",
   // Emitted by matchers on shapes this corpus does not build (match.test reaches most of them).
   "harmony.schema-rotation": "needs a schema loop matcher (match.test)",
-  "harmony.missing-chord": "needs a given harmonic rhythm with a change left out (match.test)",
-  "harmony.extra-chord": "needs a given harmonic rhythm with a change added",
   "rhythm.subdivision": "needs a swung or tuplet answer (match.test)",
   "rhythm.period": "needs a period mismatch (match.test)",
   "rhythm.swing-missing": "needs a swing matcher (match.test)",
@@ -165,6 +165,7 @@ beforeAll(async () => {
     [`${T}mel: note('c4 e4')`],
     [`${T}mel: n("0 2 4").s("piano")`],
     [`${T}chords: chord("<Cmaj Dm>").voicing()`],
+    [`${T}chords: chord("<C Caug>").dict("triads").voicing()`],
     [`${T}chords: chord("<C+ Am>").voicing()`],
     [`${T}chords: chord("<c Am>").voicing()`],
     [`${T}chords: chord("<C/E Am>").voicing()`],
@@ -716,6 +717,162 @@ beforeAll(async () => {
       { ...tapTol, forgiveOffset: true },
       PITCH_PROFILE,
     ).diagnostics,
+  );
+
+  // Wave 4: chord names, qualities, numerals, strips, chords on the staff, staged dictation, the voicing gate.
+  const C = { tonic: "C", mode: "major" } as const;
+  const chordText = { ui: "text", normalize: "chord" } as const;
+  for (const got of ["Em", "A", "C", "Dbm"])
+    collect(
+      "answers",
+      gradeAnswer(
+        chordText,
+        { text: [got === "C" ? "C/E" : got === "Dbm" ? "C#m" : "Am"] },
+        { text: [got] },
+        {
+          key: C,
+          spelling: "strict",
+        },
+      ).diagnostics,
+    );
+  collect(
+    "answers",
+    gradeAnswer(
+      { ui: "quality-pad", set: ["maj", "min", "dim"] },
+      { qualities: ["dim"] },
+      { qualities: ["min"] },
+    ).diagnostics,
+  );
+  const palette: AnswerUi = { ui: "rn-palette", slots: 3, allow: ["triads", "inversions"] };
+  collect(
+    "answers",
+    gradeAnswer(palette, { rn: ["vi", "viio", "V6"] }, { rn: ["IV", "vii", "V"] }, { key: C }).diagnostics,
+  );
+  collect(
+    "answers",
+    gradeAnswer(
+      { ui: "slot-choice", slots: 2, options: [...FUNCTION_OPTIONS] },
+      { choice: ["PD", "D"] },
+      { choice: ["D", "D"] },
+    ).diagnostics,
+  );
+  collect(
+    "answers",
+    gradeAnswer(
+      { ui: "slot-choice", slots: 1, options: [...CADENCE_OPTIONS] },
+      { choice: ["PAC"] },
+      { choice: ["HC"] },
+    ).diagnostics,
+  );
+  collect(
+    "answers",
+    gradeAnswer(
+      {
+        ui: "slot-choice",
+        slots: 1,
+        options: [
+          { id: "ct", label: "chord tone" },
+          { id: "x", label: "not a chord tone" },
+        ],
+      },
+      { choice: ["ct"] },
+      { choice: ["x"] },
+    ).diagnostics,
+  );
+  const staffChord = (at: number, notes: [string, number][]) =>
+    notes.map(([w, m]) => ({
+      ...ev({ onset: rat(at, 2), dur: rat(1, 2), midi: m, track: "staff" }),
+      written: w,
+    }));
+  collect(
+    "staff-chords",
+    staffChordsCheck(
+      { symbols: ["C", "E", "G/B"], spelling: "strict", bass: true },
+      [
+        ...staffChord(0, [
+          ["G3", 55],
+          ["C4", 60],
+          ["E4", 64],
+        ]),
+        ...staffChord(1, [
+          ["E4", 64],
+          ["Ab4", 68],
+          ["B4", 71],
+        ]),
+        ...staffChord(2, [
+          ["B3", 59],
+          ["D4", 62],
+          ["A4", 69],
+        ]),
+        ...staffChord(3, [
+          ["C4", 60],
+          ["E4", 64],
+          ["G4", 67],
+        ]),
+      ],
+      { key: C, meter: "4/4" },
+    ).diagnostics,
+  );
+  collect(
+    "staff-chords",
+    staffChordsCheck(
+      { symbols: ["C", "G"], spelling: "enharmonic", bass: false },
+      staffChord(0, [
+        ["C4", 60],
+        ["E4", 64],
+        ["G4", 67],
+      ]),
+      {
+        key: C,
+        meter: "4/4",
+      },
+    ).diagnostics,
+  );
+  const gate: RubricRule = {
+    id: "gate",
+    label: "Every voice moves by a step or stays",
+    required: true,
+    skills: [],
+    rule: "voice-leading",
+    track: "chords",
+    maxMovePerVoice: 2,
+    voices: 3,
+    commonTones: true,
+    noCrossing: true,
+  };
+  for (const stacks of [
+    "[c4,e4,g4] [f4,a4,c5] [d4,b3,g4] [c4,e4,g4,c5]",
+    "[c4,e4,g4] [c4,f4,a4] [b3,d4,g4] [c4,e4,g4]",
+  ]) {
+    const code = `chords: note("<${stacks}>").s("piano")`;
+    const n = await strudel(code, 4);
+    const r = evaluateRubric([gate], n, { meter: "4/4", key: C, code, params: {}, bars: 4 });
+    collect("rubric", [...r.rows.map((x) => x.diag as Diagnostic), ...r.extra]);
+  }
+  await grade(
+    "stages",
+    {
+      ...base("dictation"),
+      domain: "harmony",
+      stimulus: { src: "code", code: "", bars: 2, loop: true, showCode: false },
+      cue: { kind: "none" } as never,
+      answer: { ui: "rn-palette", slots: 2, allow: ["triads"] },
+      stages: ["bass", "quality", "rn"],
+      stageAnswers: {
+        bass: { ui: "degree-pad", set: ["1", "4", "5"], syllables: false },
+        quality: { ui: "quality-pad", set: ["maj", "min"] },
+        rn: { ui: "rn-palette", slots: 2, allow: ["triads"] },
+      },
+      reference: { solutions: [`${T}chords: n("<[0,2,4] [4,6,8]>").scale("C3:major").s("piano")`], bars: 2 },
+      matcher: {
+        m: "harmony",
+        level: "rn",
+        qualityDepth: "triad",
+        inversion: false,
+        harmonicRhythm: "given",
+      },
+    } as Exercise,
+    { answer: { stages: { bass: ["1", "4"], quality: ["maj", "min"], rn: ["I", "IV"] } } },
   );
 });
 

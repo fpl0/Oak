@@ -1,6 +1,7 @@
 // The dev pages against the real server: /dev/telemetry over step rows posted through the API and the seeded
 // session telemetry, /dev/qa over reports posted through the API (replay, copy as test case, triage), and
-// /dev/listen (every curated sound and example, verdicts saved on the server). Screenshots in both themes.
+// /dev/listen (every curated sound and example, verdicts saved on the server), and /dev/kit with the Wave 4
+// pieces. Screenshots in both themes.
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import { SCREENSHOT_MATRIX } from "../../../../e2e/support/stack.ts";
@@ -214,3 +215,25 @@ for (const m of SCREENSHOT_MATRIX) {
     }
   });
 }
+
+test("the UI kit gallery shows the Wave 4 pieces under the Wave 3 sections, in both themes", async ({
+  page,
+}) => {
+  await page.routeWebSocket(/.*/, () => {});
+  for (const theme of ["paper", "bark"] as const) {
+    await useUiPrefs(page, { theme });
+    await page.goto("/dev/kit");
+    await expect(page.getByRole("heading", { level: 1, name: "UI kit", exact: true })).toBeVisible({
+      timeout: 30_000,
+    });
+    const w4 = page.getByTestId("kit-wave4");
+    await expect(w4).toBeVisible();
+    // One h1 on the page: the Wave 4 gallery nests under it.
+    await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+    await expect(w4.getByRole("heading", { level: 2, name: "UI kit · Wave 4" })).toBeVisible();
+    await w4.scrollIntoViewIfNeeded();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+    await shoot(page, SHOTS, "dev-kit-wave4", theme);
+  }
+});

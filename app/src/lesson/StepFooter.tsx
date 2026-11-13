@@ -9,6 +9,8 @@ import { Kbd } from "../ui/kit/basics.tsx";
 import { InlineMd } from "./frame.tsx";
 import { hintText } from "./model.ts";
 
+const DEFAULT_NOTE = "Pass the check, or show the answer, to go on.";
+
 const RUNG_LABEL: readonly string[] = ["Nudge", "Pointer", "Partial", "Reveal"];
 
 export interface StepFooterProps {
@@ -33,6 +35,10 @@ export interface StepFooterProps {
   onNudge: (() => void) | null;
   onReport: (() => void) | null;
   onNewSeries: (() => void) | null;
+  /** The new-series link's words ("Try a new one"; a revealed gate check: "Start a fresh try"). */
+  newSeriesLabel?: string;
+  /** The line under a held Continue (default: pass the check or show the answer). */
+  continueNote?: string;
   onWrapUp: (() => void) | null;
   onDismissNotice(): void;
   tutorAvailable: boolean;
@@ -152,7 +158,7 @@ export function StepFooter(p: StepFooterProps) {
               onClick={p.onNewSeries}
               data-testid="new-series"
             >
-              Try a new one
+              {p.newSeriesLabel ?? "Try a new one"}
             </button>
           )}
           {p.onReport && (
@@ -185,7 +191,7 @@ export function StepFooter(p: StepFooterProps) {
             onClick={p.onContinue}
             disabled={!p.canContinue || p.busy}
             data-testid="continue"
-            title={p.canContinue ? undefined : "Pass the check, or show the answer, to go on."}
+            title={p.canContinue ? undefined : (p.continueNote ?? DEFAULT_NOTE)}
             icon={<ArrowRight aria-hidden className="size-4" />}
           >
             {p.continueLabel}
@@ -193,7 +199,9 @@ export function StepFooter(p: StepFooterProps) {
         )}
       </div>
       {!p.canContinue && p.step.kind !== "make" && (
-        <p className="text-right text-xs text-text-3">Pass the check, or show the answer, to go on.</p>
+        <p className="text-right text-xs text-text-3" data-testid="continue-note">
+          {p.continueNote ?? DEFAULT_NOTE}
+        </p>
       )}
     </div>
   );

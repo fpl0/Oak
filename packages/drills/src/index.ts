@@ -37,8 +37,24 @@ export {
 } from "./engine.ts";
 export { CTX, isContextCategory } from "./gen/common.ts";
 export { gradeSungResolution } from "./gen/degree.ts";
-export { type DrillTrialResult, gradeAnswer, normalizeAnswerText } from "./grade.ts";
-export { generateLadderPiece } from "./ladder.ts";
+export { type DrillTrialResult, gradeAnswer, normalizeAnswerText, sameRnAnswer } from "./grade.ts";
+export {
+  generateLadderPiece,
+  LADDER_FEATURE_GATES,
+  LADDER_LOOPS,
+  type LadderChord,
+  type LadderFeature,
+  type LadderFlavour,
+  type LadderGiven,
+  type LadderItemFields,
+  type LadderLevelNo,
+  type LadderOptions,
+  type LadderPiece,
+  type LadderRealism,
+  type LadderStageId,
+  ladderItemOf,
+  ladderKeys,
+} from "./ladder.ts";
 export { parseMini, parseMiniCode } from "./mini.ts";
 export { BASS, CLICKS, KEYS1, KEYS2, KEYS3, KITS, LEAD, soundName } from "./pools.ts";
 export { createRng, hashString, trialSeed } from "./rng.ts";

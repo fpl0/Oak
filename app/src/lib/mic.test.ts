@@ -1,7 +1,7 @@
 // The shell's Mic-live state mirrors the graph's state exactly (contracts §11: visible while open).
 import { describe, expect, test } from "bun:test";
 import type { MicState } from "@oak/audio";
-import { bindMicState } from "./mic.ts";
+import { bindMicState, watchBleed } from "./mic.ts";
 import { useShell } from "./shell-store.ts";
 
 function fakeGraph() {
@@ -55,5 +55,26 @@ describe("bindMicState", () => {
     expect(useShell.getState().micLive).toBe(false);
     expect(released).toBe(2);
     off();
+  });
+});
+
+describe("watchBleed", () => {
+  test("a session whose bleed check trips leaves the hint; a session without the check never does", () => {
+    let cb: (() => void) | null = null;
+    let reported = 0;
+    watchBleed(
+      {
+        onBleed: (f) => {
+          cb = f as () => void;
+          return () => {};
+        },
+      },
+      () => reported++,
+    );
+    expect(reported).toBe(0);
+    (cb as unknown as () => void)();
+    expect(reported).toBe(1);
+    watchBleed({}, () => reported++);
+    expect(reported).toBe(1);
   });
 });

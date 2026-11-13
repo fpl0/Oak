@@ -5,6 +5,7 @@ import type {
   Answer,
   Diagnostic,
   FamilyDef,
+  KeySpec,
   LearnerProfile,
   LevelParams,
   SingMode,
@@ -14,6 +15,7 @@ import type {
   TrialResult,
 } from "@oak/content-kit";
 import type { SungTarget } from "@oak/pitch";
+import { parseRN, rnToChord } from "@oak/theory";
 import { parsePc } from "./kernel.ts";
 import { parseMiniCode } from "./mini.ts";
 import { pitch } from "./pitch-seam.ts";
@@ -36,15 +38,21 @@ const wrong = (exp: string, got: string, extra: Record<string, string | number> 
 
 /** Text normalization for typed answers: note names, chord symbols, intervals, keys, Roman numerals. */
 export function normalizeAnswerText(text: string): string {
-  return text
-    .trim()
-    .replace(/♯/g, "#")
-    .replace(/♭/g, "b")
-    .replace(/𝄫/g, "bb")
-    .replace(/𝄪/g, "##")
-    .replace(/°/g, "o")
-    .replace(/ø/g, "ø")
-    .replace(/\s+/g, " ");
+  return (
+    text
+      .trim()
+      .replace(/♯/g, "#")
+      .replace(/♭/g, "b")
+      .replace(/𝄫/g, "bb")
+      .replace(/𝄪/g, "##")
+      .replace(/°/g, "o")
+      .replace(/ø/g, "ø")
+      // The half-diminished sign as some fonts and keyboards give it (∅, Ø).
+      .replace(/[∅Ø]/g, "ø")
+      // Figures as Oak prints them (V⁶, I⁶₄, V⁷): the same numbers written on the line.
+      .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉]/g, (c) => String("⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉".indexOf(c) % 10))
+      .replace(/\s+/g, " ")
+  );
 }
 /** Note-name answers ignore the case of the letter: "eb", "Eb" and "E♭" are the same answer. */
 function sameText(expected: string, got: string, kind: string | undefined): boolean {
@@ -68,6 +76,32 @@ function sameText(expected: string, got: string, kind: string | undefined): bool
   }
   return false;
 }
+
+/**
+ * Two Roman numerals name the same chord in `key`: compared as (degree, alteration, quality, inversion) and the
+ * applied target's root, never as strings (contracts §6.6, wave4.md §10 item 11), the same way the grader's
+ * `sameRn` and the drills runner's step checks (`romanParts`) read them. "vii°" and "viio", "V6/5" and "V65"
+ * are one answer; "II" is not "ii". Without a key, or when either side does not parse, the normalized texts
+ * are compared.
+ */
+export function sameRnAnswer(expected: string, got: string, key: KeySpec | null): boolean {
+  const same = normalizeAnswerText(expected) === normalizeAnswerText(got);
+  if (!key) return same;
+  const a = parseRN(normalizeAnswerText(expected), key);
+  const b = parseRN(normalizeAnswerText(got), key);
+  if (!a || !b) return same;
+  if (a.degree !== b.degree || a.alt !== b.alt || a.quality !== b.quality || a.inversion !== b.inversion)
+    return false;
+  if (!a.of !== !b.of) return false;
+  return !a.of || !b.of || rnToChord(a.of, key).rootPc === rnToChord(b.of, key).rootPc;
+}
+const keyParam = (v: unknown): KeySpec | null =>
+  v &&
+  typeof v === "object" &&
+  typeof (v as KeySpec).tonic === "string" &&
+  typeof (v as KeySpec).mode === "string"
+    ? (v as KeySpec)
+    : null;
 
 /**
  * A sequence typed into one box ("F C G D A E B", "G, A, B"): split on spaces and commas when the key
@@ -145,7 +179,8 @@ export function gradeAnswer(
   };
   seq(exp.degrees, got.degrees);
   seq(exp.qualities, got.qualities);
-  seq(exp.rn, got.rn, (a, b) => normalizeAnswerText(a) === normalizeAnswerText(b));
+  const rnKey = keyParam(trial.params.key);
+  seq(exp.rn, got.rn, (a, b) => sameRnAnswer(a, b, rnKey));
   seq(exp.text, splitTyped(exp.text, got.text), (a, b) => sameText(a, b, textKind));
   if (exp.midi) {
     const pcOnly = trial.params.pcOnly === true;
@@ -159,10 +194,8 @@ export function gradeAnswer(
   if (exp.stages) {
     for (const [stage, e] of Object.entries(exp.stages)) {
       const g = got.stages?.[stage as keyof typeof exp.stages];
-      seq(
-        e as string[],
-        g as string[] | undefined,
-        (a, b) => normalizeAnswerText(a) === normalizeAnswerText(b),
+      seq(e as string[], g as string[] | undefined, (a, b) =>
+        stage === "rn" ? sameRnAnswer(a, b, rnKey) : normalizeAnswerText(a) === normalizeAnswerText(b),
       );
     }
   }

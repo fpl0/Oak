@@ -5,10 +5,18 @@
 // Scale steps follow Strudel 1.2.6 exactly (verified headlessly in hum.test.ts): `n(k)` is scale step k
 // from the tonic of `.scale("G4:major")`, wrapping by octaves; a step string "3#" / "4b" is that step
 // raised / lowered by a semitone; negative steps go below the tonic.
-import type { KeySpec, MeterId, Rat, ScaleMode } from "@oak/content-kit";
-import { barSeconds, METERS, tempoLine } from "@oak/theory";
+import type { KeySpec, LearnerProfile, MeterId, Rat, ScaleMode } from "@oak/content-kit";
+import { barSeconds, labelPitch, METERS, tempoLine } from "@oak/theory";
 import { median } from "./math.ts";
-import type { HumDraft, HumDraftNote, HumDraftOptions, HumDraftWarning, SungNote } from "./types.ts";
+import { pitchFramesToNotes, trackerOptionsFor } from "./tracker.ts";
+import type {
+  HumDraft,
+  HumDraftNote,
+  HumDraftOptions,
+  HumDraftWarning,
+  PitchFrame,
+  SungNote,
+} from "./types.ts";
 
 /** Semitones of each scale from its tonic, as Strudel's `.scale()` (tonal) resolves them. */
 export const SCALE_INTERVALS: Readonly<Record<ScaleMode, readonly number[]>> = {
@@ -254,6 +262,8 @@ export function draftFromHum(notes: readonly SungNote[], opts: HumDraftOptions):
       step: p.choice.step,
       midi: p.choice.midi,
       cents: Math.round((p.m - p.choice.midi) * 1000) / 10,
+      degree: labelPitch(p.choice.midi, opts.key).degree,
+      octave: Math.floor((p.choice.midi - tonic) / 12),
     });
   });
 
@@ -307,4 +317,48 @@ function barText(events: readonly { on: number; off: number; step: string }[], s
 }
 function unwrap(text: string): string {
   return text.startsWith("[") && text.endsWith("]") ? text.slice(1, -1) : text;
+}
+
+/** Notes shorter than this are a slide or a consonant, not a note of the tune. */
+export const HUM_MIN_NOTE_SEC = 0.09;
+
+export interface HumToDraftOptions extends HumDraftOptions {
+  /**
+   * The learner's calibration: the tracker's voicing gates (a low voice, the room's noise floor) and, unless
+   * `latencyMs` is given, the sing latency removed from every note.
+   */
+  profile?: Pick<LearnerProfile, "rangeLow" | "noiseFloorDb" | "singLatencyMs">;
+  /** Drop notes shorter than this, seconds. Default `HUM_MIN_NOTE_SEC`. */
+  minNoteSec?: number;
+}
+
+/** What `humToDraft` returns: the draft, and the notes the tracker heard (for the "what Oak heard" strip). */
+export interface HumToDraftResult extends HumDraft {
+  sung: SungNote[];
+  /** The draft's degrees in order, 1-based ("1", "b3"), with each one's octave from the tonic. */
+  degrees: { degree: HumDraftNote["degree"]; octave: number }[];
+}
+
+/**
+ * "Hum it, Oak drafts it" from the microphone (contracts §6.12): sung or hummed pitch frames become notes
+ * (the tracker the graders use: clarity gate, median of 5, octave repair, held-pitch splits), then a draft
+ * quantised to the bar grid in `key` and `meter` (`draftFromHum`): onsets and lengths snapped to the grid, the
+ * constant tuning offset removed, the octave chosen from where the line sits (or moved onto `tonicOctave`).
+ * Every note carries its scale degree, 1-based, so the app can show the line in Oak's pitch language and write
+ * `n()` code (`degree − 1`). The draft is machine-made: no evidence until the learner's corrected version is
+ * checked.
+ */
+export function humToDraft(frames: readonly PitchFrame[], opts: HumToDraftOptions): HumToDraftResult {
+  const profile = opts.profile ?? { rangeLow: 48, noiseFloorDb: -70, singLatencyMs: 0 };
+  const minSec = opts.minNoteSec ?? HUM_MIN_NOTE_SEC;
+  const sung = pitchFramesToNotes(frames, trackerOptionsFor(profile)).filter(
+    (n) => n.end - n.start >= minSec && Number.isFinite(n.midi),
+  );
+  const latencyMs = opts.latencyMs ?? (Number.isFinite(profile.singLatencyMs) ? profile.singLatencyMs : 0);
+  const draft = draftFromHum(sung, { ...opts, latencyMs });
+  return {
+    ...draft,
+    sung,
+    degrees: draft.notes.map((n) => ({ degree: n.degree, octave: n.octave })),
+  };
 }

@@ -21,6 +21,73 @@ export interface SoundCase {
 const ARP = 'note("c3 e3 g3 c4").s("sawtooth")';
 const SAMPLE = 's("cr")';
 
+const PIANO_TRIAD = 'note("[c3,e3,g3]").s("piano")';
+const VOICED_C = 'chord("C").voicing().s("piano")';
+const pair = (id: string, control: string, base: string, withCode: string): ControlCase => ({
+  id,
+  control,
+  value: "=",
+  base,
+  withCode,
+});
+
+/** The U05–U07 tools: each as the same music without the tool and with it. */
+function wave4Cases(): ControlCase[] {
+  return [
+    pair("tb.arp", "arp", PIANO_TRIAD, 'note("[c3,e3,g3]").arp("0 1 2 1").s("piano")'),
+    pair(
+      "chord.triad",
+      "chord",
+      'chord("C C C C").voicing().s("piano")',
+      'chord("C Cm Co Caug").voicing().s("piano")',
+    ),
+    pair("tb.chord", "chord", VOICED_C, 'chord("Am").voicing().s("piano")'),
+    pair("tb.voicing", "voicing", PIANO_TRIAD, VOICED_C),
+    pair("tb.anchor", "anchor", VOICED_C, 'chord("C").anchor("g4").voicing().s("piano")'),
+    // `below` is the default mode, so it is heard against root position.
+    pair(
+      "tb.mode.below",
+      "mode",
+      'chord("C").mode("root:c3").voicing().s("piano")',
+      'chord("C").mode("below").voicing().s("piano")',
+    ),
+    pair("tb.dict.triads", "dict", VOICED_C, 'chord("C").dict("triads").voicing().s("piano")'),
+    pair(
+      "tb.add",
+      "add",
+      'n("0 2 4").scale("C4:major").s("piano")',
+      'n("0 2 4").add(n("2")).scale("C4:major").s("piano")',
+    ),
+    pair("tb.mode.root", "mode", VOICED_C, 'chord("C").mode("root:g2").voicing().s("piano")'),
+    pair("tb.rev", "rev", 'note("c3 e3 g3 c4").s("piano")', 'note("c3 e3 g3 c4").rev().s("piano")'),
+    pair(
+      "tb.scaleTranspose",
+      "scaleTranspose",
+      'n("0 1 2 3").scale("C4:major").s("piano")',
+      'n("0 1 2 3").scale("C4:major").scaleTranspose(2).s("piano")',
+    ),
+    pair("tb.struct", "struct", PIANO_TRIAD, 'note("[c3,e3,g3]").struct("x ~ x x").s("piano")'),
+    // One rendered cycle: `lastOf(1, …)` and `firstOf(1, …)` apply in it.
+    pair("tb.lastOf", "lastOf", ARP, `${ARP}.lastOf(1, x => x.rev())`),
+    pair("tb.firstOf", "firstOf", ARP, `${ARP}.firstOf(1, x => x.fast(2))`),
+    pair("tb.off", "off", ARP, `${ARP}.off(1/8, x => x.add(note(7)))`),
+    pair("tb.superimpose", "superimpose", ARP, `${ARP}.superimpose(x => x.add(note(12)))`),
+    pair("tb.mini.maybe", "?", 'note("c3*8").s("sawtooth")', 'note("c3*8?").s("sawtooth")'),
+    pair(
+      "tb.degradeBy",
+      "degradeBy",
+      'note("c3*8").s("sawtooth")',
+      'note("c3*8").degradeBy(0.5).s("sawtooth")',
+    ),
+    pair(
+      "tb.sometimesBy",
+      "sometimesBy",
+      'note("c3*8").s("sawtooth")',
+      'note("c3*8").sometimesBy(0.5, x => x.add(note(12))).s("sawtooth")',
+    ),
+  ];
+}
+
 export const CONTROL_CASES: ControlCase[] = [
   { id: "tb.room", control: "room", value: 0.6 },
   { id: "tb.clip", control: "clip", value: 0.25 },
@@ -101,6 +168,10 @@ export const CONTROL_CASES: ControlCase[] = [
   },
   { id: "tb.velocity", control: "velocity", value: 0.3 },
   { id: "tb.gain", control: "gain", value: 0.3 },
+  // Wave 4: the pattern, chord and voicing tools U05–U07 unlock (the voicing gate's tools included). A pattern
+  // tool is audible when the code with it sounds different from the same music without it; each pair is
+  // written out in STYLE order (controls before `.voicing()`, `.add()` before `.scale()`).
+  ...wave4Cases(),
   // Known silent no-ops (contracts §3.1 rule 7): never taught; listed so a Strudel update that changes them shows.
   { id: "noop.leslie", control: "leslie", value: 1 },
   { id: "noop.lrate", control: "lrate", value: 4 },

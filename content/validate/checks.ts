@@ -12,7 +12,9 @@ import {
   stripMarkers,
   type UnlockableId,
   unimplementedInLesson,
+  WORKBENCH_PANEL_TOOLS,
 } from "@oak/content-kit";
+import { parseChordWithBass } from "@oak/theory";
 import { exerciseCode } from "../../scripts/content/generate.ts";
 import { bandById, bandMeter } from "../bands/index.ts";
 import { candoById } from "../candos.ts";
@@ -24,7 +26,7 @@ import type { LoadedLesson } from "../lib/load.bun.ts";
 import { checkMdx, parseMdx } from "../lib/mdx.ts";
 import { unitSpecs } from "../specs/index.ts";
 import { termById } from "../terms.ts";
-import { toolboxById } from "../toolbox.ts";
+import { toolboxById, VOICING_GATE } from "../toolbox.ts";
 import { lessonAuthoring } from "./authoring.ts";
 import {
   BAD_LOG,
@@ -179,6 +181,14 @@ export function checkLint(l: LoadedLesson): CheckSection {
   for (const [f, swap] of Object.entries(def.flavours ?? {}))
     for (const snd of Object.values(swap?.sounds ?? {}))
       if (!unlocked.has(snd)) issues.push(`flavour ${f}: starter sound ${snd} is locked at ${session}`);
+  // Wave 4: a panel a step opens is a toolbox row like any tool (contracts §3.2 group A).
+  for (const s of def.steps)
+    for (const p of s.ui.initialPanels ?? []) {
+      const tool = WORKBENCH_PANEL_TOOLS[p];
+      if (!unlocked.has(tool as UnlockableId))
+        issues.push(`${s.id}: the ${p} panel needs ${tool}, locked here`);
+    }
+  issues.push(...gateCheckIssues(def));
   return { n: 4, name: "STYLE lint and unlock-before-use", issues };
 }
 
@@ -366,6 +376,9 @@ export function checkTheory(l: LoadedLesson): CheckSection {
             `${step.id}/${e.id}#${c.what}: .scale("${m[1]}…:${m[2]}") but the key is ${key.tonic} ${key.mode}`,
           );
     }
+  // Wave 4: every chord symbol written as data names a chord (`@oak/theory` reads it, slash chords too).
+  for (const c of chordSymbolsOf(l.def))
+    if (!parseChordWithBass(c.symbol)) issues.push(`${c.where}: "${c.symbol}" is not a chord symbol`);
   return { n: 13, name: "Theory", issues };
 }
 
@@ -401,6 +414,56 @@ export function specDrift(def: LessonDef): string[] {
   if (req && req !== spec.make.required.rule)
     out.push(`spec: the Make's required rule is \`${spec.make.required.rule}\`, lesson: \`${req}\``);
   if (def.meter !== spec.meter) out.push(`spec: meter ${spec.meter}, lesson: ${def.meter}`);
+  return out;
+}
+
+/**
+ * The voicing gate's second chance (contracts §3.1 rule 6, `StepDef.gateCheck`): only in the session the
+ * gated tools unlock at, and its exercise is one of the condition's `variants`, so a pass there opens the
+ * gate. A real lesson's gate check uses none of the tools it guards.
+ */
+export function gateCheckIssues(def: LessonDef): string[] {
+  const issues: string[] = [];
+  const gatedAt = new Set(
+    [...toolboxById.values()]
+      .filter((t) => t.unlock.condition)
+      .flatMap((t) => (Array.isArray(t.unlock.at) ? t.unlock.at : [t.unlock.at])),
+  );
+  const variants = new Set<string>(VOICING_GATE.variants);
+  for (const s of def.steps) {
+    if (!s.gateCheck) continue;
+    if (!gatedAt.has(def.id))
+      issues.push(`${s.id}: a gate check belongs to the lesson that unlocks the gated tools`);
+    const ex = s.exercise;
+    if (ex && !variants.has(`${def.id}/${ex.id}`))
+      issues.push(
+        `${s.id}: ${def.id}/${ex.id} is not a variant of the gate check (toolbox VOICING_GATE.variants)`,
+      );
+    for (const c of ex ? exerciseCode(ex) : [])
+      if (/\b(chord|voicing)\(/.test(c.code) && !c.what.startsWith("test:"))
+        issues.push(`${s.id}#${c.what}: the gate check uses a tool it guards`);
+  }
+  return issues;
+}
+
+/** Chord symbols an exercise or step names as data (not code): staff chords, lead-sheet charts, typed answers. */
+export function chordSymbolsOf(def: LessonDef): { where: string; symbol: string }[] {
+  const out: { where: string; symbol: string }[] = [];
+  for (const s of def.steps) {
+    const chords = s.ui.leadSheet?.chords;
+    if (chords && typeof chords === "object")
+      for (const c of chords.chart) out.push({ where: `${s.id} lead sheet bar ${c.bar}`, symbol: c.symbol });
+    for (const e of s.exercise ? flattenExercise(s.exercise) : []) {
+      if (e.kind === "staff-write" && e.expect.e === "chords")
+        for (const sym of e.expect.symbols) out.push({ where: `${s.id}/${e.id} expect`, symbol: sym });
+      if (
+        (e.kind === "fact" || e.kind === "identify") &&
+        e.answer.ui === "text" &&
+        e.answer.normalize === "chord"
+      )
+        for (const sym of e.correct.text ?? []) out.push({ where: `${s.id}/${e.id} correct`, symbol: sym });
+    }
+  }
   return out;
 }
 

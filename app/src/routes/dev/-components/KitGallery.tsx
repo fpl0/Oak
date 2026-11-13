@@ -22,6 +22,7 @@ import {
 import { Callout, SegmentedControl, Stepper } from "../../../ui/kit/Controls.tsx";
 import { Dialog } from "../../../ui/kit/Dialog.tsx";
 import { Field, Select, Slider, Switch } from "../../../ui/kit/Field.tsx";
+import { KitWave4 } from "../../../ui/kit/gallery/KitWave4.tsx";
 import { dbToLevel, Meter, MicLevelMeter, ProgressRing } from "../../../ui/kit/Meters.tsx";
 import { Tabs, tabPanelProps } from "../../../ui/kit/Tabs.tsx";
 import { toast } from "../../../ui/kit/Toast.tsx";
@@ -348,6 +349,7 @@ export function KitGallery() {
           </EmptyState>
         </Section>
       </div>
+      <KitWave4 nested />
     </Page>
   );
 }

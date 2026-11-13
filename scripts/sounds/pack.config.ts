@@ -5,8 +5,9 @@
 //
 // v2 (Wave 3): `acgtr` alias; per-alias gain/release (loudness-matched, no click at note ends); the Oak
 // jazz kit (`.bank("jazzkit")`, brushes and ride from the Roland MC-303 bank of tidal-drum-machines).
+// v3 (Wave 4): `brk`, Oak's own one-bar break (scripts/sounds/brk.ts, CC0), in the `oak-rendered` map.
 
-export const PACK_VERSION = "v2";
+export const PACK_VERSION = "v3";
 
 /** Public URL prefix the app serves the pack from. Every rewritten `_base` starts with this. */
 export const PUBLIC_ROOT = `/sounds/${PACK_VERSION}`;
@@ -58,7 +59,8 @@ const drumBanks = new Set<string>(DRUM_BANKS);
 export const SAMPLE_MAPS: SampleMapSpec[] = [
   // Salamander Grand Piano V3 (CC-BY 3.0, Alexander Holm) - one velocity layer, 29 pitches
   { json: "piano.json", dir: "piano/", keep: () => Number.POSITIVE_INFINITY },
-  // uzu-drumkit (Unlicense): default bd/sd/hh... kit. "brk" (amen break) and "misc" are pruned.
+  // uzu-drumkit (Unlicense): default bd/sd/hh... kit. Its "brk" (a recording of the Amen break, whose
+  // licence is not Oak's to give) and "misc" are pruned; Oak's `brk` is rendered (scripts/sounds/brk.ts).
   {
     json: "uzu-drumkit.json",
     dir: "uzu-drumkit/",
@@ -129,15 +131,17 @@ export interface AliasSpec {
  * Curated Oak instrument names. Variants, gains and releases come from the sound-quality harness
  * (`packages/strudel/e2e/quality.pw.ts`, results in `packages/strudel/sound-quality.json`): every alias's
  * first partial within ±10 cents of equal temperament at A2/A3/A4 (A1/A2/A3 for basses), in the octave it
- * claims, no click at note ends, loudness within ±1.5 LU of the piano.
+ * claims, no click at note ends, loudness within ±1.5 LU of the piano. Wave 4 also matches the chord
+ * instruments on triads (packages/strudel/e2e/wave4.pw.ts, ±3 LU of the piano's chords): rhodes 0.56 → 0.6
+ * and acgtr 2.26 → 1.95 (its chords peaked at −0.9 dBFS), both still within ±1.5 LU on a melody.
  */
 export const OAK_ALIASES: Record<string, AliasSpec> = {
-  rhodes: { gm: "gm_epiano1", variant: 1, gain: 0.56 },
+  rhodes: { gm: "gm_epiano1", variant: 1, gain: 0.6 },
   upright: { gm: "gm_acoustic_bass", variant: 1, range: [24, 67] },
   ebass: { gm: "gm_electric_bass_pick", variant: 0, gain: 1.13, range: [24, 67] },
   fingerbass: { gm: "gm_electric_bass_finger", variant: 0, range: [24, 67] },
   organ: { gm: "gm_drawbar_organ", variant: 3, gain: 1.46 },
-  acgtr: { gm: "gm_acoustic_guitar_steel", variant: 5, gain: 2.26, range: [40, 88] },
+  acgtr: { gm: "gm_acoustic_guitar_steel", variant: 5, gain: 1.95, range: [40, 88] },
   jazzgtr: { gm: "gm_electric_guitar_jazz", variant: 0, gain: 1.19, range: [40, 88] },
   cleangtr: { gm: "gm_electric_guitar_clean", variant: 0, gain: 0.69, range: [40, 88] },
   crunch: { gm: "gm_overdriven_guitar", variant: 0, gain: 0.58, range: [40, 88] },

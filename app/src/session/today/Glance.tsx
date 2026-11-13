@@ -14,7 +14,7 @@ import { AcornIcon, LeafIcon, RingIcon } from "../../ui/icons/index.tsx";
 import { Card, Skeleton } from "../../ui/kit/basics.tsx";
 import { goalGradient } from "../coda-model.ts";
 import { isWritten, unitTitleOf } from "../edge.ts";
-import { doneItems, nextUnlocksFrom } from "../progress-model.ts";
+import { albumWindow, doneItems, nextUnlocksFrom } from "../progress-model.ts";
 import { toolName as toolLabel } from "../tool-name.ts";
 
 function CardTitle({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
@@ -109,12 +109,18 @@ export function OakGlanceCard() {
   );
 }
 
-/** The album's first slots: C0 and C1 in Wave 2, filled as tracks are released. */
+/** The album's slots around where the learner is: the last ones filled and the next one to fill (Side A). */
 export function AlbumStrip() {
   const album = useAlbum();
   const content = useContent();
   const course = useCourseProgress();
-  const slots = (content.data?.capstones ?? []).filter((c) => /^C\d+$/.test(c.id)).slice(0, 3);
+  const released = new Set((album.data?.tracks ?? []).map((t) => t.capstoneId as string | null));
+  const slots = albumWindow(
+    (content.data?.capstones ?? []).filter((c) => /^(C|X)\d+$/.test(c.id)),
+    (content.data?.syllabus?.defaultOrder ?? []) as readonly string[],
+    released,
+    3,
+  );
   return (
     <Card className="p-4" data-testid="album-strip">
       <CardTitle icon={<RingIcon size={16} />}>Album</CardTitle>
@@ -145,7 +151,10 @@ export function AlbumStrip() {
                       )}
                     />
                   )}
-                  <span className="w-full truncate text-[0.75rem] text-text-2" title={c.title}>
+                  <span
+                    className="line-clamp-2 w-full break-words text-[0.75rem] leading-tight text-text-2"
+                    title={c.title}
+                  >
                     {c.title}
                   </span>
                   <span className="sr-only">

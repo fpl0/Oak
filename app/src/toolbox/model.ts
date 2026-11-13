@@ -139,6 +139,53 @@ export function demoMeter(code: string): MeterId {
   return "4/4";
 }
 
+/**
+ * How many bars the demo's loop takes: the longest `<…>` alternation (one entry per bar, `x!n` counting n),
+ * 2 at least (the two-bar examples of ux §5.1), 8 at most.
+ */
+export function demoBars(code: string): number {
+  let most = 1;
+  for (const m of code.matchAll(/"([^"]*)"/g)) {
+    const text = m[1] as string;
+    let depth = 0;
+    let angle = -1;
+    let count = 0;
+    let token = "";
+    const flush = () => {
+      if (token.trim()) {
+        const rep = /!(\d+)$/.exec(token.trim());
+        count += rep ? Number(rep[1]) : 1;
+      }
+      token = "";
+    };
+    for (const ch of text) {
+      if (ch === "<" || ch === "[" || ch === "{" || ch === "(") {
+        if (ch === "<" && angle < 0) {
+          angle = depth;
+          count = 0;
+        }
+        depth++;
+        if (angle >= 0 && depth - 1 > angle) token += ch;
+        continue;
+      }
+      if (ch === ">" || ch === "]" || ch === "}" || ch === ")") {
+        depth--;
+        if (ch === ">" && depth === angle) {
+          flush();
+          most = Math.max(most, count);
+          angle = -1;
+          continue;
+        }
+        if (angle >= 0) token += ch;
+        continue;
+      }
+      if (angle >= 0 && depth === angle + 1 && /\s/.test(ch)) flush();
+      else if (angle >= 0) token += ch;
+    }
+  }
+  return Math.max(2, Math.min(8, most));
+}
+
 /** The demo's own key from its first `.scale("D4:major")`, for degree labels. */
 export function demoKey(code: string): { tonic: string; mode: string } | null {
   const m = /\.scale\(\s*"([A-G][#b]?)-?\d?:([a-z:]+)/.exec(code);

@@ -27,7 +27,13 @@ export interface ServerDepsOptions {
   contentHash: string;
   /** Active ms of the step on screen (the attempt's `activeMs`). */
   activeMs: () => number;
-  band: (stepId: string) => { bandId: BandId; flavour: FlavourId } | null;
+  /**
+   * The Band a step plays, as the Make's sketch keeps it: `mutes` are the Band's parts the step leaves out
+   * (`ui.band.tracks`), so Studio plays the sketch with what the learner heard in the lesson.
+   */
+  band: (
+    stepId: string,
+  ) => { bandId: BandId; flavour: FlavourId; mutes?: ("drums" | "bass" | "chords")[] } | null;
   /** Whether the Make's code has run successfully at least once (a sketch qualifies a streak day then). */
   ranOk: (stepId: string) => boolean;
   /** Grades the Make's code when no check of it is current. */
@@ -69,7 +75,7 @@ export function serverDeps(o: ServerDepsOptions): LessonDeps {
         analysis: null,
         note: null,
         tutorAssisted,
-        band: band ? { ...band, mutes: [] } : null,
+        band: band ? { bandId: band.bandId, flavour: band.flavour, mutes: band.mutes ?? [] } : null,
         flags: { lockedTools: [], previewTools: [] },
         ranOk: o.ranOk(stepId),
       },

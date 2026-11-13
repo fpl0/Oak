@@ -196,6 +196,7 @@ export function checkExercise(
     });
   }
   issues.push(...checkWave3(ex, path));
+  issues.push(...checkWave4(ex, path, where));
   if (ex.kind === "predict" && ex.mode !== "hum" && ex.correct === undefined) {
     issues.push({
       path: `${path}.correct`,
@@ -343,6 +344,102 @@ function checkWave3(ex: Exercise, path: string): ContentIssue[] {
   return issues;
 }
 
+/** True when a matcher (or a member of an `all`) reads harmony: `harmony` or `pcset`. */
+function readsHarmony(m: Matcher): boolean {
+  if (m.m === "harmony" || m.m === "pcset") return true;
+  return m.m === "all" && m.of.some(readsHarmony);
+}
+/** True when a matcher grades a bass line: a `harmony` matcher at level `bass`, or any matcher on a bass track. */
+function gradesBass(track: string, m: Matcher): boolean {
+  if (track === "bass" || track === "@bass") return true;
+  if (m.m === "harmony") return m.level === "bass";
+  return m.m === "all" && m.of.some((x) => gradesBass(track, x));
+}
+const STAGE_ORDER = ["bass", "quality", "rn"] as const;
+/** Stages listed in bass → quality → rn order, each at most once. */
+function stagesInOrder(stages: readonly string[]): boolean {
+  const at = stages.map((x) => STAGE_ORDER.indexOf(x as (typeof STAGE_ORDER)[number]));
+  return at.every((v, i) => v >= 0 && (i === 0 || v > (at[i - 1] as number)));
+}
+
+/**
+ * Structural rules of the Wave 4 additions (slot choices, chords on the staff, staged chord dictation,
+ * by-ear transcription in parts, staged transcription, the new rubric fields).
+ */
+function checkWave4(ex: Exercise, path: string, where: "lesson" | "capstone" | "checkpoint"): ContentIssue[] {
+  const issues: ContentIssue[] = [];
+  const add = (p: string, rule: string, message: string) =>
+    issues.push({ path: `${path}${p}`, rule, message });
+  if ("answer" in ex && ex.answer.ui === "slot-choice") {
+    const ui = ex.answer;
+    if (ui.labels && ui.labels.length !== ui.slots)
+      add(".answer.labels", "slot-choice.labels", "labels has one entry per slot");
+    if ((ex.kind === "identify" || ex.kind === "fact") && ex.correct.choice) {
+      const ids = new Set(ui.options.map((o) => o.id));
+      if (ex.correct.choice.length !== ui.slots)
+        add(".correct.choice", "slot-choice.correct", `one answer per slot (${ui.slots})`);
+      for (const c of ex.correct.choice)
+        if (!ids.has(c)) add(".correct.choice", "slot-choice.correct", `"${c}" is not one of the options`);
+    }
+  }
+  if (ex.kind === "staff-write" && ex.expect.e === "chords" && !ex.answer.palette.chords)
+    add(
+      ".answer.palette.chords",
+      "staff.chords-palette",
+      "chords on the staff need palette.chords: true (notes at one position stack)",
+    );
+  if (ex.kind === "dictation") {
+    const keys = Object.keys(ex.stageAnswers ?? {});
+    if (ex.stageAnswers) {
+      if (!ex.stages)
+        add(".stageAnswers", "dictation.stage-answers", "stageAnswers needs the stages it answers");
+      else {
+        for (const k of keys)
+          if (!(ex.stages as readonly string[]).includes(k))
+            add(".stageAnswers", "dictation.stage-answers", `stage "${k}" is not in stages`);
+        for (const st of ex.stages)
+          if (!keys.includes(st))
+            add(".stageAnswers", "dictation.stage-answers", `stage "${st}" has no answer widget`);
+      }
+    } else if (ex.stageFlow !== undefined || ex.stagePass !== undefined)
+      add(".stageFlow", "dictation.stage-answers", "stageFlow and stagePass go with stageAnswers");
+    const harmonyStages = (ex.stages ?? []).filter((x) => (STAGE_ORDER as readonly string[]).includes(x));
+    if (ex.stageAnswers && harmonyStages.length > 1 && !stagesInOrder(harmonyStages))
+      add(".stages", "dictation.stage-order", "chord stages run bass → quality → rn");
+    const parts = ex.byEar?.parts ?? [];
+    const tracks = parts.map((p) => p.track);
+    if (new Set(tracks).size !== tracks.length)
+      add(".byEar.parts", "by-ear.parts-tracks", "each part transcribes its own track");
+    parts.forEach((p, i) => {
+      if (readsHarmony(p.matcher) && !parts.slice(0, i).some((q) => gradesBass(q.track, q.matcher)))
+        add(
+          `.byEar.parts[${i}]`,
+          "by-ear.bass-first",
+          "chords by ear come after the bass: put a bass part before this one",
+        );
+    });
+  }
+  if (ex.kind === "transcribe-step" && ex.grading.mode === "auto" && ex.grading.stages) {
+    if (!stagesInOrder(ex.grading.stages.map((x) => x.stage)))
+      add(".grading.stages", "transcribe.stage-order", "chord stages run bass → quality → rn, once each");
+  }
+  if (ex.kind === "transcribe-step" && ex.stimulus.src === "capstone-song" && where !== "capstone")
+    add(".stimulus", "stimulus.capstone-song", "the capstone's song exists only inside a capstone");
+  const rules =
+    ex.kind === "code-make" || ex.kind === "compose-brief"
+      ? ex.rubric
+      : "matcher" in ex && ex.matcher?.m === "rubric"
+        ? ex.matcher.rules
+        : [];
+  for (const [i, r] of rules.entries()) {
+    if (r.rule === "progression" && r.bars && r.bars[0] > r.bars[1])
+      add(`.rubric[${i}].bars`, "rubric.bars-window", "bars is [from, to] with from ≤ to");
+    if (r.rule === "chord-qualities" && !r.contains && !r.anyOf && !r.subsetOf && r.min === undefined)
+      add(`.rubric[${i}]`, "rubric.chord-qualities", "say what is asked: contains, anyOf, subsetOf or min");
+  }
+  return issues;
+}
+
 // --- lessons ------------------------------------------------------------------------------------
 
 function checkStep(step: StepDef, i: number, def: LessonDef): ContentIssue[] {
@@ -380,6 +477,24 @@ function checkStep(step: StepDef, i: number, def: LessonDef): ContentIssue[] {
     });
   }
   if (step.exercise) issues.push(...checkExercise(step.exercise, `${path}.exercise`, "lesson"));
+  if (step.ui.leadSheet && step.ui.panels.staff !== "lead")
+    issues.push({
+      path: `${path}.ui.leadSheet`,
+      rule: "lead-sheet.staff-panel",
+      message: 'a lead sheet is shown in the staff panel: set panels.staff to "lead"',
+    });
+  if (step.gateCheck && (i !== 0 || !step.graded || !step.exercise))
+    issues.push({
+      path: `${path}.gateCheck`,
+      rule: "step.gate-check",
+      message: "the gate's second chance is the lesson's first step, graded, with an exercise",
+    });
+  for (const id of duplicates(step.ui.initialPanels ?? []))
+    issues.push({
+      path: `${path}.ui.initialPanels`,
+      rule: "step.initial-panels",
+      message: `panel "${id}" is listed twice`,
+    });
   if (
     step.graded &&
     (!step.exercise || ["make", "predict", "listen", "run", "see", "concept", "reflect"].includes(step.kind))
@@ -887,6 +1002,47 @@ export function defineCapstone(def: CapstoneDef): CapstoneDef {
         rule: "capstone.song",
         message: "a transcription capstone names its song pool",
       });
+    const releases = c.sessionDefs.flatMap((s, i) => (s.release ? [i] : []));
+    if (releases.length > 1 || (releases.length === 1 && releases[0] !== c.sessionDefs.length - 1))
+      issues.push({
+        path: "sessionDefs",
+        rule: "capstone.release-last",
+        message: "only the last session releases the piece",
+      });
+    const checkIds = c.sessionDefs.flatMap((s) => (s.checks ?? []).map((x) => x.id));
+    for (const id of duplicates(checkIds))
+      issues.push({ path: "sessionDefs", rule: "capstone.check-id", message: `check "${id}" is used twice` });
+    c.sessionDefs.forEach((s, i) => {
+      if (s.checks && c.kind !== "transcribe")
+        issues.push({
+          path: `sessionDefs[${i}].checks`,
+          rule: "capstone.checks-transcribe",
+          message: "phrase checks belong to a transcribe capstone",
+        });
+      for (const [j, x] of (s.checks ?? []).entries()) {
+        const p = `sessionDefs[${i}].checks[${j}]`;
+        if (x.stages && x.layer !== "chords")
+          issues.push({
+            path: `${p}.stages`,
+            rule: "capstone.check-stages",
+            message: "stages are for chords",
+          });
+        if (x.stages && !stagesInOrder(x.stages))
+          issues.push({
+            path: `${p}.stages`,
+            rule: "capstone.check-stages",
+            message: "chord stages run bass → quality → rn, once each",
+          });
+        if (Array.isArray(x.phrase) && x.phrase[0] > x.phrase[1])
+          issues.push({
+            path: `${p}.phrase`,
+            rule: "capstone.check-phrase",
+            message: "phrase [from, to], from ≤ to",
+          });
+      }
+      for (const [j, st] of (s.stages ?? []).entries())
+        issues.push(...checkExercise(st, `sessionDefs[${i}].stages[${j}]`, "capstone"));
+    });
     if (c.brief) {
       issues.push(...checkExercise(c.brief, "brief", "capstone"));
       if (!c.brief.rubric.some((r) => r.required))

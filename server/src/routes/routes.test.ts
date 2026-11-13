@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { contract, ENDPOINT_NAMES, WAVE2_ENDPOINTS, WAVE3_ENDPOINTS } from "@oak/api";
+import { contract, ENDPOINT_NAMES, WAVE2_ENDPOINTS, WAVE3_ENDPOINTS, WAVE4_ENDPOINTS } from "@oak/api";
 import { gradeResult, type Harness, harness } from "../testing/harness.ts";
 
 let h: Harness;
@@ -39,7 +39,7 @@ describe("meta", () => {
     }>("GET", "/api/health");
     expect(r.status).toBe(200);
     expect(r.body.ok).toBe(true);
-    expect(r.body.schemaVersion).toBe(3);
+    expect(r.body.schemaVersion).toBe(5);
     expect(r.body.contentVersion).toBe("fixture-1");
     expect(r.body.tutor).toBe("unreachable");
     expect(r.body.dev).toBe(false);
@@ -601,6 +601,64 @@ describe("Wave 3 endpoints", () => {
         const path = `/api${def.path.replace(/:([A-Za-z]+)/g, "x")}`;
         const r = await full.json<{ error?: { code: string } }>(def.method, path, WAVE3_BODIES[name]);
         if (WAVE3_PENDING.includes(name))
+          expect({ name, status: r.status, code: r.body?.error?.code }).toEqual({
+            name,
+            status: 501,
+            code: "not_implemented",
+          });
+        else expect({ name, status: r.status }).not.toEqual({ name, status: 501 });
+      }
+    } finally {
+      await full.close();
+    }
+  });
+});
+
+/**
+ * The Wave 4 endpoints still answering their typed 501 stub (docs/design/wave4.md §5). The server engineer
+ * removes a name here as its handler lands; the test then checks it no longer answers 501.
+ */
+const WAVE4_PENDING: readonly (typeof WAVE4_ENDPOINTS)[number][] = [];
+/** A valid body (and query) per endpoint, so a pending one reaches its handler (a 400 would hide the 501). */
+const WAVE4_REQUESTS: Partial<Record<(typeof WAVE4_ENDPOINTS)[number], { body?: unknown; query?: string }>> =
+  {
+    "capstones.saveDraft": {
+      body: { capstoneSessionId: "C2.S1", sessionId: null, sketchId: "x", sketchVersion: 1 },
+    },
+    "capstones.recordCheck": {
+      body: {
+        capstoneSessionId: "X1.S1",
+        stage: null,
+        sketchId: "x",
+        sketchVersion: 1,
+        result: gradeResult({ exerciseId: "X1/phrase-1" }),
+      },
+    },
+    "album.patchVersion": { body: { includeReviewNote: true } },
+    "album.attachReview": {
+      body: {
+        conversationId: "x",
+        includeReviewNote: false,
+        review: { strengths: [], revisions: [], listeningQuestion: "?", linerNote: "." },
+      },
+    },
+    "tutor.reviews": { query: "?subjectKind=capstone&subjectId=C2" },
+    "transcriptions.putSettings": { body: { rate: 0.75 } },
+    "ladder.setLevel": { body: { level: 2 } },
+    "ladder.next": { body: { sessionId: null, gymId: null } },
+    "ladder.submit": { body: { sessionId: null, code: 's("bd")', rung: 0 } },
+  };
+
+describe("Wave 4 endpoints", () => {
+  test("a pending endpoint answers the typed 501 stub; a built one never does", async () => {
+    const full = await harness({ dev: true });
+    try {
+      for (const name of WAVE4_ENDPOINTS) {
+        const def = contract[name] as { method: string; path: string };
+        const req = WAVE4_REQUESTS[name] ?? {};
+        const path = `/api${def.path.replace(/:([A-Za-z]+)/g, "x")}${req.query ?? ""}`;
+        const r = await full.json<{ error?: { code: string } }>(def.method, path, req.body);
+        if (WAVE4_PENDING.includes(name))
           expect({ name, status: r.status, code: r.body?.error?.code }).toEqual({
             name,
             status: 501,

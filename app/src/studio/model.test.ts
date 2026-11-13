@@ -17,6 +17,7 @@ import {
   differsFrom,
   exportFileName,
   exportText,
+  harmonyViewHints,
   isNamed,
   linerFlags,
   lockedHints,
@@ -280,5 +281,17 @@ describe("the tree-ring cover", () => {
     }
     const rs = ringsOf("sk_4", 6).map((r) => r.r);
     expect([...rs].sort((a, b) => a - b)).toEqual(rs);
+  });
+});
+
+describe("harmony view hints (Wave 4)", () => {
+  const at = (id: string) => ({ "tb.arp": "U05.L04", "tb.feature.rn": "U06.L02" })[id] ?? null;
+  test("a sketch with chords hears what is still locked, in course order; none once unlocked", () => {
+    expect(harmonyViewHints(true, new Set(), at).map((h) => [h.id, h.at])).toEqual([
+      ["tb.arp", "U05.L04"],
+      ["tb.feature.rn", "U06.L02"],
+    ]);
+    expect(harmonyViewHints(true, new Set(["tb.arp"]), at).map((h) => h.id)).toEqual(["tb.feature.rn"]);
+    expect(harmonyViewHints(false, new Set(), at)).toEqual([]);
   });
 });

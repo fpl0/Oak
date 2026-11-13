@@ -1,6 +1,7 @@
 // The workbench keys that arrived in Wave 2 (ux §7.10: `L` loop, `[`/`]` shrink/extend, `Shift+[`/`Shift+]`
 // move, `M` metronome) and Wave 3 (the lens bar: `D` degrees, `S` solfège, `Shift+N` note names, `Shift+K` the
-// key-signature panel, `Shift+C` the circle of fifths). The workbench handles them itself (its own keydown, focus on the workbench, not in the
+// key-signature panel, `Shift+C` the circle of fifths) and Wave 4 (`Shift+H`/`Shift+R` chord symbols and numerals, `Shift+F` function,
+// `Shift+T` chord tones, `Shift+G` range, `Shift+L` lead sheet). The workbench handles them itself (its own keydown, focus on the workbench, not in the
 // editor); the shortcut sheet lists them in its static Workbench section (app/src/ui/shell/GlobalKeys.tsx).
 // `shortcutRows()` gives them as display-only keymap rows (`when` is false) for a host that wants them there.
 import type { Binding } from "../ui/keys/keymap.ts";
@@ -17,6 +18,13 @@ export const WORKBENCH_LENS_SHORTCUTS: readonly (readonly [string, string])[] = 
   ["Shift+N", "Note-name labels on / off"],
   ["Shift+K", "Key-signature panel"],
   ["Shift+C", "Circle of fifths"],
+  // Wave 4: the chord lenses and the harmony panels, each once unlocked.
+  ["Shift+H", "Chord symbols on / off"],
+  ["Shift+R", "Roman numerals on / off"],
+  ["Shift+F", "Function bands (T, PD, D)"],
+  ["Shift+T", "Chord tones in the melody"],
+  ["Shift+G", "Range of each melody line"],
+  ["Shift+L", "Lead sheet"],
 ];
 
 /**

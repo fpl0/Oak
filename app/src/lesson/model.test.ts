@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 import type { Exercise, GradeResult, LessonDef, StepDef, StepState } from "@oak/api";
 import sample from "../../../content/core/_sample/L00/lesson.ts";
 import u01l01 from "../../../content/core/U01/L01/lesson.ts";
+import u06l11 from "../../../content/core/U06/L11/lesson.ts";
 import type { AnswerSpec } from "../answers/types.ts";
 import { answerFeedback, partMarks, revealValue } from "./feedback.ts";
 import {
@@ -12,6 +13,7 @@ import {
   continueLabel,
   editorStart,
   hintText,
+  initialTabOf,
   isCheckable,
   ladderOf,
   partRange,
@@ -287,5 +289,16 @@ describe("a drawn trial's own choice options (U03.L01 Find home)", () => {
     expect(withTrialOptions(pad, { params: {} })).toBe(pad);
     expect(withTrialOptions(authored, { params: {} })).toBe(authored);
     expect(withTrialOptions({ ui: "number" }, { params: { options: ["1"] } })).toEqual({ ui: "number" });
+  });
+});
+
+describe("the Workbench tab a step opens on (review:journey)", () => {
+  test("roll with the grand staff or the bass clef opens on Both; anything else keeps the default", () => {
+    const at = (id: string) => u06l11.steps.find((x) => x.id === id) as StepDef;
+    expect(initialTabOf(at("S3"))).toBe("both");
+    expect(initialTabOf(at("S8"))).toBe("both");
+    // The grand staff alone (no roll) has nothing to tab.
+    expect(initialTabOf(at("S1"))).toBeUndefined();
+    expect(initialTabOf(step(sample, "S6"))).toBeUndefined();
   });
 });

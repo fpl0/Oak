@@ -24,7 +24,11 @@ const BANNED: readonly [RegExp, string][] = [
   [/\bsimply\b/i, '"simply" (if it were simple, nobody would need telling)'],
   [/\bobviously\b/i, '"obviously"'],
   [/\b(easy|easily)\b/i, '"easy" (it is not easy for everyone)'],
-  [/\bgreat job\b|\bawesome\b|\bamazing\b|\bwell done\b/i, "generic praise (name what the learner did)"],
+  // "Amazing Grace" is a hymn title (U07.L09), not praise.
+  [
+    /\bgreat job\b|\bawesome\b|\bamazing\b(?! grace)|\bwell done\b/i,
+    "generic praise (name what the learner did)",
+  ],
   [/\boops\b|\bwrong!/i, "blame"],
   [/\blet['’]s\b/i, '"let\'s" (write to one adult: second person)'],
   [/\byou should\b/i, '"you should"'],
@@ -88,8 +92,17 @@ export function exerciseTexts(e: Exercise, where: string): Text[] {
         add(`${at} question ${i + 1}`, q.prompt);
         if (q.q === "choice") for (const o of q.options) add(`${at} question ${i + 1} option`, o.label);
       });
-    if ("answer" in x && x.answer.ui === "choice")
+    if ("answer" in x && (x.answer.ui === "choice" || x.answer.ui === "slot-choice"))
       for (const o of x.answer.options) add(`${at} option ${o.id}`, o.label);
+    // Wave 4: slot labels, the widgets of staged dictation, the parts of a by-ear transcription.
+    if ("answer" in x && x.answer.ui === "slot-choice")
+      for (const [i, l] of (x.answer.labels ?? []).entries()) add(`${at} slot ${i + 1}`, l);
+    if (x.kind === "dictation") {
+      for (const [stage, ui] of Object.entries(x.stageAnswers ?? {}))
+        if (ui && (ui.ui === "choice" || ui.ui === "slot-choice"))
+          for (const o of ui.options) add(`${at} ${stage} option ${o.id}`, o.label);
+      for (const [i, p] of (x.byEar?.parts ?? []).entries()) add(`${at} part ${i + 1}`, p.label);
+    }
     if ("rubric" in x) for (const l of ruleLabels(x.rubric)) add(`${at} rubric`, l);
     if (x.kind === "compose-brief") add(`${at} brief`, x.brief);
   }
@@ -111,8 +124,12 @@ export function voiceIssues(texts: readonly Text[]): string[] {
 }
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-/** The word as it appears in running text, with a plural. */
-const termRe = (t: TermEntry) => new RegExp(`\\b${escapeRe(t.term)}(s|es)?\\b`, "i");
+/**
+ * The word as it appears in running text, with a plural. Word edges are Unicode-aware, so a term that ends in
+ * a non-ASCII letter ("line cliché") is still found.
+ */
+const termRe = (t: TermEntry) =>
+  new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(t.term)}(s|es)?(?![\\p{L}\\p{N}])`, "iu");
 
 /** Terms of later lessons (in the default order) that this text uses: advice, since many are everyday words. */
 function laterTerms(lessonId: string): TermEntry[] {
@@ -155,8 +172,19 @@ export function lessonAuthoring(def: LessonDef, mdxSource: string | null, sample
     const at = stepIndex.get(decl.step);
     if (!t || at === undefined) continue;
     const re = termRe(t);
-    const bold = [...(mdxSource ?? "").matchAll(/\*\*([^*]+)\*\*/g)].filter((m) => re.test(m[1] as string));
-    const inPass = re.test([...(mdx.get(decl.step)?.onPass ?? "").matchAll(/\*\*([^*]+)\*\*/g)].join(" "));
+    // A bold that is another term this lesson declares ("**half cadence**" beside "**cadence**") is that
+    // term's bold, not this one's.
+    const others = def.terms
+      .filter((d) => d.id !== decl.id)
+      .flatMap((d) => {
+        const o = termById.get(d.id);
+        return o && o.term.length > t.term.length ? [termRe(o)] : [];
+      });
+    const own = (b: string) => re.test(b) && !others.some((o) => o.test(b));
+    const bold = [...(mdxSource ?? "").matchAll(/\*\*([^*]+)\*\*/g)].filter((m) => own(m[1] as string));
+    const inPass = [...(mdx.get(decl.step)?.onPass ?? "").matchAll(/\*\*([^*]+)\*\*/g)].some((m) =>
+      own(m[1] as string),
+    );
     if (!sample && (!inPass || bold.length !== 1))
       issues.push(
         `${decl.id}: bold "**${t.term}**" exactly once, in the <OnPass> of ${decl.step} (found ${bold.length} bold use${bold.length === 1 ? "" : "s"}${inPass ? "" : ", none in that pass text"})`,

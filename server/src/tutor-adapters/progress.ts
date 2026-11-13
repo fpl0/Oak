@@ -121,6 +121,8 @@ export class ProgressAdapter implements ProgressPort {
         .reverse()
         .slice(0, MAX_RECENT_TERMS)
         .map((r) => r.termId as string),
+      // Wave 4: every introduced ID, for the vocabulary rules (solfège, chord symbols, numerals).
+      all: rows.map((r) => r.termId as string),
     };
   }
 }

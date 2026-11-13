@@ -12,7 +12,7 @@ export const NOISY_SHARE = 0.4;
 /** A noise floor at or above this (dBFS) is too high to sing over (the quiet check's own line, −45). */
 export const HIGH_FLOOR_DB = -45;
 
-export type RecheckKind = "no-voice" | "high-floor" | "noisy";
+export type RecheckKind = "no-voice" | "high-floor" | "noisy" | "bleed";
 export interface RecheckAdvice {
   kind: RecheckKind;
   title: string;
@@ -33,6 +33,16 @@ export function noisyShare(frames: readonly PitchFrame[], floorDb: number | null
 }
 
 /**
+ * Contracts §8.6: the mic heard Oak's own playback (`sing.bleed`). The line is the feedback catalog's; the
+ * fallback offered with it is Quiet mode for today, and the bleed check in the set-up.
+ */
+export const BLEED_ADVICE: RecheckAdvice = {
+  kind: "bleed",
+  title: "The mic hears the playback",
+  body: "The mic hears the playback; use wired headphones. Until then Oak can't tell your voice from its own sound: switch on Quiet mode for today and sing steps become listen-and-check, with nothing held back.",
+};
+
+/**
  * What a finished take suggests. `diagnostics` are the grader's (`sing.no-voice` when nothing was voiced);
  * `frames` the take itself; `floorDb` the stored noise floor.
  */
@@ -41,6 +51,7 @@ export function takeAdvice(take: {
   frames?: readonly PitchFrame[];
   floorDb: number | null;
 }): RecheckAdvice | null {
+  if (take.diagnostics.some((d) => d.id === "sing.bleed")) return BLEED_ADVICE;
   const nv = take.diagnostics.find((d) => d.id === "sing.no-voice");
   // @oak/pitch says why nothing could be graded (`reason`): only short blips are a matter of holding each note,
   // not of the mic or the room, so they leave no re-check behind; a voice the room drowned is the noisy advice.
@@ -111,6 +122,14 @@ export function reportTake(take: Parameters<typeof takeAdvice>[0]): RecheckAdvic
   const advice = takeAdvice(take);
   if (advice) write({ ...advice, at: Date.now() });
   return advice;
+}
+/**
+ * The mic session heard Oak's own playback (a live trip of the session's bleed check, `MicSession.onBleed`):
+ * leaves the bleed advice, whatever the take's grade will say.
+ */
+export function reportBleed(): RecheckAdvice {
+  write({ ...BLEED_ADVICE, at: Date.now() });
+  return BLEED_ADVICE;
 }
 /** The quiet check was run again, or the learner dismissed the suggestion. */
 export function clearRecheck(): void {

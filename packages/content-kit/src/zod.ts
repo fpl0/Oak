@@ -26,11 +26,13 @@ import {
   FAMILY_KINDS,
   LAYERS,
   METER_IDS,
+  NON_CHORD_TONE_ROLES,
   SCALE_MODES,
   SKILL_KINDS,
   SKILL_REGIONS,
   STEP_KINDS,
   TOOL_KINDS,
+  WORKBENCH_PANELS,
 } from "./schema/index.ts";
 
 // --- IDs ----------------------------------------------------------------------------------------
@@ -193,6 +195,7 @@ export const StimulusSchema: z.ZodType<S.Stimulus> = z.discriminatedUnion("src",
     showCode: z.boolean(),
     showStaff: z.boolean().exactOptional(),
     showRoll: z.boolean().exactOptional(),
+    showLeadSheet: z.boolean().exactOptional(),
   }),
   z.strictObject({
     src: z.literal("generator"),
@@ -203,6 +206,11 @@ export const StimulusSchema: z.ZodType<S.Stimulus> = z.discriminatedUnion("src",
   z.strictObject({
     src: z.literal("tune"),
     tuneId: songId,
+    bars: bars2,
+    layers: z.array(layer).exactOptional(),
+  }),
+  z.strictObject({
+    src: z.literal("capstone-song"),
     bars: bars2,
     layers: z.array(layer).exactOptional(),
   }),
@@ -308,6 +316,7 @@ export const MatcherSchema: z.ZodType<S.Matcher> = z.lazy(() =>
       perRole: z.boolean(),
       displacementCredit: z.number().min(0).max(1),
       tracks: z.array(trackRef).exactOptional(),
+      roleWeight: z.enum(["onsets", "equal"]).exactOptional(),
     }),
     z.strictObject({
       m: z.literal("melody"),
@@ -404,6 +413,7 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       rn: z.array(z.string()).exactOptional(),
       allowRotation: z.boolean().exactOptional(),
       track: trackRef.exactOptional(),
+      bars: z.tuple([z.number().int().positive(), z.number().int().positive()]).exactOptional(),
     }),
     z.strictObject({
       ...ruleBase,
@@ -449,6 +459,10 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       track: trackRef,
       maxMovePerVoice: z.number(),
       maxTotal: z.number().exactOptional(),
+      voices: z.number().int().positive().exactOptional(),
+      commonTones: z.boolean().exactOptional(),
+      noCrossing: z.boolean().exactOptional(),
+      bassFree: z.boolean().exactOptional(),
     }),
     z.strictObject({
       ...ruleBase,
@@ -573,6 +587,7 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       rule: z.literal("sounds"),
       subsetOf: z.array(soundId).exactOptional(),
       contains: z.array(soundId).exactOptional(),
+      anyOf: z.array(soundId).min(1).exactOptional(),
     }),
     z.strictObject({
       ...ruleBase,
@@ -593,6 +608,39 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       matcher: MatcherSchema,
       min: z.number().min(0).max(1),
     }),
+    z.strictObject({
+      ...ruleBase,
+      rule: z.literal("pickup"),
+      track: trackRef,
+      units: RatSchema.exactOptional(),
+    }),
+    z.strictObject({
+      ...ruleBase,
+      rule: z.literal("chord-qualities"),
+      track: trackRef.exactOptional(),
+      contains: z.array(chordQuality).min(1).exactOptional(),
+      anyOf: z.array(chordQuality).min(1).exactOptional(),
+      subsetOf: z.array(chordQuality).min(1).exactOptional(),
+      min: z.number().int().positive().exactOptional(),
+    }),
+    z.strictObject({
+      ...ruleBase,
+      rule: z.literal("chord-inversions"),
+      track: trackRef.exactOptional(),
+      min: z.number().int().positive(),
+      of: z
+        .array(z.union([z.literal(1), z.literal(2)]))
+        .min(1)
+        .exactOptional(),
+    }),
+    z.strictObject({
+      ...ruleBase,
+      rule: z.literal("non-chord-tones"),
+      track: trackRef,
+      harmony: trackRef.exactOptional(),
+      roles: z.array(z.enum(NON_CHORD_TONE_ROLES)).min(1).exactOptional(),
+      min: z.number().int().positive(),
+    }),
   ]),
 );
 
@@ -612,6 +660,7 @@ const staffInputUi = z.strictObject({
     accidentals: z.boolean(),
     ties: z.boolean(),
     rests: z.boolean(),
+    chords: z.boolean().exactOptional(),
   }),
   key: KeySpecSchema.exactOptional(),
   mode: z.enum(["notes", "key-signature"]).exactOptional(),
@@ -648,6 +697,12 @@ export const AnswerUiSchema: z.ZodType<S.AnswerUi> = z.discriminatedUnion("ui", 
     rows: z.union([z.array(drumRole).min(1), z.tuple([z.literal("hit")])]),
     stepsPerBar: z.union([z.literal(8), z.literal(12), z.literal(16)]),
     bars: z.number().int().positive(),
+  }),
+  z.strictObject({
+    ui: z.literal("slot-choice"),
+    slots: z.number().int().positive(),
+    options: z.array(choice).min(2),
+    labels: z.array(z.string().min(1)).exactOptional(),
   }),
   z.strictObject({
     ui: z.literal("code"),
@@ -790,6 +845,12 @@ const staffExpect: z.ZodType<S.StaffExpect> = z.discriminatedUnion("e", [
     order: z.enum(["sequence", "set"]).exactOptional(),
   }),
   z.strictObject({ e: z.literal("events"), reference: ReferenceSchema, matcher: MatcherSchema }),
+  z.strictObject({
+    e: z.literal("chords"),
+    symbols: z.array(z.string().min(1)).min(1),
+    spelling: z.enum(["strict", "enharmonic"]),
+    bass: z.boolean(),
+  }),
 ]);
 const singTarget: z.ZodType<S.SingTarget> = z.discriminatedUnion("from", [
   z.strictObject({ from: z.literal("stimulus"), track: trackRef.exactOptional() }),
@@ -812,6 +873,18 @@ const ladderLevel = z.union([
   z.literal(8),
 ]);
 const checklist = z.array(z.strictObject({ id: z.string().min(1), label: md }));
+const transcribeGiven: z.ZodType<S.TranscribeGiven> = z.strictObject({
+  meter: z.boolean().exactOptional(),
+  key: z.boolean().exactOptional(),
+  tonic: z.boolean().exactOptional(),
+  pickup: z.boolean().exactOptional(),
+  rhythmSkeleton: z.string().min(1).exactOptional(),
+});
+const transcribeStage: z.ZodType<S.TranscribeStage> = z.strictObject({
+  stage: z.enum(["bass", "quality", "rn"]),
+  matcher: MatcherSchema,
+  pass: z.number().min(0).max(1),
+});
 
 const predictEx = z.strictObject({
   ...exBase,
@@ -979,8 +1052,22 @@ const dictationEx = z.strictObject({
       ab: z.boolean(),
       rates: z.array(z.number().min(0.25).max(1)).min(1),
       accepts: z.enum(["exact", "any-octave", "any-key"]),
+      parts: z
+        .array(
+          z.strictObject({
+            track: trackRef,
+            label: md,
+            matcher: MatcherSchema,
+            pass: z.number().min(0).max(1).exactOptional(),
+          }),
+        )
+        .min(1)
+        .exactOptional(),
     })
     .exactOptional(),
+  stageAnswers: z.partialRecord(dictationStage, AnswerUiSchema).exactOptional(),
+  stageFlow: z.enum(["sequential", "together"]).exactOptional(),
+  stagePass: z.number().min(0).max(1).exactOptional(),
 });
 const transcribeStepEx = z.strictObject({
   ...exBase,
@@ -991,7 +1078,12 @@ const transcribeStepEx = z.strictObject({
   layer: z.union([layer, z.literal("form")]),
   bars: bars2,
   grading: z.discriminatedUnion("mode", [
-    z.strictObject({ mode: z.literal("auto"), reference: ReferenceSchema, matcher: MatcherSchema }),
+    z.strictObject({
+      mode: z.literal("auto"),
+      reference: ReferenceSchema,
+      matcher: MatcherSchema,
+      stages: z.array(transcribeStage).min(1).exactOptional(),
+    }),
     z.strictObject({ mode: z.literal("self"), checklist }),
   ]),
   studio: z.strictObject({
@@ -999,6 +1091,7 @@ const transcribeStepEx = z.strictObject({
     transposeSemis: z.boolean().exactOptional(),
     overlay: z.boolean(),
   }),
+  given: transcribeGiven.exactOptional(),
 });
 const composeBriefEx = z.strictObject({
   ...exBase,
@@ -1210,6 +1303,28 @@ export const StepUiSchema: z.ZodType<S.StepUi> = z.strictObject({
   staffLabels: z.enum(["none", "note", "degree", "degree+solfege"]).exactOptional(),
   loopBars: z.number().positive().exactOptional(),
   band: z.union([bandRef, z.literal(false)]).exactOptional(),
+  initialPanels: z.array(z.enum(WORKBENCH_PANELS)).min(1).exactOptional(),
+  leadSheet: z
+    .strictObject({
+      melody: trackRef.exactOptional(),
+      chords: z.union([
+        trackRef,
+        z.strictObject({
+          chart: z
+            .array(
+              z.strictObject({
+                bar: z.number().int().min(0),
+                beat: z.number().positive(),
+                symbol: z.string().min(1),
+              }),
+            )
+            .min(1),
+        }),
+      ]),
+      title: z.string().min(1).exactOptional(),
+      degrees: z.boolean().exactOptional(),
+    })
+    .exactOptional(),
 });
 const termDef: z.ZodType<S.TermDef> = z.strictObject({
   id: termId,
@@ -1234,6 +1349,7 @@ export const StepDefSchema: z.ZodType<S.StepDef> = z.strictObject({
   graded: z.boolean().exactOptional(),
   optional: z.boolean().exactOptional(),
   testOut: z.strictObject({ skips: z.array(stepLocalId).min(1) }).exactOptional(),
+  gateCheck: z.literal(true).exactOptional(),
 });
 const flavourOverrides = z.partialRecord(
   flavourId,
@@ -1300,6 +1416,21 @@ export const CheckpointDefSchema: z.ZodType<S.CheckpointDef> = z.strictObject({
   }),
   make: codeMakeEx,
 });
+const phraseCheck: z.ZodType<S.PhraseCheck> = z.strictObject({
+  id: slug,
+  phrase: z.union([
+    z.number().int().positive(),
+    z.tuple([z.number().int().positive(), z.number().int().positive()]),
+  ]),
+  layer: z.enum(["melody", "bass", "chords"]),
+  matcher: MatcherSchema,
+  pass: z.number().min(0).max(1),
+  stages: z
+    .array(z.enum(["bass", "quality", "rn"]))
+    .min(1)
+    .exactOptional(),
+  given: transcribeGiven.exactOptional(),
+});
 const capstoneMeta = {
   id: capstoneId,
   title: z.string().min(1),
@@ -1326,6 +1457,10 @@ export const CapstoneDefSchema: z.ZodType<S.CapstoneDef> = z.strictObject({
         goal: md,
         focusRules: z.array(z.string()).exactOptional(),
         stages: z.array(transcribeStepEx).exactOptional(),
+        checks: z.array(phraseCheck).min(1).exactOptional(),
+        starter: z.string().min(1).exactOptional(),
+        review: z.boolean().exactOptional(),
+        release: z.boolean().exactOptional(),
       }),
     )
     .min(1),
@@ -1346,7 +1481,12 @@ export const ToolEntrySchema: z.ZodType<S.ToolEntry> = z.strictObject({
     at: sessionOrSessions,
     when: z.enum(["complete", "start"]),
     condition: z
-      .strictObject({ exercise: exerciseId, minScore: z.number().min(0).max(1), unrevealed: z.literal(true) })
+      .strictObject({
+        exercise: exerciseId,
+        minScore: z.number().min(0).max(1),
+        unrevealed: z.literal(true),
+        variants: z.array(exerciseId).min(1).exactOptional(),
+      })
       .exactOptional(),
     fallbackAt: SessionIdSchema.exactOptional(),
   }),
@@ -1401,6 +1541,7 @@ const answerUiKind = z.enum([
   "click-code",
   "click-staff",
   "click-roll",
+  "slot-choice",
 ]);
 const familyKind = z.enum(FAMILY_KINDS);
 export const FamilyDefSchema: z.ZodType<S.FamilyDef> = z.strictObject({

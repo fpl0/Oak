@@ -26,14 +26,33 @@ export function keyFromScaleCtx(scaleCtx: string): KeySpec | null {
 export function parseChord(symbol: string): ChordId | null {
   return theory.parseChordSymbol(symbol);
 }
+/** A chord symbol (slash chords too: `G/B`, `Bb/D`) as the chord its notes are spelled from. */
+export function chordForSpelling(symbol: string): ChordId | null {
+  return theory.parseChordWithBass(symbol);
+}
 /**
  * Lead-sheet display of a code symbol, in the form abcjs prints correctly (theory's `abc` column:
- * `Cm7b5` → C m7♭5, `Co7` → C°7). An unknown symbol is shown as written, minus the literal `h7`.
+ * `Cm7b5` → C m7♭5, `Co7` → C°7, `G/B` keeps its bass). An unknown symbol is shown as written, minus the literal
+ * `h7`.
  */
 export function chordDisplay(symbol: string): string {
-  const chord = parseChord(symbol);
+  const chord = theory.parseChordWithBass(symbol);
   const text = chord ? theory.toAbcChord(chord) : symbol;
   return text.replace(/h7?$/, "ø7");
+}
+/**
+ * A Roman numeral in Oak's dialect (`V6`, `viio7`, `bVII`, `iih7`, `V65/V`) as printed under the staff: theory's
+ * display (`displayRN`: ° and ø, ♭ and ♯ before the numeral), figures as digits after it ("V65", "I64": abcjs
+ * cannot stack them, `ABCJS_LIMITS` "stacked-figures"). abcjs prints annotation text as written, so the glyphs are
+ * Unicode here (chord symbols are ASCII: abcjs turns b, # and o into glyphs itself). Unknown text is kept.
+ */
+export function romanDisplay(rn: string): string {
+  return rn
+    .trim()
+    .replace(/h7/g, "ø7")
+    .replace(/(^|\/)b(?=[IViv])/g, "$1♭")
+    .replace(/(^|\/)#(?=[IViv])/g, "$1♯")
+    .replace(/([iv])o(?=\d|\/|$)/g, "$1°");
 }
 export function degreeLabel(p: SpelledPitch, key: KeySpec): { degree: string; syllable: string } {
   const d = theory.degreeOf(p.midi, key);

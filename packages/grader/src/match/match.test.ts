@@ -7,6 +7,7 @@ import { strudel } from "../analyze/__support__/fixtures.ts";
 import { renderFeedback } from "../feedback/catalog.ts";
 import type { MatchResult, NormalizeContext as NCtx } from "../types.ts";
 import { runMatcher } from "./index.ts";
+import { melodyMatch } from "./melody.ts";
 import { bestDisplacement, matchOnsets } from "./rhythm.ts";
 
 setDefaultTimeout(20_000);
@@ -144,11 +145,39 @@ describe("melody matcher", () => {
     expect(r.diagnostics[0]?.params).toMatchObject({ dir: "too high", deg: "1", idx: 0 });
     expect(r.score).toBeLessThan(0.5);
   });
+  test("by ear, a bass line typed with its degrees (C G A F as D A B G) is the index slip, not D major", async () => {
+    // By-ear steps report like a transcription teacher (`transcription`): a whole tune in another key is one
+    // `melody.wrong-key`; a line one scale step off inside the key is the n-from-0 slip.
+    const byEar = async (ref: string, ans: string): Promise<MatchResult> =>
+      melodyMatch(
+        await strudel(ref, 4),
+        await strudel(ans, 4),
+        melody("absolute", { track: "bass" }) as Extract<Matcher, { m: "melody" }>,
+        { ...C44, transcription: true },
+      );
+    const bass = (p: string) => `bass: n("<${p}>").scale("C2:major").s("piano")`;
+    const r = await byEar(bass("0 4 5 3"), bass("1 5 6 4"));
+    expect(ids(r)).toContain("melody.index-shift");
+    expect(ids(r)).not.toContain("melody.wrong-key");
+    // The same slip written as letters stays the slip; a tune that leaves the key (C E G C as D F♯ A D) is
+    // the wrong key.
+    const letters = await byEar(
+      'bass: note("<c2 g2 a2 f2>").s("piano")',
+      'bass: note("<d2 a2 b2 g2>").s("piano")',
+    );
+    expect(ids(letters)).toContain("melody.index-shift");
+    const out = await byEar(
+      'bass: note("<c2 e2 g2 c3>").s("piano")',
+      'bass: note("<d2 f#2 a2 d3>").s("piano")',
+    );
+    expect(ids(out)).toContain("melody.wrong-key");
+    expect(ids(out)).not.toContain("melody.index-shift");
+  });
   test("one wrong note: melody.wrong-degree with degrees and syllables at its bar and beat", async () => {
     const r = await run(melody("key-relative"), ref, 'n("0 2 4 2 1 3 2 4").scale("C4:major")');
     expect(ids(r)).toEqual(["melody.wrong-degree"]);
     const d = r.diagnostics[0];
-    expect(d?.params).toEqual({ got: "5", gotSyl: "sol", exp: "1", expSyl: "do" });
+    expect(d?.params).toEqual({ got: "5", gotSyl: "sol", exp: "1", expSyl: "do", line: "melody" });
     expect(d?.where?.beatLabel).toBe("4&");
     expect(renderFeedback(d as never)).toBe("Bar 1, 4&: you have 5 (sol); the melody has 1 (do).");
   });
@@ -267,6 +296,16 @@ describe("harmony matcher", () => {
     const wrong = await run(pc, ref, 'chords: note("<[c3,eb3,g3] [a2,c3,e3]>")', C44, 2);
     expect(ids(wrong)).toEqual(["harmony.pcset"]);
     expect(wrong.diagnostics[0]?.params).toMatchObject({ exp: "C E G" });
+  });
+  test("pcset names the notes as the chord they make: C E G♯ for C+, B D♯ F♯ for B (U05.L03)", async () => {
+    const pc: Matcher = { m: "pcset", perOnset: true, bass: false };
+    const aug = await run(pc, 'chords: note("[c3,e3,g#3]")', 'chords: note("[c3,e3,g3]")');
+    expect(aug.diagnostics[0]?.params).toMatchObject({ exp: "C E G#", got: "C E G" });
+    const b = await run(pc, 'chords: note("[b2,d#3,f#3]")', 'chords: note("[b2,d3,f#3]")');
+    expect(b.diagnostics[0]?.params).toMatchObject({ exp: "B D# F#", got: "B D F#" });
+    // Not a chord (a cluster): spelled by the key, low to high.
+    const cl = await run(pc, 'chords: note("[c3,e3,g3]")', 'chords: note("[c3,d3,e3]")');
+    expect(cl.diagnostics[0]?.params).toMatchObject({ exp: "C E G", got: "C D E" });
   });
   test("pcset with bass: the right notes over the wrong bass is harmony.bass", async () => {
     const pc: Matcher = { m: "pcset", perOnset: true, bass: true };

@@ -4,8 +4,16 @@
 // FeedbackPanel, all linked through one HighlightBus per instance. The roll and the staff come from the
 // static analysis path (the browser grader host), so they show code that has not been played; while it
 // plays, the adapter's paint clock drives the playhead and the highlights.
-import type { LensId } from "@oak/api";
-import type { GradeResult, HintLadder, HintRung, KeySpec, LintContext, UnlockableId } from "@oak/content-kit";
+import type { ChordLensId, LensId } from "@oak/api";
+import type {
+  GradeResult,
+  HintLadder,
+  HintRung,
+  KeySpec,
+  LintContext,
+  PickupSpec,
+  UnlockableId,
+} from "@oak/content-kit";
 import type { StaffKind } from "@oak/notation";
 import {
   type BandSetup,
@@ -30,6 +38,7 @@ import { CircleOfFifths } from "./CircleOfFifths.tsx";
 import { WorkbenchClock } from "./clock.ts";
 import { FeedbackPanel, viewOf } from "./FeedbackPanel.tsx";
 import { ghostEvents, marksOf, unlocks } from "./feedback.ts";
+import { chordTonePercent, rangeLines } from "./harmony.ts";
 import { HighlightBus } from "./highlight-bus.ts";
 import { Keyboard } from "./Keyboard.tsx";
 import { KeyPanel } from "./KeyPanel.tsx";
@@ -45,8 +54,18 @@ import {
   stepRegion,
 } from "./loop-math.ts";
 import { Metronome } from "./metronome.ts";
-import { activeAt, keyAtCycle, pieceKeys, type WorkbenchModel } from "./model.ts";
+import { activeAt, keyAtCycle, leadEvents, pieceKeys, type WorkbenchModel } from "./model.ts";
 import { PianoRoll, type RollColorMode, type RollLabelMode } from "./PianoRoll.tsx";
+import {
+  chordDisplay,
+  initialPanelState,
+  PANEL_SWITCHES,
+  type PanelId,
+  type PanelState,
+  panelAvailability,
+  readStoredPanels,
+  writeStoredPanels,
+} from "./panels.ts";
 import { FOLLOW_PAGE_BARS } from "./roll-layout.ts";
 import { StaffView } from "./StaffView.tsx";
 import { useWorkbenchServices } from "./services.tsx";
@@ -97,8 +116,18 @@ export interface WorkbenchProps {
    * the lenses do not apply and their switches are hidden. Without it the shared lenses decide (Wave 3).
    */
   roll?: { color?: RollColorMode; labels?: RollLabelMode };
-  /** The staff and its lines; `labels` (a step's `ui.staffLabels`) makes the content decide, as for the roll. */
+  /**
+   * The staff and its lines; `labels` (a step's `ui.staffLabels`) makes the content decide, as for the roll.
+   * `kind: "lead"` shows the staff as a lead sheet (a step's `panels.staff: "lead"`, U07.L09).
+   */
   staff?: { kind?: StaffKind; labels?: StaffLabelMode };
+  /** A declared pickup (contracts §6.11): bar 0 is the pickup bar on the staff, the lead sheet and the chord band. */
+  pickup?: PickupSpec | null;
+  /**
+   * Draw the editable regions of a code-modify step as target boxes, redrawn after every edit from the editor's
+   * live ranges (`EditorHandle.editableRanges()`, wave4.md §3.5). Default off.
+   */
+  targetRegions?: boolean;
   /**
    * The lens source: by default the app's shared lenses (under a QueryClient) or a `WorkbenchLensProvider`;
    * `null` turns the lenses off (the Wave 2 labels).
@@ -108,8 +137,12 @@ export interface WorkbenchProps {
   panels?: boolean;
   /** The tab shown first when roll and staff are tabbed (narrow or short): default the roll. */
   initialTab?: ViewTab;
-  /** Panels open at first (the Toolbox's feature pages); otherwise the viewer's last choice. */
-  initialPanels?: Partial<Record<"key" | "circle", boolean>>;
+  /**
+   * Panels open at first (the Toolbox's feature pages; a lesson step's `ui.initialPanels` through
+   * `initialPanelsOf` in app/src/lib/panels.ts); otherwise the viewer's last choice. Wave 4 widens the IDs to
+   * content-kit `WorkbenchPanelId`; a panel the Workbench does not draw yet is ignored.
+   */
+  initialPanels?: Partial<Record<PanelId, boolean>>;
   feedback?: WorkbenchFeedback;
   /** A/B target, played as hidden code. */
   target?: { code: string; audible: "always" | "fromHint2" | "never" } | null;
@@ -171,26 +204,16 @@ function runIssueOf(outcome: EvalOutcome): RunIssue | null {
 const sameUnlocked = (a: ReadonlySet<UnlockableId>, b: ReadonlySet<UnlockableId>) =>
   a.size === b.size && [...a].every((x) => b.has(x));
 
-/** Unlocks of the two key panels (contracts §3.2 group A). */
-const PANEL_UNLOCKS = { key: "tb.feature.keysig", circle: "tb.feature.circle" } as const;
-type PanelId = keyof typeof PANEL_UNLOCKS;
-const PANELS_STORE = "oak.wb.panels";
-
-function readPanels(): Record<PanelId, boolean> {
-  try {
-    const v = JSON.parse(localStorage.getItem(PANELS_STORE) ?? "{}") as Partial<Record<PanelId, boolean>>;
-    return { key: v.key === true, circle: v.circle === true };
-  } catch {
-    return { key: false, circle: false };
-  }
-}
-function writePanels(v: Record<PanelId, boolean>): void {
-  try {
-    localStorage.setItem(PANELS_STORE, JSON.stringify(v));
-  } catch {
-    // a per-viewer convenience: nothing to do when storage is unavailable
-  }
-}
+/** The chord-lens switches (Wave 4): label, key and title. */
+const CHORD_SWITCHES: readonly { id: ChordLensId; label: string; keys: string; title: string }[] = [
+  {
+    id: "chordSymbols",
+    label: "Chords",
+    keys: "Shift+H",
+    title: "Chord symbols on the chord band and the staff",
+  },
+  { id: "romanNumerals", label: "Numerals", keys: "Shift+R", title: "Roman numerals in the key" },
+];
 
 export function Workbench(props: WorkbenchProps) {
   const kind = useLensSourceKind();
@@ -233,14 +256,18 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
   const [regionRaw, setRegion] = useState<LoopRegion>(() => defaultRegion(loopBars));
   const region = clampRegion(regionRaw, loopBars);
   const [metronomeOn, setMetronomeOn] = useState(false);
-  const staffKind: StaffKind = props.staff?.kind ?? "auto";
+  // A lead sheet is drawn from the analysed staff (its melody and the chords); the analysis engraves the full one.
+  const staffKind: StaffKind = props.staff?.kind === "lead" ? "auto" : (props.staff?.kind ?? "auto");
 
   const views = useMemo(() => {
     const wanted = variant === "mini" ? (["roll"] as MusicView[]) : (props.views ?? ["roll", "staff"]);
     return clampViews(wanted, { early: isEarlyUnit(props.unit) });
   }, [props.views, props.unit, variant]);
 
+  // The Band parts heard: the step's tracks, less the ones muted here (the chord band reads only these).
+  const bandHeard = props.band ? props.band.tracks.filter((r) => !mutes.muted.has(`band.${r}`)) : null;
   const analysis = useAnalysis(grader, code, {
+    bandHeard,
     bars: loopBars,
     meter: props.lessonCtx.meter,
     key: props.lessonCtx.key,
@@ -249,6 +276,7 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
     staff: views.includes("staff") ? staffKind : false,
     staffLabels: props.staff?.labels === "counts" ? "counts" : "none",
     debounceMs: props.analysisDebounceMs ?? 300,
+    pickup: props.pickup ?? null,
   });
   const model = analysis.model;
   const keySpec: KeySpec | null = model?.key ?? props.lessonCtx.key;
@@ -263,27 +291,35 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
     ...(source ? { rollSetting: source.rollSetting } : {}),
     hasKey: (model?.key ?? null) !== null,
   });
-  const lensBar = variant !== "mini" && showsSwitcher(source, labels.mode);
+  const chordLenses = labels.mode === "lenses" ? (source?.chords ?? null) : null;
+  const chordLensBar =
+    variant !== "mini" &&
+    chordLenses !== null &&
+    (chordLenses.available.chordSymbols || chordLenses.available.romanNumerals);
+  const lensBar = variant !== "mini" && (showsSwitcher(source, labels.mode) || chordLensBar);
   const unlockedSet = props.lint.unlocked as ReadonlySet<string>;
-  const panelsAllowed =
-    (props.panels ?? true) && variant !== "mini" && labels.mode === "lenses" && source !== null;
-  const panelAvailable: Record<PanelId, boolean> = {
-    key: panelsAllowed && unlockedSet.has(PANEL_UNLOCKS.key),
-    circle: panelsAllowed && unlockedSet.has(PANEL_UNLOCKS.circle),
-  };
-  const [panelPrefs, setPanelPrefs] = useState<Record<PanelId, boolean>>(() => ({
-    ...readPanels(),
-    ...props.initialPanels,
-  }));
-  const panelsOpen: Record<PanelId, boolean> = {
-    key: panelAvailable.key && panelPrefs.key,
-    circle: panelAvailable.circle && panelPrefs.circle,
-  };
+  // Panels: the lenses decide outside a step, the step's `initialPanels` inside one (wave4.md §4.4).
+  const panelMode: "lenses" | "content" = labels.mode === "lenses" && source !== null ? "lenses" : "content";
+  const panelAvailable = panelAvailability({
+    mode: panelMode,
+    allowed: (props.panels ?? true) && variant !== "mini",
+    unlocked: unlockedSet,
+    initial: props.initialPanels,
+    hasStaff: views.includes("staff"),
+    hasRoll: views.includes("roll"),
+  });
+  const [panelPrefs, setPanelPrefs] = useState<PanelState>(() =>
+    initialPanelState(readStoredPanels(), props.initialPanels, panelMode),
+  );
+  const panelsOpen = Object.fromEntries(
+    (Object.keys(panelPrefs) as PanelId[]).map((id) => [id, panelAvailable[id] && panelPrefs[id]]),
+  ) as PanelState;
   const togglePanel = (id: PanelId) => {
     if (!panelAvailable[id]) return;
     setPanelPrefs((p) => {
       const next = { ...p, [id]: !p[id] };
-      writePanels(next);
+      // Only the viewer's own choice outside a step is remembered; a step's panels are the step's.
+      if (panelMode === "lenses") writeStoredPanels({ ...readStoredPanels(), ...next } as PanelState);
       return next;
     });
   };
@@ -291,6 +327,13 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
     if (!source || !lensBar || !source.available[id]) return;
     source.toggle(id);
   };
+  const toggleChordLens = (id: ChordLensId) => {
+    if (!chordLenses || !chordLensBar || !chordLenses.available[id]) return;
+    chordLenses.toggle(id);
+  };
+  const chords = chordDisplay(panelMode, panelsOpen, chordLenses, unlockedSet);
+  // The lead sheet: a step that asks for it (`staff.kind: "lead"`), or the learner's switch.
+  const leadSheet = props.staff?.kind === "lead" || panelsOpen.lead;
 
   // The model of the code that is playing (the clock highlights that, not an unplayed edit).
   const playedModel = useRef<WorkbenchModel | null>(null);
@@ -315,7 +358,7 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
       const h = (e as CustomEvent<TutorHighlight>).detail;
       const m = modelRef.current;
       if (!h || !m) return;
-      const ids = tutorHighlightEvents(m.events, h);
+      const ids = tutorHighlightEvents(m.events, h, m.pickup !== null);
       if (ids.length === 0) return;
       bus.hover({ events: ids }, "feedback");
       clearTimeout(timer);
@@ -349,9 +392,17 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
   });
   const ghosts = useMemo(() => (can.ghosts ? ghostEvents(gradeView) : []), [can.ghosts, gradeView]);
   useEffect(() => bus.setIssues(marks.issues), [bus, marks]);
+  // The grade's marks, plus (when the host asks) the editable regions as target boxes from the editor's live
+  // ranges: after an edit the box is drawn where the region is now, not where the starter had it.
+  const targetRegions = props.targetRegions === true;
+  const [targetText, setTargetText] = useState<string | undefined>(undefined);
   useEffect(() => {
-    handle?.setMarks(marks.code);
-  }, [handle, marks]);
+    if (!handle || handle.disposed) return;
+    const live = targetRegions ? handle.editableRanges() : null;
+    const targets = live && live.length > 0 ? live : [];
+    handle.setMarks([...marks.code, ...targets.map((range) => ({ range, kind: "target" as const }))]);
+    setTargetText(targetRegions ? targets.map((r) => `${r.from}-${r.to}`).join(" ") : undefined);
+  }, [handle, marks, code, targetRegions]);
 
   // --- the editor (stable lifecycle: created once per ID, disposed on unmount) --------------------
   const id = editorId(props.id, props.n ?? 0);
@@ -491,6 +542,8 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
     cps: model?.cps ?? 0.5,
     lint: props.lint,
     readOnly: props.readOnly === true,
+    band: props.band ?? null,
+    mutes,
   });
   const previewRef = useRef(preview);
   previewRef.current = preview;
@@ -645,7 +698,7 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
     };
   }, []);
   const layout = layoutFor(width, availHeight);
-  const anyPanelAvailable = panelAvailable.key || panelAvailable.circle;
+  const anyPanelAvailable = PANEL_SWITCHES.some((p) => panelAvailable[p.id]);
   const musicViews: MusicView[] = views.filter((v) => v !== "keyboard");
   const showKeyboard = views.includes("keyboard");
   const tabs: ViewTab[] = musicViews.length > 1 ? [...musicViews, "both"] : musicViews;
@@ -707,7 +760,8 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
     }
     // Loop region and metronome (ux §7.10): L, [ ], Shift+[ Shift+], M. Not in text fields.
     const textField = target.closest?.("input, select, textarea, [contenteditable]");
-    // The lens bar (Wave 3): D degrees, S solfège, Shift+N note names, Shift+K key panel, Shift+C circle.
+    // The lens bar (Wave 3): D degrees, S solfège, Shift+N note names, Shift+K key panel, Shift+C circle; Wave 4:
+    // Shift+H chord symbols, Shift+R numerals, Shift+F function, Shift+T chord tones, Shift+G range, Shift+L lead.
     if (!typing && !textField && !ev.repeat && (lensBar || anyPanelAvailable)) {
       const lens: LensId | null =
         !ev.shiftKey && k === "d"
@@ -722,8 +776,16 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
         toggleLens(lens);
         return;
       }
-      const panel: PanelId | null =
-        ev.shiftKey && k === "k" ? "key" : ev.shiftKey && k === "c" ? "circle" : null;
+      const chordLens: ChordLensId | null =
+        ev.shiftKey && k === "h" ? "chordSymbols" : ev.shiftKey && k === "r" ? "romanNumerals" : null;
+      if (chordLens && chordLensBar && chordLenses?.available[chordLens]) {
+        ev.preventDefault();
+        toggleChordLens(chordLens);
+        return;
+      }
+      const panel = ev.shiftKey
+        ? (PANEL_SWITCHES.find((p) => p.keys === `Shift+${k.toUpperCase()}`)?.id ?? null)
+        : null;
       if (panel && panelAvailable[panel]) {
         ev.preventDefault();
         togglePanel(panel);
@@ -821,26 +883,18 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
               keys: "Shift+N",
               title: "Note names",
             },
+            ...(chordLensBar && chordLenses
+              ? CHORD_SWITCHES.filter((c) => chordLenses.available[c.id]).map((c) => ({
+                  ...c,
+                  on: chordLenses.shown[c.id],
+                }))
+              : []),
           ]
         : [],
-    panels: [
-      ...(panelAvailable.key
-        ? [{ id: "key", label: "Key", on: panelsOpen.key, keys: "Shift+K", title: "The key-signature panel" }]
-        : []),
-      ...(panelAvailable.circle
-        ? [
-            {
-              id: "circle",
-              label: "Circle",
-              on: panelsOpen.circle,
-              keys: "Shift+C",
-              title: "The circle of fifths",
-            },
-          ]
-        : []),
-    ],
+    panels: PANEL_SWITCHES.filter((p) => panelAvailable[p.id]).map((p) => ({ ...p, on: panelsOpen[p.id] })),
     onToggle: (id) => {
-      if (id === "key" || id === "circle") togglePanel(id);
+      if (PANEL_SWITCHES.some((p) => p.id === id)) togglePanel(id as PanelId);
+      else if (id === "chordSymbols" || id === "romanNumerals") toggleChordLens(id);
       else toggleLens(id as LensId);
     },
   };
@@ -866,6 +920,16 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
       (model !== null && model.code === code && model.events.length === 0 && !analysis.pending));
   const silenced = useCallback((t: string) => isSilenced(mutes, t), [mutes]);
   const tracks = model?.tracks ?? [];
+  const harmony = model?.harmony ?? null;
+  const ranges = useMemo(
+    () => (model && panelsOpen.range ? rangeLines(model.events) : null),
+    [model, panelsOpen.range],
+  );
+  const lead = useMemo(() => (model && leadSheet ? leadEvents(model) : null), [model, leadSheet]);
+  const chordSet = useMemo(
+    () => ({ symbols: chords.symbols || leadSheet, romans: chords.romans }),
+    [chords.symbols, chords.romans, leadSheet],
+  );
 
   const renderView = (v: MusicView) => {
     if (!model)
@@ -886,6 +950,28 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
           onAudition={(e) => e.midi !== null && audition(e.midi)}
           stale={stale}
           height={variant === "mini" ? 60 : 180}
+          {...(chords.band && harmony
+            ? {
+                chordBand: {
+                  regions: harmony.regions,
+                  source: harmony.source,
+                  symbols: chords.symbols,
+                  romans: chords.romans,
+                  fn: chords.fn,
+                  pickup: Boolean(props.pickup),
+                },
+              }
+            : {})}
+          {...(panelsOpen["chord-tones"]
+            ? {
+                chordTones: {
+                  marks: harmony?.melody ?? new Map(),
+                  percent: chordTonePercent(harmony),
+                  strong: harmony?.strong ?? null,
+                },
+              }
+            : {})}
+          {...(ranges ? { ranges } : {})}
           {...(variant !== "mini" && (props.rollFollowBars ?? FOLLOW_PAGE_BARS) > 0
             ? { followBars: props.rollFollowBars ?? FOLLOW_PAGE_BARS }
             : {})}
@@ -893,7 +979,15 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
       );
     if (v === "staff")
       return (
-        <StaffView model={model} bus={bus} stale={stale} hover={labels.hover} annotations={labels.staff} />
+        <StaffView
+          model={model}
+          bus={bus}
+          stale={stale}
+          hover={labels.hover}
+          annotations={labels.staff}
+          chordSet={chordSet}
+          {...(lead ? { lead } : {})}
+        />
       );
     return null;
   };
@@ -917,6 +1011,15 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
           : undefined
       }
       data-key={keyNow ? `${keyNow.tonic} ${keyNow.mode}` : undefined}
+      data-panels={(Object.keys(panelsOpen) as PanelId[]).filter((p) => panelsOpen[p]).join(" ")}
+      data-chords={[
+        chords.symbols ? "symbols" : "",
+        chords.romans ? "romans" : "",
+        chords.fn ? "function" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      data-targets={targetText}
       // Focusable (not a tab stop) so a click on the roll or the staff gives the workbench its keys.
       tabIndex={-1}
       onKeyDown={onKeyDown}

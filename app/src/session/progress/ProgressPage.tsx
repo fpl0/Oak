@@ -4,12 +4,16 @@
 import type { CanDoEntry } from "@oak/api";
 import { Link } from "@tanstack/react-router";
 import { clsx } from "clsx";
+import { milestoneById } from "../../../../content/milestones.ts";
 import { useContent } from "../../lib/content.ts";
 import { formatDate, formatMonth } from "../../lib/format.ts";
 import { usePageTitle } from "../../lib/nav.ts";
 import {
+  useAlbum,
   useBootstrap,
   useCourseProgress,
+  useGymPlan,
+  useLadder,
   useProgressReport,
   useStreak,
   useTodayPlan,
@@ -26,15 +30,21 @@ import {
   Skeleton,
 } from "../../ui/kit/basics.tsx";
 import { ErrorState, LoadingState } from "../../ui/kit/QueryState.tsx";
-import { courseEdge, edgeLead } from "../edge.ts";
+import { useGymOpen } from "../day-hooks.ts";
+import { courseEdge, edgeLead, mapNextId } from "../edge.ts";
+import { REALISM_LINES } from "../gym-day.ts";
 import {
+  doneItems,
   EVIDENCE_LABEL,
   formatMinutes,
+  ladderRungs,
   ledger,
   ledgerCounts,
+  ledgerNow,
   type MilestoneRow,
   milestoneTimeline,
   practiceTime,
+  sourceUnit,
   unitProgress,
 } from "../progress-model.ts";
 import { restsLine, streakLine, weekStatusLabel } from "../streak-model.ts";
@@ -68,6 +78,7 @@ function CourseCard() {
   const content = useContent();
   const course = useCourseProgress();
   const plan = useTodayPlan();
+  const gymOpen = useGymOpen(plan.data ?? null);
   if (course.isError) return <ErrorState error={course.error} onRetry={() => void course.refetch()} />;
   if (!course.data || !content.data?.syllabus) return <LoadingState rows={3} label="Loading the course" />;
   const units = unitProgress(content.data.syllabus, course.data);
@@ -93,7 +104,7 @@ function CourseCard() {
         >
           <p className="font-medium">You have reached the edge of what's written.</p>
           <p className="text-sm text-text-2">
-            {edgeLead(edge)}{" "}
+            {edgeLead(edge, { gym: gymOpen })}{" "}
             <Link to="/practice" className="text-link underline-offset-2 hover:underline">
               Practice
             </Link>{" "}
@@ -145,10 +156,24 @@ function Ledger() {
   const content = useContent();
   const report = useProgressReport();
   const voice = useVoiceState();
+  const course = useCourseProgress();
+  const plan = useTodayPlan();
   const quiet = voice.data?.quiet === true;
   if (report.isError) return <ErrorState error={report.error} onRetry={() => void report.refetch()} />;
   if (content.isPending || report.isPending) return <LoadingState rows={5} label="Loading the ledger" />;
   const rows = ledger(report.data.canDo);
+  const order = (content.data?.syllabus?.defaultOrder ?? []) as readonly string[];
+  const done = course.data ? doneItems(course.data) : new Set<string>();
+  const authored = new Set((content.data?.lessons ?? []).map((l) => l.id as string));
+  const next = mapNextId(course.data?.next ?? null, plan.data?.mapItemId ?? null, authored, order);
+  const unitTitle = new Map(
+    (content.data?.syllabus?.units ?? []).map((u) => [u.id as string, u.title] as const),
+  );
+  const capTitle = new Map((content.data?.capstones ?? []).map((c) => [c.id as string, c.title] as const));
+  const placeOf = (source: string) => {
+    const unit = sourceUnit(source);
+    return capTitle.get(source) ?? (unitTitle.has(unit) ? `${unit} ${unitTitle.get(unit)}` : unit);
+  };
   return (
     <>
       {rows.size === 0 && (
@@ -163,6 +188,33 @@ function Ledger() {
         const defs = content.data?.candos.filter((c) => c.area === area) ?? [];
         if (defs.length === 0) return null;
         const counts = ledgerCounts(defs, rows);
+        // Statements from later in the course wait under "Later" (course progress decides; while it loads,
+        // everything is in view).
+        const split = course.data
+          ? ledgerNow(defs, new Set(rows.keys()), order, done, next)
+          : { now: defs.map((d) => d.id), later: [] };
+        const byId = new Map(defs.map((d) => [d.id as string, d]));
+        const item = (id: string) => {
+          const d = byId.get(id);
+          if (!d) return null;
+          const e = rows.get(d.id);
+          const status = e?.latest.status ?? "not-yet";
+          return (
+            <li key={d.id} className="flex items-center justify-between gap-3 py-2" data-cando={d.id}>
+              <span className="min-w-0">
+                <span className={clsx("block", !e && "text-text-2")}>{d.statement}</span>
+                <span className="block text-sm text-text-3">
+                  {e
+                    ? `since ${formatDate(e.firstAt, true)} · latest from ${EVIDENCE_LABEL[e.latest.evidenceKind]}`
+                    : placeOf(d.source)}
+                </span>
+              </span>
+              <Chip tone={STATUS_TONE[status]} className="shrink-0">
+                {status === "not-yet" ? (area === "sing" && quiet ? "waits for the mic" : "not yet") : status}
+              </Chip>
+            </li>
+          );
+        };
         return (
           <Card key={area} className="p-4" data-testid={`ledger-${area}`}>
             <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3">
@@ -177,32 +229,19 @@ function Ledger() {
                 Quiet mode is on: these wait for the microphone. Nothing else does.
               </p>
             )}
-            <ul className="divide-y divide-border">
-              {defs.map((d) => {
-                const e = rows.get(d.id);
-                const status = e?.latest.status ?? "not-yet";
-                return (
-                  <li key={d.id} className="flex items-center justify-between gap-3 py-2">
-                    <span className="min-w-0">
-                      <span className={clsx("block", !e && "text-text-2")}>{d.statement}</span>
-                      {e && (
-                        <span className="block text-sm text-text-3">
-                          since {formatDate(e.firstAt, true)} · latest from{" "}
-                          {EVIDENCE_LABEL[e.latest.evidenceKind]}
-                        </span>
-                      )}
-                    </span>
-                    <Chip tone={STATUS_TONE[status]} className="shrink-0">
-                      {status === "not-yet"
-                        ? area === "sing" && quiet
-                          ? "waits for the mic"
-                          : "not yet"
-                        : status}
-                    </Chip>
-                  </li>
-                );
-              })}
-            </ul>
+            {split.now.length > 0 ? (
+              <ul className="divide-y divide-border">{split.now.map(item)}</ul>
+            ) : (
+              <p className="text-sm text-text-2">The first of these comes later in the course.</p>
+            )}
+            {split.later.length > 0 && (
+              <details className="mt-1 text-sm" data-testid={`ledger-${area}-later`}>
+                <summary className="cursor-pointer py-1 text-text-2">
+                  Later in the course ({split.later.length})
+                </summary>
+                <ul className="divide-y divide-border text-base">{split.later.map(item)}</ul>
+              </details>
+            )}
           </Card>
         );
       })}
@@ -210,7 +249,23 @@ function Ledger() {
   );
 }
 
+/** The album track behind a reached capstone milestone ("You can now compose a song." → the C2 track). */
+function useMilestoneTrack(id: string): { id: string; title: string } | null {
+  const album = useAlbum();
+  const caps = milestoneById.get(id)?.when.capstones ?? [];
+  const track = album.data?.tracks.find((t) => t.capstoneId !== null && caps.includes(t.capstoneId));
+  return track ? { id: track.id, title: track.title } : null;
+}
+
+/** A milestone that a transcription ladder pass reaches counts graded passes only (wave4.md §5.4). */
+function gradedOnly(id: string): boolean {
+  const when = milestoneById.get(id)?.when;
+  return !!when && (!!when.ladder || (when.anyOf ?? []).some((c) => !!c.ladder));
+}
+
 function MilestoneItem({ m, tone }: { m: MilestoneRow; tone: "reached" | "next" | "ahead" }) {
+  const track = useMilestoneTrack(m.id);
+  const graded = gradedOnly(m.id);
   return (
     <li
       className={clsx(
@@ -227,6 +282,28 @@ function MilestoneItem({ m, tone }: { m: MilestoneRow; tone: "reached" | "next" 
         </span>
       </span>
       {tone !== "ahead" && <span className="text-sm text-text-2">{m.description}</span>}
+      {(graded || (track && m.reachedAt)) && tone !== "ahead" && (
+        <span className="flex flex-wrap items-center gap-2 text-sm">
+          {graded && (
+            <Chip
+              tone="neutral"
+              title="Only a graded ladder pass counts: 85% or better, with nothing revealed."
+              data-testid="graded-pass-flag"
+            >
+              Graded pass
+            </Chip>
+          )}
+          {track && m.reachedAt && (
+            <Link
+              to="/album/$trackId"
+              params={{ trackId: track.id }}
+              className="text-link underline-offset-2 hover:underline"
+            >
+              On your album: {track.title}
+            </Link>
+          )}
+        </span>
+      )}
     </li>
   );
 }
@@ -261,6 +338,66 @@ function Milestones({ milestones }: { milestones: readonly MilestoneRow[] }) {
         </details>
       )}
     </div>
+  );
+}
+
+/**
+ * The transcription ladder (contracts §2.9): where the learner stands, and what each rung lets them say. Shown once
+ * the gym is open (U07.L01); a rung is reached by a graded pass only.
+ */
+function LadderCard() {
+  const ladder = useLadder();
+  const gym = useGymPlan();
+  if (!ladder.data) return null;
+  const passes = Object.values(ladder.data.gradedPasses).some((n) => n > 0);
+  if (!gym.data?.active && ladder.data.history.length === 0 && !passes) return null;
+  const rungs = ladderRungs(ladder.data);
+  const r = ladder.data.realism as 0 | 1 | 2 | 3 | 4;
+  return (
+    <Card className="p-4" data-testid="progress-ladder">
+      <h2 className="mb-1 text-h3">Transcription ladder</h2>
+      <p className="mb-3 text-sm text-text-2">
+        Level {ladder.data.level} at R{r}: {REALISM_LINES[r]}.
+      </p>
+      <ol className="flex flex-col gap-2">
+        {rungs.map((g) => (
+          <li
+            key={g.level}
+            className={clsx(
+              "flex flex-col gap-0.5",
+              g.current && "rounded-control border border-accent/50 bg-lane-in px-3 py-2",
+            )}
+            data-rung={g.level}
+            data-state={g.reached ? "reached" : g.current ? "current" : "ahead"}
+          >
+            <span className="flex items-baseline justify-between gap-2">
+              <span className={clsx(g.reached || g.current ? "font-medium" : "text-text-3")}>
+                L{g.level} · {g.name}
+              </span>
+              <span className="shrink-0 text-sm text-text-3">
+                {g.passes > 0
+                  ? `${g.passes} graded ${g.passes === 1 ? "pass" : "passes"}`
+                  : g.current
+                    ? "your level"
+                    : ""}
+              </span>
+            </span>
+            {g.reached && (
+              <span className="flex flex-wrap items-center gap-2 text-sm text-text-2">
+                {g.claim}
+                <Chip tone="accent" data-testid="graded-pass-flag">
+                  Graded pass
+                </Chip>
+              </span>
+            )}
+          </li>
+        ))}
+      </ol>
+      <p className="mt-2 text-sm text-text-3">
+        Only a graded pass counts: 85% or better with nothing revealed. Your own recordings are self-assessed
+        and sit in Transcribe.
+      </p>
+    </Card>
   );
 }
 
@@ -357,6 +494,7 @@ export function ProgressPage() {
               <Skeleton className="h-16 w-full" />
             )}
           </Card>
+          <LadderCard />
           <Card className="p-4" data-testid="progress-milestones">
             <h2 className="mb-2 text-h3">Milestones</h2>
             {report.data ? (

@@ -6,6 +6,7 @@ import { parseRat, R } from "@oak/content-kit";
 import { evalHeadless } from "@oak/grader/testing";
 import { METERS, meterWith } from "@oak/theory";
 import {
+  type AbcOptions,
   type AnnotationSet,
   type NotationInput,
   type NotationWarning,
@@ -26,6 +27,13 @@ export interface CorpusEntry {
   swing?: SwingSpec;
   pickup?: PickupSpec;
   chords?: NotationInput["chords"];
+  romans?: NotationInput["romans"];
+  keyChanges?: NotationInput["keyChanges"];
+  trackKeys?: NotationInput["trackKeys"];
+  startBar?: number;
+  endsPiece?: boolean;
+  /** Abc options (bars per line, bar numbers). */
+  abcOptions?: AbcOptions;
   labels?: NotationInput["labels"];
   annotations?: AnnotationSet;
   trackClefs?: NotationInput["trackClefs"];
@@ -34,6 +42,8 @@ export interface CorpusEntry {
   chordByBar?: string[];
   /** Tracks the chord symbols belong to (default: every pitched track). */
   chordTracks?: string[];
+  /** Only these tracks are notated (a lead sheet's melody; `leadSheetInput` takes the melody's events only). */
+  tracks?: string[];
   tempoBpm?: number;
   /** Golden facts: the note list of each (staff, voice), bars joined by " | ". */
   expect: {
@@ -46,14 +56,19 @@ export interface CorpusEntry {
     staves?: string[];
     /** Chord symbols as abcjs parses them (what the learner sees). */
     chordTexts?: string[];
+    /** Roman numerals as abcjs parses them (annotations below the staff). */
+    romanTexts?: string[];
+    /** Bar numbers abcjs prints at the start of each system after the first (`%%barnumbers 0`). */
+    barNumbers?: number[];
   };
 }
 
 export async function eventsOf(
-  e: Pick<CorpusEntry, "code" | "bars" | "chordByBar" | "chordTracks">,
+  e: Pick<CorpusEntry, "code" | "bars" | "chordByBar" | "chordTracks" | "tracks" | "startBar">,
 ): Promise<NEvent[]> {
-  const r = await evalHeadless(e.code, e.bars);
-  const raw = r.events.map((h): Omit<NEvent, "id"> => {
+  const r = await evalHeadless(e.code, (e.startBar ?? 0) + e.bars);
+  const haps = e.tracks ? r.events.filter((h) => e.tracks?.includes(h.track)) : r.events;
+  const raw = haps.map((h): Omit<NEvent, "id"> => {
     const onset = parseRat(h.begin);
     const dur = R.sub(parseRat(h.end), onset);
     const note = h.note;
@@ -103,6 +118,11 @@ export function inputOf(e: CorpusEntry, events: NEvent[]): NotationInput {
     ...(e.trackClefs ? { trackClefs: e.trackClefs } : {}),
     ...(e.splitMidi !== undefined ? { splitMidi: e.splitMidi } : {}),
     ...(e.tempoBpm ? { tempoBpm: e.tempoBpm } : {}),
+    ...(e.romans ? { romans: e.romans } : {}),
+    ...(e.keyChanges ? { keyChanges: e.keyChanges } : {}),
+    ...(e.trackKeys ? { trackKeys: e.trackKeys } : {}),
+    ...(e.startBar !== undefined ? { startBar: e.startBar } : {}),
+    ...(e.endsPiece !== undefined ? { endsPiece: e.endsPiece } : {}),
   };
 }
 
@@ -119,6 +139,13 @@ export interface AbcCheck {
   /** Lyrics per note element of staff 0 voice 0. */
   lyrics: (string | null)[];
   chordTexts: string[];
+  /**
+   * Every chord symbol (`default`) and annotation below (`below`) abcjs parsed, with its staff, voice and onset in
+   * whole notes from the start of the tune (tuplets applied).
+   */
+  labels: { si: number; vi: number; onset: number; text: string; position: string }[];
+  /** The bar numbers abcjs will print at the start of each system (`staff.barNumber`, staff 0). */
+  barNumbers: number[];
 }
 /** Parses with abcjs (headless) and returns what the renderer will see. */
 export function checkAbc(abc: string): AbcCheck {
@@ -127,7 +154,12 @@ export function checkAbc(abc: string): AbcCheck {
   const classes: string[][][] = [];
   const lyrics: (string | null)[] = [];
   const chordTexts: string[] = [];
+  const labels: AbcCheck["labels"] = [];
+  const barNumbers: number[] = [];
+  const clock: number[][] = [];
   for (const line of tune.lines) {
+    const n0 = line.staff?.[0]?.barNumber;
+    if (typeof n0 === "number") barNumbers.push(n0);
     (line.staff ?? []).forEach((staff: { voices: unknown[][] }, si: number) => {
       staff.voices.forEach((voice, vi) => {
         const staffTotals = barTotals[si] ?? [];
@@ -141,6 +173,8 @@ export function checkAbc(abc: string): AbcCheck {
         let total = 0;
         let mult = 1;
         let left = 0;
+        clock[si] ??= [];
+        let t = clock[si]?.[vi] ?? 0;
         // biome-ignore lint/suspicious/noExplicitAny: abcjs element
         for (const el of voice as any[]) {
           if (el.el_type === "bar") {
@@ -151,18 +185,25 @@ export function checkAbc(abc: string): AbcCheck {
               mult = el.tripletMultiplier;
               left = el.tripletR;
             }
-            total += el.duration * (left > 0 ? mult : 1);
+            const d = el.duration * (left > 0 ? mult : 1);
+            total += d;
             if (left > 0) left--;
             if (!el.rest) cls.push(el.extraClass ?? "");
             if (si === 0 && vi === 0 && !el.rest)
               lyrics.push(el.lyric?.map((l: { syllable: string }) => l.syllable).join("") ?? null);
-            for (const c of el.chord ?? []) if (c.position === "default") chordTexts.push(c.name);
+            for (const c of el.chord ?? []) {
+              if (c.position === "default") chordTexts.push(c.name);
+              if (c.position === "default" || c.position === "below")
+                labels.push({ si, vi, onset: Math.round(t * 1e9) / 1e9, text: c.name, position: c.position });
+            }
+            t += d;
           }
         }
+        (clock[si] as number[])[vi] = t;
       });
     });
   }
-  return { warnings: tune.warnings ?? [], barTotals, classes, lyrics, chordTexts };
+  return { warnings: tune.warnings ?? [], barTotals, classes, lyrics, chordTexts, labels, barNumbers };
 }
 
 const LETTERS = "CDEFGAB";
@@ -216,8 +257,11 @@ export function readBack(abc: string): { staves: { perc: boolean; voices: ReadNo
             continue;
           }
           if (el.el_type === "key") {
+            // The new signature governs from here, also inside a bar (Oak restates any letter an earlier
+            // accidental of the bar altered, so either reading of a mid-bar change gives the same pitches).
             sig = {};
             for (const a of el.accidentals ?? []) sig[String(a.note).toUpperCase()] = ALT[a.acc] ?? 0;
+            bar = new Map();
             continue;
           }
           if (el.el_type !== "note") continue;
@@ -276,7 +320,7 @@ export function readBack(abc: string): { staves: { perc: boolean; voices: ReadNo
 export async function runEntry(e: CorpusEntry) {
   const events = await eventsOf(e);
   const input = inputOf(e, events);
-  const { score, abc } = notate(input);
+  const { score, abc } = notate(input, e.abcOptions);
   return { events, input, score, abc, check: checkAbc(abc.abc) };
 }
 

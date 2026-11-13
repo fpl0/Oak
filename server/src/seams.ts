@@ -78,13 +78,14 @@ export function patternStimulus(graders: GraderHosts, content: ContentIndex): Pa
 }
 
 export function ladderGenerator(repos: Repos): LadderGenerator {
-  return (level, realism, seed) => {
+  return (level, realism, seed, opts = {}) => {
     try {
       return generateLadderPiece(
         Math.min(4, Math.max(1, level)) as 1 | 2 | 3 | 4,
         Math.min(4, Math.max(0, realism)) as 0 | 1 | 2 | 3 | 4,
         seed,
         toLearnerProfile(repos.profile.get()),
+        opts.completed === undefined ? {} : { completed: opts.completed },
       );
     } catch (e) {
       throw new ApiError(

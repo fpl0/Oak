@@ -3,7 +3,7 @@
 // immediate after an evaluation. A failed analysis keeps the last good model on screen (Strudel keeps
 // playing the last good pattern too) and reports the error beside it.
 
-import type { KeySpec, LintContext, MeterId } from "@oak/content-kit";
+import type { KeySpec, LintContext, MeterId, PickupSpec } from "@oak/content-kit";
 import type { GraderErrorInfo, GraderHost } from "@oak/grader";
 import type { StaffKind } from "@oak/notation";
 import type { BandSetup } from "@oak/strudel";
@@ -19,6 +19,10 @@ export interface AnalysisOptions {
   staff: StaffKind | false;
   staffLabels: "none" | "degree" | "solfege" | "counts";
   debounceMs: number;
+  /** A declared pickup (Wave 4): the harmony's bars and the staff's first bar follow it. */
+  pickup?: PickupSpec | null;
+  /** The Band parts heard (the step's tracks less the muted ones); the harmony reads only these. */
+  bandHeard?: readonly ("drums" | "bass" | "chords")[] | null;
 }
 
 export interface AnalysisState {
@@ -70,6 +74,8 @@ export function useAnalysis(
             key: o.key,
             staff: o.staff,
             staffLabels: o.staffLabels,
+            pickup: o.pickup ?? null,
+            bandHeard: o.bandHeard ?? null,
           });
           if (out.ok) setState({ model: out.model, code: src, error: null, errorCode: null, pending: false });
           else setState((s) => ({ ...s, error: out.error, errorCode: src, pending: false }));
@@ -100,7 +106,7 @@ export function useAnalysis(
   // (the learner's unlocked set often arrives after the first analysis: without this the "locked" errors of an
   // empty set stay on screen).
   const lintKey = `${opts.lint.profile}|${opts.lint.allowPreview}|${[...opts.lint.unlocked].sort().join(",")}`;
-  const shape = `${opts.bars}|${opts.meter}|${opts.key?.tonic}:${opts.key?.mode}|${opts.band?.code ?? ""}|${opts.staff}|${opts.staffLabels}|${lintKey}`;
+  const shape = `${opts.bars}|${opts.meter}|${opts.key?.tonic}:${opts.key?.mode}|${opts.band?.code ?? ""}|${opts.staff}|${opts.staffLabels}|${opts.pickup ? opts.pickup.units.join("/") : ""}|${opts.bandHeard?.join("+") ?? "*"}|${lintKey}`;
   const lastShape = useRef(shape);
   useEffect(() => {
     if (lastShape.current === shape) return;

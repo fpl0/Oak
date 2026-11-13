@@ -26,6 +26,7 @@ import {
   chainOf,
   child,
   declaredNames,
+  isDynamicMember,
   lineCol,
   numericValue,
   type ProgramInfo,
@@ -109,6 +110,10 @@ const SCALE_WORD =
 
 let strudelNames: Set<string> | null = null;
 /** Every name the Strudel realm knows: exports of core, mini and tonal, Pattern methods, repl functions. */
+/** `code.unknown-chord` reasons: a spelling Strudel cannot voice, or an alias it voices that Oak spells otherwise. */
+const NOT_A_CHORD = "isn't a Strudel chord name";
+const ALIAS_CHORD = "plays, but Oak writes this chord another way";
+
 export function knownStrudelNames(): Set<string> {
   if (strudelNames) return strudelNames;
   const names = new Set<string>(REPL_NAMES);
@@ -300,6 +305,22 @@ function scanProgram(code: string, ast: AstNode, ctx: LintContext): Scan {
   }
 
   // --- 3. calls ----------------------------------------------------------------------------------
+  // A method reached by a name built at run time (`p[k]()`) cannot be checked against the toolbox, so a graded
+  // step could call a locked tool through it (`voicing()` before its gate, contracts §3.1 rule 6). The strict
+  // profile already refuses every computed access; the learner's own code is refused only this one form.
+  if (!STRICT_PROFILES.includes(ctx.profile))
+    walk(ast, (n) => {
+      if (n.type !== "CallExpression") return undefined;
+      const callee = child(n, "callee");
+      if (callee !== null && isDynamicMember(callee))
+        find(
+          "lint.strict.computed-member",
+          callee,
+          { what: "a method named by a value computed at run time; call it by its name" },
+          { graded: "error" },
+        );
+      return undefined;
+    });
   for (const site of sites) {
     const { name } = site;
     if (!site.isMethod && declared.has(name)) continue;
@@ -482,8 +503,11 @@ function scanProgram(code: string, ast: AstNode, ctx: LintContext): Scan {
       });
     }
     if (!callee || !NO_MINI_OPS.has(callee)) {
-      for (const op of mini.ops)
+      for (const op of mini.ops) {
+        // "G/B" inside chord() is a slash chord (code.slash-chord says so), not a division to look up.
+        if (special && op.op === "slow" && /[A-Ga-g][#b]?[^\s<>[\]{},/]*\/[A-Ga-g]/.test(lit.value)) continue;
         use(`mini:${op.op}`, op.op, op, { reportUnknown: true, why: " (mini-notation operator)" });
+      }
     }
     if (callee) readArg(lit, callee, lit.argIndex, lit.call);
   }
@@ -628,7 +652,11 @@ function scanProgram(code: string, ast: AstNode, ctx: LintContext): Scan {
     const plus = [...text.matchAll(/([A-Ga-g][#b]?)\+/g)];
     for (const m of plus) {
       const start = lit.contentStart + (m.index ?? 0);
-      find("code.unknown-chord", { start, end: start + m[0].length }, { sym: m[0], suggest: `${m[1]}aug` });
+      find(
+        "code.unknown-chord",
+        { start, end: start + m[0].length },
+        { sym: m[0], why: NOT_A_CHORD, suggest: `${m[1]}aug` },
+      );
     }
     if (slashes.length || plus.length) return;
     for (const a of miniOf(lit).atoms) {
@@ -643,6 +671,7 @@ function scanProgram(code: string, ast: AstNode, ctx: LintContext): Scan {
       if (!c.known) {
         find("code.unknown-chord", a, {
           sym,
+          why: NOT_A_CHORD,
           suggest: c.suggest ?? (parts ? parts.root.toUpperCase() : "C"),
         });
         continue;
@@ -652,11 +681,14 @@ function scanProgram(code: string, ast: AstNode, ctx: LintContext): Scan {
         find(
           "code.unknown-chord",
           a,
-          { sym, suggest: c.suggest ?? sym },
+          // An alias Strudel voices ("CM" plays C major) is a spelling note, not "no such chord" (Wave 4 gate).
+          { sym, why: verdict === "ok" ? ALIAS_CHORD : NOT_A_CHORD, suggest: c.suggest ?? sym },
           { graded: verdict === "ok" ? "info" : "error" },
         );
       }
       if (c.family) direct(c.family, sym, a);
+      // A misspelt name ("Cmaj") has one fix, its spelling; the dictionary verdict follows from that.
+      if (!c.canonical) continue;
       if (verdict === "missing" || verdict === "wrong") {
         const ok = dictsFor(sym).filter((d) => d !== dict);
         find("code.chord-not-in-dict", a, {

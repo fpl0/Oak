@@ -1,5 +1,6 @@
 // Public types of @oak/pitch.
 import type {
+  Degree,
   Diagnostic,
   Dimension,
   DimScore,
@@ -32,6 +33,13 @@ export interface PitchFrame {
    * clipped (`takeQuality().clipped`). Older frames without it fall back to the RMS.
    */
   peak?: number;
+  /**
+   * Wave 4 (contracts §8.6, `bleed.ts`): what Oak's own output was playing while this frame was heard — the
+   * clear pitches (fractional MIDI) the master bus had over the last `PLAYBACK_LAG_SEC`, newest first; `[]`
+   * while the output was silent or unpitched. Added on the main thread by the mic session that listens to the
+   * output too (`@oak/audio` `MicGraphOptions.playback`); absent when nothing listened (tests, older hosts).
+   */
+  playing?: readonly number[];
 }
 
 export interface DetectorOptions {
@@ -254,6 +262,13 @@ export interface HumDraftNote {
   midi: number;
   /** Where the learner's pitch was, relative to `midi`, in cents (after the octave move and tuning offset). */
   cents: number;
+  /**
+   * Wave 4: the scale degree the step plays, 1-based as Oak teaches it ("5", "b3", "#4"; `labelPitch` of
+   * @oak/theory in the draft's key), and its octave from the scale's tonic (0: from the tonic up to the 7th,
+   * 1: the tonic an octave up and above, −1: below the tonic). `n()` writes `degree − 1` (`step`).
+   */
+  degree: Degree;
+  octave: number;
 }
 export type HumDraftWarning =
   | { code: "empty" }

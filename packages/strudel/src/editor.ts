@@ -20,6 +20,7 @@ import {
 } from "./evaluation.ts";
 import {
   addFlashEffect,
+  editableField,
   editableOf,
   focusRangesIn,
   oakExtensions,
@@ -567,6 +568,12 @@ export function createEditor(rt: Runtime, root: HTMLElement, opts: EditorOptions
     },
     queryHaps(from, to) {
       return queryLiveHaps(lastPattern, from, to, tracks);
+    },
+    editableRanges() {
+      const st = view.state.field(editableField);
+      if (st.kind === "all") return null;
+      if (st.kind === "none") return [];
+      return st.ranges.map((r) => ({ from: r.from, to: r.to }));
     },
     setEditable(next) {
       if (disposed) return;

@@ -22,8 +22,8 @@ const SING_TOL = {
   passHitRate: 1,
 };
 
-test("the content schema version moved to 2 with the Wave 3 shapes", () => {
-  expect(CONTENT_SCHEMA_VERSION).toBe(2);
+test("the content schema version moved to 2 with the Wave 3 shapes (3 since Wave 4)", () => {
+  expect(CONTENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(2);
 });
 
 describe("staff writing", () => {

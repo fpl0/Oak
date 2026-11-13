@@ -1,11 +1,12 @@
-// The worked example of a Wave 2 area config (docs/design/wave2.md §2): one stack on its own ports, a throwaway
-// data dir, the fake tutor. Run: bunx playwright test -c app/src/ui/kit/e2e/playwright.config.ts
+// The kit area (shared UI: kit, shell, keys; docs/design/wave4.md §2): one stack on its own ports (5214 / 8814 from
+// Wave 4, when the old "polish" area split into capstone, tutor and kit), a throwaway data dir, the fake tutor.
+// Run: bunx playwright test -c app/src/ui/kit/e2e/playwright.config.ts
 import { fileURLToPath } from "node:url";
 import { type Area, areaConfig, oakStack, stackUse } from "../../../../../e2e/support/stack.ts";
 
 export const stack = oakStack({
-  vitePort: 5200,
-  apiPort: 8800,
+  vitePort: 5214,
+  apiPort: 8814,
   dataDirName: "kit",
   extraEnv: { OAK_TUTOR_FAKE: "1" },
 });

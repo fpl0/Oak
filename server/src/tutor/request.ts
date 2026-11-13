@@ -44,6 +44,10 @@ export const TurnRequestSchema = z.strictObject({
   graderResult: GradeSnapshotSchema.optional(),
   lessonId: z.string().min(1).max(200).optional(),
   stepId: z.string().min(1).max(200).optional(),
+  // Wave 4: the version a review is about (packages/api TutorTurnRequestSchema).
+  albumTrackId: z.string().min(1).max(200).optional(),
+  albumVersion: z.number().int().positive().optional(),
+  transcriptionVersion: z.number().int().nonnegative().optional(),
 });
 
 /** Parse a request body. zod's `optional()` yields `T | undefined`; the result is narrowed to TurnRequest. */
@@ -63,5 +67,8 @@ export function parseTurnRequest(
   if (d.graderResult !== undefined) request.graderResult = d.graderResult;
   if (d.lessonId !== undefined) request.lessonId = d.lessonId;
   if (d.stepId !== undefined) request.stepId = d.stepId;
+  if (d.albumTrackId !== undefined) request.albumTrackId = d.albumTrackId;
+  if (d.albumVersion !== undefined) request.albumVersion = d.albumVersion;
+  if (d.transcriptionVersion !== undefined) request.transcriptionVersion = d.transcriptionVersion;
   return { ok: true, request };
 }

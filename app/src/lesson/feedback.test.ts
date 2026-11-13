@@ -14,6 +14,52 @@ const result = (status: GradeResult["status"], ids: string[]): GradeResult =>
 
 describe("summaryOf", () => {
   const render = () => "";
+  test("a locked tool in a code step leads the verdict, before the notes that differ", () => {
+    const r = {
+      ...result("fail", ["code.locked-tool", "melody.wrong-degree"]),
+      overlay: undefined,
+    } as GradeResult;
+    const said = (d: { id: string }) =>
+      d.id === "code.locked-tool" ? "`.voicing()` opens in U05.L08." : "x";
+    const line = summaryOf(viewFor(r, 0, false, said as never), r, { kind: "code" });
+    expect(line).toBe("`.voicing()` opens in U05.L08.");
+    // Also when the locked tool stopped the code from running.
+    const e = result("error", ["code.locked-tool", "eval.runtime"]);
+    expect(summaryOf(viewFor(e, 0, false, said as never), e, { kind: "code" })).toBe(
+      "`.voicing()` opens in U05.L08.",
+    );
+  });
+  test("one wrong slot of a slotted answer is named (a function strip, numerals per bar)", () => {
+    const r = {
+      ...result("fail", []),
+      diagnostics: [{ id: "id.wrong", severity: "error", params: {}, where: { slot: 3 } }],
+    } as unknown as GradeResult;
+    const line = summaryOf(
+      viewFor(r, 0, false, () => ""),
+      r,
+      { kind: "answer", listen: true, slotted: true },
+    );
+    expect(line).toBe("Answer 3 is not right yet.");
+    // Numerals a bar (the RN palette): the slot is named as its label reads, "bar 3" (review:journey).
+    expect(
+      summaryOf(
+        viewFor(r, 0, false, () => ""),
+        r,
+        {
+          kind: "answer",
+          listen: false,
+          slotted: true,
+          slotNoun: "bar",
+        },
+      ),
+    ).toBe("Bar 3 is not right yet.");
+  });
+  test("chord() locked is said once, not once per chord name", () => {
+    const r = result("error", ["code.locked-tool", "code.locked-chord", "code.locked-chord"]);
+    const said = (d: { id: string }) => (d.id === "code.locked-tool" ? "`chord` unlocks in U05.L08." : "C");
+    const lines = issueLines(viewFor(r, 0, false, said as never), { kind: "code" });
+    expect(lines.map((l) => l.what)).toEqual(["`chord` unlocks in U05.L08."]);
+  });
   test("a sung take with no voice says so, not 'Code didn't run.'", () => {
     const r = result("error", ["sing.no-voice"]);
     const line = summaryOf(viewFor(r, 0, false, render), r);

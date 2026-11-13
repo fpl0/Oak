@@ -4,6 +4,7 @@ import type { AppDeps } from "../deps.ts";
 import { ApiError } from "../errors.ts";
 import { idempotent } from "../idempotency.ts";
 import type { SessionStartRecord } from "../services/sessions.ts";
+import { voicingGate } from "../services/voicing-gate.ts";
 import type { Mounter } from "./define.ts";
 
 /** `U07` (core route parameter) or the full ID (`U07.CP`, `J.CP1`). */
@@ -96,7 +97,7 @@ export function courseRoutes(mount: Mounter, d: AppDeps): void {
   mount("capstones.check", ({ params, body }) => s.course.capstoneCheck(params.id, body));
   mount("capstones.completeSession", ({ params, body }) => s.course.capstoneCompleteSession(params.id, body));
 
-  mount("gym.start", ({ body }) => s.course.gymStart(body));
+  mount("gym.start", ({ body }) => s.gym.start(body));
   mount("terms.introduced", () => ({ items: d.repos.terms.list() }));
 
   // Wave 2 (docs/design/wave2.md §4).
@@ -107,4 +108,22 @@ export function courseRoutes(mount: Mounter, d: AppDeps): void {
 
   // Wave 3 (docs/design/wave3.md §5.1): today's sessions on the server, Today's done state.
   mount("session.day", () => s.sessions.dayState());
+
+  // Wave 4 (docs/design/wave4.md §5.1, §5.5, §5.6): multi-session capstones, the gym plan, the voicing gate.
+  mount("capstones.sessions", ({ params }) => s.capstoneSessions.sessions(params.id));
+  mount("capstones.saveDraft", ({ params, body }) => s.capstoneSessions.saveDraft(params.id, body));
+  // A retried or double-submitted check with the same key counts once (wave3.md §5.2).
+  mount("capstones.recordCheck", ({ params, body }) => {
+    const { idempotencyKey, ...rest } = body;
+    return idempotent(
+      d,
+      "capstones.recordCheck",
+      idempotencyKey,
+      { capstoneId: params.id, checkId: params.checkId, body: rest },
+      () => s.capstoneSessions.recordCheck(params.id, params.checkId, { ...rest }),
+    );
+  });
+  mount("capstones.gate", ({ params }) => s.capstoneSessions.gate(params.id));
+  mount("gym.plan", () => s.gym.plan());
+  mount("gates.voicing", () => voicingGate(s.unlocks));
 }

@@ -397,6 +397,28 @@ export class SrsRepo {
     );
   }
   /** Stores trials; a resent index replaces the earlier row (the client may retry a batch). */
+  /**
+   * Wave 4 (`FamilyState.sungStats`): per category, the learner's sung resolutions in this family's trials (`n`) and
+   * how many passed (`hits`). Skipped and Quiet-mode resolutions are left out (no voice evidence, contracts §8.5).
+   */
+  sungStats(familyId: string): Record<string, { n: number; hits: number }> {
+    const rows = all<{ category: string; trial_json: string }>(
+      this.db,
+      "SELECT category, trial_json FROM drill_trials WHERE family_id = ? AND trial_json LIKE '%\"sungResolution\":{%' ORDER BY id",
+      familyId,
+    );
+    const out: Record<string, { n: number; hits: number }> = {};
+    for (const r of rows) {
+      const t = fromJson<{
+        sungResolution?: { passed?: boolean; skipped?: boolean; quiet?: boolean } | null;
+      }>(r.trial_json, {});
+      const sr = t.sungResolution;
+      if (sr === null || sr === undefined || sr.skipped === true || sr.quiet === true) continue;
+      const s = out[r.category] ?? { n: 0, hits: 0 };
+      out[r.category] = { n: s.n + 1, hits: s.hits + (sr.passed === true ? 1 : 0) };
+    }
+    return out;
+  }
   saveTrials(drillSessionId: string, trials: readonly DrillTrialRecord[]): void {
     for (const t of trials)
       run(

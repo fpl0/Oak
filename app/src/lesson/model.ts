@@ -24,6 +24,7 @@ import {
   type TargetMinutes,
 } from "@oak/api";
 import type { AnswerSpec } from "../answers/types.ts";
+import { type GateState, gateAllowsContinue } from "./gate.ts";
 import { isSungStep } from "./rules.ts";
 
 export type SplitPart = "A" | "B";
@@ -110,7 +111,7 @@ export function editorStart(ex: Exercise | undefined, example: StepDef["example"
     return { code: clean.code, editable: clean.editable };
   }
   if (ex?.kind === "transcribe-step") return { code: "", editable: null };
-  if (ex?.kind === "dictation" && ex.byEar && ex.answer.ui === "code") {
+  if (ex?.kind === "dictation" && ex.answer.ui === "code") {
     const clean = stripMarkers(ex.answer.starter);
     return { code: clean.code, editable: clean.editable };
   }
@@ -123,7 +124,7 @@ export function showsWorkbench(step: StepDef): boolean {
   const ex = step.exercise;
   if (!ex) return step.example !== undefined;
   if (EDITOR_KINDS.has(ex.kind) || ex.kind === "code-fill" || ex.kind === "transcribe-step") return true;
-  if (ex.kind === "dictation" && ex.byEar) return true;
+  if (ex.kind === "dictation" && (ex.byEar || ex.answer.ui === "code")) return true;
   if (ex.kind === "listen" || ex.kind === "predict") return true;
   if (ex.kind === "all") return ex.parts.some((p) => EDITOR_KINDS.has(p.kind) || p.kind === "code-fill");
   return step.example !== undefined;
@@ -242,9 +243,14 @@ export interface StepProgress {
   disputed: boolean;
 }
 
-/** Whether Continue is open on a step (ux §3.1). The Make has its own "Save sketch" instead. */
-export function canContinue(step: StepDef, p: StepProgress): boolean {
+/**
+ * Whether Continue is open on a step (ux §3.1). The Make has its own "Save sketch" instead. U05.L08's `gateCheck`
+ * step is the course's one hard gate (contracts §3.1 rule 6): only a gate pass opens it, never a reveal or a
+ * report.
+ */
+export function canContinue(step: StepDef, p: StepProgress, gate: GateState | null = null): boolean {
   if (step.kind === "make") return false;
+  if (step.gateCheck === true) return gateAllowsContinue(step, p.result, gate);
   if (!step.graded) return true;
   // Singing never gates anything (contracts §7.6, §8): a sung step can always be left, a graded one too.
   if (isSungStep(step)) return true;
@@ -321,6 +327,15 @@ export function viewsOf(step: StepDef): ("roll" | "staff" | "keyboard")[] {
   if (p.staff) out.push("staff");
   if (p.keyboard) out.push("keyboard");
   return out;
+}
+
+/**
+ * The Workbench tab a step opens on when its roll and staff have to be tabs: Both for a step that shows the roll
+ * with the bass clef or the grand staff (the bass line is what it asks the learner to read); else the default.
+ */
+export function initialTabOf(step: StepDef): "both" | undefined {
+  const p = step.ui.panels;
+  return p.roll && (p.staff === "grand" || p.staff === "bass") ? "both" : undefined;
 }
 
 /** The scale argument a Band's `{{key}}` takes: `"C4:major"`. */

@@ -5,9 +5,12 @@
 // Everything in it is redacted to the turn's level by redaction.ts. It is deterministic: fixed
 // line order, sorted keys, nothing finer than the learner-local day, so equal inputs give equal
 // bytes and the transcript stays cache-friendly.
+import { answerForms, answerKindOf } from "./answer-guard.ts";
 import type { GradeSnapshot, ReviewSource, TutorNote } from "./domain.ts";
 import { hintsShown, type IssueView, redactGrade } from "./redaction.ts";
+import { factLines } from "./review-facts.ts";
 import type { TurnContext, UserTurn } from "./types.ts";
+import { vocabularyLines, vocabularyOf } from "./vocabulary.ts";
 
 export const CONTEXT_VERSION = "1";
 
@@ -55,8 +58,8 @@ function issueLine(v: IssueView): string {
   return parts.join(" · ");
 }
 
-function checkerLines(grade: GradeSnapshot, ctx: Pick<TurnContext, "disclosure">): string[] {
-  const view = redactGrade(grade, ctx.disclosure);
+function checkerLines(grade: GradeSnapshot, ctx: Pick<TurnContext, "disclosure" | "step">): string[] {
+  const view = redactGrade(grade, ctx.disclosure, ctx.step ? answerForms(ctx.step) : []);
   const dims = Object.entries(view.dims)
     .map(([k, v]) => `${k} ${v}`)
     .join(", ");
@@ -88,6 +91,12 @@ function reviewLines(kind: string, subjectId: string, r: ReviewSource): string[]
     );
   }
   for (const item of r.checklist) lines.push(`checklist: ${inline(item, 160)}`);
+  if (r.target?.kind === "album")
+    lines.push(`review_target: album track ${inline(r.target.trackId, 80)} version ${r.target.version}`);
+  else if (r.target?.kind === "transcription")
+    lines.push(`review_target: transcription version ${r.target.version}`);
+  // Oak's analysis, fact by fact: every strength and revision is anchored to bars listed here (contracts §10.6).
+  if (r.facts) lines.push(...factLines(r.facts).map((l) => inline(l, 400)));
   // Only present once a graded ladder piece has passed (contracts §10.6).
   if (r.reference !== null) lines.push(`reference: ${block(r.reference)}`);
   return lines;
@@ -120,10 +129,12 @@ export function buildOakContext(ctx: TurnContext): string {
   );
 
   if (lesson) {
-    lines.push(
-      `key: ${lesson.key ?? "none"} · meter: ${lesson.meter ?? "none"} · bpm: ${lesson.bpm ?? "none"}`,
-    );
-  }
+    // The step's own key wins over the lesson's (wave4.md §5.6): a step in G inside a lesson in C is in G.
+    const key = step?.key ?? lesson.key;
+    lines.push(`key: ${key ?? "none"} · meter: ${lesson.meter ?? "none"} · bpm: ${lesson.bpm ?? "none"}`);
+  } else if (step?.key) lines.push(`key: ${step.key}`);
+  const answerKind = step ? answerKindOf(step) : null;
+  if (answerKind) lines.push(`answer_kind: ${inline(answerKind, 60)}`);
   if (step) {
     lines.push(`prompt: ${block(step.prompt, 1_200)}`);
     for (const c of step.constraints) lines.push(`constraint: ${inline(c, 200)}`);
@@ -155,6 +166,7 @@ export function buildOakContext(ctx: TurnContext): string {
 
   const terms = ctx.terms.recent.slice(0, MAX_RECENT_TERMS);
   lines.push(`terms_introduced: ${ctx.terms.count} · recent: ${terms.length ? terms.join(", ") : "none"}`);
+  lines.push(...vocabularyLines(vocabularyOf(ctx.terms)));
   const tools = ctx.progress.unlocked.recent.slice(0, MAX_RECENT_TOOLS);
   lines.push(
     `tools_unlocked: ${ctx.progress.unlocked.count} · recent: ${tools.length ? tools.join(", ") : "none"}`,

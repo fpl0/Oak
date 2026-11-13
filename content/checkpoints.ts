@@ -75,6 +75,11 @@ export const CHECKPOINT_MAKE_BANDS: Partial<Record<CheckpointId, BandRef>> = {
   // An eight-bar melody that pauses on V in bar 4 and comes home in bar 8.
   "U03.CP": { band: "band.phrase-8bar" },
   "U04.CP": { band: "band.two-chord-vamp" },
+  // Chord loops voiced or numbered by the learner: the Band keeps time and leaves the harmony to them.
+  "U05.CP": { band: "band.axis-4bar", tracks: ["drums"] },
+  "U06.CP": { band: "band.axis-4bar", tracks: ["drums"] },
+  // A hook over the four-chord loop: the whole Band states I V vi IV under the learner's tune.
+  "U07.CP": { band: "band.axis-4bar" },
 };
 
 /** Pass rules (contracts §7.6). The numbers are also in @oak/srs `CHECKPOINT`; content CI compares them. */

@@ -34,20 +34,45 @@ export class UnlocksService {
    * from the learner's code only (any version of the exercise; disputed attempts do not count).
    */
   conditionMet(c: Condition): boolean {
-    const slash = c.exercise.indexOf("/");
-    const lessonId = c.exercise.slice(0, slash);
-    return this.ctx.repos.lessons
-      .attemptsOfLesson(lessonId)
-      .some(
-        (a) =>
-          `${a.lessonId}/${a.exerciseId}` === c.exercise &&
-          !a.disputed &&
-          !a.tutorAssisted &&
-          a.result !== null &&
-          a.result.status !== "error" &&
-          a.score >= c.minScore &&
-          a.result.assist.revealed === false,
-      );
+    return this.gateAttempts(c).some((a) => a.qualifies);
+  }
+
+  /**
+   * Every graded attempt of the gate exercise or one of its regenerated variants (Wave 4: U05.L08's `gateCheck`
+   * step) typed by the learner, oldest first, and whether it qualifies (score ≥ `minScore`, unrevealed). Disputed
+   * and tutor-assisted attempts are left out: an applied tutor card gives no evidence (contracts §3.1 rule 6).
+   */
+  gateAttempts(
+    c: Condition,
+  ): { at: string; score: number; revealed: boolean; qualifies: boolean; code: string | null }[] {
+    const ids = [c.exercise as string, ...((c.variants ?? []) as string[])];
+    const lessons = [...new Set(ids.map((id) => id.slice(0, id.indexOf("/"))))];
+    const out: { at: string; score: number; revealed: boolean; qualifies: boolean; code: string | null }[] =
+      [];
+    for (const lessonId of lessons)
+      for (const a of this.ctx.repos.lessons.attemptsOfLesson(lessonId)) {
+        if (!ids.includes(`${a.lessonId}/${a.exerciseId}`)) continue;
+        if (a.disputed || a.tutorAssisted || a.result === null || a.result.status === "error") continue;
+        const revealed = a.result.assist.revealed === true || a.hintRung >= 4;
+        // The evidence is the learner's own hand voicing (rule 6): code that reaches the gated helpers
+        // (`voicing()`, `chord()`, or a method named at run time) never opens the gate, whatever it scored.
+        const own = a.code === null || !reachesGatedHelpers(a.code);
+        out.push({
+          at: a.at,
+          score: a.score,
+          revealed,
+          qualifies: own && !revealed && a.score >= c.minScore - 1e-9,
+          code: a.code,
+        });
+      }
+    return out.sort((x, y) => x.at.localeCompare(y.at));
+  }
+
+  /** The conditional rows (the voicing gate's holds) and their one condition, if the table has any. */
+  gatedRows(): { condition: Condition; rows: ToolEntry[] } | null {
+    const rows = this.ctx.content.toolbox().filter((t) => t.unlock.condition !== undefined);
+    const condition = rows[0]?.unlock.condition;
+    return condition === undefined ? null : { condition, rows };
   }
 
   #row(t: ToolEntry, sourceKind: Unlock["sourceKind"], sourceId: string): Unlock {
@@ -106,7 +131,11 @@ export class UnlocksService {
     const rows = this.ctx.content
       .toolbox()
       .filter(
-        (t) => t.unlock.condition?.exercise === exerciseGlobalId && this.conditionMet(t.unlock.condition),
+        (t) =>
+          t.unlock.condition !== undefined &&
+          (t.unlock.condition.exercise === exerciseGlobalId ||
+            (t.unlock.condition.variants ?? []).includes(exerciseGlobalId as never)) &&
+          this.conditionMet(t.unlock.condition),
       );
     const out: Unlock[] = [];
     for (const t of rows) {
@@ -235,4 +264,40 @@ export class UnlocksService {
   markSeen(itemId: string): boolean {
     return this.ctx.repos.unlocks.markSeen(itemId);
   }
+}
+
+/**
+ * Does this code call a gated voicing helper (contracts §3.1 rule 6)? Comments are dropped and string
+ * contents blanked first (a mini-notation string or a comment may say "chord"), then the code is refused
+ * when it calls `voicing`, `voicings` or `chord`, or calls a method through a computed key (`p["voi"+"cing"]()`,
+ * `p[k]()`), which the browser lint refuses in a graded step. The server's own check, independent of the
+ * client that graded the attempt.
+ */
+export function reachesGatedHelpers(code: string): boolean {
+  let out = "";
+  let i = 0;
+  while (i < code.length) {
+    const ch = code[i] as string;
+    const next = code[i + 1];
+    if (ch === "/" && next === "/") {
+      while (i < code.length && code[i] !== "\n") i++;
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      const end = code.indexOf("*/", i + 2);
+      i = end < 0 ? code.length : end + 2;
+      out += " ";
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      out += `${ch}${ch}`;
+      i++;
+      while (i < code.length && code[i] !== ch) i += code[i] === "\\" ? 2 : 1;
+      i++;
+      continue;
+    }
+    out += ch;
+    i++;
+  }
+  return /\b(?:voicings?|chord)\s*\(|\]\s*\(/.test(out);
 }

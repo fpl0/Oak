@@ -1,6 +1,6 @@
 // /settings/voice/setup: the mic and voice wizard (focus mode, ux §4.7; contracts §8.6), the same screens as
-// onboarding. `?part=range` (or headphones, mic, latency, first-sing) runs one of them only: Settings › Voice
-// links here to re-run the range or the timing.
+// onboarding. `?part=range` (or headphones, mic, latency, first-sing, noise, bleed) runs one of them only:
+// Settings › Voice links here to re-run the range or the timing; the `sing.bleed` hint links to the bleed check.
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
 import { usePageTitle } from "../lib/nav.ts";
@@ -35,6 +35,7 @@ const LABEL: Record<WizardPart, string> = {
   match: "Match three notes",
   "first-sing": "First note",
   noise: "Quiet check",
+  bleed: "Bleed check",
 };
 
 function VoiceSetup() {
@@ -85,7 +86,7 @@ function VoiceSetup() {
             context: "settings",
             onDone: () => {
               // A fresh quiet check answers the "re-run the quiet check" suggestion.
-              if (current === "noise" || current === "mic") clearRecheck();
+              if (current === "noise" || current === "mic" || current === "bleed") clearRecheck();
               go(next);
             },
             onSkip: () => go(next),

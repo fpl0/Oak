@@ -7,10 +7,12 @@ import type { ViewEvent } from "./model.ts";
 export function tutorHighlightEvents(
   events: readonly Pick<ViewEvent, "id" | "band" | "onset" | "midi">[],
   h: Pick<TutorHighlight, "kind"> & ({ from: number; to: number } | { midi: number }),
+  /** A declared pickup: bar 0 is the pickup bar (contracts §6.11). */
+  pickup = false,
 ): string[] {
   const mine = events.filter((e) => !e.band);
   if (h.kind === "bars" && "from" in h) {
-    const [c0, c1] = barsToCycles(h.from, h.to);
+    const [c0, c1] = barsToCycles(h.from, h.to, pickup);
     return mine.filter((e) => e.onset >= c0 - 1e-9 && e.onset < c1 - 1e-9).map((e) => e.id);
   }
   if (h.kind === "note" && "midi" in h)

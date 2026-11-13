@@ -2,6 +2,6 @@
   // The e2e page, its Vite config and the Playwright specs (not part of the root typecheck projects).
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": { "lib": ["es2023", "dom", "dom.iterable"], "types": ["vite/client", "bun"] },
-  "include": [".", "../../../types/signalsmith-stretch.d.ts"],
+  "include": [".", "../../../types/signalsmith-stretch.d.ts", "../../../types/strudel.d.ts"],
   "exclude": [".generated", ".results", ".vite", "dist"]
 }

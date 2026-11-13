@@ -95,6 +95,48 @@ export const children = (node: AstNode, key: string): AstNode[] => {
 export const nameOf = (node: AstNode | null): string | null =>
   node && node.type === "Identifier" ? (node.name as string) : null;
 
+/**
+ * The name a member access reaches: `a.voicing` → "voicing", and a computed key the lint can read in full
+ * (`a["voicing"]`, `` a[`voicing`] ``, `a["voi" + "cing"]`) → the same name, so `x["voicing"]()` is checked
+ * against the toolbox exactly like `x.voicing()`. `null` for a key only known at run time (`a[k]`, `a[f()]`).
+ */
+export function memberName(member: AstNode): string | null {
+  const prop = child(member, "property");
+  if (!member.computed) return nameOf(prop);
+  return staticString(prop);
+}
+
+/** The value of a string expression made only of literals and `+` (no variables, no calls). */
+export function staticString(node: AstNode | null): string | null {
+  if (!node) return null;
+  const lit = stringLit(node);
+  if (lit) return lit.value;
+  if (node.type === "BinaryExpression" && node.operator === "+") {
+    const l = staticString(child(node, "left"));
+    const r = staticString(child(node, "right"));
+    if (l !== null && r !== null) return l + r;
+    // `"voi" + 1` is still static text.
+    const ln = l ?? literalText(child(node, "left"));
+    const rn = r ?? literalText(child(node, "right"));
+    return (l !== null || r !== null) && ln !== null && rn !== null ? ln + rn : null;
+  }
+  if (node.type === "ParenthesizedExpression") return staticString(child(node, "expression"));
+  return null;
+}
+function literalText(node: AstNode | null): string | null {
+  if (node?.type === "Literal" && (typeof node.value === "number" || typeof node.value === "boolean"))
+    return String(node.value);
+  return null;
+}
+
+/** A computed member access whose key is not a number and cannot be read statically (`a[k]`, `a[f()]`). */
+export function isDynamicMember(member: AstNode): boolean {
+  if (member.type !== "MemberExpression" || !member.computed) return false;
+  const prop = child(member, "property");
+  if (prop?.type === "Literal" && typeof prop.value === "number") return false;
+  return staticString(prop) === null;
+}
+
 /** A string literal and how it was quoted. Template literals without `${}` count as backtick strings. */
 export interface StringLit {
   node: AstNode;
@@ -200,10 +242,11 @@ export function chainOf(expr: AstNode): Chain {
         cur = null;
         break;
       }
-      if (callee?.type === "MemberExpression" && !callee.computed) {
+      if (callee?.type === "MemberExpression") {
+        const name = memberName(callee);
         const prop = child(callee, "property");
-        if (prop?.type === "Identifier") {
-          links.push({ name: prop.name as string, call: cur, args, nameNode: prop });
+        if (name !== null && prop !== null) {
+          links.push({ name, call: cur, args, nameNode: prop });
           cur = child(callee, "object");
           continue;
         }
@@ -246,11 +289,12 @@ export function callSites(ast: AstNode): CallSite[] {
         isMethod: false,
         objectName: null,
       });
-    } else if (callee?.type === "MemberExpression" && !callee.computed) {
+    } else if (callee?.type === "MemberExpression") {
       const prop = child(callee, "property");
-      if (prop?.type === "Identifier") {
+      const name = memberName(callee);
+      if (name !== null && prop !== null) {
         out.push({
-          name: prop.name as string,
+          name,
           call: n,
           args,
           nameNode: prop,

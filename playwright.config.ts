@@ -1,4 +1,5 @@
-// Every browser suite of the repo in one run: `bun run e2e` (alias `bun run test:browser`). One project per suite;
+// Every browser suite of the repo. `bun run e2e` runs the projects side by side (scripts/e2e-parallel.ts);
+// `bun run e2e:serial` is this config alone, one test at a time. One project per suite;
 // `bunx playwright test --project <name>` runs one (several `--project` flags run several), and only the web
 // servers of the selected projects start. Each project keeps its own stack (ports, data dir), so they never share
 // state; each area's own `playwright.config.ts` still runs that suite alone.
@@ -9,10 +10,12 @@
 //   journey         e2e/journey: the Wave 2 gate journey on the real stack with real content, the scripted fake tutor
 //                   and Chrome's fake microphone (Vite 5212, API 8812), and the first session on the production
 //                   build (8792, its own data dir).
-//   <area>          every config that exports `area` is discovered (docs/design/wave3.md §6): app/src/<area>/e2e on
-//                   the area's own stack (wave2.md §2), app/src/workbench/e2e on its own Vite page (5193),
-//                   e2e/review (5221/8821), app/src/ui/review/e2e (5222/8822), packages/<pkg>/e2e pages that
-//                   export `area` (notation 5194), and any new Wave 3 area config, without editing this file.
+//   <area>          every config that exports `area` is discovered (docs/design/wave3.md §6, wave4.md §2):
+//                   app/src/<area>/e2e on the area's own stack (Wave 4: lesson 5201, answers 5202, drills 5203,
+//                   session 5205, studio 5206, tutor 5208, voice/onboarding 5209, capstone 5210, transcribe 5213,
+//                   kit 5214; API = Vite + 3600), app/src/workbench/e2e on its own Vite page (5193), e2e/review
+//                   (5221/8821), app/src/ui/review/e2e (5222/8822), packages/<pkg>/e2e pages that export `area`
+//                   (notation 5194), and any new area config, without editing this file.
 //   strudel-*       packages/strudel/e2e on its own Vite page (5192), autoplay and gesture policies.
 //   audio           packages/audio/e2e on its own Vite page (5191).
 //
@@ -216,6 +219,14 @@ if (servers.has(platformProd.name as string))
   for (const [k, w] of servers)
     if (k.startsWith("journey-prod"))
       servers.set(k, { ...w, command: w.command.replace("bun run build && ", "") });
+// `bun run e2e` (scripts/e2e-parallel.ts) runs several of these processes side by side. It builds the content and
+// the production app once, before any of them starts, and says so here: no process may rebuild while others read.
+if (process.env.OAK_E2E_PREBUILT === "1")
+  for (const [k, w] of servers)
+    servers.set(k, {
+      ...w,
+      command: w.command.replace("bun run build && ", "").replace("bun scripts/content/build.ts && ", ""),
+    });
 
 export default defineConfig({
   fullyParallel: false,

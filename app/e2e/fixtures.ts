@@ -142,7 +142,7 @@ export const FIXTURES = {
   health: {
     ok: true,
     appVersion: "0.0.0-e2e",
-    contractsVersion: "1.3",
+    contractsVersion: "1.4",
     schemaVersion: 1,
     contentVersion: null,
     tutor: "ready",
@@ -153,7 +153,7 @@ export const FIXTURES = {
     health: {
       ok: true,
       appVersion: "0.0.0-e2e",
-      contractsVersion: "1.3",
+      contractsVersion: "1.4",
       schemaVersion: 1,
       contentVersion: null,
       tutor: "ready",
@@ -550,6 +550,44 @@ export const FIXTURES = {
     },
   },
   "lessons.steps": { lessonId: "U01.L02", progress: null, steps: [] },
+  // Wave 4 endpoints the shell's surfaces read (Today, Progress, the album, Transcribe), for this early learner:
+  // the gym rule not yet running, the ladder at its start, the voicing gate unmet, C1 in its first session.
+  "capstones.sessions": {
+    capstoneId: "C1",
+    sessions: [
+      {
+        capstoneSessionId: "C1.S1",
+        status: "open",
+        sessionId: null,
+        draft: null,
+        checks: [],
+        startedAt: null,
+        completedAt: null,
+      },
+    ],
+    current: "C1.S1",
+  },
+  "capstones.gate": {
+    capstoneId: "C1",
+    open: true,
+    conditions: [],
+    gymSetsToOpen: null,
+    message: null,
+  },
+  "tutor.reviews": { items: [] },
+  "ladder.get": { level: 1, realism: 0, history: [], gradedPasses: {}, levelUp: null },
+  "gym.plan": { active: false, sinceLast: 0, slotDue: false, next: null, history: [], x1: null },
+  "gates.voicing": {
+    exerciseId: "U05.L07/hand-voiced-cadence",
+    variants: ["U05.L08/hand-voiced-cadence-again"],
+    minScore: 0.9,
+    best: null,
+    passed: false,
+    passedAt: null,
+    attempts: 0,
+    passedCode: null,
+    holds: ["tb.chord", "tb.voicing", "snd.rhodes", "snd.organ"],
+  },
   "profile.calibrations": { items: [] },
 } satisfies Partial<Record<JsonEndpointName, unknown>>;
 

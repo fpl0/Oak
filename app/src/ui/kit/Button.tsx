@@ -22,7 +22,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  */
 const VARIANTS: Record<ButtonVariant, string> = {
   primary: "bg-accent text-on-accent hover:bg-accent-hover border-transparent",
-  secondary: "bg-surface text-text border-border hover:bg-surface-2",
+  secondary: "bg-control text-text border-control-border hover:bg-control-hover",
   ghost: "bg-text/[0.06] text-text border-transparent hover:bg-text/[0.11] aria-pressed:bg-text/[0.13]",
   danger: "bg-danger text-on-danger border-transparent hover:opacity-90",
   /** A text action inside a line of other actions ("Wrap up", "Try a new one"): underlined, so it reads as one. */

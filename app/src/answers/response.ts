@@ -13,7 +13,7 @@ export function gridSteps(spec: AnswerSpecOf<"grid">): number {
 /** Number of slots of a slotted kind (degree pad, quality pad, RN palette). */
 export function slotCount(spec: AnswerSpec): number {
   if (spec.ui === "degree-pad") return spec.sequenceLen ?? 1;
-  if (spec.ui === "rn-palette") return spec.slots;
+  if (spec.ui === "rn-palette" || spec.ui === "slot-choice") return spec.slots;
   return 1;
 }
 
@@ -36,6 +36,7 @@ export function emptyValue<K extends AnswerKind>(spec: AnswerSpecOf<K>): AnswerV
       case "click-roll":
         return null;
       case "rn-palette":
+      case "slot-choice":
         return Array.from({ length: s.slots }, () => "");
       case "grid":
         return s.rows.map(() => Array.from({ length: gridSteps(s) }, () => false));
@@ -64,6 +65,7 @@ export function isComplete(spec: AnswerSpec, value: AnswerValue): boolean {
     case "degree-pad":
       return Array.isArray(value) && value.length === slotCount(spec);
     case "rn-palette":
+    case "slot-choice":
       return Array.isArray(value) && value.length === spec.slots && value.every((x) => x !== "");
     case "blanks":
       return Object.values(value as Record<string, string>).every((x) => x.trim() !== "");
@@ -95,6 +97,11 @@ export function responseOf(spec: AnswerSpec, value: AnswerValue): AttemptRespons
     case "choice":
     case "same-different":
       return { answer: { choice: value as string[] } };
+    case "slot-choice":
+      // Slot order is the answer: an empty slot stays "" so slot 3 is never read as slot 2.
+      return {
+        answer: { choice: Array.from({ length: spec.slots }, (_, i) => (value as string[])[i] ?? "") },
+      };
     case "degree-pad":
       return { answer: { degrees: value as AnswerValueMap["degree-pad"] } };
     case "quality-pad":

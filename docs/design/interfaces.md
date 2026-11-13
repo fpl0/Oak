@@ -8,8 +8,9 @@
 
 Written at the Wave 1 final gate (2026-11-11). §1–§10 are the Foundation API; §11 and §12 record what the
 code changed since. When they disagree, §12 beats §11 beats §4, and the code beats all of them. **Wave 2** is
-recorded in §13–§15 and in `docs/design/wave2.md` (its "Wave 2 state" section is the current summary); the
-"Known gaps" below are Wave 1's, most of them closed by Wave 2.
+recorded in §13–§15 and in `docs/design/wave2.md` (its "Wave 2 state" section is the current summary), **Wave 3**
+in §16–§18 and `docs/design/wave3.md` §0, **Wave 4** in §19–§20 and `docs/design/wave4.md` "Wave 4 state"; the "Known gaps" below
+are Wave 1's, most of them closed by Wave 2.
 
 **What Wave 2 can rely on** (implemented, tested by execution, green in `bun run check` and `bun run e2e`):
 
@@ -1215,3 +1216,122 @@ The reviews and the final gate changed these seams. wave3.md §0 is the summary;
   `AlbumCover` text is fitted (`fitCoverText`, `coverTextWidth`, `ALBUM_WIDTH`, `TITLE_WIDTH`) and haloed. The
   Workbench's play button is `aria-disabled` (not `disabled`) while the audio starts, so keyboard focus stays on
   it. Checkpoint progress counts skipped items apart from answered ones.
+
+## 19. Wave 4 (harmony, album and transcription, through U07)
+
+`docs/design/wave4.md` is the Wave 4 seam document (ownership, ports, the 14 endpoints of §5 with their status, the
+dev seeds of §6, the content kinds of §11) and its §0 "Wave 4 state" is the current summary. This section records the
+cross-package API as built, for the next wave. The code beats this list.
+
+- **`@oak/theory`** (wave4.md §3.1, all built): `readChord`, `diatonicChordOn`, `romanText`, `chordOfRoman`,
+  `romanParts`, `harmonicFunction`, `cadenceOf`, `schemaOf`, `chordSymbol(text, "lead-sheet" | "code" | "jazz" |
+  "abc")`, `toneRole`, `inversionOf`, `READABLE_QUALITIES`; `SCHEMAS[].title` is the name a learner reads (album theory
+  tags use it). `normalizeText("chord")` accepts a lower-case slash bass (`g/b` → `G/B`).
+- **`@oak/grader`** (§3.2): `harmonyView` (+ `FunctionBand`, `BeatHarmony`, `MelodyNoteRelation`), the ladder block
+  (`gradeLadder`, `ladderGradedPass`, `nextRealism`, `LADDER_MATCHERS` — L1 is `roleWeight: "equal"`), the capstone
+  block (`gradeCapstone`, `capstoneLength`), X1 phrase checks (`gradePhraseCheck`, `phraseCheckPassed`, `phraseWindow`,
+  `PHRASE_PASS` 0.85, `PHRASE_STAGE_PASS` 0.80), staged dictation (`STAGE_PASS`, `stagePassed`), `staffChordsCheck`,
+  the voicing gate (`voicingGateCheck`, `voicedChords`, `trackChords`). Package-internal but load-bearing:
+  `spellChordPcs` (match/harmony.ts), `lineWord` (analyze/tracks.ts) and `pieceSlots(n, track, { exclude })`
+  (rubric/rules.ts: a line tested against chords never helps name them). `ExerciseResponse` code
+  answers may carry `part` (by-ear parts) or `stage` (staged transcribe); `GradeContext.window` limits a grade to a
+  span. Rules graded: `cadence`, `chord-tones-strong`, `progression` (`bars`), `contains-rn`, `harmonic-rhythm`,
+  `voice-leading` (gate fields), `pickup`, `chord-qualities`, `chord-inversions`, `non-chord-tones`, `sounds.anyOf`.
+  Catalog: `melody.wrong-degree` takes `{line}`; `melody.index-shift` stands alone for the n-from-0 slip. Learner
+  copy says "half steps", never "semitones" (decision 38).
+- **`@oak/notation`** (§3.3): `tagChordLabels` built; `leadSheetInput`, `leadSheetLayout`, `leadSheetPages`,
+  `LEAD_SHEET_BAR_PX`, `chordLabelInput`, `chordLabelTexts`, `chordSymbolDisplay`, `numeralDisplay`, `keyAtOnset`,
+  `stepStaffInput`; `KeyChange.beat`, `NotationInput.endsPiece`, `Score.pickupNumbering`, `Score.lead`,
+  `ScoreAnnotation.drawnAt`, `AbcOptions.barNumbers`, `StaffEdit` `stack`. Symbols engrave as plain text ("Bm",
+  not abcjs `jazzchords` "Bᵐ") on the Workbench staff and the lesson lead sheet (§20).
+- **`@oak/audio`** (§3.4): `createStretchPlayer` (signalsmith-stretch), `createAbSwitch`, `createMasterRecorder`
+  (`MasterRecording.startAt?`, `exact?`; WAV when it can cut the take) are built; `abDriftMs`, `sourceBarTimes`.
+  **`@oak/pitch`**: `humToDraft(frames, { key, bpm, meter, downbeat, tonicOctave, profile })` (draft + 1-based
+  degrees), `sungStatsOf(records)`.
+- **`@oak/strudel`** (§3.5): `PatternPlayer.load(code, { band, key? })` plays the Band (a bad Band warns
+  `eval.band-failed`, never rejects); `setRealism` R0–R4; `RealismSpec.target`; the sound pack is v3 (`snd.brk`).
+- **`@oak/drills`**: `generateLadderPiece(level, realism, seed, profile)` → `LadderPiece` (with `performance { target,
+  swung, vocalLead }`); `sameRnAnswer` compares numerals as (degree, alteration, quality, inversion, applied target);
+  harmony prompts print display forms (B°, F♯m, vii°, B♭ major) and keep code spellings in the answers.
+- **`@oak/api`** (§5): 14 endpoints, all built (`WAVE4_PENDING` empty). Additive shapes after Foundation:
+  `VoicingGate.passedCode`, `BackupInfo.ownAudio { files, bytes, unusedFiles, unusedBytes }` and `albumAudioBytes`,
+  `CapstoneGateCondition.kind: "lesson"`, `TranscriptionDetail.stimulus.performance?` (closer: the generator's hints;
+  Transcribe passes them to `realismSpec`), `DevSeedRequest.recordings?` (closer: default true, every seeded release
+  is recorded). Review turns forward `albumTrackId` + `albumVersion` /
+  `transcriptionVersion`; an accepted capstone review is stored on that album version.
+- **App seams.** Workbench: `initialPanels` (`PanelId` incl. `"lead"`), `targetRegions`, `pickup`,
+  `staff.kind: "lead"`, `LensSource.chords`; the model's harmony reads only the Band parts heard
+  (`ModelOptions.bandHeard`, `heardBand`, decision 37). Lesson: `bandMutesOf` keeps a step's Band parts as a Make
+  sketch's mutes (lessons and checkpoints); `AnswerEnv.harmony` and the chord lenses are passed by every host;
+  `walk.ts` exports the Wave 4 walkers. Answers: `slot-choice`, `StagedDictation`, the RN palette and quality pad;
+  `sing.bleed` has its own message. Session: `gym-start.ts` (`startGymOnce`), `resume-once.ts`
+  (`resumeDecision`), `host/GymBlock.tsx` (the gym New block runs Transcribe's `ProjectPage` with `inSession`, which
+  hides the list link and Delete). Transcribe: `REALISM_TARGET`, `usePhrase1Rhythm`, own-audio transport with
+  pre-roll. Tutor: `TutorSubject.harmony` (`chordAtsOfView`, `useSubjectHarmony`), `debriefDrill`,
+  `askReview({ albumTrackId, albumVersion, released })`, `askTranscriptionReview`. Kit: `TransportBar`,
+  `FineSlider`, `AbSwitch`, `FileDropZone`, `Checklist`, `VersionList`, `MediaCard`; `KitWave4 { nested }`. Lib:
+  `titleOf` names every capstone's sessions (`X1.S2`, `CF-T.S1`).
+- **Browser suites.** `e2e/journey` holds the Wave 4 journeys (`w4-*.pw.ts`, wave4.md §7) with `w4-day.ts`
+  (Today, Start, the warm-up skipped, capstone code, Done); `OAK_JOURNEY_ALT=1` runs the journey suite on a second
+  port set (5242/8842/8794) beside a full `bun run e2e`. `app/e2e/fixtures.ts` answers the Wave 4 GETs.
+
+## 20. Wave 4 final gate (after the five reviews)
+
+The five Wave 4 reviews (journey, robustness, studio, surfaces, teaching) and the final gate changed these seams.
+`wave4.md` "Wave 4 state" is the summary; this is the API. The code beats this list.
+
+- **Schema: migration `0005_checked_version.sql`** (schema version 5). `capstone_state.checked_sketch_id` and
+  `checked_sketch_version`: the sketch version the latest rubric check (`capstones.check`) graded.
+  `CapstonesRepo` `CapstoneRow.checked?: { sketchId, version } | null` (left out of a save, the stored value is kept).
+  `capstones.release` refuses a **first** release whose code differs from the checked version's code (409 "the draft
+  changed since its last check; run the check again before release"); a revision of a released track is not checked
+  again (contracts §11.7 "completed stays completed"). Rows from before the column: judged as before.
+- **Server (robustness):** `capstones.completeSession` answers 409 out of order; `gym.start` is idempotent per Oak
+  session (another kind is a 409); `capstones.recordCheck` treats rung ≥ 4 as revealed; the voicing gate's own check
+  `reachesGatedHelpers` (unlocks.ts) refuses an attempt that calls `voicing`, `voicings` or `chord`, or any method
+  through a computed key; media GETs serve only `audio/*` (else the extension's type, else octet-stream) with a
+  sandbox CSP and nosniff (`serveFile(…, { media: true })`); `backup.import` refuses an `audio/<sha256>` entry whose
+  bytes hash otherwise; a generated ladder item gives the tutor its reference only after its graded pass.
+- **`@oak/api`:** `TranscriptionPatchSchema.checklist` values 0–2, item IDs ≤ 64 characters.
+- **`@oak/grader`:** `MatchResult.floor?` (an `all` matcher fails when any member is under the pass mark; below the
+  mark the score is the weakest member's); `brokenChordSlots` (a monophonic chord track stacked in 3rds is read bar
+  by bar when block reading finds nothing); `byRole` (X1 phrase checks read `mel`/`bass`/`chords` by role);
+  `memberName`, `staticString`, `isDynamicMember` (lint/ast.ts: `x["voicing"]()` is `x.voicing()`; `x[k]()` is
+  `lint.strict.computed-member`, error in graded steps); `progression` fails a bar with two chords and names chords as
+  "V/ii (A)"; `cadence` names both chords and its type in words. **Gate:** `harmonyView` spells each sounding chord's
+  `symbol` in the key when its numeral gives the same chord over the same bass (C♯m for iii in A, not D♭m; a written
+  symbol is never respelled); `messagesOf` prints an identical finding once; `code.unknown-chord` takes a `{why}`
+  param ("isn't a Strudel chord name", or for an alias Strudel voices such as `CM`, "plays, but Oak writes this chord
+  another way", info in graded steps).
+- **`@oak/drills`:** `normalizeAnswerText` folds printed figures (`V⁶`, `I⁶₄`, `V⁷`) and ∅/Ø.
+- **`@oak/notation`:** `accidentals()` restates an accidental in a second voice of the same staff.
+- **`@oak/strudel`:** `PatternPlayer.setLoop` accepts a fractional or negative `fromBar`.
+- **`@oak/audio`:** channel data goes to the stretch worklet by transfer (`stretch-player.ts`).
+- **App:**
+  - Lesson: `gateNeedsFreshTry`, `continueNote` (gate.ts); `StepFooter` `newSeriesLabel`, `continueNote`;
+    `initialTabOf` (a roll + bass-clef or grand-staff step opens on Both); `AnswerShape.slotNoun`; staged dictation
+    keeps found stages in sessionStorage (`stagedMemoKey`); the lead sheet engraves plain symbols
+    (`jazzchords: false`), as the Workbench staff does.
+  - Answers: `undoPick`, `digitRange` (keys.ts); **gate:** `HarmonyEnv.bassDegrees` and `rnHasDegree` (harmony.ts):
+    in staged dictation the RN palette lights the numerals whose chord contains the slot's known bass and dims the
+    rest (ux §4.5 stage 2; they stay pickable).
+  - Drills: `BASS_ALONE` event, `trial.bassAlone`, `bassAloneWhileAnswering`.
+  - Session: `playbackLint` (the learner's own code is linted as Studio lints it); **gate:** `lib/audition.ts` uses
+    the same Studio profile, and the Coda's code showcase has no reserved empty height.
+  - Workbench: `spelledSymbol`, `annotateAbc` with a pickup, `StaffView` re-links on `linkKey`, `useAppLensSource`;
+    **gate:** `useLenses().toggle` reads the stored preference (hammered keys are no longer lost anywhere);
+    `tutorHighlightEvents(events, h, pickup)` and `barsToCycles(from, to, pickup)` (bar 0 is the pickup);
+    `ChordBandProps.pickup` (band labels count from bar 0); `busiestBar(events, { grand })` counts each staff of a
+    grand staff alone (a tune over a chord a bar no longer pages one bar at a time with lens lines on).
+  - Capstone: `useCapstoneReview(id)` returns `wait` and `asked()`; `reviewWaitOf`, `REVIEW_WAIT_MS`;
+    `releaseErrorText`, `audioErrorText`; `PIECE_DOES_NOT_RUN`; **gate:** `savedElsewhere`, `SAVED_ELSEWHERE`
+    (draft.ts: a save numbered past the one this tab expected tells the learner another tab saved too).
+  - Transcribe: `onBarLines`, `loopInBars`, `barsOfLoop`, `barLabelEvery` (grid.ts), `preRoll` (transport.ts),
+    `SPECTROGRAM_MAX_SEC` (8 minutes).
+  - Tutor: `[[bars:4-2]]` reads "bars 2–4"; a slash `[[chord:G/B]]` renders as text; **gate:** "Mark done" on each
+    review revision (`review-done.ts` `readDone`/`writeDone`, this browser only, ux §6.5).
+  - Album: **gate:** a cover of a piece that runs but plays nothing has a plain pith (no "120 BPM").
+- **Tutor persona (gate):** distances are "half steps", never "semitones" (decision 38; found in the live smoke).
+- **Content harness:** an exercise's own `pickup` is passed to the grader before the lesson's.
+- **Browser suites:** `review-studio` (app/src/album/e2e, 5223/8823), `e2e/review` W4 specs (5221/8821),
+  `app/src/ui/review/e2e` W4 specs (5222/8822).

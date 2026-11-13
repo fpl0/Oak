@@ -61,8 +61,11 @@ export interface StepHost {
    * renderer then calls `onCheck` with the result.
    */
   grade(response: AttemptResponse, exercise?: Exercise): Promise<GradeResult | null>;
-  /** Grades without telling the machine (the Make's live checklist): never an attempt. */
-  gradeQuiet(response: AttemptResponse): Promise<GradeResult | null>;
+  /**
+   * Grades without telling the machine (the Make's live checklist, one stage of a staged dictation, one part of
+   * a by-ear transcription): never an attempt. `exercise` grades against a narrowed copy of the step's exercise.
+   */
+  gradeQuiet(response: AttemptResponse, exercise?: Exercise): Promise<GradeResult | null>;
   /** The Make's "Save sketch" (the lesson completes; a checkpoint records its Make item). */
   save?(code: string, title: string): void;
   /** The step was completed without a graded pass (played, ran, answered). */

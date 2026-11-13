@@ -15,6 +15,7 @@ import type {
   UnlockableId,
 } from "@oak/content-kit";
 import type { AudioPlan } from "@oak/drills";
+import type { RealismSpec } from "./realism.ts";
 
 export interface Readable<T> {
   get(): T;
@@ -150,6 +151,12 @@ export interface EditorHandle {
   /** Sorted onset haps of the last evaluated pattern in `[from, to)` cycles, Band included (static views, tests). */
   queryHaps(from: number, to: number): LiveHap[];
   setEditable(readOnly: EditorOptions["readOnly"]): void;
+  /**
+   * Wave 4 (docs/design/wave4.md §3.5): the editable regions as they are now, mapped through every edit since
+   * `readOnly` was set (offsets into the current code). `null`: everything is editable; `[]`: nothing is. The
+   * lesson redraws the code-modify region box from it after the learner's edits.
+   */
+  editableRanges(): CodeRange[] | null;
   setUnlocked(unlocked: ReadonlySet<UnlockableId>): void;
   /** Takes effect on the playing pattern at once; no re-evaluation, the text is untouched. */
   setMutes(mutes: MuteMap): void;
@@ -256,7 +263,26 @@ export interface PlaybackHandle {
  */
 export interface PatternPlayer {
   /** `lint` defaults to the content profile with previews allowed: reference code is authored, never typed. */
-  load(code: string, opts: { bars: number; cps: number; lint?: LintContext }): Promise<EvalOutcome>;
+  load(
+    code: string,
+    opts: {
+      bars: number;
+      cps: number;
+      lint?: LintContext;
+      /**
+       * Wave 4 (docs/design/wave4.md §3.5): play a Band under the hidden code, on the same scheduler (the circle
+       * of fifths' key preview, a ladder item over a backing). Its tracks come back as `band.<label>` in
+       * `tracks` and mute like any other. A Band that fails its lint or its evaluation is dropped with an
+       * `adapter.band` warning; the hidden code still plays.
+       */
+      band?: BandSetup | null;
+      /**
+       * The key the Band was written for (`followsLearnerKey` moves it to the code's first `.scale()`). Default:
+       * the Band code's own first `.scale()`, which is the key the app filled `{{key}}` with.
+       */
+      key?: KeySpec | null;
+    },
+  ): Promise<EvalOutcome>;
   play(): Promise<void>;
   stop(): void;
   /** 0.25 to 1. */
@@ -265,6 +291,15 @@ export interface PatternPlayer {
   setTranspose(semitones: number): void;
   setLoop(loop: { fromBar: number; bars: number } | null): void;
   setMutes(mutes: MuteMap): void;
+  /**
+   * Wave 4 (docs/design/wave4.md §3.5): the realism of a ladder stimulus (contracts §6.12): humanised timing and
+   * velocity, swing, room, a buried target part, a lead sound with detune. Takes effect on the playing pattern
+   * at once, survives `load`, and is deterministic from `spec.seed` and each note's position. `realismSpec(0)`
+   * is the clean, grid-exact pattern. When the code has reference tracks (`ref_…`, a pattern source beside the
+   * learner's code for A/B) only they take realism. The target (`spec.buried.track`) matches `bass`, `ref_bass`
+   * and `ref_bass_1`.
+   */
+  setRealism(spec: RealismSpec): void;
   /** 0-based bar position, fractional. */
   position(): number;
   readonly playing: boolean;

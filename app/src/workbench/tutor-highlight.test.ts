@@ -27,6 +27,13 @@ describe("tutor references on the Workbench", () => {
     const last = tutorHighlightEvents(m.events, { kind: "bars", from: 4, to: 4 });
     expect(m.events.filter((e) => last.includes(e.id)).map((e) => e.midi)).toEqual([60]);
   });
+  test("with a pickup, bar 0 is the pickup bar and bar 1 the first full bar (contracts §6.11)", async () => {
+    const m = await model('mel: note("<[~ ~ ~ g4] [c5 e5] [d5 c5]>").s("piano")', 3);
+    const pick = tutorHighlightEvents(m.events, { kind: "bars", from: 0, to: 0 }, true);
+    expect(m.events.filter((e) => pick.includes(e.id)).map((e) => e.midi)).toEqual([67]);
+    const one = tutorHighlightEvents(m.events, { kind: "bars", from: 1, to: 1 }, true);
+    expect(m.events.filter((e) => one.includes(e.id)).map((e) => e.midi)).toEqual([72, 76]);
+  });
   test("a note lights every learner event at that pitch", async () => {
     const m = await model('mel: note("c4 e4 c4 g4").s("piano")\nbass: note("c2").s("piano")', 1);
     const ids = tutorHighlightEvents(m.events, { kind: "note", midi: 60 });

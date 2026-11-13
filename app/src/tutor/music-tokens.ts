@@ -26,6 +26,7 @@ import {
   labelPitch,
   noteToMidi,
   parseChordSymbol,
+  parseChordWithBass,
   parseInterval,
   parseRN,
   relativeKey,
@@ -36,6 +37,7 @@ import {
   syllableOf,
   toLeadSheet,
 } from "@oak/theory";
+import { barsPhrase, barsWhere, type ChordAt, runsOf } from "./harmony-chips.ts";
 
 export const PLAY_KEY: KeySpec = { tonic: "C", mode: "major" } as KeySpec;
 
@@ -56,6 +58,11 @@ export interface TokenContext {
   key?: KeySpec | null;
   /** Shown lenses (preference ∧ unlocked). Absent: no extra labels. */
   labels?: TokenLabels;
+  /**
+   * Wave 4: the chords of the music on screen, bar by bar (harmony-chips.ts), so a chord or numeral chip can light
+   * the bars it sounds in. Absent or empty: the chip only plays.
+   */
+  harmony?: readonly ChordAt[];
 }
 
 export type TokenVariant = "interval" | "key" | "signature";
@@ -84,6 +91,10 @@ export interface TokenInfo {
   preview?: boolean;
   /** For a locked tool: where it unlocks. */
   unlocksAt?: string;
+  /** Wave 4: bars a chord or numeral chip lights on the roll and the staff (the first run of where it sounds). */
+  highlight?: { from: number; to: number };
+  /** Wave 4: every bar it sounds in. */
+  where?: number[];
 }
 
 const pretty = (s: string) => s.replace(/b(?=\d)/g, "♭").replace(/#(?=\d)/g, "♯");
@@ -166,13 +177,42 @@ function rnInfo(value: string, ctx: TokenContext): TokenInfo {
   const chord = rnToChord(rn, key);
   const label = displayRN(rn);
   const fn = functionOf(rn, key);
+  const preview = beyond(ctx, NUMERALS_TERM);
+  const at = located({ kind: "rn", value }, ctx);
   return {
     kind: "rn",
     label,
-    title: `${label}: ${FUNCTION_NAME[fn] ?? "a chord in the key"}. ${ctx.key ? `In ${keyName(ctx.key)}` : "In C major"} it is ${toLeadSheet(chord)}.`,
-    aria: `Roman numeral ${label}`,
+    title: `${preview ? "Roman numerals come later. " : ""}${label}: ${FUNCTION_NAME[fn] ?? "a chord in the key"}. ${ctx.key ? `In ${keyName(ctx.key)}` : "In C major"} it is ${toLeadSheet(chord)}.${at.title}`,
+    aria: `Roman numeral ${label}${preview ? ", preview" : ""}${at.aria}`,
     ...(fn === "chromatic" ? {} : { degree: fn === "T" ? "1" : fn === "PD" ? "4" : "5" }),
     play: [chordMidis(chord.rootPc, chordPcs(chord))],
+    ...(preview ? { preview: true } : {}),
+    ...at.info,
+  };
+}
+
+/** The glossary terms after which chord symbols and numerals are part of the learner's vocabulary. */
+export const CHORD_SYMBOL_TERM = "term.chord-symbol";
+export const NUMERALS_TERM = "term.roman-numeral";
+
+/** A form the learner has not met yet (and we know what they have met): the chip is badged "preview". */
+function beyond(ctx: TokenContext, term: string): boolean {
+  return ctx.introduced !== null && !ctx.introduced.has(term);
+}
+
+/** Where a chord or numeral sounds in the music on screen, as chip info and hover/aria text. */
+function located(
+  token: { kind: "chord" | "rn"; value: string },
+  ctx: TokenContext,
+): { info: Pick<TokenInfo, "highlight" | "where">; title: string; aria: string } {
+  const where = ctx.harmony && ctx.harmony.length > 0 ? barsWhere(ctx.harmony, token, ctx.key ?? null) : [];
+  const first = runsOf(where)[0];
+  if (!first) return { info: {}, title: "", aria: "" };
+  const phrase = barsPhrase(where);
+  return {
+    info: { highlight: first, where },
+    title: ` Sounds in ${phrase}: click to hear it and light it on the roll and the staff.`,
+    aria: `, in ${phrase}`,
   };
 }
 
@@ -199,10 +239,12 @@ function noteInfo(value: string, ctx: TokenContext): TokenInfo {
 }
 
 function chordInfo(value: string, ctx: TokenContext): TokenInfo {
-  const chord = parseChordSymbol(value);
+  const chord = parseChordSymbol(value) ?? parseChordWithBass(value);
   if (!chord) return { kind: "chord", label: value, title: `Chord ${value}.`, aria: `chord ${value}` };
   const label = toLeadSheet(chord);
-  const names = chordMidis(chord.rootPc, chordPcs(chord));
+  const stacked = chordMidis(chord.rootPc, chordPcs(chord));
+  // A slash chord sounds its bass below the stack.
+  const names = chord.bassPc === chord.rootPc ? stacked : [36 + chord.bassPc, ...stacked];
   let inKey = "";
   if (ctx.key) {
     try {
@@ -211,19 +253,25 @@ function chordInfo(value: string, ctx: TokenContext): TokenInfo {
       inKey = "";
     }
   }
+  const preview = beyond(ctx, CHORD_SYMBOL_TERM);
+  const at = located({ kind: "chord", value }, ctx);
   return {
     kind: "chord",
     label,
-    title: `${label}: ${names.length} notes stacked on ${label.replace(/^([A-G][♯♭]?).*$/, "$1")}.${inKey} Click to hear it.`,
-    aria: `chord ${label}`,
+    title: `${preview ? "Chord symbols come later. " : ""}${label}: ${names.length} notes stacked on ${label.replace(/^([A-G][♯♭]?).*$/, "$1")}.${inKey}${at.title || " Click to hear it."}`,
+    aria: `chord ${label}${preview ? ", preview" : ""}${at.aria}`,
     play: [names],
+    ...(preview ? { preview: true } : {}),
+    ...at.info,
   };
 }
 
 function barsInfo(value: string): TokenInfo {
-  const [a, b] = value.split("-").map(Number) as [number, number | undefined];
-  const from = Math.max(1, Math.min(a, b ?? a));
-  const to = Math.max(from, b ?? a);
+  // The same bars the highlight lights (`barsToCycles`): a range written backwards ("4-2") is bars 2–4, not bar 2.
+  const [a, b0] = value.split("-").map(Number) as [number, number | undefined];
+  const b = b0 ?? a;
+  const from = Math.max(1, Math.min(a, b));
+  const to = Math.max(from, a, b);
   const label = from === to ? `bar ${from}` : `bars ${from}–${to}`;
   return {
     kind: "bars",
@@ -519,5 +567,12 @@ export function canonicalTokenRaw(raw: string): string {
   if (!m) return raw;
   let value = (m[2] as string).trim().replace(/♭/g, "b").replace(/♯/g, "#");
   if (m[1] === "deg") value = SYLLABLE_DEGREE[value.toLowerCase()] ?? value;
+  // A slash chord (`[[chord:G/B]]`) is not in the token grammar (contracts §10.7: a code symbol): it reads as the
+  // lead-sheet text it names, never as raw brackets.
+  const slash = m[1] === "chord" ? /^([A-G][#b]?[^/\s]{0,10})\/([A-G][#b]?)$/.exec(value) : null;
+  if (slash) {
+    const glyphs = (t: string) => t.replace(/(?<=^[A-G])b|(?<=[A-G])b(?=$)/g, "♭").replace(/#/g, "♯");
+    return `${glyphs(slash[1] as string)}/${glyphs(slash[2] as string)}`;
+  }
   return `[[${m[1]}:${value}]]`;
 }

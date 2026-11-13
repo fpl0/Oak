@@ -16,6 +16,7 @@ import type {
 } from "@oak/api";
 import type { ComponentType } from "react";
 import type { AnswerWidgetFor } from "../answers/types.ts";
+import type { GateState } from "./gate.ts";
 
 /** What every step renderer is given by the StepHost. */
 export interface StepHostProps {
@@ -120,7 +121,14 @@ export type LessonEvent =
       splitPart: "A" | "B" | null;
       /** The furthest step reached before (a revisit keeps forward access up to it); a completed lesson: its last. */
       reachedStep?: string | null;
+      /**
+       * Wave 4. The voicing gate, for a lesson that holds its check or its second chance (U05.L07, U05.L08):
+       * a met gate drops the `gateCheck` step; an unmet one makes it the hard gate (contracts §3.1 rule 6).
+       */
+      gate?: GateState | null;
     }
+  /** Wave 4: the server (or this visit) reports the voicing gate met. */
+  | { type: "GATE"; passed: boolean }
   | { type: "GOTO"; stepId: string }
   | { type: "CODE"; code: string }
   | { type: "CHECK" }

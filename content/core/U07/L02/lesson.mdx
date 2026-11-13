@@ -1,0 +1,55 @@
+{/* U07.L02 Motif & Variation: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+Four notes and one line of code. Listen to how far they go.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+A tune can be read backwards as well as forwards. Strudel can do the reading for you.
+
+<Predict exercise="backwards" />
+</Step>
+
+<Step id="S3">
+The hook has one more function in it: `.scaleTranspose()`, after `.scale()`. Find out what it does from what you hear.
+
+<Example id="one-idea-moved" views="code,roll" />
+
+<OnPass>One shape, 1 3 5 3, started on the root of each chord: degree 1, then 5, 6 and 4. `.scaleTranspose("<0 4 5 3>")` moves it that many degrees, a bar at a time, the way `.add()` moved a chord onto a new root. A short idea that comes back like this is a **motif**. A listener remembers it after one hearing, so every return sounds like the same tune.</OnPass>
+</Step>
+
+<Step id="S4">
+The same motif over the drums, stuck in place. Make it climb.
+
+<Editor exercise="climb-a-step" />
+
+<OnPass>`.scaleTranspose("<0 1 2 3>")`: the motif one degree higher each bar. A motif repeated from another degree, so the same shape climbs or falls, is a **sequence**. Because the steps are degrees, the 3rds inside it change size to stay in the key: C E G, then D F A.</OnPass>
+</Step>
+
+<Step id="S5">
+A motif can also come back turned round. Here bar 1 asks, and bar 2 answers by retracing its steps.
+
+<Editor exercise="turn-it-round" />
+
+<OnPass>`[7 4 2 0]`: up in bar 1, back down the same way in bar 2. A motif played backwards, last note first, is a **retrograde**. `.rev()` does the same to a whole cycle: on a line that changes bar by bar, it turns every bar round.</OnPass>
+</Step>
+
+<Step id="S6">
+Repeat, move, turn round: three ways to keep an idea alive. Hear what they add.
+
+<Choice exercise="which-one-keeps-you" />
+
+<OnPass>Repetition makes a motif stick. Moving it and turning it round keeps it interesting, and lets it fit each new chord: in card A, bar 2 starts on C against the G chord and bumps. Most good tunes do both.</OnPass>
+</Step>
+
+<Step id="S7">
+The band plays the four-chord loop. Pick one bar you like and build the other three from it.
+
+<Make exercise="one-idea-four-bars" />
+
+<CanDo id="cd.compose.motif" />
+
+<Recap />
+</Step>

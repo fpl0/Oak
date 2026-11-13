@@ -274,7 +274,9 @@ class Sim {
     if (w.plannedSec > w.budgetSec + 0.001)
       this.fail(plan.day, `warm-up ${w.plannedSec}s over ${w.budgetSec}s`);
     const short = plan.kind === "checkpoint" || plan.kind === "capstone";
-    const budget = short ? 180 : { 15: 240, 20: 300, 25: 360 }[plan.targetMinutes];
+    // Wave 4: a gym day's warm-up is 4 minutes at every target (contracts §9.1).
+    const budget =
+      plan.kind === "gym" ? 240 : short ? 180 : { 15: 240, 20: 300, 25: 360 }[plan.targetMinutes];
     if (w.budgetSec !== budget) this.fail(plan.day, `budget ${w.budgetSec} for a ${plan.kind} day`);
     if (w.items.filter((i) => i.mic).length > 2) this.fail(plan.day, "more than 2 mic sets");
     // Nothing is scheduled before it opens.
@@ -283,7 +285,10 @@ class Sim {
       const l = progress.lessons.find((x) => x.lessonId === id);
       const c = progress.checkpoints.find((x) => x.cpId === id);
       const cap = progress.capstones.find((x) => id.startsWith(`${x.capstoneId}.`));
-      const status = l?.status ?? c?.status ?? cap?.status ?? "unknown";
+      const gym =
+        /^GYM\.\d{2}$/.test(id) &&
+        progress.lessons.some((x) => x.lessonId === "U07.L01" && x.status === "completed");
+      const status = gym ? "open" : (l?.status ?? c?.status ?? cap?.status ?? "unknown");
       if (status === "locked" || status === "unknown") this.fail(plan.day, `${id} planned while ${status}`);
     }
     const { cards, families } = await this.me.api<{ cards: SrsCard[]; families: FamilyState[] }>(
@@ -514,6 +519,9 @@ class Sim {
         if (x.status !== 200 && x.status !== 409) this.fail(plan.day, `checkpoint submit ${x.status}`);
     } else if (plan.kind === "capstone" && id !== null) {
       await this.capstone(plan, ses.id);
+    } else if (plan.kind === "gym" && id !== null) {
+      // Wave 4: the transcription slot (contracts §2.5) takes its ordinal and a ladder item.
+      await this.me.gymDay(ses.id, { note: plan.note });
     }
     const ends = await this.write<SessionSummary>("POST", `/api/session/${ses.id}/end`, {
       wrappedEarly: false,

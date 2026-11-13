@@ -20,7 +20,7 @@ import type {
   SkillRef,
   SoundId,
 } from "@oak/content-kit";
-import { BASS, KEYS1, KEYS2, KEYS3, LEAD } from "../pools.ts";
+import { BASS, KEYS1, KEYS2, KEYS3, LEAD, POP_SOUL } from "../pools.ts";
 
 type Lv = Partial<LevelParams> & { categories: string[] } & Record<string, unknown>;
 interface FamSpec {
@@ -1065,29 +1065,33 @@ const melody: FamilyDef[] = [
         leapMax: 4,
         replays: 3,
       },
+      // Levels 5–6 are the X1 material (U07): two-bar tunes over chords, composed as ladder L4 items are.
       {
         categories: ["two-bars"],
         only: true,
         ui: "code",
         rhythm: "dictated",
         length: [6, 8],
-        steps: [-2, 8],
+        steps: [0, 7],
         leapMax: 4,
         bars: 2,
         replays: 3,
         keys: "≤4acc",
+        overChords: true,
       },
       {
         categories: ["nct"],
         only: true,
         ui: "code",
         rhythm: "dictated",
-        length: [6, 8],
-        steps: [-2, 9],
+        length: [6, 9],
+        steps: [0, 7],
         leapMax: 5,
         bars: 2,
         replays: 3,
-        keys: "all",
+        keys: "≤4acc",
+        overChords: true,
+        nct: true,
       },
       {
         categories: ["minor"],
@@ -1476,23 +1480,27 @@ const chords: FamilyDef[] = [
     domain: "chord",
     skills: "E08",
     lesson: "U05.L02",
-    gates: { 3: "U05.L03" },
+    // The ladder follows U05 (content/specs/U05.md): major against minor in root position (U05.L02), wider
+    // and in the pop and jazz-soul keyboards, diminished and augmented (U05.L03), inversions once they are
+    // taught (U05.L05), open and spread voicings and arpeggios once `voicing()` is (U05.L08).
+    gates: { 3: "U05.L03", 5: "U05.L05", 6: "U05.L08" },
     cats: [
       ["maj", "U05.L02", ["min"]],
       ["min", "U05.L02", ["maj"]],
       ["dim", "U05.L03", ["min"]],
       ["aug", "U05.L03", ["maj"]],
     ],
-    base: { ...base(2, KEYS1, "C", [80, 100], "none"), register: [48, 55], voicings: ["close"] },
+    base: { ...base(2, KEYS1, "C", [80, 100], "none"), register: [48, 59], voicings: ["close"] },
     levels: [
       { categories: ["maj", "min"] },
-      { categories: [], inversions: true, register: [43, 60] },
-      { categories: ["dim"], inversions: true, register: [43, 60] },
-      { categories: ["aug"], inversions: true, register: [43, 60] },
+      { categories: [], register: [45, 57], instruments: POP_SOUL },
+      { categories: ["dim"], register: [45, 57], instruments: POP_SOUL },
+      { categories: ["aug"], register: [45, 57], instruments: POP_SOUL },
+      { categories: [], inversions: true, register: [43, 57], instruments: POP_SOUL },
       {
         categories: [],
         inversions: true,
-        register: [40, 60],
+        register: [40, 57],
         voicings: ["close", "open", "spread"],
         instruments: KEYS3,
         arpeggiate: true,
@@ -1559,7 +1567,7 @@ const chords: FamilyDef[] = [
     base: { ...base(2, KEYS1, "≤2acc", [80, 100], "none"), register: [43, 57] },
     levels: [
       { categories: ["root", "first"] },
-      { categories: ["second"], instruments: KEYS2 },
+      { categories: ["second"], instruments: POP_SOUL },
       { categories: ["third"], sevenths: true, instruments: KEYS2 },
       { categories: ["spot"], only: true, keys: "all", instruments: KEYS3 },
     ],
@@ -1706,12 +1714,16 @@ const harmony: FamilyDef[] = [
     domain: "harmony",
     skills: "E09 V05",
     lesson: "U06.L05",
+    // A bass on the 3rd or 5th of its chord is a degree like any other (inversions are U05.L05's); two chords
+    // a bar wait for U06.L08 (harmonic rhythm), so level 4 is filled from what is open until then. A level
+    // gate at U06.L11 here was measured: the recall it causes pushes the 15-minute steady-state overflow
+    // past 1.2 budgets (decision 27's simulation), and it closes nothing the learner has not met.
     gates: { 5: "U10.L04", 6: ["U15.L06", "U16.L05"] },
     cats: [
       ["schema-roots", "U06.L05"],
       ["diatonic-roots", "U06.L05"],
       ["inversions", "U06.L05"],
-      ["two-per-bar", "U06.L05"],
+      ["two-per-bar", "U06.L08"],
       ["minor", "U10.L04"],
       ["chromatic", "U15.L06"],
     ],
@@ -1776,11 +1788,12 @@ const harmony: FamilyDef[] = [
     domain: "harmony",
     skills: "E09",
     lesson: "U06.L09",
-    gates: { 4: "U10.L04", 5: "U12.L04", 6: "U16.L05" },
+    // Two chords a bar (U06.L08) come before inverted chords (U06.L11): level 3 waits for U06.L11.
+    gates: { 3: "U06.L11", 4: "U10.L04", 5: "U12.L04", 6: "U16.L05" },
     cats: [
       ["diatonic", "U06.L09"],
-      ["inversions", "U06.L09"],
       ["cadential", "U06.L09"],
+      ["inversions", "U06.L11"],
       ["minor", "U10.L04"],
       ["sevenths", "U12.L04"],
       ["chromatic", "U16.L05"],
@@ -1788,8 +1801,8 @@ const harmony: FamilyDef[] = [
     base: base(6, KEYS2, "≤2acc", [72, 92], "none"),
     levels: [
       { categories: ["diatonic"] },
-      { categories: ["inversions"] },
       { categories: ["cadential"] },
+      { categories: ["inversions"] },
       { categories: ["minor"], replays: 5 },
       { categories: ["sevenths"], replays: 4 },
       { categories: ["chromatic"], replays: 3 },

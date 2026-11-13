@@ -181,6 +181,11 @@ describe("rendering", () => {
     );
     expect(renderFeedback(d)).toBe(renderFeedback(structuredClone(d)));
     expect(renderFeedback(d)).toBe("Bar 2, 4: you have 5 (sol); the melody has 1 (do).");
+    // The line is named by the producer (a bass track says "the bass has"); a stored finding without it reads
+    // "the melody".
+    expect(renderFeedback({ ...d, params: { ...d.params, line: "bass" } })).toBe(
+      "Bar 2, 4: you have 5 (sol); the bass has 1 (do).",
+    );
   });
   test("sorted by severity, then bar, then beat; top three plus 'n more'", () => {
     const ds = [
@@ -200,6 +205,15 @@ describe("rendering", () => {
     const m = messagesOf(ds);
     expect(m.length).toBe(4);
     expect(m[3]?.text).toBe("2 more");
+  });
+  test("messagesOf says an identical finding once (an `all` matcher's members both report it)", () => {
+    const m = messagesOf([
+      diag("rhythm.pickup-missing"),
+      diag("rhythm.pickup-missing"),
+      diag("rhythm.missing"),
+    ]);
+    expect(m).toHaveLength(2);
+    expect(m.filter((x) => x.id === "rhythm.pickup-missing")).toHaveLength(1);
   });
   test("unknownCodes flags codes outside the catalog", () => {
     expect(

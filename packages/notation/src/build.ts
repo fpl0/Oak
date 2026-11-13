@@ -11,11 +11,12 @@ import { toRat } from "./q.ts";
 import { type QItem, quantizeBar, type Seg, writtenOf } from "./quantize.ts";
 import {
   chordDisplay,
+  chordForSpelling,
   countLabel,
   degreeLabel,
   keyFromScaleCtx,
-  parseChord,
   parseNoteName,
+  romanDisplay,
   spell,
 } from "./theory-port.ts";
 import type {
@@ -367,7 +368,7 @@ interface ChordAt {
   at: Rat;
   symbol: string;
 }
-function spellVoice(slots: Slot[], keyAt: (t: Rat) => KeySpec | null, chords: ChordAt[]): void {
+function spellVoice(slots: Slot[], keyAt: (t: Rat, e: NEvent) => KeySpec | null, chords: ChordAt[]): void {
   const chordAt = (t: Rat): string | undefined => {
     let found: string | undefined;
     for (const c of chords) if (R.lte(c.at, t)) found = c.symbol;
@@ -397,9 +398,9 @@ function spellVoice(slots: Slot[], keyAt: (t: Rat) => KeySpec | null, chords: Ch
         }
       }
       const symbol = e.chordSymbol ?? chordAt(s.onset);
-      const chord = symbol ? parseChord(symbol) : null;
+      const chord = symbol ? chordForSpelling(symbol) : null;
       return spell(midi, {
-        key: keyAt(s.onset),
+        key: keyAt(s.onset, e),
         ...(chord ? { chord } : {}),
         ...(direction && !chord ? { direction } : {}),
       });
@@ -426,6 +427,13 @@ export function buildScore(input: NotationInput): Score {
   events = events
     .filter((e) => R.lt(e.onset, [stop, 1]) && R.lt([startBar, 1], end(e)))
     .map((e) => (e.midi !== null && !Number.isInteger(e.midi) ? { ...e, midi: Math.round(e.midi) } : e));
+  // A declared pickup (contracts §6.11): cycle 0 holds only the lead-in. Other tracks rest there or play a
+  // count-in; a drum count-in before the pickup is not engraved (bar 0 is a partial measure on every staff).
+  const pickupCycles = input.pickup ? R.div(input.pickup.units, [meter.unitsPerBar, 1]) : null;
+  const pickupDeclared = pickupCycles !== null && R.lt([0, 1], pickupCycles) && R.lt(pickupCycles, [1, 1]);
+  const pickupStart: Rat | null = pickupDeclared ? R.sub([1, 1], pickupCycles as Rat) : null;
+  if (pickupStart && startBar === 0)
+    events = events.filter((e) => !(isDrum(e) && R.lt(e.onset, pickupStart)));
 
   // 2. key
   const ctx = events.find((e) => e.scaleCtx)?.scaleCtx;
@@ -433,12 +441,14 @@ export function buildScore(input: NotationInput): Score {
     input.key ??
     (ctx ? keyFromScaleCtx(ctx) : null) ??
     estimateKey(events.filter((e) => e.chordSymbol === undefined));
-  const keyChanges = normalizeKeyChanges(key, input.keyChanges ?? [], startBar, stop);
-  const keyAt = (t: Rat): KeySpec | null => keyAtBar({ key, keyChanges }, R.floor(t));
+  const upb = meter.unitsPerBar;
+  const keyChanges = normalizeKeyChanges(key, input.keyChanges ?? [], startBar, stop, upb);
+  const piecePlan: KeyPlan = { key, keyChanges };
+  const atBeat = (bar: number, beat: number): Rat => R.add([bar, 1], R.div(toRat(beat - 1), [upb, 1]));
 
   // 3. chord symbols (display) and their context for spelling
   const chordList: ChordAt[] = (input.chords ?? []).map((c) => ({
-    at: R.add([c.bar, 1], R.div(toRat(c.beat - 1), [meter.unitsPerBar, 1])),
+    at: atBeat(c.bar, c.beat),
     symbol: c.symbol,
   }));
   if (!input.chords && input.staff === "lead") {
@@ -457,37 +467,56 @@ export function buildScore(input: NotationInput): Score {
   }
   chordList.sort((a, b) => R.cmp(a.at, b.at));
   const inRange = (at: Rat) => R.lte([startBar, 1], at) && R.lt(at, [stop, 1]);
-  const chords: ScoreAnnotation[] = chordList
-    .filter((c) => inRange(c.at))
-    .map((c) => ({ bar: R.floor(c.at), at: c.at, source: c.symbol, text: chordDisplay(c.symbol) }));
-  const romans: ScoreAnnotation[] = (input.romans ?? [])
-    .map((r) => ({ at: R.add([r.bar, 1], R.div(toRat(r.beat - 1), [meter.unitsPerBar, 1])), rn: r.rn }))
-    .filter((r) => inRange(r.at))
-    .map((r) => ({ bar: R.floor(r.at), at: r.at, source: r.rn, text: r.rn.replace(/h7/g, "ø7") }));
+  // One label per position (the last given wins), in time order.
+  const onePerPosition = (list: ScoreAnnotation[]) =>
+    list.filter((a, i) => !list.slice(i + 1).some((b) => R.eq(a.at, b.at)));
+  const chords: ScoreAnnotation[] = onePerPosition(
+    chordList
+      .filter((c) => inRange(c.at))
+      .map((c) => ({ bar: R.floor(c.at), at: c.at, source: c.symbol, text: chordDisplay(c.symbol) })),
+  );
+  const romans: ScoreAnnotation[] = onePerPosition(
+    (input.romans ?? [])
+      .map((r) => ({ at: atBeat(r.bar, r.beat), rn: r.rn }))
+      .filter((r) => inRange(r.at))
+      .sort((a, b) => R.cmp(a.at, b.at))
+      .map((r) => ({ bar: R.floor(r.at), at: r.at, source: r.rn, text: romanDisplay(r.rn) })),
+  );
 
   // 4. staves and voices
   const plans = planStaves(input, events, warnings);
-  // A staff whose tracks all carry one key plan of their own (`trackKeys`) other than the piece's: its own
-  // signature and spelling.
-  const own = plans.map((p): { key: KeySpec; keyChanges: KeyChange[] } | null => {
-    if (p.kind !== "pitched" || !input.trackKeys || p.events.length === 0) return null;
-    const plansOf = [...new Set(p.events.map((e) => e.track))].map((t) => input.trackKeys?.[t]);
-    const first = plansOf[0];
-    if (!first) return null;
-    const changes = normalizeKeyChanges(first.key, first.keyChanges ?? [], startBar, stop);
-    const same = (o: typeof first | undefined) =>
-      o !== undefined &&
-      sameKey(o.key, first.key) &&
-      sameChanges(normalizeKeyChanges(o.key, o.keyChanges ?? [], startBar, stop), changes);
-    if (!plansOf.every(same)) return null;
-    if (sameKey(first.key, key) && sameChanges(changes, keyChanges)) return null;
-    return { key: first.key, keyChanges: changes };
-  });
-  const keyAtOf = (pi: number): ((t: Rat) => KeySpec | null) => {
-    const o = own[pi];
-    return o ? (t) => keyAtBar(o, R.floor(t)) : keyAt;
+  // Each track's key plan: its own (`trackKeys`, a key its code states) or the piece's.
+  const trackPlan = new Map<string, KeyPlan>();
+  const planOfTrack = (track: string): KeyPlan => {
+    const known = trackPlan.get(track);
+    if (known) return known;
+    const t = input.trackKeys?.[track];
+    const plan = t
+      ? { key: t.key, keyChanges: normalizeKeyChanges(t.key, t.keyChanges ?? [], startBar, stop, upb) }
+      : piecePlan;
+    trackPlan.set(track, plan);
+    return plan;
   };
-  const staffVoices: Slot[][][] = plans.map((p, pi) => {
+  // A staff whose tracks all carry one key plan other than the piece's shows that signature. A staff that mixes
+  // tracks in two keys shows the signature of the plan most of its notes are in (the piece's on a tie) and spells
+  // every note in its own track's key, so the accidentals say which notes belong to the other key.
+  const own = plans.map((p): KeyPlan | null => {
+    if (p.kind !== "pitched" || !input.trackKeys || p.events.length === 0) return null;
+    const count = new Map<KeyPlan, number>();
+    for (const e of p.events) {
+      const pl = planOfTrack(e.track);
+      const same = [...count.keys()].find((q) => samePlan(q, pl)) ?? pl;
+      count.set(same, (count.get(same) ?? 0) + 1);
+    }
+    const ranked = [...count.entries()].sort(
+      (a, b) => b[1] - a[1] || (samePlan(b[0], piecePlan) ? 1 : 0) - (samePlan(a[0], piecePlan) ? 1 : 0),
+    );
+    const sig = ranked[0]?.[0] as KeyPlan;
+    return samePlan(sig, piecePlan) ? null : sig;
+  });
+  const sigPlanOf = (pi: number): KeyPlan => own[pi] ?? piecePlan;
+  const spellKey = (t: Rat, e: NEvent): KeySpec | null => keyAtPlan(planOfTrack(e.track), t, upb);
+  const staffVoices: Slot[][][] = plans.map((p) => {
     if (p.kind === "drums") return drumVoices(p.events);
     if (p.kind === "rhythm") {
       const [one] = drumVoices(p.events.map((e) => ({ ...e, midi: null, s: "rhythm" })));
@@ -501,7 +530,7 @@ export function buildScore(input: NotationInput): Score {
     // Clipping at the next onset belongs to a declared swing (§6.10.6); otherwise overlaps are polyphony.
     const evs = input.swing ? clipWithinTracks(p.events) : p.events;
     const voices = assignVoices(groupSlots(evs), warnings).map((v) => v.slots);
-    for (const v of voices) spellVoice(v, keyAtOf(pi), chordList);
+    for (const v of voices) spellVoice(v, spellKey, chordList);
     const ms = p.events.map((e) => e.midi as number);
     const lo = p.clef === "treble" ? 48 : 26;
     const hi = p.clef === "treble" ? 93 : 72;
@@ -516,17 +545,13 @@ export function buildScore(input: NotationInput): Score {
   });
   if (warnings.some((w) => w.code === "overlap-cut")) approximate = true;
 
-  // 5. cut positions: chord symbols on the top staff, Roman numerals on the bottom pitched staff, the pickup
-  const pickupCycles = input.pickup ? R.div(input.pickup.units, [meter.unitsPerBar, 1]) : null;
-  const pickupCut =
-    pickupCycles && R.lt([0, 1], pickupCycles) && R.lt(pickupCycles, [1, 1])
-      ? R.mul(R.sub([1, 1], pickupCycles), W)
-      : null;
+  // 5. cut positions: chord symbols on the top staff, Roman numerals on the bottom pitched staff, key changes
+  // inside a bar (every voice of the staves they belong to), the pickup
+  const pickupCut = pickupStart ? R.mul(pickupStart, W) : null;
   const romanStaff = plans.reduce((acc, p, i) => (p.kind === "pitched" ? i : acc), 0);
   // Decide the pickup from the sounding slots before quantizing, so a refused cut never splits a note.
   const allSlots = staffVoices.flat(2);
   const silent = (from: Rat, to: Rat) => allSlots.every((s) => R.lte(s.end, from) || R.lte(to, s.onset));
-  const pickupStart = pickupCut ? R.div(pickupCut, W) : null;
   const pickup = pickupStart !== null && startBar === 0 && nBars > 0 && silent([0, 1], pickupStart);
   if (pickupStart !== null && startBar === 0 && nBars > 0 && !pickup) {
     warnings.push({
@@ -535,16 +560,33 @@ export function buildScore(input: NotationInput): Score {
       message: "notes sound before the declared pickup; bar 0 is written in full",
     });
   }
-  const shortenLast = pickup && nBars > 1 && silent(R.add([stop - 1, 1], pickupStart as Rat), [stop, 1]);
-  const cutsFor = (si: number, vi: number, c: number): Rat[] => {
+  // The last bar of the piece loses trailing rests as long as the pickup (also on a later page of the piece).
+  const shortenLast =
+    (pickup || (pickupStart !== null && startBar > 0)) &&
+    input.endsPiece !== false &&
+    nBars > (pickup ? 1 : 0) &&
+    silent(R.add([stop - 1, 1], pickupStart as Rat), [stop, 1]);
+  const inBar = (x: Rat) => R.lt([0, 1], x) && R.lt(x, W);
+  /** Cuts every voice of a staff must have (key changes inside a bar, the pickup), in bar positions. */
+  const cutsFor = (si: number, c: number): Rat[] => {
     const cuts: Rat[] = [];
-    const add = (list: ScoreAnnotation[]) => {
-      for (const a of list) if (a.bar === c) cuts.push(R.mul(R.sub(a.at, [c, 1]), W));
+    if (plans[si]?.kind === "pitched")
+      for (const k of sigPlanOf(si).keyChanges) {
+        const a = changeAt(k, upb);
+        if (R.floor(a) === c) cuts.push(R.mul(R.sub(a, [c, 1]), W));
+      }
+    if (pickupCut && ((pickup && c === 0) || (shortenLast && c === stop - 1))) cuts.push(pickupCut);
+    return cuts.filter(inBar).sort(R.cmp);
+  };
+  /** Where the labels of a voice stand in bar `c` (symbols on the top staff, numerals on the bottom one). */
+  const labelCutsFor = (si: number, vi: number, c: number): Rat[] => {
+    const cuts: Rat[] = [];
+    const add = (list: readonly { at: Rat }[]) => {
+      for (const a of list) if (R.floor(a.at) === c) cuts.push(R.mul(R.sub(a.at, [c, 1]), W));
     };
     if (vi === 0 && si === 0) add(chords);
     if (vi === 0 && si === romanStaff) add(romans);
-    if (pickupCut && ((pickup && c === 0) || (shortenLast && c === stop - 1))) cuts.push(pickupCut);
-    return cuts.filter((x) => R.lt([0, 1], x) && R.lt(x, W)).sort(R.cmp);
+    return cuts.filter(inBar);
   };
 
   // 6. quantize every voice, bar by bar
@@ -569,7 +611,16 @@ export function buildScore(input: NotationInput): Score {
           cursor = z;
         }
         if (R.lt(cursor, W)) segs.push({ start: cursor, end: W, slot: null, tieIn: false, tieOut: false });
-        const res = quantizeBar(g, segs, cutsFor(si, vi, c));
+        // A label needs an item that starts where it stands: the note under it is split there (tied), unless
+        // that would cut into a tuplet: then it is drawn on the item sounding there (`anchor` below warns).
+        const fixed = cutsFor(si, c);
+        let res = quantizeBar(g, segs, fixed);
+        const wanted = labelCutsFor(si, vi, c).filter((x) => !res.items.some((it) => R.eq(it.start, x)));
+        const kept = wanted.filter((x) => {
+          const host = res.items.find((it) => R.lt(it.start, x) && R.lt(x, R.add(it.start, it.dur)));
+          return !host?.inTuplet;
+        });
+        if (kept.length) res = quantizeBar(g, segs, [...fixed, ...kept].sort(R.cmp));
         if (res.approximate) approximate = true;
         for (const w of res.warnings) warnings.push({ ...w, bar: c });
         bars.push({ c, items: res.items, partial: false });
@@ -579,12 +630,14 @@ export function buildScore(input: NotationInput): Score {
   );
 
   // 7. pickup: bar 0 holds only the pickup; the last bar loses trailing rests as long as the pickup
-  if (pickupCut && pickup) {
+  if (pickupCut && (pickup || shortenLast)) {
     for (const v of quantized.flat()) {
-      const first = v[0] as Bar;
-      first.items = first.items.filter((it) => R.lte(pickupCut, it.start));
-      first.partial = true;
-      if (first.items[0]) first.items[0].breakBefore = false;
+      if (pickup) {
+        const first = v[0] as Bar;
+        first.items = first.items.filter((it) => R.lte(pickupCut, it.start));
+        first.partial = true;
+        if (first.items[0]) first.items[0].breakBefore = false;
+      }
       if (shortenLast) {
         const last = v[v.length - 1] as Bar;
         last.items = last.items.filter((it) => R.lt(it.start, pickupCut));
@@ -630,7 +683,9 @@ export function buildScore(input: NotationInput): Score {
             else if (slot.drums && slot.drums.length > 1) item.drums = slot.drums;
           } else if (vi > 0 && !hasNotes) item.hidden = true;
           if (si === lyricStaff && vi === 0 && slot && !it.tieFromPrev && labels !== "none") {
-            const lyric = lyricOf(labels, item, p.kind, keyAtOf(si)(item.onset), it.start, b.c, input);
+            const first = slot.events[0];
+            const k = first ? spellKey(item.onset, first) : keyAtPlan(sigPlanOf(si), item.onset, upb);
+            const lyric = lyricOf(labels, item, p.kind, k, it.start, b.c, input);
             if (lyric) item.lyric = lyric;
           }
           return item;
@@ -647,6 +702,25 @@ export function buildScore(input: NotationInput): Score {
       ...(o ? { key: o.key, ...(o.keyChanges.length ? { keyChanges: o.keyChanges } : {}) } : {}),
     };
   });
+
+  // A label is drawn on the note or rest that starts where it does (the cuts above made one); inside a tuplet or
+  // a snapped bar there may be none: it is drawn on the item sounding there, and the Score warns.
+  const anchor = (list: ScoreAnnotation[], si: number, what: string) => {
+    const items = staves[si]?.voices[0]?.bars.flatMap((b) => b.items) ?? [];
+    for (const a of list) {
+      if (items.some((it) => R.eq(it.onset, a.at))) continue;
+      const host = items.find((it) => R.lte(it.onset, a.at) && R.lt(a.at, R.add(it.onset, it.dur)));
+      if (!host) continue;
+      a.drawnAt = host.onset;
+      warnings.push({
+        code: "abcjs-limit",
+        bar: a.bar,
+        message: `the ${what} "${a.source}" falls inside a tuplet: drawn at the note sounding there`,
+      });
+    }
+  };
+  anchor(chords, 0, "chord symbol");
+  anchor(romans, romanStaff, "Roman numeral");
 
   warnings.push(...abcjsLimitWarnings({ key, staves }));
   const swingText = input.swing ? (input.swing.subdivision === 8 ? "Swing 8ths" : "Swing 16ths") : undefined;
@@ -666,6 +740,8 @@ export function buildScore(input: NotationInput): Score {
     ...(romans.length ? { romans } : {}),
     ...(annotations ? { annotations } : {}),
     ...(input.title ? { title: input.title } : {}),
+    ...(pickupStart !== null && (pickup || startBar > 0) ? { pickupNumbering: true as const } : {}),
+    ...(input.staff === "lead" ? { lead: true as const } : {}),
   };
 }
 
@@ -692,45 +768,93 @@ function lyricOf(
   return labels === "degree" ? d.degree.replace(/b/g, "♭").replace(/#/g, "♯") : d.syllable;
 }
 
-/** Display bar (1-based; 0 is the pickup bar) and 1-based beat of an onset. */
+/** A key plan: the signature at the start and its changes inside the engraved bars. */
+interface KeyPlan {
+  key: KeySpec | null;
+  keyChanges: KeyChange[];
+}
 const sameChanges = (a: readonly KeyChange[], b: readonly KeyChange[]) =>
-  a.length === b.length && a.every((c, i) => c.bar === b[i]?.bar && sameKey(c.key, b[i]?.key ?? null));
+  a.length === b.length &&
+  a.every(
+    (c, i) => c.bar === b[i]?.bar && (c.beat ?? 1) === (b[i]?.beat ?? 1) && sameKey(c.key, b[i]?.key ?? null),
+  );
 const sameKey = (a: KeySpec | null, b: KeySpec | null) =>
   a === b || (a !== null && b !== null && a.tonic === b.tonic && a.mode === b.mode);
+const samePlan = (a: KeyPlan, b: KeyPlan) =>
+  a === b || (sameKey(a.key, b.key) && sameChanges(a.keyChanges, b.keyChanges));
 
-/** Key changes strictly inside the engraved bars, in order, each to a key other than the one in force. */
+/** Where a key change starts, in cycles (absolute): its bar, plus its beat inside the bar. */
+export function changeAt(c: KeyChange, unitsPerBar: number): Rat {
+  const beat = c.beat ?? 1;
+  return beat === 1 ? [c.bar, 1] : R.add([c.bar, 1], R.div(toRat(beat - 1), [unitsPerBar, 1]));
+}
+/** The key in force at an onset (a change inside a bar takes effect from its beat). */
+function keyAtPlan(plan: KeyPlan, t: Rat, unitsPerBar: number): KeySpec | null {
+  let key = plan.key;
+  for (const c of plan.keyChanges) if (R.lte(changeAt(c, unitsPerBar), t)) key = c.key;
+  return key;
+}
+
+/**
+ * Key changes strictly inside the engraved bars (a change at `startBar`'s bar line is the page's starting key,
+ * not a change), in order, each to a key other than the one in force; two at one position: the last wins.
+ */
 function normalizeKeyChanges(
   start: KeySpec | null,
   changes: readonly KeyChange[],
   startBar: number,
   stop: number,
+  unitsPerBar: number,
 ): KeyChange[] {
   const out: KeyChange[] = [];
   let current = start;
-  const inside = [...changes]
-    .filter((c) => Number.isInteger(c.bar) && c.bar > startBar && c.bar < stop)
-    .sort((a, b) => a.bar - b.bar);
-  for (const c of inside) {
-    const last = out[out.length - 1];
-    if (last && last.bar === c.bar) {
-      out.pop();
+  const valid = (c: KeyChange) =>
+    Number.isInteger(c.bar) &&
+    Number.isFinite(c.beat ?? 1) &&
+    (c.beat ?? 1) >= 1 &&
+    (c.beat ?? 1) < unitsPerBar + 1;
+  const inside = changes
+    .filter(valid)
+    .map((c) => ({ c, at: changeAt(c, unitsPerBar) }))
+    .filter((x) => R.lt([startBar, 1], x.at) && R.lt(x.at, [stop, 1]))
+    .sort((a, b) => R.cmp(a.at, b.at));
+  let lastAt: Rat | null = null;
+  for (const { c, at } of inside) {
+    if (lastAt && R.eq(lastAt, at)) {
+      const prev = out[out.length - 1];
+      if (prev && R.eq(changeAt(prev, unitsPerBar), at)) out.pop();
       current = out[out.length - 1]?.key ?? start;
     }
+    lastAt = at;
     if (sameKey(current, c.key)) continue;
-    out.push({ bar: c.bar, key: c.key });
+    out.push(
+      (c.beat ?? 1) === 1 ? { bar: c.bar, key: c.key } : { bar: c.bar, beat: c.beat as number, key: c.key },
+    );
     current = c.key;
   }
   return out;
 }
 
-/** The key signature in force at cycle `bar` (absolute, 0-based). */
+/**
+ * The key signature in force at the start of cycle `bar` (absolute, 0-based). A change inside the bar (`beat` > 1)
+ * is not in force yet: `keyAtOnset` reads inside a bar.
+ */
 export function keyAtBar(score: Pick<Score, "key" | "keyChanges">, bar: number): KeySpec | null {
   let key = score.key;
-  for (const c of score.keyChanges ?? []) if (c.bar <= bar) key = c.key;
+  for (const c of score.keyChanges ?? [])
+    if (c.bar < bar || (c.bar === bar && (c.beat ?? 1) <= 1)) key = c.key;
   return key;
 }
+/** The key signature in force at an onset (cycles), changes inside a bar included. */
+export function keyAtOnset(score: Pick<Score, "key" | "keyChanges" | "meter">, onset: Rat): KeySpec | null {
+  return keyAtPlan({ key: score.key, keyChanges: score.keyChanges ?? [] }, onset, score.meter.unitsPerBar);
+}
 
+/** Display bar (1-based; 0 is the pickup bar) and 1-based beat of an onset. */
 export function barBeat(score: Score, onset: Rat): { bar: number; beat: number } {
   const inBar = R.frac(onset);
-  return { bar: barOf(onset, score.pickup), beat: 1 + R.toNum(inBar) * score.meter.unitsPerBar };
+  return {
+    bar: barOf(onset, score.pickup || !!score.pickupNumbering),
+    beat: 1 + R.toNum(inBar) * score.meter.unitsPerBar,
+  };
 }

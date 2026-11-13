@@ -9,7 +9,7 @@ import { openPage } from "./helpers.ts";
 // biome-ignore lint/suspicious/noExplicitAny: the test API is driven untyped from page.evaluate
 type W = Window & { __oak: any };
 
-test("audibility table for every group-H control and every sound", async ({ page }) => {
+test("audibility table for every group-H control, every U05–U07 tool and every sound", async ({ page }) => {
   test.setTimeout(240_000);
   await openPage(page);
   const result = await page.evaluate(
@@ -79,10 +79,17 @@ test("audibility table for every group-H control and every sound", async ({ page
     expect(get(id), id).toBe(true);
   }
   expect(get("tb.unison")).toBe(true); // supersaw is not bit-repeatable: proven through spectrum and width
-  // Wave 3: clip (U02.L08) and the Oak jazz kit are proven; every catalog sound is in pack v2 but the break.
+  // Wave 3: clip (U02.L08) and the Oak jazz kit are proven.
   expect(get("tb.clip")).toBe(true);
   expect(get("snd.jazzkit")).toBe(true);
+  // Wave 4: every catalog sound is in pack v3, Oak's rendered break (A2.L04) included.
   const silentSounds = SOUND_CASES.map((c) => c.id).filter((id) => !get(id));
-  expect(silentSounds).toEqual(["snd.brk"]); // A2.L04: the CC0 break Oak renders is not in the pack yet
-  for (const r of table.sounds) if (r.id !== "snd.brk") expect(r.error, String(r.id)).toBeUndefined();
+  expect(silentSounds).toEqual([]);
+  for (const r of table.sounds) expect(r.error, String(r.id)).toBeUndefined();
+  // Wave 4: every tool U05–U07 unlock changes what is heard (chords, voicings, arps, pattern transforms).
+  const wave4 = CONTROL_CASES.filter((c) => c.value === "=" && c.withCode).map((c) => c.id);
+  expect(wave4.length).toBeGreaterThanOrEqual(19);
+  for (const id of wave4) expect(get(id), id).toBe(true);
+  for (const r of table.controls)
+    if (wave4.includes(String(r.id))) expect(r.error, String(r.id)).toBeUndefined();
 });

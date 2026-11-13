@@ -73,6 +73,11 @@ export function ListenBlock({
     return () => stop.current?.();
     // Plays once on arrival; "Play again" replays.
   }, []);
+  // Once every example has played, focus moves to the next action (`autoFocus` acts only on the first render).
+  const done = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (heard) done.current?.focus();
+  }, [heard]);
 
   useHotkeys([
     {
@@ -123,7 +128,7 @@ export function ListenBlock({
         </ol>
       )}
       <div className="flex flex-wrap gap-2">
-        <Button variant="primary" onClick={() => onDone()} autoFocus={heard}>
+        <Button variant="primary" onClick={() => onDone()} ref={done}>
           {doneLabel} <Kbd tone="inverse">Enter</Kbd>
         </Button>
         {examples.length > 0 && (

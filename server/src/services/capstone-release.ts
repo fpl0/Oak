@@ -7,6 +7,7 @@ import { CapstoneReviewSchema } from "@oak/api";
 import { tx } from "../db/index.ts";
 import { conflict, notFound } from "../errors.ts";
 import type { CanDoService } from "./cando.ts";
+import type { CapstoneSessionsService } from "./capstone-sessions.ts";
 import { LearnerTime, type ServiceContext } from "./context.ts";
 import type { CourseService } from "./course.ts";
 import type { GatesService } from "./gates.ts";
@@ -21,6 +22,8 @@ export interface ReleaseDeps {
   unlocks: UnlocksService;
   cando: CanDoService;
   streak: StreakService;
+  /** Wave 4: transcribe capstones release on their checks; revealed checks are named in the liner notes. */
+  capstoneSessions?: CapstoneSessionsService;
 }
 
 export class CapstoneReleaseService {
@@ -50,9 +53,23 @@ export class CapstoneReleaseService {
       if (row === null) throw conflict("start the capstone's first session before releasing it");
       if (repos.sketches.version(body.sketchId, body.sketchVersion) === null)
         throw notFound(`sketch ${body.sketchId} v${body.sketchVersion}`);
-      // The requirements checklist must be met: the latest rubric run on the draft passed (§6.6).
-      if (row.lastResult === null || row.lastResult.status !== "pass")
+      // The requirements checklist must be met: the latest rubric run on the draft passed (§6.6). A transcribe
+      // capstone with authored checks (X1) is ready when every phrase and stage check passed or was revealed.
+      const cleared = this.d.capstoneSessions?.checksCleared(id) ?? null;
+      if (cleared === false)
+        throw conflict(
+          "every phrase and chord stage has to be checked before release; check the ones still open",
+        );
+      if (cleared === null && (row.lastResult === null || row.lastResult.status !== "pass"))
         throw conflict("every required rule of the brief has to pass before release; run the check first");
+      // The first release must be of the code that passed: a draft checked, then edited, is checked again. (A
+      // revision of a released track is the album's Revise flow; "completed stays completed", contracts §11.7.)
+      if (cleared === null && row.status !== "released" && row.checked) {
+        const checkedCode = repos.sketches.version(row.checked.sketchId, row.checked.version)?.code;
+        const releasedCode = repos.sketches.version(body.sketchId, body.sketchVersion)?.code;
+        if (checkedCode === undefined || checkedCode.trim() !== releasedCode?.trim())
+          throw conflict("the draft changed since its last check; run the check again before release");
+      }
       const all = this.ctx.content.capstoneSessionIds(id);
       const missing = all.filter((s) => !row.sessions.includes(s));
       if (missing.length > 1)
@@ -66,14 +83,20 @@ export class CapstoneReleaseService {
 
       const review = CapstoneReviewSchema.safeParse(repos.tutor.latestReview("capstone", id));
       const note = review.success && body.includeReviewNote ? review.data.linerNote.trim() : "";
-      const linerNotesMd =
-        note === "" ? body.linerNotesMd : `${body.linerNotesMd.trimEnd()}\n\n${note}`.trim();
+      // A revealed check is named in the liner notes (contracts §6.6), once.
+      const revealed = (this.d.capstoneSessions?.revealedLines(id) ?? []).filter(
+        (l) => !body.linerNotesMd.includes(l),
+      );
+      const own = [body.linerNotesMd.trimEnd(), ...revealed].filter((x) => x !== "").join("\n\n");
+      // The app may already have appended the review's note (the release dialog does): never twice.
+      const linerNotesMd = note === "" || own.includes(note) ? own : `${own}\n\n${note}`.trim();
       const version = {
         sketchId: body.sketchId,
         sketchVersion: body.sketchVersion,
         linerNotesMd,
         theoryTags: body.theoryTags,
         attribution: null,
+        includeReviewNote: body.includeReviewNote,
       };
       const existing = repos.album.trackOfCapstone(id);
       // The same release sent twice (a retried request, a second tab) is not a revision: when the track's
@@ -113,6 +136,7 @@ export class CapstoneReleaseService {
         releasedAt: row.releasedAt ?? now,
         updatedAt: now,
       });
+      for (const sid of missing) this.d.capstoneSessions?.onSessionDone(sid);
       let canDo: CanDoEntry[] = [];
       if (first) {
         unlocks.push(...this.d.unlocks.onComplete(id));

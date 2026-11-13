@@ -1,13 +1,14 @@
 // Running a prepared turn on a backend. Everything that must be the same for both backends
 // happens here, around the backend call: the meta/done/error events, the HTML guard on streamed
 // text, the tool session, the append-only transcript, usage rows and tutor notes.
+import { AnswerGuard, answerForms, maskAnswers } from "./answer-guard.ts";
 import type { TutorErrorInfo } from "./errors.ts";
 import { classifyThrown } from "./errors.ts";
 import type { TutorEvent, UsageSummary } from "./events.ts";
 import { escapeTags, HtmlGuard, sanitizeMarkdown } from "./markup.ts";
 import type { TutorPorts } from "./ports.ts";
 import type { PreparedTurn } from "./prepare.ts";
-import type { ReviewValue } from "./reviews.ts";
+import { type ReviewValue, validateListeningNote } from "./reviews.ts";
 import { checkBudget, hintSummary } from "./threads.ts";
 import { TOOLS } from "./tools/defs.ts";
 import { createToolSession, type ToolSession } from "./tools/execute.ts";
@@ -179,6 +180,9 @@ export async function runTurn(
 ): Promise<RunResult> {
   const { ctx } = prep;
   const guard = new HtmlGuard();
+  // Below the reveal rung, the step's own answer is held back from what the learner reads (wave4.md §5.6).
+  const forms = ctx.answerPolicy === "socratic" && ctx.step ? answerForms(ctx.step, ctx.learnerCode) : [];
+  const answers = new AnswerGuard(forms, ctx.disclosure);
   let text = "";
   let breakBeforeText = false;
 
@@ -193,7 +197,11 @@ export async function runTurn(
 
   // Tool events come from the session and are trusted as they are.
   const fromSession: Emit = (e) => {
-    if (e.type === "tool_result") breakBeforeText = true;
+    if (e.type === "tool_result") {
+      // A tool round ends a paragraph: what the answer guard holds is released before it.
+      pushText(answers.flush());
+      breakBeforeText = true;
+    }
     emit(e);
   };
   const { session, input } = await setUp(prep, backend, fromSession, ports);
@@ -203,10 +211,14 @@ export async function runTurn(
   const fromBackend: Emit = (e: TutorEvent) => {
     switch (e.type) {
       case "text":
-        pushText(guard.push(e.data.delta));
+        pushText(answers.push(guard.push(e.data.delta)));
         break;
       case "thinking":
-        emit({ type: "thinking", data: { delta: escapeTags(e.data.delta) } });
+        // Summarized thinking arrives in whole sentences: each delta is masked as it is, not held back.
+        emit({
+          type: "thinking",
+          data: { delta: maskAnswers(escapeTags(e.data.delta), forms, ctx.disclosure) },
+        });
         break;
       case "tool_start":
         session.markStarted(e.data.toolUseId);
@@ -235,7 +247,8 @@ export async function runTurn(
       calls: [],
     };
   }
-  pushText(guard.flush());
+  pushText(answers.push(guard.flush()));
+  pushText(answers.flush());
 
   const error = outcome.status === "failed" ? outcome.error : null;
   const stored = sanitizeMarkdown(text);
@@ -251,7 +264,8 @@ export async function runTurn(
     review: session.review ?? null,
   });
 
-  if (error === null && ctx.kind === "listening" && stored.trim() !== "") {
+  // A note that does not keep the listening-note schema was still shown, but is not remembered.
+  if (error === null && ctx.kind === "listening" && validateListeningNote({ text: stored }).ok) {
     // Each listening note becomes a tutor note, written by the server (contracts §10.2).
     await ports.notes.add({
       day: ctx.conversation.day,

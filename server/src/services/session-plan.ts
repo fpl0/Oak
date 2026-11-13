@@ -56,6 +56,12 @@ export interface SessionPlanCoursePort {
    * or a checkpoint waits for tomorrow): the line Today shows on the review day. `null` otherwise.
    */
   pause?(): string | null;
+  /**
+   * Wave 4 (contracts §6.6): while X1 waits only for `fam.mel.dictation` to reach its level, the line Today shows
+   * ("Two more gym sets open X1"); the planner then schedules gym sessions on days with no other map item.
+   * `null` otherwise.
+   */
+  capstoneGymNote?(): string | null;
 }
 export interface SessionPlanLearnerPort {
   profile(): { targetMinutes: 15 | 20 | 25; timeZone: string; rolloverHour: number };
@@ -94,6 +100,8 @@ export const MAIN_MINUTES = {
   gym: { 15: 10, 20: 14, 25: 19 },
   make: { 15: 3, 20: 4, 25: 5 },
 } as const;
+/** The last gym ordinal an ID can carry (`GYM.99`). */
+export const MAX_GYM = 99;
 /** At the 15-minute target a lesson whose scaled content exceeds this is split at `wrapAt`. */
 export const SPLIT_ABOVE_MIN = 10;
 
@@ -112,19 +120,30 @@ const capstoneSessionNo = (id: string): number | null => {
  * the slot. The rule does not run in the advanced tracks.
  */
 export function transcriptionSlotDue(history: readonly string[], next: string | null): boolean {
-  if (next === null || !isCoreItem(next)) return false;
-  const start = history.indexOf("U07.L01");
-  if (start < 0) return false;
-  if (/^X\d+\.S\d+$/.test(next)) return false;
-  const n = capstoneSessionNo(next);
+  // `null`: no other map item can be offered today (the next lessons are not written yet): the slot still runs.
+  if (next !== null && !isCoreItem(next)) return false;
+  const count = sessionsSinceTranscription(history);
+  if (count === null) return false;
+  if (next !== null && /^X\d+\.S\d+$/.test(next)) return false;
+  const n = next === null ? null : capstoneSessionNo(next);
   if (n !== null && n > 1) return false;
+  return count >= GYM.slotEvery;
+}
+
+/**
+ * Completed core sessions since the last transcription session (gym, `X#.S#`, `CF-T.S#`), counted from U07.L01
+ * on (contracts §2.5); `null` while the rule does not run (U07.L01 not completed).
+ */
+export function sessionsSinceTranscription(history: readonly string[]): number | null {
+  const start = history.indexOf("U07.L01");
+  if (start < 0) return null;
   let count = 0;
   for (let i = history.length - 1; i >= start; i--) {
     const id = history[i] as string;
     if (isTranscription(id)) break;
-    count++;
+    if (isCoreItem(id)) count++;
   }
-  return count >= GYM.slotEvery;
+  return count;
 }
 
 /** Days missed since the last qualifying day: a weekend off after Friday is 2, practising yesterday is 0. */
@@ -201,6 +220,27 @@ export class SessionPlanService {
     }
 
     const next = course.next();
+    // `GYM.nn` has two digits (contracts §1.2): after GYM.99 the gym is no longer scheduled.
+    const gymRoom = course.gymCount() < MAX_GYM;
+    const gymNote = gymRoom ? (course.capstoneGymNote?.() ?? null) : null;
+    // A transcription slot (contracts §2.5), also on a day whose next lessons are not written yet.
+    if (gymRoom && transcriptionSlotDue(course.history(), next?.id ?? null)) {
+      const cft = course.nextCftSession();
+      if (cft !== null) {
+        return {
+          ...base,
+          kind: "gym",
+          mapItemId: cft,
+          title: "Transcription: CF-T",
+          note: null,
+          warmup: this.warmup(now, WARMUP_GYM_SEC, gap),
+          main: { resumeStep: null, splitPart: null, light: null, estMinutes: MAIN_MINUTES.gym[target] },
+        };
+      }
+      return { ...base, ...this.gym(now, gap, target, gymNote) };
+    }
+    // X1 waits for its gym sets (contracts §6.6): on a day with no other map item, schedule a gym session.
+    if (next === null && gymNote !== null) return { ...base, ...this.gym(now, gap, target, gymNote) };
     if (next === null) {
       // Nothing to offer from the map today (the course is done, its next lessons are not written yet, or a
       // checkpoint waits for tomorrow): a reviews-only day (`/practice/review` offers "a little more"), with
@@ -222,33 +262,6 @@ export class SessionPlanService {
           moreAvailable: review.blocks.length > 1 || review.overflow.length > 0,
         },
         main: null,
-      };
-    }
-
-    // A transcription slot (contracts §2.5).
-    if (transcriptionSlotDue(course.history(), next.id)) {
-      const cft = course.nextCftSession();
-      if (cft !== null) {
-        return {
-          ...base,
-          kind: "gym",
-          mapItemId: cft,
-          title: "Transcription: CF-T",
-          note: null,
-          warmup: this.warmup(now, WARMUP_GYM_SEC, gap),
-          main: { resumeStep: null, splitPart: null, light: null, estMinutes: MAIN_MINUTES.gym[target] },
-        };
-      }
-      const n = course.gymCount() + 1;
-      const ladder = n % 2 === 1 || !course.hasAudioProject();
-      return {
-        ...base,
-        kind: "gym",
-        mapItemId: `GYM.${String(n).padStart(2, "0")}` as SessionId,
-        title: ladder ? "Transcription Gym: ladder" : "Transcription Gym: your own audio",
-        note: n % 2 === 0 && ladder ? "No audio project yet: a ladder session one realism level up." : null,
-        warmup: this.warmup(now, WARMUP_GYM_SEC, gap),
-        main: { resumeStep: null, splitPart: null, light: null, estMinutes: MAIN_MINUTES.gym[target] },
       };
     }
 
@@ -299,6 +312,27 @@ export class SessionPlanService {
               ? MAIN_MINUTES.splitB
               : MAIN_MINUTES.lesson[target],
       },
+    };
+  }
+
+  /** A gym session in the slot (contracts §2.5): odd ladder, even own audio (a ladder one realism up without audio). */
+  private gym(
+    now: Date,
+    gap: number,
+    target: 15 | 20 | 25,
+    note: string | null,
+  ): Pick<SessionPlan, "kind" | "mapItemId" | "title" | "note" | "warmup" | "main"> {
+    const { course } = this.deps;
+    const n = course.gymCount() + 1;
+    const ladder = n % 2 === 1 || !course.hasAudioProject();
+    const fallback = n % 2 === 0 && ladder;
+    return {
+      kind: "gym",
+      mapItemId: `GYM.${String(n).padStart(2, "0")}` as SessionId,
+      title: ladder ? "Transcription Gym: ladder" : "Transcription Gym: your own audio",
+      note: note ?? (fallback ? "No audio project yet: a ladder session one realism level up." : null),
+      warmup: this.warmup(now, WARMUP_GYM_SEC, gap),
+      main: { resumeStep: null, splitPart: null, light: null, estMinutes: MAIN_MINUTES.gym[target] },
     };
   }
 

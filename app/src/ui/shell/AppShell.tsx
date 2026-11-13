@@ -6,6 +6,7 @@ import {
   AudioWaveform,
   ChevronLeft,
   ListChecks,
+  Lock,
   NotebookPen,
   Search,
   Settings,
@@ -16,6 +17,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { NAV_ITEMS, type NavId } from "../../lib/nav.ts";
 import { useDue } from "../../lib/queries.ts";
 import { useShell } from "../../lib/shell-store.ts";
+import { useUnlockedSet } from "../../lib/unlocked.ts";
 import { useTutorBridge } from "../../tutor/use-tutor-bridge.ts";
 import { OakIcon, RingIcon, TuningForkIcon } from "../icons/index.tsx";
 import { isFocusRoute } from "../keys/keymap.ts";
@@ -26,6 +28,7 @@ import { Tooltip } from "../kit/Tooltip.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
 import { useFocusHeader } from "./focus-header.ts";
 import { GlobalKeys } from "./GlobalKeys.tsx";
+import { navItemState } from "./nav-state.ts";
 import { AudioStatus, MicLiveDot, NowPlaying, TutorToggle } from "./status.tsx";
 import { TutorPanel } from "./TutorPanel.tsx";
 
@@ -57,11 +60,14 @@ function PracticeBadge() {
 
 function NavRail({ path }: { path: string }) {
   const due = useDue();
+  const { unlocked, ready } = useUnlockedSet();
   const main = NAV_ITEMS.filter((i) => i.id !== "settings");
   const settings = NAV_ITEMS.find((i) => i.id === "settings");
   const item = (n: (typeof NAV_ITEMS)[number]) => {
     const active = n.match(path);
-    const label = n.id === "practice" && due.data?.items.length ? `${n.label} · ${due.data.label}` : n.label;
+    const base = n.id === "practice" && due.data?.items.length ? `${n.label} · ${due.data.label}` : n.label;
+    // Transcribe and Album say when they open, and stay reachable (never gated, contracts §7.6).
+    const { pending, label } = navItemState(n.id, base, unlocked, ready);
     return (
       <li key={n.id}>
         <Tooltip content={label} shortcut={`G ${n.gKey}`} side="right">
@@ -70,13 +76,26 @@ function NavRail({ path }: { path: string }) {
             aria-label={label}
             aria-current={active ? "page" : undefined}
             data-nav={n.id}
+            data-nav-pending={pending || undefined}
             className={clsx(
               "relative flex size-10 items-center justify-center rounded-control transition-colors",
-              active ? "bg-lane-in text-accent" : "text-text-2 hover:bg-surface-2 hover:text-text",
+              active
+                ? "bg-lane-in text-accent"
+                : pending
+                  ? "text-text-3 hover:bg-surface-2 hover:text-text-2"
+                  : "text-text-2 hover:bg-surface-2 hover:text-text",
             )}
           >
             {ICONS[n.id]}
             {n.id === "practice" && <PracticeBadge />}
+            {pending && (
+              <span
+                aria-hidden
+                className="absolute right-0 bottom-0 flex size-4 items-center justify-center rounded-full border border-border bg-surface-2 text-text-2"
+              >
+                <Lock className="size-2.5" strokeWidth={2.5} />
+              </span>
+            )}
           </Link>
         </Tooltip>
       </li>

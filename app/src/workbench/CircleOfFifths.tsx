@@ -181,7 +181,8 @@ export function CircleOfFifths({ current, keys, preview }: CircleProps) {
         ) : playing ? (
           <>
             <span>
-              Hearing your code in <strong>{keyName(playing)}</strong> ({signatureText(playing)}).
+              Hearing your code{preview.withBand ? " with the Band" : ""} in{" "}
+              <strong>{keyName(playing)}</strong> ({signatureText(playing)}).
             </span>
             <span className="oak-circle-buttons">
               <button

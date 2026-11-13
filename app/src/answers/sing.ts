@@ -2,7 +2,7 @@
 // folded onto the target lane, the needle words, and the per-note summary an attempt stores. The ONE rule for a
 // sung note is `@oak/pitch` `gradeSung` (`gradeSungLive` while singing); nothing here grades on its own terms.
 // Pure: tested with `bun test`.
-import type { Degree, LearnerProfile, SingMode, SingTolerance } from "@oak/content-kit";
+import type { Degree, KeySpec, LearnerProfile, SingMode, SingTolerance } from "@oak/content-kit";
 import {
   fitToRange,
   gradeSung,
@@ -13,6 +13,7 @@ import {
   type SungTarget,
   trackerOptionsFor,
 } from "@oak/pitch";
+import { degreeOf } from "@oak/theory";
 import { degreeDisplay, degreeSpoken, SYLLABLES } from "./normalize.ts";
 import type { AnswerFeedback, PartMark, SungSummary } from "./types.ts";
 
@@ -262,7 +263,7 @@ export function summarize(result: SungResult): SungSummary[] {
 }
 
 /** Why a take could not be judged, or what spoiled it, as @oak/pitch reports it (`take.ts`). */
-export type TakeProblemKind = "no-voice" | "too-noisy" | "too-short" | "clipped";
+export type TakeProblemKind = "no-voice" | "too-noisy" | "too-short" | "clipped" | "bleed";
 
 /**
  * The take-quality cases of the pitch tracker, each with its own calm line and always a way forward: nothing
@@ -290,6 +291,12 @@ export function takeProblem(
       text: "Oak didn't hear a voice. Sing or hum a little closer to the microphone, then try again. No mic today? Quiet mode lets you hear it in your head instead.",
     };
   }
+  // The mic hears the playback (wave4 audio: runtime bleed detection): the fix is headphones, or Quiet mode.
+  if (diagnostics.some((d) => d.id === "sing.bleed"))
+    return {
+      kind: "bleed",
+      text: "The mic hears the playback; use wired headphones, then try again. No headphones today? Quiet mode lets you hear it in your head instead.",
+    };
   if (diagnostics.some((d) => d.id === "sing.clipped"))
     return {
       kind: "clipped",
@@ -351,4 +358,66 @@ export function gradeLive(
   now: number,
 ): SungResult {
   return gradeSungLive(frames, targetsAt(notes, startAt), tol, mode, profile, now);
+}
+
+// --- the trace coloured by degree (Wave 4, wave3.md §0 carry-over; ux §4.3 "degree colour when in band") ---------
+
+/** A run of the live trace drawn in one colour: the target's degree while the voice is in its band, else neutral. */
+export interface TraceSegment {
+  /** The degree the voice is on (in band of the target sounding then), or `null` (out of band: neutral). */
+  degree: Degree | null;
+  points: { t: number; midi: number }[];
+}
+
+/**
+ * The key a take is in, for degree colours: the reference's tonic when the step has one, else read back from a
+ * target that carries its degree (its MIDI minus the degree's semitones). `null`: no degree to colour by.
+ */
+export function traceKey(
+  notes: readonly SingNote[],
+  reference?: { tonic: number; mode?: "major" | "minor" } | null,
+): KeySpec | null {
+  const PC = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"] as const;
+  const mode = reference?.mode ?? "major";
+  if (reference) return { tonic: PC[((reference.tonic % 12) + 12) % 12] as string, mode };
+  const withDegree = notes.find((n) => n.degree);
+  if (!withDegree?.degree) return null;
+  const tonicPc = withDegree.midi - degreeSemitones(withDegree.degree);
+  return { tonic: PC[((tonicPc % 12) + 12) % 12] as string, mode };
+}
+
+/**
+ * Splits the trace into runs of one colour. A point is in band when it is within `tolCents` of the target sounding
+ * at that moment; its degree is the target's (its own `degree`, else read in `key`). Unvoiced frames break the
+ * line; a change of colour starts the next run at the last point so the line stays joined.
+ */
+export function traceSegments(
+  trace: readonly TracePoint[],
+  notes: readonly SingNote[],
+  tolCents: number,
+  key: KeySpec | null,
+): TraceSegment[] {
+  const out: TraceSegment[] = [];
+  let cur: TraceSegment | null = null;
+  for (const pt of trace) {
+    if (pt.midi === null) {
+      cur = null;
+      continue;
+    }
+    const target = notes.find((n) => pt.t >= n.at && pt.t < n.at + n.dur);
+    const inBand = target !== undefined && Math.abs(pt.midi - target.midi) * 100 <= tolCents;
+    const degree: Degree | null = inBand
+      ? (target.degree ?? (key ? (degreeOf(target.midi, key).degree as Degree) : null))
+      : null;
+    const p = { t: pt.t, midi: pt.midi };
+    const prev = cur as TraceSegment | null;
+    if (prev && prev.degree === degree) {
+      prev.points.push(p);
+      continue;
+    }
+    const last = prev?.points[prev.points.length - 1];
+    cur = { degree, points: last ? [last, p] : [p] };
+    out.push(cur);
+  }
+  return out;
 }

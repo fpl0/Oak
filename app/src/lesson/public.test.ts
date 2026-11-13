@@ -146,3 +146,65 @@ describe("what the tutor reads of a Wave 3 step", () => {
     expect(s.key).toEqual({ tonic: "G", mode: "major" });
   });
 });
+
+describe("Wave 4 answers for the tutor: what the learner entered, never the step's answer", () => {
+  const stepOf = async (unit: string, lesson: string, step: string) => {
+    const mod = (await import(`../../../content/core/${unit}/${lesson}/lesson.ts`)) as {
+      default: { steps: { id: string; exercise?: Exercise }[] };
+    };
+    return mod.default.steps.find((s) => s.id === step)?.exercise as Exercise;
+  };
+
+  test("numerals placed on the RN palette (U06.L02 S5), bar by bar", async () => {
+    const ex = await stepOf("U06", "L02", "S5");
+    const right = (ex as { correct: { rn: string[] } }).correct.rn;
+    const mine = [...right].reverse();
+    const a = tutorAnswerOf(ex, { answer: { rn: mine } });
+    expect(a).toMatchObject({ kind: "numerals", numerals: mine.map((rn, i) => ({ bar: i + 1, rn })) });
+    expect(JSON.stringify(a)).not.toContain(JSON.stringify(right));
+  });
+
+  test("a function strip (U06.L03 S6) by its slot labels and option labels", async () => {
+    const ex = await stepOf("U06", "L03", "S6");
+    const a = tutorAnswerOf(ex, { answer: { choice: ["T", "T", "", "T"] } });
+    expect(a).toEqual({
+      kind: "slots",
+      prompt: (ex as { prompt: string }).prompt,
+      slots: [
+        { label: "Bar 1", value: "T: home (tonic)" },
+        { label: "Bar 2", value: "T: home (tonic)" },
+        { label: "Bar 3", value: null },
+        { label: "Bar 4", value: "T: home (tonic)" },
+      ],
+    });
+  });
+
+  test("a staged chord dictation so far (U06.L09 S2): the stages answered, the last one named", async () => {
+    const ex = await stepOf("U06", "L09", "S2");
+    const a = tutorAnswerOf(ex, { answer: { stages: { bass: ["1", "3", "5", "4"] } } } as never);
+    expect(a).toEqual({
+      kind: "stages",
+      stage: "bass",
+      answers: [{ stage: "bass", values: ["1", "3", "5", "4"] }],
+    });
+    const all = tutorAnswerOf(ex, {
+      answer: { stages: { bass: ["1", "3", "6", "4"], quality: ["maj", "min", "min", "maj"], rn: ["I"] } },
+    } as never);
+    expect(all).toMatchObject({ kind: "stages", stage: "rn" });
+  });
+
+  test("a chord built on the keyboard is spelled in the step's key; a chord name typed is a chord", async () => {
+    const kb = await stepOf("U05", "L01", "S5");
+    expect(tutorAnswerOf(kb, { answer: { midi: [60, 64, 67] } })).toMatchObject({
+      kind: "text",
+      value: "notes C4 E4 G4",
+    });
+    const named = await stepOf("U05", "L04", "S6");
+    expect(tutorAnswerOf(named, { answer: { text: ["Cm"] } })).toMatchObject({
+      kind: "chords",
+      chords: [{ symbol: "Cm" }],
+    });
+    const q = tutorAnswerOf(await stepOf("U05", "L02", "S5"), { answer: { qualities: ["min"] } });
+    expect(q?.kind).toBe("chords");
+  });
+});

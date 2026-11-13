@@ -2,21 +2,26 @@
 // - One `!class=oak-e{n}!` decoration per element (several classes allowed in its value), placed after
 //   the tuplet marker and before the chord brackets; tied pieces repeat it; rests carry none.
 // - Accidentals against the key signature and earlier accidentals in the same bar, staff and octave
-//   (naturals included); a note tied in over the bar line is not restated. Courtesy accidentals: the first
+//   (naturals included); a note tied in over the bar line is not restated; an accidental another voice of the
+//   staff wrote earlier in the bar is restated in this voice. Courtesy accidentals: the first
 //   note of a letter and octave after a bar that altered it, and a note whose letter is altered in another
 //   octave of the same bar, are written out (abcjs has no parenthesised form: ABCJS_LIMITS).
 // - Theoretical keys (more than seven accidentals) get an explicit signature (`K:C exp ^^f ^c …`).
-// - Key changes (`score.keyChanges`): `[K:…]` at the bar line, in every pitched voice.
+// - Key changes (`score.keyChanges`): `[K:…]` at the bar line, in every pitched voice; a change inside a bar
+//   (`beat` > 1) is written before the item at its beat (the build cut every voice there), and the accidentals of
+//   that bar start again under the new signature (a letter altered earlier in the bar is restated).
+// - Chord symbols over the top staff, Roman numerals (`"_…"`) under the bottom pitched staff; a lead sheet numbers
+//   the first bar of each system (`%%barnumbers 0` with `%%setbarnb`, so a pickup bar is bar 0).
 // - Annotation lines (degree, solfège, name): one `w:` line per kind under every pitched staff, or stacked
 //   `"^…"` texts over the notes.
 // - Spaces at beam-group boundaries, `(p:q:r` tuplets, `-` ties, `z` rests, `x` invisible rests.
 import type { CodeRange, KeySpec, Rat } from "@oak/content-kit";
 import { R } from "@oak/content-kit";
 import type { SpelledPitch } from "@oak/theory";
-import { barBeat } from "./build.ts";
+import { barBeat, changeAt } from "./build.ts";
 import { type NoteAnnotation, noteAnnotations } from "./options.ts";
 import { keySig } from "./theory-port.ts";
-import type { AbcOptions, AbcResult, IdMapEntry, NoteItem, Score, Staff, Voice } from "./types.ts";
+import type { AbcOptions, AbcResult, IdMapEntry, KeyChange, NoteItem, Score, Staff, Voice } from "./types.ts";
 
 const ACC: Record<number, string> = { [-2]: "__", [-1]: "_", 0: "=", 1: "^", 2: "^^" };
 
@@ -91,6 +96,7 @@ function annotationLines(ctx: Ctx, voice: Voice, from: number, to: number): stri
 function accidentals(
   score: Score,
   sigOf: (bi: number, si: number) => Record<string, number>,
+  midBar: (bi: number, si: number) => { at: Rat; sig: Record<string, number> }[],
 ): Map<string, string> {
   const out = new Map<string, string>();
   score.staves.forEach((staff, si) => {
@@ -106,9 +112,21 @@ function accidentals(
         });
       });
       entries.sort((a, b) => R.cmp(a.onset, b.onset) || a.vi - b.vi);
-      const sig = sigOf(bi, si);
-      const state = new Map<string, number>();
+      let sig = sigOf(bi, si);
+      let state = new Map<string, number>();
+      /** Letter+octave → the voice whose accidental set `state` there. */
+      const owner = new Map<string, number>();
+      const changes = midBar(bi, si);
       for (const e of entries) {
+        // A key change inside the bar: its signature holds from here; what an accidental altered before it is
+        // restated where it differs from the new signature.
+        while (changes.length && R.lte((changes[0] as { at: Rat }).at, e.onset)) {
+          const ch = changes.shift() as { at: Rat; sig: Record<string, number> };
+          const before = state;
+          sig = ch.sig;
+          state = new Map();
+          carried = new Map([...carried, ...before].filter(([k, alt]) => alt !== (sig[k[0] as string] ?? 0)));
+        }
         e.it.pitches.forEach((p, pi) => {
           const k = `${p.letter}${p.oct}`;
           const id = `${si}|${bi}|${e.vi}|${e.ii}|${pi}`;
@@ -125,11 +143,15 @@ function accidentals(
             for (const [kk, alt] of state)
               if (kk !== k && kk[0] === p.letter && alt !== p.alt) otherOctave = true;
           const courtesy = (prevBar !== undefined && prevBar !== p.alt) || otherOctave;
-          if (p.alt === current && !courtesy) {
+          // Two voices on one staff: an accidental another voice wrote earlier in the bar is restated (engraving
+          // convention; a reader of the second part must not have to find it in the first).
+          const otherVoice = state.has(k) && owner.get(k) !== e.vi && p.alt !== sigAlt;
+          if (p.alt === current && !courtesy && !otherVoice) {
             out.set(id, "");
             return;
           }
           state.set(k, p.alt);
+          owner.set(k, e.vi);
           out.set(id, ACC[p.alt] ?? "");
         });
       }
@@ -140,7 +162,7 @@ function accidentals(
 }
 
 function annotationsAt(list: Score["chords"], onset: Rat): string[] {
-  return (list ?? []).filter((a) => R.eq(a.at, onset)).map((a) => a.text.replace(/"/g, "'"));
+  return (list ?? []).filter((a) => R.eq(a.drawnAt ?? a.at, onset)).map((a) => a.text.replace(/"/g, "'"));
 }
 
 function emitBar(
@@ -151,12 +173,15 @@ function emitBar(
   vi: number,
   bi: number,
   flags: { chords: boolean; romans: boolean; swing: boolean; above: boolean },
+  keysAt: { at: Rat; text: string }[] = [],
 ): string {
   const bar = voice.bars[bi];
   if (!bar) return "";
   let out = "";
   bar.items.forEach((it, ii) => {
-    if (ii > 0) out += it.breakBefore ? " " : "";
+    const change = ii > 0 ? keysAt.find((k) => R.eq(k.at, it.onset)) : undefined;
+    if (change) out += ` [K:${change.text}] `;
+    else if (ii > 0) out += it.breakBefore ? " " : "";
     if (it.tupletStart) out += `(${it.tupletStart.p}:${it.tupletStart.q}:${it.tupletStart.r}`;
     if (flags.swing && bi === 0 && ii === 0 && ctx.score.swingText) out += `"^${ctx.score.swingText}"`;
     if (flags.chords) for (const t of annotationsAt(ctx.score.chords, it.onset)) out += `"${t}"`;
@@ -220,19 +245,34 @@ export function toAbc(score: Score, opts: AbcOptions = {}): AbcResult {
       : { key: score.key, keyChanges: score.keyChanges ?? [] };
   };
   const changeAtOf = score.staves.map(
-    (_s, si) => new Map(planOf(si).keyChanges.map((c) => [c.bar, c.key] as const)),
+    (_s, si) =>
+      new Map(
+        planOf(si)
+          .keyChanges.filter((c) => (c.beat ?? 1) <= 1)
+          .map((c) => [c.bar, c.key] as const),
+      ),
   );
   const sigOfBar = (bi: number, si: number) => {
     const plan = planOf(si);
     let key = plan.key;
-    for (const c of plan.keyChanges) if (c.bar <= barCycle(bi)) key = c.key;
+    for (const c of plan.keyChanges)
+      if (c.bar < barCycle(bi) || (c.bar === barCycle(bi) && (c.beat ?? 1) <= 1)) key = c.key;
     return key === score.key ? ks.sig : keySig(key).sig;
   };
   const kTextOf = (key: KeySpec | null) => {
     const k = keySig(key);
     return k.notes.length > 7 ? explicitKey(k.sig) : k.abcK;
   };
-  const ctx: Ctx = { score, prefix, sig: ks.sig, acc: accidentals(score, sigOfBar), ann };
+  // Changes inside a bar (`beat` > 1), per staff and bar index.
+  const midBarOf = (si: number, bi: number): { at: Rat; key: KeySpec | null }[] =>
+    planOf(si)
+      .keyChanges.filter((c: KeyChange) => (c.beat ?? 1) > 1 && c.bar === barCycle(bi))
+      .map((c) => ({ at: changeAt(c, score.meter.unitsPerBar), key: c.key }));
+  const midBarSigs = (bi: number, si: number) =>
+    score.staves[si]?.clef === "perc"
+      ? []
+      : midBarOf(si, bi).map((c) => ({ at: c.at, sig: keySig(c.key).sig }));
+  const ctx: Ctx = { score, prefix, sig: ks.sig, acc: accidentals(score, sigOfBar, midBarSigs), ann };
   const above = score.annotations?.position === "above";
   const pitchedStaves = score.staves.filter((s) => s.clef !== "perc");
   const voices = score.staves.flatMap((s, si) => s.voices.map((v, vi) => ({ s, si, v, vi })));
@@ -244,6 +284,14 @@ export function toAbc(score: Score, opts: AbcOptions = {}): AbcResult {
   // Annotation lines read in the sans face abcjs uses for texts over the notes (its lyric default is bold
   // Times, where ♭ and ♯ set wide: "B ♭ 2").
   if (annotationKinds(score).length && !above) header.push("%%vocalfont Helvetica 12");
+  // A lead-sheet page that is not the song's end fills its last system to the width (the next page goes on).
+  if (score.lead && opts.finalBar === false) header.push("%%stretchlast 1");
+  // Bar numbers at the start of each system (not on the first): cycle 0 is bar 0 with a pickup.
+  if (opts.barNumbers ?? !!score.lead) {
+    const first = score.startBar + (score.pickup || score.pickupNumbering ? 0 : 1);
+    header.push("%%barnumbers 0");
+    if (first !== 1) header.push(`%%setbarnb ${first}`);
+  }
   const clefOf = (s: Staff) =>
     s.clef === "perc"
       ? `clef=perc${s.lines === 1 ? " stafflines=1" : ""}`
@@ -271,14 +319,22 @@ export function toAbc(score: Score, opts: AbcOptions = {}): AbcResult {
     header.push(`K:${kText}`);
   } else {
     const s = score.staves[0];
-    header.push(`K:${kText}${s && s.clef !== "treble" ? ` ${clefOf(s)}` : ""}`);
+    // A single staff with its own key plan (`Staff.key`) shows that signature.
+    const own = s && s.clef !== "perc" && s.key !== undefined ? kTextOf(s.key) : kText;
+    header.push(`K:${own}${s && s.clef !== "treble" ? ` ${clefOf(s)}` : ""}`);
   }
   const nBars = score.staves[0]?.voices[0]?.bars.length ?? 0;
   const lines: string[] = [];
   const topStaff = 0;
   const romanStaff = score.staves.reduce((acc, s, i) => (s.clef !== "perc" ? i : acc), 0);
-  for (let from = 0; from < nBars; from += perLine) {
-    const to = Math.min(nBars, from + perLine);
+  // The pickup bar does not count towards the first system's bars.
+  const lineStarts: number[] = [];
+  for (let from = 0; from < nBars; ) {
+    lineStarts.push(from);
+    from += from === 0 && score.pickup ? perLine + 1 : perLine;
+  }
+  for (const [li, from] of lineStarts.entries()) {
+    const to = Math.min(nBars, lineStarts[li + 1] ?? nBars);
     for (const { s, si, v, vi } of voices) {
       if (multi) lines.push(`V:${v.id}`);
       let body = "";
@@ -294,7 +350,9 @@ export function toAbc(score: Score, opts: AbcOptions = {}): AbcResult {
         const changeAt = changeAtOf[si] as Map<number, KeySpec | null>;
         const change = bi > 0 && s.clef !== "perc" ? changeAt.get(barCycle(bi)) : undefined;
         if (change) body += `[K:${kTextOf(change)}] `;
-        body += emitBar(ctx, s, si, v, vi, bi, flags);
+        const keysAt =
+          s.clef === "perc" ? [] : midBarOf(si, bi).map((c) => ({ at: c.at, text: kTextOf(c.key) }));
+        body += emitBar(ctx, s, si, v, vi, bi, flags, keysAt);
         // A key change is preceded by a double barline, as engravers mark it.
         const nextChanges = bi + 1 < nBars && s.clef !== "perc" && changeAt.has(barCycle(bi + 1));
         body += bi === nBars - 1 && opts.finalBar !== false ? " |]" : nextChanges ? " ||" : " |";

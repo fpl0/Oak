@@ -2,7 +2,7 @@
 
 For every agent or person who writes or reviews Oak content. It applies `docs/design/contracts.md` (schemas, budgets, IDs, unlocks, grading) and `content/STYLE.md` (the code dialect). If this guide and those disagree, they win; fix this guide.
 
-Start here, in this order: this guide, STYLE, your unit's spec (`content/specs/Uxx.md`), then the exemplar lessons `content/core/U01/L01` ("Heartbeat"), `content/core/U02/L01` ("High & Low") and, for U03 on, `content/core/U03/L02` ("Degrees in Code"), which also shows the Wave 3 shapes of §16. All three pass every check with the real grader; copy their shape, not their words.
+Start here, in this order: this guide, STYLE, your unit's spec (`content/specs/Uxx.md`), then the exemplar lessons `content/core/U01/L01` ("Heartbeat"), `content/core/U02/L01` ("High & Low"), for U03 on `content/core/U03/L02` ("Degrees in Code"), which also shows the Wave 3 shapes of §16, and for U05 on `content/core/U05/L01` ("Stacking Thirds"), which shows how chords are written, graded and made into a song (§17). All of them pass every check with the real grader; copy their shape, not their words. U06.L02 and U07.L08 are the U06 and U07 exemplars.
 
 ## 1. How content gets made
 
@@ -152,7 +152,7 @@ Rules:
 | U01 | drum lanes | by part | percussion + counts | — | — | — |
 | U02 | note names | by letter name | treble from U02.L04 | on (by letter name) | — | — |
 | U03–U04 | note names in U03.L01; degrees from U03.L02 (+ syllables from U03.L08) | by letter name in U03.L01; by degree from U03.L02 | treble | on | on, from U03.L02 (`staffLabels`, §16.7) | — |
-| U05 | degrees | degree / chord tone | grand | on | on | — |
+| U05 | degrees | degree / chord tone | treble in U05.L01–L05 (chords read as stacks), grand from U05.L06 | on | on | — |
 | U06 | degrees | degree + chord band | grand / lead | on hover only | on | from U06.L02 |
 | U07 | degrees | learner's choice | lead sheet | off | on hover only | on |
 | U08–U10 | degrees | learner's choice | lead sheet | off | off | on |
@@ -176,14 +176,16 @@ Rules:
 | `band.two-chord-vamp` | 4/4 | I–IV, one chord per bar | every U01 groove Make (`tracks: ["bass", "chords"]`) and every U02 melody Make (all tracks) |
 | `band.waltz-vamp` | 3/4 | I–IV, bass on 1, chords on 2 and 3 | U01.L08 and later waltzes |
 | `band.phrase-8bar` | 4/4 | I–IV–I–V, I–IV–V–I (eight bars, voiced so each change moves a voice by a step) | an eight-bar melody that pauses on V in bar 4 and comes home on I in bar 8 (U03.L11, U03.CP) |
-| `band.axis-4bar` | 4/4 | I–V–vi–IV | schema lessons (U06 on); its jazz-soul version swings and uses sevenths |
+| `band.axis-4bar` | 4/4 | I–V–vi–IV | schema lessons (U06 on); its jazz-soul version swings and uses sixths and sevenths (C6 G7 Am7 F6, never a major 7th under a tune that lands on 1 or 4). In U05 the learner plays the chords: `tracks: ["drums", "bass"]` when the chords sit on the Band's roots (U05.L01), `tracks: ["drums"]` when the learner chooses them. Its snare is on 2 and 4 only in pop; indie, funk and jazz-soul put it on 3, so prose never names the snare's beat over this Band (U06.L12) |
+| `band.doo-wop` | 4/4 | I–vi–IV–V, piano on every triplet, bass on 1 and 3 | doo-wop (U06.L07) and C2 |
+| `band.three-chord` | 4/4 | I–IV–V–IV, straight eighths, a pumping root bass | three-chord rock (U06.L07) and C2 |
 
 `followsLearnerKey: true` makes the Band take the key of the learner's `.scale()` (a pattern included, from U03.L05), so a learner who moves the tune keeps the backing. The degree rubric rules (`ends-on-degree`, `degree-set`) are judged in the exercise's declared key: until the grader reads the learner's `.scale()` there, a Make whose required rule counts degrees does not invite another key (U03.L02 S9 keeps C).
 
 2. A Band carries no tempo line: it plays at the lesson's tempo, so its bar must have the lesson's number of beats. The Make check fails a Band written in another meter (`BAND_METERS` in `content/bands/index.ts`).
 3. Band code is read-only for the learner and may use locked tools (it is a preview context). It must follow STYLE, pass the strict lint, and exist for every flavour.
 4. The Band supplies the roles the learner is **not** writing. If the Make is a melody, the Band is drums + bass + chords; if the Make is a groove, the Band is bass + chords (`tracks: ["bass", "chords"]`).
-5. A check that needs harmony under a learner melody names the Band track explicitly (`harmony: 'band.chords'`).
+5. A check that needs harmony under a learner melody reads a chord track **in the learner's code** (`harmony: "chords"`), with the Band on drums and bass only. The grader is not given the Band's code (neither content:check nor the app passes `ctx.band` yet), so a rule against `band.chords` reads no chords and can only ever say "not yet" (U06.L05, U07.L03–L07 and U07.CP were written this way). When the Band reaches grading, `harmony: "band.chords"` becomes usable.
 6. A flavour changes sounds and the Band, **never the rubric and never the notes the learner must write**. Declare starter sound swaps in `flavours`; ship a passing solution test for each shipped flavour. A swap applies to learner-editable code only where that sound is already unlocked; otherwise the default (`piano`, `ebass`, the default kit) stays, and only the Band carries the flavour's sounds (contracts §5.10 rule 8). In U01–U02 that means: no swaps at all.
 7. The jazz-soul Band uses seventh chords and swing from U03 on; your prose must not name those ideas before their lessons. "Hear how the band leans back" is fine; "swing" as a term waits for U11 (the U01.L09 preview calls it a feel and does not add a term).
 8. Use `band: false` only when silence around the part is the point, or in U00 (the onboarding loop is already a band); give the reason in a comment.
@@ -260,6 +262,16 @@ The Wave 3 answer shapes (§16) have codes of their own:
 | a by-ear transcription: where it first goes wrong / the right note at the wrong time / right pitches, wrong rhythm | `melody.first-difference` / `melody.rhythm-note` / `melody.pitch-only` |
 
 The events matcher's rhythm `"onsets+durations"` compares onsets and lengths; write it in new content. `"exact"` is the same thing under its older name (U01.L05 keeps it), and content CI refuses `"exact"` together with `durations: false` (`matcher.rhythm-exact-durations`).
+
+The chord steps of U05 on (§17) meet these:
+
+| Situation | Code |
+|---|---|
+| a chord with other notes than the target (an `n` stack, a note list, a `voicing()`) | `harmony.pcset` |
+| the right chord over the wrong lowest note | `harmony.bass` / `harmony.inversion` |
+| a keyboard chord with a note missing / extra / the wrong lowest note | `kb.missing-note` / `kb.extra-note` / `kb.bass` |
+| a staged chord dictation: the bass / the quality / the numeral of a chord | `harmony.bass` / `id.quality` / `harmony.rn` (`harmony.rn-case` for I against i); an X1 phrase check's quality stage reports `harmony.quality` |
+| a Make or brief whose `progression`, `cadence`, `voice-leading` or `chord-qualities` rule is not met | `rubric.unmet` (the detail names the chords; override it before U06.L02, §17.7) |
 
 Write the tests with your best guess, run `bun run content:check <id> --verbose`, and pin the codes it shows. The verbose output also prints the exact text the learner would read; fix the lesson (or override `feedbackText`) when that text uses a word the learner does not have yet.
 
@@ -341,6 +353,8 @@ Several authors run these at the same time. `content:check` only reads, and a le
 - **A step param inside code.** `{{param:x}}` in a stimulus or starter does not evaluate in check 6; a fixed stimulus with two audio cards (U03.L02 S6) gives the same contrast.
 - **A word that waits.** "Cadence" is U06.L04's term: in U03 the chords that set home are "a few chords that set home". The spec's conventions list every such word for its unit.
 - **A degree rule in another key.** A Make that said "any key you like" graded `degree-set` in C while the learner's line was in G; the prompt now keeps the declared key (§8).
+- **Numerals before they are taught.** A `progression` or `contains-rn` rule's detail reads "chords go I; the brief asks for I V vi IV". Before U06.L02 override `rubric.unmet` with the lesson's own words; the override serves every rule of the rubric, suggestions included, so keep it neutral ("{label}: not yet.", U05.L01 S8).
+- **A cluster that passes as a chord.** `progression` reads each chord's triad core, and today it calls C D E a C chord. Test "steps instead of 3rds" where a `pcset` matcher grades the chord (U05.L01 S4), and use `chord-qualities` (§17.6) when a Make must insist on triads.
 
 ## 14. Asking for a registry change
 
@@ -487,3 +501,109 @@ A `modify` step that starts by ear and ends with a picture: `target: { audible: 
 - A fact card may list other correct answers: `accept: [{ text: ["CM7"] }]` beside `answer: { text: ["Cmaj7"] }` (content/decks).
 - A milestone may require a transcription-ladder level (`ladder: { level: 5 }`, optionally counted only from a session on: `after: "J1.L01"`) and alternatives (`anyOf: [{ capstones: ["CF-A"] }, { capstones: ["CF-T"] }]`). ms.05, ms.07, ms.08 and ms.09 use them.
 
+## 17. The Wave 4 shapes (harmony, album and transcription)
+
+Wave 4 added these to `@oak/content-kit` (`CONTENT_SCHEMA_VERSION` 3). Each is checked structurally by `defineLesson` / `defineCapstone` (the rule names in brackets) and by `content:check`. Some are **planned**: they are in the schema and in `PLANNED`, a unit spec may use them, and a lesson that uses one fails check 2 ("which the platform does not implement yet") until the Build phase moves it into `IMPLEMENTED`. `bun run content:check <id>` names them. The planned ones are marked (planned) below; everything else is graded today.
+
+### 17.1 Chords in code: stack them, grade them as chords
+
+From U05.L01 a chord is a stack of degrees, `n("[0,2,4]")` over `.scale("C3:major")`: "skip a degree, twice" from the root. Grade any step whose answer is a chord with the `pcset` matcher (pitch classes per onset; `bass: true` when the lowest note matters), never with `events` and never by text: `[9,7,5]` and `[-2,0,2]` are the same chord as `[5,7,9]`, and one of them is your "equivalent answer" test. `voicing()` output (U05.L08 on) is graded only this way (contracts §6.7). The worked example is U05.L01 S4:
+
+```ts
+code: { starter: code(chords("<[0,2,4] [4,6,8] ⟪[5]⟫ [3,5,7]>")) },
+reference: { solutions: [code(chords("<[0,2,4] [4,6,8] [5,7,9] [3,5,7]>"))], bars: 4 },
+matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"] },
+constraints: [{ c: "edit-only-regions", feedback: "code.edit-outside" }],
+feedbackText: { "harmony.pcset": "Bar {bar}: your chord has {got}; the target has {exp}. Stack from the bass note: …" },
+```
+
+A chord outside the key's triads (A major in C, C augmented) is a note list, `note("[a3,c#4,e4]")`; chromatic `n` steps wait for U15.L01. `chord()` and `.voicing()` are locked until U05.L08 (the voicing gate, contracts §3.1 rule 6) and appear before it only in `preview: true` examples.
+
+### 17.2 Chords as answers: build, name, number
+
+| The learner … | Exercise and answer | Graded by |
+|---|---|---|
+| builds a chord on the keyboard | `keyboard`, `{ ui: "keyboard", mode: "chord" }`, `expect: { pcs, bassPc }`, `pitchMode: "octave-free"` (U05.L01 S5) | pitch classes and the lowest note: `kb.*` |
+| builds chords on the staff (planned) | `staff-write` with `palette.chords: true` and `expect: { e: "chords", symbols: ["C", "G/B"], spelling: "strict", bass: true }`; tests answer `{ staff: "[C4,E4,G4]:2 [B3,D4,G4]:2" }` (`staff.chords-palette`) | pitch classes per chord, the letters when strict (`staff.enharmonic`), the lowest note (`harmony.inversion`) |
+| names a chord | `fact` (or `identify`) with `{ ui: "text", normalize: "chord" }`: C°, Co and Cdim are one answer, C+ and Caug one, slash chords allowed (`C/E`) | the normalized symbol; check 13 parses every expected symbol |
+| picks a quality | `quality-pad` (`maj`, `min`, `dim`, `aug`), usually from `fam.chd.quality-triad` | the quality |
+| names the inversion | `choice` with `root`, `first`, `second` (or the generator of `fam.chd.inversion`) | the choice |
+| writes Roman numerals per bar | `rn-palette` with `slots` = bars, `allow: ["triads"]` (add `"inversions"` from U06.L11 to grade the bass too) and the exercise's `key` | degree, quality and, with `inversions`, the bass; never the string (`IV` and `iv` differ by quality, `harmony.rn-case`) |
+| marks function or cadence per bar or phrase (planned) | `{ ui: "slot-choice", slots: 4, options: FUNCTION_OPTIONS }` (T, PD, D) or `CADENCE_OPTIONS` (PAC, IAC, HC, PC, DC), `correct: { choice: ["T", "PD", "D", "T"] }` (`slot-choice.labels`, `slot-choice.correct`) | slot by slot; a `partial` map gives credit for IAC against PAC |
+
+Offer only the options a lesson has taught: the cadence ids arrive with U06.L04 (PAC, IAC, HC) and U06.L06–L07 (DC, PC), and their labels use those words (check 14 reads option labels).
+
+### 17.3 Chord dictation in stages: bass, quality, numeral
+
+A `dictation` step with `domain: "harmony"`, `stages: ["bass", "quality", "rn"]` and a widget per stage (feature `dictation.stage-answers`):
+
+```ts
+stages: ["bass", "quality", "rn"],
+stageAnswers: {
+  bass: { ui: "degree-pad", set: ["1", "2", "3", "4", "5", "6"], sequenceLen: 4, syllables: true },
+  quality: { ui: "quality-pad", set: ["maj", "min"] },
+  rn: { ui: "rn-palette", slots: 4, allow: ["triads"] },
+},
+stageFlow: "sequential",   // the default: a stage opens when the one before passes at stagePass or is revealed
+stagePass: 0.8,
+```
+
+The stages run bass → quality → rn (`dictation.stage-order`); every listed stage has a widget and every widget a stage (`dictation.stage-answers`). Tests answer `{ answer: { stages: { bass: ["1", "5", "6", "4"], quality: [...], rn: [...] } } }`.
+
+### 17.4 By ear in parts, bass first
+
+A by-ear transcription (§16.4) of a loop with chords is taken one track at a time (feature `by-ear.parts`): the bass, then the chords. Each part names its track, a label the learner reads, its matcher and pass mark; the step's own `matcher` grades the whole at the end and must still carry the pitch mode `accepts` names (an `all` of the parts' matchers does).
+
+```ts
+byEar: { ab: true, rates: [1, 0.75, 0.5], accepts: "exact", parts: [
+  { track: "bass", label: "The bass: one note a bar", matcher: { m: "melody", pitch: "absolute", wPitch: 0.8, wRhythm: 0.2, rhythmTol: [1, 8], track: "bass" } },
+  { track: "chords", label: "The chords above it", matcher: { m: "pcset", perOnset: true, bass: false, tracks: ["chords"] }, pass: 0.8 },
+] },
+```
+
+A part graded on harmony needs a bass part before it (`by-ear.bass-first`); each track appears once (`by-ear.parts-tracks`).
+
+### 17.5 Voice leading and the voicing gate
+
+`voice-leading` reads a hand-voiced chord track as voices **in the order the notes are written**, so `[c4,a4,f4]` is a leap plus a crossing even though it sounds like `[c4,f4,a4]`: teach "keep the three in order, lowest first". `maxMovePerVoice: 2` ("every voice moves by a step or stays") suits loops whose neighbouring chords share a note (C G Am F; U05.L07's Make). Where IV meets V nothing is shared and one voice must fall a 3rd, so I–IV–V–I needs `maxMovePerVoice: 3` (the gate check, U05.CP). The gate check adds (feature `voice-leading.gate`): `voices: 3` (every chord has three notes), `commonTones: true` (a shared pitch class stays put in its voice), `noCrossing: true` (voices keep their order), `bassFree: true` (a root bass inside the track is left out of the motion limits). The gate check is the exercise `U05.L07/hand-voiced-cadence` (the id is fixed: toolbox `VOICING_GATE`), graded with `all` of `pcset` per onset and that rubric rule; it must pass at 0.9 with nothing revealed. U05.L08's first step is the same check in another key with `gateCheck: true` and the id `hand-voiced-cadence-again` (a `variants` entry of the gate), shown only while the gate is unmet (feature `step.gate-check`). It may not use the tools it guards.
+
+### 17.6 Rubric rules for harmony and melody over chords
+
+Graded: `progression` (`rn` or a `schema`, `allowRotation`, `track`, `bars: [from, to]` to compare only those bars, C2's "bars 1–6 loop"), `cadence` (`types`, `at`), `chord-tones-strong` (`melody`, `harmony`: a chord track of the learner's code, see §8 rule 5; `strength`, `minRatio`), `contains-rn` (`rn`, `min`, `mustResolve`), `harmonic-rhythm` (`changesPerBar`), `voice-leading` (§17.5), `motif-reuse` (`shape: "steps"` counts a diatonic sequence), `range`, `ends-on-degree`, `degree-set`, `chord-qualities` (`contains`, `anyOf` with `min`, `subsetOf`, or `min` triads; a cluster is not a triad), `chord-inversions` (`min`, `of: [1, 2]`), `non-chord-tones` (`roles`: passing, neighbour, appoggiatura, suspension; `min`; U07.L04–L05), `pickup` (`track`, `units`: the line starts with a pickup in bar 0, U07.L08). A lesson Make still has exactly one required rule.
+
+What the grader reads, so a Make can be passed by the music it asks for:
+
+- **Two chords in a bar: roots first.** `.add()` keeps the structure of the pattern on its left, so `n("[0,2,4]").add(n("<[5 3]>"))` plays only vi; write `n("<[5 3]>").add(n("[0,2,4]"))` (U06.L08 teaches this).
+- **An arpeggiated `n` stack is not read as a chord** (each note sounds alone), while `chord(…).voicing().arp(…)` is (U06.L07's Make starts in chord names for this reason).
+- **`motif-reuse` reads one period of the line**: four identical bars are a 1-bar loop and score 0; a sequence (the idea moved) counts. At `minRatio: 0.5` it needs about half the bars to repeat an earlier shape.
+- **Progression and cadence rules judge in the declared key**: a Make that requires them does not invite another key.
+- **`rn-palette` with `allow: ["inversions"]` grades the bass** (`V6` against `V`).
+- **Chord symbols in `chord("…")`**: `o` for °, `aug` for +, never a slash (contracts §0.3). Unknown symbols (`Cmaj`) fail lint.
+
+### 17.7 Pickups and lead sheets
+
+A pickup is leading rests in bar 0 plus `pickup: { units }` on the lesson or exercise (contracts §6.11, STYLE §9); before U07.L08 nothing starts with one. A lead sheet is a step whose staff panel is `"lead"` with `ui.leadSheet` (feature `lead-sheet`, `lead-sheet.staff-panel`): the melody track, and the chords from a chord track or a fixed `chart` of `{ bar, beat, symbol }` (bar 0 is the pickup bar; every symbol must parse, check 13). "Play from the page" with a lead sheet is a `modify` step whose target is shown only as the lead sheet; "sing from the page" is a `sing` step in `mode: "sight"` with a code stimulus and `showLeadSheet: true`.
+
+### 17.8 Opening a Workbench panel in a step
+
+`ui.initialPanels: ["key"]` opens the key-signature panel when the step starts; also `circle`, `chords` (the chord band: symbols, and numerals from U06.L02), `function`, `range`, `chord-tones`. Each needs its toolbox row unlocked at the lesson (`WORKBENCH_PANEL_TOOLS`, check 4): the chord band only from U06.L02. Feature `step.initial-panels`. A step whose prose or prompt names a lens ("the chord-tone lens marks…") opens it, so the learner never has to find it (U06.L03 S3, U07.L01 S1/S3, U07.L03–L05).
+
+### 17.9 Capstone sessions and phrase checks
+
+A capstone's `sessionDefs` say what each session is for (`goal`, from contracts §2.4 verbatim), and may carry `starter` (what the first session opens with; later sessions open the draft), `review: true` (offer the tutor review here) and `release: true` (only the last session, `capstone.release-last`). A transcribe capstone whose learner picks the song (X1: Aura Lee or Red River Valley, `song`) declares its graded work as `checks`, resolved against the chosen song's answer key (`content/repertoire/<slug>/song.ts`, `answerKey.phrases` and `layers`):
+
+```ts
+checks: [
+  { id: "phrase-1", phrase: 1, layer: "melody", pass: 0.85,
+    matcher: { m: "melody", pitch: "key-relative", wPitch: 0.8, wRhythm: 0.2, rhythmTol: [1, 16] },
+    given: { meter: true, key: true, tonic: true, pickup: true, rhythmSkeleton: "setcpm(…)\n\nmel: s(\"…\")" } },
+  { id: "chords", phrase: [1, 4], layer: "chords", pass: 0.8, stages: ["bass", "quality", "rn"],
+    matcher: { m: "harmony", level: "rn", qualityDepth: "triad", inversion: false, harmonicRhythm: "given" } },
+],
+```
+
+Melody checks compare key-relative (contracts §6.6 X1); chord checks are staged bass first (`capstone.check-stages`). `bun run content:check X1` resolves every check against every song in the pool and lists a song whose answer key is not written yet as pending. A stage exercise written out in full (`stages: TranscribeStepEx[]`) may use `stimulus: { src: "capstone-song", bars, layers }`, `given`, and `grading.stages` (planned features `stimulus.capstone-song`, `transcribe.stages`).
+
+### 17.10 The gym schedule
+
+The slot rule of contracts §2.5 lives in `content/gym/slots.ts` (`placeGymSlots`) and `content/validate/gym.test.ts` proves that it reproduces every GYM.nn of the default order, that no slot falls inside a capstone, and that every graded slot has ladder material open (`LADDER_OPENS`). Nobody authors a gym session: ladder levels 1–4 are generated, 5 and 6 draw on the repertoire, own-audio slots use `content/gym/templates.ts`.

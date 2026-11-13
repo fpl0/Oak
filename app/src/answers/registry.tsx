@@ -1,4 +1,5 @@
-// The AnswerWidget registry (docs/design/wave2.md §3.1): one component per answer kind. Wave 3: `staff-input` is the
+// The AnswerWidget registry (docs/design/wave2.md §3.1): one component per answer kind. Wave 4: a `chord` text answer
+// gets the chord-name picker; `slot-choice` is the slot strip (function, cadence). Wave 3: `staff-input` is the
 // staff (notes, or a key signature with `mode: "key-signature"`); a `text` answer read as an interval or a key gets
 // the interval pad or the circle of fifths, each with its forgiving text field. A kind without a widget returns
 // null and the host shows `<AnswerUnavailable>`.
@@ -7,6 +8,7 @@ import { KeyAnswer } from "./keys/KeyAnswer.tsx";
 import { StaffInputAnswer } from "./staff/StaffInput.tsx";
 import type { AnswerKind, AnswerSpecOf, AnswerWidget, AnswerWidgetFor, AnswerWidgetProps } from "./types.ts";
 import { ChoiceAnswer } from "./widgets/Choice.tsx";
+import { ChordNameAnswer } from "./widgets/ChordName.tsx";
 import { ClickRollAnswer, ClickStaffAnswer } from "./widgets/ClickMusic.tsx";
 import { BlanksAnswer, ClickCodeAnswer, CodeAnswer } from "./widgets/CodeLike.tsx";
 import { DegreePadAnswer } from "./widgets/DegreePad.tsx";
@@ -16,6 +18,7 @@ import { OrderAnswer } from "./widgets/Order.tsx";
 import { RhythmGridAnswer } from "./widgets/RhythmGrid.tsx";
 import { BarButtonsAnswer, HumAnswer, SameDifferentAnswer, SliderAnswer } from "./widgets/Simple.tsx";
 import { SingCaptureAnswer } from "./widgets/SingCapture.tsx";
+import { SlotChoiceAnswer } from "./widgets/SlotChoice.tsx";
 import { TapPadAnswer } from "./widgets/TapPad.tsx";
 import { NumberAnswer, TextAnswer } from "./widgets/TextEntry.tsx";
 
@@ -25,6 +28,7 @@ type Registry = { [K in AnswerKind]: AnswerWidget<K> | null };
 function TextKindAnswer(p: AnswerWidgetProps<"text">) {
   if (p.spec.normalize === "interval") return <IntervalAnswer {...p} />;
   if (p.spec.normalize === "key") return <KeyAnswer {...p} />;
+  if (p.spec.normalize === "chord") return <ChordNameAnswer {...p} />;
   return <TextAnswer {...p} />;
 }
 
@@ -42,6 +46,7 @@ export const ANSWER_WIDGETS: Registry = {
   tap: TapPadAnswer,
   mic: SingCaptureAnswer,
   "bar-buttons": BarButtonsAnswer,
+  "slot-choice": SlotChoiceAnswer,
   "click-code": ClickCodeAnswer,
   "click-staff": ClickStaffAnswer,
   "click-roll": ClickRollAnswer,

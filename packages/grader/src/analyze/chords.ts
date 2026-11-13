@@ -7,10 +7,12 @@ import type { ChordId, Pc, RomanNumeral, SchemaDef } from "@oak/theory";
 import {
   chordPcs,
   degreeOf,
+  displayRN,
   formatRN,
   identifyChord,
   parseChordSymbol,
   parseRN,
+  readChord,
   rnToChord,
   romanOf,
   SCHEMAS,
@@ -143,6 +145,77 @@ export function chordSlots(
   return slots;
 }
 
+/**
+ * A chord track played one note at a time (a broken chord: `n("<[0,2,4] …>").arp("0 1 2 1")`, `tb.arp` from
+ * U05.L04) never sounds two notes together, so `chordSlots` finds no chord in it. Read it the way a listener
+ * does: the notes that start in each bar, or in each half bar when the whole bar is not one chord, name a chord
+ * when they are stacked in 3rds (`readChord`). The bass is the lowest note sounding at the segment's start
+ * across `bass` (default: the segment's own lowest note). Segments that are not stacked in 3rds give no slot.
+ */
+export function brokenChordSlots(
+  events: readonly NEvent[],
+  o: { bass?: readonly NEvent[] } = {},
+): ChordSlot[] {
+  const notes = pitched(events);
+  if (notes.length < 3) return [];
+  const out: ChordSlot[] = [];
+  const read = (from: Rat, to: Rat): ChordSlot | null => {
+    const inside = notes.filter((e) => R.lte(from, e.onset) && R.lt(e.onset, to));
+    const pcs = [...new Set(inside.map((e) => mod12(e.midi)))];
+    if (pcs.length < 3) return null;
+    const sound = o.bass ? sounding(pitched(o.bass), from) : [];
+    const lowest = Math.min(...inside.map((e) => e.midi), ...sound.map((e) => e.midi));
+    const named = readChord(pcs, mod12(lowest) as Pc);
+    if (!named) return null;
+    return {
+      span: [from, to],
+      chord: withBass(named.chord, lowest),
+      midis: inside.map((e) => e.midi).sort((a, b) => a - b),
+      ids: inside.map((e) => e.id),
+      bassMidi: lowest,
+    };
+  };
+  const last = notes.reduce((m, e) => Math.max(m, R.floor(e.onset)), 0);
+  for (let c = 0; c <= last; c++) {
+    const whole = read(rat(c), rat(c + 1));
+    if (whole) {
+      out.push(whole);
+      continue;
+    }
+    for (const [a, b] of [
+      [rat(c), rat(2 * c + 1, 2)],
+      [rat(2 * c + 1, 2), rat(c + 1)],
+    ] as const) {
+      const half = read(a, b);
+      if (half) out.push(half);
+    }
+  }
+  return out;
+}
+
+/**
+ * A hand-stacked slot of three or more pitch classes names a chord only when it is stacked in 3rds (a
+ * triad or seventh, `readChord`) or holds a whole triad under its extensions (C E G D is Cadd9); a cluster
+ * such as C D E is no chord, so it can never pass as I (content lead, Wave 4).
+ */
+export function unclustered(slot: ChordSlot): ChordSlot {
+  if (slot.symbol !== undefined || !slot.chord) return slot;
+  const pcs = [...new Set(slot.midis.map(mod12))];
+  if (pcs.length < 3) return slot;
+  if (readChord(pcs, slot.chord.bassPc)) return slot;
+  const core = triadCore(slot.chord);
+  const third =
+    core.quality === "min" || core.quality === "dim"
+      ? 3
+      : core.quality === "sus2"
+        ? 2
+        : core.quality === "sus4"
+          ? 5
+          : 4;
+  const fifth = core.quality === "dim" ? 6 : core.quality === "aug" ? 8 : 7;
+  const whole = [0, third, fifth].every((i) => pcs.includes(mod12(core.rootPc + i)));
+  return whole ? slot : { ...slot, chord: null };
+}
 /** Slots built from chord symbols alone, one per bar or per given span (staged dictation answers). */
 export function slotsFromChords(
   chords: readonly (ChordId | null)[],
@@ -157,6 +230,10 @@ export function slotRomans(slots: readonly ChordSlot[], key: KeySpec): (RomanNum
 }
 export function romanText(rn: RomanNumeral | null): string {
   return rn ? formatRN(rn) : "?";
+}
+/** A numeral as messages show it ("vii°", "♭VII"); comparisons never use text (they compare parts). */
+export function romanShown(rn: RomanNumeral | null): string {
+  return rn ? displayRN(rn) : "?";
 }
 
 /** Chord changes per bar over `bars` bars (the first chord of the piece counts as a change). */
@@ -267,6 +344,10 @@ export function cadenceAt(
   endBar: number,
 ): CadenceType {
   const end = rat(endBar);
+  // The chord sounding last decides: when it cannot be named (a sus chord, a cluster) there is no cadence,
+  // never one read from the chord before it (Csus4 after G is not a half cadence).
+  const sounding = slots.filter((s) => R.lt(s.span[0], end) && s.midis.length > 0);
+  if (sounding.length > 0 && !sounding[sounding.length - 1]?.chord) return "none";
   const before = slots.filter((s) => R.lt(s.span[0], end) && s.chord);
   const last = before[before.length - 1];
   if (!last?.chord) return "none";

@@ -91,9 +91,22 @@ if (arg === "all") {
   checkpoints = cps.defs;
   // A brief is authored just in time (two units ahead of the learner): `all` checks the ones that carry
   // tests, and names the rest.
-  capstoneIds = capstones.filter((c) => (c.brief?.tests.length ?? 0) > 0).map((c) => c.id);
+  // A transcribe capstone is checked once its sessions carry phrase checks or stage exercises (Wave 4).
+  const authoredSessions = (c: (typeof capstones)[number]) =>
+    c.sessionDefs.some((s) => (s.checks?.length ?? 0) > 0 || (s.stages?.length ?? 0) > 0);
+  capstoneIds = capstones
+    .filter((c) => (c.brief?.tests.length ?? 0) > 0 || (c.kind === "transcribe" && authoredSessions(c)))
+    .map((c) => c.id);
   const later = capstones.filter((c) => c.brief && c.brief.tests.length === 0).map((c) => c.id);
   if (later.length) console.log(color(2, `note: briefs without tests yet (not checked): ${later.join(" ")}`));
+  const unchecked = capstones.filter((c) => c.kind === "transcribe" && !authoredSessions(c)).map((c) => c.id);
+  if (unchecked.length)
+    console.log(
+      color(
+        2,
+        `note: transcription capstones without phrase checks yet (not checked): ${unchecked.join(" ")}`,
+      ),
+    );
 } else if (unitIds.has(arg)) {
   targets = lessons.filter((l) => l.def.id.startsWith(`${arg}.`) && !l.sample);
   checkpoints = cps.defs.filter((c) => c.id === `${arg}.CP`);

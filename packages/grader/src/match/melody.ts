@@ -6,14 +6,14 @@ import type { Diagnostic, KeySpec, Matcher, NEvent, Rat } from "@oak/content-kit
 import { R } from "@oak/content-kit";
 import { degreeOf, pcOf } from "@oak/theory";
 import { locAt, locOf, median, mod12, modeOf } from "../analyze/events.ts";
-import { keyFromContext, keyOf } from "../analyze/key.ts";
+import { inScale, keyFromContext, keyOf } from "../analyze/key.ts";
 import type { Note } from "../analyze/melody.ts";
 import { contourScore, editDistance, melodyLine, parsons } from "../analyze/melody.ts";
-import { selectTrack } from "../analyze/tracks.ts";
+import { lineWord, selectTrack } from "../analyze/tracks.ts";
 import { diag } from "../feedback/catalog.ts";
 import type { MatchResult, NormalizeContext, Normalized } from "../types.ts";
 import { alignFeel, clampScore, f1, noteName, pitchLabel } from "./common.ts";
-import { matchOnsets } from "./rhythm.ts";
+import { matchOnsets, pickupShift } from "./rhythm.ts";
 
 export type MelodyMatcher = Extract<Matcher, { m: "melody" }>;
 
@@ -266,7 +266,13 @@ export function melodyMatch(
         perNote.push(
           diag(
             "melody.wrong-degree",
-            { got: g.name, gotSyl: g.syl, exp: e.name, expSyl: e.syl },
+            {
+              got: g.name,
+              gotSyl: g.syl,
+              exp: e.name,
+              expSyl: e.syl,
+              line: lineWord(reference, cfg.track ?? t.event.track),
+            },
             where,
             "pitch",
           ),
@@ -349,7 +355,11 @@ export function melodyMatch(
   if (transposed && !indexShift && Sp >= 0.75) diagnostics.push(transposed);
   // By ear: a whole tune moved where the step wants it as heard is one finding, not one per note.
   let moved: Diagnostic | null = null;
-  if (ctx.transcription && (cfg.pitch === "absolute" || cfg.pitch === "octave-free") && tKey) {
+  // Every answer note in the key and one scale step off is the n-from-0 slip, not a tune in another key, even
+  // when the slip happens to equal a chromatic transposition (C G A F typed as D A B G).
+  const keyIdx = cfg.pitch === "key-relative" ? (aKey ?? tKey) : tKey;
+  const slipInKey = indexShift && !!keyIdx && A.every((n) => inScale(n.midi, keyIdx));
+  if (ctx.transcription && !slipInKey && (cfg.pitch === "absolute" || cfg.pitch === "octave-free") && tKey) {
     const k = bestTransposition(T, A);
     const shifted = A.map((n) => (cfg.pitch === "absolute" ? n.midi + k : mod12(n.midi + k)));
     const ref = T.map((n) => (cfg.pitch === "absolute" ? n.midi : mod12(n.midi)));
@@ -371,7 +381,7 @@ export function melodyMatch(
         {
           gotKey: keyText(gotKey),
           expKey: keyText(tKey),
-          semis: `${semis} semitone${semis === 1 ? "" : "s"}`,
+          semis: `${semis} half step${semis === 1 ? "" : "s"}`,
           dir: k > 0 ? "up" : "down",
         },
         undefined,
@@ -379,8 +389,14 @@ export function melodyMatch(
       );
     }
   }
-  if (moved) diagnostics.push(moved);
-  else if (!indexShift) diagnostics.push(...perNote);
+  if (moved) {
+    // A whole tune moved out of the key: the transposition is the finding, not a step slip.
+    if (indexShift) {
+      const at = diagnostics.findIndex((d) => d.id === "melody.index-shift");
+      if (at >= 0) diagnostics.splice(at, 1);
+    }
+    diagnostics.push(moved);
+  } else if (!indexShift) diagnostics.push(...perNote);
   if (ctx.transcription && !moved) {
     const say = (x: { name: string; syl: string }): string =>
       x.syl && x.syl !== x.name ? `${x.name} (${x.syl})` : x.name;
@@ -436,7 +452,25 @@ export function melodyMatch(
   if (Sp === 1 && Sr < 1) diagnostics.push(diag("melody.rhythm-only", {}, undefined, "rhythm"));
 
   const wSum = cfg.wPitch + cfg.wRhythm || 1;
-  const score = (cfg.wPitch * Sp + cfg.wRhythm * Sr) / wSum;
+  let score = (cfg.wPitch * Sp + cfg.wRhythm * Sr) / wSum;
+  // A pickup put on the downbeat (contracts §6.11 item 5): one finding in place of the per-note rhythm ones,
+  // and the displacement credit when the notes are right.
+  if (ctx.pickup && Sr < 1) {
+    const shift = pickupShift(
+      T.map((x) => x.onset),
+      A.map((x) => x.onset),
+      ctx.pickup,
+      ctx.meter,
+    );
+    if (shift) {
+      for (let i = diagnostics.length - 1; i >= 0; i--)
+        if ((diagnostics[i] as Diagnostic).dim === "rhythm") diagnostics.splice(i, 1);
+      diagnostics.unshift(
+        diag("rhythm.pickup-missing", { units: R.str(ctx.pickup.units) }, undefined, "rhythm"),
+      );
+      if (Sp >= 0.999) score = Math.max(score, PICKUP_CREDIT);
+    }
+  }
   return {
     score: clampScore(score),
     dims: {
@@ -448,6 +482,9 @@ export function melodyMatch(
     overlay,
   };
 }
+
+/** Credit for a melody whose only fault is a pickup put on the downbeat (the rhythm matcher's default). */
+const PICKUP_CREDIT = 0.5;
 
 /** Pitch class of a key's tonic. */
 export const pitchClassOfKey = (key: KeySpec): number => pcOf(key.tonic);

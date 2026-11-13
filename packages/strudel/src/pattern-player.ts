@@ -1,17 +1,29 @@
-// The hidden pattern player (Transcribe's "pattern source": ladder stimuli, X1, X2, CF-T). A repl with no
-// editor and nothing in the DOM. Rate is a cps scale, transposition a live `note` shift on pitched haps,
-// the A–B loop `.ribbon(fromBar, bars)`; all three change the playing pattern at once, no re-evaluation.
-import type { LintContext, LintDiagnostic } from "@oak/content-kit";
+// The hidden pattern player (Transcribe's "pattern source": ladder stimuli, X1, X2, CF-T; the circle's key
+// preview; auditions). A repl with no editor and nothing in the DOM: the code it plays never reaches an editor,
+// the page or the learner. Rate is a cps scale, transposition a live `note` shift on pitched haps, the A–B loop
+// `.ribbon(fromBar, bars)`, realism (contracts §6.12) a deterministic layer on the pattern; all four change the
+// playing pattern at once, no re-evaluation. A Band (contracts §5.10) is evaluated next to the code and plays on
+// the same scheduler, exactly as under an editor.
+import type { KeySpec, LintContext, LintDiagnostic } from "@oak/content-kit";
 import * as core from "@strudel/core";
 import { transpiler } from "@strudel/transpiler";
 import * as webaudio from "@strudel/webaudio";
 import * as WT from "worker-timers";
-import { type EvalSession, finalizePattern, installTrackWrapper, newSession } from "./evaluation.ts";
+import { bandCodeFor, firstScaleOf } from "./band.ts";
+import {
+  type EvalSession,
+  evaluateBand,
+  finalizePattern,
+  installTrackWrapper,
+  newSession,
+} from "./evaluation.ts";
 import { ADAPTER_FEEDBACK, diagnostic, errorToDiagnostic, hasError, runLint } from "./lint-bridge.ts";
 import { copyMutes, NO_MUTES } from "./mutes.ts";
+import { isCleanRealism, type RealismSpec, realismSpec } from "./realism.ts";
+import { applyRealism } from "./realism-pattern.ts";
 import { captureMessageListeners, type Runtime, removeCaptured } from "./runtime.ts";
 import type { CyclistLike } from "./transport.ts";
-import type { EvalOutcome, MuteMap, PatternPlayer } from "./types.ts";
+import type { BandSetup, EvalOutcome, MuteMap, PatternPlayer } from "./types.ts";
 
 interface ReplLike {
   scheduler: CyclistLike & { stop(): void; start(): Promise<void> };
@@ -31,6 +43,18 @@ export function barPosition(cycle: number, loop: { fromBar: number; bars: number
 
 export const clampRate = (rate: number): number =>
   Math.max(0.25, Math.min(1, Number.isFinite(rate) ? rate : 1));
+/** The step key a Band was written for: its first `.scale()` (the app filled `{{key}}` with it). */
+export function keyOfBandCode(code: string): KeySpec | null {
+  const first = firstScaleOf(code);
+  if (!first) return null;
+  return { tonic: first.tonic, mode: first.mode.replace(/:/g, " ") } as KeySpec;
+}
+
+/** Beats per bar of the player's meter (4/4): turns the item's cps into the Band's `{{bpm}}`. */
+const BEATS_PER_BAR = 4;
+/** Bars warmed ahead of play: a ladder item or a song phrase fits; longer sources warm the rest while playing. */
+const PRELOAD_BARS = 16;
+
 export const clampTranspose = (st: number): number =>
   Math.max(-12, Math.min(12, Math.round(Number.isFinite(st) ? st : 0)));
 
@@ -49,6 +73,13 @@ export function createPatternPlayer(rt: Runtime): PatternPlayer {
   let effective: Strudel.Pattern | undefined;
   let session: EvalSession = newSession();
   let release: (() => void) | null = null;
+  let realism: RealismSpec = realismSpec(0);
+  let pendingBand: { code: string; roles: string[] } | null = null;
+  let bandFailure: unknown = null;
+  let loadedTracks: string[] = [];
+  let loadedBars = 1;
+  /** The preload a realism change started: `play` waits for it, so a new lead sound never skips. */
+  let warming: Promise<unknown> = Promise.resolve();
   const intervals = new Set<number>();
 
   const constructed = captureMessageListeners(
@@ -69,7 +100,17 @@ export function createPatternPlayer(rt: Runtime): PatternPlayer {
           if (intervals.delete(t)) WT.clearInterval(t);
         },
         id: `oak_${id.replace(":", "-")}_`,
-        beforeEval: () => installTrackWrapper(session, () => mutes),
+        beforeEval: async () => {
+          installTrackWrapper(session, () => mutes);
+          if (pendingBand) {
+            try {
+              await evaluateBand(pendingBand.code, pendingBand.roles, session);
+            } catch (err) {
+              session.band = [];
+              bandFailure = err;
+            }
+          }
+        },
         editPattern: (pat: Strudel.Pattern) => {
           raw = pat;
           effective = build();
@@ -108,7 +149,37 @@ export function createPatternPlayer(rt: Runtime): PatternPlayer {
     let out = finalizePattern(raw, { session, mutes: () => mutes, transpose: () => transpose });
     if (loop)
       out = (out.ribbon as (offset: number, cycles: number) => Strudel.Pattern)(loop.fromBar, loop.bars);
+    // Realism after the loop (so a note pushed across the loop point stays one note, never a re-triggered
+    // fragment), keyed by the bar each looped cycle plays: bars 3–4 looped sound as they did in the full play.
+    if (!isCleanRealism(realism)) {
+      const l = loop;
+      out = applyRealism(out, realism, {
+        cps: baseCps,
+        tracks: loadedTracks,
+        ...(l ? { origin: (c: number) => barPosition(c, l) } : {}),
+      });
+    }
     return out;
+  }
+
+  /** The Band code to evaluate under the hidden code, checked with the Band's own lint profile. */
+  function prepareBand(
+    band: BandSetup | null,
+    code: string,
+    cps: number,
+    key: KeySpec | null | undefined,
+    ctx: LintContext,
+  ): { ok: true; value: { code: string; roles: string[] } } | { ok: false; error: unknown } {
+    if (!band) return { ok: false, error: null };
+    const bandCode = bandCodeFor(band, {
+      key: key ?? keyOfBandCode(band.code),
+      defaultBpm: cps > 0 ? Math.round(cps * 60 * BEATS_PER_BAR * 1000) / 1000 : 120,
+      learnerCode: code,
+    });
+    const linted = runLint(rt.lint, bandCode, { ...ctx, profile: "band", allowPreview: true });
+    if (!linted.ok || !linted.result.ok)
+      return { ok: false, error: new Error("the Band code did not pass its check") };
+    return { ok: true, value: { code: bandCode, roles: [...band.tracks] } };
   }
 
   const source = {
@@ -158,30 +229,53 @@ export function createPatternPlayer(rt: Runtime): PatternPlayer {
         if (!lint.ok || hasError(lint.diagnostics))
           return { ...base, diagnostics: [...lint.diagnostics], lint };
         await rt.prebake();
+        const extra: LintDiagnostic[] = [];
+        pendingBand = null;
+        bandFailure = null;
+        const band = prepareBand(opts.band ?? null, code, opts.cps, opts.key, ctx);
+        if (band.ok) pendingBand = band.value;
+        else if (band.error) bandFailure = band.error;
         session = newSession();
         await repl.evaluate(code, false);
+        pendingBand = null;
         if (session.error) {
           const d: LintDiagnostic = errorToDiagnostic(session.error, code);
           return { ...base, diagnostics: [...lint.diagnostics, d], lint };
         }
+        if (bandFailure) {
+          extra.push(
+            diagnostic(
+              ADAPTER_FEEDBACK.band,
+              "warn",
+              `The Band could not play (${String(bandFailure)}); the source still plays.`,
+              code,
+            ),
+          );
+        }
+        loadedTracks = [...session.tracks, ...session.band.map((b) => b.track)];
         // Reference code is authored at its own tempo; `opts.cps` is the tempo at rate 1.
         baseCps = opts.cps > 0 ? opts.cps : repl.scheduler.cps;
         applyRate();
-        if (raw) await rt.preloadPattern(raw, 0, Math.max(1, Math.min(opts.bars, 8)));
+        effective = build();
+        loadedBars = Math.max(1, Math.min(opts.bars, PRELOAD_BARS));
+        // The whole stimulus as it will sound (Band, realism, lead sound and detuned pitches included).
+        if (effective) await rt.preloadPattern(effective, 0, loadedBars);
         if (!playing) rt.transport.setActive(source);
         return {
           ...base,
           ok: true,
           cps: repl.scheduler.cps,
-          diagnostics: [...lint.diagnostics],
+          diagnostics: [...lint.diagnostics, ...extra],
           lint,
           miniLocations: (repl.state.miniLocations ?? []).map(([a, b]) => [a, b] as [number, number]),
-          tracks: [...session.tracks],
+          tracks: [...loadedTracks],
         };
       });
     },
     async play() {
       if (disposed || !raw) return;
+      await warming;
+      if (disposed) return;
       if (!repl.scheduler.started) {
         applyRate();
         await repl.start();
@@ -198,11 +292,22 @@ export function createPatternPlayer(rt: Runtime): PatternPlayer {
       transpose = clampTranspose(semitones);
     },
     setLoop(next) {
-      loop = next && next.bars > 0 ? { fromBar: Math.max(0, next.fromBar), bars: next.bars } : null;
+      // `fromBar` may be fractional, and negative for own audio looped in its lead-in (before bar 1).
+      loop =
+        next && next.bars > 0 && Number.isFinite(next.fromBar)
+          ? { fromBar: next.fromBar, bars: next.bars }
+          : null;
       effective = build();
     },
     setMutes(next) {
       mutes = copyMutes(next);
+    },
+    setRealism(spec) {
+      realism = { ...spec };
+      effective = build();
+      // A lead sound or detuned pitches the clean pattern never asked for: warm them before they are due.
+      if (effective && !isCleanRealism(realism))
+        warming = rt.preloadPattern(effective, 0, loadedBars).catch(() => undefined);
     },
     position: () => barPosition(repl.scheduler.started ? repl.scheduler.now() : 0, loop),
     dispose() {

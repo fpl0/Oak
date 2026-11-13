@@ -493,7 +493,9 @@ export function CodaUnlock({ toolIds, onDone }: CodaUnlockProps) {
           <Prose text={first.catalog.meaning} />
         </p>
       </div>
-      <div className="min-h-[96px]" aria-live="off">
+      {/* The picture's height is reserved while it draws (a roll, a staff, the circle); a code demo is one block of
+          known height, so it gets no reserve and no empty band under it (review:journey). */}
+      <div className={show.kind === "code" ? undefined : "min-h-[96px]"} aria-live="off">
         <ShowcaseView show={show} bar={bar} live={phase === "playing"} />
       </div>
       <div className="flex flex-wrap items-center gap-2">

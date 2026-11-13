@@ -12,6 +12,7 @@ import type {
   GradeResult,
   HintRung,
   InvestigateQ,
+  KeySpec,
   Trial,
 } from "@oak/api";
 import { fillBlanks, stripMarkers } from "@oak/api";
@@ -34,6 +35,7 @@ import { lessonWidgetFor } from "./answers.tsx";
 import { type Playing, playLead, playStimulus } from "./audio.ts";
 import { InlineMd, useStepHost } from "./frame.tsx";
 import type { TakeLookup } from "./grading.ts";
+import { LeadSheetView, leadSheetOf } from "./lead-sheet.tsx";
 import { answerSpecOf, questionSpec, revealCode, withTrialOptions } from "./model.ts";
 import { CodeMusic } from "./music.tsx";
 import { byEarSource, isByEar, keySignatureResponse, singLabelsFor, tonicPc } from "./rules.ts";
@@ -45,6 +47,8 @@ type Part = Exclude<Exercise, AllEx>;
 export interface InputRuntime {
   tapStart: number | null;
   plays: number;
+  /** The slot a slot strip is playing (`P`), stopped when another slot plays. */
+  slotPlaying?: { stop(): void } | null;
 }
 
 export interface InvestigateValue {
@@ -60,8 +64,13 @@ const CODE_INPUT = new Set<Exercise["kind"]>([
   "transcribe-step",
 ]);
 
+/** A dictation written as code: by ear, or from the page (U07.CP "from the page": a staff to write in `n()`). */
+function isCodeDictation(ex: Exercise): boolean {
+  return ex.kind === "dictation" && ex.answer.ui === "code";
+}
+
 export function isCodeInput(ex: Exercise): boolean {
-  return CODE_INPUT.has(ex.kind) || isByEar(ex);
+  return CODE_INPUT.has(ex.kind) || isByEar(ex) || isCodeDictation(ex);
 }
 
 /** The starter of a code part as the editor shows it (clean), and its editable regions. */
@@ -70,7 +79,7 @@ export function starterOf(ex: Exercise): { code: string; editable: CodeRange[] |
     const c = stripMarkers(ex.code.starter);
     return { code: c.code, editable: c.editable };
   }
-  if (isByEar(ex) && ex.answer.ui === "code") {
+  if (ex.kind === "dictation" && ex.answer.ui === "code") {
     const c = stripMarkers(ex.answer.starter);
     return { code: c.code, editable: c.editable };
   }
@@ -224,7 +233,8 @@ function useWorkbenchBase(ex: Part, variant: "full" | "compact"): Omit<Workbench
     ...(ex.key ? { key: ex.key } : {}),
     ...(ex.meter ? { meter: ex.meter } : {}),
   };
-  return { ...base, lessonCtx, variant };
+  // A part with its own pickup (contracts §6.11) shows bar 0 as the pickup bar, as it is graded.
+  return { ...base, lessonCtx, variant, ...(ex.pickup ? { pickup: ex.pickup } : {}) };
 }
 
 /** The Workbench of a code part, its A/B target and its marks. */
@@ -252,6 +262,8 @@ function CodeStage(p: PartInputProps & { code: string; setCode(code: string): vo
       {...base}
       id={p.wbId}
       code={p.code}
+      // The regions' boxes follow every edit (wave4.md §3.5), not only the pristine starter.
+      {...(!p.readOnly && (editable?.length ?? 0) > 0 ? { targetRegions: true } : {})}
       {...(p.readOnly
         ? { readOnly: true as const }
         : editable && editable.length > 0
@@ -427,7 +439,8 @@ export function useAnswerEnvFor(
     ex.kind === "sing" ? (ex.key ?? h.env.key) : null,
     ex.kind === "sing" ? (ex.meter ?? h.env.meter) : h.env.meter,
   );
-  const lenses = useLenses().shown;
+  const allLenses = useLenses();
+  const lenses = allLenses.shown;
   const env: AnswerEnv = { profile: h.env.profile, quiet: h.voice.quiet, audio: appAudio };
   // A checkpoint stores the answer without grading it ("Save answer"), so the widgets' Enter hint says so.
   if (h.mode === "checkpoint") env.submitVerb = "save";
@@ -441,7 +454,57 @@ export function useAnswerEnvFor(
     degrees: lenses.degrees || labels.some((l) => l.includes("degree")),
     solfege: lenses.solfege || labels.some((l) => l.includes("solfege")),
     noteNames: lenses.noteNames || labels.includes("note"),
+    // Wave 4 chord lenses: the RN palette prints a numeral's chord symbol only with that lens on.
+    chordSymbols: allLenses.chords.shown.chordSymbols,
+    romanNumerals: allLenses.chords.shown.romanNumerals,
   };
+  // Chords, numerals and slot strips are heard and named in the step's own key and tempo (wave4.md §4.3).
+  const harmonyUi = "answer" in ex && ex.answer && typeof ex.answer === "object" ? ex.answer.ui : null;
+  const staged = ex.kind === "dictation" && ex.stageAnswers !== undefined;
+  if (
+    staged ||
+    harmonyUi === "rn-palette" ||
+    harmonyUi === "quality-pad" ||
+    harmonyUi === "slot-choice" ||
+    harmonyUi === "keyboard" ||
+    harmonyUi === "staff-input" ||
+    harmonyUi === "text"
+  ) {
+    const meter = ex.meter ?? h.env.meter;
+    env.harmony = {
+      key: ex.key ?? (trial?.params.key as KeySpec | undefined) ?? h.env.key,
+      beatsPerBar: METERS[meter].unitsPerBar,
+      bpm: typeof ex.bpm === "number" ? ex.bpm : h.env.bpm,
+      // A graded chord is named once it is checked, never while it is built (that would give the answer away).
+      nameChords: "after",
+    };
+  }
+  // A slot strip hears its selected slot alone (`P`): slot i is the i-th equal span of the stimulus (a bar, half a
+  // bar or a phrase, as the strip divides it).
+  const slotSpec = harmonyUi === "slot-choice" && "answer" in ex ? (ex.answer as { slots?: number }) : null;
+  const slotStim = "stimulus" in ex ? ex.stimulus : undefined;
+  if (slotSpec?.slots && slotStim && (slotStim.src === "code" || trial)) {
+    const meter = ex.meter ?? h.env.meter;
+    const bars = slotStim.src === "code" ? slotStim.bars : Number(trial?.params.bars ?? 0);
+    const per = bars / slotSpec.slots;
+    if (bars > 0 && per > 0)
+      env.slots = {
+        play: (slot) => {
+          runtime.slotPlaying?.stop();
+          void playStimulus({
+            ...(slotStim.src === "code" ? { code: slotStim.code } : { trial }),
+            bars,
+            meter,
+            key: ex.key ?? h.env.key,
+            span: { fromBar: slot * per, bars: per },
+          })
+            .then((p) => {
+              runtime.slotPlaying = p;
+            })
+            .catch(() => null);
+        },
+      };
+  }
   if (ex.kind === "staff-write" || ex.kind === "staff-read" || ex.kind === "dictation")
     env.staff = { meter: METERS[ex.meter ?? h.env.meter] };
   if (ex.kind === "tap") {
@@ -576,18 +639,56 @@ export function useAnswerEnvFor(
 
 /** A static view of the stimulus where the exercise asks for one (staff to read, roll to look at). */
 export function StimulusView({ ex }: { ex: Part }) {
+  const h = useStepHost();
+  // Wave 4: "sing from the page" shows the tune as a lead sheet (one per step, not per part of an `all`).
+  const lead =
+    h.exercise?.kind === "all" &&
+    !("stimulus" in ex && ex.stimulus?.src === "code" && ex.stimulus.showLeadSheet)
+      ? null
+      : leadSheetOf(h.step, ex);
+  if (lead) return <LeadSheetView spec={lead} />;
   if (ex.kind === "staff-read")
     return <CodeMusic code={ex.source} bars={ex.bars} view="staff" label="The music to read" />;
-  if ("stimulus" in ex && ex.stimulus?.src === "code" && (ex.stimulus.showRoll || ex.stimulus.showStaff))
-    return (
+  const stim = "stimulus" in ex && ex.stimulus?.src === "code" ? ex.stimulus : null;
+  if (!stim) return null;
+  // `showCode`: the stimulus is read as code too ("you can see the code and hear it"), read-only; in an `all`
+  // whose parts share one stimulus, once, above the first part.
+  const parts = h.exercise?.kind === "all" ? (h.exercise.parts as Part[]) : null;
+  const firstWithCode = parts?.find(
+    (q) => "stimulus" in q && q.stimulus?.src === "code" && q.stimulus.showCode,
+  );
+  const shared =
+    parts !== null &&
+    firstWithCode !== undefined &&
+    firstWithCode.id !== ex.id &&
+    "stimulus" in firstWithCode &&
+    firstWithCode.stimulus?.src === "code" &&
+    firstWithCode.stimulus.code === stim.code;
+  const code =
+    stim.showCode && !shared ? (
+      <figure className="rounded-card border border-border bg-surface p-3" data-testid="stimulus-code">
+        <figcaption className="mb-2 text-sm text-text-2">The code</figcaption>
+        <pre className="overflow-x-auto font-mono text-sm leading-relaxed">
+          {stim.code.replace(/[⟪⟫]/g, "")}
+        </pre>
+      </figure>
+    ) : null;
+  const music =
+    stim.showRoll || stim.showStaff ? (
       <CodeMusic
-        code={ex.stimulus.code}
-        bars={ex.stimulus.bars}
-        view={ex.stimulus.showStaff ? "staff" : "roll"}
+        code={stim.code}
+        bars={stim.bars}
+        view={stim.showStaff ? "staff" : "roll"}
         label="The music"
       />
-    );
-  return null;
+    ) : null;
+  if (!code && !music) return null;
+  return (
+    <>
+      {code}
+      {music}
+    </>
+  );
 }
 
 /** The input of one part, in the stage slot (its Workbench) or the answer slot (its questions and widget). */

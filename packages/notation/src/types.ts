@@ -73,8 +73,18 @@ export interface NotationInput {
    * quantizing, and "Swing 8ths" / "Swing 16ths" is printed above the first bar (contracts §6.10).
    */
   swing?: SwingSpec;
-  /** Bar 0 is engraved as a partial measure holding only the pickup (contracts §6.11). */
+  /**
+   * The piece declares a pickup (contracts §6.11): cycle 0 is "the pickup bar" (bar 0) and bar numbers start at 1
+   * on cycle 1. With `startBar` 0 bar 0 is engraved as a partial measure holding only the pickup (leading rests in
+   * bar 0 are not drawn, a drum count-in before the pickup is left out); a later page (`startBar` > 0) only takes
+   * the numbering from it.
+   */
   pickup?: PickupSpec;
+  /**
+   * The last engraved bar is the piece's last bar (default true). With a pickup that bar loses trailing rests as
+   * long as the pickup (contracts §6.11 item 4); a page that stops before the end passes false.
+   */
+  endsPiece?: boolean;
   title?: string;
 }
 
@@ -148,15 +158,25 @@ export interface ScoreAnnotation {
   bar: number;
   /** Absolute position in cycles. */
   at: Rat;
+  /**
+   * Where it is drawn when no note or rest of its staff starts at `at` (a label inside a tuplet): the onset of the
+   * item sounding there. The Score then carries an `abcjs-limit` warning ("label-off-grid").
+   */
+  drawnAt?: Rat;
   /** Code spelling as given ("Cm7b5", "V7/V"). */
   source: string;
   /** What is printed ("Cm7♭5" is written as "Cm7b5", which abcjs renders with a flat glyph). */
   text: string;
 }
-/** A key signature change at the start of a bar. */
+/**
+ * A key signature change: at the start of a bar, or (Wave 4, `beat` > 1) inside it, where the new signature is
+ * written in the bar (abcjs has no mid-bar double barline: `ABCJS_LIMITS` "mid-bar-key-change").
+ */
 export interface KeyChange {
   /** 0-based cycle (absolute, like `ScoreAnnotation.bar`). */
   bar: number;
+  /** 1-based beat in tempo units where the new key starts (1.5 = the "&" of beat 1). Default 1: the bar line. */
+  beat?: number;
   key: KeySpec;
 }
 /** The NotationModel. Everything a staff view needs, with no abcjs in it. */
@@ -186,6 +206,13 @@ export interface Score {
   /** The annotation lines asked for (`NotationInput.annotations`), when any kind is on. */
   annotations?: AnnotationSet;
   title?: string;
+  /**
+   * The piece declares a pickup (`NotationInput.pickup`): bar numbers count cycle 0 as bar 0, also on a page that
+   * does not engrave it (`startBar` > 0). `pickup` above says whether bar 0 is engraved short here.
+   */
+  pickupNumbering?: true;
+  /** A lead sheet (`staff: "lead"`): `toAbc` numbers the first bar of every system unless told otherwise. */
+  lead?: true;
 }
 export type NotationModel = Score;
 
@@ -198,6 +225,11 @@ export interface AbcOptions {
   finalBar?: boolean;
   /** Class prefix; default "oak-e". */
   classPrefix?: string;
+  /**
+   * Print the bar number at the start of every system after the first bar (with a pickup, cycle 0 is bar 0 and the
+   * first full bar is 1). Default: true for a lead sheet (`Score.lead`), false otherwise.
+   */
+  barNumbers?: boolean;
 }
 export interface IdMapEntry {
   n: number;

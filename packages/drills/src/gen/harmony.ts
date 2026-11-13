@@ -1,9 +1,11 @@
 // Harmony families: Roman numerals (concept), function, bass-degree dictation, schema ID, cadence ID and
 // ii–V recognition. Progressions are RnChords in a key, voiced by Oak's voicer with smooth upper voices.
 import type { Answer, ChordQuality, Degree, KeySpec, ScaleMode } from "@oak/content-kit";
+import { chordSymbol, displayRN, parseRN } from "@oak/theory";
 import { buildPiece, type TrackSpec } from "../build.ts";
 import {
   chordCode,
+  chordPcs,
   degreeOfMidi,
   diatonicChord,
   keysFor,
@@ -14,9 +16,10 @@ import {
   rnRootPc,
   spellMidi,
   stepForDegree,
+  stepToMidi,
   tonicMidi,
 } from "../kernel.ts";
-import { above, rn, type Voiced, voiceProgression } from "../music.ts";
+import { above, closeVoices, rn, spellVoiced, type Voiced, voiceProgression } from "../music.ts";
 import { atom, chordOf, line, type Node, rest, seq } from "../pat.ts";
 import {
   cueOf,
@@ -100,7 +103,7 @@ export const rnFacts: Generator = {
       symbol = d.symbol;
       rnText = d.rn;
     }
-    const keyName = `${key.tonic} ${key.mode}`;
+    const keyName = shownKey(key);
     const toChord = ctx.rng.next() < 0.5;
     return toChord
       ? silentTrial({ text: [symbol] }, cue, {
@@ -108,15 +111,27 @@ export const rnFacts: Generator = {
           ui: "text",
           textKind: "chord",
           rn: rnText,
-          prompt: `In ${keyName}, which chord is ${rnText}? (code spelling, e.g. F#m)`,
+          prompt: `In ${keyName}, which chord is ${shownRn(rnText, key)}? (code spelling, e.g. F#m)`,
         })
       : silentTrial({ rn: [rnText] }, cue, {
           key,
           ui: "rn-palette",
           symbol,
-          prompt: `In ${keyName}, ${symbol} is which Roman numeral?`,
+          prompt: `In ${keyName}, ${shownSymbol(symbol)} is which Roman numeral?`,
         });
   },
+};
+
+/**
+ * What a prompt prints: the lead-sheet symbol ("B°", "F♯m") and the display numeral ("vii°", "♭VII"); the
+ * answers keep Oak's code spellings ("Bo", "viio"), which is what the learner types.
+ */
+const shownKey = (key: KeySpec) => `${key.tonic.replace("#", "♯").replace(/(?<=[A-G])b/, "♭")} ${key.mode}`;
+const shownSymbol = (code: string) => chordSymbol(code, "lead-sheet") ?? code;
+const shownRn = (text: string, key: KeySpec) => {
+  if (text.includes("/")) return text.replace(/o/g, "°");
+  const parsed = parseRN(text, key);
+  return parsed ? displayRN(parsed) : text;
 };
 
 // --- function -----------------------------------------------------------------------------------
@@ -151,7 +166,7 @@ export const functionId: Generator = {
       return silentTrial({ choice: [pick.fn] }, cueOf(ctx, { replays: -1 }), {
         key,
         rn: d.rn,
-        prompt: `In ${key.tonic} ${key.mode}, what is the function of ${d.rn}?`,
+        prompt: `In ${shownKey(key)}, what is the function of ${shownRn(d.rn, key)}?`,
       });
     // Heard: a four-chord loop I – x – … with the marked chord in bar 3.
     const chords: RnChord[] = [
@@ -190,6 +205,15 @@ function arrangement(
   const flat = slots.flat();
   const voiced = voiceProgression(flat, key);
   const bassMidis: number[] = [];
+  // The bass moves to the nearest octave of its next note, inside E1–A♭3 (a bass player's line, not a root
+  // in a fixed octave that jumps a 7th).
+  let lastBass: number | null = null;
+  const nearestBass = (pc: number): number => {
+    const low = above(pc, 28);
+    const options = [low, low + 12, low + 24].filter((m) => m <= 56);
+    const ref = lastBass ?? 40;
+    return options.sort((a, b) => Math.abs(a - ref) - Math.abs(b - ref))[0] as number;
+  };
   let k = 0;
   const chordBars: Node[] = [];
   const bassBars: Node[] = [];
@@ -199,7 +223,8 @@ function arrangement(
     for (let i = 0; i < bar.length; i++) {
       const v = voiced[k++] as Voiced;
       const bassPc = mod(v.midis[0] as number, 12);
-      const bass = above(bassPc, 36);
+      const bass = nearestBass(bassPc);
+      lastBass = bass;
       bassMidis.push(bass);
       cs.push(chordOf(v.midis.slice(1).map((m) => spellMidi(m, key).code)));
       bs.push(atom(spellMidi(bass, key).code));
@@ -257,7 +282,8 @@ const BASS_LOOPS: Readonly<Record<string, { mode: ScaleMode; chords: RnChord[][]
   inversions: [
     { mode: "major", chords: [[rn("1", "maj")], [rn("5", "maj", 1)], [rn("6", "min")], [rn("4", "maj")]] },
     { mode: "major", chords: [[rn("1", "maj")], [rn("1", "maj", 1)], [rn("4", "maj")], [rn("5", "maj")]] },
-    { mode: "major", chords: [[rn("4", "maj")], [rn("1", "maj", 2)], [rn("5", "maj")], [rn("1", "maj")]] },
+    // The walk-down of U06.L11: C G/B Am G, the bass 1 7 6 5.
+    { mode: "major", chords: [[rn("1", "maj")], [rn("5", "maj", 1)], [rn("6", "min")], [rn("5", "maj")]] },
   ],
   "two-per-bar": [
     {
@@ -474,13 +500,24 @@ export const cadence: Generator = {
   generate(ctx) {
     const phrase = CADENCE_PHRASES[ctx.category] ?? (CADENCE_PHRASES.PAC as (typeof CADENCE_PHRASES)[string]);
     const key = pickKey(ctx, phrase.mode);
-    const voiced = voiceProgression(phrase.chords, key);
+    // The tune is the top voice: close triads under it, a bass under them (a cadence is heard in the outer
+    // voices, so the melody must never sit inside the chords).
+    const triads = closeVoices(phrase.chords, key, 57);
     const sop = ctx.rng.pick(phrase.soprano).map((s) => {
       // The minor key's leading tone is the raised 7th: step 6 of the scale sharpened.
       if (phrase.mode === "minor" && s === 6) return "6#";
       return s;
     });
-    const octave = pickOctave(ctx.rng, key, 64, 75);
+    const top = Math.max(...triads.flatMap((v) => v.midis));
+    let octave = 3;
+    while (Math.min(...sop.map((x) => stepToMidi(x, key, octave))) <= top) octave++;
+    const chordNodes = phrase.chords.map((c, i) => {
+      const v = triads[i] as Voiced;
+      const pcs = chordPcs(v.rootPc, c.quality);
+      const bassPc = pcs[c.inversion ?? 0] as number;
+      const bass = above(bassPc, 40);
+      return chordOf([spellMidi(bass, key).code, ...spellVoiced(v, key)]);
+    });
     const piece = buildPiece({
       bpm: pickTempo(ctx),
       bars: 1,
@@ -488,7 +525,7 @@ export const cadence: Generator = {
         {
           label: "chords",
           src: "note",
-          pat: seq(voiced.map((v) => voicedNode(v, key))),
+          pat: seq(chordNodes),
           s: pickSound(ctx),
           gain: jitter(ctx, 0.5),
         },

@@ -136,7 +136,11 @@ export function normalizeText(kind: NoteTextKind, text: string): string | null {
       return k ? `${k.tonic} ${k.mode}` : null;
     }
     case "chord": {
-      const t = text.trim().replace(/^([a-g])/, (c) => c.toUpperCase());
+      // A forgiving entry: "g/b", "c#m/e" and "Cmaj7/g" read as G/B, C#m/E and Cmaj7/G (root and bass letters).
+      const t = text
+        .trim()
+        .replace(/^([a-g])/, (c) => c.toUpperCase())
+        .replace(/\/\s*([a-g])(?=[#b♯♭]?\s*$)/, (_, c: string) => `/${c.toUpperCase()}`);
       const c = parseChordWithBass(t);
       if (!c) return null;
       return c.bassPc === c.rootPc ? toCode(c) : `${toCode(c)}/${c.bass ?? ""}`;

@@ -50,7 +50,7 @@ const entries: [string, Sev, string][] = [
   ],
   ["code.bare-value", E, 'Values with no sound control. Use `note("…")` or `s("…")`.'],
   ["code.no-pitch", W, "`{s}` needs a pitch: add `note(…)` or `n(…).scale(…)`."],
-  ["code.unknown-chord", E, '"{sym}" isn\'t a Strudel chord name. Write "{suggest}".'],
+  ["code.unknown-chord", E, '"{sym}" {why}. Write "{suggest}".'],
   ["code.lowercase-chord-root", E, 'Chord roots are capitals: "{suggest}".'],
   [
     "code.locked-tool",
@@ -177,7 +177,7 @@ const entries: [string, Sev, string][] = [
   [
     "melody.wrong-degree",
     E,
-    "Bar {bar}, {beatLabel}: you have {got} ({gotSyl}); the melody has {exp} ({expSyl}).",
+    "Bar {bar}, {beatLabel}: you have {got} ({gotSyl}); the {line} has {exp} ({expSyl}).",
   ],
   ["melody.octave", W, "Bar {bar}, {beatLabel}: right note, an octave {dir}."],
   [
@@ -223,6 +223,36 @@ const entries: [string, Sev, string][] = [
   ["harmony.not-in-key", W, "{chord} isn't in {key}. Intended?"],
   ["harmony.pcset", E, "Bar {bar}, {beatLabel}: the chord has {got}; it should have {exp}."],
   ["harmony.no-chords", E, "No chords found{track}."],
+  // Wave 4: the voicing gate (hand voice leading), numerals by degree, quality and bass, strips of choices.
+  ["harmony.voice-count", E, "Bar {bar}: {notes} is {got} notes; the brief asks for {exp} voices."],
+  [
+    "harmony.common-tone",
+    E,
+    "Bar {bar}: {pc} is in both chords. Keep the {note} where it is, in the same voice.",
+  ],
+  [
+    "harmony.voice-leap",
+    E,
+    "Bar {bar}: the voice on {from} jumps {semis} half steps to {to}. The nearest note of the new chord is {nearest}; move at most {max}.",
+  ],
+  [
+    "harmony.voice-crossing",
+    E,
+    "Bar {bar}: the voice on {low} moves to {lowTo}, above the voice that went from {high} to {highTo}. Keep the voices in order.",
+  ],
+  [
+    "harmony.rn-degree",
+    E,
+    "Chord {slot}: {got} is built on degree {gotDeg} ({gotChord}); this chord is {exp}, built on degree {expDeg} ({expChord}).",
+  ],
+  ["harmony.rn-quality", E, "Chord {slot}: right degree, but {exp} is {expQ}, not {gotQ} ({got})."],
+  [
+    "harmony.rn-inversion",
+    W,
+    "Chord {slot}: right chord, but its {member} is in the bass, so it is {exp}, not {got} ({gotMember} in the bass).",
+  ],
+  ["harmony.function", E, "{at}: this chord is {exp}, not {got}."],
+  ["harmony.cadence", E, "{at}: that ending is {exp}, not {got}."],
   // --- spelling, key signatures
   ["spell.enharmonic", E, "{got} sounds right, but in {context} it's spelled {exp}."],
   ["spell.wrong", E, "{got} → {exp}."],
@@ -276,10 +306,20 @@ const entries: [string, Sev, string][] = [
   ["id.partial", W, "Close: {got} is near {exp}."],
   ["id.confusion", I, "You mixed up {a} and {b} {n}×: {tip}"],
   ["id.missing", E, "Answer every slot ({n} left)."],
+  ["id.slot", E, "{at}: {exp}, not {got}."],
+  ["id.quality", E, "That was {exp}, not {got}: {tip}."],
+  ["id.chord-root", E, "{exp}, not {got}: the chord is built on {expRoot}, not {gotRoot}."],
+  ["id.chord-quality", E, "{exp}, not {got}: right root, but the chord is {expQ}, not {gotQ}."],
+  [
+    "id.chord-inversion",
+    E,
+    "{exp}, not {got}: right chord, but the lowest note is {expBass}, not {gotBass}.",
+  ],
+  ["id.chord-spelling", E, "{got} sounds right, but here it is spelled {exp}."],
   [
     "id.interval-quality",
     E,
-    "Right size, a {generic}, but {exp} ({expLong}), not {got}. Count the semitones: {semis}.",
+    "Right size, a {generic}, but {exp} ({expLong}), not {got}. Count the half steps: {semis}.",
   ],
   [
     "id.interval-number",
@@ -364,6 +404,14 @@ export function diag(
 }
 
 /**
+ * Values for slots a template gained after diagnostics were stored (a Wave 3 attempt's `melody.wrong-degree`
+ * has no `line`): the stored finding still renders whole. Params always win.
+ */
+const SLOT_DEFAULTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  "melody.wrong-degree": { line: "melody" },
+};
+
+/**
  * Renders a diagnostic with its catalog template, or the exercise's override text. Slots come from
  * `params`, then from `where` (`bar`, `beat`, `beatLabel`, `track`, `slot`, `rule`, `blank`). A slot with
  * no value is dropped with its surrounding spaces. Deterministic: same input, same text.
@@ -372,6 +420,7 @@ export function renderFeedback(d: Diagnostic, overrides?: Partial<Record<Feedbac
   const template = overrides?.[d.id] ?? FEEDBACK_CATALOG[d.id]?.template ?? `${d.id}`;
   const w = d.where ?? {};
   const slots: Record<string, string | number | undefined> = {
+    ...SLOT_DEFAULTS[d.id],
     bar: w.bar === 0 ? "pickup" : w.bar,
     beat: w.beat,
     beatLabel: w.beatLabel,
@@ -456,7 +505,15 @@ export function messagesOf(
   overrides?: Partial<Record<FeedbackId, Md>>,
   max = 3,
 ): GradeResult["messages"] {
-  const sorted = sortDiagnostics(ds);
+  // One message per distinct text and place: an `all` matcher's members can report the same finding (the melody
+  // and rhythm matchers both say `rhythm.pickup-missing` in U07.L08 S5), which the learner should read once.
+  const seen = new Set<string>();
+  const sorted = sortDiagnostics(ds).filter((d) => {
+    const k = `${d.id}\u0000${renderFeedback(d, overrides)}\u0000${JSON.stringify(d.where ?? null)}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
   const out: GradeResult["messages"] = sorted
     .slice(0, max)
     .map((d) => ({ id: d.id, text: renderFeedback(d, overrides), ...(d.where ? { where: d.where } : {}) }));

@@ -4,6 +4,7 @@ import { lintOak } from "@oak/grader";
 import { evalHeadless } from "@oak/grader/testing";
 import { toolbox } from "../../../content/toolbox.ts";
 import {
+  demoBars,
   demoKey,
   demoMeter,
   groupTools,
@@ -120,5 +121,15 @@ describe("demos", () => {
     const at = unlockArpeggio().map((n) => n.at);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
     expect(at.at(-1)).toBeLessThan(1);
+  });
+});
+
+describe("demoBars", () => {
+  test("the longest alternation, between 2 and 8 bars", () => {
+    expect(demoBars('chords: n("<[0,2,4] [5,7,9] [3,5,7] [4,6,8]>").scale("C3:major")')).toBe(4);
+    expect(demoBars('chords: chord("<C Am F G>").voicing()')).toBe(4);
+    expect(demoBars('x: n("<0!3 1>")')).toBe(4);
+    expect(demoBars('mel: n("0 2 4")')).toBe(2);
+    expect(demoBars('mel: n("<0 1 2 3 4 5 6 7 8 9>")')).toBe(8);
   });
 });

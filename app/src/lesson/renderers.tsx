@@ -4,7 +4,7 @@
 // renderer over `PartInput`. Renderers grade in the browser through the host and report with `onCheck`.
 import type { AllEx, Exercise, ExerciseKind, GradeResult } from "@oak/api";
 import { Check, CircleDashed } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type { AnswerSpec } from "../answers/types.ts";
 import { IS_MAC } from "../ui/keys/KeymapProvider.tsx";
 import { Button } from "../ui/kit/Button.tsx";
@@ -22,13 +22,17 @@ import {
   inputResponse,
   isCodeInput,
   PartInput,
+  StimulusView,
   starterOf,
 } from "./inputs.tsx";
+import { LeadSheetView, leadSheetOf } from "./lead-sheet.tsx";
 import { answerSpecOf, revealCode, withTrialOptions } from "./model.ts";
 import { CodeMusic } from "./music.tsx";
 import { PassiveListenRenderer } from "./passive.tsx";
 import { failedChecks, isByEar, makeTitle, targetRollShown } from "./rules.ts";
 import { SingRenderer } from "./sing.tsx";
+import { ByEarParts, StagedRenderer } from "./staged.tsx";
+import { hasParts, isStaged } from "./stages.ts";
 import { useTargetMarks } from "./target-marks.ts";
 import type { ExerciseRenderer, ExerciseRendererProps, RendererFor } from "./types.ts";
 
@@ -84,7 +88,13 @@ function SingleRenderer(props: ExerciseRendererProps) {
       if (ex.kind === "run-investigate") h.setCode((v as InvestigateValue).code);
     }
   };
-  const ready = inputReady(ex, value, h.trial);
+  // A by-ear step in parts opens its Check once every part passed (or the step is revealed).
+  const [parts, setParts] = useState<{ ready: boolean; track: string | null }>(() => ({
+    ready: !hasParts(ex),
+    track: hasParts(ex) ? (ex.byEar.parts[0]?.track ?? null) : null,
+  }));
+  const onPartsState = useCallback((s: { ready: boolean; track: string | null }) => setParts(s), []);
+  const ready = inputReady(ex, value, h.trial) && parts.ready;
   const isRun = ex.kind === "run-investigate" && ex.questions.length === 0;
   const { check, checked } = useCheck(props, () => (ready ? inputResponse(ex, value, rt) : null), rt);
   const spec: AnswerSpec | null = withTrialOptions(answerSpecOf(ex), h.trial);
@@ -130,8 +140,14 @@ function SingleRenderer(props: ExerciseRendererProps) {
   });
   const reference = showTarget ? revealCode(ex) : null;
   const refBars = "reference" in ex && ex.reference && "bars" in ex.reference ? ex.reference.bars : 1;
+  // A lead sheet beside the Workbench of a "play from the page" step (answer kinds show it with the stimulus).
+  const lead = isCodeInput(ex) ? leadSheetOf(h.step, ex) : null;
+  // A dictation from the page (not by ear): the music to write down stays in view above the editor.
+  const fromPage = !lead && ex.kind === "dictation" && !isByEar(ex);
   const stage = (
     <div className="flex flex-col gap-3">
+      {lead ? <LeadSheetView spec={lead} /> : null}
+      {fromPage ? <StimulusView ex={ex} /> : null}
       {reference ? (
         <div data-testid="target-roll">
           <p className="mb-1 text-sm font-medium">The target, on the roll</p>
@@ -147,7 +163,10 @@ function SingleRenderer(props: ExerciseRendererProps) {
       {...(hasStage ? { stage } : {})}
       answer={
         <>
-          {isByEar(ex) ? <ByEarPanel ex={ex} /> : null}
+          {isByEar(ex) ? <ByEarPanel ex={ex} track={parts.track} /> : null}
+          {hasParts(ex) && typeof value === "string" ? (
+            <ByEarParts code={value} onState={onPartsState} />
+          ) : null}
           <PartInput {...common} slot="answer" />
           {isRun ? (
             <p className="text-sm text-text-2">
@@ -532,7 +551,14 @@ function MakeRenderer() {
 
 // --- the registry -------------------------------------------------------------------------------------
 
+/** A dictation: staged (bass, quality, numerals; Wave 4) or the single-input renderer. */
+function DictationRenderer(props: ExerciseRendererProps) {
+  const h = useStepHost();
+  return isStaged(h.exercise) ? <StagedRenderer {...props} /> : <SingleRenderer {...props} />;
+}
+
 const RENDERERS: Partial<Record<ExerciseKind, ExerciseRenderer<never>>> = {
+  dictation: DictationRenderer as unknown as ExerciseRenderer<never>,
   listen: ListenRenderer as unknown as ExerciseRenderer<never>,
   predict: PredictRenderer as unknown as ExerciseRenderer<never>,
   all: AllRenderer as unknown as ExerciseRenderer<never>,

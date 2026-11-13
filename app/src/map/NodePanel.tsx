@@ -5,12 +5,12 @@ import type { FamilyDef, FamilyState, SkillState, SrsCard } from "@oak/api";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, MicOff, X } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { isResting } from "../drills/resting.ts";
 import { REGION_LABEL } from "../lib/content-model.ts";
 import { useRevive } from "../lib/queries.ts";
 import { buttonClass, IconButton } from "../ui/kit/Button.tsx";
 import { Chip } from "../ui/kit/basics.tsx";
 import { blurbOf } from "./blurbs.ts";
+import { familyStatus } from "./family-status.ts";
 import type { MapGraph, MapNode } from "./graph.ts";
 import { familiesOf, type PractiseTarget, practiseTarget } from "./guide.ts";
 import { LeafSwatch } from "./Leaf.tsx";
@@ -257,20 +257,22 @@ export function NodePanel(p: NodePanelProps) {
             </h3>
             <ul className="flex flex-col gap-1 text-sm">
               {fams.map((f) => {
-                const st = cardStatus.get(f.id);
+                const st = familyStatus(f, {
+                  card: cardStatus.get(f.id),
+                  state: famState.get(f.id),
+                  states: famState,
+                  lessonStatus: p.lessonStatus,
+                });
                 return (
-                  <li key={f.id} className="flex items-baseline justify-between gap-2">
-                    <span>{f.title}</span>
-                    <span className="shrink-0 text-text-3">
-                      {isResting(f, famState.get(f.id))
-                        ? "resting in mixed practice"
-                        : st === "active" || st === "graduated"
-                          ? "in your reviews"
-                          : st === "deferred"
-                            ? "queued for later"
-                            : (p.lessonStatus.get(f.unlock.lesson) ?? "locked") === "locked"
-                              ? `opens with ${f.unlock.lesson}`
-                              : "not in your reviews yet"}
+                  <li
+                    key={f.id}
+                    className="flex items-baseline justify-between gap-2"
+                    data-family={f.id}
+                    data-family-status={st.kind}
+                  >
+                    <span className="min-w-0">{f.title}</span>
+                    <span className="shrink-0 text-right text-text-3" title={st.help}>
+                      {st.text}
                     </span>
                   </li>
                 );

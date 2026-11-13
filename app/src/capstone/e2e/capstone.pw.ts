@@ -244,8 +244,8 @@ test("C0 from the reference solution: check, review, record, release, album", as
   await row.getByRole("button", { name: "Liner notes" }).click();
   const notes = row.getByTestId("liner-notes");
   await expect(notes).toContainText("Straight time, then the toms take bar 4.");
-  await expect(notes).toContainText("4 bars at 100 BPM");
-  await expect(notes).toContainText("I can write a drum intro with a fill.");
+  await expect(notes).toContainText("4 bars of 4/4 at 100 BPM");
+  await expect(notes).toContainText("Theory used:");
   await expect(page.getByTestId("album-meta")).toContainText("1 track");
   await expect(row.getByRole("button", { name: "Play Intro" })).toBeEnabled();
 
@@ -253,7 +253,7 @@ test("C0 from the reference solution: check, review, record, release, album", as
   await row.getByRole("link", { name: "Intro" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Intro" })).toBeVisible();
   await expect(page.getByTestId("track-audio")).toBeVisible();
-  await expect(page.getByTestId("liner-notes").first()).toContainText("4 bars at 100 BPM");
+  await expect(page.getByTestId("liner-notes").first()).toContainText("4 bars of 4/4 at 100 BPM");
   await expect(page.getByRole("link", { name: "Revise and release version 2" })).toBeVisible();
   expect(errors).toEqual([]);
 });

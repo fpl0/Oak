@@ -366,6 +366,83 @@ export function noteAtOnset(notes: readonly StaffNote[], onset: Rat): StaffNote 
   return notes.find((n) => R.eq(n.onset, onset)) ?? null;
 }
 
+// --- chords (Wave 4, `palette.chords`) --------------------------------------------------------------
+
+/** The notes that start together, across both staves of a grand staff, low to high: one chord of the answer. */
+export interface StaffChord {
+  /** Index among the chords (the `part` of a per-chord mark when the palette has chords). */
+  index: number;
+  onset: Rat;
+  /** The longest length among its notes. */
+  dur: Rat;
+  bar: number;
+  beat: number;
+  pitches: StaffPitch[];
+  /** Aligned with `pitches`. */
+  eventIds: string[];
+  /** The `StaffNote.index` of every engraved item it is drawn with (one per staff). */
+  items: number[];
+}
+
+/** The answer's chords in time order: every group of notes that start together. */
+export function staffChords(notes: readonly StaffNote[]): StaffChord[] {
+  const out: StaffChord[] = [];
+  for (const n of notes) {
+    let c = out.find((x) => R.eq(x.onset, n.onset));
+    if (!c) {
+      c = {
+        index: out.length,
+        onset: n.onset,
+        dur: n.dur,
+        bar: n.bar,
+        beat: n.beat,
+        pitches: [],
+        eventIds: [],
+        items: [],
+      };
+      out.push(c);
+    }
+    if (R.lt(c.dur, n.dur)) c.dur = n.dur;
+    c.items.push(n.index);
+    n.pitches.forEach((p, i) => {
+      c.pitches.push(p);
+      c.eventIds.push(n.eventIds[i] ?? n.eventIds[0] ?? "");
+    });
+  }
+  for (const c of out) {
+    const order = c.pitches
+      .map((_, i) => i)
+      .sort((a, b) => (c.pitches[a]?.midi ?? 0) - (c.pitches[b]?.midi ?? 0));
+    c.pitches = order.map((i) => c.pitches[i] as StaffPitch);
+    c.eventIds = order.map((i) => c.eventIds[i] as string);
+  }
+  out.sort((a, b) => R.cmp(a.onset, b.onset));
+  out.forEach((c, i) => {
+    c.index = i;
+  });
+  return out;
+}
+
+/** The chord starting at `onset`, if any. */
+export function chordAt(notes: readonly StaffNote[], onset: Rat): StaffChord | null {
+  return staffChords(notes).find((c) => R.eq(c.onset, onset)) ?? null;
+}
+
+/** The note of a chord the cursor means: the one on the ghost's line or space, else the top note. */
+export function pickInChord(chord: StaffChord, dia: number): number {
+  const i = chord.pitches.findIndex((p) => p.dia === dia);
+  return i >= 0 ? i : chord.pitches.length - 1;
+}
+
+/** "C4 E4 G4, half, bar 1 beat 1" (sharps and flats spoken). */
+export function describeChord(
+  c: Pick<StaffChord, "pitches" | "bar" | "beat">,
+  written?: { base: number; dots: number },
+): string {
+  const names = c.pitches.map((p) => `${p.letter}${p.alt > 0 ? " sharp" : p.alt < 0 ? " flat" : ""}${p.oct}`);
+  return `${names.join(" ")}${written ? `, ${durationName(written)}` : ""}, bar ${c.bar} ${beatText(c.beat)}`;
+}
+
 // --- the cursor and its keys (ux §4.5, wave3 task) ---------------------------------------------------
 
 export interface StaffCursor {
@@ -428,6 +505,152 @@ function retarget(cursor: StaffCursor, k: StaffKeyContext): StaffCursor {
 }
 
 /**
+ * The chord grammar (`palette.chords`): the cursor stays on a chord while it is built. A letter adds that note to
+ * the chord at the cursor, the nearest one ABOVE its top note (`Shift` + letter: BELOW its bass), with the chord's
+ * length; on an empty place it starts a chord with the chosen length. `↑`/`↓` (`Shift`: a half step, `Mod`: an
+ * octave), `#`/`-`/`=` and `Backspace`/`Delete` act on the chord's note on the ghost's line, else its top note.
+ * `→` steps past the chord, `←` back to the chord before. Every change plays the whole chord. `undefined`: the
+ * plain grammar handles the key (lengths, rests, Home/End).
+ */
+function chordKey(
+  cursor: StaffCursor,
+  input: StaffKeyInput,
+  k: StaffKeyContext,
+): StaffKeyResult | null | undefined {
+  const { spec, ctx } = k;
+  const key = input.key;
+  const meter = ctx.meter;
+  const chords = staffChords(k.notes);
+  const chord = chords.find((c) => R.eq(c.onset, cursor.onset)) ?? null;
+  const sounding = (c: StaffChord | null, extra: number[] = [], drop: number | null = null) => [
+    ...(c?.pitches.filter((_, i) => i !== drop).map((p) => p.midi) ?? []),
+    ...extra,
+  ];
+  const landOn = (onset: Rat): StaffKeyResult => {
+    const at = chords.find((c) => R.eq(c.onset, onset));
+    const top = at?.pitches[at.pitches.length - 1];
+    return {
+      cursor: { ...cursor, onset, dia: top ? top.dia : cursor.dia, last: null },
+      say: at ? `On ${describeChord(at)}` : `${describePlace(onset, meter)}, empty`,
+    };
+  };
+  if ((key === "ArrowLeft" || key === "ArrowRight") && !input.mod && !input.alt && !input.shift) {
+    if (key === "ArrowRight" && chord) return landOn(clampOnset(R.add(chord.onset, chord.dur), k));
+    if (key === "ArrowLeft") {
+      const before = [...chords].reverse().find((c) => R.lt(c.onset, cursor.onset));
+      if (before) return landOn(before.onset);
+    }
+    return undefined;
+  }
+  if (key === "ArrowUp" || key === "ArrowDown") {
+    if (input.alt || !chord) return undefined;
+    const i = pickInChord(chord, cursor.dia);
+    const p = chord.pitches[i] as StaffPitch;
+    const id = chord.eventIds[i] as string;
+    const dir = key === "ArrowUp" ? 1 : -1;
+    if (input.shift) {
+      if (!spec.palette.accidentals) return { cursor, say: "This answer has no sharps or flats to add." };
+      const alt = Math.max(-2, Math.min(2, p.alt + dir)) as -2 | -1 | 0 | 1 | 2;
+      const np = pitchAt(p.dia, null, alt);
+      return {
+        cursor: { ...cursor, dia: p.dia, last: null },
+        edit: { op: "accidental", eventId: id, alt },
+        play: sounding(chord, [np.midi], i),
+        say: np.display,
+      };
+    }
+    const dia = p.dia + dir * (input.mod ? 7 : 1);
+    const np = input.mod ? pitchAt(dia, null, p.alt) : pitchAt(dia, ctx.key);
+    if (chord.pitches.some((q, j) => j !== i && q.midi === np.midi))
+      return { cursor, say: `${np.display} is already in the chord.` };
+    return {
+      cursor: { ...cursor, dia, last: null },
+      edit: { op: "repitch", eventId: id, pitch: np.name },
+      play: sounding(chord, [np.midi], i),
+      say: `Moved to ${np.display}`,
+    };
+  }
+  if (input.mod || input.alt) return undefined;
+  if (key === "#" || key === "+" || key === "-" || key === "=") {
+    const target = (cursor.last ? chords.find((c) => R.eq(c.onset, cursor.last as Rat)) : null) ?? chord;
+    if (!target) return { cursor, say: "Put the cursor on a chord first." };
+    if (!spec.palette.accidentals) return { cursor, say: "This answer has no sharps or flats to add." };
+    const i = pickInChord(target, cursor.dia);
+    const p = target.pitches[i] as StaffPitch;
+    const alt = (key === "=" ? 0 : Math.max(-2, Math.min(2, p.alt + (key === "-" ? -1 : 1)))) as
+      | -2
+      | -1
+      | 0
+      | 1
+      | 2;
+    const np = pitchAt(p.dia, null, alt);
+    return {
+      cursor: { ...cursor, last: cursor.last },
+      edit: { op: "accidental", eventId: target.eventIds[i] as string, alt },
+      play: sounding(target, [np.midi], i),
+      say: np.display,
+    };
+  }
+  if (/^[a-gA-G]$/.test(key)) {
+    if (chord) {
+      const top = chord.pitches[chord.pitches.length - 1] as StaffPitch;
+      const low = chord.pitches[0] as StaffPitch;
+      const li = LETTERS.indexOf(key.toUpperCase());
+      // Above the top note (or below the bass with Shift): the first such letter strictly beyond it.
+      let dia: number;
+      if (input.shift) {
+        dia = Math.floor(low.dia / 7) * 7 + li;
+        while (dia >= low.dia) dia -= 7;
+      } else {
+        dia = Math.floor(top.dia / 7) * 7 + li;
+        while (dia <= top.dia) dia += 7;
+      }
+      const p = pitchAt(dia, ctx.key);
+      if (chord.pitches.some((q) => q.midi === p.midi))
+        return { cursor, say: `${p.display} is already in the chord.` };
+      return {
+        cursor: { ...cursor, dia, last: cursor.onset },
+        edit: { op: "insert", onset: chord.onset, dur: chord.dur, pitch: p.name, keep: true },
+        play: sounding(chord, [p.midi]),
+        say: `${p.display} added. The chord: ${[...chord.pitches, p]
+          .sort((a, b) => a.midi - b.midi)
+          .map((q) => q.display)
+          .join(" ")}`,
+      };
+    }
+    const d = parseDuration(cursor.dur) ?? (paletteDurations(spec)[0] as DurationToken);
+    const len = durCycles(d, meter);
+    if (R.lt(totalCycles(ctx), R.add(cursor.onset, len)))
+      return { cursor, say: `No room for a ${durationName(d)} here. Pick a shorter value or move left.` };
+    const dia = nearestLetter(key, cursor.dia);
+    const p = pitchAt(dia, ctx.key);
+    return {
+      cursor: { ...cursor, dia, last: cursor.onset },
+      edit: { op: "insert", onset: cursor.onset, dur: len, pitch: p.name },
+      play: [p.midi],
+      say: `${p.display}, ${durationName(d)}, ${describePlace(cursor.onset, meter)}: a new chord. Add its other notes.`,
+    };
+  }
+  if (key === "Backspace" || key === "Delete") {
+    let target = chord;
+    if (!target && key === "Backspace")
+      target = [...chords].reverse().find((c) => R.lt(c.onset, cursor.onset)) ?? null;
+    if (!target) return { cursor, say: "No note to delete here." };
+    const i = target === chord ? pickInChord(target, cursor.dia) : target.pitches.length - 1;
+    const p = target.pitches[i] as StaffPitch;
+    const left = target.pitches.filter((_, j) => j !== i);
+    const nextTop = left[left.length - 1];
+    return {
+      cursor: { ...cursor, onset: target.onset, dia: nextTop ? nextTop.dia : p.dia, last: null },
+      edit: { op: "delete", eventId: target.eventIds[i] as string },
+      ...(left.length ? { play: left.map((q) => q.midi) } : {}),
+      say: `Deleted ${p.display}${left.length ? `; the chord has ${left.length === 1 ? "one note" : `${left.length} notes`}` : ""}`,
+    };
+  }
+  return undefined;
+}
+
+/**
  * The staff's keyboard grammar. Letters `A`–`G` place the nearest such note at the cursor (the key signature
  * applies) and step on; `#`/`+` sharpen, `-` flattens, `=` naturals the note just placed (else the one under the
  * cursor);
@@ -447,6 +670,10 @@ export function staffKey(
   const grid = gridCycles(spec, meter);
   const under = noteAtOnset(k.notes, cursor.onset);
   const lastNote = cursor.last ? noteAtOnset(k.notes, cursor.last) : null;
+  if (spec.palette.chords === true) {
+    const r = chordKey(cursor, input, k);
+    if (r !== undefined) return r;
+  }
   const moved = (c: StaffCursor): StaffKeyResult => {
     const next = retarget({ ...c, last: null }, k);
     const at = noteAtOnset(k.notes, next.onset);
