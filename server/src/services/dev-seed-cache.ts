@@ -8,9 +8,12 @@
 // A restore is the build it was taken from, table by table and file by file (dev-seed-cache.test.ts), never another
 // option set: the key is the point and every option of the request, the content version, the schema version and (for
 // a shared folder) the server's own code. A snapshot is used only on the learner day it was built on and for one hour
-// of the requesting server's clock after its build: the restored learner is the built one who waited up to an hour
-// longer before opening Oak, never one whose "yesterday" moved. The /dev/listen verdicts are not the learner's: they
-// stay as they are, as the build keeps them.
+// of the requesting server's clock after its build. A build's history hangs on the instant it was made at (item k at
+// that time of day, k days back), so a build holds the clock at one instant, and a restore made later moves every
+// instant of the learner later by the time that has passed (`shiftInstants`): the restored learner is the one a fresh
+// build at the restoring instant makes — the same minutes since each review, the same recall — and never one who
+// waited up to an hour longer. Due dates stay where they are: they are the first instant of a learner day, and the
+// day is the same. The /dev/listen verdicts are not the learner's: they stay as they are, as the build keeps them.
 //
 // Where: `<dataDir>/dev-seed-cache/` (this server only, emptied when it starts seeding), or `OAK_SEED_CACHE_DIR`, a
 // folder several dev servers share (the e2e stacks: a point built by one shard is restored by every other). Entries
@@ -32,7 +35,7 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 import type { DevSeedRequest, DevSeedResult } from "@oak/api";
-import { schemaVersion, tableNames } from "../db/index.ts";
+import { type Db, schemaVersion, tableNames } from "../db/index.ts";
 import { triggerDdl } from "../db/migrate.ts";
 import type { AppDeps } from "../deps.ts";
 import { learnerDay } from "../lib/days.ts";
@@ -50,7 +53,7 @@ const META = "meta.json";
 
 interface SnapshotMeta {
   key: string;
-  /** The dev clock's instant when the build finished. */
+  /** The dev clock's instant the build was made at (the clock is held there while it builds). */
   builtAt: number;
   /** The seeded learner's calendar, to tell whether "today" is still the build's day. */
   timeZone: string;
@@ -148,15 +151,16 @@ export class SeedCache {
     return out.sort((a, b) => b.meta.builtAt - a.meta.builtAt);
   }
 
-  /** The newest snapshot of `key` that may stand for a fresh build now. */
-  #usable(key: string): { dir: string; meta: SnapshotMeta } | null {
-    const now = this.d.clock.now();
+  /** The newest snapshot of `key` that may stand for a fresh build at `now`. */
+  #usable(key: string, now: Date): { dir: string; meta: SnapshotMeta } | null {
     for (const e of this.#entries(key)) {
       const { builtAt, timeZone, rolloverHour } = e.meta;
       const age = now.getTime() - builtAt;
       const sameDay =
         learnerDay(now, timeZone, rolloverHour) === learnerDay(new Date(builtAt), timeZone, rolloverHour);
-      if (age >= 0 && age <= SNAPSHOT_MAX_AGE_MS && sameDay) return e;
+      // A build made on the very first instant of a day has events that look like due dates: never restored later.
+      const movable = age === 0 || !isDayStart(builtAt, timeZone, rolloverHour);
+      if (age >= 0 && age <= SNAPSHOT_MAX_AGE_MS && sameDay && movable) return e;
     }
     return null;
   }
@@ -210,10 +214,13 @@ export class SeedCache {
 
   async #seed(body: DevSeedRequest, build: () => Promise<DevSeedResult>): Promise<DevSeedResult> {
     const key = snapshotKey(this.d, body);
-    const hit = this.#usable(key);
+    // The instant this seed stands for: a build is made at it, a restore is moved to it.
+    const now = this.d.clock.now();
+    const hit = this.#usable(key, now);
     if (hit !== null) {
       try {
-        await this.restore(hit.dir);
+        const { builtAt, timeZone, rolloverHour } = hit.meta;
+        await this.restore(hit.dir, { ms: now.getTime() - builtAt, timeZone, rolloverHour });
         this.stats.restored++;
         // Least recently used: a restore counts as a use (own folder only; a shared entry is never touched).
         if (!this.shared) utimesSync(hit.dir, new Date(), new Date());
@@ -231,18 +238,20 @@ export class SeedCache {
         );
       }
     } else if (this.#entries(key).length > 0) this.stats.expired++;
-    const result = await build();
-    this.#keep(key, result);
+    // The clock is held at `now` while the seed builds, so the whole history hangs on that one instant and a later
+    // restore can be moved by exactly the time that has passed.
+    const clock = this.d.devClock;
+    const result = clock === null ? await build() : await clock.at(now, build);
+    this.#keep(key, result, now.getTime());
     this.stats.built++;
     return result;
   }
 
-  /** Takes the snapshot of the learner as the build left it: written aside, then renamed into place. */
-  #keep(key: string, result: DevSeedResult): void {
+  /** Takes the snapshot of the learner as the build made at `builtAt` left it: written aside, then renamed into place. */
+  #keep(key: string, result: DevSeedResult, builtAt: number): void {
     // A server's own folder keeps one entry per key (no other server reads it).
     if (!this.shared) for (const e of this.#entries(key)) rmSync(e.dir, { recursive: true, force: true });
     this.#cap();
-    const builtAt = this.d.clock.now().getTime();
     const final = join(this.root, `${this.#name(key)}-${builtAt}`);
     const tmp = `${final}.tmp-${process.pid}-${++this.#n}`;
     mkdirSync(tmp, { recursive: true, mode: 0o700 });
@@ -269,9 +278,10 @@ export class SeedCache {
 
   /**
    * Replaces the learner with the snapshot in `dir`: every table (but the kept QA tables) in one transaction with the
-   * append-only triggers dropped and recreated, then the audio and album folders.
+   * append-only triggers dropped and recreated, then the audio and album folders. `later` moves the learner's instants
+   * by the time that has passed since the build (`shiftInstants`).
    */
-  async restore(dir: string): Promise<void> {
+  async restore(dir: string, later: SnapshotAge | null = null): Promise<void> {
     const db = this.d.db;
     const names = tableNames(db).filter((t) => !KEPT_TABLES.has(t));
     const triggers = triggerDdl(db);
@@ -292,6 +302,7 @@ export class SeedCache {
             .join(", ");
           db.run(`INSERT INTO main."${t}" (${cols}) SELECT ${cols} FROM seed_snapshot."${t}"`);
         }
+        if (later !== null && later.ms !== 0) shiftInstants(db, names, later);
         for (const t of triggers) db.run(t.sql);
         const fk = db.query("PRAGMA main.foreign_key_check").all();
         if (fk.length > 0) throw new Error("the seed snapshot's rows do not fit together (foreign keys)");
@@ -316,6 +327,68 @@ export class SeedCache {
     const clock = this.d.devClock;
     if (srs !== null && clock !== null)
       await clock.at(new Date(this.d.clock.now().getTime() - 86_400_000), () => srs.recall(""));
+  }
+}
+
+/** How much later than its build a snapshot is restored, and the seeded learner's calendar. */
+export interface SnapshotAge {
+  ms: number;
+  timeZone: string;
+  rolloverHour: number;
+}
+
+const INSTANT = /\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z/g;
+
+/** The first instant of a learner day (the rollover): what a due date is snapped to (packages/srs `schedule`). */
+function isDayStart(ms: number, timeZone: string, rolloverHour: number): boolean {
+  return (
+    learnerDay(new Date(ms), timeZone, rolloverHour) !== learnerDay(new Date(ms - 1), timeZone, rolloverHour)
+  );
+}
+
+/**
+ * Moves every instant stored in `tables` (a column's value, or inside its JSON) `later.ms` later, as a build made
+ * that much later writes it: every event of a build is a whole number of days before the instant it was made at.
+ * Instants on the first instant of a learner day stay: they are due dates snapped to the rollover, and a build made
+ * later on the same day snaps them to the same instant. An instant that would move to another learner day throws
+ * (the caller builds instead): the day columns beside it would no longer be its day.
+ */
+export function shiftInstants(db: Db, tables: readonly string[], later: SnapshotAge): void {
+  const { ms, timeZone, rolloverHour } = later;
+  const moved = new Map<string, string>();
+  const move = (iso: string): string => {
+    let out = moved.get(iso);
+    if (out === undefined) {
+      const t = Date.parse(iso);
+      if (isDayStart(t, timeZone, rolloverHour)) out = iso;
+      else {
+        const to = new Date(t + ms);
+        if (learnerDay(new Date(t), timeZone, rolloverHour) !== learnerDay(to, timeZone, rolloverHour))
+          throw new Error("the seed snapshot's history would move to another learner day");
+        out = to.toISOString();
+      }
+      moved.set(iso, out);
+    }
+    return out;
+  };
+  for (const t of tables) {
+    const cols = (
+      db.query(`PRAGMA main.table_info("${t}")`).all() as { name: string; type: string }[]
+    ).filter((c) => !/INT|REAL|FLOA|DOUB|BLOB/i.test(c.type));
+    for (const c of cols) {
+      const rows = db
+        .query(
+          `SELECT rowid AS r, "${c.name}" AS v FROM main."${t}" WHERE "${c.name}" LIKE '%-__T__:__:__.___Z%'`,
+        )
+        .all() as { r: number; v: unknown }[];
+      if (rows.length === 0) continue;
+      const put = db.query(`UPDATE main."${t}" SET "${c.name}" = ? WHERE rowid = ?`);
+      for (const row of rows) {
+        if (typeof row.v !== "string") continue;
+        const v = row.v.replace(INSTANT, move);
+        if (v !== row.v) put.run(v, row.r);
+      }
+    }
   }
 }
 

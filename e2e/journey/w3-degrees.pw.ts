@@ -1,8 +1,7 @@
 // Wave 3 journey (b) and (f): U03's first two lessons as real daily sessions, then the first functional-ear set
-// with its way home sung — and the two days with something to sing (U03.L02, the set) again in Quiet mode, where
-// nothing opens the microphone and the way home is heard in the head instead (U03.L01 sings nothing). Each test
-// starts from a dev seed (POST /api/dev/seed) on the real stack: real server, real content, the scripted fake
-// tutor, Chrome's fake microphone.
+// with its way home sung — and the same three days again in Quiet mode, where nothing opens the microphone and the
+// way home is heard in the head instead. Each test starts from a dev seed (POST /api/dev/seed) on the real stack:
+// real server, real content, the scripted fake tutor, Chrome's fake microphone.
 //   1. "after U02.L08": today is U03.L01 (Major Scale). No degree labels yet (they arrive with U03.L02).
 //   2. "after C1.S1": today is U03.L02 (Degrees in Code). Its Coda grants the Degrees lens; in Studio the lens bar
 //      now offers Degrees (not Solfège), and switching it on labels the roll with degrees.
@@ -15,26 +14,21 @@ import u03l01 from "../../content/core/U03/L01/lesson.ts";
 import u03l02 from "../../content/core/U03/L02/lesson.ts";
 import { useUiPrefs as setUiPrefs } from "../support/ui.ts";
 import { lessonDay, startToday } from "./day.ts";
-import { api, expectClean, noHmr, resetClock, seed, shootAll, type Watch, watch } from "./support.ts";
+import {
+  api,
+  countMicAsks,
+  expectClean,
+  noHmr,
+  resetClock,
+  seed,
+  shootAll,
+  type Watch,
+  watch,
+} from "./support.ts";
 import type { WarmupRun } from "./warmup-walk.ts";
 
 test.use({ launchOptions: { args: fakeMic("voice.wav") }, permissions: ["microphone"] });
 test.describe.configure({ mode: "serial" });
-
-/** Counts every request for the microphone the page makes (Quiet mode must make none). */
-async function countMicRequests(page: Page): Promise<() => Promise<number>> {
-  await page.addInitScript(() => {
-    const md = navigator.mediaDevices;
-    if (!md) return;
-    const orig = md.getUserMedia.bind(md);
-    (window as unknown as { __oakMicAsks: number }).__oakMicAsks = 0;
-    md.getUserMedia = (c) => {
-      (window as unknown as { __oakMicAsks: number }).__oakMicAsks++;
-      return orig(c);
-    };
-  });
-  return () => page.evaluate(() => (window as unknown as { __oakMicAsks?: number }).__oakMicAsks ?? 0);
-}
 
 async function begin(
   page: Page,
@@ -47,7 +41,8 @@ async function begin(
   if (quiet) await api(request, "PUT", "/api/voice/quiet", { quiet: true, scope: "always" });
   await noHmr(page);
   await setUiPrefs(page, { theme: quiet ? "bark" : "paper" });
-  const micAsks = await countMicRequests(page);
+  // Every getUserMedia call from here on, across navigations (support.ts).
+  const micAsks = await countMicAsks(page);
   return { w: watch(page), micAsks };
 }
 
@@ -63,34 +58,40 @@ async function openMakeSketch(page: Page, title: RegExp): Promise<void> {
 
 const makeTitle = (def: LessonDef) => `${def.id} make`;
 
-// U03.L01 holds no sung step, so Quiet mode changes nothing in it: it is walked once. The Quiet days below are
-// the ones with something to sing (U03.L02's sung steps, the functional-ear set's way home).
-test("U03.L01 as a daily session: the major scale, no degree labels yet", async ({ page, request }) => {
-  test.setTimeout(240_000);
-  const { w } = await begin(page, request, "after U02.L08", false);
-  const plan = await lessonDay(page, request, u03l01, {
-    unlocks: "auto",
-    // The warm-up is reported skipped: the first functional-ear set has its own test below, and a whole
-    // warm-up is walked by gate journey 2.
-    warmupSets: 0,
-    makeTitle: makeTitle(u03l01),
-    shots: "w3-coda-U03.L01",
-  });
-  expect(plan.mapItemId).toBe("U03.L01");
-  const progress = await api<{ lessons: { lessonId: string; status: string }[] }>(
-    request,
-    "GET",
-    "/api/lessons/progress",
-  );
-  expect(progress.lessons.find((l) => l.lessonId === "U03.L01")?.status).toBe("completed");
-  // Degree labels wait for U03.L02: the Workbench offers no Degrees lens yet.
-  await openMakeSketch(page, new RegExp(makeTitle(u03l01)));
-  await expect(page.getByTestId("lens-degrees")).toHaveCount(0);
-  expectClean(w);
-});
-
 for (const quiet of [false, true]) {
   const mode = quiet ? " (Quiet mode)" : "";
+
+  // U03.L01 holds no sung step, so its Quiet day shows the same screens. What only a Quiet traversal can prove is
+  // that nothing on the way asks for the microphone, so the Quiet day walks one warm-up set for real (a warm-up
+  // is where a microphone would open); the ordinary day reports its warm-up skipped: the first functional-ear set
+  // has its own test below, and a whole warm-up is walked by gate journey 2.
+
+  test(`U03.L01 as a daily session: the major scale, no degree labels yet${mode}`, async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(240_000);
+    const { w, micAsks } = await begin(page, request, "after U02.L08", quiet);
+    const plan = await lessonDay(page, request, u03l01, {
+      unlocks: "auto",
+      warmupSets: quiet ? 1 : 0,
+      makeTitle: makeTitle(u03l01),
+      shots: quiet ? "w3-quiet-coda-U03.L01" : "w3-coda-U03.L01",
+    });
+    expect(plan.mapItemId).toBe("U03.L01");
+    const progress = await api<{ lessons: { lessonId: string; status: string }[] }>(
+      request,
+      "GET",
+      "/api/lessons/progress",
+    );
+    expect(progress.lessons.find((l) => l.lessonId === "U03.L01")?.status).toBe("completed");
+    // Degree labels wait for U03.L02: the Workbench offers no Degrees lens yet.
+    await openMakeSketch(page, new RegExp(makeTitle(u03l01)));
+    await expect(page.getByTestId("lens-degrees")).toHaveCount(0);
+    // The whole day and the Studio after it: the warm-up set, the lesson, the Coda, the sketch.
+    if (quiet) expect(await micAsks()).toBe(0);
+    expectClean(w);
+  });
 
   test(`U03.L02 as a daily session: degree labels switch on${mode}`, async ({ page, request }) => {
     test.setTimeout(240_000);

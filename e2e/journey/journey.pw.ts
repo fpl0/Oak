@@ -12,6 +12,7 @@ import {
   fakeMic,
   shootAll as shootOnboarding,
   throughTheLoop,
+  watchErrors,
 } from "../../app/src/onboarding/e2e/helpers.ts";
 import { capstones } from "../../content/capstones.ts";
 import u00l02 from "../../content/core/U00/L02/lesson.ts";
@@ -69,6 +70,10 @@ test("gate journey 1: a fresh learner goes through onboarding with a microphone"
   await noHmr(page);
   await useUiPrefs(page, { theme: "paper" });
   const w = watch(page);
+  // The onboarding area's own watcher as well (its walk of these screens was merged into this test): every console
+  // error and page error counts but a 501's line. The journey's watch lets Strudel's report of a learner's broken
+  // code pass, and nothing on this path breaks code on purpose, so both must be clean at the end.
+  const problems = watchErrors(page);
 
   // --- day 1: onboarding with a microphone (it completes U00.L01 on the map) ----------------------------------
   await openToday(page);
@@ -240,6 +245,7 @@ test("gate journey 1: a fresh learner goes through onboarding with a microphone"
   await page.reload();
   await expect(card).toHaveAttribute("data-state", "done");
 
+  expect(problems, "console and page errors, evaluation errors included").toEqual([]);
   expectClean(w);
 });
 

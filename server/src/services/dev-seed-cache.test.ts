@@ -1,25 +1,29 @@
 // The dev seeder's snapshots (dev-seed-cache.ts): a repeated `POST /api/dev/seed` restores the build it was taken
 // from, table by table and file by file; one test's writes never reach the next seed; another option set, another
 // day, an hour later or new content never restores a snapshot; and the /dev/listen verdicts stay as the build keeps
-// them. The real course, so the points carry sketches, album recordings and an own-audio file.
-import { afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
+// them. A snapshot restored 59 minutes after its build is the learner a fresh build makes at that later instant, for
+// every seed point and every option the browser suite passes. The real course, so the points carry sketches, album
+// recordings and an own-audio file.
+import { Database } from "bun:sqlite";
+import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import type { DevSeedResult, SessionPlan } from "@oak/api";
+import type { DevSeedRequest, DevSeedResult, SessionPlan } from "@oak/api";
 import { loadContent } from "../content/loader.ts";
 import type { ContentSource } from "../content/types.ts";
 import { tableNames } from "../db/index.ts";
 import { CONTENT_DIR } from "../testing/course.ts";
 import { type Harness, harness } from "../testing/harness.ts";
-import { buildSeed } from "./dev-seed.ts";
+import { buildSeed, SEED_POINTS } from "./dev-seed.ts";
 import {
   codeHash,
   SeedCache,
   SNAPSHOT_MAX_AGE_MS,
   seedCacheEnabled,
   seedCacheOf,
+  shiftInstants,
   snapshotKey,
 } from "./dev-seed-cache.ts";
 
@@ -303,5 +307,186 @@ describe("dev seed snapshots", () => {
     const h1 = codeHash();
     expect(h1).toMatch(/^[0-9a-f]{16}$/);
     expect(codeHash()).toBe(h1);
+  });
+});
+
+// What a test can see of a seeded learner: Today's plan and day, the due cards in their order, the Oak's leaves (level,
+// recall, strength, freshness, drying), the streak, and every other list the app reads.
+const OBSERVED = [
+  "/api/session/today",
+  "/api/session/day",
+  "/api/srs/due",
+  "/api/skills/map",
+  "/api/skills/revive",
+  "/api/streak",
+  "/api/progress",
+  "/api/bootstrap",
+  "/api/unlocks",
+  "/api/unlocks/next",
+  "/api/lessons/progress",
+  "/api/drills/families",
+  "/api/album",
+  "/api/sketches",
+  "/api/transcriptions",
+  "/api/gym",
+  "/api/ladder",
+  "/api/side-lessons",
+  "/api/voice",
+  "/api/profile",
+  "/api/onboarding",
+];
+const MUST_ANSWER = ["/api/session/today", "/api/srs/due", "/api/skills/map", "/api/streak"];
+const INSTANT = /\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z/g;
+
+/**
+ * JSON with what no two builds share made comparable: a random ID (`ses_…`, `sk_…`, `trk_…`) becomes its order of
+ * first appearance, a track's cover seed (a hash of its random ID) a constant. Instants and numbers stay as they are.
+ */
+function comparable(value: unknown): unknown {
+  const ids = new Map<string, string>();
+  const text = JSON.stringify(value)
+    .replace(/\b([a-z]{2,4})_[0-9a-f]{20}\b/g, (id, prefix: string) => {
+      const known = ids.get(id);
+      if (known !== undefined) return known;
+      const name = `${prefix}#${ids.size + 1}`;
+      ids.set(id, name);
+      return name;
+    })
+    .replace(/"coverSeed":"[0-9a-f]{16}"/g, '"coverSeed":"of its id"');
+  return JSON.parse(text);
+}
+
+async function observed(x: Harness): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {};
+  for (const path of OBSERVED) {
+    const r = await x.json("GET", path);
+    if (MUST_ANSWER.includes(path)) expect(r.status, path).toBe(200);
+    out[path] = comparable({ status: r.status, body: r.body });
+  }
+  return out;
+}
+
+/** Every instant stored anywhere in the learner (a column, or inside its JSON), per table, sorted. */
+function instants(x: Harness): Record<string, string[]> {
+  const db = x.server.deps.db;
+  const out: Record<string, string[]> = {};
+  for (const t of tableNames(db)) {
+    if (t === "listen_marks") continue;
+    const found: string[] = [];
+    for (const row of db.query(`SELECT * FROM "${t}"`).all() as Record<string, unknown>[])
+      for (const v of Object.values(row)) if (typeof v === "string") found.push(...(v.match(INSTANT) ?? []));
+    out[t] = found.sort();
+  }
+  return out;
+}
+
+// Every named point of the dev seeder, an instance of each pattern, and every option set the browser specs pass
+// (gapDays, targetMinutes, recordings, mic) plus `practice: false`.
+const AGED: DevSeedRequest[] = [
+  ...SEED_POINTS.filter((p) => !p.point.includes("<")).map((p) => ({ point: p.point })),
+  { point: "after U01.L03" },
+  { point: "after GYM.04" },
+  { point: "onboarding at react (edit 5)" },
+  { point: "4-day gap" },
+  { point: "12-day gap" },
+  { point: "21-day gap" },
+  { point: "after U02.L05", gapDays: 6 },
+  { point: "after U01.L03", targetMinutes: 15 },
+  { point: "U03.CP due", targetMinutes: 15 },
+  { point: "C0 released", recordings: false },
+  { point: "after U03.L02", mic: false },
+  { point: "C2 open", mic: false },
+  { point: "after U03.L02", practice: false },
+];
+const AGE_MS = SNAPSHOT_MAX_AGE_MS - 60_000;
+
+describe("a snapshot restored 59 minutes after its build is a fresh build at that instant", () => {
+  let x: Harness;
+  beforeAll(async () => {
+    x = await harness({ dev: true, content: real, now: NOW });
+  });
+  afterAll(async () => {
+    await x.close();
+  });
+
+  for (const body of AGED) {
+    const { point, ...options } = body;
+    const name = Object.keys(options).length > 0 ? `${point} ${JSON.stringify(options)}` : point;
+    test(name, async () => {
+      x.clock.set(NOW);
+      const before = { ...cache(x).stats };
+      await seed(x, body);
+      expect(cache(x).stats.built).toBe(before.built + 1);
+      // Another learner in between, then the same request 59 minutes later: restored, not built.
+      await seed(x, { point: "fresh" });
+      x.clock.advance(AGE_MS);
+      const built = cache(x).stats.built;
+      const restoredResult = await seed(x, body);
+      expect(cache(x).stats.built).toBe(built);
+      expect(cache(x).stats.restored).toBeGreaterThan(before.restored);
+      const restored = { seen: await observed(x), instants: instants(x), files: fileHashes(x) };
+      // The same request built from nothing at this instant, past the cache.
+      const freshResult = await buildSeed(x.server.deps, body);
+      const fresh = { seen: await observed(x), instants: instants(x), files: fileHashes(x) };
+      expect(restored.seen).toEqual(fresh.seen);
+      expect(restored.instants).toEqual(fresh.instants);
+      expect(restored.files).toEqual(fresh.files);
+      expect(comparable(restoredResult)).toEqual(comparable(freshResult));
+    });
+  }
+});
+
+/** The audio and album files by content (their names hold random IDs), sorted. */
+function fileHashes(x: Harness): string[] {
+  const { audioDir, albumDir } = x.server.deps.config;
+  return [...Object.values(files(audioDir)), ...Object.values(files(albumDir))].sort();
+}
+
+describe("moving a restored learner's instants", () => {
+  const later = { ms: 59 * 60_000, timeZone: "UTC", rolloverHour: 4 };
+  const table = (rows: (string | null)[]) => {
+    const db = new Database(":memory:");
+    db.run("CREATE TABLE t (id INTEGER PRIMARY KEY, n INTEGER, at TEXT, doc TEXT)");
+    rows.forEach((at, i) => {
+      db.run("INSERT INTO t (n, at, doc) VALUES (?, ?, ?)", [
+        i,
+        at,
+        JSON.stringify({ at, day: "2026-11-12" }),
+      ]);
+    });
+    return db;
+  };
+  const read = (db: Database) => db.query("SELECT n, at, doc FROM t ORDER BY id").all();
+
+  test("an event moves by the time passed, in a column and inside JSON; a due date on a day's first instant stays", () => {
+    const db = table(["2026-11-12T12:00:00.000Z", "2026-11-20T04:00:00.000Z", null]);
+    shiftInstants(db, ["t"], later);
+    expect(read(db)).toEqual([
+      { n: 0, at: "2026-11-12T12:59:00.000Z", doc: '{"at":"2026-11-12T12:59:00.000Z","day":"2026-11-12"}' },
+      { n: 1, at: "2026-11-20T04:00:00.000Z", doc: '{"at":"2026-11-20T04:00:00.000Z","day":"2026-11-12"}' },
+      { n: 2, at: null, doc: '{"at":null,"day":"2026-11-12"}' },
+    ]);
+  });
+
+  test("an event that would move to another learner day refuses the restore", () => {
+    const db = table(["2026-11-12T03:30:00.000Z"]);
+    expect(() => shiftInstants(db, ["t"], later)).toThrow("another learner day");
+  });
+
+  test("a build made on a day's first instant is never restored later: built again", async () => {
+    const x = await harness({ dev: true, content: real, now: NOW });
+    try {
+      const { timezone, rolloverHour } = x.server.deps.repos.profile.get();
+      expect({ timezone, rolloverHour }).toEqual({ timezone: "UTC", rolloverHour: 4 });
+      x.clock.set("2026-11-13T04:00:00.000Z");
+      await seed(x, { point: "after U01.L03" });
+      await seed(x, { point: "after U01.L03" });
+      expect(cache(x).stats).toEqual({ built: 1, restored: 1, expired: 0 });
+      x.clock.advance(60_000);
+      await seed(x, { point: "after U01.L03" });
+      expect(cache(x).stats).toEqual({ built: 2, restored: 1, expired: 1 });
+    } finally {
+      await x.close();
+    }
   });
 });

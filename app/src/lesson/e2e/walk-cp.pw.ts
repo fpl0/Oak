@@ -153,7 +153,8 @@ async function walkCheckpoint(page: Page, unit: "U03" | "U04") {
     make: { tests: { expect: string; response: { code?: string } }[] };
   };
   await page.goto(`/checkpoint/${unit}`);
-  await expect(page.getByTestId("checkpoint-intro")).toBeVisible({ timeout: 30_000 });
+  // 20 s: the deadline checkpoint-w3.pw.ts gave its own whole U03.CP for the intro (the config's default).
+  await expect(page.getByTestId("checkpoint-intro")).toBeVisible({ timeout: 20_000 });
   await page.getByTestId("start-checkpoint").click();
   await expect(page.getByTestId("hint")).toHaveCount(0);
   const kinds: string[] = [];

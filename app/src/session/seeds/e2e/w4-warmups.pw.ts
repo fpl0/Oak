@@ -3,13 +3,31 @@
 // its roots sung on Chromium's fake microphone, and the same day in Quiet mode (the mic never opens); a U06 day with
 // the staged chord dictation (bass → quality → numerals). Each set is run in the session's warm-up with the keyboard,
 // its trials read back from the wire with the warm-up item they belong to, and the session moves on after it.
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import type { DrillTrialRecord, Trial } from "@oak/api";
-import { expect, type Page, test } from "@playwright/test";
-import { SCREENSHOT_MATRIX } from "../../../../../e2e/support/stack.ts";
+import { expect, type Locator, type Page, test } from "@playwright/test";
+import { REPO_ROOT, SCREENSHOT_MATRIX } from "../../../../../e2e/support/stack.ts";
 import { shoot, useUiPrefs } from "../../../../../e2e/support/ui.ts";
+import { fakeMic } from "../../../onboarding/e2e/helpers.ts";
 import { api, blockHmr, expectNoOverflow, matrix, SHOTS, seed, settle } from "./support.ts";
 
+// A voice sings in this file: Chromium's fake microphone plays the onboarding suite's voice.wav (quiet, five short
+// notes, then C4 held for 9 s; it starts again each time the microphone opens), as it does in the journeys. The
+// area's default fake device only beeps, and no steady note reaches the mic from it: the sung part of the
+// bass-degree set would then show its fallback line and an empty pad, not the roots that were sung. Only that test
+// opens the microphone.
+test.use({ launchOptions: { args: fakeMic("voice.wav") } });
 test.describe.configure({ mode: "serial" });
+test.beforeAll(() => {
+  // `bun run e2e` writes every fake-microphone fixture before any suite starts; a run of this file alone may be
+  // the first to need this one.
+  const wav = fakeMic("voice.wav")
+    .find((a) => a.startsWith("--use-file-for-fake-audio-capture="))
+    ?.split("=")[1];
+  if (wav && !existsSync(wav))
+    execFileSync("bun", ["app/src/onboarding/e2e/make-fixtures.bun.ts"], { cwd: REPO_ROOT });
+});
 test.beforeEach(async ({ page }) => {
   await blockHmr(page);
 });
@@ -166,6 +184,14 @@ async function finishSet(page: Page, warmupIndexBefore: number): Promise<void> {
 
 const QUALITY_KEYS: Record<string, string> = { maj: "1", min: "2", dim: "3", aug: "4" };
 
+/**
+ * A bass-degree set is four trials: the family's own set size (`fam.har.bass`, `n: 4` in
+ * packages/drills/src/catalog/families.ts). A warm-up item of one family is planned with it
+ * (server/src/services/srs.ts `toWarmupItem`: the family's `trialsPerSet`, and an anchor set is four as well), and
+ * the set the session opens for the item holds as many (server/src/srs-wiring.ts `#startDrill`).
+ */
+const BASS_TRIALS = 4;
+
 test("a U05 day: the chord-quality set in the warm-up, answered by key, then the day goes on", async ({
   page,
   request,
@@ -219,14 +245,15 @@ test("a U05 day: the chord-quality set in the warm-up, answered by key, then the
 });
 
 /**
- * Both themes at both sizes on the trial in view (the theme switched in place): the next action in view, no
- * horizontal overflow of the document (none at all) or of <main>; back to Paper 1440×900.
+ * Both themes at both sizes on the trial in view, reached once (the size and the theme are switched in place: a
+ * reload would start the trial again and drop what was just sung or answered): `inView` on screen, no horizontal
+ * overflow of the document (none at all) or of <main>; back to Paper 1440×900.
  */
-async function frameMatrix(page: Page, name: string): Promise<void> {
+async function frameMatrix(page: Page, name: string, inView: Locator): Promise<void> {
   for (const m of SCREENSHOT_MATRIX) {
     await page.setViewportSize({ width: m.width, height: m.height });
     await page.evaluate((theme) => document.documentElement.setAttribute("data-theme", theme), m.theme);
-    await expect(page.getByTestId("next-trial")).toBeInViewport();
+    await expect(inView).toBeInViewport();
     await settle(page);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);
@@ -253,9 +280,12 @@ test("a U06 day: the bass-degree set, its roots sung on the mic before they are 
   expect(s.next).toBe("U06.L06");
   await useUiPrefs(page, { theme: "paper" });
   await startDay(page);
-  await toFamily(page, "fam.har.bass");
+  const item = await toFamily(page, "fam.har.bass");
   const before = (await sessionState(page)).warmupIndex;
+  // Four trials, by the plan and on the screen (the practice-page copies asserted "Trial n of 4").
+  expect(item.trials).toBe(BASS_TRIALS);
   const total = await totalOf(page);
+  expect(total).toBe(BASS_TRIALS);
   const t0 = await trialNo(page, 1, total);
   await expect(page.getByTestId("trial-prompt")).toHaveText(
     "Hear the bass first: which degree is each root?",
@@ -271,9 +301,11 @@ test("a U06 day: the bass-degree set, its roots sung on the mic before they are 
   await shoot(page, SHOTS, "w4-bass-singing", "paper");
   await expect(page.getByTestId("sung-part-line")).toBeVisible({ timeout: 40_000 });
   expect(micAsked()).toBeGreaterThan(0);
-  await settle(page);
-  await expectNoOverflow(page);
-  await shoot(page, SHOTS, "w4-warmup-bass-sung", "paper");
+  // The voice was heard: the line names the roots as sung (the held C4 gives the last bars a steady note), and
+  // they are on the pad. This screen, before any pick, in both themes at both sizes (the journey's U06 day took
+  // these four, e2e/journey/w4-harmony.pw.ts "w4-journey-bass-sung").
+  await expect(page.getByTestId("sung-part-line")).toHaveText(/^You sang .+\. Check them on the pad/);
+  await frameMatrix(page, "w4-warmup-bass-sung", page.getByTestId("sung-part-line"));
   // The pick is the learner's: clear what was prefilled and enter the roots.
   const pad = page.getByRole("group", { name: "Your answer: the degrees, in order" });
   await expect(pad).toBeVisible();
@@ -284,7 +316,6 @@ test("a U06 day: the bass-degree set, its roots sung on the mic before they are 
   await expect(page.getByTestId("answer-in-context")).toContainText("Bar 1");
   await nextTrial(page);
   // The last pick is wrong on purpose (its first root off by one); the others are right, nothing sung.
-  expect(total).toBeGreaterThanOrEqual(3);
   for (let i = 1; i < total; i++) {
     const t = await trialNo(page, i + 1, total);
     await expect(pad).toBeVisible();
@@ -320,9 +351,12 @@ test("the same U06 day in Quiet mode: no sung part, the mic never opens, the set
   await useUiPrefs(page, { theme: "bark" });
   await startDay(page);
   expect(await api<{ quiet: boolean }>(request, "GET", "/api/voice")).toMatchObject({ quiet: true });
-  await toFamily(page, "fam.har.bass");
+  const item = await toFamily(page, "fam.har.bass");
   const before = (await sessionState(page)).warmupIndex;
+  // The set is whole in Quiet mode: the same four trials, by the plan and on the screen.
+  expect(item.trials).toBe(BASS_TRIALS);
   const total = await totalOf(page);
+  expect(total).toBe(BASS_TRIALS);
   const pad = page.getByRole("group", { name: "Your answer: the degrees, in order" });
   for (let i = 0; i < total; i++) {
     const t = await trialNo(page, i + 1, total);
@@ -340,7 +374,7 @@ test("the same U06 day in Quiet mode: no sung part, the mic never opens, the set
       await settle(page);
       await expectNoOverflow(page);
       await shoot(page, SHOTS, "w4-warmup-bass-quiet", "bark");
-      await frameMatrix(page, "w4-bass-feedback");
+      await frameMatrix(page, "w4-bass-feedback", page.getByTestId("next-trial"));
     }
     await nextTrial(page);
   }

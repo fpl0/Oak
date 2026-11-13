@@ -58,41 +58,49 @@ async function settle(page: Page) {
   await expect(page.locator("[data-state=loading]")).toHaveCount(0, { timeout: 15_000 });
 }
 
+/** Each route's own deadline: what it had as a test of its own (the project's 60 s, its browser context included). */
+const ROUTE_DEADLINE_MS = 60_000;
+
 // One test per theme walks every route, each in a fresh browser context of its own (the project's options, this
-// theme's colour scheme): as isolated as one test per route, without a test's own setup for each of 34 routes.
+// theme's colour scheme): as isolated as one test per route, without a test's own setup for each of 34 routes. Every
+// route's step keeps the 60-second deadline it had as a test: a step that overruns fails and names its route.
 for (const scheme of ["light", "dark"] as const) {
   test.describe(`routes in ${scheme === "light" ? "Paper" : "Bark"}`, () => {
     test.use({ colorScheme: scheme });
     test("every route renders", async ({ browser, baseURL, viewport, serviceWorkers, colorScheme }) => {
       test.setTimeout(ROUTES.length * 30_000);
       for (const r of ROUTES)
-        await test.step(`${r.path} renders`, async () => {
-          const context = await browser.newContext({
-            ...(baseURL ? { baseURL } : {}),
-            viewport,
-            serviceWorkers,
-            colorScheme,
-          });
-          try {
-            const page = await context.newPage();
-            const problems = watchConsole(page);
-            await installStubApi(page);
-            await page.goto(r.path);
-            await settle(page);
-            await expect(page.locator("html")).toHaveAttribute(
-              "data-theme",
-              scheme === "light" ? "paper" : "bark",
-            );
-            await expect(page.getByTestId("page-title")).toHaveText(r.title);
-            await expect(page.locator("#main")).not.toBeEmpty();
-            // Focus routes hide the NavRail (ux §2.1).
-            await expect(page.getByRole("navigation", { name: "Main" })).toHaveCount(r.focus ? 0 : 1);
-            await expect(page.locator("[data-state=error]")).toHaveCount(0);
-            expect(problems, `${r.path}: console`).toEqual([]);
-          } finally {
-            await context.close();
-          }
-        });
+        await test.step(
+          `${r.path} renders`,
+          async () => {
+            const context = await browser.newContext({
+              ...(baseURL ? { baseURL } : {}),
+              viewport,
+              serviceWorkers,
+              colorScheme,
+            });
+            try {
+              const page = await context.newPage();
+              const problems = watchConsole(page);
+              await installStubApi(page);
+              await page.goto(r.path);
+              await settle(page);
+              await expect(page.locator("html")).toHaveAttribute(
+                "data-theme",
+                scheme === "light" ? "paper" : "bark",
+              );
+              await expect(page.getByTestId("page-title")).toHaveText(r.title);
+              await expect(page.locator("#main")).not.toBeEmpty();
+              // Focus routes hide the NavRail (ux §2.1).
+              await expect(page.getByRole("navigation", { name: "Main" })).toHaveCount(r.focus ? 0 : 1);
+              await expect(page.locator("[data-state=error]")).toHaveCount(0);
+              expect(problems, `${r.path}: console`).toEqual([]);
+            } finally {
+              await context.close();
+            }
+          },
+          { timeout: ROUTE_DEADLINE_MS },
+        );
     });
   });
 }

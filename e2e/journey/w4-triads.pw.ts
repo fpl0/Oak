@@ -1,7 +1,6 @@
 // Wave 4 journey (a) and (h): U05's first lesson, then U05.L07 with the hand-voiced cadence that is the voicing()
 // gate, and the next day U05.L08, where chord() and voicing() arrive — each as a real daily session (Today → the
-// warm-up → the lesson → the Coda). These lessons hold no sung step, so Quiet mode changes nothing in them: they
-// are walked once (the Quiet days with something to sing are in w3-degrees, w5-days and journey.pw.ts).
+// warm-up → the lesson → the Coda), and the same days again in Quiet mode, where nothing opens the microphone.
 // Each test starts from a dev seed (POST /api/dev/seed) on the real stack: real server, real content, the scripted
 // fake tutor, Chrome's fake microphone.
 //   1. "after U04.L04": today is U05.L01 (Stacking Thirds). Chords are stacks of thirds in n(); chord() stays locked.
@@ -15,7 +14,17 @@ import u05l07 from "../../content/core/U05/L07/lesson.ts";
 import u05l08 from "../../content/core/U05/L08/lesson.ts";
 import { useUiPrefs as setUiPrefs } from "../support/ui.ts";
 import { lessonDay } from "./day.ts";
-import { advanceDays, api, expectClean, noHmr, resetClock, seed, type Watch, watch } from "./support.ts";
+import {
+  advanceDays,
+  api,
+  countMicAsks,
+  expectClean,
+  noHmr,
+  resetClock,
+  seed,
+  type Watch,
+  watch,
+} from "./support.ts";
 
 test.use({ launchOptions: { args: fakeMic("voice.wav") }, permissions: ["microphone"] });
 test.describe.configure({ mode: "serial" });
@@ -24,12 +33,16 @@ async function begin(
   page: Page,
   request: import("@playwright/test").APIRequestContext,
   point: string,
-): Promise<Watch> {
+  quiet: boolean,
+): Promise<{ w: Watch; micAsks: () => Promise<number> }> {
   await resetClock(request);
   await seed(request, point);
+  if (quiet) await api(request, "PUT", "/api/voice/quiet", { quiet: true, scope: "always" });
   await noHmr(page);
-  await setUiPrefs(page, { theme: "paper" });
-  return watch(page);
+  await setUiPrefs(page, { theme: quiet ? "bark" : "paper" });
+  // Every getUserMedia call from here on, across navigations and days (support.ts): Quiet mode must make none.
+  const micAsks = await countMicAsks(page);
+  return { w: watch(page), micAsks };
 }
 
 interface Unlocks {
@@ -44,60 +57,75 @@ interface Gate {
   passedCode?: string | null;
 }
 
-test("U05.L01 as a daily session: triads stacked in n(), chord() still locked", async ({ page, request }) => {
-  test.setTimeout(240_000);
-  const w = await begin(page, request, "after U04.L04");
-  const plan = await lessonDay(page, request, u05l01, {
-    unlocks: "auto",
-    warmupSets: 0,
-    makeTitle: "U05.L01 make",
-    shots: "w4-coda-U05.L01",
-  });
-  expect(plan.mapItemId).toBe("U05.L01");
-  const progress = await api<{ lessons: { lessonId: string; status: string }[] }>(
+// These lessons hold no sung step, so a Quiet day shows the same screens as the ordinary one. What only a Quiet
+// traversal can prove is that nothing on the way asks for the microphone: each day is walked again with Quiet on,
+// and the count of getUserMedia calls over the whole of it is zero.
+for (const quiet of [false, true]) {
+  const mode = quiet ? " (Quiet mode)" : "";
+
+  test(`U05.L01 as a daily session: triads stacked in n(), chord() still locked${mode}`, async ({
+    page,
     request,
-    "GET",
-    "/api/lessons/progress",
-  );
-  expect(progress.lessons.find((l) => l.lessonId === "U05.L01")?.status).toBe("completed");
-  const have = await unlocked(request);
-  expect(have).not.toContain("tb.chord");
-  expect(have).not.toContain("tb.voicing");
-  expectClean(w);
-});
-
-test(`U05.L07 passes the voicing gate by hand; the next day U05.L08 grants chord() and voicing()`, async ({
-  page,
-  request,
-}) => {
-  test.setTimeout(300_000);
-  const w = await begin(page, request, "after U05.L06");
-  const before = await api<Gate>(request, "GET", "/api/gates/voicing");
-  expect(before.passed).toBe(false);
-  await lessonDay(page, request, u05l07, {
-    unlocks: "auto",
-    warmupSets: 0,
-    makeTitle: "U05.L07 make",
-    shots: "w4-coda-U05.L07",
+  }) => {
+    test.setTimeout(240_000);
+    const { w, micAsks } = await begin(page, request, "after U04.L04", quiet);
+    const plan = await lessonDay(page, request, u05l01, {
+      unlocks: "auto",
+      // The Quiet day walks one warm-up set for real (a warm-up is where a microphone would open); the ordinary
+      // day reports its warm-up skipped (whole warm-ups are walked by gate journey 2 and the drill suites).
+      warmupSets: quiet ? 1 : 0,
+      makeTitle: `U05.L01 make${quiet ? " quiet" : ""}`,
+      shots: quiet ? "w4-quiet-coda-U05.L01" : "w4-coda-U05.L01",
+    });
+    expect(plan.mapItemId).toBe("U05.L01");
+    const progress = await api<{ lessons: { lessonId: string; status: string }[] }>(
+      request,
+      "GET",
+      "/api/lessons/progress",
+    );
+    expect(progress.lessons.find((l) => l.lessonId === "U05.L01")?.status).toBe("completed");
+    const have = await unlocked(request);
+    expect(have).not.toContain("tb.chord");
+    expect(have).not.toContain("tb.voicing");
+    if (quiet) expect(await micAsks()).toBe(0);
+    expectClean(w);
   });
-  // The gate is the hand-voiced cadence, typed and checked in the lesson: the server holds the code that passed.
-  const gate = await api<Gate>(request, "GET", "/api/gates/voicing");
-  expect(gate.passed).toBe(true);
-  expect(gate.best ?? 0).toBeGreaterThanOrEqual(0.9);
-  expect(gate.passedCode ?? "").toContain("chords:");
-  // The tools themselves arrive with U05.L08 (contracts §3.1 rule 6).
-  expect(await unlocked(request)).not.toContain("tb.voicing");
 
-  await advanceDays(request, 1);
-  const plan = await lessonDay(page, request, u05l08, {
-    unlocks: true,
-    warmupSets: 0,
-    makeTitle: "U05.L08 make",
-    shots: "w4-coda-U05.L08",
+  test(`U05.L07 passes the voicing gate by hand; the next day U05.L08 grants chord() and voicing()${mode}`, async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(300_000);
+    const { w, micAsks } = await begin(page, request, "after U05.L06", quiet);
+    const before = await api<Gate>(request, "GET", "/api/gates/voicing");
+    expect(before.passed).toBe(false);
+    await lessonDay(page, request, u05l07, {
+      unlocks: "auto",
+      warmupSets: 0,
+      makeTitle: `U05.L07 make${quiet ? " quiet" : ""}`,
+      shots: quiet ? "w4-quiet-coda-U05.L07" : "w4-coda-U05.L07",
+    });
+    // The gate is the hand-voiced cadence, typed and checked in the lesson: the server holds the code that passed.
+    const gate = await api<Gate>(request, "GET", "/api/gates/voicing");
+    expect(gate.passed).toBe(true);
+    expect(gate.best ?? 0).toBeGreaterThanOrEqual(0.9);
+    expect(gate.passedCode ?? "").toContain("chords:");
+    // The tools themselves arrive with U05.L08 (contracts §3.1 rule 6).
+    expect(await unlocked(request)).not.toContain("tb.voicing");
+
+    await advanceDays(request, 1);
+    const plan = await lessonDay(page, request, u05l08, {
+      unlocks: true,
+      warmupSets: 0,
+      makeTitle: `U05.L08 make${quiet ? " quiet" : ""}`,
+      shots: quiet ? "w4-quiet-coda-U05.L08" : "w4-coda-U05.L08",
+    });
+    expect(plan.mapItemId).toBe("U05.L08");
+    const have = await unlocked(request);
+    for (const id of ["tb.chord", "tb.voicing", "snd.rhodes", "snd.organ"]) expect(have).toContain(id);
+    // Both days: the count is kept across the second day's page load.
+    if (quiet) expect(await micAsks()).toBe(0);
+    expectClean(w);
+    await resetClock(request);
   });
-  expect(plan.mapItemId).toBe("U05.L08");
-  const have = await unlocked(request);
-  for (const id of ["tb.chord", "tb.voicing", "snd.rhodes", "snd.organ"]) expect(have).toContain(id);
-  expectClean(w);
-  await resetClock(request);
-});
+}

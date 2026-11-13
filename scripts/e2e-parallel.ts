@@ -16,11 +16,13 @@
 //      longest first. A project whose files add up to more than CHAIN_MINUTES is cut into SHARDS (up to MAX_SHARDS),
 //      files balanced by their measured seconds, shard k on the base shift + 100·k, so no serial chain sets the
 //      floor of the run. This pass records no Playwright trace;
-//   4. a test that failed (or did not run) is run again alone, traced (its whole file if the file is serial). The
-//      alone outcome is the one that counts; one that passes only alone is listed by name as load-sensitive and still
-//      fails the run (fix it, or move its file to QUIET with the evidence): never hidden;
+//   4. a test that failed (or did not run) is run again alone, traced (its whole file if the file is serial, or if
+//      a helper declares the test). The alone outcome is the one that counts; one that passes only alone is listed by
+//      name as load-sensitive and still fails the run (fix it, or move its file to QUIET with the evidence): never
+//      hidden;
 //   5. the budgets: minutes of test time per project (e2e/budgets.json) against this run; more than 15 % over a
-//      budget, or the whole suite over its total, fails the run.
+//      budget, or the whole suite over its total, fails the run. The total applies whenever the run was given every
+//      test the config lists, whatever the arguments were (`-- --trace on` filters nothing: the total holds).
 //
 // Every listed test is accounted for: the summary names each failed test, each one that never ran (a serial file
 // stopped early, a web server that did not start, a dead process) and each skip the spec asked for, and prints the
@@ -36,7 +38,8 @@
 //   bun run e2e --quiet-jobs 1           the quiet files one unit at a time
 //   bun run e2e --no-bundle              every stack on a Vite dev server (as an area run alone does)
 //   bun run e2e --plan                   print the plan (units, shards, files) and exit
-//   bun run e2e -- --grep foo            anything after `--` goes to every Playwright process
+//   bun run e2e -- --grep foo            anything after `--` goes to every Playwright process (a filter makes the
+//                                        run partial; `-- --trace on` does not)
 //   bun run e2e:serial                   the old way: one Playwright process, one test at a time
 //
 // Logs: test-results/e2e-logs/<unit>.log. Durations: test-results/e2e-durations.json (per project and per file; the
@@ -271,8 +274,13 @@ export interface Listed {
   key: TestKey;
   project: string;
   file: string;
-  /** The line of the test in its file (`file:line` re-runs exactly that test). */
+  /** The line of the test in the file that declares it (`file:line` re-runs exactly that test). */
   line?: number;
+  /**
+   * The file that declares the test, when it is not `file`: a helper the spec calls (w3walk.ts declares the tests
+   * walk-u03a.pw.ts owns). `line` is then a line of the helper, and `file:line` selects nothing.
+   */
+  declaredIn?: string;
 }
 interface Result {
   unit: Unit;
@@ -398,7 +406,8 @@ interface ReportTest {
 interface ReportSuite {
   file?: string;
   title?: string;
-  specs?: { title: string; line?: number; tests: ReportTest[] }[];
+  /** A spec's own `file` is the file that declares the test: a helper's, when the spec file calls one. */
+  specs?: { title: string; file?: string; line?: number; tests: ReportTest[] }[];
   suites?: ReportSuite[];
 }
 interface Report {
@@ -413,28 +422,29 @@ export function eachTest(
 ): (Listed & { test: ReportTest })[] {
   const out: (Listed & { test: ReportTest })[] = [];
   const walk = (s: ReportSuite, file: string, path: string[]): void => {
-    for (const spec of s.specs ?? [])
+    for (const spec of s.specs ?? []) {
+      const declaredIn = spec.file === undefined ? file : rel(spec.file);
       for (const t of spec.tests)
         out.push({
           key: `${t.projectName} › ${file} › ${[...path, spec.title].join(" › ")}`,
           project: t.projectName,
           file,
           ...(spec.line !== undefined ? { line: spec.line } : {}),
+          ...(declaredIn !== file ? { declaredIn } : {}),
           test: t,
         });
+    }
     for (const c of s.suites ?? []) walk(c, file, c.title ? [...path, c.title] : path);
   };
   for (const s of report.suites ?? []) walk(s, rel(s.file ?? ""), []);
   return out;
 }
 
-/** Every project with its spec files and test counts, and its web servers, from the config itself. */
-async function discover(
-  shift: number,
-  rest: string[],
-): Promise<{ projects: Map<string, Project>; listed: Listed[] }> {
+type Listing = Report & { config: { projects: { name: string; testDir: string }[] } };
+
+/** `playwright test --list` of the config, narrowed by `rest` exactly as a run with those arguments is. */
+function list(shift: number, rest: string[]): Listing {
   const env = { ...process.env, OAK_E2E_SHIFT: String(shift), FORCE_COLOR: "0" };
-  // The pass-through (`-- --grep x`) narrows the listing exactly as it narrows the runs.
   const listing = spawnSync(
     playwright,
     ["test", "-c", where.config, "--list", "--reporter", "json", ...rest],
@@ -447,9 +457,20 @@ async function discover(
   );
   if (listing.status !== 0)
     throw new Error(`playwright test --list failed:\n${listing.stderr}${listing.stdout}`);
-  const json = JSON.parse(listing.stdout) as Report & {
-    config: { projects: { name: string; testDir: string }[] };
-  };
+  return JSON.parse(listing.stdout) as Listing;
+}
+
+/**
+ * Every project with its spec files and test counts, and its web servers, from the config itself. `whole` is every
+ * test the config lists with no pass-through at all: what "the whole suite" means (wholeSuite).
+ */
+async function discover(
+  shift: number,
+  rest: string[],
+): Promise<{ projects: Map<string, Project>; listed: Listed[]; whole: TestKey[] }> {
+  // The pass-through (`-- --grep x`) narrows the listing exactly as it narrows the runs.
+  const json = list(shift, rest);
+  const whole = [...new Set(eachTest(rest.length === 0 ? json : list(shift, [])).map((t) => t.key))];
   const projects = new Map<string, Project>();
   for (const p of json.config.projects)
     projects.set(p.name, {
@@ -468,6 +489,7 @@ async function discover(
       project: t.project,
       file: t.file,
       ...(t.line !== undefined ? { line: t.line } : {}),
+      ...(t.declaredIn !== undefined ? { declaredIn: t.declaredIn } : {}),
     });
   }
 
@@ -481,7 +503,19 @@ async function discover(
     const p = projects.get(name);
     if (p) p.servers = servers;
   }
-  return { projects, listed };
+  return { projects, listed, whole };
+}
+
+/**
+ * Whether a run is the whole suite: every test the config lists is among the tests the run was given. Decided from
+ * the selection itself, never from how the arguments look: `-- --trace on` or `-- --workers 1` select every test (the
+ * total budget holds); `--project`, `--since`, `-- -g`, `-- --grep-invert`, `-- --shard`, `-- --only-changed` or a
+ * file after `--` leave some out (a partial run: the total does not apply).
+ */
+export function wholeSuite(given: Iterable<TestKey>, whole: Iterable<TestKey>): boolean {
+  const g = new Set(given);
+  for (const k of whole) if (!g.has(k)) return false;
+  return true;
 }
 
 /** A spec path as a JSON report gives it (relative to the config's folder, or absolute) → repo-relative. */
@@ -785,8 +819,11 @@ export const SERIAL_RE = /describe\.serial\b|mode:\s*["']serial["']/;
 /**
  * What the alone re-run runs, from the tests that failed or did not run beside other suites: in a serial file, every
  * test of the file (each depends on the ones before it); elsewhere exactly those tests (`file:line`, so the tests
- * that passed are not paid for twice). `tests` are the unit's listed tests; `keys` are the tests whose outcome the
- * re-run decides.
+ * that passed are not paid for twice). A test a helper declares (`declaredIn`) has no `file:line` of its own (the
+ * line is the helper's, and Playwright matches a line against the declaring file): its whole owning spec file runs
+ * again. A file is serial when its own source says so, or the source of a helper that declares its tests (the walk
+ * helpers set the mode for the spec that calls them). `tests` are the unit's listed tests; `keys` are the tests whose
+ * outcome the re-run decides.
  */
 export function rerunPlan(
   bad: TestKey[],
@@ -801,7 +838,10 @@ export function rerunPlan(
   for (const file of [...badFiles].sort()) {
     const mine = bad.map((k) => byKey.get(k)).filter((t): t is Listed => t?.file === file);
     const lines = mine.map((t) => t.line);
-    if (isSerial(file) || mine.length === 0 || lines.some((l) => l === undefined)) {
+    const helpers = new Set(tests.flatMap((t) => (t.file === file && t.declaredIn ? [t.declaredIn] : [])));
+    const serial = isSerial(file) || [...helpers].some(isSerial);
+    const elsewhere = mine.some((t) => t.declaredIn !== undefined);
+    if (serial || elsewhere || mine.length === 0 || lines.some((l) => l === undefined)) {
       filters.push(fileFilter(file));
       for (const t of tests) if (t.file === file) keys.add(t.key);
       for (const k of bad) if ((byKey.get(k)?.file ?? k.split(" › ")[1]) === file) keys.add(k);
@@ -809,8 +849,10 @@ export function rerunPlan(
     }
     for (const line of [...new Set(lines as number[])].sort((a, b) => a - b)) {
       filters.push(`${fileFilter(file)}:${line}`);
-      // Tests made in a loop share a line: all of them run again, and all of them are decided by the re-run.
-      for (const t of tests) if (t.file === file && t.line === line) keys.add(t.key);
+      // Tests made in a loop share a line: all of them run again, and all of them are decided by the re-run. A
+      // helper's test on the same line number of ITS file is not selected by `<spec>:<line>`: it keeps its outcome.
+      for (const t of tests)
+        if (t.file === file && t.line === line && t.declaredIn === undefined) keys.add(t.key);
     }
   }
   return { filters, keys };
@@ -861,7 +903,7 @@ export function readBudgets(raw: unknown): BudgetFile {
  * Each budget against this run's minutes. A budget whose projects all ran is checked: over it by more than the
  * tolerance fails the run. One whose projects ran only in part is printed, not checked (a partial run). A project
  * that ran with no budget fails the run: every suite declares what it may cost. The total is checked only when
- * `everything` ran.
+ * `everything` ran (wholeSuite: the run was given every test the config lists).
  */
 export function checkBudgets(
   file: BudgetFile,
@@ -985,7 +1027,7 @@ if (import.meta.main) {
   const say = (s: string): void =>
     console.log(`[e2e ${((performance.now() - t0) / 60_000).toFixed(1)}m] ${s}`);
 
-  const { projects: all, listed } = await discover(args.shift, args.rest);
+  const { projects: all, listed, whole } = await discover(args.shift, args.rest);
   if (args.only) for (const p of args.only) if (!all.has(p)) throw new Error(`unknown project "${p}"`);
   let wanted: Set<string> = args.only ?? new Set(all.keys());
   if (args.since) {
@@ -999,6 +1041,15 @@ if (import.meta.main) {
       process.exit(0);
     }
   }
+  // What this run is given, and whether that is the whole suite (the total budget applies only then).
+  const wantedListed = listed.filter((t) => wanted.has(t.project));
+  const everything = wholeSuite(
+    wantedListed.map((t) => t.key),
+    whole,
+  );
+  const coverage = everything
+    ? `every listed test is selected (${whole.length}): the total budget applies`
+    : `${new Set(wantedListed.map((t) => t.key)).size} of ${whole.length} listed tests are selected: a partial run, the total budget does not apply`;
   const durations = readDurations();
   const units = plan(
     [...all.values()].filter((p) => wanted.has(p.name) && p.files.size > 0),
@@ -1022,6 +1073,7 @@ if (import.meta.main) {
         u.files.length > 0 ? `  ${u.files.length} files` : ""
       }`,
     );
+  console.log(`  ${coverage}`);
   if (args.plan) {
     for (const u of units.filter((x) => x.files.length > 0)) console.log(`${u.name}: ${u.files.join(" ")}`);
     process.exit(0);
@@ -1146,8 +1198,8 @@ if (import.meta.main) {
   }
 
   // Tests that failed or could not run beside other suites (quiet units too: their stream had a neighbour): once
-  // more, alone, traced. Exactly those tests, or their whole file when it is serial (rerunPlan). The alone outcome is
-  // the one that counts.
+  // more, alone, traced. Exactly those tests, or their whole file when it is serial or a helper declares them
+  // (rerunPlan; isSerial reads any file's source, a helper's too). The alone outcome is the one that counts.
   const serial = new Map<string, boolean>();
   const isSerial = (file: string): boolean => {
     if (!serial.has(file)) {
@@ -1228,7 +1280,6 @@ if (import.meta.main) {
   // Every listed test, once, with its final outcome; then the counts per project, which must add up to the listing.
   const final = new Map<TestKey, Outcome>();
   for (const r of results) for (const [k, o] of r.outcomes) final.set(k, o);
-  const wantedListed = listed.filter((t) => wanted.has(t.project));
   for (const t of wantedListed) if (!final.has(t.key)) final.set(t.key, "notRun");
   const byOutcome = (o: Outcome): TestKey[] => [...final].filter(([, v]) => v === o).map(([k]) => k);
   const rows = tally(final);
@@ -1287,7 +1338,6 @@ if (import.meta.main) {
   // Oak's own run always reads e2e/budgets.json (a missing file fails the run).
   if (!args.config || existsSync(budgetsFile)) {
     const ran = new Set(units.flatMap((u) => u.projects));
-    const everything = !args.only && !args.since && args.rest.length === 0;
     const b = checkBudgets(
       readBudgets(JSON.parse(readFileSync(budgetsFile, "utf8"))),
       projectMinutes,
@@ -1306,7 +1356,7 @@ if (import.meta.main) {
         `  ${row.name.padEnd(22)} budget ${row.budget === null ? "  —  " : row.budget.toFixed(1).padStart(5)}  measured ${row.measured.toFixed(1).padStart(5)}  ${d.padStart(6)}  ${row.verdict}`,
       );
     }
-    if (!b.total) console.log("  (the total is checked only when every project runs)");
+    if (!b.total) console.log(`  (the total is not checked: ${coverage})`);
     overBudget = args.budget && b.failed;
     if (overBudget)
       console.log(

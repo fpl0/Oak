@@ -186,7 +186,38 @@ test("a chord-quality set: the key first, the chord, then the bass alone, broken
 
 // The bass-degree set (its roots sung on the mic, and the same set in Quiet mode) is walked once in the suite, inside
 // a real session's warm-up: app/src/session/seeds/e2e/w4-warmups.pw.ts, "a U06 day: the bass-degree set …" and its
-// Quiet twin, which hold every assertion the two practice-page copies made here.
+// Quiet twin, which hold every assertion the two practice-page copies made here but one. That one is the practice
+// page's own and stays here: a set started from /practice at level 1 is four trials, the family's set size
+// (`fam.har.bass`, `n: 4` in packages/drills/src/catalog/families.ts; app/src/drills/sources.ts `staircaseSource`
+// takes its total from it). Nothing is sung: the picks go in by key as soon as the pad is there.
+test("a bass-degree practice set at level 1 is four trials: each picked by key, all four on the wire", async ({
+  page,
+}) => {
+  const problems = watch(page);
+  const posts = trialPosts(page);
+  await seed(page);
+  await prepare(page, { quiet: false });
+  await startPractice(page, "fam.har.bass");
+  const pad = page.getByRole("group", { name: "Your answer: the degrees, in order" });
+  for (let i = 0; i < 4; i++) {
+    const t = await trialNo(page, i + 1, 4);
+    expect(t.family).toBe("fam.har.bass");
+    await expect(pad).toBeVisible();
+    if (i === 0) await pad.locator("button").first().focus();
+    for (const d of t.expected.degrees ?? []) await page.keyboard.press(d.replace(/^[b#]/, ""));
+    await expect(page.getByTestId("trial-feedback")).toHaveAttribute("data-correct", "true");
+    await page.getByTestId("next-trial").focus();
+    await page.keyboard.press("Enter");
+  }
+  // The fourth trial ends the set: its summary, and exactly four records posted (indexes 0 to 3).
+  await expect(page.getByTestId("set-summary")).toBeVisible({ timeout: 30_000 });
+  expect([...posts.keys()].sort()).toEqual([0, 1, 2, 3]);
+  for (const r of posts.values()) {
+    expect(r).toMatchObject({ familyId: "fam.har.bass", correct: true });
+    expect(r.response.sung).toBeNull();
+  }
+  expect(problems).toEqual([]);
+});
 
 /** Picks a quality for each chord of the quality step (one pad per chord; a pick moves to the next). */
 async function pickQualities(page: Page, qualities: readonly string[]): Promise<void> {

@@ -75,6 +75,32 @@ export function expectClean(w: Watch): void {
   expect(w.problems, "console errors").toEqual([]);
 }
 
+/**
+ * Counts every request for the microphone the page makes (`getUserMedia`), in this process: the count survives a
+ * navigation and a reload, so one number covers a whole day and whatever is opened after it (Quiet mode must make
+ * none). Call it before the first `goto`.
+ */
+export async function countMicAsks(page: Page): Promise<() => Promise<number>> {
+  let asks = 0;
+  await page.exposeFunction("__oakMicAsked", () => {
+    asks++;
+  });
+  await page.addInitScript(() => {
+    const md = navigator.mediaDevices;
+    if (!md) return;
+    const orig = md.getUserMedia.bind(md);
+    md.getUserMedia = (c) => {
+      void (window as unknown as { __oakMicAsked(): Promise<void> }).__oakMicAsked();
+      return orig(c);
+    };
+  });
+  return async () => {
+    // A request made just before this read is still on its way here: one round trip to the page lets it land.
+    await page.evaluate(() => 0);
+    return asks;
+  };
+}
+
 /** Cuts Vite's HMR socket so a file saved elsewhere cannot remount the screen under test. */
 export async function noHmr(page: Page): Promise<void> {
   await page.routeWebSocket(/\/(\?token=|@vite)/, () => {});
