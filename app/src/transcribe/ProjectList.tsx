@@ -1,12 +1,11 @@
 // Transcribe (contracts §11.9 naming; ux §9): the ladder (L1–L4 at the learner's level and realism, the next
 // item, an offered level-up), the Transcription Gym's next session, the learner's own audio (drop or pick a
 // file: checked and decoded here, stored by the local server, never sent anywhere), and every project.
-import type { GymPlan, LadderState, Transcription } from "@oak/api";
-import { OakApiError } from "@oak/api";
+import type { GymPlan, LadderSong, LadderState, Transcription } from "@oak/api";
+import { AUDIO_UPLOAD_MAX_BYTES, OakApiError } from "@oak/api";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { clsx } from "clsx";
-import { ArrowUp, AudioWaveform, Dumbbell, Upload } from "lucide-react";
-import { type DragEvent, useRef, useState } from "react";
+import { ArrowUp, AudioWaveform, Dumbbell, Lock } from "lucide-react";
+import { useState } from "react";
 import { formatDate, formatKey } from "../lib/format.ts";
 import { getOak } from "../lib/oak.ts";
 import {
@@ -15,16 +14,19 @@ import {
   useLadder,
   useLadderNext,
   useLadderSetLevel,
+  useLadderSongs,
   useTranscriptionCreate,
   useTranscriptions,
 } from "../lib/queries.ts";
 import { currentSessionId } from "../session/store.ts";
 import { Button } from "../ui/kit/Button.tsx";
 import { Card, Chip, EmptyState, PageHeader, Skeleton } from "../ui/kit/basics.tsx";
+import { FileDropZone } from "../ui/kit/FileDropZone.tsx";
 import { QueryView } from "../ui/kit/QueryState.tsx";
 import { toast } from "../ui/kit/Toast.tsx";
-import { DROP_COPY, fileProblem, PRIVACY_COPY, titleOf } from "./import.ts";
+import { AUDIO_ACCEPT, AUDIO_KINDS, fileProblem, PRIVACY_COPY, titleOf } from "./import.ts";
 import { type LadderLevel, LEVEL_TITLE, ladderSummary, REALISM_TEXT } from "./ladder.ts";
+import { rememberItem } from "./song.ts";
 
 const SOURCE_LABEL: Record<Transcription["sourceKind"], string> = {
   "own-audio": "your audio",
@@ -86,26 +88,9 @@ function useImport() {
 }
 
 function ImportCard() {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [over, setOver] = useState(false);
   const imp = useImport();
-  const onDrop = (e: DragEvent) => {
-    e.preventDefault();
-    setOver(false);
-    const f = e.dataTransfer.files[0];
-    if (f) void imp.run(f);
-  };
   return (
-    <Card
-      className={clsx("flex flex-col gap-3 p-4 transition-colors", over && "border-accent bg-lane-in")}
-      onDragOver={(e) => {
-        e.preventDefault();
-        setOver(true);
-      }}
-      onDragLeave={() => setOver(false)}
-      onDrop={onDrop}
-      data-testid="import"
-    >
+    <Card className="flex flex-col gap-3 p-4" data-testid="import">
       <div className="flex items-start gap-3">
         <AudioWaveform aria-hidden className="mt-0.5 size-5 shrink-0 text-text-3" />
         <div className="min-w-0">
@@ -115,39 +100,93 @@ function ImportCard() {
           </p>
         </div>
       </div>
-      <div
-        className={clsx(
-          "flex flex-col items-center gap-2 rounded-control border border-dashed px-4 py-5 text-center",
-          over ? "border-accent" : "border-border",
-        )}
-      >
-        <p className="text-sm text-text-2">{DROP_COPY}</p>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="audio/*,.wav,.flac,.mp3,.m4a,.ogg,.aif,.aiff"
-          className="sr-only"
-          tabIndex={-1}
-          aria-hidden
-          data-testid="file-input"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            e.target.value = "";
-            if (f) void imp.run(f);
-          }}
-        />
-        <Button
-          variant="secondary"
-          loading={imp.step !== null}
-          icon={<Upload aria-hidden className="size-4" />}
-          onClick={() => fileRef.current?.click()}
-          data-testid="pick-file"
-        >
-          {imp.step ?? "Choose a file — from your own audio"}
-        </Button>
-      </div>
+      <FileDropZone
+        title="Bring a recording"
+        hint="It stays on this device."
+        accept={AUDIO_ACCEPT}
+        kinds={AUDIO_KINDS}
+        maxBytes={AUDIO_UPLOAD_MAX_BYTES}
+        onFile={(f) => void imp.run(f)}
+        busy={imp.step !== null}
+        {...(imp.step ? { busyText: imp.step } : {})}
+        buttonText="Choose your own audio…"
+        data-testid="drop-zone"
+      />
       <p className="text-sm text-text-3">{PRIVACY_COPY}</p>
     </Card>
+  );
+}
+
+/** One song of the L5/L6 pool: what is passed, and Start or Continue (or why it is not open). */
+function SongRow({ song, busy, onOpen }: { song: LadderSong; busy: boolean; onOpen(): void }) {
+  const progress =
+    song.level === 5
+      ? `${song.passedPhrases.length} of ${song.phrases.length} phrases`
+      : `${song.passedStages.length} of 3 stages`;
+  const started = song.passedPhrases.length > 0 || song.passedStages.length > 0;
+  return (
+    <li className="flex flex-wrap items-center gap-x-2 gap-y-1 py-1.5 text-sm" data-testid="song-row">
+      <span className="min-w-0 flex-1">
+        <span className="font-medium">{song.title}</span>{" "}
+        <span className="text-text-3">({song.year === "trad" ? "trad." : song.year})</span>
+        <span className="block text-text-2">
+          {song.status === "locked"
+            ? song.level === 5
+              ? `${song.phrases.length} phrases`
+              : "Bass, changes, melody"
+            : progress}
+        </span>
+      </span>
+      {song.status === "locked" ? (
+        <Chip>
+          <Lock aria-hidden className="size-3" /> {song.lockedReason ?? "Locked"}
+        </Chip>
+      ) : song.status === "done" ? (
+        <Chip tone="accent">done</Chip>
+      ) : (
+        <Button size="sm" loading={busy} onClick={onOpen}>
+          {started ? "Continue" : "Start"}
+        </Button>
+      )}
+    </li>
+  );
+}
+
+/** L5/L6: the song pool (contracts §2.8) to pick from; locked and unchecked songs say why. */
+function SongPicker({
+  level,
+  onOpen,
+  busy,
+}: {
+  level: 5 | 6;
+  onOpen(songId: string, level: 5 | 6): void;
+  busy: boolean;
+}) {
+  const songs = useLadderSongs();
+  if (songs.isPending) return <Skeleton className="h-20 w-full" />;
+  if (songs.isError)
+    return (
+      <p className="text-sm text-text-2" data-testid="songs-unavailable">
+        {notBuilt(songs.error)
+          ? "Not built yet: this server can't list the songs."
+          : "The songs couldn't be read."}
+      </p>
+    );
+  const pool = songs.data.items.filter((s) => s.level === level);
+  if (pool.length === 0)
+    return (
+      <p className="text-sm text-text-2">No songs at this level yet: their answer keys are being checked.</p>
+    );
+  return (
+    <ul
+      className="flex flex-col divide-y divide-border"
+      aria-label={`Songs for L${level}`}
+      data-testid="song-picker"
+    >
+      {pool.map((s) => (
+        <SongRow key={s.songId} song={s} busy={busy} onOpen={() => onOpen(s.songId, s.level)} />
+      ))}
+    </ul>
   );
 }
 
@@ -156,11 +195,17 @@ function LadderCard() {
   const next = useLadderNext();
   const setLevel = useLadderSetLevel();
   const navigate = useNavigate();
-  const start = async (level?: LadderLevel) => {
+  const start = async (level?: LadderLevel, songId?: string) => {
     try {
       const item = await next.mutateAsync({
-        body: { sessionId: currentSessionId(), gymId: null, ...(level ? { level } : {}) },
+        body: {
+          sessionId: currentSessionId(),
+          gymId: null,
+          ...(level ? { level } : {}),
+          ...(songId ? { songId } : {}),
+        },
       });
+      rememberItem(item);
       void navigate({ to: "/transcribe/$projectId", params: { projectId: item.itemId } });
     } catch (e) {
       toast.error(
@@ -180,8 +225,8 @@ function LadderCard() {
         <div className="min-w-0">
           <h2 className="text-h3">The ladder</h2>
           <p className="mt-0.5 text-sm text-text-2">
-            Short loops Oak generates and grades exactly: drums, then bass lines, four-chord loops and
-            melodies.
+            Short loops Oak generates and grades exactly (drums, bass lines, four-chord loops, melodies), then
+            songs: folk tunes phrase by phrase, and the blues in stages.
           </p>
         </div>
       </div>
@@ -198,6 +243,7 @@ function LadderCard() {
           s={ladder.data}
           busy={next.isPending}
           onNext={(l) => void start(l)}
+          onSong={(songId, l) => void start(l, songId)}
           onLevelUp={(to) =>
             setLevel.mutate(
               { body: { level: to } },
@@ -217,14 +263,17 @@ function LadderStatus({
   s,
   busy,
   onNext,
+  onSong,
   onLevelUp,
 }: {
   s: LadderState;
   busy: boolean;
   onNext(level?: LadderLevel): void;
+  onSong(songId: string, level: 5 | 6): void;
   onLevelUp(to: number): void;
 }) {
   const level = s.level as LadderLevel;
+  const songLevel = level === 5 || level === 6;
   const lower = ([1, 2, 3, 4] as const).filter((l) => l < level);
   return (
     <div className="flex flex-col gap-2">
@@ -232,9 +281,21 @@ function LadderStatus({
         {ladderSummary(s)}
       </p>
       <p className="text-sm text-text-3">{REALISM_TEXT[s.realism]}</p>
+      {songLevel ? <SongPicker level={level} busy={busy} onOpen={onSong} /> : null}
+      {level === 6 ? (
+        <details className="text-sm">
+          <summary className="cursor-pointer text-text-2">Folk songs (L5) to practise</summary>
+          <SongPicker level={5} busy={busy} onOpen={onSong} />
+        </details>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="primary" loading={busy} onClick={() => onNext()} data-testid="ladder-next">
-          Next item · L{level}
+        <Button
+          variant={songLevel ? "secondary" : "primary"}
+          loading={busy}
+          onClick={() => onNext()}
+          data-testid="ladder-next"
+        >
+          {songLevel ? `Next song · L${level}` : `Next item · L${level}`}
         </Button>
         {s.levelUp ? (
           <Button

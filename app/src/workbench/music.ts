@@ -63,6 +63,7 @@ export function pitchLabel(
   chord?: ChordId,
   direction?: 1 | -1,
   written?: string,
+  blues = false,
 ): PitchLabel {
   if (!key) {
     const spelled = written && !chord ? { name: written } : spellMidi(midi, chord ? { key, chord } : { key });
@@ -76,6 +77,12 @@ export function pitchLabel(
       if (alt.name === written) l = alt;
     }
   const name = chord ? spellMidi(midi, { key, chord }).name : (written ?? l.name);
+  // In a blues the note a tritone above the tonic is the blue five, ♭5 (se), however it is spelled (as the staff's
+  // degree lens reads it, @oak/notation): the name keeps its spelling, the degree reads ♭5.
+  if (blues && l.chromatic && l.degree === "#4") {
+    const b5 = labelPitch(midi, key, { direction: -1 });
+    l = { ...b5, name: l.name };
+  }
   return {
     midi,
     name,
@@ -93,7 +100,7 @@ export function pitchLabel(
 }
 
 function glyphs(name: string): string {
-  return name.replace(/#/g, "♯").replace(/(?<=[A-G])b/g, "♭");
+  return name.replace(/#/g, "♯").replace(/(?<=[A-G]b*)b/g, "♭");
 }
 
 /** Row label for the roll gutter by the label mode of ux §3.4. */

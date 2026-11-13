@@ -5,7 +5,7 @@
 // action is a key press, and every control that takes focus shows a focus ring.
 import { expect, type Page, test } from "@playwright/test";
 import { lessonDef } from "../../app/src/lesson/e2e/walk.ts";
-import { useUiPrefs } from "../support/ui.ts";
+import { textNow, useUiPrefs } from "../support/ui.ts";
 import { api, openToday, resetClock, reviewMic, shootAll, watch } from "./support.ts";
 import {
   active,
@@ -102,17 +102,8 @@ async function stageDSetByKeys(page: Page): Promise<string> {
       expect(a.tag, "after the answer, focus is on a control (never lost to the page)").not.toBe("body");
       await page.keyboard.press("Enter");
     } else {
-      const stage = (
-        (await page
-          .getByTestId("stage-text")
-          .textContent()
-          .catch(() => "")) ?? ""
-      ).trim();
-      const counter =
-        (await page
-          .getByTestId("trial-counter")
-          .textContent()
-          .catch(() => "")) ?? "";
+      const stage = (await textNow(page.getByTestId("stage-text"))).trim();
+      const counter = await textNow(page.getByTestId("trial-counter"));
       if (/your turn/i.test(stage) && counter !== lastTrial) {
         lastTrial = counter;
         const t = await page.evaluate(

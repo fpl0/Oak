@@ -3,6 +3,7 @@
 // answered from the keyboard, and each set summary moves on with Enter. It does not aim for a perfect score; the
 // grades come from the real drill engine and go to the real server.
 import { expect, type Page } from "@playwright/test";
+import { textNow } from "../support/ui.ts";
 
 export interface WarmupRun {
   /** Set summaries moved past. */
@@ -13,6 +14,19 @@ export interface WarmupRun {
   heardHome: number;
   /** Passive-listen blocks played through. */
   passive: number;
+}
+
+/** Waits until the warm-up's text changes (the next stage, trial or set), or `ms` at most: the walker's poll. */
+async function nextChange(page: Page, ms: number): Promise<void> {
+  const read = () => document.querySelector('[data-testid="warmup"]')?.textContent ?? "";
+  const now = await page.evaluate(read).catch(() => "");
+  await page
+    .waitForFunction(
+      (before) => (document.querySelector('[data-testid="warmup"]')?.textContent ?? "") !== before,
+      now,
+      { timeout: ms, polling: 50 },
+    )
+    .catch(() => {});
 }
 
 /** Runs until the warm-up hands over to the next block (the lesson step, a checkpoint, a capstone or the Make). */
@@ -57,7 +71,8 @@ export async function walkWarmup(
       else
         await fact
           .getByRole("button", { name: /^(Next card|Finish)/ })
-          .click()
+          // A short try: the loop polls again (a bare click would wait the whole action timeout).
+          .click({ timeout: 2_000 })
           .catch(() => {});
       await page.waitForTimeout(200);
       continue;
@@ -76,12 +91,14 @@ export async function walkWarmup(
     const feedback = page.getByTestId("trial-feedback").filter({ visible: true }).first();
     if (await feedback.isVisible().catch(() => false)) {
       const next = page.getByTestId("next-trial").filter({ visible: true }).first();
-      const label = (await next.textContent().catch(() => "")) ?? "";
+      const label = (await next.textContent({ timeout: 5_000 }).catch(() => "")) ?? "";
       if (/Sing it home/.test(label)) {
         // The way home, sung on Chrome's fake microphone; singing never gates, so a skipped take moves on too.
         run.sungHome++;
         await next.click();
-        await expect(feedback).toContainText(/Sung home|Singing skipped/, { timeout: 30_000 });
+        await expect(feedback).toContainText(/Sung home|Sung\. The trace|Singing skipped/, {
+          timeout: 30_000,
+        });
         continue;
       }
       if (/Hear it home/.test(label)) {
@@ -95,17 +112,8 @@ export async function walkWarmup(
       await next.click();
       continue;
     }
-    const stage = (
-      (await page
-        .getByTestId("stage-text")
-        .textContent()
-        .catch(() => "")) ?? ""
-    ).trim();
-    const counter =
-      (await page
-        .getByTestId("trial-counter")
-        .textContent()
-        .catch(() => null)) ?? "";
+    const stage = (await textNow(page.getByTestId("stage-text"))).trim();
+    const counter = await textNow(page.getByTestId("trial-counter"));
     if (/tap with Space/i.test(stage) && tappedTrial !== counter) {
       tappedTrial = counter;
       // Taps on the beat while the pad is armed (the drill engine grades them against the click).
@@ -124,7 +132,7 @@ export async function walkWarmup(
       // A typed answer (a scale to spell, a note to name): "Show me" is the honest way on for this walker.
       await runner
         .getByRole("button", { name: "Show me" })
-        .click()
+        .click({ timeout: 2_000 })
         .catch(() => {});
     } else if (
       (await pad.isVisible().catch(() => false)) &&
@@ -133,15 +141,16 @@ export async function walkWarmup(
       await pad
         .locator("button:not([disabled])")
         .first()
-        .click()
+        .click({ timeout: 2_000 })
         .catch(() => {});
       // Most pads answer on the click; one that waits for a confirmation takes Enter (never Enter on the
       // feedback, which would start the trial's next action unseen).
-      await page.waitForTimeout(300);
+      // Up to 300 ms for the feedback (it usually comes at once).
+      await feedback.waitFor({ state: "visible", timeout: 300 }).catch(() => {});
       if (!(await feedback.isVisible().catch(() => false)))
         await page.keyboard.press("Enter").catch(() => {});
     }
-    await page.waitForTimeout(400);
+    await nextChange(page, 400);
   }
   throw new Error("the warm-up did not finish in time");
 }

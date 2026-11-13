@@ -39,8 +39,21 @@ import { gradeFor } from "@oak/srs";
 import { degreeSemitones, syllableOf } from "@oak/theory";
 import { qualityLabel, rnDisplay } from "../answers/keys.ts";
 import type { AnswerSpec, AnswerValue, SungSummary } from "../answers/types.ts";
+import { isBassTrial } from "./harmony.ts";
 import { isResting, RESTING_LINE } from "./resting.ts";
 import { staffSpecOf } from "./staff.ts";
+import {
+  bassLineTrialOf,
+  formAnswer,
+  formIdLetters,
+  formModeOf,
+  gradeBassLine,
+  gradeSections,
+  graduationNews,
+  honestLevel,
+  stageECategoryLabel,
+  stageEOptionLabel,
+} from "./wave5.ts";
 
 // --- answer surfaces -----------------------------------------------------------------------------
 
@@ -77,8 +90,8 @@ const OPTION_LABELS: Record<string, string> = {
   "three-chord": "I–IV–V",
   "axis-vi": "vi–IV–I–V",
   "doo-wop": "I–vi–IV–V",
-  aeolian: "i–♭VI–♭VII–i",
-  andalusian: "Andalusian (i–♭VII–♭VI–V)",
+  aeolian: "Aeolian loop (i–VI–III–VII)",
+  andalusian: "Andalusian (i–VII–VI–V)",
   blues12: "12-bar blues",
   first: "First inversion",
   second: "Second inversion",
@@ -123,13 +136,17 @@ const CATEGORY_WORDS: Record<string, string> = {
 };
 
 /** A category as the level picker and the level news name it. */
-export function categoryLabel(id: string): string {
+export function categoryLabel(id: string, generator?: string): string {
+  const stageE = generator ? stageECategoryLabel(generator, id) : null;
+  if (stageE) return stageE.charAt(0).toUpperCase() + stageE.slice(1);
   const own = CATEGORY_WORDS[id];
   if (own) return own.charAt(0).toUpperCase() + own.slice(1);
   return optionLabel(id);
 }
 
-export function optionLabel(id: string): string {
+export function optionLabel(id: string, generator?: string, options: readonly string[] = []): string {
+  const own = generator ? stageEOptionLabel(generator, id, options) : null;
+  if (own) return own;
   // Degree categories ("deg.5", "deg.b6") read as the learner's word for them, never as an ID.
   const deg = /^deg\.([#b]?[1-7])$/.exec(id);
   if (deg) return `Degree ${(deg[1] as string).replace("b", "♭").replace("#", "♯")}`;
@@ -192,6 +209,9 @@ export function surfaceOf(
   if (p.mode === "tap") return { kind: "tap", twoVoices: p.twoVoices === true };
   if (p.mode === "sing") return { kind: "sing" };
   const ui = typeof p.ui === "string" ? p.ui : null;
+  // Form by ear (Wave 5): the sections labelled one by one on the form widget.
+  const form = formModeOf(trial);
+  if (form) return { kind: "widget", spec: form.spec };
   // Written on the staff (dictation's top levels): the answers registry's staff widget; graded as code.
   if (ui === "staff-input") return { kind: "widget", spec: staffSpecOf(trial) };
   if (p.mode === "code" || ui === "code")
@@ -281,9 +301,10 @@ export function surfaceOf(
   // Generators that answer in code strings or named forms give readable labels (`params.optionLabels`).
   const labels =
     p.optionLabels && typeof p.optionLabels === "object" ? (p.optionLabels as Record<string, unknown>) : {};
-  const options = choiceOptionsOf(trial, def).map((id) => ({
+  const ids = choiceOptionsOf(trial, def);
+  const options = ids.map((id) => ({
     id,
-    label: typeof labels[id] === "string" ? (labels[id] as string) : optionLabel(id),
+    label: typeof labels[id] === "string" ? (labels[id] as string) : optionLabel(id, def.generator, ids),
     ...(audio.has(id) ? { audio: audio.get(id) as string } : {}),
   }));
   return {
@@ -312,6 +333,8 @@ export const DICTATION_MODE_LABELS: Readonly<Record<DictationMode, string>> = {
  * learner may write the tune as degrees, as code, or on the staff; earlier levels keep their one surface.
  */
 export function dictationModesOf(trial: Trial<unknown>, def: Pick<FamilyDef, "generator">): DictationMode[] {
+  // Bass-line dictation (Wave 5): the roots on the degree pad, or the line written as code or on the bass staff.
+  if (isBassTrial(trial) && bassLineTrialOf(trial as Trial) !== null) return ["degrees", "code", "staff"];
   if (def.generator !== "melody-dictation") return [];
   const ui = trial.params.ui;
   if (trial.params.mode !== "code" || (ui !== "code" && ui !== "staff-input")) return [];
@@ -329,6 +352,12 @@ export function dictationSurface(
 ): Surface {
   const modes = dictationModesOf(trial, def);
   if (!modes.includes(mode)) return surfaceOf(trial, def, opts);
+  const line = isBassTrial(trial) ? bassLineTrialOf(trial as Trial) : null;
+  if (line) {
+    if (mode === "degrees") return surfaceOf(trial, def, opts);
+    if (mode === "staff") return { kind: "widget", spec: staffSpecOf(line) };
+    return { kind: "widget", spec: { ui: "code", starter: codeStarterOf(line) } };
+  }
   if (mode === "staff") return { kind: "widget", spec: staffSpecOf(trial) };
   if (mode === "code") return { kind: "widget", spec: { ui: "code", starter: codeStarterOf(trial) } };
   const degrees = ((trial.expected as Answer).degrees ?? []) as Degree[];
@@ -354,6 +383,15 @@ export function gradeDrillTrial(
   response: TrialResponse,
   profile: LearnerProfile,
 ): DrillTrialResult {
+  // Wave 5: a bass line written as code or on the staff (octave-free), and section labels (form by ear).
+  const text = response.answer?.text?.[0];
+  const line = text !== undefined && isBassTrial(trial) ? bassLineTrialOf(trial) : null;
+  if (line && text !== undefined) {
+    if (response.skipped) return skippedResult(response.rtMs, response.replays);
+    return gradeBassLine(line, text, response.rtMs, response.replays);
+  }
+  if (Array.isArray((trial.expected as Answer).sections) && response.answer?.sections)
+    return gradeSections(trial, response.answer, response.rtMs, response.replays);
   const degreesAnswer =
     trial.params.mode === "code" &&
     Array.isArray(response.answer?.degrees) &&
@@ -422,6 +460,8 @@ export function answerOf(
       return value === null ? null : { number: value as number };
     case "keyboard":
       return { midi: value as number[] };
+    case "form":
+      return { sections: value as string[] };
     case "grid": {
       const rows = value as boolean[][];
       const one = rows.length === 1;
@@ -434,6 +474,17 @@ export function answerOf(
     default:
       return null;
   }
+}
+
+/**
+ * The grader answer of a trial's widget value: section labels of a form-by-ear trial become the family's own form
+ * (`formAnswer`), every other value goes through `answerOf`. The runner and the tests share this one path.
+ */
+export function trialAnswerOf(trial: Trial<unknown>, spec: AnswerSpec, value: AnswerValue): Answer | null {
+  const form = spec.ui === "form" ? formModeOf(trial) : null;
+  if (form) return formAnswer(form, value as string[]);
+  const expected = trial.expected as Answer;
+  return answerOf(spec, value, expected.text?.length ?? 1, expected);
 }
 
 /** The expected answer in the widget's value shape, for the "it was …" side of the feedback. */
@@ -453,6 +504,11 @@ export function expectedValueOf(spec: AnswerSpec, expected: Answer): AnswerValue
       return expected.qualities ?? null;
     case "rn-palette":
       return expected.rn ?? null;
+    case "form": {
+      if (expected.sections) return expected.sections;
+      const letters = expected.choice?.[0] ? formIdLetters(expected.choice[0]) : null;
+      return letters ? letters.split("") : null;
+    }
     case "text":
       return expected.text ? expected.text.join(" ") : null;
     case "number":
@@ -481,6 +537,9 @@ export function wrongMarks(
   if (spec.ui === "degree-pad") {
     return (value as unknown[]).map((v, i) => ({ part: i, ok: v === (expected as unknown[])[i] }));
   }
+  if (spec.ui === "form") {
+    return (value as unknown[]).map((v, i) => ({ part: i, ok: v === (expected as unknown[])[i] }));
+  }
   if (spec.ui === "choice") {
     const want = new Set((expected as unknown[]).map(String));
     return (value as unknown[]).map((v) => ({ part: String(v), ok: want.has(String(v)) }));
@@ -494,6 +553,10 @@ export function expectedText(spec: AnswerSpec | null, expected: Answer, solfege 
     const bars = expectedValueOf(spec, expected) as number[] | null;
     return bars && bars.length > 0 ? `bar ${bars.join(", ")}` : null;
   }
+  if (spec?.ui === "form") {
+    const letters = expectedValueOf(spec, expected) as string[] | null;
+    return letters && letters.length > 0 ? letters.join(" ") : null;
+  }
   if (expected.degrees)
     return expected.degrees
       .map((d) => (solfege ? `${optionLabel(d)} · ${syllableOf(d)}` : optionLabel(d)))
@@ -502,7 +565,7 @@ export function expectedText(spec: AnswerSpec | null, expected: Answer, solfege 
     return expected.choice
       .map((id) => spec.options.find((o) => o.id === id)?.label ?? optionLabel(id))
       .join(", ");
-  if (expected.choice) return expected.choice.map(optionLabel).join(", ");
+  if (expected.choice) return expected.choice.map((id) => optionLabel(id)).join(", ");
   if (expected.qualities) return expected.qualities.map((q) => qualityLabel(q).long).join(", ");
   if (expected.rn) return expected.rn.map(rnDisplay).join(" ");
   if (expected.text) return expected.text.map((t) => t.replace(/b/g, "♭").replace(/#/g, "♯")).join(" ");
@@ -741,7 +804,7 @@ export function levelChangeText(
   change: "promoted" | "demoted" | null,
   level: number,
   of: number,
-  def?: Pick<FamilyDef, "levels">,
+  def?: Pick<FamilyDef, "levels"> & Partial<Pick<FamilyDef, "generator">>,
 ): string | null {
   const news = def ? levelNews(def, level) : null;
   if (change === "promoted")
@@ -768,7 +831,10 @@ const lowerWord = (label: string): string =>
   /^[A-Z][a-z]/.test(label) ? label[0]?.toLowerCase() + label.slice(1) : label;
 
 /** What a level adds over the one below ("Diminished joins the others"), or null when it adds nothing nameable. */
-export function levelNews(def: Pick<FamilyDef, "levels">, level: number): string | null {
+export function levelNews(
+  def: Pick<FamilyDef, "levels"> & Partial<Pick<FamilyDef, "generator">>,
+  level: number,
+): string | null {
   const cur = def.levels[level - 1];
   if (!cur) return null;
   const prev = level > 1 ? def.levels[level - 2] : undefined;
@@ -776,7 +842,14 @@ export function levelNews(def: Pick<FamilyDef, "levels">, level: number): string
   const parts: string[] = [];
   if (added.length > 0)
     parts.push(
-      `${added.map((c) => CATEGORY_WORDS[c] ?? lowerWord(optionLabel(c))).join(", ")} join${added.length === 1 ? "s" : ""} in`,
+      `${added
+        .map(
+          (c) =>
+            (def.generator ? stageECategoryLabel(def.generator, c) : null) ??
+            CATEGORY_WORDS[c] ??
+            lowerWord(optionLabel(c, def.generator, cur.categories)),
+        )
+        .join(", ")} join${added.length === 1 ? "s" : ""} in`,
     );
   for (const [knob, words] of LEVEL_KNOBS) if (cur[knob] === true && prev?.[knob] !== true) parts.push(words);
   return parts.length > 0 ? parts.join("; ") : null;
@@ -807,6 +880,8 @@ export function summaryView(input: {
   before: Pick<FamilyState, "categoryStats"> | null;
   profile: Pick<LearnerProfile, "singTolCents">;
   now?: Date;
+  /** The title of the composite a graduating family joins ("Mixed pitch"). */
+  compositeTitle?: string;
 }): SummaryView {
   const { def, summary, finish } = input;
   const answered = input.outcomes.filter((o) => o.result.skipped !== true);
@@ -829,12 +904,17 @@ export function summaryView(input: {
   if (top) {
     const [expected, got] = top[0].split("|");
     const tip = def.confusionTips?.[top[0]];
+    const ids = [expected ?? "", got ?? ""];
     moved.push(
-      `${optionLabel(got ?? "")} when it was ${optionLabel(expected ?? "")}: ${top[1] === 1 ? "once" : `${top[1]} times`}${tip ? `. ${tip}` : "."}`,
+      `${optionLabel(got ?? "", def.generator, ids)} when it was ${optionLabel(expected ?? "", def.generator, ids)}: ${top[1] === 1 ? "once" : `${top[1]} times`}${tip ? `. ${tip}` : "."}`,
     );
   }
+  // Graduation into the composite is progress (contracts §7.4): said as such, never as a card that went away.
+  if (review?.graduated && (review.familyState?.restingSince ?? null) === null)
+    moved.unshift(graduationNews(def.title, input.compositeTitle ?? "mixed practice"));
   let next: string | null = null;
-  if (review) next = nextDueText(review.dueAt, input.now);
+  if (review?.graduated) next = `Next heard in ${input.compositeTitle ?? "mixed practice"}.`;
+  else if (review) next = nextDueText(review.dueAt, input.now);
   else if (input.purpose === "practice") next = "Free practice: your schedule stays as it is.";
   else if (input.purpose === "anchor") next = "A warm-up anchor: it counts as practice, not as a review.";
   const local = gradeFor({
@@ -919,7 +999,7 @@ export function compositeLine(
   ).length;
   const others = Math.max(0, members - 1);
   const company = others === 0 ? "" : ` with ${others} other ${others === 1 ? "family" : "families"}`;
-  return `In ${title}${company}: two trials whenever it comes up, back to its own sets if it slips.`;
+  return `In ${title}${company}: two trials whenever it comes up, and its own sets come back if it needs them.`;
 }
 
 /** Composite reviews are not practised by hand: they appear only through the warm-up. */
@@ -940,7 +1020,10 @@ export const STAGE_TITLES: Record<StageKey | "concepts", { title: string; sub: s
     title: "Stage D · Chords and progressions",
     sub: "Chord colours, bass lines, cadences and common loops.",
   },
-  E: { title: "Stage E · Minor, sevenths and modes", sub: "The darker and richer colours." },
+  E: {
+    title: "Stage E · Minor, sevenths and the blues",
+    sub: "Degrees in minor, which minor, bass lines, sevenths, sections and the twelve bars.",
+  },
   F: { title: "Stage F · Chromatic colour", sub: "Notes and chords from outside the key." },
   G: { title: "Stage G · Jazz harmony", sub: "ii–V–I, guide tones, extensions, substitutions." },
   H: { title: "Stage H · Groove and feel", sub: "Syncopation, swing, clave and odd groupings." },
@@ -963,6 +1046,9 @@ export const HUB_STAGE_EXTRAS: Readonly<Record<string, StageKey>> = {
   "fam.har.function": "D",
   "fam.har.progression": "D",
   "fam.mel.nct": "C",
+  // Wave 5: form by ear and the bass locked with the kick are heard with stage E (wave5.md §11).
+  "fam.frm.sections": "E",
+  "fam.rhy.groove-lock": "E",
 };
 
 /** Families grouped by ear-training stage (contracts §7.3), concept families after them. */
@@ -1012,10 +1098,14 @@ export function familyAccuracy(state: FamilyState | undefined): { n: number; acc
  */
 export function levelLine(def: FamilyDef, state: FamilyState | undefined): string {
   const total = def.levels.length;
-  const level = Math.max(1, Math.min(total, state?.level ?? 1));
+  // Never above the highest level the lessons have opened (a graduated family can carry a level its gate has
+  // not opened yet: it is shown at the open one, with the lesson that opens the next).
+  const level = honestLevel(state, total);
   const open = Math.max(level, Math.min(total, state?.maxOpenLevel ?? 1));
   const head = `Level ${level} of ${total}`;
-  if (total === 1 || open >= total) return head;
+  if (total === 1 || level >= total) return head;
+  // Every level is open (a graduated family can sit below them in mixed practice): say so, never "for now".
+  if (open >= total) return `${head} · every level open`;
   if (open > level) return `${head} · up to level ${open} for now`;
   // At the highest open level: say which lesson opens the next one.
   const lesson = nextLevelLesson(def, open + 1);

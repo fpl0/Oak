@@ -3,9 +3,9 @@
 // U03.L03 "Degrees 4 & 5" step by step (choices, numbers, code typed into the editor, the degree pad, the sung
 // patterns, the Make) → the Coda → Done for today. The page is only read (to know what the drawn trial asks);
 // every action is a key press. Every control that takes focus shows a focus ring.
-import { expect, type Page, test } from "@playwright/test";
+import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
 import { lessonDef } from "../../app/src/lesson/e2e/walk.ts";
-import { useUiPrefs } from "../support/ui.ts";
+import { textNow, useUiPrefs } from "../support/ui.ts";
 import { api, noHmr, openToday, resetClock, reviewMic, seed, shootAll, watch } from "./support.ts";
 
 test.use({
@@ -176,21 +176,15 @@ async function warmupByKeys(
       // Enter is "next" in the drill's scope (the way home, sung on the fake mic, then the next trial).
       await page.keyboard.press("Enter");
       if (/Sing it home/.test(label))
-        await expect(page.getByTestId("trial-feedback")).toContainText(/Sung home|Singing skipped/, {
-          timeout: 30_000,
-        });
+        await expect(page.getByTestId("trial-feedback")).toContainText(
+          /Sung home|Sung\. The trace|Singing skipped/,
+          {
+            timeout: 30_000,
+          },
+        );
     } else {
-      const stage = (
-        (await page
-          .getByTestId("stage-text")
-          .textContent()
-          .catch(() => "")) ?? ""
-      ).trim();
-      const counter =
-        (await page
-          .getByTestId("trial-counter")
-          .textContent()
-          .catch(() => "")) ?? "";
+      const stage = (await textNow(page.getByTestId("stage-text"))).trim();
+      const counter = await textNow(page.getByTestId("trial-counter"));
       if (/your turn/i.test(stage) && counter !== lastTrial) {
         const t = await page.evaluate(
           () => (globalThis as { __oakDrillTrial?: DrillTrial }).__oakDrillTrial ?? null,
@@ -215,12 +209,24 @@ async function warmupByKeys(
   throw new Error("the warm-up did not finish in time");
 }
 
-test("a whole U03 day from the keyboard, with reduced motion", async ({ page, request }) => {
-  test.setTimeout(240_000);
+// One U03 day from the keyboard, as two tests from the same seed (Wave 5 test speed: it was one test of two
+// minutes): Today → Start → the warm-up by keys; then Today → Start → the lesson and the Coda by keys, the warm-up
+// reported skipped through the session's dev hook. Every key path and assertion of the whole day is still made.
+for (const part of ["the warm-up", "the lesson and the Coda"] as const)
+  test(`a U03 day from the keyboard, with reduced motion: ${part}`, async ({ page, request }) => {
+    await useUiPrefs(page, { theme: "bark", motion: "system" });
+    await keyboardDay(page, request, part);
+  });
+
+async function keyboardDay(
+  page: Page,
+  request: APIRequestContext,
+  part: "the warm-up" | "the lesson and the Coda",
+): Promise<void> {
+  test.setTimeout(180_000);
   await resetClock(request);
   await seed(request, "after U03.L02");
   await noHmr(page);
-  await useUiPrefs(page, { theme: "bark", motion: "system" });
   const problems = watch(page);
   const plan = await api<{ kind: string; mapItemId: string }>(request, "GET", "/api/session/today");
   expect(plan).toMatchObject({ kind: "lesson", mapItemId: "U03.L03" });
@@ -230,10 +236,16 @@ test("a whole U03 day from the keyboard, with reduced motion", async ({ page, re
   await expect(page).toHaveURL(/\/session\/?$/);
   // Three sets by keys (the scale spelling, the degree set with its ways home sung, a sung set); the rest are
   // reported skipped through the session's dev hook so the spec stays short (the drill suites walk every family).
-  const run = await warmupByKeys(page, 150_000, 3);
+  const run = await warmupByKeys(page, 150_000, part === "the warm-up" ? 3 : 0);
   console.log(`[warm-up] ${JSON.stringify(run)}`);
-
   const def = await lessonDef("U03.L03");
+  if (part === "the warm-up") {
+    // The warm-up hands over to the lesson's first step.
+    await onStep(page, def.steps.find((st) => !st.optional)?.id as string);
+    expect(problems).toEqual([]);
+    return;
+  }
+
   for (const step of def.steps) {
     if (step.optional) continue;
     await onStep(page, step.id);
@@ -385,7 +397,7 @@ test("a whole U03 day from the keyboard, with reduced motion", async ({ page, re
   );
   expect(prog.lessons.find((l) => l.lessonId === "U03.L03")?.status).toBe("completed");
   expect(problems).toEqual([]);
-});
+}
 
 type SessionHandle = {
   report(r: unknown): void;

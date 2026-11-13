@@ -100,16 +100,27 @@ export type PractiseTarget =
   | { kind: "lesson"; lessonId: string; title: string; completed: boolean }
   | { kind: "locked"; lessonId: string | null; title: string; unwritten?: boolean };
 
+/** How much a family trains a skill (the sum of its weights on the skill and its categories). */
+export function familyWeight(skillId: string, f: Pick<FamilyDef, "skills">): number {
+  return f.skills
+    .filter((s) => s.skill === skillId || String(s.skill).startsWith(`${skillId}/`))
+    .reduce((sum, s) => sum + s.w, 0);
+}
+
 /** Drill families that train a skill, strongest weight first. */
 export function familiesOf(skillId: string, families: readonly FamilyDef[]): FamilyDef[] {
-  const weight = (f: FamilyDef) =>
-    f.skills
-      .filter((s) => s.skill === skillId || String(s.skill).startsWith(`${skillId}/`))
-      .reduce((sum, s) => sum + s.w, 0);
+  const weight = (f: FamilyDef) => familyWeight(skillId, f);
   return families
     .filter((f) => weight(f) > 0)
     .sort((a, b) => weight(b) - weight(a) || a.id.localeCompare(b.id));
 }
+
+/**
+ * A family "Practise this" may send a skill to: one that trains it in earnest, at least a quarter of the weight of
+ * the family that trains it most. A mixed review that touches the skill in passing (Mixed harmony carries the filter
+ * skill D03 at 0.04 beside its own family's 1) is not practice of that skill.
+ */
+const PRACTICE_SHARE = 0.25;
 
 /**
  * "Practise this": the strongest drill family whose card the learner already has (active or graduated),
@@ -129,7 +140,9 @@ export function practiseTarget(
   const live = new Set(
     ctx.cards.filter((c) => c.status === "active" || c.status === "graduated").map((c) => c.cardId),
   );
-  const fam = familiesOf(skill.id, ctx.families).find((f) => live.has(f.id));
+  const trained = familiesOf(skill.id, ctx.families);
+  const top = trained[0] ? familyWeight(skill.id, trained[0]) : 0;
+  const fam = trained.find((f) => live.has(f.id) && familyWeight(skill.id, f) >= top * PRACTICE_SHARE);
   if (fam) return { kind: "family", familyId: fam.id, title: fam.title };
   const lessonId = skill.introducedBy;
   const status = lessonId ? (ctx.lessonStatus.get(lessonId) ?? "locked") : "locked";

@@ -12,8 +12,11 @@
 //   that bar start again under the new signature (a letter altered earlier in the bar is restated).
 // - Chord symbols over the top staff, Roman numerals (`"_…"`) under the bottom pitched staff; a lead sheet numbers
 //   the first bar of each system (`%%barnumbers 0` with `%%setbarnb`, so a pickup bar is bar 0).
-// - Annotation lines (degree, solfège, name): one `w:` line per kind under every pitched staff, or stacked
-//   `"^…"` texts over the notes.
+// - Annotation lines (degree, solfège, name): one `w:` line per kind under every voice of every pitched staff
+//   (c5: a staff's first voice is padded with blank lines so a later voice's lines and the numerals stay clear), or
+//   stacked `"^…"` texts over the notes (first voice).
+// - Section marks (Wave 5, `score.sections`): an inline part label `[P:Chorus]` at the start of the section's first
+//   bar on the top staff's first voice, and a double barline `||` closing the bar before it in every voice.
 // - Spaces at beam-group boundaries, `(p:q:r` tuplets, `-` ties, `z` rests, `x` invisible rests.
 import type { CodeRange, KeySpec, Rat } from "@oak/content-kit";
 import { R } from "@oak/content-kit";
@@ -161,6 +164,27 @@ function accidentals(
   return out;
 }
 
+/** Whether a voice has a note (not only rests) in bars `from` … `to`. */
+function sounds(voice: Voice, from: number, to: number): boolean {
+  for (let bi = from; bi < to; bi++) if (voice.bars[bi]?.items.some((it) => it.kind !== "rest")) return true;
+  return false;
+}
+/**
+ * A blank lyric line for a voice's bars (`~`, a space abcjs still gives a line's height), used to reserve the room
+ * a later voice's lines need under the staff (c5). The workbench's own lens lines pad the same way.
+ */
+export function padLine(voice: Voice, from: number, to: number): string {
+  const parts: string[] = [];
+  for (let bi = from; bi < to; bi++)
+    parts.push(
+      (voice.bars[bi]?.items ?? [])
+        .filter((it) => it.kind !== "rest")
+        .map(() => "~")
+        .join(" "),
+    );
+  return `w:${parts.join(" | ")}`;
+}
+
 function annotationsAt(list: Score["chords"], onset: Rat): string[] {
   return (list ?? []).filter((a) => R.eq(a.drawnAt ?? a.at, onset)).map((a) => a.text.replace(/"/g, "'"));
 }
@@ -172,7 +196,7 @@ function emitBar(
   voice: Voice,
   vi: number,
   bi: number,
-  flags: { chords: boolean; romans: boolean; swing: boolean; above: boolean },
+  flags: { chords: boolean; romans: boolean; above: boolean },
   keysAt: { at: Rat; text: string }[] = [],
 ): string {
   const bar = voice.bars[bi];
@@ -183,7 +207,6 @@ function emitBar(
     if (change) out += ` [K:${change.text}] `;
     else if (ii > 0) out += it.breakBefore ? " " : "";
     if (it.tupletStart) out += `(${it.tupletStart.p}:${it.tupletStart.q}:${it.tupletStart.r}`;
-    if (flags.swing && bi === 0 && ii === 0 && ctx.score.swingText) out += `"^${ctx.score.swingText}"`;
     if (flags.chords) for (const t of annotationsAt(ctx.score.chords, it.onset)) out += `"${t}"`;
     if (flags.romans) for (const t of annotationsAt(ctx.score.romans, it.onset)) out += `"_${t}"`;
     if (flags.above && it.n !== null && !it.tieFromPrev && it.kind !== "rest")
@@ -280,7 +303,14 @@ export function toAbc(score: Score, opts: AbcOptions = {}): AbcResult {
   const header: string[] = ["X:1"];
   if (score.title) header.push(`T:${score.title.replace(/\n/g, " ")}`);
   header.push(`M:${score.meter.num}/${score.meter.den}`, "L:1/16");
-  if (score.tempoBpm) header.push(`Q:${tempoUnitAbc[score.meter.tempoUnit]}=${Math.round(score.tempoBpm)}`);
+  // The tempo line: "Swing 8ths" (contracts §6.10 item 3) as its text, where engravers write the feel, so it never
+  // stacks with the first bar's chord symbol; then the tempo.
+  const tempo: string[] = [];
+  if (score.swingText) tempo.push(`"${score.swingText}"`);
+  if (score.tempoBpm) tempo.push(`${tempoUnitAbc[score.meter.tempoUnit]}=${Math.round(score.tempoBpm)}`);
+  if (tempo.length) header.push(`Q:${tempo.join(" ")}`);
+  // Section labels in the sans face the chord symbols use (abcjs's default is a large serif).
+  if (score.sections?.length) header.push("%%partsfont Helvetica 13 bold");
   // Annotation lines read in the sans face abcjs uses for texts over the notes (its lyric default is bold
   // Times, where ♭ and ♯ set wide: "B ♭ 2").
   if (annotationKinds(score).length && !above) header.push("%%vocalfont Helvetica 12");
@@ -324,6 +354,7 @@ export function toAbc(score: Score, opts: AbcOptions = {}): AbcResult {
     header.push(`K:${own}${s && s.clef !== "treble" ? ` ${clefOf(s)}` : ""}`);
   }
   const nBars = score.staves[0]?.voices[0]?.bars.length ?? 0;
+  const sectionAt = new Map((score.sections ?? []).map((m) => [m.bar, m] as const));
   const lines: string[] = [];
   const topStaff = 0;
   const romanStaff = score.staves.reduce((acc, s, i) => (s.clef !== "perc" ? i : acc), 0);
@@ -344,7 +375,6 @@ export function toAbc(score: Score, opts: AbcOptions = {}): AbcResult {
         const flags = {
           chords: si === topStaff && vi === 0,
           romans: si === romanStaff && vi === 0,
-          swing: si === 0 && vi === 0,
           above: above && vi === 0 && s.clef !== "perc",
         };
         const changeAt = changeAtOf[si] as Map<number, KeySpec | null>;
@@ -352,18 +382,38 @@ export function toAbc(score: Score, opts: AbcOptions = {}): AbcResult {
         if (change) body += `[K:${kTextOf(change)}] `;
         const keysAt =
           s.clef === "perc" ? [] : midBarOf(si, bi).map((c) => ({ at: c.at, text: kTextOf(c.key) }));
+        // A section's label stands over its first bar, on the top staff's first voice (an ABC part label).
+        const part = si === 0 && vi === 0 ? sectionAt.get(barCycle(bi)) : undefined;
+        if (part) body += `[P:${partText(part.text)}]`;
         body += emitBar(ctx, s, si, v, vi, bi, flags, keysAt);
-        // A key change is preceded by a double barline, as engravers mark it.
+        // A key change is preceded by a double barline, as engravers mark it; so is a new section.
         const nextChanges = bi + 1 < nBars && s.clef !== "perc" && changeAt.has(barCycle(bi + 1));
-        body += bi === nBars - 1 && opts.finalBar !== false ? " |]" : nextChanges ? " ||" : " |";
+        const nextSection = bi + 1 < nBars && !!sectionAt.get(barCycle(bi + 1))?.doubleBar;
+        body +=
+          bi === nBars - 1 && opts.finalBar !== false ? " |]" : nextChanges || nextSection ? " ||" : " |";
         if (bi < to - 1) body += " ";
       }
       lines.push(body);
+      let own = 0;
       if (si === 0 && vi === 0) {
         const w = lyricLine(v, from, to);
-        if (w) lines.push(w);
+        if (w) {
+          lines.push(w);
+          own++;
+        }
       }
-      if (vi === 0 && s.clef !== "perc" && !above) lines.push(...annotationLines(ctx, v, from, to));
+      if (s.clef !== "perc" && !above) {
+        const ann = annotationLines(ctx, v, from, to);
+        lines.push(...ann);
+        own += ann.length;
+        // c5: abcjs keeps room under a staff for one voice's lyric lines and draws a later voice's lines below
+        // them, so the numerals and the next staff would cover them. The first voice is padded with blank lines,
+        // one per line the later voices of the staff carry in this system.
+        if (vi === 0 && own > 0) {
+          const later = s.voices.slice(1).filter((w) => sounds(w, from, to)).length;
+          for (let k = 0; k < later * annotationKinds(score).length; k++) lines.push(padLine(v, from, to));
+        }
+      }
     }
   }
   const abc = `${header.join("\n")}\n${lines.join("\n")}\n`;
@@ -402,6 +452,14 @@ export function toAbc(score: Score, opts: AbcOptions = {}): AbcResult {
     }
   }
   return { abc, idMap, byEvent };
+}
+
+/** A part label's text: one line, no brackets (they would close the inline field). */
+function partText(text: string): string {
+  return text
+    .replace(/[[\]\n%]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** An explicit key signature (abcjs draws K:G# as four flats): `C exp ^^f ^c ^g ^d ^a ^e ^b`. */

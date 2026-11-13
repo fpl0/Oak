@@ -163,7 +163,7 @@ test("a degree set: cadence, the degree pad, hear it resolve, and the way home s
         });
         await shoot(page, SHOTS, "fet-sing-home", "paper");
       }
-      await expect(feedback).toContainText(/Sung home|Singing skipped/, { timeout: 30_000 });
+      await expect(feedback).toContainText(/Sung home|Sung\. The trace|Singing skipped/, { timeout: 30_000 });
     } else {
       // Every answered degree walks home (or yours vs it); "Hear it resolve" is there to hear it again.
       await expect(page.getByRole("button", { name: /Hear it resolve/ })).toBeVisible();

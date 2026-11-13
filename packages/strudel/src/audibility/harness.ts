@@ -25,6 +25,8 @@ export { AUDIBLE_DB };
 export interface Rendered extends Stereo {
   haps: number;
   logs: string[];
+  /** Wall time to queue the voices and to render the graph (pattern renders only). */
+  timings?: { scheduleMs: number; renderMs: number };
 }
 
 export interface AudibleRow {
@@ -56,6 +58,8 @@ export interface HarnessOptions {
   frameUrl?: string;
   sampleRate?: number;
   seconds?: number;
+  /** A render that takes longer fails (default 30 s; a 90-second piece needs more). */
+  timeoutMs?: number;
 }
 
 export const DEFAULT_BASE = 'note("c3 e3 g3 c4").s("sawtooth")';
@@ -66,6 +70,7 @@ export function createHarness(options: HarnessOptions = {}) {
   const frameUrl = options.frameUrl ?? "/render.html";
   const sampleRate = options.sampleRate ?? 44100;
   const seconds = options.seconds ?? 2.5;
+  const timeoutMs = options.timeoutMs ?? 30_000;
 
   function renderInFrame(
     code: string,
@@ -78,7 +83,7 @@ export function createHarness(options: HarnessOptions = {}) {
       const frame = document.createElement("iframe");
       frame.style.display = "none";
       frame.src = frameUrl;
-      const timer = setTimeout(() => done(() => reject(new Error(`render timeout: ${code}`))), 30_000);
+      const timer = setTimeout(() => done(() => reject(new Error(`render timeout: ${code}`))), timeoutMs);
       const done = (fn: () => void): void => {
         clearTimeout(timer);
         window.removeEventListener("message", onMessage);
@@ -100,8 +105,12 @@ export function createHarness(options: HarnessOptions = {}) {
           };
           frame.contentWindow?.postMessage(req, location.origin);
         } else if (event.data?.type === "rendered" && event.data.id === id) {
-          const { error, left, right, haps, logs } = event.data as Rendered & { error?: string };
-          done(() => (error ? reject(new Error(error)) : resolve({ left, right, haps, logs })));
+          const { error, left, right, haps, logs, timings } = event.data as Rendered & { error?: string };
+          done(() =>
+            error
+              ? reject(new Error(error))
+              : resolve({ left, right, haps, logs, ...(timings ? { timings } : {}) }),
+          );
         }
       };
       window.addEventListener("message", onMessage);
@@ -110,11 +119,12 @@ export function createHarness(options: HarnessOptions = {}) {
   }
 
   const baseCache = new Map<string, Promise<Rendered>>();
-  const renderBase = (base: string): Promise<Rendered> => {
-    let p = baseCache.get(base);
+  const renderBase = (base: string, cycles = 1, cps = 1): Promise<Rendered> => {
+    const key = `${cycles}|${cps}|${base}`;
+    let p = baseCache.get(key);
     if (!p) {
-      p = renderInFrame(base);
-      baseCache.set(base, p);
+      p = renderInFrame(base, cycles, cps);
+      baseCache.set(key, p);
     }
     return p;
   };
@@ -143,23 +153,28 @@ export function createHarness(options: HarnessOptions = {}) {
     tail: [0, 0],
   });
 
-  /** `audible("lpf", 400)` compares `base` with `base.lpf(400)`. `value` is a JS literal or raw code. */
+  /**
+   * `audible("lpf", 400)` compares `base` with `base.lpf(400)`. `value` is a JS literal or raw code. `at` renders
+   * both at a lesson's tempo (`cps`) over `cycles` cycles (default one cycle at cps 1).
+   */
   async function audible(
     control: string,
     value: unknown,
     base = DEFAULT_BASE,
     id?: string,
     withCode?: string,
+    at: { cycles?: number; cps?: number } = {},
   ): Promise<AudibleRow> {
     const arg = typeof value === "string" && value.startsWith("=") ? value.slice(1) : JSON.stringify(value);
     const code = withCode ?? `${base}.${control}(${arg})`;
     const row = emptyRow(control, value, base, code, id);
+    const [cycles, cps] = [at.cycles ?? 1, at.cps ?? 1];
     try {
-      const without = await renderBase(base);
+      const without = await renderBase(base, cycles, cps);
       const baseRms = rms(without);
       if (baseRms === 0) throw new Error("base render is silent");
-      const withControl = await renderInFrame(code);
-      const again = await renderInFrame(code);
+      const withControl = await renderInFrame(code, cycles, cps);
+      const again = await renderInFrame(code, cycles, cps);
       row.diffDb = round(db(diffRms(without, withControl) / baseRms));
       row.repeatDb = round(db(diffRms(withControl, again) / baseRms));
       row.levelDb = round(db(rms(withControl) / baseRms));

@@ -4,7 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 import { useContent } from "../lib/content.ts";
 import { useSketchCreate } from "../lib/queries.ts";
-import { toolLabel } from "../lib/tool-label.ts";
+import { shownToolLabel as toolLabel } from "../toolbox/label.ts";
 import { toolSketchBody } from "../toolbox/model.ts";
 import { Page } from "../ui/kit/basics.tsx";
 import { LoadingState } from "../ui/kit/QueryState.tsx";

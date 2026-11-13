@@ -4,7 +4,7 @@
 // in the key of its own track and bar (a patterned `.scale("<C4:major G4:major>")` labels bar 2 in G), which a
 // single score-wide key cannot do. Pure: the ABC of `toAbc` with the lines inserted after each voice's music.
 import type { AbcOptions, AbcResult, Score, Voice } from "@oak/notation";
-import { toAbc } from "@oak/notation";
+import { padLine, toAbc } from "@oak/notation";
 import type { PitchLabel } from "./music.ts";
 
 export interface AnnotationKinds {
@@ -37,7 +37,11 @@ export function annotationText(
   const out: AnnotationTexts = {};
   const degree = kinds.degree ? join(ls.map((l) => l.degree?.label)) : undefined;
   const solfege = kinds.solfege ? join(ls.map((l) => l.degree?.syllable)) : undefined;
-  const noteName = kinds.noteName ? join(ls.map((l) => l.display)) : undefined;
+  // A chord's names: the lowest with its octave, the members above it by letter alone ("E♭4~G♭~B♭"), so four
+  // chords a bar fit under the staff at the narrowest width (c5); one note keeps its full name.
+  const noteName = kinds.noteName
+    ? join(ls.map((l, i) => (i === 0 || ls.length === 1 ? l.display : l.display.replace(/-?\d+$/, ""))))
+    : undefined;
   if (degree) out.degree = degree;
   if (solfege) out.solfege = solfege;
   if (noteName) out.noteName = noteName;
@@ -97,7 +101,6 @@ export function annotateAbc(
   if (!head.some((l) => l.startsWith("%%vocalfont"))) head.splice(kIdx, 0, "%%vocalfont Helvetica 12");
   const body = lines.slice(kIdx + 1);
   const voices = score.staves.flatMap((s, si) => s.voices.map((v, vi) => ({ s, si, v, vi })));
-  const romanStaff = score.staves.reduce((acc, s, i) => (s.clef !== "perc" ? i : acc), 0);
   const multi = voices.length > 1;
   const perLine = Math.max(1, opts.barsPerLine ?? 4);
   const nBars = score.staves[0]?.voices[0]?.bars.length ?? 0;
@@ -107,26 +110,41 @@ export function annotateAbc(
   const span = (from: number) => (from === 0 && score.pickup ? perLine + 1 : perLine);
   for (let from = 0; from < nBars; from += span(from)) {
     const to = Math.min(nBars, from + span(from));
-    for (const { s, si, v, vi } of voices) {
+    for (const { s, v, vi } of voices) {
       if (multi) {
         if (body[i] !== `V:${v.id}`) return abc;
         out.push(body[i++] as string);
       }
       const music = body[i++];
       if (music === undefined || music.startsWith("w:") || music.startsWith("V:")) return abc;
+      // Every voice of a staff gets its lines (a chord under a tune is labelled too). abcjs keeps room under a
+      // staff for its first voice's lyric lines only and sets the numerals under them, so a later voice's lines
+      // would print over the numerals (the Wave 4 review; c5). As `toAbc` does, the first voice is padded with a
+      // blank line for each line the later voices of its staff carry: the numerals stay under the staff, below
+      // every lens line (closer: raising them above the staff ran them into the chord symbols and the stems).
       out.push(music);
       while (body[i]?.startsWith("w:")) out.push(body[i++] as string);
-      // Every voice of a staff gets its lines (a chord under a tune is labelled too), except a second voice on
-      // the staff that carries the numerals: abcjs sets a numeral under the first voice's lines only, so it would
-      // print over the second voice's (seen in the Wave 4 review; app/src/ui/review/e2e/wave4-notation.pw.ts).
-      const numeralsHere = (score.romans?.length ?? 0) > 0 && si === romanStaff;
-      if (s.clef !== "perc" && (vi === 0 || !numeralsHere))
+      if (s.clef !== "perc") {
+        let own = 0;
         for (const k of active) {
           const w = lyricLine(v, from, to, k, textOf);
-          if (w) out.push(w);
+          if (w) {
+            out.push(w);
+            own++;
+          }
         }
+        if (vi === 0 && own > 0) {
+          const later = s.voices.slice(1).length;
+          for (let n = 0; n < later * own; n++) out.push(padLine(v, from, to));
+        }
+      }
     }
   }
   if (i !== body.length) return abc;
   return { ...abc, abc: `${[...head, ...out].join("\n")}\n` };
+}
+
+/** A voice's numeral annotations (`"_IV"`, below the staff) written above it instead (`"^IV"`). */
+export function raiseNumerals(music: string): string {
+  return music.replace(/"_([^"]*)"/g, '"^$1"');
 }

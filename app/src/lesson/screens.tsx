@@ -5,11 +5,13 @@ import type { LessonCompleteResult, LessonDef } from "@oak/api";
 import { Link } from "@tanstack/react-router";
 import { Check } from "lucide-react";
 import { useState } from "react";
-import type { ContentBundle } from "../lib/content-model.ts";
+import { type ContentBundle, lessonTitles } from "../lib/content-model.ts";
 import { Button, buttonClass } from "../ui/kit/Button.tsx";
 import { Chip } from "../ui/kit/basics.tsx";
 import { Dialog } from "../ui/kit/Dialog.tsx";
 import { Workbench, type WorkbenchProps } from "../workbench/Workbench.tsx";
+import { openedText } from "./checkpoint/model.ts";
+import type { OriginLink, SideInfo } from "./side.ts";
 
 export function CompleteScreen({
   lesson,
@@ -20,6 +22,9 @@ export function CompleteScreen({
   preview,
   inSession,
   content,
+  side = null,
+  origin = { to: "/", label: "Back to Today" },
+  nextSide = null,
 }: {
   lesson: LessonDef;
   completion: LessonCompleteResult | null;
@@ -29,11 +34,25 @@ export function CompleteScreen({
   preview: boolean;
   inSession: boolean;
   content: ContentBundle | null;
+  /** A side lesson (Wave 5): its end says it was optional and returns to where the learner came from. */
+  side?: SideInfo | null;
+  /** Where "back" goes outside a session (Today, the Toolbox, the map). */
+  origin?: OriginLink;
+  /** The next side lesson of the track, offered without pressure. */
+  nextSide?: { id: string; title: string } | null;
 }) {
   const toolName = (id: string) => content?.toolbox.find((t) => t.id === id)?.code ?? id;
   const canDo = (id: string) => content?.candos.find((c) => c.id === id)?.statement ?? id;
   const term = (id: string) => content?.terms.find((t) => t.id === id)?.term ?? id;
-  const title = partA ? "Part A done" : wrapped ? "Saved for next time" : "Lesson complete";
+  // What opens is named by title ("Blues checkpoint"), never by ID.
+  const opened = openedText(completion?.opened ?? [], lessonTitles(content?.syllabus ?? null));
+  const title = partA
+    ? "Part A done"
+    : wrapped
+      ? "Saved for next time"
+      : side
+        ? "Side lesson complete"
+        : "Lesson complete";
   const body = partA
     ? "Your quick sketch is saved. Part B picks up right after this step next time."
     : wrapped
@@ -56,6 +75,13 @@ export function CompleteScreen({
           <p className="mt-1 text-text-2">{body}</p>
         </div>
       </div>
+      {side && !partA && !wrapped && (
+        <p className="text-sm text-text-2" data-testid="side-complete-note">
+          {nextSide
+            ? `It was optional, and your course carries on where it was. ${nextSide.title}, the next side lesson, is there whenever you want it.`
+            : "It was optional, and your course carries on where it was."}
+        </p>
+      )}
       {preview && (
         <p className="rounded-control bg-surface-2 px-3 py-2 text-sm text-text-2">
           This was a preview: nothing was saved to your progress.
@@ -105,17 +131,23 @@ export function CompleteScreen({
               </dd>
             </div>
           )}
-          {completion.opened.length > 0 && (
+          {opened !== "" && (
             <div>
               <dt className="text-sm font-medium">Open now</dt>
-              <dd className="mt-1 text-sm text-text-2">{completion.opened.join(", ")}</dd>
+              <dd className="mt-1 text-sm text-text-2" data-testid="lesson-opened">
+                {opened}
+              </dd>
             </div>
           )}
         </dl>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <Link to="/" className={buttonClass("primary", "lg")} data-testid="back-to-today">
-          {inSession ? "On to the Coda" : "Back to Today"}
+        <Link
+          to={inSession ? "/" : origin.to}
+          className={buttonClass("primary", "lg")}
+          data-testid="back-to-today"
+        >
+          {inSession ? "On to the Coda" : origin.label}
         </Link>
         {sketchId && sketchId !== "preview" && (
           <Link to="/studio/$sketchId" params={{ sketchId }} className={buttonClass("secondary", "lg")}>

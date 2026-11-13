@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./reference": "./src/reference.ts",
+    "./probes": "./src/probes.ts",
     "./audibility": "./src/audibility/harness.ts",
     "./audibility/cases": "./src/audibility/cases.ts",
     "./audibility/render-frame": "./src/audibility/render-frame.ts",

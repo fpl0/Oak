@@ -520,9 +520,12 @@ export interface StoredLadderItem {
   };
   /** Cycles the reference plays (given bars, plus a pickup bar). */
   cycles: number;
-  stages: ("bass" | "quality" | "rn")[] | null;
+  /** L3: bass → quality → rn; Wave 5, L6 songs: bass → changes → melody. */
+  stages: ("bass" | "quality" | "rn" | "changes" | "melody")[] | null;
   swing: { subdivision: number; amount: number } | null;
   title: string;
+  /** Wave 5: an L5/L6 song item — the repertoire song, its level and the phrases the item works. */
+  song?: { songId: string; level: 5 | 6; phrases: [number, number][] };
   /** The stimulus as the pattern source plays it. */
   stimulus: {
     events: unknown[];
@@ -584,8 +587,12 @@ export interface TranscriptionVersionRow {
   createdAt: string;
   /** Wave 4: a "Hum it, Oak drafts it" draft not yet edited (no evidence). */
   machineDraft?: boolean;
-  /** Wave 4: the L3 stage this version answered. */
-  stage?: "bass" | "quality" | "rn" | null;
+  /** Wave 4: the L3 stage this version answered; Wave 5: an L6 stage (`bass`, `changes`, `melody`). */
+  stage?: "bass" | "quality" | "rn" | "changes" | "melody" | null;
+  /** Wave 5: the L5 phrase (1-based) this version answered. */
+  phrase?: number | null;
+  /** Wave 5 (c2): arrived through a backup import; runs only after the strict lint and the learner's confirmation. */
+  reviewBeforeRun?: boolean;
 }
 
 export class TranscriptionsRepo {
@@ -679,6 +686,8 @@ export class TranscriptionsRepo {
       created_at: string;
       machine_draft: number;
       stage: string | null;
+      phrase?: number | null;
+      review_before_run?: number;
     }>(this.db, "SELECT * FROM transcription_versions WHERE transcription_id = ? ORDER BY version", id).map(
       (r) => ({
         transcriptionId: r.transcription_id,
@@ -687,14 +696,16 @@ export class TranscriptionsRepo {
         result: fromJson<GradeResult | null>(r.result_json, null),
         createdAt: r.created_at,
         machineDraft: r.machine_draft === 1,
-        stage: (r.stage ?? null) as "bass" | "quality" | "rn" | null,
+        stage: (r.stage ?? null) as NonNullable<TranscriptionVersionRow["stage"]> | null,
+        phrase: r.phrase ?? null,
+        ...(r.review_before_run === 1 ? { reviewBeforeRun: true } : {}),
       }),
     );
   }
   insertVersion(v: TranscriptionVersionRow): void {
     run(
       this.db,
-      "INSERT INTO transcription_versions (transcription_id, version, code, result_json, created_at, machine_draft, stage) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO transcription_versions (transcription_id, version, code, result_json, created_at, machine_draft, stage, phrase, review_before_run) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
       v.transcriptionId,
       v.version,
       v.code,
@@ -702,7 +713,43 @@ export class TranscriptionsRepo {
       v.createdAt,
       int(v.machineDraft === true),
       v.stage ?? null,
+      v.phrase ?? null,
+      int(v.reviewBeforeRun === true),
     );
+  }
+  /** Wave 5 (c2): the learner read an imported version, the strict lint passed, and they confirmed it as theirs. */
+  confirmVersion(id: string, version: number): boolean {
+    return (
+      run(
+        this.db,
+        "UPDATE transcription_versions SET review_before_run = 0 WHERE transcription_id = ? AND version = ? AND review_before_run = 1",
+        id,
+        version,
+      ).changes > 0
+    );
+  }
+  /** Wave 5 (c11): the version a review conversation was asked about, recorded when the review was accepted. */
+  addReviewVersion(r: {
+    conversationId: string;
+    transcriptionId: string;
+    version: number | null;
+    at: string;
+  }): void {
+    run(
+      this.db,
+      "INSERT OR REPLACE INTO transcription_review_versions (conversation_id, transcription_id, version, at) VALUES (?, ?, ?, ?)",
+      r.conversationId,
+      r.transcriptionId,
+      r.version,
+      r.at,
+    );
+  }
+  reviewVersions(transcriptionId: string): { conversationId: string; version: number | null; at: string }[] {
+    return all<{ conversation_id: string; version: number | null; at: string }>(
+      this.db,
+      "SELECT conversation_id, version, at FROM transcription_review_versions WHERE transcription_id = ? ORDER BY at",
+      transcriptionId,
+    ).map((r) => ({ conversationId: r.conversation_id, version: r.version, at: r.at }));
   }
   delete(id: string): boolean {
     return run(this.db, "DELETE FROM transcriptions WHERE id = ?", id).changes > 0;

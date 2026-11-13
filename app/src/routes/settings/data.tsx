@@ -1,9 +1,9 @@
 // Settings › Data (contracts §11.10): export (audio included by default, with the size shown), the learner's own
-// recordings with their sizes and a delete that asks first (Wave 4), import (nonce, automatic safety copy first) and
-// reset (type RESET OAK).
+// recordings with their sizes and a delete that asks first (Wave 4), the album's recordings with their sizes
+// (Wave 5), import (nonce, automatic safety copy first) and reset (type RESET OAK).
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AudioWaveform, Trash2 } from "lucide-react";
+import { AudioWaveform, Disc3, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { api } from "../../lib/api.ts";
 import { formatBytes, formatDate } from "../../lib/format.ts";
@@ -22,8 +22,16 @@ import { Button, buttonClass } from "../../ui/kit/Button.tsx";
 import { Chip } from "../../ui/kit/basics.tsx";
 import { Dialog } from "../../ui/kit/Dialog.tsx";
 import { Field, ReadOnlyRow, Section, Switch } from "../../ui/kit/Field.tsx";
+import { clockLabel } from "../../ui/kit/model.ts";
 import { QueryView } from "../../ui/kit/QueryState.tsx";
 import { toast } from "../../ui/kit/Toast.tsx";
+import {
+  type AlbumAudioRow,
+  albumAudioTotal,
+  albumRowPlace,
+  audioShare,
+  useAlbumRecordings,
+} from "./-data/album-audio.ts";
 import {
   deleteQuestion,
   type OwnAudioRow,
@@ -46,6 +54,8 @@ function DataSettings() {
   const [typed, setTyped] = useState("");
   const withAudio = bootstrap.data?.settings.backupWithAudio ?? true;
   const own = useOwnAudio();
+  const album = useAlbumRecordings();
+  const albumTotal = albumAudioTotal(album.rows, info.data?.albumAudioBytes);
 
   const onImport = async (file: File) => {
     try {
@@ -78,12 +88,10 @@ function DataSettings() {
             <>
               <Field
                 label="Include audio"
-                help={
-                  `With audio ≈ ${formatBytes(i.bytesWithAudio)}; without ≈ ${formatBytes(i.bytesWithoutAudio)}.` +
-                  (own.total.files > 0 && own.total.known
-                    ? ` Your own recordings are ${formatBytes(own.total.bytes)} of that.`
-                    : "")
-                }
+                help={`With audio ≈ ${formatBytes(i.bytesWithAudio)}; without ≈ ${formatBytes(i.bytesWithoutAudio)}.${audioShare(
+                  own.total.files > 0 && own.total.known ? own.total.bytes : null,
+                  albumTotal.files > 0 || (i.albumAudioBytes ?? 0) > 0 ? (i.albumAudioBytes ?? null) : null,
+                )}`}
               >
                 {({ id, describedBy }) => (
                   <Switch
@@ -107,7 +115,8 @@ function DataSettings() {
           )}
         </QueryView>
       </Section>
-      <OwnAudioSection own={own} withAudio={withAudio} />
+      <OwnAudioSection own={own} withAudio={withAudio} unused={info.data?.ownAudio} />
+      <AlbumAudioSection album={album} total={albumTotal} withAudio={withAudio} />
       <Section title="Restore" description="Imported code runs only after Oak's strict safety check.">
         <div className="py-3">
           <input
@@ -192,7 +201,15 @@ function useOwnAudio() {
   return { list, sizes, rows, total: ownAudioTotal(rows) };
 }
 
-function OwnAudioSection({ own, withAudio }: { own: ReturnType<typeof useOwnAudio>; withAudio: boolean }) {
+function OwnAudioSection({
+  own,
+  withAudio,
+  unused,
+}: {
+  own: ReturnType<typeof useOwnAudio>;
+  withAudio: boolean;
+  unused: { unusedFiles: number; unusedBytes: number } | undefined;
+}) {
   const del = useTranscriptionDelete();
   const qc = useQueryClient();
   const [busy, setBusy] = useState<string | null>(null);
@@ -275,6 +292,19 @@ function OwnAudioSection({ own, withAudio }: { own: ReturnType<typeof useOwnAudi
                 </span>
               }
             />
+            {unused && unused.unusedFiles > 0 && (
+              <ReadOnlyRow
+                label="Left by deleted projects"
+                value={
+                  <span data-testid="own-audio-unused">
+                    {unused.unusedFiles} {unused.unusedFiles === 1 ? "recording" : "recordings"},{" "}
+                    {formatBytes(unused.unusedBytes)}: no project uses{" "}
+                    {unused.unusedFiles === 1 ? "it" : "them"}; a backup with audio still carries{" "}
+                    {unused.unusedFiles === 1 ? "it" : "them"}
+                  </span>
+                }
+              />
+            )}
             <ul
               aria-label="Recordings"
               className="flex flex-col divide-y divide-border"
@@ -318,6 +348,104 @@ function OwnAudioSection({ own, withAudio }: { own: ReturnType<typeof useOwnAudi
             </ul>
           </>
         )}
+      </QueryView>
+    </Section>
+  );
+}
+
+function AlbumAudioSection({
+  album,
+  total,
+  withAudio,
+}: {
+  album: ReturnType<typeof useAlbumRecordings>;
+  total: ReturnType<typeof albumAudioTotal>;
+  withAudio: boolean;
+}) {
+  const sizeText = (r: AlbumAudioRow) =>
+    r.bytes === null ? (album.sizes.isPending ? "measuring…" : "size unknown") : formatBytes(r.bytes);
+  return (
+    <Section
+      title="Album recordings"
+      description={
+        <>
+          The takes you recorded for your releases, one per album version. They stay with their version;
+          delete a track in the album to remove them.{" "}
+          {withAudio ? "A backup includes them." : "Backups leave them out while “Include audio” is off."}
+        </>
+      }
+    >
+      <QueryView
+        query={album.album}
+        loading={<p className="py-3 text-text-3">Looking for recordings…</p>}
+        isEmpty={() => album.rows.length === 0 && !album.detailsPending}
+        empty={
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 py-3"
+            data-testid="album-audio-empty"
+          >
+            <p className="text-text-2">
+              No album recordings yet. When you release a capstone, record a take of it and it is listed here.
+            </p>
+            <Link to="/album" className={buttonClass("secondary", "sm")}>
+              <Disc3 aria-hidden className="size-4" /> Open the album
+            </Link>
+          </div>
+        }
+      >
+        {() =>
+          album.rows.length === 0 ? (
+            <p className="py-3 text-text-3">Looking for recordings…</p>
+          ) : (
+            <>
+              <ReadOnlyRow
+                label="On this device"
+                value={
+                  <span data-testid="album-audio-total">
+                    {total.files} {total.files === 1 ? "recording" : "recordings"}
+                    {total.known
+                      ? `, ${formatBytes(total.bytes)}`
+                      : album.sizes.isPending
+                        ? ", measuring…"
+                        : ""}
+                  </span>
+                }
+              />
+              <ul
+                aria-label="Takes on the album"
+                className="flex flex-col divide-y divide-border"
+                data-testid="album-audio"
+              >
+                {album.rows.map((r) => (
+                  <li
+                    key={`${r.trackId}/v${r.version}`}
+                    className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        to="/album/$trackId"
+                        params={{ trackId: r.trackId }}
+                        className="block truncate font-medium text-link underline decoration-current/40 underline-offset-[3px] hover:decoration-current"
+                      >
+                        {r.title}
+                      </Link>
+                      <span className="text-sm text-text-2">
+                        {[
+                          albumRowPlace(r),
+                          r.durationS === null ? null : clockLabel(r.durationS),
+                          sizeText(r),
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    </div>
+                    {r.current ? <Chip tone="accent">On the album</Chip> : <Chip>Earlier version</Chip>}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )
+        }
       </QueryView>
     </Section>
   );

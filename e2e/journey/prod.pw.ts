@@ -205,7 +205,8 @@ test("production: a U06 learner from a backup starts the day's U06 session and o
   // The Transcription Studio on the production build: the own-audio entry, nothing sent off this machine.
   await page.goto("/transcribe");
   await expect(page.getByRole("heading", { level: 1, name: "Transcribe" })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText("Drop an audio file — it stays on this device.")).toBeVisible();
+  await expect(page.getByTestId("import")).toContainText("Bring a recording");
+  await expect(page.getByTestId("import")).toContainText("It stays on this device.");
 
   await expect
     .poll(
@@ -225,6 +226,97 @@ test("production: a U06 learner from a backup starts the day's U06 session and o
   await expect(page.getByRole("heading", { level: 1, name: "Transcribe" })).toBeVisible({ timeout: 30_000 });
   await page.goto("/session");
   await expect(page.locator("#main")).toBeVisible({ timeout: 30_000 });
+  const offlineProblems = w.problems.filter(
+    (p) => !/Failed to load resource|net::ERR_INTERNET_DISCONNECTED|fetch/i.test(p),
+  );
+  expect(offlineProblems).toEqual([]);
+  expect(w.remote).toEqual([]);
+  await context.setOffline(false);
+  await context.close();
+});
+
+/** Moves the dev stack's learner at `point` onto the production server (a backup, imported with its confirm nonce). */
+async function importSeed(
+  request: import("@playwright/test").APIRequestContext,
+  point: string,
+): Promise<void> {
+  await resetClock(request);
+  await seed(request, point);
+  const exported = await request.get(`${stack.apiURL}/api/backup/export?audio=1`, {
+    headers: { "x-oak": "1", origin: stack.apiURL },
+  });
+  expect(exported.ok()).toBe(true);
+  const prodHeaders = { "x-oak": "1", origin: PROD_URL };
+  const nonce = await request.post(`${PROD_URL}/api/confirm`, {
+    headers: { ...prodHeaders, "content-type": "application/json" },
+    data: JSON.stringify({ action: "backup.import", target: "*" }),
+  });
+  expect(nonce.ok()).toBe(true);
+  const imported = await request.post(`${PROD_URL}/api/backup/import`, {
+    headers: {
+      ...prodHeaders,
+      "content-type": "application/octet-stream",
+      "x-oak-confirm": ((await nonce.json()) as { nonce: string }).nonce,
+    },
+    data: await exported.body(),
+  });
+  expect(imported.ok(), await imported.text()).toBe(true);
+}
+
+test("production (Wave 5): a U10 session and the C4 capstone workspace, each reloaded offline", async ({
+  browser,
+  request,
+}) => {
+  test.setTimeout(240_000);
+  const up = await fetch(`${PROD_URL}/api/health`, { headers: { "X-Oak": "1" } }).catch(() => null);
+  test.skip(up === null, `no production server on ${PROD_URL}`);
+  const u10l04 = (await import("../../content/core/U10/L04/lesson.ts")).default;
+
+  // A U10 learner (U10.L03 done yesterday): today's session is U10.L04.
+  await importSeed(request, "after U10.L03");
+  const context = await browser.newContext({ baseURL: PROD_URL, viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  const w = watch(page);
+  await page.goto("/");
+  const today = page.getByTestId("today-card");
+  await expect(today).toBeVisible({ timeout: 30_000 });
+  await expect(today).not.toHaveAttribute("data-state", /first-run|done/);
+  await expect(today).toContainText(u10l04.title);
+  await page.getByTestId("start-session").click();
+  await expect(page).toHaveURL(/\/session\/?$/);
+  await expect(page.getByTestId("warmup").or(page.getByTestId("lesson-step")).first()).toBeVisible({
+    timeout: 60_000,
+  });
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => (await navigator.serviceWorker.getRegistration())?.active?.scriptURL ?? ""),
+      { timeout: 30_000 },
+    )
+    .toMatch(/\/sw\.js/);
+  await page.reload();
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 30_000 });
+  expectClean(w);
+  await context.setOffline(true);
+  w.problems.length = 0;
+  await page.reload();
+  await expect(page.locator("#main")).toBeVisible({ timeout: 30_000 });
+  await context.setOffline(false);
+
+  // A learner at C4's first session: the capstone workspace on the production build, then offline.
+  await importSeed(request, "C4 open");
+  await page.goto("/capstone/C4");
+  await expect(page.getByRole("heading", { level: 1, name: "C4 Minor Indie Ballad" })).toBeVisible({
+    timeout: 60_000,
+  });
+  await page.getByRole("button", { name: "Start session 1 of 2" }).click();
+  await expect(page.getByTestId("capstone-workspace")).toBeVisible({ timeout: 60_000 });
+  // Offline the Service Worker serves the shell: the page keeps its title and says calmly that the server is away
+  // (the learner's data lives on the local server, which is not cached).
+  await context.setOffline(true);
+  await page.reload();
+  await expect(page.getByRole("banner")).toContainText("C4 Minor Indie Ballad", { timeout: 30_000 });
+  await expect(page.locator("#main")).toBeVisible();
   const offlineProblems = w.problems.filter(
     (p) => !/Failed to load resource|net::ERR_INTERNET_DISCONNECTED|fetch/i.test(p),
   );

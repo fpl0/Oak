@@ -18,7 +18,7 @@ import type { PieceKeySpan } from "./model.ts";
 
 /** "F#" → "F♯", "Bb" → "B♭". */
 export function glyph(name: string): string {
-  return name.replace(/#/g, "♯").replace(/(?<=[A-G])b/g, "♭");
+  return name.replace(/#/g, "♯").replace(/(?<=[A-G]b*)b/g, "♭");
 }
 
 /** "D major", "F♯ minor". */
@@ -36,6 +36,14 @@ export function signatureText(k: KeySpec): string {
   if (list.length === 0) return "no sharps or flats";
   const kind = sig.sharps.length ? "sharp" : "flat";
   return `${list.length} ${kind}${list.length === 1 ? "" : "s"}: ${list.map(glyph).join(" ")}`;
+}
+
+/**
+ * The signature the staff draws for a key, in fifths: a blues (C blues, A minor blues) is written in its tonic's
+ * major signature with the blue notes as accidentals (@oak/notation `signatureKey`), every other mode in its own.
+ */
+export function staffFifths(k: KeySpec): number {
+  return fifthsOfKey(/blues/.test(k.mode) ? ({ tonic: k.tonic, mode: "major" } as KeySpec) : k);
 }
 
 /** "2♯", "3♭", "0" (the compact form on the ring and the staff facts). */
@@ -138,7 +146,8 @@ export function keySummary(
   if (keys.length === 0) return null;
   if (keys.length === 1) {
     const k = keys[0] as KeySpec;
-    return `${keyName(k)} · ${signatureShort(fifthsOfKey(k))}`;
+    const fifths = staffFifths(k);
+    return Number.isFinite(fifths) ? `${keyName(k)} · ${signatureShort(fifths)}` : keyName(k);
   }
   // A key change every bar would make a line longer than the staff: the first and last, and how many.
   if (keys.length > 3)
@@ -221,10 +230,29 @@ export interface KeyMove {
   shift: number;
 }
 
+/** The mode as a `.scale()` argument writes it: "major", "minor", "harmonic:minor", "major:pentatonic". */
+export function modeText(mode: KeySpec["mode"]): string {
+  return mode.replace(/ /g, ":");
+}
+
+/**
+ * The twins of a key (Wave 5, U10.L02): its relative (same signature: C major and A minor) and its parallel (same
+ * tonic: C major and C minor). A minor form (harmonic, melodic) twins as natural minor's does; the relative of a
+ * major key is its natural minor.
+ */
+export function keyTwinsOf(k: KeySpec): { relative: KeySpec; parallel: KeySpec } | null {
+  const minorish = k.mode === "minor" || k.mode === "harmonic minor" || k.mode === "melodic minor";
+  if (k.mode !== "major" && !minorish) return null;
+  const n = fifthsNeighbours(minorish ? { tonic: k.tonic, mode: "minor" } : k);
+  return { relative: n.relative, parallel: n.parallel };
+}
+
 /**
  * Moves the piece from `from` to `to`: every key token in the `.scale()` arguments moves by the same nearer
  * shift (a patterned `<C4:major G4:major>` stays a progression of keys), the octave follows the tonic across C,
- * the mode text stays as written. A token in `from` takes `to`'s spelling; the others the plainest spelling.
+ * the mode text stays as written. A token in `from` takes `to`'s spelling, and `to`'s mode when the move changes
+ * mode (the relative or parallel minor: `C4:major` → `A3:minor` or `C4:minor`, so the same degrees play in
+ * minor); the others the plainest spelling in their own mode.
  */
 export function moveKey(code: string, from: KeySpec, to: KeySpec): KeyMove {
   const tokens = scaleTokens(code);
@@ -232,14 +260,16 @@ export function moveKey(code: string, from: KeySpec, to: KeySpec): KeyMove {
   if (tokens.length === 0) return { code: null, changes: [], shift };
   const changes = tokens.map((t) => {
     const own = t.key ?? { tonic: t.tonic.toUpperCase(), mode: "major" as const };
-    const next = sameKey(own, from) ? to : transposeKey(own, shift);
+    const mine = sameKey(own, from);
+    const next = mine ? to : transposeKey(own, shift);
     let octave = t.octave;
     if (octave !== null) {
       const midi = (octave + 1) * 12 + tonicPc(t.tonic) + shift;
       // The new tonic's own octave number: C♭ and B♯ sit across the octave line from their pitch.
       octave = Math.floor((midi - tonicPc(next.tonic)) / 12) - 1;
     }
-    return { from: t.from, to: t.to, insert: `${next.tonic}${octave === null ? "" : octave}:${t.modeText}` };
+    const mode = mine && to.mode !== from.mode ? modeText(to.mode) : t.modeText;
+    return { from: t.from, to: t.to, insert: `${next.tonic}${octave === null ? "" : octave}:${mode}` };
   });
   let out = "";
   let at = 0;

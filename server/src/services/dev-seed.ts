@@ -13,14 +13,23 @@ import type {
   WarmupItem,
 } from "@oak/api";
 import { ONBOARDING_STEPS } from "@oak/api";
-import type { Exercise, GradeResult, HintRung } from "@oak/content-kit";
+import {
+  type Exercise,
+  type GradeResult,
+  type HintRung,
+  type KeySpec,
+  type SongDef,
+  stripMarkers,
+} from "@oak/content-kit";
 import { analyzePiece, capstoneLength, linerNotes, normalize } from "@oak/grader";
 import type { AppDeps } from "../deps.ts";
 import { ApiError, badRequest } from "../errors.ts";
 import { finishDrill, reviewCard } from "../routes/practice.ts";
+import { markForReview } from "./backup.ts";
 import { checkSlots } from "./capstone-sessions.ts";
 import { LearnerTime } from "./context.ts";
 import type { DevClock } from "./dev-clock.ts";
+import { CAPSTONE_DRAFTS, CAPSTONE_KEYS, pickStandIn, WAVE5_SEED_DESCRIPTIONS } from "./seed-wave5.ts";
 
 const DAY_MS = 86_400_000;
 
@@ -172,6 +181,9 @@ export const SEED_POINTS: readonly DevSeedPoint[] = [
     description:
       "After U01.L03 with N days missed since the last activity (3, 10, 21: the return policy of contracts §7.9).",
   },
+  // Wave 5 (wave5.md §6). Lessons not written yet are completed as stand-ins (evidence for their skills, a Make of
+  // real course code from seed-wave5.ts); a point whose own content is missing (X2's songs, an L6 song) answers 400.
+  ...WAVE5_SEED_DESCRIPTIONS,
 ];
 
 /** What a point expands to. */
@@ -184,7 +196,12 @@ interface SeedPlan {
     | { kind: "draft"; capstoneId: string }
     | { kind: "gate-open" }
     | { kind: "ladder-l3" }
-    | { kind: "own-audio" }
+    | { kind: "own-audio"; imported?: true }
+    // Wave 5
+    | { kind: "side"; lessons: string[] }
+    | { kind: "ladder-song"; level: 5 | 6; realism: number }
+    | { kind: "ladder-levelup" }
+    | { kind: "ladder-realism" }
     | null;
   /** Wave 4: family levels set after the walk (a learner who did, or did not yet do, the gym sets X1 waits for). */
   familyLevels?: { family: string; level: number }[];
@@ -246,6 +263,49 @@ export function planSeed(point: string, order: readonly string[]): SeedPlan {
     "x1 released": () => ({ upTo: inOrder("X1.S3"), extra: null, gapDays: null }),
     "ladder l3": () => ({ upTo: inOrder("U07.L07"), extra: { kind: "ladder-l3" }, gapDays: null }),
     "own-audio project": () => ({ upTo: inOrder("U07.L07"), extra: { kind: "own-audio" }, gapDays: null }),
+    // Wave 5 (wave5.md §6).
+    "after x1 (u08.l02 next)": () => ({ upTo: inOrder("X1.S3"), extra: null, gapDays: null }),
+    "c3 open": () => ({ upTo: inOrder("U09.CP"), extra: null, gapDays: null }),
+    "c3.s2 done": () => ({ upTo: inOrder("C3.S2"), extra: null, gapDays: null }),
+    "c4 open": () => ({ upTo: inOrder("U10.CP"), extra: null, gapDays: null }),
+    "c5 open": () => ({ upTo: inOrder("U11.CP"), extra: null, gapDays: null }),
+    "c5.s1 done": () => ({ upTo: inOrder("C5.S1"), extra: null, gapDays: null }),
+    "x2 open": () => ({ upTo: inOrder("C5.S2"), extra: null, gapDays: null }),
+    "x2.s1 done": () => ({ upTo: inOrder("X2.S1"), extra: null, gapDays: null }),
+    "x2 released": () => ({ upTo: inOrder("X2.S2"), extra: null, gapDays: null }),
+    // The ladder points end the day before a gym slot (Today is a ladder session; its Coda is the c10 card).
+    "ladder l5": () => ({
+      upTo: inOrder("U10.L05"),
+      extra: { kind: "ladder-song", level: 5, realism: 0 },
+      gapDays: null,
+    }),
+    "ladder l6": () => ({
+      upTo: inOrder("C5.S2"),
+      extra: { kind: "ladder-song", level: 6, realism: 1 },
+      gapDays: null,
+    }),
+    "ladder level-up due": () => ({
+      upTo: inOrder("U09.L04"),
+      extra: { kind: "ladder-levelup" },
+      gapDays: null,
+    }),
+    "ladder realism-up due": () => ({
+      upTo: inOrder("U09.L04"),
+      extra: { kind: "ladder-realism" },
+      gapDays: null,
+    }),
+    "side lesson offered": () => ({ upTo: inOrder("U03.L02"), extra: null, gapDays: null }),
+    "imported own-audio (c2)": () => ({
+      upTo: inOrder("U07.L07"),
+      extra: { kind: "own-audio", imported: true },
+      gapDays: null,
+    }),
+    "a1.l02 done": () => ({
+      upTo: inOrder("U03.L02"),
+      extra: { kind: "side", lessons: ["A1.L01", "A1.L02"] },
+      gapDays: null,
+      unit: "U03.L02",
+    }),
   };
   const namedPlan = named[lower.replace(/\s+/g, " ")];
   if (namedPlan !== undefined) return namedPlan();
@@ -368,6 +428,7 @@ class Seeder {
     originKind: "lesson-make" | "capstone" | "checkpoint",
     originId: string,
     code: string,
+    key: KeySpec = { tonic: "C", mode: "major" },
   ) {
     const saved = this.#s.library.createSketch({
       title,
@@ -376,7 +437,7 @@ class Seeder {
       code,
       bpm: 100,
       meter: "4/4",
-      key: { tonic: "C", mode: "major" },
+      key,
       analysis: null,
       note: null,
       tutorAssisted: false,
@@ -391,10 +452,18 @@ class Seeder {
 
   /**
    * The Make of a stand-in (a lesson not written yet, a checkpoint): course code the learner's unlocks allow.
-   * A degree line over `.scale()` once U03.L02's tools are unlocked, a labelled groove before.
+   * Wave 5: the unit's own idea (seed-wave5.ts) once its tools are usable, in the session itself included (contracts
+   * §3.1 rule 2); else a degree line over `.scale()` once U03.L02's tools are unlocked, a labelled groove before.
    */
-  #standIn(): string {
-    const have = this.#s.unlocks.ids();
+  #standIn(sessionId?: string): string {
+    const have = new Set(this.#s.unlocks.ids());
+    if (sessionId !== undefined) {
+      for (const t of this.d.content.unlockRowsAt(sessionId, "complete")) have.add(t.id);
+      for (const t of this.d.content.unlockRowsAt(sessionId, "start")) have.add(t.id);
+      const unit = /^([A-Z]\d{1,2})\./.exec(sessionId)?.[1] ?? "";
+      const pick = pickStandIn(unit, have, this.d.content.toolbox());
+      if (pick !== null) return pick.code;
+    }
     return DEGREE_LINE_TOOLS.every((t) => have.has(t)) ? DEGREE_LINE : CHECKPOINT_GROOVE;
   }
 
@@ -534,7 +603,7 @@ class Seeder {
       );
     }
     const title = def?.title ?? this.d.content.lessonTitle(lessonId);
-    const code = def === null ? this.#standIn() : lessonMakeCode(def.steps.at(-1)?.exercise);
+    const code = def === null ? this.#standIn(lessonId) : lessonMakeCode(def.steps.at(-1)?.exercise);
     const sk = this.sketch(title, "lesson-make", lessonId, code);
     await s.course.complete(
       lessonId,
@@ -561,7 +630,7 @@ class Seeder {
     });
     await this.warmup(ses.id);
     const start = s.course.checkpointStart(cpId);
-    const sk = this.sketch(`${cpId} Make`, "checkpoint", cpId, this.#standIn());
+    const sk = this.sketch(`${cpId} Make`, "checkpoint", cpId, this.#standIn(cpId));
     s.course.checkpointSubmit(cpId, {
       sessionId: ses.id,
       attemptNo: start.attemptNo,
@@ -669,7 +738,7 @@ class Seeder {
       seed: 4000 + this.done.length,
     });
     if (!answer) return item;
-    for (const stage of item.stages ?? [null]) {
+    for (const stage of (item.stages ?? [null]) as ("bass" | "quality" | "rn" | null)[]) {
       const code = s.ladder.answerOf(item.itemId, stage);
       if (code === null) break;
       await s.ladder.submit(item.itemId, {
@@ -705,13 +774,21 @@ class Seeder {
     const title = meta?.title.replace(/^[A-Z0-9-]+\s+/, "") ?? capstoneId;
     const brief = def?.brief;
     const code = capstoneSessionCode(this.d, capstoneId, index, last && finish);
+    // A transcription's draft is in its song's key and tagged with the song (X1, X2: the workspace and the album
+    // read the tag; the cover names the key); a compose capstone's in the key its brief gives.
+    const song = capstoneSong(this.d, capstoneId);
+    const key = CAPSTONE_KEYS[capstoneId] ?? song?.key;
     let sk =
       this.capstoneSketchId === null || s.library.sketch(this.capstoneSketchId).originId !== capstoneId
-        ? this.sketch(`${title} (draft)`, "capstone", capstoneId, code)
+        ? this.sketch(`${title} (draft)`, "capstone", capstoneId, code, key)
         : s.library.sketch(this.capstoneSketchId);
+    if (song !== null && !sk.tags.includes(song.id)) {
+      s.library.patchSketch(sk.id, { tags: [song.id, ...sk.tags.filter((t) => !t.startsWith("song."))] });
+      sk = s.library.sketch(sk.id);
+    }
     if (sk.currentVersion > 0 && s.library.sketch(sk.id).versions.at(-1)?.code !== code) {
       s.library.addSketchVersion(sk.id, {
-        ...draftVersion(code),
+        ...draftVersion(code, key),
         sessionId: ses.id,
       });
       sk = s.library.sketch(sk.id);
@@ -726,14 +803,15 @@ class Seeder {
     // X1: every phrase (and chord stage) check of the session, graded in the browser in capstone mode. The first
     // phrase check of the capstone was revealed (hint 4): no evidence, and the liner notes name it.
     const sessionDef = def?.sessionDefs.find((x) => x.id === sessionId);
-    let first = index === 0;
+    // X1 only: its first phrase check was revealed (Wave 4). X2's checks all pass at their marks (bass ≥ 0.90 first).
+    let first = index === 0 && capstoneId === "X1";
     for (const { check, stage } of checkSlots(sessionDef)) {
       const revealed = first && stage === null;
       first = false;
       const result = syntheticGrade(
         `${capstoneId}/${check.id}`,
         { kind: "transcribe-step", id: check.id } as unknown as Exercise,
-        revealed ? 1 : Math.max(check.pass, 0.9),
+        revealed ? 1 : Math.max(check.pass, 0.92),
       );
       if (revealed) result.assist = { ...result.assist, rung: 4, revealed: true };
       result.mode = "capstone";
@@ -904,6 +982,50 @@ class Seeder {
     lib.saveTranscriptionVersion(t.id, { code: OWN_AUDIO_DRAFT, result: null, ranOk: true });
   }
 
+  /**
+   * `ladder L5` / `ladder L6`: the ladder at that level and realism, one song item started from the first open song
+   * of the level and its first check answered with the answer key (L5 phrase 1, L6 the bass stage): a pass.
+   */
+  async ladderSong(level: 5 | 6, realism: number): Promise<void> {
+    const s = this.#s;
+    this.d.repos.ladder.saveState(level, realism, this.d.clock.now().toISOString());
+    let item: Awaited<ReturnType<typeof s.ladder.next>>;
+    try {
+      item = await s.ladder.next({ sessionId: null, gymId: null, level, seed: 5000 + this.done.length });
+    } catch (e) {
+      throw badRequest(
+        `the point needs an L${level} song with a complete answer key in content/repertoire (${e instanceof Error ? e.message : String(e)})`,
+      );
+    }
+    const full = s.ladder.songAnswerOf(item.itemId);
+    if (full === null) throw badRequest(`the L${level} song ${item.song?.songId ?? ""} has no answer key`);
+    // L6 saves only what the learner has written by then: the bass line, with the key's tempo line (review:studio
+    // found the whole answer key, melody included, stored as the learner's version). L5 answers phrase 1 whole.
+    const song = this.d.content.source.songs.find((x) => x.id === item.song?.songId);
+    const bass = level === 6 ? song?.answerKey.layers.bass : undefined;
+    const tempo = /^\s*setcpm\([^)]*\)/m.exec(full)?.[0];
+    const code = bass === undefined ? full : `${tempo ? `${tempo.trim()}\n\n` : ""}bass: ${bass}`;
+    await s.ladder.submit(item.itemId, {
+      sessionId: null,
+      code,
+      rung: 0,
+      ...(level === 5 ? { phrase: 1 } : { stage: "bass" as const }),
+    });
+  }
+
+  /** `ladder level-up due`: the ladder at L4, R2, and one graded L4 pass (called on two different days). */
+  async levelUpPass(): Promise<void> {
+    const st = this.d.repos.ladder.state();
+    if (st.level !== 4) this.d.repos.ladder.saveState(4, 2, this.d.clock.now().toISOString());
+    await this.ladderItem(null, null, 4, true);
+  }
+
+  /** `ladder realism-up due`: the ladder at L2, R1, and one session at R1 scoring ≥ 0.9 (the item answered exactly). */
+  async realismPass(): Promise<void> {
+    this.d.repos.ladder.saveState(2, 1, this.d.clock.now().toISOString());
+    await this.ladderItem(null, null, 2, true);
+  }
+
   async draft(capstoneId: string): Promise<void> {
     const first = this.d.content.capstoneSessionIds(capstoneId)[0];
     if (first === undefined) throw badRequest(`capstone ${capstoneId} has no sessions`);
@@ -924,7 +1046,11 @@ export async function seedLearner(d: AppDeps, body: DevSeedRequest): Promise<Dev
         ? plan.extra.times
         : plan.extra.kind === "draft" || plan.extra.kind === "gate-open"
           ? 1
-          : 0;
+          : plan.extra.kind === "side"
+            ? plan.extra.lessons.length
+            : plan.extra.kind === "ladder-levelup"
+              ? 2
+              : 0;
   const days = items.length + extraDays;
 
   // Wipe, keeping the /dev/listen verdicts.
@@ -965,10 +1091,31 @@ export async function seedLearner(d: AppDeps, body: DevSeedRequest): Promise<Dev
     await clock.at(dayAt(k), () => seeder.gateOpen());
     k++;
   }
+  // Wave 5: two graded L4 passes at R2 on two days after the walk (learner days never run backwards).
+  if (plan.extra?.kind === "ladder-levelup")
+    for (let n = 0; n < 2; n++) {
+      await clock.at(dayAt(k), () => seeder.levelUpPass());
+      k++;
+    }
+  // Wave 5: side lessons taken on the days after the walk (one a day, like Today offers them).
+  if (plan.extra?.kind === "side")
+    for (const id of plan.extra.lessons) {
+      await clock.at(dayAt(k), () => seeder.item(id));
+      k++;
+    }
   // Same-day additions on the last seeded day (yesterday).
   const lastDay = dayAt(Math.max(0, days - 1));
   if (plan.extra?.kind === "ladder-l3") await clock.at(lastDay, () => seeder.ladderL3());
-  if (plan.extra?.kind === "own-audio") await clock.at(lastDay, () => seeder.ownAudio());
+  if (plan.extra?.kind === "own-audio") {
+    await clock.at(lastDay, () => seeder.ownAudio());
+    // c2: as if the learner's data came back through a backup import — every version held for review.
+    if (plan.extra.imported === true) markForReview(d.repos.db);
+  }
+  const extra = plan.extra;
+  if (extra?.kind === "ladder-song")
+    await clock.at(lastDay, () => seeder.ladderSong(extra.level, extra.realism));
+
+  if (extra?.kind === "ladder-realism") await clock.at(lastDay, () => seeder.realismPass());
   if (plan.familyLevels !== undefined)
     await clock.at(lastDay, () => {
       for (const f of plan.familyLevels ?? []) setFamilyLevel(d, f.family, f.level, false);
@@ -1013,12 +1160,15 @@ export function lessonMakeCode(make: Exercise | undefined): string {
   return firstPassingCode(make) ?? 'setcpm(96/4)\n\ndrums: s("bd ~ sd ~")';
 }
 
-function firstPassingCode(ex: Exercise | undefined): string | null {
+function firstPassingCode(ex: Exercise | undefined, starter = true): string | null {
   const b = ex as
     | { tests?: { expect: string; response?: { code?: string } }[]; code?: { starter?: string } }
     | undefined;
   const pass = b?.tests?.find((t) => t.expect === "pass" && typeof t.response?.code === "string");
-  return pass?.response?.code ?? b?.code?.starter ?? null;
+  if (pass?.response?.code !== undefined) return pass.response.code;
+  const raw = starter ? b?.code?.starter : undefined;
+  // A starter carries ⟪…⟫ / ⟦id⟧ markers for the editor; the saved draft is the code the learner sees, which runs.
+  return raw === undefined ? null : stripMarkers(raw).code;
 }
 
 /** A seeded Make in degrees (U03.L02 on): 1 3 5 3 | 4 2 1, home on the last beat but one. */
@@ -1103,11 +1253,17 @@ export function capstoneSessionCode(
 ): string {
   if (capstoneId === "C2") return index === 0 && !releasing ? C2_CHORDS : C2_SONG;
   const def = d.content.capstoneDef(capstoneId);
+  // Wave 5 compose capstones: the session's own draft (seed-wave5.ts); the release is the brief's own passing piece
+  // once the capstones author pins one, else the seeded song.
+  const drafts = CAPSTONE_DRAFTS[capstoneId];
+  if (drafts !== undefined) {
+    const last = drafts.length - 1;
+    if (releasing) return firstPassingCode(def?.brief, false) ?? (drafts[last] as string);
+    return drafts[Math.min(index, last)] as string;
+  }
   if (def?.kind === "transcribe" || d.content.capstoneMeta(capstoneId)?.kind === "transcribe") {
-    const song = (def?.song ?? [])
-      .map((id) => d.content.source.songs.find((x) => x.id === id))
-      .find((x) => x !== undefined);
-    if (song === undefined)
+    const song = capstoneSong(d, capstoneId);
+    if (song === null)
       throw badRequest(
         `${capstoneId}'s songs are not written yet (content/repertoire: ${(def?.song ?? []).join(", ") || "none named"})`,
       );
@@ -1118,13 +1274,23 @@ export function capstoneSessionCode(
   return capstoneDraftCode(def?.brief);
 }
 
+/** The first written song a transcribe capstone offers (X1, X2), as the Start page picks it; null for a compose one. */
+export function capstoneSong(d: Pick<AppDeps, "content">, capstoneId: string): SongDef | null {
+  const def = d.content.capstoneDef(capstoneId);
+  return (
+    (def?.song ?? [])
+      .map((id) => d.content.source.songs.find((x) => x.id === id))
+      .find((x) => x !== undefined) ?? null
+  );
+}
+
 /** A sketch version body for a draft. */
-function draftVersion(code: string) {
+function draftVersion(code: string, key: KeySpec = { tonic: "C", mode: "major" }) {
   return {
     code,
-    bpm: 96,
+    bpm: Number(/setcpm\((\d+(?:\.\d+)?)\s*\/\s*4\)/.exec(code)?.[1] ?? 96),
     meter: "4/4" as const,
-    key: { tonic: "C", mode: "major" as const },
+    key,
     analysis: null,
     note: null,
     tutorAssisted: false,

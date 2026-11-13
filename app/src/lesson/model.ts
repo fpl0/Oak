@@ -15,6 +15,7 @@ import {
   type LessonDef,
   type LessonProgress,
   lessonBudget,
+  MODE_DEGREES,
   type ParamValues,
   type StepDef,
   type StepKind,
@@ -23,6 +24,7 @@ import {
   substituteParams,
   type TargetMinutes,
 } from "@oak/api";
+import { barGridStart } from "../answers/bar-grid.ts";
 import type { AnswerSpec } from "../answers/types.ts";
 import { type GateState, gateAllowsContinue } from "./gate.ts";
 import { isSungStep } from "./rules.ts";
@@ -143,9 +145,11 @@ export function withTrialOptions(
   // four notes and the authored pad took one).
   if (spec?.ui === "degree-pad" && trial) {
     const len = trial.params.sequenceLen;
-    return typeof len === "number" && Number.isInteger(len) && len > 0 && len !== (spec.sequenceLen ?? 1)
-      ? { ...spec, sequenceLen: len }
-      : spec;
+    const sized =
+      typeof len === "number" && Number.isInteger(len) && len > 0 && len !== (spec.sequenceLen ?? 1)
+        ? { ...spec, sequenceLen: len }
+        : spec;
+    return withTrialMode(sized, trial);
   }
   if (spec?.ui !== "choice" || !trial) return spec;
   const own = trial.params.options;
@@ -168,6 +172,41 @@ export function withTrialOptions(
       return { id, label, ...(sound !== undefined ? { audio: sound } : {}) };
     }),
   };
+}
+
+/** Degrees in pad order, chromatic from home. */
+const PAD_ORDER = ["1", "b2", "2", "#2", "b3", "3", "4", "#4", "b5", "5", "#5", "b6", "6", "b7", "7"];
+
+/**
+ * A pad authored for one mode while the drawn trial is in another (U10.L04 S6: a minor pad, "a new key each time,
+ * often minor", and a major trial whose bass is on 3): the pad also offers the trial's own scale degrees, so every
+ * drawn answer can be entered. Nothing is taken away from the authored set. A pad that is a deliberate choice
+ * within the trial's own mode (U10.L03 S2 "Do, me or sol?": 1 ♭3 5 over minor trials, U03's three-degree pads) is
+ * not a pad for another mode and stays as authored (review:journey: it had grown to all seven degrees).
+ */
+export function withTrialMode<S extends Extract<AnswerSpec, { ui: "degree-pad" }>>(
+  spec: S,
+  trial: { params: Record<string, unknown> },
+): S {
+  const key = trial.params.key as { mode?: unknown } | undefined;
+  const mode = typeof key?.mode === "string" ? key.mode : null;
+  const own = mode !== null ? (MODE_DEGREES as Record<string, readonly string[]>)[mode] : undefined;
+  if (!own || own.every((d) => spec.set.includes(d as never))) return spec;
+  // Authored for this very mode (every degree on the pad is one of the trial's own): a chosen subset, kept.
+  if (spec.set.every((d) => d === "1" || own.includes(d))) return spec;
+  const set = PAD_ORDER.filter((d) => spec.set.includes(d as never) || own.includes(d));
+  return { ...spec, set: set as S["set"] };
+}
+
+/**
+ * The value a chart starts from (U11.CP "bar 1, I7, is filled in"): a bar grid's given bars are printed filled, so
+ * the given box shows its chord and the answer sent carries it (review:journey: it showed "given", empty, and the
+ * answer went with an empty bar 1). `null` for every other answer.
+ */
+export function givenStart(ex: Exercise | { kind: string }, spec: AnswerSpec | null): string[] | null {
+  if (spec?.ui !== "bar-grid") return null;
+  const c = "correct" in ex ? (ex.correct as { rn?: string[]; text?: string[] } | undefined) : undefined;
+  return barGridStart(spec, c?.rn ?? c?.text);
 }
 
 /** `Bb` → `B♭`, `F#` → `F♯`; anything else as it is. */
@@ -241,6 +280,8 @@ export interface StepProgress {
   /** Completed without a graded pass: an ungraded step played or answered, or a disputed grading. */
   done: boolean;
   disputed: boolean;
+  /** Wave 5: the step's answer widget cannot be drawn in this app yet (Continue opens; never a pass). */
+  unavailable?: boolean;
 }
 
 /**
@@ -254,7 +295,7 @@ export function canContinue(step: StepDef, p: StepProgress, gate: GateState | nu
   if (!step.graded) return true;
   // Singing never gates anything (contracts §7.6, §8): a sung step can always be left, a graded one too.
   if (isSungStep(step)) return true;
-  if (p.disputed) return true;
+  if (p.disputed || p.unavailable) return true;
   if (p.state?.passed || (p.state?.rung ?? 0) >= 4) return true;
   return p.result?.status === "pass";
 }
@@ -262,6 +303,7 @@ export function canContinue(step: StepDef, p: StepProgress, gate: GateState | nu
 /** "Continue" on an ungraded step the learner did not finish reads "Skip" (it can always be skipped). */
 export function continueLabel(step: StepDef, p: StepProgress): "Continue" | "Skip" {
   if (step.exercise && step.graded && isSungStep(step)) return stepDone(step, p) ? "Continue" : "Skip";
+  if (step.exercise && step.graded && p.unavailable && !stepDone(step, p)) return "Skip";
   if (!step.exercise || step.graded) return "Continue";
   return stepDone(step, p) ? "Continue" : "Skip";
 }

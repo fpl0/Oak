@@ -5,6 +5,7 @@ import type { RubricContext } from "../rubric/context.ts";
 import { rubricMatch } from "../rubric/index.ts";
 import type { MatcherFn, MatchResult, NormalizeContext, Normalized } from "../types.ts";
 import { clampScore } from "./common.ts";
+import { controlsMatch } from "./controls.ts";
 import { eventsMatch } from "./events.ts";
 import { harmonyMatch, pcsetMatch } from "./harmony.ts";
 import { melodyMatch } from "./melody.ts";
@@ -28,6 +29,8 @@ export function runMatcher(
       return harmonyMatch(reference, answer, matcher, ctx);
     case "pcset":
       return pcsetMatch(reference, answer, matcher, ctx);
+    case "controls":
+      return controlsMatch(reference, answer, matcher, ctx);
     case "rubric": {
       const { rows: _rows, ...res } = rubricMatch(matcher.rules, answer, { code: "", params: {}, ...ctx });
       return res;
@@ -74,6 +77,7 @@ export const MATCHERS: { [K in Matcher["m"]]: MatcherFn<Extract<Matcher, { m: K 
   melody: melodyMatch,
   harmony: harmonyMatch,
   pcset: pcsetMatch,
+  controls: controlsMatch,
   rubric: (r, a, cfg, ctx) => runMatcher(cfg, r, a, ctx),
   all: (r, a, cfg, ctx) => runMatcher(cfg, r, a, ctx),
 };

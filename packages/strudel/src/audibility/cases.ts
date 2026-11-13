@@ -88,6 +88,49 @@ function wave4Cases(): ControlCase[] {
   ];
 }
 
+/**
+ * The U08–U11 tools that change what is heard (Wave 5): the root-bass helper, the energy-curve tools, layer
+ * entries, swing and shuffle, the dominant seventh and every minor, pentatonic and blues scale, each as the same
+ * music without the tool and with it.
+ */
+export function wave5Cases(): ControlCase[] {
+  const SCALE_RUN = (name: string) => `n("0 1 2 3 4 5 6 7").scale("C4:${name}").s("piano")`;
+  const scale = (id: string, name: string): ControlCase =>
+    pair(id, "scale", SCALE_RUN("major"), SCALE_RUN(name));
+  return [
+    pair(
+      "tb.rootNotes",
+      "rootNotes",
+      'note("c2*4").s("ebass")',
+      'chord("Am").rootNotes(2).struct("x*4").s("ebass")',
+    ),
+    pair("tb.signal", "sine", 'note("c3*8").s("sawtooth")', 'note("c3*8").s("sawtooth").gain(sine)'),
+    pair(
+      "tb.range",
+      "range",
+      'note("c3*8").s("sawtooth").lpf(2000)',
+      'note("c3*8").s("sawtooth").lpf(saw.range(200, 4000).segment(8))',
+    ),
+    pair(
+      "tb.segment",
+      "segment",
+      'note("c3*8").s("sawtooth").lpf(saw.range(200, 4000))',
+      'note("c3*8").s("sawtooth").lpf(saw.range(200, 4000).segment(2))',
+    ),
+    pair("tb.mask", "mask", 'note("c3*8").s("sawtooth")', 'note("c3*8").s("sawtooth").mask("1 0 1 1")'),
+    // Swing moves the off-beat eighths onto the last triplet: the same hats, later.
+    pair("tb.swingBy", "swingBy", 's("hh*8")', 's("hh*8").swingBy(1/3, 4)'),
+    pair("tb.swing", "swing", 's("hh*8")', 's("hh*8").swing(4)'),
+    pair("chord.dom7", "chord", VOICED_C, 'chord("C7").voicing().s("piano")'),
+    scale("scale.minor", "minor"),
+    scale("scale.harmonic-minor", "harmonic:minor"),
+    scale("scale.melodic-minor", "melodic:minor"),
+    scale("scale.major-pentatonic", "major:pentatonic"),
+    scale("scale.minor-pentatonic", "minor:pentatonic"),
+    scale("scale.blues", "blues"),
+  ];
+}
+
 export const CONTROL_CASES: ControlCase[] = [
   { id: "tb.room", control: "room", value: 0.6 },
   { id: "tb.clip", control: "clip", value: 0.25 },
@@ -172,6 +215,8 @@ export const CONTROL_CASES: ControlCase[] = [
   // tool is audible when the code with it sounds different from the same music without it; each pair is
   // written out in STYLE order (controls before `.voicing()`, `.add()` before `.scale()`).
   ...wave4Cases(),
+  // Wave 5: the tools U08–U11 unlock.
+  ...wave5Cases(),
   // Known silent no-ops (contracts §3.1 rule 7): never taught; listed so a Strudel update that changes them shows.
   { id: "noop.leslie", control: "leslie", value: 1 },
   { id: "noop.lrate", control: "lrate", value: 4 },
@@ -223,6 +268,8 @@ export const SOUND_CASES: SoundCase[] = [
   pitched("snd.mutetpt", "mutetpt", "c4 e4 g4 c5"),
   pitched("snd.clav", "clav"),
   pitched("snd.choir", "choir"),
+  // U08.L05's synth-bass recipe (a template row: the sawtooth with the bass preset).
+  { id: "tb.template.synthbass", sound: "sawtooth", code: 'note("c2 e2 g2 c3").s("sawtooth").lpf(600)' },
 ];
 
 /** A pitched alias the sound-quality harness measures: tuning at `notes`, clicks at `clickNote`, loudness of `phrase`. */
@@ -269,3 +316,309 @@ export const QUALITY_CASES: QualityCase[] = [
   q("pad", [45, 57, 69], MID),
   q("choir", [45, 57, 69], MID),
 ];
+
+/**
+ * A control heard in the context a lesson teaches it (Wave 5): the lesson's own parts, tempo and values, so
+ * "only audible controls are taught" holds where the learner meets the control, not only on the harness's arpeggio.
+ * A row with `same: true` is an equivalence a lesson relies on (two spellings that must sound alike); it is
+ * asserted NOT audible and never decides an id.
+ */
+export interface LessonCase extends ControlCase {
+  lesson: string;
+  /** What the row proves, in the lesson's words. */
+  claim: string;
+  cps: number;
+  cycles: number;
+  same?: true;
+}
+
+/** The A1 loop (content/specs/A1.ts): 100 BPM in 4/4, the bass in note names, the riff in degrees of C major. */
+const A1_CPS = 100 / 240;
+const A1_BASS = 'note("<[c2 ~ c2 g1] [f1 ~ f1 c2]>")';
+const A1_RIFF = 'n("<[4 4 2 4 ~ 2 0 ~] [5 5 3 5 ~ 3 0 ~]>").scale("C4:major")';
+const A1_PAD = 'n("<[4 ~ 2 ~] [5 ~ 3 ~]>").scale("C4:major")';
+const A1_SNARE = 's("~ sd ~ sd")';
+const a1 = (
+  lesson: string,
+  id: string | undefined,
+  control: string,
+  base: string,
+  withCode: string,
+  claim: string,
+  extra: Partial<LessonCase> = {},
+): LessonCase => ({
+  ...(id ? { id } : { id: "" }),
+  lesson,
+  control,
+  value: "=",
+  base,
+  withCode,
+  claim,
+  cps: A1_CPS,
+  cycles: 2,
+  ...extra,
+});
+
+/** Every control A1.L01–L04 teach, in the lesson's own loop and values (content/specs/A1.ts). */
+export const A1_CASES: LessonCase[] = [
+  // A1.L01 Waves & Harmonics
+  ...(["triangle", "square", "sawtooth"] as const).map((w) =>
+    a1(
+      "A1.L01",
+      `snd.wave.${w}`,
+      "s",
+      `${A1_RIFF}.s("sine")`,
+      `${A1_RIFF}.s("${w}")`,
+      `a ${w} sounds unlike a sine`,
+    ),
+  ),
+  a1(
+    "A1.L01",
+    "tb.partials",
+    "partials",
+    `${A1_RIFF}.s("sawtooth").partials([1, 0, 0, 0])`,
+    `${A1_RIFF}.s("sawtooth").partials([1, 1, 1, 1])`,
+    "S5: four equal harmonics are brighter than the fundamental alone",
+  ),
+  a1(
+    "A1.L01",
+    "tb.partials",
+    "partials",
+    `${A1_BASS}.s("sawtooth")`,
+    `${A1_BASS}.s("sawtooth").partials([1, 1, 1, 1, 1, 1])`,
+    "hook: six equal harmonics on the sawtooth bass change it",
+  ),
+  a1(
+    "A1.L01",
+    "tb.partials",
+    "partials",
+    `${A1_RIFF}.s("square")`,
+    `${A1_RIFF}.s("square").partials([1, 1, 1, 1, 1]).gain(.8)`,
+    "hook: five equal partials on the square riff change it",
+  ),
+  // A1.L02 Filters
+  a1(
+    "A1.L02",
+    "tb.lpf",
+    "lpf",
+    `${A1_BASS}.s("sawtooth")`,
+    `${A1_BASS}.s("sawtooth").lpf(400)`,
+    "the bass under .lpf(400)",
+  ),
+  a1(
+    "A1.L02",
+    "tb.lpf",
+    "lpf",
+    `${A1_BASS}.s("sawtooth").lpf(4000)`,
+    `${A1_BASS}.s("sawtooth").lpf(400)`,
+    "S4: the starter's 4000 against the target 400",
+  ),
+  a1(
+    "A1.L02",
+    "tb.lpf",
+    "lpf",
+    `${A1_RIFF}.s("sawtooth").lpf(1000)`,
+    `${A1_RIFF}.s("sawtooth").lpf(500)`,
+    "S2: each step of <4000 2000 1000 500> is heard (the last one)",
+  ),
+  a1(
+    "A1.L02",
+    "tb.lpq",
+    "lpq",
+    `${A1_BASS}.s("sawtooth").lpf(400)`,
+    `${A1_BASS}.s("sawtooth").lpf(400).lpq(4)`,
+    "hook: .lpq(4) on the bass at 400 Hz",
+  ),
+  a1(
+    "A1.L02",
+    "tb.lpq",
+    "lpq",
+    `${A1_RIFF}.s("sawtooth").lpf(800).lpq(0)`,
+    `${A1_RIFF}.s("sawtooth").lpf(800).lpq(10)`,
+    "S5: a whistle at the cutoff from 10",
+  ),
+  a1(
+    "A1.L02",
+    "tb.lpenv",
+    "lpenv",
+    `${A1_RIFF}.s("sawtooth").lpf(300)`,
+    `${A1_RIFF}.s("sawtooth").lpf(300).lpenv(4).lpd(.2)`,
+    "S6: the pluck, up four octaves and back in 0.2 s",
+  ),
+  a1(
+    "A1.L02",
+    "tb.hpf",
+    "hpf",
+    `${A1_RIFF}.s("square")`,
+    `${A1_RIFF}.s("square").hpf(400)`,
+    "the riff under .hpf(400)",
+  ),
+  a1(
+    "A1.L02",
+    "tb.bpf",
+    "bpf",
+    `${A1_RIFF}.s("sawtooth")`,
+    `${A1_RIFF}.s("sawtooth").bpf(800)`,
+    "the riff through .bpf(800)",
+  ),
+  // A1.L03 Envelopes
+  a1(
+    "A1.L03",
+    "tb.adsr",
+    "decay",
+    `${A1_BASS}.s("sawtooth").lpf(500)`,
+    `${A1_BASS}.s("sawtooth").lpf(500).decay(.2).sustain(0)`,
+    "S4: the plucked bass",
+  ),
+  a1(
+    "A1.L03",
+    "tb.adsr",
+    "attack",
+    `${A1_PAD}.s("square").gain(.7)`,
+    `${A1_PAD}.s("square").attack(.3).release(.8).gain(.7)`,
+    "S5: the riff swells in and rings on",
+  ),
+  a1(
+    "A1.L03",
+    "tb.adsr",
+    "attack",
+    `${A1_PAD}.s("square")`,
+    `${A1_PAD}.s("square").attack(.3)`,
+    "attack alone",
+  ),
+  a1(
+    "A1.L03",
+    "tb.adsr",
+    "release",
+    `${A1_PAD}.s("square")`,
+    `${A1_PAD}.s("square").release(.8)`,
+    "release alone",
+  ),
+  a1(
+    "A1.L03",
+    "tb.adsr",
+    "sustain",
+    `${A1_PAD}.s("square")`,
+    `${A1_PAD}.s("square").sustain(0)`,
+    "mistake: .sustain(0) alone makes each note a click",
+  ),
+  a1(
+    "A1.L03",
+    undefined,
+    "decay",
+    `${A1_BASS}.s("sawtooth").lpf(500).decay(.2).sustain(0)`,
+    `${A1_BASS}.s("sawtooth").lpf(500).decay(.2)`,
+    "S4 equivalent: .decay(.2) alone sounds as .decay(.2).sustain(0)",
+    { same: true },
+  ),
+  // A1.L04 Space
+  a1("A1.L04", "tb.room", "room", A1_SNARE, `${A1_SNARE}.room(.5)`, "the snare in a room"),
+  a1(
+    "A1.L04",
+    "tb.roomsize",
+    "roomsize",
+    `${A1_SNARE}.room(.5)`,
+    `${A1_SNARE}.room(.5).roomsize(6)`,
+    "hook: a big room (size 6) against the default",
+  ),
+  a1(
+    "A1.L04",
+    "tb.roomsize",
+    "roomsize",
+    `${A1_SNARE}.room(.5).roomsize(1)`,
+    `${A1_SNARE}.room(.5).roomsize(6)`,
+    "S5: a small room against a big one",
+  ),
+  a1(
+    "A1.L04",
+    "tb.delay",
+    "delay",
+    `${A1_RIFF}.s("square").lpf(2000)`,
+    `${A1_RIFF}.s("square").lpf(2000).delay(.4)`,
+    "the riff echoes",
+  ),
+  a1(
+    "A1.L04",
+    "tb.delaytime",
+    "delaytime",
+    `${A1_RIFF}.s("square").lpf(2000).delay(.4)`,
+    `${A1_RIFF}.s("square").lpf(2000).delay(.4).delaytime(.3)`,
+    "hook: half a beat (0.3 s) against the left-out default (0.45 s at 100 BPM)",
+  ),
+  a1(
+    "A1.L04",
+    "tb.delaytime",
+    "delaytime",
+    `${A1_RIFF}.s("square").delay(.4).delaytime(.6).delayfeedback(.3)`,
+    `${A1_RIFF}.s("square").delay(.4).delaytime(.3).delayfeedback(.3)`,
+    "S4: the starter's 0.6 against the target 0.3",
+  ),
+  a1(
+    "A1.L04",
+    "tb.delayfeedback",
+    "delayfeedback",
+    `${A1_RIFF}.s("square").delay(.4).delaytime(.3).delayfeedback(.7)`,
+    `${A1_RIFF}.s("square").delay(.4).delaytime(.3).delayfeedback(.3)`,
+    "S4: the starter's 0.7 against the target 0.3",
+  ),
+  a1(
+    "A1.L04",
+    "tb.delayfeedback",
+    "delayfeedback",
+    `${A1_RIFF}.s("square").delay(.5).delaytime(.3).delayfeedback(.2)`,
+    `${A1_RIFF}.s("square").delay(.5).delaytime(.3).delayfeedback(.7)`,
+    'S3: the two bars of delayfeedback("<.2 .7>")',
+  ),
+  // Orbits: the riff's small room shares the snare's orbit, so one reverb keeps switching size; orbit 2 gives the
+  // riff its own (S5).
+  a1(
+    "A1.L04",
+    "tb.orbit",
+    "orbit",
+    `stack(${A1_SNARE}.room(.5).roomsize(6), ${A1_PAD}.s("square").lpf(2000).room(.3).roomsize(1))`,
+    `stack(${A1_SNARE}.room(.5).roomsize(6), ${A1_PAD}.s("square").lpf(2000).room(.3).roomsize(1).orbit(2))`,
+    "S5: two rooms on one orbit, then the riff on its own",
+  ),
+  // The hook moves the echoing riff to orbit 2 while only the snare has a room: nothing on orbit 1 sets a delay,
+  // so this is reported (does the hook's .orbit(2) change what is heard?), never used to decide tb.orbit.
+  a1(
+    "A1.L04",
+    undefined,
+    "orbit",
+    `stack(${A1_SNARE}.room(.5).roomsize(6), ${A1_RIFF}.s("square").lpf(2000).delay(.4).delaytime(.3).delayfeedback(.4))`,
+    `stack(${A1_SNARE}.room(.5).roomsize(6), ${A1_RIFF}.s("square").lpf(2000).delay(.4).delaytime(.3).delayfeedback(.4).orbit(2))`,
+    "hook: .orbit(2) on the echoing riff when only the snare has a room",
+  ),
+];
+
+/** U08.L05's bass tone: each bass sound, darker and brighter under the bass preset `.lpf()`, at 96 BPM. */
+const U08_BASS = 'n("<[0 ~ 0 4] [5 ~ 5 9] [3 ~ 3 7] [4 ~ 4 8]>").scale("C2:major")';
+export const BASS_TONE_CASES: LessonCase[] = (
+  ["ebass", "fingerbass", "upright", "sawtooth"] as const
+).flatMap((sound) => [
+  {
+    id: "tb.lpf",
+    lesson: "U08.L05",
+    control: "lpf",
+    value: "=",
+    base: `${U08_BASS}.s("${sound}")`,
+    withCode: `${U08_BASS}.s("${sound}").lpf(600)`,
+    claim: `the bass preset .lpf(600) darkens ${sound}`,
+    cps: 96 / 240,
+    cycles: 2,
+  },
+  {
+    id: "tb.lpf",
+    lesson: "U08.L05",
+    control: "lpf",
+    value: "=",
+    base: `${U08_BASS}.s("${sound}").lpf(1200)`,
+    withCode: `${U08_BASS}.s("${sound}").lpf(400)`,
+    claim: `moving .lpf() from 1200 to 400 is heard on ${sound}`,
+    cps: 96 / 240,
+    cycles: 2,
+  },
+]);
+
+/** Every U08–U11 lesson context and A1 row, in the order audibility.pw.ts renders them. */
+export const LESSON_CASES: LessonCase[] = [...A1_CASES, ...BASS_TONE_CASES];

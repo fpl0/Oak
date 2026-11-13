@@ -1,0 +1,57 @@
+{/* U08.L02 Root–Five–Octave: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+The same four chords, the same drums, three basses. Listen to what each one does to the loop.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+A bass shape works like a chord stack: write it once as a cell, and `.add()` moves it onto every root.
+
+<Predict exercise="what-the-4-adds" />
+</Step>
+
+<Step id="S3">
+Run it and follow the bass. Each bar climbs from its root and comes back.
+
+<Example id="up-and-back" views="code,roll" />
+
+<OnPass>Seven steps up from any root is the same letter again, an octave higher; four steps up is its 5th. Over G that 5th is D, degree 2 of C. Root, 5th and octave: one cell, and `.add()` fits it to every chord.</OnPass>
+</Step>
+
+<Step id="S4">
+Disco basses live on this jump. One number to change.
+
+<Editor exercise="the-octave-bounce" />
+
+<OnPass>The root and its octave on alternate eighths, under every chord. `n` counts from 0, so the octave is 7, not 8. That bounce is a whole bass line, and a good place to stop for today if you need to.</OnPass>
+</Step>
+
+<Step id="S5">
+Read this one from the bass clef. The code holds the chords; the bass is yours to write.
+
+<Editor exercise="root-five-from-the-page" />
+
+<OnPass>C to G, then G to D: each bar's root and its 5th, the same cell under both chords. Half notes on the page, a two-number cell in code.</OnPass>
+</Step>
+
+<Step id="S6">
+The 5th and the octave are the two notes a bass reaches for after the root. Tell them apart by ear.
+
+<Choice exercise="which-one-jumps" />
+
+<OnPass>The octave blends with the root, so the line sounds like one note bouncing. The 5th is a new note, so the line moves between two.</OnPass>
+</Step>
+
+<Step id="S7">
+The chords and drums are set. The bass walks from each root to its 3rd; this low, the 3rd makes each chord sound less settled. Give it the 5th or the octave instead, then make the cell your own: more notes, rests, the 5th below the root, anything built from those three.
+
+<Make exercise="your-bass-groove" />
+
+<CanDo id="cd.write.bass-line" />
+
+Root, 5th and octave will put a bass under any loop you write. Next: the note just before each change, which pulls the bass into the new chord.
+
+<Recap />
+</Step>

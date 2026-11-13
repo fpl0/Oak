@@ -5,8 +5,12 @@
 // Scale steps follow Strudel 1.2.6 exactly (verified headlessly in hum.test.ts): `n(k)` is scale step k
 // from the tonic of `.scale("G4:major")`, wrapping by octaves; a step string "3#" / "4b" is that step
 // raised / lowered by a semitone; negative steps go below the tonic.
-import type { KeySpec, LearnerProfile, MeterId, Rat, ScaleMode } from "@oak/content-kit";
-import { barSeconds, labelPitch, METERS, tempoLine } from "@oak/theory";
+//
+// Wave 5: a note held across a bar line is tied over it (c7: the line becomes one sequence over the bars with
+// `.slow(bars)`), a swinging project is straightened before quantising and drafted with `.swingBy`, and in
+// minor the raised 6 and 7 are kept and spelled as the dialect writes them ("5#", "6#"; ♭ degrees "2b", "6b").
+import type { Degree, KeySpec, LearnerProfile, MeterId, Rat, ScaleMode, SwingSpec } from "@oak/content-kit";
+import { barSeconds, labelPitch, METERS, strudelStep, swingByArgs, tempoLine } from "@oak/theory";
 import { median } from "./math.ts";
 import { pitchFramesToNotes, trackerOptionsFor } from "./tracker.ts";
 import type {
@@ -76,9 +80,53 @@ interface Choice {
   step: string;
   midi: number;
   snapped: boolean;
+  /** The degree the step was spelled from, when it is not the key's own label (a kept ♭5 rather than ♯4). */
+  degree?: Degree;
 }
+
+const MAJOR_SEMIS = [0, 2, 4, 5, 7, 9, 11] as const;
+/** Semitones above the tonic of a degree relative to major ("b3" → 3, "#4" → 6), 0–11. */
+function degreeSemis(d: Degree): number | null {
+  const m = /^(bb|b|##|#)?([1-7])$/.exec(d);
+  if (!m) return null;
+  const acc = m[1] ?? "";
+  const alt = acc.startsWith("#") ? acc.length : -acc.length;
+  return ((((MAJOR_SEMIS[Number(m[2]) - 1] as number) + alt) % 12) + 12) % 12;
+}
+
+/**
+ * The step string that plays the chromatic MIDI note `r` in a seven-note scale, spelled as the dialect writes
+ * `degree` (default: the degree Oak labels `r` with): STYLE §6, ♭3 is "2b", ♯4 "3#", ♭5 "4b", ♭7 "6b"; in minor
+ * the raised 6 and 7, la and ti, are "5#" and "6#". `null` when the scale is not a seven-note one or the spelling
+ * would not play `r`.
+ */
+function dialectStep(r: number, tonic: number, key: KeySpec, degree?: Degree): string | null {
+  if (SCALE_INTERVALS[key.mode].length !== 7) return null;
+  const m = /^(\d+)(#|b)$/.exec(String(strudelStep(degree ?? labelPitch(r, key).degree, key)));
+  if (!m) return null;
+  const idx = Number(m[1]);
+  const acc = m[2] as string;
+  const oct = Math.round((r - stepMidi(`${idx}${acc}`, tonic, key.mode)) / 12);
+  const step = `${idx + 7 * oct}${acc}`;
+  return stepMidi(step, tonic, key.mode) === r ? step : null;
+}
+
+/** Degrees kept as chromatic steps by default (`HumDraftOptions.keepDegrees`): la and ti in minor. */
+export function defaultKeepDegrees(mode: ScaleMode): readonly Degree[] {
+  if (mode === "minor") return ["6", "7"];
+  if (mode === "harmonic minor") return ["6"];
+  return [];
+}
+
 /** Nearest scale step to a (fractional, tuning-corrected) MIDI value. */
-function chooseStep(m: number, tonic: number, mode: ScaleMode, chromatic: "snap" | "keep"): Choice {
+function chooseStep(
+  m: number,
+  tonic: number,
+  key: KeySpec,
+  chromatic: "snap" | "keep",
+  keep: readonly Degree[],
+): Choice {
+  const mode = key.mode;
   const iv = SCALE_INTERVALS[mode];
   const len = iv.length;
   const r = Math.round(m);
@@ -87,9 +135,14 @@ function chooseStep(m: number, tonic: number, mode: ScaleMode, chromatic: "snap"
   const pc = rel - 12 * oct;
   const idx = iv.indexOf(pc);
   if (idx >= 0) return { step: String(idx + oct * len), midi: r, snapped: false };
-  if (chromatic === "keep") {
-    // Raise the scale tone below (Strudel's "3#"), else lower the one above ("1b"); the tonic an octave up
-    // counts as the tone above pc 11.
+  // A kept degree is matched by its pitch (♭5 and ♯4 are one pitch) and spelled as it was named.
+  const keptAs = keep.find((d) => degreeSemis(d) === (((r - tonicPc(key.tonic)) % 12) + 12) % 12);
+  if (chromatic === "keep" || keptAs) {
+    const spelled = dialectStep(r, tonic, key, keptAs);
+    if (spelled !== null)
+      return { step: spelled, midi: r, snapped: false, ...(keptAs ? { degree: keptAs } : {}) };
+    // Pentatonic and blues scales: raise the scale tone below ("3#"), else lower the one above ("1b"); the
+    // tonic an octave up counts as the tone above pc 11.
     const below = iv.indexOf(pc - 1);
     if (below >= 0) return { step: `${below + oct * len}#`, midi: r, snapped: false };
     const above = iv.indexOf(pc + 1);
@@ -104,6 +157,29 @@ function chooseStep(m: number, tonic: number, mode: ScaleMode, chromatic: "snap"
   }
   const b = best as { k: number; midi: number };
   return { step: String(b.k), midi: b.midi, snapped: true };
+}
+
+/**
+ * Straightens a time (seconds from the downbeat) on the swung subdivision (contracts §6.10): within each swing
+ * slot of `slotSec` (a beat for 8ths, half a beat for 16ths) the swung off-beat at `(1 + amount) / 2` maps to the
+ * straight off-beat at 1/2, piecewise linearly, so an onset is quantised to the straight grid it was swung from.
+ */
+export function straightenTime(t: number, slotSec: number, amount: number): number {
+  if (!(amount > 0) || !(slotSec > 0)) return t;
+  const k = Math.floor(t / slotSec);
+  const p = t / slotSec - k;
+  const off = (1 + amount) / 2;
+  const q = p <= off ? (p * 0.5) / off : 0.5 + ((p - off) * 0.5) / (1 - off);
+  return (k + q) * slotSec;
+}
+
+/** A swing amount as STYLE §1 rule 6 writes a musical ratio: `1/3`, `1/4`; otherwise a decimal (`.2`). */
+export function amountText(x: number): string {
+  for (let d = 2; d <= 12; d++) {
+    const n = Math.round(x * d);
+    if (n > 0 && Math.abs(n / d - x) < 1e-6) return `${n}/${d}`;
+  }
+  return String(Math.round(x * 100) / 100).replace(/^0\./, ".");
 }
 
 function gcd(a: number, b: number): number {
@@ -132,30 +208,42 @@ export function tuningOffsetCents(midis: readonly number[]): number {
   return cents <= -50 ? 50 : cents;
 }
 
-/** Slots per bar of the default grid: eighth notes. */
-export function defaultSlotsPerBar(meter: MeterId): number {
+/** Slots per bar of the default grid: eighth notes (sixteenths when the line swings 16ths). */
+export function defaultSlotsPerBar(meter: MeterId, swing?: SwingSpec | null): number {
   const m = METERS[meter];
+  if (swing?.subdivision === 16 && swing.amount > 0 && swingByArgs(meter, 16) !== null)
+    return m.unitsPerBar * 4;
   return m.den === 4 ? m.num * 2 : m.num;
 }
 
 /**
  * Turns sung notes into a draft Strudel line in `key` at `bpm`, quantized to the bar grid (eighth notes
  * by default). Pitch: a constant tuning offset is removed first, then each note goes to the nearest scale
- * step ("snap", the default) or keeps a chromatic step ("keep": "3#"). Time: onsets and ends round to the
- * grid from `downbeat` (default: the first note's start); two notes on one slot keep the longer one; a
- * note that crosses a bar line is cut at the bar line; bars past `maxBars` are dropped. Each bar becomes
- * one step of a `<…>` sequence, reduced to the coarsest grid that keeps every onset and length.
+ * step ("snap", the default) or keeps a chromatic step ("keep", and always for `keepDegrees`: the raised 6 and 7
+ * in minor), spelled as the dialect writes the degree ("2b" for ♭3, "6#" for the raised 7 in minor). Time: with
+ * a declared swing, onsets and ends are straightened first; then they round to the grid from `downbeat`
+ * (default: the first note's start); two notes on one slot keep the longer one; bars past `maxBars` are
+ * dropped. Each bar becomes one step of a `<…>` sequence, reduced to the coarsest grid that keeps every onset
+ * and length. When a note is held across a bar line (c7) the whole line is one sequence over the bars with
+ * `.slow(bars)`, so a `_` carries the note over the bar line: never a rest on the next beat 1.
  */
 export function draftFromHum(notes: readonly SungNote[], opts: HumDraftOptions): HumDraft {
   const meter: MeterId = opts.meter ?? "4/4";
-  const slots = Math.max(1, Math.round(opts.slotsPerBar ?? defaultSlotsPerBar(meter)));
+  const warnings: HumDraftWarning[] = [];
+  const asked = opts.swing && opts.swing.amount > 0 ? opts.swing : null;
+  const swingUnits = asked ? swingByArgs(meter, asked.subdivision) : null;
+  if (asked && swingUnits === null) warnings.push({ code: "swing-ignored" });
+  const swing: SwingSpec | null = asked && swingUnits !== null ? asked : null;
+  const slots = Math.max(1, Math.round(opts.slotsPerBar ?? defaultSlotsPerBar(meter, swing)));
   const maxBars = Math.max(1, Math.round(opts.maxBars ?? 8));
   const latency = (opts.latencyMs ?? 0) / 1000;
   const label = opts.label ?? "mel";
   const chromatic = opts.chromatic ?? "snap";
+  const keep = opts.keepDegrees ?? defaultKeepDegrees(opts.key.mode);
   const barSec = barSeconds(opts.bpm, meter);
   const slotSec = barSec / slots;
-  const warnings: HumDraftWarning[] = [];
+  const swingSlotSec = swing && swingUnits ? barSec / swingUnits : 0;
+  const straight = (t: number) => (swing ? straightenTime(t, swingSlotSec, swing.amount) : t);
 
   const sung = notes
     .map((n, source) => ({ source, start: n.start - latency, end: n.end - latency, midi: n.midi }))
@@ -205,13 +293,13 @@ export function draftFromHum(notes: readonly SungNote[], opts: HumDraftOptions):
   const placed: Placed[] = [];
   sung.forEach((n, k) => {
     const m = (corrected[k] as number) + 12 * octaveShift;
-    const on = Math.round((n.start - downbeat) / slotSec);
-    const off = Math.max(on + 1, Math.round((n.end - downbeat) / slotSec));
+    const on = Math.round(straight(n.start - downbeat) / slotSec);
+    const off = Math.max(on + 1, Math.round(straight(n.end - downbeat) / slotSec));
     if (on < 0) {
       warnings.push({ code: "before-downbeat", source: n.source });
       return;
     }
-    const choice = chooseStep(m, tonic, opts.key.mode, chromatic);
+    const choice = chooseStep(m, tonic, opts.key, chromatic, keep);
     if (choice.snapped) {
       warnings.push({
         code: "chromatic-snapped",
@@ -239,52 +327,61 @@ export function draftFromHum(notes: readonly SungNote[], opts: HumDraftOptions):
     kept = kept.filter((p) => p.on < limit);
     warnings.push({ code: "truncated", bars: maxBars });
   }
-  // A note ends at the next onset, at the bar line, and inside the draft.
+
+  // A note ends at the next onset and inside the draft; one held across a bar line is tied over it (c7).
   const draftNotes: HumDraftNote[] = [];
-  const events: { bar: number; on: number; off: number; step: string }[] = [];
+  const events: { on: number; off: number; step: string }[] = [];
+  let tied = false;
   kept.forEach((p, k) => {
     const next = kept[k + 1];
     const bar = Math.floor(p.on / slots);
-    const barEnd = (bar + 1) * slots;
-    let off = Math.min(p.off, next ? next.on : p.off, limit);
-    if (off > barEnd) {
-      warnings.push({ code: "tie-truncated", source: p.source, bar });
-      off = barEnd;
-    }
+    const off = Math.min(p.off, next ? next.on : p.off, limit);
+    const crosses = off > (bar + 1) * slots;
+    if (crosses) tied = true;
     const onIn = p.on - bar * slots;
-    const offIn = off - bar * slots;
-    events.push({ bar, on: onIn, off: offIn, step: p.choice.step });
-    draftNotes.push({
+    events.push({ on: p.on, off, step: p.choice.step });
+    const note: HumDraftNote = {
       source: p.source,
       bar,
       onset: rat(onIn, slots),
-      dur: rat(offIn - onIn, slots),
+      dur: rat(off - p.on, slots),
       step: p.choice.step,
       midi: p.choice.midi,
       cents: Math.round((p.m - p.choice.midi) * 1000) / 10,
-      degree: labelPitch(p.choice.midi, opts.key).degree,
+      degree: p.choice.degree ?? labelPitch(p.choice.midi, opts.key).degree,
       octave: Math.floor((p.choice.midi - tonic) / 12),
-    });
+    };
+    if (crosses) note.tied = true;
+    draftNotes.push(note);
   });
 
-  const bars =
-    events.length > 0 ? Math.min(maxBars, (events[events.length - 1] as { bar: number }).bar + 1) : 0;
+  const lastOff = events.length > 0 ? (events[events.length - 1] as { off: number }).off : 0;
+  const bars = events.length > 0 ? Math.min(maxBars, Math.ceil(lastOff / slots)) : 0;
   if (events.length === 0) warnings.push({ code: "empty" });
-  const barTexts: string[] = [];
-  for (let b = 0; b < bars; b++)
-    barTexts.push(
-      barText(
-        events.filter((e) => e.bar === b),
-        slots,
-      ),
-    );
   let pattern: string;
+  let timing = "";
   if (bars === 0) pattern = "~";
-  else if (bars === 1) pattern = unwrap(barTexts[0] as string);
-  else pattern = `<${barTexts.join(" ")}>`;
+  else if (tied) {
+    // One sequence over every bar: `_` continues a note across a bar line.
+    pattern = unwrap(cellsText(events, bars * slots));
+    timing = `.slow(${bars})`;
+  } else {
+    const barTexts: string[] = [];
+    for (let b = 0; b < bars; b++)
+      barTexts.push(
+        cellsText(
+          events
+            .filter((e) => Math.floor(e.on / slots) === b)
+            .map((e) => ({ on: e.on - b * slots, off: e.off - b * slots, step: e.step })),
+          slots,
+        ),
+      );
+    pattern = bars === 1 ? unwrap(barTexts[0] as string) : `<${barTexts.join(" ")}>`;
+  }
+  if (swing && swingUnits !== null) timing += `.swingBy(${amountText(swing.amount)}, ${swingUnits})`;
   const tempo = tempoLine(opts.bpm, meter);
   const sound = opts.sound ? `.s("${opts.sound}")` : "";
-  const line = `${label}: n("${pattern}").scale("${scale}")${sound}`;
+  const line = `${label}: n("${pattern}").scale("${scale}")${timing}${sound}`;
   return {
     machineMade: true,
     tempoLine: tempo,
@@ -293,6 +390,8 @@ export function draftFromHum(notes: readonly SungNote[], opts: HumDraftOptions):
     pattern,
     scale,
     bars,
+    layout: tied ? "tied" : "bars",
+    swing,
     notes: draftNotes,
     tuningCents: Math.round(tuningCents * 10) / 10,
     octaveShift,
@@ -300,8 +399,11 @@ export function draftFromHum(notes: readonly SungNote[], opts: HumDraftOptions):
   };
 }
 
-/** One bar as mini-notation on the coarsest grid that keeps every onset and end: `[0 _ 2 4]`, or `~`. */
-function barText(events: readonly { on: number; off: number; step: string }[], slots: number): string {
+/**
+ * A span of `slots` slots as mini-notation on the coarsest grid that keeps every onset and end: `[0 _ 2 4]`, or
+ * `~`. Events are in slots from the span's start and may run to its end.
+ */
+function cellsText(events: readonly { on: number; off: number; step: string }[], slots: number): string {
   if (events.length === 0) return "~";
   let g = slots;
   for (const e of events) g = gcd(gcd(g, e.on), e.off);

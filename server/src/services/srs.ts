@@ -753,7 +753,11 @@ export class SrsService {
     } else if (def) {
       trials = p.kind === "anchor" ? GOVERNOR.anchorTrials : def.trialsPerSet;
     }
-    const level = row ? (p.kind === "anchor" ? Math.max(1, row.level - 1) : row.level) : null;
+    // Never above the level its gates open (contracts §7.3): a checkpoint's level-setting item can confirm a family at
+    // its mastery level before every level's lesson is done; the set itself runs at the open level (drills.start).
+    const open = def ? this.deps.catalog.levelLimits(def.id).maxOpenLevel : Number.POSITIVE_INFINITY;
+    const own = row ? Math.min(row.level, open) : null;
+    const level = own === null ? null : p.kind === "anchor" ? Math.max(1, own - 1) : Math.max(1, own);
     return {
       id,
       kind: p.kind,

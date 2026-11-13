@@ -135,7 +135,8 @@ export function KeyPanel({ current, keys, preview }: KeyPanelProps) {
       <ul className="oak-neighbours" aria-label="Neighbouring keys">
         {neighbours(current).map((nb) => {
           const on = preview?.playing && sameKey(preview.playing, nb.key);
-          const can = preview?.movable && nb.key.mode === current.mode;
+          // Wave 5: the relative and parallel keys preview too (the same degrees heard in the twin's mode).
+          const can = preview?.movable;
           return (
             <li key={nb.label}>
               <span className="oak-muted">{nb.label}</span>{" "}

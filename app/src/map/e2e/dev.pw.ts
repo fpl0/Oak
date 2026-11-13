@@ -1,14 +1,15 @@
 // The dev pages against the real server: /dev/telemetry over step rows posted through the API and the seeded
 // session telemetry, /dev/qa over reports posted through the API (replay, copy as test case, triage), and
 // /dev/listen (every curated sound and example, verdicts saved on the server), and /dev/kit with the Wave 4
-// pieces. Screenshots in both themes.
+// and Wave 5 pieces. Screenshots in both themes.
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import { SCREENSHOT_MATRIX } from "../../../../e2e/support/stack.ts";
 import { shoot, useUiPrefs } from "../../../../e2e/support/ui.ts";
+import { stack } from "./playwright.config.ts";
 
 const SHOTS = fileURLToPath(new URL("./screenshots", import.meta.url));
-const API = { "X-Oak": "1", Origin: "http://127.0.0.1:5207" };
+const API = { "X-Oak": "1", Origin: stack.baseURL };
 
 const iso = (minAgo: number) => new Date(Date.now() - minAgo * 60_000).toISOString();
 const step = (
@@ -216,7 +217,7 @@ for (const m of SCREENSHOT_MATRIX) {
   });
 }
 
-test("the UI kit gallery shows the Wave 4 pieces under the Wave 3 sections, in both themes", async ({
+test("the UI kit gallery shows the Wave 4 and Wave 5 pieces under the Wave 3 sections, in both themes", async ({
   page,
 }) => {
   await page.routeWebSocket(/.*/, () => {});
@@ -235,5 +236,13 @@ test("the UI kit gallery shows the Wave 4 pieces under the Wave 3 sections, in b
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);
     await shoot(page, SHOTS, "dev-kit-wave4", theme);
+    // Wave 5: the scope, the section strip, the twelve-bar chart and the probe controls nest after Wave 4.
+    const w5 = page.getByTestId("kit-wave5");
+    await expect(w5).toBeVisible();
+    await expect(w5.getByRole("heading", { level: 2, name: "UI kit · Wave 5" })).toBeVisible();
+    await w5.scrollIntoViewIfNeeded();
+    const overflow5 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow5).toBeLessThanOrEqual(0);
+    await shoot(page, SHOTS, "dev-kit-wave5", theme);
   }
 });

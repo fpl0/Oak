@@ -17,7 +17,9 @@ const ALLOWED: Record<string, string[]> = {
   "content-kit": [],
   api: ["content-kit"],
   theory: ["content-kit"],
-  grader: ["content-kit", "theory"],
+  // Wave 5: the `notates` rule (C3's lead sheet) engraves through @oak/notation with `approximate = false`
+  // (docs/design/wave5.md §1, grader seam). Notation is isomorphic and never imports the grader.
+  grader: ["content-kit", "theory", "notation"],
   notation: ["content-kit", "theory"],
   pitch: ["content-kit", "theory"],
   drills: ["content-kit", "theory", "pitch"],

@@ -5,6 +5,8 @@ import {
   barLabelEvery,
   barLines,
   barsOfLoop,
+  beatSecOfGrid,
+  beatTicks,
   bpmFromTaps,
   clampRate,
   downbeatFromTaps,
@@ -16,7 +18,12 @@ import {
   loopInBars,
   loopLabel,
   loopOf,
+  nudgeDownbeat,
+  offBeatAt,
   onBarLines,
+  playheadAt,
+  STAMP_FRESH_SEC,
+  scaleTempo,
   setLoopPoint,
   shiftLoop,
   snapLoop,
@@ -25,6 +32,7 @@ import {
   stepRate,
   stepSemitones,
   TAPS_KEPT,
+  tapProgress,
 } from "./grid.ts";
 
 describe("transport steps", () => {
@@ -162,5 +170,54 @@ describe("bar numbers on the waveform", () => {
     // 40 minutes at 120 BPM fit into 1265 px: about 1 px a bar, four-digit numbers.
     expect(barLabelEvery(1265 / 1200, 1200)).toBe(64);
     expect(barLabelEvery(0, 10)).toBe(1);
+  });
+});
+
+describe("Wave 5: song loops and setting the bars", () => {
+  const g = { downbeatS: 0, barSec: 2 };
+  test("with a pickup, loops count bars from the first full bar", () => {
+    expect(loopLabel({ startS: 0, endS: 2 }, g, true)).toBe("pickup");
+    expect(loopLabel({ startS: 0, endS: 10 }, g, true)).toBe("pickup + bars 1–4");
+    expect(loopLabel({ startS: 0, endS: 4 }, g, true)).toBe("pickup + bar 1");
+    expect(loopLabel({ startS: 8, endS: 18 }, g, true)).toBe("bars 4–8");
+    expect(loopLabel({ startS: 8, endS: 18 }, g)).toBe("bars 5–9");
+  });
+  test("bar 1 moves by a beat, never before the start", () => {
+    const grid = { downbeatS: 0.3, barSec: 2.4 };
+    expect(beatSecOfGrid(grid, "4/4")).toBeCloseTo(0.6);
+    expect(beatSecOfGrid(grid, "3/4")).toBeCloseTo(0.8);
+    expect(nudgeDownbeat(0.3, 0.6, 1)).toBe(0.9);
+    expect(nudgeDownbeat(0.9, 0.6, -1)).toBe(0.3);
+    expect(nudgeDownbeat(0.3, 0.6, -1)).toBeNull();
+  });
+  test("half and double time stay inside the tempo range", () => {
+    expect(scaleTempo(92, 2)).toBe(184);
+    expect(scaleTempo(92, 0.5)).toBe(46);
+    expect(scaleTempo(200, 2)).toBeNull();
+    expect(scaleTempo(50, 0.5)).toBeNull();
+  });
+  test("swung off-beats sit at two thirds of the beat (swingBy(1/3, 4))", () => {
+    expect(offBeatAt(false)).toBe(0.5);
+    expect(offBeatAt(true)).toBeCloseTo(2 / 3);
+    const ticks = beatTicks(4, true);
+    expect(ticks).toHaveLength(8);
+    expect(ticks[1]).toEqual({ at: (0 + 2 / 3) / 4, kind: "off" });
+    expect(beatTicks(3, false).map((t) => t.at)).toEqual([0, 1 / 6, 1 / 3, 1 / 2, 2 / 3, 5 / 6]);
+  });
+  test("tap progress counts to eight", () => {
+    expect(tapProgress([1, 2, 3])).toEqual({ count: 3, of: 8, done: false });
+    expect(tapProgress([1, 2, 3, 4, 5, 6, 7, 8]).done).toBe(true);
+  });
+});
+
+describe("the playhead between position updates (tap tempo)", () => {
+  test("extrapolated from a fresh update at the playback rate, capped at the end", () => {
+    expect(playheadAt({ t: 2, at: 1000 }, 1100, 2, 1, 60)).toBeCloseTo(2.1, 6);
+    expect(playheadAt({ t: 2, at: 1000 }, 1100, 2, 0.5, 60)).toBeCloseTo(2.05, 6);
+    expect(playheadAt({ t: 59.99, at: 1000 }, 1200, 59.99, 1, 60)).toBe(60);
+  });
+  test("no update yet, or a stale one (playback just started): the transport's own time, never the end", () => {
+    expect(playheadAt({ t: 0, at: 0 }, 5_000_000, 0.02, 1, 43.6)).toBe(0.02);
+    expect(playheadAt({ t: 3, at: 1000 }, 1000 + STAMP_FRESH_SEC * 1000 + 1, 3, 1, 43.6)).toBe(3);
   });
 });

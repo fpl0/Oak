@@ -1,0 +1,57 @@
+{/* A1.L03 Envelopes: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+Your loop from Filters. A low-pass changed what each note is made of; today changes how each note moves in time: how it starts, how it falls, how it ends.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+In the filter lesson, `.lpd()` moved the cutoff over a fraction of a second. These controls move the loudness the same way. Pick before you run it. <CodeRef fn="attack" />
+
+<Predict exercise="a-slower-start" />
+</Step>
+
+<Step id="S3">
+The scope draws loudness as the height of the wave. Watch one note go through its whole life.
+
+<Example id="four-stages" views="code" />
+
+<OnPass>Attack: 0.3 seconds to reach full level. Decay: 0.2 seconds to fall to the sustain level, half. Sustain: that level, held while the note lasts. Release: 0.8 seconds to die away after it ends. Those four stages are the note's **envelope**. With `.sustain(0)` the note would die away during the decay, even while it is still held.</OnPass>
+</Step>
+
+<Step id="S4">
+A bass that stops on its own leaves room for the kick. Match the target by ear.
+
+<Editor exercise="pluck-the-bass" />
+
+<OnPass>A pluck: each bass note hits, falls to nothing in a fifth of a second and gets out of the way. Set only `.decay()` and the sustain falls to nothing on its own, the same pluck. A good place to stop for today if you need to.</OnPass>
+</Step>
+
+<Step id="S5">
+The opposite shape. On longer notes a slow start and a long tail turn a square into something like a pad.
+
+<Editor exercise="swell-the-riff" />
+
+<OnPass>Each riff note swells in over 0.3 seconds and rings for 0.8 after it ends, so the notes overlap and blur together. Set only `.attack()` and `.release()` and the note holds at full level in between.</OnPass>
+</Step>
+
+<Step id="S6">
+Your ear for the envelope. Two bars, one change.
+
+<Choice exercise="start-or-tail" />
+
+<OnPass>A softer start blurs the front of each note; a longer tail fills the gaps after it. Oak brings this back in your warm-ups, beside the cutoff.</OnPass>
+</Step>
+
+<Step id="S7">
+Back to the loop from Filters. A punchy part and a floating part sit well together: try a different shape on each.
+
+<Make exercise="shape-your-loop" />
+
+<CanDo id="cd.code.envelopes" />
+
+Next, whenever you like: Space puts your loop in a room, with echoes in time.
+
+<Recap />
+</Step>

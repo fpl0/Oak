@@ -3,7 +3,9 @@
 // Entries 01–10 are the ten patterns spike S4 required; the rest cover meters, ties, tuplets, swing,
 // pickups, staves, keys, chromatic spelling, voicings and lead sheets; 132–181 (Wave 4) cover triads and
 // inversions, chord symbols and Roman numerals, chords on the grand staff, lead sheets with pickups, key changes
-// inside a bar and two keys on one staff, much of it the U05–U07 material of content/specs.
+// inside a bar and two keys on one staff, much of it the U05–U07 material of content/specs; 182– (Wave 5,
+// corpus-w5.ts) cover minor keys, blues, swing, bass lines, sections and the U08–U11 material.
+import { CORPUS_W5 } from "./corpus-w5.ts";
 import type { CorpusEntry } from "./harness.ts";
 
 export const CORPUS: CorpusEntry[] = [
@@ -243,7 +245,7 @@ export const CORPUS: CorpusEntry[] = [
     expect: {
       voices: { S1: "C4:8 D4:8 E4:8 F4:8 G4:8 A4:8 B4:8 C5:8" },
       approximate: false,
-      abc: ['"^Swing 8ths"'],
+      abc: ['Q:"Swing 8ths"\n'],
     },
   },
   {
@@ -255,7 +257,7 @@ export const CORPUS: CorpusEntry[] = [
     expect: {
       voices: { DR: Array(16).fill("hh:16").join(" ") },
       approximate: false,
-      abc: ['"^Swing 16ths"', "clef=perc"],
+      abc: ['Q:"Swing 16ths"\n', "clef=perc"],
     },
   },
   {
@@ -3656,4 +3658,6 @@ export const CORPUS: CorpusEntry[] = [
       barNumbers: [5],
     },
   },
+  // --- Wave 5 (corpus-w5.ts) ----------------------------------------------------------------------
+  ...CORPUS_W5,
 ];

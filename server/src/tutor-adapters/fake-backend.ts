@@ -31,6 +31,8 @@ export const FAKE_TUTOR_MARKERS = {
   "#reveal": "answers with one sentence and the [[reveal]] token (the Reveal (hint 4) button)",
   "#long": "a long markdown answer using every music token kind",
   "#empty": "an answer with no text at all (only done)",
+  "#sections":
+    "an answer that names the piece's sections (verse, chorus) and a bar range, so e2e can see section chips stream on a subject with arrange() sections",
   "#echo":
     "a worst-case model: calls get_lesson_context for the step on screen and repeats everything it was given (the oak_context and the tool result) in its answer, so a test can prove what the model could ever say at each rung",
 } as const;
@@ -98,6 +100,12 @@ export function replyFor(turn: Pick<BackendTurn, "kind" | "user">, markers: Set<
   if (markers.has("#empty")) return "";
   if (markers.has("#reveal"))
     return "I can't give that away while the step is open, but you can take the last hint. [[reveal]]";
+  if (markers.has("#sections"))
+    return [
+      "The verse and the chorus differ on two axes: the chorus melody sits higher, and the hats double up.",
+      "Loop the verse, then the chorus, and listen for the lift where they meet ([[bars:8-9]]).",
+      "If the chorus still feels flat, give its bass more notes than the verse's.",
+    ].join(" ");
   if (markers.has("#long"))
     return [
       "Here is the whole picture, one layer at a time.",

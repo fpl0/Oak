@@ -73,7 +73,8 @@ export function viewFor(
  */
 export interface AnswerShape {
   /** `notes`: notes written on a staff, each answer slot a note. */
-  kind: "code" | "notes" | "answer" | "questions" | "sung";
+  /** `tapped` (Wave 5): taps along with a groove; each finding names its own note, so no "Answer n" in front. */
+  kind: "code" | "notes" | "answer" | "questions" | "sung" | "tapped";
   listen?: boolean;
   /** An answer of several slots (a numeral or a function per bar): one wrong slot is named, not "this one". */
   slotted?: boolean;
@@ -81,13 +82,14 @@ export interface AnswerShape {
    * What a slot is called: "bar" for the RN palette, one numeral a bar in a lesson or a checkpoint, whose slots
    * read "bar 1" … (review:journey: the verdict said "Answer 3" under a slot labelled "bar 3"); else "answer".
    */
-  slotNoun?: "bar";
+  slotNoun?: "bar" | "section";
 }
 
 export function shapeOf(ex: Exercise | undefined): AnswerShape {
   if (!ex) return { kind: "code" };
   if (ex.kind === "sing" || (ex.kind === "all" && ex.parts.every((p) => p.kind === "sing")))
     return { kind: "sung" };
+  if (ex.kind === "tap") return { kind: "tapped", listen: true };
   if (ex.kind === "run-investigate")
     return ex.questions.length > 1 ? { kind: "questions" } : { kind: "answer" };
   if (ex.kind === "staff-write" && ex.answer.ui === "staff-input" && ex.answer.mode !== "key-signature")
@@ -107,6 +109,9 @@ export function shapeOf(ex: Exercise | undefined): AnswerShape {
     "answer" in ex && ex.answer && typeof ex.answer === "object" && "slots" in ex.answer
       ? ex.answer.slots
       : 1;
+  // Wave 5: a chart answers bar by bar, a form section by section; their slots are named so ("Bar 10").
+  if (ui === "bar-grid") return { kind: "answer", listen: heard, slotted: true, slotNoun: "bar" };
+  if (ui === "form") return { kind: "answer", listen: heard, slotted: true, slotNoun: "section" };
   return {
     kind: "answer",
     listen: heard,
@@ -175,6 +180,12 @@ export function summaryOf(
       const n = notes > 0 ? notes : view.issues.filter((i) => i.severity !== "praise").length;
       return `Not there yet: ${n} ${n === 1 ? "note" : "notes"} to sing again.`;
     }
+    if (shape.kind === "tapped") {
+      const n = view.issues.filter((i) => i.severity === "error" || i.severity === "warn").length;
+      return n > 0
+        ? `Not in time yet: ${n} ${n === 1 ? "tap" : "taps"} to look at. Listen, then tap along again.`
+        : "Not in time yet. Listen, then tap along again.";
+    }
     const slots = wrongSlots(view);
     const noun = shape.kind === "questions" ? "question" : (shape.slotNoun ?? "answer");
     if (slots.length > 1 || (slots.length === 1 && (shape.kind === "questions" || shape.slotted))) {
@@ -211,7 +222,7 @@ export function issueLines(
   // with no place in the music (a key signature, a sung take) has no "where" — never "Somewhere in the piece".
   // A sung note names itself ("Note 2: …"), so it carries no "Answer n" in front, and the notes come in order.
   // An answer slot with nothing to say yet (rung 0 hides the words) is already named by the summary.
-  const sung = shape.kind === "sung";
+  const sung = shape.kind === "sung" || shape.kind === "tapped";
   // `chord()` itself locked says it once: a line per chord name it was given would only repeat it.
   const chordLocked = view.issues.some((i) => i.id === "code.locked-tool" && /\bchord\b/.test(i.what ?? ""));
   const issues = view.issues.filter(
@@ -219,7 +230,7 @@ export function issueLines(
       !(view.status === "pass" && i.severity === "praise") && !(chordLocked && i.id === "code.locked-chord"),
   );
   const ordered = sung ? [...issues].sort((a, b) => (a.where.slot ?? 0) - (b.where.slot ?? 0)) : issues;
-  return ordered
+  const lines = ordered
     .filter(
       (i) =>
         !(
@@ -238,8 +249,8 @@ export function issueLines(
       const where = slotOnly
         ? sung
           ? ""
-          : `${shape.kind === "questions" ? "Question" : shape.kind === "notes" ? "Note" : "Answer"} ${w.slot}`
-        : placed
+          : `${shape.kind === "questions" ? "Question" : shape.kind === "notes" ? "Note" : shape.slotNoun === "bar" ? "Bar" : shape.slotNoun === "section" ? "Section" : "Answer"} ${w.slot}`
+        : placed && !(sung && w.bar === undefined)
           ? whereText(i)
           : "";
       return {
@@ -249,6 +260,26 @@ export function issueLines(
         fix: i.fix ?? null,
       };
     });
+  return collapseRepeats(lines, shape.kind === "tapped" ? "taps" : "times");
+}
+
+/**
+ * The same finding said once with how often it happened: 24 taps between the kicks read as one line "(24 taps)",
+ * not 24 identical lines. Lines that name their own place (a bar, a note) stay apart.
+ */
+export function collapseRepeats<L extends { where: string; what: string | null; fix: string | null }>(
+  lines: readonly L[],
+  noun: string,
+): L[] {
+  const out: { line: L; n: number }[] = [];
+  for (const l of lines) {
+    const same = out.find((o) => o.line.where === l.where && o.line.what === l.what && o.line.fix === l.fix);
+    if (same && l.where === "") same.n += 1;
+    else out.push({ line: l, n: 1 });
+  }
+  return out.map(({ line, n }) =>
+    n > 1 && line.what ? { ...line, what: `${line.what} (${n} ${noun})` } : line,
+  );
 }
 
 /** Per-part marks: a slot, blank or choice with a finding is wrong; rung 0 may say where (contracts §10.5). */
@@ -293,6 +324,9 @@ export function revealValue(ex: Exercise, spec: AnswerSpec | null, trial: Trial 
     case "number":
       if (ex.kind === "predict" && typeof ex.correct === "number") return ex.correct;
       return correct?.number ?? null;
+    case "bar-buttons":
+      // "Which bar?" (U09.L01 S6, U09.L05 S6, U11.L08 S5): the bar the answer names.
+      return typeof correct?.number === "number" ? [correct.number] : null;
     case "text":
       // A several-part answer (a scale spelled letter by letter) is revealed whole, not its first letter.
       return correct?.text && correct.text.length > 0 ? correct.text.join(" ") : null;

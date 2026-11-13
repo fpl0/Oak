@@ -17,7 +17,7 @@ import {
 } from "./engine.ts";
 import { SCHEMA_LOOPS } from "./gen/harmony.ts";
 import { intervalSemis } from "./gen/interval.ts";
-import { MODE_VAMPS } from "./gen/key.ts";
+import { CLIMBS, MODE_VAMPS } from "./gen/key.ts";
 import { gradeAnswer, gradeCodeTrial } from "./grade.ts";
 import { degreeSemis, keysFor, parseDegree } from "./kernel.ts";
 import { trialSeed } from "./rng.ts";
@@ -194,9 +194,13 @@ async function checkAnswer(
       expect(exp.text).toEqual(notes);
       break;
     }
-    case "key-scale-spell":
-      expect(exp.text).toEqual(tonalScale(key as KeySpec));
+    case "key-scale-spell": {
+      // The blues scale's blue note may be spelled ♯4 where tonal's ♭5 needs a double flat (B𝄫 → A).
+      const want = tonalScale(key as KeySpec);
+      expect((exp.text ?? []).map((n) => Note.chroma(n))).toEqual(want.map((n) => Note.chroma(n)));
+      if ((key as KeySpec).mode !== "blues") expect(exp.text).toEqual(want);
       break;
+    }
     case "degree-index": {
       if (exp.text && trial.category !== "chromatic") {
         const n = Number(/n\("(-?\d+)"\)/.exec(String(p.prompt))?.[1]);
@@ -227,7 +231,13 @@ async function checkAnswer(
         const ans = exp.text?.[0] as string;
         expect(Note.chroma(Note.transpose(key.tonic, up ? "5P" : "4P"))).toBe(Note.chroma(ans));
       }
-      if (trial.category === "parallel") expect(exp.number).toBe(3);
+      if (trial.category === "parallel" && key) {
+        // The parallel minor's own signature (tonal's minor key), three flats more than its major.
+        const sig = Key.minorKey(key.tonic).keySignature;
+        const n = sig.length === 0 ? "0" : `${sig.length}${sig[0]}`;
+        expect(exp.text?.[0]).toBe(n);
+        expect(Key.majorKey(key.tonic).alteration - Key.minorKey(key.tonic).alteration).toBe(3);
+      }
       break;
     }
     case "harmony-bass": {
@@ -245,8 +255,9 @@ async function checkAnswer(
     case "key-mode": {
       const scale = tonalScale(key as KeySpec).map((n) => Note.chroma(n));
       for (const m of await midisOf("mel")) expect(scale).toContain(((m % 12) + 12) % 12);
-      const vamp = MODE_VAMPS[trial.category];
-      expect(vamp?.mode).toBe((key as KeySpec).mode);
+      // A vamp in its mode; "which minor" tunes (level 2) over their own scale.
+      const mode = MODE_VAMPS[trial.category]?.mode ?? CLIMBS[trial.category];
+      expect(mode).toBe((key as KeySpec).mode);
       break;
     }
     case "melody-dictation": {

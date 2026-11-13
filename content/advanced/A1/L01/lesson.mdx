@@ -1,0 +1,57 @@
+{/* A1.L01 Waves & Harmonics: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+A loop like the ones you write: kick, snare, hats, a bass line and a two-bar riff, with the band on chords. First every pitched part on a sine, then the same notes on other waves.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+You have heard these four waves before. Before you run them, pick the one that will sound the brightest.
+
+<Predict exercise="which-is-brightest" />
+</Step>
+
+<Step id="S3">
+A sound is air moving back and forth, many times a second. The scope draws that movement: time runs left to right, the air pushes up and pulls down. <CodeRef fn="scope" />
+
+<Example id="see-the-wave" views="code" />
+
+<OnPass>Sine: a round curve. Triangle: straight lines up and down. Square: flat at the top, flat at the bottom. Sawtooth: a slow climb and a sudden drop. Each wave is named after its shape, and each shape has its own sound.</OnPass>
+</Step>
+
+<Step id="S4">
+Bar 2 hides something about bar 1. Listen to the sawtooth's single note, then to the six notes after it.
+
+<Example id="notes-inside" views="code" />
+
+<OnPass>How many times a wave repeats each second is its **frequency**, counted in hertz: a2 is 110, a3 220, a4 440. Bar 2 climbs by about 110 each time, 110, 220, 330, 440, 550, 660, played on the nearest notes of the keyboard. Those six notes are all inside the sawtooth's a2: one note, heard as one, with quieter higher notes stacked on it.</OnPass>
+</Step>
+
+<Step id="S5">
+`.partials()` takes a list, one number per note in that stack, from the bottom. On a sawtooth, a square or a triangle it keeps each one at the wave's own level (1), leaves it out (0), or anything between. On a sine it does nothing: a sine has only the bottom one. <CodeRef fn="partials" />
+
+<Editor exercise="build-a-sawtooth" />
+
+<OnPass>Four on: the riff has its edge back. The stack of notes at 1, 2, 3, 4 … times a note's frequency is its **harmonic series**, and each one is a harmonic. Which harmonics a wave has, and how loud, is its colour. A good place to stop for today if you need to.</OnPass>
+</Step>
+
+<Step id="S6">
+Each wave is a recipe of harmonics. Listen to the bass line and name its recipe.
+
+<Choice exercise="odd-ones-only" />
+
+<OnPass>The square: harmonics 1, 3, 5 and up, none of the even ones. That gap is what makes it hollow, where the sawtooth, with all of them, buzzes.</OnPass>
+</Step>
+
+<Step id="S7">
+Back to the loop, every pitched part on a sine. A bass with harmonics carries on headphones and on small speakers alike, because the ear hears its low note through the harmonics above it. Give the bass and the riff their colours. Add `.scope()` to a line to see it.
+
+<Make exercise="voice-your-loop" />
+
+<CanDo id="cd.code.harmonics" />
+
+Next, whenever you like: the next side lesson takes some of those harmonics away again, so a bass sits low and a riff plucks.
+
+<Recap />
+</Step>

@@ -15,6 +15,7 @@ describe("shortcut sheet sections", () => {
     expect(sheetSections([]).map((s) => s.id)).toEqual([
       "editor",
       "workbench",
+      "form-sound",
       "answers",
       "staff-input",
       "keys-intervals",
@@ -63,6 +64,7 @@ describe("shortcut sheet sections", () => {
     expect(ids).toEqual([
       "editor",
       "workbench",
+      "form-sound",
       "answers",
       "keys-intervals",
       "staff-input",
@@ -96,6 +98,7 @@ describe("shortcut sheet sections", () => {
     expect(sheetSections([], live).map((s) => s.id)).toEqual([
       "editor",
       "workbench",
+      "form-sound",
       "answers",
       "staff-input",
       "keys-intervals",

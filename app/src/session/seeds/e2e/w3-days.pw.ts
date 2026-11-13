@@ -142,8 +142,9 @@ test("the edge of what's written: Today, the Oak and Progress say so; review, St
   await page.goto("/oak?view=course");
   const u05 = page.getByRole("heading", { name: /U05/ }).locator("..");
   await expect(u05.getByText("being written").first()).toBeVisible();
-  await expect(page.locator(`a[href="/learn/${next}"]`)).toHaveCount(0);
-  await expect(page.locator('a[href="/learn/U04.L04"]')).toHaveCount(1);
+  // Course-view links carry `?from=map` (Wave 5: the lesson's end returns to the map).
+  await expect(page.locator(`a[href^="/learn/${next}?"], a[href="/learn/${next}"]`)).toHaveCount(0);
+  await expect(page.locator('a[href="/learn/U04.L04?from=map"]')).toHaveCount(1);
 
   // Progress: the same plain fact, with Practice and Studio.
   const progress = async (p: Page) => {

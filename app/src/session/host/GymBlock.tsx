@@ -63,7 +63,10 @@ export function GymBlock({
       />
     );
   if (!started) return <LoadingState rows={3} label="Opening the Transcription Gym" />;
-  return <GymProject started={started} detail={day?.detail ?? null} session={session} />;
+  // The plan's line names the slot as planned; the started session is what opened (an even slot with no audio
+  // project falls back to the ladder, and an extra gym session has no planned slot): its kind wins.
+  const detail = day && day.kind === started.kind ? day.detail : null;
+  return <GymProject started={started} detail={detail} session={session} />;
 }
 
 function GymProject({

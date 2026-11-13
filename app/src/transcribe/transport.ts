@@ -55,6 +55,12 @@ export interface TransportState {
   /** The realism the pattern source plays at (`null` for own audio); `realismApplied` false: played clean. */
   realism: number | null;
   realismApplied: boolean;
+  /**
+   * Wave 5: the reference's tracks (pattern sources; `[]` for own audio) and those muted for listening — "bass
+   * only", "without melody" (song.ts `listenMutes`). Absent on a transport built before Wave 5.
+   */
+  sourceTracks?: readonly string[];
+  sourceMuted?: readonly string[];
 }
 
 export interface TranscribeTransport {
@@ -71,6 +77,8 @@ export interface TranscribeTransport {
   setCents(c: number): void;
   setLoop(loop: Loop | null): void;
   setSide(side: Side): void;
+  /** Wave 5: mute these reference tracks while the source plays (pattern sources; own audio ignores it). */
+  setSourceMutes(tracks: readonly string[]): void;
   /** The learner's code to compare with; reloaded on the next play (and at once while playing). */
   setMineCode(code: string): Promise<void>;
   /** Own audio: the bar grid from the tempo and the first downbeat changed (the next play uses it). */
@@ -177,6 +185,8 @@ export async function createPatternTransport(d: PatternTransportDeps): Promise<T
     mineBlocked: "Write some code first: A/B compares it with the source.",
     realism: d.realism?.level ?? 0,
     realismApplied: true,
+    sourceTracks: d.ref.tracks,
+    sourceMuted: [],
   });
   const si = d.setInterval ?? ((cb: () => void, ms: number) => setInterval(cb, ms));
   const ci = d.clearInterval ?? ((t: unknown) => clearInterval(t as ReturnType<typeof setInterval>));
@@ -188,7 +198,7 @@ export async function createPatternTransport(d: PatternTransportDeps): Promise<T
 
   const applyMutes = () => {
     const side = st.get().side;
-    const refMuted = side === "mine" ? d.ref.tracks : [];
+    const refMuted = side === "mine" ? d.ref.tracks : (st.get().sourceMuted ?? []);
     const mineMuted = side === "source" ? mineTracks : [];
     d.player.setMutes(mutes([...refMuted, ...mineMuted]));
   };
@@ -305,6 +315,11 @@ export async function createPatternTransport(d: PatternTransportDeps): Promise<T
       st.set({ side: st.get().mineBlocked !== null ? "source" : side });
       applyMutes();
     },
+    setSourceMutes(tracks) {
+      const known = new Set(d.ref.tracks);
+      st.set({ sourceMuted: tracks.filter((t) => known.has(t)) });
+      applyMutes();
+    },
     async setMineCode(code) {
       mineCode = code;
       // Read the tracks now (and swap the playing pattern), so the A/B switch knows whether it can play "mine".
@@ -373,6 +388,8 @@ export function createAudioTransport(d: AudioTransportDeps): TranscribeTransport
     mineBlocked: grid ? "Write some code first: A/B compares it with the recording." : noGrid,
     realism: null,
     realismApplied: true,
+    sourceTracks: [],
+    sourceMuted: [],
   });
   let mine: PatternPlayerPort | null = null;
   let mineCode: string | null = null;
@@ -618,6 +635,7 @@ export function createAudioTransport(d: AudioTransportDeps): TranscribeTransport
       }
       applySide();
     },
+    setSourceMutes() {},
     async setMineCode(code) {
       mineCode = code;
       st.set({ mineBlocked: blockedReason() });

@@ -94,6 +94,9 @@ const base = (
   context?: Cue["context"],
 ): FamSpec["base"] => ({ replays, instruments, keys, tempo, ...(context ? { context } : {}) });
 const deg = (d: string): string => `deg.${d.replace("#", "s")}`;
+/** Context categories of the minor key's harmony (gen/common.ts `CTX`). */
+const CTX_MAJOR_V = "ctx.major-v";
+const CTX_ANDALUSIAN = "ctx.andalusian";
 
 /**
  * Context categories (`ctx.*`, see gen/common.ts): opened by a lesson like any category, never sampled and
@@ -370,15 +373,18 @@ const rhythm: FamilyDef[] = [
     skills: "R13",
     lesson: "U11.L07",
     gates: { 4: "R1.L02" },
+    // U11.L07 (content/specs/U11.md): level 1 is "straight or swung" with FEEL_OPTIONS' ids; "swung" is the
+    // long–short eighth at two thirds of the beat (the triplet feel, a word that waits for U13.L05); level 2
+    // adds a lighter and a harder swing (U11.CP "straight, swung, light, hard").
     cats: [
-      ["straight", "U11.L07"],
-      ["triplet", "U11.L07", ["straight"]],
-      ["light", "U11.L07", ["straight", "triplet"]],
-      ["hard", "U11.L07", ["triplet"]],
+      ["straight", "U11.L07", ["swung"]],
+      ["swung", "U11.L07", ["straight"]],
+      ["light", "U11.L07", ["straight", "swung"]],
+      ["hard", "U11.L07", ["swung"]],
     ],
     base: base(2, drums, "C", [100, 140], "none"),
     levels: [
-      { categories: ["straight", "triplet"] },
+      { categories: ["straight", "swung"] },
       { categories: ["light", "hard"] },
       { categories: [], full: true },
       { categories: [], sixteenths: true, tempo: [80, 100] },
@@ -623,7 +629,7 @@ const pitch: FamilyDef[] = [
     title: "Read it",
     kind: "concept",
     domain: "notation",
-    skills: "N02 N03 N07",
+    skills: "N02 N03 N04 N07",
     lesson: "U02.L08",
     gates: { 2: "U03.L06", 3: "U05.L06", 4: "U07.L09" },
     cats: [
@@ -663,6 +669,7 @@ const pitch: FamilyDef[] = [
       ["harmonic-minor", "U10.L06"],
       ["melodic-minor", "U10.L08"],
       ["pentatonic", "U11.L01"],
+      ["minor-pentatonic", "U11.L02"],
       ["blues", "U11.L03"],
       ["mixolydian", "U14.L02"],
       ["dorian", "U14.L03"],
@@ -676,7 +683,7 @@ const pitch: FamilyDef[] = [
       { categories: ["major-2acc"] },
       { categories: ["major"], keys: "all" },
       { categories: ["natural-minor", "harmonic-minor", "melodic-minor"], keys: "all" },
-      { categories: ["pentatonic", "blues"], keys: "all" },
+      { categories: ["pentatonic", "minor-pentatonic", "blues"], keys: "all" },
       { categories: ["mixolydian", "dorian", "lydian", "phrygian", "locrian"], keys: "all" },
     ],
     mastery: 2,
@@ -724,9 +731,14 @@ const pitch: FamilyDef[] = [
     skills: "E10",
     lesson: "U10.L01",
     gates: { 3: "U14.L03", 4: "U14.L03", 5: "U14.L05" },
+    // Level 2 is the melody alone: major or natural minor, then harmonic minor (its raised 7, U10.L06) and
+    // melodic minor (raised 6 and 7 on the way up, U10.L08) as the near misses of natural minor; the option
+    // ids are MINOR_OPTIONS'.
     cats: [
       ["major", "U10.L01", ["minor"]],
-      ["minor", "U10.L01", ["major"]],
+      ["minor", "U10.L01", ["major", "harmonic minor"]],
+      ["harmonic minor", "U10.L06", ["minor", "melodic minor"]],
+      ["melodic minor", "U10.L08", ["harmonic minor"]],
       ["dorian", "U14.L03", ["minor"]],
       ["mixolydian", "U14.L02", ["major"]],
       ["lydian", "U14.L04", ["major"]],
@@ -735,7 +747,7 @@ const pitch: FamilyDef[] = [
     base: base(2, KEYS2, "≤4acc", [84, 110], "none"),
     levels: [
       { categories: ["major", "minor"] },
-      { categories: [], melodyOnly: true },
+      { categories: ["harmonic minor", "melodic minor"], melodyOnly: true },
       { categories: ["dorian", "minor"], only: true },
       { categories: ["mixolydian", "major"], only: true },
       { categories: ["dorian", "minor", "mixolydian", "major", "lydian", "phrygian"], only: true },
@@ -867,17 +879,22 @@ const degrees: FamilyDef[] = [
       [deg("2"), "U10.L03"],
       [deg("4"), "U10.L03"],
       [deg("b6"), "U10.L03", [deg("5")]],
-      [deg("b7"), "U10.L03", [deg("1")]],
-      [deg("6"), "U10.L06", [deg("b6")]],
+      [deg("b7"), "U10.L03", [deg("7"), deg("1")]],
+      // The raised 7 of harmonic minor (U10.L06) and the raised 6 of melodic minor (U10.L08), each from its
+      // own lesson (content/specs/U10.md: "the raised 6 and 7 wait for U10.L06 and L08").
       [deg("7"), "U10.L06", [deg("b7")]],
+      [deg("6"), "U10.L08", [deg("b6")]],
       [deg("3"), "U10.L03"],
+      // The cadence before a target closes with VII–i or v–i until the major V is taught.
+      [CTX_MAJOR_V, "U10.L06"],
     ],
     base: { ...base(2, KEYS2, "≤2acc", [84, 110], "cadence"), register: [57, 76], mode: "minor" },
     levels: [
       { categories: [deg("1"), deg("b3"), deg("5")] },
       { categories: [deg("2"), deg("4")] },
       { categories: [deg("b6"), deg("b7")], keys: "all" },
-      { categories: [deg("6"), deg("7")], keys: "all", instruments: KEYS3 },
+      { categories: [deg("7")], keys: "all", instruments: KEYS3 },
+      { categories: [deg("6")], keys: "all", instruments: KEYS3 },
       { categories: [], keys: "all", instruments: KEYS3, context: "none", loop: true },
     ],
     mastery: 3,
@@ -973,6 +990,7 @@ const degrees: FamilyDef[] = [
       ["5-6-7-1", "U03.L04"],
       ["b3-2-1", "U10.L03"],
       ["b6-5", "U10.L03"],
+      [CTX_MAJOR_V, "U10.L06"],
       ...EAR_KEYS,
       ...SOLFEGE,
     ],
@@ -1049,6 +1067,7 @@ const melody: FamilyDef[] = [
       ["minor", "U10.L01"],
       ["chromatic", "U15.L01"],
       ["jazz", "J1.L03"],
+      [CTX_MAJOR_V, "U10.L06"],
     ],
     base: { ...base(4, KEYS1, "≤2acc", [80, 96], "cadence"), register: [60, 76] },
     levels: [
@@ -1627,6 +1646,8 @@ const harmony: FamilyDef[] = [
       ["sevenths", "U12.L04"],
       ["applied", "U15.L02"],
       ["borrowed", "U16.L01"],
+      // Minor keys are natural minor (v, VII) until U10.L06 adds the major V and vii° (contracts §7.3).
+      [CTX_MAJOR_V, "U10.L06"],
     ],
     base: base(-1, KEYS1, "≤2acc", [90, 90], "none"),
     levels: [
@@ -1658,6 +1679,7 @@ const harmony: FamilyDef[] = [
       ["T", "U06.L03", ["PD"]],
       ["PD", "U06.L03", ["T", "D"]],
       ["D", "U06.L03", ["PD"]],
+      [CTX_MAJOR_V, "U10.L06"],
     ],
     base: base(2, KEYS2, "≤2acc", [80, 100], "none"),
     levels: [
@@ -1725,7 +1747,11 @@ const harmony: FamilyDef[] = [
       ["inversions", "U06.L05"],
       ["two-per-bar", "U06.L08"],
       ["minor", "U10.L04"],
+      // Bass-line dictation (U08): root and 5th (U08.L02), the octave and approach notes (U08.L03).
+      ["lines", "U08.L03"],
       ["chromatic", "U15.L06"],
+      [CTX_MAJOR_V, "U10.L06"],
+      [CTX_ANDALUSIAN, "U10.L07"],
     ],
     base: base(3, KEYS2, "≤2acc", [80, 100], "none"),
     levels: [
@@ -1733,7 +1759,9 @@ const harmony: FamilyDef[] = [
       { categories: ["diatonic-roots"], keys: "all" },
       { categories: ["inversions"], keys: "all" },
       { categories: ["two-per-bar"], keys: "all" },
-      { categories: ["minor"], keys: "all" },
+      // Level 5 (gate U10.L04): the bass under a minor loop, and bass lines with roots, 5ths, octaves and
+      // approach notes (wave5.md §11 "bass-line dictation through fam.har.bass L5").
+      { categories: ["minor", "lines"], keys: "all" },
       { categories: ["chromatic"], keys: "all", instruments: KEYS3 },
     ],
     mastery: 3,
@@ -1797,6 +1825,8 @@ const harmony: FamilyDef[] = [
       ["minor", "U10.L04"],
       ["sevenths", "U12.L04"],
       ["chromatic", "U16.L05"],
+      [CTX_MAJOR_V, "U10.L06"],
+      [CTX_ANDALUSIAN, "U10.L07"],
     ],
     base: base(6, KEYS2, "≤2acc", [72, 92], "none"),
     levels: [

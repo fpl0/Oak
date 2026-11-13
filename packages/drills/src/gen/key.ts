@@ -1,6 +1,7 @@
 // Key families: mode identification (vamps and melodies), scale spelling and the circle of fifths.
-import type { Degree, KeySpec, ScaleMode } from "@oak/content-kit";
+import { type Degree, type KeySpec, MINOR_OPTIONS, type ScaleMode } from "@oak/content-kit";
 import { buildPiece } from "../build.ts";
+import { gradeAnswer, normalizeAnswerText, splitTyped } from "../grade.ts";
 import {
   allKeys,
   keyAccidentals,
@@ -15,6 +16,7 @@ import { rn, voiceProgression } from "../music.ts";
 import { line } from "../pat.ts";
 import {
   cueOf,
+  type GenCtx,
   type Generator,
   metKeys,
   pickKey,
@@ -56,9 +58,25 @@ export const MODE_VAMPS: Readonly<Record<string, { mode: ScaleMode; vamp: RnChor
   },
 };
 
+/**
+ * "Which minor?" by ear (U10.L06–L08, MINOR_OPTIONS' ids): the same tune in each form, climbing home 5 · 6 · 7 · 1
+ * in bar 2, so the two notes below home tell them apart: ♭6 ♭7 natural, ♭6 7 harmonic (the gap of three half
+ * steps), 6 7 melodic; major has its major 3rd in bar 1 as well. Each is written over its own scale
+ * (`A4:harmonic:minor`), as U10.L06 and L08 write them.
+ */
+export const CLIMBS: Readonly<Record<string, ScaleMode>> = {
+  major: "major",
+  minor: "minor",
+  "harmonic minor": "harmonic minor",
+  "melodic minor": "melodic minor",
+};
+const WHICH_MINOR = ["major", "minor", "harmonic minor", "melodic minor"];
+
 export const modeId: Generator = {
   name: "key-mode",
   generate(ctx) {
+    const minorForms = ctx.level.categories.some((c) => c === "harmonic minor" || c === "melodic minor");
+    if (minorForms && CLIMBS[ctx.category]) return whichMinor(ctx);
     const m = MODE_VAMPS[ctx.category] ?? (MODE_VAMPS.major as (typeof MODE_VAMPS)[string]);
     const key = pickKey(ctx, m.mode);
     const octave = pickOctave(ctx.rng, key, 60, 71);
@@ -88,6 +106,37 @@ export const modeId: Generator = {
   },
 };
 
+/** Level 2 of `fam.key.mode`: a tune alone, major or which minor; the options are the forms the learner has met. */
+function whichMinor(ctx: GenCtx) {
+  const mode = CLIMBS[ctx.category] as ScaleMode;
+  // The keys of natural minor (harmonic and melodic minor share its signature).
+  const tonic = pickKey(ctx, mode === "major" ? "major" : "minor").tonic;
+  const key: KeySpec = { tonic, mode };
+  const octave = pickOctave(ctx.rng, key, 57, 67);
+  // Bar 1 moves around home and touches the 3rd (major 3 or ♭3), bar 2 climbs home, bars 3–4 hold it.
+  const bar1 = melodySteps(ctx.rng, { length: 4, lowest: 0, highest: 4, leaps: true, leapMax: 2 });
+  bar1[0] = 0;
+  if (!bar1.includes(2)) bar1[ctx.rng.int(1, 3)] = 2;
+  const climb = [4, 5, 6, 7];
+  const steps = [...bar1, ...climb, 7];
+  const tracks = [stepTrack(key, octave, [line(bar1), line(climb), line([7]), line([7])], pickSound(ctx))];
+  const piece = buildPiece({ bpm: pickTempo(ctx), bars: 4, tracks });
+  const open = ctx.level.categories.filter((c) => c === ctx.category || ctx.openCategories.includes(c));
+  const options = WHICH_MINOR.filter((c) => open.includes(c));
+  return trialOf(piece, { choice: [ctx.category] }, cueOf(ctx), {
+    mode: "choice",
+    key,
+    steps,
+    options,
+    optionLabels: Object.fromEntries(options.map((o) => [o, MINOR_LABELS[o] as string])),
+    prompt: "Major, or which minor?",
+  });
+}
+const MINOR_LABELS: Readonly<Record<string, string>> = {
+  major: "Major",
+  ...Object.fromEntries(MINOR_OPTIONS.map((o) => [o.id, o.label])),
+};
+
 // --- key.scale-spell ----------------------------------------------------------------------------
 
 const SPELL_MODES: Readonly<Record<string, ScaleMode[]>> = {
@@ -96,7 +145,9 @@ const SPELL_MODES: Readonly<Record<string, ScaleMode[]>> = {
   "natural-minor": ["minor"],
   "harmonic-minor": ["harmonic minor"],
   "melodic-minor": ["melodic minor"],
-  pentatonic: ["major pentatonic", "minor pentatonic"],
+  // Major pentatonic from U11.L01, minor pentatonic from U11.L02, the blues scale from U11.L03.
+  pentatonic: ["major pentatonic"],
+  "minor-pentatonic": ["minor pentatonic"],
   blues: ["blues"],
   dorian: ["dorian"],
   mixolydian: ["mixolydian"],
@@ -109,15 +160,64 @@ export const scaleSpell: Generator = {
   generate(ctx) {
     const mode = ctx.rng.pick<ScaleMode>(SPELL_MODES[ctx.category] ?? ["major"]);
     const key = pickKey(ctx, mode, ctx.category === "major-2acc" ? "≤2acc" : ctx.level.keys);
-    const notes = scaleNames(key);
+    const notes = mode === "blues" ? bluesNames(key.tonic) : scaleNames(key);
+    const how =
+      mode === "melodic minor"
+        ? " going up (raised 6 and 7)"
+        : mode === "blues"
+          ? " (the blue note between 4 and 5 as ♭5 or ♯4, either is right)"
+          : "";
     return silentTrial({ text: notes }, cueOf(ctx, { replays: -1 }), {
       key,
       ui: "text",
       textKind: "note",
-      prompt: `Spell ${key.tonic} ${mode} from ${key.tonic} up: ${spellCount(notes.length)}, with a sharp (#) or a flat (b) where the scale needs one, separated by spaces.`,
+      ...(mode === "blues" ? { blueNoteAt: 3 } : {}),
+      prompt: `Spell ${key.tonic} ${mode} from ${key.tonic} up${how}: ${spellCount(notes.length)}, with a sharp (#) or a flat (b) where the scale needs one, separated by spaces.`,
     });
   },
+  grade(trial, response, _profile, def) {
+    // The blues scale's blue note is right as ♭5 or as ♯4 (U11.L03 spells it by direction); every other note
+    // keeps its one spelling.
+    const at = trial.params.blueNoteAt;
+    const want = trial.expected.text;
+    const got = splitTyped(want, response.answer?.text);
+    if (typeof at === "number" && want && got && got[at] !== undefined) {
+      const w = want[at] as string;
+      const g = normalizeAnswerText(got[at] as string);
+      const same = (a: string, b: string) => {
+        try {
+          return parsePc(a).pc === parsePc(b.charAt(0).toUpperCase() + b.slice(1)).pc;
+        } catch {
+          return false;
+        }
+      };
+      const blueOk = same(w, g) && /^[A-Ga-g](#|b)$/.test(g);
+      if (blueOk) {
+        const fixed = [...got];
+        fixed[at] = w;
+        return gradeAnswer(trial, { ...response, answer: { ...response.answer, text: fixed } }, def);
+      }
+    }
+    return gradeAnswer(trial, response, def);
+  },
 };
+
+/**
+ * The blues scale spelled up from its tonic: the minor pentatonic (1 ♭3 4 5 ♭7) with the blue note between 4 and
+ * 5, written as ♭5 unless that needs a double flat or C♭/F♭ (then as ♯4): A C D E♭ E G, E♭ G♭ A♭ A B♭ D♭.
+ */
+export function bluesNames(tonic: string): string[] {
+  const pent = scaleNames({ tonic, mode: "minor pentatonic" });
+  const four = pent[2] as string;
+  const five = pent[3] as string;
+  const flat = (n: string) => (n.endsWith("#") ? n.slice(0, -1) : `${n}b`);
+  const sharp = (n: string) => (n.endsWith("b") ? n.slice(0, -1) : `${n}#`);
+  const flat5 = flat(five);
+  const sharp4 = sharp(four);
+  const awkward = (n: string) => /bb$|##$|^[CF]b$|^[BE]#$/.test(n);
+  const blue = awkward(flat5) && !awkward(sharp4) ? sharp4 : flat5;
+  return [pent[0], pent[1], four, blue, five, pent[4]] as string[];
+}
 
 /**
  * How many notes a spelling has, in words. The format is said in words, never shown as an example: any
@@ -195,16 +295,24 @@ export const circle: Generator = {
           key: from,
           ui: "text",
           textKind: "key",
-          prompt: `What is the relative ${toMinor ? "minor" : "major"} of ${from.tonic} ${from.mode}?`,
+          prompt: `What is the relative ${toMinor ? "minor" : "major"} of ${shown(from.tonic)} ${from.mode}? Write the key: its letter (with # or b if it has one), then ${toMinor ? "minor" : "major"}.`,
         });
       }
       case "parallel": {
-        // Parallel minor has three more flats (three fewer sharps).
-        const diff = keyAccidentals(key) - keyAccidentals({ tonic: key.tonic, mode: "minor" });
-        return silentTrial({ number: diff }, cue, {
-          key,
-          ui: "number",
-          prompt: `How many more flats (or fewer sharps) does ${key.tonic} minor have than ${key.tonic} major?`,
+        // The parallel minor: the same home, three more flats (three fewer sharps) than its major. Asked as the
+        // minor key's own signature, so the answer changes with the key; only majors whose parallel minor is a
+        // key the course writes (D minor yes, D♭ minor no: that one is C♯ minor).
+        const minors = new Set(keysFor("all", "minor").map((k) => k.tonic));
+        const majors = metKeys(ctx, "all", "major").filter((k) => minors.has(k.tonic));
+        const prev = (ctx.previous?.params.key as KeySpec | undefined)?.tonic;
+        const pool = majors.filter((k) => k.tonic !== prev);
+        const major = ctx.rng.pick(pool.length > 0 ? pool : majors);
+        const n = keyAccidentals({ tonic: major.tonic, mode: "minor" });
+        return silentTrial({ text: [signatureText(n)] }, cue, {
+          key: major,
+          ui: "text",
+          textKind: "free",
+          prompt: `${shown(major.tonic)} minor is the parallel minor of ${shown(major.tonic)} major. How many sharps or flats does its key signature have? Write it as 2#, 3b or 0.`,
         });
       }
       default: {
@@ -219,6 +327,9 @@ export const circle: Generator = {
     }
   },
 };
+const shown = (tonic: string): string => tonic.replace("#", "♯").replace(/^([A-G])b/, "$1♭");
+/** A signature as the decks write it: "2#", "3b", "0". */
+const signatureText = (n: number): string => (n === 0 ? "0" : n > 0 ? `${n}#` : `${-n}b`);
 function sameSignatureSpelling(key: KeySpec, accidentals: number): KeySpec {
   const pc = parsePc(key.tonic).pc;
   const candidates = [...keysFor("all", key.mode), ...enharmonicTwins(key.mode)].filter(

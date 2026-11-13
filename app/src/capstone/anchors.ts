@@ -1,7 +1,7 @@
 // Bar anchors for rubric results (ux §2.3 "living Requirements checklist"): where in the piece an unmet rule
 // is unmet, as a bar range the learner can find. The grader's rubric reports pass/fail and a detail line; this
 // reads the same normalized events to say *where*. Pure: the grader's track selection plus exact rationals.
-import type { NEvent, Rat, RubricRule } from "@oak/content-kit";
+import type { NEvent, Rat, RubricRule, SectionRef } from "@oak/content-kit";
 import { R } from "@oak/content-kit";
 import { type Normalized, selectTrack } from "@oak/grader";
 import { noteToMidi } from "@oak/theory";
@@ -10,10 +10,13 @@ import { noteToMidi } from "@oak/theory";
 export interface BarAnchor {
   from: number;
   to: number;
+  /** The section the bars are ("Chorus 2"), when the anchor is a section. */
+  label?: string;
 }
 
 export function anchorText(a: BarAnchor): string {
-  return a.from === a.to ? `Bar ${a.from}` : `Bars ${a.from}–${a.to}`;
+  const bars = a.from === a.to ? `Bar ${a.from}` : `Bars ${a.from}–${a.to}`;
+  return a.label ? `${a.label} · ${bars.toLowerCase()}` : bars;
 }
 
 /** Collapses a set of 1-based bars into the smallest range that holds them. */
@@ -121,6 +124,8 @@ export function anchorsOf(
   n: Normalized | null,
   totalBars: number,
   details: Readonly<Record<string, string | null | undefined>> = {},
+  /** The piece's sections (Wave 5): a rule read in one section points at it when nothing more precise does. */
+  sections: readonly SectionSpan[] = [],
 ): Record<string, BarAnchor | null> {
   const out: Record<string, BarAnchor | null> = {};
   for (const r of rules) {
@@ -129,7 +134,59 @@ export function anchorsOf(
       continue;
     }
     const fromEvents = n ? anchorFor(r, n, totalBars) : null;
-    out[r.id] = fromEvents ?? anchorFromText(details[r.id], totalBars);
+    out[r.id] =
+      fromEvents ?? anchorFromText(details[r.id], totalBars) ?? sectionOfRule(r, sections, totalBars);
   }
   return out;
+}
+
+/** A section as the anchors read it (`FormViewSection`): 0-based first bar. */
+export interface SectionSpan {
+  label: string;
+  tag: string;
+  text: string;
+  startBar: number;
+  bars: number;
+}
+
+/** The section a rule is read in (`rule.section`, or the first section a contrast compares). */
+export function sectionOfRule(
+  rule: RubricRule,
+  sections: readonly SectionSpan[],
+  totalBars: number,
+): BarAnchor | null {
+  const ref: SectionRef | undefined =
+    rule.rule === "contrast"
+      ? rule.a
+      : "section" in rule
+        ? (rule.section as SectionRef | undefined)
+        : undefined;
+  return ref ? sectionRefAnchor(ref, sections, totalBars) : null;
+}
+
+/** Where a section reference lands (1-based inclusive bars, with the section's name); `null` when it isn't there. */
+export function sectionRefAnchor(
+  ref: SectionRef,
+  sections: readonly SectionSpan[],
+  totalBars: number,
+): BarAnchor | null {
+  if (ref === "last") {
+    const s = sections.at(-1);
+    if (s) return { from: s.startBar + 1, to: s.startBar + s.bars, label: s.text };
+    return totalBars > 0 ? { from: 1, to: totalBars } : null;
+  }
+  if ("bars" in ref) {
+    const from = Math.max(1, ref.bars[0]);
+    const to = Math.min(Math.max(totalBars, from), ref.bars[1]);
+    return { from, to: Math.max(from, to) };
+  }
+  const want = ref.section.toLowerCase();
+  const matches = sections.filter((s) => s.tag === want || s.label === want);
+  const s =
+    ref.nth === undefined
+      ? matches[0]
+      : ref.nth < 0
+        ? matches[matches.length + ref.nth]
+        : matches[ref.nth - 1];
+  return s ? { from: s.startBar + 1, to: s.startBar + s.bars, label: s.text } : null;
 }

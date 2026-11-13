@@ -1,0 +1,57 @@
+{/* A1.L04 Space: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+Your loop from Envelopes: filtered, shaped, and dry, as if every part played right next to your ear. Then the same loop with a little space around it.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+You know `.room()`, the sound of a space. The other half of space is an echo, and its time is in seconds. Pick before you run it. <CodeRef fn="delaytime" />
+
+<Predict exercise="where-the-echo-lands" />
+</Step>
+
+<Step id="S3">
+An echo in time with the music lands on the beat or between beats. A beat lasts 60 ÷ BPM seconds.
+
+<Example id="half-a-beat" views="code" />
+
+<OnPass>Half of 0.6 is 0.3: each echo lands half a beat after its note, so the riff's rests fill with echoes. Echoes of a sound repeating after a set time are a **delay**: `.delay()` sets how much of the part goes to it, `.delaytime()` when the echoes come. In bar 2 they keep coming for longer.</OnPass>
+</Step>
+
+<Step id="S4">
+Match an echo by ear: when it comes, and how long it keeps repeating.
+
+<Editor exercise="match-the-echo" />
+
+<OnPass>Half a beat later, two or three repeats, then gone. How much of each echo goes back into the delay is its **feedback**: at 0.3 each repeat comes back at 0.3 times the level of the one before; at 0.7 they hang on for a long time. A good place to stop for today if you need to.</OnPass>
+</Step>
+
+<Step id="S5">
+One more rule of space in Strudel: parts on the same orbit share one reverb and one delay. Each part can send more or less into them, but the room size and the echo time belong to the orbit. <CodeRef fn="orbit" />
+
+<Editor exercise="two-rooms" />
+
+<OnPass>Two orbits, two rooms: the snare keeps its big hall and the riff its small one, and neither cuts the other's tail. Give a part its own orbit whenever it needs a space the others do not share.</OnPass>
+</Step>
+
+<Step id="S6">
+Your ear for space. Two bars, one change.
+
+<Choice exercise="room-or-echoes" />
+
+<OnPass>A reverb is a wash; a delay is the note again, after a gap. Oak brings this back in your warm-ups, beside the cutoff and the envelope.</OnPass>
+</Step>
+
+<Step id="S7">
+Back to the dry loop. Place each part: what is near, what is far, what echoes. Time the echoes to the beat so they groove with the drums.
+
+<Make exercise="place-your-loop" />
+
+<CanDo id="cd.code.space" />
+
+Your loop now has harmonics you chose, filters, shaped notes and a space of its own: four tools for any track you write. Grit, movement and richer synths come later in the course.
+
+<Recap />
+</Step>

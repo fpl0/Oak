@@ -53,7 +53,10 @@ function lesson(l: LessonSpec): string {
   const b = specBudget(l);
   const out: string[] = [];
   out.push(`## ${l.id} ${m?.title ?? ""}`, "");
-  out.push(`Author: **${l.author}**. Key ${l.key.tonic} ${l.key.mode}, ${l.meter}, ${l.bpm} BPM.`, "");
+  out.push(
+    `Author: **${l.author}**. Key ${l.key.tonic} ${l.key.mode}, ${l.meter}, ${l.bpm} BPM.${m?.side ? " A side lesson: outside the default order, offered from its gate on, written for a learner at the gate." : ""}`,
+    "",
+  );
   out.push(`**Objective (syllabus).** ${m?.objective ?? "?"}`, "");
   out.push(`**The one idea.** ${l.idea}`, "");
   out.push(`**Sound first.** ${l.hook.hear}${l.hook.preview ? " (a `preview: true` example)" : ""}`, "");
@@ -145,6 +148,15 @@ function lesson(l: LessonSpec): string {
       "",
     );
   }
+  if (l.epr)
+    out.push(
+      `**Enjoyment.** ${l.epr.enjoyment}`,
+      "",
+      `**Pace.** ${l.epr.pace}`,
+      "",
+      `**Return.** ${l.epr.return}`,
+      "",
+    );
   out.push("**Mistakes the tests must pin (feedback codes as the grader emits them).**", "");
   for (const x of l.mistakes) out.push(`- ${x}`);
   out.push("");

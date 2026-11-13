@@ -50,8 +50,48 @@ export function capstoneShortTitle(def: Pick<CapstoneDefLike, "id" | "title">): 
   return def.title.startsWith(`${def.id} `) ? def.title.slice(def.id.length + 1) : def.title;
 }
 
+type Check = CapstoneSessions["sessions"][number]["checks"][number];
+
+const pct = (x: number | null) => (x === null ? "" : ` at ${Math.round(x * 100)}%`);
+
+/** A staged check's name ("the bass", "the changes", "melody line 2"). */
+function stagedName(c: Check): string {
+  if (c.layer === "bass") return "the bass";
+  if (c.layer === "chords") return "the changes";
+  const p = typeof c.phrase === "number" ? c.phrase : c.phrase[0];
+  return `melody line ${p}`;
+}
+
+/**
+ * X2 (and any capstone whose checks open in order, `CapstoneCheckState.after`): what passed so far and what is next,
+ * in one line ("The bass passed at 92%, the changes at 88%; next, the melody line by line"). Every session up to and
+ * including today's counts: a stage passed earlier today stays passed when the session resumes.
+ */
+export function stagedChecksLine(sessions: CapstoneSessions | null, upTo: number): string | null {
+  if (!sessions) return null;
+  const all = sessions.sessions.slice(0, Math.max(0, upTo)).flatMap((s) => s.checks);
+  if (!all.some((c) => c.after !== undefined)) return null;
+  const passed = all.filter((c) => c.passed || c.revealed);
+  if (passed.length === 0) return null;
+  const said = passed.map((c, i) => {
+    const name = stagedName(c);
+    const head = i === 0 ? `${name[0]?.toUpperCase()}${name.slice(1)}` : name;
+    return c.revealed && !c.passed ? `${head} revealed (no evidence)` : `${head} passed${pct(c.score)}`;
+  });
+  const later = sessions.sessions.flatMap((s) => s.checks).filter((c) => !c.passed && !c.revealed);
+  const next = later[0];
+  const nextLine = !next
+    ? "every stage is done"
+    : next.layer === "melody"
+      ? "next, the melody line by line"
+      : `next, ${stagedName(next)}`;
+  return `${said.join(", ")}; ${nextLine}`;
+}
+
 function checksLine(sessions: CapstoneSessions | null, upTo: number): string | null {
   if (!sessions) return null;
+  const staged = stagedChecksLine(sessions, upTo);
+  if (staged) return staged;
   const done = sessions.sessions
     .slice(0, Math.max(0, upTo - 1))
     .flatMap((s) => s.checks)

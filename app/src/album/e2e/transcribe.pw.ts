@@ -58,12 +58,12 @@ async function shots(page: Page, name: string) {
 async function importFile(page: Page, name: string, mimeType: string, buffer: Buffer) {
   await page.goto("/transcribe");
   await expect(page.getByRole("heading", { level: 1, name: "Transcribe" })).toBeVisible();
-  await page.getByTestId("file-input").setInputFiles({ name, mimeType, buffer });
+  await page.getByTestId("import").locator("input[type=file]").setInputFiles({ name, mimeType, buffer });
 }
 
 async function opened(page: Page, durationText: RegExp) {
   await expect(page).toHaveURL(/\/transcribe\/tr/, { timeout: 60_000 });
-  await expect(page.getByTestId("play")).toBeEnabled({ timeout: 90_000 });
+  await expect(page.getByTestId("transport-play")).toBeEnabled({ timeout: 90_000 });
   await expect(page.getByTestId("source")).toHaveAttribute("data-engine", "stretch");
   await expect(page.getByTestId("position")).toContainText(durationText);
 }
@@ -112,7 +112,7 @@ test("own audio of every shape: WAV, MP3, mono 8 kHz, a corrupt file and a 40-mi
   // Bars over 40 minutes: 1200 bar lines, numbered sparsely enough to read.
   await api(page, "PATCH", `/transcriptions/${id}`, { bpm: 120, meter: "4/4", downbeatS: 0 });
   await page.reload();
-  await expect(page.getByTestId("play")).toBeEnabled({ timeout: 90_000 });
+  await expect(page.getByTestId("transport-play")).toBeEnabled({ timeout: 90_000 });
   await expect
     .poll(() => page.getByTestId("waveform").locator("[part~='region-content']").count(), { timeout: 20_000 })
     .toBeGreaterThan(10);
@@ -141,15 +141,15 @@ test("a half-beat loop at 0.25×, transposed and fine-tuned while it loops, stay
     settings: { rate: 0.25, loop },
   });
   await page.goto(`/transcribe/${id}`);
-  await expect(page.getByTestId("play")).toBeEnabled({ timeout: 60_000 });
-  await expect(page.getByTestId("rate")).toContainText("25 %");
+  await expect(page.getByTestId("transport-play")).toBeEnabled({ timeout: 60_000 });
+  await expect(page.getByTestId("transport-rate")).toContainText("25 %");
   // The label says what plays: the half beat, in bar 3 (it read "bar 3", a whole bar it did not play).
   await expect(page.getByTestId("loop-label")).toHaveText(/^0:04\.1–0:04\.[34] in bar 3$/);
   await page.getByTestId("transcribe-project").focus();
 
   await startCapture(page, false);
   await page.keyboard.press("Space");
-  await expect(page.getByTestId("play")).toHaveAccessibleName(/Pause/);
+  await expect(page.getByTestId("transport-play")).toHaveAccessibleName(/Pause/);
   const seen: number[] = [];
   for (let i = 0; i < 14; i++) {
     seen.push(await position(page));
@@ -205,7 +205,7 @@ const BLIP = `setcpm(${BPM}/4)\n\nblip: note("e7").s("sine").attack(0).decay(0.0
 /** Plays with both sides heard and returns `code − recording` per bar line, ms. */
 async function measureDrift(page: Page, seconds: number): Promise<number[]> {
   await startCapture(page, true);
-  if (!/Pause/.test((await page.getByTestId("play").getAttribute("aria-label")) ?? ""))
+  if (!/Pause/.test((await page.getByTestId("transport-play").getAttribute("aria-label")) ?? ""))
     await page.keyboard.press("Space");
   await page.waitForTimeout(seconds * 1000);
   const c = await stopCapture(page);
@@ -221,7 +221,7 @@ async function openDriftProject(page: Page, settings: Record<string, unknown>, b
     settings,
   });
   await page.goto(`/transcribe/${id}`);
-  await expect(page.getByTestId("play")).toBeEnabled({ timeout: 60_000 });
+  await expect(page.getByTestId("transport-play")).toBeEnabled({ timeout: 60_000 });
   await page.getByTestId("transcribe-project").focus();
 }
 
@@ -233,13 +233,13 @@ test(`A/B a hundred times while it plays at 0.75×, then the gate: < ${AB_DRIFT_
   await seed(page, "own-audio project");
   await openDriftProject(page, { rate: 0.75 }, 40);
   await page.keyboard.press("Space");
-  await expect(page.getByTestId("play")).toHaveAccessibleName(/Pause/);
+  await expect(page.getByTestId("transport-play")).toHaveAccessibleName(/Pause/);
   for (let i = 0; i < 100; i++) {
     await page.keyboard.press("v");
     await page.waitForTimeout(30);
   }
   // A hundred switches later: still playing, on "Source" (an even count), and nothing restarted.
-  await expect(page.getByTestId("play")).toHaveAccessibleName(/Pause/);
+  await expect(page.getByTestId("transport-play")).toHaveAccessibleName(/Pause/);
   await expect(page.getByRole("radio", { name: "Source" })).toHaveAttribute("aria-checked", "true");
   await page.keyboard.press("o");
   await expect(page.getByRole("radio", { name: "Both" })).toHaveAttribute("aria-checked", "true");
@@ -296,10 +296,10 @@ test("no click at the A/B switch: the recording fades out and in", async ({ page
     code: `setcpm(120/4)\n\nmelody: note("c4").s("sine").gain(0)\n`,
   });
   await page.goto(`/transcribe/${id}`);
-  await expect(page.getByTestId("play")).toBeEnabled({ timeout: 60_000 });
+  await expect(page.getByTestId("transport-play")).toBeEnabled({ timeout: 60_000 });
   await page.getByTestId("transcribe-project").focus();
   await page.keyboard.press("Space");
-  await expect(page.getByTestId("play")).toHaveAccessibleName(/Pause/);
+  await expect(page.getByTestId("transport-play")).toHaveAccessibleName(/Pause/);
   await page.waitForTimeout(800);
   await startCapture(page, false);
   for (let i = 0; i < 20; i++) {
@@ -337,7 +337,7 @@ test("a ladder item's hidden code reaches neither the DOM, storage, the console,
   await seed(page, "ladder L3");
   await page.goto("/transcribe");
   await page.getByTestId("project-link").first().click();
-  await expect(page.getByTestId("play")).toBeEnabled({ timeout: 60_000 });
+  await expect(page.getByTestId("transport-play")).toBeEnabled({ timeout: 60_000 });
   const id = page.url().split("/").pop() as string;
   const root = page.getByTestId("transcribe-project");
   await root.focus();
@@ -449,7 +449,7 @@ test("hum it, Oak drafts it: flat, sharp and wordless takes give the degrees sun
     // Init scripts run in order on every load: the newest voice is the one the page gets.
     await fakeVoice(page, take);
     await page.goto(`/transcribe/${id}`);
-    await expect(page.getByTestId("play")).toBeEnabled({ timeout: 60_000 });
+    await expect(page.getByTestId("transport-play")).toBeEnabled({ timeout: 60_000 });
     await page.getByTestId("hum-open").click();
     await page.getByTestId("hum-start").click();
     const draft = page.getByTestId("hum-draft");

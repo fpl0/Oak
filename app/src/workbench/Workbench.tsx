@@ -4,7 +4,7 @@
 // FeedbackPanel, all linked through one HighlightBus per instance. The roll and the staff come from the
 // static analysis path (the browser grader host), so they show code that has not been played; while it
 // plays, the adapter's paint clock drives the playhead and the highlights.
-import type { ChordLensId, LensId } from "@oak/api";
+import type { ChordLensId, LensId, LineLensId } from "@oak/api";
 import type {
   GradeResult,
   HintLadder,
@@ -23,20 +23,29 @@ import {
   editorId,
   friendlyEvalError,
   type LessonCtx,
+  type LiveHap,
   type MuteMap,
   NO_MUTES,
+  type ScopePanel as ScopePanelId,
+  type ScopeSource,
 } from "@oak/strudel";
+import { probeOf, type VisualProbe } from "@oak/strudel/probes";
 import { METERS } from "@oak/theory";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { SectionLoop } from "../lib/form-view.ts";
+import { probeFromHaps, probeUnlocked, type ScopePanelHostProps } from "../lib/scope-panel.ts";
 import {
   HIGHLIGHT_MS,
   TUTOR_BARS_EVENT,
   TUTOR_HIGHLIGHT_EVENT,
+  TUTOR_SECTION_EVENT,
   type TutorHighlight,
 } from "../tutor/context.ts";
+import { ChartPanel } from "./ChartPanel.tsx";
 import { CircleOfFifths } from "./CircleOfFifths.tsx";
 import { WorkbenchClock } from "./clock.ts";
 import { FeedbackPanel, viewOf } from "./FeedbackPanel.tsx";
+import { FormMap } from "./FormMap.tsx";
 import { ghostEvents, marksOf, unlocks } from "./feedback.ts";
 import { chordTonePercent, rangeLines } from "./harmony.ts";
 import { HighlightBus } from "./highlight-bus.ts";
@@ -45,6 +54,7 @@ import { KeyPanel } from "./KeyPanel.tsx";
 import { TYPING_MAP, typedMidi } from "./keyboard-layout.ts";
 import { type LensSource, useAppLensSource, useLensSourceKind } from "./lens-source.tsx";
 import { type StaffLabelMode, showsSwitcher, viewLabels } from "./lens-view.ts";
+import { alternationBars, barOfCycle, pieceBarsOf, swingBadges } from "./lines.ts";
 import {
   clampRegion,
   defaultRegion,
@@ -52,6 +62,7 @@ import {
   type RegionStep,
   regionLabel,
   stepRegion,
+  tutorBarsRegion,
 } from "./loop-math.ts";
 import { Metronome } from "./metronome.ts";
 import { activeAt, keyAtCycle, leadEvents, pieceKeys, type WorkbenchModel } from "./model.ts";
@@ -67,7 +78,10 @@ import {
   writeStoredPanels,
 } from "./panels.ts";
 import { FOLLOW_PAGE_BARS } from "./roll-layout.ts";
+import { ProbeView, ScopePanel } from "./ScopePanel.tsx";
+import { linearAxis, SectionRibbon } from "./SectionRibbon.tsx";
 import { StaffView } from "./StaffView.tsx";
+import { f0OfHap, probesInHap } from "./scope-view.ts";
 import { useWorkbenchServices } from "./services.tsx";
 import { TransportBar, type TransportLenses } from "./TransportBar.tsx";
 import {
@@ -176,6 +190,17 @@ export interface WorkbenchProps {
   initialMutes?: MuteMap;
   /** The learner changed a mute or solo chip. */
   onMutes?(mutes: MuteMap): void;
+  /**
+   * Wave 5 (wave5.md §4.4): the scope panel a lesson step asks for, `scopePanelOf(step.ui, outcome.panels)` — its
+   * panels (wave, spectrum), its source (the master bus or one track) and its probe (filter, envelope, harmonics).
+   * Without it the lenses decide (the panel switches, and the code's own `.scope()` / `.fscope()`).
+   */
+  scopePanel?: ScopePanelHostProps | null;
+  /**
+   * Probes to draw beside the code whatever the panels (a Toolbox page: the filter curve of `.lpf()`), each once its
+   * tool is unlocked. A step's own probe (`scopePanel.probe`) wins.
+   */
+  probeKinds?: readonly VisualProbe["kind"][];
 }
 
 interface RunIssue {
@@ -203,6 +228,29 @@ function runIssueOf(outcome: EvalOutcome): RunIssue | null {
 
 const sameUnlocked = (a: ReadonlySet<UnlockableId>, b: ReadonlySet<UnlockableId>) =>
   a.size === b.size && [...a].every((x) => b.has(x));
+
+/** The line-lens switches (Wave 5, wave5.md §4.3): label, key and title. */
+const LINE_SWITCHES: readonly { id: LineLensId; label: string; keys: string; title: string }[] = [
+  { id: "sections", label: "Sections", keys: "Shift+O", title: "The section ribbon over the roll" },
+  {
+    id: "bassRoles",
+    label: "Bass roles",
+    keys: "Shift+B",
+    title: "Root, fifth, octave and approach notes in the bass",
+  },
+  { id: "blueNotes", label: "Blue notes", keys: "Shift+U", title: "Blue notes: ♭3, ♭5 and ♭7" },
+];
+
+/** The scope and spectrum panels' toolbox rows (contracts §3.2; `WORKBENCH_PANEL_TOOLS`). */
+const SCOPE_TOOL = "tb.scope";
+const FSCOPE_TOOL = "tb.fscope";
+/** The delay probe has no content-kit probe kind: its row is the delay's own. */
+const DELAY_TOOL = "tb.delay";
+
+/** The delay probe of a hap (A1.L04; not a content-kit probe kind, so outside `probeFromHaps`). */
+function delayProbeOf(hap: LiveHap, cps: number): VisualProbe | null {
+  return probeOf("delay", hap.value, cps);
+}
 
 /** The chord-lens switches (Wave 4): label, key and title. */
 const CHORD_SWITCHES: readonly { id: ChordLensId; label: string; keys: string; title: string }[] = [
@@ -248,9 +296,17 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
   const [pressed, setPressed] = useState<ReadonlySet<number>>(new Set());
   /** What the last Run said about the code it ran: an error (friendly text) or "ran, but silent". */
   const [runIssue, setRunIssue] = useState<RunIssue | null>(null);
+  /** Wave 5: the panels the last run's code asked for (`.scope()`, `.fscope()`) and its first cycle's haps (probes). */
+  const [codePanels, setCodePanels] = useState<readonly ScopePanelId[]>([]);
+  const [runHaps, setRunHaps] = useState<{ haps: LiveHap[]; cps: number } | null>(null);
+  const liveHandle = useRef<EditorHandle | null>(null);
   const variant = props.variant ?? "full";
   const meter = METERS[props.lessonCtx.meter];
-  const loopBars = props.lessonCtx.loopBars;
+  // An arranged song is analysed, drawn and looped whole (Wave 5): its bars, not the step's loop, when longer.
+  const loopBars = useMemo(
+    () => pieceBarsOf(code, props.lessonCtx.loopBars),
+    [code, props.lessonCtx.loopBars],
+  );
   const loopControls = (props.loopControls ?? true) && variant !== "mini";
   const [loopOn, setLoopOn] = useState(false);
   const [regionRaw, setRegion] = useState<LoopRegion>(() => defaultRegion(loopBars));
@@ -296,7 +352,11 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
     variant !== "mini" &&
     chordLenses !== null &&
     (chordLenses.available.chordSymbols || chordLenses.available.romanNumerals);
-  const lensBar = variant !== "mini" && (showsSwitcher(source, labels.mode) || chordLensBar);
+  // Wave 5: the line lenses (sections, bass roles, blue notes) follow the lenses wherever the content does not
+  // name the labels; inside a step that does, the step's form panel shows the ribbon.
+  const lineLenses = labels.mode === "lenses" && variant !== "mini" ? (source?.lines ?? null) : null;
+  const lineLensBar = lineLenses !== null && LINE_SWITCHES.some((l) => lineLenses.available[l.id] === true);
+  const lensBar = variant !== "mini" && (showsSwitcher(source, labels.mode) || chordLensBar || lineLensBar);
   const unlockedSet = props.lint.unlocked as ReadonlySet<string>;
   // Panels: the lenses decide outside a step, the step's `initialPanels` inside one (wave4.md §4.4).
   const panelMode: "lenses" | "content" = labels.mode === "lenses" && source !== null ? "lenses" : "content";
@@ -326,6 +386,10 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
   const toggleLens = (id: LensId) => {
     if (!source || !lensBar || !source.available[id]) return;
     source.toggle(id);
+  };
+  const toggleLineLens = (id: LineLensId) => {
+    if (!lineLenses?.available[id]) return;
+    lineLenses.toggle(id);
   };
   const toggleChordLens = (id: ChordLensId) => {
     if (!chordLenses || !chordLensBar || !chordLenses.available[id]) return;
@@ -435,6 +499,13 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
         setRunIssue(runIssueOf(outcome));
         if (outcome.ok) {
           setPlayedCode(outcome.code);
+          setCodePanels(outcome.panels ?? []);
+          try {
+            const live = liveHandle.current;
+            if (live && !live.disposed) setRunHaps({ haps: live.queryHaps(0, 1), cps: outcome.cps ?? 0.5 });
+          } catch {
+            setRunHaps(null);
+          }
           analysis.analyzeNow(outcome.code);
           if (outcome.cps !== null && practiceRef.current !== 1)
             oak.transport.setCps(outcome.cps * practiceRef.current);
@@ -459,6 +530,7 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
     };
     if (p.readOnly !== undefined) opts.readOnly = p.readOnly;
     const h = oak.createEditor(el, opts);
+    liveHandle.current = h;
     if (p.initialMutes) h.setMutes(p.initialMutes);
     setHandle(h);
     if (p.autoPlay) {
@@ -468,6 +540,7 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
     }
     return () => {
       setHandle(null);
+      liveHandle.current = null;
       clock.stop();
       bus.setPlaying([]);
       h.dispose();
@@ -617,21 +690,127 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
     const next = stepRegion(region, step, loopBars);
     return next.from !== region.from || next.bars !== region.bars;
   };
-  // The tutor's bar references loop those bars (1-based, inclusive) in this Workbench.
+  // --- Wave 5: the form (section ribbon, form map, section loop) ---------------------------------------
+  const lines = model?.lines ?? null;
+  const sections = lines?.sections ?? [];
+  const sectionLoop: SectionLoop | null = (() => {
+    if (!loopOn) return null;
+    const s = sections.find((x) => x.startBar === region.from && x.bars === region.bars);
+    return s ? { from: s.startBar, bars: s.bars, tag: s.tag } : null;
+  })();
+  const loopSection = (next: SectionLoop | null) => {
+    if (!next) {
+      if (!loopOn) return;
+      toggleLoop();
+      return;
+    }
+    const r = clampRegion({ from: next.from, bars: next.bars }, loopBars);
+    setRegion(r);
+    setLoopOn(true);
+    reportLoop(true, r);
+    if (handle && !handle.disposed && (handle.playing || loop.playing)) void loop.start(handle.getCode());
+  };
+  const showRibbon = variant !== "mini" && (lineLenses?.shown.sections === true || panelsOpen.form === true);
+  const currentBar = anyPlaying ? barOfCycle(keyBar, model?.bars ?? 0) : null;
+
+  // --- Wave 5: Oak's scope, its spectrum and the visual probes -------------------------------------
+  const hostScope = props.scopePanel ?? null;
+  // A step that asks for the panel gets it (content check 4 already proved its tool is there, and A1.L01 teaches
+  // tb.scope while the learner is in it); elsewhere the tool must be unlocked.
+  const wantWave =
+    (hostScope?.panels.includes("scope") ?? false) ||
+    (unlockedSet.has(SCOPE_TOOL) && (panelsOpen.scope || codePanels.includes("scope")));
+  const wantSpectrum =
+    (hostScope?.panels.includes("fscope") ?? false) ||
+    (unlockedSet.has(FSCOPE_TOOL) && (panelsOpen.spectrum || codePanels.includes("fscope")));
+  // The probes: the step's one, else (outside a step) one per control the code sets, each once its tool is unlocked.
+  const learnerHaps = useMemo(
+    () => (runHaps?.haps ?? []).filter((h) => !h.track.startsWith("band.")),
+    [runHaps],
+  );
+  const firstPitched =
+    learnerHaps.find(
+      (h) => h.value.note !== undefined || h.value.n !== undefined || h.value.freq !== undefined,
+    ) ?? learnerHaps[0];
+  const probes: { kind: VisualProbe["kind"]; probe: VisualProbe | null; f0: number | null }[] =
+    useMemo(() => {
+      const cps = runHaps?.cps ?? 0.5;
+      if (hostScope?.probe) {
+        const sp = hostScope.probe;
+        // The step's own probe shows in the lesson that teaches its tool too (A1.L03 teaches tb.adsr).
+        const hap = sp.track ? learnerHaps.find((h) => h.track === sp.track) : firstPitched;
+        return [{ kind: sp.kind, probe: probeFromHaps(sp, learnerHaps, cps), f0: f0OfHap(hap) }];
+      }
+      if (panelMode !== "lenses" || variant === "mini") return [];
+      const hap = firstPitched;
+      const asked = props.probeKinds ?? null;
+      if (!hap)
+        return (asked ?? [])
+          .filter((k) => (k === "delay" ? unlockedSet.has(DELAY_TOOL) : probeUnlocked(k, unlockedSet)))
+          .map((k) => ({ kind: k, probe: null, f0: null }));
+      return (asked ? [...asked] : probesInHap(hap.value))
+        .filter((k) => (k === "delay" ? unlockedSet.has(DELAY_TOOL) : probeUnlocked(k, unlockedSet)))
+        .map((k) => ({
+          kind: k,
+          probe:
+            k === "delay"
+              ? delayProbeOf(hap, cps)
+              : probeFromHaps({ kind: k, track: hap.track }, learnerHaps, cps),
+          f0: f0OfHap(hap),
+        }));
+    }, [hostScope, unlockedSet, learnerHaps, firstPitched, panelMode, variant, runHaps, props.probeKinds]);
+  const scopeShown =
+    variant !== "mini" &&
+    (wantWave ||
+      wantSpectrum ||
+      ((hostScope?.probe != null || (props.probeKinds?.length ?? 0) > 0) && probes.length > 0));
+  // The source the panel listens to: the step's (one track, A1.L01) or the master bus.
+  const [sourceNote, setSourceNote] = useState("The whole mix");
+  const sourceKey = hostScope?.source.kind === "track" ? hostScope.source.label : "";
+  useEffect(() => {
+    if (!scopeShown) return;
+    const want: ScopeSource = sourceKey ? { kind: "track", label: sourceKey } : { kind: "master" };
+    try {
+      oak.scope.setSource(want);
+      setSourceNote(want.kind === "track" ? `The track ${want.label}` : "The whole mix");
+    } catch {
+      // The adapter taps one labelled track (sound, Wave 5); it refuses only a track it cannot name. Then the
+      // master bus, said plainly.
+      try {
+        oak.scope.setSource({ kind: "master" });
+      } catch {
+        // nothing to fall back to
+      }
+      setSourceNote(`The whole mix (no track called ${sourceKey} to listen to alone)`);
+    }
+  }, [oak, scopeShown, sourceKey]);
+
+  // The tutor's bar references loop those bars (1-based, inclusive) in this Workbench. Bars count from the first
+  // full bar (c4): with a pickup, the tutor's bar n is cycle n (cycle 0 is the pickup bar).
   const tutorBars = props.tutorBars === true && loopControls;
   useEffect(() => {
     if (!tutorBars) return;
     const onBars = (e: Event) => {
       const d = (e as CustomEvent<{ from: number; to: number }>).detail;
       if (!d || !Number.isFinite(d.from) || !Number.isFinite(d.to)) return;
-      const next = clampRegion({ from: d.from - 1, bars: d.to - d.from + 1 }, loopBars);
+      const next = clampRegion(tutorBarsRegion(d, Boolean(props.pickup)), loopBars);
       setRegion(next);
       setLoopOn(true);
       propsRef.current.onLoopChange?.({ on: true, region: next });
       if (handle && !handle.disposed && handle.playing) void loop.start(handle.getCode());
     };
+    // A section chip in the tutor panel: select and loop that section, exactly as a click on the ribbon does.
+    const onSection = (e: Event) => {
+      const d = (e as CustomEvent<SectionLoop | null>).detail;
+      if (!d || !Number.isFinite(d.from) || !Number.isFinite(d.bars)) return;
+      loopSection(d);
+    };
     window.addEventListener(TUTOR_BARS_EVENT, onBars);
-    return () => window.removeEventListener(TUTOR_BARS_EVENT, onBars);
+    window.addEventListener(TUTOR_SECTION_EVENT, onSection);
+    return () => {
+      window.removeEventListener(TUTOR_BARS_EVENT, onBars);
+      window.removeEventListener(TUTOR_SECTION_EVENT, onSection);
+    };
   });
 
   const onToggle = useCallback(async () => {
@@ -783,6 +962,14 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
         toggleChordLens(chordLens);
         return;
       }
+      const lineLens = ev.shiftKey
+        ? (LINE_SWITCHES.find((l) => l.keys === `Shift+${k.toUpperCase()}`)?.id ?? null)
+        : null;
+      if (lineLens && lineLenses?.available[lineLens]) {
+        ev.preventDefault();
+        toggleLineLens(lineLens);
+        return;
+      }
       const panel = ev.shiftKey
         ? (PANEL_SWITCHES.find((p) => p.keys === `Shift+${k.toUpperCase()}`)?.id ?? null)
         : null;
@@ -889,12 +1076,19 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
                   on: chordLenses.shown[c.id],
                 }))
               : []),
+            ...(lineLenses
+              ? LINE_SWITCHES.filter((l) => lineLenses.available[l.id]).map((l) => ({
+                  ...l,
+                  on: lineLenses.shown[l.id],
+                }))
+              : []),
           ]
         : [],
     panels: PANEL_SWITCHES.filter((p) => panelAvailable[p.id]).map((p) => ({ ...p, on: panelsOpen[p.id] })),
     onToggle: (id) => {
       if (PANEL_SWITCHES.some((p) => p.id === id)) togglePanel(id as PanelId);
       else if (id === "chordSymbols" || id === "romanNumerals") toggleChordLens(id);
+      else if (LINE_SWITCHES.some((l) => l.id === id)) toggleLineLens(id as LineLensId);
       else toggleLens(id as LensId);
     },
   };
@@ -930,6 +1124,22 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
     () => ({ symbols: chords.symbols || leadSheet, romans: chords.romans }),
     [chords.symbols, chords.romans, leadSheet],
   );
+
+  const ribbon = showRibbon
+    ? {
+        sections,
+        energy: lines?.form.energy ?? [],
+        problem: lines?.problem ?? null,
+        currentBar,
+        loop: sectionLoop,
+        onLoop: loopSection,
+        pickup: Boolean(props.pickup),
+        showEnergy: panelsOpen.form === true,
+      }
+    : null;
+  const bassMarks = lineLenses?.shown.bassRoles ? (lines?.bassMarks ?? null) : null;
+  const blueNotes = lineLenses?.shown.blueNotes ? (lines?.blue ?? null) : null;
+  const badges = useMemo(() => swingBadges(lines?.swing ?? []), [lines]);
 
   const renderView = (v: MusicView) => {
     if (!model)
@@ -972,6 +1182,9 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
               }
             : {})}
           {...(ranges ? { ranges } : {})}
+          {...(ribbon ? { ribbon } : {})}
+          {...(bassMarks && bassMarks.size > 0 ? { bassMarks } : {})}
+          {...(blueNotes && blueNotes.size > 0 ? { blueNotes } : {})}
           {...(variant !== "mini" && (props.rollFollowBars ?? FOLLOW_PAGE_BARS) > 0
             ? { followBars: props.rollFollowBars ?? FOLLOW_PAGE_BARS }
             : {})}
@@ -979,15 +1192,21 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
       );
     if (v === "staff")
       return (
-        <StaffView
-          model={model}
-          bus={bus}
-          stale={stale}
-          hover={labels.hover}
-          annotations={labels.staff}
-          chordSet={chordSet}
-          {...(lead ? { lead } : {})}
-        />
+        <>
+          {/* No roll beside the staff (or the staff tab alone): the ribbon rides over the staff instead. */}
+          {ribbon && (!musicViews.includes("roll") || (layout === "tabs" && activeTab === "staff")) ? (
+            <SectionRibbon {...ribbon} axis={linearAxis(Math.max(200, width - 24), model.bars)} />
+          ) : null}
+          <StaffView
+            model={model}
+            bus={bus}
+            stale={stale}
+            hover={labels.hover}
+            annotations={labels.staff}
+            chordSet={chordSet}
+            {...(lead ? { lead } : {})}
+          />
+        </>
       );
     return null;
   };
@@ -1020,6 +1239,16 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
         .filter(Boolean)
         .join(" ")}
       data-targets={targetText}
+      data-sections={sections.length > 0 ? sections.map((x) => x.tag).join(" ") : undefined}
+      data-form-problem={lines?.problem ? "1" : undefined}
+      data-line-lenses={
+        lineLenses
+          ? LINE_SWITCHES.filter((l) => lineLenses.shown[l.id])
+              .map((l) => l.id)
+              .join(" ")
+          : undefined
+      }
+      data-piece-bars={loopBars}
       // Focusable (not a tab stop) so a click on the roll or the staff gives the workbench its keys.
       tabIndex={-1}
       onKeyDown={onKeyDown}
@@ -1039,6 +1268,7 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
         loopBars={loopBars}
         keySpec={keySpec}
         tracks={tracks}
+        badges={badges}
         mutes={mutes}
         onMute={(t) => applyMutes(toggleMute(mutes, t))}
         onSolo={(t) => applyMutes(toggleSolo(mutes, t))}
@@ -1123,10 +1353,10 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
           </>
         ) : model ? (
           musicViews.map((v) => <div key={v}>{renderView(v)}</div>)
-        ) : (
+        ) : musicViews.length > 0 ? (
           // Nothing to draw yet: one line, not one per view side by side.
           <div>{renderView(musicViews[0] ?? "roll")}</div>
-        )}
+        ) : null}
         {showKeyboard ? (
           <Keyboard
             model={model}
@@ -1139,12 +1369,81 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
           />
         ) : null}
       </div>
-      {anyPanel ? (
-        <div className={`oak-wb-panels${panelsOpen.key && panelsOpen.circle ? " oak-wb-panels--two" : ""}`}>
+      {anyPanel || panelsOpen.form || panelsOpen.chart || scopeShown ? (
+        <div
+          className={`oak-wb-panels${[panelsOpen.key, panelsOpen.circle, panelsOpen.form, panelsOpen.chart, scopeShown].filter(Boolean).length > 1 ? " oak-wb-panels--two" : ""}`}
+        >
           <div className="oak-wb-panels-grid">
             {panelsOpen.key ? <KeyPanel current={keyNow} keys={keysOfPiece} preview={preview} /> : null}
             {panelsOpen.circle ? (
               <CircleOfFifths current={keyNow} keys={keysOfPiece} preview={preview} />
+            ) : null}
+            {panelsOpen.form ? (
+              <FormMap
+                form={lines?.form ?? null}
+                sections={sections}
+                problem={lines?.problem ?? null}
+                loop={sectionLoop}
+                onLoop={loopSection}
+                currentBar={currentBar}
+                pickup={Boolean(props.pickup)}
+                cut={lines?.cut ?? null}
+              />
+            ) : null}
+            {panelsOpen.chart && model ? (
+              <ChartPanel
+                regions={harmony?.regions ?? []}
+                meter={model.meter}
+                bars={model.bars}
+                pickup={Boolean(props.pickup)}
+                swing={(lines?.swing ?? []).find((t) => t.swung !== null)?.swung ?? null}
+                blues={lines?.blues ?? null}
+                currentBar={currentBar}
+                period={Math.max(model.totalBars ?? 0, alternationBars(model.code))}
+              />
+            ) : null}
+            {scopeShown ? (
+              wantWave || wantSpectrum ? (
+                <ScopePanel
+                  tap={oak.scope}
+                  show={{ wave: wantWave, spectrum: wantSpectrum }}
+                  playing={anyPlaying}
+                  probe={probes[0]?.probe ?? null}
+                  probeKind={probes[0]?.kind ?? null}
+                  f0={probes[0]?.f0 ?? null}
+                  sourceNote={sourceNote}
+                  ran={runHaps !== null}
+                />
+              ) : (
+                <section className="oak-wb-panel oak-scope" aria-label="Sound" data-testid="probe-panel">
+                  {probes.slice(0, 1).map((pr) => (
+                    <ProbeView
+                      key={pr.kind}
+                      probe={pr.probe}
+                      kind={pr.kind}
+                      f0={pr.f0}
+                      ran={runHaps !== null}
+                    />
+                  ))}
+                </section>
+              )
+            ) : null}
+            {scopeShown && (wantWave || wantSpectrum) && probes.length > 1 ? (
+              <section
+                className="oak-wb-panel oak-scope"
+                aria-label="More of the sound"
+                data-testid="probe-more"
+              >
+                {probes.slice(1).map((pr) => (
+                  <ProbeView
+                    key={pr.kind}
+                    probe={pr.probe}
+                    kind={pr.kind}
+                    f0={pr.f0}
+                    ran={runHaps !== null}
+                  />
+                ))}
+              </section>
             ) : null}
           </div>
         </div>
@@ -1165,6 +1464,7 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
           bus={bus}
           abAudible={props.target?.audible ?? "fromHint2"}
           ab={ab}
+          {...(props.abLabels ? { abLabels: props.abLabels } : {})}
         />
       ) : null}
     </div>

@@ -1,7 +1,7 @@
 // Registry integrity (architecture §3.7 items 1–2, contracts §1, §2.5, §2.7, §4, §7.3, §7.6): IDs are
 // unique and well-formed, every reference resolves, the course adds up, the default order is a legal
 // order, the skill graph is ordered in every legal order, and the ID ledger holds.
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type IdKind, isId, type SessionId } from "@oak/content-kit";
@@ -10,6 +10,9 @@ import { CHECKPOINT_RETESTS } from "../checkpoints.ts";
 import { courseGraph, registries } from "../index.ts";
 import { atOrBefore, sessionCycles, skillOrderIssues } from "../lib/course.ts";
 import { LANDMARKS, SESSION_COUNTS } from "../syllabus.ts";
+import { BAD_LOG, evaluate, lint } from "./harness.ts";
+
+setDefaultTimeout(60_000);
 
 const R = registries;
 const g = courseGraph();
@@ -269,5 +272,41 @@ describe("references resolve", () => {
   test("ear stages name real families (§7.3)", () => {
     const famIds = new Set(R.families.map((f) => f.id as string));
     for (const list of Object.values(R.earStages)) for (const f of list) expect(famIds.has(f)).toBe(true);
+  });
+});
+
+// Wave 5: every glossary entry's audio example (terms.ts) plays and is legal where the term is introduced,
+// in every legal order, so the glossary card of a side lesson (A1) is playable by a learner at U03.L02.
+describe("glossary examples", () => {
+  const meterOf = (code: string) =>
+    /setcpm\(\d+\/3\)/.test(code) ? "3/4" : /setcpm\(\d+\/2\)/.test(code) ? "2/4" : "4/4";
+  for (const t of R.terms)
+    test(`${t.id} plays and lints at ${t.introducedBy}`, async () => {
+      const r = await evaluate(t.example, 2);
+      expect([t.id, r.ok, r.error ?? ""]).toEqual([t.id, true, ""]);
+      expect([t.id, r.events.length > 0]).toEqual([t.id, true]);
+      expect(r.logs.filter((x) => BAD_LOG.test(x))).toEqual([]);
+      const errors = lint(t.example, {
+        session: t.introducedBy as SessionId,
+        meter: meterOf(t.example),
+        key: { tonic: "C", mode: "major" },
+        allowPreview: t.introducedBy.startsWith("U00"),
+      }).diagnostics.filter((d) => d.severity === "error");
+      expect([t.id, errors.map((d) => `${d.id} ${d.message}`)]).toEqual([t.id, []]);
+    });
+});
+
+describe("milestones", () => {
+  test("every session and capstone a milestone waits for exists", () => {
+    const sessions = new Set<string>([...g.nodes.keys()]);
+    const caps = new Set<string>(R.capstones.map((c) => c.id));
+    const bad: string[] = [];
+    const conds = (w: (typeof R.milestones)[number]["when"]): (typeof w)[] => [w, ...(w.anyOf ?? [])];
+    for (const m of R.milestones)
+      for (const w of conds(m.when)) {
+        for (const s of w.sessions ?? []) if (!sessions.has(s)) bad.push(`${m.id} session ${s}`);
+        for (const c of w.capstones ?? []) if (!caps.has(c)) bad.push(`${m.id} capstone ${c}`);
+      }
+    expect(bad).toEqual([]);
   });
 });

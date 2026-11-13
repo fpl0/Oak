@@ -54,13 +54,15 @@ export function swingRatio(events: readonly NEvent[], meter: MeterId, subdivisio
 }
 
 /**
- * Straightens swung onsets with an exact amount: an event at or after `(1 + x) / 2` of its slot was
- * delayed by `swingBy`, so `x / 2` of a slot is subtracted from its onset. Durations are untouched.
+ * Straightens swung onsets with an exact amount: an event past the midpoint between `1/2` and `(1 + x) / 2`
+ * of its slot was delayed by `swingBy`, so `x / 2` of a slot is subtracted from its onset. Durations are untouched.
  */
 export function straightenExact<T extends NEvent>(events: readonly T[], x: Rat, slot: Rat): T[] {
   if (x[0] <= 0) return [...events];
   const shift = R.mul(R.div(x, [2, 1]), slot);
-  const threshold = R.div(R.add([1, 1], x), [2, 1]);
+  // From the midpoint between the straight off-beat (1/2) and the swung one ((1 + x)/2) on: an answer swung a
+  // touch less than declared (`.swingBy(.33, 4)` against 1/3) is still straightened (review:teaching, wave 5 gate).
+  const threshold = R.div(R.add([2, 1], x), [4, 1]);
   return events.map((e) => {
     const f = R.frac(R.div(e.onset, slot));
     return R.lt(f, threshold) ? e : { ...e, onset: R.sub(e.onset, shift) };

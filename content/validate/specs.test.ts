@@ -22,6 +22,7 @@ import { unitSpecs } from "../specs/index.ts";
 import { renderUnit, specBudget } from "../specs/render.ts";
 import { termById } from "../terms.ts";
 import { toolboxById } from "../toolbox.ts";
+import { orderPoint } from "./authoring.ts";
 import { BAD_LOG, evaluate, lint, ONBOARDING_PREVIEW, unlockedFor } from "./harness.ts";
 
 setDefaultTimeout(60_000);
@@ -34,16 +35,29 @@ const meta = new Map(
 );
 const termsOf = (t: string | string[] | undefined): string[] =>
   t === undefined ? [] : Array.isArray(t) ? t : [t];
+/** Specs written before Wave 5, which predate the enjoyment / pace / return lines. Every later spec has them. */
+const BEFORE_EPR = new Set(["U00", "U01", "U02", "U03", "U04", "U05", "U06", "U07"]);
 
 test("the skill graph is ordered in every legal order (contracts §4.2 rule 1)", () => {
   expect(skillOrderIssues(g, registries.syllabus, registries.skills)).toEqual([]);
 });
 
+/**
+ * Makes that write their own drums, each with its reason (AUTHORING §8 rule 8): a Band's drums would double or
+ * flam against them.
+ */
+const NO_BAND: Record<string, string> = {
+  "U11.L07": "the shuffle's swung hats are the learner's; a Band's straight hats would flam against them",
+  "U11.L08": "the swung shuffle of U11.L07 again, hats, kick and snare in the learner's code",
+};
+
 for (const u of unitSpecs)
   describe(`${u.unit} spec`, () => {
     const unit = registries.syllabus.units.find((x) => x.id === u.unit);
-    test("covers every lesson of the unit, in order", () => {
-      expect(u.lessons.map((l) => l.id)).toEqual((unit?.lessons ?? []).map((l) => l.id));
+    test("covers every lesson of the unit (or the lessons it says it covers), in order", () => {
+      const all = (unit?.lessons ?? []).map((l) => l.id as string);
+      if (u.covers) for (const id of u.covers) expect([id, all.includes(id)]).toEqual([id, true]);
+      expect(u.lessons.map((l) => l.id as string)).toEqual(u.covers ?? all);
     });
     test("content/specs/*.md is the current rendering", () => {
       const md = readFileSync(join(import.meta.dir, "..", "specs", `${u.unit}.md`), "utf8");
@@ -193,17 +207,27 @@ for (const u of unitSpecs)
           for (const s of l.steps) expect((s.minutes * 4) % 1).toBe(0);
         });
         test("the Band exists and is written in the lesson's meter; from U01 every Make has one", () => {
-          if (l.make.band === false) expect(l.id.startsWith("U00")).toBe(true);
+          if (l.make.band === false)
+            expect([l.id, l.id.startsWith("U00") || l.id in NO_BAND]).toEqual([l.id, true]);
           else {
             expect(bandById.has(l.make.band)).toBe(true);
             expect(bandMeter(l.make.band)).toBe(l.meter);
           }
         });
+        if (!BEFORE_EPR.has(u.unit))
+          test("enjoyment, pace and return: one line each (Wave 5)", () => {
+            const e = l.epr;
+            expect([l.id, Boolean(e)]).toEqual([l.id, true]);
+            for (const [k, v] of Object.entries(e ?? {}))
+              expect([l.id, k, (v as string).trim().split(/\s+/).length >= 8]).toEqual([l.id, k, true]);
+          });
         test("singing: numbers until U03.L08, syllables from it (contracts §8.3)", () => {
           const order = registries.syllabus.defaultOrder as readonly string[];
-          const before = order.indexOf(l.id) >= 0 && order.indexOf(l.id) < order.indexOf("U03.L08");
+          // A side lesson is judged at the earliest point it can be taken (just after U03.L02 for A1).
+          const at = orderPoint(l.id);
+          const before = at >= 0 && at < order.indexOf("U03.L08");
           const sings = l.steps.some((s) => s.kind === "sing");
-          if (sings && order.indexOf(l.id) >= order.indexOf("U03.L02"))
+          if (sings && at >= order.indexOf("U03.L02"))
             expect([l.id, l.singOn]).toEqual([l.id, before ? "numbers" : "syllables"]);
           if (l.singOn === "syllables") expect([l.id, before]).toEqual([l.id, false]);
         });

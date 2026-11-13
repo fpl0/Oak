@@ -123,6 +123,15 @@ export interface AnswerValueMap {
   /** `"same"` or `"different"`, as a one-item choice list. */
   "same-different": string[];
   slider: number | null;
+  /**
+   * Wave 5 (docs/design/wave5.md §11; the answers engineer builds the widgets): one label per section heard
+   * (`"verse"`, or a letter), sent as `answer.sections`.
+   */
+  form: string[];
+  /** Wave 5: one entry per bar — a numeral (`entry: "rn"`, `answer.rn`) or a code-spelled symbol (`answer.text`); `""` empty. */
+  "bar-grid": string[];
+  /** Wave 5: MIDI notes picked on the keyboard (`answer.midi`) or degrees ticked on the pad (`answer.degrees`). */
+  "scale-builder": (number | string)[];
 }
 export type AnswerValue<K extends AnswerKind = AnswerKind> = AnswerValueMap[K];
 

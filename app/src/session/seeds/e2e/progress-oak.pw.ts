@@ -3,6 +3,7 @@
 // fail), the U03–U04 leaves from real progress on the 'after U03.L02', 'after U03.CP' and 'U04.CP due' seeds,
 // and Revive / Revive more against the real server.
 import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
+import { milestones } from "../../../../../content/milestones.ts";
 import { shoot, useUiPrefs } from "../../../../../e2e/support/ui.ts";
 import { api, blockHmr, expectNoOverflow, matrix, SHOTS, seed, settle } from "./support.ts";
 
@@ -69,7 +70,8 @@ test("progress: milestones from content, honest ledger counts, sing can-dos wait
   await expect(ms.locator('[data-milestone="ms.02"]')).toContainText("a bass line");
   await expect(ms.locator('[data-state="next"]')).toContainText("You can now compose a song.");
   await expect(ms.locator('[data-state="next"]')).toContainText("Chords that loop");
-  await expect(ms).toContainText("Later (6)");
+  // Two reached, one next, the rest later (the registry grows with each wave: ms.10–ms.14 in Wave 5).
+  await expect(ms).toContainText(`Later (${milestones.length - 3})`);
   // Counts are what the ledger holds: "n of N shown · k solid or strong".
   await expect(page.getByTestId("ledger-code-counts")).toHaveText(
     /^\d+ of \d+ shown( · \d+ solid or strong)?$/,
@@ -185,7 +187,7 @@ test("Revive on the real server: today's planned sets of drying leaves, inside t
       `≈ ${Math.max(1, Math.round(batch.plannedSec / 60))} min`,
     );
   } else {
-    await expect(page.getByText("Nothing to revive right now")).toBeVisible();
+    await expect(page.getByText("Nothing to revive right now")).toBeVisible({ timeout: 20_000 });
   }
   await settle(page);
   await expectNoOverflow(page);

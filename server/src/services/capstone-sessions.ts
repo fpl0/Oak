@@ -136,11 +136,30 @@ export class CapstoneSessionsService {
     const out: CapstoneCheckState[] = [];
     let prevCheck: string | null = null;
     let prevCleared = true;
+    // Wave 5 (X2: bass → changes → melody, contracts §6.6): a check naming `after` opens once each of those checks
+    // (every stage of it, in whichever session of the capstone it sits) passed or was revealed.
+    const allSlots = (this.#content.capstoneDef(id)?.sessionDefs ?? []).flatMap((d) => checkSlots(d));
+    const cleared = (checkId: string): boolean => {
+      const slots = allSlots.filter((x) => x.check.id === checkId);
+      return (
+        slots.length > 0 &&
+        slots.every(({ stage }) => {
+          const r = rows.find((x) => x.checkId === checkId && x.stage === stage);
+          return r !== undefined && (r.passed || r.revealed);
+        })
+      );
+    };
     for (const { check, stage } of checkSlots(this.#sessionDef(id, capstoneSessionId))) {
       const r = rows.find((x) => x.checkId === check.id && x.stage === stage) ?? null;
+      const after = check.after ?? [];
       // A stage opens once the stage before it passed or was revealed (bass → quality → rn).
-      const open = !locked && (stage === null || prevCheck !== check.id || prevCleared);
+      const open =
+        !locked &&
+        (stage === null || prevCheck !== check.id || prevCleared) &&
+        after.every((a) => cleared(a));
       out.push({
+        ...(after.length > 0 ? { after: [...after] } : {}),
+        passAt: check.pass,
         checkId: check.id,
         phrase: check.phrase,
         layer: check.layer,
@@ -290,7 +309,11 @@ export class CapstoneSessionsService {
         throw badRequest(`${checkId} has no stage ${body.stage}`);
       const cs = state.checks.find((c) => c.checkId === checkId && c.stage === body.stage);
       if (cs !== undefined && !cs.open)
-        throw conflict("this stage opens once the stage before it passes or is revealed");
+        throw conflict(
+          (cs.after ?? []).length > 0 && cs.stage === null
+            ? `${checkId} opens once ${(cs.after ?? []).join(" and ")} passed or was revealed`
+            : "this stage opens once the stage before it passes or is revealed",
+        );
       const version = this.#repos.sketches.version(body.sketchId, body.sketchVersion);
       if (version === null) throw notFound(`sketch ${body.sketchId} v${body.sketchVersion}`);
       const now = this.time.iso();

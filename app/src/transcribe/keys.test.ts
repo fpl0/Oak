@@ -75,4 +75,38 @@ describe("Transcribe keys", () => {
     hits.length = 0;
     expect(hits).toEqual([]);
   });
+
+  test("song keys: digits loop phrase or line n, PageUp/PageDown step, C the chorus, Shift+B the bass alone", () => {
+    const hits: string[] = [];
+    const km = createKeymap();
+    km.register(transcribeBindings((a, n) => hits.push(n === undefined ? a : `${a}:${n}`)));
+    km.handle(ev("3", {}, "Digit3"), ctx());
+    km.handle(ev("9", {}, "Digit9"), ctx());
+    km.handle(ev("PageDown", {}, "PageDown"), ctx());
+    km.handle(ev("PageUp", {}, "PageUp"), ctx());
+    km.handle(ev("c", {}, "KeyC"), ctx());
+    km.handle(ev("B", { shiftKey: true }, "KeyB"), ctx());
+    km.handle(ev("M", { shiftKey: true }, "KeyM"), ctx());
+    km.handle(ev("ArrowLeft", { shiftKey: true }, "ArrowLeft"), ctx());
+    km.handle(ev("w", {}, "KeyW"), ctx());
+    expect(hits).toEqual([
+      "loopLine:3",
+      "loopLine:9",
+      "nextLine",
+      "prevLine",
+      "loopChorus",
+      "listenBass",
+      "listenNoMelody",
+      "downbeatEarlier",
+      "swing",
+    ]);
+    // A focused button keeps PageDown (and Space) for itself.
+    km.handle(ev("PageDown", {}, "PageDown"), ctx({ onControl: true }));
+    expect(hits).toHaveLength(9);
+    // One row in the sheet stands for the nine digits.
+    const grouped = transcribeBindings(() => {}).filter(
+      (b) => b.id.startsWith("transcribe:loopLine") && b.group,
+    );
+    expect(grouped.map((b) => b.keys)).toEqual(["1"]);
+  });
 });

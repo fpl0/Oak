@@ -6,7 +6,13 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { toolbox } from "../../content/toolbox.ts";
-import { CONTROL_CASES, QUALITY_CASES, SOUND_CASES } from "../../packages/strudel/src/audibility/cases.ts";
+import {
+  A1_CASES,
+  BASS_TONE_CASES,
+  CONTROL_CASES,
+  QUALITY_CASES,
+  SOUND_CASES,
+} from "../../packages/strudel/src/audibility/cases.ts";
 import { OAK_ALIASES, OAK_KITS } from "./pack.config.ts";
 
 const ROOT = join(import.meta.dirname, "../..");
@@ -64,6 +70,62 @@ describe("audibility table", () => {
     if (unflagged.length)
       console.info(`proven audible, not flagged in content/toolbox.ts: ${unflagged.join(", ")}`);
     expect(unflagged).toEqual([]);
+  });
+});
+
+describe("Wave 5: U08–U11 and the A1 side lessons", () => {
+  const wave5 = JSON.parse(readFileSync(join(ROOT, "packages/strudel/sound-wave5.json"), "utf8")) as {
+    audibility: {
+      tools: { id: string; audible: boolean }[];
+      lessons: { id?: string; audible: boolean; same?: boolean; lesson: string }[];
+    };
+    bass: { tuning: Record<string, unknown[]> };
+    blues: { tuning: Record<string, unknown[]> };
+  };
+  /** Rows that shape the code, not the sound (form and naming): no audibility case by design. */
+  const STRUCTURAL = new Set(["tb.const", "tb.arrange"]);
+  const unlockedIn = (re: RegExp) =>
+    toolbox.filter((t) => {
+      const at = Array.isArray(t.unlock.at) ? t.unlock.at : [t.unlock.at];
+      return at.some((s) => re.test(String(s)));
+    });
+
+  test("every tool, scale, chord and sound U08–U11 unlock has a case and is proven audible", () => {
+    const rows = unlockedIn(/^U(0[89]|1[01])\./).filter(
+      (t) => ["sound", "tool", "chord", "scale", "template"].includes(t.kind) && !STRUCTURAL.has(t.id),
+    );
+    expect(rows.length).toBeGreaterThanOrEqual(15);
+    const cased = new Set([...CONTROL_CASES, ...SOUND_CASES].map((c) => c.id));
+    expect(rows.map((t) => t.id).filter((id) => !cased.has(id))).toEqual([]);
+    expect(rows.map((t) => t.id).filter((id) => table.audible[id] !== true)).toEqual([]);
+  });
+
+  test("every sound control A1.L01–L04 teach is rendered in the lesson's own loop and heard there", () => {
+    const taught = unlockedIn(/^A1\.L0[1-4]$/).filter((t) => t.group === "H" && !VISUAL.has(t.id));
+    expect(taught.length).toBeGreaterThanOrEqual(10);
+    const cased = new Set(A1_CASES.map((c) => c.id).filter((id) => id !== ""));
+    expect(taught.map((t) => t.id).filter((id) => !cased.has(id))).toEqual([]);
+    const rows = wave5.audibility.lessons.filter((r) => r.lesson.startsWith("A1."));
+    expect(rows.length).toBe(A1_CASES.length);
+    for (const r of rows) {
+      if (r.same) expect([r.id, r.audible]).toEqual([r.id, false]);
+      else if (r.id) expect([r.id, r.audible]).toEqual([r.id, true]);
+    }
+    // U08.L05's bass preset on every bass tone
+    const bass = wave5.audibility.lessons.filter((r) => r.lesson === "U08.L05");
+    expect(bass.length).toBe(BASS_TONE_CASES.length);
+    expect(bass.every((r) => r.audible)).toBe(true);
+  });
+
+  test("the tuning table covers every pitched sound U08–U11 unlock", () => {
+    const pitched = unlockedIn(/^U(0[89]|1[01])\./)
+      .filter((t) => t.kind === "sound")
+      .map((t) => t.id);
+    const measured = new Set(QUALITY_CASES.map((c) => c.id));
+    expect(pitched.filter((id) => !measured.has(id))).toEqual([]);
+    // and the bass and blues registers they are played in
+    expect(Object.keys(wave5.bass.tuning).sort()).toEqual(["ebass", "fingerbass", "synthbass", "upright"]);
+    expect(Object.keys(wave5.blues.tuning).sort()).toEqual(["cleangtr", "crunch", "organ", "piano"]);
   });
 });
 

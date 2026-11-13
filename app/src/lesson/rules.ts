@@ -26,8 +26,21 @@ export function coreRank(id: string): number | null {
   return m ? Number(m[1]) * 100 + Number(m[2]) : null;
 }
 
+/**
+ * Where a side lesson is judged: at its gate (A1.L01–L04 open after U03.L02 and are written for a learner who has
+ * only that, wave5.md §5.1), so it sings on numbers like U03.L02 does.
+ */
+const SIDE_GATE: Readonly<Record<string, string>> = {
+  "A1.L01": "U03.L02",
+  "A1.L02": "U03.L02",
+  "A1.L03": "U03.L02",
+  "A1.L04": "U03.L02",
+};
+
 /** Whether `id` comes at or after the core lesson `from` (non-core sessions count as later: they follow U03). */
 export function atOrAfter(id: string, from: string): boolean {
+  const gate = SIDE_GATE[id];
+  if (gate !== undefined) return atOrAfter(gate, from);
   const a = coreRank(id);
   const b = coreRank(from);
   if (b === null) return false;

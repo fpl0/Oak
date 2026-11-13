@@ -25,12 +25,14 @@ import type { CapstoneDef, Exercise, GradeResult, LessonDef, PhraseCheck } from 
 import { gradeExercise } from "@oak/grader";
 import { loadContent } from "../content/loader.ts";
 import type { ContentSource } from "../content/types.ts";
-import { CONTENT_DIR, standInLesson } from "../testing/course.ts";
+import { CONTENT_DIR, standInLesson, wave4Course } from "../testing/course.ts";
 import { gradeResult, type Harness, harness } from "../testing/harness.ts";
 
 let real: ContentSource;
 beforeAll(async () => {
-  real = await loadContent({ contentDir: CONTENT_DIR });
+  // The course as Wave 4 had it: the Wave 5 lessons (U08.L02 on, the side lessons) that authors write now would
+  // change what Today offers after C2 (a lesson instead of X1's gym day).
+  real = wave4Course(await loadContent({ contentDir: CONTENT_DIR }));
 });
 
 const NOW = "2026-11-11T12:00:00.000Z";
@@ -1037,7 +1039,10 @@ describe("backup → restore keeps Wave 4 state (contracts §11.10)", () => {
         projects: await ok(fresh, "GET", "/api/transcriptions"),
         voicing: await ok(fresh, "GET", "/api/gates/voicing"),
       };
-      expect(after).toEqual(before);
+      // Wave 5 (c2): the imported gate attempt's code runs only after the strict lint; otherwise nothing changed.
+      const { passedCodeImported, ...voicing } = after.voicing as { passedCodeImported?: boolean };
+      expect(passedCodeImported).toBe(true);
+      expect({ ...after, voicing } as unknown).toEqual(before);
       const own = (after.projects as { items: Transcription[] }).items.find(
         (t) => t.sourceKind === "own-audio",
       );

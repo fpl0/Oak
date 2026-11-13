@@ -5,6 +5,7 @@
 import type { CapstoneCheckState, GradeResult, PhraseCheck, SongDef } from "@oak/api";
 import { phraseWindow } from "@oak/grader";
 import { displayRN, METERS, parseChordSymbol, romanOf, tempoLine, toLeadSheet } from "@oak/theory";
+import { lineSpans, type SongGiven, songStarter } from "../../transcribe/song.ts";
 
 export type Stage = "bass" | "quality" | "rn";
 
@@ -24,7 +25,15 @@ export interface CheckRow extends LocalCheck {
   stage: Stage | null;
   open: boolean;
   pass: number;
+  /**
+   * Wave 5 (`PhraseCheck.after`, X2's bass → changes → melody): what this row waits for while it is closed ("the
+   * bass"), `null` when open or when it only waits for the stage before it.
+   */
+  waitsFor: string | null;
 }
+
+/** Whether each check of a capstone is settled (every stage passed or revealed), and its name for "Opens after". */
+export type SettledChecks = ReadonlyMap<string, { settled: boolean; name: string }>;
 
 export const rowKey = (checkId: string, stage: Stage | null): string =>
   stage ? `${checkId}.${stage}` : checkId;
@@ -51,12 +60,19 @@ export function checkRows(
   checks: readonly PhraseCheck[],
   server: readonly CapstoneCheckState[],
   local: Readonly<Record<string, LocalCheck>>,
+  /** Checks of earlier sessions (for `after` across sessions: X2's melody waits for S1's changes). */
+  earlier: SettledChecks = new Map(),
 ): CheckRow[] {
   const fromServer = new Map(server.map((s) => [rowKey(s.checkId, s.stage), s] as const));
+  const known = new Map(earlier);
   const rows: CheckRow[] = [];
   for (const c of checks) {
     const stages: (Stage | null)[] = c.layer === "chords" && c.stages?.length ? c.stages : [null];
+    // `after`: every named check settled first (contracts §6.6 X2 "stages in that order").
+    const waiting = (c.after ?? []).find((id) => !(known.get(id)?.settled ?? false));
+    const waitsFor = waiting === undefined ? null : (known.get(waiting)?.name ?? waiting);
     let prevSettled = true;
+    let all = true;
     for (const stage of stages) {
       const key = rowKey(c.id, stage);
       const s = fromServer.get(key);
@@ -64,21 +80,47 @@ export function checkRows(
         s ? { score: s.score, passed: s.passed, revealed: s.revealed, attempts: s.attempts } : undefined,
         local[key],
       );
-      const open = stage === null ? true : prevSettled || (s?.open ?? false);
+      const stageOpen = stage === null ? true : prevSettled || (s?.open ?? false);
       rows.push({
         key,
         checkId: c.id,
         phrase: c.phrase,
         layer: c.layer,
         stage,
-        open,
+        open: stageOpen && waitsFor === null,
         pass: c.pass,
+        waitsFor,
         ...merged,
       });
       prevSettled = settled(merged);
+      all &&= prevSettled;
     }
+    known.set(c.id, { settled: all, name: checkName(c) });
   }
   return rows;
+}
+
+/** The rows of every session in order, each knowing the checks before it (`after` across sessions). */
+export function capstoneRows(
+  sessions: readonly { checks: readonly PhraseCheck[]; server: readonly CapstoneCheckState[] }[],
+  local: Readonly<Record<string, LocalCheck>>,
+): CheckRow[][] {
+  const known = new Map<string, { settled: boolean; name: string }>();
+  return sessions.map((s) => {
+    const rows = checkRows(s.checks, s.server, local, known);
+    for (const c of s.checks) {
+      const mine = rows.filter((r) => r.checkId === c.id);
+      known.set(c.id, { settled: mine.length > 0 && mine.every(settled), name: checkName(c) });
+    }
+    return rows;
+  });
+}
+
+/** "the bass", "the changes", "the melody of phrase 2": a check as "Opens after …" names it. */
+export function checkName(c: Pick<PhraseCheck, "layer" | "phrase" | "stages">): string {
+  if (c.layer === "bass") return "the bass";
+  if (c.layer === "chords") return c.stages?.length ? "the chords" : "the changes";
+  return `the melody of ${phraseText(c.phrase).toLowerCase()}`;
 }
 
 /** Folds one graded result into the local record of a row. */
@@ -109,9 +151,16 @@ export const STAGE_WORD: Record<Stage, string> = {
 };
 const LAYER_WORD: Record<PhraseCheck["layer"], string> = { melody: "melody", bass: "bass", chords: "chords" };
 
-/** "Phrase 2 · melody", "Phrases 1–4 · chords: the bass". */
+/** "Phrase 2 · melody", "Phrases 1–4 · chords: the bass", "Phrases 1–3 · changes" (X2: the chords, unstaged). */
 export function rowLabel(r: Pick<CheckRow, "phrase" | "layer" | "stage">): string {
-  return `${phraseText(r.phrase)} · ${LAYER_WORD[r.layer]}${r.stage ? `: ${STAGE_WORD[r.stage]}` : ""}`;
+  const layer = r.layer === "chords" && r.stage === null ? "changes" : LAYER_WORD[r.layer];
+  return `${phraseText(r.phrase)} · ${layer}${r.stage ? `: ${STAGE_WORD[r.stage]}` : ""}`;
+}
+
+/** Why a closed row is closed: the check it waits for, else the stage before it. */
+export function lockedText(r: Pick<CheckRow, "stage" | "waitsFor">): string {
+  if (r.waitsFor) return `Opens after ${r.waitsFor}.`;
+  return `Opens after ${r.stage === "quality" ? STAGE_WORD.bass : r.stage === "rn" ? STAGE_WORD.quality : "the check before it"}.`;
 }
 
 /** What was revealed rather than heard, for the liner notes ("phrase 2", "the chords' Roman numerals"). */
@@ -121,7 +170,11 @@ export function revealedItems(rows: readonly CheckRow[]): string[] {
     .map((r) =>
       r.stage
         ? `${STAGE_WORD[r.stage]} of ${phraseText(r.phrase).toLowerCase()}`
-        : phraseText(r.phrase).toLowerCase(),
+        : r.layer === "melody"
+          ? phraseText(r.phrase).toLowerCase()
+          : r.layer === "bass"
+            ? "the bass line"
+            : "the changes",
     );
 }
 
@@ -147,7 +200,7 @@ export function songCycles(song: Pick<SongDef, "pickup" | "answerKey">): number 
 
 /** "4/4 · C major · tonic C · pickup of 1 beat": what X1 tells the learner first (contracts §6.6 X1). */
 export function givenLines(
-  song: Pick<SongDef, "meter" | "key" | "pickup" | "bpm">,
+  song: Pick<SongDef, "meter" | "key" | "pickup" | "bpm"> & Partial<Pick<SongDef, "swing">>,
 ): { label: string; value: string }[] {
   const out = [
     { label: "Meter", value: song.meter },
@@ -155,6 +208,11 @@ export function givenLines(
     { label: "Tonic (1)", value: song.key.tonic },
     { label: "Tempo", value: `${song.bpm} BPM` },
   ];
+  if (song.swing)
+    out.push({
+      label: "Feel",
+      value: `Swing ${song.swing.subdivision}ths, given: write straight; the check straightens`,
+    });
   if (song.pickup) {
     const units = song.pickup.units[0] / song.pickup.units[1];
     const per = METERS[song.meter].unitsPerBar;
@@ -207,4 +265,47 @@ export function chordAnswer(
         rn: chord ? displayRN(romanOf(chord, song.key)) : null,
       };
     });
+}
+
+// --- X2 (Wave 5) ---------------------------------------------------------------------------------
+
+/** A transcription worked bass-first (X2: a check waits for another, or a non-melody check comes first). */
+export function bassFirst(checks: readonly PhraseCheck[]): boolean {
+  return checks.some((c) => (c.after?.length ?? 0) > 0) || checks[0]?.layer === "bass";
+}
+
+/** The givens of a song as Transcribe's song items state them (contracts §6.12; X2 adds the form and the feel). */
+export function songGivenFromDef(
+  song: Pick<
+    SongDef,
+    "id" | "title" | "year" | "bpm" | "meter" | "key" | "pickup" | "swing" | "form" | "answerKey"
+  >,
+): SongGiven {
+  const units = song.pickup ? song.pickup.units[0] / song.pickup.units[1] : 0;
+  return {
+    songId: String(song.id),
+    title: song.title,
+    year: song.year,
+    bpm: song.bpm,
+    meter: song.meter,
+    key: song.key,
+    pickupBeats: units > 0 ? units : null,
+    bars: song.answerKey.bars,
+    phrases: (song.answerKey.phrases ?? lineSpans(song.answerKey.bars)).map(
+      (p) => [p[0], p[1]] as [number, number],
+    ),
+    swing: song.swing !== undefined,
+    form: song.form || null,
+  };
+}
+
+/**
+ * The code a transcription capstone starts from: X1's melody line, or, for a bass-first one (X2), Transcribe's L6
+ * starter: the tempo, the givens as comments, a bass line, an empty `chords:` line and the melody, a bar each.
+ */
+export function transcribeStarter(
+  checks: readonly PhraseCheck[],
+  song: Parameters<typeof songGivenFromDef>[0] & Pick<SongDef, "answerKey" | "title">,
+): string {
+  return bassFirst(checks) ? songStarter(6, songGivenFromDef(song)) : x1Starter(song);
 }

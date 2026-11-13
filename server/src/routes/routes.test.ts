@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { contract, ENDPOINT_NAMES, WAVE2_ENDPOINTS, WAVE3_ENDPOINTS, WAVE4_ENDPOINTS } from "@oak/api";
+import {
+  contract,
+  ENDPOINT_NAMES,
+  WAVE2_ENDPOINTS,
+  WAVE3_ENDPOINTS,
+  WAVE4_ENDPOINTS,
+  WAVE5_ENDPOINTS,
+} from "@oak/api";
 import { gradeResult, type Harness, harness } from "../testing/harness.ts";
 
 let h: Harness;
@@ -39,7 +46,7 @@ describe("meta", () => {
     }>("GET", "/api/health");
     expect(r.status).toBe(200);
     expect(r.body.ok).toBe(true);
-    expect(r.body.schemaVersion).toBe(5);
+    expect(r.body.schemaVersion).toBe(6);
     expect(r.body.contentVersion).toBe("fixture-1");
     expect(r.body.tutor).toBe("unreachable");
     expect(r.body.dev).toBe(false);
@@ -666,6 +673,54 @@ describe("Wave 4 endpoints", () => {
           });
         else expect({ name, status: r.status }).not.toEqual({ name, status: 501 });
       }
+    } finally {
+      await full.close();
+    }
+  });
+});
+
+/**
+ * The Wave 5 endpoints still answering their typed 501 stub (docs/design/wave5.md §5). The server engineer removes
+ * a name here as its handler lands; the test then checks it no longer answers 501.
+ */
+const WAVE5_PENDING: readonly (typeof WAVE5_ENDPOINTS)[number][] = [];
+const WAVE5_BODIES: Partial<Record<(typeof WAVE5_ENDPOINTS)[number], unknown>> = {
+  "transcriptions.confirmVersion": { strictLintPassed: true },
+};
+
+describe("Wave 5 endpoints", () => {
+  test("a pending endpoint answers the typed 501 stub; a built one never does", async () => {
+    const full = await harness({ dev: true });
+    try {
+      for (const name of WAVE5_ENDPOINTS) {
+        const def = contract[name] as { method: string; path: string };
+        const path = `/api${def.path.replace(/:([A-Za-z]+)/g, "1")}`;
+        const r = await full.json<{ error?: { code: string } }>(def.method, path, WAVE5_BODIES[name]);
+        if (WAVE5_PENDING.includes(name))
+          expect({ name, status: r.status, code: r.body?.error?.code }).toEqual({
+            name,
+            status: 501,
+            code: "not_implemented",
+          });
+        else expect({ name, status: r.status }).not.toEqual({ name, status: 501 });
+      }
+    } finally {
+      await full.close();
+    }
+  });
+  test("ladder levels 5 and 6 are built: a higher level is refused until offered, never a 501", async () => {
+    const full = await harness({ dev: true });
+    try {
+      const r = await full.json<{ error?: { code: string } }>("POST", "/api/ladder/items", {
+        sessionId: null,
+        gymId: null,
+        level: 5,
+      });
+      expect({ status: r.status, code: r.body?.error?.code }).toEqual({ status: 409, code: "conflict" });
+      const up = await full.json<{ error?: { code: string } }>("PUT", "/api/ladder", { level: 6 });
+      expect(up.status).toBe(409);
+      const songs = await full.json<{ items: unknown[] }>("GET", "/api/ladder/songs");
+      expect(songs.status).toBe(200);
     } finally {
       await full.close();
     }

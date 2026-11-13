@@ -21,6 +21,8 @@ export function answerWidgetLabel(spec: AnswerSpec): string {
       return "Your answer: the code";
     case "staff-input":
       return "Your answer: the notes on the staff";
+    case "form":
+      return "Your answer: a letter for each section";
     default:
       return "Your answer";
   }

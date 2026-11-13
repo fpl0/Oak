@@ -160,6 +160,15 @@ export function friendlyEvalError(raw: string, code: string, offset?: number | n
     const name = notDefined[1] as string;
     const range = known ?? findWord(code, name, null, null);
     const line = range ? `Line ${lineAt(code, range.from)}: ` : "";
+    // A part named for a section (`drumsChorus`, `melA`) or used inside `arrange()`: it is a const the learner
+    // has not written yet, not a pattern that wants quotes.
+    const inArrange = new RegExp(`arrange\\s*\\([^;]*\\b${name}\\b`).test(code);
+    if (inArrange || /^[a-z]+[A-Z][A-Za-z0-9]*$/.test(name))
+      return {
+        message: `${line}\`${name}\` isn't defined yet. Write \`const ${name} = …\` above the line that uses it, or check the spelling against the const you wrote.`,
+        range,
+        detail,
+      };
     return {
       message: `${line}\`${name}\` isn't something Strudel knows. Check the spelling; a pattern goes in quotes, like "${name}".`,
       range,

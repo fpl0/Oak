@@ -46,6 +46,11 @@ describe("toolName (Today, the Coda, the ceremony)", () => {
       text: "the major scale",
       mono: false,
     });
+    // A colon inside the scale's name reads in words (Wave 5: harmonic and melodic minor, the pentatonics).
+    expect(toolName({ kind: "scale", code: "X4:harmonic:minor" } as never)).toEqual({
+      text: "the harmonic minor scale",
+      mono: false,
+    });
     expect(toolName({ kind: "code", code: ".lpf()" } as never)).toEqual(
       toolLabel({ kind: "code", code: ".lpf()" } as never),
     );

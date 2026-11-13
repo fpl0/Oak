@@ -3,12 +3,13 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { defineDeck, type FactDeck } from "@oak/content-kit";
+import { defineDeck, type FactDeck, type KeySpec } from "@oak/content-kit";
 import { bindDeck } from "@oak/drills";
 import { evalHeadless } from "@oak/grader/testing";
 import * as theory from "@oak/theory";
 import { units } from "../syllabus.ts";
 import {
+  A_MINOR_CHORDS,
   CADENCE_NAMES,
   CADENCE_ROWS,
   CHORD_ROOTS,
@@ -16,21 +17,34 @@ import {
   CHORD_SYMBOLS,
   chordCardId,
   DIATONIC_TRIADS,
+  DOMINANT_SEVENTH_ROWS,
+  DOMINANT_SEVENTHS,
   decks,
   FLAT_ORDER,
   INTERVAL_NAMES,
   INTERVAL_ROWS,
   KEY_SIGNATURES,
   MAJOR_SIGNATURES,
+  MINOR_CHORDS,
+  MINOR_KEYS,
   MINOR_SIGNATURES,
+  MINOR_TRIADS,
   NUMERAL_CHORDS,
   NUMERALS,
   PENDING_DECKS,
+  RELATIVE_PAIRS,
+  SCALE_DEGREE_ROWS,
+  SCALE_DEGREES,
+  SCALE_SPELLING_ROWS,
   SHARP_ORDER,
   STAFF_NAMES,
   signatureText,
   TRIAD_ROWS,
   TRIAD_SPELLINGS,
+  TWELVE_BAR,
+  TWELVE_BAR_ROWS,
+  TWELVE_BARS,
+  WAVE5_DECKS,
 } from "./index.ts";
 
 const lessons = new Set(units.flatMap((u) => u.lessons.map((l) => l.id as string)));
@@ -308,5 +322,167 @@ describe("U05–U07 fact decks (pending their contracts §7.3 rows and ledger ID
     // Terms before they are taught: deceptive (U06.L06) and plagal (U06.L07) cards wait for their lessons.
     for (const c of CADENCE_NAMES.cards.filter((x) => /dc|pc|deceptive|plagal/.test(x.id)))
       expect([c.id, c.gate]).toEqual([c.id, /dc|deceptive/.test(c.id) ? "U06.L06" : "U06.L07"]);
+  });
+});
+
+describe("U10–U11 fact decks (pending their contracts §7.3 rows): every answer as @oak/theory gives it", () => {
+  const credit = (deck: FactDeck, id: string, text: string[]) => {
+    const card = deck.cards.find((c) => c.id === id) as FactDeck["cards"][number];
+    expect(card).toBeDefined();
+    return bindDeck(deck).grade(card, { text }, 1000).credit;
+  };
+  const answerOf = (deck: FactDeck, id: string) =>
+    (deck.cards.find((c) => c.id === id)?.answer.text ?? []) as string[];
+  const order = (id: string) => units.flatMap((u) => u.lessons.map((l) => l.id as string)).indexOf(id);
+  test("pending, valid, gated on real lessons no earlier than the deck, IDs unique and new", () => {
+    const ids = WAVE5_DECKS.flatMap((d) => d.cards.map((c) => c.id as string));
+    expect(new Set(ids).size).toBe(ids.length);
+    const others = new Set(
+      [...decks, ...PENDING_DECKS.filter((d) => !WAVE5_DECKS.includes(d))].flatMap((d) =>
+        d.cards.map((c) => c.id as string),
+      ),
+    );
+    for (const d of WAVE5_DECKS) {
+      expect(() => defineDeck(d)).not.toThrow();
+      expect(PENDING_DECKS).toContain(d);
+      expect(decks.map((x) => x.id as string)).not.toContain(d.id);
+      expect(lessons.has(d.unlock.lesson)).toBe(true);
+      for (const c of d.cards) {
+        expect(others.has(c.id as string)).toBe(false);
+        // Every prompt states the answer format ("Write …").
+        expect([c.id, /Write /.test(c.prompt.text ?? "")]).toEqual([c.id, true]);
+        if (c.gate) {
+          expect([c.id, lessons.has(c.gate)]).toEqual([c.id, true]);
+          expect([c.id, order(c.gate) >= order(d.unlock.lesson)]).toEqual([c.id, true]);
+        }
+      }
+    }
+  });
+  test("relative pairs: @oak/theory's relative minor and major", () => {
+    for (const [major, minor] of RELATIVE_PAIRS) {
+      const rel = theory.relativeKey({ tonic: major, mode: "major" });
+      expect([major, theory.pcOf(rel.tonic), rel.mode]).toEqual([major, theory.pcOf(minor), "minor"]);
+      expect(answerOf(MINOR_KEYS, `fact.minor.relative-of-${major.replace("#", "s")}`)).toEqual([
+        `${minor} minor`,
+      ]);
+    }
+    for (const c of MINOR_KEYS.cards.filter((x) => x.id.startsWith("fact.minor.relative-major-of-"))) {
+      const m = /of (\S+) minor/.exec(c.prompt.text ?? "") as RegExpExecArray;
+      const minor = (m[1] as string).replace("♯", "#").replace("♭", "b");
+      const rel = theory.relativeKey({ tonic: minor, mode: "minor" });
+      expect([c.id, c.answer.text?.[0]]).toEqual([c.id, `${rel.tonic} major`]);
+    }
+    expect(credit(MINOR_KEYS, "fact.minor.relative-of-F", ["d minor"])).toBe(1);
+    expect(credit(MINOR_KEYS, "fact.minor.relative-of-F", ["Dm"])).toBe(1);
+    expect(credit(MINOR_KEYS, "fact.minor.relative-of-F", ["F minor"])).toBe(0);
+    expect(credit(MINOR_KEYS, "fact.minor.melodic-raises", ["6 7"])).toBe(1);
+    // The parallel minor has three flats more: C major 0, C minor 3 flats.
+    const sig = (k: KeySpec) => theory.keySignature(k).accidentals;
+    for (const t of ["C", "D", "G", "A", "E", "F"])
+      expect([t, sig({ tonic: t, mode: "major" }) - sig({ tonic: t, mode: "minor" })]).toEqual([t, 3]);
+  });
+  test("chords of a minor key: as @oak/theory's minorKeyChords names them, natural then harmonic", () => {
+    const natural = theory.minorKeyChords("A");
+    for (const [degree, numeral, q] of MINOR_TRIADS) {
+      const k = natural[degree - 1] as theory.KeyChord;
+      expect([degree, k.rn, k.chord.quality]).toEqual([
+        degree,
+        numeral,
+        { major: "maj", minor: "min", diminished: "dim" }[q],
+      ]);
+    }
+    const harmonic = theory.minorKeyChords("A", { form: "harmonic" });
+    const A: KeySpec = { tonic: "A", mode: "minor" };
+    for (const [numeral, symbol] of A_MINOR_CHORDS) {
+      const want = (["V", "viio"].includes(numeral) ? harmonic : natural).find(
+        (k) => k.rn === numeral,
+      ) as theory.KeyChord;
+      const got = theory.parseChordSymbol(symbol.replace(/o$/, "dim")) as theory.ChordId;
+      expect([numeral, got.rootPc, got.quality]).toEqual([numeral, want.chord.rootPc, want.chord.quality]);
+      expect(theory.chordOfRoman(numeral, A)).not.toBeNull();
+    }
+    const syms = (rns: string[]) => rns.map((rn) => theory.chordOfRoman(rn, A) as theory.ChordId);
+    expect(syms(answerOf(MINOR_CHORDS, "fact.minor.aeolian-loop")).map((c) => c.rootPc)).toEqual(
+      theory.schemaChords("schema.aeolian", A).map((c) => c.rootPc),
+    );
+    expect(syms(answerOf(MINOR_CHORDS, "fact.minor.andalusian")).map((c) => [c.rootPc, c.quality])).toEqual(
+      theory.schemaChords("schema.andalusian", A).map((c) => [c.rootPc, c.quality]),
+    );
+    expect(credit(MINOR_CHORDS, "fact.minor.A-viio", ["G#°"])).toBe(1);
+    expect(credit(MINOR_CHORDS, "fact.minor.A-V", ["Em"])).toBe(0);
+    expect(credit(MINOR_CHORDS, "fact.minor.A-v", ["E minor"])).toBe(1);
+    expect(credit(MINOR_CHORDS, "fact.minor.aeolian-loop", ["i vi iii vii"])).toBeLessThan(1);
+    // The major V and vii° wait for U10.L06; the Andalusian cadence for U10.L07.
+    expect(MINOR_CHORDS.cards.find((c) => c.id === "fact.minor.A-V")?.gate).toBe("U10.L06");
+    expect(MINOR_CHORDS.cards.find((c) => c.id === "fact.minor.andalusian")?.gate).toBe("U10.L07");
+  });
+  test("scales as degrees and spelled: @oak/theory's scales, each from its own lesson", () => {
+    const modes: Record<string, string> = {
+      "natural-minor": "minor",
+      "harmonic-minor": "harmonic minor",
+      "melodic-minor": "melodic minor",
+      "major-pentatonic": "major pentatonic",
+      "minor-pentatonic": "minor pentatonic",
+      blues: "blues",
+    };
+    for (const [id, , degrees] of SCALE_DEGREE_ROWS)
+      expect<unknown>([id, theory.scaleDegrees({ tonic: "C", mode: modes[id] as KeySpec["mode"] })]).toEqual([
+        id,
+        degrees,
+      ]);
+    for (const [scale, tonic, notes] of SCALE_SPELLING_ROWS) {
+      const want = theory.scaleNotes({ tonic, mode: scale as KeySpec["mode"] });
+      expect([scale, tonic, notes.map((n) => theory.pcOf(n))]).toEqual([
+        scale,
+        tonic,
+        want.map((n) => theory.pcOf(n)),
+      ]);
+    }
+    expect(credit(SCALE_DEGREES, "fact.scale.natural-minor-degrees", ["1 2 ♭3 4 5 ♭6 ♭7"])).toBe(1);
+    expect(credit(SCALE_DEGREES, "fact.scale.harmonic-minor-degrees", ["1 2 b3 4 5 b6 b7"])).toBeLessThan(1);
+    expect(credit(SCALE_DEGREES, "fact.scale.A-blues", ["A C D D# E G"])).toBe(1);
+    expect(credit(SCALE_DEGREES, "fact.scale.A-blues", ["A C D Eb E G"])).toBe(1);
+    expect(credit(SCALE_DEGREES, "fact.scale.blues-adds", ["#4"])).toBe(1);
+    expect(credit(SCALE_DEGREES, "fact.scale.C-minor-pentatonic", ["C D# F G A#"])).toBeLessThan(1);
+    expect(SCALE_DEGREES.cards.find((c) => c.id === "fact.scale.minor-pentatonic-degrees")?.gate).toBe(
+      "U11.L02",
+    );
+  });
+  test("the twelve bars: @oak/theory's 12-bar plan (standard, quick change, turnaround)", () => {
+    const plan = theory
+      .twelveBarPlan({ variant: "standard", turnaround: true })
+      .map((rn) => rn.replace("7", ""));
+    expect(plan).toEqual([...TWELVE_BARS]);
+    for (const [bar, numeral] of TWELVE_BAR_ROWS) expect([bar, plan[bar - 1]]).toEqual([bar, numeral]);
+    const quick = theory.twelveBarPlan({ variant: "quick-change", turnaround: false });
+    expect(answerOf(TWELVE_BAR, "fact.blues.quick-change")).toEqual([quick[1]?.replace("7", "") as string]);
+    const inC = theory.twelveBarChords("C", { variant: "standard", turnaround: true });
+    const sym = answerOf(TWELVE_BAR, "fact.blues.chords-in-C").map(
+      (s) => theory.parseChordSymbol(s) as theory.ChordId,
+    );
+    expect<unknown>(sym.map((c) => [c.rootPc, c.quality])).toEqual(
+      [0, 4, 8].map((i) => [inC[i]?.rootPc, inC[i]?.quality]),
+    );
+    expect(credit(TWELVE_BAR, "fact.blues.bar-9", ["V7"])).toBe(1);
+    expect(credit(TWELVE_BAR, "fact.blues.bar-10", ["V"])).toBe(0);
+    expect(credit(TWELVE_BAR, "fact.blues.bar-10", ["iv"])).toBe(0);
+  });
+  test("dominant sevenths: @oak/theory's chord on each root, stacked in thirds", async () => {
+    for (const [root, notes] of DOMINANT_SEVENTH_ROWS) {
+      const want = theory.chordNotes(theory.dominantSeventh(root));
+      expect([root, notes.map((n) => theory.pcOf(n))]).toEqual([root, want.map((n) => theory.pcOf(n))]);
+      const letters = notes.map((n) => "CDEFGAB".indexOf(n[0] as string));
+      for (let i = 1; i < 4; i++)
+        expect([root, ((letters[i] as number) - (letters[i - 1] as number) + 7) % 7]).toEqual([root, 2]);
+      expect(theory.isDominantSeventhSymbol(`${root}7`)).toBe(true);
+    }
+    // And Strudel's chord() plays the same notes.
+    const res = await evalHeadless('chord("C7").voicing()', 1);
+    expect(new Set(res.events.map((e) => (((e.midi as number) % 12) + 12) % 12))).toEqual(
+      new Set([0, 4, 7, 10]),
+    );
+    expect(credit(DOMINANT_SEVENTHS, "fact.dom7.E7", ["E G# B D"])).toBe(1);
+    expect(credit(DOMINANT_SEVENTHS, "fact.dom7.E7", ["E Ab B D"])).toBeLessThan(1);
+    expect(credit(DOMINANT_SEVENTHS, "fact.dom7.seventh", ["minor 7th"])).toBe(1);
   });
 });

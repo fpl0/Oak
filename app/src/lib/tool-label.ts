@@ -21,6 +21,19 @@ function bare(code: string): string {
 export function toolLabel(
   t: Pick<ToolEntry, "kind" | "code"> & { catalog?: { signature?: string } },
 ): ToolLabel {
+  const l = rawToolLabel(t);
+  return { ...l, text: withoutAuthorMark(l.text) };
+}
+
+/**
+ * The catalog's "†" (contracts §3.2 rule 7: audibility still to be confirmed by the S3 harness) is a note for
+ * authors; no learner surface shows it (".partials([…]) †" reads ".partials([…])").
+ */
+export function withoutAuthorMark(text: string): string {
+  return text.replace(/\s*†\s*$/u, "").replace(/\s+†\s+/gu, " ");
+}
+
+function rawToolLabel(t: Pick<ToolEntry, "kind" | "code"> & { catalog?: { signature?: string } }): ToolLabel {
   if (t.kind === "feature" || t.kind === "lens" || t.kind === "template") {
     const plain = t.code.replace(/\s*\([^)]*\)\s*$/, "").trim();
     return { text: plain || t.code, mono: false };
@@ -34,7 +47,7 @@ export function toolLabel(
  * The name a learner reads for a tool in Today, the Coda and the ceremony (promoted from session/tool-name.ts):
  * `toolLabel`, except that a sound is the code the learner types (`.s("ebass")`), never the registry's
  * sample-bank note ("ebass (gm_electric_bass_pick:0)"), and a scale row (written with a placeholder tonic,
- * "X4:major") is the scale named in words.
+ * "X4:major", or a colon inside the name, "X4:harmonic:minor") is the scale named in words ("the harmonic minor scale").
  */
 export function toolName(
   t: Pick<ToolEntry, "kind" | "code"> & { catalog?: { signature?: string } },
@@ -42,14 +55,16 @@ export function toolName(
   const sig = t.catalog?.signature?.trim();
   if (t.kind === "sound") {
     const alias = /^([\w-]+)\s*\(/.exec(t.code)?.[1];
-    return { text: sig || (alias ? `.s("${alias}")` : t.code), mono: true };
+    return { text: withoutAuthorMark(sig || (alias ? `.s("${alias}")` : t.code)), mono: true };
   }
   if (t.kind === "scale") {
     const name =
       t.code
         .split(",")[0]
         ?.trim()
-        .replace(/^X\d?:/, "") ?? "";
+        .replace(/^X\d?:/, "")
+        // A scale written with a colon in code (`harmonic:minor`, `minor:pentatonic`) reads in words.
+        .replace(/:/g, " ") ?? "";
     if (name) return { text: `the ${name} scale`, mono: false };
   }
   return toolLabel(t);

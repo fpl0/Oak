@@ -22,6 +22,8 @@ import {
 import { above, closeVoices, rn, spellVoiced, type Voiced, voiceProgression } from "../music.ts";
 import { atom, chordOf, line, type Node, rest, seq } from "../pat.ts";
 import {
+  CTX,
+  contextOpen,
   cueOf,
   type GenCtx,
   type Generator,
@@ -83,7 +85,11 @@ export const rnFacts: Generator = {
     const cue = cueOf(ctx, { replays: -1 });
     const cat = ctx.category;
     const minor = cat === "minor-triads";
-    const key = pickKey(ctx, minor ? "minor" : "major");
+    // Natural minor (i ii° III iv v VI VII) from U10.L04; the major V and vii° of harmonic minor join at U10.L06,
+    // so v against V and VII against vii° become the near misses.
+    const majorV = minor && contextOpen(ctx, CTX.majorV);
+    // Minor keys up to four sharps or flats (C♭ as VI of E♭ minor is a spelling for later).
+    const key = pickKey(ctx, minor ? "minor" : "major", minor ? "≤4acc" : ctx.level.keys);
     let rnText: string;
     let symbol: string;
     if (cat === "applied") {
@@ -99,7 +105,8 @@ export const rnFacts: Generator = {
       rnText = b.rn;
     } else {
       const index = ctx.rng.int(1, 7);
-      const d = diatonicInKey(key, index, cat === "sevenths", minor);
+      const harmonic = majorV && (index === 5 || index === 7) && ctx.rng.next() < 0.5;
+      const d = diatonicInKey(key, index, cat === "sevenths", harmonic);
       symbol = d.symbol;
       rnText = d.rn;
     }
@@ -157,11 +164,16 @@ export const functionId: Generator = {
   name: "harmony-function",
   generate(ctx) {
     const minor = ctx.level.minor === true && ctx.rng.next() < 0.5;
+    // In minor the dominant is v until U10.L06 teaches the major V (and vii°, which is only a dominant then: the
+    // natural VII is the subtonic, never asked for a function).
+    const harmonicV = minor && contextOpen(ctx, CTX.majorV);
     const key = pickKey(ctx, minor ? "minor" : "major");
-    const pool = (FUNCTIONS[minor ? "minor" : "major"] ?? []).filter((f) => f.fn === ctx.category);
+    const pool = (FUNCTIONS[minor ? "minor" : "major"] ?? []).filter(
+      (f) => f.fn === ctx.category && !(minor && !harmonicV && f.index === 7),
+    );
     const pick = ctx.rng.pick(pool);
     const seventh = ctx.level.sevenths === true && ctx.rng.next() < 0.5;
-    const d = diatonicInKey(key, pick.index, seventh, minor);
+    const d = diatonicInKey(key, pick.index, seventh, harmonicV);
     if (ctx.level.heard !== true)
       return silentTrial({ choice: [pick.fn] }, cueOf(ctx, { replays: -1 }), {
         key,
@@ -170,10 +182,10 @@ export const functionId: Generator = {
       });
     // Heard: a four-chord loop I – x – … with the marked chord in bar 3.
     const chords: RnChord[] = [
-      diatonicInKey(key, 1, false, minor).chord,
-      diatonicInKey(key, ctx.rng.pick([4, 6, 2]), false, minor).chord,
+      diatonicInKey(key, 1, false, harmonicV).chord,
+      diatonicInKey(key, ctx.rng.pick([4, 6, 2]), false, harmonicV).chord,
       d.chord,
-      diatonicInKey(key, 1, false, minor).chord,
+      diatonicInKey(key, 1, false, harmonicV).chord,
     ];
     const voiced = voiceProgression(chords, key);
     const piece = buildPiece({
@@ -305,10 +317,14 @@ const BASS_LOOPS: Readonly<Record<string, { mode: ScaleMode; chords: RnChord[][]
       ],
     },
   ],
+  // Minor loops in what U10 teaches (content/specs/U10.md): the key's natural chords from U10.L04 (i–iv–v–i, the
+  // L04 hook i–iv–VII–III, the Aeolian loop i–VI–III–VII, VI–VII–i), the major V from U10.L06 and the
+  // Andalusian cadence from U10.L07 (`MINOR_BASS_LOOPS`). No Dorian i–IV before U14.
   minor: [
     { mode: "minor", chords: [[rn("1", "min")], [rn("b6", "maj")], [rn("b3", "maj")], [rn("b7", "maj")]] },
-    { mode: "minor", chords: [[rn("1", "min")], [rn("4", "min")], [rn("5", "maj")], [rn("1", "min")]] },
-    { mode: "dorian", chords: [[rn("1", "min")], [rn("4", "maj")], [rn("1", "min")], [rn("4", "maj")]] },
+    { mode: "minor", chords: [[rn("1", "min")], [rn("4", "min")], [rn("5", "min")], [rn("1", "min")]] },
+    { mode: "minor", chords: [[rn("1", "min")], [rn("4", "min")], [rn("b7", "maj")], [rn("b3", "maj")]] },
+    { mode: "minor", chords: [[rn("1", "min")], [rn("b6", "maj")], [rn("b7", "maj")], [rn("1", "min")]] },
   ],
   chromatic: [
     { mode: "major", chords: [[rn("1", "maj")], [rn("b6", "maj")], [rn("b7", "maj")], [rn("1", "maj")]] },
@@ -332,6 +348,28 @@ const BASS_LOOPS: Readonly<Record<string, { mode: ScaleMode; chords: RnChord[][]
     },
   ],
 };
+/** Minor loops that wait for a later lesson: the major V (U10.L06), the Andalusian cadence (U10.L07). */
+const MINOR_BASS_LOOPS: readonly { needs: string; mode: ScaleMode; chords: RnChord[][] }[] = [
+  {
+    needs: CTX.majorV,
+    mode: "minor",
+    chords: [[rn("1", "min")], [rn("4", "min")], [rn("5", "maj")], [rn("1", "min")]],
+  },
+  {
+    needs: CTX.majorV,
+    mode: "minor",
+    chords: [[rn("1", "min")], [rn("b6", "maj")], [rn("4", "min")], [rn("5", "maj")]],
+  },
+  {
+    needs: CTX.andalusian,
+    mode: "minor",
+    chords: [[rn("1", "min")], [rn("b7", "maj")], [rn("b6", "maj")], [rn("5", "maj")]],
+  },
+];
+function minorLoop(ctx: GenCtx): { mode: ScaleMode; chords: RnChord[][] } {
+  const later = MINOR_BASS_LOOPS.filter((l) => contextOpen(ctx, l.needs));
+  return ctx.rng.pick([...(BASS_LOOPS.minor ?? []), ...later]);
+}
 function diatonicRootsLoop(ctx: GenCtx): { mode: ScaleMode; chords: RnChord[][] } {
   const key: KeySpec = { tonic: "C", mode: "major" };
   const indices = [1, ...Array.from({ length: 3 }, () => ctx.rng.int(2, 7))];
@@ -340,10 +378,13 @@ function diatonicRootsLoop(ctx: GenCtx): { mode: ScaleMode; chords: RnChord[][] 
 export const bassDegrees: Generator = {
   name: "harmony-bass",
   generate(ctx) {
+    if (ctx.category === "lines") return bassLine(ctx);
     const loop =
       ctx.category === "diatonic-roots"
         ? diatonicRootsLoop(ctx)
-        : ctx.rng.pick(BASS_LOOPS[ctx.category] ?? (BASS_LOOPS["schema-roots"] as never));
+        : ctx.category === "minor"
+          ? minorLoop(ctx)
+          : ctx.rng.pick(BASS_LOOPS[ctx.category] ?? (BASS_LOOPS["schema-roots"] as never));
     const key = pickKey(ctx, loop.mode);
     const { tracks, bass } = arrangement(ctx, key, loop.chords);
     const piece = buildPiece({ bpm: pickTempo(ctx), bars: loop.chords.length, tracks });
@@ -357,6 +398,94 @@ export const bassDegrees: Generator = {
     });
   },
 };
+
+/** What the bass plays on beat 3 of a bar in a U08 line: the 5th, the octave, or an approach to the next root. */
+export type BassMove = "fifth" | "octave" | "approach";
+/**
+ * A bass line of U08 to take down (the `lines` category): four bars of a loop the learner knows, two notes a
+ * bar: the root on beat 1, then on beat 3 the chord's 5th (above, or below when above leaves the bass), the
+ * root an octave up or down, or a diatonic approach note a step above or below the next bar's root (U08.L02:
+ * root and 5th; U08.L03: octave and approach). Every bar has a different move from the bar before when it can,
+ * so roots and 5ths sit side by side in the answer (the near miss the family drills). In E1–A♭3.
+ */
+function bassLine(ctx: GenCtx) {
+  // Level 5 opens at U10.L04, so a line may be in a minor key as well (its natural chords).
+  const loop =
+    ctx.rng.next() < 0.4
+      ? ctx.rng.pick(BASS_LOOPS.minor ?? [])
+      : ctx.rng.pick(BASS_LOOPS["schema-roots"] ?? []);
+  const key = pickKey(ctx, loop.mode);
+  const { tracks, bass: roots } = arrangement(ctx, key, loop.chords);
+  const steps = MODE_STEPS[key.mode];
+  const tonicPc = parsePcOf(key.tonic);
+  const scalePcs = steps.map((x) => mod(tonicPc + x, 12));
+  const inBass = (m: number) => m >= 28 && m <= 56;
+  const midis: number[] = [];
+  const moves: BassMove[] = [];
+  let last: BassMove | null = null;
+  roots.forEach((root, i) => {
+    const next = roots[(i + 1) % roots.length] as number;
+    const chord = loop.chords[i]?.[0] as RnChord;
+    const fifthPc = mod(rnRootPc(chord, key) + 7, 12);
+    const options: BassMove[] = ["fifth", "octave", "approach"];
+    // The approach: the scale note a step above or below the next root (never the root itself).
+    const nextIdx = scalePcs.indexOf(mod(next, 12));
+    const approachPcs =
+      nextIdx < 0
+        ? []
+        : [scalePcs[(nextIdx + 1) % 7] as number, scalePcs[(nextIdx + 6) % 7] as number].filter(
+            (pc) => pc !== mod(root, 12),
+          );
+    // The 5th or the octave above or below, whichever leaves the next root nearer (a bass player's choice).
+    const nearer = (cands: number[]) =>
+      cands.filter(inBass).sort((x, y) => Math.abs(x - next) - Math.abs(y - next))[0] ?? null;
+    const secondOf = (m: BassMove): number | null => {
+      if (m === "fifth") {
+        const up = root + mod(fifthPc - root, 12);
+        return nearer([up, up - 12]);
+      }
+      if (m === "octave") return nearer([root + 12, root - 12]);
+      // The approach sits a step from the next root.
+      const cands = [-2, -1, 1, 2]
+        .map((d) => next + d)
+        .filter((x) => approachPcs.includes(mod(x, 12)) && inBass(x));
+      return cands.sort((x, y) => Math.abs(x - root) - Math.abs(y - root))[0] ?? null;
+    };
+    // A move is playable when its note stays within an octave of this root and of the next one.
+    const all = options
+      .map((o) => ({ o, n: secondOf(o) }))
+      .filter((c): c is { o: BassMove; n: number } => c.n !== null);
+    const playable = all.filter((c) => Math.abs(c.n - root) <= 12 && Math.abs(c.n - next) <= 12);
+    const fresh = playable.filter((c) => c.o !== last);
+    const choice = ctx.rng.pick(fresh.length > 0 ? fresh : playable.length > 0 ? playable : all);
+    const move = choice.o;
+    const second = choice.n;
+    midis.push(root, second);
+    moves.push(move);
+    last = move;
+  });
+  const bassBars: Node[] = [];
+  for (let b = 0; b < roots.length; b++)
+    bassBars.push(
+      seq([
+        atom(spellMidi(midis[2 * b] as number, key).code),
+        atom(spellMidi(midis[2 * b + 1] as number, key).code),
+      ]),
+    );
+  const bassTrack = tracks.find((t) => t.label === "bass") as TrackSpec;
+  bassTrack.pat = { t: "alt", items: bassBars };
+  const piece = buildPiece({ bpm: pickTempo(ctx), bars: roots.length, tracks });
+  const degrees = midis.map((m) => degreeOfMidi(m, { tonic: key.tonic, mode: "major" }));
+  return trialOf(piece, { degrees }, cueOf(ctx), {
+    mode: "choice",
+    key,
+    ui: "degree-pad",
+    sequenceLen: degrees.length,
+    singMode: "bassline",
+    moves,
+  });
+}
+const parsePcOf = (tonic: string): number => mod(tonicMidi(tonic, 4), 12);
 
 // --- har.schema ---------------------------------------------------------------------------------
 
@@ -374,9 +503,10 @@ export const SCHEMA_LOOPS: Readonly<Record<string, { mode: ScaleMode; chords: Rn
     mode: "major",
     chords: [[rn("1", "maj")], [rn("6", "min")], [rn("4", "maj")], [rn("5", "maj")]],
   },
+  // `schema.aeolian` (U10.L05): i–VI–III–VII, Am F C G in A minor.
   aeolian: {
     mode: "minor",
-    chords: [[rn("1", "min")], [rn("b6", "maj")], [rn("b7", "maj")], [rn("1", "min")]],
+    chords: [[rn("1", "min")], [rn("b6", "maj")], [rn("b3", "maj")], [rn("b7", "maj")]],
   },
   andalusian: {
     mode: "minor",
@@ -399,6 +529,11 @@ export const SCHEMA_LOOPS: Readonly<Record<string, { mode: ScaleMode; chords: Rn
     chords: [[rn("2", "m7")], [rn("5", "7")], [rn("1", "maj7")], [rn("1", "maj7")]],
   },
 };
+/**
+ * Loops that are the same four chords with another home (U10.L05: Am F C G is i–VI–III–VII in A minor and
+ * vi–IV–I–V in C): played as chords alone they sound alike, so a trial never offers its twin.
+ */
+const SCHEMA_TWINS: Readonly<Record<string, string>> = { aeolian: "axis-vi", "axis-vi": "aeolian" };
 export const schema: Generator = {
   name: "harmony-schema",
   generate(ctx) {
@@ -406,7 +541,12 @@ export const schema: Generator = {
     const key = pickKey(ctx, loop.mode);
     const { tracks } = arrangement(ctx, key, loop.chords, { drums: ctx.level.full === true });
     const piece = buildPiece({ bpm: pickTempo(ctx), bars: loop.chords.length, tracks });
-    return trialOf(piece, { choice: [ctx.category] }, cueOf(ctx), { mode: "choice", key });
+    // The loops the learner has met at this level (never one still closed), the answer's twin left out.
+    const twin = SCHEMA_TWINS[ctx.category];
+    const options = ctx.level.categories.filter(
+      (c) => (c === ctx.category || ctx.openCategories.includes(c)) && c !== twin,
+    );
+    return trialOf(piece, { choice: [ctx.category] }, cueOf(ctx), { mode: "choice", key, options });
   },
 };
 

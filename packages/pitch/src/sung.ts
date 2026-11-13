@@ -391,7 +391,10 @@ function grade(
   });
 
   // Drift compensation.
-  const near = errors.filter((e): e is number => e !== null && Math.abs(e) < 100);
+  // Blue targets (bent toward a neighbour on purpose) say nothing about drift.
+  const near = errors.filter(
+    (e, i): e is number => e !== null && Math.abs(e) < 100 && !(targets[i] as SungTarget).blue,
+  );
   const drift = near.length > 0 ? median(near) : 0;
   const compensate = near.length >= DRIFT_MIN_NOTES && Math.abs(drift) <= tol.driftCompCents + EPS;
   const diagnostics: Diagnostic[] = [];
@@ -429,18 +432,36 @@ function grade(
       };
     }
     const sungMidi = target.midi + cents / 100;
-    let credit: number = beyond[i] ? 0 : sungCredit(Math.abs(cents), tolCents);
+    // A blue note sung toward its neighbour is judged against the nearer of the two (Wave 5, U11).
+    const bend = blueBend(target, cents);
+    const judged = bend === null ? cents : cents - 100 * bend;
+    let credit: number = beyond[i] ? 0 : sungCredit(Math.abs(judged), tolCents);
     let feedback: SungNoteResult["feedback"] = null;
-    const dir = cents > 0 ? "sharp" : "flat";
+    const dir = judged > 0 ? "sharp" : "flat";
     const params = {
       i: i + 1,
       exp: midiName(target.midi),
       expMidi: target.midi,
       got: midiName((e.sungMidi as number) - (compensate ? drift / 100 : 0)),
       gotMidi: Math.round(((e.sungMidi as number) - (compensate ? drift / 100 : 0)) * 100) / 100,
-      cents: Math.round(Math.abs(cents)),
+      cents: Math.round(Math.abs(judged)),
       dir,
     };
+    if (bend !== null && credit === 1 && !jumped[i]) {
+      diagnostics.push({
+        id: "sing.blue-note",
+        severity: "info",
+        dim: "pitch",
+        where,
+        params: {
+          ...params,
+          toward: midiName(target.midi + bend),
+          towardMidi: target.midi + bend,
+          cents: Math.round(Math.abs(cents)),
+          dir: bend > 0 ? "above" : "below",
+        },
+      });
+    }
     if (credit === 0) {
       feedback = "sing.wrong-note";
       diagnostics.push({ id: "sing.wrong-note", severity: "error", dim: "pitch", where, params });
@@ -449,7 +470,7 @@ function grade(
       feedback = "sing.octave-jump";
       diagnostics.push({ id: "sing.octave-jump", severity: "info", dim: "pitch", where, params });
     } else if (credit === 0.5) {
-      feedback = cents > 0 ? "sing.sharp" : "sing.flat";
+      feedback = judged > 0 ? "sing.sharp" : "sing.flat";
       diagnostics.push({ id: feedback, severity: "warn", dim: "cents", where, params });
     }
     if (e.spread > 60) {
@@ -483,7 +504,9 @@ function grade(
         });
       }
     }
-    return { ...base, sungMidi, cents, credit, timingCredit, onsetErrorMs, feedback };
+    const result: SungNoteResult = { ...base, sungMidi, cents, credit, timingCredit, onsetErrorMs, feedback };
+    if (bend !== null) result.blue = { neighbourMidi: target.midi + bend, judgedCents: judged };
+    return result;
   });
 
   if (Math.abs(drift) > 15 && near.length >= DRIFT_MIN_NOTES) {
@@ -529,7 +552,7 @@ function grade(
     dims.coverage = { score: mean(settled.map((n) => n.coverage)), weight: 0, n: settled.length };
   }
   const abs = settled
-    .map((n) => n.cents)
+    .map((n) => n.blue?.judgedCents ?? n.cents)
     .filter((c): c is number => c !== null)
     .map(Math.abs);
   const complete = settled.length === targets.length;
@@ -546,6 +569,18 @@ function grade(
     startShiftSec,
     ...(take ? { take } : {}),
   };
+}
+
+/**
+ * Wave 5 (U11 blue notes): the neighbouring semitone (+1 or −1) a blue target was sung toward, when the pitch lies
+ * nearer to it than to the target and on a side the target allows (`SungTarget.blue.toward`); otherwise `null`
+ * and the note is judged against the target alone.
+ */
+export function blueBend(target: Pick<SungTarget, "blue">, cents: number): 1 | -1 | null {
+  if (!target.blue || cents === 0) return null;
+  const side: 1 | -1 = cents > 0 ? 1 : -1;
+  if (target.blue.toward !== 0 && target.blue.toward !== side) return null;
+  return Math.abs(cents - 100 * side) < Math.abs(cents) ? side : null;
 }
 
 /**

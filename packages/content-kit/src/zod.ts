@@ -16,6 +16,7 @@ import {
 } from "./ids.ts";
 import type * as S from "./schema/index.ts";
 import {
+  BASS_MEMBERS,
   CADENCE_TYPES,
   CANDO_AREAS,
   CHORD_QUALITIES,
@@ -24,9 +25,11 @@ import {
   DRUM_ROLES,
   FAMILY_DOMAINS,
   FAMILY_KINDS,
+  FORM_SECTION_NAMES,
   LAYERS,
   METER_IDS,
   NON_CHORD_TONE_ROLES,
+  PROBE_KINDS,
   SCALE_MODES,
   SKILL_KINDS,
   SKILL_REGIONS,
@@ -238,6 +241,7 @@ export const AnswerSchema: z.ZodType<S.Answer> = z.strictObject({
   rn: z.array(z.string()).exactOptional(),
   midi: z.array(z.number()).exactOptional(),
   stages: z.partialRecord(dictationStage, z.array(z.string())).exactOptional(),
+  sections: z.array(z.string().min(1)).exactOptional(),
 });
 const partialMap: z.ZodType<S.PartialMap> = z.record(
   z.string(),
@@ -344,6 +348,19 @@ export const MatcherSchema: z.ZodType<S.Matcher> = z.lazy(() =>
     }),
     z.strictObject({ m: z.literal("rubric"), rules: z.array(RubricRuleSchema).min(1) }),
     z.strictObject({
+      m: z.literal("controls"),
+      controls: z
+        .array(
+          z.strictObject({
+            control: z.string().min(1),
+            scale: z.enum(["linear", "log", "exact"]),
+            tol: z.number().nonnegative(),
+          }),
+        )
+        .min(1),
+      track: trackRef.exactOptional(),
+    }),
+    z.strictObject({
       m: z.literal("all"),
       of: z.array(MatcherSchema).min(1),
       weights: z.array(z.number().nonnegative()).exactOptional(),
@@ -356,7 +373,13 @@ const sectionRef: z.ZodType<S.SectionRef> = z.union([
   z.strictObject({ bars: bars2 }),
   z.literal("last"),
 ]);
-const ruleBase = { id: slug, label: md, required: z.boolean(), skills: z.array(skillRef) };
+const ruleBase = {
+  id: slug,
+  label: md,
+  required: z.boolean(),
+  skills: z.array(skillRef),
+  section: z.lazy(() => sectionRef).exactOptional(),
+};
 const ratio2 = z.tuple([z.number(), z.number()]);
 export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
   z.discriminatedUnion("rule", [
@@ -391,6 +414,7 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       rule: z.literal("ends-on-degree"),
       degrees: z.array(degree).min(1),
       track: trackRef,
+      over: z.string().min(1).exactOptional(),
     }),
     z.strictObject({
       ...ruleBase,
@@ -488,6 +512,8 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       ...ruleBase,
       rule: z.literal("blues-form"),
       variant: z.enum(["standard", "quick-change", "jazz"]),
+      choruses: z.number().int().positive().exactOptional(),
+      quickChangeOk: z.boolean().exactOptional(),
     }),
     z.strictObject({
       ...ruleBase,
@@ -580,6 +606,7 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       track: trackRef,
       subsetOf: z.array(degree).exactOptional(),
       contains: z.array(degree).exactOptional(),
+      anyOf: z.array(degree).min(1).exactOptional(),
       minCount: z.number().int().exactOptional(),
     }),
     z.strictObject({
@@ -622,6 +649,7 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       anyOf: z.array(chordQuality).min(1).exactOptional(),
       subsetOf: z.array(chordQuality).min(1).exactOptional(),
       min: z.number().int().positive().exactOptional(),
+      depth: z.enum(["triad", "seventh"]).exactOptional(),
     }),
     z.strictObject({
       ...ruleBase,
@@ -640,6 +668,37 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       harmony: trackRef.exactOptional(),
       roles: z.array(z.enum(NON_CHORD_TONE_ROLES)).min(1).exactOptional(),
       min: z.number().int().positive(),
+    }),
+    z.strictObject({
+      ...ruleBase,
+      rule: z.literal("bass-line"),
+      track: trackRef,
+      harmony: trackRef.exactOptional(),
+      roots: z
+        .strictObject({ on: z.enum(["change", "downbeat"]), minRatio: z.number().min(0).max(1) })
+        .exactOptional(),
+      members: z
+        .strictObject({
+          allowed: z.array(z.enum(BASS_MEMBERS)).min(1),
+          minRatio: z.number().min(0).max(1),
+          each: z.boolean().exactOptional(),
+        })
+        .exactOptional(),
+      approach: z
+        .strictObject({
+          min: z.number().int().positive(),
+          kinds: z
+            .array(z.enum(["diatonic", "chromatic"]))
+            .min(1)
+            .exactOptional(),
+        })
+        .exactOptional(),
+    }),
+    z.strictObject({
+      ...ruleBase,
+      rule: z.literal("notates"),
+      view: z.enum(["lead-sheet", "staff"]),
+      melody: trackRef.exactOptional(),
     }),
   ]),
 );
@@ -703,6 +762,28 @@ export const AnswerUiSchema: z.ZodType<S.AnswerUi> = z.discriminatedUnion("ui", 
     slots: z.number().int().positive(),
     options: z.array(choice).min(2),
     labels: z.array(z.string().min(1)).exactOptional(),
+  }),
+  z.strictObject({
+    ui: z.literal("form"),
+    sections: z.number().int().min(2),
+    vocabulary: z.union([z.literal("letters"), z.array(z.enum(FORM_SECTION_NAMES)).min(2)]),
+    input: z.enum(["label", "order"]),
+    sectionBars: z.array(z.number().int().positive()).min(2).exactOptional(),
+  }),
+  z.strictObject({
+    ui: z.literal("bar-grid"),
+    bars: z.number().int().positive(),
+    perRow: z.number().int().positive(),
+    entry: z.enum(["rn", "symbol"]),
+    qualities: z.array(chordQuality).min(1),
+    given: z.array(z.number().int().positive()).exactOptional(),
+  }),
+  z.strictObject({
+    ui: z.literal("scale-builder"),
+    tonic: z.string().min(1),
+    input: z.enum(["keyboard", "degrees"]),
+    palette: z.array(degree).min(2).exactOptional(),
+    range: z.tuple([z.string(), z.string()]).exactOptional(),
   }),
   z.strictObject({
     ui: z.literal("code"),
@@ -1177,6 +1258,7 @@ export const NEventSchema: z.ZodType<S.NEvent> = z.strictObject({
   gain: z.number(),
   scaleCtx: z.string().exactOptional(),
   locs: z.array(CodeRangeSchema),
+  controls: z.record(z.string(), z.union([z.number(), z.string()])).exactOptional(),
 });
 const dimension = z.enum(DIMENSIONS);
 export const LocSchema: z.ZodType<S.Loc> = z.strictObject({
@@ -1325,6 +1407,7 @@ export const StepUiSchema: z.ZodType<S.StepUi> = z.strictObject({
       degrees: z.boolean().exactOptional(),
     })
     .exactOptional(),
+  probe: z.strictObject({ kind: z.enum(PROBE_KINDS), track: trackRef.exactOptional() }).exactOptional(),
 });
 const termDef: z.ZodType<S.TermDef> = z.strictObject({
   id: termId,
@@ -1381,6 +1464,7 @@ const lessonMeta: z.ZodType<S.LessonMeta> = z.strictObject({
   introduces: z.array(skillId),
   practises: z.array(skillId),
   optional: z.boolean().exactOptional(),
+  side: z.boolean().exactOptional(),
 });
 export const UnitDefSchema: z.ZodType<S.UnitDef> = z.strictObject({
   id: unitId,
@@ -1430,6 +1514,7 @@ const phraseCheck: z.ZodType<S.PhraseCheck> = z.strictObject({
     .min(1)
     .exactOptional(),
   given: transcribeGiven.exactOptional(),
+  after: z.array(slug).min(1).exactOptional(),
 });
 const capstoneMeta = {
   id: capstoneId,
@@ -1542,6 +1627,9 @@ const answerUiKind = z.enum([
   "click-staff",
   "click-roll",
   "slot-choice",
+  "form",
+  "bar-grid",
+  "scale-builder",
 ]);
 const familyKind = z.enum(FAMILY_KINDS);
 export const FamilyDefSchema: z.ZodType<S.FamilyDef> = z.strictObject({

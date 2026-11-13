@@ -29,3 +29,9 @@ test("a scale row is named in words, never by its placeholder tonic", () => {
     expect(n.text).toMatch(/^the .+ scale$/);
   }
 });
+
+test("a scale written with a colon in code reads in words (Wave 5: harmonic and melodic minor, pentatonics)", () => {
+  const h = toolbox.find((t) => t.kind === "scale" && t.code.includes("harmonic:minor"));
+  expect(h && toolName(h).text).toBe("the harmonic minor scale");
+  for (const t of toolbox.filter((x) => x.kind === "scale")) expect(toolName(t).text).not.toContain(":");
+});

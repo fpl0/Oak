@@ -155,3 +155,72 @@ export function preloadPattern(pattern: QueryablePattern, from = 0, to = 2): Pro
   }
   return warmAll(values);
 }
+
+/** Bars a long piece is warmed ahead after the first two: the longest graded piece (capstone mode, contracts §6.4). */
+export const WARM_AHEAD_BARS = 128;
+/** Cycles queried per step of a warm-ahead (each step yields to the event loop). */
+export const WARM_AHEAD_CHUNK = 8;
+
+export interface WarmAhead {
+  /** Stops after the step in flight (a new evaluation, a new load, dispose). */
+  cancel(): void;
+  /** Resolves with what was warmed (never rejects), when finished or cancelled. */
+  readonly done: Promise<PreloadReport & { cycles: number; cancelled: boolean }>;
+}
+
+/**
+ * Warms the rest of a long piece in the background, in order: `[from, to)` cycles in steps of `chunk`, each step
+ * warming only values no earlier step warmed. A 90-second song whose chorus brings a crash, a pad or a pitch
+ * the first bars never play has it decoded long before bar 17 (Wave 5, C3), without delaying the first note.
+ */
+export function warmAhead(
+  pattern: QueryablePattern,
+  from: number,
+  to: number,
+  opts: { chunk?: number; warm?: (values: readonly HapValue[]) => Promise<PreloadReport> } = {},
+): WarmAhead {
+  const chunk = Math.max(1, opts.chunk ?? WARM_AHEAD_CHUNK);
+  const warm = opts.warm ?? ((values: readonly HapValue[]) => warmAll(values));
+  let cancelled = false;
+  const seen = new Set<string>();
+  const done = (async () => {
+    const t0 = performance.now();
+    const total = { warmed: 0, synths: 0, missing: new Set<string>(), cycles: 0 };
+    for (let c = from; c < to && !cancelled; c += chunk) {
+      await new Promise<void>((r) => setTimeout(r, 0));
+      if (cancelled) break;
+      let values: HapValue[] = [];
+      try {
+        values = valuesOfPattern(pattern, c, Math.min(to, c + chunk));
+      } catch {
+        break; // a query error is the evaluation's to report
+      }
+      const fresh = values.filter((v) => {
+        const key = valueKey(v);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      total.cycles = Math.min(to, c + chunk) - from;
+      if (fresh.length === 0) continue;
+      const r = await warm(fresh);
+      total.warmed += r.warmed;
+      total.synths += r.synths;
+      for (const m of r.missing) total.missing.add(m);
+    }
+    return {
+      warmed: total.warmed,
+      synths: total.synths,
+      missing: [...total.missing].sort(),
+      ms: Math.round(performance.now() - t0),
+      cycles: total.cycles,
+      cancelled,
+    };
+  })();
+  return {
+    cancel() {
+      cancelled = true;
+    },
+    done,
+  };
+}

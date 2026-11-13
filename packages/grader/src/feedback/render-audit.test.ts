@@ -20,7 +20,7 @@ import type {
   SingTolerance,
 } from "@oak/content-kit";
 import { CADENCE_OPTIONS, FUNCTION_OPTIONS, rat } from "@oak/content-kit";
-import { gradeSung, gradeTaps } from "@oak/pitch";
+import { degreeTargets, gradeSung, gradeSwingTaps, gradeTaps } from "@oak/pitch";
 import { PROFILE as PITCH_PROFILE } from "../../../pitch/src/fixtures.test-data.ts";
 import { ev, line, norm, strudel } from "../analyze/__support__/fixtures.ts";
 import {
@@ -54,9 +54,9 @@ const NOT_REACHED: Record<string, string> = {
   "eval.truncated": "needs a piece past the mode's bar cap (runtime.test reaches it)",
   // Emitted by matchers on shapes this corpus does not build (match.test reaches most of them).
   "harmony.schema-rotation": "needs a schema loop matcher (match.test)",
+  "harmony.key-mismatch": "needs a capstone brief graded in another key (rubric/gate-wave5.test reaches it)",
   "rhythm.subdivision": "needs a swung or tuplet answer (match.test)",
   "rhythm.period": "needs a period mismatch (match.test)",
-  "rhythm.swing-missing": "needs a swing matcher (match.test)",
   "rhythm.pickup-missing": "needs a pickup context (match.test)",
   "kb.bass": "needs a keyboard answer in bass mode",
   "code.tempo-factor": "needs a tempo line written without the division",
@@ -74,7 +74,6 @@ const NOT_REACHED: Record<string, string> = {
   "sing.flat": "needs a note within twice the tolerance",
   "sing.octave-jump": "needs one note an octave off (pitch adversarial.test)",
   "sing.clipped": "needs a clipped take (pitch take.test)",
-  "tap.offset": "needs a whole take offset past the report threshold (pitch taps.test)",
   "tap.rushing": "needs taps speeding up (pitch taps.test)",
   "tap.dragging": "needs taps slowing down",
   // In the catalog for the tutor and older content; no Wave 3 producer emits them.
@@ -84,7 +83,6 @@ const NOT_REACHED: Record<string, string> = {
   "code.mini-uses": "not emitted: the constraint was replaced by must-use (contracts §5.4)",
   "code.must-not-call": "not emitted: the constraint was replaced by must-not-use (contracts §5.4)",
   "harmony.not-in-key": "not emitted",
-  "form.wrong": "not emitted",
   "staff.wrong-note": "not emitted: staff answers report melody.* and staff.octave/accidental/enharmonic",
   "staff.missing-note": "not emitted: staff answers report melody.missing-note",
   "staff.extra-note": "not emitted: staff answers report melody.extra-note",
@@ -473,6 +471,16 @@ beforeAll(async () => {
       nctx,
     ).diagnostics,
   );
+  // The right changes a whole step up (review:robustness, Wave 5): one `harmony.transposed`, not a numeral a bar.
+  collect(
+    "harmony",
+    runMatcher(
+      { ...HARMONY, level: "rn" } as Matcher,
+      chordsRef,
+      await strudel(`chords: note("<[d3,f#3,a3] [b2,d3,f#3] [g2,b2,d3] [a2,c#3,e3]>")`, 4),
+      nctx,
+    ).diagnostics,
+  );
   collect("harmony", runMatcher(HARMONY, chordsRef, norm(line("x", "C4:4")), nctx).diagnostics);
   collect("melody", runMatcher(MELODY, chordsRef, norm(), nctx).diagnostics);
   const swing = await strudel(`mel: n("<[2@2 0@2] [2@2 0 -2] [-3@4] ~>").scale("C4:major")`, 4);
@@ -719,6 +727,42 @@ beforeAll(async () => {
     ).diagnostics,
   );
 
+  // Wave 5 (U11): a blue ♭3 sung toward 3 (credited, `sing.blue-note`); a shuffle tapped swung and tapped straight.
+  const bluesTargets = degreeTargets({
+    key: { tonic: "C", mode: "major" },
+    tonicMidi: 60,
+    notes: (["1", "b3", "4", "5"] as const).map((degree, k) => ({ degree, at: 0.1 + k * 0.6, dur: 0.5 })),
+    blues: true,
+  });
+  collect(
+    "pitch",
+    gradeSung(
+      frames(
+        bluesTargets.map((t, k): [number, number, number] => [
+          t.midi + (k === 1 ? 0.6 : 0),
+          t.on + 0.05,
+          t.off - 0.05,
+        ]),
+      ),
+      bluesTargets,
+      tol,
+      "pitch",
+      PITCH_PROFILE,
+    ).diagnostics,
+  );
+  const beat = 60 / 112;
+  const shuffle = (p: number) => {
+    const out: number[] = [];
+    for (let k = 0; k < 8; k++) out.push(2 + k * beat, 2 + (k + p) * beat);
+    return [...out, 2 + 8 * beat];
+  };
+  for (const p of [2 / 3, 1 / 2])
+    collect(
+      "taps",
+      gradeSwingTaps(shuffle(p), { downbeat: 2, bpm: 112, slots: 8, amount: 1 / 3 }, tapTol, PITCH_PROFILE)
+        .diagnostics,
+    );
+
   // Wave 4: chord names, qualities, numerals, strips, chords on the staff, staged dictation, the voicing gate.
   const C = { tonic: "C", mode: "major" } as const;
   const chordText = { ui: "text", normalize: "chord" } as const;
@@ -873,6 +917,109 @@ beforeAll(async () => {
       },
     } as Exercise,
     { answer: { stages: { bass: ["1", "4"], quality: ["maj", "min"], rn: ["I", "IV"] } } },
+  );
+  // Wave 5: the rules, answers and matcher of U08–U11, A1 and C3–C5 (rubric/wave5-rules.ts, grade/answers-wave5.ts,
+  // match/controls.ts).
+  const w5rubric = async (rules: RubricRule[], code: string, bars: number, key: Record<string, string>) => {
+    const n = await strudel(code, bars);
+    const r = evaluateRubric(rules, n, {
+      meter: "4/4",
+      key: key as never,
+      code,
+      params: {},
+      bars,
+      totalBars: bars,
+    });
+    collect("rubric-w5", [...r.rows.map((x) => x.diag as Diagnostic), ...r.extra]);
+  };
+  const w5 = (body: Record<string, unknown>): RubricRule =>
+    ({ id: "w5", label: "Wave 5", required: true, skills: [], ...body }) as unknown as RubricRule;
+  const blues = "C7 C7 C7 C7 C7 F7 C7 C7 G7 F7 C7 G7";
+  await w5rubric(
+    [
+      w5({ rule: "blues-form", variant: "standard", choruses: 1 }),
+      w5({ rule: "swing", track: ["hats"], subdivision: 8, ratio: [1.6, 2.4] }),
+      w5({ rule: "contains-rn", rn: ["V"], min: 1, section: { section: "chorus" } }),
+    ],
+    `chords: chord("<${blues}>").voicing()\nhats: s("hh*8")`,
+    12,
+    { tonic: "C", mode: "blues" },
+  );
+  await w5rubric(
+    [w5({ rule: "swing", track: ["hats"], subdivision: 8, ratio: [1.6, 2.4] })],
+    'hats: s("hh*8").swingBy(0.6, 4)',
+    1,
+    { tonic: "C", mode: "major" },
+  );
+  await w5rubric(
+    [
+      w5({ rule: "form", pattern: "verse chorus" }),
+      w5({
+        rule: "contrast",
+        a: { section: "chorus" },
+        b: { section: "verse" },
+        axes: ["pitch", "density"],
+        minAxes: 2,
+      }),
+      w5({ rule: "progression", rn: ["I"], section: { section: "bridge" } }),
+    ],
+    'const melVerse = note("c4 e4")\nconst melChorus = note("c4 e4")\nmel: arrange([1, melVerse], [1, melChorus], [1, melVerse])',
+    3,
+    { tonic: "C", mode: "major" },
+  );
+  await w5rubric(
+    [
+      w5({ rule: "ends-on-degree", degrees: ["1"], track: "mel", over: "i" }),
+      w5({ rule: "notates", view: "lead-sheet" }),
+    ],
+    'chords: chord("<Am F>").voicing()\nmel: n("<[0 2] [4 0]>").scale("A4:minor").late(0.07)',
+    2,
+    { tonic: "A", mode: "minor" },
+  );
+  const sawRef = await strudel('a: note("c3 e3").s("sawtooth").lpf(600).release(.4)', 1);
+  for (const answer of [
+    'a: note("c3 e3").s("sawtooth").release(.4)',
+    'a: note("c3 e3").s("sawtooth").lpf(4000).release(1.2)',
+  ])
+    collect(
+      "controls",
+      runMatcher(
+        {
+          m: "controls",
+          controls: [
+            { control: "lpf", scale: "log", tol: 0.5 },
+            { control: "release", scale: "linear", tol: 0.1 },
+          ],
+        },
+        sawRef,
+        await strudel(answer, 1),
+        { meter: "4/4" },
+      ).diagnostics,
+    );
+  collect(
+    "answers-w5",
+    gradeAnswer(
+      { ui: "form", sections: 4, vocabulary: ["verse", "chorus", "bridge"], input: "label" },
+      { sections: ["verse", "chorus", "verse", "chorus"] },
+      { sections: ["verse", "chorus", "bridge", "chorus"] },
+    ).diagnostics,
+  );
+  collect(
+    "answers-w5",
+    gradeAnswer(
+      { ui: "bar-grid", bars: 12, perRow: 4, entry: "rn", qualities: ["7"] },
+      { rn: blues.split(" ").map((c) => ({ C7: "I7", F7: "IV7", G7: "V7" })[c] as string) },
+      { rn: "I7 I7 I7 I7 I7 I7 I7 I7 V7 IV7 I7 V7".split(" ") },
+      { key: { tonic: "C", mode: "blues" } },
+    ).diagnostics,
+  );
+  collect(
+    "answers-w5",
+    gradeAnswer(
+      { ui: "scale-builder", tonic: "C", input: "degrees" },
+      { degrees: ["1", "b3", "4", "b5", "5", "b7"] },
+      { degrees: ["1", "b3", "4", "5", "6"] },
+    ).diagnostics,
   );
 });
 

@@ -37,6 +37,7 @@ import {
   syllableOf,
   toLeadSheet,
 } from "@oak/theory";
+import type { FormViewSection } from "../lib/form-view.ts";
 import { barsPhrase, barsWhere, type ChordAt, runsOf } from "./harmony-chips.ts";
 
 export const PLAY_KEY: KeySpec = { tonic: "C", mode: "major" } as KeySpec;
@@ -63,6 +64,13 @@ export interface TokenContext {
    * the bars it sounds in. Absent or empty: the chip only plays.
    */
   harmony?: readonly ChordAt[];
+  /**
+   * Wave 5: the sections of the music on screen (the form view's), so section names in tutor text become chips that
+   * select them. Absent or empty: section names stay plain words.
+   */
+  sections?: readonly FormViewSection[];
+  /** Wave 5: the music on screen has a pickup (section and bar numbers count from the first full bar). */
+  pickup?: boolean;
 }
 
 export type TokenVariant = "interval" | "key" | "signature";
@@ -117,10 +125,27 @@ export function chordMidis(rootPc: number, pcs: readonly number[]): number[] {
   return pcs.map((pc) => root + ((((pc - rootPc) % 12) + 12) % 12));
 }
 
-/** I IV V I (i iv V i in minor) in a key: what sets up the key before a degree is played (ux §6.4). */
+/** The modes whose home chord is minor: their cadence is i iv V i (V from the raised 7, as Oak teaches minor). */
+const MINOR_HOME = new Set([
+  "minor",
+  "harmonic minor",
+  "melodic minor",
+  "dorian",
+  "phrygian",
+  "minor pentatonic",
+]);
+
+/**
+ * I IV V I in a key (i iv V i in the minor modes, I7 IV7 V7 I7 in a blues key): what sets up the key before a degree
+ * is played (ux §6.4). Wave 5: a harmonic-minor or minor-pentatonic key is set up in minor, never in major.
+ */
 export function cadenceIn(key: KeySpec): number[][] {
-  const minor = key.mode === "minor";
-  return (minor ? ["i", "iv", "V", "i"] : ["I", "IV", "V", "I"]).map((t) => {
+  const plan = MINOR_HOME.has(key.mode)
+    ? ["i", "iv", "V", "i"]
+    : key.mode === "blues"
+      ? ["I7", "IV7", "V7", "I7"]
+      : ["I", "IV", "V", "I"];
+  return plan.map((t) => {
     const rn = parseRN(t, key);
     const chord = rn ? rnToChord(rn, key) : null;
     return chord ? chordMidis(chord.rootPc, chordPcs(chord)) : [];

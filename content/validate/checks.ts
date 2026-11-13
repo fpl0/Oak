@@ -8,6 +8,8 @@ import {
   type Exercise,
   flattenExercise,
   type LessonDef,
+  type Matcher,
+  PROBE_TOOLS,
   type SessionId,
   stripMarkers,
   type UnlockableId,
@@ -26,7 +28,7 @@ import type { LoadedLesson } from "../lib/load.bun.ts";
 import { checkMdx, parseMdx } from "../lib/mdx.ts";
 import { unitSpecs } from "../specs/index.ts";
 import { termById } from "../terms.ts";
-import { toolboxById, VOICING_GATE } from "../toolbox.ts";
+import { toolbox, toolboxById, VOICING_GATE } from "../toolbox.ts";
 import { lessonAuthoring } from "./authoring.ts";
 import {
   BAD_LOG,
@@ -188,8 +190,47 @@ export function checkLint(l: LoadedLesson): CheckSection {
       if (!unlocked.has(tool as UnlockableId))
         issues.push(`${s.id}: the ${p} panel needs ${tool}, locked here`);
     }
+  // Wave 5: a probe beside the sound needs its row too (`PROBE_TOOLS`), and a "match this sound" step compares
+  // only controls that have a toolbox row, are unlocked here and are audible (contracts §3.1 rule 7).
+  for (const s of def.steps) {
+    if (s.ui.probe && !unlocked.has(PROBE_TOOLS[s.ui.probe.kind] as UnlockableId))
+      issues.push(`${s.id}: the ${s.ui.probe.kind} probe needs ${PROBE_TOOLS[s.ui.probe.kind]}, locked here`);
+    for (const e of s.exercise ? flattenExercise(s.exercise) : [])
+      issues.push(...controlIssues(e, `${s.id}/${e.id}`, unlocked));
+  }
   issues.push(...gateCheckIssues(def));
   return { n: 4, name: "STYLE lint and unlock-before-use", issues };
+}
+
+/** The toolbox rows a control name (`lpf`, `release`, `s`) belongs to, by the lint's `matches` names. */
+export function controlToolIds(control: string): string[] {
+  return toolbox.filter((t) => (t.matches ?? []).includes(control)).map((t) => t.id as string);
+}
+function controlMatchers(m: Matcher | undefined): Extract<Matcher, { m: "controls" }>[] {
+  if (!m) return [];
+  if (m.m === "controls") return [m];
+  if (m.m === "all") return m.of.flatMap(controlMatchers);
+  return [];
+}
+/**
+ * Wave 5 (`controls` matcher, AUTHORING §18.5): every compared control has a toolbox row, unlocked at the
+ * session, and a group-H row is audible (the row says so or the S3 harness measured it).
+ */
+export function controlIssues(e: Exercise, where: string, unlocked: ReadonlySet<UnlockableId>): string[] {
+  const issues: string[] = [];
+  for (const m of controlMatchers("matcher" in e ? e.matcher : undefined))
+    for (const c of m.controls) {
+      const ids = controlToolIds(c.control);
+      if (ids.length === 0) issues.push(`${where}: control ${c.control} has no toolbox row`);
+      else if (!ids.some((id) => unlocked.has(id as UnlockableId)))
+        issues.push(`${where}: control ${c.control} (${ids.join("/")}) is locked here`);
+      else if (
+        ids.every((id) => toolboxById.get(id)?.group === "H") &&
+        !ids.some((id) => toolboxById.get(id)?.audible === true || provenByHarness(id))
+      )
+        issues.push(`${where}: control ${c.control} is not proven audible (contracts §3.1 rule 7)`);
+    }
+  return issues;
 }
 
 export async function checkEvaluation(l: LoadedLesson): Promise<CheckSection> {
@@ -287,7 +328,11 @@ export async function checkNotation(l: LoadedLesson): Promise<CheckSection> {
   const pending: string[] = [];
   for (const s of def.steps) {
     if (!s.example || s.ui.panels.staff === false) continue;
-    const n = await notateCode(s.example.code, def.meter, def.key, s.example.bars, s.ui.panels.staff);
+    const swing = s.exercise && "swing" in s.exercise ? s.exercise.swing : (def.swing ?? undefined);
+    const n = await notateCode(s.example.code, def.meter, def.key, s.example.bars, s.ui.panels.staff, {
+      ...(s.ui.leadSheet?.melody ? { melody: s.ui.leadSheet.melody } : {}),
+      ...(swing ? { swing } : {}),
+    });
     if (n.error) issues.push(`${s.id}@${s.example.id}: ${n.error}`);
     else {
       if (n.approximate) issues.push(`${s.id}@${s.example.id}: renders approximately`);
@@ -315,6 +360,12 @@ function provenByHarness(id: string): boolean {
   return harnessAudible[id] === true;
 }
 
+/**
+ * Group H rows that draw rather than sound (contracts §3.1 rule 9): `.scope()` and `.fscope()` route to Oak's own
+ * panel and change nothing the learner hears, so the audibility harness has nothing to prove for them.
+ */
+const VIEW_ROWS: ReadonlySet<string> = new Set(["tb.scope", "tb.fscope"]);
+
 export function checkSounds(l: LoadedLesson): CheckSection {
   const issues: string[] = [];
   const used = new Set<string>();
@@ -331,7 +382,10 @@ export function checkSounds(l: LoadedLesson): CheckSection {
   const pending = [...used]
     .filter(
       (id) =>
-        toolboxById.get(id)?.group === "H" && toolboxById.get(id)?.audible !== true && !provenByHarness(id),
+        toolboxById.get(id)?.group === "H" &&
+        toolboxById.get(id)?.audible !== true &&
+        !VIEW_ROWS.has(id) &&
+        !provenByHarness(id),
     )
     .map((id) => `${id}: audibility not yet proven by the S3 harness`);
   return { n: 10, name: "Sounds", issues, pending };

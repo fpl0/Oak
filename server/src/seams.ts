@@ -2,7 +2,7 @@
 // the pattern stimulus of hidden Transcribe sources (evaluated by the learner host); the ladder
 // generator (`@oak/drills`). A piece that is unfinished fails the request that needs it with 503.
 import { toLearnerProfile } from "@oak/api";
-import type { NEvent, ToolEntry, UnlockableId } from "@oak/content-kit";
+import { METER_IDS, type MeterId, type NEvent, type ToolEntry, type UnlockableId } from "@oak/content-kit";
 import { generateLadderPiece } from "@oak/drills";
 import { type GraderHost, normalize } from "@oak/grader";
 import type { ContentIndex } from "./content/index.ts";
@@ -58,7 +58,9 @@ export function serverGraderHosts(opts: { toolbox: () => readonly ToolEntry[] })
 
 /** Events of hidden pattern code (pd-song and ladder sources), evaluated by the learner host. */
 export function patternStimulus(graders: GraderHosts, content: ContentIndex): PatternStimulus {
-  return async (code, bars) => {
+  return async (code, bars, meterText = "4/4") => {
+    // A song in 3/4 (or 6/8) is read in its own meter: its `setcpm(bpm/3)` is right there, not a 4/4 mistake.
+    const meter = (METER_IDS as readonly string[]).includes(meterText) ? (meterText as MeterId) : "4/4";
     const r = await graders.learner().analyze(code, {
       mode: "capstone",
       bars,
@@ -66,12 +68,12 @@ export function patternStimulus(graders: GraderHosts, content: ContentIndex): Pa
         profile: "content",
         unlocked: new Set(content.toolbox().map((t) => t.id)) as Set<UnlockableId>,
         allowPreview: true,
-        meter: "4/4",
+        meter,
         key: null,
       },
     });
     if (!r.ok) return null;
-    const n = normalize(r, { meter: "4/4" });
+    const n = normalize(r, { meter });
     const preload = [...new Set(n.all.map((e: NEvent) => e.s).filter((s): s is string => s !== undefined))];
     return { events: n.all, cps: r.cps, bars: r.bars, preload };
   };

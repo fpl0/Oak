@@ -126,4 +126,7 @@ export function courseRoutes(mount: Mounter, d: AppDeps): void {
   mount("capstones.gate", ({ params }) => s.capstoneSessions.gate(params.id));
   mount("gym.plan", () => s.gym.plan());
   mount("gates.voicing", () => voicingGate(s.unlocks));
+
+  // Wave 5 (docs/design/wave5.md §5.1): the optional side lessons A1.L01–L04 and the one Today would offer next.
+  mount("sideLessons.list", () => s.sideLessons.list());
 }

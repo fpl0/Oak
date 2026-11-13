@@ -23,58 +23,75 @@
 import { globSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { defineConfig, type PlaywrightTestConfig, type Project } from "@playwright/test";
-import { type Area, selectedProjects } from "./e2e/support/stack.ts";
+import {
+  type Area,
+  E2E_SUFFIX,
+  PREBUILT,
+  selectedProjects,
+  shifted,
+  withFixtures,
+} from "./e2e/support/stack.ts";
 
 type WebServer = Extract<NonNullable<PlaywrightTestConfig["webServer"]>, readonly unknown[]>[number];
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const vite = `node ${root}node_modules/vite/bin/vite.js`;
 const autoplay = { launchOptions: { args: ["--autoplay-policy=no-user-gesture-required"] } };
-const DATA = `${root}test-results/e2e-data`;
+const DATA = `${root}test-results/e2e-data${E2E_SUFFIX}`;
+// Every port below moves with OAK_E2E_SHIFT (e2e/support/stack.ts), like every area's stack.
+const PLATFORM_API = shifted(8787);
+const PLATFORM_VITE = shifted(5173);
+const PLATFORM_PROD = shifted(8790);
+const STRUDEL = shifted(5192);
+const AUDIO = shifted(5191);
 const pipe = { reuseExistingServer: false, stdout: "pipe", stderr: "pipe" } as const;
 
 // --- the platform stack (platform + app) -----------------------------------------------------------------------
 const platformDev: WebServer = {
   ...pipe,
-  name: "platform-api:8787",
+  name: `platform-api:${PLATFORM_API}`,
   // The real Oak server, dev mode (the Vite proxy's Host and Origin are allowed), a throwaway data dir.
-  command: `rm -rf "${DATA}/dev" && OAK_DEV=1 OAK_DATA_DIR="${DATA}/dev" bun server/src/main.ts`,
+  command: `rm -rf "${DATA}/dev" && OAK_DEV=1 OAK_PORT=${PLATFORM_API} OAK_VITE_PORT=${PLATFORM_VITE} OAK_DATA_DIR="${DATA}/dev" bun server/src/main.ts`,
   cwd: root,
-  url: "http://127.0.0.1:8787/api/health",
+  url: `http://127.0.0.1:${PLATFORM_API}/api/health`,
   timeout: 60_000,
 };
 const platformVite: WebServer = {
   ...pipe,
-  name: "platform-vite:5173",
-  command: `bun scripts/content/build.ts && ${vite} --config app/vite.config.ts`,
+  name: `platform-vite:${PLATFORM_VITE}`,
+  command: `bun scripts/content/build.ts && ${vite} --config e2e/support/vite.e2e.config.ts`,
   cwd: root,
-  url: "http://127.0.0.1:5173/",
+  env: { OAK_VITE_PORT: String(PLATFORM_VITE), OAK_API_PORT: String(PLATFORM_API) },
+  url: `http://127.0.0.1:${PLATFORM_VITE}/`,
   timeout: 120_000,
 };
 /** `bun run build` + `bun run start` on 8790. The journey's production server reuses this build when both run. */
 const platformProd: WebServer = {
   ...pipe,
-  name: "platform-prod:8790",
-  command: `bun run build && rm -rf "${DATA}/prod" && OAK_PORT=8790 OAK_DATA_DIR="${DATA}/prod" bun server/src/main.ts --serve-dist`,
+  name: `platform-prod:${PLATFORM_PROD}`,
+  command: `bun run build && rm -rf "${DATA}/prod" && OAK_PORT=${PLATFORM_PROD} OAK_DATA_DIR="${DATA}/prod" bun server/src/main.ts --serve-dist`,
   cwd: root,
-  url: "http://127.0.0.1:8790/",
+  url: `http://127.0.0.1:${PLATFORM_PROD}/`,
   timeout: 300_000,
 };
 
 const strudelVite: WebServer = {
   ...pipe,
-  name: "strudel-vite:5192",
-  command: `${vite} --config vite.config.ts`,
+  name: `strudel-vite:${STRUDEL}`,
+  command: `${vite} --config vite.config.ts --port ${STRUDEL} --strictPort`,
   cwd: `${root}packages/strudel/e2e`,
-  url: "http://127.0.0.1:5192/",
+  url: `http://127.0.0.1:${STRUDEL}/`,
   timeout: 90_000,
 };
 const audioVite: WebServer = {
   ...pipe,
-  name: "audio-vite:5191",
-  command: `bun make-fixtures.bun.ts && ${vite} --config vite.config.ts`,
+  name: `audio-vite:${AUDIO}`,
+  command: withFixtures(
+    "bun make-fixtures.bun.ts",
+    `${vite} --config vite.config.ts --port ${AUDIO} --strictPort`,
+  ),
   cwd: `${root}packages/audio/e2e`,
-  url: "http://127.0.0.1:5191/",
+  url: `http://127.0.0.1:${AUDIO}/`,
   timeout: 90_000,
 };
 
@@ -150,7 +167,11 @@ const SUITES: Suite[] = [
       testDir: `${root}e2e`,
       testMatch: /\/e2e\/[^/]+\.pw\.ts$/,
       testIgnore: /(journey|review)\//,
-      use: { baseURL: "http://127.0.0.1:5173", viewport: { width: 1440, height: 900 }, ...autoplay },
+      use: {
+        baseURL: `http://127.0.0.1:${PLATFORM_VITE}`,
+        viewport: { width: 1440, height: 900 },
+        ...autoplay,
+      },
     },
     servers: [platformDev, platformVite, platformProd],
   },
@@ -161,7 +182,7 @@ const SUITES: Suite[] = [
       testMatch: /.*\.pw\.ts$/,
       timeout: 60_000,
       use: {
-        baseURL: "http://127.0.0.1:5173",
+        baseURL: `http://127.0.0.1:${PLATFORM_VITE}`,
         viewport: { width: 1440, height: 900 },
         // The production build registers sw.js, whose own fetches would bypass the in-page API stub.
         serviceWorkers: "block",
@@ -176,7 +197,7 @@ const SUITES: Suite[] = [
       testDir: `${root}packages/strudel/e2e`,
       testMatch: /.*\.pw\.ts$/,
       grepInvert: /@gesture/,
-      use: { baseURL: "http://127.0.0.1:5192", viewport: { width: 1000, height: 900 }, ...autoplay },
+      use: { baseURL: `http://127.0.0.1:${STRUDEL}`, viewport: { width: 1000, height: 900 }, ...autoplay },
     },
     servers: [strudelVite],
   },
@@ -187,7 +208,7 @@ const SUITES: Suite[] = [
       testMatch: /.*\.pw\.ts$/,
       grep: /@gesture/,
       use: {
-        baseURL: "http://127.0.0.1:5192",
+        baseURL: `http://127.0.0.1:${STRUDEL}`,
         viewport: { width: 1000, height: 900 },
         launchOptions: { args: ["--autoplay-policy=document-user-activation-required"] },
         // Trace snapshots run script with a user activation, which would unlock audio before the real gesture.
@@ -202,11 +223,16 @@ const SUITES: Suite[] = [
       testDir: `${root}packages/audio/e2e`,
       testMatch: /.*\.pw\.ts$/,
       timeout: 60_000,
-      use: { baseURL: "http://127.0.0.1:5191" },
+      use: { baseURL: `http://127.0.0.1:${AUDIO}` },
     },
     servers: [audioVite],
   },
 ];
+
+/** Each project's web servers by name: scripts/e2e-parallel.ts runs projects that share one in one process. */
+export const projectServers: Record<string, string[]> = Object.fromEntries(
+  SUITES.map((s) => [s.project.name as string, s.servers.map((w) => w.name ?? w.command)]),
+);
 
 const wanted = selectedProjects();
 const chosen = SUITES.filter((s) => wanted === null || wanted.has(s.project.name as string));
@@ -221,7 +247,7 @@ if (servers.has(platformProd.name as string))
       servers.set(k, { ...w, command: w.command.replace("bun run build && ", "") });
 // `bun run e2e` (scripts/e2e-parallel.ts) runs several of these processes side by side. It builds the content and
 // the production app once, before any of them starts, and says so here: no process may rebuild while others read.
-if (process.env.OAK_E2E_PREBUILT === "1")
+if (PREBUILT)
   for (const [k, w] of servers)
     servers.set(k, {
       ...w,
@@ -233,7 +259,7 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: [["list"]],
-  outputDir: `${root}test-results/e2e`,
+  outputDir: `${root}test-results/e2e${E2E_SUFFIX}`,
   timeout: 120_000,
   use: { headless: true, browserName: "chromium", trace: "retain-on-failure" },
   webServer: [...servers.values()],

@@ -135,6 +135,6 @@ test("the Oak after X1: the chord, harmony and melody strands at the server's le
   await shoot(page, SHOTS, "w4-oak-panel-h04", "bark");
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0);
-  // What's next past X1: the unwritten lesson, named and never opened.
-  await expect(page.getByTestId("whats-next")).toContainText("still being written");
+  // What's next past X1: U08.L02, named (and, while it was unwritten, "still being written" and never opened).
+  await expect(page.getByTestId("whats-next")).toContainText("U08.L02");
 });

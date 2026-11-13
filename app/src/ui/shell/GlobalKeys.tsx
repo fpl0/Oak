@@ -2,15 +2,19 @@
 // shortcut sheet (`?`).
 
 import { useNavigate, useRouter } from "@tanstack/react-router";
+import { Lock } from "lucide-react";
 import { useMemo } from "react";
 import type { Command } from "../../lib/commands.ts";
 import { useCommandSource } from "../../lib/commands.ts";
+import { useContent } from "../../lib/content.ts";
 import { NAV_ITEMS, SETTINGS_SECTIONS } from "../../lib/nav.ts";
 import { stopAllAudio } from "../../lib/oak.ts";
 import { useBootstrap } from "../../lib/queries.ts";
 import { useShell } from "../../lib/shell-store.ts";
+import { useUnlockedSet } from "../../lib/unlocked.ts";
 import { IS_MAC, useHotkeys, useKeymap } from "../keys/KeymapProvider.tsx";
 import { type Binding, formatKeys } from "../keys/keymap.ts";
+import { rowLock } from "../keys/locks.ts";
 import { formatSheetKeys, sheetSections, useSheetSections } from "../keys/sheet.ts";
 import { Kbd } from "../kit/basics.tsx";
 import { Dialog } from "../kit/Dialog.tsx";
@@ -219,6 +223,18 @@ function ShortcutSheet() {
   // app/src/ui/keys/sheet.ts); a row a live page group already lists is not repeated.
   const registered = useSheetSections((s) => s.sections);
   const statics = sheetSections(registered, new Set(live.map((b) => `${b.keys}|${b.description}`)));
+  // Wave 5: a Workbench key whose tool is not unlocked yet says when it opens (honest, never hidden).
+  const { unlocked, ready } = useUnlockedSet();
+  const content = useContent();
+  const lockOf = (section: string, keys: string) =>
+    rowLock(
+      section,
+      keys,
+      unlocked,
+      ready && content.data !== undefined,
+      content.data?.toolbox ?? [],
+      content.data?.syllabus ?? null,
+    );
   return (
     <Dialog
       open={open}
@@ -246,14 +262,30 @@ function ShortcutSheet() {
           <section key={s.id} data-sheet-section={s.id}>
             <h3 className="mb-2 font-sans text-sm font-semibold text-text-2">{s.title}</h3>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-              {s.rows.map(([k, d]) => (
-                <div key={k + d} className="contents">
-                  <dt>
-                    <Kbd>{formatSheetKeys(k, IS_MAC)}</Kbd>
-                  </dt>
-                  <dd>{d}</dd>
-                </div>
-              ))}
+              {s.rows.map(([k, d]) => {
+                const lock = lockOf(s.id, k);
+                return (
+                  <div
+                    key={k + d}
+                    className="contents"
+                    data-sheet-row={k}
+                    data-locked={lock ? true : undefined}
+                  >
+                    <dt className={lock ? "opacity-70" : undefined}>
+                      <Kbd>{formatSheetKeys(k, IS_MAC)}</Kbd>
+                    </dt>
+                    <dd className={lock ? "text-text-2" : undefined}>
+                      {d}
+                      {lock && (
+                        <span className="ml-1.5 inline-flex items-center gap-1 text-[0.75rem] text-text-3">
+                          <Lock aria-hidden className="size-3" strokeWidth={2.25} />
+                          {lock.note}
+                        </span>
+                      )}
+                    </dd>
+                  </div>
+                );
+              })}
             </dl>
           </section>
         ))}

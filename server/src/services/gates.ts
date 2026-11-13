@@ -22,6 +22,7 @@ import {
 import { CHECKPOINT, MASTERY } from "@oak/srs";
 import { dayIndex } from "../lib/days.ts";
 import { LearnerTime, type ServiceContext } from "./context.ts";
+import { openFamilyLevels } from "./family-levels.ts";
 
 export type LessonStatus = LessonProgress["status"];
 
@@ -216,10 +217,12 @@ export class GatesService {
   nextMapItem(): SessionId | null {
     for (const id of this.#content.defaultOrder())
       if (!this.sessionDone(id) && this.sessionOpen(id)) return id as SessionId;
-    // Then any open track lesson.
+    // Then any open track lesson. Never a side lesson (A1.L01–L04): Today offers those beside the core session,
+    // never as its next item (contracts §9.6, wave5.md §5.1).
     for (const site of this.#content.allLessons())
       if (
         site.unit.track !== "core" &&
+        site.meta.side !== true &&
         this.lessonStatus(site.meta.id) !== "completed" &&
         this.lessonOpen(site.meta.id)
       )
@@ -233,11 +236,15 @@ export class GatesService {
     const capstones = this.#content.capstones().map((c) => this.capstoneStatus(c.id));
     const gym = this.#repos.gym.list().map((g) => ({ gymId: g.gymId, kind: g.kind, at: g.at }));
     const order = this.#content.defaultOrder();
+    // Side lessons count in track A (`sideLessons`), never in the core map's done and total (contracts §9.6).
     const trackLessons = this.#content
       .allLessons()
-      .filter((s) => s.unit.track !== "core" && this.lessonStatus(s.meta.id) !== "locked")
+      .filter(
+        (s) => s.unit.track !== "core" && s.meta.side !== true && this.lessonStatus(s.meta.id) !== "locked",
+      )
       .map((s) => s.meta.id as string);
     const all = [...order, ...trackLessons.filter((l) => !order.includes(l as SessionId))];
+    const side = this.#content.allLessons().filter((s) => s.meta.side === true);
     return {
       lessons,
       checkpoints,
@@ -246,6 +253,10 @@ export class GatesService {
       next: this.nextMapItem(),
       mapDone: all.filter((id) => this.sessionDone(id)).length,
       mapTotal: all.length,
+      sideLessons: {
+        done: side.filter((s) => this.lessonCompleted(s.meta.id)).length,
+        total: side.length,
+      },
     };
   }
 
@@ -303,7 +314,10 @@ export class GatesService {
       n += 1;
       if (familyId === undefined) return null;
       const fam = this.#content.family(familyId);
-      const level = Math.max(1, Math.min(fam?.masteryLevel ?? 1, fam?.levels.length ?? 1));
+      // At the mastery level, but never above the family's open level (§7.3): a checkpoint never asks for
+      // material whose lesson is still ahead, and its level-setting result cannot carry the family past it.
+      const open = fam === null ? 1 : openFamilyLevels(fam, (l) => this.lessonCompleted(l)).maxOpenLevel;
+      const level = Math.max(1, Math.min(fam?.masteryLevel ?? 1, fam?.levels.length ?? 1, open));
       return {
         skillId: skill as SkillId,
         role: this.roleOf(skill),

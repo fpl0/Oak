@@ -2,6 +2,8 @@
 // generator for trials whose generator does not write one.
 import type { FamilyDef, Trial } from "@oak/api";
 import type { Stage } from "./machine.ts";
+import { choiceOptionsOf } from "./model.ts";
+import { stageEPrompt, swingPrompt } from "./wave5.ts";
 
 const PROMPTS: Record<string, string> = {
   "rhythm-pulse": "Tap along on the beat from the second bar.",
@@ -42,6 +44,11 @@ const PROMPTS: Record<string, string> = {
 
 export function promptOf(trial: Trial<unknown>, def: FamilyDef): string {
   const p = trial.params;
+  // Stage E (Wave 5): form by ear on the form widget, major or minor, which minor, scale colours, degrees in minor.
+  const stageE = stageEPrompt(trial, def);
+  if (stageE) return stageE;
+  if (def.generator === "rhythm-swing" && typeof p.prompt !== "string")
+    return swingPrompt(choiceOptionsOf(trial, def).length);
   // Chord dictation names its key in its own prompt; the runner says how it is answered (bass first).
   if (def.generator === "harmony-progression" && p.key && typeof p.key === "object") {
     const k = p.key as { tonic: string; mode: string };
@@ -91,6 +98,13 @@ export const DICTATION_PROMPTS: Readonly<Record<"degrees" | "code" | "staff", st
   staff: "Write the tune on the staff: the pitches and how long each one lasts.",
 };
 
+/** What a bass-line dictation asks in each answer mode (Wave 5): the roots, or the line itself. */
+export const BASS_LINE_PROMPTS: Readonly<Record<"degrees" | "code" | "staff", string>> = {
+  degrees: "Hear the bass first: which degree is each root?",
+  code: "Write the bass line as code: n is the degree − 1, in any octave.",
+  staff: "Write the bass line on the bass staff.",
+};
+
 /** What a staged trial's open step asks. */
 export const STEP_PROMPTS: Readonly<Record<"bass" | "quality" | "rn", string>> = {
   bass: "Step 1 · The bass: the degree under each chord.",
@@ -98,10 +112,23 @@ export const STEP_PROMPTS: Readonly<Record<"bass" | "quality" | "rn", string>> =
   rn: "Step 3 · The Roman numerals.",
 };
 
+/** A bass-line dictation's two steps (Wave 5): root motion first, then the whole line. */
+export const LINE_STEP_PROMPTS: Readonly<Record<"bass" | "line", string>> = {
+  bass: "Step 1 · The root under each chord.",
+  line: "Step 2 · The whole line, passing notes and all.",
+};
+
 /** The line after a step check that did not pass yet (never shaming: what is right, and what to do). */
-export function stepRetryText(step: "bass" | "quality" | "rn", marks: readonly boolean[]): string {
+export function stepRetryText(step: "bass" | "quality" | "rn" | "line", marks: readonly boolean[]): string {
   const right = marks.filter(Boolean).length;
-  const what = step === "bass" ? "bass notes" : step === "quality" ? "qualities" : "numerals";
+  const what =
+    step === "bass"
+      ? "bass notes"
+      : step === "quality"
+        ? "qualities"
+        : step === "line"
+          ? "notes"
+          : "numerals";
   return `${right} of ${marks.length} ${what} right so far. Hear it again, change the marked ones, and check again.`;
 }
 

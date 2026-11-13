@@ -66,8 +66,25 @@ export function trackChords(n: Normalized, track: string, ctx: RubricContext): T
   });
 }
 
-/** The quality a chord is read as against a listed quality: its own, or its triad core for a triad. */
-function hasQuality(c: ChordId, q: ChordQuality): boolean {
+/** Dominant-seventh qualities: a 9th or 13th on a dominant seventh is still one (C5 "every chord a dominant 7th"). */
+const DOMINANT_FAMILY: readonly string[] = [
+  "7",
+  "9",
+  "13",
+  "7b9",
+  "7#9",
+  "7#11",
+  "7b13",
+  "7alt",
+  "9#11",
+  "13b9",
+];
+/**
+ * The quality a chord is read as against a listed quality: its own, or its triad core for a triad. With
+ * `depth: "seventh"` (Wave 5) the chord keeps its 7th: C7 is not a major triad, and "7" takes the dominant family.
+ */
+function hasQualityAt(c: ChordId, q: ChordQuality, depth: "triad" | "seventh" = "triad"): boolean {
+  if (depth === "seventh") return c.quality === q || (q === "7" && DOMINANT_FAMILY.includes(c.quality));
   return c.quality === q || (TRIADS.includes(q) && triadCore(c).quality === q);
 }
 /** "a C major triad", "an A minor 7th". */
@@ -83,6 +100,8 @@ export const chordQualitiesRule = (
   const chords = trackChords(n, r.track ?? "@chords", ctx);
   if (chords.length === 0)
     return { ok: false, value: 0, ...(r.min ? { target: r.min } : {}), detail: "no chords found" };
+  const depth = r.depth ?? "triad";
+  const hasQuality = (c: ChordId, q: ChordQuality): boolean => hasQualityAt(c, q, depth);
   const triads = chords.filter(
     (c) => c.stacked && c.chord && TRIADS.includes(triadCore(c.chord).quality as ChordQuality),
   );
@@ -118,9 +137,13 @@ export const chordQualitiesRule = (
     );
     if (out) {
       const bar = barOf(out.slot.span[0], ctx);
+      const fix =
+        depth === "seventh" && r.subsetOf.length === 1 && out.chord
+          ? `: write ${toLeadSheet({ ...out.chord, quality: r.subsetOf[0] as ChordQuality, bassPc: out.chord.rootPc })}`
+          : "";
       problems.push(
         out.chord && out.stacked
-          ? `bar ${bar} is ${chordWords(out.chord)}; the brief allows ${r.subsetOf.map(qualityWord).join(", ")}`
+          ? `bar ${bar} is ${chordWords(out.chord)}; the brief allows ${r.subsetOf.map(qualityWord).join(", ")}${fix}`
           : `bar ${bar} is not stacked in 3rds (${out.slot.midis.map((m) => noteName(m, null)).join(" ")})`,
       );
       where = at(out);

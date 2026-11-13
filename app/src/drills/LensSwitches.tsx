@@ -1,6 +1,7 @@
 // The lens switches of the drill footer (wave3.md §4.3): degree numbers, solfège and note names, the one
 // shared preference (`useLenses`). A lens that is not unlocked yet has no switch at all (before U03.L02 no
 // degree labels, before U03.L08 no syllables); with none unlocked but note names, only that one shows.
+import type { FamilyDef } from "@oak/content-kit";
 import { clsx } from "clsx";
 import {
   CHORD_LENS_IDS,
@@ -11,6 +12,14 @@ import {
   type Lenses,
   type LensId,
 } from "../lib/lenses.ts";
+
+/**
+ * Families whose trials show no pitch label (rhythm feel, groove lock, form, the twelve-bar chart's numerals):
+ * the degree, solfège and note-name switches would change nothing there, so the footer leaves them out.
+ */
+export function hidesNoteLenses(def: Pick<FamilyDef, "generator"> | undefined): boolean {
+  return !!def && /^(rhythm-|form-)/.test(def.generator);
+}
 
 /**
  * The label switches. With `chords` (a harmony trial), the chord lenses join them (wave4.md §4.3): chord symbols

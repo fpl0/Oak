@@ -207,6 +207,14 @@ export const toolbox: readonly ToolEntry[] = defineToolbox([
     meaning: "Adds do re mi fa sol la ti under the degree numbers. Do is home in every key, so a tune keeps its syllables when it moves.",
     demo: ex(80, 'mel: n("<[0 1 2 [3 2]] [4 2 0 ~]>").scale("C4:major").s("piano")'),
   }),
+  // Carry-over c14 (Wave 5 Foundation): the chord band's and the staff's chord-symbol labels open with chord
+  // names (U05.L04), not with `.arp()`; app/src/lib/lenses.ts `CHORD_LENS_UNLOCKS.chordSymbols` reads this row.
+  // The §3.2 row is requested from the contracts owner (content/validate/contracts-sync.test.ts lists it as
+  // pending until the table has it).
+  feature("tb.feature.chord-symbols", "Chord-symbol labels (chord band and staff)", "U05.L04", "chord names", {
+    meaning: "Names each chord as it sounds with its lead-sheet symbol (C, Am, G7, C/E), in the chord band under the roll and above the staff.",
+    demo: ex(90, 'chords: n("<[0,2,4] [5,7,9] [3,5,7] [4,6,8]>").scale("C3:major").s("piano")'),
+  }),
   feature("tb.feature.grand-staff", "Bass clef and grand staff", "U05.L06", "low register on paper", {
     meaning: "The staff panel shows low notes on the bass clef, and chords and bass lines on a grand staff: treble on top, bass below, middle C between them. A bass track goes to the bass staff by itself.",
     demo: ex(84, 'chords: note("<[e3,g3,c4] [f3,a3,c4]>").s("piano")', 'bass: note("<c2 f2>").s("piano")'),
@@ -235,7 +243,10 @@ export const toolbox: readonly ToolEntry[] = defineToolbox([
     meaning: "Shows a piece as a lead sheet: the melody on one staff, chord symbols above it, the pickup bar when there is one. Export it with your sketch or album track.",
     demo: ex(90, 'chords: n("<[0,2,4] [3,5,7]>").scale("C3:major").s("piano")', 'mel: n("<[4 2 0 2] [5 ~ 3 ~]>").scale("C4:major").s("piano")'),
   }),
-  feature("tb.lens.form", "Lens: form map", "U09.L02", "sections"),
+  feature("tb.lens.form", "Lens: form map", "U09.L02", "sections", {
+    meaning: "Draws the sections of an arranged piece over the bars, named from your consts (verse, chorus, bridge) and lettered by first appearance (A B A B), so the song's form is visible at a glance.",
+    demo: ex(100, 'const chordsVerse = chord("<C Am F G>").voicing().s("piano")', 'const chordsChorus = chord("<F G C C>").voicing().s("piano")', 'chords: arrange([4, chordsVerse], [4, chordsChorus])'),
+  }),
   feature("tb.feature.transcribe.chords", "Transcribe: chords mode", "C4.S1", "chords by ear in your own songs"),
   feature("tb.feature.transcribe.bass", "Transcribe: bass mode", "X2.S1", "bass first"),
   feature("tb.feature.transcribe.full", "Transcribe: full-arrangement mode", "CF-T.S1", "whole-song transcription"),

@@ -5,7 +5,8 @@ import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { type Block, type Inline, parseInline, parseMarkdown } from "./markdown.ts";
 import type { TokenContext } from "./music-tokens.ts";
-import { TokenChip } from "./TokenChip.tsx";
+import { splitSections } from "./sections.ts";
+import { SectionChip, TokenChip } from "./TokenChip.tsx";
 
 export interface MarkdownProps {
   text: string;
@@ -19,8 +20,30 @@ function inlines(nodes: Inline[], p: MarkdownProps, key: string): ReactNode[] {
   return nodes.map((n, i) => {
     const k = `${key}.${i}`;
     switch (n.t) {
-      case "text":
-        return n.text;
+      case "text": {
+        // Wave 5: section names become chips that select the section in the form view.
+        const sections = p.ctx.sections ?? [];
+        if (sections.length === 0) return n.text;
+        const parts = splitSections(n.text, sections);
+        if (parts.length === 1 && typeof parts[0] === "string") return n.text;
+        return (
+          <span key={k}>
+            {parts.map((part, j) =>
+              typeof part === "string" ? (
+                part
+              ) : (
+                <SectionChip
+                  key={`${k}.s${j}`}
+                  raw={part.raw}
+                  section={part.section}
+                  pickup={p.ctx.pickup === true}
+                  thread={p.thread}
+                />
+              ),
+            )}
+          </span>
+        );
+      }
       case "br":
         return <br key={k} />;
       case "code":

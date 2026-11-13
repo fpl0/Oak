@@ -6,7 +6,19 @@
 // The tutor imports no package, so the inputs are structural: the server passes `harmonyView(...)` and the
 // version's `AnalysisSummary` as they are (both fit these shapes), plus the pitched notes it evaluated.
 // `factLines` renders the facts as `<oak_context>` lines. Pure.
-import type { FactChord, FactMotif, FactRange, ReviewFacts } from "./domain.ts";
+import type {
+  FactBass,
+  FactBlues,
+  FactChord,
+  FactContrast,
+  FactForm,
+  FactMotif,
+  FactRange,
+  FactSection,
+  FactStage,
+  FactSwing,
+  ReviewFacts,
+} from "./domain.ts";
 
 /** The part of `@oak/grader`'s `HarmonyView` the facts read. */
 export interface HarmonyViewLike {
@@ -45,6 +57,77 @@ export interface ReviewFactsInput {
   key?: string | null;
   /** Tracks whose motifs are looked for (default: the tracks named like a melody, else every pitched track). */
   motifTracks?: readonly string[];
+  // --- Wave 5 (wave5.md §3.2): the grader's views as they are, so a review says what a grade would ---
+  /** `formView(...)` of @oak/grader. */
+  form?: FormViewLike | null;
+  /** `contrastAxes` of @oak/grader, to compare the sections' features (never re-implemented here). */
+  contrast?: ((a: SectionFeaturesLike, b: SectionFeaturesLike) => readonly string[]) | null;
+  /** `bassView(...)`. */
+  bass?: BassViewLike | null;
+  /** `bluesView(...)`. */
+  blues?: BluesViewLike | null;
+  /** `swingView(...)`. */
+  swing?: readonly TrackSwingLike[] | null;
+  /** A transcription's checks (`CapstoneCheckState` of @oak/api, or the ladder's stages). */
+  checks?: readonly CheckLike[] | null;
+  /** A declared pickup: cycle 0 is bar 0 and section bars count from the first full bar (c4). */
+  pickupBars?: boolean;
+}
+
+/** The part of `SectionFeatures` the facts read; the rest is passed through to `contrast`. */
+export interface SectionFeaturesLike {
+  energy: number;
+  [k: string]: unknown;
+}
+
+/** The part of @oak/grader's `FormView` the facts read. */
+export interface FormViewLike {
+  kind: "sections" | "inconsistent" | "through";
+  sections?: readonly {
+    label: string;
+    tag: string;
+    bars: number;
+    startBar: number;
+    tracks: readonly string[];
+    features: SectionFeaturesLike;
+  }[];
+  detail?: string;
+  letters?: string;
+  totalBars: number;
+  energy: readonly number[];
+}
+
+export interface BassViewLike {
+  track: string | null;
+  notes: readonly { role: string | null; approach: string | null }[];
+  rootOnChange: number;
+  groove: { lock: number; coverage: number } | null;
+}
+
+export interface BluesViewLike {
+  form: { variant: string; turnaround: boolean; jazz: boolean } | null;
+  choruses: number;
+  wrongBars: readonly number[];
+  bars: readonly (string | null)[];
+  allDominant: boolean;
+}
+
+export interface TrackSwingLike {
+  track: string;
+  eighths: { ratio: number };
+  swung: 8 | 16 | null;
+}
+
+export interface CheckLike {
+  checkId: string;
+  phrase: number | readonly [number, number];
+  layer: string;
+  stage: string | null;
+  open: boolean;
+  score: number | null;
+  passed: boolean;
+  revealed: boolean;
+  passAt?: number;
 }
 
 /** Bars of chord detail sent at most; the rest is summarised by the harmonic rhythm. */
@@ -166,6 +249,148 @@ export function rangesOf(notes: readonly NoteLike[]): FactRange[] {
 
 const MELODY_TRACK = /^(mel|melody|lead|tune|vox|voice|top)/i;
 
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** "chorus2" → "Chorus 2" (the ribbon's text, app/src/lib/form-view.ts). */
+export function sectionName(tag: string): string {
+  const m = /^([a-z]+)(\d+)?$/.exec(tag);
+  if (!m) return tag;
+  const w = (m[1] as string).charAt(0).toUpperCase() + (m[1] as string).slice(1);
+  return m[2] ? `${w} ${m[2]}` : w;
+}
+
+/** The chords of display bars `[from, to]` in order of change, each once in a row (`Am (i)`). */
+function progressionIn(chords: readonly FactChord[], from: number, to: number): string[] {
+  const out: string[] = [];
+  // The chord already sounding when the section starts (a change in an earlier bar that carries over) comes first.
+  const sounding = chords.filter((c) => c.bar < from || (c.bar === from && c.beat === 1)).at(-1);
+  const startsOnChange = chords.some((c) => c.bar === from && c.beat === 1);
+  if (sounding && !startsOnChange)
+    out.push(sounding.rn ? `${sounding.symbol} (${sounding.rn})` : sounding.symbol);
+  for (const c of chords) {
+    if (c.bar < from || c.bar > to) continue;
+    const label = c.rn ? `${c.symbol} (${c.rn})` : c.symbol;
+    if (out.at(-1) !== label) out.push(label);
+  }
+  return out;
+}
+
+/** The form facts: sections in display bars, letters, the energy curve and the contrast of each pair of types. */
+export function formFacts(input: ReviewFactsInput, chords: readonly FactChord[]): FactForm | null {
+  const view = input.form;
+  if (!view) return null;
+  const energy = view.energy.map(round2);
+  if (view.kind !== "sections") {
+    return {
+      kind: view.kind,
+      sections: [],
+      letters: view.kind === "through" ? (view.letters ?? "") : "",
+      problem: view.kind === "inconsistent" ? (view.detail ?? "the arranged tracks disagree") : null,
+      energy,
+      contrast: [],
+    };
+  }
+  const offset = input.pickupBars ? 0 : 1;
+  const types: string[] = [];
+  const raw = view.sections ?? [];
+  const sections: FactSection[] = raw.map((s) => {
+    if (!types.includes(s.label)) types.push(s.label);
+    const from = s.startBar + offset;
+    const to = from + Math.max(1, s.bars) - 1;
+    return {
+      name: sectionName(s.tag),
+      tag: s.tag,
+      label: s.label,
+      letter: String.fromCharCode(65 + types.indexOf(s.label)),
+      bars: [from, to],
+      tracks: [...s.tracks],
+      energy: round2(s.features.energy),
+      progression: progressionIn(chords, from, to),
+    };
+  });
+  const contrast: FactContrast[] = [];
+  if (input.contrast) {
+    const firsts = types.map((t) => raw.find((s) => s.label === t) as (typeof raw)[number]);
+    for (let i = 0; i < firsts.length; i++)
+      for (let j = i + 1; j < firsts.length; j++) {
+        const a = firsts[i] as (typeof raw)[number];
+        const b = firsts[j] as (typeof raw)[number];
+        contrast.push({
+          a: sectionName(a.tag),
+          b: sectionName(b.tag),
+          axes: [...input.contrast(a.features, b.features)],
+        });
+      }
+  }
+  return {
+    kind: "sections",
+    sections,
+    letters: sections.map((s) => s.letter).join(""),
+    problem: null,
+    energy,
+    contrast,
+  };
+}
+
+export function bassFacts(view: BassViewLike | null | undefined): FactBass | null {
+  if (!view || view.track === null || view.notes.length === 0) return null;
+  const roles: Record<string, number> = {};
+  const approaches: Record<string, number> = {};
+  for (const n of view.notes) {
+    const r = n.role ?? "no chord";
+    roles[r] = (roles[r] ?? 0) + 1;
+    if (n.approach) approaches[n.approach] = (approaches[n.approach] ?? 0) + 1;
+  }
+  return {
+    track: view.track,
+    notes: view.notes.length,
+    roles,
+    rootOnChange: round2(view.rootOnChange),
+    approaches,
+    grooveLock: view.groove
+      ? { lock: round2(view.groove.lock), coverage: round2(view.groove.coverage) }
+      : null,
+  };
+}
+
+export function bluesFacts(view: BluesViewLike | null | undefined): FactBlues | null {
+  if (!view) return null;
+  // A piece that is no blues at all says nothing here: only a chorus that fits, or a piece of dominant sevenths
+  // that does not fit yet (a C5 draft one bar off).
+  if (view.form === null && !view.allDominant) return null;
+  return {
+    variant: view.form?.variant ?? null,
+    turnaround: view.form?.turnaround ?? false,
+    jazz: view.form?.jazz ?? false,
+    choruses: view.choruses,
+    wrongBars: [...view.wrongBars],
+    bars: view.bars.slice(0, 12),
+    allDominant: view.allDominant,
+  };
+}
+
+export function swingFacts(view: readonly TrackSwingLike[] | null | undefined): FactSwing[] {
+  // Only lines whose eighths can be measured: a held chord or a bass on the beat says nothing about swing.
+  return (view ?? [])
+    .filter((t) => Number.isFinite(t.eighths.ratio))
+    .map((t) => ({ track: t.track, ratio: round2(t.eighths.ratio), swung: t.swung }));
+}
+
+/** A transcription's checks as facts: score, mark and state; the expected notes are never part of a check. */
+export function stageFacts(checks: readonly CheckLike[] | null | undefined): FactStage[] {
+  return (checks ?? []).map((c) => ({
+    check: c.checkId,
+    layer: c.layer,
+    stage: c.stage,
+    phrase: typeof c.phrase === "number" ? `phrase ${c.phrase}` : `phrases ${c.phrase[0]}-${c.phrase[1]}`,
+    score: c.score === null ? null : round2(c.score),
+    passed: c.passed,
+    revealed: c.revealed,
+    passAt: c.passAt ?? null,
+    open: c.open,
+  }));
+}
+
 /** The facts of a piece from Oak's analysis. Every field is optional on input; missing parts stay empty. */
 export function reviewFactsFrom(input: ReviewFactsInput): ReviewFacts {
   const { view, analysis } = input;
@@ -183,12 +408,27 @@ export function reviewFactsFrom(input: ReviewFactsInput): ReviewFacts {
     )
     .slice(0, MAX_MOTIFS);
   const bars = view?.bars ?? analysis?.bars ?? notes.reduce((m, n) => Math.max(m, n.bar), 0);
+  const chords = chordsOf(input);
+  const pickup = view?.pickup ?? input.pickupBars ?? false;
+  const w5: Partial<ReviewFacts> = {};
+  const form = formFacts({ ...input, pickupBars: pickup }, chords);
+  if (form) w5.form = form;
+  const bass = bassFacts(input.bass);
+  if (bass) w5.bass = bass;
+  const blues = bluesFacts(input.blues);
+  if (blues) w5.blues = blues;
+  const swing = swingFacts(input.swing);
+  if (swing.length > 0) w5.swing = swing;
+  const stages = stageFacts(input.checks);
+  if (stages.length > 0) w5.stages = stages;
   return {
-    key: keyText(view?.key) ?? input.key ?? keyText(analysis?.key?.[0]?.key) ?? null,
+    // The key the brief gives wins over an estimate (contracts §6.8 item 1); a minor piece is never read in its
+    // relative major.
+    key: input.key ?? keyText(view?.key) ?? keyText(analysis?.key?.[0]?.key) ?? null,
     meter: input.meter ?? null,
     bars,
-    pickup: view?.pickup ?? false,
-    chords: chordsOf(input),
+    pickup,
+    chords,
     harmonicRhythm: [...(view?.harmonicRhythm ?? [])],
     cadences: (analysis?.cadences ?? []).map((c) => ({ bar: c.bar, type: c.type })),
     schemas: (analysis?.schemas ?? []).map((s) => ({
@@ -198,6 +438,7 @@ export function reviewFactsFrom(input: ReviewFactsInput): ReviewFacts {
     motifs,
     ranges: rangesOf(notes),
     chordToneShare: view?.chordToneShare ?? null,
+    ...w5,
   };
 }
 
@@ -233,5 +474,69 @@ export function factLines(f: ReviewFacts): string[] {
     );
   if (f.chordToneShare !== null)
     lines.push(`chord_tones_on_strong_beats: ${Math.round(f.chordToneShare * 100)}%`);
+  lines.push(...w5FactLines(f));
+  return lines;
+}
+
+const pct = (n: number) => `${Math.round(n * 100)}%`;
+const counts = (r: Record<string, number>) =>
+  Object.entries(r)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([k, v]) => `${k} ${v}`)
+    .join(", ");
+
+/** Wave 5 facts as `<oak_context>` lines: form, contrast, energy, progression per section, bass, blues, swing, checks. */
+export function w5FactLines(f: ReviewFacts): string[] {
+  const lines: string[] = [];
+  const form = f.form;
+  if (form) {
+    if (form.kind === "inconsistent") lines.push(`form: the arranged tracks disagree: ${form.problem ?? ""}`);
+    else if (form.kind === "through")
+      lines.push(`form: no arrange(); phrase letters ${form.letters || "none"} (4-bar phrases)`);
+    else {
+      lines.push(
+        `form: ${form.sections.map((s) => s.name).join(" ")} (${form.letters}); section bars count from the first full bar`,
+      );
+      for (const s of form.sections)
+        lines.push(
+          `section ${s.name}: ${span(s.bars)} · letter ${s.letter} · tracks ${s.tracks.join(", ") || "none"} · energy ${pct(s.energy)}${s.progression.length > 0 ? ` · chords ${s.progression.join(" ")}` : ""}`,
+        );
+      for (const c of form.contrast)
+        lines.push(
+          `contrast ${c.a} vs ${c.b}: ${c.axes.length > 0 ? c.axes.join(", ") : "no axis differs enough"} (${c.axes.length} of 7 axes)`,
+        );
+    }
+    if (form.energy.length > 0) lines.push(`energy_curve (per bar, 0-1): ${form.energy.join(" ")}`);
+  }
+  const b = f.bass;
+  if (b) {
+    lines.push(
+      `bass: ${b.track} · ${b.notes} notes · roles ${counts(b.roles)} · root on ${pct(b.rootOnChange)} of chord changes`,
+    );
+    if (Object.keys(b.approaches).length > 0) lines.push(`bass_approaches: ${counts(b.approaches)}`);
+    lines.push(
+      b.grooveLock
+        ? `groove_lock: ${pct(b.grooveLock.lock)} of bass notes on a kick · ${pct(b.grooveLock.coverage)} of kicks carry a bass note`
+        : "groove_lock: no kick",
+    );
+  }
+  const bl = f.blues;
+  if (bl) {
+    lines.push(
+      bl.variant
+        ? `blues: ${bl.variant}${bl.jazz ? " (jazz)" : ""}${bl.turnaround ? " with a turnaround (bar 12 on V)" : ""} · ${bl.choruses} chorus${bl.choruses === 1 ? "" : "es"} of 12 bars · ${bl.allDominant ? "every chord a dominant seventh" : "not every chord a dominant seventh"}`
+        : `blues: no full 12-bar chorus fits · ${bl.allDominant ? "every chord a dominant seventh" : "not every chord a dominant seventh"}`,
+    );
+    if (bl.bars.length > 0) lines.push(`blues_bars (1-12): ${bl.bars.map((x) => x ?? "-").join(" | ")}`);
+    if (bl.wrongBars.length > 0) lines.push(`blues_off_form_bars: ${bl.wrongBars.join(", ")}`);
+  }
+  for (const s of f.swing ?? [])
+    lines.push(
+      `swing: ${s.track} ${s.ratio === null ? "not measurable" : `ratio ${s.ratio}`}${s.swung ? ` · swung ${s.swung}ths` : " · straight"}`,
+    );
+  for (const s of f.stages ?? [])
+    lines.push(
+      `check ${s.check}: ${s.layer}${s.stage ? ` stage ${s.stage}` : ""} · ${s.phrase} · ${s.score === null ? "not checked yet" : `best ${pct(s.score)}`}${s.passAt === null ? "" : ` · mark ${pct(s.passAt)}`} · ${s.revealed ? "revealed" : s.passed ? "passed" : s.open ? "open" : "locked until the checks before it pass"}`,
+    );
   return lines;
 }

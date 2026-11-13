@@ -69,9 +69,16 @@ describe("capstone sessions (§2.4, §2.6)", () => {
 describe("unlock table (§3.2)", () => {
   const rows = lines.filter((l) => /^\| `(tb|snd|scale|chord)\.[^`]+` \|/.test(l)).map(cells);
   const byId = new Map(toolbox.map((t) => [t.id as string, t]));
+  /**
+   * Rows content/toolbox.ts has ahead of the table, each requested from the contracts owner with its exact
+   * §3.2 text (a Foundation result's apiNotes). Remove an entry once the table carries the row.
+   */
+  const PENDING_IN_CONTRACTS: Record<string, string> = {};
   test("the same rows", () => {
     expect<unknown>(rows.map((r) => (r[0] as string).replaceAll("`", "")).sort()).toEqual(
-      [...byId.keys()].sort(),
+      [...byId.keys()]
+        .filter((id) => !(id in PENDING_IN_CONTRACTS && !rows.some((r) => r[0] === `\`${id}\``)))
+        .sort(),
     );
   });
   test("the same unlock sites, START rows and voicing-gate marks", () => {

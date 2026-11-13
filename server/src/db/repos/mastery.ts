@@ -93,6 +93,19 @@ export class MasteryRepo {
   allEvidence(): EvidenceRow[] {
     return all<EvRow>(this.db, "SELECT * FROM evidence ORDER BY at, id").map(toEvidence);
   }
+  /** Wave 5 (c11): whether a source (by ID prefix) already gave evidence of this kind on a learner day. */
+  hasEvidenceOn(sourceKind: string, sourceIdPrefix: string, day: string): boolean {
+    return (
+      (get<{ n: number }>(
+        this.db,
+        "SELECT COUNT(*) AS n FROM evidence WHERE source_kind = ? AND substr(source_id, 1, ?) = ? AND day = ?",
+        sourceKind,
+        sourceIdPrefix.length,
+        sourceIdPrefix,
+        day,
+      )?.n ?? 0) > 0
+    );
+  }
   /** Removes the evidence one source produced (a disputed attempt gives none, contracts §11.8). Returns the skills touched. */
   removeEvidenceOf(sourceKinds: readonly string[], sourceId: string): string[] {
     const marks = sourceKinds.map(() => "?").join(", ");

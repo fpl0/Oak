@@ -30,6 +30,14 @@ export interface MelodyReportOptions {
 /** The events a melody matcher reads: the named track or `@melody`, else every learner track. */
 export function melodyEvents(n: Normalized, track?: string): NEvent[] {
   const ev = selectTrack(n, track ?? "@melody");
+  if (ev.length === 0 && track === "@bass") {
+    // A bass stage answered with one unlabelled line in a higher register (`note("f3 c3 …")`): the role is only
+    // inferred below C3, but the line is the bass the learner wrote, and the bass matchers are octave-free.
+    const lines = Object.entries(n.byTrack).filter(
+      ([t, es]) => !t.startsWith("band.") && es.some((e) => e.midi !== null && e.chordSymbol === undefined),
+    );
+    if (lines.length === 1) return selectTrack(n, (lines[0] as [string, NEvent[]])[0]);
+  }
   return ev.length > 0 || track ? ev : selectTrack(n, "*");
 }
 

@@ -10,6 +10,7 @@ import { transpiler } from "@strudel/transpiler";
 import * as webaudio from "@strudel/webaudio";
 import * as WT from "worker-timers";
 import { bandCodeFor, firstScaleOf } from "./band.ts";
+import { formBarsOf } from "./band-form.ts";
 import {
   type EvalSession,
   evaluateBand,
@@ -19,6 +20,7 @@ import {
 } from "./evaluation.ts";
 import { ADAPTER_FEEDBACK, diagnostic, errorToDiagnostic, hasError, runLint } from "./lint-bridge.ts";
 import { copyMutes, NO_MUTES } from "./mutes.ts";
+import { WARM_AHEAD_BARS, type WarmAhead } from "./preload.ts";
 import { isCleanRealism, type RealismSpec, realismSpec } from "./realism.ts";
 import { applyRealism } from "./realism-pattern.ts";
 import { captureMessageListeners, type Runtime, removeCaptured } from "./runtime.ts";
@@ -81,6 +83,8 @@ export function createPatternPlayer(rt: Runtime): PatternPlayer {
   /** The preload a realism change started: `play` waits for it, so a new lead sound never skips. */
   let warming: Promise<unknown> = Promise.resolve();
   const intervals = new Set<number>();
+  /** The background warm of a long source's later bars (a 90-second song). */
+  let ahead: WarmAhead | null = null;
 
   const constructed = captureMessageListeners(
     () =>
@@ -146,7 +150,12 @@ export function createPatternPlayer(rt: Runtime): PatternPlayer {
   ) as Strudel.Pattern;
   function build(): Strudel.Pattern | undefined {
     if (!raw) return undefined;
-    let out = finalizePattern(raw, { session, mutes: () => mutes, transpose: () => transpose });
+    let out = finalizePattern(raw, {
+      session,
+      mutes: () => mutes,
+      transpose: () => transpose,
+      scopeTrack: rt.scope.track,
+    });
     if (loop)
       out = (out.ribbon as (offset: number, cycles: number) => Strudel.Pattern)(loop.fromBar, loop.bars);
     // Realism after the loop (so a note pushed across the loop point stays one note, never a re-triggered
@@ -259,7 +268,12 @@ export function createPatternPlayer(rt: Runtime): PatternPlayer {
         effective = build();
         loadedBars = Math.max(1, Math.min(opts.bars, PRELOAD_BARS));
         // The whole stimulus as it will sound (Band, realism, lead sound and detuned pitches included).
+        ahead?.cancel();
+        ahead = null;
         if (effective) await rt.preloadPattern(effective, 0, loadedBars);
+        // A source longer than the bars warmed up front: the rest is warmed in order while it plays.
+        const pieceBars = Math.min(Math.max(opts.bars, formBarsOf(code) ?? 0), WARM_AHEAD_BARS);
+        if (effective && pieceBars > loadedBars) ahead = rt.warmAhead(effective, loadedBars, pieceBars);
         if (!playing) rt.transport.setActive(source);
         return {
           ...base,
@@ -313,6 +327,8 @@ export function createPatternPlayer(rt: Runtime): PatternPlayer {
     dispose() {
       if (disposed) return;
       disposed = true;
+      ahead?.cancel();
+      ahead = null;
       try {
         repl.stop();
       } catch {

@@ -8,6 +8,7 @@ import {
   chordNotes,
   chordOf,
   chordPcs,
+  noteToMidi,
   readChord,
   romanOf,
   schemaMatch,
@@ -153,18 +154,56 @@ const overlap = (a: readonly [Rat, Rat], b: readonly [Rat, Rat]): number => {
  * the answer slot with the largest overlap (< 50% → `harmony.missing-chord`), then bass, root, quality and
  * inversion are scored per slot and folded with the level's weights, duration-weighted over the target.
  */
+/**
+ * A target chord held over several bars is compared bar by bar wherever the answer changes chord on a bar line
+ * inside it (wave 5 gate: Careless Love with bars 2–3 written as B♭ under a four-bar F scored 0.966, and the wrong
+ * bars were never named). A target with no change inside it is left whole, so right answers score as before.
+ */
+export function splitAtAnswerBars(t: readonly ChordSlot[], a: readonly ChordSlot[]): ChordSlot[] {
+  const out: ChordSlot[] = [];
+  for (const ts of t) {
+    const cuts = a
+      .map((s) => s.span[0])
+      .filter((x) => R.lt(ts.span[0], x) && R.lt(x, ts.span[1]) && R.eq(x, [R.floor(x), 1]))
+      .sort((x, y) => num(x) - num(y))
+      .filter((x, i, xs) => i === 0 || !R.eq(x, xs[i - 1] as Rat));
+    if (cuts.length === 0) {
+      out.push(ts);
+      continue;
+    }
+    let from = ts.span[0];
+    for (const c of [...cuts, ts.span[1]]) {
+      out.push({ ...ts, span: [from, c] });
+      from = c;
+    }
+  }
+  return out;
+}
+
 export function compareSlots(
-  t: readonly ChordSlot[],
+  tIn: readonly ChordSlot[],
   a: readonly ChordSlot[],
   cfg: HarmonyMatcher,
   key: KeySpec | null,
   ctx: NormalizeContext,
 ): MatchResult {
+  // Numeral-level reading (the L3/L6 ladder, X2's changes, numeral steps): per bar where the answer changes.
+  const byNumeral = cfg.level === "rn" || cfg.level === "full";
+  const t = byNumeral ? splitAtAnswerBars(tIn, a) : tIn;
   const base = { ...LEVEL_WEIGHTS[cfg.level], ...(cfg.weights ?? {}) };
   if (!cfg.inversion) delete base.inversion;
+  // A part weighted 0 is not graded at all (no credit and no message): X2's changes leave the bass to its own check.
+  for (const k of Object.keys(base) as (keyof typeof base)[]) if (base[k] === 0) delete base[k];
   const pos = { meter: ctx.meter, ...(ctx.pickup ? { pickup: ctx.pickup } : {}) };
   // Numerals in messages carry inversion figures only when the inversion is graded.
   const rnLabel = (rn: RomanNumeral): string => romanShown(cfg.inversion ? rn : { ...rn, inversion: 0 });
+  // At triad depth a chord is read on its triad core, so an applied reading never names it: C7 in C is I7 (a
+  // blues' I7), not V7/IV. The quality (the 7) is kept for the label.
+  const rnFor = (c: ChordId, k: KeySpec): RomanNumeral => {
+    const rn = romanOf(c, k);
+    if (cfg.qualityDepth !== "triad" || !rn.of) return rn;
+    return { ...romanOf({ ...c, quality: triadCore(c).quality }, k), quality: c.quality };
+  };
   const diagnostics: Diagnostic[] = [];
   const sums = { bass: 0, root: 0, quality: 0, inversion: 0, rn: 0 };
   let totalDur = 0;
@@ -198,11 +237,14 @@ export function compareSlots(
       diagnostics.push(diag("harmony.missing-chord", {}, where, "harmonicRhythm"));
       return;
     }
+    const rootOk = tc.rootPc === ac.rootPc;
+    // Reading numerals, a chord on the wrong root is a wrong numeral: its quality and inversion earn nothing
+    // (wave 5 gate: Frankie and Johnny with bars 9–10 as F F for G7 G7 kept 0.45 a slot and passed at 0.909).
     const s = {
       bass: tc.bassPc === ac.bassPc ? 1 : 0,
-      root: tc.rootPc === ac.rootPc ? 1 : 0,
-      quality: qualityCredit(tc, ac, cfg.qualityDepth),
-      inversion: bassMember(tc) === bassMember(ac) ? 1 : 0,
+      root: rootOk ? 1 : 0,
+      quality: byNumeral && !rootOk ? 0 : qualityCredit(tc, ac, cfg.qualityDepth),
+      inversion: byNumeral && !rootOk ? 0 : bassMember(tc) === bassMember(ac) ? 1 : 0,
       rn: 0,
     };
     if (key) {
@@ -242,7 +284,7 @@ export function compareSlots(
     if (wants("root") && !s.root) {
       if (key && (cfg.level === "rn" || cfg.level === "full"))
         diagnostics.push(
-          diag("harmony.rn", { got: rnLabel(romanOf(ac, key)), exp: rnLabel(romanOf(tc, key)) }, atBar, "rn"),
+          diag("harmony.rn", { got: rnLabel(rnFor(ac, key)), exp: rnLabel(rnFor(tc, key)) }, atBar, "rn"),
         );
       else
         diagnostics.push(
@@ -251,8 +293,8 @@ export function compareSlots(
     } else if (wants("quality") && s.quality < 1) {
       const tq = triadCore(tc).quality;
       const aq = triadCore(ac).quality;
-      const rnA = key ? romanOf(ac, key) : null;
-      const rnT = key ? romanOf(tc, key) : null;
+      const rnA = key ? rnFor(ac, key) : null;
+      const rnT = key ? rnFor(tc, key) : null;
       const caseOnly =
         !!rnA &&
         !!rnT &&
@@ -281,7 +323,7 @@ export function compareSlots(
   // Extra changes in the answer (only when the harmonic rhythm is graded).
   const dims: MatchResult["dims"] = {};
   if (cfg.harmonicRhythm === "graded") {
-    const tOn = t.map((s) => s.span[0]);
+    const tOn = tIn.map((s) => s.span[0]);
     const aOn = a.map((s) => s.span[0]);
     let matched = 0;
     for (const x of aOn) if (tOn.some((y) => R.eq(x, y))) matched++;
@@ -293,20 +335,20 @@ export function compareSlots(
   }
   const norm = (x: number): number => (totalDur === 0 ? 0 : x / totalDur);
   for (const k of ["bass", "root", "quality", "inversion"] as const)
-    if (k in base) dims[k] = { score: norm(sums[k]), weight: base[k] as number, n: t.length };
-  dims.rn = { score: norm(sums.rn), weight: 0, n: t.length };
+    if (k in base) dims[k] = { score: norm(sums[k]), weight: base[k] as number, n: tIn.length };
+  dims.rn = { score: norm(sums.rn), weight: 0, n: tIn.length };
 
   // A rotation of the right loop.
-  if (key && t.length >= 2 && a.length === t.length) {
+  if (key && tIn.length >= 2 && a.length === tIn.length) {
     const sig = (s: ChordSlot): string =>
       s.chord ? `${triadCore(s.chord).rootPc}${triadCore(s.chord).quality}` : "?";
-    const ts = t.map(sig);
+    const ts = tIn.map(sig);
     const as = a.map(sig);
     if (ts.join() !== as.join())
       for (let r = 1; r < ts.length; r++)
         if (as.every((x, i) => x === ts[(i + r) % ts.length])) {
           const found = schemaMatch(
-            t.map((s) => (s.chord ? romanOf(s.chord, key) : null)).filter((x) => x !== null),
+            tIn.map((s) => (s.chord ? romanOf(s.chord, key) : null)).filter((x) => x !== null),
           );
           diagnostics.push(
             diag("harmony.schema-rotation", { schema: found?.schema.title ?? "the loop" }, undefined, "rn"),
@@ -335,8 +377,67 @@ export function harmonyMatch(
       dims: { root: { score: 0, weight: 1 } },
       diagnostics: [diag("harmony.no-chords", {}, undefined, "root")],
     };
-  return compareSlots(t, a, cfg, key, ctx);
+  const r = compareSlots(t, a, cfg, key, ctx);
+  return key && r.score < 0.85 ? namedTransposition(t, a, key, r) : r;
 }
+
+/**
+ * The right changes in another key (Careless Love's F C7 F F … written as G D7 G G …): one message that names the
+ * key and the move, in place of a wrong numeral on every bar. The score stays the per-bar one.
+ */
+function namedTransposition(
+  t: readonly ChordSlot[],
+  a: readonly ChordSlot[],
+  key: KeySpec,
+  r: MatchResult,
+): MatchResult {
+  const judged = t.filter((x) => x.chord);
+  if (judged.length < 2) return r;
+  const answerAt = (ts: ChordSlot): ChordSlot | undefined => {
+    let best: ChordSlot | undefined;
+    let bestOv = 0;
+    for (const as of a) {
+      const ov = overlap(ts.span, as.span);
+      if (ov > bestOv + 1e-12) {
+        bestOv = ov;
+        best = as;
+      }
+    }
+    return best;
+  };
+  for (let k = 1; k < 12; k++) {
+    const fits = judged.filter((ts) => {
+      const ac = answerAt(ts)?.chord;
+      const tc = ts.chord as ChordId;
+      return !!ac && mod12(ac.rootPc - k) === tc.rootPc && triadCore(ac).quality === triadCore(tc).quality;
+    }).length;
+    if (fits / judged.length < 0.9) continue;
+    const up = k <= 6;
+    const semis = up ? k : 12 - k;
+    const tonic = spellMidi(60 + mod12(pcOfName(key.tonic) + k), { key: null }).name.replace(/-?\d+$/, "");
+    const moved = diag(
+      "harmony.transposed",
+      {
+        gotKey: `${tonic} ${key.mode}`,
+        expKey: `${key.tonic} ${key.mode}`,
+        semis: `${semis} half step${semis === 1 ? "" : "s"}`,
+        dir: up ? "down" : "up",
+      },
+      undefined,
+      "rn",
+    );
+    const perBar = new Set([
+      "harmony.rn",
+      "harmony.root",
+      "harmony.rn-case",
+      "harmony.quality",
+      "harmony.bass",
+    ]);
+    return { ...r, diagnostics: [moved, ...r.diagnostics.filter((d) => !perBar.has(d.id))] };
+  }
+  return r;
+}
+const pcOfName = (name: string): number => mod12((noteToMidi(`${name}4`) ?? 60) - 60);
 
 /** Label for messages and the analysis summary: "Am" plus its numeral. */
 export const slotText = (s: ChordSlot, key: KeySpec | null): string =>

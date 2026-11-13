@@ -1,8 +1,8 @@
 // Keyboard maps and value operations behind the widgets (ux §4.5, §7.10): which degree a digit picks, the Roman
 // numeral palette and its keys, the chromatic typing row, reordering, the rhythm grid's counts and its audition
 // code, the slider's steps and labels. Pure: tested with `bun test`.
-import type { ChordQuality, Degree, DrumRole } from "@oak/api";
-import { formatRN } from "@oak/theory";
+import type { ChordQuality, Degree, DrumRole, KeySpec } from "@oak/api";
+import { formatRN, isMinorRef } from "@oak/theory";
 import { degreeDisplay, formatNumber } from "./normalize.ts";
 
 // --- degree pad ---------------------------------------------------------------------------------
@@ -115,6 +115,51 @@ const TRIADS: Q[] = ["maj", "min", "min", "maj", "maj", "min", "dim"];
 const SEVENTHS: Q[] = ["maj7", "m7", "m7", "maj7", "7", "m7", "m7b5"];
 /** Tonic, predominant and dominant columns (ux §4.5: T | PD | D). */
 const ROLE_OF: HarmonicRole[] = ["T", "PD", "T", "PD", "D", "T", "D"];
+/**
+ * Wave 5, minor keys (contracts §6.8; U10.L04, L06): natural minor's i ii° III iv v VI VII, and the raised 7th's
+ * V and vii° (harmonic minor). In a harmonic or melodic minor key the digits give V and vii° directly.
+ */
+const MINOR_TRIADS: Q[] = ["min", "dim", "maj", "min", "min", "maj", "maj"];
+const MINOR_SEVENTHS: Q[] = ["m7", "m7b5", "maj7", "m7", "m7", "maj7", "7"];
+/** In minor, VI and III sit with the tonic, iv and ii° lead away, v V VII vii° pull home. */
+const MINOR_ROLE_OF: HarmonicRole[] = ["T", "PD", "T", "PD", "D", "T", "D"];
+
+/**
+ * The palette a key asks for: `major` (and every key without a minor third, the blues included: I7 IV7 V7),
+ * `minor` (natural minor numerals, the minor pentatonic and the other minor-third modes), `harmonic` (harmonic or
+ * melodic minor: V and vii° on the digits). Without a key: major.
+ */
+export type RnMode = "major" | "minor" | "harmonic";
+export function rnModeOf(key: KeySpec | null | undefined): RnMode {
+  if (!key) return "major";
+  if (key.mode === "harmonic minor" || key.mode === "melodic minor") return "harmonic";
+  return isMinorRef(key) ? "minor" : "major";
+}
+
+function triadsOf(mode: RnMode): Q[] {
+  if (mode === "major") return TRIADS;
+  const t = [...MINOR_TRIADS];
+  if (mode === "harmonic") {
+    t[4] = "maj";
+    t[6] = "dim";
+  }
+  return t;
+}
+function seventhsOf(mode: RnMode): Q[] {
+  if (mode === "major") return SEVENTHS;
+  const t = [...MINOR_SEVENTHS];
+  if (mode === "harmonic") {
+    t[4] = "7";
+    t[6] = "dim7";
+  }
+  return t;
+}
+/** The other form of 5 and 7 in minor: the raised 7th's V and vii° (natural), or v and VII (harmonic). */
+function raisedOf(mode: RnMode, deg: 5 | 7, seventh: boolean): Q {
+  const natural = mode === "minor";
+  if (deg === 5) return natural ? (seventh ? "7" : "maj") : seventh ? "m7" : "min";
+  return natural ? (seventh ? "dim7" : "dim") : seventh ? "7" : "maj";
+}
 
 function rnText(degree: number, quality: Q, alt: -1 | 0 | 1 = 0, inversion: 0 | 1 | 2 | 3 = 0): string {
   return formatRN({ degree: degree as 1, alt, quality, inversion });
@@ -137,17 +182,29 @@ function button(rn: string, role: HarmonicRole, key: string | null): RnButton {
   return { rn, display: rnDisplay(rn), role, key };
 }
 
-/** The palette for a major key: T | PD | D columns, then applied and borrowed rows when allowed. */
-export function rnPalette(allow: readonly RnAllow[]): RnGroup[] {
+/**
+ * The palette for a key: T | PD | D columns, then applied and borrowed rows when allowed. In minor (Wave 5) the
+ * columns hold i VI III | iv ii° | V v VII vii° (the raised 7th's chords next to the natural ones, picked with `+`
+ * then the digit), the applied row tonicizes iv, III and V, and the borrowed row offers the major key's I and IV
+ * and the Neapolitan ♭II.
+ */
+export function rnPalette(allow: readonly RnAllow[], mode: RnMode = "major"): RnGroup[] {
   const sevenths = allow.includes("sevenths");
   const triads = allow.includes("triads") || !sevenths;
   const cols: Record<"T" | "PD" | "D", RnButton[]> = { T: [], PD: [], D: [] };
+  const tri = triadsOf(mode);
+  const sev = seventhsOf(mode);
+  const roles = mode === "major" ? ROLE_OF : MINOR_ROLE_OF;
   // Column order inside a role follows ux §4.5: T: I vi iii, PD: IV ii, D: V vii°.
   const order = [1, 6, 3, 4, 2, 5, 7];
   for (const deg of order) {
-    const role = ROLE_OF[deg - 1] as "T" | "PD" | "D";
-    if (triads) cols[role].push(button(rnText(deg, TRIADS[deg - 1] as Q), role, String(deg)));
-    if (sevenths) cols[role].push(button(rnText(deg, SEVENTHS[deg - 1] as Q), role, `⇧${deg}`));
+    const role = roles[deg - 1] as "T" | "PD" | "D";
+    if (triads) cols[role].push(button(rnText(deg, tri[deg - 1] as Q), role, String(deg)));
+    if (sevenths) cols[role].push(button(rnText(deg, sev[deg - 1] as Q), role, `⇧${deg}`));
+    if (mode !== "major" && (deg === 5 || deg === 7)) {
+      if (triads) cols[role].push(button(rnText(deg, raisedOf(mode, deg, false)), role, `+${deg}`));
+      if (sevenths) cols[role].push(button(rnText(deg, raisedOf(mode, deg, true)), role, `+⇧${deg}`));
+    }
   }
   const groups: RnGroup[] = [
     { id: "T", label: "Tonic", buttons: cols.T },
@@ -158,40 +215,62 @@ export function rnPalette(allow: readonly RnAllow[]): RnGroup[] {
     groups.push({
       id: "secondary",
       label: "Applied",
-      buttons: ["V/V", "V7/V", "V/ii", "V7/ii", "V/vi", "V7/vi", "V7/IV", "viio7/V"].map((rn) =>
-        button(rn, "chromatic", null),
-      ),
+      buttons: (mode === "major"
+        ? ["V/V", "V7/V", "V/ii", "V7/ii", "V/vi", "V7/vi", "V7/IV", "viio7/V"]
+        : ["V/iv", "V7/iv", "V/III", "V7/III", "V/V", "V7/V", "V/VI", "viio7/V"]
+      ).map((rn) => button(rn, "chromatic", null)),
     });
   if (allow.includes("borrowed"))
     groups.push({
       id: "borrowed",
       label: "Borrowed",
-      buttons: [
-        button(rnText(4, "min"), "chromatic", null),
-        button(rnText(3, "maj", -1), "chromatic", "-3"),
-        button(rnText(6, "maj", -1), "chromatic", "-6"),
-        button(rnText(7, "maj", -1), "chromatic", "-7"),
-        button(rnText(2, "maj", -1), "chromatic", "-2"),
-        button(rnText(2, "dim"), "chromatic", null),
-      ],
+      buttons:
+        mode === "major"
+          ? [
+              button(rnText(4, "min"), "chromatic", null),
+              button(rnText(3, "maj", -1), "chromatic", "-3"),
+              button(rnText(6, "maj", -1), "chromatic", "-6"),
+              button(rnText(7, "maj", -1), "chromatic", "-7"),
+              button(rnText(2, "maj", -1), "chromatic", "-2"),
+              button(rnText(2, "dim"), "chromatic", null),
+            ]
+          : [
+              button(rnText(1, "maj"), "chromatic", null),
+              button(rnText(4, "maj"), "chromatic", null),
+              button(rnText(2, "maj", -1), "chromatic", "-2"),
+            ],
     });
   return groups;
 }
 
-/** RN keys (ux §4.5): `1`–`7` the diatonic triad, `Shift+digit` the seventh, `-` then a digit a flat-degree chord. */
+/**
+ * RN keys (ux §4.5): `1`–`7` the diatonic triad, `Shift+digit` the seventh, `-` then a digit a flat-degree chord.
+ * Minor (Wave 5): the digits follow the key's own chords, `+` then 5 or 7 the other form (the raised 7th's V and
+ * vii° in natural minor; v and VII in harmonic minor).
+ */
 export function rnForKey(
   digit: number,
-  o: { shift?: boolean; flat?: boolean; allow: readonly RnAllow[] },
+  o: { shift?: boolean; flat?: boolean; raised?: boolean; allow: readonly RnAllow[]; mode?: RnMode },
 ): string | null {
   if (digit < 1 || digit > 7) return null;
+  const mode = o.mode ?? "major";
   if (o.flat) {
-    if (!o.allow.includes("borrowed") || ![2, 3, 6, 7].includes(digit)) return null;
+    if (!o.allow.includes("borrowed")) return null;
+    if (mode !== "major") return digit === 2 ? rnText(2, "maj", -1) : null;
+    if (![2, 3, 6, 7].includes(digit)) return null;
     return rnText(digit, "maj", -1);
   }
   const sevenths = o.allow.includes("sevenths");
   const triads = o.allow.includes("triads") || !sevenths;
-  if (o.shift) return sevenths ? rnText(digit, SEVENTHS[digit - 1] as Q) : null;
-  return triads ? rnText(digit, TRIADS[digit - 1] as Q) : rnText(digit, SEVENTHS[digit - 1] as Q);
+  if (o.raised) {
+    if (mode === "major" || (digit !== 5 && digit !== 7)) return null;
+    if (o.shift) return sevenths ? rnText(digit, raisedOf(mode, digit, true)) : null;
+    return rnText(digit, raisedOf(mode, digit, !triads));
+  }
+  const tri = triadsOf(mode);
+  const sev = seventhsOf(mode);
+  if (o.shift) return sevenths ? rnText(digit, sev[digit - 1] as Q) : null;
+  return triads ? rnText(digit, tri[digit - 1] as Q) : rnText(digit, sev[digit - 1] as Q);
 }
 
 const FIGURES_TRIAD = ["", "6", "64"] as const;

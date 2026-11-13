@@ -45,6 +45,9 @@ export interface CorpusEntry {
   /** Only these tracks are notated (a lead sheet's melody; `leadSheetInput` takes the melody's events only). */
   tracks?: string[];
   tempoBpm?: number;
+  /** Wave 5: section marks (`sectionMarks`) and blue-note spelling. */
+  sections?: NotationInput["sections"];
+  blues?: boolean;
   /** Golden facts: the note list of each (staff, voice), bars joined by " | ". */
   expect: {
     voices?: Record<string, string>;
@@ -60,6 +63,10 @@ export interface CorpusEntry {
     romanTexts?: string[];
     /** Bar numbers abcjs prints at the start of each system after the first (`%%barnumbers 0`). */
     barNumbers?: number[];
+    /** Wave 5: the section labels abcjs parsed (part titles), in order. */
+    parts?: string[];
+    /** Wave 5: spelled pitch names of the top staff's first voice in time order, one per head ("Eb4"). */
+    names?: string[];
   };
 }
 
@@ -123,6 +130,8 @@ export function inputOf(e: CorpusEntry, events: NEvent[]): NotationInput {
     ...(e.trackKeys ? { trackKeys: e.trackKeys } : {}),
     ...(e.startBar !== undefined ? { startBar: e.startBar } : {}),
     ...(e.endsPiece !== undefined ? { endsPiece: e.endsPiece } : {}),
+    ...(e.sections ? { sections: e.sections } : {}),
+    ...(e.blues !== undefined ? { blues: e.blues } : {}),
   };
 }
 
@@ -146,6 +155,10 @@ export interface AbcCheck {
   labels: { si: number; vi: number; onset: number; text: string; position: string }[];
   /** The bar numbers abcjs will print at the start of each system (`staff.barNumber`, staff 0). */
   barNumbers: number[];
+  /** Part labels (sections) abcjs parsed, with the staff and voice they stand in, in order. */
+  parts: { si: number; vi: number; title: string }[];
+  /** Every barline abcjs parsed on staff 0 voice 0, by type (`bar_thin`, `bar_thin_thin`, `bar_thin_thick`). */
+  barTypes: string[];
 }
 /** Parses with abcjs (headless) and returns what the renderer will see. */
 export function checkAbc(abc: string): AbcCheck {
@@ -156,6 +169,8 @@ export function checkAbc(abc: string): AbcCheck {
   const chordTexts: string[] = [];
   const labels: AbcCheck["labels"] = [];
   const barNumbers: number[] = [];
+  const parts: AbcCheck["parts"] = [];
+  const barTypes: string[] = [];
   const clock: number[][] = [];
   for (const line of tune.lines) {
     const n0 = line.staff?.[0]?.barNumber;
@@ -177,7 +192,9 @@ export function checkAbc(abc: string): AbcCheck {
         let t = clock[si]?.[vi] ?? 0;
         // biome-ignore lint/suspicious/noExplicitAny: abcjs element
         for (const el of voice as any[]) {
+          if (el.el_type === "part") parts.push({ si, vi, title: el.title });
           if (el.el_type === "bar") {
+            if (si === 0 && vi === 0) barTypes.push(el.type);
             totals.push(Math.round(total * 1e9) / 1e9);
             total = 0;
           } else if (el.el_type === "note") {
@@ -203,7 +220,17 @@ export function checkAbc(abc: string): AbcCheck {
       });
     });
   }
-  return { warnings: tune.warnings ?? [], barTotals, classes, lyrics, chordTexts, labels, barNumbers };
+  return {
+    warnings: tune.warnings ?? [],
+    barTotals,
+    classes,
+    lyrics,
+    chordTexts,
+    labels,
+    barNumbers,
+    parts,
+    barTypes,
+  };
 }
 
 const LETTERS = "CDEFGAB";

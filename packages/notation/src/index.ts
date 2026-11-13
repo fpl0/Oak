@@ -7,7 +7,7 @@ import { buildScore } from "./build.ts";
 import { drumStaffPosition as drumPos } from "./drums.ts";
 import type { AbcOptions, AbcResult, NotationInput, Score } from "./types.ts";
 
-export { abcLength, abcPitchLetter, toAbc } from "./abc.ts";
+export { abcLength, abcPitchLetter, padLine, toAbc } from "./abc.ts";
 export {
   annotationsOn,
   barBeat,
@@ -69,22 +69,30 @@ export {
   leadSheetInput,
   leadSheetLayout,
   leadSheetPages,
+  pageSections,
+  restateChords,
   stepStaffInput,
 } from "./lead-sheet.ts";
 export { ABCJS_LIMITS, type AbcjsLimit, abcjsLimitWarnings } from "./limits.ts";
 export { type Grid, gridOf } from "./meter.ts";
-export { activeNotes, scoreToEvents } from "./model.ts";
+export { activeNotes, scoreToEvents, spelledByEvent } from "./model.ts";
 export { eventIdBase, parseNoteList, toNoteList, withIds } from "./notelist.ts";
 export {
   ANNOTATION_CLASSES,
+  ANNOTATION_FONT_PX,
   type AnnotationSet,
+  barTextPx,
   CLEFS,
   type Clef,
   type KeySignatureOption,
   labelSpelled,
   type NoteAnnotation,
   noteAnnotations,
+  noteNameText,
   resolveKeySignature,
+  type StaffTextLayout,
+  staffTextLayout,
+  textWidthPx,
 } from "./options.ts";
 export {
   chordDisplay as chordSymbolDisplay,
@@ -101,3 +109,18 @@ export function notate(input: NotationInput, opts?: AbcOptions): { score: Score;
 export function drumStaffPosition(s: string): { pitch: string; head: "normal" | "x" } | null {
   return drumPos(s);
 }
+// Wave 5 (docs/design/wave5.md §3.3): section marks, the 12-bar chart (layout and engraved).
+export {
+  type ChartAbc,
+  type ChartAbcOptions,
+  type ChartBar,
+  type ChartChord,
+  type ChartInput,
+  type ChartLayout,
+  chartAbc,
+  chartBarText,
+  chartChordText,
+  chartLayout,
+  type SectionSpanInput,
+  sectionMarks,
+} from "./wave5.ts";

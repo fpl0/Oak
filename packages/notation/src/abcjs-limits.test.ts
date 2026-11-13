@@ -243,3 +243,93 @@ test("label-in-tuplet: the labels inside a tuplet ride on its notes; splitting t
   const split = parse('(5:4:3"C"C D E/2- (5:4:3"Dm"E/2 F G z12 |]');
   expect(split.notes.filter((n) => n.startTriplet).map((n) => n.tripletR)).toEqual([3, 3]);
 });
+
+// --- Wave 5: the rows of ABCJS_LIMITS for form, swing, charts and c5 ------------------------------------------
+
+test("lyrics-second-voice: each voice's w: lines are its own; a padding line of ~ is a blank syllable per note", () => {
+  const t = tune(
+    'X:1\nM:4/4\nL:1/16\n%%score (S1 S1v2)\nV:S1 stem=up\nV:S1v2 stem=down\nK:C\nV:S1\n"_I"e4 d4 c4 B4 |]\nw:3 2 1 7\nw:~ ~ ~ ~\nV:S1v2\n[CEG]16 |]\nw:1~3~5',
+  );
+  expect(t.warnings).toBeUndefined();
+  // biome-ignore lint/suspicious/noExplicitAny: abcjs element
+  const v1 = t.lines[0].staff[0].voices[0].filter((e: any) => e.el_type === "note");
+  // biome-ignore lint/suspicious/noExplicitAny: abcjs element
+  expect(v1[0].lyric.map((l: any) => l.syllable.replace(/\s/u, "_"))).toEqual(["3", "_"]);
+  // biome-ignore lint/suspicious/noExplicitAny: abcjs element
+  const v2 = t.lines[0].staff[0].voices[1].filter((e: any) => e.el_type === "note");
+  // biome-ignore lint/suspicious/noExplicitAny: abcjs element
+  expect(v2[0].lyric.map((l: any) => l.syllable.replace(/\s/gu, " "))).toEqual(["1 3 5"]);
+});
+
+test("unison-in-chord: [BB] parses as two heads on one step (Oak never writes it)", () => {
+  const { notes } = parse("[BB]16 |]");
+  // biome-ignore lint/suspicious/noExplicitAny: abcjs pitch
+  expect(notes[0].pitches.map((p: any) => p.pitch)).toEqual([6, 6]);
+});
+
+test("text-over-chord-symbol: a ^text and a symbol on one note share it; Q: carries a text before the tempo", () => {
+  const { notes } = parse('"^Swing 8ths""C7"C16 |]');
+  // biome-ignore lint/suspicious/noExplicitAny: abcjs chord
+  expect(notes[0].chord.map((c: any) => `${c.name}@${c.position}`)).toEqual([
+    "Swing 8ths@above",
+    "C7@default",
+  ]);
+  const t = tune('X:1\nM:4/4\nL:1/16\nQ:"Swing 8ths" 1/4=112\nK:C\nC16 |]');
+  expect(t.warnings).toBeUndefined();
+  expect(t.metaText.tempo.preString).toBe("Swing 8ths");
+  expect(t.metaText.tempo.bpm).toBe(112);
+  expect(tune('X:1\nM:4/4\nL:1/16\nQ:"Swing 16ths"\nK:C\nC16 |]').metaText.tempo.preString).toBe(
+    "Swing 16ths",
+  );
+});
+
+test("part-labels: an inline [P:] is a part element where it stands, also after a double barline and mid-line", () => {
+  const t = tune(
+    "X:1\nM:4/4\nL:1/16\n%%partsfont Helvetica 13 bold\nK:C\n[P:Verse]C16 || [P:Chorus 2]D16 |]",
+  );
+  expect(t.warnings).toBeUndefined();
+  // biome-ignore lint/suspicious/noExplicitAny: abcjs element
+  const els = t.lines[0].staff[0].voices[0].map((e: any) =>
+    e.el_type === "part" ? `P:${e.title}` : e.el_type,
+  );
+  expect(els).toEqual(["P:Verse", "note", "bar", "P:Chorus 2", "note", "bar"]);
+  expect(t.formatting.partsfont?.face).toBe("Helvetica");
+});
+
+test("chart-off-beat-chord: style=rhythm gives slash heads per note; a symbol rides on a note", () => {
+  const t = tune('X:1\nM:4/4\nL:1/16\nV:CH clef=treble style=rhythm\nK:C\n"C7"B4 B4 "F7"B4 B4 |]');
+  expect(t.warnings).toBeUndefined();
+  // biome-ignore lint/suspicious/noExplicitAny: abcjs element
+  const els = t.lines[0].staff[0].voices[0] as any[];
+  expect(els[0]).toMatchObject({ el_type: "style", head: "rhythm" });
+  expect(els.filter((e) => e.el_type === "note").map((e) => e.chord?.[0]?.name ?? "")).toEqual([
+    "C7",
+    "",
+    "F7",
+    "",
+  ]);
+});
+
+test("blues-signature: K:Cm is three flats; a blues key is written K:C", () => {
+  expect(keyAcc("Cm")).toEqual(["flatB", "flatE", "flatA"]);
+  expect(keyAcc("C")).toEqual([]);
+});
+
+test("ABCJS_LIMITS: every row has an id, says what abcjs does and what Oak writes; ids are unique", async () => {
+  const { ABCJS_LIMITS } = await import("./limits.ts");
+  expect(new Set(ABCJS_LIMITS.map((l) => l.id)).size).toBe(ABCJS_LIMITS.length);
+  for (const l of ABCJS_LIMITS) {
+    expect(l.abcjs.length).toBeGreaterThan(20);
+    expect(l.fallback.length).toBeGreaterThan(20);
+  }
+  for (const id of [
+    "lyrics-second-voice",
+    "unison-in-chord",
+    "text-over-chord-symbol",
+    "part-labels",
+    "chart-off-beat-chord",
+    "swing-compound",
+    "blues-signature",
+  ])
+    expect(ABCJS_LIMITS.some((l) => l.id === id)).toBe(true);
+});

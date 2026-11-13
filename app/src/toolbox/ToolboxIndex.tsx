@@ -10,10 +10,10 @@ import { useContent } from "../lib/content.ts";
 import { lessonTitles } from "../lib/content-model.ts";
 import { usePageTitle } from "../lib/nav.ts";
 import { useUnlocks } from "../lib/queries.ts";
-import { toolLabel } from "../lib/tool-label.ts";
 import { Card, Chip, EmptyState, Page, PageHeader, Progress } from "../ui/kit/basics.tsx";
 import { ErrorState, LoadingState } from "../ui/kit/QueryState.tsx";
 import { Tabs } from "../ui/kit/Tabs.tsx";
+import { shownToolLabel as toolLabel } from "./label.ts";
 import { groupTools, KIND_LABEL, KIND_ORDER, sitesOf, siteText } from "./model.ts";
 
 type Cat = ToolEntry["kind"] | "all";

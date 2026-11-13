@@ -11,6 +11,13 @@
 //
 // Playwright starts both servers before the first test and stops them when the run ends (never reused: a
 // server already on the port fails the run instead of silently testing someone else's stack).
+//
+// ONE VARIABLE MOVES EVERY STACK: `OAK_E2E_SHIFT=<n>` adds n to every port of every e2e server (oakStack's two,
+// the platform stack, the journey's production server, the package pages) and suffixes every data and output
+// dir with `-s<n>`, so a second copy of any suite runs beside the first without a clash: a builder on the
+// standard ports, the speed work on +300, and the shards of one project (`bun run e2e` gives shard k of a project
+// the shift base + 100·k). Area configs pass their standard ports and follow without edits; a spec that needs a
+// port reads it from its config's stack (or `shifted()`), never as a literal.
 import { fileURLToPath } from "node:url";
 import type { PlaywrightTestConfig } from "@playwright/test";
 
@@ -53,16 +60,56 @@ export const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
 const RESERVED = ["OAK_DEV", "OAK_PORT", "OAK_VITE_PORT", "OAK_API_PORT", "OAK_DATA_DIR"];
 
+/** Parses `OAK_E2E_SHIFT`: a non-negative multiple of 10 below 5000 (0 when unset). */
+export function parseShift(raw: string | undefined): number {
+  if (raw === undefined || raw === "") return 0;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0 || n >= 5000 || n % 10 !== 0)
+    throw new Error(`OAK_E2E_SHIFT must be a multiple of 10 in 0–4990, got "${raw}"`);
+  return n;
+}
+
+/** The port shift of this process (`OAK_E2E_SHIFT`, default 0). */
+export const E2E_SHIFT = parseShift(process.env.OAK_E2E_SHIFT);
+
+/** The suffix of every data and output dir under this shift: "" at 0, `-s300` at 300. */
+export const E2E_SUFFIX = E2E_SHIFT === 0 ? "" : `-s${E2E_SHIFT}`;
+
+/** A standard port moved by this process's shift. Every e2e server and URL goes through it. */
+export function shifted(port: number): number {
+  return port + E2E_SHIFT;
+}
+
+/**
+ * `OAK_E2E_PREBUILT=1`: `bun run e2e` has already built the content and the production app and written every
+ * fake-microphone fixture (scripts/e2e-parallel.ts), so no server command may do it again while others read.
+ */
+export const PREBUILT = process.env.OAK_E2E_PREBUILT === "1";
+
+/** `fixture && rest`, or just `rest` when the runner has written the fixtures already (`PREBUILT`). */
+export function withFixtures(fixtureCommand: string, command: string): string {
+  return PREBUILT ? command : `${fixtureCommand} && ${command}`;
+}
+
 function checkPort(name: string, port: number): void {
   if (!Number.isInteger(port) || port < 1024 || port > 65535)
     throw new Error(`oakStack: ${name} must be an integer port in 1024–65535, got ${port}`);
 }
 
-/** The two `webServer` entries and the URLs of one stack. Pure: nothing starts until Playwright runs. */
-export function oakStack(o: StackOptions): OakStack {
-  checkPort("vitePort", o.vitePort);
-  checkPort("apiPort", o.apiPort);
-  if (o.vitePort === o.apiPort) throw new Error("oakStack: vitePort and apiPort must differ");
+/**
+ * The two `webServer` entries and the URLs of one stack. Pure: nothing starts until Playwright runs. The ports
+ * given are the standard ones; `OAK_E2E_SHIFT` moves them (and suffixes the data dir) here.
+ */
+export function oakStack(options: StackOptions): OakStack {
+  checkPort("vitePort", options.vitePort);
+  checkPort("apiPort", options.apiPort);
+  if (options.vitePort === options.apiPort) throw new Error("oakStack: vitePort and apiPort must differ");
+  const o: StackOptions = {
+    ...options,
+    vitePort: shifted(options.vitePort),
+    apiPort: shifted(options.apiPort),
+    dataDirName: `${options.dataDirName}${E2E_SUFFIX}`,
+  };
   if (!/^[a-z0-9][a-z0-9-]*$/.test(o.dataDirName))
     throw new Error(`oakStack: dataDirName must be a lower-case slug, got "${o.dataDirName}"`);
   for (const key of Object.keys(o.extraEnv ?? {}))
@@ -71,7 +118,8 @@ export function oakStack(o: StackOptions): OakStack {
   const dataDir = `${REPO_ROOT}test-results/stacks/${o.dataDirName}`;
   const baseURL = `http://127.0.0.1:${o.vitePort}`;
   const apiURL = `http://127.0.0.1:${o.apiPort}`;
-  const vite = `node ${REPO_ROOT}node_modules/vite/bin/vite.js --config app/vite.config.ts`;
+  // e2e/support/vite.e2e.config.ts: the app's config without a file watcher or HMR (no reload mid-test).
+  const vite = `node ${REPO_ROOT}node_modules/vite/bin/vite.js --config e2e/support/vite.e2e.config.ts`;
   const common = { cwd: REPO_ROOT, reuseExistingServer: false, stdout: "pipe", stderr: "pipe" } as const;
   return {
     baseURL,

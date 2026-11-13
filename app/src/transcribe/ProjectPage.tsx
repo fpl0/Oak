@@ -2,10 +2,15 @@
 // waveform, a ladder item as a bar timeline), the transport (play, speed 25–100 %, transpose, fine-tune, the A–B
 // loop, Source · Mine · Both), and below it the learner's Workbench beside the item's panel — a ladder item's
 // givens, stages and Check, or own audio's bars, sections, notes and checklist. Keyboard-first (keys.ts).
+// Wave 5: song items (L5 phrase by phrase, L6 bass → changes → melody; song.ts, SongPanel.tsx) with section,
+// chorus and line marks on the timeline and "bass only" / "without melody" listening; a version imported in a
+// backup is reviewed as text before it runs (c2, ImportReview.tsx); own audio's first run sets the bars by tapping
+// along and a beat nudge, and a swing switch marks the swung off-beats on the grid.
 import type { LadderSubmitResult, TranscriptionDetail } from "@oak/api";
 import type { KeySpec, MeterId } from "@oak/content-kit";
 import type { EvalOutcome } from "@oak/strudel";
-import { tempoLine } from "@oak/theory";
+import { METERS, tempoLine } from "@oak/theory";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { AudioLines, ChevronLeft, MessageSquareText, Mic, Save, Trash2, ZoomIn, ZoomOut } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -13,6 +18,7 @@ import { api } from "../lib/api.ts";
 import { formatDate, formatKey } from "../lib/format.ts";
 import { usePageTitle } from "../lib/nav.ts";
 import {
+  apiQuery,
   useTranscriptionAddVersion,
   useTranscriptionDelete,
   useTranscriptionPatch,
@@ -36,7 +42,7 @@ import { IS_MAC, keyScope, useHotkeys } from "../ui/keys/KeymapProvider.tsx";
 import { formatKeys } from "../ui/keys/keymap.ts";
 import { Button } from "../ui/kit/Button.tsx";
 import { Card, Chip, Kbd, Skeleton } from "../ui/kit/basics.tsx";
-import { Callout } from "../ui/kit/Controls.tsx";
+import { Callout, SegmentedControl } from "../ui/kit/Controls.tsx";
 import { toast } from "../ui/kit/Toast.tsx";
 import { useThemeName } from "../ui/theme/use-theme-name.ts";
 import { useVoice } from "../voice/use-voice.ts";
@@ -45,12 +51,16 @@ import { ServicesGate } from "../workbench/ServicesGate.tsx";
 import { Workbench } from "../workbench/Workbench.tsx";
 import {
   addTap,
+  barAt,
+  beatSecOfGrid,
   bpmFromTaps,
   downbeatFromTaps,
   gridOf,
   type Loop,
   loopOf,
   loopOfBars,
+  nudgeDownbeat,
+  playheadAt,
   setLoopPoint,
   shiftLoop,
   stepBar,
@@ -61,12 +71,42 @@ import {
 } from "./grid.ts";
 import { HumDialog } from "./HumDialog.tsx";
 import type { HumTarget } from "./hum.ts";
+import { ImportReview, needsReview } from "./ImportReview.tsx";
 import { PRIVACY_COPY } from "./import.ts";
 import { type TranscribeAction, transcribeBindings } from "./keys.ts";
 import { givenOfProject, LadderPanel } from "./LadderPanel.tsx";
 import { type LadderLevel, starterCode } from "./ladder.ts";
-import { ChecklistCard, NotesCard, SectionsCard, TempoCard } from "./OwnAudioPanel.tsx";
+import {
+  ChecklistCard,
+  NotesCard,
+  projectSwing,
+  SectionsCard,
+  SWUNG_EIGHTHS,
+  swingMeter,
+  TempoCard,
+  writeSwing,
+} from "./OwnAudioPanel.tsx";
+import { type SongFocus, SongPanel } from "./SongPanel.tsx";
 import { BarTimeline, type Section, Waveform } from "./SourceView.tsx";
+import {
+  chorusSpans,
+  cycleOfBar,
+  isSongLevel,
+  LISTEN_LABEL,
+  LISTEN_MODES,
+  type ListenMode,
+  lineSpans,
+  listenAllowed,
+  listenMutes,
+  rememberedItem,
+  type SongLevel,
+  songGivenOf,
+  songStarter,
+  spanAt,
+  spanLoop,
+  stageListenMode,
+  timelineMarks,
+} from "./song.ts";
 import { TransportControls } from "./TransportControls.tsx";
 import { useRememberSettings, useTranscribeTransport, useTransportState } from "./use-transport.ts";
 
@@ -82,11 +122,12 @@ const ZOOMS = [0, 100, 200, 400, 800] as const;
  */
 export const SPECTROGRAM_MAX_SEC = 8 * 60;
 
-function ownAudioStarter(p: TranscriptionDetail): string {
+function ownAudioStarter(p: TranscriptionDetail, swing = false): string {
   const bpm = Math.round(p.bpm ?? 90);
   const key: KeySpec = p.key ?? { tonic: "C", mode: "major" };
   const meter = (p.meter ?? "4/4") as MeterId;
-  return `${tempoLine(bpm, meter)}\n// ${p.title} · ${formatKey(key)}\n\nmelody: n("0").scale("${key.tonic}4:${key.mode.replace(/ /g, ":")}").s("piano")\n`;
+  const feel = swing ? "\n// Swing 8ths: write straight eighths; .swingBy(1/3, 4) plays them swung." : "";
+  return `${tempoLine(bpm, meter)}\n// ${p.title} · ${formatKey(key)}${feel}\n\nmelody: n("0").scale("${key.tonic}4:${key.mode.replace(/ /g, ":")}").s("piano")\n`;
 }
 
 /**
@@ -103,6 +144,17 @@ export function ProjectPage({
   const id = project.id;
   const pattern = project.player === "pattern";
   const level = (project.ladderLevel ?? 1) as LadderLevel;
+  const songLevel: SongLevel | null =
+    pattern && isSongLevel(project.ladderLevel) ? (level as SongLevel) : null;
+  // The song pool is read only for a song item (a server without it answers 501, never on other pages).
+  const songs = useQuery({ ...apiQuery("ladder.songs"), enabled: songLevel !== null });
+  const listedSong = songs.data?.items.find((x) => x.songId === project.songId) ?? null;
+  const songGiven = useMemo(
+    () => (songLevel ? songGivenOf(project, rememberedItem(project.id), listedSong) : null),
+    [songLevel, project, listedSong],
+  );
+  const songPickup = songGiven?.pickupBeats !== null && songGiven !== null;
+  const [focus, setFocus] = useState<SongFocus>({ span: null, marks: null, stage: null });
   const navigate = useNavigate();
   const theme = useThemeName();
   const voice = useVoice();
@@ -138,16 +190,30 @@ export function ProjectPage({
   const timeNow = useCallback(() => {
     const s = transport?.state;
     if (!s) return 0;
+    // Between the engine's position updates the playhead is extrapolated from the last one (`playheadAt`).
     if (!s.playing) return s.time;
-    return Math.min(s.durationS, stamp.current.t + ((performance.now() - stamp.current.at) / 1000) * s.rate);
+    return playheadAt(stamp.current, performance.now(), s.time, s.rate, s.durationS);
   }, [transport]);
 
   // --- the learner's code ----------------------------------------------------------------------------
   const latest = project.versions.at(-1) ?? null;
+  const starter = () =>
+    songLevel && songGiven
+      ? songStarter(songLevel, songGiven)
+      : pattern
+        ? starterCode(level, given)
+        : ownAudioStarter(project, projectSwing(project));
+  // c2: a version imported in a backup is shown as text until the learner reviews it; the editor starts fresh.
+  const [reviewing, setReviewing] = useState<{ version: number; code: string } | null>(() =>
+    latest && needsReview(latest) ? { version: latest.version, code: latest.code } : null,
+  );
   const [seed, setSeed] = useState(() => ({
-    code: latest?.code ?? (pattern ? starterCode(level, given) : ownAudioStarter(project)),
+    code: latest && !needsReview(latest) ? latest.code : starter(),
     n: 0,
   }));
+  // The L6 chart reads the code as it is typed (a short pause after each edit).
+  const [liveCode, setLiveCode] = useState(seed.code);
+  const liveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const live = useRef(seed.code);
   const lastRunOk = useRef<string | null>(null);
   const draftCode = useRef<string | null>(null);
@@ -155,9 +221,33 @@ export function ProjectPage({
   useEffect(() => {
     if (transport) void transport.setMineCode(live.current);
   }, [transport]);
-  const onChange = useCallback((code: string) => {
+  const onChange = useCallback(
+    (code: string) => {
+      live.current = code;
+      if (songLevel !== 6) return;
+      if (liveTimer.current) clearTimeout(liveTimer.current);
+      liveTimer.current = setTimeout(() => setLiveCode(code), 300);
+    },
+    [songLevel],
+  );
+  useEffect(
+    () => () => {
+      if (liveTimer.current) clearTimeout(liveTimer.current);
+    },
+    [],
+  );
+  // Own audio: while the editor still holds the untouched starter, it follows the tempo, key and feel the learner
+  // sets (the tapped tempo goes into setcpm); once they edit it, it is theirs.
+  const ownStarter = useRef<string | null>(
+    !pattern && seed.code === ownAudioStarter(project, projectSwing(project)) ? seed.code : null,
+  );
+  /** Puts code in the editor (a hum draft, an opened version, the chart written in, a reviewed import). */
+  const putCode = (code: string) => {
     live.current = code;
-  }, []);
+    setLiveCode(code);
+    setSeed((x) => ({ code, n: x.n + 1 }));
+    void transport?.setMineCode(code);
+  };
   const onEvaluated = useCallback(
     (o: EvalOutcome) => {
       if (!o.ok) return;
@@ -223,11 +313,13 @@ export function ProjectPage({
     () =>
       registerTutorHost({
         thread,
+        // Bars count from the first full bar (c4): after a song's pickup, bar n is cycle n.
         showBars: (from, to) => {
-          if (grid && transport) transport.setLoop(loopOfBars(grid, from - 1, to - from + 1));
+          if (grid && transport)
+            transport.setLoop(loopOfBars(grid, cycleOfBar(from, songPickup), to - from + 1));
         },
       }),
-    [thread, transport, grid?.barSec, grid?.downbeatS],
+    [thread, transport, grid?.barSec, grid?.downbeatS, songPickup],
   );
 
   // --- source view ------------------------------------------------------------------------------------
@@ -280,18 +372,79 @@ export function ProjectPage({
 
   // --- hum it -------------------------------------------------------------------------------------------
   const [humOpen, setHumOpen] = useState(false);
-  const humTarget: HumTarget = pattern && (level === 2 || level === 3) ? "bass" : "melody";
+  const humTarget: HumTarget =
+    pattern && (level === 2 || level === 3 || (songLevel === 6 && focus.stage === "bass"))
+      ? "bass"
+      : "melody";
   const humPlan = {
     key: project.key ?? given.key ?? { tonic: "C", mode: "major" },
     bpm: project.bpm ?? given.bpm,
     meter: (project.meter ?? "4/4") as MeterId,
-    bars: pattern ? given.bars : 4,
+    bars: songGiven ? (project.stimulus?.bars ?? songGiven.bars) : pattern ? given.bars : 4,
     target: humTarget,
   };
+
+  // --- own audio's feel; a song's phrases, lines and choruses; listening to one layer -----------------
+  // The own-audio feel is kept with the project on the server (`settings.swing`, PATCH { swing }).
+  const [swing, setSwingState] = useState(() => !pattern && projectSwing(project));
+  const setSwing = (on: boolean) => {
+    const v = on && swingMeter(project.meter);
+    setSwingState(v);
+    writeSwing(id, v);
+    patch.mutate(
+      { params: { id }, body: { swing: v ? SWUNG_EIGHTHS : null } },
+      { onError: (e) => toast.error("Couldn't save the feel", e.message) },
+    );
+  };
+  const unitsPerBar = METERS[(project.meter ?? "4/4") as MeterId]?.unitsPerBar ?? 4;
+  useEffect(() => {
+    if (pattern || ownStarter.current === null) return;
+    if (live.current !== ownStarter.current) {
+      ownStarter.current = null;
+      return;
+    }
+    const next = ownAudioStarter(project, swing);
+    if (next === live.current) return;
+    ownStarter.current = next;
+    putCode(next);
+  }, [project.bpm, project.key?.tonic, project.key?.mode, project.meter, swing]);
+  /** The spans the digit keys loop: a song's phrases (L5) or 4-bar lines (L6), a generated item's bars. */
+  const spans: [number, number][] = songGiven
+    ? songLevel === 5
+      ? songGiven.phrases
+      : lineSpans(songGiven.bars)
+    : pattern
+      ? Array.from({ length: given.bars }, (_, b) => [b + 1, b + 1] as [number, number])
+      : [];
+  const loopSpan = (span: readonly [number, number]) => {
+    if (!transport || !grid) return;
+    const l = spanLoop(span, songPickup, songLevel === 5 || focus.stage === "melody");
+    transport.setLoop(loopOfBars(grid, l.fromBar, l.bars));
+  };
+  /** The span the loop (or the playhead) is in, as an index into `spans`. */
+  const spanNow = (): number => {
+    if (!grid || spans.length === 0) return -1;
+    const s0 = transport?.state.loop ? transport.state.loop.startS + grid.barSec / 2 : timeNow();
+    const cycle = Math.floor(barAt(grid, s0));
+    // With a pickup each phrase's loop starts a bar early: the loop's second bar names it.
+    const lead = songPickup && transport?.state.loop ? 1 : 0;
+    const bar = songPickup ? cycle + lead : cycle + 1;
+    return spanAt(spans, bar);
+  };
+  const realism = project.realism ?? 0;
+  const canListen = songLevel === 6 && listenAllowed(realism);
+  const [listen, setListen] = useState<ListenMode>("full");
+  useEffect(() => {
+    if (songLevel === 6 && focus.stage) setListen(stageListenMode(focus.stage));
+  }, [songLevel, focus.stage]);
+  useEffect(() => {
+    if (!transport) return;
+    transport.setSourceMutes(canListen ? listenMutes(listen, transport.state.sourceTracks ?? []) : []);
+  }, [transport, listen, canListen]);
   const humAllowed = !(pattern && level === 1);
 
   // --- keys -------------------------------------------------------------------------------------------
-  const act = (a: TranscribeAction) => {
+  const act = (a: TranscribeAction, n?: number) => {
     if (!transport) return;
     const state = transport.state;
     const dur = state.durationS;
@@ -354,6 +507,64 @@ export function ProjectPage({
       case "spectrogram":
         setSpectrogram((s) => !s);
         return;
+      case "loopLine": {
+        const span = spans[(n ?? 1) - 1];
+        if (span) loopSpan(span);
+        return;
+      }
+      case "prevLine":
+      case "nextLine": {
+        const at = spanNow();
+        const to = Math.max(0, Math.min(spans.length - 1, at < 0 ? 0 : at + (a === "nextLine" ? 1 : -1)));
+        const span = spans[to];
+        if (span) loopSpan(span);
+        return;
+      }
+      case "loopChorus": {
+        if (!songGiven || !grid) return;
+        const chorus =
+          songLevel === 6
+            ? (chorusSpans(songGiven.bars)[
+                Math.max(
+                  0,
+                  chorusSpans(songGiven.bars).findIndex((c) => {
+                    const bar = songPickup
+                      ? Math.floor(barAt(grid, timeNow()))
+                      : Math.floor(barAt(grid, timeNow())) + 1;
+                    return bar >= c[0] && bar <= c[1];
+                  }),
+                )
+              ] ?? [1, songGiven.bars])
+            : ([1, songGiven.bars] as [number, number]);
+        const l = spanLoop(chorus, songPickup, songLevel === 5);
+        const want = loopOfBars(grid, l.fromBar, l.bars);
+        const same =
+          state.loop !== null &&
+          Math.abs(state.loop.startS - want.startS) < 1e-3 &&
+          Math.abs(state.loop.endS - want.endS) < 1e-3;
+        transport.setLoop(same ? null : want);
+        return;
+      }
+      case "listenBass":
+      case "listenNoMelody": {
+        const mode: ListenMode = a === "listenBass" ? "bass" : "no-melody";
+        setListen((m) => (m === mode ? "full" : mode));
+        return;
+      }
+      case "downbeatEarlier":
+      case "downbeatLater": {
+        if (!grid || project.downbeatS === null) return;
+        const next = nudgeDownbeat(
+          project.downbeatS,
+          beatSecOfGrid(grid, project.meter as MeterId),
+          a === "downbeatLater" ? 1 : -1,
+        );
+        if (next !== null) applyGrid({ downbeatS: next });
+        return;
+      }
+      case "swing":
+        setSwing(!swing);
+        return;
     }
   };
   const defaultLoop = (): Loop | null => {
@@ -364,12 +575,27 @@ export function ProjectPage({
     }
     return setLoopPoint(null, "A", timeNow(), transport.state.durationS, null);
   };
+  const OWN_AUDIO_ONLY: readonly TranscribeAction[] = [
+    "centsDown",
+    "centsUp",
+    "tap",
+    "zoomIn",
+    "zoomOut",
+    "spectrogram",
+    "downbeatEarlier",
+    "downbeatLater",
+    "swing",
+  ];
   const enabled = (a: TranscribeAction) => {
     if (!transport) return false;
     if (a === "spectrogram" && tooLongForSpectrogram) return false;
-    if (pattern && ["centsDown", "centsUp", "tap", "zoomIn", "zoomOut", "spectrogram"].includes(a))
-      return false;
+    if (pattern && OWN_AUDIO_ONLY.includes(a)) return false;
     if (pattern && (a === "prevBar" || a === "nextBar")) return transport.state.loop !== null;
+    if (a === "loopLine" || a === "prevLine" || a === "nextLine") return spans.length > 0 && grid !== null;
+    if (a === "loopChorus") return songGiven !== null;
+    if (a === "listenBass" || a === "listenNoMelody") return canListen;
+    if (a === "downbeatEarlier" || a === "downbeatLater") return grid !== null && project.downbeatS !== null;
+    if (a === "swing") return swingMeter(project.meter);
     return true;
   };
   useHotkeys(transcribeBindings(act, enabled));
@@ -389,10 +615,16 @@ export function ProjectPage({
         ],
   );
 
-  // Keys act from the first moment: focus the page (not a control) once it is up.
+  // Keys act from the first moment: focus the page (not a control) once it is up — unless the learner already
+  // put focus on a control of the page around it (the gym's "Finish the gym session" in a session): a late audio
+  // load must not move it away (gate: Enter on the focused Finish button did nothing under load).
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (load.kind === "ready" && !root.current?.contains(document.activeElement)) root.current?.focus();
+    if (load.kind !== "ready") return;
+    const active = document.activeElement as HTMLElement | null;
+    if (root.current?.contains(active)) return;
+    const elsewhere = active !== null && active !== document.body && active.closest("main") !== null;
+    if (!elsewhere) root.current?.focus();
   }, [load.kind]);
 
   // Own audio: the recording goes with the project unless another project uses it (as Settings › Data does);
@@ -433,7 +665,7 @@ export function ProjectPage({
     key: project.key ?? given.key,
     meter: (project.meter ?? "4/4") as MeterId,
     defaultBpm: Math.round(project.bpm ?? given.bpm),
-    loopBars: pattern ? given.bars : 4,
+    loopBars: songLevel ? (project.stimulus?.bars ?? given.bars) : pattern ? given.bars : 4,
   };
   const lint = studioLint(unlocked, lessonCtx.meter, lessonCtx.key);
   const sub = [
@@ -442,7 +674,12 @@ export function ProjectPage({
     project.key ? formatKey(project.key) : null,
     project.bpm ? `${Math.round(project.bpm)} BPM` : null,
     project.meter,
+    (songGiven?.swing ?? swing) ? "Swing 8ths" : null,
   ].filter(Boolean);
+  const timelineBars = project.stimulus?.bars ?? given.bars;
+  const current = focus.span
+    ? spanLoop(focus.span, songPickup, songLevel === 5 || focus.stage === "melody")
+    : null;
 
   return (
     <div
@@ -527,12 +764,46 @@ export function ProjectPage({
           </Callout>
         ) : state && transport ? (
           pattern ? (
-            <BarTimeline
-              transport={transport}
-              state={state}
-              bars={project.stimulus?.bars ?? given.bars}
-              pickup={false}
-            />
+            <>
+              <BarTimeline
+                transport={transport}
+                state={state}
+                bars={timelineBars}
+                pickup={songPickup}
+                marks={songLevel && songGiven ? timelineMarks(songLevel, songGiven) : []}
+                swing={songGiven?.swing ?? false}
+                unitsPerBar={unitsPerBar}
+                current={current}
+                {...(focus.marks ? { barMarks: focus.marks } : {})}
+              />
+              {songLevel === 6 ? (
+                <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="listen">
+                  <SegmentedControl
+                    label="Listen to (Shift+B bass only, Shift+M without melody)"
+                    size="sm"
+                    value={canListen ? listen : "full"}
+                    options={LISTEN_MODES.map((m) => ({
+                      value: m,
+                      label: LISTEN_LABEL[m],
+                      disabled: !canListen && m !== "full",
+                    }))}
+                    onChange={(m) => setListen(m)}
+                  />
+                  <span className="text-text-3">
+                    {canListen
+                      ? "The source only: your code plays as written."
+                      : `At R${realism} the whole mix plays: hearing the part through it is the exercise.`}
+                  </span>
+                </div>
+              ) : null}
+              {songGiven ? (
+                <p className="text-sm text-text-3">
+                  <Kbd>1</Kbd>–<Kbd>{Math.min(9, spans.length)}</Kbd> loop a{" "}
+                  {songLevel === 5 ? "phrase" : "line"} · <Kbd>PageUp</Kbd> <Kbd>PageDown</Kbd> the one before
+                  or after · <Kbd>C</Kbd> {songLevel === 5 ? "the whole song" : "the chorus"}
+                </p>
+              ) : null}
+            </>
           ) : load.buffer ? (
             <>
               <Waveform
@@ -544,6 +815,8 @@ export function ProjectPage({
                 zoom={ZOOMS[zoomAt] ?? 0}
                 spectrogram={spectrogram}
                 theme={theme}
+                unitsPerBar={unitsPerBar}
+                swing={swing}
               />
               <div className="flex flex-wrap items-center gap-1.5 text-sm">
                 <Button
@@ -584,8 +857,14 @@ export function ProjectPage({
                   </span>
                 ) : null}
                 <span className="ml-auto text-text-3">
-                  Drag across the waveform to loop it · <Kbd>[</Kbd> <Kbd>]</Kbd> set A and B · <Kbd>T</Kbd>{" "}
-                  tap the beat
+                  {grid ? "Drag across the waveform to loop it · " : "First set the bars: tap along with "}
+                  {grid ? (
+                    <>
+                      <Kbd>[</Kbd> <Kbd>]</Kbd> set A and B · <Kbd>T</Kbd> tap the beat
+                    </>
+                  ) : (
+                    <Kbd>T</Kbd>
+                  )}
                 </span>
               </div>
             </>
@@ -605,6 +884,10 @@ export function ProjectPage({
           onCents={(d) => act(d > 0 ? "centsUp" : "centsDown")}
           onToggleLoop={() => act("loop")}
           onSetPoint={(w) => act(w === "A" ? "setA" : "setB")}
+          setRate={(r) => transport.setRate(r)}
+          setSemitones={(st) => transport.setSemitones(st)}
+          setCents={(c) => transport.setCents(c)}
+          pickup={songPickup}
         />
       ) : null}
       {state && pattern && !state.realismApplied ? (
@@ -615,20 +898,39 @@ export function ProjectPage({
 
       <div className="grid gap-4 @min-[60rem]:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="flex min-w-0 flex-col gap-3">
-          <ServicesGate load={appWorkbenchServices} auto>
-            <Workbench
-              key={seed.n}
-              id={`tr${id.replace(/[^a-z0-9]/gi, "").slice(-10)}`}
-              code={seed.code}
-              lessonCtx={lessonCtx}
-              lint={lint}
-              views={["roll", "staff"]}
-              onChange={onChange}
-              onEvaluated={onEvaluated}
-              onModel={onModel}
-              tutorBars
+          {reviewing ? (
+            <ImportReview
+              projectId={id}
+              version={reviewing.version}
+              code={reviewing.code}
+              meter={lessonCtx.meter}
+              keySpec={lessonCtx.key ?? null}
+              onConfirmed={(code, note) => {
+                setReviewing(null);
+                putCode(code);
+                toast.success(`Version ${reviewing.version} is yours to run`, note ?? undefined);
+              }}
+              onFresh={() => {
+                setReviewing(null);
+                toast.info("Starting fresh", `Version ${reviewing.version} stays in Versions, as text.`);
+              }}
             />
-          </ServicesGate>
+          ) : (
+            <ServicesGate load={appWorkbenchServices} auto>
+              <Workbench
+                key={seed.n}
+                id={`tr${id.replace(/[^a-z0-9]/gi, "").slice(-10)}`}
+                code={seed.code}
+                lessonCtx={lessonCtx}
+                lint={lint}
+                views={["roll", "staff"]}
+                onChange={onChange}
+                onEvaluated={onEvaluated}
+                onModel={onModel}
+                tutorBars
+              />
+            </ServicesGate>
+          )}
           <Card className="flex flex-col gap-2 p-4" data-testid="transcription-reviews">
             <h2 className="text-h3">Claude's reviews</h2>
             <ReviewCards
@@ -656,16 +958,27 @@ export function ProjectPage({
             <Versions
               project={project}
               current={savedVersion}
-              onOpen={(code) => {
-                setSeed((s) => ({ code, n: s.n + 1 }));
-                live.current = code;
-                void transport?.setMineCode(code);
+              onOpen={(v) => {
+                if (needsReview(v)) setReviewing({ version: v.version, code: v.code });
+                else putCode(v.code);
               }}
             />
           )}
         </div>
         <aside className="flex min-w-0 flex-col gap-3" aria-label={pattern ? "The item" : "Your recording"}>
-          {pattern ? (
+          {songLevel && songGiven ? (
+            <SongPanel
+              project={project}
+              level={songLevel}
+              given={songGiven}
+              code={liveCode}
+              getCode={() => live.current}
+              setCode={putCode}
+              onResult={setLastResult}
+              onFocus={setFocus}
+              onLoopSpan={loopSpan}
+            />
+          ) : pattern ? (
             <LadderPanel
               project={project}
               given={given}
@@ -681,6 +994,11 @@ export function ProjectPage({
                 onClearTaps={() => setTaps([])}
                 onApply={applyGrid}
                 getTime={timeNow}
+                onTap={tap}
+                playing={state?.playing ?? false}
+                swing={swing}
+                onSwing={setSwing}
+                busy={patch.isPending}
               />
               <SectionsCard
                 sections={sections}
@@ -716,9 +1034,7 @@ export function ProjectPage({
         code={live.current}
         onUse={(code) => {
           draftCode.current = code;
-          live.current = code;
-          setSeed((s) => ({ code, n: s.n + 1 }));
-          void transport?.setMineCode(code);
+          putCode(code);
           toast.info(
             "Oak's draft is in the editor",
             pattern
@@ -738,7 +1054,7 @@ function Versions({
 }: {
   project: TranscriptionDetail;
   current: number;
-  onOpen(code: string): void;
+  onOpen(v: TranscriptionDetail["versions"][number]): void;
 }) {
   if (project.versions.length === 0) return null;
   return (
@@ -750,8 +1066,9 @@ function Versions({
             <span className="font-medium">v{v.version}</span>
             <span className="text-text-3">{formatDate(v.createdAt)}</span>
             {v.version === current ? <Chip>latest</Chip> : null}
-            <Button size="sm" variant="ghost" className="ml-auto" onClick={() => onOpen(v.code)}>
-              Open in the editor
+            {needsReview(v) ? <Chip tone="amber">imported</Chip> : null}
+            <Button size="sm" variant="ghost" className="ml-auto" onClick={() => onOpen(v)}>
+              {needsReview(v) ? "Review it" : "Open in the editor"}
             </Button>
           </li>
         ))}

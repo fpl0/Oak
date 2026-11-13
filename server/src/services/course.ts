@@ -39,6 +39,7 @@ import { conflict, notFound } from "../errors.ts";
 import type { CanDoService } from "./cando.ts";
 import type { CapstoneSessionsService } from "./capstone-sessions.ts";
 import { LearnerTime, type ServiceContext } from "./context.ts";
+import { openFamilyLevels } from "./family-levels.ts";
 import { GatesService } from "./gates.ts";
 import { evidenceWeight, type MasteryService } from "./mastery.ts";
 import type { SrsPort } from "./ports.ts";
@@ -707,7 +708,14 @@ export class CourseService {
       if (state === null || a.n === 0) continue;
       const mean = a.sum / a.n;
       let level = state.level;
-      if (mean >= 0.85) level = Math.max(level, a.level);
+      // Confirming a level never carries the family past its open level (§7.3), whatever the item was set at.
+      const fam = this.#content.family(familyId);
+      const open =
+        fam === null
+          ? a.level
+          : openFamilyLevels(fam, (l) => this.#repos.lessons.progress(l)?.status === "completed")
+              .maxOpenLevel;
+      if (mean >= 0.85) level = Math.max(level, Math.min(a.level, open));
       else if (mean < 0.6) level = Math.max(1, Math.min(level, a.level - 1));
       if (level !== state.level) this.#repos.srs.saveFamily({ ...state, level, updatedAt: this.time.iso() });
     }
@@ -719,12 +727,25 @@ export class CourseService {
     if (this.#content.capstoneMeta(id) === null) throw notFound(`capstone ${id}`);
     const status = this.d.gates.capstoneStatus(id);
     const row = this.#repos.capstones.get(id);
+    // c1 (wave5.md §5.2): the draft version the last check graded, and whether the draft changed since (the first
+    // release must be of the checked code, so the Brief says "Check again before you release").
+    const checked = row?.checked ?? null;
+    let changed = false;
+    if (checked !== null && row !== null && row.status !== "released" && row.sketchId !== null) {
+      const sketch = this.#repos.sketches.get(row.sketchId);
+      const latest = sketch === null ? null : this.#repos.sketches.version(sketch.id, sketch.currentVersion);
+      const checkedCode = this.#repos.sketches.version(checked.sketchId, checked.version)?.code;
+      changed = latest !== null && (checkedCode === undefined || checkedCode.trim() !== latest.code.trim());
+    }
     return {
       ...status,
       sessions: row?.sessions ?? [],
       flavour: (row?.flavour ?? null) as CapstoneState["flavour"],
       lastResult: row?.lastResult ?? null,
       reviewRequested: this.#reviewRequested(id),
+      checkedVersion:
+        checked === null ? null : { sketchId: checked.sketchId, sketchVersion: checked.version },
+      draftChangedSinceCheck: changed,
     };
   }
   #reviewRequested(id: string): boolean {

@@ -63,6 +63,33 @@ export {
   type TranscribeSource,
   type TranscribeSourceState,
 } from "./pattern-source.ts";
+// Wave 5: the long-take recorder (a C3 demo of 90 s and more, sample-exact, memory bounded).
+export {
+  createPcmRecorder,
+  createPcmRecorderWith,
+  PCM_RECORDER_PROCESSOR,
+  PCM_RECORDER_SOURCE,
+  PCM_TAIL_SEC,
+  type PcmRecorder,
+  type PcmRecorderDeps,
+  type PcmRecorderStats,
+  type PcmRecording,
+  type PcmWorkletNodeLike,
+  wavHeader,
+} from "./pcm-recorder.ts";
+// Wave 5 seam (docs/design/wave5.md §3.4): the scope and spectrum panel's analysis.
+export { harmonicLevels, type SpectrumBand, spectrumBands, steadyWave, triggerIndex } from "./scope.ts";
+// Wave 5: the analyser taps behind the panel (master bus and per track, side branches on the shared context).
+export {
+  type AnalyserLike,
+  createScopeTaps,
+  createScopeTapsWith,
+  type ScopeTapSource,
+  type ScopeTaps,
+  type ScopeTapsDeps,
+  type ScopeTapsOptions,
+  type TapSourceNode,
+} from "./scope-taps.ts";
 // Wave 4 seam (docs/design/wave4.md §3.4): the Transcribe engine, the A/B switch and the master recorder.
 export {
   AB_DRIFT_GATE_BARS,

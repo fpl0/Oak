@@ -86,6 +86,32 @@ export interface NotationInput {
    */
   endsPiece?: boolean;
   title?: string;
+  /**
+   * Wave 5 (docs/design/wave5.md §3.3): section labels over the staff and a double barline before each new
+   * section, from the per-track `arrange()` (`sectionMarks`). Drawn as an ABC part label (`[P:Chorus]`) over the
+   * section's first bar, on the top staff, with `||` closing the bar before it. Marks outside the engraved bars are
+   * dropped (a page shows only its own).
+   */
+  sections?: readonly SectionMark[];
+  /**
+   * Wave 5: spell blue notes as blues players read them: ♭3 and ♭7 always as flats (E♭ and B♭ in C, also when the
+   * line climbs through them to 3 or 1), ♭5 by direction (F♯ going up, G♭ going down). Default: on when the key is a
+   * blues key (`.scale("C4:blues")`), an event's scale is a blues scale, or every chord symbol given is a dominant
+   * seventh on two or more roots (a 12-bar blues); `false` turns it off.
+   */
+  blues?: boolean;
+}
+
+/** Wave 5: a section label on the staff (`sectionMarks` of `@oak/notation`). */
+export interface SectionMark {
+  /** 0-based cycle (absolute) where the section starts. */
+  bar: number;
+  /** "Verse", "Chorus 2": the text over the staff. */
+  text: string;
+  /** The tagged name as the code writes it ("chorus2"). */
+  tag: string;
+  /** A double barline before this bar (every section but the first). */
+  doubleBar: boolean;
 }
 
 export interface TupletMark {
@@ -99,8 +125,13 @@ export interface NoteItem {
   kind: "note" | "chord" | "rest";
   /** Index in the render's `idMap`: the abcjs class is `oak-e{n}`. `null` for rests. Tied pieces share it. */
   n: number | null;
-  /** `NEvent.id`s this item engraves, low to high (aligned with `pitches`). */
+  /**
+   * `NEvent.id`s this item engraves, low to high (aligned with `pitches`). Wave 5 (c5): events in unison with a
+   * head follow the heads; `doubled[k]` is the index in `pitches` of the head that `eventIds[pitches.length + k]`
+   * doubles.
+   */
   eventIds: string[];
+  doubled?: number[];
   pitches: SpelledPitch[];
   /** Onset and sounding length in cycles. */
   onset: Rat;
@@ -147,7 +178,12 @@ export interface NotationWarning {
     | "unpitched-dropped"
     | "out-of-range"
     /** Something abcjs 6.7.2 cannot draw as written (see `ABCJS_LIMITS`); the ABC uses the stated fallback. */
-    | "abcjs-limit";
+    | "abcjs-limit"
+    /**
+     * Wave 5: a declared swing the staff cannot carry (contracts §6.10 item 1: swing is not used in compound
+     * meters, so a swung 6/8 is engraved as played and snapped); content must not declare it.
+     */
+    | "swing-unsupported";
   /** 0-based cycle. */
   bar: number;
   message: string;
@@ -213,6 +249,13 @@ export interface Score {
   pickupNumbering?: true;
   /** A lead sheet (`staff: "lead"`): `toAbc` numbers the first bar of every system unless told otherwise. */
   lead?: true;
+  /**
+   * Wave 5: the section marks inside the engraved bars (`NotationInput.sections`), in order: a part label over the
+   * first bar of each and a double barline before each one that asks for it.
+   */
+  sections?: SectionMark[];
+  /** Wave 5: blue notes were spelled as blues (`NotationInput.blues`). */
+  blues?: true;
 }
 export type NotationModel = Score;
 

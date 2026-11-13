@@ -53,6 +53,8 @@ import {
   bandSetupFor,
   bandsForMeter,
   differsFrom,
+  formSoundHints,
+  formSoundTips,
   harmonyViewHints,
   LENGTHS,
   type LockedHint,
@@ -65,6 +67,7 @@ import {
   STUDIO_FLAVOURS,
   STUDIO_METERS,
   sinceText,
+  soundFactsOf,
   strictLint,
   strictVerdict,
   studioFlavour,
@@ -264,6 +267,17 @@ export function SketchEditor({ sketch }: { sketch: SketchDetail }) {
       .map((s) => siteText(s, titles))
       .join(" or ");
   }).slice(0, 2);
+  // Wave 5: the form and sound views (the ribbon, the form map, the scope, the probes): hints, never a block.
+  const [hasSections, setHasSections] = useState(false);
+  const soundFacts = soundFactsOf(liveCode, hasSections);
+  const soundHints = formSoundHints(soundFacts, unlocked as ReadonlySet<string>, (tid) => {
+    const t = toolbox.find((x) => x.id === tid);
+    if (!t) return null;
+    return sitesOf(t)
+      .map((s) => siteText(s, titles))
+      .join(" or ");
+  }).slice(0, 2);
+  const soundTips = formSoundTips(soundFacts, unlocked as ReadonlySet<string>);
 
   // --- the tutor's subject: this sketch -----------------------------------------------------------------
   const thread = { subjectKind: "sketch" as const, subjectId: id };
@@ -624,6 +638,7 @@ export function SketchEditor({ sketch }: { sketch: SketchDetail }) {
                 onEvaluated={onEvaluated}
                 onModel={(m) => {
                   setHasChords(m.harmony !== null && m.harmony.source === "learner");
+                  setHasSections((m.lines?.sections.length ?? 0) > 0);
                   onHarmony(m);
                 }}
                 tutorBars
@@ -644,6 +659,20 @@ export function SketchEditor({ sketch }: { sketch: SketchDetail }) {
             <Callout tone="info" title="Coming for your chords" className="text-sm">
               <ul className="flex flex-col gap-0.5" data-testid="harmony-hints">
                 {harmonyHints.map((h) => (
+                  <li key={h.id}>
+                    {h.what}: from {h.at}.
+                  </li>
+                ))}
+              </ul>
+            </Callout>
+          ) : null}
+          {(soundHints.length > 0 || soundTips.length > 0) && !review ? (
+            <Callout tone="info" title="Views for this sketch" className="text-sm">
+              <ul className="flex flex-col gap-0.5" data-testid="sound-hints">
+                {soundTips.map((t) => (
+                  <li key={t}>{t}</li>
+                ))}
+                {soundHints.map((h) => (
                   <li key={h.id}>
                     {h.what}: from {h.at}.
                   </li>

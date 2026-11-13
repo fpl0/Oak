@@ -211,6 +211,52 @@ export type AnswerUi =
    * Use `FUNCTION_OPTIONS` and `CADENCE_OPTIONS` for the standard ids.
    */
   | { ui: "slot-choice"; slots: number; options: Choice[]; labels?: string[] }
+  /**
+   * Wave 5. The form of a piece heard (U09): one label per section played, in order. `vocabulary` is either
+   * `"letters"` (A, B, C … by first appearance: AABA) or the section names the learner may use
+   * (`FORM_SECTION_NAMES`). `input: "label"` names each section as it plays (a strip of `sections` slots,
+   * the bars of each given by `sectionBars` when known); `input: "order"` puts the distinct sections, given as
+   * cards, in the order they were heard. The response is `answer.sections`, one entry per section. With named
+   * sections each slot is graded by section type, as the `form` rule reads names (a tagged `chorus2` counts as
+   * a chorus; contracts §6.3 item 4); with `"letters"` (or a letter key) both sequences are rewritten as
+   * letters by first appearance and graded on the shape, so BABA answers ABAB.
+   */
+  | {
+      ui: "form";
+      sections: number;
+      vocabulary: "letters" | FormSectionName[];
+      input: "label" | "order";
+      sectionBars?: number[];
+    }
+  /**
+   * Wave 5. A chord chart of `bars` bars, `perRow` to a line (a twelve-bar blues is 12 bars, 4 a row), one
+   * entry per bar: a Roman numeral (`entry: "rn"`, answered as `answer.rn`) or a chord symbol (`"symbol"`,
+   * answered as `answer.text` in code spelling, `C7`). `qualities` limits the palette (`["7"]` for an
+   * all-dominant blues; `["maj", "min", "7"]`). `given`: 1-based bars printed already filled (bar 1's I7).
+   * Graded bar by bar by degree (the root against the exercise key) and quality, never by string: `I7`,
+   * `i7` and `IV` differ by quality (`harmony.rn-case`, `id.quality`).
+   */
+  | {
+      ui: "bar-grid";
+      bars: number;
+      perRow: number;
+      entry: "rn" | "symbol";
+      qualities: ChordQuality[];
+      given?: number[];
+    }
+  /**
+   * Wave 5. Build a scale: choose its notes on a keyboard from `tonic` (`input: "keyboard"`, answered as
+   * `answer.midi` and graded by pitch class against the tonic) or tick its degrees on a pad of `palette`
+   * (`input: "degrees"`, answered as `answer.degrees`). Graded as a set against `correct.degrees` (the major
+   * and minor pentatonic, the blues scale, the three minors). `range` is the keyboard's span.
+   */
+  | {
+      ui: "scale-builder";
+      tonic: string;
+      input: "keyboard" | "degrees";
+      palette?: Degree[];
+      range?: [string, string];
+    }
   | { ui: "code"; starter: string; constraints?: AstConstraint[] }
   | { ui: "tap" }
   | { ui: "mic" }
@@ -235,6 +281,36 @@ export interface Answer {
   rn?: string[];
   midi?: number[];
   stages?: Partial<Record<DictationStage, string[]>>;
+  /** Wave 5. The `form` answer: one section label per section (`["verse", "chorus"]` or `["A", "A", "B", "A"]`). */
+  sections?: string[];
+}
+
+/** Wave 5. The section names a `form` answer may offer (contracts §6.3 item 2: the tag names). */
+export const FORM_SECTION_NAMES = [
+  "intro",
+  "verse",
+  "prechorus",
+  "chorus",
+  "bridge",
+  "solo",
+  "outro",
+] as const;
+export type FormSectionName = (typeof FORM_SECTION_NAMES)[number];
+
+/**
+ * Wave 5. A form sequence as letters by first appearance (contracts §6.3 item 4): `verse chorus verse
+ * chorus` → `ABAB`; a trailing digit tags a variant of the same section (`chorus2` is a chorus); single
+ * capital letters are kept as letters by first appearance too (`B A B` → `ABA`).
+ */
+export function formLetters(sections: readonly string[]): string {
+  const seen = new Map<string, string>();
+  let out = "";
+  for (const raw of sections) {
+    const type = raw.trim().toLowerCase().replace(/\d+$/, "");
+    if (!seen.has(type)) seen.set(type, String.fromCharCode(65 + seen.size));
+    out += seen.get(type);
+  }
+  return out;
 }
 /** expected → got → credit. */
 export type PartialMap = Record<string, Record<string, number>>;
@@ -323,9 +399,32 @@ export type Matcher =
   /** The only matcher allowed for `voicing()` output (contracts §6.7). */
   | { m: "pcset"; perOnset: boolean; bass: boolean; tracks?: TrackRef[] }
   | { m: "rubric"; rules: RubricRule[] }
+  /**
+   * Wave 5. "Match this sound" (A1.L01–L04): the sound controls of the learner's code against the hidden
+   * reference's, event by event on `track` (default: every learner track), each within its tolerance.
+   * Notes and rhythm are given and not compared. See `ControlTolerance`.
+   */
+  | { m: "controls"; controls: ControlTolerance[]; track?: TrackRef }
   /** Every member must pass; score = weighted mean. */
   | { m: "all"; of: Matcher[]; weights?: number[] };
 export type MatcherName = Matcher["m"];
+
+/**
+ * Wave 5. One sound control a `controls` matcher compares. `control` is the method as the learner writes it
+ * (`lpf`, `lpq`, `attack`, `release`, `room`, `roomsize`, `delaytime`, `delayfeedback`, `s`); content CI
+ * requires a toolbox row for it that the audibility harness marks `audible: true` and that is unlocked at
+ * the lesson (contracts §3.1 rule 7: only audible controls are taught). `scale`:
+ * - `linear`: |answer − target| ≤ `tol` (a level, a time in seconds: `release` within 0.1);
+ * - `log`: |log2(answer / target)| ≤ `tol` octaves (frequencies: `lpf` within half an octave is `tol: 0.5`);
+ * - `exact`: the same value (a wave name, `s`); `tol` is ignored.
+ * A control the answer leaves out takes Strudel's default (no filter = fully open), so a missing `.lpf()`
+ * is a miss, not an error.
+ */
+export interface ControlTolerance {
+  control: string;
+  scale: "linear" | "log" | "exact";
+  tol: number;
+}
 
 // --- AST constraints ----------------------------------------------------------------------------
 
@@ -821,6 +920,29 @@ export const CADENCE_OPTIONS: readonly Choice[] = [
   { id: "HC", label: "Half cadence (ends on V)" },
   { id: "PC", label: "Plagal (IV–I)" },
   { id: "DC", label: "Deceptive (V–vi)" },
+];
+
+// --- Wave 5 standard options ---------------------------------------------------------------------
+
+/** "Straight or swung" (U11.L07; the drill is `fam.rhy.swing`): an `identify` with these options, from U11.L07. */
+export const FEEL_OPTIONS: readonly Choice[] = [
+  { id: "straight", label: "Straight: even eighths" },
+  { id: "swung", label: "Swung: long–short eighths" },
+];
+/**
+ * "Which minor" (U10.L06–L08): natural, harmonic or melodic. Offer only the ones taught by then: natural from
+ * U10.L01, harmonic from U10.L06, melodic from U10.L08 (check 14 reads option labels).
+ */
+export const MINOR_OPTIONS: readonly Choice[] = [
+  { id: "minor", label: "Natural minor (♭3 ♭6 ♭7)" },
+  { id: "harmonic minor", label: "Harmonic minor (♭3 ♭6, raised 7)" },
+  { id: "melodic minor", label: "Melodic minor (♭3, raised 6 and 7)" },
+];
+/** Scale colours of U11 (ear steps that name a scale by its sound): ids are `ScaleMode`s. Offer each only from its lesson. */
+export const SCALE_COLOUR_OPTIONS: readonly Choice[] = [
+  { id: "major pentatonic", label: "Major pentatonic (1 2 3 5 6)" },
+  { id: "minor pentatonic", label: "Minor pentatonic (1 ♭3 4 5 ♭7)" },
+  { id: "blues", label: "Blues (1 ♭3 4 ♭5 5 ♭7)" },
 ];
 
 // --- tests --------------------------------------------------------------------------------------

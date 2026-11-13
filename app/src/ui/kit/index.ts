@@ -1,12 +1,16 @@
 // Oak's base UI kit: accessible, keyboard-first, themed through --oak-* tokens.
+
+export * from "./BarGrid.tsx";
 export * from "./Button.tsx";
 export * from "./basics.tsx";
 export * from "./Checklist.tsx";
+export * from "./ControlReadout.tsx";
 export * from "./Controls.tsx";
 export * from "./Dialog.tsx";
 export * from "./Field.tsx";
 export * from "./FileDropZone.tsx";
 export * from "./FineSlider.tsx";
+export * from "./LineChart.tsx";
 export * from "./MediaCard.tsx";
 export * from "./Meters.tsx";
 export {
@@ -21,7 +25,19 @@ export {
   semitoneLabel,
   versionLabel,
 } from "./model.ts";
+export {
+  type AxisScale,
+  axisFraction,
+  axisTicks,
+  axisValue,
+  barNumber,
+  barSpanText,
+  chartSummary,
+  unitLabel,
+} from "./model-w5.ts";
 export * from "./QueryState.tsx";
+export * from "./ScopeFrame.tsx";
+export * from "./SectionRibbon.tsx";
 export * from "./Tabs.tsx";
 export * from "./Toast.tsx";
 export * from "./Tooltip.tsx";

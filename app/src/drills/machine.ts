@@ -56,8 +56,11 @@ export interface ResumeState {
   records: DrillTrialRecord[];
 }
 
-/** One step of a staged trial (chord dictation: the bass, the quality, then the numerals). */
-export type TrialStep = "bass" | "quality" | "rn";
+/**
+ * One step of a staged trial (chord dictation: the bass, the quality, then the numerals; a bass-line dictation:
+ * the roots, then the line).
+ */
+export type TrialStep = "bass" | "quality" | "rn" | "line";
 export interface StepRecord {
   answer: Answer | null;
   credit: number;
@@ -122,8 +125,22 @@ export interface DrillInput {
 
 export type Stage = "cue" | "count-in" | "listen" | "respond" | "sing" | "resolution" | null;
 /** After the answer: again, the answer, yours then it, the key, the way home; and for chords the bass alone,
- * the chords broken (arpeggiated), and the passage in its key. */
-export type Audition = "again" | "answer" | "compare" | "cue" | "resolve" | "bass" | "arpeggio" | "context";
+ * the chords broken (arpeggiated), and the passage in its key. Wave 5: the thing alone (the note, the hats, the
+ * bass with the kick, the tune), the other version (the other feel, the chord without its seventh), the scale, and
+ * one part of the passage (`part`: a section, a bar). */
+export type Audition =
+  | "again"
+  | "answer"
+  | "compare"
+  | "cue"
+  | "resolve"
+  | "bass"
+  | "arpeggio"
+  | "context"
+  | "alone"
+  | "other"
+  | "scale"
+  | "part";
 
 export type DrillEvent =
   | { type: "PRESENTED" }
@@ -151,7 +168,7 @@ export type DrillEvent =
   | { type: "STEP_REVEAL" }
   /** Sing the part before picking it (the bass line); never in Quiet mode. */
   | { type: "SING_PART" }
-  | { type: "AUDITION"; what: Audition }
+  | { type: "AUDITION"; what: Audition; part?: number }
   /** While answering a bass trial or a staged bass step: the bass line by itself (counts as a replay). */
   | { type: "BASS_ALONE" }
   | { type: "AUDITION_DONE" }
@@ -182,6 +199,8 @@ export interface DrillContext {
   sungPart: SungPart | null;
   micError: string | null;
   audition: Audition | null;
+  /** The section or bar an `audition: "part"` plays (0-based section, 1-based bar). */
+  auditionPart: number | null;
   finish: DrillFinish | null;
   error: string | null;
 }
@@ -195,6 +214,7 @@ export interface AuditionInput {
   trial: Trial;
   what: Audition;
   captured: DrillContext["captured"];
+  part?: number | null;
 }
 export interface ResolveInput {
   trial: Trial;
@@ -269,6 +289,8 @@ export function stagesAnswer(steps: StepsState, last: Answer | null): NonNullabl
   const listOf = (step: TrialStep, a: Answer | null | undefined): string[] =>
     ((step === "bass" ? a?.degrees : step === "quality" ? a?.qualities : a?.rn) ?? []).map(String);
   for (const step of steps.order) {
+    // The written line is the answer itself (`answer.text`), not a dictation stage.
+    if (step === "line") continue;
     const a = step === steps.order[steps.order.length - 1] ? last : steps.results[step]?.answer;
     out[step] = listOf(step, a);
   }
@@ -466,6 +488,7 @@ export const drillMachine = setup({
       sungPart: null,
       micError: null,
       audition: null,
+      auditionPart: null,
       finish: null,
       error: null,
     };
@@ -532,6 +555,7 @@ export const drillMachine = setup({
             sungPart: null,
             micError: null,
             audition: null,
+            auditionPart: null,
           };
         }),
         { type: "persist", params: ({ context }) => ({ ctx: context }) },
@@ -719,7 +743,13 @@ export const drillMachine = setup({
         },
         idle: {
           on: {
-            AUDITION: { target: "auditioning", actions: assign({ audition: ({ event }) => event.what }) },
+            AUDITION: {
+              target: "auditioning",
+              actions: assign({
+                audition: ({ event }) => event.what,
+                auditionPart: ({ event }) => event.part ?? null,
+              }),
+            },
           },
         },
         auditioning: {
@@ -729,14 +759,18 @@ export const drillMachine = setup({
               trial: (context.current as PlannedTrial).trial,
               what: context.audition ?? "again",
               captured: context.captured,
+              part: context.auditionPart,
             }),
           },
           on: {
-            AUDITION_DONE: { target: "idle", actions: assign({ audition: null }) },
+            AUDITION_DONE: { target: "idle", actions: assign({ audition: null, auditionPart: null }) },
             AUDITION: {
               target: "auditioning",
               reenter: true,
-              actions: assign({ audition: ({ event }) => event.what }),
+              actions: assign({
+                audition: ({ event }) => event.what,
+                auditionPart: ({ event }) => event.part ?? null,
+              }),
             },
           },
         },

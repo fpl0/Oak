@@ -23,6 +23,8 @@ export interface SessionsDeps {
   capstoneSessions?: CapstoneSessionsService;
   /** Whether the tutor is switched off in Settings (then the Coda never offers a listening note). */
   tutorOff: () => boolean;
+  /** Wave 5 (c10): what a gym day's Coda shows (`GymService.summary`); absent: no gym card. */
+  gymSummary?: (sessionId: string) => SessionSummary["gym"];
 }
 
 /** Stored as `sessions.plan_json` at start: the planned warm-up and all review due then. */
@@ -31,6 +33,9 @@ export interface SessionStartRecord {
   dueSec: number;
   warmupItems: number;
 }
+
+/** How long after its start a session that crossed the rollover stays the open one (sessions run 15–25 min). */
+const ROLLOVER_CARRY_MS = 3 * 60 * 60 * 1000;
 
 export class SessionsService {
   readonly time: LearnerTime;
@@ -47,8 +52,19 @@ export class SessionsService {
     return s;
   }
 
+  /**
+   * The session open now: today's, or one started on the previous learner day that crossed the 04:00 rollover
+   * a short while ago (a 03:40 start reloaded at 04:10 resumes, wave5 gate). A session left open yesterday and
+   * not touched for hours does not hold the new day.
+   */
   openToday(): Session | null {
-    return this.ctx.repos.sessions.openOn(this.time.day());
+    const day = this.time.day();
+    const own = this.ctx.repos.sessions.openOn(day);
+    if (own !== null) return own;
+    const prev = this.ctx.repos.sessions.openOn(addDays(day, -1));
+    if (prev === null) return null;
+    const age = this.time.now().getTime() - Date.parse(prev.startedAt);
+    return age >= 0 && age <= ROLLOVER_CARRY_MS ? prev : null;
   }
 
   /**
@@ -233,6 +249,7 @@ export class SessionsService {
         toleranceChange,
         listeningNote: listening,
         teaser,
+        ...(s.kind === "gym" && this.d.gymSummary !== undefined ? { gym: this.d.gymSummary(id) } : {}),
       };
       this.ctx.repos.sessions.end(id, now, minutes, summary);
       return summary;

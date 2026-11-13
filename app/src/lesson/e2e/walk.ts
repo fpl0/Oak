@@ -22,6 +22,7 @@ export interface TestCaseLike {
 export interface PartLike {
   kind: string;
   id: string;
+  prompt?: string;
   answer?: {
     ui?: string;
     mode?: string;
@@ -98,9 +99,11 @@ function answerLeaks(part: PartLike, trial: Record<string, unknown> | null): str
   const ref = part.reference?.solutions[0] ?? passingCode(part);
   if (ref) {
     const starter = (part.code?.starter ?? "").replace(/[⟪⟫]/g, "");
+    // A pattern the prompt itself names (U08.L05 S5: "`.s("fingerbass")` or `.s("sawtooth")`") is the task.
+    const prompt = part.prompt ?? "";
     for (const m of ref.matchAll(/"([^"]{6,})"/g)) {
       const q = m[1] as string;
-      if (!starter.includes(q)) out.push(q);
+      if (!starter.includes(q) && !prompt.includes(q)) out.push(q);
     }
   }
   return out;
@@ -320,6 +323,10 @@ export interface WalkOptions {
   preview?: boolean;
   /** Walks from this step on (the earlier ones are already done). */
   from?: string;
+  /** Stops when this step is on screen, before playing it (the caller plays it its own way). */
+  until?: string;
+  /** Played inside its own session (started from Today): it ends on the session's Coda, not its own end. */
+  inSession?: boolean;
 }
 
 /** Answers a single answer-kind part through its widget; `false` when the widget cannot enter this answer. */
@@ -374,6 +381,16 @@ export async function answerWidget(
     }
     return true;
   }
+  if (ui === "form" || ui === "bar-grid" || ui === "scale-builder") return answerWave5(part, response, step);
+  if (ui === "bar-buttons") {
+    // "Which bar?" (U09.L01 S6, U09.L05 S6, U11.L08 S5): the bar's own button.
+    if (a.number === undefined) return false;
+    const bar = step.getByRole("radio", { name: `Bar ${a.number}`, exact: true });
+    if ((await bar.count()) === 0) return false;
+    await bar.first().click();
+    await expect(bar.first()).toHaveAttribute("aria-checked", "true");
+    return true;
+  }
   if (ui === "choice" && part.answer?.multi) {
     // Several boxes ticked (U06.L08 S6 "which bars hold two chords"): exactly these, the others cleared.
     const want = new Set(a.choice ?? []);
@@ -398,6 +415,97 @@ export async function answerWidget(
       .fill((a.text ?? []).join(" "));
   } else throw new Error(`walker: no way to answer ${ui}`);
   return true;
+}
+
+/**
+ * Wave 5 (wave5.md §11): the form strip (a label per section block), the 12-bar grid (a numeral or a chord per
+ * bar) and the scale builder (degrees on the pad, or keys). Each is entered through its widget (the answers
+ * engineer's `[data-form-block]` + `[data-form-option]`, `[data-bar]` + `[data-chord]`, `[data-degree]` or
+ * `[data-midi]` toggles, 0-based blocks and bars) when the widget offers every value; `false` when it does not
+ * (the registry has no widget for the kind yet: the walker then answers through the player's own grading path,
+ * see `answerOrSubmit`).
+ */
+async function answerWave5(
+  part: PartLike,
+  response: Record<string, unknown>,
+  step: Locator,
+): Promise<boolean> {
+  const a = (response.answer ?? {}) as {
+    sections?: string[];
+    rn?: string[];
+    text?: string[];
+    degrees?: string[];
+    midi?: number[];
+  };
+  const ui = part.answer?.ui;
+  const has = async (sel: string) => (await step.locator(sel).count()) > 0;
+  if (ui === "form") {
+    const labels = a.sections ?? [];
+    if (!(await has('[data-form-block="0"]'))) return false;
+    for (const l of labels) if (!(await has(`[data-form-option="${l}"]`))) return false;
+    for (const [i, l] of labels.entries()) {
+      await step.locator(`[data-form-block="${i}"]`).first().click();
+      await step.locator(`[data-form-option="${l}"]`).first().click();
+    }
+    return true;
+  }
+  if (ui === "bar-grid") {
+    const values = a.rn ?? a.text ?? [];
+    if (!(await has('[data-bar="0"]'))) return false;
+    for (const [i, v] of values.entries()) {
+      if (v === "") continue;
+      const bar = step.locator(`[data-bar="${i}"]`).first();
+      // A given bar is printed filled (bar 1's I7) and cannot be changed.
+      if ((await bar.getAttribute("data-given")) !== null) continue;
+      await bar.click();
+      const chord = step.locator(`[data-chord="${v}"]`).first();
+      if ((await chord.count()) === 0) {
+        // A palette of several qualities (U11.CP: triads and sevenths) offers the key's own first: the quality
+        // control turns the buttons into sevenths, as a learner would.
+        const qualities = step
+          .locator('[aria-label="Quality of the next chord"]')
+          .locator('button, [role="radio"]');
+        for (let q = 0; q < (await qualities.count()) && (await chord.count()) === 0; q++)
+          await qualities.nth(q).click();
+      }
+      if ((await chord.count()) === 0) return false;
+      await chord.click();
+    }
+    return true;
+  }
+  // scale-builder: degrees on the pad, or keys on the keyboard, toggled until exactly these are in.
+  const attr = a.midi ? "data-midi" : "data-degree";
+  const want = new Set((a.midi ?? a.degrees ?? []).map(String));
+  for (const v of want) if (!(await has(`[${attr}="${v}"]`))) return false;
+  const buttons = step.locator(`[${attr}]`);
+  for (let i = 0; i < (await buttons.count()); i++) {
+    const b = buttons.nth(i);
+    const on = (await b.getAttribute("aria-pressed")) === "true";
+    if (on !== want.has((await b.getAttribute(attr)) ?? "")) await b.click();
+  }
+  return true;
+}
+
+/** A Wave 5 answer kind (form, bar-grid, scale-builder) whose widget may not exist yet. */
+const WAVE5_UIS = new Set(["form", "bar-grid", "scale-builder"]);
+
+/**
+ * Enters a response through its widget, or — for a Wave 5 kind the answers registry does not draw yet, and for a
+ * tap step, whose taps need real timing — grades and submits it through the player's own path. Returns the
+ * submitted result for the latter (`null` when the widget took it: the caller presses Check).
+ */
+export async function answerOrSubmit(
+  page: Page,
+  part: PartLike,
+  response: Record<string, unknown>,
+  scope: Locator = page.getByTestId("lesson-step"),
+): Promise<"widget" | "submitted" | "none"> {
+  if (part.kind !== "tap" && (await answerWidget(page, part, response, scope))) return "widget";
+  if (part.kind === "tap" || WAVE5_UIS.has(part.answer?.ui ?? "")) {
+    await submit(page, response);
+    return "submitted";
+  }
+  return "none";
 }
 
 /**
@@ -464,6 +572,26 @@ export async function wrongFor(page: Page, part: PartLike, expected: Record<stri
       .evaluateAll((els) => els.map((e) => e.getAttribute("data-rn") ?? ""));
     return { answer: { rn: [shown.find((r) => r !== right[0]) as string, ...right.slice(1)] } };
   }
+  if (ui === "form") {
+    // Two sections swapped (A B A B → B A A B …), else the first relabelled.
+    const right = [...((expected.sections as string[] | undefined) ?? [])];
+    const j = right.findIndex((s) => s !== right[0]);
+    if (j > 0) [right[0], right[j]] = [right[j] as string, right[0] as string];
+    else right[0] = right[0] === "A" ? "B" : "A";
+    return { answer: { sections: right } };
+  }
+  if (ui === "bar-grid") {
+    const key = expected.rn ? "rn" : "text";
+    const right = [...((expected[key] as string[] | undefined) ?? [])];
+    const j = right.findIndex((s) => s !== "" && s !== right.find((x) => x !== ""));
+    const i = right.findIndex((s) => s !== "");
+    if (i >= 0 && j >= 0) [right[i], right[j]] = [right[j] as string, right[i] as string];
+    return { answer: { [key]: right } };
+  }
+  if (ui === "scale-builder") {
+    if (Array.isArray(expected.midi)) return { answer: { midi: (expected.midi as number[]).slice(1) } };
+    return { answer: { degrees: ((expected.degrees as string[] | undefined) ?? []).slice(1) } };
+  }
   if (ui === "text") {
     const right = expected.text as string[];
     const first = right[0] ?? "C";
@@ -480,6 +608,10 @@ export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): P
   for (const step of def.steps) {
     if (!started && step.id !== o.from) continue;
     started = true;
+    if (step.id === o.until) {
+      await stepIs(page, step.id);
+      return seen;
+    }
     if (step.optional) continue;
     if (step.gateCheck) {
       // U05.L08's second chance shows only while the voicing gate is unmet (the seed may have passed it).
@@ -624,42 +756,56 @@ export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): P
       const expected = (await drawnAnswer(page)) as Record<string, unknown>;
       expect(expected, `${label}: a drawn trial`).not.toBeNull();
       const wrong = await wrongFor(page, ex, expected);
-      await answerWidget(page, ex, wrong);
-      await check(page);
+      if ((await answerOrSubmit(page, ex, wrong)) === "widget") await check(page);
       await expectHonestFeedback(page, answerLeaks(ex, expected), `${label} wrong`);
-      await answerWidget(page, ex, { answer: expected });
-      await check(page);
+      if ((await answerOrSubmit(page, ex, { answer: expected })) === "widget") await check(page);
       await expectPass(page, label);
       await next(page);
       continue;
     }
     const pass = ex.tests.find((t) => t.expect === "pass");
     expect(pass, `${label}: a passing test`).toBeDefined();
-    // The lesson's own pinned mistake: the first failing test the widget can enter.
+    // The lesson's own pinned mistake: the first failing test the widget can enter (Wave 5 kinds without a widget
+    // yet, and taps, through the player's own grading path).
     for (const wrong of ex.tests.filter((t) => t.expect === "fail")) {
-      if (!(await answerWidget(page, ex, wrong.response))) continue;
-      await check(page);
+      const how = await answerOrSubmit(page, ex, wrong.response);
+      if (how === "none") continue;
+      if (how === "widget") await check(page);
       await expectHonestFeedback(page, answerLeaks(ex, null), `${label} wrong (${wrong.name})`);
       await expectPinned(page, wrong, label);
       break;
     }
-    expect(await answerWidget(page, ex, (pass as TestCaseLike).response), `${label}: the right answer`).toBe(
-      true,
-    );
-    await check(page);
+    const how = await answerOrSubmit(page, ex, (pass as TestCaseLike).response);
+    expect(how, `${label}: the right answer`).not.toBe("none");
+    if (how === "submitted")
+      console.log(`[answer] ${label}: through the player's grading path (${ex.answer?.ui ?? ex.kind})`);
+    if (how === "widget") await check(page);
     await expectPass(page, label);
     await next(page);
   }
-  await expect(page.getByTestId("lesson-complete"), `${def.id}: complete`).toBeVisible({ timeout: 30_000 });
+  if (o.inSession) {
+    // Inside its own session the lesson's end is the session's Coda (its Make done, the Coda follows).
+    await page.waitForURL(/\/session\/coda$/, { timeout: 30_000 });
+  } else
+    await expect(page.getByTestId("lesson-complete"), `${def.id}: complete`).toBeVisible({ timeout: 30_000 });
+  if (o.inSession) return checkCompleted(page, def.id, seen);
+  // What opens next is named by title, never by ID ("Blues checkpoint", not "U11.CP").
+  await expect(page.getByTestId("lesson-complete"), `${def.id}: no lesson IDs`).not.toContainText(
+    /\b(U\d\d|A\d)\.(L\d\d|CP)\b/,
+  );
   if (o.preview) return seen;
+  return checkCompleted(page, def.id, seen);
+}
+
+async function checkCompleted(page: Page, lessonId: string, seen: string[]): Promise<string[]> {
   const prog = await api<{ lessons: { lessonId: string; status: string }[] }>(
     page,
     "GET",
     "/lessons/progress",
   );
   expect(
-    prog.body?.lessons.find((l) => l.lessonId === def.id)?.status,
-    `${def.id} completed on the server`,
+    prog.body?.lessons.find((l) => l.lessonId === lessonId)?.status,
+    `${lessonId} completed on the server`,
   ).toBe("completed");
   return seen;
 }

@@ -31,6 +31,12 @@ export interface EndpointDef {
   /** Destructive: needs `X-Oak-Confirm: <nonce>` from `POST /api/confirm` for this action (contracts §11.6). */
   confirm?: D.ConfirmAction;
   /**
+   * Wave 5: destructive only when it replaces something (re-recording an album version, carry-over c11). The client
+   * sends `X-Oak-Confirm` when the caller passes a nonce; the server answers 428 `confirm_required` when there is
+   * something to replace and no valid nonce for this action and `<id>/v<v>`, and needs none otherwise.
+   */
+  confirmIf?: D.ConfirmAction;
+  /**
    * Media GET, the target of an `<audio src>`: exempt from `X-Oak: 1`, must carry
    * `Sec-Fetch-Site: same-origin` instead (contracts §11.1 rule 4). Supports Range.
    */
@@ -311,6 +317,7 @@ export const contract = {
     query: z.strictObject({ durationS: z.string().optional() }),
     body: "binary",
     res: D.AlbumTrackVersionSchema,
+    confirmIf: "album.audio.replace",
   },
   "album.getAudio": {
     method: "GET",
@@ -691,7 +698,32 @@ export const contract = {
   "gym.plan": { method: "GET", path: "/gym", res: D.GymPlanSchema },
   /** The U05.L07 voice-leading gate that unlocks `voicing()`, `rhodes` and `organ`. */
   "gates.voicing": { method: "GET", path: "/gates/voicing", res: D.VoicingGateSchema },
+
+  // --- Wave 5 additions (docs/design/wave5.md §5). Until the server engineer builds a handler, each answers
+  // 501 `not_implemented` (`WAVE5_ENDPOINTS`; routes.test.ts keeps the list of those still pending). ---
+  /** The optional side lessons A1.L01–L04: state, and the one Today would offer. */
+  "sideLessons.list": { method: "GET", path: "/side-lessons", res: D.SideLessonsSchema },
+  /** The repertoire pool of ladder levels L5 and L6, with what the learner has passed. */
+  "ladder.songs": { method: "GET", path: "/ladder/songs", res: list(D.LadderSongSchema) },
+  /** Confirm an imported transcription version as the learner's own after a strict lint (carry-over c2). */
+  "transcriptions.confirmVersion": {
+    method: "POST",
+    path: "/transcriptions/:id/versions/:v/confirm",
+    params: p("id", "v"),
+    body: D.TranscriptionVersionConfirmSchema,
+    res: D.TranscriptionVersionSchema,
+  },
 } as const satisfies Record<string, EndpointDef>;
+
+/**
+ * The Wave 5 endpoints of docs/design/wave5.md §5. Each answers a typed 501 until built; `routes.test.ts` lists the
+ * ones still pending (`WAVE5_PENDING`), and the server engineer removes a name there as each lands.
+ */
+export const WAVE5_ENDPOINTS = [
+  "sideLessons.list",
+  "ladder.songs",
+  "transcriptions.confirmVersion",
+] as const satisfies readonly (keyof typeof contract)[];
 
 /**
  * The Wave 4 endpoints of docs/design/wave4.md §5. Each answers a typed 501 until built; `routes.test.ts`

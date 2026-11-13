@@ -84,6 +84,9 @@ test("every rule name of the content contract has an analyzer", () => {
     "chord-qualities",
     "chord-inversions",
     "non-chord-tones",
+    // Wave 5 (docs/design/wave5.md §3.2): `bass-line` built on the bass view; `notates` a typed stub.
+    "bass-line",
+    "notates",
   ];
   expect(Object.keys(RULES).sort()).toEqual([...names].sort());
   expect(Object.keys(CUSTOM_RULES).sort()).toEqual(["allowed-tensions", "ii-v-chain", "walking-bass"]);

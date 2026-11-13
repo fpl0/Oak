@@ -45,8 +45,14 @@ const LINES = code(bassNotes("g2 b2 d3 f3"));
 const PAGE = "<[c2 e2 g2 e2] [f2 a2 c3 a2]>";
 const PAGE_STARTER = "<[c2 c2 c2 c2] [c2 c2 c2 c2]>";
 
-/** The Make's starter: the right notes, an octave too high (C3–G3), in the Band's chords' own register. */
-const MAKE_STARTER = code(bassNotes("<[c3 ~ g3 ~] [f3 ~ c3 ~]>"));
+/**
+ * The Make's starter: roots and 5ths under the four-chord loop, an octave too high (C3–A3), in the Band's
+ * chords' own register. Learner review: under the two-chord vamp the Make ended on two bars of C and F; under
+ * the four-chord loop the same task ends on a groove like the hook's.
+ */
+const MAKE_STARTER = code(bassNotes("<[c3 ~ g3 ~] [g3 ~ d3 ~] [a3 ~ e3 ~] [f3 ~ c3 ~]>"));
+/** The Band's drums and the four-chord loop, C G Am F, for the Make. */
+const AXIS_BAND = { band: "band.axis-4bar", tracks: ["drums", "chords"] } as const;
 
 /** The Band's drums and chords (C, then F); the learner writes the bass. */
 const VAMP = { band: "band.two-chord-vamp", tracks: ["drums", "chords"] } as const;
@@ -330,14 +336,14 @@ export default defineLesson({
       kind: "make",
       title: "A bass line of your own",
       minutes: 2.75,
-      ui: { panels: BASS_KEYS, band: VAMP },
+      ui: { panels: BASS_KEYS, band: AXIS_BAND },
       exercise: {
         kind: "code-make",
         id: "bass-of-your-own",
         version: 1,
         role: "practice",
         prompt:
-          "The band plays drums and chords: C, then F, a bar each. Write the bass line under them on `upright` or `ebass`, the root on beat 1 of each bar and anything you like between. Keep it on the bass clef, at `c3` or below.",
+          "The band plays drums and the four-chord loop: C, G, Am, F, a bar each. Write the bass line under them on `upright` or `ebass`, the root on beat 1 of each bar and anything you like between. Keep it on the bass clef, at `c3` or below.",
         skills: [{ skill: "N04", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [2, 8],
@@ -386,21 +392,21 @@ export default defineLesson({
           },
           {
             name: "minimal: the starter an octave down",
-            response: { code: code(bassNotes("<[c2 ~ g2 ~] [f2 ~ c2 ~]>")) },
+            response: { code: code(bassNotes("<[c2 ~ g2 ~] [g2 ~ d2 ~] [a2 ~ e2 ~] [f2 ~ c2 ~]>")) },
             expect: "pass",
           },
           {
-            name: "beyond the brief: four bars, steps into each root, the electric bass",
+            name: "beyond the brief: steps into each root, the electric bass",
             response: {
               code: code(
-                bassNotes("<[c2 ~ c2 e2] [f2 ~ f2 a2] [c2 g1 c2 e2] [f2 c2 f2 g2]>", "ebass", ".room(.2)"),
+                bassNotes("<[c2 ~ c2 e2] [g1 ~ g1 b1] [a1 ~ a1 g1] [f1 c2 f2 g2]>", "ebass", ".room(.2)"),
               ),
             },
             expect: "pass",
           },
           {
             name: "one note climbs above c3",
-            response: { code: code(bassNotes("<[c2 ~ g2 ~] [f2 ~ c3 a3]>")) },
+            response: { code: code(bassNotes("<[c2 ~ g2 ~] [g2 ~ d2 ~] [a2 ~ e2 ~] [f2 ~ c3 a3]>")) },
             expect: "fail",
             feedback: ["rubric.unmet"],
           },

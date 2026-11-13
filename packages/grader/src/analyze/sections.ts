@@ -7,7 +7,7 @@ import type { SectionInfo } from "../types.ts";
  * The one AST reading of sections lives with the lint (`sectionsFromAst` of `@oak/grader`); the matcher
  * library resolves section references on its result.
  */
-export { sectionsFromAst } from "../lint/ast.ts";
+export { arrangedTotal, sectionsFromAst } from "../lint/ast.ts";
 
 /** `melChorus2` → { tag: "chorus2", label: "chorus" }; `bassVerse` → verse; `silence` → null. */
 export function sectionNameOf(ident: string): { tag: string; label: string } | null {

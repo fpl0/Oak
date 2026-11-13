@@ -4,7 +4,7 @@
 // request and the realm is healed after it.
 import type { Diagnostic, LintDiagnostic, LintResult, MeterId } from "@oak/content-kit";
 import { cpsToBpm } from "@oak/theory";
-import { sectionsFromAst } from "../lint/ast.ts";
+import { arrangedTotal, sectionsFromAst } from "../lint/ast.ts";
 import { checkChord, splitChord } from "../lint/chords.ts";
 import { lintOak } from "../lint/oak.ts";
 import { sortOakEvents } from "../normalize/hap.ts";
@@ -86,7 +86,7 @@ async function evaluateOnce(code: string, opts: EvalOptions): Promise<EvalResult
     }
   }
   const structure = sectionsFromAst(code);
-  const astTotal = structure && "totalBars" in structure ? structure.totalBars : null;
+  const astTotal = arrangedTotal(structure);
 
   const logs: LogLine[] = [];
   restoreRealm();

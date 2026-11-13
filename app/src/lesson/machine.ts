@@ -101,6 +101,11 @@ export interface LessonContext extends LessonInput {
   results: Record<string, GradeResult | null>;
   done: Record<string, boolean>;
   disputed: Record<string, boolean>;
+  /**
+   * Wave 5: steps whose answer widget the app cannot draw yet (a kind the answers registry has no widget for): the
+   * player says so and Continue opens, so a learner is never stuck on a step they cannot answer.
+   */
+  unavailable: Record<string, boolean>;
   code: Record<string, string>;
   /** Code applied from a tutor card and not edited by hand since (contracts §10.7). */
   tutorAssisted: Record<string, boolean>;
@@ -138,6 +143,8 @@ export type LessonInternalEvent =
   | { type: "DONE"; stepId: string }
   /** "Report a grading problem" was sent: Continue opens at once (contracts §11.8). */
   | { type: "DISPUTED"; stepId: string }
+  /** The step's answer widget is not available in this app yet: Continue opens (it never counts as a pass). */
+  | { type: "UNAVAILABLE"; stepId: string }
   | { type: "BACK" }
   | { type: "FORWARD" }
   /** "Know this already? Try the check." (contracts §9.5): jump to the test-out step. */
@@ -158,6 +165,7 @@ export function progressOf(c: LessonContext, stepId: string): StepProgress {
     result: c.results[stepId] ?? null,
     done: c.done[stepId] === true || c.testedOut.includes(stepId),
     disputed: c.disputed[stepId] === true,
+    unavailable: c.unavailable[stepId] === true,
   };
 }
 
@@ -266,6 +274,7 @@ export const lessonMachine = setup({
     results: {},
     done: {},
     disputed: {},
+    unavailable: {},
     code: {},
     tutorAssisted: {},
     testedOut: [],
@@ -353,6 +362,12 @@ export const lessonMachine = setup({
         DISPUTED: {
           actions: assign({
             disputed: ({ context, event }) => ({ ...context.disputed, [event.stepId]: true }),
+          }),
+        },
+        UNAVAILABLE: {
+          guard: ({ context, event }) => context.unavailable[event.stepId] !== true,
+          actions: assign({
+            unavailable: ({ context, event }) => ({ ...context.unavailable, [event.stepId]: true }),
           }),
         },
         GRADED: {
@@ -651,7 +666,8 @@ export function nextUnfinished(c: LessonContext): string {
     const s = c.steps[i];
     if (!s) continue;
     const p = progressOf(c, s.id);
-    if (!(p.done || p.disputed || p.state?.passed || p.result?.status === "pass")) return s.id;
+    if (!(p.done || p.disputed || p.unavailable || p.state?.passed || p.result?.status === "pass"))
+      return s.id;
   }
   return c.steps[c.index]?.id ?? c.steps[0]?.id ?? "S1";
 }

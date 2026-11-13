@@ -622,7 +622,13 @@ export function levelAfterSet(
   return { level: state.level, promoDay: summary.meanCredit >= 0.9 ? state.promoDay : null, change: null };
 }
 
-/** The highest level whose categories are all open (and whose gate lessons are completed). */
+/**
+ * The highest level a family may be played at (contracts §7.3 "Level and category gates"): a level opens at
+ * its gate (its gate lessons completed) and is filled from its open categories, so it needs at least one of
+ * the categories it adds to be open (a level that adds none only changes parameters); and a family is promoted
+ * past a level only when every category of that level is open. So `fam.key.scale-spell` plays level 3 from
+ * U10.L01 with natural minor alone, and moves on to level 4 only once U10.L08 has opened melodic minor.
+ */
 export function maxOpenLevel(
   def: FamilyDef,
   openCategories: readonly string[],
@@ -631,10 +637,14 @@ export function maxOpenLevel(
   let max = 1;
   for (let i = 0; i < def.levels.length; i++) {
     const l = def.levels[i] as LevelParams;
+    const prev = i > 0 ? (def.levels[i - 1] as LevelParams).categories : [];
     const gate = def.unlock.levelGates?.[i + 1];
     const gates = gate === undefined ? [] : Array.isArray(gate) ? gate : [gate];
     const gateOk = !completedLessons || gates.every((g) => completedLessons.includes(g));
-    if (!gateOk || !l.categories.every((c) => openCategories.includes(c))) break;
+    const pastPrev = prev.every((c) => openCategories.includes(c));
+    const added = l.categories.filter((c) => !prev.includes(c));
+    const filled = added.length === 0 || added.some((c) => openCategories.includes(c));
+    if (!gateOk || !pastPrev || !filled) break;
     max = i + 1;
   }
   return max;

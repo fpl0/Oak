@@ -9,7 +9,8 @@
 Written at the Wave 1 final gate (2026-11-11). §1–§10 are the Foundation API; §11 and §12 record what the
 code changed since. When they disagree, §12 beats §11 beats §4, and the code beats all of them. **Wave 2** is
 recorded in §13–§15 and in `docs/design/wave2.md` (its "Wave 2 state" section is the current summary), **Wave 3**
-in §16–§18 and `docs/design/wave3.md` §0, **Wave 4** in §19–§20 and `docs/design/wave4.md` "Wave 4 state"; the "Known gaps" below
+in §16–§18 and `docs/design/wave3.md` §0, **Wave 4** in §19–§20 and `docs/design/wave4.md` "Wave 4 state", **Wave 5** in §21 and
+`docs/design/wave5.md` §0 "Wave 5 state"; the "Known gaps" below
 are Wave 1's, most of them closed by Wave 2.
 
 **What Wave 2 can rely on** (implemented, tested by execution, green in `bun run check` and `bun run e2e`):
@@ -162,8 +163,9 @@ An arrow means "may import". Test files may import any package for verification;
 content-kit                      (zod only)
   ├─ api                         (content-kit)
   ├─ theory                      (content-kit; tonal)
-  │    ├─ grader                 (content-kit, theory; @strudel/core mini tonal transpiler, acorn)
   │    ├─ notation               (content-kit, theory)
+  │    ├─ grader                 (content-kit, theory, notation [Wave 5: the `notates` rule]; @strudel/core mini
+  │    │                          tonal transpiler, acorn)
   │    ├─ pitch                  (content-kit, theory; pitchy)
   │    │    ├─ drills            (content-kit, theory, pitch)
   │    │    └─ audio             (content-kit, theory, pitch; signalsmith-stretch)        browser only
@@ -411,7 +413,7 @@ function barSeconds(bpm: number, meter: MeterId | MeterSpec): number;
 ### 4.4 `@oak/grader`
 
 **Purpose.** The shared headless grader: the Strudel realm (evalScope, `.p` collector, voicing shim, visual stubs, fuel, lockdown, healing), the lint (`lintOak`), normalization to `NEvent`, constraints, matchers, rubric rules and analysis, the feedback catalog, the worker protocol, and three hosts behind `GraderHost`.
-**Owner paths.** `packages/grader/**`. **Spike.** `spikes/s1-grader` (`runtime.ts`, `lint.ts`, `protocol.ts`, `host.ts`, `worker.ts`, `proc.ts`, `watchdog.ts`, and its four test files, which carry the facts). **May import.** `@oak/content-kit`, `@oak/theory`, `@strudel/core|mini|tonal|transpiler`, `acorn`.
+**Owner paths.** `packages/grader/**`. **Spike.** `spikes/s1-grader` (`runtime.ts`, `lint.ts`, `protocol.ts`, `host.ts`, `worker.ts`, `proc.ts`, `watchdog.ts`, and its four test files, which carry the facts). **May import.** `@oak/content-kit`, `@oak/theory`, `@oak/notation` (Wave 5: the `notates` rule engraves the lead sheet with `approximate = false`), `@strudel/core|mini|tonal|transpiler`, `acorn`.
 
 Entry points: `@oak/grader` (isomorphic), `@oak/grader/host/browser` (`src/host/browser.dom.ts`), `@oak/grader/host/bun` (`src/host/bun.bun.ts`), `@oak/grader/worker` (`src/worker.ts`, the entry of both Worker kinds), `@oak/grader/proc` (`src/proc.bun.ts`, the subprocess entry), `@oak/grader/testing` (implemented; keep it free of other Oak imports).
 
@@ -1335,3 +1337,141 @@ The five Wave 4 reviews (journey, robustness, studio, surfaces, teaching) and th
 - **Content harness:** an exercise's own `pickup` is passed to the grader before the lesson's.
 - **Browser suites:** `review-studio` (app/src/album/e2e, 5223/8823), `e2e/review` W4 specs (5221/8821),
   `app/src/ui/review/e2e` W4 specs (5222/8822).
+
+## 21. Wave 5 (bass lines, form, minor, pentatonic and blues, through U11)
+
+`docs/design/wave5.md` is the Wave 5 seam document (ownership, the package seams of §3 with their signatures, the app
+seams of §4, the three endpoints and the additive shapes of §5, the dev seeds of §6, the content kinds of §11); its
+§0 "Wave 5 state" is the current summary. This section records the cross-package API as built after integration. The
+code beats this list.
+
+- **Dependency direction (closer):** `@oak/grader` may import `@oak/notation` (`rubric/wave5-rules.ts` `notates`
+  engraves through `buildScore` / `leadSheetInput`; notation never imports the grader). `types/import-boundaries.test.ts`
+  allows it; §2 above is updated.
+- **`@oak/theory`** (wave5.md §3.1, all built): minor forms and keys (`minorKey`, `minorFormOf`, `minorDegrees`,
+  `minorScaleNotes`, `keyTwins`, `minorKeyChords`, `schemaChords`), pentatonic and blues (`pentatonicKey`, `bluesKey`,
+  `scaleDegrees`, `BLUE_NOTES`, `blueNoteOf`, `spellBlueNote`), dominant sevenths (`isDominantSeventhSymbol`,
+  `isDominantSeventhPcs`, `dominantSeventh`), the 12-bar form (`twelveBarPlan`, `twelveBarChords`, `twelveBarFormOf`),
+  bass (`bassRole`, `approachKind`, `approachTones`, `rootFiveOctave`), `degreeLens`, `tonicDisplay`. In a `blues` key
+  `labelPitch` reads the tritone as ♭5 (se).
+- **`@oak/grader`** (§3.2): `formView`, `sectionFeatures`, `contrastAxes` (`CONTRAST_AXES`, `CONTRAST_THRESHOLDS`),
+  `bassView` / `bassNotes`, `bluesView`, `swingView`; the song ladder (`gradeSongLadder`, `songLadderRequest`,
+  `songLadderCheck`, `songLadderPassed`, `nextSongStage`, `SONG_LADDER_STAGES`, `SONG_LADDER_PASS`,
+  `SONG_LADDER_MATCHERS` — `changes` grades the chords alone, `weights: { bass: 0 }`; the harmony matcher drops a part
+  weighted 0). Rules built and in content-kit `IMPLEMENTED`: `bass-line`, `notates`, `groove-lock`, `duration-sec`,
+  `form`, `contrast` (energy is |ΔE|, not directional, contracts §5.6), `swing`, `syncopation`, `blues-form`
+  (`choruses`, `quickChangeOk`); rule features `section`, `depth`, `anyOf`, `over` (the period is read on every
+  track); the `controls` matcher (A1 "match this sound"; defaults pinned against `@oak/strudel/probes`); the answers
+  `form` (named vocabulary graded by section type), `bar-grid`, `scale-builder`. Feedback catalog: `sing.blue-note`,
+  `tap.swing`. `keyEstimate` handles sparse and long sketches (c6). At triad depth an applied chord whose triad is
+  diatonic reads by its triad (a blues' C7 in C is I7, never V7/IV).
+- **`@oak/notation`** (§3.3): `SectionMark` drawn (ABC `P:` labels, `||` at each section), `sectionMarks`, the 12-bar
+  chart (`chartLayout`, `chartBarText`, `chartChordText`, `chartAbc`), `restateChords` (a page or section that starts
+  under a ringing chord restates it on beat 1); a blue ♭5 reads ♭5 (se) under the degree lens in a blues however it
+  is spelled; c5 (a second voice keeps its lens lines, a unison chord note shares the melody's notehead, labels at
+  four chords a bar keep apart).
+- **`@oak/strudel` / `@oak/audio`** (§3.4): `ScopeTap.setSource({ kind: "track" })` taps one track;
+  `@oak/strudel/probes` (`probeOf`, `adsrValues`, `filterCurve`, `delayTaps`, `waveHarmonics`, `harmonicsOf`,
+  `SYNTH_ENVELOPE_DEFAULTS`, `DELAY_DEFAULTS`); `@oak/audio` scope frames (`triggerIndex`, `steadyWave`,
+  `spectrumBands`, `harmonicLevels`). **`@oak/pitch`**: `humToDraft` drafts a note held across a bar line as a tie
+  (c7); `gradeSung` marks blue targets, `gradeSwingTaps`; `labelSungResult` gives `expDeg`/`towardDeg`.
+- **`@oak/drills` / `@oak/srs`**: stage E families (`fam.deg.fet-minor` with the do-based pad, `fam.key.mode`,
+  `fam.chd.quality-7th`, `fam.frm.blues`, `fam.frm.sections`, `fam.rhy.groove-lock`, `fam.rhy.swing` — category
+  `swung`, never "triplet"); `maxOpenLevel(def, open, completed)` (a gate of several lessons needs all of them); the
+  planner counts a mic anchor as one of the day's two mic sets.
+- **`@oak/api`** (§5): `sideLessons.list`, `ladder.songs`, `transcriptions.confirmVersion` built (`WAVE5_PENDING`
+  empty). Integration additions: `SideLessonState.offer`, `TranscriptionDetail.given { pickup, swing, form }`,
+  `TranscriptionSettings.swing` / `TranscriptionPatch.swing` (the own-audio feel; Transcribe's switch stores it with
+  `PATCH { swing }` — closer), `LadderSong.passedLines`, `BackupInfo.albumAudio[]`, the seed point
+  `"imported own-audio (c2)"`.
+- **Server**: `services/family-levels.ts` `openFamilyLevels` (on `maxOpenLevel`; used by `levelLimits`, checkpoint
+  items and the level-setting result); seeded drafts go through `stripMarkers`; a pd-song stimulus spans
+  `answerKey.bars + 1` cycles with a pickup, in the song's meter, `performance.swung` when the song swings. Dev seed
+  (closer): a transcription capstone's seeded draft is tagged with its song (`song.*`) and kept in the song's key
+  (`capstoneSong`, dev-seed.ts), so X2's album cover reads F major for Careless Love.
+- **Content**: `content/capstones.ts` `X2_CHANGES` is the ladder's chords-only matcher (`weights: { bass: 0 }`,
+  closer), pinned by `capstone-content-wave5.test.ts`.
+- **App seams.** Lib (`form-view.ts`, `scope-panel.ts`, `lenses.ts` line lenses `sections`/`bassRoles`/`blueNotes`,
+  `tool-label.ts` `toolName` names a colon scale in words — "the harmonic minor scale", closer; session's
+  `tool-name.ts` re-exports it). Workbench: the section ribbon and form map (`loopSection`, `TUTOR_SECTION_EVENT`,
+  `tutorBarsRegion` pickup-aware), the scope panel and probes (`scopePanel` prop), the chart panel, swing badges on
+  track chips (`swing-<track>`), FeedbackPanel `abLabels`; `bluesContext` (model.ts) and `pitchLabel(…, blues)` read
+  the blue five as ♭5 (se) in a blues, as the staff does (closer); `annotateAbc` pads a staff's first voice with a
+  blank line per later-voice lens line (as `toAbc`), so numerals stay under the staff below every line (closer:
+  raising them above the staff ran them into the chord symbols; `raiseNumerals` is no longer used). Answers: `form`, `bar-grid`, `scale-builder`
+  widgets; the RN palette lights numerals in minor (c8). Lesson: `answerResponse` / `barAnswer` (bar-buttons send
+  `{ answer: { number } }`), `withTrialMode`, `collapseRepeats`, `wave5Answer` (tutor), `openedText` (titles, never
+  IDs). Session: `SideOffer`, the gym Coda cards (`coda-own-audio`, `coda-ladder-today`, `coda-level-up`).
+  Capstone: `FormStrip` (`loop`), `LeadSheetCard`, `joinReviewWait` (c9), `songOfDraft`. Transcribe: `SongPanel`,
+  `ChangesChart`, `ImportReview` (c2), `playheadAt`, `TempoCard busy`, `projectSwing` / `SWUNG_EIGHTHS` (closer).
+  Kit: `KitWave5 { nested }` on /dev/kit.
+- **Browser suites.** `e2e/journey/w5-days.pw.ts` and `e2e/journey/w5-capstones.pw.ts` hold the Wave 5 journeys
+  (wave5.md §7); the capstone journeys record their takes in real time and run past the 90-second guide (C3's take is
+  96 s by its brief). The runner (`scripts/e2e-parallel.ts`) is described in wave5.md §7 "Browser tests".
+
+
+## 22. Wave 5 final gate (after the six reviews)
+
+The six Wave 5 reviews (journey, learner, robustness, studio, surfaces, teaching) and the final gate changed these
+seams. `wave5.md` "Wave 5 state" is the summary; this is the API. The code beats this list.
+
+- **`@oak/grader`.**
+  - Sections: `SectionsResult`'s inconsistent case carries `arrangedBars?` when the tracks agree on every section's
+    bars and differ only on a name; `arrangedTotal(result)` (lint/ast.ts, re-exported by analyze/sections.ts) is the
+    piece's length either way, used by `analyze`, `gradeRubricPiece` and the ladder (gate: a C3 with `melVerse`
+    reused in the chorus read "50 s" for a 100-s piece). `ArrangedTrack.timeScale`: a `.fast`/`.slow`/`.hurry`/
+    `.density`/`.sparsity` after `arrange()` makes the sections inconsistent (`form.inconsistent-arrange`, robustness).
+  - Rubric: `ends-on-degree` reads a piece longer than the 16-bar motif cap to its own last bar (gate);
+    `blues-form` counts from the first full bar with a pickup, names numerals by quality ("v (Gm7)") and asks for a
+    second chorus written out with `arrange([12, …], [12, …])` and changed (gate); `contains-rn` names the fault (v for
+    V, a V that does not resolve, the chords heard) and never throws on a chromatic chord; `progression` refuses a
+    minor-schema loop that starts on III; `swing` measures a whole-kit line and names the other subdivision
+    (robustness). `chordSlots`/`pieceSlots` read hand-voiced chords on a symbol track (robustness).
+  - Harmony matcher: at `rn`/`full` level a chord on the wrong root earns no quality or inversion credit, and a target
+    chord held over several bars is compared bar by bar wherever the answer changes chord on a bar line inside it
+    (`splitAtAnswerBars`, gate: Frankie and Johnny with F F for G7 G7 passed at 0.909). New diagnostic
+    `harmony.transposed` ("Right changes, but in {gotKey} …", robustness). `melodyEvents(n, "@bass")` falls back to
+    the only pitched line (robustness).
+  - New diagnostic `harmony.key-mismatch` (warn; `{got}`, `{exp}`): a failing compose-brief whose heard scale is not
+    the brief's key ("Your piece reads in D minor; the brief is in A minor …"); `keyMismatch(n, key)` in
+    grade/index.ts; relative keys count as the same key (gate; Wave 4's "the message names the mismatch").
+  - `straightenExact` straightens from the midpoint between the straight and the swung off-beat (`.swingBy(.33, 4)`
+    under a declared 1/3 is straightened, review:teaching). `code.swing-fraction-string` now reads "write the amount
+    as a plain number, `.swingBy(1/3, 4)`" (the string form is locked at U11.L07).
+- **`@oak/strudel`.** The editor's `stop()` and `toggle()` cut the voices the scheduler already started (the panic
+  path, a 40 ms duck), only when that editor was the one playing (gate: a 4-second note rang on after Stop).
+  `friendlyEvalError`: an undefined name used in `arrange()` or shaped like a section const (`drumsChorus`) asks for
+  `const drumsChorus = …`, never for quotes (gate).
+- **`@oak/notation`** (surfaces): `written` is honoured for any pitch source; the blues context test is
+  `/\bblues\b/`.
+- **Server.**
+  - `SessionsService.openToday()` also returns a session started on the previous learner day that crossed the 04:00
+    rollover less than 3 hours ago (`ROLLOVER_CARRY_MS`; gate: a 03:40 start reloaded at 04:10 was lost).
+  - `SideLessonsService.estMinutes` counts only the required steps from the lesson's current step on for a side
+    lesson in progress (gate).
+  - Dev seed "ladder L6" stores only the bass line (with the key's tempo line) as the learner's version (gate:
+    it stored the whole answer key, melody included).
+  - `PUT /api/ladder` refusals name the rule ("the ladder moves up one level at a time: L2 is next", robustness).
+- **App.**
+  - Lib: `toolLabel`/`toolName` drop the catalog's "†" on every surface (`withoutAuthorMark`); lens saves run one at a
+    time and send the stored preference when their turn comes (`queueLensSave`; no bootstrap invalidation on success;
+    a failed save rolls back to the last saved preference); `session.end` invalidates `gym.plan`.
+  - Session: `tomorrowLine(summary, next, gym?)` and `gymNextLabel(gym, nextId)` (coda-model.ts): the Coda's "Next
+    time" names a due transcription slot before the lesson it delays and a capstone session with its place and goal
+    ("C4 Minor Indie Ballad · session 2 of 2: Chorus cadence", via `capstoneDay`).
+  - Workbench: `bandCodeForTracks(code, tracks)` (loop-math.ts); `useAnalysis` analyses only the Band parts a step
+    asked for (gate: chips, roll notes and dead mute buttons for parts that never played). Surfaces: `StaffSource.
+    relabel`, `StaffSource.swing`, `WorkbenchLines.cut`, `alteredStepName`, `alteredSteps`, `staffSwingOf`,
+    `clipSections`, `cutText`, `letterNamed`, `staffFifths`; `FormMap` `cut`.
+  - Lesson (journey): `useWorkbenchBase(ex, variant?)` defaults to the step's variant; `givenStart(ex, spec)`;
+    `bar-grid` gets `env.harmony`; `withTrialMode` widens a degree pad only for a degree outside the trial's mode.
+  - Capstone (studio): `pieceForm(…).hint`, `sectionNamingHint`, `sectionLabelOf`, `arrangeLines`, `RowExtra`
+    `note`/`unread`; `pieceBars` uses the `arrange()` total when the parts agree on lengths. Gate: the workspace
+    shows `harmony.key-mismatch` as a callout (`capstone-key-note`).
+  - Drills: a sung way home under 0.3 credit reads "Sung. The trace shows where it was against the way home." (not
+    "Sung home"); the set summary says "Sang the way home on N trials, k in tune".
+  - Transcribe (studio): `checkLines` drops "Chord N:" and keeps numeral case. Gate: `ProjectPage` focuses its own
+    root once loaded only when focus is not already on a control inside `main` (the gym's Finish button kept its
+    focus). Toolbox: `shownToolLabel`.
+  - Answers (gate): the form widget's cards are keyed by position and focus is handed on before a placed option
+    leaves the pool, so keys typed in quick succession (`1 3`, Alt + ← then `4 2`) are never lost on `<body>`.

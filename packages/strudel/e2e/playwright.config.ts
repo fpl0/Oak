@@ -1,13 +1,15 @@
 // Playwright for @oak/strudel: `bunx playwright test -c packages/strudel/e2e/playwright.config.ts`.
 // Specs are *.pw.ts so the root `bun test` ignores them. The dev server runs on Node (never bunx --bun vite).
 import { defineConfig } from "@playwright/test";
+import { E2E_SUFFIX, shifted } from "../../../e2e/support/stack.ts";
 
-const PORT = 5192;
+// vite.config.ts pins 5192; `--port` moves it with OAK_E2E_SHIFT (e2e/support/stack.ts).
+const PORT = shifted(5192);
 
 export default defineConfig({
   testDir: ".",
   testMatch: /.*\.pw\.ts/,
-  outputDir: "./test-results",
+  outputDir: `./test-results${E2E_SUFFIX.replace("-", "/")}`,
   fullyParallel: false,
   workers: 1,
   retries: 0,
@@ -32,7 +34,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "node ../../../node_modules/vite/bin/vite.js --config vite.config.ts",
+    command: `node ../../../node_modules/vite/bin/vite.js --config vite.config.ts --port ${PORT} --strictPort`,
     cwd: import.meta.dirname,
     url: `http://127.0.0.1:${PORT}/`,
     reuseExistingServer: false,

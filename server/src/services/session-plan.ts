@@ -62,6 +62,13 @@ export interface SessionPlanCoursePort {
    * `null` otherwise.
    */
   capstoneGymNote?(): string | null;
+  /**
+   * Wave 5 (contracts §9.6, wave5.md §5.1): the optional side lesson Today may offer beside (or after) the planned
+   * session, given the plan's kind, day and return state; never the New block. `null` when none is offered.
+   */
+  sideLesson?(
+    plan: Pick<SessionPlan, "kind" | "returning" | "day" | "targetMinutes">,
+  ): SessionPlan["sideLesson"];
 }
 export interface SessionPlanLearnerPort {
   profile(): { targetMinutes: 15 | 20 | 25; timeZone: string; rolloverHour: number };
@@ -176,8 +183,23 @@ export function warmupLabel(plannedSec: number): string {
 export class SessionPlanService {
   constructor(private readonly deps: SessionPlanDeps) {}
 
-  /** `GET /api/session/today`. Idempotent within a day (the SRS day preparation runs once per day). */
+  /**
+   * `GET /api/session/today`. Idempotent within a day (the SRS day preparation runs once per day). Wave 5: the
+   * optional side lesson is offered beside the plan (`sideLesson`, and as a `lesson` alternative while today's
+   * session has not ended), never as its New block.
+   */
   today(now: Date, targetMinutes?: 15 | 20 | 25): SessionPlan {
+    const plan = this.#today(now, targetMinutes);
+    const side = this.deps.course.sideLesson?.(plan) ?? null;
+    if (side === null || side === undefined) return { ...plan, sideLesson: null };
+    const alternatives =
+      side.placement === "alternative" && !plan.alternatives.some((a) => a.mapItemId === side.lessonId)
+        ? [...plan.alternatives, { kind: "lesson" as const, mapItemId: side.lessonId, title: side.title }]
+        : plan.alternatives;
+    return { ...plan, alternatives, sideLesson: side };
+  }
+
+  #today(now: Date, targetMinutes?: 15 | 20 | 25): SessionPlan {
     const { srs, course, learner } = this.deps;
     const target = targetMinutes ?? learner.profile().targetMinutes;
     const day = srs.day(now);

@@ -25,6 +25,14 @@ export const WORKBENCH_LENS_SHORTCUTS: readonly (readonly [string, string])[] = 
   ["Shift+T", "Chord tones in the melody"],
   ["Shift+G", "Range of each melody line"],
   ["Shift+L", "Lead sheet"],
+  // Wave 5: the line lenses and the form and sound panels, each once unlocked.
+  ["Shift+O", "Section ribbon on / off"],
+  ["Shift+E", "Form map and energy curve"],
+  ["Shift+B", "Bass roles (root, fifth, octave, approach) on / off"],
+  ["Shift+U", "Blue notes on / off"],
+  ["Shift+W", "Scope: the wave of what plays"],
+  ["Shift+Y", "Spectrum of what plays"],
+  ["Shift+P", "Chord chart, four bars a line"],
 ];
 
 /**

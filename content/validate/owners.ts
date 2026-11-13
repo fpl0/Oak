@@ -19,6 +19,7 @@ import {
   stripMarkers,
   type UnlockableId,
   unimplementedIn,
+  unimplementedInCapstoneSessions,
 } from "@oak/content-kit";
 import { exerciseCode } from "../../scripts/content/generate.ts";
 import { CHECKPOINT_RULES, checkpointMetas } from "../checkpoints.ts";
@@ -250,6 +251,8 @@ export async function capstoneSessionSections(c: CapstoneDef): Promise<CheckSect
   for (const s of songs)
     if (!s.def && c.sessionDefs.some((x) => x.checks?.length))
       pending.push(`${s.id}: no answer key yet (content/repertoire/${s.id.replace(/^song\./, "")}/song.ts)`);
+  for (const u of unimplementedInCapstoneSessions(c))
+    issues.push(`${u.exercise}: uses ${u.what} "${u.name}", which the platform does not implement yet`);
   const last = c.sessionDefs.length - 1;
   for (const [i, s] of c.sessionDefs.entries()) {
     if (s.release && i !== last) issues.push(`${s.id}: only the last session releases the piece`);

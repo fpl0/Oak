@@ -142,6 +142,13 @@ test("lens keys pressed mid-step leave the step as it was: the content's labels 
     );
   await page.getByTestId("check").click();
   await expect(page.getByTestId("step-feedback")).toHaveAttribute("data-status", "fail");
+  // The verdict shows before the machine leaves "checking" and counts the attempt: read the step once it has settled.
+  await expect
+    .poll(async () => (await snap()) as unknown as { status: string; attempts: number })
+    .toMatchObject({
+      status: "step",
+      attempts: 1,
+    });
   const before = await snap();
   // The Workbench's lens switches are not offered inside a step (the content decides its labels)...
   await expect(page.locator('[data-testid^="lens-"]')).toHaveCount(0);

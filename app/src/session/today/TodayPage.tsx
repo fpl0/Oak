@@ -18,6 +18,7 @@ import {
   useOnboarding,
   useProfileUpdate,
   useSessionDay,
+  useSideLessons,
   useStreak,
   useTodayPlan,
   useTutorWarm,
@@ -37,6 +38,7 @@ import { type CourseEdge, courseEdge, edgeShort } from "../edge.ts";
 import { alternativePlan, extraGym, type GymDay, x1Line } from "../gym-day.ts";
 import { useLastEnded, useRunnerNavigator, useRunnerView } from "../hooks.ts";
 import { sessionRunner } from "../live.ts";
+import { sideLessonPlan } from "../side-lessons.ts";
 import { daysLine, goalLine, repairLine, restsLine, streakLine } from "../streak-model.ts";
 import { itemTitle as titleOf } from "../titles.ts";
 import {
@@ -47,6 +49,7 @@ import {
   todayView,
 } from "../today-model.ts";
 import { AlbumStrip, LastSketchCard, NextUnlockCard, OakGlanceCard, TutorNoteCard } from "./Glance.tsx";
+import { InlineCodeText, SideOfferLine } from "./SideOffer.tsx";
 import { WeeklyRhythm } from "./WeeklyRhythm.tsx";
 
 function amountOf(r: SetlistRow): string {
@@ -66,6 +69,11 @@ function Setlist({ rows }: { rows: SetlistRow[] }) {
               {r.label} <span className="font-normal text-text-2">· {amountOf(r)}</span>
             </p>
             <p className="text-text-2">{r.detail}</p>
+            {r.sub && (
+              <p className="text-sm text-text-3" data-testid="setlist-sub">
+                <InlineCodeText text={r.sub} />
+              </p>
+            )}
           </div>
         </li>
       ))}
@@ -173,10 +181,16 @@ function DoneCard({
   hasCoda,
   onStart,
   extraGym,
+  side,
+  objective,
 }: {
   plan: SessionPlan;
   titles: Map<string, string>;
   edge: CourseEdge | null;
+  /** "One more, if you like": the side lesson offered after the core (wave5.md §5.1). */
+  side: React.ReactNode;
+  /** What the next lesson is for (its objective), so tomorrow reads as worth opening. */
+  objective: string | null;
   /** Today's Coda can be shown (a session ended today has a summary; onboarding's Coda was its own). */
   hasCoda: boolean;
   onStart(): void;
@@ -199,8 +213,14 @@ function DoneCard({
             {next}
             {plan.main?.resumeStep ? `, from step ${plan.main.resumeStep.replace(/^S/, "")}` : ""}
           </span>
+          {objective && (
+            <span className="block text-sm text-text-2" data-testid="today-next-what">
+              <InlineCodeText text={objective} />
+            </span>
+          )}
         </p>
       )}
+      {side}
       <div className="flex flex-wrap items-center gap-2">
         {hasCoda && (
           <Link to="/session/coda" className={buttonClass("secondary", "md")} data-testid="see-coda">
@@ -238,11 +258,14 @@ export function TodayPage() {
   const sessionDay = useSessionDay();
   const voice = useVoiceState();
   const progress = useCourseProgress();
+  const sideLessons = useSideLessons();
   const ended = useLastEnded();
   const starting = useRunnerView((v) => v.starting);
   const qc = useQueryClient();
   const titles = lessonTitles(content.data?.syllabus ?? null);
   const stepsOf = (id: string) => content.data?.lessons.find((l) => l.id === id)?.steps.length ?? null;
+  const objectiveOf = (id: string) =>
+    content.data?.syllabus?.units.flatMap((u) => u.lessons).find((l) => l.id === id)?.objective ?? null;
   // A capstone in progress is never interrupted by a gym slot (contracts §2.5): the plan Today runs keeps it.
   const inProgress = useCapstoneInProgress();
   const planData = plan.data ? keepCapstone(plan.data, inProgress, (id) => titleOf(id, titles)) : undefined;
@@ -270,6 +293,8 @@ export function TodayPage() {
           server: sessionDay.data ?? null,
           titleOf: (id) => titleOf(id, titles),
           stepsOf,
+          objectiveOf,
+          sideLessons: sideLessons.data ?? null,
           edge,
           ladder: ladder ? { cents: ladder.cents, offerLoosen: ladder.offerLoosen } : null,
           capstone,
@@ -389,6 +414,16 @@ export function TodayPage() {
                     extraGym={
                       extra ? () => void onStart(alternativePlan(planData, { kind: "gym", ...extra })) : null
                     }
+                    objective={planData.mapItemId ? objectiveOf(planData.mapItemId) : null}
+                    side={
+                      view.side && (
+                        <SideOfferLine
+                          offer={view.side}
+                          disabled={starting}
+                          onStart={() => view.side && void onStart(sideLessonPlan(planData, view.side))}
+                        />
+                      )
+                    }
                   />
                 ) : view.state === "first-run" ? (
                   <div className="mt-4">
@@ -426,6 +461,15 @@ export function TodayPage() {
                         >
                           Short on time? A Keep-alive: one easy set, about 2 minutes
                         </button>
+                      )}
+                      {view.side && view.state !== "in-session" && (
+                        <div className="mt-2 w-full">
+                          <SideOfferLine
+                            offer={view.side}
+                            disabled={starting}
+                            onStart={() => view.side && void onStart(sideLessonPlan(planData, view.side))}
+                          />
+                        </div>
                       )}
                     </div>
                   </>
@@ -484,6 +528,8 @@ export function TodayPage() {
                 {planData.alternatives
                   // The main item itself is not "another way" (a capstone day listed its own capstone again).
                   .filter((a) => !(a.mapItemId !== null && a.mapItemId === planData.mapItemId))
+                  // The side lesson has its own calm line in the card (wave5.md §5.1): never a second button.
+                  .filter((a) => !(view.side && a.mapItemId === view.side.lessonId))
                   .map((a) =>
                     // An extra gym session or an open capstone is a session of its own: it starts here, with
                     // today's warm-up, and takes the next GYM.nn (contracts §2.5).

@@ -9,6 +9,14 @@ import { atomicWrite } from "./generate.ts";
 
 const check = process.argv.includes("--check");
 let stale = 0;
+/** Specs written before Wave 5; every later spec gives each lesson its enjoyment, pace and return lines. */
+const BEFORE_EPR = new Set(["U00", "U01", "U02", "U03", "U04", "U05", "U06", "U07"]);
+for (const u of unitSpecs)
+  for (const l of BEFORE_EPR.has(u.unit) ? [] : u.lessons)
+    if (!l.epr?.enjoyment.trim() || !l.epr.pace.trim() || !l.epr.return.trim()) {
+      console.error(`content/specs/${u.unit}.ts: ${l.id} needs epr: { enjoyment, pace, return }`);
+      stale++;
+    }
 for (const u of unitSpecs) {
   const file = join(CONTENT_ROOT, "specs", `${u.unit}.md`);
   const body = renderUnit(u);

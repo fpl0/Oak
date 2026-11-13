@@ -4,16 +4,26 @@
 // pass or a fail.
 import type { TranscriptionDetail } from "@oak/api";
 import { OakApiError, OWN_AUDIO_CHECKLIST } from "@oak/api";
-import type { KeySpec, MeterId } from "@oak/content-kit";
+import type { KeySpec, MeterId, SwingSpec } from "@oak/content-kit";
 import { clsx } from "clsx";
-import { Bookmark, Trash2 } from "lucide-react";
+import { Bookmark, ChevronsLeft, ChevronsRight, Hand, Trash2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranscriptionPatch, useTranscriptionSettings } from "../lib/queries.ts";
 import { Button } from "../ui/kit/Button.tsx";
 import { Card, Kbd } from "../ui/kit/basics.tsx";
 import { SegmentedControl } from "../ui/kit/Controls.tsx";
 import { toast } from "../ui/kit/Toast.tsx";
-import { type BarGrid, bpmFromTaps, downbeatFromTaps, formatTime, type Loop } from "./grid.ts";
+import {
+  type BarGrid,
+  beatSecOfGrid,
+  bpmFromTaps,
+  downbeatFromTaps,
+  formatTime,
+  type Loop,
+  nudgeDownbeat,
+  scaleTempo,
+  tapProgress,
+} from "./grid.ts";
 import { CHECK_LEVELS, checklistProgress, selfScoreOf } from "./import.ts";
 import type { Section } from "./SourceView.tsx";
 
@@ -23,6 +33,12 @@ const TONICS = ["C", "G", "D", "A", "E", "B", "F#", "Db", "Ab", "Eb", "Bb", "F"]
 const MODES = ["major", "minor"] as const;
 const show = (t: string) => t.replace("#", "♯").replace(/(?<=[A-G])b/, "♭");
 
+/**
+ * The bar grid of the learner's recording (ux §9 "BeatGrid"). A first run is two steps: tap along (eight taps on
+ * the beat, from a bar's first beat, set the tempo and bar 1), then check bar 1 and move it by a beat if the taps
+ * started on another beat (Shift+←/→), or halve or double the tempo. Then the meter, the key and the feel: a
+ * recording that swings shows its off-beat eighths at the swung place on the grid (W).
+ */
 export function TempoCard({
   project,
   grid,
@@ -30,6 +46,11 @@ export function TempoCard({
   onClearTaps,
   onApply,
   getTime,
+  onTap,
+  playing,
+  swing,
+  onSwing,
+  busy = false,
 }: {
   project: TranscriptionDetail;
   grid: BarGrid | null;
@@ -38,18 +59,181 @@ export function TempoCard({
   onApply(p: { bpm?: number; downbeatS?: number; meter?: MeterId; key?: KeySpec | null }): void;
   /** The playhead now (for "bar 1 starts here"). */
   getTime(): number;
+  /** One tap (also the key T); starts the recording when it is stopped. */
+  onTap(): void;
+  /**
+   * A tempo or bar-1 change is being saved: the steps that start from the saved value (double, halve) wait for
+   * it, so a quick second click never starts from the old tempo.
+   */
+  busy?: boolean;
+  playing: boolean;
+  swing: boolean;
+  onSwing(on: boolean): void;
 }) {
   const bpm = bpmFromTaps(taps);
   const down = downbeatFromTaps(taps);
   const bpmId = useId();
+  const firstRun = !grid || project.downbeatS === null;
+  const prog = tapProgress(taps);
+  const beat = grid ? beatSecOfGrid(grid, (project.meter ?? "4/4") as MeterId) : null;
+  const earlier =
+    beat !== null && project.downbeatS !== null ? nudgeDownbeat(project.downbeatS, beat, -1) : null;
+  const later =
+    beat !== null && project.downbeatS !== null ? nudgeDownbeat(project.downbeatS, beat, 1) : null;
   return (
-    <Card className="flex flex-col gap-2 p-4" data-testid="tempo-card">
-      <h2 className="text-h3">Bars</h2>
-      <p className="text-sm text-text-2">
-        Play the recording and tap <Kbd>T</Kbd> on each beat, starting on a bar's first beat. Eight taps set
-        the tempo and where bar 1 starts, so your bars line up with the recording.
-      </p>
-      <div className="flex flex-wrap items-center gap-2">
+    <Card
+      className={clsx("flex flex-col gap-2.5 p-4", firstRun && "border-accent")}
+      data-testid="tempo-card"
+      data-first-run={firstRun || undefined}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="text-h3">{firstRun ? "Set the bars" : "Bars"}</h2>
+        {grid ? (
+          <span className="text-sm text-text-3 tabular-nums" data-testid="grid-summary">
+            {Math.round((project.bpm ?? 0) * 10) / 10} BPM · bar 1 at {formatTime(project.downbeatS ?? 0)}
+          </span>
+        ) : null}
+      </div>
+
+      <section aria-labelledby={`${bpmId}-tap`} className="flex flex-col gap-1.5" data-testid="tap-step">
+        <h3 id={`${bpmId}-tap`} className="font-sans text-sm font-semibold text-text-2">
+          <span className="mr-1 text-text-3">1</span> Tap along
+        </h3>
+        {firstRun ? (
+          <p className="text-sm text-text-2">
+            {playing
+              ? "Tap on each beat, starting on a bar's first beat."
+              : "Press Tap to start the recording, then tap on each beat from a bar's first beat."}{" "}
+            Eight taps set the tempo and where bar 1 starts.
+          </p>
+        ) : (
+          <p className="text-sm text-text-2">Tap again to reset the tempo and bar 1.</p>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant={firstRun ? "primary" : "secondary"}
+            icon={<Hand aria-hidden className="size-4" />}
+            onClick={onTap}
+            data-testid="tap-button"
+          >
+            {playing ? "Tap" : "Play and tap"} <Kbd tone={firstRun ? "inverse" : "default"}>T</Kbd>
+          </Button>
+          <span className="flex items-center gap-1" aria-hidden>
+            {Array.from({ length: prog.of }, (_, i) => (
+              <span
+                key={i}
+                className={clsx("size-2 rounded-full", i < prog.count ? "bg-accent" : "bg-border")}
+              />
+            ))}
+          </span>
+          <span className="text-sm text-text-2 tabular-nums" aria-live="polite" data-testid="taps">
+            {taps.length === 0
+              ? "No taps yet"
+              : `${prog.count} of ${prog.of}${bpm !== null ? ` · about ${Math.round(bpm)} BPM` : ""}${down !== null ? ` · bar 1 at ${formatTime(down)}` : ""}`}
+          </span>
+          {bpm !== null && down !== null && taps.length < prog.of ? (
+            <Button size="sm" onClick={() => onApply({ bpm, downbeatS: down })} data-testid="use-taps">
+              Use this
+            </Button>
+          ) : null}
+          {taps.length > 0 ? (
+            <Button size="sm" variant="ghost" onClick={onClearTaps}>
+              Clear taps
+            </Button>
+          ) : null}
+        </div>
+      </section>
+
+      <section
+        aria-labelledby={`${bpmId}-check`}
+        className={clsx("flex flex-col gap-1.5", !grid && "opacity-60")}
+        data-testid="check-step"
+      >
+        <h3 id={`${bpmId}-check`} className="font-sans text-sm font-semibold text-text-2">
+          <span className="mr-1 text-text-3">2</span> Check bar 1
+        </h3>
+        <p className="text-sm text-text-2">
+          {grid
+            ? "Play from the start: bar 1's line should fall on the strong beat. If your taps began on another beat, move bar 1 by a beat."
+            : "Once the taps set the bars, check that bar 1 falls on the strong beat."}
+        </p>
+        <p className="text-sm">
+          <span className="text-text-2">Bar 1 at </span>
+          <span className="tabular-nums" data-testid="downbeat">
+            {project.downbeatS !== null ? formatTime(project.downbeatS) : "not set"}
+          </span>
+        </p>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Button
+            size="sm"
+            icon={<ChevronsLeft aria-hidden className="size-4" />}
+            disabled={earlier === null}
+            onClick={() => earlier !== null && onApply({ downbeatS: earlier })}
+            aria-label="Move bar 1 a beat earlier (Shift+Left)"
+            data-testid="beat-earlier"
+          >
+            A beat earlier
+          </Button>
+          <Button
+            size="sm"
+            icon={<ChevronsRight aria-hidden className="size-4" />}
+            disabled={later === null}
+            onClick={() => later !== null && onApply({ downbeatS: later })}
+            aria-label="Move bar 1 a beat later (Shift+Right)"
+            data-testid="beat-later"
+          >
+            A beat later
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={project.downbeatS === null}
+            aria-label="Move bar 1 earlier by 10 milliseconds"
+            onClick={() => onApply({ downbeatS: Math.max(0, (project.downbeatS ?? 0) - 0.01) })}
+          >
+            −10 ms
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={project.downbeatS === null}
+            aria-label="Move bar 1 later by 10 milliseconds"
+            onClick={() => onApply({ downbeatS: (project.downbeatS ?? 0) + 0.01 })}
+          >
+            +10 ms
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => onApply({ downbeatS: Math.max(0, getTime()) })}>
+            Bar 1 starts here
+          </Button>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-sm text-text-2">Tapped every other beat, or every half beat?</span>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy || project.bpm === null || scaleTempo(project.bpm, 2) === null}
+            onClick={() =>
+              project.bpm !== null && onApply({ bpm: scaleTempo(project.bpm, 2) ?? project.bpm })
+            }
+            data-testid="tempo-double"
+          >
+            Double it
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy || project.bpm === null || scaleTempo(project.bpm, 0.5) === null}
+            onClick={() =>
+              project.bpm !== null && onApply({ bpm: scaleTempo(project.bpm, 0.5) ?? project.bpm })
+            }
+            data-testid="tempo-half"
+          >
+            Halve it
+          </Button>
+        </div>
+      </section>
+
+      <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2.5">
         <label className="flex items-center gap-1.5 text-sm" htmlFor={bpmId}>
           <span className="text-text-2">Tempo</span>
           <input
@@ -113,61 +297,63 @@ export function TempoCard({
           options={METER_CHOICES.map((m) => ({ value: m, label: m }))}
           onChange={(m) => onApply({ meter: m })}
         />
-      </div>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm">
-        <span className="text-text-2">Bar 1 at</span>
-        <span className="min-w-12 tabular-nums" data-testid="downbeat">
-          {project.downbeatS !== null ? formatTime(project.downbeatS) : "not set"}
+        <span className="flex items-center gap-1.5" data-testid="swing-switch">
+          <SegmentedControl
+            label="Feel (W)"
+            size="sm"
+            value={swing ? "swing" : "straight"}
+            options={[
+              { value: "straight", label: "Straight" },
+              { value: "swing", label: "Swing 8ths", disabled: !swingMeter(project.meter) },
+            ]}
+            onChange={(v) => onSwing(v === "swing")}
+          />
+          <Kbd>W</Kbd>
         </span>
-        {project.downbeatS !== null ? (
-          <span className="inline-flex">
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label="Move bar 1 earlier by 10 milliseconds"
-              onClick={() => onApply({ downbeatS: Math.max(0, (project.downbeatS ?? 0) - 0.01) })}
-            >
-              −10 ms
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label="Move bar 1 later by 10 milliseconds"
-              onClick={() => onApply({ downbeatS: (project.downbeatS ?? 0) + 0.01 })}
-            >
-              +10 ms
-            </Button>
-          </span>
-        ) : null}
-        <Button size="sm" onClick={() => onApply({ downbeatS: Math.max(0, getTime()) })}>
-          Bar 1 starts here
-        </Button>
       </div>
-      {taps.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2 text-sm" aria-live="polite" data-testid="taps">
-          <span className="text-text-2">
-            {taps.length} {taps.length === 1 ? "tap" : "taps"}
-            {bpm !== null ? ` · about ${Math.round(bpm)} BPM` : ""}
-            {down !== null ? ` · bar 1 at ${formatTime(down)}` : ""}
-          </span>
-          {bpm !== null && down !== null ? (
-            <Button size="sm" onClick={() => onApply({ bpm, downbeatS: down })} data-testid="use-taps">
-              Use this
-            </Button>
-          ) : null}
-          <Button size="sm" variant="ghost" onClick={onClearTaps}>
-            Clear taps
-          </Button>
-        </div>
-      ) : null}
       {grid ? (
         <p className="text-sm text-text-3">
-          A bar is {grid.barSec.toFixed(2)} s. The waveform shows the bar lines; A/B plays your code with the
-          recording from the start of the bar the playhead is in.
+          A bar is {grid.barSec.toFixed(2)} s.{" "}
+          {swing ? "The grid marks the swung off-beats at two thirds of each beat. " : ""}A/B plays your code
+          with the recording from the start of the bar the playhead is in.
         </p>
       ) : null}
     </Card>
   );
+}
+
+/** Swing is for simple meters only (contracts §6.10: never in compound meters). */
+export const swingMeter = (meter: string | null): boolean => meter === null || !/^(6|9|12)\/8$/.test(meter);
+
+const SWING_KEY = (id: string) => `oak.transcribe.swing.${id}`;
+/** The feel of an own-audio project (kept in this browser until the server keeps it: apiNotes). */
+export function readSwing(id: string): boolean {
+  try {
+    return localStorage.getItem(SWING_KEY(id)) === "1";
+  } catch {
+    return false;
+  }
+}
+/**
+ * The own-audio feel: the server's `settings.swing` (Wave 5, `null` straight), else what this browser remembered
+ * before the server kept it (projects switched before the field existed).
+ */
+export function projectSwing(p: {
+  id: string;
+  settings?: { swing?: SwingSpec | null | undefined } | undefined;
+}): boolean {
+  const kept = p.settings?.swing;
+  return kept === undefined ? readSwing(p.id) : kept !== null;
+}
+/** The feel the swing switch stores: triplet swing on the eighths, or straight. */
+export const SWUNG_EIGHTHS: SwingSpec = { subdivision: 8, amount: 1 / 3 };
+export function writeSwing(id: string, on: boolean): void {
+  try {
+    if (on) localStorage.setItem(SWING_KEY(id), "1");
+    else localStorage.removeItem(SWING_KEY(id));
+  } catch {
+    // storage blocked: the switch lasts for this visit
+  }
 }
 
 export function SectionsCard({

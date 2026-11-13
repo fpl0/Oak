@@ -108,6 +108,17 @@ test("gate journey 1: a fresh learner goes through onboarding with a microphone"
   await expect(page.getByTestId("workbench")).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("sketch-save").click();
   await expectStep(page, "coda");
+  // The review's first-day regressions (merged from e2e/review/onboarding-day.pw.ts, which walked these same
+  // screens): the Coda's toolbox uses plain tool names and leaves out the Sing panel (it arrives with U00.L02),
+  // and its "Next time" names the lesson Today will offer (it said "Heartbeat", which is U01.L01).
+  const box = page.getByTestId("coda-toolbox");
+  await expect(box).toContainText("Band layer");
+  await expect(box).not.toContainText("(");
+  await expect(box).not.toContainText("Sing panel");
+  await expect(box).not.toContainText("lowercase track labels");
+  await expect(box).toContainText("label: pattern");
+  await expect(page.getByTestId("screen-coda")).toContainText("Next time: Set Up & First Sing.");
+  await shootAll(page, "onboarding-coda");
   await page.getByTestId("coda-done").click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByTestId("today-card")).toBeVisible();
@@ -119,7 +130,27 @@ test("gate journey 1: a fresh learner goes through onboarding with a microphone"
   expect(p1.lessons.find((l) => l.lessonId === "U00.L01")?.status).toBe("completed");
   const profile = await api<{ tapLatencyMs: number | null; quiet: boolean }>(request, "GET", "/api/profile");
   expect(profile.quiet).toBe(false);
+  // The first day ends done and counted (not a full 20-minute session offered again; the onboarding day on the
+  // week strip), and Today names the next unlock plainly.
+  const card = page.getByTestId("today-card");
+  await expect(card).toHaveAttribute("data-state", "done");
+  await expect(page.getByTestId("today-done")).toContainText("Next time: Set Up & First Sing");
+  await expect(page.getByRole("button", { name: "Start another session" })).toBeVisible();
+  const unlock = page.getByTestId("next-unlock");
+  await expect(unlock).toContainText("Sing panel");
+  await expect(unlock).not.toContainText("PitchLane");
+  const boot = await api<{ streak: { todayQualified: boolean; thisWeek: { qualifyingDays: number } } }>(
+    request,
+    "GET",
+    "/api/bootstrap",
+  );
+  expect(boot.streak.todayQualified).toBe(true);
+  expect(boot.streak.thisWeek.qualifyingDays).toBe(1);
+  await expect(page.getByText(/1 of \d days this week/)).toBeVisible();
   await shootAll(page, "today-day1");
+  // A reload keeps the done state (it is remembered in this browser).
+  await page.reload();
+  await expect(card).toHaveAttribute("data-state", "done");
 
   expectClean(w);
 });

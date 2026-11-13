@@ -1,6 +1,7 @@
 // sketches, album, audio (media GETs with Range), transcriptions.
+import { HEADERS } from "@oak/api";
 import type { AppDeps } from "../deps.ts";
-import { badRequest } from "../errors.ts";
+import { ApiError, badRequest } from "../errors.ts";
 import { serveFile } from "../services/audio-store.ts";
 import type { Mounter } from "./define.ts";
 
@@ -37,11 +38,22 @@ export function libraryRoutes(mount: Mounter, d: AppDeps): void {
   mount("album.track", ({ params }) => lib.track(params.id));
   mount("album.createTrack", ({ body }) => lib.createTrack(body));
   mount("album.addVersion", ({ params, body }) => lib.addTrackVersion(params.id, body));
-  mount("album.putAudio", ({ params, query, bytes, contentType }) => {
+  mount("album.putAudio", ({ params, query, bytes, contentType }, c) => {
     const duration = query.durationS === undefined ? null : Number(query.durationS);
     if (duration !== null && !(Number.isFinite(duration) && duration >= 0))
       throw badRequest("durationS must be a number of seconds");
-    return lib.putTrackAudio(params.id, versionParam(params.v), bytes, contentType, duration);
+    const version = versionParam(params.v);
+    // c11 (`confirmIf: album.audio.replace`): re-recording a version replaces its earlier recording, so it needs the
+    // confirm nonce for `<trackId>/v<v>`; a first recording needs none.
+    if (
+      d.repos.album.audioOf(params.id, version) !== null &&
+      !d.confirm.consume(c.req.header(HEADERS.confirm), "album.audio.replace", `${params.id}/v${version}`)
+    )
+      throw new ApiError(
+        "confirm_required",
+        "confirm replacing the earlier recording first (album.audio.replace)",
+      );
+    return lib.putTrackAudio(params.id, version, bytes, contentType, duration);
   });
   mount("album.getAudio", ({ params }, c) => {
     const a = lib.trackAudio(params.id, versionParam(params.v));
@@ -103,4 +115,11 @@ export function libraryRoutes(mount: Mounter, d: AppDeps): void {
   mount("transcriptions.putSettings", ({ params, body }) =>
     lib.putTranscriptionSettings(params.id, stripUndefined(body)),
   );
+
+  // Wave 5 (carry-over c2, contracts §11.3): an imported version runs as the learner's own once confirmed.
+  mount("transcriptions.confirmVersion", ({ params }) => {
+    const v = Number(params.v);
+    if (!Number.isInteger(v) || v < 1) throw badRequest("the version must be a positive integer");
+    return lib.confirmTranscriptionVersion(params.id, v);
+  });
 }

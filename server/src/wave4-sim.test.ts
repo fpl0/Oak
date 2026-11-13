@@ -21,13 +21,16 @@ import type {
   SessionPlan,
 } from "@oak/api";
 import type { ContentSource } from "./content/types.ts";
-import { realCourse } from "./testing/course.ts";
+import { realCourse, wave4Course } from "./testing/course.ts";
 import { gradeResult, type Harness, harness } from "./testing/harness.ts";
 import { rng, SimLearner } from "./testing/learner.ts";
 
 let course: ContentSource;
 beforeAll(async () => {
-  course = await realCourse({ standInUnits: ["U00", "U01", "U02", "U03", "U04", "U05", "U06", "U07"] });
+  // Pinned to the course as Wave 4 shipped it: Wave 5 lessons authored now would replace its review days.
+  course = wave4Course(
+    await realCourse({ standInUnits: ["U00", "U01", "U02", "U03", "U04", "U05", "U06", "U07"] }),
+  );
 });
 
 const HOUR = 3_600_000;
@@ -302,7 +305,10 @@ class Sim {
         c2: await get("/api/capstones/C2/sessions"),
         x1: await get("/api/capstones/X1/sessions"),
         x1gate: await get("/api/capstones/X1/gate"),
-        voicing: await get("/api/gates/voicing"),
+        // c2 (Wave 5): the imported gate attempt's code runs after the strict lint; the gate is otherwise the same.
+        voicing: (({ passedCodeImported: _i, ...g }) => g)(
+          (await get("/api/gates/voicing")) as Record<string, unknown>,
+        ),
         progress: await get("/api/lessons/progress"),
       };
     };

@@ -4,6 +4,7 @@ import {
   autoListen,
   canDoChanges,
   goalGradient,
+  gymNextLabel,
   skillMoves,
   TOLERANCE_LINE,
   todayLines,
@@ -260,5 +261,49 @@ describe("Progress helpers", () => {
     expect(formatMinutes(40)).toBe("40 min");
     expect(formatMinutes(135)).toBe("2 h 15 min");
     expect(formatMinutes(120)).toBe("2 h");
+  });
+});
+
+describe("Coda: next time names a gym slot and a capstone session's place (wave 5 gate)", () => {
+  const gym = (over: Record<string, unknown> = {}) =>
+    ({
+      active: true,
+      slotDue: true,
+      next: {
+        gymId: "GYM.07",
+        kind: "ladder",
+        ladderLevel: 6,
+        realism: 1,
+        ownAudioFallback: false,
+        transcriptionId: null,
+      },
+      ...over,
+    }) as never;
+  test("a due ladder slot is named before the lesson it delays", () => {
+    const label = gymNextLabel(gym(), "U11.L06");
+    expect(label).toBe("a Transcription Gym session (ladder level 6: blues)");
+    expect(tomorrowLine(fixtureSummary(), { id: "U11.L06", title: "Quick Change & Turnaround" }, label)).toBe(
+      "Next time: a Transcription Gym session (ladder level 6: blues). Then Quick Change & Turnaround",
+    );
+  });
+  test("own audio, no slot due, and a capstone under way", () => {
+    expect(
+      gymNextLabel(
+        gym({
+          next: {
+            gymId: "GYM.08",
+            kind: "own-audio",
+            ladderLevel: null,
+            realism: null,
+            ownAudioFallback: false,
+            transcriptionId: "t1",
+          },
+        }),
+        "U11.L06",
+      ),
+    ).toBe("a Transcription Gym session on your own audio");
+    expect(gymNextLabel(gym({ slotDue: false }), "U11.L06")).toBeNull();
+    expect(gymNextLabel(gym(), "C4.S2")).toBeNull();
+    expect(gymNextLabel(null, "U11.L06")).toBeNull();
   });
 });

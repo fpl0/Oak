@@ -62,6 +62,17 @@ import {
   trialTonicMidi,
 } from "./plans.ts";
 import { compositeSource, plannedSource, staircaseSource } from "./sources.ts";
+import {
+  barPlan,
+  gradeRoots,
+  isBassLineTrial,
+  noteAlonePlan,
+  otherFeelPlan,
+  scalePlan,
+  sectionPlan,
+  tracksPlan,
+  withoutSeventhPlan,
+} from "./wave5.ts";
 
 // --- live data for the panels -------------------------------------------------------------------
 
@@ -83,6 +94,11 @@ interface Live {
   levelDb: number;
   /** A pointer tap on the on-screen pad while armed (`timeStamp` from the DOM event). */
   tapNow: ((timeStamp: number) => void) | null;
+  /**
+   * Wave 5: where the passage is while it plays (the twelve-bar chart lights the bar that sounds): its start on the
+   * AudioContext clock, the clock, its tempo, the passage bar it starts at (0-based) and how many bars it plays.
+   */
+  playhead: { start: number; clock: () => number; cps: number; fromBar: number; bars: number } | null;
   reset(): void;
 }
 export const useLive = create<Live>((set) => ({
@@ -93,6 +109,7 @@ export const useLive = create<Live>((set) => ({
   clock: null,
   levelDb: -100,
   tapNow: null,
+  playhead: null,
   reset: () =>
     set({ taps: [], frames: [], windowSec: 0, windowStart: null, clock: null, levelDb: -100, tapNow: null }),
 }));
@@ -263,8 +280,15 @@ export function drillDeps(env: Pick<DrillEnv, "registry" | "profile">): DrillDep
   return {
     grade: (trial, response) =>
       gradeDrillTrial(env.registry.family(trial.family), trial, response, env.profile),
-    stepsOf: (trial) => (stagedKeyOf(trial) ? ["bass", "quality", "rn"] : null),
-    gradeStep: (trial, step, answer) => gradeStep(trial, step, answer),
+    // Chord dictation: bass → quality → numerals. Bass-line dictation (Wave 5): the roots first, then the line.
+    stepsOf: (trial) =>
+      stagedKeyOf(trial) ? ["bass", "quality", "rn"] : isBassLineTrial(trial) ? ["bass", "line"] : null,
+    gradeStep: (trial, step, answer) =>
+      isBassLineTrial(trial)
+        ? gradeRoots(trial, (answer.degrees ?? []).map(String))
+        : step === "line"
+          ? { credit: 0, passed: false, marks: [] }
+          : gradeStep(trial, step, answer),
     hasSungPart: (trial) => isBassTrial(trial),
     gradeSungPart: (trial, frames) => {
       const targets = bassSingTargets(trial, env.profile);
@@ -474,6 +498,10 @@ function presentActor(env: DrillEnv) {
       handles.push(play(oak, st.cue, t0));
       const stim = play(oak, st.stimulus, t0 + st.stimulusAt);
       handles.push(stim);
+      if (stim) {
+        useLive.setState({ playhead: playheadOf(oak, trial, t0 + st.stimulusAt) });
+        cleanups.push(() => useLive.setState({ playhead: null }));
+      }
       sendBack({ type: "STAGE", stage: st.cue ? "cue" : "listen" });
       if (st.cue && st.stimulus)
         timers.push(atTime(oak, t0 + st.stimulusAt, () => sendBack({ type: "STAGE", stage: "listen" })));
@@ -499,14 +527,39 @@ function presentActor(env: DrillEnv) {
   });
 }
 
+/**
+ * Wave 5: what "alone" means for a trial — the hats of a feel trial, the bass with the kick of a groove-lock trial,
+ * the asked note of an FET trial, the bass line of a bass trial, else the tune by itself.
+ */
+export function alonePlan(trial: Trial): AudioPlan | null {
+  if (trial.family === "fam.rhy.swing") return tracksPlan(trial, ["hats", "hatClosed", "hatOpen"]);
+  if (trial.family === "fam.rhy.groove-lock") return tracksPlan(trial, ["kick", "bass"]);
+  if (Array.isArray(trial.params.resolutionTargets)) return noteAlonePlan(trial);
+  if (trial.family === "fam.har.bass" || isBassLineTrial(trial)) return bassPlan(trial);
+  return tracksPlan(trial, ["mel"]);
+}
+
 /** The plan of an after-answer audition (pure apart from the profile's comfort range). */
 export function auditionPlan(
   trial: Trial,
   what: AuditionInput["what"],
   captured: AuditionInput["captured"],
   profile: LearnerProfile,
+  part: number | null = null,
 ): AudioPlan | null {
   switch (what) {
+    case "alone":
+      return alonePlan(trial);
+    case "other":
+      return trial.family === "fam.rhy.swing" ? otherFeelPlan(trial) : withoutSeventhPlan(trial);
+    case "scale":
+      return scalePlan(trial);
+    case "part": {
+      if (part === null) return null;
+      // A section of a form trial (0-based), else a bar of the passage (1-based).
+      const section = sectionPlan(trial, part);
+      return section ?? barPlan(trial, part);
+    }
     case "answer":
       return answerPlan(trial);
     case "resolve": {
@@ -540,6 +593,13 @@ export function auditionPlan(
   }
 }
 
+/** The playhead of a passage that starts at `start` (from passage bar `fromBar`, for `bars` bars). */
+function playheadOf(oak: OakStrudel, trial: Trial, start: number, fromBar = 0, bars?: number) {
+  const cue = Number(trial.params.cueBars ?? 0);
+  const all = Math.max(1, Number(trial.params.bars ?? 1) - cue);
+  return { start, clock: () => oak.ctx.currentTime, cps: trial.cps, fromBar, bars: bars ?? all - fromBar };
+}
+
 function auditionActor(env: DrillEnv) {
   return fromCallback<DrillEvent, AuditionInput>(({ input, sendBack }) => {
     let cancelled = false;
@@ -547,10 +607,21 @@ function auditionActor(env: DrillEnv) {
     void (async () => {
       const oak = await getOak();
       if (cancelled) return;
-      const plan = auditionPlan(input.trial, input.what, input.captured, env.profile);
+      const plan = auditionPlan(input.trial, input.what, input.captured, env.profile, input.part ?? null);
       if (plan) await preload(oak, plan.preload);
       if (cancelled) return;
-      handle = play(oak, plan, oak.ctx.currentTime + LEAD_S);
+      const at = oak.ctx.currentTime + LEAD_S;
+      handle = play(oak, plan, at);
+      // The passage again, or one bar of it: the chart follows (Wave 5, the twelve bars).
+      if (handle && (input.what === "again" || (input.what === "part" && typeof input.part === "number"))) {
+        const st = stagingOf(input.trial, env.profile);
+        useLive.setState({
+          playhead:
+            input.what === "part"
+              ? playheadOf(oak, input.trial, at, (input.part as number) - 1, 1)
+              : playheadOf(oak, input.trial, at + (st.cue ? st.stimulusAt : 0)),
+        });
+      }
       await handle?.done;
       if (!cancelled) sendBack({ type: "AUDITION_DONE" });
     })().catch(() => {
@@ -559,6 +630,7 @@ function auditionActor(env: DrillEnv) {
     return () => {
       cancelled = true;
       handle?.stop();
+      useLive.setState({ playhead: null });
     };
   });
 }

@@ -55,6 +55,62 @@ export interface KeySpec {
   mode: ScaleMode;
 }
 
+/**
+ * Wave 5. The degrees of each mode, 1-based and spelled against the major scale (contracts §5.2 `Degree`):
+ * what a degree pad offers in that key and what a sung or written degree may be. The minors are do-based:
+ * 1 is home in minor too, and ♭3 ♭6 ♭7 are written `b3 b6 b7` (sung me, le, te). Harmonic minor raises 7,
+ * melodic minor (ascending, the form Oak teaches) raises 6 and 7.
+ */
+export const MODE_DEGREES: Readonly<Record<ScaleMode, readonly Degree[]>> = {
+  major: ["1", "2", "3", "4", "5", "6", "7"],
+  minor: ["1", "2", "b3", "4", "5", "b6", "b7"],
+  "harmonic minor": ["1", "2", "b3", "4", "5", "b6", "7"],
+  "melodic minor": ["1", "2", "b3", "4", "5", "6", "7"],
+  dorian: ["1", "2", "b3", "4", "5", "6", "b7"],
+  phrygian: ["1", "b2", "b3", "4", "5", "b6", "b7"],
+  lydian: ["1", "2", "3", "#4", "5", "6", "7"],
+  mixolydian: ["1", "2", "3", "4", "5", "6", "b7"],
+  locrian: ["1", "b2", "b3", "4", "b5", "b6", "b7"],
+  "major pentatonic": ["1", "2", "3", "5", "6"],
+  "minor pentatonic": ["1", "b3", "4", "5", "b7"],
+  blues: ["1", "b3", "4", "b5", "5", "b7"],
+};
+/** Wave 5. The modes whose 3rd is ♭3: a degree pad in one of these keys offers ♭3, never 3. */
+export const MINOR_THIRD_MODES: readonly ScaleMode[] = [
+  "minor",
+  "harmonic minor",
+  "melodic minor",
+  "dorian",
+  "phrygian",
+  "locrian",
+  "minor pentatonic",
+  "blues",
+];
+/**
+ * Wave 5. Movable-do syllables for every degree, do-based in minor (contracts §8.3; U10.L01): 1 is do in
+ * every key, ♭3 me, ♭6 le, ♭7 te; the chromatic degrees take their usual raised (-i) and lowered (-a/-e)
+ * names. @oak/theory `labelPitch` gives the same syllables.
+ */
+export const DEGREE_SYLLABLES: Readonly<Record<Degree, string>> = {
+  "1": "do",
+  "#1": "di",
+  b2: "ra",
+  "2": "re",
+  "#2": "ri",
+  b3: "me",
+  "3": "mi",
+  "4": "fa",
+  "#4": "fi",
+  b5: "se",
+  "5": "sol",
+  "#5": "si",
+  b6: "le",
+  "6": "la",
+  "#6": "li",
+  b7: "te",
+  "7": "ti",
+};
+
 /** The table is in contracts §6.9; `METERS` in @oak/theory is its only implementation. */
 export const METER_IDS = ["4/4", "3/4", "2/4", "6/8", "9/8", "12/8", "5/4", "5/8", "7/8", "9/8i"] as const;
 export type MeterId = (typeof METER_IDS)[number];

@@ -192,6 +192,15 @@ describe("backup", () => {
         r.flags_json = JSON.stringify(rest);
       }
     }
+    // Wave 5 (c2): imported transcription versions and typed lesson attempts carry the review marks too.
+    for (const r of (flagged.transcription_versions ?? []) as { review_before_run: number }[]) {
+      expect(r.review_before_run).toBe(1);
+      r.review_before_run = 0;
+    }
+    for (const r of (flagged.step_attempts ?? []) as { imported: number; code: string | null }[]) {
+      expect(r.imported).toBe(r.code === null ? 0 : 1);
+      r.imported = 0;
+    }
     expect(flagged).toEqual(dump(a));
     const sketch = await b.json<{ versions: { flags: { reviewBeforeRun?: boolean } }[] }>(
       "GET",

@@ -66,6 +66,63 @@ export function pitchOf(value: unknown): Pitch {
   return out;
 }
 
+/**
+ * Wave 5. The sound controls an event keeps (`NEvent.controls`), by Strudel's value key: what the `controls`
+ * matcher ("match this sound", A1) and the probes compare. Pitch, rhythm and sample controls are elsewhere.
+ */
+export const SOUND_CONTROL_KEYS = [
+  "cutoff",
+  "resonance",
+  "hcutoff",
+  "hresonance",
+  "bandf",
+  "bandq",
+  "ftype",
+  "lpenv",
+  "lpattack",
+  "lpdecay",
+  "lpsustain",
+  "lprelease",
+  "attack",
+  "decay",
+  "sustain",
+  "release",
+  "room",
+  "roomsize",
+  "delay",
+  "delaytime",
+  "delayfeedback",
+  "distort",
+  "shape",
+  "crush",
+  "coarse",
+  "pan",
+  "orbit",
+  "vowel",
+  "partials",
+] as const;
+
+/** The sound controls a hap value sets, or `undefined` when it sets none. */
+export function soundControlsOf(obj: Record<string, unknown>): Record<string, number | string> | undefined {
+  let out: Record<string, number | string> | undefined;
+  for (const k of SOUND_CONTROL_KEYS) {
+    const v = obj[k];
+    let x: number | string | null = null;
+    if (typeof v === "number" && Number.isFinite(v)) x = v;
+    else if (typeof v === "string") x = capText(v);
+    else if (
+      Array.isArray(v) &&
+      v.length <= 64 &&
+      v.every((y) => typeof y === "number" && Number.isFinite(y))
+    )
+      x = v.join(",");
+    if (x === null) continue;
+    out ??= {};
+    out[k] = x;
+  }
+  return out;
+}
+
 /** Where each mini-notation literal of the code sits and which call it is an argument of. */
 export interface LiteralRole {
   start: number;
@@ -114,6 +171,10 @@ export function hapToEvent(
     chord,
     scale: str(ctx.scale),
     locations,
+    ...((): { controls?: Record<string, number | string> } => {
+      const c = soundControlsOf(obj);
+      return c ? { controls: c } : {};
+    })(),
   };
 }
 

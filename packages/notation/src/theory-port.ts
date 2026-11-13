@@ -10,8 +10,18 @@ export function spell(
 ): SpelledPitch {
   return theory.spellMidi(midi, ctx);
 }
+/**
+ * The key whose signature a staff shows for `key`. Wave 5: a blues key (`.scale("C4:blues")`, U11) is written in
+ * the tonic's major signature, as blues lead sheets are: the 12-bar blues runs on I7 IV7 V7, and its blue notes
+ * (♭3, ♭5, ♭7) are accidentals against the major (E♭, G♭/F♯ and B♭ in C, never a three-flat signature). Every
+ * other mode keeps its own signature (a minor pentatonic riff in A reads in A minor).
+ */
+export function signatureKey(key: KeySpec | null): KeySpec | null {
+  return key && key.mode === "blues" ? { tonic: key.tonic, mode: "major" } : key;
+}
 /** The key signature plus its alteration per letter (`sig.F === 1` in D major). */
-export function keySig(key: KeySpec | null): KeySignature & { sig: Record<string, number> } {
+export function keySig(key0: KeySpec | null): KeySignature & { sig: Record<string, number> } {
+  const key = signatureKey(key0);
   const ks: KeySignature = key ? theory.keySignature(key) : { accidentals: 0, notes: [], abcK: "C" };
   const sig: Record<string, number> = { C: 0, D: 0, E: 0, F: 0, G: 0, A: 0, B: 0 };
   for (const n of ks.notes) {
@@ -19,6 +29,25 @@ export function keySig(key: KeySpec | null): KeySignature & { sig: Record<string
     if (m) sig[m[1] as string] = (m[2] ?? "").startsWith("#") ? (m[2] ?? "").length : -(m[2] ?? "").length;
   }
   return { ...ks, sig };
+}
+/** A blue note (♭3, ♭5, ♭7 against the tonic read as major), or null. */
+export function blueNote(midi: number, key: KeySpec): theory.BlueNote | null {
+  return theory.blueNoteOf(midi, key);
+}
+/** A blue note spelled for the staff: ♭3 and ♭7 as flats, ♭5 by direction (F♯ going up, G♭ going down). */
+export function spellBlue(midi: number, key: KeySpec, direction?: 1 | -1): SpelledPitch {
+  return theory.spellBlueNote(midi, key, direction);
+}
+/** Whether a chord symbol is a dominant seventh ("C7", "G7/B"). */
+export function isDominantSeventh(symbol: string): boolean {
+  return theory.isDominantSeventhSymbol(symbol);
+}
+/** The pitch classes of a chord (spelled names), for "is this note a chord tone". */
+export function chordPcs(chord: ChordId): number[] {
+  return theory.chordNotes(chord).flatMap((n) => {
+    const p = theory.parseNote(`${n}4`);
+    return p ? [((p.midi % 12) + 12) % 12] : [];
+  });
 }
 export function keyFromScaleCtx(scaleCtx: string): KeySpec | null {
   return theory.keyFromScaleCtx(scaleCtx);

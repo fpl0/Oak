@@ -86,6 +86,8 @@ interface AttemptRow {
   disputed: number;
   tutor_assisted: number;
   at: string;
+  /** Wave 5 (migration 0006, c2): the attempt arrived through a backup import. */
+  imported?: number;
 }
 const toAttempt = (r: AttemptRow): StepAttempt => ({
   id: r.id,
@@ -112,6 +114,8 @@ export interface StoredAttempt extends StepAttempt {
   code: string | null;
   assisted: boolean;
   tutorAssisted: boolean;
+  /** Wave 5 (c2): the attempt arrived through a backup import; its code is not known to be the learner's typing. */
+  imported: boolean;
 }
 const toStored = (r: AttemptRow): StoredAttempt => ({
   ...toAttempt(r),
@@ -119,6 +123,7 @@ const toStored = (r: AttemptRow): StoredAttempt => ({
   code: r.code,
   assisted: bool(r.assisted),
   tutorAssisted: bool(r.tutor_assisted),
+  imported: r.imported === 1,
 });
 
 interface ExResultRow {

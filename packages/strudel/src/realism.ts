@@ -75,7 +75,7 @@ export function isCleanRealism(spec: RealismSpec): boolean {
 export class StrudelNotBuiltError extends Error {
   readonly code = "strudel_not_built";
   constructor(what: string) {
-    super(`@oak/strudel: ${what} is not built yet (docs/design/wave4.md §3.5)`);
+    super(`@oak/strudel: ${what} is not built yet (docs/design/wave4.md §3.5, wave5.md §3.4)`);
     this.name = "StrudelNotBuiltError";
   }
 }

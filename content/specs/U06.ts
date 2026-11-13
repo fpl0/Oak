@@ -1044,7 +1044,7 @@ export const U06: UnitSpec = {
       wrapAt: 4,
       make: {
         brief:
-          "Write a four-bar loop over the drums and give at least two of its chords the extra 3rd. The Rhodes suits it; so does a slow tempo.",
+          "The four-chord loop, I V vi IV, in plain triads with its U05.L01 tune: give at least two of its chords the extra 3rd, the ones you choose (Cmaj7 G7 Am7 Fmaj7 when all four). The Rhodes suits it; so does a slow tempo. (Learner review: the starter was the S4 loop again; it is now the learner's oldest loop.)",
         required: {
           rule: "chord-qualities",
           label: "At least two chords with a 7th on top",

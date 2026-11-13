@@ -14,7 +14,7 @@ import { EvalMutex, withTimeout } from "./mutex.ts";
 import { type PackManifest, packFileUrls, prebake, soundNames } from "./pack.ts";
 import { createPatternPlayer } from "./pattern-player.ts";
 import { playEvents, playNote } from "./playback.ts";
-import { preloadPattern, preloadSpec, soundKeyOf, warmAll } from "./preload.ts";
+import { preloadPattern, preloadSpec, soundKeyOf, warmAhead, warmAll } from "./preload.ts";
 import { createRecorder } from "./recorder.ts";
 import type { Runtime } from "./runtime.ts";
 import { createScopeTap } from "./scope-tap.ts";
@@ -28,6 +28,8 @@ export { buildVocabulary, completionSiteAt, completionsFor } from "./completion.
 export type { InternalEditor } from "./editor.ts";
 export { type FriendlyError, friendlyEvalError } from "./friendly.ts";
 export { isMuted, NO_MUTES } from "./mutes.ts";
+// Wave 5 seam (docs/design/wave5.md §3.4): visual probes and a fake scope tap (also "@oak/strudel/probes").
+export * from "./probes.ts";
 // Wave 4 seam (docs/design/wave4.md §3.5): realism levels of ladder stimuli.
 export {
   isCleanRealism,
@@ -109,7 +111,22 @@ export function createOakStrudel(options: OakStrudelOptions): OakStrudel {
   const budget = new LiveBudget<string>(options.maxLiveEditors ?? 6);
   const transport = createTransport(ctx);
   const master = createMasterBus(ctx);
-  const scope = createScopeTap(master.analyser, ctx.sampleRate);
+  // The scope's one-track source is superdough's `analyze` analyser. An AnalyserNode whose voices have all ended
+  // has no input and stops being processed, freezing its last frame: a silent ConstantSource keeps it running,
+  // so a track that stops reads silence, not its last wave.
+  const kept = new WeakSet<AnalyserNode>();
+  const scope = createScopeTap(master.analyser, ctx.sampleRate, (id, fftSize) => {
+    // Only once audio is unlocked: superdough's analysers live in the context `initAudio` set up.
+    if (!unlocked) return null;
+    const node = webaudio.getAnalyserById(id, fftSize, 0) as AnalyserNode;
+    if (!kept.has(node)) {
+      kept.add(node);
+      const zero = new ConstantSourceNode(ctx, { offset: 0 });
+      zero.connect(node);
+      zero.start();
+    }
+    return node;
+  });
   const ui = createUiSoundBus(ctx);
   const editors: Runtime["editors"] = new Map();
   const audio = createStore<AudioState>("locked");
@@ -292,6 +309,7 @@ export function createOakStrudel(options: OakStrudelOptions): OakStrudel {
     editors,
     preload: (spec) => preloadSpec(spec),
     preloadPattern: (pattern, from, to) => preloadPattern(pattern, from, to),
+    warmAhead: (pattern, from, to) => warmAhead(pattern, from, to),
     preloadValues: (values) => prebakeOnce().then(() => warmAll(values)),
     noteTrigger(value) {
       if (!value || typeof value !== "object") return;

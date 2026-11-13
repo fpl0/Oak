@@ -50,8 +50,14 @@ const MODIFY_STARTER = code(stacks(`⟪${TRIAD}⟫`), bass());
 const MODIFY_SOLUTION = code(stacks(SEVENTH), bass());
 const modifyWith = (shape: string, roots = LOOP) => code(stacks(shape, roots), bass());
 
-/** The Make starts from the hook in triads, without its tune. */
-const MAKE_STARTER = code(stacks(TRIAD), bass());
+/**
+ * The Make starts from the learner's oldest loop, I V vi IV with its U05.L01 tune, in triads (learner review:
+ * the hook's loop in triads was S4's starter again, so the minimal pass was S4's answer). Coloured, it becomes
+ * Cmaj7 G7 Am7 Fmaj7; which chords take the 7th is the learner's choice.
+ */
+const AXIS = "<0 4 5 3>";
+const AXIS_TUNE = "<[4 ~ 2 4] [6 ~ 4 ~] [5 ~ 7 5] [5 ~ 3 ~]>";
+const MAKE_STARTER = code(stacks(TRIAD, AXIS), bass(AXIS), mel(AXIS_TUNE));
 
 /** Drums only from the Band (the jazz-soul flavour swings them; the prose says "lean back"): the learner's chords and bass set the harmony. */
 const DRUMS = { band: "band.axis-4bar", tracks: ["drums"] } as const;
@@ -362,7 +368,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Here is the loop in triads over the drums. Make it yours, with these chords or your own, and give at least two of them the extra 3rd. The Rhodes suits it; so does a slow tempo.",
+          "The loop you have played since Stacking Thirds, I V vi IV, in plain triads with its tune. Give at least two of its chords the extra 3rd, the ones you choose, and hear it change colour. The Rhodes suits it; so does a slow tempo.",
         skills: [{ skill: "C10", w: 1 }],
         // The catalog's text is "{label}: {detail}", and this rule's detail names the kinds of four-note
         // chord (major 7th, dominant 7th), which wait for U12. The same text serves the suggestions.
@@ -413,7 +419,18 @@ export default defineLesson({
           },
           {
             name: "minimal: the stack of four on every chord",
-            response: { code: code(stacks(SEVENTH), bass()) },
+            response: { code: code(stacks(SEVENTH, AXIS), bass(AXIS), mel(AXIS_TUNE)) },
+            expect: "pass",
+          },
+          {
+            name: "two of the four coloured, by hand: Cmaj7 and Am7",
+            response: {
+              code: code(
+                'chords: n("<[0,2,4,6] [4,6,8] [5,7,9,11] [3,5,7]>").scale("C3:major").s("rhodes")',
+                bass(AXIS),
+                mel(AXIS_TUNE),
+              ),
+            },
             expect: "pass",
           },
           {
@@ -431,8 +448,8 @@ export default defineLesson({
             name: "only one chord coloured",
             response: {
               code: code(
-                'chords: n("<[0,2,4,6] [5,7,9] [1,3,5] [4,6,8]>").scale("C3:major").s("rhodes")',
-                bass(),
+                'chords: n("<[0,2,4,6] [4,6,8] [5,7,9] [3,5,7]>").scale("C3:major").s("rhodes")',
+                bass(AXIS),
               ),
             },
             expect: "fail",
@@ -440,7 +457,7 @@ export default defineLesson({
           },
           {
             name: "the root doubled on top, not a 7th",
-            response: { code: code(stacks("[0,2,4,7]"), bass()) },
+            response: { code: code(stacks("[0,2,4,7]", AXIS), bass(AXIS)) },
             expect: "fail",
             feedback: ["rubric.unmet"],
           },

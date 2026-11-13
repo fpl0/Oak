@@ -8,6 +8,7 @@ import type { GraderErrorInfo, GraderHost } from "@oak/grader";
 import type { StaffKind } from "@oak/notation";
 import type { BandSetup } from "@oak/strudel";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { bandCodeForTracks } from "./loop-math.ts";
 import { buildModel, type WorkbenchModel } from "./model.ts";
 
 export interface AnalysisOptions {
@@ -62,7 +63,8 @@ export function useAnalysis(
         bars: o.bars,
         lint: o.lint,
         meter: o.meter,
-        ...(o.band ? { band: o.band.code } : {}),
+        // Only the parts the step asked for: the roll, the chips and the harmony show what plays.
+        ...(o.band ? { band: bandCodeForTracks(o.band.code, o.band.tracks) } : {}),
       };
       grader
         .analyze(src, evalOpts, ctl.signal)
@@ -106,7 +108,7 @@ export function useAnalysis(
   // (the learner's unlocked set often arrives after the first analysis: without this the "locked" errors of an
   // empty set stay on screen).
   const lintKey = `${opts.lint.profile}|${opts.lint.allowPreview}|${[...opts.lint.unlocked].sort().join(",")}`;
-  const shape = `${opts.bars}|${opts.meter}|${opts.key?.tonic}:${opts.key?.mode}|${opts.band?.code ?? ""}|${opts.staff}|${opts.staffLabels}|${opts.pickup ? opts.pickup.units.join("/") : ""}|${opts.bandHeard?.join("+") ?? "*"}|${lintKey}`;
+  const shape = `${opts.bars}|${opts.meter}|${opts.key?.tonic}:${opts.key?.mode}|${opts.band?.code ?? ""}:${opts.band?.tracks.join("+") ?? ""}|${opts.staff}|${opts.staffLabels}|${opts.pickup ? opts.pickup.units.join("/") : ""}|${opts.bandHeard?.join("+") ?? "*"}|${lintKey}`;
   const lastShape = useRef(shape);
   useEffect(() => {
     if (lastShape.current === shape) return;

@@ -22,7 +22,13 @@ import {
   type TermEntry,
   type ToolEntry,
 } from "@oak/content-kit";
-import { type ContentProblem, type ContentSource, EMPTY_SYLLABUS, emptyContent } from "./types.ts";
+import {
+  type ContentProblem,
+  type ContentSource,
+  EMPTY_SYLLABUS,
+  emptyContent,
+  type RepertoireMeta,
+} from "./types.ts";
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -115,6 +121,9 @@ export async function loadContent(options: LoadOptions): Promise<ContentSource> 
     ...byKind<MilestoneDef>(await load("milestones.ts", false), "milestone"),
   ];
 
+  // Wave 5: the repertoire pool's metadata (ladder level, availableFrom) for the L5/L6 song pools.
+  const repertoire = byKind<RepertoireMeta>(await load("repertoire/index.ts", false), "song");
+
   // The capstone registry (`content/capstones.ts`: the full definitions with briefs and rubrics, contracts
   // §6.6). It also exports the metas; a definition is told apart by its `sessionDefs`.
   const capstoneRegistry = exportedObjects(await load("capstones.ts", false)).filter(
@@ -194,6 +203,7 @@ export async function loadContent(options: LoadOptions): Promise<ContentSource> 
     canDos,
     milestones,
     songs,
+    repertoire,
     lessons,
     checkpoints,
     capstones,

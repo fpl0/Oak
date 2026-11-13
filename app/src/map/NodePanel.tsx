@@ -88,6 +88,7 @@ function PractiseAction({ target }: { target: PractiseTarget }) {
       <Link
         to="/learn/$lessonId"
         params={{ lessonId: target.lessonId }}
+        search={{ from: "map" }}
         className={buttonClass("primary", "md", "w-full")}
         data-testid="practise-this"
       >
@@ -202,6 +203,7 @@ export function NodePanel(p: NodePanelProps) {
                 <Link
                   to="/learn/$lessonId"
                   params={{ lessonId: node.introducedBy }}
+                  search={{ from: "map" }}
                   className="text-link underline-offset-2 hover:underline"
                 >
                   <span className="font-mono">{node.introducedBy}</span> {p.lessonTitle(node.introducedBy)}

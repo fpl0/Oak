@@ -1,7 +1,14 @@
 import { create } from "zustand";
 import { useContent } from "../lib/content.ts";
 import { useTermsIntroduced, useUnlocks } from "../lib/queries.ts";
-import { GENERAL_SUBJECT, sameThread, subjectKey, type TutorSubject, useTutorContext } from "./context.ts";
+import {
+  GENERAL_SUBJECT,
+  sameThread,
+  subjectKey,
+  subjectSections,
+  type TutorSubject,
+  useTutorContext,
+} from "./context.ts";
 import { chordMapFromCode } from "./harmony-chips.ts";
 import type { TokenContext } from "./music-tokens.ts";
 
@@ -21,6 +28,7 @@ export function useTokenContext(): TokenContext {
   if (!content.data) return EMPTY;
   const labels = subject.labels ?? lenses;
   const key = subjectKey(subject);
+  const sections = subjectSections(subject);
   // Wave 4: where chords sound, so chord and numeral chips light their bars. The surface's own analysis wins.
   const harmony =
     subject.harmony ??
@@ -36,6 +44,8 @@ export function useTokenContext(): TokenContext {
     key,
     ...(labels ? { labels: { degrees: labels.degrees, solfege: labels.solfege } } : {}),
     ...(harmony.length > 0 ? { harmony } : {}),
+    // Wave 5: section names in tutor text select the section in the form view.
+    ...(sections.length > 0 ? { sections, pickup: subject.pickup === true } : {}),
   };
 }
 

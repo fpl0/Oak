@@ -2,7 +2,7 @@
 // Transcribe, what the next gym session holds, and starting one (`gym.start`): the learner's own ordinals, odd
 // sessions graded ladder at the learner's level and realism, even sessions own audio (a ladder session one realism
 // level up without an audio project).
-import type { GymPlan, GymSession } from "@oak/api";
+import type { GymPlan, GymSession, SessionSummary } from "@oak/api";
 import { tx } from "../db/index.ts";
 import { conflict, notFound } from "../errors.ts";
 import type { CapstoneSessionsService } from "./capstone-sessions.ts";
@@ -84,6 +84,64 @@ export class GymService {
             },
       history: this.ctx.repos.gym.list(),
       x1: x1 !== null && !x1.open ? x1 : null,
+    };
+  }
+
+  /**
+   * Wave 5 (c10, wave5.md §5.4): what a gym day's Coda shows. Ladder: the level and realism the session was drawn
+   * at, its best score, whether it made a graded pass, the realism change it caused and the level-up it opened, each
+   * announced in this session's Coda only. Own audio: the project's checklist, the versions saved and the regions
+   * marked today. `null` when the session started no gym session.
+   */
+  summary(sessionId: string): SessionSummary["gym"] {
+    const g = this.ctx.repos.gym.list().find((x) => x.sessionId === sessionId);
+    if (g === undefined) return null;
+    const t = g.transcriptionId === null ? null : this.ctx.repos.transcriptions.get(g.transcriptionId);
+    const day = this.time.day();
+    if (g.kind === "own-audio") {
+      const versionsToday =
+        t === null
+          ? 0
+          : this.ctx.repos.transcriptions
+              .versions(t.id)
+              .filter((v) => this.time.day(new Date(v.createdAt)) === day).length;
+      return {
+        gymId: g.gymId as NonNullable<SessionSummary["gym"]>["gymId"],
+        kind: "own-audio",
+        transcriptionId: g.transcriptionId,
+        title: t?.title ?? "Your own audio",
+        ladder: null,
+        ownAudio: {
+          checklist: Object.fromEntries(
+            Object.entries(t?.checklist ?? {}).filter(([, v]) => Number.isFinite(v) && v >= 0 && v <= 2),
+          ),
+          versionsToday,
+          regions: t?.regions.length ?? 0,
+        },
+      };
+    }
+    const row = this.ctx.repos.ladder.session(sessionId);
+    const state = this.ctx.repos.ladder.state();
+    const level = g.ladderLevel ?? row?.level ?? state.level;
+    const realism = g.realism ?? row?.startRealism ?? state.realism;
+    const realismChange =
+      row !== null && row.level === state.level && row.startRealism !== state.realism
+        ? { from: row.startRealism, to: state.realism }
+        : null;
+    return {
+      gymId: g.gymId as NonNullable<SessionSummary["gym"]>["gymId"],
+      kind: "ladder",
+      transcriptionId: g.transcriptionId,
+      title: t?.title ?? "Transcription Gym: ladder",
+      ladder: {
+        level,
+        realism,
+        bestScore: row === null ? null : Math.max(0, Math.min(1, row.bestScore)),
+        gradedPass: row?.gradedPass ?? false,
+        realismChange,
+        levelUp: this.d.ladder.levelUpEarnedBy(sessionId),
+      },
+      ownAudio: null,
     };
   }
 

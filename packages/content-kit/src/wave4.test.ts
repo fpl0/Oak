@@ -38,8 +38,8 @@ const cue = { context: "tonic-chord", countInBars: 1, click: false, replays: -1 
 const rule = (body: object) => ({ id: "r", label: "l", required: true, skills: ["C01"], ...body });
 const ruleParses = (body: object) => schemaIssues(RubricRuleSchema, rule(body)).length === 0;
 
-test("the content schema version is 3 with the Wave 4 shapes", () => {
-  expect(CONTENT_SCHEMA_VERSION).toBe(3);
+test("the content schema version is at least 3 with the Wave 4 shapes", () => {
+  expect(CONTENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(3);
 });
 
 describe("slot-choice: a function strip or a cadence per phrase", () => {
@@ -426,7 +426,8 @@ describe("IMPLEMENTED, PLANNED and the shapes inside a kind", () => {
       ]),
     );
     for (const f of GRADER_READY.features ?? []) expect(IMPLEMENTED.features).not.toContain(f);
-    expect(PLANNED.features).toEqual(["transcribe.stages", "stimulus.capstone-song"]);
+    // Wave 4's planned shapes; Wave 5 adds its own after them (wave5.test.ts).
+    expect(PLANNED.features?.slice(0, 2)).toEqual(["transcribe.stages", "stimulus.capstone-song"]);
   });
   test("non-chord-tones (U07.L04–L05): a track, optional harmony and roles, a count", () => {
     expect(ruleParses({ rule: "non-chord-tones", track: "mel", min: 2 })).toBe(true);

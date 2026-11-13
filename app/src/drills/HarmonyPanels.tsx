@@ -17,11 +17,14 @@ export function StepTrack({
   steps,
   done,
   lastRight = true,
+  titles,
 }: {
   steps: StepsState;
   done: boolean;
   /** Once answered: whether the last step (the trial's own answer) was right. */
   lastRight?: boolean;
+  /** Step names other than the chord dictation's (a bass-line dictation: Roots, Line). */
+  titles?: Readonly<Record<string, string>>;
 }) {
   return (
     <ol className="flex flex-wrap items-center gap-2" aria-label="Steps" data-testid="step-track">
@@ -48,7 +51,7 @@ export function StepTrack({
             )}
           >
             <span className="tabular-nums">{i + 1}</span>
-            <span>{STEP_TITLES[step as ChordStep]}</span>
+            <span>{titles?.[step] ?? STEP_TITLES[step as ChordStep]}</span>
             {settled && !missed && !r?.revealed && (
               <Check aria-label="found" className="size-3.5 text-accent" />
             )}

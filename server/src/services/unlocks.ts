@@ -42,13 +42,24 @@ export class UnlocksService {
    * step) typed by the learner, oldest first, and whether it qualifies (score ≥ `minScore`, unrevealed). Disputed
    * and tutor-assisted attempts are left out: an applied tutor card gives no evidence (contracts §3.1 rule 6).
    */
-  gateAttempts(
-    c: Condition,
-  ): { at: string; score: number; revealed: boolean; qualifies: boolean; code: string | null }[] {
+  gateAttempts(c: Condition): {
+    at: string;
+    score: number;
+    revealed: boolean;
+    qualifies: boolean;
+    code: string | null;
+    imported: boolean;
+  }[] {
     const ids = [c.exercise as string, ...((c.variants ?? []) as string[])];
     const lessons = [...new Set(ids.map((id) => id.slice(0, id.indexOf("/"))))];
-    const out: { at: string; score: number; revealed: boolean; qualifies: boolean; code: string | null }[] =
-      [];
+    const out: {
+      at: string;
+      score: number;
+      revealed: boolean;
+      qualifies: boolean;
+      code: string | null;
+      imported: boolean;
+    }[] = [];
     for (const lessonId of lessons)
       for (const a of this.ctx.repos.lessons.attemptsOfLesson(lessonId)) {
         if (!ids.includes(`${a.lessonId}/${a.exerciseId}`)) continue;
@@ -63,6 +74,7 @@ export class UnlocksService {
           revealed,
           qualifies: own && !revealed && a.score >= c.minScore - 1e-9,
           code: a.code,
+          imported: a.imported,
         });
       }
     return out.sort((x, y) => x.at.localeCompare(y.at));

@@ -33,6 +33,8 @@ export function voicingGate(unlocks: UnlocksService): VoicingGate {
     passedAt: first?.at ?? null,
     attempts: attempts.length,
     passedCode: first?.code ?? null,
+    // c2 (contracts §11.3): code that arrived through a backup import runs only after the strict lint.
+    ...(first?.imported === true ? { passedCodeImported: true } : {}),
     holds: (gated?.rows ?? []).map((r) => r.id) as VoicingGate["holds"],
   };
 }

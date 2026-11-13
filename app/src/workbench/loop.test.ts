@@ -2,6 +2,7 @@
 import { describe, expect, test } from "bun:test";
 import { METERS } from "@oak/theory";
 import {
+  bandCodeForTracks,
   bandTrackAlias,
   clampRegion,
   codeWithBand,
@@ -11,10 +12,21 @@ import {
   mutesForLoop,
   regionLabel,
   stepRegion,
+  tutorBarsRegion,
 } from "./loop-math.ts";
 import { beatOf, beatsUntil, clickValue, firstBeatAt } from "./metronome.ts";
 import { followWindow, layoutRoll } from "./roll-layout.ts";
 import { shortcutRows, WORKBENCH_LOOP_SHORTCUTS } from "./shortcuts.ts";
+
+describe("tutor bar references (c4)", () => {
+  test("bars count from the first full bar: with a pickup, bar n is cycle n", () => {
+    expect(tutorBarsRegion({ from: 2, to: 3 }, false)).toEqual({ from: 1, bars: 2 });
+    expect(tutorBarsRegion({ from: 2, to: 3 }, true)).toEqual({ from: 2, bars: 2 });
+    expect(tutorBarsRegion({ from: 1, to: 1 }, true)).toEqual({ from: 1, bars: 1 });
+    // A reversed reference still names the same bars.
+    expect(tutorBarsRegion({ from: 4, to: 2 }, false)).toEqual({ from: 1, bars: 3 });
+  });
+});
 
 describe("loop region", () => {
   test("L loops the first half of the loop first, at least one bar", () => {
@@ -154,7 +166,7 @@ describe("a roll that follows the playhead on long loops", () => {
 });
 
 describe("shortcut sheet rows", () => {
-  test("every Wave 2, 3 and 4 workbench key is listed, display-only", () => {
+  test("every Wave 2–5 workbench key is listed, display-only", () => {
     const rows = shortcutRows();
     expect(rows.map((r) => r.keys)).toEqual(WORKBENCH_LOOP_SHORTCUTS.map(([k]) => k));
     expect(rows.every((r) => r.when?.({} as never) === false && r.scope === "workbench")).toBe(true);
@@ -176,6 +188,26 @@ describe("shortcut sheet rows", () => {
       "Shift+T",
       "Shift+G",
       "Shift+L",
+      "Shift+O",
+      "Shift+E",
+      "Shift+B",
+      "Shift+U",
+      "Shift+W",
+      "Shift+Y",
+      "Shift+P",
     ]);
+  });
+});
+
+describe("bandCodeForTracks (wave 5 gate: the analysis shows only the Band parts a step asked for)", () => {
+  const band = 'drums: s("bd sd")\nbass: n("0").s("ebass")\nchords: n("[0,2,4]").s("piano")';
+  test("keeps the asked roles and every unlabelled line", () => {
+    expect(bandCodeForTracks(band, ["drums"])).toBe('drums: s("bd sd")');
+    expect(bandCodeForTracks(`setcpm(90/4)\n${band}`, ["drums", "bass"])).toBe(
+      'setcpm(90/4)\ndrums: s("bd sd")\nbass: n("0").s("ebass")',
+    );
+  });
+  test("no roles named: the whole Band", () => {
+    expect(bandCodeForTracks(band, [])).toBe(band);
   });
 });

@@ -3,8 +3,10 @@
 // `/capstones/:id/gate`) may answer 501 on a server that has not built them; every model then falls back to what
 // the plan and course progress already say, so nothing here ever blocks a day.
 import type { CapstoneGate, SessionPlan } from "@oak/api";
+import { useQuery } from "@tanstack/react-query";
 import { useCapstoneContent } from "../capstone/content.ts";
 import {
+  apiQuery,
   useCapstoneGate,
   useCapstoneSessions,
   useCourseProgress,
@@ -78,10 +80,23 @@ export function useGymDay(
   const gym = useGymPlan();
   const ladder = useLadder();
   const projects = useTranscriptions();
+  const songs = useLadderSongsAt(
+    gym.data?.next?.ladderLevel ?? ladder.data?.level ?? null,
+    plan?.kind === "gym",
+  );
   if (plan?.kind !== "gym") return null;
   const projectId = gym.data?.next?.transcriptionId ?? null;
   const own = projectId ? projects.data?.items.find((t) => t.id === projectId) : undefined;
-  return gymDay(plan, gym.data ?? null, ladder.data ?? null, own?.title ?? null);
+  return gymDay(plan, gym.data ?? null, ladder.data ?? null, own?.title ?? null, songs);
+}
+
+/**
+ * The song pool (`GET /ladder/songs`, Wave 5), read only on a level-5 or level-6 day: the other levels are generated
+ * and name no song. `null` while it loads or on a server that answers 501.
+ */
+export function useLadderSongsAt(level: number | null, when = true) {
+  const songs = useQuery({ ...apiQuery("ladder.songs"), enabled: when && (level === 5 || level === 6) });
+  return songs.data?.items ?? null;
 }
 
 /**

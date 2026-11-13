@@ -1,6 +1,7 @@
 // The answers area: every answer widget behind the AnswerWidget contract (docs/design/wave2.md §3.1), the registry,
 // the environment some widgets read, and the pure helpers hosts use to grade taps and sung notes the same way.
 
+export { barGridStart, entryText as barGridEntryText } from "./bar-grid.ts";
 export {
   StagedDictation,
   type StagedDictationProps,
@@ -34,6 +35,7 @@ export {
   type TapTake,
   useAnswerEnv,
 } from "./env.tsx";
+export { readsAsLetters, sectionText } from "./form.ts";
 export {
   buildChord,
   chordParts,
@@ -44,8 +46,10 @@ export {
   rnSymbol,
   voiceChord,
 } from "./harmony.ts";
+export { rnModeOf } from "./keys.ts";
 export { ANSWER_WIDGETS, AnswerUnavailable, AnswerView, answerWidgetFor } from "./registry.tsx";
 export { emptyValue, gridSteps, isComplete, responseOf, slotCount } from "./response.ts";
+export { spellDegreeName, valueDegrees } from "./scale.ts";
 export {
   cadenceChords,
   DEFAULT_SING_TOL,

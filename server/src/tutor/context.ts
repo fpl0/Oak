@@ -5,12 +5,18 @@
 // Everything in it is redacted to the turn's level by redaction.ts. It is deterministic: fixed
 // line order, sorted keys, nothing finer than the learner-local day, so equal inputs give equal
 // bytes and the transcript stays cache-friendly.
-import { answerForms, answerKindOf } from "./answer-guard.ts";
+import { answerForms, answerKindOf, answerLeaks } from "./answer-guard.ts";
 import type { GradeSnapshot, ReviewSource, TutorNote } from "./domain.ts";
 import { hintsShown, type IssueView, redactGrade } from "./redaction.ts";
 import { factLines } from "./review-facts.ts";
 import type { TurnContext, UserTurn } from "./types.ts";
-import { vocabularyLines, vocabularyOf } from "./vocabulary.ts";
+import {
+  keyScaleLine,
+  vocabularyLines,
+  vocabularyOf,
+  w5VocabularyLines,
+  w5VocabularyOf,
+} from "./vocabulary.ts";
 
 export const CONTEXT_VERSION = "1";
 
@@ -128,11 +134,20 @@ export function buildOakContext(ctx: TurnContext): string {
     `thread: ${ctx.kind} · day ${key.day} · reply_limit: ${limit.filter((x) => x !== null).join(", ")}`,
   );
 
+  const vocab = vocabularyOf(ctx.terms);
+  // The step's own key wins over the lesson's (wave4.md §5.6): a step in G inside a lesson in C is in G.
+  const stepKey = step?.key ?? lesson?.key ?? null;
   if (lesson) {
-    // The step's own key wins over the lesson's (wave4.md §5.6): a step in G inside a lesson in C is in G.
-    const key = step?.key ?? lesson.key;
-    lines.push(`key: ${key ?? "none"} · meter: ${lesson.meter ?? "none"} · bpm: ${lesson.bpm ?? "none"}`);
+    lines.push(`key: ${stepKey ?? "none"} · meter: ${lesson.meter ?? "none"} · bpm: ${lesson.bpm ?? "none"}`);
   } else if (step?.key) lines.push(`key: ${step.key}`);
+  // Wave 5: the key's mode in full (degrees, do-based syllables, minor numerals), so a minor step is never read
+  // in its relative major (wave5.md §10 item 12).
+  const scale = keyScaleLine(stepKey ?? ctx.review?.facts?.key ?? null, vocab);
+  // On a step whose answer is the scale itself (a scale-builder), its degrees are the answer: withheld below 4.
+  const scaleForms = step ? answerForms(step, ctx.learnerCode) : [];
+  if (scale && answerLeaks(scale, scaleForms, ctx.disclosure).length > 0)
+    lines.push(`${scale.split(" · ")[0]} · its degrees are this step's answer: withheld until the reveal`);
+  else if (scale) lines.push(scale);
   const answerKind = step ? answerKindOf(step) : null;
   if (answerKind) lines.push(`answer_kind: ${inline(answerKind, 60)}`);
   if (step) {
@@ -166,7 +181,10 @@ export function buildOakContext(ctx: TurnContext): string {
 
   const terms = ctx.terms.recent.slice(0, MAX_RECENT_TERMS);
   lines.push(`terms_introduced: ${ctx.terms.count} · recent: ${terms.length ? terms.join(", ") : "none"}`);
-  lines.push(...vocabularyLines(vocabularyOf(ctx.terms)));
+  lines.push(...vocabularyLines(vocab));
+  lines.push(
+    ...w5VocabularyLines(w5VocabularyOf(ctx.terms), vocab, stepKey ?? ctx.review?.facts?.key ?? null),
+  );
   const tools = ctx.progress.unlocked.recent.slice(0, MAX_RECENT_TOOLS);
   lines.push(
     `tools_unlocked: ${ctx.progress.unlocked.count} · recent: ${tools.length ? tools.join(", ") : "none"}`,

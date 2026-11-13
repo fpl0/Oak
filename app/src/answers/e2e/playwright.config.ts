@@ -3,11 +3,12 @@
 // The gallery is the app's Vite serving app/src/answers/dev/gallery.html. The fake-microphone WAVs are written
 // before the run (fixtures.ts); the sing specs feed them to Chromium's fake capture device.
 import { fileURLToPath } from "node:url";
-import { type Area, areaConfig, oakStack, stackUse } from "../../../../e2e/support/stack.ts";
+import { type Area, areaConfig, oakStack, PREBUILT, stackUse } from "../../../../e2e/support/stack.ts";
 import { writeMicFixtures } from "./fixtures.ts";
 
 export const stack = oakStack({ vitePort: 5202, apiPort: 8802, dataDirName: "answers" });
-writeMicFixtures();
+// `bun run e2e` writes them once before any process starts (PREBUILT); a run of this suite alone writes them here.
+if (!PREBUILT) writeMicFixtures();
 
 export const area: Area = {
   name: "answers",

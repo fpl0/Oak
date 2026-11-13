@@ -35,8 +35,10 @@ import {
   useUnlocks,
 } from "../../lib/queries.ts";
 import { currentSessionId, reportBlockDone } from "../../session/store.ts";
+import { ChangesChart } from "../../transcribe/ChangesChart.tsx";
 import { checkLines, lineText } from "../../transcribe/ladder.ts";
 import { ReferenceStaff } from "../../transcribe/ReferenceView.tsx";
+import { barMarks, changesOfCode, withChanges } from "../../transcribe/song.ts";
 import {
   askReview,
   clearSubject,
@@ -61,7 +63,13 @@ import type { CapstoneContent } from "../content.ts";
 import { useDraftSaver } from "../draft.ts";
 import { analyzeDraft } from "../engine.ts";
 import { analysisTheory, composeLiner } from "../liner.ts";
-import { latestVersion, useCapstoneReview, useDraft, useDraftSketchId } from "../queries.ts";
+import {
+  latestVersion,
+  reviewRequestText,
+  useCapstoneReview,
+  useDraft,
+  useDraftSketchId,
+} from "../queries.ts";
 import { ReleaseDialog, type ReleasePiece } from "../ReleaseDialog.tsx";
 import { ReviewCard } from "../ReviewCard.tsx";
 import { useTryRevision } from "../revision.ts";
@@ -70,30 +78,29 @@ import { WorkbenchServicesLoader } from "../WorkbenchServicesLoader.tsx";
 import { refreshAfterRelease } from "../Workspace.tsx";
 import {
   applyResult,
+  bassFirst,
   type CheckRow,
-  checkRows,
+  capstoneRows,
   chordAnswer,
   givenLines,
   type LocalCheck,
+  lockedText,
   phraseLoop,
   revealedItems,
   rowLabel,
-  STAGE_WORD,
   sessionComplete,
   songCycles,
-  x1Starter,
+  transcribeStarter,
 } from "./phrases.ts";
 import { type SongLayer, SongSource, type SongSourceHandle } from "./SongSource.tsx";
-import { usePhrase1Rhythm, useSong } from "./songs.ts";
+import { songOfDraft } from "./song-of-draft.ts";
+import { usePhrase1Rhythm, useSong, useSongs } from "./songs.ts";
+
+export { songOfDraft };
 
 const slug = (id: string) => `capstone-${id}`;
 const notBuilt = (e: unknown) => e instanceof OakApiError && e.code === "not_implemented";
 const LOCAL_KEY = (id: string, sketch: string | null) => `oak.capstone.${id}.checks.${sketch ?? "new"}`;
-
-/** The song a transcribe capstone's draft is of: its `song.*` tag, else the first the capstone offers. */
-export function songOfDraft(def: Pick<CapstoneDef, "song">, tags: readonly string[]): string | null {
-  return tags.find((t) => t.startsWith("song.")) ?? def.song?.[0] ?? null;
-}
 
 export function X1Workspace({
   def,
@@ -109,11 +116,18 @@ export function X1Workspace({
   const ready = !draftRef.pending && (draftRef.id === null || draft.data !== undefined);
   const [opened, setOpened] = useState(false);
   if (ready && !opened) setOpened(true);
-  const songId = songOfDraft(def, draft.data?.tags ?? []);
+  const written = useSongs(def.song ?? []);
+  const songId = written.isPending
+    ? null
+    : songOfDraft(
+        def,
+        draft.data?.tags ?? [],
+        (written.data ?? []).map((x) => x.id),
+      );
   const song = useSong((songId as SongDef["id"]) ?? null);
   const entry = content.repertoire.find((r) => r.id === songId);
   let body: React.ReactNode;
-  if (!(ready || opened) || song.isPending)
+  if (!(ready || opened) || written.isPending || song.isPending)
     body = (
       <div
         className="flex flex-1 flex-col gap-3 p-4"
@@ -217,7 +231,9 @@ function X1Loaded({
   const unlocked = new Set((unlocksQ.data?.items ?? []).map((u) => u.itemId as UnlockableId));
 
   // --- code and saving ------------------------------------------------------------------------------
-  const initialCode = latest?.code ?? x1Starter(song);
+  const allChecks = def.sessionDefs.flatMap((sd) => sd.checks ?? []);
+  const staged = bassFirst(allChecks);
+  const initialCode = latest?.code ?? transcribeStarter(allChecks, song);
   const [code, setCode] = useState(initialCode);
   const codeRef = useRef(code);
   codeRef.current = code;
@@ -249,10 +265,15 @@ function X1Loaded({
   const [local, setLocal] = useState<Record<string, LocalCheck>>(() => readLocal(storeKey));
   useEffect(() => writeLocal(storeKey, local), [storeKey, local]);
   const checksOf = (i: number): PhraseCheck[] => def.sessionDefs[i]?.checks ?? [];
-  const rowsOf = (i: number) => checkRows(checksOf(i), views[i]?.checks ?? [], local);
-  const allRows = views.flatMap((v) => rowsOf(v.index));
+  // Every session's rows in order, so a check waits for one of an earlier session (X2: the melody after S1's
+  // changes; contracts §6.6 "stages in that order").
+  const bySession = capstoneRows(
+    def.sessionDefs.map((_, i) => ({ checks: checksOf(i), server: views[i]?.checks ?? [] })),
+    local,
+  );
+  const allRows = bySession.flat();
   const sessionIndex = current?.index ?? 0;
-  const rows = rowsOf(sessionIndex);
+  const rows = bySession[sessionIndex] ?? [];
   const complete = sessionComplete(rows);
   const releaseSession = current?.release === true;
   const qa = useApiMutation("qa.report");
@@ -353,8 +374,13 @@ function X1Loaded({
   const onSource = useCallback((h: SongSourceHandle | null) => {
     source.current = h;
   }, []);
+  // X1 plays the tune alone until its chords session; a bass-first transcription (X2) the whole band from the start.
   const layers: SongLayer[] =
-    allDone || checksOf(sessionIndex).some((c) => c.layer !== "melody")
+    allDone ||
+    staged ||
+    def.sessionDefs
+      .slice(0, sessionIndex + 1)
+      .some((sd) => (sd.checks ?? []).some((c) => c.layer !== "melody"))
       ? ["melody", "bass", "chords"]
       : ["melody"];
   const loopPhrase = (phrase: number | [number, number]) => {
@@ -395,12 +421,22 @@ function X1Loaded({
       toast.error("Couldn't prepare the release", e instanceof Error ? e.message : undefined);
     }
   };
-  const theory = [
-    "the melody by ear, phrase by phrase",
-    ...(allRows.some((r) => r.stage === "bass" && r.passed) ? ["the bass line by ear"] : []),
-    ...(allRows.some((r) => r.stage === "quality" && r.passed) ? ["chord qualities by ear"] : []),
-    ...(allRows.some((r) => r.stage === "rn" && r.passed) ? ["the chords as Roman numerals"] : []),
-  ];
+  const bassHeard = allRows.some((r) => (r.layer === "bass" || r.stage === "bass") && r.passed);
+  const theory = staged
+    ? [
+        ...(bassHeard ? ["the bass line by ear"] : []),
+        ...(allRows.some((r) => r.layer === "chords" && r.stage === null && r.passed)
+          ? ["the changes by ear"]
+          : []),
+        "the melody by ear, line by line",
+        ...(song.swing ? ["the shuffle feel"] : []),
+      ]
+    : [
+        "the melody by ear, phrase by phrase",
+        ...(bassHeard ? ["the bass line by ear"] : []),
+        ...(allRows.some((r) => r.stage === "quality" && r.passed) ? ["chord qualities by ear"] : []),
+        ...(allRows.some((r) => r.stage === "rn" && r.passed) ? ["the chords as Roman numerals"] : []),
+      ];
   const notesFor = (p: ReleasePiece) => (line: string) =>
     composeLiner({
       learnerLine: line,
@@ -417,10 +453,14 @@ function X1Loaded({
   // --- tutor ---------------------------------------------------------------------------------------
   const thread = { subjectKind: "capstone" as const, subjectId: def.id };
   const onHarmony = useSubjectHarmony(thread);
-  const onBars = (from: number, to: number) => {
-    showBars(thread, from, to);
+  // The tutor's bar references land here (the host's `showBars`, after the panel lit the bars): loop them. Bars
+  // count from the first full bar (c4), so with a pickup bar n is cycle n.
+  const loopTutorBars = (from: number, to: number) => {
     source.current?.loopBars(song.pickup ? from : from - 1, to - from + 1);
   };
+  // A bar named on this page (a check line): light it and loop it through the same path as a tutor reference.
+  // (`showBars` calls the host below, so the host must not call `showBars` again.)
+  const onBars = (from: number, to: number) => showBars(thread, from, to);
   useEffect(() => {
     setSubject({
       thread,
@@ -438,7 +478,7 @@ function X1Loaded({
     patchSubject(thread, { code, released, lastResult: feedback?.result ?? null });
   }, [code, released, feedback]);
   useEffect(
-    () => registerTutorHost({ thread, sketchId: saver.sketchId, showBars: (a, b) => onBars(a, b) }),
+    () => registerTutorHost({ thread, sketchId: saver.sketchId, showBars: (a, b) => loopTutorBars(a, b) }),
     [def.id],
   );
 
@@ -460,6 +500,24 @@ function X1Loaded({
     } catch (e) {
       toast.error("It didn't play", e instanceof Error ? e.message : undefined);
     }
+  };
+
+  // The changes check (X2, unstaged chords): the chart from the code's `chords:` line, written back as the
+  // learner fills it (Transcribe's chart and its code helpers).
+  const pickup = song.pickup !== undefined;
+  const changesRow = rows.find((r) => r.layer === "chords" && r.stage === null) ?? null;
+  const chart = changesRow ? changesOfCode(code, song.answerKey.bars, pickup) : null;
+  const changesMarks =
+    changesRow && feedback?.key === changesRow.key
+      ? barMarks(feedback.result, [1, song.answerKey.bars], pickup)
+      : null;
+  const writeChart = (next: string[]) => {
+    const src = withChanges(codeRef.current, next, pickup);
+    const h = editorHandle();
+    if (h) h.setCode(src, { undoable: true });
+    setCode(src);
+    saver.changed(src);
+    source.current?.setMine(src);
   };
 
   const given = givenLines(song);
@@ -541,7 +599,10 @@ function X1Loaded({
             {review.review ? (
               <div data-testid="review-summary">
                 <ReviewCard
+                  key={review.entryId ?? "review"}
                   review={review.review}
+                  doneId={review.entryId ?? undefined}
+                  heading={review.version ? `Review of version ${review.version}` : undefined}
                   onBars={onBars}
                   headingLevel={3}
                   compact
@@ -577,6 +638,7 @@ function X1Loaded({
                   title: def.title,
                   code: codeRef.current,
                   released,
+                  note: reviewRequestText(saver.saved?.version ?? null, true),
                 });
                 if (!r.ok) openTutor();
                 else {
@@ -714,6 +776,31 @@ function X1Loaded({
               </Callout>
             )}
             <SongSource song={song} layers={layers} code={code} onReady={onSource} />
+            {changesRow?.open && (
+              <section aria-label="The changes" className="flex flex-col gap-1.5" data-testid="x2-changes">
+                {chart ? (
+                  <ChangesChart
+                    chart={chart}
+                    onChart={writeChart}
+                    bars={song.answerKey.bars}
+                    meter={song.meter}
+                    keySpec={song.key}
+                    bpm={song.bpm}
+                    swing={song.swing !== undefined}
+                    marks={changesMarks}
+                    firstCycle={pickup ? 1 : 0}
+                    disabled={busy !== null}
+                    onSubmit={() => void runCheck(changesRow, false)}
+                  />
+                ) : (
+                  <p className="text-sm text-text-2">
+                    Your <code className="font-mono">chords:</code> line is written your own way, so the chart
+                    leaves it alone. Write one chord a bar in{" "}
+                    <code className="font-mono">chord("&lt;…&gt;")</code> and the chart follows it.
+                  </p>
+                )}
+              </section>
+            )}
             {feedback && <FeedbackView fb={feedback} rows={rows} onDismiss={() => setFeedback(null)} />}
             {revealedRow && <Revealed song={song} row={revealedRow} />}
             <Workbench
@@ -753,7 +840,16 @@ function X1Loaded({
           review={review.review}
           includeReviewDefault={boot.data?.settings.linerNotesInAlbum ?? true}
           notesFor={notesFor(piece)}
-          tags={["Melodic dictation", "Phrase structure", ...(theory.length > 1 ? ["Chords by ear"] : [])]}
+          tags={
+            staged
+              ? [
+                  "Bass lines by ear",
+                  "Changes by ear",
+                  "Melodic dictation",
+                  ...(song.swing ? ["Swing feel"] : []),
+                ]
+              : ["Melodic dictation", "Phrase structure", ...(theory.length > 1 ? ["Chords by ear"] : [])]
+          }
           defaultTitle={track.data?.title ?? song.title}
           editor={() => editorHandle()}
           onClose={() => setReleaseOpen(false)}
@@ -842,7 +938,7 @@ function CheckRowView({
               : row.revealed
                 ? "Revealed: no evidence, named in the liner notes."
                 : !row.open
-                  ? `Opens after ${row.stage === "quality" ? STAGE_WORD.bass : STAGE_WORD.quality}.`
+                  ? lockedText(row)
                   : row.score !== null
                     ? `Best so far ${Math.round(row.score * 100)} % of ${Math.round(row.pass * 100)} %.`
                     : `Pass mark ${Math.round(row.pass * 100)} %.`}
@@ -1005,7 +1101,7 @@ function Revealed({ song, row }: { song: SongDef; row: CheckRow }) {
       return { events, bars };
     },
   });
-  if (row.layer === "chords" && row.stage) {
+  if (row.layer === "chords") {
     const chords = chordAnswer(song, row.phrase);
     return (
       <section

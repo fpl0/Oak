@@ -86,7 +86,7 @@ test("hum a line: Oak drafts it in the editor, the draft is saved as a version t
     key: { tonic: "G", mode: "major" },
   });
   await page.goto(`/transcribe/${id}`);
-  await expect(page.getByTestId("play")).toBeEnabled({ timeout: 30_000 });
+  await expect(page.getByTestId("transport-play")).toBeEnabled({ timeout: 30_000 });
 
   await page.getByTestId("hum-open").click();
   await expect(page.getByRole("dialog")).toContainText("Nothing is recorded or sent");

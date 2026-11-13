@@ -3,6 +3,7 @@
 // realism change, announced once here and never mid-item (contracts §6.12), and a ladder level-up when the server
 // offers one (wave4.md §5.4), taken or left with one button. Each card reads its own data and renders nothing
 // until there is something true to say.
+import type { LadderLevelSet, SessionSummary } from "@oak/api";
 import { toolsUsed } from "@oak/grader";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -10,15 +11,32 @@ import { ArrowRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { TrackCover } from "../../album/TrackCover.tsx";
 import { useContent } from "../../lib/content.ts";
-import { apiQuery, useAlbum, useCapstoneGate, useLadder, useLadderSetLevel } from "../../lib/queries.ts";
+import { lessonTitles } from "../../lib/content-model.ts";
+import {
+  apiQuery,
+  useAlbum,
+  useCapstoneGate,
+  useCourseProgress,
+  useLadder,
+  useLadderSetLevel,
+} from "../../lib/queries.ts";
 import { toolLabel } from "../../lib/tool-label.ts";
 import { Button, buttonClass } from "../../ui/kit/Button.tsx";
 import { Card, Chip } from "../../ui/kit/basics.tsx";
 import { Callout } from "../../ui/kit/Controls.tsx";
 import { toast } from "../../ui/kit/Toast.tsx";
-import { capstoneOfSession, releaseOf, releaseTools, usedOnRelease } from "../coda-model.ts";
+import {
+  albumCountLine,
+  albumNext,
+  capstoneOfSession,
+  codeShape,
+  releaseOf,
+  releaseTools,
+  usedOnRelease,
+} from "../coda-model.ts";
 import { useX1Gate } from "../day-hooks.ts";
-import { ladderCoda, levelName, x1Line } from "../gym-day.ts";
+import { ladderCoda, levelName, ownAudioCoda, summaryLadderCoda, x1Line } from "../gym-day.ts";
+import { itemTitle } from "../titles.ts";
 
 type CodaSession = { kind: string; mapItemId: string | null; startedAt: string; day: string };
 
@@ -60,6 +78,7 @@ export function ReleaseCard({ session }: { session: CodaSession }) {
   // X1 may open with this very release (melodic dictation already at its level): then it is simply next.
   const x1Gate = useCapstoneGate(capstoneId === "C2" ? "X1" : null);
   const x1Open = x1Gate.data?.open === true;
+  const course = useCourseProgress();
   if (!release) return null;
   const code = sketch.data?.versions.find((v) => v.version === release.version.sketchVersion)?.code ?? null;
   const toolbox = content.data?.toolbox ?? [];
@@ -73,11 +92,24 @@ export function ReleaseCard({ session }: { session: CodaSession }) {
           capstoneId,
         ).map((t) => {
           const l = toolLabel(t);
-          return { id: t.id as string, label: l.text, mono: l.mono };
+          return { id: t.id as string, label: l.mono ? codeShape(l.text) : l.text, mono: l.mono };
         })
       : [];
   const used = usedOnRelease(release.version.theoryTags, tools);
   const { track: t } = release;
+  const titles = lessonTitles(content.data?.syllabus ?? null);
+  // C2 → X1 keeps its own lines (the gym gate); every later release names the album's next track (Wave 5).
+  const next =
+    capstoneId && capstoneId !== "C2" && !release.revision
+      ? albumNext(
+          capstoneId,
+          content.data?.capstones ?? [],
+          order,
+          (id) => course.data?.capstones.find((c) => c.capstoneId === id)?.status ?? null,
+          (id) => (/\.CP\d?$/.test(id) ? `the ${itemTitle(id, titles)}` : itemTitle(id, titles)),
+        )
+      : null;
+  const count = release.revision ? null : albumCountLine(album.data?.tracks.length ?? 0);
   return (
     <section
       aria-labelledby="coda-release-title"
@@ -125,6 +157,16 @@ export function ReleaseCard({ session }: { session: CodaSession }) {
             next.
           </p>
         )}
+        {next && (
+          <p className="text-sm text-text-2" data-testid="coda-release-next" data-next={next.capstoneId}>
+            <span className="font-medium text-text">Next on the album: {next.title}.</span> {next.line}
+          </p>
+        )}
+        {count && (
+          <p className="text-sm text-text-3" data-testid="coda-album-count">
+            {count}
+          </p>
+        )}
         {x1 && capstoneId === "C2" && (
           <p className="text-sm text-text-2" data-testid="coda-release-next">
             <span className="font-medium text-text">Next on the album: X1 Folk Transcription.</span>{" "}
@@ -149,18 +191,22 @@ export function ReleaseCard({ session }: { session: CodaSession }) {
   );
 }
 
-/** A realism change and a level-up offer after a session with ladder work. */
-export function LadderCard({ session }: { session: CodaSession }) {
+/**
+ * A realism change and a level-up offer after a session with ladder work. The session summary's `gym` (Wave 5,
+ * c10) says what happened today, each change announced once by the server; without it (an older server) the
+ * ladder's own history is read, as in Wave 4.
+ */
+export function LadderCard({ session, gym }: { session: CodaSession; gym?: SessionSummary["gym"] }) {
   const ladder = useLadder();
   const setLevel = useLadderSetLevel();
   const [left, setLeft] = useState(false);
   const [taken, setTaken] = useState<number | null>(null);
-  if (session.kind !== "gym") return null;
-  const coda = ladderCoda(ladder.data, session.day);
+  if (session.kind !== "gym" || gym?.kind === "own-audio") return null;
+  const coda = gym ? summaryLadderCoda(gym) : ladderCoda(ladder.data, session.day);
   if (!coda && taken === null) return null;
   const take = async (to: number) => {
     try {
-      await setLevel.mutateAsync({ body: { level: to as 1 | 2 | 3 | 4 } });
+      await setLevel.mutateAsync({ body: { level: to as LadderLevelSet["level"] } });
       setTaken(to);
     } catch (e) {
       toast.error("That didn't save", e instanceof Error ? e.message : undefined);
@@ -191,7 +237,9 @@ export function LadderCard({ session }: { session: CodaSession }) {
         </Card>
       ) : (
         coda?.levelUp &&
-        !left && (
+        !left &&
+        // A summary read again after the level was taken (or on another day) offers it no more: the ladder moved.
+        !((ladder.data?.level ?? 0) >= coda.levelUp.to) && (
           <Card className="p-4 animate-fade-in" data-testid="coda-level-up">
             <p className="text-sm text-text-2">The transcription ladder</p>
             <h2 className="mb-1 text-h3">{coda.levelUp.title}</h2>
@@ -213,5 +261,47 @@ export function LadderCard({ session }: { session: CodaSession }) {
         )
       )}
     </div>
+  );
+}
+
+/** The own-audio gym Coda (c10): today's versions and bars, and the checklist as the learner scored it. */
+export function OwnAudioCard({ session, gym }: { session: CodaSession; gym?: SessionSummary["gym"] }) {
+  if (session.kind !== "gym") return null;
+  const coda = ownAudioCoda(gym);
+  if (!coda) return null;
+  return (
+    <Card className="p-4 animate-fade-in" data-testid="coda-own-audio">
+      <p className="text-sm text-text-2">Your own audio</p>
+      <h2 className="mb-1 text-h3">{coda.title}</h2>
+      <p className="text-text-2" data-testid="coda-own-audio-line">
+        {coda.line}.
+      </p>
+      {coda.rows.length > 0 && (
+        <ul aria-label="Your checklist today" className="mt-3 flex flex-col gap-1.5">
+          {coda.rows.map((r) => (
+            <li key={r.id} className="flex flex-wrap items-center justify-between gap-2" data-row={r.id}>
+              <span className="min-w-0">{r.label}</span>
+              <Chip tone={r.value === 2 ? "accent" : r.value === 1 ? "amber" : "neutral"}>{r.word}</Chip>
+            </li>
+          ))}
+        </ul>
+      )}
+      {coda.verdict && <p className="mt-2 text-sm text-text-2">{coda.verdict}</p>}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {coda.transcriptionId && (
+          <Link
+            to="/transcribe/$projectId"
+            params={{ projectId: coda.transcriptionId }}
+            className={buttonClass("secondary", "sm")}
+            data-testid="coda-own-audio-open"
+          >
+            Open it in Transcribe <ArrowRight aria-hidden className="size-4" />
+          </Link>
+        )}
+        <span className="text-sm text-text-3">
+          Self-assessed: it is never graded, and the recording stays on this device.
+        </span>
+      </div>
+    </Card>
   );
 }

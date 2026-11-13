@@ -37,6 +37,8 @@ const lesson = (
   practises: skills(practises),
   ...(optional ? { optional } : {}),
 });
+/** Wave 5: an optional side lesson (A1.L01–L04, contracts §2.6), offered from its track gate on. */
+const side = (meta: LessonMeta): LessonMeta => ({ ...meta, optional: true, side: true });
 const unit = (
   id: UnitId,
   title: string,
@@ -562,17 +564,12 @@ export const units: UnitDef[] = [
     lesson("R3.L05", "Rhythm Master Lab", "Mixed rhythm dictation.", "", "E14"),
   ]),
   unit("A1", "Sound Design", "A", null, [
-    lesson(
-      "A1.L01",
-      "Waves & Harmonics",
-      "The harmonic series; see a wave in Oak's scope panel.",
-      "D02",
-      "",
-      true,
+    side(
+      lesson("A1.L01", "Waves & Harmonics", "The harmonic series; see a wave in Oak's scope panel.", "D02"),
     ),
-    lesson("A1.L02", "Filters & Filter Envelopes", "Cutoff, resonance and movement.", "D03", "", true),
-    lesson("A1.L03", "Envelopes", "Attack, decay, sustain, release.", "D04", "", true),
-    lesson("A1.L04", "Space", "Reverb size, delay time and feedback, orbits.", "", "D05", true),
+    side(lesson("A1.L02", "Filters & Filter Envelopes", "Cutoff, resonance and movement.", "D03")),
+    side(lesson("A1.L03", "Envelopes", "Attack, decay, sustain, release.", "D04")),
+    side(lesson("A1.L04", "Space", "Reverb size, delay time and feedback, orbits.", "", "D05")),
     lesson("A1.L05", "Grit", "Saturation and bit reduction.", "D06"),
     lesson("A1.L06", "Movement", "Vibrato, phaser and other modulation.", "D07"),
     lesson("A1.L07", "FM & Supersaw", "Two richer synth sources.", "", "D07"),

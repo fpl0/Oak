@@ -13,11 +13,13 @@ import {
   type Transcription,
   type TranscriptionDetail,
   type TranscriptionSettings,
+  type TranscriptionVersion,
 } from "@oak/api";
 import { type GradeResult, skillOf } from "@oak/content-kit";
 import type { LadderPiece } from "@oak/drills";
+import { lintStrict } from "@oak/grader";
 import { tx } from "../db/index.ts";
-import type { StoredTranscription } from "../db/repos/library.ts";
+import type { StoredTranscription, TranscriptionVersionRow } from "../db/repos/library.ts";
 import { ApiError, badRequest, conflict, notFound } from "../errors.ts";
 import {
   type AudioStore,
@@ -40,7 +42,15 @@ type VersionInput = Omit<SketchVersion, "sketchId" | "version" | "createdAt"> & 
 };
 
 /** Events of hidden pattern code for the Transcribe player, computed by the server grader. */
-export type PatternStimulus = (code: string, bars: number) => Promise<TranscriptionDetail["stimulus"]>;
+/** The stage a transcription version answers: L3 (bass, quality, rn) or L6 (bass, changes, melody). */
+export type TranscriptionVersionStage = NonNullable<TranscriptionVersionRow["stage"]>;
+
+/** Events of hidden pattern code over `bars` cycles, read in the song's meter (default 4/4). */
+export type PatternStimulus = (
+  code: string,
+  bars: number,
+  meter?: string,
+) => Promise<TranscriptionDetail["stimulus"]>;
 /**
  * A ladder piece (`@oak/drills` `generateLadderPiece`), behind a seam because it may be unfinished. `completed`
  * (lesson IDs) turns on the generator's later vocabulary (a pickup from U07.L08).
@@ -458,8 +468,16 @@ export class LibraryService {
       version: v.version,
       code: v.code,
       createdAt: v.createdAt,
+      ...(v.reviewBeforeRun === true ? { reviewBeforeRun: true as const } : {}),
     }));
-    return { ...rest, versions, stimulus: await this.#stimulus(t, hiddenCode) };
+    const song = t.songId === null ? undefined : this.ctx.content.source.songs.find((x) => x.id === t.songId);
+    // Wave 5: a pd-song project gives the learner its pickup, feel and form (contracts §6.12; the transcribe page
+    // and X1/X2 read them instead of guessing from the stimulus).
+    const given =
+      t.sourceKind === "pd-song" && song !== undefined
+        ? { given: { pickup: song.pickup ?? null, swing: song.swing ?? null, form: song.form ?? null } }
+        : {};
+    return { ...rest, versions, stimulus: await this.#stimulus(t, hiddenCode), ...given };
   }
 
   async #stimulus(t: StoredTranscription, code: string | null): Promise<TranscriptionDetail["stimulus"]> {
@@ -473,9 +491,11 @@ export class LibraryService {
     if (cached !== undefined) return cached;
     if (this.d.stimulus === undefined) return null;
     const song = t.songId === null ? null : this.ctx.content.source.songs.find((s) => s.id === t.songId);
-    const bars = song?.answerKey.bars ?? 8;
+    // With a pickup the code's first cycle is the pickup bar: the stimulus spans one cycle more than the bars.
+    const bars =
+      song === undefined || song === null ? 8 : song.answerKey.bars + (song.pickup === undefined ? 0 : 1);
     try {
-      const s = await this.d.stimulus(code, bars);
+      const s = await this.d.stimulus(code, bars, song?.meter ?? t.meter ?? "4/4");
       if (s !== null) this.#stimulusCache.set(key, s);
       return s;
     } catch {
@@ -565,9 +585,20 @@ export class LibraryService {
   patchTranscription(id: string, patch: Partial<Omit<Transcription, "id">>): Transcription {
     const t = this.#repos.transcriptions.get(id);
     if (t === null) throw notFound(`transcription ${id}`);
+    // Wave 5: the own-audio feel lives in the player settings (`settings.swing`); the patch field is a shorthand.
+    const { swing, ...rest } = patch as typeof patch & { swing?: TranscriptionSettings["swing"] };
     const next: StoredTranscription = {
       ...t,
-      ...patch,
+      ...rest,
+      ...(swing === undefined
+        ? {}
+        : {
+            settings: {
+              ...DEFAULT_TRANSCRIPTION_SETTINGS,
+              ...(t.settings ?? { fineTuneCents: t.fineTuneCents }),
+              swing,
+            },
+          }),
       id,
       hiddenCode: t.hiddenCode,
       updatedAt: this.time.iso(),
@@ -587,6 +618,8 @@ export class LibraryService {
    */
   #selfEvidence(id: string, before: Record<string, number>, after: Record<string, number>): void {
     if (this.d.mastery === undefined) return;
+    // c11: checklist toggles are self-reported evidence at most once per project per learner day.
+    if (this.#repos.mastery.hasEvidenceOn("self-transcription", `${id}/`, this.time.day())) return;
     const LAYER: Record<string, "melody" | "bass" | "chords"> = {
       contour: "melody",
       rhythm: "melody",
@@ -646,7 +679,8 @@ export class LibraryService {
       result: GradeResult | null;
       ranOk: boolean;
       machineDraft?: boolean;
-      stage?: "bass" | "quality" | "rn" | null;
+      stage?: TranscriptionVersionStage | null;
+      phrase?: number | null;
     },
   ): Promise<TranscriptionDetail> {
     this.saveTranscriptionVersion(id, body);
@@ -661,7 +695,8 @@ export class LibraryService {
       result: GradeResult | null;
       ranOk: boolean;
       machineDraft?: boolean;
-      stage?: "bass" | "quality" | "rn" | null;
+      stage?: TranscriptionVersionStage | null;
+      phrase?: number | null;
     },
   ): number {
     return tx(this.#repos.db, () => {
@@ -680,6 +715,7 @@ export class LibraryService {
         createdAt: at,
         machineDraft,
         stage: body.stage ?? null,
+        phrase: body.phrase ?? null,
       });
       this.#repos.transcriptions.update({ ...t, currentVersion: version, updatedAt: at });
       // The saved transcription version is the gym day's Make (contracts §9.1) and a sketch for the streak.
@@ -692,11 +728,51 @@ export class LibraryService {
     if (!this.#repos.transcriptions.delete(id)) throw notFound(`transcription ${id}`);
   }
 
-  saveTranscriptionReview(id: string, review: unknown): boolean {
+  /**
+   * An accepted transcription review. Wave 5 (c11): the version it was asked about (the request's
+   * `transcriptionVersion`, else the version current when it was given) is recorded for `ReviewRecord.version`.
+   */
+  saveTranscriptionReview(
+    id: string,
+    review: unknown,
+    asked: { conversationId?: string; version?: number | null } = {},
+  ): boolean {
     const t = this.#repos.transcriptions.get(id);
     if (t === null) return false;
-    this.#repos.transcriptions.update({ ...t, review, updatedAt: this.time.iso() });
+    const at = this.time.iso();
+    tx(this.#repos.db, () => {
+      this.#repos.transcriptions.update({ ...t, review, updatedAt: at });
+      if (asked.conversationId !== undefined)
+        this.#repos.transcriptions.addReviewVersion({
+          conversationId: asked.conversationId,
+          transcriptionId: id,
+          version: asked.version ?? (t.currentVersion > 0 ? t.currentVersion : null),
+          at,
+        });
+    });
     return true;
+  }
+
+  /**
+   * `POST /transcriptions/:id/versions/:v/confirm` (c2, contracts §11.3): the learner read an imported version, the
+   * browser's strict lint passed, and they run it as theirs. The server lints it strictly again (400 naming the
+   * first finding); a version without the flag is refused (409).
+   */
+  confirmTranscriptionVersion(id: string, version: number): TranscriptionVersion {
+    return tx(this.#repos.db, () => {
+      if (this.#repos.transcriptions.get(id) === null) throw notFound(`transcription ${id}`);
+      const v = this.#repos.transcriptions.versions(id).find((x) => x.version === version);
+      if (v === undefined) throw notFound(`transcription ${id} v${version}`);
+      if (v.reviewBeforeRun !== true) throw conflict("this version was typed here; it needs no confirmation");
+      const findings = lintStrict(v.code).filter((d) => d.severity === "error");
+      const first = findings[0];
+      if (first !== undefined)
+        throw badRequest(`the strict lint refuses this code: ${first.message}`, [
+          { path: `code@${first.range.from}`, message: first.message },
+        ]);
+      this.#repos.transcriptions.confirmVersion(id, version);
+      return { transcriptionId: id, version: v.version, code: v.code, createdAt: v.createdAt };
+    });
   }
 }
 

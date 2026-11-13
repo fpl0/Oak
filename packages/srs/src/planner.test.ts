@@ -83,6 +83,22 @@ describe("planWarmup", () => {
     expect(planWarmup(weak, ctx(), cfg).items[0]?.item.recall).toBe(0.6);
   });
 
+  test("a mic anchor is one of the day's two mic sets (the server's binge-and-gaps property)", () => {
+    const weakMic = Array.from({ length: 4 }, (_, i) =>
+      item({ mic: true, recall: 0.5, sec: 30, domain: `m${i}` }),
+    );
+    const anchor = item({ cardId: "anchor:fam.int.sing", mic: true, sec: 40, recall: 0.97 });
+    const plan = planWarmup(weakMic, ctx({ anchorFallback: anchor }), cfg);
+    expect(plan.items[0]).toMatchObject({ kind: "anchor" });
+    expect(sets(plan).filter((p) => p.item.mic)).toHaveLength(2);
+    // With one mic set already used today, the mic anchor is the second and last.
+    const second = planWarmup(weakMic, ctx({ anchorFallback: anchor, micSetsUsed: 1 }), cfg);
+    expect(sets(second).filter((p) => p.item.mic)).toHaveLength(1);
+    // With both used, a mic anchor is not offered at all.
+    const none = planWarmup(weakMic, ctx({ anchorFallback: anchor, micSetsUsed: 2 }), cfg);
+    expect(none.items.some((p) => p.kind === "anchor")).toBe(false);
+  });
+
   test("repair-queue sets come right after the opener", () => {
     const due = [
       item({ recall: 0.95, domain: "a" }),

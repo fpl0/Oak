@@ -123,6 +123,7 @@ async function show(o: ShowOptions): Promise<Shown> {
   await dom.renderStaff(el, abc.abc, o.params ? { params: o.params } : {});
   if (o.annotations) dom.placeAnnotations(el, notation.noteAnnotations(score, o.annotations), o.annotations);
   dom.tagChordLabels(el, score);
+  dom.tagSections(el, score);
   const geometry = dom.measureStaff(el, abc, score);
   const { symbol, roman, at } = notation.CHORD_LABEL_CLASSES;
   const labels: ShownLabel[] = [...el.querySelectorAll(`.${symbol}, .${roman}`)].map((t) => {
@@ -194,6 +195,56 @@ async function showLead(o: LeadOptions): Promise<Shown[]> {
   return out;
 }
 
+/** Wave 5: a chord chart, engraved (`chartAbc` + abcjs) or drawn as HTML (`renderChart`). */
+export interface ChartOptions {
+  title?: string;
+  chart: notation.ChartInput;
+  mode: "abc" | "dom";
+  width?: number;
+}
+export interface ShownChart {
+  id: string;
+  abc: string | null;
+  warnings: string[];
+  /** DOM mode: the spoken label of each bar, in order. */
+  bars: string[];
+}
+const lit = new Map<string, (bar: number | null) => void>();
+async function showChart(o: ChartOptions): Promise<ShownChart> {
+  const id = `chart-${count++}`;
+  const block = document.createElement("section");
+  block.className = "staff";
+  block.dataset.testid = id;
+  if (o.title) {
+    const h = document.createElement("h2");
+    h.textContent = o.title;
+    block.append(h);
+  }
+  if (o.width) block.style.width = `${o.width}px`;
+  const el = document.createElement("div");
+  el.id = id;
+  block.append(el);
+  document.getElementById("root")?.append(block);
+  if (o.mode === "abc") {
+    const c = notation.chartAbc(o.chart);
+    await dom.renderStaff(el, c.abc, { prefix: "oak-cb" });
+    return { id, abc: c.abc, warnings: c.warnings.map((w) => w.message), bars: [] };
+  }
+  const view = dom.renderChart(el, notation.chartLayout(o.chart));
+  lit.set(id, view.setBar);
+  return {
+    id,
+    abc: null,
+    warnings: [],
+    bars: [...el.querySelectorAll(`.${dom.CHART_CLASSES.bar}`)].map(
+      (b) => b.getAttribute("aria-label") ?? "",
+    ),
+  };
+}
+function lightBar(id: string, bar: number | null): void {
+  lit.get(id)?.(bar);
+}
+
 function clear(): void {
   const root = document.getElementById("root");
   if (root) root.textContent = "";
@@ -205,12 +256,14 @@ declare global {
       typeof dom & {
         show: typeof show;
         showLead: typeof showLead;
+        showChart: typeof showChart;
+        lightBar: typeof lightBar;
         clear: typeof clear;
         METERS: typeof METERS;
       };
     oakReady: boolean;
   }
 }
-window.oakNotation = { ...notation, ...dom, show, showLead, clear, METERS };
+window.oakNotation = { ...notation, ...dom, show, showLead, showChart, lightBar, clear, METERS };
 await dom.loadAbcjs();
 window.oakReady = true;

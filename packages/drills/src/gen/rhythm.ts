@@ -2,7 +2,7 @@
 // odd-meter grouping (exercises §4.4 "Rhythm"). Rhythms are built beat by beat; each beat prints with the
 // smallest division that holds its onsets, so the shown code reads like the counting the learner does.
 import type { Answer, MeterId, Rat } from "@oak/content-kit";
-import { R, rat } from "@oak/content-kit";
+import { FEEL_OPTIONS, R, rat } from "@oak/content-kit";
 import { METERS } from "@oak/theory";
 import { buildPiece, fmtNum, type Piece, type TrackSpec } from "../build.ts";
 import { atom, line, type Node, query, rest, seq } from "../pat.ts";
@@ -509,8 +509,17 @@ export const syncopation: Generator = {
 const SWING: Readonly<Record<string, Rat | null>> = {
   straight: null,
   light: rat(1, 6),
-  triplet: rat(1, 3),
+  swung: rat(1, 3),
   hard: rat(1, 2),
+};
+/**
+ * The feels as U11.L07 names them (FEEL_OPTIONS for straight and swung): "swung" puts the off-beat eighth two
+ * thirds of the way through the beat (long–short, 2:1); light swing a little less (7:5), hard swing more (3:1).
+ */
+const FEEL_LABELS: Readonly<Record<string, string>> = {
+  ...Object.fromEntries(FEEL_OPTIONS.map((o) => [o.id, o.label])),
+  light: "Light swing: a little long–short",
+  hard: "Hard swing: very long–short",
 };
 export const swingFeel: Generator = {
   name: "rhythm-swing",
@@ -544,7 +553,15 @@ export const swingFeel: Generator = {
       });
     }
     const piece = buildPiece({ bpm: pickTempo(ctx), bars: 2, tracks });
-    return trialOf(piece, { choice: [ctx.category] }, cueOf(ctx), { mode: "choice" });
+    // Only the feels the level offers and the learner has met, in order from straight to hard.
+    const open = ctx.level.categories.filter((c) => ctx.openCategories.includes(c) || c === ctx.category);
+    const options = ["straight", "light", "swung", "hard"].filter((c) => open.includes(c));
+    return trialOf(piece, { choice: [ctx.category] }, cueOf(ctx), {
+      mode: "choice",
+      options,
+      optionLabels: Object.fromEntries(options.map((o) => [o, FEEL_LABELS[o] as string])),
+      prompt: options.length > 2 ? "Straight, or how much swing?" : "Straight or swung?",
+    });
   },
 };
 const NAMES = ["c", "c#", "d", "eb", "e", "f", "f#", "g", "ab", "a", "bb", "b"];

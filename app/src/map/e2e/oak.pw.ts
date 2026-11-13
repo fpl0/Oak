@@ -64,7 +64,7 @@ test("the panel explains a leaf and points at the right practice", async ({ page
   await panel.getByRole("button", { name: /R02 Tempo/ }).click();
   await expect(panel.getByRole("heading", { name: "Tempo / BPM" })).toBeVisible();
   // R02 has no drill family yet: practise goes to its (completed) lesson.
-  await expect(panel.getByTestId("practise-this")).toHaveAttribute("href", "/learn/U01.L01");
+  await expect(panel.getByTestId("practise-this")).toHaveAttribute("href", "/learn/U01.L01?from=map");
   // A locked leaf says which lesson opens it, with no dead button.
   await leaf(page, "P05").click();
   await expect(panel).toContainText("Opens with U02.L02");

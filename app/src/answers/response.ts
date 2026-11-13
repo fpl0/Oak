@@ -38,6 +38,10 @@ export function emptyValue<K extends AnswerKind>(spec: AnswerSpecOf<K>): AnswerV
       case "rn-palette":
       case "slot-choice":
         return Array.from({ length: s.slots }, () => "");
+      case "form":
+        return Array.from({ length: s.sections }, () => "");
+      case "bar-grid":
+        return Array.from({ length: s.bars }, () => "");
       case "grid":
         return s.rows.map(() => Array.from({ length: gridSteps(s) }, () => false));
       default:
@@ -72,6 +76,16 @@ export function isComplete(spec: AnswerSpec, value: AnswerValue): boolean {
     case "grid":
       // An empty grid is a legitimate answer ("no hits") only after an explicit Check; the host decides.
       return true;
+    case "form":
+      return Array.isArray(value) && value.length === spec.sections && value.every((x) => x !== "");
+    case "bar-grid":
+      return (
+        Array.isArray(value) &&
+        value.length === spec.bars &&
+        value.every((x, i) => x !== "" || (spec.given ?? []).includes(i + 1))
+      );
+    case "scale-builder":
+      return Array.isArray(value) && value.length > 0;
     case "keyboard":
     case "choice":
     case "quality-pad":
@@ -147,5 +161,28 @@ export function responseOf(spec: AnswerSpec, value: AnswerValue): AttemptRespons
       return { order: value as string[] };
     case "blanks":
       return { blanks: value as Record<string, string> };
+    case "form": {
+      // A form with an unnamed section is not an answer yet (every label is a word or a letter).
+      const sections = value as string[];
+      return sections.some((x) => x === "") ? { skipped: true } : { answer: { sections } };
+    }
+    case "bar-grid":
+      return spec.entry === "rn"
+        ? { answer: { rn: value as string[] } }
+        : { answer: { text: value as string[] } };
+    case "scale-builder":
+      return spec.input === "keyboard"
+        ? {
+            answer: {
+              midi: (value as (number | string)[]).filter((x): x is number => typeof x === "number"),
+            },
+          }
+        : {
+            answer: {
+              degrees: (value as (number | string)[]).filter(
+                (x): x is string => typeof x === "string",
+              ) as never,
+            },
+          };
   }
 }

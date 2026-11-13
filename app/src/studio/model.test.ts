@@ -17,6 +17,8 @@ import {
   differsFrom,
   exportFileName,
   exportText,
+  formSoundHints,
+  formSoundTips,
   harmonyViewHints,
   isNamed,
   linerFlags,
@@ -27,6 +29,7 @@ import {
   OVER_BAND_CODE,
   ringsOf,
   sinceText,
+  soundFactsOf,
   strictLint,
   strictVerdict,
   studioFlavour,
@@ -285,13 +288,39 @@ describe("the tree-ring cover", () => {
 });
 
 describe("harmony view hints (Wave 4)", () => {
-  const at = (id: string) => ({ "tb.arp": "U05.L04", "tb.feature.rn": "U06.L02" })[id] ?? null;
+  const at = (id: string) =>
+    ({ "tb.feature.chord-symbols": "U05.L04", "tb.feature.rn": "U06.L02" })[id] ?? null;
   test("a sketch with chords hears what is still locked, in course order; none once unlocked", () => {
     expect(harmonyViewHints(true, new Set(), at).map((h) => [h.id, h.at])).toEqual([
-      ["tb.arp", "U05.L04"],
+      ["tb.feature.chord-symbols", "U05.L04"],
       ["tb.feature.rn", "U06.L02"],
     ]);
-    expect(harmonyViewHints(true, new Set(["tb.arp"]), at).map((h) => h.id)).toEqual(["tb.feature.rn"]);
+    expect(harmonyViewHints(true, new Set(["tb.feature.chord-symbols"]), at).map((h) => h.id)).toEqual([
+      "tb.feature.rn",
+    ]);
     expect(harmonyViewHints(false, new Set(), at)).toEqual([]);
+  });
+});
+
+describe("Wave 5: form and sound hints in the Studio", () => {
+  const sites = (id: string) =>
+    ({ "tb.lens.form": "U09.L02", "tb.scope": "A1.L01", "tb.lpf": "C1.S1", "tb.adsr": "A1.L03" })[id] ?? null;
+  test("an arranged sketch hears when the ribbon opens; nothing once it is open", () => {
+    const facts = soundFactsOf("drums: arrange([4, a], [4, b])", true);
+    expect(formSoundHints(facts, new Set(), sites).map((h) => h.id)).toEqual(["tb.lens.form"]);
+    expect(formSoundHints(facts, new Set(["tb.lens.form"]), sites)).toEqual([]);
+    expect(formSoundTips(facts, new Set(["tb.lens.form"]))[0]).toMatch(/Shift\+E/);
+  });
+  test("the scope and probe hints follow the code's controls", () => {
+    const facts = soundFactsOf('bass: note("c2").s("sawtooth").lpf(600).attack(.1).scope()', false);
+    expect(facts).toEqual({ sections: false, scope: true, filter: true, envelope: true });
+    expect(formSoundHints(facts, new Set(["tb.lpf"]), sites).map((h) => h.id)).toEqual([
+      "tb.scope",
+      "tb.adsr",
+    ]);
+    expect(formSoundTips(soundFactsOf('x: note("c2").lpf(600)', false), new Set(["tb.scope"]))[0]).toMatch(
+      /Shift\+W/,
+    );
+    expect(formSoundHints(soundFactsOf('x: note("c2")', false), new Set(), sites)).toEqual([]);
   });
 });

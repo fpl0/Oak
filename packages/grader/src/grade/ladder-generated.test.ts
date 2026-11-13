@@ -2,7 +2,7 @@
 // `@oak/drills` `generateLadderPiece` makes, at every realism level, passes with its own answer key (the
 // learner's code is the target layer only, written in degrees), and known-wrong answers fail. Realism never
 // changes a tolerance: the answers stay on the grid and the same matcher grades R0 and R4.
-import { describe, expect, setDefaultTimeout, test } from "bun:test";
+import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import type { GradeResult } from "@oak/content-kit";
 import { DEFAULT_PROFILE, generateLadderPiece, type LadderPiece, ladderItemOf } from "@oak/drills";
 import { headlessDeps, hits, norm } from "../analyze/__support__/fixtures.ts";
@@ -43,6 +43,19 @@ const shiftDegrees = (code: string, label: string, k: number): string =>
       `${a}${body.replace(/(?<![@*/!.\d])-?\d+/g, (x) => String(Number(x) + k))}${b}`,
   );
 
+/** The measured table (printed at the end): per level (and L3 stage), items graded and the lowest own-key score. */
+const measured = new Map<string, { items: number; min: number }>();
+const note = (k: string, score: number) => {
+  const m = measured.get(k) ?? { items: 0, min: 1 };
+  measured.set(k, { items: m.items + 1, min: Math.min(m.min, score) });
+};
+afterAll(() => {
+  const rows = [...measured].map(
+    ([k, m]) => `| ${k} | R0–R4 × seeds 1–5 | ${m.items} | ${m.min.toFixed(3)} |`,
+  );
+  console.log(["| Level | Items | Graded | Own key score (min) |", "|---|---|---|---|", ...rows].join("\n"));
+});
+
 describe("every generated item passes with its own answer key, R0 to R4", () => {
   for (const level of [1, 2, 4] as const)
     test(`L${level}: ${REALISM.length * SEEDS.length} items`, async () => {
@@ -50,6 +63,7 @@ describe("every generated item passes with its own answer key, R0 to R4", () => 
         for (const s of SEEDS) {
           const p = piece(level, r, s);
           const res = await grade(p, p.answer);
+          note(`L${level}`, res.score);
           if (res.status !== "pass" || res.score < 1 - 1e-9)
             throw new Error(
               `L${level} R${r} seed ${s}: ${res.status} ${res.score} ${res.diagnostics.map((d) => d.id)}`,
@@ -64,6 +78,7 @@ describe("every generated item passes with its own answer key, R0 to R4", () => 
         expect(p.stages).toEqual(["bass", "quality", "rn"]);
         for (const stage of ["bass", "quality", "rn"] as const) {
           const res = await grade(p, p.stageAnswers?.[stage] ?? "", stage);
+          note(`L3 ${stage}`, res.score);
           if (res.status !== "pass")
             throw new Error(`L3 R${r} seed ${s} ${stage}: ${res.score} ${res.diagnostics.map((d) => d.id)}`);
         }

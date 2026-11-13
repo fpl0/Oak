@@ -2,7 +2,7 @@
 // long as it stayed open (the review had long arrived); a request still on its way left "Request review" clickable,
 // and one that failed read "Requested … when it is ready" for good. `reviewWaitOf` is the rule.
 import { describe, expect, test } from "bun:test";
-import { REVIEW_WAIT_MS, reviewWaitOf } from "./queries.ts";
+import { joinReviewWait, REVIEW_WAIT_MS, reviewWaitOf } from "./queries.ts";
 
 const ask = {
   role: "user" as const,
@@ -46,5 +46,37 @@ describe("where a review request stands", () => {
   test("the second request's answer is the one that counts", () => {
     expect(reviewWaitOf([ask, answer(), ask], null, 0)).toEqual({ kind: "pending" });
     expect(reviewWaitOf([ask, answer(), ask, answer()], { asksBefore: 1 }, 0)).toEqual({ kind: "idle" });
+  });
+});
+
+describe("c9: the Brief follows the tutor panel's own record of the request", () => {
+  const T = 1_000_000;
+  test("a request that failed before reaching the server clears pending at once", () => {
+    const waiting = reviewWaitOf([], { asksBefore: 0 }, 100);
+    expect(waiting).toEqual({ kind: "pending" });
+    expect(joinReviewWait(waiting, { phase: "failed-early", at: T + 50 }, T, T + 60)).toEqual({
+      kind: "failed",
+    });
+    expect(joinReviewWait(waiting, { phase: "failed", at: T + 50, message: "x" }, T, T + 60)).toEqual({
+      kind: "failed",
+    });
+    // An older failure (before this page asked) does not end the new wait.
+    expect(joinReviewWait(waiting, { phase: "failed-early", at: T - 10 }, T, T + 60)).toEqual({
+      kind: "pending",
+    });
+  });
+  test("a request the panel sent itself reads as pending on the Brief, for the wait's length", () => {
+    expect(joinReviewWait({ kind: "idle" }, { phase: "pending", at: T }, null, T + 1000)).toEqual({
+      kind: "pending",
+    });
+    expect(
+      joinReviewWait({ kind: "idle" }, { phase: "pending", at: T }, null, T + REVIEW_WAIT_MS + 1),
+    ).toEqual({
+      kind: "idle",
+    });
+    expect(joinReviewWait({ kind: "idle" }, { phase: "answered", at: T }, null, T + 10)).toEqual({
+      kind: "idle",
+    });
+    expect(joinReviewWait({ kind: "idle" }, null, null, T)).toEqual({ kind: "idle" });
   });
 });

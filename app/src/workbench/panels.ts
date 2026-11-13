@@ -10,7 +10,7 @@ import { WORKBENCH_PANEL_TOOLS, type WorkbenchPanelId } from "@oak/content-kit";
 import { CHORD_LENS_UNLOCKS } from "../lib/lenses.ts";
 
 /** The panels the Workbench draws: the content-kit panels plus the lead-sheet view of the staff. */
-export type PanelId = WorkbenchPanelId | "lead";
+export type PanelId = WorkbenchPanelId | "lead" | "chart";
 export const PANEL_IDS: readonly PanelId[] = [
   "key",
   "circle",
@@ -19,12 +19,19 @@ export const PANEL_IDS: readonly PanelId[] = [
   "range",
   "chord-tones",
   "lead",
+  // Wave 5: the form map (tb.lens.form), Oak's scope and its spectrum (tb.scope, tb.fscope).
+  "form",
+  "scope",
+  "spectrum",
+  "chart",
 ];
 
 /** The toolbox row each panel needs (contracts §3.2 group A). */
 export const PANEL_UNLOCKS: Readonly<Record<PanelId, string>> = {
   ...WORKBENCH_PANEL_TOOLS,
   lead: "tb.feature.leadsheet",
+  // Wave 5: the chord chart opens with the dominant seventh (U11.L04), the lesson before the 12-bar form.
+  chart: "chord.dom7",
 };
 
 /** Panels a learner switches on and off with a key (lens mode), in the order of the transport's switches. */
@@ -40,6 +47,11 @@ export const PANEL_SWITCHES: readonly {
   { id: "chord-tones", label: "Chord tones", keys: "Shift+T", title: "Chord tones in the melody" },
   { id: "range", label: "Range", keys: "Shift+G", title: "The range of each melody line" },
   { id: "lead", label: "Lead sheet", keys: "Shift+L", title: "The staff as a lead sheet" },
+  // Wave 5 (docs/design/wave5.md §4.3–§4.4).
+  { id: "form", label: "Form map", keys: "Shift+E", title: "The form map and the energy curve" },
+  { id: "scope", label: "Scope", keys: "Shift+W", title: "Oak's scope: the wave of what plays" },
+  { id: "spectrum", label: "Spectrum", keys: "Shift+Y", title: "The spectrum of what plays" },
+  { id: "chart", label: "Chart", keys: "Shift+P", title: "The chords as a chart, four bars a line" },
 ];
 
 export type PanelState = Record<PanelId, boolean>;
@@ -51,6 +63,11 @@ export const NO_PANELS: PanelState = {
   range: false,
   "chord-tones": false,
   lead: false,
+  // Wave 5 (docs/design/wave5.md §4.4): the form map and Oak's scope / spectrum, drawn by the workbench engineer.
+  form: false,
+  scope: false,
+  spectrum: false,
+  chart: false,
 };
 
 export interface PanelContext {

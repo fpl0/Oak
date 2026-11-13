@@ -164,6 +164,9 @@ const WIDE = new Set([
   "code",
   "click-code",
   "slot-choice",
+  "form",
+  "bar-grid",
+  "scale-builder",
 ]);
 
 function Section({ f, env, states }: { f: Fixture; env: AnswerEnv; states: readonly GalleryState[] }) {

@@ -112,6 +112,28 @@ export interface FinalizeOptions {
   mutes: () => MuteMap;
   /** Live transposition in semitones (the pattern player). */
   transpose?: () => number;
+  /** The track Oak's scope taps (`ScopeTap.setSource({ kind: "track" })`), read live; null for the master bus. */
+  scopeTrack?: () => string | null;
+}
+
+/** Superdough's analyser id the scope's track source reads (`analyze` on a hap sends its voice there). */
+export const SCOPE_TRACK_ANALYSER = "oak.scope.track";
+/** superdough sizes an `analyze` analyser as 2^(fft + 5): 6 gives the master analyser's 2048. */
+export const SCOPE_TRACK_FFT = 6;
+
+/** Sends the voices of one track, live, to the scope's track analyser too (pre-reverb, post-filter). */
+export function tapTrack(pattern: Pattern, scopeTrack: () => string | null): Pattern {
+  return (pattern.withHap as (fn: (hap: Strudel.Hap) => Strudel.Hap) => Pattern).call(pattern, (hap) => {
+    const label = scopeTrack();
+    if (label === null || hap.context[TRACK_KEY] !== label) return hap;
+    const v = hap.value;
+    if (!v || typeof v !== "object" || Array.isArray(v)) return hap;
+    return (hap as unknown as { withValue(f: (x: unknown) => unknown): Strudel.Hap }).withValue((x) => ({
+      ...(x as Record<string, unknown>),
+      analyze: SCOPE_TRACK_ANALYSER,
+      fft: SCOPE_TRACK_FFT,
+    }));
+  });
 }
 
 /**
@@ -129,5 +151,6 @@ export function finalizePattern(pattern: Pattern, opts: FinalizeOptions): Patter
   });
   const transpose = opts.transpose;
   if (transpose) out = out.fmap((value) => transposeValue(value, transpose()));
+  if (opts.scopeTrack) out = tapTrack(out, opts.scopeTrack);
   return out;
 }

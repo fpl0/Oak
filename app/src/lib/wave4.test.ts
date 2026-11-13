@@ -13,9 +13,17 @@ describe("chord lenses", () => {
       romanNumerals: false,
     });
     expect(chordLensAvailability(new Set())).toEqual({ chordSymbols: false, romanNumerals: false });
-    expect(chordLensAvailability(new Set(["tb.arp"]))).toEqual({ chordSymbols: true, romanNumerals: false });
+    expect(chordLensAvailability(new Set(["tb.feature.chord-symbols"]))).toEqual({
+      chordSymbols: true,
+      romanNumerals: false,
+    });
+    // Wave 5 (c14): `tb.arp` alone no longer opens the chord-symbol lens.
+    expect(chordLensAvailability(new Set(["tb.arp"]))).toEqual({ chordSymbols: false, romanNumerals: false });
     expect(
-      effectiveChordLenses({ ...base, chordSymbols: false }, new Set(["tb.arp", "tb.feature.rn"])),
+      effectiveChordLenses(
+        { ...base, chordSymbols: false },
+        new Set(["tb.feature.chord-symbols", "tb.feature.rn"]),
+      ),
     ).toEqual({
       chordSymbols: false,
       romanNumerals: true,
@@ -32,6 +40,10 @@ describe("initialPanelsOf", () => {
       function: false,
       range: false,
       "chord-tones": false,
+      // Wave 5 panels (content-kit WORKBENCH_PANELS): closed unless listed.
+      form: false,
+      scope: false,
+      spectrum: false,
     });
     expect(initialPanelsOf({})).toBeNull();
     expect(initialPanelsOf(null)).toBeNull();

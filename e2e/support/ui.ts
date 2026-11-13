@@ -1,7 +1,7 @@
 // Small Playwright helpers every Wave 2 area shares (docs/design/wave2.md §8): theme and motion before the first
 // paint, and screenshots named by theme and viewport.
 import { mkdirSync } from "node:fs";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 /** The localStorage key boot.js reads before first paint (app/src/ui/theme/prefs.ts `PREFS_KEY`). */
 export const PREFS_KEY = "oak.ui.v1";
@@ -57,4 +57,14 @@ export async function shoot(page: Page, dir: string, name: string, theme: string
     if (main) main.scrollTop = 0;
   });
   return paths;
+}
+
+/**
+ * A locator's text right now, without Playwright's auto-wait: "" when it is absent or not unique. Walkers that poll
+ * the screen read with this: `locator.textContent()` waits up to the action timeout (60 s in some suites) for an
+ * element that is not there, and `.catch(() => "")` turned each such read into a minute of nothing.
+ */
+export async function textNow(locator: Locator): Promise<string> {
+  const all = await locator.allTextContents();
+  return all.length === 1 ? (all[0] ?? "") : "";
 }

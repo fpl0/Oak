@@ -43,7 +43,15 @@ const course = LESSONS.map((id) => byId.get(id)).filter((l): l is LoadedLesson =
  * U04 in Wave 3). The cross-lesson scans (vocabulary, unlocks, skills, families, budgets, music over the
  * Band) read all of them; the completeness and ID-ledger tests keep to the released first playable.
  */
-const authored = ORDER.filter((s) => /\.L\d{2}$/.test(s))
+/**
+ * Wave 5: the side lessons (A1.L01–L04, `LessonMeta.side`) sit outside the default order and are offered from
+ * their gate on; they join every cross-lesson scan, each judged at the earliest point a learner can take it
+ * (unlocks and skills in every legal order through the course graph; terms through `laterTerms`).
+ */
+const SIDE_LESSONS = registries.syllabus.units.flatMap((u) =>
+  u.lessons.filter((l) => l.side).map((l) => l.id as SessionId),
+);
+const authored = [...ORDER.filter((s) => /\.L\d{2}$/.test(s)), ...SIDE_LESSONS]
   .map((id) => byId.get(id))
   .filter((l): l is LoadedLesson => Boolean(l));
 const g = courseGraph();
@@ -244,6 +252,143 @@ describe("U05–U07, C2 and X1 are complete (contracts §2.3–§2.5)", () => {
   });
 });
 
+// Wave 5: U08–U11 with A1.L01–L04, the checkpoints U09.CP–U11.CP and the capstones C3–C5 and X2 (sessions
+// 75 and 83–129 of the default order). The cross-lesson scans below read them like every authored lesson.
+const WAVE5 = ORDER.slice(ORDER.indexOf("U08.L02" as SessionId), ORDER.indexOf("X2.S2" as SessionId) + 1);
+const W5_LESSONS = [
+  "U08.L01",
+  ...WAVE5.filter((s) => /^U(0[89]|1[01])\.L\d{2}$/.test(s)),
+  ...SIDE_LESSONS,
+] as SessionId[];
+const w5course = W5_LESSONS.map((id) => byId.get(id)).filter((l): l is LoadedLesson => Boolean(l));
+
+describe("U08–U11, A1, C3–C5 and X2 are complete (contracts §2.3–§2.6)", () => {
+  test("the default order runs U08.L02 … X2.S2 as §2.5 prints it, gym slots and capstone sessions included", () => {
+    expect(WAVE5).toEqual([
+      ...["U08.L02", "U08.L03", "U08.L04", "U08.L05", "GYM.04", "U09.L01", "U09.L02", "U09.L03", "U09.L04"],
+      ...["GYM.05", "U09.L05", "U10.L01", "U09.CP", "C3.S1", "C3.S2", "C3.S3", "GYM.06", "U10.L02"],
+      ...["U10.L03", "U10.L04", "U10.L05", "GYM.07", "U10.L06", "U10.L07", "U10.L08", "U10.L09", "GYM.08"],
+      ...["U11.L01", "U10.CP", "C4.S1", "C4.S2", "GYM.09", "U11.L02", "U11.L03", "U11.L04", "U11.L05"],
+      ...["GYM.10", "U11.L06", "U11.L07", "U11.L08", "U12.L01", "GYM.11", "U11.CP", "C5.S1", "C5.S2"],
+      ...["X2.S1", "X2.S2"],
+    ] as SessionId[]);
+    expect([ORDER.indexOf("U08.L02" as SessionId) + 1, ORDER.indexOf("X2.S2" as SessionId) + 1]).toEqual([
+      83, 129,
+    ]);
+  });
+  test("all 31 lessons of U08–U11 and the four side lessons are authored and load", () => {
+    expect(errors.filter((e) => e.folderId && W5_LESSONS.includes(e.folderId as SessionId))).toEqual([]);
+    expect(W5_LESSONS.filter((id) => !byId.has(id))).toEqual([]);
+    expect(W5_LESSONS.length).toBe(31);
+  });
+  test("U09.CP, U10.CP and U11.CP have two or three authored items and a Make", async () => {
+    const { defs } = await loadCheckpointFiles();
+    for (const id of ["U09.CP", "U10.CP", "U11.CP"]) {
+      const d = defs.find((x) => x.id === id);
+      const n = d?.authored.length ?? 0;
+      expect([id, Boolean(d), n >= 2 && n <= 3, Boolean(d?.make)]).toEqual([id, true, true, true]);
+    }
+  });
+  test("C3–C5 have tested briefs and their sessions; X2's checks open bass → changes → melody", () => {
+    const sessions: Record<string, number> = { C3: 3, C4: 2, C5: 2, X2: 2 };
+    for (const [id, n] of Object.entries(sessions)) {
+      const c = capstones.find((x) => x.id === id);
+      expect([id, c?.sessionDefs.length, c?.sessionDefs.at(-1)?.release]).toEqual([id, n, true]);
+      if (id !== "X2") expect([id, (c?.brief?.tests ?? []).length >= 8]).toEqual([id, true]);
+    }
+    const x2 = capstones.find((x) => x.id === "X2");
+    const checks = (x2?.sessionDefs ?? []).flatMap((sd) => sd.checks ?? []);
+    expect(checks.map((k) => [k.id, k.after ?? []])).toEqual([
+      ["bass", []],
+      ["changes", ["bass"]],
+      ["melody-1", ["changes"]],
+      ["melody-2", ["changes"]],
+      ["melody-3", ["changes"]],
+    ]);
+  });
+  test("every lesson, step, example and exercise ID of U08–U11 and A1 is in ids.lock.json", () => {
+    const lock = new Set(
+      (
+        JSON.parse(readFileSync(join(CONTENT_ROOT, "ids.lock.json"), "utf8")) as { ids: { id: string }[] }
+      ).ids.map((x) => x.id),
+    );
+    const missing: string[] = [];
+    for (const l of w5course) {
+      const ids = [
+        l.def.id,
+        ...l.def.steps.flatMap((s) => [
+          `${l.def.id}/${s.id}`,
+          ...(s.example ? [`${l.def.id}@${s.example.id}`] : []),
+        ]),
+        ...exercisesOf(l).map(({ e }) => `${l.def.id}/${e.id}`),
+      ];
+      missing.push(...ids.filter((id) => !lock.has(id)));
+    }
+    expect(missing).toEqual([]);
+  });
+  test("each can-do of U08–U11 and A1 is awarded once, by the lesson the registry names", () => {
+    const problems: string[] = [];
+    for (const c of candos) {
+      if (!W5_LESSONS.includes(c.source as SessionId)) continue;
+      const by = w5course.filter((l) => (l.def.canDo as string[]).includes(c.id)).map((l) => l.def.id);
+      if (by.join() !== c.source) problems.push(`${c.id}: source ${c.source}, awarded by [${by.join(" ")}]`);
+    }
+    expect(problems).toEqual([]);
+  });
+  test("no learner-facing text names a lesson by its ID: lessons are named by their titles", () => {
+    const found: string[] = [];
+    const id = /\b(U\d{2}|A\d)\.(L\d{2}|CP)\b/;
+    for (const l of w5course) {
+      const mdx = mdxSteps(l.mdxSource ?? "");
+      for (const s of l.def.steps) {
+        const m = mdx.get(s.id);
+        const texts = [
+          ...(s.exercise ? exerciseTexts(s.exercise, s.id) : []),
+          ...(m ? [{ where: `${s.id} prose`, text: `${m.prose}\n${m.onPass}` }] : []),
+        ];
+        // MDX comments ({/* … */}) are for authors.
+        for (const t of texts)
+          if (id.test(t.text.replace(/\{\/\*[\s\S]*?\*\/\}/g, "")))
+            found.push(`${l.def.id} ${t.where}: ${t.text.slice(0, 60)}`);
+      }
+    }
+    expect(found).toEqual([]);
+  });
+});
+
+describe("side lessons (contracts §2.6, §4.3)", () => {
+  test("A1.L01–L04 are the side lessons: optional, outside the default order, open once U03.L02 is done", () => {
+    expect(SIDE_LESSONS).toEqual(["A1.L01", "A1.L02", "A1.L03", "A1.L04"] as SessionId[]);
+    for (const id of SIDE_LESSONS) {
+      expect([id, ORDER.includes(id)]).toEqual([id, false]);
+      const before = g.before(id);
+      expect([id, before.has("U03.L02" as SessionId), before.has("U03.L03" as SessionId)]).toEqual([
+        id,
+        true,
+        false,
+      ]);
+      // Nothing in the core waits for a side lesson.
+      for (const core of ORDER) expect([core, g.before(core).has(id)]).toEqual([core, false]);
+    }
+  });
+  // (Its glossary examples are linted at the side lesson itself in registries.test.ts "glossary examples".)
+  test("a side lesson's skills need nothing past its gate", () => {
+    const late: string[] = [];
+    for (const id of SIDE_LESSONS) {
+      const meta = registries.syllabus.units.flatMap((u) => u.lessons).find((l) => l.id === id);
+      for (const sk of [...(meta?.introduces ?? []), ...(meta?.practises ?? [])]) {
+        const node = registries.skills.find((x) => x.id === sk);
+        for (const p of sk && meta?.introduces.includes(sk) ? (node?.prerequisites ?? []) : [sk]) {
+          const pre = registries.skills.find((x) => x.id === p);
+          if (pre && pre.introducedBy !== id && !atOrBefore(g, pre.introducedBy, id))
+            late.push(`${id}: ${p} arrives in ${pre.introducedBy}`);
+        }
+      }
+    }
+    expect(late).toEqual([]);
+  });
+});
+
 describe("prerequisite order (contracts §4)", () => {
   test("a lesson introduces the skills the graph says it does, after their prerequisites, in every legal order", () => {
     const problems: string[] = [];
@@ -292,6 +437,10 @@ describe("vocabulary across lesson boundaries (AUTHORING §7)", () => {
   const ALLOWED_LATER_TERMS: Record<string, string> = {
     'U01.L05 S2 prose "staff"':
       "the percussion staff is U01.L05's own subject (contracts §2.3); U02.L04 S3 ties the word back to it",
+    'U03.L10 S3 title "swing"': 'the song title "Swing Low, Sweet Chariot", not the U11.L07 term',
+    'U03.L10 S3 pass text "swing"': 'the song title "Swing Low", not the U11.L07 term',
+    'U04.L01 S4 pass text "bridge"':
+      '"the same bridge as degree and `n`": a link between two ideas, not a song section',
   };
   test("no lesson uses a later lesson's term unless it is listed with its reason", () => {
     const found: string[] = [];
@@ -391,11 +540,12 @@ describe("can-dos and milestones", () => {
           expect([m.id, c, candos.some((x) => x.id === c)]).toEqual([m.id, c, true]);
       }
   });
-  test("the nine milestones of ux §5.5 are all defined", () => {
+  test("the nine milestones of ux §5.5 are all defined, then Wave 5's five", () => {
     expect(milestones.map((m) => m.id)).toEqual(
-      ["ms.01", "ms.02", "ms.03", "ms.04", "ms.05", "ms.06", "ms.07", "ms.08", "ms.09"].map(
-        (x) => x as never,
-      ),
+      [
+        ...["ms.01", "ms.02", "ms.03", "ms.04", "ms.05", "ms.06", "ms.07", "ms.08", "ms.09"],
+        ...["ms.10", "ms.11", "ms.12", "ms.13", "ms.14"],
+      ].map((x) => x as never),
     );
   });
 });

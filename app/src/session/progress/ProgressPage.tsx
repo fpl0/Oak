@@ -6,6 +6,7 @@ import { Link } from "@tanstack/react-router";
 import { clsx } from "clsx";
 import { milestoneById } from "../../../../content/milestones.ts";
 import { useContent } from "../../lib/content.ts";
+import { lessonTitles } from "../../lib/content-model.ts";
 import { formatDate, formatMonth } from "../../lib/format.ts";
 import { usePageTitle } from "../../lib/nav.ts";
 import {
@@ -15,6 +16,7 @@ import {
   useGymPlan,
   useLadder,
   useProgressReport,
+  useSideLessons,
   useStreak,
   useTodayPlan,
   useVoiceState,
@@ -35,19 +37,22 @@ import { courseEdge, edgeLead, mapNextId } from "../edge.ts";
 import { REALISM_LINES } from "../gym-day.ts";
 import {
   doneItems,
-  EVIDENCE_LABEL,
+  evidenceLine,
   formatMinutes,
   ladderRungs,
   ledger,
   ledgerCounts,
   ledgerNow,
   type MilestoneRow,
+  milestoneEvidence,
   milestoneTimeline,
   practiceTime,
   sourceUnit,
   unitProgress,
 } from "../progress-model.ts";
+import { sideLessonsLine } from "../side-lessons.ts";
 import { restsLine, streakLine, weekStatusLabel } from "../streak-model.ts";
+import { itemTitle } from "../titles.ts";
 
 const AREAS = ["hear", "read", "write", "compose", "transcribe", "sing", "code"] as const;
 const AREA_LABEL: Record<(typeof AREAS)[number], string> = {
@@ -79,9 +84,20 @@ function CourseCard() {
   const course = useCourseProgress();
   const plan = useTodayPlan();
   const gymOpen = useGymOpen(plan.data ?? null);
+  const side = useSideLessons();
   if (course.isError) return <ErrorState error={course.error} onRetry={() => void course.refetch()} />;
   if (!course.data || !content.data?.syllabus) return <LoadingState rows={3} label="Loading the course" />;
   const units = unitProgress(content.data.syllabus, course.data);
+  // Track A (contracts §9.6): the side lessons taken, from the course count or, before it, the side-lesson list.
+  const sideCount =
+    course.data.sideLessons ??
+    (side.data
+      ? {
+          done: side.data.items.filter((i) => i.status === "done").length,
+          total: side.data.items.length,
+        }
+      : null);
+  const sideLine = sideLessonsLine(sideCount, side.data?.open ?? null);
   const shown = units.filter((u, i) => u.done > 0 || u.inProgress || i < 3);
   const edge = courseEdge(
     course.data,
@@ -139,6 +155,12 @@ function CourseCard() {
           </li>
         ))}
       </ul>
+      {sideLine && (
+        <p className="mt-3 text-sm text-text-2" data-testid="progress-side-lessons">
+          {sideLine}{" "}
+          <span className="text-text-3">They count in the sound-design track, never in the core map.</span>
+        </p>
+      )}
       {shown.length < units.length && (
         <Link
           to="/oak"
@@ -170,6 +192,7 @@ function Ledger() {
     (content.data?.syllabus?.units ?? []).map((u) => [u.id as string, u.title] as const),
   );
   const capTitle = new Map((content.data?.capstones ?? []).map((c) => [c.id as string, c.title] as const));
+  const titles = lessonTitles(content.data?.syllabus ?? null);
   const placeOf = (source: string) => {
     const unit = sourceUnit(source);
     return capTitle.get(source) ?? (unitTitle.has(unit) ? `${unit} ${unitTitle.get(unit)}` : unit);
@@ -205,7 +228,7 @@ function Ledger() {
                 <span className={clsx("block", !e && "text-text-2")}>{d.statement}</span>
                 <span className="block text-sm text-text-3">
                   {e
-                    ? `since ${formatDate(e.firstAt, true)} · latest from ${EVIDENCE_LABEL[e.latest.evidenceKind]}`
+                    ? `since ${formatDate(e.firstAt, true)} · latest from ${evidenceLine(e.latest, (x) => itemTitle(x, titles))}`
                     : placeOf(d.source)}
                 </span>
               </span>
@@ -263,9 +286,25 @@ function gradedOnly(id: string): boolean {
   return !!when && (!!when.ladder || (when.anyOf ?? []).some((c) => !!c.ladder));
 }
 
+/** What backs a milestone (progress-model `milestoneEvidence`): each condition, met or still ahead. */
+function useEvidence(id: string) {
+  const content = useContent();
+  const course = useCourseProgress();
+  const ladder = useLadder();
+  const when = milestoneById.get(id)?.when;
+  if (!when || !course.data) return [];
+  const titles = lessonTitles(content.data?.syllabus ?? null);
+  return milestoneEvidence(when, {
+    course: course.data,
+    gradedPasses: ladder.data?.gradedPasses ?? null,
+    titleOf: (x) => itemTitle(x, titles),
+  });
+}
+
 function MilestoneItem({ m, tone }: { m: MilestoneRow; tone: "reached" | "next" | "ahead" }) {
   const track = useMilestoneTrack(m.id);
   const graded = gradedOnly(m.id);
+  const evidence = useEvidence(m.id);
   return (
     <li
       className={clsx(
@@ -282,6 +321,24 @@ function MilestoneItem({ m, tone }: { m: MilestoneRow; tone: "reached" | "next" 
         </span>
       </span>
       {tone !== "ahead" && <span className="text-sm text-text-2">{m.description}</span>}
+      {tone !== "ahead" && evidence.length > 0 && (
+        <ul
+          className="mt-0.5 flex flex-col gap-0.5 text-sm"
+          aria-label="What shows it"
+          data-testid="milestone-evidence"
+        >
+          {evidence.map((e) => (
+            <li key={e.id} className="flex items-baseline gap-1.5" data-met={e.met}>
+              <span aria-hidden className={clsx("shrink-0", e.met ? "text-accent" : "text-text-3")}>
+                {e.met ? "✓" : "○"}
+              </span>
+              <span className={clsx("min-w-0", e.met ? "text-text-2" : "text-text-3")}>
+                {e.label}: {e.detail}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
       {(graded || (track && m.reachedAt)) && tone !== "ahead" && (
         <span className="flex flex-wrap items-center gap-2 text-sm">
           {graded && (

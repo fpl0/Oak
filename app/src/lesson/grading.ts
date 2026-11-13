@@ -358,6 +358,10 @@ export async function toGraderResponse(
     return { performance: await singPerformance(deps, env, ex, r.sung) };
   }
   if ("answer" in r) return { ...r, answer: splitTypedParts(ex, r.answer) } as ExerciseResponse;
+  // A bar picked on the bar buttons and stored as a click (before the host sent `answer.number`): a question
+  // reads it as the bar's number; only the error hunt reads clicks.
+  if ("click" in r && typeof r.click === "string" && ex.kind !== "error-hunt" && /^\d+$/.test(r.click))
+    return { answer: { number: Number(r.click) } };
   return r as ExerciseResponse;
 }
 

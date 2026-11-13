@@ -244,7 +244,7 @@ function Setup({
             />
           </div>
           <p id={`${id}-cats`} className="text-sm text-text-2">
-            Level {level}: {cats.map(categoryLabel).join(", ")}
+            Level {level}: {cats.map((c) => categoryLabel(c, def.generator)).join(", ")}
             {maxLevel < def.levels.length && (
               <span className="block text-text-3">Higher levels open with later lessons.</span>
             )}
@@ -282,7 +282,8 @@ function Setup({
                 const [expected, got] = pair.split("|");
                 return (
                   <li key={pair}>
-                    {optionLabel(got ?? "")} heard for {optionLabel(expected ?? "")} · {count}×
+                    {optionLabel(got ?? "", def.generator, [expected ?? "", got ?? ""])} heard for{" "}
+                    {optionLabel(expected ?? "", def.generator, [expected ?? "", got ?? ""])} · {count}×
                     {def.confusionTips?.[pair] ? ` · ${def.confusionTips[pair]}` : ""}
                   </li>
                 );

@@ -21,6 +21,7 @@ import {
   surfaceOf,
   type TrialOutcome,
   tapReport,
+  trialAnswerOf,
   trialRecord,
   wrongMarks,
 } from "./model.ts";
@@ -163,10 +164,7 @@ describe("widget values reach the grader in the shape it reads", () => {
         if (s.kind !== "widget" || s.spec.ui === "code") continue;
         const value = expectedValueOf(s.spec, t.expected as Answer);
         expect(value).not.toBeNull();
-        const r = grade(
-          t,
-          answerOf(s.spec, value as never, (t.expected as Answer).text?.length ?? 1, t.expected as Answer),
-        );
+        const r = grade(t, trialAnswerOf(t, s.spec, value as never));
         expect(r.correct).toBe(true);
       }
     });

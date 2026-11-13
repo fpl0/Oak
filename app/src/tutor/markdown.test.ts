@@ -198,7 +198,9 @@ describe("hostile input renders inert", () => {
     ]) {
       const t = performance.now();
       parseMarkdown(hostile);
-      expect(performance.now() - t).toBeLessThan(150);
+      // The quadratic parse took ~1 s; linear takes tens of ms. 400 ms keeps that apart on a loaded machine
+      // (Wave 5: the shared machine's load made 150 ms flaky).
+      expect(performance.now() - t).toBeLessThan(400);
     }
     // Ordinary emphasis and links are untouched by the bound.
     expect(parseInline("_one_ and [Oak](/oak)")).toEqual([

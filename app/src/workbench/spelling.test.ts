@@ -44,10 +44,16 @@ function disagreements(m: WorkbenchModel): string[] {
       )
       .map((e) => e.midi as number)
       .sort((a, b) => a - b);
-    if (drawn.join() !== sounding.join()) out.push(`page ${p}: drew ${drawn} for ${sounding}`);
+    // c5 (Wave 5): two lines in unison on one staff share one notehead, so a head may stand for two events of the
+    // same pitch: every pitch that sounds is drawn, and nothing is drawn that does not sound.
+    const uniq = (xs: readonly (string | number)[]) => [...new Set(xs)].sort().join();
+    if (uniq(drawn) !== uniq(sounding) || drawn.length > sounding.length)
+      out.push(`page ${p}: drew ${drawn} for ${sounding}`);
     for (const entry of page.abc.idMap) {
-      const labels = entry.eventIds.map((id) => m.byId.get(id)?.label?.name).filter(Boolean);
-      if (labels.length && [...labels].sort().join() !== [...entry.pitches].sort().join())
+      const labels = entry.eventIds
+        .map((id) => m.byId.get(id)?.label?.name)
+        .filter((x): x is string => Boolean(x));
+      if (labels.length && uniq(labels) !== uniq(entry.pitches))
         out.push(`bar ${entry.bar + page.startBar}: drew ${entry.pitches} labelled ${labels}`);
     }
   }

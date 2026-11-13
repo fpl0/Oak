@@ -80,6 +80,13 @@ export const CHECKPOINT_MAKE_BANDS: Partial<Record<CheckpointId, BandRef>> = {
   "U06.CP": { band: "band.axis-4bar", tracks: ["drums"] },
   // A hook over the four-chord loop: the whole Band states I V vi IV under the learner's tune.
   "U07.CP": { band: "band.axis-4bar" },
+  // Wave 5. The learner writes drums and bass in sections; the Band's keys follow them (verse C Am F G, chorus
+  // F G C C) and stay above the bass's octave.
+  "U09.CP": { band: "band.sections", tracks: ["chords"] },
+  // A minor loop of the learner's own: their chords are graded, so the Band keeps time in the ballad's groove.
+  "U10.CP": { band: "band.aeolian-4bar", tracks: ["drums"] },
+  // Twelve bars of the learner's own: kick and snare on the beat, the hats left to the learner (straight or swung).
+  "U11.CP": { band: "band.blues-12bar", tracks: ["drums"] },
 };
 
 /** Pass rules (contracts §7.6). The numbers are also in @oak/srs `CHECKPOINT`; content CI compares them. */

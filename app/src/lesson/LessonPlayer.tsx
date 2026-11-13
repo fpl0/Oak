@@ -13,8 +13,10 @@ import {
   type LessonProgress,
   OakApiError,
   type SessionId,
+  SIDE_LESSON_IDS,
   type StepDef,
   type StepState,
+  type SubjectRef,
   type TargetMinutes,
   toLearnerProfile,
   type UnlockableId,
@@ -44,6 +46,7 @@ import {
   setSubject,
   useTutorContext,
 } from "../tutor/context.ts";
+import { useSubjectHarmony } from "../tutor/use-subject-harmony.ts";
 import { useHotkeys } from "../ui/keys/KeymapProvider.tsx";
 import { Button, buttonClass } from "../ui/kit/Button.tsx";
 import { EmptyState, Page } from "../ui/kit/basics.tsx";
@@ -107,6 +110,17 @@ import { StepFooter } from "./StepFooter.tsx";
 import { CompleteScreen, QuickSketch, ReportDialog } from "./screens.tsx";
 import { isNotImplemented, previewDeps, serverDeps } from "./server.ts";
 import { browserGrader, catalogText, lessonServices } from "./services.ts";
+import {
+  isSideLesson,
+  type LessonOrigin,
+  nextSideLesson,
+  originLink,
+  reportsToSession,
+  type SideInfo,
+  sideInfo,
+  sideMinutes,
+} from "./side.ts";
+import { answerMissing, registryHas, stepScopePanel } from "./wave5.ts";
 
 /** U00.L01 and U00.L02 run on the onboarding loop, a preview context (contracts §3.1 rule 5a). */
 const ONBOARDING_PREVIEW = new Set(["U00.L01", "U00.L02"]);
@@ -118,9 +132,11 @@ export interface LessonPlayerProps {
   step?: string | undefined;
   /** Dev only: play a locked lesson locally without saving. */
   preview?: boolean | undefined;
+  /** Where the lesson was opened from: its end and "Leave for now" return there (Wave 5, side lessons). */
+  from?: LessonOrigin | undefined;
 }
 
-export function LessonPlayer({ lessonId, step, preview }: LessonPlayerProps) {
+export function LessonPlayer({ lessonId, step, preview, from }: LessonPlayerProps) {
   const loaded = useLessonContent(lessonId);
   const bundle = useContent();
   const progress = useCourseProgress();
@@ -225,9 +241,20 @@ export function LessonPlayer({ lessonId, step, preview }: LessonPlayerProps) {
         }
         bundle={bundle.data ?? null}
         searchStep={step}
+        side={isSideLesson(lessonId, meta) ? sideInfo(lessonId, meta, sideMinutes(loaded.data.def)) : null}
+        from={from}
       />
     </ServicesGate>
   );
+}
+
+/** The next side lesson of the track (its ID and title), for a side lesson's complete screen. */
+function nextSideOf(id: string, bundle: ContentBundle | null): { id: string; title: string } | null {
+  const metas = bundle?.syllabus?.units.flatMap((u) => u.lessons) ?? [];
+  const sideIds = metas.filter((l) => isSideLesson(l.id, l)).map((l) => l.id);
+  const next = nextSideLesson(id, sideIds.length > 0 ? sideIds : SIDE_LESSON_IDS);
+  if (!next) return null;
+  return { id: next, title: metas.find((l) => l.id === next)?.title ?? next };
 }
 
 /** Every step's server state: `lessons.steps`, or one `steps.state` per step until that endpoint exists. */
@@ -268,6 +295,9 @@ interface CoreProps {
   completed: ReadonlySet<string>;
   bundle: ContentBundle | null;
   searchStep: string | undefined;
+  /** A side lesson's framing (optional, what it makes better), or `null` for a core lesson. */
+  side: SideInfo | null;
+  from: LessonOrigin | undefined;
 }
 
 function PlayerCore(props: CoreProps) {
@@ -275,7 +305,11 @@ function PlayerCore(props: CoreProps) {
   const def = loaded.def;
   const qc = useQueryClient();
   const plan = useSession((s) => s.plan);
-  const inSession = useSession((s) => s.session !== null && s.plan?.mapItemId === def.id);
+  const inSession = useSession((s) => s.session !== null && reportsToSession(def.id, s.plan));
+  // Only the session's own lesson reports to it and saves under its ID (a side lesson opened from the Toolbox
+  // during a core session leaves the session's New block alone).
+  const sessionIdHere = () =>
+    reportsToSession(def.id, useSession.getState().plan) ? currentSessionId() : null;
   const target: TargetMinutes = (inSession ? plan?.targetMinutes : undefined) ?? props.profileTarget;
   const splitPart = preview ? null : splitPartFor(def, target, lp);
   const states = useStepStates(def, !preview);
@@ -315,6 +349,7 @@ function PlayerCore(props: CoreProps) {
       bundle?.toolbox ?? [],
       (loaded.context ?? (loaded.sample ? SAMPLE_CONTEXT : def.id)) as never,
     ),
+    ...((loaded.extraUnlocks ?? []) as UnlockableId[]),
   ]);
   // Inside U05.L08 the gated tools are usable only once the gate is met (rule 2 does not apply before that).
   const unlocked = secondChance ? withoutGated(held, gatedIds(bundle?.toolbox ?? []), gateOpen) : held;
@@ -347,7 +382,7 @@ function PlayerCore(props: CoreProps) {
       : serverDeps({
           qc,
           lesson: def,
-          sessionId: () => currentSessionId(),
+          sessionId: sessionIdHere,
           splitPart: () => ref.current.splitPart,
           contentHash: `${def.id}@${def.version}:${bundle?.version ?? "source"}`,
           activeMs: () => clock.current.peek(),
@@ -374,7 +409,7 @@ function PlayerCore(props: CoreProps) {
   deps.stepLeft = (stepId) => {
     const c = actorRef.current?.getSnapshot().context;
     const step = def.steps.find((s) => s.id === stepId);
-    const sessionId = currentSessionId();
+    const sessionId = sessionIdHere();
     const activeMs = clock.current.take();
     const startedAt = stepStarted.current;
     stepStarted.current = new Date().toISOString();
@@ -403,7 +438,7 @@ function PlayerCore(props: CoreProps) {
   };
 
   const actor = useActorRef(lessonMachine, {
-    input: { lessonId: def.id, target, sessionId: currentSessionId(), deps },
+    input: { lessonId: def.id, target, sessionId: sessionIdHere(), deps },
   });
   actorRef.current = actor;
 
@@ -545,13 +580,13 @@ function PlayerCore(props: CoreProps) {
   // The session: the New block ends at the Make; the Make ends with its sketch (wave2 §3.3).
   const reportedNew = useRef(false);
   useEffect(() => {
-    if (preview || reportedNew.current || step?.kind !== "make") return;
+    if (preview || !inSession || reportedNew.current || step?.kind !== "make") return;
     reportedNew.current = true;
     reportBlockDone({ block: "new", source: "lesson", itemId: def.id, completed: true });
-  }, [step?.kind, preview, def.id]);
+  }, [step?.kind, preview, inSession, def.id]);
   const reportedEnd = useRef(false);
   useEffect(() => {
-    if (preview || reportedEnd.current || status !== "complete" || !ctx.sketchId) return;
+    if (preview || !inSession || reportedEnd.current || status !== "complete" || !ctx.sketchId) return;
     reportedEnd.current = true;
     if (ctx.wrapReason) {
       reportBlockDone({
@@ -563,7 +598,19 @@ function PlayerCore(props: CoreProps) {
       });
       reportBlockDone({ block: "make", source: "quick-sketch", sketchId: ctx.sketchId });
     } else reportBlockDone({ block: "make", source: "lesson", sketchId: ctx.sketchId });
-  }, [status, ctx.sketchId, ctx.wrapReason, preview, def.id, lp?.currentStep]);
+  }, [status, ctx.sketchId, ctx.wrapReason, preview, inSession, def.id, lp?.currentStep]);
+
+  // The step this visit opened at (a resumed side lesson says it is optional there, not only on step 1).
+  const [openedAt, setOpenedAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (openedAt === null && status === "active") setOpenedAt(ctx.index);
+  }, [openedAt, status, ctx.index]);
+
+  // Wave 5: a step whose answer the app cannot draw yet (a kind without a widget) never strands the learner.
+  useEffect(() => {
+    if (step && answerMissing(step.exercise, registryHas(lessonWidgetFor)))
+      actor.send({ type: "UNAVAILABLE", stepId: step.id });
+  }, [step, actor]);
 
   // The session's own "Wrap up" (the non-modal line) reaches the lesson here.
   const sessionWrap = useSession((s) => s.wrap);
@@ -658,6 +705,9 @@ function PlayerCore(props: CoreProps) {
 
   const [reportOpen, setReportOpen] = useState(false);
   const [reportBusy, setReportBusy] = useState(false);
+  // The tutor's chord map and sections follow what the step's Workbench analysed (tutor apiNote 5): section
+  // names in tutor text then select the sections the form ribbon draws, and chord chips light their real bars.
+  const onModel = useSubjectHarmony({ subjectKind: "lesson", subjectId: def.id } as SubjectRef);
 
   // --- screens -----------------------------------------------------------------------------------------
   if (status === "loading" || !step)
@@ -711,11 +761,15 @@ function PlayerCore(props: CoreProps) {
       lint: gradedLint({ ...env, key: ex?.key ?? env.key, meter: ex?.meter ?? env.meter }),
       ...((ex?.pickup ?? def.pickup) ? { pickup: ex?.pickup ?? def.pickup } : {}),
       views: viewsOf(s),
+      onModel,
       // A step that asks for the roll and the bass clef or grand staff wants both read ("watch the bass on the
       // lower staff"): when the Workbench has to tab them (the height rule), it opens on Both, not the roll alone.
       ...(initialTabOf(s) === "both" ? { initialTab: "both" as const } : {}),
       // Wave 4: a step may open Workbench panels (the key panel, the chord band …); its choice wins.
       ...(initialPanelsOf(s.ui) ? { initialPanels: initialPanelsOf(s.ui) ?? {} } : {}),
+      // Wave 5: the scope / spectrum panel and a visual probe the step asks for (A1); the code's own .scope()
+      // opens the same panel inside the Workbench.
+      ...(stepScopePanel(s.ui) ? { scopePanel: stepScopePanel(s.ui) } : {}),
       unit: def.id,
       band,
       roll: {
@@ -745,6 +799,9 @@ function PlayerCore(props: CoreProps) {
         preview={preview}
         inSession={inSession}
         content={bundle}
+        side={props.side}
+        origin={originLink(props.from)}
+        nextSide={nextSideOf(def.id, bundle)}
       />
     );
   if (status === "wrapping")
@@ -916,6 +973,27 @@ function PlayerCore(props: CoreProps) {
           onReplay={featureSwitch.replay}
         />
       )}
+      {props.side && ctx.index === (openedAt ?? ctx.range[0]) && (
+        <div data-testid="side-lesson-note" className="mt-3">
+          <Callout
+            tone="info"
+            title={props.side.heading}
+            actions={
+              !inSession ? (
+                <Link
+                  to={originLink(props.from).to}
+                  className={buttonClass("ghost", "sm")}
+                  data-testid="side-leave"
+                >
+                  Leave for now
+                </Link>
+              ) : undefined
+            }
+          >
+            {props.side.offer} {props.side.note}
+          </Callout>
+        </div>
+      )}
       {preview && ctx.index === ctx.range[0] && (
         <Callout tone="info" title="Preview" className="mt-3">
           {loaded.note ??
@@ -1071,7 +1149,7 @@ function PlayerCore(props: CoreProps) {
     state: st,
     params,
     target,
-    sessionId: currentSessionId(),
+    sessionId: sessionIdHere(),
     review,
     exercise: ex,
     lastResult: p.result,

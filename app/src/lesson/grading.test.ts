@@ -3,6 +3,7 @@
 // grader shape, params, unlocked tools, the onboarding preview context), must come out as the author pinned it.
 import { beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import type { AttemptResponse, ByEarPart, Exercise, LessonDef, SessionId, TestCase } from "@oak/api";
+import type { CheckpointDef } from "@oak/content-kit";
 import { evaluateForGrading, gradeExercise, initRealm } from "@oak/grader";
 import sample from "../../../content/core/_sample/L00/lesson.ts";
 import u00l02 from "../../../content/core/U00/L02/lesson.ts";
@@ -26,6 +27,8 @@ import u04l04 from "../../../content/core/U04/L04/lesson.ts";
 import { courseGraph } from "../../../content/index.ts";
 import { unlockedAt } from "../../../content/lib/course.ts";
 import { toolbox } from "../../../content/toolbox.ts";
+import type { AnswerSpec } from "../answers/types.ts";
+import { answerResponse, barAnswer } from "./answer-response.ts";
 import fixture, { BUNS_CODE, BUNS_WRONG, FIXTURE_CONTEXT } from "./dev/wave3-fixture.ts";
 import {
   type GradeEnv,
@@ -71,6 +74,41 @@ const W4_LESSONS: LessonDef[] = await Promise.all(
   }),
 );
 
+/** The 31 lessons of Wave 5: U08 Bass Lines (5), U09 Form (5), U10 Minor (9), U11 Pentatonic & Blues (8), A1 (4). */
+const W5_LESSON_IDS: readonly string[] = [
+  ...(
+    [
+      ["U08", 5],
+      ["U09", 5],
+      ["U10", 9],
+      ["U11", 8],
+    ] as const
+  ).flatMap(([u, n]) => Array.from({ length: n }, (_, i) => `${u}.L${String(i + 1).padStart(2, "0")}`)),
+  "A1.L01",
+  "A1.L02",
+  "A1.L03",
+  "A1.L04",
+];
+
+const W5_LESSONS: LessonDef[] = await Promise.all(
+  W5_LESSON_IDS.map(async (id) => {
+    const [unit, lesson] = id.split(".") as [string, string];
+    const base = unit.startsWith("U") ? "core" : "advanced";
+    const mod = (await import(`../../../content/${base}/${unit}/${lesson}/lesson.ts`)) as {
+      default: LessonDef;
+    };
+    return mod.default;
+  }),
+);
+
+/** U09.CP, U10.CP and U11.CP: their authored items and the Make, graded in the checkpoint's own context. */
+const W5_CHECKPOINTS: CheckpointDef[] = await Promise.all(
+  ["U09", "U10", "U11"].map(async (u) => {
+    const mod = (await import(`../../../content/core/${u}/CP/checkpoint.ts`)) as { default: CheckpointDef };
+    return mod.default;
+  }),
+);
+
 const deps: GraderDeps = {
   grade: (req) => gradeExercise(req),
   evaluate: (code, bars, meter) => evaluateForGrading(code, { mode: "lesson", bars, lint: null, meter }),
@@ -111,7 +149,88 @@ const LESSONS: [LessonDef, string][] = [
   ...[u04l01, u04l02, u04l03, u04l04].map((d) => [d, d.id] as [LessonDef, string]),
   // Every Wave 4 lesson (U05 Triads, U06 Diatonic Harmony, U07 Melody), each in its own context.
   ...W4_LESSONS.map((d) => [d, d.id] as [LessonDef, string]),
+  // Every Wave 5 lesson (U08–U11 and the A1 side lessons), each in its own context.
+  ...W5_LESSONS.map((d) => [d, d.id] as [LessonDef, string]),
 ];
+
+describe("Wave 5: every lesson and checkpoint is here", () => {
+  test("31 lessons, 3 checkpoints", () => {
+    expect(W5_LESSONS.map((d) => d.id)).toEqual([...W5_LESSON_IDS]);
+    expect(W5_CHECKPOINTS.map((c) => c.id)).toEqual(["U09.CP", "U10.CP", "U11.CP"]);
+  });
+});
+
+for (const cp of W5_CHECKPOINTS) {
+  describe(`${cp.id} authored items and Make through the player's grading path`, () => {
+    const env: GradeEnv = {
+      ownerId: cp.id,
+      key: { tonic: "C", mode: "major" },
+      meter: "4/4",
+      bpm: 100,
+      unlocked: unlockedAt(courseGraph(), toolbox, cp.id as SessionId),
+      allowPreview: false,
+      profile: NEUTRAL_PROFILE,
+    };
+    for (const ex of [...cp.authored, cp.make] as Exercise[]) {
+      for (const part of partsOf(ex)) {
+        for (const t of [...(ex.kind === "all" ? ex.tests : []), ...part.tests]) {
+          const response = wire(t);
+          if (!response) continue;
+          const target = ex.kind === "all" && ex.tests.includes(t) ? ex : part;
+          test(`${ex.id} ${target === ex ? "" : part.id}: ${t.name} → ${t.expect}`, async () => {
+            const r = await gradeStep(deps, env, target as Exercise, response, {
+              params: t.params ?? {},
+              attemptNo: 1,
+              rung: 0,
+              extraReplays: 0,
+            });
+            if (t.expect === "pass") expect(r.status).toBe("pass");
+            else if (t.expect === "fail") expect(r.status).not.toBe("pass");
+            else expect(r.status).toBe("error");
+            for (const code of t.feedback ?? []) expect(r.diagnostics.map((d) => d.id)).toContain(code);
+          });
+        }
+      }
+    }
+  });
+}
+
+describe("Wave 5: a bar picked on the bar buttons is the answer to 'which bar?'", () => {
+  const cases: [string, string][] = [
+    ["U09.L01", "S6"],
+    ["U09.L05", "S6"],
+    ["U11.L08", "S5"],
+  ];
+  for (const [lessonId, stepId] of cases) {
+    test(`${lessonId} ${stepId}: the widget's value grades as the author pinned it`, async () => {
+      const def = W5_LESSONS.find((d) => d.id === lessonId) as LessonDef;
+      const ex = def.steps.find((s) => s.id === stepId)?.exercise as Exercise;
+      expect(ex.kind).toBe("identify");
+      const spec = (ex as { answer: AnswerSpec }).answer;
+      expect(spec.ui).toBe("bar-buttons");
+      const right = ex.tests.find((t) => t.expect === "pass")?.response as { answer: { number: number } };
+      const wrong = ex.tests.find((t) => t.expect === "fail");
+      const env = envOf(def, def.id);
+      const opts = { params: {}, attemptNo: 1, rung: 0 as const, extraReplays: 0 };
+      // The value the widget holds is the list of bars picked; the last one is the answer.
+      const pass = await gradeStep(deps, env, ex, answerResponse(ex.kind, spec, [right.answer.number]), opts);
+      expect(pass.status).toBe("pass");
+      if (wrong) {
+        const bar = (wrong.response as { answer: { number: number } }).answer.number;
+        const fail = await gradeStep(deps, env, ex, answerResponse(ex.kind, spec, [bar]), opts);
+        expect(fail.status).toBe("fail");
+        for (const code of wrong.feedback ?? []) expect(fail.diagnostics.map((d) => d.id)).toContain(code);
+      }
+      // An attempt stored before the fix (the widget's own click) still grades as the bar it names.
+      const stored = await gradeStep(deps, env, ex, { click: String(right.answer.number) }, opts);
+      expect(stored.status).toBe("pass");
+    });
+  }
+  test("nothing picked is no answer", () => {
+    expect(barAnswer([])).toEqual({ skipped: true });
+    expect(barAnswer([3, 7])).toEqual({ answer: { number: 7 } });
+  });
+});
 
 for (const [def, session] of LESSONS) {
   describe(`${def.id} authored tests through the player's grading path`, () => {

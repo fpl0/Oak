@@ -58,7 +58,7 @@ describe("build", () => {
       edges: unknown[];
     };
     expect(graph.nodes.length).toBe(143);
-    expect(JSON.parse(readFileSync(join(tmp, "a", "toolbox.json"), "utf8")).length).toBe(212);
+    expect(JSON.parse(readFileSync(join(tmp, "a", "toolbox.json"), "utf8")).length).toBe(213);
     expect(readFileSync(join(tmp, "a", "tutor", "catalog.md"), "utf8")).toContain("## `scale`");
   });
   test("ids.ts is valid TypeScript with one union per kind", async () => {
@@ -113,10 +113,15 @@ describe("ID ledger (contracts §1.1 rule 4)", () => {
   });
   test("step, exercise and example IDs are ledgered once their unit is released", () => {
     const { lock } = updateLock([], {
-      exercise: ["U01.L02/silence-beat-3", "U09.L01/draft-name"],
-      step: ["U02.L01/S5", "U09.L01/S1"],
+      exercise: ["U01.L02/silence-beat-3", "U12.L01/draft-name", "A1.L02/released-side"],
+      step: ["U02.L01/S5", "U12.L01/S1", "A1.L02/S1"],
     });
-    expect(lock.map((e) => e.id)).toEqual(["U01.L02/silence-beat-3", "U02.L01/S5"]);
+    expect(lock.map((e) => e.id)).toEqual([
+      "A1.L02/released-side",
+      "U01.L02/silence-beat-3",
+      "A1.L02/S1",
+      "U02.L01/S5",
+    ]);
     const renamed = updateLock([{ id: "U01.L02/silence-beat-3", kind: "exercise" }], {
       exercise: ["U01.L02/beat-3"],
     });

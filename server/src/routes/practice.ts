@@ -41,7 +41,13 @@ export function progressReport(d: AppDeps): ProgressReport {
   // capstone is a pass at its level (X1: L5, X2: L6, CF-T: L8, contracts §2.9).
   const ladderPasses = d.repos.transcriptions
     .list()
-    .filter((t) => t.sourceKind === "generated" && t.gradedPass === true && t.ladderLevel !== null)
+    // Wave 5: an L5/L6 song item (a `pd-song` project the ladder cut) counts like a generated one.
+    .filter(
+      (t) =>
+        (t.sourceKind === "generated" || (t.sourceKind === "pd-song" && t.ladder != null)) &&
+        t.gradedPass === true &&
+        t.ladderLevel !== null,
+    )
     .map((t) => ({ level: t.ladderLevel as number, at: t.updatedAt }));
   const CAPSTONE_LADDER: Record<string, number> = { X1: 5, X2: 6, "CF-T": 8 };
   for (const c of d.repos.capstones.all())
@@ -315,4 +321,7 @@ export function practiceRoutes(mount: Mounter, d: AppDeps): void {
       s.ladder.submit(params.id, rest),
     );
   });
+
+  // Wave 5 (docs/design/wave5.md §5.3): the L5/L6 repertoire pool with what the learner passed.
+  mount("ladder.songs", () => s.ladder.songs());
 }

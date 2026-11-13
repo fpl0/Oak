@@ -44,6 +44,7 @@ async function renderOffline(req: RenderRequest, soundsRoot: string) {
       haps: req.events.length,
     };
   }
+  const t0 = performance.now();
   const { pattern } = (await core.evaluate(req.code, transpiler)) as { pattern: Strudel.Pattern };
   const haps = pattern
     .queryArc(0, req.cycles, { _cps: req.cps })
@@ -65,11 +66,15 @@ async function renderOffline(req: RenderRequest, soundsRoot: string) {
     if (performance.now() > deadline) throw new Error("reverb impulse response was never generated");
     await new Promise((r) => setTimeout(r, 5));
   }
+  const t1 = performance.now();
   const rendered = await ctx.startRendering();
+  const t2 = performance.now();
   return {
     left: rendered.getChannelData(0).slice(),
     right: rendered.getChannelData(1).slice(),
     haps: haps.length,
+    // Wall time to queue every voice (sample and font loads included) and to render the audio graph.
+    timings: { scheduleMs: Math.round(t1 - t0), renderMs: Math.round(t2 - t1) },
   };
 }
 
@@ -82,11 +87,13 @@ export function installRenderFrame(soundsRoot: string): void {
     if (event.source !== window.parent || event.data?.type !== "render") return;
     const req = event.data as RenderRequest;
     try {
-      const { left, right, haps } = await renderOffline(req, soundsRoot);
-      window.parent.postMessage({ type: "rendered", id: req.id, left, right, haps, logs }, location.origin, [
-        left.buffer,
-        right.buffer,
-      ]);
+      const { left, right, haps, ...rest } = await renderOffline(req, soundsRoot);
+      const timings = "timings" in rest ? rest.timings : undefined;
+      window.parent.postMessage(
+        { type: "rendered", id: req.id, left, right, haps, logs, timings },
+        location.origin,
+        [left.buffer, right.buffer],
+      );
     } catch (err) {
       window.parent.postMessage(
         { type: "rendered", id: req.id, error: String((err as Error)?.message ?? err), logs },

@@ -85,7 +85,12 @@ export function createTutorWiring(d: TutorWiringDeps): TutorWiring {
         ...(target?.kind === "album" ? { trackId: target.trackId, version: target.version } : {}),
         ...(accepted.conversationId === undefined ? {} : { conversationId: accepted.conversationId }),
       });
-    else d.services.library.saveTranscriptionReview(accepted.subject.subjectId, accepted.review);
+    // c11: the review records the transcription version it was asked about.
+    else
+      d.services.library.saveTranscriptionReview(accepted.subject.subjectId, accepted.review, {
+        ...(accepted.conversationId === undefined ? {} : { conversationId: accepted.conversationId }),
+        version: target?.kind === "transcription" ? target.version : null,
+      });
   };
   const tutor = d.fake
     ? fakeTutor(d, ports, onReview)

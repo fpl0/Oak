@@ -14,6 +14,17 @@ export const MAX_CAPSTONE_BARS = 128;
 export function pieceBars(code: string, events: readonly NEvent[]): number {
   const ast = sectionsFromAst(code);
   if (ast && "totalBars" in ast) return Math.max(1, Math.min(MAX_CAPSTONE_BARS, ast.totalBars));
+  // Parts that disagree only about their sections' names still agree about the length: every arranged part sums
+  // to the same bars. One track's loop (the period) would show a 48-bar song as 24.
+  if (ast && "inconsistent" in ast) {
+    const sums = arrangeLines(code).map((l) =>
+      l.sections.every((s) => s.bars !== null)
+        ? l.sections.reduce((n, s) => n + (s.bars as number), 0)
+        : null,
+    );
+    const total = sums[0];
+    if (total && sums.every((x) => x === total)) return Math.max(1, Math.min(MAX_CAPSTONE_BARS, total));
+  }
   if (events.length === 0) return 1;
   return Math.max(1, periodOf(events, MAX_CAPSTONE_BARS));
 }
@@ -95,4 +106,40 @@ export function theoryTags(
 export function clock(sec: number): string {
   const s = Math.max(0, Math.round(sec));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+// --- arrange() as written ----------------------------------------------------------------------------
+
+/** One labelled track's `arrange()` as written: each section's bars and the const it plays. */
+export interface ArrangeLine {
+  track: string;
+  sections: { bars: number | null; name: string | null }[];
+}
+
+/**
+ * The `arrange()` of every labelled track, read from the text (a line `label: arrange([8, a], [8, b])…`). A light
+ * reading for the hints only: the grader's AST reading is the one that decides.
+ */
+export function arrangeLines(code: string): ArrangeLine[] {
+  const out: ArrangeLine[] = [];
+  for (const m of code.matchAll(/^[ \t]*([A-Za-z_$][\w$]*)[ \t]*:[ \t]*arrange\(/gm)) {
+    const track = m[1] as string;
+    if (track.startsWith("_") || track.endsWith("_")) continue;
+    // The arguments up to the matching parenthesis.
+    let depth = 1;
+    let i = (m.index ?? 0) + m[0].length;
+    const from = i;
+    for (; i < code.length && depth > 0; i++) {
+      const c = code[i];
+      if (c === "(") depth++;
+      else if (c === ")") depth--;
+    }
+    const args = code.slice(from, i - 1);
+    const sections = [...args.matchAll(/\[\s*([^,\]]*?)\s*,\s*([A-Za-z_$][\w$]*)?[^\]]*\]/g)].map((s) => {
+      const bars = Number(s[1]);
+      return { bars: Number.isFinite(bars) && s[1] !== "" ? bars : null, name: s[2] ?? null };
+    });
+    out.push({ track, sections });
+  }
+  return out;
 }

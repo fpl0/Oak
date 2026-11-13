@@ -10,14 +10,18 @@ import { type Grid, gridOf } from "./meter.ts";
 import { toRat } from "./q.ts";
 import { type QItem, quantizeBar, type Seg, writtenOf } from "./quantize.ts";
 import {
+  blueNote,
   chordDisplay,
   chordForSpelling,
+  chordPcs,
   countLabel,
   degreeLabel,
+  isDominantSeventh,
   keyFromScaleCtx,
   parseNoteName,
   romanDisplay,
   spell,
+  spellBlue,
 } from "./theory-port.ts";
 import type {
   KeyChange,
@@ -26,6 +30,7 @@ import type {
   NoteItem,
   Score,
   ScoreAnnotation,
+  SectionMark,
   Staff,
   StaffKind,
   Voice,
@@ -40,6 +45,8 @@ export interface Slot {
   pitches: SpelledPitch[];
   drums?: { s: string; head: "normal" | "x" }[];
   n: number | null;
+  /** Distinct noteheads: `events[0 … heads)` are drawn, later ones double them in unison (c5). Default: all. */
+  heads?: number;
 }
 interface StaffPlan {
   id: Staff["id"];
@@ -281,8 +288,17 @@ function groupSlots(events: NEvent[]): Slot[] {
   return [...map.values()].map((evs) => {
     const sorted = [...evs].sort((a, b) => (a.midi ?? 0) - (b.midi ?? 0));
     const first = sorted[0] as NEvent;
-    return { onset: first.onset, end: end(first), events: sorted, pitches: [], n: null };
+    // c5: two events in unison in one slot (a chord tone doubling the tune in the same rhythm) share one notehead;
+    // the doubled event's id rides after the heads (`NoteItem.eventIds` is longer than `pitches`), so a click on
+    // the head still reaches both.
+    return { onset: first.onset, end: end(first), ...unisonHeads(sorted), pitches: [], n: null };
   });
+}
+/** Events low to high with unison doubles moved after the distinct heads (c5). */
+function unisonHeads(events: readonly NEvent[]): { events: NEvent[]; heads: number } {
+  const sorted = [...events].sort((a, b) => (a.midi ?? 0) - (b.midi ?? 0));
+  const heads = sorted.filter((e, i) => sorted.findIndex((x) => x.midi === e.midi) === i);
+  return { events: [...heads, ...sorted.filter((e) => !heads.includes(e))], heads: heads.length };
 }
 
 function assignVoices(slots: Slot[], warnings: NotationWarning[]): { slots: Slot[] }[] {
@@ -309,7 +325,7 @@ function assignVoices(slots: Slot[], warnings: NotationWarning[]): { slots: Slot
       message: "more than four overlapping lines on one staff; a note was shortened",
     });
     if (R.eq(prev.onset, s.onset)) {
-      prev.events = [...prev.events, ...s.events].sort((a, b) => (a.midi ?? 0) - (b.midi ?? 0));
+      Object.assign(prev, unisonHeads([...prev.events, ...s.events]));
       prev.end = R.min(prev.end, s.end);
       v.last = prev.end;
     } else {
@@ -368,29 +384,59 @@ interface ChordAt {
   at: Rat;
   symbol: string;
 }
-function spellVoice(slots: Slot[], keyAt: (t: Rat, e: NEvent) => KeySpec | null, chords: ChordAt[]): void {
+/** White-key enharmonics (E♯, B♯, C♭, F♭): a chromatic note is never spelled so unless the key owns it. */
+const WHITE_ENHARMONIC = /^(?:E#|B#|Cb|Fb)/;
+
+function spellVoice(
+  slots: Slot[],
+  keyAt: (t: Rat, e: NEvent) => KeySpec | null,
+  chords: ChordAt[],
+  blues: boolean,
+): void {
   const chordAt = (t: Rat): string | undefined => {
     let found: string | undefined;
     for (const c of chords) if (R.lte(c.at, t)) found = c.symbol;
     return found;
   };
+  const headsOf = (s: Slot | undefined) => (s ? s.events.slice(0, s.heads ?? s.events.length) : []);
   slots.forEach((s, i) => {
-    const single = s.events.length === 1;
+    const single = headsOf(s).length === 1;
     const cur = s.events[0]?.midi ?? 0;
-    const nextMidi = slots[i + 1]?.events.length === 1 ? slots[i + 1]?.events[0]?.midi : undefined;
-    const prevMidi = slots[i - 1]?.events.length === 1 ? slots[i - 1]?.events[0]?.midi : undefined;
+    const nextMidi = headsOf(slots[i + 1]).length === 1 ? slots[i + 1]?.events[0]?.midi : undefined;
+    const prevMidi = headsOf(slots[i - 1]).length === 1 ? slots[i - 1]?.events[0]?.midi : undefined;
     let direction: 1 | -1 | undefined;
-    // Direction decides only chromatic passing notes (C C# D, E Eb D); neighbours and leaps keep the key's
-    // default chromatic spelling (b3 in D major is F natural, not E#).
+    // Direction decides chromatic passing notes (C C# D, E Eb D) ...
     const near = (m: number | null | undefined): m is number =>
       m != null && m !== cur && Math.abs(m - cur) <= 2;
     if (single && near(prevMidi) && near(nextMidi)) {
       if (prevMidi < cur && cur < nextMidi) direction = 1;
       else if (prevMidi > cur && cur > nextMidi) direction = -1;
     }
-    s.pitches = s.events.map((e) => {
+    // ... and approach tones (Wave 5, bass lines): a chromatic note a half step from the next note is spelled
+    // towards it (F♯ into G, A♭ into G, G♯ into A), unless that needs a white-key enharmonic or a double
+    // accidental (F into F♯ in D major stays F, not E♯): then the key's default spelling stands. A neighbour
+    // figure (E E♭ E: back to the note it left) keeps the key's spelling, as in Wave 4.
+    const approach: 1 | -1 | undefined =
+      single && nextMidi != null && Math.abs(nextMidi - cur) === 1 && prevMidi !== nextMidi
+        ? nextMidi > cur
+          ? 1
+          : -1
+        : undefined;
+    // A blue ♭5 follows the line: from the next note when it is a step away, else from where it came from.
+    const motion: 1 | -1 | undefined =
+      near(nextMidi) && nextMidi !== cur
+        ? nextMidi > cur
+          ? 1
+          : -1
+        : near(prevMidi)
+          ? prevMidi < cur
+            ? 1
+            : -1
+          : undefined;
+    s.pitches = headsOf(s).map((e) => {
       const midi = Math.round(e.midi as number);
-      if (e.pitchSource === "note-str" && e.written) {
+      // A name the code wrote (`note("eb4")`), or a scale step it altered (`n("2b")`: the host passes E♭).
+      if (e.written) {
         const w = parseNoteName(e.written);
         if (w && w.midi === midi) {
           const acc = w.alt > 0 ? "#".repeat(w.alt) : "b".repeat(-w.alt);
@@ -399,13 +445,43 @@ function spellVoice(slots: Slot[], keyAt: (t: Rat, e: NEvent) => KeySpec | null,
       }
       const symbol = e.chordSymbol ?? chordAt(s.onset);
       const chord = symbol ? chordForSpelling(symbol) : null;
-      return spell(midi, {
-        key: keyAt(s.onset, e),
-        ...(chord ? { chord } : {}),
-        ...(direction && !chord ? { direction } : {}),
-      });
+      const key = keyAt(s.onset, e);
+      const pc = ((midi % 12) + 12) % 12;
+      const chordTone = !!chord && chordPcs(chord).includes(pc);
+      // Blue notes (♭3 ♭5 ♭7 against the tonic as major), unless they are a tone of the chord sounding.
+      const blue = blues && key && !chordTone ? blueNote(midi, key) : null;
+      if (blue && key) {
+        if (blue.degree === "b5") return spellBlue(midi, key, single ? motion : undefined);
+        return spellBlue(midi, key);
+      }
+      const plain = spell(midi, { key, ...(chord ? { chord } : {}) });
+      const dir = direction ?? approach;
+      if (!dir || chordTone) return plain;
+      const toward = spell(midi, { key, direction: dir });
+      if (toward.name === plain.name) return plain;
+      if (Math.abs(toward.alt) > 1 || WHITE_ENHARMONIC.test(toward.name)) return plain;
+      // A passing note always follows the line; an approach tone only replaces a spelling on the target's letter
+      // or a white-key enharmonic (D♯ into E, G♯ into A, not E♭ into D).
+      if (direction) return toward;
+      const target = spell(nextMidi as number, { key, ...(chord ? { chord } : {}) });
+      return plain.letter === target.letter ? toward : plain;
     });
   });
+}
+
+/** Whether blue notes are spelled as blues: asked for, a blues key or scale, or a dominant-seventh blues. */
+function bluesContext(input: NotationInput, key: KeySpec | null, events: readonly NEvent[]): boolean {
+  if (input.blues !== undefined) return input.blues;
+  if (key?.mode === "blues") return true;
+  // An event's scale context reads "C4 blues" / "A3 minor blues" (the grader's `scaleCtx`).
+  if (events.some((e) => e.scaleCtx && /\bblues\b/i.test(e.scaleCtx))) return true;
+  const symbols = [
+    ...(input.chords ?? []).map((c) => c.symbol),
+    ...(input.chords ? [] : events.flatMap((e) => (e.chordSymbol ? [e.chordSymbol] : []))),
+  ];
+  if (symbols.length === 0 || !symbols.every(isDominantSeventh)) return false;
+  const roots = new Set(symbols.map((s) => chordForSpelling(s)?.root ?? s));
+  return roots.size >= 2;
 }
 
 // --- the pipeline --------------------------------------------------------------------------------
@@ -424,6 +500,12 @@ export function buildScore(input: NotationInput): Score {
   let events = input.events.filter((e) => R.lt([0, 1], e.dur));
   if (input.swing && meter.tempoUnit === "quarter")
     events = straightenSwing(events, meter.unitsPerBar, input.swing);
+  else if (input.swing)
+    warnings.push({
+      code: "swing-unsupported",
+      bar: startBar,
+      message: `swing is not written in ${meter.num}/${meter.den} (contracts §6.10): the notes are engraved as played`,
+    });
   events = events
     .filter((e) => R.lt(e.onset, [stop, 1]) && R.lt([startBar, 1], end(e)))
     .map((e) => (e.midi !== null && !Number.isInteger(e.midi) ? { ...e, midi: Math.round(e.midi) } : e));
@@ -484,6 +566,7 @@ export function buildScore(input: NotationInput): Score {
   );
 
   // 4. staves and voices
+  const blues = bluesContext(input, key, events);
   const plans = planStaves(input, events, warnings);
   // Each track's key plan: its own (`trackKeys`, a key its code states) or the piece's.
   const trackPlan = new Map<string, KeyPlan>();
@@ -530,7 +613,7 @@ export function buildScore(input: NotationInput): Score {
     // Clipping at the next onset belongs to a declared swing (§6.10.6); otherwise overlaps are polyphony.
     const evs = input.swing ? clipWithinTracks(p.events) : p.events;
     const voices = assignVoices(groupSlots(evs), warnings).map((v) => v.slots);
-    for (const v of voices) spellVoice(v, spellKey, chordList);
+    for (const v of voices) spellVoice(v, spellKey, chordList, blues);
     const ms = p.events.map((e) => e.midi as number);
     const lo = p.clef === "treble" ? 48 : 26;
     const hi = p.clef === "treble" ? 93 : 72;
@@ -677,6 +760,10 @@ export function buildScore(input: NotationInput): Score {
           if (slot) {
             if (slot.n === null) slot.n = nextN++;
             item.n = slot.n;
+            if (slot.heads !== undefined && slot.heads < slot.events.length)
+              item.doubled = slot.events
+                .slice(slot.heads)
+                .map((e) => slot.pitches.findIndex((p) => p.midi === Math.round(e.midi as number)));
             const locs = slot.events.flatMap((e) => e.locs);
             if (locs.length) item.locs = locs;
             if (slot.drums?.length === 1) item.drum = slot.drums[0] as { s: string; head: "normal" | "x" };
@@ -723,6 +810,7 @@ export function buildScore(input: NotationInput): Score {
   anchor(romans, romanStaff, "Roman numeral");
 
   warnings.push(...abcjsLimitWarnings({ key, staves }));
+  const sections = sectionsIn(input.sections ?? [], startBar, stop);
   const swingText = input.swing ? (input.swing.subdivision === 8 ? "Swing 8ths" : "Swing 16ths") : undefined;
   return {
     meter,
@@ -742,7 +830,18 @@ export function buildScore(input: NotationInput): Score {
     ...(input.title ? { title: input.title } : {}),
     ...(pickupStart !== null && (pickup || startBar > 0) ? { pickupNumbering: true as const } : {}),
     ...(input.staff === "lead" ? { lead: true as const } : {}),
+    ...(sections.length ? { sections } : {}),
+    ...(blues ? { blues: true as const } : {}),
   };
+}
+
+/** The section marks inside the engraved bars, in bar order, one per bar (the last given wins). */
+function sectionsIn(marks: readonly SectionMark[], startBar: number, stop: number): SectionMark[] {
+  const byBar = new Map<number, SectionMark>();
+  for (const m of marks)
+    if (Number.isInteger(m.bar) && m.bar >= startBar && m.bar < stop && m.text.trim() !== "")
+      byBar.set(m.bar, { ...m });
+  return [...byBar.values()].sort((a, b) => a.bar - b.bar);
 }
 
 /** True when an annotation set switches at least one line on. */
@@ -778,8 +877,14 @@ const sameChanges = (a: readonly KeyChange[], b: readonly KeyChange[]) =>
   a.every(
     (c, i) => c.bar === b[i]?.bar && (c.beat ?? 1) === (b[i]?.beat ?? 1) && sameKey(c.key, b[i]?.key ?? null),
   );
+/** Natural, harmonic and melodic minor on one tonic are one key on the staff (Wave 5: U10.L08 switches forms). */
+const MINOR_FORMS = new Set(["minor", "harmonic minor", "melodic minor"]);
 const sameKey = (a: KeySpec | null, b: KeySpec | null) =>
-  a === b || (a !== null && b !== null && a.tonic === b.tonic && a.mode === b.mode);
+  a === b ||
+  (a !== null &&
+    b !== null &&
+    a.tonic === b.tonic &&
+    (a.mode === b.mode || (MINOR_FORMS.has(a.mode) && MINOR_FORMS.has(b.mode))));
 const samePlan = (a: KeyPlan, b: KeyPlan) =>
   a === b || (sameKey(a.key, b.key) && sameChanges(a.keyChanges, b.keyChanges));
 

@@ -21,6 +21,7 @@ import {
   unitOf,
 } from "../../drills/model.ts";
 import { type DrillData, useDrillData } from "../../drills/use-drill-data.ts";
+import { graduatedLine } from "../../drills/wave5.ts";
 import { usePageTitle } from "../../lib/nav.ts";
 import { useDue } from "../../lib/queries.ts";
 import { buttonClass } from "../../ui/kit/Button.tsx";
@@ -60,7 +61,16 @@ function FamilyCard({ def, data }: { def: FamilyDef; data: DrillData }) {
   const playable = status === "unlocked" || status === "resting" || status === "mastered";
   const quietBlocked = playable && def.mic === true && data.profile.quiet;
   const chip = STATUS_CHIP[status];
-  const mix = compositeLine(state, data.states, data.defs);
+  const compositeTitle = state?.compositeId ? (data.defs.get(state.compositeId)?.title ?? null) : null;
+  const others = state?.compositeId
+    ? [...data.states.values()].filter(
+        (s) => s.compositeId === state.compositeId && s.graduatedAt !== null && s.familyId !== def.id,
+      ).length
+    : 0;
+  // Graduated into its composite (contracts §7.4): progress, said as such.
+  const graduated =
+    status === "mastered" && compositeTitle ? graduatedLine(state, def, compositeTitle, others) : null;
+  const mix = graduated ?? compositeLine(state, data.states, data.defs);
   return (
     <Card
       className={clsx("flex flex-col gap-2 p-4", !playable && "bg-surface-2/60")}
@@ -108,7 +118,10 @@ function FamilyCard({ def, data }: { def: FamilyDef; data: DrillData }) {
             </p>
           )}
           {mix && status !== "resting" && (
-            <p className="text-sm text-text-3" data-testid="family-composite">
+            <p
+              className={clsx("text-sm", graduated ? "text-text-2" : "text-text-3")}
+              data-testid={graduated ? "family-graduated" : "family-composite"}
+            >
               {mix}
             </p>
           )}
@@ -191,6 +204,9 @@ function Stages({ data }: { data: DrillData }) {
             familyStatus(d, data.states.get(d.id), data.completed),
           ),
         ).length;
+        const mastered = g.families.filter(
+          (d) => familyStatus(d, data.states.get(d.id), data.completed) === "mastered",
+        ).length;
         return (
           <section key={g.key} aria-labelledby={`stage-${g.key}`} data-testid={`stage-${g.key}`}>
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
@@ -200,8 +216,9 @@ function Stages({ data }: { data: DrillData }) {
                 </h2>
                 <p className="text-sm text-text-2">{g.sub}</p>
               </div>
-              <span className="text-sm text-text-3">
+              <span className="text-sm text-text-3" data-testid={`stage-${g.key}-count`}>
                 {open} of {g.families.length} open
+                {mastered > 0 ? ` · ${mastered} mastered` : ""}
               </span>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

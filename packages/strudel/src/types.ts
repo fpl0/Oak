@@ -390,7 +390,18 @@ export interface ScopeTap extends Readable<{ editorId: string | null; panels: Sc
   wave(target?: Float32Array): Float32Array;
   /** Magnitudes in dBFS per frequency bin (`fftSize / 2` bins up to `sampleRate / 2`). */
   spectrum(target?: Float32Array): Float32Array;
+  /**
+   * Wave 5 seam (docs/design/wave5.md §3.4): what the panel listens to — the master bus (default) or one labelled
+   * track (A1.L01 "see a wave": one voice alone; `band.chords` names a Band track). A track is tapped live after
+   * its filters, envelope, gain and pan and before reverb and delay (superdough's `analyze` send); nothing is
+   * heard differently. A label that plays nothing reads as silence; an empty label throws. Before audio is
+   * unlocked the master bus is read.
+   */
+  readonly source: ScopeSource;
+  setSource(source: ScopeSource): void;
 }
+/** Wave 5: the scope and spectrum panel's input. */
+export type ScopeSource = { kind: "master" } | { kind: "track"; label: string };
 
 export interface OakStrudel {
   readonly ctx: AudioContext;

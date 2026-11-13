@@ -2,6 +2,32 @@
 
 Owner: **kit** (docs/design/wave4.md §1). Everyone else imports from here and never edits it; ask under `apiNotes`.
 
+## New in Wave 5 (use these instead of a local copy)
+
+All exported from `kit/index.ts`; specimens in both themes in `kit/gallery/KitWave5.tsx` (`mountKitWave5`, screenshot by
+`kit/e2e/wave5.pw.ts`). Pure rules in `kit/model-w5.ts` (unit-tested).
+
+| Piece | File | What it is for |
+|---|---|---|
+| `SectionRibbon` | `kit/SectionRibbon.tsx` | The sections of a piece as labelled blocks as wide as their bars (`RibbonSection`: `tag`, `text`, `letter`, `startBar`, `bars`, `energy?`; a `FormViewSection` from `lib/form-view.ts` fits as is). One tab stop: arrows move, Home/End, Enter or Space loops the focused section (again: stops), Esc stops; a click loops. `loopTag` + `onLoop` (loopable), `selectedTag` + `onSelect` (a form answer), `currentBar` (a playhead), `pickup` (bars count from the first full bar, c4), `problem` (the tracks disagree: a sentence, never a wrong form), `empty`. Blocks under a tenth of the ribbon show their letter alone. The Workbench keeps its own ribbon on the roll's time axis; this one stands alone (a brief, a prompt, the Coda). |
+| `BarGrid` | `kit/BarGrid.tsx` | A grid of bar boxes, four a line (the twelve-bar chart, a 16-bar form). `cells: { content, text?, state? }[]` with states `empty` (a slash a beat), `given`, `filled`, `met`, `unmet` (icon + words). One tab stop: arrows move a box, up/down a line, Home/End the line, Mod+Home/End the grid; `selected` + `onSelect`, `current` (playing), `lineLabels` ("I", "IV", "V"), `firstBar`. |
+| `LineChart` | `kit/LineChart.tsx` | A small line chart of one series (the energy curve): SVG line and area, HTML points and labels (a run of equal labels prints once), `marked` point, one accessible sentence naming the lowest and highest points (`chartSummary`), `table` adds a visually hidden table, `empty` text. |
+| `ScopeFrame` | `kit/ScopeFrame.tsx` | The frame Oak's scope, spectrum and probe curves draw in: a DPR-sized canvas, the grid at the axis ticks, HTML tick labels that thin out so none overlap (`thinTicks`), `x`/`y` `AxisSpec` (`linear` / `log`, unit, label, ticks), an `empty` sentence ("Press Play to see the wave"), `header`, `description`. `live` redraws every frame — at most 10 a second under reduced motion (wave5.md §4.4); otherwise it redraws on `frameKey`, size and theme. You draw in `draw(ctx, plot)` with `plot.x(v)`, `plot.y(v)` and the theme's `plot.colours`. |
+| `ControlReadout` | `kit/ControlReadout.tsx` | One sound control, knob-less: label, its method in code (`.lpf()`), the value large with its unit ("800 Hz"), a slider on the control's own scale (`log`: a step is a half step of frequency, Shift an octave, Alt a quarter of a half step; `linear`: `step` / `fine` / `coarse`), Home/End, PageUp/PageDown, a Reset to `defaultValue`, `help`. `role="slider"` carries the real value. |
+| helpers | `kit/model-w5.ts` | `barNumber`, `barSpanText` ("bars 5–8", "the pickup and bars 1–4"), `axisFraction`, `axisValue`, `axisTicks`, `unitLabel` ("1.2 kHz", "250 ms", "−12 dB"), `chartSummary` (exported from the index); `ribbonKey`, `gridMove`, `controlKeyValue`, `thinTicks` (internal, tested). |
+
+## Shell and settings (Wave 5)
+
+- The shortcut sheet has a section **Sections, charts and sound controls** (the kit pieces' keys). Workbench lens and
+  panel keys whose tool is not unlocked yet stay listed but say when they open ("Opens with U09 · Form", "Opens with
+  the side lesson Waves & Harmonics"), from the owners' tables (`workbench/panels.ts`, `lib/lenses.ts`) and the
+  course (`keys/locks.ts`). Nothing is marked before the unlock list loads.
+- The command palette lists side lessons as optional ("Optional side lesson", "Side lesson · opens after …",
+  "Side lesson · done"): the server's `sideLessons.list` answer when a page loaded it, else the unlock list
+  (`shell/side-lessons.ts`). It never fetches for it.
+- Settings › Data lists the album's recordings (each version with a take: place, length, size, on the album or an
+  earlier version) with the server's total, and the own-audio recordings that deleted projects left behind.
+
 ## New in Wave 4 (use these instead of a local copy)
 
 | Piece | File | What it is for |

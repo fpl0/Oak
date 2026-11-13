@@ -202,6 +202,20 @@ export function quietNote(setAside: number): string | null {
   return `${setAside === 1 ? "One sung item was" : `${setAside} sung items were`} set aside in Quiet mode. Singing never counts against a checkpoint.`;
 }
 
+/**
+ * What a pass opens, by name ("Grit, Verse–Chorus Demo"), never by ID: lessons, checkpoints and capstones by their
+ * syllabus titles; a capstone session as its capstone. An item the syllabus does not name is left out.
+ */
+export function openedText(ids: readonly string[], titles: ReadonlyMap<string, string>): string {
+  const names = ids.map((id) => {
+    const own = titles.get(id);
+    if (own) return own;
+    const m = /^(.+)\.S\d+$/.exec(id);
+    return m ? (titles.get(m[1] as string) ?? null) : null;
+  });
+  return [...new Set(names.filter((n): n is string => n !== null))].join(", ");
+}
+
 /** The headline of the result screen (calm in every case; "not yet" is never "failed"). */
 export function resultCopy(o: Pick<CheckpointOutcome, "passed" | "softPass">): {
   title: string;

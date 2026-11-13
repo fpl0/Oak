@@ -7,6 +7,8 @@ import * as webaudio from "@strudel/webaudio";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createHarness } from "../src/audibility/harness.ts";
+import * as metrics from "../src/audibility/metrics.ts";
+import * as qualityMetrics from "../src/audibility/quality.ts";
 import { createQualityHarness } from "../src/audibility/quality-harness.ts";
 import {
   createOakStrudel,
@@ -195,6 +197,12 @@ Object.assign(window, {
     rawPlay,
     decodeRecording,
     harness: createHarness({ frameUrl: "/render.html" }),
+    // Two bars of a lesson loop at its own tempo (A1 at 100 BPM: 4.8 s) with room for tails.
+    lessonHarness: createHarness({ frameUrl: "/render.html", seconds: 5.5 }),
+    /** A harness of any length (the 90-second C3 render measures CPU headroom). */
+    createHarness,
+    /** The pure measures (spectra, loudness, pitch) for analysis inside the page (wave5.pw.ts). */
+    analysis: { ...metrics, ...qualityMetrics },
     quality: createQualityHarness("/render.html"),
     editorId,
     webaudio,

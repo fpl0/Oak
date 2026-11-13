@@ -12,7 +12,13 @@ import {
   toneRole,
 } from "./harmony.ts";
 import {
+  approachKind,
+  approachTones,
+  BLUE_NOTES,
   barPosition,
+  bassRole,
+  blueNoteOf,
+  bluesKey,
   bpmToCpm,
   CHORD_TABLE,
   characteristicTones,
@@ -39,12 +45,21 @@ import {
   intervalSemitones,
   invertInterval,
   isCanonicalCode,
+  isDominantSeventhPcs,
+  isDominantSeventhSymbol,
   keySignature,
+  keyTwins,
   labelPitch,
   METERS,
+  type MinorForm,
   midiToFreq,
+  minorDegrees,
+  minorKey,
+  minorKeyChords,
+  minorScaleNotes,
   normalizeText,
   noteToMidi,
+  type PentatonicKind,
   parallelKey,
   parseChordWithBass,
   parseInterval,
@@ -53,33 +68,41 @@ import {
   parseRN,
   parseScaleArg,
   parseStrudelInterval,
+  pentatonicKey,
   RHYTHM_GRIDS,
   relativeKey,
   rhythmGrid,
   rnToChord,
   romanOf,
   SCHEMAS,
+  scaleDegrees,
   scaleNotes,
   scalePcs,
+  schemaChords,
   schemaMatch,
   signatureOf,
+  spellBlueNote,
   spellMidi,
   stepToMidi,
   strudelInterval,
   strudelStep,
+  type TwelveBarForm,
   tempoLine,
   toAbcChord,
   toCode,
   toJazzGlyph,
   toLeadSheet,
   transposeKey,
+  twelveBarChords,
+  twelveBarFormOf,
+  twelveBarPlan,
   VOICING_DICTS,
   type VoicingDict,
 } from "./index.ts";
 
 const mod12 = (x: number): number => ((Math.round(x) % 12) + 12) % 12;
 
-import type { ChordId, NoteTextKind, RomanNumeral } from "./types.ts";
+import type { ChordId, NoteTextKind, RomanNumeral, SchemaDef } from "./types.ts";
 
 export const CLI_HELP = `theory <op> [args]   (keys: C:major, Eb, F#m, A:harmonic:minor, D_dorian; output is JSON)
 
@@ -108,6 +131,22 @@ chords
                                  names; null for a cluster ("C4 E4 G4 --bass E" → C/E, I6 in C)
   symbol <text> [--dict D]       one chord symbol in every dialect (C° Co Cdim → C°, Co; G/B → code G)
   diatonic <key> [--sevenths]
+  dom7 <symbol|note...>          is it a dominant seventh? (from a symbol, or from hand-voiced notes; --bass X)
+minor, pentatonic and blues (Wave 5)
+  minor <tonic> [--natural|--harmonic|--melodic] [--sevenths]   notes, degrees (do-based: me le te), chords
+                                 (harmonic: V and vii° with the raised 7), signature, relative and parallel
+  twins <key>                    relative and parallel key ("C" → A minor and C minor)
+  schema-chords <schema> <key>   a schema's chords in a key ("schema.aeolian" "A:minor" → Am F C G)
+  pentatonic <tonic> <major|minor>   the five notes and their degrees
+  blues <tonic>                  the blues scale, its degrees and the blue notes (♭3 ♭5 ♭7: me se te)
+  blue <note|midi> <tonic> [--up|--down]   which blue note it is against the tonic, spelled by direction
+  twelve-bar <tonic> [--quick] [--turnaround]   the 12-bar chorus in a key: numerals and chord symbols
+  twelve-bar-of <chord...>       which 12-bar form twelve chords are (variant, turnaround), or null
+bass lines (Wave 5)
+  bass-role <note|midi> <chord> [--root X] [--next-chord Y] [--before] [--key K]   root, fifth, octave, third,
+                                 seventh, approach or other
+  approach <note|midi> <key>     the approach notes into that root: a step below and above, a half step
+                                 below and above, the fifth below
 Roman numerals, function, cadences, schemas
   rn <chord> <key> [next]        Roman numeral of a chord (C/E for inversions)
   chord-of <rn> <key>            the chord of a numeral ("V65/V" C)
@@ -542,6 +581,120 @@ function run(op: string, a: string[], flags: Set<string>, opts: Map<string, stri
         fail("kind must be note|chord|rn|interval|key");
       return { kind, input: a.slice(1).join(" "), normalized: normalizeText(kind, a.slice(1).join(" ")) };
     }
+    case "dom7": {
+      if (a.length === 1 && !/^-?\d+$/.test(a[0] as string) && parseChordWithBass(a[0] as string))
+        return { symbol: a[0], dominantSeventh: isDominantSeventhSymbol(a[0] as string) };
+      const midis = a.map(midiArg);
+      const bass = opts.get("bass");
+      return {
+        notes: midis,
+        dominantSeventh: isDominantSeventhPcs(midis, bass ? mod12(midiArg(bass)) : mod12(Math.min(...midis))),
+      };
+    }
+    case "minor": {
+      const tonic = a[0] ?? fail("missing tonic");
+      parseKeyText(tonic) ?? fail(`not a tonic: ${tonic}`);
+      const form: MinorForm = flags.has("harmonic")
+        ? "harmonic"
+        : flags.has("melodic")
+          ? "melodic"
+          : "natural";
+      const key = minorKey(tonic, form);
+      const twins = keyTwins(key);
+      return {
+        key: keyText(key),
+        form,
+        notes: minorScaleNotes(tonic, form),
+        degrees: minorDegrees(form).map((d) => ({ degree: d.degree, syllable: d.syllable, n: d.n })),
+        signature: keySignature({ tonic, mode: "minor" }).notes,
+        relative: keyText(twins.relative),
+        parallel: keyText(twins.parallel),
+        chords: minorKeyChords(tonic, {
+          form: form === "natural" ? "natural" : "harmonic",
+          seventh: flags.has("sevenths"),
+        }).map((c) => ({ rn: c.rn, symbol: c.symbol, code: toCode(c.chord) })),
+      };
+    }
+    case "twins": {
+      const t = keyTwins(keyArg(a[0]));
+      return { relative: keyText(t.relative), parallel: keyText(t.parallel) };
+    }
+    case "schema-chords": {
+      const id = a[0] ?? fail("missing schema");
+      if (!SCHEMAS.some((s) => s.id === id)) fail(`unknown schema ${id}`);
+      return schemaChords(id as SchemaDef["id"], keyArg(a[1])).map((c) => toLeadSheet(c));
+    }
+    case "pentatonic": {
+      const tonic = a[0] ?? fail("missing tonic");
+      const kind = a[1] ?? fail("missing major|minor");
+      if (kind !== "major" && kind !== "minor") fail("kind must be major or minor");
+      const k = pentatonicKey(tonic, kind as PentatonicKind);
+      return { key: keyText(k), notes: scaleNotes(k), degrees: scaleDegrees(k) };
+    }
+    case "blues": {
+      const tonic = a[0] ?? fail("missing tonic");
+      const k = bluesKey(tonic);
+      const t = 60 + mod12(noteToMidi(`${tonic}4`) ?? fail(`not a tonic: ${tonic}`));
+      return {
+        key: keyText(k),
+        notes: scaleNotes(k),
+        degrees: scaleDegrees(k),
+        blueNotes: BLUE_NOTES.map((b) => ({
+          degree: b.degree,
+          name: b.name,
+          syllable: b.syllable,
+          up: spellBlueNote(t + b.semitones, k, 1).name,
+          down: spellBlueNote(t + b.semitones, k, -1).name,
+        })),
+      };
+    }
+    case "blue": {
+      const midi = midiArg(a[0]);
+      const tonic = a[1] ?? fail("missing tonic");
+      const k = { tonic, mode: "major" } as KeySpec;
+      const b = blueNoteOf(midi, k);
+      const dir = flags.has("up") ? 1 : flags.has("down") ? -1 : undefined;
+      return b ? { ...b, spelled: spellBlueNote(midi, k, dir).name } : null;
+    }
+    case "twelve-bar": {
+      const tonic = a[0] ?? fail("missing tonic");
+      const form: TwelveBarForm = {
+        variant: flags.has("quick") ? "quick-change" : "standard",
+        turnaround: flags.has("turnaround"),
+      };
+      return {
+        form,
+        rn: twelveBarPlan(form),
+        chords: twelveBarChords(tonic, form).map((c) => toLeadSheet(c)),
+        code: twelveBarChords(tonic, form).map((c) => toCode(c)),
+      };
+    }
+    case "twelve-bar-of": {
+      const chords = a.map(chordArg);
+      if (chords.length !== 12) fail("give twelve chords, one per bar");
+      const tonic = (chords[0] as ChordId).rootPc;
+      return twelveBarFormOf(chords.map((c) => mod12(c.rootPc - tonic)));
+    }
+    case "bass-role": {
+      const midi = midiArg(a[0]);
+      const chord = chordArg(a[1]);
+      const root = opts.get("root");
+      const next = opts.get("next-chord");
+      const key = opts.get("key");
+      const nextChord = next ? chordArg(next) : null;
+      const k = key ? keyArg(key) : null;
+      return {
+        role: bassRole(midi, chord, {
+          ...(root ? { rootMidi: midiArg(root) } : {}),
+          ...(nextChord ? { nextChord } : {}),
+          beforeChange: flags.has("before"),
+          key: k,
+        }),
+        approach: nextChord ? approachKind(midi, nextChord, k) : null,
+      };
+    }
+    case "approach":
+      return approachTones(midiArg(a[0]), keyArg(a[1]));
     case "table":
       return CHORD_TABLE.map((r) => ({
         quality: r.quality,

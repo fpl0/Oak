@@ -1,77 +1,22 @@
 // Transcribe's transport row (ux §9: rate 25–100 %, ±12 semitones, ±50¢ fine-tune, the A–B loop, the A/B
-// switch "Source · Mine · Both"). Every control names its key; the keys themselves are bound by the page.
-import { clsx } from "clsx";
-import { Minus, Pause, Play, Plus, Repeat } from "lucide-react";
+// switch "Source · Mine · Both"), drawn with the kit's TransportBar and AbSwitch (carry-over c12): the kit draws,
+// this file says what the controls mean here. Every control names its key; the keys are bound by the page.
+import { Repeat } from "lucide-react";
 import type { ReactNode } from "react";
 import { Kbd } from "../ui/kit/basics.tsx";
-import { SegmentedControl } from "../ui/kit/Controls.tsx";
-import {
-  type BarGrid,
-  formatCents,
-  formatRate,
-  formatSemitones,
-  formatTime,
-  loopLabel,
-  RATE_MAX,
-  RATE_MIN,
-} from "./grid.ts";
+import { type AbOption, AbSwitch, TransportBar } from "../ui/kit/Transport.tsx";
+import { type BarGrid, formatTime, loopLabel, RATE_MAX, RATE_MIN } from "./grid.ts";
 import type { Side, TransportState } from "./transport.ts";
 
-function Nudge({
-  label,
-  value,
-  onDown,
-  onUp,
-  downDisabled,
-  upDisabled,
-  keys,
-  disabled,
-  testId,
-}: {
-  label: string;
-  value: string;
-  onDown(): void;
-  onUp(): void;
-  downDisabled?: boolean;
-  upDisabled?: boolean;
-  keys: [string, string];
-  disabled?: boolean;
-  testId: string;
-}) {
-  const btn =
-    "inline-flex size-8 items-center justify-center text-text-2 hover:bg-surface-2 hover:text-text disabled:pointer-events-none disabled:opacity-40";
-  return (
-    <div className={clsx("flex items-center gap-1.5", disabled && "opacity-50")} data-testid={testId}>
-      <span className="text-sm text-text-2">{label}</span>
-      <div className="inline-flex items-stretch overflow-hidden rounded-control border border-border bg-surface">
-        <button
-          type="button"
-          className={clsx(btn, "border-r border-border")}
-          aria-label={`${label} down (${keys[0]})`}
-          disabled={disabled || downDisabled}
-          onClick={onDown}
-        >
-          <Minus aria-hidden className="size-4" />
-        </button>
-        <output
-          className="flex min-w-14 items-center justify-center px-1 text-sm tabular-nums text-text"
-          aria-live="polite"
-          aria-label={label}
-        >
-          {value}
-        </output>
-        <button
-          type="button"
-          className={clsx(btn, "border-l border-border")}
-          aria-label={`${label} up (${keys[1]})`}
-          disabled={disabled || upDisabled}
-          onClick={onUp}
-        >
-          <Plus aria-hidden className="size-4" />
-        </button>
-      </div>
-    </div>
-  );
+/** What the loop control says: the pending A, or the loop in bars (from the first full bar after a pickup). */
+export function loopText(
+  state: Pick<TransportState, "loop">,
+  grid: BarGrid | null,
+  pendingA: number | null,
+  pickup = false,
+): string {
+  if (pendingA !== null && !state.loop) return `A at ${formatTime(pendingA)} · ] to close`;
+  return loopLabel(state.loop, grid, pickup);
 }
 
 export function TransportControls({
@@ -86,6 +31,10 @@ export function TransportControls({
   onToggleLoop,
   onSetPoint,
   extra,
+  pickup = false,
+  setRate,
+  setSemitones,
+  setCents,
 }: {
   onPlay(): void;
   onSide(side: Side): void;
@@ -93,116 +42,106 @@ export function TransportControls({
   grid: BarGrid | null;
   /** A marked with [ and no loop yet: the loop starts there when ] is pressed. */
   pendingA?: number | null;
+  /** A step of the rate (the keys `,` `.`), when `setRate` is not given. */
   onRate(dir: 1 | -1): void;
   onSemitones(dir: 1 | -1): void;
   onCents(dir: 1 | -1): void;
   onToggleLoop(): void;
   onSetPoint(which: "A" | "B"): void;
   extra?: ReactNode;
+  /** The material starts with a pickup bar: loops count bars from the first full bar (c4). */
+  pickup?: boolean;
+  /** Exact values from the kit's slider and nudges (drag, Alt for fine steps); default: one step toward it. */
+  setRate?(rate: number): void;
+  setSemitones?(st: number): void;
+  setCents?(cents: number): void;
 }) {
   const mineOk = state.mineBlocked === null;
-  const sideOptions: { value: Side; label: ReactNode; disabled?: boolean; ariaLabel?: string }[] = [
-    { value: "source", label: "Source" },
-    { value: "mine", label: "Mine", disabled: !mineOk },
-    { value: "both", label: "Both", disabled: !mineOk },
+  const sideOptions: AbOption<Side>[] = [
+    { value: "source", letter: "A", label: "Source" },
+    { value: "mine", letter: "B", label: "Mine", disabled: !mineOk },
+    { value: "both", letter: "A+B", label: "Both", disabled: !mineOk },
   ];
+  const toward = (now: number, next: number, step: (d: 1 | -1) => void) => {
+    if (next !== now) step(next > now ? 1 : -1);
+  };
+  const btn =
+    "inline-flex h-8 items-center gap-1 rounded-control border border-control-border bg-control px-2 text-sm text-text-2 hover:bg-control-hover hover:text-text";
   return (
-    <section
-      aria-label="Transport"
-      className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-card border border-border bg-surface px-3 py-2"
-      data-testid="transcribe-transport"
-    >
-      <button
-        type="button"
-        onClick={onPlay}
+    <section aria-label="Transport" data-testid="transcribe-transport" className="flex flex-col gap-1">
+      <TransportBar
+        label="Transport"
+        playing={state.playing}
+        onPlayToggle={onPlay}
         disabled={!state.ready}
-        className="inline-flex h-9 items-center gap-2 rounded-control bg-accent px-3 font-medium text-on-accent hover:bg-accent-hover disabled:opacity-50"
-        aria-label={state.playing ? "Pause (Space)" : "Play (Space)"}
-        data-testid="play"
+        rate={{
+          value: state.rate,
+          onChange: (v) => (setRate ? setRate(v) : toward(state.rate, v, onRate)),
+          min: RATE_MIN,
+          max: RATE_MAX,
+          keys: [",", "."],
+        }}
+        pitch={{
+          semitones: state.semitones,
+          onSemitones: (v) => (setSemitones ? setSemitones(v) : toward(state.semitones, v, onSemitones)),
+          keys: ["-", "="],
+          ...(state.cents !== null
+            ? {
+                cents: state.cents,
+                onCents: (v: number) => (setCents ? setCents(v) : toward(state.cents ?? 0, v, onCents)),
+              }
+            : {}),
+        }}
       >
-        {state.playing ? <Pause aria-hidden className="size-4" /> : <Play aria-hidden className="size-4" />}
-        {state.playing ? "Pause" : "Play"}
-        <Kbd tone="inverse">Space</Kbd>
-      </button>
-      <span className="min-w-[7.5rem] text-sm tabular-nums text-text-2" data-testid="position">
-        {formatTime(state.time)} / {formatTime(state.durationS)}
-      </span>
-      <Nudge
-        label="Speed"
-        value={formatRate(state.rate)}
-        onDown={() => onRate(-1)}
-        onUp={() => onRate(1)}
-        downDisabled={state.rate <= RATE_MIN}
-        upDisabled={state.rate >= RATE_MAX}
-        keys={[",", "."]}
-        testId="rate"
-      />
-      <Nudge
-        label="Transpose"
-        value={formatSemitones(state.semitones)}
-        onDown={() => onSemitones(-1)}
-        onUp={() => onSemitones(1)}
-        downDisabled={state.semitones <= -12}
-        upDisabled={state.semitones >= 12}
-        keys={["-", "="]}
-        testId="semitones"
-      />
-      {state.cents !== null ? (
-        <Nudge
-          label="Fine-tune"
-          value={formatCents(state.cents)}
-          onDown={() => onCents(-1)}
-          onUp={() => onCents(1)}
-          downDisabled={state.cents <= -50}
-          upDisabled={state.cents >= 50}
-          keys={["Shift+-", "Shift+="]}
-          testId="cents"
-        />
-      ) : null}
-      <div className="flex items-center gap-1.5" data-testid="tr-loop">
-        <button
-          type="button"
-          onClick={onToggleLoop}
-          aria-pressed={state.loop !== null}
-          className="inline-flex h-8 items-center gap-1.5 rounded-control border border-border px-2 text-sm text-text-2 hover:bg-surface-2 aria-pressed:border-accent aria-pressed:bg-lane-in aria-pressed:text-text"
-          aria-label={`Loop ${state.loop ? "on" : "off"} (L)`}
-        >
-          <Repeat aria-hidden className="size-4" />
-          <span data-testid="loop-label">
-            {pendingA !== null && !state.loop
-              ? `A at ${formatTime(pendingA)} · ] to close`
-              : loopLabel(state.loop, grid)}
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={() => onSetPoint("A")}
-          className="inline-flex h-8 items-center rounded-control border border-border px-2 text-sm text-text-2 hover:bg-surface-2"
-          aria-label="Set the loop start at the playhead ([)"
-        >
-          A <Kbd>[</Kbd>
-        </button>
-        <button
-          type="button"
-          onClick={() => onSetPoint("B")}
-          className="inline-flex h-8 items-center rounded-control border border-border px-2 text-sm text-text-2 hover:bg-surface-2"
-          aria-label="Set the loop end at the playhead (])"
-        >
-          B <Kbd>]</Kbd>
-        </button>
-      </div>
-      <div className="flex items-center gap-2" data-testid="tr-ab">
-        <SegmentedControl
-          label="What you hear (V switches, O plays both)"
-          size="sm"
-          value={state.side}
-          options={sideOptions}
-          onChange={onSide}
-        />
-      </div>
-      {extra ? <div className="ml-auto flex items-center gap-2">{extra}</div> : null}
+        <span className="min-w-[7.5rem] text-sm tabular-nums text-text-2" data-testid="position">
+          {formatTime(state.time)} <span className="text-text-3">/ {formatTime(state.durationS)}</span>
+        </span>
+        <div className="flex flex-wrap items-center gap-1.5" data-testid="tr-loop">
+          <button
+            type="button"
+            onClick={onToggleLoop}
+            aria-pressed={state.loop !== null}
+            disabled={!state.ready}
+            className={`${btn} aria-pressed:border-accent/50 aria-pressed:bg-lane-in aria-pressed:text-accent disabled:opacity-50`}
+            aria-label={`Loop ${state.loop ? "on" : "off"} (L)`}
+          >
+            <Repeat aria-hidden className="size-4" />
+            <span data-testid="loop-label">{loopText(state, grid, pendingA, pickup)}</span>
+            <Kbd>L</Kbd>
+          </button>
+          <button
+            type="button"
+            onClick={() => onSetPoint("A")}
+            disabled={!state.ready}
+            className={btn}
+            aria-label="Set the loop start at the playhead ([)"
+          >
+            A <Kbd>[</Kbd>
+          </button>
+          <button
+            type="button"
+            onClick={() => onSetPoint("B")}
+            disabled={!state.ready}
+            className={btn}
+            aria-label="Set the loop end at the playhead (])"
+          >
+            B <Kbd>]</Kbd>
+          </button>
+        </div>
+        <div data-testid="tr-ab">
+          <AbSwitch
+            label="What you hear (V switches, O plays both)"
+            value={state.side}
+            options={sideOptions}
+            onChange={onSide}
+            keyHint="V"
+            disabled={!state.ready}
+          />
+        </div>
+        {extra}
+      </TransportBar>
       {state.mineBlocked && state.mine.kind !== "none" ? (
-        <p className="basis-full text-sm text-text-2" data-testid="ab-blocked">
+        <p className="px-1 text-sm text-text-2" data-testid="ab-blocked">
           {state.mineBlocked}
         </p>
       ) : null}

@@ -190,15 +190,15 @@ export const TRANSCRIBE_PASS = {
   "CF-T": { melody: 0.9, changesPerBar: 0.85, formMap: 1, order: ["bass", "changes", "melody", "arrange"] },
 } as const;
 
-/** The one-off rubric checks (`rule: 'custom'`) the capstones need; each gets a unit test in @oak/grader. */
+/**
+ * The one-off rubric checks (`rule: 'custom'`) the capstones still need; each gets a unit test in @oak/grader.
+ * C3's lead sheet and C5's form, sevenths, bar 12 and blue notes left this list in Wave 5: they are written with
+ * `notates`, `blues-form` + `choruses`, `chord-qualities` + `depth`, `contains-rn` + `section` and `degree-set` +
+ * `anyOf` (AUTHORING §18).
+ */
 export const CUSTOM_RUBRIC_FNS = {
   "hats-grid": "the hi-hat line sits on an 8th or 16th grid",
   "fill-last-bar": "the last bar's drum onsets differ from bar 1",
-  "leadsheet-exact": "the lead sheet renders with approximate = false",
-  "blues-form-any": "standard or quick-change 12-bar form, for at least `choruses` choruses",
-  "all-dominant-sevenths": "every chord symbol is a dominant seventh (pc-set only for hand voicings)",
-  "bar-contains-rn": "bar `bar` contains the Roman numeral `rn`",
-  "blue-notes": "the melody uses one of `degrees` at least `min` times",
   "mode-either":
     "the piece is in one of `modes` with its characteristic tone on a strong beat ≥ `minStrong` times",
   "mode-avoid": "no leading tone (Mixolydian) / no ♭6 (Dorian)",
@@ -349,6 +349,344 @@ export const X1_CHECKS: readonly PhraseCheck[][] = [
   ],
 ];
 
+// --- Pieces in sections (C3, C4, C5) ---------------------------------------------------------------------
+
+/** A section plan: `[bars, Section]` in order; `silence` for a part that rests in that section. */
+type Plan = readonly (readonly [number, string])[];
+/** One `arrange()` for a track (contracts §6.3, STYLE §10): the role's section consts in the plan's order. */
+const arr = (role: string, plan: Plan): string =>
+  `arrange(${plan.map(([bars, sec]) => `[${bars}, ${sec === "silence" ? sec : `${role}${sec}`}]`).join(", ")})`;
+/** A whole file: the tempo line, the consts, then the labelled tracks. */
+const sectioned = (bpm: number, consts: readonly string[], tracks: readonly string[]): string =>
+  [`setcpm(${bpm}/4)`, "", ...consts, "", ...tracks].join("\n");
+const VC: Plan = [
+  [8, "Verse"],
+  [8, "Chorus"],
+];
+const VCVC: Plan = [...VC, ...VC];
+
+// --- C3 Verse–Chorus Demo ----------------------------------------------------------------------------
+
+/**
+ * C3.S1's template (content/specs/U09.md): both sections, eight bars each, arranged verse–chorus once. The
+ * drums that change get a const per section; the snare plays through. The chords and roots are U09.L02's; the
+ * bass plays its roots on straight eighths, so it locks with the kick on 2 of 8 until the learner gives it the
+ * kick's rhythm, and the chorus's kick and hats are the verse's until the learner makes them busier. No tune
+ * yet: C3.S2 adds it.
+ */
+const C3_TEMPLATE = sectioned(
+  100,
+  [
+    "// verse and chorus, 8 bars each",
+    'const kickVerse = s("bd ~ bd ~")',
+    'const kickChorus = s("⟪bd ~ bd ~⟫")',
+    'const hatsVerse = s("hh*8").gain(.4)',
+    'const hatsChorus = s("⟪hh*8⟫").gain(.4)',
+    'const chordsVerse = chord("<C Am F G>").voicing()',
+    'const chordsChorus = chord("<F G C C>").voicing()',
+    'const bassVerse = n("<0 5 3 4>").struct("⟪x*8⟫").scale("C2:major")',
+    'const bassChorus = n("<3 4 0 0>").struct("⟪x*8⟫").scale("C2:major")',
+  ],
+  [
+    `kick: ${arr("kick", VC)}`,
+    'snare: s("~ sd ~ sd")',
+    `hats: ${arr("hats", VC)}`,
+    `chords: ${arr("chords", VC)}.s("piano")`,
+    `bass: ${arr("bass", VC)}.s("ebass").lpf(600)`,
+  ],
+);
+
+interface C3Parts {
+  bpm?: number;
+  plan?: Plan;
+  /** The consts in place of the pop reference's (each replaces the one with the same name). */
+  consts?: Record<string, string>;
+  /** Extra consts (a pad, a second chorus tune). */
+  more?: string[];
+  /** A track's whole line in place of the default (`bass`, `mel`, …); `null` drops it. */
+  tracks?: Record<string, string | null>;
+  extraTracks?: string[];
+  sounds?: { chords?: string; bass?: string; mel?: string; bank?: string };
+}
+/**
+ * The pop reference in C at 100 BPM: verse I vi IV V under a tune in the middle of the voice, chorus IV V I I
+ * a fourth higher on average, kick and bass sharing a rhythm const in each section (the chorus pushes:
+ * more kicks, open hats on the off-beat). Every strong-beat note is a chord note.
+ */
+const C3_CONSTS: Record<string, string> = {
+  groove: '"x ~ ~ x ~ ~ x ~"',
+  push: '"x ~ x x ~ ~ x ~"',
+  kickVerse: 's("bd").struct(groove)',
+  kickChorus: 's("bd").struct(push)',
+  hatsVerse: 's("hh*8").gain(.4)',
+  hatsChorus: 's("[hh hh hh oh]*2").gain(.5)',
+  chordsVerse: 'chord("<C Am F G>").voicing()',
+  chordsChorus: 'chord("<F G C C>").voicing()',
+  bassVerse: 'n("<0 5 3 4>").struct(groove).scale("C2:major")',
+  bassChorus: 'n("<3 4 0 0>").struct(push).scale("C2:major")',
+  melVerse: 'n("<[2 ~ 4 2] [0 ~ 2 ~] [3 ~ 5 3] [1 ~ ~ ~]>").scale("C4:major")',
+  melChorus: 'n("<[5 7 5 3] [6 ~ 4 ~] [7 9 11 9] [9 8 7 ~]>").scale("C4:major")',
+};
+const c3Song = (o: C3Parts = {}): string => {
+  const plan = o.plan ?? VCVC;
+  const s = { chords: "piano", bass: "ebass", mel: "piano", ...o.sounds };
+  const bank = s.bank ? `.bank("${s.bank}")` : "";
+  const consts = { ...C3_CONSTS, ...o.consts };
+  const tracks: Record<string, string> = {
+    kick: `kick: ${arr("kick", plan)}${bank}`,
+    snare: `snare: s("~ sd ~ sd")${bank}`,
+    hats: `hats: ${arr("hats", plan)}${bank}`,
+    chords: `chords: ${arr("chords", plan)}.s("${s.chords}")`,
+    bass: `bass: ${arr("bass", plan)}.s("${s.bass}").lpf(600)`,
+    mel: `mel: ${arr("mel", plan)}.s("${s.mel}")`,
+  };
+  for (const [k, v] of Object.entries(o.tracks ?? {}))
+    if (v === null) delete tracks[k];
+    else tracks[k] = v;
+  return sectioned(
+    o.bpm ?? 100,
+    [...Object.entries(consts).map(([k, v]) => `const ${k} = ${v}`), ...(o.more ?? [])],
+    [...Object.values(tracks), ...(o.extraTracks ?? [])],
+  );
+};
+/** Verse, chorus, verse, then a chorus twice as long: 40 bars, 96 seconds at 100 BPM. */
+const C3_LONG: Plan = [...VCVC.slice(0, 3), [16, "Chorus"]];
+
+// --- C4 Minor Indie Ballad ----------------------------------------------------------------------------
+
+/**
+ * C4.S1's sectioned starter (content/specs/U10.md): the verse alone, eight bars of the Aeolian loop i–VI–III–VII
+ * in A minor (U10.L05) over a half-time groove, roots in the bass, and one `arrange()` per labelled track so the
+ * chorus slots in next session without rewriting a line. The tune is a placeholder on A (no ♭3, no ♭6 yet) and
+ * there is no V, so the starter fails the colour and the major V.
+ */
+const C4_TEMPLATE = sectioned(
+  76,
+  [
+    "// the verse: the Aeolian loop, 8 bars",
+    'const kickVerse = s("bd ~ ~ ~")',
+    'const snareVerse = s("~ ~ sd ~")',
+    'const hatsVerse = s("hh*4").gain(.4)',
+    'const chordsVerse = chord("<Am F C G>").voicing()',
+    'const bassVerse = n("<0 5 2 6>").scale("A1:minor")',
+    'const melVerse = n("⟪0 ~ 0 ~⟫").scale("A3:minor")',
+  ],
+  [
+    `kick: ${arr("kick", [[8, "Verse"]])}`,
+    `snare: ${arr("snare", [[8, "Verse"]])}`,
+    `hats: ${arr("hats", [[8, "Verse"]])}`,
+    `chords: ${arr("chords", [[8, "Verse"]])}.s("piano")`,
+    `bass: ${arr("bass", [[8, "Verse"]])}.s("ebass").lpf(600)`,
+    `mel: ${arr("mel", [[8, "Verse"]])}.s("piano")`,
+  ],
+);
+
+/**
+ * The pop reference in A minor at 80 BPM: the verse on the Aeolian loop with a low tune that sings C (♭3) and F
+ * (♭6), the chorus iv–VII–V–i (Dm G E Am) a few steps higher, landing on A over Am. Strong beats are chord notes.
+ */
+const C4_CONSTS: Record<string, string> = {
+  kickVerse: 's("bd ~ ~ ~")',
+  kickChorus: 's("bd ~ bd ~")',
+  snareVerse: 's("~ ~ sd ~")',
+  snareChorus: 's("~ sd ~ sd")',
+  hatsVerse: 's("hh*4").gain(.4)',
+  hatsChorus: 's("hh*8").gain(.45)',
+  chordsVerse: 'chord("<Am F C G>").voicing()',
+  chordsChorus: 'chord("<Dm G E Am>").voicing()',
+  bassVerse: 'n("<0 5 2 6>").scale("A1:minor")',
+  bassChorus: 'n("<3 6 4 0>").scale("A1:minor")',
+  melVerse: 'n("<[4 ~ 2 ~] [5 ~ 7 ~] [4 ~ 2 ~] [1 ~ ~ ~]>").scale("A3:minor")',
+  melChorus: 'n("<[3 5 7 5] [6 8 10 8] [8 ~ 4 ~] [7 ~ ~ ~]>").scale("A3:minor")',
+};
+interface C4Parts {
+  bpm?: number;
+  plan?: Plan;
+  consts?: Record<string, string>;
+  tracks?: Record<string, string | null>;
+  extraTracks?: string[];
+  sounds?: { chords?: string; bass?: string; mel?: string; bank?: string; melTail?: string };
+}
+const c4Song = (o: C4Parts = {}): string => {
+  const plan = o.plan ?? VCVC;
+  const s = { chords: "piano", bass: "ebass", mel: "piano", ...o.sounds };
+  const bank = s.bank ? `.bank("${s.bank}")` : "";
+  const consts = { ...C4_CONSTS, ...o.consts };
+  const tracks: Record<string, string> = {
+    kick: `kick: ${arr("kick", plan)}${bank}`,
+    snare: `snare: ${arr("snare", plan)}${bank}`,
+    hats: `hats: ${arr("hats", plan)}${bank}`,
+    chords: `chords: ${arr("chords", plan)}.s("${s.chords}")`,
+    bass: `bass: ${arr("bass", plan)}.s("${s.bass}").lpf(600)`,
+    mel: `mel: ${arr("mel", plan)}.s("${s.mel}")${s.melTail ?? ""}`,
+  };
+  for (const [k, v] of Object.entries(o.tracks ?? {}))
+    if (v === null) delete tracks[k];
+    else tracks[k] = v;
+  return sectioned(
+    o.bpm ?? 80,
+    Object.entries(consts).map(([k, v]) => `const ${k} = ${v}`),
+    [...Object.values(tracks), ...(o.extraTracks ?? [])],
+  );
+};
+
+// --- C5 12-Bar Shuffle --------------------------------------------------------------------------------
+
+/**
+ * C5's starter (content/specs/U11.md C5.S1): twelve bars of dominant sevenths in C with bar 12 left on I for the
+ * learner to turn round, a backbeat, straight hats to swing, and a one-note placeholder on the blues scale where
+ * the riff goes. It fails the form (one chorus), the swing, the turnaround and the blue notes.
+ */
+const C5_TEMPLATE = [
+  "setcpm(112/4)",
+  "",
+  "// twelve bars of dominant sevenths in C",
+  'const changes = "<C7 C7 C7 C7 F7 F7 C7 C7 G7 F7 C7 ⟪C7⟫>"',
+  "",
+  'kick: s("bd ~ bd ~")',
+  'snare: s("~ sd ~ sd")',
+  'hats: s("⟪hh*8⟫").gain(.5)',
+  'chords: chord(changes).voicing().s("piano")',
+  'mel: n("⟪0 ~ ~ ~⟫").scale("C4:blues").s("piano")',
+].join("\n");
+
+/** The twelve bars, one chord a bar: the standard form and the quick change (IV in bar 2). */
+const BLUES_STANDARD = ["C7", "C7", "C7", "C7", "F7", "F7", "C7", "C7", "G7", "F7", "C7", "G7"];
+const BLUES_QUICK = BLUES_STANDARD.map((c, i) => (i === 1 ? "F7" : c));
+/**
+ * The riff, one bar moved onto each chord's root: root, ♭3 bending up to the 3rd, 5th, then the 5th again and
+ * the ♭7 (on C7: C E♭ E G, G B♭). Over C7 the E♭ is the key's ♭3; over F7 the riff's ♭7 is E♭ again.
+ */
+const RIFF: Record<string, string> = {
+  C7: "[c4 eb4 e4 g4 ~ g4 bb4 ~]",
+  F7: "[f4 ab4 a4 c5 ~ c5 eb5 ~]",
+  G7: "[g4 bb4 b4 d5 ~ d5 f5 ~]",
+};
+/** The answer of chorus 2 (bar 3 of each line, always over C7): down the blues scale G F E♭ C. */
+const ANSWER = "[g4 ~ f4 ~ eb4 ~ c4 ~]";
+/** Bar 4 of each line lands; bar 12 walks up the V chord, G B D F, back to the top. */
+const LAND = "[c4 ~ ~ ~ ~ ~ ~ ~]";
+const TURN = "[g3 ~ b3 ~ d4 ~ f4 ~]";
+/** Chorus 1: the riff on every bar. Chorus 2: call (bars 1–2 of each line), answer (bar 3), land or turn (bar 4). */
+const riffChorus = (bars: readonly string[], riff = RIFF): string =>
+  `<${bars.map((c) => riff[c] ?? riff.C7).join(" ")}>`;
+const answerChorus = (bars: readonly string[], riff = RIFF, answer = ANSWER): string =>
+  `<${bars.map((c, i) => (i % 4 < 2 ? (riff[c] ?? riff.C7) : i % 4 === 2 ? answer : i === 11 ? TURN : LAND)).join(" ")}>`;
+/** A boogie bass on quarters (root, 3rd, 5th, 6th of each chord): quarter notes are left alone by the swing. */
+const BOOGIE: Record<string, string> = { C7: "[c2 e2 g2 a2]", F7: "[f2 a2 c3 d3]", G7: "[g2 b2 d3 e3]" };
+
+interface C5Parts {
+  bpm?: number;
+  bars?: readonly string[];
+  /** The changes string in place of `bars` (two-chord bars). */
+  changes?: string;
+  melChorus?: string;
+  melChorus2?: string;
+  /** A tune of one chorus only (no second section). */
+  oneChorus?: boolean;
+  hats?: string;
+  melSwing?: string;
+  bass?: string | null;
+  sounds?: { chords?: string; bass?: string; mel?: string; bank?: string };
+}
+/** The pop reference: the standard form in C at 112, swung hats, a boogie bass, the riff, then call and answer. */
+const c5Song = (o: C5Parts = {}): string => {
+  const bars = o.bars ?? BLUES_STANDARD;
+  const s = { chords: "piano", bass: "ebass", mel: "piano", ...o.sounds };
+  const bank = s.bank ? `.bank("${s.bank}")` : "";
+  const swing = o.melSwing ?? ".swingBy(1/3, 4)";
+  const mel = o.oneChorus
+    ? [`mel: note("${o.melChorus ?? riffChorus(bars)}")${swing}.s("${s.mel}")`]
+    : [`mel: arrange([12, melChorus], [12, melChorus2])${swing}.s("${s.mel}")`];
+  return [
+    `setcpm(${o.bpm ?? 112}/4)`,
+    "",
+    `const changes = "${o.changes ?? `<${bars.join(" ")}>`}"`,
+    ...(o.oneChorus
+      ? []
+      : [
+          `const melChorus = note("${o.melChorus ?? riffChorus(bars)}")`,
+          `const melChorus2 = note("${o.melChorus2 ?? answerChorus(bars)}")`,
+        ]),
+    "",
+    `kick: s("bd ~ bd ~")${bank}`,
+    `snare: s("~ sd ~ sd")${bank}`,
+    o.hats ?? `hats: s("hh*8")${bank}.swingBy(1/3, 4).gain(.5)`,
+    `chords: chord(changes).voicing().s("${s.chords}")`,
+    ...(o.bass === null
+      ? []
+      : [o.bass ?? `bass: note("<${bars.map((c) => BOOGIE[c] ?? BOOGIE.C7).join(" ")}>").s("${s.bass}")`]),
+    ...mel,
+  ].join("\n");
+};
+
+// --- X2 Blues Transcription -------------------------------------------------------------------------------
+
+/**
+ * X2's bass (contracts §6.6 X2, ≥ 0.90): the ladder's L3 bass matcher, the bass line by its notes and rhythm,
+ * octave-free, on the bass role.
+ */
+export const X2_BASS: Matcher = {
+  m: "melody",
+  pitch: "octave-free",
+  wPitch: 0.7,
+  wRhythm: 0.3,
+  rhythmTol: [1, 16],
+  track: "@bass",
+};
+/** X2's changes (≥ 0.85): each chord by numeral on the triad core, so I7 counts as I; one chord a bar given. */
+export const X2_CHANGES: Matcher = {
+  m: "harmony",
+  level: "rn",
+  qualityDepth: "triad",
+  inversion: false,
+  harmonicRhythm: "given",
+  // The chords alone, as ladder L6's changes stage (`SONG_LADDER_MATCHERS.changes`): the bass has its own check
+  // first, so a right bass never carries a wrong chord (Wave 5 integration).
+  weights: { bass: 0 },
+};
+/** X2's givens (content/specs/U11.md X2.S1): meter, key, tonic and the pickup; the swing comes with the song. */
+const X2_GIVEN = { meter: true, key: true, tonic: true, pickup: true } as const;
+/**
+ * X2's checks by session (contracts §6.6 X2: bass ≥ 0.90, then changes ≥ 0.85, then melody ≥ 0.85, stages in
+ * that order; feature `capstone.check-after`). X2.S1: the bass, then the changes once the bass passed or was
+ * revealed. X2.S2: the melody one 4-bar line at a time, each open once the changes are done, compared
+ * key-relative like X1's phrases. The checks read the answer key's phrases (one per 4-bar line): lines 1–3 are
+ * the whole 12-bar strain of St. Louis Blues and the first twelve bars of Careless Love's 16-bar verse, whose
+ * fourth line is its first again ("Love, oh love, oh careless love"), so every line of either song is checked once.
+ * A check names phrases by index, the same for both songs; a per-song phrase count is not expressible yet.
+ */
+export const X2_CHECKS: readonly PhraseCheck[][] = [
+  [
+    {
+      id: "bass",
+      phrase: [1, 3],
+      layer: "bass",
+      pass: TRANSCRIBE_PASS.X2.bass,
+      matcher: X2_BASS,
+      given: X2_GIVEN,
+    },
+    {
+      id: "changes",
+      phrase: [1, 3],
+      layer: "chords",
+      pass: TRANSCRIBE_PASS.X2.changes,
+      matcher: X2_CHANGES,
+      after: ["bass"],
+    },
+  ],
+  [1, 2, 3].map(
+    (n): PhraseCheck => ({
+      id: `melody-${n}`,
+      phrase: n,
+      layer: "melody",
+      pass: TRANSCRIBE_PASS.X2.melody,
+      matcher: X1_MELODY,
+      after: ["changes"],
+    }),
+  ),
+];
+
 /**
  * Liner-note seeds for the release dialog (ux §5, "write a one-line liner note"): first lines the learner
  * can take, edit or ignore. `{bars}` and `{bpm}` are filled from the released piece. They describe what
@@ -375,6 +713,37 @@ export const CAPSTONE_LINER_SEEDS: Readonly<Partial<Record<CapstoneId, readonly 
     "Four phrases and their chords, written from listening. The arrangement around them is mine.",
     "The tune came first, one phrase at a time; the bass line told me the chords.",
   ],
+  C3: [
+    "{bars} bars at {bpm} BPM: a verse, a chorus that lifts, and both again.",
+    "The chorus climbs above the verse and the drums push harder; the bass rides the kick all the way.",
+    "My first song in sections: verse, chorus, verse, chorus.",
+  ],
+  C4: [
+    "A minor ballad at {bpm} BPM: the verse turns i–VI–III–VII, the chorus comes home through the major V.",
+    "The tune leans on ♭3 and ♭6; the G♯ in the chorus pulls it back to A.",
+    "{bars} bars in A minor, slow, ending on 1 over i.",
+  ],
+  C5: [
+    "Two choruses of a 12-bar shuffle at {bpm} BPM, dominant sevenths all the way.",
+    "The riff calls in the first chorus; in the second it gets an answer.",
+    "Swung hats, a turnaround on V, and blue notes where the riff bends.",
+  ],
+  X2: [
+    "A blues taken down by ear: the bass first, then the changes, then the tune line by line.",
+    "The bass told me the changes; the tune came last, four bars at a time.",
+    "An old blues written from listening, its shuffle kept. The arrangement around it is mine.",
+  ],
+};
+
+/**
+ * The question the release dialog asks above the learner's one line (content/specs U09–U11, "the learner's
+ * inputs at release"): about what they made, never about how well it went.
+ */
+export const CAPSTONE_LINER_PROMPTS: Readonly<Partial<Record<CapstoneId, string>>> = {
+  C3: "What makes your chorus lift?",
+  C4: "What does the minor key do for this song?",
+  C5: "Where does your second chorus go that the first does not?",
+  X2: "What did you hear first, and what took longest?",
 };
 
 export const capstones: readonly CapstoneDef[] = [
@@ -669,7 +1038,7 @@ export const capstones: readonly CapstoneDef[] = [
       // `shape: "either"`: a bar that moves the idea by degrees (the sequence of U07.L02, C E G over C, then
       // A C E over Am) counts as the idea, as it does in U07.L10; in half steps only, every move onto a chord
       // of the other quality was refused, so a tune built the way the course teaches it failed (review).
-      req("motif", "Repeat or vary your bar-1 idea at least once", ["M02"], {
+      req("motif", "Repeat or vary your bar-1 idea in half the bars or more", ["M02"], {
         rule: "motif-reuse",
         track: "@melody",
         minRatio: 0.5,
@@ -857,17 +1226,20 @@ export const capstones: readonly CapstoneDef[] = [
     opensAfter: { checkpoints: ["U09.CP"] },
     meter: "4/4",
     bpm: [70, 140],
+    // No key: the song is in whatever key the learner writes it (the analysis reads it from the code).
     brief:
-      "A demo in verse–chorus form: verse, chorus, verse, chorus. Make the chorus different on at least two counts.",
-    starter: `setcpm(100/4)\n\nconst chordsVerse = chord("<C Am F G>").voicing()\nconst chordsChorus = chord("<F G C C>").voicing()\n\nchords: arrange([8, chordsVerse], [8, chordsChorus], [8, chordsVerse], [8, chordsChorus]).s("piano")\ndrums: s("bd ~ sd ~, hh*8")`,
+      "Verse, chorus, verse, chorus, 90 seconds or more, no intro. The chorus lifts: it differs from the verse in two ways or more (higher tune, busier drums, new chords, more parts). The bass lands with the kick. Key, tempo (70–140 BPM), groove, chords, tunes and sounds are yours; start from the template or paste your C2 in as the verse.",
+    starter: C3_TEMPLATE,
     skills: ["F02", "F05", "B04"],
     minDurationSec: 90,
+    // The binding rubric of contracts §6.6, in the Wave 5 shapes (content/specs/U09.md C3). `groove-lock` takes
+    // the kick out of any drum track, so a `kick:` line and a whole-kit `drums:` line both work.
     rubric: [
       req("form", "Verse, chorus, verse, chorus", ["F02"], {
         rule: "form",
         pattern: "verse chorus verse chorus",
       }),
-      req("contrast", "The chorus differs from the verse on at least two counts", ["F02", "F05"], {
+      req("contrast", "The chorus differs from the verse on two counts or more", ["F02", "F05"], {
         rule: "contrast",
         a: { section: "chorus" },
         b: { section: "verse" },
@@ -875,25 +1247,224 @@ export const capstones: readonly CapstoneDef[] = [
         minAxes: 2,
       }),
       req("duration", "At least 90 seconds", ["F06"], { rule: "duration-sec", min: 90 }),
-      req("groove-lock", "Bass locks with the kick", ["B04"], {
+      req("groove-lock", "Bass lands with the kick", ["B04"], {
         rule: "groove-lock",
         kick: "@drums",
         bass: "@bass",
         min: 0.5,
       }),
-      req("leadsheet", "The lead sheet renders exactly", ["N07"], custom("leadsheet-exact")),
+      req("leadsheet", "The lead sheet writes your song exactly", ["N07"], {
+        rule: "notates",
+        view: "lead-sheet",
+      }),
     ],
     sessions: [
       ["Groove & changes", "Groove and changes for verse and chorus."],
       ["Melodies", "Melodies and section contrast."],
       ["Arrange", "Arrange V C V C, lead sheet, review, release."],
     ],
+    sessionExtras: [
+      { starter: C3_TEMPLATE, focusRules: ["groove-lock"] },
+      { focusRules: ["contrast", "groove-lock"] },
+      { focusRules: ["form", "contrast", "duration", "groove-lock", "leadsheet"] },
+    ],
     canDo: ["cd.compose.verse-chorus"],
+    // One ladder for the three sessions: the lock (S1), the lift (S2), the length and the page (S3).
     hints: ladder(
-      "What makes a chorus feel like a lift?",
-      "Compare the two sections: register, density, harmony.",
-      "Move the chorus melody up a few steps and add hats on 16ths.",
+      "A listener knows the chorus has come when several things change at once: the tune moves up, the drums get busier, the chords start somewhere new. Which of those has your chorus changed so far?",
+      "The checklist line for the chorus names what already differs, and the form strip shows each section's bars and parts. For the lock, give the bass the kick's rhythm const with `.struct()`, as in Lock with the Kick. For the length: at 100 BPM a bar lasts 2.4 seconds.",
+      "Lift the chorus tune a few degrees above the verse's and put `oh` into `hatsChorus`; give the last chorus 16 bars (`[16, chordsChorus]` on every arranged track), or slow the song to 84 BPM.",
     ),
+    tests: [
+      {
+        name: "the starter: 16 bars, no tune, a bass on eighths off the kick",
+        response: { code: stripMarkers(C3_TEMPLATE).code },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      // One passing piece per shipped flavour (contracts §6.6); a flavour never changes the rubric.
+      {
+        name: "pop: 100 BPM, the last chorus twice as long (40 bars, 96 s), the chorus higher with open hats",
+        response: { code: c3Song({ plan: C3_LONG }) },
+        expect: "pass",
+      },
+      {
+        name: "minimal: 32 bars at 80 BPM (96 s), the chorus only higher and on new chords",
+        response: {
+          code: c3Song({
+            bpm: 80,
+            consts: { kickChorus: 's("bd").struct(groove)', hatsChorus: 's("hh*8").gain(.4)' },
+          }),
+        },
+        expect: "pass",
+      },
+      {
+        name: "pop, beyond the brief: a second chorus tune (melChorus2) that climbs to the top in its last bars",
+        response: {
+          code: c3Song({
+            plan: [...VCVC.slice(0, 3), [16, "Chorus2"]],
+            more: [
+              'const kickChorus2 = s("bd").struct(push)',
+              'const hatsChorus2 = s("[hh hh hh oh]*2").gain(.5)',
+              'const chordsChorus2 = chord("<F G C C>").voicing()',
+              'const bassChorus2 = n("<3 4 0 0>").struct(push).scale("C2:major")',
+              'const melChorus2 = n("<[5 7 5 3] [6 ~ 4 ~] [7 9 11 9] [9 8 7 ~] [5 7 10 7] [8 ~ 6 4] [7 9 11 14] [11 9 7 ~]>").scale("C4:major")',
+            ],
+          }),
+        },
+        expect: "pass",
+      },
+      {
+        // Half-time drums (the snare on 3), the bass on the kick's whole notes in the verse; the chorus adds
+        // a pad and sings an octave above the verse.
+        name: "indie: 84 BPM, 32 bars (91 s), LinnDrum, acoustic guitar, a pad only in the chorus",
+        response: {
+          code: c3Song({
+            bpm: 84,
+            consts: {
+              groove: '"x ~ ~ ~"',
+              push: '"x ~ ~ x ~ ~ x ~"',
+              hatsVerse: 's("hh*4").gain(.4)',
+              hatsChorus: 's("hh*8").gain(.5)',
+              chordsVerse: 'chord("<Am F C G>").voicing()',
+              chordsChorus: 'chord("<F G C Am>").voicing()',
+              bassVerse: 'n("<5 3 0 4>").struct(groove).scale("C2:major")',
+              bassChorus: 'n("<3 4 0 5>").struct(push).scale("C2:major")',
+              melVerse: 'n("<[2 ~ 0 ~] [3 ~ 5 ~] [4 ~ 2 0] [1 ~ ~ ~]>").scale("C4:major")',
+              melChorus: 'n("<[10 ~ 12 10] [8 ~ 6 ~] [7 ~ 9 ~] [9 ~ ~ ~]>").scale("C4:major")',
+            },
+            more: ['const padChorus = chord("<F G C Am>").voicing()'],
+            tracks: { snare: 'snare: s("~ ~ sd ~").bank("LinnDrum")' },
+            extraTracks: [
+              `pad: ${arr("pad", [
+                [8, "silence"],
+                [8, "Chorus"],
+                [8, "silence"],
+                [8, "Chorus"],
+              ])}.s("pad").gain(.5)`,
+            ],
+            sounds: { chords: "acgtr", bank: "LinnDrum" },
+          }),
+        },
+        expect: "pass",
+      },
+      {
+        // Sixteenth-note kick rhythms, each shared by the fingerbass; organ chords, a Rhodes lead.
+        name: "funk: 104 BPM, 40 bars (92 s), a sixteenth-note bass on the kick's const, TR-808",
+        response: {
+          code: c3Song({
+            bpm: 104,
+            plan: C3_LONG,
+            consts: {
+              groove: '"x ~ ~ x ~ ~ x ~ ~ ~ x ~ x ~ ~ ~"',
+              push: '"x ~ x x ~ ~ x ~ x ~ x ~ x ~ ~ x"',
+              hatsVerse: 's("hh*16").gain(.3)',
+              hatsChorus: 's("[hh hh oh hh]*4").gain(.35)',
+            },
+            sounds: { chords: "organ", bass: "fingerbass", mel: "rhodes", bank: "RolandTR808" },
+          }),
+        },
+        expect: "pass",
+      },
+      {
+        // Swing is not unlocked at C3 (U11.L07), so the jazz-soul flavour plays straight: hand-stacked
+        // sevenths (Fmaj7 Dm7 B♭maj7 C7, then B♭maj7 C7 Am7 Dm7) on Rhodes, upright bass, in F.
+        name: "jazz-soul: 80 BPM in F, 32 bars (96 s), hand-stacked sevenths on Rhodes, upright bass",
+        response: {
+          code: c3Song({
+            bpm: 80,
+            consts: {
+              chordsVerse: 'n("<[0,2,4,6] [5,7,9,11] [3,5,7,9] [4,6,8,10]>").scale("F3:major")',
+              chordsChorus: 'n("<[3,5,7,9] [4,6,8,10] [2,4,6,8] [5,7,9,11]>").scale("F3:major")',
+              bassVerse: 'n("<0 5 3 4>").struct(groove).scale("F2:major")',
+              bassChorus: 'n("<3 4 2 5>").struct(push).scale("F2:major")',
+              melVerse: 'n("<[2 ~ 4 2] [0 ~ 2 ~] [3 ~ 5 3] [1 ~ ~ ~]>").scale("F4:major")',
+              melChorus: 'n("<[7 ~ 5 7] [6 ~ 4 ~] [6 ~ 4 2] [5 ~ ~ ~]>").scale("F4:major")',
+            },
+            sounds: { chords: "rhodes", bass: "upright" },
+          }),
+        },
+        expect: "pass",
+      },
+      // Known-wrong pieces, one per required rule (the others hold).
+      {
+        name: "weak: verse, chorus, verse, verse",
+        response: {
+          code: c3Song({
+            plan: [...VCVC.slice(0, 3), [16, "Verse"]],
+          }),
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: a chorus that changes only its chords",
+        response: {
+          code: c3Song({
+            bpm: 80,
+            consts: {
+              kickChorus: 's("bd").struct(groove)',
+              hatsChorus: 's("hh*8").gain(.4)',
+              bassChorus: 'n("<3 4 0 0>").struct(groove).scale("C2:major")',
+              melChorus: 'n("<[2 ~ 4 2] [0 ~ 2 ~] [3 ~ 5 3] [1 ~ ~ ~]>").scale("C4:major")',
+            },
+          }),
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: 32 bars at 100 BPM is 77 seconds",
+        response: { code: c3Song() },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: a bass on straight eighths against a kick on 1 and the and of 2",
+        response: {
+          code: c3Song({
+            bpm: 80,
+            consts: {
+              groove: '"x ~ ~ x ~ ~ ~ ~"',
+              push: '"x ~ ~ x ~ ~ ~ ~"',
+              bassVerse: 'n("<0 5 3 4>").struct("x*8").scale("C2:major")',
+              bassChorus: 'n("<3 4 0 0>").struct("x*8").scale("C2:major")',
+            },
+          }),
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        // Triplets, quintuplets and 32nds all engrave exactly; eleven notes in one beat do not.
+        name: "weak: an eleven-note run squeezed into one beat, which no lead sheet writes exactly",
+        response: {
+          code: c3Song({
+            bpm: 80,
+            consts: {
+              melChorus:
+                'n("<[[5 7 5 3 2 1 0 1 2 3 4] ~ ~ ~] [6 ~ 4 ~] [7 9 11 9] [9 8 7 ~]>").scale("C4:major")',
+            },
+          }),
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet", "staff.not-exact"],
+      },
+      {
+        // contracts §6.3 item 8: the bass lists its sections in another order than the other tracks.
+        name: "weak: the bass arranged verse, chorus, chorus, verse while the rest is V C V C",
+        response: {
+          code: c3Song({
+            bpm: 80,
+            tracks: {
+              bass: `bass: ${arr("bass", [VC[0], VC[1], VC[1], VC[0]] as Plan)}.s("ebass").lpf(600)`,
+            },
+          }),
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet", "form.inconsistent-arrange"],
+      },
+    ],
   }),
   compose({
     id: "C4",
@@ -901,29 +1472,37 @@ export const capstones: readonly CapstoneDef[] = [
     objective: "An Aeolian verse i–VI–III–VII and a chorus cadence with the major V.",
     opensAfter: { checkpoints: ["U10.CP"] },
     meter: "4/4",
+    // The analysis runs in A minor (contracts §6.8 item 1); a piece in another key reads a message naming it.
     key: { tonic: "A", mode: "minor" },
     bpm: [60, 95],
     brief:
-      "A slow minor ballad: an Aeolian verse loop, then a chorus whose cadence uses the major V before i.",
-    starter: `setcpm(76/4)\n\nchords: chord("<Am F C G>").voicing().s("piano")\nmel: n("⟪0 2 4 2⟫").scale("A4:minor").s("piano")\ndrums: s("bd ~ sd ~")`,
+      "A slow minor ballad in A minor, 60 to 95 BPM. The verse loops i–VI–III–VII (Am F C G); the chorus finds its own chords and lands with the major V, E with its G♯, then i. Your tune sings ♭3 and ♭6 and ends on 1 over Am. Groove, tempo, both tunes, the form and the sounds are yours.",
+    starter: C4_TEMPLATE,
     skills: ["H08", "H09", "S05"],
+    // The binding rubric of contracts §6.6 in the Wave 5 shapes (content/specs/U10.md C4): the verse rule reads
+    // the verse only (`section`), so the chorus is free; the ending reads the chord under the last note (`over`).
     rubric: [
-      req("aeolian", "Verse loop i–VI–III–VII", ["H08"], { rule: "progression", schema: "schema.aeolian" }),
-      req("major-v", "A major V (raised 7) followed by i", ["H09"], {
+      req("aeolian", "The verse loops i–VI–III–VII", ["H08"], {
+        rule: "progression",
+        schema: "schema.aeolian",
+        section: { section: "verse" },
+      }),
+      req("major-v", "A major V (with the raised 7) that goes home to i", ["H09"], {
         rule: "contains-rn",
         rn: ["V"],
         min: 1,
         mustResolve: true,
       }),
-      req("minor-colour", "Melody uses ♭3 and ♭6", ["S05"], {
+      req("minor-colour", "The tune sings ♭3 and ♭6", ["S05"], {
         rule: "degree-set",
         track: "@melody",
         contains: ["b3", "b6"],
       }),
-      req("ends-on-1", "Melody ends on 1 over i", ["S05"], {
+      req("ends-on-1", "The tune ends on 1 over i", ["S05"], {
         rule: "ends-on-degree",
         degrees: ["1"],
         track: "@melody",
+        over: "i",
       }),
       tempo(60, 95),
     ],
@@ -931,12 +1510,180 @@ export const capstones: readonly CapstoneDef[] = [
       ["Aeolian verse", "Aeolian verse i–VI–III–VII."],
       ["Chorus cadence", "Chorus cadence with the major V; release."],
     ],
+    sessionExtras: [
+      { starter: C4_TEMPLATE, focusRules: ["aeolian", "minor-colour", "tempo"] },
+      { focusRules: ["aeolian", "major-v", "minor-colour", "ends-on-1", "tempo"] },
+    ],
     canDo: ["cd.compose.minor-ballad"],
     hints: ladder(
-      "Which chord makes minor sound like it has to go home?",
-      "The V chord needs the raised 7th: in A minor, E with a G♯.",
-      "End the chorus `<… E Am>`.",
+      "Which chord makes a minor key sound as if it has to go home?",
+      "The chord on 5 pulls home only with the raised 7th: in A minor that is E major, with G♯, not E minor. For the colour, the tune needs C (♭3) and F (♭6) somewhere; its very last note is A, over Am.",
+      'End the chorus on `E Am>` and put an F into the verse tune over the F chord: in `.scale("A3:minor")` that is ♭6, `n` 5.',
     ),
+    tests: [
+      {
+        name: "the starter: the verse alone, a tune on A with no ♭3 or ♭6, no V",
+        response: { code: stripMarkers(C4_TEMPLATE).code },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      // One passing piece per shipped flavour (contracts §6.6); a flavour never changes the rubric.
+      {
+        name: "pop: 80 BPM, Am F C G verse, Dm G E Am chorus, piano",
+        response: { code: c4Song() },
+        expect: "pass",
+      },
+      {
+        name: "minimal: verse and chorus once each (16 bars) at 64 BPM",
+        response: { code: c4Song({ bpm: 64, plan: VC }) },
+        expect: "pass",
+      },
+      {
+        // The Andalusian descent (U10.L07) twice in the chorus, the tune climbing through G♯ into A.
+        name: "indie: 72 BPM, acoustic guitar with room, an Andalusian chorus Am G F E into i",
+        response: {
+          code: c4Song({
+            bpm: 72,
+            consts: {
+              chordsChorus: 'chord("<Am G F E Am G E Am>").voicing()',
+              bassChorus: 'n("<0 6 5 4 0 6 4 0>").scale("A1:minor")',
+              melChorus:
+                'note("<[c5 b4 a4 ~] [b4 ~ g4 ~] [a4 ~ f4 ~] [g#4 ~ e4 ~] [c5 ~ e5 ~] [d5 ~ b4 ~] [b4 a4 g#4 ~] [a4 ~ ~ ~]>")',
+            },
+            tracks: {
+              chords: `chords: ${arr("chords", VCVC)}.s("acgtr").room(.3)`,
+            },
+            sounds: { bank: "LinnDrum" },
+          }),
+        },
+        expect: "pass",
+      },
+      {
+        // Seventh chords by name unlock at U11–U12, so the jazz-soul voicings are hand-stacked note names:
+        // Am7 Fmaj7 Cmaj7 G7, then Dm7 G7 E7 Am7 (E7 is V: the rubric reads the triad core).
+        name: "jazz-soul: 68 BPM, hand-voiced sevenths on Rhodes, upright bass, E7 as the V",
+        response: {
+          code: c4Song({
+            bpm: 68,
+            consts: {
+              chordsVerse: 'note("<[a2,c3,e3,g3] [f2,a2,c3,e3] [c3,e3,g3,b3] [g2,b2,d3,f3]>")',
+              chordsChorus: 'note("<[d3,f3,a3,c4] [g2,b2,d3,f3] [e3,g#3,b3,d4] [a2,c3,e3,g3]>")',
+            },
+            sounds: { chords: "rhodes", bass: "upright" },
+          }),
+        },
+        expect: "pass",
+      },
+      {
+        name: "funk: 92 BPM, a sixteenth-note fingerbass under the same chords, TR-808",
+        response: {
+          code: c4Song({
+            bpm: 92,
+            consts: {
+              hatsVerse: 's("hh*16").gain(.3)',
+              hatsChorus: 's("[hh hh oh hh]*4").gain(.35)',
+              bassVerse: 'n("<0 5 2 6>").struct("x ~ ~ x ~ ~ x ~ ~ ~ x ~ x ~ ~ ~").scale("A1:minor")',
+              bassChorus: 'n("<3 6 4 0>").struct("x ~ x x ~ ~ x ~ x ~ x ~ x ~ ~ x").scale("A1:minor")',
+            },
+            sounds: { chords: "organ", bass: "fingerbass", mel: "rhodes", bank: "RolandTR808" },
+          }),
+        },
+        expect: "pass",
+      },
+      {
+        // U10.L09's ballad texture: strings and a delayed piano in the chorus only.
+        name: "beyond the brief: strings in the chorus, the tune echoing through `.delay()`",
+        response: {
+          code: c4Song({
+            bpm: 70,
+            sounds: { melTail: ".delay(.3)" },
+            extraTracks: [
+              `pad: ${arr("pad", [
+                [8, "silence"],
+                [8, "Chorus"],
+                [8, "silence"],
+                [8, "Chorus"],
+              ])}.s("strings").gain(.5)`,
+            ],
+          }).replace("\n\nkick:", '\nconst padChorus = chord("<Dm G E Am>").voicing()\n\nkick:'),
+        },
+        expect: "pass",
+      },
+      // Known-wrong pieces, one per required rule (the others hold).
+      {
+        name: "weak: a verse on iv (Am F Dm G) is not the Aeolian loop",
+        response: {
+          code: c4Song({
+            consts: {
+              chordsVerse: 'chord("<Am F Dm G>").voicing()',
+              bassVerse: 'n("<0 5 3 6>").scale("A1:minor")',
+            },
+          }),
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: the chorus lands Em to Am (the minor v, no G♯)",
+        response: { code: c4Song({ consts: { chordsChorus: 'chord("<Dm G Em Am>").voicing()' } }) },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: E goes on to Dm, never home to Am",
+        response: {
+          code: c4Song({
+            consts: {
+              chordsChorus: 'chord("<F E Dm Am>").voicing()',
+              bassChorus: 'n("<5 4 3 0>").scale("A1:minor")',
+              melChorus: 'n("<[5 7 5 ~] [4 ~ 1 ~] [3 5 3 ~] [0 ~ ~ ~]>").scale("A3:minor")',
+            },
+          }),
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: a tune with ♭3 but no ♭6",
+        response: {
+          code: c4Song({
+            consts: {
+              melVerse: 'n("<[4 ~ 2 ~] [7 ~ 9 ~] [4 ~ 2 ~] [1 ~ ~ ~]>").scale("A3:minor")',
+              melChorus: 'n("<[3 7 3 7] [6 8 10 8] [8 ~ 4 ~] [7 ~ ~ ~]>").scale("A3:minor")',
+            },
+          }),
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: the last note is C over Am (ends on ♭3)",
+        response: {
+          code: c4Song({
+            consts: { melChorus: 'n("<[3 5 7 5] [6 8 10 8] [8 ~ 4 ~] [9 ~ ~ ~]>").scale("A3:minor")' },
+          }),
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: 110 BPM is no ballad",
+        response: { code: c4Song({ bpm: 110 }) },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        // contracts §6.3 item 8: the chords list their sections in another order than the other tracks.
+        name: "weak: the chords arranged verse, chorus, chorus, verse while the rest is V C V C",
+        response: {
+          code: c4Song({
+            tracks: { chords: `chords: ${arr("chords", [VC[0], VC[1], VC[1], VC[0]] as Plan)}.s("piano")` },
+          }),
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet", "form.inconsistent-arrange"],
+      },
+    ],
   }),
   compose({
     id: "C5",
@@ -944,21 +1691,29 @@ export const capstones: readonly CapstoneDef[] = [
     objective: "Two choruses of 12-bar blues with a shuffle feel, a turnaround and a riff.",
     opensAfter: { checkpoints: ["U11.CP"] },
     meter: "4/4",
+    // The analysis runs in C (contracts §6.8 item 1): bar 12's V and the blue notes are read in the brief's key.
     key: { tonic: "C", mode: "blues" },
     bpm: [80, 140],
     swing: { subdivision: 8, amount: 1 / 3 },
     brief:
-      "A 12-bar shuffle: two choruses, dominant sevenths, swung hats, a turnaround in bar 12 and a riff that answers itself.",
-    starter: `setcpm(112/4)\n\nconst changes = "<C7 C7 C7 C7 F7 F7 C7 C7 G7 F7 C7 G7>"\n\nhats: s("hh*8").swingBy(1/3, 4).gain(.5)\ndrums: s("bd ~ sd ~")\nchords: chord(changes).voicing().s("piano")\nmel: n("⟪0 2 3 4⟫").scale("C4:blues").swingBy(1/3, 4).s("piano")`,
+      "Two choruses of a 12-bar blues in C, 80–140 BPM, shuffled: swung 8ths on the hats. Every chord a dominant seventh, standard or quick change, V in bar 12. A riff that comes back, ♭3 or ♭5 in the tune at least twice, a second chorus that answers the first. Tempo, groove, riff and sounds are yours.",
+    starter: C5_TEMPLATE,
     skills: ["H10", "F04", "R13", "M08"],
+    // The binding rubric of contracts §6.6 in the Wave 5 shapes (content/specs/U11.md C5). `blues-form` counts
+    // choruses on the piece as written (the `arrange()` total), so the second chorus is a section of the tune.
     rubric: [
-      req(
-        "form",
-        "12-bar blues, at least two choruses",
-        ["F04", "H10"],
-        custom("blues-form-any", { variants: ["standard", "quick-change"], choruses: 2 }),
-      ),
-      req("sevenths", "Every chord is a dominant seventh", ["C06"], custom("all-dominant-sevenths")),
+      req("form", "A 12-bar blues, two choruses or more", ["F04", "H10"], {
+        rule: "blues-form",
+        variant: "standard",
+        choruses: 2,
+        quickChangeOk: true,
+      }),
+      req("sevenths", "Every chord a dominant seventh", ["C06"], {
+        rule: "chord-qualities",
+        track: "@chords",
+        subsetOf: ["7"],
+        depth: "seventh",
+      }),
       req("swing", "Swung 8ths on the hats", ["R13"], {
         rule: "swing",
         track: ["hats", "@drums"],
@@ -966,25 +1721,180 @@ export const capstones: readonly CapstoneDef[] = [
         subdivision: 8,
         ratio: [1.6, 2.4],
       }),
-      req("turnaround", "Bar 12 contains V", ["H10"], custom("bar-contains-rn", { bar: 12, rn: "V" })),
-      req(
-        "blue-notes",
-        "The melody uses ♭3 or ♭5 at least twice",
-        ["S11"],
-        custom("blue-notes", { degrees: ["b3", "b5"], min: 2 }),
-      ),
+      req("turnaround", "Bar 12 turns round on V", ["H10"], {
+        rule: "contains-rn",
+        rn: ["V", "V7"],
+        min: 1,
+        section: { bars: [12, 12] },
+      }),
+      req("blue-notes", "♭3 or ♭5 in the tune, twice or more", ["S11"], {
+        rule: "degree-set",
+        track: "@melody",
+        anyOf: ["b3", "b5"],
+        minCount: 2,
+      }),
       req("riff", "The riff comes back", ["M08"], { rule: "motif-reuse", track: "@melody", minRatio: 0.6 }),
     ],
     sessions: [
       ["Changes & riff", "Changes, shuffle feel and riff."],
       ["Second chorus", "Second chorus, turnaround, call and response; release."],
     ],
+    sessionExtras: [
+      { starter: C5_TEMPLATE, focusRules: ["sevenths", "swing", "turnaround", "riff"] },
+      { focusRules: ["form", "sevenths", "swing", "turnaround", "blue-notes", "riff"] },
+    ],
     canDo: ["cd.compose.twelve-bar"],
     hints: ladder(
-      "What makes a shuffle lean?",
-      "Swing the hats with `.swingBy(1/3, 4)`; bar 12 turns around on V.",
-      "The last chord of the changes is `G7`.",
+      "What makes a shuffle lean, and where does a blues turn round to start again?",
+      "Swing the hats with `.swingBy(1/3, 4)`: eighths move, quarter notes stay. Bar 12 is the turnaround, V7 pulling back to bar 1. The blue notes are the key's ♭3 and ♭5: in C, E♭ and G♭.",
+      "Give the tune two 12-bar sections, `mel: arrange([12, melChorus], [12, melChorus2])`: chorus 1 plays the riff; chorus 2 calls with it in the first two bars of each line and answers in the next two.",
     ),
+    tests: [
+      {
+        name: "the starter: one chorus, straight hats, bar 12 on I, no blue note",
+        response: { code: stripMarkers(C5_TEMPLATE).code },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      // One passing piece per shipped flavour (contracts §6.6); a flavour never changes the rubric.
+      {
+        name: "pop: the standard form at 112, swung hats, a boogie bass, the riff then call and answer",
+        response: { code: c5Song() },
+        expect: "pass",
+      },
+      {
+        name: "minimal: the riff on every bar of both choruses, no bass, at 90",
+        response: {
+          code: c5Song({ bpm: 90, bass: null, melChorus2: riffChorus(BLUES_STANDARD) }),
+        },
+        expect: "pass",
+      },
+      {
+        name: "indie: the quick change at 96, acoustic guitar, a lighter swing on the tune",
+        response: {
+          code: c5Song({
+            bpm: 96,
+            bars: BLUES_QUICK,
+            melSwing: ".swingBy(.25, 4)",
+            sounds: { chords: "acgtr", bank: "LinnDrum" },
+          }),
+        },
+        expect: "pass",
+      },
+      {
+        // The turnaround split in two: bar 11 I–IV, bar 12 I–V; the ride carries the swing.
+        name: "jazz-soul: 132 BPM, Rhodes and upright, swung ride, the turnaround [C7 F7] [C7 G7]",
+        response: {
+          code: c5Song({
+            bpm: 132,
+            changes: "<C7 F7 C7 C7 F7 F7 C7 C7 G7 F7 [C7 F7] [C7 G7]>",
+            bars: BLUES_QUICK,
+            hats: 'drums: s("rd*8").swingBy(1/3, 4).gain(.5)',
+            // Bars 11–12 follow the split turnaround: C then F, C then G.
+            bass: `bass: note("<${BLUES_QUICK.slice(0, 10)
+              .map((c) => BOOGIE[c])
+              .join(" ")} [c2 e2 f2 a2] [c2 e2 g2 b2]>").s("upright")`,
+            sounds: { chords: "rhodes", mel: "rhodes" },
+          }),
+        },
+        expect: "pass",
+      },
+      {
+        // The fingerbass doubles the riff two octaves down, swung with it.
+        name: "funk: 100 BPM, swung hats, the riff doubled by the fingerbass, TR-808",
+        response: {
+          code: c5Song({
+            bpm: 100,
+            bass: `bass: note("${riffChorus(BLUES_STANDARD, {
+              C7: "[c2 eb2 e2 g2 ~ g2 bb2 ~]",
+              F7: "[f2 ab2 a2 c3 ~ c3 eb3 ~]",
+              G7: "[g2 bb2 b2 d3 ~ d3 f3 ~]",
+            })}").swingBy(1/3, 4).s("fingerbass")`,
+            sounds: { chords: "organ", mel: "rhodes", bank: "RolandTR808" },
+          }),
+        },
+        expect: "pass",
+      },
+      {
+        // contracts §6.4: capstone mode reads the length from the code, so one 24-bar tune line counts as two.
+        name: "two choruses written as one 24-bar line instead of arrange()",
+        response: {
+          code: c5Song({
+            oneChorus: true,
+            melChorus: `<${[riffChorus(BLUES_STANDARD), answerChorus(BLUES_STANDARD)].map((x) => x.slice(1, -1)).join(" ")}>`,
+          }),
+        },
+        expect: "pass",
+      },
+      // Known-wrong pieces, one per required rule (the others hold).
+      {
+        name: "weak: one chorus only",
+        response: { code: c5Song({ oneChorus: true }) },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: IV and V swapped in bars 9 and 10",
+        response: {
+          code: c5Song({
+            changes: "<C7 C7 C7 C7 F7 F7 C7 C7 F7 G7 C7 G7>",
+          }),
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: a C triad in bar 1",
+        response: { code: c5Song({ changes: "<C C7 C7 C7 F7 F7 C7 C7 G7 F7 C7 G7>" }) },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: straight hats (only the tune swings)",
+        response: { code: c5Song({ hats: 'hats: s("hh*8").gain(.5)' }) },
+        expect: "fail",
+        feedback: ["rubric.unmet", "rhythm.swing-missing"],
+      },
+      {
+        name: "weak: bar 12 stays on I in both choruses",
+        response: { code: c5Song({ changes: "<C7 C7 C7 C7 F7 F7 C7 C7 G7 F7 C7 C7>" }) },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: a riff with no ♭3 or ♭5 (major 3rds only)",
+        response: {
+          code: (() => {
+            const plain = {
+              C7: "[c4 e4 f4 g4 ~ g4 a4 ~]",
+              F7: "[f4 a4 bb4 c5 ~ c5 d5 ~]",
+              G7: "[g4 b4 c5 d5 ~ d5 e5 ~]",
+            };
+            return c5Song({
+              melChorus: riffChorus(BLUES_STANDARD, plain),
+              melChorus2: answerChorus(BLUES_STANDARD, plain, "[g4 ~ f4 ~ e4 ~ c4 ~]"),
+            });
+          })(),
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: a tune that never says the same bar twice",
+        response: {
+          code: c5Song({
+            oneChorus: true,
+            melChorus: `<${Array.from(
+              { length: 24 },
+              (_, i) =>
+                `[c4 eb4 ${["d4", "f4", "a4", "b4", "e4", "g4"][i % 6]} ${["g4", "c5", "e4", "d5", "f4", "a4", "b3"][i % 7]}]`,
+            ).join(" ")}>`,
+          }),
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+    ],
   }),
   transcribe({
     id: "X2",
@@ -994,9 +1904,13 @@ export const capstones: readonly CapstoneDef[] = [
     meter: "4/4",
     song: ["song.st-louis-blues", "song.careless-love"],
     sessions: [
-      ["Bass & changes", "St. Louis Blues (1914) 12-bar strain or Careless Love: bass, then changes."],
+      [
+        "Bass & changes",
+        "A pre-1930 12-bar blues from the repertoire (Careless Love; St. Louis Blues (1914) once a verified answer key exists): bass, then changes.",
+      ],
       ["Melody", "Melody, review, release."],
     ],
+    sessionExtras: X2_CHECKS.map((checks) => ({ checks: [...checks] })),
     canDo: ["cd.transcribe.blues"],
   }),
   compose({

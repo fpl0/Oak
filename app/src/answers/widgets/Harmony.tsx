@@ -21,6 +21,7 @@ import {
   rnDisplay,
   rnForKey,
   rnGlyph,
+  rnModeOf,
   rnPalette,
   toggleCase,
   withInversion,
@@ -168,7 +169,7 @@ export function RnGlyph({ rn }: { rn: string }) {
 }
 
 /** "V six-five", "vii diminished": what a screen reader hears for a numeral. */
-function rnSpoken(rn: string): string {
+export function rnSpoken(rn: string): string {
   const g = rnGlyph(rn);
   if (!g) return rnDisplay(rn);
   const mark =
@@ -201,8 +202,10 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
   const root = useRef<HTMLDivElement>(null);
   const timers = useRef<number[]>([]);
   const allow = spec.allow as readonly RnAllow[];
-  const groups = rnPalette(allow);
+  const mode = rnModeOf(key);
+  const groups = rnPalette(allow, mode);
   const [flat, setFlat] = useState(false);
+  const [raised, setRaised] = useState(false);
   const [slot, setSlot] = useState<number | null>(null);
   const [inversion, setInversion] = useState<"0" | "1" | "2" | "3">("0");
   const correct = revealedOf<string[]>(feedback);
@@ -271,6 +274,7 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
     sound(text);
     setSlot(null);
     setFlat(false);
+    setRaised(false);
   };
   const clearLast = () => {
     if (disabled) return;
@@ -306,12 +310,19 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
   const onKey = (e: React.KeyboardEvent<HTMLElement>): boolean => {
     if (e.key === "-") {
       setFlat(true);
+      setRaised(false);
+      return true;
+    }
+    if ((e.key === "+" || e.key === "#") && mode !== "major") {
+      setRaised(true);
+      setFlat(false);
       return true;
     }
     const n = digitOf(e);
     if (n !== null) {
-      const rn = rnForKey(n, { shift: e.shiftKey, flat, allow });
+      const rn = rnForKey(n, { shift: e.shiftKey, flat, raised, allow, mode });
       setFlat(false);
+      setRaised(false);
       if (rn) place(rn);
       return n >= 1 && n <= 7;
     }
@@ -357,7 +368,12 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
         <>
           <KeyHint keys={["1–7"]}>triad</KeyHint>
           {allow.includes("sevenths") ? <KeyHint keys={["⇧ + digit"]}>seventh</KeyHint> : null}
-          {allow.includes("borrowed") ? <KeyHint keys={["- then digit"]}>♭ degree</KeyHint> : null}
+          {mode !== "major" ? (
+            <KeyHint keys={["+ then 5 or 7"]}>{mode === "minor" ? "raised 7th: V, vii°" : "v, VII"}</KeyHint>
+          ) : null}
+          {allow.includes("borrowed") ? (
+            <KeyHint keys={[mode === "major" ? "- then digit" : "- then 2"]}>♭ degree</KeyHint>
+          ) : null}
           <KeyHint keys={["M"]}>major/minor</KeyHint>
           {allow.includes("inversions") ? <KeyHint keys={["I"]}>inversion</KeyHint> : null}
           <KeyHint keys={["←", "→"]}>slot</KeyHint>
@@ -521,7 +537,7 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
           })}
         </div>
         <p className="sr-only" aria-live="polite">
-          {flat ? "flat — now a digit" : ""}
+          {flat ? "flat — now a digit" : raised ? "raised — now 5 or 7" : ""}
         </p>
       </div>
     </AnswerFrame>

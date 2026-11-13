@@ -117,12 +117,16 @@ export function planWarmup(due: readonly ReviewItem[], ctx: PlanContext, cfg: Go
     const fallbackUsable =
       fallback !== null &&
       total() + fallback.sec <= limit &&
-      !(fallback.mic && (cfg.quiet || micLimit === 0));
+      !(fallback.mic && (cfg.quiet || micUsed >= micLimit));
     if (best && best.recall >= GOVERNOR.anchorMinRecall) opener = best;
     else if (fallbackUsable) anchor = fallback;
     else opener = best;
     if (opener) take(opener);
-    if (anchor) used.set += anchor.sec;
+    if (anchor) {
+      used.set += anchor.sec;
+      // A mic anchor is one of the day's mic sets (at most 2, contracts §7.4).
+      if (anchor.mic) micUsed++;
+    }
   }
 
   // (2) The repair queue, ahead of everything else.

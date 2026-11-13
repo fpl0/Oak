@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { checklistProgress, fileProblem, selfScoreOf, titleOf } from "./import.ts";
+import { fileProblem as kitFileProblem } from "../ui/kit/model.ts";
+import { AUDIO_ACCEPT, AUDIO_KINDS, checklistProgress, fileProblem, selfScoreOf, titleOf } from "./import.ts";
 
 describe("own audio in", () => {
   test("files are checked before anything is stored", () => {
@@ -20,5 +21,22 @@ describe("own audio in", () => {
     expect(selfScoreOf({ contour: 2, rhythm: 1 })).toBe(0.75);
     expect(selfScoreOf({ contour: 2, rhythm: 2, landing: 2, bass: 2, chords: 2 })).toBe(1);
     expect(checklistProgress({ contour: 0, other: 2 })).toEqual({ answered: 1, total: 5 });
+  });
+});
+
+describe("the kit's drop zone with Transcribe's rules (c12)", () => {
+  const kit = (name: string, type: string) =>
+    kitFileProblem(
+      { name, size: 1000, type },
+      { accept: AUDIO_ACCEPT, maxBytes: 300 * 1024 * 1024, kinds: AUDIO_KINDS },
+    );
+  test("audio files pass, by type or by extension", () => {
+    expect(kit("take.wav", "audio/wav")).toBeNull();
+    expect(kit("take.m4a", "")).toBeNull();
+    expect(kit("phone.mp4", "video/mp4")).toBeNull();
+    expect(kit("demo.AIFF", "")).toBeNull();
+  });
+  test("anything else is refused with the kinds named", () => {
+    expect(kit("notes.txt", "text/plain")?.message).toContain(AUDIO_KINDS);
   });
 });

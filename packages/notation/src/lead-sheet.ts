@@ -4,7 +4,7 @@
 // labels stable classes (`tagChordLabels` in `@oak/notation/render`).
 import type { KeySpec, MeterSpec, NEvent, PickupSpec, SwingSpec } from "@oak/content-kit";
 import type { AnnotationSet } from "./options.ts";
-import type { AbcOptions, NotationInput, Score, StaffKind } from "./types.ts";
+import type { AbcOptions, NotationInput, Score, SectionMark, StaffKind } from "./types.ts";
 
 /**
  * Stable classes of the chord labels in a rendered staff: every chord symbol above the staff carries
@@ -75,11 +75,39 @@ export interface LeadSheetInput {
   romans?: boolean;
   /** Note-label lenses under the melody. */
   annotations?: AnnotationSet;
+  /**
+   * Wave 5: the sections of an arranged piece (`sectionMarks(formView.sections)`, C3.S3): a label over each section's
+   * first bar and a double barline before it. A page that starts inside a section repeats its name in parentheses.
+   */
+  sections?: readonly SectionMark[];
+  /** Wave 5: blue-note spelling (`NotationInput.blues`); default from the key and the changes. */
+  blues?: boolean;
+}
+
+/**
+ * The chord labels with the sounding chord restated on beat 1 of each bar in `at` that has no chord of its own
+ * (a page or a section that starts while a chord rings on): a lead sheet names the harmony at every new page and
+ * section, as charts do (Wave 5, C3's lead sheet: "Verse" at bar 17 over a C held from bar 16).
+ */
+export function restateChords(labels: readonly ChordLabel[], at: readonly number[]): ChordLabel[] {
+  const sorted = [...labels].sort((a, b) => a.bar - b.bar || a.beat - b.beat);
+  const out = [...sorted];
+  for (const bar of new Set(at)) {
+    if (sorted.some((l) => l.bar === bar && l.beat <= 1)) continue;
+    const before = sorted.filter((l) => l.bar < bar).pop();
+    if (before) out.push({ ...before, bar, beat: 1 });
+  }
+  return out.sort((a, b) => a.bar - b.bar || a.beat - b.beat);
 }
 
 /** The `NotationInput` of a lead sheet: staff `lead` (treble, symbols above, the melody only). */
 export function leadSheetInput(i: LeadSheetInput): NotationInput {
-  const labels = i.chords ? chordLabelInput(i.chords, { symbols: true, romans: i.romans ?? false }) : {};
+  const starts = [
+    ...(i.startBar !== undefined && i.startBar > 0 ? [i.startBar] : []),
+    ...(i.sections ?? []).map((m) => m.bar),
+  ];
+  const chords = i.chords ? restateChords(i.chords, starts) : undefined;
+  const labels = chords ? chordLabelInput(chords, { symbols: true, romans: i.romans ?? false }) : {};
   return {
     events: [...i.melody],
     meter: i.meter,
@@ -94,7 +122,21 @@ export function leadSheetInput(i: LeadSheetInput): NotationInput {
     ...(i.tempoBpm === undefined ? {} : { tempoBpm: i.tempoBpm }),
     ...(i.title === undefined ? {} : { title: i.title }),
     ...(i.annotations ? { annotations: i.annotations } : {}),
+    ...(i.sections?.length ? { sections: i.sections } : {}),
+    ...(i.blues === undefined ? {} : { blues: i.blues }),
   };
+}
+
+/**
+ * The section marks a page from `startBar` shows: its own, plus, when the page starts inside a section, that
+ * section's name in parentheses over its first bar ("(Chorus)"), with no double barline.
+ */
+export function pageSections(sections: readonly SectionMark[], startBar: number): SectionMark[] {
+  const sorted = [...sections].sort((a, b) => a.bar - b.bar);
+  const own = sorted.filter((m) => m.bar >= startBar);
+  if (own[0]?.bar === startBar) return own;
+  const open = sorted.filter((m) => m.bar < startBar).pop();
+  return open ? [{ ...open, bar: startBar, text: `(${open.text})`, doubleBar: false }, ...own] : own;
 }
 
 /** How a lead sheet is laid out in a host of a given width. */
@@ -164,6 +206,9 @@ export function leadSheetPages(i: LeadSheetInput, layout: LeadSheetLayout): Lead
       bars,
       input: leadSheetInput({
         ...i,
+        ...(i.sections?.length
+          ? { sections: pageSections(i.sections, at).filter((m) => m.bar < at + bars) }
+          : {}),
         startBar: at,
         bars,
         ...(last ? (i.endsPiece === false ? { endsPiece: false } : {}) : { endsPiece: false }),

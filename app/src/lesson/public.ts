@@ -104,6 +104,8 @@ export function tutorAnswerOf(
         mode: "key-signature",
       };
   }
+  const w5 = "answer" in response ? wave5Answer(ex, response.answer as Wave5Answer, o.key ?? null) : null;
+  if (w5) return w5;
   const w4 = "answer" in response ? wave4Answer(ex, response.answer as Wave4Answer, o.key ?? null) : null;
   if (w4) return w4;
   if ("answer" in response && response.answer.text && response.answer.text.length > 0)
@@ -125,6 +127,74 @@ export function tutorAnswerOf(
     }
     if (typeof a.number === "number") return { kind: "text", prompt: ex.prompt, value: String(a.number) };
   }
+  return null;
+}
+
+interface Wave5Answer {
+  sections?: string[];
+  text?: string[];
+  rn?: string[];
+  midi?: number[];
+  degrees?: string[];
+  number?: number;
+}
+
+/**
+ * The Wave 5 answers in the tutor's shapes (wave5.md §11): the form strip section by section with its bars, the
+ * twelve-bar chart bar by bar (numerals or chord symbols), the scale built on the keyboard by note name or on the
+ * pad by degree, the bar picked on the bar buttons. Only what the learner entered; never the step's `correct`.
+ */
+function wave5Answer(ex: Exercise, a: Wave5Answer, key: KeySpec | null): TutorAnswer | null {
+  const spec = "answer" in ex && ex.answer && typeof ex.answer === "object" ? ex.answer : null;
+  const ui = spec && "ui" in spec ? spec.ui : null;
+  const exKey = ("key" in ex && ex.key) || key || null;
+  if (ui === "form" && spec && "sections" in spec && a.sections) {
+    const bars = "sectionBars" in spec && Array.isArray(spec.sectionBars) ? spec.sectionBars : null;
+    let start = 1;
+    return {
+      kind: "slots",
+      prompt: ex.prompt,
+      slots: Array.from({ length: spec.sections }, (_, i) => {
+        const n = bars?.[i];
+        const label =
+          n === undefined ? `Section ${i + 1}` : `Section ${i + 1} (bars ${start}–${start + n - 1})`;
+        if (n !== undefined) start += n;
+        const v = a.sections?.[i] ?? "";
+        return { label, value: v === "" ? null : v };
+      }),
+    };
+  }
+  if (ui === "bar-grid" && a.rn)
+    return {
+      kind: "numerals",
+      prompt: ex.prompt,
+      key: exKey,
+      numerals: a.rn.map((rn, i) => ({ bar: i + 1, rn: rn === "" ? "(empty)" : rn })),
+    };
+  if (ui === "bar-grid" && a.text)
+    return {
+      kind: "chords",
+      prompt: ex.prompt,
+      key: exKey,
+      chords: a.text.map((symbol, i) => ({ bar: i + 1, symbol: symbol === "" ? "(empty)" : symbol })),
+    };
+  if (ui === "scale-builder" && spec && "tonic" in spec) {
+    const from = `from ${spec.tonic}`;
+    if (a.midi && a.midi.length > 0)
+      return {
+        kind: "text",
+        prompt: ex.prompt,
+        value: `the scale I built ${from}: ${a.midi.map((m) => noteName(m, exKey)).join(" ")}`,
+      };
+    if (a.degrees && a.degrees.length > 0)
+      return {
+        kind: "text",
+        prompt: ex.prompt,
+        value: `the scale I built ${from}: degrees ${a.degrees.join(" ")}`,
+      };
+  }
+  if (ui === "bar-buttons" && typeof a.number === "number")
+    return { kind: "text", prompt: ex.prompt, value: `bar ${a.number}` };
   return null;
 }
 

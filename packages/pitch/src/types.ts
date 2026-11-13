@@ -9,6 +9,7 @@ import type {
   Rat,
   SingMode,
   SingTolCents,
+  SwingSpec,
 } from "@oak/content-kit";
 
 /** Analysis geometry shared by the worklet and the graders. */
@@ -117,6 +118,13 @@ export interface SungTarget {
   /** AudioContext seconds. Timed modes only use them as windows; free modes align by order. */
   on: number;
   off: number;
+  /**
+   * Wave 5 (U11, blue notes): the target is a blue note (♭3, ♭5 or ♭7 in a blues line). A pitch sung between it
+   * and its neighbouring semitone in `toward` (+1: up, a blue third between ♭3 and 3; −1: down; 0: either side) is
+   * judged against the nearer of the two, within the normal tolerance, and the note says so (`sing.blue-note`).
+   * `markBlueNotes` sets it from a key.
+   */
+  blue?: { toward: 1 | -1 | 0 };
 }
 export interface SungNoteResult {
   index: number;
@@ -133,6 +141,11 @@ export interface SungNoteResult {
   onsetErrorMs: number | null;
   octaveShift: number;
   feedback: "sing.missed" | "sing.sharp" | "sing.flat" | "sing.wrong-note" | "sing.octave-jump" | null;
+  /**
+   * Wave 5: a blue target sung toward its neighbour, judged against that neighbour (`SungTarget.blue`): the
+   * neighbour's MIDI and the error the credit used. `cents` stays the error against the target itself.
+   */
+  blue?: { neighbourMidi: number; judgedCents: number };
 }
 /** What `gradeSung` and `gradeSungLive` return: the PitchLane fill, the per-note tick and the grade all read it. */
 export interface SungResult {
@@ -243,6 +256,19 @@ export interface HumDraftOptions {
   tonicOctave?: number;
   /** A pitch between two scale tones: "snap" to the nearer scale tone (default) or "keep" it as a chromatic step (`3#`). */
   chromatic?: "snap" | "keep";
+  /**
+   * Wave 5: chromatic degrees (relative to major, as Oak labels them: "6", "7", "b3", "b7") that are kept as
+   * chromatic steps even when snapping. Default: the raised 6 and 7 in a natural-minor key (`["6", "7"]`, la and ti,
+   * written "5#" and "6#"), the raised 6 in harmonic minor, nothing otherwise. Blues drafts in a major key pass
+   * `["b3", "b5", "b7"]`.
+   */
+  keepDegrees?: readonly Degree[];
+  /**
+   * Wave 5: the project swings (contracts §6.10). Onsets and ends on the swung subdivision are straightened before
+   * they are quantised (an off-beat sung at 2/3 of the beat lands on the straight off-beat), and the draft line
+   * gets `.swingBy(amount, …)` so it plays back swung. Ignored in compound meters (they never swing).
+   */
+  swing?: SwingSpec;
   /** Track label. Default "mel". */
   label?: string;
   /** Adds `.s("…")` when given. */
@@ -269,14 +295,23 @@ export interface HumDraftNote {
    */
   degree: Degree;
   octave: number;
+  /**
+   * Wave 5 (c7): the note is held across a bar line. `dur` then runs past the end of its bar (a fraction of a
+   * bar, so it can exceed `1 − onset`), and the line is written as one sequence over every bar (`.slow(bars)`),
+   * where a `_` continues the note into the next bar. Never a rest on the next beat 1.
+   */
+  tied?: true;
 }
 export type HumDraftWarning =
   | { code: "empty" }
   | { code: "chromatic-snapped"; source: number; sungMidi: number; midi: number }
   | { code: "collision-dropped"; source: number }
+  /** No longer produced (Wave 5, c7): a note across a bar line is tied (`HumDraftNote.tied`), never cut. */
   | { code: "tie-truncated"; source: number; bar: number }
   | { code: "truncated"; bars: number }
-  | { code: "before-downbeat"; source: number };
+  | { code: "before-downbeat"; source: number }
+  /** Wave 5: the project declares swing in a compound meter, which never swings; the draft is straight. */
+  | { code: "swing-ignored" };
 /** A machine-made draft: it gives no evidence until the learner's corrected version is checked. */
 export interface HumDraft {
   machineMade: true;
@@ -291,6 +326,13 @@ export interface HumDraft {
   /** `G4:major`. */
   scale: string;
   bars: number;
+  /**
+   * Wave 5: how the line is written. `bars`: one `<…>` step per bar (no note crosses a bar line); `tied`: one
+   * sequence over every bar with `.slow(bars)`, because a note is held across a bar line (c7).
+   */
+  layout: "bars" | "tied";
+  /** Wave 5: the swing the line was straightened by and plays back with (`.swingBy`), or `null`. */
+  swing: SwingSpec | null;
   notes: HumDraftNote[];
   /** Constant tuning offset removed before choosing steps, in cents (positive = the learner sang sharp). */
   tuningCents: number;

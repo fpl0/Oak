@@ -48,22 +48,26 @@ test("an album with no recordings yet, and a take abandoned mid-way", async ({ p
   await expect(page.getByText(/Recording \d/)).toBeVisible({ timeout: 10_000 });
   await page.getByRole("link", { name: "Studio" }).first().click();
   await expect(page).toHaveURL(/\/studio$/);
-  const state = await page.evaluate(async () => {
-    const o = (
-      globalThis as unknown as {
-        __oakStrudel: { recorder: { recording: boolean }; master: { level(): { rms: number } } };
+  // The recorder stops at once; the master falls silent once the transport's stop reaches the audio thread
+  // (closer: under a loaded machine that took longer than a fixed 300 ms, so a silent second is polled for, 5 s at most).
+  const state = () =>
+    page.evaluate(async () => {
+      const o = (
+        globalThis as unknown as {
+          __oakStrudel: { recorder: { recording: boolean }; master: { level(): { rms: number } } };
+        }
+      ).__oakStrudel;
+      let peak = 0;
+      for (let i = 0; i < 40; i++) {
+        peak = Math.max(peak, o.master.level().rms);
+        await new Promise((r) => setTimeout(r, 25));
       }
-    ).__oakStrudel;
-    await new Promise((r) => setTimeout(r, 300));
-    let peak = 0;
-    for (let i = 0; i < 40; i++) {
-      peak = Math.max(peak, o.master.level().rms);
-      await new Promise((r) => setTimeout(r, 25));
-    }
-    return { recording: o.recorder.recording, peak };
-  });
-  expect(state.recording).toBe(false);
-  expect(state.peak).toBeLessThan(0.0005);
+      return { recording: o.recorder.recording, peak };
+    });
+  expect((await state()).recording).toBe(false);
+  await expect
+    .poll(async () => (await state()).peak, { timeout: 5_000, intervals: [100] })
+    .toBeLessThan(0.0005);
   await page.waitForTimeout(12_000); // longer than the 4-bar take and its tail
   expect(await hasAudio()).toBe(false);
 });

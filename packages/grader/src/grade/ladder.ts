@@ -13,7 +13,7 @@ import type {
   SwingSpec,
 } from "@oak/content-kit";
 import { R } from "@oak/content-kit";
-import { sectionsFromAst } from "../analyze/sections.ts";
+import { arrangedTotal, sectionsFromAst } from "../analyze/sections.ts";
 import { periodOf } from "../analyze/tracks.ts";
 import type { GradeContext, GradeRequest } from "../types.ts";
 import { MODE_LIMITS } from "../types.ts";
@@ -203,7 +203,7 @@ export interface CapstoneLength {
 export function capstoneLength(code: string, events: readonly NEvent[], cps: number): CapstoneLength {
   const cap = MODE_LIMITS.capstone.maxBars;
   const ast = sectionsFromAst(code);
-  const fromAst = ast && "totalBars" in ast ? ast.totalBars : null;
+  const fromAst = arrangedTotal(ast);
   const last = events.reduce((m, e) => Math.max(m, R.floor(e.onset) + 1), 0);
   const totalBars = fromAst ?? Math.max(1, periodOf(events, Math.max(1, Math.min(cap, last || 1))));
   return {

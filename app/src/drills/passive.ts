@@ -10,6 +10,7 @@ import {
   type AudioPlan,
   type DrillFamilyRuntime,
   eventsToAudioPlan,
+  FAMILIES,
   generateTrial,
   openCategoriesOf,
   passiveSequence,
@@ -93,8 +94,11 @@ export function passiveCaption(
     const generic = GENERIC[trial.category] ?? null;
     return { caption, sub: [generic, harmonic ? "together" : null].filter(Boolean).join(", ") || null };
   }
-  if (expected.choice && expected.choice.length > 0)
-    return { caption: expected.choice.map(optionLabel).join(", "), sub: null };
+  if (expected.choice && expected.choice.length > 0) {
+    const gen = FAMILIES.find((f) => f.id === trial.family)?.generator;
+    const ids = expected.choice;
+    return { caption: ids.map((id) => optionLabel(id, gen, ids)).join(", "), sub: null };
+  }
   return { caption: optionLabel(trial.category), sub: null };
 }
 
@@ -151,7 +155,11 @@ export function passiveItems(
       cue: newRun ? audio.cue : null,
       example,
       gapSec: Math.max(0.3, spec.gapBeats * beatSec),
-      keyName: keyName(runKey),
+      // Major and minor on one tonic (Wave 5): the run shares the tonic, never one mode's name.
+      keyName:
+        def.generator === "key-mode" && runKey
+          ? `On ${runKey.tonic.replace(/b$/, "♭").replace(/#$/, "♯")}`
+          : keyName(runKey),
     });
   }
   return out;
@@ -163,4 +171,10 @@ export function passiveSeconds(items: readonly PassiveItem[]): number {
 }
 
 /** Families with a guided listening block before practice: named in-key pairs and degrees. */
-export const PASSIVE_GENERATORS: readonly string[] = ["interval-in-key", "degree-id"];
+export const PASSIVE_GENERATORS: readonly string[] = [
+  "interval-in-key",
+  "degree-id",
+  // Wave 5: major and minor (and later modes) on one tonic, and straight against swung, labelled as they play.
+  "key-mode",
+  "rhythm-swing",
+];

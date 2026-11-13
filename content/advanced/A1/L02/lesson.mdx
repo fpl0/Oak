@@ -1,0 +1,65 @@
+{/* A1.L02 Filters & Filter Envelopes: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+Your loop from Waves & Harmonics: a sawtooth bass and a square riff, every harmonic in. Then the same notes with some of those harmonics taken away again, the way a record's bass and synth riff sound.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+`.lpf()` is the low-pass you may have met as a bass preset. Here its number moves. Pick what you expect before you run it. <CodeRef fn="lpf" />
+
+<Predict exercise="four-bars-down" />
+</Step>
+
+<Step id="S3">
+A sawtooth's harmonics climb all the way up: 1, 2, 3, 4 … times its note. The low-pass draws a line among them.
+
+<Example id="what-goes-first" views="code" />
+
+<OnPass>The top goes first: harmonics above the number are cut back, more the further above it they sit, so the riff turns darker bar by bar and its wave loses its corners. A tool that takes some harmonics out of a sound is a **filter**; `.lpf()` is a low-pass filter, and the number where it starts to cut is its **cutoff**. `.hpf()` is the opposite, a high-pass: it takes away the lows. `.bpf()` keeps a band in the middle.</OnPass>
+</Step>
+
+<Step id="S4">
+Match a sound by ear. Play the target, play yours, and move one number until they agree.
+
+<Editor exercise="match-the-bass" />
+
+<OnPass>A round bass: only its lowest few harmonics get through, so it sits under the riff instead of buzzing beside it. A good place to stop for today if you need to.</OnPass>
+</Step>
+
+<Step id="S5">
+A filter can do more than cut. Push this one and listen to what happens right at the cutoff. <CodeRef fn="lpq" />
+
+<Editor exercise="make-it-ring" />
+
+<OnPass>That whistle is **resonance**: a peak the filter adds at its cutoff, so the harmonics near the cutoff ring out. Move the cutoff and the peak moves with it. A little resonance gives a bass or a riff a vocal edge; a lot sounds like a synth solo.</OnPass>
+</Step>
+
+<Step id="S6">
+So far the cutoff stood still. On a record's synth riff it usually moves: each note starts bright and closes down, a pluck. <CodeRef fn="lpenv" />
+
+<Editor exercise="pluck-the-riff" />
+
+<OnPass>Four octaves above 300 is 4800: each note opens there and falls back to 300 in a fifth of a second. Without `.lpd()` it falls back in about 0.14 seconds, a slightly snappier pluck. That jump and fall on every note is the pluck of a synth riff; the next sound lesson gives the same kind of shape to a note's loudness.</OnPass>
+</Step>
+
+<Step id="S7">
+Your ear for the cutoff. Two bars, one change.
+
+<Choice exercise="brighter-or-darker" />
+
+<OnPass>Brighter means the cutoff rose and more harmonics came through; darker, the reverse. Oak brings this back in your warm-ups.</OnPass>
+</Step>
+
+<Step id="S8">
+Back to the raw loop. Shape the bass and the riff with what you heard today: where each one's cutoff sits, how much it rings, and how it moves on every note.
+
+<Make exercise="filter-your-loop" />
+
+<CanDo id="cd.code.filters" />
+
+Next, whenever you like: the next side lesson shapes how every note starts and ends.
+
+<Recap />
+</Step>

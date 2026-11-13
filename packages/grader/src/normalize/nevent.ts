@@ -127,6 +127,7 @@ export function toNEvent(e: OakEvent): NEvent {
   if (typeof e.n === "number" && e.scale === null && source !== "voicing" && Number.isInteger(e.n))
     out.sampleN = e.n;
   if (e.scale !== null) out.scaleCtx = e.scale;
+  if (e.controls) out.controls = { ...e.controls };
   return out;
 }
 

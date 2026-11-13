@@ -23,13 +23,14 @@ import type {
   WarmupItem,
 } from "@oak/api";
 import type { ContentSource } from "./content/types.ts";
-import { realCourse } from "./testing/course.ts";
+import { realCourse, wave4Course } from "./testing/course.ts";
 import { gradeResult as gradeResultOf0, type Harness, harness } from "./testing/harness.ts";
 import { rng, SimLearner } from "./testing/learner.ts";
 
 let course: ContentSource;
 beforeAll(async () => {
-  course = await realCourse();
+  // Pinned to the course as Wave 4 shipped it: Wave 5 lessons, authored in parallel, would move the end of the course.
+  course = wave4Course(await realCourse());
 });
 
 const HOUR = 3_600_000;

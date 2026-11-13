@@ -29,6 +29,7 @@ import {
 import { mod12 } from "../analyze/events.ts";
 import { diag } from "../feedback/catalog.ts";
 import type { MatchResult } from "../types.ts";
+import { wave5Answer } from "./answers-wave5.ts";
 
 export interface AnswerCheck extends MatchResult {
   /** Per-slot credit, for the overlay of a slot UI. */
@@ -167,6 +168,9 @@ export function gradeAnswer(
     spelledIntervals?: readonly (string | null)[];
   } = {},
 ): AnswerCheck {
+  // Wave 5: the form strip, the bar grid and the scale builder (answers-wave5.ts).
+  const w5 = wave5Answer(ui, correct, got, o.key ?? null);
+  if (w5) return w5;
   const parts: AnswerCheck[] = [];
   const order = o.order ?? (ui.ui === "choice" && ui.multi ? "set" : "sequence");
   if (correct.choice && ui.ui === "slot-choice")

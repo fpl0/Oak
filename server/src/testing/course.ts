@@ -85,3 +85,17 @@ export async function realCourse(opts: { standInUnits?: readonly string[] } = {}
       for (const meta of unit.lessons) if (!authored.has(meta.id)) standIns.push(standInLesson(meta, unit));
   return { ...content, lessons: [...content.lessons, ...standIns] };
 }
+
+/**
+ * The course as Wave 4 shipped it: lesson files of U08.L02 and later units, and the side lessons, are left out (they
+ * are authored during Wave 5), so a Wave 4 scenario keeps the days it was written for.
+ */
+export function wave4Course(content: ContentSource): ContentSource {
+  const keep = (id: string) => {
+    const m = /^U(\d{2})\.L(\d{2})$/.exec(id);
+    if (m === null) return !/^A\d\./.test(id);
+    const unit = Number(m[1]);
+    return unit < 8 || (unit === 8 && Number(m[2]) === 1);
+  };
+  return { ...content, lessons: content.lessons.filter((l) => keep(l.id)) };
+}

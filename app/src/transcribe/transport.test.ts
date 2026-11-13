@@ -108,6 +108,26 @@ describe("pattern transport", () => {
     expect(t.state.playing).toBe(true);
   });
 
+  test("listening to one layer mutes the others on the source side only, without a reload", async () => {
+    const player = fakePlayer();
+    const t = await createPatternTransport({ player, ref: REF, bars: 2, cps: 0.4 });
+    await t.setMineCode('kick: s("bd ~ bd ~")');
+    const loads = player.calls.filter((c) => c.startsWith("load")).length;
+    expect(t.state.sourceTracks).toEqual(["ref_kick", "ref_hats"]);
+    t.setSourceMutes(["ref_hats", "ref_nope"]);
+    expect(t.state.sourceMuted).toEqual(["ref_hats"]);
+    expect([...player.mutes()].sort()).toEqual(["kick", "ref_hats"]);
+    t.setSide("both");
+    expect([...player.mutes()]).toEqual(["ref_hats"]);
+    // "Mine" still mutes the whole source.
+    t.setSide("mine");
+    expect([...player.mutes()].sort()).toEqual(["ref_hats", "ref_kick"]);
+    t.setSide("source");
+    t.setSourceMutes([]);
+    expect([...player.mutes()]).toEqual(["kick"]);
+    expect(player.calls.filter((c) => c.startsWith("load")).length).toBe(loads);
+  });
+
   test("broken learner code never silences the source", async () => {
     const player = fakePlayer();
     const t = await createPatternTransport({ player, ref: REF, bars: 2, cps: 0.4 });

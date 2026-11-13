@@ -31,15 +31,17 @@ import { useLenses } from "../lib/lenses.ts";
 import { Button } from "../ui/kit/Button.tsx";
 import { reportTake } from "../voice/recheck.ts";
 import { Workbench, type WorkbenchProps } from "../workbench/Workbench.tsx";
+import { answerResponse } from "./answer-response.ts";
 import { lessonWidgetFor } from "./answers.tsx";
 import { type Playing, playLead, playStimulus } from "./audio.ts";
 import { InlineMd, useStepHost } from "./frame.tsx";
 import type { TakeLookup } from "./grading.ts";
 import { LeadSheetView, leadSheetOf } from "./lead-sheet.tsx";
-import { answerSpecOf, questionSpec, revealCode, withTrialOptions } from "./model.ts";
+import { answerSpecOf, givenStart, questionSpec, revealCode, withTrialOptions } from "./model.ts";
 import { CodeMusic } from "./music.tsx";
 import { byEarSource, isByEar, keySignatureResponse, singLabelsFor, tonicPc } from "./rules.ts";
 import { useTargetMarks } from "./target-marks.ts";
+import { isMatchSound, MATCH_SOUND_LABELS } from "./wave5.ts";
 
 type Part = Exclude<Exercise, AllEx>;
 
@@ -94,6 +96,8 @@ export function initialInput(ex: Part): unknown {
       answers: ex.questions.map((q) => emptyValue(questionSpec(q) as AnswerSpecOf<AnswerKind>)),
     } satisfies InvestigateValue;
   const spec = answerSpecOf(ex);
+  const given = givenStart(ex, spec);
+  if (given) return given;
   return spec ? emptyValue(spec as AnswerSpecOf<AnswerKind>) : null;
 }
 
@@ -120,7 +124,7 @@ export function inputResponse(ex: Part, value: unknown, rt: InputRuntime): Attem
   // A key signature is placed as accidentals in order; the grader reads them as `answer.text` (wave3.md §10).
   if (spec.ui === "staff-input" && spec.mode === "key-signature")
     return keySignatureResponse(value as string);
-  const r = responseOf(spec, value as AnswerValue);
+  const r = answerResponse(ex.kind, spec, value as AnswerValue);
   // The tap pad reports AudioContext seconds; the grader reads seconds from bar 1 of the stimulus.
   if ("taps" in r && rt.tapStart !== null) {
     const start = rt.tapStart;
@@ -225,7 +229,7 @@ export interface PartInputProps {
   label?: string;
 }
 
-function useWorkbenchBase(ex: Part, variant: "full" | "compact"): Omit<WorkbenchProps, "id" | "code"> {
+function useWorkbenchBase(ex: Part, variant?: "full" | "compact"): Omit<WorkbenchProps, "id" | "code"> {
   const h = useStepHost();
   const base = h.workbench;
   const lessonCtx = {
@@ -234,19 +238,26 @@ function useWorkbenchBase(ex: Part, variant: "full" | "compact"): Omit<Workbench
     ...(ex.meter ? { meter: ex.meter } : {}),
   };
   // A part with its own pickup (contracts §6.11) shows bar 0 as the pickup bar, as it is graded.
-  return { ...base, lessonCtx, variant, ...(ex.pickup ? { pickup: ex.pickup } : {}) };
+  // The part's own variant (a part of an "all" step is compact), else the step's: code with long lines gets the
+  // full width with the music under it (LessonPlayer `wide`). review:journey: the step's choice was overwritten
+  // with "full", so A1.L01's `.scope()` line was cut off in a half-width editor beside an empty column.
+  const v = variant ?? (base.variant === "compact" ? "compact" : "full");
+  return { ...base, lessonCtx, variant: v, ...(ex.pickup ? { pickup: ex.pickup } : {}) };
 }
 
 /** The Workbench of a code part, its A/B target and its marks. */
 function CodeStage(p: PartInputProps & { code: string; setCode(code: string): void; readOnly?: true }) {
-  const base = useWorkbenchBase(p.ex, p.variant ?? "full");
+  const base = useWorkbenchBase(p.ex, p.variant);
   const starter = starterOf(p.ex);
   const { editable } = starter;
   // The ⟪…⟫ regions are the only editable text: they are boxed, and a keyboard focus lands in them.
   useTargetMarks(p.wbId, p.readOnly ? null : editable, p.code === starter.code, p.result);
   const reference = isByEar(p.ex) ? byEarSource(p.ex).code : revealCode(p.ex);
+  // A1's "match this sound" (a controls matcher): the sound to match is the point, so it is heard from the start.
+  const matchSound = isMatchSound(p.ex);
   const audible =
     isByEar(p.ex) ||
+    matchSound ||
     ("target" in p.ex && p.ex.target && typeof p.ex.target === "object" && "audible" in p.ex.target
       ? p.ex.target.audible
       : false);
@@ -254,6 +265,7 @@ function CodeStage(p: PartInputProps & { code: string; setCode(code: string): vo
   // roll appears only after a failed check, `revealRollAfter`) can be heard from the start: the ear is the point.
   const abAudible =
     isByEar(p.ex) ||
+    matchSound ||
     (p.ex.kind === "code-modify" && p.ex.target.revealRollAfter !== undefined && !p.ex.target.showRoll)
       ? ("always" as const)
       : ("fromHint2" as const);
@@ -279,7 +291,11 @@ function CodeStage(p: PartInputProps & { code: string; setCode(code: string): vo
           }
         : {})}
       target={reference && audible ? { code: reference, audible: abAudible } : null}
-      {...(isByEar(p.ex) ? { abLabels: { a: "Your code", b: "The tune" } } : {})}
+      {...(isByEar(p.ex)
+        ? { abLabels: { a: "Your code", b: "The tune" } }
+        : matchSound
+          ? { abLabels: { ...MATCH_SOUND_LABELS } }
+          : {})}
       onChange={(c) => p.setCode(c)}
       onEvaluated={(o) => {
         if (o.ok) p.onRun?.(o.code);
@@ -464,6 +480,7 @@ export function useAnswerEnvFor(
   if (
     staged ||
     harmonyUi === "rn-palette" ||
+    harmonyUi === "bar-grid" ||
     harmonyUi === "quality-pad" ||
     harmonyUi === "slot-choice" ||
     harmonyUi === "keyboard" ||

@@ -74,13 +74,43 @@ export interface StepUi {
    * when the lesson or exercise declares `pickup`. Used for "play / sing from the page" (U07.L09).
    */
   leadSheet?: LeadSheetSpec;
+  /**
+   * Wave 5. A visual probe drawn beside the sound (A1, feature `step.probe`): the `filter` response curve of
+   * the learner's filter controls (cutoff, resonance, filter envelope), the `envelope` shape of the amp
+   * envelope (attack, decay, sustain, release), or the `harmonics` of a wave as bars (partials). It reads the
+   * controls of `track` (default: the first pitched track) after each run. Each needs its toolbox row
+   * unlocked at the lesson (`PROBE_TOOLS`, content check 4).
+   */
+  probe?: { kind: ProbeKind; track?: TrackRef };
 }
+/** Wave 5. The probes a step can draw (`StepUi.probe`). */
+export const PROBE_KINDS = ["filter", "envelope", "harmonics"] as const;
+export type ProbeKind = (typeof PROBE_KINDS)[number];
+/** Wave 5. The toolbox row each probe needs (contracts §3.2 group H). */
+export const PROBE_TOOLS: Readonly<Record<ProbeKind, ToolId>> = {
+  filter: "tb.lpf",
+  envelope: "tb.adsr",
+  harmonics: "tb.partials",
+};
 /**
  * Wave 4. A Workbench panel a step can open (`StepUi.initialPanels`). `key`: the key-signature panel;
  * `circle`: the circle of fifths; `chords`: the chord band over the roll (symbols, and numerals from
  * U06.L02); `function`: the T/PD/D bands; `range`: the range lens; `chord-tones`: the chord-tone lens.
+ * Wave 5: `form`: the form map (sections over the bars, U09.L02); `scope`: Oak's scope panel (the wave of the
+ * master bus, A1.L01; contracts §3.1 rule 9); `spectrum`: Oak's spectrum panel (A2.L01). Opening one of
+ * these is feature `panel.wave5`.
  */
-export const WORKBENCH_PANELS = ["key", "circle", "chords", "function", "range", "chord-tones"] as const;
+export const WORKBENCH_PANELS = [
+  "key",
+  "circle",
+  "chords",
+  "function",
+  "range",
+  "chord-tones",
+  "form",
+  "scope",
+  "spectrum",
+] as const;
 export type WorkbenchPanelId = (typeof WORKBENCH_PANELS)[number];
 /** The toolbox row each panel needs (contracts §3.2 group A). */
 export const WORKBENCH_PANEL_TOOLS: Readonly<Record<WorkbenchPanelId, ToolId>> = {
@@ -90,6 +120,9 @@ export const WORKBENCH_PANEL_TOOLS: Readonly<Record<WorkbenchPanelId, ToolId>> =
   function: "tb.lens.function",
   range: "tb.lens.range",
   "chord-tones": "tb.lens.chord-tones",
+  form: "tb.lens.form",
+  scope: "tb.scope",
+  spectrum: "tb.fscope",
 };
 /** Wave 4. What a lead sheet shows (`StepUi.leadSheet`). */
 export interface LeadSheetSpec {
@@ -206,6 +239,14 @@ export interface LessonMeta {
   practises: SkillId[];
   /** Optional side lesson (A1.L01 to L04) or the one lesson that can be passed over (J2.L04). */
   optional?: boolean;
+  /**
+   * Wave 5. A side lesson (A1.L01–L04, contracts §2.6, §4.3): outside the default order, offered from its
+   * track gate on (U03.L02 completed) and never required by anything. It is written for a learner who has
+   * only the tools and terms of its gate plus what the side lesson itself (and the side lessons before it)
+   * introduces, so a learner at U03 and a learner at U11 can both follow it; content CI checks it at the
+   * earliest legal point (the gate). Implies `optional`.
+   */
+  side?: boolean;
 }
 export interface UnitDef {
   id: UnitId;
@@ -326,6 +367,12 @@ export interface PhraseCheck {
   stages?: ("bass" | "quality" | "rn")[];
   /** What the learner is told first (X1: meter, key, tonic, pickup, the rhythm skeleton of phrase 1). */
   given?: TranscribeGiven;
+  /**
+   * Wave 5. Checks of the same capstone that must pass (or be revealed) before this one opens (feature
+   * `capstone.check-after`): X2's changes open after its bass, its melody after the changes (contracts §6.6
+   * "stages in that order"). Each id names a check defined earlier in the capstone.
+   */
+  after?: string[];
 }
 /** `content/core/capstones/C2/capstone.ts`: brief, rubric, sessions. Prose lives in `brief.mdx`. */
 export interface CapstoneDef extends CapstoneMeta {

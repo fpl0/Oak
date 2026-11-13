@@ -98,7 +98,7 @@ describe("stage D families in mixed practice", () => {
     ]);
     expect(familyStatus(quality, st, done)).toBe("mastered");
     expect(compositeLine(st, states, defs)).toBe(
-      "In Mixed harmony with 1 other family: two trials whenever it comes up, back to its own sets if it slips.",
+      "In Mixed harmony with 1 other family: two trials whenever it comes up, and its own sets come back if it needs them.",
     );
     expect(compositeLine(states.get("fam.har.cadence"), states, defs)).toBeNull();
   });

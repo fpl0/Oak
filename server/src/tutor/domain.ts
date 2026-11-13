@@ -215,6 +215,105 @@ export interface ReviewFacts {
   ranges: FactRange[];
   /** Share of strong-beat melody notes that are chord tones, 0..1; `null` when there is no melody over chords. */
   chordToneShare: number | null;
+  /** Wave 5: the sections of the per-track `arrange()`, their contrast and the energy curve (C3, C4). */
+  form?: FactForm | null;
+  /** Wave 5: the bass line against the chords and the kick (U08, C3). */
+  bass?: FactBass | null;
+  /** Wave 5: the 12-bar form (C5, X2). */
+  blues?: FactBlues | null;
+  /** Wave 5: swing per track (C5, X2). */
+  swing?: FactSwing[];
+  /** Wave 5: a transcription's checks, stage by stage (X2: bass, changes, melody; ladder L5 phrases, L6 stages). */
+  stages?: FactStage[];
+}
+
+/** Wave 5. One section as the section ribbon prints it. Bars are display bars: 1-based, 0 is a pickup (c4). */
+export interface FactSection {
+  /** "Chorus 2": what the ribbon prints. */
+  name: string;
+  /** "chorus2": the tag in the code's const names. */
+  tag: string;
+  /** "chorus": the section type. */
+  label: string;
+  /** A, B, … by first appearance of the type. */
+  letter: string;
+  bars: [number, number];
+  /** Learner tracks that sound in it. */
+  tracks: string[];
+  /** Mean of the energy curve over the section, 0–1. */
+  energy: number;
+  /** The chords of the section in order of change, with numerals when the key is known (`Am (i)`). */
+  progression: string[];
+}
+
+/** Wave 5. Two sections compared on the contrast axes (`contrastAxes` of @oak/grader). */
+export interface FactContrast {
+  a: string;
+  b: string;
+  axes: string[];
+}
+
+export interface FactForm {
+  kind: "sections" | "inconsistent" | "through";
+  sections: FactSection[];
+  /** The form as letters by first appearance ("ABAB"); a through-composed piece's phrase letters. */
+  letters: string;
+  /** The tracks disagree about the sections (the rule's message), else `null`. */
+  problem: string | null;
+  /** Energy per bar, 0–1, rounded to two places. */
+  energy: number[];
+  /** Each distinct pair of section types, first occurrences, compared. */
+  contrast: FactContrast[];
+}
+
+export interface FactBass {
+  track: string;
+  notes: number;
+  /** Notes per role: root, fifth, octave, third, seventh, approach, other. */
+  roles: Record<string, number>;
+  /** Share of chord changes whose first bass note is the root, 0–1. */
+  rootOnChange: number;
+  /** Approach notes into the next chord, by kind (`chromatic-below`). */
+  approaches: Record<string, number>;
+  /** Share of bass onsets on a kick, and of kicks with a bass note; `null` without a kick. */
+  grooveLock: { lock: number; coverage: number } | null;
+}
+
+export interface FactBlues {
+  /** "standard", "quick-change"; `null` when no full chorus fits. */
+  variant: string | null;
+  turnaround: boolean;
+  /** A jazz blues (quick change with ii–V moves). */
+  jazz: boolean;
+  choruses: number;
+  /** Bars (1-based) that break the closest variant. */
+  wrongBars: number[];
+  /** The chord of each bar of the first chorus, lead-sheet symbols. */
+  bars: (string | null)[];
+  allDominant: boolean;
+}
+
+export interface FactSwing {
+  track: string;
+  /** Long : short of the eighths (1 straight, 2 triplet swing); `null` when not measurable. */
+  ratio: number | null;
+  swung: 8 | 16 | null;
+}
+
+/** Wave 5. One check of a transcription: what the checker measured, never the source. */
+export interface FactStage {
+  check: string;
+  layer: string;
+  /** `bass`, `changes`, `melody`, `quality`, `rn`; `null` for a phrase check. */
+  stage: string | null;
+  /** "phrase 2", "phrases 1-4". */
+  phrase: string;
+  score: number | null;
+  passed: boolean;
+  revealed: boolean;
+  /** The check's pass mark (X2: 0.90 bass, 0.85 changes and melody). */
+  passAt: number | null;
+  open: boolean;
 }
 
 // --- learner -----------------------------------------------------------------------------------

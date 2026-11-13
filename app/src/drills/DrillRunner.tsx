@@ -14,6 +14,7 @@ import {
   OakApiError,
   type Trial,
 } from "@oak/api";
+import { formLetters } from "@oak/content-kit";
 import { labelPitch } from "@oak/theory";
 import { useMachine } from "@xstate/react";
 import { clsx } from "clsx";
@@ -39,7 +40,9 @@ import { useVoice } from "../voice/use-voice.ts";
 import { answerWidgetLabel } from "./answer-label.ts";
 import { drillWidgetFor } from "./answer-widget.tsx";
 import {
+  BASS_LINE_PROMPTS,
   DICTATION_PROMPTS,
+  LINE_STEP_PROMPTS,
   levelMoveText,
   promptOf,
   STEP_PROMPTS,
@@ -64,10 +67,15 @@ import {
   stepSpecOf,
 } from "./harmony.ts";
 import { clearInflight, inflightKey, loadInflight, resumeFromServer } from "./inflight.ts";
-import { LensSwitches } from "./LensSwitches.tsx";
-import { type DrillPurpose, drillMachine, onInnerStep, type ResumeState } from "./machine.ts";
+import { hidesNoteLenses, LensSwitches } from "./LensSwitches.tsx";
 import {
-  answerOf,
+  type DrillPurpose,
+  drillMachine,
+  onInnerStep,
+  type ResumeState,
+  type StepsState,
+} from "./machine.ts";
+import {
   DICTATION_MODE_LABELS,
   type DictationMode,
   debriefTrials,
@@ -78,6 +86,7 @@ import {
   type Surface,
   surfaceOf,
   type TrialOutcome,
+  trialAnswerOf,
   wrongMarks,
 } from "./model.ts";
 import {
@@ -91,14 +100,31 @@ import {
   stagingOf,
   targetMidisOf,
 } from "./plans.ts";
-import { auditionCode, drillDeps, drillImplementations } from "./runtime.ts";
+import { alonePlan, auditionCode, drillDeps, drillImplementations } from "./runtime.ts";
 import { SetSummary } from "./SetSummary.tsx";
 import { SingPanel } from "./SingPanel.tsx";
+import { BarChart, SectionsBar } from "./StageEPanels.tsx";
 import { expectedStaffValue, isStaffTrial, meterOf, staffAnswer } from "./staff.ts";
 import { TapPanel } from "./TapPanel.tsx";
 import { KeyHighlight, TrialStaff } from "./TrialVisual.tsx";
 import type { DrillData } from "./use-drill-data.ts";
 import { usePlanPlayer } from "./use-plan-player.ts";
+import {
+  bassLineCodeOf,
+  bassLineTrialOf,
+  bluesChartOf,
+  formModeOf,
+  foundBassOf,
+  isBassLineTrial,
+  playedSwung,
+  rootsOf,
+  rootsSpecOf,
+  scalePlan,
+  sectionPlan,
+  sectionsOf,
+  wayHomeText,
+  withoutSeventhPlan,
+} from "./wave5.ts";
 
 export interface SetResult {
   drillSessionId: string | null;
@@ -346,41 +372,66 @@ function TrialView({
   const imagining = snap.matches({ resolution: "imagining" });
   const fet = isFetTrial(trial);
   const harmony = isHarmonyTrial(trial);
+  // Rhythm and form families label no pitch: the note lenses would switch nothing on screen, so they are not shown.
+  const unlabelled = hidesNoteLenses(def);
   // Stage D chord dictation: bass → quality → numerals, one step open at a time (the last one is the answer).
   const steps = ctx.steps;
   const lastStep = steps ? steps.order.length - 1 : 0;
-  const step: ChordStep | null = steps
-    ? ((inFeedback ? steps.order[lastStep] : steps.order[Math.min(steps.at, lastStep)]) as ChordStep)
+  // A bass-line dictation (Wave 5) is staged too: the roots under the chords first, then the whole line.
+  const lineStaged = isBassLineTrial(trial);
+  const anyStep = steps
+    ? ((inFeedback ? steps.order[lastStep] : steps.order[Math.min(steps.at, lastStep)]) ?? null)
     : null;
+  const step: ChordStep | null = !lineStaged && anyStep ? (anyStep as ChordStep) : null;
+  const lineStep: "bass" | "line" | null = lineStaged && anyStep ? (anyStep as "bass" | "line") : null;
   const innerStep = !inFeedback && onInnerStep(steps);
-  // Melodic dictation from level 4: written as degrees, in code or on the staff (the learner's choice).
+  // Melodic dictation from level 4: written as degrees, in code or on the staff (the learner's choice); a bass-degree
+  // trial's roots on the pad, or its line as code or on the bass staff (Wave 5).
   const dictModes = dictationModesOf(trial, def);
-  const [dictMode, setDictMode] = useState<DictationMode>(() => preferredDictationMode(dictModes));
+  const [dictMode, setDictMode] = useState<DictationMode>(() =>
+    isBassTrial(trial) ? "degrees" : preferredDictationMode(dictModes),
+  );
+  const bassMode = isBassTrial(trial) && dictModes.length > 0;
+  const lineTrial = bassMode && dictMode !== "degrees" ? bassLineTrialOf(trial) : null;
+  // The trial a written answer is read against (the bass line of a bass trial, else the trial itself).
+  const answerTrial = lineTrial ?? trial;
+  const formMode = formModeOf(trial);
   const surface: Surface =
-    steps && step
+    lineStep === "bass"
       ? {
           kind: "widget",
-          spec: stepSpecOf(trial, step, { syllables: solfegeShown }) as NonNullable<
-            ReturnType<typeof stepSpecOf>
-          >,
+          spec: rootsSpecOf(trial, solfegeShown) as NonNullable<ReturnType<typeof rootsSpecOf>>,
         }
-      : dictModes.length > 0
-        ? dictationSurface(trial, def, dictMode, { solfege })
-        : surfaceOf(trial, def, { solfege });
+      : lineStep === "line" && dictModes.length === 0
+        ? surfaceOf(trial, def, { solfege })
+        : steps && step
+          ? {
+              kind: "widget",
+              spec: stepSpecOf(trial, step, { syllables: solfegeShown }) as NonNullable<
+                ReturnType<typeof stepSpecOf>
+              >,
+            }
+          : dictModes.length > 0
+            ? dictationSurface(trial, def, dictMode, { solfege })
+            : surfaceOf(trial, def, { solfege });
   const spec = surface.kind === "widget" ? surface.spec : null;
   // One value per step (or per dictation mode), so moving on keeps what was written.
-  const slotKey = step ?? (dictModes.length > 0 ? dictMode : "main");
+  const slotKey =
+    step ?? (lineStep === "bass" ? "bass" : null) ?? (dictModes.length > 0 ? dictMode : (lineStep ?? "main"));
   const [values, setValues] = useState<Record<string, AnswerValue>>({});
   const value: AnswerValue | null =
     values[slotKey] ?? (spec ? (emptyValue(spec as never) as AnswerValue) : null);
   const setValue = (v: AnswerValue) => setValues((prev) => ({ ...prev, [slotKey]: v }));
   const qualityCount = step === "quality" ? chordSlotsOf(trial).length : 0;
-  const dictation = isDictation(trial, def.generator);
+  const dictation =
+    isDictation(trial, def.generator) ||
+    lineTrial !== null ||
+    (lineStaged && lineStep === "line" && spec?.ui !== "degree-pad");
   // A staff answer is graded (and played back as "mine") as the code it spells (staff.ts).
   const staffTrial = spec?.ui === "staff-input";
   const mine =
     dictation && !inFeedback
-      ? mineOf(trial, staffTrial ? staffAnswer(trial, String(value ?? ""))?.text?.[0] : value)
+      ? mineOf(answerTrial, staffTrial ? staffAnswer(answerTrial, String(value ?? ""))?.text?.[0] : value)
       : null;
   // A full pad checks itself, except in dictation (the learner plays theirs back first) and in a staged trial
   // (each step is checked with Enter).
@@ -410,6 +461,25 @@ function TrialView({
   const setLevel = ctx.session?.levels[trial.family] ?? trial.level;
   const shownLevel = props.purpose === "practice" ? trial.level : setLevel;
   const replayLimit = trial.cue.replays;
+  // Wave 5, stage E: after every answer, the thing alone and the thing in context (the passage again), and where
+  // it helps the other version (the other feel, the chord without its seventh) or the scale it was in.
+  const stageEFamily = STAGE_E_LISTEN.has(trial.family) || fet;
+  const aloneOk = !harmony && stageEFamily && alonePlan(trial) !== null;
+  const aloneLabel = ALONE_LABELS[trial.family] ?? (fet ? "The note alone" : "Alone");
+  const otherLabel =
+    trial.family === "fam.rhy.swing"
+      ? playedSwung(trial)
+        ? "Hear it straight"
+        : "Hear it swung"
+      : withoutSeventhPlan(trial) !== null
+        ? "Without its seventh"
+        : null;
+  const scaleOk = def.generator === "key-mode" && scalePlan(trial) !== null;
+  const contextOk = harmony || stageEFamily || formMode !== null || isBarChartFamily(def.generator);
+  const sections = formMode ? sectionsOf(trial) : [];
+  // After a stage E answer the passage again is the thing in context (R, and K as for chords).
+  const contextAgain = snap.matches("feedback") && !harmony && contextOk;
+  const chart = bluesChartOf(trial, def);
 
   // Focus: the pad while answering (widgets focus themselves), the region otherwise so the keys keep working.
   // Dev only (tree-shaken from production): the trial on screen, for the browser suites' right answers.
@@ -422,6 +492,17 @@ function TrialView({
         : null;
       // A staged trial's three answers as @oak/theory reads them (bass degrees, qualities, numerals).
       (globalThis as { __oakDrillSteps?: unknown }).__oakDrillSteps = stagedKeyOf(trial);
+      // Wave 5: a bass trial's roots and its line as the learner would write it in code.
+      const line = isBassTrial(trial) ? bassLineTrialOf(trial) : null;
+      const ak = line?.params.answerKey as { key: KeySpec; octave: number } | undefined;
+      (globalThis as { __oakDrillBassLine?: unknown }).__oakDrillBassLine =
+        line && ak && bassLineCodeOf(trial)
+          ? {
+              code: `${bassLineCodeOf(trial)}.scale("${ak.key.tonic}${ak.octave}:${ak.key.mode}")`,
+              roots: rootsOf(trial),
+              staged: isBassLineTrial(trial),
+            }
+          : null;
     }
   }, [trial]);
 
@@ -497,8 +578,9 @@ function TrialView({
       if (d === null) break;
       heard.push(d);
     }
-    if (heard.length > 0) setValues((prev) => ({ ...prev, main: heard }));
-  }, [sungPart]);
+    if (heard.length > 0)
+      setValues((prev) => ({ ...prev, [lineStaged ? "bass" : bassMode ? "degrees" : "main"]: heard }));
+  }, [sungPart, bassMode, lineStaged]);
 
   const complete = (v: AnswerValue | null): boolean => {
     if (!spec || v === null) return false;
@@ -516,8 +598,8 @@ function TrialView({
       step === "quality"
         ? { qualities: v as ChordQuality[] }
         : spec.ui === "staff-input"
-          ? staffAnswer(trial, v as string)
-          : answerOf(spec, v, (trial.expected as Answer).text?.length ?? 1, trial.expected as Answer);
+          ? staffAnswer(answerTrial, v as string)
+          : trialAnswerOf(trial, spec, v);
     if (answer === null) return;
     // An inner step (bass, quality) is checked on its own; the last step is the trial's answer.
     send(innerStep ? { type: "STEP_CHECK", answer } : { type: "SUBMIT", answer });
@@ -617,9 +699,36 @@ function TrialView({
       keys: "K",
       scope: "answer-pad",
       group: "Drills",
-      description: "Hear it in its key",
-      when: () => snap.matches("feedback") && harmony,
-      run: () => send({ type: "AUDITION", what: "context" }),
+      description: harmony ? "Hear it in its key" : "Hear it in context",
+      when: () => snap.matches("feedback") && contextOk,
+      run: () => send({ type: "AUDITION", what: harmony ? "context" : "again" }),
+    },
+    {
+      id: "drill-alone",
+      keys: "L",
+      scope: "answer-pad",
+      group: "Drills",
+      description: `${aloneLabel}`,
+      when: () => snap.matches("feedback") && aloneOk,
+      run: () => send({ type: "AUDITION", what: "alone" }),
+    },
+    {
+      id: "drill-other",
+      keys: "O",
+      scope: "answer-pad",
+      group: "Drills",
+      description: otherLabel ?? "The other version",
+      when: () => snap.matches("feedback") && otherLabel !== null,
+      run: () => send({ type: "AUDITION", what: "other" }),
+    },
+    {
+      id: "drill-scale",
+      keys: "M",
+      scope: "answer-pad",
+      group: "Drills",
+      description: "Hear the scale it was in",
+      when: () => snap.matches("feedback") && scaleOk,
+      run: () => send({ type: "AUDITION", what: "scale" }),
     },
     {
       id: "drill-heard",
@@ -658,7 +767,11 @@ function TrialView({
         (b.id !== "drill-skip-sung" || isSing || trial.params.sungResolution === true || sungPartOffered) &&
         (b.id !== "drill-play-mine" || dictation) &&
         (b.id !== "drill-sing-part" || sungPartOffered) &&
-        (!["drill-bass", "drill-arpeggio", "drill-context"].includes(b.id) || harmony) &&
+        (!["drill-bass", "drill-arpeggio"].includes(b.id) || harmony) &&
+        (b.id !== "drill-context" || contextOk) &&
+        (b.id !== "drill-alone" || aloneOk) &&
+        (b.id !== "drill-other" || otherLabel !== null) &&
+        (b.id !== "drill-scale" || scaleOk) &&
         (b.id !== "drill-heard" || imagining),
     ),
   );
@@ -667,9 +780,11 @@ function TrialView({
   const expectedValue = !spec
     ? null
     : spec.ui === "staff-input"
-      ? expectedStaffValue(trial)
-      : expectedValueOf(spec, expected);
-  const stepResult = steps && step ? steps.results[step] : undefined;
+      ? expectedStaffValue(answerTrial)
+      : formMode && spec.ui === "form"
+        ? formMode.expected
+        : expectedValueOf(spec, expected);
+  const stepResult = steps && (step || lineStep) ? steps.results[(step ?? lineStep) as ChordStep] : undefined;
   const feedback: AnswerFeedback = innerStep
     ? stepResult && !stepResult.passed && stepResult.tries > 0
       ? { state: "wrong", marks: stepResult.marks.map((ok, part) => ({ part, ok })) }
@@ -685,6 +800,7 @@ function TrialView({
               ...(spec.ui === "staff-input" ? {} : { marks: wrongMarks(spec, value, expectedValue) }),
             }
           : { state: "wrong" };
+  // The answers registry draws every widget; the form answer has a runner fallback until the registry has one.
   const Widget = spec ? drillWidgetFor(spec) : null;
   const chordLabels = harmony && inFeedback ? slotLabels(trial, lenses.chords.shown) : [];
   const stage = imagining
@@ -712,11 +828,20 @@ function TrialView({
             {props.title}
           </p>
           <h2 className="text-h3" data-testid="trial-prompt">
-            {dictModes.length > 0 ? DICTATION_PROMPTS[dictMode] : promptOf(trial, def)}
+            {bassMode
+              ? BASS_LINE_PROMPTS[dictMode]
+              : dictModes.length > 0
+                ? DICTATION_PROMPTS[dictMode]
+                : promptOf(trial, def)}
           </h2>
           {steps && step && !inFeedback && (
             <p className="mt-0.5 text-sm text-text-2" data-testid="step-prompt">
               {STEP_PROMPTS[step]}
+            </p>
+          )}
+          {lineStep && !inFeedback && (
+            <p className="mt-0.5 text-sm text-text-2" data-testid="step-prompt">
+              {LINE_STEP_PROMPTS[lineStep]}
             </p>
           )}
         </div>
@@ -732,7 +857,13 @@ function TrialView({
       </header>
 
       <Card
-        className="flex min-h-36 flex-col items-center justify-center gap-3 p-5 text-center"
+        className={clsx(
+          "flex flex-col items-center justify-center gap-3 p-5 text-center",
+          // Once answered, a panel with nothing to look at gives its height to the answer and the listening.
+          inFeedback && !chart && sections.length === 0 && trial.params.showStaff !== true
+            ? "min-h-24"
+            : "min-h-36",
+        )}
         data-testid="stimulus-panel"
       >
         <div className="flex items-center gap-2 text-text-2" aria-live="polite">
@@ -758,6 +889,26 @@ function TrialView({
           </span>
         </div>
         {trial.params.showStaff === true && <TrialStaff trial={trial} />}
+        {chart && (
+          <BarChart
+            chart={chart}
+            revealed={inFeedback}
+            onPlayBar={(bar) => send({ type: "AUDITION", what: "part", part: bar })}
+          />
+        )}
+        {sections.length > 0 && inFeedback && (
+          <SectionsBar
+            sections={sections}
+            revealed={inFeedback}
+            yours={
+              inFeedback && ctx.captured.answer?.sections
+                ? formLetters(ctx.captured.answer.sections).split("")
+                : null
+            }
+            playing={ctx.audition === "part" ? ctx.auditionPart : null}
+            onPlay={(i) => send({ type: "AUDITION", what: "part", part: i })}
+          />
+        )}
         {showKey !== null && <KeyHighlight highlight={showKey} />}
         {inFeedback && (keyText(trial) || harmony || instrumentsOf(trial).length > 0) && (
           <p className="text-sm text-text-3" data-testid="trial-details">
@@ -784,17 +935,24 @@ function TrialView({
       >
         {steps && (
           <div className="flex flex-col gap-2">
-            <StepTrack steps={steps} done={inFeedback} lastRight={outcome?.result.correct ?? true} />
-            {!inFeedback && step !== "quality" && <StepsSoFar trial={trial} steps={steps} />}
+            <StepTrack
+              steps={steps}
+              done={inFeedback}
+              lastRight={outcome?.result.correct ?? true}
+              {...(lineStaged ? { titles: LINE_STEP_TITLES } : {})}
+            />
+            {!inFeedback && step !== "quality" && !lineStaged && <StepsSoFar trial={trial} steps={steps} />}
+            {!inFeedback && lineStep === "line" && <RootsFound trial={trial} steps={steps} />}
           </div>
         )}
-        {dictModes.length > 0 && !inFeedback && (
+        {dictModes.length > 0 && !inFeedback && lineStep !== "bass" && (
           <DictationModeSwitch
             modes={dictModes}
             mode={dictMode}
+            labels={bassMode ? BASS_MODE_LABELS : undefined}
             onChange={(m) => {
               setDictMode(m);
-              rememberDictationMode(m);
+              if (!bassMode) rememberDictationMode(m);
             }}
           />
         )}
@@ -880,9 +1038,9 @@ function TrialView({
             autoFocus
           />
         )}
-        {innerStep && stepResult && !stepResult.passed && stepResult.tries > 0 && step && (
+        {innerStep && stepResult && !stepResult.passed && stepResult.tries > 0 && (step || lineStep) && (
           <p className="text-sm text-text-2" data-testid="step-retry" role="status">
-            {stepRetryText(step, stepResult.marks)}
+            {stepRetryText(lineStep ? "bass" : (step as ChordStep), stepResult.marks)}
           </p>
         )}
         {spec &&
@@ -901,9 +1059,35 @@ function TrialView({
                   chordSymbols: lenses.chords.shown.chordSymbols,
                   romanNumerals: lenses.chords.shown.romanNumerals,
                 },
-                ...(staffTrial ? { staff: { meter: meterOf(trial), sound: "piano" } } : {}),
+                ...(staffTrial ? { staff: { meter: meterOf(answerTrial), sound: "piano" } } : {}),
+                // Form by ear: a section block plays that section (P, or a click); a replay of part of it.
+                ...(formMode && sections.length > 0 && !inFeedback
+                  ? {
+                      slots: {
+                        play: (i: number) => {
+                          const plan = sectionPlan(trial, i);
+                          if (!plan) return;
+                          send({ type: "LISTENED" });
+                          player.play(`section${i}`, plan);
+                        },
+                      },
+                    }
+                  : {}),
                 ...(harmony && keyOfTrial(trial)
-                  ? { harmony: { key: keyOfTrial(trial) as KeySpec, bpm: Number(trial.params.bpm ?? 90) } }
+                  ? {
+                      harmony: {
+                        key: keyOfTrial(trial) as KeySpec,
+                        bpm: Number(trial.params.bpm ?? 90),
+                        // c8: in the numerals step, the numerals that fit the bass the learner found are lit
+                        // (in minor too: ♭3 ♭6 ♭7 are degrees like any other).
+                        ...(step === "rn" && steps
+                          ? (() => {
+                              const found = foundBassOf(steps.results.bass, stagedKeyOf(trial)?.bass ?? []);
+                              return found ? { bassDegrees: found } : {};
+                            })()
+                          : {}),
+                      },
+                    }
                   : {}),
               }}
             >
@@ -932,7 +1116,7 @@ function TrialView({
 
       {dictation && (answering || presenting) && (
         <DictationTools
-          trial={trial}
+          trial={answerTrial}
           mine={mine}
           player={player}
           onSourceHeard={() => send({ type: "LISTENED" })}
@@ -942,7 +1126,11 @@ function TrialView({
       {outcome && (
         <FeedbackLine
           outcome={outcome}
-          text={expectedText(spec, expected, data.solfege === "syllables")}
+          text={
+            lineTrial && bassLineCodeOf(trial)
+              ? `${bassLineCodeOf(trial)}, roots ${expectedText(null, expected) ?? ""}`
+              : expectedText(spec, expected, data.solfege === "syllables")
+          }
           def={def}
           trial={trial}
           resolving={resolving || imagining}
@@ -954,6 +1142,15 @@ function TrialView({
         />
       )}
       {outcome && isSing && inFeedback && <RecheckHint />}
+      {fet &&
+        outcome &&
+        !outcome.result.skipped &&
+        inFeedback &&
+        wayHomeText(trial, data.solfege === "syllables") && (
+          <p className="text-sm text-text-2" data-testid="way-home">
+            The way home: {wayHomeText(trial, data.solfege === "syllables")}
+          </p>
+        )}
       {chordLabels.length > 0 && (
         <ChordStrip
           labels={chordLabels}
@@ -969,8 +1166,16 @@ function TrialView({
               onClick={() =>
                 inFeedback ? send({ type: "AUDITION", what: "again" }) : send({ type: "REPLAY" })
               }
+              {...(contextAgain ? { "data-testid": "hear-in-context" } : {})}
             >
-              {isTap || isSing ? (inFeedback ? "Hear it again" : "Once more") : "Hear it again"} <Kbd>R</Kbd>
+              {contextAgain
+                ? "Hear it in context"
+                : isTap || isSing
+                  ? inFeedback
+                    ? "Hear it again"
+                    : "Once more"
+                  : "Hear it again"}{" "}
+              <Kbd>R</Kbd>
             </Button>
           )}
           {hasCue && (answering || snap.matches({ feedback: "idle" })) && (
@@ -1003,6 +1208,21 @@ function TrialView({
               </Button>
             </>
           )}
+          {snap.matches("feedback") && aloneOk && (
+            <Button onClick={() => send({ type: "AUDITION", what: "alone" })} data-testid="hear-alone">
+              {aloneLabel} <Kbd>L</Kbd>
+            </Button>
+          )}
+          {snap.matches("feedback") && otherLabel && (
+            <Button onClick={() => send({ type: "AUDITION", what: "other" })} data-testid="hear-other">
+              {otherLabel} <Kbd>O</Kbd>
+            </Button>
+          )}
+          {snap.matches("feedback") && scaleOk && (
+            <Button onClick={() => send({ type: "AUDITION", what: "scale" })} data-testid="hear-scale">
+              The scale <Kbd>M</Kbd>
+            </Button>
+          )}
           {bassAloneNow && (
             <Button onClick={() => send({ type: "BASS_ALONE" })} data-testid="hear-bass-now">
               Bass alone <Kbd>B</Kbd>
@@ -1013,9 +1233,9 @@ function TrialView({
               Sing the roots <Kbd>V</Kbd>
             </Button>
           )}
-          {(answering || presenting) && innerStep && step && (
+          {(answering || presenting) && innerStep && (step || lineStep) && (
             <Button variant="ghost" onClick={() => send({ type: "STEP_REVEAL" })} data-testid="show-step">
-              Show the {step === "bass" ? "bass" : "qualities"}
+              Show the {lineStep ? "roots" : step === "bass" ? "bass" : "qualities"}
             </Button>
           )}
           {answering && spec && !innerStep && (
@@ -1037,7 +1257,7 @@ function TrialView({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <LensSwitches lenses={lenses} chords={harmony} />
+          {!unlabelled && <LensSwitches lenses={lenses} chords={harmony} />}
           {(answering || (presenting && steps !== null)) && spec && !autoSubmit && (
             <Button
               variant="primary"
@@ -1045,7 +1265,11 @@ function TrialView({
               onClick={() => submit()}
               data-testid="check-answer"
             >
-              {innerStep && step ? `Check the ${step === "bass" ? "bass" : "qualities"}` : "Check"}{" "}
+              {innerStep && lineStep
+                ? "Check the roots"
+                : innerStep && step
+                  ? `Check the ${step === "bass" ? "bass" : "qualities"}`
+                  : "Check"}{" "}
               {spec.ui === "code" ? null : <Kbd tone="inverse">Enter</Kbd>}
             </Button>
           )}
@@ -1194,7 +1418,9 @@ function FeedbackLine({
                   : outcome.resolutionCredit !== null
                     ? outcome.resolutionCredit >= 0.8
                       ? "Sung home, in tune."
-                      : "Sung home. The trace shows where it drifted."
+                      : outcome.resolutionCredit >= 0.3
+                        ? "Sung home. The trace shows where it drifted."
+                        : "Sung. The trace shows where it was against the way home."
                     : "Resolution heard."}
         </p>
       )}
@@ -1254,6 +1480,37 @@ function loneChordText(
 
 const DICTATION_MODE_KEY = "oak.drills.dictation-mode";
 
+/** A bass trial's answer modes: the roots on the pad, or the line as code or on the bass staff. */
+const BASS_MODE_LABELS: Readonly<Record<DictationMode, string>> = {
+  degrees: "Roots",
+  code: "Line as code",
+  staff: "Line on the staff",
+};
+
+/** A bass-line dictation's steps. */
+const LINE_STEP_TITLES: Readonly<Record<string, string>> = { bass: "Roots", line: "Line" };
+
+/** The roots settled in step 1 of a bass-line dictation, shown while the line is written. */
+function RootsFound({ trial, steps }: { trial: Trial; steps: StepsState }) {
+  const r = steps.results.bass;
+  const roots: string[] = r?.revealed ? rootsOf(trial) : (r?.answer?.degrees ?? rootsOf(trial));
+  return (
+    <p className="text-sm text-text-2" data-testid="roots-found">
+      Roots: {roots.map((d) => String(d).replace(/^b/, "♭").replace(/^#/, "♯")).join(" · ")}. Now the line:
+      the root on beat 1, then what moves it on.
+    </p>
+  );
+}
+
+/** Stage E families with their own after-answer listening (Wave 5). */
+const STAGE_E_LISTEN = new Set(["fam.rhy.swing", "fam.rhy.groove-lock", "fam.key.mode"]);
+const ALONE_LABELS: Readonly<Record<string, string>> = {
+  "fam.rhy.swing": "Hats alone",
+  "fam.rhy.groove-lock": "Kick and bass",
+  "fam.key.mode": "The tune alone",
+};
+const isBarChartFamily = (generator: string): boolean => generator === "form-blues";
+
 /** The learner's last dictation mode (a per-viewer convenience; storage may be unavailable). */
 function preferredDictationMode(modes: readonly DictationMode[]): DictationMode {
   let saved: string | null = null;
@@ -1276,10 +1533,12 @@ function rememberDictationMode(mode: DictationMode): void {
 function DictationModeSwitch({
   modes,
   mode,
+  labels,
   onChange,
 }: {
   modes: readonly DictationMode[];
   mode: DictationMode;
+  labels?: Readonly<Record<DictationMode, string>> | undefined;
   onChange(m: DictationMode): void;
 }) {
   return (
@@ -1308,7 +1567,7 @@ function DictationModeSwitch({
               : "border-border bg-surface text-text-2 hover:text-text",
           )}
         >
-          {DICTATION_MODE_LABELS[m]}
+          {(labels ?? DICTATION_MODE_LABELS)[m]}
         </button>
       ))}
     </div>

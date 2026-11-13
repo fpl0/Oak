@@ -13,10 +13,11 @@ import {
   OakApiError,
   type UnlockableId,
 } from "@oak/api";
-import { keyEstimate, type Normalized, normalize } from "@oak/grader";
+import { type FormView, formView, keyEstimate, type Normalized, normalize } from "@oak/grader";
 import type { Recording } from "@oak/strudel";
 import { sideOfCapstone } from "../album/model.ts";
 import { callApi } from "../lib/api.ts";
+import { formSectionsOf } from "../lib/form-view.ts";
 import { graderHost } from "../lib/grader-client.ts";
 import { anchorsOf, type BarAnchor } from "./anchors.ts";
 
@@ -34,6 +35,8 @@ export interface CheckOutcome {
   analysis: AnalysisSummary | null;
   anchors: Record<string, BarAnchor | null>;
   key: KeySpec | null;
+  /** The piece's sections (one `arrange()` per labelled track, contracts §6.3); `null` when it does not evaluate. */
+  form: FormView | null;
 }
 
 export function lintFor(def: CapstoneDef, unlocked: ReadonlySet<UnlockableId>) {
@@ -94,6 +97,7 @@ export async function checkPiece(
     signal,
   );
   const analysis = n ? pieceAnalysis(n, { code, meter: def.meter, key, bars }) : null;
+  const form = n ? safeFormView(n, code, bars) : null;
   const unmet = new Set((result.rubric ?? []).filter((r) => !r.ok).map((r) => r.ruleId));
   const details: Record<string, string | null> = {};
   for (const r of result.rubric ?? [])
@@ -104,9 +108,19 @@ export async function checkPiece(
     n,
     bars,
     analysis,
-    anchors: anchorsOf(brief.rubric, unmet, n, bars, details),
+    anchors: anchorsOf(brief.rubric, unmet, n, bars, details, formSectionsOf(form)),
     key,
+    form,
   };
+}
+
+/** The form view of a piece; a view that cannot be read (an odd AST) is no sections, never a failed check. */
+function safeFormView(n: Normalized, code: string, bars: number): FormView | null {
+  try {
+    return formView(n, { code, bars });
+  } catch {
+    return null;
+  }
 }
 
 /** The piece without a rubric (a transcription's release): its first pass, length, analysis and key. */

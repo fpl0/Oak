@@ -16,11 +16,13 @@ import type {
   FactDeck,
   FamilyDef,
   FlavourKit,
+  KeySpec,
   LessonDef,
   LevelParams,
   Matcher,
   MilestoneDef,
   PitchMode,
+  RubricRule,
   SkillDef,
   SongDef,
   StepDef,
@@ -28,7 +30,15 @@ import type {
   ToolEntry,
   UnitDef,
 } from "./schema/index.ts";
-import { CODE_KINDS, HINTLESS_KINDS, STEP_EXERCISE_KINDS } from "./schema/index.ts";
+import {
+  CODE_KINDS,
+  FORM_SECTION_NAMES,
+  formLetters,
+  HINTLESS_KINDS,
+  MINOR_THIRD_MODES,
+  MODE_DEGREES,
+  STEP_EXERCISE_KINDS,
+} from "./schema/index.ts";
 import {
   BandDefSchema,
   CanDoDefSchema,
@@ -197,6 +207,7 @@ export function checkExercise(
   }
   issues.push(...checkWave3(ex, path));
   issues.push(...checkWave4(ex, path, where));
+  issues.push(...checkWave5(ex, path));
   if (ex.kind === "predict" && ex.mode !== "hum" && ex.correct === undefined) {
     issues.push({
       path: `${path}.correct`,
@@ -440,6 +451,162 @@ function checkWave4(ex: Exercise, path: string, where: "lesson" | "capstone" | "
   return issues;
 }
 
+/** Every rubric rule an exercise carries: a Make's or brief's rubric, a rubric matcher (inside `all` too). */
+function rubricRulesOf(ex: Exercise): { rule: RubricRule; path: string }[] {
+  const out: { rule: RubricRule; path: string }[] = [];
+  const fromMatcher = (m: Matcher, p: string): void => {
+    if (m.m === "rubric")
+      for (const [i, r] of m.rules.entries()) out.push({ rule: r, path: `${p}.rules[${i}]` });
+    if (m.m === "all") for (const [i, x] of m.of.entries()) fromMatcher(x, `${p}.of[${i}]`);
+  };
+  if (ex.kind === "code-make" || ex.kind === "compose-brief")
+    for (const [i, r] of ex.rubric.entries()) out.push({ rule: r, path: `.rubric[${i}]` });
+  if ("matcher" in ex && ex.matcher) fromMatcher(ex.matcher, ".matcher");
+  if (ex.kind === "parsons")
+    for (const [i, r] of (ex.accept.rubric ?? []).entries())
+      out.push({ rule: r, path: `.accept.rubric[${i}]` });
+  return out;
+}
+function controlsMatchersIn(
+  m: Matcher | undefined,
+  p: string,
+): { m: Extract<Matcher, { m: "controls" }>; path: string }[] {
+  if (!m) return [];
+  if (m.m === "controls") return [{ m, path: p }];
+  if (m.m === "all") return m.of.flatMap((x, i) => controlsMatchersIn(x, `${p}.of[${i}]`));
+  return [];
+}
+
+/**
+ * Structural rules of the Wave 5 additions (form answers, the bar grid, the scale builder, the controls
+ * matcher, the bass-line rule, section references on rules).
+ */
+function checkWave5(ex: Exercise, path: string): ContentIssue[] {
+  const issues: ContentIssue[] = [];
+  const add = (p: string, rule: string, message: string) =>
+    issues.push({ path: `${path}${p}`, rule, message });
+  if ("answer" in ex && (ex.kind === "identify" || ex.kind === "fact" || ex.kind === "dictation")) {
+    const ui = ex.answer;
+    const correct = "correct" in ex ? ex.correct : undefined;
+    if (ui.ui === "form") {
+      const got = correct?.sections;
+      if (!got || got.length !== ui.sections)
+        add(".correct.sections", "form.correct", `one section label per section (${ui.sections})`);
+      if (ui.sectionBars && ui.sectionBars.length !== ui.sections)
+        add(".answer.sectionBars", "form.section-bars", "sectionBars has one entry per section");
+      for (const x of got ?? []) {
+        const ok =
+          ui.vocabulary === "letters"
+            ? /^[A-Z]$/.test(x)
+            : (ui.vocabulary as readonly string[]).includes(x.replace(/\d+$/, ""));
+        if (!ok) add(".correct.sections", "form.vocabulary", `"${x}" is not in the answer's vocabulary`);
+      }
+      if (ui.vocabulary === "letters" && got && got.join("") !== formLetters(got))
+        add(".correct.sections", "form.letters", "letters go by first appearance: A first, then B, …");
+      if (ui.vocabulary !== "letters")
+        for (const v of ui.vocabulary)
+          if (!(FORM_SECTION_NAMES as readonly string[]).includes(v))
+            add(".answer.vocabulary", "form.vocabulary", `"${v}" is not a section name`);
+    }
+    if (ui.ui === "bar-grid") {
+      const entries = ui.entry === "rn" ? correct?.rn : correct?.text;
+      if (!entries || entries.length !== ui.bars)
+        add(
+          `.correct.${ui.entry === "rn" ? "rn" : "text"}`,
+          "bar-grid.correct",
+          `one ${ui.entry === "rn" ? "numeral" : "chord symbol"} per bar (${ui.bars})`,
+        );
+      for (const b of ui.given ?? [])
+        if (b > ui.bars) add(".answer.given", "bar-grid.given", `bar ${b} is outside the chart`);
+    }
+    if (ui.ui === "scale-builder") {
+      const d = correct?.degrees ?? [];
+      if (d.length < 2 || !d.includes("1"))
+        add(".correct.degrees", "scale-builder.correct", "a scale has home (1) and at least one more degree");
+      if (duplicates(d).length) add(".correct.degrees", "scale-builder.correct", "each degree once");
+      if (ui.input === "degrees" && ui.palette)
+        for (const x of d)
+          if (!ui.palette.includes(x))
+            add(".answer.palette", "scale-builder.palette", `degree ${x} is an answer but not on the pad`);
+    }
+  }
+  const controls = [
+    ...("matcher" in ex ? controlsMatchersIn(ex.matcher, ".matcher") : []),
+    ...(ex.kind === "staff-write" && ex.expect.e === "events"
+      ? controlsMatchersIn(ex.expect.matcher, ".expect.matcher")
+      : []),
+  ];
+  for (const { m, path: p } of controls) {
+    for (const id of duplicates(m.controls.map((c) => c.control)))
+      add(`${p}.controls`, "controls.unique", `control "${id}" is listed twice`);
+    if (!["code-modify", "code-fill", "error-hunt", "dictation"].includes(ex.kind))
+      add(
+        p,
+        "controls.kind",
+        "a controls matcher grades code: code-modify, code-fill, error-hunt or a by-ear dictation",
+      );
+  }
+  for (const { rule: r, path: p } of rubricRulesOf(ex)) {
+    if (r.section && (r.rule === "contrast" || r.rule === "key-change"))
+      add(`${p}.section`, "rubric.section", `${r.rule} names its sections itself (a, b / at)`);
+    if (r.section && typeof r.section === "object" && "bars" in r.section) {
+      const [a, b] = r.section.bars;
+      if (a < 1 || a > b) add(`${p}.section`, "rubric.section", "bars is [from, to], 1-based, from ≤ to");
+    }
+    if (r.rule === "bass-line" && !r.roots && !r.members && !r.approach)
+      add(p, "rubric.bass-line", "say what the bass is held to: roots, members or approach");
+    if (r.rule === "degree-set" && !r.subsetOf && !r.contains && !r.anyOf)
+      add(p, "rubric.degree-set", "say what is asked: subsetOf, contains or anyOf");
+  }
+  return issues;
+}
+
+/**
+ * Wave 5. In a key whose 3rd is ♭3 (the minors, the minor pentatonic, the blues; `MINOR_THIRD_MODES`), a
+ * degree pad offers the key's own degrees: ♭3, never 3, and every degree of the right answer is on it; a sung
+ * degree target is spelled the same way (do-based minor: me, le, te). `key` is the exercise's or the lesson's.
+ */
+export function checkMinorDegrees(ex: Exercise, key: KeySpec, path: string): ContentIssue[] {
+  const issues: ContentIssue[] = [];
+  if (!MINOR_THIRD_MODES.includes(key.mode)) return issues;
+  const own = MODE_DEGREES[key.mode];
+  for (const e of flattenExercise(ex)) {
+    const k = e.key ?? key;
+    if (!MINOR_THIRD_MODES.includes(k.mode)) continue;
+    const pads: { ui: Extract<Exercise, { kind: "identify" }>["answer"]; p: string }[] = [];
+    if ("answer" in e && e.answer.ui === "degree-pad") pads.push({ ui: e.answer, p: ".answer" });
+    if (e.kind === "dictation")
+      for (const [st, ui] of Object.entries(e.stageAnswers ?? {}))
+        if (ui?.ui === "degree-pad") pads.push({ ui, p: `.stageAnswers.${st}` });
+    for (const { ui, p } of pads) {
+      if (ui.ui !== "degree-pad") continue;
+      if (ui.set.includes("3") || !ui.set.includes("b3"))
+        issues.push({
+          path: `${path}${p}.set`,
+          rule: "minor.degree-pad",
+          message: `in ${k.tonic} ${k.mode} the pad offers ♭3 (b3), not 3`,
+        });
+      const correct = e.kind === "identify" || e.kind === "fact" ? e.correct.degrees : undefined;
+      for (const d of correct ?? [])
+        if (!ui.set.includes(d))
+          issues.push({
+            path: `${path}${p}.set`,
+            rule: "minor.degree-pad",
+            message: `degree ${d} is in the answer but not on the pad`,
+          });
+    }
+    if (e.kind === "sing" && e.target.from === "degrees")
+      for (const d of e.target.degrees)
+        if (d === "3" && !own.includes("3"))
+          issues.push({
+            path: `${path}.target.degrees`,
+            rule: "minor.sung-degree",
+            message: `in ${k.tonic} ${k.mode} the 3rd is ♭3 (b3, sung "me")`,
+          });
+  }
+  return issues;
+}
+
 // --- lessons ------------------------------------------------------------------------------------
 
 function checkStep(step: StepDef, i: number, def: LessonDef): ContentIssue[] {
@@ -477,6 +644,7 @@ function checkStep(step: StepDef, i: number, def: LessonDef): ContentIssue[] {
     });
   }
   if (step.exercise) issues.push(...checkExercise(step.exercise, `${path}.exercise`, "lesson"));
+  if (step.exercise) issues.push(...checkMinorDegrees(step.exercise, def.key, `${path}.exercise`));
   if (step.ui.leadSheet && step.ui.panels.staff !== "lead")
     issues.push({
       path: `${path}.ui.leadSheet`,
@@ -761,6 +929,14 @@ export function defineUnit(def: UnitDef): UnitDef {
         rule: "unit.track",
         message: `unit ${u.id} is not in track "${u.track}"`,
       });
+    u.lessons.forEach((l, i) => {
+      if (l.side && (u.track === "core" || !l.optional))
+        issues.push({
+          path: `lessons[${i}].side`,
+          rule: "unit.side-lesson",
+          message: "a side lesson is an optional lesson of a track (optional: true, outside the core)",
+        });
+    });
     if (u.checkpoint && u.track === "core" && !u.checkpoint.startsWith(u.id))
       issues.push({
         path: "checkpoint",
@@ -1033,6 +1209,16 @@ export function defineCapstone(def: CapstoneDef): CapstoneDef {
             rule: "capstone.check-stages",
             message: "chord stages run bass → quality → rn, once each",
           });
+        const earlier = c.sessionDefs
+          .slice(0, i + 1)
+          .flatMap((t, k) => (t.checks ?? []).slice(0, k === i ? j : undefined).map((y) => y.id));
+        for (const a of x.after ?? [])
+          if (!earlier.includes(a))
+            issues.push({
+              path: `${p}.after`,
+              rule: "capstone.check-after",
+              message: `"${a}" is not a check defined before this one`,
+            });
         if (Array.isArray(x.phrase) && x.phrase[0] > x.phrase[1])
           issues.push({
             path: `${p}.phrase`,

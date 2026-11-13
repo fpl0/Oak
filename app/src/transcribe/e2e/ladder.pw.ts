@@ -126,12 +126,12 @@ test("L1: a wrong groove fails bar by bar, the right one passes and shows the so
   const id = page.url().split("/").pop() as string;
 
   // Keyboard: loop bar 1, play, hear mine, stop.
-  await expect(page.getByTestId("play")).toBeEnabled({ timeout: 30_000 });
+  await expect(page.getByTestId("transport-play")).toBeEnabled({ timeout: 30_000 });
   await page.getByTestId("transcribe-project").focus();
   await page.keyboard.press("l");
   await expect(page.getByTestId("loop-label")).toHaveText("bar 1");
   await page.keyboard.press("Space");
-  await expect(page.getByTestId("play")).toHaveAccessibleName(/Pause/);
+  await expect(page.getByTestId("transport-play")).toHaveAccessibleName(/Pause/);
   await page.keyboard.press("v");
   await expect(page.getByRole("radio", { name: "Mine" })).toHaveAttribute("aria-checked", "true");
   await page.keyboard.press("Space");
@@ -266,7 +266,7 @@ test("L3: a wrong bass fails, then bass, qualities and numerals pass in turn and
   await page.goto(`/transcribe/${id}`);
   await expect(page.getByTestId("check")).toHaveText("Check the bass", { timeout: 30_000 });
   // The item plays at its realism level (humanised timing from R1), not clean.
-  await expect(page.getByTestId("play")).toBeEnabled({ timeout: 30_000 });
+  await expect(page.getByTestId("transport-play")).toBeEnabled({ timeout: 30_000 });
   await expect(page.getByTestId("transcribe-project")).toContainText(/· R[1-4]/);
   await expect(page.getByTestId("realism-note")).toHaveCount(0);
   // The starter's bass (the tonic every bar) is not this bass line.

@@ -19,13 +19,14 @@ import {
 import { loadContent } from "./content/loader.ts";
 import type { ContentSource } from "./content/types.ts";
 import { C2_CHORDS, C2_SONG, HAND_VOICED_CADENCE, recordingSeconds } from "./services/dev-seed.ts";
-import { CONTENT_DIR } from "./testing/course.ts";
+import { CONTENT_DIR, wave4Course } from "./testing/course.ts";
 import { type Harness, harness } from "./testing/harness.ts";
 import { SimLearner } from "./testing/learner.ts";
 
 let real: ContentSource;
 beforeAll(async () => {
-  real = await loadContent({ contentDir: CONTENT_DIR });
+  // Pinned to the course as Wave 4 shipped it (Wave 5 lessons are authored in parallel).
+  real = wave4Course(await loadContent({ contentDir: CONTENT_DIR }));
 });
 
 const NOW = "2026-11-11T12:00:00.000Z";

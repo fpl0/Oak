@@ -74,6 +74,10 @@ import {
   type PhraseCheckGradeRequest,
   phraseCheckRequest as phraseCheckRequestImpl,
 } from "./grade/phrase-check.ts";
+import {
+  type SongLadderGradeRequest,
+  songLadderRequest as songLadderRequestImpl,
+} from "./grade/song-ladder.ts";
 import { toolsUsed as toolsUsedImpl } from "./lint/index.ts";
 import { runMatcher as runMatcherImpl } from "./match/index.ts";
 import { normalize as normalizeImpl } from "./normalize/nevent.ts";
@@ -260,4 +264,46 @@ export function gradeCapstone(
   req: Omit<GradeRequest, "ctx"> & { ctx: Omit<GradeRequest["ctx"], "mode"> },
 ): Promise<GradeResult> {
   return gradeExercise({ ...req, ctx: { ...req.ctx, mode: "capstone" } });
+}
+
+// --- Wave 5 seams (docs/design/wave5.md §3.2) ------------------------------------------------------
+
+export {
+  type BassNoteView,
+  type BassView,
+  type BluesView,
+  bassView,
+  bluesView,
+  CONTRAST_AXES,
+  CONTRAST_THRESHOLDS,
+  type ContrastAxis,
+  contrastAxes,
+  type FormSectionView,
+  type FormView,
+  formView,
+  type SectionFeatures,
+  sectionFeatures,
+  swingView,
+  type TrackSwing,
+} from "./analyze/wave5-views.ts";
+export {
+  nextSongStage,
+  SONG_LADDER_MATCHERS,
+  SONG_LADDER_PASS,
+  SONG_LADDER_STAGES,
+  type SongLadderGradeRequest,
+  type SongLadderItem,
+  type SongLadderLevel,
+  type SongLadderStage,
+  songLadderCheck,
+  songLadderPassed,
+  songLadderRequest,
+} from "./grade/song-ladder.ts";
+
+/**
+ * Grades a ladder L5 phrase (lesson mode) or an L6 stage (capstone mode) against the song's answer key
+ * (contracts §2.9, §6.6 X2). Runs in whichever host grades ladder items (the server's learner host).
+ */
+export function gradeSongLadder(req: SongLadderGradeRequest): Promise<GradeResult> {
+  return gradeExercise(songLadderRequestImpl(req));
 }

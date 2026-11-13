@@ -350,7 +350,7 @@ export const TRIAD_SPELLINGS: FactDeck = defineDeck({
     },
     answer: { text: notes },
   })),
-  newPerDay: 2,
+  newPerDay: 1,
   fastRtMs: 6000,
   answer: "text",
 });
@@ -422,7 +422,7 @@ export const NUMERALS: FactDeck = defineDeck({
       accept: symbolWords(symbol).map((t) => ({ text: [t] })),
     })),
   ],
-  newPerDay: 2,
+  newPerDay: 1,
   fastRtMs: 5000,
   answer: "text",
 });
@@ -498,13 +498,371 @@ export const CADENCE_NAMES: FactDeck = defineDeck({
       answer: { text: ["IV", "I"] },
     },
   ],
-  newPerDay: 2,
+  newPerDay: 1,
   fastRtMs: 5000,
   answer: "text",
 });
 
-/** Decks written and tested but waiting for their contracts row (see INTERVAL_NAMES). */
-export const PENDING_DECKS: readonly FactDeck[] = [INTERVAL_NAMES, TRIAD_SPELLINGS, NUMERALS, CADENCE_NAMES];
+// --- U10–U11: minor keys, minor-key chords, scales as degrees, the twelve bars, dominant sevenths -----
+
+/** A text card with its accepted alternatives. */
+const card = (
+  id: string,
+  text: string,
+  answer: string[],
+  opts: { gate?: LessonId; accept?: string[][] } = {},
+): FactCardDef => ({
+  id: `fact.${id}` as FactId,
+  ...(opts.gate ? { gate: opts.gate } : {}),
+  prompt: { text },
+  answer: { text: answer },
+  ...(opts.accept ? { accept: opts.accept.map((t) => ({ text: t })) } : {}),
+});
+const KEY_FORMAT = "Write the key: its letter (with # or b if it has one), then major or minor.";
+
+/**
+ * Relative pairs (U10.L02): [major tonic, its relative minor's tonic], the keys U10 and its Makes move between,
+ * up to three sharps or flats.
+ */
+export const RELATIVE_PAIRS: readonly [string, string][] = [
+  ["C", "A"],
+  ["G", "E"],
+  ["D", "B"],
+  ["A", "F#"],
+  ["F", "D"],
+  ["Bb", "G"],
+  ["Eb", "C"],
+];
+const slug = (tonic: string) => tonic.replace("#", "s");
+/**
+ * Minor keys and their twins (S06, S07, S08): the relative minor of a major key and back (U10.L02), the parallel
+ * minor's three extra flats and where the relative minor's home sits, then the degrees harmonic minor (U10.L06)
+ * and melodic minor (U10.L08) raise.
+ */
+export const MINOR_KEYS: FactDeck = defineDeck({
+  id: "deck.key.minor" as DeckId,
+  title: "Minor keys and their twins",
+  unlock: { skill: "S06", lesson: "U10.L02" },
+  cards: [
+    ...RELATIVE_PAIRS.map(([major, minor]) =>
+      card(
+        `minor.relative-of-${slug(major)}`,
+        `What is the relative minor of ${display(major)} major? ${KEY_FORMAT}`,
+        [`${minor} minor`],
+        {
+          accept: [[`${minor}m`]],
+        },
+      ),
+    ),
+    ...RELATIVE_PAIRS.filter(([, minor]) => ["A", "E", "D", "G"].includes(minor)).map(([major, minor]) =>
+      card(
+        `minor.relative-major-of-${slug(minor)}`,
+        `What is the relative major of ${display(minor)} minor? ${KEY_FORMAT}`,
+        [`${major} major`],
+        {
+          accept: [[major]],
+        },
+      ),
+    ),
+    card(
+      "minor.relative-home",
+      "A major key's relative minor has its home on which degree of the major key? Write the number.",
+      ["6"],
+      { accept: [["la"]] },
+    ),
+    card(
+      "minor.parallel-flats",
+      "A parallel minor (C minor beside C major) has how many more flats, or fewer sharps, than its major? Write the number.",
+      ["3"],
+      { accept: [["three"]] },
+    ),
+    card(
+      "minor.harmonic-raises",
+      "Harmonic minor raises which degree of natural minor? Write the number.",
+      ["7"],
+      { gate: "U10.L06", accept: [["ti"]] },
+    ),
+    card(
+      "minor.melodic-raises",
+      "Melodic minor, going up, raises which two degrees of natural minor? Write the numbers, separated by a space.",
+      ["6", "7"],
+      { gate: "U10.L08", accept: [["la", "ti"]] },
+    ),
+  ],
+  newPerDay: 1,
+  fastRtMs: 5000,
+  answer: "text",
+});
+
+const MINOR_NUMERAL_FORMAT =
+  "Write the Roman numeral: upper case for a major triad, lower case for minor, lower case with o after it for diminished.";
+/** [degree, natural-minor numeral, quality word]: the chords of a minor key (U10.L04). */
+export const MINOR_TRIADS: readonly [number, string, "major" | "minor" | "diminished"][] = [
+  [1, "i", "minor"],
+  [2, "iio", "diminished"],
+  [3, "III", "major"],
+  [4, "iv", "minor"],
+  [5, "v", "minor"],
+  [6, "VI", "major"],
+  [7, "VII", "major"],
+];
+const MINOR_DEGREE_WORDS = ["1", "2", "♭3", "4", "5", "♭6", "♭7"];
+/** [numeral, the chord in A minor]: the numerals of A minor, the key U10 plays in, as chords. */
+export const A_MINOR_CHORDS: readonly [string, string, LessonId | undefined][] = [
+  ["iv", "Dm", undefined],
+  ["v", "Em", undefined],
+  ["VI", "F", undefined],
+  ["III", "C", undefined],
+  ["VII", "G", undefined],
+  ["V", "E", "U10.L06"],
+  ["viio", "G#o", "U10.L06"],
+];
+/**
+ * Chords of a minor key (H07, H08, H09): the quality on each degree of natural minor and the numerals of A minor
+ * (U10.L04), the Aeolian loop (U10.L05), the major V and vii° of harmonic minor (U10.L06), the Andalusian
+ * cadence (U10.L07).
+ */
+export const MINOR_CHORDS: FactDeck = defineDeck({
+  id: "deck.har.minor" as DeckId,
+  title: "Chords of a minor key",
+  unlock: { skill: "H07", lesson: "U10.L04" },
+  cards: [
+    ...MINOR_TRIADS.map(([degree, , q]) =>
+      card(
+        `minor.quality-${degree}`,
+        `In natural minor, what quality is the triad on degree ${MINOR_DEGREE_WORDS[degree - 1]}? Write major, minor or diminished.`,
+        [q],
+        { accept: q === "major" ? [["maj"]] : q === "minor" ? [["min"], ["m"]] : [["dim"]] },
+      ),
+    ),
+    ...A_MINOR_CHORDS.map(([numeral, symbol, gate]) =>
+      card(
+        `minor.A-${numeral}`,
+        `In A minor, which chord is ${numeral === "viio" ? "vii°" : numeral}? ${SYMBOL_FORMAT}`,
+        [symbol],
+        { ...(gate ? { gate } : {}), accept: symbolWords(symbol).map((t) => [t]) },
+      ),
+    ),
+    card(
+      "minor.aeolian-loop",
+      `Write the Aeolian loop (Am F C G in A minor) in numerals. ${MINOR_NUMERAL_FORMAT} Separate them with spaces.`,
+      ["i", "VI", "III", "VII"],
+      { gate: "U10.L05" },
+    ),
+    card(
+      "minor.harmonic-v-quality",
+      "In harmonic minor, what quality is the triad on 5? Write major, minor or diminished.",
+      ["major"],
+      { gate: "U10.L06", accept: [["maj"]] },
+    ),
+    card(
+      "minor.andalusian",
+      `Write the Andalusian cadence (Am G F E in A minor) in numerals. ${MINOR_NUMERAL_FORMAT} Separate them with spaces.`,
+      ["i", "VII", "VI", "V"],
+      { gate: "U10.L07" },
+    ),
+  ],
+  newPerDay: 1,
+  fastRtMs: 5000,
+  answer: "text",
+});
+
+const DEGREE_FORMAT =
+  "Write the degrees in order from 1, separated by spaces, with b before a flattened degree (b3).";
+const SPELL_FORMAT = "Write the notes from the tonic up, separated by spaces, with # or b where needed.";
+/** [id, scale words, degrees, gate]: the scales of U10–U11 as degrees against major on the same home. */
+export const SCALE_DEGREE_ROWS: readonly [string, string, string[], LessonId][] = [
+  ["natural-minor", "natural minor", ["1", "2", "b3", "4", "5", "b6", "b7"], "U10.L01"],
+  ["harmonic-minor", "harmonic minor", ["1", "2", "b3", "4", "5", "b6", "7"], "U10.L06"],
+  ["melodic-minor", "melodic minor going up", ["1", "2", "b3", "4", "5", "6", "7"], "U10.L08"],
+  ["major-pentatonic", "the major pentatonic scale", ["1", "2", "3", "5", "6"], "U11.L01"],
+  ["minor-pentatonic", "the minor pentatonic scale", ["1", "b3", "4", "5", "b7"], "U11.L02"],
+  ["blues", "the blues scale", ["1", "b3", "4", "b5", "5", "b7"], "U11.L03"],
+];
+/** [scale, tonic, notes, gate]: spellings worth knowing by heart (the keys U11 plays in). */
+export const SCALE_SPELLING_ROWS: readonly [string, string, string[], LessonId][] = [
+  ["major pentatonic", "C", ["C", "D", "E", "G", "A"], "U11.L01"],
+  ["major pentatonic", "G", ["G", "A", "B", "D", "E"], "U11.L01"],
+  ["minor pentatonic", "A", ["A", "C", "D", "E", "G"], "U11.L02"],
+  ["minor pentatonic", "C", ["C", "Eb", "F", "G", "Bb"], "U11.L02"],
+  ["blues", "A", ["A", "C", "D", "Eb", "E", "G"], "U11.L03"],
+  ["blues", "C", ["C", "Eb", "F", "Gb", "G", "Bb"], "U11.L03"],
+];
+/**
+ * Scales as degrees (S05, S07–S11): each scale of U10–U11 written as degrees against the major scale on the same
+ * home, what each one changes, and the pentatonic and blues spellings in the keys U11 plays in. The blues
+ * spellings accept the blue note as ♯4 (D♯ for E♭), as U11.L03 spells it going up.
+ */
+export const SCALE_DEGREES: FactDeck = defineDeck({
+  id: "deck.scl.degrees" as DeckId,
+  title: "Scales as degrees",
+  unlock: { skill: "S05", lesson: "U10.L01" },
+  cards: [
+    ...SCALE_DEGREE_ROWS.map(([id, words, degrees, gate]) =>
+      card(`scale.${id}-degrees`, `Write ${words} as degrees. ${DEGREE_FORMAT}`, degrees, {
+        ...(gate !== "U10.L01" ? { gate } : {}),
+        accept: [degrees.map((d) => d.replace("b", "♭"))],
+      }),
+    ),
+    card(
+      "scale.natural-minor-lowers",
+      "Natural minor lowers which three degrees of major on the same home? Write the numbers, separated by spaces.",
+      ["3", "6", "7"],
+    ),
+    card(
+      "scale.major-pentatonic-leaves",
+      "The major pentatonic scale leaves out which two degrees of major? Write the numbers, separated by a space.",
+      ["4", "7"],
+      { gate: "U11.L01", accept: [["fa", "ti"]] },
+    ),
+    card(
+      "scale.blues-adds",
+      "The blues scale adds which note to the minor pentatonic? Write it as a degree, with b (b5).",
+      ["b5"],
+      { gate: "U11.L03", accept: [["#4"], ["♯4"], ["♭5"], ["se"]] },
+    ),
+    ...SCALE_SPELLING_ROWS.map(([scale, tonic, notes, gate]) =>
+      card(
+        `scale.${slug(tonic)}-${scale.replace(" ", "-")}`,
+        `Spell ${display(tonic)} ${scale}. ${SPELL_FORMAT}`,
+        notes,
+        {
+          gate,
+          ...(scale === "blues"
+            ? {
+                accept: [notes.map((n, i) => (i === 3 ? `${String.fromCharCode(n.charCodeAt(0) - 1)}#` : n))],
+              }
+            : {}),
+        },
+      ),
+    ),
+  ],
+  newPerDay: 1,
+  fastRtMs: 8000,
+  answer: "text",
+});
+
+const BLUES_NUMERAL_FORMAT = "Write its Roman numeral: I, IV or V (I7, IV7, V7 also count).";
+/** [bar, numeral in the standard form, gate]: the bars of a 12-bar blues worth knowing cold. */
+export const TWELVE_BAR_ROWS: readonly [number, string, LessonId][] = [
+  [5, "IV", "U11.L05"],
+  [7, "I", "U11.L05"],
+  [9, "V", "U11.L05"],
+  [10, "IV", "U11.L05"],
+  [11, "I", "U11.L05"],
+];
+/** The standard twelve bars (bar 12 the turnaround's V, U11.L06), as numerals. */
+export const TWELVE_BARS = ["I", "I", "I", "I", "IV", "IV", "I", "I", "V", "IV", "I", "V"] as const;
+/**
+ * The twelve bars (F04, H10): which chord in the bars that matter (U11.L05), the three lines of four, the
+ * chords of a blues in C as symbols, the quick change and the turnaround (U11.L06).
+ */
+export const TWELVE_BAR: FactDeck = defineDeck({
+  id: "deck.frm.twelve-bar" as DeckId,
+  title: "The twelve bars",
+  unlock: { skill: "F04", lesson: "U11.L05" },
+  cards: [
+    ...TWELVE_BAR_ROWS.map(([bar, numeral]) =>
+      card(
+        `blues.bar-${bar}`,
+        `In a standard 12-bar blues, which chord is in bar ${bar}? ${BLUES_NUMERAL_FORMAT}`,
+        [numeral],
+        {
+          accept: [[`${numeral}7`]],
+        },
+      ),
+    ),
+    card("blues.lines", "A 12-bar blues is three lines of how many bars each? Write the number.", ["4"], {
+      accept: [["four"]],
+    }),
+    card(
+      "blues.chords-in-C",
+      "Write the three chords of a blues in C as chord symbols for `chord()`, I then IV then V, separated by spaces.",
+      ["C7", "F7", "G7"],
+    ),
+    card(
+      "blues.quick-change",
+      `In a quick-change blues, which chord is in bar 2? ${BLUES_NUMERAL_FORMAT}`,
+      ["IV"],
+      { gate: "U11.L06", accept: [["IV7"]] },
+    ),
+    card("blues.turnaround", `With a turnaround, which chord is in bar 12? ${BLUES_NUMERAL_FORMAT}`, ["V"], {
+      gate: "U11.L06",
+      accept: [["V7"]],
+    }),
+  ],
+  newPerDay: 1,
+  fastRtMs: 5000,
+  answer: "text",
+});
+
+/** [root, the dominant seventh from the root up]: the roots of the blues keys U11 plays in, and A minor's V7. */
+export const DOMINANT_SEVENTH_ROWS: readonly [string, string[]][] = [
+  ["C", ["C", "E", "G", "Bb"]],
+  ["F", ["F", "A", "C", "Eb"]],
+  ["G", ["G", "B", "D", "F"]],
+  ["D", ["D", "F#", "A", "C"]],
+  ["A", ["A", "C#", "E", "G"]],
+  ["E", ["E", "G#", "B", "D"]],
+  ["Bb", ["Bb", "D", "F", "Ab"]],
+];
+/** Dominant sevenths (C06, U11.L04): spellings, and the chord as a major triad plus a minor 7th. */
+export const DOMINANT_SEVENTHS: FactDeck = defineDeck({
+  id: "deck.chd.dom7" as DeckId,
+  title: "Dominant sevenths",
+  unlock: { skill: "C06", lesson: "U11.L04" },
+  cards: [
+    ...DOMINANT_SEVENTH_ROWS.map(([root, notes]) =>
+      card(
+        `dom7.${slug(root)}7`,
+        `Spell ${display(root)}7 from the root up. Write its four note names, separated by spaces.`,
+        notes,
+      ),
+    ),
+    card(
+      "dom7.degrees",
+      "A dominant seventh on 1 uses which degrees? Write them from 1 up, separated by spaces, with b before a flattened degree.",
+      ["1", "3", "5", "b7"],
+      { accept: [["1", "3", "5", "♭7"]] },
+    ),
+    card(
+      "dom7.seventh",
+      "A dominant seventh is a major triad plus which interval above the root? Write its quality letter and number (m7) or its name.",
+      ["m7"],
+      { accept: [["minor 7th"], ["7m"], ["minor seventh"]] },
+    ),
+  ],
+  newPerDay: 1,
+  fastRtMs: 6000,
+  answer: "text",
+});
+
+/**
+ * The U10–U11 decks, each waiting for its contracts §7.3 row (see INTERVAL_NAMES). One new card a day each: U10
+ * opens three of them in eight lessons, and at two a day the 25-minute simulation's oldest due card waited
+ * 14 days on one seed (contracts §7.4 allows 7); at one a day every run holds (packages/srs
+ * simulation-wave5.test.ts).
+ */
+export const WAVE5_DECKS: readonly FactDeck[] = [
+  MINOR_KEYS,
+  MINOR_CHORDS,
+  SCALE_DEGREES,
+  TWELVE_BAR,
+  DOMINANT_SEVENTHS,
+];
+
+/**
+ * Decks written and tested but waiting for their contracts row (see INTERVAL_NAMES). The U05–U07 and U10–U11 decks
+ * bring one new card a day: at two, U05–U07's decks alone pushed the 15-minute simulation's oldest due card to 13
+ * days on a held-out seed (contracts §7.4 allows 7); at one, every gate and held-out run holds with all of them.
+ */
+export const PENDING_DECKS: readonly FactDeck[] = [
+  INTERVAL_NAMES,
+  TRIAD_SPELLINGS,
+  NUMERALS,
+  CADENCE_NAMES,
+  ...WAVE5_DECKS,
+];
 
 export const decks: readonly FactDeck[] = [STAFF_NAMES, KEY_SIGNATURES, CHORD_SYMBOLS];
 export const deckById: ReadonlyMap<string, FactDeck> = new Map(decks.map((d) => [d.id, d] as const));

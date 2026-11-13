@@ -79,3 +79,17 @@ describe("errorToDiagnostic is friendly", () => {
     expect(f.message).not.toContain("typo");
   });
 });
+
+describe("an undefined section const (wave 5 gate)", () => {
+  test("asks for the const, not for quotes", () => {
+    const code = 'const drumsVerse = s("bd sd")\ndrums: arrange([4, drumsVerse], [4, drumsChorus])';
+    const f = friendlyEvalError("ReferenceError: drumsChorus is not defined", code);
+    expect(f.message).toContain("`drumsChorus` isn't defined yet");
+    expect(f.message).toContain("const drumsChorus = …");
+    expect(f.message).not.toContain("in quotes");
+  });
+  test("a single lower-case word outside arrange() still reads as a missing quote", () => {
+    const f = friendlyEvalError("ReferenceError: bd is not defined", "s(bd)");
+    expect(f.message).toContain('like "bd"');
+  });
+});

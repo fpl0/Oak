@@ -21,7 +21,9 @@ import {
 } from "@oak/api";
 import { type KeySpec, keyOf } from "@oak/theory";
 import { create } from "zustand";
+import type { FormViewSection, SectionLoop } from "../lib/form-view.ts";
 import type { ChordAt } from "./harmony-chips.ts";
+import { displayBars, formLetters, sectionRequest, sectionsFromCode, sectionsLine } from "./sections.ts";
 
 /** One context chip: exactly what the next turn will carry (contracts §10.2, ux §6.2). */
 export interface ContextChip {
@@ -37,7 +39,8 @@ export interface ContextChip {
     | "track"
     | "transcription"
     | "key"
-    | "labels";
+    | "labels"
+    | "form";
   label: string;
 }
 
@@ -159,6 +162,14 @@ export interface TutorSubject {
   albumVersion?: number;
   /** Wave 4: the transcription project version on screen (a review requested here is about it). */
   transcriptionVersion?: number;
+  /**
+   * Wave 5: the sections of the music on screen as the form view draws them (`model.lines.sections`; kept in step by
+   * `useSubjectHarmony`). Section names in tutor text become chips that select them. Absent: read from the code's
+   * `arrange()`.
+   */
+  sections?: FormViewSection[];
+  /** Wave 5: the music on screen has a pickup: bar 0 is the pickup and section bars count from the first full bar. */
+  pickup?: boolean;
 }
 
 export interface TutorAsk {
@@ -218,7 +229,15 @@ export interface TutorHost {
   reveal?(): void | Promise<void>;
   /** The sketch an in-editor Apply lands in (`tutor.cardApplied` body), when the surface has one. */
   sketchId?: string | null;
+  /**
+   * Wave 5: selects and loops a section in the form view (what a click on the section ribbon does). Without it a
+   * section chip dispatches `TUTOR_SECTION_EVENT` and loops the section's bars through `showBars`.
+   */
+  selectSection?(loop: SectionLoop): void;
 }
+
+/** `window` event a section chip fires when no host handles it: `detail = SectionLoop` (0-based cycles). */
+export const TUTOR_SECTION_EVENT = "oak:tutor-section";
 
 /** `window` event a bar reference fires when no host handles it: `detail = { from, to }`. */
 export const TUTOR_BARS_EVENT = "oak:tutor-bars";
@@ -372,6 +391,34 @@ export function showBars(thread: SubjectRef, from: number, to: number): void {
     window.dispatchEvent(new CustomEvent(TUTOR_BARS_EVENT, { detail: { from, to } }));
 }
 
+/**
+ * A section chip: lights the section's bars and selects it in the form view (the host's `selectSection`, else the
+ * section event and a loop of its bars). The highlight takes display bars (pickup-aware, c4); the loop takes the
+ * Workbench's own bar numbering, so the region is the section's cycles exactly and the ribbon shows it selected.
+ */
+export function showSection(thread: SubjectRef, section: FormViewSection, pickup = false): void {
+  const shown = displayBars(section, pickup);
+  highlightReference({ kind: "bars", thread, from: shown.from, to: shown.to });
+  const { loop } = sectionRequest(section);
+  const host = tutorHostFor(thread);
+  if (host?.selectSection) {
+    host.selectSection(loop);
+    return;
+  }
+  // The Workbench that follows the tutor selects the section itself (exactly its cycles, the ribbon lit). A host
+  // with its own transport (X1, Transcribe) loops the bars as it does for any bar reference: display bars, which
+  // it maps past a pickup (c4). The window bars event is never used for a section: its numbering is display bars.
+  if (typeof window !== "undefined")
+    window.dispatchEvent(new CustomEvent(TUTOR_SECTION_EVENT, { detail: loop }));
+  if (host?.showBars) host.showBars(shown.from, shown.to);
+}
+
+/** The sections of a subject: the surface's form view, else the code's `arrange()`. */
+export function subjectSections(s: Pick<TutorSubject, "sections" | "code" | "answer">): FormViewSection[] {
+  if (s.sections) return s.sections;
+  return sectionsFromCode(s.code ?? (s.answer?.kind === "transcription" ? s.answer.code : null));
+}
+
 export function sameThread(a: SubjectRef, b: SubjectRef): boolean {
   return a.subjectKind === b.subjectKind && a.subjectId === b.subjectId;
 }
@@ -393,6 +440,11 @@ export function chipsOf(s: TutorSubject, lenses: LabelState | null = null): Cont
   if (s.thread.subjectKind === "transcription") chips.push({ id: "transcription", label: s.title });
   const key = subjectKey(s);
   if (key) chips.push({ id: "key", label: `Key · ${keyLabel(key)}` });
+  const sections = subjectSections(s);
+  if (sections.length > 0) {
+    const types = [...new Set(sections.map((x) => x.text.replace(/\s+\d+$/, "")))];
+    chips.push({ id: "form", label: `Form · ${formLetters(sections)} · ${types.join(", ")}` });
+  }
   const labels = labelsLine(s.labels ?? lenses);
   if (labels && (s.code || s.answer || s.lessonId || s.sketchId || s.capstoneId))
     chips.push({ id: "labels", label: `Labels · ${labels}` });
@@ -582,6 +634,11 @@ export function onScreenLine(s: TutorSubject, lenses: LabelState | null): string
   const labels = chips.find((c) => c.id === "labels");
   if (key) parts.push(`key ${key.label.replace(/^Key · /, "")}`);
   if (labels) parts.push(`labels shown: ${labels.label.replace(/^Labels · /, "")}`);
+  // Wave 5: the sections as the ribbon names them, with their bars (from the first full bar after a pickup).
+  if (chips.some((c) => c.id === "form")) {
+    const line = sectionsLine(subjectSections(s), s.pickup === true);
+    if (line) parts.push(`sections ${line}`);
+  }
   return parts.length > 0 ? `${ON_SCREEN}${parts.join("; ")}.` : null;
 }
 
@@ -701,6 +758,46 @@ export function buildTurnRequest(
   return req;
 }
 
+// --- review requests (c9) ------------------------------------------------------------------------------
+
+/**
+ * Where the last review request of a thread stands, as this browser knows it (Wave 5, carry-over c9): `pending`
+ * from the moment it is asked until the turn ends; `failed-early` when it ended before reaching the server (no
+ * `meta` came back: nothing is on the server's timeline to wait for, so "pending" clears at once); `failed` when
+ * the server answered with an error; `answered` when the review arrived. The panel's "Request review" and the
+ * capstone Brief read it together with the timeline.
+ */
+export type ReviewRequestPhase = "pending" | "failed-early" | "failed" | "answered";
+export interface ReviewRequest {
+  phase: ReviewRequestPhase;
+  /** Local clock of the last change. */
+  at: number;
+  /** The error shown when it failed. */
+  message?: string;
+}
+
+export const useReviewRequests = create<{ byThread: Record<string, ReviewRequest> }>(() => ({
+  byThread: {},
+}));
+
+export function reviewRequestOf(thread: SubjectRef): ReviewRequest | null {
+  return useReviewRequests.getState().byThread[threadKey(thread)] ?? null;
+}
+
+export function useReviewRequest(thread: SubjectRef | null): ReviewRequest | null {
+  return useReviewRequests((s) => (thread ? (s.byThread[threadKey(thread)] ?? null) : null));
+}
+
+/** Records a change in a thread's review request (the panel calls this as the turn runs). */
+export function setReviewRequest(thread: SubjectRef, phase: ReviewRequestPhase, message?: string): void {
+  const next: ReviewRequest = { phase, at: Date.now(), ...(message ? { message } : {}) };
+  useReviewRequests.setState((s) => ({ byThread: { ...s.byThread, [threadKey(thread)]: next } }));
+}
+
+/** A review lane's request kinds. */
+export const isReviewKind = (k: ThreadKind | string): boolean =>
+  k === "review-capstone" || k === "review-transcription";
+
 function refuse(notice: TutorNotice): AskResult {
   useTutorContext.setState({ notice });
   openTutor();
@@ -732,6 +829,7 @@ function ask(kind: ThreadKind, userText: string, label: string, subject?: TutorS
     ...(subject ? { subject } : {}),
   };
   useTutorContext.setState((s) => ({ queue: [...s.queue, a], notice: null }));
+  if (isReviewKind(kind)) setReviewRequest(subj.thread, "pending");
   openTutor();
   return { ok: true, ask: a };
 }

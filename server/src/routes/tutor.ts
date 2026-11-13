@@ -55,15 +55,21 @@ export function reviewRecords(d: AppDeps, subjectKind: string, subjectId: string
     return out;
   }
   const versions = d.repos.transcriptions.versions(subjectId);
+  // c11: the version each review was asked about, as recorded when it was accepted (the first record of its
+  // conversation at or after the review's message); a review from before Wave 5 falls back to the version current
+  // when it was given.
+  const asked = d.repos.transcriptions.reviewVersions(subjectId);
   for (const r of rows) {
     const review = TranscriptionReviewSchema.safeParse(r.review);
     if (!review.success) continue;
+    const ofConversation = asked.filter((a) => a.conversationId === r.conversationId);
+    const recorded = ofConversation.find((a) => a.at >= r.at) ?? ofConversation.at(-1) ?? null;
     const before = versions.filter((v) => v.createdAt <= r.at).at(-1) ?? null;
     out.push({
       kind: "transcription",
       subject,
       conversationId: r.conversationId,
-      version: before?.version ?? null,
+      version: recorded !== null ? recorded.version : (before?.version ?? null),
       review: review.data,
       at: r.at,
     });

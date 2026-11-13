@@ -2,10 +2,10 @@
 // store (one preference for every view, gated by unlocks) and Settings → Learning's "Roll labels"; outside the app
 // (the standalone e2e page, tests) a host can provide a lens source through `WorkbenchLensProvider`, and with
 // neither the Workbench keeps its Wave 2 labels. The app hooks run only under a QueryClient.
-import type { ChordLensId, LensId, LensPrefs } from "@oak/api";
+import type { ChordLensId, LensId, LensPrefs, LineLensId } from "@oak/api";
 import { QueryClientContext, useQueryClient } from "@tanstack/react-query";
 import { createContext, type ReactNode, useContext } from "react";
-import { chordLensPrefs, useLenses } from "../lib/lenses.ts";
+import { chordLensPrefs, lineLensPrefs, useLenses } from "../lib/lenses.ts";
 import { apiKey, useBootstrap } from "../lib/queries.ts";
 import type { LensState, RollLabelSetting } from "./lens-view.ts";
 
@@ -19,6 +19,17 @@ export interface LensSource extends LensState {
    * host without them (the Wave 3 standalone page) shows no chord labels outside a lesson step.
    */
   chords?: ChordLensSource;
+  /**
+   * Wave 5 (wave5.md §4.3): the line lenses, sections (the ribbon), bass roles and blue notes, from the same store.
+   * Absent: a host without them shows none of the three outside a lesson step.
+   */
+  lines?: LineLensSource;
+}
+
+export interface LineLensSource {
+  shown: Record<LineLensId, boolean>;
+  available: Record<LineLensId, boolean>;
+  toggle(id: LineLensId): void;
 }
 
 export interface ChordLensSource {
@@ -62,6 +73,11 @@ export function useAppLensSource(): LensSource {
       shown: lenses.chords.shown,
       available: lenses.chords.available,
       toggle: (id) => lenses.chords.set(id, !chordLensPrefs(stored())[id]),
+    },
+    lines: {
+      shown: lenses.lines.shown,
+      available: lenses.lines.available,
+      toggle: (id) => lenses.lines.set(id, !lineLensPrefs(stored())[id]),
     },
   };
 }

@@ -14,8 +14,12 @@ import { stripMarkers } from "@oak/content-kit";
 import { signatureOf } from "@oak/theory";
 import type { ContentIndex } from "../content/index.ts";
 import type { Repos } from "../db/repos/index.ts";
+import type { StoredTranscription } from "../db/repos/library.ts";
+import { checkSlots } from "../services/capstone-sessions.ts";
+import { checkKeyOf, checkOf, songChecks } from "../services/song-ladder.ts";
 import type { LessonSource, ReviewSource, ReviewTarget, StepSource, SubjectFacts } from "../tutor/domain.ts";
 import type { LessonContextPort } from "../tutor/ports.ts";
+import type { CheckLike } from "../tutor/review-facts.ts";
 import { revisionCountFor } from "../tutor/reviews.ts";
 import type { SubjectRef } from "../tutor/types.ts";
 import type { ReviewFactsPort } from "./review-facts.ts";
@@ -68,13 +72,24 @@ function hintsOf(ex: Exercise, solutions: readonly string[]): StepSource["hints"
 
 type ChoiceLike = { id: string; label: string };
 
+/** A bar-grid answer widget (Wave 5): one entry per bar. */
+function isBarGrid(ui: unknown): boolean {
+  return typeof ui === "object" && ui !== null && (ui as { ui?: unknown }).ui === "bar-grid";
+}
+
 /** A static answer as the learner would say it: choice labels (not IDs), texts, numbers, numerals. */
-function answerTexts(answer: Partial<Answer> | undefined, choices: readonly ChoiceLike[] = []): string[] {
+function answerTexts(
+  answer: Partial<Answer> | undefined,
+  choices: readonly ChoiceLike[] = [],
+  perBar = false,
+): string[] {
   if (answer === undefined || answer === null) return [];
   const label = (id: string) => choices.find((c) => c.id === id)?.label ?? id;
   const out: string[] = [];
   if (answer.choice !== undefined && answer.choice.length > 0) out.push(answer.choice.map(label).join(", "));
-  if (answer.text !== undefined) out.push(...answer.text.slice(0, 1));
+  // `text` lists accepted spellings of one answer, except in a bar-grid (`entry: "symbol"`), where it holds one
+  // chord symbol per bar: there the whole chart is the answer the guard holds back.
+  if (answer.text !== undefined) out.push(...(perBar ? [answer.text.join(" ")] : answer.text.slice(0, 1)));
   if (answer.number !== undefined) out.push(String(answer.number));
   if (answer.rn !== undefined && answer.rn.length > 0) out.push(answer.rn.join(" "));
   if (answer.degrees !== undefined && answer.degrees.length > 0) out.push(answer.degrees.join(" "));
@@ -85,6 +100,10 @@ function answerTexts(answer: Partial<Answer> | undefined, choices: readonly Choi
     if (st !== undefined && st.length > 0) out.push(st.join(" "));
   }
   if (answer.midi !== undefined && answer.midi.length > 0) out.push(answer.midi.join(" "));
+  // Wave 5: the form widget's sections ("verse chorus verse chorus"); the bar-grid answers bar by bar in `rn` or
+  // `text` (all bars, above) and the scale builder in `midi` or `degrees` (above).
+  const sections = (answer as { sections?: readonly string[] }).sections;
+  if (sections !== undefined && sections.length > 0) out.push(sections.join(" "));
   return out;
 }
 
@@ -133,10 +152,10 @@ export function referenceAnswers(ex: Exercise | undefined): string[] {
       break;
     case "identify":
     case "fact":
-      out.push(...answerTexts(ex.correct, optionsOf(ex.answer)));
+      out.push(...answerTexts(ex.correct, optionsOf(ex.answer), isBarGrid(ex.answer)));
       break;
     case "staff-read":
-      out.push(...answerTexts(ex.correct, optionsOf(ex.answer)));
+      out.push(...answerTexts(ex.correct, optionsOf(ex.answer), isBarGrid(ex.answer)));
       break;
     case "staff-write": {
       // Staff writing (Wave 3): the notes to write, or the key signature's accidentals in written order.
@@ -339,7 +358,12 @@ export class LessonContextAdapter implements LessonContextPort {
     const facts =
       this.facts === undefined
         ? null
-        : await this.facts(source.source.code, { key: source.key, meter: source.meter });
+        : await this.facts(source.source.code, {
+            key: source.key,
+            meter: source.meter,
+            checks: source.checks ?? null,
+            pickup: source.pickup === true,
+          });
     return { ...source.source, facts, target: source.target };
   }
 
@@ -355,6 +379,8 @@ export class LessonContextAdapter implements LessonContextPort {
     key: KeySpec | null;
     meter: MeterId | null;
     target: ReviewTarget | null;
+    checks?: CheckLike[];
+    pickup?: boolean;
   } | null {
     const meta = this.content.capstoneMeta(id);
     const row = this.repos.capstones.get(id);
@@ -400,7 +426,80 @@ export class LessonContextAdapter implements LessonContextPort {
       key: version.key ?? def?.key ?? null,
       meter: version.meter ?? def?.meter ?? null,
       target: reviewTarget,
+      checks: this.#capstoneChecks(id),
     };
+  }
+
+  /**
+   * Wave 5: a transcribe capstone's checks as the review's facts read them (X2: bass ≥ 0.90, then the changes, then
+   * the melody): the best score, the mark, passed or revealed, and whether it is open (its `after` checks cleared).
+   */
+  #capstoneChecks(id: string): CheckLike[] {
+    const def = this.content.capstoneDef(id);
+    const slots = (def?.sessionDefs ?? []).flatMap((d) => checkSlots(d));
+    const rows = this.repos.capstoneSessions.checks(id);
+    const cleared = (checkId: string) =>
+      slots
+        .filter((x) => x.check.id === checkId)
+        .every(({ stage }) => {
+          const r = rows.find((x) => x.checkId === checkId && x.stage === stage);
+          return r !== undefined && (r.passed || r.revealed);
+        });
+    return slots.map(({ check, stage }) => {
+      const r = rows.find((x) => x.checkId === check.id && x.stage === stage);
+      return {
+        checkId: check.id,
+        phrase: check.phrase,
+        layer: check.layer,
+        stage,
+        open: (check.after ?? []).every(cleared),
+        score: r?.bestScore ?? null,
+        passed: r?.passed ?? false,
+        revealed: r?.revealed ?? false,
+        passAt: check.pass,
+      };
+    });
+  }
+
+  /** Wave 5: a ladder song item's checks (L5 phrases, L6 bass → changes → melody lines) for the review's facts. */
+  #songChecks(t: StoredTranscription): CheckLike[] {
+    const song = this.content.source.songs.find((x) => x.id === t.songId);
+    const level = t.ladderLevel;
+    if (song === undefined || (level !== 5 && level !== 6)) return [];
+    const versions = this.repos.transcriptions.versions(t.id);
+    const checks = songChecks(song, level);
+    let open = true;
+    return checks.map((c) => {
+      const mine = versions.filter((v) => {
+        const k = checkOf(song, level, {
+          ...(v.stage == null ? {} : { stage: v.stage }),
+          ...(v.phrase == null ? {} : { phrase: v.phrase }),
+        });
+        return k !== null && checkKeyOf(k) === checkKeyOf(c);
+      });
+      const graded = mine.filter((v) => v.result !== null && v.result.status !== "error");
+      const passAt = level === 5 ? 0.85 : c.stage === "bass" ? 0.9 : 0.85;
+      const passed = graded.some(
+        (v) =>
+          v.result?.status === "pass" && v.result.score >= passAt - 1e-9 && v.result.assist.revealed !== true,
+      );
+      const revealed = graded.some(
+        (v) => v.result?.assist.revealed === true || (v.result?.assist.rung ?? 0) >= 4,
+      );
+      const row: CheckLike = {
+        checkId: checkKeyOf(c),
+        phrase: c.phrase,
+        layer: c.stage === "changes" ? "chords" : (c.stage ?? "melody"),
+        stage: level === 6 ? (c.stage ?? null) : null,
+        open,
+        score: graded.length === 0 ? null : Math.max(...graded.map((v) => v.result?.score ?? 0)),
+        passed,
+        revealed,
+        passAt,
+      };
+      open = open && (passed || revealed);
+      return row;
+    });
   }
 
   /** A transcription: the version named (Wave 4: `transcriptionVersion`), else the latest. */
@@ -412,6 +511,8 @@ export class LessonContextAdapter implements LessonContextPort {
     key: KeySpec | null;
     meter: MeterId | null;
     target: ReviewTarget | null;
+    checks?: CheckLike[];
+    pickup?: boolean;
   } | null {
     const t = this.repos.transcriptions.get(id);
     if (t === null) return null;
@@ -459,6 +560,8 @@ export class LessonContextAdapter implements LessonContextPort {
       key: t.key,
       meter: t.meter,
       target: { kind: "transcription", version: latest.version },
+      checks: this.#songChecks(t),
+      pickup: (t.ladder?.given.pickup ?? null) !== null,
     };
   }
 

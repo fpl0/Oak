@@ -139,6 +139,7 @@ export class BackupService {
     lastAutomatic: string | null;
     ownAudio: { files: number; bytes: number; unusedFiles: number; unusedBytes: number };
     albumAudioBytes: number;
+    albumAudio: { trackId: string; version: number; bytes: number }[];
   } {
     const json = new TextEncoder().encode(JSON.stringify(dumpTables(this.db))).length + 512;
     const files = this.#files().reduce((s, f) => s + statSync(f.abs).size + 76 + 2 * f.name.length, 0);
@@ -150,13 +151,20 @@ export class BackupService {
       )
       .all() as { bytes: number; used: number }[];
     const album = this.db
-      .query("SELECT audio_path FROM album_track_versions WHERE audio_path IS NOT NULL")
-      .all() as { audio_path: string }[];
+      .query(
+        `SELECT track_id, version, audio_path FROM album_track_versions WHERE audio_path IS NOT NULL
+         ORDER BY track_id, version`,
+      )
+      .all() as { track_id: string; version: number; audio_path: string }[];
     let albumAudioBytes = 0;
+    const albumAudio: { trackId: string; version: number; bytes: number }[] = [];
     for (const a of album) {
       try {
         const abs = this.paths.store.resolveStored(a.audio_path);
-        if (this.paths.store.exists(abs)) albumAudioBytes += statSync(abs).size;
+        if (!this.paths.store.exists(abs)) continue;
+        const bytes = statSync(abs).size;
+        albumAudioBytes += bytes;
+        albumAudio.push({ trackId: a.track_id, version: a.version, bytes });
       } catch {
         // A stored path outside the audio folders is never followed (as in the export).
       }
@@ -173,6 +181,7 @@ export class BackupService {
         unusedBytes: unused.reduce((s, a) => s + a.bytes, 0),
       },
       albumAudioBytes,
+      albumAudio,
     };
   }
 
@@ -375,14 +384,20 @@ export class BackupService {
   }
 }
 
-/** Every imported sketch and album version runs only after the strict lint (§11.3): flag it for review. */
-function markForReview(db: Db): void {
+/**
+ * Every imported sketch and album version runs only after the strict lint (§11.3): flag it for review. Wave 5
+ * (carry-over c2): so does every imported transcription version (`review_before_run`, until the learner confirms
+ * it), and an imported lesson attempt is marked `imported` (the voicing gate never hands its code back as typed).
+ */
+export function markForReview(db: Db): void {
   const empty = '{"lockedTools":[],"previewTools":[]}';
   for (const t of ["sketch_versions", "album_track_versions"]) {
     db.run(
       `UPDATE "${t}" SET flags_json = json_set(COALESCE(flags_json, '${empty}'), '$.reviewBeforeRun', json('true'))`,
     );
   }
+  db.run("UPDATE transcription_versions SET review_before_run = 1");
+  db.run("UPDATE step_attempts SET imported = 1 WHERE code IS NOT NULL");
 }
 
 /** JSON gives numbers, strings, booleans and nulls; SQLite STRICT tables want 0/1 for booleans. */

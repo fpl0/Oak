@@ -142,7 +142,7 @@ export const FIXTURES = {
   health: {
     ok: true,
     appVersion: "0.0.0-e2e",
-    contractsVersion: "1.4",
+    contractsVersion: "1.5",
     schemaVersion: 1,
     contentVersion: null,
     tutor: "ready",
@@ -153,7 +153,7 @@ export const FIXTURES = {
     health: {
       ok: true,
       appVersion: "0.0.0-e2e",
-      contractsVersion: "1.4",
+      contractsVersion: "1.5",
       schemaVersion: 1,
       contentVersion: null,
       tutor: "ready",
@@ -589,6 +589,8 @@ export const FIXTURES = {
     holds: ["tb.chord", "tb.voicing", "snd.rhodes", "snd.organ"],
   },
   "profile.calibrations": { items: [] },
+  // Wave 5: the sound side lessons open once U03.L02 is done; this learner is at U01.L02 (the shell asks on every page).
+  "sideLessons.list": { open: false, items: [], next: null },
 } satisfies Partial<Record<JsonEndpointName, unknown>>;
 
 FIXTURES["profile.get"] = FIXTURES.bootstrap.profile;

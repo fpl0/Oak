@@ -8,14 +8,20 @@ import { allCommands, type Command, rankCommands, useCommandStore } from "../../
 import { useContent } from "../../lib/content.ts";
 import { apiQuery } from "../../lib/queries.ts";
 import { useShell } from "../../lib/shell-store.ts";
+import { useUnlockedSet } from "../../lib/unlocked.ts";
 import { IS_MAC } from "../keys/KeymapProvider.tsx";
 import { formatKeys } from "../keys/keymap.ts";
+import { sideLessonHint } from "./side-lessons.ts";
 
 function useSearchCommands(open: boolean): Command[] {
   const navigate = useNavigate();
   const content = useContent();
   const sketches = useQuery({ ...apiQuery("sketches.list", { query: {} }), enabled: open });
   const album = useQuery({ ...apiQuery("album.get"), enabled: open });
+  // Wave 5: side lessons say they are optional and where they stand: the server's answer when a page loaded it
+  // (never fetched here), else the unlock list the shell has anyway.
+  const side = useQuery({ ...apiQuery("sideLessons.list"), enabled: false });
+  const { unlocked, ready } = useUnlockedSet();
   return useMemo(() => {
     const out: Command[] = [];
     for (const u of content.data?.syllabus?.units ?? [])
@@ -24,8 +30,15 @@ function useSearchCommands(open: boolean): Command[] {
           id: `lesson:${l.id}`,
           title: l.title,
           group: "Lessons",
-          hint: l.id,
-          keywords: [l.id, u.title],
+          hint:
+            sideLessonHint(l.id, l.side === true, {
+              state: side.data,
+              unlocked,
+              ready,
+              toolbox: content.data?.toolbox ?? [],
+              syllabus: content.data?.syllabus ?? null,
+            }) ?? l.id,
+          keywords: l.side ? [l.id, u.title, "side lesson", "optional", "sound"] : [l.id, u.title],
           run: () => void navigate({ to: "/learn/$lessonId", params: { lessonId: l.id } }),
         });
     for (const t of content.data?.toolbox ?? [])
@@ -54,7 +67,7 @@ function useSearchCommands(open: boolean): Command[] {
         run: () => void navigate({ to: "/album/$trackId", params: { trackId: t.id } }),
       });
     return out;
-  }, [content.data, sketches.data, album.data, navigate]);
+  }, [content.data, sketches.data, album.data, side.data, unlocked, ready, navigate]);
 }
 
 export function CommandPalette() {

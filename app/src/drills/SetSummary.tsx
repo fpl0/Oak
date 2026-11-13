@@ -43,6 +43,9 @@ export function SetSummary({
   };
   const outcomes = context.outcomes.filter(Boolean);
   const summary = summarize(plan, context.trials, context.outcomes);
+  const review = context.finish?.reviews.find((r) => r.cardId === def.id);
+  const compositeId = review?.familyState?.compositeId ?? (def.mix ? `fam.mix.${def.mix}` : null);
+  const compositeTitle = compositeId ? data.defs.get(compositeId)?.title : undefined;
   const view = summaryView({
     def: { ...def, title },
     summary,
@@ -52,6 +55,7 @@ export function SetSummary({
     cardLevel: level,
     before: data.states.get(def.id) ?? null,
     profile: data.profile,
+    ...(compositeTitle ? { compositeTitle } : {}),
   });
   const answered = outcomes.filter((o) => o.result.skipped !== true);
   const hits = answered.filter((o) => o.result.correct).length;
@@ -61,10 +65,11 @@ export function SetSummary({
   const question = top
     ? (() => {
         const [expected, got] = top[0].split("|");
+        const ids = [expected ?? "", got ?? ""];
         // A concept set (spelling a scale, a key signature) is not heard: its question is about the rule.
         return aural
-          ? `How do I hear ${optionLabel(expected ?? "")} apart from ${optionLabel(got ?? "")}?`
-          : `Why ${optionLabel(expected ?? "")} here, not ${optionLabel(got ?? "")}?`;
+          ? `How do I hear ${optionLabel(expected ?? "", def.generator, ids)} apart from ${optionLabel(got ?? "", def.generator, ids)}?`
+          : `Why ${optionLabel(expected ?? "", def.generator, ids)} here, not ${optionLabel(got ?? "", def.generator, ids)}?`;
       })()
     : null;
   const composite = familyIds.length > 1;
@@ -107,7 +112,7 @@ export function SetSummary({
             ))}
             {sungTrials.length > 0 && (
               <li>
-                Sung home on {sungTrials.length} {sungTrials.length === 1 ? "trial" : "trials"}
+                Sang the way home on {sungTrials.length} {sungTrials.length === 1 ? "trial" : "trials"}
                 {sungTrials.filter((o) => (o.resolutionCredit ?? 0) >= 0.8).length > 0
                   ? `, ${sungTrials.filter((o) => (o.resolutionCredit ?? 0) >= 0.8).length} in tune.`
                   : "."}

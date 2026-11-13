@@ -5,7 +5,7 @@
 // tabs, midnight, wrap-and-resume, ten wrong answers). Every spec here is a regression test for a defect found.
 // Run alone: bunx playwright test -c e2e/review/playwright.config.ts  (ports: Vite 5221, API 8821).
 import { fileURLToPath } from "node:url";
-import { type Area, areaConfig, oakStack, stackUse } from "../support/stack.ts";
+import { type Area, areaConfig, oakStack, stackUse, withFixtures } from "../support/stack.ts";
 
 export const stack = oakStack({
   vitePort: 5221,
@@ -18,7 +18,10 @@ const webServer = stack.webServer.map((w) =>
   w.name?.startsWith("oak-api")
     ? {
         ...w,
-        command: `bun app/src/onboarding/e2e/make-fixtures.bun.ts && bun e2e/review/make-fixtures.bun.ts && ${w.command}`,
+        command: withFixtures(
+          "bun app/src/onboarding/e2e/make-fixtures.bun.ts && bun e2e/review/make-fixtures.bun.ts",
+          w.command,
+        ),
       }
     : w,
 );

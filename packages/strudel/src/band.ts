@@ -1,6 +1,7 @@
 // Band-layer code preparation (contracts §5.10). The Band is evaluated separately from the learner's code
 // and its tracks are collected as `band.<label>`. This file holds the pure text part.
 import type { KeySpec } from "@oak/content-kit";
+import { followLearnerForm } from "./band-form.ts";
 import { stringArgsOf, stripComments } from "./sounds-in.ts";
 import type { BandSetup } from "./types.ts";
 
@@ -119,6 +120,8 @@ function patternAt(arg: string, octave: number): string {
  *   re-written to the tonic and mode of the learner's first `.scale()`, keeping the Band's octaves. When
  *   that `.scale()` is patterned (`"<C4:major!2 G4:major!2>"`), a Band line in one key takes the whole
  *   pattern, so the Band changes key with the tune.
+ * - A Band written in sections (one `arrange()` per labelled track) follows the learner's sections: their order
+ *   and bar counts, each played by the Band's section of the same type (`followLearnerForm`, band-form.ts).
  * - Last, the register is folded (`foldBandRegister`): in G, A or B the Band sits below C, not a fifth above.
  */
 export function bandCodeFor(band: BandSetup, ctx: BandContext): string {
@@ -152,7 +155,7 @@ export function bandCodeFor(band: BandSetup, ctx: BandContext): string {
       (_all, lead: string, octave: string) => `${lead}${learner.tonic}${octave}:${learner.mode}`,
     );
   }
-  return foldBandRegister(code);
+  return foldBandRegister(followLearnerForm(code, ctx.learnerCode));
 }
 
 const escapeRe = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

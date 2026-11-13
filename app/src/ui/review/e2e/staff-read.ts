@@ -223,7 +223,14 @@ export function verify(
     const got = d.lines.map((l) => l.replace(/\s+/g, " "));
     if (lenses.degree && d.degree && got[0] !== d.degree)
       out.push(`bar ${d.bar} n${d.n}: degree line "${got[0]}" ≠ ${d.degree}`);
-    if (lenses.names && !got.includes(want[want.length - 1] as string))
+    // Wave 5 (c5): when full chord names do not fit, the members above the lowest drop their octave ("C4 E G",
+    // notation `compactNames`); either form names the same pitches.
+    const compact = d.said.map((x, i) => (i === 0 ? glyph(x) : glyph(x).replace(/-?\d+$/, ""))).join(" ");
+    if (
+      lenses.names &&
+      !got.includes(want[want.length - 1] as string) &&
+      !(d.said.length > 1 && got.includes(compact))
+    )
       out.push(`bar ${d.bar} n${d.n}: name line ${JSON.stringify(got)} lacks ${want[want.length - 1]}`);
     if (lenses.degree && d.degree) {
       const nums = d.degree.split(" ").map((x) => x.replace(/[^\d]/g, ""));

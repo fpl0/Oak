@@ -1,6 +1,7 @@
 // Reading a built Score: what sounds at a cycle (highlighting), and the score back to events (staff input).
 import type { NEvent, Rat } from "@oak/content-kit";
 import { R } from "@oak/content-kit";
+import type { SpelledPitch } from "@oak/theory";
 import { withIds } from "./notelist.ts";
 import type { NoteItem, Score } from "./types.ts";
 
@@ -64,4 +65,28 @@ export function scoreToEvents(score: Score, track = "main"): NEvent[] {
   }
   out.sort((a, b) => R.cmp(a.onset, b.onset) || (a.midi ?? 0) - (b.midi ?? 0));
   return withIds(out);
+}
+
+/**
+ * How the staff spells each engraved event, by `NEvent.id` (Wave 5): the one spelling a lens label, a tooltip or a
+ * note name next to the staff should show, so text and staff never disagree (approach tones, blue notes, raised
+ * 6 and 7 in minor). A unison doubled in one notehead (c5) maps both events to that head's pitch. Drum strokes and
+ * rests are left out.
+ */
+export function spelledByEvent(score: Score): Map<string, SpelledPitch> {
+  const out = new Map<string, SpelledPitch>();
+  for (const s of score.staves) {
+    if (s.clef === "perc") continue;
+    for (const v of s.voices)
+      for (const b of v.bars)
+        for (const it of b.items) {
+          if (it.kind === "rest" || it.tieFromPrev) continue;
+          it.eventIds.forEach((id, i) => {
+            // An event beyond the heads doubles one of them (`NoteItem.doubled`).
+            const p = it.pitches[i] ?? it.pitches[it.doubled?.[i - it.pitches.length] ?? -1];
+            if (p && !out.has(id)) out.set(id, p);
+          });
+        }
+  }
+  return out;
 }

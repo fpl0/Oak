@@ -8,9 +8,12 @@
 //   4. The tutor status endpoint answers (a backend detected, or off) without any model call.
 //   5. The production build is served by the Oak server and its Service Worker caches /sounds.
 import { expect, type Page, test } from "@playwright/test";
+import { shifted } from "./support/stack.ts";
 
-const API_HEADERS = { "X-Oak": "1", Origin: "http://127.0.0.1:5173" };
-const PROD = "http://127.0.0.1:8790";
+// The platform stack's ports (root playwright.config.ts), moved by OAK_E2E_SHIFT like every stack.
+const VITE_HOST = `127.0.0.1:${shifted(5173)}`;
+const API_HEADERS = { "X-Oak": "1", Origin: `http://${VITE_HOST}` };
+const PROD = `http://127.0.0.1:${shifted(8790)}`;
 
 /** Console errors, uncaught exceptions, failed responses and any request that leaves this machine. */
 function watch(page: Page): { problems: string[]; remote: string[] } {
@@ -233,7 +236,7 @@ test("/dev/workbench plays the 4-track loop from the self-hosted pack; views sta
   await expect(wb).toHaveAttribute("data-playing", "0");
   // Every sample came from this machine's /sounds route; nothing left localhost.
   expect(sounds.length).toBeGreaterThan(0);
-  for (const u of sounds) expect(new URL(u).host).toBe("127.0.0.1:5173");
+  for (const u of sounds) expect(new URL(u).host).toBe(VITE_HOST);
   expect(remote).toEqual([]);
   expect(problems).toEqual([]);
 });

@@ -486,14 +486,19 @@ test("C2 released, X1 waits on melodic dictation: a gym day, 'Two more gym sets 
 }) => {
   await seed(request, "C2 released");
   const plan = await api<{ kind: string; note: string | null }>(request, "GET", "/api/session/today");
-  expect(plan).toMatchObject({ kind: "gym", note: "Two more gym sets open X1" });
+  // Nothing else waits for X1: a gym day while U08.L02 was unwritten; since Wave 5 wrote it, that lesson's day.
+  expect(["gym", "lesson"]).toContain(plan.kind);
+  if (plan.kind === "gym") expect(plan.note).toBe("Two more gym sets open X1");
   await useUiPrefs(page, { theme: "paper" });
   const open = async (p: Page) => {
     await today(p);
     await expect(p.getByTestId("x1-gate")).toBeVisible();
   };
   await open(page);
-  await expect(page.getByTestId("today-card")).toHaveAttribute("data-state", "gym");
+  await expect(page.getByTestId("today-card")).toHaveAttribute(
+    "data-state",
+    plan.kind === "gym" ? "gym" : "normal",
+  );
   await expect(page.getByTestId("x1-gate")).toContainText("Two more gym sets open X1");
   await expect(page.getByTestId("x1-gate")).toContainText("level 3 now, 4 opens it");
   await expect(page.getByTestId("x1-gate")).toContainText("nothing else waits for X1");
@@ -588,6 +593,8 @@ test("past X1: the edge of what's written — a review day with Studio and the g
 }) => {
   await seed(request, "X1 released");
   const plan = await api<{ kind: string; note: string | null }>(request, "GET", "/api/session/today");
+  // Wave 5 writes U08: the day after X1 is a lesson again, and the edge moves to after X2 (w5-today.pw.ts).
+  test.skip(plan.kind !== "review", "U08 is written now: the edge of the written course is past X2");
   expect(plan.kind).toBe("review");
   await useUiPrefs(page, { theme: "paper" });
   const open = async (p: Page) => {

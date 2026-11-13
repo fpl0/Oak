@@ -10,6 +10,7 @@ import {
   glyph,
   keyName,
   keyOfSlot,
+  keyTwinsOf,
   ring,
   sameKey,
   signatureShort,
@@ -232,6 +233,44 @@ export function CircleOfFifths({ current, keys, preview }: CircleProps) {
         )}
         {preview?.error ? <p className="oak-issue-text">{preview.error}</p> : null}
       </div>
+      {current && preview?.movable ? <Twins current={current} preview={preview} /> : null}
     </section>
+  );
+}
+
+/**
+ * The key's twins (Wave 5, U10.L02): its relative (the inner ring, the same signature) and its parallel (the same
+ * tonic, the other mode), each heard as a preview of the same code; "Use" is the circle's own explicit edit.
+ */
+function Twins({ current, preview }: { current: KeySpec; preview: KeyPreview }) {
+  const twins = keyTwinsOf(current);
+  if (!twins) return null;
+  const rows = [
+    { id: "relative", label: "Relative", key: twins.relative, hint: "same signature" },
+    { id: "parallel", label: "Parallel", key: twins.parallel, hint: "same tonic" },
+  ];
+  return (
+    <ul className="oak-twins" aria-label="Twin keys" data-testid="circle-twins">
+      {rows.map((r) => {
+        const on = preview.playing !== null && sameKey(preview.playing, r.key);
+        return (
+          <li key={r.id}>
+            <span className="oak-muted">{r.label}</span>{" "}
+            <button
+              type="button"
+              className="oak-toggle oak-toggle--small"
+              aria-pressed={on}
+              onClick={() => (on ? preview.stop() : preview.preview(r.key))}
+              title={on ? "Stop" : `Hear this code in ${keyName(r.key)} (${r.hint})`}
+              data-testid={`twin-${r.id}`}
+            >
+              {keyName(r.key)}
+              {preview.pending && sameKey(preview.pending, r.key) ? " …" : on ? " ■" : " ▶"}
+            </button>{" "}
+            <span className="oak-muted">({r.hint})</span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

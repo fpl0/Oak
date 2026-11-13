@@ -26,6 +26,14 @@ export interface RubricRuleBase {
   required: boolean;
   /** Evidence at weight 1.5 goes to these skills, only for code the learner typed. */
   skills: SkillRef[];
+  /**
+   * Wave 5. The rule reads only this part of the piece (feature `rubric.section`): a section of an arranged
+   * piece by name (`{ section: "verse" }`, the `nth` one when it recurs; contracts §6.3, read through
+   * `sectionsFromAst`), a bar window (`{ bars: [12, 12] }`, 1-based and inclusive: "bar 12 contains V"), or
+   * the `last` section. A section rule on a piece with no `arrange()` fails with `form.no-sections`.
+   * `contrast` and `key-change` carry their own section references and never take this field.
+   */
+  section?: SectionRef;
 }
 
 export type RubricRuleBody =
@@ -34,7 +42,11 @@ export type RubricRuleBody =
   | { rule: "tempo-bpm"; min?: number; max?: number }
   | { rule: "tracks"; min: number; roles?: Layer[] }
   | { rule: "in-key"; key: KeySpec | "declared"; minRatio: number; tracks?: TrackRef[] }
-  | { rule: "ends-on-degree"; degrees: Degree[]; track: TrackRef }
+  /**
+   * `over` (Wave 5, feature `ends-on-degree.over`): the last chord under that note must be this numeral, read
+   * in the rule's key ("ends on 1 over i", C4). Default: any chord.
+   */
+  | { rule: "ends-on-degree"; degrees: Degree[]; track: TrackRef; over?: string }
   | { rule: "cadence"; types: CadenceType[]; at: "last" | "phrase-ends" | { bar: number } }
   | {
       rule: "chord-tones-strong";
@@ -95,7 +107,16 @@ export type RubricRuleBody =
   /** Kept, for pivot modulations. Lifts use `key-change`. */
   | { rule: "modulation"; to: "up-step" | "up-half" | "relative" | "dominant" | KeySpec; atBar?: number }
   | { rule: "mode"; tonic: string; mode: ScaleMode; requireCharacteristic: boolean }
-  | { rule: "blues-form"; variant: "standard" | "quick-change" | "jazz" }
+  /**
+   * `choruses` (Wave 5, feature `blues-form.choruses`): at least this many twelve-bar choruses in a row
+   * (C5: 2). `variant: "standard"` also accepts the quick change when `quickChangeOk` is set (C5 takes either).
+   */
+  | {
+      rule: "blues-form";
+      variant: "standard" | "quick-change" | "jazz";
+      choruses?: number;
+      quickChangeOk?: boolean;
+    }
   | { rule: "euclid"; track: TrackRef; k: number; n: number; rotationFree: boolean }
   | { rule: "clave"; track: TrackRef; type: "son" | "rumba"; direction: "3-2" | "2-3" }
   | { rule: "polyrhythm"; a: TrackRef; b: TrackRef; ratio: [number, number] }
@@ -145,7 +166,18 @@ export type RubricRuleBody =
   /** ≥ `min` hits with effective gain ≤ `maxGain` (default 0.4) at the given positions. */
   | { rule: "velocity-ghosts"; track: TrackRef; min: number; maxGain?: number; on?: "16th-offbeat" | "any" }
   | { rule: "onsets"; track: TrackRef; drum?: DrumRole; contains?: Rat[]; equals?: Rat[]; perBar: boolean }
-  | { rule: "degree-set"; track: TrackRef; subsetOf?: Degree[]; contains?: Degree[]; minCount?: number }
+  /**
+   * `anyOf` (Wave 5, feature `degree-set.any-of`): at least `minCount` (default 1) notes of the line fall on
+   * any of these degrees ("♭3 or ♭5 at least twice", C5). `subsetOf`/`contains` keep their meaning.
+   */
+  | {
+      rule: "degree-set";
+      track: TrackRef;
+      subsetOf?: Degree[];
+      contains?: Degree[];
+      anyOf?: Degree[];
+      minCount?: number;
+    }
   /** `contains`: every one listed; `anyOf` (Wave 4, U05.L08 "Rhodes or organ"): at least one of them. */
   | { rule: "sounds"; subsetOf?: SoundId[]; contains?: SoundId[]; anyOf?: SoundId[] }
   | { rule: "distinct-pitches"; track: TrackRef; min: number }
@@ -175,6 +207,12 @@ export type RubricRuleBody =
       anyOf?: ChordQuality[];
       subsetOf?: ChordQuality[];
       min?: number;
+      /**
+       * Wave 5 (feature `chord-qualities.depth`): `seventh` reads each chord with its 7th (from the `chord()`
+       * symbol, or from the pitch-class set of a hand-voiced chord), so `subsetOf: ["7"]` means "every chord
+       * is a dominant seventh" (C5). Default `triad`: the triad core, as before.
+       */
+      depth?: "triad" | "seventh";
     }
   /**
    * Wave 4. Inversions (U05.L05, U06.L11): at least `min` chords whose lowest sounding note, across every
@@ -195,9 +233,47 @@ export type RubricRuleBody =
       harmony?: TrackRef;
       roles?: NonChordToneRole[];
       min: number;
-    };
+    }
+  /**
+   * Wave 5. A bass line against the chords (U08, C3, C5): `track` is the bass, `harmony` the chord track
+   * (default: the piece's chords, the bass track excluded). At least one of:
+   * - `roots`: the share of chord changes (`on: "change"`) or of downbeats (`on: "downbeat"`) where the bass
+   *   sounds the chord's root at that moment (any octave) is at least `minRatio` (U08.L01: 0.75 of the
+   *   changes; a bar of rest under a chord counts as a miss);
+   * - `members`: the share of bass notes that are one of `allowed` against the chord at their onset is at
+   *   least `minRatio` (U08.L02: `["root", "fifth", "octave"]`, 0.9), and with `each` every listed member
+   *   occurs at least once;
+   * - `approach`: at least `min` chord changes are reached by an approach tone: the last bass note before the
+   *   change is a diatonic step (`diatonic`) or a half step (`chromatic`) from the new root and the new root
+   *   sounds on the change (U08.L03).
+   * Groove against the kick is the separate `groove-lock` rule (U08.L04).
+   */
+  | {
+      rule: "bass-line";
+      track: TrackRef;
+      harmony?: TrackRef;
+      roots?: { on: "change" | "downbeat"; minRatio: number };
+      members?: { allowed: BassMember[]; minRatio: number; each?: boolean };
+      approach?: { min: number; kinds?: ("diatonic" | "chromatic")[] };
+    }
+  /**
+   * Wave 5. The piece notates cleanly (C3): rendered as a lead sheet (`view: "lead-sheet"`: the melody of
+   * `melody`, chord symbols from the piece's chords) or on the staff, through @oak/notation with
+   * `approximate = false`. A declared `swing` is carried by the notation (contracts §6.10 item 3), so a
+   * swung flavour passes; a piece the quantizer cannot write exactly fails with the bars it rounded.
+   */
+  | { rule: "notates"; view: "lead-sheet" | "staff"; melody?: TrackRef };
 
 /** The kinds of non-chord tone a melody note can be (U07.L03–L05; the harmony view's roles). */
+/**
+ * Wave 5. Which chord member a bass note is, against the chord sounding at its onset (U08): the root, the
+ * 5th, the root an octave up or down (`octave`: the root again in another octave, counted apart so a "root–
+ * five–octave" line can ask for all three), the 3rd, or an approach tone (a note a step or a half step away
+ * from the next chord's root, sounding just before it changes).
+ */
+export const BASS_MEMBERS = ["root", "fifth", "octave", "third", "approach"] as const;
+export type BassMember = (typeof BASS_MEMBERS)[number];
+
 export const NON_CHORD_TONE_ROLES = [
   "passing",
   "neighbour",
@@ -255,6 +331,8 @@ export const RUBRIC_RULE_NAMES = [
   "chord-qualities",
   "chord-inversions",
   "non-chord-tones",
+  "bass-line",
+  "notates",
 ] as const satisfies readonly RubricRuleName[];
 
 /** What a rule evaluation returns. Numeric rules give partial credit `min(1, value / target)`. */

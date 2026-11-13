@@ -211,6 +211,23 @@ describe("Today's done state on the server and one open session per learner day 
     expect(d).toMatchObject({ day: "2026-11-12", doneForToday: true, summarySessionId: late.body.id });
   });
 
+  test("a session open across the 04:00 rollover is still the open one after a reload; hours later it is not", async () => {
+    h.clock.set("2026-11-12T03:40:00.000Z");
+    const late = await start();
+    h.clock.set("2026-11-12T04:10:00.000Z");
+    const d = await ok<SessionDay>("GET", "/api/session/day");
+    expect(d.day).toBe("2026-11-12");
+    expect(d.open?.id).toBe(late.body.id);
+    // A start (the reload's Resume, another tab) returns it rather than opening a second session.
+    expect((await start()).body.id).toBe(late.body.id);
+    // Left open and untouched until the afternoon: the new day starts fresh.
+    h.clock.set("2026-11-12T15:00:00.000Z");
+    expect((await ok<SessionDay>("GET", "/api/session/day")).open).toBeNull();
+    const fresh = await start();
+    expect(fresh.body.id).not.toBe(late.body.id);
+    expect(fresh.body.day).toBe("2026-11-12");
+  });
+
   test("onboarding is the first day's session: the day it finishes on is done; the next day is not", async () => {
     await ok("PUT", "/api/onboarding", { step: "loop", completed: ["loop"] });
     // Part-way through onboarding the day is not done yet.

@@ -136,6 +136,12 @@ const MINOR_CADENCES: RnChord[][] = [
   [rn("2", "dim"), rn("5", "maj"), rn("1", "min")],
   [rn("1", "min"), rn("b6", "maj"), rn("4", "min"), rn("5", "maj")],
 ];
+/** Minor cadences before the major V (U10.L01–L05): the Aeolian VII–i and the minor v–i. */
+const NATURAL_MINOR_CADENCES: RnChord[][] = [
+  [rn("1", "min"), rn("b6", "maj"), rn("b7", "maj"), rn("1", "min")],
+  [rn("1", "min"), rn("4", "min"), rn("b7", "maj"), rn("1", "min")],
+  [rn("1", "min"), rn("4", "min"), rn("5", "min"), rn("1", "min")],
+];
 const isMinorish = (key: KeySpec): boolean =>
   key.mode !== "major" &&
   key.mode !== "lydian" &&
@@ -143,16 +149,22 @@ const isMinorish = (key: KeySpec): boolean =>
   key.mode !== "major pentatonic" &&
   (MODE_STEPS[key.mode][2] === 3 || key.mode.includes("minor"));
 
-/** One of the cadence variants of code C, or the shorter contexts of the fading ladder. */
+/**
+ * One of the cadence variants of code C, or the shorter contexts of the fading ladder. A minor key closes
+ * with the major V only once the learner has met it (`majorV`, U10.L06); before that VII–i or v–i.
+ */
 export function contextChords(
   rng: Rng,
   key: KeySpec,
   context: "cadence" | "short-cadence" | "tonic-chord" | "drone",
+  opts: { majorV?: boolean } = {},
 ): RnChord[] {
   const minor = isMinorish(key);
+  const majorV = !minor || opts.majorV !== false;
   const tonic = rn("1", minor ? "min" : "maj");
   if (context === "tonic-chord" || context === "drone") return [tonic];
-  if (context === "short-cadence") return [tonic, rn("5", "maj"), tonic];
+  if (context === "short-cadence") return [tonic, majorV ? rn("5", "maj") : rn("b7", "maj"), tonic];
+  if (minor && !majorV) return rng.pick(NATURAL_MINOR_CADENCES);
   return rng.pick(minor ? MINOR_CADENCES : MAJOR_CADENCES);
 }
 
@@ -275,6 +287,13 @@ export function resolutionSteps(step: number | string, key: KeySpec): (number | 
   const semis = (steps[within] as number) + acc;
   const out: (number | string)[] = [step];
   if (within === 0 && acc === 0) return out;
+  const minorScale = len === 7 && steps[2] === 3;
+  // Melodic minor's raised 6 climbs home through the raised 7 (la ti do), never through te.
+  if (minorScale && acc > 0 && semis === 9 && steps[(within + 1) % len] === 10) {
+    out.push(`${idx + 1}#`);
+    for (let i = idx + 2; i <= base + len; i++) out.push(i);
+    return out;
+  }
   // ♯4 and everything from 5 up resolve upwards; 2, ♭3, 3, 4 resolve down.
   if (semis >= 6) {
     for (let i = acc < 0 ? idx : idx + 1; i <= base + len; i++) out.push(i);

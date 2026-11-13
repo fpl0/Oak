@@ -1,4 +1,6 @@
-// The AnswerWidget registry (docs/design/wave2.md §3.1): one component per answer kind. Wave 4: a `chord` text answer
+// The AnswerWidget registry (docs/design/wave2.md §3.1): one component per answer kind. Wave 5: `form` (a timeline
+// of sections to label, or cards to order), `bar-grid` (a chord chart, a numeral or symbol per bar) and
+// `scale-builder` (a scale's notes on a keyboard or a degree pad). Wave 4: a `chord` text answer
 // gets the chord-name picker; `slot-choice` is the slot strip (function, cadence). Wave 3: `staff-input` is the
 // staff (notes, or a key signature with `mode: "key-signature"`); a `text` answer read as an interval or a key gets
 // the interval pad or the circle of fifths, each with its forgiving text field. A kind without a widget returns
@@ -7,15 +9,18 @@ import { IntervalAnswer } from "./keys/IntervalAnswer.tsx";
 import { KeyAnswer } from "./keys/KeyAnswer.tsx";
 import { StaffInputAnswer } from "./staff/StaffInput.tsx";
 import type { AnswerKind, AnswerSpecOf, AnswerWidget, AnswerWidgetFor, AnswerWidgetProps } from "./types.ts";
+import { BarGridAnswer } from "./widgets/BarGrid.tsx";
 import { ChoiceAnswer } from "./widgets/Choice.tsx";
 import { ChordNameAnswer } from "./widgets/ChordName.tsx";
 import { ClickRollAnswer, ClickStaffAnswer } from "./widgets/ClickMusic.tsx";
 import { BlanksAnswer, ClickCodeAnswer, CodeAnswer } from "./widgets/CodeLike.tsx";
 import { DegreePadAnswer } from "./widgets/DegreePad.tsx";
+import { FormAnswer } from "./widgets/Form.tsx";
 import { QualityPadAnswer, RnPaletteAnswer } from "./widgets/Harmony.tsx";
 import { KeyboardAnswer } from "./widgets/KeyboardPick.tsx";
 import { OrderAnswer } from "./widgets/Order.tsx";
 import { RhythmGridAnswer } from "./widgets/RhythmGrid.tsx";
+import { ScaleBuilderAnswer } from "./widgets/ScaleBuilder.tsx";
 import { BarButtonsAnswer, HumAnswer, SameDifferentAnswer, SliderAnswer } from "./widgets/Simple.tsx";
 import { SingCaptureAnswer } from "./widgets/SingCapture.tsx";
 import { SlotChoiceAnswer } from "./widgets/SlotChoice.tsx";
@@ -55,6 +60,10 @@ export const ANSWER_WIDGETS: Registry = {
   hum: HumAnswer,
   "same-different": SameDifferentAnswer,
   slider: SliderAnswer,
+  // Wave 5 kinds (docs/design/wave5.md §11): the form strip, the chord chart, the scale builder.
+  form: FormAnswer,
+  "bar-grid": BarGridAnswer,
+  "scale-builder": ScaleBuilderAnswer,
 };
 
 export const answerWidgetFor: AnswerWidgetFor = <K extends AnswerKind>(spec: AnswerSpecOf<K>) =>

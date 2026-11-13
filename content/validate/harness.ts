@@ -11,6 +11,7 @@ import type {
   LintResult,
   MeterId,
   SessionId,
+  SwingSpec,
   TapEx,
   TestCase,
   TestResponse,
@@ -247,14 +248,25 @@ export async function notateCode(
   key: KeySpec | null,
   bars: number,
   staff: "treble" | "bass" | "grand" | "perc" | "lead" = "treble",
+  opts: {
+    /** A lead sheet engraves its melody track only (the chords are symbols above it, the bass is not shown). */
+    melody?: string;
+    /** A declared swing (contracts §6.10): the staff writes straight eighths under "Swing 8ths". */
+    swing?: SwingSpec;
+  } = {},
 ): Promise<NotationOutcome> {
   await ensureRealm();
   const res = await grader.evaluateForGrading(code, { mode: "lesson", bars, lint: null, meter });
   if (!res.ok) return { available: true, error: res.error.message };
   const n = grader.normalize(res, key ? { meter, key } : { meter });
   // The percussion staff engraves the drums; every other staff the pitched events.
+  const pitched = n.all.filter((e) => e.midi !== null && !e.drum);
   const events =
-    staff === "perc" ? n.all.filter((e) => !!e.drum) : n.all.filter((e) => e.midi !== null && !e.drum);
+    staff === "perc"
+      ? n.all.filter((e) => !!e.drum)
+      : staff === "lead" && opts.melody
+        ? pitched.filter((e) => e.track === opts.melody)
+        : pitched;
   if (events.length === 0)
     return {
       available: true,
@@ -266,6 +278,7 @@ export async function notateCode(
     key,
     bars,
     staff: staff === "perc" ? "percussion" : staff,
+    ...(opts.swing ? { swing: opts.swing } : {}),
   });
   used.notation.add("package");
   return { available: true, approximate: score.approximate, warnings: score.warnings.length, abc: abc.abc };

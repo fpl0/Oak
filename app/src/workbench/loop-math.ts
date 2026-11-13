@@ -56,6 +56,16 @@ export function loopPosition(cycle: number, r: LoopRegion): number {
   return r.from + within;
 }
 
+/**
+ * The loop a tutor bar reference asks for (`[[bars:2-3]]`, 1-based, inclusive). Bars count from the first full bar
+ * (c4), so with a pickup the tutor's bar n is cycle n (cycle 0 holds the pickup); without one it is cycle n − 1.
+ */
+export function tutorBarsRegion(d: { from: number; to: number }, pickup: boolean): LoopRegion {
+  const from = Math.min(d.from, d.to);
+  const to = Math.max(d.from, d.to);
+  return { from: from - 1 + (pickup ? 1 : 0), bars: to - from + 1 };
+}
+
 /** True when the region covers the whole loop (looping it changes nothing audible). */
 export function isWholeLoop(r: LoopRegion, loopBars: number): boolean {
   return r.from === 0 && r.bars >= Math.floor(loopBars);
@@ -74,13 +84,22 @@ export function bandTrackAlias(label: string): string {
 
 const BAND_LABEL = /^(\s*)([a-z][A-Za-z0-9]*)(\s*:)/gm;
 
+/** The Band's code with only the labelled lines of the roles a step asked for (all of them when it names none). */
+export function bandCodeForTracks(code: string, tracks: readonly string[]): string {
+  if (tracks.length === 0) return code;
+  return code
+    .split("\n")
+    .filter((line) => {
+      const m = /^\s*([a-z][A-Za-z0-9]*)\s*:/.exec(line);
+      return !m || tracks.includes(m[1] as string);
+    })
+    .join("\n");
+}
+
 /** The learner's code followed by the Band's lines with renamed labels (only the roles asked for). */
 export function codeWithBand(code: string, band: { code: string; tracks: readonly string[] } | null): string {
   if (!band || band.code.trim() === "") return code;
-  const lines = band.code.split("\n").filter((line) => {
-    const m = /^\s*([a-z][A-Za-z0-9]*)\s*:/.exec(line);
-    return !m || band.tracks.length === 0 || band.tracks.includes(m[1] as string);
-  });
+  const lines = [bandCodeForTracks(band.code, band.tracks)];
   const renamed = lines.join("\n").replace(BAND_LABEL, (_all, lead: string, label: string, colon: string) => {
     return `${lead}${bandTrackAlias(label)}${colon}`;
   });

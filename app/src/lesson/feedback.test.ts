@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Exercise, GradeResult } from "@oak/api";
 import type { AnswerSpec } from "../answers/types.ts";
-import { issueLines, revealValue, summaryOf, viewFor } from "./feedback.ts";
+import { collapseRepeats, issueLines, revealValue, summaryOf, viewFor } from "./feedback.ts";
 
 const result = (status: GradeResult["status"], ids: string[]): GradeResult =>
   ({
@@ -159,5 +159,18 @@ describe("Wave 3 reveals", () => {
     expect(revealValue(ex, (ex as { answer: AnswerSpec }).answer, null)).toBe("Bb Eb Ab");
     const d = { ...ex, expect: { e: "key-signature", key: { tonic: "D", mode: "major" } } } as Exercise;
     expect(revealValue(d, (ex as { answer: AnswerSpec }).answer, null)).toBe("F# C#");
+  });
+});
+
+describe("the same finding said once (Wave 5 taps)", () => {
+  test("24 taps between the kicks read as one line with the count; placed lines stay apart", () => {
+    const tap = { where: "", what: "A tap landed between the kicks.", fix: null };
+    const lines = [
+      ...Array.from({ length: 24 }, (_, i) => ({ ...tap, key: `t${i}` })),
+      { key: "b2", where: "Bar 2", what: "Late.", fix: null },
+      { key: "b3", where: "Bar 3", what: "Late.", fix: null },
+    ];
+    const out = collapseRepeats(lines, "taps");
+    expect(out.map((l) => l.what)).toEqual(["A tap landed between the kicks. (24 taps)", "Late.", "Late."]);
   });
 });

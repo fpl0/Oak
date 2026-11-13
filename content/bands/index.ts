@@ -347,6 +347,279 @@ const rock = (f: Flavour, fours: { jazz: string; funk: string } = ROCK_EARLY, sw
 };
 const ROCK_EARLY = { jazz: ROCK_TRIADS, funk: ROCK_TRIADS };
 
+// ---- Wave 5 (U08–U11, C3–C5) ---------------------------------------------------------------------------------
+//
+// Two new ways of writing a Band, both for the units that leave major:
+//
+// 1. Semitones above the tonic. A minor loop or a 12-bar blues must sound the same in every key and every mode
+//    a step names (A minor, A harmonic minor, C blues, C minor pentatonic): a degree like `n(5)` means a
+//    different note in each, and the dominant seventh of a blues has a ♭7 no major scale owns. So these Bands
+//    write each part as half steps from the tonic, `note("<-24 -28>")`, and add the tonic the key names,
+//    `.add(n("0").scale("{{key}}"))`. Only the tonic of `{{key}}` counts; the Band still follows the learner's
+//    key (its `.scale()` is rewritten like any other) and the register fold (packages/strudel bandOctave).
+//    Offsets are written for a tonic of C4 = 0, as every Band is "written in C": the bass's lowest root is
+//    two octaves down (−24), the chords sit in the octave below the tonic.
+// 2. Sections. A Band written as section consts with one `arrange()` per labelled track (STYLE §10) follows
+//    the learner's form: packages/strudel band-form.ts rewrites its `arrange()` to the learner's sections, each
+//    played by the Band's section of the same type (contracts §6.3). Its own form, when the learner has none,
+//    is verse chorus verse chorus.
+//
+// Every Wave 5 Band arrives after U03 and U06, so jazz-soul and funk play their four-note chords from the
+// first stage and need no `BAND_STAGES`; jazz-soul swings. A Band under a bass line the learner writes plays
+// without its bass (`tracks`), and its chords stay out of the bass's octave (content/bands/index.test.ts).
+
+/** The tonic a semitone Band adds to every note: only the tonic of `{{key}}` counts, never its mode. */
+const TONIC = 'n("0").scale("{{key}}")';
+
+interface SemiParts {
+  drums: string;
+  drumsVelocity: string;
+  /** Half steps from the tonic (C4 = 0), quoted mini-notation. */
+  bass: string;
+  chords: string;
+  struct: string;
+  chordsVelocity: string;
+  /** `.swingBy(…)` for drums and chords, or "". */
+  swing?: string;
+  /** `.swingBy(…)` for the bass: a shuffle's bass swings its eighths. */
+  bassSwing?: string;
+}
+/** One flavour's code with its parts in half steps from the tonic (see the comment above). */
+function semiLayers(f: Flavour, p: SemiParts): string {
+  const k = KITS[f];
+  const prod = production(f);
+  const swing = p.swing ?? "";
+  const bank = k.bank ? `.bank("${k.bank}")` : "";
+  return [
+    `drums: s("${p.drums}")${bank}${swing}.velocity(${p.drumsVelocity}).gain(${num(k.drumsGain)})`,
+    `bass: note(${p.bass}).add(${TONIC})${p.bassSwing ?? ""}.s("${k.bass}").lpf(${prod.bassLpf}).gain(${num(k.bassGain)})`,
+    `chords: note(${p.chords}).add(${TONIC}).struct("${p.struct}")${swing}.s("${k.chords}").velocity(${p.chordsVelocity}).gain(${num(k.chordsGain)}).pan(${num(prod.pan.chords ?? 0.42)}).room(${num(prod.room)})`,
+  ].join("\n");
+}
+
+// The Aeolian loop, i–VI–III–VII (Am F C G in A minor; written in C minor: Cm A♭ E♭ B♭), U10 on, C4.
+// Roots: i two octaves down, VI a major 3rd under it, III a minor 3rd over it, VII a whole step under it, so
+// the bass steps down to VI and back up through III to VII, never leaping past a 4th. The chords are voiced
+// close round the tonic an octave down, each change moving a voice by two half steps at most:
+// Cm C E♭ G, A♭ C E♭ A♭ (C and E♭ stay), E♭ B♭ E♭ G, B♭ B♭ D F.
+const AEOLIAN_ROOTS = ["-24", "-28", "-21", "-26"] as const;
+const AEOLIAN_TRIADS = '"<[-12,-9,-5] [-12,-9,-4] [-14,-9,-5] [-14,-10,-7]>"';
+// With four notes (jazz-soul, funk): Cm7 B♭ C E♭ G, A♭6 C E♭ F A♭, E♭add9 B♭ E♭ F G, and B♭ with its root on
+// top (B♭ D F B♭). No major 7th anywhere: an E♭maj7 or A♭maj7 would put D or G a half step under a tune on
+// ♭3 or ♭6, the two notes minor is made of (me and le).
+const AEOLIAN_FOURS = '"<[-14,-12,-9,-5] [-12,-9,-7,-4] [-14,-9,-7,-5] [-14,-10,-7,-2]>"';
+const aeolianBass = (cell: (root: number) => string) =>
+  `"<${AEOLIAN_ROOTS.map((r) => cell(Number(r))).join(" ")}>"`;
+/** A minor ballad's band: a slow piano in pop, Rhodes and a swung ride in jazz-soul, an eighth-note pulse in indie. */
+const aeolian = (f: Flavour): string => {
+  switch (f) {
+    case "flavour.pop":
+      return semiLayers(f, {
+        ...POP_4,
+        ...PIANO_4,
+        bass: aeolianBass((r) => `${r}`),
+        chords: AEOLIAN_TRIADS,
+      });
+    case "flavour.jazz-soul":
+      // Root, then the 5th above it; under III the 5th is taken below, so the bass stays under the chords.
+      return semiLayers(f, {
+        drums: "bd ~ sd ~, rd*8",
+        drumsVelocity: HUMAN_8THS,
+        bass: '"<[-24 -17] [-28 -21] [-21 -26] [-26 -19]>"',
+        chords: AEOLIAN_FOURS,
+        struct: "~ x ~ x",
+        chordsVelocity: '"1 .86"',
+        swing: SWING_4,
+      });
+    case "flavour.indie":
+      // The driving eighth-note bass of an indie ballad (U10.L05) under a strummed guitar.
+      return semiLayers(f, {
+        ...INDIE_4,
+        struct: "x*8",
+        chordsVelocity: HUMAN_8THS,
+        bass: aeolianBass((r) => `[${r}*8]`),
+        chords: AEOLIAN_TRIADS,
+      });
+    case "flavour.funk":
+      // Root, root, then the octave pop and the 5th under it.
+      return semiLayers(f, {
+        ...FUNK_4,
+        ...STAB,
+        bass: aeolianBass((r) => `[${r} ~ ${r} ${r + 12}]`),
+        chords: AEOLIAN_FOURS,
+      });
+  }
+};
+
+// The twelve-bar blues (U11.L05 on, C5): I7 IV7 V7 in C are C7 F7 G7. Written in half steps, so it is the same
+// blues in C blues, C major or C minor pentatonic. Every flavour plays dominant sevenths: the blues is made of
+// them (contracts §6.6 C5), whatever the kit's chord depth elsewhere. Voiced close and voice-led round C4:
+// C7 E G B♭ C, F7 E♭ F A C (E to E♭, G to F, B♭ to A), G7 F G B D (E to F, B♭ to B, C to D).
+const DOM7: Readonly<Record<"I" | "IV" | "V", string>> = {
+  I: "[-8,-5,-2,0]",
+  IV: "[-9,-7,-3,0]",
+  V: "[-7,-5,-1,2]",
+};
+/** Roots two octaves down: C2, F2, G2. */
+const BLUES_ROOT: Readonly<Record<"I" | "IV" | "V", number>> = { I: -24, IV: -19, V: -17 };
+type Step = "I" | "IV" | "V";
+/** The standard twelve bars, and the quick change (IV in bar 2). Bar 12 is V: the turnaround to the top. */
+const STANDARD: readonly Step[] = ["I", "I", "I", "I", "IV", "IV", "I", "I", "V", "IV", "I", "V"];
+const QUICK: readonly Step[] = ["I", "IV", "I", "I", "IV", "IV", "I", "I", "V", "IV", "I", "V"];
+/**
+ * The bass of each bar from its root `r`: the boogie-woogie line up and back (root, 3rd, 5th, 6th, ♭7, 6th, 5th,
+ * 3rd) in swung eighths, or a walk in quarters that climbs from the root when the chord changes (root, 3rd, 5th,
+ * 6th) and comes back down from the ♭7 when it stays (♭7, 6th, 5th, 3rd), so every change lands on its root.
+ */
+type BassCell = (r: number, changed: boolean) => string;
+const BOOGIE: BassCell = (r) => `[${[0, 4, 7, 9, 10, 9, 7, 4].map((x) => r + x).join(" ")}]`;
+const WALK: BassCell = (r, changed) =>
+  `[${(changed ? [0, 4, 7, 9] : [10, 9, 7, 4]).map((x) => r + x).join(" ")}]`;
+/** Root, root, 5th, 5th, 6th, 6th, 5th, 5th: the rock-and-roll shuffle bass. */
+const ROCK_SHUFFLE: BassCell = (r) => `[${[0, 0, 7, 7, 9, 9, 7, 7].map((x) => r + x).join(" ")}]`;
+const FUNK_SHUFFLE: BassCell = (r) => `[${r} ~ ${r + 7} ${r + 10} ~ ${r + 9} ${r + 7} ~]`;
+const bluesBass = (plan: readonly Step[], cell: BassCell) =>
+  `"<${plan.map((s, i) => cell(BLUES_ROOT[s], i === 0 || plan[i - 1] !== s)).join(" ")}>"`;
+const bluesChords = (plan: readonly Step[]) => `"<${plan.map((s) => DOM7[s]).join(" ")}>"`;
+/**
+ * A shuffle in every kit. The drums keep to quarter notes, kick and snare only: the hats, or the ride, are the
+ * learner's (U11.L07 and C5 swing them), so the Band's drums sit under straight or swung hats alike and never
+ * flam against them. The swing is in the bass's eighths and the chords' push.
+ */
+const blues = (f: Flavour, plan: readonly Step[]): string => {
+  const chords = bluesChords(plan);
+  switch (f) {
+    case "flavour.pop":
+      return semiLayers(f, {
+        drums: "bd ~ sd ~",
+        drumsVelocity: PUMP_4,
+        bass: bluesBass(plan, BOOGIE),
+        bassSwing: SWING_4,
+        chords,
+        struct: "~ x ~ x",
+        chordsVelocity: PUSH,
+      });
+    case "flavour.jazz-soul":
+      return semiLayers(f, {
+        drums: "bd ~ sd ~",
+        drumsVelocity: PUMP_4,
+        bass: bluesBass(plan, WALK),
+        chords,
+        ...COMP_SWUNG,
+        swing: SWING_4,
+      });
+    case "flavour.indie":
+      return semiLayers(f, {
+        drums: "bd bd sd ~",
+        drumsVelocity: PUMP_4,
+        bass: bluesBass(plan, ROCK_SHUFFLE),
+        bassSwing: SWING_4,
+        chords,
+        struct: "~ x ~ x",
+        chordsVelocity: PUSH,
+      });
+    case "flavour.funk":
+      return semiLayers(f, {
+        drums: "bd ~ sd bd",
+        drumsVelocity: PUMP_4,
+        bass: bluesBass(plan, FUNK_SHUFFLE),
+        bassSwing: SWING_4,
+        chords,
+        ...COMP_SWUNG,
+        swing: SWING_4,
+      });
+  }
+};
+
+// A song in sections (U09 on, C3): verse I vi IV V (the doo-wop order, C Am F G), chorus IV V I I (F G C C),
+// the harmony U09.L02 teaches. Written in degrees like the major loops, with the same close voicings. The
+// chorus lifts on three counts at once: the snare moves from beat 3 to 2 and 4, the hats double, the bass
+// drives eighths and the chords strike twice as often. A learner's intro or bridge is played by the verse
+// (band-form.ts finds no section of that type and falls back to its kin).
+const SECTION_FORM = (role: string) =>
+  `arrange([4, ${role}Verse], [4, ${role}Chorus], [4, ${role}Verse], [4, ${role}Chorus])`;
+const VERSE_TRIADS = DOOWOP_TRIADS;
+const CHORUS_TRIADS = `"<${IV3} ${V3} ${I3} ${I3}>"`;
+const VERSE_FOURS = DOOWOP_FOURS;
+const CHORUS_FOURS = `"<${IV6_LOW} ${V7} ${I6} ${I6}>"`;
+interface SectionParts {
+  drums: [string, string];
+  drumsVelocity: string;
+  bass: [string, string];
+  chords: [string, string];
+  struct: [string, string];
+  chordsVelocity: string;
+  swing?: string;
+}
+function sectionLayers(f: Flavour, p: SectionParts): string {
+  const k = KITS[f];
+  const prod = production(f);
+  const swing = p.swing ?? "";
+  const bank = k.bank ? `.bank("${k.bank}")` : "";
+  return [
+    `const drumsVerse = s("${p.drums[0]}")`,
+    `const drumsChorus = s("${p.drums[1]}")`,
+    `const bassVerse = n(${p.bass[0]})`,
+    `const bassChorus = n(${p.bass[1]})`,
+    `const chordsVerse = n(${p.chords[0]}).struct("${p.struct[0]}")`,
+    `const chordsChorus = n(${p.chords[1]}).struct("${p.struct[1]}")`,
+    "",
+    `drums: ${SECTION_FORM("drums")}${bank}${swing}.velocity(${p.drumsVelocity}).gain(${num(k.drumsGain)})`,
+    `bass: ${SECTION_FORM("bass")}.scale("{{key}}").s("${k.bass}").lpf(${prod.bassLpf}).gain(${num(k.bassGain)})`,
+    `chords: ${SECTION_FORM("chords")}.scale("{{key}}")${swing}.s("${k.chords}").velocity(${p.chordsVelocity}).gain(${num(k.chordsGain)}).pan(${num(prod.pan.chords ?? 0.42)}).room(${num(prod.room)})`,
+  ].join("\n");
+}
+const VERSE_ROOTS = '"<-14 -9 -11 -10>"';
+const CHORUS_EIGHTHS = '"<[-11*8] [-10*8] [-14*8] [-14*8]>"';
+const sections = (f: Flavour): string => {
+  switch (f) {
+    case "flavour.pop":
+      return sectionLayers(f, {
+        drums: ["bd ~ sd ~, hh*8", "bd sd [~ bd] sd, hh*16"],
+        drumsVelocity: HUMAN_16THS,
+        bass: [VERSE_ROOTS, CHORUS_EIGHTHS],
+        chords: [VERSE_TRIADS, CHORUS_TRIADS],
+        struct: ["x x x x", "x*8"],
+        chordsVelocity: PUMP_4,
+      });
+    case "flavour.jazz-soul":
+      return sectionLayers(f, {
+        drums: ["bd ~ sd ~, rd*4", "bd ~ sd [~ bd], rd*8"],
+        drumsVelocity: HUMAN_8THS,
+        // Root and 5th in the verse (under V the 5th below), walking roots and 5ths in the chorus.
+        bass: [
+          '"<[-14 -10] [-9 -12] [-11 -7] [-10 -13]>"',
+          '"<[-11 -7 -11 -7] [-10 -13 -10 -13] [-14 -10 -14 -10] [-14 -10 -14 -10]>"',
+        ],
+        chords: [VERSE_FOURS, CHORUS_FOURS],
+        struct: ["~ x ~ x", "x ~ [~ x] ~"],
+        chordsVelocity: PUSH,
+        swing: SWING_4,
+      });
+    case "flavour.indie":
+      return sectionLayers(f, {
+        drums: ["bd ~ sd ~, hh*8", "bd [~ bd] sd [~ bd], hh*16"],
+        drumsVelocity: HUMAN_16THS,
+        bass: [VERSE_ROOTS, CHORUS_EIGHTHS],
+        chords: [VERSE_TRIADS, CHORUS_TRIADS],
+        struct: ["x x x x", "x*8"],
+        chordsVelocity: HUMAN_8THS,
+      });
+    case "flavour.funk":
+      return sectionLayers(f, {
+        drums: ["bd ~ sd ~, hh*16", "bd [~ bd] sd [~ bd], hh*16"],
+        drumsVelocity: HUMAN_16THS,
+        bass: [
+          '"<[-14 ~ -14 -7] [-9 ~ -9 -5] [-11 ~ -11 -7] [-10 ~ -10 -6]>"',
+          '"<[-11 -11 -7 -11] [-10 -10 -6 -10] [-14 -14 -7 -14] [-14 -14 -7 -14]>"',
+        ],
+        chords: [VERSE_FOURS, CHORUS_FOURS],
+        struct: ["~ x ~ [~ x]", "[~ x]*4"],
+        chordsVelocity: PUSH,
+      });
+  }
+};
+
 const FLAVOURS: readonly Flavour[] = ["flavour.pop", "flavour.jazz-soul", "flavour.indie", "flavour.funk"];
 const each = (code: (f: Flavour) => string): Record<FlavourId, string> =>
   Object.fromEntries(FLAVOURS.map((f) => [f, code(f)])) as Record<FlavourId, string>;
@@ -406,8 +679,63 @@ export const bands: readonly BandDef[] = [
     params: { key: true, bpm: false },
     code: each((f) => waltz(f, EARLY)),
   }),
+  // Wave 5. U10 on and C4: the minor loop of the records, in any minor key (the step's tonic; see TONIC).
+  defineBand({
+    id: "band.aeolian-4bar",
+    title: "Aeolian loop (i–VI–III–VII)",
+    bars: 4,
+    roles: ["drums", "bass", "chords"],
+    params: { key: true, bpm: false },
+    code: each((f) => aeolian(f)),
+  }),
+  // U11.L05 on, U11.CP and C5: twelve bars of shuffle, the standard form and the quick change (IV in bar 2).
+  defineBand({
+    id: "band.blues-12bar",
+    title: "12-bar shuffle (standard)",
+    bars: 12,
+    roles: ["drums", "bass", "chords"],
+    params: { key: true, bpm: false },
+    code: each((f) => blues(f, STANDARD)),
+  }),
+  defineBand({
+    id: "band.blues-12bar-qc",
+    title: "12-bar shuffle (quick change)",
+    bars: 12,
+    roles: ["drums", "bass", "chords"],
+    params: { key: true, bpm: false },
+    code: each((f) => blues(f, QUICK)),
+  }),
+  // U09 on, U09.CP and C3: verse and chorus, following the learner's own sections (band-form.ts).
+  defineBand({
+    id: "band.sections",
+    title: "Verse and chorus (I–vi–IV–V, IV–V–I–I)",
+    bars: 16,
+    roles: ["drums", "bass", "chords"],
+    params: { key: true, bpm: false },
+    code: each((f) => sections(f)),
+  }),
 ];
 export default bands;
+
+/**
+ * Bands written in half steps above the tonic (see TONIC): the same harmony whatever the mode of the key, so
+ * they serve minor, blues and pentatonic steps. Every other Band is written in degrees of a major key and plays
+ * its bass and chords only under a major key (content/bands/index.test.ts).
+ */
+export const TONIC_BANDS: ReadonlySet<string> = new Set([
+  "band.aeolian-4bar",
+  "band.blues-12bar",
+  "band.blues-12bar-qc",
+]);
+/** Bands written in sections: they follow the learner's `arrange()` (packages/strudel band-form.ts). */
+export const SECTION_BANDS: ReadonlySet<string> = new Set(["band.sections"]);
+/** The harmony each Wave 5 Band plays, one chord a bar, in C (or C minor for the Aeolian loop). */
+export const BAND_CHANGES: Readonly<Record<string, readonly string[]>> = {
+  "band.aeolian-4bar": ["Cm", "Ab", "Eb", "Bb"],
+  "band.blues-12bar": STANDARD.map((s) => ({ I: "C7", IV: "F7", V: "G7" })[s]),
+  "band.blues-12bar-qc": QUICK.map((s) => ({ I: "C7", IV: "F7", V: "G7" })[s]),
+  "band.sections": ["C", "Am", "F", "G", "F", "G", "C", "C", "C", "Am", "F", "G", "F", "G", "C", "C"],
+};
 
 /**
  * A later stage of one Band in one flavour: from `from` on (in every legal order), the Band plays `code`

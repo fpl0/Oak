@@ -3,6 +3,7 @@
 import type { AlbumTrackDetail, AlbumTrackVersion, CapstoneReview, MeterId, SketchDetail } from "@oak/api";
 import { CapstoneReviewSchema, OakApiError } from "@oak/api";
 import { editorId } from "@oak/strudel";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { clsx } from "clsx";
 import { Code2, Download, MessageSquareText, Mic2, Pencil, Square, Trash2 } from "lucide-react";
@@ -10,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { recordingSeconds, recordPerformance } from "../capstone/engine.ts";
 import { PIECE_DOES_NOT_RUN } from "../capstone/record.ts";
 import { WorkbenchServicesLoader } from "../capstone/WorkbenchServicesLoader.tsx";
+import { callConfirmed } from "../lib/api.ts";
 import { FLAVOUR_LABEL, formatDate, formatDuration } from "../lib/format.ts";
 import { usePageTitle } from "../lib/nav.ts";
 import {
@@ -28,6 +30,7 @@ import { AlbumCover } from "../ui/AlbumCover.tsx";
 import { Button, buttonClass } from "../ui/kit/Button.tsx";
 import { Card, Chip, Page, Skeleton } from "../ui/kit/basics.tsx";
 import { Callout } from "../ui/kit/Controls.tsx";
+import { Dialog } from "../ui/kit/Dialog.tsx";
 import { Switch } from "../ui/kit/Field.tsx";
 import { ErrorState } from "../ui/kit/QueryState.tsx";
 import { toast } from "../ui/kit/Toast.tsx";
@@ -592,6 +595,9 @@ function LiveCode({
 }) {
   const { oak } = useWorkbenchServices();
   const put = useAlbumPutAudio();
+  const qc = useQueryClient();
+  // c11: a version that has a recording asks before a new take replaces it.
+  const [confirmReplace, setConfirmReplace] = useState(false);
   const { music, pending } = useCoverMusic(
     { sketchId: version.sketchId, sketchVersion: version.sketchVersion },
     track.flavour,
@@ -628,7 +634,7 @@ function LiveCode({
     live.current.stopped = true;
     oak.recorder.cancel();
   };
-  const record = async () => {
+  const record = async (replace: boolean) => {
     const h = oak.editors.get(editorId(slug));
     if (!h || pending || broken) return;
     setRecording(true);
@@ -637,13 +643,26 @@ function LiveCode({
     try {
       const rec = await recordPerformance(oak, h, bars);
       if (live.current.gone) return;
-      await put.mutateAsync({
+      const input = {
         params: { id: track.id, v: String(version.version) },
         query: { durationS: String(Math.round(rec.durationS * 10) / 10) },
         body: rec.blob,
         contentType: rec.mime.split(";")[0],
-      } as never);
-      toast.success(`Version ${version.version} recorded`);
+      } as never;
+      if (replace) {
+        // The learner confirmed the replacement; the nonce is fetched now, after the take (it lives 60 s).
+        await callConfirmed(
+          "album.putAudio",
+          "album.audio.replace",
+          `${track.id}/v${version.version}`,
+          input,
+        );
+        void qc.invalidateQueries({ queryKey: ["api", "album.track"] });
+        void qc.invalidateQueries({ queryKey: ["api", "album.get"] });
+      } else await put.mutateAsync(input);
+      toast.success(
+        replace ? `Version ${version.version} recorded again` : `Version ${version.version} recorded`,
+      );
     } catch (e) {
       if (live.current.gone) return;
       if (live.current.stopped) toast.info("Recording stopped. Nothing was saved.");
@@ -688,7 +707,8 @@ function LiveCode({
               loading={recording}
               disabled={pending || broken}
               title={pending ? "Reading the piece…" : broken ? "This version's code doesn't run" : undefined}
-              onClick={() => void record()}
+              onClick={() => (version.hasAudio ? setConfirmReplace(true) : void record(false))}
+              data-testid="record-version"
               className={clsx(!version.hasAudio && "border-accent")}
             >
               {version.hasAudio ? "Record again" : "Record this version"}
@@ -713,6 +733,32 @@ function LiveCode({
           {expected ? ` of ${formatDuration(expected)}` : ""}… UI sounds and the mic are off.
         </p>
       )}
+      <Dialog
+        open={confirmReplace}
+        onClose={() => setConfirmReplace(false)}
+        title={`Replace the earlier recording of v${version.version}?`}
+        description="A new take of this version replaces the one it has now. The earlier take is not kept; the code, the cover and the liner notes stay as they are."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmReplace(false)} data-testid="keep-recording">
+              Keep the earlier one
+            </Button>
+            <Button
+              variant="primary"
+              icon={<Mic2 aria-hidden className="size-4" />}
+              onClick={() => {
+                setConfirmReplace(false);
+                void record(true);
+              }}
+              data-testid="confirm-replace"
+            >
+              Record and replace
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-text-2">Stopping the take before it ends keeps the earlier recording.</p>
+      </Dialog>
     </div>
   );
 }

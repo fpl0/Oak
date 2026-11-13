@@ -92,6 +92,13 @@ export const CTX = {
   flatKeys: "ctx.flat-keys",
   /** Movable-do syllables join the degree numbers (U03.L08). */
   solfege: "ctx.solfege",
+  /**
+   * The minor key's major V and vii° (harmonic minor, U10.L06): before it a minor key's dominant is v and its
+   * cadences close VII–i or v–i (U10.L04 "the major V of harmonic minor waits for U10.L06").
+   */
+  majorV: "ctx.major-v",
+  /** The Andalusian cadence i–VII–VI–V (U10.L07). */
+  andalusian: "ctx.andalusian",
 } as const;
 export const isContextCategory = (id: string): boolean => id.startsWith("ctx.");
 /** Whether the family declares a context category. */

@@ -3,12 +3,20 @@
 // are the learner's own audio, self-assessed (or, with no audio project yet, a ladder session one realism level
 // up). Today says that plainly, and while X1 waits only on melodic dictation it says "Two more gym sets open X1".
 // The Coda announces a realism change once, and offers a ladder level-up when the server offers one. Pure.
-import type { CapstoneGate, GymPlan, LadderState, SessionPlan } from "@oak/api";
+import {
+  type CapstoneGate,
+  type GymPlan,
+  type LadderSong,
+  type LadderState,
+  OWN_AUDIO_CHECKLIST,
+  type SessionPlan,
+  type SessionSummary,
+} from "@oak/api";
 
-export type LadderLevel = 1 | 2 | 3 | 4;
+export type LadderLevel = 1 | 2 | 3 | 4 | 5 | 6;
 export type Realism = 0 | 1 | 2 | 3 | 4;
 
-/** The four generated rungs (contracts §2.9), in the learner's words. */
+/** The rungs a learner sets (contracts §2.9): four generated, then public-domain songs (L5) and blues (L6). */
 export const LADDER_LEVELS: Readonly<Record<LadderLevel, { name: string; what: string }>> = {
   1: { name: "drum loops", what: "a generated drum loop: copy each drum line by ear" },
   2: { name: "bass lines", what: "a generated bass line: write its notes and rhythm by ear" },
@@ -17,6 +25,14 @@ export const LADDER_LEVELS: Readonly<Record<LadderLevel, { name: string; what: s
     what: "a generated four-chord loop, bass first: the bass notes, then each chord's quality, then its numeral",
   },
   4: { name: "short melodies", what: "a generated short melody: write it down phrase by phrase" },
+  5: {
+    name: "folk songs",
+    what: "a public-domain folk song: write its melody down one phrase at a time, each phrase checked on its own",
+  },
+  6: {
+    name: "blues",
+    what: "a blues from before 1930, in three stages: the bass, then the changes, then the melody",
+  },
 };
 
 /** What each realism level adds (contracts §6.12). Grading never changes with it. */
@@ -29,7 +45,7 @@ export const REALISM_LINES: Readonly<Record<Realism, string>> = {
 };
 
 export const levelName = (level: number): string =>
-  LADDER_LEVELS[Math.min(4, Math.max(1, Math.round(level))) as LadderLevel].name;
+  LADDER_LEVELS[Math.min(6, Math.max(1, Math.round(level))) as LadderLevel].name;
 
 export interface GymDay {
   gymId: string | null;
@@ -51,6 +67,42 @@ const gymNo = (id: string | null): number | null => {
   return m ? Number(m[1]) : null;
 };
 
+const STAGE_NAME: Record<"bass" | "changes" | "melody", string> = {
+  bass: "the bass",
+  changes: "the changes",
+  melody: "the melody",
+};
+
+/** The song a level-5 or level-6 gym day works on: the one under way at that level, else the first open one. */
+export function currentSong(
+  songs: readonly LadderSong[] | null | undefined,
+  level: number | null,
+): LadderSong | null {
+  if (!songs || (level !== 5 && level !== 6)) return null;
+  const at = songs.filter((s) => s.level === level && s.status === "open");
+  return at.find((s) => s.passedPhrases.length > 0 || s.passedStages.length > 0) ?? at[0] ?? null;
+}
+
+/** "Shenandoah: phrase 2 of 4 next", "St. Louis Blues: the changes next", or the title alone at its start. */
+export function songLine(
+  song: Pick<LadderSong, "title" | "level" | "phrases" | "passedPhrases" | "passedStages">,
+): string {
+  if (song.level === 6) {
+    const stage = (["bass", "changes", "melody"] as const).find((s) => !song.passedStages.includes(s));
+    if (!stage) return `${song.title}: every stage passed`;
+    return song.passedStages.length === 0
+      ? `${song.title}, the bass first`
+      : `${song.title}: ${STAGE_NAME[stage]} next`;
+  }
+  const total = song.phrases.length;
+  const next = Array.from({ length: total }, (_, i) => i + 1).find((p) => !song.passedPhrases.includes(p));
+  if (total === 0) return song.title;
+  if (next === undefined) return `${song.title}: every phrase passed`;
+  return song.passedPhrases.length === 0
+    ? `${song.title}, phrase 1 of ${total}`
+    : `${song.title}: phrase ${next} of ${total} next`;
+}
+
 /**
  * The gym day of a plan. `gym` (`GET /gym`) and `ladder` (`GET /ladder`) may be null (loading, or a server that
  * has not built them): the plan's own ID and title still decide odd or even.
@@ -60,6 +112,8 @@ export function gymDay(
   gym: Pick<GymPlan, "next"> | null,
   ladder: Pick<LadderState, "level" | "realism"> | null,
   ownAudioTitle?: string | null,
+  /** `GET /ladder/songs` (L5/L6), when built. */
+  songs?: readonly LadderSong[] | null,
 ): GymDay | null {
   if (plan.kind !== "gym") return null;
   const id = plan.mapItemId?.startsWith("GYM.") ? plan.mapItemId : null;
@@ -97,23 +151,37 @@ export function gymDay(
   const levelText = level ? `level ${level}: ${levelName(level)}` : "the ladder";
   const realismText = realism !== null ? ` · R${realism}` : "";
   const what = level ? LADDER_LEVELS[level as LadderLevel]?.what : null;
+  const song = currentSong(songs, level);
+  const songText = song ? ` · ${songLine(song)}` : "";
   const explain: string[] = [];
   if (what) explain.push(`You hear ${what}. Tempo, meter and key are given.`);
   if (realism !== null)
     explain.push(
       `Realism R${realism}: ${REALISM_LINES[realism as Realism]}. The grading is the same at every realism level.`,
     );
-  explain.push("It is graded exactly: 85% or better is a pass. A revealed answer earns no pass.");
+  if (level === 5)
+    explain.push(
+      "Each phrase is graded on its own: 85% or better passes it. The song counts once every phrase has passed with nothing revealed; it waits in Transcribe between days.",
+    );
+  else if (level === 6)
+    explain.push(
+      "The stages open in order: the bass passes at 90%, the changes and the melody at 85%. Nothing revealed; the song waits in Transcribe between days.",
+    );
+  else explain.push("It is graded exactly: 85% or better is a pass. A revealed answer earns no pass.");
   return {
     gymId: id,
     kind: "ladder",
     fallback,
     level,
     realism,
-    detail: `${tag} · Ladder, ${levelText}${realismText}`,
+    detail: `${tag} · Ladder, ${levelText}${songText}${realismText}`,
     lead: fallback
       ? "Every fifth session is a transcription slot. Even slots are for your own audio; you have none yet, so today is a ladder session one realism level up. Add a recording in Transcribe whenever you like."
-      : "Every fifth session is a transcription slot: you listen to a short generated piece and write it down in code.",
+      : level === 5
+        ? "Every fifth session is a transcription slot: today, a public-domain folk song, written down in code a phrase at a time."
+        : level === 6
+          ? "Every fifth session is a transcription slot: today, a blues, written down in code stage by stage: bass, changes, melody."
+          : "Every fifth session is a transcription slot: you listen to a short generated piece and write it down in code.",
     explain,
   };
 }
@@ -193,7 +261,7 @@ export function ladderCoda(ladder: LadderState | null | undefined, day: string):
         from: ladder.level,
         to: ladder.levelUp.to,
         title: `Level ${ladder.levelUp.to} is open: ${levelName(ladder.levelUp.to)}`,
-        body: `${ladder.levelUp.reason} Take it when you like; it starts clean, at R0, and you can step back down any time.`,
+        body: `${ladder.levelUp.reason} ${levelUpWhat(ladder.levelUp.to)} Take it when you like; it starts clean, at R0, and you can step back down any time.`,
       }
     : null;
   let today: LadderCoda["today"] = null;
@@ -212,4 +280,109 @@ export function ladderCoda(ladder: LadderState | null | undefined, day: string):
   }
   if (!realism && !levelUp && !today) return null;
   return { realism, levelUp, today };
+}
+
+// --- Wave 5 (carry-over c10): the gym Coda from the session summary ---------------------------------------------
+
+type SummaryGym = NonNullable<SessionSummary["gym"]>;
+
+export interface OwnAudioCoda {
+  title: string;
+  transcriptionId: string | null;
+  /** "2 versions saved · 3 bars worked on" */
+  line: string;
+  /** The checklist rows as saved today, in the checklist's order (unanswered rows left out). */
+  rows: { id: string; label: string; value: number; word: string }[];
+  /** What the self-assessment says, plainly: "3 of 5 rows answered yes". */
+  verdict: string | null;
+}
+
+const CHECK_WORD = ["not yet", "partly", "yes"] as const;
+
+/** The own-audio card of a gym Coda: today's versions, the bars worked on, the checklist as the learner scored it. */
+export function ownAudioCoda(g: SummaryGym | null | undefined): OwnAudioCoda | null {
+  if (g?.kind !== "own-audio" || !g.ownAudio) return null;
+  const o = g.ownAudio;
+  const parts: string[] = [];
+  parts.push(
+    o.versionsToday === 0
+      ? "No version saved today"
+      : `${o.versionsToday} ${o.versionsToday === 1 ? "version" : "versions"} saved`,
+  );
+  if (o.regions > 0) parts.push(`${o.regions} ${o.regions === 1 ? "bar" : "bars"} worked on`);
+  const rows = OWN_AUDIO_CHECKLIST.filter((r) => typeof o.checklist[r.id] === "number").map((r) => {
+    const value = Math.max(0, Math.min(2, Math.round(o.checklist[r.id] as number)));
+    return { id: r.id, label: r.label, value, word: CHECK_WORD[value] as string };
+  });
+  const yes = rows.filter((r) => r.value === 2).length;
+  return {
+    title: g.title,
+    transcriptionId: g.transcriptionId,
+    line: parts.join(" · "),
+    rows,
+    verdict:
+      rows.length === 0
+        ? null
+        : `${yes} of ${OWN_AUDIO_CHECKLIST.length} rows answered yes. It is your own judgement, and it counts.`,
+  };
+}
+
+/**
+ * The ladder card of a gym Coda from the summary (c10): today's best score and whether it was a graded pass, the
+ * realism change and an offered level-up, each announced once by the server. `null` when the summary carries no
+ * ladder work; the Coda then reads the ladder itself (`ladderCoda`), as in Wave 4.
+ */
+export function summaryLadderCoda(g: SummaryGym | null | undefined): LadderCoda | null {
+  if (g?.kind !== "ladder" || !g.ladder) return null;
+  const l = g.ladder;
+  const name = levelName(l.level);
+  const pass =
+    l.level === 6
+      ? "A stage passes at 85% or better, the bass at 90%"
+      : l.level === 5
+        ? "A phrase passes at 85% or better"
+        : "A pass is 85% or better";
+  const today: LadderCoda["today"] =
+    l.bestScore === null
+      ? {
+          level: l.level,
+          realism: l.realism,
+          passed: false,
+          line: `Level ${l.level}, ${name}, at R${l.realism}: ${g.title} is open in Transcribe, nothing checked yet.`,
+        }
+      : {
+          level: l.level,
+          realism: l.realism,
+          passed: l.gradedPass,
+          line: l.gradedPass
+            ? `Level ${l.level}, ${name}, at R${l.realism}: ${Math.round(l.bestScore * 100)}% on ${g.title}, a graded pass.`
+            : `Level ${l.level}, ${name}, at R${l.realism}: ${Math.round(l.bestScore * 100)}% so far on ${g.title}. ${pass}; it waits in Transcribe.`,
+        };
+  const rc = l.realismChange;
+  const realism: LadderCoda["realism"] =
+    rc && rc.from !== rc.to
+      ? {
+          from: rc.from,
+          to: rc.to,
+          line:
+            rc.to > rc.from
+              ? `Two strong sessions in a row: the ladder now plays at R${rc.to}, ${REALISM_LINES[rc.to as Realism]}. The grading stays the same.`
+              : `The ladder steps back to R${rc.to}, ${REALISM_LINES[rc.to as Realism]}, until it feels easy again. The grading stays the same.`,
+        }
+      : null;
+  const levelUp: LadderCoda["levelUp"] = l.levelUp
+    ? {
+        from: l.level,
+        to: l.levelUp.to,
+        title: `Level ${l.levelUp.to} is open: ${levelName(l.levelUp.to)}`,
+        body: `${l.levelUp.reason} ${levelUpWhat(l.levelUp.to)} Take it when you like; it starts clean, at R0, and you can step back down any time.`,
+      }
+    : null;
+  return { realism, levelUp, today };
+}
+
+/** What a new level holds, in one sentence (the Coda's level-up offer). */
+export function levelUpWhat(to: number): string {
+  const what = LADDER_LEVELS[Math.min(6, Math.max(1, Math.round(to))) as LadderLevel].what;
+  return `On level ${Math.round(to)} you hear ${what}.`;
 }

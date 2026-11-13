@@ -4,6 +4,7 @@ import { clsx } from "clsx";
 import { Check, Circle, CircleDashed, Loader2 } from "lucide-react";
 import { anchorText } from "./anchors.ts";
 import { type ChecklistRow, labelRuns, type Readiness } from "./checklist.ts";
+import { contrastText, durationText, type RowExtra } from "./wave5.ts";
 
 export function RuleLabel({ label }: { label: string }) {
   return (
@@ -27,6 +28,7 @@ export function Checklist({
   checking,
   stale,
   onBars,
+  extras = {},
 }: {
   rows: readonly ChecklistRow[];
   ready: Readiness;
@@ -35,6 +37,8 @@ export function Checklist({
   stale: boolean;
   /** A bar anchor lights those bars on the roll and the staff. */
   onBars?: (from: number, to: number) => void;
+  /** Wave 5: what a row shows beyond met / not yet (contrast axes, the length, the section it reads). */
+  extras?: Readonly<Record<string, RowExtra>>;
 }) {
   const required = rows.filter((r) => r.required);
   const suggestions = rows.filter((r) => !r.required);
@@ -53,7 +57,7 @@ export function Checklist({
       </div>
       <ul className={clsx("flex flex-col gap-1", stale && "opacity-70")} aria-busy={checking || undefined}>
         {required.map((r) => (
-          <Row key={r.id} row={r} onBars={onBars} />
+          <Row key={r.id} row={r} onBars={onBars} extra={extras[r.id]} />
         ))}
       </ul>
       {suggestions.length > 0 && (
@@ -61,7 +65,7 @@ export function Checklist({
           <h3 className="mt-2 font-sans text-sm font-medium text-text-3">Suggestions</h3>
           <ul className="flex flex-col gap-1">
             {suggestions.map((r) => (
-              <Row key={r.id} row={r} onBars={onBars} />
+              <Row key={r.id} row={r} onBars={onBars} extra={extras[r.id]} />
             ))}
           </ul>
         </>
@@ -73,9 +77,11 @@ export function Checklist({
 function Row({
   row,
   onBars,
+  extra,
 }: {
   row: ChecklistRow;
   onBars?: ((from: number, to: number) => void) | undefined;
+  extra?: RowExtra | undefined;
 }) {
   const icon =
     row.state === "met" ? (
@@ -123,10 +129,58 @@ function Row({
                   {anchorText(row.anchor)}
                 </span>
               ))}
-            {row.detail && <span>{row.detail}</span>}
+            {row.detail && (extra === undefined || extra.kind === "section" || extra.kind === "note") && (
+              <span>
+                <RuleLabel label={row.detail} />
+              </span>
+            )}
           </p>
         )}
+        {extra && <Extra extra={extra} />}
       </div>
     </li>
   );
+}
+
+/** A row's Wave 5 line: the contrast axes found (lit) and not yet, the length read from the code, the section. */
+function Extra({ extra }: { extra: RowExtra }) {
+  if (extra.kind === "contrast") {
+    const f = extra.finding;
+    return (
+      <div className="mt-1 flex flex-col gap-1" data-testid="contrast-axes">
+        <ul className="flex flex-wrap gap-1" aria-label="What the sections differ on">
+          {f.axes.map((a) => (
+            <li
+              key={a.axis}
+              data-axis={a.axis}
+              data-found={a.found ? "true" : "false"}
+              className={clsx(
+                "inline-flex h-5 items-center gap-1 rounded-full border px-1.5 text-[0.75rem]",
+                a.found ? "border-accent/50 bg-lane-in text-text" : "border-border text-text-3",
+              )}
+            >
+              {a.found && <Check aria-hidden className="size-3 text-accent" strokeWidth={2.5} />}
+              {a.label}
+              <span className="sr-only">{a.found ? " (differs)" : " (same so far)"}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="text-text-2">{contrastText(f)}</p>
+      </div>
+    );
+  }
+  if (extra.kind === "duration")
+    return (
+      <p className="mt-0.5 text-text-2 tabular-nums" data-testid="duration-read">
+        {durationText(extra.finding)}
+      </p>
+    );
+  if (!extra.text) return null;
+  if (extra.kind === "note" || extra.kind === "unread")
+    return (
+      <p className="mt-0.5 text-text-2" data-testid={extra.kind === "note" ? "row-note" : "row-unread"}>
+        <RuleLabel label={extra.text} />
+      </p>
+    );
+  return <p className="mt-0.5 text-text-2">{extra.text}</p>;
 }

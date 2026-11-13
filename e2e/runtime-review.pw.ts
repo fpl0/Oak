@@ -16,9 +16,10 @@
 // Vite's HMR socket is stubbed in every page: other packages are edited while this runs, and a full reload
 // mid-test is not what is being tested.
 import { expect, type Page, test } from "@playwright/test";
+import { shifted } from "./support/stack.ts";
 
 const SHOTS = new URL("./screenshots/", import.meta.url).pathname;
-const PROD = process.env.OAK_PROD_URL ?? "http://127.0.0.1:8790";
+const PROD = process.env.OAK_PROD_URL ?? `http://127.0.0.1:${shifted(8790)}`;
 
 type OakGlobal = {
   __oakStrudel?: {

@@ -4,8 +4,28 @@
 // machine: the server is on 127.0.0.1 and the tutor only ever gets code (ux §7.11 "Own audio").
 import { AUDIO_UPLOAD_MAX_BYTES, OWN_AUDIO_CHECKLIST } from "@oak/api";
 
-export const DROP_COPY = "Drop an audio file — it stays on this device.";
 export const PRIVACY_COPY = "Your audio file stays on this device. Claude only sees your transcription code.";
+
+/** The audio files the browser can usually decode (the server keeps whatever it is given, up to the limit). */
+/** For the kit's FileDropZone (`accept`): audio types and the extensions browsers decode. */
+export const AUDIO_ACCEPT = [
+  "audio/*",
+  ".wav",
+  ".wave",
+  ".flac",
+  ".ogg",
+  ".oga",
+  ".opus",
+  ".mp3",
+  ".m4a",
+  ".mp4",
+  ".aac",
+  ".webm",
+  ".aif",
+  ".aiff",
+] as const;
+/** The accepted files in words, for the drop zone's refusal. */
+export const AUDIO_KINDS = "WAV, FLAC, MP3, AAC (m4a), Ogg or AIFF";
 
 const AUDIO_EXT = /\.(wav|wave|flac|ogg|oga|opus|mp3|m4a|mp4|aac|webm|aif|aiff)$/i;
 

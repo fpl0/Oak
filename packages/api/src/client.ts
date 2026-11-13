@@ -220,6 +220,9 @@ export function createClient(options: OakClientOptions = {}): OakClient {
           `${name} is destructive and needs a confirm nonce`,
         );
       (init.headers as Record<string, string>)[HEADERS.confirm] = opts.confirmNonce;
+    } else if (opts.confirmNonce && def.confirmIf) {
+      // Wave 5: destructive only when it replaces something (`confirmIf`): the nonce is sent when given.
+      (init.headers as Record<string, string>)[HEADERS.confirm] = opts.confirmNonce;
     }
     if (opts.signal) init.signal = opts.signal;
     let res: Response;

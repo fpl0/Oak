@@ -49,21 +49,100 @@ export function pcHistogram(events: readonly NEvent[], window?: readonly [Rat, R
   return h;
 }
 
-/** The 24 major and minor keys ranked by Krumhansl–Kessler correlation, best first. */
+/**
+ * The 24 major and minor keys ranked by Krumhansl–Kessler correlation, best first, with two corrections the
+ * profiles alone get wrong (Wave 4 carry-over c6):
+ * - a sparse line (at most four pitch classes carrying weight) is read in the key whose tonic triad holds the most
+ *   of it: D F♯ A F♯ is D major, not F♯ minor (where it is the VI chord);
+ * - when the best two are relative keys within `RELATIVE_MARGIN`, the one whose tonic triad stands on the bar
+ *   lines (downbeats, the bass weighing more) and that starts and ends on its tonic wins: a D-minor sketch whose
+ *   melody leans on F is still D minor.
+ */
 export function keyEstimate(
   events: readonly NEvent[],
   o: { window?: readonly [Rat, Rat] } = {},
 ): { key: KeySpec; r: number }[] {
   const h = pcHistogram(events, o.window);
   if (h.every((x) => x === 0)) return [];
-  const out: { key: KeySpec; r: number }[] = [];
+  const out: { key: KeySpec; r: number; t: number; minor: boolean }[] = [];
   for (let t = 0; t < 12; t++) {
     const rot = (p: readonly number[]): number[] =>
       Array.from({ length: 12 }, (_, i) => p[mod12(i - t)] as number);
-    out.push({ key: { tonic: MAJOR_NAMES[t] as string, mode: "major" }, r: pearson(h, rot(MAJOR)) });
-    out.push({ key: { tonic: MINOR_NAMES[t] as string, mode: "minor" }, r: pearson(h, rot(MINOR)) });
+    out.push({
+      key: { tonic: MAJOR_NAMES[t] as string, mode: "major" },
+      r: pearson(h, rot(MAJOR)),
+      t,
+      minor: false,
+    });
+    out.push({
+      key: { tonic: MINOR_NAMES[t] as string, mode: "minor" },
+      r: pearson(h, rot(MINOR)),
+      t,
+      minor: true,
+    });
   }
-  return out.sort((a, b) => b.r - a.r);
+  out.sort((a, b) => b.r - a.r);
+  const notes = pitched(events).filter(
+    (e) => !o.window || (R.lte(o.window[0], e.onset) && R.lt(e.onset, o.window[1])),
+  );
+  const total = h.reduce((a, b) => a + b, 0);
+  const used = h.filter((x) => x / total >= 0.05).length;
+  const triad = (k: { t: number; minor: boolean }): number[] => [
+    k.t,
+    mod12(k.t + (k.minor ? 3 : 4)),
+    mod12(k.t + 7),
+  ];
+  let ranked = out;
+  if (used <= 4) {
+    // Sparse: the tonic triad that holds the most weight, among keys whose scale holds every note used.
+    const cover = (k: (typeof out)[number]): number =>
+      triad(k).reduce((a, pc) => a + (h[pc] as number), 0) / total;
+    const fits = out.filter((k) => h.every((w, pc) => w === 0 || inScale(pc, k.key)));
+    const best = [...fits].sort((a, b) => cover(b) - cover(a) || b.r - a.r)[0];
+    if (best && cover(best) > cover(out[0] as (typeof out)[number]) + 1e-9)
+      ranked = [best, ...out.filter((k) => k !== best)];
+  } else {
+    const [a, b] = out as [(typeof out)[number], (typeof out)[number]];
+    const relatives =
+      a.minor !== b.minor && mod12((a.minor ? a.t + 3 : b.t + 3) - (a.minor ? b.t : a.t)) === 0;
+    if (
+      relatives &&
+      a.r - b.r < RELATIVE_MARGIN &&
+      tonicEvidence(notes, triad(b)) > tonicEvidence(notes, triad(a))
+    )
+      ranked = [b, a, ...out.slice(2)];
+  }
+  return ranked.map(({ key, r }) => ({ key, r }));
+}
+/** How close two relative keys' correlations must be for the tonic evidence to decide between them. */
+export const RELATIVE_MARGIN = 0.12;
+
+/**
+ * How strongly the music leans on a tonic triad (`[tonic, third, fifth]` pitch classes): every note that starts on
+ * a bar line counts 2 when it is the tonic and 1 when it is the 3rd or 5th, half again when it is the lowest note
+ * there; the first and the last lowest notes add 3 when they are the tonic.
+ */
+function tonicEvidence(notes: readonly (NEvent & { midi: number })[], triad: readonly number[]): number {
+  if (notes.length === 0) return 0;
+  const lowestAt = new Map<string, number>();
+  for (const e of notes) {
+    const k = `${e.onset[0]}/${e.onset[1]}`;
+    lowestAt.set(k, Math.min(lowestAt.get(k) ?? Number.POSITIVE_INFINITY, e.midi));
+  }
+  let score = 0;
+  for (const e of notes) {
+    if (!R.isInt(e.onset)) continue;
+    const pc = mod12(e.midi);
+    const w = pc === triad[0] ? 2 : triad.includes(pc) ? 1 : 0;
+    score += w * (lowestAt.get(`${e.onset[0]}/${e.onset[1]}`) === e.midi ? 1.5 : 1);
+  }
+  const sorted = [...notes].sort((a, b) => R.cmp(a.onset, b.onset) || a.midi - b.midi);
+  const first = sorted[0] as NEvent & { midi: number };
+  const lastOnset = (sorted[sorted.length - 1] as NEvent & { midi: number }).onset;
+  const last = sorted.find((e) => R.eq(e.onset, lastOnset)) as NEvent & { midi: number };
+  if (mod12(first.midi) === triad[0]) score += 3;
+  if (mod12(last.midi) === triad[0]) score += 3;
+  return score;
 }
 
 /** Characteristic tone of each diatonic mode, in semitones above the tonic. */

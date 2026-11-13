@@ -229,15 +229,18 @@ export const EVIDENCE_LABEL: Record<CanDoEntry["evidenceKind"], string> = {
  * Reached by a graded pass at that level or higher: passed at 85% or better, nothing revealed (wave4.md §5.4,
  * `TranscriptionSchema.gradedPass`). A finished, revealed or self-assessed transcription never counts.
  */
-export const LADDER_CLAIMS: Readonly<Record<1 | 2 | 3 | 4, { name: string; claim: string }>> = {
+export type RungLevel = 1 | 2 | 3 | 4 | 5 | 6;
+export const LADDER_CLAIMS: Readonly<Record<RungLevel, { name: string; claim: string }>> = {
   1: { name: "Drum loops", claim: "You can transcribe a drum loop." },
   2: { name: "Bass lines", claim: "You can now transcribe a bass line." },
   3: { name: "Four-chord loops", claim: "You can take down a chord loop, bass first." },
   4: { name: "Short melodies", claim: "You can transcribe a short melody." },
+  5: { name: "Folk songs", claim: "You can transcribe a whole folk song, phrase by phrase." },
+  6: { name: "Blues", claim: "You can transcribe a blues: its bass, its changes and its melody." },
 };
 
 export interface LadderRung {
-  level: 1 | 2 | 3 | 4;
+  level: RungLevel;
   name: string;
   claim: string;
   /** Graded passes at exactly this level. */
@@ -248,11 +251,19 @@ export interface LadderRung {
   current: boolean;
 }
 
+/**
+ * The rungs Progress shows: L1–L4 always, L5 once the learner is past the generated rungs (a level of 4 or more, or
+ * any pass at 5 or 6; a released X1 counts as an L5 pass), L6 once L5 is reached or X2 counted. Released X1 and X2
+ * count as passes at 5 and 6 on the server (`progressReport`).
+ */
 export function ladderRungs(ladder: { level: number; gradedPasses: Record<string, number> }): LadderRung[] {
   const passes = (l: number) => Math.max(0, ladder.gradedPasses[String(l)] ?? 0);
-  return ([1, 2, 3, 4] as const).map((level) => {
+  const top: RungLevel =
+    ladder.level >= 5 || passes(5) > 0 || passes(6) > 0 ? 6 : ladder.level >= 4 || passes(4) > 0 ? 5 : 4;
+  const levels = ([1, 2, 3, 4, 5, 6] as const).filter((l) => l <= top);
+  return levels.map((level) => {
     let higher = 0;
-    for (let l = level; l <= 4; l++) higher += passes(l);
+    for (let l = level; l <= 6; l++) higher += passes(l);
     return {
       level,
       ...LADDER_CLAIMS[level],
@@ -317,4 +328,133 @@ export function albumWindow<T extends { id: string }>(
   const next = sorted.findIndex((c) => !released.has(c.id));
   const end = next < 0 ? sorted.length : next + 1;
   return sorted.slice(Math.max(0, end - size), Math.max(end, Math.min(size, sorted.length)));
+}
+
+// --- Wave 5: what backs each milestone ------------------------------------------------------------------------
+
+export interface MilestoneConditionLike {
+  sessions?: readonly string[];
+  capstones?: readonly string[];
+  canDos?: readonly string[];
+  ladder?: { level: number; after?: string };
+  anyOf?: readonly MilestoneConditionLike[];
+}
+
+export interface EvidenceItem {
+  /** The map item, capstone or `ladder:5`. */
+  id: string;
+  kind: "lesson" | "checkpoint" | "capstone" | "session" | "ladder" | "cando";
+  /** "U08.L05 Bass Dictation & Tone" */
+  label: string;
+  met: boolean;
+  /** How it was shown: "completed", "passed", "released: every rubric check passed", "2 graded passes". */
+  detail: string;
+}
+
+export interface EvidenceContext {
+  course: Pick<CourseProgress, "lessons" | "checkpoints" | "capstones" | "gym"> | null;
+  /** Graded ladder passes per level (`LadderState.gradedPasses`; X1 counts at 5 and X2 at 6). */
+  gradedPasses: Readonly<Record<string, number>> | null;
+  /** Can-dos with evidence now (emerging or better). */
+  canDoShown?: ReadonlySet<string>;
+  titleOf: (id: string) => string;
+}
+
+function conditionEvidence(c: MilestoneConditionLike, ctx: EvidenceContext): EvidenceItem[] {
+  const out: EvidenceItem[] = [];
+  const course = ctx.course;
+  for (const id of c.sessions ?? []) {
+    const title = ctx.titleOf(id);
+    const label = title && title !== id ? `${id} ${title}` : id;
+    if (/\.L\d+$/.test(id)) {
+      const l = course?.lessons.find((x) => x.lessonId === id);
+      const met = l?.status === "completed";
+      out.push({ id, kind: "lesson", label, met, detail: met ? "completed" : "ahead" });
+    } else if (/\.CP\d?$/.test(id)) {
+      const cp = course?.checkpoints.find((x) => x.cpId === id);
+      const met = cp?.status === "passed" || cp?.status === "soft-passed";
+      out.push({
+        id,
+        kind: "checkpoint",
+        label: title || id,
+        met,
+        detail: met ? "passed, graded without hints" : cp?.status === "failed" ? "retake open" : "ahead",
+      });
+    } else {
+      const done = course ? doneItems(course as CourseProgress).has(id) : false;
+      out.push({ id, kind: "session", label, met: done, detail: done ? "done" : "ahead" });
+    }
+  }
+  for (const id of c.capstones ?? []) {
+    const cap = course?.capstones.find((x) => x.capstoneId === id);
+    const met = cap?.status === "released";
+    out.push({
+      id,
+      kind: "capstone",
+      label: ctx.titleOf(id) || id,
+      met,
+      detail: met
+        ? "released to your album: every check passed"
+        : cap?.status === "in_progress"
+          ? `in progress, ${cap.sessionsDone} of ${cap.sessionsTotal} sessions`
+          : cap?.status === "open"
+            ? "open now"
+            : "ahead",
+    });
+  }
+  for (const id of c.canDos ?? []) {
+    const met = ctx.canDoShown?.has(id) ?? false;
+    out.push({ id, kind: "cando", label: ctx.titleOf(id) || id, met, detail: met ? "shown" : "ahead" });
+  }
+  if (c.ladder) {
+    const lvl = c.ladder.level;
+    let n = 0;
+    for (const [k, v] of Object.entries(ctx.gradedPasses ?? {})) if (Number(k) >= lvl) n += Math.max(0, v);
+    const met = n > 0;
+    out.push({
+      id: `ladder:${lvl}`,
+      kind: "ladder",
+      label: `Transcription ladder, level ${lvl} or higher`,
+      met,
+      detail: met
+        ? `${n} graded ${n === 1 ? "pass" : "passes"}: 85% or better, nothing revealed`
+        : "a graded pass still to come: 85% or better, nothing revealed",
+    });
+  }
+  return out;
+}
+
+/**
+ * The evidence behind a milestone, as /progress lists it: every condition it names with whether it holds and how it
+ * was shown (a lesson completed, a checkpoint passed, a capstone released with its checks passed, graded ladder
+ * passes). With `anyOf`, the branch that holds (else the first) is listed after the plain conditions.
+ */
+export function milestoneEvidence(when: MilestoneConditionLike, ctx: EvidenceContext): EvidenceItem[] {
+  const own = conditionEvidence(when, ctx);
+  if (!when.anyOf || when.anyOf.length === 0) return own;
+  const branches = when.anyOf.map((b) => conditionEvidence(b, ctx));
+  const held = branches.find((b) => b.length > 0 && b.every((e) => e.met)) ?? branches[0] ?? [];
+  return [...own, ...held];
+}
+
+/**
+ * Where a can-do's latest evidence came from, named when it can be: "a graded step in U08.L03 Walking Up to It",
+ * "the U10.CP Minor checkpoint", "your album track C4 Minor Indie Ballad"; else the plain kind ("a review set").
+ */
+export function evidenceLine(
+  e: Pick<CanDoEntry, "evidenceKind" | "evidenceId">,
+  titleOf: (id: string) => string,
+): string {
+  const t = titleOf(e.evidenceId);
+  const named = t && t !== e.evidenceId;
+  switch (e.evidenceKind) {
+    case "lesson":
+      return named ? `graded work in ${e.evidenceId} ${t}` : EVIDENCE_LABEL.lesson;
+    case "checkpoint":
+      return named ? `the ${t}` : EVIDENCE_LABEL.checkpoint;
+    case "track":
+      return named ? `your album track ${t}` : EVIDENCE_LABEL.track;
+    default:
+      return EVIDENCE_LABEL[e.evidenceKind];
+  }
 }

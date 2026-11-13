@@ -236,7 +236,7 @@ mel: n("<[~ ~ 4] [0 2 4] [3 5 7]>").scale("C4:major").s("piano")`;
 });
 
 describe("panels: the lenses outside a step, the step inside one", () => {
-  const all = new Set([...Object.values(PANEL_UNLOCKS), "tb.arp"]);
+  const all = new Set([...Object.values(PANEL_UNLOCKS), "tb.arp", "tb.feature.chord-symbols"]);
   const ctx = { allowed: true, unlocked: all, hasStaff: true, hasRoll: true } as const;
 
   test("lens mode: every unlocked panel has a switch; the chord band follows the chord lenses", () => {

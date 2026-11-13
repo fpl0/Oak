@@ -13,7 +13,8 @@ import {
   stripMarkers,
   type TermEntry,
 } from "@oak/content-kit";
-import { registries } from "../index.ts";
+import { courseGraph, registries } from "../index.ts";
+import { atOrBefore } from "../lib/course.ts";
 import { termById } from "../terms.ts";
 
 const WORDS_PROMPT = 60;
@@ -131,12 +132,37 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const termRe = (t: TermEntry) =>
   new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(t.term)}(s|es)?(?![\\p{L}\\p{N}])`, "iu");
 
-/** Terms of later lessons (in the default order) that this text uses: advice, since many are everyday words. */
+/**
+ * Terms of later lessons that this text uses: advice, since many are everyday words. For a core lesson,
+ * "later" is later in the default order. For a lesson outside it (a side lesson such as A1.L01–L04, or a
+ * track lesson), it is every term not guaranteed to come before the lesson in every legal order: a side
+ * lesson is checked at the earliest point a learner can take it (contracts §2.6, §4.3), so it may use only
+ * the terms of its gate and of the side lessons before it, plus its own.
+ */
 function laterTerms(lessonId: string): TermEntry[] {
   const order = registries.syllabus.defaultOrder as readonly string[];
   const here = order.indexOf(lessonId);
-  if (here < 0) return [];
-  return registries.terms.filter((t) => order.indexOf(t.introducedBy) > here);
+  if (here >= 0) return registries.terms.filter((t) => order.indexOf(t.introducedBy) > here);
+  const g = courseGraph();
+  if (!g.nodes.has(lessonId as never)) return [];
+  return registries.terms.filter(
+    (t) => t.introducedBy !== lessonId && !atOrBefore(g, t.introducedBy as never, lessonId as never),
+  );
+}
+
+/**
+ * Where a lesson sits in the default order, for the "before U03.L02 / before U03.L08" rules: its own index,
+ * or, for a lesson outside the default order (a side lesson), the earliest point a learner can take it,
+ * just after the last default-order session guaranteed before it. -1 for a lesson the course does not know.
+ */
+export function orderPoint(lessonId: string): number {
+  const order = registries.syllabus.defaultOrder as readonly string[];
+  const here = order.indexOf(lessonId);
+  if (here >= 0) return here;
+  const g = courseGraph();
+  if (!g.nodes.has(lessonId as never)) return -1;
+  const before = [...g.before(lessonId as never)].map((s) => order.indexOf(s)).filter((i) => i >= 0);
+  return before.length ? Math.max(...before) + 0.5 : -1;
 }
 
 export interface AuthoringResult {
@@ -205,7 +231,7 @@ export function lessonAuthoring(def: LessonDef, mdxSource: string | null, sample
   // Feedback in words the learner has: before U03.L02 the grader's melody feedback names scale degrees
   // and solfège ("you have 5 (sol)"), so note-name steps override it.
   const order = registries.syllabus.defaultOrder as readonly string[];
-  const at = order.indexOf(def.id);
+  const at = orderPoint(def.id);
   const beforeDegrees = !sample && at >= 0 && at < order.indexOf("U03.L02");
   // Singing is on numbers until U03.L08 introduces syllables (contracts §8.3): before it, no syllable labels
   // and no catalog text that names syllables.

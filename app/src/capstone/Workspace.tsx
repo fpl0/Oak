@@ -6,7 +6,7 @@
 // Opened again outside Today's runner, the draft is offered from the top. Release names the track, records the
 // performance and puts it on the album; a released capstone stays open for revision.
 import type { CapstoneDef, CapstoneState, FlavourId, SketchVersion, UnlockableId } from "@oak/api";
-import { toolsUsed } from "@oak/grader";
+import { renderFeedback, toolsUsed } from "@oak/grader";
 import { editorId } from "@oak/strudel";
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -52,13 +52,23 @@ import type { CapstoneContent } from "./content.ts";
 import { bandSetupFor as bandFor } from "./content.ts";
 import { useDraftSaver } from "./draft.ts";
 import { type CheckOutcome, checkPiece, lintFor } from "./engine.ts";
+import { FormStrip } from "./FormStrip.tsx";
+import { LeadSheetCard } from "./LeadSheetCard.tsx";
 import { analysisTheory, composeLiner, dedupe } from "./liner.ts";
 import { theoryTags } from "./piece.ts";
-import { latestVersion, useCapstoneReview, useDraft, useDraftSketchId, usePatchDraft } from "./queries.ts";
+import {
+  latestVersion,
+  reviewRequestText,
+  useCapstoneReview,
+  useDraft,
+  useDraftSketchId,
+  usePatchDraft,
+} from "./queries.ts";
 import { ReleaseDialog } from "./ReleaseDialog.tsx";
 import { useTryRevision } from "./revision.ts";
 import { currentSession, isResume, sessionsDone, sessionViews, starterOf } from "./sessions.ts";
 import { WorkbenchServicesLoader } from "./WorkbenchServicesLoader.tsx";
+import { pieceForm, releaseGate, rowExtras, rubricUsesSections } from "./wave5.ts";
 
 export { starterOf };
 
@@ -273,6 +283,8 @@ function Loaded({
     tone: "success" | "attention" | "info";
     title: string;
     body?: string | undefined;
+    /** The code a check's notice describes: once the code moves on, the notice no longer speaks for it. */
+    code?: string;
   } | null>(null);
   const [releaseOpen, setReleaseOpen] = useState(false);
   const [ceremony, setCeremony] = useState<CeremonyData | null>(null);
@@ -303,8 +315,9 @@ function Loaded({
       setOfficial(rec);
       const rows = checklistOf(brief.rubric, outcome.result);
       const r = readiness(rows);
-      setNotice(
-        outcome.result.status === "error"
+      setNotice({
+        code: src,
+        ...(outcome.result.status === "error"
           ? {
               tone: "attention",
               title: "The piece doesn't run yet",
@@ -320,8 +333,8 @@ function Loaded({
                 tone: "info",
                 title: `Checked version ${version}: ${r.met} of ${r.required} requirements met.`,
                 body: "The open ones are marked in the brief, with the bars to look at.",
-              },
-      );
+              }),
+      });
       return rec;
     } catch (e) {
       toast.error("The check didn't go through", e instanceof Error ? e.message : undefined);
@@ -397,6 +410,9 @@ function Loaded({
   const thread = { subjectKind: "capstone" as const, subjectId: def.id };
   const onHarmony = useSubjectHarmony(thread);
   const onBars = (from: number, to: number) => showBars(thread, from, to);
+  // The Workbench's loop region (0-based bars) while it loops: the form strip marks the section it covers, whether
+  // the loop came from the strip, the ribbon or a section chip in the tutor panel.
+  const [wbLoop, setWbLoop] = useState<{ from: number; bars: number } | null>(null);
   useEffect(() => {
     setSubject({
       thread,
@@ -485,7 +501,47 @@ function Loaded({
     outcome && !stale && outcome.result.status === "error"
       ? (outcome.result.messages[0]?.text ?? "The piece doesn't run.")
       : null;
-  const canRelease = (lastSession || allDone) && ready.ready && !stale && !live.checking;
+  // A piece written in another key than the brief's: every row below read it in the brief's key, so say that first.
+  const keyDiag =
+    outcome && !stale && outcome.result.status !== "error"
+      ? (outcome.result.diagnostics?.find((d) => d.id === "harmony.key-mismatch") ?? null)
+      : null;
+  const keyNote = keyDiag ? renderFeedback(keyDiag) : null;
+  // The piece's sections (C3 and every brief that reads them) and what each row says beyond met / not yet.
+  const form = outcome ? pieceForm(outcome.form, outcome.code, brief.rubric) : null;
+  // Shown for a brief that reads sections, and for any piece the learner has arranged into sections.
+  const showForm =
+    rubricUsesSections(brief.rubric) ||
+    (form !== null && (form.sections.length > 0 || form.problem !== null));
+  const extras = outcome
+    ? rowExtras(brief.rubric, outcome.result, {
+        bars: outcome.bars,
+        bpm: outcome.analysis?.bpm ?? null,
+        durationSec: outcome.analysis?.durationSec ?? null,
+        meter: def.meter,
+        form,
+        view: outcome.form,
+        analysis: outcome.analysis,
+      })
+    : {};
+  // C3.S3: the lead sheet of the arranged piece, once the melodies are written (the `notates` rule's view).
+  const leadSheetRule = brief.rubric.some((r) => r.rule === "notates" || r.id === "leadsheet");
+  const showLeadSheet = leadSheetRule && (lastSession || allDone || released) && outcome?.n != null;
+  // c1: the first release is of the code its last passing check graded; an edit after it asks for a new check.
+  const checkedPassing =
+    official && readiness(checklistOf(brief.rubric, official.outcome.result)).ready ? official.code : null;
+  const gate = releaseGate({
+    liveReady: ready.ready && !stale && !live.checking,
+    checkedPassingCode: checkedPassing,
+    code,
+    checkedHere: official !== null,
+    serverChanged: state.draftChangedSinceCheck,
+    serverPassed: state.lastResult?.status === "pass",
+    editedSinceLoad: code !== initialCode,
+    released,
+  });
+  const canRelease = (lastSession || allDone) && gate.kind === "ready";
+  const checkAgain = (lastSession || allDone) && !released && gate.kind === "check-again";
   const skillName = (id: string) => content.skillNames.get(id) ?? null;
   const bandTitle = band ? `${content.bands.find((b) => b.id === band.band)?.title ?? "the Band"}` : null;
   const releaseTheory = (o: CheckOutcome) =>
@@ -512,6 +568,7 @@ function Loaded({
         views={views}
         current={allDone ? null : current}
         rows={rows}
+        extras={extras}
         ready={ready}
         checking={live.checking || checkingNow}
         stale={stale}
@@ -525,10 +582,12 @@ function Loaded({
         flavourLocked={done > 0 || state.sessionsDone > 0 || released}
         onBars={onBars}
         review={review.review}
+        reviewId={review.entryId}
+        reviewVersion={review.version}
         reviewWait={review.wait}
         canRequestReview={state.sketchId !== null || official !== null}
         onRequestReview={() => {
-          const r = askReviewFor(def, codeRef.current, released);
+          const r = askReviewFor(def, codeRef.current, released, savedInfo?.version ?? null);
           if (r.ok) {
             review.asked();
             setNotice({
@@ -631,7 +690,13 @@ function Loaded({
                 variant={canRelease ? "primary" : "secondary"}
                 icon={<Disc3 aria-hidden className="size-4" />}
                 disabled={!canRelease}
-                title={canRelease ? undefined : "Every requirement in the brief is met first"}
+                title={
+                  canRelease
+                    ? undefined
+                    : checkAgain
+                      ? "Check this version first: the release is of the code a check passed"
+                      : "Every requirement in the brief is met first"
+                }
                 onClick={() => void openRelease()}
                 data-testid="release"
               >
@@ -696,14 +761,42 @@ function Loaded({
                 stay as they are.
               </Callout>
             )}
-            {notice && (
-              <Callout tone={notice.tone} title={notice.title} onDismiss={() => setNotice(null)}>
-                {notice.body}
-              </Callout>
+            {checkAgain ? (
+              <div data-testid="check-again" role="status">
+                <Callout
+                  tone="info"
+                  title="Edited since the last check"
+                  actions={
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      loading={checkingNow}
+                      icon={<CheckCheck aria-hidden className="size-4" />}
+                      onClick={() => void checkMyTrack()}
+                    >
+                      Check this version
+                    </Button>
+                  }
+                >
+                  Check again before you release: the album gets the version a check passed.
+                </Callout>
+              </div>
+            ) : (
+              notice &&
+              (notice.code === undefined || notice.code === code) && (
+                <Callout tone={notice.tone} title={notice.title} onDismiss={() => setNotice(null)}>
+                  {notice.body}
+                </Callout>
+              )
             )}
             {evalError && (
               <Callout tone="attention" title="The piece doesn't run yet">
                 {evalError}
+              </Callout>
+            )}
+            {keyNote && (
+              <Callout tone="attention" title="Another key than the brief's">
+                <span data-testid="capstone-key-note">{keyNote}</span>
               </Callout>
             )}
             {live.error && !evalError && (
@@ -711,8 +804,10 @@ function Loaded({
                 {live.error} The next edit tries again.
               </Callout>
             )}
+            {showForm && form && <FormStrip form={form} onBars={onBars} stale={stale} loop={wbLoop} />}
             <Workbench
               tutorBars
+              onLoopChange={(l) => setWbLoop(l.on ? l.region : null)}
               id={wbSlug(def.id)}
               onModel={onHarmony}
               code={initialCode}
@@ -734,6 +829,21 @@ function Loaded({
                 if (o.ok) saveQuietly(o.code, true);
               }}
             />
+            {showLeadSheet && outcome?.n && (
+              <LeadSheetCard
+                stale={stale}
+                piece={{
+                  n: outcome.n,
+                  bars: outcome.bars,
+                  key: outcome.key,
+                  meter: def.meter,
+                  bpm: outcome.analysis?.bpm ?? null,
+                  analysis: outcome.analysis,
+                  form,
+                  title: track.data?.title ?? trackTitleOf(def),
+                }}
+              />
+            )}
           </div>
         </div>
       </section>
@@ -787,8 +897,14 @@ function Loaded({
   );
 }
 
-function askReviewFor(def: CapstoneDef, code: string, released: boolean) {
-  const r = askReview({ capstoneId: def.id, title: def.title, code, released });
+function askReviewFor(def: CapstoneDef, code: string, released: boolean, version: number | null) {
+  const r = askReview({
+    capstoneId: def.id,
+    title: def.title,
+    code,
+    released,
+    note: reviewRequestText(version, false),
+  });
   if (!r.ok) openTutor();
   return r;
 }

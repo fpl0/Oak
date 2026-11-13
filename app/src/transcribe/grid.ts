@@ -50,6 +50,26 @@ export function formatTime(s: number): string {
 // --- tap tempo ---------------------------------------------------------------------------------------
 
 /** Adds a tap (source seconds) to a run: a long pause, or a tap that goes back in time, starts a new run. */
+/** Longest gap between the engine's position updates that the playhead is extrapolated across (seconds). */
+export const STAMP_FRESH_SEC = 0.25;
+
+/**
+ * The playhead now, between the engine's position updates: the last update (`stamp`: its time and the
+ * `performance.now()` it came at) moved on at the playback rate, capped at the end. With no update yet, or one
+ * older than `STAMP_FRESH_SEC` (playback just started or resumed; the stamp is the paused position), it is the
+ * transport's own time: extrapolating from a stale stamp jumped ahead, and the next tap reset the tap run.
+ */
+export function playheadAt(
+  stamp: { t: number; at: number },
+  nowMs: number,
+  time: number,
+  rate: number,
+  durationS: number,
+): number {
+  if (stamp.at <= 0 || nowMs - stamp.at > STAMP_FRESH_SEC * 1000) return time;
+  return Math.min(durationS, stamp.t + ((nowMs - stamp.at) / 1000) * rate);
+}
+
 export function addTap(taps: readonly number[], t: number): number[] {
   const last = taps.at(-1);
   if (last !== undefined && (t - last > TAP_RESET_SEC || t <= last)) return [t];
@@ -249,13 +269,69 @@ export function shiftLoop(loop: Loop, grid: BarGrid | null, dir: 1 | -1, duratio
   return loopOfBars(grid, to, bars);
 }
 
-/** "bars 3–4" / "bar 2" for a loop, 1-based, or seconds when there is no grid. */
-export function loopLabel(loop: Loop | null, grid: BarGrid | null): string {
+/**
+ * "bars 3–4" / "bar 2" for a loop, 1-based, or seconds when there is no grid. With a pickup (a song's bar 0,
+ * contracts §6.11) the bars count from the first full bar: "pickup", "pickup + bars 1–4", "bars 4–8".
+ */
+export function loopLabel(loop: Loop | null, grid: BarGrid | null, pickup = false): string {
   if (!loop) return "Off";
   if (!grid) return `${formatTime(loop.startS)}–${formatTime(loop.endS)}`;
   const { fromBar, bars } = barsOfLoop(loop, grid);
-  const where = bars === 1 ? `bar ${fromBar + 1}` : `bars ${fromBar + 1}–${fromBar + bars}`;
+  const first = pickup ? fromBar : fromBar + 1;
+  const last = first + bars - 1;
+  const where =
+    pickup && first === 0
+      ? bars === 1
+        ? "pickup"
+        : last === 1
+          ? "pickup + bar 1"
+          : `pickup + bars 1–${last}`
+      : bars === 1
+        ? `bar ${first}`
+        : `bars ${first}–${last}`;
   // A loop inside the bars says exactly what it plays (and where), never a whole bar it does not play.
   if (!onBarLines(loop, grid)) return `${formatTime(loop.startS)}–${formatTime(loop.endS)} in ${where}`;
   return where;
+}
+
+// --- own audio: setting the bars (Wave 5) ------------------------------------------------------------
+
+/** Seconds per beat (tempo unit) of a grid in a meter. */
+export const beatSecOfGrid = (grid: BarGrid, meter: MeterId | null): number =>
+  grid.barSec / (METERS[meter ?? "4/4"]?.unitsPerBar ?? 4);
+
+/**
+ * Bar 1 a beat earlier or later ("nudge by a beat": the learner tapped from beat 2 or 4, so the bar lines sit a
+ * beat off). `null` when it would move before the start of the recording.
+ */
+export function nudgeDownbeat(downbeatS: number, beatSec: number, dir: 1 | -1): number | null {
+  const next = Math.round((downbeatS + dir * beatSec) * 1000) / 1000;
+  return next < 0 ? null : next;
+}
+
+/** Half or double the tempo (a tap run on every other beat, or on the eighths), inside the BPM range. */
+export function scaleTempo(bpm: number, factor: 0.5 | 2): number | null {
+  const next = Math.round(bpm * factor * 10) / 10;
+  return next < BPM_MIN || next > BPM_MAX ? null : next;
+}
+
+/** Where the off-beat eighth sits in its beat: half way straight, two thirds swung (`swingBy(1/3, …)`, §6.10). */
+export const offBeatAt = (swing: boolean): number => (swing ? 2 / 3 : 1 / 2);
+
+/**
+ * The beat and eighth ticks inside one bar, as fractions of the bar: each beat, then its off-beat eighth at the
+ * straight or swung place.
+ */
+export function beatTicks(unitsPerBar: number, swing: boolean): { at: number; kind: "beat" | "off" }[] {
+  const out: { at: number; kind: "beat" | "off" }[] = [];
+  for (let k = 0; k < unitsPerBar; k++) {
+    out.push({ at: k / unitsPerBar, kind: "beat" });
+    out.push({ at: (k + offBeatAt(swing)) / unitsPerBar, kind: "off" });
+  }
+  return out;
+}
+
+/** The tap-along steps of a first run: how many taps so far, out of the eight that set the bars. */
+export function tapProgress(taps: readonly number[]): { count: number; of: number; done: boolean } {
+  return { count: Math.min(taps.length, TAPS_KEPT), of: TAPS_KEPT, done: taps.length >= TAPS_KEPT };
 }

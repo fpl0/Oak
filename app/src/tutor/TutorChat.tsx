@@ -25,16 +25,21 @@ import {
   chipRemovable,
   chipsOf,
   dismissNotice,
+  isReviewKind,
   patchSubject,
   sameThread,
+  setReviewRequest,
+  subjectSections,
   type TutorSubject,
   takeAsk,
   toggleChip,
+  useReviewRequest,
   useTutorContext,
 } from "./context.ts";
 import { shownSubject, usePanelView, useShownSubject, useTokenContext } from "./hooks.ts";
 import { Markdown } from "./Markdown.tsx";
 import type { TokenContext } from "./music-tokens.ts";
+import { REVIEW_WAIT_MS, reviewPending, unansweredReviewAt } from "./review-request.ts";
 import { DayDivider, dayLabel, HistoryEntry, LiveTurnView, learnerDay } from "./Timeline.tsx";
 import { reasonText } from "./TutorSettings.tsx";
 import { onTurns, sendTurn, settleThread, stopTurn, streamingTurn, turnsOf, useTurns } from "./turns.ts";
@@ -75,6 +80,16 @@ function useTurnEffects(): void {
           }
         },
         finished(turn) {
+          // c9: a review request that ended before reaching the server (no meta) has nothing on the timeline to
+          // wait for: its "pending" clears at once, here and on the capstone Brief.
+          if (isReviewKind(turn.kind)) {
+            const st = turn.state;
+            setReviewRequest(
+              turn.thread,
+              st.status === "done" ? "answered" : st.meta === null ? "failed-early" : "failed",
+              st.error?.message,
+            );
+          }
           void qc.invalidateQueries({ queryKey: ["api", "tutor.timeline"] });
           void qc.invalidateQueries({ queryKey: ["api", "tutor.notes"] });
           // Every turn is counted in this month's usage (reviews included); a review lands on its version.
@@ -179,6 +194,7 @@ const CHIP_SEES: Record<ContextChip["id"], string> = {
   capstone: "This capstone's brief and your code.",
   track: "This album track and its code.",
   transcription: "This transcription's code and checklist.",
+  form: "The sections of the music on screen and their bars, named as the section ribbon names them.",
 };
 
 function Chips({ subject }: { subject: TutorSubject }) {
@@ -316,6 +332,33 @@ export function suggestedPrompts(s: TutorSubject): string[] {
   if (s.thread.subjectKind === "drill") return ["How do I hear 6 against 4?", "A memory hook for ♭7?"];
   if (s.thread.subjectKind === "transcription")
     return ["Does this chord fit the bass?", "What form is this?", "Where should I listen next?"];
+  // Wave 5: a song in sections asks about its form; the Wave 5 capstones about what their briefs grade.
+  const sectioned = subjectSections(s).length > 0;
+  const id = s.thread.subjectId;
+  if (s.thread.subjectKind === "capstone" && (id === "C3" || id === "C4"))
+    return [
+      "Does my chorus contrast enough with the verse?",
+      "Where could the energy rise?",
+      "Is my bass locked to the kick?",
+    ];
+  if (s.thread.subjectKind === "capstone" && id === "C5")
+    return [
+      "Does my turnaround lead back to bar 1?",
+      "Is my shuffle swinging?",
+      "How could my riff answer itself?",
+    ];
+  if (s.thread.subjectKind === "capstone" && id === "X2")
+    return [
+      "What should I listen for in the bass?",
+      "How do I hear where the chords change?",
+      "Where should I listen next?",
+    ];
+  if ((s.thread.subjectKind === "sketch" || s.thread.subjectKind === "track") && sectioned)
+    return [
+      "Does my chorus contrast enough with the verse?",
+      "Where could the energy rise?",
+      "Help me add a bridge",
+    ];
   if (s.thread.subjectKind === "sketch" || s.thread.subjectKind === "track")
     return ["What's this progression called?", "How could this swing?", "Help me add a bass line"];
   if (s.thread.subjectKind === "capstone")
@@ -339,10 +382,34 @@ export function suggestedPrompts(s: TutorSubject): string[] {
 
 function QuickActions({ subject, disabled }: { subject: TutorSubject; disabled: boolean }) {
   const rung = subject.rung ?? 0;
+  // c9: "Request review" follows the same pending state as the capstone Brief: this browser's request, and the
+  // server's timeline (a review asked from the Brief, or from another tab, that has not come back yet).
+  const reviewable =
+    subject.thread.subjectKind === "capstone" || subject.thread.subjectKind === "transcription";
+  const request = useReviewRequest(reviewable ? subject.thread : null);
+  const timeline = useTutorTimeline(reviewable ? subject.thread : null);
+  const entries = timeline.data?.entries ?? [];
+  const waiting = reviewable && reviewPending(request, entries, Date.now());
+  // A review asked elsewhere that never comes back stops holding the button after the Brief's wait.
+  const askedAt = waiting ? unansweredReviewAt(entries) : null;
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (askedAt === null) return;
+    const t = setTimeout(() => tick((x) => x + 1), Math.max(0, askedAt + REVIEW_WAIT_MS - Date.now()) + 50);
+    return () => clearTimeout(t);
+  }, [askedAt]);
   const failed =
     subject.lastResult && (subject.lastResult.status === "fail" || subject.lastResult.status === "error");
   const hintable = subject.thread.subjectKind === "lesson" && subject.graded === true && !subject.passed;
-  const actions: { key: string; icon: ReactNode; label: string; cost?: string; run(): void }[] = [];
+  const actions: {
+    key: string;
+    icon: ReactNode;
+    label: string;
+    cost?: string;
+    /** A review on its way: the button stays disabled until it is answered or fails. */
+    waiting?: boolean;
+    run(): void;
+  }[] = [];
   if (hintable) {
     const next = Math.min(3, rung + 1);
     actions.push({
@@ -384,8 +451,11 @@ function QuickActions({ subject, disabled }: { subject: TutorSubject; disabled: 
     actions.push({
       key: "review",
       icon: <MessageSquareText aria-hidden className="size-3.5" />,
-      label: "Request review",
-      cost: "Reviews your last saved draft. It never affects pass or fail.",
+      label: waiting ? "Review requested" : "Request review",
+      waiting,
+      cost: waiting
+        ? "Claude is writing the review. It appears here and in the Brief."
+        : "Reviews your last saved draft. It never affects pass or fail.",
       run: () =>
         void askReview({
           capstoneId: subject.capstoneId as string,
@@ -400,8 +470,11 @@ function QuickActions({ subject, disabled }: { subject: TutorSubject; disabled: 
     actions.push({
       key: "review-transcription",
       icon: <MessageSquareText aria-hidden className="size-3.5" />,
-      label: "Request review",
-      cost: "Reviews your saved transcription from its code and checklist, never audio. It never affects pass or fail.",
+      label: waiting ? "Review requested" : "Request review",
+      waiting,
+      cost: waiting
+        ? "Claude is writing the review. It appears here when it is done."
+        : "Reviews your saved transcription from its code and checklist, never audio. It never affects pass or fail.",
       run: () =>
         void askTranscriptionReview({
           projectId: subject.thread.subjectId,
@@ -421,7 +494,14 @@ function QuickActions({ subject, disabled }: { subject: TutorSubject; disabled: 
       <ul className="flex flex-wrap gap-1.5" aria-label="Ask Claude">
         {actions.map((a) => (
           <li key={a.key}>
-            <Button size="sm" icon={a.icon} disabled={disabled} onClick={a.run} data-action={a.key}>
+            <Button
+              size="sm"
+              icon={a.icon}
+              disabled={disabled || a.waiting === true}
+              onClick={a.run}
+              data-action={a.key}
+              data-waiting={a.waiting ? "" : undefined}
+            >
               {a.label}
             </Button>
           </li>

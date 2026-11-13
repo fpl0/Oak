@@ -25,7 +25,7 @@ import { toast } from "../ui/kit/Toast.tsx";
 import { FLAVOUR_TITLE, useCapstoneContent } from "./content.ts";
 import { useCreateDraft, usePatchDraft, useStartCapstoneSession } from "./queries.ts";
 import { starterOf, Workspace } from "./Workspace.tsx";
-import { x1Starter } from "./x1/phrases.ts";
+import { bassFirst, transcribeStarter } from "./x1/phrases.ts";
 import { useSongs } from "./x1/songs.ts";
 import { X1Workspace } from "./x1/X1Workspace.tsx";
 
@@ -249,7 +249,13 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
           originKind: "capstone",
           originId: def.id,
           sessionId: currentSessionId(),
-          code: transcribe && chosenSong?.song ? x1Starter(chosenSong.song) : starterOf(def),
+          code:
+            transcribe && chosenSong?.song
+              ? transcribeStarter(
+                  def.sessionDefs.flatMap((sd) => sd.checks ?? []),
+                  chosenSong.song,
+                )
+              : starterOf(def),
           bpm: transcribe && chosenSong?.song ? chosenSong.song.bpm : null,
           meter: transcribe && chosenSong?.song ? chosenSong.song.meter : def.meter,
           key: transcribe && chosenSong?.song ? chosenSong.song.key : (def.key ?? null),
@@ -291,8 +297,9 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
           <div>
             <h2 className="mb-1 text-h3">The song</h2>
             <p className="mb-2 text-sm text-text-2">
-              Pick one; you transcribe it by ear. Its meter, key, tonic, pickup and the rhythm of the first
-              phrase are given.
+              {bassFirst(def.sessionDefs.flatMap((sd) => sd.checks ?? []))
+                ? "Pick one; you transcribe it by ear, bass first, then the changes, then the melody. Its meter, key, tempo, pickup, form and feel are given."
+                : "Pick one; you transcribe it by ear. Its meter, key, tonic, pickup and the rhythm of the first phrase are given."}
             </p>
             {songs.isPending ? (
               <p className="text-sm text-text-3">Loading the songs…</p>

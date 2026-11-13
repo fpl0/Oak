@@ -38,7 +38,8 @@ export const DEFAULT_KEY: KeySpec = { tonic: "C", mode: "major" };
 export const STUDIO_METERS: readonly MeterId[] = ["4/4", "3/4", "2/4", "6/8"];
 export const TONICS = ["C", "C#", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"] as const;
 export const MODES = ["major", "minor"] as const;
-export const LENGTHS = [1, 2, 4, 8, 16, 32, 64] as const;
+// Wave 5: 12 and 24 for one and two choruses of a 12-bar blues (U11.L05, C5).
+export const LENGTHS = [1, 2, 4, 8, 12, 16, 24, 32, 64] as const;
 
 /** "Sketch 007": one more than the highest number already used (never a duplicate after a delete). */
 export function nextSketchTitle(existing: readonly { title: string }[]): string {
@@ -394,7 +395,7 @@ export interface HarmonyViewHint {
 }
 
 /**
- * The harmony views still locked for a sketch that plays chords: chord names (with `.arp()`, U05.L04), Roman
+ * The harmony views still locked for a sketch that plays chords: chord names (U05.L04), Roman
  * numerals (U06.L02), function bands, chord tones and the lead sheet. Nothing when the sketch has no chords.
  */
 export function harmonyViewHints(
@@ -404,7 +405,8 @@ export function harmonyViewHints(
 ): HarmonyViewHint[] {
   if (!hasChords) return [];
   const rows: [string, string][] = [
-    ["tb.arp", "Chord names on the roll and the staff"],
+    // Wave 5 (c14): the chord-symbol lens opens with its own row at U05.L04, no longer `tb.arp`.
+    ["tb.feature.chord-symbols", "Chord names on the roll and the staff"],
     ["tb.feature.rn", "Roman numerals"],
     ["tb.lens.function", "Function bands"],
     ["tb.lens.chord-tones", "Chord tones in the melody"],
@@ -415,4 +417,58 @@ export function harmonyViewHints(
     const at = sites(id);
     return at ? [{ id, what, at }] : [];
   });
+}
+
+/** What a sketch does that the Wave 5 views can show (read from its analysed model and its code). */
+export interface SketchSoundFacts {
+  /** It plays its tracks through `arrange()` (sections). */
+  sections: boolean;
+  /** Its code asks for Oak's scope (`.scope()` / `.fscope()`). */
+  scope: boolean;
+  /** It sets a filter, an envelope or a delay (the probes). */
+  filter: boolean;
+  envelope: boolean;
+}
+
+/** The facts of a code, without running it: sections from the model, the sound controls from the text. */
+export function soundFactsOf(code: string, hasSections: boolean): SketchSoundFacts {
+  return {
+    sections: hasSections,
+    scope: /\.f?scope\(\s*\)/.test(code),
+    filter: /\.(lpf|hpf|bpf|cutoff|hcutoff|bandf)\(/.test(code),
+    envelope: /\.(attack|decay|sustain|release)\(/.test(code),
+  };
+}
+
+/**
+ * Wave 5: the form and sound views a sketch could use, still locked — the section ribbon and the form map
+ * (tb.lens.form), Oak's scope (tb.scope), the filter curve (tb.lpf) and the envelope's shape (tb.adsr). A hint
+ * with the session that opens each, never a block (the sketch plays as it is).
+ */
+export function formSoundHints(
+  facts: SketchSoundFacts,
+  unlocked: ReadonlySet<string>,
+  sites: (id: string) => string | null,
+): HarmonyViewHint[] {
+  const rows: [boolean, string, string][] = [
+    [facts.sections, "tb.lens.form", "The section ribbon and the form map"],
+    [facts.scope, "tb.scope", "Oak's scope panel"],
+    [facts.filter, "tb.lpf", "The filter's curve"],
+    [facts.envelope, "tb.adsr", "The envelope's shape"],
+  ];
+  return rows.flatMap(([wanted, id, what]) => {
+    if (!wanted || unlocked.has(id)) return [];
+    const at = sites(id);
+    return at ? [{ id, what, at }] : [];
+  });
+}
+
+/** Wave 5: one line saying how to reach a view the sketch can already use (unlocked, not obvious). */
+export function formSoundTips(facts: SketchSoundFacts, unlocked: ReadonlySet<string>): string[] {
+  const out: string[] = [];
+  if (facts.sections && unlocked.has("tb.lens.form"))
+    out.push("Click a section on the ribbon to loop it; Shift+E opens the form map and its energy curve.");
+  if ((facts.filter || facts.envelope) && unlocked.has("tb.scope") && !facts.scope)
+    out.push("Shift+W opens the scope: it draws the wave and the curve of your filter or envelope.");
+  return out;
 }

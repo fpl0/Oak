@@ -16,9 +16,11 @@ import {
   useBootstrap,
   useCanDo,
   useCourseProgress,
+  useGymPlan,
   useProgressReport,
   useSessionDay,
   useSessionSummary,
+  useSideLessons,
   useSkillMap,
   useTodayPlan,
   useUnlocks,
@@ -30,10 +32,12 @@ import { Card, Chip, Page } from "../../ui/kit/basics.tsx";
 import { Callout } from "../../ui/kit/Controls.tsx";
 import { LoadingState } from "../../ui/kit/QueryState.tsx";
 import { useFocusHeaderContent } from "../../ui/shell/focus-header.ts";
+import { capstoneDay } from "../capstone-day.ts";
 import {
   autoListen,
   canDoChanges,
   goalGradient,
+  gymNextLabel,
   LEVEL_LABEL,
   skillMoves,
   TOLERANCE_LINE,
@@ -41,19 +45,22 @@ import {
   tomorrowLine,
   toolCards,
 } from "../coda-model.ts";
+import { useCapstoneDef } from "../day-hooks.ts";
 import { courseEdge, edgeShort, mapNextId } from "../edge.ts";
 import { useLastEnded, useRunnerNavigator, useRunnerView } from "../hooks.ts";
 import { sessionRunner } from "../live.ts";
 import type { EndedRecord } from "../persist.ts";
 import { milestonesReached, statusesBefore } from "../progress-model.ts";
+import { sideLessonPlan, sideOffer } from "../side-lessons.ts";
 import { useSession } from "../store.ts";
 import { goalLine, streakLine } from "../streak-model.ts";
 import { itemTitle as titleOf } from "../titles.ts";
 import { useNextUnlockList } from "../today/Glance.tsx";
+import { InlineCodeText, SideOfferLine } from "../today/SideOffer.tsx";
 import { WeeklyRhythm } from "../today/WeeklyRhythm.tsx";
 import { toolName as toolLabel } from "../tool-name.ts";
 import { CodaUnlock } from "./CodaUnlock.tsx";
-import { LadderCard, ReleaseCard } from "./CodaWave4.tsx";
+import { LadderCard, OwnAudioCard, ReleaseCard } from "./CodaWave4.tsx";
 
 /** Server reads that a finished session changes. */
 const SESSION_ENDED_KEYS = [
@@ -188,13 +195,44 @@ function CodaBody({ summary, ended }: { summary: SessionSummary; ended: EndedRec
     content.data?.syllabus?.defaultOrder,
   );
   const edge = courseEdge(course.data, content.data?.syllabus ?? null, authored, plan.data ?? null);
+  // A capstone session reads with its place and goal ("C4 Minor Indie Ballad · session 2 of 2: Chorus
+  // cadence"), and a transcription slot due first is named before the lesson it delays.
+  const nextCapstone =
+    nextId && !nextId.startsWith("GYM.") ? (/^(.+)\.S\d+$/.exec(nextId)?.[1] ?? null) : null;
+  const nextCapDef = useCapstoneDef(nextCapstone);
+  const gymPlan = useGymPlan();
+  const nextTitle = nextId
+    ? ((nextCapDef
+        ? capstoneDay({ kind: "capstone", mapItemId: nextId as never, title: "" }, nextCapDef, null, null)
+            ?.detail
+        : null) ?? titleOf(nextId, titles))
+    : null;
   const tomorrow =
     edge && !summary.teaser
       ? `Next time: a review day. ${edgeShort(edge)}.`
-      : tomorrowLine(summary, nextId ? { id: nextId, title: titleOf(nextId, titles) } : null);
+      : tomorrowLine(
+          summary,
+          nextId && nextTitle ? { id: nextId, title: nextTitle } : null,
+          gymNextLabel(gymPlan.data, nextId),
+        );
+  const nextObjective =
+    !edge && nextId
+      ? (content.data?.syllabus?.units.flatMap((u) => u.lessons).find((l) => l.id === nextId)?.objective ??
+        null)
+      : null;
+  // "One more, if you like" (wave5.md §5.1): the optional side lesson, once today's planned session has ended.
+  const sideLessons = useSideLessons();
+  const side =
+    plan.data && !wrappedEarly(own, reports)
+      ? sideOffer(plan.data, sideLessons.data ?? null, {
+          done: true,
+          titleOf: (id) => titleOf(id, titles),
+        })
+      : null;
+  const starting = useRunnerView((v) => v.starting);
   const gradient = next.items?.[0];
   const gradientTool = gradient ? content.data?.toolbox.find((t) => t.id === gradient.itemId) : undefined;
-  const wrapped = own?.wrappedEarly === true || reports.some((r) => r.block === "new" && !r.completed);
+  const wrapped = wrappedEarly(own, reports);
 
   // The unlock ceremony (ux §5.1) plays here once for the tools not seen yet, judged by the live unlock list so a
   // reload does not replay it; the moment marks them seen (they stay replayable from the Toolbox).
@@ -231,7 +269,8 @@ function CodaBody({ summary, ended }: { summary: SessionSummary; ended: EndedRec
 
       {summary.sketchesSaved[0] && <SketchCard sketchId={summary.sketchesSaved[0]} />}
 
-      <LadderCard session={summary.session} />
+      <LadderCard session={summary.session} gym={summary.gym} />
+      <OwnAudioCard session={summary.session} gym={summary.gym} />
 
       {cando.length > 0 && (
         <Section title="What you can do now" testId="coda-cando">
@@ -355,9 +394,15 @@ function CodaBody({ summary, ended }: { summary: SessionSummary; ended: EndedRec
 
       {(tomorrow || gradient) && (
         <Section title="Next" testId="coda-next">
-          {tomorrow && <p>{tomorrow}</p>}
+          {tomorrow && <p data-testid="coda-tomorrow">{tomorrow}</p>}
+          {tomorrow && nextObjective && !summary.teaser && (
+            <p className="text-sm text-text-2" data-testid="coda-tomorrow-what">
+              <InlineCodeText text={nextObjective} />
+            </p>
+          )}
           {gradient && (
-            <p className="text-sm text-text-2">
+            <p className="text-sm text-text-2" data-testid="coda-next-unlock">
+              <span className="text-text-3">Next unlock: </span>
               {goalGradient(gradient, "")}
               {gradientTool && !toolLabel(gradientTool).mono ? (
                 <span className="font-medium text-text">{toolLabel(gradientTool).text}</span>
@@ -368,10 +413,29 @@ function CodaBody({ summary, ended }: { summary: SessionSummary; ended: EndedRec
               )}
             </p>
           )}
+          {side && (
+            <div className="mt-3">
+              <SideOfferLine
+                offer={side}
+                disabled={starting}
+                onStart={() => {
+                  if (!plan.data) return;
+                  const p = sideLessonPlan(plan.data, side);
+                  sessionRunner.finish(null);
+                  void sessionRunner.start(p).catch(() => {});
+                }}
+              />
+            </div>
+          )}
         </Section>
       )}
     </div>
   );
+}
+
+/** The session stopped before its New block was complete (Save & wrap, or left part-way). */
+function wrappedEarly(own: EndedRecord | null, reports: EndedRecord["reports"]): boolean {
+  return own?.wrappedEarly === true || reports.some((r) => r.block === "new" && !r.completed);
 }
 
 /** A record from an earlier day is not today's Coda. */

@@ -56,6 +56,25 @@ export const CORE_SECTIONS: readonly SheetSection[] = [
     ],
   },
   {
+    // Wave 5: the kit's section ribbon, bar chart and sound controls (app/src/ui/kit: SectionRibbon, BarGrid,
+    // ControlReadout), wherever a page shows them; the Workbench's lens and panel keys (Shift+O, Shift+E, Shift+W …)
+    // are in its own section above.
+    id: "form-sound",
+    title: "Sections, charts and sound controls",
+    order: 24,
+    rows: [
+      ["ArrowRight", "Sections: next section (ArrowLeft: back; Home, End: first, last)"],
+      ["Enter", "Sections: loop the focused section (again: stop; also Space)"],
+      ["Escape", "Sections: stop the section loop"],
+      ["ArrowDown", "Bar chart: the bar a line down (ArrowUp: up; ArrowLeft, ArrowRight: bar by bar)"],
+      ["Mod+Home", "Bar chart: bar 1 (Mod+End: the last bar)"],
+      ["ArrowUp", "Sound control: a step up (a half step on a frequency; ArrowDown: down)"],
+      ["Alt+ArrowUp", "Sound control: a fine step"],
+      ["Shift+ArrowUp", "Sound control: a coarse step (an octave on a frequency; also PageUp, PageDown)"],
+      ["Home", "Sound control: lowest value (End: highest)"],
+    ],
+  },
+  {
     id: "answers",
     title: "Answers",
     order: 30,

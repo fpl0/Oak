@@ -55,7 +55,7 @@ export const U05: UnitSpec = {
     'Chord names in prose are lead-sheet form (C, Cm, C°, C+, C/E); in code, from U05.L08, the STYLE spelling (`C Cm Co Caug`). When both appear, show both once: "`Co` (C°)". `chord("C/E")` is an error (`/` slows a pattern): an inversion is a stack or a bass track (STYLE §5.3 rule 3). Typed chord answers use `text` with `normalize: "chord"`, which accepts C°, Co and Cdim alike, C+ and Caug alike, and slash chords.',
     'Words that wait: "Roman numeral", "I, IV, V" as names (U06.L02), "diatonic" (U06.L01), "function", "dominant" (U06.L03), "cadence" (U06.L04), "voicing" (U05.L08), "chord tone" (U07.L03). Say "the triad on degree 5", "the chords that set home". A grader detail that prints numerals (the `progression` rule\'s "chords go I V vi IV") is overridden in `feedbackText` (U05.L01 S8 shows how).',
     'Staff: treble in U05.L01–L05 (one chord a beat reads as a stack, a "snowman": line-line-line or space-space-space); the bass clef and the grand staff unlock in U05.L06 (`tb.feature.grand-staff`), and from then a `bass:` track goes to the bass staff by itself. Degree labels stay on (AUTHORING §6); syllables are available (U03.L08 on).',
-    'Bands: `band.axis-4bar` with `tracks: ["drums", "bass"]` when the learner plays the chords over given roots (U05.L01, L04, L07, L08: the Band\'s bass plays 1 5 6 4, one a bar); with `tracks: ["drums"]` when the learner picks the chords (U05.L02, L03, L05); `band.two-chord-vamp` with `tracks: ["drums", "chords"]` when the learner writes the bass (U05.L06). A learner\'s chords never sound together with the Band\'s chords.',
+    'Bands: `band.axis-4bar` with `tracks: ["drums", "bass"]` when the learner plays the chords over given roots (U05.L01, L04, L07, L08: the Band\'s bass plays 1 5 6 4, one a bar); with `tracks: ["drums"]` when the learner picks the chords (U05.L02, L03, L05); `band.two-chord-vamp` with `tracks: ["drums", "chords"]` for U05.L06\'s page step and `band.axis-4bar` with `tracks: ["drums", "chords"]` for its Make, where the learner writes the bass. A learner\'s chords never sound together with the Band\'s chords.',
     "Ear training stage D begins: `fam.chd.quality-triad` (U05.L02 seeds level 1, major against minor; level 3 from U05.L03 adds diminished, level 4 augmented) and `fam.chd.inversion` (U05.L05). Concept families: `fam.chd.spell` (U05.L02, level 2 from U05.L03), `deck.chd.symbols` (U05.L04), `deck.pit.staff-names` bass cards and `fam.not.read` level 3 (U05.L06).",
     'U05\'s "Play from the page" step is U05.L06 S4: a bass line shown on the bass staff only, written in code.',
     "Wave 4 shapes (AUTHORING §17) that U05 needs before its lessons can pass: `chord-qualities` and `chord-inversions` (U05.L03, L05 Makes), `staff-expect.chords` (U05.CP), `voice-leading.gate` (U05.L07 S5, U05.L08 S1), `step.gate-check` (U05.L08 S1). Until they move into `IMPLEMENTED`, content:check reports them; the rest of U05 uses only implemented kinds.",
@@ -627,17 +627,17 @@ export const U05: UnitSpec = {
       wrapAt: 3,
       make: {
         brief:
-          "The Band plays drums and chords (C, then F). Write the bass line under them on `upright` or `ebass`: roots on the downbeat, anything you like between.",
+          "The Band plays drums and the four-chord loop (C G Am F). Write the bass line under them on `upright` or `ebass`: roots on the downbeat, anything you like between. (Learner review: the Make moved from the two-chord vamp to the four-chord loop, so it ends on a groove like the hook's.)",
         required: {
           rule: "range",
           label: "The bass line stays low, on the bass staff",
-          why: '`range` on `track: "bass"`, `within: ["c1", "c3"]`: the starter plays its line in the tenor register (C3–G3).',
+          why: '`range` on `track: "bass"`, `within: ["c1", "c3"]`: the starter plays its line in the tenor register (C3–A3).',
         },
         suggestions: [
           "at least three different notes (`distinct-pitches` ≥ 3)",
           "the root on beat 1 of every bar",
         ],
-        band: "band.two-chord-vamp",
+        band: "band.axis-4bar",
         tracks: ["drums", "chords"],
         flavours:
           "The Band's drums and chords follow the flavour (jazz-soul: sixth chords, swung); the bass is the learner's (`upright` unlocks here, `ebass` since C1).",

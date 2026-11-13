@@ -64,6 +64,8 @@ export interface OakEvent {
   chord: string | null;
   /** `hap.context.scale` ("C4 major") when the pitch came through `.scale()`. */
   scale: string | null;
+  /** Wave 5. The sound controls the hap sets (`SOUND_CONTROL_KEYS`), when it sets any (`NEvent.controls`). */
+  controls?: Record<string, number | string>;
   /**
    * [start, end) offsets into the ORIGINAL code, one per contributing mini-notation atom, later-applied
    * first: for `note("c4").s("piano")` the first entry is the word `piano`, not the note.

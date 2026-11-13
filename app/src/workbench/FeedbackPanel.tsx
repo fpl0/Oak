@@ -30,6 +30,29 @@ export interface FeedbackPanelProps {
   ab?: ABControls | null;
   /** An issue row was activated: loop that bar. */
   onIssueBar?: (bar: number) => void;
+  /** Names of the A/B sides ("Your sound" / "The sound to match"); default "yours" / "target". */
+  abLabels?: { a: string; b: string };
+}
+
+/**
+ * A grader message with `code` spans: the backticked parts drawn as inline code, never as raw backticks
+ * ("`.lpf()`: yours is brighter…").
+ */
+export function InlineCode({ text }: { text: string }) {
+  const parts = text.split(/(`[^`]+`)/g).filter((p) => p !== "");
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.length > 2 && p.startsWith("`") && p.endsWith("`") ? (
+          <code key={i} className="oak-inline-code">
+            {p.slice(1, -1)}
+          </code>
+        ) : (
+          <span key={i}>{p}</span>
+        ),
+      )}
+    </>
+  );
 }
 
 const DIM_LABEL: Partial<Record<string, string>> = {
@@ -89,7 +112,7 @@ export function FeedbackPanel(props: FeedbackPanelProps) {
     return (
       <section className="oak-feedback" data-testid="feedback-panel" aria-label="Feedback">
         <p className="oak-muted">Run your code to check it.</p>
-        {props.ab && free.ab ? <ABButtons ab={props.ab} /> : null}
+        {props.ab && free.ab ? <ABButtons ab={props.ab} labels={props.abLabels ?? null} /> : null}
       </section>
     );
   }
@@ -146,8 +169,18 @@ export function FeedbackPanel(props: FeedbackPanelProps) {
                 }}
               >
                 <span className="oak-issue-where">{whereText(issue)}</span>
-                {issue.what ? <span className="oak-issue-what"> · {issue.what}</span> : null}
-                {issue.fix ? <span className="oak-issue-fix"> → {issue.fix}</span> : null}
+                {issue.what ? (
+                  <span className="oak-issue-what">
+                    {" "}
+                    · <InlineCode text={issue.what} />
+                  </span>
+                ) : null}
+                {issue.fix ? (
+                  <span className="oak-issue-fix">
+                    {" "}
+                    → <InlineCode text={issue.fix} />
+                  </span>
+                ) : null}
               </button>
             </li>
           ))}
@@ -184,7 +217,7 @@ export function FeedbackPanel(props: FeedbackPanelProps) {
             Hint: {can.nextLabel}
           </button>
         ) : null}
-        {props.ab && can.ab ? <ABButtons ab={props.ab} /> : null}
+        {props.ab && can.ab ? <ABButtons ab={props.ab} labels={props.abLabels ?? null} /> : null}
         {can.ghosts && view.ghosts.length > 0 ? (
           <span className="oak-muted" data-testid="ghost-note-count">
             {view.ghosts.length} target note{view.ghosts.length === 1 ? "" : "s"} shown dashed on the roll
@@ -195,18 +228,22 @@ export function FeedbackPanel(props: FeedbackPanelProps) {
   );
 }
 
-function ABButtons({ ab }: { ab: ABControls }) {
+function ABButtons({ ab, labels }: { ab: ABControls; labels: { a: string; b: string } | null }) {
+  const a = `A · ${labels?.a ?? "yours"}`;
+  const b = `B · ${labels?.b ?? "target"}`;
   return (
     <span className="oak-ab" data-testid="ab-controls">
       <button type="button" aria-pressed={ab.active === "A"} onClick={ab.playA} data-testid="ab-a">
-        A · yours{ab.pendingSide === "A" ? " …" : ""}
+        {a}
+        {ab.pendingSide === "A" ? " …" : ""}
       </button>
       <button type="button" aria-pressed={ab.active === "B"} onClick={ab.playB} data-testid="ab-b">
-        B · target{ab.pendingSide === "B" ? " …" : ""}
+        {b}
+        {ab.pendingSide === "B" ? " …" : ""}
       </button>
       {ab.active ? (
         <span className="oak-ab-now" data-testid="ab-now">
-          {ab.active === "A" ? "A · yours" : "B · target"}
+          {ab.active === "A" ? a : b}
           <button type="button" onClick={ab.stop}>
             Stop
           </button>

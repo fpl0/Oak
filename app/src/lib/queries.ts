@@ -107,6 +107,10 @@ export const useSessionEnd = () =>
     "streak.get",
     "unlocks.list",
     "cando.list",
+    // Wave 5: ending today's core session may turn on the "after-core" side-lesson offer.
+    "sideLessons.list",
+    // The Coda's "Next time" names a gym slot when the session just ended makes one due.
+    "gym.plan",
   ]);
 
 // --- lessons, steps, checkpoints, capstones, gym ----------------------------------------------------
@@ -119,7 +123,14 @@ export const useStepAttempt = () =>
 export const useStepHint = () => useApiMutation("steps.hint", ["steps.state"]);
 export const useStepNewSeries = () => useApiMutation("steps.newSeries", ["steps.state"]);
 export const useLessonComplete = () =>
-  useApiMutation("lessons.complete", ["lessons.progress", "unlocks.list", "session.today", "skills.map"]);
+  useApiMutation("lessons.complete", [
+    "lessons.progress",
+    "unlocks.list",
+    "session.today",
+    "skills.map",
+    // Wave 5: a completed side lesson (A1.L0n) changes the side-lesson list and the next offer.
+    "sideLessons.list",
+  ]);
 export const useCheckpointStart = () => useApiMutation("checkpoints.start", ["lessons.progress"]);
 export const useCheckpointAttempt = () =>
   useApiMutation("checkpoints.attempt", ["lessons.progress", "skills.map", "session.today"]);
@@ -372,3 +383,15 @@ export const useLadderSubmit = () =>
 export const useGymPlan = () => useQuery(apiQuery("gym.plan"));
 /** The U05.L07 voice-leading gate (`voicing()`, `rhodes`, `organ`). */
 export const useVoicingGate = () => useQuery(apiQuery("gates.voicing"));
+
+// --- Wave 5 additions (docs/design/wave5.md §5) -------------------------------------------------------
+// Until the server engineer builds them these answer 501 (`OakApiError.code === "not_implemented"`, never
+// retried); a surface shows its own "not built yet" copy through `ErrorState`.
+
+/** The optional side lessons A1.L01–L04: state, and the one Today would offer next. */
+export const useSideLessons = () => useQuery(apiQuery("sideLessons.list"));
+/** The L5/L6 repertoire pool with the learner's passed phrases and stages. */
+export const useLadderSongs = () => useQuery(apiQuery("ladder.songs"));
+/** Confirm an imported transcription version as the learner's own after the strict lint passed (c2). */
+export const useTranscriptionConfirmVersion = () =>
+  useApiMutation("transcriptions.confirmVersion", ["transcriptions.get", "transcriptions.list"]);

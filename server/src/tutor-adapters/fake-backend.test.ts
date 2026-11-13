@@ -79,6 +79,17 @@ describe("markers and canned replies", () => {
     expect(chunks.join("")).toBe("Bar [[bars:3-4]] lands on [[deg:5]] today.");
   });
 
+  test("#sections names the verse and the chorus and a bar range (Wave 5 section chips)", () => {
+    const text = replyFor(
+      { kind: "chat", user: { oakContext: "", learnerCode: null, text: "#sections" } },
+      markersIn("Compare my sections #sections"),
+    );
+    expect(text).toContain("verse");
+    expect(text).toContain("chorus");
+    expect(text).toContain("[[bars:8-9]]");
+    expect(text).not.toContain("[[reveal]]");
+  });
+
   test("the canned reviews pass the tutor's own validators (counts, words, bars, strict lint of tryCode)", () => {
     for (const revisions of [1, 2] as const) {
       expect(

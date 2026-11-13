@@ -22,6 +22,7 @@ import {
   type SessionId,
   type SingEx,
   type StepDef,
+  type SyllabusDef,
   type Trial,
   toLearnerProfile,
   type UnlockableId,
@@ -34,6 +35,7 @@ import { courseGraph } from "../../../../content/index.ts";
 import { unlockedAt } from "../../../../content/lib/course.ts";
 import { callApi } from "../../lib/api.ts";
 import { useContent } from "../../lib/content.ts";
+import { lessonTitles } from "../../lib/content-model.ts";
 import { formatDate, pct } from "../../lib/format.ts";
 import { usePageTitle } from "../../lib/nav.ts";
 import { initialPanelsOf } from "../../lib/panels.ts";
@@ -50,6 +52,7 @@ import { useFocusHeader, useFocusHeaderContent } from "../../ui/shell/focus-head
 import { ServicesGate } from "../../workbench/ServicesGate.tsx";
 import "../../workbench/workbench.css";
 import { promptOf } from "../../drills/copy.ts";
+import { lessonWidgetFor } from "../answers.tsx";
 import { bandMutesOf, bandSetupOf, checkpointMakeBand } from "../band.ts";
 import { useCheckpointDef, useLessonContent } from "../content.ts";
 import { renderer as feedbackRenderer } from "../feedback.ts";
@@ -65,6 +68,7 @@ import {
 import { viewsOf } from "../model.ts";
 import { MakeRenderer, rendererFor } from "../renderers.tsx";
 import { browserGrader, catalogText, lessonServices } from "../services.ts";
+import { answerMissing, registryHas, stepScopePanel } from "../wave5.ts";
 import {
   clearRecords,
   familyAnswerSpec,
@@ -72,6 +76,7 @@ import {
   type ItemRecord,
   isSungTrial,
   loadRecords,
+  openedText,
   progressLine,
   quietNote,
   resultCopy,
@@ -330,6 +335,7 @@ function itemKey(ex: Exercise, trial: Trial | null, fallback: KeySpec): KeySpec 
 }
 
 const registry = createRegistry(FAMILIES, decks);
+const HAS_WIDGET = registryHas(lessonWidgetFor);
 
 /** Builds the items the runner shows from the server's composition and the checkpoint's definition. */
 function buildItems(
@@ -382,7 +388,9 @@ function buildItems(
           exercise: ex,
           trial: null,
           kind: "authored" as const,
-          unavailable: false,
+          // Wave 5: an answer kind the app cannot draw yet (form, the 12-bar grid, the scale builder before
+          // their widgets land) is set aside rather than shown as a dead end.
+          unavailable: answerMissing(ex, HAS_WIDGET),
           sung: false,
         };
       }
@@ -451,7 +459,7 @@ function buildItems(
         exercise,
         trial,
         kind: "family" as const,
-        unavailable: answer === null,
+        unavailable: answer === null || !HAS_WIDGET(answer),
         sung: false,
       };
     }
@@ -590,6 +598,8 @@ function Runner(p: {
       params: () => devItem.current?.trial?.params ?? null,
       trialCode: () => devItem.current?.trial?.code ?? null,
       kind: () => devItem.current?.kind ?? null,
+      /** The item's index in the attempt (`CheckpointItemSpec.idx`, the server's skill per item). */
+      idx: () => devItem.current?.idx ?? null,
       exercise: () => devItem.current?.exercise ?? null,
       /** Grades and saves a response for the item on screen, then moves on (the Make: saves its sketch). */
       answer: (r: AttemptResponse) => devApi.current?.answer(r),
@@ -841,6 +851,7 @@ function Runner(p: {
       unit: p.cpId,
       // Wave 4: an item may open a Workbench panel (the chord band, the key panel), as a lesson step does.
       ...(initialPanelsOf(item.step.ui) ? { initialPanels: initialPanelsOf(item.step.ui) ?? {} } : {}),
+      ...(stepScopePanel(item.step.ui) ? { scopePanel: stepScopePanel(item.step.ui) } : {}),
       band: item.kind === "make" ? makeBand : null,
       roll: { labels: "none", color: "part" },
     },
@@ -1015,7 +1026,7 @@ function ResultScreen({
   onContinue,
 }: {
   outcome: CheckpointOutcome;
-  content: { skills: { nodes: { id: string; name: string }[] } } | null;
+  content: { skills: { nodes: { id: string; name: string }[] }; syllabus?: SyllabusDef | null } | null;
   onDebrief(): void;
   /** Inside a session the primary action goes on to the Coda instead of back to Today. */
   inSession: boolean;
@@ -1023,6 +1034,7 @@ function ResultScreen({
 }) {
   const copy = resultCopy(outcome);
   const name = (id: string) => content?.skills.nodes.find((n) => n.id === id)?.name ?? id;
+  const titles = lessonTitles(content?.syllabus ?? null);
   return (
     <Page width="narrow">
       <div
@@ -1073,8 +1085,10 @@ function ResultScreen({
             your next warm-ups. Then retake it on another day.
           </Callout>
         )}
-        {outcome.opened.length > 0 && (
-          <p className="text-sm text-text-2">Open now: {outcome.opened.join(", ")}.</p>
+        {openedText(outcome.opened, titles) !== "" && (
+          <p className="text-sm text-text-2" data-testid="checkpoint-opened">
+            Open now: {openedText(outcome.opened, titles)}.
+          </p>
         )}
         <div className="flex flex-wrap gap-2">
           {inSession ? (

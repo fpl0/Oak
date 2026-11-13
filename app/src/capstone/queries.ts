@@ -11,6 +11,7 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { apiQuery, useApiMutation } from "../lib/queries.ts";
+import { type ReviewRequest, useReviewRequest } from "../tutor/context.ts";
 
 /** The capstone's draft: the sketch the server links (`CapstoneState.sketchId`), else the newest `capstone` sketch for it. */
 export function useDraftSketchId(capstoneId: string, linked: string | null | undefined) {
@@ -73,6 +74,18 @@ export type ReviewWait =
   | { kind: "stalled" };
 
 type TimelineEntry = Pick<TranscriptEntry, "role" | "kind" | "review" | "excluded" | "errorKind">;
+
+/** The request text that names the draft version a review is asked about (c11: a review names its version). */
+export function reviewRequestText(version: number | null, transcription: boolean): string {
+  const what = transcription ? "transcription" : "draft";
+  return version === null ? `Please review my ${what}.` : `Please review version ${version} of my ${what}.`;
+}
+
+/** The version a review request named (`reviewRequestText`), or `null`. */
+export function versionOfRequest(text: string | null | undefined): number | null {
+  const m = /\bversion (\d+)\b/i.exec(text ?? "");
+  return m ? Number(m[1]) : null;
+}
 const isReviewKind = (k: string) => k.startsWith("review-");
 
 /**
@@ -97,13 +110,41 @@ export function reviewWaitOf(
 }
 
 /**
+ * The Brief's wait joined with the tutor panel's own record of the request (c9, `useReviewRequest`): a request
+ * that ended before reaching the server (`failed-early`) or with an error, after this page asked, is failed at once
+ * (nothing is on the timeline to wait for); a request the panel sent itself (its "Request review") reads as pending
+ * here too. `askedAt` is this page's local clock when it asked. Pure.
+ */
+export function joinReviewWait(
+  wait: ReviewWait,
+  request: ReviewRequest | null,
+  askedAt: number | null,
+  now: number,
+): ReviewWait {
+  if (!request) return wait;
+  const failed = request.phase === "failed-early" || request.phase === "failed";
+  if (failed && askedAt !== null && request.at >= askedAt && wait.kind !== "idle") return { kind: "failed" };
+  const recent = now - request.at < REVIEW_WAIT_MS;
+  if (
+    request.phase === "pending" &&
+    recent &&
+    wait.kind === "idle" &&
+    (askedAt === null || request.at >= askedAt)
+  )
+    return { kind: "pending" };
+  return wait;
+}
+
+/**
  * The latest structured review of this capstone in its tutor timeline (contracts §10.6), and where the last request
  * stands. The tutor panel renders the review itself; the workspace shows its state and offers its liner note at
  * release. The timeline is polled only while a requested review is on its way, and for `REVIEW_WAIT_MS` at most:
  * once it has arrived (or failed) nothing polls.
  */
 export function useCapstoneReview(capstoneId: string) {
-  const [asked, setAsked] = useState<{ asksBefore: number } | null>(null);
+  const [asked, setAsked] = useState<{ asksBefore: number; at: number } | null>(null);
+  // The panel's own record of the request (c9): a request that never reached the server clears "pending" at once.
+  const request = useReviewRequest({ subjectKind: "capstone", subjectId: capstoneId });
   // When this page started waiting (local clock), and the clock the wait is read against.
   const [since, setSince] = useState<number | null>(null);
   const [now, setNow] = useState(0);
@@ -112,19 +153,28 @@ export function useCapstoneReview(capstoneId: string) {
     refetchInterval: (query) => {
       const entries = query.state.data?.entries ?? [];
       const waited = since === null ? 0 : Date.now() - since;
-      return reviewWaitOf(entries, asked, waited).kind === "pending" ? REVIEW_POLL_MS : false;
+      const w = joinReviewWait(reviewWaitOf(entries, asked, waited), request, asked?.at ?? null, Date.now());
+      return w.kind === "pending" ? REVIEW_POLL_MS : false;
     },
     retry: 0,
   });
   const entries = q.data?.entries ?? [];
   let review: CapstoneReview | null = null;
   let at: string | null = null;
+  // The entry's id as the tutor panel keys it (`<conversationId>-<seq>`: its "Mark done" ticks), and the draft
+  // version the request before it named.
+  let entryId: string | null = null;
+  let version: number | null = null;
+  let lastAsk: string | null = null;
   for (const e of entries) {
+    if (e.role === "user" && isReviewKind(e.kind)) lastAsk = e.text;
     if (e.review === null || e.excluded) continue;
     const parsed = CapstoneReviewSchema.safeParse(e.review);
     if (parsed.success) {
       review = parsed.data;
       at = e.at;
+      entryId = `${e.conversationId}-${e.seq}`;
+      version = versionOfRequest(lastAsk);
     }
   }
   const loaded = q.data !== undefined;
@@ -140,13 +190,18 @@ export function useCapstoneReview(capstoneId: string) {
     const t = setTimeout(() => setNow(Date.now()), Math.max(0, since + REVIEW_WAIT_MS - Date.now()) + 50);
     return () => clearTimeout(t);
   }, [since]);
-  const wait: ReviewWait =
+  const wait: ReviewWait = joinReviewWait(
     loaded || asked !== null
       ? reviewWaitOf(entries, asked, since === null ? 0 : Math.max(0, now - since))
-      : { kind: "idle" };
+      : { kind: "idle" },
+    request,
+    asked?.at ?? null,
+    Date.now(),
+  );
   const askedNow = () => {
-    setSince(Date.now());
-    setAsked({ asksBefore: entries.filter((e) => e.role === "user" && isReviewKind(e.kind)).length });
+    const at = Date.now();
+    setSince(at);
+    setAsked({ asksBefore: entries.filter((e) => e.role === "user" && isReviewKind(e.kind)).length, at });
   };
-  return { review, at, query: q, wait, asked: askedNow };
+  return { review, at, entryId, version, query: q, wait, asked: askedNow };
 }

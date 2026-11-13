@@ -43,6 +43,7 @@ export async function gradePiece(id: string, code: string, key: KeySpec | null =
       key: key ?? c.key ?? { tonic: "C", mode: "major" },
       meter: c.meter,
       bpm: 100,
+      ...(c.swing ? { swing: c.swing } : {}),
       params: {},
       attemptNo: 1,
       firstAttempt: true,

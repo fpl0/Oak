@@ -278,7 +278,14 @@ class Sim {
     const budget =
       plan.kind === "gym" ? 240 : short ? 180 : { 15: 240, 20: 300, 25: 360 }[plan.targetMinutes];
     if (w.budgetSec !== budget) this.fail(plan.day, `budget ${w.budgetSec} for a ${plan.kind} day`);
-    if (w.items.filter((i) => i.mic).length > 2) this.fail(plan.day, "more than 2 mic sets");
+    if (w.items.filter((i) => i.mic).length > 2)
+      this.fail(
+        plan.day,
+        `more than 2 mic sets: ${w.items
+          .filter((i) => i.mic)
+          .map((i) => `${i.kind}:${i.familyId ?? i.members.join("+")}`)
+          .join(", ")}`,
+      );
     // Nothing is scheduled before it opens.
     const id = plan.mapItemId;
     if (id !== null) {

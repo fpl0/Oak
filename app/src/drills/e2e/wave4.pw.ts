@@ -506,14 +506,22 @@ test("the Practice hub shows stage D honestly: levels, mixed practice and its co
   const quality = stage.locator('[data-family="fam.chd.quality-triad"]');
   await expect(quality).toHaveAttribute("data-status", "mastered");
   await expect(quality).toContainText("Level 5 of 6");
-  await expect(quality.getByTestId("family-composite")).toContainText(
-    "In Mixed harmony with 3 other families",
+  // Wave 5: graduation reads as progress (where it lives now, its level kept).
+  // The company it keeps is the server's: every other family graduated into the same composite.
+  const fams = (await (
+    await page.request.get(`${stack.apiURL}/api/drills/families`, { headers: HEADERS })
+  ).json()) as { families: { familyId: string; compositeId: string | null; graduatedAt: string | null }[] };
+  const others = fams.families.filter(
+    (f) =>
+      f.compositeId === "fam.mix.harmony" && f.graduatedAt !== null && f.familyId !== "fam.chd.quality-triad",
+  ).length;
+  expect(others).toBeGreaterThan(1);
+  await expect(quality.getByTestId("family-graduated")).toContainText(
+    `Graduated to Mixed harmony with ${others} others`,
   );
-  // Still on its own card: its level and how far the lessons let it go.
+  // At the highest level its lessons open: the lesson that opens the next one is named, never a level beyond it.
   const cadence = stage.locator('[data-family="fam.har.cadence"]');
-  await expect(cadence).toHaveAttribute("data-status", "unlocked");
-  await expect(cadence).toContainText("Level 1 of 4 · up to level 3 for now");
-  await expect(cadence.getByTestId("family-composite")).toHaveCount(0);
+  await expect(cadence).toContainText("Level 3 of 4 · level 4 opens with U14.L02");
   // Melodic dictation left its own card below its mastery level: in mixed practice, never "mastered".
   const dictation = page.getByTestId("stage-C").locator('[data-family="fam.mel.dictation"]');
   await expect(dictation).toHaveAttribute("data-status", "resting");

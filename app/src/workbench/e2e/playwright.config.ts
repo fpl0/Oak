@@ -1,16 +1,17 @@
 // Workbench e2e: `bunx playwright test -c app/src/workbench/e2e/playwright.config.ts` (or `--project workbench` from
 // the root config). Starts its own Vite page on 127.0.0.1:5193 (Node) and stops it afterwards.
 import { fileURLToPath } from "node:url";
-import { type Area, areaConfig } from "../../../../e2e/support/stack.ts";
+import { type Area, areaConfig, E2E_SUFFIX, shifted } from "../../../../e2e/support/stack.ts";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url));
-const PORT = 5193;
+// vite.config.ts pins 5193; `--port` moves it with OAK_E2E_SHIFT (e2e/support/stack.ts).
+const PORT = shifted(5193);
 
 export const area: Area = {
   name: "workbench",
   testDir: here,
-  outputDir: `${here}test-results`,
+  outputDir: `${here}test-results${E2E_SUFFIX.replace("-", "/")}`,
   timeout: 90_000,
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
@@ -22,7 +23,7 @@ export const area: Area = {
   webServer: [
     {
       name: `workbench-vite:${PORT}`,
-      command: `node ${repoRoot}node_modules/vite/bin/vite.js --config ${here}vite.config.ts`,
+      command: `node ${repoRoot}node_modules/vite/bin/vite.js --config ${here}vite.config.ts --port ${PORT} --strictPort`,
       cwd: repoRoot,
       url: `http://127.0.0.1:${PORT}/`,
       reuseExistingServer: false,

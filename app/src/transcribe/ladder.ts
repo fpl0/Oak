@@ -7,7 +7,8 @@ import { scaleName } from "@oak/pitch";
 import { tempoLine } from "@oak/theory";
 import { formatKey } from "../lib/format.ts";
 
-export type LadderLevel = 1 | 2 | 3 | 4;
+/** L1–L4 are generated; L5 (folk, per phrase) and L6 (blues, staged) are songs (song.ts). */
+export type LadderLevel = 1 | 2 | 3 | 4 | 5 | 6;
 export type LadderStage = "bass" | "quality" | "rn";
 
 /** Pass mark of every ladder level (contracts §6.12; `LADDER_PASS` of @oak/grader). */
@@ -18,12 +19,16 @@ export const LEVEL_TITLE: Record<LadderLevel, string> = {
   2: "Bass lines",
   3: "Four-chord loops",
   4: "Short melodies",
+  5: "Public-domain folk",
+  6: "Blues",
 };
 export const LEVEL_TASK: Record<LadderLevel, string> = {
   1: "Write the drum loop you hear: kick, snare and hats.",
   2: "Write the bass line you hear as scale degrees.",
   3: "Write the bass line first, then the chords above it.",
   4: "Write the melody you hear as scale degrees.",
+  5: "Write the tune phrase by phrase, as scale degrees.",
+  6: "Write the bass, then the changes, then the melody.",
 };
 export const STAGE_LABEL: Record<LadderStage, string> = {
   bass: "Bass",
@@ -59,6 +64,8 @@ export const REALISM_TARGET: Record<LadderLevel, string> = {
   2: "bass",
   3: "chords",
   4: "mel",
+  5: "mel",
+  6: "bass",
 };
 
 export interface Given {
@@ -163,6 +170,9 @@ export function checkLines(result: GradeResult): CheckLine[] {
     const more = /^(\d+) more\.?$/.exec(text);
     if (more && bar === null) text = `…and ${more[1]} more.`;
     if (bar !== null) text = text.replace(new RegExp(`^bar\\s+${bar}\\s*[:,·-]\\s*`, "i"), "");
+    // A harmony slot's number ("Chord 4: IV, expected V7.") counts chord changes, not bars: with the bar said, it
+    // only misleads (bar 9 is the fourth change of a blues).
+    if (bar !== null) text = text.replace(/^chord\s+\d+\s*:\s*/i, "");
     let onBeat: string | null = null;
     if (beat !== null && new RegExp(`^${esc(beat)}\\s*:\\s*`).test(text)) {
       text = text.replace(new RegExp(`^${esc(beat)}\\s*:\\s*`), "");
@@ -174,7 +184,13 @@ export function checkLines(result: GradeResult): CheckLine[] {
     lines.push({
       bar,
       beat: bar === null ? null : onBeat,
-      text: bar === null ? cap(text) : text.charAt(0).toLowerCase() + text.slice(1),
+      // After "Bar 9:" a sentence goes on in lower case; a numeral, a chord or a note name keeps its case ("IV").
+      text:
+        bar === null
+          ? cap(text)
+          : /^(?:[A-Z][a-z]|A\s)/.test(text)
+            ? text.charAt(0).toLowerCase() + text.slice(1)
+            : text,
     });
   }
   return lines.sort((a, b) => (a.bar ?? 1e9) - (b.bar ?? 1e9));

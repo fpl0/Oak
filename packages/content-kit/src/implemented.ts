@@ -5,6 +5,7 @@ import { flattenExercise } from "./define.ts";
 import type {
   AnswerUiKind,
   AstConstraintName,
+  CapstoneDef,
   Exercise,
   ExerciseKind,
   LessonDef,
@@ -53,6 +54,23 @@ export const SCHEMA_FEATURES = [
   "progression.bars",
   /** `StepDef.gateCheck` (U05.L08's second chance at the voicing gate) and the condition's `variants`. */
   "step.gate-check",
+  // Wave 5 (U08–U11, A1, C3–C5, X2; AUTHORING §18).
+  /** `RubricRuleBase.section`: a rule read on one section or bar window of the piece. */
+  "rubric.section",
+  /** `chord-qualities` with `depth: "seventh"` (C5: every chord a dominant seventh). */
+  "chord-qualities.depth",
+  /** `degree-set` with `anyOf` (C5: ♭3 or ♭5 at least twice). */
+  "degree-set.any-of",
+  /** `ends-on-degree` with `over` (C4: ends on 1 over i). */
+  "ends-on-degree.over",
+  /** `blues-form` with `choruses` or `quickChangeOk` (C5). */
+  "blues-form.choruses",
+  /** `StepUi.probe`: a filter curve, envelope shape or harmonics beside the sound (A1). */
+  "step.probe",
+  /** `StepUi.initialPanels` with `form`, `scope` or `spectrum`. */
+  "panel.wave5",
+  /** `PhraseCheck.after`: a capstone check that opens after others (X2: bass → changes → melody). */
+  "capstone.check-after",
 ] as const;
 export type SchemaFeature = (typeof SCHEMA_FEATURES)[number];
 
@@ -90,7 +108,9 @@ export const IMPLEMENTED: Implemented = {
     "listen",
     "all",
   ],
-  matchers: ["events", "rhythm", "melody", "harmony", "pcset", "rubric", "all"],
+  // Wave 5 Build (grader): `controls`, "match this sound" (A1), graded on each event's sound controls with
+  // superdough's defaults (packages/grader/src/match/controls.ts and controls.test.ts).
+  matchers: ["events", "rhythm", "melody", "harmony", "pcset", "rubric", "all", "controls"],
   constraints: [
     "must-use",
     "must-not-use",
@@ -128,6 +148,24 @@ export const IMPLEMENTED: Implemented = {
     "chord-qualities",
     "chord-inversions",
     "non-chord-tones",
+    // Wave 5 Foundation: graded in @oak/grader since Wave 1 (rubric.test.ts "matches", rubric/wave4.test.ts
+    // "matches inside a Make"; the reference is resolved by grade/index.ts) and drawn by the Make like any
+    // rule. U08.L01's Make reads the bass under each chord with it (a `harmony` matcher at level `bass`).
+    "matches",
+    // Wave 5 Build (grader), each with its golden tests: the per-track arrange() pass and the disagreeing-
+    // sections fail of contracts §6.3 item 8 (rubric/form-golden.test.ts: form, contrast, groove-lock,
+    // key-change), the §6.6 rubrics with one passing piece per shipped flavour and the known-wrong pieces
+    // (grade/capstone-wave5.test.ts: C3, C4, C5), and the rule tests (rubric/wave5-rules.test.ts,
+    // wave5-features.test.ts, rubric.test.ts).
+    "bass-line",
+    "notates",
+    "groove-lock",
+    "duration-sec",
+    "form",
+    "contrast",
+    "swing",
+    "syncopation",
+    "blues-form",
   ],
   answerUis: [
     "choice",
@@ -148,6 +186,11 @@ export const IMPLEMENTED: Implemented = {
     "staff-input",
     // Wave 4 integration: graded (grade/answers.ts slotChoices) and rendered (app/src/answers registry).
     "slot-choice",
+    // Wave 5 integration: graded (grade/answers-wave5.ts, answers-wave5.test.ts) and rendered (app/src/answers
+    // widgets Form.tsx, BarGrid and ScaleBuilder; registry and gallery).
+    "form",
+    "bar-grid",
+    "scale-builder",
   ],
   customRules: [],
   // Wave 4 Build (grader): shapes that need only the grader (no renderer), graded with tests. Wave 4
@@ -164,6 +207,19 @@ export const IMPLEMENTED: Implemented = {
     "lead-sheet",
     "step.initial-panels",
     "step.gate-check",
+    // Wave 5 Build (grader): fields of existing rules that only the grader reads (rubric/wave5-features.test.ts;
+    // C4 and C5 in grade/capstone-wave5.test.ts). A Make line and the capstone checklist draw them as any rule.
+    "rubric.section",
+    "chord-qualities.depth",
+    "degree-set.any-of",
+    "ends-on-degree.over",
+    "blues-form.choruses",
+    // Wave 5 integration: the X2 check order (graded per check by `gradePhraseCheck`, kept by the server's
+    // capstone sessions, opened in order by the capstone workspace), and the A1 probe and the form, scope and
+    // spectrum panels a step opens (lesson `initialPanelsOf` / `scopePanel` → the Workbench draws them).
+    "capstone.check-after",
+    "step.probe",
+    "panel.wave5",
   ],
 };
 
@@ -187,9 +243,12 @@ export const GRADER_READY: Pick<Implemented, "answerUis" | "features"> = {
  */
 export const PLANNED: Implemented = {
   exerciseKinds: [],
+  // Wave 5 Build: the `controls` matcher and the rules bass-line, notates, groove-lock, duration-sec, form,
+  // contrast, swing, syncopation and blues-form moved into `IMPLEMENTED` with their golden tests.
   matchers: [],
   constraints: [],
   rubricRules: [],
+  // Wave 5 integration moved the form strip, the twelve-bar chart and the scale builder into `IMPLEMENTED`.
   answerUis: [],
   customRules: [],
   features: SCHEMA_FEATURES.filter((f) => !(IMPLEMENTED.features ?? []).includes(f)),
@@ -236,6 +295,13 @@ function ruleUses(r: RubricRule, ex: string, impl: Implemented, out: Unimplement
   if (r.rule === "voice-leading" && (r.voices !== undefined || r.commonTones || r.noCrossing || r.bassFree))
     featureUse("voice-leading.gate", ex, impl, out);
   if (r.rule === "progression" && r.bars) featureUse("progression.bars", ex, impl, out);
+  if (r.section) featureUse("rubric.section", ex, impl, out);
+  if (r.rule === "chord-qualities" && r.depth === "seventh")
+    featureUse("chord-qualities.depth", ex, impl, out);
+  if (r.rule === "degree-set" && r.anyOf) featureUse("degree-set.any-of", ex, impl, out);
+  if (r.rule === "ends-on-degree" && r.over) featureUse("ends-on-degree.over", ex, impl, out);
+  if (r.rule === "blues-form" && (r.choruses !== undefined || r.quickChangeOk))
+    featureUse("blues-form.choruses", ex, impl, out);
   if (r.rule === "custom" && !impl.customRules.includes(r.fn))
     out.push({ what: "custom-rule", name: r.fn, exercise: ex });
   if (r.rule === "matches") matcherUses(r.matcher, ex, impl, out);
@@ -291,8 +357,30 @@ export function unimplementedInLesson(def: LessonDef, impl: Implemented = IMPLEM
   return def.steps.flatMap((s) => {
     const out = s.exercise ? unimplementedIn(s.exercise, impl) : [];
     if (s.ui.initialPanels) featureUse("step.initial-panels", s.id, impl, out);
+    if (s.ui.initialPanels?.some((p) => p === "form" || p === "scope" || p === "spectrum"))
+      featureUse("panel.wave5", s.id, impl, out);
+    if (s.ui.probe) featureUse("step.probe", s.id, impl, out);
     if (s.ui.leadSheet) featureUse("lead-sheet", s.id, impl, out);
     if (s.gateCheck) featureUse("step.gate-check", s.id, impl, out);
     return out;
   });
+}
+
+/**
+ * Wave 5. What a capstone's sessions use outside `impl`: each phrase check's matcher, the `after` order of
+ * checks (X2), and every stage exercise. The brief is checked as an exercise (`unimplementedIn`).
+ */
+export function unimplementedInCapstoneSessions(
+  def: CapstoneDef,
+  impl: Implemented = IMPLEMENTED,
+): UnimplementedUse[] {
+  const out: UnimplementedUse[] = [];
+  for (const s of def.sessionDefs) {
+    for (const x of s.checks ?? []) {
+      matcherUses(x.matcher, x.id, impl, out);
+      if (x.after) featureUse("capstone.check-after", x.id, impl, out);
+    }
+    for (const st of s.stages ?? []) out.push(...unimplementedIn(st, impl));
+  }
+  return out;
 }

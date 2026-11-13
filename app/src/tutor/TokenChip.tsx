@@ -7,13 +7,14 @@
 import type { MusicToken, SubjectRef } from "@oak/api";
 import { Link } from "@tanstack/react-router";
 import { clsx } from "clsx";
-import { Lock, Repeat } from "lucide-react";
+import { LayoutList, Lock, Repeat } from "lucide-react";
 import { type ReactNode, useId, useRef, useState } from "react";
 import { degreeBackgroundCss, degreeStyle } from "../ui/theme/palette.ts";
-import { highlightReference, showBars } from "./context.ts";
+import { highlightReference, showBars, showSection } from "./context.ts";
 import { useThemeName } from "./hooks.ts";
 import { describeToken, type TokenContext, type TokenInfo } from "./music-tokens.ts";
 import { playChords } from "./preview.ts";
+import { describeSection, type FormViewSection } from "./sections.ts";
 
 interface PopPos {
   left: number;
@@ -216,6 +217,69 @@ export function TokenChip({
     <>
       {body}
       {bubble}
+    </>
+  );
+}
+
+/**
+ * A section the tutor names ("the chorus", "Chorus 2"), as a chip (Wave 5): a click or Enter selects that section in
+ * the form view and loops it, as a click on the section ribbon does, and lights its bars. The tutor's own words stay
+ * the chip's label; the hover and the spoken name give the section and its bars.
+ */
+/** A section whose name is a single letter (`melA`: "A", "A 2"): its form letter would only repeat it. */
+export function letterNamed(section: Pick<FormViewSection, "text">): boolean {
+  return /^[A-Z](?: \d+)?$/.test(section.text);
+}
+
+export function SectionChip({
+  raw,
+  section,
+  pickup,
+  thread,
+}: {
+  raw: string;
+  section: FormViewSection;
+  pickup: boolean;
+  thread: SubjectRef;
+}) {
+  const def = useDefinition();
+  const id = useId();
+  const d = describeSection(section, pickup);
+  const info: TokenInfo = { kind: "bars", label: raw, title: d.title, aria: d.aria };
+  return (
+    <>
+      <button
+        type="button"
+        ref={(el) => {
+          def.ref.current = el;
+        }}
+        aria-label={d.aria}
+        aria-describedby={def.pos ? id : undefined}
+        data-token="section"
+        data-section={section.tag}
+        onClick={() => showSection(thread, section, pickup)}
+        onMouseEnter={() => def.show(false)}
+        onMouseLeave={def.hide}
+        onFocus={() => def.show(true)}
+        onBlur={def.close}
+        onKeyDown={(e) => {
+          if (e.key === "Escape" && def.pos) {
+            e.stopPropagation();
+            def.close();
+          }
+        }}
+        className={clsx(PILL, "border-accent/40 bg-lane-in text-accent hover:bg-surface-2")}
+      >
+        <LayoutList aria-hidden className="size-3" />
+        {raw}
+        {/* A section named by a letter (A, B) is its letter already: "A A" would read as two sections. */}
+        {letterNamed(section) ? null : (
+          <span data-sub className="font-sans text-[0.75rem] font-normal text-text-2">
+            {section.letter}
+          </span>
+        )}
+      </button>
+      {def.pos ? <Bubble id={id} pos={def.pos} info={info} /> : null}
     </>
   );
 }

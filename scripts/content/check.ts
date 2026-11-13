@@ -111,7 +111,9 @@ if (arg === "all") {
   targets = lessons.filter((l) => l.def.id.startsWith(`${arg}.`) && !l.sample);
   checkpoints = cps.defs.filter((c) => c.id === `${arg}.CP`);
   if (targets.length === 0 && checkpoints.length === 0 && ok)
-    console.log(`\n${arg}: nothing authored yet (lessons go in content/core/${arg}/Lnn/).`);
+    console.log(
+      `\n${arg}: nothing authored yet (lessons go in content/${arg.startsWith("U") ? "core" : "advanced"}/${arg}/Lnn/).`,
+    );
 } else if (capstones.some((c) => c.id === arg)) capstoneIds = [arg];
 else if (checkpointMetas.some((c) => c.id === arg)) {
   checkpoints = cps.defs.filter((c) => c.id === arg);

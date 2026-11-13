@@ -34,6 +34,11 @@ export interface ContentSource {
   canDos: readonly CanDoDef[];
   milestones: readonly MilestoneDef[];
   songs: readonly SongDef[];
+  /**
+   * Wave 5: the repertoire pool's metadata (`content/repertoire/index.ts`): which ladder level a song serves
+   * (contracts §2.8–§2.9) and from which lesson. Absent from older fixtures (treated as empty).
+   */
+  repertoire?: readonly RepertoireMeta[];
   /** Authored lessons. The syllabus may list lessons that are not written yet. */
   lessons: readonly LessonDef[];
   checkpoints: readonly CheckpointDef[];
@@ -42,6 +47,20 @@ export interface ContentSource {
   tutorPrefix: { syllabus: string; catalog: string };
   /** What the loader could not read. Shown by `GET /api/dev/content-report`. */
   problems: readonly ContentProblem[];
+}
+
+/** One repertoire entry as the server reads it (the answer key, when written, is the `SongDef` of the same ID). */
+export interface RepertoireMeta {
+  id: string;
+  title: string;
+  year: number | "trad";
+  /** The ladder level the song serves (5 PD folk, 6 blues and standards, 8 CF-T), when it serves one. */
+  ladder?: number;
+  /** Not offered before this lesson is completed ("Opens with U14.L03"). */
+  availableFrom?: string;
+  /** Offered only once a human verified it. */
+  onlyWhenVerified?: boolean;
+  form?: string;
 }
 
 export const EMPTY_SYLLABUS: SyllabusDef = {
@@ -65,6 +84,7 @@ export function emptyContent(problems: readonly ContentProblem[] = []): ContentS
     canDos: [],
     milestones: [],
     songs: [],
+    repertoire: [],
     lessons: [],
     checkpoints: [],
     capstones: [],

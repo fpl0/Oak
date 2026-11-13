@@ -142,9 +142,10 @@ describe("the contract table", () => {
         "DELETE /settings/anthropic-key → anthropic-key.delete",
       ].sort(),
     );
-    expect(new Set(defs.flatMap(([, d]) => (d.confirm ? [d.confirm] : [])))).toEqual(
-      new Set(CONFIRM_ACTIONS),
-    );
+    // Wave 5: `confirmIf` actions need the nonce only when they replace something (album.audio.replace).
+    expect(
+      new Set(defs.flatMap(([, d]) => (d.confirm ? [d.confirm] : d.confirmIf ? [d.confirmIf] : []))),
+    ).toEqual(new Set(CONFIRM_ACTIONS));
     // Every DELETE is destructive.
     expect(defs.filter(([, d]) => d.method === "DELETE" && !d.confirm)).toEqual([]);
   });

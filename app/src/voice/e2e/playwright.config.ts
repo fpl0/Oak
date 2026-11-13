@@ -4,7 +4,7 @@
 // the Settings › Voice flows. Each spec picks its WAV with `fakeMic()`.
 // Run: bunx playwright test -c app/src/voice/e2e/playwright.config.ts
 import { fileURLToPath } from "node:url";
-import { type Area, areaConfig, oakStack, stackUse } from "../../../../e2e/support/stack.ts";
+import { type Area, areaConfig, oakStack, stackUse, withFixtures } from "../../../../e2e/support/stack.ts";
 
 export const stack = oakStack({
   vitePort: 5239,
@@ -16,7 +16,7 @@ export const stack = oakStack({
 // The fixtures are written before the API server starts (it is the first web server).
 const webServer = stack.webServer.map((w) =>
   w.name?.startsWith("oak-api")
-    ? { ...w, command: `bun app/src/voice/e2e/make-fixtures.bun.ts && ${w.command}` }
+    ? { ...w, command: withFixtures("bun app/src/voice/e2e/make-fixtures.bun.ts", w.command) }
     : w,
 );
 

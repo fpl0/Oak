@@ -97,15 +97,18 @@ test("own audio: a WAV imported, its bars set, a bar looped at 0.75× on the str
   const w = watch(page);
   await page.goto("/transcribe");
   await expect(page.getByRole("heading", { level: 1, name: "Transcribe" })).toBeVisible({ timeout: 60_000 });
-  await page.getByTestId("file-input").setInputFiles({
-    name: "groove_take_1.wav",
-    mimeType: "audio/wav",
-    buffer: makeWav({ bpm: 120, bars: 8, leadInSec: 0.5 }),
-  });
+  await page
+    .getByTestId("import")
+    .locator("input[type=file]")
+    .setInputFiles({
+      name: "groove_take_1.wav",
+      mimeType: "audio/wav",
+      buffer: makeWav({ bpm: 120, bars: 8, leadInSec: 0.5 }),
+    });
   await expect(page).toHaveURL(/\/transcribe\/tr/, { timeout: 30_000 });
   const id = page.url().split("/").pop() as string;
   await expect(page.getByTestId("project-title")).toHaveText("groove take 1");
-  await expect(page.getByTestId("play")).toBeEnabled({ timeout: 30_000 });
+  await expect(page.getByTestId("transport-play")).toBeEnabled({ timeout: 30_000 });
   // Stored by the local server under its content hash, never sent anywhere else.
   const created = await api<{ sourceKind: string; audioId: string | null }>(
     request,
@@ -128,12 +131,12 @@ test("own audio: a WAV imported, its bars set, a bar looped at 0.75× on the str
   const root = page.getByTestId("transcribe-project");
   await root.focus();
   for (let i = 0; i < 5; i++) await page.keyboard.press(",");
-  await expect(page.getByTestId("rate")).toContainText("75 %");
+  await expect(page.getByTestId("transport-rate")).toContainText("75 %");
   await page.keyboard.press("l");
   await page.keyboard.press("Alt+ArrowRight");
   await expect(page.getByTestId("loop-label")).toHaveText("bar 2");
   await page.keyboard.press("Space");
-  await expect(page.getByTestId("play")).toHaveAccessibleName(/Pause/);
+  await expect(page.getByTestId("transport-play")).toHaveAccessibleName(/Pause/);
   // Slowed down without a pitch change: the time-stretch engine, not the plain element.
   await expect(page.locator("[data-engine]").first()).toHaveAttribute("data-engine", "stretch", {
     timeout: 30_000,
@@ -162,16 +165,16 @@ test("own audio: a WAV imported, its bars set, a bar looped at 0.75× on the str
   await root.focus();
   await page.keyboard.press("v");
   await expect(page.getByRole("radio", { name: "Mine" })).toHaveAttribute("aria-checked", "true");
-  await expect(page.getByTestId("play")).toHaveAccessibleName(/Pause/);
+  await expect(page.getByTestId("transport-play")).toHaveAccessibleName(/Pause/);
   await page.keyboard.press("o");
   await expect(page.getByRole("radio", { name: "Both" })).toHaveAttribute("aria-checked", "true");
   await page.keyboard.press("v");
   await expect(page.getByRole("radio", { name: "Source" })).toHaveAttribute("aria-checked", "true");
   await expect(page.getByTestId("loop-label")).toHaveText("bar 2");
-  await expect(page.getByTestId("play")).toHaveAccessibleName(/Pause/);
+  await expect(page.getByTestId("transport-play")).toHaveAccessibleName(/Pause/);
   await shootAll(page, "w4-journey-own-audio");
   await page.keyboard.press("Space");
-  await expect(page.getByTestId("play")).toHaveAccessibleName(/Play/);
+  await expect(page.getByTestId("transport-play")).toHaveAccessibleName(/Play/);
   // The player settings are kept with the project.
   await expect
     .poll(

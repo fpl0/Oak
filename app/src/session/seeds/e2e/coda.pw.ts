@@ -2,7 +2,7 @@
 // server's `session.end`; to show every Wave 3 feature tool (degree labels, solfège, the key-signature panel, the
 // circle of fifths) and a code tool without playing four lessons, the spec adds them to the real responses of
 // `session.end` and `unlocks.list` (route interception), and marks ms.03 reached in `progress.get`.
-import { expect, type Page, type Route, test } from "@playwright/test";
+import { type APIRequestContext, expect, type Page, type Route, test } from "@playwright/test";
 import { SCREENSHOT_MATRIX } from "../../../../../e2e/support/stack.ts";
 import { shoot, useUiPrefs } from "../../../../../e2e/support/ui.ts";
 import { blockHmr, expectNoOverflow, SHOTS, seed, settle, today } from "./support.ts";
@@ -72,12 +72,9 @@ async function playsThrough(page: Page): Promise<void> {
   expect(Date.now() - t0).toBeLessThanOrEqual(9_000);
 }
 
-test("the unlock ceremony: the feature itself working, Try it and About it, Esc skips, seen once", async ({
-  page,
-  request,
-}) => {
+/** From the "C1 released" seed: a session started from Today and sent straight to its Coda. */
+async function toCoda(page: Page, request: APIRequestContext, f: Fakes): Promise<void> {
   await blockHmr(page);
-  const f: Fakes = { show: "tb.feature.degree-labels", seen: [], milestone: true };
   await intercept(page, f);
   await seed(request, "C1 released");
   await useUiPrefs(page, { theme: "paper" });
@@ -88,6 +85,17 @@ test("the unlock ceremony: the feature itself working, Try it and About it, Esc 
     (window as never as { __oakSession: { runner: { toCoda(): void } } }).__oakSession.runner.toCoda(),
   );
   await page.waitForURL(/\/session\/coda$/);
+}
+
+// Split from one 160-second test (Wave 5 test speed): the degree-labels ceremony with Esc, then each showcase in
+// both themes and sizes as its own test, every one from the same seed. Each ceremony still plays through in real
+// time and is held to its 8 seconds.
+test("the unlock ceremony: the feature itself working, Try it and About it, Esc skips, seen once", async ({
+  page,
+  request,
+}) => {
+  const f: Fakes = { show: "tb.feature.degree-labels", seen: [], milestone: true };
+  await toCoda(page, request, f);
 
   // The milestone banner: reached in this session, with its words from content.
   await expect(page.getByTestId("coda-milestone")).toContainText("You can now compose a song.", {
@@ -126,17 +134,20 @@ test("the unlock ceremony: the feature itself working, Try it and About it, Esc 
   expect(f.seen).toContain("tb.feature.degree-labels");
   // Esc skipped the ceremony only: the Coda is still here.
   await expect(page).toHaveURL(/\/session\/coda$/);
+});
 
-  // Each showcase, in both themes and sizes.
-  const names: Record<string, string> = {
-    "tb.feature.keysig": "keysig",
-    "tb.feature.circle": "circle",
-    "tb.feature.solfege": "solfege",
-    "tb.scale": "code",
-    "tb.feature.degree-labels": "degrees",
-  };
-  for (const id of ["tb.feature.keysig", "tb.feature.circle", "tb.feature.solfege", "tb.scale"]) {
-    f.show = id;
+const SHOWCASES: Record<string, string> = {
+  "tb.feature.keysig": "keysig",
+  "tb.feature.circle": "circle",
+  "tb.feature.solfege": "solfege",
+  "tb.scale": "code",
+};
+
+for (const [id, name] of Object.entries(SHOWCASES)) {
+  test(`the ${name} showcase plays through in both themes at both sizes`, async ({ page, request }) => {
+    // The degree ceremony is seen (as after the test above); this tool is the one the Coda shows.
+    const f: Fakes = { show: id, seen: [], milestone: true };
+    await toCoda(page, request, f);
     for (const m of SCREENSHOT_MATRIX) {
       await page.setViewportSize({ width: m.width, height: m.height });
       await useUiPrefs(page, { theme: m.theme });
@@ -144,19 +155,20 @@ test("the unlock ceremony: the feature itself working, Try it and About it, Esc 
       await playsThrough(page);
       await settle(page);
       await expectNoOverflow(page);
-      await shoot(page, SHOTS, `coda-ceremony-${names[id]}`, m.theme);
+      await shoot(page, SHOTS, `coda-ceremony-${name}`, m.theme);
     }
-  }
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await expect(page.getByTestId("ceremony-code").locator("mark")).toHaveText(["scale"]);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    if (id !== "tb.scale") return;
+    await expect(page.getByTestId("ceremony-code").locator("mark")).toHaveText(["scale"]);
 
-  // Keyboard: Enter on the focused Continue ends the moment; Enter again is Done for today.
-  await page.keyboard.press("Enter");
-  await expect(moment(page)).toHaveCount(0);
-  await expect(page.getByTestId("done-for-today")).toBeFocused();
-  await page.keyboard.press("Enter");
-  await page.waitForURL((u) => u.pathname === "/");
-});
+    // Keyboard: Enter on the focused Continue ends the moment; Enter again is Done for today.
+    await page.keyboard.press("Enter");
+    await expect(moment(page)).toHaveCount(0);
+    await expect(page.getByTestId("done-for-today")).toBeFocused();
+    await page.keyboard.press("Enter");
+    await page.waitForURL((u) => u.pathname === "/");
+  });
+}
 
 test("reduced motion: the showcase appears at once, nothing moves longer than 120 ms", async ({
   page,

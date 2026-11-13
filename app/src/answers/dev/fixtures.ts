@@ -2,12 +2,14 @@
 // every state (idle, pending, correct, wrong, revealed) can be drawn from real data. Musical claims are checked
 // in `fixtures.test.ts` with headless Strudel and @oak/theory.
 import type { KeySpec } from "@oak/api";
-import { CADENCE_OPTIONS, FUNCTION_OPTIONS } from "@oak/content-kit";
+import { CADENCE_OPTIONS, FUNCTION_OPTIONS, formLetters } from "@oak/content-kit";
+import { barGridStart } from "../bar-grid.ts";
 import { type AnswerEnv, appAudio, NEUTRAL_PROFILE } from "../env.tsx";
 import { rnMidis } from "../harmony.ts";
 import { parseSignatureValue } from "../keys/circle.ts";
 import { readsAs, type TextKind } from "../normalize.ts";
 import { emptyValue } from "../response.ts";
+import { valueDegrees } from "../scale.ts";
 import { centsText, degreeNotes } from "../sing.ts";
 import { engrave, staffChords, staffContext, staffNotes } from "../staff/model.ts";
 import { tapReport, targetSeconds } from "../tap.ts";
@@ -20,6 +22,7 @@ import type {
   PartMark,
   SungSummary,
 } from "../types.ts";
+import { WAVE5_FIXTURES } from "./fixtures-wave5.ts";
 
 export interface Fixture<K extends AnswerKind = AnswerKind> {
   id: string;
@@ -664,6 +667,8 @@ export const FIXTURES: Fixture[] = [
     wrongMessage: "Chord 2 has E at the bottom: the 3rd of C. That is V in first inversion, V6.",
     env: { harmony: { key: F_MAJOR, slotsPerBar: 2 } },
   }),
+  // --- Wave 5: form, the chord chart, the scale builder, minor everywhere, new pick kinds -----------------
+  ...WAVE5_FIXTURES,
 ];
 
 /** The staged-dictation gallery's loop: I V vi IV in C, chords and a root bass (checked in fixtures.test.ts). */
@@ -745,6 +750,30 @@ export function demoMarks(spec: AnswerSpec, value: AnswerValue, expected: Answer
         part: id,
         ok: text.trim() === (expected as Record<string, string>)[id],
       }));
+    case "form": {
+      // Letters are compared by shape (letters by first appearance, `formLetters`); names by the section's type
+      // (`chorus2` is a chorus), so a learner who swaps verse and chorus is told so.
+      if (spec.vocabulary === "letters") {
+        const got = formLetters(value as string[]).split("");
+        const want = formLetters(expected as string[]).split("");
+        return got.map((l, i) => ({ part: i, ok: l === want[i] }));
+      }
+      const type = (x: string | undefined) => (x ?? "").replace(/\d+$/, "");
+      return (value as string[]).map((v, i) => ({
+        part: i,
+        ok: type(v) === type((expected as string[])[i]),
+      }));
+    }
+    case "bar-grid":
+      return (value as string[]).flatMap((v, i) =>
+        (spec.given ?? []).includes(i + 1) ? [] : [{ part: i, ok: v === (expected as string[])[i] }],
+      );
+    case "scale-builder": {
+      // A set: each picked note is right when its degree is in the scale.
+      const want = new Set(valueDegrees(expected as (number | string)[], spec.tonic));
+      const got = valueDegrees(value as (number | string)[], spec.tonic);
+      return got.map((d, i) => ({ part: i, ok: want.has(d) }));
+    }
     case "slider":
       return [
         {
@@ -766,7 +795,8 @@ export function demoCheck(f: Fixture, value: AnswerValue): AnswerFeedback {
   }
   const marks = demoMarks(f.spec, value, f.expected);
   const sameLength =
-    f.spec.ui !== "staff-input" || marks.length === demoMarks(f.spec, f.expected, f.expected).length;
+    (f.spec.ui !== "staff-input" && f.spec.ui !== "scale-builder") ||
+    marks.length === demoMarks(f.spec, f.expected, f.expected).length;
   const ok =
     sameLength &&
     (f.spec.ui === "text"
@@ -785,7 +815,14 @@ export type GalleryState = (typeof STATES)[number];
 export function stateOf(f: Fixture, s: GalleryState): { value: AnswerValue; feedback: AnswerFeedback } {
   switch (s) {
     case "idle":
-      return { value: emptyValue(f.spec), feedback: { state: "idle" } };
+      // A chart's given bars are printed filled: the host starts from `barGridStart`.
+      return {
+        value:
+          f.spec.ui === "bar-grid"
+            ? (barGridStart(f.spec, f.expected as string[]) as AnswerValue)
+            : emptyValue(f.spec),
+        feedback: { state: "idle" },
+      };
     case "pending":
       return { value: f.sample, feedback: { state: "pending" } };
     case "correct": {

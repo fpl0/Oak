@@ -113,7 +113,7 @@ const entries: [string, Sev, string][] = [
   [
     "code.swing-fraction-string",
     E,
-    'Inside a pattern string write the amount as a decimal (`.33`), not "1/3".',
+    "A fraction inside quotes gives no swing: write the amount as a plain number, `.swingBy(1/3, 4)`.",
   ],
   ["code.setcpm-missing", W, "{detail}: start with a tempo line like `setcpm({example})`."],
   ["code.setcpm-form", W, "Tempo line: {detail}."],
@@ -133,6 +133,13 @@ const entries: [string, Sev, string][] = [
     'A patterned `.scale("<…>")` inside a section restarts with the section; put the key plan after `arrange()`.',
   ],
   ["code.locked-fn", E, "`{fn}()` unlocks in {lesson}. For now use {alt}."],
+  // Wave 5: "match this sound" (the `controls` matcher, A1). Never prints the hidden value.
+  [
+    "code.control-missing",
+    E,
+    "The target sound uses `{fn}`; yours leaves it out, so it plays at Strudel's default. Add it and listen again.",
+  ],
+  ["code.control-off", E, "`{fn}`: yours is {how}."],
   ["code.must-use", E, "Use {tool} here."],
   ["code.must-not-use", E, "Solve this without {tool}: {why}"],
   ["code.must-call", E, "Use `{fn}()` here."],
@@ -168,6 +175,8 @@ const entries: [string, Sev, string][] = [
   ["rhythm.period", W, "Yours repeats every {got} bar(s); the target repeats every {expected}."],
   ["rhythm.role-missing", E, "No {role} part found."],
   ["rhythm.swing-missing", W, "Right rhythm, but {got} where the target is {expected}."],
+  // Wave 5: the `swing` rule (U11.L07, C5) names the line and the fix.
+  ["rhythm.swing-amount", W, "`{line}` swings at {ratio}:1; the brief asks for {range}:1, so {tip}."],
   [
     "rhythm.pickup-missing",
     W,
@@ -219,10 +228,24 @@ const entries: [string, Sev, string][] = [
   ["harmony.rn", E, "Chord {slot}: {got}, expected {exp}."],
   ["harmony.missing-chord", E, "Bar {bar}, {beatLabel}: a chord change is missing."],
   ["harmony.extra-chord", W, "Bar {bar}, {beatLabel}: no change here."],
+  [
+    "harmony.transposed",
+    E,
+    "Right changes, but in {gotKey}. The song is in {expKey}: move every chord {semis} {dir}.",
+  ],
+  [
+    "harmony.key-mismatch",
+    W,
+    "Your piece reads in {got}; the brief is in {exp}, so every check reads it in {exp}. Move it to {exp}: the key in .scale() and the chords.",
+  ],
   ["harmony.schema-rotation", I, "Right loop ({schema}), but it starts on a different chord."],
   ["harmony.not-in-key", W, "{chord} isn't in {key}. Intended?"],
   ["harmony.pcset", E, "Bar {bar}, {beatLabel}: the chord has {got}; it should have {exp}."],
   ["harmony.no-chords", E, "No chords found{track}."],
+  // Wave 5: the 12-bar blues (`blues-form`, the bar grid), the last chord under the tune (`ends-on-degree` over).
+  ["harmony.blues-bar", E, "Bar {bar} of the blues should be {exp}; yours is {got}."],
+  ["harmony.bar", E, "Bar {bar}: {exp}, not {got}. {why}"],
+  ["harmony.ends-over", E, "The melody ends on the right note, but {detail}."],
   // Wave 4: the voicing gate (hand voice leading), numerals by degree, quality and bass, strips of choices.
   ["harmony.voice-count", E, "Bar {bar}: {notes} is {got} notes; the brief asks for {exp} voices."],
   [
@@ -287,6 +310,13 @@ const entries: [string, Sev, string][] = [
   ["sing.unstable", I, "Note {i} wobbled ±{cents}¢."],
   ["sing.early", W, "Note {i}: {ms} ms {dir}."],
   ["sing.late", W, "Note {i}: {ms} ms {dir}."],
+  // Wave 5 (U11): a blue note sung toward its neighbour is credited (`SungTarget.blue`); the host re-spells
+  // `exp`/`toward` (neutral sharp names) or reads `expDeg`/`towardDeg` from @oak/pitch `labelSungResult`.
+  [
+    "sing.blue-note",
+    I,
+    "Note {i} ({exp}): {cents}¢ {dir}, bent toward {toward}. That is a blue note, and it counts.",
+  ],
   // sung degree patterns (the grader judges the pattern; @oak/pitch judged each note)
   ["sing.wrong-degree", E, "Note {i}: you sang {got}; the pattern has {exp} here."],
   ["sing.contour-right", I, "The ups and downs are right; check how far each step goes."],
@@ -301,6 +331,8 @@ const entries: [string, Sev, string][] = [
   ["tap.offset", I, "You're consistently {ms} ms {dir}."],
   ["tap.rushing", W, "You sped up {ms} ms over the phrase."],
   ["tap.dragging", W, "You slowed down {ms} ms over the phrase."],
+  // Wave 5 (U11.L07): the measured feel of a tapped shuffle (@oak/pitch `gradeSwingTaps`); warn when it is off.
+  ["tap.swing", I, "Your off-beats sat at {got}, {gotFeel}; the pattern is {exp}, {expFeel}."],
   // --- answers
   ["id.wrong", E, "That was {exp}, not {got}. Listen to both."],
   ["id.partial", W, "Close: {got} is near {exp}."],
@@ -316,6 +348,10 @@ const entries: [string, Sev, string][] = [
     "{exp}, not {got}: right chord, but the lowest note is {expBass}, not {gotBass}.",
   ],
   ["id.chord-spelling", E, "{got} sounds right, but here it is spelled {exp}."],
+  // Wave 5: the scale builder (U10–U11) and the form strip (U09).
+  ["id.scale-missing", E, "{scale} also has {deg} ({syl}), the note {note}."],
+  ["id.scale-extra", E, "{deg} ({note}) is not in {scale}."],
+  ["form.section", E, "Section {slot} is {exp}, not {got}."],
   [
     "id.interval-quality",
     E,
@@ -345,6 +381,8 @@ const entries: [string, Sev, string][] = [
   ["staff.missing-note", E, "Bar {bar}, {beatLabel}: a note is missing."],
   ["staff.extra-note", E, "Bar {bar}, {beatLabel}: one note too many."],
   ["staff.rhythm", E, "Bar {bar}, {beatLabel}: the rhythm differs."],
+  // Wave 5: `notates` (C3 "the lead sheet renders").
+  ["staff.not-exact", E, "The lead sheet can't write {bars} exactly: {why}."],
   [
     "staff.octave",
     E,
@@ -358,6 +396,8 @@ const entries: [string, Sev, string][] = [
   ["form.section-period", W, "`{name}` repeats every {period} bars, so a {bars}-bar section cuts it off."],
   ["form.wrong", E, "The form is {got}; the brief asks for {expected}."],
   ["form.no-sections", E, "No sections found: write one `arrange()` per labelled track."],
+  ["form.no-section", E, "There is no {section} in your sections ({have})."],
+  ["form.contrast", E, "The {a} is no {list} than the {b}: change {need} of these."],
   // --- make, rubric, pass
   ["make.beyond-brief", I, "You went past today's brief. Nice."],
   ["make.silent", E, "Nothing plays yet."],

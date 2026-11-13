@@ -324,7 +324,9 @@ export function isFetTrial(trial: Trial<unknown>): boolean {
 function melodyEvents(trial: Trial<unknown>) {
   const cueBars = Number(trial.params.cueBars ?? 0);
   const pitched = trial.events.filter((e) => e.midi !== null && e.onset[0] / e.onset[1] >= cueBars);
-  const mel = pitched.filter((e) => e.track === "mel");
+  // The answer track when the trial names one (a bass line: `bass`), else the tune.
+  const own = typeof trial.params.answerTrack === "string" ? trial.params.answerTrack : "mel";
+  const mel = pitched.filter((e) => e.track === own);
   return (mel.length ? mel : pitched).sort((a, b) => a.onset[0] / a.onset[1] - b.onset[0] / b.onset[1]);
 }
 

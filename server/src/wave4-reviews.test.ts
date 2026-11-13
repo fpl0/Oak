@@ -310,11 +310,20 @@ describe("a transcription review of one version on the fake backend", () => {
         albumVersion: 1,
       });
       expect(wrong.status).toBe(400);
+      // Wave 5 (c11): the review records the version it was asked about, even when a newer one exists by then.
+      const asked = own.currentVersion;
+      const newer = await s.api("POST", `/api/transcriptions/${own.id}/versions`, {
+        sessionId: null,
+        code: 'setcpm(90/4)\n\nmelody: n("<[4 4 2 0] [1 2 4 2]>").scale("G4:major").s("piano")',
+        result: null,
+        ranOk: true,
+      });
+      expect(newer.status).toBe(200);
       const r = await s.turn("/api/tutor/reviews/transcription", {
         thread: { subjectKind: "transcription", subjectId: own.id },
         kind: "review-transcription",
         userText: "",
-        transcriptionVersion: own.currentVersion,
+        transcriptionVersion: asked,
       });
       expect(terminal(r.events)).toEqual(["done"]);
       const review = r.events.find((e) => e.event === "review")?.data as { reviewKind: string };
@@ -326,9 +335,7 @@ describe("a transcription review of one version on the fake backend", () => {
         )
       ).body.items;
       expect(records).toHaveLength(1);
-      expect((records[0] as Extract<ReviewRecord, { kind: "transcription" }>).version).toBe(
-        own.currentVersion,
-      );
+      expect((records[0] as Extract<ReviewRecord, { kind: "transcription" }>).version).toBe(asked);
     } finally {
       await s.close();
     }

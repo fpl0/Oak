@@ -84,7 +84,12 @@ function CourseView() {
                     {st === "locked" || (model && !isWritten(l.id, model.authored)) ? (
                       <span className="text-text-3">{l.title}</span>
                     ) : (
-                      <Link to="/learn/$lessonId" params={{ lessonId: l.id }} className="text-link">
+                      <Link
+                        to="/learn/$lessonId"
+                        params={{ lessonId: l.id }}
+                        search={{ from: "map" }}
+                        className="text-link"
+                      >
                         {l.title}
                       </Link>
                     )}

@@ -17,16 +17,21 @@ test.beforeEach(async ({ page }) => {
 async function importWav(page: import("@playwright/test").Page) {
   await page.goto("/transcribe");
   await expect(page.getByRole("heading", { level: 1, name: "Transcribe" })).toBeVisible();
-  await expect(page.getByText("Drop an audio file — it stays on this device.")).toBeVisible();
-  await page.getByTestId("file-input").setInputFiles({
-    name: "groove_take_1.wav",
-    mimeType: "audio/wav",
-    buffer: makeWav({ bpm: 120, bars: 8, leadInSec: 0.5 }),
-  });
+  await expect(page.getByTestId("import")).toContainText("Bring a recording");
+  // The promise the old drop zone made ("it stays on this device") is still made where the file goes in.
+  await expect(page.getByTestId("import")).toContainText("It stays on this device.");
+  await page
+    .getByTestId("import")
+    .locator("input[type=file]")
+    .setInputFiles({
+      name: "groove_take_1.wav",
+      mimeType: "audio/wav",
+      buffer: makeWav({ bpm: 120, bars: 8, leadInSec: 0.5 }),
+    });
   await expect(page).toHaveURL(/\/transcribe\/tr/, { timeout: 30_000 });
   await expect(page.getByTestId("project-title")).toHaveText("groove take 1");
   await expect(page.getByTestId("waveform").locator("div").first()).toBeVisible();
-  await expect(page.getByTestId("play")).toBeEnabled({ timeout: 30_000 });
+  await expect(page.getByTestId("transport-play")).toBeEnabled({ timeout: 30_000 });
 }
 
 test("import a WAV, set the bars, loop a region at 0.75× and switch A/B", async ({ page }) => {
@@ -51,7 +56,7 @@ test("import a WAV, set the bars, loop a region at 0.75× and switch A/B", async
   const root = page.getByTestId("transcribe-project");
   await root.focus();
   for (let i = 0; i < 5; i++) await page.keyboard.press(",");
-  await expect(page.getByTestId("rate")).toContainText("75 %");
+  await expect(page.getByTestId("transport-rate")).toContainText("75 %");
   await page.keyboard.press("l");
   await expect(page.getByTestId("loop-label")).toHaveText("bar 1");
   // With a loop on, Alt+arrows move it bar by bar.
@@ -71,7 +76,7 @@ test("import a WAV, set the bars, loop a region at 0.75× and switch A/B", async
     return Number(m) * 60 + Number(sec);
   };
   await page.keyboard.press("Space");
-  await expect(page.getByTestId("play")).toHaveAccessibleName(/Pause/);
+  await expect(page.getByTestId("transport-play")).toHaveAccessibleName(/Pause/);
   await expect.poll(pos, { timeout: 15_000, intervals: [50] }).toBeGreaterThanOrEqual(3);
   await page.keyboard.press("[");
   await expect(page.getByTestId("loop-label")).toContainText("A at 0:03");
@@ -101,7 +106,7 @@ test("import a WAV, set the bars, loop a region at 0.75× and switch A/B", async
   await root.focus();
   await page.keyboard.press("v");
   await expect(page.getByRole("radio", { name: "Mine" })).toHaveAttribute("aria-checked", "true");
-  await expect(page.getByTestId("play")).toHaveAccessibleName(/Pause/);
+  await expect(page.getByTestId("transport-play")).toHaveAccessibleName(/Pause/);
   await page.keyboard.press("o");
   await expect(page.getByRole("radio", { name: "Both" })).toHaveAttribute("aria-checked", "true");
   await page.keyboard.press("v");
@@ -111,7 +116,7 @@ test("import a WAV, set the bars, loop a region at 0.75× and switch A/B", async
   // Still the same loop, still playing: a switch never restarts the transport.
   await expect(page.getByTestId("loop-label")).toHaveText(loopLabel);
   await page.keyboard.press("Space");
-  await expect(page.getByTestId("play")).toHaveAccessibleName(/Play/);
+  await expect(page.getByTestId("transport-play")).toHaveAccessibleName(/Play/);
 
   // The checklist and a saved version.
   await page.getByTestId("check-contour-2").click();
@@ -189,7 +194,7 @@ test("the seeded project opens with its regions and versions; Quiet mode offers 
   expect(own, "the seed has an own-audio project").toBeTruthy();
   await useUiPrefs(page, { theme: "paper", motion: "off" });
   await page.goto(`/transcribe/${own?.id}`);
-  await expect(page.getByTestId("play")).toBeEnabled({ timeout: 30_000 });
+  await expect(page.getByTestId("transport-play")).toBeEnabled({ timeout: 30_000 });
   await expect(page.getByTestId("versions")).toBeVisible();
   await page.getByTestId("hum-open").click();
   await expect(page.getByRole("dialog")).toContainText("Quiet mode is on");
@@ -212,10 +217,10 @@ test("an own-audio project: on the real stretch engine, Claude reviews the code 
   expect(own?.audioId, "the seed has an own-audio project with a recording").toBeTruthy();
   await useUiPrefs(page, { theme: "paper", motion: "off" });
   await page.goto(`/transcribe/${own?.id}`);
-  await expect(page.getByTestId("play")).toBeEnabled({ timeout: 30_000 });
+  await expect(page.getByTestId("transport-play")).toBeEnabled({ timeout: 30_000 });
   await expect(page.getByTestId("source")).toHaveAttribute("data-engine", "stretch");
   // The remembered player settings come back (the seed saved 0.75×).
-  await expect(page.getByTestId("rate")).toContainText("75 %");
+  await expect(page.getByTestId("transport-rate")).toContainText("75 %");
 
   // A review from the scripted tutor: kept, and shown as a card beside the code.
   const reviews = page.getByTestId("transcription-reviews");

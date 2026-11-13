@@ -11,6 +11,7 @@ import type {
   GradeResult,
   GradeStatus,
   InvestigateQ,
+  KeySpec,
   Matcher,
   NEvent,
   Reference,
@@ -25,13 +26,13 @@ import {
   stripMarkers,
   substituteParams,
 } from "@oak/content-kit";
-import { intervalOf, labelPitch, romanOf, spellMidi, triadCore } from "@oak/theory";
+import { intervalOf, labelPitch, romanOf, scalePcs, spellMidi, triadCore } from "@oak/theory";
 import { romanText } from "../analyze/chords.ts";
 import { firstBars, mod12 } from "../analyze/events.ts";
 import { keyOf } from "../analyze/key.ts";
 import { degreeSequence, melodyLine } from "../analyze/melody.ts";
 import { analyzePiece } from "../analyze/piece.ts";
-import { sectionsFromAst } from "../analyze/sections.ts";
+import { arrangedTotal, sectionsFromAst } from "../analyze/sections.ts";
 import { normalizedFromEvents, periodOf, resolveTarget, selectTrack } from "../analyze/tracks.ts";
 import { diag, messagesOf, sortDiagnostics } from "../feedback/catalog.ts";
 import { miniErrorDetail } from "../lint/mini.ts";
@@ -589,7 +590,7 @@ async function gradeRubricPiece(
   code: string,
 ): Promise<GradeResult> {
   const ast = sectionsFromAst(code);
-  const astTotal = ast && "totalBars" in ast ? ast.totalBars : null;
+  const astTotal = arrangedTotal(ast);
   const cap = MODE_LIMITS[ctx.mode].maxBars;
   const want = ex.kind === "code-make" ? ex.bars[1] : 16;
   const bars = Math.min(cap, Math.max(want, astTotal ?? Math.min(cap, ctx.mode === "capstone" ? 64 : 16)));
@@ -645,6 +646,10 @@ async function gradeRubricPiece(
         : 1
       : required.reduce((a, x) => a + x.c, 0) / required.length;
   const ds: Diagnostic[] = [...extra, ...rows.map((r) => r.diag as Diagnostic), ...ruleExtra];
+  // A failing capstone written in another key than its brief's: say so first, since every rule above read it in
+  // the brief's key ("chord 1 is iv" for a D-minor C4). Relative keys (one scale) are the same key here.
+  const mismatch = !requiredOk && ex.kind === "compose-brief" ? keyMismatch(n, ctx.key ?? null) : null;
+  if (mismatch) ds.unshift(diag("harmony.key-mismatch", mismatch));
   if (ex.kind === "code-make" && pieceBars(n, rctx) > ex.bars[1]) ds.push(diag("make.beyond-brief"));
   if (res.truncated) ds.push(diag("eval.truncated", { bars: res.bars }));
   const analysis = ex.kind === "compose-brief" ? analyzePiece(n, { ...nc, code, bars }) : undefined;
@@ -657,6 +662,31 @@ async function gradeRubricPiece(
     eval: evalSummary(res),
     ...(analysis ? { analysis } : {}),
   });
+}
+
+/** The key a piece is heard in when its scale differs from the brief's (`null` when they agree or nothing reads). */
+export function keyMismatch(n: Normalized, brief: KeySpec | null): { got: string; exp: string } | null {
+  if (!brief || !/^(major|minor)$/.test(brief.mode)) return null;
+  const heard = keyOf(
+    n.all.filter((e) => !e.track.startsWith("band.")),
+    null,
+  );
+  if (!heard) return null;
+  const set = (k: KeySpec) => [...scalePcs(k)].sort((a, b) => a - b).join(",");
+  if (set(heard) === set(brief)) return null;
+  // Read the heard key in the brief's mode when its relative names the same scale (C major heard, minor brief).
+  const shown =
+    heard.mode !== brief.mode && heard.tonic !== brief.tonic ? (relativeOf(heard) ?? heard) : heard;
+  return { got: `${shown.tonic} ${shown.mode}`, exp: `${brief.tonic} ${brief.mode}` };
+}
+
+const SHARP_NAMES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
+function relativeOf(k: KeySpec): KeySpec | null {
+  const pc = scalePcs(k)[0];
+  if (pc === undefined) return null;
+  if (k.mode === "major") return { tonic: SHARP_NAMES[(pc + 9) % 12] as string, mode: "minor" };
+  if (k.mode === "minor") return { tonic: SHARP_NAMES[(pc + 3) % 12] as string, mode: "major" };
+  return null;
 }
 
 // --- answer kinds -------------------------------------------------------------------------------

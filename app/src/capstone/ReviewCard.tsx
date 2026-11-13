@@ -4,7 +4,9 @@
 // header line says the review never affects pass or fail.
 import type { CapstoneReview } from "@oak/api";
 import { clsx } from "clsx";
-import { FilePlus2 } from "lucide-react";
+import { Check, FilePlus2 } from "lucide-react";
+import { useState } from "react";
+import { readDone, writeDone } from "../tutor/review-done.ts";
 import { Button } from "../ui/kit/Button.tsx";
 
 export const REVIEW_HEADER = "Claude's comments never affect pass or fail.";
@@ -54,6 +56,8 @@ export function ReviewCard({
   showLinerNote = true,
   compact = false,
   headingLevel = 2,
+  doneId,
+  heading,
 }: {
   review: CapstoneReview;
   onBars?: (from: number, to: number) => void;
@@ -64,10 +68,29 @@ export function ReviewCard({
   showLinerNote?: boolean;
   compact?: boolean;
   headingLevel?: 2 | 3;
+  /**
+   * "Mark done" on each revision (ux §6.5, c9): the learner's own ticks, kept in this browser under the same key as
+   * the tutor panel's copy of this review (`<conversationId>-<seq>`), so a tick shows in both. Absent: no ticks.
+   */
+  doneId?: string | undefined;
+  /** A line above the review ("Review of version 3"). */
+  heading?: string | undefined;
 }) {
   const H = headingLevel === 2 ? "h2" : "h3";
+  const [done, setDone] = useState<number[]>(() => (doneId ? readDone(doneId) : []));
+  const toggle = (i: number) => {
+    if (!doneId) return;
+    const next = done.includes(i) ? done.filter((x) => x !== i) : [...done, i].sort((a, b) => a - b);
+    setDone(next);
+    writeDone(doneId, next);
+  };
   return (
     <div className={clsx("flex flex-col gap-3 text-sm", compact && "gap-2")} data-testid="review-card">
+      {heading && (
+        <p className="font-medium text-text" data-testid="review-heading">
+          {heading}
+        </p>
+      )}
       <p className="text-text-3">{REVIEW_HEADER}</p>
       <div>
         <H className="mb-1 font-sans text-sm font-semibold text-text-2">What works</H>
@@ -85,10 +108,28 @@ export function ReviewCard({
           {review.revisions.length === 1 ? "One revision to try" : "Revisions to try"}
         </H>
         {review.revisions.map((v, i) => (
-          <div key={v.title} className="rounded-control border border-border bg-surface p-2.5">
+          <div
+            key={`${i}-${v.title}`}
+            data-revision={i}
+            data-done={done.includes(i) || undefined}
+            className="rounded-control border border-border bg-surface p-2.5 data-[done]:bg-surface-2"
+          >
             <p className="flex flex-wrap items-center gap-2 font-medium">
-              <span>{v.title}</span>
+              <span className="min-w-0 [overflow-wrap:anywhere]">{v.title}</span>
               <BarLink bars={v.bars} onBars={onBars} />
+              {doneId && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="ml-auto"
+                  aria-pressed={done.includes(i)}
+                  icon={done.includes(i) ? <Check aria-hidden className="size-3.5" /> : undefined}
+                  onClick={() => toggle(i)}
+                  data-testid="review-mark-done"
+                >
+                  {done.includes(i) ? "Done" : "Mark done"}
+                </Button>
+              )}
             </p>
             <p className="mt-1 text-text-2">{v.why}</p>
             {onTry && (

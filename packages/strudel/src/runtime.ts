@@ -6,6 +6,7 @@ import type { CoordinatorInternals } from "./coordinator.ts";
 import type { LiveBudget } from "./lru.ts";
 import type { MasterBusInternals } from "./master-bus.ts";
 import type { EvalMutex } from "./mutex.ts";
+import type { WarmAhead } from "./preload.ts";
 import type { ScopeTapInternals } from "./scope-tap.ts";
 import type { TransportInternals } from "./transport.ts";
 import type { EditorHandle, PreloadReport, PreloadSpec, StrudelLog } from "./types.ts";
@@ -34,6 +35,8 @@ export interface Runtime {
     from: number,
     to: number,
   ): Promise<PreloadReport>;
+  /** Warms `[from, to)` cycles in the background, step by step, after the first bars are warm (long pieces). */
+  warmAhead(pattern: { queryArc(b: number, e: number): Strudel.Hap[] }, from: number, to: number): WarmAhead;
   /** Warms exactly these hap values (a plan's events): the sound, bank, variant and pitch each triggers. */
   preloadValues(values: readonly Record<string, unknown>[]): Promise<PreloadReport>;
   /** Records the sound a scheduler is about to trigger (names the soundfont skip message). */

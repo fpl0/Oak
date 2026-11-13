@@ -14,7 +14,6 @@ import { formatDate } from "../lib/format.ts";
 import { usePageTitle } from "../lib/nav.ts";
 import { getOak } from "../lib/oak.ts";
 import { useSketchCreate, useUnlocks } from "../lib/queries.ts";
-import { toolLabel } from "../lib/tool-label.ts";
 import { appWorkbenchServices } from "../lib/workbench-services.ts";
 import { useUnlockedSet } from "../studio/queries.ts";
 import { Button, buttonClass } from "../ui/kit/Button.tsx";
@@ -22,10 +21,12 @@ import { Card, Chip, EmptyState, Page } from "../ui/kit/basics.tsx";
 import { Dialog } from "../ui/kit/Dialog.tsx";
 import { LoadingState } from "../ui/kit/QueryState.tsx";
 import { toast } from "../ui/kit/Toast.tsx";
+import { shownToolLabel as toolLabel } from "./label.ts";
 import "../workbench/index.ts";
 import type { PanelId } from "../workbench/panels.ts";
 import { ServicesGate } from "../workbench/ServicesGate.tsx";
 import { Workbench } from "../workbench/Workbench.tsx";
+import { toolDemo } from "./demos.ts";
 import { FeatureGlimpse } from "./Glimpse.tsx";
 import { glimpseOf } from "./glimpse.ts";
 import {
@@ -91,7 +92,7 @@ function ToolDetail({ tool, unlockedAt }: { tool: ToolEntry; unlockedAt: string 
   const open = unlockedAt !== null;
   const [replay, setReplay] = useState(false);
   const lessons = (usage.data?.get(tool.id) ?? []).filter((l) => !sitesOf(tool).includes(l));
-  const hasDemo = tool.catalog.demo.trim() !== "";
+  const hasDemo = tool.catalog.demo.trim() !== "" || toolDemo(tool.id) !== null;
 
   return (
     <Page width="narrow">
@@ -248,12 +249,16 @@ function LiveExample({ tool }: { tool: ToolEntry }) {
   const navigate = useNavigate();
   const create = useSketchCreate();
   const { unlocked } = useUnlockedSet();
-  const [code, setCode] = useState(tool.catalog.demo);
-  const meter = demoMeter(tool.catalog.demo);
-  const key = demoKey(tool.catalog.demo) as { tonic: string; mode: "major" } | null;
+  // Wave 5: the tools of U08–U11 and A1 play inside a short groove (demos.ts), with their panel or probe.
+  const wave5 = toolDemo(tool.id);
+  const demo = wave5?.code ?? tool.catalog.demo;
+  const [code, setCode] = useState(demo);
+  const meter = demoMeter(demo);
+  const key = demoKey(demo) as { tonic: string; mode: "major" } | null;
   // A feature's page shows the feature at work: roll and staff side by side, its panel open, its lens switch.
-  const feature = FEATURE_DEMOS[tool.id] ?? null;
-  const chordTool = CHORD_TOOLS.has(tool.id);
+  const feature =
+    FEATURE_DEMOS[tool.id] ?? (wave5?.panels ? { panels: wave5.panels, hint: wave5.hint } : null);
+  const chordTool = CHORD_TOOLS.has(tool.id) || (wave5 !== null && !feature);
 
   const openInStudio = async () => {
     try {
@@ -279,11 +284,15 @@ function LiveExample({ tool }: { tool: ToolEntry }) {
           Open in Studio
         </Button>
       </div>
-      {feature ? <p className="text-sm text-text-2">{feature.hint}</p> : null}
+      {feature || wave5 ? (
+        <p className="text-sm text-text-2" data-testid="tool-hint">
+          {feature?.hint ?? wave5?.hint}
+        </p>
+      ) : null}
       <ServicesGate load={appWorkbenchServices} auto>
         <Workbench
           id={`tool${tool.id.replace(/[^a-z0-9]/gi, "").slice(-12)}`}
-          code={tool.catalog.demo}
+          code={demo}
           {...(feature
             ? {
                 variant: "compact" as const,
@@ -294,7 +303,8 @@ function LiveExample({ tool }: { tool: ToolEntry }) {
             : chordTool
               ? { variant: "compact" as const, views: ["roll"] as "roll"[] }
               : { variant: "mini" as const })}
-          lessonCtx={{ key, meter, defaultBpm: 90, loopBars: demoBars(tool.catalog.demo) }}
+          lessonCtx={{ key, meter, defaultBpm: 90, loopBars: demoBars(demo) }}
+          {...(wave5?.probes ? { probeKinds: wave5.probes } : {})}
           lint={{
             profile: "studio",
             unlocked: unlocked as ReadonlySet<UnlockableId>,

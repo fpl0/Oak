@@ -180,8 +180,8 @@ test(`A/B on the Transcribe page: own audio and the learner's code drift < ${AB_
   await seed(page, "own-audio project");
   const id = await makeProject(page);
   await page.goto(`/transcribe/${id}`);
-  await expect(page.getByTestId("play")).toBeEnabled({ timeout: 30_000 });
-  await expect(page.getByTestId("rate")).toContainText("75 %");
+  await expect(page.getByTestId("transport-play")).toBeEnabled({ timeout: 30_000 });
+  await expect(page.getByTestId("transport-rate")).toContainText("75 %");
   await expect(page.getByTestId("source")).toHaveAttribute("data-engine", "stretch");
   await page.getByTestId("transcribe-project").focus();
   // Overlay: the recording and the code together.
@@ -191,7 +191,7 @@ test(`A/B on the Transcribe page: own audio and the learner's code drift < ${AB_
   });
   await startCapture(page);
   await page.keyboard.press("Space");
-  await expect(page.getByTestId("play")).toHaveAccessibleName(/Pause/);
+  await expect(page.getByTestId("transport-play")).toHaveAccessibleName(/Pause/);
   const barReal = (4 * 60) / BPM / AB_DRIFT_GATE_RATE;
   await page.waitForTimeout((AB_DRIFT_GATE_BARS + 1.5) * barReal * 1000);
   const on = await stopCapture(page);

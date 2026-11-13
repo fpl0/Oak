@@ -115,6 +115,61 @@ export const ABCJS_LIMITS: readonly AbcjsLimit[] = [
       "%%setbarnb starts the count at the engraved first bar's number: 0 for a pickup bar, so the first full bar is 1 (contracts §6.11).",
     warns: null,
   },
+  // --- Wave 5 ---------------------------------------------------------------------------------------
+  {
+    id: "lyrics-second-voice",
+    abcjs:
+      "under a staff abcjs keeps room for one voice's lyric lines only: a second voice's w: lines are drawn below the first voice's, over the numerals (\"_…\" texts) and into the next staff.",
+    fallback:
+      "every voice gets its lens lines, and the first voice of a staff is padded with blank lines (w:~ ~ …), one per line its later voices carry, so the room is reserved (c5).",
+    warns: null,
+  },
+  {
+    id: "unison-in-chord",
+    abcjs: "a chord with one pitch twice ([BB]) is drawn as two noteheads on top of each other.",
+    fallback:
+      "two events in unison in one slot (a chord tone doubling the tune in its rhythm) share one notehead; the item carries both event ids (c5).",
+    warns: null,
+  },
+  {
+    id: "text-over-chord-symbol",
+    abcjs:
+      'a "^text" over the first note stacks under that note\'s chord symbol, so "Swing 8ths" and the first chord collide in one column.',
+    fallback:
+      '"Swing 8ths" / "Swing 16ths" is the tempo line\'s text (Q:"Swing 8ths" 1/4=112), drawn above the first system as engravers write a feel.',
+    warns: null,
+  },
+  {
+    id: "part-labels",
+    abcjs:
+      "a section label is an inline part field [P:Chorus]; abcjs draws it above the staff in its parts font (a large serif by default) at the bar where it stands, on the voice that carries it only.",
+    fallback:
+      "the label stands at the start of the section's first bar on the top staff's first voice, in Helvetica 13 bold (%%partsfont), with a double barline closing the bar before it in every voice; a label is one line of text (brackets and % are dropped).",
+    warns: null,
+  },
+  {
+    id: "chart-off-beat-chord",
+    abcjs:
+      "a chord chart is a staff of slash noteheads (style=rhythm), one per beat: a chord symbol can only stand on a slash.",
+    fallback:
+      "chartAbc draws a chord that starts between two beats on the beat before it and returns an abcjs-limit warning; two chords on one beat show the last (warned).",
+    warns: "abcjs-limit",
+  },
+  {
+    id: "swing-compound",
+    abcjs:
+      "nothing in abcjs: Oak's straightening is defined only for a quarter-note tempo unit (contracts §6.10 item 1, swing is not used in compound meters).",
+    fallback:
+      "a swing declared in 6/8, 9/8 or 12/8 is not straightened; the notes are engraved as played and the Score warns.",
+    warns: "swing-unsupported",
+  },
+  {
+    id: "blues-signature",
+    abcjs: "K:Cm draws three flats for a blues key read as minor (the blues scale's ♭3 and ♭7).",
+    fallback:
+      "a blues key is written in its tonic's major signature (C blues: none), with ♭3 and ♭7 as flats and ♭5 by direction as accidentals; degree and solfège labels still read the blues degrees.",
+    warns: null,
+  },
   {
     id: "annotation-above",
     abcjs: 'several "^text" annotations on one note are joined into one text, stacked with line breaks.',

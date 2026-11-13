@@ -50,11 +50,24 @@ export interface LoadedLesson {
   note?: string;
   /** A dev fixture's own voicing gate (the content's is `VOICING_GATE`). */
   gate?: GateRule;
+  /** Tools a dev fixture holds on top of its context's (the Wave 5 fixture: A1's sound tools). */
+  extraUnlocks?: readonly string[];
 }
 
 /** The dev-only fixture of the Wave 3 step kinds (`app/src/lesson/dev/wave3-fixture.ts`); never in a build. */
 async function devFixture(id: string): Promise<LoadedLesson | null> {
   if (!import.meta.env.DEV) return null;
+  if (id === "U11.L99") {
+    const w5 = await import("./dev/wave5-fixture.ts");
+    return {
+      def: w5.default,
+      Mdx: null,
+      sample: true,
+      context: w5.FIXTURE5_CONTEXT,
+      extraUnlocks: w5.FIXTURE5_EXTRA,
+      note: "A dev fixture of the Wave 5 step kinds, played with the tools of U11.L06 and the sound side lessons. Nothing here is saved.",
+    };
+  }
   if (id === "U05.L99") {
     const w4 = await import("./dev/wave4-fixture.ts");
     return {

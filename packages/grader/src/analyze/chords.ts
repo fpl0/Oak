@@ -127,7 +127,28 @@ export function chordSlots(
       if (R.lt(R.sub((slots[i] as ChordSlot).span[1], (slots[i] as ChordSlot).span[0]), minDur))
         slots.splice(i, 1);
   }
-  for (const slot of slots) {
+  // A harmony line that is written partly with `chord()` and partly by hand (a verse of symbols, a chorus voiced
+  // in `note("[e3,g#3,b3]")`): the hand-voiced chords where no symbol sounds are read from their pitches.
+  if (symbolic.length > 0) {
+    const free = pitched(events).filter(
+      (e) =>
+        e.chordSymbol === undefined &&
+        !slots.some((s) => R.lte(s.span[0], e.onset) && R.lt(e.onset, s.span[1])),
+    );
+    if (free.length >= 2) {
+      const extra = chordSlots(free, { ...o, bass: bassPool }).filter(
+        (x) => !slots.some((s) => R.lt(s.span[0], x.span[1]) && R.lt(x.span[0], s.span[1])),
+      );
+      if (extra.length > 0) {
+        for (const slot of slots) finishSlot(slot);
+        return [...slots, ...extra].sort((a, b) => R.cmp(a.span[0], b.span[0]));
+      }
+    }
+  }
+  for (const slot of slots) finishSlot(slot);
+  return slots;
+
+  function finishSlot(slot: ChordSlot): void {
     slot.midis.sort((a, b) => a - b);
     const bass = lowestAt(slot.span[0]);
     if (bass !== undefined) slot.bassMidi = bass;
@@ -142,7 +163,6 @@ export function chordSlots(
     }
     slot.chord = withBass(slot.chord, slot.bassMidi);
   }
-  return slots;
 }
 
 /**

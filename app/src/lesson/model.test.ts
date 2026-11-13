@@ -302,3 +302,38 @@ describe("the Workbench tab a step opens on (review:journey)", () => {
     expect(initialTabOf(step(sample, "S6"))).toBeUndefined();
   });
 });
+
+describe("a minor pad and a drawn trial in a major key (U10.L04 S6)", () => {
+  const pad = {
+    ui: "degree-pad",
+    set: ["1", "2", "b3", "4", "5", "b6", "b7"],
+    sequenceLen: 4,
+    syllables: true,
+  } as const;
+  test("the pad also offers the major scale's own degrees, nothing taken away", () => {
+    const spec = withTrialOptions(pad as never, {
+      params: { key: { tonic: "A", mode: "major" }, sequenceLen: 8 },
+    });
+    expect(spec).toMatchObject({
+      sequenceLen: 8,
+      set: ["1", "2", "b3", "3", "4", "5", "b6", "6", "b7", "7"],
+    });
+  });
+  test("a minor trial keeps the authored minor pad", () => {
+    const spec = withTrialOptions(pad as never, { params: { key: { tonic: "C", mode: "minor" } } });
+    expect(spec).toMatchObject({ set: pad.set });
+  });
+  // review:journey: U10.L03 S2 "Do, me or sol?" (1 ♭3 5 over fet-minor trials) had grown to all seven degrees, and
+  // every three-degree pad of U03 over its major trials with it.
+  test("a chosen few degrees of the trial's own mode stay as authored", () => {
+    const three = { ui: "degree-pad", set: ["1", "b3", "5"], syllables: true } as const;
+    const minor = withTrialOptions(three as never, { params: { key: { tonic: "A", mode: "minor" } } });
+    expect(minor).toMatchObject({ set: ["1", "b3", "5"] });
+    const doReMi = { ui: "degree-pad", set: ["1", "2", "3"] } as const;
+    const major = withTrialOptions(doReMi as never, { params: { key: { tonic: "D", mode: "major" } } });
+    expect(major).toMatchObject({ set: ["1", "2", "3"] });
+    // The same three over a major trial: ♭3 is not major's, so the pad is for another mode and takes major's own.
+    const wide = withTrialOptions(three as never, { params: { key: { tonic: "A", mode: "major" } } });
+    expect(wide).toMatchObject({ set: ["1", "2", "b3", "3", "4", "5", "6", "7"] });
+  });
+});

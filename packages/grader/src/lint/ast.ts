@@ -444,7 +444,12 @@ export interface ArrangedTrack {
   track: string;
   arrange: AstNode;
   sections: { name: string | null; bars: number | null; node: AstNode; pattern: AstNode | null }[];
+  /** A method after `arrange()` that changes the length of every bar (`.fast(2)`, `.slow(2)`), as written. */
+  timeScale?: string;
 }
+
+/** Methods that stretch or squeeze time: after `arrange()` they make every section's bar count wrong. */
+const TIME_SCALE_METHODS = new Set(["fast", "slow", "hurry", "density", "sparsity"]);
 
 /** The labelled tracks whose expression has exactly one `arrange()` at the root of its chain. */
 export function arrangedTracks(info: ProgramInfo): ArrangedTrack[] {
@@ -454,9 +459,19 @@ export function arrangedTracks(info: ProgramInfo): ArrangedTrack[] {
     const ch = chainOf(l.expr);
     const first = ch.links[0];
     if (!ch.rootIsCall || first?.name !== "arrange") continue;
+    const scale = ch.links.slice(1).find((x) => {
+      if (!TIME_SCALE_METHODS.has(x.name)) return false;
+      const k = numericValue(x.args[0] ?? null);
+      return k !== 1;
+    });
     out.push({
       track: l.label,
       arrange: first.call,
+      ...(scale
+        ? {
+            timeScale: `.${scale.name}(${numericValue(scale.args[0] ?? null) ?? (staticString(scale.args[0] ?? null) !== null ? `"${staticString(scale.args[0] ?? null)}"` : "…")})`,
+          }
+        : {}),
       sections: first.args.map((a) => {
         if (a.type !== "ArrayExpression") return { name: null, bars: null, node: a, pattern: null };
         const [bars, pat] = children(a, "elements");
@@ -482,13 +497,34 @@ export function sectionName(identifier: string | null): { label: string; tag: st
 
 export type SectionsResult =
   | { sections: SectionInfo[]; totalBars: number }
-  | { inconsistent: { track: string; detail: string } }
+  | {
+      inconsistent: { track: string; detail: string };
+      /**
+       * The tracks agree on every section's bars and disagree only on a name (`melVerse` reused in the chorus):
+       * the piece's length is still known (wave 5 gate). Absent for every other inconsistency.
+       */
+      arrangedBars?: number;
+    }
   | null;
+
+/** The piece's length from `arrange()`: the section total, or the agreed bar total when only a name differs. */
+export function arrangedTotal(result: SectionsResult): number | null {
+  if (result === null) return null;
+  if ("totalBars" in result) return result.totalBars;
+  return result.arrangedBars ?? null;
+}
 
 export function sectionsFromProgram(info: ProgramInfo): SectionsResult {
   const tracks = arrangedTracks(info);
   if (tracks.length === 0) return null;
   for (const t of tracks) {
+    if (t.timeScale)
+      return {
+        inconsistent: {
+          track: t.track,
+          detail: `\`${t.timeScale}\` after arrange() on ${t.track} changes how long every section lasts, so its bar counts are no longer true; set the tempo with setcpm() instead`,
+        },
+      };
     if (t.sections.length === 0)
       return { inconsistent: { track: t.track, detail: "arrange() has no sections" } };
     for (const [i, s] of t.sections.entries()) {
@@ -537,6 +573,7 @@ export function sectionsFromProgram(info: ProgramInfo): SectionsResult {
             track: t.track,
             detail: `section ${i + 1} is a ${n.label} in ${t.track} and a ${named.label} elsewhere`,
           },
+          arrangedBars: first.sections.reduce((sum, x) => sum + (x.bars as number), 0),
         };
       }
       // The tag names the variant: a numbered tag (`chorus2`) on any track wins over a plain one.

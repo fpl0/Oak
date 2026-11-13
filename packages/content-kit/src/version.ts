@@ -2,7 +2,7 @@
  * Version of docs/design/contracts.md that this package implements. Bump it in the same commit as any
  * contract change (contracts "Changing a contract").
  */
-export const CONTRACTS_VERSION = "1.4";
+export const CONTRACTS_VERSION = "1.5";
 
 /**
  * Bump when the shape of a content schema changes in a way that old generated content or an older reader
@@ -13,6 +13,10 @@ export const CONTRACTS_VERSION = "1.4";
  * dictation with a widget per stage, by-ear transcription in parts, staged transcription and what is
  * given, the capstone-song stimulus and lead-sheet display, Workbench panels opened by a step, the
  * voice-leading gate fields, `progression.bars`, the `pickup`, `chord-qualities` and `chord-inversions`
- * rules, capstone session checks, starter, review and release).
+ * rules, capstone session checks, starter, review and release). 4: the Wave 5 shapes (the `form`, `bar-grid` and
+ * `scale-builder` widgets and `Answer.sections`, the `controls` matcher, the `bass-line` and `notates` rules,
+ * `section` on every rubric rule, `chord-qualities.depth`, `degree-set.anyOf`, `ends-on-degree.over`,
+ * `blues-form.choruses`, the `form`/`scope`/`spectrum` panels and `StepUi.probe`, `LessonMeta.side`,
+ * `PhraseCheck.after`).
  */
-export const CONTENT_SCHEMA_VERSION = 3;
+export const CONTENT_SCHEMA_VERSION = 4;

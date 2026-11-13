@@ -18,6 +18,8 @@ import { above, rn, spellVoiced, type Voiced, voiceProgression } from "../music.
 import { atom, chordOf, type Node, seq } from "../pat.ts";
 import type { Rng } from "../types.ts";
 import {
+  CTX,
+  contextOpen,
   cueOf,
   type GenCtx,
   type Generator,
@@ -85,7 +87,7 @@ export function progressionTracks(
 export function diatonic(
   key: KeySpec,
   i: number,
-  opts: { seventh?: boolean; inversion?: 0 | 1 } = {},
+  opts: { seventh?: boolean; inversion?: 0 | 1; natural?: boolean } = {},
 ): ProgChord {
   const steps = MODE_STEPS[key.mode];
   const at = (k: number) => (steps[mod(k, 7)] as number) + 12 * Math.floor(k / 7);
@@ -97,8 +99,9 @@ export function diatonic(
   if (opts.seventh)
     quality =
       third === 4 ? (seventh === 11 ? "maj7" : "7") : fifth === 6 ? (seventh === 10 ? "m7b5" : "dim7") : "m7";
-  const minor = key.mode === "minor";
-  // The minor key's V and vii° take the raised 7th (harmonic minor), as the course teaches (U10.L06).
+  const minor = key.mode === "minor" && opts.natural !== true;
+  // The minor key's V and vii° take the raised 7th (harmonic minor), as the course teaches (U10.L06); with
+  // `natural` they stay v and VII (natural minor, U10.L04).
   if (minor && i === 5) quality = opts.seventh ? "7" : "maj";
   if (minor && i === 7) quality = opts.seventh ? "dim7" : "dim";
   const semis = minor && i === 7 ? 11 : root;
@@ -124,12 +127,29 @@ const NEXT: Readonly<Record<number, readonly number[]>> = {
   6: [4, 2],
   7: [1],
 };
-function functionalWalk(rng: Rng, length: number, pool: readonly number[]): number[] {
+/**
+ * Next scale step in a minor key as U10 plays it (natural minor, pop and soul): i to iv, VI, III or VII; the
+ * subtonic VII back to i or on to III; v (later V) home or to VI. No ii°, which U10 names but never loops.
+ */
+const NEXT_MINOR: Readonly<Record<number, readonly number[]>> = {
+  1: [4, 6, 3, 7, 5],
+  3: [6, 7, 4],
+  4: [5, 7, 1],
+  5: [1, 6],
+  6: [7, 3, 4, 5],
+  7: [1, 3],
+};
+function functionalWalk(
+  rng: Rng,
+  length: number,
+  pool: readonly number[],
+  next: Readonly<Record<number, readonly number[]>> = NEXT,
+): number[] {
   for (let tries = 0; tries < 50; tries++) {
     const out = [1];
     while (out.length < length) {
       const prev = out[out.length - 1] as number;
-      const nexts = (NEXT[prev] ?? [1]).filter((x) => pool.includes(x));
+      const nexts = (next[prev] ?? [1]).filter((x) => pool.includes(x));
       out.push(rng.pick(nexts.length > 0 ? nexts : [1]));
     }
     if (new Set(out).size >= Math.min(3, length)) return out;
@@ -199,8 +219,19 @@ export const progression: Generator = {
       const pd = ctx.rng.pick([2, 4]);
       prog = [...walk, pd, 5, 1].map((i) => diatonic(key, i));
       perBar = 2;
+    } else if (minor) {
+      // Natural minor from U10.L04 (v and VII); from U10.L06 the major V takes v's place on most trials (v against
+      // V is the near miss); from U10.L07 the Andalusian descent i–VII–VI–V is one of the progressions.
+      const majorV = contextOpen(ctx, CTX.majorV);
+      if (contextOpen(ctx, CTX.andalusian) && majorV && ctx.rng.next() < 0.25) {
+        prog = [1, 7, 6, 5].map((i) => diatonic(key, i, { natural: i !== 5 }));
+      } else {
+        const steps = functionalWalk(ctx.rng, 4, [1, 3, 4, 5, 6, 7], NEXT_MINOR);
+        const harmonicV = majorV && ctx.rng.next() < 0.7;
+        prog = steps.map((i) => diatonic(key, i, { natural: !(i === 5 && harmonicV) }));
+      }
     } else {
-      const pool = minor ? [1, 3, 4, 5, 6, 7] : [1, 2, 4, 5, 6];
+      const pool = [1, 2, 4, 5, 6];
       const steps = functionalWalk(ctx.rng, 4, pool);
       const seventh = cat === "sevenths";
       prog = steps.map((i) =>

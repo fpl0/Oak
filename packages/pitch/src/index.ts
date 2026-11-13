@@ -19,8 +19,24 @@ export {
   playbackPitch,
   SINGING_MARGIN_SEC,
 } from "./bleed.ts";
+// Wave 5: sung degrees in minor (do-based syllables) and blue notes.
+export {
+  BLUE_BEND,
+  BLUE_DEGREES,
+  blueNoteName,
+  type DegreeNote,
+  type DegreeTarget,
+  degreeSemitones,
+  degreeTargets,
+  degreeText,
+  labelSungResult,
+  markBlueNotes,
+  sungDegree,
+} from "./degrees.ts";
 export { createDetector, MIN_VOLUME_DB, PitchFrameAnalyzer } from "./detector.ts";
 export {
+  amountText,
+  defaultKeepDegrees,
   defaultSlotsPerBar,
   draftFromHum,
   HUM_MIN_NOTE_SEC,
@@ -30,6 +46,7 @@ export {
   SCALE_INTERVALS,
   scaleName,
   stepMidi,
+  straightenTime,
   tonicMidi,
   tonicPc,
   tuningOffsetCents,
@@ -78,6 +95,7 @@ export {
 } from "./stats.ts";
 export {
   alignSung,
+  blueBend,
   calibrateRange,
   DRIFT_MIN_NOTES,
   detectBleed,
@@ -93,6 +111,23 @@ export {
   resolveSingTolerance,
   sungCredit,
 } from "./sung.ts";
+// Wave 5 (U11.L07): tap a shuffle against a click, get the measured swing.
+export {
+  feelWord,
+  gradeSwingTaps,
+  measureTapSwing,
+  offbeatOf,
+  ratioOfAmount,
+  ratioText,
+  SWING_MIN_MEASURED,
+  type SwingGrid,
+  type SwingTapResult,
+  swingSlotSec,
+  swungTargets,
+  type TapSwing,
+  type TapSwingClass,
+  tapSwingClass,
+} from "./swing-taps.ts";
 export {
   CLIP_LEVEL,
   CLIP_MIN_FRAMES,

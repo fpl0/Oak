@@ -3,6 +3,7 @@
 // lanes for unpitched tracks, the meter's bar/beat grid, the playhead from the adapter's clock, hover
 // tooltips and the link to code and staff through the HighlightBus. Layout maths: ./roll-layout.ts.
 import type { KeySpec, MeterSpec } from "@oak/content-kit";
+import type { BlueNote } from "@oak/theory";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { degreeCanvasFill, functionStyle } from "../ui/theme/palette.ts";
 import type { AnnotationKinds } from "./annotate.ts";
@@ -10,6 +11,7 @@ import type { WorkbenchClock } from "./clock.ts";
 import { type ChordRegion, type MelodyMark, type RangeLine, ROLE_TAG, ROLE_WORDS } from "./harmony.ts";
 import type { BusState, HighlightBus } from "./highlight-bus.ts";
 import { noteText, type RollColorMode, type RollLabelMode } from "./lens-view.ts";
+import { type BassMark, blueTag, blueWords } from "./lines.ts";
 import type { ViewEvent, WorkbenchModel } from "./model.ts";
 import { pitchLabel, tooltipText } from "./music.ts";
 import { degreeStyle, neutralSwatch, partColor, type ThemeName, themeOf } from "./palette.ts";
@@ -24,6 +26,7 @@ import {
   type RollRect,
   xOfCycle,
 } from "./roll-layout.ts";
+import { SectionRibbon, type SectionRibbonProps } from "./SectionRibbon.tsx";
 
 export type { RollColorMode, RollLabelMode };
 
@@ -71,6 +74,12 @@ export interface PianoRollProps {
   };
   /** Wave 4: the range lens: each line's lowest and highest note marked, its span in half steps. */
   ranges?: readonly RangeLine[];
+  /** Wave 5: the section ribbon over the roll, on the roll's own time axis (the section lens). */
+  ribbon?: Omit<SectionRibbonProps, "axis">;
+  /** Wave 5: the bass-role lens (R, 5, 8, →) under each bass note. */
+  bassMarks?: ReadonlyMap<string, BassMark>;
+  /** Wave 5: the blue-note lens: blue notes ringed and tagged (♭3, ♭5, ♭7). */
+  blueNotes?: ReadonlyMap<string, BlueNote>;
 }
 
 export interface ChordBandProps {
@@ -98,6 +107,7 @@ interface Colors {
   issue: string;
   laneIn: string;
   accent: string;
+  blue: string;
 }
 
 function readColors(el: Element): Colors {
@@ -114,6 +124,7 @@ function readColors(el: Element): Colors {
     issue: v("--wb-issue", "#B4532A"),
     laneIn: v("--wb-lane-in", "rgba(47,107,69,.06)"),
     accent: v("--wb-accent", "#2F6B45"),
+    blue: v("--wb-blue", "#0B5F8A"),
   };
 }
 
@@ -546,6 +557,51 @@ export function PianoRoll(props: PianoRollProps) {
       }
     }
 
+    // the blue-note lens: a ring in the blue colour and the note's flat degree over it
+    if (p.blueNotes && p.blueNotes.size > 0) {
+      for (const r of L.rects) {
+        const b = p.blueNotes.get(r.id);
+        if (!b || r.kind !== "note") continue;
+        g.save();
+        g.strokeStyle = c.blue;
+        g.lineWidth = 2;
+        roundRect(g, r.x - 2, r.y - 2, r.w + 4, r.h + 4, 4);
+        g.stroke();
+        if (r.y - L.rulerHeight >= 11) {
+          g.fillStyle = c.blue;
+          g.font = "bold 9px ui-monospace, monospace";
+          g.textBaseline = "bottom";
+          g.fillText(blueTag(b), r.x, r.y - 3);
+          g.textBaseline = "middle";
+        }
+        g.restore();
+      }
+    }
+
+    // the bass-role lens: R, 5, 8, 3, 7 or → just under each bass note
+    if (p.bassMarks && p.bassMarks.size > 0) {
+      for (const r of L.rects) {
+        const m = p.bassMarks.get(r.id);
+        if (!m || r.kind !== "note") continue;
+        const y = Math.min(L.height - 6, r.y + r.h + 7);
+        g.save();
+        g.font = "bold 9px ui-monospace, monospace";
+        g.textBaseline = "middle";
+        const w = g.measureText(m.tag).width + 6;
+        g.fillStyle = c.surface;
+        g.globalAlpha = 0.9;
+        roundRect(g, r.x, y - 6, w, 12, 3);
+        g.fill();
+        g.globalAlpha = 1;
+        g.strokeStyle = m.role === "approach" ? c.accent : c.text3;
+        g.lineWidth = 1;
+        g.stroke();
+        g.fillStyle = c.text;
+        g.fillText(m.tag, r.x + 3, y + 0.5);
+        g.restore();
+      }
+    }
+
     // the range lens: a flag over each line's high point, a mark under its low point
     for (const line of p.ranges ?? []) {
       const hi = L.rects.find((r) => r.id === line.high.id);
@@ -622,6 +678,8 @@ export function PianoRoll(props: PianoRollProps) {
     props.silenced,
     props.chordTones,
     props.ranges,
+    props.bassMarks,
+    props.blueNotes,
   ]);
   useEffect(
     () =>
@@ -693,10 +751,19 @@ export function PianoRoll(props: PianoRollProps) {
           props.hover ?? { degree: true, solfege: true },
         );
         const role = props.chordTones?.marks.get(id)?.role;
+        const bass = props.bassMarks?.get(id);
+        const blue = props.blueNotes?.get(id);
         setTip({
           x: pt.x,
           y: pt.y,
-          text: role && role !== "no-chord" ? `${text} · ${ROLE_WORDS[role]}` : text,
+          text: [
+            text,
+            role && role !== "no-chord" ? ROLE_WORDS[role] : null,
+            bass ? `bass: ${bass.words}` : null,
+            blue ? blueWords(blue) : null,
+          ]
+            .filter(Boolean)
+            .join(" · "),
         });
       }
     } else {
@@ -781,6 +848,18 @@ export function PianoRoll(props: PianoRollProps) {
           Notes table
         </button>
       </div>
+      {props.ribbon ? (
+        <SectionRibbon
+          {...props.ribbon}
+          axis={{
+            left: layout.gutter,
+            width: layout.width,
+            from: layout.from,
+            to: layout.to,
+            xOf: (c) => xOfCycle(layout, c),
+          }}
+        />
+      ) : null}
       <canvas
         ref={canvasRef}
         className="oak-roll-canvas"

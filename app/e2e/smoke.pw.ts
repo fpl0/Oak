@@ -148,7 +148,7 @@ test.describe("keyboard", () => {
     await page.keyboard.press("o");
     await expect(page).toHaveURL(/\/learn\/U01\.L02$/);
     await page.keyboard.press("Escape");
-    await expect(page).toHaveURL(/127\.0\.0\.1:5173\/$/);
+    await expect(page).toHaveURL(`${test.info().project.use.baseURL}/`);
   });
 
   test("Tab reaches the skip link first, then the navigation; Enter on a nav link navigates", async ({

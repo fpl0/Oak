@@ -135,8 +135,10 @@ export async function startCapture(page: Page, split: boolean): Promise<void> {
       .filter((u) => /packages\/strudel\/src\/index\.ts/.test(u))
       .reverse();
     type Oak = { ctx: AudioContext; master: { analyser: AudioNode } };
-    let oak: Oak | null = null;
-    for (const u of urls) {
+    // The app's own instance first (app/src/lib/oak.ts publishes it on the dev server). The resource list keeps only
+    // the first 250 entries, so on a page that loads more modules the strudel module may not be listed at all.
+    let oak: Oak | null = (globalThis as { __oakStrudel?: Oak }).__oakStrudel ?? null;
+    for (const u of oak ? [] : urls) {
       try {
         oak = ((await import(/* @vite-ignore */ u)) as { getOakStrudel(): Oak }).getOakStrudel();
         break;

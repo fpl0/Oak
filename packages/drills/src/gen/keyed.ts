@@ -8,7 +8,7 @@ import { comfortShift, contextChords, spellVoiced, type Voiced, voiceProgression
 import { chordOf, type Node, rest, seq } from "../pat.ts";
 import { CADENCE_SOUNDS } from "../pools.ts";
 import type { Rng } from "../types.ts";
-import { type GenCtx, jitter, range } from "./common.ts";
+import { CTX, contextOpen, type GenCtx, jitter, range } from "./common.ts";
 
 export const degreeCategory = (d: Degree): string => `deg.${d.replace("#", "s")}`;
 export const categoryDegree = (c: string): Degree => c.replace(/^deg\./, "").replace("s", "#") as Degree;
@@ -60,7 +60,7 @@ export function chordTrack(
 /** The context bar of code C for the cue's context, voiced; `null` when the context is `none`. */
 export function contextBar(ctx: GenCtx, key: KeySpec, context: Cue["context"]): Voiced[] | null {
   if (context === "none") return null;
-  const chords: RnChord[] = contextChords(ctx.rng, key, context);
+  const chords: RnChord[] = contextChords(ctx.rng, key, context, { majorV: contextOpen(ctx, CTX.majorV) });
   return voiceProgression(chords, key);
 }
 

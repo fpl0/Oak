@@ -53,7 +53,28 @@ export type Author =
   | "U07b"
   | "U07c"
   | "U07d"
-  | "songs";
+  | "songs"
+  // Wave 5 (the wave plan's ownership): the content lead writes U08 and its exemplar U08.L01; four spec
+  // writers write U09 (with C3), U10 (with C4), U11 (with C5, X2 and ladder L5–L6) and A1.L01–L04, each with
+  // its exemplar (U09.L02, U10.L01, U11.L05, A1.L01); fifteen authors write the rest.
+  | "spec-U09"
+  | "spec-U10"
+  | "spec-U11"
+  | "spec-A1"
+  | "U08a"
+  | "U08b"
+  | "U09a"
+  | "U09b"
+  | "U10a"
+  | "U10b"
+  | "U10c"
+  | "U10d"
+  | "U11a"
+  | "U11b"
+  | "U11c"
+  | "A1"
+  | "capstones"
+  | "repertoire";
 
 /**
  * The Wave 3 schema a step uses (AUTHORING §16), so the author and the app engineers know which new shape
@@ -156,6 +177,14 @@ export interface LessonSpec {
   mistakes: string[];
   connects: { back: string; forward: string };
   notes?: string[];
+  /**
+   * Wave 5, required from U08 on (content/validate/specs.test.ts): one line each on the three things that
+   * decide whether the product works.
+   * - `enjoyment`: what the learner makes in this lesson and would replay (the Make's sound, not its rule).
+   * - `pace`: the single new idea, and what was cut or left to another lesson to keep it single.
+   * - `return`: what the Coda says the learner can now do, and what opens next.
+   */
+  epr?: { enjoyment: string; pace: string; return: string };
 }
 
 export interface CheckpointSpec {
@@ -243,6 +272,11 @@ export interface UnitSpec {
   unit: string;
   title: string;
   summary: string;
+  /**
+   * Wave 5. The lessons this spec covers when it is not the whole unit: the A1 spec covers the side lessons
+   * A1.L01–L04 only (A1.L05–L07 open after U09.CP and are specified later). Default: every lesson of the unit.
+   */
+  covers?: LessonId[];
   lessons: LessonSpec[];
   checkpoint?: CheckpointSpec;
   capstones: CapstoneSpec[];

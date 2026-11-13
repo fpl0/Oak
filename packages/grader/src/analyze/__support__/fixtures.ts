@@ -7,6 +7,7 @@ import { parseRat, R, rat } from "@oak/content-kit";
 import { METERS } from "@oak/theory";
 import * as core from "@strudel/core";
 import type { GradeDeps } from "../../grade/index.ts";
+import { soundControlsOf } from "../../normalize/hap.ts";
 import type { HeadlessResult } from "../../testing.ts";
 import { evalHeadless } from "../../testing.ts";
 import type { EvalOptions, EvalResult, EvalSuccess, NormalizeContext, Normalized } from "../../types.ts";
@@ -137,6 +138,10 @@ export function toNEvents(res: HeadlessResult): NEvent[] {
       gain,
       ...(e.scale ? { scaleCtx: e.scale } : {}),
       locs: e.locations.map((l) => ({ from: l.start, to: l.end })),
+      ...((): { controls?: Record<string, number | string> } => {
+        const c = soundControlsOf(v);
+        return c ? { controls: c } : {};
+      })(),
     } satisfies NEvent;
   });
 }

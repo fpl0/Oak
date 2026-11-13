@@ -8,6 +8,9 @@ import { CHORD_LABEL_CLASSES } from "./lead-sheet.ts";
 import { ANNOTATION_CLASSES, type AnnotationSet, type NoteAnnotation } from "./options.ts";
 import type { AbcResult, Score, Staff } from "./types.ts";
 
+// Wave 5: the chord-chart view and section labels (chart.dom.ts).
+export { CHART_CLASSES, type RenderChartOptions, renderChart, tagSections } from "./chart.dom.ts";
+
 /** The renderAbc options proven in S4. */
 export const ABCJS_OPTIONS = {
   add_classes: true,

@@ -56,6 +56,8 @@ export interface TransportBarProps {
   loopBars: number;
   keySpec: KeySpec | null;
   tracks: readonly string[];
+  /** Wave 5: a badge per track label ("Swing 8ths" on a swung track, contracts §6.10). */
+  badges?: ReadonlyMap<string, string>;
   mutes: MuteMap;
   onMute(label: string): void;
   onSolo(label: string): void;
@@ -286,6 +288,15 @@ export function TransportBar(p: TransportBarProps) {
               >
                 {t.startsWith("band.") ? `${t.slice(5)} (band)` : t}
               </button>
+              {p.badges?.get(t) ? (
+                <span
+                  className="oak-swing-badge"
+                  data-testid={`swing-${t}`}
+                  title="This line swings: its off-beats land late"
+                >
+                  {p.badges.get(t)}
+                </span>
+              ) : null}
               <button
                 type="button"
                 aria-pressed={st === "solo"}

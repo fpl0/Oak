@@ -22,6 +22,7 @@ import { OnboardingService } from "./onboarding.ts";
 import { OpsService } from "./ops.ts";
 import type { SrsPort } from "./ports.ts";
 import { SessionsService } from "./sessions.ts";
+import { SideLessonsService } from "./side-lessons.ts";
 import { StreakService } from "./streak.ts";
 import { UnlocksService } from "./unlocks.ts";
 import { VoiceService } from "./voice.ts";
@@ -46,10 +47,12 @@ export interface Services {
   capstoneSessions: CapstoneSessionsService;
   ladder: LadderService;
   gym: GymService;
+  /** Wave 5: the optional side lessons A1.L01–L04 (wave5.md §5.1). */
+  sideLessons: SideLessonsService;
 }
 
 export interface ServiceOptions {
-  config: Pick<OakConfig, "audioDir" | "albumDir" | "backupsDir">;
+  config: Pick<OakConfig, "audioDir" | "albumDir" | "backupsDir"> & Partial<Pick<OakConfig, "dev">>;
   srs: () => SrsPort | null;
   stimulus?: PatternStimulus;
   ladder?: LadderGenerator;
@@ -102,6 +105,7 @@ export function createServices(ctx: ServiceContext, opts: ServiceOptions): Servi
     voice,
     capstoneSessions,
     tutorOff: () => ctx.repos.settings.get("tutor").backend === "off",
+    gymSummary: (id) => services.gym.summary(id),
   });
   const library = new LibraryService(ctx, {
     streak,
@@ -131,6 +135,9 @@ export function createServices(ctx: ServiceContext, opts: ServiceOptions): Servi
         throw new ApiError("unavailable", "the grader is not available");
       }),
     ...(opts.ladder === undefined ? {} : { generator: opts.ladder }),
+    ...(opts.stimulus === undefined ? {} : { stimulus: opts.stimulus }),
+    // Wave 5: in dev (OAK_DEV=1) the L5/L6 songs whose answer keys are still "Being checked" can be worked (e2e).
+    allowUnverifiedSongs: opts.config.dev === true,
   });
   const onboarding = new OnboardingService(ctx, course);
   const ops = new OpsService(ctx, mastery);
@@ -165,6 +172,7 @@ export function createServices(ctx: ServiceContext, opts: ServiceOptions): Servi
     capstoneSessions,
     ladder,
     gym,
+    sideLessons: new SideLessonsService(ctx, gates),
   };
   return services;
 }

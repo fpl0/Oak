@@ -1,7 +1,16 @@
 // The analysis path (architecture §2.2): an `EvalResult` from the grader host → `NEvent`s (`normalize`)
 // → view events with location roles, degrees and bar/beat positions → the NotationModel and ABC
 // (`@oak/notation`). Pure and synchronous, so it runs the same in the browser and in bun tests.
-import type { CodeRange, KeySpec, MeterId, MeterSpec, NEvent, PickupSpec, Rat } from "@oak/content-kit";
+import type {
+  CodeRange,
+  KeySpec,
+  MeterId,
+  MeterSpec,
+  NEvent,
+  PickupSpec,
+  Rat,
+  SwingSpec,
+} from "@oak/content-kit";
 import { R } from "@oak/content-kit";
 import {
   type EvalResult,
@@ -21,12 +30,23 @@ import {
   chordLabelInput,
   clefOfTrack,
   type Score,
+  type SectionMark,
   type StaffKind,
+  sectionMarks,
+  spelledByEvent,
 } from "@oak/notation";
-import { barPosition, keyFromScaleCtx, METERS, parseChordSymbol, parseNote } from "@oak/theory";
+import {
+  barPosition,
+  isDominantSeventhSymbol,
+  keyFromScaleCtx,
+  METERS,
+  parseChordSymbol,
+  parseNote,
+} from "@oak/theory";
 import { type AnnotationKinds, annotateAbc, annotationText, NO_ANNOTATIONS } from "./annotate.ts";
 import { primaryRanges } from "./code-roles.ts";
 import { type WorkbenchHarmony, workbenchHarmony } from "./harmony.ts";
+import { linesOf, type WorkbenchLines } from "./lines.ts";
 import { type ChordRole, chordRoleOf, type PitchLabel, pitchLabel } from "./music.ts";
 
 export interface ViewEvent {
@@ -95,6 +115,11 @@ export interface WorkbenchModel {
   harmony: WorkbenchHarmony | null;
   /** The declared pickup (cycle 0 is the pickup bar, contracts §6.11), when the host gave one. */
   pickup: PickupSpec | null;
+  /**
+   * Wave 5 (lines.ts): the form from `arrange()`, the bass line's roles, blue notes and swing per track. Absent on a
+   * model built without them (tests that build a model by hand).
+   */
+  lines?: WorkbenchLines | null;
 }
 
 /** The staff engraves at most this many bars at a time; longer loops turn pages with the playhead. */
@@ -194,6 +219,12 @@ export interface StaffSource {
   /** The annotation lines under the staff and the text of each, per event (in its own track's key). */
   annotations: AnnotationKinds;
   labelOf: (eventId: string) => PitchLabel | null;
+  /**
+   * The label of an event as the staff spells it (`written`: the staff's name for it), when that differs from
+   * `labelOf`'s (an approach tone the staff leans into its target, D♯ into E; a blue five by its motion). The
+   * texts under a head then never name another note than the head shows. Absent: `labelOf` is used as is.
+   */
+  relabel?: (eventId: string, written: string) => PitchLabel | null;
   tempoBpm: number;
   /** Bars analysed. */
   bars: number;
@@ -206,6 +237,13 @@ export interface StaffSource {
   chordSet?: ChordLabelSet;
   /** Bar 0 is a pickup (engraved as a partial measure on the first page). */
   pickup?: PickupSpec;
+  /** Wave 5: the sections of the piece (absolute 0-based bars): a label and a double barline at each. */
+  sections?: readonly SectionMark[];
+  /**
+   * The swing the code plays (contracts §6.10 item 2: filled from the measured swing for a sketch): the staff prints
+   * the swung lines straight under "Swing 8ths" / "Swing 16ths" instead of as triplets.
+   */
+  swing?: SwingSpec;
 }
 
 export interface StaffPage {
@@ -262,11 +300,16 @@ export function staffPage(src: StaffSource, page: number): StaffPage {
             src.chordSet,
           )
         : {};
+    const sections = (src.sections ?? [])
+      .filter((m) => m.bar >= startBar && m.bar < startBar + bars)
+      .map((m) => ({ ...m, bar: m.bar - startBar }));
     const score = buildScore({
       events,
       meter: src.meter,
       ...labels,
+      ...(sections.length > 0 ? { sections } : {}),
       ...(src.pickup && startBar === 0 ? { pickup: src.pickup } : {}),
+      ...(src.swing ? { swing: src.swing } : {}),
       key,
       ...(keyChanges.length ? { keyChanges } : {}),
       ...(Object.keys(trackKeys).length ? { trackKeys } : {}),
@@ -276,6 +319,14 @@ export function staffPage(src: StaffSource, page: number): StaffPage {
       labels: src.labels,
       tempoBpm: src.tempoBpm,
     });
+    // The texts follow the heads: an event the staff spells otherwise than its label is relabelled as drawn.
+    const spelled = src.relabel ? spelledByEvent(score) : null;
+    const labelFor = (id: string): PitchLabel | null => {
+      const l = src.labelOf(id);
+      const sp = spelled?.get(id);
+      if (!l || !sp || sp.name === l.name || !src.relabel) return l;
+      return src.relabel(id, sp.name) ?? l;
+    };
     const abc = annotateAbc(
       score,
       {
@@ -284,7 +335,7 @@ export function staffPage(src: StaffSource, page: number): StaffPage {
         finalBar: startBar + bars >= src.bars,
       },
       src.annotations,
-      (_n, ids) => annotationText(ids.map(src.labelOf), src.annotations),
+      (_n, ids) => annotationText(ids.map(labelFor), src.annotations),
     );
     return { page: p, startBar, bars, score, abc, error: null };
   } catch (err) {
@@ -444,7 +495,8 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
   if (!result.ok) return { ok: false, error: result.error, result };
   const meter = meterSpec(opts.meter);
   const n = normalize(result, { meter: meter.id });
-  const learner = n.all;
+  // A scale step the code alters (`n("2b")`) keeps the code's accidental on the staff and in the labels.
+  const learner = alteredSteps(code, n.all);
   const all: NEvent[] = [...learner, ...n.band];
   // A key guessed from a handful of letter-name notes would label them wrongly as often as not: an estimate
   // is used only with at least ESTIMATE_MIN_NOTES pitched notes to go on (as the staff's own key estimate).
@@ -459,6 +511,7 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
   const keySpans = pieceKeySpans(keyContexts, result.tracks);
   const key = keySpans[0]?.key ?? opts.key ?? keyContext(null, learner);
   const spellings = spellingOf(all);
+  const blues = bluesContext(all);
   const trackIndex = new Map(result.tracks.map((t, i) => [t, i] as const));
 
   const events: ViewEvent[] = all.map((e) => {
@@ -491,6 +544,7 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
               chord,
               spellings.get(e.id)?.direction,
               spellings.get(e.id)?.written,
+              blues,
             ),
       chordTone: e.midi !== null && e.chordSymbol ? chordRoleOf(e.midi, e.chordSymbol) : null,
     };
@@ -513,12 +567,26 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
     harmony = null;
   }
 
+  let lines: WorkbenchLines | null = null;
+  try {
+    lines = linesOf(heardBand(n, opts.bandHeard ?? null), {
+      code,
+      meter: meter.id,
+      key,
+      pickup: opts.pickup ?? null,
+      bars: Math.max(1, result.bars),
+    });
+  } catch {
+    lines = null;
+  }
+
   let score: Score | null = null;
   let abc: AbcResult | null = null;
   let notationError: string | null = null;
   let staffSource: StaffSource | null = null;
   if (opts.staff !== false && learner.length > 0) {
     const labelOf = new Map(events.map((e) => [e.id, e.label] as const));
+    const byNEvent = new Map(learner.map((e) => [e.id, e] as const));
     const legacy = opts.staffLabels ?? "none";
     const pitchedTracks = new Set(learner.filter((e) => e.midi !== null).map((e) => e.track));
     // Only keys the code states (`.scale()` on every stretch of the track), never an estimate or the lesson's.
@@ -542,12 +610,22 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
         solfege: legacy === "solfege",
       },
       labelOf: (id) => labelOf.get(id) ?? null,
+      relabel: (id, written) => {
+        const e = byNEvent.get(id);
+        if (!e || e.midi === null) return null;
+        const chord = e.chordSymbol ? (parseChordSymbol(e.chordSymbol) ?? undefined) : undefined;
+        const l = pitchLabel(e.midi, keyAt(keyContexts, e.track, e.onset), chord, undefined, written, blues);
+        return l.name === written ? l : null;
+      },
       tempoBpm: Math.round(result.bpm),
       bars: Math.max(1, result.bars),
       pageBars: Math.max(1, opts.maxStaffBars ?? STAFF_PAGE_BARS),
       ...(harmony ? { chordLabels: harmony.labels } : {}),
       ...(opts.pickup ? { pickup: opts.pickup } : {}),
+      ...(lines && lines.sections.length > 0 ? { sections: sectionMarks(lines.sections) } : {}),
     };
+    const swing = staffSwingOf(lines?.swing ?? []);
+    if (swing) staffSource.swing = swing;
     const first = staffPage(staffSource, 0);
     score = first.score;
     abc = first.abc;
@@ -579,6 +657,7 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
       staffSource,
       harmony,
       pickup: opts.pickup ?? null,
+      lines,
     },
   };
 }
@@ -619,7 +698,7 @@ export function spellingOf(events: readonly NEvent[]): Map<string, { direction?:
       }
       for (const e of slot) {
         const midi = Math.round(e.midi as number);
-        const w = e.pitchSource === "note-str" && e.written ? parseNote(e.written) : null;
+        const w = e.written ? parseNote(e.written) : null;
         if (w && w.midi === midi) {
           const acc = w.alt > 0 ? "#".repeat(w.alt) : "b".repeat(-w.alt);
           out.set(e.id, { written: `${w.letter}${acc}${w.oct}` });
@@ -628,6 +707,76 @@ export function spellingOf(events: readonly NEvent[]): Map<string, { direction?:
     });
   }
   return out;
+}
+
+/**
+ * The swing the staff prints for a piece (contracts §6.10 items 2–3): the subdivision and exact amount every swung
+ * learner track shares (measured by the grader's `swingView`), `null` when nothing swings or the swung tracks
+ * disagree (8ths in one, 16ths or another amount in another: the staff then shows what plays). Straight tracks are
+ * untouched by it (only onsets at the swung position move).
+ */
+export function staffSwingOf(
+  tracks: readonly {
+    swung: 8 | 16 | null;
+    eighths: { p: Rat | null };
+    sixteenths: { p: Rat | null };
+  }[],
+): SwingSpec | null {
+  const swung = tracks.filter((t) => t.swung !== null);
+  const first = swung[0];
+  if (!first) return null;
+  const sub = first.swung as 8 | 16;
+  const pOf = (t: (typeof swung)[number]) => (sub === 8 ? t.eighths.p : t.sixteenths.p);
+  const p = pOf(first);
+  if (!p) return null;
+  if (swung.some((t) => t.swung !== sub || !pOf(t) || R.toNum(pOf(t) as Rat) !== R.toNum(p))) return null;
+  const amount = (2 * p[0]) / p[1] - 1;
+  return amount > 0 && amount < 1 ? { subdivision: sub, amount } : null;
+}
+
+const STEP_LETTERS = "CDEFGAB";
+const LETTER_PC: Readonly<Record<string, number>> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+/** Seven-note scales, where a step is a letter: `n("2b")` on them is the third letter, flattened. */
+const HEPTATONIC =
+  /^(?:major|minor|ionian|dorian|phrygian|lydian|mixolydian|aeolian|locrian|harmonic minor|melodic minor)$/;
+
+/**
+ * The written name of a scale step the code alters with an accidental (`n("2b")`, `n("3#")` on a seven-note scale):
+ * the step's letter with the accidental the sound needs, so `n("0 2b 2").scale("C4:major")` is C E♭ E — the flat
+ * the code wrote — and never C D♯ E, which the staff's approach-tone rule would otherwise choose. `null` for any
+ * other event (no accidental, a pentatonic or blues scale, `note()`, a double accidental).
+ */
+export function alteredStepName(code: string, e: NEvent): string | null {
+  if (e.pitchSource !== "n-scale" || e.midi === null || !e.scaleCtx) return null;
+  const ctx = /^([A-G])([#b]*)-?\d*\s+(.+)$/.exec(e.scaleCtx.trim());
+  if (!ctx || !HEPTATONIC.test((ctx[3] as string).trim().toLowerCase())) return null;
+  let step: number | null = null;
+  for (const l of e.locs) {
+    const m = /^(-?\d+)([#b]+)$/.exec(code.slice(l.from, l.to).trim());
+    if (m) {
+      step = Number(m[1]);
+      break;
+    }
+  }
+  if (step === null) return null;
+  const letter = STEP_LETTERS[(((STEP_LETTERS.indexOf(ctx[1] as string) + step) % 7) + 7) % 7] as string;
+  const midi = Math.round(e.midi);
+  for (let oct = -1; oct <= 9; oct++) {
+    const alt = midi - (12 * (oct + 1) + (LETTER_PC[letter] as number));
+    // A step altered twice over (`6b` on the ♭7 of a minor key) is left to the key's own spelling (C, not D𝄫).
+    if (Math.abs(alt) <= 2)
+      return Math.abs(alt) === 2 ? null : `${letter}${alt > 0 ? "#" : alt < 0 ? "b" : ""}${oct}`;
+  }
+  return null;
+}
+
+/** The learner's events, each altered scale step carrying its written name (`alteredStepName`). */
+export function alteredSteps(code: string, events: readonly NEvent[]): NEvent[] {
+  if (!/\d[#b]/.test(code)) return [...events];
+  return events.map((e) => {
+    const written = alteredStepName(code, e);
+    return written ? { ...e, written } : e;
+  });
 }
 
 /**
@@ -666,4 +815,16 @@ export function activeAt(model: Pick<WorkbenchModel, "events" | "bars">, cycle: 
     if (c < e.end) out.push(e.id);
   }
   return out;
+}
+
+/**
+ * Whether the piece is a blues for the degree lens (as @oak/notation's `bluesContext`): a line on a blues scale, or
+ * chords that are all dominant sevenths on two roots or more (a 12-bar of I7 IV7 V7).
+ */
+export function bluesContext(events: readonly Pick<NEvent, "scaleCtx" | "chordSymbol">[]): boolean {
+  // The grader's `scaleCtx` reads "C4 blues" / "A3 minor blues".
+  if (events.some((e) => e.scaleCtx && /\bblues\b/i.test(e.scaleCtx))) return true;
+  const symbols = events.flatMap((e) => (e.chordSymbol ? [e.chordSymbol] : []));
+  if (symbols.length === 0 || !symbols.every(isDominantSeventhSymbol)) return false;
+  return new Set(symbols.map((x) => parseChordSymbol(x)?.rootPc ?? x)).size >= 2;
 }

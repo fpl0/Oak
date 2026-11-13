@@ -54,7 +54,7 @@ const BASE = [
   "tb.mini.stack",
   "tb.note",
 ].map(row);
-const U05_L04 = ["tb.arp"].map(row);
+const U05_L04 = ["tb.arp", "tb.feature.chord-symbols"].map(row);
 const U06 = ["tb.feature.rn", "tb.lens.function"].map(row);
 const U07 = ["tb.lens.range", "tb.lens.chord-tones", "tb.feature.leadsheet"].map(row);
 const U05_L08 = ["tb.chord", "tb.voicing", "tb.anchor", "tb.mode.below", "tb.dict.triads", "chord.triad"].map(

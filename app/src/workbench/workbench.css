@@ -14,6 +14,12 @@
   --wb-issue: var(--oak-issue, var(--issue, #b4532a));
   --wb-lane-in: var(--oak-lane-in, var(--lane-in, rgba(47, 107, 69, 0.06)));
   --wb-selection: var(--oak-selection, rgba(47, 107, 69, 0.18));
+  /* Wave 5: blue notes and the spectrum (the code-label blue of both themes); section letters. */
+  --wb-blue: var(--oak-code-label, #0b5f8a);
+  --wb-sec-a: var(--oak-accent, #2f6b45);
+  --wb-sec-b: var(--oak-accent-2, #b7791f);
+  --wb-sec-c: var(--oak-code-label, #0b5f8a);
+  --wb-sec-d: var(--oak-code-fn, #6b3fa0);
   --wb-font-code: var(--oak-font-code, ui-monospace, "SF Mono", Menlo, monospace);
   /* Key names (C♯m, B♭): the UI face, whose sharp and flat signs are compact (the code face's fall back wide). */
   --wb-font-ui: var(--oak-font-ui, system-ui, -apple-system, "Segoe UI", "Segoe UI Symbol", sans-serif);
@@ -520,12 +526,15 @@
 /* --- Wave 3: the lens bar, the staff facts, the key-signature panel and the circle of fifths ------------------ */
 .oak-lens-switch {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 3px;
   margin: 0;
   padding: 0;
   border: 0;
   min-width: 0;
+  /* Wave 5 adds switches: the group wraps inside the transport instead of running past its edge. */
+  max-width: 100%;
 }
 .oak-lens-switch-label {
   float: left;
@@ -917,4 +926,279 @@ ul.oak-chord-band {
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* --- Wave 5: the section ribbon, the form map, the scope and the probes ----------------------------------- */
+.oak-ribbon-wrap {
+  position: relative;
+  max-width: 100%;
+  overflow: hidden;
+}
+.oak-ribbon {
+  position: relative;
+  height: 24px;
+  max-width: 100%;
+  margin-bottom: 2px;
+}
+.oak-ribbon-section {
+  --sec: var(--wb-sec-a);
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--sec) 55%, var(--wb-border));
+  border-left: 3px solid var(--sec);
+  border-radius: 4px;
+  /* Fill grows with the section's energy (0–100). */
+  background: color-mix(in srgb, var(--sec) calc(8% + var(--energy, 0) * 0.22%), var(--wb-surface));
+  color: var(--wb-text);
+  font: 600 11px var(--wb-font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.oak-ribbon-section[data-letter="B"] {
+  --sec: var(--wb-sec-b);
+}
+.oak-ribbon-section[data-letter="C"] {
+  --sec: var(--wb-sec-c);
+}
+.oak-ribbon-section[data-letter="D"],
+.oak-ribbon-section[data-letter="E"],
+.oak-ribbon-section[data-letter="F"] {
+  --sec: var(--wb-sec-d);
+}
+.oak-ribbon-section[data-playing="1"] {
+  box-shadow: inset 0 -3px 0 var(--sec);
+}
+.oak-ribbon-section[aria-pressed="true"] {
+  outline: 2px solid var(--sec);
+  outline-offset: -1px;
+}
+.oak-ribbon-section:focus-visible {
+  outline: 2px solid var(--wb-accent);
+  outline-offset: 1px;
+}
+.oak-ribbon-letter {
+  font-family: var(--wb-font-code);
+  color: var(--wb-text-2);
+}
+.oak-ribbon-text {
+  overflow: hidden;
+  text-overflow: clip;
+}
+.oak-ribbon-loop {
+  margin-left: auto;
+  color: var(--wb-text-2);
+}
+.oak-ribbon-energy {
+  display: block;
+  max-width: 100%;
+}
+.oak-energy-line {
+  fill: none;
+  stroke: var(--wb-accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.oak-ribbon-problem {
+  margin: 0 0 4px;
+  padding: 4px 8px;
+  border-left: 3px solid var(--wb-issue);
+  background: var(--wb-surface-2);
+  font-size: 12px;
+}
+.oak-form-curve {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  height: auto;
+  margin: 4px 0;
+}
+.oak-form-band {
+  fill: color-mix(in srgb, var(--wb-sec-a) 10%, var(--wb-surface));
+}
+.oak-form-band[data-letter="B"] {
+  fill: color-mix(in srgb, var(--wb-sec-b) 14%, var(--wb-surface));
+}
+.oak-form-band[data-letter="C"] {
+  fill: color-mix(in srgb, var(--wb-sec-c) 12%, var(--wb-surface));
+}
+.oak-form-boundary {
+  stroke: var(--wb-text-3);
+  stroke-dasharray: 2 2;
+}
+.oak-form-now {
+  stroke: var(--wb-accent);
+  stroke-width: 2;
+}
+.oak-form-sections {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.oak-form-sections li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+}
+.oak-form-tracks {
+  color: var(--wb-text-2);
+  overflow-wrap: anywhere;
+}
+.oak-form-meter {
+  appearance: none;
+  width: 56px;
+  height: 8px;
+  border: 1px solid var(--wb-border);
+  border-radius: 4px;
+  background: var(--wb-surface-2);
+  overflow: hidden;
+}
+.oak-form-meter::-webkit-meter-bar {
+  background: var(--wb-surface-2);
+  border: 0;
+  border-radius: 4px;
+}
+.oak-form-meter::-webkit-meter-optimum-value {
+  background: var(--wb-accent);
+}
+.oak-form-meter::-moz-meter-bar {
+  background: var(--wb-accent);
+}
+.oak-form-example {
+  margin: 4px 0;
+  padding: 4px 6px;
+  background: var(--wb-surface-2);
+  border-radius: 4px;
+  font: 12px var(--wb-font-code);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.oak-scope-live {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.oak-scope-canvas {
+  display: block;
+  max-width: 100%;
+  border: 1px solid var(--wb-border);
+  border-radius: 4px;
+}
+.oak-scope-idle {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  color: var(--wb-text-2);
+  pointer-events: none;
+}
+.oak-scope-source {
+  font-weight: 400;
+  color: var(--wb-text-2);
+}
+.oak-probe {
+  margin-top: 6px;
+}
+.oak-probe-title {
+  margin: 0 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wb-text-2);
+}
+.oak-probe-svg {
+  display: block;
+  width: 100%;
+  max-width: 340px;
+  height: auto;
+  overflow: visible;
+  color: var(--wb-text);
+}
+.oak-probe-axis {
+  stroke: var(--wb-border);
+}
+.oak-probe-zero {
+  stroke: var(--wb-text-3);
+  stroke-dasharray: 3 3;
+}
+.oak-probe-curve {
+  fill: none;
+  stroke: var(--wb-accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.oak-probe-bar {
+  fill: var(--wb-blue);
+}
+.oak-probe-mark {
+  stroke: var(--wb-text-2);
+  stroke-dasharray: 2 2;
+}
+.oak-probe-label {
+  fill: var(--wb-text-2);
+  font: 10px var(--wb-font-ui);
+}
+.oak-probe-caption {
+  font-size: 12px;
+  color: var(--wb-text);
+}
+.oak-harmonics {
+  margin: 4px 0 0;
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0 10px;
+  font-size: 12px;
+}
+.oak-swing-badge {
+  align-self: center;
+  margin: 0 6px 0 2px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--wb-surface-2);
+  color: var(--wb-text-2);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.oak-twins {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 13px;
+}
+.oak-chart-host {
+  color: var(--wb-text);
+  font: 14px var(--wb-font-ui);
+  max-width: 560px;
+}
+.oak-chart-host .oak-chart-bar.oak-active {
+  background: color-mix(in srgb, var(--wb-accent) 14%, var(--wb-surface));
+}
+.oak-chart-host .oak-section {
+  color: var(--wb-text-2);
+}
+
+/* Grader messages with `code` spans (FeedbackPanel `InlineCode`). */
+.oak-feedback .oak-inline-code {
+  font-family: var(--wb-font-code);
+  font-size: 0.92em;
+  padding: 0 0.25em;
+  border-radius: 3px;
+  background: var(--wb-surface-2);
 }

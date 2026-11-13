@@ -230,8 +230,13 @@ export const formBlues: Generator = {
       const chords = BLUES.standard;
       const byNumeral = { I: [] as number[], IV: [] as number[], V: [] as number[] };
       for (const [i, c] of chords.entries()) byNumeral[numeralOf(c) as "I"].push(i + 1);
-      const numeral = ctx.rng.pick(["I", "IV", "V"] as const);
-      const bar = ctx.rng.pick(byNumeral[numeral]);
+      // Bars 9 and 10 (V then IV, the near miss of the form) on two trials in five; otherwise a numeral, then
+      // one of its bars, so I, IV and V are asked alike.
+      const late = ctx.rng.next() < 0.4;
+      const numeral = late
+        ? (numeralOf(chords[ctx.rng.pick([8, 9])] as RnChord) as "I" | "IV" | "V")
+        : ctx.rng.pick(["I", "IV", "V"] as const);
+      const bar = late ? (numeral === "V" ? 9 : 10) : ctx.rng.pick(byNumeral[numeral]);
       const piece = bluesPiece(ctx, key, chords);
       return trialOf(piece, { choice: [numeral] }, cueOf(ctx), {
         mode: "choice",

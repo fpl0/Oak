@@ -12,6 +12,7 @@ import { FLAVOUR_TITLE } from "./content.ts";
 import type { ReviewWait } from "./queries.ts";
 import { ReviewCard } from "./ReviewCard.tsx";
 import type { SessionView } from "./sessions.ts";
+import type { RowExtra } from "./wave5.ts";
 
 export interface BriefPanelProps {
   def: CapstoneDef;
@@ -25,6 +26,8 @@ export interface BriefPanelProps {
   onTryRevision?: ((i: number) => void) | undefined;
   tryPending?: boolean;
   rows: readonly ChecklistRow[];
+  /** Wave 5: what a row says beyond met / not yet. */
+  extras?: Readonly<Record<string, RowExtra>>;
   ready: Readiness;
   checking: boolean;
   stale: boolean;
@@ -34,6 +37,10 @@ export interface BriefPanelProps {
   onFlavour(f: FlavourId): void;
   flavourLocked: boolean;
   review: CapstoneReview | null;
+  /** The review's timeline entry (`<conversationId>-<seq>`): its "Mark done" ticks. */
+  reviewId?: string | null;
+  /** The draft version the review was asked about. */
+  reviewVersion?: number | null;
   /** Where the last review request stands (`useCapstoneReview`). */
   reviewWait: ReviewWait;
   canRequestReview: boolean;
@@ -73,7 +80,14 @@ export function BriefPanel(p: BriefPanelProps) {
         )}
       </section>
 
-      <Checklist rows={p.rows} ready={p.ready} checking={p.checking} stale={p.stale} onBars={p.onBars} />
+      <Checklist
+        rows={p.rows}
+        ready={p.ready}
+        checking={p.checking}
+        stale={p.stale}
+        onBars={p.onBars}
+        extras={p.extras ?? {}}
+      />
 
       {p.beyond.length > 0 && (
         <div role="status" className="flex gap-2 rounded-card border border-accent/30 bg-lane-in p-3 text-sm">
@@ -165,7 +179,10 @@ function ReviewSection(p: BriefPanelProps) {
       {r ? (
         <div data-testid="review-summary">
           <ReviewCard
+            key={p.reviewId ?? "review"}
             review={r}
+            doneId={p.reviewId ?? undefined}
+            heading={p.reviewVersion ? `Review of version ${p.reviewVersion}` : undefined}
             onBars={p.onBars}
             {...(p.onTryRevision ? { onTry: p.onTryRevision } : {})}
             tryPending={p.tryPending ?? false}

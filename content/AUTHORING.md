@@ -2,7 +2,7 @@
 
 For every agent or person who writes or reviews Oak content. It applies `docs/design/contracts.md` (schemas, budgets, IDs, unlocks, grading) and `content/STYLE.md` (the code dialect). If this guide and those disagree, they win; fix this guide.
 
-Start here, in this order: this guide, STYLE, your unit's spec (`content/specs/Uxx.md`), then the exemplar lessons `content/core/U01/L01` ("Heartbeat"), `content/core/U02/L01` ("High & Low"), for U03 on `content/core/U03/L02` ("Degrees in Code"), which also shows the Wave 3 shapes of §16, and for U05 on `content/core/U05/L01` ("Stacking Thirds"), which shows how chords are written, graded and made into a song (§17). All of them pass every check with the real grader; copy their shape, not their words. U06.L02 and U07.L08 are the U06 and U07 exemplars.
+Start here, in this order: this guide, STYLE, your unit's spec (`content/specs/Uxx.md`), then the exemplar lessons `content/core/U01/L01` ("Heartbeat"), `content/core/U02/L01` ("High & Low"), for U03 on `content/core/U03/L02` ("Degrees in Code"), which also shows the Wave 3 shapes of §16, and for U05 on `content/core/U05/L01` ("Stacking Thirds"), which shows how chords are written, graded and made into a song (§17). All of them pass every check with the real grader; copy their shape, not their words. U06.L02 and U07.L08 are the U06 and U07 exemplars. From Wave 5: `content/core/U08/L01` ("Roots Down Low") shows a bass line written and graded against the chords (§18); U09.L02, U10.L01, U11.L05 and A1.L01 are the U09, U10, U11 and side-lesson exemplars.
 
 ## 1. How content gets made
 
@@ -179,6 +179,12 @@ Rules:
 | `band.axis-4bar` | 4/4 | I–V–vi–IV | schema lessons (U06 on); its jazz-soul version swings and uses sixths and sevenths (C6 G7 Am7 F6, never a major 7th under a tune that lands on 1 or 4). In U05 the learner plays the chords: `tracks: ["drums", "bass"]` when the chords sit on the Band's roots (U05.L01), `tracks: ["drums"]` when the learner chooses them. Its snare is on 2 and 4 only in pop; indie, funk and jazz-soul put it on 3, so prose never names the snare's beat over this Band (U06.L12) |
 | `band.doo-wop` | 4/4 | I–vi–IV–V, piano on every triplet, bass on 1 and 3 | doo-wop (U06.L07) and C2 |
 | `band.three-chord` | 4/4 | I–IV–V–IV, straight eighths, a pumping root bass | three-chord rock (U06.L07) and C2 |
+| `band.sections` | 4/4 | verse I–vi–IV–V, chorus IV–V–I–I, in section consts with one `arrange()` per track (16 bars) | U09 lessons, U09.CP and C3: it follows the learner's `arrange()` (an intro or a bridge hears the verse's chords), and its chorus lifts (snare on 2 and 4, doubled hats, driving bass). Use `tracks: ["drums"]` whenever the learner's own chords differ from C Am F G / F G C C |
+| `band.aeolian-4bar` | 4/4 | i–VI–III–VII | minor Makes (U10.L03 on), U10.CP and C4. Written in half steps above the tonic, so it plays the same chords in natural, harmonic or melodic minor; no major 7th under a tune on ♭3 or ♭6 |
+| `band.blues-12bar` | 4/4 | the standard 12-bar blues, every chord a dominant seventh | U11.L05 on, U11.CP and C5. Its drums are kick and snare on quarter notes only: the hats are the learner's (straight or swung), so nothing flams; the swing lives in the bass and the chords' push |
+| `band.blues-12bar-qc` | 4/4 | the 12-bar blues with the quick change (IV in bar 2) | U11.L06 on and C5's quick-change pieces; drums as `band.blues-12bar` |
+
+A Band written in major degrees (`band.two-chord-vamp`, `band.phrase-8bar`, `band.axis-4bar`, `band.doo-wop`, `band.three-chord`, `band.sections`) plays its bass and chords only under a major key: under a minor, pentatonic or blues key it would play the major key's chords, so a step in such a key takes `tracks: ["drums"]` or one of the tonic-written Bands above (`content/bands/index.test.ts` enforces it).
 
 `followsLearnerKey: true` makes the Band take the key of the learner's `.scale()` (a pattern included, from U03.L05), so a learner who moves the tune keeps the backing. The degree rubric rules (`ends-on-degree`, `degree-set`) are judged in the exercise's declared key: until the grader reads the learner's `.scale()` there, a Make whose required rule counts degrees does not invite another key (U03.L02 S9 keeps C).
 
@@ -607,3 +613,71 @@ Melody checks compare key-relative (contracts §6.6 X1); chord checks are staged
 ### 17.10 The gym schedule
 
 The slot rule of contracts §2.5 lives in `content/gym/slots.ts` (`placeGymSlots`) and `content/validate/gym.test.ts` proves that it reproduces every GYM.nn of the default order, that no slot falls inside a capstone, and that every graded slot has ladder material open (`LADDER_OPENS`). Nobody authors a gym session: ladder levels 1–4 are generated, 5 and 6 draw on the repertoire, own-audio slots use `content/gym/templates.ts`.
+
+## 18. The Wave 5 shapes (bass, form, minor, blues, sound)
+
+Wave 5 added these to `@oak/content-kit` (`CONTENT_SCHEMA_VERSION` 4). As in §17, each is checked structurally by `defineLesson` / `defineCapstone` / `defineUnit` (the rule names in brackets), and the ones marked (planned) sit in `PLANNED`: a unit spec may use them, a lesson that does fails check 2 until the Build phase moves them into `IMPLEMENTED`. `bun run content:check <id>` names them.
+
+### 18.1 A bass line against the chords (the worked example: U08.L01)
+
+The chords a bass is judged against are a `chords:` line in the learner's code (the grader is not given the Band, §8 rule 5), so the Band plays `tracks: ["drums"]`. A bass in degrees is an `events` match on its own track; "the root under each chord" is a `matches` rule with a `harmony` matcher at level `bass`, which compares the lowest note sounding at each chord change with the chord's root. U08.L01 S7, graded today:
+
+```ts
+code: { starter: code(chords("<0 4 5 3>"), bass("0")) },          // C under every chord: fails (1 bar of 4)
+rubric: [{ id: "roots-on-the-one", label: "Each chord's root in the bass on its beat 1", required: true,
+  skills: ["B01"], rule: "matches", min: 0.75,
+  reference: { solutions: [code(chords("<0 4 5 3>"), bass("<0 4 5 3>"))], bars: 4 },
+  matcher: { m: "harmony", level: "bass", qualityDepth: "triad", inversion: false, harmonicRhythm: "given" } }],
+feedbackText: { "rubric.unmet": "{label}: not yet." },             // serves every rule, so neutral
+```
+
+A bass that repeats, holds or decorates its roots passes (eighths on the root, `.rootNotes(2).struct(…)`, root–5th); the grader names each miss ("Chord 2 (bar 2): bass is C; you should hear G", `harmony.bass`). The S4 modify step grades a bass written in degrees with `{ m: "events", pitch: "octave-free", rhythm: "onsets", durations: false, tracks: ["bass"] }` and pins the off-by-one (`<0 6 4 5>` for I vi IV V, `melody.wrong-degree`).
+
+The new rule `bass-line` (planned) says more: `roots: { on: "change" | "downbeat", minRatio }`, `members: { allowed: ["root", "fifth", "octave", "third", "approach"], minRatio, each? }` (U08.L02: only roots, 5ths and octaves), `approach: { min, kinds?: ["diatonic", "chromatic"] }` (U08.L03: approach notes into the changes). At least one of the three (`rubric.bass-line`). The kick lock is `groove-lock` (`kick`, `bass`, `min`; planned for content, graded by the grader).
+
+### 18.2 Sections: `section` on any rule, form, contrast, the form answer
+
+Every rubric rule may read one part of the piece with `section` (feature `rubric.section`): `{ section: "verse" }` (the `nth` one when it recurs), `{ bars: [12, 12] }` (1-based, inclusive: "bar 12 contains V"), or `"last"`. Sections come from one `arrange()` per labelled track (contracts §6.3, STYLE §10). `contrast` and `key-change` name their own sections and refuse `section` (`rubric.section`). `form` (`pattern: "verse chorus verse chorus"` or `"AABA"`), `contrast`, `duration-sec` and `groove-lock` are planned for content until the grader lists them.
+
+The learner names a form heard with the `form` answer (planned):
+
+```ts
+answer: { ui: "form", sections: 4, vocabulary: ["verse", "chorus", "bridge"], input: "label" },  // or "letters"
+correct: { sections: ["verse", "chorus", "verse", "chorus"] },
+```
+
+One label per section (`form.correct`), from the vocabulary (`form.vocabulary`; names from `FORM_SECTION_NAMES`), letters by first appearance (`form.letters`: A first, then B). Graded on the shape: both sides become letters (`formLetters`), so ABAB and verse–chorus–verse–chorus are one answer and `chorus2` is a chorus. `input: "order"` gives the distinct sections as cards to put in order; `sectionBars` (one per section) shows their lengths. Tests answer `{ answer: { sections: [...] } }`. A step that shows the form map opens it with `initialPanels: ["form"]` (`tb.lens.form`, U09.L02; feature `panel.wave5`).
+
+### 18.3 Minor keys
+
+A key is `{ tonic: "A", mode: "minor" }` (`"harmonic minor"`, `"melodic minor"`); its degrees are spelled against major, do-based (contracts §8.3): `MODE_DEGREES.minor` is `1 2 b3 4 5 b6 b7`, sung do re me fa sol le te (`DEGREE_SYLLABLES`). In a key whose 3rd is ♭3 (`MINOR_THIRD_MODES`: the minors, minor pentatonic, blues) a degree pad offers `b3`, never `3`, and every degree of the right answer (`minor.degree-pad`); a sung degree target writes `b3` (`minor.sung-degree`). The check reads the exercise's `key`, else the lesson's. "Which minor" is an `identify` with `MINOR_OPTIONS` (offer each from its lesson: natural U10.L01, harmonic U10.L06, melodic U10.L08). C4's "ends on 1 over i" is `ends-on-degree` with `over: "i"` (feature `ends-on-degree.over`); its verse is `progression` with `schema: "schema.aeolian"` and `section: { section: "verse" }`.
+
+### 18.4 Pentatonic, blues and the twelve bars
+
+Build a scale with the `scale-builder` answer (planned): `{ ui: "scale-builder", tonic: "A", input: "degrees", palette: [...] }` (or `input: "keyboard"` with a `range`, answered as `midi`), `correct: { degrees: ["1", "b3", "4", "5", "b7"] }`, graded as a set (`scale-builder.correct`: home and one more, each once; `scale-builder.palette`: every answer on the pad). Colours by ear: `SCALE_COLOUR_OPTIONS`.
+
+Chart a twelve-bar blues with the `bar-grid` answer (planned): `{ ui: "bar-grid", bars: 12, perRow: 4, entry: "rn", qualities: ["7"], given: [1] }`, `correct: { rn: ["I7", "I7", "I7", "I7", "IV7", "IV7", "I7", "I7", "V7", "IV7", "I7", "V7"] }` (or `entry: "symbol"` with `correct.text` in code spelling: `C7`). One entry per bar (`bar-grid.correct`); graded bar by bar by degree and quality, never as strings.
+
+C5's rules: `blues-form` with `choruses: 2` and `quickChangeOk` (feature `blues-form.choruses`); every chord a dominant seventh is `chord-qualities` with `subsetOf: ["7"]` and `depth: "seventh"` (feature `chord-qualities.depth`); "♭3 or ♭5 at least twice" is `degree-set` with `anyOf: ["b3", "b5"]`, `minCount: 2` (feature `degree-set.any-of`); bar 12 contains V is `contains-rn` with `section: { bars: [12, 12] }`. Straight or swung by ear is an `identify` with `FEEL_OPTIONS`; swing in code is contracts §6.10 (`swingBy(1/3, 4)`, `swing` metadata).
+
+### 18.5 Side lessons and the sound steps (A1.L01–L04)
+
+A1.L01–L04 are side lessons (`LessonMeta.side`, `unit.side-lesson`): outside the default order, offered once U03.L02 is done, never required. content:check and `test:content` judge one at the earliest point a learner can take it: tools in every legal order (so only U03.L02's, plus what A1 itself unlocks), terms through `laterTerms` (any term not guaranteed before it is advice to reword), singing on numbers (before U03.L08). Write each so a learner at U03 and a learner at U11 can both follow it: no chords by name, no Roman numerals, no minor, no `arrange()`.
+
+A sound step can open Oak's scope or spectrum panel (`initialPanels: ["scope"]`, `tb.scope`; `"spectrum"` needs `tb.fscope`, A2.L01) or draw a probe beside the sound (feature `step.probe`): `ui.probe: { kind: "filter" | "envelope" | "harmonics", track? }`, each needing its row (`PROBE_TOOLS`: `tb.lpf`, `tb.adsr`, `tb.partials`). "Match this sound" is a `code-modify` whose target is audible only, graded by the `controls` matcher (planned):
+
+```ts
+matcher: { m: "controls", track: "bass", controls: [
+  { control: "lpf", scale: "log", tol: 0.5 },          // cutoff within half an octave
+  { control: "release", scale: "linear", tol: 0.1 } ] },
+```
+
+`control` is the method as written; content CI requires its toolbox row to be `audible: true` and unlocked at the lesson. A control listed twice is `controls.unique`; the matcher grades code only (`controls.kind`).
+
+### 18.6 Capstones in three sessions, X2 in stages
+
+C3 has three sessions (`sessions: 3`, three `sessionDefs`, only the last releases). X2's checks open in order with `after` (feature `capstone.check-after`): the changes after the bass, the melody after the changes, each naming checks defined before it (`capstone.check-after`). `bun run content:check X2` lists every planned shape a capstone's sessions use.
+
+### 18.7 Specs: enjoyment, pace and return
+
+From U08 every lesson of a unit spec carries `epr: { enjoyment, pace, return }`, one line each (content/validate/specs.test.ts and `bun scripts/content/spec.ts --check` fail without them): what the learner makes and would replay, the single new idea and what was cut to keep it single, and what the Coda says they can now do and what opens next. A spec may cover part of a unit (`covers`: the A1 spec covers A1.L01–L04).

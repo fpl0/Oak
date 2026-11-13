@@ -1,10 +1,11 @@
 // What Today shows (ux §1.4): one decision — start the session — and the state around it. Pure, so every plan
 // and return state is unit-tested from fixture plans (today-model.test.ts). The page (TodayPage.tsx) renders it.
-import type { Bootstrap, SessionDay, SessionPlan, WarmupItem } from "@oak/api";
+import type { Bootstrap, SessionDay, SessionPlan, SideLessons, WarmupItem } from "@oak/api";
 import { learnerDay } from "@oak/srs";
 import type { CapstoneDay } from "./capstone-day.ts";
 import { type CourseEdge, edgeLead } from "./edge.ts";
 import type { GymDay } from "./gym-day.ts";
+import { type SideOffer, sideOffer } from "./side-lessons.ts";
 import { blockBudget } from "./store.ts";
 import { isRestDay } from "./streak-model.ts";
 
@@ -38,6 +39,8 @@ export interface SetlistRow {
   amount: number;
   unit: "min" | "s";
   detail: string;
+  /** What today's lesson is for, in one line (its objective), so the day ahead reads as worth opening. */
+  sub?: string;
 }
 
 export interface TodayView {
@@ -54,6 +57,11 @@ export interface TodayView {
   offerLoosen: boolean;
   /** A Keep-alive (one easy set, ~2 min) is a real option today. */
   keepAlive: boolean;
+  /**
+   * Wave 5: an optional side lesson offered beside today's session (`alternative`) or, once today's session is
+   * done, as "one more" (`after-core`). Never the primary action; null on checkpoint, capstone and return days.
+   */
+  side: SideOffer | null;
 }
 
 export interface TodayInput {
@@ -75,6 +83,10 @@ export interface TodayInput {
   titleOf: (id: string) => string;
   /** Step count of a lesson, for "from step 4 of 8". */
   stepsOf?: (lessonId: string) => number | null;
+  /** A lesson's objective (the syllabus), shown under the New row. */
+  objectiveOf?: (id: string) => string | null;
+  /** `GET /side-lessons` (Wave 5): the offer's fallback on a server whose plan has no `sideLesson`. */
+  sideLessons?: Pick<SideLessons, "open" | "items" | "next"> | null;
   /** The written course is used up (edge.ts): review days until the next unit is written. */
   edge?: CourseEdge | null;
   /** A capstone session day (capstone-day.ts): which session of how many, and whether the draft resumes. */
@@ -118,7 +130,11 @@ const round = (x: number) => Math.max(1, Math.round(x));
 export function setlistRows(
   plan: SessionPlan,
   titleOf: (id: string) => string,
-  days: { capstone?: CapstoneDay | null; gym?: GymDay | null } = {},
+  days: {
+    capstone?: CapstoneDay | null;
+    gym?: GymDay | null;
+    objectiveOf?: ((id: string) => string | null) | undefined;
+  } = {},
 ): SetlistRow[] {
   const b = blockBudget(plan.kind, plan.targetMinutes);
   const rows: SetlistRow[] = [];
@@ -154,12 +170,14 @@ export function setlistRows(
             : main.resumeStep
               ? `${title} · from step ${stepNo(main.resumeStep)}`
               : title;
+      const objective = plan.mapItemId ? (days.objectiveOf?.(plan.mapItemId) ?? null) : null;
       rows.push({
         key: "new",
         label: "New",
         amount: round(main.estMinutes - makeMin),
         unit: "min",
         detail: what,
+        ...(objective ? { sub: objective } : {}),
       });
       rows.push(
         quick
@@ -356,7 +374,11 @@ function activeState({ plan, boot, edge }: TodayInput): TodayState {
 
 export function todayView(input: TodayInput): TodayView {
   const { plan, boot } = input;
-  const rows = setlistRows(plan, input.titleOf, { capstone: input.capstone ?? null, gym: input.gym ?? null });
+  const rows = setlistRows(plan, input.titleOf, {
+    capstone: input.capstone ?? null,
+    gym: input.gym ?? null,
+    objectiveOf: input.objectiveOf,
+  });
   // A review day is as long as its sets, not the day's target (the server plans what is due, nothing more).
   const rowMinutes = rows.reduce((sum, r) => sum + (r.unit === "min" ? r.amount : r.amount / 60), 0);
   const length =
@@ -393,6 +415,11 @@ export function todayView(input: TodayInput): TodayView {
           ? null
           : { action: "start", label: "Start session" };
   const active = state !== "first-run" && state !== "done" && state !== "in-session";
+  // The side lesson never displaces the core (wave5.md §5.1): beside an active day, or as "one more" once done.
+  const side =
+    active || state === "done"
+      ? sideOffer(plan, input.sideLessons, { done: state === "done", titleOf: input.titleOf })
+      : null;
   return {
     state,
     heading: HEADING[state],
@@ -407,6 +434,7 @@ export function todayView(input: TodayInput): TodayView {
         ? input.ladder.offerLoosen && input.ladder.cents < 70
         : plan.returning?.offerLoosen === true && boot.profile.singToleranceCents < 70),
     keepAlive: active && plan.kind !== "review" && plan.warmup.items.length > 0,
+    side,
   };
 }
 

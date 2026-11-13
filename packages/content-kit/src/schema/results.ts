@@ -36,6 +36,12 @@ export interface NEvent {
   scaleCtx?: string;
   /** Every contributing mini-notation atom, later-applied first (so `locs[0]` may be the word "piano"). */
   locs: CodeRange[];
+  /**
+   * Wave 5. The sound controls the hap carries, by Strudel's value key (`cutoff` for `.lpf()`, `resonance`,
+   * `hcutoff`, `attack`, `release`, `room`, `roomsize`, `delaytime`, `partials` as "1,0.5", …): only the
+   * controls the `controls` matcher and the probes read, and only when the code sets one. Absent otherwise.
+   */
+  controls?: Record<string, number | string>;
 }
 
 export const DIMENSIONS = [

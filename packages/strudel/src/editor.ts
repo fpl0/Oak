@@ -11,6 +11,7 @@ import { transpiler } from "@strudel/transpiler";
 import * as webaudio from "@strudel/webaudio";
 import * as WT from "worker-timers";
 import { bandCodeFor } from "./band.ts";
+import { formBarsOf } from "./band-form.ts";
 import {
   type EvalSession,
   evaluateBand,
@@ -42,6 +43,7 @@ import {
 import { copyMutes, NO_MUTES } from "./mutes.ts";
 import { withTimeout } from "./mutex.ts";
 import { scopeRequests } from "./pack.ts";
+import { WARM_AHEAD_BARS, type WarmAhead } from "./preload.ts";
 import { captureMessageListeners, type Runtime, removeCaptured } from "./runtime.ts";
 import { type CyclistLike, queryLiveHaps } from "./transport.ts";
 import type {
@@ -107,6 +109,8 @@ export function createEditor(rt: Runtime, root: HTMLElement, opts: EditorOptions
   const releaseCoordinator: { fn: (() => void) | null } = { fn: null };
   let pendingBand: { code: string; roles: string[] } | null = null;
   let bandFailure: unknown = null;
+  /** The background warm of a long piece's later bars (cancelled by the next evaluation and by dispose). */
+  let ahead: WarmAhead | null = null;
 
   root.classList.add("oak-editor");
 
@@ -147,7 +151,7 @@ export function createEditor(rt: Runtime, root: HTMLElement, opts: EditorOptions
         solo: true,
         autodraw: false,
         editPattern: (pat: Strudel.Pattern) => {
-          const out = finalizePattern(pat, { session, mutes: () => mutes });
+          const out = finalizePattern(pat, { session, mutes: () => mutes, scopeTrack: rt.scope.track });
           return (out.onPaint as (fn: unknown) => Strudel.Pattern)(
             (_ctx: unknown, time: number, haps: Strudel.Hap[]) => paint(time, haps),
           );
@@ -426,9 +430,19 @@ export function createEditor(rt: Runtime, root: HTMLElement, opts: EditorOptions
       const panels = [...scopeRequests] as ScopePanel[];
       rt.scope.setPanels(opts.id, panels);
       if (!rt.transport.active || !rt.transport.get().playing) rt.transport.setActive(clockSource);
+      ahead?.cancel();
+      ahead = null;
       if (start && lastPattern && !disposed) {
         const from = repl.scheduler.started ? repl.scheduler.now() : 0;
         const warm = rt.preloadPattern(lastPattern, from, from + 2);
+        // A song in sections (a 90-second C3) brings sounds and pitches the first bars never play: warm them,
+        // in order, while the first bars play, so the chorus's first crash or pad note is never skipped.
+        const pattern = lastPattern;
+        void warm.then(() => {
+          if (disposed || lastPattern !== pattern) return;
+          const bars = Math.min(formBarsOf(code) ?? WARM_AHEAD_BARS, WARM_AHEAD_BARS);
+          ahead = rt.warmAhead(pattern, from + 2, from + Math.max(2, bars));
+        });
         if (!repl.scheduler.started) {
           await withTimeout(warm, PRELOAD_BUDGET_MS, () => new Error("preload budget")).catch(
             () => undefined,
@@ -476,6 +490,8 @@ export function createEditor(rt: Runtime, root: HTMLElement, opts: EditorOptions
   function teardown(): void {
     if (disposed) return;
     disposed = true;
+    ahead?.cancel();
+    ahead = null;
     rt.editors.delete(opts.id);
     rt.budget.delete(opts.id);
     const release = releaseCoordinator.fn;
@@ -519,6 +535,16 @@ export function createEditor(rt: Runtime, root: HTMLElement, opts: EditorOptions
     }
   }
 
+  // The learner's Stop: the scheduler stops, and the notes it already started stop with it (a 4-second pad no
+  // longer rings on for seconds; review:surfaces). Only when this editor was playing, so a Stop on a silent
+  // editor never cuts another source's tail; the master ducks for 40 ms, so the cut does not click.
+  function stopAndCut(): void {
+    const wasPlaying = playing;
+    mirror.repl.scheduler.stop();
+    const active = rt.coordinator.get().activeId;
+    if (wasPlaying && !rt.disposed() && (active === null || active === opts.id)) rt.coordinator.panic();
+  }
+
   const handle: InternalEditor = {
     id: opts.id,
     view,
@@ -540,11 +566,11 @@ export function createEditor(rt: Runtime, root: HTMLElement, opts: EditorOptions
     evaluate,
     play: () => evaluate({ autostart: true }),
     stop() {
-      if (!disposed) mirror.repl.scheduler.stop();
+      if (!disposed) stopAndCut();
     },
     async toggle() {
       if (disposed) return;
-      if (mirror.repl.scheduler.started) mirror.repl.scheduler.stop();
+      if (mirror.repl.scheduler.started) stopAndCut();
       else await evaluate({ autostart: true });
     },
     setDiagnostics(diagnostics) {

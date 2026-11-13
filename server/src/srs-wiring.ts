@@ -29,6 +29,7 @@ import type { FamilyStateRow } from "./db/repos/srs.ts";
 import { badRequest, notFound } from "./errors.ts";
 import { dayStartInstant } from "./lib/days.ts";
 import { type Clock, newId } from "./services/context.ts";
+import { openFamilyLevels } from "./services/family-levels.ts";
 import type { Services } from "./services/index.ts";
 import { evidenceWeight } from "./services/mastery.ts";
 import type { DrillSessionCreate, SessionPlannerPort, SrsPort, StepReviewInput } from "./services/ports.ts";
@@ -90,24 +91,15 @@ export class CatalogAdapter implements SrsCatalogPort {
     return this.content.family(id);
   }
   /**
-   * Contracts §7.3 "Level and category gates": a category is open when its lesson is completed; a level
-   * opens at its gate (one of its gate lessons completed) and needs at least one open category.
+   * Contracts §7.3 "Level and category gates": a category is open when its lesson is completed; a level opens at
+   * its gate (every gate lesson completed) and needs at least one of the categories it adds open; a family is
+   * promoted past a level only when every category of that level is open. The rule is the engine's own
+   * (`maxOpenLevel` in @oak/drills), so the server never plays a level whose new material is still closed.
    */
   levelLimits(id: FamilyId): { maxOpenLevel: number; topLevel: number; openCategories: string[] } {
     const def = this.content.family(id);
     if (def === null) return { maxOpenLevel: 1, topLevel: 1, openCategories: [] };
-    const open = def.categories.filter((c) => this.#done(c.unlockAt)).map((c) => c.id);
-    const openSet = new Set(open);
-    let max = 1;
-    for (let level = 2; level <= def.levels.length; level++) {
-      const gate = def.unlock.levelGates?.[level];
-      const gateOk =
-        gate === undefined || (Array.isArray(gate) ? gate.some((l) => this.#done(l)) : this.#done(gate));
-      const cats = (def.levels[level - 1] as { categories?: string[] } | undefined)?.categories ?? [];
-      if (!gateOk || (cats.length > 0 && !cats.some((c) => openSet.has(c)))) break;
-      max = level;
-    }
-    return { maxOpenLevel: max, topLevel: def.levels.length, openCategories: open };
+    return openFamilyLevels(def, (l) => this.#done(l));
   }
   fact(cardId: string): { fastRtMs: number; skills: SkillId[] } | null {
     const f = this.content.fact(cardId);
@@ -821,6 +813,12 @@ export class CourseAdapter implements SessionPlanCoursePort {
         unwritten = true;
         continue;
       }
+      // Wave 5: a transcription capstone whose songs are not written yet (X2 before St. Louis Blues or Careless
+      // Love exists) is not offered either: its sessions have nothing to transcribe.
+      if (this.#songsMissing(id)) {
+        unwritten = true;
+        continue;
+      }
       if (this.content.checkpointMeta(id) !== null && this.#unitEndedOn(id) === today) {
         this.#pause = `${this.#title(id)} is ready tomorrow. Today: a review, then Studio.`;
         return null;
@@ -828,7 +826,7 @@ export class CourseAdapter implements SessionPlanCoursePort {
       return { id: id as SessionId, kind: this.#kind(id), title: this.#title(id) };
     }
     const track = g.nextMapItem();
-    if (track !== null && !isTranscriptionSlot(track)) {
+    if (track !== null && !isTranscriptionSlot(track) && !this.#songsMissing(track)) {
       if (this.content.lessonSite(track) === null || this.content.lessonDef(track) !== null)
         return { id: track, kind: this.#kind(track), title: this.#title(track) };
       unwritten = true;
@@ -837,6 +835,15 @@ export class CourseAdapter implements SessionPlanCoursePort {
     return null;
   }
   #pause: string | null = null;
+  /** A session of a transcribe capstone none of whose songs has an answer key yet. */
+  #songsMissing(id: string): boolean {
+    const m = /^(.+)\.S\d+$/.exec(id);
+    if (m === null || id.startsWith("GYM.")) return false;
+    const def = this.content.capstoneDef(m[1] as string);
+    if (def === null || def.kind !== "transcribe") return false;
+    const songs = (def as { song?: readonly string[] }).song ?? [];
+    return songs.length > 0 && !songs.some((sid) => this.content.source.songs.some((x) => x.id === sid));
+  }
   /** Why `next()` had nothing to offer although the course is not finished, or `null`. */
   pause(): string | null {
     return this.#pause;
@@ -907,10 +914,17 @@ export class CourseAdapter implements SessionPlanCoursePort {
     const def = this.content.lessonDef(id);
     return def === null ? 0 : lessonBudget(def).scaledMinutes;
   }
+  /** Wave 5: the side lesson Today offers beside the plan (`services/side-lessons.ts`). */
+  sideLesson(
+    plan: Pick<SessionPlan, "kind" | "returning" | "day" | "targetMinutes">,
+  ): SessionPlan["sideLesson"] {
+    return this.services.sideLessons.offer(plan);
+  }
+  /** The last core lesson completed (a Light lesson replays its Make; a side lesson never stands in for it). */
   lastCompletedLesson(): LessonId | null {
     const done = this.repos.lessons
       .allProgress()
-      .filter((p) => p.status === "completed")
+      .filter((p) => p.status === "completed" && this.content.lessonSite(p.lessonId)?.meta.side !== true)
       .sort((a, b) => (a.completedAt ?? "").localeCompare(b.completedAt ?? ""));
     return done.at(-1)?.lessonId ?? null;
   }

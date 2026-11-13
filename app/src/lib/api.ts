@@ -2,6 +2,7 @@
 // the tutor stream build on. Same origin: the Vite proxy in dev, the Oak server in production.
 import {
   type CallOptions,
+  type ConfirmAction,
   type ConfirmEndpointName,
   createClient,
   type EndpointInput,
@@ -57,4 +58,21 @@ export async function callDestructive<N extends ConfirmEndpointName>(
 /** URL of a media or download endpoint (`<audio src>`, backup export). */
 export function apiUrl<N extends JsonEndpointName>(name: N, input?: EndpointInput<N>): string {
   return (client.url as unknown as (n: string, i?: unknown) => string)(name, input);
+}
+
+/**
+ * Wave 5 (docs/design/wave5.md §4.1; carry-over c11): a call that replaces something only sometimes
+ * (`EndpointDef.confirmIf`, re-recording an album version). The caller's own dialog has already asked the learner
+ * ("Replace the earlier recording?"); this fetches the single-use nonce for `(action, target)` and sends it.
+ */
+export async function callConfirmed<N extends JsonEndpointName>(
+  name: N,
+  action: ConfirmAction,
+  target: string,
+  input?: EndpointInput<N>,
+): Promise<EndpointOutput<N>> {
+  const nonce = await client.confirm(action, target);
+  return (client.call as unknown as LooseCall)(name, input, { confirmNonce: nonce.nonce }) as Promise<
+    EndpointOutput<N>
+  >;
 }

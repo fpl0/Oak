@@ -5,6 +5,7 @@ import type {
   AlbumTrack,
   AlbumTrackDetail,
   CanDoEntry,
+  GymPlan,
   NextUnlock,
   SessionPlan,
   SessionSummary,
@@ -12,6 +13,7 @@ import type {
   Unlock,
 } from "@oak/api";
 import type { CanDoDef, ToolEntry } from "@oak/content-kit";
+import { levelName } from "./gym-day.ts";
 import type { BlockReport } from "./types.ts";
 
 export interface CanDoChange {
@@ -135,10 +137,31 @@ export function goalGradient(n: Pick<NextUnlock, "remaining" | "remainingKind">,
 export function tomorrowLine(
   summary: Pick<SessionSummary, "teaser"> | null,
   next: { id: string; title: string } | null,
+  /** A transcription slot that comes first (`gymNextLabel`): the next lesson waits one day behind it. */
+  gym: string | null = null,
 ): string | null {
   if (summary?.teaser) return `Next time: ${summary.teaser.title}`;
+  if (gym) return next ? `Next time: ${gym}. Then ${next.title}` : `Next time: ${gym}`;
   if (next) return `Next time: ${next.title}`;
   return null;
+}
+
+/**
+ * The transcription slot the next session holds (contracts §2.5), or null when none is due: "a Transcription Gym
+ * session (ladder level 6: blues)". A capstone already under way keeps its slot, so the gym never names itself
+ * in front of a capstone's later session.
+ */
+export function gymNextLabel(
+  gym: Pick<GymPlan, "active" | "slotDue" | "next"> | null | undefined,
+  nextId: string | null,
+): string | null {
+  if (!gym?.active || !gym.slotDue || !gym.next) return null;
+  const m = nextId ? /^[A-Z][A-Z0-9-]*\.S(\d+)$/.exec(nextId) : null;
+  if (m && Number(m[1]) > 1) return null;
+  const n = gym.next;
+  if (n.kind === "own-audio") return "a Transcription Gym session on your own audio";
+  const level = n.ladderLevel ?? 1;
+  return `a Transcription Gym session (ladder level ${level}: ${levelName(level)})`;
 }
 
 /** Whether the Coda asks for the listening note by itself (contracts §10.10). */
@@ -204,13 +227,24 @@ export function usedOnRelease(
   limit = 12,
 ): { theory: string[]; tools: { id: string; label: string; mono: boolean }[] } {
   const seen = new Set<string>();
+  const labels = new Set<string>();
   const out: { id: string; label: string; mono: boolean }[] = [];
   for (const t of tools) {
-    if (seen.has(t.id)) continue;
+    if (seen.has(t.id) || labels.has(t.label)) continue;
     seen.add(t.id);
+    labels.add(t.label);
     out.push(t);
   }
   return { theory: [...new Set(theoryTags)].slice(0, limit), tools: out.slice(0, limit) };
+}
+
+/**
+ * A code tool's shape without the catalog's example arguments: `.scale("C4:major")` → `.scale()`, `n("-1 0 7")` →
+ * `n()`. A release names the tools it uses; the catalog's example key or notes are not the piece's (a minor ballad
+ * never reads as "C4:major").
+ */
+export function codeShape(label: string): string {
+  return label.replace(/\((?:[^()]|\([^()]*\))*\)/g, "()");
 }
 
 const BASIC_TOOL = /^tb\.(mini\.|label$|setcpm$|s$|s\.pitched$|note$|gain$)/;
@@ -253,4 +287,76 @@ export function releaseTools<
   const fresh = picked.filter((t) => rank(t) > prev);
   const rest = picked.filter((t) => rank(t) <= prev);
   return [...fresh, ...rest].slice(0, limit);
+}
+
+// --- Wave 5: what a release opens next on the album (C3, C4, C5, X2) ----------------------------------------------
+
+export interface CapstoneMetaLike {
+  id: string;
+  title: string;
+  objective: string;
+  opensAfter: { checkpoints?: readonly string[]; capstones?: readonly string[]; lessons?: readonly string[] };
+}
+
+export interface AlbumNext {
+  capstoneId: string;
+  title: string;
+  open: boolean;
+  /** One line: what the next track is and when it opens. */
+  line: string;
+}
+
+/** Core album capstones (C0…C9, X1, X2) in default order, by their first session. */
+function albumOrder<T extends { id: string }>(metas: readonly T[], order: readonly string[]): T[] {
+  const at = (c: T) => {
+    const i = order.indexOf(`${c.id}.S1`);
+    return i < 0 ? Number.POSITIVE_INFINITY : i;
+  };
+  return metas
+    .filter((c) => /^(C|X)\d+$/.test(c.id) && at(c) < Number.POSITIVE_INFINITY)
+    .sort((a, b) => at(a) - at(b));
+}
+
+const sentence = (s: string) => (/[.!?]$/.test(s.trim()) ? s.trim() : `${s.trim()}.`);
+
+/**
+ * The album's next track after a release: open now ("It is open now … Today plans it next.") or what opens it
+ * ("It opens with U10.CP Minor checkpoint."). `null` at the end of the core album. X1 after C2 keeps its own lines
+ * (the gym gate), so C2 is answered here only when X1 is plainly open or locked behind a checkpoint.
+ */
+export function albumNext(
+  capstoneId: string,
+  metas: readonly CapstoneMetaLike[],
+  order: readonly string[],
+  status: (id: string) => "locked" | "open" | "in_progress" | "released" | null,
+  titleOf: (id: string) => string,
+): AlbumNext | null {
+  const list = albumOrder(metas, order);
+  const i = list.findIndex((c) => c.id === capstoneId);
+  if (i < 0) return null;
+  const next = list.slice(i + 1).find((c) => status(c.id) !== "released");
+  if (!next) return null;
+  const st = status(next.id);
+  const open = st === "open" || st === "in_progress";
+  const what = sentence(next.objective);
+  if (open)
+    return {
+      capstoneId: next.id,
+      title: next.title,
+      open,
+      line: `It is open now. ${what} Today plans it next.`,
+    };
+  const gates = [
+    ...(next.opensAfter.checkpoints ?? []).map((g) => titleOf(g)),
+    ...(next.opensAfter.lessons ?? []).map((g) => titleOf(g)),
+    ...(next.opensAfter.capstones ?? []).filter((g) => status(g) !== "released").map((g) => titleOf(g)),
+  ];
+  const when = gates.length > 0 ? `It opens after ${gates.join(" and ")}.` : "It opens later in the course.";
+  return { capstoneId: next.id, title: next.title, open, line: `${what} ${when}` };
+}
+
+/** "Your album now holds 7 tracks." */
+export function albumCountLine(tracks: number): string | null {
+  if (tracks <= 0) return null;
+  return tracks === 1 ? "Your album now holds its first track." : `Your album now holds ${tracks} tracks.`;
 }
