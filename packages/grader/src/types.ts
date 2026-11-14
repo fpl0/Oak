@@ -65,6 +65,13 @@ export interface OakEvent {
   chord: string | null;
   /** `hap.context.scale` ("C4 major") when the pitch came through `.scale()`. */
   scale: string | null;
+  /**
+   * The note was moved to another pitch class after `voicing()` / `rootNotes()` (`.note()`, `.transpose()`):
+   * `chord` no longer names what sounds, and `normalize` drops the symbol of its whole chord.
+   */
+  chordStale?: true;
+  /** Corrections pass: the voicing dictionary in force when `voicing()` voiced this note (`NEvent.voicedWith`). */
+  voicedWith?: string;
   /** Wave 5. The sound controls the hap sets (`SOUND_CONTROL_KEYS`), when it sets any (`NEvent.controls`). */
   controls?: Record<string, number | string>;
   /**
@@ -268,8 +275,9 @@ export interface GradeContext {
   /**
    * Wave 6 (CF-T.S4): the sections of the song a transcription capstone arranges, in order, each with its length
    * in bars (`SongDef.answerKey.sections`; `songFormOf`). The `form` rule's `@song` pattern compares with it.
+   * Corrections pass: `chords`, the song's lead-sheet symbols bar by bar, for the `song-kept` rule.
    */
-  songForm?: readonly { label: string; bars: number }[];
+  songForm?: readonly { label: string; bars: number; chords?: readonly (readonly string[])[] }[];
 }
 
 export interface GradeRequest {

@@ -32,6 +32,7 @@ import {
   keyFromScaleCtx,
   METERS,
   outsideChordKind,
+  parseChordSymbol,
   parseRN,
   pcOf,
   pivotChords,
@@ -49,7 +50,7 @@ import { locAt, mod12, modeOf, pitched } from "../analyze/events.ts";
 import { velocityGhosts } from "../analyze/groove.ts";
 import { keyOf } from "../analyze/key.ts";
 import { chordKeys, keyChangesByBar, keysByBar } from "../analyze/key-plan.ts";
-import { isStrong, melodyLine, type Note } from "../analyze/melody.ts";
+import { barChordAt, isStrong, melodyLine, type Note } from "../analyze/melody.ts";
 import { sectionsFromAst } from "../analyze/sections.ts";
 import { straightenSwungLines } from "../analyze/swing.ts";
 import { loopPassBars, selectTrack, tracksOfRole } from "../analyze/tracks.ts";
@@ -258,8 +259,17 @@ function tryMode(
         ? `its colour note ${toneText} is on a strong beat ${strongChar === 0 ? "0 times" : times(strongChar)}; put it on beat 1 or 3 at least twice`
         : `its colour tone is on a strong beat ${strongChar}× (at least 2)`,
     );
-  const home = homeShare(n, ctx, tonicPc);
-  if (home !== null && home.share < 0.4)
+  const home = homeShare(n, ctx, tonicPc, isMinorish(mode) ? 3 : 4);
+  // Corrections pass: the home chord carries the mode's own 3rd (D Dorian's is D minor, G Mixolydian's G major).
+  if (home?.wrongThird) {
+    const third = isMinorish(mode) ? 3 : 4;
+    const at = locAt(rat(home.wrongThird.bar), ctx);
+    where ??= at;
+    problems.push(
+      `the home chord in ${barWord(at.bar ?? 0)} is ${home.wrongThird.name}, with ${pcWord(tonicPc + 7 - third, key)}; ${name}'s home chord is ${third === 3 ? "minor" : "major"}, with ${pcWord(tonicPc + third, key)} as its 3rd`,
+    );
+  }
+  if (home !== null && home.share < 0.4 && !home.wrongThird)
     problems.push(
       `the ${noteWord(tonic)} ${home.what} is in ${pct(home.share)} of the bars; the home chord needs at least 40%`,
     );
@@ -274,7 +284,8 @@ function homeShare(
   n: Normalized,
   ctx: RubricContext,
   tonicPc: number,
-): { share: number; what: string } | null {
+  third?: 3 | 4,
+): { share: number; what: string; wrongThird?: { bar: number; name: string } } | null {
   const reach = n.all.reduce((m, e) => Math.max(m, R.floor(e.onset) + 1), 0);
   // An arranged piece is as long as its `arrange()` total, not the window the grader queried (an eight-bar vamp
   // graded over sixteen bars is home in 4 of its 8 bars, not 4 of 16).
@@ -284,9 +295,30 @@ function homeShare(
     n.all.filter((e) => e.chordSymbol !== undefined).length > 0 || tracksOfRole(n, "chords").length > 0;
   if (chordEvents) {
     const slots = pieceSlots(n);
-    const perBar = Array.from({ length: bars }, (_, b) => slotAt(slots, rat(b))?.chord ?? null);
+    // The chord of a bar: the one sounding on beat 1, else the bar's own (chords pushed with `.early()` or
+    // comped off the beat leave beat 1 empty).
+    const perBar = Array.from(
+      { length: bars },
+      (_, b) => slotAt(slots, rat(b))?.chord ?? barChordAt(slots, rat(b))?.chord ?? null,
+    );
     if (perBar.some((c) => c)) {
-      return { share: perBar.filter((c) => c && c.rootPc === tonicPc).length / bars, what: "chord" };
+      // A chord on the tonic with the other 3rd is not this mode's home chord (D major under D Dorian).
+      const thirdOf = (c: ChordId): number | null => {
+        const q = triadCore(c).quality;
+        return q === "maj" || q === "aug" ? 4 : q === "min" || q === "dim" ? 3 : null;
+      };
+      const wrong = third
+        ? perBar.findIndex((c) => !!c && c.rootPc === tonicPc && thirdOf(c) !== null && thirdOf(c) !== third)
+        : -1;
+      const isHome = (c: ChordId | null): boolean =>
+        !!c && c.rootPc === tonicPc && (!third || thirdOf(c) === null || thirdOf(c) === third);
+      return {
+        share: perBar.filter(isHome).length / bars,
+        what: "chord",
+        ...(wrong >= 0
+          ? { wrongThird: { bar: wrong, name: toLeadSheet(rootPos(perBar[wrong] as ChordId)) } }
+          : {}),
+      };
     }
   }
   const bass = pitched(tracksOfRole(n, "bass").flatMap((t) => n.byTrack[t] ?? []));
@@ -475,10 +507,23 @@ function containsRun(r: RuleOf<"contains-rn">, chords: readonly ChordRead[], ctx
   let count = 0;
   let best = { len: 0, at: -1 };
   let unresolved: ChordRead | null = null;
+  // Corrections gate (AS-26): a numeral written with a 7 ("V7/ii") asks for the seventh chord itself; contains-rn
+  // otherwise compares the triad core (decision 68), so plain A D G would pass a chain of dominant sevenths.
+  const wantsSeventh = r.rn.map((x) => /^[b#♭♯]?[ivIV]+(?:°|ø|\+)?7/.test(x));
+  const hasSeventh = (c: ChordId): boolean => /7|9|11|13/.test(c.quality) && c.quality !== "add9";
+  let triadOnly: { at: ChordRead; rn: string } | null = null;
+  const fits = (c: ChordRead, want: ChordId | null | undefined, k: number): boolean => {
+    if (!coreEq(c.chord, want ?? null)) return false;
+    if (wantsSeventh[k] && !hasSeventh(c.chord)) {
+      triadOnly ??= { at: c, rn: r.rn[k] as string };
+      return false;
+    }
+    return true;
+  };
   for (let i = 0; i < chords.length; i++) {
     const want = wantAt(i);
     let k = 0;
-    while (k < len && i + k < chords.length && coreEq((chords[i + k] as ChordRead).chord, want[k])) k++;
+    while (k < len && i + k < chords.length && fits(chords[i + k] as ChordRead, want[k], k)) k++;
     if (k > best.len) best = { len: k, at: i };
     if (k < len) continue;
     const last = chords[i + len - 1] as ChordRead;
@@ -503,9 +548,16 @@ function containsRun(r: RuleOf<"contains-rn">, chords: readonly ChordRead[], ctx
   }
   let detail: string;
   let whereAt: ChordRead | null = null;
+  const t = triadOnly as { at: ChordRead; rn: string } | null;
   if (unresolved) {
     detail = unresolvedText(unresolved);
     whereAt = unresolved;
+  } else if (t && count === 0) {
+    detail = `${plainText(t.at.chord, t.at.key)} in ${barWord(t.at.bar)} is a plain triad: ${rnShown(t.rn, t.at.key)} is a seventh chord${(() => {
+      const pr = parseRN(t.rn, t.at.key);
+      return pr ? `, ${toLeadSheet(rootPos(rnToChord(pr, t.at.key)))}` : "";
+    })()}. Add its 7th`;
+    whereAt = t.at;
   } else if (count > 0) detail = `${run} ${times(count)}; the brief asks for ${r.min}`;
   else if (best.len === 0) {
     const want = wantAt(0)[0];
@@ -621,12 +673,26 @@ const cap = (s: string): string => `${s.charAt(0).toUpperCase()}${s.slice(1)}`;
 
 /** The notes of the line a guide-tone rule judges, each with the chord it is judged against. */
 function judgedNotes(
-  at: "change" | "strong" | "all",
+  at: "change" | "strong" | "all" | "bar",
   line: readonly Note[],
   slots: readonly ChordSlot[],
   ctx: RubricContext,
 ): { note: Note | null; chord: ChordId; at: Rat }[] {
   const chordAt = (t: Rat): ChordId | null => slotAt(slots, t)?.chord ?? null;
+  const sounding = (t: Rat): Note | null =>
+    [...line].reverse().find((x) => R.lte(x.onset, t) && R.lt(t, R.add(x.onset, x.dur))) ?? null;
+  if (at === "bar") {
+    // Corrections pass: beat 1 of every bar, a repeated chord's bar included (U12.L05 "starts each bar").
+    const reach = slots.reduce((m, s) => Math.max(m, Math.ceil(s.span[1][0] / s.span[1][1])), 0);
+    const bars = Math.max(0, Math.min(ctx.totalBars ?? ctx.bars ?? reach, ctx.bars ?? reach, reach));
+    const out: { note: Note | null; chord: ChordId; at: Rat }[] = [];
+    for (let b = 0; b < bars; b++) {
+      const t = rat(b);
+      const chord = chordAt(t) ?? barChordAt(slots, t)?.chord ?? null;
+      if (chord) out.push({ note: sounding(t), chord, at: t });
+    }
+    return out;
+  }
   if (at === "change") {
     const out: { note: Note | null; chord: ChordId; at: Rat }[] = [];
     let prev: ChordId | null = null;
@@ -678,10 +744,54 @@ const memberWord = (midi: number, chord: ChordId): string => {
             : "not in the chord";
 };
 /** `guide-tones` with `at` or `maxMoveSemis`. */
+/**
+ * The given cycle as chord slots, one bar each, looped over the piece (`guide-tones.changes`, corrections gate): the
+ * line is judged against the changes the step gives, so a cycle rewritten under the tune cannot carry it.
+ */
+function givenChanges(
+  changes: readonly string[],
+  line: readonly Note[],
+  n: Normalized,
+  ctx: RubricContext,
+): ChordSlot[] {
+  const reach = Math.max(
+    n.all.reduce((m, e) => Math.max(m, R.floor(e.onset) + 1), 0),
+    line.reduce((m, x) => Math.max(m, R.floor(x.onset) + 1), 0),
+  );
+  const bars = Math.max(1, Math.min(ctx.bars ?? reach, reach || 1));
+  const out: ChordSlot[] = [];
+  for (let b = 0; b < bars; b++) {
+    const chord = parseChordSymbol(changes[b % changes.length] as string);
+    if (chord) out.push({ span: [rat(b), rat(b + 1)], chord, midis: [], ids: [] });
+  }
+  return out;
+}
 export function guideTonesWave6(r: RuleOf<"guide-tones">, n: Normalized, ctx: RubricContext): RuleEval {
   const line = melodyLine(selectTrack(n, r.track));
-  const slots = pieceSlots(n, r.harmony, { exclude: r.track });
-  const judged = judgedNotes(r.at ?? "change", line, slots, ctx);
+  const slots = r.changes
+    ? givenChanges(r.changes, line, n, ctx)
+    : pieceSlots(n, r.harmony, { exclude: r.track });
+  // With the given changes, every bar the line plays is judged: a one-bar chords loop does not shorten the piece.
+  const lineEvents = selectTrack(n, r.track);
+  const lineReach = lineEvents.reduce((m, e) => Math.max(m, R.floor(e.onset) + 1), 0);
+  const judged = judgedNotes(
+    r.at ?? "change",
+    line,
+    slots,
+    r.changes
+      ? {
+          ...ctx,
+          // One pass of the line, and at least once round the given cycle.
+          totalBars: Math.min(
+            Math.max(1, ctx.bars ?? lineReach, lineReach),
+            Math.max(
+              r.changes.length,
+              loopPassBars(lineEvents, Math.max(1, Math.min(ctx.bars ?? lineReach, lineReach || 1))),
+            ),
+          ),
+        }
+      : ctx,
+  );
   if (judged.length === 0)
     return {
       ok: false,
@@ -712,7 +822,13 @@ export function guideTonesWave6(r: RuleOf<"guide-tones">, n: Normalized, ctx: Ru
   const ok = ratio >= r.minRatio - 1e-9 && !leap;
   const whereOf = (t: Rat) => locAt(t, ctx, { track: r.track.replace(/^@/, "") });
   const unit =
-    (r.at ?? "change") === "change" ? "chord changes" : r.at === "strong" ? "strong-beat notes" : "notes";
+    (r.at ?? "change") === "change"
+      ? "chord changes"
+      : r.at === "strong"
+        ? "strong-beat notes"
+        : r.at === "bar"
+          ? "bars"
+          : "notes";
   let detail = `${hit.length} of ${judged.length} ${unit} meet a 3rd or a 7th (${pct(ratio)})`;
   let where: RuleEval["where"];
   if (ratio < r.minRatio - 1e-9 && miss) {
@@ -748,6 +864,22 @@ const sameTonality = (a: KeySpec, b: KeySpec): boolean =>
 const isDominantOf = (c: ChordId, key: KeySpec): boolean =>
   mod12(c.rootPc - pcOf(key.tonic)) === 7 && triadCore(c).quality === "maj";
 const inKeyChord = (c: ChordId, key: KeySpec): boolean => chromaticChordKind(rootPos(c), key) === "diatonic";
+/**
+ * Corrections pass (fix:leftovers): a chord that arrives in `key` is its home chord, root AND 3rd: G or Gmaj7 in
+ * G major, Am in A minor (a sus chord, with no 3rd, still arrives). `D7 Gm` lands on G's root, in G minor.
+ */
+/** A dominant seventh (or its 9th, 13th, altered forms): G7 leans on to C, so in G it is no arrival (AS-29). */
+const DOMINANT_FAMILY: readonly string[] = ["7", "9", "11", "13", "7b9", "7#9", "7#11", "7b13", "7sus4"];
+const homeQualityText = (got: ChordId, key: KeySpec): string => {
+  const minor = isMinorish(key.mode);
+  if (DOMINANT_FAMILY.includes(got.quality))
+    return `a dominant seventh, which leans on to the next key down a 5th and does not arrive in ${keyDisplay(key)}: end on ${pcWord(pcOf(key.tonic), key)}${minor ? "m" : ""} itself, with no 7th`;
+  return `which is not the home chord of ${keyDisplay(key)}: that is ${pcWord(pcOf(key.tonic), key)}${minor ? "m" : ""}, ${minor ? "minor" : "major"}. Make the last chord ${pcWord(pcOf(key.tonic), key)}${minor ? "m" : ""}`;
+};
+const isHomeChordOf = (c: ChordId, key: KeySpec): boolean =>
+  c.rootPc === pcOf(key.tonic) &&
+  !(isMinorish(key.mode) ? ["maj", "aug"] : ["min", "dim"]).includes(triadCore(c).quality) &&
+  !DOMINANT_FAMILY.includes(c.quality);
 
 export function modulationRule(r: RuleOf<"modulation">, n: Normalized, ctx: RubricContext): RuleEval {
   const total = Math.max(1, pieceBars(n, ctx));
@@ -812,7 +944,45 @@ export function modulationRule(r: RuleOf<"modulation">, n: Normalized, ctx: Rubr
     };
   }
   const base = `moves to ${tName} at bar ${shownBar}`;
-  if (!r.via) return { ok: true, detail: base };
+  // Corrections pass (`cadence`): the chords arrive too: from the change on, the new key's V goes to its I or i.
+  if (r.cadence) {
+    const tonicPc = pcOf(target.tonic);
+    const after: ChordSlot[] = [];
+    for (const s of pieceSlots(n))
+      if (s.chord && R.floor(s.span[0]) >= changeBar && R.floor(s.span[0]) < total)
+        if (!coreEq(after[after.length - 1]?.chord, s.chord)) after.push(s);
+    const arrives = after.some((s, i) => {
+      const next = after[i + 1]?.chord;
+      return isDominantOf(s.chord as ChordId, target) && !!next && isHomeChordOf(next, target);
+    });
+    const wrongHome = after.find((s, i) => {
+      const next = after[i + 1]?.chord;
+      return (
+        isDominantOf(s.chord as ChordId, target) && next?.rootPc === tonicPc && !isHomeChordOf(next, target)
+      );
+    });
+    if (!arrives && wrongHome) {
+      const next = after[after.indexOf(wrongHome) + 1]?.chord as ChordId;
+      return {
+        ok: false,
+        value: 0,
+        detail: `the tune ${base}, but ${toLeadSheet(rootPos(wrongHome.chord as ChordId))} goes to ${toLeadSheet(rootPos(next))}, ${homeQualityText(next, target)}`,
+        where: { bar: R.floor(wrongHome.span[0]) + shift },
+      };
+    }
+    if (!arrives) {
+      const heard = [...new Set(after.map((s) => toLeadSheet(rootPos(s.chord as ChordId))))].slice(0, 6);
+      const v = pcWord(tonicPc + 7, target);
+      const i = keyDisplay({ tonic: target.tonic, mode: target.mode }).split(" ")[0] ?? target.tonic;
+      return {
+        ok: false,
+        value: 0,
+        detail: `the tune ${base}, but the chords do not: from bar ${shownBar} they are ${heard.join(", ") || "none"}, with no ${v} or ${v}7 going to ${i}${isMinorish(target.mode) ? "m" : ""}. Put the new key's V before its home chord`,
+        where: { bar: shownBar },
+      };
+    }
+  }
+  if (!r.via) return { ok: true, detail: r.cadence ? `${base}, and its V goes home there` : base };
   // The pivot: the last chord before the new key's first dominant, when both keys own it (U17.L01).
   const slots = pieceSlots(n).filter((s) => s.chord);
   const merged: ChordSlot[] = [];
@@ -825,9 +995,31 @@ export function modulationRule(r: RuleOf<"modulation">, n: Normalized, ctx: Rubr
       (!inKeyChord({ ...(s.chord as ChordId), ext: [] }, start) || /7/.test((s.chord as ChordId).quality)) &&
       (() => {
         const next = merged[i + 1]?.chord;
-        return !next || next.rootPc === pcOf(target.tonic);
+        return !next || isHomeChordOf(next, target);
       })(),
   );
+  // The new key's V goes to the right root with the wrong 3rd (`D7 Gm` for G major): say so.
+  if (domAt < 0 && r.via === "pivot") {
+    const w = merged.findIndex((s, i) => {
+      const next = merged[i + 1]?.chord;
+      return (
+        R.floor(s.span[0]) >= changeBar - 2 &&
+        R.floor(s.span[0]) <= changeBar &&
+        isDominantOf(s.chord as ChordId, target) &&
+        !!next &&
+        next.rootPc === pcOf(target.tonic) &&
+        !isHomeChordOf(next, target)
+      );
+    });
+    if (w >= 0) {
+      const next = merged[w + 1]?.chord as ChordId;
+      return {
+        ok: false,
+        detail: `${base}, but ${toLeadSheet(rootPos(merged[w]?.chord as ChordId))} goes to ${toLeadSheet(rootPos(next))}, ${homeQualityText(next, target)}`,
+        where: { bar: R.floor((merged[w] as ChordSlot).span[0]) + shift },
+      };
+    }
+  }
   const dominant = domAt >= 0 ? (merged[domAt] as ChordSlot) : null;
   const before = dominant && domAt > 0 ? (merged[domAt - 1] as ChordSlot) : null;
   const shared = pivotChords(
@@ -936,7 +1128,19 @@ export function velocityGhostsRule(
   const okAccents = accents.length >= needAccents;
   const parts: string[] = [];
   if (!okGhosts) {
-    if (quietAnywhere.length === 0)
+    // Corrections gate (now-fails A.3): quiet hits on another drum of the same line (`rim`) are not this drum's
+    // ghost notes; say so rather than "every hit is at the same strength".
+    const others = r.drum
+      ? velocityGhosts(
+          selectTrack(n, r.track).filter((e) => e.drum !== r.drum),
+          { meter: ctx.meter, maxGain, on: "any" },
+        )
+      : [];
+    if (quietAnywhere.length === 0 && others.length > 0)
+      parts.push(
+        `your quiet hits are on \`${others[0]?.s ?? "another drum"}\`, not the ${DRUM_WORDS[r.drum as string] ?? r.drum}: ghost notes here are ${what}s played softly, such as \`sd\` with \`.velocity()\` values of .4 or less (${ghosts.length} ghost notes${where16}; at least ${r.min})`,
+      );
+    else if (quietAnywhere.length === 0)
       parts.push(
         `every ${what} is at the same strength: give the small ones \`.velocity()\` values of .4 or less (${ghosts.length} ghost notes${where16}; at least ${r.min})`,
       );

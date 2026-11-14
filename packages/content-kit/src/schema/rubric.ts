@@ -48,13 +48,30 @@ export type RubricRuleBody =
    * in the rule's key ("ends on 1 over i", C4). Default: any chord.
    */
   | { rule: "ends-on-degree"; degrees: Degree[]; track: TrackRef; over?: string }
-  | { rule: "cadence"; types: CadenceType[]; at: "last" | "phrase-ends" | { bar: number } }
+  /**
+   * The chord the cadence lands on must still sound in the bar it is asked for (`at`). Corrections pass (feature
+   * `cadence.before`): `before` names the chord that must come just before the last one, as numerals read in the
+   * piece's key and compared on the triad core (`["V"]`: V → I only, so vii° → I, an IAC, does not count; V7 is
+   * V). Default: any chord the cadence type allows.
+   */
+  | {
+      rule: "cadence";
+      types: CadenceType[];
+      at: "last" | "phrase-ends" | { bar: number };
+      before?: string[];
+    }
   | {
       rule: "chord-tones-strong";
       minRatio: number;
       melody: TrackRef;
       harmony: TrackRef;
       strength: "downbeat" | "strong" | "beat";
+      /**
+       * Corrections pass (feature `chord-tones-strong.cover`): every position of `strength` under a chord must
+       * have a note of `melody` sounding there (starting there, or held into it); an empty one counts as a miss
+       * ("on beat 1 of every bar, a note of that bar's chord"). Default: only the notes that are there count.
+       */
+      cover?: boolean;
     }
   /**
    * `bars` (Wave 4): only bars `[from, to]` (1-based, inclusive) are compared, so "bars 1–6 are the loop"
@@ -135,6 +152,11 @@ export type RubricRuleBody =
       commonTones?: boolean;
       noCrossing?: boolean;
       bassFree?: boolean;
+      /**
+       * Corrections pass (feature `voice-leading.loop`): the progression repeats, so the move from its last chord
+       * back to its first is judged like every other change (one pass of the track's loop is read).
+       */
+      loop?: boolean;
     }
   /**
    * A guide-tone line (U12.L05, J1.L04, JC1): the share of the chord changes of `harmony` at which `track`
@@ -148,8 +170,19 @@ export type RubricRuleBody =
       track: TrackRef;
       harmony: TrackRef;
       minRatio: number;
-      at?: "change" | "strong" | "all";
+      /**
+       * Corrections pass (feature `guide-tones.bar`): `bar` judges the note sounding on beat 1 of every bar of the
+       * piece, a bar whose chord repeats included, against that bar's chord ("starts each bar on the chord's 3rd or
+       * 7th"); a rest there is a miss.
+       */
+      at?: "change" | "strong" | "all" | "bar";
       maxMoveSemis?: number;
+      /**
+       * Corrections gate (feature `guide-tones.changes`): the chord symbols of the given cycle, one a bar, looped.
+       * The line is judged against them, whatever the `harmony` line plays, so rewriting the cycle under the tune
+       * cannot make a wrong tune right (U12.L05: "the eight-bar cycle plays; write the tune over it").
+       */
+      changes?: string[];
     }
   /**
    * Kept, for pivot modulations (U17.L01). Lifts use `key-change`. The piece ends in the key `to` names,
@@ -162,6 +195,12 @@ export type RubricRuleBody =
       to: "up-step" | "up-half" | "relative" | "dominant" | KeySpec;
       atBar?: number;
       via?: "pivot" | "direct";
+      /**
+       * Corrections pass (feature `modulation.cadence`): the chords also arrive in the new key: from the bar the
+       * key changes on, the new key's V (a major triad or a dominant 7th on its 5th) goes to its I or i. A key
+       * plan in the scales over chords that still cadence in the old key is no modulation of the harmony.
+       */
+      cadence?: boolean;
     }
   /**
    * The piece is in `mode` on `tonic` (contracts §6.6 C6): none of its notes is the degree the mode replaces
@@ -211,6 +250,14 @@ export type RubricRuleBody =
       minRatio: number;
       unitBars?: number;
       shape?: "semitones" | "steps" | "either";
+      /**
+       * Corrections pass (feature `motif-reuse.loop-repeats`): read the line over every bar queried, not over one
+       * pass of its loop, so a bar written again unchanged counts as a return ("bring bar 1 back: the same, or
+       * moved"). A one-bar loop then also passes: use it only where the brief allows plain repetition.
+       * A number N (fix:leftovers) reads one pass as at least N bars, so a two-bar hook played twice in a
+       * four-bar loop (`<A B A B>`) returns, while a one-bar loop (every bar the same) still fails.
+       */
+      loopRepeats?: boolean | number;
     }
   /**
    * pitch: mean melody pitch differs ≥ 3 st; density: onsets per bar differ ≥ 25%; harmony: RN sequences
@@ -249,7 +296,19 @@ export type RubricRuleBody =
       drum?: DrumRole;
       accents?: number;
     }
-  | { rule: "onsets"; track: TrackRef; drum?: DrumRole; contains?: Rat[]; equals?: Rat[]; perBar: boolean }
+  | {
+      rule: "onsets";
+      track: TrackRef;
+      drum?: DrumRole;
+      contains?: Rat[];
+      equals?: Rat[];
+      /**
+       * Corrections gate (feature `onsets.excludes`): none of these places may hold an onset (a backbeat has no
+       * snare on 1 and 3; "the snare marks beat 2" of 6/8 is not a snare on every eighth).
+       */
+      excludes?: Rat[];
+      perBar: boolean;
+    }
   /**
    * `anyOf` (Wave 5, feature `degree-set.any-of`): at least `minCount` (default 1) notes of the line fall on
    * any of these degrees ("♭3 or ♭5 at least twice", C5). `subsetOf`/`contains` keep their meaning.
@@ -263,7 +322,11 @@ export type RubricRuleBody =
       minCount?: number;
     }
   /** `contains`: every one listed; `anyOf` (Wave 4, U05.L08 "Rhodes or organ"): at least one of them. */
-  | { rule: "sounds"; subsetOf?: SoundId[]; contains?: SoundId[]; anyOf?: SoundId[] }
+  /**
+   * Corrections pass (feature `sounds.track`): `track` reads the sounds of that track only ("the octave line on a
+   * synth wave": `{ track: "vox", anyOf: [...] }`). Default: every learner track.
+   */
+  | { rule: "sounds"; subsetOf?: SoundId[]; contains?: SoundId[]; anyOf?: SoundId[]; track?: TrackRef }
   | { rule: "distinct-pitches"; track: TrackRef; min: number }
   /** Device names are `DEVICE_NAMES` (the grader's `detectDevices`; `AnalysisSummary.devices` lists them). */
   | { rule: "device-count"; devices: DeviceName[]; min: number }
@@ -274,7 +337,11 @@ export type RubricRuleBody =
    * at least one note, and the next bar starts on its downbeat. With `units`, the pickup (from its first
    * note to the bar line) is exactly that many tempo units long. Read on one period of the learner's loop.
    */
-  | { rule: "pickup"; track: TrackRef; units?: Rat }
+  /**
+   * Corrections pass (feature `pickup.leads-in`): `leadsIn` also asks that something of the pickup sounds in the
+   * last beat of bar 0, so it runs into bar 1 (`[~ ~ -3 ~]` stops a beat early and does not lead in).
+   */
+  | { rule: "pickup"; track: TrackRef; units?: Rat; leadsIn?: boolean }
   /**
    * Wave 4. Chord qualities in a chord track (U05 Makes): every chord (the notes that start together,
    * named from its pitch classes for hand-stacked notes and from its symbol for `chord()`) is read as a

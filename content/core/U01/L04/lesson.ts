@@ -366,8 +366,10 @@ export default defineLesson({
             label: "Splits a beat with `[ ]`",
             required: true,
             skills: ["R05"],
-            rule: "uses",
-            tool: "tb.mini.sub",
+            // The effect, not the brackets: `[hh hh hh hh]` over the whole bar is four quarter notes.
+            rule: "custom",
+            fn: "split-beat",
+            params: { alsoUses: ["tb.mini.sub"] },
           },
           {
             id: "backbeat",
@@ -414,6 +416,26 @@ export default defineLesson({
             response: { code: QUARTER_GROOVE },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            name: "brackets round the whole bar: four quarter notes, no beat split",
+            response: { code: groove("[hh hh hh hh]") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "a kick pushed off beat 2 with `[~ bd]`",
+            response: {
+              code: `${TEMPO}kick: s("bd [~ bd] ~ ~")\nsnare: s("~ sd ~ sd")\nhats: s("hh hh hh hh").gain(.5)`,
+            },
+            expect: "pass",
+          },
+          {
+            name: "an eighth-note fill on beat 4 of the snare",
+            response: {
+              code: `${TEMPO}kick: s("bd ~ bd ~")\nsnare: s("~ sd ~ [sd sd]")\nhats: s("hh hh hh hh").gain(.5)`,
+            },
+            expect: "pass",
           },
           {
             name: "eighths with a star, no brackets",

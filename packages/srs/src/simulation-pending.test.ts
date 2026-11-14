@@ -39,10 +39,10 @@ const runs: { t: 15 | 20 | 25; seed: string; s: SimSummary }[] = TARGETS.flatMap
 );
 console.log(
   [
-    "every deck: target seed | planned warm-up p95 s | active max | oldest undelivered p95 d | first-review wait max d (never) | review day p95 s",
+    "every deck: target seed | planned warm-up p95 s | active max | oldest undelivered p95 d | first-review wait max d (never) | review day p95 s: a little more (d22) / warm-up inside the cap",
     ...runs.map(
       ({ t, seed, s }) =>
-        `${t} ${seed} | ${Math.round(s.plannedSec.p95)} | ${s.maxActivePerceptual} | ${s.oldestUndeliveredDays.p95} | ${s.firstReviewWait.all.max} (${s.firstReviewWait.all.censored}) | ${Math.round(s.reviewDaySec.p95)}`,
+        `${t} ${seed} | ${Math.round(s.plannedSec.p95)} | ${s.maxActivePerceptual} | ${s.oldestUndeliveredDays.p95} | ${s.firstReviewWait.all.max} (${s.firstReviewWait.all.censored}) | ${Math.round(s.reviewMoreSec.p95)} / ${Math.round(s.reviewDaySec.p95)}`,
     ),
   ].join("\n"),
 );
@@ -59,7 +59,8 @@ describe("§7.4 with every fact deck in the catalog (the U05–U07 decks among t
       expect([t, seed, s.oldestUndeliveredDays.p95 <= SIM_GATE.p95OldestDueDays]).toEqual([t, seed, true]);
       expect([t, seed, s.firstReviewWait.all.max <= SIM_GATE.firstReviewWaitDays]).toEqual([t, seed, true]);
       expect([t, seed, s.firstReviewWait.all.censored]).toEqual([t, seed, 0]);
-      expect([t, seed, s.reviewDaySec.p95 <= SIM_GATE.p95ReviewDaySec]).toEqual([t, seed, true]);
+      // The review day as contracts 1.7 counts it: the "a little more" review only (d22).
+      expect([t, seed, s.reviewMoreSec.p95 <= SIM_GATE.p95ReviewDaySec]).toEqual([t, seed, true]);
     }
   });
 });

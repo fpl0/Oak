@@ -997,6 +997,9 @@ function X1Loaded({
               lint={{ profile: "graded", unlocked, allowPreview: false, meter: song.meter, key: song.key }}
               views={["roll", "staff"]}
               onChange={(c) => {
+                // A check reads `codeRef`: set it now, not at the next render. Under load a Check pressed in the
+                // frame after an edit graded the code before it (the CF-T session 1 race of the Wave 6 run).
+                codeRef.current = c;
                 setCode(c);
                 saver.changed(c);
                 source.current?.setMine(c);

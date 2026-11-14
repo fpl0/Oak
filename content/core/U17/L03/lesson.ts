@@ -11,8 +11,9 @@
 // key change, or the bar where the new key begins), seeded here; "how" is three fixed items, each a `choice`
 // among no key change, a pivot chord and a direct lift (the ids of `KEY_CHANGE_OPTIONS`). The sung step is
 // never graded and never gates; Quiet mode names the note instead. The Make's one required rule is
-// `modulation` to the relative minor: the piece's key plan ends in A minor. The starter's bridge only starts on
-// Am and stays in C, and fails.
+// `modulation` to the relative minor with `cadence`: the piece's key plan ends in A minor and, from the change
+// on, A minor's V goes to Am. The starter's bridge only starts on Am and stays in C, and fails; so does a key plan
+// in A minor over the starter's Am Dm G C (corrections pass: the plan alone used to pass).
 import {
   type Choice,
   defineLesson,
@@ -97,18 +98,18 @@ const howHints = (): HintLadder => [
     text: "If home has moved, listen to the bar before the first new note. A chord that fits both keys there is a door; no such bar means a lift.",
   },
   {
-    text: "Hear it again, slower. Sing the first note of the piece over the last bar, then find where the music turned.",
+    text: "Hear it again, slower. Sing the first bass note of the piece, the old do, over the last bar, then find where the music turned.",
     replay: { rate: 0.75 },
   },
   "auto",
 ];
-const howPart = (
-  id: string,
-  prompt: string,
-  stimulus: string,
-  answer: string,
-  wrong: string,
-): IdentifyEx => ({
+/**
+ * A wrong answer gets the three questions again, never the answer (contracts §5.3: rung 0 says where and what to
+ * listen for). The hint ladder narrows them, and the reveal gives the answer.
+ */
+const HOW_AGAIN =
+  "Not that one. Ask the three questions again: at the end, does the first bass note still sound like home? If not, in which bar did the first new note come in? And the bar before it: a chord both keys own, or nothing between the two keys?";
+const howPart = (id: string, prompt: string, stimulus: string, answer: string): IdentifyEx => ({
   kind: "identify",
   id,
   version: 1,
@@ -123,8 +124,8 @@ const howPart = (
   cue: { context: "none", countInBars: 1, click: false, replays: -1 },
   answer: { ui: "choice", options: HOW },
   correct: { choice: [answer] },
-  // The catalog's `id.wrong` names the option ids ("That was pivot, not none").
-  feedbackText: { "id.wrong": wrong },
+  // The catalog's `id.wrong` names the option ids and the answer ("That was pivot, not none").
+  feedbackText: { "id.wrong": HOW_AGAIN },
   tests: [
     { name: answer, response: { answer: { choice: [answer] } }, expect: "pass" },
     ...HOW.filter((o) => o.id !== answer).map((o) => ({
@@ -246,7 +247,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Two pieces, eight bars each. Hum the very first note of each, and keep it in your ear. When the piece ends, hum it again: does it still sound like home?",
+          "Two pieces, eight bars each. Hum the first bass note of each, C, the home note they start from, and keep it in your ear. When the piece ends, hum it again: does it still sound like home?",
         skills: [{ skill: "E13", w: 1 }],
         hints: null,
         tests: [],
@@ -425,27 +426,9 @@ export default defineLesson({
         tests: [],
         srs: [{ family: "fam.har.chromatic", mode: "review-if-due" }],
         parts: [
-          howPart(
-            "how-1",
-            "Piece 1.",
-            VISIT,
-            "none",
-            "Piece 1 has a chord from outside the key, D7 in bar 3, but it is a visit: the next bar is G and the phrase comes straight back to C, which is still home at the end. A move stays.",
-          ),
-          howPart(
-            "how-2",
-            "Piece 2.",
-            HOOK,
-            "pivot",
-            "Piece 2 moves to A minor, and it uses a door: bar 6 is Am, which C major owns as well, then E7 brings G♯ and the music stays in A minor. A lift would have no chord between the two keys.",
-          ),
-          howPart(
-            "how-3",
-            "Piece 3.",
-            HALF_LIFT,
-            "direct",
-            "Piece 3 changes key with nothing to prepare it: at bar 5 the same four bars start again a half step higher. No chord sits between the two keys, so it is direct.",
-          ),
+          howPart("how-1", "Piece 1.", VISIT, "none"),
+          howPart("how-2", "Piece 2.", HOOK, "pivot"),
+          howPart("how-3", "Piece 3.", HALF_LIFT, "direct"),
         ],
       },
     },
@@ -470,12 +453,13 @@ export default defineLesson({
         rubric: [
           {
             id: "bridge-in-a-minor",
-            label: "The bridge moves to A minor, the relative minor",
+            label: "The bridge moves to A minor, the relative minor: its V, then Am",
             required: true,
             // Writing the move practises H14; hearing your own bridge arrive somewhere else is this lesson's E13.
             skills: ["E13", "H14"],
             rule: "modulation",
             to: "relative",
+            cadence: true,
           },
           {
             // Read in the key in force: in the starter's bridge G→C is a V going home, so a numeral rule would be
@@ -538,6 +522,23 @@ export default defineLesson({
             response: { code: song({ bridge: "<Am Dm E7 Am>" }) },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the tune's key plan in A minor, the bridge chords still Am Dm G C",
+            response: { code: song({ plan: "<C4:major!4 A3:minor!4>" }) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the key plan in A harmonic minor, the bridge chords still Am Dm G C",
+            response: { code: song({ plan: "<C4:major!4 A3:harmonic:minor!4>" }) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "E, not E7, before Am, and the bridge tune in natural minor",
+            response: { code: song({ bridge: "<Am Dm E Am>", plan: "<C4:major!4 A3:minor!4>" }) },
+            expect: "pass",
           },
           {
             name: "a lift to D instead",

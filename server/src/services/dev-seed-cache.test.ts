@@ -2,8 +2,8 @@
 // from, table by table and file by file; one test's writes never reach the next seed; another option set, another
 // day, an hour later or new content never restores a snapshot; and the /dev/listen verdicts stay as the build keeps
 // them. A snapshot restored 59 minutes after its build is the learner a fresh build makes at that later instant, for
-// every seed point and every option the browser suite passes. The real course, so the points carry sketches, album
-// recordings and an own-audio file.
+// a point in every unit, every point with its own path through the seeder and every option the browser suite passes
+// (AGED). The real course, so the points carry sketches, album recordings and an own-audio file.
 import { Database } from "bun:sqlite";
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { createHash } from "node:crypto";
@@ -383,24 +383,139 @@ function instants(x: Harness): Record<string, string[]> {
   return out;
 }
 
-// Every named point of the dev seeder, an instance of each pattern, and every option set the browser specs pass
-// (gapDays, targetMinutes, recordings, mic) plus `practice: false`.
+// A representative set: one point in each unit U00–U17, every point whose build takes its own path through the
+// seeder (each `extra` kind of `planSeed`, each request pattern, the family levels, the Wave 6 checkpoint rule, the
+// CF-T walk), and every option set the browser specs pass (gapDays, targetMinutes, recordings, mic) plus
+// `practice: false`. A point left out is a plain walk of the default order up to an item (or a capstone state) whose
+// rows a kept point on the same path writes too: the restore moves every instant of every table and column alike
+// (`shiftInstants`), so a point adds to this proof only the kinds of rows its build writes. "core complete" walks
+// every session of the core (each capstone released, each transcription session, CF-A), so every table a dropped
+// point fills is in it. The list of named points is checked below, so a new point is either here or named as left out.
 const AGED: DevSeedRequest[] = [
-  ...SEED_POINTS.filter((p) => !p.point.includes("<")).map((p) => ({ point: p.point })),
-  { point: "after U01.L03" },
-  { point: "after GYM.04" },
+  // U00 and the start of the walk.
+  { point: "fresh" },
   { point: "onboarding at react (edit 5)" },
+  { point: "onboarded" },
+  // U01: `after <SessionId>` with targetMinutes, `<CP> due`, one and two failed checkpoints, the return policy's
+  // three gap ranges (contracts §7.9).
+  { point: "after U01.L03", targetMinutes: 15 },
+  { point: "U01.CP due" },
+  { point: "U01.CP failed" },
+  { point: "U01.CP failed twice" },
   { point: "4-day gap" },
   { point: "12-day gap" },
   { point: "21-day gap" },
-  { point: "after U02.L05", gapDays: 6 },
-  { point: "after U01.L03", targetMinutes: 15 },
-  { point: "U03.CP due", targetMinutes: 15 },
+  // C0: an unreleased draft, and a release without a recording.
+  { point: "C0 in progress" },
   { point: "C0 released", recordings: false },
-  { point: "after U03.L02", mic: false },
-  { point: "C2 open", mic: false },
+  // U02 with gapDays; U03 with practice off; a side lesson; a gym session as `after <SessionId>`.
+  { point: "after U02.L05", gapDays: 6 },
   { point: "after U03.L02", practice: false },
+  { point: "A1.L02 done" },
+  { point: "after GYM.04" },
+  // U04–U07; the U05.L07 gate; ladder L3; own audio recorded and imported.
+  { point: "U04.CP due" },
+  { point: "U05.L07 gate open" },
+  { point: "after U06.L05" },
+  { point: "after U07.L03 (gym due)" },
+  { point: "ladder L3" },
+  { point: "own-audio project" },
+  { point: "imported own-audio (c2)" },
+  // C2 open with the mic off; C2 released (family levels, a release with its recording); X1 half done.
+  { point: "C2 open", mic: false },
+  { point: "C2 released" },
+  { point: "X1.S2 done" },
+  // U08–U11: the ladder's level-up and realism-up, C3.S3 open in its session, two takes, a ladder song (L5).
+  { point: "after U08.L04" },
+  { point: "ladder level-up due" },
+  { point: "ladder realism-up due" },
+  { point: "C3.S3 in progress (d13)" },
+  { point: "two takes (d20)" },
+  { point: "ladder L5" },
+  { point: "after U11.L06" },
+  // U12–U17: a second tab's open session, the Wave 6 `<CP> due` rule, CF-T (its standards), ladder L8, the end.
+  { point: "second tab (d21)" },
+  { point: "after U12.L05" },
+  { point: "U13.CP due" },
+  { point: "after U14.L03" },
+  { point: "CF-T open (U15.L01 done)" },
+  { point: "after U16.L03" },
+  { point: "ladder L8" },
+  { point: "core complete" },
 ];
+/**
+ * Named points left out of the aged proof, each a plain walk up to an item or a capstone state on a path a kept point
+ * takes (see AGED). Each is still built and checked where it is used: the wave seed and course tests, the browser specs.
+ */
+const AGED_LEFT_OUT = [
+  // Plain walks and capstone states of U01–U07, C0–C2, X1: the same builder code as the kept points of those units.
+  "C0 ready",
+  "U02.CP due",
+  "C1 ready",
+  "C1 in progress",
+  "C1 released",
+  "after U02.CP",
+  "U03.CP due",
+  "after U03.CP",
+  "after U04.CP",
+  "after U05.L04",
+  "after U05.L08",
+  "U05.CP due",
+  "U06.CP due",
+  "after U07.L07",
+  "U07.CP due",
+  "C2.S1 done",
+  "X1 open",
+  "X1 released",
+  "side lesson offered",
+  // Wave 5: plain walks and capstone states (C3–C5, X2), a second ladder song level.
+  "after X1 (U08.L02 next)",
+  "after U09.L01",
+  "after U09.L04",
+  "U09.CP due",
+  "C3 open",
+  "C3.S2 done",
+  "C3 released",
+  "after U10.L02",
+  "after U10.L05",
+  "after U10.L08",
+  "U10.CP due",
+  "C4 open",
+  "C4 released",
+  "after U11.L03",
+  "U11.CP due",
+  "C5 open",
+  "C5.S1 done",
+  "C5 released",
+  "X2 open",
+  "X2.S1 done",
+  "X2 released",
+  "ladder L6",
+  // Wave 6: plain walks and capstone states (C6, C7, CF-T, CF-A, C3.S3); all inside "core complete"'s walk.
+  "after X2 (U12.L02 next)",
+  "after U13.L03",
+  "tracks open (after U13.CP)",
+  "U14.CP due",
+  "C6 open",
+  "C6 released",
+  "CF-T.S2 done",
+  "after U15.L05",
+  "after U17.L02",
+  "U17.CP due",
+  "C7 open",
+  "C7.S2 done",
+  "C7 released",
+  "CF-A open",
+  "CF-A.S3 done",
+  "C3.S3 done",
+];
+
+test("every named seed point is in the aged proof or named as left out", () => {
+  const named = SEED_POINTS.map((p) => p.point).filter((p) => !p.includes("<"));
+  const aged = new Set(AGED.map((b) => b.point));
+  expect(named.filter((p) => !aged.has(p) && !AGED_LEFT_OUT.includes(p))).toEqual([]);
+  expect(AGED_LEFT_OUT.filter((p) => !named.includes(p) || aged.has(p))).toEqual([]);
+});
 const AGE_MS = SNAPSHOT_MAX_AGE_MS - 60_000;
 
 describe("a snapshot restored 59 minutes after its build is a fresh build at that instant", () => {

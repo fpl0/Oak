@@ -161,11 +161,13 @@ describe("voice-leading: the voicing gate (U05.L07 hand-voiced-cadence)", () => 
     expect(f.extra.some((d) => d.id === "harmony.common-tone")).toBe(true);
     expect(Number(f.row.value)).toBeLessThan(0.9);
   });
-  test("crossing voices (the B written under the D of the voice below) fail with harmony.voice-crossing", async () => {
-    const f = await fails(gate, voiced("[c4,e4,g4] [c4,f4,a4] [d4,b3,g4] [c4,e4,g4]"));
-    const x = f.extra.find((d) => d.id === "harmony.voice-crossing");
-    expect(x).toBeDefined();
-    expect(renderFeedback(x as never)).toContain("Keep the voices in order");
+  test("corrections gate: a stack written out of order is heard from the bottom up, so `[d4,b4,g4]` is D G B", async () => {
+    // The ear hears D4 G4 B4 whatever order the stack is written in; the old written-order reading failed the
+    // smooth path written this way as crossing voices (attack:still-passes, notes for the gate).
+    await passes(gate, voiced("[c4,e4,g4] [c4,a4,f4] [d4,b4,g4] [e4,c5,g4]"));
+    // A real leap is still a leap, however the stack is written.
+    const f = await fails(gate, voiced("[c4,e4,g4] [c4,f4,a4] [g3,d4,b4] [c4,e4,g4]"));
+    expect(f.extra.some((d) => d.id === "harmony.voice-leap")).toBe(true);
   });
   test("four notes where three voices are asked for: harmony.voice-count, score below the gate", async () => {
     const f = await fails(gate, voiced("[c4,e4,g4,c5] [c4,f4,a4] [b3,d4,g4] [c4,e4,g4]"));

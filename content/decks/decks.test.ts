@@ -74,9 +74,28 @@ describe("fact decks", () => {
     // Term cards (fact.<term>) are also locked facts; every deck card is locked, and no locked deck card is missing.
     const prefixes = new Set(ours.map((id) => id.split(".")[1]));
     const deckLocked = locked.filter((id) => prefixes.has(id.split(".")[1] as string));
-    // The twelve decks' own prefixes (contracts 1.6 promoted nine decks): none is shared with a term card.
+    // The eighteen decks' own prefixes (contracts 1.6 promoted nine decks, 1.7 the six U12–U17 ones): none is
+    // shared with a term card.
     expect([...prefixes].sort()).toEqual(
-      ["blues", "cadence", "chord", "dom7", "int", "keysig", "minor", "rn", "scale", "staff", "triad"].sort(),
+      [
+        "blues",
+        "cadence",
+        "chord",
+        "dom7",
+        "int",
+        "keysig",
+        "minor",
+        "rn",
+        "scale",
+        "staff",
+        "triad",
+        "seventh",
+        "diatonic7",
+        "mode",
+        "applied",
+        "borrowed",
+        "pivot",
+      ].sort(),
     );
     expect([...ours].sort()).toEqual([...deckLocked].sort());
   });
@@ -475,6 +494,11 @@ describe("U10–U11 fact decks (in the catalog since contracts 1.6): every answe
     expect<unknown>(sym.map((c) => [c.rootPc, c.quality])).toEqual(
       [0, 4, 8].map((i) => [inC[i]?.rootPc, inC[i]?.quality]),
     );
+    // Corrections pass: C F G are a blues's three chords too, so the prompt names the dominant sevenths it wants.
+    expect(TWELVE_BAR.cards.find((c) => c.id === "fact.blues.chords-in-C")?.prompt.text).toContain(
+      "each a dominant seventh",
+    );
+    expect(credit(TWELVE_BAR, "fact.blues.chords-in-C", ["C7 F7 G7"])).toBe(1);
     expect(credit(TWELVE_BAR, "fact.blues.bar-9", ["V7"])).toBe(1);
     expect(credit(TWELVE_BAR, "fact.blues.bar-10", ["V"])).toBe(0);
     expect(credit(TWELVE_BAR, "fact.blues.bar-10", ["iv"])).toBe(0);

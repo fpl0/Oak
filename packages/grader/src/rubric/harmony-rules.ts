@@ -242,6 +242,23 @@ export const pickupRule = (r: RuleOf<"pickup">, n: Normalized, ctx: RubricContex
       where: locAt(rat(1), ctx),
     };
   const length = R.sub(rat(1), first.onset);
+  // Corrections pass (`leadsIn`): the pickup runs into bar 1; something of it sounds in bar 0's last beat.
+  if (r.leadsIn) {
+    const lastBeat = R.sub(rat(1), rat(1, units));
+    const reaches = bar0.some((e) => R.lt(lastBeat, R.add(e.onset, e.clipDur ?? e.dur)));
+    if (!reaches) {
+      const end = bar0.reduce(
+        (m, e) => (R.lt(m, R.add(e.onset, e.clipDur ?? e.dur)) ? R.add(e.onset, e.clipDur ?? e.dur) : m),
+        rat(0),
+      );
+      return {
+        ok: false,
+        value: 0,
+        detail: `the pickup stops before the bar line: bar 0 is silent for its last ${unitsText(R.sub(rat(1), end))}; let its last note run into bar 1, or put one on beat ${units}`,
+        where: locAt(lastBeat, ctx),
+      };
+    }
+  }
   if (r.units) {
     const want = R.div(r.units, rat(units));
     if (!R.eq(length, want))
@@ -313,13 +330,14 @@ export interface GateCheck {
 
 /**
  * The hand voice-leading check of the voicing gate (U05.L07 `hand-voiced-cadence`): at each chord change
- * every voice moves to its next note (voice i to voice i, in written order); `voices` checks the count,
+ * every voice moves to its next note (voice i to voice i, counted from the lowest note up: the ear hears voices
+ * by pitch, not by the order a stack is written in; corrections gate); `voices` checks the count,
  * `commonTones` that a shared pitch class stays put in one voice, `maxMovePerVoice` the nearest motion
  * (`bassFree` leaves the lowest voice out of the motion limits and the common-tone check), and `noCrossing`
  * that no two voices swap order. Each change earns the share of its checks that pass.
  */
 export function voicingGateCheck(
-  chords: readonly VoicedChord[],
+  written: readonly VoicedChord[],
   r: Pick<
     RuleOf<"voice-leading">,
     "maxMovePerVoice" | "maxTotal" | "voices" | "commonTones" | "noCrossing" | "bassFree"
@@ -327,6 +345,8 @@ export function voicingGateCheck(
   ctx: Pick<RubricContext, "meter" | "pickup">,
   key: KeySpec | null,
 ): GateCheck {
+  // `[c4,a4,f4]` sounds as `[c4,f4,a4]`: the voices are the notes from the bottom up.
+  const chords = written.map((c) => ({ ...c, voices: [...c.voices].sort((x, y) => x - y) }));
   const faults: GateFault[] = [];
   const credits: number[] = [];
   const where = (at: Rat, ids: string[]) => locAt(at, ctx, ids.length ? { noteIds: ids } : {});
@@ -476,12 +496,30 @@ export function voicingGateCheck(
 export const isGateRule = (r: RuleOf<"voice-leading">): boolean =>
   r.voices !== undefined || !!r.commonTones || !!r.noCrossing || !!r.bassFree;
 
+/** The chords of one pass of a track's loop, then its first chord again at the end of the pass. */
+export function loopOnce(
+  chords: readonly VoicedChord[],
+  events: readonly NEvent[],
+  ctx: RubricContext,
+): VoicedChord[] {
+  const reach = events.reduce((m, e) => Math.max(m, R.floor(e.onset) + 1), 0);
+  const window = Math.max(1, Math.min(ctx.bars ?? reach, reach || 1));
+  const period = periodOf(events, 16, window);
+  const pass = chords.filter((c) => R.lt(c.at, rat(period)));
+  const first = pass[0];
+  if (!first || pass.length < 2) return [...chords];
+  return [...pass, { ...first, at: R.add(first.at, rat(period)) }];
+}
+
 export const voiceLeadingGateRule = (
   r: RuleOf<"voice-leading">,
   n: Normalized,
   ctx: RubricContext,
 ): RuleEval => {
-  const chords = voicedChords(selectTrack(n, r.track)).filter((c) => c.voices.length > 1);
+  let chords = voicedChords(selectTrack(n, r.track)).filter((c) => c.voices.length > 1);
+  // Corrections pass (`loop`): one pass of the progression, then its first chord again, so the move back to the
+  // top of the loop is judged like every other change.
+  if (r.loop && chords.length > 1) chords = loopOnce(chords, selectTrack(n, r.track), ctx);
   if (chords.length < 2) return { ok: false, value: 0, target: 1, detail: "no chord changes to lead" };
   const key = keyOf(n.all, ctx.key ?? null);
   const g = voicingGateCheck(chords, r, ctx, key);

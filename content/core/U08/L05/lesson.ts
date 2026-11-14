@@ -382,7 +382,8 @@ export default defineLesson({
             rule: "matches",
             reference: { solutions: [make(bass(MAKE_ROOTS))], bars: 4 },
             matcher: ROOT_BASS,
-            min: 0.75,
+            // "Each chord its root": every change, not three of four (corrections pass).
+            min: 1,
           },
           {
             id: "a-tone-from-today",
@@ -442,6 +443,17 @@ export default defineLesson({
             response: { code: make(bass("<[4 5 5 5] [5 3 3 3] [3 0 0 0] [0 4 4 4]>")) },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            name: "three roots right, the last chord left on C",
+            response: { code: make(bass("<5 3 0 0>")) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "roots on beat 1, each with its 5th on beat 3",
+            response: { code: make(bass("<[5 ~ 9 ~] [3 ~ 7 ~] [0 ~ 4 ~] [4 ~ 8 ~]>")) },
+            expect: "pass",
           },
         ],
       },

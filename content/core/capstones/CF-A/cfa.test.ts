@@ -219,6 +219,19 @@ describe("CF-A on the real grader (capstone mode)", () => {
       "the form is verse chorus verse chorus verse chorus chorus2: there is no bridge yet",
     );
   });
+  // Corrections pass (theory-g 1): a device has to be heard. Every line muted is no song, however it is written;
+  // the same lines played quietly are still the song.
+  test("every line muted with `.gain(0)` fails; the same lines at `.gain(.2)` still pass", async () => {
+    const tail = (g: string) =>
+      CF_A_PIECES.pop
+        .split("\n")
+        .map((l) => (/^[a-z]+:/.test(l) ? `${l}.gain(${g})` : l))
+        .join("\n");
+    const muted = await grade(tail("0"));
+    expect(muted.status).toBe("fail");
+    expect(muted.diagnostics.map((d) => d.id)).toContain("make.silent");
+    expect((await grade(tail(".2"))).status).toBe("pass");
+  });
   test("48 bars at 100 BPM are 115.2 s: `duration` fails alone", async () => {
     const r = await grade(CF_A_PIECES.short);
     expect(requiredFailing(r)).toEqual(["duration"]);

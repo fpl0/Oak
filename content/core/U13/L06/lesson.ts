@@ -11,10 +11,13 @@
 // given in the code (`byEar`, A/B at full and three-quarter speed). They compare the kick's hits by drum role and
 // onset (`events` with `sound: "drum-role"`, which the by-ear rule reads as `exact`) and by the rhythm matcher on
 // a thirty-second's give. S5 declares `swing`, so onsets are compared on the straight grid and a straight answer
-// matches them; the measured `swing` rule on the hats (U11.L07's ratio window) is what makes it fail. S6 is twelve
+// matches them; the measured `swing` rule on the hats (U11.L07's ratio window) and `swung-offbeats` on the kick
+// (its hits on an "and" sit late, long–short) are what make it fail. S6 is twelve
 // steps of one bar, kick and snare, on the grid: an `identify` with the grid's cells as the answer (a `dictation`
 // answered on a grid has no grading path yet; see the result's apiNotes). The Make's one required rule is
-// `syncopation` on the kick in bars 3–4, the learner's answer: at least two kicks that start between the beats.
+// `syncopation` on the kick in bars 3–4, the learner's answer: at least two kicks that start between the beats
+// with no kick on the beat after them (a kick on the "and" of 4 followed by one on 1 does not count), as the
+// brief and the label say.
 //
 // Meter: S6's bar is the twelve eighths of a 12/8 bar, written here as eighth-note triplets in 4/4 on a
 // twelve-step grid (the spec's fallback while `meter.compound` is planned): it sounds the same, and the prose
@@ -402,16 +405,23 @@ export default defineLesson({
                   subdivision: 8,
                   ratio: [1.6, 2.4],
                 },
+                {
+                  id: "kick-shuffles",
+                  label: "The kick shuffles too",
+                  required: true,
+                  skills: ["R13"],
+                  rule: "custom",
+                  fn: "swung-offbeats",
+                  params: { track: "kick" },
+                },
               ],
             },
           ],
         },
         pass: 0.95,
         byEar: { ab: true, rates: [1, 0.75], accepts: "exact" },
-        feedbackText: {
-          "rubric.unmet":
-            "The kick is in the right slots. The hats still tick evenly: give them `.swingBy(1/3, 4)`, and the kick too, so its hits on the “&” land with them.",
-        },
+        // No `rubric.unmet` override: each swing rule names its own line ("bar 1, 2& in `kick` divides its beat 1:1,
+        // straight; … add `.swingBy(1/3, 4)` to that line"), so a straight kick under swung hats is told so.
         srs: [{ family: "fam.rhy.swing", mode: "review-if-due" }],
         tests: [
           { name: "reference", response: { code: SHUFFLE_SOURCE }, expect: "pass" },
@@ -431,6 +441,28 @@ export default defineLesson({
             response: { code: shuffle(`kick: s("${KICK_SHUFFLE}")`, hats()) },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the hats swung, the kick left straight",
+            response: { code: shuffle(`kick: s("${KICK_SHUFFLE}")`, hats("hh*8", SWING)) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the kick swung, the hats left straight",
+            response: { code: shuffle(`kick: s("${KICK_SHUFFLE}")${SWING}`, hats()) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the kick written with .struct(), both lines swung",
+            response: {
+              code: shuffle(
+                `kick: s("bd").struct("<[x ~ ~ x x ~ ~ ~] [x ~ ~ ~ ~ x ~ x]>")${SWING}`,
+                hats("hh*8", SWING),
+              ),
+            },
+            expect: "pass",
           },
           {
             name: "a kick on the wrong eighth",
@@ -513,7 +545,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Bars 1 and 2 are the funk groove you took down: that is the call. Bars 3 and 4 put a plain kick on 1 and 3. Write your answer there: a kick with hits between the beats, the bass on the same hits, and anything else this unit gave you: a push, ghost notes, a roll into the repeat.",
+          "Bars 1 and 2 are the funk groove you took down: the call. Bars 3 and 4 put a plain kick on 1 and 3. Write your answer there: kicks between the beats, each leaving the next beat open, the bass on the same hits, and more from this unit: a push, ghost notes, a roll into the repeat.",
         skills: [
           { skill: "R10", w: 0.6 },
           { skill: "E14", w: 0.4 },
@@ -524,7 +556,8 @@ export default defineLesson({
         rubric: [
           {
             id: "answer-off-the-beat",
-            label: "Your answer has at least two kicks between the beats",
+            label:
+              "Your answer has at least two kicks between the beats, each with no kick on the beat after it",
             required: true,
             skills: ["E14", "R10"],
             rule: "syncopation",
@@ -599,6 +632,20 @@ export default defineLesson({
                   'chords: chord("<Dm7 G7 Dm7 G7>").voicing().early(1/8).s("rhodes").gain(.6)',
                 ),
             },
+            expect: "pass",
+          },
+          {
+            // Every hit between the beats is followed at once by a kick on the next beat: nothing is left open.
+            name: "eighths all through the answer: the beats are never left open",
+            response: {
+              code: callAnswer("[bd bd bd bd bd bd bd bd] [bd bd bd bd bd bd bd bd]", bassOf(MAKE_BASS)),
+            },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "kicks on the “and” of 1 and of 3, the beats after them open",
+            response: { code: callAnswer("[bd bd ~ ~ bd bd ~ ~] [bd bd ~ ~ bd bd ~ ~]", bassOf(MAKE_BASS)) },
             expect: "pass",
           },
           {

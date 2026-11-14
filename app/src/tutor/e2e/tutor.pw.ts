@@ -521,6 +521,10 @@ test("keyboard only: Mod+I, Enter, ↑ recall, Esc stop, Mod+I closes to the rai
   await expect(sep).toHaveAttribute("aria-valuenow", "380");
   await page.reload();
   await expect(page.getByTestId("tutor-panel")).toHaveCSS("width", "380px");
+  // The app after the reload is up as openApp waits for it, its keys mounted, before Mod+I is pressed: beside other
+  // suites the panel was drawn before the key handler was, and the key was lost (corrections gate's run).
+  await page.waitForFunction(() => "__oakTutor" in window);
+  await expect(page.getByTestId("tutor-status")).toHaveAttribute("data-state", "ready", { timeout: 20_000 });
   // Mod+I from inside the panel closes it.
   await panel(page).getByTestId("composer").focus();
   await page.keyboard.press("ControlOrMeta+i");

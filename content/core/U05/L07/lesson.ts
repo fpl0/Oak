@@ -1,5 +1,7 @@
-// U05.L07 Voice Leading by Hand. From one chord to the next, keep the notes the two chords share and move
-// every other note to the nearest note of the new chord. C F G C voiced that way, three notes over a root
+// U05.L07 Voice Leading by Hand. Voice leading is how each note of one chord moves to a note of the next; the
+// smooth way taught here keeps the notes the two chords share and moves every other note a short way, so that the
+// new chord still has all its notes (review finding theory-c B: "the nearest note" is the strategy's aim, not
+// the definition, and F to G below moves F4 three half steps to D4 although G4 is two away). C F G C voiced that way, three notes over a root
 // bass: [c4,e4,g4] [c4,f4,a4] [b3,d4,g4] [c4,e4,g4]. F and G share no note, so one voice there skips a 3rd
 // (F4 down to D4, three half steps) while the others step; every other move is a step or nothing. What the
 // learner has: triads stacked by hand (U05.L01), qualities (U05.L02–L03), chord names (U05.L04), inversions
@@ -72,6 +74,8 @@ const GATE_MATCHER: Matcher = {
           voices: 3,
           commonTones: true,
           noCrossing: true,
+          // The progression loops: the last chord leads back into the first, and that move is judged too.
+          loop: true,
         },
       ],
     },
@@ -101,7 +105,7 @@ export default defineLesson({
   version: 1,
   title: "Voice Leading by Hand",
   objective:
-    "I can voice a progression by hand so each note moves as little as possible: shared notes stay, the rest move to the nearest note.",
+    "I can voice a progression by hand so each note moves as little as possible: shared notes stay, the rest move a short way, and every chord keeps all its notes.",
   key: { tonic: "C", mode: "major" },
   meter: "4/4",
   bpm: BPM,
@@ -341,7 +345,7 @@ export default defineLesson({
         role: "check",
         pass: 0.9,
         prompt:
-          "Now all four: C F G C, three notes each, over the bass. Hold every note two neighbouring chords share, move each other note as little as you can (three half steps at most), and keep the three in the same order, lowest to highest.",
+          "Now all four: C F G C, three notes each, over the bass. Hold every note two neighbouring chords share, move each other note as little as you can (three half steps at most), and keep the three in order, lowest to highest. The loop repeats: the last C leads back into the first too.",
         skills: [{ skill: "C05", w: 1 }],
         code: { starter: GATE_STARTER },
         reference: { solutions: [HOOK], bars: 4 },
@@ -368,9 +372,22 @@ export default defineLesson({
         tests: [
           { name: "reference", response: { code: HOOK }, expect: "pass" },
           {
-            name: "another smooth path: D G B, then E G C",
-            response: { code: code(bass(ROOTS), chords("<[c4,e4,g4] [c4,f4,a4] [d4,g4,b4] [e4,g4,c5]>")) },
+            name: "another smooth path, from a higher C: F A C, D G B, E G C",
+            response: { code: code(bass(ROOTS), chords("<[e4,g4,c5] [f4,a4,c5] [d4,g4,b4] [e4,g4,c5]>")) },
             expect: "pass",
+          },
+          {
+            name: "from C with G at the bottom: G C E, A C F, G B D, G C E",
+            response: { code: code(bass(ROOTS), chords("<[g3,c4,e4] [a3,c4,f4] [g3,b3,d4] [g3,c4,e4]>")) },
+            expect: "pass",
+          },
+          {
+            // Review finding (theory-c A4): every change inside the bar line is smooth, but the loop comes back to its
+            // first chord, and E G C back to C E G moves every voice 3 to 5 half steps with C held nowhere.
+            name: "smooth inside, but the last C leaps back to the first: D G B, then E G C",
+            response: { code: code(bass(ROOTS), chords("<[c4,e4,g4] [c4,f4,a4] [d4,g4,b4] [e4,g4,c5]>")) },
+            expect: "fail",
+            feedback: ["harmony.voice-leap"],
           },
           {
             name: "an octave higher",
@@ -396,10 +413,11 @@ export default defineLesson({
             feedback: ["harmony.pcset"],
           },
           {
-            name: "the right notes, written so the middle and top voices swap at every change",
+            // Corrections gate: the ear hears voices from the bottom up, so the order a stack is written in is
+            // not a voice; this sounds exactly like the reference.
+            name: "the right notes, the middle and top written the other way round",
             response: { code: code(bass(ROOTS), chords("<[c4,e4,g4] [c4,a4,f4] [b3,d4,g4] [c4,g4,e4]>")) },
-            expect: "fail",
-            feedback: ["rubric.unmet"],
+            expect: "pass",
           },
         ],
       },
@@ -431,6 +449,8 @@ export default defineLesson({
             rule: "voice-leading",
             track: "chords",
             maxMovePerVoice: 2,
+            // The loop comes back to its first chord: that move is heard, so it is judged too.
+            loop: true,
           },
           {
             id: "a-tune",

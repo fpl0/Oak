@@ -386,6 +386,11 @@ export default defineLesson({
               [1, 4],
               [3, 4],
             ],
+            // Corrections gate (AS-37): a backbeat leaves 1 and 3 to the kick; a snare on every beat is no backbeat.
+            excludes: [
+              [0, 1],
+              [1, 2],
+            ],
             perBar: true,
           },
           {

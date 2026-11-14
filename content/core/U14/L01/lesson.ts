@@ -92,8 +92,8 @@ const earPart = (
   feedbackText: {
     "id.wrong":
       mode === "major"
-        ? "That was major: its 7th sits a half step under home and pulls up into it."
-        : "That was Mixolydian: its 7th sits a whole step under home, the ♭7, and does not pull.",
+        ? "Listen again to the note just under home: in this phrase it sits a half step below and pulls up into it."
+        : "Listen again to the note just under home: in this phrase it sits a whole step below and does not pull.",
   },
   tests: [
     { name: mode, response: { answer: { choice: [mode] } }, expect: "pass" },

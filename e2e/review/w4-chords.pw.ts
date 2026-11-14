@@ -112,8 +112,14 @@ test("RN palette: numerals by digit, the wrong case named by bar and fixed with 
   await page.keyboard.type("AM");
   await expect(step(page)).toContainText("Reads as A");
   await checkStep(page, /fail/);
+  // The field is read-only while a check runs, and the feedback's status can land a frame before the field opens
+  // again: keys typed in that frame were dropped beside other suites (the race of this test). Wait for the field.
+  const field = step(page).locator("[data-chord-name] input");
+  await expect(field).toBeFocused();
+  await expect(field).toBeEditable();
   await page.keyboard.press("ControlOrMeta+A");
   await page.keyboard.type("am");
+  await expect(field).toHaveValue("am");
   // The field reads the new symbol back before the check: a check sent in the same frame as the last key graded
   // the old text beside other suites.
   await expect(step(page)).toContainText("Reads as Am");

@@ -13,8 +13,10 @@
 // `.swing(4)`, both unlocked here) together with a measured `swing` rule per graded line (an `all` matcher).
 // `.swingBy(1/3, 8)` swings sixteenths, which leaves eighth notes where they were: the ratio rule names it. The
 // rhythm is compared with a sixteenth's give, so `.swingBy(.33, 4)` (the decimal STYLE §7 allows) lines up too.
-// The Make's one required rule is `swing` on the hats (C5's rule): ratio 2 for `.swingBy(1/3, 4)`, 1.5 ("light")
-// for `.swingBy(.2, 4)`, which the brief invites as an experiment and the rule does not take as a shuffle.
+// The Make's one required rule is `swing` on the hats: ratio 2 for `.swingBy(1/3, 4)`, 1.5 ("light") for
+// `.swingBy(.2, 4)`. The brief invites the lighter swing and lets the learner keep it, so the Make's window is
+// 1.45–2.4:1 (corrections pass, theory-b 6); straight hats, or a hint of swing such as `.swingBy(.1, 4)`
+// (1.2:1), still fail. The modify steps S4 and S5 ask for `.swingBy(1/3, 4)` and keep 1.6–2.4:1.
 //
 // Band: none (`band: false`). Every step's code carries its own `hats:` and `drums:` lines, because the hats
 // are what the learner swings; the drum track of `band.axis-4bar` plays straight hats (pop and indie `hh*8`,
@@ -482,7 +484,7 @@ export default defineLesson({
             track: ["hats", "@drums"],
             drums: ["hatClosed", "hatOpen", "ride"],
             subdivision: 8,
-            ratio: [1.6, 2.4],
+            ratio: [1.45, 2.4],
           },
           {
             id: "riff-swings",
@@ -541,8 +543,18 @@ export default defineLesson({
             feedback: ["rubric.unmet"],
           },
           {
-            name: "a light swing on the hats: .2",
+            name: "the lighter swing the brief invites, kept: .2 on both lines",
             response: { code: blues(QUICK_FORM, hats(".swingBy(.2, 4)"), gtr(".swingBy(.2, 4)", MAKE_RIFF)) },
+            expect: "pass",
+          },
+          {
+            name: "the hats in the short form, .swing(4)",
+            response: { code: blues(QUICK_FORM, hats(".swing(4)"), gtr("", MAKE_RIFF)) },
+            expect: "pass",
+          },
+          {
+            name: "a hint of swing on the hats, .1: still nearly even",
+            response: { code: blues(QUICK_FORM, hats(".swingBy(.1, 4)"), gtr(".swingBy(.1, 4)", MAKE_RIFF)) },
             expect: "fail",
             feedback: ["rubric.unmet"],
           },

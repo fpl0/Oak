@@ -9,9 +9,9 @@
 //
 // How it is graded (AUTHORING §17, §19): numerals with sevenths are an `rn-palette` with `allow: ["sevenths"]`
 // in A minor, read by degree and quality; the thread the learner finishes note by note is an `events` match in
-// absolute pitch on `mel`. The Make's one required rule is `guide-tones` (`at: "change"`, `minRatio: 0.75`):
-// the share of chord changes at which the tune sounds the new chord's 3rd or 7th. The starter's held A meets
-// it at two of seven changes (the 3rd of Fmaj7, the 7th of Bm7♭5) and fails. The sung step is a degree line
+// absolute pitch on `mel`. The Make's one required rule is `guide-tones` (`at: "bar"`, `minRatio: 1`): the
+// note sounding on beat 1 of every bar, the repeated Am7 of bar 8 included, is that bar's chord's 3rd or 7th, as
+// the brief says. The starter's held A meets it in two of eight bars (the 3rd of Fmaj7, the 7th of Bm7♭5) and fails. The sung step is a degree line
 // in C over the cycle's first four chords (`mode: "degree"`): the spec's `mode: "guide-tones"` is still a
 // planned feature (`sing.guide-tones`), and the degree mode sings the same four notes and is graded today.
 import { defineLesson, type HintLadder } from "@oak/content-kit";
@@ -64,7 +64,7 @@ const SING = FIRST_FOUR;
 
 /**
  * The Make: the eight-bar cycle with its bass, and a tune that is one A a bar. A is the 3rd of Fmaj7 and the 7th
- * of Bm7♭5, so it meets two of the seven changes (Am7 struck again in bar 8 is no change).
+ * of Bm7♭5, so it starts two of the eight bars on a guide tone.
  */
 const MAKE_STARTER = loop(CYCLE, mel("a4"));
 
@@ -392,8 +392,10 @@ export default defineLesson({
             rule: "guide-tones",
             track: "mel",
             harmony: "chords",
-            minRatio: 0.75,
-            at: "change",
+            minRatio: 1,
+            at: "bar",
+            // Corrections gate (AS-22): judged against the given cycle, so rewriting it under the tune changes nothing.
+            changes: ["Dm7", "G7", "C^7", "F^7", "Bm7b5", "E7", "Am7", "Am7"],
           },
           {
             id: "ends-at-home",
@@ -405,8 +407,7 @@ export default defineLesson({
             track: "mel",
           },
         ],
-        // The override serves every rule of the rubric, suggestions included, so it stays neutral.
-        feedbackText: { "rubric.unmet": "{label}: not yet." },
+        // Corrections gate: no "not yet." override; the rule names the bar, the chord and its guide tones.
         hints: ladder(
           "Over Dm7, which two notes say what kind of chord it is?",
           "Each bar's first note should be its chord's 3rd or 7th: F or C over Dm7, B or F over G7, E or B over Cmaj7, and so on. The chord-tone lens marks them.",
@@ -426,7 +427,7 @@ export default defineLesson({
               code: loop(
                 CYCLE,
                 mel(
-                  "<[f5 ~ e5 d5] [f5 d5 b4 g4] [e5 ~ g5 b5] [e5 c5 a4 c5] [d5 ~ f5 a5] [d5 b4 g#4 b4] [c5 e5 b4 g4] [b4 a4@3]>",
+                  "<[f5 ~ e5 d5] [f5 d5 b4 g4] [e5 ~ g5 b5] [e5 c5 a4 c5] [d5 ~ f5 a5] [d5 b4 g#4 b4] [c5 e5 b4 g4] [c5 b4 a4@2]>",
                 ),
               ),
             },
@@ -437,6 +438,31 @@ export default defineLesson({
             response: { code: loop(CYCLE, mel("<d5 g4 c5 f4 b4 e4 a4 a4>")) },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the thread with a root in bar 1 and in bar 8: two bars start on D and A",
+            response: { code: loop(CYCLE, mel("<d5 f5 e5 e5 d5 d5 c5 a4>")) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "other guide tones than the thread's, each bar starting on one, a rhythm after it",
+            response: {
+              code: loop(
+                CYCLE,
+                mel(
+                  "<[c5 ~ d5 e5] [b4 ~ a4 g4] [b4 a4 g4 e4] [e5 d5 c5 a4] [a4 b4 c5 d5] [g#4 ~ b4 d5] [g5 e5 c5 ~] [c5@3 a4]>",
+                ),
+              ),
+            },
+            expect: "pass",
+          },
+          {
+            name: "the thread, each move made a beat early, on beat 4 of the bar before",
+            response: {
+              code: loop(CYCLE, mel("<f5 [f5 ~ ~ e5] e5 [e5 ~ ~ d5] d5 [d5 ~ c5 b4] c5 [g5 e5 c5 a4]>")),
+            },
+            expect: "pass",
           },
         ],
       },

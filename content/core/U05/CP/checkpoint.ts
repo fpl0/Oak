@@ -63,6 +63,8 @@ const VOICE_MATCHER: Matcher = {
           rule: "voice-leading",
           track: "chords",
           maxMovePerVoice: 3,
+          // The loop repeats: G leads back into C, and that change counts too (as in the voicing gate).
+          loop: true,
         },
       ],
     },
@@ -159,7 +161,7 @@ export const checkpoint: CheckpointDef = defineCheckpoint({
       version: 1,
       role: "checkpoint",
       prompt:
-        "C, Am, F and G over a bass on their roots, every chord in root position, so the notes jump. Voice the chords again with the same letters, so that at every change no note moves more than three half steps. Inversions are welcome.",
+        "C, Am, F and G over a bass on their roots, every chord in root position, so the notes jump. Voice the chords again with the same letters, so that at every change, G back to C included, no note moves more than three half steps. Inversions are welcome.",
       skills: [
         { skill: "C01", w: 0.3 },
         { skill: "C04", w: 0.2 },
@@ -195,6 +197,19 @@ export const checkpoint: CheckpointDef = defineCheckpoint({
           response: { code: LOOP("<[c4,e4,g4] [c4,e4,a4] [c4,f4,a4] [g4,b4,d5]>") },
           expect: "fail",
           feedback: ["rubric.unmet"],
+        },
+        {
+          // The theory-c A4 case here: every change inside the loop is smooth, but G (D G B) back to the first C
+          // (C E G) moves its notes 2, 3 and 4 half steps down.
+          name: "smooth inside, but G leaps back down to the first C",
+          response: { code: LOOP("<[c4,e4,g4] [c4,e4,a4] [c4,f4,a4] [d4,g4,b4]>") },
+          expect: "fail",
+          feedback: ["rubric.unmet"],
+        },
+        {
+          name: "from C with G at the bottom: G C E, A C E, A C F, G B D",
+          response: { code: LOOP("<[g3,c4,e4] [a3,c4,e4] [a3,c4,f4] [g3,b3,d4]>") },
+          expect: "pass",
         },
         {
           name: "A minor played as A major (C♯)",
@@ -274,6 +289,8 @@ export const checkpoint: CheckpointDef = defineCheckpoint({
         rule: "voice-leading",
         track: "chords",
         maxMovePerVoice: 3,
+        // The loop repeats: its last chord leads back into the first, and that change counts too.
+        loop: true,
       },
       {
         id: "an-inversion",
@@ -311,6 +328,12 @@ export const checkpoint: CheckpointDef = defineCheckpoint({
           ),
         },
         expect: "pass",
+      },
+      {
+        name: "C Am F G of your own, smooth inside, but G leaps back to the first C",
+        response: { code: code(bass(LOOP_ROOTS), chords("<[c4,e4,g4] [c4,e4,a4] [c4,f4,a4] [d4,g4,b4]>")) },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
       },
       {
         name: "voice-led until the last chord, which jumps to G B D up high",

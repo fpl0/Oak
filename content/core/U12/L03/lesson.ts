@@ -104,8 +104,8 @@ const earPart = (id: string, prompt: string, notes: string, answer: "m7" | "m7b5
   feedbackText: {
     "id.quality":
       answer === "m7b5"
-        ? "That was a half-diminished seventh: the diminished triad underneath, its 5th a half step lower than in a minor seventh chord."
-        : "That was a minor seventh chord: a plain minor triad underneath, and the chord sits calmly.",
+        ? "Listen again to the lowest note and the third note up: here they are a tritone apart, a half step less than a clean 5th, and the chord does not sit calmly."
+        : "Listen again to the lowest note and the third note up: here they are a clean 5th apart, and the chord sits calmly.",
   },
   tests: [
     { name: answer, response: { answer: { qualities: [answer] } }, expect: "pass" },

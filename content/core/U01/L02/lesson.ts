@@ -360,7 +360,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write a one-bar groove over the band with at least one silent beat. Any drums you have: `bd`, `sd`, `hh`, `oh`, `cr`, `rd`, `cp`, `rim`.",
+          "Write a one-bar groove over the band with at least one silent beat: a beat where none of your lines plays, hats included. Any drums you have: `bd`, `sd`, `hh`, `oh`, `cr`, `rd`, `cp`, `rim`.",
         skills: [
           { skill: "R06", w: 0.6 },
           { skill: "R03", w: 0.4 },
@@ -371,11 +371,13 @@ export default defineLesson({
         rubric: [
           {
             id: "a-rest",
-            label: "Uses at least one `~`",
+            // The effect, not the `~`: a rest in the drums under hats that keep playing leaves no beat empty.
+            label: "At least one beat where nothing plays",
             required: true,
             skills: ["R06"],
-            rule: "uses",
-            tool: "tb.mini.rest",
+            rule: "custom",
+            fn: "silent-beat",
+            params: { alsoUses: ["tb.mini.rest"] },
           },
           {
             id: "beat-one",
@@ -398,17 +400,33 @@ export default defineLesson({
         ],
         hints: ladder(
           "Where would a gap make the groove breathe?",
-          "Pick one of the four words on the drums line and make it silent.",
-          "A crash on beat 1 with a gap after it marks the start of the bar: try it on the first two words.",
+          "A beat is empty only when every line rests there, the hats too. Pick one beat and make it silent on the drums line and on the hats line.",
+          'Write the hats one word per beat, `hats: s("hh hh ~ hh")`, and put `~` on beat 3 of the drums line too. A crash on beat 1 with a gap after it also marks the start of the bar.',
         ),
         tests: [
-          { name: "minimal", response: { code: `${drums("bd sd ~ sd")}\n${HATS}` }, expect: "pass" },
+          {
+            name: "minimal",
+            response: { code: `${drums("bd sd ~ sd")}\nhats: s("hh hh ~ hh").gain(.6)` },
+            expect: "pass",
+          },
+          { name: "the hats taken out", response: { code: drums("bd sd bd ~") }, expect: "pass" },
           {
             name: "beyond the brief",
             response: {
-              code: `${drums("cr ~ bd sd", '.gain("1 .5 .8 .6")')}\nhats: s("hh hh oh ~").gain(.6)\nperc: s("~ rim ~ rim").gain(.5)`,
+              code: `${drums("cr ~ bd sd", '.gain("1 .5 .8 .6")')}\nhats: s("hh ~ oh hh").gain(.6)\nperc: s("~ ~ rim ~").gain(.5)`,
             },
             expect: "pass",
+          },
+          {
+            name: "two empty beats, a crash and a kick on the downbeats",
+            response: { code: `${drums("cr ~ sd ~")}\nkick: s("bd ~ bd ~")` },
+            expect: "pass",
+          },
+          {
+            name: "a rest in the drums, but the hats play through it",
+            response: { code: `${drums("bd sd ~ sd")}\n${HATS}` },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
           },
           {
             name: "the starter as it is",

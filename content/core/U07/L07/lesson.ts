@@ -9,9 +9,11 @@
 // with `roles: ["melody"]`, so the chords line does not count as the second part) and chord tones on beats 1
 // and 3 of the response. The grader is not given the Band's code (see U06.L05, U07.L04), so the step writes
 // the loop's chords as a `chords:` line (I V vi IV, the Band's harmony) and the Band plays drums and bass.
-// The by-ear step grades only the `vox` line, transposition-invariant (`accepts: "any-key"`). The Make's
-// one required rule is `tracks` (two melody parts); its chord-tone suggestion is left out for the reason
-// above, so its suggestion is the response coming home.
+// The by-ear step grades only the `vox` line, in any octave but in C (`accepts: "any-octave"`): the call is
+// in C, so a reply in another key would answer it differently. The Make's
+// one required rule is `call-response` (the two parts take turns: a copy of the call on `vox` plays with it,
+// not after it); its chord-tone suggestion is left out for the reason above, so its suggestion is the
+// response coming home.
 import { defineLesson, type HintLadder, type Matcher } from "@oak/content-kit";
 
 const BPM = 96;
@@ -311,8 +313,10 @@ export default defineLesson({
               label: "The call echoes itself with `.off()`",
               required: true,
               skills: ["M07"],
-              rule: "uses",
-              tool: "tb.off",
+              // Corrections gate (AS-43): an echo you hear, later than the call; `.off(0, …)` and `.off(4, …)` do not.
+              rule: "custom",
+              fn: "echo",
+              params: { track: "mel", alsoUses: ["tb.off"] },
             },
           ],
         },
@@ -376,15 +380,17 @@ export default defineLesson({
         cue: { context: "tonic-chord", countInBars: 1, click: false, replays: -1 },
         answer: { ui: "code", starter: HEARD_STARTER },
         reference: { solutions: [HEARD], bars: 4 },
+        // The call is given in C, so the reply is heard against it: a reply in another key changes how
+        // it answers the call. Any octave is fine; any key is not (corrections pass, theory-b 2).
         matcher: {
           m: "melody",
-          pitch: "transposition-invariant",
+          pitch: "octave-free",
           wPitch: 0.8,
           wRhythm: 0.2,
           rhythmTol: [1, 16],
           track: "vox",
         },
-        byEar: { ab: true, rates: [1, 0.75, 0.5], accepts: "any-key" },
+        byEar: { ab: true, rates: [1, 0.75, 0.5], accepts: "any-octave" },
         srs: [{ family: "fam.mel.dictation", mode: "evidence-only" }],
         tests: [
           { name: "reference", response: { code: HEARD }, expect: "pass" },
@@ -411,6 +417,26 @@ export default defineLesson({
             expect: "fail",
             feedback: ["melody.wrong-degree"],
           },
+          {
+            name: "the reply in note names",
+            response: {
+              code: code(call(HEARD_CALL), 'vox: note("<~ [b4 ~ g4 d4] ~ [a4 ~ f4 c4]>").s("rhodes")'),
+            },
+            expect: "pass",
+          },
+          {
+            name: "the reply an octave higher",
+            response: { code: heard("<~ [13 ~ 11 8] ~ [12 ~ 10 7]>") },
+            expect: "pass",
+          },
+          {
+            name: "the right shape, but the reply in F# major against a call in C",
+            response: {
+              code: code(call(HEARD_CALL), resp(HEARD_RESPONSE).replace("C4:major", "F#4:major")),
+            },
+            expect: "fail",
+            feedback: ["melody.wrong-key"],
+          },
         ],
       },
     },
@@ -428,20 +454,20 @@ export default defineLesson({
         prompt:
           "Over the four-chord band, this call climbs twice and leaves bars 2 and 4 empty. Answer it on another sound, in a line of its own: `vox`, on the Rhodes, the organ or the piano. Let the response end somewhere the call did not.",
         skills: [{ skill: "M07", w: 1 }],
-        // The `tracks` detail counts "melody parts"; the label says it in the lesson's words.
-        feedbackText: { "rubric.unmet": "{label}: not yet." },
         code: { starter: MAKE_STARTER },
         bars: [4, 8],
         saveAs: "sketch",
         rubric: [
+          // Taking turns is checked, not only a second line: the call copied onto `vox` plays with it and
+          // answers nothing (corrections pass, theory-b 3).
           {
             id: "two-parts",
             label: "Two parts that take turns",
             required: true,
             skills: ["M07"],
-            rule: "tracks",
-            min: 2,
-            roles: ["melody"],
+            rule: "custom",
+            fn: "call-response",
+            params: { a: "mel", b: "vox" },
           },
           {
             id: "home",
@@ -476,6 +502,40 @@ export default defineLesson({
             response: { code: MAKE_ONE_LINE },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the call copied onto vox: both play together, nothing answers",
+            response: { code: code(call(MAKE_CALL), resp(MAKE_CALL)) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "a vox line that plays all the way through, over the call",
+            response: { code: code(call(MAKE_CALL), resp("<[4 2 1 0] [4 ~ 1 ~] [5 4 3 2] [3 ~ 0 ~]>")) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "a reply that comes in on beat 4 of the call's bar and runs on",
+            response: {
+              code: code(call(MAKE_CALL), resp("<[~ ~ ~ 7] [6 4 2 ~] [~ ~ ~ 6] [5 3 1 0]>", "piano")),
+            },
+            expect: "pass",
+          },
+          {
+            name: "a short answer, one held note a bar, on the organ",
+            response: { code: code(call(MAKE_CALL), resp("<~ 4 ~ 0>", "organ")) },
+            expect: "pass",
+          },
+          {
+            name: "the parts trade halves of each bar",
+            response: {
+              code: code(
+                call("<[0 2 ~ ~] [2 4 ~ ~] [4 5 ~ ~] [2 0 ~ ~]>"),
+                resp("<[~ ~ 4 1] [~ ~ 3 0] [~ ~ 2 1] [~ ~ 1 0]>"),
+              ),
+            },
+            expect: "pass",
           },
         ],
       },

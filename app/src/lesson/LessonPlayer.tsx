@@ -25,7 +25,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useActorRef, useSelector } from "@xstate/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import type { ActorRefFrom } from "xstate";
+import { type ActorRefFrom, waitFor } from "xstate";
 import { courseGraph } from "../../../content/index.ts";
 import { unlockedAt } from "../../../content/lib/course.ts";
 import { callApi } from "../lib/api.ts";
@@ -941,8 +941,21 @@ function PlayerCore(props: CoreProps) {
     },
     submit: async (response) => {
       const result = await grade(response);
-      if (result && ex)
-        actor.send({ type: "SUBMIT", response, result, extraReplays: 0, exercise: ex, seriesNo, params });
+      if (result && ex) {
+        const event = {
+          type: "SUBMIT",
+          response,
+          result,
+          extraReplays: 0,
+          exercise: ex,
+          seriesNo,
+          params,
+        } as const;
+        // A SUBMIT while the previous attempt is still being posted is dropped by the machine: the hook waits for
+        // a state that takes it (beside other suites a second answer sent right after a first one was lost).
+        await waitFor(actor, (s) => s.can(event), { timeout: 30_000 });
+        actor.send(event);
+      }
       return result;
     },
   };

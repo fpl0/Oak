@@ -46,6 +46,9 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 const ROLL_KEYS = { roll: true, staff: false, keyboard: true } as const;
 const ROLL_STAFF = { roll: true, staff: "treble", keyboard: false } as const;
 
+/** A harmony line's distance from the riff: anything but a unison or an octave (those double it), up to two octaves. */
+const HARMONY_SEMIS = Array.from({ length: 47 }, (_, i) => i - 23).filter((k) => k % 12 !== 0);
+
 export default defineLesson({
   id: "U04.L02",
   version: 1,
@@ -290,8 +293,6 @@ export default defineLesson({
         id: "named-harmony",
         version: 1,
         role: "practice",
-        // The catalog's text for a `uses` rule names the tool ID; the label says it in words.
-        feedbackText: { "rubric.unmet": "{label}: not yet." },
         prompt:
           'Write a riff and a harmony line that follows it a named distance away, with `.transpose("…")`. Try a 3rd, a 6th or a 5th, and keep the one you like.',
         skills: [{ skill: "I02", w: 1 }],
@@ -301,11 +302,21 @@ export default defineLesson({
         rubric: [
           {
             id: "named",
-            label: "The harmony is moved by a named interval",
+            label: "A harmony line moves with the riff, a named interval away",
             required: true,
             skills: ["I02"],
-            rule: "uses",
-            tool: "tb.transpose.interval",
+            // The effect, then the tool: a second line sounds with the riff, every note moved by one interval (not
+            // a unison, `"1P"`), written with a named `.transpose("…")`.
+            rule: "custom",
+            fn: "transposed-copy",
+            // Corrections gate (AS-11): the harmony sounds WITH the riff in every bar it plays, a real interval away
+            // (not a unison and not an octave, which only double it).
+            params: {
+              together: true,
+              minRatio: 1,
+              semis: HARMONY_SEMIS,
+              alsoUses: ["tb.transpose.interval"],
+            },
           },
           {
             id: "two-voices",
@@ -343,6 +354,17 @@ export default defineLesson({
             response: {
               code: `${TEMPO}hats: s("hh*8").gain(.35)\n${notes("mel", "<[c4 ~ g4 c4] [f4 g4 [f4 c4] ~]>")}\n${notes("vox", "<[c4 ~ g4 c4] [f4 g4 [f4 c4] ~]>", '.transpose("6M")', ".gain(.5)")}`,
             },
+            expect: "pass",
+          },
+          {
+            name: "a unison: named, but no harmony",
+            response: { code: makePair('.transpose("1P")') },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "a 4th below, named",
+            response: { code: makePair('.transpose("-4P")') },
             expect: "pass",
           },
           {

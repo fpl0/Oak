@@ -5,6 +5,9 @@
 // Oak sets it in 3/4 (the source transcription is in 6/4, two of Oak's bars to one of its bars) with every attack
 // where the source has it: each dotted quarter and eighth becomes a quarter, an eighth rest and the eighth, and
 // each dotted half a half and a quarter rest.
+// Four bars follow Chappell's "oldest copy" (as two separate readers of it agree, 2026-11) where the modern
+// transcription differs: bar 16 holds 1 (E), not 5 below; bars 18 and 26 are ♭7 dotted quarter, ♯6 eighth, 5
+// quarter; bar 29 has the passing 2 (F♯), as bar 13 does.
 // Harmony, one chord a bar (Oak's, after the usual accompaniment): i III VII v | i VI V V | i III VII v | i V i i,
 // the refrain III VII VII v | i VI V V | III VII VII v | i V i i.
 import { noteSong } from "../tunes.ts";
@@ -12,7 +15,7 @@ import { noteSong } from "../tunes.ts";
 export const setting =
   "3/4 with every attack where the source has it: a dotted quarter and eighth become a quarter, an eighth rest and the eighth; a dotted half becomes a half and a quarter rest.";
 const UP = ["[g4@2 a4]", "[b4@2 ~ c5 b4@2]", "[a4@2 f#4]", "[d4@2 ~ e4 f#4@2]"];
-const GREEN = ["[d5@2 ~]", "[d5@4 c#5 b4]", "[a4@2 f#4]", "[d4@2 ~ e4 f#4@2]"];
+const GREEN = ["[d5@2 ~]", "[d5@2 ~ c#5 b4@2]", "[a4@2 f#4]", "[d4@2 ~ e4 f#4@2]"];
 export default noteSong({
   id: "song.greensleeves",
   bpm: 108,
@@ -25,21 +28,21 @@ export default noteSong({
     "[e4@2 ~ d#4 e4@2]",
     "[f#4@2 d#4]",
     "[b3@2 e4]",
-    // Strain, line 2: the same to bar 12, then ♭3 2 1 | ♯7, ♯6, ♯7, | 1 | 5,
+    // Strain, line 2: the same to bar 12, then ♭3 2 1 | ♯7, ♯6, ♯7, | 1 | 1
     ...UP,
     "[g4@2 ~ f#4 e4@2]",
     "[d#4@2 ~ c#4 d#4@2]",
     "[e4@2 ~]",
-    "[b3@2 ~]",
+    "[e4@2 ~]",
     // Refrain, line 1: ♭7 | ♭7 ♯6 5 | 4 2 | ♭7, 1 2 | ♭3 1 | 1 ♯7, 1 | 2 ♯7, | 5,
     ...GREEN,
     "[g4@2 e4]",
     "[e4@2 ~ d#4 e4@2]",
     "[f#4@2 d#4]",
     "[b3@2 ~]",
-    // Refrain, line 2: the same to bar 28, then ♭3 1 | ♯7, ♯6, ♯7, | 1 | 1
+    // Refrain, line 2: the same to bar 28, then ♭3 2 1 | ♯7, ♯6, ♯7, | 1 | 1
     ...GREEN,
-    "[g4@2 e4]",
+    "[g4@2 ~ f#4 e4@2]",
     "[d#4@2 ~ c#4 d#4@2]",
     "[e4@2 ~]",
     "[e4@2 ~]",

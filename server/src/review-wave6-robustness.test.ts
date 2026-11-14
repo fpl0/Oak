@@ -10,7 +10,7 @@
 //    recording is still a new take; a lesson completion sent twice counts once;
 //  - every Wave 6 endpoint keeps contracts §11.1: no X-Oak, a foreign Host, a cross-origin write or a preflight is
 //    403; a take's audio is a media GET (Sec-Fetch-Site same-origin, no X-Oak) and nothing else is.
-import { beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   type AlbumTrackVersion,
   type CoreCompletion,
@@ -24,6 +24,7 @@ import { loadContent } from "./content/loader.ts";
 import type { ContentSource } from "./content/types.ts";
 import { CONTENT_DIR } from "./testing/course.ts";
 import { BROWSER, gradeResult, type Harness, harness } from "./testing/harness.ts";
+import { dropSharedSeeds, sharedSeed } from "./testing/seed-cache.ts";
 
 let real: ContentSource;
 beforeAll(async () => {
@@ -31,12 +32,14 @@ beforeAll(async () => {
 });
 
 const NOW = "2026-11-14T12:00:00.000Z";
+afterAll(dropSharedSeeds);
 const DAY = 24 * 3_600_000;
 
 async function seeded(point: string): Promise<Harness> {
   const h = await harness({ dev: true, content: real, now: NOW });
   await h.json("PUT", "/api/profile", { timezone: "UTC" });
-  const r = await h.json<{ error?: { message: string } }>("POST", "/api/dev/seed", { point });
+  // A point several tests start from is built once and restored for the others (testing/seed-cache.ts).
+  const r = await sharedSeed<{ error?: { message: string } }>(h, real, { point });
   if (r.status !== 200) throw new Error(`seed ${point}: ${r.status} ${JSON.stringify(r.body)}`);
   return h;
 }

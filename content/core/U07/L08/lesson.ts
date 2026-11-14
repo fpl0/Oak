@@ -8,8 +8,8 @@
 // How it uses the shapes (AUTHORING §17.7): the graded code steps declare `pickup` (its length in beats), so
 // the grader numbers bars from the first full bar, says "Pickup" for bar 0, and reports a tune that starts
 // on the bar line instead as `rhythm.pickup-missing` (the `rhythm` matcher inside an `all`). The Make's
-// required rule is an implemented `onsets` rule: a note on beat 4 of bar 0 (perBar false, absolute). When the
-// grader implements the planned `pickup` rule, switch to it and keep the tests.
+// required rule is `pickup` with `leadsIn`: bar 0 starts with rests, something sounds in its last beat, and
+// bar 1 starts on its downbeat.
 //
 // Repertoire (contracts §2.8): Auld Lang Syne (song.auld-lang-syne), the first phrase in U03.L10's plain-rhythm
 // setting (each dotted quarter and eighth as two quarters), now with its pickup: 5 | 1 1 1 3 | 2 1 2 3 |
@@ -384,22 +384,21 @@ export default defineLesson({
           "The note in bar 0 comes on beat 1 and just sits there. Move it, or write two, so it leads into bar 1. Then make the tune yours.",
         skills: [{ skill: "M10", w: 1 }],
         pickup: { units: [1, 1] },
-        // The `onsets` rule's own detail ("the onsets differ from the brief") says nothing a learner can use;
-        // the same text serves the suggestion, so it says only "not yet".
-        feedbackText: { "rubric.unmet": "{label}: not yet." },
         code: { starter: MAKE_STARTER },
         bars: [5, 9],
         saveAs: "sketch",
         rubric: [
+          // The `pickup` rule reads the effect: bar 0 starts with rests, its last beat sounds, and bar 1 starts
+          // on its downbeat. A note on beat 4 alone is not enough: `[-3 -2 -1 -3]` fills bar 0 from beat 1 and
+          // is a bar of its own (corrections pass, theory-b 4).
           {
             id: "a-pickup",
-            label: "A pickup: a note on beat 4 of bar 0, leading into bar 1",
+            label: "A pickup that leads into bar 1",
             required: true,
             skills: ["M10"],
-            rule: "onsets",
+            rule: "pickup",
             track: "@melody",
-            contains: [[3, 4]],
-            perBar: false,
+            leadsIn: true,
           },
           {
             id: "chord-tones",
@@ -440,6 +439,27 @@ export default defineLesson({
             response: { code: MAKE_WITH("[~ ~ -3 ~]") },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            name: "bar 0 filled from beat 1: a bar of its own, not a pickup",
+            response: { code: MAKE_WITH("[-3 -2 -1 -3]") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "a pickup on beat 3, held through beat 4",
+            response: { code: MAKE_WITH("[~ ~ -3@2]") },
+            expect: "pass",
+          },
+          {
+            name: "three notes climbing into home",
+            response: { code: MAKE_WITH("[~ -3 -2 -1]") },
+            expect: "pass",
+          },
+          {
+            name: "two quick notes on beat 4",
+            response: { code: MAKE_WITH("[~ ~ ~ [-2 -1]]") },
+            expect: "pass",
           },
         ],
       },

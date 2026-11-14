@@ -328,7 +328,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Bars 1–2 are the start of the tune you took down. Write bars 3–4 to answer them: **the same shape, at another height**. Move every number of bars 1–2 by the same amount. Start bar 3 on degree 6, `n` 5, and the answer lands on home.",
+          "Bars 1–2 are the start of the tune you took down. Write bars 3–4 to answer them: **the same shape, at another height**. Move every number of bars 1–2 by the same amount. Start bar 3 on degree 6, `n` 5, and the answer lands on home; another start gives another ending.",
         skills: [
           { skill: "E07", w: 0.5 },
           { skill: "M01", w: 0.5 },
@@ -340,21 +340,19 @@ export default defineLesson({
         rubric: [
           {
             id: "same-shape",
-            label: "Bars 3 and 4 reuse the shape of bars 1 and 2",
+            label: "Bars 3 and 4 are bars 1 and 2 moved: every number by the same amount",
             required: true,
             // The phrase came in by ear; the answer is heard against it.
             skills: ["E07", "M01"],
-            rule: "motif-reuse",
-            track: "@melody",
-            // Measured over one pass of the 4-bar loop: bars 3 and 4 both in the phrase's shape score 2 of 4;
-            // one of them alone, 1 of 4; an answer with no link to the phrase, 0.
-            minRatio: 0.5,
-            unitBars: 1,
-            // The shape in degrees as well as in half steps (a tonal sequence, the way tunes answer
-            // themselves): U03 moves lines by degrees, and half-step sizes of 3rds wait for U04.L02. Only
-            // moves by degrees can come home: the phrase ends on 3, so the answer from 6 (`n` 5 or -2) ends
-            // on 1, and no move that keeps every half step (from 4 or 5) does.
-            shape: "either",
+            // Corrections pass: one move for the whole two-bar answer, counted in degrees (a tonal sequence, the
+            // way tunes answer themselves: U03 moves lines by degrees, and half-step sizes of 3rds wait for
+            // U04.L02). `motif-reuse` compared each bar with any earlier one, so `[5 5 5 7] [1 0 1 2]` (bar 3
+            // moved, bar 4 a plain copy of bar 2) passed. Only moves by degrees can come home: the phrase ends on
+            // 3, so the answer from 6 (`n` 5 or -2) ends on 1. `steps: "either"` keeps `motif-reuse`'s `shape:
+            // "either"`: an exact move in half steps, out of the key, also keeps the shape.
+            rule: "custom",
+            fn: "transposed-copy",
+            params: { track: "@melody", unitBars: 2, steps: "either", pairs: [[1, 3]] },
           },
           {
             id: "ends-home",
@@ -374,8 +372,6 @@ export default defineLesson({
             tool: "tb.legato",
           },
         ],
-        // The catalog's detail counts bars in one pass of the loop; the label says it in words.
-        feedbackText: { "rubric.unmet": "{label}: not yet." },
         hints: ladder(
           "Sing bars 1 and 2. Which notes repeat, and where does the line step up?",
           "Bars 3 and 4 copy bars 1 and 2 with every number moved by the same amount. The phrase ends on 3; to end the answer on home, move it so that its last note becomes 1.",
@@ -437,6 +433,33 @@ export default defineLesson({
             response: { code: deg("<[0 0 0 2] [1 0 1 2] [5 5 5 7] [7@4]>") },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            // The outside review's counterexample: bar 3 moved, bar 4 a plain copy of bar 2.
+            name: "bar 3 moved, bar 4 left at the height of bar 2",
+            response: { code: deg("<[0 0 0 2] [1 0 1 2] [5 5 5 7] [1 0 1 2]>") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "bars 1 and 2 again at the same height",
+            response: { code: deg("<[0 0 0 2] [1 0 1 2] [0 0 0 2] [1 0 1 2]>") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "two steps up, written as note names",
+            response: {
+              code: `${TEMPO}mel: note("<[c4 c4 c4 e4] [d4 c4 d4 e4] [e4 e4 e4 g4] [f4 e4 f4 g4]>").s("piano")`,
+            },
+            expect: "pass",
+          },
+          {
+            name: "a step down, with legato",
+            response: {
+              code: deg("<[0 0 0 2] [1 0 1 2] [-1 -1 -1 1] [0 -1 0 1]>", "C4:major", ".legato(.9)"),
+            },
+            expect: "pass",
           },
           {
             name: "from 4 as well: F up to A is the same 3rd as C up to E",

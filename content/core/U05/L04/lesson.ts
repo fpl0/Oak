@@ -1,5 +1,7 @@
 // U05.L04 Arpeggios. One thing a chord can do besides sound as a block: be played one note at a time
-// (`.arp()`, which picks notes out of a stack by position, counting from the lowest as 0). What the learner
+// (`.arp()`, which picks notes out of a stack by position, in the order they are written, the first as 0; every
+// stack in this lesson is written lowest note first, so 0 is the lowest here). Review finding theory-c A3:
+// `n("[4,0,2]").arp("0 1 2")` plays G, C, E. What the learner
 // has: triads stacked by hand (U05.L01), the four qualities by ear and by their 3rds (U05.L02–L03). Not yet:
 // chord names (U05.L09 "Chord Names", the next lesson: split out of this one in contracts 1.6, so this
 // lesson keeps one idea), `chord()` and `.voicing()` (U05.L08), inversions (U05.L05).
@@ -99,7 +101,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          '`.arp()` picks notes out of the stack by position, counting from the lowest as 0. In what order will `n("[0,2,4]").arp("0 2 1")` play C, E and G?',
+          '`.arp()` picks notes out of the stack by position, in the order they are written, the first as 0; this stack is written lowest first. In what order will `n("[0,2,4]").arp("0 2 1")` play C, E and G?',
         skills: [{ skill: "C01", w: 1 }],
         hints: null,
         tests: [],
@@ -131,7 +133,7 @@ export default defineLesson({
         skills: [{ skill: "C01", w: 1 }],
         feedbackText: {
           "investigate.wrong":
-            "Not quite. In `.arp()` each number is a position in the stack: 0 is the lowest note, 2 the highest.",
+            "Not quite. In `.arp()` each number is a position in the stack, in the order its notes are written: here 0 is the lowest note, 2 the highest.",
         },
         hints: ladder(
           "How many numbers are inside the quotes of `.arp()`?",
@@ -260,8 +262,11 @@ export default defineLesson({
             label: "The chords are broken with `.arp()`",
             required: true,
             skills: ["C01"],
-            rule: "uses",
-            tool: "tb.arp",
+            // Corrections gate (AS-41): the chords really sound one note at a time (`.arp("0")` and
+            // `.arp("[0,1,2]")` do not break them), written with `.arp()`.
+            rule: "custom",
+            fn: "broken-chord",
+            params: { track: "chords", alsoUses: ["tb.arp"] },
           },
           {
             id: "gaps",
@@ -283,7 +288,7 @@ export default defineLesson({
         ],
         hints: ladder(
           "Where in the chord line do you choose which note of the stack plays when?",
-          "`.arp()` goes after the stacks and before `.scale()`, with a pattern of positions: 0 the lowest note, 2 the highest.",
+          "`.arp()` goes after the stacks and before `.scale()`, with a pattern of positions in the stack as written: 0 the first note, here the lowest, 2 the last, here the highest.",
           'Start from `.arp("0 1 2 1")`, then change one number, or put a `~` where a note was.',
         ),
         tests: [

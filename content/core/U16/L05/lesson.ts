@@ -231,8 +231,9 @@ export default defineLesson({
         ],
         code: { starter: MODIFY_STARTER },
         reference: { solutions: [MODIFY_SOLUTION], bars: 4 },
-        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7).
-        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"] },
+        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7); `durations`:
+        // and it lasts as the target's does, so a B♭ cut to a click is not the target.
+        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"], durations: true },
         constraints: [{ c: "edit-only-regions", feedback: "code.edit-outside" }],
         target: { audible: true, showRoll: false, revealRollAfter: 1 },
         feedbackText: {
@@ -280,6 +281,12 @@ export default defineLesson({
             response: { code: phrase2("<Am Bb G [C Fm]>") },
             expect: "fail",
             feedback: ["code.edit-outside"],
+          },
+          {
+            name: "B♭ cut to a click: the right chord, 1% of the bar",
+            response: { code: phrase2("<C [Bb@0.01 ~@0.99] G [C Fm]>") },
+            expect: "fail",
+            feedback: ["rhythm.duration"],
           },
         ],
       },

@@ -42,6 +42,11 @@ export interface NEvent {
    * controls the `controls` matcher and the probes read, and only when the code sets one. Absent otherwise.
    */
   controls?: Record<string, number | string>;
+  /**
+   * Corrections pass. The voicing dictionary in force when `voicing()` voiced this note (`.dict("lefthand")`
+   * written before it); absent for the default dictionary and for notes not voiced from a chord symbol.
+   */
+  voicedWith?: string;
 }
 
 export const DIMENSIONS = [

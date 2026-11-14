@@ -13,7 +13,8 @@
 // left-hand loop as pitch classes and lowest note per onset against a reference in the same dictionary, with
 // `must-use tb.dict.lefthand`: `.dict("lefthand")` written after `.voicing()` changes nothing and is named by
 // `harmony.pcset`. The ear step is five trials of `fam.chd.quality-7th` at level 4, all five qualities. The
-// Make's one required rule is `uses tb.dict.lefthand`: the starter is voiced by the default dictionary.
+// Make's one required rule is `voiced-with lefthand` on `chords`: the chords themselves must be voiced by that
+// dictionary, so `.dict("lefthand")` written after `.voicing()`, or on the bass, does not meet it.
 import { defineLesson, type FactEx, type HintLadder, type IdentifyEx } from "@oak/content-kit";
 
 const BPM = 112;
@@ -31,7 +32,10 @@ const ladder = (nudge: string, pointer: string, partial: string): HintLadder => 
 const changes = (form: string) => `const changes = "${form}"\n`;
 /** The comping rhythm of the hook: the "and" of 1, then beat 3. */
 const COMP = '.struct("~ x ~ ~ x ~ ~ ~")';
-/** The upright walks the roots in quarter notes: the left-hand voicings below leave the root to it. */
+/**
+ * The upright plays the roots in quarter notes (no walking bass: that moves between the roots), and the left-hand
+ * voicings below leave the root to it.
+ */
 const WALK = 'bass: chord(changes).rootNotes(2).struct("x x x x").s("upright")';
 /** The guitar answers the comping: A F over Dm7, B G over G7, G B over Cmaj7, then a bar of space. */
 const GTR = 'gtr: n("<[~ 5 ~ 3] [~ 6 ~ 4] [~ 4 6 ~] ~>").scale("C4:major").s("jazzgtr")';
@@ -68,11 +72,11 @@ const STACK_THEN_LEFT = code(
 const pairs = (pattern: string) => code(`mel: note("${pattern}").s("piano")`);
 
 /**
- * The Make: Cmaj7 Am7 Dm7 G7 held in the default voicing over a walking bass, with a line that meets each chord
+ * The Make: Cmaj7 Am7 Dm7 G7 held in the default voicing over the upright's quarter-note roots, with a line that meets each chord
  * on a guide tone (B over Cmaj7, G over Am7, F over Dm7, F over G7).
  */
 const MAKE_LINE = 'mel: n("<[6 ~ 4 ~] [4 ~ 2 ~] [3 ~ 5 ~] [3 ~ 1 ~]>").scale("C5:major").s("piano")';
-/** The upright walks the roots, so a comping rhythm that starts between the beats still has its root under it. */
+/** The upright plays the roots on every beat, so a comping rhythm that starts between the beats still has its root under it. */
 const MAKE_BASS = WALK;
 const make = (form: string, chords: string, ...rest: string[]) =>
   code(changes(form), `chords: chord(changes)${chords}`, ...rest);
@@ -188,7 +192,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: Dm7, G7 and Cmaj7, held one a bar over the root. Then the same three chords as a jazz pianist plays them, with the bass walking and a guitar answering. Watch the roll: where do the chords sit the second time?",
+          "Press Play: Dm7, G7 and Cmaj7, held one a bar over the root. Then the same three chords as a jazz pianist plays them, with the bass on the roots, four to the bar, and a guitar answering. Watch the roll: where do the chords sit the second time?",
         skills: [{ skill: "C07", w: 1 }],
         hints: null,
         tests: [],
@@ -197,7 +201,7 @@ export default defineLesson({
           {
             code: HOOK,
             caption:
-              "The same chords in a narrow band in the middle, comped, with a walking bass and a guitar.",
+              "The same chords in a narrow band in the middle, comped, over the roots four to the bar, with a guitar.",
             bars: 4,
           },
         ],
@@ -486,7 +490,7 @@ export default defineLesson({
         role: "practice",
         title: "Your trio",
         prompt:
-          "Cmaj7, Am7, Dm7, G7, held in the plain voicing, with a walking bass and a line on top. Make it your trio: comp the chords for the left hand on the Rhodes or the jazz guitar, give the comping a rhythm with `.struct()`, keep the bass on the roots. Or bring a loop of your own from this unit.",
+          "Cmaj7, Am7, Dm7, G7 in the plain voicing, the bass on the roots, a line on top. Make it your trio: comp the chords for the left hand on the Rhodes or the jazz guitar, give the comping a rhythm with `.struct()`, keep the bass on the roots. Or bring a loop of your own from this unit.",
         skills: [
           { skill: "C07", w: 0.5 },
           { skill: "I04", w: 0.5 },
@@ -500,8 +504,9 @@ export default defineLesson({
             label: "The chords are voiced for the left hand",
             required: true,
             skills: ["C07", "I04"],
-            rule: "uses",
-            tool: "tb.dict.lefthand",
+            rule: "custom",
+            fn: "voiced-with",
+            params: { track: "chords", dict: "lefthand" },
           },
           {
             id: "bass-on-roots",
@@ -562,13 +567,46 @@ export default defineLesson({
             expect: "pass",
           },
           {
-            name: "beyond the brief: its own loop on the jazz guitar, comped, a walking bass, a swung line",
+            name: "beyond the brief: its own loop on the jazz guitar, comped, the roots in quarter notes, a swung line",
             response: {
               code: make(
                 "<Dm7 G7 C^7 Am7>",
                 `${LEFT}.voicing().struct("x ~ ~ x ~ ~ x ~").s("jazzgtr")`,
                 MAKE_BASS,
                 'mel: n("<[3 ~ 2 ~] [3 ~ ~ 1] [6 ~ 4 ~] [4 ~ 6 ~]>").scale("C5:major").s("rhodes").swingBy(1/3, 4)',
+              ),
+            },
+            expect: "pass",
+          },
+          {
+            name: "the dictionary written after .voicing(): the chords keep the default voicing",
+            response: {
+              code: make("<C^7 Am7 Dm7 G7>", `.voicing()${LEFT}.s("rhodes")`, MAKE_BASS, MAKE_LINE),
+            },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the left hand's dictionary on the bass line, not the chords",
+            response: {
+              code: make(
+                "<C^7 Am7 Dm7 G7>",
+                '.voicing().s("rhodes")',
+                'bass: chord(changes).dict("lefthand").rootNotes(2).struct("x x x x").s("upright")',
+                MAKE_LINE,
+              ),
+            },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "its own changes for the left hand, comped long–short on the jazz guitar",
+            response: {
+              code: make(
+                "<Am7 D7 G^7 C^7>",
+                `${LEFT}.voicing().struct("x ~ ~ x ~ ~ ~ ~").s("jazzgtr")`,
+                MAKE_BASS,
+                MAKE_LINE,
               ),
             },
             expect: "pass",

@@ -325,8 +325,10 @@ export default defineLesson({
             label: "Changes a bar with `< >`",
             required: true,
             skills: ["R04"],
-            rule: "uses",
-            tool: "tb.mini.alt",
+            // The effect, not the brackets: `<[~ sd ~ sd]>` holds one choice and plays the same bar every time.
+            rule: "custom",
+            fn: "bars-differ",
+            params: { min: 2, alsoUses: ["tb.mini.alt"] },
           },
           {
             id: "four-bars",
@@ -388,6 +390,30 @@ export default defineLesson({
                 snare(`<[${GROOVE_BAR}]!3 [sd [sd sd] [ht!2 mt!2] [lt lt lt lt]]>`),
                 'hats: s("<hh*16 hh*8 hh*16 [hh*4 ~ ~]>").gain(.5)',
                 'perc: s("<cr ~ ~ ~>")',
+              ),
+            },
+            expect: "pass",
+          },
+          {
+            name: "`< >` with one choice: the same bar every time",
+            response: { code: withSnare(`<[${GROOVE_BAR}]>`) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the kick changes in bar 4, the snare stays",
+            response: {
+              code: code('kick: s("<[bd ~ bd ~]!3 [bd bd [bd bd] [bd bd]]>")', snare(GROOVE_BAR), HATS),
+            },
+            expect: "pass",
+          },
+          {
+            name: "the hats drop out at the end of bar 4",
+            response: {
+              code: code(
+                KICK,
+                snare(`<[${GROOVE_BAR}]!3 [sd sd sd sd]>`),
+                'hats: s("<hh*8 hh*8 hh*8 [hh hh hh hh ~ ~ ~ ~]>").gain(.6)',
               ),
             },
             expect: "pass",

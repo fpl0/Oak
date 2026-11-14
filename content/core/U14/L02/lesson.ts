@@ -321,8 +321,9 @@ export default defineLesson({
         skills: [{ skill: "H11", w: 1 }],
         code: { starter: MODIFY_STARTER },
         reference: { solutions: [MODIFY_SOLUTION], bars: 4 },
-        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7).
-        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"] },
+        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7), held for its
+        // bar: a G struck for 1% of the bar and then silent is not the swap (`durations`).
+        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"], durations: true },
         constraints: [{ c: "edit-only-regions", feedback: "code.edit-outside" }],
         target: { audible: true, showRoll: false, revealRollAfter: 1 },
         feedbackText: {
@@ -354,6 +355,18 @@ export default defineLesson({
             response: { code: inA("<A G#o D A>") },
             expect: "fail",
             feedback: ["harmony.pcset"],
+          },
+          { name: "G struck twice in its bar", response: { code: inA("<A [G G] D A>") }, expect: "pass" },
+          {
+            name: "G held three beats, a beat of air",
+            response: { code: inA("<A [G@3 ~] D A>") },
+            expect: "pass",
+          },
+          {
+            name: "G struck for a moment, then silence for the rest of the bar",
+            response: { code: inA("<A [G@0.01 ~@0.99] D A>") },
+            expect: "fail",
+            feedback: ["rhythm.duration"],
           },
           {
             name: "another bar edited too",

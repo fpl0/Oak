@@ -142,7 +142,9 @@ export function useDraftSaver(i: DraftSaverInput): DraftSaver {
     );
   };
 
-  // A pause in typing saves.
+  // A pause in typing saves. The timer restarts when the code changes, not on every render: a workspace that renders
+  // more often than every 4 s (analysis, the clock, playback) cleared it each time, so nothing was saved (the C7
+  // session 1 race of the corrections gate's run: "Not saved yet" after 30 s beside other suites).
   useEffect(() => {
     if (pending === null) return;
     if (
@@ -152,7 +154,7 @@ export function useDraftSaver(i: DraftSaverInput): DraftSaver {
       return;
     const t = setTimeout(() => saveQuietly(pending, false), 4000);
     return () => clearTimeout(t);
-  });
+  }, [pending]);
   // Leaving the page (or hiding it) saves what is there.
   const latestCode = useRef<string | null>(null);
   useEffect(() => {

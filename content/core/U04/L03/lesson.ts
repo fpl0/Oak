@@ -202,13 +202,16 @@ export default defineLesson({
         ],
         code: { starter: keys(`⟪${RIFF_APART}⟫`) },
         reference: { solutions: [keys(RIFF_TOGETHER)], bars: 1 },
-        // The notes that sound together on each beat, whatever their order or octave inside the brackets.
-        matcher: { m: "pcset", perOnset: true, bass: false },
+        // The notes that sound together on each beat, at the octave the page shows, whatever their order inside
+        // the brackets: a pair is an interval, and C4 with E5 is not the 3rd the staff stacks.
+        matcher: { m: "events", pitch: "absolute", rhythm: "onsets", durations: false, tracks: ["keys"] },
         constraints: [{ c: "must-use", tool: "tb.mini.stack", feedback: "code.must-use" }],
         target: { audible: true },
         feedbackText: {
-          "harmony.pcset":
-            "Bar {bar}, {beatLabel}: the pair sounds {got}; it should be {exp}. Keep the same two notes in each pair, only together.",
+          "melody.wrong-degree":
+            "Bar {bar}, {beatLabel}: the pair has {got} ({gotSyl}) where the page shows {exp} ({expSyl}). Keep the same two notes in each pair, only together.",
+          "melody.octave":
+            "Bar {bar}, {beatLabel}: the right letter, but an octave {dir} than the page shows. Moving one note of a pair by an octave changes the distance between them: keep each note at the octave written.",
           "code.must-use": "Play each pair at once with a comma between the two notes inside its brackets.",
         },
         hints: ladder(
@@ -233,7 +236,21 @@ export default defineLesson({
             name: "F for E in the first pair",
             response: { code: keys("[c4,f4] [c4,a4] [b3,f4] [c4,e4]") },
             expect: "fail",
-            feedback: ["harmony.pcset"],
+            feedback: ["melody.wrong-degree"],
+          },
+          {
+            // Review finding (theory-c A1): the same letters at other octaves are other intervals.
+            name: "the upper notes an octave too high: a 10th, not the 3rd on the page",
+            response: { code: keys("[c4,e5] [c4,a5] [b3,f5] [c4,e5]") },
+            expect: "fail",
+            feedback: ["melody.octave"],
+          },
+          {
+            name: "written as degrees, with spaces after the commas",
+            response: {
+              code: `${TEMPO}keys: n("[0, 2] [0, 5] [-1, 3] [0, 2]").scale("C4:major").s("piano")`,
+            },
+            expect: "pass",
           },
           {
             name: "two lines instead of a comma",

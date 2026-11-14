@@ -439,7 +439,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write a riff, then play it again higher or lower with `.transpose()`: on a second line, or in a second bar.",
+          "Write a riff, then play it again higher or lower with `.transpose()`: on a second line starting with it, or in a second bar.",
         skills: [{ skill: "P06", w: 1 }],
         code: { starter: riff() },
         bars: [1, 4],
@@ -447,11 +447,13 @@ export default defineLesson({
         rubric: [
           {
             id: "moved-copy",
-            label: "Moves a line with `.transpose()`",
+            // The effect, not the call: `.transpose(0)` moves nothing, and the riff must also sound unmoved.
+            label: "Plays the riff again, moved with `.transpose()`",
             required: true,
             skills: ["P06"],
-            rule: "uses",
-            tool: "tb.transpose",
+            rule: "custom",
+            fn: "transposed-copy",
+            params: { rhythm: "any", alsoUses: ["tb.transpose"] },
           },
           {
             id: "two-lines",
@@ -492,6 +494,30 @@ export default defineLesson({
             name: "beyond the brief: the copy follows the band's second chord",
             response: {
               code: `${TEMPO}mel: note("<[c4 e4 g4 e4] ~>").s("piano")\nvox: note("<~ [60 64 67 64]>").transpose(5).s("piano")`,
+            },
+            expect: "pass",
+          },
+          {
+            name: "`.transpose(0)`: the copy sounds where the riff does",
+            response: { code: riff(".transpose(0)") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "only the moved line, no riff to compare it with",
+            response: { code: riff(".transpose(7)") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "an octave below, on a second line",
+            response: { code: `${riff()}\nvox: note("${RIFF_NOTES}").transpose(-12).s("piano").gain(.6)` },
+            expect: "pass",
+          },
+          {
+            name: "a fifth up in the second bar, as numbers",
+            response: {
+              code: `${TEMPO}mel: note("<[60 64 67 64] ~>").s("piano")\nvox: note("<~ [60 64 67 64]>").transpose(7).s("piano")`,
             },
             expect: "pass",
           },

@@ -59,6 +59,9 @@ setDefaultTimeout(60_000);
 
 /** Codes with a slot that no producer here can reach, and why. Keep it short; prefer adding a case. */
 const NOT_REACHED: Record<string, string> = {
+  // Corrections gate: the voicing gate reads voices from the lowest note up (the ear hears no written order), so two
+  // voices can no longer cross; the code stays in the catalog for a timbre-aware gate.
+  "harmony.voice-crossing": "voices are read by pitch, so they cannot cross",
   // Emitted, but the case needs a realm limit or a log line this corpus does not trigger.
   "eval.timeout": "needs a pattern past the realm's time limit",
   "eval.too-many-events": "needs a pattern past the event cap",

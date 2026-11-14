@@ -8,7 +8,7 @@
 //  - The own-audio checklist's form row (OWN_AUDIO_FORM_ROW) is self-reported evidence for the form skills.
 //  - A ladder item gives a tune's key plan with its key; an L8 standard keeps its sections off the wire until the
 //    form map is behind.
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import {
   type CourseProgress,
   type DevSeedResult,
@@ -26,6 +26,7 @@ import type { ContentSource } from "./content/types.ts";
 import { makeWav } from "./services/dev-seed.ts";
 import { CONTENT_DIR } from "./testing/course.ts";
 import { type Harness, harness } from "./testing/harness.ts";
+import { dropSharedSeeds, sharedSeed } from "./testing/seed-cache.ts";
 
 const NOW = "2026-11-14T12:00:00.000Z";
 let realP: Promise<ContentSource> | null = null;
@@ -34,10 +35,14 @@ const real = () => {
   return realP;
 };
 
+afterAll(dropSharedSeeds);
+
 async function seeded(point: string, content?: ContentSource): Promise<Harness> {
-  const h = await harness({ dev: true, content: content ?? (await real()), now: NOW });
+  const source = content ?? (await real());
+  const h = await harness({ dev: true, content: source, now: NOW });
   await h.json("PUT", "/api/profile", { timezone: "UTC" });
-  const r = await h.json<DevSeedResult>("POST", "/api/dev/seed", { point });
+  // A point several tests start from is built once and restored for the others (testing/seed-cache.ts).
+  const r = await sharedSeed<DevSeedResult>(h, source, { point });
   if (r.status !== 200) {
     await h.close();
     throw new Error(`seed ${point}: ${r.status} ${JSON.stringify(r.body)}`);

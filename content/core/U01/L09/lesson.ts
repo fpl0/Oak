@@ -353,11 +353,12 @@ export default defineLesson({
         rubric: [
           {
             id: "slow-or-fast",
-            label: "Uses `.slow()` or `.fast()`",
+            label: "Changes the speed with `.slow()` or `.fast()`",
             required: true,
             skills: ["R05"],
-            rule: "uses",
-            tool: ["tb.slow", "tb.fast"],
+            // The effect, not the call: `.slow(1)` keeps the speed it had.
+            rule: "custom",
+            fn: "speed-change",
           },
           {
             id: "new-kit",
@@ -398,6 +399,41 @@ export default defineLesson({
                 'hats: s("hh*8").fast(2).bank("AkaiLinn").gain(.4)',
                 'perc: s("[~ sh]*4").bank("RolandTR707").gain(.5)',
                 'perc2: s("<~ ~ ~ [cb ~ cb cb]>").bank("RolandTR707").gain(.6)',
+              ),
+            },
+            expect: "pass",
+          },
+          {
+            name: "`.slow(1)`: the speed it had",
+            response: {
+              code: code(
+                linn("kick", KICK_HOOK, ".slow(1)"),
+                linn("snare", BACKBEAT),
+                linn("hats", HATS8, "", ".gain(.5)"),
+              ),
+            },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "double-time on the hats alone",
+            response: {
+              code: code(
+                linn("kick", KICK_HOOK),
+                linn("snare", BACKBEAT),
+                linn("hats", HATS8, ".fast(2)", ".gain(.4)"),
+              ),
+            },
+            expect: "pass",
+          },
+          { name: "all double-time", response: { code: DOUBLE }, expect: "pass" },
+          {
+            name: "a half-time snare under a shaker",
+            response: {
+              code: code(
+                linn("kick", "bd ~ bd ~"),
+                linn("snare", BACKBEAT, ".slow(2)"),
+                'perc: s("sh*8").bank("RolandTR707").gain(.5)',
               ),
             },
             expect: "pass",

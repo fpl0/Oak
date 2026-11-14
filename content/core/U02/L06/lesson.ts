@@ -240,14 +240,34 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Add a second line labelled `vox`, the label for a second lead line, that plays the same four notes **one octave higher** on a synth wave, with `.gain(.4)`. Keep the piano line as it is.",
+          "Add a second line labelled `vox`, the label for a second lead line, that plays the same four notes **one octave higher** on a synth wave. Keep the piano line as it is. Waves are loud: `.gain(.4)` keeps the new line under the piano.",
         skills: [{ skill: "D01", w: 1 }],
         code: { starter: code(line("mel", RIFF, "piano"), "⟪⟫") },
         reference: {
           solutions: [code(line("mel", RIFF, "piano"), line("vox", "c5 e5 g5 e5", "triangle", ".4"))],
           bars: 1,
         },
-        matcher: { m: "events", pitch: "absolute", rhythm: "onsets", durations: false },
+        // The notes, and the sound the brief asks for: an octave double on the piano is right notes, wrong colour.
+        matcher: {
+          m: "all",
+          of: [
+            { m: "events", pitch: "absolute", rhythm: "onsets", durations: false },
+            {
+              m: "rubric",
+              rules: [
+                {
+                  id: "synth",
+                  label: "The octave line on a synth wave",
+                  required: true,
+                  skills: [],
+                  rule: "sounds",
+                  track: "vox",
+                  anyOf: ["snd.wave.sine", "snd.wave.triangle", "snd.wave.square", "snd.wave.sawtooth"],
+                },
+              ],
+            },
+          ],
+        },
         constraints: [{ c: "labels", min: 2, feedback: "code.labels" }],
         target: { audible: true, showRoll: true },
         feedbackText: LETTER_FEEDBACK,
@@ -284,6 +304,24 @@ export default defineLesson({
             feedback: ["melody.octave"],
           },
           {
+            name: "the octave line on the piano too",
+            response: { code: code(line("mel", RIFF, "piano"), line("vox", "c5 e5 g5 e5", "piano", ".4")) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "on a sawtooth, a little louder",
+            response: {
+              code: code(line("mel", RIFF, "piano"), line("vox", "c5 e5 g5 e5", "sawtooth", ".5")),
+            },
+            expect: "pass",
+          },
+          {
+            name: "on a sine, as MIDI numbers",
+            response: { code: code(line("mel", RIFF, "piano"), line("vox", "72 76 79 76", "sine", ".4")) },
+            expect: "pass",
+          },
+          {
             name: "one line only, moved up",
             response: { code: code(line("mel", "c5 e5 g5 e5", "sine", ".4")) },
             expect: "fail",
@@ -312,12 +350,15 @@ export default defineLesson({
         rubric: [
           {
             id: "two-parts",
-            label: "Two pitched parts",
+            label: "A second line doubles the first on another sound",
             required: true,
             skills: ["D01"],
-            rule: "tracks",
-            min: 2,
-            roles: ["melody"],
+            // Corrections pass: the doubling itself. `tracks` counted two pitched lines, so two piano lines, or a
+            // `vox` that played something else, passed. Every bar of the line has a copy on another line, at the
+            // same time and in the same rhythm, at the same height or one or two octaves away, on other sounds.
+            rule: "custom",
+            fn: "transposed-copy",
+            params: { together: true, semis: [0, 12, -12, 24, -24], otherSound: true, minRatio: 1 },
           },
           {
             id: "space",
@@ -364,6 +405,60 @@ export default defineLesson({
               code: code(
                 line("mel", "<[c4 e4 g4 ~] [f4 a4 c5 a4]>", "<piano sawtooth>"),
                 line("vox", "<[c4 e4 g4 ~] [f4 a4 c5 a4]>", "triangle", ".4", ".transpose(12)"),
+              ),
+            },
+            expect: "pass",
+          },
+          {
+            // The outside review's counterexamples: two lines on one sound; a second line that plays other notes.
+            name: "the copy on the same sound",
+            response: {
+              code: code(
+                line("mel", "<[c4 e4 g4 e4] [f4 a4 g4 e4]>", "piano"),
+                line("vox", "<[c4 e4 g4 e4] [f4 a4 g4 e4]>", "piano", ".4"),
+              ),
+            },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "a second line that plays something else",
+            response: {
+              code: code(
+                line("mel", "<[c4 e4 g4 e4] [f4 a4 g4 e4]>", "piano"),
+                line("vox", "c5 ~ ~ ~", "sine", ".4"),
+              ),
+            },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "doubled in bar 1 only",
+            response: {
+              code: code(
+                line("mel", "<[c4 e4 g4 e4] [f4 a4 g4 e4]>", "piano"),
+                line("vox", "<[c4 e4 g4 e4] ~>", "sine", ".4"),
+              ),
+            },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "an octave below on a sawtooth, a line of its own",
+            response: {
+              code: code(
+                line("mel", "<[e4 ~ d4 c4] [d4 e4 c4 ~]>", "piano"),
+                line("vox", "<[e3 ~ d3 c3] [d3 e3 c3 ~]>", "sawtooth", ".3"),
+              ),
+            },
+            expect: "pass",
+          },
+          {
+            name: "the double written as MIDI numbers, on a square wave",
+            response: {
+              code: code(
+                line("mel", "<[c4 e4 g4 e4] [f4 a4 g4 e4]>", "piano"),
+                line("vox", "<[60 64 67 64] [65 69 67 64]>", "square", ".3"),
               ),
             },
             expect: "pass",

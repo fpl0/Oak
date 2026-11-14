@@ -128,6 +128,7 @@ export function toNEvent(e: OakEvent): NEvent {
     out.sampleN = e.n;
   if (e.scale !== null) out.scaleCtx = e.scale;
   if (e.controls) out.controls = { ...e.controls };
+  if (e.voicedWith) out.voicedWith = e.voicedWith;
   return out;
 }
 
@@ -151,9 +152,48 @@ export function assignIds(events: NEvent[], pickup: boolean): NEvent[] {
   return events;
 }
 
-/** Raw events to `NEvent`s grouped by track, with the roles of contracts §6.2. */
+/**
+ * At or below this effective gain ((gain ?? 0.8) · velocity · postgain) an event is not heard: `.gain(0)`,
+ * `.velocity(0)`, `.postgain(0)`, a `"<0 .4>"` gain pattern's silent bars (−40 dB under full scale). Such events
+ * are not part of the music that is graded or analysed: a muted part cannot show a backbeat, a melody or a
+ * transcription. The raw `EvalSuccess.events` keep them.
+ */
+export const SILENT_GAIN = 0.01;
+/** Effective gain of one event: `(gain ?? 0.8) · velocity · postgain`. */
+export const effectiveGain = (e: OakEvent): number => (e.gain ?? 0.8) * (e.velocity ?? 1) * (e.postgain ?? 1);
+export const isAudible = (e: OakEvent): boolean => effectiveGain(e) > SILENT_GAIN;
+
+/**
+ * Corrections gate (attack:still-passes S1): a learner event this far under the loudest learner event of the piece
+ * (−24 dB) is masked by the rest of the mix: `.gain(.02)` under a piano at full scale is not heard as a part, so it
+ * cannot carry a melody, a reply, a second key or a backbeat. Ghost notes (.3), quiet hats (.3 · .5) and soft pads
+ * (.1) stay well above it. Band tracks are judged on their own (they are mixed apart from the learner's code).
+ */
+export const MASKED_RATIO = 1 / 16;
+export function audibleInMix(events: readonly OakEvent[]): OakEvent[] {
+  const heard = events.filter(isAudible);
+  let peak = 0;
+  for (const e of heard) if (!e.track.startsWith("band.")) peak = Math.max(peak, effectiveGain(e));
+  const floor = peak * MASKED_RATIO;
+  return heard.filter((e) => e.track.startsWith("band.") || effectiveGain(e) >= floor);
+}
+
+/**
+ * Raw events to `NEvent`s grouped by track, with the roles of contracts §6.2. Inaudible events (`isAudible`) and
+ * events masked by the rest of the mix (`audibleInMix`) are left out; a chord whose voiced notes were moved to another pitch class after `voicing()` (`chordStale` on any
+ * of its notes) loses its symbol, so it is read from the notes that sound.
+ */
 export function normalize(result: EvalSuccess, ctx: NormalizeContext): Normalized {
-  const events = assignIds(result.events.map(toNEvent), ctx.pickup !== undefined);
+  const audible = audibleInMix(result.events);
+  const stale = new Set(
+    audible.filter((e) => e.chordStale).map((e) => `${e.track}|${e.begin}|${e.chord ?? ""}`),
+  );
+  const nevents = audible.map((e) => {
+    const ne = toNEvent(e);
+    if (stale.size > 0 && stale.has(`${e.track}|${e.begin}|${e.chord ?? ""}`)) delete ne.chordSymbol;
+    return ne;
+  });
+  const events = assignIds(nevents, ctx.pickup !== undefined);
   const n = normalizedFromEvents(events, { cps: result.cps, bpm: result.bpm });
   // Every evaluated track is present, even a silent one, so a selector can tell "silent" from "absent".
   for (const t of result.tracks) n.byTrack[t] ??= [];

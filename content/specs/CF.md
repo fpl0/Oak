@@ -312,7 +312,7 @@ Author: **finale**. The third transcription on the album and the first whole son
 
 - **Opens with.** The CF-T.S3 draft in the full Workbench, the source one click away for reference. `kick`, `snare` and `hats` lines are added if the draft has no drums.
 - **Hears.** The learner's own version from bar 1; the original beside it at any bar; then the take, one chorus (and an intro and an ending if they wrote them) in real time, about a minute.
-- **Sees.** The Workbench `full`, the form map with the song's sections, the checklist of two lines, then "Record the take", "Review" and "Release". Session bar: "Session 4 of 4: Arrange and release".
+- **Sees.** The Workbench `full`, the form map with the song's sections, the checklist of three lines, then "Record the take", "Review" and "Release". Session bar: "Session 4 of 4: Arrange and release".
 - **Work.**
   1. Drums of their own: a ride or hats on swung eighths, a two-feel kick, a light backbeat or none.
   2. A comping rhythm for the chords (a push from U13.L01, `.dict("lefthand")` on the sevenths) and a sound for each part; the tune on whatever lead the learner has unlocked.
@@ -323,7 +323,7 @@ Author: **finale**. The third transcription on the album and the first whole son
   - Release needs the form map and the twelve phrase checks recorded (passed or revealed) and the two rubric lines met on the code being released. The arrangement's taste is not graded.
 - **Ends.** The tutor's transcription review is offered (`review: true`, contracts §10.6: two revisions, plausibility flags, a listening question; never pass or fail), then release (`release: true`): album track CF-T v1 with its recording, cover and liner notes. ms.20 "You can now transcribe a standard." The ladder counts the release as an L8 pass, and the gym may now serve another standard at L8.
 - **Enjoyment.** A song people have played for a hundred years, in the learner's arrangement, on their record. The take is a minute of listening to it.
-- **Pace.** The notes are done. Today is drums, sounds and a take; an intro and an ending are optional. The rubric is two lines the draft nearly meets already.
+- **Pace.** The notes are done. Today is drums, sounds and a take; an intro and an ending are optional. The rubric is three lines the draft nearly meets already: the four parts, the song's sections, and its changes bar by bar.
 - **Return.** The Coda shows the track on Side A beside the others and says the gym can now serve another standard at L8. In the default order the four lessons of U17, its checkpoint, C7 and the single remain.
 
 **Liner notes.**

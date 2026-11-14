@@ -72,7 +72,17 @@ export const LADDER_MATCHERS: {
     },
     rn: { m: "harmony", level: "rn", qualityDepth: "triad", inversion: false, harmonicRhythm: "given" },
   },
-  4: { m: "melody", pitch: "octave-free", wPitch: 0.6, wRhythm: 0.4, rhythmTol: [1, 32], track: "@melody" },
+  // Corrections pass: an L4 melody is transcribed with its written lengths (`durations`): four quarter notes and two
+  // half notes written as eighths with rests between them is another rhythm, not a perfect answer (grader review).
+  4: {
+    m: "melody",
+    pitch: "octave-free",
+    wPitch: 0.6,
+    wRhythm: 0.4,
+    rhythmTol: [1, 32],
+    track: "@melody",
+    durations: true,
+  },
 };
 
 /** The matcher for a level (and an L3 stage, default `bass`). */

@@ -140,6 +140,14 @@ describe("Wave 6 dev seeds (wave6.md §6)", () => {
     const h = await harness({ dev: true, content: real, now: NOW });
     try {
       const written = cftStandards(h.server.deps).length > 0;
+      // Once the real standards are complete, withCft adds nothing: `full` holds the real songs and capstones, and
+      // each point below (the CF-T points and "C6 open") is built on it by its own test, which asserts 200, Today and
+      // more ("C6 open": CF-T.S1 done). Building them a second time here would prove nothing more.
+      const fullIsReal =
+        full.songs.length === real.songs.length &&
+        full.songs.every((s, i) => s === real.songs[i]) &&
+        full.capstones.every((c, i) => c === real.capstones[i]);
+      if (written && fullIsReal) return;
       for (const point of NEEDS_CFT) {
         if (point === "ladder L8" && cftStandards(h.server.deps).length >= 2) continue;
         const r = await h.json<{ error?: { message: string } }>("POST", "/api/dev/seed", { point });

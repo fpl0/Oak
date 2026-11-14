@@ -306,6 +306,9 @@ export default defineLesson({
             harmony: "chords",
             strength: "downbeat",
             minRatio: 1,
+            // Every beat 1 needs a note (review finding theory-d 2: a bass only in bar 1 passed, the empty
+            // downbeats never counted).
+            cover: true,
           },
           {
             id: "low",
@@ -357,6 +360,23 @@ export default defineLesson({
                 'mel: n("<[4 ~ 2 4] [6 ~ 4 ~] [5 ~ 7 5] [5 ~ 3 ~]>").scale("C4:major").s("piano")',
               ),
             },
+            expect: "pass",
+          },
+          {
+            // Review finding (theory-d 2): the root in bar 1, then nothing on beat 1 of bars 2 to 4.
+            name: "one note in bar 1, the other bars empty",
+            response: { code: make(bassN("<0 ~ ~ ~>")) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the 3rd on beat 1, then a walk to the next chord",
+            response: { code: make(bassN("<[2 ~ 1 0] [6 ~ 5 4] [0 ~ 6 5] [5 ~ 4 3]>")) },
+            expect: "pass",
+          },
+          {
+            name: "a rest after each beat-1 root",
+            response: { code: make(bassN("<[0 ~ ~ 4] [4 ~ ~ 1] [5 ~ ~ 2] [3 ~ ~ 0]>")) },
             expect: "pass",
           },
           {

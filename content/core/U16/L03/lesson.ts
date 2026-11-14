@@ -90,14 +90,12 @@ const ENDING_OPTIONS = [
   { id: "minor-plagal", label: "iv to I: the plagal cadence with a minor IV" },
 ];
 type Ending = "authentic" | "plagal" | "minor-plagal";
-const HEARD: Record<Ending, string> = {
-  authentic:
-    "That was V to I: the chord before home had the leading note, a half step under home, pulling up.",
-  plagal:
-    "That was IV to I: the chord before home was major and the line inside it fell a whole step, la to sol.",
-  "minor-plagal":
-    "That was iv to I: the chord before home was minor, and its le fell a half step to sol as home arrived.",
-};
+/**
+ * A wrong answer gets a listening direction, never the answer (contracts §5.3: rung 0 says where and what to listen
+ * for). The hint ladder then says what each close does, and the reveal gives the answer.
+ */
+const LISTEN_AGAIN =
+  "Not that one. Listen to the chord before home: is it bright or dark? Then hum the note inside it that moves as home arrives: does it climb a half step into home, or fall onto sol, by a whole step or a half step?";
 const endingHints = (): HintLadder =>
   ladder(
     "Is the chord before home bright or dark? Does any note in it pull up into home?",
@@ -133,7 +131,7 @@ const ending = (id: string, prompt: string, key: KeySpec, form: string, answer: 
   cue: { context: "none", countInBars: 0, click: false, replays: -1 },
   answer: { ui: "choice", options: ENDING_OPTIONS },
   correct: { choice: [answer] },
-  feedbackText: { "id.wrong": HEARD[answer] },
+  feedbackText: { "id.wrong": LISTEN_AGAIN },
   tests: [
     { name: answer, response: { answer: { choice: [answer] } }, expect: "pass" },
     {
@@ -309,8 +307,9 @@ export default defineLesson({
         skills: [{ skill: "H13", w: 1 }],
         code: { starter: PAGE_STARTER },
         reference: { solutions: [PAGE_SOLUTION], bars: 4 },
-        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7).
-        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"] },
+        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7); `durations`:
+        // and it lasts as the page's does, so a chord cut to a click is not the page's.
+        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"], durations: true },
         constraints: [{ c: "edit-only-regions", feedback: "code.edit-outside" }],
         target: { audible: true, showRoll: false },
         feedbackText: {
@@ -350,6 +349,12 @@ export default defineLesson({
             response: { code: page("<D Fmaj G Gm>") },
             expect: "fail",
             feedback: ["code.unknown-chord"],
+          },
+          {
+            name: "F cut to a click: the right chord, 1% of the bar",
+            response: { code: page("<D [F@0.01 ~@0.99] G Gm>") },
+            expect: "fail",
+            feedback: ["rhythm.duration"],
           },
         ],
       },
@@ -487,7 +492,8 @@ export default defineLesson({
           },
           {
             id: "minor-plagal-close",
-            label: "The loop ends on home, after F minor",
+            // `cadence` PC is IV or iv into I: the label says so, and the brief suggests the minor one.
+            label: "The loop closes on home from F or F minor",
             required: false,
             skills: ["H03"],
             rule: "cadence",

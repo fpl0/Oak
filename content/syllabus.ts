@@ -434,7 +434,7 @@ export const units: UnitDef[] = [
   unit("U14", "Modes", "core", "U14.CP", [
     lesson("U14.L01", "Modes as Colours", "The characteristic tone; Mixolydian ♭7.", "S12"),
     lesson("U14.L02", "Mixolydian Rock", "I–♭VII–IV; Old Joe Clark.", "H11"),
-    lesson("U14.L03", "Dorian ♮6", "i–IV; Scarborough Fair, Drunken Sailor.", "", "S12 H11"),
+    lesson("U14.L03", "Dorian ♮6", "i–IV; Drunken Sailor.", "", "S12 H11"),
     lesson("U14.L04", "Lydian Glow", "♯4 and I–II.", "S13"),
     lesson("U14.L05", "Phrygian Edge", "♭2 and i–♭II.", "", "S13"),
     lesson("U14.L06", "Mode Lab", "Mode identification and a modal vamp.", "", "E10"),

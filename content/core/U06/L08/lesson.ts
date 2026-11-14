@@ -11,8 +11,9 @@
 //
 // Shapes: the changes are graded as chords per onset (`pcset` with the bass), so a bar of `[5 3]` must
 // place vi and IV at half a bar each. "Which bars hold two chords?" is a multiple `choice` of the four bars
-// (`bar-buttons` takes one bar per answer). The Make's one required rule is `harmonic-rhythm`, the average
-// number of changes per bar over the loop: one a bar is 1.0, two in half the bars 1.5, one a beat 4.0.
+// (`bar-buttons` takes one bar per answer). The Make's one required rule is `chords-per-bar`, which reads
+// the brief as written: at least one bar with one chord, at least one with two, none with more (review finding
+// theory-d 3: the average of `harmonic-rhythm`, 1.25–2 changes a bar, failed the hint's own `<0 5 1 [4 0]>`).
 import { type Choice, defineLesson, type HintLadder } from "@oak/content-kit";
 
 const BPM = 100;
@@ -366,11 +367,12 @@ export default defineLesson({
         rubric: [
           {
             id: "some-bars-twice",
-            label: "Some bars change chord twice",
+            label: "One chord in some bars, two in others",
             required: true,
             skills: ["H06"],
-            rule: "harmonic-rhythm",
-            changesPerBar: [1.25, 2],
+            rule: "custom",
+            fn: "chords-per-bar",
+            params: { one: 1, two: 1, max: 2 },
           },
           {
             id: "ends-home",
@@ -418,6 +420,24 @@ export default defineLesson({
               ),
             },
             expect: "pass",
+          },
+          {
+            // Review finding (theory-d 3): the hint's own answer, bar 4 as V then home.
+            name: "the hint: bar 4 turned into V, then home",
+            response: { code: code(triads("<0 5 1 [4 0]>")) },
+            expect: "pass",
+          },
+          {
+            // Review finding (theory-d 3): eight bars, seven of one chord and one of two.
+            name: "eight bars, two chords only in the last",
+            response: { code: code(triads("<0 5 1 4 0 5 3 [1 4]>")) },
+            expect: "pass",
+          },
+          {
+            name: "two chords in every bar: no bar of one",
+            response: { code: code(triads("<[0 5] [3 4] [0 5] [1 4]>")) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
           },
           {
             name: "the stack first: the brackets fold into one chord a bar",

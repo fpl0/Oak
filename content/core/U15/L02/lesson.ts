@@ -308,8 +308,9 @@ export default defineLesson({
         skills: [{ skill: "H12", w: 1 }],
         code: { starter: MODIFY_STARTER },
         reference: { solutions: [MODIFY_SOLUTION], bars: 4 },
-        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7).
-        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"] },
+        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7); `durations`:
+        // and it lasts as the target's does, so a G7 cut to a click is not the target.
+        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"], durations: true },
         constraints: [{ c: "edit-only-regions", feedback: "code.edit-outside" }],
         target: { audible: true, showRoll: false, revealRollAfter: 1 },
         feedbackText: {
@@ -354,6 +355,12 @@ export default defineLesson({
             response: { code: loop("<F Dm G7 C>") },
             expect: "fail",
             feedback: ["code.edit-outside"],
+          },
+          {
+            name: "G7 cut to a click: the right chord, 1% of the bar",
+            response: { code: loop("<F Dm [G7@0.01 ~@0.99] C7>") },
+            expect: "fail",
+            feedback: ["rhythm.duration"],
           },
         ],
       },
@@ -542,6 +549,28 @@ export default defineLesson({
             response: { code: loop("<C Am D7 F C Am Dm G7>", verseTune("[3 ~ 5 3]")) },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            name: "D7 that lands on G minor: the right root, not the V it points at",
+            response: { code: loop("<C Am F G7 C Am D7 Gm>", verseTune("[3 ~ 5 3]")) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "D7 that lands on G augmented: the right root, not the V it points at",
+            response: { code: loop("<C Am F G7 C Am D7 Gaug>", verseTune("[3 ~ 5 3]")) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "D7 into G7 in a new place: bar 3, with the tune on ♯4 there",
+            response: {
+              code: loop(
+                "<C Am D7 G7 C Am F G7>",
+                mel("<[4 ~ 2 4] [2 ~ 0 ~] [3# ~ 5 3#] [4 ~ 3 1] [4 ~ 2 4] [5 ~ 4 2] [3 ~ 5 3] [4 ~ 3 1]>"),
+              ),
+            },
+            expect: "pass",
           },
           {
             name: "Dm7: a seventh on the key's own chord, no raised note",

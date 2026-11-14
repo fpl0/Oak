@@ -4,7 +4,7 @@
 // the promoted fact decks reach a learner already past their lessons (d1), the gym slot on review-only days (d19),
 // and the recorded track gates announced once (§5.3).
 import { Database } from "bun:sqlite";
-import { beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   type AlbumTrackDetail,
   type AlbumTrackVersion,
@@ -24,6 +24,7 @@ import { transcriptionSlotDue } from "./services/session-plan.ts";
 import { CONTENT_DIR } from "./testing/course.ts";
 import { type Harness, harness } from "./testing/harness.ts";
 import { SimLearner } from "./testing/learner.ts";
+import { dropSharedSeeds, sharedSeed } from "./testing/seed-cache.ts";
 import { withCft } from "./testing/wave6.ts";
 
 let real: ContentSource;
@@ -32,13 +33,15 @@ beforeAll(async () => {
   real = await loadContent({ contentDir: CONTENT_DIR });
   full = withCft(real);
 });
+afterAll(dropSharedSeeds);
 
 const NOW = "2026-11-14T12:00:00.000Z";
 
 async function seeded(point: string, content: ContentSource = real): Promise<Harness> {
   const h = await harness({ dev: true, content, now: NOW });
   await h.json("PUT", "/api/profile", { timezone: "UTC" });
-  const r = await h.json<{ error?: { message: string } }>("POST", "/api/dev/seed", { point });
+  // A point several tests start from is built once and restored for the others (testing/seed-cache.ts).
+  const r = await sharedSeed<{ error?: { message: string } }>(h, content, { point });
   if (r.status !== 200) throw new Error(`seed ${point}: ${r.status} ${JSON.stringify(r.body)}`);
   return h;
 }

@@ -783,7 +783,7 @@ export const TWELVE_BAR: FactDeck = defineDeck({
     }),
     card(
       "blues.chords-in-C",
-      "Write the three chords of a blues in C as chord symbols for `chord()`, I then IV then V, separated by spaces.",
+      "Write the three chords of a blues in C, each a dominant seventh, as chord symbols for `chord()`: I then IV then V, separated by spaces.",
       ["C7", "F7", "G7"],
     ),
     card(
@@ -901,7 +901,7 @@ export const SEVENTH_CHORDS_DECK: FactDeck = defineDeck({
     ...SEVENTH_FORMULA_ROWS.map(([id, words, triad, interval, accept, gate]) =>
       card(
         `seventh.${id}-adds`,
-        `A ${words} is a ${triad} triad plus which interval above the root? Write its quality letter and number (M7, m7) or its name.`,
+        `A ${words} is a ${triad} triad plus which interval above the root? Write its quality letter and number (m3, P4) or its name.`,
         [interval],
         { ...(gate ? { gate } : {}), accept },
       ),
@@ -982,7 +982,7 @@ export const DIATONIC_SEVENTHS_DECK: FactDeck = defineDeck({
   answer: "text",
 });
 
-const CHANGED_DEGREE_FORMAT = "Write the degree with b or # before it (b7, #4).";
+const CHANGED_DEGREE_FORMAT = "Write the degree with b or # before it (b6, #2).";
 /**
  * [mode, the scale it changes, the changed degree, its solfège, the chord that shows it (numeral), the white-key
  * home U14 plays it on with its spelling, gate]: a mode is a known scale with one note changed (content/specs/U14.md).
@@ -1007,7 +1007,9 @@ const MODE_CHORD_GATE: Readonly<Record<string, LessonId>> = { Mixolydian: "U14.L
 /**
  * Modes as one changed note (S12, S13, H11): which scale each mode changes and which degree, the chord that shows
  * the colour, and each mode spelled on the white-key home U14 plays it on. Mixolydian from U14.L01 (its ♭VII from
- * U14.L02), Dorian U14.L03, Lydian U14.L04, Phrygian U14.L05.
+ * U14.L02), Dorian U14.L03, Lydian U14.L04, Phrygian U14.L05. The chord card asks for the MAJOR chord: a minor and
+ * a diminished chord of each mode hold the colour note too (v and iii° in Mixolydian), but only one major chord
+ * beside home does, the one each lesson's vamp uses.
  */
 export const MODES_DECK: FactDeck = defineDeck({
   id: "deck.scl.modes" as DeckId,
@@ -1040,7 +1042,7 @@ export const MODES_DECK: FactDeck = defineDeck({
       ),
       card(
         `mode.${mode.toLowerCase()}-chord`,
-        `Which chord, beside the home chord, shows the ${mode} colour? Write its Roman numeral: upper case for major, with b before a lowered root (bVII).`,
+        `Which major chord, beside the home chord, holds the ${mode} colour note? Write its Roman numeral, with b before a lowered root (bIII).`,
         [chord],
         { gate: MODE_CHORD_GATE[mode] ?? gate, accept: [[chord.replace("b", "♭")]] },
       ),
@@ -1102,7 +1104,7 @@ export const APPLIED_DOMINANTS_DECK: FactDeck = defineDeck({
     ),
     card(
       "applied.root-above-target",
-      "A secondary dominant's root is which interval above the root of its target? Write its quality letter and number (P5) or its name.",
+      "A secondary dominant's root is which interval above the root of its target? Write its quality letter and number (m3, P4) or its name.",
       ["P5"],
       { accept: [["perfect 5th"], ["5P"], ["perfect fifth"], ["a fifth"], ["fifth"]] },
     ),
@@ -1131,7 +1133,9 @@ export const BORROWED_ROWS: readonly [string, string, string, LessonId | undefin
 const shownNumeral = (n: string) => n.replace("b", "♭");
 /**
  * Borrowed chords (H13): each as a chord in C and in G, where they come from, the note that turns IV into iv, and
- * the two loans a minor key takes (the Picardy third and the Dorian IV, U16.L04).
+ * the two loans a minor key takes (the Picardy third and the Dorian IV, U16.L04). The Dorian IV card asks which mode
+ * the chord is NAMED after, the minor scale with only 6 raised: D F♯ A is also in A major and in A melodic minor,
+ * and U16.L04 itself says it comes from A major, so "borrowed from which mode" had three right answers.
  */
 export const BORROWED_CHORDS_DECK: FactDeck = defineDeck({
   id: "deck.har.borrowed" as DeckId,
@@ -1173,9 +1177,12 @@ export const BORROWED_CHORDS_DECK: FactDeck = defineDeck({
     ),
     card(
       "borrowed.dorian-iv",
-      "In a minor key, the major IV is borrowed from which mode on the same home? Write its name.",
+      "The major IV in a minor key is named after which mode on the same home: the minor scale with only its 6th raised? Write its name.",
       ["Dorian"],
-      { gate: "U16.L04", accept: [["dorian mode"], ["the dorian mode"]] },
+      {
+        gate: "U16.L04",
+        accept: [["dorian mode"], ["the dorian mode"], ["the Dorian mode"], ["Dorian mode"]],
+      },
     ),
   ],
   newPerDay: 1,
@@ -1238,11 +1245,9 @@ export const PIVOT_CHORDS_DECK: FactDeck = defineDeck({
 });
 
 /**
- * The U12–U17 decks, written and tested in Wave 6 Build. They are NOT in `decks` (no learner gets them yet): a
- * deck joins the catalog with its contracts §7.3 row (contracts-sync.test.ts holds `decks` to that table), and
- * the contracts were frozen at 1.6 before these were written. The rows to add are in the Wave 6 result of the
- * drills engine; packages/srs simulation-wave6.test.ts proves §7.4 holds with all six in the catalog, one new
- * card a day each. (They are kept out of `PENDING_DECKS`, which content/validate/wave6.test.ts pins empty.)
+ * The U12–U17 decks, written and tested in Wave 6 Build, in `decks` since contracts 1.7 (their §7.3 rows; the
+ * table and `decks` are held together by contracts-sync.test.ts). One new card a day each: packages/srs
+ * simulation-wave6.test.ts proves §7.4 holds with all six in the catalog, through CF-A.S4 and on into the tracks.
  */
 export const WAVE6_DECKS: readonly FactDeck[] = [
   SEVENTH_CHORDS_DECK,
@@ -1282,7 +1287,7 @@ export const PROMOTED_DECKS: readonly FactDeck[] = [
 ];
 
 /**
- * Decks written and tested but waiting for their contracts §7.3 row. Empty since contracts 1.6; a deck written
+ * Decks written and tested but waiting for their contracts §7.3 row. Empty (the U12–U17 decks joined with contracts 1.7, without waiting here); a deck written
  * after a contracts freeze waits here (in no learner's catalog) until its row lands.
  */
 export const PENDING_DECKS: readonly FactDeck[] = [];
@@ -1301,5 +1306,6 @@ export const decks: readonly FactDeck[] = [
   MINOR_CHORDS,
   DOMINANT_SEVENTHS,
   TWELVE_BAR,
+  ...WAVE6_DECKS,
 ];
 export const deckById: ReadonlyMap<string, FactDeck> = new Map(decks.map((d) => [d.id, d] as const));

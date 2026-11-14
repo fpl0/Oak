@@ -40,8 +40,14 @@ const SEVENTH = "[0,2,4,6]";
  */
 const TUNE = "<[2 ~ 4 6] [5 ~ 4 2] [3 ~ 1 5] [4 ~ 3 ~]>";
 const HOOK = code(stacks(SEVENTH), bass(), mel(TUNE));
-/** The same loop in plain triads: C Am Dm G. */
-const HOOK_TRIADS = code(stacks(TRIAD), bass(), mel(TUNE));
+/**
+ * The tune for the plain-triad version: only notes of each triad (E G C | A E C | F D A | G B), so no 7th
+ * sounds anywhere in it (review finding theory-d 6: the hook's own tune kept B over C, G over Am and F over G,
+ * and the "plain triads" still sounded sevenths).
+ */
+const TRIAD_TUNE = "<[2 ~ 4 7] [5 ~ 2 0] [3 ~ 1 5] [4 ~ 6 ~]>";
+/** The same loop in plain triads: C Am Dm G, the tune on triad notes too. */
+const HOOK_TRIADS = code(stacks(TRIAD), bass(), mel(TRIAD_TUNE));
 const SEVENTHS_ONLY = code(stacks(SEVENTH));
 const TRIADS_ONLY = code(stacks(TRIAD));
 
@@ -98,7 +104,11 @@ export default defineLesson({
         tests: [],
         items: [
           { code: HOOK, caption: "Four notes in every chord, on degrees 1, 6, 2 and 5.", bars: 4 },
-          { code: HOOK_TRIADS, caption: "The same loop with three notes in every chord.", bars: 4 },
+          {
+            code: HOOK_TRIADS,
+            caption: "The same loop with three notes in every chord, and a tune that keeps to those three.",
+            bars: 4,
+          },
         ],
       },
     },

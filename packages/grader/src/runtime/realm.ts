@@ -23,6 +23,25 @@ export const DEFAULT_CPS = 0.5; // the repl's default without setcps/setcpm
 export const TRACK_KEY = "oakTrack";
 export const CHORD_CONTEXT_KEY = "oakChord";
 export const CHORD_VALUE_KEY = "_oakChord";
+/**
+ * The note `voicing()` / `rootNotes()` produced, kept in the hap context. A later `.note()`, `.transpose()` or
+ * `.add()` that changes the pitch class leaves the `_oakChord` tag behind on notes that no longer belong to it;
+ * `hapToEvent` compares the two and marks such an event `chordStale` (the symbol is then not trusted).
+ */
+export const VOICED_CONTEXT_KEY = "oakVoiced";
+/** The voicing dictionary in force when `voicing()` ran (`.dict("lefthand")` before it), kept in the hap context. */
+export const DICT_CONTEXT_KEY = "oakDict";
+
+function markVoiced(p: Pat): Pat {
+  return p.withHap((h: Hap) => {
+    const v = h.value as unknown;
+    const note =
+      typeof v === "object" && v !== null ? (v as { note?: unknown }).note : (v as string | number);
+    return typeof note === "string" || typeof note === "number"
+      ? h.setContext({ ...h.context, [VOICED_CONTEXT_KEY]: note })
+      : h;
+  });
+}
 
 export type Transform = (pattern: Pat) => unknown;
 
@@ -229,8 +248,13 @@ function installPatternMethods(): string[] {
       typeof v === "string"
         ? { chord: v, [CHORD_VALUE_KEY]: v }
         : { ...(v as object), [CHORD_VALUE_KEY]: (v as { chord?: unknown }).chord },
-    );
-    return voicing.apply(tagged, args);
+    ).withHap((h: Hap) => {
+      // The dictionary that voices this chord (`.dict()` written before `voicing()`); one written after it
+      // changes nothing and is not recorded (corrections pass, U12.L06).
+      const d = (h.value as { dictionary?: unknown } | null)?.dictionary;
+      return typeof d === "string" ? h.setContext({ ...h.context, [DICT_CONTEXT_KEY]: d }) : h;
+    });
+    return markVoiced(voicing.apply(tagged, args) as Pat);
   };
   // rootNotes() returns `{ note }` only, so the symbol travels in the hap context instead.
   const rootNotes = proto.rootNotes as PatternMethod;
@@ -240,7 +264,7 @@ function installPatternMethods(): string[] {
       const chord = chordOfValue(h.value);
       return typeof chord === "string" ? h.setContext({ ...h.context, [CHORD_CONTEXT_KEY]: chord }) : h;
     });
-    return rootNotes.apply(tagged, args);
+    return markVoiced(rootNotes.apply(tagged, args) as Pat);
   };
   return stubbed;
 }

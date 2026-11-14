@@ -7,9 +7,10 @@
 // and rolls with `.ply()` (U13.L05), swung sixteenths and humanized timing (the rhythm track). Spec:
 // content/specs/U13.md.
 //
-// How it is graded: the modify step is `all` of a `rhythm` match on the snare (every hit stays where it is, so
-// a `~` in the velocity string, which silences the hit under it, is `rhythm.missing`) and the `velocity-ghosts`
-// rule on the snare: at least three hits on sixteenth off-beats at an effective level (`gain × velocity`) of .4
+// How it is graded: the modify step is `all` of a `rhythm` match on the snare, drum by drum (`perRole`: every
+// hit stays where it is and stays a snare, so hats in its place are `rhythm.extra`; a `~` or a 0 in the velocity
+// string silences the hit under it, `rhythm.missing`) and the `velocity-ghosts` rule on the snare's own hits
+// (`drum: "snare"`): at least three on sixteenth off-beats at an effective level (`gain × velocity`) of .4
 // or less, beside at least two at the line's full strength, so a snare that is quiet throughout fails. The ear
 // step is `fam.rhy.syncopation` at level 3 (a kick on a sixteenth between the eighths), drawn by the generator.
 // The Make's one required rule is the same `velocity-ghosts` rule on the snare.
@@ -83,6 +84,8 @@ const GHOSTS_RULE: RubricRule = {
   min: 3,
   on: "16th-offbeat",
   accents: 2,
+  // Snare hits only: hats written on the snare line are not ghost notes of the snare.
+  drum: "snare",
 };
 
 /** The Make: the vamp with every hit at the same strength and the Rhodes holding each chord. */
@@ -300,7 +303,8 @@ export default defineLesson({
               m: "rhythm",
               tol: [1, 32],
               durations: false,
-              perRole: false,
+              // Each hit stays a snare: a hat in its place is a different drum (rhythm.extra and .missing).
+              perRole: true,
               displacementCredit: 0,
               tracks: ["snare"],
             },
@@ -311,7 +315,7 @@ export default defineLesson({
         target: { audible: true, showRoll: false },
         feedbackText: {
           "rhythm.missing":
-            "Bar {bar}, {beatLabel}: a snare hit went missing. A `~` in the velocity string silences the hit under it; write a small number there instead.",
+            "Bar {bar}, {beatLabel}: a snare hit went missing. A `~` or a 0 in the velocity string silences the hit under it; a ghost note is quiet but heard, so write a small number there, such as .3.",
         },
         hints: ladder(
           "Which snare hits carry the backbeat, and which ones only fill the gaps?",
@@ -355,6 +359,25 @@ export default defineLesson({
             response: { code: s5(snare(FLAT_VEL, ".gain(.3)")) },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the small hits at 0: silent, not ghosted",
+            response: { code: s5(snare("1 1 1 1 1 1 1 0 1 0 1 1 1 1 1 0")) },
+            expect: "fail",
+            feedback: ["rhythm.missing"],
+          },
+          {
+            name: "hats in place of the snare, ghosted the same way",
+            response: {
+              code: s5(`snare: s("${SNARE_HITS.replaceAll("sd", "hh")}").velocity("${SNARE_VEL}")`),
+            },
+            expect: "fail",
+            feedback: ["rhythm.extra"],
+          },
+          {
+            name: "ghosts at .4, the most the brief allows",
+            response: { code: s5(snare(SNARE_VEL.replaceAll(".3", ".4"))) },
+            expect: "pass",
           },
           {
             name: "a rest in the velocity string: the hit disappears",

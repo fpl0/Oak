@@ -49,7 +49,7 @@ const chordOf = (symbol: string) =>
 const pcs = (notes: readonly string[]) => notes.map((n) => theory.pcOf(n));
 
 describe("the U12–U17 decks: shape, gates and formats", () => {
-  test("six decks, valid, with unique card IDs that no deck of the catalog uses; not in the catalog yet", () => {
+  test("six decks, valid, with unique card IDs that no other deck uses; in the catalog since contracts 1.7", () => {
     expect(WAVE6_DECKS.map((d) => [d.id as string, d.unlock.lesson, d.cards.length])).toEqual([
       ["deck.chd.sevenths", "U12.L01", 12],
       ["deck.har.sevenths", "U12.L04", 14],
@@ -60,15 +60,20 @@ describe("the U12–U17 decks: shape, gates and formats", () => {
     ]);
     const ids = WAVE6_DECKS.flatMap((d) => d.cards.map((c) => c.id as string));
     expect(new Set(ids).size).toBe(ids.length);
-    const live = new Set([...decks, ...PENDING_DECKS].flatMap((d) => d.cards.map((c) => c.id as string)));
-    for (const id of ids) expect([id, live.has(id)]).toEqual([id, false]);
-    const liveDecks = new Set(decks.map((d) => d.id as string));
+    const others = new Set(
+      [...decks, ...PENDING_DECKS]
+        .filter((d) => !WAVE6_DECKS.includes(d))
+        .flatMap((d) => d.cards.map((c) => c.id as string)),
+    );
+    for (const id of ids) expect([id, others.has(id)]).toEqual([id, false]);
     for (const d of WAVE6_DECKS) {
       expect(() => defineDeck(d)).not.toThrow();
-      // They join `decks` with their contracts §7.3 rows, not before (contracts-sync.test.ts).
-      expect([d.id, liveDecks.has(d.id)]).toEqual([d.id, false]);
+      // They joined `decks` with their contracts §7.3 rows (contracts-sync.test.ts holds the two together), last
+      // in course order, and none waits in `PENDING_DECKS`.
+      expect([d.id, decks.includes(d), PENDING_DECKS.includes(d)]).toEqual([d.id, true, false]);
       expect(d.newPerDay).toBe(1);
     }
+    expect(decks.slice(-WAVE6_DECKS.length)).toEqual([...WAVE6_DECKS]);
   });
   test("every card opens at a real lesson no earlier than its deck, in the order the unit teaches it", () => {
     for (const d of WAVE6_DECKS) {
@@ -217,6 +222,51 @@ describe("the U12–U17 decks: every answer as @oak/theory gives it", () => {
     expect(credit(MODES_DECK, "fact.mode.lydian-chord", ["ii"])).toBe(0);
     expect(credit(MODES_DECK, "fact.mode.phrygian-parent", ["natural minor"])).toBe(1);
     expect(credit(MODES_DECK, "fact.mode.D-dorian", ["D E F G A Bb C"])).toBeLessThan(1);
+  });
+  test("modes: the chord card asks for the one MAJOR chord beside home that holds the colour note (corrections pass)", () => {
+    // theory-f 5: "which chord shows the colour" had more right answers than the card took (v in G Mixolydian,
+    // Dm, holds F too). Every mode has a minor and a diminished chord with the colour note, and exactly one
+    // major chord beside home: the one the card asks for.
+    for (const [name, , , , chord, home] of MODE_ROWS) {
+      const key: KeySpec = { tonic: home, mode: name.toLowerCase() as theory.TaughtMode };
+      const colour = theory.modeColour(key.mode as theory.TaughtMode) as theory.ModeColour;
+      const notes = theory.scaleNotes(key);
+      const degree = Number((colour.characteristic[0] as string).replace(/[b#]/g, ""));
+      const colourPc = theory.pcOf(notes[degree - 1] as string);
+      const withColour = theory
+        .diatonicChords(key)
+        .filter((c) => c.rootPc !== theory.pcOf(home) && theory.chordPcs(c).includes(colourPc));
+      const majors = withColour.filter((c) => c.quality === "maj");
+      expect([name, majors.map((c) => theory.formatRN(theory.romanOf(c, key)))]).toEqual([name, [chord]]);
+      // The other chords that hold it are minor or diminished, which the prompt rules out by asking for major.
+      expect([name, withColour.length]).toEqual([name, 3]);
+      const card = MODES_DECK.cards.find((c) => c.id === `fact.mode.${name.toLowerCase()}-chord`);
+      expect([name, card?.prompt.text?.includes("Which major chord")]).toEqual([name, true]);
+    }
+    expect(credit(MODES_DECK, "fact.mode.mixolydian-chord", ["bVII"])).toBe(1);
+    expect(credit(MODES_DECK, "fact.mode.mixolydian-chord", ["♭VII"])).toBe(1);
+    expect(credit(MODES_DECK, "fact.mode.mixolydian-chord", ["v"])).toBe(0);
+    expect(credit(MODES_DECK, "fact.mode.dorian-chord", ["IV"])).toBe(1);
+    expect(credit(MODES_DECK, "fact.mode.phrygian-chord", ["bII"])).toBe(1);
+  });
+  test("the Dorian IV card asks what the chord is named after, not where a minor key borrows it (corrections pass)", () => {
+    // theory-g 7: D F♯ A in A minor is in A Dorian, A major and A melodic minor, and U16.L04 says it comes from
+    // A major; the card now asks for the mode it is named after, the minor scale with only 6 raised.
+    const A: KeySpec = { tonic: "A", mode: "minor" };
+    const four = theory.dorianFour(A).chord;
+    for (const mode of ["dorian", "major", "melodic minor"] as const) {
+      const fours = theory.diatonicChords({ tonic: "A", mode }).filter((c) => c.rootPc === four.rootPc);
+      expect([mode, fours.map((c) => c.quality)]).toEqual([mode, ["maj"]]);
+    }
+    const dorian = theory.scaleNotes({ tonic: "A", mode: "dorian" });
+    const minor = theory.scaleNotes({ tonic: "A", mode: "minor" });
+    expect(dorian.filter((n, i) => n !== minor[i])).toEqual(["F#"]);
+    const card = BORROWED_CHORDS_DECK.cards.find((c) => c.id === "fact.borrowed.dorian-iv");
+    expect(card?.prompt.text).toContain("named after which mode");
+    expect(card?.prompt.text).toContain("only its 6th raised");
+    expect(credit(BORROWED_CHORDS_DECK, "fact.borrowed.dorian-iv", ["Dorian"])).toBe(1);
+    expect(credit(BORROWED_CHORDS_DECK, "fact.borrowed.dorian-iv", ["dorian mode"])).toBe(1);
+    expect(credit(BORROWED_CHORDS_DECK, "fact.borrowed.dorian-iv", ["melodic minor"])).toBe(0);
   });
   test("secondary dominants: V7 of each target, the chromatic degree it brings, a fifth above its target, vii°/V", () => {
     for (const [tonic, target, symbol] of APPLIED_ROWS) {

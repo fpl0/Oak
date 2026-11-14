@@ -148,7 +148,7 @@ export default defineLesson({
         skills: [{ skill: "H06", w: 1 }],
         feedbackText: {
           "investigate.wrong":
-            "Not quite. Look at the drums line: the snare is the second and fourth word, `sd`. Count the `x`s in the hook's rhythm, inside the brackets too.",
+            "Not quite. Look at the drums line: the snare is the second and fourth word, `sd`; a rhythm that also hits on beats 1 and 3 plays between the snares too. Count the `x`s in the hook's rhythm, inside the brackets too.",
         },
         hints: ladder(
           'Which beats does the snare play in `s("bd sd [~ bd] sd")`?',
@@ -160,7 +160,8 @@ export default defineLesson({
         questions: [
           {
             q: "choice",
-            prompt: "Which rhythm hits with the snare?",
+            // "Only": `"x x x x"` hits with the snare too, and on beats 1 and 3 (review finding theory-d 7).
+            prompt: "Which rhythm hits only with the snare?",
             options: [
               { id: "one-three", label: '"x ~ x ~"' },
               { id: "two-four", label: '"~ x ~ x"' },
@@ -183,6 +184,12 @@ export default defineLesson({
           {
             name: "with the kick",
             response: { answer: { choice: ["one-three"], number: 2 } },
+            expect: "fail",
+            feedback: ["investigate.wrong"],
+          },
+          {
+            name: "every beat: with the snare, and on 1 and 3 as well",
+            response: { answer: { choice: ["every-beat"], number: 2 } },
             expect: "fail",
             feedback: ["investigate.wrong"],
           },

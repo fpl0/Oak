@@ -3,7 +3,7 @@
 // pass marks, c1 (`checkedVersion`, `draftChangedSinceCheck`), c2 (imported transcription versions run after a strict
 // lint and the learner's confirmation), c10 (a gym day's Coda card), c11 (re-recording asks first; own-audio
 // checklist evidence once a day), and the tutor ports for the new content.
-import { beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type {
   AlbumTrackDetail,
   CapstoneSessions,
@@ -23,6 +23,7 @@ import type { ContentSource } from "../content/types.ts";
 import { CONTENT_DIR } from "../testing/course.ts";
 import { gradeResult, type Harness, harness } from "../testing/harness.ts";
 import { SimLearner } from "../testing/learner.ts";
+import { dropSharedSeeds, sharedSeed } from "../testing/seed-cache.ts";
 import { withX2 } from "../testing/wave5.ts";
 import { referenceAnswers } from "../tutor-adapters/lessons.ts";
 
@@ -32,13 +33,15 @@ beforeAll(async () => {
 });
 
 const NOW = "2026-11-13T12:00:00.000Z";
+afterAll(dropSharedSeeds);
 const DAY = 86_400_000;
 
 async function seeded(point: string, content: ContentSource = real, dev = true): Promise<Harness> {
   const h = await harness({ dev, content, now: NOW });
   await h.json("PUT", "/api/profile", { timezone: "UTC" });
   if (point !== "") {
-    const r = await h.json("POST", "/api/dev/seed", { point });
+    // A point several tests start from is built once and restored for the others (testing/seed-cache.ts).
+    const r = await sharedSeed(h, content, { point });
     if (r.status !== 200) throw new Error(`seed ${point}: ${r.status} ${JSON.stringify(r.body)}`);
   }
   return h;

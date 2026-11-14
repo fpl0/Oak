@@ -63,6 +63,9 @@ const S4_MATCHER: Matcher = {
       track: "@melody",
       minRatio: 0.66,
       shape: "either",
+      // The brief allows "the same": a hook written out four times comes back three times, it is not a
+      // one-bar loop with nothing to reuse (corrections pass, theory-b 5).
+      loopRepeats: true,
     },
     {
       id: "singable",
@@ -285,6 +288,16 @@ export default defineLesson({
             expect: "pass",
           },
           {
+            name: "the same: bar 1 written out four times",
+            response: { code: s4("[7 ~ 7 5] [7 ~ 7 5] [7 ~ 7 5]") },
+            expect: "pass",
+          },
+          {
+            name: "the same twice, moved once",
+            response: { code: s4("[7 ~ 7 5] [4 ~ 4 2] [7 ~ 7 5]") },
+            expect: "pass",
+          },
+          {
             name: "unchanged",
             response: { code: s4(S4_REST) },
             expect: "fail",
@@ -320,7 +333,8 @@ export default defineLesson({
           "The hook comes back four times, exactly. Add a little chance after `.scale()`: `.degradeBy(.2)` leaves out about one note in five, `.sometimesBy(.25, x => x.scaleTranspose(2))` moves about one in four up a 3rd. Run four loops and hear which repeats change.",
         skills: [{ skill: "M09", w: 1 }],
         code: { starter: s5() },
-        reference: { solutions: [s5(".degradeBy(.2)")], bars: 4 },
+        // Twelve bars: the four-bar hook three times, so a repeat can be heard to change (corrections gate, AS-44).
+        reference: { solutions: [s5(".degradeBy(.2)")], bars: 12 },
         matcher: {
           m: "rubric",
           rules: [
@@ -329,8 +343,10 @@ export default defineLesson({
               label: "Chance changes a repeat",
               required: true,
               skills: ["M09"],
-              rule: "uses",
-              tool: ["tb.mini.maybe", "tb.degradeBy", "tb.sometimesBy"],
+              // Corrections gate (AS-44): a repeat really changes; a chance tool that changes nothing does not count.
+              rule: "custom",
+              fn: "chance-varies",
+              params: { bars: 4, alsoUses: ["tb.mini.maybe", "tb.degradeBy", "tb.sometimesBy"] },
             },
           ],
         },
@@ -506,8 +522,12 @@ export default defineLesson({
             skills: ["M09"],
             rule: "motif-reuse",
             track: "@melody",
-            minRatio: 0.5,
+            // Corrections gate (now-fails B): one bar of four brought back is a hook (hint 3: "copy bar 1 there").
+            minRatio: 0.25,
             shape: "either",
+            // Corrections pass: one pass is read as four bars at least, so a two-bar hook played twice
+            // (`<A B A B>`) comes back; a one-bar loop, every bar the same, still fails.
+            loopRepeats: 4,
           },
           {
             id: "chance",
@@ -550,6 +570,27 @@ export default defineLesson({
             response: { code: code(mel("<[0 2 4 6] [4 3 1 -1] [5 7 4 2] [3 6 5 0]>")) },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            name: "a two-bar hook played twice",
+            response: { code: code(mel("<[2 0 4 1] [3 ~ 1 ~] [2 0 4 1] [3 ~ 1 ~]>")) },
+            expect: "pass",
+          },
+          {
+            name: "a two-bar hook, then the same two bars a step lower",
+            response: { code: code(mel("<[2 0 4 1] [3 ~ 1 ~] [1 -1 3 0] [2 ~ 0 ~]>")) },
+            expect: "pass",
+          },
+          {
+            name: "one bar four times: a one-bar loop",
+            response: { code: code(mel("<[2 0 4 1] [2 0 4 1] [2 0 4 1] [2 0 4 1]>")) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "a hook that comes back moved, the last bar new",
+            response: { code: code(mel("<[2 0 4 1] [4 2 6 3] [3 1 5 2] [1 ~ 0 ~]>")) },
+            expect: "pass",
           },
         ],
       },

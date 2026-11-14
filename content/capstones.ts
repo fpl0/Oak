@@ -225,6 +225,10 @@ export const CUSTOM_RUBRIC_FNS = {
   "two-versions-differ":
     "two versions: Δ tempo ≥ 20 BPM or swung vs straight; instrument sets differ by ≥ 2 sounds",
   "extended-chord-share": "a 9th or 11th in at least `min` of the bars",
+  // Corrections gate (AS-32): C0's fill. The corrections pass's effect check, with `last: true` (the loop's last bar
+  // differs from the bar before it), stands for §6.6's `fill-last-bar`.
+  "bars-differ":
+    "the loop has `min` different bars; with `last`, its last bar differs from the one before it",
 } as const;
 
 /** C0's reference intro (tests and the release preview): four bars, the fill a sixteenth-note snare-tom run. */
@@ -1358,8 +1362,10 @@ export const CF_T_CHECKS: readonly PhraseCheck[][] = [
 ];
 /**
  * CF-T.S4's own rubric (feature `capstone.session-rubric`), graded in capstone mode on the whole arrangement with
- * the chosen song's sections for `@song`: the four parts, and the song's own sections in order (an intro before
- * and an outro after are welcome; a second chorus is not the song's form). The arrangement's taste is not graded.
+ * the chosen song's sections for `@song`: the four parts, the song's own sections in order (an intro before and an
+ * outro after are welcome; a second chorus is not the song's form), and the song's changes bar by bar (`song-kept`,
+ * three bars in four, after any intro: corrections pass, theory-g 3, where 32 bars of one chord passed). The
+ * arrangement's taste is not graded, and neither is its melody (the rubric cannot read the song's tune yet).
  */
 export const CF_T_ARRANGE_RUBRIC: RubricRule[] = [
   req("roles", "Drums, bass, chords and melody", ["F06"], {
@@ -1371,6 +1377,11 @@ export const CF_T_ARRANGE_RUBRIC: RubricRule[] = [
     rule: "form",
     pattern: "@song",
     extra: ["intro", "outro"],
+  }),
+  req("changes", "The song's changes, bar by bar", ["F03"], {
+    rule: "custom",
+    fn: "song-kept",
+    params: { minRatio: 0.75 },
   }),
 ];
 
@@ -1472,7 +1483,8 @@ export const capstones: readonly CapstoneDef[] = [
     // §6.6 names two one-off checks, `hats-grid` and `fill-last-bar` (CUSTOM_RUBRIC_FNS). Until @oak/grader
     // registers them, C0 grades the same ideas with implemented rules: closed hats on every 8th of bar 1
     // (16ths contain the 8ths), the backbeat in bars 1–3 (the last bar is free for the fill), and the
-    // fill written as bar-level variation with `< >`, the U01.L07 way.
+    // fill written as bar-level variation with `< >`, the U01.L07 way, read by its effect: the last bar changes
+    // (custom `bars-differ` with `last`, corrections gate).
     rubric: [
       req("meter", "In 4/4, 4 to 8 bars long", ["R03"], { rule: "bars", min: 4, max: 8 }),
       req("drum-lines", "At least two drum lines", ["R04"], { rule: "tracks", min: 2, roles: ["drums"] }),
@@ -1506,9 +1518,11 @@ export const capstones: readonly CapstoneDef[] = [
         ],
         perBar: false,
       }),
+      // Corrections gate (AS-32): the last bar itself changes; a `< >` that puts the fill in bar 1 does not count.
       req("fill", "A fill: the last bar changes, written with `< >`", ["R07"], {
-        rule: "uses",
-        tool: "tb.mini.alt",
+        rule: "custom",
+        fn: "bars-differ",
+        params: { last: true, alsoUses: ["tb.mini.alt"] },
       }),
       tempo(70, 140),
     ],
@@ -2781,6 +2795,30 @@ export const capstones: readonly CapstoneDef[] = [
         feedback: ["rubric.unmet"],
       },
       {
+        // Corrections pass (theory-f 1): the home chord carries the mode's 3rd too, not only its root.
+        name: "weak: a D major chord under a D Dorian tune (F♯ under F)",
+        response: {
+          code: 'setcpm(100/4)\n\nconst chordsVamp = chord("D").voicing()\nconst melVamp = n("5 2 5 2").scale("D4:dorian")\n\nchords: arrange([16, chordsVamp]).s("piano")\nmel: arrange([16, melVamp]).s("piano")',
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "weak: a G minor chord under a G Mixolydian tune (B♭ under B)",
+        response: {
+          code: 'setcpm(100/4)\n\nconst chordsVamp = chord("Gm").voicing()\nconst melVamp = n("2 0 6 0").scale("G4:mixolydian")\n\nchords: arrange([16, chordsVamp]).s("piano")\nmel: arrange([16, melVamp]).s("piano")',
+        },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "minimal Dorian: i–IV written out to sixteen bars, the line on the raised 6",
+        response: {
+          code: 'setcpm(100/4)\n\nconst chordsVamp = chord("<Dm G>").voicing()\nconst melVamp = n("5 4 5 0").scale("D4:dorian")\n\nchords: arrange([16, chordsVamp]).s("piano")\nmel: arrange([16, melVamp]).s("piano")',
+        },
+        expect: "pass",
+      },
+      {
         name: "weak: the Dorian tune on D4:minor (B♭ for B)",
         response: {
           code: c6Dorian({
@@ -2962,6 +3000,18 @@ export const capstones: readonly CapstoneDef[] = [
         name: "minimal: chords and tune only, the last chorus a whole step up",
         response: { code: c7Song({ tracks: { kick: null, snare: null, hats: null, bass: null } }) },
         expect: "pass",
+      },
+      {
+        // Corrections pass (theory-g 1): the devices have to be heard; every line muted is no song.
+        name: "weak: the pop piece with every line muted by .gain(0)",
+        response: {
+          code: c7Song()
+            .split("\n")
+            .map((l) => (/^[a-z]+:/.test(l) ? `${l}.gain(0)` : l))
+            .join("\n"),
+        },
+        expect: "fail",
+        feedback: ["make.silent"],
       },
       {
         // The tune sings G♯, the 3rd of E7, and rises to A over Am. Half-step lift: D♭ major, so the borrowed

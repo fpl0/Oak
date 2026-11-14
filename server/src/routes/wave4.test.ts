@@ -1,7 +1,7 @@
 // The Wave 4 endpoints over HTTP (docs/design/wave4.md §5) on the real course, each started from a dev seed:
 // multi-session capstones with their checks and gate, album versions and reviews, transcription settings, the
 // ladder graded exactly by the real grader, the gym plan, the voicing gate and sung statistics, backup → restore.
-import { beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type {
   AlbumTrackDetail,
   AlbumTrackVersion,
@@ -27,6 +27,7 @@ import { loadContent } from "../content/loader.ts";
 import type { ContentSource } from "../content/types.ts";
 import { CONTENT_DIR, standInLesson, wave4Course } from "../testing/course.ts";
 import { gradeResult, type Harness, harness } from "../testing/harness.ts";
+import { dropSharedSeeds, sharedSeed } from "../testing/seed-cache.ts";
 
 let real: ContentSource;
 beforeAll(async () => {
@@ -36,6 +37,7 @@ beforeAll(async () => {
 });
 
 const NOW = "2026-11-11T12:00:00.000Z";
+afterAll(dropSharedSeeds);
 const DAY = 86_400_000;
 
 async function seeded(
@@ -44,7 +46,8 @@ async function seeded(
 ): Promise<{ h: Harness; seed: DevSeedResult }> {
   const h = await harness({ dev: true, content, now: NOW });
   await h.json("PUT", "/api/profile", { timezone: "UTC" });
-  const r = await h.json<DevSeedResult>("POST", "/api/dev/seed", { point });
+  // A point several tests start from is built once and restored for the others (testing/seed-cache.ts).
+  const r = await sharedSeed<DevSeedResult>(h, content, { point });
   if (r.status !== 200) throw new Error(`seed ${point}: ${r.status} ${JSON.stringify(r.body)}`);
   return { h, seed: r.body };
 }

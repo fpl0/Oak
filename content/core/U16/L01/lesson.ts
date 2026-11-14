@@ -228,13 +228,16 @@ export default defineLesson({
         skills: [{ skill: "H13", w: 1 }],
         code: { starter: MODIFY_STARTER },
         reference: { solutions: [MODIFY_SOLUTION], bars: 4 },
-        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7).
-        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"] },
+        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7); `durations`:
+        // and it lasts as the target's does, so a C minor cut to a click is not the target.
+        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"], durations: true },
         constraints: [{ c: "edit-only-regions", feedback: "code.edit-outside" }],
         target: { audible: true, showRoll: false, revealRollAfter: 1 },
+        // Where and what, not the answer (contracts §5.3): the ladder names the 3rd (rung 2) and the symbol (rung 3).
+        // The sentence holds for every miss: Co lowers the 5th as well, C7 adds a note, C keeps the 3rd.
         feedbackText: {
           "harmony.pcset":
-            "Bar {bar}: your chord has {got}; the target has {exp}. One note of one chord moves: the E of the second C chord, down to E♭.",
+            "Bar {bar}: your chord has {got}, which is not the target's chord. Only the second C changes, into the sad IV: the same root and 5th, and one note lowered, its 3rd.",
         },
         hints: ladder(
           "In C major you turned F into F minor. What is the same move on a C chord?",
@@ -251,7 +254,7 @@ export default defineLesson({
             feedback: ["code.unchanged"],
           },
           {
-            name: "C diminished: two notes lowered",
+            name: "C diminished: the 3rd lowered, and the 5th as well",
             response: { code: held("<G C Co G>") },
             expect: "fail",
             feedback: ["harmony.pcset"],
@@ -268,6 +271,18 @@ export default defineLesson({
             response: { code: held("<G C Cm Gm>") },
             expect: "fail",
             feedback: ["code.edit-outside"],
+          },
+          {
+            name: "C minor cut to a click: the right chord, 1% of the bar",
+            response: { code: held("<G C [Cm@0.01 ~@0.99] G>") },
+            expect: "fail",
+            feedback: ["rhythm.duration"],
+          },
+          {
+            name: "C7: a 7th added, the 3rd left major",
+            response: { code: held("<G C C7 G>") },
+            expect: "fail",
+            feedback: ["harmony.pcset"],
           },
         ],
       },

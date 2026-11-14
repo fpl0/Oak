@@ -103,12 +103,12 @@ const TARGETS = [
 ] as const;
 type Target = (typeof TARGETS)[number]["id"];
 
-/** What the right answer sounds like: the note the visitor brings, and where it goes. */
-const LISTEN_FOR: Record<Target, string> = {
-  vi: "That one was aimed at A minor: its outside note is si, G♯, which climbs a half step into A.",
-  ii: "That one was aimed at D minor: its outside note is di, C♯, which climbs a half step into D.",
-  iv: "That one was aimed at F: home turned restless with te, B♭, which falls a half step onto A, the 3rd of F.",
-};
+/**
+ * A wrong answer gets a listening direction, never the answer (contracts §5.3: rung 0 says where and what to listen
+ * for). The hint ladder then names each target's note, and the reveal gives the answer.
+ */
+const LISTEN_AGAIN =
+  "Not that one. Listen to bar 3, where the visitor lands: is that chord major or minor? Then find the note in bar 2 that is not in C major and let it move a half step, up into the next chord's root or down onto its 3rd.";
 
 const earPart = (n: number, form: string, target: Target, other: Target): IdentifyEx => ({
   kind: "identify",
@@ -124,7 +124,7 @@ const earPart = (n: number, form: string, target: Target, other: Target): Identi
   hints: [
     { text: "Listen to bar 3: the visitor lands there. Is that chord minor or major?" },
     {
-      text: "Hum the top of bar 2 and let it move. Si climbs into A, di climbs into D, te falls onto the A of an F chord.",
+      text: "Find the note in bar 2 that is not in C major and let it move. Si climbs into A, di climbs into D, te falls onto the A of an F chord.",
     },
     {
       text: "Hear it again, slower, and hum the bass: in bar 3 it lands a 5th below where it was in bar 2.",
@@ -136,7 +136,7 @@ const earPart = (n: number, form: string, target: Target, other: Target): Identi
   cue: { context: "none", countInBars: 1, click: false, replays: -1 },
   answer: { ui: "choice", options: [...TARGETS] },
   correct: { choice: [target] },
-  feedbackText: { "id.wrong": LISTEN_FOR[target] },
+  feedbackText: { "id.wrong": LISTEN_AGAIN },
   tests: [
     { name: target, response: { answer: { choice: [target] } }, expect: "pass" },
     {
@@ -355,8 +355,9 @@ export default defineLesson({
         skills: [{ skill: "H12", w: 1 }],
         code: { starter: PAGE_STARTER },
         reference: { solutions: [PAGE_SOLUTION], bars: 8 },
-        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7).
-        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"] },
+        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7); `durations`:
+        // and it lasts as the target's does, so a chord cut to a click is not the page's.
+        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"], durations: true },
         constraints: [{ c: "edit-only-regions", feedback: "code.edit-outside" }],
         target: { audible: true, showRoll: false },
         feedbackText: {
@@ -400,6 +401,12 @@ export default defineLesson({
             expect: "fail",
             feedback: ["harmony.pcset"],
           },
+          {
+            name: "B7 cut to a click: the right chord, 1% of the bar",
+            response: { code: page("<G [B7@0.01 ~@0.99] Em G7 C E7 Am D7>") },
+            expect: "fail",
+            feedback: ["rhythm.duration"],
+          },
         ],
       },
     },
@@ -423,7 +430,7 @@ export default defineLesson({
         ],
         hints: ladder(
           "Listen to bar 3: the visitor lands there. Is that chord minor or major?",
-          "Hum the top of bar 2 and let it move. Si climbs into A, di climbs into D, te falls onto the A of an F chord.",
+          "Find the note in bar 2 that is not in C major and let it move. Si climbs into A, di climbs into D, te falls onto the A of an F chord.",
           "Two of the targets are minor. If bar 3 is major, it is F. If it is minor, sing its bass against home: A is la, D is re.",
         ),
         srs: [{ family: "fam.deg.fet-chromatic", mode: "review-if-due" }],
@@ -470,7 +477,8 @@ export default defineLesson({
             skills: ["E12a"],
             rule: "degree-set",
             track: "mel",
-            anyOf: ["#5", "#1", "b7"],
+            // The theory names a raised 5 or 1 by its pitch class in a major key (♭6, ♭2), so both spellings count.
+            anyOf: ["#5", "b6", "#1", "b2", "b7"],
             minCount: 1,
           },
           {
@@ -511,6 +519,23 @@ export default defineLesson({
                 mel("<[2 ~ 4 2] [4 ~ 6 4#] [5 ~ 4 2] [0 ~ 6b ~] [5 ~ 3 2] [0# ~ 2 4] [3 ~ 1 3] [1 ~ -1 ~]>"),
               ),
             },
+            expect: "pass",
+          },
+          {
+            name: "E7 that lands on A major: the right root, not vi",
+            response: { code: loop("<C E7 A C F Am Dm G7>", PLAIN_TUNE) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "C7 that lands on F minor: the right root, not IV",
+            response: { code: loop("<C Em Am C7 Fm Am Dm G7>", PLAIN_TUNE) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "A7 into Dm only, the tune on di: the C♯ counts, however the theory spells it",
+            response: { code: loop("<C Em Am C F A7 Dm G7>", ballad("4", "6", "0#")) },
             expect: "pass",
           },
           {

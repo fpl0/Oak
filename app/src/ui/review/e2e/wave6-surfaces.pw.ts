@@ -71,14 +71,16 @@ async function staffTab(page: Page): Promise<void> {
   // After a resize the views may fold into tabs a frame later: wait for one or the other.
   const tab = page.getByTestId("tab-staff");
   await expect(page.locator(`${STAFF}, [data-testid=tab-staff]`).first()).toBeVisible();
-  // The fold can re-render the tabs on Roll after a click landed: click again until the staff is shown.
+  // The fold can re-render the tabs on Roll after a click landed, even after the staff was shown once (the race
+  // of the Wave 6 run: the staff seen, then gone when its status was read). One state is waited for: the staff
+  // shown AND drawn, clicking the tab again while the fold settles.
   await expect(async () => {
     if (await tab.isVisible().catch(() => false)) {
       if ((await tab.getAttribute("aria-selected")) !== "true") await tab.click();
     }
     await expect(page.locator(STAFF)).toBeVisible({ timeout: 2_000 });
-  }).toPass({ timeout: 30_000 });
-  await expect(page.locator(STAFF)).toHaveAttribute("data-status", "ready", { timeout: 30_000 });
+    await expect(page.locator(STAFF)).toHaveAttribute("data-status", "ready", { timeout: 5_000 });
+  }).toPass({ timeout: 45_000 });
 }
 
 async function setLens(page: Page, id: string, on: boolean): Promise<void> {

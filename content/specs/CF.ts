@@ -362,7 +362,7 @@ export const CF: UnitSpec = {
           opens:
             "The CF-T.S3 draft in the full Workbench, the source one click away for reference. `kick`, `snare` and `hats` lines are added if the draft has no drums.",
           hear: "The learner's own version from bar 1; the original beside it at any bar; then the take, one chorus (and an intro and an ending if they wrote them) in real time, about a minute.",
-          see: 'The Workbench `full`, the form map with the song\'s sections, the checklist of two lines, then "Record the take", "Review" and "Release". Session bar: "Session 4 of 4: Arrange and release".',
+          see: 'The Workbench `full`, the form map with the song\'s sections, the checklist of three lines, then "Record the take", "Review" and "Release". Session bar: "Session 4 of 4: Arrange and release".',
           work: [
             "Drums of their own: a ride or hats on swung eighths, a two-feel kick, a light backbeat or none.",
             'A comping rhythm for the chords (a push from U13.L01, `.dict("lefthand")` on the sevenths) and a sound for each part; the tune on whatever lead the learner has unlocked.',
@@ -377,7 +377,7 @@ export const CF: UnitSpec = {
           epr: {
             enjoyment:
               "A song people have played for a hundred years, in the learner's arrangement, on their record. The take is a minute of listening to it.",
-            pace: "The notes are done. Today is drums, sounds and a take; an intro and an ending are optional. The rubric is two lines the draft nearly meets already.",
+            pace: "The notes are done. Today is drums, sounds and a take; an intro and an ending are optional. The rubric is three lines the draft nearly meets already: the four parts, the song's sections, and its changes bar by bar.",
             return:
               "The Coda shows the track on Side A beside the others and says the gym can now serve another standard at L8. In the default order the four lessons of U17, its checkpoint, C7 and the single remain.",
           },

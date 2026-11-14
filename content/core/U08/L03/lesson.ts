@@ -456,7 +456,8 @@ export default defineLesson({
               bars: 4,
             },
             matcher: ROOT_BASS,
-            min: 0.75,
+            // "Every chord": all four changes (corrections pass).
+            min: 1,
           },
           {
             id: "outside-the-key",

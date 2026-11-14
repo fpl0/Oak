@@ -449,7 +449,22 @@ export type Matcher =
        */
       roleWeight?: "onsets" | "equal";
     }
-  | { m: "melody"; pitch: PitchMode; wPitch: number; wRhythm: number; rhythmTol: Rat; track?: TrackRef }
+  | {
+      m: "melody";
+      pitch: PitchMode;
+      wPitch: number;
+      wRhythm: number;
+      rhythmTol: Rat;
+      track?: TrackRef;
+      /**
+       * Corrections pass (feature `melody.durations`): also compare the written length of every note that is right
+       * in pitch and time (its own length, cut where the next note starts; within `rhythmTol`). The rhythm credit
+       * becomes `onsets × (0.5 + 0.5 × lengths right)`, and each wrong length is `rhythm.duration`. A held note
+       * written short with a rest after it, or a rest filled by holding the note before it, then counts. Default:
+       * onsets only.
+       */
+      durations?: boolean;
+    }
   | {
       m: "harmony";
       level: "bass" | "root" | "quality" | "rn" | "full";
@@ -467,7 +482,12 @@ export type Matcher =
       wrongQuality?: "partial" | "none";
     }
   /** The only matcher allowed for `voicing()` output (contracts §6.7). */
-  | { m: "pcset"; perOnset: boolean; bass: boolean; tracks?: TrackRef[] }
+  /**
+   * Corrections pass (feature `pcset.durations`): `durations` also asks each chord to last as the target's does
+   * (halfway through the target chord the answer still sounds its notes): `[G7@0.01 ~@0.99]` is not a bar of G7.
+   * A wrong length halves that chord's credit and reads `rhythm.duration`.
+   */
+  | { m: "pcset"; perOnset: boolean; bass: boolean; tracks?: TrackRef[]; durations?: boolean }
   | { m: "rubric"; rules: RubricRule[] }
   /**
    * Wave 5. "Match this sound" (A1.L01–L04): the sound controls of the learner's code against the hidden

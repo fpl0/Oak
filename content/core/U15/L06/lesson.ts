@@ -468,7 +468,8 @@ export default defineLesson({
             skills: ["E12a"],
             rule: "degree-set",
             track: "mel",
-            anyOf: ["#4", "#5", "#1", "b7"],
+            // The theory names a raised 5 or 1 by its pitch class in a major key (♭6, ♭2), so both spellings count.
+            anyOf: ["#4", "#5", "b6", "#1", "b2", "b7"],
           },
           {
             id: "a-leading-tone-chord",
@@ -524,6 +525,17 @@ export default defineLesson({
             response: { code: loop("<C^7 Dm7 Em7 C7 F^7 Em7 Dm7 C^7>", STAIR_TUNE) },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            name: "two visitors, one landing on the wrong kind of chord: A7 into D major, not ii",
+            response: { code: loop("<C^7 Dm7 Em7 C7 F^7 A7 D C^7>", STAIR_TUNE) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "two doors in other places: B7 into Em7, A7 into Dm7",
+            response: { code: loop("<C^7 B7 Em7 F^7 F^7 A7 Dm7 C^7>", STAIR_TUNE) },
+            expect: "pass",
           },
           {
             name: "two visitors, one of which does not land: E7 goes to Dm7",

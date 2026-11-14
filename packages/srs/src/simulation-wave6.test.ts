@@ -1,6 +1,6 @@
 // The contract gate of §7.4 on the whole core: every family of the catalog as content/families.ts tunes it
 // (Wave 6: ear stages E and F and the rhythm part of H, the level gates U12–U17 open) and every fact deck, the
-// six U12–U17 decks that wait for their §7.3 rows among them (content/decks `WAVE6_DECKS`: seventh chords,
+// six U12–U17 decks among them (content/decks `WAVE6_DECKS`, in `decks` since contracts 1.7: seventh chords,
 // diatonic sevenths, modes, secondary dominants, borrowed chords, pivots; one new card a day each), introduced in
 // the default course order to its last session, CF-A.S4 (session 185 of the order since contracts 1.6), and on
 // into the tracks.
@@ -11,13 +11,15 @@
 // stretch that ends with CF-A.S4 and over the whole run: p95 planned warm-up within the budget; at most 12 active
 // perceptual and production families on every day; p95 age of the oldest undelivered due card at most 7 days;
 // every perceptual and production family's first review set within 7 days of its lesson, none left unreviewed;
-// p95 of a planned reviews-only day at most 12 minutes.
+// review day p95 at most 720 s, counting the "a little more" review only (the warm-up is budgeted by §9.1; d22,
+// contracts 1.7).
 //
 // Two variants. "padded" is the gate's own conservative assumption (simulation.test.ts): every lesson also adds
 // two tested-term cards, about 250 fact cards the course does not have (no term of content/terms.ts carries a
 // card today). "as written" has the course's own cards only; it is the run that shows whether the decks drain.
-// The table is printed for the report; so is the reviews-only day under d22 (the warm-up outside the 12-minute
-// cap), which the server and session engineers build.
+// The table prints the reviews-only day three ways: with the warm-up inside the 12-minute cap (the rule before
+// d22), the whole day under d22 (the warm-up outside the cap, which the server builds), and its "a little more"
+// part, which is what §7.4 holds.
 import { describe, expect, test } from "bun:test";
 import { WAVE6_DECKS } from "../../../content/decks/index.ts";
 import { decks, families } from "../../../content/families.ts";
@@ -34,7 +36,7 @@ import {
 import { simCatalogOf } from "./sim/course-catalog.test-util.ts";
 import { DEFAULT_LEARNER, type SimResult, simulate } from "./sim/simulate.ts";
 
-const catalog = simCatalogOf(families, [...decks, ...WAVE6_DECKS]);
+const catalog = simCatalogOf(families, decks);
 const srs = await createSrs({ factRetention: DECISION_2.factRetention });
 const TARGETS = [15, 20, 25] as const;
 /** The gate's five seeds and the five held-out ones. */
@@ -73,6 +75,7 @@ interface Window {
   oldestP95: number;
   reviewDayP95: number;
   reviewOpenP95: number;
+  reviewMoreP95: number;
   waitMax: number;
   waitCensored: number;
   wave6WaitMax: number;
@@ -97,6 +100,7 @@ function windowOf(r: SimResult): Window {
     oldestP95: p95(rows.map((x) => x.oldestUndeliveredDays)),
     reviewDayP95: p95(rows.map((x) => x.reviewDaySec)),
     reviewOpenP95: p95(rows.map((x) => x.reviewDayOpenSec)),
+    reviewMoreP95: p95(rows.map((x) => x.reviewMoreSec)),
     waitMax: Math.max(0, ...waits.map((w) => w.waitDays)),
     waitCensored: waits.filter((w) => w.censored && w.seededDay < day).length,
     wave6WaitMax: Math.max(0, ...wave6.map((w) => w.waitDays)),
@@ -128,9 +132,9 @@ const written = TARGETS.flatMap((t) => GATE_SEEDS.map((seed) => run(t, seed, TER
 
 const cards = catalog.deckBatches.reduce((n, b) => n + (b[2] as number), 0);
 const line = ({ t, seed, s, w }: (typeof padded)[number]) =>
-  `${t} ${seed} | ${w.sessions} (${w.day}) | ${Math.round(w.plannedP95)} | ${w.activeMax} | ${w.oldestP95} | ${w.waitMax} (${w.wave6WaitMax}) [${w.waitCensored}] | ${Math.round(w.reviewDayP95)} | ${Math.round(w.reviewOpenP95)} | ${w.seeded} / ${w.activeAtEnd} | ${w.deckPendingAtEnd} || ${Math.round(s.plannedSec.p95)} | ${s.maxActivePerceptual} | ${s.oldestUndeliveredDays.p95} | ${s.firstReviewWait.all.max} [${s.firstReviewWait.all.censored}] | ${Math.round(s.reviewDaySec.p95)} | ${Math.round(s.reviewDayOpenSec.p95)} | ${s.families.graduated}+${s.families.resting} | ${s.deckPending.atEnd} | ${s.factCards}`;
+  `${t} ${seed} | ${w.sessions} (${w.day}) | ${Math.round(w.plannedP95)} | ${w.activeMax} | ${w.oldestP95} | ${w.waitMax} (${w.wave6WaitMax}) [${w.waitCensored}] | ${Math.round(w.reviewDayP95)} | ${Math.round(w.reviewOpenP95)} | ${Math.round(w.reviewMoreP95)} | ${w.seeded} / ${w.activeAtEnd} | ${w.deckPendingAtEnd} || ${Math.round(s.plannedSec.p95)} | ${s.maxActivePerceptual} | ${s.oldestUndeliveredDays.p95} | ${s.firstReviewWait.all.max} [${s.firstReviewWait.all.censored}] | ${Math.round(s.reviewDaySec.p95)} | ${Math.round(s.reviewDayOpenSec.p95)} | ${Math.round(s.reviewMoreSec.p95)} | ${s.families.graduated}+${s.families.resting} | ${s.deckPending.atEnd} | ${s.factCards}`;
 const header = (name: string) =>
-  `Wave 6 catalog, ${name} (${PERCEPTUAL.size} perceptual and production families, ${cards} deck cards in ${decks.length + WAVE6_DECKS.length} decks): target seed | through ${END}: sessions (day) | planned warm-up p95 s | active max | oldest undelivered p95 d | first-review wait max d (U12–U17 families) [never] | review day p95 s | review day with the warm-up outside the cap (d22) p95 s | families seeded / active at the end | deck cards not yet dealt || whole run: planned p95 | active max | oldest p95 | wait max [never] | review day p95 | d22 review day p95 | graduated+resting at the end | deck cards not yet dealt | fact cards`;
+  `Wave 6 catalog, ${name} (${PERCEPTUAL.size} perceptual and production families, ${cards} deck cards in ${decks.length} decks): target seed | through ${END}: sessions (day) | planned warm-up p95 s | active max | oldest undelivered p95 d | first-review wait max d (U12–U17 families) [never] | review day p95 s | review day with the warm-up outside the cap (d22) p95 s | its "a little more" p95 s (the §7.4 criterion) | families seeded / active at the end | deck cards not yet dealt || whole run: planned p95 | active max | oldest p95 | wait max [never] | review day p95 | d22 review day p95 | d22 a little more p95 | graduated+resting at the end | deck cards not yet dealt | fact cards`;
 console.log(
   [header("padded with two term cards a lesson (the gate's assumption)"), ...padded.map(line)].join("\n"),
 );
@@ -139,8 +143,8 @@ console.log([header(`as written (${TERM_CARDS} term cards)`), ...written.map(lin
 describe("§7.4 over the whole core with the U12–U17 families and decks", () => {
   test("the catalog: the six U12–U17 decks card by card in their lessons, the seven families the stretch seeds, the order to CF-A.S4", () => {
     const ids = new Set(catalog.deckBatches.map(([id]) => id));
-    for (const d of WAVE6_DECKS) expect([d.id, ids.has(d.id)]).toEqual([d.id, true]);
-    expect(ids.size).toBe(decks.length + WAVE6_DECKS.length);
+    for (const d of WAVE6_DECKS) expect([d.id, decks.includes(d), ids.has(d.id)]).toEqual([d.id, true, true]);
+    expect(ids.size).toBe(decks.length);
     for (const [id, lesson] of catalog.deckBatches)
       if (WAVE6_DECKS.some((d) => d.id === id))
         expect([
@@ -182,7 +186,7 @@ describe("§7.4 over the whole core with the U12–U17 families and decks", () =
     ["padded", padded],
     ["as written", written],
   ] as const) {
-    test(`${name}, through ${END}: budget, 12 active, oldest due 7 d, first review 7 d, review day 12 min, on every run and target`, () => {
+    test(`${name}, through ${END}: budget, 12 active, oldest due 7 d, first review 7 d, "a little more" p95 720 s, on every run and target`, () => {
       for (const { t, seed, w } of runs) {
         const where = [t, seed];
         expect([...where, w.plannedP95 <= SIM_GATE.p95WarmupSec[t]]).toEqual([...where, true]);
@@ -190,7 +194,7 @@ describe("§7.4 over the whole core with the U12–U17 families and decks", () =
         expect([...where, w.oldestP95 <= SIM_GATE.p95OldestDueDays]).toEqual([...where, true]);
         expect([...where, w.waitMax <= SIM_GATE.firstReviewWaitDays]).toEqual([...where, true]);
         expect([...where, w.waitCensored]).toEqual([...where, 0]);
-        expect([...where, w.reviewDayP95 <= SIM_GATE.p95ReviewDaySec]).toEqual([...where, true]);
+        expect([...where, w.reviewMoreP95 <= SIM_GATE.p95ReviewDaySec]).toEqual([...where, true]);
       }
     });
     test(`${name}, the whole run (into the tracks): the same five criteria, and no family left unreviewed`, () => {
@@ -207,7 +211,7 @@ describe("§7.4 over the whole core with the U12–U17 families and decks", () =
           true,
         ]);
         expect([...where, s.firstReviewWait.all.censored]).toEqual([...where, 0]);
-        expect([...where, s.reviewDaySec.p95 <= SIM_GATE.p95ReviewDaySec]).toEqual([...where, true]);
+        expect([...where, s.reviewMoreSec.p95 <= SIM_GATE.p95ReviewDaySec]).toEqual([...where, true]);
       }
     });
   }

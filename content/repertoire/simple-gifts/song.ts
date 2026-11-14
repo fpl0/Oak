@@ -3,7 +3,8 @@
 // (quarters). Harmony, one triad a bar: I I V V | I I V I | I I I V | I I V I.
 import { folkSong } from "../folk.ts";
 
-export const setting = "Bar 9's dotted quarter and eighth become two quarters; everything else as printed.";
+export const setting =
+  "Bar 9's dotted figure (5, then 3 2) is played as a half and two quarters; everything else as printed.";
 export default folkSong({
   id: "song.simple-gifts",
   bpm: 96,

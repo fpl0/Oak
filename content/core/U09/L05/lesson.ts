@@ -140,8 +140,20 @@ const MAKE_RICH = make(
   `hats: arrange([4, hatsIntro], [4, hatsVerse], [4, hatsChorus], [4, hatsVerse], [4, hatsChorus]).gain(.5)`,
   ...tracks("Intro", "Verse", "Chorus", "Verse", "Chorus"),
 );
-/** An intro, but only one part is masked: the other parts all start together. */
+/** An intro, but only one part is masked: the other parts all start together (the tune plays the verse's). */
 const MAKE_ONE_MASK = make(
+  [
+    chordsIntro(""),
+    ...MAKE_CONSTS.slice(0, 2),
+    BASS_INTRO,
+    ...MAKE_CONSTS.slice(2, 4),
+    MEL_VERSE.replace("melVerse", "melIntro"),
+    ...MAKE_CONSTS.slice(4),
+  ],
+  ...tracks("Intro", "Verse", "Chorus"),
+);
+/** One mask, and the tune waits the whole intro with `silence`: the chords, then the bass, then the tune. */
+const MAKE_MASK_AND_SILENCE = make(
   [
     chordsIntro(""),
     ...MAKE_CONSTS.slice(0, 2),
@@ -151,6 +163,11 @@ const MAKE_ONE_MASK = make(
     ...MAKE_CONSTS.slice(4),
   ],
   ...tracks("Intro", "Verse", "Chorus"),
+);
+/** The outside review's counterexample: two masks that silence nothing; every part from bar 1. */
+const MAKE_EMPTY_MASKS = make(
+  [CHORDS_VERSE, CHORDS_CHORUS, bassVerse('.mask("1")'), BASS_CHORUS, MEL_VERSE, `${MEL_CHORUS}.mask("1")`],
+  ...tracks("Verse", "Chorus"),
 );
 
 /** Drums from the Band in the flavour's kit; chords, bass and tune are in the learner's code. */
@@ -467,7 +484,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Verse and chorus are arranged, and every part plays from bar 1. Add a four-bar intro that brings the parts in one at a time, and make one part drop out for the bar before a chorus.",
+          "Verse and chorus are arranged, and every part plays from bar 1. Add a four-bar intro that brings the parts in one at a time. For more, make one part drop out for the bar before a chorus.",
         skills: [{ skill: "F06", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [12, 32],
@@ -475,12 +492,14 @@ export default defineLesson({
         rubric: [
           {
             id: "mask-twice",
-            label: "Parts come in or drop out with .mask(), twice or more",
+            label: "Parts come in or drop out, twice or more, with .mask()",
             required: true,
             skills: ["F06"],
-            rule: "uses",
-            tool: "tb.mask",
-            min: 2,
+            // Corrections pass: the effect, not the count of `.mask()` calls (two `.mask("1")` silence nothing and
+            // passed). A part silent for a whole bar while another plays, coming in later or dropping out: twice.
+            rule: "custom",
+            fn: "parts-enter",
+            params: { min: 2, alsoUses: ["tb.mask"] },
           },
           {
             id: "four-tracks",
@@ -521,6 +540,17 @@ export default defineLesson({
           {
             name: "beyond the brief: lead-in, a drop before each chorus, verse chorus verse chorus, own hats",
             response: { code: MAKE_RICH },
+            expect: "pass",
+          },
+          {
+            name: "two masks that silence nothing",
+            response: { code: MAKE_EMPTY_MASKS },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "one mask, and the tune waits the whole intro",
+            response: { code: MAKE_MASK_AND_SILENCE },
             expect: "pass",
           },
           {

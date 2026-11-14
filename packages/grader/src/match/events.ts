@@ -12,6 +12,8 @@ import { alignFeel, clampScore, f1, keyAtOnset, noteValueLabel, pitchLabel } fro
 import { pitchClassOfKey, stepIndex } from "./melody.ts";
 
 export type EventsMatcher = Extract<Matcher, { m: "events" }>;
+/** Onsets closer than this (cycles) are one onset: below any written value, far below what an ear can tell. */
+const SNAP = 1 / 192;
 
 const soundKey = (e: NEvent, mode: EventsMatcher["sound"]): string =>
   mode === "s" ? (e.s ?? "") : mode === "drum-role" ? (e.drum ?? (e.midi === null ? (e.s ?? "") : "")) : "";
@@ -24,7 +26,17 @@ export function eventsMatch(
 ): MatchResult {
   const [tEv, aEv] = alignFeel(selectTracks(reference, cfg.tracks), selectTracks(answer, cfg.tracks), ctx);
   const T = sortEvents(tEv);
-  const A = sortEvents(aEv);
+  // Corrections gate (now-fails B, U13.L06): an onset within a 192nd of a bar of the target's is the target's onset.
+  // `.swingBy(.33, 4)` puts the swung 8th at 333/800 where `.swingBy(1/3, 4)` puts it at 5/12, about a millisecond
+  // apart: no ear hears it, so exact rational positions must not fail it.
+  const A = sortEvents(
+    aEv.map((a) => {
+      const near = T.find(
+        (t) => !R.eq(t.onset, a.onset) && Math.abs(R.toNum(R.sub(t.onset, a.onset))) <= SNAP,
+      );
+      return near ? { ...a, onset: near.onset } : a;
+    }),
+  );
   const pos = { meter: ctx.meter, ...(ctx.pickup ? { pickup: ctx.pickup } : {}) };
   const tKey: KeySpec | null = keyOf(T, ctx.key ?? null);
   const aKey: KeySpec | null = keyOf(A, null) ?? tKey;

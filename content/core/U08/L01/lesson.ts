@@ -376,7 +376,8 @@ export default defineLesson({
             rule: "matches",
             reference: { solutions: [code(chords(AXIS), bass(AXIS))], bars: 4 },
             matcher: ROOT_BASS,
-            min: 0.75,
+            // "Each chord its root": every change, not three of four (corrections pass).
+            min: 1,
           },
           {
             id: "low-down",
@@ -439,6 +440,22 @@ export default defineLesson({
             response: { code: code(chords(AXIS), bass("<2 6 7 5>")) },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            name: "three roots right, the last chord left on C",
+            response: { code: code(chords(AXIS), bass("<0 4 5 0>")) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "roots an octave apart, each on beat 1 then up high",
+            response: { code: code(chords(AXIS), bass("<[0 ~ 7 ~] [4 ~ 11 ~] [5 ~ 12 ~] [3 ~ 10 ~]>")) },
+            expect: "pass",
+          },
+          {
+            name: "roots held, a push on beat 4",
+            response: { code: code(chords(AXIS), bass("<[0@3 0] [4@3 4] [5@3 5] [3@3 3]>")) },
+            expect: "pass",
           },
         ],
       },

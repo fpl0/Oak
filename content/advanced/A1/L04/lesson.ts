@@ -14,8 +14,9 @@
 //
 // How it is graded: S4 is "match this echo" on the `controls` matcher (time within 0.02 s, feedback within
 // 0.15), with `edit-only-regions` keeping the notes; S5 gives one part its own orbit, graded with an `events`
-// match on the riff's notes, `must-use tb.orbit` and `arg-matches` on the first `.orbit()` argument, because
-// either part may move (a `controls` match on one track cannot see the other); S6 is a `fam.snd.params` level 4
+// match on the riff's notes, the `orbits-differ` rule (the snare and the riff end on different orbits, so
+// `.orbit(2)` on both or on the hats does not pass), `must-use tb.orbit` and `arg-matches` on the first
+// `.orbit()` argument; either part may move; S6 is a `fam.snd.params` level 4
 // ear step (more room or echoes); the Make requires a room size or an echo time (`uses`).
 import { defineLesson, type HintLadder } from "@oak/content-kit";
 
@@ -302,14 +303,36 @@ export default defineLesson({
         skills: [{ skill: "D05", w: 1 }],
         code: { starter: ROOMS_STARTER },
         reference: { solutions: [ROOMS_RIFF_MOVED, ROOMS_SNARE_MOVED], bars: 2 },
-        matcher: { m: "events", pitch: "absolute", rhythm: "onsets", durations: false, tracks: ["mel"] },
+        // The two rooms are apart only when the snare and the riff end up on different orbits: `.orbit(2)` on
+        // both, or on the hats, still leaves them sharing one reverb (corrections pass, theory-b 1).
+        matcher: {
+          m: "all",
+          of: [
+            { m: "events", pitch: "absolute", rhythm: "onsets", durations: false, tracks: ["mel"] },
+            {
+              m: "rubric",
+              rules: [
+                {
+                  id: "two-rooms",
+                  label: "The snare and the riff in two rooms",
+                  required: true,
+                  skills: [],
+                  rule: "custom",
+                  fn: "orbits-differ",
+                  params: { a: "snare", b: "mel" },
+                },
+              ],
+            },
+          ],
+        },
         constraints: [
           { c: "must-use", tool: "tb.orbit", feedback: "code.must-use" },
           {
             c: "arg-matches",
             fn: "orbit",
             argIndex: 0,
-            pattern: "^[2-9]$",
+            // A number, or the same number in quotes (`.orbit("2")` is valid Strudel; corrections gate).
+            pattern: "^([\"'`]?)[2-9]\\1$",
             feedback: "code.arg-mismatch",
           },
         ],
@@ -355,6 +378,35 @@ export default defineLesson({
             response: { code: rooms("", ".orbit(1)") },
             expect: "fail",
             feedback: ["code.arg-mismatch"],
+          },
+          {
+            name: "both lines sent to orbit 2, so they still share one",
+            response: { code: rooms(".orbit(2)", ".orbit(2)") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the hats moved, the snare and the riff left together",
+            response: {
+              code: code(
+                KICK,
+                snare(".room(.5).roomsize(6)"),
+                `${HATS}.orbit(2)`,
+                riff(`${RIFF_SOUND}.room(.3).roomsize(1).gain(.8)`),
+              ),
+            },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "each line on an orbit of its own",
+            response: { code: rooms(".orbit(2)", ".orbit(3)") },
+            expect: "pass",
+          },
+          {
+            name: "the snare on orbit 4",
+            response: { code: rooms(".orbit(4)", "") },
+            expect: "pass",
           },
         ],
       },

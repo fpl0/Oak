@@ -2,7 +2,7 @@
  * Version of docs/design/contracts.md that this package implements. Bump it in the same commit as any
  * contract change (contracts "Changing a contract").
  */
-export const CONTRACTS_VERSION = "1.6";
+export const CONTRACTS_VERSION = "1.7";
 
 /**
  * Bump when the shape of a content schema changes in a way that old generated content or an older reader

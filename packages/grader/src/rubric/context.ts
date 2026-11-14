@@ -29,7 +29,7 @@ export interface RubricContext extends NormalizeContext {
    * Wave 6. The sections of the song a transcription capstone arranges, in order (`SongDef.answerKey.sections`):
    * what the `form` pattern `@song` compares with (CF-T.S4). `bars` is the section's length.
    */
-  songForm?: readonly { label: string; bars: number }[];
+  songForm?: readonly { label: string; bars: number; chords?: readonly (readonly string[])[] }[];
 }
 
 /** The learner tracks a rubric reads; Band tracks are never counted (contracts §6.2 item 5). */

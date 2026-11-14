@@ -56,10 +56,8 @@ gate numbers.
 
 **Known gaps** (open after Wave 6):
 
-- **The six Wave 6 fact decks are not in any learner's catalog.** `WAVE6_DECKS` (`deck.chd.sevenths`,
-  `deck.har.sevenths`, `deck.scl.modes`, `deck.har.applied`, `deck.har.borrowed`, `deck.har.pivots`) wait for their
-  contracts §7.3 rows (exact text in the gate's result and decisions row W6); §7.4 already holds with them in the
-  catalog. Switching them on is one change: the rows, `decks`, the change log, `CONTRACTS_VERSION` and its pins.
+- **The six Wave 6 fact decks are live since the corrections pass** (contracts 1.7, §7.3 rows, `decks`; decision 71).
+  Their format examples were changed at the corrections gate so that no example is a card's own answer.
 - **Transcription feedback names the expected chord at rung 0** ("Bar 2: I, expected V7/vi.") on L5–L8, X1, X2 and
   CF-T, where contracts §5.3 shows only "where and how many" below rung 3. Kept for now (decision 67); the fix is a
   rung-aware `checkLines(result, rung)` over `toIssueView`.

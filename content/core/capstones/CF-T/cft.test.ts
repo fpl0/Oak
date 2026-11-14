@@ -94,6 +94,13 @@ const SECTIONS = ["A", "A", "B", "A"].map((label, i) => ({
   label,
   bars: [i * 8 + 1, i * 8 + 8] as [number, number],
 }));
+/** The lead sheet of the stand-in, bar by bar: what `song-kept` compares an arrangement with (CF-T.S4). */
+const CHART = AABA.flatMap((bar, i) =>
+  bar
+    .replace(/[[\]]/g, "")
+    .split(" ")
+    .map((symbol, k, all) => ({ bar: i + 1, beat: all.length === 2 ? 1 + k * 2 : 1, symbol })),
+);
 const STAND_IN = {
   id: "song.cf-t-stand-in",
   title: "Stand-in standard (test only)",
@@ -112,6 +119,7 @@ const STAND_IN = {
     layers: { bass: bassOf(BASS), chords: chordsOf(AABA), melody: melodyOf(TUNE) },
     phrases: SECTIONS.map((s) => s.bars),
     sections: SECTIONS,
+    chords: CHART,
   },
 } as unknown as SongDef;
 const HEAD = "setcpm(132/4)\n\n";
@@ -136,7 +144,7 @@ describe("CF-T's sessions (contracts §6.6 CF-T, CF.md)", () => {
       ["CF-T.S1", "form-map", ["bass-1", "bass-2", "bass-3", "bass-4"], [], false],
       ["CF-T.S2", null, ["changes-1", "changes-2", "changes-3", "changes-4"], [], false],
       ["CF-T.S3", null, ["melody-1", "melody-2", "melody-3", "melody-4"], [], false],
-      ["CF-T.S4", null, [], ["roles", "form"], true],
+      ["CF-T.S4", null, [], ["roles", "form", "changes"], true],
     ]);
     expect(cft?.inGymSlots).toBe(true);
     expect(cft?.opensAfter).toEqual({ lessonsCompleted: ["U15.L01"] });
@@ -175,12 +183,13 @@ describe("CF-T's sessions (contracts §6.6 CF-T, CF.md)", () => {
         ]);
       }
   });
-  test("the release asks what the form told the learner; the S4 rubric is the arrangement's two lines", () => {
+  test("the release asks what the form told the learner; the S4 rubric is the arrangement's three lines", () => {
     expect(CAPSTONE_LINER_PROMPTS["CF-T"]).toBe("What did the form tell you before you wrote a note?");
     expect(CAPSTONE_LINER_SEEDS["CF-T"]?.length).toBe(3);
     expect(CF_T_ARRANGE_RUBRIC.map((r) => [r.id, r.rule, r.required])).toEqual([
       ["roles", "tracks", true],
       ["form", "form", true],
+      ["changes", "custom", true],
     ]);
   });
 });
@@ -263,10 +272,14 @@ describe("CF-T on the stand-in standard (32 bars, AABA, swing 8ths)", () => {
   });
 
   for (const n of [1, 2, 3, 4])
-    test(`melody-${n}: the tune passes, and in another key; a degree off throughout fails`, async () => {
+    test(`melody-${n}: the tune passes, an octave lower too; in another key, or a degree off throughout, it fails`, async () => {
       const c = check(`melody-${n}`);
       expect(passed(await grade(STAND_IN, c, draft(`mel: ${L.melody}`)))).toBe(true);
-      expect(passed(await grade(STAND_IN, c, draft(`mel: ${melodyOf(TUNE, "F4:major")}`)))).toBe(true);
+      expect(passed(await grade(STAND_IN, c, draft(`mel: ${melodyOf(TUNE, "C3:major")}`)))).toBe(true);
+      // Corrections pass (theory-g 2): the recording is in C, and its accompaniment with it; a tune in F is not it.
+      const moved = await grade(STAND_IN, c, draft(`mel: ${melodyOf(TUNE, "F4:major")}`));
+      expect(passed(moved)).toBe(false);
+      expect(ids(moved)).toContain("melody.wrong-key");
       const up = TUNE.map((bar) => bar.replace(/-?\d+/g, (d) => String(Number(d) + 1)));
       const off = await grade(STAND_IN, c, draft(`mel: ${melodyOf(up)}`));
       expect(passed(off)).toBe(false);
@@ -365,8 +378,27 @@ describe("CF-T.S4: the arrangement's rubric on the whole piece, with the song's 
   test("no drums fails `roles`", async () => {
     expect(failing(await gradeArrangement(arrangement({ drums: false })))).toEqual(["roles"]);
   });
+  test("the song's sections and parts, but one chord throughout, fail `changes` (corrections pass, theory-g 3)", async () => {
+    const one = arrangement()
+      .replace(/const chordsA = .*\n/, 'const chordsA = chord("C").voicing()\n')
+      .replace(/const chordsB = .*\n/, 'const chordsB = chord("C").voicing()\n');
+    const r = await gradeArrangement(one);
+    expect([r.status, failing(r)]).toEqual(["fail", ["changes"]]);
+  });
+  test("the changes after a four-bar intro, in a two-beat comp, still keep the song", async () => {
+    const comped = arrangement({ order: ["Intro", "A", "A", "B", "A"] }).replace(
+      '.s("rhodes")',
+      '.struct("~ x ~ x").s("rhodes")',
+    );
+    const r = await gradeArrangement(comped);
+    expect([r.status, failing(r)]).toEqual(["pass", []]);
+  });
   test("the sections in another order fail `form`; so does a second chorus", async () => {
-    expect(failing(await gradeArrangement(arrangement({ order: ["A", "B", "A", "A"] })))).toEqual(["form"]);
+    // A B A A also moves the song's changes: bars 9 to 24 hold the other section's chords.
+    expect(failing(await gradeArrangement(arrangement({ order: ["A", "B", "A", "A"] })))).toEqual([
+      "form",
+      "changes",
+    ]);
     expect(
       failing(await gradeArrangement(arrangement({ order: ["A", "A", "B", "A", "A", "A", "B", "A"] }))),
     ).toEqual(["form"]);

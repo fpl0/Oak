@@ -124,12 +124,37 @@ export const checkpoint: CheckpointDef = defineCheckpoint({
       hints: null,
       code: { starter: deg(`⟪${RIFF}⟫`) },
       reference: { solutions: [deg(THIRDS)], bars: 2 },
-      matcher: { m: "pcset", perOnset: true, bass: false },
+      // The pitch classes of each pair, and the size of the pair: the two notes 3 or 4 half steps apart, read from the
+      // lower one. Together they say "a 3rd above the riff's note": with the riff's note and its 3rd as the only pitch
+      // classes, 3 or 4 half steps apart can only put the 3rd on top (E3 under C4 is a 6th below; E5 over C4 a 10th).
+      // The order inside the brackets is free: `[2,0]` sounds the same as `[0,2]`.
+      matcher: {
+        m: "all",
+        of: [
+          { m: "pcset", perOnset: true, bass: false },
+          {
+            m: "rubric",
+            rules: [
+              {
+                id: "a-third-above",
+                label: "Each pair is a 3rd, 3 or 4 half steps",
+                required: true,
+                skills: ["I01"],
+                rule: "custom",
+                fn: "stack-intervals",
+                params: { semitones: [3, 4] },
+              },
+            ],
+          },
+        ],
+      },
       constraints: [{ c: "must-use", tool: "tb.mini.stack", feedback: "code.must-use" }],
       // The catalog names the tool by its card ("stack"); say what to type.
       feedbackText: {
         "code.must-use":
           "Play each pair at the same time: both notes inside one pair of brackets, with `,` between them.",
+        "rubric.unmet":
+          "{label}: {detail}. Keep the riff's note where it is and put the second note the next-but-one step up, in the same octave: `n` 0 becomes `[0,2]`.",
       },
       target: { audible: true, showRoll: true },
       tests: [
@@ -140,9 +165,31 @@ export const checkpoint: CheckpointDef = defineCheckpoint({
           expect: "pass",
         },
         {
+          name: "each pair written top down",
+          response: { code: deg("<[[2,0] [3,1] [4,2] [2,0]] [[5,3] [4,2] [3,1] ~]>") },
+          expect: "pass",
+        },
+        {
+          name: "in note names, with spaces after the commas",
+          response: {
+            code: `${TEMPO}mel: note("<[[c4, e4] [d4, f4] [e4, g4] [c4, e4]] [[f4, a4] [e4, g4] [d4, f4] ~]>").s("piano")`,
+          },
+          expect: "pass",
+        },
+        {
+          // Review finding (theory-c A1): the same letters an octave apart are a 10th, a compound interval the
+          // course names in U12; the brief asks for a 3rd.
           name: "the upper voice an octave higher, a 10th",
           response: { code: deg("<[[0,9] [1,10] [2,11] [0,9]] [[3,12] [2,11] [1,10] ~]>") },
-          expect: "pass",
+          expect: "fail",
+          feedback: ["rubric.unmet"],
+        },
+        {
+          // Review finding (theory-c A1): E3 under C4 has the right letters but is a 6th below, not a 3rd above.
+          name: "the second note a 6th below",
+          response: { code: deg("<[[0,-5] [1,-4] [2,-3] [0,-5]] [[3,-2] [2,-3] [1,-4] ~]>") },
+          expect: "fail",
+          feedback: ["rubric.unmet"],
         },
         {
           name: "unchanged",

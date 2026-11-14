@@ -279,9 +279,16 @@ for (const m of SCREENSHOT_MATRIX)
     await ready(page);
     await c5Draft(page);
     await setSubject(page, C5_SUBJECT);
-    await panel(page).getByTestId("quick-actions").locator('[data-action="review"]').click();
+    const button = panel(page).getByTestId("quick-actions").locator('[data-action="review"]');
+    await button.click();
+    // The review message is the last one only once the request is under way, and it renders again when the answer
+    // settles: waiting for "done" alone could read an earlier message, and the scroll then met a review that was
+    // being replaced (the race of the Wave 6 run). Wait for the settled review: its two revisions, the button back.
+    await expect(button).toHaveText("Review requested");
     await waitDone(page);
     const review = lastMessage(page).getByTestId("review");
+    await expect(review.getByTestId("review-revisions").locator(":scope > li")).toHaveCount(2);
+    await expect(button).toHaveText("Request review");
     await review.getByTestId("review-revisions").scrollIntoViewIfNeeded();
     await page.screenshot({ path: `${SHOTS}/w5-review-${m.theme}-${m.width}x${m.height}.png` });
   });

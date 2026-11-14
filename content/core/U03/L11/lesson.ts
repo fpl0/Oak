@@ -238,7 +238,7 @@ export default defineLesson({
           starter: deg(`<${TUNE.slice(0, 4).join(" ")} ⟪${TOO_SOON}⟫ ${TUNE.slice(5).join(" ")}>`),
         },
         reference: { solutions: [HOOK], bars: 8 },
-        // At least one of the eight bars repeats an earlier bar's steps, exactly or moved; only bar 5 can change.
+        // Bar 5 repeats bar 1's steps, exactly or moved; only bar 5 can change.
         matcher: {
           m: "rubric",
           rules: [
@@ -247,10 +247,12 @@ export default defineLesson({
               label: "Bar 5 reuses the shape of bar 1",
               required: true,
               skills: ["M01"],
-              rule: "motif-reuse",
-              track: "@melody",
-              minRatio: 0.125,
-              unitBars: 1,
+              // Corrections pass: bar 5 against bar 1 only. `motif-reuse` took any earlier bar, so bar 5 written as
+              // bar 2's `[3 ~ 2 ~]` or bar 3's `[2 4 7 4]` passed. The shape is compared in half steps, at any
+              // height (`minSemis: 0`: bar 1 itself is the reference's answer).
+              rule: "custom",
+              fn: "transposed-copy",
+              params: { track: "@melody", pairs: [[1, 5]], minSemis: 0 },
             },
           ],
         },
@@ -260,7 +262,7 @@ export default defineLesson({
         // into minor ones and does not count, so the hint names the moves that keep the shape.
         feedbackText: {
           "rubric.unmet":
-            "{label}: not yet. Bar 5 needs bar 1's exact shape: its four numbers, or all four plus 7 for the octave above.",
+            "{label}: not yet. Bar 5 needs bar 1's exact shape, every distance the same in half steps: its four numbers, all four plus 7 for the octave above, or the same distances from another note (F A C A keeps them).",
         },
         hints: ladder(
           "Sing bar 1, then bar 5. Which one sounds like a beginning?",
@@ -292,6 +294,30 @@ export default defineLesson({
             response: { code: deg(bars(with_(4, "[1 3 5 3]"))) },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            // The outside review's counterexamples: bar 5 copies another earlier bar, not bar 1.
+            name: "bar 5 copies bar 2",
+            response: { code: deg(bars(with_(4, "[3 ~ 2 ~]"))) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "bar 5 copies bar 3",
+            response: { code: deg(bars(with_(4, "[2 4 7 4]"))) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            // F A C A keeps every half step of C E G E: the same shape a 4th up.
+            name: "bar 1's shape a 4th up, from F",
+            response: { code: deg(bars(with_(4, "[3 5 7 5]"))) },
+            expect: "pass",
+          },
+          {
+            name: "bar 1 an octave down",
+            response: { code: deg(bars(with_(4, "[-7 -5 -3 -5]"))) },
+            expect: "pass",
           },
           {
             name: "bars 5 and 6 both rewritten",

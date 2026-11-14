@@ -12,9 +12,10 @@
 // each onset (`pcset` with `bass: true`); numerals are an `rn-palette` in the minor key with `borrowed` allowed,
 // read by degree and quality, so `iv` for the bright `IV` and `i` for the last `I` are quality misses
 // (`harmony.rn-case`), never string mismatches. The sung lines are never graded into the lesson and have a
-// Quiet path (`fallback: "identify"`). The Make's one required rule is `contains-rn` with `I` read on bar 8
-// only: the starter ends on A minor and fails, an ending on C major (III) fails, and A major in bar 8 passes
-// whatever the other seven bars hold.
+// Quiet path (`fallback: "identify"`). The Make's one required rule is `last-chord` with `I`: the last chord
+// that sounds, read in A minor, is A major. The starter ends on A minor and fails, an ending on C major (III)
+// fails, `[A Am]` and `[A E]` in bar 8 fail (A major is in the bar, but it is not the end), and an ending on
+// A major passes whatever the other seven bars hold.
 import { defineLesson, type HintLadder, type KeySpec, type SingEx } from "@oak/content-kit";
 
 const BPM = 88;
@@ -296,8 +297,9 @@ export default defineLesson({
         skills: [{ skill: "H13", w: 1 }],
         code: { starter: MODIFY_STARTER },
         reference: { solutions: [MODIFY_SOLUTION], bars: 4 },
-        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7).
-        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"] },
+        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7); `durations`:
+        // and it lasts as the target's does, so a chord cut to a click is not the target.
+        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"], durations: true },
         constraints: [{ c: "edit-only-regions", feedback: "code.edit-outside" }],
         target: { audible: true, showRoll: false, revealRollAfter: 1 },
         feedbackText: {
@@ -342,6 +344,12 @@ export default defineLesson({
             response: { code: held("<E A B E>") },
             expect: "fail",
             feedback: ["code.edit-outside"],
+          },
+          {
+            name: "E major cut to a click: the right chord, 1% of the bar",
+            response: { code: held("<Em A B [E@0.01 ~@0.99]>") },
+            expect: "fail",
+            feedback: ["rhythm.duration"],
           },
         ],
       },
@@ -470,14 +478,14 @@ export default defineLesson({
         saveAs: "sketch",
         rubric: [
           {
+            // The last chord that sounds, not a chord somewhere in bar 8: `[A Am]` ends on A minor.
             id: "major-home-at-the-end",
-            label: "The last bar is the major home chord",
+            label: "The piece ends on the major home chord",
             required: true,
             skills: ["H13"],
-            rule: "contains-rn",
-            rn: ["I"],
-            min: 1,
-            section: { bars: [8, 8] },
+            rule: "custom",
+            fn: "last-chord",
+            params: { rn: ["I"] },
           },
           {
             id: "the-bright-four",
@@ -537,6 +545,23 @@ export default defineLesson({
             response: { code: ballad("<Am Dm F E Am Dm E C>", makeTune("[2@3 ~]")) },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            name: "A major, then A minor, in the last bar: the piece ends minor",
+            response: { code: ballad("<Am Dm F E Am Dm E [A Am]>", makeTune("[0@3 ~]")) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "A major, then E, in the last bar: the piece ends on V",
+            response: { code: ballad("<Am Dm F E Am Dm E [A E]>", makeTune("[0@3 ~]")) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "E, then A major, in the last bar: the Picardy chord comes last",
+            response: { code: ballad("<Am Dm F E Am Dm Dm [E A]>", makeTune("[0@3 ~]")) },
+            expect: "pass",
           },
           {
             name: "A major in bar 1, the ending still minor",

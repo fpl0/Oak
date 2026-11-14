@@ -364,6 +364,24 @@ function run(op: string, a: string[], flags: Set<string>, opts: Map<string, stri
           mode: ref.def.mode ?? "major",
           strudelName: ref.def.strudelName,
         });
+        // A chromatic step keeps the degree it is written as (`4#` is ♯5, G♯ in C, never ♭6, A♭): the natural step
+        // is spelled in the key, then the written sign moves it (corrections pass, theory-f).
+        const written = /^(-?\d+)([#b]+)$/.exec(String(step));
+        if (written) {
+          const natural = stepToMidi(Number(written[1]), {
+            tonic: ref.tonic,
+            octave: ref.octave,
+            mode: ref.def.mode ?? "major",
+            strudelName: ref.def.strudelName,
+          });
+          const alt = [...(written[2] as string)].reduce((m, c) => m + (c === "#" ? 1 : -1), 0);
+          return {
+            step: s,
+            midi,
+            note: alterSpelling(spellMidi(natural, { key }).name, alt),
+            ...(key ? { degree: alterDegree(degreeOf(natural, key).degree, alt) } : {}),
+          };
+        }
         return {
           step: s,
           midi,
@@ -612,10 +630,23 @@ function run(op: string, a: string[], flags: Set<string>, opts: Map<string, stri
         signature: keySignature({ tonic, mode: "minor" }).notes,
         relative: keyText(twins.relative),
         parallel: keyText(twins.parallel),
-        chords: minorKeyChords(tonic, {
-          form: form === "natural" ? "natural" : "harmonic",
-          seventh: flags.has("sevenths"),
-        }).map((c) => ({ rn: c.rn, symbol: c.symbol, code: toCode(c.chord) })),
+        // Melodic minor's own chords (i ii III+ IV V vi° vii°), never harmonic minor's under its name; its sevenths
+        // are not built (corrections pass, theory-e).
+        chords:
+          form === "melodic"
+            ? flags.has("sevenths")
+              ? fail(
+                  "the seventh chords of melodic minor are not built (its III is an augmented major seventh)",
+                )
+              : diatonicChords({ tonic, mode: "melodic minor" }).map((c) => ({
+                  rn: romanText(c, { tonic, mode: "minor" }),
+                  symbol: toLeadSheet(c),
+                  code: toCode(c),
+                }))
+            : minorKeyChords(tonic, {
+                form: form === "natural" ? "natural" : "harmonic",
+                seventh: flags.has("sevenths"),
+              }).map((c) => ({ rn: c.rn, symbol: c.symbol, code: toCode(c.chord) })),
       };
     }
     case "twins": {
@@ -750,4 +781,19 @@ export function runTheoryCli(argv: readonly string[]): { code: number; out: stri
     const msg = e instanceof Error ? e.message : String(e);
     return { code: 1, out: `theory ${op}: ${msg}\n\n${CLI_HELP}` };
   }
+}
+
+/** A spelled note moved by `alt` half steps on its own letter: `alterSpelling("G4", 1)` → "G#4". */
+export function alterSpelling(name: string, alt: number): string {
+  const m = /^([A-G])([#b]*)(-?\d+)$/.exec(name);
+  if (!m) return name;
+  const acc = [...(m[2] as string)].reduce((x, c) => x + (c === "#" ? 1 : -1), 0) + alt;
+  return `${m[1]}${acc > 0 ? "#".repeat(acc) : "b".repeat(-acc)}${m[3]}`;
+}
+/** A degree moved by `alt` half steps: `alterDegree("5", 1)` → "#5", `alterDegree("b3", 1)` → "3". */
+export function alterDegree(degree: string, alt: number): string {
+  const m = /^([#b]*)(\d+)$/.exec(degree);
+  if (!m) return degree;
+  const acc = [...(m[1] as string)].reduce((x, c) => x + (c === "#" ? 1 : -1), 0) + alt;
+  return `${acc > 0 ? "#".repeat(acc) : "b".repeat(-acc)}${m[2]}`;
 }

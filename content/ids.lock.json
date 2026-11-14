@@ -1083,6 +1083,10 @@
       "kind": "deck"
     },
     {
+      "id": "deck.chd.sevenths",
+      "kind": "deck"
+    },
+    {
       "id": "deck.chd.symbols",
       "kind": "deck"
     },
@@ -1095,6 +1099,14 @@
       "kind": "deck"
     },
     {
+      "id": "deck.har.applied",
+      "kind": "deck"
+    },
+    {
+      "id": "deck.har.borrowed",
+      "kind": "deck"
+    },
+    {
       "id": "deck.har.cadence",
       "kind": "deck"
     },
@@ -1103,7 +1115,15 @@
       "kind": "deck"
     },
     {
+      "id": "deck.har.pivots",
+      "kind": "deck"
+    },
+    {
       "id": "deck.har.rn",
+      "kind": "deck"
+    },
+    {
+      "id": "deck.har.sevenths",
       "kind": "deck"
     },
     {
@@ -1124,6 +1144,10 @@
     },
     {
       "id": "deck.scl.degrees",
+      "kind": "deck"
+    },
+    {
+      "id": "deck.scl.modes",
       "kind": "deck"
     },
     {
@@ -6431,6 +6455,54 @@
       "kind": "exercise"
     },
     {
+      "id": "fact.applied.C-V7-of-ii",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.applied.C-V7-of-IV",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.applied.C-V7-of-V",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.applied.C-V7-of-vi",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.applied.C-viio-of-V",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.applied.degree-of-ii",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.applied.degree-of-IV",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.applied.degree-of-V",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.applied.degree-of-vi",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.applied.F-V7-of-V",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.applied.G-V7-of-V",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.applied.root-above-target",
+      "kind": "fact"
+    },
+    {
       "id": "fact.blues.bar-10",
       "kind": "fact"
     },
@@ -6464,6 +6536,54 @@
     },
     {
       "id": "fact.blues.turnaround",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.borrowed.C-bIII",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.borrowed.C-bVI",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.borrowed.C-bVII",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.borrowed.C-iv",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.borrowed.dorian-iv",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.borrowed.G-bIII",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.borrowed.G-bVI",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.borrowed.G-bVII",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.borrowed.G-iv",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.borrowed.iv-lowers",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.borrowed.picardy",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.borrowed.source",
       "kind": "fact"
     },
     {
@@ -6736,6 +6856,62 @@
     },
     {
       "id": "fact.chord.Gsus",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.diatonic7.Am-i7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.diatonic7.Am-ii7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.diatonic7.Am-V7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.diatonic7.C-ii7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.diatonic7.C-IVmaj7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.diatonic7.C-V7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.diatonic7.C-vii7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.diatonic7.quality-1",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.diatonic7.quality-2",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.diatonic7.quality-3",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.diatonic7.quality-4",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.diatonic7.quality-5",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.diatonic7.quality-6",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.diatonic7.quality-7",
       "kind": "fact"
     },
     {
@@ -7203,6 +7379,110 @@
       "kind": "fact"
     },
     {
+      "id": "fact.mode.D-dorian",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.mode.dorian-chord",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.mode.dorian-degree",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.mode.dorian-parent",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.mode.E-phrygian",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.mode.F-lydian",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.mode.G-mixolydian",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.mode.lydian-chord",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.mode.lydian-degree",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.mode.lydian-parent",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.mode.mixolydian-chord",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.mode.mixolydian-degree",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.mode.mixolydian-parent",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.mode.phrygian-chord",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.mode.phrygian-degree",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.mode.phrygian-parent",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.pivot.Am-in-A-minor",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.pivot.Am-in-G-major",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.pivot.C-in-G-major",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.pivot.confirm-Am",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.pivot.confirm-G",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.pivot.Dm-in-A-minor",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.pivot.Em-in-G-major",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.pivot.G-in-G-major",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.pivot.lift-half",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.pivot.lift-whole",
+      "kind": "fact"
+    },
+    {
       "id": "fact.rn.C-1",
       "kind": "fact"
     },
@@ -7340,6 +7620,54 @@
     },
     {
       "id": "fact.scale.natural-minor-lowers",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.seventh.Am7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.seventh.Bdim7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.seventh.Bm7b5",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.seventh.Cmaj7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.seventh.dim7-half-steps",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.seventh.Dm7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.seventh.Em7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.seventh.Fmaj7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.seventh.Gmaj7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.seventh.m7-adds",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.seventh.m7b5-adds",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.seventh.maj7-adds",
       "kind": "fact"
     },
     {

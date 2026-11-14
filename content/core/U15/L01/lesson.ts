@@ -102,7 +102,7 @@ const earPart = (n: number): IdentifyEx => ({
   hints: [
     { text: "Sing the note, then let it go where it wants. Does it want to move at all?" },
     {
-      text: "A note that climbs a half step to sol was fi, ♯4. A note that falls a half step to la was te, ♭7. The key's own notes are content where they stand.",
+      text: "A note that climbs a half step to sol was fi, ♯4. A note that falls a half step to la was te, ♭7. Ti climbs a half step too, but to do.",
     },
     {
       text: "Hear it again, slower. Sing do re mi fa sol from home and stop where the note sits, or between two of them.",
@@ -117,7 +117,7 @@ const earPart = (n: number): IdentifyEx => ({
   // The catalog prints the degree as plain text ("#4"); this says where each of the two new notes leans.
   feedbackText: {
     "id.wrong":
-      "Not {got}. Let the note move: fi, ♯4, wants to climb a half step to sol; te, ♭7, wants to fall a half step to la. Fa, sol, la, ti and do are the key's own and sit still.",
+      "Not {got}. Let the note move where it wants: fi, ♯4, climbs a half step to sol; te, ♭7, falls a half step to la. The key's own notes lean too, ti up to do and fa down to mi, but sol and do are already at rest.",
   },
   tests: [],
 });
@@ -270,7 +270,8 @@ export default defineLesson({
         ],
         code: { starter: MODIFY_STARTER },
         reference: { solutions: [MODIFY_SOLUTION], bars: 4 },
-        matcher: { m: "events", pitch: "absolute", rhythm: "onsets", durations: false, tracks: ["mel"] },
+        // `durations`: the bent note lasts as the target's does, so a fi cut to a click is not the target.
+        matcher: { m: "events", pitch: "absolute", rhythm: "onsets", durations: true, tracks: ["mel"] },
         constraints: [{ c: "edit-only-regions", feedback: "code.edit-outside" }],
         target: { audible: true, showRoll: false, revealRollAfter: 1 },
         feedbackText: {
@@ -309,12 +310,23 @@ export default defineLesson({
             feedback: ["melody.wrong-degree", "code.chromatic-step"],
           },
           {
+            name: "fi written in brackets: the same note, the same length",
+            response: { code: loop(MOD_FORM, modTune("[3#]", "6b")) },
+            expect: "pass",
+          },
+          {
             name: "bar 3 changed as well",
             response: {
               code: loop(MOD_FORM, "<[4 3# 4 7] [6b ~ 5 4] [5 ~ 3# 5] [4 ~ ~ ~]>"),
             },
             expect: "fail",
             feedback: ["code.edit-outside"],
+          },
+          {
+            name: "fi cut to a click: the right note, 1% of its length",
+            response: { code: loop(MOD_FORM, modTune("[3#@0.01 ~@0.99]", "6b")) },
+            expect: "fail",
+            feedback: ["rhythm.duration"],
           },
         ],
       },

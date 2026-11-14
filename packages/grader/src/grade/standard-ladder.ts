@@ -146,10 +146,24 @@ export function formMapKey(
  * The song's form as the `form` rule's `@song` pattern reads it (CF-T.S4: "the arrangement keeps the song's
  * sections"): pass it as `GradeContext.songForm` when grading the session's rubric. `null`: the song has none.
  */
-export function songFormOf(song: Pick<SongDef, "answerKey">): { label: string; bars: number }[] | null {
+export function songFormOf(
+  song: Pick<SongDef, "answerKey">,
+): { label: string; bars: number; chords?: string[][] }[] | null {
   const sections = song.answerKey.sections;
   if (!sections || sections.length === 0) return null;
-  return sections.map((s) => ({ label: s.label, bars: s.bars[1] - s.bars[0] + 1 }));
+  // Corrections pass (CF-T.S4 "the arrangement keeps the song"): each section also carries the song's chords, bar
+  // by bar (the lead-sheet symbols of `answerKey.chords`, in order), for the `song-kept` rule.
+  const chart = song.answerKey.chords ?? [];
+  return sections.map((s) => {
+    const bars = s.bars[1] - s.bars[0] + 1;
+    const chords = Array.from({ length: bars }, (_, i) =>
+      chart
+        .filter((c) => c.bar === s.bars[0] + i)
+        .sort((a, b) => a.beat - b.beat)
+        .map((c) => c.symbol),
+    );
+    return { label: s.label, bars, ...(chart.length > 0 ? { chords } : {}) };
+  });
 }
 
 /**

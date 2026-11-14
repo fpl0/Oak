@@ -16,10 +16,12 @@
 // Spec: content/specs/U17.md, "U17.CP Chromatic checkpoint".
 //
 // Every authored item and the required rule are implemented shapes: `rn-palette` with `secondary` and `borrowed`,
-// `slotKeys` (rn-palette.slot-keys), `events` in absolute pitch, `in-key` on the last section. The suggestions use
-// `contains-rn` with `kind` and `key-change` (verified: the lift alone ticks neither colour line, and chord names
-// left in G do not count as the same tune a step higher). The required rule reads only the last section, so a
-// colour chord is never needed to pass and a song with one but no lift does not.
+// `slotKeys` (rn-palette.slot-keys), `events` in absolute pitch, `key-change` on the last section (+2, four bars or
+// more: the last chorus is a whole step above the chorus before it, on every line; corrections pass: `in-key` on
+// the last section alone passed a song in A, or on one chord, from the first bar). The suggestions use
+// `contains-rn` with `kind` and `key-change` with `sameMelody` (verified: the lift alone ticks neither colour
+// line, and chord names left in G do not count as the same tune a step higher). A colour chord is never needed to
+// pass, and a song with one but no lift does not.
 //
 // No sung item is gated (contracts §7.6, §8): a learner in Quiet mode passes the same checkpoint. Checked at its
 // place in the default order (session 177, after U17.L04 and GYM.16): every U15–U17 tool and word is the learner's.
@@ -30,7 +32,6 @@ const TEMPO = `setcpm(${BPM}/4)\n\n`;
 const code = (...lines: string[]) => `${TEMPO}${lines.join("\n")}`;
 
 const G_MAJOR: KeySpec = { tonic: "G", mode: "major" };
-const A_MAJOR: KeySpec = { tonic: "A", mode: "major" };
 
 // --- name-the-colours ---------------------------------------------------------------------------------------
 
@@ -44,6 +45,21 @@ const COLOURS = code(
   'chords: chord(changes).voicing().s("rhodes")',
 );
 const COLOURS_RN = ["I", "V7/ii", "ii", "iv", "I", "bVI", "bVII", "I"];
+
+/** Known wrong for the Make: twelve bars on one chord and one note that never change key (corrections pass). */
+const NO_LIFT_SONG = (chordName: string, note: string) =>
+  code(
+    `const chordsVerse = chord("${chordName}").voicing()`,
+    "const chordsChorus = chordsVerse",
+    `const bassVerse = note("${note}2")`,
+    "const bassChorus = bassVerse",
+    `const melVerse = note("${note}4")`,
+    "const melChorus = melVerse",
+    "",
+    'chords: arrange([4, chordsVerse], [4, chordsChorus], [4, chordsChorus]).s("piano")',
+    'bass: arrange([4, bassVerse], [4, bassChorus], [4, bassChorus]).s("ebass")',
+    'mel: arrange([4, melVerse], [4, melChorus], [4, melChorus]).s("piano")',
+  );
 
 // --- lift-the-last-chorus -----------------------------------------------------------------------------------
 
@@ -299,13 +315,13 @@ export const checkpoint: CheckpointDef = defineCheckpoint({
     rubric: [
       {
         id: "last-chorus-in-a",
-        label: "The last chorus is in A major on every line: chords, bass and tune",
+        label: "The last chorus lifts a whole step, to A, on every line: chords, bass and tune",
         required: true,
         skills: ["H14"],
-        rule: "in-key",
-        key: A_MAJOR,
-        minRatio: 1,
-        section: "last",
+        rule: "key-change",
+        at: "last",
+        semitones: [2],
+        minBarsAfter: 4,
       },
       {
         id: "applied",
@@ -363,6 +379,23 @@ export const checkpoint: CheckpointDef = defineCheckpoint({
         response: { code: song("G D Em C", "<G2:major!8 A2:major!4>", "<G4:major!8 A4:major!4>") },
         expect: "fail",
         feedback: ["rubric.unmet"],
+      },
+      {
+        name: "the whole song in A: the last chorus is in A, but nothing lifts",
+        response: { code: NO_LIFT_SONG("A", "a") },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "one D chord throughout: in both keys at once, and nothing lifts",
+        response: { code: NO_LIFT_SONG("D", "d") },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "the lift with the tune an octave higher",
+        response: { code: song("A E F#m D", "<G2:major!8 A2:major!4>", "<G5:major!8 A5:major!4>") },
+        expect: "pass",
       },
       {
         name: "a colour chord, and no lift",

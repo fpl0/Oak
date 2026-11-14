@@ -163,10 +163,16 @@ export function phraseCheckRequest(req: PhraseCheckGradeRequest): GradeRequest {
       bpm: req.song.bpm,
       ...(req.song.pickup ? { pickup: req.song.pickup } : {}),
       ...(req.song.swing ? { swing: req.song.swing } : {}),
+      // Corrections pass: CF-T transcribes a standard against its recording, as ladder L8 does: a tune moved to
+      // another key fails (`melody.wrong-key`), an octave lower or higher still passes. X1 (folk songs, sung in
+      // any key) keeps the `melody.transposed` note.
+      ...(IN_KEY_CAPSTONES.has(req.capstoneId) ? { requireKey: true } : {}),
       window: { from: w.from, to: w.to },
     },
   };
 }
+/** Capstones whose transcriptions must be in the recording's key (d12, as ladder L5, L6 and L8). */
+const IN_KEY_CAPSTONES: ReadonlySet<string> = new Set(["CF-T"]);
 
 /** A check (or stage) that counts: passed at its mark and not revealed (a revealed check earns no evidence). */
 export function phraseCheckPassed(result: GradeResult): boolean {

@@ -169,8 +169,10 @@ export const checkpoint: CheckpointDef = defineCheckpoint({
         label: "Two bars that differ, with `< >`",
         required: false,
         skills: ["R03"],
-        rule: "uses",
-        tool: "tb.mini.alt",
+        // The effect, not the brackets: `<[~ sd ~ sd]>` plays the same bar every time.
+        rule: "custom",
+        fn: "bars-differ",
+        params: { min: 2, alsoUses: ["tb.mini.alt"] },
       },
     ],
     tests: [

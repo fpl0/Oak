@@ -232,8 +232,9 @@ export default defineLesson({
         skills: [{ skill: "H13", w: 1 }],
         code: { starter: MODIFY_STARTER },
         reference: { solutions: [MODIFY_SOLUTION], bars: 4 },
-        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7).
-        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"] },
+        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7); `durations`:
+        // and it lasts as the target's does, so an E♭ cut to a click is not the target.
+        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"], durations: true },
         constraints: [{ c: "edit-only-regions", feedback: "code.edit-outside" }],
         target: { audible: true, showRoll: false, revealRollAfter: 1 },
         feedbackText: {
@@ -282,6 +283,12 @@ export default defineLesson({
             response: { code: ending("<G C [Eb F] Gm>") },
             expect: "fail",
             feedback: ["code.edit-outside"],
+          },
+          {
+            name: "E♭ cut to a click: the right chord, a sliver of its two beats",
+            response: { code: ending("<G C [[Eb@0.01 ~@0.99] F] G>") },
+            expect: "fail",
+            feedback: ["rhythm.duration"],
           },
         ],
       },

@@ -398,6 +398,9 @@ export default defineLesson({
             rule: "cadence",
             types: ["PAC", "IAC"],
             at: "last",
+            // V to I, as the label says (review finding theory-d 1): vii° to I is an authentic close the rule
+            // otherwise counts, and this lesson asks for V. V7 counts as V.
+            before: ["V"],
           },
           {
             id: "bar-4-waits",
@@ -452,6 +455,28 @@ export default defineLesson({
                   "[6 ~ 4 ~]",
                   "[7 ~ ~ ~]",
                 ]),
+              ),
+            },
+            expect: "pass",
+          },
+          {
+            // Review finding (theory-d 1): B D F to C E G closes, but on vii°, not V.
+            name: "vii° to I at the end",
+            response: { code: code(triads("<0 3 0 4 0 3 6 0>")) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "IV, V, I at the end, the V on bar 7",
+            response: { code: code(triads("<0 5 1 4 0 3 4 0>")) },
+            expect: "pass",
+          },
+          {
+            name: "by name, over a bass of roots",
+            response: {
+              code: code(
+                'chords: chord("<C F C G Am F G C>").voicing().s("piano")',
+                'bass: note("<c2 f2 c2 g2 a2 f2 g2 c2>").s("ebass").lpf(800)',
               ),
             },
             expect: "pass",

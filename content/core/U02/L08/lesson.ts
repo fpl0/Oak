@@ -310,8 +310,11 @@ export default defineLesson({
             label: "Puts the tune in a room with `.room()`",
             required: true,
             skills: ["D05"],
-            rule: "uses",
-            tool: "tb.room",
+            // Corrections pass: a room you can hear. `uses tb.room` passed `.room(0)`, a dry sound.
+            rule: "custom",
+            fn: "control-set",
+            // Corrections gate (AS-04, AS-05): on the tune itself, at a size you can hear, for most of its notes.
+            params: { control: "room", above: 0.02, example: ".4", track: "@melody", share: 0.5 },
           },
           {
             id: "four-bars",
@@ -348,6 +351,23 @@ export default defineLesson({
             response: {
               code: `${TEMPO}mel: note("${SAINTS}").s("triangle").gain(.5).room(.5)\nvox: note("${SAINTS}").transpose(12).s("piano").clip(.6).room(.3)`,
             },
+            expect: "pass",
+          },
+          {
+            // The outside review's counterexample.
+            name: "a room of 0: dry",
+            response: { code: mel(ODE, ".room(0)") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "a big room on a sine",
+            response: { code: `${TEMPO}mel: note("${SAINTS}").s("sine").gain(.5).room(.9)` },
+            expect: "pass",
+          },
+          {
+            name: "short notes in a small room",
+            response: { code: mel(ODE, ".clip(.5).room(.15)") },
             expect: "pass",
           },
           {

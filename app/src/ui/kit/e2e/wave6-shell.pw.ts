@@ -356,9 +356,15 @@ test("after the core nothing in the navigation reads as finished, and what is op
 
   // G L with no lesson open goes to Today, and the sheet says so; nothing in the sheet reads as finished.
   await page.goto("/settings/keys");
+  // The shell (and its keys) is up before the keys are pressed (d21's test waits for it too). G L then asks the
+  // server for this tab's day and only navigates when it answers: beside other suites that answer took longer than
+  // the URL check waited (the race of the Wave 6 run, and of the corrections gate's run). Wait for the answer.
+  await expect(page.locator('[data-nav="today"]')).toBeVisible();
   await page.locator("#main").focus();
+  const day = page.waitForResponse((r) => r.url().includes("/api/session/day"));
   await page.keyboard.press("g");
   await page.keyboard.press("l");
+  await day;
   await expect(page).toHaveURL(/\/$/);
   const sheet = await openSheet(page);
   await expect(sheet).toContainText("Lesson (resume), or Today when none is open");

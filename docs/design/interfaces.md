@@ -1497,7 +1497,7 @@ records what integration and the closer changed in the cross-package API. The co
     palette prints "♭ii → ♭II"; `harmony.pcset` is one finding per bar with every stroke's `where.noteIds`.
 - **`@oak/content-kit`.** `capstone.form-map` and `capstone.session-rubric` are IMPLEMENTED; a brief rule may be
   `required: false` (a suggestion row; the pins compare required rules only). `sing.guide-tones` stays PLANNED and
-  `key-plan` GRADER_READY. `CONTRACTS_VERSION` is "1.6".
+  `key-plan` GRADER_READY. `CONTRACTS_VERSION` is "1.6" (1.7 since the corrections pass, §24).
 - **`@oak/api`.** `OWN_AUDIO_FORM_ROW` (the own-audio checklist's form row, self-reported evidence for
   `fam.frm.sections`); `LadderItem.given.keyPlan` is filled from `SongDef.keyPlan` at L5, L6 and L8;
   `CoreCompletion.sessionId` names the session whose Coda carried the ending (`GET /course/completion`, which the
@@ -1562,3 +1562,51 @@ records what integration and the closer changed in the cross-package API. The co
     (`{ C6: "U14.L06" }`) opens C6 with the learner's Mode Lab vamp when they saved one, Oak's starter beside it
     (`data-testid="vamp-start"`); the Master card never shows a package's `@oak/…` message and says nothing once it
     has unmounted (`learnerDetail`).
+
+## 24. Corrections pass (2026-11-14, before the learner starts the course)
+
+An outside review attacked the grader and re-derived U01–U11, A1 and the song answer keys; ten engineers fixed what
+reproduced, three attackers attacked the fixes, and the gate fixed what the attackers found (docs/decisions.md 71).
+Every change is additive unless it says otherwise. Contracts 1.7 (the six Wave 6 fact decks are live, §7.3).
+
+- **`@oak/content-kit`.**
+  - `CONTRACTS_VERSION` is "1.7". `IMPLEMENTED.rubricRules` lists `"custom"`; `IMPLEMENTED.customRules` lists the
+    corrections functions below.
+  - New rule and matcher fields, each a `SchemaFeature` content:check validates: matcher `melody.durations`,
+    `pcset.durations`; `cadence.before`; `chord-tones-strong.cover`; `motif-reuse.loopRepeats` (`true` or a number of
+    bars); `voice-leading.loop`; `sounds.track`; `pickup.leadsIn`; `guide-tones.at: "bar"`; `modulation.cadence`;
+    and, at the gate, **`guide-tones.changes`** (`string[]`, one chord symbol a bar, looped: the line is judged against
+    the given cycle, not the chords line; feature `guide-tones.changes`) and **`onsets.excludes`** (`Rat[]`: places
+    that must hold no onset; feature `onsets.excludes`).
+  - `NEvent.voicedWith` (the dictionary `voicing()` used); `GradeContext.songForm[].chords` (a song's chart, bar by
+    bar, for `song-kept`).
+- **`@oak/grader`.**
+  - `normalize`: `isAudible` (effective gain `(gain ?? 0.8) · velocity · postgain` > 0.01) and, at the gate,
+    `audibleInMix` / `MASKED_RATIO` (1/16, −24 dB): a learner event that far under the loudest learner event is masked
+    and left out of grading; Band tracks are judged on their own. `effectiveGain` is exported. The raw
+    `EvalSuccess.events` keep every event.
+  - Custom rules (`{ rule: "custom", fn, params }`, all with `params.alsoUses: ToolId[]`): `silent-beat`, `split-beat`,
+    `held`, `bars-differ` (gate: `last`), `speed-change` (gate: per heard line, factors composed along the chain, a
+    felt change |log2 f| ≥ 0.4), `transposed-copy` (`unitBars`, `steps`, `pairs`, `together`, `semis`, `otherSound`,
+    `minRatio`; gate: `alone`, and harmony wording when `semis` leaves out 0), `distinct-keys` (gate: `track`),
+    `orbits-differ`, `call-response` (gate: both parts must play notes), `stack-intervals`, `chords-per-bar`,
+    `last-chord` (gate: the chord the last bar rests on, a beat or longer; a dominant seventh is no plain I),
+    `song-kept` (gate: `sectionRatio`, default .5, for every section), `tuplets-every-bar` (gate: `track` may be a
+    list; `drums` roles), `swung-offbeats`, `voiced-with` (gate: with nothing voiced in `track`, the learner line
+    that voices chord names), `control-set` (gate: `share`), `parts-enter`; new at the gate: **`broken-chord`**
+    (`track`, `minRatio`), **`black-keys`** (`track`, `min`), **`chance-varies`** (`track`, `bars`: the written loop),
+    **`echo`** (`track`).
+  - `withoutUnheardLines(code, n)`: `uses` and every `alsoUses` read the code with muted lines and silent labelled
+    lines blanked. `CorrectionDeps.toolUse(ctx, tools, n?)`.
+  - Behaviour changed at the gate (each pinned in content/validate/corrections-gate.test.ts): `cadenceAt` reads
+    V → I6/4 as no cadence; `contains-rn` `mustResolve` (plain V) lands on the home chord's own quality; `contains-rn`
+    `inOrder` asks for the seventh when the numeral is written with a 7 (`V7/ii`); the `modulation` arrival is not a
+    dominant seventh; `key-change` keeps the mode and needs the tune heard in the lifted section; `step-ratio` counts
+    moves to another note only (repeats are not steps); the melody matcher's `octave-free` allows one octave for a
+    whole line (a `@bass` line keeps per-note octaves); the events matcher treats onsets within 1/192 of a cycle as
+    one; the voicing gate reads voices from the lowest note up (written order is not a voice; `harmony.voice-crossing`
+    is unreachable); `sounds` with `track` and `anyOf` needs 75 % of the line's notes on those sounds;
+    `velocity-ghosts` names quiet hits on another drum of the line.
+- **`@oak/theory`.** `arrivesOn(next, target)`; `alterSpelling`, `alterDegree`; `keySevenths` refuses melodic minor.
+- **App.** `X1Workspace` sets `codeRef` in the editor's `onChange` (a check pressed in the frame after an edit
+  graded the code before it).

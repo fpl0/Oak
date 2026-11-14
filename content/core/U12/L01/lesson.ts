@@ -72,7 +72,7 @@ const KEYS = { roll: false, staff: false, keyboard: true } as const;
 
 const earHints = (): HintLadder =>
   ladder(
-    "Listen to the three lowest notes first. Is the triad inside this chord major or minor?",
+    "Listen through the whole chord, not only its lowest notes: is the triad inside it major, bright, or minor, darker?",
     "A major triad with a 7th close under the octave is a major seventh chord; a minor triad with a ♭7 is a minor seventh chord.",
     "Hum the hook's first chord, Cmaj7, then its second, Am7. Which of the two does this one sit like?",
   );
@@ -91,8 +91,8 @@ const earPart = (id: string, prompt: string, symbol: string, answer: "maj7" | "m
   feedbackText: {
     "id.quality":
       answer === "maj7"
-        ? "That was a major seventh chord: a major triad underneath, bright, with the 7th close under the octave."
-        : "That was a minor seventh chord: a minor triad underneath, darker, with a ♭7 on top.",
+        ? "Listen again for the triad inside the chord: this one is major, bright, and its 7th sits a half step under the root's octave."
+        : "Listen again for the triad inside the chord: this one is minor, darker, and its 7th sits a whole step under the root's octave.",
   },
   tests: [
     { name: answer, response: { answer: { qualities: [answer] } }, expect: "pass" },

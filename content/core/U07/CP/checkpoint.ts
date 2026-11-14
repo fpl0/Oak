@@ -344,8 +344,12 @@ export const checkpoint: CheckpointDef = defineCheckpoint({
         skills: ["M09"],
         rule: "motif-reuse",
         track: "@melody",
-        minRatio: 0.5,
+        // Corrections gate (now-fails B): a motif in bars 1 and 3, the textbook hook, is one return in four bars.
+        minRatio: 0.25,
         shape: "either",
+        // Corrections pass: one pass is read as four bars at least, so a two-bar hook played twice (`<A B A B>`)
+        // comes back; a one-bar loop, every bar the same, still fails.
+        loopRepeats: 4,
       },
       // No chord-tone line here: the Band plays the chords, and the grader is not given the Band's code
       // (neither content:check nor the app passes ctx.band), so a rule against `band.chords` could only ever
@@ -385,6 +389,22 @@ export const checkpoint: CheckpointDef = defineCheckpoint({
           ),
         },
         expect: "pass",
+      },
+      {
+        name: "a two-bar hook played twice",
+        response: { code: code(mel("<[2 4 2 0] [3 ~ 1 ~] [2 4 2 0] [3 ~ 1 ~]>")) },
+        expect: "pass",
+      },
+      {
+        name: "a two-bar hook, then moved to fit the next two chords",
+        response: { code: code(mel("<[2 4 2 0] [3 ~ 1 ~] [0 2 0 -2] [5 ~ 3 ~]>")) },
+        expect: "pass",
+      },
+      {
+        name: "one bar four times: a one-bar loop",
+        response: { code: code(mel("<[2 4 2 0] [2 4 2 0] [2 4 2 0] [2 4 2 0]>")) },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
       },
       {
         name: "eight bars, every bar new",

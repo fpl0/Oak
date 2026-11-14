@@ -343,8 +343,9 @@ export default defineLesson({
         skills: [{ skill: "H12", w: 1 }],
         code: { starter: MODIFY_STARTER },
         reference: { solutions: [MODIFY_SOLUTION], bars: 8 },
-        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7).
-        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"] },
+        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7); `durations`:
+        // and it lasts as the target's does, so a push cut to a click is not the target.
+        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"], durations: true },
         constraints: [{ c: "edit-only-regions", feedback: "code.edit-outside" }],
         target: { audible: true, showRoll: false, revealRollAfter: 1 },
         feedbackText: {
@@ -412,6 +413,12 @@ export default defineLesson({
             response: { code: loop("<C Dm7 Dm7 F#o7 G7 G#o7 Am7 G7>") },
             expect: "fail",
             feedback: ["code.edit-outside"],
+          },
+          {
+            name: "F♯°7 cut to a click: the right chord, 1% of the bar",
+            response: { code: loop("<C C#o7 Dm7 [F#o7@0.01 ~@0.99] G7 G#o7 Am7 G7>") },
+            expect: "fail",
+            feedback: ["rhythm.duration"],
           },
         ],
       },
@@ -542,6 +549,17 @@ export default defineLesson({
             response: { code: loop("<C C Dm7 C#o7 G7 G7 Am7 G7>") },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            name: "C♯°7 that lands on D augmented: the right root, not ii",
+            response: { code: loop("<C C#o7 Daug Dm7 G7 G7 Am7 G7>") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "G♯°7 into Am7 only, the waits before it left as they were",
+            response: { code: loop("<C C Dm7 Dm7 G7 G#o7 Am7 G7>") },
+            expect: "pass",
           },
           {
             name: "only V7 pushes, no leading-tone chord",

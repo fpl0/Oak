@@ -316,8 +316,9 @@ export default defineLesson({
         skills: [{ skill: "H14", w: 1 }],
         code: { starter: DOOR_STARTER },
         reference: { solutions: [HOOK], bars: 8 },
-        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7).
-        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"] },
+        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7); `durations`:
+        // and it lasts as the target's does, so a D7 cut to a click is not the target.
+        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"], durations: true },
         constraints: [{ c: "edit-only-regions", feedback: "code.edit-outside" }],
         target: { audible: true, showRoll: false, revealRollAfter: 1 },
         feedbackText: {
@@ -363,6 +364,12 @@ export default defineLesson({
             expect: "fail",
             feedback: ["code.edit-outside"],
           },
+          {
+            name: "D7 cut to a click: the right chord, 1% of the bar",
+            response: { code: door("[D7@0.01 ~@0.99] G") },
+            expect: "fail",
+            feedback: ["rhythm.duration"],
+          },
         ],
       },
     },
@@ -389,7 +396,8 @@ export default defineLesson({
         ],
         code: { starter: PAGE_STARTER },
         reference: { solutions: [PAGE_SOLUTION], bars: 4 },
-        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"] },
+        // `durations`: each chord lasts its bar, as the page writes it; a chord cut to a click is not the page's.
+        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"], durations: true },
         constraints: [{ c: "edit-only-regions", feedback: "code.edit-outside" }],
         target: { audible: true, showRoll: false },
         feedbackText: {
@@ -429,6 +437,12 @@ export default defineLesson({
             },
             expect: "fail",
             feedback: ["code.edit-outside"],
+          },
+          {
+            name: "Dm cut to a click: the right chord, 1% of the bar",
+            response: { code: page("<F [Dm@0.01 ~@0.99] G7 C>") },
+            expect: "fail",
+            feedback: ["rhythm.duration"],
           },
         ],
       },
@@ -503,6 +517,18 @@ export default defineLesson({
             response: { code: loop("<C Am F G C Am D7 G>", mel(STAY_TUNE, "C4:major")) },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            // Corrections pass (fix:leftovers): the arrival is G major's home chord, not only its root.
+            name: "D7 that lands on G minor",
+            response: { code: loop("<C Am F G C Am D7 Gm>", mel(MOVE_TUNE, PLAN)) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the door into a G major seventh",
+            response: { code: loop("<C Am F G C Am D7 G^7>", mel(MOVE_TUNE, PLAN)) },
+            expect: "pass",
           },
           {
             name: "a lift to D instead of a move to G",

@@ -9,6 +9,7 @@ import {
   chordOf,
   chordPcs,
   noteToMidi,
+  parseChordSymbol,
   readChord,
   romanOf,
   schemaMatch,
@@ -23,7 +24,7 @@ import { selectTrack, selectTracks, tracksOfRole } from "../analyze/tracks.ts";
 import { pushesOf } from "../analyze/wave6-views.ts";
 import { diag } from "../feedback/catalog.ts";
 import type { MatchResult, NormalizeContext, Normalized } from "../types.ts";
-import { alignFeel, clampScore, f1, keyAtOnset, shiftLabel } from "./common.ts";
+import { alignFeel, clampScore, f1, keyAtOnset, noteValueLabel, shiftLabel } from "./common.ts";
 
 export type HarmonyMatcher = Extract<Matcher, { m: "harmony" }>;
 export type PcsetMatcher = Extract<Matcher, { m: "pcset" }>;
@@ -638,11 +639,36 @@ export function pcsetMatch(
     const same = inter === want.length && want.length === got.length;
     const bassSame = bassAt(tp, at) === bassAt(ap, at);
     const pcsCredit = same ? 1 : union === 0 ? 0 : inter / union;
-    const credit = cfg.bass
+    let credit = cfg.bass
       ? 0.75 * (same ? 1 : pcsCredit * 0.5) + 0.25 * (bassSame ? 1 : 0)
       : same
         ? 1
         : pcsCredit * 0.5;
+    // Corrections pass (`durations`): the chord also lasts as the target's does. Halfway through the target chord
+    // the answer still sounds the same notes; a stab cut to 1% of the bar is not the bar's chord (theory-f).
+    if (cfg.durations && same) {
+      const endOf = (ev: readonly NEvent[]): Rat =>
+        ev
+          .filter((e) => R.eq(e.onset, at))
+          .reduce((m, e) => R.max(m, R.add(e.onset, e.clipDur ?? e.dur)), at);
+      const tEnd = endOf(tp);
+      const mid = R.add(at, R.div(R.sub(tEnd, at), [2, 1]));
+      const wantMid = pcsAt(tp, mid);
+      if (R.lt(at, tEnd) && wantMid.join() === want.join() && pcsAt(ap, mid).join() !== want.join()) {
+        credit *= 0.5;
+        diagnostics.push(
+          diag(
+            "rhythm.duration",
+            {
+              got: noteValueLabel(R.sub(endOf(ap), at), ctx.meter),
+              expected: noteValueLabel(R.sub(tEnd, at), ctx.meter),
+            },
+            locAt(at, pos),
+            "duration",
+          ),
+        );
+      }
+    }
     sum += credit;
     if (same) pcsOk++;
     if (bassSame) bassOk++;
@@ -676,11 +702,19 @@ export function pcsetMatch(
     } else if (cfg.bass && !bassSame) {
       const gb = bassAt(ap, at);
       const tb = bassAt(tp, at);
+      // The right notes on another root (a diminished 7th is four chords in one): name the root the chord is
+      // written on as well as its lowest note, so "bass is E♭" is not read as "you wrote E♭°7" (gate leftover).
+      const sym = sounding(ap, at).find((e) => e.chordSymbol)?.chordSymbol;
+      const root = sym ? parseChordSymbol(sym)?.rootPc : undefined;
+      const onRoot =
+        gb !== null && root !== undefined && root !== null && mod12(root) !== gb && mod12(root) !== tb
+          ? ` (your chord is built on ${pcName(mod12(root), key)})`
+          : "";
       diagnostics.push(
         diag(
           "harmony.bass",
           {
-            got: gb === null ? "nothing" : pcName(gb, key),
+            got: gb === null ? "nothing" : `${pcName(gb, key)}${onRoot}`,
             exp: tb === null ? "?" : pcName(tb, key),
             bar: where.bar ?? 0,
           },

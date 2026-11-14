@@ -359,10 +359,8 @@ export default defineLesson({
         id: "your-tune-two-keys",
         version: 1,
         role: "practice",
-        // The catalog's text for a `uses` rule names the tool ID; the label says it in words.
-        feedbackText: { "rubric.unmet": "{label}: not yet." },
         prompt:
-          'Make this tune yours, then let it visit a **second key** with a pattern in `.scale("< >")`. The band follows you.',
+          'Make this tune yours, then let it visit a **second key** with a pattern in `.scale("< >")`. The band follows you. Four bars or more give each key the whole tune.',
         skills: [{ skill: "S03", w: 1 }],
         code: { starter: deg("<[0 2 1 4] [3 2 0 ~]>") },
         bars: [1, 8],
@@ -370,11 +368,14 @@ export default defineLesson({
         rubric: [
           {
             id: "two-keys",
-            label: 'The key changes: a pattern in `.scale("< >")`',
+            // The effect, not the pattern: `<C4:major!2 C4:major!2>` names one key twice.
+            label: 'The tune visits a second key, with a pattern in `.scale("< >")`',
             required: true,
             skills: ["S03"],
-            rule: "uses",
-            tool: "tb.scale.patterned",
+            rule: "custom",
+            fn: "distinct-keys",
+            // Corrections gate (AS-06): the tune visits the key, not a bass line under it.
+            params: { track: "@melody", alsoUses: ["tb.scale.patterned"] },
           },
           {
             id: "four-bars",
@@ -407,6 +408,28 @@ export default defineLesson({
             response: {
               code: `${TEMPO}hats: s("hh*8").gain(.35)\nmel: n("<[0 2 4 2] [4 [5 4] 2 1] [0 2 4 7] [4 2 0@2]>").scale("<C4:major!4 D4:major!4 F4:major!4 G3:major!4>").s("piano")`,
             },
+            expect: "pass",
+          },
+          {
+            name: "a pattern that names one key twice",
+            response: { code: deg("<[0 2 1 4] [3 2 0 ~]>", "<C4:major!2 C4:major!2>") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the same key an octave lower is still one key",
+            response: { code: deg("<[0 2 1 4] [3 2 0 ~]>", "<C4:major!2 C3:major!2>") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "C, then G below it",
+            response: { code: deg("<[0 2 1 4] [3 2 0 ~]>", "<C4:major!2 G3:major!2>") },
+            expect: "pass",
+          },
+          {
+            name: "a new key every bar",
+            response: { code: deg("<[0 2 4 2] [4 2 0 ~]>", "<D4:major E4:major>") },
             expect: "pass",
           },
           {

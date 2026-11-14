@@ -103,7 +103,7 @@ const earPart = (n: number): IdentifyEx => ({
   prompt: `Chord ${n}. Major seventh or dominant seventh?`,
   skills: [{ skill: "E11", w: 1 }],
   hints: ladder(
-    "Could this chord be the last one of a song, or does it want another chord after it?",
+    "Does this chord sound settled on its own, or does it seem to want another chord after it?",
     "Both kinds have a major triad inside. Listen to the top note: a half step under the octave it rests; a whole step under, it leans.",
     "Sing the lowest note an octave up, then slide down to the chord's top note. One key down is a major seventh chord; two keys down is a dominant seventh.",
   ),
@@ -240,7 +240,7 @@ export default defineLesson({
             "Not quite. Play it again and stop after bar 2: that chord does not sit still. On the roll its top note is one key below bar 1's.",
         },
         hints: ladder(
-          "Three of the four bars could be the last chord of a song. Which one could not?",
+          "In this loop, three of the four bars sit still where they are. Which one wants to move on?",
           "Bars 1 and 2 share C, E and G. Only the top note differs: B in bar 1, B♭ in bar 2, and bar 2 is the chord of the blues.",
           "B down to B♭ is the smallest move on the keyboard. The chord with B♭ in it is the one that pulls toward F.",
         ),
@@ -365,7 +365,7 @@ export default defineLesson({
           "Six seventh chords, one at a time, on roots that keep changing. Every one is a major triad with a 7th on top. Does it rest or does it lean: major seventh, or dominant seventh?",
         skills: [{ skill: "E11", w: 1 }],
         hints: ladder(
-          "Could this chord be the last one of a song, or does it want another chord after it?",
+          "Does this chord sound settled on its own, or does it seem to want another chord after it?",
           "Both kinds have a major triad inside. Listen to the top note: a half step under the octave it rests; a whole step under, it leans.",
           "Sing the lowest note an octave up, then slide down to the chord's top note. One key down is a major seventh chord; two keys down is a dominant seventh.",
         ),

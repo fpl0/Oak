@@ -44,7 +44,7 @@ import { mod12, onsets, pitched } from "./events.ts";
 import { velocityGhosts } from "./groove.ts";
 import { keyOf } from "./key.ts";
 import { chordKeys, keysByBar } from "./key-plan.ts";
-import { isStrong } from "./melody.ts";
+import { barChordAt, isStrong } from "./melody.ts";
 import { finestGrid, gridFeel, type Syncopation, syncopation } from "./meter.ts";
 import { analysisKeyContexts, harmonySlots } from "./piece.ts";
 import { straightenSwungLines } from "./swing.ts";
@@ -293,7 +293,12 @@ export function modeView(
   const scale = new Set<number>(scalePcs(stated));
   const from = ctx.span?.[0] ?? 0;
   const to = ctx.span?.[1] ?? ctx.bars ?? notes.reduce((m, e) => Math.max(m, R.floor(e.onset) + 1), 0);
-  const perBar = chordPerBar(harmonySlots(n), to).slice(from);
+  // The chord of a bar: the one on beat 1, else the bar's own (pushed with `.early()` and cut with `.struct()`,
+  // a chord can leave beat 1 empty; review:studio C6_FUNK_E).
+  const slots = harmonySlots(n);
+  const perBar = chordPerBar(slots, to)
+    .map((c, b) => c ?? barChordAt(slots, rat(b))?.chord ?? null)
+    .slice(from);
   const withChord = perBar.some((c) => c !== null);
   return {
     tonic: stated.tonic,

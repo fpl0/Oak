@@ -172,6 +172,10 @@ export const SIM_GATE = {
   p95OldestDueDays: 7,
   /** The Wave 2 criterion decision 27 replaced; the simulation still prints the deferred-queue count. */
   p95DeferredCards: 4,
+  /**
+   * Review day p95, counting the "a little more" review only: the warm-up before it is budgeted by §9.1 and no
+   * longer counts against the 12-minute cap (d22, contracts 1.7).
+   */
   p95ReviewDaySec: 720,
   /**
    * Decision 27: every perceptual or production family has its first review set within this many days of

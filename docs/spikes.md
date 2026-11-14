@@ -1082,7 +1082,7 @@ The course map, default session order, session counts and skill table were gener
   - `.add("<0 3 4>")` on an `n()` pattern is a silent no-op; the canonical form is `.add(n("…"))` before `.scale()`.
   - `"0..7"` errors; ranges need spaces.
   - A patterned swing amount written `"1/3"` silently gives no swing; use decimals.
-- **Session counts** come out at 183 core + 74 advanced = 257, against the plan's "about 250". The plan's U07 and U15–U17 rows and C0 were mis-added; reconciliation is in §0.10 and §2.7.
+- **Session counts** came out at 183 core + 74 advanced = 257, against the plan's "about 250". The plan's U07 and U15–U17 rows and C0 were mis-added; reconciliation is in §0.10 and §2.7. Since contracts 1.6 (U05.L09 and C3.S4 added) the core is 185 sessions and the course 259.
 
 ## Decisions I made beyond the plan
 

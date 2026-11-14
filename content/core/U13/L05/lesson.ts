@@ -9,12 +9,12 @@
 // quarter-note triplets, fives and sevens, three against two (rhythm track); triplet staff writing
 // (`fam.rhy.dictation` level 7, after U13.L06). Spec: content/specs/U13.md.
 //
-// How it is graded: the modify step compares the rhythm of the `chords` line only (`[x x x]*4` and `x*12` pass as
-// well as `.ply(3)`); `.ply(3)` written before `.struct()` multiplies nothing the ear can hear and fails like
-// `.ply(2)`. The read-it step is a staff-read answered in code, compared note for note in absolute pitch with
+// How it is graded: the modify step compares the rhythm of the `chords` line (`[x x x]*4` and `x*12` pass as
+// well as `.ply(3)`) and its chords at every onset (`pcset`: a hat or one note in their place is no chord);
+// `.ply(3)` written before `.struct()` multiplies nothing the ear can hear and fails like `.ply(2)`. The read-it step is a staff-read answered in code, compared note for note in absolute pitch with
 // lengths. The ear step is `fam.rhy.subdivision` at level 1, which this lesson seeds. The Make's one required
-// rule is `onsets` on every line together: some line plays the second and third triplet of beat 1 in every bar
-// (positions 1/12 and 1/6), which the starter's eighths never do.
+// rule is `tuplets-every-bar`: one line plays all three triplet places of every beat in every bar, which the
+// starter's eighths never do and two hits early in each bar do not.
 //
 // Band: none (`band: false`). The doo-wop Band plays these piano triplets itself, and two pianos in threes would
 // be a blur; every other Band's drums would double the learner's lines. The starter carries the whole section.
@@ -58,13 +58,20 @@ const DRUMS_THREES = PREDICT;
 const s5 = (chordLine: string) => song(LOOP, KICK, SNARE, HATS_THREES, BASS, chordLine);
 const S5_STARTER = s5('chords: ⟪chord(changes).voicing().struct("x*4").s("piano").gain(.6)⟫');
 const S5_SOLUTION = s5(piano(THREES));
+/** The new rhythm, and still the chords: the notes of each chord at every onset (a hat or one note is no chord). */
 const CHORD_RHYTHM: Matcher = {
-  m: "rhythm",
-  tol: [1, 32],
-  durations: false,
-  perRole: false,
-  displacementCredit: 0.5,
-  tracks: ["chords"],
+  m: "all",
+  of: [
+    {
+      m: "rhythm",
+      tol: [1, 32],
+      durations: false,
+      perRole: false,
+      displacementCredit: 0.5,
+      tracks: ["chords"],
+    },
+    { m: "pcset", perOnset: true, bass: false, tracks: ["chords"] },
+  ],
 };
 
 /** S6: one bar to read: a quarter note, a triplet, a quarter note, a triplet (C, E G C, G, E D C). */
@@ -253,6 +260,10 @@ export default defineLesson({
         reference: { solutions: [S5_SOLUTION], bars: 4 },
         matcher: CHORD_RHYTHM,
         constraints: [{ c: "edit-only-regions", feedback: "code.edit-outside" }],
+        feedbackText: {
+          "harmony.pcset":
+            "Bar {bar}: the piano plays {got}; the chord there is {exp}. Keep `chord(changes).voicing()` and change only its rhythm.",
+        },
         target: { audible: true, showRoll: false, revealRollAfter: 1 },
         hints: ladder(
           "How do the hats get three notes out of each of their four steps?",
@@ -283,6 +294,25 @@ export default defineLesson({
             response: { code: s5(piano('.struct("x*4").ply(2)')) },
             expect: "fail",
             feedback: ["rhythm.missing"],
+          },
+          {
+            name: "one note in place of the chords, in triplets",
+            response: { code: s5('chords: note("c#4").struct("x*4").ply(3).s("piano").gain(.6)') },
+            expect: "fail",
+            feedback: ["harmony.pcset"],
+          },
+          {
+            name: "hats in place of the piano chords",
+            response: { code: s5('chords: s("hh*12")') },
+            expect: "fail",
+            feedback: ["harmony.pcset"],
+          },
+          {
+            name: "the triplets on the Rhodes, the chords the same",
+            response: {
+              code: s5('chords: chord(changes).voicing().struct("x*4").ply(3).s("rhodes").gain(.6)'),
+            },
+            expect: "pass",
           },
           {
             name: "the call before the rhythm: still quarters",
@@ -413,16 +443,13 @@ export default defineLesson({
         rubric: [
           {
             id: "triplets-every-bar",
-            label: "A line plays triplets through every bar",
+            label: "The piano or the hats play triplets through every bar",
             required: true,
             skills: ["R12"],
-            rule: "onsets",
-            track: "*",
-            contains: [
-              [1, 12],
-              [1, 6],
-            ],
-            perBar: true,
+            rule: "custom",
+            fn: "tuplets-every-bar",
+            // Corrections gate (AS-25): the piano or the hats, as the brief says; a new rimshot line does not count.
+            params: { track: ["chords", "hats"], drums: ["hatClosed", "hatOpen", "ride"] },
           },
           {
             id: "snare-roll",
@@ -494,6 +521,33 @@ export default defineLesson({
             response: { code: song(MAKE_LOOP, KICK, SNARE_ROLL, HATS_EIGHTHS, BASS, piano(QUARTERS)) },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            name: "two hits early in each bar, the rest of the bar square",
+            response: {
+              code: song(
+                MAKE_LOOP,
+                KICK,
+                SNARE,
+                HATS_EIGHTHS,
+                BASS,
+                piano('.struct("~ x x ~ ~ ~ ~ ~ ~ ~ ~ ~")'),
+              ),
+            },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the hats in threes, the piano left on the beats",
+            response: { code: song(MAKE_LOOP, KICK, SNARE, HATS_THREES, BASS, piano(QUARTERS)) },
+            expect: "pass",
+          },
+          {
+            name: "the piano's triplets written out, three to each beat",
+            response: {
+              code: song(MAKE_LOOP, KICK, SNARE, HATS_EIGHTHS, BASS, piano('.struct("[x x x]*4")')),
+            },
+            expect: "pass",
           },
           {
             name: "the piano in eighths: two to the beat",

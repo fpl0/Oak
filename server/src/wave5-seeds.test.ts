@@ -126,31 +126,6 @@ describe("Wave 5 dev seeds (wave5.md §6)", () => {
     }
   });
 
-  test("X2's seeded draft is tagged with its song and kept in the song's key (closer)", async () => {
-    const song = real.songs.find((x) => X2_SONGS.includes(x.id) && x.answerKey.layers.bass !== undefined);
-    if (song === undefined) return;
-    const h = await harness({ dev: true, content: real, now: NOW });
-    try {
-      const r = await h.json("POST", "/api/dev/seed", { point: "X2 released" });
-      expect(r.status).toBe(200);
-      const list = await ok<{ items: { id: string; originId: string | null; tags: string[] }[] }>(
-        h,
-        "GET",
-        "/api/sketches",
-      );
-      const draft = list.items.find((x) => x.originId === "X2");
-      expect(draft?.tags).toContain(song.id);
-      const detail = await ok<{ versions: { key: { tonic: string; mode: string } | null }[] }>(
-        h,
-        "GET",
-        `/api/sketches/${draft?.id}`,
-      );
-      for (const v of detail.versions) expect(v.key).toEqual(song.key);
-    } finally {
-      await h.close();
-    }
-  }, 60_000);
-
   for (const point of WAVE5_SEED_POINTS)
     test(`“${point}”`, async () => {
       const h = await harness({ dev: true, content: real, now: NOW });
@@ -242,6 +217,25 @@ async function deepChecks(h: Harness, point: string, plan: SessionPlan): Promise
       const track = await ok<AlbumTrackDetail>(h, "GET", `/api/album/tracks/${st.trackId}`);
       expect(track.versions[0]?.hasAudio).toBe(true);
       expect(track.versions[0]?.linerNotesMd.length).toBeGreaterThan(0);
+      break;
+    }
+    case "X2 released": {
+      // X2's seeded draft is tagged with its song and kept in the song's key (closer).
+      const song = real.songs.find((x) => X2_SONGS.includes(x.id) && x.answerKey.layers.bass !== undefined);
+      if (song === undefined) break;
+      const list = await ok<{ items: { id: string; originId: string | null; tags: string[] }[] }>(
+        h,
+        "GET",
+        "/api/sketches",
+      );
+      const draft = list.items.find((x) => x.originId === "X2");
+      expect(draft?.tags).toContain(song.id);
+      const detail = await ok<{ versions: { key: { tonic: string; mode: string } | null }[] }>(
+        h,
+        "GET",
+        `/api/sketches/${draft?.id}`,
+      );
+      for (const v of detail.versions) expect(v.key).toEqual(song.key);
       break;
     }
     case "C5.S1 done": {

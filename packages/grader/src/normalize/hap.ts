@@ -7,7 +7,13 @@
 //   `n` without a note is a sample index / unresolved degree → midi null;
 //   the `octave` control adds 12 per step (superdough multiplies the frequency by 2^octave).
 // Never `getPlayableNoteValue` (it throws), and never display `value.note` (`.scale()` misspells).
-import { CHORD_CONTEXT_KEY, CHORD_VALUE_KEY, TRACK_KEY } from "../runtime/realm.ts";
+import {
+  CHORD_CONTEXT_KEY,
+  CHORD_VALUE_KEY,
+  DICT_CONTEXT_KEY,
+  TRACK_KEY,
+  VOICED_CONTEXT_KEY,
+} from "../runtime/realm.ts";
 import { core, type Hap } from "../runtime/strudel.ts";
 import type { OakEvent } from "../types.ts";
 
@@ -130,6 +136,19 @@ export interface LiteralRole {
   fn: string | null;
 }
 
+/**
+ * Whether a voiced note was moved to another pitch class after `voicing()` / `rootNotes()` (`.note("c#4")`,
+ * `.transpose(1)`, `.add(note(5))`): its chord symbol then names notes that no longer sound. An octave move
+ * keeps the pitch class and the symbol.
+ */
+export function voicedAway(midi: number | null, voiced: unknown): boolean {
+  if (midi === null || (typeof voiced !== "string" && typeof voiced !== "number")) return false;
+  const was = pitchOf(voiced).midi;
+  if (was === null) return false;
+  const pc = (x: number): number => ((Math.round(x) % 12) + 12) % 12;
+  return pc(midi) !== pc(was);
+}
+
 export function hapToEvent(
   hap: Hap,
   fallbackTrack: string,
@@ -153,13 +172,18 @@ export function hapToEvent(
       ...(text ? { text } : {}),
     };
   });
+  const pitch = pitchOf(v);
   return {
     track: str(ctx[TRACK_KEY]) ?? fallbackTrack,
     begin: whole.begin.toFraction(),
     end: whole.end.toFraction(),
     beginF: whole.begin.valueOf(),
     endF: whole.end.valueOf(),
-    ...pitchOf(v),
+    ...pitch,
+    ...(chord !== null && voicedAway(pitch.midi, ctx[VOICED_CONTEXT_KEY])
+      ? { chordStale: true as const }
+      : {}),
+    ...(typeof ctx[DICT_CONTEXT_KEY] === "string" ? { voicedWith: ctx[DICT_CONTEXT_KEY] as string } : {}),
     s: str(obj.s),
     n: typeof obj.n === "number" ? obj.n : typeof obj.n === "string" ? capText(obj.n) : null,
     bank: str(obj.bank),

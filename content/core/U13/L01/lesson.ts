@@ -341,7 +341,7 @@ export default defineLesson({
         target: { audible: true, showRoll: false, revealRollAfter: 1 },
         feedbackText: {
           "harmony.pcset":
-            "The Rhodes is not where the target has it yet. Each chord should start on the “and” after beat 4, an eighth note before its bar: `.early(1/8)`, with no quotes around the number.",
+            "Bar {bar}: the Rhodes has {got} where the target has {exp}. Play the target again and listen for when each chord arrives, and which notes it holds.",
           "code.time-fraction-string":
             "In quotes, `1/8` is read as a pattern and nothing moves. Write the number bare: `.early(1/8)`.",
         },
@@ -392,6 +392,12 @@ export default defineLesson({
             // The right eighth, the wrong chord: each chord now sounds a bar behind the bass.
             name: "seven eighths late: the chord of the bar before",
             response: { code: s5(chords(".late(7/8)")) },
+            expect: "fail",
+            feedback: ["harmony.pcset"],
+          },
+          {
+            name: "one note a bar, pushed: the timing right, the chords gone",
+            response: { code: s5('chords: note("<a4 d4 g4 c4>").early(1/8).s("rhodes")') },
             expect: "fail",
             feedback: ["harmony.pcset"],
           },

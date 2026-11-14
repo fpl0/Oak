@@ -234,8 +234,10 @@ export default defineLesson({
         ],
         target: { audible: true, showRoll: false },
         feedbackText: {
+          // `{how}` says which way: a cutoff below the target's is darker, and lowering it further would
+          // take it further away (corrections pass, theory-b 9).
           "code.control-off":
-            "Not yet: yours is brighter than the target. The target keeps only the bass's lowest harmonics: bring the number down further.",
+            "Not yet: yours is {how}. The target keeps the bass's lowest few harmonics and takes the rest away.",
           "code.must-use":
             "This step needs `.lpf()`, the low-pass: it keeps the lows. `.hpf()` does the opposite and takes the low note away.",
         },
@@ -259,6 +261,14 @@ export default defineLesson({
             expect: "fail",
             feedback: ["code.control-off"],
           },
+          {
+            name: "lowered too far: darker than the target",
+            response: { code: bassWith("lpf(100)") },
+            expect: "fail",
+            feedback: ["code.control-off"],
+          },
+          { name: "close enough from above: 500", response: { code: bassWith("lpf(500)") }, expect: "pass" },
+          { name: "close enough from below: 300", response: { code: bassWith("lpf(300)") }, expect: "pass" },
           {
             name: "a high-pass instead",
             response: { code: bassWith("hpf(400)") },
@@ -288,8 +298,7 @@ export default defineLesson({
         constraints: [{ c: "edit-only-regions", feedback: "code.edit-outside" }],
         target: { audible: false, showRoll: false },
         feedbackText: {
-          "code.control-off":
-            "Not yet: the peak is too small to whistle. Raise the `.lpq()` number to 10 or more.",
+          "code.control-off": "Not yet: yours is {how}. The brief asks for an `.lpq()` number from 10 to 30.",
         },
         hints: ladder(
           "Which number sets how big the peak is?",
@@ -311,6 +320,13 @@ export default defineLesson({
             expect: "fail",
             feedback: ["code.control-off"],
           },
+          {
+            name: "past the brief's 30: a scream, not a whistle",
+            response: { code: ringWith("800", "45") },
+            expect: "fail",
+            feedback: ["code.control-off"],
+          },
+          { name: "30, the top of the range", response: { code: ringWith("800", "30") }, expect: "pass" },
           {
             name: "the riff's notes changed as well",
             response: {
@@ -442,8 +458,10 @@ export default defineLesson({
             label: "One part plucked or swept with .lpenv()",
             required: true,
             skills: ["D03"],
-            rule: "uses",
-            tool: "tb.lpenv",
+            // Corrections gate (fix:leftovers notDone): an envelope you can hear; `.lpenv(0)` moves nothing.
+            rule: "custom",
+            fn: "control-set",
+            params: { control: "lpenv", call: "lpenv", not: 0, example: "3", alsoUses: ["tb.lpenv"] },
           },
           {
             id: "bass-low-pass",
@@ -484,6 +502,22 @@ export default defineLesson({
             expect: "pass",
           },
           { name: "beyond the brief: both parts filtered", response: { code: FILTERED }, expect: "pass" },
+          {
+            // Corrections gate: `uses` passed it; an envelope of depth 0 opens nothing.
+            name: "an envelope of 0: the tool written, nothing moves",
+            response: {
+              code: code(...DRUMS, bass('.s("sawtooth")'), riff('.s("square").lpf(400).lpenv(0).gain(.8)')),
+            },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "a downward sweep, a negative envelope",
+            response: {
+              code: code(...DRUMS, bass('.s("sawtooth")'), riff('.s("square").lpf(2000).lpenv(-3).gain(.8)')),
+            },
+            expect: "pass",
+          },
           {
             name: "a static low-pass only",
             response: {

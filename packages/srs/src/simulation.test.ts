@@ -81,10 +81,10 @@ const waitCell = (w: SimSummary["firstReviewWait"]["deferred"]) =>
   `${w.n} | ${w.p50}/${w.p95}/${w.max} | ${w.censored}`;
 console.log(
   [
-    "target seed | warm-up p50/p95/max s | oldest undelivered p95 d | deferred p95 (families, of them P/Pr) | review day p95 s | active max | at mastery | wait p95 d | credit / <0.65 | sessions to clear after gaps",
+    "target seed | warm-up p50/p95/max s | oldest undelivered p95 d | deferred p95 (families, of them P/Pr) | review day p95 s: a little more (d22) / warm-up inside the cap | active max | at mastery | wait p95 d | credit / <0.65 | sessions to clear after gaps",
     ...all().map(
       ({ t, seed, s }) =>
-        `${t} ${seed} | ${r1(s.warmupSec.p50)}/${r1(s.warmupSec.p95)}/${r1(s.warmupSec.max)} | ${s.oldestUndeliveredDays.p95} | ${s.deferredCards.p95} (${s.deferredFamiliesP95.all}, ${s.deferredFamiliesP95.perceptual}) | ${r1(s.reviewDaySec.p95)} | ${s.maxActivePerceptual} | ${s.families.atMastery}/${s.families.unlocked} | ${s.families.waitDaysP95} | ${r1(s.setCredit.mean * 100)}% / ${r1(s.setCredit.below065 * 100)}% | ${s.sessionsToClearAfterGap.join(",")}`,
+        `${t} ${seed} | ${r1(s.warmupSec.p50)}/${r1(s.warmupSec.p95)}/${r1(s.warmupSec.max)} | ${s.oldestUndeliveredDays.p95} | ${s.deferredCards.p95} (${s.deferredFamiliesP95.all}, ${s.deferredFamiliesP95.perceptual}) | ${r1(s.reviewMoreSec.p95)} / ${r1(s.reviewDaySec.p95)} | ${s.maxActivePerceptual} | ${s.families.atMastery}/${s.families.unlocked} | ${s.families.waitDaysP95} | ${r1(s.setCredit.mean * 100)}% / ${r1(s.setCredit.below065 * 100)}% | ${s.sessionsToClearAfterGap.join(",")}`,
     ),
   ].join("\n"),
 );
@@ -129,10 +129,12 @@ describe("300-day simulation: the contract gate (contracts §7.4)", () => {
     for (const { s } of everyRun()) expect(s.maxActivePerceptual).toBeLessThanOrEqual(SIM_GATE.maxActive);
   });
 
-  test("p95 of a planned reviews-only day is at most 12 minutes", () => {
-    for (const { s } of everyRun()) {
-      expect(s.reviewDaySec.p95).toBeLessThanOrEqual(SIM_GATE.p95ReviewDaySec);
-      expect(s.reviewDaySec.max).toBeLessThanOrEqual(REVIEW_DAY_MAX_SEC);
+  test('review day p95 ≤ 720 s, counting the "a little more" review only (the warm-up is budgeted by §9.1)', () => {
+    // d22 (contracts 1.7): a reviews-only day is the warm-up, then "a little more" up to 12 minutes on top of it.
+    for (const { t, s } of everyRun()) {
+      expect(s.reviewMoreSec.p95).toBeLessThanOrEqual(SIM_GATE.p95ReviewDaySec);
+      expect(s.reviewMoreSec.max).toBeLessThanOrEqual(REVIEW_DAY_MAX_SEC);
+      expect(s.reviewDayOpenSec.max).toBeLessThanOrEqual(WARMUP_BUDGET_SEC[t] + REVIEW_DAY_MAX_SEC);
     }
   });
 
@@ -183,7 +185,7 @@ describe("300-day simulation: companion assertions (spike S7)", () => {
 
   test("resting families come back: the composite is a place to wait, not a sink (decision 27)", () => {
     // Families rest only while the course seeds faster than slots and time turn over (U03–U06), and most come
-    // back to their own card once nothing waits. Since contracts 1.6 the catalog holds 265 deck cards (twelve
+    // back to their own card once nothing waits. Since contracts 1.7 the catalog holds 341 deck cards (eighteen
     // decks) beside this gate's padding of two term cards a lesson, about 250 fact cards the course does not
     // have; at 20 minutes (one session a lesson, the tightest target) the fact cards then leave the set forecast
     // rarely open, and on the runs with the weakest learner families rest to the end (measured: 27 of 30 runs

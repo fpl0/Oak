@@ -352,7 +352,8 @@ export const isMinorKey = (key: KeySpec): boolean => MINORISH.includes(key.mode)
 /**
  * The cadence at the end of bar `endBar` (1-based), from the last two chords before it (exercises §3.5):
  * V → I with both in root position and the soprano on 1 is PAC, otherwise IAC; vii°(7) → I is IAC;
- * ending on V is HC; IV (or iv) → I is PC; V → vi (or ♭VI) is DC; ♭VII → I is its own type. Minor keys use
+ * ending on V is HC; IV (or iv) → I is PC (a diminished or augmented chord on 4 is not); the chord the cadence
+ * lands on must still sound in bar `endBar`; V → vi (or ♭VI) is DC; ♭VII → I is its own type. Minor keys use
  * V → i and iv → i, and a Picardy I counts as the tonic; a blues key's tonic is I(7). The soprano is the
  * melody's last note before the bar line; with no melody, the top note of a hand-voiced final chord, else
  * harmony alone decides (as `classifyCadence` does).
@@ -371,6 +372,9 @@ export function cadenceAt(
   const before = slots.filter((s) => R.lt(s.span[0], end) && s.chord);
   const last = before[before.length - 1];
   if (!last?.chord) return "none";
+  // The cadence ends the bar it is asked for: the chord it lands on still sounds in bar `endBar`. A V → I two bars
+  // early followed by an empty last bar is no cadence at `endBar` (C2: "bars 7–8 land on I").
+  if (endBar >= 1 && R.lte(last.span[1], rat(endBar - 1))) return "none";
   let i = before.length - 2;
   while (i >= 0 && sameCore(coreOf((before[i] as ChordSlot).chord as ChordId), coreOf(last.chord))) i--;
   const prev = i >= 0 ? (before[i] as ChordSlot) : undefined;
@@ -383,7 +387,10 @@ export function cadenceAt(
   const isTonic = lastSemis === 0 && tonicQualities.includes(lastTriad);
   const isDominant = (c: ChordId): boolean => semis(c) === 7 && major(c);
   const isLeadingTone = (c: ChordId): boolean => semis(c) === 11 && triadCore(c).quality === "dim";
-  if (isTonic && prev?.chord) {
+  // Corrections gate (AS-13, AS-31): a home chord over its own 5th in the bass (I6/4) is the cadential 6/4, which
+  // leans on into V; the cadence has not arrived, so V → I6/4 is no authentic cadence.
+  const sixFour = isTonic && mod12(last.chord.bassPc - last.chord.rootPc) === 7;
+  if (isTonic && prev?.chord && !sixFour) {
     const p = prev.chord;
     if (isDominant(p)) {
       const rootPosition = p.bassPc === p.rootPc && last.chord.bassPc === last.chord.rootPc;
@@ -396,7 +403,8 @@ export function cadenceAt(
       return rootPosition && onTonic ? "PAC" : "IAC";
     }
     if (isLeadingTone(p)) return "IAC";
-    if (semis(p) === 5) return "PC";
+    // IV or iv only (contracts §6.6): F diminished → C shares the root but is not a plagal cadence.
+    if (semis(p) === 5 && ["maj", "min"].includes(triadCore(p).quality)) return "PC";
     if (semis(p) === 10 && major(p)) return "bVII-I";
   }
   if (isDominant(last.chord)) return "HC";
@@ -405,6 +413,24 @@ export function cadenceAt(
     if ((lastSemis === 9 && q === "min") || (lastSemis === 8 && q === "maj")) return "DC";
   }
   return "none";
+}
+
+/**
+ * The two chords a cadence at the end of bar `endBar` is read from (as `cadenceAt` reads them): the last named
+ * chord that starts before the bar line, and the last chord before it with another triad core. `last` is
+ * `undefined` when no named chord sounds; `prev` when the piece has only one chord.
+ */
+export function cadenceChords(
+  slots: readonly ChordSlot[],
+  endBar: number,
+): { last?: ChordSlot; prev?: ChordSlot } {
+  const end = rat(endBar);
+  const before = slots.filter((s) => R.lt(s.span[0], end) && s.chord);
+  const last = before[before.length - 1];
+  if (!last?.chord) return {};
+  let i = before.length - 2;
+  while (i >= 0 && sameCore(coreOf((before[i] as ChordSlot).chord as ChordId), coreOf(last.chord))) i--;
+  return i >= 0 ? { last, prev: before[i] as ChordSlot } : { last };
 }
 
 /** Root of every bar of a 12-bar blues, in semitones above the tonic; alternatives are allowed per bar. */

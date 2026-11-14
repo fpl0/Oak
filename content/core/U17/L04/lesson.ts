@@ -191,10 +191,11 @@ const HOW_FAR: IdentifyEx = {
     ],
   },
   correct: { choice: ["whole-step"] },
-  // The catalog's `id.wrong` names the option ids ("That was half-step, not whole-step").
+  // The catalog's `id.wrong` names the option ids and the answer ("That was half-step, not whole-step"). This says
+  // what to compare, not the size (contracts §5.3); the hint ladder narrows it and the reveal gives it.
   feedbackText: {
     "id.wrong":
-      "Not this time: the chorus starts on A, and after the change on B. From A to B is two half steps, a whole step. Sing the two notes one after the other.",
+      "Not this time. Sing the first note of the chorus, then its first note after the change, one after the other: are they neighbouring keys on the keyboard, black or white, or is there one between them?",
   },
   tests: [
     { name: "a whole step", response: { answer: { choice: ["whole-step"] } }, expect: "pass" },

@@ -14,10 +14,12 @@ import {
 import {
   chordNotes,
   chordOf,
+  chordPcs,
   chordSpelling,
   parseChordWithBass,
   SEVENTH_CORE,
   toLeadSheet,
+  triadCore,
   triadQuality,
 } from "./chords.ts";
 import { chordOfRoman, readChord, romanText } from "./harmony.ts";
@@ -140,6 +142,12 @@ export function seventhChord(root: string, quality: SeventhQuality): ChordId {
  * its own (G Mixolydian: I7 … ♭VIImaj7). Numerals go back to chords with `chordOfRoman`.
  */
 export function keySevenths(key: KeySpec, opts: { form?: "natural" | "harmonic" } = {}): KeyChord[] {
+  // Melodic minor's sevenths (Am(maj7) Bm7 Caug(maj7) D7 E7 F♯ø7 G♯ø7) include an augmented major seventh no chord
+  // quality names: say so rather than return natural minor's (corrections pass, theory-e).
+  if (minorFormOf(key) === "melodic")
+    throw new RangeError(
+      "@oak/theory: the seventh chords of melodic minor are not built (its III is an augmented major seventh); ask for natural or harmonic minor",
+    );
   if (minorFormOf(key))
     return minorKeyChords(key.tonic, {
       seventh: true,
@@ -632,8 +640,19 @@ export function appliedReading(
     rn: romanText(chord, key, next),
     kind,
     target: keyChord(targetChord, key),
-    resolves: next !== undefined && next.rootPc === targetChord.rootPc,
+    resolves: next !== undefined && arrivesOn(next, targetChord),
   };
+}
+/**
+ * Whether `next` is the chord an applied chord points at (corrections pass, theory-f): its root with the target's
+ * own triad quality (V/vi → Am, not A or A+), or a dominant seventh on that root, the next link of a dominant
+ * chain (V7/ii → D7 in C, U15.L05).
+ */
+export function arrivesOn(next: ChordId, target: ChordId): boolean {
+  if (next.rootPc !== target.rootPc) return false;
+  const nq = triadCore(next).quality;
+  if (nq === triadCore(target).quality) return true;
+  return nq === "maj" && (chordPcs(next) as number[]).includes((next.rootPc + 10) % 12);
 }
 const NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII"];
 /**

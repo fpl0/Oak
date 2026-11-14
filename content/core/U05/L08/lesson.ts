@@ -12,6 +12,7 @@
 // `hand-voiced-cadence-again`, a VOICING_GATE variant): the U05.L07 check in G major, shown only while the gate
 // is unmet, written without the tools it guards. Everything a `voicing()` plays is graded only by pitch-class
 // set (contracts §6.7): no check, hint or line of prose here depends on its octave, top note or note count.
+// S6 "Lift them" checks the anchor the learner writes (above Strudel's own, C5), never the notes it places.
 import { defineLesson, type HintLadder, type Matcher } from "@oak/content-kit";
 
 const BPM = 92;
@@ -64,6 +65,8 @@ const GATE_MATCHER: Matcher = {
           voices: 3,
           commonTones: true,
           noCrossing: true,
+          // The progression loops: the last chord leads back into the first, and that move is judged too.
+          loop: true,
         },
       ],
     },
@@ -136,7 +139,7 @@ export default defineLesson({
         key: { tonic: "G", mode: "major" },
         pass: 0.9,
         prompt:
-          "The last check of Voice Leading by Hand, in G: G C D G, three notes each, over the bass. Hold every note two neighbouring chords share, move each other note as little as you can (three half steps at most), and keep the three in order, lowest to highest.",
+          "The last check of Voice Leading by Hand, in G: G C D G, three notes each, over the bass. Hold every note two neighbouring chords share, move each other note three half steps at most, and keep the three in order, lowest to highest. The loop repeats: the last G leads back into the first too.",
         skills: [{ skill: "C05", w: 1 }],
         code: { starter: GATE_STARTER },
         reference: { solutions: [gate(G_SMOOTH)], bars: 4 },
@@ -163,9 +166,16 @@ export default defineLesson({
         tests: [
           { name: "reference", response: { code: gate(G_SMOOTH) }, expect: "pass" },
           {
-            name: "another smooth path: A D F♯, then B D G",
-            response: { code: gate("<[g3,b3,d4] [g3,c4,e4] [a3,d4,f#4] [b3,d4,g4]>") },
+            name: "another smooth path, from a higher G: C E G, A D F♯, B D G",
+            response: { code: gate("<[b3,d4,g4] [c4,e4,g4] [a3,d4,f#4] [b3,d4,g4]>") },
             expect: "pass",
+          },
+          {
+            // Review finding (theory-c A4, the U05.L07 case moved to G): the last G leaps back to the first one.
+            name: "smooth inside, but the last G leaps back to the first: A D F♯, then B D G",
+            response: { code: gate("<[g3,b3,d4] [g3,c4,e4] [a3,d4,f#4] [b3,d4,g4]>") },
+            expect: "fail",
+            feedback: ["harmony.voice-leap"],
           },
           {
             name: "an octave higher",
@@ -428,10 +438,23 @@ export default defineLesson({
         constraints: [
           { c: "edit-only-regions", feedback: "code.edit-outside" },
           { c: "must-use", tool: "tb.anchor", feedback: "code.must-use" },
+          // "A higher anchor, higher chords" (review finding theory-c A5: `.anchor("g3")` passed and moved them down).
+          // Read from the code, not from the voiced notes, whose octave §6.7 never grades: an anchor above Strudel's
+          // own, C5 (from D5 up, as a name or a MIDI number), lifts at least one chord of C F G C.
+          {
+            c: "arg-matches",
+            fn: "anchor",
+            argIndex: 0,
+            pattern:
+              "^\\s*[\"'`]?\\s*(?:(?:[eEfFgGaAbB][#b]?|[dD]#?)5|[a-gA-G][#b]?[6-9]|7[4-9]|[89]\\d|1[01]\\d|12[0-7])\\s*[\"'`]?\\s*$",
+            feedback: "code.arg-mismatch",
+          },
         ],
         target: { audible: true, showRoll: false },
         feedbackText: {
           "code.must-use": 'Put `.anchor("g5")` after `chord(…)` and before `.voicing()`.',
+          "code.arg-mismatch":
+            '`.anchor({got})` does not lift the chords. With no anchor, Strudel anchors them at C5, and an anchor below D5 keeps them there or takes them down. Anchor on D5 or higher, such as `"g5"`.',
           "harmony.pcset":
             "Bar {bar}: that chord has {got}; it should have {exp}. Keep the four names as they were.",
         },
@@ -462,6 +485,24 @@ export default defineLesson({
             response: { code: s6(named("<C F G C>", "", "rhodes", ".room(.4)")) },
             expect: "fail",
             feedback: ["code.must-use"],
+          },
+          {
+            name: "anchored an octave up",
+            response: { code: s6(named("<C F G C>", '.anchor("c6")', "rhodes")) },
+            expect: "pass",
+          },
+          {
+            // Review finding (theory-c A5): this anchor moves every chord down, below the default.
+            name: "anchored low: the chords go down",
+            response: { code: s6(named("<C F G C>", '.anchor("g3")', "rhodes")) },
+            expect: "fail",
+            feedback: ["code.arg-mismatch"],
+          },
+          {
+            name: "anchored on C5, Strudel's own anchor: nothing moves",
+            response: { code: s6(named("<C F G C>", '.anchor("c5")', "rhodes")) },
+            expect: "fail",
+            feedback: ["code.arg-mismatch"],
           },
           {
             name: "a name changed on the way",

@@ -59,7 +59,7 @@ export function keyChangesOf(
  * How a modal piece shows its key signature.
  * - `mode`: the mode's own signature, the notes of its parent scale (D Dorian: no sharps or flats; G Mixolydian:
  *   none; abcjs `K:Ddor`). The characteristic tone needs no accidental. This is how the folk repertoire is printed
- *   (Scarborough Fair, Drunken Sailor, Old Joe Clark) and what the engraver has done since Wave 1.
+ *   (Drunken Sailor, Old Joe Clark) and what the engraver has done since Wave 1.
  * - `parallel`: the signature of the major or natural-minor key on the same tonic, with the characteristic tone
  *   written as an accidental every time (G Mixolydian: one sharp, each F with a natural sign). The colour tone is
  *   visible on the page, which is what U14.L01 "Modes as Colours" teaches ("major with ♭7").

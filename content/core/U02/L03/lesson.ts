@@ -358,11 +358,13 @@ export default defineLesson({
         rubric: [
           {
             id: "black-key",
-            label: "Uses a sharp or a flat",
+            label: "Uses a sharp or a flat on a black key",
             required: true,
             skills: ["P04"],
-            rule: "uses",
-            tool: "tb.note.accidentals",
+            // Corrections gate (AS-38): the note lands on a black key (`e#4` is spelt with a sharp but sounds F).
+            rule: "custom",
+            fn: "black-keys",
+            params: { alsoUses: ["tb.note.accidentals"] },
           },
           {
             id: "steps",

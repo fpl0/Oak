@@ -1,7 +1,8 @@
 // U04.L04 Interval Ear Lab. No new idea: intervals inside a key become familiar by hearing many of them,
 // named as they play (passive blocks, AUTHORING §16.5), then by naming them: up, down, and together. A sung
 // pair (1 up to 3, 1 up to 5) seeds `fam.int.sing`. The Make answers a one-bar riff with the same shape a
-// named distance away; the grader hears the shape in half steps (`motif-reuse`). Spec: content/specs/U04.md.
+// named distance away; the grader hears the shape in half steps (`transposed-copy`: same rhythm, every note moved
+// by one interval). Spec: content/specs/U04.md.
 import { type AnswerUi, defineLesson, type HintLadder } from "@oak/content-kit";
 
 const BPM = 96;
@@ -248,15 +249,15 @@ export default defineLesson({
         rubric: [
           {
             id: "same-shape",
-            label: "Bar 2 keeps bar 1's shape: every distance the same in half steps",
+            label: "Bar 2 is bar 1 moved: every distance the same in half steps",
             required: true,
             skills: ["E06", "I01"],
-            rule: "motif-reuse",
-            track: "@melody",
-            // Measured over one pass of the 2-bar loop, in half steps: bar 2 in bar 1's shape scores 1 of 2;
-            // bar 2 in another shape, or the starter's rest, 0.
-            minRatio: 0.5,
-            unitBars: 1,
+            // The exact copy, moved (review finding theory-c A2): the same rhythm, and every note of bar 1 moved by one
+            // interval, so every distance inside the riff keeps its size. Read on one pass of the loop.
+            rule: "custom",
+            fn: "transposed-copy",
+            // Corrections gate (AS-10): the answer is bar 2 of the same line, as the brief says.
+            params: { pairs: [[1, 2]], alone: true },
           },
           {
             id: "named",
@@ -277,10 +278,8 @@ export default defineLesson({
           },
         ],
         // The check compares half steps (an exact copy, moved). Moving the riff by degrees inside the key
-        // (`n` plus 2, as in U04.L01) turns C–E, a major 3rd, into E–G, a minor one: say so instead of the
-        // catalog's "14 of 16 bars reuse an earlier idea", which counts the loop's repeats.
-        // One text serves every unmet rule, so the teaching point lives in the rule's label and the hints.
-        feedbackText: { "rubric.unmet": "{label}: not yet." },
+        // (`n` plus 2, as in U04.L01) turns C–E, a major 3rd, into E–G, a minor one, and fails.
+        // Corrections gate: the rule's own detail reaches the learner ("bar 2 does not bring back bar 1: …").
         hints: ladder(
           "Bar 2 is a rest now. What would make it sound like an answer to bar 1, not a new idea?",
           "The same shape is the same distances between the notes, in half steps. Move every note of bar 1 by one named distance, up or down: a major 3rd stays a major 3rd.",
@@ -299,11 +298,36 @@ export default defineLesson({
             expect: "pass",
           },
           {
-            name: "beyond the brief: a 5th up, the last note bent home, hats",
+            name: "beyond the brief: a 5th up, a split last beat, hats",
+            response: {
+              code: `${TEMPO}hats: s("hh*8").gain(.35)\nmel: note("<[c4 e4 g4 [e4 d4]] [g4 b4 d5 [b4 a4]]>").s("piano")`,
+            },
+            expect: "pass",
+          },
+          {
+            // Review finding (theory-c A2): E4→D4 falls 2 half steps, B4→C5 rises 1: not the same shape.
+            name: "a 5th up, the last note bent home",
             response: {
               code: `${TEMPO}hats: s("hh*8").gain(.35)\nmel: note("<[c4 e4 g4 [e4 d4]] [g4 b4 d5 [b4 c5]]>").s("piano")`,
             },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "a 4th down, named",
+            response: { code: mel("[c4 e4 g4 e4]", '.transpose("<1P -4P>")') },
             expect: "pass",
+          },
+          {
+            name: "a whole step up, by hand, with a held note",
+            response: { code: mel("<[c4 e4 g4@2] [d4 f#4 a4@2]>") },
+            expect: "pass",
+          },
+          {
+            name: "bar 1 played again at the same pitch",
+            response: { code: mel("<[c4 e4 g4 e4] [c4 e4 g4 e4]>") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
           },
           {
             name: "a patterned named move",

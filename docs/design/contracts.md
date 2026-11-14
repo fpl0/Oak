@@ -316,7 +316,7 @@ This replaces curriculum §1. `content/syllabus.ts` is written from these tables
 |---|---|---|---|---|
 | U14.L01 | Modes as Colours | The characteristic tone; Mixolydian ♭7. | S12 | — |
 | U14.L02 | Mixolydian Rock | I–♭VII–IV; Old Joe Clark. | H11 | — |
-| U14.L03 | Dorian ♮6 | i–IV; Scarborough Fair, Drunken Sailor. | — | S12 H11 |
+| U14.L03 | Dorian ♮6 | i–IV; Drunken Sailor. | — | S12 H11 |
 | U14.L04 | Lydian Glow | ♯4 and I–II. | S13 | — |
 | U14.L05 | Phrygian Edge | ♭2 and i–♭II. | — | S13 |
 | U14.L06 | Mode Lab | Mode identification and a modal vamp. | — | E10 |
@@ -562,7 +562,7 @@ Every song lives in `content/repertoire/<song-id>/song.ts` and must carry `{ tit
 | Stage | Pool |
 |---|---|
 | U02–U03 reading, tunes by number, first by-ear work | Ode to Joy theme (1824), When the Saints Go Marching In (trad), Auld Lang Syne (trad), Swing Low, Sweet Chariot (spiritual), Michael, Row the Boat Ashore (trad), Down by the Riverside (trad), plus Oak-original hooks over four-chord Band backings. No nursery tunes. Before U13 a tune is used only in a fragment or setting that needs no ties or dots, and before U07.L08 only in one that needs no pickup (start at the first full bar; Auld Lang Syne and Michael, Row the Boat Ashore both begin with one). |
-| Ladder L5 (PD folk), U07, X1 | Aura Lee (1861), Red River Valley (trad), Shenandoah (trad), Drunken Sailor (trad, Dorian; from U14), Scarborough Fair (trad melody, Dorian; from U14), Amazing Grace (New Britain; U07.L09 reading only, never X1), Simple Gifts (1848), Oh! Susanna (1848) |
+| Ladder L5 (PD folk), U07, X1 | Aura Lee (1861), Red River Valley (trad), Shenandoah (trad), Drunken Sailor (trad, Dorian; from U14), Amazing Grace (New Britain; U07.L09 reading only, never X1), Simple Gifts (1848), Oh! Susanna (1848) |
 | U10 minor | Wayfaring Stranger (trad), Go Down Moses (spiritual), Joshua Fit the Battle (spiritual), Greensleeves (trad) |
 | Ladder L6, U11, X2, U14, AC1 | St. Louis Blues (1914), Memphis Blues (1912), Careless Love (trad), Frankie and Johnny (trad), Old Joe Clark (trad, Mixolydian), The Entertainer A-strain (1902), Sweet Georgia Brown (1925) |
 | U15–U17, CF-T, J track | Five Foot Two (1925), Ain't She Sweet (1927), Bye Bye Blackbird (1926) for CF-T; Body and Soul (1930), Georgia on My Mind (1930), I Got Rhythm (1930) for U17.L04, JC3, JC4; further standards (Blue Skies 1926, Ain't Misbehavin' 1929, Honeysuckle Rose 1929, On the Sunny Side of the Street 1930, Tea for Two 1924, Lady Be Good 1924) only when verified |
@@ -1727,6 +1727,7 @@ Families are the exercises §4.4 catalog with the `fam.` prefix, re-pointed at t
 | `fam.mel.nct` | P/C | U07.L04 (L2 U07.L05) | M04, M05 | pitch |
 | `fam.frm.sections` | P | U09.L03 | F02, F03 | harmony |
 | `fam.key.mode` | P | U10.L01 (L3 and L4 U14.L03; L5 U14.L05) | E10 | pitch |
+| `deck.scl.modes` | F | U14.L01 (♭VII U14.L02; Dorian U14.L03; Lydian U14.L04; Phrygian U14.L05) | S12 | — |
 | `deck.scl.degrees` | F | U10.L01 (harmonic U10.L06; melodic U10.L08; pentatonic U11.L01–L02; blues U11.L03) | S05, S07, S08, S09, S10, S11 | — |
 | `deck.key.minor` | F | U10.L02 (harmonic minor U10.L06; melodic minor U10.L08) | S06, S07, S08 | — |
 | `fam.deg.fet-minor` | P | U10.L03 | E10 | pitch |
@@ -1735,9 +1736,14 @@ Families are the exercises §4.4 catalog with the `fam.` prefix, re-pointed at t
 | `fam.frm.blues` | P/C | U11.L05 (L4 J4.L02) | F04 | harmony |
 | `deck.frm.twelve-bar` | F | U11.L05 (quick change and turnaround U11.L06) | F04, H10 | — |
 | `fam.chd.quality-7th` | P | U12.L02 (L3 U12.L03; L5 J1.L02 for 6 and m6, J2.L02 for the minor-major seventh) | E11 | harmony |
+| `deck.chd.sevenths` | F | U12.L01 (half-diminished and diminished U12.L03) | C07 | — |
+| `deck.har.sevenths` | F | U12.L04 (minor keys U12.L05) | C08 | — |
 | `fam.deg.fet-chromatic` | P | U15.L01 | E12a | pitch |
 | `fam.har.chromatic` | P | U15.L06 (L3 U16.L05) | H12, E12b | harmony |
+| `deck.har.applied` | F | U15.L02 (V7 of vi, ii and IV U15.L03; vii°/V U15.L04) | H12 | — |
+| `deck.har.borrowed` | F | U16.L01 (♭VI and ♭VII U16.L02; ♭III U16.L03; Picardy and Dorian IV U16.L04) | H13 | — |
 | `fam.har.modulation` | P | U17.L03 | E13 | harmony |
+| `deck.har.pivots` | F | U17.L01 (direct lifts U17.L02) | H14 | — |
 | `fam.jzz.ii-v` | P | J1.L03 (L2 J2.L02) | J04, J05 | harmony |
 | `fam.jzz.guide` | Pr/P | J1.L04 | J07, V06 | harmony |
 | `fam.jzz.voicing` | C | J1.L05 (L2 J3.L01; L3 J3.L02) | J08, J09 | — |
@@ -1759,7 +1765,7 @@ Ear stages of the plan: A = `rhy.pulse`, `rhy.echo`, `pit.match`, `pit.compare`,
 
 ### 7.4 The review-load governor
 
-**Budgets.** Warm-up on a session day: **4 / 5 / 6 minutes** at the 15 / 20 / 25-minute target (3 minutes on checkpoint and capstone days). The planner fills the warm-up with sets and fact mini-sets (up to 10 due cards) until the estimated time reaches the budget. Leftovers stay due without any penalty or display. On a day with no lesson, `/practice/review` plans the same budget and then offers "a little more" in budget-sized blocks, up to **12 minutes** in total.
+**Budgets.** Warm-up on a session day: **4 / 5 / 6 minutes** at the 15 / 20 / 25-minute target (3 minutes on checkpoint and capstone days). The planner fills the warm-up with sets and fact mini-sets (up to 10 due cards) until the estimated time reaches the budget. Leftovers stay due without any penalty or display. On a day with no lesson, `/practice/review` plans the same budget and then offers "a little more" in budget-sized blocks, up to **12 minutes** of them; the warm-up before them does not count against those 12 minutes (d22).
 
 **Warm-up order.** (1) An anchor: the highest-R due item, or 4 trials one level down from the highest-R mastered family (evidence 0.5, no FSRS rating). (2) Repair-queue families (failed checkpoint skills). (3) By priority `2·(1 − R) + 1·blockedIntroPending + 0.5·linkedToNextLesson + 0.5·debt`. Constraints: no two consecutive sets from one domain; at most 2 mic sets (0 in Quiet mode); a 15–20 s listen-only block after every second perceptual set; first drill and first sing of a new family arrive here as blocked-intro sets on the day after the lesson that seeded them, not inside the lesson; a family's first set is planned before the opener and the priority order, after a gap too.
 
@@ -1781,7 +1787,7 @@ Ear stages of the plan: A = `rhy.pulse`, `rhy.echo`, `pit.match`, `pit.compare`,
 
 **Display.** Raw due counts are never shown anywhere. Today says "Today's review ≈ 5 min". The Practice nav item shows a plain dot only when today's planned review is not yet done. Overflow is invisible.
 
-**CI gate.** `bun test packages/srs` runs a 300-day simulation with the full family and deck catalog introduced in default course order, 5 sessions a week, a simulated learner at 85% mean credit (10% of sets below 0.65), for each target. It must hold: p95 planned warm-up ≤ **240 / 300 / 360 s** for 15 / 20 / 25; active P/Pr family cards ≤ 12 on every day; p95 age of the oldest undelivered due card ≤ 7 days; every perceptual and production family has its first review set within **7 days** of the lesson that seeded it, on every run and target (the learner's own breaks not counted; a family still unreviewed at the end counts the days it has waited), and no family is left unreviewed; p95 of a planned reviews-only day ≤ 720 s. A failing simulation blocks the merge of any change to families, decks, schedulers or constants.
+**CI gate.** `bun test packages/srs` runs a 300-day simulation with the full family and deck catalog introduced in default course order, 5 sessions a week, a simulated learner at 85% mean credit (10% of sets below 0.65), for each target. It must hold: p95 planned warm-up ≤ **240 / 300 / 360 s** for 15 / 20 / 25; active P/Pr family cards ≤ 12 on every day; p95 age of the oldest undelivered due card ≤ 7 days; every perceptual and production family has its first review set within **7 days** of the lesson that seeded it, on every run and target (the learner's own breaks not counted; a family still unreviewed at the end counts the days it has waited), and no family is left unreviewed; review day p95 ≤ 720 s, counting the "a little more" review only (the warm-up is budgeted by §9.1). A failing simulation blocks the merge of any change to families, decks, schedulers or constants.
 
 ### 7.5 Mastery
 
@@ -2533,3 +2539,4 @@ Every issue and every MISSING item in `docs/design/critiques.md`, with where thi
 | 1.4 | 2026-11-13 | Wave 4. §6.6: C2's motif rule is labelled as it is checked ("in half the bars or more", `shape: 'either'`) and its cadence text lists what the grader accepts (vii°→I, iv→I); a first release must be of the code the latest passing check graded. §7.3: `fam.not.read` trains N04 too. §10.7: a chord token may carry a slash bass. §11.11: `capstone_state` records the checked sketch version. |
 | 1.5 | 2026-11-13 | Wave 5. §2.4: X2.S1 names Careless Love, and St. Louis Blues only once a verified answer key exists. §3.2: the row for `tb.feature.chord-symbols` (U05.L04). §6.8: a failing capstone check names a key mismatch first (`harmony.key-mismatch`). §7.3: stages are groupings, so `rhy.swing` is practised from U11.L07. §7.8: a session started before the 04:00 rollover stays open for 3 hours. The §7.3 rows for the written fact decks follow in 1.6, in the same change that moves those decks out of `PENDING_DECKS`. |
 | 1.6 | 2026-11-13 | Wave 6 Foundation, the learner's decisions of 2026-11-13. §7.3: rows for the nine written fact decks (`deck.int.names`, `deck.chd.triads`, `deck.har.rn`, `deck.har.cadence`, `deck.scl.degrees`, `deck.key.minor`, `deck.har.minor`, `deck.chd.dom7`, `deck.frm.twelve-bar`), which join `decks` with one new card a day each. §2.3, §3.2, §4.1, §7.3: U05.L04 is split; it keeps `.arp()` as "Arpeggios", and chord-symbol names (N05, `tb.feature.chord-symbols`, `deck.chd.symbols`) are the new lesson U05.L09 "Chord Names", taught directly after it; no lesson ID changes, and a learner who completed U05.L04 before the split counts as having completed U05.L09 (content-kit `LessonMeta.splitFrom`). §2.4: C3 takes four sessions (C3.S3 arranges and writes the lead sheet; C3.S4 records the take, reviews and releases). §2.5, §2.7, §0.10: the default order has 185 sessions (125 lessons, 13 checkpoints, 30 capstone sessions, 17 gym sessions), 259 with the tracks; the landmarks move with it. §6.6: X1's chord stages pass at 0.85, like its melody. |
+| 1.7 | 2026-11-14 | Corrections pass before the learner starts. §7.3: rows for the six U12–U17 fact decks (`deck.chd.sevenths`, `deck.har.sevenths`, `deck.scl.modes`, `deck.har.applied`, `deck.har.borrowed`, `deck.har.pivots`), which join `decks` with one new card a day each; the §7.4 simulation holds with them on every seed and target. §7.4: the warm-up no longer counts against the 12-minute cap of "a little more", and the CI criterion for a reviews-only day counts the "a little more" review only (the learner's decision d22 of 2026-11-13; the warm-up is budgeted by §9.1). §2.3, §2.8: U14.L03 and the L5 pool no longer name Scarborough Fair, which no lesson uses (no printing of its familiar Dorian tune from 1930 or earlier is known). |

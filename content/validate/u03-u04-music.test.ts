@@ -275,8 +275,10 @@ describe("degree = n + 1, everywhere it is claimed", () => {
     expect(keepsHalfSteps).toEqual([1, 4, 5]);
     expect(keepsHalfSteps.map((d) => ((d + 2 - 1) % 7) + 1)).toEqual([3, 6, 7]);
     const e = exOf(U03L10, "answer-the-phrase") as Extract<Exercise, { kind: "code-make" }>;
-    const rule = e.rubric.find((r) => r.id === "same-shape") as { shape?: string };
-    expect(rule.shape).toBe("either");
+    // The corrections pass moved the rule to `transposed-copy` with `steps: "either"`: by degrees, or an exact
+    // move in half steps (fix:leftovers apiNotes; the same claim as `motif-reuse` `shape: "either"`).
+    const rule = e.rubric.find((r) => r.id === "same-shape") as { params?: { steps?: string } };
+    expect(rule.params?.steps).toBe("either");
     const minimal = e.tests.find((t) => t.name.startsWith("minimal"));
     if (!minimal) throw new Error("U03.L10 S6: no minimal test");
     const code = (minimal.response as { code: string }).code;

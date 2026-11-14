@@ -34,6 +34,7 @@ interface Window {
   activeMax: number;
   oldestP95: number;
   reviewDayP95: number;
+  reviewMoreP95: number;
   waitMax: number;
   waitCensored: number;
   wave5WaitMax: number;
@@ -56,6 +57,7 @@ function windowOf(r: SimResult): Window {
     activeMax: Math.max(0, ...rows.map((x) => x.activePerceptual)),
     oldestP95: p95(rows.map((x) => x.oldestUndeliveredDays)),
     reviewDayP95: p95(rows.map((x) => x.reviewDaySec)),
+    reviewMoreP95: p95(rows.map((x) => x.reviewMoreSec)),
     waitMax: Math.max(0, ...waits.map((w) => w.waitDays)),
     waitCensored: waits.filter((w) => w.censored).length,
     wave5WaitMax: Math.max(0, ...waits.filter((w) => wave5.has(w.family)).map((w) => w.waitDays)),
@@ -118,7 +120,8 @@ describe("§7.4 with Wave 5's families and every deck, through X2.S2 and over 30
       expect([...where, w.oldestP95 <= SIM_GATE.p95OldestDueDays]).toEqual([...where, true]);
       expect([...where, w.waitMax <= SIM_GATE.firstReviewWaitDays]).toEqual([...where, true]);
       expect([...where, w.waitCensored]).toEqual([...where, 0]);
-      expect([...where, w.reviewDayP95 <= SIM_GATE.p95ReviewDaySec]).toEqual([...where, true]);
+      // The review day as contracts 1.7 counts it: the "a little more" review only (d22).
+      expect([...where, w.reviewMoreP95 <= SIM_GATE.p95ReviewDaySec]).toEqual([...where, true]);
     }
   });
   test("300 days: the same five criteria, and no family left unreviewed", () => {
@@ -129,7 +132,7 @@ describe("§7.4 with Wave 5's families and every deck, through X2.S2 and over 30
       expect([...where, s.oldestUndeliveredDays.p95 <= SIM_GATE.p95OldestDueDays]).toEqual([...where, true]);
       expect([...where, s.firstReviewWait.all.max <= SIM_GATE.firstReviewWaitDays]).toEqual([...where, true]);
       expect([...where, s.firstReviewWait.all.censored]).toEqual([...where, 0]);
-      expect([...where, s.reviewDaySec.p95 <= SIM_GATE.p95ReviewDaySec]).toEqual([...where, true]);
+      expect([...where, s.reviewMoreSec.p95 <= SIM_GATE.p95ReviewDaySec]).toEqual([...where, true]);
     }
   });
 });

@@ -47,6 +47,8 @@ interface Source {
   moved?: [number, number][];
   /** Compare only the first `bars` bars (and the pickup). */
   bars?: number;
+  /** Bars (Oak's numbering) where the setting follows the cited edition instead of this transcription; left out. */
+  differs?: number[];
 }
 
 const SOURCES: Record<string, Source[]> = {
@@ -106,6 +108,9 @@ K:F
       from: "B. Olson's fiddle tunebook, B168 (G minor, 6/4)",
       rhythm: true,
       tonic: "G",
+      // Chappell's "oldest copy", as two readers of it agree: bar 16 holds 1, bars 18 and 26 are ♭7 dq, ♯6 e, 5 q,
+      // bar 29 passes through 2. Pinned note by note in section 3.
+      differs: [16, 18, 26, 29],
       abc: `L:1/4
 M:6/4
 K:Gm
@@ -240,8 +245,10 @@ describe("each answer key plays the notes of a separate transcription", () => {
     for (const src of SOURCES[s.id] ?? [])
       test(`${s.id}: ${src.from}`, async () => {
         const end = (src.bars ?? s.answerKey.bars) * beatsOf(s);
-        const theirs = readAbc(src.abc, !!s.pickup).filter((a) => a.beat < end - 1e-9);
-        const ours = (await melodyOf(s)).filter((n) => n.beat < end - 1e-9);
+        const kept = (beat: number) =>
+          beat < end - 1e-9 && !src.differs?.includes(Math.floor(beat / beatsOf(s) + 1e-9) + 1);
+        const theirs = readAbc(src.abc, !!s.pickup).filter((a) => kept(a.beat));
+        const ours = (await melodyOf(s)).filter((n) => kept(n.beat));
         expect(ours.length).toBe(theirs.length);
         // Pitches: one fixed interval, the difference of the two keys (any octave).
         const shifts = new Set(ours.map((n, i) => n.midi - (theirs[i]?.midi ?? Number.NaN)));
@@ -380,6 +387,38 @@ describe("what the song files say about the tunes", () => {
     expect([j.has(1), j.has(0)]).toEqual([true, false]);
     const g = await pcs(greensleeves);
     expect([g.has(0), g.has(1), g.has(3), g.has(2)]).toEqual([true, true, true, true]);
+  });
+  test("Greensleeves follows Chappell in bars 16, 18, 26 and 29, where the modern transcription differs", async () => {
+    const notes = await melodyOf(greensleeves);
+    const bar = (b: number) =>
+      notes.filter((n) => n.beat >= (b - 1) * 3 && n.beat < b * 3).map((n) => [n.beat - (b - 1) * 3, n.midi]);
+    // Bar 16: the second strain ends on home, E, not on B below it.
+    expect(bar(16)).toEqual([[0, 64]]);
+    // Bars 18 and 26: D (♭7) dotted quarter, C♯ (♯6) eighth, B (5) quarter, set as quarter, eighth rest, eighth, quarter.
+    for (const b of [18, 26])
+      expect(bar(b)).toEqual([
+        [0, 74],
+        [1.5, 73],
+        [2, 71],
+      ]);
+    // Bar 29: G (♭3) dotted quarter, F♯ (2) eighth, E (1) quarter, as bar 13.
+    expect(bar(29)).toEqual([
+      [0, 67],
+      [1.5, 66],
+      [2, 64],
+    ]);
+    expect(bar(29)).toEqual(bar(13));
+    // The transcription really differs in each bar the test of section 1 leaves out.
+    // (G minor down a minor third to E minor; bar 13, which both share, checks the transposition.)
+    const olson = SOURCES["song.greensleeves"]?.[0];
+    const theirs = readAbc(olson?.abc ?? "", true);
+    const at = (b: number) =>
+      theirs
+        .filter((a) => a.beat >= (b - 1) * 3 && a.beat < b * 3)
+        .map((a) => [a.beat - (b - 1) * 3, a.midi - 3]);
+    expect(at(13)).toEqual(bar(13));
+    expect(olson?.differs).toEqual([16, 18, 26, 29]);
+    for (const b of olson?.differs ?? []) expect([b, at(b)]).not.toEqual([b, bar(b)]);
   });
   test("Wayfaring Stranger: natural minor only (D E F G A C, no B or C♯)", async () => {
     expect([...(await pcs(wayfaring))].sort((a, b) => a - b)).toEqual([0, 2, 4, 5, 7, 9]);

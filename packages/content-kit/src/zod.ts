@@ -338,6 +338,7 @@ export const MatcherSchema: z.ZodType<S.Matcher> = z.lazy(() =>
       wRhythm: z.number().nonnegative(),
       rhythmTol: RatSchema,
       track: trackRef.exactOptional(),
+      durations: z.boolean().exactOptional(),
     }),
     z.strictObject({
       m: z.literal("harmony"),
@@ -355,6 +356,7 @@ export const MatcherSchema: z.ZodType<S.Matcher> = z.lazy(() =>
       perOnset: z.boolean(),
       bass: z.boolean(),
       tracks: z.array(trackRef).exactOptional(),
+      durations: z.boolean().exactOptional(),
     }),
     z.strictObject({ m: z.literal("rubric"), rules: z.array(RubricRuleSchema).min(1) }),
     z.strictObject({
@@ -431,6 +433,7 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       rule: z.literal("cadence"),
       types: z.array(cadenceType).min(1),
       at: z.union([z.literal("last"), z.literal("phrase-ends"), z.strictObject({ bar: z.number().int() })]),
+      before: z.array(z.string().min(1)).min(1).exactOptional(),
     }),
     z.strictObject({
       ...ruleBase,
@@ -439,6 +442,7 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       melody: trackRef,
       harmony: trackRef,
       strength: z.enum(["downbeat", "strong", "beat"]),
+      cover: z.boolean().exactOptional(),
     }),
     z.strictObject({
       ...ruleBase,
@@ -501,6 +505,7 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       commonTones: z.boolean().exactOptional(),
       noCrossing: z.boolean().exactOptional(),
       bassFree: z.boolean().exactOptional(),
+      loop: z.boolean().exactOptional(),
     }),
     z.strictObject({
       ...ruleBase,
@@ -508,8 +513,9 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       track: trackRef,
       harmony: trackRef,
       minRatio: z.number(),
-      at: z.enum(["change", "strong", "all"]).exactOptional(),
+      at: z.enum(["change", "strong", "all", "bar"]).exactOptional(),
       maxMoveSemis: z.number().positive().exactOptional(),
+      changes: z.array(z.string().min(1)).min(1).exactOptional(),
     }),
     z.strictObject({
       ...ruleBase,
@@ -517,6 +523,7 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       to: z.union([z.enum(["up-step", "up-half", "relative", "dominant"]), KeySpecSchema]),
       atBar: z.number().int().exactOptional(),
       via: z.enum(["pivot", "direct"]).exactOptional(),
+      cadence: z.boolean().exactOptional(),
     }),
     z.strictObject({
       ...ruleBase,
@@ -576,6 +583,7 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       minRatio: z.number().min(0).max(1),
       unitBars: z.number().positive().exactOptional(),
       shape: z.enum(["semitones", "steps", "either"]).exactOptional(),
+      loopRepeats: z.union([z.boolean(), z.number().int().min(2).max(16)]).exactOptional(),
     }),
     z.strictObject({
       ...ruleBase,
@@ -618,6 +626,7 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       drum: drumRole.exactOptional(),
       contains: z.array(RatSchema).exactOptional(),
       equals: z.array(RatSchema).exactOptional(),
+      excludes: z.array(RatSchema).exactOptional(),
       perBar: z.boolean(),
     }),
     z.strictObject({
@@ -635,6 +644,7 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       subsetOf: z.array(soundId).exactOptional(),
       contains: z.array(soundId).exactOptional(),
       anyOf: z.array(soundId).min(1).exactOptional(),
+      track: trackRef.exactOptional(),
     }),
     z.strictObject({
       ...ruleBase,
@@ -660,6 +670,7 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       rule: z.literal("pickup"),
       track: trackRef,
       units: RatSchema.exactOptional(),
+      leadsIn: z.boolean().exactOptional(),
     }),
     z.strictObject({
       ...ruleBase,
@@ -1301,6 +1312,7 @@ export const NEventSchema: z.ZodType<S.NEvent> = z.strictObject({
   scaleCtx: z.string().exactOptional(),
   locs: z.array(CodeRangeSchema),
   controls: z.record(z.string(), z.union([z.number(), z.string()])).exactOptional(),
+  voicedWith: z.string().exactOptional(),
 });
 const dimension = z.enum(DIMENSIONS);
 export const LocSchema: z.ZodType<S.Loc> = z.strictObject({

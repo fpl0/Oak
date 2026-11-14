@@ -195,6 +195,7 @@ export {
   appliedChords,
   appliedReading,
   appliedTargets,
+  arrivesOn,
   type BeatGrid,
   type BeatGridLine,
   type BorrowedChord,

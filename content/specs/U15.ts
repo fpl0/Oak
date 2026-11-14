@@ -670,8 +670,8 @@ export const U15: UnitSpec = {
           'An eight-bar turn on the key\'s own chords, `"<C Em Am Am Dm G7 C G7>"`: the roots already fall by 5ths from E to C, played by a guitar, a bass and a trumpet. Turn the walk into a chain: at least three dominant sevenths in a row, each the V7 of the next, landing on C. Then give the horns their stabs with `.struct()`, and let the trumpet take the notes the chain brings (`4#`, `0#`, `3#`).',
         required: {
           rule: "contains-rn",
-          label: "Three dominants in a row, each the V of the next",
-          why: '`contains-rn` with `rn: ["V/ii", "V/V", "V"]`, `inOrder: true`, `min: 1` (planned feature `contains-rn.in-order`; a held chord counts once, so the long links of Sweet Georgia Brown pass): A7 D7 G7 anywhere in the piece. Until it is built the author uses `rn: ["V/vi", "V/ii", "V/V"]`, `min: 3`, `mustResolve: true`, which today passes the chain of the hook and fails the starter.',
+          label: "Three dominants in a row, each the V of the next, landing home",
+          why: 'Corrections pass (theory-f 8): `rn: ["V/ii", "V/V", "V", "I"]`, so the chain lands on home (A7 D7 G7 F fails). Before: `contains-rn` with `rn: ["V/ii", "V/V", "V"]`, `inOrder: true`, `min: 1` (planned feature `contains-rn.in-order`; a held chord counts once, so the long links of Sweet Georgia Brown pass): A7 D7 G7 anywhere in the piece. Until it is built the author uses `rn: ["V/vi", "V/ii", "V/V"]`, `min: 3`, `mustResolve: true`, which today passes the chain of the hook and fails the starter.',
         },
         suggestions: [
           'the horns play (`sounds`, `anyOf: ["snd.horns"]`)',
@@ -690,7 +690,7 @@ export const U15: UnitSpec = {
       mistakes: [
         "numerals: `III7 VI7 II7 V7` (the players' names): `harmony.rn-degree` today, with an override that says the roots are right and asks for each chord as the V7 of the next; `V/vi` without its 7th: `harmony.rn-case`, overridden",
         "modify: `A7 A7 E7 E7` (up a 5th instead of down), `Gm7 Gm7 C7 C7` (the key's own ii7) and `G7 G7 C C` (the last link not a seventh): each `harmony.pcset`; the unchanged starter: `code.unchanged`",
-        "ear: the bass heard as 1 3 6 4 5 1 (4 for 2): `id.wrong`, with an override that says each root is a 5th below the last",
+        "ear: the bass heard as 1 3 6 4 5 1 (4 for 2): `id.wrong`, with an override that says each root after the second is a 5th below the one before (corrections pass: the first move, 1 to 3, is not)",
         "investigate: 2 half steps, or the 3rd for the 7th: `investigate.wrong`",
         "Make: the starter as it is (Em Am Dm are not dominants), and a chain of two (`<C C Am Am D7 G7 C G7>`): `rubric.unmet`",
       ],

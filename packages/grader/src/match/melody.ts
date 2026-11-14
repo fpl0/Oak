@@ -12,7 +12,7 @@ import { contourScore, editDistance, melodyLine, parsons } from "../analyze/melo
 import { lineWord, selectTrack } from "../analyze/tracks.ts";
 import { diag } from "../feedback/catalog.ts";
 import type { MatchResult, NormalizeContext, Normalized } from "../types.ts";
-import { alignFeel, clampScore, f1, keyAtOnset, noteName, pitchLabel } from "./common.ts";
+import { alignFeel, clampScore, f1, keyAtOnset, noteName, noteValueLabel, pitchLabel } from "./common.ts";
 import { matchOnsets, pickupShift } from "./rhythm.ts";
 
 export type MelodyMatcher = Extract<Matcher, { m: "melody" }>;
@@ -213,6 +213,19 @@ export function melodyMatch(
         diag("melody.transposed", { gotKey: keyText(aKey), expKey: keyText(tKey) }, undefined, "pitch"),
       );
     value = (n, side) => mod12(n.midi - (side === "t" ? tTonic : aTonic));
+  } else if (cfg.pitch === "octave-free" && !/bass/.test(String(cfg.track ?? ""))) {
+    // Corrections gate (AS-17): a melody is free in ONE octave for the whole line (a dictation written an octave
+    // lower is right), not note by note: B3 G4 D5 for B4 G4 D4 turns a falling reply into a rising one. The
+    // answer is moved by the octave that brings its middle nearest the target's, then compared note for note.
+    // A bass line keeps per-note octaves (players jump octaves on the same root; ladder L2).
+    const mid = (xs: readonly Note[]): number => {
+      const m = xs.map((x) => x.midi).sort((a, b) => a - b);
+      return m.length === 0 ? 0 : (m[Math.floor((m.length - 1) / 2)] as number);
+    };
+    const k = 12 * Math.round((mid(T) - mid(A)) / 12);
+    A = A.map((n) => ({ ...n, midi: n.midi + k }));
+    value = (n) => n.midi;
+    octaveAware = true;
   } else if (cfg.pitch === "octave-free") value = (n) => mod12(n.midi);
   else {
     value = (n) => n.midi;
@@ -538,8 +551,39 @@ export function melodyMatch(
     diagnostics.push(diag("melody.contour-right", {}, undefined, "contour"));
   if (Sp === 1 && Sr < 1) diagnostics.push(diag("melody.rhythm-only", {}, undefined, "rhythm"));
 
+  // 6b. Written lengths (`durations`, a transcription of a line with held notes and rests): every note that is
+  // right in pitch and time is also compared in length (its own length, cut where the next note starts). A note
+  // written half as long with a rest after it is another rhythm: the rhythm credit falls by up to half.
+  let durAcc = 1;
+  let durPairs = 0;
+  if (cfg.durations) {
+    let hits = 0;
+    const found: Diagnostic[] = [];
+    for (const o of ops) {
+      if (o.op !== "match" || onsetDiffers(o.i, o.j)) continue;
+      const t = T[o.i] as Note;
+      const a = A[o.j] as Note;
+      durPairs++;
+      if (R.lte(R.abs(R.sub(a.dur, t.dur)), cfg.rhythmTol)) {
+        hits++;
+        continue;
+      }
+      found.push(
+        diag(
+          "rhythm.duration",
+          { got: noteValueLabel(a.dur, ctx.meter), expected: noteValueLabel(t.dur, ctx.meter) },
+          locOf(a.event, pos),
+          "duration",
+        ),
+      );
+    }
+    durAcc = durPairs === 0 ? 1 : hits / durPairs;
+    diagnostics.push(...found.slice(0, 3));
+  }
+  const SrLen = Sr * (cfg.durations ? 0.5 + 0.5 * durAcc : 1);
+
   const wSum = cfg.wPitch + cfg.wRhythm || 1;
-  let score = (cfg.wPitch * Sp + cfg.wRhythm * Sr) / wSum;
+  let score = (cfg.wPitch * Sp + cfg.wRhythm * SrLen) / wSum;
   // A pickup put on the downbeat (contracts §6.11 item 5): one finding in place of the per-note rhythm ones,
   // and the displacement credit when the notes are right.
   if (ctx.pickup && Sr < 1) {
@@ -562,8 +606,9 @@ export function melodyMatch(
     score: clampScore(score),
     dims: {
       pitch: { score: Sp, weight: cfg.wPitch, n: T.length },
-      rhythm: { score: Sr, weight: cfg.wRhythm, n: T.length },
+      rhythm: { score: SrLen, weight: cfg.wRhythm, n: T.length },
       contour: { score: contour, weight: 0 },
+      ...(cfg.durations ? { duration: { score: durAcc, weight: 0, n: durPairs } } : {}),
     },
     diagnostics,
     overlay,

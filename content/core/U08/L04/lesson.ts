@@ -352,7 +352,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The Band plays the four-chord loop. Write a rhythm for the kick and the bass in one `const`, with at least one hit between the beats, and give it to both lines. Then add a snare and hats of your own.",
+          "The Band plays the four-chord loop. Write a rhythm for the kick and the bass in one `const` and give it to both lines; a hit between the beats makes them push. Then add a snare and hats of your own.",
         skills: [{ skill: "B04", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

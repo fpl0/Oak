@@ -306,7 +306,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write a groove over the band that mixes long and short sounds. At least one sound must last longer than a beat, written with `@` or `_`.",
+          "Write a groove over the band that mixes long and short sounds. Hold at least one sound with `@` or `_`, so it lasts two beats or more, or twice as long as another sound in its bar.",
         skills: [
           { skill: "N01", w: 0.7 },
           { skill: "R06", w: 0.3 },
@@ -320,8 +320,10 @@ export default defineLesson({
             label: "Holds a sound with `@` or `_`",
             required: true,
             skills: ["N01"],
-            rule: "uses",
-            tool: ["tb.mini.elongate", "tb.mini.hold"],
+            // The effect, not the symbol: `cr@1 bd sd sd` holds nothing.
+            rule: "custom",
+            fn: "held",
+            params: { alsoUses: ["tb.mini.elongate", "tb.mini.hold"] },
           },
           {
             id: "space",
@@ -359,6 +361,27 @@ export default defineLesson({
             response: { code: `${drums("cr bd sd sd")}\n${HATS}` },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            name: "`@1`: every sound still one beat",
+            response: { code: `${drums("cr@1 bd sd sd")}\n${HATS}` },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "held with `_`",
+            response: { code: `${drums("cr _ bd sd")}\n${HATS}` },
+            expect: "pass",
+          },
+          {
+            name: "a snare held for the last three beats",
+            response: { code: `${drums("bd sd@3")}\n${HATS}` },
+            expect: "pass",
+          },
+          {
+            name: "a rest, then a snare that rings to the end of the bar",
+            response: { code: `${drums("bd ~ sd@2")}\n${HATS}` },
+            expect: "pass",
           },
           {
             name: "a gap instead of a hold",

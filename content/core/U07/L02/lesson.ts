@@ -361,7 +361,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "These four bars fit their chords, but each one is a new idea. Keep a one-bar motif and build the four bars from it: repeat it, move it with `.scaleTranspose()`, turn it round with `.rev()`. At least two bars must be the motif in some form.",
+          "These four bars fit their chords, but each one is a new idea. Keep a one-bar motif and build the four bars from it: repeat it, move it with `.scaleTranspose()`, turn it round with `.rev()`. Bring the motif back in at least two of bars 2 to 4; four bars all the same are a one-bar loop.",
         skills: [{ skill: "M02", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],
@@ -376,6 +376,9 @@ export default defineLesson({
             skills: ["M02"],
             rule: "motif-reuse",
             track: "@melody",
+            // Two of the four bars bring an earlier bar back (0.25 lets four unrelated bars through on contour
+            // alone). Four bars all the same are read as a one-bar loop, which brings nothing back; the brief
+            // says both (corrections pass: it used to say "at least two bars", which this never checked).
             minRatio: 0.5,
             shape: "either",
           },
@@ -420,6 +423,28 @@ export default defineLesson({
             response: { code: code(mel("<[0 ~ 4 2] [4 ~ ~ 1] [2 0 5 ~] [3 ~ 0 ~]>")) },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the motif four times, all the same: a one-bar loop",
+            response: { code: code(mel("<[4 ~ 2 0] [4 ~ 2 0] [4 ~ 2 0] [4 ~ 2 0]>")) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the motif back in bar 2 only",
+            response: { code: code(mel("<[4 ~ 2 0] [4 ~ 2 0] [3 5 ~ 0] [1 2 4 ~]>")) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the motif, the same in bar 3, moved in bar 4",
+            response: { code: code(mel("<[4 ~ 2 0] [1 2 4 ~] [4 ~ 2 0] [7 ~ 5 3]>")) },
+            expect: "pass",
+          },
+          {
+            name: "repeated, moved, turned round",
+            response: { code: code(mel("<[4 ~ 2 0] [4 ~ 2 0] [5 ~ 3 1] [0 2 4 ~]>")) },
+            expect: "pass",
           },
         ],
       },

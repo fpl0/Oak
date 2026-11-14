@@ -118,6 +118,31 @@ export const SCHEMA_FEATURES = [
   "capstone.form-map",
   /** `CapstoneSessionDef.rubric` (CF-T.S4). */
   "capstone.session-rubric",
+  // Corrections pass (before the learner starts; docs/design/wave6.md "Wave 6 state").
+  /** The `melody` matcher with `durations` (written note lengths and rests compared, not only onsets). */
+  "melody.durations",
+  /** `cadence` with `before` (V → I only, not vii° → I). */
+  "cadence.before",
+  /** `chord-tones-strong` with `cover` (every strong position needs a note). */
+  "chord-tones-strong.cover",
+  /** `motif-reuse` with `loopRepeats` (a bar written again unchanged counts as a return). */
+  "motif-reuse.loop-repeats",
+  /** `voice-leading` with `loop` (the move from the last chord back to the first is judged too). */
+  "voice-leading.loop",
+  /** `sounds` with `track` (the sound of one named track). */
+  "sounds.track",
+  /** `pickup` with `leadsIn` (the pickup sounds in the last beat of bar 0). */
+  "pickup.leads-in",
+  /** `guide-tones` with `at: "bar"` (the note on beat 1 of every bar). */
+  "guide-tones.bar",
+  /** `guide-tones` with `changes` (judged against the given cycle, whatever the chords line plays; gate). */
+  "guide-tones.changes",
+  /** `onsets` with `excludes` (places that must hold no onset; gate). */
+  "onsets.excludes",
+  /** `modulation` with `cadence` (the new key's V goes to its I or i). */
+  "modulation.cadence",
+  /** The `pcset` matcher with `durations` (each chord lasts as the target's does). */
+  "pcset.durations",
 ] as const;
 export type SchemaFeature = (typeof SCHEMA_FEATURES)[number];
 
@@ -227,6 +252,9 @@ export const IMPLEMENTED: Implemented = {
     // Added in the Wave 6 Build at the U13 spec's request ("a triplet somewhere"); graded with tests
     // (rubric/wave6-rules.test.ts).
     "tuplets",
+    // Corrections pass: the `custom` rule itself. Which functions exist is `customRules` below; `ruleUses` reports
+    // an unregistered `fn` as a "custom-rule" use.
+    "custom",
   ],
   answerUis: [
     "choice",
@@ -253,7 +281,37 @@ export const IMPLEMENTED: Implemented = {
     "bar-grid",
     "scale-builder",
   ],
-  customRules: [],
+  // Corrections pass (grader): effect checks for the lesson fixes, each unit-tested on a right and a wrong piece in
+  // packages/grader/src/rubric/corrections-rules.test.ts (`CORRECTION_RULES` in rubric/corrections-rules.ts).
+  customRules: [
+    "silent-beat",
+    "split-beat",
+    "held",
+    "bars-differ",
+    "speed-change",
+    "transposed-copy",
+    "distinct-keys",
+    "orbits-differ",
+    "call-response",
+    "stack-intervals",
+    "chords-per-bar",
+    "last-chord",
+    "song-kept",
+    "tuplets-every-bar",
+    "swung-offbeats",
+    "voiced-with",
+    // Corrections pass, the leftovers (fix:leftovers): a sound control set to a value you can hear, and parts
+    // that come in or drop out. `transposed-copy` also takes `unitBars`, `steps`, `pairs`, `together`, `semis`,
+    // `otherSound` and `minRatio` (U03.L10, U03.L11, U02.L06).
+    "control-set",
+    "parts-enter",
+    // Corrections gate (attack:still-passes): chords really broken, a note on a black key, a repeat that chance
+    // really changes.
+    "broken-chord",
+    "black-keys",
+    "chance-varies",
+    "echo",
+  ],
   // Wave 4 Build (grader): shapes that need only the grader (no renderer), graded with tests. Wave 4
   // integration: the shapes whose grading is tested here and whose renderer has landed — staff chords
   // (app/src/answers StaffInput with `palette.chords`), staged dictation and by-ear parts (app/src/lesson
@@ -324,6 +382,20 @@ export const IMPLEMENTED: Implemented = {
     //                          `sessionRubricRequest`, with `songFormOf(song)` for `@song`; capstone-wave6.test.ts)
     "capstone.form-map",
     "capstone.session-rubric",
+    // Corrections pass (grader): fields only the grader reads, graded with tests in packages/grader/src/rubric/
+    // corrections-rules.test.ts and match/melody-durations.test.ts. A Make line draws them as any rule.
+    "melody.durations",
+    "cadence.before",
+    "chord-tones-strong.cover",
+    "motif-reuse.loop-repeats",
+    "voice-leading.loop",
+    "sounds.track",
+    "pickup.leads-in",
+    "guide-tones.bar",
+    "guide-tones.changes",
+    "onsets.excludes",
+    "modulation.cadence",
+    "pcset.durations",
   ],
 };
 
@@ -395,6 +467,8 @@ export interface UnimplementedUse {
 function matcherUses(m: Matcher, ex: string, impl: Implemented, out: UnimplementedUse[]): void {
   if (!impl.matchers.includes(m.m)) out.push({ what: "matcher", name: m.m, exercise: ex });
   if (m.m === "harmony" && m.wrongQuality === "none") featureUse("harmony.wrong-quality", ex, impl, out);
+  if (m.m === "melody" && m.durations) featureUse("melody.durations", ex, impl, out);
+  if (m.m === "pcset" && m.durations) featureUse("pcset.durations", ex, impl, out);
   if (m.m === "all") for (const sub of m.of) matcherUses(sub, ex, impl, out);
   if (m.m === "rubric") for (const r of m.rules) ruleUses(r, ex, impl, out);
 }
@@ -425,11 +499,21 @@ function ruleUses(r: RubricRule, ex: string, impl: Implemented, out: Unimplement
   if (r.rule === "guide-tones" && (r.at !== undefined || r.maxMoveSemis !== undefined))
     featureUse("guide-tones.motion", ex, impl, out);
   if (r.rule === "modulation" && r.via) featureUse("modulation.via", ex, impl, out);
+  if (r.rule === "guide-tones" && r.at === "bar") featureUse("guide-tones.bar", ex, impl, out);
+  if (r.rule === "guide-tones" && r.changes) featureUse("guide-tones.changes", ex, impl, out);
+  if (r.rule === "onsets" && r.excludes) featureUse("onsets.excludes", ex, impl, out);
+  if (r.rule === "modulation" && r.cadence) featureUse("modulation.cadence", ex, impl, out);
   if (r.rule === "velocity-ghosts" && (r.drum || r.accents !== undefined))
     featureUse("velocity-ghosts.accents", ex, impl, out);
   if (r.rule === "reharmonize") {
     if (r.kinds) featureUse("contains-rn.kind", ex, impl, out);
   }
+  if (r.rule === "cadence" && r.before) featureUse("cadence.before", ex, impl, out);
+  if (r.rule === "chord-tones-strong" && r.cover) featureUse("chord-tones-strong.cover", ex, impl, out);
+  if (r.rule === "motif-reuse" && r.loopRepeats) featureUse("motif-reuse.loop-repeats", ex, impl, out);
+  if (r.rule === "voice-leading" && r.loop) featureUse("voice-leading.loop", ex, impl, out);
+  if (r.rule === "sounds" && r.track) featureUse("sounds.track", ex, impl, out);
+  if (r.rule === "pickup" && r.leadsIn) featureUse("pickup.leads-in", ex, impl, out);
   if (r.rule === "custom" && !impl.customRules.includes(r.fn))
     out.push({ what: "custom-rule", name: r.fn, exercise: ex });
   if (r.rule === "matches") matcherUses(r.matcher, ex, impl, out);

@@ -17,7 +17,8 @@
 // degree, chroma and quality (the players' `III7` names the right notes and another job: `harmony.rn-degree`,
 // with the lesson's own words); a named chord in code is its pitch classes and lowest note per onset (`pcset`,
 // `bass: true`); the bass of a chain by ear is an `identify` on a degree pad. The Make's one required rule is
-// `contains-rn` with `inOrder`: V/ii, V/V and V one after the other (A7 D7 G7 in C), a held chord counted once.
+// `contains-rn` with `inOrder`: V/ii, V/V, V and I one after the other (A7 D7 G7 C in C), a held chord counted
+// once, so a chain that turns away before home (G7 to F) does not pass.
 import { defineLesson, type HintLadder, type KeySpec } from "@oak/content-kit";
 
 const BPM = 120;
@@ -305,8 +306,9 @@ export default defineLesson({
         skills: [{ skill: "H12", w: 1 }],
         code: { starter: GEORGIA_STARTER },
         reference: { solutions: [GEORGIA_IN_F], bars: 8 },
-        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7).
-        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"] },
+        // A chord is its notes: the pitch classes at each onset and the lowest one (contracts §6.7); `durations`:
+        // and it lasts as the target's does, so a link cut to a click is not the target.
+        matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"], durations: true },
         constraints: [{ c: "edit-only-regions", feedback: "code.edit-outside" }],
         target: { audible: true, showRoll: false, revealRollAfter: 1 },
         feedbackText: {
@@ -356,6 +358,12 @@ export default defineLesson({
             expect: "fail",
             feedback: ["code.edit-outside"],
           },
+          {
+            name: "G7 cut to a click in bar 3: gone before the guitar's first chop",
+            response: { code: band("<D7 D7 [G7@0.01 ~@0.99] G7 C7 C7 F F>") },
+            expect: "fail",
+            feedback: ["harmony.pcset"],
+          },
         ],
       },
     },
@@ -401,7 +409,7 @@ export default defineLesson({
         // The catalog names one degree for another; the chain has a rule that finds every root from the last.
         feedbackText: {
           "id.wrong":
-            "Not this time. Every bass note of a chain is a 5th below the one before it: from 3, count five degrees down, then do it again. The notes that leave the key are in the chords above, not in the bass.",
+            "Not this time. Find the second bass note first. From there each bass note of a chain is a 5th below the one before it (the bass may climb a 4th instead: the same note one octave apart), so count five degrees down from it, then do it again. The notes that leave the key are in the chords above, not in the bass.",
         },
         srs: [{ family: "fam.har.bass", mode: "review-if-due" }],
         tests: [
@@ -439,11 +447,12 @@ export default defineLesson({
         rubric: [
           {
             id: "three-in-a-row",
-            label: "Three dominants in a row, each the V of the next",
+            label: "Three dominant sevenths in a row, each the V7 of the next, landing home",
             required: true,
             skills: ["H12"],
             rule: "contains-rn",
-            rn: ["V/ii", "V/V", "V"],
+            // Corrections gate (AS-26): written with the 7, so the links are dominant SEVENTHS, as the brief asks.
+            rn: ["V7/ii", "V7/V", "V7", "I"],
             min: 1,
             inOrder: true,
           },
@@ -472,7 +481,8 @@ export default defineLesson({
             skills: ["E12a"],
             rule: "degree-set",
             track: "mel",
-            anyOf: ["#5", "#1", "#4"],
+            // The theory names a raised 5 or 1 by its pitch class in a major key (♭6, ♭2), so both spellings count.
+            anyOf: ["#5", "b6", "#1", "b2", "#4"],
             minCount: 1,
           },
         ],
@@ -509,6 +519,17 @@ export default defineLesson({
             response: { code: band("<C C Am Am D7 G7 C G7>", trumpet(MAKE_TUNE)) },
             expect: "fail",
             feedback: ["rubric.unmet"],
+          },
+          {
+            name: "A7 D7 G7, then F: the chain does not land home",
+            response: { code: band("<C Em A7 A7 D7 G7 F F>", trumpet(MAKE_TUNE)) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the chain one bar a link from E7, home in bar 6, the tune left plain",
+            response: { code: band("<C E7 A7 D7 G7 C Dm G7>", trumpet(MAKE_TUNE)) },
+            expect: "pass",
           },
           {
             name: "A7 into the key's own Dm: the chain broken after one link",

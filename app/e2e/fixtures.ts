@@ -142,7 +142,7 @@ export const FIXTURES = {
   health: {
     ok: true,
     appVersion: "0.0.0-e2e",
-    contractsVersion: "1.6",
+    contractsVersion: "1.7",
     schemaVersion: 1,
     contentVersion: null,
     tutor: "ready",
@@ -153,7 +153,7 @@ export const FIXTURES = {
     health: {
       ok: true,
       appVersion: "0.0.0-e2e",
-      contractsVersion: "1.6",
+      contractsVersion: "1.7",
       schemaVersion: 1,
       contentVersion: null,
       tutor: "ready",

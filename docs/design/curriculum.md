@@ -260,7 +260,7 @@ Ear stages run alongside the units:
 |---|---|---|---|---|
 | U14.L01 | Modes as Colours — characteristic tone; Mixolydian b7 | `mixolydian` | E4 | S12 |
 | U14.L02 | Mixolydian Rock — I–bVII–IV; Old Joe Clark | — | E4 | H11 |
-| U14.L03 | Dorian ♮6 — i–IV; Scarborough Fair, Drunken Sailor | `dorian` | E4 | S12 H11 |
+| U14.L03 | Dorian ♮6 — i–IV; Drunken Sailor | `dorian` | E4 | S12 H11 |
 | U14.L04 | Lydian Glow — #4, I–II | `lydian` | E4 | S13 |
 | U14.L05 | Phrygian Edge — b2, i–bII | `phrygian` | E4 | S13 |
 | U14.L06 | Mode Lab — mode ID and a modal vamp | `.pan()`, `.jux()` | E4 | E10 |
@@ -803,7 +803,7 @@ Repertoire rules:
 | T3 Loop harmony | U05–U06 | Generated 4-chord loops: bass first, then quality, then RN; schema ID | rootNotes/RN per bar | — |
 | T4 Folk melody + chords | U07, X1 | Amazing Grace (New Britain tune, 1829), Oh! Susanna (1848), Simple Gifts (1848), Aura Lee (1861), Red River Valley (trad), When the Saints (trad), Swing Low Sweet Chariot (spiritual), Down by the Riverside (trad), Auld Lang Syne (trad, pentatonic) | melody ≥ 90%, chords ≥ 85% | **Studio opens (melody mode)**: loop a hook from your own file, transcribe 2–4 bars, self-check list (contour, rhythm, landing note) |
 | T5 Bass + chords + minor | U08–U10, C4 | House of the Rising Sun (trad melody), Wayfaring Stranger (trad), Go Down Moses (spiritual), Joshua Fit the Battle (spiritual), Greensleeves (trad) | bass ≥ 90% → chords → melody | Bass mode (U08), chord mode (U10): bass first, A/B against the slowed original |
-| T6 Blues, modal, ragtime | U11–U14, X2 | St. Louis Blues (1914), Memphis Blues (1912), Careless Love (trad), Frankie and Johnny (trad), Scarborough Fair (trad, Dorian), Drunken Sailor (trad, Dorian), Old Joe Clark (trad, Mixolydian), The Entertainer A-strain (1902) | lead sheet in Strudel + staff | A/B overlay; self-assessment checklist |
+| T6 Blues, modal, ragtime | U11–U14, X2 | St. Louis Blues (1914), Memphis Blues (1912), Careless Love (trad), Frankie and Johnny (trad), Drunken Sailor (trad, Dorian), Old Joe Clark (trad, Mixolydian), The Entertainer A-strain (1902) | lead sheet in Strudel + staff | A/B overlay; self-assessment checklist |
 | T7 Standards ≤1930 | U15–U17, CF | Five Foot Two (1925), Sweet Georgia Brown (1925), Bye Bye Blackbird (1926), Blue Skies (1926), Ain't She Sweet (1927), Ain't Misbehavin' (1929), Honeysuckle Rose (1929), Body and Soul (1930), Georgia on My Mind (1930), I Got Rhythm (1930), On the Sunny Side of the Street (1930) | melody, changes and form map | **Full-arrangement mode** (CF): drums → bass → chords → melody → form map; tutor reviews code only |
 | T8 Advanced | J, R, A tracks | Tea for Two (1924), Lady Be Good (1924), Tiger Rag (1917), Maple Leaf Rag A-strain (1899); generated funk and clave loops | heads + changes + groove | Learner's own songs in any genre; the Gym "Song of the week" slot |
 

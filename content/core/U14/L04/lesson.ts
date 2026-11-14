@@ -69,11 +69,11 @@ const COLOURS = [
 ];
 const HEARD: Record<Colour, string> = {
   major:
-    "That was major: its 4th sits a half step above the 3rd, and its 7th a half step under home, pulling up.",
+    "Listen again to the middle and the top: in this phrase the 4th sits a half step above the 3rd, and the note under home is a half step below it, pulling up.",
   lydian:
-    "That was Lydian: the 4th is raised, a whole step above the 3rd and a half step under 5, and the phrase floats.",
+    "Listen again to the middle of the phrase: here the 4th sits only a half step under 5, raised, and the phrase floats.",
   mixolydian:
-    "That was Mixolydian: the 4th is major's own, and the 7th sits a whole step under home, the ♭7.",
+    "Listen again to the top of the phrase: here the 4th is where major has it, but the note under home is a whole step below it and does not pull.",
 };
 const earHints = (): HintLadder =>
   ladder(

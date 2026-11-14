@@ -62,7 +62,7 @@ export const candos: readonly CanDoDef[] = [
   // write
   c("cd.write.scale", "write", "I can spell any major scale.", "S01", "U03.L01"),
   c("cd.write.triads", "write", "I can build a triad on any degree of a key.", "C01 H01", "U06.L01"),
-  c("cd.write.voice-leading", "write", "I can voice a progression so each note moves as little as possible.", "C05", "U05.L07"),
+  c("cd.write.voice-leading", "write", "I can voice a progression so shared notes hold and the other notes move as little as they can.", "C05", "U05.L07"),
   c("cd.write.chord-qualities", "write", "I can build major, minor, diminished and augmented triads from their 3rds.", "C02 C03", "U05.L03"),
   c("cd.write.seventh-family", "write", "I can build all five seventh chords from a triad and a 7th.", "C07", "U12.L03"),
   c("cd.write.secondary-dominant", "write", "I can build the V of V and say where it resolves.", "H12", "U15.L02"),

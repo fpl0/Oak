@@ -92,7 +92,36 @@ test("every rule name of the content contract has an analyzer", () => {
     "tuplets",
   ];
   expect(Object.keys(RULES).sort()).toEqual([...names].sort());
-  expect(Object.keys(CUSTOM_RULES).sort()).toEqual(["allowed-tensions", "ii-v-chain", "walking-bass"]);
+  // Corrections pass: the effect checks of the lesson fixes (rubric/corrections-rules.ts).
+  expect(Object.keys(CUSTOM_RULES).sort()).toEqual(
+    [
+      "allowed-tensions",
+      "ii-v-chain",
+      "walking-bass",
+      "silent-beat",
+      "split-beat",
+      "held",
+      "bars-differ",
+      "speed-change",
+      "transposed-copy",
+      "distinct-keys",
+      "orbits-differ",
+      "call-response",
+      "stack-intervals",
+      "chords-per-bar",
+      "control-set",
+      "parts-enter",
+      "last-chord",
+      "song-kept",
+      "tuplets-every-bar",
+      "swung-offbeats",
+      "voiced-with",
+      "broken-chord",
+      "black-keys",
+      "chance-varies",
+      "echo",
+    ].sort(),
+  );
 });
 
 describe("form-free rules", () => {

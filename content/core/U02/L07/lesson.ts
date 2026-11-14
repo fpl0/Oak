@@ -243,7 +243,27 @@ export default defineLesson({
         ],
         code: { starter: mel("e4 ⟪~ ~⟫ ~") },
         reference: { solutions: [mel("e4 d4 c4 ~")], bars: 1 },
-        matcher: { m: "events", pitch: "absolute", rhythm: "onsets", durations: false },
+        // The notes where they start, and the rest the brief asks to keep: `c4@2` rings through beat 4.
+        matcher: {
+          m: "all",
+          of: [
+            { m: "events", pitch: "absolute", rhythm: "onsets", durations: false },
+            {
+              m: "rubric",
+              rules: [
+                {
+                  id: "rest-at-the-end",
+                  label: "The rest at the end",
+                  required: true,
+                  skills: [],
+                  rule: "custom",
+                  fn: "silent-beat",
+                  params: { tracks: ["mel"], at: "end" },
+                },
+              ],
+            },
+          ],
+        },
         // The roll of the target appears after the first failed check: by ear first, then a picture to compare.
         target: { audible: true, showRoll: false, revealRollAfter: 1 },
         feedbackText: LETTER_FEEDBACK,
@@ -255,7 +275,28 @@ export default defineLesson({
         srs: [{ family: "fam.pit.compare", mode: "evidence-only" }],
         tests: [
           { name: "reference", response: { code: mel("e4 d4 c4 ~") }, expect: "pass" },
-          { name: "last note held", response: { code: mel("e4 d4 c4@2") }, expect: "pass" },
+          {
+            name: "last note held through the rest",
+            response: { code: mel("e4 d4 c4@2") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "last note held with `_`",
+            response: { code: mel("e4 d4 c4 _") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "short notes, the rest still at the end",
+            response: { code: mel("e4 d4 [c4 ~] ~") },
+            expect: "pass",
+          },
+          {
+            name: "on a triangle wave",
+            response: { code: `${mel("e4 d4 c4 ~")}.gain(.5)`.replace('"piano"', '"triangle"') },
+            expect: "pass",
+          },
           {
             name: "unchanged",
             response: { code: mel("e4 ~ ~ ~") },

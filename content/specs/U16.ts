@@ -554,9 +554,9 @@ export const U16: UnitSpec = {
         brief:
           'Eight bars in A minor, `"<Am Dm F E Am Dm E Am>"`, with a bass, a strings pad and a tune. Let it end in sunlight: make the last chord A major and let the tune find C♯ (`2#`) or stay on A. Then try the bright IV, D for D minor, wherever the verse needs a lift, and make the tune yours.',
         required: {
-          rule: "contains-rn",
-          label: "The last bar is the major home chord",
-          why: '`contains-rn` with `rn: ["I"]`, `min: 1` and `section: { bars: [8, 8] }` in A minor (graded today; the Make is `bars: [8, 8]`): the starter ends on A minor ("i (Am) is minor: I is A major, with C♯"); an ending on C major (III) fails; `A` in bar 8 passes, whatever the other seven bars hold.',
+          rule: "custom",
+          label: "The piece ends on the major home chord",
+          why: 'Corrections pass (theory-g 4): `custom` `last-chord` with `rn: ["I"]`, the last chord that sounds, read in A minor; `[A Am]` and `[A E]` in bar 8 contain A major but end on A minor and on E, and fail. Before: `contains-rn` with `rn: ["I"]`, `min: 1` and `section: { bars: [8, 8] }` in A minor (graded today; the Make is `bars: [8, 8]`): the starter ends on A minor ("i (Am) is minor: I is A major, with C♯"); an ending on C major (III) fails; `A` in bar 8 passes, whatever the other seven bars hold.',
         },
         suggestions: [
           'the bright IV somewhere before the end (`contains-rn`, `rn: ["IV"]`, `min: 1`: D major in A minor)',

@@ -458,6 +458,12 @@ export default defineLesson({
             track: "@drums",
             drum: "snare",
             contains: [[1, 2]],
+            // Corrections gate (AS-49): beat 2 marked, beat 1 left to the kick, no snare on every eighth.
+            excludes: [
+              [0, 1],
+              [1, 6],
+              [1, 3],
+            ],
             perBar: true,
           },
           {

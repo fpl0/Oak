@@ -16,10 +16,10 @@
 // target note by note); `.transpose()` after `.scale()` would sound right and is refused by a `must-not-use`
 // constraint, as contracts §6.8 item 2 asks. Until `key-plan` reads each bar in its own key the grader words a
 // wrong note of the lifted bars in degrees of C, so those steps override `melody.wrong-degree` with text that
-// names the bars and the two keys. The Make's one required rule is `in-key` read on the last section
-// (`section: "last"`): every pitched note of the last chorus is in D major. It fails while the bass, the tune
-// or the chord names stay behind, and it is the rule that sees unmoved chord names (`key-change` reads the
-// key from the degree lines only).
+// names the bars and the two keys. The Make's one required rule is `key-change` on the last section, +2 for
+// four bars or more: the last chorus is a whole step above the chorus before it, so a song that sits in D (or
+// on one chord) from the start fails, as do chord names left in C under a lifted tune and a tune left in C over
+// lifted chords (corrections pass: `in-key` on the last section alone passed a song that never moved).
 import { defineLesson, type HintLadder, type Matcher } from "@oak/content-kit";
 
 const BPM = 112;
@@ -123,6 +123,21 @@ const IN_C = scale("C4:major");
 const SECTIONS_STARTER = song({ inVerse: `⟪${IN_C}⟫`, inChorus: `⟪${IN_C}⟫`, mel: "⟪⟫" });
 const sections = (o: SongParts) => song({ inVerse: "", inChorus: "", ...o });
 
+/** Known wrong for the Make: twelve bars on one chord and one note that never change key (corrections pass). */
+const NO_LIFT_SONG = (chordName: string, note: string) =>
+  code(
+    `const chordsVerse = chord("${chordName}").voicing()`,
+    "const chordsChorus = chordsVerse",
+    `const bassVerse = note("${note}2")`,
+    "const bassChorus = bassVerse",
+    `const melVerse = note("${note}4")`,
+    "const melChorus = melVerse",
+    "",
+    'chords: arrange([4, chordsVerse], [4, chordsChorus], [4, chordsChorus]).s("piano")',
+    'bass: arrange([4, bassVerse], [4, bassChorus], [4, bassChorus]).s("ebass")',
+    'mel: arrange([4, melVerse], [4, melChorus], [4, melChorus]).s("piano")',
+  );
+
 /** The Make: the whole song in C. `chordsChorus2` is still a copy of the chorus; bass and tune have one key. */
 const MAKE_STARTER = song({ lifted: "C G Am F", bass: "C2:major", mel: scale("C4:major") });
 const MAKE_MINIMAL = SONG;
@@ -158,7 +173,6 @@ const offTarget = (c: string, d: string, count: string) =>
 const DRUMS = { band: "band.axis-4bar", tracks: ["drums"] } as const;
 const NONE = { roll: false, staff: false, keyboard: false } as const;
 const ROLL = { roll: true, staff: false, keyboard: false } as const;
-const D_MAJOR = { tonic: "D", mode: "major" } as const;
 const C_MAJOR = { tonic: "C", mode: "major" } as const;
 
 export default defineLesson({
@@ -509,13 +523,13 @@ export default defineLesson({
         rubric: [
           {
             id: "last-chorus-in-d",
-            label: "The last chorus is in D major on every line: chords, bass and tune",
+            label: "The last chorus lifts a whole step, to D, on every line: chords, bass and tune",
             required: true,
             skills: ["H14"],
-            rule: "in-key",
-            key: D_MAJOR,
-            minRatio: 1,
-            section: "last",
+            rule: "key-change",
+            at: "last",
+            semitones: [2],
+            minBarsAfter: 4,
           },
           {
             id: "before-it-in-c",
@@ -578,6 +592,25 @@ export default defineLesson({
           {
             name: "chords and bass lifted, the tune left in C",
             response: { code: song({ mel: scale("C4:major") }) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the lift with the tune an octave higher and the bass an octave lower",
+            response: {
+              code: song({ bass: "<C1:major!8 D1:major!4>", mel: scale("<C5:major!8 D5:major!4>") }),
+            },
+            expect: "pass",
+          },
+          {
+            name: "the whole song in D: the last chorus is in D, but nothing lifts",
+            response: { code: NO_LIFT_SONG("D", "d") },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "one G chord throughout: in both keys at once, and nothing lifts",
+            response: { code: NO_LIFT_SONG("G", "g") },
             expect: "fail",
             feedback: ["rubric.unmet"],
           },

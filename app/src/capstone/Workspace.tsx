@@ -926,6 +926,9 @@ function Loaded({
               band={band}
               staff={{ kind: def.id === "C0" ? "percussion" : "auto" }}
               onChange={(c) => {
+                // A check reads `codeRef`: set it now, not at the next render (a check pressed in the frame after an
+                // edit graded the code before it; the capstone-silent race of the corrections gate's run).
+                codeRef.current = c;
                 setCode(c);
                 draftSaver.changed(c);
               }}

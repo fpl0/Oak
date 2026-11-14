@@ -44,7 +44,8 @@ const wave6Lessons = units
 
 describe("contracts 1.6", () => {
   test("the version, the session counts and the landmarks", () => {
-    expect(CONTRACTS_VERSION).toBe("1.6");
+    // 1.7 (the corrections pass) changed no count or landmark held here.
+    expect(CONTRACTS_VERSION).toBe("1.7");
     expect(SESSION_COUNTS).toMatchObject({
       coreLessons: 125,
       coreCapstoneSessions: 30,
@@ -160,7 +161,8 @@ describe("contracts 1.6", () => {
       expect(decks).toContain(d);
       expect([d.id, d.newPerDay]).toEqual([d.id, 1]);
     }
-    expect(decks.length).toBe(12);
+    // Plus the six U12–U17 decks since contracts 1.7 (content/decks/wave6-decks.test.ts).
+    expect(decks.length).toBe(18);
     // In course order of their unlock lessons.
     const sites = decks.map((d) => at(d.unlock.lesson));
     expect(sites).toEqual([...sites].sort((a, b) => a - b));

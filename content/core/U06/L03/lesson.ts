@@ -343,7 +343,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write a four- or eight-bar phrase over the drums: start at home, go away, build tension, come home. Your choice of chords for each job; a tune on top if you like.",
+          "Write a four- or eight-bar phrase over the drums: start at home, go away, build tension on V, come home. Your choice of chords for home and away; a tune on top if you like.",
         skills: [{ skill: "H02", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],
@@ -400,6 +400,11 @@ export default defineLesson({
                 mel("<[4 ~ 2 ~] [5 ~ 7 ~] [5 ~ 3 ~] [4 ~ 6 ~] [7 ~ 4 ~] [5 ~ 3 ~] [1 ~ 6 ~] [7 ~ ~ ~]>"),
               ),
             },
+            expect: "pass",
+          },
+          {
+            name: "ii as the away chord: I ii V I",
+            response: { code: code(triads("<0 1 4 0>")) },
             expect: "pass",
           },
           {

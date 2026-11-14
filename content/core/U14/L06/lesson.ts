@@ -502,6 +502,34 @@ export default defineLesson({
             feedback: ["rubric.unmet"],
           },
           {
+            name: "a Dorian riff over a D major chord: F♯ in the chord, F in the riff",
+            response: {
+              code: vamp("<D G>", riff("D3:dorian", "<[0 ~ 2 3 ~ 4 6 ~] [5 ~ 6 4 ~ 3 2 0]>")),
+            },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the Mixolydian scale word over D minor chords: F in the chord, F♯ in the riff",
+            response: { code: vamp("<Dm C>", riff("D3:mixolydian")) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "Dorian with Dm7 and Em7: B as the 5th of Em7, on beat 1",
+            response: {
+              code: vamp("<Dm7 Em7>", riff("D3:dorian", "<[0 ~ 2 3 ~ 4 6 ~] [5 ~ 6 4 ~ 3 2 0]>")),
+            },
+            expect: "pass",
+          },
+          {
+            name: "Mixolydian with D7 in every bar: C inside the home chord, on beat 1",
+            response: {
+              code: vamp("<D7 D7>", riff("D3:mixolydian", "<[0 ~ 2 3 ~ 4 6 ~] [6 ~ 4 2 ~ 1 0 ~]>")),
+            },
+            expect: "pass",
+          },
+          {
             name: "Dorian chords, but the riff on D minor: B♭ against G7's B",
             response: {
               code: vamp("<Dm7 G7>", riff("D3:minor", "<[0 ~ 2 3 ~ 4 5 ~] [5 ~ 6 4 ~ 3 2 0]>")),

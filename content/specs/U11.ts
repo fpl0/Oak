@@ -1226,7 +1226,7 @@ export const U11: UnitSpec = {
       {
         level: 5,
         material:
-          "One phrase (4 bars, as the answer key's `phrases` cut it) of a public-domain folk tune from the L5 pool with a verified answer key: Aura Lee (1861), Red River Valley (trad), Shenandoah (trad), Simple Gifts (1848) and Oh! Susanna (1848); Drunken Sailor and Scarborough Fair (Dorian) only from U14.L03 (`availableFrom`); never Amazing Grace (U07.L09 reading only). Melody only: the chords play as accompaniment and are not graded at L5. A song is worked phrase by phrase, in order; a phrase already passed in X1 is not served again.",
+          "One phrase (4 bars, as the answer key's `phrases` cut it) of a public-domain folk tune from the L5 pool with a verified answer key: Aura Lee (1861), Red River Valley (trad), Shenandoah (trad), Simple Gifts (1848) and Oh! Susanna (1848); Drunken Sailor (Dorian) only from U14.L03 (`availableFrom`); never Amazing Grace (U07.L09 reading only). Melody only: the chords play as accompaniment and are not graded at L5. A song is worked phrase by phrase, in order; a phrase already passed in X1 is not served again.",
         source:
           "content/repertoire `<song>/song.ts` (`folkSong`: melody, harmony, phrases, pickup, the setting note), Oak's rendition played as a pattern source with Oak's plain accompaniment (block chords and a root bass); the hidden code never reaches the browser.",
         given:
