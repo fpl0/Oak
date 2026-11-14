@@ -2,8 +2,9 @@
 // before the first check. A suggestion is never a cross. Open rows say what the rubric found and where.
 import { clsx } from "clsx";
 import { Check, Circle, CircleDashed, Loader2 } from "lucide-react";
-import { anchorText } from "./anchors.ts";
+import { anchorText, type BarAnchor } from "./anchors.ts";
 import { type ChecklistRow, labelRuns, type Readiness } from "./checklist.ts";
+import { deviceCountText, deviceRowText } from "./devices.ts";
 import { contrastText, durationText, type RowExtra } from "./wave5.ts";
 
 export function RuleLabel({ label }: { label: string }) {
@@ -98,7 +99,7 @@ function Row({
       data-state={row.state}
       className={clsx(
         "flex gap-2 rounded-control px-2 py-1.5",
-        row.state === "open" && row.required && "bg-accent-2/8",
+        row.state === "open" && row.required && !row.later && "bg-accent-2/8",
         row.focus && "ring-1 ring-accent/30",
       )}
     >
@@ -107,6 +108,19 @@ function Row({
         <p className={clsx(row.state === "met" ? "text-text-2" : "text-text")}>
           <RuleLabel label={row.label} />
           <span className="sr-only"> ({status})</span>
+          {extra?.kind === "devices" && (
+            <span
+              className="ml-1.5 font-mono text-[0.8rem] text-text-2 tabular-nums"
+              data-testid="device-count"
+            >
+              {deviceCountText(extra.found, extra.rows.length, extra.need)}
+            </span>
+          )}
+          {row.later && (
+            <span className="ml-1.5 text-[0.8rem] text-text-3" data-testid="row-later">
+              a later session
+            </span>
+          )}
         </p>
         {(row.detail || row.anchor) && (
           <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-text-2">
@@ -129,21 +143,130 @@ function Row({
                   {anchorText(row.anchor)}
                 </span>
               ))}
-            {row.detail && (extra === undefined || extra.kind === "section" || extra.kind === "note") && (
-              <span>
-                <RuleLabel label={row.detail} />
-              </span>
-            )}
+            {row.detail &&
+              !row.later &&
+              (extra === undefined ||
+                extra.kind === "section" ||
+                extra.kind === "note" ||
+                extra.kind === "found") && (
+                <span>
+                  <RuleLabel label={row.detail} />
+                </span>
+              )}
           </p>
         )}
-        {extra && <Extra extra={extra} />}
+        {extra && (
+          <Extra
+            extra={extra}
+            onBars={onBars}
+            hideOpen={row.state === "open" && !!row.detail && !row.later}
+          />
+        )}
       </div>
     </li>
   );
 }
 
+/** A bar chip: lights those bars on the roll and the staff when the host can. */
+function BarChip({
+  anchor,
+  onBars,
+}: {
+  anchor: BarAnchor;
+  onBars?: ((from: number, to: number) => void) | undefined;
+}) {
+  const cls =
+    "inline-flex h-5 shrink-0 items-center rounded-full border border-accent/40 bg-surface px-1.5 font-mono text-[0.75rem] text-text";
+  const text = anchor.from === anchor.to ? `Bar ${anchor.from}` : `Bars ${anchor.from}–${anchor.to}`;
+  return onBars ? (
+    <button
+      type="button"
+      data-testid="found-anchor"
+      onClick={() => onBars(anchor.from, anchor.to)}
+      aria-label={`${text}: show on the roll and the staff`}
+      className={clsx(cls, "hover:border-accent hover:text-accent")}
+    >
+      {text}
+    </button>
+  ) : (
+    <span data-testid="found-anchor" className={cls}>
+      {text}
+    </span>
+  );
+}
+
 /** A row's Wave 5 line: the contrast axes found (lit) and not yet, the length read from the code, the section. */
-function Extra({ extra }: { extra: RowExtra }) {
+function Extra({
+  extra,
+  onBars,
+  hideOpen = false,
+}: {
+  extra: RowExtra;
+  onBars?: ((from: number, to: number) => void) | undefined;
+  /** The row is open and says so in its own words: found lines that only repeat "not yet" are left out. */
+  hideOpen?: boolean;
+}) {
+  if (extra.kind === "found") {
+    // An open rule's own sentence says what is missing; the found lines then keep to what is already there.
+    const items = hideOpen ? extra.items.filter((it) => it.ok || it.keep) : extra.items;
+    if (items.length === 0 && !extra.note) return null;
+    return (
+      <div className="mt-0.5 flex flex-col gap-1" data-testid="row-found">
+        {extra.note ? (
+          <p className="text-text-2" data-testid="row-note">
+            <RuleLabel label={extra.note} />
+          </p>
+        ) : null}
+        <ul className="flex flex-col gap-1">
+          {items.map((it) => (
+            <li
+              key={it.text}
+              data-ok={it.ok ? "true" : "false"}
+              className="flex flex-wrap items-center gap-1.5 text-text-2"
+            >
+              {it.anchor && <BarChip anchor={it.anchor} onBars={onBars} />}
+              <span>
+                <RuleLabel label={it.text} />
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+  if (extra.kind === "devices")
+    return (
+      <ul className="mt-1 flex flex-col gap-0.5" data-testid="device-rows" aria-label="Devices in this song">
+        {extra.rows.map((r) => {
+          const has = r.bars.length > 0;
+          return (
+            <li
+              key={r.device}
+              data-device={r.device}
+              data-found={has ? "true" : "false"}
+              className="flex items-start gap-1.5"
+              title={r.definition.replaceAll("`", "")}
+            >
+              <span className="mt-0.5 shrink-0">
+                {has ? (
+                  <Check aria-hidden className="size-3.5 text-accent" strokeWidth={2.5} />
+                ) : (
+                  <Circle aria-hidden className="size-3.5 text-text-3" />
+                )}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className={has ? "text-text" : "text-text-2"}>{r.title}</span>
+                <span className="sr-only">{has ? " (found)" : " (not yet)"}</span>
+                <span className="flex flex-wrap items-center gap-1.5 text-[0.8rem] text-text-2">
+                  {has && r.span ? <BarChip anchor={r.span} onBars={onBars} /> : null}
+                  <span>{deviceRowText(r)}</span>
+                </span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    );
   if (extra.kind === "contrast") {
     const f = extra.finding;
     return (

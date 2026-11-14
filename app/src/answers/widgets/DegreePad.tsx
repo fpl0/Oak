@@ -4,12 +4,15 @@
 // degree (also `b` or `#`), `Backspace` clears the last slot, `←`/`→` choose a slot to overwrite. One slot is a radio
 // group. Syllables show when the content asks, the learner's singing labels say so (`solfege`), or the solfège
 // lens is on (wave3.md §4.3, `AnswerEnv.lenses`).
+// Wave 6 (U15.L01): a chromatic pad (the key's degrees with raised and lowered ones: 4 ♯4 5 6 ♭7 7 1) is drawn in
+// two rows, the altered degrees above and between their neighbours as black keys are, with the chromatic syllables
+// (fi, si, di, ri, li rising; te, le, se, me, ra falling) under the same lens. Arrows and digits work as before.
 import type { Degree } from "@oak/api";
 import { clsx } from "clsx";
 import { useEffect, useRef, useState } from "react";
 import { degreeBackgroundCss, degreeStyle } from "../../ui/theme/palette.ts";
 import { useAnswerEnv } from "../env.tsx";
-import { degreeForDigit, digitRange, padOrder, popSlot, putSlot } from "../keys.ts";
+import { degreeForDigit, digitRange, padOrder, padRows, popSlot, putSlot } from "../keys.ts";
 import { degreeDisplay, degreeSpoken, SYLLABLES } from "../normalize.ts";
 import type { AnswerWidgetProps } from "../types.ts";
 import {
@@ -80,6 +83,10 @@ export function DegreePadAnswer(p: AnswerWidgetProps<"degree-pad">) {
   const lenses = useAnswerEnv().lenses;
   const syllables = spec.syllables || p.solfege === "syllables" || lenses?.solfege === true;
   const set = padOrder(spec.set);
+  // Two rows when the pad is chromatic; the buttons stay in number order in the DOM, so arrows walk 4 ♯4 5.
+  const rows = padRows(spec.set);
+  const cellOf = new Map((rows ?? []).map((c) => [c.degree, c]));
+  const lowerCount = (rows ?? []).filter((c) => c.row === "lower").length;
   const correct = revealedOf<Degree[]>(feedback);
 
   useEffect(() => {
@@ -199,7 +206,17 @@ export function DegreePadAnswer(p: AnswerWidgetProps<"degree-pad">) {
         <div
           role={single ? "radiogroup" : "group"}
           aria-label={single ? p.label : "Degree pad"}
-          className="flex flex-wrap gap-2"
+          data-pad-layout={rows ? "chromatic" : "row"}
+          className={rows ? "grid w-full gap-y-1.5" : "flex flex-wrap gap-2"}
+          style={
+            rows
+              ? {
+                  // The columns shrink with the host (a narrow drill column), never past a readable button.
+                  gridTemplateColumns: `minmax(0, 1rem) repeat(${lowerCount * 2}, minmax(1.125rem, 1.875rem)) minmax(0, 1rem)`,
+                  maxWidth: `${lowerCount * 3.75 + 2}rem`,
+                }
+              : undefined
+          }
         >
           {set.map((d) => {
             const on = single && value[0] === d;
@@ -219,7 +236,8 @@ export function DegreePadAnswer(p: AnswerWidgetProps<"degree-pad">) {
                 tabIndex={single ? ((value[0] ?? set[0]) === d ? 0 : -1) : 0}
                 onClick={() => pick(d)}
                 className={clsx(
-                  "relative flex h-14 min-w-14 flex-col items-center justify-center rounded-card border-2 px-2 font-semibold tabular-nums transition-[filter,border-color]",
+                  "relative flex flex-col items-center justify-center rounded-card border-2 font-semibold tabular-nums transition-[filter,border-color]",
+                  rows ? "mx-0.5 h-12 min-w-0 px-0.5" : "h-14 min-w-14 px-2",
                   on ? "border-text" : "border-transparent hover:brightness-105",
                   on && mark ? markRing(mark.ok ? "ok" : "bad") : "",
                   isAnswer && "outline-2 outline-dashed outline-offset-2 outline-accent-2",
@@ -229,6 +247,13 @@ export function DegreePadAnswer(p: AnswerWidgetProps<"degree-pad">) {
                   background: degreeBackgroundCss(st),
                   color: st.label,
                   ...(st.outline && !on ? { borderColor: st.outline } : {}),
+                  ...(cellOf.get(d)
+                    ? {
+                        // Column 1 is a margin (a ♭ before the first degree stands there); a degree spans two.
+                        gridColumn: `${(cellOf.get(d)?.col ?? 0) + 2} / span 2`,
+                        gridRow: cellOf.get(d)?.row === "upper" ? 1 : 2,
+                      }
+                    : {}),
                 }}
               >
                 <span className="text-lg leading-none">{degreeDisplay(d)}</span>

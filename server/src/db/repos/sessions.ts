@@ -15,6 +15,7 @@ interface SessionRow {
   active_minutes: number;
   plan_json: string | null;
   summary_json: string | null;
+  tab_id: string | null;
 }
 
 function toSession(r: SessionRow): Session {
@@ -29,6 +30,7 @@ function toSession(r: SessionRow): Session {
     endedAt: r.ended_at,
     activeMinutes: r.active_minutes,
     phase: r.phase as Session["phase"],
+    tabId: r.tab_id ?? null,
   };
 }
 
@@ -38,8 +40,8 @@ export class SessionsRepo {
   create(s: Session, plan: unknown = null): Session {
     run(
       this.db,
-      `INSERT INTO sessions (id, day, kind, target_minutes, content_version, map_item_id, phase, started_at, ended_at, active_minutes, plan_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO sessions (id, day, kind, target_minutes, content_version, map_item_id, phase, started_at, ended_at, active_minutes, plan_json, tab_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       s.id,
       s.day,
       s.kind,
@@ -51,6 +53,7 @@ export class SessionsRepo {
       s.endedAt,
       s.activeMinutes,
       toJsonOrNull(plan),
+      s.tabId ?? null,
     );
     return s;
   }
@@ -92,6 +95,20 @@ export class SessionsRepo {
       day,
     );
     return row === null ? null : toSession(row);
+  }
+  /** Wave 6 (d21): every session of `day` that has not ended, oldest first (one per tab). */
+  openAllOn(day: string): Session[] {
+    return all<SessionRow>(
+      this.db,
+      "SELECT * FROM sessions WHERE day = ? AND ended_at IS NULL ORDER BY started_at",
+      day,
+    ).map(toSession);
+  }
+  /** Sessions that ended, in order (the end of the core counts them; a Coda summary is read per session). */
+  endedCount(): number {
+    return (
+      get<{ n: number }>(this.db, "SELECT COUNT(*) AS n FROM sessions WHERE ended_at IS NOT NULL")?.n ?? 0
+    );
   }
   onDay(day: string): Session[] {
     return all<SessionRow>(this.db, "SELECT * FROM sessions WHERE day = ? ORDER BY started_at", day).map(

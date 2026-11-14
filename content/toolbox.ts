@@ -209,9 +209,8 @@ export const toolbox: readonly ToolEntry[] = defineToolbox([
   }),
   // Carry-over c14 (Wave 5 Foundation): the chord band's and the staff's chord-symbol labels open with chord
   // names (U05.L04), not with `.arp()`; app/src/lib/lenses.ts `CHORD_LENS_UNLOCKS.chordSymbols` reads this row.
-  // The §3.2 row is requested from the contracts owner (content/validate/contracts-sync.test.ts lists it as
-  // pending until the table has it).
-  feature("tb.feature.chord-symbols", "Chord-symbol labels (chord band and staff)", "U05.L04", "chord names", {
+  // Contracts 1.6: chord names are U05.L09 "Chord Names", the lesson split out of U05.L04 (which keeps `.arp()`).
+  feature("tb.feature.chord-symbols", "Chord-symbol labels (chord band and staff)", "U05.L09", "chord names", {
     meaning: "Names each chord as it sounds with its lead-sheet symbol (C, Am, G7, C/E), in the chord band under the roll and above the staff.",
     demo: ex(90, 'chords: n("<[0,2,4] [5,7,9] [3,5,7] [4,6,8]>").scale("C3:major").s("piano")'),
   }),

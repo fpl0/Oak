@@ -26,7 +26,7 @@ import {
   stripMarkers,
   substituteParams,
 } from "@oak/content-kit";
-import { intervalOf, labelPitch, romanOf, scalePcs, spellMidi, triadCore } from "@oak/theory";
+import { degreeOf, intervalOf, labelPitch, romanOf, scalePcs, spellMidi, triadCore } from "@oak/theory";
 import { romanText } from "../analyze/chords.ts";
 import { firstBars, mod12 } from "../analyze/events.ts";
 import { keyOf } from "../analyze/key.ts";
@@ -36,6 +36,7 @@ import { arrangedTotal, sectionsFromAst } from "../analyze/sections.ts";
 import { normalizedFromEvents, periodOf, resolveTarget, selectTrack } from "../analyze/tracks.ts";
 import { diag, messagesOf, sortDiagnostics } from "../feedback/catalog.ts";
 import { miniErrorDetail } from "../lint/mini.ts";
+import { keyAtOnset } from "../match/common.ts";
 import { slotsOf } from "../match/harmony.ts";
 import { runMatcher } from "../match/index.ts";
 import { melodyEvents } from "../match/melody.ts";
@@ -206,6 +207,8 @@ const lintNotes = (r: EvalSuccess): Diagnostic[] =>
 const nctx = (ex: Exercise, ctx: GradeContext): NormalizeContext => ({
   meter: ex.meter ?? ctx.meter,
   key: ex.key ?? ctx.key,
+  // Wave 6 (`key-plan`): an exercise that changes key says where; every degree and numeral follows it.
+  ...(ex.keyPlan && ex.keyPlan.length > 0 ? { keyPlan: ex.keyPlan } : {}),
   ...((ex.swing ?? ctx.swing)
     ? { swing: (ex.swing ?? ctx.swing) as NonNullable<GradeContext["swing"]> }
     : {}),
@@ -319,6 +322,7 @@ async function gradeAgainstReference(
       ...(deps.toolsUsed ? { toolsUsed: deps.toolsUsed } : {}),
       ...(deps.toolCode ? { toolCode: deps.toolCode } : {}),
       ...(spec.transcription ? { transcription: true } : {}),
+      ...(ctx.requireKey ? { requireKey: true } : {}),
     };
     const refN = ctx.window ? onsetWindow(refEv.n, ctx.window) : refEv.n;
     const m = runMatcher(matcher, scoped(refN, ref), scoped(nAns, ref), rctx);
@@ -619,12 +623,18 @@ async function gradeRubricPiece(
     });
   // References of `matches` rules are evaluated first, so the rubric itself stays synchronous.
   const refs = new Map<Reference, Normalized>();
+  // Every solution of a `matches` reference: the rule passes on the one the piece is closest to (Wave 6: "a half
+  // or a whole step up" is two solutions).
+  const refsAll = new Map<Reference, Normalized[]>();
   for (const r of rules)
-    if (r.rule === "matches" && !refs.has(r.reference))
-      refs.set(
-        r.reference,
-        (await evaluateReference(deps, r.reference.solutions[0] ?? "", r.reference.bars, ex, ctx)).n,
-      );
+    if ((r.rule === "matches" || r.rule === "reharmonize") && !refs.has(r.reference)) {
+      const sols = r.rule === "matches" ? r.reference.solutions : r.reference.solutions.slice(0, 1);
+      const all: Normalized[] = [];
+      for (const sol of sols.length ? sols : [""])
+        all.push((await evaluateReference(deps, sol, r.reference.bars, ex, ctx)).n);
+      refs.set(r.reference, all[0] as Normalized);
+      refsAll.set(r.reference, all);
+    }
   const rctx: RubricContext = {
     ...nc,
     code,
@@ -634,7 +644,9 @@ async function gradeRubricPiece(
     ...(deps.toolsUsed ? { toolsUsed: deps.toolsUsed } : {}),
     ...(deps.toolCode ? { toolCode: deps.toolCode } : {}),
     ...(ctx.profile ? { profile: ctx.profile } : {}),
+    ...(ctx.songForm ? { songForm: ctx.songForm } : {}),
     resolveReference: (ref) => refs.get(ref) ?? null,
+    resolveReferences: (ref) => refsAll.get(ref) ?? [],
   };
   const { rows, extra: ruleExtra, credits } = evaluateRubric(rules, n, rctx);
   const required = rows.map((r, i) => ({ r, c: credits[i] as number })).filter((x) => x.r.required);
@@ -648,7 +660,10 @@ async function gradeRubricPiece(
   const ds: Diagnostic[] = [...extra, ...rows.map((r) => r.diag as Diagnostic), ...ruleExtra];
   // A failing capstone written in another key than its brief's: say so first, since every rule above read it in
   // the brief's key ("chord 1 is iv" for a D-minor C4). Relative keys (one scale) are the same key here.
-  const mismatch = !requiredOk && ex.kind === "compose-brief" ? keyMismatch(n, ctx.key ?? null) : null;
+  // A brief whose home is the learner's (`mode` with `tonic: "declared"`, C6) has no key to be in.
+  const ownTonic = rules.some((r) => r.rule === "mode" && r.tonic === "declared");
+  const mismatch =
+    !requiredOk && ex.kind === "compose-brief" && !ownTonic ? keyMismatch(n, ctx.key ?? null) : null;
   if (mismatch) ds.unshift(diag("harmony.key-mismatch", mismatch));
   if (ex.kind === "code-make" && pieceBars(n, rctx) > ex.bars[1]) ds.push(diag("make.beyond-brief"));
   if (res.truncated) ds.push(diag("eval.truncated", { bars: res.bars }));
@@ -1123,7 +1138,9 @@ export async function gradeWith(req: GradeRequest, deps: GradeDeps): Promise<Gra
       return answerFold(
         ex,
         ctx,
-        keyboardCheck(ex.expect, resp.answer.midi ?? [], ex.pitchMode, ex.answer.mode),
+        keyboardCheck(ex.expect, resp.answer.midi ?? [], ex.pitchMode, ex.answer.mode, {
+          key: ex.key ?? ctx.key ?? null,
+        }),
       );
     }
     case "staff-read": {
@@ -1242,10 +1259,12 @@ export async function gradeWith(req: GradeRequest, deps: GradeDeps): Promise<Gra
       }
       if ("code" in resp)
         // A code answer starts from the step's starter: handing it back unchanged is `code.unchanged`
-        // (AUTHORING §9), not a list of every missing note.
+        // (AUTHORING §9), not a list of every missing note. Its `constraints` hold as in a code step (Wave 6,
+        // U17.L04: `must-not-use tb.transpose`, so a `.transpose()` after `.scale()` cannot pass a key change).
         return gradeAgainstReference(ex, ctx, deps, {
           code: resp.code,
           starter: ex.answer.ui === "code" ? ex.answer.starter : "",
+          ...(ex.answer.ui === "code" && ex.answer.constraints ? { constraints: ex.answer.constraints } : {}),
           ...(ex.answer.ui === "code" && ex.answer.starter.trim() !== "" ? { requireChange: true } : {}),
           reference: ex.reference,
           matcher: ex.byEar ? byEarMatcher(ex.matcher, ex.byEar.accepts) : ex.matcher,
@@ -1260,8 +1279,23 @@ export async function gradeWith(req: GradeRequest, deps: GradeDeps): Promise<Gra
           ex,
           ctx,
         );
-        const key = keyOf(ref.n.all, nctx(ex, ctx).key ?? null);
-        const want = key ? degreeSequence(melodyLine(melodyEvents(ref.n)), key) : [];
+        const nc = nctx(ex, ctx);
+        const key = keyOf(ref.n.all, nc.key ?? null);
+        // The line the step asks for: the matcher's own track, else the bass for a bass dictation (the degrees
+        // of a bass line were once read from the top line whatever the matcher named), else the melody.
+        const track =
+          ex.matcher.m === "melody" && ex.matcher.track
+            ? ex.matcher.track
+            : ex.domain === "bass"
+              ? "@bass"
+              : undefined;
+        const line = melodyLine(melodyEvents(ref.n, track));
+        // With a key plan each note is a degree of the key in force at its bar.
+        const want = key
+          ? nc.keyPlan
+            ? line.map((x) => degreeOf(x.midi, keyAtOnset(nc, x.onset, key) ?? key).degree)
+            : degreeSequence(line, key)
+          : [];
         return answerFold(
           ex,
           ctx,

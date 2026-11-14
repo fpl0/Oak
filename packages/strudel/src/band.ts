@@ -1,7 +1,7 @@
 // Band-layer code preparation (contracts §5.10). The Band is evaluated separately from the learner's code
 // and its tracks are collected as `band.<label>`. This file holds the pure text part.
 import type { KeySpec } from "@oak/content-kit";
-import { followLearnerForm } from "./band-form.ts";
+import { arrangeCalls, followLearnerForm } from "./band-form.ts";
 import { stringArgsOf, stripComments } from "./sounds-in.ts";
 import type { BandSetup } from "./types.ts";
 
@@ -87,26 +87,99 @@ export function foldBandRegister(code: string): string {
   );
 }
 
-/** The learner's first `.scale()` argument when it names more than one key (`"<C4:major!2 G4:major!2>"`). */
-function patternedScaleArg(code: string): string | null {
-  for (const arg of stringArgsOf(stripComments(code), ["scale"])) {
-    const names = new Set<string>();
-    for (const token of arg.split(/[\s<>[\],!*@/|]+/)) {
-      const m = SCALE_NAME.exec(token);
-      if (m) names.add(`${m[1]}:${m[3]}`);
-    }
-    if (names.size === 0) continue;
-    return names.size > 1 ? arg : null;
+/** The distinct keys (`C:major`) a `.scale()` argument names. */
+function keysOf(arg: string): Set<string> {
+  const names = new Set<string>();
+  for (const token of arg.split(/[\s<>[\],!*@/|]+/)) {
+    const m = SCALE_NAME.exec(token);
+    if (m) names.add(`${m[1]}:${m[3]}`);
+  }
+  return names;
+}
+
+/** The text of `const <ident> = …`, up to the next statement at the start of a line. */
+function constBodyOf(text: string, ident: string): string | null {
+  const m = new RegExp(`(?:^|\\n)\\s*(?:const|let|var)\\s+${escapeRe(ident)}\\s*=`).exec(text);
+  if (!m) return null;
+  const from = m.index + m[0].length;
+  const next = /\n\s*(?:(?:const|let|var)\s|[A-Za-z_$][\w$]*\s*:|setcp[ms]\s*\()/.exec(text.slice(from));
+  return text.slice(from, next ? from + next.index : undefined);
+}
+
+/**
+ * The learner's key plan as one `.scale()` argument, or null when the code stays in one key (or names none).
+ *
+ * Contracts §6.8 item 4 gives a key change two forms, and the Band follows both:
+ *  - the plan after `arrange()`: `.scale("<C4:major!16 D4:major!8>")`. The first `.scale()` argument that names
+ *    more than one key is the plan, on whichever track it stands (a bass in one key above it does not hide it);
+ *  - a lifted section const: `const melChorus2 = n("…").scale("D4:major")` beside sections in C. The plan is read
+ *    from the first arranged track whose sections carry their own single key, a section without one (a rest, or a
+ *    const with no `.scale()`) staying in the key before it.
+ */
+export function learnerKeyPlanOf(code: string): string | null {
+  const text = stripComments(code);
+  for (const arg of stringArgsOf(text, ["scale"])) if (keysOf(arg).size > 1) return arg;
+  for (const call of arrangeCalls(text)) {
+    if (!call.sections) continue;
+    const keys = call.sections.map((s) => {
+      const body = s.ident === "silence" ? null : constBodyOf(text, s.ident);
+      if (!body) return null;
+      for (const arg of stringArgsOf(body, ["scale"])) {
+        const m = SCALE_NAME.exec(arg.trim());
+        if (m) return `${m[1]}${m[2] ?? "4"}:${m[3]}`;
+      }
+      return null;
+    });
+    const first = keys.find((k) => k !== null);
+    if (
+      !first ||
+      new Set(keys.filter((k) => k !== null).map((k) => (k as string).replace(/-?\d+:/, ":"))).size < 2
+    )
+      continue;
+    // Runs of bars in one key, in order.
+    const runs: { key: string; bars: number }[] = [];
+    let current = first;
+    call.sections.forEach((s, i) => {
+      current = keys[i] ?? current;
+      const last = runs[runs.length - 1];
+      if (last && last.key === current) last.bars += s.bars;
+      else runs.push({ key: current, bars: s.bars });
+    });
+    if (runs.some((r) => !Number.isInteger(r.bars))) continue;
+    return `<${runs.map((r) => `${r.key}!${r.bars}`).join(" ")}>`;
   }
   return null;
 }
 
-/** The learner's key pattern, every name at `octave` (the Band's own octave for that line). */
-function patternAt(arg: string, octave: number): string {
+/** MIDI pitch of a tonic at an octave number (`C4` is 60). */
+const tonicPitch = (tonic: string, octave: number): number => 12 * (octave + 1) + tonicOffset(tonic);
+
+/** The widest move (half steps) that counts as a lift: a key a half or a whole step from the one before. */
+export const LIFT_STEP = 2;
+
+/**
+ * The learner's key plan for a Band line written at `octave`. Every key takes the Band's register (`bandOctave`:
+ * the tonic within a tritone below to a fourth above C), except a key one step from the key before it (a half or
+ * a whole step, the lift of U17.L02): that one takes the octave nearest the last tonic, so a lift is a lift. F to
+ * G rises a whole step instead of falling a seventh into the fold, and F to F♯ a half step instead of falling a
+ * major seventh. Any wider move goes back to the register, so a plan that walks through many keys never drifts.
+ */
+export function keyPlanAt(arg: string, octave: number): string {
+  let prev: number | null = null;
   return arg.replace(
     /(^|[^A-Za-z0-9#])([A-G](?:#|b)*)(-?\d+)?(:[a-z]+(?::[a-z]+)*)/g,
-    (_t, lead, tonic, _o, rest) => {
-      return `${lead}${tonic}${octave}${rest}`;
+    (_t, lead: string, tonic: string, _o: string | undefined, rest: string) => {
+      let oct = bandOctave(tonic, octave);
+      if (prev !== null) {
+        const from = prev;
+        const near = [oct - 1, oct, oct + 1].sort(
+          (a, b) => Math.abs(tonicPitch(tonic, a) - from) - Math.abs(tonicPitch(tonic, b) - from),
+        )[0] as number;
+        const move = Math.abs(tonicPitch(tonic, near) - from);
+        if (move > 0 && move <= LIFT_STEP) oct = near;
+      }
+      prev = tonicPitch(tonic, oct);
+      return `${lead}${tonic}${oct}${rest}`;
     },
   );
 }
@@ -118,15 +191,16 @@ function patternAt(arg: string, octave: number): string {
  *   tempo or the lesson default).
  * - With `followsLearnerKey`, every scale name in the Band that carries the step's tonic and mode is
  *   re-written to the tonic and mode of the learner's first `.scale()`, keeping the Band's octaves. When
- *   that `.scale()` is patterned (`"<C4:major!2 G4:major!2>"`), a Band line in one key takes the whole
- *   pattern, so the Band changes key with the tune.
+ *   the learner's code has a key plan (`learnerKeyPlanOf`: a patterned `.scale("<C4:major!16 D4:major!8>")` on any
+ *   track, or a lifted section const), a Band line in one key takes the whole plan, so the Band changes key with
+ *   the tune; a key a step above the last is played a step higher, never a seventh lower (`keyPlanAt`).
  * - A Band written in sections (one `arrange()` per labelled track) follows the learner's sections: their order
  *   and bar counts, each played by the Band's section of the same type (`followLearnerForm`, band-form.ts).
  * - Last, the register is folded (`foldBandRegister`): in G, A or B the Band sits below C, not a fifth above.
  */
 export function bandCodeFor(band: BandSetup, ctx: BandContext): string {
   const learner = band.followsLearnerKey ? firstScaleOf(ctx.learnerCode) : null;
-  const pattern = band.followsLearnerKey ? patternedScaleArg(ctx.learnerCode) : null;
+  const pattern = band.followsLearnerKey ? learnerKeyPlanOf(ctx.learnerCode) : null;
   const stepKey = ctx.key ? { tonic: ctx.key.tonic, mode: strudelMode(ctx.key.mode) } : null;
   const target = learner ? { tonic: learner.tonic, mode: learner.mode } : stepKey;
   let code = band.code;
@@ -138,12 +212,15 @@ export function bandCodeFor(band: BandSetup, ctx: BandContext): string {
     const tempo = tempoOf(ctx.learnerCode);
     code = code.replaceAll("{{bpm}}", String(tempo?.bpm ?? ctx.defaultBpm));
   }
+  const planned: number[] = [];
   if (pattern) {
-    // A Band line in one key (`.scale("C4:major")`) takes the learner's whole key plan at its own octave.
+    // A Band line in one key (`.scale("C4:major")`) takes the learner's whole key plan at its own octave. The plan
+    // is put in after the register fold, which would otherwise fold each of its keys on its own.
     code = code.replace(SCALE_CALL, (all, open: string, quote: string, arg: string) => {
       const m = SCALE_NAME.exec(arg.trim());
       if (!m || m[2] === undefined) return all;
-      return `${open}${quote}${patternAt(pattern, Number(m[2]))}${quote}`;
+      planned.push(Number(m[2]));
+      return `${open}${quote}${PLAN_MARK}${planned.length - 1}${PLAN_MARK}${quote}`;
     });
   } else if (learner && stepKey && (learner.tonic !== stepKey.tonic || learner.mode !== stepKey.mode)) {
     const from = new RegExp(
@@ -155,8 +232,15 @@ export function bandCodeFor(band: BandSetup, ctx: BandContext): string {
       (_all, lead: string, octave: string) => `${lead}${learner.tonic}${octave}:${learner.mode}`,
     );
   }
-  return foldBandRegister(followLearnerForm(code, ctx.learnerCode));
+  code = foldBandRegister(followLearnerForm(code, ctx.learnerCode));
+  if (!pattern) return code;
+  return code.replace(new RegExp(`${PLAN_MARK}(\\d+)${PLAN_MARK}`, "g"), (_all, i: string) =>
+    keyPlanAt(pattern, planned[Number(i)] as number),
+  );
 }
+
+/** Stands in a Band line's `.scale()` for the learner's key plan until the register fold has run. */
+const PLAN_MARK = "\u0001";
 
 const escapeRe = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 

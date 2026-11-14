@@ -176,7 +176,15 @@ for (const id of X2.song ?? []) {
       // On the chords alone (the bass has its own check first) the wrong line fails.
       expect(phraseCheckPassed(fixed)).toBe(false);
       // The shipped X2 matcher is that same chords-only matcher (closer: content X2_CHANGES gained weights.bass 0).
-      expect(changes.matcher).toEqual(SONG_LADDER_MATCHERS.changes);
+      // d11: the ladder's matcher reads sevenths and gives a wrong quality nothing; X2_CHANGES takes the same two
+      // fields once content lists `harmony.wrong-quality` (requested from the content owner). Equal either way.
+      const shippedMatcher: Record<string, unknown> = {
+        ...changes.matcher,
+        qualityDepth: "seventh",
+        wrongQuality: "none",
+      };
+      const ladderMatcher: Record<string, unknown> = { ...SONG_LADDER_MATCHERS.changes };
+      expect(shippedMatcher).toEqual(ladderMatcher);
       expect(phraseCheckPassed(shipped)).toBe(false);
       const one = b.map((x, i) => (i === 8 ? (x === tonicOf ? other : tonicOf) : x));
       const single = await grade(

@@ -13,6 +13,7 @@ import { StreakRepo } from "./streak.ts";
 import { TutorRepo } from "./tutor.ts";
 import { IdempotencyRepo, SungNotesRepo, VoiceRepo } from "./voice.ts";
 import { CapstoneSessionsRepo, LadderRepo } from "./wave4.ts";
+import { CoreStateRepo, TakesRepo, TrackGatesRepo } from "./wave6.ts";
 
 export interface Repos {
   db: Db;
@@ -43,6 +44,10 @@ export interface Repos {
   /** Wave 4. */
   capstoneSessions: CapstoneSessionsRepo;
   ladder: LadderRepo;
+  /** Wave 6. */
+  trackGates: TrackGatesRepo;
+  coreState: CoreStateRepo;
+  takes: TakesRepo;
 }
 
 export function createRepos(db: Db, defaults: { timezone: string; now: () => Date }): Repos {
@@ -74,6 +79,9 @@ export function createRepos(db: Db, defaults: { timezone: string; now: () => Dat
     sung: new SungNotesRepo(db),
     capstoneSessions: new CapstoneSessionsRepo(db),
     ladder: new LadderRepo(db),
+    trackGates: new TrackGatesRepo(db),
+    coreState: new CoreStateRepo(db),
+    takes: new TakesRepo(db),
   };
 }
 

@@ -150,7 +150,7 @@ const HARMONIC = { tonic: "A", mode: "harmonic minor" } as const;
 
 export default defineLesson({
   id: "U10.L06",
-  version: 1,
+  version: 2,
   title: "Raise the Seventh",
   objective: "I can raise degree 7 of a minor key to make its v a major V that pulls home to i.",
   key: MINOR,
@@ -408,6 +408,9 @@ export default defineLesson({
         code: { starter: MAKE_STARTER },
         bars: [4, 8],
         saveAs: "sketch",
+        // Decision of 2026-11-13 (d15): this Make opens with the learner's own sketch from U10.L05 when one is
+        // saved, with "Start from Oak's copy" to put the starter back; without one it opens with the starter.
+        fromSketch: "U10.L05",
         rubric: [
           {
             id: "v-goes-home",

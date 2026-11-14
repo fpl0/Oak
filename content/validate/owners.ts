@@ -39,6 +39,20 @@ interface Owner {
   meter: MeterId;
   bpm: number;
   mode: "lesson" | "capstone";
+  /**
+   * A capstone without a key grades each test in the key its code states, as the capstone workspace does
+   * (app/src/capstone/engine.ts reads the stated key of a key-less brief): the first `.scale("D4:dorian")` of the
+   * piece, else `key`.
+   */
+  statedKey?: boolean;
+}
+
+const STATED_MODES = new Set(["major", "minor", "mixolydian", "dorian", "lydian", "phrygian"]);
+/** The key a piece states: its first `.scale("<tonic><octave>:<mode>")`, or the first key of a key plan. */
+function statedKeyOf(code: string): KeySpec | null {
+  const m = /\.scale\("<?\s*([A-G][#b]?)-?\d*:([a-z]+)[\s!">]/.exec(code);
+  if (!m || !STATED_MODES.has(m[2] as string)) return null;
+  return { tonic: m[1] as string, mode: m[2] as KeySpec["mode"] };
 }
 type Item = { where: string; e: Exercise };
 
@@ -92,7 +106,14 @@ async function exerciseSections(owner: Owner, items: Item[], evalBars: number): 
       bpm: owner.bpm,
     };
     for (const t of e.tests) {
-      const r = await grade(e, t, lessonLike, owner.session, owner.mode);
+      const stated = owner.statedKey && "code" in t.response ? statedKeyOf(t.response.code) : null;
+      const r = await grade(
+        e,
+        t,
+        stated ? { ...lessonLike, key: stated } : lessonLike,
+        owner.session,
+        owner.mode,
+      );
       if (!r.decided) {
         pending.push(`${where}/${t.name}: ${r.note}`);
         continue;
@@ -290,7 +311,41 @@ export async function capstoneSessionSections(c: CapstoneDef): Promise<CheckSect
       }
     }
   }
-  if (c.kind === "transcribe" && !c.sessionDefs.some((s) => s.checks?.length || s.stages?.length))
+  // Wave 6: the form map and a session's own rubric (CF-T; AUTHORING §19.7) are read against each song's
+  // sections; a song without them cannot be mapped, and `@song` has nothing to compare with.
+  for (const s of c.sessionDefs) {
+    const usesSong = (s.rubric ?? []).some((r) => r.rule === "form" && r.pattern === "@song");
+    if (!s.formMap && !usesSong) continue;
+    for (const song of songs) {
+      if (!song.def) continue;
+      const sections = song.def.answerKey.sections;
+      if (!sections) {
+        issues.push(
+          `${s.id}: ${song.id}'s answer key has no sections; the form map and the \`@song\` form need \`answerKey.sections\``,
+        );
+        continue;
+      }
+      const vocabulary = s.formMap?.vocabulary;
+      if (vocabulary === "letters" && sections.some((x) => !/^[A-Z]$/.test(x.label)))
+        issues.push(
+          `${s.id}/${s.formMap?.id}: ${song.id} labels its sections with names; the map asks for letters`,
+        );
+      if (Array.isArray(vocabulary))
+        for (const x of sections)
+          if (!(vocabulary as readonly string[]).includes(x.label.replace(/\d+$/, "")))
+            issues.push(
+              `${s.id}/${s.formMap?.id}: ${song.id}'s section "${x.label}" is not in the map's vocabulary`,
+            );
+    }
+    if (s.rubric && !s.rubric.some((r) => r.required))
+      issues.push(`${s.id}: a session rubric has at least one required rule`);
+  }
+  if (c.inGymSlots && c.kind !== "transcribe")
+    issues.push("only a transcription capstone runs in gym slots (contracts §2.5)");
+  if (
+    c.kind === "transcribe" &&
+    !c.sessionDefs.some((s) => s.checks?.length || s.stages?.length || s.formMap || s.rubric?.length)
+  )
     pending.push("no phrase checks or stage exercises authored yet");
   return { n: 5, name: "Sessions (contracts §2.4, §6.6)", issues, pending };
 }
@@ -318,6 +373,7 @@ export async function checkCapstone(c: CapstoneDef): Promise<CheckSection[]> {
     meter: c.meter,
     bpm: c.bpm ? Math.round((c.bpm[0] + c.bpm[1]) / 2) : 100,
     mode: "capstone",
+    statedKey: !c.key,
   };
   const items: Item[] = [{ where: "brief", e: b }];
   return [

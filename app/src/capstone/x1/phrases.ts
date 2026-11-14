@@ -104,8 +104,10 @@ export function checkRows(
 export function capstoneRows(
   sessions: readonly { checks: readonly PhraseCheck[]; server: readonly CapstoneCheckState[] }[],
   local: Readonly<Record<string, LocalCheck>>,
+  /** Checks that are not phrase checks but may be waited for (CF-T's form map, `after: ["form-map"]`). */
+  before: SettledChecks = new Map(),
 ): CheckRow[][] {
-  const known = new Map<string, { settled: boolean; name: string }>();
+  const known = new Map<string, { settled: boolean; name: string }>(before);
   return sessions.map((s) => {
     const rows = checkRows(s.checks, s.server, local, known);
     for (const c of s.checks) {
@@ -151,10 +153,24 @@ export const STAGE_WORD: Record<Stage, string> = {
 };
 const LAYER_WORD: Record<PhraseCheck["layer"], string> = { melody: "melody", bass: "bass", chords: "chords" };
 
-/** "Phrase 2 · melody", "Phrases 1–4 · chords: the bass", "Phrases 1–3 · changes" (X2: the chords, unstaged). */
-export function rowLabel(r: Pick<CheckRow, "phrase" | "layer" | "stage">): string {
+/**
+ * "Phrase 2 · melody", "Phrases 1–4 · chords: the bass", "Phrases 1–3 · changes" (X2: the chords, unstaged). A
+ * capstone whose checks are the song's own sections (CF-T) names them by section, with the letter once the form is
+ * mapped or shown ("Section 3 (B) · changes"; an empty letter: "Section 3 · bass", the form not given away).
+ */
+export function rowLabel(
+  r: Pick<CheckRow, "phrase" | "layer" | "stage">,
+  sections: readonly string[] | null = null,
+): string {
   const layer = r.layer === "chords" && r.stage === null ? "changes" : LAYER_WORD[r.layer];
-  return `${phraseText(r.phrase)} · ${layer}${r.stage ? `: ${STAGE_WORD[r.stage]}` : ""}`;
+  const letter = typeof r.phrase === "number" ? sections?.[r.phrase - 1] : undefined;
+  const where =
+    sections && typeof r.phrase === "number"
+      ? letter
+        ? `Section ${r.phrase} (${letter})`
+        : `Section ${r.phrase}`
+      : phraseText(r.phrase);
+  return `${where} · ${layer}${r.stage ? `: ${STAGE_WORD[r.stage]}` : ""}`;
 }
 
 /** Why a closed row is closed: the check it waits for, else the stage before it. */

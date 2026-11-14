@@ -12,10 +12,10 @@ const repos = () => {
 };
 
 describe("schema", () => {
-  test("0001 to 0006 create every table of interfaces.md §7 plus Waves 2 to 5, and set user_version", () => {
+  test("0001 to 0007 create every table of interfaces.md §7 plus Waves 2 to 6, and set user_version", () => {
     const db = openDb(":memory:");
-    expect(schemaVersion(db)).toBe(6);
-    expect(latestVersion()).toBe(6);
+    expect(schemaVersion(db)).toBe(7);
+    expect(latestVersion()).toBe(7);
     const expected = [
       "settings",
       "learner_profile",
@@ -68,6 +68,10 @@ describe("schema", () => {
       "ladder_state",
       "ladder_sessions",
       "transcription_review_versions",
+      // Wave 6 (0007): the recorded track gates, the end of the core, every take of an album version (d20).
+      "track_gates",
+      "core_state",
+      "album_takes",
     ];
     expect(tableNames(db).sort()).toEqual([...expected].sort());
     expect(all<{ foreign_keys: number }>(db, "PRAGMA foreign_keys")[0]?.foreign_keys).toBe(1);
@@ -126,7 +130,7 @@ describe("schema", () => {
     try {
       const path = join(dir, "oak.db");
       const db = openDb(path);
-      db.run("PRAGMA user_version = 7");
+      db.run("PRAGMA user_version = 8");
       db.close();
       expect(() => openDb(path)).toThrow(/newer than this build/);
     } finally {

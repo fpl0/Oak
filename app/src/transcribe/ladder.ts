@@ -7,8 +7,11 @@ import { scaleName } from "@oak/pitch";
 import { tempoLine } from "@oak/theory";
 import { formatKey } from "../lib/format.ts";
 
-/** L1–L4 are generated; L5 (folk, per phrase) and L6 (blues, staged) are songs (song.ts). */
-export type LadderLevel = 1 | 2 | 3 | 4 | 5 | 6;
+/**
+ * L1–L4 are generated; L5 (folk, per phrase) and L6 (blues, staged) are songs (song.ts); L8 is a standard in four
+ * stages (standard.ts). L7 is the learner's own audio: a project, never a level items are drawn at.
+ */
+export type LadderLevel = 1 | 2 | 3 | 4 | 5 | 6 | 8;
 export type LadderStage = "bass" | "quality" | "rn";
 
 /** Pass mark of every ladder level (contracts §6.12; `LADDER_PASS` of @oak/grader). */
@@ -21,6 +24,7 @@ export const LEVEL_TITLE: Record<LadderLevel, string> = {
   4: "Short melodies",
   5: "Public-domain folk",
   6: "Blues",
+  8: "Standards, a full arrangement",
 };
 export const LEVEL_TASK: Record<LadderLevel, string> = {
   1: "Write the drum loop you hear: kick, snare and hats.",
@@ -29,6 +33,7 @@ export const LEVEL_TASK: Record<LadderLevel, string> = {
   4: "Write the melody you hear as scale degrees.",
   5: "Write the tune phrase by phrase, as scale degrees.",
   6: "Write the bass, then the changes, then the melody.",
+  8: "Map the form, then write the bass, the changes and the melody, section by section.",
 };
 export const STAGE_LABEL: Record<LadderStage, string> = {
   bass: "Bass",
@@ -66,6 +71,7 @@ export const REALISM_TARGET: Record<LadderLevel, string> = {
   4: "mel",
   5: "mel",
   6: "bass",
+  8: "mel",
 };
 
 export interface Given {
@@ -196,6 +202,18 @@ export function checkLines(result: GradeResult): CheckLine[] {
   return lines.sort((a, b) => (a.bar ?? 1e9) - (b.bar ?? 1e9));
 }
 
+/**
+ * d12 (ladder L5 and every later level): an answer in another key than the recording fails, and the result names
+ * both keys (`melody.wrong-key`, `harmony.key-mismatch`; before Wave 6 the passing note `melody.transposed`). The
+ * grader's message is the sentence; this finds it so a verdict can lead with it.
+ */
+export function keyMismatchText(result: GradeResult): string | null {
+  const hit = result.messages.find(
+    (m) => typeof m.id === "string" && /\.(transposed|wrong-key|key-mismatch)(\.|$)/.test(m.id),
+  );
+  return hit ? hit.text.trim() : null;
+}
+
 export const lineText = (l: CheckLine): string =>
   l.bar === null ? l.text : `Bar ${l.bar}${l.beat ? `, beat ${l.beat}` : ""}: ${l.text}`;
 
@@ -222,5 +240,5 @@ export function verdictText(r: { passed: boolean; result: GradeResult }, stage: 
 
 export function ladderSummary(s: LadderState): string {
   const passes = s.gradedPasses[String(s.level)] ?? 0;
-  return `Level ${s.level} · ${LEVEL_TITLE[s.level as LadderLevel]} · realism R${s.realism} · ${passes} graded ${passes === 1 ? "pass" : "passes"} at this level`;
+  return `Level ${s.level} · ${LEVEL_TITLE[s.level as LadderLevel] ?? "Your own audio"} · realism R${s.realism} · ${passes} graded ${passes === 1 ? "pass" : "passes"} at this level`;
 }

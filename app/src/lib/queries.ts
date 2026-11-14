@@ -111,6 +111,9 @@ export const useSessionEnd = () =>
     "sideLessons.list",
     // The Coda's "Next time" names a gym slot when the session just ended makes one due.
     "gym.plan",
+    // Wave 6: the session that ends may have met a track gate or completed the core.
+    "tracks.list",
+    "course.completion",
   ]);
 
 // --- lessons, steps, checkpoints, capstones, gym ----------------------------------------------------
@@ -395,3 +398,31 @@ export const useLadderSongs = () => useQuery(apiQuery("ladder.songs"));
 /** Confirm an imported transcription version as the learner's own after the strict lint passed (c2). */
 export const useTranscriptionConfirmVersion = () =>
   useApiMutation("transcriptions.confirmVersion", ["transcriptions.get", "transcriptions.list"]);
+
+// --- Wave 6 additions (docs/design/wave6.md §5) -------------------------------------------------------
+// Until the server engineer builds them these answer 501 (`OakApiError.code === "not_implemented"`, never
+// retried); a surface shows its own "not built yet" copy through `ErrorState`. `session.start` and `session.day`
+// carry this tab's id by themselves (`callApi`, d21); the tab's own open session is `useOwnOpenSession`
+// (tab-session.ts).
+
+/** The advanced tracks (J, R, A): their gates as recorded and the one honest line each shows. */
+export const useTracks = () => useQuery(apiQuery("tracks.list"));
+/** Where the core stands, what the learner can now do and what stays open after it. */
+export const useCoreCompletion = () => useQuery(apiQuery("course.completion"));
+/** d15: the learner's latest saved Make sketch of `lessonId` (`sketch: null` when there is none). */
+export const useLessonSketch = (lessonId: string | null) =>
+  useQuery({
+    ...apiQuery("lessons.sketch", { params: { id: lessonId ?? "none" } }),
+    enabled: lessonId !== null,
+  });
+/** d20: record another take of an album version; the earlier takes stay. */
+export const useAlbumAddTake = () => useApiMutation("album.addTake", ["album.track", "album.get"]);
+/** d20: choose the take that plays by default and is exported. */
+export const useAlbumChooseTake = () => useApiMutation("album.chooseTake", ["album.track", "album.get"]);
+/** d20: the audio of one take of an album version, for an `<audio src>` (`take` absent: the current one). */
+export function albumTakeUrl(trackId: string, version: number, take?: number): string {
+  return apiUrl("album.getAudio", {
+    params: { id: trackId, v: String(version) },
+    ...(take === undefined ? {} : { query: { take: String(take) } }),
+  });
+}

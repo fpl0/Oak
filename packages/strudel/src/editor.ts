@@ -43,6 +43,7 @@ import {
 import { copyMutes, NO_MUTES } from "./mutes.ts";
 import { withTimeout } from "./mutex.ts";
 import { scopeRequests } from "./pack.ts";
+import { playOnce } from "./play-once.ts";
 import { WARM_AHEAD_BARS, type WarmAhead } from "./preload.ts";
 import { captureMessageListeners, type Runtime, removeCaptured } from "./runtime.ts";
 import { type CyclistLike, queryLiveHaps } from "./transport.ts";
@@ -51,6 +52,7 @@ import type {
   EditorHandle,
   EditorOptions,
   EvalOutcome,
+  EvaluateOptions,
   LiveHap,
   MuteMap,
   ScopePanel,
@@ -63,7 +65,7 @@ const TRAILING_UNDERSCORE = /_$/;
 interface MirrorLike {
   editor: EditorView;
   repl: {
-    scheduler: CyclistLike & { stop(): void; start(): Promise<void> };
+    scheduler: CyclistLike & { stop(): void; start(): Promise<void>; pattern?: Strudel.Pattern };
     state: { pattern?: Strudel.Pattern };
     start(): Promise<void>;
     setCps(cps: number): unknown;
@@ -326,7 +328,7 @@ export function createEditor(rt: Runtime, root: HTMLElement, opts: EditorOptions
     relint(view);
   }
 
-  function evaluate(evalOpts: { autostart?: boolean } = {}): Promise<EvalOutcome> {
+  function evaluate(evalOpts: EvaluateOptions = {}): Promise<EvalOutcome> {
     const autostart = evalOpts.autostart ?? true;
     return rt.mutex.run(async (): Promise<EvalOutcome> => {
       const code = view.state.doc.toString();
@@ -417,6 +419,8 @@ export function createEditor(rt: Runtime, root: HTMLElement, opts: EditorOptions
       }
       lastPattern = repl.state.pattern;
       tracks = [...session.tracks, ...session.band.map((b) => b.track)];
+      // Once (a take): the scheduler plays only what starts before the last bar's end, from a stopped start (cycle 0).
+      if (evalOpts.once !== undefined) playOnce(repl, evalOpts.once);
       // A pattern that runs but makes no notes (`silence`, a `mask("0")`, an empty string) is not an error,
       // but the learner hears nothing: say so instead of looking broken. Mutes are the learner's choice.
       if (mutes.muted.size === 0 && mutes.solo === null) {
@@ -564,7 +568,8 @@ export function createEditor(rt: Runtime, root: HTMLElement, opts: EditorOptions
       opts.onChange?.(code);
     },
     evaluate,
-    play: () => evaluate({ autostart: true }),
+    play: (playOpts) =>
+      evaluate({ autostart: true, ...(playOpts?.once !== undefined ? { once: playOpts.once } : {}) }),
     stop() {
       if (!disposed) stopAndCut();
     },

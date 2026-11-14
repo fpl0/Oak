@@ -2,7 +2,7 @@
 // laid over the learner's audio from its tempo and first downbeat, the A–B loop set at the playhead, and the
 // transport steps (rate ±5 %, ±1 semitone, ±5 cents). Pure, so every rule is unit-tested.
 import type { MeterId } from "@oak/content-kit";
-import { barSeconds, METERS } from "@oak/theory";
+import { barSeconds, beatGrid, METERS } from "@oak/theory";
 
 /** Transcribe's rate range (contracts §6.12: 25–100 %; `TranscriptionSettingsSchema.rate` stores at most 1). */
 export const RATE_MIN = 0.25;
@@ -334,4 +334,81 @@ export function beatTicks(unitsPerBar: number, swing: boolean): { at: number; ki
 /** The tap-along steps of a first run: how many taps so far, out of the eight that set the bars. */
 export function tapProgress(taps: readonly number[]): { count: number; of: number; done: boolean } {
   return { count: Math.min(taps.length, TAPS_KEPT), of: TAPS_KEPT, done: taps.length >= TAPS_KEPT };
+}
+
+// --- the beat grid inside a bar: swing, triplets, compound meter (Wave 6) ----------------------------------
+
+/**
+ * How a beat divides on the grid: `straight` in two, `swing` in two with the off-beat at two thirds (§6.10),
+ * `triplet` in three. A compound meter (6/8, 9/8, 12/8) always divides its dotted-quarter beat in three, whatever
+ * the feel says (contracts §6.9: the beat is the dotted quarter everywhere).
+ */
+export type GridFeel = "straight" | "swing" | "triplet";
+export const GRID_FEELS: readonly GridFeel[] = ["straight", "swing", "triplet"];
+
+export interface GridTick {
+  /** Position inside the bar, 0–1. */
+  at: number;
+  kind: "beat" | "off";
+  /** What the count says there: "1", "&", "la", "li", "trip", "let". */
+  label: string;
+}
+
+/** Whether a meter's beat is the dotted quarter (two beats in 6/8, four in 12/8). */
+export const isCompound = (meter: MeterId | string | null): boolean =>
+  meter !== null && METERS[meter as MeterId]?.tempoUnit === "dottedQuarter";
+
+/**
+ * The beat and division ticks inside one bar of `meter` with `feel`, from `@oak/theory` `beatGrid` (the same
+ * lines the roll's beat-grid lens draws): 4/4 straight is "1 & 2 & …", swung the same with each "&" at two
+ * thirds, in triplets "1 trip let …"; 6/8 is two beats of "1 la li". A meter the grid does not cover (5/8, 7/8)
+ * shows its tempo units alone.
+ */
+export function gridTicks(meter: MeterId | string | null, feel: GridFeel): GridTick[] {
+  const m = METERS[(meter ?? "4/4") as MeterId] ?? METERS["4/4"];
+  if (m.tempoUnit === "eighth")
+    return Array.from({ length: m.unitsPerBar }, (_, k) => ({
+      at: k / m.unitsPerBar,
+      kind: "beat" as const,
+      label: String(k + 1),
+    }));
+  const compound = m.tempoUnit === "dottedQuarter";
+  const g = beatGrid(m, { triplets: !compound && feel === "triplet" });
+  const ticks: GridTick[] = g.lines.map((l) => ({
+    at: l.at[0] / l.at[1],
+    kind: l.level === "beat" ? "beat" : "off",
+    label: l.label,
+  }));
+  if (compound || feel !== "swing") return ticks;
+  // Swing: the off-beat eighth sits two thirds of the way through its beat.
+  return ticks.map((t, i) =>
+    t.kind === "off" ? { ...t, at: (Math.floor(i / 2) + offBeatAt(true)) / m.unitsPerBar } : t,
+  );
+}
+
+/** The feel as the grid names it: "Swing 8ths", "Triplets", "Dotted-quarter beat, in three" (compound), or `null`. */
+export function feelText(meter: MeterId | string | null, feel: GridFeel): string | null {
+  if (isCompound(meter)) return `${meter}: the beat is the dotted quarter, in three`;
+  return feel === "swing" ? "Swing 8ths" : feel === "triplet" ? "Triplets" : null;
+}
+
+/**
+ * The feel a source's own events show (a pattern source: a ladder song, a standard): onsets a third of the way
+ * through a beat mean triplets; off-beats only at two thirds mean swing; neither is straight. Compound meters
+ * need no feel (the grid is in three already).
+ */
+export function feelOfOnsets(onsetsInBars: readonly number[], meter: MeterId | string | null): GridFeel {
+  const m = METERS[(meter ?? "4/4") as MeterId] ?? METERS["4/4"];
+  if (m.tempoUnit !== "quarter") return "straight";
+  let thirds = 0;
+  let twoThirds = 0;
+  let halves = 0;
+  for (const on of onsetsInBars) {
+    const inBeat = (((on * m.unitsPerBar) % 1) + 1) % 1;
+    if (Math.abs(inBeat - 1 / 3) < 0.02) thirds++;
+    else if (Math.abs(inBeat - 2 / 3) < 0.02) twoThirds++;
+    else if (Math.abs(inBeat - 1 / 2) < 0.02) halves++;
+  }
+  if (thirds > 0) return "triplet";
+  return twoThirds > 0 && halves === 0 ? "swing" : "straight";
 }

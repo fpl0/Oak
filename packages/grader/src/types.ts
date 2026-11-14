@@ -12,6 +12,7 @@ import type {
   GradeResult,
   GradingMode,
   HintRung,
+  KeyPlanEntry,
   KeySpec,
   Layer,
   LearnerProfile,
@@ -206,6 +207,12 @@ export interface NormalizeContext {
   key?: KeySpec;
   swing?: SwingSpec;
   pickup?: PickupSpec;
+  /**
+   * Wave 6 (feature `key-plan`, contracts §6.8): the keys of an exercise whose example or answer changes key,
+   * by bar (1-based; the pickup bar is 0). Degrees, syllables and numerals of a bar are read in the key in force
+   * at that bar (`keyAtOnset`); `key` stays the first key.
+   */
+  keyPlan?: readonly KeyPlanEntry[];
 }
 
 // --- grading ------------------------------------------------------------------------------------
@@ -252,6 +259,17 @@ export interface GradeContext {
    * draft, `phraseCheckRequest`). Absent: the whole query.
    */
   window?: { from: Rat; to: Rat };
+  /**
+   * Wave 6 (d12): the answer must be in the recording's key (ladder L5, L6 and L8, set by `songLadderRequest`
+   * and `standardLadderRequest`). A transposed tune fails with `melody.wrong-key`; without it (L1–L4, X1, X2) a
+   * tune in another key keeps the `melody.transposed` note.
+   */
+  requireKey?: boolean;
+  /**
+   * Wave 6 (CF-T.S4): the sections of the song a transcription capstone arranges, in order, each with its length
+   * in bars (`SongDef.answerKey.sections`; `songFormOf`). The `form` rule's `@song` pattern compares with it.
+   */
+  songForm?: readonly { label: string; bars: number }[];
 }
 
 export interface GradeRequest {

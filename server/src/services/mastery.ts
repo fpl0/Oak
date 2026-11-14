@@ -241,12 +241,29 @@ export class MasteryService {
     const day = this.time.day();
     const out: Evidence[] = [];
     for (const item of items) {
+      if (!this.#attributable(item)) continue;
       const e: Evidence = { ...item, score: Math.min(1, Math.max(0, item.score)), at, day };
       this.ctx.repos.mastery.addEvidence(e);
       out.push(e);
     }
     for (const skill of new Set(out.map((e) => e.skillId))) this.recompute(skill);
     return out;
+  }
+
+  /**
+   * Evidence a family hands to every skill it lists (a drill set, a gym or anchor set, an own-audio checklist row)
+   * counts only for the skills whose introducing lesson the learner has started: a composite family such as
+   * `fam.mix.harmony` lists the skills of later units and of the advanced tracks, and a set played at U13 is not
+   * evidence for applied chords (U15.L02) or a jazz voicing (J1.L04). Mastery moves only on evidence (decision 22);
+   * the skill map then shows nothing as practised before it is taught. Direct evidence (steps, predictions,
+   * checkpoints, rubric rules) names its skills itself and is kept.
+   */
+  #attributable(item: Omit<Evidence, "at" | "day">): boolean {
+    if (!SET_SOURCES.has(item.sourceKind) && item.sourceKind !== "self-transcription") return true;
+    const by = this.ctx.content.skill(item.skillId)?.introducedBy;
+    if (by === undefined || by === null) return true;
+    const status = this.#lessonStatus(by);
+    return status === "in_progress" || status === "completed";
   }
 
   #cards(def: SkillDef): ShadingCard[] {

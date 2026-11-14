@@ -9,7 +9,7 @@ export type Node =
   | { t: "rest" }
   | { t: "seq"; items: Node[]; w?: number[] }
   | { t: "stack"; items: Node[] }
-  | { t: "alt"; items: Node[] };
+  | { t: "alt"; items: Node[]; w?: number[] };
 
 export const atom = (v: string | number, rep?: number): Node =>
   rep !== undefined && rep > 1 ? { t: "atom", v: String(v), rep } : { t: "atom", v: String(v) };
@@ -18,8 +18,12 @@ export const rest: Node = { t: "rest" };
 export const seq = (items: Node[], w?: number[]): Node => (w ? { t: "seq", items, w } : { t: "seq", items });
 /** `[a,b,c]`: simultaneous. */
 export const stack = (items: Node[]): Node => ({ t: "stack", items });
-/** `<a b c>`: one item per cycle. */
-export const alt = (items: Node[]): Node => ({ t: "alt", items });
+/**
+ * `<a b c>`: one item per cycle. With weights an item lasts that many cycles (`<[a b c]@2 d>`: the bracket is
+ * stretched over two bars, which is how a note held across a bar line is written, U13.L03).
+ */
+export const alt = (items: Node[], w?: number[]): Node =>
+  w?.some((x) => x !== 1) ? { t: "alt", items, w } : { t: "alt", items };
 /** A stack of note names or steps: `[c3,e3,g3]`. */
 export const chordOf = (values: readonly (string | number)[]): Node => stack(values.map((v) => atom(v)));
 /** A sequence of atoms where `null` is a rest. */
@@ -69,7 +73,14 @@ export function print(node: Node): Printed {
         text += "<";
         n.items.forEach((item, i) => {
           if (i > 0) text += " ";
-          emit(item, false);
+          const w = n.w?.[i];
+          // A weighted item keeps its brackets: `<[a b]@2 c>`.
+          if (w !== undefined && w !== 1 && item.t === "seq" && !item.w && item.items.length === 1) {
+            text += "[";
+            emit(item, false);
+            text += "]";
+          } else emit(item, false);
+          if (w !== undefined && w !== 1) text += `@${w}`;
         });
         text += ">";
         return;
@@ -115,6 +126,28 @@ export function query(node: Node, cycles: number, from = 0): PatEvent[] {
         return;
       case "alt": {
         if (n.items.length === 0) return;
+        if (n.w) {
+          // Weighted slowcat: the items laid end to end, item i lasting `w[i]` cycles; this cycle plays the
+          // slice of the item it falls in (only the notes that start inside it).
+          const weights = n.items.map((_, i) => n.w?.[i] ?? 1);
+          const total = weights.reduce((s, w) => s + w, 0);
+          const pos = cycle % total;
+          let acc = 0;
+          for (let i = 0; i < n.items.length; i++) {
+            const w = weights[i] as number;
+            if (pos < acc + w) {
+              const from = out.length;
+              const itemBegin = R.sub(begin, R.mul(len, rat(pos - acc)));
+              walk(n.items[i] as Node, itemBegin, R.mul(len, rat(w)), Math.floor(cycle / total));
+              const end = R.add(begin, len);
+              const kept = out.splice(from).filter((e) => R.lte(begin, e.onset) && R.lt(e.onset, end));
+              out.push(...kept);
+              return;
+            }
+            acc += w;
+          }
+          return;
+        }
         // slowcat: item `cycle mod n`, which itself sees cycle `floor(cycle / n)`.
         const count = n.items.length;
         walk(n.items[cycle % count] as Node, begin, len, Math.floor(cycle / count));

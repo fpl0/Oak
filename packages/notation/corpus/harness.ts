@@ -8,10 +8,17 @@ import { METERS, meterWith } from "@oak/theory";
 import {
   type AbcOptions,
   type AnnotationSet,
+  type HarmonyLabelInput,
+  harmonyLabels,
+  keyChangesOf,
+  type ModalSignatureStyle,
   type NotationInput,
   type NotationWarning,
   notate,
+  type ScoreRhythm,
   type StaffKind,
+  staffHostInput,
+  type TrackSwingInput,
   withIds,
 } from "../src/index.ts";
 
@@ -38,8 +45,11 @@ export interface CorpusEntry {
   annotations?: AnnotationSet;
   trackClefs?: NotationInput["trackClefs"];
   splitMidi?: number;
-  /** Simulates the grader's `_oakChord` shim: the chord symbol of each cycle. */
-  chordByBar?: string[];
+  /**
+   * Simulates the grader's `_oakChord` shim: the chord symbol of each cycle; a list splits the cycle into equal
+   * parts (`["Ab", "Bb"]`: two chords in the bar).
+   */
+  chordByBar?: (string | string[])[];
   /** Tracks the chord symbols belong to (default: every pitched track). */
   chordTracks?: string[];
   /** Only these tracks are notated (a lead sheet's melody; `leadSheetInput` takes the melody's events only). */
@@ -48,8 +58,30 @@ export interface CorpusEntry {
   /** Wave 5: section marks (`sectionMarks`) and blue-note spelling. */
   sections?: NotationInput["sections"];
   blues?: boolean;
+  // --- Wave 6 -------------------------------------------------------------------------------------------------
+  /** The grid the lesson declares, in steps per bar (`NotationInput.grid`). */
+  grid?: number;
+  /**
+   * Engrave as a staff host does (d5, `staffHostInput`): altered scale steps take the name the code wrote, and a
+   * measured swing (`hostSwing`, the shape of the grader's `swingView`) is printed straight under "Swing 8ths".
+   */
+  host?: boolean;
+  hostSwing?: TrackSwingInput[];
+  /** Chords with their numerals as the grader's `chromaticHarmonyView` lists them (1-based bars): `harmonyLabels`. */
+  harmony?: HarmonyLabelInput[];
+  /** A key plan (1-based bars; content-kit `KeyPlanEntry`): `keyChangesOf`, with the modal signature style. */
+  keyPlan?: { bar: number; key: KeySpec }[];
+  modal?: ModalSignatureStyle;
   /** Golden facts: the note list of each (staff, voice), bars joined by " | ". */
   expect: {
+    /** Wave 6: what `scoreRhythm` must report (the fields given). */
+    rhythm?: Partial<ScoreRhythm>;
+    /** Wave 6: the key signatures written inside the tune, in order of first appearance per change (`[K:…]`). */
+    keyMarks?: string[];
+    /** Wave 6: `drawnLabels` of the top staff's first voice in time order: "F#4=♯4/fi". */
+    drawn?: string[];
+    /** Wave 6: `guideToneMarks` in time order: "F4=third/Dm7". */
+    guide?: string[];
     voices?: Record<string, string>;
     key?: KeySpec | null;
     approximate?: boolean;
@@ -80,8 +112,11 @@ export async function eventsOf(
     const dur = R.sub(parseRat(h.end), onset);
     const note = h.note;
     const isN = h.scale !== null;
-    const chordSymbol =
-      !e.chordTracks || e.chordTracks.includes(h.track) ? e.chordByBar?.[R.floor(onset)] : undefined;
+    const inBar = e.chordByBar?.[R.floor(onset)];
+    const part = Array.isArray(inBar)
+      ? inBar[Math.min(inBar.length - 1, Math.floor(R.toNum(R.frac(onset)) * inBar.length + 1e-9))]
+      : inBar;
+    const chordSymbol = !e.chordTracks || e.chordTracks.includes(h.track) ? part : undefined;
     return {
       track: h.track,
       onset,
@@ -109,6 +144,25 @@ export async function eventsOf(
 }
 
 export function inputOf(e: CorpusEntry, events: NEvent[]): NotationInput {
+  const base = baseInputOf(e, events);
+  const plan = e.keyPlan
+    ? keyChangesOf(e.keyPlan, {
+        ...(e.pickup ? { pickup: true } : {}),
+        ...(e.modal ? { modal: e.modal } : {}),
+      })
+    : {};
+  const labels = e.harmony ? harmonyLabels(e.harmony, e.pickup ? { pickup: true } : {}) : {};
+  const input: NotationInput = {
+    ...base,
+    ...plan,
+    ...labels,
+    ...(e.grid !== undefined ? { grid: e.grid } : {}),
+  };
+  return e.host
+    ? staffHostInput(input, { code: e.code, ...(e.hostSwing ? { swing: e.hostSwing } : {}) })
+    : input;
+}
+function baseInputOf(e: CorpusEntry, events: NEvent[]): NotationInput {
   const meter = e.grouping ? meterWith(e.meter ?? "4/4", e.grouping) : METERS[e.meter ?? "4/4"];
   return {
     events,

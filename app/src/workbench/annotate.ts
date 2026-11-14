@@ -29,7 +29,10 @@ export function annotationText(
   labels: readonly (PitchLabel | null)[],
   kinds: AnnotationKinds,
 ): AnnotationTexts {
-  const ls = labels.filter((l): l is PitchLabel => l !== null);
+  // A unison (a melody note doubled by a chord) is one head on the staff: it gets one text, not two ("me~me").
+  const ls = labels.filter(
+    (l, i, all): l is PitchLabel => l !== null && all.findIndex((o) => o?.midi === l.midi) === i,
+  );
   const join = (xs: (string | undefined)[]) => {
     const v = xs.filter((x): x is string => !!x);
     return v.length ? v.join("~") : undefined;

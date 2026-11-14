@@ -159,7 +159,11 @@ export function SongPanel({
     () => [...new Set([...(listed?.passedPhrases ?? []), ...marks.passed])],
     [listed, marks.passed],
   );
-  const stageMarks = mergeStageMarks(listed?.passedStages ?? [], marks.stages);
+  // L6 has three stages; `form` is the L8 form map (Wave 6), which this panel does not show yet.
+  const stageMarks = mergeStageMarks(
+    (listed?.passedStages ?? []).filter((s) => s !== "form"),
+    marks.stages,
+  );
   const stage = level === 6 ? currentSongStage(stageMarks) : null;
   const phraseNow = level === 5 ? currentPhrase(given.phrases.length, passedPhrases, marks.revealed) : null;
   const lineNow =
@@ -622,7 +626,13 @@ function ShownSpan({
         Shown: bars {span[0]}–{span[1]}
         {layer === "melody" ? "" : layer === "bass" ? ", the bass" : ", bass and chords"}
       </h3>
-      <ReferenceStaff events={events} bars={loop.bars} meter={given.meter} keySpec={given.key} />
+      <ReferenceStaff
+        events={events}
+        bars={loop.bars}
+        meter={given.meter}
+        keySpec={given.key}
+        swing={given.swing}
+      />
     </Card>
   );
 }

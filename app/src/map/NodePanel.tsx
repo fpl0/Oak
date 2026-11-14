@@ -42,6 +42,11 @@ export interface NodePanelProps {
   isNext: boolean;
   /** Quiet mode today: voice leaves wait for the mic. */
   quiet?: { on: boolean; reason: "today" | "always" | "no-mic" | null };
+  /**
+   * Wave 6: the leaf sits on an open branch (an advanced track whose gate is met) with no lesson written yet. The
+   * panel says so in the track's own words; it never reads "not open yet" on an open track.
+   */
+  branch?: { title: string; note: string } | null;
   onSelect: (id: string) => void;
   onClose: () => void;
 }
@@ -71,7 +76,13 @@ function ReviveLink({ action }: { action: Extract<ReviveAction, { kind: "revive"
   );
 }
 
-function PractiseAction({ target }: { target: PractiseTarget }) {
+function PractiseAction({
+  target,
+  branch = null,
+}: {
+  target: PractiseTarget;
+  branch?: { title: string; note: string } | null;
+}) {
   if (target.kind === "family")
     return (
       <Link
@@ -95,6 +106,15 @@ function PractiseAction({ target }: { target: PractiseTarget }) {
         {target.completed ? "Revisit" : "Open"} {target.lessonId} · {target.title}{" "}
         <ArrowRight aria-hidden className="size-4" />
       </Link>
+    );
+  if (branch && target.kind === "locked")
+    return (
+      <p
+        className="rounded-control border border-dashed border-border px-3 py-2 text-sm text-text-2"
+        data-testid="leaf-branch"
+      >
+        {branch.title} is open, and this leaf grows on it. {branch.note.replace(/^Open\.\s*/, "")}
+      </p>
     );
   return (
     <p className="rounded-control border border-dashed border-border px-3 py-2 text-sm text-text-2">
@@ -181,7 +201,11 @@ export function NodePanel(p: NodePanelProps) {
             {v.debt && <Chip tone="issue">Needs a revisit</Chip>}
             {v.provisional && <Chip>Provisional</Chip>}
           </p>
-          <p className="text-sm text-text-2">{STATUS_HELP[v.status]}</p>
+          <p className="text-sm text-text-2">
+            {p.branch && v.status === "locked"
+              ? "Its branch is open. Its lesson is still being written."
+              : STATUS_HELP[v.status]}
+          </p>
         </section>
 
         <section aria-labelledby="oak-intro" className="flex flex-col gap-1">
@@ -195,7 +219,7 @@ export function NodePanel(p: NodePanelProps) {
                 <span className="font-mono text-text-3">{node.introducedBy}</span>{" "}
                 {p.lessonTitle(node.introducedBy)}
                 <span className="text-text-3">
-                  {introStatus === "locked" ? " · not open yet" : " · still being written"}
+                  {introStatus === "locked" && !p.branch ? " · not open yet" : " · still being written"}
                 </span>
               </p>
             ) : (
@@ -311,7 +335,7 @@ export function NodePanel(p: NodePanelProps) {
             Quiet mode and the mic: Settings → Voice
           </Link>
         ) : (
-          <PractiseAction target={target} />
+          <PractiseAction target={target} branch={p.branch ?? null} />
         )}
       </div>
     </aside>

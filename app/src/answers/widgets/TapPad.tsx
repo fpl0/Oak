@@ -3,14 +3,16 @@
 // only while focus is in the pad (`data-keyscope="tap"`). Times are AudioContext seconds through
 // `getOutputTimestamp()` pairs minus the calibrated `tapLatencyMs` (@oak/audio `createTapInput`). After an
 // attempt the targets are drawn and matched pairs joined; `tapReport` (gradeTaps) makes the marks.
+// Wave 6 (U13): with `AnswerEnv.tap.meter` in a compound meter the beat is the dotted quarter (the count-in clicks
+// it, the pad draws it in three, "1 la li"); `stepsPerBeat: 3` in a simple meter is a triplet grid ("1 trip let").
+// A syncopated target is drawn where it falls between the beats, and a missed one is named by its count.
 import { createTapInput, type TapEvent, type TapInput, type TapInputExtras } from "@oak/audio";
 import { clsx } from "clsx";
 import { Hand, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../ui/kit/index.ts";
 import { appAudio, NEUTRAL_PROFILE, useAnswerEnv } from "../env.tsx";
-import { beatSyllables } from "../keys.ts";
-import { padPoint } from "../tap.ts";
+import { padGrid, padPoint } from "../tap.ts";
 import type { AnswerWidgetProps } from "../types.ts";
 import { AnswerFrame, KeyHint, markOf, SubmitHint } from "../ui.tsx";
 
@@ -33,8 +35,13 @@ export function TapPadAnswer(p: AnswerWidgetProps<"tap">) {
   const [problem, setProblem] = useState<string | null>(null);
 
   const bars = setup?.bars ?? 1;
-  const beatsPerBar = setup?.beatsPerBar ?? 4;
-  const stepsPerBeat = setup?.stepsPerBeat ?? 4;
+  const grid = padGrid({
+    ...(setup?.meter ? { meter: setup.meter } : {}),
+    ...(setup?.beatsPerBar !== undefined ? { beatsPerBar: setup.beatsPerBar } : {}),
+    ...(setup?.stepsPerBeat !== undefined ? { stepsPerBeat: setup.stepsPerBeat } : {}),
+  });
+  const beatsPerBar = grid.beatsPerBar;
+  const stepsPerBeat = grid.stepsPerBeat;
   const barSec = setup ? (60 / setup.bpm) * beatsPerBar : 2;
   const cps = 1 / barSec;
   const countIn = setup?.countInBars ?? 1;
@@ -146,7 +153,6 @@ export function TapPadAnswer(p: AnswerWidgetProps<"tap">) {
       : live;
   const showTargets =
     feedback.state !== "idle" && feedback.state !== "pending" && startAt !== null && setup.targets;
-  const syl = beatSyllables(stepsPerBeat);
   const steps = beatsPerBar * stepsPerBeat;
   const countNumeral =
     phase === "count-in" && beat !== null && beat < 0
@@ -206,7 +212,7 @@ export function TapPadAnswer(p: AnswerWidgetProps<"tap">) {
                   ? `Tap now: ${live.length} ${live.length === 1 ? "tap" : "taps"}`
                   : phase === "done"
                     ? `${value.length} ${value.length === 1 ? "tap" : "taps"} recorded.`
-                    : `${bars} ${bars === 1 ? "bar" : "bars"} at ${setup.bpm} BPM, after a ${countIn}-bar count-in.`}
+                    : `${bars} ${bars === 1 ? "bar" : "bars"}${setup.meter ? ` of ${setup.meter.id}` : ""} at ${setup.bpm} BPM${grid.compound ? " (the dotted quarter)" : ""}, after a ${countIn}-bar count-in.`}
           </span>
           {problem ? <span className="text-sm text-issue">{problem}</span> : null}
         </div>
@@ -247,7 +253,7 @@ export function TapPadAnswer(p: AnswerWidgetProps<"tap">) {
                       style={{ left: `${(s / steps) * 100}%` }}
                     >
                       <span className="absolute top-0.5 left-1 text-[0.65rem] text-text-3">
-                        {s % stepsPerBeat === 0 ? s / stepsPerBeat + 1 : syl[s % stepsPerBeat]}
+                        {grid.counts[s]}
                       </span>
                     </span>
                   ))}
@@ -316,7 +322,7 @@ export function TapPadAnswer(p: AnswerWidgetProps<"tap">) {
         </div>
         <p className="sr-only" aria-live="polite">
           {showTargets && "marks" in feedback
-            ? `${feedback.marks?.filter((m) => m.ok && typeof m.part === "number").length ?? 0} of ${setup.targets?.length ?? 0} beats matched`
+            ? `${feedback.marks?.filter((m) => m.ok && typeof m.part === "number").length ?? 0} of ${setup.targets?.length ?? 0} ${setup.targetWord ?? "beat"}s matched`
             : ""}
         </p>
       </div>

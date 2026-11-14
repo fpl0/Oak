@@ -17,14 +17,15 @@ const isPerceptualSet = (it: ReviewItem) => !isFact(it) && it.perceptual;
 /**
  * Warm-up priority of contracts §7.4: `2·(1 − R) + 1·blockedIntroPending + 0.5·linkedToNextLesson + 0.5·debt`,
  * plus a small gain per day waited so a high-recall item is never starved. A never-reviewed card
- * (`fresh`) fills only the room the due items leave.
+ * (`fresh`) fills only the room the due items leave for its first two days, then ages like the rest
+ * (`freshPriority`).
  */
 export function warmupPriority(
   it: ReviewItem,
   today: number,
   cfg: Pick<GovernorConfig, "agingPerDay">,
 ): number {
-  if (it.fresh) return -1;
+  if (it.fresh) return freshPriority(it, today, cfg);
   return (
     PRIORITY_WEIGHTS.forgetting * (1 - it.recall) +
     PRIORITY_WEIGHTS.blockedIntro * Number(it.blockedIntroPending) +
@@ -32,6 +33,19 @@ export function warmupPriority(
     PRIORITY_WEIGHTS.debt * Number(it.debt) +
     cfg.agingPerDay * Math.max(0, today - it.dueDay)
   );
+}
+
+/**
+ * A never-reviewed card is new for `URGENT_AFTER_DAYS` days: it fills only the room the due items leave
+ * (priority −1). After that it has been dealt and not shown, and it waits like any due card: it gains the
+ * same priority per day waited, with no forgetting term (there is nothing to forget yet). Without this a
+ * card dealt in a busy stretch is outranked by every day's reviews for weeks (measured before Wave 6: a
+ * deck card dealt on day 142 of a 15-minute run was first shown on day 170), and it is the oldest
+ * undelivered due card of contracts §7.4 all that time.
+ */
+function freshPriority(it: ReviewItem, today: number, cfg: Pick<GovernorConfig, "agingPerDay">): number {
+  const waited = Math.max(0, today - it.dueDay);
+  return waited < URGENT_AFTER_DAYS ? -1 : cfg.agingPerDay * waited;
 }
 
 function kindOf(it: ReviewItem): PlannedItem["kind"] {
@@ -73,7 +87,7 @@ export function planWarmup(due: readonly ReviewItem[], ctx: PlanContext, cfg: Go
   const offered = live.filter((it) => (it.deferUntilDay ?? today) <= today);
 
   const priority = (it: ReviewItem): number => {
-    if (it.fresh) return -1;
+    if (it.fresh) return freshPriority(it, today, cfg);
     return returning ? returnRank(it.recall) : warmupPriority(it, today, cfg);
   };
   const ranked = [...offered].sort((a, b) => priority(b) - priority(a) || byId(a, b));
@@ -252,26 +266,39 @@ export interface ReviewDayPlan {
   /** The first block is the day's review; each later one is one "a little more". */
   blocks: WarmupPlan[];
   plannedSec: number;
+  /** Planned seconds of the blocks after the first: what "a little more" adds to the day's review. */
+  moreSec: number;
   /** Still due after every block. */
   overflow: ReviewItem[];
 }
 
 /**
  * A reviews-only day (`/practice/review`): the warm-up budget first, then "a little more" in budget-sized
- * blocks, up to 12 minutes in total. A block is offered only while something is left to review.
+ * blocks. A block is offered only while something is left to review.
+ *
+ * The 12-minute cap (`REVIEW_DAY_MAX_SEC`): by default it covers the whole day, the first block included
+ * (contracts §7.4 "up to 12 minutes in total", decision 23). With `warmupCounts: false` it covers "a little
+ * more" alone, on top of whatever the first block took (the learner's decision of 2026-11-13, d22): the day
+ * is then at most the budget plus 12 minutes.
  */
 export function planReviewDay(
   due: readonly ReviewItem[],
   ctx: PlanContext,
   cfg: GovernorConfig,
+  opts: { warmupCounts?: boolean } = {},
 ): ReviewDayPlan {
+  const warmupCounts = opts.warmupCounts ?? true;
   const blockBudget = ctx.budgetSec ?? cfg.budgetSec;
   const blocks: WarmupPlan[] = [];
   let remaining: readonly ReviewItem[] = due;
+  /** Seconds counted against the cap so far. */
   let budgeted = 0;
   let micSets = ctx.micSetsUsed ?? 0;
-  while (budgeted < REVIEW_DAY_MAX_SEC) {
-    const budgetSec = Math.min(blockBudget, REVIEW_DAY_MAX_SEC - budgeted);
+  for (;;) {
+    const counts = warmupCounts || blocks.length > 0;
+    const left = REVIEW_DAY_MAX_SEC - budgeted;
+    if (counts && left <= 0) break;
+    const budgetSec = counts ? Math.min(blockBudget, left) : blockBudget;
     const plan = planWarmup(
       remaining,
       { ...ctx, budgetSec, micSetsUsed: micSets, continuation: blocks.length > 0 },
@@ -282,7 +309,7 @@ export function planReviewDay(
       break;
     }
     blocks.push(plan);
-    budgeted += budgetSec;
+    if (counts) budgeted += budgetSec;
     micSets += plan.items.filter((p) => p.item.mic && p.kind !== "fact-set" && p.kind !== "listen").length;
     remaining = plan.overflow;
     if (remaining.length === 0) break;
@@ -291,6 +318,7 @@ export function planReviewDay(
   return {
     blocks,
     plannedSec: blocks.reduce((a, b) => a + b.plannedSec, 0),
+    moreSec: blocks.slice(1).reduce((a, b) => a + b.plannedSec, 0),
     overflow: last ? last.overflow : [],
   };
 }

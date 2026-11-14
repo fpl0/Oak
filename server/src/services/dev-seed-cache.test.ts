@@ -16,6 +16,7 @@ import type { ContentSource } from "../content/types.ts";
 import { tableNames } from "../db/index.ts";
 import { CONTENT_DIR } from "../testing/course.ts";
 import { type Harness, harness } from "../testing/harness.ts";
+import { withCft } from "../testing/wave6.ts";
 import { buildSeed, SEED_POINTS } from "./dev-seed.ts";
 import {
   codeHash,
@@ -31,7 +32,9 @@ setDefaultTimeout(120_000);
 
 let real: ContentSource;
 beforeAll(async () => {
-  real = await loadContent({ contentDir: CONTENT_DIR });
+  // Wave 6: with CF-T's standards as test renditions until the repertoire author writes them, so the points about
+  // CF-T and ladder L8 build (on the real content alone they answer 400).
+  real = withCft(await loadContent({ contentDir: CONTENT_DIR }));
 });
 
 const NOW = "2026-11-13T12:00:00.000Z";

@@ -24,6 +24,7 @@ import type { SrsPort } from "./ports.ts";
 import { SessionsService } from "./sessions.ts";
 import { SideLessonsService } from "./side-lessons.ts";
 import { StreakService } from "./streak.ts";
+import { TracksService } from "./tracks.ts";
 import { UnlocksService } from "./unlocks.ts";
 import { VoiceService } from "./voice.ts";
 
@@ -49,6 +50,8 @@ export interface Services {
   gym: GymService;
   /** Wave 5: the optional side lessons A1.L01–L04 (wave5.md §5.1). */
   sideLessons: SideLessonsService;
+  /** Wave 6: the advanced tracks' recorded gates and the end of the core (wave6.md §5.3, §5.5). */
+  tracks: TracksService;
 }
 
 export interface ServiceOptions {
@@ -86,6 +89,18 @@ export function createServices(ctx: ServiceContext, opts: ServiceOptions): Servi
   };
   const cando = new CanDoService(ctx, { sourceDone, freshness });
   const capstoneSessions = new CapstoneSessionsService(ctx, { gates, mastery, streak });
+  const sideLessons = new SideLessonsService(ctx, gates);
+  const tracks = new TracksService(ctx, {
+    gates,
+    sideLesson: () => {
+      const list = sideLessons.list();
+      const next = list.items.find((i) => i.lessonId === list.next);
+      return next === undefined ? null : { lessonId: next.lessonId, title: next.title };
+    },
+    dueTomorrow: () =>
+      ctx.repos.srs.due(new Date(ctx.clock.now().getTime() + 86_400_000).toISOString()).length,
+    nextStandard: () => services.ladder.nextStandardTitle(),
+  });
   const course = new CourseService(ctx, {
     gates,
     unlocks,
@@ -95,6 +110,7 @@ export function createServices(ctx: ServiceContext, opts: ServiceOptions): Servi
     voice,
     srs: opts.srs,
     capstoneSessions,
+    tracks,
   });
   const store = new AudioStore(opts.config.audioDir, opts.config.albumDir);
   const sessions = new SessionsService(ctx, {
@@ -106,6 +122,7 @@ export function createServices(ctx: ServiceContext, opts: ServiceOptions): Servi
     capstoneSessions,
     tutorOff: () => ctx.repos.settings.get("tutor").backend === "off",
     gymSummary: (id) => services.gym.summary(id),
+    tracks,
   });
   const library = new LibraryService(ctx, {
     streak,
@@ -122,6 +139,7 @@ export function createServices(ctx: ServiceContext, opts: ServiceOptions): Servi
     cando,
     streak,
     capstoneSessions,
+    tracks,
   });
   const ladder = new LadderService(ctx, {
     library,
@@ -172,7 +190,8 @@ export function createServices(ctx: ServiceContext, opts: ServiceOptions): Servi
     capstoneSessions,
     ladder,
     gym,
-    sideLessons: new SideLessonsService(ctx, gates),
+    sideLessons,
+    tracks,
   };
   return services;
 }

@@ -295,7 +295,13 @@ export interface CapstoneMetaLike {
   id: string;
   title: string;
   objective: string;
-  opensAfter: { checkpoints?: readonly string[]; capstones?: readonly string[]; lessons?: readonly string[] };
+  opensAfter: {
+    checkpoints?: readonly string[];
+    capstones?: readonly string[];
+    lessons?: readonly string[];
+    /** The registry's own field name (content-kit `GateSpec`): CF-T opens when U15.L01 is completed. */
+    lessonsCompleted?: readonly string[];
+  };
 }
 
 export interface AlbumNext {
@@ -306,15 +312,21 @@ export interface AlbumNext {
   line: string;
 }
 
-/** Core album capstones (C0…C9, X1, X2) in default order, by their first session. */
+/**
+ * Core album capstones in the record's running order: C0…C7, X1 and X2 by their first session in the default order,
+ * then the two parts of the finale, the single last (album/model.ts `SIDE_A_ORDER`, content/specs/END.md). CF-T's sessions fall in
+ * gym slots from session 156, before C6: by its first session it would be "next on the album" after X2, months
+ * before it can open.
+ */
 function albumOrder<T extends { id: string }>(metas: readonly T[], order: readonly string[]): T[] {
+  const finale = (id: string) => (id === "CF-T" ? 1 : id === "CF-A" ? 2 : 0);
   const at = (c: T) => {
     const i = order.indexOf(`${c.id}.S1`);
     return i < 0 ? Number.POSITIVE_INFINITY : i;
   };
   return metas
-    .filter((c) => /^(C|X)\d+$/.test(c.id) && at(c) < Number.POSITIVE_INFINITY)
-    .sort((a, b) => at(a) - at(b));
+    .filter((c) => (/^(C|X)\d+$/.test(c.id) || finale(c.id) > 0) && at(c) < Number.POSITIVE_INFINITY)
+    .sort((a, b) => finale(a.id) - finale(b.id) || at(a) - at(b));
 }
 
 const sentence = (s: string) => (/[.!?]$/.test(s.trim()) ? s.trim() : `${s.trim()}.`);
@@ -339,24 +351,89 @@ export function albumNext(
   const st = status(next.id);
   const open = st === "open" || st === "in_progress";
   const what = sentence(next.objective);
+  // The finale's parts read by what they are ("Album Single"), as on Today (capstone-day.ts `capstoneDayTitle`).
+  const title = /^CF-[AT] Core Finale: (.+)$/.exec(next.title)?.[1] ?? next.title;
   if (open)
     return {
       capstoneId: next.id,
-      title: next.title,
+      title,
       open,
-      line: `It is open now. ${what} Today plans it next.`,
+      // CF-T arrives in the transcription slots, not as tomorrow's session.
+      line:
+        next.id === "CF-T"
+          ? `It is open now. ${what} Its sessions arrive in your transcription slots.`
+          : `It is open now. ${what} Today plans it next.`,
     };
   const gates = [
     ...(next.opensAfter.checkpoints ?? []).map((g) => titleOf(g)),
-    ...(next.opensAfter.lessons ?? []).map((g) => titleOf(g)),
+    ...[...(next.opensAfter.lessons ?? []), ...(next.opensAfter.lessonsCompleted ?? [])].map((g) =>
+      titleOf(g),
+    ),
     ...(next.opensAfter.capstones ?? []).filter((g) => status(g) !== "released").map((g) => titleOf(g)),
   ];
   const when = gates.length > 0 ? `It opens after ${gates.join(" and ")}.` : "It opens later in the course.";
-  return { capstoneId: next.id, title: next.title, open, line: `${what} ${when}` };
+  return { capstoneId: next.id, title, open, line: `${what} ${when}` };
 }
 
 /** "Your album now holds 7 tracks." */
 export function albumCountLine(tracks: number): string | null {
   if (tracks <= 0) return null;
   return tracks === 1 ? "Your album now holds its first track." : `Your album now holds ${tracks} tracks.`;
+}
+
+// --- Wave 6: the thing the learner can now do, said first (U12–U17: content/specs "The Coda says: you can now …") --
+
+/** "I can build the V of V and say where it resolves." → "You can now build the V of V and say where it resolves." */
+export function canNow(statement: string): string {
+  const s = statement.trim();
+  if (/^I can now /.test(s)) return `You can now ${s.slice("I can now ".length)}`;
+  if (/^I can /.test(s)) return `You can now ${s.slice("I can ".length)}`;
+  return s;
+}
+
+/** Song-level statements first: what the learner can write, then what they can hear and read. */
+const CAN_NOW_AREAS = ["compose", "transcribe", "write", "code", "hear", "read", "sing"] as const;
+
+export interface CanNowLine {
+  candoId: string;
+  text: string;
+}
+
+/**
+ * The line under the Coda's title on a day that finished a lesson or released a capstone: the can-do statements
+ * whose source is that item (content/candos.ts), in the second person, at most two. It is said because the item was
+ * completed today, graded steps and Make included; the ledger below keeps the status ("emerging", "solid") as
+ * evidence arrives. Nothing is said for a lesson left part-way, a checkpoint, a gym day or a review day.
+ */
+export function canNowLines(
+  item: { id: string | null; completed: boolean },
+  defs: readonly Pick<CanDoDef, "id" | "statement" | "area" | "source">[],
+  limit = 2,
+): CanNowLine[] {
+  if (!item.id || !item.completed) return [];
+  const source = /^(.+)\.S\d+$/.exec(item.id)?.[1] ?? item.id;
+  const rank = (area: string) => {
+    const i = (CAN_NOW_AREAS as readonly string[]).indexOf(area);
+    return i < 0 ? CAN_NOW_AREAS.length : i;
+  };
+  return defs
+    .filter((d) => d.source === source)
+    .map((d, i) => ({ d, i }))
+    .sort((a, b) => rank(a.d.area) - rank(b.d.area) || a.i - b.i)
+    .slice(0, limit)
+    .map(({ d }) => ({ candoId: d.id, text: canNow(d.statement) }));
+}
+
+/** The can-do changes the card still lists once the title has said some of them: first evidence is not repeated. */
+export function canDoBelow(changes: readonly CanDoChange[], said: readonly CanNowLine[]): CanDoChange[] {
+  const ids = new Set(said.map((s) => s.candoId));
+  return changes.filter((c) => !(ids.has(c.candoId) && c.from === null));
+}
+
+/**
+ * Tomorrow's preview when a transcription slot comes first and CF-T holds it (cft-day.ts `cftNextLabel`): the same
+ * shape as the gym's line, "Next time: your standard, session 2 of 4: changes. Then U15.L04 …".
+ */
+export function slotNextLabel(gymLabel: string | null, cftLabel: string | null): string | null {
+  return cftLabel ?? gymLabel;
 }

@@ -12,7 +12,7 @@ import { contourScore, editDistance, melodyLine, parsons } from "../analyze/melo
 import { lineWord, selectTrack } from "../analyze/tracks.ts";
 import { diag } from "../feedback/catalog.ts";
 import type { MatchResult, NormalizeContext, Normalized } from "../types.ts";
-import { alignFeel, clampScore, f1, noteName, pitchLabel } from "./common.ts";
+import { alignFeel, clampScore, f1, keyAtOnset, noteName, pitchLabel } from "./common.ts";
 import { matchOnsets, pickupShift } from "./rhythm.ts";
 
 export type MelodyMatcher = Extract<Matcher, { m: "melody" }>;
@@ -25,6 +25,12 @@ export type MelodyMatcher = Extract<Matcher, { m: "melody" }>;
  */
 export interface MelodyReportOptions {
   transcription?: boolean;
+  /**
+   * d12 (decision of 2026-11-13; ladder L5 and every later level): the answer must be in the recording's key.
+   * A `key-relative` matcher then reads both sides in the reference key, and a tune that is right in another key
+   * fails with `melody.wrong-key`, which names both keys.
+   */
+  requireKey?: boolean;
 }
 
 /** The events a melody matcher reads: the named track or `@melody`, else every learner track. */
@@ -166,6 +172,13 @@ export function melodyMatch(
         mode: tKey.mode,
       };
   } else if (!aCtxKey) aKey = keyOf(aEv, null);
+  // d12 (ladder L5 and later): the recording's key is required, so both sides are read in it; a tune moved to
+  // another key is `melody.wrong-key`, a failure, in place of the `melody.transposed` note.
+  const strictKey = !!ctx.requireKey && cfg.pitch === "key-relative" && !!tKey;
+  if (strictKey) aKey = tKey;
+  // Wave 6 (`key-plan`): the exercise says which key each bar is in; nothing is inferred from the answer.
+  const planned = !!tKey && (ctx.keyPlan?.length ?? 0) > 1;
+  if (planned) aKey = tKey;
   // Pitch values per mode.
   let value: (n: Note, side: "t" | "a") => number;
   let octaveAware = false;
@@ -188,6 +201,10 @@ export function melodyMatch(
     A = A.map((n) => ({ ...n, midi: n.midi + k }));
     value = (n) => n.midi;
     octaveAware = true;
+  } else if (cfg.pitch === "key-relative" && planned) {
+    // A key plan is given (U17): both sides are read bar by bar in the key in force, so the degrees of a lifted
+    // chorus are the degrees of its own key and a note is right when its pitch class is.
+    value = (n) => mod12(n.midi - pitchClassOfKey(keyAtOnset(ctx, n.onset, tKey) as KeySpec));
   } else if (cfg.pitch === "key-relative") {
     const tTonic = tKey ? pitchClassOfKey(tKey) : 0;
     const aTonic = aKey ? pitchClassOfKey(aKey) : tTonic;
@@ -234,10 +251,21 @@ export function melodyMatch(
   const subs: { i: number; j: number; octave: boolean }[] = [];
   let otherErrors = 0;
   // Transposition-invariant answers were moved into the reference's key above, so both sides read in it.
+  // Where a note of its line goes next (up or down): what names a note from outside the key.
+  const dirOf = (n: Note, side: "t" | "a"): 1 | -1 | undefined => {
+    const lineOf = side === "t" ? T : A;
+    const i = lineOf.indexOf(n);
+    const next = i >= 0 ? lineOf[i + 1] : undefined;
+    if (!next || next.midi === n.midi) return undefined;
+    return next.midi > n.midi ? 1 : -1;
+  };
   const label = (n: Note, key: KeySpec | null, side: "t" | "a"): { name: string; syl: string } =>
-    cfg.pitch === "absolute" || cfg.pitch === "octave-free" || cfg.pitch === "transposition-invariant"
-      ? pitchLabel(n.midi, tKey)
-      : pitchLabel(n.midi, side === "t" ? tKey : key);
+    planned
+      ? // The degree a note is in the key in force at its bar ("5" in D after the lift, not "6" in C).
+        pitchLabel(n.midi, keyAtOnset(ctx, n.onset, tKey), dirOf(n, side))
+      : cfg.pitch === "absolute" || cfg.pitch === "octave-free" || cfg.pitch === "transposition-invariant"
+        ? pitchLabel(n.midi, tKey, dirOf(n, side))
+        : pitchLabel(n.midi, side === "t" ? tKey : key, dirOf(n, side));
   for (const o of ops) {
     if (o.op === "match") {
       overlay.answer.push({ id: (A[o.j] as Note).id, ok: !onsetDiffers(o.i, o.j) });
@@ -308,10 +336,47 @@ export function melodyMatch(
     perNote.push(diag("melody.extra-note", { got: label(a, aKey, "a").name }, locOf(a.event, pos), "pitch"));
   }
 
+  // 4b. A key plan (U17): a stretch the answer left in the key before it. The notes there are the tune moved back
+  // by the lift, which is one finding ("from bar 9 the tune is in D major"), never one per note and never the
+  // n-from-0 slip.
+  let leftBehind: Diagnostic | null = null;
+  if (planned && tKey) {
+    const plan = ctx.keyPlan ?? [];
+    const shiftBar = ctx.pickup ? 0 : 1;
+    for (let k = 1; k < plan.length && !leftBehind; k++) {
+      const from = (plan[k] as { bar: number }).bar - shiftBar;
+      const to = plan[k + 1] ? (plan[k + 1] as { bar: number }).bar - shiftBar : Number.POSITIVE_INFINITY;
+      const inSpan = (n: Note): boolean => R.floor(n.onset) >= from && R.floor(n.onset) < to;
+      const ts = T.filter(inSpan);
+      const as = A.filter(inSpan);
+      const prev = (plan[k - 1] as { key: KeySpec }).key;
+      const here = (plan[k] as { key: KeySpec }).key;
+      const lift = mod12(pitchClassOfKey(here) - pitchClassOfKey(prev));
+      if (lift === 0 || ts.length < 2 || ts.length !== as.length) continue;
+      if (!ts.every((t, i) => mod12(t.midi - (as[i] as Note).midi) === lift)) continue;
+      const semis = lift <= 6 ? lift : 12 - lift;
+      leftBehind = diag(
+        "melody.key-plan",
+        {
+          expKey: keyText(here),
+          gotKey: keyText(prev),
+          semis: `${semis} half step${semis === 1 ? "" : "s"}`,
+          dir: lift <= 6 ? "up" : "down",
+        },
+        { bar: from + shiftBar },
+        "pitch",
+      );
+      for (let x = perNote.length - 1; x >= 0; x--) {
+        const b = (perNote[x] as Diagnostic).where?.bar;
+        if (b !== undefined && b >= from + shiftBar && b < to + shiftBar) perNote.splice(x, 1);
+      }
+    }
+  }
   // 5. Index shift: every wrong note one scale step off in the same direction.
   const real = subs.filter((s) => !s.octave);
   let indexShift = false;
-  if (tKey && real.length > 0 && otherErrors === 0 && cfg.pitch !== "octave-free") {
+  if (leftBehind) diagnostics.push(leftBehind);
+  if (!leftBehind && tKey && real.length > 0 && otherErrors === 0 && cfg.pitch !== "octave-free") {
     const keyA = cfg.pitch === "key-relative" ? (aKey ?? tKey) : tKey;
     const deltas = real.map(
       (s) => stepIndex((A[s.j] as Note).midi, keyA) - stepIndex((T[s.i] as Note).midi, tKey),
@@ -336,7 +401,14 @@ export function melodyMatch(
   // Index shift on a tune with repeated notes (Ode to Joy): the alignment can pair shifted notes with
   // neighbours and hide the pattern, so test it note by note too. Same number of notes, same onsets, and
   // nearly every note one scale step off in the same direction.
-  if (!indexShift && tKey && cfg.pitch !== "octave-free" && T.length >= 3 && T.length === A.length) {
+  if (
+    !leftBehind &&
+    !indexShift &&
+    tKey &&
+    cfg.pitch !== "octave-free" &&
+    T.length >= 3 &&
+    T.length === A.length
+  ) {
     const keyA = cfg.pitch === "key-relative" ? (aKey ?? tKey) : tKey;
     const sameTimes = T.every((t, i) => R.eq(t.onset, (A[i] as Note).onset));
     const deltas = T.map((t, i) => stepIndex((A[i] as Note).midi, keyA) - stepIndex(t.midi, tKey));
@@ -367,15 +439,22 @@ export function melodyMatch(
   // when the slip happens to equal a chromatic transposition (C G A F typed as D A B G).
   const keyIdx = cfg.pitch === "key-relative" ? (aKey ?? tKey) : tKey;
   const slipInKey = indexShift && !!keyIdx && A.every((n) => inScale(n.midi, keyIdx));
-  if (ctx.transcription && !slipInKey && (cfg.pitch === "absolute" || cfg.pitch === "octave-free") && tKey) {
+  if (
+    (ctx.transcription || ctx.requireKey) &&
+    !slipInKey &&
+    (cfg.pitch === "absolute" || cfg.pitch === "octave-free" || strictKey) &&
+    tKey
+  ) {
     const k = bestTransposition(T, A);
     const shifted = A.map((n) => (cfg.pitch === "absolute" ? n.midi + k : mod12(n.midi + k)));
     const ref = T.map((n) => (cfg.pitch === "absolute" ? n.midi : mod12(n.midi)));
+    // The whole tune moved (with a required key: nearly all of it, so one slip does not hide the wrong key).
+    const same = shifted.filter((x, i) => x === ref[i]).length;
     const fits =
       k !== 0 &&
       (cfg.pitch === "absolute" || mod12(k) !== 0) &&
       shifted.length === ref.length &&
-      shifted.every((x, i) => x === ref[i]);
+      (ctx.requireKey ? same >= Math.ceil(ref.length * 0.9) : same === ref.length);
     if (fits && mod12(k) === 0)
       moved = diag("melody.wrong-octave", { dir: k < 0 ? "higher" : "lower" }, undefined, "pitch");
     else if (fits) {
@@ -455,7 +534,7 @@ export function melodyMatch(
 
   // 6. Summary findings.
   const contour = contourScore(parsons(T), parsons(A));
-  if (!indexShift && T.length >= 4 && real.length >= 2 && Sp < 0.8 && contour >= 0.8)
+  if (!leftBehind && !indexShift && T.length >= 4 && real.length >= 2 && Sp < 0.8 && contour >= 0.8)
     diagnostics.push(diag("melody.contour-right", {}, undefined, "contour"));
   if (Sp === 1 && Sr < 1) diagnostics.push(diag("melody.rhythm-only", {}, undefined, "rhythm"));
 

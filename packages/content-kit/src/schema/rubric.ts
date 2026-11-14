@@ -9,6 +9,7 @@ import type {
   KeySpec,
   Layer,
   Md,
+  OutsideChordKind,
   Rat,
   ScaleMode,
   SkillRef,
@@ -67,7 +68,27 @@ export type RubricRuleBody =
       track?: TrackRef;
       bars?: [number, number];
     }
-  | { rule: "contains-rn"; rn: string[]; min: number; mustResolve?: boolean }
+  /**
+   * At least `min` chords that are one of `rn` (read by degree, chroma and quality in the rule's key, never by
+   * string; an applied numeral such as `V/V` counts only where the chord sounds applied). `mustResolve`: a
+   * dominant counts only when the next chord is its target (V → I, V/x → x).
+   *
+   * Wave 6:
+   * - `kind` (feature `contains-rn.kind`): instead of, or beside, listed numerals, count any chord of these
+   *   kinds ("a secondary dominant, whichever", C7 and CF-A; "a borrowed chord", U16). With `kind`, `rn` may
+   *   be empty.
+   * - `inOrder` (feature `contains-rn.in-order`): `rn` is a run of chords that must occur one after the other
+   *   in this order somewhere in the piece (♭VI–♭VII–I, C7; a repeated chord counts once); `min` counts the
+   *   runs.
+   */
+  | {
+      rule: "contains-rn";
+      rn: string[];
+      min: number;
+      mustResolve?: boolean;
+      kind?: OutsideChordKind[];
+      inOrder?: boolean;
+    }
   | { rule: "range"; track: TrackRef; maxSpan?: number; within?: [string, string] | "learner-voice" }
   | { rule: "step-ratio"; track: TrackRef; min: number }
   | { rule: "harmonic-rhythm"; changesPerBar: [number, number] }
@@ -81,8 +102,20 @@ export type RubricRuleBody =
       ratio: [number, number];
     }
   | { rule: "syncopation"; track: TrackRef; min: number }
-  /** Section names ('verse chorus verse chorus') or letters by first appearance ('ABAB'); `?` matches any section. */
-  | { rule: "form"; pattern: string; phraseBars?: number }
+  /**
+   * Section names ('verse chorus verse chorus') or letters by first appearance ('ABAB'); `?` matches any
+   * section.
+   *
+   * Wave 6:
+   * - `contains` (feature `form.contains`): section types that must each occur at least once, wherever they
+   *   fall ("the form contains a bridge", CF-A). The pattern `*` matches any form, so `{ pattern: "*",
+   *   contains: ["bridge"] }` asks for nothing else.
+   * - the pattern `@song` (feature `form.song`): only in a session rubric of a transcribe capstone
+   *   (`CapstoneSessionDef.rubric`): the sections of the song the learner picked, in order, from its answer
+   *   key (`SongDef.answerKey.sections`); sections named in `extra` (an intro, an outro, a solo chorus) may be
+   *   added around and between them.
+   */
+  | { rule: "form"; pattern: string; phraseBars?: number; contains?: string[]; extra?: string[] }
   /**
    * Smooth chord-to-chord motion of a hand-voiced chord track (contracts §6.7 item 4). Each chord (the
    * notes that start together) is a set of voices, lowest first; at each change every voice moves at most
@@ -103,10 +136,48 @@ export type RubricRuleBody =
       noCrossing?: boolean;
       bassFree?: boolean;
     }
-  | { rule: "guide-tones"; track: TrackRef; harmony: TrackRef; minRatio: number }
-  /** Kept, for pivot modulations. Lifts use `key-change`. */
-  | { rule: "modulation"; to: "up-step" | "up-half" | "relative" | "dominant" | KeySpec; atBar?: number }
-  | { rule: "mode"; tonic: string; mode: ScaleMode; requireCharacteristic: boolean }
+  /**
+   * A guide-tone line (U12.L05, J1.L04, JC1): the share of the chord changes of `harmony` at which `track`
+   * sounds the new chord's 3rd or 7th is at least `minRatio`. Wave 6 (planned with the rule): `at` says which
+   * notes are judged: the note sounding at each chord `change` (default), every `strong` beat, or `all` the
+   * line's notes; `maxMoveSemis`: from one judged note to the next the line moves at most this many half
+   * steps (a guide-tone line moves by step or stays: 2).
+   */
+  | {
+      rule: "guide-tones";
+      track: TrackRef;
+      harmony: TrackRef;
+      minRatio: number;
+      at?: "change" | "strong" | "all";
+      maxMoveSemis?: number;
+    }
+  /**
+   * Kept, for pivot modulations (U17.L01). Lifts use `key-change`. The piece ends in the key `to` names,
+   * relative to the key it starts in (`dominant`: a 5th up; `relative`: the relative minor or major), from
+   * `atBar` on when given. Wave 6: `via: "pivot"` also asks that the last chord before the new key's first
+   * dominant belongs to both keys (the pivot chord); `"direct"` that none does.
+   */
+  | {
+      rule: "modulation";
+      to: "up-step" | "up-half" | "relative" | "dominant" | KeySpec;
+      atBar?: number;
+      via?: "pivot" | "direct";
+    }
+  /**
+   * The piece is in `mode` on `tonic` (contracts §6.6 C6): none of its notes is the degree the mode replaces
+   * (`MODE_CHARACTERISTIC`: no leading tone in Mixolydian, no ♭6 in Dorian), the tonic chord sounds in at least
+   * 40% of the bars, and with `requireCharacteristic` the characteristic tone falls on a strong beat at least
+   * twice. Wave 6 (feature `mode.any-of`): `anyOf` lets the learner choose ("Mixolydian or Dorian", C6): the
+   * piece passes when it meets the rule in one of them (`mode` is then the one the brief shows first); `tonic:
+   * "declared"` takes the tonic from the piece's own first `.scale()`.
+   */
+  | {
+      rule: "mode";
+      tonic: string;
+      mode: ScaleMode;
+      requireCharacteristic: boolean;
+      anyOf?: ScaleMode[];
+    }
   /**
    * `choruses` (Wave 5, feature `blues-form.choruses`): at least this many twelve-bar choruses in a row
    * (C5: 2). `variant: "standard"` also accepts the quick change when `quickChangeOk` is set (C5 takes either).
@@ -122,8 +193,8 @@ export type RubricRuleBody =
   | { rule: "polyrhythm"; a: TrackRef; b: TrackRef; ratio: [number, number] }
   | { rule: "register-separation"; low: TrackRef; high: TrackRef; minGapSemis: number }
   | { rule: "no-muddy-low"; track: TrackRef }
-  /** Amended: toolbox IDs, like the `must-use` constraint. */
-  | { rule: "uses"; tool: ToolId | ToolId[]; min?: number }
+  /** Amended: toolbox IDs, like the `must-use` constraint (Wave 6: a sound ID too). */
+  | { rule: "uses"; tool: ToolId | SoundId | (ToolId | SoundId)[]; min?: number }
   /** One-off checks registered by name with a unit test (`walking-bass`, `allowed-tensions`, `ii-v-chain`). */
   | { rule: "custom"; fn: string; params?: Record<string, unknown> }
   /**
@@ -163,8 +234,21 @@ export type RubricRuleBody =
    * bars; `sameMelody`: key-relative degree sequences of the two sections are equal.
    */
   | { rule: "key-change"; at: SectionRef; semitones: number[]; minBarsAfter?: number; sameMelody?: boolean }
-  /** ≥ `min` hits with effective gain ≤ `maxGain` (default 0.4) at the given positions. */
-  | { rule: "velocity-ghosts"; track: TrackRef; min: number; maxGain?: number; on?: "16th-offbeat" | "any" }
+  /**
+   * ≥ `min` hits with effective gain ≤ `maxGain` (default 0.4) at the given positions. The effective gain is
+   * `gain × velocity` (U13.L02 writes ghost notes with `.velocity("1 .3")`). Wave 6: `drum` counts only that
+   * drum's hits (ghost snares), and `accents` asks for at least that many hits of the same track at full level
+   * (effective gain ≥ 0.8), so a line that is quiet throughout is not a line with ghost notes.
+   */
+  | {
+      rule: "velocity-ghosts";
+      track: TrackRef;
+      min: number;
+      maxGain?: number;
+      on?: "16th-offbeat" | "any";
+      drum?: DrumRole;
+      accents?: number;
+    }
   | { rule: "onsets"; track: TrackRef; drum?: DrumRole; contains?: Rat[]; equals?: Rat[]; perBar: boolean }
   /**
    * `anyOf` (Wave 5, feature `degree-set.any-of`): at least `minCount` (default 1) notes of the line fall on
@@ -181,8 +265,8 @@ export type RubricRuleBody =
   /** `contains`: every one listed; `anyOf` (Wave 4, U05.L08 "Rhodes or organ"): at least one of them. */
   | { rule: "sounds"; subsetOf?: SoundId[]; contains?: SoundId[]; anyOf?: SoundId[] }
   | { rule: "distinct-pitches"; track: TrackRef; min: number }
-  /** Device names come from `AnalysisSummary.devices`. */
-  | { rule: "device-count"; devices: string[]; min: number }
+  /** Device names are `DEVICE_NAMES` (the grader's `detectDevices`; `AnalysisSummary.devices` lists them). */
+  | { rule: "device-count"; devices: DeviceName[]; min: number }
   /** For example "melody identical to the reference" (JC4, AC1). */
   | { rule: "matches"; reference: Reference; matcher: Matcher; min: number }
   /**
@@ -262,7 +346,31 @@ export type RubricRuleBody =
    * `approximate = false`. A declared `swing` is carried by the notation (contracts §6.10 item 3), so a
    * swung flavour passes; a piece the quantizer cannot write exactly fails with the bars it rounded.
    */
-  | { rule: "notates"; view: "lead-sheet" | "staff"; melody?: TrackRef };
+  | { rule: "notates"; view: "lead-sheet" | "staff"; melody?: TrackRef }
+  /**
+   * Wave 6. A reharmonization (U16.L05; later JC4): the same tune over new chords. Both must hold:
+   * - the notes of `melody` are the reference's, note for note (pitch, onset and length; any sound);
+   * - the chords differ from the reference's: with `kinds`, at least `min` chords are of one of those kinds
+   *   (a borrowed chord, a secondary dominant); without `kinds`, at least `min` bars carry another chord than
+   *   the reference's bar (compared on the triad core).
+   * `harmony` is the chord track (default: the piece's chords). The reference is the original setting, the
+   * step's starter as a rule.
+   */
+  | {
+      rule: "reharmonize";
+      melody: TrackRef;
+      reference: Reference;
+      min: number;
+      kinds?: OutsideChordKind[];
+      harmony?: TrackRef;
+    }
+  /**
+   * Wave 6 Build (U13.L05 "a triplet somewhere"). At least `min` tuplet groups in the line: a beat (or two
+   * beats) cut into equal parts the meter does not give it, a triplet where the beat divides in two, a duplet
+   * in a compound meter (the grader's `tupletsOf`). `division` asks for one kind (3: triplets). Counted on one
+   * pass of the line's own loop, wherever in the bar the groups fall (the `onsets` rule is positional).
+   */
+  | { rule: "tuplets"; track: TrackRef; min: number; division?: number };
 
 /** The kinds of non-chord tone a melody note can be (U07.L03–L05; the harmony view's roles). */
 /**
@@ -273,6 +381,27 @@ export type RubricRuleBody =
  */
 export const BASS_MEMBERS = ["root", "fifth", "octave", "third", "approach"] as const;
 export type BassMember = (typeof BASS_MEMBERS)[number];
+
+/**
+ * Wave 6. The compositional devices `device-count` can ask for (contracts §6.6 CF-A, JC4), named exactly as
+ * the grader's `detectDevices` reports them. The first six are the core's (CF-A asks for four of them); the
+ * last four belong to the jazz track (JC4).
+ */
+export const DEVICE_NAMES = [
+  "secondary dominant",
+  "borrowed chord",
+  "modulation",
+  "suspension",
+  "syncopated bass",
+  "modal colour",
+  "tritone sub",
+  "secondary ii–V",
+  "backdoor",
+  "diminished passing",
+] as const;
+export type DeviceName = (typeof DEVICE_NAMES)[number];
+/** The six devices of the Core Finale's rubric (contracts §6.6 CF-A). */
+export const CORE_DEVICES = DEVICE_NAMES.slice(0, 6) as readonly DeviceName[];
 
 export const NON_CHORD_TONE_ROLES = [
   "passing",
@@ -333,6 +462,8 @@ export const RUBRIC_RULE_NAMES = [
   "non-chord-tones",
   "bass-line",
   "notates",
+  "reharmonize",
+  "tuplets",
 ] as const satisfies readonly RubricRuleName[];
 
 /** What a rule evaluation returns. Numeric rules give partial credit `min(1, value / target)`. */

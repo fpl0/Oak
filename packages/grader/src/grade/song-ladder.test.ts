@@ -83,11 +83,16 @@ describe("L6 stages", () => {
 });
 
 describe("L5 per phrase", () => {
-  test("a phrase in lesson mode, key-relative", async () => {
+  test("a phrase in lesson mode, in the recording's key (d12)", async () => {
     const item = { itemId: "lad.5.test.1", level: 5 as const, phrase: 1 };
-    const r = await grade(item, `setcpm(100/4)\nmel: ${MEL.replace("C4:major", "D4:major")}`);
+    const r = await grade(item, `setcpm(100/4)\nmel: ${MEL}`);
     expect(r.mode).toBe("lesson");
     expect(songLadderPassed(item, r)).toBe(true);
+    // Decision of 2026-11-13: from L5 on a transposed answer fails and names both keys (it passed before).
+    const moved = await grade(item, `setcpm(100/4)\nmel: ${MEL.replace("C4:major", "D4:major")}`);
+    expect(songLadderPassed(item, moved)).toBe(false);
+    const wrongKey = (moved.diagnostics ?? []).find((d) => d.id === "melody.wrong-key");
+    expect(wrongKey?.params).toMatchObject({ gotKey: "D major", expKey: "C major" });
   });
 });
 
@@ -124,17 +129,22 @@ describe("§6.12: given swing, the straightened grid, a phrase's own window, rev
     const straight = await gradeSong(EIGHTH_SONG, item, `setcpm(100/4)\nmel: ${EIGHTHS}`);
     expect(straight.score).toBeGreaterThanOrEqual(SONG_LADDER_PASS[6].melody);
   });
-  test("L6 changes compare on the triad core: C F G triads pass where the strain has dominant sevenths", async () => {
+  test("d11: L6 changes read the sevenths; plain triads where the strain has dominant sevenths fail", async () => {
     const item = {
       itemId: "lad.6.test",
       level: 6 as const,
       phrase: [1, 3] as [number, number],
       stage: "changes" as const,
     };
+    const right = await gradeSong(SONG, item, `setcpm(100/4)\nbass: ${BASS}\nchords: ${CHORDS}`);
+    expect(right.mode).toBe("capstone");
+    expect(songLadderPassed(item, right)).toBe(true);
+    // Decision of 2026-11-13: the right root with the wrong quality earns nothing for its bar (it passed before).
     const triads = CHORDS.replace(/7/g, "");
     const r = await gradeSong(SONG, item, `setcpm(100/4)\nbass: ${BASS}\nchords: ${triads}`);
-    expect(r.mode).toBe("capstone");
-    expect(songLadderPassed(item, r)).toBe(true);
+    expect(songLadderPassed(item, r)).toBe(false);
+    expect(r.score).toBe(0);
+    expect((r.diagnostics ?? []).find((d) => d.id === "harmony.rn-quality")?.where?.bar).toBe(1);
   });
   test("L6 changes grade the chords alone: a right bass under a wrong last line does not carry it", async () => {
     const item = {

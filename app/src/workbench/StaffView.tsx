@@ -7,7 +7,13 @@
 // the notes pointed at from elsewhere (a tutor reference, a feedback row, a note selected in the code or the roll).
 import type { KeySpec, NEvent } from "@oak/content-kit";
 import { type AbcResult, type ChordLabelSet, chordLabelTexts } from "@oak/notation";
-import { nsFromClasses, type RenderedStaff, renderStaff, tagChordLabels } from "@oak/notation/render";
+import {
+  markGuideTones,
+  nsFromClasses,
+  type RenderedStaff,
+  renderStaff,
+  tagChordLabels,
+} from "@oak/notation/render";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type AnnotationKinds, anyAnnotation } from "./annotate.ts";
 import type { BusState, HighlightBus } from "./highlight-bus.ts";
@@ -35,6 +41,21 @@ export interface StaffViewProps {
   chordSet?: ChordLabelSet;
   /** Wave 4: show a lead sheet of these melody events (with the chord symbols above) instead of the full staff. */
   lead?: readonly NEvent[];
+  /**
+   * The bar that plays (0-based cycle), `null` when stopped. The staff turns to the page that holds it (d3): the
+   * section that is playing is on screen even while its first bar rests or a note of the page before still rings.
+   * Absent: the page follows the sounding notes, as before.
+   */
+  playBar?: number | null;
+  /** Wave 6: the guide-tone lens: the notes that are the 3rd or the 7th of their chord, marked on the staff. */
+  guide?: ReadonlyMap<string, { role: "third" | "seventh" }>;
+}
+
+/** The staff page that holds a bar: `null` when the bar is outside the pages. */
+export function pageOfBar(bar: number | null | undefined, pageBars: number, pages: number): number | null {
+  if (bar === null || bar === undefined || !Number.isFinite(bar) || bar < 0) return null;
+  const page = Math.floor(bar / Math.max(1, pageBars));
+  return page < pages ? page : null;
 }
 
 const PREFIX = "oak-e";
@@ -70,7 +91,17 @@ function rove(host: HTMLElement, to: SVGElement | null): void {
   if (to) target.focus();
 }
 
-export function StaffView({ model, bus, stale, hover, annotations, chordSet, lead }: StaffViewProps) {
+export function StaffView({
+  model,
+  bus,
+  stale,
+  hover,
+  annotations,
+  chordSet,
+  lead,
+  playBar,
+  guide,
+}: StaffViewProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const rendered = useRef<RenderedStaff | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -81,6 +112,10 @@ export function StaffView({ model, bus, stale, hover, annotations, chordSet, lea
     selected: ClassSync;
     issue: ClassSync;
   } | null>(null);
+  const guideRef = useRef(guide);
+  guideRef.current = guide;
+  const playBarRef = useRef(playBar);
+  playBarRef.current = playBar;
   const ann = annotations ?? model.staffSource?.annotations ?? null;
   const annRef = useRef(ann);
   annRef.current = ann;
@@ -201,7 +236,10 @@ export function StaffView({ model, bus, stale, hover, annotations, chordSet, lea
       setPage(want);
       return true;
     };
-    if (pr.pages > 1 && s.playing.size > 0) {
+    if (pr.pages > 1 && playBarRef.current !== null && playBarRef.current !== undefined) {
+      // The host knows the bar that plays: its page, whatever sounds (a rest, a note held over from the page before).
+      if (turn(pageOfBar(playBarRef.current, pr.pageBars, pr.pages))) return;
+    } else if (pr.pages > 1 && s.playing.size > 0) {
       if (turn(pageOf(s.playing))) return;
     } else if (pr.pages > 1) {
       // Stopped: something pointed at from elsewhere (a tutor reference or a feedback row, a note clicked in the
@@ -244,8 +282,42 @@ export function StaffView({ model, bus, stale, hover, annotations, chordSet, lea
     sy.selected.set(bus.staffNsOf(s.selected.events, page));
     sy.issue.set(bus.staffNsOf(s.issues.keys(), page));
   };
+  /** The guide-tone lens on the drawn page: each head that is a 3rd or a 7th gets notation's guide classes. */
+  const markGuide = () => {
+    const host = hostRef.current;
+    if (!host || !rendered.current) return;
+    const marks = guideRef.current;
+    const list = [];
+    for (const entry of marks ? (pageAbc.current?.idMap ?? []) : [])
+      for (const [member, id] of entry.eventIds.entries()) {
+        const m = marks?.get(id);
+        if (m)
+          list.push({
+            n: entry.n,
+            member,
+            eventId: id,
+            role: m.role,
+            pitch: entry.pitches[member] ?? "",
+            chord: "",
+            onset: [0, 1] as [number, number],
+          });
+      }
+    try {
+      host.dataset.guideHeads = String(markGuideTones(host, list, PREFIX).length);
+    } catch {
+      // The marks are an aid: a drawing they cannot be placed on stays unmarked.
+      delete host.dataset.guideHeads;
+    }
+  };
+  const markGuideRef = useRef(markGuide);
+  markGuideRef.current = markGuide;
   const applyRef = useRef(apply);
   applyRef.current = apply;
+  // The page follows the bar that plays; the guide-tone marks follow the lens.
+  useEffect(() => {
+    applyRef.current(bus.get());
+    markGuideRef.current();
+  }, [bus, playBar, guide]);
 
   const sheetRef = useRef(sheet);
   sheetRef.current = sheet;
@@ -320,6 +392,7 @@ export function StaffView({ model, bus, stale, hover, annotations, chordSet, lea
         // One tab stop for the whole staff (roving tabindex): abcjs makes every note and rest a stop, which
         // puts hundreds of stops between the transport and the rest of the page on a long loop.
         rove(host, null);
+        markGuideRef.current();
         setStatus("ready");
         setError(null);
         applyRef.current(bus.get());
@@ -421,6 +494,7 @@ export function StaffView({ model, bus, stale, hover, annotations, chordSet, lea
       data-testid="staff-view"
       data-status={status}
       data-page={page}
+      data-guide={guide ? guide.size : undefined}
       data-lead={isLead ? "1" : undefined}
       data-chord-symbols={labelTexts.symbols.join(" ") || undefined}
       data-romans={labelTexts.romans.join(" ") || undefined}

@@ -2,11 +2,11 @@
 // store (one preference for every view, gated by unlocks) and Settings → Learning's "Roll labels"; outside the app
 // (the standalone e2e page, tests) a host can provide a lens source through `WorkbenchLensProvider`, and with
 // neither the Workbench keeps its Wave 2 labels. The app hooks run only under a QueryClient.
-import type { ChordLensId, LensId, LensPrefs, LineLensId } from "@oak/api";
+import type { ChordLensId, LensId, LensPrefs, LineLensId, MusicLensId } from "@oak/api";
 import { QueryClientContext, useQueryClient } from "@tanstack/react-query";
-import { createContext, type ReactNode, useContext } from "react";
-import { chordLensPrefs, lineLensPrefs, useLenses } from "../lib/lenses.ts";
-import { apiKey, useBootstrap } from "../lib/queries.ts";
+import { createContext, type ReactNode, useContext, useMemo } from "react";
+import { chordLensPrefs, lineLensPrefs, musicLensPrefs, useLenses } from "../lib/lenses.ts";
+import { apiKey, useBootstrap, useCourseProgress } from "../lib/queries.ts";
 import type { LensState, RollLabelSetting } from "./lens-view.ts";
 
 export interface LensSource extends LensState {
@@ -24,6 +24,25 @@ export interface LensSource extends LensState {
    * Absent: a host without them shows none of the three outside a lesson step.
    */
   lines?: LineLensSource;
+  /**
+   * Wave 6 (wave6.md §4.3): guide tones, the key ribbon and the beat grid, from the same store. Unlike the label
+   * lenses these also apply inside a lesson step (no step names them). Absent: none of the three.
+   */
+  music?: MusicLensSource;
+  /**
+   * Wave 6: the lessons the learner has completed, for how deep the chord and degree lenses write
+   * (`harmonyDepth`: applied numerals from U15.L02, borrowed ones from U16.L01) and for the key panel's rows.
+   * Absent: none (a host that knows better passes `harmonyDepth` to the Workbench).
+   */
+  completedLessons?: ReadonlySet<string>;
+}
+
+export interface MusicLensSource {
+  /** The stored preference (absent = on), whatever is unlocked. */
+  prefs: Record<MusicLensId, boolean>;
+  /** Which of them the learner's unlocks open (the Workbench adds the tools of the lesson being taken). */
+  available: Record<MusicLensId, boolean>;
+  toggle(id: MusicLensId): void;
 }
 
 export interface LineLensSource {
@@ -57,7 +76,13 @@ export function useLensSourceKind(): LensSource | "app" | null {
 export function useAppLensSource(): LensSource {
   const lenses = useLenses();
   const bootstrap = useBootstrap();
+  const progress = useCourseProgress();
   const qc = useQueryClient();
+  const done = progress.data?.lessons;
+  const completedLessons = useMemo(
+    () => new Set((done ?? []).filter((l) => l.completedAt !== null).map((l) => l.lessonId as string)),
+    [done],
+  );
   // A toggle flips what is stored now, not what the last render saw: two presses of Shift+H inside one frame
   // (a held or hammered key) are two toggles. `useLenses().toggle` reads the render's preferences, so the second
   // press set the value the first had already set and was dropped.
@@ -79,5 +104,11 @@ export function useAppLensSource(): LensSource {
       available: lenses.lines.available,
       toggle: (id) => lenses.lines.set(id, !lineLensPrefs(stored())[id]),
     },
+    music: {
+      prefs: lenses.music.prefs,
+      available: lenses.music.available,
+      toggle: (id) => lenses.music.set(id, !musicLensPrefs(stored())[id]),
+    },
+    completedLessons,
   };
 }

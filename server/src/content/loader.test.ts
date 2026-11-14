@@ -89,11 +89,11 @@ describe("the real content", () => {
     ]);
     expect(order.indexOf("U02.CP")).toBe(order.indexOf("U03.L01") + 1);
     expect(order[order.indexOf("U02.CP") + 1]).toBe("C1.S1");
-    // GYM.01–GYM.17 in the core; the first at session 66, after U07.L03.
+    // GYM.01–GYM.17 in the core; the first at session 67, after U07.L03 (66 until contracts 1.6 added U05.L09).
     const gyms = order.filter((id) => id.startsWith("GYM."));
     expect(gyms).toEqual(Array.from({ length: 17 }, (_, i) => `GYM.${String(i + 1).padStart(2, "0")}`));
-    expect(order.indexOf("GYM.01")).toBe(65);
-    expect(order[64]).toBe("U07.L03");
+    expect(order.indexOf("GYM.01")).toBe(66);
+    expect(order[65]).toBe("U07.L03");
     const generated = join(CONTENT_DIR, ".generated", "course-index.json");
     if (existsSync(generated)) {
       const sessions = (

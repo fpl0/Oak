@@ -16,6 +16,7 @@ import { Disc3, Mic2, RotateCcw, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { fromPromise } from "xstate";
 import { ALBUM_TITLE_MAX, DEFAULT_ALBUM_TITLE, useAlbumTitle } from "../album/title.ts";
+import { useAlbum } from "../lib/queries.ts";
 import { Button } from "../ui/kit/Button.tsx";
 import { Progress } from "../ui/kit/basics.tsx";
 import { Callout, SegmentedControl } from "../ui/kit/Controls.tsx";
@@ -72,7 +73,9 @@ export function ReleaseDialog(p: ReleaseDialogProps) {
   const tags = [...p.tags];
   // The album gets its name at its first release (ux §5.3), editable later on /album.
   const album = useAlbumTitle();
-  const namesAlbum = p.state.trackId === null && !album.named;
+  // The album is named with its first track only: a learner who kept "Oak Sessions" is not asked again on track 11.
+  const albumTracks = useAlbum().data?.tracks.length;
+  const namesAlbum = p.state.trackId === null && !album.named && albumTracks === 0;
   const [albumName, setAlbumName] = useState(album.title);
   const [flavour, setFlavour] = useState<FlavourId | null>(p.flavour);
   const flavourRef = useRef(flavour);
@@ -115,6 +118,7 @@ export function ReleaseDialog(p: ReleaseDialogProps) {
             includeReviewNote: input.includeReviewNote && p.review !== null,
             reviewNote: p.review?.linerNote ?? null,
             recording: input.recording,
+            otherTakes: input.otherTakes,
           }).catch((e: unknown) => {
             throw new Error(releaseErrorText(e, input.recording !== null));
           });
@@ -220,7 +224,7 @@ export function ReleaseDialog(p: ReleaseDialogProps) {
               disabled={busy}
               onClick={() => send({ type: "RECORD" })}
             >
-              Record again
+              Record another take
             </Button>
             <Button
               variant="primary"
@@ -368,7 +372,34 @@ export function ReleaseDialog(p: ReleaseDialogProps) {
         )}
         {(phase === "take" || (phase === "releasing" && takeUrl)) && takeUrl && (
           <div className="flex flex-col gap-1.5">
-            <p className="text-sm font-medium">Your take · {clock(ctx.recording?.durationS ?? 0)}</p>
+            {ctx.takes.length > 1 ? (
+              <fieldset className="flex flex-col gap-1" data-testid="release-takes">
+                <legend className="text-sm font-medium">
+                  Which take plays on the album?{" "}
+                  <span className="font-normal text-text-3">Every take is kept with the track.</span>
+                </legend>
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  {ctx.takes.map((t, i) => (
+                    <label
+                      key={`${i}-${t.durationS}`}
+                      className="flex cursor-pointer items-center gap-1.5 text-sm"
+                    >
+                      <input
+                        type="radio"
+                        name="rel-take"
+                        className="accent-[var(--oak-accent)]"
+                        checked={ctx.chosen === i}
+                        disabled={busy}
+                        onChange={() => send({ type: "CHOOSE", index: i })}
+                      />
+                      Take {i + 1} · {clock(t.durationS)}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            ) : (
+              <p className="text-sm font-medium">Your take · {clock(ctx.recording?.durationS ?? 0)}</p>
+            )}
             {/* biome-ignore lint/a11y/useMediaCaption: an instrumental recording of the learner's own piece. */}
             <audio controls src={takeUrl} className="w-full" data-testid="take-audio" />
           </div>

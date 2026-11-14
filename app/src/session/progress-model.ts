@@ -229,7 +229,7 @@ export const EVIDENCE_LABEL: Record<CanDoEntry["evidenceKind"], string> = {
  * Reached by a graded pass at that level or higher: passed at 85% or better, nothing revealed (wave4.md §5.4,
  * `TranscriptionSchema.gradedPass`). A finished, revealed or self-assessed transcription never counts.
  */
-export type RungLevel = 1 | 2 | 3 | 4 | 5 | 6;
+export type RungLevel = 1 | 2 | 3 | 4 | 5 | 6 | 8;
 export const LADDER_CLAIMS: Readonly<Record<RungLevel, { name: string; claim: string }>> = {
   1: { name: "Drum loops", claim: "You can transcribe a drum loop." },
   2: { name: "Bass lines", claim: "You can now transcribe a bass line." },
@@ -237,6 +237,8 @@ export const LADDER_CLAIMS: Readonly<Record<RungLevel, { name: string; claim: st
   4: { name: "Short melodies", claim: "You can transcribe a short melody." },
   5: { name: "Folk songs", claim: "You can transcribe a whole folk song, phrase by phrase." },
   6: { name: "Blues", claim: "You can transcribe a blues: its bass, its changes and its melody." },
+  // Wave 6 (contracts §2.9): L7 is the learner's own audio, self-assessed, never a rung; L8 is a whole standard.
+  8: { name: "Standards", claim: "You can transcribe a standard: its form, bass, changes and melody." },
 };
 
 export interface LadderRung {
@@ -258,12 +260,20 @@ export interface LadderRung {
  */
 export function ladderRungs(ladder: { level: number; gradedPasses: Record<string, number> }): LadderRung[] {
   const passes = (l: number) => Math.max(0, ladder.gradedPasses[String(l)] ?? 0);
+  // L8 comes into view once L6 is reached (a pass at 6, a released X2) or the learner stands on it (a released
+  // CF-T counts as a pass at 8 on the server).
   const top: RungLevel =
-    ladder.level >= 5 || passes(5) > 0 || passes(6) > 0 ? 6 : ladder.level >= 4 || passes(4) > 0 ? 5 : 4;
-  const levels = ([1, 2, 3, 4, 5, 6] as const).filter((l) => l <= top);
+    ladder.level >= 8 || passes(8) > 0 || passes(6) > 0
+      ? 8
+      : ladder.level >= 5 || passes(5) > 0
+        ? 6
+        : ladder.level >= 4 || passes(4) > 0
+          ? 5
+          : 4;
+  const levels = ([1, 2, 3, 4, 5, 6, 8] as const).filter((l) => l <= top);
   return levels.map((level) => {
     let higher = 0;
-    for (let l = level; l <= 6; l++) higher += passes(l);
+    for (let l = level; l <= 8; l++) higher += passes(l);
     return {
       level,
       ...LADDER_CLAIMS[level],
@@ -328,6 +338,27 @@ export function albumWindow<T extends { id: string }>(
   const next = sorted.findIndex((c) => !released.has(c.id));
   const end = next < 0 ? sorted.length : next + 1;
   return sorted.slice(Math.max(0, end - size), Math.max(end, Math.min(size, sorted.length)));
+}
+
+const FINALE: readonly string[] = ["CF-T", "CF-A"];
+
+/**
+ * Today's album strip (Wave 6): the core album's slots around where the learner is, in the record's running order
+ * (album `SIDE_A_ORDER`, END.md): C0…C7, X1 and X2 by their first session, then the two parts of the core finale,
+ * the single last. CF-T's first session falls before C6's, but it is track 11; neither finale is ever left out.
+ */
+export function albumStripSlots<T extends { id: string }>(
+  capstones: readonly T[],
+  order: readonly string[],
+  released: ReadonlySet<string | null>,
+  size = 3,
+): T[] {
+  const core = capstones.filter((c) => /^(C|X)\d+$/.test(c.id) || FINALE.includes(c.id));
+  const finaleLast = [
+    ...order.filter((id) => !FINALE.some((f) => id.startsWith(`${f}.`))),
+    ...FINALE.map((f) => `${f}.S1`),
+  ];
+  return albumWindow(core, finaleLast, released, size);
 }
 
 // --- Wave 5: what backs each milestone ------------------------------------------------------------------------

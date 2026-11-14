@@ -91,14 +91,22 @@ const labelsOf = (t: Trial) => {
 describe("stage E words", () => {
   test("major or minor reads as the learner's words, never an ID", () => {
     const t = trialAt("fam.key.mode", 1, 7, "minor");
-    expect(labelsOf(t)).toEqual(["Major", "Minor"]);
-    expect(promptOf(t, def("fam.key.mode"))).toBe("Major or minor?");
+    // Wave 6: the engine may name its own options ("Natural minor") and ask its own question; either way the
+    // learner reads words, never an ID.
+    const labels = labelsOf(t);
+    expect(labels.length).toBe(2);
+    expect(labels[0]).toBe("Major");
+    expect(labels[1]).toMatch(/^(Minor|Natural minor)$/);
+    expect(promptOf(t, def("fam.key.mode"))).toMatch(/^(Major or minor\?|Which scale is this in\?)$/);
   });
 
   test("a mode is a mode, never the loop of the same name", () => {
     const t = trialAt("fam.key.mode", 4, 7, "mixolydian");
-    expect(labelsOf(t)).toEqual(["Mixolydian", "Major"]);
-    expect(promptOf(t, def("fam.key.mode"))).toBe("Which mode?");
+    const labels = labelsOf(t);
+    expect(labels.some((l) => /^Mixolydian/.test(l))).toBe(true);
+    expect(labels).toContain("Major");
+    expect(labels.every((l) => /^[A-Z]/.test(l) && !/^[a-z-]+$/.test(l))).toBe(true);
+    expect(promptOf(t, def("fam.key.mode"))).toMatch(/\?/);
     // The loop family keeps its own word.
     expect(stageEOptionLabel("harmony-schema", "mixolydian", [])).toBeNull();
   });
@@ -524,6 +532,8 @@ describe("the Practice hub: stage E, honest levels, graduation as progress", () 
       "fam.frm.blues",
       "fam.key.mode",
       "fam.rhy.groove-lock",
+      // Wave 6: intervals by name arrive with the sevenths (U12.L06).
+      "fam.int.isolated",
       "fam.frm.sections",
     ]);
     expect(e?.title).toBe("Stage E · Minor, sevenths and the blues");

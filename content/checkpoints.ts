@@ -87,6 +87,11 @@ export const CHECKPOINT_MAKE_BANDS: Partial<Record<CheckpointId, BandRef>> = {
   "U10.CP": { band: "band.aeolian-4bar", tracks: ["drums"] },
   // Twelve bars of the learner's own: kick and snare on the beat, the hats left to the learner (straight or swung).
   "U11.CP": { band: "band.blues-12bar", tracks: ["drums"] },
+  // Wave 6. U13.CP has no Band: its drums are the learner's lines (the unit's rule), and U13.L06's Make has none.
+  // U14.CP: a rock loop in D Mixolydian whose chords the rule reads, so the Band keeps time only.
+  "U14.CP": { band: "band.axis-4bar", tracks: ["drums"] },
+  // U17.CP: a song in sections whose last chorus lifts; the Band's chords would stay in the old key.
+  "U17.CP": { band: "band.axis-4bar", tracks: ["drums"] },
 };
 
 /** Pass rules (contracts §7.6). The numbers are also in @oak/srs `CHECKPOINT`; content CI compares them. */

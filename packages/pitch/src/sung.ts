@@ -16,7 +16,8 @@ import type {
 } from "./types.ts";
 import { HOP_SIZE, WINDOW_SIZE } from "./types.ts";
 
-const TIMED_MODES: readonly SingMode[] = ["pitch", "degree", "sight"];
+// `guide-tones` (Wave 6): one note per chord while the chords play, each chord a window.
+const TIMED_MODES: readonly SingMode[] = ["pitch", "degree", "sight", "guide-tones"];
 /** Notes fewer than this never get drift compensation: the median of one or two errors is the error itself. */
 export const DRIFT_MIN_NOTES = 3;
 const EPS = 1e-9;
@@ -391,9 +392,14 @@ function grade(
   });
 
   // Drift compensation.
-  // Blue targets (bent toward a neighbour on purpose) say nothing about drift.
+  // Blue targets (bent toward a neighbour on purpose) say nothing about drift; nor does a note sung as its
+  // declared neighbour (Wave 6: fa for fi is another note, not a flat one).
   const near = errors.filter(
-    (e, i): e is number => e !== null && Math.abs(e) < 100 && !(targets[i] as SungTarget).blue,
+    (e, i): e is number =>
+      e !== null &&
+      Math.abs(e) < 100 &&
+      !(targets[i] as SungTarget).blue &&
+      neighbourSung(targets[i] as SungTarget, e) === null,
   );
   const drift = near.length > 0 ? median(near) : 0;
   const compensate = near.length >= DRIFT_MIN_NOTES && Math.abs(drift) <= tol.driftCompCents + EPS;
@@ -462,7 +468,38 @@ function grade(
         },
       });
     }
-    if (credit === 0) {
+    // Wave 6: a pitch nearer to a declared neighbour (the key's own note beside a chromatic degree, the plain
+    // scale's note beside a mode's colour tone) than to the target. Outside the tolerance it is that other note.
+    const rival = bend === null && !beyond[i] && !jumped[i] ? neighbourSung(target, cents) : null;
+    const rivalParams = rival
+      ? {
+          ...params,
+          got: midiName(rival.midi),
+          gotMidi: rival.midi,
+          cents: Math.round(Math.abs(cents)),
+          // Where the target lies from what was sung.
+          dir: rival.midi < target.midi ? "above" : "below",
+        }
+      : null;
+    if (rival && rivalParams && credit < 1) {
+      credit = 0;
+      feedback = "sing.wrong-note";
+      diagnostics.push({
+        id: rival.kind === "parallel" ? "sing.plain-scale" : "sing.neighbour",
+        severity: "error",
+        dim: "pitch",
+        where,
+        params: rivalParams,
+      });
+    } else if (rival && rivalParams) {
+      diagnostics.push({
+        id: "sing.neighbour-close",
+        severity: "info",
+        dim: "cents",
+        where,
+        params: { ...rivalParams, dir: cents > 0 ? "sharp" : "flat" },
+      });
+    } else if (credit === 0) {
       feedback = "sing.wrong-note";
       diagnostics.push({ id: "sing.wrong-note", severity: "error", dim: "pitch", where, params });
     } else if (jumped[i]) {
@@ -506,6 +543,13 @@ function grade(
     }
     const result: SungNoteResult = { ...base, sungMidi, cents, credit, timingCredit, onsetErrorMs, feedback };
     if (bend !== null) result.blue = { neighbourMidi: target.midi + bend, judgedCents: judged };
+    if (rival)
+      result.neighbour = {
+        midi: rival.midi,
+        kind: rival.kind,
+        cents: Math.round((cents - (rival.midi - target.midi) * 100) * 10) / 10,
+        credited: credit === 1,
+      };
     return result;
   });
 
@@ -569,6 +613,28 @@ function grade(
     startShiftSec,
     ...(take ? { take } : {}),
   };
+}
+
+/**
+ * Wave 6 (U14, U15): the declared neighbour (`SungTarget.neighbours`) a note was sung as, when the pitch — the
+ * target plus `cents`, already folded into the target's octave — lies nearer to it than to the target and within
+ * a quarter tone of it; `null` otherwise (a pitch further off is a third note, and the usual wrong-note line names
+ * it). The neighbour comes back in the octave nearest the target.
+ */
+export function neighbourSung(
+  target: Pick<SungTarget, "midi" | "neighbours">,
+  cents: number,
+): { midi: number; kind: "diatonic" | "parallel" } | null {
+  if (!target.neighbours || target.neighbours.length === 0) return null;
+  let best: { midi: number; kind: "diatonic" | "parallel"; d: number } | null = null;
+  for (const n of target.neighbours) {
+    const midi = n.midi + 12 * Math.round((target.midi - n.midi) / 12);
+    const d = Math.abs(cents - (midi - target.midi) * 100);
+    // Nearer the neighbour than the target, and within a quarter tone of it: any further and it is a third note.
+    if (d <= 50 + EPS && d < Math.abs(cents) - EPS && (best === null || d < best.d))
+      best = { midi, kind: n.kind, d };
+  }
+  return best ? { midi: best.midi, kind: best.kind } : null;
 }
 
 /**

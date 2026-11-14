@@ -4,7 +4,7 @@
 import type { SkillState } from "@oak/api";
 import { Link } from "@tanstack/react-router";
 import { clsx } from "clsx";
-import { Maximize2, MicOff, Minus, MoveHorizontal, Plus, Route as RouteIcon } from "lucide-react";
+import { GitBranch, Maximize2, MicOff, Minus, MoveHorizontal, Plus, Route as RouteIcon } from "lucide-react";
 import { useState } from "react";
 import { useHotkeys } from "../ui/keys/KeymapProvider.tsx";
 import { Button, buttonClass, IconButton } from "../ui/kit/Button.tsx";
@@ -98,6 +98,49 @@ function ReviveBar({ model }: { model: OakModel }) {
         </Link>
       )}
     </div>
+  );
+}
+
+/**
+ * The advanced tracks as branches (tracks-model.ts), once Jazz or Rhythm is open: each named, with its honest line
+ * ("Open. Its first lessons are still being written."), and a way to its rows on the map. Absent before the U13
+ * checkpoint: the core is the whole tree until then.
+ */
+function BranchBar({ model, onGo }: { model: OakModel; onGo: (leafId: string) => void }) {
+  // Jazz and Rhythm: the branches that open at the U13 checkpoint. Arrangement & Sound has had its side lessons
+  // since U03 (their own line on Today and Progress); the Course view lists all three.
+  const rows = model.tracks.filter((t) => t.open && t.trackId !== "A");
+  if (rows.length === 0) return null;
+  const firstLeaf = (units: readonly string[]) =>
+    model.layout.nodes.find((n) => units.includes(n.unit))?.id ?? null;
+  return (
+    <ul
+      aria-label="Branches: the advanced tracks"
+      className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm"
+      data-testid="oak-branches"
+    >
+      {rows.map((t) => {
+        const leaf = firstLeaf(t.openUnits);
+        return (
+          <li key={t.trackId} className="flex min-w-0 items-baseline gap-1.5" data-track={t.trackId}>
+            <GitBranch aria-hidden className="size-3.5 shrink-0 self-center text-accent" />
+            {leaf ? (
+              <button
+                type="button"
+                onClick={() => onGo(leaf)}
+                className="font-medium underline-offset-2 hover:underline"
+                title={`Show ${t.title} on the map`}
+              >
+                {t.title}
+              </button>
+            ) : (
+              <span className="font-medium">{t.title}</span>
+            )}
+            <span className="text-text-2">{t.next ? `Next: ${t.next}.` : t.note}</span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -242,15 +285,17 @@ function TreeBody({
                 {next.targets.length > 0 && (
                   <span className="text-text-3">
                     {" "}
-                    · {next.kind === "lesson" ? "grows" : "checks"} {next.targets.length}{" "}
-                    {next.targets.length === 1 ? "leaf" : "leaves"}
+                    · {next.kind !== "lesson" ? "checks" : next.grows ? "grows" : "deepens"}{" "}
+                    {next.targets.length} {next.targets.length === 1 ? "leaf" : "leaves"}
                   </span>
                 )}
               </button>
             </>
           ) : (
-            <p className="text-sm text-text-2">
-              Every open lesson is done. New leaves appear as the course opens.
+            <p className="text-sm text-text-2" data-testid="oak-no-next">
+              {model.core === "complete"
+                ? "Every limb of the core is at full length. Reviews keep it green; the tracks are its open branches."
+                : "Every open lesson is done. New leaves appear as the course opens."}
             </p>
           )}
         </div>
@@ -285,7 +330,26 @@ function TreeBody({
         <Legend quiet={model.quiet.on} />
         <ReviveBar model={model} />
       </div>
-      <div className="relative h-[calc(100dvh-262px)] min-h-[380px]">
+      <BranchBar
+        model={model}
+        onGo={(id) => {
+          send("focus", id);
+          requestAnimationFrame(() =>
+            document
+              .querySelector<SVGGElement>(`[data-node="${CSS.escape(id)}"]`)
+              ?.focus({ preventScroll: true }),
+          );
+        }}
+      />
+      {/* The branch bar is one more line above the canvas: the canvas gives it up, the page never scrolls. */}
+      <div
+        className={clsx(
+          "relative min-h-[380px]",
+          model.tracks.some((t) => t.open && t.trackId !== "A")
+            ? "h-[calc(100dvh-298px)]"
+            : "h-[calc(100dvh-262px)]",
+        )}
+      >
         <OakMap
           layout={layout}
           states={states}
@@ -297,6 +361,7 @@ function TreeBody({
           onClose={close}
           command={command}
           unitProgress={model.units}
+          openUnits={model.openUnits}
           initialId={initialId}
         />
         {node && (
@@ -318,6 +383,12 @@ function TreeBody({
               reviveSec={model.reviveSec}
               quiet={model.quiet}
               isNext={next.targets.includes(node.id)}
+              branch={
+                // An open branch with no lesson written for this leaf's unit (a core unit never is one).
+                model.openUnits.has(node.unit) && !model.authored.has(node.introducedBy ?? "")
+                  ? (model.openUnits.get(node.unit) ?? null)
+                  : null
+              }
               onSelect={(id) => {
                 setSelected(id);
                 send("focus", id);

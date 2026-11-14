@@ -3,20 +3,21 @@
 import type { AlbumTrackDetail, AlbumTrackVersion, CapstoneReview, MeterId, SketchDetail } from "@oak/api";
 import { CapstoneReviewSchema, OakApiError } from "@oak/api";
 import { editorId } from "@oak/strudel";
-import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { clsx } from "clsx";
-import { Code2, Download, MessageSquareText, Mic2, Pencil, Square, Trash2 } from "lucide-react";
+import { Check, Code2, Download, MessageSquareText, Mic2, Pencil, Play, Square, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { recordingSeconds, recordPerformance } from "../capstone/engine.ts";
 import { PIECE_DOES_NOT_RUN } from "../capstone/record.ts";
 import { WorkbenchServicesLoader } from "../capstone/WorkbenchServicesLoader.tsx";
-import { callConfirmed } from "../lib/api.ts";
 import { FLAVOUR_LABEL, formatDate, formatDuration } from "../lib/format.ts";
 import { usePageTitle } from "../lib/nav.ts";
 import {
   albumAudioUrl,
+  albumTakeUrl,
+  useAlbumAddTake,
   useAlbumAttachReview,
+  useAlbumChooseTake,
   useAlbumDeleteTrack,
   useAlbumPatchVersion,
   useAlbumPutAudio,
@@ -30,7 +31,6 @@ import { AlbumCover } from "../ui/AlbumCover.tsx";
 import { Button, buttonClass } from "../ui/kit/Button.tsx";
 import { Card, Chip, Page, Skeleton } from "../ui/kit/basics.tsx";
 import { Callout } from "../ui/kit/Controls.tsx";
-import { Dialog } from "../ui/kit/Dialog.tsx";
 import { Switch } from "../ui/kit/Field.tsx";
 import { ErrorState } from "../ui/kit/QueryState.tsx";
 import { toast } from "../ui/kit/Toast.tsx";
@@ -43,7 +43,7 @@ import { LINER_MAX_WORDS, wordCount } from "../capstone/liner.ts";
 import { ReviewCard } from "../capstone/ReviewCard.tsx";
 import { useTryRevision } from "../capstone/revision.ts";
 import { LinerNotes } from "./AlbumPage.tsx";
-import { audioFileName, changeSummary } from "./model.ts";
+import { audioFileName, changeSummary, currentTakeOf, takeFileName, takesOf } from "./model.ts";
 import { useCoverMusic } from "./music.ts";
 
 export function TrackPage({ trackId, v }: { trackId: string; v: number | undefined }) {
@@ -187,24 +187,7 @@ function Track({ t, v }: { t: AlbumTrackDetail; v: number | undefined }) {
               Listen
             </h2>
             {version.hasAudio ? (
-              <>
-                {/* biome-ignore lint/a11y/useMediaCaption: an instrumental recording of the learner's own piece. */}
-                <audio
-                  controls
-                  preload="metadata"
-                  src={albumAudioUrl(t.id, version.version)}
-                  className="w-full"
-                  data-testid="track-audio"
-                />
-                <a
-                  href={albumAudioUrl(t.id, version.version)}
-                  download={audioFileName(t.title, version.version, version.audioMime)}
-                  className={buttonClass("ghost", "sm", "self-start")}
-                  data-testid="download-audio"
-                >
-                  <Download aria-hidden className="size-4" /> Download the recording
-                </a>
-              </>
+              <Listen key={`${t.id}-${version.version}`} track={t} version={version} />
             ) : (
               <p className="text-text-2">
                 {!pending &&
@@ -272,6 +255,145 @@ function Track({ t, v }: { t: AlbumTrackDetail; v: number | undefined }) {
         </div>
       </div>
     </Page>
+  );
+}
+
+/**
+ * The recording of a version and its takes (d20): the chosen take plays by default; an older one can be heard,
+ * chosen again and downloaded. Nothing is ever deleted here.
+ */
+function Listen({ track, version }: { track: AlbumTrackDetail; version: AlbumTrackVersion }) {
+  const choose = useAlbumChooseTake();
+  const takes = takesOf(version);
+  const current = currentTakeOf(version);
+  const [heard, setHeard] = useState<number | null>(null);
+  const take = heard !== null && takes.some((x) => x.take === heard) ? heard : current;
+  const audio = useRef<HTMLAudioElement>(null);
+  const autoplay = useRef(false);
+  const several = takes.length > 1;
+  const mime = takes.find((x) => x.take === take)?.audioMime ?? version.audioMime;
+  // The current take is the plain URL (what the album and an export use); another take is asked for by number.
+  const src =
+    take === null || take === current
+      ? albumAudioUrl(track.id, version.version)
+      : albumTakeUrl(track.id, version.version, take);
+  return (
+    <>
+      {/* biome-ignore lint/a11y/useMediaCaption: an instrumental recording of the learner's own piece. */}
+      <audio
+        ref={audio}
+        // A take recorded or chosen a moment ago is another file at the same address.
+        key={`${src}#${take ?? 0}#${takes.length}`}
+        controls
+        preload="metadata"
+        src={src}
+        className="w-full"
+        data-testid="track-audio"
+        data-take={take ?? ""}
+        onCanPlay={(e) => {
+          if (!autoplay.current) return;
+          autoplay.current = false;
+          void e.currentTarget.play().catch(() => {});
+        }}
+      />
+      <a
+        href={src}
+        download={
+          take === null
+            ? audioFileName(track.title, version.version, mime)
+            : takeFileName(track.title, version.version, take, mime, takes.length)
+        }
+        className={buttonClass("ghost", "sm", "self-start")}
+        data-testid="download-audio"
+      >
+        <Download aria-hidden className="size-4" /> Download {several ? `take ${take}` : "the recording"}
+      </a>
+      {several && (
+        <div className="flex flex-col gap-1" data-testid="takes">
+          <h3 className="font-sans text-sm font-semibold text-text-2">
+            Takes of version {version.version}{" "}
+            <span className="font-normal text-text-3">· every take is kept</span>
+          </h3>
+          <ol className="flex flex-col gap-1">
+            {[...takes].reverse().map((x) => {
+              const isCurrent = x.take === current;
+              const isHeard = x.take === take;
+              return (
+                <li
+                  key={x.take}
+                  data-take={x.take}
+                  data-current={isCurrent ? "true" : "false"}
+                  className={clsx(
+                    "flex flex-wrap items-center gap-2 rounded-control border px-2.5 py-1.5 text-sm",
+                    isCurrent ? "border-accent/50 bg-lane-in" : "border-border",
+                  )}
+                >
+                  <span className="font-medium">Take {x.take}</span>
+                  <span className="text-text-2 tabular-nums">
+                    {formatDate(x.recordedAt, true)}
+                    {x.durationS ? ` · ${formatDuration(x.durationS)}` : ""}
+                  </span>
+                  {isCurrent && (
+                    <Chip tone="accent">
+                      <Check aria-hidden className="size-3.5" /> plays on the album
+                    </Chip>
+                  )}
+                  <span className="ml-auto flex items-center gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-pressed={isHeard}
+                      icon={<Play aria-hidden className="size-3.5" />}
+                      onClick={() => {
+                        autoplay.current = true;
+                        if (isHeard) void audio.current?.play().catch(() => {});
+                        else setHeard(x.take);
+                      }}
+                      data-testid="hear-take"
+                    >
+                      Hear it
+                    </Button>
+                    {!isCurrent && (
+                      <Button
+                        size="sm"
+                        loading={choose.isPending && choose.variables?.body.take === x.take}
+                        onClick={() =>
+                          choose
+                            .mutateAsync({
+                              params: { id: track.id, v: String(version.version) },
+                              body: { take: x.take },
+                            })
+                            .then(
+                              () => toast.success(`Take ${x.take} now plays on the album`),
+                              (e: unknown) =>
+                                toast.error(
+                                  "The take wasn't changed",
+                                  e instanceof Error ? e.message : undefined,
+                                ),
+                            )
+                        }
+                        data-testid="use-take"
+                      >
+                        Use this take
+                      </Button>
+                    )}
+                    <a
+                      href={albumTakeUrl(track.id, version.version, x.take)}
+                      download={takeFileName(track.title, version.version, x.take, x.audioMime, takes.length)}
+                      aria-label={`Download take ${x.take}`}
+                      title={`Download take ${x.take}`}
+                      className={buttonClass("ghost", "sm")}
+                    >
+                      <Download aria-hidden className="size-4" />
+                    </a>
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -595,9 +717,7 @@ function LiveCode({
 }) {
   const { oak } = useWorkbenchServices();
   const put = useAlbumPutAudio();
-  const qc = useQueryClient();
-  // c11: a version that has a recording asks before a new take replaces it.
-  const [confirmReplace, setConfirmReplace] = useState(false);
+  const addTake = useAlbumAddTake();
   const { music, pending } = useCoverMusic(
     { sketchId: version.sketchId, sketchVersion: version.sketchVersion },
     track.flavour,
@@ -634,7 +754,8 @@ function LiveCode({
     live.current.stopped = true;
     oak.recorder.cancel();
   };
-  const record = async (replace: boolean) => {
+  // d20: a version that has a recording gets another take; the earlier ones stay and can be chosen again.
+  const record = async (another: boolean) => {
     const h = oak.editors.get(editorId(slug));
     if (!h || pending || broken) return;
     setRecording(true);
@@ -649,19 +770,23 @@ function LiveCode({
         body: rec.blob,
         contentType: rec.mime.split(";")[0],
       } as never;
-      if (replace) {
-        // The learner confirmed the replacement; the nonce is fetched now, after the take (it lives 60 s).
-        await callConfirmed(
-          "album.putAudio",
-          "album.audio.replace",
-          `${track.id}/v${version.version}`,
-          input,
-        );
-        void qc.invalidateQueries({ queryKey: ["api", "album.track"] });
-        void qc.invalidateQueries({ queryKey: ["api", "album.get"] });
+      if (another) {
+        try {
+          await addTake.mutateAsync(input);
+        } catch (e) {
+          // A server without takes (a typed 501) could only replace the recording: nothing is replaced unasked.
+          if (!notBuilt(e)) throw e;
+          toast.error(
+            "This take wasn't saved",
+            "Keeping several takes is not built on this server yet. The earlier recording is untouched.",
+          );
+          return;
+        }
       } else await put.mutateAsync(input);
       toast.success(
-        replace ? `Version ${version.version} recorded again` : `Version ${version.version} recorded`,
+        another
+          ? `Another take of version ${version.version} recorded. The earlier ones are kept.`
+          : `Version ${version.version} recorded`,
       );
     } catch (e) {
       if (live.current.gone) return;
@@ -707,11 +832,11 @@ function LiveCode({
               loading={recording}
               disabled={pending || broken}
               title={pending ? "Reading the piece…" : broken ? "This version's code doesn't run" : undefined}
-              onClick={() => (version.hasAudio ? setConfirmReplace(true) : void record(false))}
+              onClick={() => void record(version.hasAudio)}
               data-testid="record-version"
               className={clsx(!version.hasAudio && "border-accent")}
             >
-              {version.hasAudio ? "Record again" : "Record this version"}
+              {version.hasAudio ? "Record another take" : "Record this version"}
             </Button>
             {recording && (
               <Button
@@ -733,32 +858,11 @@ function LiveCode({
           {expected ? ` of ${formatDuration(expected)}` : ""}… UI sounds and the mic are off.
         </p>
       )}
-      <Dialog
-        open={confirmReplace}
-        onClose={() => setConfirmReplace(false)}
-        title={`Replace the earlier recording of v${version.version}?`}
-        description="A new take of this version replaces the one it has now. The earlier take is not kept; the code, the cover and the liner notes stay as they are."
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setConfirmReplace(false)} data-testid="keep-recording">
-              Keep the earlier one
-            </Button>
-            <Button
-              variant="primary"
-              icon={<Mic2 aria-hidden className="size-4" />}
-              onClick={() => {
-                setConfirmReplace(false);
-                void record(true);
-              }}
-              data-testid="confirm-replace"
-            >
-              Record and replace
-            </Button>
-          </>
-        }
-      >
-        <p className="text-sm text-text-2">Stopping the take before it ends keeps the earlier recording.</p>
-      </Dialog>
+      {version.hasAudio && !recording && (
+        <p className="text-sm text-text-3" data-testid="take-kept-note">
+          A new take is added to this version. Every take is kept; you choose which one plays.
+        </p>
+      )}
     </div>
   );
 }
@@ -802,6 +906,7 @@ function Versions({
                     {summary ? ` · ${summary}` : ""}
                     {x.durationS ? ` · ${formatDuration(x.durationS)}` : ""}
                     {x.hasAudio ? "" : " · not recorded"}
+                    {takesOf(x).length > 1 ? ` · ${takesOf(x).length} takes` : ""}
                   </span>
                 </span>
               </Link>

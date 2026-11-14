@@ -2,78 +2,15 @@
 // ranges, every chord symbol of STYLE §5.2 through the adapter's own realm in all twelve roots, the chord
 // instruments' clarity and balance, the Band's four-chord loop as a mix, Oak's rendered break, and the preloader
 // for the sounds U05–U07 unlock. Every spec runs on the test page (port 5192) and the locked pack.
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { bandCodeAt } from "../../../content/bands/index.ts";
-import { ROWS } from "../../theory/src/chord-table.ts";
-import { chordOf, chordPcs, noteToMidi, parseChordSymbol } from "../../theory/src/index.ts";
+import { noteToMidi } from "../../theory/src/index.ts";
 import { realismSpec } from "../src/realism.ts";
 import { openPage } from "./helpers.ts";
+import { type Dict, pcsOf, ROOTS, type Status, statusOf, styleTable } from "./style-chords.ts";
 
 // biome-ignore lint/suspicious/noExplicitAny: the test API is driven untyped from page.evaluate
 type W = Window & { __oak: any };
-
-const ROOTS = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"] as const;
-const DICTS = ["ireal", "ireal-ext", "triads", "lefthand", "guidetones"] as const;
-type Dict = (typeof DICTS)[number];
-type Status = "ok" | "missing" | "wrong";
-
-/** STYLE §5.2, parsed from content/STYLE.md itself: the test follows the table wherever it changes. */
-function styleTable(): { suffix: string; dict: Dict; status: Status }[] {
-  const md = readFileSync(resolve(import.meta.dirname, "../../../content/STYLE.md"), "utf8");
-  const start = md.indexOf("| Symbol | `ireal` (default)");
-  if (start < 0) throw new Error("STYLE §5.2 table not found");
-  const lines = md.slice(start).split("\n");
-  const rows = lines.slice(
-    2,
-    lines.findIndex((l, i) => i > 1 && !l.startsWith("|")),
-  );
-  const cells: { suffix: string; dict: Dict; status: Status }[] = [];
-  const mark = (c: string): Status => (c === "✓" ? "ok" : c === "✗" ? "wrong" : "missing");
-  for (const row of rows) {
-    const [head, ...cols] = row
-      .split("|")
-      .slice(1, -1)
-      .map((c) => c.trim());
-    if (cols.length !== DICTS.length || head === undefined) throw new Error(`bad STYLE row: ${row}`);
-    const codes = [...head.matchAll(/`C([^`]*)`/g)].map((m) => m[1] as string);
-    if (codes.length > 0) {
-      for (const suffix of codes)
-        cols.forEach((c, i) => {
-          cells.push({ suffix, dict: DICTS[i] as Dict, status: mark(c) });
-        });
-    } else {
-      // "minor-major seventh": each cell names the spelling that dictionary takes, or —.
-      cols.forEach((c, i) => {
-        const code = /`C([^`]*)`/.exec(c)?.[1];
-        cells.push({ suffix: code ?? "m^7", dict: DICTS[i] as Dict, status: code ? "ok" : "missing" });
-      });
-    }
-  }
-  return cells;
-}
-
-const pcsOf = (notes: unknown[]): number[] =>
-  [
-    ...new Set(
-      notes
-        .map((n) => (typeof n === "number" ? n : typeof n === "string" ? noteToMidi(n) : null))
-        .filter((m): m is number => m !== null && Number.isFinite(m))
-        .map((m) => ((Math.round(m) % 12) + 12) % 12),
-    ),
-  ].sort((a, b) => a - b);
-
-function statusOf(symbol: string, notes: unknown[]): Status {
-  const c = parseChordSymbol(symbol);
-  if (!c) throw new Error(`@oak/theory cannot read ${symbol}`);
-  const row = ROWS.find((r) => r.quality === c.quality);
-  const root = chordPcs(chordOf(c.root, c.quality))[0] as number;
-  const allowed = new Set([...chordPcs(c), ...(row?.tensions ?? []).map((t) => (t + root) % 12)]);
-  const pcs = pcsOf(notes);
-  if (pcs.length === 0) return "missing";
-  return pcs.length >= 2 && pcs.every((p) => allowed.has(p)) ? "ok" : "wrong";
-}
 
 async function slowSounds(page: Page): Promise<void> {
   await page.context().route("**/sounds/**", async (route) => {

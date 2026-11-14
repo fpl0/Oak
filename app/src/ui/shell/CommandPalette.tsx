@@ -11,6 +11,7 @@ import { useShell } from "../../lib/shell-store.ts";
 import { useUnlockedSet } from "../../lib/unlocked.ts";
 import { IS_MAC } from "../keys/KeymapProvider.tsx";
 import { formatKeys } from "../keys/keymap.ts";
+import { openCommands, shellTracks, trackHint, tracksListedOpen, unwrittenHint } from "./course-state.ts";
 import { sideLessonHint } from "./side-lessons.ts";
 
 function useSearchCommands(open: boolean): Command[] {
@@ -22,25 +23,78 @@ function useSearchCommands(open: boolean): Command[] {
   // (never fetched here), else the unlock list the shell has anyway.
   const side = useQuery({ ...apiQuery("sideLessons.list"), enabled: false });
   const { unlocked, ready } = useUnlockedSet();
+  // Wave 6: the advanced tracks and what stays open after the core. The course progress is the shell's anyway (the
+  // rail reads it); `course.completion` is asked only while the palette is open and the lessons of the core are done.
+  const progress = useQuery({ ...apiQuery("lessons.progress"), enabled: open });
+  const core = progress.data?.core;
+  const completion = useQuery({
+    ...apiQuery("course.completion"),
+    enabled: open && (core === "lessons-done" || core === "complete"),
+  });
   return useMemo(() => {
     const out: Command[] = [];
+    const authored = new Set((content.data?.lessons ?? []).map((l) => l.id));
+    const toCourse = () => void navigate({ to: "/oak", search: { view: "course" } });
+    // What stays open after the core comes first among the results: reviews, the gym, Studio, a track left to
+    // release; a track with no lesson yet says so and leads to the Oak, never to a lesson.
+    for (const c of openCommands(completion.data?.open ?? []))
+      out.push({
+        id: c.id,
+        title: c.title,
+        group: "Navigate",
+        hint: c.hint,
+        keywords: ["open to you", "what is open", "what next", "after the core"],
+        run: () => {
+          const to = c.to;
+          if (to.kind === "lesson")
+            void navigate({ to: "/learn/$lessonId", params: { lessonId: to.lessonId } });
+          else if (to.kind === "capstone")
+            void navigate({ to: "/capstone/$id", params: { id: to.capstoneId } });
+          else if (to.path === "/oak") toCourse();
+          else void navigate({ to: to.path });
+        },
+      });
+    const listed = tracksListedOpen(completion.data?.open ?? []);
+    for (const t of shellTracks(progress.data, content.data?.syllabus ?? null)) {
+      if (listed.has(t.trackId)) continue;
+      out.push({
+        id: `course-track:${t.trackId}`,
+        title: t.title,
+        group: "Lessons",
+        hint: trackHint(t),
+        keywords: ["track", "advanced track", t.trackId],
+        run: () => {
+          const next = t.next;
+          if (t.state === "ready" && next)
+            void navigate({ to: "/learn/$lessonId", params: { lessonId: next } });
+          else toCourse();
+        },
+      });
+    }
     for (const u of content.data?.syllabus?.units ?? [])
-      for (const l of u.lessons)
+      for (const l of u.lessons) {
+        // A lesson nobody has written yet is listed honestly and leads to the course view, not to an empty page.
+        const unwritten = unwrittenHint(l.id, authored);
         out.push({
           id: `lesson:${l.id}`,
           title: l.title,
           group: "Lessons",
           hint:
+            unwritten ??
             sideLessonHint(l.id, l.side === true, {
               state: side.data,
               unlocked,
               ready,
               toolbox: content.data?.toolbox ?? [],
               syllabus: content.data?.syllabus ?? null,
-            }) ?? l.id,
+            }) ??
+            l.id,
           keywords: l.side ? [l.id, u.title, "side lesson", "optional", "sound"] : [l.id, u.title],
-          run: () => void navigate({ to: "/learn/$lessonId", params: { lessonId: l.id } }),
+          run: unwritten
+            ? toCourse
+            : () => void navigate({ to: "/learn/$lessonId", params: { lessonId: l.id } }),
         });
+      }
     for (const t of content.data?.toolbox ?? [])
       out.push({
         id: `tool:${t.id}`,
@@ -67,7 +121,17 @@ function useSearchCommands(open: boolean): Command[] {
         run: () => void navigate({ to: "/album/$trackId", params: { trackId: t.id } }),
       });
     return out;
-  }, [content.data, sketches.data, album.data, side.data, unlocked, ready, navigate]);
+  }, [
+    content.data,
+    sketches.data,
+    album.data,
+    side.data,
+    progress.data,
+    completion.data,
+    unlocked,
+    ready,
+    navigate,
+  ]);
 }
 
 export function CommandPalette() {

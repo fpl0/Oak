@@ -102,6 +102,16 @@ export const EDITOR_KINDS: ReadonlySet<ExerciseKind> = new Set<ExerciseKind>([
   "run-investigate",
 ]);
 
+/**
+ * The starter of an answer written in code that is not a code exercise: a dictation written as code (by ear or
+ * from the page) or a staff read back in code (U13.L05 S6: "write the bar in code"). `null` otherwise.
+ */
+export function codeAnswerStarter(ex: Exercise | undefined): string | null {
+  if (!ex || (ex.kind !== "dictation" && ex.kind !== "staff-read")) return null;
+  const a = ex.answer as { ui?: string; starter?: string } | undefined;
+  return a?.ui === "code" ? (a.starter ?? "") : null;
+}
+
 /** The step's starter as the editor shows it: clean code and the editable regions (`null` = all editable). */
 export interface EditorStart {
   code: string;
@@ -113,8 +123,9 @@ export function editorStart(ex: Exercise | undefined, example: StepDef["example"
     return { code: clean.code, editable: clean.editable };
   }
   if (ex?.kind === "transcribe-step") return { code: "", editable: null };
-  if (ex?.kind === "dictation" && ex.answer.ui === "code") {
-    const clean = stripMarkers(ex.answer.starter);
+  const coded = codeAnswerStarter(ex);
+  if (coded !== null) {
+    const clean = stripMarkers(coded);
     return { code: clean.code, editable: clean.editable };
   }
   if (example) return { code: example.code, editable: [] };
@@ -126,7 +137,7 @@ export function showsWorkbench(step: StepDef): boolean {
   const ex = step.exercise;
   if (!ex) return step.example !== undefined;
   if (EDITOR_KINDS.has(ex.kind) || ex.kind === "code-fill" || ex.kind === "transcribe-step") return true;
-  if (ex.kind === "dictation" && (ex.byEar || ex.answer.ui === "code")) return true;
+  if ((ex.kind === "dictation" && ex.byEar) || codeAnswerStarter(ex) !== null) return true;
   if (ex.kind === "listen" || ex.kind === "predict") return true;
   if (ex.kind === "all") return ex.parts.some((p) => EDITOR_KINDS.has(p.kind) || p.kind === "code-fill");
   return step.example !== undefined;
@@ -151,6 +162,7 @@ export function withTrialOptions(
         : spec;
     return withTrialMode(sized, trial);
   }
+  if (spec?.ui === "bar-buttons" && trial) return barTrialSpec(spec, trial);
   if (spec?.ui !== "choice" || !trial) return spec;
   const own = trial.params.options;
   if (!Array.isArray(own) || own.length === 0 || !own.every((o) => typeof o === "string")) return spec;
@@ -172,6 +184,41 @@ export function withTrialOptions(
       return { id, label, ...(sound !== undefined ? { audio: sound } : {}) };
     }),
   };
+}
+
+/**
+ * A "which bar" step whose question is a drawn trial (U15.L06 S2, U16.L05 S5, U17.L03 S4): the trial brings its
+ * own bars, and "No key change" for a modulation trial, as `params.options` with "Bar n" labels, and its expected
+ * answer is one of them (`choice`). The step shows those as a choice, which the answers draw as the same bar
+ * timeline, and is graded as the drill grades it. A trial without its own bars keeps the authored buttons.
+ */
+function barTrialSpec(
+  spec: Extract<AnswerSpec, { ui: "bar-buttons" }>,
+  trial: { params: Record<string, unknown> },
+): AnswerSpec {
+  const own = trial.params.options;
+  if (!Array.isArray(own) || own.length === 0) return spec;
+  if (!own.every((o) => typeof o === "string" && (/^\d+$/.test(o) || o === "none"))) return spec;
+  const labels =
+    trial.params.optionLabels && typeof trial.params.optionLabels === "object"
+      ? (trial.params.optionLabels as Record<string, unknown>)
+      : {};
+  // The timeline reads left to right: the bars in order, "No key change" after them.
+  const ids = [...(own as string[])].sort((a, b) =>
+    a === "none" ? 1 : b === "none" ? -1 : Number(a) - Number(b),
+  );
+  return {
+    ui: "choice",
+    options: ids.map((id) => ({
+      id,
+      label:
+        typeof labels[id] === "string"
+          ? (labels[id] as string)
+          : id === "none"
+            ? "No key change"
+            : `Bar ${id}`,
+    })),
+  } as AnswerSpec;
 }
 
 /** Degrees in pad order, chromatic from home. */

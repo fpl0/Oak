@@ -1,10 +1,22 @@
 // Exercise definitions (contracts §5.3 to §5.5; exercises.md §2.2 for the kept types).
-import type { CanDoId, DeckId, FactId, FamilyId, FeedbackId, FlavourId, SongId, ToolId } from "../ids.ts";
+import type {
+  CanDoId,
+  DeckId,
+  FactId,
+  FamilyId,
+  FeedbackId,
+  FlavourId,
+  LessonId,
+  SongId,
+  SoundId,
+  ToolId,
+} from "../ids.ts";
 import type {
   ChordQuality,
   CodeRange,
   Degree,
   DrumRole,
+  KeyPlanEntry,
   KeySpec,
   Layer,
   Md,
@@ -36,6 +48,15 @@ export interface ExBase<K extends string> {
   role: Role;
   /** Default: the lesson's. */
   key?: KeySpec;
+  /**
+   * Wave 6 (feature `key-plan`). The keys of an example or answer that changes key (U17; contracts §6.8), by
+   * bar: `[{ bar: 1, key: C major }, { bar: 9, key: D major }]`. `key` stays the first key. Degrees,
+   * syllables and Roman numerals of a bar are read in the key in force at that bar: a `key-relative` melody
+   * match, a degree pad, an `rn-palette` or `bar-grid` answer, the chord band and the lead sheet of the
+   * stimulus. Entries are in bar order, the first at bar 1 (or 0 with a pickup) and equal to `key`
+   * (`key-plan.order`, `key-plan.first`).
+   */
+  keyPlan?: KeyPlanEntry[];
   meter?: MeterId;
   bpm?: Num;
   swing?: SwingSpec;
@@ -172,10 +193,22 @@ export type AnswerUi =
     }
   | { ui: "degree-pad"; set: Degree[]; sequenceLen?: number; syllables: boolean; rhythmTemplate?: string }
   | { ui: "quality-pad"; set: ChordQuality[] }
+  /**
+   * Roman numerals, one per slot. `allow` sets what the palette offers and what is graded: `sevenths` adds
+   * the seventh-chord suffixes (Imaj7 ii7 V7 viiø7 vii°7; graded at seventh depth, so `V` for `V7` is
+   * a quality miss, `harmony.rn-quality`), `secondary` the applied chords (V/x, V7/x, vii°/x: U15), `borrowed` the chords of
+   * the parallel key (iv ♭III ♭VI ♭VII, the Picardy I: U16). Wave 6: `labels` names the slots ("Bar 1",
+   * "in C major"); `slotKeys` (feature `rn-palette.slot-keys`) gives a slot its own key, so one chord can be
+   * named in two keys (a pivot chord, U17.L01: slots 2, `slotKeys: [C major, G major]`, correct `["vi",
+   * "ii"]`). A slot without its own key is read in the exercise's key (or its `keyPlan`). One label and one
+   * key per slot (`rn-palette.labels`, `rn-palette.slot-keys`).
+   */
   | {
       ui: "rn-palette";
       slots: number;
       allow: ("triads" | "sevenths" | "inversions" | "secondary" | "borrowed")[];
+      labels?: string[];
+      slotKeys?: KeySpec[];
     }
   | { ui: "text"; normalize: "note" | "chord" | "rn" | "interval" | "key" | "free" }
   | { ui: "number" }
@@ -187,6 +220,13 @@ export type AnswerUi =
       /**
        * `chords` (Wave 4): notes entered at the same position stack into one chord (the note-list DSL writes
        * it `[C4,E4,G4]:2`). Needed by `StaffExpect` `chords`.
+       *
+       * `durations` are note-list duration tokens (packages/notation `notelist.ts`; `staff.duration-token`):
+       * `1 2 4 8 16` are the plain values, a trailing `.` dots one (`4.` a dotted quarter, the beat of 6/8), a
+       * trailing `t` makes it a triplet value (`8t`: three in the time of two eighths; the input groups three
+       * of them under a bracket). Wave 6 (U13): a dotted token is feature `staff-input.dots`, a triplet token
+       * `staff-input.triplets`, and `ties: true` (a tie from a note to the next one of the same pitch, also
+       * across the bar line: `C4:4~ C4:8`) is `staff-input.ties`.
        */
       palette: { durations: string[]; accidentals: boolean; ties: boolean; rests: boolean; chords?: boolean };
       /**
@@ -202,7 +242,12 @@ export type AnswerUi =
        */
       mode?: "notes" | "key-signature";
     }
-  | { ui: "grid"; rows: DrumRole[] | ["hit"]; stepsPerBar: 8 | 12 | 16; bars: number }
+  /**
+   * A step grid. `stepsPerBar`: 8 or 16 in simple meters; 12 for twelve eighths (12/8) or eighth-note triplets
+   * in 4/4. Wave 6 (feature `grid.steps`): 6 for the six eighths of a 6/8 bar and 24 for sixteenth-note
+   * triplets (or the sixteenths of 12/8). The widget groups the steps by the exercise's meter (3 + 3 in 6/8).
+   */
+  | { ui: "grid"; rows: DrumRole[] | ["hit"]; stepsPerBar: 6 | 8 | 12 | 16 | 24; bars: number }
   /**
    * Wave 4. One choice per slot, in order: a function strip under four bars (T PD D T), the cadence at the
    * end of each phrase, "chord tone or not" per marked note. Every slot offers the same `options`; the
@@ -220,13 +265,21 @@ export type AnswerUi =
    * sections each slot is graded by section type, as the `form` rule reads names (a tagged `chorus2` counts as
    * a chorus; contracts §6.3 item 4); with `"letters"` (or a letter key) both sequences are rewritten as
    * letters by first appearance and graded on the shape, so BABA answers ABAB.
+   *
+   * Wave 6 (feature `form.map`): `input: "map"` is the form map of a whole tune (CF-T, ladder L8): the
+   * learner hears `bars` bars, cuts the bar strip into sections and labels each. The number of sections is
+   * not shown; `sections` is the number in the right answer. The response is `answer.sections` (the labels)
+   * with `answer.bars` (the 1-based first bar of each section); a section counts when it starts at the right
+   * bar and has the right label (by shape, as above). Needs `bars` (`form.map-bars`); `sectionBars` is then
+   * the answer key's section lengths and must add up to `bars`.
    */
   | {
       ui: "form";
       sections: number;
       vocabulary: "letters" | FormSectionName[];
-      input: "label" | "order";
+      input: "label" | "order" | "map";
       sectionBars?: number[];
+      bars?: number;
     }
   /**
    * Wave 5. A chord chart of `bars` bars, `perRow` to a line (a twelve-bar blues is 12 bars, 4 a row), one
@@ -249,6 +302,12 @@ export type AnswerUi =
    * `answer.midi` and graded by pitch class against the tonic) or tick its degrees on a pad of `palette`
    * (`input: "degrees"`, answered as `answer.degrees`). Graded as a set against `correct.degrees` (the major
    * and minor pentatonic, the blues scale, the three minors). `range` is the keyboard's span.
+   *
+   * Wave 6 (feature `scale-builder.from`): `from` opens the builder already holding that scale ("raise or
+   * lower one note to get the mode", U14): from `major`, untick 7 and tick ♭7 for Mixolydian; from `minor`,
+   * swap ♭6 for 6 to get Dorian. The widget shows which degree moved and in which direction; grading is the
+   * same set comparison. With `input: "degrees"` the palette must hold every degree of `from` and of the
+   * answer (`scale-builder.from`).
    */
   | {
       ui: "scale-builder";
@@ -256,6 +315,7 @@ export type AnswerUi =
       input: "keyboard" | "degrees";
       palette?: Degree[];
       range?: [string, string];
+      from?: ScaleMode;
     }
   | { ui: "code"; starter: string; constraints?: AstConstraint[] }
   | { ui: "tap" }
@@ -283,6 +343,8 @@ export interface Answer {
   stages?: Partial<Record<DictationStage, string[]>>;
   /** Wave 5. The `form` answer: one section label per section (`["verse", "chorus"]` or `["A", "A", "B", "A"]`). */
   sections?: string[];
+  /** Wave 6. With a `form` answer in `input: "map"`: the 1-based first bar of each section, in order. */
+  bars?: number[];
 }
 
 /** Wave 5. The section names a `form` answer may offer (contracts §6.3 item 2: the tag names). */
@@ -395,6 +457,14 @@ export type Matcher =
       inversion: boolean;
       harmonicRhythm: "given" | "graded";
       weights?: Partial<Record<"bass" | "root" | "quality" | "inversion", number>>;
+      /**
+       * Wave 6 (feature `harmony.wrong-quality`; decision of 2026-11-13, d11). What a chord with the right root
+       * and the wrong quality earns: `partial` (the default: the root's share of the weights, as every step
+       * before Wave 6) or `none`: no credit for that bar, whether the answer is a minor chord for a dominant
+       * or a plain triad where the reference has a seventh (compared at `qualityDepth`). Ladder L6, X2 and
+       * CF-T changes use `none`; other steps opt in.
+       */
+      wrongQuality?: "partial" | "none";
     }
   /** The only matcher allowed for `voicing()` output (contracts §6.7). */
   | { m: "pcset"; perOnset: boolean; bass: boolean; tracks?: TrackRef[] }
@@ -448,9 +518,12 @@ export type MiniOp =
 export type AstConstraint = {
   id?: string;
   feedback?: FeedbackId;
-} /** Any toolbox ID, strings and mini operators included. Replaces must-call and mini-uses. */ & (
-  | { c: "must-use"; tool: ToolId | ToolId[]; min?: number }
-  | { c: "must-not-use"; tool: ToolId | ToolId[]; why?: Md }
+} /**
+ * Any toolbox ID, strings and mini operators included. Replaces must-call and mini-uses. Wave 6 (d6): a sound
+ * counts too (`snd.rhodes`: "play it on the Rhodes"), read where the code names it in `s()` / `sound()`.
+ */ & (
+  | { c: "must-use"; tool: ToolId | SoundId | (ToolId | SoundId)[]; min?: number }
+  | { c: "must-not-use"; tool: ToolId | SoundId | (ToolId | SoundId)[]; why?: Md }
   /** `pattern` is a regex source. */
   | { c: "arg-matches"; fn: string; argIndex: number; pattern: string }
   | { c: "labels"; min?: number; max?: number; names?: string[] }
@@ -583,6 +656,15 @@ export interface CodeMakeEx extends ExBase<"code-make"> {
   /** Exactly one rule with `required: true` (contracts §6.5). */
   rubric: RubricRule[];
   saveAs: "sketch";
+  /**
+   * Wave 6 (feature `make.from-sketch`; decision of 2026-11-13, d15). This Make builds on the sketch the
+   * learner saved in an earlier lesson's Make ("your blues", "your Aeolian loop"): it opens with the latest
+   * saved sketch of that lesson when one exists, with a "Start from Oak's copy" button that puts
+   * `code.starter` back; with no such sketch it opens with `code.starter`, as before. The lesson named comes
+   * before this one in every legal order (content CI: `make.from-sketch`), and `code.starter` stays a
+   * complete starter of its own: tests and the reference grade against it.
+   */
+  fromSketch?: LessonId;
 }
 export interface IdentifyEx extends ExBase<"identify"> {
   stimulus: Stimulus;
@@ -654,9 +736,12 @@ export interface TapEx extends ExBase<"tap"> {
  * `pitch`, `degree`: one timed target after the cue. `resolution`: a degree, then the path home.
  * `echo`: the target plays first, then the learner sings it back. `sight`: the target is shown (the
  * stimulus with `showStaff`, or the degree numbers) and only the cue plays; Oak plays the target after the
- * attempt. `bassline`: the bass of a progression.
+ * attempt. `bassline`: the bass of a progression. `guide-tones` (Wave 6, feature `sing.guide-tones`; the
+ * U12.L05 preview and J1.L04): the thread of 3rds and 7ths through a progression, one note per chord, sung
+ * while the chords play; the target is a `reference` track (the guide-tone line) or `degrees`. Like every sung
+ * step it declares a `fallback` (Quiet mode picks the notes instead) and never gates.
  */
-export type SingMode = "pitch" | "degree" | "resolution" | "echo" | "sight" | "bassline";
+export type SingMode = "pitch" | "degree" | "resolution" | "echo" | "sight" | "bassline" | "guide-tones";
 export interface SingEx extends ExBase<"sing"> {
   mode: SingMode;
   stimulus: Stimulus;
@@ -943,6 +1028,63 @@ export const SCALE_COLOUR_OPTIONS: readonly Choice[] = [
   { id: "major pentatonic", label: "Major pentatonic (1 2 3 5 6)" },
   { id: "minor pentatonic", label: "Minor pentatonic (1 ♭3 4 5 ♭7)" },
   { id: "blues", label: "Blues (1 ♭3 4 ♭5 5 ♭7)" },
+];
+
+// --- Wave 6 standard options ---------------------------------------------------------------------
+
+/**
+ * "Which mode" (U14; the drill is `fam.key.mode`): ids are `ScaleMode`s. Offer each only from its lesson
+ * (check 14 reads option labels): major and natural minor from U10.L01, Mixolydian U14.L01, Dorian U14.L03,
+ * Lydian U14.L04, Phrygian U14.L05.
+ */
+export const MODE_OPTIONS: readonly Choice[] = [
+  { id: "major", label: "Major" },
+  { id: "mixolydian", label: "Mixolydian (major with ♭7)" },
+  { id: "lydian", label: "Lydian (major with ♯4)" },
+  { id: "minor", label: "Natural minor" },
+  { id: "dorian", label: "Dorian (minor with ♮6)" },
+  { id: "phrygian", label: "Phrygian (minor with ♭2)" },
+];
+/**
+ * "Simple or compound" (U13.L04; the drill is `fam.rhy.meter` from level 3): how each beat divides.
+ * `BEAT_DIVISION_OPTIONS` is the same question inside 4/4 (U13.L05; `fam.rhy.subdivision`).
+ */
+export const METER_FEEL_OPTIONS: readonly Choice[] = [
+  { id: "simple", label: "Simple: each beat splits in two" },
+  { id: "compound", label: "Compound: each beat splits in three" },
+];
+export const BEAT_DIVISION_OPTIONS: readonly Choice[] = [
+  { id: "duple", label: "Two to the beat (eighths)" },
+  { id: "triplet", label: "Three to the beat (triplets)" },
+];
+/**
+ * "On the beat or pushed" (U13.L01): does the chord or note land on the beat, or an eighth (or a sixteenth) early.
+ * Authored items only: `fam.rhy.syncopation` asks something else (click the hit that is off the beat on a
+ * sixteen-step grid) and does not use these options.
+ */
+export const PUSH_OPTIONS: readonly Choice[] = [
+  { id: "on", label: "On the beat" },
+  { id: "pushed", label: "Pushed: it arrives early" },
+];
+/**
+ * "Where is this chord from" (U15.L06, U16.L05; the drill is `fam.har.chromatic`): ids are
+ * `OutsideChordKind`s plus `diatonic`. Offer `secondary-dominant` from U15.L02, `applied-leading-tone` from
+ * U15.L04 and `borrowed` from U16.L01.
+ */
+export const OUTSIDE_CHORD_OPTIONS: readonly Choice[] = [
+  { id: "diatonic", label: "In the key" },
+  { id: "secondary-dominant", label: "A secondary dominant: the V of another chord" },
+  { id: "applied-leading-tone", label: "An applied vii°: a diminished chord a half step below its target" },
+  { id: "borrowed", label: "Borrowed from the parallel minor (or major)" },
+];
+/**
+ * "How does the key change" (U17.L01–L03; the drill is `fam.har.modulation`): `none` (it stays), `pivot` (a
+ * chord both keys share, U17.L01) or `direct` (a lift with no preparation, U17.L02).
+ */
+export const KEY_CHANGE_OPTIONS: readonly Choice[] = [
+  { id: "none", label: "No key change" },
+  { id: "pivot", label: "Through a pivot chord" },
+  { id: "direct", label: "Direct: it just lifts" },
 ];
 
 // --- tests --------------------------------------------------------------------------------------

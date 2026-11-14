@@ -57,12 +57,16 @@ describe("Wave 5 contract additions", () => {
   });
 
   test("ladder L5 and L6: levels up to 6, L6 stages, song items, a phrase per L5 submission", () => {
-    expect(LADDER_STAGES).toEqual(["bass", "quality", "rn", "changes", "melody"]);
+    // Wave 6 appended `form` (L8's form map); the Wave 5 stages keep their order.
+    expect(LADDER_STAGES.slice(0, 5)).toEqual(["bass", "quality", "rn", "changes", "melody"]);
     expect(
       LadderNextSchema.safeParse({ sessionId: null, gymId: "GYM.11", level: 5, songId: "song.aura-lee" })
         .success,
     ).toBe(true);
+    // Wave 6: L8 (a standard) is an item; L7 is own audio and never one.
     expect(LadderNextSchema.safeParse({ sessionId: null, gymId: null, level: 7 }).success).toBe(false);
+    expect(LadderNextSchema.safeParse({ sessionId: null, gymId: null, level: 8 }).success).toBe(true);
+    expect(LadderNextSchema.safeParse({ sessionId: null, gymId: null, level: 9 }).success).toBe(false);
     expect(LadderSubmitSchema.safeParse({ sessionId: null, code: "x", rung: 0, phrase: 2 }).success).toBe(
       true,
     );

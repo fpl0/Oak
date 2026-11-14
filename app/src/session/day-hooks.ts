@@ -2,9 +2,10 @@
 // session host and the Coda. The Wave 4 endpoints (`GET /capstones/:id/sessions`, `/gym`, `/ladder`,
 // `/capstones/:id/gate`) may answer 501 on a server that has not built them; every model then falls back to what
 // the plan and course progress already say, so nothing here ever blocks a day.
-import type { CapstoneGate, SessionPlan } from "@oak/api";
+import type { Bootstrap, CapstoneGate, CoreCompletion, SessionPlan } from "@oak/api";
 import { useQuery } from "@tanstack/react-query";
 import { useCapstoneContent } from "../capstone/content.ts";
+import { useContent } from "../lib/content.ts";
 import {
   apiQuery,
   useCapstoneGate,
@@ -14,8 +15,17 @@ import {
   useLadder,
   useTranscriptions,
 } from "../lib/queries.ts";
-import { type CapstoneDay, type CapstoneDefLike, capstoneDay, capstoneInProgress } from "./capstone-day.ts";
+import {
+  type CapstoneDay,
+  type CapstoneDefLike,
+  capstoneDay,
+  capstoneDayTitle,
+  capstoneInProgress,
+} from "./capstone-day.ts";
+import { type CftDay, cftDay, isCftSession, waitingLine } from "./cft-day.ts";
+import { type AfterCore, afterCore } from "./finale-model.ts";
 import { type GymDay, gymDay } from "./gym-day.ts";
+import { authoredUnits, deriveTracks, type TrackRow, trackRows } from "./tracks-model.ts";
 
 /** The full capstone definition (sessions, release, review) for an ID, once the capstone chunk has loaded. */
 export function useCapstoneDef(capstoneId: string | null): CapstoneDefLike | null {
@@ -95,7 +105,10 @@ export function useGymDay(
  * and name no song. `null` while it loads or on a server that answers 501.
  */
 export function useLadderSongsAt(level: number | null, when = true) {
-  const songs = useQuery({ ...apiQuery("ladder.songs"), enabled: when && (level === 5 || level === 6) });
+  const songs = useQuery({
+    ...apiQuery("ladder.songs"),
+    enabled: when && (level === 5 || level === 6 || level === 8),
+  });
   return songs.data?.items ?? null;
 }
 
@@ -118,4 +131,75 @@ export function useGymOpen(plan: Pick<SessionPlan, "alternatives" | "kind"> | nu
   const gym = useGymPlan();
   if (gym.data) return gym.data.active;
   return !!plan && (plan.kind === "gym" || plan.alternatives.some((a) => a.kind === "gym"));
+}
+
+// --- Wave 6 ---------------------------------------------------------------------------------------------------
+
+/**
+ * The CF-T day of a plan (cft-day.ts): the standard's sessions and checks, the slot rule's state and the song the
+ * learner picked. The song's title comes from the ladder's song list (level 8), read only on a CF-T day.
+ */
+export function useCftDay(plan: Pick<SessionPlan, "kind" | "mapItemId" | "slot"> | null): CftDay | null {
+  const on = plan?.kind === "capstone" && isCftSession(plan.mapItemId);
+  const sessions = useCapstoneSessions(on ? "CF-T" : null);
+  const gym = useGymPlan();
+  const songs = useQuery({ ...apiQuery("ladder.songs"), enabled: on });
+  if (!plan || !on) return null;
+  const songId = gym.data?.cfT?.songId ?? null;
+  const title = songId ? (songs.data?.items.find((s) => s.songId === songId)?.title ?? null) : null;
+  return cftDay(plan, sessions.data ?? null, gym.data ?? null, title);
+}
+
+/** The compose capstone that waits behind today's CF-T session, in one line, or null. */
+export function useWaitingLine(plan: Pick<SessionPlan, "kind" | "mapItemId"> | null): string | null {
+  const course = useCourseProgress();
+  const content = useCapstoneContent();
+  if (plan?.kind !== "capstone" || !isCftSession(plan.mapItemId)) return null;
+  // Said with the capstone's own title, so not before the capstone content has loaded.
+  const caps = content.data?.capstones;
+  if (!caps) return null;
+  return waitingLine(capstoneInProgress(course.data), (id) =>
+    capstoneDayTitle(caps.find((c) => c.id === id)?.title ?? id),
+  );
+}
+
+/**
+ * `GET /course/completion`, asked only once the lessons of the core are done (`core` from the plan or course
+ * progress): before that no surface needs it, and a server that has not built it is never asked.
+ */
+export function useCompletionWhen(core: string | null | undefined) {
+  return useQuery({
+    ...apiQuery("course.completion"),
+    enabled: core === "lessons-done" || core === "complete",
+  });
+}
+
+/** What is open once the lessons of the core are done (finale-model.ts), for Today. */
+export function useAfterCore(
+  plan: Pick<SessionPlan, "core" | "kind" | "mapItemId"> | null,
+  boot: Pick<Bootstrap, "day" | "profile"> | null | undefined,
+): { after: AfterCore | null; completion: CoreCompletion | null } {
+  const completion = useCompletionWhen(plan?.core);
+  if (!plan || !boot || !completion.data) return { after: null, completion: completion.data ?? null };
+  return {
+    after: afterCore(plan, completion.data, {
+      day: boot.day,
+      timezone: boot.profile.timezone,
+      rolloverHour: boot.profile.rolloverHour,
+    }),
+    completion: completion.data,
+  };
+}
+
+/**
+ * The advanced tracks as rows (tracks-model.ts): the server's `CourseProgress.tracks` when it carries them, else
+ * the same gates read from course progress, so Progress and the Oak show the branches on any server.
+ */
+export function useTrackRows(): TrackRow[] {
+  const course = useCourseProgress();
+  const content = useContent();
+  if (!course.data) return [];
+  if (course.data.tracks && course.data.tracks.length > 0) return trackRows(course.data.tracks);
+  const authored = authoredUnits((content.data?.lessons ?? []).map((l) => l.id as string));
+  return trackRows(deriveTracks(course.data, authored));
 }

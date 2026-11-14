@@ -156,8 +156,12 @@ export function preloadPattern(pattern: QueryablePattern, from = 0, to = 2): Pro
   return warmAll(values);
 }
 
-/** Bars a long piece is warmed ahead after the first two: the longest graded piece (capstone mode, contracts §6.4). */
-export const WARM_AHEAD_BARS = 128;
+/**
+ * Bars a long piece is warmed ahead after the first two. Wave 6: the Core Finale single (CF-A) is at least two
+ * minutes with no upper limit in its brief; 256 bars is over six minutes at 160 BPM and four at 240, so the bridge,
+ * the lift and the last chorus of any song a learner writes are decoded before they play. (Wave 5: 128.)
+ */
+export const WARM_AHEAD_BARS = 256;
 /** Cycles queried per step of a warm-ahead (each step yields to the event loop). */
 export const WARM_AHEAD_CHUNK = 8;
 

@@ -67,7 +67,7 @@ const KEYS = { roll: false, staff: false, keyboard: true } as const;
 
 export default defineLesson({
   id: "U06.L10",
-  version: 1,
+  version: 2,
   title: "Seventh Colour (preview)",
   objective: 'I can stack one more 3rd on a triad, n("[0,2,4,6]"), and colour a chord loop with it.',
   key: { tonic: "C", mode: "major" },
@@ -376,6 +376,9 @@ export default defineLesson({
         code: { starter: MAKE_STARTER },
         bars: [4, 8],
         saveAs: "sketch",
+        // Decision of 2026-11-13 (d15): this Make opens with the learner's own sketch from U05.L01 when one is
+        // saved, with "Start from Oak's copy" to put the starter back; without one it opens with the starter.
+        fromSketch: "U05.L01",
         rubric: [
           {
             id: "two-sevenths",

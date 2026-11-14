@@ -21,7 +21,7 @@ export {
   stageStatuses,
   stageWidget,
 } from "./dictation/stages.ts";
-export type { HarmonyEnv } from "./env.tsx";
+export type { HarmonyEnv, KeyChangeEnv } from "./env.tsx";
 export {
   type AnswerAudio,
   type AnswerEnv,
@@ -35,7 +35,30 @@ export {
   type TapTake,
   useAnswerEnv,
 } from "./env.tsx";
+export {
+  guideToneFacts,
+  isBarChoice,
+  isModeChoice,
+  keyChangeFact,
+  modeFact,
+  pivotFact,
+  scaleMove,
+} from "./facts.ts";
 export { readsAsLetters, sectionText } from "./form.ts";
+export {
+  EMPTY_FORM_MAP,
+  type FormMapGrade,
+  formMapAnswer,
+  formMapComplete,
+  formMapMarks,
+  formMapMarksFromSlots,
+  formMapOf,
+  formMapSections,
+  formMapValue,
+  type MapSection,
+  mapBlocks,
+  mapLetters,
+} from "./form-map.ts";
 export {
   buildChord,
   chordParts,
@@ -46,9 +69,18 @@ export {
   rnSymbol,
   voiceChord,
 } from "./harmony.ts";
-export { rnModeOf } from "./keys.ts";
+export { appliedTargetsOf, applyOf, gridLayout, isModalKey, rnModeOf } from "./keys.ts";
+export { chordTyped } from "./normalize.ts";
 export { ANSWER_WIDGETS, AnswerUnavailable, AnswerView, answerWidgetFor } from "./registry.tsx";
-export { emptyValue, gridSteps, isComplete, responseOf, slotCount } from "./response.ts";
+export {
+  emptyValue,
+  gridSteps,
+  incompleteReason,
+  isComplete,
+  responseOf,
+  scaleStart,
+  slotCount,
+} from "./response.ts";
 export { spellDegreeName, valueDegrees } from "./scale.ts";
 export {
   cadenceChords,
@@ -63,5 +95,21 @@ export {
   targetLabel,
   voiceSing,
 } from "./sing.ts";
-export { DEFAULT_TAP_TOL, type TapReport, tapReport, targetSeconds } from "./tap.ts";
+export {
+  applyRhythmEdit,
+  type RhythmEdit,
+  type RhythmPalette,
+  type RhythmToken,
+  rhythmPalette,
+  rhythmTokens,
+  tripletGroupsOfValue,
+} from "./staff/rhythm.ts";
+export {
+  DEFAULT_TAP_TOL,
+  padGrid,
+  type TapReport,
+  tapReport,
+  targetPlace,
+  targetSeconds,
+} from "./tap.ts";
 export * from "./types.ts";

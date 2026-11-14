@@ -6,12 +6,19 @@ import type { AllEx, Exercise, ExerciseKind, GradeResult } from "@oak/api";
 import { Check, CircleDashed } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type { AnswerSpec } from "../answers/types.ts";
+import { useContent } from "../lib/content.ts";
+import { useLessonSketch } from "../lib/queries.ts";
 import { IS_MAC } from "../ui/keys/KeymapProvider.tsx";
 import { Button } from "../ui/kit/Button.tsx";
 import { Kbd } from "../ui/kit/basics.tsx";
+import { Callout } from "../ui/kit/Controls.tsx";
+import { LoadingState } from "../ui/kit/QueryState.tsx";
 import { Workbench } from "../workbench/Workbench.tsx";
 import { ByEarPanel } from "./byear.tsx";
 import { CheckButton, quietIn, StepFeedback, useCheck } from "./check.tsx";
+import { allCheckReason, checkReason } from "./check-reason.ts";
+import { clearDraft, draftKey, keepsDraft, loadDraft, saveDraft } from "./drafts.ts";
+import { EarAfter } from "./ear-after.tsx";
 import { answerFeedback, revealValue } from "./feedback.ts";
 import { InlineMd, StepLayout, useStepHost } from "./frame.tsx";
 import {
@@ -26,6 +33,7 @@ import {
   starterOf,
 } from "./inputs.tsx";
 import { LeadSheetView, leadSheetOf } from "./lead-sheet.tsx";
+import { fromSketchOf, type MakeSource, makeStart, makeStartNote, ownSketchOf } from "./make-start.ts";
 import { answerSpecOf, revealCode, withTrialOptions } from "./model.ts";
 import { CodeMusic } from "./music.tsx";
 import { PassiveListenRenderer } from "./passive.tsx";
@@ -68,6 +76,41 @@ function RevealCard({ ex, current, apply }: { ex: Exercise; current: string; app
   );
 }
 
+// --- unchecked answers kept over a reload (d4) ---------------------------------------------------------
+
+interface DraftSlot {
+  load(initial: unknown): unknown;
+  save(value: unknown, initial: unknown): void;
+  clear(): void;
+}
+const NO_DRAFT: DraftSlot = { load: () => null, save: () => {}, clear: () => {} };
+
+function draftSlot(h: ReturnType<typeof useStepHost>, ex: Part, on: boolean): DraftSlot {
+  const spec = answerSpecOf(ex);
+  // Lesson steps only (a checkpoint keeps its own records), never a replayed step.
+  if (!on || !spec || h.mode !== "lesson" || h.review || !keepsDraft(spec)) return NO_DRAFT;
+  const key = draftKey({
+    ownerId: h.lesson.id,
+    stepId: h.step.id,
+    seriesNo: h.seriesNo,
+    exerciseId: ex.id,
+  });
+  return {
+    load: (initial) => loadDraft(key, spec, initial),
+    save: (value, initial) => saveDraft(key, value, initial),
+    clear: () => clearDraft(key),
+  };
+}
+
+function useDraft(ex: Part, on: boolean): DraftSlot {
+  return draftSlot(useStepHost(), ex, on);
+}
+
+function useDrafts(parts: readonly Part[]): DraftSlot[] {
+  const h = useStepHost();
+  return parts.map((p) => draftSlot(h, p, true));
+}
+
 // --- the single-input renderer ----------------------------------------------------------------------
 
 function SingleRenderer(props: ExerciseRendererProps) {
@@ -75,16 +118,19 @@ function SingleRenderer(props: ExerciseRendererProps) {
   const ex = h.exercise as Part;
   const rt = useRef<InputRuntime>({ tapStart: null, plays: 0 }).current;
   const code = isCodeInput(ex);
+  // d4: an unchecked form, scale, chart or line of numerals is kept on this device and comes back after a reload.
+  const draft = useDraft(ex, !code);
   const [local, setLocal] = useState<unknown>(() => {
-    const v = initialInput(ex);
+    const v = initialInput(ex, h.trial);
     if (ex.kind === "run-investigate" && h.code !== null) return { ...(v as InvestigateValue), code: h.code };
-    return v;
+    return draft.load(v) ?? v;
   });
   const value = code ? (h.code ?? starterOf(ex).code) : local;
   const setValue = (v: unknown) => {
     if (code) h.setCode(v as string);
     else {
       setLocal(v);
+      draft.save(v, initialInput(ex, h.trial));
       if (ex.kind === "run-investigate") h.setCode((v as InvestigateValue).code);
     }
   };
@@ -96,8 +142,18 @@ function SingleRenderer(props: ExerciseRendererProps) {
   const onPartsState = useCallback((s: { ready: boolean; track: string | null }) => setParts(s), []);
   const ready = inputReady(ex, value, h.trial) && parts.ready;
   const isRun = ex.kind === "run-investigate" && ex.questions.length === 0;
-  const { check, checked } = useCheck(props, () => (ready ? inputResponse(ex, value, rt) : null), rt);
+  const { check, checked } = useCheck(
+    props,
+    () => {
+      if (!ready) return null;
+      // Checked: the answer is the server's now, the kept copy goes.
+      draft.clear();
+      return inputResponse(ex, value, rt, h.trial);
+    },
+    rt,
+  );
   const spec: AnswerSpec | null = withTrialOptions(answerSpecOf(ex), h.trial);
+  const reason = code || ready ? null : checkReason(ex, value, initialInput(ex, h.trial), h.trial);
   const feedback =
     quietIn(h.mode, h.checking) ??
     answerFeedback({
@@ -142,8 +198,9 @@ function SingleRenderer(props: ExerciseRendererProps) {
   const refBars = "reference" in ex && ex.reference && "bars" in ex.reference ? ex.reference.bars : 1;
   // A lead sheet beside the Workbench of a "play from the page" step (answer kinds show it with the stimulus).
   const lead = isCodeInput(ex) ? leadSheetOf(h.step, ex) : null;
-  // A dictation from the page (not by ear): the music to write down stays in view above the editor.
-  const fromPage = !lead && ex.kind === "dictation" && !isByEar(ex);
+  // A dictation from the page (not by ear), or a staff read back in code (U13.L05 S6): the music to write down
+  // stays in view above the editor.
+  const fromPage = !lead && ((ex.kind === "dictation" && !isByEar(ex)) || (code && ex.kind === "staff-read"));
   const stage = (
     <div className="flex flex-col gap-3">
       {lead ? <LeadSheetView spec={lead} /> : null}
@@ -174,12 +231,17 @@ function SingleRenderer(props: ExerciseRendererProps) {
             </p>
           ) : null}
           <StepFeedback detail={!code} />
+          <EarAfter ex={ex} trial={h.trial} value={value} />
           {code || ex.kind === "code-fill" ? (
             <RevealCard ex={ex} current={typeof value === "string" ? value : ""} apply={(c) => setValue(c)} />
           ) : null}
         </>
       }
-      actions={isRun ? null : <CheckButton onClick={() => void check()} disabled={!ready || h.checking} />}
+      actions={
+        isRun ? null : (
+          <CheckButton onClick={() => void check()} disabled={!ready || h.checking} reason={reason} />
+        )
+      }
     />
   );
 }
@@ -340,15 +402,38 @@ function AllRenderer(props: ExerciseRendererProps) {
   const ex = h.exercise as AllEx;
   const parts = ex.parts;
   const runtimes = useRef<InputRuntime[]>(parts.map(() => ({ tapStart: null, plays: 0 }))).current;
-  const [values, setValues] = useState<unknown[]>(() => parts.map((p) => initialInput(p)));
+  const drafts = useDrafts(parts);
+  const [values, setValues] = useState<unknown[]>(() =>
+    parts.map((p, i) => {
+      const v = initialInput(p, h.trials[i] ?? null);
+      return drafts[i]?.load(v) ?? v;
+    }),
+  );
   const ready = parts.every((p, i) => inputReady(p, values[i], h.trials[i] ?? null));
   const rt: InputRuntime = { tapStart: null, plays: runtimes.reduce((a, r) => a + r.plays, 0) };
   const { check } = useCheck(
     props,
     () =>
-      ready ? { parts: parts.map((p, i) => inputResponse(p, values[i], runtimes[i] as InputRuntime)) } : null,
+      ready
+        ? (() => {
+            for (const d of drafts) d.clear();
+            return {
+              parts: parts.map((p, i) =>
+                inputResponse(p, values[i], runtimes[i] as InputRuntime, h.trials[i] ?? null),
+              ),
+            };
+          })()
+        : null,
     rt,
   );
+  const reason = ready
+    ? null
+    : allCheckReason(
+        parts,
+        values,
+        parts.map((p, i) => initialInput(p, h.trials[i] ?? null)),
+        h.trials,
+      );
   const anyCode = parts.some((p) => isCodeInput(p) || p.kind === "code-fill" || p.kind === "run-investigate");
   const fb =
     quietIn(h.mode, h.checking) ??
@@ -356,18 +441,20 @@ function AllRenderer(props: ExerciseRendererProps) {
   const cards: ReactNode = (
     <ol className="flex flex-col gap-4" aria-label="Parts">
       {parts.map((p, i) => {
-        const set = (v: unknown) =>
+        const set = (v: unknown) => {
+          drafts[i]?.save(v, initialInput(p, h.trials[i] ?? null));
           setValues((vs) => {
             const next = [...vs];
             next[i] = v;
             return next;
           });
+        };
         const partProps = {
           ex: p,
           value: values[i],
           onChange: set,
           wbId: `l-${h.step.id.toLowerCase()}-p${i + 1}-${h.seriesNo}`,
-          feedback: partFeedback(fb, h.result),
+          feedback: partFeedback(fb, h.result, i),
           result: null as GradeResult | null,
           rung: h.rung,
           disabled: h.checking || h.review,
@@ -385,6 +472,7 @@ function AllRenderer(props: ExerciseRendererProps) {
             <div className="flex flex-col gap-3">
               <PartInput {...partProps} slot="stage" />
               <PartInput {...partProps} slot="answer" />
+              <EarAfter ex={p} trial={h.trials[i] ?? null} value={values[i]} />
             </div>
           </li>
         );
@@ -400,19 +488,32 @@ function AllRenderer(props: ExerciseRendererProps) {
           <StepFeedback detail />
         </>
       }
-      actions={<CheckButton onClick={() => void check()} disabled={!ready || h.checking} label="Check all" />}
+      actions={
+        <CheckButton
+          onClick={() => void check()}
+          disabled={!ready || h.checking}
+          label="Check all"
+          reason={reason}
+        />
+      }
     />
   );
 }
 
-/** Parts of an `all` share the step's verdict; a pass marks them all correct. */
-function partFeedback(fb: ReturnType<typeof answerFeedback>, r: GradeResult | null) {
+/**
+ * Parts of an `all` share the step's verdict; a pass marks them all correct. A fail marks the parts the grading
+ * placed a finding on (grading.ts `withPartSlots`: several answers checked together) and leaves the others as they
+ * are; with no part named (code parts), none is marked.
+ */
+export function partFeedback(fb: ReturnType<typeof answerFeedback>, r: GradeResult | null, part: number) {
   if (fb.state === "correct" || fb.state === "pending") return fb;
-  return r && r.status === "fail"
-    ? ({ state: "idle" } as const)
-    : fb.state === "revealed"
-      ? ({ state: "idle" } as const)
-      : fb;
+  if (r && r.status === "fail") {
+    const off = r.diagnostics.some(
+      (d) => (d.severity === "error" || d.severity === "warn") && d.where?.slot === part + 1,
+    );
+    return off && fb.state === "wrong" ? ({ state: "wrong" } as const) : ({ state: "idle" } as const);
+  }
+  return fb.state === "revealed" ? ({ state: "idle" } as const) : fb;
 }
 
 // --- the Make -----------------------------------------------------------------------------------------
@@ -421,7 +522,33 @@ function MakeRenderer() {
   const h = useStepHost();
   const ex = h.exercise as Extract<Exercise, { kind: "code-make" | "compose-brief" }>;
   const starter = starterOf(ex);
-  const code = h.code ?? starter.code;
+  // d15: a Make that builds on an earlier lesson's sketch opens with the learner's own, when they saved one.
+  const from = fromSketchOf(ex);
+  const sketchQ = useLessonSketch(from);
+  const content = useContent();
+  const own = from !== null && sketchQ.isSuccess ? ownSketchOf(sketchQ.data) : null;
+  // The editor waits for the answer only when it would otherwise open with Oak's copy and then change.
+  const waiting = from !== null && h.code === null && sketchQ.isPending && sketchQ.fetchStatus !== "idle";
+  const start = makeStart({ starter: starter.code, own, current: h.code });
+  const code = start.code;
+  const [chosen, setChosen] = useState<MakeSource | null>(null);
+  const side = chosen ?? start.source;
+  // Each copy as the learner left it in this visit: switching back and forth never loses an edit.
+  const kept = useRef<Record<MakeSource, string | null>>({ sketch: null, oak: null });
+  const setCode = h.setCode;
+  const ownCode = own?.code ?? null;
+  useEffect(() => {
+    // The step holds the sketch from the start (Wrap up and the saved sketch read the step's code).
+    if (ownCode !== null && h.code === null) setCode(ownCode);
+  }, [ownCode, h.code, setCode]);
+  const switchTo = (to: MakeSource) => {
+    if (!own || to === side) return;
+    kept.current[side] = code;
+    h.setCode(kept.current[to] ?? (to === "oak" ? starter.code : own.code));
+    setChosen(to);
+  };
+  const fromTitle =
+    content.data?.syllabus?.units.flatMap((u) => u.lessons).find((l) => l.id === from)?.title ?? null;
   const editorId = `l-${h.step.id.toLowerCase()}-make`;
   // The starter's marked spot (`⟪4⟫`: "change the highlighted number") gets the dashed target box until the
   // learner edits; the whole Make stays editable. Without it the prompt pointed at a highlight nobody could see.
@@ -447,9 +574,10 @@ function MakeRenderer() {
   const liveRef = useRef(live);
   liveRef.current = live;
   useEffect(() => {
+    if (waiting) return;
     const t = window.setTimeout(() => void liveRef.current(code), 700);
     return () => window.clearTimeout(t);
-  }, [code]);
+  }, [code, waiting]);
   useEffect(() => {
     h.setCheck(() => void live(code));
     return () => h.setCheck(null);
@@ -457,21 +585,48 @@ function MakeRenderer() {
   return (
     <StepLayout
       stage={
-        <Workbench
-          {...h.workbench}
-          id={editorId}
-          tutorBars
-          code={code}
-          onChange={(c) => h.setCode(c)}
-          onEvaluated={(o) => {
-            // A refused run (a locked tool) is graded too, so the list says why in words.
-            if (o.ok) h.markDone();
-            void live(o.code);
-          }}
-        />
+        waiting ? (
+          <LoadingState label="Looking for your sketch" />
+        ) : (
+          <Workbench
+            {...h.workbench}
+            id={editorId}
+            tutorBars
+            code={code}
+            // Switching copies puts the other one into the editor even when its text equals the last prop.
+            {...(own ? { codeKey: side } : {})}
+            onChange={(c) => h.setCode(c)}
+            onEvaluated={(o) => {
+              // A refused run (a locked tool) is graded too, so the list says why in words.
+              if (o.ok) h.markDone();
+              void live(o.code);
+            }}
+          />
+        )
       }
       answer={
         <>
+          {own && start.choice ? (
+            <Callout
+              tone="info"
+              title={side === "sketch" ? "Your own sketch" : "Oak's copy"}
+              actions={
+                side === "sketch" ? (
+                  <Button size="sm" onClick={() => switchTo("oak")} data-testid="make-oak-copy">
+                    Start from Oak's copy
+                  </Button>
+                ) : (
+                  <Button size="sm" onClick={() => switchTo("sketch")} data-testid="make-own-sketch">
+                    Use my sketch
+                  </Button>
+                )
+              }
+            >
+              <span data-testid="make-start-note" data-source={side}>
+                {makeStartNote(side, own, fromTitle)}
+              </span>
+            </Callout>
+          ) : null}
           <section aria-label="What the Make asks for" data-testid="make-checklist">
             <p className="text-sm text-text-2">
               {ex.kind === "code-make" ? `${ex.bars[0]} to ${ex.bars[1]} bars. ` : ""}Run it to tick the list.

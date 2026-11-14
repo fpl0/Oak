@@ -24,6 +24,7 @@ import u04l01 from "../../../content/core/U04/L01/lesson.ts";
 import u04l02 from "../../../content/core/U04/L02/lesson.ts";
 import u04l03 from "../../../content/core/U04/L03/lesson.ts";
 import u04l04 from "../../../content/core/U04/L04/lesson.ts";
+import u10l04 from "../../../content/core/U10/L04/lesson.ts";
 import { courseGraph } from "../../../content/index.ts";
 import { unlockedAt } from "../../../content/lib/course.ts";
 import { toolbox } from "../../../content/toolbox.ts";
@@ -31,6 +32,8 @@ import type { AnswerSpec } from "../answers/types.ts";
 import { answerResponse, barAnswer } from "./answer-response.ts";
 import fixture, { BUNS_CODE, BUNS_WRONG, FIXTURE_CONTEXT } from "./dev/wave3-fixture.ts";
 import {
+  answerTakes,
+  drawnTapTargets,
   type GradeEnv,
   type GraderDeps,
   gradeStep,
@@ -41,7 +44,7 @@ import {
   sungPerformance,
   withTrial,
 } from "./grading.ts";
-import { partsOf } from "./model.ts";
+import { answerSpecOf, partsOf, withTrialOptions } from "./model.ts";
 import { firstWrongBar } from "./rules.ts";
 import {
   hasParts,
@@ -101,9 +104,30 @@ const W5_LESSONS: LessonDef[] = await Promise.all(
   }),
 );
 
+/** The 33 lessons of Wave 6: U12 Seventh Chords (6), U13 Rhythm II (6), U14 Modes (6), U15 Secondary Dominants
+ * (6), U16 Borrowed Chords (5), U17 Modulation (4). Every one must load: a missing lesson fails here. */
+const W6_LESSON_IDS: readonly string[] = (
+  [
+    ["U12", 6],
+    ["U13", 6],
+    ["U14", 6],
+    ["U15", 6],
+    ["U16", 5],
+    ["U17", 4],
+  ] as const
+).flatMap(([u, n]) => Array.from({ length: n }, (_, i) => `${u}.L${String(i + 1).padStart(2, "0")}`));
+
+const W6_LESSONS: LessonDef[] = await Promise.all(
+  W6_LESSON_IDS.map(async (id) => {
+    const [unit, lesson] = id.split(".") as [string, string];
+    const mod = (await import(`../../../content/core/${unit}/${lesson}/lesson.ts`)) as { default: LessonDef };
+    return mod.default;
+  }),
+);
+
 /** U09.CP, U10.CP and U11.CP: their authored items and the Make, graded in the checkpoint's own context. */
 const W5_CHECKPOINTS: CheckpointDef[] = await Promise.all(
-  ["U09", "U10", "U11"].map(async (u) => {
+  ["U09", "U10", "U11", "U13", "U14", "U17"].map(async (u) => {
     const mod = (await import(`../../../content/core/${u}/CP/checkpoint.ts`)) as { default: CheckpointDef };
     return mod.default;
   }),
@@ -156,9 +180,51 @@ const LESSONS: [LessonDef, string][] = [
 describe("Wave 5: every lesson and checkpoint is here", () => {
   test("31 lessons, 3 checkpoints", () => {
     expect(W5_LESSONS.map((d) => d.id)).toEqual([...W5_LESSON_IDS]);
-    expect(W5_CHECKPOINTS.map((c) => c.id)).toEqual(["U09.CP", "U10.CP", "U11.CP"]);
+    expect(W5_CHECKPOINTS.map((c) => c.id).slice(0, 3)).toEqual(["U09.CP", "U10.CP", "U11.CP"]);
   });
 });
+
+describe("Wave 6: every lesson and checkpoint is here", () => {
+  test("33 lessons, 3 checkpoints (U13.CP, U14.CP, U17.CP)", () => {
+    expect(W6_LESSONS.map((d) => d.id)).toEqual([...W6_LESSON_IDS]);
+    expect(W5_CHECKPOINTS.map((c) => c.id).slice(3)).toEqual(["U13.CP", "U14.CP", "U17.CP"]);
+  });
+});
+
+// Every authored test of every Wave 6 lesson through the player's own grading path, in the lesson's context (its
+// tools, its swing and pickup), the tests of a several-answer step as a whole too.
+for (const def of W6_LESSONS) {
+  describe(`${def.id} authored tests through the player's grading path`, () => {
+    const env: GradeEnv = {
+      ...envOf(def, def.id),
+      ...(def.swing ? { swing: def.swing } : {}),
+      ...(def.pickup ? { pickup: def.pickup } : {}),
+    };
+    for (const step of def.steps) {
+      const ex = step.exercise;
+      if (!ex) continue;
+      for (const part of partsOf(ex)) {
+        for (const t of [...(ex.kind === "all" && part === ex.parts[0] ? ex.tests : []), ...part.tests]) {
+          const response = wire(t);
+          if (!response) continue;
+          const target = ex.kind === "all" && ex.tests.includes(t) ? ex : part;
+          test(`${step.id} ${target === ex ? ex.id : part.id}: ${t.name} → ${t.expect}`, async () => {
+            const r = await gradeStep(deps, env, target as Exercise, response, {
+              params: t.params ?? {},
+              attemptNo: 1,
+              rung: 0,
+              extraReplays: 0,
+            });
+            if (t.expect === "pass") expect(r.status).toBe("pass");
+            else if (t.expect === "fail") expect(r.status).not.toBe("pass");
+            else expect(r.status).toBe("error");
+            for (const code of t.feedback ?? []) expect(r.diagnostics.map((d) => d.id)).toContain(code);
+          });
+        }
+      }
+    }
+  });
+}
 
 for (const cp of W5_CHECKPOINTS) {
   describe(`${cp.id} authored items and Make through the player's grading path`, () => {
@@ -332,6 +398,132 @@ describe("locked tools are rejected in graded steps", () => {
     );
     expect(r.status).not.toBe("pass");
     expect(r.diagnostics.some((d) => d.id.startsWith("code.locked"))).toBe(true);
+  });
+});
+
+describe("d8: a step whose degree pad is minor draws minor-key trials", () => {
+  test("U10.L04 S6 (a minor pad of b3, b6, b7): every drawn trial is in a minor key, every degree on the pad", () => {
+    const ex = u10l04.steps.find((s) => s.id === "S6")?.exercise as Exercise;
+    const stim = (ex as { stimulus: { family: string } }).stimulus;
+    const cats = openCategories(stim.family, "U10.L04", () => true);
+    const pad = new Set(["1", "2", "b3", "4", "5", "b6", "b7"]);
+    for (let series = 0; series < 60; series++) {
+      const trial = stimulusTrial(ex, "U10.L04", series, NEUTRAL_PROFILE, cats);
+      if (!trial) throw new Error("no trial");
+      const key = trial.params.key as { mode: string };
+      expect(["minor", "aeolian", "harmonic-minor", "melodic-minor", "dorian"]).toContain(key.mode);
+      for (const d of trial.expected.degrees ?? []) expect(pad.has(d)).toBe(true);
+    }
+  });
+
+  test("a pad that holds both 3 and b3 (major or minor?) is not narrowed", () => {
+    const ex = u10l04.steps.find((s) => s.id === "S6")?.exercise as Exercise;
+    const both = {
+      ...ex,
+      answer: { ...(ex as { answer: object }).answer, set: ["1", "3", "b3", "5"] },
+    } as Exercise;
+    const stim = (ex as { stimulus: { family: string } }).stimulus;
+    const cats = openCategories(stim.family, "U10.L04", () => true);
+    const modes = new Set<string>();
+    for (let series = 0; series < 60; series++) {
+      const t = stimulusTrial(both, "U10.L04", series, NEUTRAL_PROFILE, cats);
+      modes.add(((t?.params.key ?? {}) as { mode?: string }).mode ?? "");
+    }
+    // Both kinds of key are still drawn: an identification step keeps both answers.
+    expect(modes.has("major")).toBe(true);
+    expect([...modes].some((m) => m !== "major")).toBe(true);
+  });
+});
+
+describe("a drawn trial the step's own answer can take", () => {
+  const w6 = (id: string, step: string, part = -1) => {
+    const ex = W6_LESSONS.find((d) => d.id === id)?.steps.find((s) => s.id === step)?.exercise as Exercise;
+    return (part >= 0 ? (ex as Extract<Exercise, { kind: "all" }>).parts[part] : ex) as Exercise;
+  };
+  const draws = (id: string, ex: Exercise, n = 40) => {
+    const fam = (ex as { stimulus: { family: string } }).stimulus.family;
+    const cats = openCategories(fam, id, () => true);
+    return Array.from(
+      { length: n },
+      (_, s) =>
+        stimulusTrial(ex, id, s, NEUTRAL_PROFILE, cats) as NonNullable<ReturnType<typeof stimulusTrial>>,
+    );
+  };
+
+  test("U13.L02 S6 offers the sixteenths between the eighths: every drawn push is one of them", () => {
+    const ex = w6("U13.L02", "S6");
+    const ids = (ex as { answer: { options: { id: string }[] } }).answer.options.map((o) => o.id);
+    const got = new Set<string>();
+    for (const t of draws("U13.L02", ex)) {
+      expect(ids).toContain(t.expected.choice?.[0] as string);
+      got.add(t.expected.choice?.[0] as string);
+    }
+    expect(got.size).toBeGreaterThan(3);
+  });
+
+  test("U12.L04 S6's palette is sevenths only, four slots: every drawn loop is four sevenths", () => {
+    const ex = w6("U12.L04", "S6");
+    for (const t of draws("U12.L04", ex)) {
+      expect(t.expected.rn).toHaveLength(4);
+      for (const rn of t.expected.rn ?? []) expect(rn).toMatch(/7/);
+    }
+  });
+
+  test("a bar-buttons step draws only 'which bar' trials, shown as the trial's own bars", () => {
+    for (const [id, step, part] of [
+      ["U15.L06", "S2", 1],
+      ["U16.L05", "S5", -1],
+      ["U17.L03", "S4", -1],
+    ] as const) {
+      const ex = w6(id, step, part);
+      const asked = new Set<string>();
+      for (const t of draws(id, ex)) {
+        expect(answerTakes(ex, t)).toBe(true);
+        const spec = withTrialOptions(answerSpecOf(ex), t);
+        expect(spec?.ui).toBe("choice");
+        const opts = (spec as { options: { id: string; label: string }[] }).options;
+        expect(opts.map((o) => o.id)).toContain(t.expected.choice?.[0] as string);
+        // The answers draw it as the bar timeline: every option "Bar n", or "none".
+        for (const o of opts) expect(o.id === "none" || o.label === `Bar ${o.id}`).toBe(true);
+        asked.add(t.expected.choice?.[0] as string);
+      }
+      expect(asked.size, `${id}: the bar moves round`).toBeGreaterThan(1);
+    }
+    // U17.L03's modulation trials keep "No key change", last on the timeline.
+    const mod = draws("U17.L03", w6("U17.L03", "S4")).find((t) => t.expected.choice?.[0] === "none");
+    const spec = withTrialOptions(answerSpecOf(w6("U17.L03", "S4")), mod ?? null) as {
+      options: { id: string; label: string }[];
+    };
+    expect(spec.options.at(-1)).toEqual({ id: "none", label: "No key change" });
+  });
+
+  test("a drawn bar trial is graded as the drill grades it: its bar passes, another fails", async () => {
+    const ex = w6("U16.L05", "S5");
+    const env = envOf(W6_LESSONS.find((d) => d.id === "U16.L05") as LessonDef, "U16.L05");
+    const t = draws("U16.L05", ex, 1)[0] as NonNullable<ReturnType<typeof stimulusTrial>>;
+    const right = t.expected.choice?.[0] as string;
+    const wrong = (t.params.options as string[]).find((o) => o !== right) as string;
+    const o = { params: {}, attemptNo: 1, rung: 0 as const, extraReplays: 0, trial: t };
+    expect((await gradeStep(deps, env, ex, { answer: { choice: [right] } }, o)).status).toBe("pass");
+    expect((await gradeStep(deps, env, ex, { answer: { choice: [wrong] } }, o)).status).toBe("fail");
+  });
+
+  test("a drawn echo (U13.L05 S2) is graded against the trial's own taps, after its response point", async () => {
+    const ex = w6("U13.L05", "S2");
+    const env = envOf(W6_LESSONS.find((d) => d.id === "U13.L05") as LessonDef, "U13.L05");
+    const t = draws("U13.L05", ex, 1)[0] as NonNullable<ReturnType<typeof stimulusTrial>>;
+    const targets = drawnTapTargets(t) as number[];
+    const at = t.params.responseAt as number;
+    expect(at).toBeGreaterThan(0);
+    expect(targets[0]).toBeCloseTo(at + (t.params.tapTargets as number[])[0], 6);
+    const o = { params: {}, attemptNo: 1, rung: 0 as const, extraReplays: 0, trial: t };
+    expect((await gradeStep(deps, env, ex, { taps: targets }, o)).status).toBe("pass");
+    const half = targets.slice(0, Math.ceil(targets.length / 2));
+    expect((await gradeStep(deps, env, ex, { taps: half }, o)).status).not.toBe("pass");
+    // Tapped along with the figure instead of after it: the echo's targets are not met.
+    expect((await gradeStep(deps, env, ex, { taps: t.params.tapTargets as number[] }, o)).status).not.toBe(
+      "pass",
+    );
   });
 });
 

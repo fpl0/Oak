@@ -29,9 +29,33 @@ export function recordingWindow(
   return { delayS, durationS: bars / cps + tail };
 }
 
+/** Seconds over which a take fades out at its end, and the silence after the fade before the recorder stops. */
+export const TAKE_FADE_SEC = 0.2;
+export const TAKE_FADE_GUARD_SEC = 0.05;
+
+/**
+ * The fade at a take's end on the recorder's own gain (`tapGain`, ctx time): whatever still rings when the tail is
+ * over ends in a fade, never in a cut (a click on every album track). Only with a tail long enough to hold it.
+ */
+export function scheduleTakeFade(
+  gain: Pick<AudioParam, "cancelScheduledValues" | "setValueAtTime" | "linearRampToValueAtTime">,
+  startedAt: number,
+  durationS: number,
+  tailSec: number,
+): void {
+  gain.cancelScheduledValues(startedAt);
+  gain.setValueAtTime(1, startedAt);
+  if (tailSec < TAKE_FADE_SEC + TAKE_FADE_GUARD_SEC) return;
+  const end = startedAt + durationS - TAKE_FADE_GUARD_SEC;
+  gain.setValueAtTime(1, end - TAKE_FADE_SEC);
+  gain.linearRampToValueAtTime(0, end);
+}
+
 export interface RecorderDeps {
   ctx: AudioContext;
   tap: MediaStreamAudioDestinationNode;
+  /** The gain before the tap (only the recorder hears it): the take fades out on it. */
+  tapGain?: GainNode;
   transport: Transport;
   playing: () => boolean;
   /** Called while recording (the UI-sound bus suppresses itself); returns the release. */
@@ -70,7 +94,14 @@ export function createRecorder(deps: RecorderDeps): Recorder & { dispose(): void
         active = state;
         // UI sounds are suppressed from the moment a recording is asked for, through its count-in.
         let release: (() => void) | null = deps.onStart?.() ?? null;
+        const restoreTap = (): void => {
+          const g = deps.tapGain?.gain;
+          if (!g) return;
+          g.cancelScheduledValues(deps.ctx.currentTime);
+          g.setValueAtTime(1, deps.ctx.currentTime);
+        };
         const fail = (err: Error): void => {
+          restoreTap();
           release?.();
           release = null;
           if (active === state) finish();
@@ -105,6 +136,7 @@ export function createRecorder(deps: RecorderDeps): Recorder & { dispose(): void
             };
             recorder.onerror = () => fail(new Error("@oak/strudel: MediaRecorder failed"));
             recorder.onstop = () => {
+              restoreTap();
               release?.();
               release = null;
               if (active === state) finish();
@@ -116,6 +148,7 @@ export function createRecorder(deps: RecorderDeps): Recorder & { dispose(): void
               });
             };
             recorder.start(250);
+            if (deps.tapGain) scheduleTakeFade(deps.tapGain.gain, startedAt, durationS, opts.tailSec ?? 2);
             state.timers.push(
               setTimeout(() => {
                 if (recorder.state !== "inactive") recorder.stop();

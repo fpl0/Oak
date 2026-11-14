@@ -236,4 +236,90 @@ describe("the PCM long-take recorder", () => {
     expect(v.getUint32(28, true)).toBe(44100 * 4);
     expect(v.getUint32(40, true)).toBe(40);
   });
+  // Wave 6 (CF-A): the single is a two-minute-plus piece with section changes and a key change.
+  test("a 2:14 song with a section change every eight bars and a lift: every sample, the exact length, nothing missing", async () => {
+    const sr = 48000;
+    const h = harness(sr);
+    const rec = createPcmRecorderWith({ ctx: h.ctx, source: h.source, createNode: h.createNode });
+    await rec.prepare();
+    // CF-A's plan: 56 bars at 100 BPM (2.4 s a bar, 134.4 s), verse chorus verse chorus bridge chorus chorus2;
+    // the last eight bars a whole step up. The signal is a tone per section that restarts at every section
+    // change (a discontinuity, as a new section's attack is) with a different level and pan per section.
+    const barFrames = 2.4 * sr;
+    const sections = [0, 4, 0, 4, 9, 4, 6]; // semitones above 220 Hz; the last chorus lifted by two
+    const at = 0.5;
+    const start = at * sr;
+    const piece = (f: number, c: number): number => {
+      const k = f - start;
+      if (k < 0 || k >= 56 * barFrames) return 0;
+      const sec = Math.floor(k / (8 * barFrames));
+      const inSec = k - sec * 8 * barFrames;
+      const hz = 220 * 2 ** ((sections[sec] as number) / 12);
+      const amp = (0.2 + 0.08 * sec) * (c === 0 ? 1 : 0.6 + 0.05 * sec);
+      return amp * Math.sin((2 * Math.PI * hz * inSec) / sr);
+    };
+    const take = rec.record({ seconds: 134.4, at, tailSec: 2 });
+    await h.render(Math.ceil((at + 134.4 + 2.2) * sr), piece);
+    const r = await take;
+    expect(r.exact).toBe(true);
+    expect(r.frames).toBe(Math.round(136.4 * sr));
+    expect(r.durationS).toBe(136.4);
+    expect(r.latePadFrames).toBe(0);
+    expect(r.missingFrames).toBe(0);
+    const wav = await readWav(r.blob);
+    expect(wav.frames).toBe(6547200);
+    // Sample for sample against the piece, both channels, through every section change and the lift.
+    let worst = 0;
+    let zeroRun = 0;
+    let longestZeroRun = 0;
+    const song = 56 * barFrames;
+    for (let f = 0; f < wav.frames; f++) {
+      for (let c = 0; c < 2; c++) {
+        const x = piece(start + f, c);
+        const want = x < 0 ? x * 0x8000 : x * 0x7fff;
+        const d = Math.abs((wav.pcm[2 * f + c] as number) - Math.trunc(want));
+        if (d > worst) worst = d;
+      }
+      // A dropout would be a run of silence inside the song: the tone never rests for a millisecond.
+      if (f < song) {
+        if (wav.pcm[2 * f] === 0 && wav.pcm[2 * f + 1] === 0) zeroRun++;
+        else zeroRun = 0;
+        if (zeroRun > longestZeroRun) longestZeroRun = zeroRun;
+      }
+    }
+    expect(worst).toBeLessThanOrEqual(1);
+    expect(longestZeroRun).toBeLessThan(sr / 1000);
+    // The section changes sit on their exact frames: the first sample of each section is the tone's zero.
+    for (let sec = 1; sec < 7; sec++) expect(wav.pcm[2 * sec * 8 * barFrames]).toBe(0);
+    // The tail after the last bar is there and silent.
+    expect(wav.pcm[2 * (song + sr)]).toBe(0);
+    expect(rec.stats().peakHeldBytes).toBeLessThanOrEqual(8 * sr * 4);
+  });
+
+  test("a chunk that never arrives is reported as missing frames; the length still holds", async () => {
+    const sr = 8000;
+    const h = harness(sr);
+    const rec = createPcmRecorderWith({
+      ctx: h.ctx,
+      source: h.source,
+      createNode: h.createNode,
+      channels: 1,
+      chunkSec: 0.5,
+    });
+    await rec.prepare();
+    const take = rec.record({ seconds: 3, at: 0, tailSec: 0 });
+    // The page loses the third half-second chunk on its way from the audio thread.
+    const deliver = h.node.port.onmessage as (e: { data: unknown }) => void;
+    let chunks = 0;
+    h.node.port.onmessage = (e) => {
+      const d = e.data as { type: string };
+      if (d.type === "chunk" && ++chunks === 3) return;
+      deliver(e);
+    };
+    await h.render(3.2 * sr, () => 0.3);
+    const r = await take;
+    expect(r.frames).toBe(3 * sr);
+    expect(r.missingFrames).toBe(sr / 2);
+    expect((await readWav(r.blob)).frames).toBe(3 * sr);
+  });
 });

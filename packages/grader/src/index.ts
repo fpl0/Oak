@@ -78,6 +78,10 @@ import {
   type SongLadderGradeRequest,
   songLadderRequest as songLadderRequestImpl,
 } from "./grade/song-ladder.ts";
+import {
+  type StandardLadderGradeRequest,
+  standardLadderRequest as standardLadderRequestImpl,
+} from "./grade/standard-ladder.ts";
 import { toolsUsed as toolsUsedImpl } from "./lint/index.ts";
 import { runMatcher as runMatcherImpl } from "./match/index.ts";
 import { normalize as normalizeImpl } from "./normalize/nevent.ts";
@@ -306,4 +310,64 @@ export {
  */
 export function gradeSongLadder(req: SongLadderGradeRequest): Promise<GradeResult> {
   return gradeExercise(songLadderRequestImpl(req));
+}
+
+// Wave 6 Build: the key in force bar by bar as the rubric reads it (contracts §6.8), and the device detector with
+// the bar of each device (CF-A's device rows and the "Your devices so far" card).
+export { chordKeys, type KeysByBarOptions, keyChangesByBar, keysByBar } from "./analyze/key-plan.ts";
+export { type Device, detectDevices, MODULATION_MIN_BARS, SYNCOPATED_BASS_MIN } from "./analyze/piece.ts";
+// Wave 6 seam (docs/design/wave6.md §3.2): the U12–U17 views, the L8 / CF-T standard ladder, the rule fields
+// that are not built yet.
+export {
+  type ChordColourView,
+  type ChromaticHarmonyView,
+  chromaticHarmonyView,
+  type KeyChangeView,
+  type KeyPlanSpanView,
+  type KeyPlanView,
+  keyAtBarOf,
+  keyPlanView,
+  type ModeView,
+  modeView,
+  type PushView,
+  pushesOf,
+  type RhythmView,
+  rhythmView,
+  type TrackRhythmView,
+  type TupletView,
+  tupletsOf,
+} from "./analyze/wave6-views.ts";
+export {
+  type FormMapAnswer,
+  type FormMapResult,
+  type FormMapSection,
+  formMapKey,
+  gradeFormMap,
+  nextStandardStage,
+  STANDARD_LADDER_MATCHERS,
+  STANDARD_LADDER_PASS,
+  STANDARD_LADDER_STAGES,
+  type StandardCodeStage,
+  type StandardLadderGradeRequest,
+  type StandardLadderItem,
+  type StandardLadderStage,
+  songFormOf,
+  standardLadderCheck,
+  standardLadderPassed,
+  standardLadderRequest,
+} from "./grade/standard-ladder.ts";
+export {
+  notBuiltYet,
+  type UnbuiltRuleField,
+  unbuiltWave6,
+  unbuiltWave6Matcher,
+  WAVE6_UNBUILT,
+} from "./rubric/wave6-rules.ts";
+
+/**
+ * Grades one code stage of a ladder L8 standard or of CF-T (bass, changes, melody) against the song's answer key,
+ * in capstone mode (contracts §2.9, §6.6 CF-T). The form map is graded without Strudel by `gradeFormMap`.
+ */
+export function gradeStandardLadder(req: StandardLadderGradeRequest): Promise<GradeResult> {
+  return gradeExercise(standardLadderRequestImpl(req));
 }

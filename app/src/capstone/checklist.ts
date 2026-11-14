@@ -16,6 +16,11 @@ export interface ChecklistRow {
   anchor: BarAnchor | null;
   /** This session works towards the rule (`CapstoneSessionDef.focusRules`). */
   focus: boolean;
+  /**
+   * The session names its rules and this open one is not among them: it belongs to a later session (CF-A.S1 shows
+   * "At least 4 devices" with its count, marked "a later session", never as a failure of today's draft).
+   */
+  later: boolean;
 }
 
 export function checklistOf(
@@ -23,6 +28,8 @@ export function checklistOf(
   result: GradeResult | null,
   anchors: Readonly<Record<string, BarAnchor | null>> = {},
   focusRules: readonly string[] = [],
+  /** The session that releases the piece has no "later": every rule is due. */
+  lastSession = false,
 ): ChecklistRow[] {
   const byId = new Map((result?.rubric ?? []).map((r) => [r.ruleId, r] as const));
   const usable = result !== null && result.status !== "error";
@@ -39,6 +46,7 @@ export function checklistOf(
       detail,
       anchor: state === "open" ? (anchors[rule.id] ?? null) : null,
       focus: focusRules.includes(rule.id),
+      later: !lastSession && focusRules.length > 0 && !focusRules.includes(rule.id) && state !== "met",
     };
   });
 }

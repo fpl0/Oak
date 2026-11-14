@@ -119,6 +119,41 @@ export function spokenChord(display: string): string {
   return bass ? `${words} over ${acc(bass)}` : words;
 }
 
+/**
+ * A chord name as typed, with the spellings Oak takes beyond the grader's own list (Wave 6, U12): the triangle
+ * for a major seventh, with or without its 7 (`CΔ`, `CΔ7` → `C^7`), and a slashed circle typed as `0` after the
+ * root is left alone. The preview, the picker and the response all read through this, so what the learner sees
+ * is what is graded.
+ */
+export function chordTyped(text: string): string {
+  return chordWords(text).replace(/[Δ△]7?/g, "^7");
+}
+
+/**
+ * A seventh chord spelled the way Oak itself says it (the spoken form of `spokenChord`: "C major 7", "B flat
+ * minor 7 flat 5") or in words ("C dominant seventh", "F sharp half-diminished"), read as its symbol (Wave 6
+ * review: "C major 7" was "not a chord symbol" while the preview of `Cmaj7` read it aloud in those very words).
+ * A name that is not a root followed by these words is returned as it was.
+ */
+function chordWords(text: string): string {
+  const m = /^\s*([A-Ga-g])(\s*(?:#|♯|b(?![a-z])|♭|sharp|flat))?\s+(.+?)\s*$/i.exec(text);
+  if (!m) return text;
+  const acc = (m[2] ?? "").trim().toLowerCase();
+  const root = `${(m[1] as string).toUpperCase()}${acc === "sharp" || acc === "#" || acc === "♯" ? "#" : acc ? "b" : ""}`;
+  const seventh = "(?:7|7th|seventh)";
+  const words: [RegExp, string][] = [
+    [new RegExp(`^(?:major|maj)\\s*${seventh}$`, "i"), "^7"],
+    [new RegExp(`^(?:dominant|dom)(?:\\s*${seventh})?$`, "i"), "7"],
+    [new RegExp(`^(?:minor|min)\\s*${seventh}\\s*(?:flat|b|♭)\\s*5$`, "i"), "m7b5"],
+    [new RegExp(`^half[- ]?diminished(?:\\s*${seventh})?$`, "i"), "m7b5"],
+    [new RegExp(`^(?:minor|min)\\s*${seventh}$`, "i"), "m7"],
+    [new RegExp(`^(?:diminished|dim)\\s*${seventh}$`, "i"), "o7"],
+  ];
+  const rest = m[3] as string;
+  for (const [re, suffix] of words) if (re.test(rest)) return `${root}${suffix}`;
+  return text;
+}
+
 function free(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -158,7 +193,7 @@ function readOne(kind: TextKind, text: string): ReadsAs {
   }
   let canonical: string | null = null;
   try {
-    canonical = normalizeText(kind, text);
+    canonical = normalizeText(kind, kind === "chord" ? chordTyped(text) : text);
   } catch {
     canonical = null;
   }

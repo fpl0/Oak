@@ -147,6 +147,22 @@ test("Settings › Audio: the output meter follows what Oak plays", async ({ pag
   await expect(meter).toContainText(/-\d+ dBFS/);
   await shootAll(page, "45-settings-audio-meter");
   await expect(meter).toHaveAttribute("data-playing", "0", { timeout: 15_000 });
+  // The phrase was measured on the master bus, before and after the limiter (Wave 6: the Master meter): its
+  // average level and loudest moment in dB below full scale, and a practice-level phrase leaves the limiter alone.
+  const readout = page.getByTestId("audio-readout");
+  await expect(readout).toHaveText(
+    /^Measured over that phrase: average level −\d+\.\d dB, loudest moment −\d+\.\d dB before the limiter \(0 dB is full scale\)\. The limiter rested\.$/,
+    { timeout: 15_000 },
+  );
+  const said = (await readout.textContent()) ?? "";
+  const [level, peak] = [...said.matchAll(/−(\d+\.\d) dB/g)].map((m) => -Number(m[1]));
+  console.log(`settings audio read-out: ${said}`);
+  // A piano phrase at practice volume: well under full scale, its peak above its average.
+  expect(level).toBeLessThan(-12);
+  expect(level).toBeGreaterThan(-45);
+  expect(peak).toBeGreaterThan(level as number);
+  expect(peak).toBeLessThan(-3);
+  await shootAll(page, "46-settings-audio-readout");
   await expectNoOverflow(page);
   expect(problems).toEqual([]);
 });

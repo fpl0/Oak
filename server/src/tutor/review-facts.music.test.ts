@@ -21,5 +21,5 @@ test("SONG_FACTS are what Oak's analysis reads from SONG_CODE", async () => {
   const notes = view.melody.map((m) => ({ track: "mel", midi: m.midi, bar: m.bar, beat: m.beat }));
   const facts = reviewFactsFrom({ view, analysis, notes, meter: "4/4" });
   expect(facts).toEqual(SONG_FACTS);
-  expect(factLines(facts)).toContain("cadence: bar 8 PAC");
+  expect(factLines(facts)).toContain("cadence: bar 8 authentic cadence (V to I, melody on 1)");
 });

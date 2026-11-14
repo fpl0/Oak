@@ -334,6 +334,7 @@ export function createOakStrudel(options: OakStrudelOptions): OakStrudel {
   const recorder = createRecorder({
     ctx,
     tap: master.tap,
+    tapGain: master.tapGain,
     transport,
     playing: () => transport.get().playing,
     onStart: () => ui.suppress("recording"),

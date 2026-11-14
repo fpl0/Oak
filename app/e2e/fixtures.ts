@@ -142,7 +142,7 @@ export const FIXTURES = {
   health: {
     ok: true,
     appVersion: "0.0.0-e2e",
-    contractsVersion: "1.5",
+    contractsVersion: "1.6",
     schemaVersion: 1,
     contentVersion: null,
     tutor: "ready",
@@ -153,7 +153,7 @@ export const FIXTURES = {
     health: {
       ok: true,
       appVersion: "0.0.0-e2e",
-      contractsVersion: "1.5",
+      contractsVersion: "1.6",
       schemaVersion: 1,
       contentVersion: null,
       tutor: "ready",
@@ -591,6 +591,29 @@ export const FIXTURES = {
   "profile.calibrations": { items: [] },
   // Wave 5: the sound side lessons open once U03.L02 is done; this learner is at U01.L02 (the shell asks on every page).
   "sideLessons.list": { open: false, items: [], next: null },
+  // Wave 6: the album page asks where the learner stands in the core (Side A's line); this learner is at U01.L02.
+  "course.completion": {
+    stage: "in-progress",
+    completedAt: null,
+    sessionId: null,
+    sessionsDone: 3,
+    sessionsTotal: 185,
+    remaining: [{ kind: "lesson", id: "U01.L02", title: "Count to Four" }],
+    milestone: null,
+    stats: {
+      firstDay: "2026-11-01",
+      days: 3,
+      sessions: 3,
+      activeMinutes: 45,
+      lessons: 2,
+      tracksReleased: 1,
+      transcriptions: 0,
+      sketches: 2,
+    },
+    canDo: [],
+    album: { released: 1, total: 12, latestTrackId: "tr_1" },
+    open: [],
+  },
 } satisfies Partial<Record<JsonEndpointName, unknown>>;
 
 FIXTURES["profile.get"] = FIXTURES.bootstrap.profile;

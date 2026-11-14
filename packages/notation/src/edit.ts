@@ -262,6 +262,13 @@ export interface NoteListContext {
   ties?: boolean;
   /** May a length be written as a dotted value (a dotted quarter)? Default false: such a length is refused. */
   dots?: boolean;
+  /**
+   * Wave 6 (U13.L05, `staff-input.triplets`): may a length be a triplet value (`8t`: a third of a quarter)? Default
+   * false: such a length is refused like any length no single value writes. With it on, a triplet length is one
+   * value, the answer writes triplet groups as `C4:8t D4:8t E4:8t` (`tripletTokens`; rests fill a group the notes
+   * leave open: `C4:8t r:4t`), and other tuplets stay in the group form `(5:4 … )`.
+   */
+  triplets?: boolean;
 }
 
 /** The engraving input of a staff-input answer (the note-list DSL, `AnswerValueMap["staff-input"]`). */
@@ -305,9 +312,27 @@ function valueTable(dots: boolean): { len: Rat; text: string }[] {
   }
   return out.sort((a, b) => R.cmp(b.len, a.len));
 }
-/** One value that writes `len` whole notes exactly, or null. */
-function singleValue(len: Rat, dots: boolean): string | null {
-  return valueTable(dots).find((v) => R.eq(v.len, len))?.text ?? null;
+/** One value that writes `len` whole notes exactly (with `triplets`, also a triplet value: `8t`), or null. */
+function singleValue(len: Rat, dots: boolean, triplets = false): string | null {
+  const plain = valueTable(dots).find((v) => R.eq(v.len, len))?.text;
+  if (plain || !triplets) return plain ?? null;
+  const third = valueTable(false).find((v) => R.eq(R.mul(v.len, [2, 3]), len))?.text;
+  return third ? `${third}t` : null;
+}
+
+/**
+ * A note list with its triplet groups written as triplet values: `(3:2 C4:8 D4:8~ E4:8)` → `C4:8t D4:8t~ E4:8t`
+ * (the same lengths: a group scales by 2/3, `t` does too). Other tuplets (`(5:4 … )`) are kept as groups. This is
+ * the form a `staff-input` answer with triplets has (content-kit duration token `8t`).
+ */
+export function tripletTokens(list: string): string {
+  return list.replace(/\(3:2\s+([^()]*)\)/g, (_m, inner: string) =>
+    inner
+      .trim()
+      .split(/\s+/)
+      .map((tok) => tok.replace(/^(.+:\d+\.{0,2})(~?)$/, "$1t$2"))
+      .join(" "),
+  );
 }
 /** `len` whole notes as values, longest first (`aligned`: each starts on a multiple of its plain length). */
 function decompose(pos: Rat, len: Rat, dots: boolean, aligned: boolean): string[] | null {
@@ -527,7 +552,7 @@ export function editNoteList(
       clipped = true;
     }
     // With ties off the length must be one value (a rest may be several).
-    if (edit.op !== "rest" && !ties && !singleValue(R.mul(dur, W), dots))
+    if (edit.op !== "rest" && !ties && !singleValue(R.mul(dur, W), dots, ctx.triplets ?? false))
       return refuse(singleValue(R.mul(dur, W), true) ? "needs-dot" : "needs-tie");
     if (clipped && edit.op === "move") {
       // A moved note keeps its length up to the bar line: shorten it in place (its id does not depend on
@@ -549,7 +574,9 @@ export function editNoteList(
  * answer keeps both hands), else the engraving of its first staff.
  */
 function noteListOf(input: NotationInput, ctx: NoteListContext & { dots: boolean }): string {
-  return (
-    plainNoteList(input.events, ctx) ?? slicedNoteList(input.events, ctx) ?? toNoteList(buildScore(input))
-  );
+  const binary = plainNoteList(input.events, ctx) ?? slicedNoteList(input.events, ctx);
+  if (binary !== null) return binary;
+  // A tuplet length: the engraving's own note list (it reads back exactly); triplets as `8t` values when offered.
+  const engraved = toNoteList(buildScore(input));
+  return ctx.triplets ? tripletTokens(engraved) : engraved;
 }

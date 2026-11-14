@@ -454,7 +454,9 @@ describe("budgets", () => {
       readBudgets({ ...file, budgets: [...file.budgets, { name: "x", projects: ["map"], minutes: 1 }] }),
     ).toThrow();
     const real = readBudgets(JSON.parse(readFileSync(`${REPO_ROOT}e2e/budgets.json`, "utf8")));
-    expect(real.totalMinutes).toBe(105);
+    // 105 after the suite pass; 131 after Wave 6 (docs/decisions.md 63: the new specs' measured minutes only); 134
+    // after the Wave 6 gate (decision 66: the two review specs).
+    expect(real.totalMinutes).toBe(134);
     const covered = new Set(real.budgets.flatMap((b) => b.projects));
     for (const p of [
       "lesson",

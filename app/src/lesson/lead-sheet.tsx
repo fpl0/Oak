@@ -4,8 +4,8 @@
 // chords are a fixed chart (code spellings, bar 1-based, 0 = the pickup bar) or read from a chord track by the
 // grader's harmony view (`harmonyView`, never a table here). Engraving is @oak/notation's `leadSheetInput`.
 import type { Exercise, KeySpec, LeadSheetSpec, MeterId, PickupSpec, StepDef } from "@oak/api";
-import { harmonyView, normalize, selectTrack } from "@oak/grader";
-import { type ChordLabel, leadSheetInput, notate } from "@oak/notation";
+import { harmonyView, normalize, selectTrack, swingView } from "@oak/grader";
+import { type ChordLabel, leadSheetInput, notate, staffHostInput } from "@oak/notation";
 import { renderStaff } from "@oak/notation/render";
 import { METERS } from "@oak/theory";
 import { useEffect, useRef, useState } from "react";
@@ -61,6 +61,7 @@ export function LeadSheetView({
   const meter = meterIn ?? h?.exercise?.meter ?? h?.env.meter ?? "4/4";
   const key = keySpec ?? h?.exercise?.key ?? h?.env.key ?? null;
   const pickup = pickupIn ?? h?.exercise?.pickup ?? h?.env.pickup;
+  const declaredSwing = h?.exercise?.swing ?? h?.env.swing ?? null;
   const host = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<{ status: "drawing" | "ready" | "error"; symbols: string[] }>({
     status: "drawing",
@@ -94,16 +95,23 @@ export function LeadSheetView({
             };
           });
         }
-        const input = leadSheetInput({
-          melody,
-          chords,
-          meter: METERS[meter],
-          key,
-          bars,
-          ...(pickup ? { pickup } : {}),
-          ...(spec.title ? { title: spec.title } : {}),
-          ...(spec.degrees ? { annotations: { degree: true, solfege: false, noteName: false } } : {}),
-        });
+        // d5: every staff host prints what the Workbench prints — a swung tune straight under "Swing 8ths"
+        // (contracts §6.10 item 3), and a scale step the code alters as the code wrote it (♯4 stays F♯, never G♭).
+        const melodyTrack = melody[0]?.track;
+        const measured = swingView(n, meter).filter((t) => t.track === melodyTrack);
+        const input = staffHostInput(
+          leadSheetInput({
+            melody,
+            chords,
+            meter: METERS[meter],
+            key,
+            bars,
+            ...(pickup ? { pickup } : {}),
+            ...(spec.title ? { title: spec.title } : {}),
+            ...(spec.degrees ? { annotations: { degree: true, solfege: false, noteName: false } } : {}),
+          }),
+          { code, swing: declaredSwing ?? measured },
+        );
         const { abc } = notate(input);
         const el = host.current;
         if (!live || !el) return;
@@ -128,6 +136,8 @@ export function LeadSheetView({
     pickup?.units?.[1],
     chartKey,
     spec.melody,
+    declaredSwing?.subdivision,
+    declaredSwing?.amount,
   ]);
   return (
     <figure

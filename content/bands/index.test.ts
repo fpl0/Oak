@@ -24,11 +24,14 @@ import { loadCheckpointFiles, loadLessons } from "../lib/load.bun.ts";
 import { BAD_LOG, evaluate, lint } from "../validate/harness.ts";
 import {
   BAND_CHANGES,
+  BAND_METERS,
   BAND_STAGES,
   bandById,
   bandCodeAt,
   bandMeter,
   bands,
+  MODAL_BANDS,
+  MODAL_GUARDS,
   SECTION_BANDS,
   TONIC_BANDS,
 } from "./index.ts";
@@ -53,7 +56,11 @@ const at = (session: string) => (from: string) => atOrBefore(g, from as SessionI
 const KEYS = ["C", "G", "D", "A", "E", "B", "F#", "Db", "Ab", "Eb", "Bb", "F"].map((t) => `${t}4:major`);
 const fill = (code: string, key = "C4:major", beats = 4, bpm = 96) =>
   `setcpm(${bpm}/${beats})\n\n${code.replaceAll("{{key}}", key).replaceAll("{{bpm}}", String(bpm))}`;
-const beatsOf = (id: string) => Number(bandMeter(id).split("/")[0]);
+/** The divisor of a Band's tempo line: the beats in its bar, dotted quarters in a compound meter (contracts §6.9). */
+const beatsOf = (id: string) => {
+  const n = Number(bandMeter(id).split("/")[0]);
+  return bandMeter(id).endsWith("/8") ? n / 3 : n;
+};
 const rat = (x: string | number): number => {
   const [a, b] = String(x).split("/").map(Number);
   return b ? (a as number) / b : (a as number);
@@ -805,5 +812,176 @@ describe("Wave 5 steps over their Bands (U08–U11, A1, U09–U11 checkpoints)",
       }
     }
     expect([...new Set(found)]).toEqual([]);
+  });
+});
+
+// Wave 6 (U12–U17, C6, C7, the U14 and U17 checkpoints): the modal vamps keep their mode in every key and kit, the
+// compound-meter Bands count in their meter, the ii–V–I leaves the learner's register free, and a Band follows a
+// learner's key plan.
+describe("Wave 6 Bands", () => {
+  const TONICS = ["C", "G", "D", "A", "E", "B", "F#", "Db", "Ab", "Eb", "Bb", "F"];
+  const PC: Record<string, number> = {
+    C: 0,
+    Db: 1,
+    D: 2,
+    Eb: 3,
+    E: 4,
+    F: 5,
+    "F#": 6,
+    G: 7,
+    Ab: 8,
+    A: 9,
+    Bb: 10,
+    B: 11,
+  };
+  /** Pitch classes of one track, bar by bar (every onset of the bar). */
+  const pcsByBar = async (code: string, track: string, bars: number, beats = 4) => {
+    const r = await evalHeadless(fill(code, "C4:major", beats), bars);
+    return [...Array(bars).keys()].map((i) =>
+      [
+        ...new Set(
+          r.events
+            .filter((e) => e.track === track && Math.floor(rat(e.begin) + 1e-9) === i && e.midi !== null)
+            .map((e) => (e.midi as number) % 12),
+        ),
+      ].sort((a, b) => a - b),
+    );
+  };
+
+  test("a modal vamp never sounds the note that would break its mode, and sounds its colour, in every key and kit", async () => {
+    const bad: string[] = [];
+    for (const [id, mode] of Object.entries(MODAL_BANDS)) {
+      const guard = MODAL_GUARDS[mode];
+      const def = bandById.get(id);
+      for (const f of flavours)
+        for (const t of TONICS) {
+          const code = (def?.code[f.id] ?? "").replaceAll("{{key}}", `${t}4:${mode}`);
+          const r = await evalHeadless(`setcpm(96/4)\n\n${code}`, 2);
+          const rel = new Set(
+            r.events
+              .filter((e) => e.midi !== null && e.track !== "drums")
+              .map((e) => ((((e.midi as number) - (PC[t] as number)) % 12) + 12) % 12),
+          );
+          if (rel.has(guard.never))
+            bad.push(`${id} ${f.id} in ${t}: plays ${guard.never} half steps above home`);
+          if (!rel.has(guard.colour)) bad.push(`${id} ${f.id} in ${t}: no colour note`);
+        }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  test("the modal vamps play their two chords in C: C B♭, Cm F, C D/C, Cm D♭", async () => {
+    const expected: Record<string, number[][]> = {
+      "band.mixolydian-vamp": [
+        [0, 4, 7],
+        [2, 5, 10],
+      ],
+      "band.dorian-vamp": [
+        [0, 3, 7],
+        [0, 5, 9],
+      ],
+      "band.lydian-vamp": [
+        [0, 4, 7],
+        [2, 6, 9],
+      ],
+      "band.phrygian-vamp": [
+        [0, 3, 7],
+        [1, 5, 8],
+      ],
+    };
+    for (const [id, chords] of Object.entries(expected)) {
+      const pop = bandById.get(id)?.code["flavour.pop"] ?? "";
+      expect([id, await pcsByBar(lineOf(pop, "chords"), "chords", 2)]).toEqual([id, chords]);
+      expect([id, BAND_CHANGES[id]?.length]).toEqual([id, 2]);
+    }
+    // Lydian holds its home note in the bass under both chords.
+    const lyd = bandById.get("band.lydian-vamp")?.code["flavour.pop"] ?? "";
+    expect(await pcsByBar(lineOf(lyd, "bass"), "bass", 2)).toEqual([[0], [0]]);
+  });
+
+  test("the compound Bands are in 6/8 and 12/8: the 6/8 snare on the second dotted quarter, the 12/8 keys in triplets, no swing", async () => {
+    expect(BAND_METERS["band.soul-68"]).toBe("6/8");
+    expect(BAND_METERS["band.slow-128"]).toBe("12/8");
+    for (const id of ["band.soul-68", "band.slow-128"])
+      for (const f of flavours) expect([id, f.id, bandById.get(id)?.code[f.id]]).not.toContain("swingBy");
+    for (const f of flavours) {
+      const code = bandById.get("band.soul-68")?.code[f.id] ?? "";
+      const r = await evalHeadless(fill(lineOf(code, "drums"), "C4:major", 2), 1);
+      const all = r.events.map((e) => ({ s: String(e.s ?? ""), t: round(rat(e.begin)) }));
+      expect([f.id, all.some((e) => e.s.startsWith("sd") && e.t === 0.5)]).toEqual([f.id, true]);
+      expect([f.id, all.some((e) => e.s.startsWith("bd") && e.t === 0)]).toEqual([f.id, true]);
+    }
+    const pop = bandById.get("band.slow-128")?.code["flavour.pop"] ?? "";
+    const keys = await evalHeadless(fill(lineOf(pop, "chords"), "C4:major", 4), 1);
+    expect(new Set(keys.events.map((e) => round(rat(e.begin)))).size).toBe(12);
+  });
+
+  test("the ii–V–I plays guide tones only, under F3, over a bass at or under G2 (in C)", async () => {
+    for (const f of flavours) {
+      const code = bandById.get("band.two-five-one")?.code[f.id] ?? "";
+      const chords = await pcsByBar(lineOf(code, "chords").replace(/\.swingBy\([^)]*\)/, ""), "chords", 4);
+      // Dm7: F C; G7: B F; C6: E A.
+      expect([f.id, chords]).toEqual([
+        f.id,
+        [
+          [0, 5],
+          [5, 11],
+          [4, 9],
+          [4, 9],
+        ],
+      ]);
+      const r = await evalHeadless(fill(code), 4);
+      const top = (t: string) =>
+        Math.max(...r.events.filter((e) => e.track === t).map((e) => e.midi as number));
+      expect([f.id, top("chords") <= 53]).toEqual([f.id, true]);
+      if (f.id !== "flavour.funk") expect([f.id, top("bass") <= 43]).toEqual([f.id, true]);
+    }
+  });
+
+  test("a Band follows the learner's key plan: the four-chord loop and a modal vamp lift with the tune", async () => {
+    const lift = (id: string, flavour: string, key: KeySpec, learner: string) =>
+      bandCodeFor(
+        {
+          band: id,
+          flavour: flavour as FlavourId,
+          code: bandCodeAt(id, flavour, at("U17.L02")),
+          followsLearnerKey: true,
+          tracks: ["bass"],
+        },
+        { key, defaultBpm: 96, learnerCode: learner },
+      );
+    const roots = async (code: string, bars: number) => {
+      const r = await evalHeadless(`setcpm(96/4)\n\n${lineOf(code, "bass")}`, bars);
+      return [...Array(bars).keys()].map((i) => {
+        const inBar = r.events.filter((e) => Math.floor(rat(e.begin) + 1e-9) === i);
+        return Math.min(...inBar.map((e) => e.midi as number)) % 12;
+      });
+    };
+    const axis = lift(
+      "band.axis-4bar",
+      "flavour.pop",
+      { tonic: "C", mode: "major" },
+      'mel: n("0 2 4 2").scale("<C4:major!4 D4:major!4>")',
+    );
+    // C G A F, then the same loop in D: D A B G.
+    expect(await roots(axis, 8)).toEqual([0, 7, 9, 5, 2, 9, 11, 7]);
+    const vamp = lift(
+      "band.mixolydian-vamp",
+      "flavour.pop",
+      { tonic: "G", mode: "mixolydian" },
+      'mel: n("0 2 4 6").scale("<G4:mixolydian!2 A4:mixolydian!2>")',
+    );
+    // G F, then A G.
+    expect(await roots(vamp, 4)).toEqual([7, 5, 9, 7]);
+  });
+
+  test("the checkpoint Makes of U14 and U17 keep the Band to its drums: their chords are the learner's, in a mode or a lifted key", () => {
+    for (const id of ["U14.CP", "U17.CP"] as const) {
+      const ref = CHECKPOINT_MAKE_BANDS[id];
+      expect([id, ref?.tracks]).toEqual([id, ["drums"]]);
+      expect([id, bandMeter(ref?.band ?? "")]).toEqual([id, "4/4"]);
+    }
+    // U13.CP: the drums are the learner's lines (the unit's rule).
+    expect(CHECKPOINT_MAKE_BANDS["U13.CP"]).toBeUndefined();
   });
 });

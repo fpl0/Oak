@@ -72,7 +72,12 @@ describe("fact decks", () => {
     const ours = decks.flatMap((d) => d.cards.map((c) => c.id as string));
     expect(new Set(ours).size).toBe(ours.length);
     // Term cards (fact.<term>) are also locked facts; every deck card is locked, and no locked deck card is missing.
-    const deckLocked = locked.filter((id) => /^fact\.(staff|keysig|chord)\./.test(id));
+    const prefixes = new Set(ours.map((id) => id.split(".")[1]));
+    const deckLocked = locked.filter((id) => prefixes.has(id.split(".")[1] as string));
+    // The twelve decks' own prefixes (contracts 1.6 promoted nine decks): none is shared with a term card.
+    expect([...prefixes].sort()).toEqual(
+      ["blues", "cadence", "chord", "dom7", "int", "keysig", "minor", "rn", "scale", "staff", "triad"].sort(),
+    );
     expect([...ours].sort()).toEqual([...deckLocked].sort());
   });
 
@@ -175,9 +180,10 @@ describe("fact decks", () => {
     expect(g("F C G D A B E")).toBeCloseTo(5 / 7, 5);
   });
 
-  test("interval names (pending deck): half steps and names as @oak/theory measures them, Strudel's strings too", () => {
+  test("interval names (in the catalog since contracts 1.6): half steps and names as @oak/theory measures them, Strudel's strings too", () => {
     expect(() => defineDeck(INTERVAL_NAMES)).not.toThrow();
-    expect(decks.map((d) => d.id as string)).not.toContain(INTERVAL_NAMES.id);
+    expect(decks.map((d) => d.id as string)).toContain(INTERVAL_NAMES.id);
+    expect(INTERVAL_NAMES.newPerDay).toBe(1);
     for (const [name, semis, code, , gate] of INTERVAL_ROWS) {
       const info = theory.intervalOf(60, 60 + semis);
       expect([name, info.semitones]).toEqual([name, semis]);
@@ -186,7 +192,10 @@ describe("fact decks", () => {
       expect([code, theory.parseStrudelInterval(code)?.semitones]).toEqual([code, semis]);
       const semisCard = INTERVAL_NAMES.cards.find((c) => c.id === `fact.int.semis-${semis}`);
       expect(semisCard?.gate).toBe(gate);
+      // The reverse direction (name → half steps) is dealt from U12.L06, where intervals come back.
+      expect(INTERVAL_NAMES.cards.find((c) => c.id === `fact.int.${name}-semis`)?.gate).toBe("U12.L06");
     }
+    expect(INTERVAL_NAMES.cards.filter((c) => c.gate !== "U12.L06")).toHaveLength(18);
     const grade = (id: string, t: string) => {
       const c = INTERVAL_NAMES.cards.find((x) => x.id === id) as FactDeck["cards"][number];
       return bindDeck(INTERVAL_NAMES).grade(c, { text: [t] }, 1000).credit;
@@ -244,20 +253,23 @@ describe("fact decks", () => {
   });
 });
 
-describe("U05–U07 fact decks (pending their contracts §7.3 rows and ledger IDs)", () => {
+describe("U05–U07 fact decks (in the catalog since contracts 1.6)", () => {
   const C = { tonic: "C", mode: "major" } as const;
   const credit = (deck: FactDeck, id: string, text: string[]) => {
     const card = deck.cards.find((c) => c.id === id) as FactDeck["cards"][number];
     return bindDeck(deck).grade(card, { text }, 1000).credit;
   };
-  test("they are pending: valid, gated on real lessons at or after their unlock, IDs unique and new", () => {
+  test("they are in the catalog: valid, gated on real lessons at or after their unlock, IDs unique", () => {
     const pending = [TRIAD_SPELLINGS, NUMERALS, CADENCE_NAMES];
     const ids = pending.flatMap((d) => d.cards.map((c) => c.id as string));
     expect(new Set(ids).size).toBe(ids.length);
-    const live = new Set(decks.flatMap((d) => d.cards.map((c) => c.id as string)));
+    const live = new Set(
+      decks.filter((d) => !pending.includes(d)).flatMap((d) => d.cards.map((c) => c.id as string)),
+    );
     for (const d of pending) {
       expect(() => defineDeck(d)).not.toThrow();
-      expect(decks.map((x) => x.id as string)).not.toContain(d.id);
+      expect(decks.map((x) => x.id as string)).toContain(d.id);
+      expect(PENDING_DECKS).not.toContain(d);
       for (const c of d.cards) {
         expect(live.has(c.id as string)).toBe(false);
         if (c.gate) expect([c.id, lessons.has(c.gate)]).toEqual([c.id, true]);
@@ -325,7 +337,7 @@ describe("U05–U07 fact decks (pending their contracts §7.3 rows and ledger ID
   });
 });
 
-describe("U10–U11 fact decks (pending their contracts §7.3 rows): every answer as @oak/theory gives it", () => {
+describe("U10–U11 fact decks (in the catalog since contracts 1.6): every answer as @oak/theory gives it", () => {
   const credit = (deck: FactDeck, id: string, text: string[]) => {
     const card = deck.cards.find((c) => c.id === id) as FactDeck["cards"][number];
     expect(card).toBeDefined();
@@ -334,18 +346,18 @@ describe("U10–U11 fact decks (pending their contracts §7.3 rows): every answe
   const answerOf = (deck: FactDeck, id: string) =>
     (deck.cards.find((c) => c.id === id)?.answer.text ?? []) as string[];
   const order = (id: string) => units.flatMap((u) => u.lessons.map((l) => l.id as string)).indexOf(id);
-  test("pending, valid, gated on real lessons no earlier than the deck, IDs unique and new", () => {
+  test("in the catalog, valid, gated on real lessons no earlier than the deck, IDs unique", () => {
     const ids = WAVE5_DECKS.flatMap((d) => d.cards.map((c) => c.id as string));
     expect(new Set(ids).size).toBe(ids.length);
     const others = new Set(
-      [...decks, ...PENDING_DECKS.filter((d) => !WAVE5_DECKS.includes(d))].flatMap((d) =>
-        d.cards.map((c) => c.id as string),
-      ),
+      [...decks, ...PENDING_DECKS]
+        .filter((d) => !WAVE5_DECKS.includes(d))
+        .flatMap((d) => d.cards.map((c) => c.id as string)),
     );
     for (const d of WAVE5_DECKS) {
       expect(() => defineDeck(d)).not.toThrow();
-      expect(PENDING_DECKS).toContain(d);
-      expect(decks.map((x) => x.id as string)).not.toContain(d.id);
+      expect(decks.map((x) => x.id as string)).toContain(d.id);
+      expect(PENDING_DECKS).not.toContain(d);
       expect(lessons.has(d.unlock.lesson)).toBe(true);
       for (const c of d.cards) {
         expect(others.has(c.id as string)).toBe(false);

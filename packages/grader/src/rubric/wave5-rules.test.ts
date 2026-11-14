@@ -112,3 +112,16 @@ mel: n("<[0 2 4 2] [1 ~ 4 ~] [2 4 5 4] [3@3 ~]>").scale("C4:major")`;
     expect(bright.diagnostics[0]?.params.how).toMatch(/brighter than the target/);
   });
 });
+
+describe("bass-line under comping that enters after the beat (U12.L06)", () => {
+  const roots = bassLine({ roots: { on: "change", minRatio: 0.75 } });
+  const comp = 'chords: chord("<Dm7 G7 C^7 A7>").voicing().struct("~ x ~ ~ x ~ ~ ~")';
+  test("a held root on each downbeat belongs to the chord that enters on the & of 1", async () => {
+    const r = await row(roots, `${comp}\nbass: note("<d2 g2 c2 a1>").s("sawtooth")`, 4);
+    expect(r?.ok).toBe(true);
+  });
+  test("a held wrong note is still wrong", async () => {
+    const r = await row(roots, `${comp}\nbass: note("<d2 e2 c2 e2>").s("sawtooth")`, 4);
+    expect(r?.ok).toBe(false);
+  });
+});

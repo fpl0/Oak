@@ -9,7 +9,7 @@ import {
   type TutorSubject,
   useTutorContext,
 } from "./context.ts";
-import { chordMapFromCode } from "./harmony-chips.ts";
+import { chordMapFromCode, keyPlanFromCode } from "./harmony-chips.ts";
 import type { TokenContext } from "./music-tokens.ts";
 
 const EMPTY: TokenContext = { terms: [], introduced: null, tools: [], unlocked: null };
@@ -36,6 +36,9 @@ export function useTokenContext(): TokenContext {
       subject.code ?? (subject.answer?.kind === "transcription" ? subject.answer.code : null),
       key,
     );
+  // Wave 6: the key plan of a piece that changes key, so key and mode chips light their bars and numerals are read
+  // in the key of their bar. The surface's own analysis wins; else a patterned `.scale()` in the code.
+  const keyPlan = subject.keyPlan ?? keyPlanFromCode(subject.code ?? null);
   return {
     terms: content.data.terms,
     tools: content.data.toolbox,
@@ -46,6 +49,7 @@ export function useTokenContext(): TokenContext {
     ...(harmony.length > 0 ? { harmony } : {}),
     // Wave 5: section names in tutor text select the section in the form view.
     ...(sections.length > 0 ? { sections, pickup: subject.pickup === true } : {}),
+    ...(keyPlan.length > 1 ? { keyPlan } : {}),
   };
 }
 

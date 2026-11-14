@@ -21,8 +21,8 @@ export const SONG_LADDER_PASS: { readonly 5: number; readonly 6: Readonly<Record
   };
 
 /**
- * The matchers: the melody key-relative (as X1); the bass as L3's bass stage; the changes by numeral on the triad
- * core, on the chords alone (`weights.bass` 0): the bass has its own check before them, so a right bass under a
+ * The matchers: the melody key-relative (as X1); the bass as L3's bass stage; the changes by numeral at seventh
+ * depth, on the chords alone (`weights.bass` 0): the bass has its own check before them, so a right bass under a
  * wrong chord earns nothing for the chord (a wrong last line of a 12-bar blues fails, Wave 5 integration).
  */
 export const SONG_LADDER_MATCHERS: Readonly<Record<"melody" | SongLadderStage, Matcher>> = {
@@ -35,13 +35,16 @@ export const SONG_LADDER_MATCHERS: Readonly<Record<"melody" | SongLadderStage, M
     track: "@melody",
   },
   bass: LADDER_MATCHERS[3].bass,
+  // d11 (decision of 2026-11-13): read at seventh depth, and the right root with the wrong quality earns nothing
+  // for its bar (a minor chord for a dominant; a plain V where the song has V7). The pass mark stays 0.85.
   changes: {
     m: "harmony",
     level: "rn",
-    qualityDepth: "triad",
+    qualityDepth: "seventh",
     inversion: false,
     harmonicRhythm: "given",
     weights: { bass: 0 },
+    wrongQuality: "none",
   },
 };
 
@@ -103,6 +106,8 @@ export function songLadderRequest(req: SongLadderGradeRequest): GradeRequest {
       ...base.ctx,
       exerciseGlobalId: `ladder/${req.item.itemId}`,
       mode: req.item.level === 5 ? "lesson" : "capstone",
+      // d12: from L5 on the transcription is in the recording's key; a transposed answer fails and names both keys.
+      requireKey: true,
     },
   };
 }

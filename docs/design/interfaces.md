@@ -10,7 +10,7 @@ Written at the Wave 1 final gate (2026-11-11). §1–§10 are the Foundation API
 code changed since. When they disagree, §12 beats §11 beats §4, and the code beats all of them. **Wave 2** is
 recorded in §13–§15 and in `docs/design/wave2.md` (its "Wave 2 state" section is the current summary), **Wave 3**
 in §16–§18 and `docs/design/wave3.md` §0, **Wave 4** in §19–§20 and `docs/design/wave4.md` "Wave 4 state", **Wave 5** in §21 and
-`docs/design/wave5.md` §0 "Wave 5 state"; the "Known gaps" below
+`docs/design/wave5.md` §0 "Wave 5 state", **Wave 6** in §23 and `docs/design/wave6.md` "Wave 6 state"; the "Known gaps" below
 are Wave 1's, most of them closed by Wave 2.
 
 **What Wave 2 can rely on** (implemented, tested by execution, green in `bun run check` and `bun run e2e`):
@@ -1475,3 +1475,90 @@ seams. `wave5.md` "Wave 5 state" is the summary; this is the API. The code beats
     focus). Toolbox: `shownToolLabel`.
   - Answers (gate): the form widget's cards are keyed by position and focus is handed on before a placed option
     leaves the pool, so keys typed in quick succession (`1 3`, Alt + ← then `4 2`) are never lost on `<body>`.
+
+## 23. Wave 6 (sevenths, rhythm II, modes, chromatic harmony, the end of the core)
+
+`docs/design/wave6.md` is the Wave 6 seam document; its "Wave 6 state" section is the current summary. This section
+records what integration and the closer changed in the cross-package API. The code beats this list.
+
+- **`@oak/grader`.**
+  - `contains-rn` and numeral lists with `min` above 1 count one pass of a loop (`loopPassBars`, analyze/tracks.ts);
+    `min: 1` reads the whole window. `guide-tones` `maxMoveSemis` judges moves inside one pass.
+  - `bass-line` `roots: { on: "change" }` merges consecutive slots of the same chord (`bassNotes`).
+  - `chord-tones-strong` judges a strong-beat note where no chord sounds against the bar's chord (`barChordAt`).
+  - `ends-on-degree` reads the key in force at the last bar when the code or the exercise changes key.
+  - The `mode` rule's home-chord share divides by the `arrange()` total (bounded by the window); a brief whose rubric
+    has `mode` with `tonic: "declared"` gets no `harmony.key-mismatch`.
+  - `syncopation` and `tuplets` read each line separately (`linesOf`, exported from rubric/rules.ts).
+  - Dictation code answers keep `answer.constraints` (`must-not-use`).
+  - Changes at `wrongQuality: "none"` are scored by the bar (L6, X2, L8, CF-T; d11); L5 and later require the
+    recording's key (d12).
+  - Feedback: keyboard notes spelled by the expected chord then the key with ♯/♭ glyphs; `harmony.rn-case` on the
+    palette prints "♭ii → ♭II"; `harmony.pcset` is one finding per bar with every stroke's `where.noteIds`.
+- **`@oak/content-kit`.** `capstone.form-map` and `capstone.session-rubric` are IMPLEMENTED; a brief rule may be
+  `required: false` (a suggestion row; the pins compare required rules only). `sing.guide-tones` stays PLANNED and
+  `key-plan` GRADER_READY. `CONTRACTS_VERSION` is "1.6".
+- **`@oak/api`.** `OWN_AUDIO_FORM_ROW` (the own-audio checklist's form row, self-reported evidence for
+  `fam.frm.sections`); `LadderItem.given.keyPlan` is filled from `SongDef.keyPlan` at L5, L6 and L8;
+  `CoreCompletion.sessionId` names the session whose Coda carried the ending (`GET /course/completion`, which the
+  album page and Today read; the app's stub API has a fixture for it).
+- **Server.** Every Wave 6 dev seed point builds on the real content (no typed 501 is left). Family-derived mastery
+  evidence counts only for skills whose introducing lesson the learner has started (`MasteryService`).
+  `tb.feature.transcribe.full` is granted when CF-T.S1 is completed. A second tab starts its own session (d21); the
+  warm-up is outside the 12-minute cap (d22). The fake tutor reads `strengths_wanted` (CF-A reviews give three).
+- **`@oak/notation`.** `staffHostInput(input, { code })` gives every staff host the Workbench's swing printing and
+  relabelled spellings (d5); content check 9 draws through it.
+- **`content/bands`.** `Parts.chordsLift` / `SemiParts.chordsLift`: a Band's chord gain over its kit's, for a sparse
+  two-note comp (the jazz-soul modal vamps ×1.4; `band.two-five-one` ×1.7 jazz-soul, ×1.5 indie, ×1.3 funk), so
+  every Band's parts sit within 10 LU (packages/strudel/e2e/wave5.pw.ts).
+- **App.** Lesson grading draws on until a trial its answer can take (`answerTakes`, `stimulusTrial`); a drawn
+  "which bar" trial is shown as the trial's own bars; a drawn echo is graded against its own targets. Side A's
+  player counts a pause at a track's end as its end (`atTrackEnd`, album/model.ts). Today's album strip keeps the
+  finale (`albumStripSlots`). The CF-T Coda says when the standard comes back (`cftAfterLine`).
+- **Browser specs.** `app/src/capstone/e2e/w6-support.ts` exports `releaseByKeyboard`, `songOf`, `arranged` (a
+  transcribed layer cut into the song's sections, one const per section), shared by the capstone suite and the
+  journeys. The journey walker (`e2e/journey/lesson-walk.ts`) answers an `all` step part by part (a drawn part with
+  `__oakLesson.trials()`, an authored part with its passing test, a sung part skipped); `day.ts` `coda()` takes an
+  `inspect` callback that reads the Coda before "Done for today".
+
+### 23.1 After the six reviews and the gate (2026-11-14)
+
+- **`@oak/strudel`.** `EditorHandle.play(opts?: { once?: number })` and `evaluate(opts?: EvaluateOptions)` with
+  `once` keep only the notes that start before bar N (`play-once.ts`); `recordPerformance` plays a take once, so a
+  take ends where the song ends. `MasterBusInternals.tapGain` sits before the record tap; the recorder fades the
+  last 0.2 s on it (`scheduleTakeFade`, `TAKE_FADE_SEC`, `TAKE_FADE_GUARD_SEC`). All additive.
+- **`@oak/audio`.** `LIMITER_WORKING_SHARE` is 0.4 (was 0.1); new `levelAdvice`, `gainFactor`,
+  `LIMITER_THRESHOLD_DB`, `TARGET_PEAK_DB`, `QUIET_PEAK_DB`; `readingLines` may return a third line (the gain
+  factor, or "that is quiet").
+- **`@oak/pitch`.** `gradeRhythmTaps` is what the lesson grades taps with (`rhythmFirst` in app/src/lesson/grading.ts:
+  a named finding leads, the per-tap lines it explains are dropped). `tap.push-on-beat` carries `which` ("All 4 of
+  your pushes", "1 of your 3 pushes", "Your push"; `pushesWhich`) and reads "… tap it just before the beat, then
+  leave the beat itself empty." (the grader catalog row is the same text).
+- **`@oak/grader`.**
+  - `pcset` per onset: when most target onsets have no answer chord starting on them, the shift detector runs even
+    with no pc-set difference, so `.early(1/4)` for `.early(1/8)` gets `harmony.shifted` (it failed with no finding).
+  - Key change: a lift written with `.transpose()` after `.scale()` is read by ear (`keysByBar` per section); a lift
+    that starts inside the last section names its bar and its length in the key plan.
+  - `swungTracks(code)` / `straightenSwungLines` (analyze/swing.ts): swung eighths are straightened before tuplets
+    and feel are read (`tupletsRule`, `rhythmView(…, code?)`).
+  - Unchanged and recorded as a decision: `contains-rn` compares on the triad core (a triad meets `V7`).
+- **`@oak/theory`.** Interval words read compound ordinals (`major tenth` → M10, `perfect eleventh` → P11, up to
+  thirteenth).
+- **`@oak/notation`.** In compound meters a triplet over two eighths of a beat is bracketed over those two eighths
+  (`(3:2:3`), not 9:6 over the whole beat.
+- **Server.** `album.putAudio` / `album.addTake`: bytes identical to the newest take are that take (a retry), not a
+  new one (`#sameBytes`, d20).
+- **App.**
+  - Answers: on the bar timeline a digit is the bar's number and 0 is "No key change"; the first letter typed on an
+    untouched treble staff lands in C4–B4; seventh chords typed in words read as their symbol (`chordWords`);
+    staff ties by keyboard say how long the hold is.
+  - Lesson: `staff-input` is a draft kind (survives a reload); a drawn ear trial offers its near miss after an
+    answer (`pickedAnswer`, "Against a major 7th", "Without the lift").
+  - Workbench: `signedSemitones` (colour.ts); `KeyRibbonSpan.change.semitones` is signed (−6…+6); under
+    `RIBBON_WORDS_MIN_PX` (190) a mark shows only its number; guide-tone lines in ♯/♭ glyphs; a unison is labelled
+    once.
+  - Capstone: `liftFound(piece, rule)` counts the lift to the piece's end (`FoundItem.keep`); the transcribe picker
+    loads only the chosen song's module (`songWritten(id)` in x1/songs.ts; `useSongs` is gone); `CAPSTONE_FROM_SKETCH`
+    (`{ C6: "U14.L06" }`) opens C6 with the learner's Mode Lab vamp when they saved one, Oak's starter beside it
+    (`data-testid="vamp-start"`); the Master card never shows a package's `@oak/…` message and says nothing once it
+    has unmounted (`learnerDetail`).

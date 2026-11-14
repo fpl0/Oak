@@ -366,7 +366,9 @@ test("a gym day on the graded ladder: gym.start, the item for GYM.01, a graded p
   );
   await expect(page.getByTestId("gym-explain")).toHaveAttribute("data-kind", "ladder");
   await expect(page.getByTestId("gym-explain")).toContainText("85% or better is a pass");
-  await expect(page.locator("main")).not.toContainText(/behind|failed|lost/i);
+  // Never a word of loss or failure. "Nothing is lost by resting" (the week's goal met, on a Saturday) is the one
+  // calm use of the word and is allowed.
+  await expect(page.locator("main")).not.toContainText(/behind|failed|(?<!nothing is )lost/i);
   await matrix(page, "w4-today-gym-ladder", gymToday);
   await page.setViewportSize({ width: 1440, height: 900 });
   await useUiPrefs(page, { theme: "paper" });
@@ -613,7 +615,7 @@ test("past X1: the edge of what's written — a review day with Studio and the g
   await expect(other.getByTestId("extra-gym")).toBeVisible();
   await expect(other.getByRole("link", { name: "Studio" })).toHaveCount(1);
   await expect(other.getByRole("link", { name: "Practice" })).toHaveAttribute("href", "/practice");
-  await expect(page.locator("main")).not.toContainText(/behind|failed|lost|error/i);
+  await expect(page.locator("main")).not.toContainText(/behind|failed|(?<!nothing is )lost|error/i);
   // Three album tracks now: C0 or C1, C2 and X1.
   await expect(page.getByTestId("album-strip")).toContainText("X1");
   await matrix(page, "w4-today-edge-x1", open);

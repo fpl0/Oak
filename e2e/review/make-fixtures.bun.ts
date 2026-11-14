@@ -27,8 +27,11 @@ const voice = (hz: number, seconds: number, extra: Partial<Parameters<typeof ton
 const cents = (c: number) => C4 * 2 ** (c / 1200);
 const w3: Record<string, Float32Array> = {
   // A whole take sung 60 cents flat or sharp: outside every rung of the ladder, close enough to read as home.
-  "flat-c4.wav": concat([silence(0.05, sr, -70), voice(cents(-60), 20)]),
-  "sharp-c4.wav": concat([silence(0.05, sr, -70), voice(cents(60), 20)]),
+  // Held steady (no vibrato): the reading is the median of a window (contracts §8.1), and over a 6¢ vibrato that
+  // median slides between −60.49 and −59.44¢ as load moves where the take falls on the file, a hair from the
+  // "−61" the spec once read beside another unit (d24; pinned in packages/pitch/src/reading-window.test.ts).
+  "flat-c4.wav": concat([silence(0.05, sr, -70), voice(cents(-60), 20, { vibratoCents: 0 })]),
+  "sharp-c4.wav": concat([silence(0.05, sr, -70), voice(cents(60), 20, { vibratoCents: 0 })]),
   // An octave below (a low voice): octave-folded, always accepted.
   "octave-c3.wav": concat([silence(0.05, sr, -70), voice(C4 / 2, 20)]),
   // Late: six seconds of quiet room before the voice comes in.

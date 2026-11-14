@@ -2,6 +2,8 @@
 // measurement, the note the first sing plays, the live note readout and the tolerance-ladder summary. No audio
 // here; the parts in ./parts call these with what @oak/audio measured.
 import type { Profile } from "@oak/api";
+// The meter's own module: pure, so this file stays importable outside the browser.
+import { levelText, limiterWords, type MasterReading } from "@oak/audio/master-meter";
 import type { SingTolCents } from "@oak/content-kit";
 import type { PitchFrame } from "@oak/pitch";
 import { median } from "@oak/pitch";
@@ -300,4 +302,13 @@ export function outputChangeAdvice(
       body: "Your timing was measured over Bluetooth. Measure it again so taps and sung notes line up without the extra delay.",
     };
   return null;
+}
+
+/**
+ * What the Master meter read over Settings › Audio's test phrase, in the words the single's Master card uses: the
+ * average level and the loudest moment before the limiter, both in dB below full scale, and what the limiter did.
+ */
+export function phraseReadout(r: MasterReading): string {
+  if (!Number.isFinite(r.levelDb)) return "Nothing reached the output while Oak was measuring.";
+  return `Measured over that phrase: average level ${levelText(r.levelDb)}, loudest moment ${levelText(r.peakDb)} before the limiter (0 dB is full scale). ${limiterWords(r)}`;
 }

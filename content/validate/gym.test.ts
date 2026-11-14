@@ -85,6 +85,37 @@ describe("what a slot plays (contracts §2.5, §2.9)", () => {
   test("own-audio templates unlock with a toolbox row", () => {
     for (const t of templates) expect([t.id, toolboxById.has(t.tool)]).toEqual([t.id, true]);
   });
+  // Wave 6: CF-T runs in gym slots (contracts §2.5 "What fills a slot"): from the moment it is open, each
+  // slot is its next session until it is released, so its four sessions sit exactly where slots fall.
+  test("CF-T's four sessions each sit on a slot, after U15.L01, and no GYM.nn falls among them", () => {
+    const cft = capstones.find((c) => c.id === "CF-T");
+    expect([cft?.inGymSlots, cft?.sessions, cft?.kind]).toEqual([true, 4, "transcribe"]);
+    const at = (id: string) => order.indexOf(id as SessionId);
+    const sessions = ["CF-T.S1", "CF-T.S2", "CF-T.S3", "CF-T.S4"];
+    expect(sessions.map((id) => at(id) + 1)).toEqual([156, 161, 166, 171]);
+    expect(at("CF-T.S1")).toBeGreaterThan(at("U15.L01"));
+    expect(cft?.opensAfter).toEqual({ lessonsCompleted: ["U15.L01"] });
+    for (const id of sessions) {
+      // Exactly four core sessions since the last transcription session: the place a slot falls.
+      let run = 0;
+      for (let i = at(id) - 1; i >= 0 && !isTranscriptionSession(order[i] as string); i--) run++;
+      expect([id, run]).toEqual([id, GYM_SLOT_RULE.afterCoreSessions]);
+    }
+    expect(order.slice(at("CF-T.S1"), at("CF-T.S4")).filter((x) => x.startsWith("GYM."))).toEqual([]);
+    // The last gym slot before it and the first after it: GYM.15 and GYM.16.
+    expect(
+      order
+        .slice(0, at("CF-T.S1"))
+        .filter((x) => x.startsWith("GYM."))
+        .at(-1),
+    ).toBe("GYM.15");
+    expect(order.slice(at("CF-T.S4")).find((x) => x.startsWith("GYM."))).toBe("GYM.16");
+  });
+  test("the default order ends with the Album Single: CF-A.S1–S4 are sessions 182–185", () => {
+    expect(order.length).toBe(185);
+    expect(order.slice(-4)).toEqual(["CF-A.S1", "CF-A.S2", "CF-A.S3", "CF-A.S4"] as SessionId[]);
+    expect(order.at(-5)).toBe("GYM.17" as SessionId);
+  });
   test("transcription capstones are transcription sessions, so they take a slot (X1 after C2)", () => {
     for (const c of capstones.filter((x) => x.kind === "transcribe"))
       for (const s of c.sessionDefs) expect([s.id, isTranscriptionSession(s.id)]).toEqual([s.id, true]);

@@ -1,7 +1,13 @@
 // Pure helpers of the AnswerWidget contract (docs/design/wave2.md §3.1): the empty value of each kind, whether a
 // value is complete enough to check, and the wire response an attempt stores. No DOM: tested with `bun test`.
 import type { AttemptResponse } from "@oak/api";
+import { MODE_DEGREES } from "@oak/content-kit";
+import { blockSpan, formBlocks } from "./form.ts";
+import { EMPTY_FORM_MAP, formMapAnswer, formMapComplete, mapMissing } from "./form-map.ts";
+import { slotLabels } from "./harmony.ts";
 import { parseSignatureValue } from "./keys/circle.ts";
+import { chordTyped } from "./normalize.ts";
+import { degreeSemis, tonicMidi } from "./scale.ts";
 import { normalizeStaffValue } from "./staff/model.ts";
 import type { AnswerKind, AnswerSpec, AnswerSpecOf, AnswerValue, AnswerValueMap } from "./types.ts";
 
@@ -39,9 +45,12 @@ export function emptyValue<K extends AnswerKind>(spec: AnswerSpecOf<K>): AnswerV
       case "slot-choice":
         return Array.from({ length: s.slots }, () => "");
       case "form":
-        return Array.from({ length: s.sections }, () => "");
+        // A map starts as one unnamed section from bar 1; the number of sections is the learner's to find.
+        return s.input === "map" ? [...EMPTY_FORM_MAP] : Array.from({ length: s.sections }, () => "");
       case "bar-grid":
         return Array.from({ length: s.bars }, () => "");
+      case "scale-builder":
+        return scaleStart(s);
       case "grid":
         return s.rows.map(() => Array.from({ length: gridSteps(s) }, () => false));
       default:
@@ -49,6 +58,18 @@ export function emptyValue<K extends AnswerKind>(spec: AnswerSpecOf<K>): AnswerV
     }
   })();
   return v as AnswerValue<K>;
+}
+
+/**
+ * What a scale builder opens with: nothing, or with `from` (Wave 6, `scale-builder.from`) that scale's notes: its
+ * degrees on the pad, or its keys from the tonic in octave 4 (inside the spec's range).
+ */
+export function scaleStart(spec: AnswerSpecOf<"scale-builder">): (number | string)[] {
+  const degrees = spec.from ? MODE_DEGREES[spec.from] : null;
+  if (!degrees) return [];
+  if (spec.input === "degrees") return [...degrees];
+  const lo = tonicMidi(spec.tonic);
+  return degrees.map((d) => lo + degreeSemis(d));
 }
 
 /** True when the value can be checked: every slot filled, something typed, something picked. */
@@ -77,6 +98,7 @@ export function isComplete(spec: AnswerSpec, value: AnswerValue): boolean {
       // An empty grid is a legitimate answer ("no hits") only after an explicit Check; the host decides.
       return true;
     case "form":
+      if (spec.input === "map") return Array.isArray(value) && formMapComplete(value as string[], spec.bars);
       return Array.isArray(value) && value.length === spec.sections && value.every((x) => x !== "");
     case "bar-grid":
       return (
@@ -123,7 +145,14 @@ export function responseOf(spec: AnswerSpec, value: AnswerValue): AttemptRespons
     case "rn-palette":
       return { answer: { rn: value as string[] } };
     case "text":
-      return { answer: { text: [(value as string).trim()] } };
+      // A chord name goes out as Oak read it in the preview (`CΔ` is a major seventh: normalize.ts `chordTyped`).
+      return {
+        answer: {
+          text: [
+            spec.normalize === "chord" ? chordTyped((value as string).trim()) : (value as string).trim(),
+          ],
+        },
+      };
     case "number":
     case "slider":
       return value === null ? { skipped: true } : { answer: { number: value as number } };
@@ -162,6 +191,10 @@ export function responseOf(spec: AnswerSpec, value: AnswerValue): AttemptRespons
     case "blanks":
       return { blanks: value as Record<string, string> };
     case "form": {
+      if (spec.input === "map") {
+        const map = formMapAnswer(value as string[], spec.bars);
+        return map.sections.some((x) => x === "") ? { skipped: true } : { answer: map };
+      }
       // A form with an unnamed section is not an answer yet (every label is a word or a letter).
       const sections = value as string[];
       return sections.some((x) => x === "") ? { skipped: true } : { answer: { sections } };
@@ -184,5 +217,60 @@ export function responseOf(spec: AnswerSpec, value: AnswerValue): AttemptRespons
               ) as never,
             },
           };
+  }
+}
+
+/**
+ * Why a value cannot be checked yet, in the learner's words, for a disabled Check (d4: after a slot auto-advances,
+ * the button says which slot is still empty): "Bar 3 is still empty.", "Name the section at bars 9–16.". `null`
+ * when the value is complete (or the kind has no slots to name).
+ */
+export function incompleteReason(
+  spec: AnswerSpec,
+  value: AnswerValue,
+  o: { slotsPerBar?: 1 | 2; beatsPerBar?: number } = {},
+): string | null {
+  if (isComplete(spec, value)) return null;
+  const list = (empty: string[]): string | null => {
+    if (empty.length === 0) return null;
+    if (empty.length === 1) return `${empty[0]} is still empty.`;
+    if (empty.length === 2) return `${empty[0]} and ${(empty[1] as string).toLowerCase()} are still empty.`;
+    return `${empty[0]} and ${empty.length - 1} more are still empty.`;
+  };
+  switch (spec.ui) {
+    case "rn-palette":
+    case "slot-choice": {
+      const labels = slotLabels(spec.slots, { ...o, ...(spec.labels ? { labels: spec.labels } : {}) });
+      const v = Array.isArray(value) ? (value as string[]) : [];
+      return list(labels.filter((_, i) => (v[i] ?? "") === "").map((l) => l.spoken));
+    }
+    case "bar-grid": {
+      const v = Array.isArray(value) ? (value as string[]) : [];
+      const given = spec.given ?? [];
+      const empty: string[] = [];
+      for (let i = 0; i < spec.bars; i++)
+        if ((v[i] ?? "") === "" && !given.includes(i + 1)) empty.push(`Bar ${i + 1}`);
+      return list(empty);
+    }
+    case "form": {
+      const v = Array.isArray(value) ? (value as string[]) : [];
+      if (spec.input === "map") return mapMissing(v, spec.bars ?? 1);
+      if (spec.input === "order") {
+        const left = spec.sections - v.filter((x) => x !== "").length;
+        return left > 0 ? `${left} ${left === 1 ? "section is" : "sections are"} still to place.` : null;
+      }
+      const blocks = formBlocks(spec);
+      return list(blocks.filter((b) => (v[b.index] ?? "") === "").map((b) => blockSpan(b)));
+    }
+    case "degree-pad": {
+      const n = slotCount(spec);
+      const have = Array.isArray(value) ? value.length : 0;
+      if (n <= 1) return "Pick a degree.";
+      return `${n - have} of ${n} ${n - have === 1 ? "note is" : "notes are"} still empty.`;
+    }
+    case "scale-builder":
+      return "Pick the notes of the scale.";
+    default:
+      return null;
   }
 }

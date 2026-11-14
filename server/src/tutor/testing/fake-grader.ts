@@ -1,5 +1,5 @@
 // A tiny deterministic stand-in for the grader host. It understands one pattern per line:
-// `label: n("0 2 4").scale("D4:dorian")`, `note("c4 e4")` or `s("bd ~ sd")`, one bar per cycle.
+// `label: n("0 2 4").scale("D4:dorian")`, `note("c4 e4")`, `s("bd ~ sd")` or `chord("C Am")`, one bar per cycle.
 // Enough to tell silent code from sounding code and a right note from a wrong one. Test code only.
 import type { EvalEvent, EvalResult, EvalTrack, GradeSnapshot, RawIssue } from "../domain.ts";
 import type { CompareRequest, CompareResult, EvalRequest, GraderPort } from "../ports.ts";
@@ -32,7 +32,7 @@ interface Voice {
 }
 
 function parseLine(line: string, index: number): Voice | null {
-  const m = /^\s*(?:([A-Za-z_$][\w$]*)\s*:)?\s*(n|note|s|sound)\(\s*"([^"]*)"\s*\)/.exec(line);
+  const m = /^\s*(?:([A-Za-z_$][\w$]*)\s*:)?\s*(n|note|s|sound|chord)\(\s*"([^"]*)"\s*\)/.exec(line);
   if (!m) return null;
   const tokens = (m[3] as string).split(/[\s,]+/).filter((t) => t !== "");
   const scale = parseScale(line);
@@ -46,6 +46,8 @@ function parseLine(line: string, index: number): Voice | null {
       const deg = ((n % 7) + 7) % 7;
       const midi = scale.root + (scale.steps[deg] as number) + 12 * Math.floor(n / 7);
       events.push({ ...at, pitch: noteName(midi), degree: String(deg + 1), sound: null, chord: null });
+    } else if (m[2] === "chord") {
+      events.push({ ...at, pitch: null, degree: null, sound: null, chord: tok.replace(/[<>[\]]/g, "") });
     } else if (m[2] === "note") {
       events.push({ ...at, pitch: tok, degree: null, sound: null, chord: null });
     } else {

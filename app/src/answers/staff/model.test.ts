@@ -105,9 +105,14 @@ describe("pitches", () => {
 describe("keyboard grammar", () => {
   test("letters place quarters and step on; the answer is the note list", () => {
     const r = typeKeys(spec({ bars: 1 }), ["c", "e", "g", "c"]);
-    // Starting from B4: C5 (nearest C), then E5, G5, C6? No: each letter is nearest to the previous note.
-    expect(r.value).toBe("C5:4 E5:4 G5:4 C6:4");
-    expect(r.played).toEqual([72, 76, 79, 84]);
+    // The first letter on a fresh treble staff lands in middle C's octave (C4–B4), then each letter is nearest
+    // to the note before it (Wave 6 review: from the ghost on B4 it took C5, an octave above the course's melodies).
+    expect(r.value).toBe("C4:4 E4:4 G4:4 C5:4");
+    expect(r.played).toEqual([60, 64, 67, 72]);
+  });
+  test("a ghost moved first is where the letter looks: up two, then C is C5", () => {
+    const r = typeKeys(spec(), ["ArrowUp", "ArrowUp", "c"]);
+    expect(r.value.startsWith("C5:4")).toBe(true);
   });
   test("moving the ghost down first, then C E G C writes the U02.L04 answer", () => {
     const s = spec();
@@ -118,52 +123,52 @@ describe("keyboard grammar", () => {
   });
   test("E then - is E♭; # sharpens; in G major F is written F♯", () => {
     const r = typeKeys(spec(), ["e", "-"]);
-    expect(r.value.startsWith("Eb5:4")).toBe(true);
+    expect(r.value.startsWith("Eb4:4")).toBe(true);
     const g = typeKeys(spec({ key: { tonic: "G", mode: "major" } }), ["f"]);
     expect(g.value.startsWith("F#4:4")).toBe(true);
     const s2 = typeKeys(spec(), ["c", "ArrowLeft", "#"]);
-    expect(s2.value.startsWith("C#5:4")).toBe(true);
+    expect(s2.value.startsWith("C#4:4")).toBe(true);
   });
   test("b is always the note B: g a b writes G A B; an accidental alters a placed note once", () => {
     expect(typeKeys(spec(), ["b"]).value.startsWith("B4:4")).toBe(true);
     expect(typeKeys(spec(), ["g", "a", "b"]).value).toBe("G4:4 A4:4 B4:4 r:4");
-    expect(typeKeys(spec(), ["e", "-", "b"]).value.startsWith("Eb5:4 B4:4")).toBe(true);
+    expect(typeKeys(spec(), ["e", "-", "b"]).value.startsWith("Eb4:4 B3:4")).toBe(true);
   });
   test("arrows on a placed note repitch it in the key; Shift a semitone; Mod an octave", () => {
     const s = spec({ key: { tonic: "D", mode: "major" } });
     const r = typeKeys(s, ["e", "ArrowLeft", "ArrowUp"]);
-    expect(r.value.startsWith("F#5:4")).toBe(true);
+    expect(r.value.startsWith("F#4:4")).toBe(true);
     const r2 = typeKeys(s, ["e", "ArrowLeft", { key: "ArrowDown", mod: true }]);
-    expect(r2.value.startsWith("E4:4")).toBe(true);
+    expect(r2.value.startsWith("E3:4")).toBe(true);
     const r3 = typeKeys(s, ["e", "ArrowLeft", { key: "ArrowUp", shift: true }]);
-    expect(r3.value.startsWith("E#5:4")).toBe(true);
+    expect(r3.value.startsWith("E#4:4")).toBe(true);
   });
   test("durations: digits pick palette values only; a half note fills two beats", () => {
     const s = spec({ palette: { durations: ["4", "2"], accidentals: false, ties: false, rests: true } });
     const r = typeKeys(s, ["5", "c", "4", "d", "e"]);
-    expect(r.value).toBe("C5:2 D5:4 E5:4");
+    expect(r.value).toBe("C4:2 D4:4 E4:4");
     const refused = typeKeys(s, ["3"]);
     expect(refused.said[0]).toBe("This answer has no eighth notes.");
   });
   test("at the end the cursor stays on the last note (typing overwrites it); no room is refused", () => {
     const s = spec({ palette: { durations: ["2"], accidentals: false, ties: false, rests: true } });
-    expect(typeKeys(s, ["c", "d", "e"]).value).toBe("C5:2 E5:2");
+    expect(typeKeys(s, ["c", "d", "e"]).value).toBe("C4:2 E4:2");
     const s2 = spec({ palette: { durations: ["4", "2"], accidentals: false, ties: false, rests: true } });
     const r = typeKeys(s2, ["c", "d", "e", "f", "5"]);
-    expect(r.value).toBe("C5:4 D5:4 E5:4 F5:4");
+    expect(r.value).toBe("C4:4 D4:4 E4:4 F4:4");
     expect(r.said.at(-1)).toBe("No room for a half here.");
     expect(typeKeys(s2, ["c", "d", "e", "5", "f"]).said.at(-1)).toContain("No room for a half here");
   });
   test("Backspace deletes the note before the cursor; rests with 0", () => {
     const r = typeKeys(spec(), ["c", "d", "Backspace"]);
-    expect(r.value).toBe("C5:4 r:4 r:2");
+    expect(r.value).toBe("C4:4 r:4 r:2");
     const rest = typeKeys(spec(), ["0", "d"]);
-    expect(rest.value).toBe("r:4 D5:4 r:2");
+    expect(rest.value).toBe("r:4 D4:4 r:2");
   });
   test("accidentals off: the palette says so instead of altering", () => {
     const s = spec({ palette: { durations: ["4"], accidentals: false, ties: false, rests: false } });
     const r = typeKeys(s, ["c", "ArrowLeft", "#"]);
-    expect(r.value.startsWith("C5:4")).toBe(true);
+    expect(r.value.startsWith("C4:4")).toBe(true);
     expect(r.said.at(-1)).toBe("This answer has no sharps or flats to add.");
   });
   test("bass clef: the ghost starts on D3 (the middle line)", () => {
@@ -348,6 +353,6 @@ describe("chords on the staff (Wave 4, palette.chords)", () => {
   });
   test("without palette.chords a letter still replaces and steps on", () => {
     const r = typeKeys(spec(), ["C", "E"]);
-    expect(r.value).toBe("C5:4 E5:4 r:2");
+    expect(r.value).toBe("C4:4 E4:4 r:2");
   });
 });

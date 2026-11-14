@@ -221,22 +221,31 @@ describe("'a little more' review stops at 12 minutes a day (§7.4), on the serve
       );
       const family = cards.find((c) => c.kind === "family")?.cardId;
       expect(family).toBeDefined();
-      const reviewed = () =>
-        (h.server.deps.srs() as unknown as { reviewedTodaySec(): number }).reviewedTodaySec();
-      // Free practice sets of that family until the day holds 12 minutes of review.
-      for (let n = 0; reviewed() < 720 && n < 60; n++) {
-        const item = {
-          id: `p${n}`,
-          kind: "srs",
-          familyId: family,
-          members: [],
-          cardIds: [family],
-          estSec: 60,
-          mic: false,
-        };
-        await me.doItem(ses.id, item as never);
-      }
-      expect(reviewed()).toBeGreaterThanOrEqual(720);
+      const srs = h.server.deps.srs() as unknown as {
+        reviewedTodaySec(): number;
+        moreDoneTodaySec(): number;
+      };
+      const set = (id: string) => ({
+        id,
+        kind: "srs",
+        familyId: family,
+        members: [],
+        cardIds: [family],
+        estSec: 60,
+        mic: false,
+      });
+      // d22 (the learner's decision of 2026-11-13, reversing decision 23): twelve minutes of the day's first block
+      // (the warm-up) do not use up "a little more".
+      for (let n = 0; srs.reviewedTodaySec() < 720 && n < 60; n++)
+        await me.doItem(ses.id, set(`w${n}`) as never);
+      expect(srs.reviewedTodaySec()).toBeGreaterThanOrEqual(720);
+      expect(srs.moreDoneTodaySec()).toBe(0);
+      const stillMore = await me.api<DueBatch>("GET", "/api/srs/due?more=1");
+      expect(stillMore.plannedSec).toBeGreaterThan(0);
+      // Sets of "a little more" (their item ids carry `:m:`) until the day holds 12 minutes of it.
+      for (let n = 0; srs.moreDoneTodaySec() < 720 && n < 60; n++)
+        await me.doItem(ses.id, set(`${h.clock.now().toISOString().slice(0, 10)}:m:x${n}`) as never);
+      expect(srs.moreDoneTodaySec()).toBeGreaterThanOrEqual(720);
       const more = await me.api<DueBatch>("GET", "/api/srs/due?more=1");
       expect(more).toMatchObject({ items: [], plannedSec: 0, moreAvailable: false });
       // The day's first block (Today's warm-up) is not the "more" offer: it still plans, but offers no more.

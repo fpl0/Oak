@@ -4,7 +4,7 @@
 // arrows move along the ribbon (one tab stop). When the lesson or the learner asks (the form map is open), the
 // energy curve runs under it. When the arranged tracks disagree, the ribbon says so in words instead of drawing a
 // wrong form; the sections always come from `formView`, never from a parse of its own.
-import { useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { type FormViewSection, type SectionLoop, sectionLoopOf, stepSection } from "../lib/form-view.ts";
 import { energyPath, letterNamed, sectionBarsText, sectionLabel } from "./lines.ts";
 
@@ -43,12 +43,27 @@ export interface SectionRibbonProps {
   pickup: boolean;
   /** Draw the energy curve under the ribbon (the form map is open, or a step opened it). */
   showEnergy: boolean;
+  /**
+   * Bring a section outside the axis's window into view (the roll turns its page to that bar): the arrow keys
+   * reach every section of the piece, not only the ones on the roll's page (d3). Absent: the axis shows them all.
+   */
+  onReveal?(startBar: number): void;
 }
 
 const ENERGY_H = 22;
 
 export function SectionRibbon(p: SectionRibbonProps) {
   const list = useRef<HTMLDivElement>(null);
+  // A section the arrows moved to on another page of the roll: focused once the page has turned to it.
+  const wantFocus = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (wantFocus.current === null) return;
+    const el = list.current?.querySelector<HTMLButtonElement>(`[data-start="${wantFocus.current}"]`);
+    if (el) {
+      wantFocus.current = null;
+      el.focus();
+    }
+  });
   if (p.problem)
     return (
       <p className="oak-ribbon-problem" role="status" data-testid="section-problem">
@@ -74,11 +89,20 @@ export function SectionRibbon(p: SectionRibbonProps) {
   const toggle = (s: FormViewSection) => p.onLoop(isLooped(s) ? null : sectionLoopOf(s));
   const onKey = (ev: React.KeyboardEvent<HTMLButtonElement>, s: FormViewSection) => {
     const dir = ev.key === "ArrowRight" ? 1 : ev.key === "ArrowLeft" ? -1 : 0;
-    if (dir !== 0) {
+    const end =
+      ev.key === "Home" ? p.sections[0] : ev.key === "End" ? p.sections[p.sections.length - 1] : null;
+    if (dir !== 0 || end) {
       ev.preventDefault();
       ev.stopPropagation();
-      const next = stepSection(visible, s, dir);
-      if (next) list.current?.querySelector<HTMLButtonElement>(`[data-start="${next.startBar}"]`)?.focus();
+      // Every section of the piece, not only those in the window: one off the page asks the roll to turn to it.
+      const next = end ?? stepSection(p.sections, s, dir as 1 | -1);
+      if (!next || next.startBar === s.startBar) return;
+      const el = list.current?.querySelector<HTMLButtonElement>(`[data-start="${next.startBar}"]`);
+      if (el) el.focus();
+      else if (p.onReveal) {
+        wantFocus.current = next.startBar;
+        p.onReveal(next.startBar);
+      }
       return;
     }
     if (ev.key === "Escape" && p.loop) {
@@ -101,8 +125,9 @@ export function SectionRibbon(p: SectionRibbonProps) {
         ref={list}
         className="oak-ribbon"
         role="toolbar"
-        aria-label="Sections: Enter loops a section, arrows move"
+        aria-label="Sections: Enter loops a section, arrows move through every section"
         data-testid="section-ribbon"
+        data-sections={p.sections.length}
         style={{ width: axis.width }}
       >
         {visible.map((s, i) => {

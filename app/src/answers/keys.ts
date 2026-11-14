@@ -2,7 +2,8 @@
 // numeral palette and its keys, the chromatic typing row, reordering, the rhythm grid's counts and its audition
 // code, the slider's steps and labels. Pure: tested with `bun test`.
 import type { ChordQuality, Degree, DrumRole, KeySpec } from "@oak/api";
-import { formatRN, isMinorRef } from "@oak/theory";
+import type { MeterSpec } from "@oak/content-kit";
+import { appliedTargets, beatGrid, formatRN, isMinorRef, modalChords } from "@oak/theory";
 import { degreeDisplay, formatNumber } from "./normalize.ts";
 
 // --- degree pad ---------------------------------------------------------------------------------
@@ -34,6 +35,58 @@ export function degreeForDigit(
 export function padOrder(set: readonly Degree[]): Degree[] {
   const rank = (d: Degree) => degreeBase(d) * 3 + (d.startsWith("b") ? 0 : d.startsWith("#") ? 2 : 1);
   return [...new Set(set)].sort((a, b) => rank(a) - rank(b));
+}
+
+/**
+ * A chromatic pad in two rows (Wave 6, U15.L01): the key's own degrees below, the raised and lowered ones above,
+ * each standing between the two degrees it lies between, as the black keys stand on a piano (♯4 between 4 and 5;
+ * ♭7 between 6 and 7). A pad is chromatic when a number appears both plain and raised (or the whole major scale
+ * stands beside a lowered degree); the minor pads (1 2 ♭3 4 5 ♭6 ♭7, with their raised 6 and 7) and the blues
+ * pad (5 beside ♭5) are one row, as before. `col` is the column of a degree in half steps of pad width: the
+ * lower row sits on even columns, the upper row on the odd ones between.
+ */
+export interface PadCell {
+  degree: Degree;
+  row: "upper" | "lower";
+  col: number;
+}
+export function padRows(set: readonly Degree[]): PadCell[] | null {
+  const order = padOrder(set);
+  const plain = order.filter((d) => d.length === 1);
+  const altered = order.filter((d) => d.length > 1);
+  // Raised degrees arrive with U15.L01, and with them the two rows. A pad of flats only keeps the one row it
+  // had in U10 and U11 (the minors, the blues: 5 beside ♭5), unless it holds the whole major scale with them.
+  const twins = altered.filter((d) => plain.some((p) => degreeBase(p) === degreeBase(d)));
+  const chromatic = twins.some((d) => d.startsWith("#")) || (twins.length > 0 && plain.length === 7);
+  if (!chromatic || plain.length < 2) return null;
+  const colOf = new Map<number, number>();
+  plain.forEach((d, i) => {
+    colOf.set(degreeBase(d), i * 2);
+  });
+  const lowerCells: PadCell[] = plain.map((d) => ({
+    degree: d,
+    row: "lower",
+    col: colOf.get(degreeBase(d)) ?? 0,
+  }));
+  const upper: PadCell[] = [];
+  for (const d of altered) {
+    const n = degreeBase(d);
+    // ♯n stands after n, ♭n before it; without that neighbour in the pad it stands over where n would be.
+    const own = colOf.get(n);
+    const col =
+      own !== undefined
+        ? own + (d.startsWith("#") ? 1 : -1)
+        : (() => {
+            const after = plain.filter((p) => degreeBase(p) < n).length;
+            return after * 2 - 1;
+          })();
+    upper.push({ degree: d, row: "upper", col });
+  }
+  // Two altered degrees on one column (♯1 with ♭2: one sound, two names) do not fit between the same two
+  // degrees: such a pad stays one row. (A pad never offers ♯4 and ♭5 together; contracts §7.3.)
+  if (upper.some((a, i) => upper.some((b, j) => i !== j && a.col === b.col))) return null;
+  if (upper.some((c) => c.col < -1)) return null;
+  return [...upper, ...lowerCells];
 }
 
 /** Fills the next empty slot (or replaces the focused one); a full sequence of one slot is replaced. */
@@ -136,6 +189,17 @@ export function rnModeOf(key: KeySpec | null | undefined): RnMode {
   return isMinorRef(key) ? "minor" : "major";
 }
 
+const MODAL = new Set<string>(["mixolydian", "dorian", "lydian", "phrygian"]);
+/** A key in one of the four colour modes of U14: its palette holds the mode's own chords (♭VII, IV, II, ♭II). */
+export function isModalKey(key: KeySpec | null | undefined): key is KeySpec {
+  return key !== null && key !== undefined && MODAL.has(key.mode);
+}
+
+/** The mode's own numeral on a degree (Wave 6, U14): in G Mixolydian 7 is ♭VII, in E Phrygian 2 is ♭II. */
+function modalRn(key: KeySpec, degree: number, seventh: boolean): string | null {
+  return modalChords(key, { seventh })[degree - 1]?.rn ?? null;
+}
+
 function triadsOf(mode: RnMode): Q[] {
   if (mode === "major") return TRIADS;
   const t = [...MINOR_TRIADS];
@@ -188,17 +252,30 @@ function button(rn: string, role: HarmonicRole, key: string | null): RnButton {
  * then the digit), the applied row tonicizes iv, III and V, and the borrowed row offers the major key's I and IV
  * and the Neapolitan ♭II.
  */
-export function rnPalette(allow: readonly RnAllow[], mode: RnMode = "major"): RnGroup[] {
+export function rnPalette(
+  allow: readonly RnAllow[],
+  mode: RnMode = "major",
+  /** Wave 6: a key in a colour mode (U14) fills the columns with the mode's own chords. */
+  key?: KeySpec | null,
+): RnGroup[] {
   const sevenths = allow.includes("sevenths");
   const triads = allow.includes("triads") || !sevenths;
   const cols: Record<"T" | "PD" | "D", RnButton[]> = { T: [], PD: [], D: [] };
   const tri = triadsOf(mode);
   const sev = seventhsOf(mode);
   const roles = mode === "major" ? ROLE_OF : MINOR_ROLE_OF;
+  const modal = isModalKey(key) ? key : null;
   // Column order inside a role follows ux §4.5: T: I vi iii, PD: IV ii, D: V vii°.
   const order = [1, 6, 3, 4, 2, 5, 7];
   for (const deg of order) {
     const role = roles[deg - 1] as "T" | "PD" | "D";
+    if (modal) {
+      const t = modalRn(modal, deg, false);
+      const s7 = modalRn(modal, deg, true);
+      if (triads && t) cols[role].push(button(t, role, String(deg)));
+      if (sevenths && s7) cols[role].push(button(s7, role, `⇧${deg}`));
+      continue;
+    }
     if (triads) cols[role].push(button(rnText(deg, tri[deg - 1] as Q), role, String(deg)));
     if (sevenths) cols[role].push(button(rnText(deg, sev[deg - 1] as Q), role, `⇧${deg}`));
     if (mode !== "major" && (deg === 5 || deg === 7)) {
@@ -211,15 +288,9 @@ export function rnPalette(allow: readonly RnAllow[], mode: RnMode = "major"): Rn
     { id: "PD", label: "Predominant", buttons: cols.PD },
     { id: "D", label: "Dominant", buttons: cols.D },
   ];
-  if (allow.includes("secondary"))
-    groups.push({
-      id: "secondary",
-      label: "Applied",
-      buttons: (mode === "major"
-        ? ["V/V", "V7/V", "V/ii", "V7/ii", "V/vi", "V7/vi", "V7/IV", "viio7/V"]
-        : ["V/iv", "V7/iv", "V/III", "V7/III", "V/V", "V7/V", "V/VI", "viio7/V"]
-      ).map((rn) => button(rn, "chromatic", null)),
-    });
+  // Wave 6 (U15): the applied chords are not a list of buttons but a second pick, "V7 of …": `appliedPicks`.
+  // The group stays in the list (empty) so a caller that draws groups keeps its place for them.
+  if (allow.includes("secondary")) groups.push({ id: "secondary", label: "Applied", buttons: [] });
   if (allow.includes("borrowed"))
     groups.push({
       id: "borrowed",
@@ -250,10 +321,24 @@ export function rnPalette(allow: readonly RnAllow[], mode: RnMode = "major"): Rn
  */
 export function rnForKey(
   digit: number,
-  o: { shift?: boolean; flat?: boolean; raised?: boolean; allow: readonly RnAllow[]; mode?: RnMode },
+  o: {
+    shift?: boolean;
+    flat?: boolean;
+    raised?: boolean;
+    allow: readonly RnAllow[];
+    mode?: RnMode;
+    key?: KeySpec | null;
+  },
 ): string | null {
   if (digit < 1 || digit > 7) return null;
   const mode = o.mode ?? "major";
+  // In a colour mode the digits pick the mode's own chord on that degree (7 in Mixolydian is ♭VII).
+  if (isModalKey(o.key) && !o.flat && !o.raised) {
+    const sevenths = o.allow.includes("sevenths");
+    const triads = o.allow.includes("triads") || !sevenths;
+    if (o.shift) return sevenths ? modalRn(o.key, digit, true) : null;
+    return modalRn(o.key, digit, !triads);
+  }
   if (o.flat) {
     if (!o.allow.includes("borrowed")) return null;
     if (mode !== "major") return digit === 2 ? rnText(2, "maj", -1) : null;
@@ -271,6 +356,67 @@ export function rnForKey(
   const sev = seventhsOf(mode);
   if (o.shift) return sevenths ? rnText(digit, sev[digit - 1] as Q) : null;
   return triads ? rnText(digit, tri[digit - 1] as Q) : rnText(digit, sev[digit - 1] as Q);
+}
+
+// --- applied chords: "V7 of …" (Wave 6, U15) ------------------------------------------------------
+
+/** The kinds of applied chord the palette offers, in the order U15 teaches them. */
+export const APPLIED_KIND_RNS = ["V7", "V", "viio", "viio7"] as const;
+export type AppliedKindRn = (typeof APPLIED_KIND_RNS)[number];
+
+export interface AppliedTarget {
+  /** The target's degree in the key (5 for "of V"). */
+  degree: number;
+  /** The target's own numeral: `V`, `ii`, `iv`. */
+  rn: string;
+  display: string;
+}
+
+/**
+ * What an applied chord can lean on in a key (`@oak/theory` `appliedTargets`): in major ii iii IV V vi, in minor
+ * III iv V VI VII. Without a key: the major key's.
+ */
+export function appliedTargetsOf(key: KeySpec | null | undefined): AppliedTarget[] {
+  const k: KeySpec = key ?? { tonic: "C", mode: "major" };
+  return appliedTargets(k).map((t) => ({ degree: t.degree, rn: t.rn, display: rnDisplay(t.rn) }));
+}
+
+/** `V7` + `V` → `V7/V`. */
+export function appliedRn(kind: AppliedKindRn, target: string): string {
+  return `${kind}/${target}`;
+}
+
+/** The applied kind of a numeral (`V7/V` → `V7`), or null when it is not applied. */
+export function appliedKindOf(rn: string): AppliedKindRn | null {
+  const slash = rn.indexOf("/");
+  if (slash < 0) return null;
+  const head = rn.slice(0, slash).replace(/(65|43|42|64|6)$/, (f) => (f === "6" || f === "64" ? "" : "7"));
+  return (APPLIED_KIND_RNS as readonly string[]).includes(head) ? (head as AppliedKindRn) : null;
+}
+
+/** The numeral with its applied part taken off (`V7/V` → `V7`), and the target (`V`), or null. */
+export function splitApplied(rn: string): { head: string; target: string } | null {
+  const slash = rn.indexOf("/");
+  return slash < 0 ? null : { head: rn.slice(0, slash), target: rn.slice(slash + 1) };
+}
+
+/**
+ * The keyboard's "of": `/` then a digit turns the chord in the slot into the applied chord of that degree.
+ * A V, V7, vii° or vii°7 keeps its kind (`V7` then `/ 5` is `V7/V`); any other chord, or an empty slot, becomes
+ * the dominant seventh of the target. `null` when the key has no such target (nothing is applied to I or vii°).
+ */
+export function applyOf(
+  current: string,
+  digit: number,
+  key: KeySpec | null | undefined,
+  /** The kind when the slot holds none of the four (the picker's choice; the dominant seventh by default). */
+  fallback: AppliedKindRn = "V7",
+): string | null {
+  const target = appliedTargetsOf(key).find((t) => t.degree === digit);
+  if (!target) return null;
+  const head = splitApplied(current)?.head ?? current;
+  const kind = (APPLIED_KIND_RNS as readonly string[]).includes(head) ? (head as AppliedKindRn) : fallback;
+  return appliedRn(kind, target.rn);
 }
 
 const FIGURES_TRIAD = ["", "6", "64"] as const;
@@ -475,6 +621,52 @@ export function gridCounts(stepsPerBar: number, bars: number, beatsPerBar = 4): 
       out.push(i === 0 ? String(beat) : (syl[i] ?? "·"));
     }
   return out;
+}
+
+/**
+ * How a step grid is counted and grouped (Wave 6: 6 and 24 steps, compound meters). With a `meter` the steps are
+ * grouped as the meter's beats (6/8: two dotted-quarter beats of three, "1 la li 2 la li"; 12/8 four); six steps
+ * with no meter are read as 6/8. In a simple meter three steps to a beat are counted "1 & a" as before, or
+ * "1 trip let" with `triplets`; six to a beat are sixteenth-note triplets, "1 trip let & trip let". The syllables
+ * are `@oak/theory`'s (`beatGrid`, `barPosition`).
+ */
+export interface GridLayout {
+  /** Beats in a bar (the dotted quarter in a compound meter). */
+  beats: number;
+  /** Steps in a beat. */
+  per: number;
+  compound: boolean;
+  /** One label per step of the whole grid; beat numbers restart each bar. */
+  counts: string[];
+}
+export function gridLayout(
+  stepsPerBar: number,
+  bars: number,
+  o: { beatsPerBar?: number; meter?: MeterSpec; triplets?: boolean } = {},
+): GridLayout {
+  const compound = o.meter
+    ? o.meter.tempoUnit === "dottedQuarter"
+    : o.beatsPerBar === undefined && stepsPerBar === 6;
+  const beats = o.meter ? o.meter.unitsPerBar : (o.beatsPerBar ?? (compound ? 2 : 4));
+  const per = Math.max(1, Math.round(stepsPerBar / beats));
+  let syl: string[];
+  if (compound && (per === 3 || per === 6)) {
+    const [, la = "la", li = "li"] = o.meter
+      ? beatGrid(o.meter)
+          .lines.slice(0, 3)
+          .map((l) => l.label)
+      : ["", "la", "li"];
+    syl = per === 3 ? ["", la, li] : ["", "·", la, "·", li, "·"];
+  } else if (!compound && per === 3 && o.triplets) syl = ["", "trip", "let"];
+  else if (!compound && per === 6) syl = ["", "trip", "let", "&", "trip", "let"];
+  else syl = beatSyllables(per);
+  const counts: string[] = [];
+  for (let bar = 0; bar < bars; bar++)
+    for (let s = 0; s < stepsPerBar; s++) {
+      const i = s % per;
+      counts.push(i === 0 ? String(Math.floor(s / per) + 1) : (syl[i] ?? "·"));
+    }
+  return { beats, per, compound, counts };
 }
 
 /** Which drum sound a grid row auditions with (the self-hosted pack's names). */

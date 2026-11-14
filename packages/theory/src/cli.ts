@@ -102,6 +102,7 @@ import {
 
 const mod12 = (x: number): number => ((Math.round(x) % 12) + 12) % 12;
 
+import { CLI_HELP_WAVE6, runWave6Op, seventhsTable } from "./cli-wave6.ts";
 import type { ChordId, NoteTextKind, RomanNumeral, SchemaDef } from "./types.ts";
 
 export const CLI_HELP = `theory <op> [args]   (keys: C:major, Eb, F#m, A:harmonic:minor, D_dorian; output is JSON)
@@ -161,7 +162,9 @@ time
   meter <id> [bpm]  |  tempo <bpm> <meter>  |  pos <onset> <meter> [--pickup]
   euclid <k> <n> [rotation]  |  grid [id]
 text
-  normalize <note|chord|rn|interval|key> <text>`;
+  normalize <note|chord|rn|interval|key> <text>
+${CLI_HELP_WAVE6}
+  sevenths-table                 the five seventh qualities with their code and lead-sheet spellings`;
 
 class CliError extends Error {}
 const fail = (msg: string): never => {
@@ -704,8 +707,13 @@ function run(op: string, a: string[], flags: Set<string>, opts: Map<string, stri
         family: r.family,
         dicts: r.dicts,
       }));
-    default:
-      return fail(`unknown op "${op}"`);
+    case "sevenths-table":
+      return seventhsTable();
+    default: {
+      // Wave 6 (U12–U17): cli-wave6.ts.
+      const out = runWave6Op(op, a, flags, opts);
+      return out === undefined ? fail(`unknown op "${op}"`) : out;
+    }
   }
 }
 
@@ -719,7 +727,18 @@ export function runTheoryCli(argv: readonly string[]): { code: number; out: stri
   for (let i = 0; i < rest.length; i++) {
     const t = rest[i] as string;
     if (
-      ["--chord", "--bass", "--key", "--melody", "--prev", "--next", "--next-chord", "--dict"].includes(t)
+      [
+        "--chord",
+        "--bass",
+        "--key",
+        "--melody",
+        "--prev",
+        "--next",
+        "--next-chord",
+        "--dict",
+        "--from",
+        "--kind",
+      ].includes(t)
     ) {
       opts.set(t.slice(2), rest[++i] ?? "");
     } else if (t.startsWith("--")) flags.add(t.slice(2));

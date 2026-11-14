@@ -15,16 +15,21 @@
 import type { MusicToken } from "@oak/api";
 import type { TermEntry, ToolEntry } from "@oak/content-kit";
 import {
+  characteristicTonesOf,
   chordPcs,
+  chromaticChordKind,
   type Degree,
   degreeSemitones,
   displayName,
   displayRN,
   functionOf,
   type KeySpec,
+  keyDisplay,
   keyOf,
   labelPitch,
+  modeColour,
   noteToMidi,
+  parentMajor,
   parseChordSymbol,
   parseChordWithBass,
   parseInterval,
@@ -38,7 +43,7 @@ import {
   toLeadSheet,
 } from "@oak/theory";
 import type { FormViewSection } from "../lib/form-view.ts";
-import { barsPhrase, barsWhere, type ChordAt, runsOf } from "./harmony-chips.ts";
+import { barsPhrase, barsWhere, type ChordAt, type KeySpanAt, runsOf } from "./harmony-chips.ts";
 
 export const PLAY_KEY: KeySpec = { tonic: "C", mode: "major" } as KeySpec;
 
@@ -71,9 +76,24 @@ export interface TokenContext {
   sections?: readonly FormViewSection[];
   /** Wave 5: the music on screen has a pickup (section and bar numbers count from the first full bar). */
   pickup?: boolean;
+  /**
+   * Wave 6: the key plan of the music on screen (two or more keys), so a key or mode chip lights the bars it is in
+   * force and a numeral is read in the key of its bar. Absent or one key: the subject's key everywhere.
+   */
+  keyPlan?: readonly KeySpanAt[];
 }
 
-export type TokenVariant = "interval" | "key" | "signature";
+export type TokenVariant = "interval" | "key" | "signature" | "mode";
+
+/**
+ * Wave 6: the lens a chip switches on when clicked, so the learner sees on the roll and the staff what the tutor
+ * named: an applied or borrowed numeral the chord band's numerals, a key the key ribbon, a mode its colour degree.
+ * Only ever on, and only a lens the learner has unlocked (the panel checks).
+ */
+export type TokenLens =
+  | { group: "chords"; id: "romanNumerals"; label: string }
+  | { group: "music"; id: "keyPlan"; label: string }
+  | { group: "base"; id: "degrees"; label: string };
 
 export interface TokenInfo {
   kind: MusicToken["kind"];
@@ -103,14 +123,23 @@ export interface TokenInfo {
   highlight?: { from: number; to: number };
   /** Wave 4: every bar it sounds in. */
   where?: number[];
+  /** Wave 6: the lens a click switches on. */
+  lens?: TokenLens;
 }
+
+const NUMERAL_LENS: TokenLens = { group: "chords", id: "romanNumerals", label: "Roman numerals" };
+const KEY_LENS: TokenLens = { group: "music", id: "keyPlan", label: "Key" };
+const DEGREE_LENS: TokenLens = { group: "base", id: "degrees", label: "Degrees" };
 
 const pretty = (s: string) => s.replace(/b(?=\d)/g, "♭").replace(/#(?=\d)/g, "♯");
 const ORDINAL = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh"];
 
 /** "E♭ major", "F♯ minor". */
 export function keyName(key: KeySpec): string {
-  return `${displayName(key.tonic)} ${key.mode}`;
+  // Wave 6: the colour modes are proper names ("D Dorian"); major, minor and the rest read as written.
+  return modeColour(key.mode) && key.mode !== "major" && key.mode !== "minor"
+    ? keyDisplay(key)
+    : `${displayName(key.tonic)} ${key.mode}`;
 }
 
 /** The tonic's MIDI note between G3 and F♯4, so a degree played above it stays in a comfortable register. */
@@ -204,16 +233,44 @@ function rnInfo(value: string, ctx: TokenContext): TokenInfo {
   const fn = functionOf(rn, key);
   const preview = beyond(ctx, NUMERALS_TERM);
   const at = located({ kind: "rn", value }, ctx);
+  // Wave 6: a chord from outside the key says what it is and switches the numeral lens on, so the chord band
+  // writes it over the bars it lights.
+  const outside = outsideWords(rn.of !== undefined, chord, key, rn.degree === 7);
   return {
     kind: "rn",
     label,
-    title: `${preview ? "Roman numerals come later. " : ""}${label}: ${FUNCTION_NAME[fn] ?? "a chord in the key"}. ${ctx.key ? `In ${keyName(ctx.key)}` : "In C major"} it is ${toLeadSheet(chord)}.${at.title}`,
+    title: `${preview ? "Roman numerals come later. " : ""}${label}: ${outside ?? FUNCTION_NAME[fn] ?? "a chord in the key"}. ${ctx.key ? `In ${keyName(ctx.key)}` : "In C major"} it is ${toLeadSheet(chord)}.${at.title}${outside && at.title ? " Turns the Roman numerals lens on." : ""}`,
     aria: `Roman numeral ${label}${preview ? ", preview" : ""}${at.aria}`,
     ...(fn === "chromatic" ? {} : { degree: fn === "T" ? "1" : fn === "PD" ? "4" : "5" }),
     play: [chordMidis(chord.rootPc, chordPcs(chord))],
     ...(preview ? { preview: true } : {}),
     ...at.info,
+    ...(outside ? { lens: NUMERAL_LENS } : {}),
   };
+}
+
+/** What an applied or borrowed chord is, in the course's words; `null` for a chord of the key. */
+function outsideWords(
+  applied: boolean,
+  chord: ReturnType<typeof rnToChord>,
+  key: KeySpec,
+  leadingTone = false,
+): string | null {
+  // vii°7/V is the leading-tone chord of its target, not its V (U15.L04).
+  if (applied && leadingTone)
+    return "an applied chord: the diminished chord a half step below the chord it leans into (its vii°)";
+  if (applied) return "an applied chord: the V of the chord it leans into";
+  let kind: string;
+  try {
+    kind = chromaticChordKind(chord, key);
+  } catch {
+    return null;
+  }
+  if (kind === "borrowed")
+    return "a chord borrowed from the other key on the same home note, with one note changed";
+  if (kind === "picardy") return "a major home chord ending a minor piece";
+  if (kind === "dorian-iv") return "the major IV, with the raised 6 of Dorian";
+  return null;
 }
 
 /** The glossary terms after which chord symbols and numerals are part of the learner's vocabulary. */
@@ -230,7 +287,8 @@ function located(
   token: { kind: "chord" | "rn"; value: string },
   ctx: TokenContext,
 ): { info: Pick<TokenInfo, "highlight" | "where">; title: string; aria: string } {
-  const where = ctx.harmony && ctx.harmony.length > 0 ? barsWhere(ctx.harmony, token, ctx.key ?? null) : [];
+  const where =
+    ctx.harmony && ctx.harmony.length > 0 ? barsWhere(ctx.harmony, token, ctx.key ?? null, ctx.keyPlan) : [];
   const first = runsOf(where)[0];
   if (!first) return { info: {}, title: "", aria: "" };
   const phrase = barsPhrase(where);
@@ -283,7 +341,7 @@ function chordInfo(value: string, ctx: TokenContext): TokenInfo {
   return {
     kind: "chord",
     label,
-    title: `${preview ? "Chord symbols come later. " : ""}${label}: ${names.length} notes stacked on ${label.replace(/^([A-G][♯♭]?).*$/, "$1")}.${inKey}${at.title || " Click to hear it."}`,
+    title: `${preview ? "Chord symbols come later. " : ""}${label}: ${names.length} notes stacked on ${label.replace(/^([A-G](?:[♯♭]{1,2})?).*$/, "$1")}.${inKey}${at.title || " Click to hear it."}`,
     aria: `chord ${label}${preview ? ", preview" : ""}${at.aria}`,
     play: [names],
     ...(preview ? { preview: true } : {}),
@@ -412,7 +470,9 @@ function intervalInfo(name: string, ctx: TokenContext, glossary?: TermEntry): To
 
 /** A key from a slug: "g-major", "e-flat-major", "f-sharp-minor", "bb-major", "c-sharp-minor". */
 export function keyFromSlug(slug: string): KeySpec | null {
-  const m = /^([a-g])(?:-?(flat|sharp|b|s))?-(major|minor)$/.exec(slug.toLowerCase());
+  const m = /^([a-g])(?:-?(flat|sharp|b|s))?-(major|minor|dorian|mixolydian|lydian|phrygian)$/.exec(
+    slug.toLowerCase(),
+  );
   if (!m) return null;
   const acc = m[2] === "flat" || m[2] === "b" ? "b" : m[2] === "sharp" || m[2] === "s" ? "#" : "";
   return keyOf(`${(m[1] as string).toUpperCase()}${acc} ${m[3]}`);
@@ -441,16 +501,79 @@ function scalePlay(key: KeySpec): number[][] {
   return midis.map((m) => [m]);
 }
 
-function keyInfo(key: KeySpec): TokenInfo {
+const sameKey = (a: KeySpec, b: KeySpec) =>
+  a.mode === b.mode && (noteToMidi(`${a.tonic}4`) ?? 0) % 12 === (noteToMidi(`${b.tonic}4`) ?? 0) % 12;
+
+/** Where a key, or a mode on any home note, is in force in the music on screen (Wave 6). */
+function keyLocated(
+  ctx: TokenContext,
+  match: (k: KeySpec) => boolean,
+): { info: Pick<TokenInfo, "highlight" | "where">; title: string; aria: string } {
+  const spans = (ctx.keyPlan ?? []).filter((sp) => match(sp.key));
+  const where: number[] = [];
+  for (const sp of spans) for (let b = sp.from; b <= sp.to; b++) where.push(b);
+  const first = runsOf(where)[0];
+  if (!first) return { info: {}, title: "", aria: "" };
+  const phrase = runsOf(where)
+    .map((r) => (r.from === r.to ? `bar ${r.from}` : `bars ${r.from}–${r.to}`))
+    .join(" and ");
+  return { info: { highlight: first, where }, title: ` In force in ${phrase}.`, aria: `, in ${phrase}` };
+}
+
+/** A key chip: in a piece that changes key it lights the bars in that key and switches the key lens on. */
+function keyInfo(key: KeySpec, ctx: TokenContext): TokenInfo {
   const sig = signatureText(signatureOf(key).fifths);
-  const rel = relativeKey(key);
+  const colour = key.mode === "major" || key.mode === "minor" ? null : modeColour(key.mode);
+  const related = colour
+    ? ` The notes of ${keyName(parentMajor(key))} from ${displayName(key.tonic)}; its colour note is ${pretty(colour.colour)}.`
+    : ` Its relative ${key.mode === "major" ? "minor" : "major"} is ${keyName(relativeKey(key))}.`;
+  const at = keyLocated(ctx, (k) => sameKey(k, key));
+  const plan = (ctx.keyPlan?.length ?? 0) > 1 && at.title !== "";
   return {
     kind: "term",
     variant: "key",
     label: keyName(key),
-    title: `${keyName(key)}: a key signature of ${sig}. Its relative ${key.mode === "major" ? "minor" : "major"} is ${keyName(rel)}. Click to hear its scale.`,
-    aria: `key ${keyName(key)}`,
+    title: `${keyName(key)}: a key signature of ${sig}.${related}${at.title} Click to hear its scale${plan ? " and turn the Key lens on" : ""}.`,
+    aria: `key ${keyName(key)}${at.aria}`,
     play: scalePlay(key),
+    ...at.info,
+    ...(plan ? { lens: KEY_LENS } : {}),
+  };
+}
+
+/** The glossary's mode terms (U14), by the mode they name. */
+const MODE_TERMS: Readonly<Record<string, string>> = {
+  "term.mixolydian": "mixolydian",
+  "term.dorian": "dorian",
+  "term.lydian": "lydian",
+  "term.phrygian": "phrygian",
+};
+
+/**
+ * A mode chip (Wave 6): the mode on the subject's home note (or the home note of the span in that mode), its colour
+ * note named by degree and spelled; a click plays its scale, lights the bars in that mode and switches the degree
+ * lens on, so the colour note's degree shows on the roll and the staff.
+ */
+function modeInfo(mode: string, entry: TermEntry, preview: boolean, ctx: TokenContext): TokenInfo {
+  const span = ctx.keyPlan?.find((sp) => sp.key.mode === mode);
+  const tonic = span?.key.tonic ?? ctx.key?.tonic ?? "C";
+  const key = { tonic, mode } as KeySpec;
+  const tone = characteristicTonesOf(key)[0];
+  const at = keyLocated(ctx, (k) => k.mode === mode);
+  const toneText = tone
+    ? ` In ${keyName(key)} its colour note is ${displayName(tone.name)}, degree ${tone.display}.`
+    : "";
+  return {
+    kind: "term",
+    variant: "mode",
+    label: entry.term,
+    title: `${entry.term}: ${entry.definition}${preview ? ` (Comes in ${entry.introducedBy}.)` : ""}${toneText}${at.title} Click to hear ${keyName(key)} and turn the Degrees lens on.`,
+    aria: `mode ${entry.term}${preview ? ", preview" : ""}${at.aria}`,
+    ...(tone ? { degree: tone.degree } : {}),
+    play: scalePlay(key),
+    ...(preview ? { preview: true } : {}),
+    ...at.info,
+    lens: DEGREE_LENS,
   };
 }
 
@@ -492,6 +615,8 @@ function termInfo(value: string, ctx: TokenContext): TokenInfo {
   const entry = ctx.terms.find((t) => t.id === id);
   const preview = ctx.introduced !== null && !ctx.introduced.has(id);
   if (entry) {
+    const mode = MODE_TERMS[id];
+    if (mode) return modeInfo(mode, entry, preview, ctx);
     const iv = GLOSSARY_INTERVAL[id];
     if (iv)
       return {
@@ -504,7 +629,7 @@ function termInfo(value: string, ctx: TokenContext): TokenInfo {
     const iv = intervalFromSlug(slug);
     if (iv) return intervalInfo(iv, ctx);
     const key = keyFromSlug(slug);
-    if (key) return keyInfo(key);
+    if (key) return keyInfo(key, ctx);
     const fifths = fifthsFromSlug(slug);
     if (fifths !== null) return signatureInfo(fifths);
   }
@@ -591,6 +716,8 @@ export function canonicalTokenRaw(raw: string): string {
   const m = /^\[\[(deg|note|chord|rn):([^\][\n]{1,64})\]\]$/.exec(raw);
   if (!m) return raw;
   let value = (m[2] as string).trim().replace(/♭/g, "b").replace(/♯/g, "#");
+  // The half-diminished sign has two spellings (ø, and the diameter sign ⌀ some fonts offer for it).
+  if (m[1] === "rn" || m[1] === "chord") value = value.replace(/⌀/g, "ø");
   if (m[1] === "deg") value = SYLLABLE_DEGREE[value.toLowerCase()] ?? value;
   // A slash chord (`[[chord:G/B]]`) is not in the token grammar (contracts §10.7: a code symbol): it reads as the
   // lead-sheet text it names, never as raw brackets.

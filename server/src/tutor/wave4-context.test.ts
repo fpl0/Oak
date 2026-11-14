@@ -192,7 +192,7 @@ describe("review facts", () => {
       "chords bar 1: F (IV, PD) then G (V, D) on beat 3",
       "chords bar 2: C (I, T)",
       "harmonic_rhythm (changes per bar): 2 1",
-      "cadence: bar 2 PAC",
+      "cadence: bar 2 authentic cadence (V to I, melody on 1)",
       "motif: no bar of the melody returns",
       "chord_tones_on_strong_beats: 75%",
     ]);
@@ -214,7 +214,7 @@ describe("review facts", () => {
       const ctx = prep.user.oakContext;
       expect(ctx).toContain("review_target: album track trk-c2 version 2");
       expect(ctx).toContain("chords bar 7: F (IV, PD) then G (V, D) on beat 3");
-      expect(ctx).toContain("cadence: bar 8 PAC");
+      expect(ctx).toContain("cadence: bar 8 authentic cadence (V to I, melody on 1)");
       expect(ctx).toContain("schema: schema.axis bars 1-4");
       expect(ctx).toContain("motif: mel bar 1 returns exact at bar 5");
       expect(ctx).toContain("range: mel C4-A4 (9 semitones), highest note in bar 6");

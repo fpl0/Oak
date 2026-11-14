@@ -58,7 +58,13 @@ export interface DrillFamilyRuntime<L extends LevelParams = LevelParams, E = Ans
     level: L,
     levelNo: number,
     profile: LearnerProfile,
-    opts: { category?: string; openCategories: readonly string[]; previous?: Trial<E> },
+    opts: {
+      category?: string;
+      openCategories: readonly string[];
+      previous?: Trial<E>;
+      /** The key mode the caller needs (a lesson step in a minor key, d8); see `GenCtx.mode`. */
+      mode?: "major" | "minor";
+    },
   ): Trial<E>;
   grade(trial: Trial<E>, response: TrialResponse, profile: LearnerProfile): TrialResult;
   /** Labelled examples for the listen block that opens a blocked introduction. */
@@ -81,6 +87,8 @@ export interface TrialSpec {
   seed: number;
   /** A sung resolution is asked on 2 to 3 trials per FET set, never on every one. */
   sungResolution?: boolean;
+  /** The key mode a lesson step needs (`stepTrialSpec`, d8): minor-key trials only in a minor-key step. */
+  mode?: "major" | "minor";
 }
 export interface SetPlan {
   setId: string;

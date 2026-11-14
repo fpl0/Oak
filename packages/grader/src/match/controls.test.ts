@@ -4,7 +4,7 @@ import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import type { Matcher } from "@oak/content-kit";
 import { strudel } from "../analyze/__support__/fixtures.ts";
 import { renderFeedback } from "../feedback/catalog.ts";
-import { adsrValues, controlValue, withinTolerance } from "./controls.ts";
+import { adsrValues, controlValue, filterEnvelopeValues, withinTolerance } from "./controls.ts";
 import { runMatcher } from "./index.ts";
 
 setDefaultTimeout(30_000);
@@ -128,5 +128,41 @@ describe("the defaults agree with @oak/strudel/probes (the panel draws what the 
     const e = n.all[0] as Parameters<typeof controlValue>[0];
     // A missing delay time is 3/16 of a cycle (superdough's delaysync), at 0.5 cps 0.375 s.
     expect(controlValue(e, "delaytime", 0.5)).toBeCloseTo(0.375, 9);
+  });
+});
+
+describe("d6: a control the answer leaves out is compared at superdough's default", () => {
+  test("A1.L02 S6: .lpenv(4) without .lpd() sweeps for 0.14 s, inside a 0.1 tolerance of the target's 0.2", async () => {
+    const env = m(["lpenv", "linear", 1], ["lpd", "linear", 0.1]);
+    const target = `${NOTES}.lpf(400).lpenv(4).lpd(.2)`;
+    expect((await score(env, target, `${NOTES}.lpf(400).lpenv(4)`)).score).toBe(1);
+    expect((await score(env, target, `${NOTES}.lpf(400).lpenv(4).lpd(.2)`)).score).toBe(1);
+    // A decay far from the target is off, and says which way; it is not "left out".
+    expect((await score(env, target, `${NOTES}.lpf(400).lpenv(4).lpd(.6)`)).texts).toEqual([
+      "`.lpd()`: yours is not like the target yet.",
+    ]);
+    // No filter envelope at all: both controls are missing.
+    const none = await score(env, target, `${NOTES}.lpf(400)`);
+    expect(none.score).toBe(0);
+    expect(none.texts.some((t) => t.includes("The target sound uses `.lpd()`; yours leaves it out"))).toBe(
+      true,
+    );
+  });
+  test("the filter envelope's values as superdough plays them", () => {
+    expect(filterEnvelopeValues({})).toBeNull();
+    expect(filterEnvelopeValues({ lpenv: 4 })).toEqual({
+      lpattack: 0.005,
+      lpdecay: 0.14,
+      lpsustain: 0,
+      lprelease: 0.1,
+    });
+    // One time set: the others fall to the minimum, as the amplitude envelope's do (`getADSRValues`).
+    expect(filterEnvelopeValues({ lpenv: 4, lpdecay: 0.3 })).toEqual({
+      lpattack: 0.001,
+      lpdecay: 0.3,
+      lpsustain: 0.001,
+      lprelease: 0.01,
+    });
+    expect(filterEnvelopeValues({ lpattack: 0.2 })?.lpsustain).toBe(1);
   });
 });

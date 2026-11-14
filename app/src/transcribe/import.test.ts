@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { fileProblem as kitFileProblem } from "../ui/kit/model.ts";
-import { AUDIO_ACCEPT, AUDIO_KINDS, checklistProgress, fileProblem, selfScoreOf, titleOf } from "./import.ts";
+import {
+  AUDIO_ACCEPT,
+  AUDIO_KINDS,
+  checklistProgress,
+  checklistRows,
+  FORM_CHECK_ROW,
+  fileProblem,
+  selfScoreOf,
+  titleOf,
+} from "./import.ts";
 
 describe("own audio in", () => {
   test("files are checked before anything is stored", () => {
@@ -38,5 +47,19 @@ describe("the kit's drop zone with Transcribe's rules (c12)", () => {
   });
   test("anything else is refused with the kinds named", () => {
     expect(kit("notes.txt", "text/plain")?.message).toContain(AUDIO_KINDS);
+  });
+});
+
+describe("the checklist of a mapped recording (L7, full arrangement)", () => {
+  test("the form row joins the API's rows once the sections are mapped, and counts in the score", () => {
+    expect(checklistRows(false).map((r) => r.id)).not.toContain("form");
+    const rows = checklistRows(true);
+    expect(rows[0]).toEqual(FORM_CHECK_ROW);
+    expect(rows).toHaveLength(checklistRows(false).length + 1);
+    expect(checklistProgress({ form: 2, contour: 1 }, rows)).toEqual({ answered: 2, total: rows.length });
+    expect(selfScoreOf({ form: 2, contour: 1 }, rows)).toBe(0.75);
+    // Without the form row the same record scores its own rows only.
+    expect(selfScoreOf({ form: 2, contour: 1 })).toBe(0.5);
+    expect(checklistProgress({ form: 2 })).toEqual({ answered: 0, total: checklistRows(false).length });
   });
 });

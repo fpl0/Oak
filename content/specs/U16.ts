@@ -1,0 +1,742 @@
+// U16 Borrowed Chords: the unit spec (rendered to content/specs/U16.md by `bun scripts/content/spec.ts`). Five
+// lessons, no checkpoint of its own (U17.CP covers U15–U17). Every hook was evaluated with headless Strudel and
+// is linted in its lesson by content/validate/specs.test.ts; U16.L01 is the exemplar, written and passing with
+// the real grader (content/core/U16/L01). The rules and numerals this spec promises were probed with the real
+// grader first: what is graded today and what is planned is said per lesson.
+import type { UnitSpec } from "./types.ts";
+
+const C = { tonic: "C", mode: "major" } as const;
+const A_MINOR = { tonic: "A", mode: "minor" } as const;
+const T = (bpm: number) => `setcpm(${bpm}/4)\n\n`;
+
+/** What every U16 lesson has from U01–U15: chords by name over one `const`, a root bass, chromatic steps. */
+const BASE = [
+  "tb.setcpm",
+  "tb.label",
+  "tb.mini.seq",
+  "tb.mini.rest",
+  "tb.mini.sub",
+  "tb.mini.alt",
+  "tb.mini.elongate",
+  "tb.n",
+  "tb.n.range",
+  "tb.n.chromatic",
+  "tb.scale",
+  "tb.s.pitched",
+  "tb.struct",
+  "tb.const",
+  "tb.chord",
+  "tb.voicing",
+  "tb.rootNotes",
+  "chord.triad",
+  "tb.feature.degree-labels",
+  "tb.feature.rn",
+  "tb.feature.chord-symbols",
+] as const;
+const MAJOR = ["scale.major", "snd.ebass"] as const;
+const ROCK = ["snd.organ", "snd.crunch"] as const;
+
+/** One string drives the chords and the bass (U08.L04): `chords` is the whole chords line after its label. */
+const band = (form: string, chords: string, bass: string, ...lines: string[]) =>
+  [`const changes = "${form}"`, "", `chords: ${chords}`, `bass: ${bass}`, ...lines].join("\n");
+
+/** U16.L01: a piano ballad, the chord on every beat; the tune's long notes fall la, le, sol (A, A♭, G). */
+const SAD_IV = band(
+  "<C F Fm C>",
+  'chord(changes).voicing().struct("x x x x").s("piano")',
+  'chord(changes).rootNotes(2).s("ebass")',
+  'mel: n("<[2 4 7 4] [5@3 3] [5b@3 3] [4@3 ~]>").scale("C4:major").s("cleangtr")',
+);
+/** U16.L02: an anthem's last four bars; the tune sings do re mi (C D E) over A♭, B♭ and C. */
+const VICTORY = band(
+  "<C F [Ab Bb] C>",
+  'chord(changes).voicing().s("organ")',
+  'chord(changes).rootNotes(2).struct("x*8").s("ebass")',
+  'mel: n("<[2 4 7 4] [5 7 5 3] [7@2 8@2] [9@3 ~]>").scale("C4:major").s("crunch")',
+);
+/** U16.L03: I ♭III IV I, then I ♭III iv I: three major chords climbing, then the minor plagal close. */
+const THREE_MAJORS = band(
+  "<C Eb F C C Eb Fm C>",
+  'chord(changes).voicing().struct("x ~ ~ x ~ ~ x ~").s("organ")',
+  'chord(changes).rootNotes(2).s("ebass")',
+  'mel: n("<[4 ~ 4 2] [4 ~ 6b 4] [5 ~ 5 3] [4 ~ ~ ~] [4 ~ 4 2] [4 ~ 6b 4] [5b ~ 5b 3] [4 ~ ~ ~]>").scale("C4:major").s("crunch")',
+);
+/** U16.L04: A minor with the Dorian IV (D, with F♯) in bars 2 and 6 and the Picardy third (A, with C♯) at the end. */
+const SUNLIGHT = band(
+  "<Am D F E Am D [F E] A>",
+  'chord(changes).voicing().struct("x x x x").s("piano")',
+  'chord(changes).rootNotes(2).s("upright")',
+  'pad: chord(changes).voicing().s("strings").gain(.4)',
+  'mel: n("<[4 ~ 2 0] [5# ~ 3 ~] [5 ~ 3 2] [1 ~ ~ ~] [4 ~ 2 0] [5# ~ 3 ~] [2 1 1 4] [2#@3 ~]>").scale("A3:minor").s("acgtr")',
+);
+/** Aura Lee's verse (bars 1–8 of content/repertoire/aura-lee), in degrees − 1 over C4. */
+const AURA_VERSE = "<[-3 0 -1 0] [1 -2 1@2] [0 -1 -2 -1] 0 [-3 0 -1 0] [1 1 1@2] [0 -1 -2 -1] 0>";
+/** U16.L05: the verse reharmonized: V7/V in bars 2 and 6, ♭VI–♭VII under the held 1 of bar 4, home in bar 5. */
+const AURA_REHARMONIZED = band(
+  "<C D7 G7 [Ab Bb] C D7 G7 C>",
+  'chord(changes).voicing().s("rhodes")',
+  'chord(changes).rootNotes(2).s("upright")',
+  `mel: n("${AURA_VERSE}").scale("C4:major").s("tenor")`,
+);
+
+export const U16: UnitSpec = {
+  unit: "U16",
+  title: "Borrowed Chords",
+  summary:
+    "Five lessons on the chords a major key takes from the minor key on the same home note, the parallel minor (U10.L02): the colours of the learner's ballads, anthems and riff rock. U15 brought in chords from outside the key that point at a chord; these do not point, they change the light. Each one is taught as ONE CHANGED NOTE in a chord the learner already uses, heard first in a loop that sounds like a record. The sad IV, iv in major: F with A lowered to A♭ (U16.L01, the exemplar). ♭VI and ♭VII and the ending that climbs home from below, ♭VI–♭VII–I (U16.L02). ♭III, the whole borrowed palette side by side, and the close iv–I, the minor plagal cadence (U16.L03). The same trade the other way, a minor key borrowing from major: the Picardy third (a major home chord at the end) and the Dorian IV (U16.L04). Then a lab: Aura Lee, the folk tune of X1 and the L5 gym, with new chords under an unchanged tune, a tenor sax on the melody, and secondary and borrowed chords found and named by ear (U16.L05; milestone ms.18). In the default order U16.L01 is session 165; CF-T.S3 (the standard's melody) takes the gym slot at 166; U16.L02–L05 are sessions 167–170; CF-T.S4 follows at 171. All of U16 needs U14.CP passed or soft-passed (contracts §7.6). U17.CP (session 177) covers H13 and E12b; C7 \"Chromatic Colour\" asks for ♭VI–♭VII–I by name.",
+  conventions: [
+    "What borrowing is, in the words every lesson uses: C major and C minor share a home note and differ in three notes, ♭3, ♭6 and ♭7 (E♭, A♭, B♭; sung me, le, te, U15.L01). A borrowed chord is one of C minor's own chords used in a C major song. The four of this unit and the lowered notes each carries: iv (F A♭ C: le), ♭VI (A♭ C E♭: le and me), ♭VII (B♭ D F: te), ♭III (E♭ G B♭: me and te). They do not lead anywhere the way a secondary dominant does (U15): they darken or widen the key for a bar, and the lowered notes move on by step, most often down a half step (le to sol, me to re, te to la).",
+    "ONE CHANGED NOTE (the unit's teaching device; every claim checked against the pitch classes): iv is IV with its 3rd lowered (F A C → F A♭ C: la becomes le). ♭VI is iv with its root stepped down (F A♭ C → E♭ A♭ C: the A♭ and the C stay). ♭VII is the key's diminished chord with its root lowered (B D F → B♭ D F: ti becomes te), and it is also the chord of Mixolydian Rock (U14.L02), so the learner has written it before. ♭III is C minor's home chord with its root stepped down (C E♭ G → B♭ E♭ G), and C minor's home chord is I with its 3rd lowered. In a minor key the trade runs the other way: the Picardy chord is i with its 3rd raised (A C E → A C♯ E) and the Dorian IV is iv with its 3rd raised (D F A → D F♯ A). No lesson says a borrowed chord is 'the chord on the same degree with one note changed' where that is false: ♭VI differs from vi in two notes and ♭III from iii in two.",
+    'Numerals (STYLE §5.1; AUTHORING §19.6): iv is lower case because the chord is minor; ♭VI, ♭VII and ♭III take a flat because their root is a lowered degree, and stay upper case because the chords are major. In tests and answer keys they are written `bVI`, `bVII`, `bIII`; `♭VI` is the same answer. They are graded by degree, chroma and quality, never as strings (probed with the real grader): `IV` for `iv` is `harmony.rn-case`; `vi` or `VI` for `♭VI` and `iii` for `♭III` are `harmony.rn-degree` ("VI is built on degree 6 (A); this chord is ♭VI, built on degree ♭6 (A♭)"). In a minor key numerals are written as U10 writes them, against the minor scale with no flats (III, VI, VII are the key\'s own), so the borrowed chords of U16.L04 are the upper-case `I` and `IV` where the key has `i` and `iv` (`harmony.rn-case` when missed). Answer widgets: `rn-palette` with `allow: ["triads", "borrowed"]` (L01–L04), plus `"sevenths"` and `"secondary"` in L05.',
+    'Code: a borrowed chord is a chord name like any other, `Fm`, `Ab`, `Bb`, `Eb`, inside `chord()` on the one `const changes` string that drives chords and bass (U08.L04); the family `chord.triad` covers them and nothing new unlocks until the tenor sax (`snd.tenor`, U16.L05). Roots are capitals with `b` for a flat: `ab` is `code.lowercase-chord-root`, `Fmin` is `code.unknown-chord`; `G#` for `Ab` sounds the same and passes a `pcset` check, but prose, hints and the chord band spell these chords with flats, because they come from the flat side. A lowered note in a tune is a chromatic step string (U15.L01, STYLE §6.3): `n("5b")` is ♭6, `n("6b")` is ♭7, `n("2b")` is ♭3 (the number is the step, one less than the degree); in A minor the raised 3rd is `n("2#")` (C♯) and the raised 6th `n("5#")` (F♯), because a step string alters the minor scale\'s own steps (evaluated).',
+    "The tune under a borrowed chord (the rule every starter, hook and reference obeys, checked on the evaluated events): no melody note sits a half step above a chord note for a beat or more. A borrowed chord therefore changes what the tune may hold: over iv and ♭VI, 6 (A) must become ♭6 or move; over ♭VI and ♭III, 3 (E) must move; over ♭VII and ♭III, 7 (B) must move. The notes that need no change are the ones lessons lean on: 1 fits iv and ♭VI, 2 and 4 fit ♭VII, 4 fits iv, 5 fits ♭III, and do re mi (C D E) is the 3rd of ♭VI, ♭VII and I in turn. A Make's starter tune keeps to those notes in the bar the learner is invited to change, so the first borrowed chord never produces a clash by accident; the lowered note itself (`5b`, `2b`, `6b`) is a suggestion, never the required rule.",
+    'Grading (probed with the real grader; AUTHORING §17, §19.6). Graded today: a chord in code is `pcset` per onset with the bass on the `chords` track (graded steps play one held chord a bar, so a wrong chord is reported once); a keyboard chord is `expect: { pcs, bassPc }`; numerals are the `rn-palette`; `contains-rn` with listed numerals reads `Fm` in C major as iv, `Eb` as ♭III, `Ab` as ♭VI, and in A minor reads `A` as I and `D` as IV (U16.L01, L03, L04 Makes), also on one bar with `section: { bars: [8, 8] }` (U16.L04; `section: "last"` needs `arrange()` sections and is not used on a loop). PLANNED until the grader lists them: `contains-rn` with `inOrder` (feature `contains-rn.in-order`: the run ♭VI–♭VII–I, U16.L02\'s Make), `contains-rn` with `kind` (suggestions only) and the rule `reharmonize` (U16.L05\'s Make); those Makes fail check 2 until then and their authors say so. A Make\'s `rubric.unmet` is overridden with the neutral "{label}: not yet.".',
+    'The sound of the unit: after U12\'s Rhodes and upright and U13–U15\'s grooves and horns, U16 is songs. L01 a piano ballad (the chord on every beat, an electric bass, a clean guitar line); L02 an anthem\'s ending (organ, a pumping eighth-note bass, an overdriven guitar on the tune); L03 riff rock and soul (organ stabs in 3 + 3 + 2, the same guitar); L04 a minor ballad (piano, upright, a strings pad, acoustic guitar); L05 a folk tune played as a soul ballad (Rhodes, upright, tenor sax). Prose places each sound by genre and era ("the last line of a sixties ballad", "the ending of a stadium anthem") and never names an artist, a record or a song published after 1930 (contracts §2.8; no lesson does).',
+    "Keys: U16.L01, L02, L03 and L05 are in C major, so the three lowered notes are always E♭, A♭ and B♭ and the four borrowed chords are learned as one family; U16.L04 is in A minor, the key of U10, borrowing C♯ and F♯ from A major. Graded steps move the idea to G and D major (L01–L03) and to E and D minor (L04), so that no borrowed chord is learned as one shape.",
+    'Words. Known and usable: parallel minor and relative minor (U10.L02), plagal cadence (U06.L07), deceptive cadence (U06.L06), Mixolydian and ♭VII (U14.L01–L02), Dorian and its i–IV (U14.L03), secondary dominant (U15.L02), tonicization (U15.L04), the chromatic syllables (U15.L01). New terms, one a lesson: borrowed chord (L01), modal mixture (L03), Picardy third (L04), reharmonization (L05); U16.L02 introduces none. "Minor plagal cadence" is the plagal cadence the learner knows with a minor iv: say it in those words and do not bold it (it is not a glossary term). Words that wait: modulation and pivot chord (U17.L01: a borrowed chord never changes the key), backdoor (J5.L02; ♭VII into I is "arriving from a whole step below"), tritone substitution and reharmonization as a jazz craft (J5.L03); "Neapolitan", "chromatic mediant" and "subdominant minor" are never used.',
+    "The Band: every Make takes only the drums of a Band (`tracks: [\"drums\"]`), because the learner's chords leave the key and a Band's chords and bass would play the key's own chords against them (AUTHORING §8 rules 4–5): `band.axis-4bar` under the C major lessons, `band.aeolian-4bar` under U16.L04. Chords and bass stay in the learner's code, which is what the rules read.",
+    'Singing: on syllables with numbers shown (contracts §8.3), never graded into the lesson, never gating; every sung step declares `fallback: "identify"`, which is the Quiet path (the learner picks the degrees on the pad). The sung lines are the changed notes themselves: la le sol over IV iv I (L01), the bass le te do under ♭VI ♭VII I (L02), sol me do then sol mi do (L04). Targets hold chromatic degrees (`b6`, `b7`), legal from U15.L01 (`chromatic.before-u15`); the raised 3rd of U16.L04 is sung as the 3 of the parallel major, in a part of its own (`minor.sung-degree` refuses `3` in a minor key).',
+    'Ear training, stage F (contracts §7.3): E12b "Secondary & borrowed chord ID" is introduced in U16.L05, where `fam.har.chromatic` reaches level 3 (iv, ♭VI, ♭VII beside the applied dominants of U15.L06) and `fam.har.bass` and `fam.har.progression` open level 6. `fam.har.rn` deals its borrowed numerals in the warm-ups from U16.L01 (level 5), and `fam.deg.fet-chromatic` (U15.L01) keeps le, te and me in the ear. L01–L04 train the ear with the lesson\'s own material (two loops side by side, a sung line, four fixed endings) and open no drill family, so each stays one idea.',
+    'Scaffolds (AUTHORING §6, U11 and later): roll labels are the learner\'s choice; steps that compare chord notes set `rollLabels: "degree"` so the lowered note reads ♭6, ♭7 or ♭3. The chord band is opened by every step that names chords (`initialPanels: ["chords"]`); it writes borrowed numerals from U16.L01 on, the lesson itself included (wave6.md §4.3). The staff is a lead sheet where a tune matters. U16\'s Play from the page step is U16.L03 S4: a lead sheet of four bars in D major with the numerals in the prompt, written in code by name.',
+    'Feedback the grader emits on U16 steps (pin what `bun run content:check <id> --verbose` prints): `harmony.pcset` (a chord with other notes: `Co` for `Cm`, `E` for `Eb`), `code.unknown-chord` (`Cmin`, `Fmin`), `code.lowercase-chord-root` (`ab`, and a numeral typed as a chord: `bVI`), `code.edit-outside`, `code.unchanged`, `harmony.rn-case` (IV for iv; i for the Picardy I), `harmony.rn-degree` (vi or VI for ♭VI, iii for ♭III, II7 for V7/V), `kb.extra-note` / `kb.missing-note` / `kb.bass`, `investigate.wrong`, `id.wrong`, `rubric.unmet` (overridden with the neutral "{label}: not yet.").',
+  ],
+  lessons: [
+    {
+      id: "U16.L01",
+      author: "spec-U16",
+      idea: "A major key can borrow a chord from the minor key on the same home note. The first one is IV with one note lowered: in C, F A C becomes F A♭ C, F minor, written iv. The lowered note is ♭6, le, and it falls on to 5: IV, iv, I is the turn that closes a great many ballads.",
+      hook: {
+        hear: "The last line of a slow song, twice, as a piano ballad with the chord on every beat: C, F, F, C, every note the key's own; then C, F, F minor, C, with a clean guitar on top whose long notes fall A, A♭, G. Both play within the first 30 seconds, and the second is a sound the learner knows from the end of many ballads.",
+        code: `${T(80)}${SAD_IV}`,
+      },
+      key: C,
+      meter: "4/4",
+      bpm: 80,
+      canDo: ["cd.compose.borrowed-iv"],
+      uses: [
+        ...BASE,
+        ...MAJOR,
+        "snd.piano",
+        "snd.cleangtr",
+        "tb.note",
+        "tb.note.names",
+        "tb.note.accidentals",
+        "tb.mini.stack",
+      ],
+      steps: [
+        {
+          kind: "listen",
+          exercise: "listen",
+          minutes: 0.75,
+          what: "Two items, four bars each, over the Band's drums: `<C F F C>` with the tune holding A for two bars, then `<C F Fm C>` with the tune falling A, A♭, G (`[5@3 3] [5b@3 3] [4@3 ~]`).",
+        },
+        {
+          kind: "predict",
+          exercise: "predict",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: '`chord("<F Fm>")`: F is F, A and C. Which note moves, and where? (`choose`: A down a half step to A♭ / F down to E / C up to D♭)',
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["choice", "number"],
+          minutes: 1,
+          panels: ["chords"],
+          what: 'The two chords stacked by hand from the root (`note("<[f3,a3,c4] [f3,ab3,c4]>")`) with the chord band open and degree labels on the roll: which key builds F minor on its degree 4 (choice: C minor, the minor key on the same home note); how many of the three notes changed (number: 1).',
+          term: "term.borrowed-chord",
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          panels: ["chords"],
+          what: 'The same turn in G major with both middle bars on C (`"<G C C G>"`, the second C editable): turn it into the sad IV (`Cm`). One held chord a bar; `pcset` per onset with the bass, `edit-only-regions`; the target is audible and its roll appears after a failed try.',
+        },
+        {
+          kind: "quiz",
+          exercise: "identify",
+          answer: ["rn-palette"],
+          minutes: 1,
+          graded: true,
+          what: 'The turn in D major, shown as code (`<D G Gm D>`): write its numerals (`rn-palette`, `slots: 4`, `allow: ["triads", "borrowed"]`; `I IV iv I`).',
+        },
+        {
+          kind: "sing",
+          exercise: "sing",
+          answer: ["mic"],
+          minutes: 1.25,
+          what: 'Sing the falling line over F, F minor and C: la, le, sol (`mode: "degree"`, degrees 6, ♭6, 5, on syllables; `fallback: "identify"`: Quiet mode picks the three degrees on the pad).',
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          panels: ["chords"],
+          what: "A ballad loop of the learner's own with the sad IV placed where they want the ache.",
+        },
+      ],
+      wrapAt: 4,
+      make: {
+        brief:
+          "A ballad loop, C, A minor, then F for two bars, with a bass on the roots and a tune. Put the sad IV where you want the ache: in place of an F, or somewhere new. Then make the loop yours: let the tune touch A♭ over that chord (`5b`), reorder the bars, change the sounds.",
+        required: {
+          rule: "contains-rn",
+          label: "The minor iv somewhere in your loop",
+          why: '`contains-rn` with `rn: ["iv"]`, `min: 1` (graded today): the starter `<C Am F F>` has none; `<C Am F Dm>` (a minor chord from inside the key) and `<C Am F Cm>` (the home chord made minor) fail; any loop with F minor passes, wherever it sits.',
+        },
+        suggestions: [
+          'the tune touches ♭6 over the borrowed chord (`degree-set`, `contains: ["b6"]`, on `mel`)',
+          'the bass on each chord\'s root (`bass-line`, `roots: { on: "change", minRatio: 0.75 }`)',
+        ],
+        band: "band.axis-4bar",
+        tracks: ["drums"],
+        flavours:
+          "Drums from the Band in the flavour's kit; the starter's piano, electric bass and clean guitar stay (every flavour has them unlocked), so the flavour changes only the drums.",
+      },
+      srs: [
+        { family: "fam.har.rn", mode: "review-if-due", level: 5 },
+        { family: "fam.deg.fet-chromatic", mode: "review-if-due", level: 2 },
+      ],
+      singOn: "syllables",
+      mistakes: [
+        "modify: `Co` for `Cm` (two notes lowered): `harmony.pcset`; `Cmin`: `code.unknown-chord`; the home chord turned minor too (`<G C Cm Gm>`): `code.edit-outside`; the unchanged starter: `code.unchanged`",
+        "numerals: `IV` for `iv`: `harmony.rn-case`; `ii` for `iv` (the key's own minor chord on 2 taken for the borrowed one): `harmony.rn-degree`",
+        "investigate: A minor chosen (its chord on degree 4 is D minor), or 2 notes counted: `investigate.wrong`",
+        "Make: the starter, `<C Am F Dm>` and `<C Am F Cm>`: `rubric.unmet`",
+      ],
+      connects: {
+        back: "U10.L04 met iv as the minor key's own chord on degree 4 and U10.L02 named the parallel minor; U06.L07's plagal cadence is IV–I; U15.L01 taught ♭6 as `5b` and as le. U15's chords from outside the key pointed at a chord; this one does not point, it darkens.",
+        forward:
+          "U16.L02 moves one note of F minor to get A♭, and adds B♭: ♭VI–♭VII–I. U16.L03 names the close iv–I and the whole practice (modal mixture). C7 and CF-A count a borrowed chord as a device.",
+      },
+      epr: {
+        enjoyment:
+          "A four-bar piano ballad loop that turns bittersweet on a chord the learner placed, with a clean guitar line that can fall through A♭: it sounds like the last line of a song they would put on a playlist.",
+        pace: "One idea: IV with its 3rd lowered, borrowed from the parallel minor, heard, written, numbered and sung. ♭VI and ♭VII are tomorrow; the cadence name and the word for the whole practice wait for U16.L03; finding the chord by ear among others waits for U16.L05. No drill family opens.",
+        return:
+          "The Coda says: you can now darken a major-key loop with the minor iv and name it. Next: two more chords from the same minor key, and the ending that climbs home from below.",
+      },
+      notes: [
+        "The exemplar: content/core/U16/L01 passes every content-CI check with the real grader (7 steps, 2 graded, 8.5 expert minutes).",
+        'Evaluated: `chord("<C F Fm C>").voicing()` plays E3 C4 E4 G4 C5 | F3 C4 F4 A4 C5 | F3 C4 F4 A♭4 C5 | E3 C4 E4 G4 C5: between F and F minor exactly one voice moves, A4 to A♭4. The tune is E G C G | A (three beats) F | A♭ (three beats) F | G: `5b` is step 5 lowered, ♭6.',
+        "The graded steps (S4, S5) play one held chord a bar instead of the hook's chord on every beat: `pcset` per onset would otherwise report the same wrong chord four times.",
+        "The Make's starter tune ends its last bar on F and C (`[3 ~ 0 ~]`), the two notes F and F minor share, so turning that bar needs no change to the tune; the tune of bar 3 (A F A) sits over the F that stays. A learner who turns bar 3 instead hears A against A♭ and has the hint ladder and the ♭6 suggestion to fix it.",
+        "`edit-only-regions` compares the code before and after the marked region, so `<G Cm Cm G>` reads as an edit inside the region and earns `harmony.pcset`; the edit-outside test changes the last chord.",
+        "The chord band shows `iv` from this lesson's first step: the borrowed depth of the harmony lens opens with U16.L01 itself (wave6.md §4.3).",
+      ],
+    },
+    {
+      id: "U16.L02",
+      author: "U16a",
+      idea: "Two more chords from the same minor key, both major, built on its lowered 6th and 7th notes: A♭ and B♭ in C, written ♭VI and ♭VII. A♭ is yesterday's F minor with one note moved; B♭ is the chord of Mixolydian Rock. Played in a row they climb by whole steps into home, ♭VI–♭VII–I, and the song arrives like a victory.",
+      hook: {
+        hear: "The last four bars of an anthem: organ, a bass pumping eighth notes, an overdriven guitar on the tune. C, F, then A♭ and B♭ in one bar, two beats each, landing on C, while the tune climbs do re mi. Before it, the same four bars arriving the usual way, through F and G.",
+        code: `${T(112)}${VICTORY}`,
+      },
+      key: C,
+      meter: "4/4",
+      bpm: 112,
+      canDo: ["cd.compose.flat-six-seven"],
+      uses: [...BASE, ...MAJOR, ...ROCK, "tb.mini.repeat"],
+      steps: [
+        {
+          kind: "listen",
+          exercise: "listen",
+          minutes: 0.75,
+          what: "Two items, four bars each, over the Band's drums, with the same tune (it ends do re mi): `<C F [F G] C>`, the arrival through IV and V, then `<C F [Ab Bb] C>`, the arrival from below.",
+        },
+        {
+          kind: "predict",
+          exercise: "predict",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: '`chord("<Fm Ab>")`: F minor is F A♭ C and A♭ major is A♭ C E♭. How many notes change? (`choose`: one, F steps down to E♭ / two / all three)',
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["choice", "number"],
+          minutes: 1,
+          panels: ["chords"],
+          what: 'Run `chord("<Ab Bb C>")`, one held chord a bar, with the chord band (♭VI ♭VII I) and degree labels: how far apart are the three roots (choice: a whole step each time); C major\'s own chord on degree 7 is B D F: how many of its notes change to make B♭ major (number: 1).',
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          panels: ["chords"],
+          what: 'The ending in G major arriving the usual way (`"<G C [C D] G>"`, the bracket editable): make it climb home from below (`[Eb F]`). `pcset` per onset with the bass, `edit-only-regions`; the target is audible and its roll appears after a failed try.',
+        },
+        {
+          kind: "quiz",
+          exercise: "keyboard",
+          answer: ["keyboard"],
+          minutes: 1,
+          graded: true,
+          what: "Build ♭VI of D major on the keyboard, root lowest: B♭ major, a major chord on the lowered 6th note (`expect: { pcs: [10, 2, 5], bassPc: 10 }`).",
+        },
+        {
+          kind: "sing",
+          exercise: "sing",
+          answer: ["mic"],
+          minutes: 1.25,
+          what: 'Sing the bass of the ending under the chords: le, te, do (`mode: "degree"`, degrees ♭6, ♭7, 1 with `octaves: [-1, -1, 0]`, on syllables; `fallback: "identify"`).',
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          panels: ["chords"],
+          what: "An anthem loop whose ending the learner rebuilds so that it climbs home from below.",
+        },
+      ],
+      wrapAt: 4,
+      make: {
+        brief:
+          'Eight bars of an anthem, `"<C G Am F C G F C>"`, with a pumping bass and a tune that ends do re mi. Bar 7 walks home through F. Rebuild it so the ending climbs home from below: A♭ then B♭, two beats each, into C. Then make it yours: move the climb, stretch it to a bar a chord, rewrite the tune above it.',
+        required: {
+          rule: "contains-rn",
+          label: "♭VI, then ♭VII, then I: the climb home from below",
+          why: '`contains-rn` with `rn: ["bVI", "bVII", "I"]`, `min: 1`, `inOrder: true` (planned, feature `contains-rn.in-order`): the starter has no flat chord; `[Ab Bb]` into C passes at two beats or a bar a chord; B♭ then A♭ (the wrong order), A♭ alone, and A♭ B♭ into A minor fail.',
+        },
+        suggestions: [
+          'the bass on each chord\'s root, so it sings le te do (`bass-line`, `roots: { on: "change", minRatio: 0.75 }`)',
+          'a tune whose strong beats are chord notes over the climb (`chord-tones-strong`, `harmony: "chords"`, ≥ 0.6): do re mi are the 3rds of A♭, B♭ and C',
+          "eight bars, so the ending has something to end (`bars` ≥ 8)",
+        ],
+        band: "band.axis-4bar",
+        tracks: ["drums"],
+        flavours:
+          "Drums from the Band in the flavour's kit; organ, electric bass and the overdriven guitar stay in the learner's code in every flavour.",
+      },
+      srs: [
+        { family: "fam.har.rn", mode: "review-if-due", level: 5 },
+        { family: "fam.har.cadence", mode: "review-if-due", level: 4 },
+      ],
+      singOn: "syllables",
+      mistakes: [
+        "modify: `[E F]` (the root not lowered: E major): `harmony.pcset`; `[Ebm F]` (the borrowed chord made minor): `harmony.pcset`; `[eb f]`: `code.lowercase-chord-root`; the last G changed too: `code.edit-outside`; the unchanged starter: `code.unchanged`",
+        "keyboard: B minor (vi, B D F♯) for B♭ major: `kb.missing-note`, `kb.extra-note` and `kb.bass` (the root itself is the note that is lowered); B♭ minor (D♭ for D): `kb.missing-note` and `kb.extra-note`, with an override that says the chord is major; D lowest: `kb.bass`",
+        "investigate: a half step chosen, or 2 notes counted: `investigate.wrong`",
+        "Make: the starter, `[Bb Ab]` into C, and `[Ab Bb]` into A minor: `rubric.unmet`",
+      ],
+      connects: {
+        back: "U16.L01's F minor shares two notes with A♭; U14.L02 wrote ♭VII in a Mixolydian loop (I–♭VII–IV) and `fam.har.cadence` has drilled ♭VII–I since; U10.L05's Aeolian loop used VI and VII in a minor key, where they are the key's own.",
+        forward:
+          'U16.L03 adds ♭III and lays all four borrowed chords side by side. C7 "Chromatic Colour" requires ♭VI–♭VII–I in the learner\'s own song, and CF-A counts it as a device.',
+      },
+      epr: {
+        enjoyment:
+          "Eight bars of an anthem on organ and overdriven guitar whose ending now climbs A♭, B♭, C under do re mi: the learner hits Play and it lands like the last chord of an encore.",
+        pace: "One idea: the run ♭VI–♭VII–I, two major chords a whole step apart arriving home from below. ♭VII is a chord the learner has used; ♭VI is one note away from yesterday's. No new term, no new tool; ♭III and the name for the practice wait for U16.L03.",
+        return:
+          "The Coda says: you can now write a ♭VI–♭VII–I ending. Next: ♭III, the last of the four borrowed chords, and the whole palette side by side.",
+      },
+      notes: [
+        'Evaluated: `chord("<C F [Ab Bb] C>").voicing()` plays A♭3 E♭4 A♭4 C5 then D3 B♭3 D4 F4 B♭4 in bar 3; `.rootNotes(2).struct("x*8")` gives A♭2 four times, B♭2 four times, then C2. The tune\'s last notes C5 (two beats), D5 (two beats), E5 are the 3rd of A♭, of B♭ and of C: it needs no chromatic note.',
+        '♭VII to I has no leading tone: B♭ is a whole step under C. The lesson says "arrives from a whole step below" and leaves the comparison with V–I to the listen step\'s two items.',
+        "The sung bass line is written an octave above the bass track (`octaves: [-1, -1, 0]` around the learner's home note) and folded into the learner's range by the engine; prose says \"sing in your own range\".",
+        "The Make's required rule uses a planned field: the lesson fails check 2 until the grader lists `contains-rn.in-order`. The plain rule without `inOrder` would count any one of the three chords, I included, and so cannot stand in for it.",
+        "`fam.har.cadence` level 4 (♭VII–I, gate U14.L02) is reviewed, not seeded: the family is U06.L04's.",
+      ],
+    },
+    {
+      id: "U16.L03",
+      author: "U16a",
+      idea: "♭III is the last of the four chords a major key borrows: E♭ in C, a major chord on the lowered 3rd note. I–♭III–IV is three major chords climbing, the sound of riff rock and sixties soul. Seen side by side, the four borrowed chords are simply C minor's chords inside a C major song, which is called modal mixture; and iv falling to I at the end of a phrase is the plagal cadence with a minor IV.",
+      hook: {
+        hear: "Eight bars of riff rock on organ stabs and an overdriven guitar: C, E♭, F, C, three major chords climbing and home; then C, E♭, F minor, C, the same climb closing on the sad IV. The first time through the same eight bars are heard with the key's own E minor in place of E♭.",
+        code: `${T(100)}${THREE_MAJORS}`,
+      },
+      key: C,
+      meter: "4/4",
+      bpm: 100,
+      canDo: ["cd.write.borrowed-chords"],
+      uses: [...BASE, ...MAJOR, ...ROCK, "tb.feature.leadsheet"],
+      steps: [
+        {
+          kind: "listen",
+          exercise: "listen",
+          minutes: 0.75,
+          what: "Two items over the Band's drums: `<C Em F C>` (four bars, the key's own chord on 3), then the hook, `<C Eb F C C Eb Fm C>` (eight bars).",
+        },
+        {
+          kind: "predict",
+          exercise: "predict",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: '`chord("<Cm Eb>")`: C minor, the home chord of the parallel minor, is C E♭ G. Step its C down to B♭. Which chord is that? (`choose`: E♭ major, E♭ G B♭ / G minor / B♭ major)',
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["choice", "number"],
+          minutes: 1,
+          panels: ["chords"],
+          what: 'Run `chord("<C Eb F Fm>")`, one held chord a bar, with the chord band (I ♭III IV iv) and degree labels: which chords of the loop come from C minor (choice: E♭ and F minor); how many of E♭ major\'s three notes belong to C major (number: 1, the G).',
+          term: "term.modal-mixture",
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.5,
+          graded: true,
+          what: 'Play from the page: a lead sheet in D major shows four bars of melody with no chord symbols; the prompt gives the numerals I ♭III IV iv. Write `changes` by name (`<D F G Gm>`); `pcset` per onset with the bass. The starter is `"<D D D D>"`.',
+        },
+        {
+          kind: "quiz",
+          exercise: "identify",
+          answer: ["rn-palette"],
+          minutes: 1,
+          graded: true,
+          what: 'A loop in G major shown as code (`<G Bb C Cm>`): write its numerals (`rn-palette`, `slots: 4`, `allow: ["triads", "borrowed"]`; `I bIII IV iv`).',
+        },
+        {
+          kind: "ear",
+          exercise: "all",
+          parts: ["identify", "identify", "identify", "identify"],
+          answer: ["choice"],
+          minutes: 1.25,
+          graded: true,
+          what: "Four endings in four keys, two chords each after a bar of home: which close is it? (`choice`: V to I / IV to I, the plagal cadence / iv to I, the plagal cadence with a minor IV.) Fixed items: G–C in C, B♭–F in F, Cm–G in G, Gm–D in D.",
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          panels: ["chords"],
+          what: "A riff-rock loop of the learner's own from the mixed palette, ♭III among its chords.",
+        },
+      ],
+      wrapAt: 4,
+      make: {
+        brief:
+          "A riff over two chords, C and F, with a bass and organ stabs. You now have seven chords for it: C, F and G from C major, and E♭, A♭, B♭ and F minor from C minor. Write a four- or eight-bar loop that brings in E♭ and anything else you like from the minor side; try closing on F minor into C.",
+        required: {
+          rule: "contains-rn",
+          label: "♭III somewhere in your loop",
+          why: '`contains-rn` with `rn: ["bIII"]`, `min: 1` (graded today): the starter `<C F C F>` has none; `<C Em F Fm>` fails (E minor is the key\'s own iii; iv alone is not ♭III); `<C Eb F Fm>`, `<C Eb Bb F>` and `<C Eb Ab Bb>` pass.',
+        },
+        suggestions: [
+          'a second borrowed chord beside it (`contains-rn` with `kind: ["borrowed"]`, `min: 2`; planned, feature `contains-rn.kind`)',
+          'the riff touches ♭3 or ♭7 over a borrowed chord (`degree-set`, `anyOf: ["b3", "b7"]`, on `mel`)',
+          'the loop ends on home after F minor (`cadence`, `types: ["PC"]`, `at: "last"`: the grader reads iv–I as plagal; a loop that turns on iv and only reaches I at the repeat does not count)',
+        ],
+        band: "band.axis-4bar",
+        tracks: ["drums"],
+        flavours:
+          "Drums from the Band in the flavour's kit; organ, electric bass and the overdriven guitar stay in the learner's code in every flavour.",
+      },
+      srs: [
+        { family: "fam.har.rn", mode: "review-if-due", level: 5 },
+        { family: "fam.har.cadence", mode: "review-if-due", level: 3 },
+      ],
+      mistakes: [
+        "Play from the page: `F#m` (the key's own iii) for `F`: `harmony.pcset`; `G` in the last bar (IV for iv): `harmony.pcset`; `Fmaj`: `code.unknown-chord`; the unchanged starter: `code.unchanged`",
+        "numerals: `iii` for `♭III` and `III` without its flat: `harmony.rn-degree`; `IV` for `iv`: `harmony.rn-case`",
+        "ear: the plagal cadence taken for its minor version, or the reverse: `id.wrong`",
+        "investigate: E♭ and F chosen, or 2 notes counted: `investigate.wrong`",
+        "Make: the starter and `<C Em F Fm>`: `rubric.unmet`",
+      ],
+      connects: {
+        back: "U16.L01 and L02 brought iv, ♭VI and ♭VII one at a time; U10.L04 listed the minor key's own triads (i ii° III iv v VI VII), which is where all four live; U06.L07 named the plagal cadence and U06.L04 the cadence itself.",
+        forward:
+          "U16.L04 turns the trade around: a minor key borrowing from major. U16.L05 puts borrowed chords under a tune the learner knows. In the jazz track J5.L02 leads from iv through ♭VII7 into I.",
+      },
+      epr: {
+        enjoyment:
+          "A riff-rock loop the learner built from seven chords, three of the key's own and four borrowed, on organ stabs and an overdriven guitar: it sounds like a band, and no two learners' loops will be the same.",
+        pace: "One idea: the borrowed chords as one palette, C minor's chords inside C major, completed by ♭III. The minor plagal close is U16.L01's sound given its cadence name, in one ear step with four fixed endings. Borrowing in a minor key is tomorrow; no drill family opens.",
+        return:
+          "The Coda says: you can now name the four chords a major key borrows from its parallel minor. Next: the trade the other way, a minor song that ends in sunlight.",
+      },
+      notes: [
+        'Evaluated: `chord("<C Eb F C C Eb Fm C>").voicing()` voices E♭ as E♭3 B♭3 E♭4 G4 B♭4; the hook\'s tune is G G E | G B♭ G | A A F | G | G G E | G B♭ G | A♭ A♭ F | G: `6b` is ♭7 (B♭) over E♭ and `5b` is ♭6 (A♭) over F minor, and G, the note C major and E♭ major share, opens the bar where the chord changes.',
+        "Play from the page (the unit's one, AUTHORING §4): the step's staff panel is a lead sheet of the melody with no chord chart (symbols would give the answer away); the numerals are in the prompt and the key signature of two sharps tells the key. In D major ♭III is F (F A C), IV is G and iv is G minor: all three roots are white keys, which is why this key was chosen.",
+        'The ear step is four fixed `identify` parts with a three-way `choice`, not `fam.har.cadence`: the family has no minor plagal category. The option labels say "plagal cadence with a minor IV" (both words known); the pass text may say "also called the minor plagal cadence" without bolding it.',
+        "The Make's starter riff keeps to 1, 2 and 5 (C, D, G): none of them sits a half step above a note of C, F, E♭, A♭, B♭ or F minor, so any chord of the minor side can go under it (only C over a G chord would clash, a half step above its B). Over E♭ the G is the chord's 3rd.",
+        "The glossary example of `term.modal-mixture` is `<C Eb F Ab>` (I ♭III IV ♭VI); the term is bolded in S3's pass text, after the learner has heard and seen two borrowed chords in one loop: \"C minor's chords in a C major song: that mixing is called modal mixture\".",
+      ],
+    },
+    {
+      id: "U16.L04",
+      author: "U16b",
+      idea: "A minor key borrows back from the major key on the same home note, and again each chord is one changed note, this time raised. End on the major home chord instead of the minor one (A minor's last chord becomes A major: C rises to C♯, the Picardy third) and the piece ends in sunlight. Make iv major (D minor becomes D: F rises to F♯) and you have the bright IV of Dorian inside a minor song.",
+      hook: {
+        hear: "Eight bars of a minor ballad on piano, upright bass and a strings pad, with an acoustic guitar on the tune: A minor, D major, F, E, twice, and the last chord is A major, the tune rising to C♯. Before it, the same eight bars with nothing borrowed: D minor in bars 2 and 6 and A minor at the end.",
+        code: `${T(88)}${SUNLIGHT}`,
+      },
+      key: A_MINOR,
+      meter: "4/4",
+      bpm: 88,
+      canDo: ["cd.compose.picardy"],
+      uses: [
+        ...BASE,
+        "scale.minor",
+        "snd.piano",
+        "snd.upright",
+        "snd.strings",
+        "snd.acgtr",
+        "tb.gain",
+        "tb.note",
+        "tb.note.names",
+        "tb.note.accidentals",
+        "tb.mini.stack",
+      ],
+      steps: [
+        {
+          kind: "listen",
+          exercise: "listen",
+          minutes: 1,
+          what: "Two items, eight bars each, over the Band's drums: `<Am Dm F E Am Dm [F E] Am>` with the tune ending on C, then the hook, `<Am D F E Am D [F E] A>`, the tune taking F♯ over D and ending on C♯.",
+        },
+        {
+          kind: "predict",
+          exercise: "predict",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: '`chord("<Am A>")`: the last chord changes from A minor to A major. Which note moves, and where? (`choose`: C up a half step to C♯ / E up to F / A down to G♯)',
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["choice", "number"],
+          minutes: 1,
+          panels: ["chords"],
+          what: 'Two pairs stacked by hand (`note("<[a3,c4,e4] [a3,c#4,e4] [d3,f3,a3] [d3,f#3,a3]>")`) with the chord band (i I iv IV): D major has F♯; which scale on A that you have played has F♯ and keeps C (choice: A Dorian); in each pair, how many notes move (number: 1).',
+          term: "term.picardy-third",
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          panels: ["chords"],
+          what: 'A four-bar minor phrase in E minor, `"<Em Am B Em>"` (the second and the last chord editable): give it the Dorian IV and the Picardy ending (`<Em A B E>`). `pcset` per onset with the bass, `edit-only-regions`; the target is audible.',
+        },
+        {
+          kind: "quiz",
+          exercise: "identify",
+          answer: ["rn-palette"],
+          minutes: 1,
+          graded: true,
+          what: 'A phrase in D minor shown as code (`<Dm G A D>`): write its numerals (`rn-palette`, `slots: 4`, `allow: ["triads", "borrowed"]`, key D minor; `i IV V I`).',
+        },
+        {
+          kind: "sing",
+          exercise: "all",
+          parts: ["sing", "sing"],
+          answer: ["mic"],
+          minutes: 1.25,
+          what: 'Sing the home chord down twice on the same home note, minor then major: sol me do, then sol mi do. Two `sing` parts in `mode: "degree"`, on syllables: the first in A minor (degrees 5, ♭3, 1), the second declares `key: { tonic: "A", mode: "major" }` (degrees 5, 3, 1), the key the last chord is borrowed from. `fallback: "identify"` on both.',
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          panels: ["chords"],
+          what: "An eight-bar minor verse of the learner's own that ends on the major home chord.",
+        },
+      ],
+      wrapAt: 4,
+      make: {
+        brief:
+          'Eight bars in A minor, `"<Am Dm F E Am Dm E Am>"`, with a bass, a strings pad and a tune. Let it end in sunlight: make the last chord A major and let the tune find C♯ (`2#`) or stay on A. Then try the bright IV, D for D minor, wherever the verse needs a lift, and make the tune yours.',
+        required: {
+          rule: "contains-rn",
+          label: "The last bar is the major home chord",
+          why: '`contains-rn` with `rn: ["I"]`, `min: 1` and `section: { bars: [8, 8] }` in A minor (graded today; the Make is `bars: [8, 8]`): the starter ends on A minor ("i (Am) is minor: I is A major, with C♯"); an ending on C major (III) fails; `A` in bar 8 passes, whatever the other seven bars hold.',
+        },
+        suggestions: [
+          'the bright IV somewhere before the end (`contains-rn`, `rn: ["IV"]`, `min: 1`: D major in A minor)',
+          'the tune ends on a note of the major home chord (`ends-on-degree`, `degrees: ["1", "3", "5"]`, `over: "I"`)',
+        ],
+        band: "band.aeolian-4bar",
+        tracks: ["drums"],
+        flavours:
+          "Drums from `band.aeolian-4bar` in the flavour's kit; piano, upright, strings and acoustic guitar stay in the learner's code in every flavour.",
+      },
+      srs: [
+        { family: "fam.har.rn", mode: "review-if-due", level: 5 },
+        { family: "fam.key.mode", mode: "review-if-due", level: 3 },
+      ],
+      singOn: "syllables",
+      mistakes: [
+        "modify: `Em` left at the end with only the IV raised: `harmony.pcset` on bar 4; `A7` for `A` (a 7th added): `harmony.pcset`; `Amaj`: `code.unknown-chord`; the first chord raised as well (`<E A B E>`): `code.edit-outside`; the unchanged starter: `code.unchanged`",
+        "numerals: `iv` for `IV` and `i` for the last `I`: `harmony.rn-case`; numerals counted from F, the relative major (`vi` for `i`): `harmony.rn-degree`",
+        "investigate: A natural minor or A harmonic minor chosen (neither has F♯), or 2 notes counted: `investigate.wrong`",
+        "Make: the starter, and an ending on C major: `rubric.unmet`",
+      ],
+      connects: {
+        back: "U14.L03's Dorian tunes lived on i–IV with the raised 6; here a natural-minor song takes just that chord. U10.L06 raised the 7th to make V major; the Picardy third raises the 3rd of the home chord the same way, by one half step. U16.L01–L03 borrowed from minor into major.",
+        forward:
+          "U16.L05 mixes secondary and borrowed chords under one tune. U17.L01 keeps a new home note for good: a Picardy ending changes the last chord, never the key.",
+      },
+      epr: {
+        enjoyment:
+          "An eight-bar minor verse on piano, strings and acoustic guitar that the learner ends on a major chord: the last bar opens like a window, and they chose whether the tune climbs to C♯ to meet it.",
+        pace: "One idea: a minor key borrows from major by raising one note of a chord, the 3rd of i at the end or the 3rd of iv on the way. The Dorian IV is a chord the learner wrote in U14.L03, recalled, not taught again. No new tool, no drill family.",
+        return:
+          "The Coda says: you can now end a minor piece on a major chord and brighten it with the Dorian IV. Next: a lab, new chords under a tune you already know, with a tenor sax to play it.",
+      },
+      notes: [
+        'Evaluated: `chord("<Am D F E Am D [F E] A>").voicing()` voices D as D3 A3 D4 F♯4 A4 and the last A as C♯3 A3 C♯4 E4 A4 (printed with D♭: display re-spells, STYLE §5.3 item 5); over `.scale("A3:minor")` the tune\'s `5#` is F♯4 and `2#` is C♯4, since a step string alters the minor scale\'s own steps. The tune is E C A | F♯ D | F D C | B | E C A | F♯ D | C B B E | C♯.',
+        'The key is A natural minor with E major from harmonic minor (U10.L06), as in U12.L03: `{ tonic: "A", mode: "minor" }`. Bars 2 and 3 set F♯ (in D) against F (in the F chord): that cross-relation is the sound of the borrowed IV in a minor song and is left to be heard, not explained.',
+        "The modify step has two marked regions. Probed: a change between them (`Bm` for `B`) is read as part of the edit and earns `harmony.pcset`, not `code.edit-outside`; a change before the first region or after the last earns `code.edit-outside`. Pin the edit-outside test on the first chord.",
+        'The loop restarts on A minor after the A major bar: C♯ falls back to C. The pass text says so ("the sun comes out, and the verse begins again in the shade").',
+        "The progression is i IV VI V; do not write i III IV VI, which is a traditional song the repertoire does not carry and whose modern arrangement contracts §2.8 excludes.",
+        "The sung step is two parts because a sung target in a minor key may not hold the raised 3rd (`minor.sung-degree` in `defineLesson`, which has no exception after U15.L01): the second part declares A major, where mi is the key's own 3rd. That is also the truth of the chord: the Picardy third is borrowed from the major key on the same home note. The Quiet path's pad offers `b3` in the first part and `3` in the second.",
+        "`fam.key.mode` level 3 (Dorian against natural minor, gate U14.L03) is reviewed so the Dorian colour comes back in the warm-ups.",
+      ],
+    },
+    {
+      id: "U16.L05",
+      author: "U16b",
+      idea: "A tune does not own its chords. Keep every note of a melody and put new chords under it, and the song changes mood without changing its tune: that is reharmonization. A new chord works when the tune's long notes belong to it; with the secondary dominants of U15 and the borrowed chords of U16 the learner has a dozen to choose from, and the ear to tell which kind it hears.",
+      hook: {
+        hear: "Aura Lee's verse, the tune the learner transcribed in X1 or met in the gym, played as a slow soul ballad: tenor sax on the melody, Rhodes and upright under it. First with the plain chords of the transcription (I ii V I, twice); then with D7 leaning into G in bars 2 and 6 and, under the long C of bar 4, A♭ and B♭ climbing back to C. Not one note of the tune has changed.",
+        code: `${T(84)}${AURA_REHARMONIZED}`,
+      },
+      key: C,
+      meter: "4/4",
+      bpm: 84,
+      canDo: ["cd.compose.reharmonize", "cd.hear.chromatic"],
+      uses: [
+        ...BASE,
+        "scale.major",
+        "snd.rhodes",
+        "snd.upright",
+        "snd.tenor",
+        "chord.dom7",
+        "tb.feature.leadsheet",
+      ],
+      steps: [
+        {
+          kind: "listen",
+          exercise: "listen",
+          minutes: 1,
+          what: "Two items, eight bars each, over the Band's drums, tenor sax on the tune: the verse over `<C Dm G C C Dm G C>` (the chords of X1's answer key), then the hook, `<C D7 G7 [Ab Bb] C D7 G7 C>`.",
+        },
+        {
+          kind: "predict",
+          exercise: "predict",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: "Bar 6 of the tune is three Ds. Which borrowed chord has D in it and could go under that bar? (`choose`: B♭ major, B♭ D F / A♭ major, A♭ C E♭ / F minor, F A♭ C)",
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["choice", "number"],
+          minutes: 1,
+          panels: ["chords"],
+          what: "Run the hook with the chord band (numerals) and the lead sheet: what is the D7 of bar 2 (choice: a secondary dominant, V7 of the G that follows); how many of the loop's chords are borrowed from C minor (number: 2, A♭ and B♭).",
+          term: "term.reharmonization",
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.5,
+          graded: true,
+          panels: ["chords"],
+          what: "The verse's second phrase over its plain chords, `\"<C Dm G C>\"` (bars 2 and 4 editable). The target plays the same tune with two borrowed chords: find them by ear, bass first, and write them (`<C Bb G [C Fm]>`: ♭VII under the three Ds; home, then the sad IV, under the long C). `pcset` per onset with the bass, `edit-only-regions`; the target's roll appears after a failed try.",
+        },
+        {
+          kind: "ear",
+          exercise: "identify",
+          answer: ["bar-buttons", "choice"],
+          minutes: 1.5,
+          graded: true,
+          what: "`fam.har.chromatic` at level 3, five trials from the generator: a four-bar loop with one chord from outside the key. Half the trials ask for its bar; the others mark the bar and ask which chord it is (iv, ♭VI or ♭VII). The applied dominants of levels 1–2 stay in the family's warm-up sets.",
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 3,
+          panels: ["chords"],
+          what: "The learner's own reharmonization of Aura Lee's verse: the tune untouched, at least two chords from outside the key.",
+        },
+      ],
+      wrapAt: 4,
+      make: {
+        brief:
+          "Aura Lee's verse, eight bars, with the plain chords you transcribed and the tune on a tenor sax. Leave the tune exactly as it is and change the chords under it: at least two from outside the key, borrowed chords or secondary dominants. Check each one against the tune's long notes, then listen: does the song still sound like itself, in a new light?",
+        required: {
+          rule: "reharmonize",
+          label: "The same tune over at least two chords from outside the key",
+          why: '`reharmonize` with `melody: "mel"`, `reference` the verse over `<C Dm G C C Dm G C>` (`bars: 8`), `min: 2`, `kinds: ["borrowed", "secondary-dominant"]` (planned rule): the starter has no outside chord; a version that changes a note of the tune fails whatever its chords; new chords from inside the key only (`Am` for `C`) fail; D7 in bar 2 with `[Ab Bb]` in bar 4 passes, as does B♭ in bar 6 with `[C Fm]` in bar 8.',
+        },
+        suggestions: [
+          'a secondary dominant that goes to its chord (`contains-rn`, `kind: ["secondary-dominant"]`, `mustResolve`; planned)',
+          'the climb ♭VI–♭VII–I under the long C of bar 4 (`contains-rn`, `rn: ["bVI", "bVII", "I"]`, `inOrder`; planned)',
+          'the bass on each chord\'s root (`bass-line`, `roots: { on: "change", minRatio: 0.75 }`)',
+          'the tenor sax on the tune (`sounds`, `anyOf: ["snd.tenor"]`)',
+        ],
+        band: "band.axis-4bar",
+        tracks: ["drums"],
+        flavours:
+          "Drums from the Band in the flavour's kit (jazz-soul swings them, which suits a ballad reading); Rhodes, upright and tenor sax stay in the learner's code in every flavour.",
+      },
+      srs: [
+        { family: "fam.har.chromatic", mode: "review-if-due", level: 3 },
+        { family: "fam.har.progression", mode: "review-if-due", level: 6 },
+        { family: "fam.har.bass", mode: "review-if-due", level: 6 },
+      ],
+      repertoire: [
+        {
+          song: "song.aura-lee",
+          fragment: "the verse, bars 1–8: two phrases on the same tune",
+          degrees: AURA_VERSE,
+          key: "C4:major",
+          letters:
+            "<[eb4 ab4 g4 ab4] [bb4 f4 bb4@2] [ab4 g4 f4 g4] ab4 [eb4 ab4 g4 ab4] [bb4 bb4 bb4@2] [ab4 g4 f4 g4] ab4>",
+          sourceKey: "Ab4:major",
+          bars: 8,
+          setting:
+            "the plain-rhythm setting of content/repertoire/aura-lee (X1 and the L5 gym): each dotted quarter and eighth of the 1887 printing is two quarters. The chords under it in this lesson are Oak's own, not the printed accompaniment.",
+        },
+      ],
+      mistakes: [
+        "modify: `Bbm` for `Bb` (its D♭ fights the tune's D): `harmony.pcset`; `[C F]` (the plain IV, no borrowed note): `harmony.pcset`; `[Fm C]` (the two halves of bar 4 the wrong way round): `harmony.pcset` on both halves; the first C changed, or a note of the tune: `code.edit-outside`; the unchanged starter: `code.unchanged`",
+        "investigate: D7 taken for a borrowed chord, or 3 chords counted (D7 is not from C minor): `investigate.wrong`",
+        "ear: the wrong bar, or ♭VI taken for iv (they share two notes): `id.wrong`",
+        "Make: the starter; new chords with a changed tune; chords from inside the key only: `rubric.unmet`",
+      ],
+      connects: {
+        back: "X1 took Aura Lee down with its plain chords, and U07.L03 taught why a chord fits a tune (chord notes on strong beats); U15.L02–L06 gave the secondary dominants and U16.L01–L04 the borrowed chords this lab chooses from. U15.L06 opened `fam.har.chromatic` with the applied dominants.",
+        forward:
+          'U17 changes the key itself. C7 "Chromatic Colour" asks for a secondary dominant and ♭VI–♭VII–I in one song, CF-A counts both as devices, and CF-T\'s standard is full of them. In the jazz track J5.L03 reharmonizes with substitute dominants.',
+      },
+      epr: {
+        enjoyment:
+          "A folk tune the learner knows by heart, played on a tenor sax over chords they chose themselves: the same eight bars now sound like a soul ballad, and it is the first arrangement on their shelf that began as someone else's song.",
+        pace: "A lab on one idea, new chords under an unchanged tune, using only chords the learner already owns; the one new thing is the tenor sax. The by-ear work is one modify step on the same tune and one set of the drill family U15.L06 opened, at its next level.",
+        return:
+          "The Coda says: you can now put new chords under a tune without changing it, and tell a borrowed chord from a secondary dominant by ear (milestone ms.18: you can use chords from outside the key). Next: Modulation, where the key itself moves.",
+      },
+      notes: [
+        "Evaluated: the verse in C is G3 C4 B3 C4 | D4 A3 D4 (held) | C4 B3 A3 B3 | C4 | G3 C4 B3 C4 | D4 D4 D4 (held) | C4 B3 A3 B3 | C4. Every long note belongs to the hook's chord under it: D and A to D7 (bar 2), the three Ds to D7 (bar 6), the held C to A♭ as its 3rd and to B♭ as its 9th (bar 4). The first C of bars 3 and 7 is a suspension over G7 for one beat, falling to B (U07.L05); the 1887 piano part has a cadential chord there and X1's plain setting has the same C over G.",
+        "Why this tune: its verse has long notes on 1 and 2, the degrees borrowed chords take best (1 fits iv and ♭VI, 2 fits ♭VII), and a bar on 2 6 2 that takes V7/V whole. A learner who chose Red River Valley in X1 knows Aura Lee from the song choice and the L5 gym; the starter gives the plain chords either way. Never use the 1956 adaptation's chorus or its chords (contracts §2.8); the lab stays on the verse.",
+        "The modify step has two marked regions, like U16.L04's: `G7` for the G between them earns `harmony.pcset` on bar 3 (probed), so the edit-outside test changes the first C or the tune. Its target is `<C Bb G [C Fm]>`: the phrase cadences V–I on the first half of its last bar and the sad IV follows as an afterthought that falls back into the loop's first chord (a plagal close after the cadence). `[Fm C]` would put F minor straight after G; the lesson does not teach that order.",
+        '`reharmonize`, `contains-rn.kind` and `contains-rn.in-order` are PLANNED: the Make fails check 2 until the grader lists the rule. `fam.har.chromatic` answers with `bar-buttons` ("in which bar does a chord step outside the key?") or a `choice` of the level\'s chords with the bar marked (packages/drills `harmony-chromatic`); a generator stimulus has no tests in the lesson.',
+        'The lead sheet (`ui.leadSheet`, melody `mel`, chords from the `chords` track) is the staff view of the investigate and Make steps, titled "Aura Lee"; song metadata comes from content/repertoire (G. R. Poulton, 1861; W. H. Hills, Students\' Songs, 1887). No lyrics are shown.',
+        "`snd.tenor` unlocks with this lesson (contracts §3.2) and is used from its first step; in U16.L01–L04 the lint refuses it (`code.locked-sound`).",
+        'Milestone ms.18 "You can now use chords from outside the key." is reached when this lesson is completed. E12b is introduced here and measured at U17.CP through `fam.har.chromatic`.',
+      ],
+    },
+  ],
+  capstones: [],
+};

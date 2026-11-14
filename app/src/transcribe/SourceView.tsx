@@ -6,7 +6,19 @@ import type { TranscriptionPlayer } from "@oak/audio";
 import type { WaveView } from "@oak/audio/waveview";
 import { clsx } from "clsx";
 import { type PointerEvent, useEffect, useRef, useState } from "react";
-import { type BarGrid, barLabelEvery, barLines, beatTicks, formatTime, type Loop, loopOf } from "./grid.ts";
+import {
+  type BarGrid,
+  barLabelEvery,
+  barLines,
+  beatTicks,
+  formatTime,
+  type GridFeel,
+  type GridTick,
+  gridTicks,
+  type Loop,
+  loopOf,
+} from "./grid.ts";
+import type { KeyRibbonSegment } from "./keyplan.ts";
 import type { TranscribeTransport, TransportState } from "./transport.ts";
 
 export interface Section {
@@ -43,6 +55,8 @@ export function Waveform({
   theme,
   unitsPerBar = 4,
   swing = false,
+  meter,
+  feel,
 }: {
   transport: TranscribeTransport;
   state: TransportState;
@@ -57,6 +71,12 @@ export function Waveform({
   unitsPerBar?: number;
   /** The recording swings: off-beat eighths are marked at two thirds of the beat (contracts §6.10). */
   swing?: boolean;
+  /**
+   * Wave 6: the meter and feel of the grid (`gridTicks`): triplets, and a compound meter's dotted-quarter beats in
+   * three. Given, they replace `unitsPerBar` and `swing`.
+   */
+  meter?: string | null;
+  feel?: GridFeel;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<WaveView | null>(null);
@@ -171,11 +191,16 @@ export function Waveform({
         );
       }
       // Beats (and the off-beat eighths, swung or straight) once there is room to see them.
-      const pxPerBeat = (pxPerSec * grid.barSec) / unitsPerBar;
-      if (pxPerBeat >= 18 && lines.length * unitsPerBar <= 1600) {
-        const ticks = beatTicks(unitsPerBar, swing).filter(
-          (t) => t.at > 0 && (t.kind === "beat" || pxPerBeat >= 36),
-        );
+      const all: readonly Pick<GridTick, "at" | "kind">[] =
+        meter !== undefined
+          ? gridTicks(meter, feel ?? (swing ? "swing" : "straight"))
+          : beatTicks(unitsPerBar, swing);
+      const beats = all.filter((t) => t.kind === "beat").length || unitsPerBar;
+      const marked =
+        meter !== undefined ? feel === "swing" || feel === "triplet" || all.length > beats * 2 : swing;
+      const pxPerBeat = (pxPerSec * grid.barSec) / beats;
+      if (pxPerBeat >= 18 && lines.length * beats <= 1600) {
+        const ticks = all.filter((t) => t.at > 0 && (t.kind === "beat" || pxPerBeat >= 36));
         for (const l of lines)
           for (const t of ticks) {
             const at = l.t + t.at * grid.barSec;
@@ -186,7 +211,7 @@ export function Waveform({
                 start: at,
                 drag: false,
                 resize: false,
-                color: withAlpha(color, t.kind === "beat" ? 0.14 : swing ? 0.12 : 0.07),
+                color: withAlpha(color, t.kind === "beat" ? 0.14 : marked ? 0.12 : 0.07),
               }),
             );
           }
@@ -195,7 +220,7 @@ export function Waveform({
     return () => {
       for (const r of made) r.remove();
     };
-  }, [view, grid?.barSec, grid?.downbeatS, buffer, zoom, unitsPerBar, swing]);
+  }, [view, grid?.barSec, grid?.downbeatS, buffer, zoom, unitsPerBar, swing, meter, feel]);
 
   return (
     <div className="relative">
@@ -233,6 +258,11 @@ export function BarTimeline({
   unitsPerBar = 4,
   current = null,
   barMarks,
+  meter,
+  feel,
+  keys = null,
+  barButtons = true,
+  height = 112,
 }: {
   transport: TranscribeTransport;
   state: TransportState;
@@ -247,6 +277,21 @@ export function BarTimeline({
   current?: { fromBar: number; bars: number } | null;
   /** The last check, per cycle: the bars it named and the ones it found right. */
   barMarks?: ReadonlyMap<number, "ok" | "issue">;
+  /**
+   * Wave 6: the meter and feel of the grid (`gridTicks`): triplets drawn three to the beat, a compound meter's
+   * dotted-quarter beats in three. Given, they replace `unitsPerBar` and `swing` for the ticks.
+   */
+  meter?: string | null;
+  feel?: GridFeel;
+  /** Wave 6: the source's key plan as a ribbon over the bars (keyplan.ts `keyRibbon`); drawn when it changes key. */
+  keys?: readonly KeyRibbonSegment[] | null;
+  /**
+   * The row of "loop this bar" buttons under the bars. Off for a whole tune (a standard's 32 bars), where the form
+   * strip loops sections and the keys loop bars (L, Alt+←/→); a drag across the bars still sets any loop.
+   */
+  barButtons?: boolean;
+  /** Pixels (default 112). */
+  height?: number;
 }) {
   const barSec = state.durationS / Math.max(1, bars);
   const drag = useRef<number | null>(null);
@@ -267,8 +312,24 @@ export function BarTimeline({
   // Many bars: the cells and the loop buttons carry the bar number alone (the words would wrap).
   const dense = bars > 8;
   const short = (b: number) => (pickup ? (b === 0 ? "pickup" : String(b)) : String(b + 1));
-  const ticks = beatTicks(unitsPerBar, swing).filter((t) => swing || t.kind === "beat");
-  const hasMarks = marks.length > 0 || swing;
+  const theFeel: GridFeel = feel ?? (swing ? "swing" : "straight");
+  const allTicks: readonly Pick<GridTick, "at" | "kind">[] =
+    meter !== undefined ? gridTicks(meter, theFeel) : beatTicks(unitsPerBar, swing);
+  const beatCount = allTicks.filter((t) => t.kind === "beat").length;
+  // The divisions are drawn when they are the point: a swung or triplet feel, or a compound meter's three.
+  const divided = theFeel !== "straight" || allTicks.length > beatCount * 2;
+  // Many bars (a whole tune): the beats alone, so the bars stay readable; the feel is still named beside them.
+  const ticks = allTicks.filter((t) => (divided && bars <= 16) || t.kind === "beat");
+  const compound = allTicks.length > beatCount * 2 && theFeel !== "triplet";
+  const feelLabel = compound
+    ? `${meter} · ${beatCount} beats, each in three`
+    : theFeel === "swing"
+      ? "Swing 8ths"
+      : theFeel === "triplet"
+        ? "Triplets"
+        : null;
+  const hasMarks = marks.length > 0 || feelLabel !== null;
+  const ribbon = keys && keys.length > 1 ? keys : null;
   return (
     <div>
       {hasMarks ? (
@@ -288,18 +349,55 @@ export function BarTimeline({
               {m.text}
             </span>
           ))}
-          {swing ? (
+          {feelLabel ? (
             <span
               className="absolute top-0 right-0 bg-surface pl-2 leading-5 text-text-2"
               data-testid="swing-label"
             >
-              Swing 8ths
+              {feelLabel}
             </span>
           ) : null}
         </div>
       ) : null}
+      {ribbon ? (
+        <div
+          className="relative mb-1 h-6 text-sm"
+          data-testid="key-ribbon"
+          role="img"
+          aria-label={`The key: ${ribbon
+            .map((k, i) =>
+              i === 0
+                ? k.text
+                : `${k.text} from ${k.fromBar === 0 ? "the pickup" : `bar ${k.fromBar}`} (${k.change})`,
+            )
+            .join(
+              ", then ",
+            )}${ribbon[0]?.sounding ? `. Transposed, it sounds in ${ribbon.map((k) => k.sounding).join(", then ")}` : ""}`}
+        >
+          {ribbon.map((k, i) => (
+            <span
+              key={k.fromCycle}
+              className={clsx(
+                "absolute top-0 flex h-6 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-control px-1.5 leading-6",
+                i % 2 === 0 ? "bg-lane-in text-text" : "bg-accent/15 text-text",
+                i > 0 && "border-l-2 border-accent",
+              )}
+              style={{
+                left: `${(k.fromCycle / Math.max(1, bars)) * 100}%`,
+                width: `${(k.cycles / Math.max(1, bars)) * 100}%`,
+              }}
+              data-testid="key-span"
+            >
+              <span className="font-medium">{k.text}</span>
+              {k.change ? <span className="text-text-2">{k.change}</span> : null}
+              {k.sounding ? <span className="text-text-3">sounds in {k.sounding}</span> : null}
+            </span>
+          ))}
+        </div>
+      ) : null}
       <div
-        className="relative flex h-[112px] touch-none select-none overflow-hidden rounded-control border border-border bg-surface-2"
+        className="relative flex touch-none select-none overflow-hidden rounded-control border border-border bg-surface-2"
+        style={{ height }}
         data-testid="bar-timeline"
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId);
@@ -393,7 +491,12 @@ export function BarTimeline({
             .join(", ") || "Every checked bar is right"}
         </p>
       ) : null}
-      <fieldset className="m-0 mt-1 flex min-w-0 flex-wrap items-center gap-1 border-0 p-0">
+      <fieldset
+        className={clsx(
+          "m-0 mt-1 min-w-0 flex-wrap items-center gap-1 border-0 p-0",
+          barButtons ? "flex" : "hidden",
+        )}
+      >
         <legend className={dense ? "float-left mr-1 text-sm text-text-3" : "sr-only"}>Loop a bar</legend>
         {Array.from({ length: bars }, (_, b) => (
           <button

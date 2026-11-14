@@ -10,6 +10,10 @@
       body { margin: 0; padding: 24px; background: var(--paper); color: var(--ink); font-family: system-ui, sans-serif; }
       .staff { max-width: 900px; margin: 0 0 24px; }
       .staff .oak-ann { fill: var(--accent); }
+      :root { --guide-third: #b0452f; --guide-seventh: #2f6fb0; }
+      :root[data-theme="bark"] { --guide-third: #f0907a; --guide-seventh: #8cc0f0; }
+      .staff .oak-guide-third { fill: var(--guide-third); stroke: var(--guide-third); }
+      .staff .oak-guide-seventh { fill: var(--guide-seventh); stroke: var(--guide-seventh); }
       .oak-chart-bar.oak-active { background: color-mix(in srgb, var(--accent) 18%, transparent); }
       .oak-chart-chord, .oak-chart-title { color: var(--ink); }
       .oak-chart-swing, .oak-section { color: var(--accent); }

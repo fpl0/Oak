@@ -14,8 +14,9 @@ import {
   Wrench,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
+import { useContent } from "../../lib/content.ts";
 import { NAV_ITEMS, type NavId } from "../../lib/nav.ts";
-import { useDue } from "../../lib/queries.ts";
+import { useCourseProgress, useDue } from "../../lib/queries.ts";
 import { useShell } from "../../lib/shell-store.ts";
 import { useUnlockedSet } from "../../lib/unlocked.ts";
 import { useTutorBridge } from "../../tutor/use-tutor-bridge.ts";
@@ -26,6 +27,7 @@ import { StepRail } from "../kit/basics.tsx";
 import { Toaster } from "../kit/Toast.tsx";
 import { Tooltip } from "../kit/Tooltip.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
+import { oakNavLabel, oakTracksNote, shellTracks } from "./course-state.ts";
 import { useFocusHeader } from "./focus-header.ts";
 import { GlobalKeys } from "./GlobalKeys.tsx";
 import { navItemState } from "./nav-state.ts";
@@ -61,11 +63,22 @@ function PracticeBadge() {
 function NavRail({ path }: { path: string }) {
   const due = useDue();
   const { unlocked, ready } = useUnlockedSet();
+  // Wave 6: once an advanced track is open the Oak's item says so, and that its lessons are still being written
+  // (never a lock, never a badge: a track is optional). Nothing is said before the course progress has loaded.
+  const progress = useCourseProgress();
+  const content = useContent();
+  const tracks = shellTracks(progress.data, content.data?.syllabus ?? null);
+  const tracksNote = oakTracksNote(tracks);
   const main = NAV_ITEMS.filter((i) => i.id !== "settings");
   const settings = NAV_ITEMS.find((i) => i.id === "settings");
   const item = (n: (typeof NAV_ITEMS)[number]) => {
     const active = n.match(path);
-    const base = n.id === "practice" && due.data?.items.length ? `${n.label} · ${due.data.label}` : n.label;
+    const base =
+      n.id === "practice" && due.data?.items.length
+        ? `${n.label} · ${due.data.label}`
+        : n.id === "oak"
+          ? oakNavLabel(n.label, tracks)
+          : n.label;
     // Transcribe and Album say when they open, and stay reachable (never gated, contracts §7.6).
     const { pending, label } = navItemState(n.id, base, unlocked, ready);
     return (
@@ -77,6 +90,7 @@ function NavRail({ path }: { path: string }) {
             aria-current={active ? "page" : undefined}
             data-nav={n.id}
             data-nav-pending={pending || undefined}
+            data-nav-tracks={n.id === "oak" && tracksNote ? "open" : undefined}
             className={clsx(
               "relative flex size-10 items-center justify-center rounded-control transition-colors",
               active

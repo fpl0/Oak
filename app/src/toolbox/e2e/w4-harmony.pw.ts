@@ -1,7 +1,7 @@
 // Wave 4 against the real server (the workbench owner's second stack 5236/8836, after lenses.pw.ts in the same
 // throwaway data dir). The Wave 4 dev seeds are not built yet (wave4.md §6), so the unlocks a lesson would grant are
 // written straight into this stack's database, as the Wave 3 lens spec does. In the Studio: a sketch with chords
-// shows no chord labels before U05.L04 (only a hint of when they arrive); then the chord band names the chords, the
+// shows no chord labels before U05.L09 (contracts 1.6, d17: chord names moved out of U05.L04; only a hint of when they arrive); then the chord band names the chords, the
 // numerals follow U06.L02, the function, chord-tone, range and lead-sheet switches follow their lessons, every one by
 // keyboard, and the staff carries the symbols and numerals. The Toolbox's U05–U07 feature pages show them at work,
 // and the voicing() unlock moment puts the learner's U05.L07 hand voicing beside Strudel's. Screenshots in both
@@ -140,7 +140,7 @@ function watchErrors(page: Page): string[] {
 
 let songId = "";
 
-test("Studio: no chord labels before U05.L04, only a hint; then symbols, numerals and the harmony panels", async ({
+test("Studio: no chord labels before U05.L09, only a hint; then symbols, numerals and the harmony panels", async ({
   page,
 }) => {
   const errors = watchErrors(page);
@@ -152,13 +152,13 @@ test("Studio: no chord labels before U05.L04, only a hint; then symbols, numeral
   await expect(wb).toHaveAttribute("data-chords", "");
   await expect(page.getByTestId("lens-chordSymbols")).toHaveCount(0);
   await expect(page.getByTestId("harmony-hints")).toContainText(
-    "Chord names on the roll and the staff: from U05.L04",
+    "Chord names on the roll and the staff: from U05.L09",
   );
   await wb.focus();
   await page.keyboard.press("Shift+H");
   await expect(page.getByTestId("chord-band")).toHaveCount(0);
 
-  // U05.L04: chord symbols (the lens is on by default once unlocked).
+  // U05.L04 and U05.L09: arpeggios, then chord symbols (the lens is on by default once unlocked).
   await grant(page, U05_L04);
   await open(page, songId);
   expect(await regions(page)).toEqual([

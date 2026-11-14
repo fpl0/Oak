@@ -22,11 +22,35 @@
       "kind": "band"
     },
     {
+      "id": "band.dorian-vamp",
+      "kind": "band"
+    },
+    {
+      "id": "band.lydian-vamp",
+      "kind": "band"
+    },
+    {
+      "id": "band.mixolydian-vamp",
+      "kind": "band"
+    },
+    {
       "id": "band.phrase-8bar",
       "kind": "band"
     },
     {
+      "id": "band.phrygian-vamp",
+      "kind": "band"
+    },
+    {
       "id": "band.sections",
+      "kind": "band"
+    },
+    {
+      "id": "band.slow-128",
+      "kind": "band"
+    },
+    {
+      "id": "band.soul-68",
       "kind": "band"
     },
     {
@@ -35,6 +59,10 @@
     },
     {
       "id": "band.two-chord-vamp",
+      "kind": "band"
+    },
+    {
+      "id": "band.two-five-one",
       "kind": "band"
     },
     {
@@ -58,7 +86,15 @@
       "kind": "canDo"
     },
     {
+      "id": "cd.code.chromatic-degrees",
+      "kind": "canDo"
+    },
+    {
       "id": "cd.code.comping",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.code.compound-meter",
       "kind": "canDo"
     },
     {
@@ -78,6 +114,10 @@
       "kind": "canDo"
     },
     {
+      "id": "cd.code.ghost-notes",
+      "kind": "canDo"
+    },
+    {
       "id": "cd.code.groove-lock",
       "kind": "canDo"
     },
@@ -86,7 +126,15 @@
       "kind": "canDo"
     },
     {
+      "id": "cd.code.key-lift",
+      "kind": "canDo"
+    },
+    {
       "id": "cd.code.layers",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.code.left-hand-voicings",
       "kind": "canDo"
     },
     {
@@ -98,7 +146,15 @@
       "kind": "canDo"
     },
     {
+      "id": "cd.code.pushes",
+      "kind": "canDo"
+    },
+    {
       "id": "cd.code.root-bass",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.code.seventh-chords",
       "kind": "canDo"
     },
     {
@@ -126,6 +182,10 @@
       "kind": "canDo"
     },
     {
+      "id": "cd.code.triplets",
+      "kind": "canDo"
+    },
+    {
       "id": "cd.compose.aeolian",
       "kind": "canDo"
     },
@@ -143,6 +203,10 @@
     },
     {
       "id": "cd.compose.blue-notes",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.borrowed-iv",
       "kind": "canDo"
     },
     {
@@ -170,6 +234,14 @@
       "kind": "canDo"
     },
     {
+      "id": "cd.compose.dominant-chain",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.dorian",
+      "kind": "canDo"
+    },
+    {
       "id": "cd.compose.drum-intro",
       "kind": "canDo"
     },
@@ -183,6 +255,10 @@
     },
     {
       "id": "cd.compose.first-loop",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.flat-six-seven",
       "kind": "canDo"
     },
     {
@@ -214,11 +290,19 @@
       "kind": "canDo"
     },
     {
+      "id": "cd.compose.lydian",
+      "kind": "canDo"
+    },
+    {
       "id": "cd.compose.melody-on-1",
       "kind": "canDo"
     },
     {
       "id": "cd.compose.minor-ballad",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.mixolydian",
       "kind": "canDo"
     },
     {
@@ -242,11 +326,23 @@
       "kind": "canDo"
     },
     {
+      "id": "cd.compose.phrygian",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.picardy",
+      "kind": "canDo"
+    },
+    {
       "id": "cd.compose.question-answer",
       "kind": "canDo"
     },
     {
       "id": "cd.compose.reharm",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.compose.reharmonize",
       "kind": "canDo"
     },
     {
@@ -298,6 +394,10 @@
       "kind": "canDo"
     },
     {
+      "id": "cd.hear.chromatic-degrees",
+      "kind": "canDo"
+    },
+    {
       "id": "cd.hear.consonance",
       "kind": "canDo"
     },
@@ -311,6 +411,10 @@
     },
     {
       "id": "cd.hear.function",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.hear.guide-tones",
       "kind": "canDo"
     },
     {
@@ -338,11 +442,27 @@
       "kind": "canDo"
     },
     {
+      "id": "cd.hear.mode-colour",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.hear.modes",
+      "kind": "canDo"
+    },
+    {
       "id": "cd.hear.pulse",
       "kind": "canDo"
     },
     {
+      "id": "cd.hear.rhythm-dictation-2",
+      "kind": "canDo"
+    },
+    {
       "id": "cd.hear.schemas",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.hear.secondary-dominants",
       "kind": "canDo"
     },
     {
@@ -378,11 +498,19 @@
       "kind": "canDo"
     },
     {
+      "id": "cd.read.diatonic-sevenths",
+      "kind": "canDo"
+    },
+    {
       "id": "cd.read.dominant-seventh",
       "kind": "canDo"
     },
     {
       "id": "cd.read.half-whole",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.read.interval-inversion",
       "kind": "canDo"
     },
     {
@@ -431,6 +559,10 @@
     },
     {
       "id": "cd.read.sixteenths",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.read.ties-dots",
       "kind": "canDo"
     },
     {
@@ -490,6 +622,10 @@
       "kind": "canDo"
     },
     {
+      "id": "cd.transcribe.key-change",
+      "kind": "canDo"
+    },
+    {
       "id": "cd.transcribe.melody",
       "kind": "canDo"
     },
@@ -502,7 +638,15 @@
       "kind": "canDo"
     },
     {
+      "id": "cd.write.applied-chords",
+      "kind": "canDo"
+    },
+    {
       "id": "cd.write.bass-line",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.write.borrowed-chords",
       "kind": "canDo"
     },
     {
@@ -518,7 +662,23 @@
       "kind": "canDo"
     },
     {
+      "id": "cd.write.pivot-modulation",
+      "kind": "canDo"
+    },
+    {
       "id": "cd.write.scale",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.write.secondary-dominant",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.write.seventh-family",
+      "kind": "canDo"
+    },
+    {
+      "id": "cd.write.tonicization",
       "kind": "canDo"
     },
     {
@@ -672,6 +832,10 @@
     },
     {
       "id": "C3.S3",
+      "kind": "capstoneSession"
+    },
+    {
+      "id": "C3.S4",
       "kind": "capstoneSession"
     },
     {
@@ -915,7 +1079,39 @@
       "kind": "chordFamily"
     },
     {
+      "id": "deck.chd.dom7",
+      "kind": "deck"
+    },
+    {
       "id": "deck.chd.symbols",
+      "kind": "deck"
+    },
+    {
+      "id": "deck.chd.triads",
+      "kind": "deck"
+    },
+    {
+      "id": "deck.frm.twelve-bar",
+      "kind": "deck"
+    },
+    {
+      "id": "deck.har.cadence",
+      "kind": "deck"
+    },
+    {
+      "id": "deck.har.minor",
+      "kind": "deck"
+    },
+    {
+      "id": "deck.har.rn",
+      "kind": "deck"
+    },
+    {
+      "id": "deck.int.names",
+      "kind": "deck"
+    },
+    {
+      "id": "deck.key.minor",
       "kind": "deck"
     },
     {
@@ -924,6 +1120,10 @@
     },
     {
       "id": "deck.pit.staff-names",
+      "kind": "deck"
+    },
+    {
+      "id": "deck.scl.degrees",
       "kind": "deck"
     },
     {
@@ -1312,7 +1512,11 @@
     },
     {
       "id": "U05.L04@by-name",
-      "kind": "example"
+      "kind": "example",
+      "retiredAt": "contracts-1.6",
+      "supersededBy": [
+        "U05.L09@by-name"
+      ]
     },
     {
       "id": "U05.L04@hook",
@@ -1368,6 +1572,14 @@
     },
     {
       "id": "U05.L08@one-c",
+      "kind": "example"
+    },
+    {
+      "id": "U05.L09@by-name",
+      "kind": "example"
+    },
+    {
+      "id": "U05.L09@hook",
       "kind": "example"
     },
     {
@@ -1860,6 +2072,294 @@
     },
     {
       "id": "U11.L08@riff-stays",
+      "kind": "example"
+    },
+    {
+      "id": "U12.L01@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U12.L01@two-kinds",
+      "kind": "example"
+    },
+    {
+      "id": "U12.L02@half-step",
+      "kind": "example"
+    },
+    {
+      "id": "U12.L02@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U12.L03@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U12.L03@two-stacks",
+      "kind": "example"
+    },
+    {
+      "id": "U12.L04@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U12.L04@seven-stacks",
+      "kind": "example"
+    },
+    {
+      "id": "U12.L04@the-page",
+      "kind": "example"
+    },
+    {
+      "id": "U12.L05@first-four",
+      "kind": "example"
+    },
+    {
+      "id": "U12.L05@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U12.L06@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U12.L06@stack-then-left",
+      "kind": "example"
+    },
+    {
+      "id": "U13.L01@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U13.L01@the-push",
+      "kind": "example"
+    },
+    {
+      "id": "U13.L02@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U13.L02@the-groove",
+      "kind": "example"
+    },
+    {
+      "id": "U13.L03@bars-12-13",
+      "kind": "example"
+    },
+    {
+      "id": "U13.L03@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U13.L03@the-ending",
+      "kind": "example"
+    },
+    {
+      "id": "U13.L03@the-lean",
+      "kind": "example"
+    },
+    {
+      "id": "U13.L03@the-riff",
+      "kind": "example"
+    },
+    {
+      "id": "U13.L04@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U13.L04@two-threes",
+      "kind": "example"
+    },
+    {
+      "id": "U13.L05@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U13.L05@threes",
+      "kind": "example"
+    },
+    {
+      "id": "U13.L06@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U14.L01@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U14.L01@two-scales",
+      "kind": "example"
+    },
+    {
+      "id": "U14.L02@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U14.L02@stacks",
+      "kind": "example"
+    },
+    {
+      "id": "U14.L03@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U14.L03@stack-on-four",
+      "kind": "example"
+    },
+    {
+      "id": "U14.L03@the-minor-climb",
+      "kind": "example"
+    },
+    {
+      "id": "U14.L03@the-shanty",
+      "kind": "example"
+    },
+    {
+      "id": "U14.L04@degree-two",
+      "kind": "example"
+    },
+    {
+      "id": "U14.L04@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U14.L05@degree-two",
+      "kind": "example"
+    },
+    {
+      "id": "U14.L05@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U14.L06@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U14.L06@ladder",
+      "kind": "example"
+    },
+    {
+      "id": "U14.L06@wide-vamp",
+      "kind": "example"
+    },
+    {
+      "id": "U15.L01@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U15.L01@hook-labelled",
+      "kind": "example"
+    },
+    {
+      "id": "U15.L02@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U15.L02@two-pairs",
+      "kind": "example"
+    },
+    {
+      "id": "U15.L03@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U15.L03@hook-chords",
+      "kind": "example"
+    },
+    {
+      "id": "U15.L03@the-page",
+      "kind": "example"
+    },
+    {
+      "id": "U15.L04@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U15.L04@three-stacks",
+      "kind": "example"
+    },
+    {
+      "id": "U15.L05@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U15.L05@thread",
+      "kind": "example"
+    },
+    {
+      "id": "U15.L06@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U16.L01@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U16.L01@two-fours",
+      "kind": "example"
+    },
+    {
+      "id": "U16.L02@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U16.L02@the-climb",
+      "kind": "example"
+    },
+    {
+      "id": "U16.L03@four-chords",
+      "kind": "example"
+    },
+    {
+      "id": "U16.L03@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U16.L03@the-page",
+      "kind": "example"
+    },
+    {
+      "id": "U16.L04@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U16.L04@two-pairs",
+      "kind": "example"
+    },
+    {
+      "id": "U16.L05@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U16.L05@the-hook-on-the-page",
+      "kind": "example"
+    },
+    {
+      "id": "U17.L01@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U17.L01@the-door",
+      "kind": "example"
+    },
+    {
+      "id": "U17.L01@the-page",
+      "kind": "example"
+    },
+    {
+      "id": "U17.L02@chorus-lift",
+      "kind": "example"
+    },
+    {
+      "id": "U17.L02@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U17.L03@hook",
+      "kind": "example"
+    },
+    {
+      "id": "U17.L04@hook",
       "kind": "example"
     },
     {
@@ -3024,7 +3524,11 @@
     },
     {
       "id": "U05.L04/name-the-stack",
-      "kind": "exercise"
+      "kind": "exercise",
+      "retiredAt": "contracts-1.6",
+      "supersededBy": [
+        "U05.L09/name-the-stack"
+      ]
     },
     {
       "id": "U05.L04/one-note-at-a-time",
@@ -3144,6 +3648,30 @@
     },
     {
       "id": "U05.L08/yours-or-strudels",
+      "kind": "exercise"
+    },
+    {
+      "id": "U05.L09/a-minor",
+      "kind": "exercise"
+    },
+    {
+      "id": "U05.L09/four-chords-four-names",
+      "kind": "exercise"
+    },
+    {
+      "id": "U05.L09/name-the-stack",
+      "kind": "exercise"
+    },
+    {
+      "id": "U05.L09/play-d-minor",
+      "kind": "exercise"
+    },
+    {
+      "id": "U05.L09/play-the-chart",
+      "kind": "exercise"
+    },
+    {
+      "id": "U05.L09/your-own-chart",
       "kind": "exercise"
     },
     {
@@ -4643,6 +5171,1334 @@
       "kind": "exercise"
     },
     {
+      "id": "U12.L01/build-fmaj7",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L01/chord-on-a",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L01/chord-on-b",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L01/chord-on-e-flat",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L01/chord-on-g",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L01/major-seven-or-minor-seven",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L01/name-the-sevenths",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L01/seventh-colour-by-name",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L01/two-triads-two-sevenths",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L01/what-the-caret-adds",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L01/your-soul-loop",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L02/a-half-step-apart",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L02/do-te-do",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L02/do-ti-do",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L02/one-note-from-outside",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L02/rest-and-lean",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L02/rest-or-lean",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L02/rest-then-lean",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L02/seventh-1",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L02/seventh-2",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L02/seventh-3",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L02/seventh-4",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L02/seventh-5",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L02/seventh-6",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L02/ti-then-te",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L02/which-note-moves",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L03/build-bm7-flat-5",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L03/calm-or-hollow",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L03/chord-on-e",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L03/chord-on-e-again",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L03/chord-on-f-sharp",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L03/one-more-half-step",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L03/seventh-4",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L03/seventh-5",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L03/the-dark-turn",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L03/the-keys-own-chord",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L03/what-b5-lowers",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L03/your-dark-turn",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L04/number-the-soul-loop",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L04/play-from-the-page",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L04/seven-degrees-seven-sevenths",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L04/sevenths-by-ear",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L04/the-stack-on-five",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L04/the-staircase",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L04/your-staircase",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L05/falling-fifths",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L05/finish-the-thread",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L05/follow-the-thread",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L05/number-it-in-minor",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L05/sing-the-thread",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L05/the-note-that-stays",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L05/your-line-through-the-cycle",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L06/a-second-an-octave-up",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L06/all-five-by-ear",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L06/c-up-to-high-e",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L06/e-up-to-c",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L06/g-up-to-c",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L06/seventh-1",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L06/seventh-2",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L06/seventh-3",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L06/seventh-4",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L06/seventh-5",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L06/the-missing-note",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L06/turn-it-over-stretch-it",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L06/two-pianists",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L06/voice-it-for-the-left-hand",
+      "kind": "exercise"
+    },
+    {
+      "id": "U12.L06/your-trio",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L01/after-the-beat",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L01/groove-four",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L01/groove-one",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L01/groove-three",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L01/groove-two",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L01/half-the-push",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L01/on-the-beat-or-pushed",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L01/on-the-beat-then-early",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L01/push-the-rhodes",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L01/tap-the-early-chord",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L01/where-the-chord-lands",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L01/your-pushed-groove",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L02/find-the-sixteenth-push",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L02/ghost-the-snare",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L02/stiff-then-breathing",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L02/tap-with-the-kick",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L02/two-numbers-eight-hits",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L02/where-the-whispers-are",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L02/your-funk-groove",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L03/across-the-bar-line",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L03/echo-the-ending",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L03/flat-then-as-written",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L03/half-as-long-again",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L03/play-from-the-page",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L03/shares-of-the-bar",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L03/write-the-lean",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L03/your-leaning-tune",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L04/a-slow-sway",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L04/from-six-to-twelve",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L04/give-it-a-second-beat",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L04/six-hats-how-many-beats",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L04/tap-the-sway",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L04/two-threes-or-three-twos",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L04/which-meter",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L04/your-six-eight-ballad",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L05/count-the-hats",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L05/echo-the-threes",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L05/read-the-triplets",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L05/square-then-rolling",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L05/the-piano-in-threes",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L05/three-where-two-go",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L05/two-or-three",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L05/your-slow-dance",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L06/call-and-answer",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L06/echo-the-hits",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L06/groove-one",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L06/groove-three",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L06/groove-two",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L06/how-the-beat-divides",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L06/one-rhythm-three-feels",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L06/take-the-kick-down",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L06/take-the-shuffle-down",
+      "kind": "exercise"
+    },
+    {
+      "id": "U13.L06/twelve-to-the-bar",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L01/build-g-mixolydian",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L01/find-the-note",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L01/how-many-notes-move",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L01/major-or-mixolydian",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L01/one-riff-two-colours",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L01/one-word-twice",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L01/phrase-in-a",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L01/phrase-in-c",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L01/phrase-in-d",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L01/phrase-in-e",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L01/your-mixolydian-riff",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L02/name-the-new-chord",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L02/number-the-loop",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L02/old-joe-clark",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L02/one-chord-changed",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L02/stack-on-the-seventh",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L02/swap-the-chord",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L02/your-three-chord-rock",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L03/make-it-dorian",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L03/minor-with-air",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L03/play-from-the-page",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L03/sol-la-te-do",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L03/the-chord-on-four",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L03/which-note-moves",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L03/your-dorian-groove",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L04/build-f-lydian",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L04/make-it-float",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L04/phrase-in-a",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L04/phrase-in-c",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L04/phrase-in-d",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L04/phrase-in-g",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L04/the-chord-on-2",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L04/the-music-lifts",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L04/which-colour",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L04/which-note-moves",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L04/your-floating-piece",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L05/all-six-colours",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L05/give-it-the-edge",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L05/number-the-loop",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L05/the-chord-on-2",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L05/the-riff-turns-dark",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L05/which-note-moves",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L05/your-phrygian-riff",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L06/colour-1",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L06/colour-2",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L06/colour-3",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L06/colour-4",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L06/colour-5",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L06/colour-6",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L06/home-of-loop-1",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L06/home-of-loop-2",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L06/left-and-right",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L06/name-the-colour",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L06/one-note-down",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L06/read-the-ladder",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L06/sing-home",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L06/six-colours-one-home",
+      "kind": "exercise"
+    },
+    {
+      "id": "U14.L06/your-modal-vamp",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L01/bend-a-tune",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L01/bend-the-tune",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L01/bent-or-not",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L01/bent-or-not-1",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L01/bent-or-not-2",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L01/bent-or-not-3",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L01/bent-or-not-4",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L01/bent-or-not-5",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L01/bent-or-not-6",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L01/fi-and-te",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L01/sing-the-two-leans",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L01/sol-something-sol",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L01/where-each-one-leans",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L02/find-the-lean",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L02/lean-in-c",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L02/lean-in-f",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L02/lean-into-c",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L02/lean-into-the-last-bar",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L02/name-it-by-where-it-goes",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L02/one-note-raised",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L02/sing-the-note-that-moves",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L02/the-same-move-a-fifth-higher",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L02/which-note-moved",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L03/aim-at-a-minor",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L03/aimed-at-ii",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L03/aimed-at-iv",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L03/aimed-at-vi",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L03/aimed-at-which-chord",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L03/play-from-the-page",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L03/three-doors",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L03/three-small-arrivals",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L03/what-each-visitor-brings",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L03/where-e7-lands",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L04/lead-into-g",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L04/nearly-the-same-chord",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L04/push-1",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L04/push-2",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L04/push-3",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L04/take-the-root-away",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L04/the-bass-climbs",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L04/two-more-pushes",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L04/which-push",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L04/your-own-walk-up",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L05/name-every-link",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L05/sweet-georgias-chain",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L05/the-bass-of-a-chain",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L05/the-next-link",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L05/tumbling-home",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L05/two-notes-slide-down",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L05/your-own-1920s-turn",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L06/bass-then-numerals",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L06/find-it-1",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L06/find-it-2",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L06/find-it-3",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L06/find-it-4",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L06/find-it-5",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L06/find-the-bar",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L06/name-the-visitor",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L06/open-two-doors",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L06/sing-them-home",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L06/two-bars-lean-out",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L06/visitor-in-b-flat",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L06/visitor-in-f",
+      "kind": "exercise"
+    },
+    {
+      "id": "U15.L06/visitor-in-g",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L01/f-becomes-f-minor",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L01/la-le-sol",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L01/number-the-turn",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L01/one-chord-turns",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L01/turn-the-second-one",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L01/whose-chord-is-it",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L01/your-sad-turn",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L02/build-flat-six-of-d",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L02/climb-home-in-g",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L02/f-minor-to-a-flat",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L02/le-te-do",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L02/three-steps-up",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L02/two-ways-home",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L02/your-encore",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L03/close-in-c",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L03/close-in-d",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L03/close-in-f",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L03/close-in-g",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L03/number-the-riff",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L03/play-from-the-page",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L03/step-the-root-down",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L03/three-chords-climbing",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L03/which-close",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L03/whose-chords",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L03/your-riff",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L04/a-minor-becomes-a",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L04/brighten-two-chords",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L04/end-in-sunlight",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L04/me-then-mi",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L04/number-it-in-minor",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L04/one-note-up-twice",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L04/sol-me-do",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L04/sol-mi-do",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L04/the-last-chord-opens",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L05/borrow-by-ear",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L05/find-the-visitor",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L05/same-tune-new-light",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L05/three-ds",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L05/two-kinds-of-visitor",
+      "kind": "exercise"
+    },
+    {
+      "id": "U16.L05/your-reharmonization",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L01/a-verse-that-leaves-home",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L01/play-from-the-page",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L01/same-chord-new-home",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L01/the-door",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L01/the-new-note",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L01/two-names",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L01/write-the-door",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L02/after-arrange",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L02/half-step-or-whole-step",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L02/lift-the-tune",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L02/same-numbers-new-letters",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L02/the-last-chorus",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L02/two-keys-one-tune",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L02/your-last-chorus",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L03/a-bridge-somewhere-else",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L03/did-it-change-key",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L03/do-in-c",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L03/do-in-g",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L03/home-or-away",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L03/how-1",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L03/how-2",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L03/how-3",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L03/how-did-it-get-there",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L03/sing-home-twice",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L03/where-is-home-now",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L04/a-ballad-moves-up",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L04/a-chorus-twice",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L04/how-far-it-lifts",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L04/take-the-tune-down",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L04/the-bass-through-the-door",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L04/where-and-how-far",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L04/where-home-moves",
+      "kind": "exercise"
+    },
+    {
+      "id": "U17.L04/your-bass-both-keys",
+      "kind": "exercise"
+    },
+    {
+      "id": "fact.blues.bar-10",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.blues.bar-11",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.blues.bar-5",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.blues.bar-7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.blues.bar-9",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.blues.chords-in-C",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.blues.lines",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.blues.quick-change",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.blues.turnaround",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.cadence.dc",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.cadence.deceptive-chord",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.cadence.half-chord",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.cadence.hc",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.cadence.iac",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.cadence.pac",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.cadence.pc",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.cadence.plagal-chords",
+      "kind": "fact"
+    },
+    {
       "id": "fact.chord.Bb",
       "kind": "fact"
     },
@@ -4883,6 +6739,162 @@
       "kind": "fact"
     },
     {
+      "id": "fact.dom7.A7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.dom7.Bb7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.dom7.C7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.dom7.D7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.dom7.degrees",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.dom7.E7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.dom7.F7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.dom7.G7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.dom7.seventh",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.code-M2",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.code-m3",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.code-M3",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.code-P4",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.code-P5",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.code-P8",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.m2-semis",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.M2-semis",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.m3-semis",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.M3-semis",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.m6-semis",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.M6-semis",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.m7-semis",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.M7-semis",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.P4-semis",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.P5-semis",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.P8-semis",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.semis-1",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.semis-10",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.semis-11",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.semis-12",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.semis-2",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.semis-3",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.semis-4",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.semis-5",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.semis-6",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.semis-7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.semis-8",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.semis-9",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.int.TT-semis",
+      "kind": "fact"
+    },
+    {
       "id": "fact.keysig.A-major",
       "kind": "fact"
     },
@@ -5063,6 +7075,274 @@
       "kind": "fact"
     },
     {
+      "id": "fact.minor.A-III",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.A-iv",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.A-v",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.A-V",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.A-VI",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.A-VII",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.A-viio",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.aeolian-loop",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.andalusian",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.harmonic-raises",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.harmonic-v-quality",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.melodic-raises",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.parallel-flats",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.quality-1",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.quality-2",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.quality-3",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.quality-4",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.quality-5",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.quality-6",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.quality-7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.relative-home",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.relative-major-of-A",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.relative-major-of-D",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.relative-major-of-E",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.relative-major-of-G",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.relative-of-A",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.relative-of-Bb",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.relative-of-C",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.relative-of-D",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.relative-of-Eb",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.relative-of-F",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.minor.relative-of-G",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.rn.C-1",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.rn.C-2",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.rn.C-3",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.rn.C-4",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.rn.C-5",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.rn.C-6",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.rn.C-7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.rn.D-V",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.rn.D-vi",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.rn.F-ii",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.rn.F-IV",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.rn.G-ii",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.rn.G-vi",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.rn.quality-1",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.rn.quality-2",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.rn.quality-3",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.rn.quality-4",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.rn.quality-5",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.rn.quality-6",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.rn.quality-7",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.scale.A-blues",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.scale.A-minor-pentatonic",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.scale.blues-adds",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.scale.blues-degrees",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.scale.C-blues",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.scale.C-major-pentatonic",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.scale.C-minor-pentatonic",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.scale.G-major-pentatonic",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.scale.harmonic-minor-degrees",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.scale.major-pentatonic-degrees",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.scale.major-pentatonic-leaves",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.scale.melodic-minor-degrees",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.scale.minor-pentatonic-degrees",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.scale.natural-minor-degrees",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.scale.natural-minor-lowers",
+      "kind": "fact"
+    },
+    {
       "id": "fact.staff.bass.A2",
       "kind": "fact"
     },
@@ -5164,6 +7444,50 @@
     },
     {
       "id": "fact.staff.treble.G5",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.triad.A-maj",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.triad.A-min",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.triad.B-dim",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.triad.C-aug",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.triad.C-maj",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.triad.C-min",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.triad.D-maj",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.triad.D-min",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.triad.E-min",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.triad.F-maj",
+      "kind": "fact"
+    },
+    {
+      "id": "fact.triad.G-maj",
       "kind": "fact"
     },
     {
@@ -5871,6 +8195,10 @@
       "kind": "lesson"
     },
     {
+      "id": "U05.L09",
+      "kind": "lesson"
+    },
+    {
       "id": "U06.L01",
       "kind": "lesson"
     },
@@ -6252,6 +8580,30 @@
     },
     {
       "id": "ms.14",
+      "kind": "milestone"
+    },
+    {
+      "id": "ms.15",
+      "kind": "milestone"
+    },
+    {
+      "id": "ms.16",
+      "kind": "milestone"
+    },
+    {
+      "id": "ms.17",
+      "kind": "milestone"
+    },
+    {
+      "id": "ms.18",
+      "kind": "milestone"
+    },
+    {
+      "id": "ms.19",
+      "kind": "milestone"
+    },
+    {
+      "id": "ms.20",
       "kind": "milestone"
     },
     {
@@ -8401,11 +10753,19 @@
     },
     {
       "id": "U05.L04/S6",
-      "kind": "step"
+      "kind": "step",
+      "retiredAt": "contracts-1.6",
+      "supersededBy": [
+        "U05.L09/S4"
+      ]
     },
     {
       "id": "U05.L04/S7",
-      "kind": "step"
+      "kind": "step",
+      "retiredAt": "contracts-1.6",
+      "supersededBy": [
+        "U05.L04/S5"
+      ]
     },
     {
       "id": "U05.L05/S1",
@@ -8509,6 +10869,34 @@
     },
     {
       "id": "U05.L08/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U05.L09/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U05.L09/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U05.L09/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U05.L09/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U05.L09/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U05.L09/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U05.L09/S7",
       "kind": "step"
     },
     {
@@ -9860,6 +12248,934 @@
       "kind": "step"
     },
     {
+      "id": "U12.L01/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L01/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L01/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L01/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L01/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L01/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L01/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L02/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L02/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L02/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L02/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L02/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L02/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L02/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L03/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L03/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L03/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L03/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L03/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L03/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L03/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L04/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L04/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L04/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L04/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L04/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L04/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L04/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L05/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L05/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L05/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L05/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L05/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L05/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L05/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L06/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L06/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L06/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L06/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L06/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L06/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U12.L06/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L01/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L01/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L01/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L01/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L01/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L01/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L01/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L01/S8",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L02/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L02/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L02/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L02/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L02/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L02/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L02/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L03/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L03/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L03/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L03/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L03/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L03/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L03/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L03/S8",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L04/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L04/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L04/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L04/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L04/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L04/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L04/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L04/S8",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L05/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L05/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L05/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L05/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L05/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L05/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L05/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L05/S8",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L06/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L06/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L06/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L06/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L06/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L06/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U13.L06/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L01/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L01/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L01/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L01/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L01/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L01/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L01/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L02/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L02/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L02/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L02/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L02/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L02/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L02/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L03/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L03/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L03/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L03/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L03/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L03/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L03/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L04/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L04/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L04/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L04/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L04/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L04/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L04/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L05/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L05/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L05/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L05/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L05/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L05/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L05/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L06/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L06/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L06/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L06/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L06/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L06/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U14.L06/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L01/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L01/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L01/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L01/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L01/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L01/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L01/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L02/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L02/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L02/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L02/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L02/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L02/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L02/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L02/S8",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L03/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L03/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L03/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L03/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L03/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L03/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L03/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L04/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L04/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L04/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L04/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L04/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L04/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L04/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L05/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L05/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L05/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L05/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L05/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L05/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L05/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L06/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L06/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L06/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L06/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L06/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U15.L06/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L01/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L01/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L01/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L01/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L01/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L01/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L01/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L02/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L02/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L02/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L02/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L02/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L02/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L02/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L03/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L03/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L03/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L03/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L03/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L03/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L03/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L04/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L04/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L04/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L04/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L04/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L04/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L04/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L05/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L05/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L05/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L05/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L05/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U16.L05/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L01/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L01/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L01/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L01/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L01/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L01/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L01/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L02/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L02/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L02/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L02/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L02/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L02/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L02/S7",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L03/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L03/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L03/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L03/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L03/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L03/S6",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L04/S1",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L04/S2",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L04/S3",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L04/S4",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L04/S5",
+      "kind": "step"
+    },
+    {
+      "id": "U17.L04/S6",
+      "kind": "step"
+    },
+    {
       "id": "term.aeolian",
       "kind": "term"
     },
@@ -9869,6 +13185,10 @@
     },
     {
       "id": "term.antecedent",
+      "kind": "term"
+    },
+    {
+      "id": "term.anticipation",
       "kind": "term"
     },
     {
@@ -9932,6 +13252,10 @@
       "kind": "term"
     },
     {
+      "id": "term.characteristic-tone",
+      "kind": "term"
+    },
+    {
       "id": "term.chord-symbol",
       "kind": "term"
     },
@@ -9941,6 +13265,10 @@
     },
     {
       "id": "term.chorus",
+      "kind": "term"
+    },
+    {
+      "id": "term.chromatic-degree",
       "kind": "term"
     },
     {
@@ -9965,6 +13293,14 @@
     },
     {
       "id": "term.comping",
+      "kind": "term"
+    },
+    {
+      "id": "term.compound-interval",
+      "kind": "term"
+    },
+    {
+      "id": "term.compound-meter",
       "kind": "term"
     },
     {
@@ -9996,7 +13332,15 @@
       "kind": "term"
     },
     {
+      "id": "term.diminished-seventh",
+      "kind": "term"
+    },
+    {
       "id": "term.diminished-triad",
+      "kind": "term"
+    },
+    {
+      "id": "term.direct-modulation",
       "kind": "term"
     },
     {
@@ -10009,6 +13353,14 @@
     },
     {
       "id": "term.dominant-seventh",
+      "kind": "term"
+    },
+    {
+      "id": "term.dorian",
+      "kind": "term"
+    },
+    {
+      "id": "term.dotted-note",
       "kind": "term"
     },
     {
@@ -10060,6 +13412,10 @@
       "kind": "term"
     },
     {
+      "id": "term.ghost-note",
+      "kind": "term"
+    },
+    {
       "id": "term.grand-staff",
       "kind": "term"
     },
@@ -10073,6 +13429,10 @@
     },
     {
       "id": "term.half-cadence",
+      "kind": "term"
+    },
+    {
+      "id": "term.half-diminished",
       "kind": "term"
     },
     {
@@ -10105,6 +13465,10 @@
     },
     {
       "id": "term.interval",
+      "kind": "term"
+    },
+    {
+      "id": "term.interval-inversion",
       "kind": "term"
     },
     {
@@ -10148,7 +13512,15 @@
       "kind": "term"
     },
     {
+      "id": "term.lydian",
+      "kind": "term"
+    },
+    {
       "id": "term.major-scale",
+      "kind": "term"
+    },
+    {
+      "id": "term.major-seventh-chord",
       "kind": "term"
     },
     {
@@ -10172,7 +13544,19 @@
       "kind": "term"
     },
     {
+      "id": "term.minor-seventh-chord",
+      "kind": "term"
+    },
+    {
       "id": "term.minor-triad",
+      "kind": "term"
+    },
+    {
+      "id": "term.mixolydian",
+      "kind": "term"
+    },
+    {
+      "id": "term.modal-mixture",
       "kind": "term"
     },
     {
@@ -10220,11 +13604,23 @@
       "kind": "term"
     },
     {
+      "id": "term.phrygian",
+      "kind": "term"
+    },
+    {
+      "id": "term.picardy-third",
+      "kind": "term"
+    },
+    {
       "id": "term.pickup",
       "kind": "term"
     },
     {
       "id": "term.pitch",
+      "kind": "term"
+    },
+    {
+      "id": "term.pivot-chord",
       "kind": "term"
     },
     {
@@ -10245,6 +13641,10 @@
     },
     {
       "id": "term.quick-change",
+      "kind": "term"
+    },
+    {
+      "id": "term.reharmonization",
       "kind": "term"
     },
     {
@@ -10280,6 +13680,10 @@
       "kind": "term"
     },
     {
+      "id": "term.rootless-voicing",
+      "kind": "term"
+    },
+    {
       "id": "term.scale-degree",
       "kind": "term"
     },
@@ -10309,6 +13713,10 @@
     },
     {
       "id": "term.shuffle",
+      "kind": "term"
+    },
+    {
+      "id": "term.simple-meter",
       "kind": "term"
     },
     {
@@ -10356,6 +13764,10 @@
       "kind": "term"
     },
     {
+      "id": "term.tie",
+      "kind": "term"
+    },
+    {
       "id": "term.timbre",
       "kind": "term"
     },
@@ -10365,6 +13777,10 @@
     },
     {
       "id": "term.tonic",
+      "kind": "term"
+    },
+    {
+      "id": "term.tonicization",
       "kind": "term"
     },
     {

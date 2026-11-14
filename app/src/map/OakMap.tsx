@@ -46,6 +46,11 @@ export interface OakMapProps {
   unitProgress: ReadonlyMap<string, { done: number; total: number; current: boolean }>;
   /** Starting tab stop: the first "what's next" leaf, else the first leaf. */
   initialId: string | null;
+  /**
+   * Wave 6: unit rows of an advanced track whose gate is met (`J1` → "Jazz Harmony" and its honest note). The row
+   * reads "open" where a core row reads its lesson count; a track never shows a count of what is missing.
+   */
+  openUnits?: ReadonlyMap<string, { title: string; note: string }>;
 }
 
 const ARROWS: Record<string, Direction> = {
@@ -271,6 +276,7 @@ export function OakMap(props: OakMapProps) {
         <g transform={`translate(${v.tx},${v.ty}) scale(${v.k})`}>
           {layout.rows.map((r, i) => {
             const p = props.unitProgress.get(r.unit);
+            const branch = props.openUnits?.get(r.unit);
             // Overview labels are skipped where the previous one would collide.
             const labelY = (r.y + Math.min(r.h, 28) / 2) * v.k;
             const showUnit = labels || labelY - lastUnitLabel >= 13;
@@ -309,12 +315,24 @@ export function OakMap(props: OakMapProps) {
                     </text>
                   )
                 )}
-                {labels && p && p.total > 0 && (
-                  <text x={12} y={r.y + 29} className="fill-text-3 text-[10.5px]">
-                    {p.current ? "now" : `${p.done}/${p.total}`}
+                {labels && branch && !p?.current && (p?.done ?? 0) === 0 ? (
+                  <text x={12} y={r.y + 29} className="fill-accent text-[10.5px]" data-branch-row={r.unit}>
+                    open
                   </text>
+                ) : (
+                  labels &&
+                  p &&
+                  p.total > 0 && (
+                    <text x={12} y={r.y + 29} className="fill-text-3 text-[10.5px]">
+                      {p.current ? "now" : `${p.done}/${p.total}`}
+                    </text>
+                  )
                 )}
-                <title>{`${r.unit} · ${r.title}${p ? ` · ${p.done} of ${p.total} lessons done` : ""}`}</title>
+                <title>
+                  {branch
+                    ? `${r.unit} · ${r.title} · ${branch.title}: ${branch.note}`
+                    : `${r.unit} · ${r.title}${p ? ` · ${p.done} of ${p.total} lessons done` : ""}`}
+                </title>
               </g>
             );
           })}

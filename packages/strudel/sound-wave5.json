@@ -156,9 +156,9 @@
         "code": "s(\"hh*8\").swingBy(1/3, 4)",
         "audible": true,
         "diffDb": 0,
-        "repeatDb": -154.8,
+        "repeatDb": -152.3,
         "spectralDb": -16.2,
-        "spectralRepeatDb": -169.7,
+        "spectralRepeatDb": -167.6,
         "width": [
           0,
           0
@@ -185,9 +185,9 @@
         "code": "s(\"hh*8\").swing(4)",
         "audible": true,
         "diffDb": 0,
-        "repeatDb": -148.7,
+        "repeatDb": -151,
         "spectralDb": -16.2,
-        "spectralRepeatDb": -163.5,
+        "spectralRepeatDb": -169.1,
         "width": [
           0,
           0
@@ -214,9 +214,9 @@
         "code": "chord(\"C7\").voicing().s(\"piano\")",
         "audible": true,
         "diffDb": -4,
-        "repeatDb": -145.7,
+        "repeatDb": -144.7,
         "spectralDb": -7,
-        "spectralRepeatDb": -162.8,
+        "spectralRepeatDb": -161.9,
         "width": [
           0.696,
           0.785
@@ -243,9 +243,9 @@
         "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:minor\").s(\"piano\")",
         "audible": true,
         "diffDb": -1.5,
-        "repeatDb": -145.1,
+        "repeatDb": -144.5,
         "spectralDb": -5.6,
-        "spectralRepeatDb": -161.9,
+        "spectralRepeatDb": -161.5,
         "width": [
           0.86,
           0.817
@@ -272,9 +272,9 @@
         "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:harmonic:minor\").s(\"piano\")",
         "audible": true,
         "diffDb": -3.2,
-        "repeatDb": -144.9,
+        "repeatDb": -145.2,
         "spectralDb": -6.5,
-        "spectralRepeatDb": -161.9,
+        "spectralRepeatDb": -162.2,
         "width": [
           0.86,
           0.862
@@ -301,9 +301,9 @@
         "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:melodic:minor\").s(\"piano\")",
         "audible": true,
         "diffDb": -6.5,
-        "repeatDb": -144.5,
+        "repeatDb": -145,
         "spectralDb": -8.1,
-        "spectralRepeatDb": -161.1,
+        "spectralRepeatDb": -161.5,
         "width": [
           0.86,
           0.861
@@ -330,9 +330,9 @@
         "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:major:pentatonic\").s(\"piano\")",
         "audible": true,
         "diffDb": -1,
-        "repeatDb": -144.8,
+        "repeatDb": -145,
         "spectralDb": -6.8,
-        "spectralRepeatDb": -161,
+        "spectralRepeatDb": -161.4,
         "width": [
           0.86,
           0.913
@@ -359,9 +359,9 @@
         "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:minor:pentatonic\").s(\"piano\")",
         "audible": true,
         "diffDb": 1.7,
-        "repeatDb": -145.8,
+        "repeatDb": -145.1,
         "spectralDb": -3.7,
-        "spectralRepeatDb": -162.1,
+        "spectralRepeatDb": -161.7,
         "width": [
           0.86,
           0.891
@@ -388,9 +388,9 @@
         "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:blues\").s(\"piano\")",
         "audible": true,
         "diffDb": 2.1,
-        "repeatDb": -145.6,
+        "repeatDb": -144.7,
         "spectralDb": -3,
-        "spectralRepeatDb": -162.8,
+        "spectralRepeatDb": -162.1,
         "width": [
           0.86,
           0.798
@@ -700,9 +700,9 @@
         "code": "note(\"<[c2 ~ c2 g1] [f1 ~ f1 c2]>\").s(\"sawtooth\").lpf(400).lpq(4)",
         "audible": true,
         "diffDb": -18.1,
-        "repeatDb": "-Infinity",
+        "repeatDb": -168,
         "spectralDb": -19.9,
-        "spectralRepeatDb": "-Infinity",
+        "spectralRepeatDb": -188.1,
         "width": [
           0,
           0
@@ -731,9 +731,9 @@
         "code": "n(\"<[4 4 2 4 ~ 2 0 ~] [5 5 3 5 ~ 3 0 ~]>\").scale(\"C4:major\").s(\"sawtooth\").lpf(800).lpq(10)",
         "audible": true,
         "diffDb": -1.6,
-        "repeatDb": -146.6,
+        "repeatDb": "-Infinity",
         "spectralDb": -2.1,
-        "spectralRepeatDb": -164.5,
+        "spectralRepeatDb": "-Infinity",
         "width": [
           0,
           0
@@ -762,9 +762,9 @@
         "code": "n(\"<[4 4 2 4 ~ 2 0 ~] [5 5 3 5 ~ 3 0 ~]>\").scale(\"C4:major\").s(\"sawtooth\").lpf(300).lpenv(4).lpd(.2)",
         "audible": true,
         "diffDb": 3,
-        "repeatDb": "-Infinity",
+        "repeatDb": -150.6,
         "spectralDb": -5.3,
-        "spectralRepeatDb": "-Infinity",
+        "spectralRepeatDb": -167.8,
         "width": [
           0,
           0
@@ -1134,9 +1134,9 @@
         "code": "n(\"<[4 4 2 4 ~ 2 0 ~] [5 5 3 5 ~ 3 0 ~]>\").scale(\"C4:major\").s(\"square\").lpf(2000).delay(.4)",
         "audible": true,
         "diffDb": -6.6,
-        "repeatDb": -157.3,
+        "repeatDb": -159.2,
         "spectralDb": -4.7,
-        "spectralRepeatDb": -176.4,
+        "spectralRepeatDb": -177.7,
         "width": [
           0,
           0
@@ -1165,9 +1165,9 @@
         "code": "n(\"<[4 4 2 4 ~ 2 0 ~] [5 5 3 5 ~ 3 0 ~]>\").scale(\"C4:major\").s(\"square\").lpf(2000).delay(.4).delaytime(.3)",
         "audible": true,
         "diffDb": -5.6,
-        "repeatDb": -158.7,
+        "repeatDb": -161.7,
         "spectralDb": -27.9,
-        "spectralRepeatDb": -176.2,
+        "spectralRepeatDb": -178.5,
         "width": [
           0,
           0
@@ -1196,9 +1196,9 @@
         "code": "n(\"<[4 4 2 4 ~ 2 0 ~] [5 5 3 5 ~ 3 0 ~]>\").scale(\"C4:major\").s(\"square\").delay(.4).delaytime(.3).delayfeedback(.3)",
         "audible": true,
         "diffDb": -7.3,
-        "repeatDb": -158.8,
+        "repeatDb": -158.4,
         "spectralDb": -29.3,
-        "spectralRepeatDb": -176.2,
+        "spectralRepeatDb": -175.2,
         "width": [
           0,
           0
@@ -1227,9 +1227,9 @@
         "code": "n(\"<[4 4 2 4 ~ 2 0 ~] [5 5 3 5 ~ 3 0 ~]>\").scale(\"C4:major\").s(\"square\").delay(.4).delaytime(.3).delayfeedback(.3)",
         "audible": true,
         "diffDb": -12.6,
-        "repeatDb": -159.9,
+        "repeatDb": -161.6,
         "spectralDb": -14.1,
-        "spectralRepeatDb": -176.2,
+        "spectralRepeatDb": -178.2,
         "width": [
           0,
           0
@@ -1258,9 +1258,9 @@
         "code": "n(\"<[4 4 2 4 ~ 2 0 ~] [5 5 3 5 ~ 3 0 ~]>\").scale(\"C4:major\").s(\"square\").delay(.5).delaytime(.3).delayfeedback(.7)",
         "audible": true,
         "diffDb": -9.4,
-        "repeatDb": -159.3,
+        "repeatDb": -158,
         "spectralDb": -9.8,
-        "spectralRepeatDb": -177.4,
+        "spectralRepeatDb": -176.3,
         "width": [
           0,
           0
@@ -1306,7 +1306,7 @@
           0.03
         ],
         "tail": [
-          0.283,
+          0.2834,
           0.2558
         ]
       },
@@ -1318,10 +1318,10 @@
         "base": "stack(s(\"~ sd ~ sd\").room(.5).roomsize(6), n(\"<[4 4 2 4 ~ 2 0 ~] [5 5 3 5 ~ 3 0 ~]>\").scale(\"C4:major\").s(\"square\").lpf(2000).delay(.4).delaytime(.3).delayfeedback(.4))",
         "code": "stack(s(\"~ sd ~ sd\").room(.5).roomsize(6), n(\"<[4 4 2 4 ~ 2 0 ~] [5 5 3 5 ~ 3 0 ~]>\").scale(\"C4:major\").s(\"square\").lpf(2000).delay(.4).delaytime(.3).delayfeedback(.4).orbit(2))",
         "audible": false,
-        "diffDb": -148.1,
-        "repeatDb": -160.1,
-        "spectralDb": -168.3,
-        "spectralRepeatDb": -178.4,
+        "diffDb": -147.1,
+        "repeatDb": -159.1,
+        "spectralDb": -166.8,
+        "spectralRepeatDb": -177.5,
         "width": [
           0.154,
           0.154
@@ -1603,7 +1603,14 @@
       "flavour.jazz-soul parts 10.5 LU apart (band.three-chord: -20.8 -25.2 -31.3)",
       "flavour.indie clips at 3.4 dBFS before the limiter (band.aeolian-4bar)",
       "flavour.jazz-soul parts 14.4 LU apart (band.aeolian-4bar: -21.1 -24.1 -35.5)",
-      "flavour.indie clips at 3.1 dBFS before the limiter (band.sections)"
+      "flavour.indie clips at 3.1 dBFS before the limiter (band.sections)",
+      "flavour.indie clips at 3.1 dBFS before the limiter (band.mixolydian-vamp)",
+      "flavour.indie clips at 3.1 dBFS before the limiter (band.dorian-vamp)",
+      "flavour.indie clips at 3.1 dBFS before the limiter (band.lydian-vamp)",
+      "flavour.indie clips at 3.1 dBFS before the limiter (band.phrygian-vamp)",
+      "flavour.indie clips at 3.1 dBFS before the limiter (band.two-five-one)",
+      "flavour.indie clips at 3.1 dBFS before the limiter (band.soul-68)",
+      "flavour.indie clips at 3.1 dBFS before the limiter (band.slow-128)"
     ],
     "mixes": [
       {
@@ -2084,6 +2091,342 @@
           "code": "const drumsVerse = s(\"bd ~ sd ~, hh*8\")\nconst drumsChorus = s(\"bd sd [~ bd] sd, hh*16\")\nconst bassVerse = n(\"<-14 -9 -11 -10>\")\nconst bassChorus = n(\"<[-11*8] [-10*8] [-14*8] [-14*8]>\")\nconst chordsVerse = n(\"<[-7,-5,-3] [-7,-5,-2] [-7,-4,-2] [-8,-6,-3]>\").struct(\"x x x x\")\nconst chordsChorus = n(\"<[-7,-4,-2] [-8,-6,-3] [-7,-5,-3] [-7,-5,-3]>\").struct(\"x*8\")\nstack(arrange([4, drumsVerse], [4, drumsChorus], [4, drumsVerse], [4, drumsChorus]).velocity(\"[1 .86 .94 .86]*4\").gain(.7), arrange([4, bassVerse], [4, bassChorus], [4, bassVerse], [4, bassChorus]).scale(\"C4:major\").s(\"ebass\").lpf(800).gain(.9), arrange([4, chordsVerse], [4, chordsChorus], [4, chordsVerse], [4, chordsChorus]).scale(\"C4:major\").s(\"piano\").velocity(\"1 .86 .92 .86\").gain(.4).pan(.42).room(.25))",
           "lufs": -17.3,
           "peakDb": -1.5
+        }
+      },
+      {
+        "band": "band.mixolydian-vamp",
+        "flavour": "flavour.funk",
+        "drums": -26.2,
+        "bass": -22.5,
+        "chords": -30.1,
+        "mix": {
+          "code": "stack(s(\"bd ~ sd ~, hh*16\").bank(\"RolandTR808\").velocity(\"[1 .86 .94 .86]*4\").gain(.7), note(\"<[-24 ~ -24 -12] [-26 ~ -26 -14]>\").add(n(\"0\").scale(\"C4:major\")).s(\"fingerbass\").lpf(850).gain(.9), note(\"<[-14,-12,-8,-5] [-14,-10,-7,-5]>\").add(n(\"0\").scale(\"C4:major\")).struct(\"~ x ~ [~ x]\").s(\"clav\").velocity(\"1 .86\").gain(.4).pan(.42).room(.2))",
+          "lufs": -21,
+          "peakDb": -3.1
+        }
+      },
+      {
+        "band": "band.mixolydian-vamp",
+        "flavour": "flavour.indie",
+        "drums": -17.4,
+        "bass": -21.1,
+        "chords": -24.8,
+        "mix": {
+          "code": "stack(s(\"bd ~ sd ~, hh*8\").bank(\"LinnDrum\").velocity(\"[1 .86 .94 .86]*2\").gain(.7), note(\"<-24 -26>\").add(n(\"0\").scale(\"C4:major\")).s(\"ebass\").lpf(750).gain(.9), note(\"<[-12,-8,-5] [-14,-10,-7]>\").add(n(\"0\").scale(\"C4:major\")).struct(\"x*8\").s(\"cleangtr\").velocity(\"[1 .86 .94 .86]*2\").gain(.4).pan(.38).room(.3))",
+          "lufs": -15.3,
+          "peakDb": 3.1
+        }
+      },
+      {
+        "band": "band.mixolydian-vamp",
+        "flavour": "flavour.jazz-soul",
+        "drums": -21.1,
+        "bass": -24.2,
+        "chords": -29.6,
+        "mix": {
+          "code": "stack(s(\"bd ~ sd ~, rd*8\").bank(\"jazzkit\").swingBy(1/3, 4).velocity(\"[1 .86 .94 .86]*2\").gain(.65), note(\"<[-24 ~ -17 ~] [-26 ~ -19 ~]>\").add(n(\"0\").scale(\"C4:major\")).s(\"upright\").lpf(900).gain(.9), note(\"<[-14,-12,-8,-5] [-14,-10,-7,-5]>\").add(n(\"0\").scale(\"C4:major\")).struct(\"x ~ [~ x] ~\").swingBy(1/3, 4).s(\"rhodes\").velocity(\"1 .86\").gain(.63).pan(.4).room(.35))",
+          "lufs": -19.6,
+          "peakDb": -3.1
+        }
+      },
+      {
+        "band": "band.mixolydian-vamp",
+        "flavour": "flavour.pop",
+        "drums": -16.5,
+        "bass": -20.4,
+        "chords": -22.6,
+        "mix": {
+          "code": "stack(s(\"bd sd [~ bd] sd, hh*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.7), note(\"<[-24*8] [-26*8]>\").add(n(\"0\").scale(\"C4:major\")).s(\"ebass\").lpf(800).gain(.9), note(\"<[-12,-8,-5] [-14,-10,-7]>\").add(n(\"0\").scale(\"C4:major\")).struct(\"x ~ x x ~ x x ~\").s(\"piano\").velocity(\"[1 .86 .94 .86]*2\").gain(.4).pan(.42).room(.25))",
+          "lufs": -15.3,
+          "peakDb": -1.1
+        }
+      },
+      {
+        "band": "band.dorian-vamp",
+        "flavour": "flavour.funk",
+        "drums": -26.2,
+        "bass": -22.5,
+        "chords": -30.1,
+        "mix": {
+          "code": "stack(s(\"bd ~ sd ~, hh*16\").bank(\"RolandTR808\").velocity(\"[1 .86 .94 .86]*4\").gain(.7), note(\"<[-24 ~ -24 -12] [-19 ~ -19 -7]>\").add(n(\"0\").scale(\"C4:major\")).s(\"fingerbass\").lpf(850).gain(.9), note(\"<[-14,-12,-9,-5] [-12,-9,-7,-3]>\").add(n(\"0\").scale(\"C4:major\")).struct(\"~ x ~ [~ x]\").s(\"clav\").velocity(\"1 .86\").gain(.4).pan(.42).room(.2))",
+          "lufs": -21.1,
+          "peakDb": -3.1
+        }
+      },
+      {
+        "band": "band.dorian-vamp",
+        "flavour": "flavour.indie",
+        "drums": -17.4,
+        "bass": -21.1,
+        "chords": -24.7,
+        "mix": {
+          "code": "stack(s(\"bd ~ sd ~, hh*8\").bank(\"LinnDrum\").velocity(\"[1 .86 .94 .86]*2\").gain(.7), note(\"<-24 -19>\").add(n(\"0\").scale(\"C4:major\")).s(\"ebass\").lpf(750).gain(.9), note(\"<[-12,-9,-5] [-12,-7,-3]>\").add(n(\"0\").scale(\"C4:major\")).struct(\"x*8\").s(\"cleangtr\").velocity(\"[1 .86 .94 .86]*2\").gain(.4).pan(.38).room(.3))",
+          "lufs": -15.3,
+          "peakDb": 3.1
+        }
+      },
+      {
+        "band": "band.dorian-vamp",
+        "flavour": "flavour.jazz-soul",
+        "drums": -21.1,
+        "bass": -24.2,
+        "chords": -29.6,
+        "mix": {
+          "code": "stack(s(\"bd ~ sd ~, rd*8\").bank(\"jazzkit\").swingBy(1/3, 4).velocity(\"[1 .86 .94 .86]*2\").gain(.65), note(\"<[-24 ~ -17 ~] [-19 ~ -12 ~]>\").add(n(\"0\").scale(\"C4:major\")).s(\"upright\").lpf(900).gain(.9), note(\"<[-14,-12,-9,-5] [-12,-9,-7,-3]>\").add(n(\"0\").scale(\"C4:major\")).struct(\"x ~ [~ x] ~\").swingBy(1/3, 4).s(\"rhodes\").velocity(\"1 .86\").gain(.63).pan(.4).room(.35))",
+          "lufs": -19.6,
+          "peakDb": -3.2
+        }
+      },
+      {
+        "band": "band.dorian-vamp",
+        "flavour": "flavour.pop",
+        "drums": -16.5,
+        "bass": -20.4,
+        "chords": -21.5,
+        "mix": {
+          "code": "stack(s(\"bd sd [~ bd] sd, hh*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.7), note(\"<[-24*8] [-19*8]>\").add(n(\"0\").scale(\"C4:major\")).s(\"ebass\").lpf(800).gain(.9), note(\"<[-12,-9,-5] [-12,-7,-3]>\").add(n(\"0\").scale(\"C4:major\")).struct(\"x ~ x x ~ x x ~\").s(\"piano\").velocity(\"[1 .86 .94 .86]*2\").gain(.4).pan(.42).room(.25))",
+          "lufs": -15,
+          "peakDb": -1.2
+        }
+      },
+      {
+        "band": "band.lydian-vamp",
+        "flavour": "flavour.funk",
+        "drums": -26.2,
+        "bass": -22.5,
+        "chords": -29.9,
+        "mix": {
+          "code": "stack(s(\"bd ~ sd ~, hh*16\").bank(\"RolandTR808\").velocity(\"[1 .86 .94 .86]*4\").gain(.7), note(\"<[-24 ~ -24 -12] [-24 ~ -24 -12]>\").add(n(\"0\").scale(\"C4:major\")).s(\"fingerbass\").lpf(850).gain(.9), note(\"<[-12,-10,-8,-5] [-12,-10,-6,-3]>\").add(n(\"0\").scale(\"C4:major\")).struct(\"~ x ~ [~ x]\").s(\"clav\").velocity(\"1 .86\").gain(.4).pan(.42).room(.2))",
+          "lufs": -21,
+          "peakDb": -3.1
+        }
+      },
+      {
+        "band": "band.lydian-vamp",
+        "flavour": "flavour.indie",
+        "drums": -17.4,
+        "bass": -21.1,
+        "chords": -24.8,
+        "mix": {
+          "code": "stack(s(\"bd ~ sd ~, hh*8\").bank(\"LinnDrum\").velocity(\"[1 .86 .94 .86]*2\").gain(.7), note(\"<-24 -24>\").add(n(\"0\").scale(\"C4:major\")).s(\"ebass\").lpf(750).gain(.9), note(\"<[-12,-8,-5] [-10,-6,-3]>\").add(n(\"0\").scale(\"C4:major\")).struct(\"x*8\").s(\"cleangtr\").velocity(\"[1 .86 .94 .86]*2\").gain(.4).pan(.38).room(.3))",
+          "lufs": -15.3,
+          "peakDb": 3.1
+        }
+      },
+      {
+        "band": "band.lydian-vamp",
+        "flavour": "flavour.jazz-soul",
+        "drums": -21.1,
+        "bass": -24.2,
+        "chords": -29.1,
+        "mix": {
+          "code": "stack(s(\"bd ~ sd ~, rd*8\").bank(\"jazzkit\").swingBy(1/3, 4).velocity(\"[1 .86 .94 .86]*2\").gain(.65), note(\"<[-24 ~ -17 ~] [-24 ~ -17 ~]>\").add(n(\"0\").scale(\"C4:major\")).s(\"upright\").lpf(900).gain(.9), note(\"<[-12,-10,-8,-5] [-12,-10,-6,-3]>\").add(n(\"0\").scale(\"C4:major\")).struct(\"x ~ [~ x] ~\").swingBy(1/3, 4).s(\"rhodes\").velocity(\"1 .86\").gain(.63).pan(.4).room(.35))",
+          "lufs": -19.6,
+          "peakDb": -3.2
+        }
+      },
+      {
+        "band": "band.lydian-vamp",
+        "flavour": "flavour.pop",
+        "drums": -16.5,
+        "bass": -20.4,
+        "chords": -22.6,
+        "mix": {
+          "code": "stack(s(\"bd sd [~ bd] sd, hh*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.7), note(\"<[-24*8] [-24*8]>\").add(n(\"0\").scale(\"C4:major\")).s(\"ebass\").lpf(800).gain(.9), note(\"<[-12,-8,-5] [-10,-6,-3]>\").add(n(\"0\").scale(\"C4:major\")).struct(\"x ~ x x ~ x x ~\").s(\"piano\").velocity(\"[1 .86 .94 .86]*2\").gain(.4).pan(.42).room(.25))",
+          "lufs": -15.3,
+          "peakDb": -1.1
+        }
+      },
+      {
+        "band": "band.phrygian-vamp",
+        "flavour": "flavour.funk",
+        "drums": -26.2,
+        "bass": -22.5,
+        "chords": -30.1,
+        "mix": {
+          "code": "stack(s(\"bd ~ sd ~, hh*16\").bank(\"RolandTR808\").velocity(\"[1 .86 .94 .86]*4\").gain(.7), note(\"<[-24 ~ -24 -12] [-23 ~ -23 -11]>\").add(n(\"0\").scale(\"C4:major\")).s(\"fingerbass\").lpf(850).gain(.9), note(\"<[-14,-12,-9,-5] [-14,-11,-7,-4]>\").add(n(\"0\").scale(\"C4:major\")).struct(\"~ x ~ [~ x]\").s(\"clav\").velocity(\"1 .86\").gain(.4).pan(.42).room(.2))",
+          "lufs": -21.1,
+          "peakDb": -3.1
+        }
+      },
+      {
+        "band": "band.phrygian-vamp",
+        "flavour": "flavour.indie",
+        "drums": -17.4,
+        "bass": -21.1,
+        "chords": -24.7,
+        "mix": {
+          "code": "stack(s(\"bd ~ sd ~, hh*8\").bank(\"LinnDrum\").velocity(\"[1 .86 .94 .86]*2\").gain(.7), note(\"<-24 -23>\").add(n(\"0\").scale(\"C4:major\")).s(\"ebass\").lpf(750).gain(.9), note(\"<[-12,-9,-5] [-11,-7,-4]>\").add(n(\"0\").scale(\"C4:major\")).struct(\"x*8\").s(\"cleangtr\").velocity(\"[1 .86 .94 .86]*2\").gain(.4).pan(.38).room(.3))",
+          "lufs": -15.3,
+          "peakDb": 3.1
+        }
+      },
+      {
+        "band": "band.phrygian-vamp",
+        "flavour": "flavour.jazz-soul",
+        "drums": -21.1,
+        "bass": -24.2,
+        "chords": -29.6,
+        "mix": {
+          "code": "stack(s(\"bd ~ sd ~, rd*8\").bank(\"jazzkit\").swingBy(1/3, 4).velocity(\"[1 .86 .94 .86]*2\").gain(.65), note(\"<[-24 ~ -17 ~] [-23 ~ -16 ~]>\").add(n(\"0\").scale(\"C4:major\")).s(\"upright\").lpf(900).gain(.9), note(\"<[-14,-12,-9,-5] [-14,-11,-7,-4]>\").add(n(\"0\").scale(\"C4:major\")).struct(\"x ~ [~ x] ~\").swingBy(1/3, 4).s(\"rhodes\").velocity(\"1 .86\").gain(.63).pan(.4).room(.35))",
+          "lufs": -19.6,
+          "peakDb": -3.2
+        }
+      },
+      {
+        "band": "band.phrygian-vamp",
+        "flavour": "flavour.pop",
+        "drums": -16.5,
+        "bass": -20.4,
+        "chords": -21.5,
+        "mix": {
+          "code": "stack(s(\"bd sd [~ bd] sd, hh*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.7), note(\"<[-24*8] [-23*8]>\").add(n(\"0\").scale(\"C4:major\")).s(\"ebass\").lpf(800).gain(.9), note(\"<[-12,-9,-5] [-11,-7,-4]>\").add(n(\"0\").scale(\"C4:major\")).struct(\"x ~ x x ~ x x ~\").s(\"piano\").velocity(\"[1 .86 .94 .86]*2\").gain(.4).pan(.42).room(.25))",
+          "lufs": -15,
+          "peakDb": -1.2
+        }
+      },
+      {
+        "band": "band.two-five-one",
+        "flavour": "flavour.funk",
+        "drums": -26.2,
+        "bass": -22.4,
+        "chords": -31.4,
+        "mix": {
+          "code": "stack(s(\"bd ~ sd ~, hh*16\").bank(\"RolandTR808\").velocity(\"[1 .86 .94 .86]*4\").gain(.7), n(\"<[-13 ~ -13 -6] [-10 ~ -10 -6] [-14 ~ -14 -7] [-14 ~ -14 -7]>\").scale(\"C4:major\").s(\"fingerbass\").lpf(850).gain(.9), n(\"<[-7,-4] [-8,-4] [-9,-5] [-9,-5]>\").scale(\"C4:major\").struct(\"~ x ~ [~ x]\").s(\"clav\").velocity(\"1 .86\").gain(.52).pan(.42).room(.2))",
+          "lufs": -21.1,
+          "peakDb": -3.2
+        }
+      },
+      {
+        "band": "band.two-five-one",
+        "flavour": "flavour.indie",
+        "drums": -17.4,
+        "bass": -21.1,
+        "chords": -26.6,
+        "mix": {
+          "code": "stack(s(\"bd ~ sd ~, hh*8\").bank(\"LinnDrum\").velocity(\"[1 .86 .94 .86]*2\").gain(.7), n(\"<[-13 -16] [-10 -13] [-14 -10] [-14 -10]>\").scale(\"C4:major\").s(\"ebass\").lpf(750).gain(.9), n(\"<[-7,-4] [-8,-4] [-9,-5] [-9,-5]>\").scale(\"C4:major\").struct(\"x ~ ~ [~ x]\").s(\"cleangtr\").velocity(\"1 .86\").gain(.6).pan(.38).room(.3))",
+          "lufs": -15.9,
+          "peakDb": 3.1
+        }
+      },
+      {
+        "band": "band.two-five-one",
+        "flavour": "flavour.jazz-soul",
+        "drums": -21.1,
+        "bass": -24.1,
+        "chords": -30.7,
+        "mix": {
+          "code": "stack(s(\"bd ~ sd ~, rd*8\").bank(\"jazzkit\").swingBy(1/3, 4).velocity(\"[1 .86 .94 .86]*2\").gain(.65), n(\"<[-13 -16] [-10 -13] [-14 -10] [-14 -10]>\").scale(\"C4:major\").s(\"upright\").lpf(900).gain(.9), n(\"<[-7,-4] [-8,-4] [-9,-5] [-9,-5]>\").scale(\"C4:major\").struct(\"x ~ [~ x] ~\").swingBy(1/3, 4).s(\"rhodes\").velocity(\"1 .86\").gain(.77).pan(.4).room(.35))",
+          "lufs": -19.2,
+          "peakDb": -2.6
+        }
+      },
+      {
+        "band": "band.two-five-one",
+        "flavour": "flavour.pop",
+        "drums": -16.5,
+        "bass": -21.1,
+        "chords": -25.5,
+        "mix": {
+          "code": "stack(s(\"bd sd [~ bd] sd, hh*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.7), n(\"<[-13 -16] [-10 -13] [-14 -10] [-14 -10]>\").scale(\"C4:major\").s(\"ebass\").lpf(800).gain(.9), n(\"<[-7,-4] [-8,-4] [-9,-5] [-9,-5]>\").scale(\"C4:major\").struct(\"x x x x\").s(\"piano\").velocity(\"1 .86 .92 .86\").gain(.4).pan(.42).room(.25))",
+          "lufs": -16.2,
+          "peakDb": -0.8
+        }
+      },
+      {
+        "band": "band.soul-68",
+        "flavour": "flavour.funk",
+        "drums": -26.1,
+        "bass": -23,
+        "chords": -29.9,
+        "mix": {
+          "code": "stack(s(\"bd ~ bd sd ~ ~, hh*12\").bank(\"RolandTR808\").velocity(\"[1 .86 .9 .86 .9 .86]*2\").gain(.7), n(\"<[-14 ~ -14 -10 ~ -7] [-9 ~ -9 -12 ~ -5] [-11 ~ -11 -14 ~ -7] [-10 ~ -10 -13 ~ -6]>\").scale(\"C4:major\").s(\"fingerbass\").lpf(850).gain(.9), n(\"<[-7,-5,-3,-2] [-9,-7,-5,-3] [-7,-6,-4,-2] [-8,-6,-4,-3]>\").scale(\"C4:major\").struct(\"~ x ~ ~ x ~\").s(\"clav\").velocity(\"1 .86\").gain(.4).pan(.42).room(.2))",
+          "lufs": -21.3,
+          "peakDb": -3.1
+        }
+      },
+      {
+        "band": "band.soul-68",
+        "flavour": "flavour.indie",
+        "drums": -17.7,
+        "bass": -22.8,
+        "chords": -27.3,
+        "mix": {
+          "code": "stack(s(\"bd ~ ~ sd ~ ~, hh*6\").bank(\"LinnDrum\").velocity(\"1 .86 .9 .94 .86 .9\").gain(.7), n(\"<[-14 ~ ~ -14 ~ ~] [-9 ~ ~ -9 ~ ~] [-11 ~ ~ -11 ~ ~] [-10 ~ ~ -10 ~ ~]>\").scale(\"C4:major\").s(\"ebass\").lpf(750).gain(.9), n(\"<[-7,-5,-3] [-7,-5,-2] [-7,-4,-2] [-8,-6,-3]>\").scale(\"C4:major\").struct(\"x ~ ~ x ~ ~\").s(\"cleangtr\").velocity(\"1 .9\").gain(.4).pan(.38).room(.3))",
+          "lufs": -16.7,
+          "peakDb": 3.1
+        }
+      },
+      {
+        "band": "band.soul-68",
+        "flavour": "flavour.jazz-soul",
+        "drums": -21,
+        "bass": -23.5,
+        "chords": -30.7,
+        "mix": {
+          "code": "stack(s(\"bd ~ ~ sd ~ ~, rd*6\").bank(\"jazzkit\").velocity(\"1 .86 .9 .94 .86 .9\").gain(.65), n(\"<[-14 ~ ~ -10 ~ ~] [-9 ~ ~ -12 ~ ~] [-11 ~ ~ -14 ~ ~] [-10 ~ ~ -13 ~ ~]>\").scale(\"C4:major\").s(\"upright\").lpf(900).gain(.9), n(\"<[-7,-5,-3,-2] [-9,-7,-5,-3] [-7,-6,-4,-2] [-8,-6,-4,-3]>\").scale(\"C4:major\").struct(\"x ~ x x ~ x\").s(\"rhodes\").velocity(\"1 .86 .9 .94 .86 .9\").gain(.45).pan(.4).room(.35))",
+          "lufs": -19.8,
+          "peakDb": -3.6
+        }
+      },
+      {
+        "band": "band.soul-68",
+        "flavour": "flavour.pop",
+        "drums": -21.1,
+        "bass": -22.6,
+        "chords": -21.3,
+        "mix": {
+          "code": "stack(s(\"bd ~ ~ sd ~ ~, hh*6\").velocity(\"1 .86 .9 .94 .86 .9\").gain(.7), n(\"<[-14 ~ ~ -10 ~ ~] [-9 ~ ~ -12 ~ ~] [-11 ~ ~ -14 ~ ~] [-10 ~ ~ -13 ~ ~]>\").scale(\"C4:major\").s(\"ebass\").lpf(800).gain(.9), n(\"<[-7,-5,-3] [-7,-5,-2] [-7,-4,-2] [-8,-6,-3]>\").scale(\"C4:major\").struct(\"x*6\").s(\"piano\").velocity(\"1 .86 .9 .94 .86 .9\").gain(.4).pan(.42).room(.25))",
+          "lufs": -18.1,
+          "peakDb": -1.5
+        }
+      },
+      {
+        "band": "band.slow-128",
+        "flavour": "flavour.funk",
+        "drums": -26.8,
+        "bass": -22.5,
+        "chords": -29.1,
+        "mix": {
+          "code": "stack(s(\"bd ~ sd ~, [hh hh hh]*4\").bank(\"RolandTR808\").velocity(\"[1 .86 .9]*4\").gain(.7), n(\"<[-14 ~ -14 -7] [-9 ~ -9 -5] [-11 ~ -11 -7] [-10 ~ -10 -6]>\").scale(\"C4:major\").s(\"fingerbass\").lpf(850).gain(.9), n(\"<[-7,-5,-3,-2] [-9,-7,-5,-3] [-7,-6,-4,-2] [-8,-6,-4,-3]>\").scale(\"C4:major\").struct(\"[~ x x]*4\").s(\"clav\").velocity(\"[1 .86 .9]*4\").gain(.4).pan(.42).room(.2))",
+          "lufs": -20.8,
+          "peakDb": -3.1
+        }
+      },
+      {
+        "band": "band.slow-128",
+        "flavour": "flavour.indie",
+        "drums": -16,
+        "bass": -21,
+        "chords": -24.1,
+        "mix": {
+          "code": "stack(s(\"bd ~ sd ~, [hh hh hh]*4\").bank(\"LinnDrum\").velocity(\"[1 .86 .9]*4\").gain(.7), n(\"<[-14 -14] [-9 -9] [-11 -11] [-10 -10]>\").scale(\"C4:major\").s(\"ebass\").lpf(750).gain(.9), n(\"<[-7,-5,-3] [-7,-5,-2] [-7,-4,-2] [-8,-6,-3]>\").scale(\"C4:major\").struct(\"[x x x]*4\").s(\"cleangtr\").velocity(\"[1 .86 .9]*4\").gain(.4).pan(.38).room(.3))",
+          "lufs": -14.3,
+          "peakDb": 3.1
+        }
+      },
+      {
+        "band": "band.slow-128",
+        "flavour": "flavour.jazz-soul",
+        "drums": -19.5,
+        "bass": -25,
+        "chords": -28.8,
+        "mix": {
+          "code": "stack(s(\"bd ~ sd ~, [rd rd rd]*4\").bank(\"jazzkit\").velocity(\"[1 .86 .9]*4\").gain(.65), n(\"<[-14 -14] [-9 -9] [-11 -11] [-10 -10]>\").scale(\"C4:major\").s(\"upright\").lpf(900).gain(.9), n(\"<[-7,-5,-3,-2] [-9,-7,-5,-3] [-7,-6,-4,-2] [-8,-6,-4,-3]>\").scale(\"C4:major\").struct(\"[x x x]*4\").s(\"rhodes\").velocity(\"[1 .86 .9]*4\").gain(.45).pan(.4).room(.35))",
+          "lufs": -18.1,
+          "peakDb": -3
+        }
+      },
+      {
+        "band": "band.slow-128",
+        "flavour": "flavour.pop",
+        "drums": -20.8,
+        "bass": -21,
+        "chords": -19.8,
+        "mix": {
+          "code": "stack(s(\"bd ~ sd ~, [hh hh hh]*4\").velocity(\"[1 .86 .9]*4\").gain(.7), n(\"<[-14 -14] [-9 -9] [-11 -11] [-10 -10]>\").scale(\"C4:major\").s(\"ebass\").lpf(800).gain(.9), n(\"<[-7,-5,-3] [-7,-5,-2] [-7,-4,-2] [-8,-6,-3]>\").scale(\"C4:major\").struct(\"[x x x]*4\").s(\"piano\").velocity(\"[1 .86 .9]*4\").gain(.4).pan(.42).room(.25))",
+          "lufs": -15.8,
+          "peakDb": -1.3
         }
       }
     ]
@@ -3193,33 +3536,33 @@
   },
   "preload": {
     "rule": "the C3 arrangement at 4× speed on a pack that answers every audio file 700 ms late: every sound the chorus brings is fetched and decoded before bar 9; no skipped note; nothing leaves 127.0.0.1",
-    "playStartMs": 2211,
-    "chorusAtMs": 7211,
+    "playStartMs": 2212,
+    "chorusAtMs": 7212,
     "chorusFiles": [
       {
         "file": "v3/uzu-drumkit/oh/10_oh_switchangel.wav",
-        "requestedMs": 2228,
-        "doneMs": 2936
+        "requestedMs": 2257,
+        "doneMs": 2972
       },
       {
         "file": "v3/uzu-drumkit/cr/10_cr_switchangel.wav",
-        "requestedMs": 2228,
-        "doneMs": 2936
+        "requestedMs": 2258,
+        "doneMs": 2972
       },
       {
         "file": "v3/uzu-drumkit/tb/10_tb.wav",
-        "requestedMs": 2229,
-        "doneMs": 2936
+        "requestedMs": 2258,
+        "doneMs": 2972
       },
       {
         "file": "v3/webaudiofontdata/sound/0480_Aspirin_sf2_file.js",
-        "requestedMs": 2241,
-        "doneMs": 2945
+        "requestedMs": 2277,
+        "doneMs": 2997
       },
       {
         "file": "v3/webaudiofontdata/sound/0290_FluidR3_GM_sf2_file.js",
-        "requestedMs": 2951,
-        "doneMs": 3661
+        "requestedMs": 2998,
+        "doneMs": 3730
       }
     ],
     "skips": []
@@ -3497,28 +3840,28 @@
       },
       "low": -33.3,
       "high": -33.8,
-      "waveRms": 0.10864756335245516,
-      "masterRms": 0.1666374162036719
+      "waveRms": 0.10764128686867949,
+      "masterRms": 0.16159846771109787
     },
     "mel": {
       "source": {
         "kind": "track",
         "label": "mel"
       },
-      "low": -139.4,
+      "low": -137.5,
       "high": -33.8,
-      "waveRms": 0.07641437289928275,
-      "masterRms": 0.16507866922015166
+      "waveRms": 0.07641347100137236,
+      "masterRms": 0.16663741576086757
     },
     "bass": {
       "source": {
         "kind": "track",
         "label": "bass"
       },
-      "low": -29.7,
-      "high": -77.5,
-      "waveRms": 0.11159855486718047,
-      "masterRms": 0.16550670081314056
+      "low": -31.4,
+      "high": -81,
+      "waveRms": 0.10662794463030568,
+      "masterRms": 0.16065597860404748
     },
     "none": {
       "source": {
@@ -3528,7 +3871,7 @@
       "low": null,
       "high": null,
       "waveRms": 0,
-      "masterRms": 0.16557165422546652
+      "masterRms": 0.16663741648235103
     },
     "back": {
       "source": {
@@ -3536,8 +3879,8 @@
       },
       "low": -30.5,
       "high": -31,
-      "waveRms": 0.16550670062200828,
-      "masterRms": 0.1615984679449021
+      "waveRms": 0.14396447330137693,
+      "masterRms": 0.1657256815599088
     }
   }
 }

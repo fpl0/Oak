@@ -9,6 +9,7 @@ import { Kbd } from "../ui/kit/basics.tsx";
 import type { Stage } from "./machine.ts";
 import { tapReport } from "./model.ts";
 import { useLive } from "./runtime.ts";
+import { countMarks } from "./wave6.ts";
 
 export function TapPanel({
   trial,
@@ -35,6 +36,8 @@ export function TapPanel({
   const report = done ? tapReport(taps ?? [], targets) : null;
   const armed = tapNow !== null;
   const x = (t: number) => `${Math.max(0, Math.min(100, (t / span) * 100))}%`;
+  // Wave 6: where the beat divides in three (6/8, or triplets in 4/4) the count is written under the timeline.
+  const counts = countMarks(trial, span);
 
   return (
     <div className="flex flex-col gap-3" data-keyscope="tap-pad">
@@ -81,6 +84,28 @@ export function TapPanel({
           running={!done && (stage === "respond" || stage === "listen" || stage === "count-in")}
         />
       </div>
+      {counts.length > 0 && (
+        <div
+          className="relative -mt-2 h-4 w-full text-[0.6875rem] leading-4"
+          data-testid="tap-counts"
+          role="img"
+          aria-label={`The count: ${counts
+            .slice(0, counts.findIndex((c, i) => i > 0 && c.beat && c.label === "1") || counts.length)
+            .map((c) => c.label)
+            .join(" ")}`}
+        >
+          {counts.map((c) => (
+            <span
+              key={c.at}
+              aria-hidden
+              className={clsx("absolute pl-0.5", c.beat ? "font-semibold text-text-2" : "text-text-3")}
+              style={{ left: x(c.at) }}
+            >
+              {c.label}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"

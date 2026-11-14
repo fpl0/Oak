@@ -2,6 +2,41 @@
 
 Owner: **kit** (docs/design/wave4.md §1). Everyone else imports from here and never edits it; ask under `apiNotes`.
 
+## New in Wave 6 (use these instead of a local copy)
+
+`KeyStrip`, `DeviceCounter`, `LoudnessReadout`, `AlbumPlayerBar`, `BranchCard` — all exported from `kit/index.ts`;
+specimens in both themes in `kit/gallery/KitWave6.tsx` (`mountKitWave6`, screenshot and keyboard-tested by
+`kit/e2e/wave6.pw.ts`). Pure rules in `kit/model-w6.ts` (unit-tested in `model-w6.test.ts`). Each piece draws and
+reports only: the owner measures, plays and words the music (`@oak/theory`, the grader's views, the server's notes).
+
+| Piece | File | What it is for |
+|---|---|---|
+| `KeyStrip` | `kit/KeyStrip.tsx` | The key in force along a piece: segments as wide as their bars, every change a heavy bar line with its distance in words above it ("+2: up a whole step", never colour alone). `segments: KeySegment[]` (`text`, `startBar` 0-based, `bars`, `change`, `sounding`); `keySegments(spans, { pickup, totalBars })` turns the 1-based spans of the grader's `keyPlanView` into them, `keyChangeWords(keyDistance(...))` words a change. One tab stop: arrows, Home/End, Enter/Space picks (`onSelect`, `selectedId`); `currentBar` outlines and names the key that sounds; a narrow segment prints "D", "Em", "+2" and keeps the full name in its accessible name; `hideSingle` draws nothing for a piece in one key; `empty`. A live status line reads the whole plan ("C major, then D major from bar 33 (+2: up a whole step)"). |
+| `DeviceCounter` | `kit/DeviceCounter.tsx` | Named things a piece may hold (CF-A's six devices, C7's colours), each found (with where: `barsListText` → "bars 11 and 27") or open ("Not yet": quiet, never an error), the count beside the heading against the rule's `need` ("3 of 6 · 4 needed"), one pip per item with the need marked, a `detail` line and an `action` per row, `dense`, `countText` (a rule not live yet). |
+| `LoudnessReadout` | `kit/LoudnessReadout.tsx` | A calm meter with numbers for CF-A's Master step: the loudest moment before the limiter on a dB scale with the threshold marked (amber past it, never red, no flashing), what the limiter took off and in words (`limiter`: resting / touching / working → "Resting", "Catching peaks", "Working steadily"), the average level, `live` while measuring, `lines` (the owner's sentences), `empty`, `action`. `dbText` prints levels as @oak/audio's `levelText` does. Reduced motion: no transitions. |
+| `AlbumPlayerBar` | `kit/AlbumPlayerBar.tsx` | One bar that plays a whole record (Side A on the finale Coda and the album): "3 of 12 · Four-Chord Song · 0:42 / 1:36", a play / stop button that names what it plays, previous / next, the track's progress. Keys on the bar: Space plays or stops, ←/→ change track, Esc stops. The owner keeps the `<audio>`, the order and the breath between tracks; it never starts by itself. `disabledReason`, `idleText`, `cover`, `actions`, `sticky`. |
+| `BranchCard` | `kit/BranchCard.tsx` | A branch of the course off the core's path (an advanced track): `locked` ("Not open yet" + what opens it), `open` (gate met, nothing to start: the server's honest note, "Its first lessons are still being written."), `ready` (a lesson to start). `branchState(TrackState)` picks the state; an `action` is drawn ONLY when `ready`, so an unwritten track can never look like a way in; `more` is an always-honest link (to the Oak); `fresh` says "Opened today"; `layout="card" | "row"`; `progress` only when ready. |
+| helpers | `kit/model-w6.ts` | `keySegments`, `keyChangeWords`, `keyPlanSentence`, `keySegmentAt`, `shortKeyName`, `shortChange`, `deviceCount`, `barsListText`, `dbText`, `reductionText`, `dbFraction`, `loudnessSentence`, `LIMITER_WORDS` / `LIMITER_PHRASES`, `nowPlayingText`, `playFraction`, `branchState`, `branchNote`, `branchSummary`, `listWords`. |
+
+## Shell and settings (Wave 6)
+
+- **Advanced tracks, honestly.** `shell/course-state.ts` reads the server's `TrackState` (`lessons.progress.tracks`),
+  or the same gates from the course progress when a server does not send it. Before U13.CP nothing is said in the
+  rail; afterwards the Oak's rail item and tooltip say "Jazz Harmony and Advanced Rhythm are open, their first lessons
+  still being written" (never a lock or a badge: tracks are optional). In the palette a track is "Advanced track ·
+  open · its first lessons are still being written" and leads to `/oak?view=course`; a lesson nobody has written yet
+  says "… · still being written" and leads there too, never to an empty `/learn` page.
+- **The end of the core.** Every rail destination stays, none locked or worded as an ending (`FINISHED_WORDS` is
+  tested against the rail, the palette and the sheet). Once the core's lessons are done the palette asks
+  `course.completion` and lists what stays open first ("Open to you · …"; a track with nothing to start: "Open,
+  nothing to start yet · …", leading to the Oak).
+- **Shortcut sheet.** New section "Key strip and the record"; "Staff input: rhythm" (T tie, . dot, ; triplet — a
+  staff that offers them registers the same id); the applied-numeral key `/`; the form map's X and A; the music-lens
+  keys Shift+I guide tones, Shift+J key ribbon, Shift+V beat grid, each locked until ANY ONE of its tools is unlocked
+  (`keys/locks.ts` `WORKBENCH_KEY_ANY_UNLOCKS`, from `MUSIC_LENS_UNLOCKS`). The sheet flows in two columns that
+  scroll down. `G L` resumes the lesson THIS tab left open (d21: `ownOpenSession(session.day)`), else goes to Today.
+- `Kbd tone="onAccent"` for a key hint inside a primary button (AA on the accent in both themes).
+
 ## New in Wave 5 (use these instead of a local copy)
 
 All exported from `kit/index.ts`; specimens in both themes in `kit/gallery/KitWave5.tsx` (`mountKitWave5`, screenshot by

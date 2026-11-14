@@ -26,6 +26,8 @@ export interface LinerFacts {
   band?: string | null;
   /** "Revision suggested by Claude (bars 5–8)". */
   attribution?: string | null;
+  /** A line of the piece's own making that is never dropped (CF-A: "Mastered against Chromatic Colour. …"). */
+  extra?: string | null;
 }
 
 export function wordCount(text: string): number {
@@ -118,6 +120,7 @@ export function composeLiner(f: LinerFacts, max = LINER_MAX_WORDS): string {
   if (f.previewTools.length)
     flags.push(sentence(`Uses preview tools: ${f.previewTools.map((t) => `\`${t}\``).join(", ")}`));
   if (f.revealed.length) flags.push(sentence(`Revealed, not heard: ${f.revealed.join(", ")}`));
+  if (f.extra) flags.push(sentence(f.extra));
   if (f.band) flags.push(sentence(f.band));
   if (f.attribution) flags.push(sentence(f.attribution));
 

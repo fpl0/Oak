@@ -8,9 +8,10 @@ import { useState } from "react";
 import { type ContentBundle, lessonTitles } from "../lib/content-model.ts";
 import { Button, buttonClass } from "../ui/kit/Button.tsx";
 import { Chip } from "../ui/kit/basics.tsx";
+import { Callout } from "../ui/kit/Controls.tsx";
 import { Dialog } from "../ui/kit/Dialog.tsx";
 import { Workbench, type WorkbenchProps } from "../workbench/Workbench.tsx";
-import { openedText } from "./checkpoint/model.ts";
+import { openedText, tracksOpenedCopy } from "./checkpoint/model.ts";
 import type { OriginLink, SideInfo } from "./side.ts";
 
 export function CompleteScreen({
@@ -46,6 +47,11 @@ export function CompleteScreen({
   const term = (id: string) => content?.terms.find((t) => t.id === id)?.term ?? id;
   // What opens is named by title ("Blues checkpoint"), never by ID.
   const opened = openedText(completion?.opened ?? [], lessonTitles(content?.syllabus ?? null));
+  // Wave 6: a completion that met an advanced-track gate (U15.L06: more of the Jazz track) says so once.
+  const tracksCopy = tracksOpenedCopy(
+    completion?.gatesOpened,
+    new Map((content?.syllabus?.tracks ?? []).map((t) => [t.id, t.title])),
+  );
   const title = partA
     ? "Part A done"
     : wrapped
@@ -140,6 +146,13 @@ export function CompleteScreen({
             </div>
           )}
         </dl>
+      )}
+      {tracksCopy && (
+        <div data-testid="tracks-opened" data-authored={tracksCopy.authored ? "1" : "0"}>
+          <Callout tone="info" title={tracksCopy.title}>
+            {tracksCopy.body}
+          </Callout>
+        </div>
       )}
       <div className="flex flex-wrap items-center gap-2">
         <Link

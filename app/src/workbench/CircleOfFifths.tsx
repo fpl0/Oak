@@ -4,8 +4,10 @@
 // Choosing a key plays the same code in that key without editing it; "Use this key" is the explicit edit of the
 // `.scale()` arguments. Keyboard: the ring is one tab stop; arrows go round it, Enter or Space plays, Esc stops.
 import type { KeySpec } from "@oak/content-kit";
-import { fifthsOfKey } from "@oak/theory";
+import { fifthsOfKey, modeColour, parallelKey, transposeKey } from "@oak/theory";
 import { useState } from "react";
+import { type KeyExtras, LIFT_LESSON, LiftRow } from "./KeyExtras.tsx";
+import { lending } from "./key-extras.ts";
 import {
   glyph,
   keyName,
@@ -25,6 +27,8 @@ export interface CircleProps {
   /** Every key the piece visits. */
   keys: readonly KeySpec[];
   preview: KeyPreview | null;
+  /** Wave 6: the parallel key's slot marked once borrowed chords are taught (U16), the lift by a step (U17.L02). */
+  extras?: KeyExtras;
 }
 
 const SIZE = 248;
@@ -37,10 +41,17 @@ function polar(r: number, index: number): { x: number; y: number } {
   return { x: C + r * Math.cos(a), y: C + r * Math.sin(a) };
 }
 
-export function CircleOfFifths({ current, keys, preview }: CircleProps) {
+export function CircleOfFifths({ current, keys, preview, extras }: CircleProps) {
   const slots = ring();
   const mode = current?.mode ?? "major";
+  // A minor-family mode (Dorian, Phrygian, the minor forms) reads "m" at the hub; a major-family one does not.
+  const family = modeColour(mode)?.family ?? (/minor/.test(mode) ? "minor" : "major");
   const minorish = mode === "minor";
+  // Wave 6: where the borrowed chords come from (the parallel key, three steps round), and a whole step up (two).
+  const lend = current && extras ? lending(current, extras.taught) : null;
+  const lendSlot = lend ? slotOf(lend.from) : null;
+  const liftOn = current !== null && extras?.taught(LIFT_LESSON) === true;
+  const liftSlot = liftOn && current ? slotOf(transposeKey(current, 2)) : null;
   const here = current ? slotOf(current) : 0;
   const [focus, setFocus] = useState<number>(here);
   const [chosen, setChosen] = useState<number | null>(null);
@@ -138,6 +149,8 @@ export function CircleOfFifths({ current, keys, preview }: CircleProps) {
                 data-on={isOn ? "1" : undefined}
                 data-visited={isVisited ? "1" : undefined}
                 data-focus={s.index === focus ? "1" : undefined}
+                data-lends={s.index === lendSlot ? "1" : undefined}
+                data-lift={s.index === liftSlot ? "1" : undefined}
                 onClick={() => choose(s.index)}
               >
                 <circle cx={outer.x} cy={outer.y} r={19} className="oak-circle-major" />
@@ -164,7 +177,7 @@ export function CircleOfFifths({ current, keys, preview }: CircleProps) {
           })}
           <text x={C} y={C - 7} textAnchor="middle" className="oak-circle-center">
             {current ? glyph(current.tonic) : "—"}
-            {current && current.mode !== "major" ? "m" : ""}
+            {current && family === "minor" ? "m" : ""}
           </text>
           <text x={C} y={C + 11} textAnchor="middle" className="oak-circle-sub">
             {/* The key's own signature: C♭ major sits on B's slot but has seven flats, not five sharps. */}
@@ -234,6 +247,13 @@ export function CircleOfFifths({ current, keys, preview }: CircleProps) {
         {preview?.error ? <p className="oak-issue-text">{preview.error}</p> : null}
       </div>
       {current && preview?.movable ? <Twins current={current} preview={preview} /> : null}
+      {current && lend ? (
+        <p className="oak-muted oak-wb-panel-note" data-testid="circle-lends">
+          {keyName(parallelKey(current))} sits three steps round the ring (dashed): it lends{" "}
+          {lend.chords.map((c) => `${c.symbol} (${c.rn})`).join(", ")}.
+        </p>
+      ) : null}
+      {current && liftOn ? <LiftRow current={current} preview={preview} /> : null}
     </section>
   );
 }

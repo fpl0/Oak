@@ -9,15 +9,16 @@ import { Check, ChevronDown, Download, Lock, Pause, Pencil, Play, X } from "luci
 import { useEffect, useId, useRef, useState } from "react";
 import "./cover.css";
 import { useCapstoneContent } from "../capstone/content.ts";
-import { FLAVOUR_LABEL, formatDuration } from "../lib/format.ts";
+import { FLAVOUR_LABEL, formatDate, formatDuration } from "../lib/format.ts";
 import { usePageTitle } from "../lib/nav.ts";
-import { albumAudioUrl, apiQuery, useAlbum, useCourseProgress } from "../lib/queries.ts";
+import { albumAudioUrl, apiQuery, useAlbum, useCoreCompletion, useCourseProgress } from "../lib/queries.ts";
 import { AlbumCover } from "../ui/AlbumCover.tsx";
 import { Button, buttonClass, IconButton } from "../ui/kit/Button.tsx";
 import { Chip, Page, Skeleton } from "../ui/kit/basics.tsx";
 import { ErrorState } from "../ui/kit/QueryState.tsx";
-import { albumSides, audioFileName, runtime, type Slot } from "./model.ts";
+import { albumSides, audioFileName, runtime, type Slot, sideARecord } from "./model.ts";
 import { useCoverMusic } from "./music.ts";
+import { pauseOtherAudio, SideARecord } from "./SideARecord.tsx";
 import { ALBUM_TITLE_MAX, cleanAlbumTitle, DEFAULT_ALBUM_TITLE, useAlbumTitle } from "./title.ts";
 import { Vinyl } from "./Vinyl.tsx";
 
@@ -31,6 +32,7 @@ export function AlbumPage() {
   const album = useAlbum();
   const content = useCapstoneContent();
   const progress = useCourseProgress();
+  const completion = useCoreCompletion();
   const tracks = album.data?.tracks ?? [];
   const details = useQueries({
     queries: tracks.map((t) => apiQuery("album.track", { params: { id: t.id } })),
@@ -49,6 +51,7 @@ export function AlbumPage() {
       el.pause();
       return;
     }
+    pauseOtherAudio(el);
     el.src = albumAudioUrl(p.trackId, p.version);
     void el.play().catch(() => setPlaying(null));
   };
@@ -98,6 +101,9 @@ export function AlbumPage() {
   }, 0);
   const newest = [...tracks].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
   const c0 = progress.data?.capstones.find((c) => c.capstoneId === "C0");
+  // Side A finished (every core track released): the album's own page is the record (content/specs/END.md).
+  const finished = sideARecord(tracks, detailOf, content.data?.capstones ?? []).complete;
+  const finishedAt = completion.data?.stage === "complete" ? completion.data.completedAt : null;
 
   return (
     <Page>
@@ -116,74 +122,89 @@ export function AlbumPage() {
         className="hidden"
         data-testid="album-player"
       />
-      <header className="mb-10 grid items-center gap-8 md:grid-cols-[minmax(0,440px)_1fr]">
-        <Sleeve
-          newest={newest}
-          spinning={playing !== null}
-          detail={newest ? detailOf.get(newest.id) : undefined}
-        />
-        <div className="min-w-0">
+      {finished ? (
+        <header className="mb-10" data-testid="album-finished">
           <p className="text-sm tracking-[0.2em] text-text-3 uppercase">Album</p>
           <AlbumTitleHeading />
-          {tracks.length > 0 ? (
-            <>
-              <p className="mt-1 text-text-2" data-testid="album-meta">
-                {tracks.length} {tracks.length === 1 ? "track" : "tracks"} ·{" "}
-                {withAudio.length > 0 ? runtime(total || null) : "no recordings yet"}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button
-                  variant="primary"
-                  icon={
-                    playing ? (
-                      <Pause aria-hidden className="size-4" />
-                    ) : (
-                      <Play aria-hidden className="size-4" />
-                    )
-                  }
-                  disabled={withAudio.length === 0}
-                  title={
-                    withAudio.length === 0
-                      ? "No track has a recording yet. Open a track to play its code live and record it."
-                      : undefined
-                  }
-                  onClick={() => {
-                    if (playing) {
-                      setQueue([]);
-                      play(null);
-                    } else {
-                      const [first, ...rest] = withAudio;
-                      setQueue(rest);
-                      play(first ?? null);
+          <p className="mt-1 max-w-[70ch] text-text-2" data-testid="album-meta">
+            Side A is complete: {tracks.filter((t) => t.side === "A").length} tracks of your own, in the order
+            you made them, the single last.
+            {finishedAt ? ` Finished on ${formatDate(finishedAt)}.` : ""}
+          </p>
+          <div className="mt-6 rounded-card border border-border bg-surface p-5 shadow-card">
+            <SideARecord />
+          </div>
+        </header>
+      ) : (
+        <header className="mb-10 grid items-center gap-8 md:grid-cols-[minmax(0,440px)_1fr]">
+          <Sleeve
+            newest={newest}
+            spinning={playing !== null}
+            detail={newest ? detailOf.get(newest.id) : undefined}
+          />
+          <div className="min-w-0">
+            <p className="text-sm tracking-[0.2em] text-text-3 uppercase">Album</p>
+            <AlbumTitleHeading />
+            {tracks.length > 0 ? (
+              <>
+                <p className="mt-1 text-text-2" data-testid="album-meta">
+                  {tracks.length} {tracks.length === 1 ? "track" : "tracks"} ·{" "}
+                  {withAudio.length > 0 ? runtime(total || null) : "no recordings yet"}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Button
+                    variant="primary"
+                    icon={
+                      playing ? (
+                        <Pause aria-hidden className="size-4" />
+                      ) : (
+                        <Play aria-hidden className="size-4" />
+                      )
                     }
-                  }}
-                >
-                  {playing ? "Stop" : "Play all"}
-                </Button>
-                {newest && (
-                  <Link
-                    to="/album/$trackId"
-                    params={{ trackId: newest.id }}
-                    className={buttonClass("secondary")}
+                    disabled={withAudio.length === 0}
+                    title={
+                      withAudio.length === 0
+                        ? "No track has a recording yet. Open a track to play its code live and record it."
+                        : undefined
+                    }
+                    onClick={() => {
+                      if (playing) {
+                        setQueue([]);
+                        play(null);
+                      } else {
+                        const [first, ...rest] = withAudio;
+                        setQueue(rest);
+                        play(first ?? null);
+                      }
+                    }}
                   >
-                    Newest: {newest.title}
-                  </Link>
-                )}
-              </div>
-              <p className="mt-4 max-w-[52ch] text-sm text-text-2">
-                Every cover is grown from its track: one ring per bar, notes in their degree colours, the
-                drums marked on the rings.
-              </p>
-            </>
-          ) : (
-            <FirstTrack c0={c0} />
-          )}
-        </div>
-      </header>
+                    {playing ? "Stop" : "Play all"}
+                  </Button>
+                  {newest && (
+                    <Link
+                      to="/album/$trackId"
+                      params={{ trackId: newest.id }}
+                      className={buttonClass("secondary")}
+                    >
+                      Newest: {newest.title}
+                    </Link>
+                  )}
+                </div>
+                <p className="mt-4 max-w-[52ch] text-sm text-text-2">
+                  Every cover is grown from its track: one ring per bar, notes in their degree colours, the
+                  drums marked on the rings.
+                </p>
+              </>
+            ) : (
+              <FirstTrack c0={c0} />
+            )}
+          </div>
+        </header>
+      )}
 
       <div className="flex flex-col gap-10">
         {sides.map((side) => (
-          <section key={side.side} aria-labelledby={`side-${side.side}`}>
+          <section key={side.side} aria-labelledby={`side-${side.side}`} data-side={side.side}>
             <div className="mb-3 flex items-baseline gap-3 border-b border-border pb-2">
               <h2 id={`side-${side.side}`} className="font-display text-h2">
                 {side.title}
@@ -511,7 +532,19 @@ function SlotRow({
           className="mb-4 ml-24 max-w-[70ch] rounded-card bg-surface-2/60 p-4 text-sm"
         >
           {v ? (
-            <LinerNotes text={v.linerNotesMd} attribution={v.attribution} />
+            <>
+              <LinerNotes text={v.linerNotesMd} attribution={v.attribution} />
+              {v.theoryTags.length > 0 && (
+                <div className="mt-3 flex flex-wrap items-center gap-1.5" data-testid="liner-theory">
+                  <span className="text-text-3">Theory used</span>
+                  {v.theoryTags.map((tag) => (
+                    <Chip key={tag} className="h-5 text-[0.75rem]">
+                      {tag}
+                    </Chip>
+                  ))}
+                </div>
+              )}
+            </>
           ) : (
             <p className="text-text-3">Loading…</p>
           )}

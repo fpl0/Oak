@@ -108,12 +108,19 @@ export function rowLabel(
   midi: number,
   key: KeySpec | null,
   mode: "none" | "note" | "degree" | "degree+solfege",
+  lateSyllables = true,
 ): string {
   if (mode === "none") return "";
   const p = pitchLabel(midi, key);
   if (mode === "note" || !p.degree) return p.display;
-  return mode === "degree+solfege" ? `${p.degree.label} ${p.degree.syllable}` : p.degree.label;
+  // Before chromatic solfège (U15.L01) a row outside the key is its degree alone: no di, ri, fi, si, li or ra.
+  const syllable =
+    !lateSyllables && !p.degree.inKey && LATE_SYLLABLES.has(p.degree.syllable) ? "" : p.degree.syllable;
+  return mode === "degree+solfege" && syllable ? `${p.degree.label} ${syllable}` : p.degree.label;
 }
+
+/** Chromatic syllables first taught at U15.L01 (`tb.n.chromatic`); me, le, te and se come earlier. */
+export const LATE_SYLLABLES: ReadonlySet<string> = new Set(["di", "ri", "fi", "si", "li", "ra"]);
 
 /**
  * The role of `midi` in the chord named by `symbol`: "R", "3", "5", "7", "9", "11", "13" (with ♭/♯ for
@@ -254,7 +261,7 @@ export function tooltipText(
     parts.push(p.display);
     if (p.degree) {
       if (show.degree) parts.push(`degree ${p.degree.label}`);
-      if (show.solfege) parts.push(p.degree.syllable);
+      if (show.solfege && p.degree.syllable) parts.push(p.degree.syllable);
     }
     if (e.chordSymbol) {
       const role = chordRoleOf(e.midi, e.chordSymbol);

@@ -55,7 +55,7 @@ describe("melody matcher", () => {
       ctx,
     );
     expect(ids(r)).toEqual(["melody.wrong-degree"]);
-    expect(r.diagnostics[0]?.params).toMatchObject({ got: "b7", gotSyl: "te", exp: "7", expSyl: "ti" });
+    expect(r.diagnostics[0]?.params).toMatchObject({ got: "♭7", gotSyl: "te", exp: "7", expSyl: "ti" });
   });
 });
 

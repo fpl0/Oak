@@ -131,7 +131,7 @@ export function noteText(
   if (!label) return "";
   const parts: string[] = [];
   if (k.degree && label.degree) parts.push(label.degree.label);
-  if (k.solfege && label.degree) parts.push(label.degree.syllable);
+  if (k.solfege && label.degree?.syllable) parts.push(label.degree.syllable);
   if (k.noteName || (k.degree && !label.degree)) parts.push(label.display);
   return parts.join(" ");
 }

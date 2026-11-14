@@ -186,6 +186,8 @@ test("a whole U10 day from the keyboard, with reduced motion", async ({ page, re
   const plan = await api<{ kind: string; mapItemId: string }>(request, "GET", "/api/session/today");
   expect(plan).toMatchObject({ kind: "lesson", mapItemId: "U10.L04" });
   await openToday(page);
+  // Today has decided before Tab is pressed (under load the card shows before its Start button).
+  await expect(page.getByTestId("start-session")).toBeVisible({ timeout: 30_000 });
   await tabTo(page, byId("start-session"), "Start session");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/session\/?$/);

@@ -18,6 +18,8 @@
   ],
   "audible": {
     "chord.dom7": true,
+    "chord.seventh": true,
+    "chord.seventh-dim": true,
     "chord.triad": true,
     "noop.amp": false,
     "noop.leslie": false,
@@ -27,11 +29,15 @@
     "noop.squiz": false,
     "noop.triode": false,
     "scale.blues": true,
+    "scale.dorian": true,
     "scale.harmonic-minor": true,
+    "scale.lydian": true,
     "scale.major-pentatonic": true,
     "scale.melodic-minor": true,
     "scale.minor": true,
     "scale.minor-pentatonic": true,
+    "scale.mixolydian": true,
+    "scale.phrygian": true,
     "snd.acgtr": true,
     "snd.bank.AkaiLinn": true,
     "snd.bank.LinnDrum": true,
@@ -93,30 +99,36 @@
     "tb.delay": true,
     "tb.delayfeedback": true,
     "tb.delaytime": true,
+    "tb.dict.lefthand": true,
     "tb.dict.triads": true,
     "tb.distort": true,
     "tb.distorttype": true,
     "tb.duck": true,
+    "tb.early": true,
     "tb.firstOf": true,
     "tb.fm": true,
     "tb.gain": true,
     "tb.hpf": true,
     "tb.jux": true,
     "tb.lastOf": true,
+    "tb.late": true,
     "tb.loopAt": true,
     "tb.lpenv": true,
     "tb.lpf": true,
     "tb.lpmod": true,
     "tb.lpq": true,
     "tb.mask": true,
+    "tb.meter.compound": true,
     "tb.mini.maybe": true,
     "tb.mode.below": true,
     "tb.mode.root": true,
+    "tb.n.chromatic": true,
     "tb.off": true,
     "tb.orbit": true,
     "tb.pan": true,
     "tb.partials": true,
     "tb.phaser": true,
+    "tb.ply": true,
     "tb.postgain": true,
     "tb.pw": true,
     "tb.range": true,
@@ -149,9 +161,9 @@
       "code": "note(\"c3 e3 g3 c4\").s(\"sawtooth\").room(0.6)",
       "audible": true,
       "diffDb": -10.7,
-      "repeatDb": -159.4,
+      "repeatDb": -158.4,
       "spectralDb": -12.8,
-      "spectralRepeatDb": -174.5,
+      "spectralRepeatDb": -173.6,
       "width": [
         0,
         0.186
@@ -236,9 +248,9 @@
       "code": "note(\"c3 e3 g3 c4\").s(\"sawtooth\").delay(0.5)",
       "audible": true,
       "diffDb": -4.9,
-      "repeatDb": -156.5,
+      "repeatDb": -156.3,
       "spectralDb": -3.7,
-      "spectralRepeatDb": -171.7,
+      "spectralRepeatDb": -172.1,
       "width": [
         0,
         0
@@ -439,9 +451,9 @@
       "code": "note(\"c3 e3 g3 c4\").s(\"sawtooth\").lpf(600).lpq(20)",
       "audible": true,
       "diffDb": 3.3,
-      "repeatDb": -79.5,
+      "repeatDb": -67.5,
       "spectralDb": 2.1,
-      "spectralRepeatDb": -99.7,
+      "spectralRepeatDb": -85.4,
       "width": [
         0,
         0
@@ -449,7 +461,7 @@
       "levelDb": 5.7,
       "centroidHz": [
         483,
-        526
+        527
       ],
       "balance": [
         0,
@@ -700,9 +712,9 @@
       "code": "note(\"c3 e3 g3 c4\").s(\"sawtooth\").release(0.5)",
       "audible": true,
       "diffDb": 2.6,
-      "repeatDb": -143.6,
+      "repeatDb": "-Infinity",
       "spectralDb": 5.4,
-      "spectralRepeatDb": -164.5,
+      "spectralRepeatDb": "-Infinity",
       "width": [
         0,
         0
@@ -729,9 +741,9 @@
       "code": "note(\"c3 e3 g3 c4\").s(\"sawtooth\").room(0.6).roomsize(6)",
       "audible": true,
       "diffDb": -6.5,
-      "repeatDb": -163.6,
+      "repeatDb": -160.5,
       "spectralDb": -10.5,
-      "spectralRepeatDb": -181.6,
+      "spectralRepeatDb": -177.4,
       "width": [
         0.186,
         0.357
@@ -758,9 +770,9 @@
       "code": "note(\"c3 e3 g3 c4\").s(\"sawtooth\").delay(0.5).delaytime(0.125)",
       "audible": true,
       "diffDb": -2.5,
-      "repeatDb": -159.3,
+      "repeatDb": -163.4,
       "spectralDb": -12.1,
-      "spectralRepeatDb": -171.7,
+      "spectralRepeatDb": -176.9,
       "width": [
         0,
         0
@@ -787,9 +799,9 @@
       "code": "note(\"c3 e3 g3 c4\").s(\"sawtooth\").delay(0.5).delayfeedback(0.8)",
       "audible": true,
       "diffDb": -9.4,
-      "repeatDb": -156.6,
+      "repeatDb": -157.7,
       "spectralDb": -7.2,
-      "spectralRepeatDb": -171.7,
+      "spectralRepeatDb": -174.1,
       "width": [
         0,
         0
@@ -816,9 +828,9 @@
       "code": "stack(note(\"c3 e3 g3 c4\").s(\"sawtooth\").delay(0.6).delaytime(0.25), s(\"~ bd ~ bd\").delay(0.6).delaytime(0.0625).orbit(2))",
       "audible": true,
       "diffDb": -10.1,
-      "repeatDb": -162.7,
+      "repeatDb": -166.2,
       "spectralDb": -13.6,
-      "spectralRepeatDb": -175.9,
+      "spectralRepeatDb": -179.3,
       "width": [
         0,
         0
@@ -1192,21 +1204,21 @@
       "base": "note(\"c3 e3 g3 c4\").s(\"supersaw\")",
       "code": "note(\"c3 e3 g3 c4\").s(\"supersaw\").unison(1)",
       "audible": true,
-      "diffDb": 3.4,
-      "repeatDb": 2.1,
-      "spectralDb": -12,
-      "spectralRepeatDb": -30.4,
+      "diffDb": 4.4,
+      "repeatDb": 3.5,
+      "spectralDb": -8.3,
+      "spectralRepeatDb": -29,
       "width": [
-        0.338,
+        0.388,
         0
       ],
-      "levelDb": -0.7,
+      "levelDb": 0.4,
       "centroidHz": [
-        4064,
-        3673
+        4041,
+        3454
       ],
       "balance": [
-        0.11,
+        0.19,
         0
       ],
       "tail": [
@@ -1221,22 +1233,22 @@
       "base": "note(\"c3 e3 g3 c4\").s(\"supersaw\")",
       "code": "note(\"c3 e3 g3 c4\").s(\"supersaw\").detune(0.8)",
       "audible": true,
-      "diffDb": 2.3,
-      "repeatDb": 2.9,
-      "spectralDb": -8.2,
-      "spectralRepeatDb": -20.3,
+      "diffDb": 3.7,
+      "repeatDb": 3.3,
+      "spectralDb": -7.1,
+      "spectralRepeatDb": -17.9,
       "width": [
-        0.338,
-        0.295
+        0.388,
+        0.331
       ],
-      "levelDb": -0.4,
+      "levelDb": 0.3,
       "centroidHz": [
-        4064,
-        3672
+        4041,
+        3805
       ],
       "balance": [
-        0.11,
-        0.12
+        0.19,
+        0.14
       ],
       "tail": [
         0,
@@ -1250,21 +1262,21 @@
       "base": "note(\"c3 e3 g3 c4\").s(\"supersaw\")",
       "code": "note(\"c3 e3 g3 c4\").s(\"supersaw\").spread(0)",
       "audible": true,
-      "diffDb": 3,
-      "repeatDb": 1.9,
-      "spectralDb": -8.5,
-      "spectralRepeatDb": -7.2,
+      "diffDb": 4.2,
+      "repeatDb": 2.6,
+      "spectralDb": -9.9,
+      "spectralRepeatDb": -8.4,
       "width": [
-        0.338,
+        0.388,
         0
       ],
-      "levelDb": -1.9,
+      "levelDb": 0.8,
       "centroidHz": [
-        4064,
-        4193
+        4041,
+        4108
       ],
       "balance": [
-        0.11,
+        0.19,
         0
       ],
       "tail": [
@@ -1598,10 +1610,10 @@
       "base": "stack(note(\"c3 e3 g3 c4\").s(\"sawtooth\").orbit(1), s(\"~ bd ~ bd\").orbit(2))",
       "code": "stack(note(\"c3 e3 g3 c4\").s(\"sawtooth\").orbit(1), s(\"~ bd ~ bd\").orbit(2).duckorbit(1))",
       "audible": true,
-      "diffDb": -14.9,
-      "repeatDb": -26.1,
-      "spectralDb": -24.2,
-      "spectralRepeatDb": -35.9,
+      "diffDb": -14.6,
+      "repeatDb": -41.5,
+      "spectralDb": -24.1,
+      "spectralRepeatDb": -51,
       "width": [
         0,
         0
@@ -1609,7 +1621,7 @@
       "levelDb": -0.1,
       "centroidHz": [
         2542,
-        2452
+        2456
       ],
       "balance": [
         0,
@@ -1627,10 +1639,10 @@
       "base": "stack(note(\"c3 e3 g3 c4\").s(\"sawtooth\").orbit(1), s(\"~ bd ~ bd\").orbit(2).duckorbit(1).duckdepth(0.3))",
       "code": "stack(note(\"c3 e3 g3 c4\").s(\"sawtooth\").orbit(1), s(\"~ bd ~ bd\").orbit(2).duckorbit(1).duckdepth(1))",
       "audible": true,
-      "diffDb": -19.5,
-      "repeatDb": -31.5,
-      "spectralDb": -29,
-      "spectralRepeatDb": -41.1,
+      "diffDb": -19.6,
+      "repeatDb": -41,
+      "spectralDb": -29.1,
+      "spectralRepeatDb": -50.3,
       "width": [
         0,
         0
@@ -1638,7 +1650,7 @@
       "levelDb": 0,
       "centroidHz": [
         2469,
-        2447
+        2445
       ],
       "balance": [
         0,
@@ -1715,9 +1727,9 @@
       "code": "note(\"[c3,e3,g3]\").arp(\"0 1 2 1\").s(\"piano\")",
       "audible": true,
       "diffDb": 2.1,
-      "repeatDb": -146.7,
+      "repeatDb": -147.1,
       "spectralDb": -10.7,
-      "spectralRepeatDb": -166.4,
+      "spectralRepeatDb": -166.6,
       "width": [
         0.694,
         0.665
@@ -1744,9 +1756,9 @@
       "code": "chord(\"C Cm Co Caug\").voicing().s(\"piano\")",
       "audible": true,
       "diffDb": -2.2,
-      "repeatDb": -140.2,
+      "repeatDb": -140.6,
       "spectralDb": -6.9,
-      "spectralRepeatDb": -158.4,
+      "spectralRepeatDb": -158.8,
       "width": [
         0.796,
         0.869
@@ -1773,9 +1785,9 @@
       "code": "chord(\"Am\").voicing().s(\"piano\")",
       "audible": true,
       "diffDb": -1.3,
-      "repeatDb": -144.8,
+      "repeatDb": -144.9,
       "spectralDb": -2.1,
-      "spectralRepeatDb": -159.5,
+      "spectralRepeatDb": -159.8,
       "width": [
         0.696,
         1.003
@@ -1802,9 +1814,9 @@
       "code": "chord(\"C\").voicing().s(\"piano\")",
       "audible": true,
       "diffDb": 1.5,
-      "repeatDb": -142.7,
+      "repeatDb": -145.9,
       "spectralDb": -3.7,
-      "spectralRepeatDb": -161.9,
+      "spectralRepeatDb": -165,
       "width": [
         0.694,
         0.696
@@ -1833,7 +1845,7 @@
       "diffDb": -0.7,
       "repeatDb": -144,
       "spectralDb": -2.8,
-      "spectralRepeatDb": -161.8,
+      "spectralRepeatDb": -161.6,
       "width": [
         0.696,
         0.734
@@ -1860,9 +1872,9 @@
       "code": "chord(\"C\").mode(\"below\").voicing().s(\"piano\")",
       "audible": true,
       "diffDb": 0.2,
-      "repeatDb": -143.5,
+      "repeatDb": -143.9,
       "spectralDb": -1.4,
-      "spectralRepeatDb": -162,
+      "spectralRepeatDb": -162.3,
       "width": [
         0.791,
         0.696
@@ -1889,9 +1901,9 @@
       "code": "chord(\"C\").dict(\"triads\").voicing().s(\"piano\")",
       "audible": true,
       "diffDb": -2.7,
-      "repeatDb": "-Infinity",
+      "repeatDb": -150.7,
       "spectralDb": -3.3,
-      "spectralRepeatDb": "-Infinity",
+      "spectralRepeatDb": -163.4,
       "width": [
         0.696,
         0.873
@@ -1918,9 +1930,9 @@
       "code": "n(\"0 2 4\").add(n(\"2\")).scale(\"C4:major\").s(\"piano\")",
       "audible": true,
       "diffDb": 2.7,
-      "repeatDb": "-Infinity",
+      "repeatDb": -152,
       "spectralDb": -3.5,
-      "spectralRepeatDb": "-Infinity",
+      "spectralRepeatDb": -167.2,
       "width": [
         0.59,
         0.88
@@ -1947,9 +1959,9 @@
       "code": "chord(\"C\").mode(\"root:g2\").voicing().s(\"piano\")",
       "audible": true,
       "diffDb": 3.2,
-      "repeatDb": -143.4,
+      "repeatDb": -144.7,
       "spectralDb": 1.4,
-      "spectralRepeatDb": -164.2,
+      "spectralRepeatDb": -165.5,
       "width": [
         0.696,
         0.721
@@ -1976,9 +1988,9 @@
       "code": "note(\"c3 e3 g3 c4\").rev().s(\"piano\")",
       "audible": true,
       "diffDb": 2.6,
-      "repeatDb": -149.3,
+      "repeatDb": -147.9,
       "spectralDb": -14.4,
-      "spectralRepeatDb": -167.8,
+      "spectralRepeatDb": -166.3,
       "width": [
         0.76,
         0.678
@@ -2005,9 +2017,9 @@
       "code": "n(\"0 1 2 3\").scale(\"C4:major\").scaleTranspose(2).s(\"piano\")",
       "audible": true,
       "diffDb": 2.7,
-      "repeatDb": -150.3,
+      "repeatDb": -151.7,
       "spectralDb": -1.4,
-      "spectralRepeatDb": -167,
+      "spectralRepeatDb": -168.3,
       "width": [
         0.59,
         0.691
@@ -2034,7 +2046,7 @@
       "code": "note(\"[c3,e3,g3]\").struct(\"x ~ x x\").s(\"piano\")",
       "audible": true,
       "diffDb": 3.1,
-      "repeatDb": -139.4,
+      "repeatDb": -139.5,
       "spectralDb": -1.1,
       "spectralRepeatDb": -162.8,
       "width": [
@@ -2121,9 +2133,9 @@
       "code": "note(\"c3 e3 g3 c4\").s(\"sawtooth\").off(1/8, x => x.add(note(7)))",
       "audible": true,
       "diffDb": 0,
-      "repeatDb": -153.8,
+      "repeatDb": -156.4,
       "spectralDb": -1,
-      "spectralRepeatDb": -169.8,
+      "spectralRepeatDb": -172.6,
       "width": [
         0,
         0
@@ -2150,9 +2162,9 @@
       "code": "note(\"c3 e3 g3 c4\").s(\"sawtooth\").superimpose(x => x.add(note(12)))",
       "audible": true,
       "diffDb": 0,
-      "repeatDb": -155.3,
+      "repeatDb": -156.2,
       "spectralDb": -6.7,
-      "spectralRepeatDb": -169.2,
+      "spectralRepeatDb": -169.5,
       "width": [
         0,
         0
@@ -2353,9 +2365,9 @@
       "code": "note(\"c3*8\").s(\"sawtooth\").lpf(saw.range(200, 4000).segment(2))",
       "audible": true,
       "diffDb": -4.4,
-      "repeatDb": -113.6,
+      "repeatDb": -124.7,
       "spectralDb": -15.1,
-      "spectralRepeatDb": -127.8,
+      "spectralRepeatDb": -142.3,
       "width": [
         0,
         0
@@ -2411,9 +2423,9 @@
       "code": "s(\"hh*8\").swingBy(1/3, 4)",
       "audible": true,
       "diffDb": 0,
-      "repeatDb": -150.4,
+      "repeatDb": -155.4,
       "spectralDb": -16.2,
-      "spectralRepeatDb": -167.6,
+      "spectralRepeatDb": -169.3,
       "width": [
         0,
         0
@@ -2440,9 +2452,9 @@
       "code": "s(\"hh*8\").swing(4)",
       "audible": true,
       "diffDb": 0,
-      "repeatDb": -152.6,
+      "repeatDb": -151.7,
       "spectralDb": -16.2,
-      "spectralRepeatDb": -168,
+      "spectralRepeatDb": -166.2,
       "width": [
         0,
         0
@@ -2469,9 +2481,9 @@
       "code": "chord(\"C7\").voicing().s(\"piano\")",
       "audible": true,
       "diffDb": -4,
-      "repeatDb": -144.8,
+      "repeatDb": -144.7,
       "spectralDb": -7,
-      "spectralRepeatDb": -161.8,
+      "spectralRepeatDb": -162.1,
       "width": [
         0.696,
         0.785
@@ -2498,9 +2510,9 @@
       "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:minor\").s(\"piano\")",
       "audible": true,
       "diffDb": -1.5,
-      "repeatDb": -144.4,
+      "repeatDb": -145.1,
       "spectralDb": -5.6,
-      "spectralRepeatDb": -161.4,
+      "spectralRepeatDb": -162,
       "width": [
         0.86,
         0.817
@@ -2527,9 +2539,9 @@
       "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:harmonic:minor\").s(\"piano\")",
       "audible": true,
       "diffDb": -3.2,
-      "repeatDb": -144.1,
+      "repeatDb": -146.3,
       "spectralDb": -6.5,
-      "spectralRepeatDb": -160.9,
+      "spectralRepeatDb": -163.3,
       "width": [
         0.86,
         0.862
@@ -2556,9 +2568,9 @@
       "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:melodic:minor\").s(\"piano\")",
       "audible": true,
       "diffDb": -6.5,
-      "repeatDb": -144.5,
+      "repeatDb": -144.6,
       "spectralDb": -8.1,
-      "spectralRepeatDb": -161.3,
+      "spectralRepeatDb": -161.2,
       "width": [
         0.86,
         0.861
@@ -2585,7 +2597,7 @@
       "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:major:pentatonic\").s(\"piano\")",
       "audible": true,
       "diffDb": -1,
-      "repeatDb": -144.6,
+      "repeatDb": -144.4,
       "spectralDb": -6.8,
       "spectralRepeatDb": -161,
       "width": [
@@ -2614,9 +2626,9 @@
       "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:minor:pentatonic\").s(\"piano\")",
       "audible": true,
       "diffDb": 1.7,
-      "repeatDb": -147,
+      "repeatDb": -144.7,
       "spectralDb": -3.7,
-      "spectralRepeatDb": -163.6,
+      "spectralRepeatDb": -161.4,
       "width": [
         0.86,
         0.891
@@ -2643,9 +2655,9 @@
       "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:blues\").s(\"piano\")",
       "audible": true,
       "diffDb": 2.1,
-      "repeatDb": -144.8,
+      "repeatDb": -144.5,
       "spectralDb": -3,
-      "spectralRepeatDb": -161.6,
+      "spectralRepeatDb": -161.4,
       "width": [
         0.86,
         0.798
@@ -2662,6 +2674,354 @@
       "tail": [
         0.0243,
         0.0218
+      ]
+    },
+    {
+      "id": "chord.seventh",
+      "control": "chord",
+      "value": "=",
+      "base": "chord(\"C C Am Am\").voicing().s(\"piano\")",
+      "code": "chord(\"C C^7 Am Am7\").voicing().s(\"piano\")",
+      "audible": true,
+      "diffDb": -4.7,
+      "repeatDb": -141.6,
+      "spectralDb": -11,
+      "spectralRepeatDb": -158.3,
+      "width": [
+        0.953,
+        0.913
+      ],
+      "levelDb": -0.7,
+      "centroidHz": [
+        773,
+        772
+      ],
+      "balance": [
+        0.41,
+        0.32
+      ],
+      "tail": [
+        0.0459,
+        0.0479
+      ]
+    },
+    {
+      "id": "chord.seventh-dim",
+      "control": "chord",
+      "value": "=",
+      "base": "chord(\"Bm7 Bm7 Bm7b5 Bm7b5\").voicing().s(\"piano\")",
+      "code": "chord(\"Bm7 Bm7b5 Bm7b5 Bo7\").voicing().s(\"piano\")",
+      "audible": true,
+      "diffDb": -3.6,
+      "repeatDb": -140.1,
+      "spectralDb": -7.6,
+      "spectralRepeatDb": -158.2,
+      "width": [
+        1.036,
+        0.936
+      ],
+      "levelDb": 0.1,
+      "centroidHz": [
+        777,
+        712
+      ],
+      "balance": [
+        0.26,
+        0.37
+      ],
+      "tail": [
+        0.0859,
+        0.0616
+      ]
+    },
+    {
+      "id": "tb.dict.lefthand",
+      "control": "dict",
+      "value": "=",
+      "base": "chord(\"Dm7 G7 C^7 C^7\").voicing().s(\"piano\")",
+      "code": "chord(\"Dm7 G7 C^7 C^7\").dict(\"lefthand\").voicing().s(\"piano\")",
+      "audible": true,
+      "diffDb": -0.4,
+      "repeatDb": -143,
+      "spectralDb": -5.8,
+      "spectralRepeatDb": -160,
+      "width": [
+        0.766,
+        0.702
+      ],
+      "levelDb": -1.3,
+      "centroidHz": [
+        750,
+        793
+      ],
+      "balance": [
+        0,
+        0.35
+      ],
+      "tail": [
+        0.0427,
+        0.033
+      ]
+    },
+    {
+      "id": "tb.early",
+      "control": "early",
+      "value": "=",
+      "base": "note(\"c3 e3 g3 c4\").s(\"piano\")",
+      "code": "note(\"c3 e3 g3 c4\").early(1/8).s(\"piano\")",
+      "audible": true,
+      "diffDb": 4,
+      "repeatDb": -147.6,
+      "spectralDb": -20.9,
+      "spectralRepeatDb": -165.4,
+      "width": [
+        0.76,
+        0.725
+      ],
+      "levelDb": 0.1,
+      "centroidHz": [
+        712,
+        633
+      ],
+      "balance": [
+        0.05,
+        0
+      ],
+      "tail": [
+        0.041,
+        0.0565
+      ]
+    },
+    {
+      "id": "tb.late",
+      "control": "late",
+      "value": "=",
+      "base": "note(\"c3 e3 g3 c4\").s(\"piano\")",
+      "code": "note(\"c3 e3 g3 c4\").late(1/8).s(\"piano\")",
+      "audible": true,
+      "diffDb": 4.1,
+      "repeatDb": -149.4,
+      "spectralDb": -32.8,
+      "spectralRepeatDb": -166.7,
+      "width": [
+        0.76,
+        0.76
+      ],
+      "levelDb": 0,
+      "centroidHz": [
+        712,
+        687
+      ],
+      "balance": [
+        0.05,
+        0.05
+      ],
+      "tail": [
+        0.041,
+        0.0562
+      ]
+    },
+    {
+      "id": "tb.ply",
+      "control": "ply",
+      "value": "=",
+      "base": "s(\"hh*4\")",
+      "code": "s(\"hh*4\").ply(3)",
+      "audible": true,
+      "diffDb": 3,
+      "repeatDb": -142.6,
+      "spectralDb": 5.4,
+      "spectralRepeatDb": -162.7,
+      "width": [
+        0,
+        0
+      ],
+      "levelDb": 4.8,
+      "centroidHz": [
+        8654,
+        8655
+      ],
+      "balance": [
+        0,
+        0
+      ],
+      "tail": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "tb.meter.compound",
+      "control": "meter",
+      "value": "=",
+      "base": "s(\"[bd hh]*3\")",
+      "code": "s(\"[bd hh hh]*2\")",
+      "audible": true,
+      "diffDb": -0.1,
+      "repeatDb": "-Infinity",
+      "spectralDb": -8.8,
+      "spectralRepeatDb": "-Infinity",
+      "width": [
+        0,
+        0
+      ],
+      "levelDb": -1.7,
+      "centroidHz": [
+        3683,
+        4452
+      ],
+      "balance": [
+        0,
+        0
+      ],
+      "tail": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "tb.n.chromatic",
+      "control": "n",
+      "value": "=",
+      "base": "n(\"4 3 4 7 6 6 5 ~\").scale(\"C4:major\").s(\"piano\")",
+      "code": "n(\"4 3# 4 7 6 6b 5 ~\").scale(\"C4:major\").s(\"piano\")",
+      "audible": true,
+      "diffDb": -3,
+      "repeatDb": -146.4,
+      "spectralDb": -5,
+      "spectralRepeatDb": -162.6,
+      "width": [
+        1.042,
+        0.925
+      ],
+      "levelDb": -0.4,
+      "centroidHz": [
+        909,
+        913
+      ],
+      "balance": [
+        0.34,
+        0.35
+      ],
+      "tail": [
+        0.0167,
+        0.0173
+      ]
+    },
+    {
+      "id": "scale.mixolydian",
+      "control": "scale",
+      "value": "=",
+      "base": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:major\").s(\"piano\")",
+      "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:mixolydian\").s(\"piano\")",
+      "audible": true,
+      "diffDb": -6.4,
+      "repeatDb": -145.2,
+      "spectralDb": -13.4,
+      "spectralRepeatDb": -161.8,
+      "width": [
+        0.86,
+        0.816
+      ],
+      "levelDb": 0,
+      "centroidHz": [
+        881,
+        858
+      ],
+      "balance": [
+        0.37,
+        0.39
+      ],
+      "tail": [
+        0.0243,
+        0.025
+      ]
+    },
+    {
+      "id": "scale.dorian",
+      "control": "scale",
+      "value": "=",
+      "base": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:minor\").s(\"piano\")",
+      "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:dorian\").s(\"piano\")",
+      "audible": true,
+      "diffDb": -6,
+      "repeatDb": -145.9,
+      "spectralDb": -12.1,
+      "spectralRepeatDb": -162.5,
+      "width": [
+        0.817,
+        0.816
+      ],
+      "levelDb": 0,
+      "centroidHz": [
+        843,
+        853
+      ],
+      "balance": [
+        0.39,
+        0.39
+      ],
+      "tail": [
+        0.0258,
+        0.0256
+      ]
+    },
+    {
+      "id": "scale.lydian",
+      "control": "scale",
+      "value": "=",
+      "base": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:major\").s(\"piano\")",
+      "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:lydian\").s(\"piano\")",
+      "audible": true,
+      "diffDb": -6,
+      "repeatDb": -144.9,
+      "spectralDb": -6.4,
+      "spectralRepeatDb": -161.2,
+      "width": [
+        0.86,
+        0.864
+      ],
+      "levelDb": -0.1,
+      "centroidHz": [
+        881,
+        890
+      ],
+      "balance": [
+        0.37,
+        0.38
+      ],
+      "tail": [
+        0.0243,
+        0.0244
+      ]
+    },
+    {
+      "id": "scale.phrygian",
+      "control": "scale",
+      "value": "=",
+      "base": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:minor\").s(\"piano\")",
+      "code": "n(\"0 1 2 3 4 5 6 7\").scale(\"C4:phrygian\").s(\"piano\")",
+      "audible": true,
+      "diffDb": -5.3,
+      "repeatDb": -144.3,
+      "spectralDb": -6.7,
+      "spectralRepeatDb": -161.2,
+      "width": [
+        0.817,
+        0.811
+      ],
+      "levelDb": 0.3,
+      "centroidHz": [
+        843,
+        836
+      ],
+      "balance": [
+        0.39,
+        0.44
+      ],
+      "tail": [
+        0.0258,
+        0.0195
       ]
     },
     {
@@ -3630,7 +3990,7 @@
       "base": "silence",
       "code": "note(\"c3 e3 g3 c4\").s(\"supersaw\")",
       "audible": true,
-      "diffDb": -28.1,
+      "diffDb": -29,
       "repeatDb": "-Infinity",
       "spectralDb": "-Infinity",
       "spectralRepeatDb": "-Infinity",
@@ -3638,10 +3998,10 @@
         0,
         0
       ],
-      "levelDb": -28.1,
+      "levelDb": -29,
       "centroidHz": [
         0,
-        4218
+        4207
       ],
       "balance": [
         0,

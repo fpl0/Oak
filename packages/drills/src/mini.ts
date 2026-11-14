@@ -122,8 +122,14 @@ export function parseMini(text: string): Node {
       const inner = sequence(">");
       if (peek() !== ">") throw new MiniParseError("a `<` is not closed");
       i++;
+      // `<a b>`: one item per bar; `<[a b c]@2 d>`: the bracket lasts two bars (a note held over the bar
+      // line, U13.L03). Weights are whole bars.
       if (inner.t === "seq" && !inner.w) return alt(inner.items);
-      if (inner.t === "seq") throw new MiniParseError("`@` inside `< >` is not supported here");
+      if (inner.t === "seq") {
+        if (inner.w?.some((w) => !Number.isInteger(w) || w < 1))
+          throw new MiniParseError("inside `< >`, `@` takes a whole number of bars");
+        return alt(inner.items, inner.w);
+      }
       return alt([inner]);
     }
     if (c === "{") {

@@ -23,13 +23,11 @@ import type { SungSummary } from "../answers/types.ts";
 import { callApi } from "../lib/api.ts";
 import { openMic } from "../lib/mic.ts";
 import { getOak } from "../lib/oak.ts";
+import { devOpenAll } from "./dev.ts";
 import {
   alignNotes,
-  arpeggioPlan,
-  bassPlan,
   bassSingTargets,
   chordsOnlyPlan,
-  contextPlan,
   gradeStep,
   isBassTrial,
   singCuePlan,
@@ -37,6 +35,7 @@ import {
   sungBassDegrees,
 } from "./harmony.ts";
 import { clearInflight, resumeFromServer, saveInflight } from "./inflight.ts";
+import { alonePlan, auditionPlan } from "./listen.ts";
 import type {
   AuditionInput,
   DrillContext,
@@ -50,29 +49,11 @@ import type {
   TrialSource,
 } from "./machine.ts";
 import { gradeDrillTrial } from "./model.ts";
-import {
-  answerPlan,
-  comparePlan,
-  cuePlan,
-  homePlan,
-  keyOfTrial,
-  resolutionOf,
-  sequence,
-  stagingOf,
-  trialTonicMidi,
-} from "./plans.ts";
-import { compositeSource, plannedSource, staircaseSource } from "./sources.ts";
-import {
-  barPlan,
-  gradeRoots,
-  isBassLineTrial,
-  noteAlonePlan,
-  otherFeelPlan,
-  scalePlan,
-  sectionPlan,
-  tracksPlan,
-  withoutSeventhPlan,
-} from "./wave5.ts";
+import { cuePlan, resolutionOf, stagingOf } from "./plans.ts";
+import { asAsked, compositeSource, plannedSource, staircaseSource } from "./sources.ts";
+import { gradeRoots, isBassLineTrial } from "./wave5.ts";
+
+export { alonePlan, auditionPlan };
 
 // --- live data for the panels -------------------------------------------------------------------
 
@@ -357,10 +338,13 @@ function startActor(env: DrillEnv) {
       const family = env.registry.family(session.familyIds[0] as FamilyId);
       if (input.purpose === "practice" && env.practiceLevel !== null) {
         const state = env.states.get(family.def.id);
-        const max = Math.max(env.practiceLevel, state?.maxOpenLevel ?? 1);
+        const max = devOpenAll()
+          ? family.def.levels.length
+          : Math.max(env.practiceLevel, state?.maxOpenLevel ?? 1);
         source = staircaseSource(family, session, env.profile, env.practiceLevel, max, env.sungResolutions);
       } else source = plannedSource(env, family, session);
     }
+    source = asAsked(source);
     // Preload every sound of a planned set before trial 1 (a staircase preloads per trial).
     const firstTrials = Array.from({ length: Math.min(source.total, 12) }, (_, i) => {
       try {
@@ -527,72 +511,6 @@ function presentActor(env: DrillEnv) {
   });
 }
 
-/**
- * Wave 5: what "alone" means for a trial — the hats of a feel trial, the bass with the kick of a groove-lock trial,
- * the asked note of an FET trial, the bass line of a bass trial, else the tune by itself.
- */
-export function alonePlan(trial: Trial): AudioPlan | null {
-  if (trial.family === "fam.rhy.swing") return tracksPlan(trial, ["hats", "hatClosed", "hatOpen"]);
-  if (trial.family === "fam.rhy.groove-lock") return tracksPlan(trial, ["kick", "bass"]);
-  if (Array.isArray(trial.params.resolutionTargets)) return noteAlonePlan(trial);
-  if (trial.family === "fam.har.bass" || isBassLineTrial(trial)) return bassPlan(trial);
-  return tracksPlan(trial, ["mel"]);
-}
-
-/** The plan of an after-answer audition (pure apart from the profile's comfort range). */
-export function auditionPlan(
-  trial: Trial,
-  what: AuditionInput["what"],
-  captured: AuditionInput["captured"],
-  profile: LearnerProfile,
-  part: number | null = null,
-): AudioPlan | null {
-  switch (what) {
-    case "alone":
-      return alonePlan(trial);
-    case "other":
-      return trial.family === "fam.rhy.swing" ? otherFeelPlan(trial) : withoutSeventhPlan(trial);
-    case "scale":
-      return scalePlan(trial);
-    case "part": {
-      if (part === null) return null;
-      // A section of a form trial (0-based), else a bar of the passage (1-based).
-      const section = sectionPlan(trial, part);
-      return section ?? barPlan(trial, part);
-    }
-    case "answer":
-      return answerPlan(trial);
-    case "resolve": {
-      // "Hear it resolve": the asked degree walks home to 1 in the trial's register.
-      const own = resolutionOf(trial).plan;
-      const tonic = trialTonicMidi(trial);
-      const d = (trial.expected as { degrees?: string[] }).degrees?.at(-1);
-      return own && own.events.length > 0
-        ? own
-        : tonic !== null && d
-          ? homePlan(tonic, d as never, keyOfTrial(trial)?.mode ?? "major")
-          : null;
-    }
-    case "cue":
-      return cuePlan(trial, profile);
-    case "compare":
-      return comparePlan(trial, captured, null);
-    case "bass":
-      return bassPlan(trial);
-    case "arpeggio":
-      return arpeggioPlan(trial);
-    case "context":
-      return contextPlan(trial);
-    default: {
-      const st = stagingOf(trial, profile);
-      return sequence(
-        [st.cue, st.stimulus ?? answerPlan(trial)],
-        st.cue ? Math.max(0, st.stimulusAt - (st.cue.durationSec ?? 0)) : 0,
-      );
-    }
-  }
-}
-
 /** The playhead of a passage that starts at `start` (from passage bar `fromBar`, for `bars` bars). */
 function playheadOf(oak: OakStrudel, trial: Trial, start: number, fromBar = 0, bars?: number) {
   const cue = Number(trial.params.cueBars ?? 0);
@@ -607,7 +525,14 @@ function auditionActor(env: DrillEnv) {
     void (async () => {
       const oak = await getOak();
       if (cancelled) return;
-      const plan = auditionPlan(input.trial, input.what, input.captured, env.profile, input.part ?? null);
+      const plan = auditionPlan(
+        input.trial,
+        input.what,
+        input.captured,
+        env.profile,
+        input.part ?? null,
+        env.defs.get(input.trial.family) ?? null,
+      );
       if (plan) await preload(oak, plan.preload);
       if (cancelled) return;
       const at = oak.ctx.currentTime + LEAD_S;

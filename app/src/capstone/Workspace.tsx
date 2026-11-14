@@ -8,7 +8,7 @@
 import type { CapstoneDef, CapstoneState, FlavourId, SketchVersion, UnlockableId } from "@oak/api";
 import { renderFeedback, toolsUsed } from "@oak/grader";
 import { editorId } from "@oak/strudel";
-import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { clsx } from "clsx";
 import { Check, CheckCheck, CircleDot, Disc3, Music4, Play, Save, Square } from "lucide-react";
@@ -16,14 +16,17 @@ import { useEffect, useRef, useState } from "react";
 import { useContent } from "../lib/content.ts";
 import {
   apiQuery,
+  useAlbum,
   useApiMutation,
   useBootstrap,
   useCapstoneCheck,
   useCapstoneSessionComplete,
   useCapstoneSessions,
   useCourseProgress,
+  useSessionDay,
   useUnlocks,
 } from "../lib/queries.ts";
+import { ownOpenSession } from "../lib/tab-session.ts";
 import { currentSessionId, reportBlockDone } from "../session/store.ts";
 import {
   askReview,
@@ -50,11 +53,15 @@ import { Ceremony, type CeremonyData } from "./Ceremony.tsx";
 import { beyondBrief, checklistOf, readiness } from "./checklist.ts";
 import type { CapstoneContent } from "./content.ts";
 import { bandSetupFor as bandFor } from "./content.ts";
+import { DevicesCard } from "./DevicesCard.tsx";
+import { deviceRows, deviceSummary, recordRows } from "./devices.ts";
 import { useDraftSaver } from "./draft.ts";
 import { type CheckOutcome, checkPiece, lintFor } from "./engine.ts";
 import { FormStrip } from "./FormStrip.tsx";
 import { LeadSheetCard } from "./LeadSheetCard.tsx";
 import { analysisTheory, composeLiner, dedupe } from "./liner.ts";
+import { MasterCard, type MasterOutcome } from "./MasterCard.tsx";
+import { masterLinerLine } from "./master.ts";
 import { theoryTags } from "./piece.ts";
 import {
   latestVersion,
@@ -65,10 +72,13 @@ import {
   usePatchDraft,
 } from "./queries.ts";
 import { ReleaseDialog } from "./ReleaseDialog.tsx";
+import { useRecordDevices } from "./record-devices.ts";
 import { useTryRevision } from "./revision.ts";
 import { currentSession, isResume, sessionsDone, sessionViews, starterOf } from "./sessions.ts";
+import { grownFromLine } from "./sketch-plan.ts";
 import { WorkbenchServicesLoader } from "./WorkbenchServicesLoader.tsx";
 import { pieceForm, releaseGate, rowExtras, rubricUsesSections } from "./wave5.ts";
+import { mergeExtras, runningLength, showsLeadSheet, wave6Extras } from "./wave6.ts";
 
 export { starterOf };
 
@@ -104,6 +114,7 @@ export function Workspace({
             sketchId={draftRef.id}
             latest={latestVersion(draft.data)}
             tags={draft.data?.tags ?? []}
+            grown={grownFromLine(draft.data?.versions ?? [])}
           />
         </WorkbenchServicesLoader>
       ) : (
@@ -126,6 +137,7 @@ function Loaded({
   sketchId: initialSketch,
   latest,
   tags,
+  grown,
 }: {
   def: CapstoneDef;
   state: CapstoneState;
@@ -133,10 +145,13 @@ function Loaded({
   sketchId: string | null;
   latest: SketchVersion | null;
   tags: readonly string[];
+  /** "Grown from “…”.": the sketch a single started from, for its liner notes. */
+  grown: string | null;
 }) {
   const { oak } = useWorkbenchServices();
   const qc = useQueryClient();
   const boot = useBootstrap();
+  const day = useSessionDay();
   const shared = useContent();
   const unlocksQ = useUnlocks();
   const progress = useCourseProgress();
@@ -151,9 +166,9 @@ function Loaded({
   const nextSession = def.sessionDefs[nextIndex];
   const allDone = done >= total || state.sessionsDone >= total;
   const lastSession = current?.release === true || state.sessionsDone >= total - 1;
-  const sessionId =
-    currentSessionId() ??
-    (boot.data?.openSession?.mapItemId?.startsWith(`${def.id}.`) ? boot.data.openSession.id : null);
+  // d21: the session this tab left open (never another tab's), when it is one of this capstone's.
+  const own = ownOpenSession(day.data);
+  const sessionId = currentSessionId() ?? (own?.mapItemId?.startsWith(`${def.id}.`) ? own.id : null);
   const currentRef = useRef(current?.id ?? null);
   currentRef.current = allDone ? null : (current?.id ?? null);
 
@@ -315,6 +330,12 @@ function Loaded({
       setOfficial(rec);
       const rows = checklistOf(brief.rubric, outcome.result);
       const r = readiness(rows);
+      // CF-A: the check names the devices it found, with their bars, and which are still open.
+      const counter = brief.rubric.find((x) => x.rule === "device-count");
+      const devicesLine =
+        counter && counter.rule === "device-count" && outcome.result.status !== "error"
+          ? `Devices: ${deviceSummary(deviceRows(counter.devices, outcome.analysis?.deviceList ?? []), counter.min)}`
+          : null;
       setNotice({
         code: src,
         ...(outcome.result.status === "error"
@@ -327,12 +348,17 @@ function Loaded({
             ? {
                 tone: "success",
                 title: `Checked version ${version}: every requirement is met.`,
-                body: released || !lastSession ? undefined : "It's ready to release when you are.",
+                body:
+                  [devicesLine, released || !lastSession ? null : "It's ready to release when you are."]
+                    .filter(Boolean)
+                    .join(" ") || undefined,
               }
             : {
                 tone: "info",
                 title: `Checked version ${version}: ${r.met} of ${r.required} requirements met.`,
-                body: "The open ones are marked in the brief, with the bars to look at.",
+                body: [devicesLine, "The open ones are marked in the brief, with the bars to look at."]
+                  .filter(Boolean)
+                  .join(" "),
               }),
       });
       return rec;
@@ -487,6 +513,7 @@ function Loaded({
     outcome?.result ?? null,
     outcome?.anchors ?? {},
     nextSession?.focusRules ?? [],
+    lastSession || allDone || released,
   );
   const ready = readiness(rows);
   const beyond =
@@ -502,8 +529,9 @@ function Loaded({
       ? (outcome.result.messages[0]?.text ?? "The piece doesn't run.")
       : null;
   // A piece written in another key than the brief's: every row below read it in the brief's key, so say that first.
+  // Only a brief that names a key has one to differ from (C6 and the single are in the learner's own).
   const keyDiag =
-    outcome && !stale && outcome.result.status !== "error"
+    def.key && outcome && !stale && outcome.result.status !== "error"
       ? (outcome.result.diagnostics?.find((d) => d.id === "harmony.key-mismatch") ?? null)
       : null;
   const keyNote = keyDiag ? renderFeedback(keyDiag) : null;
@@ -514,19 +542,72 @@ function Loaded({
     rubricUsesSections(brief.rubric) ||
     (form !== null && (form.sections.length > 0 || form.problem !== null));
   const extras = outcome
-    ? rowExtras(brief.rubric, outcome.result, {
-        bars: outcome.bars,
-        bpm: outcome.analysis?.bpm ?? null,
-        durationSec: outcome.analysis?.durationSec ?? null,
-        meter: def.meter,
-        form,
-        view: outcome.form,
-        analysis: outcome.analysis,
-      })
+    ? mergeExtras(
+        rowExtras(brief.rubric, outcome.result, {
+          bars: outcome.bars,
+          bpm: outcome.analysis?.bpm ?? null,
+          durationSec: outcome.analysis?.durationSec ?? null,
+          meter: def.meter,
+          form,
+          view: outcome.form,
+          analysis: outcome.analysis,
+        }),
+        // Wave 6: the mode and its colour note, the applied chord and where it goes, ♭VI–♭VII–I, the lift, the
+        // devices with their bars: each read from the grader's views of this piece.
+        wave6Extras(
+          brief.rubric,
+          outcome.result,
+          outcome.n
+            ? {
+                n: outcome.n,
+                code: outcome.code,
+                meter: def.meter,
+                key: def.key ?? null,
+                bars: outcome.bars,
+                form,
+                analysis: outcome.analysis,
+              }
+            : null,
+        ),
+      )
     : {};
+  // CF-A: the running length against two minutes, beside the form (decided in the first session, never found late).
+  const length = outcome
+    ? runningLength(brief.rubric, { bars: outcome.bars, durationSec: outcome.analysis?.durationSec ?? null })
+    : null;
+  // CF-A: "Your devices so far" (the learner's own released tracks per device) and, in its last session, the Master.
+  const deviceRule = brief.rubric.find((r) => r.rule === "device-count");
+  const record = useRecordDevices(def.id, deviceRule !== undefined);
+  const recordDevices =
+    deviceRule && deviceRule.rule === "device-count" ? recordRows(deviceRule.devices, record.tracks) : null;
+  const masterStep = def.id === "CF-A" && (lastSession || allDone || released);
+  const [master, setMaster] = useState<MasterOutcome>({ reading: null, reference: null });
+  const album = useAlbum();
+  const albumDetails = useQueries({
+    queries: (masterStep ? (album.data?.tracks ?? []) : [])
+      .filter((t) => t.capstoneId !== def.id)
+      .map((t) => apiQuery("album.track", { params: { id: t.id } })),
+  });
+  const references = albumDetails.flatMap((q) => {
+    const d = q.data;
+    const v = d?.versions.find((x) => x.version === d.currentVersion);
+    return d && v?.hasAudio
+      ? [
+          {
+            trackId: d.id,
+            capstoneId: d.capstoneId,
+            title: d.title,
+            version: v.version,
+            createdAt: d.createdAt,
+          },
+        ]
+      : [];
+  });
   // C3.S3: the lead sheet of the arranged piece, once the melodies are written (the `notates` rule's view).
-  const leadSheetRule = brief.rubric.some((r) => r.rule === "notates" || r.id === "leadsheet");
-  const showLeadSheet = leadSheetRule && (lastSession || allDone || released) && outcome?.n != null;
+  // d13: C3's lead sheet belongs to its third session (arranging); the take and the release are the fourth's.
+  const showLeadSheet =
+    showsLeadSheet(brief.rubric, def.sessionDefs, nextIndex, lastSession || allDone || released) &&
+    outcome?.n != null;
   // c1: the first release is of the code its last passing check graded; an edit after it asks for a new check.
   const checkedPassing =
     official && readiness(checklistOf(brief.rubric, official.outcome.result)).ready ? official.code : null;
@@ -558,6 +639,7 @@ function Loaded({
       revealed: [],
       band: bandTitle ? `Played with ${bandTitle}` : null,
       attribution: latest?.tutorAssisted && latest.note ? latest.note : null,
+      extra: [grown, masterStep ? masterLinerLine(master) : null].filter(Boolean).join(" ") || null,
     });
 
   return (
@@ -573,6 +655,19 @@ function Loaded({
         checking={live.checking || checkingNow}
         stale={stale}
         beyond={beyond}
+        devices={
+          recordDevices ? (
+            <DevicesCard
+              rows={recordDevices}
+              pending={record.pending}
+              defaultOpen={!lastSession && !allDone && !released}
+              pieces={{
+                track: (id) => record.tracks.find((t) => t.trackId === id) ?? null,
+                term: (id) => content.terms.find((t) => t.id === id)?.example ?? null,
+              }}
+            />
+          ) : null
+        }
         flavour={flavour}
         shipping={content.shipping}
         onFlavour={(f) => {
@@ -761,7 +856,7 @@ function Loaded({
                 stay as they are.
               </Callout>
             )}
-            {checkAgain ? (
+            {checkAgain && (
               <div data-testid="check-again" role="status">
                 <Callout
                   tone="info"
@@ -781,13 +876,12 @@ function Loaded({
                   Check again before you release: the album gets the version a check passed.
                 </Callout>
               </div>
-            ) : (
-              notice &&
-              (notice.code === undefined || notice.code === code) && (
-                <Callout tone={notice.tone} title={notice.title} onDismiss={() => setNotice(null)}>
-                  {notice.body}
-                </Callout>
-              )
+            )}
+            {/* A check's notice speaks for the code it checked; a session's ("Session 3 of 4 done.") stands on. */}
+            {notice && (notice.code === undefined || (!checkAgain && notice.code === code)) && (
+              <Callout tone={notice.tone} title={notice.title} onDismiss={() => setNotice(null)}>
+                {notice.body}
+              </Callout>
             )}
             {evalError && (
               <Callout tone="attention" title="The piece doesn't run yet">
@@ -804,7 +898,17 @@ function Loaded({
                 {live.error} The next edit tries again.
               </Callout>
             )}
-            {showForm && form && <FormStrip form={form} onBars={onBars} stale={stale} loop={wbLoop} />}
+            {showForm && form && (
+              <FormStrip form={form} onBars={onBars} stale={stale} loop={wbLoop} length={length} />
+            )}
+            {masterStep && (
+              <MasterCard
+                sections={form?.sections ?? []}
+                references={references}
+                onBars={onBars}
+                onOutcome={setMaster}
+              />
+            )}
             <Workbench
               tutorBars
               onLoopChange={(l) => setWbLoop(l.on ? l.region : null)}

@@ -10,7 +10,7 @@ import { swingRatio } from "../analyze/swing.ts";
 import { periodOf, roleOfTrack, selectTracks } from "../analyze/tracks.ts";
 import { diag } from "../feedback/catalog.ts";
 import type { MatchResult, NormalizeContext, Normalized } from "../types.ts";
-import { alignFeel, clampScore, f1, lengthLabel, shiftLabel } from "./common.ts";
+import { alignFeel, clampScore, f1, noteValueLabel, shiftLabel } from "./common.ts";
 
 export interface OnsetMatch {
   /** [target index, answer index]. */
@@ -211,7 +211,7 @@ export function rhythmMatch(
           perNote.push(
             diag(
               "rhythm.duration",
-              { got: lengthLabel(ad, meter), expected: lengthLabel(td, meter) },
+              { got: noteValueLabel(ad, meter), expected: noteValueLabel(td, meter) },
               locOf(ae, pos),
               "duration",
             ),
@@ -244,10 +244,63 @@ export function rhythmMatch(
     if (!replaced) {
       const periodBars = Math.max(1, periodOf(rawT, 16));
       const grid = finestGrid([...tAll, ...aAll], meter);
-      const best = bestDisplacement(tAll, aAll, rat(periodBars), grid);
-      if (best.f1 >= 0.999) {
+      const period = rat(periodBars);
+      // Read part by part: with hats on every eighth the onsets taken together fit any shift, and a snare a beat
+      // late is not "shifted an 8th". A shift counts when every part is either where the target has it or moved
+      // by that one amount, and at least one part is moved (a part with nothing to compare never fits).
+      const fitsAt = (g: Group, shift: Rat): boolean => {
+        if (g.target.length === 0 && g.answer.length === 0) return true;
+        const shifted = dedupe(g.answer.map((e) => mod(R.sub(e.onset, shift), period)));
+        const want = dedupe(g.target.map((e) => mod(e.onset, period)));
+        const m = matchOnsets(want, shifted);
+        return f1(m.pairs.length, want.length, shifted.length) >= 0.999;
+      };
+      const partsFit = (shift: Rat): boolean => {
+        const parts = [...groups.values()];
+        const still = parts.map((g) => fitsAt(g, rat(0)));
+        return (
+          parts.every((g, k) => still[k] || fitsAt(g, shift)) &&
+          parts.some((g, k) => !still[k] && fitsAt(g, shift))
+        );
+      };
+      let best = bestDisplacement(tAll, aAll, period, grid);
+      let everyPart = true;
+      let movedOn = "";
+      if (cfg.perRole) {
+        everyPart = false;
+        const steps = R.floor(R.div(period, grid));
+        let found: Rat | null = null;
+        for (let k = 1; k < steps; k++) {
+          const s0 = R.mul(grid, [k, 1]);
+          const signed = R.lte(R.mul(s0, [2, 1]), period) ? s0 : R.sub(s0, period);
+          if (!partsFit(signed)) continue;
+          if (found === null || R.lt(R.abs(signed), R.abs(found))) found = signed;
+        }
+        // Taken together the hits may also be the target moved as one figure (a kick's push played a beat early
+        // beside an unmoved backbeat). That reading holds only when the target is not its own copy under the
+        // shift: with steady hats on every eighth it is, and then it says nothing.
+        const wanted = dedupe(tAll.map((x) => mod(x, period)));
+        const asOne = dedupe(wanted.map((x) => mod(R.add(x, best.shift), period)));
+        const selfSame = matchOnsets(wanted, asOne).pairs.length === wanted.length;
+        if (found === null && best.f1 >= 0.999 && !selfSame) everyPart = true;
+        if (found !== null) {
+          best = { shift: found, f1: 1 };
+          everyPart = true;
+          // When only some parts moved, the finding names them ("a beat later on the snare").
+          const parts = [...groups.values()];
+          const movedParts = parts.filter((g) => !fitsAt(g, rat(0)));
+          if (movedParts.length < parts.length && movedParts.length <= 2)
+            movedOn = ` on the ${movedParts.map((g) => g.label).join(" and the ")}`;
+        }
+      }
+      if (best.f1 >= 0.999 && everyPart) {
         diagnostics.push(
-          diag("rhythm.displaced", { shiftLabel: shiftLabel(best.shift, meter) }, undefined, "rhythm"),
+          diag(
+            "rhythm.displaced",
+            { shiftLabel: `${shiftLabel(best.shift, meter)}${movedOn}` },
+            undefined,
+            "rhythm",
+          ),
         );
         score = Math.max(score, cfg.displacementCredit);
         replaced = true;

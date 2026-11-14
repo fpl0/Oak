@@ -23,6 +23,9 @@ import {
   isNamed,
   linerFlags,
   lockedHints,
+  musicFactsOf,
+  musicLensHints,
+  musicLensTips,
   muteMapOf,
   needsReview,
   nextSketchTitle,
@@ -34,6 +37,8 @@ import {
   strictVerdict,
   studioFlavour,
   studioLint,
+  studioMeters,
+  studioModes,
   versionBody,
   versionLabel,
 } from "./model.ts";
@@ -322,5 +327,43 @@ describe("Wave 5: form and sound hints in the Studio", () => {
       /Shift\+W/,
     );
     expect(formSoundHints(soundFactsOf('x: note("c2")', false), new Set(), sites)).toEqual([]);
+  });
+});
+
+describe("Wave 6: modes, meters and lens hints in the Studio", () => {
+  const sites = (id: string) =>
+    ({ "chord.seventh": "U12.L01", "tb.early": "U13.L01", "tb.meter.compound": "U13.L04" })[id] ?? null;
+  test("a sketch's key offers each mode once its scale is unlocked, and always keeps the one it has", () => {
+    expect(studioModes(new Set())).toEqual(["major", "minor"]);
+    expect(studioModes(new Set(["scale.mixolydian", "scale.dorian"]))).toEqual([
+      "major",
+      "minor",
+      "mixolydian",
+      "dorian",
+    ]);
+    expect(studioModes(new Set(), "phrygian")).toEqual(["major", "minor", "phrygian"]);
+    expect(studioModes(new Set(), "harmonic minor")).toEqual(["major", "minor", "harmonic minor"]);
+  });
+  test("12/8 joins the meters with the compound meters; 6/8 was always there", () => {
+    expect(studioMeters(new Set())).toEqual(["4/4", "3/4", "2/4", "6/8"]);
+    expect(studioMeters(new Set(["tb.meter.compound"]))).toEqual(["4/4", "3/4", "2/4", "6/8", "12/8"]);
+    expect(studioMeters(new Set(), "12/8")).toContain("12/8");
+  });
+  test("a sketch with sevenths and pushes hears when its lenses open; a tip once they are there", () => {
+    const facts = musicFactsOf({
+      harmony: { chords: [{ seventh: "m7" }, { seventh: null }] },
+      keys: [{}, {}],
+      rhythm: { grid: null, pushes: { size: 3 } },
+    });
+    expect(facts).toEqual({ sevenths: true, keyChange: true, beatGrid: false, pushes: true });
+    expect(musicLensHints(facts, new Set(), sites).map((h) => `${h.id} ${h.at}`)).toEqual([
+      "chord.seventh U12.L01",
+      "tb.early U13.L01",
+    ]);
+    expect(musicLensHints(facts, new Set(["chord.seventh", "tb.late"]), sites)).toEqual([]);
+    const tips = musicLensTips(facts, new Set(["chord.seventh", "tb.scale.patterned", "tb.early"]));
+    expect(tips.map((t) => /Shift\+[IJV]/.exec(t)?.[0])).toEqual(["Shift+I", "Shift+J", "Shift+V"]);
+    expect(musicLensTips(musicFactsOf(null), new Set(["chord.seventh"]))).toEqual([]);
+    expect(musicLensHints(musicFactsOf(undefined), new Set(), sites)).toEqual([]);
   });
 });

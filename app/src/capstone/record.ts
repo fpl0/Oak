@@ -23,7 +23,8 @@ export async function recordPerformance(
     peak = Math.max(peak, oak.master.level().peak);
   }, 40);
   try {
-    await handle.play();
+    // Once: the song's bars and nothing after them, so the tail rings out instead of starting the song again.
+    await handle.play({ once: bars });
     const take = await recording;
     peak = Math.max(peak, oak.master.level().peak);
     if (isSilentTake(peak)) throw new Error(SILENT_TAKE);

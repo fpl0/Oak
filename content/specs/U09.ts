@@ -111,7 +111,7 @@ export const U09: UnitSpec = {
   unit: "U09",
   title: "Form",
   summary:
-    "Five lessons on how a song is put together from sections, taught on the kind of music the learner has already made: the four-bar hooks of U07, C2's eight bars that loop and land, the bass lines of U08. Bars group into four-bar phrases and phrases into sections, the first bar of each four feeling strong (hypermeter, U09.L01); two sections that contrast, verse and chorus, written as section `const`s with one `arrange()` per labelled track (U09.L02, the exemplar); two more song forms, AABA with its bridge and strophic, heard in songs the learner already knows (U09.L03); the energy curve, with a build-up drawn by a signal (`saw.range(.2, .9).slow(4)`) and stepped with `.segment()` (U09.L04); and arranging, parts entering and leaving by bar with `.mask()` (U09.L05). U09.CP covers U08 and U09 and opens C3 Verse–Chorus Demo (three sessions) and the side lessons A1.L05–L07. In the default order U09.L01–L04 follow GYM.04; GYM.05 sits before U09.L05, and U10.L01 comes before U09.CP (session 95), so the checkpoint falls on a later day than the unit's last lesson.",
+    "Five lessons on how a song is put together from sections, taught on the kind of music the learner has already made: the four-bar hooks of U07, C2's eight bars that loop and land, the bass lines of U08. Bars group into four-bar phrases and phrases into sections, the first bar of each four feeling strong (hypermeter, U09.L01); two sections that contrast, verse and chorus, written as section `const`s with one `arrange()` per labelled track (U09.L02, the exemplar); two more song forms, AABA with its bridge and strophic, heard in songs the learner already knows (U09.L03); the energy curve, with a build-up drawn by a signal (`saw.range(.2, .9).slow(4)`) and stepped with `.segment()` (U09.L04); and arranging, parts entering and leaving by bar with `.mask()` (U09.L05). U09.CP covers U08 and U09 and opens C3 Verse–Chorus Demo (four sessions since contracts 1.6) and the side lessons A1.L05–L07. In the default order U09.L01–L04 follow GYM.04; GYM.05 sits before U09.L05, and U10.L01 comes before U09.CP (session 96), so the checkpoint falls on a later day than the unit's last lesson.",
   conventions: [
     'Sections in code (contracts §6.3, STYLE §10). Each section of each part is a `const` named `<role><Section>` in camelCase: `chordsVerse`, `bassChorus`, `melA`, `hatsBuild`, `fxBuild`; the role prefix is a label of STYLE §2, the section word one of `intro verse pre chorus bridge solo break head vamp lift outro` or a letter `a b c`, with a digit for a variant (`melChorus2` is a chorus). Every labelled track that changes between sections gets **one** `arrange()` at the root of its chain (`chords: arrange([4, chordsVerse], [4, chordsChorus]).s("piano")`), listing the same sections with the same bar counts as every other arranged track; a part that rests in a section uses `silence`; a part that never changes stays a plain line (a through track). `arrange()` is never wrapped (`stack(arrange(…))`, `arrange(…).mask(…)` across sections is fine only as a method chain on the same track).',
     "Sections restart (contracts §6.3 item 7, evaluated): inside `arrange()` every section plays from its own bar 1, so a section's length is a whole multiple of its pattern's length (`<C Am F G>` is four bars: sections of 4 or 8, never 6; `form.section-period` otherwise), a build drawn with `.slow(4)` inside a four-bar section starts again at each section, and an intro's `.mask(\"<0 1 1 1>\")` lets the bass in at bar 2 of the intro every time the intro plays. Anything that must run across sections (a fade over the whole song) goes after `arrange()`.",
@@ -731,7 +731,7 @@ export const U09: UnitSpec = {
         'F05: `contrast` `a: { section: "chorus" }`, `b: { section: "verse" }`, `axes: ["energy", "density", "register"]`, `minAxes: 1` (planned, as U09.L04\'s Make). Suggestions: `groove-lock` bass on kick ≥ 0.5 (B04) and `form` "verse chorus verse chorus" (F02), each planned and listed once the grader has them.',
     },
     notes: [
-      "In the default order U09.CP is session 95, after U10.L01 (contracts §2.5): a later day than U09.L05. Passing or soft-passing it opens C3 (sessions 96–98) and the side lessons A1.L05–L07 (contracts §2.6), and makes B01–B04, F02, F03, F05 and F06 eligible for `mastered`.",
+      "In the default order U09.CP is session 96, after U10.L01 (contracts §2.5): a later day than U09.L05. Passing or soft-passing it opens C3 (sessions 97–100) and the side lessons A1.L05–L07 (contracts §2.6), and makes B01–B04, F02, F03, F05 and F06 eligible for `mastered`.",
       "Every gated skill is a concept or creative skill (no bracketed skills in contracts §7.6's map), so every item is gating; no sing or tap item.",
       "Authored items use the exemplar's shapes where they can: `bass-into-the-changes` needs the planned `bass-line` rule; until the grader lists it, it is graded by `events` against a fixed bass shown on the bass staff (a Play-from-the-page item under C Am F G, a half note and two quarters a bar: C2 G2 B1 | A1 A2 E2 | F2 C3 F♯2 | G2 D3 B1: roots on beat 1, the 5th or the octave on beat 3, and an approach into every change, B1 into A1 from the step above, E2 into F2 and B1 into C2 from the half step below in the key, F♯2 into G2 from the half step below outside it), which measures the same three skills on one answer.",
       "`arrange-and-enter`'s intro is four bars with the bass masked `<0 1 1 1>`, then V C V C at four bars each: 20 bars, past the lesson-mode window of 16 bars of the learner's loop but within the reference's (`reference.bars: 20`; contracts §6.4 takes the larger of the two).",
@@ -742,9 +742,9 @@ export const U09: UnitSpec = {
       id: "C3",
       author: "capstones",
       intent:
-        "The first song with sections on the album (sessions 96–98 in the default order): a verse–chorus demo of at least 90 seconds, verse, chorus, verse, chorus, whose chorus differs from the verse on at least two counts, with a bass locked to the kick and a lead sheet to show for it. Session 1 lays down both sections' groove and changes; session 2 writes both melodies and makes the chorus lift; session 3 arranges the whole song to length, checks the lead sheet, takes a review and releases. Everything it asks for was taught in U08–U09; nothing new is introduced. The learner may start from their own C2 (its eight bars become the verse).",
+        "The first song with sections on the album (sessions 97–100 in the default order): a verse–chorus demo of at least 90 seconds, verse, chorus, verse, chorus, whose chorus differs from the verse on at least two counts, with a bass locked to the kick and a lead sheet to show for it. Session 1 lays down both sections' groove and changes; session 2 writes both melodies and makes the chorus lift; session 3 arranges the whole song to length and checks the lead sheet; session 4 (contracts 1.6, the learner's decision of 2026-11-13: the real-time take, the lead sheet and the review were too much for one 20-minute session) records the take, takes a review and releases. Everything it asks for was taught in U08–U09; nothing new is introduced. The learner may start from their own C2 (its eight bars become the verse).",
       opens:
-        'When U09.CP is passed or soft-passed (contracts §2.4). Today then offers C3.S1 as the New block; a learner who puts it off keeps going into U10 (a capstone never gates a lesson). In progress, no gym slot interrupts it: GYM.06 waits until C3.S3 is done (§2.5). While it is closed the album shows its slot with "Opens after the bass and form checkpoint".',
+        'When U09.CP is passed or soft-passed (contracts §2.4). Today then offers C3.S1 as the New block; a learner who puts it off keeps going into U10 (a capstone never gates a lesson). In progress, no gym slot interrupts it: GYM.06 waits until C3.S4 is done (§2.5). While it is closed the album shows its slot with "Opens after the bass and form checkpoint".',
       band: "None: a capstone is the learner's whole song, so the starter carries its own drums (a `kick:`, `snare:` and `hats:` line per section) and the recording, the cover and the liner notes cover everything that plays. The flavour sets the starter's kit and sounds (§5.10 rule 8: jazz-soul swaps `piano` for `rhodes` and `ebass` for `upright` and declares `swing`, which the lead sheet carries as \"Swing 8ths\") and never changes the rubric (§6.6).",
       sessions: [
         {
@@ -753,7 +753,7 @@ export const U09: UnitSpec = {
           opens:
             'The brief, then a choice of two starts. "Start from the template": section consts for both sections, 8 bars each (`kickVerse`, `kickChorus`, `snareVerse`, `hatsVerse`, `hatsChorus`, `chordsVerse = chord("<C Am F G>").voicing()`, `chordsChorus = chord("<F G C C>").voicing()`, `bassVerse`, `bassChorus` on the roots, all `0` where the learner decides), each track arranged verse–chorus once (16 bars), tempo 100, C major. "Start from my C2": the latest version of the learner\'s C2 track becomes the verse (its chords, bass and drums lines renamed to `chordsVerse`, `bassVerse`, …; its tune kept as `melVerse` for session 2) and the chorus consts start empty. Offered only when C2 is released.',
           hear: "The draft looping its verse and chorus (16 bars); a click on a section of the form lens loops that section alone; A/B against the last saved draft.",
-          see: 'The capstone workspace: the Workbench (code, roll, lead sheet), the form lens ribbon over the roll (`tb.lens.form`) and the form map panel with each section\'s energy, the bass-role lens (roots, 5ths, approach notes, notes on the kick), and the C3 checklist read from `formView` and `bassView`: "Bass lands with the kick" (live, with the share), "Verse and chorus both have chords and a bass" (the sections found), then the S2 and S3 lines greyed with "next session". Session bar: "Session 1 of 3: Groove and changes".',
+          see: 'The capstone workspace: the Workbench (code, roll, lead sheet), the form lens ribbon over the roll (`tb.lens.form`) and the form map panel with each section\'s energy, the bass-role lens (roots, 5ths, approach notes, notes on the kick), and the C3 checklist read from `formView` and `bassView`: "Bass lands with the kick" (live, with the share), "Verse and chorus both have chords and a bass" (the sections found), then the S2 and S3 lines greyed with "next session". Session bar: "Session 1 of 4: Groove and changes".',
           work: [
             "Verse groove: kick, snare and hats; a kick rhythm in a `const` shared with the bass (U08.L04).",
             "Verse changes: a loop of four chords, one a bar, played twice in the eight bars (or the C2 verse as it is).",
@@ -773,7 +773,7 @@ export const U09: UnitSpec = {
           opens:
             'The C3.S1 draft. `melVerse` and `melChorus` consts are added if the draft has none (`n("⟪~⟫").scale(…)` in the draft\'s key), with a `mel:` line arranged like the others.',
           hear: "The draft under the tunes as they grow; the section loop on the form lens to work on one section at a time; A/B between verse and chorus at the same bar of each.",
-          see: 'The same workspace with the chord-tone and range lenses; the form map now draws each section\'s features and the contrast hints from `contrastAxes` ("The chorus is higher (+5 half steps), denser and louder than the verse"). The checklist line "The chorus differs from the verse on two counts or more" is live, with the counts it hears. Session bar: "Session 2 of 3: Tunes and contrast".',
+          see: 'The same workspace with the chord-tone and range lenses; the form map now draws each section\'s features and the contrast hints from `contrastAxes` ("The chorus is higher (+5 half steps), denser and louder than the verse"). The checklist line "The chorus differs from the verse on two counts or more" is live, with the counts it hears. Session bar: "Session 2 of 4: Tunes and contrast".',
           work: [
             "A verse tune in the middle of the voice: a motif that comes back, chord tones on beats 1 and 3 (U07).",
             "A chorus tune with the hook: higher than the verse (the register line moves), longer notes or a repeated hook phrase.",
@@ -784,23 +784,39 @@ export const U09: UnitSpec = {
             '`contrast` (`a: { section: "chorus" }`, `b: { section: "verse" }`, `axes: ["pitch", "density", "harmony", "register", "energy"]`, `minAxes: 2`), labelled "The chorus differs from the verse on two counts or more"; the line names the counts that pass and the nearest one that does not.',
             "`groove-lock` stays live from S1. Saving is never blocked.",
           ],
-          ends: 'Draft saved and bound to C3.S2; Coda: "Next time: the whole song to 90 seconds, its lead sheet, and the release".',
+          ends: 'Draft saved and bound to C3.S2; Coda: "Next time: the whole song to 90 seconds, and its lead sheet".',
         },
         {
           id: "C3.S3",
-          goal: "Arrange V C V C, lead sheet, review, release.",
+          goal: "Arrange V C V C; lead sheet.",
           opens: "The C3.S2 draft. The form map shows its length in bars and seconds against 1:30.",
-          hear: "The whole song from bar 1; the release recording plays the final version once in full.",
-          see: 'The same workspace with the lead-sheet view (section labels and double bars at each section, chord symbols, "Swing 8ths" when the flavour swings); the full checklist live; "Review" and "Release" at the end, with "Check again before you release" whenever the draft changed after its last passing check (c1). Session bar: "Session 3 of 3: Arrange and release".',
+          hear: "The whole song from bar 1, or any section looped from the form lens.",
+          see: 'The same workspace with the lead-sheet view (section labels and double bars at each section, chord symbols, "Swing 8ths" when the flavour swings); the full checklist live. No "Release" yet: the session bar reads "Session 3 of 4: Arrange and the lead sheet", and the take is next time.',
           work: [
             "Arrange verse, chorus, verse, chorus with one `arrange()` per track that changes; a second chorus may be a variant (`melChorus2`) or twice as long.",
             "Reach 90 seconds: at 100 BPM a bar lasts 2.4 seconds, so 8-bar sections give 77 seconds; double the last chorus (40 bars, 96 seconds) or slow to 84 BPM or under (32 bars, 91 seconds). An intro or outro is not a section the `form` rule accepts (see notes).",
             "Open the lead sheet and fix what it cannot write exactly (a tuplet, a note shorter than a sixteenth, a melody track with chords in it).",
-            "Ask for a review (optional, never affects pass or fail), then release.",
           ],
           checks: [
             'The whole rubric of contracts §6.6 C3 (content/capstones.ts): `form` "verse chorus verse chorus" (tags allowed); `contrast` on ≥ 2 axes; `duration-sec` ≥ 90 from the AST (`arrange()` sum ÷ cps, never played); `groove-lock` bass on kick ≥ 0.5; `notates` `view: "lead-sheet"` (renders with `approximate = false`; a declared swing passes). Labels: "Verse, chorus, verse, chorus", "The chorus differs from the verse on two counts or more", "At least 90 seconds", "Bass lands with the kick", "The lead sheet writes your song exactly".',
-            "Release is allowed once every required line is met on the code being released; the tutor review (contracts §10.6, `reviewRevisions: 1`) is offered before release.",
+            "Saving is never blocked: a draft with open lines carries them to the last session.",
+          ],
+          ends: 'Draft saved and bound to C3.S3; Coda: "Next time: press record, hear the whole song once through, and release it". The lines that are met are listed; nothing is recorded yet.',
+        },
+        {
+          id: "C3.S4",
+          goal: "Record the full take, review, release.",
+          opens:
+            "The C3.S3 draft, with the checklist as it stood. A learner who was part-way through the old three-session C3.S3 opens here with everything kept: the draft, every passed check, a take already recorded (then only the review and the release are left).",
+          hear: "The take: the final version played once in full while it records, 90 seconds or more of the learner's own song with nothing to do but listen. Then the recording, from the album player.",
+          see: 'The workspace with the full checklist, then "Record the take" (a count-in, the song\'s length as a progress line over the form map, each section lighting as it plays), "Review" and "Release", with "Check again before you release" whenever the draft changed after its last passing check (c1). Session bar: "Session 4 of 4: The take and the release".',
+          work: [
+            "A last pass over the open checklist lines, if any.",
+            "Record the take: the whole song in real time (about 96 seconds at the template's tempo). It can be taken again; every take is kept as a version (d20).",
+            "Ask for a review (optional, never affects pass or fail), then release: title, the learner's one line for the liner notes, the cover.",
+          ],
+          checks: [
+            "The whole rubric once more, on the code being released (contracts §6.6 Release): release is allowed once every required line is met on that code; the tutor review (contracts §10.6, `reviewRevisions: 1`) is offered before release.",
           ],
           ends: 'Review offered (`review: true`), then release (`release: true`): album track C3 v1 with a recording (`OakStrudel.recorder`, `album.putAudio`), a tree-ring cover drawn from the code (its rings follow the sections), deterministic liner notes and the learner\'s own line; milestone ms.11 "You can now write a song with a verse and a chorus." Revising later makes v2.',
         },

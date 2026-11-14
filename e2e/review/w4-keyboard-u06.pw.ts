@@ -1,6 +1,6 @@
 // Wave 4 review (review:journey): a whole U06 day from the keyboard alone, with reduced motion, at 1280×800 in
-// Bark: Today → the warm-up (a stage D set by keys until its key paths are taken; the rest reported skipped to keep
-// the test short) → U06.L02 "Roman Numerals" step by step (choices, the numerals typed into the RN palette, a chord
+// Bark: Today → the warm-up (a stage D set by keys until its key paths are taken, on the U06.L04 day whose warm-up
+// deals one; the rest reported skipped to keep the test short) → the U06.L02 day: Today → U06.L02 "Roman Numerals" step by step (choices, the numerals typed into the RN palette, a chord
 // symbol typed, code typed into the region, the Make) → the Coda → Done for today. The page is only read (to know
 // what a trial asks); every action is a key press, and every control that takes focus shows a focus ring.
 import { expect, type Page, test } from "@playwright/test";
@@ -158,18 +158,41 @@ async function stageDSetByKeys(page: Page): Promise<string> {
 test("a whole U06 day from the keyboard, with reduced motion", async ({ page, request }) => {
   test.setTimeout(240_000);
   await resetClock(request);
-  await seedPoint(request, "after U05.CP");
   await quietHmr(page);
   await useUiPrefs(page, { theme: "bark", motion: "system" });
   const problems = watch(page);
   const ended = sessionEnd(page);
-  const plan = await api<{ kind: string; mapItemId: string }>(request, "GET", "/api/session/today");
-  expect(plan).toMatchObject({ kind: "lesson", mapItemId: "U06.L02" });
+  // The stage D set by keys, on a U06 day whose warm-up deals one (U06.L04's: function and inversions). Since the
+  // fact decks joined the catalog (contracts 1.6) the U06.L02 day's warm-up is a concept set and a fact set, with
+  // no stage D set in it.
+  await seedPoint(request, "after U06.L03");
   await openToday(page);
+  // Today has decided before Tab is pressed (under load the card shows before its Start button).
+  await expect(page.getByTestId("start-session")).toBeVisible({ timeout: 30_000 });
   await tabTo(page, byId("start-session"), "Start session");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/session\/?$/);
   console.log(`[warm-up] ${await stageDSetByKeys(page)} by keys`);
+
+  // The U06.L02 day from the keyboard: Today → Start → its warm-up reported skipped → the lesson → the Coda.
+  // The first session's page is left before the reseed: a heartbeat still in flight for a session the reseed
+  // removed was answered 404 and read as a console error (review:journey, Wave 6).
+  await openToday(page);
+  await seedPoint(request, "after U05.CP");
+  const plan = await api<{ kind: string; mapItemId: string }>(request, "GET", "/api/session/today");
+  expect(plan).toMatchObject({ kind: "lesson", mapItemId: "U06.L02" });
+  await openToday(page);
+  // Today has decided before Tab is pressed (under load the card shows before its Start button).
+  await expect(page.getByTestId("start-session")).toBeVisible({ timeout: 30_000 });
+  await tabTo(page, byId("start-session"), "Start session");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/session\/?$/);
+  await expect(page.getByTestId("warmup")).toBeVisible({ timeout: 60_000 });
+  const items = await page.evaluate(
+    () => (window as never as { __oakSession: SessionHandle }).__oakSession.state().plan?.warmup.items ?? [],
+  );
+  await skipItems(page, items);
+  await expect(page.getByTestId("warmup")).toBeHidden({ timeout: 30_000 });
 
   const def = await lessonDef("U06.L02");
   for (const s of def.steps) {

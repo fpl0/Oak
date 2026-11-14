@@ -1,0 +1,61 @@
+{/* U13.L04 Compound Meter: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+A slow soul ballad, the last dance of the night. Six hats tick in every bar, but the music does not walk in six, or in three. Let it sway you before you count it.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+Feel it with your hand first. The hats are the small steps; the beat is the slow swing underneath them.
+
+<OnPass>Two taps a bar, a second apart, while six hats went by: each of your taps held three of them. That slow two is what the body sways to.</OnPass>
+</Step>
+
+<Step id="S3">
+In code a bar is still one cycle and six steps share it equally. The question is how the ear groups them.
+
+<Predict exercise="six-hats-how-many-beats" />
+</Step>
+
+<Step id="S4">
+Two ways to group six eighth notes. Run the first, then move the snare and hear the bar change shape.
+
+<Example id="two-threes" views="code,roll" />
+
+<OnPass>With the snare on the fourth eighth the bar falls into two groups of three: two beats, each a dotted quarter long. With the snare on the third and fifth it is a waltz, three beats of two. A meter whose beats each split into three is a **compound meter**: 6/8 has two such beats, 12/8 four. 4/4 and 3/4, whose beats split in two, are **simple meter**. In compound meter the tempo line counts the dotted-quarter beat, so `setcpm(60/2)` is 60 beats and 180 eighth notes a minute.</OnPass>
+</Step>
+
+<Step id="S5">
+Your turn. In code each eighth note of 6/8 is a sixth of the bar: one step of six.
+
+<Editor exercise="give-it-a-second-beat" />
+
+<OnPass>The snare on 2 makes the bar sway, and the kick on the last “li” leans into the next bar. You have written a 6/8 groove. A good place to stop for today if you need to.</OnPass>
+</Step>
+
+<Step id="S6">
+Slow blues and many soul ballads are written in 12/8: four beats a bar, each split in three. It is two bars of 6/8 joined into one, and in code each eighth note is now a twelfth of the bar.
+
+<Editor exercise="from-six-to-twelve" />
+
+<OnPass>Twelve steps in one cycle and `setcpm(60/4)`: the drums sound exactly as before, because the beat did not change, only how many of them a bar holds. The chords now change every four beats, since a bar of 12/8 is twice as long. The tempo line always divides by the beats in the bar.</OnPass>
+</Step>
+
+<Step id="S7">
+By ear now. Find the beat first, then listen inside one beat: does it split in two or in three?
+
+<Choice exercise="which-meter" />
+
+<OnPass>A waltz and 6/8 both have six eighth notes in a bar. The waltz groups them in twos and walks in three; 6/8 groups them in threes and sways in two.</OnPass>
+</Step>
+
+<Step id="S8">
+Four held chords, a bass, six even hats and a kick on 1: it ticks, but it does not sway yet. Give it its second beat, then keep going until it sounds like the end of the night. You can now write a groove in 6/8 and in 12/8; next, three to a beat inside a bar of four.
+
+<Make exercise="your-six-eight-ballad" />
+
+<CanDo id="cd.code.compound-meter" />
+
+<Recap />
+</Step>

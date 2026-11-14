@@ -104,6 +104,10 @@ function answerTexts(
   // `text` (all bars, above) and the scale builder in `midi` or `degrees` (above).
   const sections = (answer as { sections?: readonly string[] }).sections;
   if (sections !== undefined && sections.length > 0) out.push(sections.join(" "));
+  // Wave 6: a form map (`input: "map"`) also answers where each section starts: the first bars as a plain list
+  // ("1 9 17 25"), the form the answer guard reads as a map's boundaries.
+  const bars = (answer as { bars?: readonly number[] }).bars;
+  if (bars !== undefined && bars.length > 0) out.push(bars.join(" "));
   return out;
 }
 
@@ -289,7 +293,19 @@ export class LessonContextAdapter implements LessonContextPort {
     if (step === null) return null;
     // Wave 4 (wave4.md §5.6): the key the step is in, the exercise's own, else the lesson's.
     const key = keyText(step.exercise?.key ?? this.content.lessonDef(lessonId)?.key ?? null);
-    return { ...stepSource(lessonId, step), key };
+    // Wave 6: a step that changes key carries its key plan (contracts §6.8), each key with the bar it starts on, and
+    // a step in its own meter (a 6/8 step inside a 4/4 lesson) says so.
+    const ex = step.exercise as
+      | { keyPlan?: readonly { bar: number; key: KeySpec }[]; meter?: string }
+      | undefined;
+    const plan = (ex?.keyPlan ?? []).map((e) => ({ bar: e.bar, key: keyText(e.key) as string }));
+    const lessonMeter = this.content.lessonDef(lessonId)?.meter ?? null;
+    return {
+      ...stepSource(lessonId, step),
+      key,
+      ...(plan.length > 1 ? { keyPlan: plan } : {}),
+      ...(ex?.meter !== undefined && ex.meter !== lessonMeter ? { meter: ex.meter } : {}),
+    };
   }
 
   async resolveExercise(ref: string): Promise<{ lessonId: string; stepId: string } | null> {
@@ -422,6 +438,8 @@ export class LessonContextAdapter implements LessonContextPort {
         reference: null,
         totalBars: analysis?.bars ?? null,
         revisions: revisionCountFor(id),
+        // Wave 6: the Core Finale's single asks for the longest review, three strengths, the strongest first.
+        ...(id === "CF-A" ? { strengthsWanted: 3 as const } : {}),
       },
       key: version.key ?? def?.key ?? null,
       meter: version.meter ?? def?.meter ?? null,

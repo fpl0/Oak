@@ -56,24 +56,38 @@ export function CheckButton({
   onClick,
   disabled,
   label: wanted = "Check",
+  reason = null,
 }: {
   onClick(): void;
   disabled: boolean;
   label?: string;
+  /** Why the button is not open yet ("Bar 3 is still empty."): shown above it and read with it (d4). */
+  reason?: string | null;
 }) {
   const h = useStepHost();
   const label = h.mode === "checkpoint" ? "Save answer" : wanted;
+  const off = disabled || h.review;
+  const why = off && !h.review && !h.checking ? reason : null;
+  const whyId = `${h.mode}-${h.step.id}-check-why`;
   return (
-    <Button
-      variant={h.passed ? "secondary" : "primary"}
-      onClick={onClick}
-      disabled={disabled || h.review}
-      loading={h.checking}
-      data-testid="check"
-      title={`${label} (${CHECK_KEYS})`}
-    >
-      {label} <Kbd tone={h.passed ? "default" : "inverse"}>{CHECK_KEYS}</Kbd>
-    </Button>
+    <>
+      {why ? (
+        <p id={whyId} className="basis-full text-right text-sm text-text-2" data-testid="check-reason">
+          {why}
+        </p>
+      ) : null}
+      <Button
+        variant={h.passed ? "secondary" : "primary"}
+        onClick={onClick}
+        disabled={off}
+        loading={h.checking}
+        data-testid="check"
+        title={why ?? `${label} (${CHECK_KEYS})`}
+        {...(why ? { "aria-describedby": whyId } : {})}
+      >
+        {label} <Kbd tone={h.passed ? "default" : "inverse"}>{CHECK_KEYS}</Kbd>
+      </Button>
+    </>
   );
 }
 

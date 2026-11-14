@@ -325,3 +325,61 @@ test("production (Wave 5): a U10 session and the C4 capstone workspace, each rel
   await context.setOffline(false);
   await context.close();
 });
+
+test("production (Wave 6): a U15 session, then the finished album of twelve tracks, each reloaded offline", async ({
+  browser,
+  request,
+}) => {
+  test.setTimeout(240_000);
+  const up = await fetch(`${PROD_URL}/api/health`, { headers: { "X-Oak": "1" } }).catch(() => null);
+  test.skip(up === null, `no production server on ${PROD_URL}`);
+  const u15l02 = (await import("../../content/core/U15/L02/lesson.ts")).default;
+
+  // A U15 learner (C6 released yesterday): today's session is U15.L02, Five of Five.
+  await importSeed(request, "C6 released");
+  const context = await browser.newContext({ baseURL: PROD_URL, viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  const w = watch(page);
+  await page.goto("/");
+  const today = page.getByTestId("today-card");
+  await expect(today).toBeVisible({ timeout: 30_000 });
+  await expect(today).not.toHaveAttribute("data-state", /first-run|done/);
+  await expect(today).toContainText(u15l02.title);
+  await page.getByTestId("start-session").click();
+  await expect(page).toHaveURL(/\/session\/?$/);
+  await expect(page.getByTestId("warmup").or(page.getByTestId("lesson-step")).first()).toBeVisible({
+    timeout: 60_000,
+  });
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => (await navigator.serviceWorker.getRegistration())?.active?.scriptURL ?? ""),
+      { timeout: 30_000 },
+    )
+    .toMatch(/\/sw\.js/);
+  await page.reload();
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 30_000 });
+  expectClean(w);
+  await context.setOffline(true);
+  w.problems.length = 0;
+  await page.reload();
+  await expect(page.locator("#main")).toBeVisible({ timeout: 30_000 });
+  await context.setOffline(false);
+
+  // A learner who has finished the core: the album holds Side A's twelve tracks, each with its recording.
+  await importSeed(request, "core complete");
+  await page.goto("/album");
+  await expect(page.getByTestId("album-meta")).toContainText("12 tracks", { timeout: 60_000 });
+  await expect(page.getByTestId("play-side-a").first()).toBeVisible();
+  await context.setOffline(true);
+  w.problems.length = 0;
+  await page.reload();
+  await expect(page.locator("#main")).toBeVisible({ timeout: 30_000 });
+  const offlineProblems = w.problems.filter(
+    (p) => !/Failed to load resource|net::ERR_INTERNET_DISCONNECTED|fetch/i.test(p),
+  );
+  expect(offlineProblems).toEqual([]);
+  expect(w.remote).toEqual([]);
+  await context.setOffline(false);
+  await context.close();
+});

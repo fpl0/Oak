@@ -4,6 +4,7 @@
 import type { Rat } from "@oak/content-kit";
 import type { AbcElem, AbcVisualParams, OakClickListener, TuneObject } from "abcjs";
 import type { Box, NoteGeometry, StaffBandGeometry, StaffGeometry } from "./geometry.ts";
+import { GUIDE_TONE_CLASSES, type GuideToneMark } from "./guide.ts";
 import { CHORD_LABEL_CLASSES } from "./lead-sheet.ts";
 import { ANNOTATION_CLASSES, type AnnotationSet, type NoteAnnotation } from "./options.ts";
 import type { AbcResult, Score, Staff } from "./types.ts";
@@ -462,4 +463,36 @@ export function tagChordLabels(el: HTMLElement, score: Score): void {
   };
   tag([...svg.querySelectorAll("text.abcjs-chord")], score.chords, symbol);
   tag([...svg.querySelectorAll("text.abcjs-annotation")], score.romans, roman);
+}
+
+/**
+ * Wave 6 (the guide-tone lens): gives the noteheads of `marks` (`guideToneMarks`) the classes of
+ * `GUIDE_TONE_CLASSES` (`oak-guide` and `oak-guide-third` / `oak-guide-seventh`), on every tied piece of the note,
+ * and takes them off every other head. A host styles them (a ring, a fill); nothing here sets a colour. Heads are
+ * matched low to high, as `NoteItem.pitches` and `NoteGeometry.heads` are. Returns the heads it marked.
+ */
+export function markGuideTones(
+  el: HTMLElement,
+  marks: readonly GuideToneMark[],
+  prefix = "oak-e",
+): Element[] {
+  const svg = el.querySelector("svg");
+  if (!svg) return [];
+  const { base, third, seventh } = GUIDE_TONE_CLASSES;
+  for (const old of [...svg.querySelectorAll(`.${base}`)]) old.classList.remove(base, third, seventh);
+  const done: Element[] = [];
+  for (const m of marks) {
+    for (const g of noteGroups(svg, m.n, prefix)) {
+      const heads = [...g.querySelectorAll(".abcjs-notehead")].sort((a, b) => {
+        const ra = rectOf(a);
+        const rb = rectOf(b);
+        return rb.y + rb.height / 2 - (ra.y + ra.height / 2) || ra.x - rb.x;
+      });
+      const head = heads[m.member];
+      if (!head) continue;
+      head.classList.add(base, m.role === "third" ? third : seventh);
+      done.push(head);
+    }
+  }
+  return done;
 }

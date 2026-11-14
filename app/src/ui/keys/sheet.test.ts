@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { RHYTHM_KEYS } from "../../answers/staff/rhythm.ts";
 import { TRANSCRIBE_KEYS } from "../../transcribe/keys.ts";
 import {
   CORE_SECTIONS,
@@ -16,8 +17,10 @@ describe("shortcut sheet sections", () => {
       "editor",
       "workbench",
       "form-sound",
+      "keys-record",
       "answers",
       "staff-input",
+      "staff-rhythm",
       "keys-intervals",
       "harmony",
       "transcribe",
@@ -65,7 +68,9 @@ describe("shortcut sheet sections", () => {
       "editor",
       "workbench",
       "form-sound",
+      "keys-record",
       "answers",
+      "staff-rhythm",
       "keys-intervals",
       "staff-input",
       "harmony",
@@ -99,8 +104,10 @@ describe("shortcut sheet sections", () => {
       "editor",
       "workbench",
       "form-sound",
+      "keys-record",
       "answers",
       "staff-input",
+      "staff-rhythm",
       "keys-intervals",
       "harmony",
       "transcribe",
@@ -116,6 +123,35 @@ describe("shortcut sheet sections", () => {
     // A live Transcribe page group lists the same rows: the static copy steps aside.
     const live = new Set(TRANSCRIBE_KEYS.map((k) => `${k.keys}|${k.description}`));
     expect(sheetSections([], live).some((s) => s.id === "transcribe")).toBe(false);
+  });
+
+  test("Wave 6: the music lenses, the staff's rhythm keys, applied numerals, the key strip and the record", () => {
+    const rows = (id: string) => CORE_SECTIONS.find((s) => s.id === id)?.rows ?? [];
+    expect(rows("workbench").map(([k]) => k)).toEqual(
+      expect.arrayContaining(["Shift+I", "Shift+J", "Shift+V"]),
+    );
+    expect(rows("staff-rhythm").map(([k]) => k)).toEqual(
+      Object.values(RHYTHM_KEYS).map((k) => k.toUpperCase()),
+    );
+    expect(rows("harmony").map(([k]) => k)).toContain("/");
+    expect(rows("keys-record").map(([, d]) => d.split(":")[0])).toEqual([
+      "Key strip",
+      "Key strip",
+      "Record",
+      "Record",
+      "Record",
+      "Record",
+    ]);
+    // A staff that offers ties registers the same id while it is on screen: one rhythm section, never two.
+    registerShortcutSection({
+      id: "staff-rhythm",
+      title: "Staff input: rhythm",
+      order: 47,
+      rows: [["T", "Tie"]],
+    });
+    const shown = sheetSections(useSheetSections.getState().sections).filter((s) => s.id === "staff-rhythm");
+    expect(shown).toHaveLength(1);
+    expect(shown[0]?.rows).toEqual([["T", "Tie"]]);
   });
 
   test("rows that list several keys are shown as keys, sequences as sequences", () => {

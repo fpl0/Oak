@@ -1,25 +1,21 @@
 // The contract gate of §7.4 with Wave 5's catalog: the U08–U11 families as content/families.ts tunes them (stage E,
-// the minor and blues ladders, groove lock, form, swing) and every fact deck written so far, the U08–U11 decks
-// (content/decks `WAVE5_DECKS`: minor keys, minor-key chords, scales as degrees, the twelve bars, dominant
-// sevenths) with the U04–U07 decks still waiting for their contracts §7.3 rows, introduced in course order. The
-// five criteria must hold on every run and target (the gate's seeds and the held-out ones) over the 300 days, and
-// again over the stretch that ends with X2.S2 (session 129 of the default order, the end of Wave 5's course). The
-// table is printed for the report.
+// the minor and blues ladders, groove lock, form, swing) and every fact deck of the catalog: since contracts 1.6
+// (Wave 6 Foundation, d1) that is all twelve, the U04–U07 decks (interval names, triad spellings, numerals,
+// cadences) and the U10–U11 decks (content/decks `WAVE5_DECKS`: minor keys, minor-key chords, scales as degrees,
+// the twelve bars, dominant sevenths) beside the three older ones, each promoted deck at one new card a day,
+// introduced in course order. The five criteria must hold on every run and target (the gate's seeds and the
+// held-out ones) over the 300 days, and again over the stretch that ends with X2.S2 (session 131 of the default
+// order since 1.6 added U05.L09 and C3.S4, the end of Wave 5's course). The table is printed for the report.
 import { describe, expect, test } from "bun:test";
-import { PENDING_DECKS, WAVE5_DECKS } from "../../../content/decks/index.ts";
+import { PROMOTED_DECKS, WAVE5_DECKS } from "../../../content/decks/index.ts";
 import { decks, families } from "../../../content/families.ts";
 import { defaultOrder } from "../../../content/syllabus.ts";
 import { createSrs, DECISION_2, recommendedGovernor, SIM_GATE } from "./index.ts";
 import { simCatalogOf } from "./sim/course-catalog.test-util.ts";
 import { DEFAULT_LEARNER, type SimResult, simulate } from "./sim/simulate.ts";
 
-/** The U05–U07 decks and the U10–U11 decks (U04's interval names wait for their own simulation, as before). */
-const U05_U07 = ["deck.chd.triads", "deck.har.rn", "deck.har.cadence"];
-const catalog = simCatalogOf(families, [
-  ...decks,
-  ...PENDING_DECKS.filter((d) => U05_U07.includes(d.id)),
-  ...WAVE5_DECKS,
-]);
+/** Every deck of the catalog, the nine promoted by contracts 1.6 among them. */
+const catalog = simCatalogOf(families, decks);
 const srs = await createSrs({ factRetention: DECISION_2.factRetention });
 const TARGETS = [15, 20, 25] as const;
 /** The gate's five seeds and the five held-out ones. */
@@ -100,24 +96,26 @@ console.log(
 describe("§7.4 with Wave 5's families and every deck, through X2.S2 and over 300 days", () => {
   test("the U08–U11 decks are in the simulated catalog, card by card in their lessons", () => {
     const ids = new Set(catalog.deckBatches.map(([id]) => id));
-    for (const d of WAVE5_DECKS) expect(ids.has(d.id)).toBe(true);
+    for (const d of PROMOTED_DECKS) expect(ids.has(d.id)).toBe(true);
+    expect(ids.size).toBe(decks.length);
     const wave5 = new Set(WAVE5_DECKS.map((d) => d.id as string));
     for (const [id, lesson] of catalog.deckBatches)
       if (wave5.has(id))
         expect([id, lesson, defaultOrder.includes(lesson as never)]).toEqual([id, lesson, true]);
-    // At 20 and 25 minutes a lesson is one session, so X2.S2 is session 129 of the default order; at 15 minutes a
+    // At 20 and 25 minutes a lesson is one session, so X2.S2 is session 131 of the default order; at 15 minutes a
     // lesson takes two sessions and the 300 days end before X2 (the window is then the whole run).
-    for (const { t, w } of runs) if (t !== 15) expect(w.sessions).toBe(129 + 1);
+    expect(defaultOrder.indexOf("X2.S2") + 1).toBe(131);
+    for (const { t, w } of runs) if (t !== 15) expect(w.sessions).toBe(131 + 1);
   });
   test("through X2.S2: p95 planned warm-up within budget; ≤ 12 active; oldest due p95 ≤ 7 d; first review ≤ 7 d; review day ≤ 12 min", () => {
     for (const { t, seed, w } of runs) {
       const where = [t, seed];
       expect([...where, w.plannedP95 <= SIM_GATE.p95WarmupSec[t]]).toEqual([...where, true]);
       expect([...where, w.activeMax <= SIM_GATE.maxActive]).toEqual([...where, true]);
-      // The oldest-due criterion is a p95 over the run (§7.4); over this shorter window, which holds the 10-day break
-      // of days 145–154, one run (20 min, e5) reaches 8 days with or without the U10–U11 decks (it is the U05–U07
-      // decks after the break): held to one day more here, and to 7 over the 300 days below.
-      expect([...where, w.oldestP95 <= SIM_GATE.p95OldestDueDays + 1]).toEqual([...where, true]);
+      // Held to the contract's 7 days over this shorter window too since Wave 6 (it was allowed 8: a deck card
+      // dealt before the 10-day break of days 145–154 was outranked by the backlog for weeks; such a card now
+      // waits like any due card after two days, planner.ts `freshPriority`).
+      expect([...where, w.oldestP95 <= SIM_GATE.p95OldestDueDays]).toEqual([...where, true]);
       expect([...where, w.waitMax <= SIM_GATE.firstReviewWaitDays]).toEqual([...where, true]);
       expect([...where, w.waitCensored]).toEqual([...where, 0]);
       expect([...where, w.reviewDayP95 <= SIM_GATE.p95ReviewDaySec]).toEqual([...where, true]);

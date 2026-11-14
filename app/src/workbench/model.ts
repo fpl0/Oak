@@ -17,6 +17,7 @@ import {
   type EvalSuccess,
   type GraderErrorInfo,
   keyAt,
+  keyAtBarOf,
   type Normalized,
   normalize,
   type TrackKeyContext,
@@ -45,6 +46,14 @@ import {
 } from "@oak/theory";
 import { type AnnotationKinds, annotateAbc, annotationText, NO_ANNOTATIONS } from "./annotate.ts";
 import { primaryRanges } from "./code-roles.ts";
+import {
+  chordReading,
+  keyPlanOf,
+  type ModeMark,
+  modeMarkOf,
+  type WorkbenchColour,
+  workbenchColour,
+} from "./colour.ts";
 import { type WorkbenchHarmony, workbenchHarmony } from "./harmony.ts";
 import { linesOf, type WorkbenchLines } from "./lines.ts";
 import { type ChordRole, chordRoleOf, type PitchLabel, pitchLabel } from "./music.ts";
@@ -76,6 +85,12 @@ export interface ViewEvent {
   label: PitchLabel | null;
   /** Role in its chord ("R", "3", "5", "7"; tensions "9", "13") when the event carries a chord symbol. */
   chordTone: ChordRole | null;
+  /**
+   * Wave 6: the label once chromatic degrees are taught (`tb.n.chromatic`, U15.L01), when the chord under the note
+   * decides its reading otherwise than `label` (G♯ under E7 is ♯5 "si", not ♭6 "le"). Absent: `label` stands.
+   * `applyDepth` (depth.ts) picks one for the learner.
+   */
+  labelTaught?: PitchLabel;
 }
 
 export interface WorkbenchModel {
@@ -120,6 +135,11 @@ export interface WorkbenchModel {
    * model built without them (tests that build a model by hand).
    */
   lines?: WorkbenchLines | null;
+  /**
+   * Wave 6 (colour.ts): sevenths, applied and borrowed chords, guide tones, the key plan, the mode's colour tone,
+   * pushes, ghost notes and the beat grid. Absent on a model built without them (tests that build one by hand).
+   */
+  colour?: WorkbenchColour | null;
 }
 
 /** The staff engraves at most this many bars at a time; longer loops turn pages with the playhead. */
@@ -514,11 +534,68 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
   const blues = bluesContext(all);
   const trackIndex = new Map(result.tracks.map((t, i) => [t, i] as const));
 
+  // The chords first (Wave 6): each note's label can then follow the chord under it.
+  const heard = heardBand(n, opts.bandHeard ?? null);
+  const analysedBars = Math.max(1, result.bars);
+  const plan = keyPlanOf(heard, {
+    code,
+    meter: meter.id,
+    key,
+    bars: analysedBars,
+    pickup: opts.pickup ?? null,
+  });
+  let harmony: WorkbenchHarmony | null = null;
+  try {
+    harmony = workbenchHarmony(heard, {
+      meter: meter.id,
+      key,
+      bars: analysedBars,
+      ...(opts.pickup ? { pickup: opts.pickup } : {}),
+      ...(plan.spans.length > 1
+        ? { keyPlan: plan.spans.map((sp) => ({ from: sp.fromBar - 1, to: sp.toBar, key: sp.key })) }
+        : {}),
+    });
+  } catch {
+    harmony = null;
+  }
+  let colour: WorkbenchColour | null = null;
+  try {
+    colour = workbenchColour(heard, harmony?.piece ?? heard, harmony, plan, {
+      code,
+      meter: meter.id,
+      key,
+      bars: analysedBars,
+      pickup: opts.pickup ?? null,
+    });
+  } catch {
+    colour = null;
+  }
+  const chordSpans = (colour?.harmony?.chords ?? []).map((c, i, list) => ({
+    from: R.toNum(c.at),
+    to: list[i + 1] ? R.toNum((list[i + 1] as typeof c).at) : Number.POSITIVE_INFINITY,
+    chord: c.chord,
+  }));
+  const chordUnder = (onset: number) =>
+    chordSpans.find((sp) => onset >= sp.from - 1e-9 && onset < sp.to - 1e-9)?.chord;
+  const modeMarks = new Map<string, ModeMark>();
+  // Wave 6 (definition of done 16): the key in force. A track that states its own key (`.scale()`) is read in
+  // it bar by bar; a track that states none (a `chord()` line, `note()` names) follows the piece's key plan, so
+  // after a lift from C to D its C♯ is 7 (ti), not ♯1.
+  const statesKey = new Map(
+    keyContexts.map((c) => [c.track, c.spans.some((sp) => sp.source === "scale")] as const),
+  );
+  const keyOfEvent = (e: NEvent): KeySpec | null => {
+    const own = keyAt(keyContexts, e.track, e.onset);
+    if (plan.spans.length < 2 || statesKey.get(e.track) || e.track.startsWith("band.")) return own;
+    return keyAtBarOf(plan, R.floor(e.onset) + 1) ?? own;
+  };
+
   const events: ViewEvent[] = all.map((e) => {
     const onset = R.toNum(e.onset);
     const end = R.toNum(R.add(e.onset, e.dur));
     const pos = barPosition(e.onset, meter);
     const chord = e.chordSymbol ? (parseChordSymbol(e.chordSymbol) ?? undefined) : undefined;
+    const eventKey = e.midi === null ? null : keyOfEvent(e);
     const v: ViewEvent = {
       id: e.id,
       track: e.track,
@@ -540,7 +617,7 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
           ? null
           : pitchLabel(
               e.midi,
-              keyAt(keyContexts, e.track, e.onset),
+              eventKey,
               chord,
               spellings.get(e.id)?.direction,
               spellings.get(e.id)?.written,
@@ -548,6 +625,21 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
             ),
       chordTone: e.midi !== null && e.chordSymbol ? chordRoleOf(e.midi, e.chordSymbol) : null,
     };
+    // A chromatic note the code does not spell itself: once chromatic degrees are taught, the chord under it
+    // says whether it is raised or lowered (U15.L01). A blues keeps its blue notes.
+    const d = v.label?.degree;
+    if (e.midi !== null && eventKey && d && !d.inKey && !blues && !spellings.get(e.id)?.written) {
+      const under = chord ?? chordUnder(onset);
+      const dir = under ? chordReading(e.midi, eventKey, under, d.label) : null;
+      if (dir) {
+        const taught = pitchLabel(e.midi, eventKey, chord, dir, undefined, blues);
+        if (taught.degree && taught.degree.label !== d.label) v.labelTaught = taught;
+      }
+    }
+    if (e.midi !== null && !v.band) {
+      const mark = modeMarkOf(e.midi, eventKey);
+      if (mark) modeMarks.set(e.id, mark);
+    }
     if (e.s !== undefined) v.s = e.s;
     if (e.drum !== undefined) v.drum = e.drum;
     if (e.chordSymbol !== undefined) v.chordSymbol = e.chordSymbol;
@@ -555,26 +647,17 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
   });
   events.sort((a, b) => a.onset - b.onset || a.trackIndex - b.trackIndex || (a.midi ?? -1) - (b.midi ?? -1));
 
-  let harmony: WorkbenchHarmony | null = null;
-  try {
-    harmony = workbenchHarmony(heardBand(n, opts.bandHeard ?? null), {
-      meter: meter.id,
-      key,
-      bars: Math.max(1, result.bars),
-      ...(opts.pickup ? { pickup: opts.pickup } : {}),
-    });
-  } catch {
-    harmony = null;
-  }
+  if (colour) colour = { ...colour, mode: modeMarks };
 
   let lines: WorkbenchLines | null = null;
   try {
-    lines = linesOf(heardBand(n, opts.bandHeard ?? null), {
+    lines = linesOf(heard, {
       code,
       meter: meter.id,
       key,
       pickup: opts.pickup ?? null,
       bars: Math.max(1, result.bars),
+      ...(plan.spans.length > 1 ? { keyOf: keyOfEvent } : {}),
     });
   } catch {
     lines = null;
@@ -658,6 +741,7 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
       harmony,
       pickup: opts.pickup ?? null,
       lines,
+      colour,
     },
   };
 }

@@ -125,6 +125,21 @@ export interface SungTarget {
    * `markBlueNotes` sets it from a key.
    */
   blue?: { toward: 1 | -1 | 0 };
+  /**
+   * Wave 6 (U14 colour tones, U15 chromatic degrees): notes a half step from the target that a learner is likely
+   * to sing in its place: the key's own note beside a chromatic degree (fa for fi), or the plain scale's note that
+   * a mode changes (the minor ♭6 for Dorian's 6). A pitch that lies nearer to one of them than to the target, and
+   * outside the tolerance, is that other note: no credit, and the note says which one it was
+   * (`SungNoteResult.neighbour`, `sing.neighbour` / `sing.plain-scale`). Inside the tolerance the §8.1 credit
+   * stands. `chromaticTargets` and `modalTargets` set it.
+   */
+  neighbours?: readonly SungNeighbour[];
+}
+/** A likely slip beside a target (`SungTarget.neighbours`). Its octave does not matter: it is compared folded. */
+export interface SungNeighbour {
+  midi: number;
+  /** `diatonic`: the key's own note a half step away; `parallel`: the plain major or minor scale's note. */
+  kind: "diatonic" | "parallel";
 }
 export interface SungNoteResult {
   index: number;
@@ -146,6 +161,12 @@ export interface SungNoteResult {
    * neighbour's MIDI and the error the credit used. `cents` stays the error against the target itself.
    */
   blue?: { neighbourMidi: number; judgedCents: number };
+  /**
+   * Wave 6: the sung pitch lay nearer to one of the target's `neighbours` than to the target: that neighbour (in
+   * the octave of the target), its kind, and the error against it in cents. With `credited` the pitch was still
+   * inside the tolerance (credit 1, an info line); otherwise it earned nothing and reads as the neighbour.
+   */
+  neighbour?: { midi: number; kind: SungNeighbour["kind"]; cents: number; credited: boolean };
 }
 /** What `gradeSung` and `gradeSungLive` return: the PitchLane fill, the per-note tick and the grade all read it. */
 export interface SungResult {
@@ -273,6 +294,34 @@ export interface HumDraftOptions {
   label?: string;
   /** Adds `.s("…")` when given. */
   sound?: string;
+  /**
+   * Wave 6 (U13): rhythm the project's grid allows beyond plain slots. Given, the bars are written beat by beat
+   * (`[0 [1 2] 3 4]`), and a note held across a bar line stays inside the bar sequence as a bracket over the tied
+   * bars (`<[0 1 2@3 3 4@2]@2 [4 3 2 1]>`), the form U13.L03 teaches, instead of one long `.slow(bars)` line.
+   * - `weights`: dotted and other long values are written with `@` (`[1@3 0 0@4]`: a dotted quarter, an eighth,
+   *   a half) rather than with `_` cells.
+   * - `triplets`: a beat whose onsets sit on thirds is drafted as a triplet (`[0 1 2]`), in simple meters; the
+   *   duple grid (`slotsPerBar`) must divide the beat evenly. Every other beat stays on the duple grid.
+   */
+  rhythm?: { weights?: boolean; triplets?: boolean };
+  /**
+   * Wave 6 (U17): the piece changes key. The key in force from each bar (0-based bars of the WHOLE piece; a
+   * `KeyPlan` span of @oak/theory fits). The draft follows it: every note is read in the key of its own bar, the
+   * degrees are that key's, and the line's `.scale()` is the patterned form over the draft's bars
+   * (`.scale("<C4:major!2 D4:major!2>")`, contracts §6.8). `key` is used for bars before the first span.
+   * A later tonic is written nearest the first key's tonic (C4 → D4, C4 → B♭3), or an octave from there when that
+   * octave holds more of the notes sung in its bars (C4 → G4 for a tune above G4), unless a span names its own
+   * `octave` and `tonicOctave` is not given.
+   */
+  keyPlan?: readonly HumKeySpan[];
+  /** 0-based bar of the piece on which the draft's first bar sits (default 0): where `keyPlan` is read from. */
+  firstBar?: number;
+}
+/** One span of a key plan as `humToDraft` reads it (`KeyPlanSpan` of @oak/theory is one). */
+export interface HumKeySpan {
+  key: KeySpec;
+  fromBar: number;
+  octave?: number | null;
 }
 export interface HumDraftNote {
   /** Index into the sung notes. */
@@ -301,6 +350,10 @@ export interface HumDraftNote {
    * where a `_` continues the note into the next bar. Never a rest on the next beat 1.
    */
   tied?: true;
+  /** Wave 6: with a key plan, the key this note was read in (the key of its bar). Absent without a plan. */
+  key?: KeySpec;
+  /** Wave 6 (`rhythm.triplets`): the note sits in a beat drafted as a triplet. */
+  triplet?: true;
 }
 export type HumDraftWarning =
   | { code: "empty" }
@@ -323,14 +376,20 @@ export interface HumDraft {
   code: string;
   /** The mini-notation inside `n("…")`. */
   pattern: string;
-  /** `G4:major`. */
+  /** `G4:major`; with a key change inside the draft, the patterned form `<C4:major!2 D4:major!2>`. */
   scale: string;
   bars: number;
   /**
-   * Wave 5: how the line is written. `bars`: one `<…>` step per bar (no note crosses a bar line); `tied`: one
-   * sequence over every bar with `.slow(bars)`, because a note is held across a bar line (c7).
+   * Wave 5: how the line is written. `bars`: one `<…>` step per bar (no note crosses a bar line); `tied`: a note
+   * is held across a bar line (c7): one sequence over every bar with `.slow(bars)`, or, with `rhythm` (Wave 6), a
+   * bracket over the tied bars inside the bar sequence (`[…]@2`).
    */
   layout: "bars" | "tied";
+  /**
+   * Wave 6: the keys of the draft's bars when a key plan was given (draft bars, 0-based, in order; one entry when
+   * the draft stays in one key), else `null`.
+   */
+  keyPlan: { key: KeySpec; scale: string; fromBar: number; bars: number }[] | null;
   /** Wave 5: the swing the line was straightened by and plays back with (`.swingBy`), or `null`. */
   swing: SwingSpec | null;
   notes: HumDraftNote[];

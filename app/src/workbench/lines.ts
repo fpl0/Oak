@@ -145,6 +145,8 @@ export interface LinesContext {
   key: KeySpec | null;
   pickup?: PickupSpec | null;
   bars: number;
+  /** Wave 6: the key in force at a note, for a piece that changes key (absent: `key` everywhere). */
+  keyOf?: (e: NEvent) => KeySpec | null;
 }
 
 /** The line views of an analysed piece. Each view fails alone: a broken view never hides the others. */
@@ -179,7 +181,9 @@ export function linesOf(n: Normalized, ctx: LinesContext): WorkbenchLines {
   const blue = new Map<string, BlueNote>();
   if (ctx.key)
     for (const e of singleLine(n.all)) {
-      const b = blueNoteOf(e.midi as number, ctx.key);
+      // Wave 6: against the key in force at the note (after a lift from C to D, F♯ is 3, not a blue ♭5).
+      const key = ctx.keyOf?.(e) ?? ctx.key;
+      const b = blueNoteOf(e.midi as number, key);
       if (b) blue.set(e.id, b);
     }
   let swing: TrackSwing[] = [];

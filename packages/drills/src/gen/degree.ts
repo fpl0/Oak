@@ -389,7 +389,11 @@ export function tonicDistractors(
 
 // --- deg.index (n ↔ degree ↔ note name) ------------------------------------------------------------
 
-const INDEX_MODES: readonly ScaleMode[] = ["dorian", "phrygian", "lydian", "mixolydian", "locrian"];
+/**
+ * The mode categories of `fam.deg.index` (level 4): one per mode, each from its own lesson (U14.L01 Mixolydian,
+ * L03 Dorian, L04 Lydian, L05 Phrygian). No Locrian: it is not taught in the core.
+ */
+const INDEX_MODES: readonly ScaleMode[] = ["mixolydian", "dorian", "lydian", "phrygian"];
 const CHROMATIC_PAIRS: readonly Degree[] = ["#4", "b7", "b3", "b6", "b2"];
 
 export const nIndex: Generator = {
@@ -410,13 +414,18 @@ export const nIndex: Generator = {
           ui: toN ? "text" : "degree-pad",
           textKind: "free",
           prompt: toN
-            ? `In \`.scale("${scaleArg(key, 4)}")\`, which \`n\` value plays degree ${d}?`
+            ? `In \`.scale("${scaleArg(key, 4)}")\`, which \`n\` value plays degree ${shownDegree(d)}? Write the step number, then # or b.`
             : `In \`.scale("${scaleArg(key, 4)}")\`, which degree does \`n("${step}")\` play?`,
         },
         `n("${step}").scale("${scaleArg(key, 4)}")`,
       );
     }
-    const mode: ScaleMode = cat === "minor" ? "minor" : cat === "modes" ? ctx.rng.pick(INDEX_MODES) : "major";
+    const mode: ScaleMode =
+      cat === "minor"
+        ? "minor"
+        : (INDEX_MODES as readonly string[]).includes(cat)
+          ? (cat as ScaleMode)
+          : "major";
     const key =
       cat === "deg-to-n" || cat === "n-to-deg" ? pickKeyFrom(ctx, ["C", "G", "F"], mode) : pickKey(ctx, mode);
     const idx = ctx.rng.int(0, 6);
@@ -441,6 +450,24 @@ export const nIndex: Generator = {
       });
     // n → note name in the key (L2+), minor (L3), modes (L4).
     const name = scaleNames(key)[idx] as string;
+    // In a mode the question that matters is its one changed note: asked half the time (Mixolydian's 7th
+    // step, Dorian's 6th, Lydian's 4th, Phrygian's 2nd).
+    const colourIdx = MODE_COLOUR_INDEX[mode];
+    if (colourIdx !== undefined && ctx.rng.next() < 0.5) {
+      const colour = scaleNames(key)[colourIdx] as string;
+      return silentTrial(
+        { text: [colour] },
+        cue,
+        {
+          key,
+          ui: "text",
+          textKind: "note",
+          colour: true,
+          prompt: `Which note does \`n("${colourIdx}").scale("${arg}")\` play? (letter name)`,
+        },
+        `n("${colourIdx}").scale("${arg}")`,
+      );
+    }
     return silentTrial(
       { text: [name] },
       cue,
@@ -453,6 +480,15 @@ export const nIndex: Generator = {
       `n("${n}").scale("${arg}")`,
     );
   },
+};
+/** A degree as prose prints it: ♯4, ♭7 (the code keeps `3#` and `6b`). */
+const shownDegree = (d: Degree): string => d.replace("#", "♯").replace("b", "♭");
+/** The 0-based scale step of each mode's characteristic tone (content-kit `MODE_CHARACTERISTIC`). */
+const MODE_COLOUR_INDEX: Readonly<Partial<Record<ScaleMode, number>>> = {
+  mixolydian: 6,
+  dorian: 5,
+  lydian: 3,
+  phrygian: 1,
 };
 function pickKeyFrom(ctx: GenCtx, tonics: string[], mode: ScaleMode): KeySpec {
   const prev = ctx.previous?.params.key as KeySpec | undefined;

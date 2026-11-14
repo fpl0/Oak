@@ -547,7 +547,7 @@ export function returnRank(recall: number): number {
 /**
  * Spreads an overdue backlog over `N = clamp(ceil(overdueSeconds / budget), 5, 7)` days: card ID → the first
  * day it is offered. Items in the 0.75–0.90 band come first, highest first. FSRS state is untouched; the
- * rating uses the real elapsed time when the review happens.
+ * rating uses the real elapsed time when the review happens. A family's first set is left out (offered today).
  */
 export function smoothBacklog(
   overdue: readonly ReviewItem[],
@@ -555,7 +555,10 @@ export function smoothBacklog(
   cfg: GovernorConfig,
 ): Map<string, number> {
   const out = new Map<string, number>();
-  const items = cfg.quiet ? overdue.filter((it) => !it.mic) : overdue;
+  // A family's first set is never spread: it is planned first on the day back (contracts §7.4 "a family's first
+  // set is planned before the opener and the priority order, after a gap too"). Dealt to the last day of the
+  // spread, as its zero recall used to rank it, a family seeded on the eve of a break waited seven days.
+  const items = (cfg.quiet ? overdue.filter((it) => !it.mic) : overdue).filter((it) => !it.firstSet);
   if (items.length === 0) return out;
   const total = items.reduce((a, it) => a + it.sec, 0);
   const [minDays, maxDays] = RETURN.backlogDays;

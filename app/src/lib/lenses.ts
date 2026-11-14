@@ -2,8 +2,8 @@
 // names, one shared preference for the Workbench (roll, staff, keyboard), the drills and the answer widgets.
 // The preference is the `lenses` setting on the server (persisted with `settings.put`, read from bootstrap);
 // a lens is shown only once its tool is unlocked. Frozen after Foundation: read it, never fork it.
-import type { ChordLensId, LensId, LensPrefs, LineLensId } from "@oak/api";
-import { CHORD_LENS_IDS, DEFAULT_SETTINGS, LENS_IDS, LINE_LENS_IDS } from "@oak/api";
+import type { ChordLensId, LensId, LensPrefs, LineLensId, MusicLensId } from "@oak/api";
+import { CHORD_LENS_IDS, DEFAULT_SETTINGS, LENS_IDS, LINE_LENS_IDS, MUSIC_LENS_IDS } from "@oak/api";
 import type { UnlockableId } from "@oak/content-kit";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { toast } from "../ui/kit/Toast.tsx";
@@ -11,8 +11,8 @@ import { callApi } from "./api.ts";
 import { apiKey, useBootstrap } from "./queries.ts";
 import { useUnlockedSet } from "./unlocked.ts";
 
-export type { ChordLensId, LensId, LensPrefs, LineLensId };
-export { CHORD_LENS_IDS, LENS_IDS, LINE_LENS_IDS };
+export type { ChordLensId, LensId, LensPrefs, LineLensId, MusicLensId };
+export { CHORD_LENS_IDS, LENS_IDS, LINE_LENS_IDS, MUSIC_LENS_IDS };
 
 /** The tool that opens each lens; `null`: always available. */
 export const LENS_UNLOCKS: Readonly<Record<LensId, UnlockableId | null>> = {
@@ -67,9 +67,10 @@ export function rollLabelsOf(shown: LensPrefs): "none" | "note" | "degree" | "de
 // optional booleans (absent = on).
 
 /**
- * The tool that opens each chord lens. Chord symbols: `tb.feature.chord-symbols` (U05.L04, contracts §3.2 v1.4;
- * Wave 5 c14 switched it from `tb.arp`, the only row U05.L04 had before; the server's start-up backfill grants the
- * new row to learners past U05.L04). Roman numerals: `tb.feature.rn` (U06.L02).
+ * The tool that opens each chord lens. Chord symbols: `tb.feature.chord-symbols` (contracts §3.2; since 1.6 it
+ * unlocks at U05.L09 "Chord Names", the lesson split out of U05.L04 and taught directly after it; Wave 5 c14 had
+ * switched it from `tb.arp`, and the server's start-up backfill grants the row to learners past U05.L04). Roman
+ * numerals: `tb.feature.rn` (U06.L02).
  */
 export const CHORD_LENS_UNLOCKS: Readonly<Record<ChordLensId, UnlockableId>> = {
   chordSymbols: "tb.feature.chord-symbols" as UnlockableId,
@@ -168,6 +169,68 @@ export interface LineLenses {
   toggle(id: LineLensId): void;
 }
 
+// --- Wave 6: the harmony and time lenses of U12–U17 (docs/design/wave6.md §4.3) ------------------------------
+// Guide tones (the 3rd and 7th of each chord and the line they make), the key plan (the key in force along the
+// timeline when a piece changes key) and the beat grid of a compound meter or of triplets on the roll. Stored in the
+// same `lenses` setting as three optional booleans (absent = on). How DEEP the chord and degree lenses write
+// (sevenths, applied and borrowed numerals, chromatic syllables) is not a switch but a gate: `harmony-lens.ts`.
+
+/**
+ * The tools that open each lens (any one of them). Guide tones arrive with the seventh chords: there is no lens
+ * row yet, so the lens opens with `chord.seventh` (U12.L01; requested from the content lead as `tb.lens.guide-tones`
+ * at U12.L05 — when it lands only this table changes). The key plan: `tb.scale.patterned` (U03.L05, where a
+ * patterned scale first changes the key; the lens draws nothing for a piece in one key). The beat grid:
+ * `tb.meter.compound` (U13.L04) or `tb.ply` (U13.L05, triplets).
+ */
+export const MUSIC_LENS_UNLOCKS: Readonly<Record<MusicLensId, readonly UnlockableId[]>> = {
+  guideTones: ["chord.seventh" as UnlockableId],
+  keyPlan: ["tb.scale.patterned" as UnlockableId],
+  // Pushes (U13.L01) come before the compound meters: the beat grid opens with them too (drawn against the plain grid).
+  beatGrid: [
+    "tb.meter.compound" as UnlockableId,
+    "tb.ply" as UnlockableId,
+    "tb.early" as UnlockableId,
+    "tb.late" as UnlockableId,
+  ],
+};
+export const MUSIC_LENS_LABELS: Readonly<Record<MusicLensId, string>> = {
+  guideTones: "Guide tones",
+  keyPlan: "Key",
+  beatGrid: "Beat grid",
+};
+export type MusicLensPrefs = Record<MusicLensId, boolean>;
+
+/** The stored preference (absent fields are on). */
+export function musicLensPrefs(prefs: LensPrefs): MusicLensPrefs {
+  return {
+    guideTones: prefs.guideTones ?? true,
+    keyPlan: prefs.keyPlan ?? true,
+    beatGrid: prefs.beatGrid ?? true,
+  };
+}
+/** Which of them the learner has unlocked. */
+export function musicLensAvailability(unlocked: ReadonlySet<string>): MusicLensPrefs {
+  const open = (id: MusicLensId): boolean => MUSIC_LENS_UNLOCKS[id].some((t) => unlocked.has(t));
+  return { guideTones: open("guideTones"), keyPlan: open("keyPlan"), beatGrid: open("beatGrid") };
+}
+/** What views show: preference ∧ unlocked. */
+export function effectiveMusicLenses(prefs: LensPrefs, unlocked: ReadonlySet<string>): MusicLensPrefs {
+  const p = musicLensPrefs(prefs);
+  const a = musicLensAvailability(unlocked);
+  return {
+    guideTones: p.guideTones && a.guideTones,
+    keyPlan: p.keyPlan && a.keyPlan,
+    beatGrid: p.beatGrid && a.beatGrid,
+  };
+}
+export interface MusicLenses {
+  prefs: MusicLensPrefs;
+  shown: MusicLensPrefs;
+  available: MusicLensPrefs;
+  set(id: MusicLensId, on: boolean): void;
+  toggle(id: MusicLensId): void;
+}
+
 export interface Lenses {
   /** The stored preference (defaults until bootstrap has loaded). */
   prefs: LensPrefs;
@@ -184,6 +247,8 @@ export interface Lenses {
   chords: ChordLenses;
   /** Wave 5: sections, bass roles, blue notes (the same store, the same persistence and rollback). */
   lines: LineLenses;
+  /** Wave 6: guide tones, the key plan, the beat grid (the same store, the same persistence and rollback). */
+  music: MusicLenses;
 }
 
 type BootstrapData = NonNullable<ReturnType<typeof useBootstrap>["data"]>;
@@ -229,7 +294,7 @@ export function useLenses(): Lenses {
   const { unlocked, ready: unlocksReady } = useUnlockedSet();
   const qc = useQueryClient();
   const prefs = bootstrap.data?.settings.lenses ?? DEFAULT_LENSES;
-  const set = (id: LensId | ChordLensId | LineLensId, on: boolean) => {
+  const set = (id: LensId | ChordLensId | LineLensId | MusicLensId, on: boolean) => {
     const key = apiKey("bootstrap");
     const before = qc.getQueryData<BootstrapData>(key);
     const current = before?.settings.lenses ?? prefs;
@@ -265,6 +330,13 @@ export function useLenses(): Lenses {
       available: lineLensAvailability(unlocked),
       set,
       toggle: (id) => set(id, !lineLensPrefs(stored())[id]),
+    },
+    music: {
+      prefs: musicLensPrefs(prefs),
+      shown: effectiveMusicLenses(prefs, unlocked),
+      available: musicLensAvailability(unlocked),
+      set,
+      toggle: (id) => set(id, !musicLensPrefs(stored())[id]),
     },
   };
 }

@@ -140,7 +140,9 @@ export type Audition =
   | "alone"
   | "other"
   | "scale"
-  | "part";
+  | "part"
+  /** Wave 6: the thing against its near miss (the learner's own wrong pick when there is one). */
+  | "near";
 
 export type DrillEvent =
   | { type: "PRESENTED" }

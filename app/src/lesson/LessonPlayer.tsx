@@ -59,12 +59,14 @@ import "../workbench/workbench.css";
 import { lessonWidgetFor } from "./answers.tsx";
 import { bandMutesOf, bandSetupOf } from "./band.ts";
 import { type LoadedLesson, useLessonContent } from "./content.ts";
+import { clearStepDrafts } from "./drafts.ts";
 import { FeatureMoment, useFeatureSwitch } from "./feature-moment.tsx";
 import { renderer as feedbackRenderer } from "./feedback.ts";
 import { InlineMd, type StepHost, StepHostContext, StepLayout, useStepHost } from "./frame.tsx";
 import { continueNote, gatedIds, gateNeedsFreshTry, withoutGated } from "./gate.ts";
 import { CONTENT_GATE, gateBoxFor, lessonHasGate, useGateState } from "./gate-ui.tsx";
 import {
+  drawnTapTargets,
   type GradeEnv,
   gradedLint,
   gradeStep,
@@ -121,6 +123,7 @@ import {
   sideMinutes,
 } from "./side.ts";
 import { answerMissing, registryHas, stepScopePanel } from "./wave5.ts";
+import { stepMusicLenses } from "./wave6.ts";
 
 /** U00.L01 and U00.L02 run on the onboarding loop, a preview context (contracts §3.1 rule 5a). */
 const ONBOARDING_PREVIEW = new Set(["U00.L01", "U00.L02"]);
@@ -151,7 +154,16 @@ export function LessonPlayer({ lessonId, step, preview, from }: LessonPlayerProp
   const title = loaded.data?.def.title ?? meta?.title ?? lessonId;
   usePageTitle(title);
 
-  if (loaded.isPending || bundle.isPending || (progress.isPending && !loaded.data?.sample))
+  // The learner's profile and voice state feed the drawn trials (range, tolerance, Quiet mode): the step waits for
+  // them, or a trial heard on the neutral profile would be redrawn under the learner when they arrive (a failed
+  // read falls back to the neutral profile, as before).
+  if (
+    loaded.isPending ||
+    bundle.isPending ||
+    (progress.isPending && !loaded.data?.sample) ||
+    profile.isPending ||
+    voice.isPending
+  )
     return (
       <Page width="narrow">
         <LoadingState label="Opening the lesson" />
@@ -600,6 +612,15 @@ function PlayerCore(props: CoreProps) {
     } else reportBlockDone({ block: "make", source: "lesson", sketchId: ctx.sketchId });
   }, [status, ctx.sketchId, ctx.wrapReason, preview, inSession, def.id, lp?.currentStep]);
 
+  // d4: an unchecked answer is kept per step on this device; leaving the step (or ending the lesson) forgets it.
+  const draftStep = useRef<string | null>(null);
+  const stepIdNow = status === "active" ? (step?.id ?? null) : null;
+  useEffect(() => {
+    const before = draftStep.current;
+    if (before !== null && before !== stepIdNow) clearStepDrafts(def.id, before);
+    draftStep.current = stepIdNow;
+  }, [stepIdNow, def.id]);
+
   // The step this visit opened at (a resumed side lesson says it is optional there, not only on step 1).
   const [openedAt, setOpenedAt] = useState<number | null>(null);
   useEffect(() => {
@@ -687,6 +708,7 @@ function PlayerCore(props: CoreProps) {
     submit(r: AttemptResponse): Promise<GradeResult | null>;
     trial(): unknown;
     trials(): unknown;
+    tapTargets(): number[] | null;
   } | null>(null);
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -696,6 +718,7 @@ function PlayerCore(props: CoreProps) {
       submit: (r: AttemptResponse) => dev.current?.submit(r),
       trial: () => dev.current?.trial(),
       trials: () => dev.current?.trials(),
+      tapTargets: () => dev.current?.tapTargets() ?? null,
       singTargets: () => Object.fromEntries(devSingTargets),
     };
     return () => {
@@ -731,6 +754,8 @@ function PlayerCore(props: CoreProps) {
         </EmptyState>
       </Page>
     );
+  const stepLenses = (s: StepDef) =>
+    stepMusicLenses({ lessonId: def.id, meter: s.exercise?.meter ?? def.meter });
   const workbenchBase = (s: StepDef) => {
     const ex = s.exercise;
     const refBars =
@@ -771,6 +796,11 @@ function PlayerCore(props: CoreProps) {
       // opens the same panel inside the Workbench.
       ...(stepScopePanel(s.ui) ? { scopePanel: stepScopePanel(s.ui) } : {}),
       unit: def.id,
+      // Wave 6: the lesson's own steps already show what it teaches (U15.L02 writes "V7/V", U16.L01 "iv"), and
+      // the lens a step is about is shown whatever the learner's switch says (the beat grid in 6/8, the key ribbon
+      // through U17).
+      lessonId: loaded.context ?? def.id,
+      ...(Object.keys(stepLenses(s)).length > 0 ? { musicLenses: stepLenses(s) } : {}),
       band,
       roll: {
         labels: moment.length > 0 && !featureSwitch.on ? labelsBefore(rollLabels, moment) : rollLabels,
@@ -904,6 +934,11 @@ function PlayerCore(props: CoreProps) {
   dev.current = {
     trial: () => trials.find((t) => t !== null)?.expected ?? null,
     trials: () => trials.map((t) => t?.expected ?? null),
+    // A drawn tap trial's targets in seconds from the stimulus start (what the pad's taps are graded against).
+    tapTargets: () => {
+      const t = trials.find((x) => x !== null);
+      return t ? drawnTapTargets(t) : null;
+    },
     submit: async (response) => {
       const result = await grade(response);
       if (result && ex)

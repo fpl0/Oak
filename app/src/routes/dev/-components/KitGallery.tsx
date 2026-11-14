@@ -24,6 +24,7 @@ import { Dialog } from "../../../ui/kit/Dialog.tsx";
 import { Field, Select, Slider, Switch } from "../../../ui/kit/Field.tsx";
 import { KitWave4 } from "../../../ui/kit/gallery/KitWave4.tsx";
 import { KitWave5 } from "../../../ui/kit/gallery/KitWave5.tsx";
+import { KitWave6 } from "../../../ui/kit/gallery/KitWave6.tsx";
 import { dbToLevel, Meter, MicLevelMeter, ProgressRing } from "../../../ui/kit/Meters.tsx";
 import { Tabs, tabPanelProps } from "../../../ui/kit/Tabs.tsx";
 import { toast } from "../../../ui/kit/Toast.tsx";
@@ -352,6 +353,7 @@ export function KitGallery() {
       </div>
       <KitWave4 nested />
       <KitWave5 nested />
+      <KitWave6 headingLevel={2} />
     </Page>
   );
 }

@@ -7,6 +7,7 @@ import type { SourceEngine, SourceEngineState } from "./engine.ts";
 import {
   createAudioTransport,
   createPatternTransport,
+  LATE_START_RETRIES,
   type PatternPlayerPort,
   preRoll,
 } from "./transport.ts";
@@ -548,28 +549,146 @@ describe("the stretch's run-up inside a loop", () => {
   });
 });
 
-// Review: on a busy page the scheduler's first bar could be gone by the time the transport looked (its lead is
-// 0.1 s), and the recording then came in a whole bar after the place the learner played from.
-describe("a missed first bar", () => {
-  test("the recording joins the pattern part-way into the bar: nothing skipped, nothing restarted", async () => {
+// Review (Wave 4): on a busy page the scheduler's first bar could be gone by the time the transport looked (its lead
+// is 0.1 s), and the recording then came in a whole bar after the place the learner played from. d10 (Wave 6): the
+// file then joined part-way into bar 0 without its run-up. Now the file is scheduled in the same turn as the
+// pattern's start, and a start that is late all the same is taken again, so both sides begin at bar 0.
+describe("a late start (d10)", () => {
+  const grid = { downbeatS: 0.5, barSec: 2 };
+  /** A clock, and a pattern player whose first bar sounds 0.11 s after each `play()` (the scheduler's latency). */
+  function lateRig(opts: { busyS: number[]; impl?: SourceEngine["impl"] }) {
+    const clock = { now: 20, cycle0: Number.NaN };
+    const engine = fakeEngine(20, opts.impl ?? "stretch");
+    const mine = fakePlayer();
+    const play = mine.play.bind(mine);
+    mine.play = async () => {
+      await play();
+      clock.cycle0 = clock.now + 0.11;
+    };
+    const busy = [...opts.busyS];
+    const t = createAudioTransport({
+      engine,
+      createMine: () => mine,
+      timeOfCycle: (c) => clock.cycle0 + c * 2,
+      cycle: () => 0,
+      now: () => clock.now,
+      grid,
+      // The page is busy for `busyS[k]` seconds between the pattern's k-th start and the transport's next line.
+      settle: async () => {
+        clock.now += busy.shift() ?? 0;
+      },
+    });
+    return { clock, engine, mine, t };
+  }
+  const starts = (calls: string[]) => calls.filter((c) => c === "play" || c === "stop");
+
+  test("on time: the file is scheduled for the pattern's first bar, its run-up filling the lead", async () => {
+    const { clock, engine, mine, t } = lateRig({ busyS: [0] });
+    await t.setMineCode('bass: n("0 2").scale("C2:major")');
+    engine.seek(0.5);
+    t.setRate(0.75);
+    t.setSide("both");
+    await t.play();
+    expect(starts(mine.calls)).toEqual(["play"]);
+    // Bar 1 (source 0.5 s) sounds at cycle 0, 0.11 s from now; the stretch starts 0.1 s of real time earlier
+    // (0.075 s of source at 0.75×: all the lead there is, less 10 ms).
+    expect(engine.calls.at(-1)).toBe(`play:${(clock.cycle0 - 0.1).toFixed(3)}@0.425`);
+    expect(clock.cycle0).toBeCloseTo(20.11, 6);
+  });
+
+  test("a page busy for 300 ms after the pattern started: it starts again, and both begin at bar 0", async () => {
+    const { clock, engine, mine, t } = lateRig({ busyS: [0.3, 0] });
+    await t.setMineCode('bass: n("0 2").scale("C2:major")');
+    engine.seek(0.5);
+    t.setRate(0.75);
+    t.setSide("both");
+    await t.play();
+    // The first bar of the first start was 0.19 s gone: the pattern is stopped and started again.
+    expect(starts(mine.calls)).toEqual(["play", "stop", "play"]);
+    expect(clock.cycle0).toBeCloseTo(20.41, 6);
+    // The file is scheduled ONCE, for the new first bar, from the bar line (0.5 s) with its run-up: never part-way
+    // into the bar, never without the run-up.
+    expect(engine.calls.filter((c) => c.startsWith("play"))).toEqual([
+      `play:${(clock.cycle0 - 0.1).toFixed(3)}@0.425`,
+    ]);
+    expect(t.state.playing).toBe(true);
+    expect(t.state.time).toBe(0.5);
+  });
+
+  test("60 ms late (the old timer's slack was 20 ms): still bar 0, still the full run-up", async () => {
+    const { clock, engine, mine, t } = lateRig({ busyS: [0.06] });
+    await t.setMineCode('bass: n("0 2").scale("C2:major")');
+    engine.seek(4.6); // bar 3 is 4.5–6.5
+    t.setSide("both");
+    await t.play();
+    // 0.05 s of lead is left: enough to schedule the file for the bar line, so nothing restarts.
+    expect(starts(mine.calls)).toEqual(["play"]);
+    expect(engine.calls.at(-1)).toBe(`play:${(clock.cycle0 - 0.04).toFixed(3)}@4.460`);
+  });
+
+  test("a loop: a late start begins again on the loop's first bar", async () => {
+    const { clock, engine, mine, t } = lateRig({ busyS: [0.5, 0], impl: "transcription" });
+    await t.setMineCode('bass: n("0 2").scale("C2:major")');
+    t.setLoop({ startS: 2.5, endS: 6.5 });
+    engine.seek(2.5);
+    t.setSide("both");
+    await t.play();
+    expect(starts(mine.calls)).toEqual(["play", "stop", "play"]);
+    expect(mine.calls).toContain("loop:1+2");
+    expect(engine.calls.at(-1)).toBe(`play:${clock.cycle0.toFixed(3)}@2.500`);
+  });
+
+  test("a page that stays busy: after two more starts the recording joins part-way, nothing skipped", async () => {
     const engine = fakeEngine(20, "stretch");
     const mine = fakePlayer();
     const t = createAudioTransport({
       engine,
       createMine: () => mine,
-      // Cycle 0 sounded at 10 s; it is 10.6 s now (one bar is 2 s).
+      // Cycle 0 sounded at 10 s every time; it is 10.6 s now (one bar is 2 s).
       timeOfCycle: (c) => 10 + c * 2,
       cycle: () => 0.3,
       now: () => 10.6,
-      grid: { downbeatS: 0.5, barSec: 2 },
+      grid,
     });
     await t.setMineCode('bass: n("0 2").scale("C2:major")');
     engine.seek(0.5);
     t.setSide("both");
     await t.play();
-    expect(mine.calls.filter((c) => c === "play" || c === "stop")).toEqual(["play"]);
+    expect(starts(mine.calls)).toEqual(["play", "stop", "play", "stop", "play"]);
+    expect(starts(mine.calls).filter((c) => c === "stop")).toHaveLength(LATE_START_RETRIES);
     // At 10.63 s the pattern is 0.315 of the way into bar 1: the file starts there (0.5 + 0.63 s), after a run-up of
     // the 0.02 s there is room for.
     expect(engine.calls.at(-1)).toBe("play:10.610@1.110");
+  });
+
+  test("paused while the page was busy: nothing is started again, nothing is left playing", async () => {
+    const clock = { now: 20, cycle0: Number.NaN };
+    const engine = fakeEngine(20, "stretch");
+    const mine = fakePlayer();
+    const play = mine.play.bind(mine);
+    mine.play = async () => {
+      await play();
+      clock.cycle0 = clock.now + 0.11;
+    };
+    let t: ReturnType<typeof createAudioTransport> | null = null;
+    t = createAudioTransport({
+      engine,
+      createMine: () => mine,
+      timeOfCycle: (c) => clock.cycle0 + c * 2,
+      cycle: () => 0,
+      now: () => clock.now,
+      grid,
+      settle: async () => {
+        clock.now += 0.3;
+        t?.pause();
+      },
+    });
+    await t.setMineCode('bass: n("0 2").scale("C2:major")');
+    t.setSide("both");
+    await t.play();
+    expect(t.state.playing).toBe(false);
+    expect(engine.calls.filter((c) => c.startsWith("play"))).toEqual([]);
+    expect(starts(mine.calls)).toEqual(["play", "stop"]);
+    expect(mine.playing).toBe(false);
   });
 });

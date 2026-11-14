@@ -26,7 +26,7 @@ export const KEEP_DAILY = 14;
 const MANIFEST = "backup.json";
 /** The only file names an archive may carry besides backup.json (export writes, import accepts). */
 const ARCHIVE_AUDIO_PATH =
-  /^(audio\/[0-9a-f]{64}\.[a-z0-9]{2,5}|album\/[A-Za-z0-9_-]+\/v\d+\.[a-z0-9]{2,5})$/;
+  /^(audio\/[0-9a-f]{64}\.[a-z0-9]{2,5}|album\/[A-Za-z0-9_-]+\/v\d+(?:-t\d+)?\.[a-z0-9]{2,5})$/;
 
 export interface BackupPaths {
   backupsDir: string;
@@ -119,9 +119,13 @@ export class BackupService {
         if (abs !== null) out.push({ name: p, abs });
       }
     }
+    // Wave 6 (d20): every take of every version, not only the one that plays (nothing a learner recorded is lost
+    // in a backup). A version's own `audio_path` is one of its takes; an older database has only that column.
     const album = this.db
       .query(
-        "SELECT audio_path FROM album_track_versions WHERE audio_path IS NOT NULL ORDER BY track_id, version",
+        `SELECT audio_path FROM album_takes
+         UNION SELECT audio_path FROM album_track_versions WHERE audio_path IS NOT NULL
+         ORDER BY audio_path`,
       )
       .all() as {
       audio_path: string;
@@ -152,11 +156,13 @@ export class BackupService {
       .all() as { bytes: number; used: number }[];
     const album = this.db
       .query(
-        `SELECT track_id, version, audio_path FROM album_track_versions WHERE audio_path IS NOT NULL
-         ORDER BY track_id, version`,
+        `SELECT track_id, version, audio_path FROM album_takes
+         UNION SELECT track_id, version, audio_path FROM album_track_versions WHERE audio_path IS NOT NULL
+         ORDER BY track_id, version, audio_path`,
       )
       .all() as { track_id: string; version: number; audio_path: string }[];
     let albumAudioBytes = 0;
+    // One line per version: the bytes of every take of it (d20).
     const albumAudio: { trackId: string; version: number; bytes: number }[] = [];
     for (const a of album) {
       try {
@@ -164,7 +170,9 @@ export class BackupService {
         if (!this.paths.store.exists(abs)) continue;
         const bytes = statSync(abs).size;
         albumAudioBytes += bytes;
-        albumAudio.push({ trackId: a.track_id, version: a.version, bytes });
+        const line = albumAudio.find((x) => x.trackId === a.track_id && x.version === a.version);
+        if (line === undefined) albumAudio.push({ trackId: a.track_id, version: a.version, bytes });
+        else line.bytes += bytes;
       } catch {
         // A stored path outside the audio folders is never followed (as in the export).
       }

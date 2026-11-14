@@ -26,14 +26,24 @@ import {
   useVoiceState,
 } from "../../lib/queries.ts";
 import { routeOfItem } from "../../lib/session-route.ts";
+import { ownOpenSession } from "../../lib/tab-session.ts";
 import { useHotkeys } from "../../ui/keys/KeymapProvider.tsx";
 import { Button, buttonClass } from "../../ui/kit/Button.tsx";
 import { Card, Chip, Page, Skeleton } from "../../ui/kit/basics.tsx";
 import { Callout } from "../../ui/kit/Controls.tsx";
 import { ErrorState, LoadingState } from "../../ui/kit/QueryState.tsx";
 import { toast } from "../../ui/kit/Toast.tsx";
-import { keepCapstone } from "../capstone-day.ts";
-import { useCapstoneDay, useCapstoneInProgress, useGymDay, useGymOpen, useX1Gate } from "../day-hooks.ts";
+import { capstoneDayTitle, keepCapstone } from "../capstone-day.ts";
+import {
+  useAfterCore,
+  useCapstoneDay,
+  useCapstoneInProgress,
+  useCftDay,
+  useGymDay,
+  useGymOpen,
+  useWaitingLine,
+  useX1Gate,
+} from "../day-hooks.ts";
 import { type CourseEdge, courseEdge, edgeShort } from "../edge.ts";
 import { alternativePlan, extraGym, type GymDay, x1Line } from "../gym-day.ts";
 import { useLastEnded, useRunnerNavigator, useRunnerView } from "../hooks.ts";
@@ -50,6 +60,7 @@ import {
 } from "../today-model.ts";
 import { AlbumStrip, LastSketchCard, NextUnlockCard, OakGlanceCard, TutorNoteCard } from "./Glance.tsx";
 import { InlineCodeText, SideOfferLine } from "./SideOffer.tsx";
+import { CftStrip, FirstDayLine, OpenToYou, OtherTabLine, TracksLine } from "./TodayWave6.tsx";
 import { WeeklyRhythm } from "./WeeklyRhythm.tsx";
 
 function amountOf(r: SetlistRow): string {
@@ -272,6 +283,10 @@ export function TodayPage() {
   const capstone = useCapstoneDay(planData ?? null);
   const gym = useGymDay(planData ?? null);
   const gymOpen = useGymOpen(planData ?? null);
+  // Wave 6: the standard in the transcription slot, and what is open once the lessons of the core are done.
+  const cft = useCftDay(planData ?? null);
+  const waiting = useWaitingLine(planData ?? null);
+  const { after } = useAfterCore(planData ?? null, boot.data);
   const x1 = x1Line(useX1Gate());
   const edge = courseEdge(
     progress.data,
@@ -300,9 +315,26 @@ export function TodayPage() {
           capstone,
           gym,
           gymOpen,
+          cft,
+          waiting,
+          after,
         })
       : null;
   const extra = planData ? extraGym(planData) : null;
+  // A compose capstone that waits behind today's CF-T session stays one click away (cft-day.ts): the plan's own
+  // alternative when the server lists it, else the capstone's next session.
+  const alternatives = planData
+    ? cft && inProgress && !planData.alternatives.some((a) => a.mapItemId === inProgress.nextSession)
+      ? [
+          {
+            kind: "capstone" as const,
+            mapItemId: inProgress.nextSession as SessionPlan["mapItemId"],
+            title: titleOf(inProgress.capstoneId, titles),
+          },
+          ...planData.alternatives,
+        ]
+      : planData.alternatives
+    : [];
   // Today's Coda exists when a session with a summary ended today: the server's record, or this browser's.
   const hasCoda =
     !!sessionDay.data?.summarySessionId ||
@@ -324,7 +356,8 @@ export function TodayPage() {
     }
   };
   const onResume = async () => {
-    const open = sessionDay.data?.open ?? boot.data?.openSession;
+    // d21: this tab resumes its own session, never one another tab left open.
+    const open = ownOpenSession(sessionDay.data);
     if (!open || !planData) return;
     try {
       await sessionRunner.resume(open, planData);
@@ -386,6 +419,7 @@ export function TodayPage() {
   return (
     <Page>
       <Header boot={boot} />
+      {view?.after?.firstDay && view.state !== "done" && <FirstDayLine />}
       <div className="grid gap-6 lg:grid-cols-12">
         <section aria-labelledby="setlist-h" className="flex flex-col gap-4 lg:col-span-8">
           <Card className="p-5" data-testid="today-card" data-state={view?.state}>
@@ -439,6 +473,7 @@ export function TodayPage() {
                   <>
                     {view.state !== "in-session" && <Setlist rows={view.rows} />}
                     {view.state === "gym" && gym && <GymExplain gym={gym} />}
+                    {view.cft && <CftStrip cft={view.cft} waiting={view.waiting} />}
                     {view.state === "capstone" && capstone?.checksLine && (
                       <p className="text-sm text-text-2" data-testid="capstone-checks">
                         So far: {capstone.checksLine}.
@@ -452,6 +487,7 @@ export function TodayPage() {
                         onResume={() => void onResume()}
                         starting={starting}
                       />
+                      {view.state !== "in-session" && <OtherTabLine count={view.otherTabs} />}
                       {view.keepAlive && (
                         <button
                           type="button"
@@ -513,9 +549,23 @@ export function TodayPage() {
               </Callout>
             </div>
           )}
+          {/* Once the lessons of the core are done: what is open, under the planned session (END.md). */}
+          {planData && view?.after && view.state !== "in-session" && (
+            <OpenToYou
+              after={view.after}
+              disabled={starting}
+              skipSideLesson={view.side !== null}
+              tracksLine={view.tracksLine}
+              onGym={extra ? () => void onStart(alternativePlan(planData, { kind: "gym", ...extra })) : null}
+            />
+          )}
+          {view?.tracksLine && !view.after && view.state !== "in-session" && (
+            <TracksLine line={view.tracksLine} />
+          )}
           {/* The done card carries its own ways on (Studio, free practice): never twice. */}
           {planData &&
             view &&
+            !view.after &&
             view.state !== "first-run" &&
             view.state !== "in-session" &&
             view.state !== "done" && (
@@ -525,7 +575,7 @@ export function TodayPage() {
                 data-testid="other-ways"
               >
                 <span className="text-sm text-text-2">Other ways today:</span>
-                {planData.alternatives
+                {alternatives
                   // The main item itself is not "another way" (a capstone day listed its own capstone again).
                   .filter((a) => !(a.mapItemId !== null && a.mapItemId === planData.mapItemId))
                   // The side lesson has its own calm line in the card (wave5.md §5.1): never a second button.
@@ -542,7 +592,7 @@ export function TodayPage() {
                         onClick={() => void onStart(alternativePlan(planData, a))}
                         data-testid={a.kind === "gym" ? "extra-gym" : "alt-capstone"}
                       >
-                        {a.kind === "gym" ? "An extra gym session" : `Continue ${a.title}`}
+                        {a.kind === "gym" ? "An extra gym session" : `Continue ${capstoneDayTitle(a.title)}`}
                       </Button>
                     ) : (
                       <Link

@@ -14,6 +14,7 @@ import type {
 import { CADENCE_TYPES, HARMONIC_FUNCTIONS } from "@oak/content-kit";
 import type { ChordId, RomanNumeral } from "@oak/theory";
 import {
+  degreeOf,
   displayRN,
   keySignature,
   normalizeText,
@@ -21,6 +22,7 @@ import {
   parseInterval,
   parseRN,
   pcOf,
+  readChord,
   rnToChord,
   spellMidi,
   toLeadSheet,
@@ -28,6 +30,7 @@ import {
 } from "@oak/theory";
 import { mod12 } from "../analyze/events.ts";
 import { diag } from "../feedback/catalog.ts";
+import { degreeShown } from "../match/common.ts";
 import type { MatchResult } from "../types.ts";
 import { wave5Answer } from "./answers-wave5.ts";
 
@@ -130,7 +133,9 @@ function compareSlots(
     const credit = o.partial?.[e]?.[g] ?? 0;
     slots.push(credit);
     if (o.rnKey !== undefined && rnCaseOnly(e, g))
-      diagnostics.push(diag("harmony.rn-case", { got: g, exp: e }, { slot: i + 1 }, "rn"));
+      diagnostics.push(
+        diag("harmony.rn-case", { got: rnGlyphs(g), exp: rnGlyphs(e) }, { slot: i + 1 }, "rn"),
+      );
     else
       diagnostics.push(
         diag(
@@ -187,6 +192,8 @@ export function gradeAnswer(
       compareSlots(correct.degrees, got.degrees ?? [], (e, g) => e === g, {
         ...(o.partial ? { partial: o.partial } : {}),
         order,
+        // "That was ♯4, not 4": degrees are printed, not shown as the code spells them.
+        label: degreeShown,
       }),
     );
   if (correct.qualities)
@@ -202,6 +209,8 @@ export function gradeAnswer(
         inversion: ui.ui === "rn-palette" && ui.allow.includes("inversions"),
         order,
         ...(o.partial ? { partial: o.partial } : {}),
+        // Wave 6 (`rn-palette.slot-keys`): a slot with its own key is read in it (a pivot chord in two keys).
+        ...(ui.ui === "rn-palette" && ui.slotKeys ? { slotKeys: ui.slotKeys } : {}),
       }),
     );
   if (correct.text) {
@@ -570,6 +579,10 @@ export function staffName(e: NEvent, key: KeySpec | null): string {
   return e.midi === null ? "?" : spellMidi(e.midi, { key }).name;
 }
 
+/** A numeral as typed ("bII", "#iv°") with its accidental as a sign ("♭II", "♯iv°"), as the palette prints it. */
+const rnGlyphs = (rn: string): string =>
+  rn.replace(/^([b#]+)/, (acc: string) => acc.replace(/b/g, "♭").replace(/#/g, "♯"));
+
 /**
  * Keyboard answers (exercises §1, `KeyboardEx`): exact notes, pitch classes, the bass, or an ordered
  * sequence, compared per `PitchMode`.
@@ -579,10 +592,23 @@ export function keyboardCheck(
   got: readonly number[],
   mode: PitchMode,
   ui: "single" | "chord" | "sequence",
+  spell: { key?: KeySpec | null } = {},
 ): AnswerCheck {
   const diagnostics: Diagnostic[] = [];
   const parts: number[] = [];
-  const name = (m: number): string => spellMidi(m, { key: null }).name;
+  // Notes are named as the expected chord spells them, else in the step's key, with ♯ and ♭ (Wave 6: G♯ in E7 is
+  // never "Ab"; "B♭ is missing", not "Bb").
+  const wantPcs = [...new Set([...(expect.midi ?? []), ...(expect.pcs ?? [])].map(mod12))];
+  const wantLow = expect.midi?.length ? Math.min(...expect.midi) : (expect.bassPc ?? wantPcs[0]);
+  const chord =
+    !expect.sequence && ui !== "sequence" && wantPcs.length >= 3 && wantLow !== undefined
+      ? (readChord(wantPcs, wantLow)?.chord ?? undefined)
+      : undefined;
+  const name = (m: number): string =>
+    spellMidi(m, { key: spell.key ?? null, ...(chord ? { chord } : {}) }).name.replace(
+      /^([A-G])([#b]*)/,
+      (_, l: string, acc: string) => `${l}${acc.replace(/#/g, "♯").replace(/b/g, "♭")}`,
+    );
   const pcName = (pc: number): string => name(60 + mod12(pc)).replace(/-?\d+$/, "");
   const octaveFree = mode !== "absolute";
   if (expect.sequence || (ui === "sequence" && expect.midi)) {
@@ -765,7 +791,7 @@ function refine(
   base: AnswerCheck,
   expected: readonly string[],
   got: readonly string[],
-  specific: (e: string, g: string, slot: number) => Diagnostic | null,
+  specific: (e: string, g: string, slot: number) => Diagnostic | Diagnostic[] | null,
 ): AnswerCheck {
   const diagnostics = base.diagnostics.flatMap((d): Diagnostic[] => {
     if (d.id !== "id.wrong" && d.id !== "id.partial") return [d];
@@ -773,13 +799,26 @@ function refine(
     const e = expected[i];
     const g = got[i];
     if (e === undefined || g === undefined) return [d];
-    const x = specific(e, g, i + 1);
+    const found = specific(e, g, i + 1);
+    const chain = found === null ? [] : Array.isArray(found) ? found : [found];
+    const x = chain[0];
     if (!x) return [d];
-    // The terse finding follows as its twin (`params.refines`): `foldRefined` keeps exactly one of the two.
-    return [
-      { ...x, ...(d.id === "id.partial" ? { severity: "warn" as const } : {}) },
-      { ...d, severity: "info", params: { ...d.params, refines: x.id } },
-    ];
+    // The terser findings follow as twins (`params.refines`), most specific first: `foldRefined` keeps exactly
+    // one of the chain. Wave 6: a chain may hold a middle finding (the code a slot had before a more exact one
+    // existed), so a lesson that overrides or pins the older code still gets it.
+    const out: Diagnostic[] = [{ ...x, ...(d.id === "id.partial" ? { severity: "warn" as const } : {}) }];
+    for (const mid of chain.slice(1))
+      out.push({
+        ...mid,
+        severity: "info",
+        params: { ...mid.params, refines: (out[out.length - 1] as Diagnostic).id },
+      });
+    out.push({
+      ...d,
+      severity: "info",
+      params: { ...d.params, refines: (out[out.length - 1] as Diagnostic).id },
+    });
+    return out;
   });
   return { ...base, diagnostics };
 }
@@ -796,15 +835,26 @@ export function foldRefined(
   const out: Diagnostic[] = [];
   for (let i = 0; i < ds.length; i++) {
     const d = ds[i] as Diagnostic;
-    const twin = ds[i + 1];
-    if (twin && typeof twin.params.refines === "string" && twin.params.refines === d.id) {
-      const { refines: _r, ...params } = twin.params;
-      const terse: Diagnostic = { ...twin, params, severity: d.severity };
-      out.push(overrides?.[twin.id] !== undefined ? terse : d);
-      i++;
+    // The chain that refines `d`: each next finding names the one before it.
+    const chain: Diagnostic[] = [d];
+    while (true) {
+      const next = ds[i + chain.length];
+      const prev = chain[chain.length - 1] as Diagnostic;
+      if (!next || typeof next.params.refines !== "string" || next.params.refines !== prev.id) break;
+      chain.push(next);
+    }
+    if (chain.length === 1) {
+      out.push(d);
       continue;
     }
-    out.push(d);
+    // The tersest finding whose text the exercise overrides; with no override, the most specific one.
+    const chosen = [...chain].reverse().find((x) => overrides?.[x.id] !== undefined) ?? d;
+    if (chosen === d) out.push(d);
+    else {
+      const { refines: _r, ...params } = chosen.params;
+      out.push({ ...chosen, params, severity: d.severity });
+    }
+    i += chain.length - 1;
   }
   return out;
 }
@@ -848,8 +898,45 @@ export function rnSlots(
   expected: readonly string[],
   got: readonly string[],
   key: KeySpec | null,
-  o: { inversion?: boolean; order?: "sequence" | "set"; partial?: PartialMap } = {},
+  o: {
+    inversion?: boolean;
+    order?: "sequence" | "set";
+    partial?: PartialMap;
+    /** One key per slot (`rn-palette.slotKeys`); a slot without one takes `key`. Slots are then a sequence. */
+    slotKeys?: readonly KeySpec[];
+  } = {},
 ): AnswerCheck {
+  if (o.slotKeys && o.slotKeys.length > 0) {
+    // Each slot is its own one-slot answer in its own key; the findings keep their slot numbers.
+    const { slotKeys, ...rest } = o;
+    const n = Math.max(expected.length, got.length);
+    const parts = Array.from({ length: n }, (_, i) => {
+      const one = rnSlots(
+        expected[i] === undefined ? [] : [expected[i] as string],
+        got[i] === undefined ? [] : [got[i] as string],
+        slotKeys[i] ?? key,
+        { ...rest, order: "sequence" },
+      );
+      return {
+        ...one,
+        diagnostics: one.diagnostics.map((d) =>
+          d.id === "id.missing" ? d : { ...d, where: { ...(d.where ?? {}), slot: i + 1 } },
+        ),
+      };
+    });
+    const slots = parts.map((p) => p.slots[0] ?? 0);
+    const score = n === 0 ? 1 : slots.reduce((a, b) => a + b, 0) / n;
+    const missing = parts.filter((p) => p.diagnostics.some((d) => d.id === "id.missing")).length;
+    return {
+      score,
+      dims: { choice: { score, weight: 1, n } },
+      diagnostics: [
+        ...parts.flatMap((p) => p.diagnostics.filter((d) => d.id !== "id.missing")),
+        ...(missing > 0 ? [diag("id.missing", { n: missing }, undefined, "choice")] : []),
+      ],
+      slots,
+    };
+  }
   const inv = o.inversion ?? false;
   const base = compareSlots(expected, got, (e, g) => sameRn(e, g, key, { inversion: inv }), {
     ...(o.partial ? { partial: o.partial } : {}),
@@ -865,31 +952,93 @@ export function rnSlots(
     const shown = (rn: RomanNumeral): string => displayRN(inv ? rn : { ...rn, inversion: 0 });
     const ce = rnToChord(re, key);
     const cg = rnToChord(rg, key);
-    if (re.degree !== rg.degree || re.alt !== rg.alt || !re.of !== !rg.of)
-      return diag(
+    const symE = toLeadSheet({ ...ce, bassPc: ce.rootPc });
+    const symG = toLeadSheet({ ...cg, bassPc: cg.rootPc });
+    // The scale degree the chord's root really stands on: 2 for V7/V (D7 in C), not the 5 of its numeral.
+    const rootDeg = (c: ChordId, rn: RomanNumeral): string =>
+      rn.of
+        ? degreeOf(60 + c.rootPc, key)
+            .degree.replace(/^b/, "♭")
+            .replace(/^#/, "♯")
+        : degreeText(rn);
+    const targetOf = (rn: RomanNumeral): { rn: string; sym: string } | null => {
+      if (!rn.of) return null;
+      const t = rnToChord({ ...rn.of, inversion: 0 }, key);
+      return { rn: displayRN({ ...rn.of, inversion: 0 }), sym: toLeadSheet({ ...t, bassPc: t.rootPc }) };
+    };
+    const sameSounding = ce.rootPc === cg.rootPc && triadCore(ce).quality === triadCore(cg).quality;
+    if (re.degree !== rg.degree || re.alt !== rg.alt || !re.of !== !rg.of) {
+      const degree = diag(
         "harmony.rn-degree",
         {
           got: shown(rg),
           exp: shown(re),
-          gotDeg: degreeText(rg),
-          expDeg: degreeText(re),
-          gotChord: toLeadSheet({ ...cg, bassPc: cg.rootPc }),
-          expChord: toLeadSheet({ ...ce, bassPc: ce.rootPc }),
+          gotDeg: rootDeg(cg, rg),
+          expDeg: rootDeg(ce, re),
+          gotChord: symG,
+          expChord: symE,
         },
         where,
         "rn",
       );
-    if (triadCore(ce).quality !== triadCore(cg).quality || re.quality !== rg.quality) {
-      const caseOnly =
-        ["maj", "min"].includes(triadCore(ce).quality) && ["maj", "min"].includes(triadCore(cg).quality);
-      if (caseOnly && re.quality.length <= 3 && rg.quality.length <= 3)
-        return diag("harmony.rn-case", { got: shown(rg), exp: shown(re) }, where, "rn");
+      // The right notes under the wrong kind of name: II7 for V7/V, or the reverse (Wave 6, U15).
+      if (sameSounding && !re.of !== !rg.of) {
+        const applied = re.of ? re : rg;
+        const t = targetOf(applied) as { rn: string; sym: string };
+        return [
+          diag(
+            "harmony.rn-applied",
+            {
+              got: shown(rg),
+              exp: shown(re),
+              chord: symE,
+              why: re.of
+                ? `it leads to ${t.rn} (${t.sym}), so it is named as that chord's own V`
+                : `this step names it by its own root, not as the V of ${t.rn} (${t.sym})`,
+            },
+            where,
+            "rn",
+          ),
+          degree,
+        ];
+      }
+      return degree;
+    }
+    // Two applied chords that point at different chords: "that is V7 of IV, the step asks for V7 of V".
+    if (re.of && rg.of && (re.of.degree !== rg.of.degree || re.of.alt !== rg.of.alt)) {
+      const te = targetOf(re) as { rn: string; sym: string };
+      const tg = targetOf(rg) as { rn: string; sym: string };
       return diag(
+        "harmony.rn-target",
+        {
+          got: shown(rg),
+          exp: shown(re),
+          gotChord: symG,
+          expChord: symE,
+          gotTarget: `${tg.rn} (${tg.sym})`,
+          expTarget: `${te.rn} (${te.sym})`,
+        },
+        where,
+        "rn",
+      );
+    }
+    if (triadCore(ce).quality !== triadCore(cg).quality || re.quality !== rg.quality) {
+      const triadE = triadCore(ce).quality;
+      const triadG = triadCore(cg).quality;
+      const caseOnly = ["maj", "min"].includes(triadE) && ["maj", "min"].includes(triadG);
+      const quality = diag(
         "harmony.rn-quality",
         { got: shown(rg), exp: shown(re), gotQ: qWord(rg.quality), expQ: qWord(re.quality) },
         where,
         "quality",
       );
+      if (caseOnly && re.quality.length <= 3 && rg.quality.length <= 3) {
+        const caseDiag = diag("harmony.rn-case", { got: shown(rg), exp: shown(re) }, where, "rn");
+        // The same triad with or without its 7th is not a slip of case (V for V7): say what the chord is, and
+        // keep the older finding behind it for a lesson that words it itself.
+        return triadE === triadG ? [quality, caseDiag] : caseDiag;
+      }
+      return quality;
     }
     if (inv && ce.bassPc !== cg.bassPc)
       return diag(

@@ -8,6 +8,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Hourglass, Lock, MicOff } from "lucide-react";
 import { useId, useState } from "react";
 import { DrillRunner } from "../../drills/DrillRunner.tsx";
+import { devOpenAll } from "../../drills/dev.ts";
 import { inflightKey, loadInflight } from "../../drills/inflight.ts";
 import {
   categoryLabel,
@@ -68,8 +69,11 @@ function FamilyPractice() {
 
 function Family({ def, data }: { def: FamilyDef; data: DrillData }) {
   const st = data.states.get(def.id);
-  const status = familyStatus(def, st, data.completed);
-  const maxLevel = Math.max(1, Math.min(def.levels.length, st?.maxOpenLevel ?? 1));
+  // Dev only (drills/dev.ts): a browser spec may open a family whose lessons are not authored yet.
+  const open = devOpenAll();
+  const real = familyStatus(def, st, data.completed);
+  const status = open && real === "locked" ? "unlocked" : real;
+  const maxLevel = open ? def.levels.length : Math.max(1, Math.min(def.levels.length, st?.maxOpenLevel ?? 1));
   const key = inflightKey({ warmupItemId: null, familyIds: [def.id], purpose: "practice" });
   const [resumed] = useState(() => loadInflight(key));
   const [level, setLevel] = useState(() => Math.min(maxLevel, st?.level ?? 1));

@@ -38,8 +38,9 @@ beforeAll(async () => {
     standInUnits: ["U00", "U01", "U02", "U03", "U04", "U05", "U06", "U07", "U08", "U09", "U10", "U11", "A1"],
   });
   // A1.L05–L07 are track lessons for a later wave: not stood in.
+  // Pinned to the course as Wave 5 shipped it: Wave 6 lessons authored now (U12–U17) would replace its review days.
   const lessons = real.lessons.filter(
-    (l) => !/^A1\.L0[5-7]$/.test(l.id) || l.title.indexOf("(stand-in)") < 0,
+    (l) => (!/^A1\.L0[5-7]$/.test(l.id) || l.title.indexOf("(stand-in)") < 0) && !/^U1[2-9]\./.test(l.id),
   );
   course = withX2({ ...real, lessons });
 });
@@ -124,7 +125,8 @@ class Sim {
     for (let i = this.history.length - 1; i >= start; i--) {
       const id = this.history[i] as string;
       if (isTranscription(id)) break;
-      if (isCore(id)) n++;
+      // d19: a reviews-only session counts towards the slot like a core session.
+      if (isCore(id) || id.startsWith("review:")) n++;
     }
     return n;
   }
@@ -259,6 +261,7 @@ class Sim {
         await this.gymDay(day, plan, id as string, ses.id);
         break;
       default:
+        if (plan.kind === "review" && this.done("U07.L01")) this.history.push(`review:${day}`);
         if (this.done(LAST)) {
           this.reviewDaysAfter++;
           if (

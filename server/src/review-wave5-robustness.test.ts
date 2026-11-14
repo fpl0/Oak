@@ -7,7 +7,7 @@
 //  - a lesson completion is sometimes sent twice: the map counts it once;
 //  - a ladder submission (L4, L5 per phrase, L6 per stage) is sometimes sent twice with its idempotency key: it
 //    counts once, and the same key with another body is refused;
-//  - a released track is re-recorded: refused (428) without the replace nonce, accepted with it;
+//  - a released track is re-recorded: each recording is another take, the newest plays, none is lost (d20);
 //  - a side lesson's completion is retried: track A counts it once, the core map not at all.
 // Checked every day: the warm-up within the budget of the day's kind, nothing before it opens, a capstone in
 // progress never interrupted, gym slots per the rule, side lessons never the New block; and every few days
@@ -36,8 +36,9 @@ beforeAll(async () => {
   const real = await realCourse({
     standInUnits: ["U00", "U01", "U02", "U03", "U04", "U05", "U06", "U07", "U08", "U09", "U10", "U11", "A1"],
   });
+  // Pinned to the course as Wave 5 shipped it: Wave 6 lessons authored now (U12–U17) would replace its review days.
   const lessons = real.lessons.filter(
-    (l) => !/^A1\.L0[5-7]$/.test(l.id) || l.title.indexOf("(stand-in)") < 0,
+    (l) => (!/^A1\.L0[5-7]$/.test(l.id) || l.title.indexOf("(stand-in)") < 0) && !/^U1[2-9]\./.test(l.id),
   );
   course = withX2({ ...real, lessons });
 });
@@ -150,7 +151,8 @@ class Robust {
     for (let i = this.history.length - 1; i >= 0; i--) {
       const id = this.history[i] as string;
       if (isTranscription(id)) break;
-      if (isCore(id)) n++;
+      // d19: a reviews-only session counts towards the slot like a core session.
+      if (isCore(id) || id.startsWith("review:")) n++;
     }
     return n;
   }
@@ -228,6 +230,7 @@ class Robust {
         break;
       default:
         if (this.done("X2.S2")) this.reviewDaysPast++;
+        if (plan.kind === "review" && this.done("U07.L01")) this.history.push(`review:${day}`);
     }
     await this.me.endSession(ses.id);
   }
@@ -344,9 +347,10 @@ class Robust {
     const path = `/api/album/tracks/${rel.track.id}/versions/${rel.track.currentVersion}/audio`;
     const first = await this.h.req("PUT", path, wav(1), { "content-type": "audio/wav" });
     if (first.status !== 200) this.fail(day, `${cap} recording ${first.status}`);
-    // c11: a second take never silently replaces the first.
+    // d20 (the learner's decision of 2026-11-13; it replaces c11's confirm): re-recording keeps every take. A second
+    // recording is another take that plays by default, with or without the old replace nonce; nothing is replaced.
     const bare = await this.h.req("PUT", path, wav(2), { "content-type": "audio/wav" });
-    if (bare.status !== 428) this.fail(day, `${cap} re-recorded without the nonce: ${bare.status}`);
+    if (bare.status !== 200) this.fail(day, `${cap} re-recorded: ${bare.status}`);
     const nonce = (await (
       await this.h.req("POST", "/api/confirm", {
         action: "album.audio.replace",
@@ -357,15 +361,18 @@ class Robust {
       "content-type": "audio/wav",
       "x-oak-confirm": nonce.nonce,
     });
-    if (ok.status !== 200) this.fail(day, `${cap} re-recorded with the nonce: ${ok.status}`);
-    const got = new Uint8Array(await (await this.h.req("GET", path)).arrayBuffer());
-    if (Bun.hash(got) !== Bun.hash(wav(3))) this.fail(day, `${cap}: the replaced take is not the new one`);
-    // A nonce is single use.
-    const reuse = await this.h.req("PUT", path, wav(4), {
-      "content-type": "audio/wav",
-      "x-oak-confirm": nonce.nonce,
-    });
-    if (reuse.status === 200) this.fail(day, `${cap}: a replace nonce was accepted twice`);
+    if (ok.status !== 200) this.fail(day, `${cap} re-recorded with the old nonce: ${ok.status}`);
+    const bytesOf = async (q: string) =>
+      new Uint8Array(await (await this.h.req("GET", `${path}${q}`)).arrayBuffer());
+    if (Bun.hash(await bytesOf("")) !== Bun.hash(wav(3)))
+      this.fail(day, `${cap}: the newest take does not play`);
+    for (const [take, n] of [
+      [1, 1],
+      [2, 2],
+      [3, 3],
+    ] as const)
+      if (Bun.hash(await bytesOf(`?take=${take}`)) !== Bun.hash(wav(n)))
+        this.fail(day, `${cap}: take ${take} was lost`);
     this.stats.rerecords++;
     for (let k = 1; k <= (def?.sessions ?? 1); k++)
       if (!this.done(`${cap}.S${k}`)) this.history.push(`${cap}.S${k}`);

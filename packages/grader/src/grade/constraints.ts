@@ -60,7 +60,20 @@ export function editsOnlyRegions(starter: string, code: string): boolean {
     last = r.to;
   }
   fixed.push(clean.code.slice(last));
-  const pattern = fixed.map((s) => esc(s.trim()).replace(/\s+/g, "\\s*")).join("[\\s\\S]*?");
+  // A fixed word that stands beside a region, with white space between them, must still end (or begin) there:
+  // `B ⟪Em⟫` answered `Bm E` changes the fixed B, it does not edit the region after it. Punctuation delimits
+  // itself (`[1, ⟪0, 0, 0⟫]` may be written tight), and white space is free everywhere else.
+  const WORD = /[\w#]/;
+  const pattern = fixed
+    .map((s, i) => {
+      const t = s.trim();
+      if (t === "") return "";
+      const lead = i > 0 && /^\s/.test(s) && WORD.test(t.charAt(0)) ? "(?<![\\w#])" : "";
+      const trail =
+        i < fixed.length - 1 && /\s$/.test(s) && WORD.test(t.charAt(t.length - 1)) ? "(?![\\w#])" : "";
+      return `${lead}${esc(t).replace(/\s+/g, "\\s*")}${trail}`;
+    })
+    .join("[\\s\\S]*?");
   return new RegExp(`^\\s*${pattern}\\s*$`).test(code);
 }
 
@@ -136,6 +149,11 @@ function usesTool(code: string, tool: string, toolsUsed?: ConstraintInput["tools
   if (toolsUsed) return toolsUsed(code).filter((t) => t.id === tool).length;
   const last = tool.split(".").pop() ?? tool;
   if (tool === "tb.mini.euclid") return (code.match(/\(\s*\d+\s*,\s*\d+/g) ?? []).length;
+  // A sound (d6: `must-use` accepts a SoundId): its name inside the string of `s()` / `sound()` / `bank()`.
+  if (tool.startsWith("snd."))
+    return stringArgsOf(code, ["s", "sound", "bank"])
+      .flatMap((x) => x.split(/[\s[\]<>,~*/!@:().?|]+/))
+      .filter((tok) => tok === last).length;
   if (tool.startsWith("tb.mini.")) {
     const op: Record<string, RegExp> = {
       mult: /\*/g,

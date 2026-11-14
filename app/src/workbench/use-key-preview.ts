@@ -5,6 +5,7 @@
 import type { KeySpec, LintContext } from "@oak/content-kit";
 import type { BandSetup, EditorHandle, EvalOutcome, MuteMap, OakStrudel, PatternPlayer } from "@oak/strudel";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { liftCode, liftProblem } from "./key-extras.ts";
 import { keyName, moveKey, scaleTokens } from "./key-tools.ts";
 
 export interface KeyPreviewOptions {
@@ -43,6 +44,16 @@ export interface KeyPreview {
   stop(): void;
   /** Writes the key into the `.scale()` arguments (one undoable edit), then plays the edited code. */
   use(key: KeySpec): void;
+  /**
+   * Wave 6 (U17.L02, a direct modulation): hears the piece once as written and once lifted by a half step (1) or
+   * a whole step (2), on a loop; the code is untouched. `lifting` is the lift heard now, `liftWhy` says why the
+   * code cannot be lifted here (`null`: it can), `liftPlan` the `.scale()` argument that writes the lift heard.
+   */
+  lifting: 1 | 2 | null;
+  liftPending: 1 | 2 | null;
+  liftWhy: string | null;
+  liftPlan: string | null;
+  lift(semitones: 1 | 2): void;
 }
 
 export function useKeyPreview(o: KeyPreviewOptions): KeyPreview {
@@ -50,6 +61,9 @@ export function useKeyPreview(o: KeyPreviewOptions): KeyPreview {
   const [pending, setPending] = useState<KeySpec | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [withBand, setWithBand] = useState(false);
+  const [lifting, setLifting] = useState<1 | 2 | null>(null);
+  const [liftPending, setLiftPending] = useState<1 | 2 | null>(null);
+  const [liftPlan, setLiftPlan] = useState<string | null>(null);
   const player = useRef<PatternPlayer | null>(null);
   const seq = useRef(0);
   const ref = useRef(o);
@@ -68,6 +82,58 @@ export function useKeyPreview(o: KeyPreviewOptions): KeyPreview {
     player.current?.stop();
     setPlaying(null);
     setPending(null);
+    setLifting(null);
+    setLiftPending(null);
+  }, []);
+
+  const lift = useCallback((semitones: 1 | 2) => {
+    const cur = ref.current;
+    if (!cur.handle || cur.handle.disposed) return;
+    const lifted = liftCode(cur.handle.getCode(), cur.pieceKey, cur.bars, semitones);
+    if (!lifted) return;
+    const my = ++seq.current;
+    setPlaying(null);
+    setPending(null);
+    setLifting(null);
+    setLiftPending(semitones);
+    setError(null);
+    void (async () => {
+      try {
+        await cur.oak.unlock();
+        player.current ??= cur.oak.createPatternPlayer();
+        const p = player.current;
+        const base = { bars: lifted.bars, cps: cur.cps, lint: cur.lint };
+        let out: EvalOutcome;
+        if (cur.band) {
+          try {
+            out = await p.load(lifted.code, { ...base, band: cur.band });
+          } catch (e) {
+            if ((e as { code?: string } | null)?.code !== "strudel_not_built") throw e;
+            out = await p.load(lifted.code, base);
+          }
+        } else out = await p.load(lifted.code, base);
+        if (cur.mutes) p.setMutes(cur.mutes);
+        if (my !== seq.current) return;
+        if (!out.ok) {
+          setLiftPending(null);
+          setError("The lift did not play: the code has an error to fix first.");
+          return;
+        }
+        cur.handle?.stop();
+        await p.play();
+        if (my !== seq.current) {
+          p.stop();
+          return;
+        }
+        setLifting(semitones);
+        setLiftPlan(lifted.plan || null);
+        setLiftPending(null);
+      } catch (e) {
+        if (my !== seq.current) return;
+        setLiftPending(null);
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    })();
   }, []);
 
   const preview = useCallback((key: KeySpec) => {
@@ -77,6 +143,8 @@ export function useKeyPreview(o: KeyPreviewOptions): KeyPreview {
     if (!moved.code) return;
     const my = ++seq.current;
     setPending(key);
+    setLifting(null);
+    setLiftPending(null);
     setError(null);
     void (async () => {
       try {
@@ -155,5 +223,10 @@ export function useKeyPreview(o: KeyPreviewOptions): KeyPreview {
     preview,
     stop,
     use,
+    lifting,
+    liftPending,
+    liftWhy: liftProblem(code, o.pieceKey),
+    liftPlan: lifting ? liftPlan : null,
+    lift,
   };
 }

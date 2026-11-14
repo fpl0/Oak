@@ -50,12 +50,22 @@ export function capstoneShortTitle(def: Pick<CapstoneDefLike, "id" | "title">): 
   return def.title.startsWith(`${def.id} `) ? def.title.slice(def.id.length + 1) : def.title;
 }
 
+/**
+ * The title a capstone day shows. The two parts of the core finale read by what they are ("Album Single",
+ * "Standard Transcription": content/specs/CF.md), never by their registry prefix; every other capstone keeps its
+ * own ("C7 Chromatic Colour").
+ */
+export function capstoneDayTitle(title: string): string {
+  return /^CF-[AT] Core Finale: (.+)$/.exec(title)?.[1] ?? title;
+}
+
 type Check = CapstoneSessions["sessions"][number]["checks"][number];
 
 const pct = (x: number | null) => (x === null ? "" : ` at ${Math.round(x * 100)}%`);
 
 /** A staged check's name ("the bass", "the changes", "melody line 2"). */
 function stagedName(c: Check): string {
+  if (c.layer === "form") return "the form map";
   if (c.layer === "bass") return "the bass";
   if (c.layer === "chords") return "the changes";
   const p = typeof c.phrase === "number" ? c.phrase : c.phrase[0];
@@ -148,7 +158,7 @@ export function capstoneDay(
   if (!parsed) return null;
   const total = def?.sessionDefs.length || status?.sessionsTotal || parsed.n;
   const sDef = def?.sessionDefs[parsed.n - 1] ?? null;
-  const title = def?.title ?? plan.title;
+  const title = capstoneDayTitle(def?.title ?? plan.title);
   const sessionTitle = sDef?.title ?? null;
   const releases = sDef?.release ?? parsed.n === total;
   const own = sessions?.sessions.find((s) => s.capstoneSessionId === parsed.session) ?? null;
@@ -178,16 +188,21 @@ export function capstoneDay(
     resume,
     draft,
     releases,
-    checksLine: transcribe ? checksLine(sessions, parsed.n) : null,
+    // CF-T's place is drawn stage by stage (cft-day.ts): its section checks are not listed one by one.
+    checksLine: transcribe && parsed.capstone !== "CF-T" ? checksLine(sessions, parsed.n) : null,
   };
 }
 
-/** A capstone whose first session is done and whose last is not: the one a gym slot must never interrupt. */
+/**
+ * A capstone whose first session is done and whose last is not: the one a gym slot must never interrupt. CF-T is
+ * never that capstone: it runs IN the transcription slots (contracts §2.5), so it is the slot, not a piece a slot
+ * could interrupt, and it may stay under way for weeks beside C6 and C7.
+ */
 export function capstoneInProgress(
   course: Pick<CourseProgress, "capstones"> | null | undefined,
 ): { capstoneId: string; nextSession: string; sessionsDone: number; sessionsTotal: number } | null {
   for (const c of course?.capstones ?? []) {
-    if (c.status === "released" || c.status === "locked") continue;
+    if (c.status === "released" || c.status === "locked" || c.capstoneId === "CF-T") continue;
     if (c.sessionsDone > 0 && c.sessionsDone < c.sessionsTotal)
       return {
         capstoneId: c.capstoneId,

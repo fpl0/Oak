@@ -289,7 +289,7 @@ async function finishCapstoneSession(page: Page): Promise<void> {
   await expect(page.getByTestId("done-for-today")).toBeFocused({ timeout: 30_000 });
 }
 
-test("C3 day 1, Today to the Coda: three sessions named, groove and changes saved, session 2 next", async ({
+test("C3 day 1, Today to the Coda: four sessions named (d13), groove and changes saved, session 2 next", async ({
   page,
   request,
 }) => {
@@ -301,19 +301,19 @@ test("C3 day 1, Today to the Coda: three sessions named, groove and changes save
     await openToday(p);
     await expect(p.getByTestId("today-card")).toHaveAttribute("data-state", "capstone");
     await expect(p.getByTestId("setlist").locator('[data-row="new"]')).toContainText(
-      "C3 Verse–Chorus Demo · session 1 of 3: Groove & changes",
+      "C3 Verse–Chorus Demo · session 1 of 4: Groove & changes",
       { timeout: 20_000 },
     );
   };
   await s1(page);
-  await expect(page.getByTestId("today-card")).toContainText("The first of 3 sessions");
+  await expect(page.getByTestId("today-card")).toContainText("The first of 4 sessions");
   // A capstone day carries no side-lesson offer (wave5.md §5.1).
   await expect(page.getByTestId("side-offer")).toHaveCount(0);
   await matrix(page, "w5-today-c3-s1", s1);
   await page.setViewportSize({ width: 1440, height: 900 });
   await useUiPrefs(page, { theme: "paper", motion: "off" });
   await s1(page);
-  await capstoneWorkspace(page, 1, 3);
+  await capstoneWorkspace(page, 1, 4);
   expect((await sessionState(page)).plan).toMatchObject({ kind: "capstone", mapItemId: "C3.S1" });
   await setCapstoneCode(page, "C3", C3_GROOVE);
   await expect(page.getByTestId("form-letters")).toHaveText("A B A B", { timeout: 60_000 });
@@ -337,11 +337,11 @@ test("C3 day 2, Today to the Coda: the draft resumes from the top, session 3 nex
   await useUiPrefs(page, { theme: "bark", motion: "off" });
   await openToday(page);
   await expect(page.getByTestId("setlist").locator('[data-row="new"]')).toContainText(
-    "C3 Verse–Chorus Demo · session 2 of 3",
+    "C3 Verse–Chorus Demo · session 2 of 4",
     { timeout: 20_000 },
   );
   await expect(page.getByTestId("today-card")).toContainText("plays from the top");
-  await capstoneWorkspace(page, 2, 3);
+  await capstoneWorkspace(page, 2, 4);
   expect((await sessionState(page)).plan).toMatchObject({ kind: "capstone", mapItemId: "C3.S2" });
   // Session 2 writes the melodies over the groove.
   await setCapstoneCode(page, "C3", C3_FULL);
@@ -355,7 +355,65 @@ test("C3 day 2, Today to the Coda: the draft resumes from the top, session 3 nex
   expect(errors).toEqual([]);
 });
 
-test("C3 day 3, Today to the Coda: resumed from the top, released; the album grows and names C4", async ({
+test("C3 day 3, Today to the Coda: resumed from the top, arranged; it no longer releases, session 4 is next (d13)", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(240_000);
+  const errors = watch(page, [/\/api\/tutor/]);
+  await seed(request, "C3.S2 done");
+  const sessions = await api<{ sessions: { draft: unknown }[] }>(
+    request,
+    "GET",
+    "/api/capstones/C3/sessions",
+  );
+  // Contracts 1.6: C3 has four sessions; the drafts of S1 and S2 are there to resume from.
+  expect(sessions.sessions).toHaveLength(4);
+  expect(sessions.sessions.some((x) => x.draft !== null)).toBe(true);
+  const s3 = async (p: Page) => {
+    await openToday(p);
+    await expect(p.getByTestId("setlist").locator('[data-row="new"]')).toContainText(
+      "C3 Verse–Chorus Demo · session 3 of 4: Arrange",
+      { timeout: 20_000 },
+    );
+  };
+  await useUiPrefs(page, { theme: "paper", motion: "off" });
+  await s3(page);
+  await expect(page.getByTestId("today-card")).toContainText("plays from the top");
+  // The third session arranges; the take and the release are the fourth's.
+  await expect(page.getByTestId("today-card")).toContainText("carries on from where the draft stands");
+  await expect(page.getByTestId("today-card")).not.toContainText("release it to your album");
+  await matrix(page, "w5-today-c3-s3", s3);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await useUiPrefs(page, { theme: "paper", motion: "off" });
+  await s3(page);
+  await startByEnter(page);
+  expect((await sessionState(page)).plan).toMatchObject({ kind: "capstone", mapItemId: "C3.S3" });
+  await skipWarmup(page);
+  const card = page.getByTestId("capstone-resume");
+  await expect(card).toBeVisible({ timeout: 30_000 });
+  await expect(card).toContainText("Session 3 of 4");
+  await expect(card).toContainText("Your draft, from the top", { timeout: 20_000 });
+  await expect(page.getByTestId("resume-continue")).toBeFocused();
+  await expect(page.getByTestId("resume-continue")).toContainText("On to session 3: Arrange");
+  await settle(page);
+  await expectNoOverflow(page);
+  await shoot(page, SHOTS, "w5-session-c3-resume", "paper");
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("capstone-workspace")).toBeVisible({ timeout: 60_000 });
+  await setCapstoneCode(page, "C3", C3_FULL);
+  await finishCapstoneSession(page);
+  const c3 = await api<{ sessions: string[] }>(request, "GET", "/api/capstones/C3");
+  expect(c3.sessions).toContain("C3.S3");
+  // Nothing was released today: no release card, and tomorrow is the take.
+  await expect(page.getByTestId("coda-release")).toHaveCount(0);
+  await expect(page.getByTestId("coda-tomorrow")).toContainText(
+    "C3 Verse–Chorus Demo · session 4 of 4: Take & release",
+  );
+  expect(errors).toEqual([]);
+});
+
+test("C3 day 4, Today to the Coda: the last session releases; the album grows and names C4 (d13)", async ({
   page,
   request,
 }) => {
@@ -366,43 +424,28 @@ test("C3 day 3, Today to the Coda: resumed from the top, released; the album gro
   await page.addInitScript(() => {
     (globalThis as { MediaRecorder?: unknown }).MediaRecorder = undefined;
   });
-  await seed(request, "C3.S2 done");
-  const sessions = await api<{ sessions: { draft: unknown }[] }>(
-    request,
-    "GET",
-    "/api/capstones/C3/sessions",
-  );
-  expect(sessions.sessions.some((x) => x.draft !== null)).toBe(true);
-  const s3 = async (p: Page) => {
+  // `C3.S3 done`: C3.S1–S3 completed with the arranged draft and the lead-sheet check passed; today is C3.S4.
+  await seed(request, "C3.S3 done");
+  const s4 = async (p: Page) => {
     await openToday(p);
     await expect(p.getByTestId("setlist").locator('[data-row="new"]')).toContainText(
-      "C3 Verse–Chorus Demo · session 3 of 3: Arrange",
+      "C3 Verse–Chorus Demo · session 4 of 4: Take & release",
       { timeout: 20_000 },
     );
   };
   await useUiPrefs(page, { theme: "paper", motion: "off" });
-  await s3(page);
+  await s4(page);
   await expect(page.getByTestId("today-card")).toContainText("plays from the top");
   await expect(page.getByTestId("today-card")).toContainText("release it to your album");
-  await matrix(page, "w5-today-c3-s3", s3);
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await useUiPrefs(page, { theme: "paper", motion: "off" });
-  await s3(page);
   await startByEnter(page);
-  expect((await sessionState(page)).plan).toMatchObject({ kind: "capstone", mapItemId: "C3.S3" });
+  expect((await sessionState(page)).plan).toMatchObject({ kind: "capstone", mapItemId: "C3.S4" });
   await skipWarmup(page);
   const card = page.getByTestId("capstone-resume");
   await expect(card).toBeVisible({ timeout: 30_000 });
-  await expect(card).toContainText("Session 3 of 3");
-  await expect(card).toContainText("Your draft, from the top", { timeout: 20_000 });
+  await expect(card).toContainText("Session 4 of 4");
   await expect(page.getByTestId("resume-continue")).toBeFocused();
-  await expect(page.getByTestId("resume-continue")).toContainText("On to session 3: Arrange");
-  await settle(page);
-  await expectNoOverflow(page);
-  await shoot(page, SHOTS, "w5-session-c3-resume", "paper");
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("capstone-workspace")).toBeVisible({ timeout: 60_000 });
-  await setCapstoneCode(page, "C3", C3_FULL);
   await expect(page.getByTestId("req-count")).toHaveText(/^(\d+) of \1 met$/, { timeout: 90_000 });
   await page.getByTestId("check-track").click();
   await expect(page.getByRole("status").filter({ hasText: /every requirement is met/ })).toBeVisible({

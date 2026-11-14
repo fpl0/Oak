@@ -113,6 +113,9 @@ export function startupTasks(d: AppDeps): void {
     }
   }
   d.services.unlocks.backfill();
+  // Wave 6 (wave6.md §5.3, §5.5): a learner already past a track gate, or past the end of the core, gets the rows
+  // with their instant and no announcement.
+  d.services.tracks.backfill();
 }
 
 /**

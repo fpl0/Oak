@@ -414,8 +414,24 @@ test("a U06 day: the staged chord dictation in the warm-up — bass, then qualit
   test.setTimeout(240_000);
   const problems = watch(page);
   const sent = wire(page);
-  const s = await seed(request, "after U06.L10");
-  expect(s.next).toBe("U06.L11");
+  // The day after U06.L09 opens the set (its blocked intro), and the day after U06.L10 reviews it. Since Wave 6
+  // deals the promoted fact decks one new card a day beside the ear sets (d1), which of the two has room for it in a
+  // 20-minute warm-up depends on the week (a week whose goal is met plans a lighter day): the first that deals it.
+  let dealt: string | null = null;
+  for (const point of ["after U06.L09", "after U06.L10"]) {
+    const s = await seed(request, point);
+    expect(s.next).toMatch(/^U06\.L1[01]$/);
+    const plan = await api<{ warmup: { items: { familyId?: string | null }[] } }>(
+      request,
+      "GET",
+      "/api/session/today",
+    );
+    if (plan.warmup.items.some((i) => i.familyId === "fam.har.progression")) {
+      dealt = point;
+      break;
+    }
+  }
+  expect(dealt, "a U06 day after U06.L09 deals the staged chord dictation").not.toBeNull();
   await useUiPrefs(page, { theme: "paper" });
   await startDay(page);
   await toFamily(page, "fam.har.progression");

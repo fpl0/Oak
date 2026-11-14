@@ -3,7 +3,7 @@
 // self-assessed checklist. Own-audio work is graded by the learner (`grading.mode: 'self'`): nothing here is a
 // pass or a fail.
 import type { TranscriptionDetail } from "@oak/api";
-import { OakApiError, OWN_AUDIO_CHECKLIST } from "@oak/api";
+import { OakApiError } from "@oak/api";
 import type { KeySpec, MeterId, SwingSpec } from "@oak/content-kit";
 import { clsx } from "clsx";
 import { Bookmark, ChevronsLeft, ChevronsRight, Hand, Trash2 } from "lucide-react";
@@ -13,21 +13,24 @@ import { Button } from "../ui/kit/Button.tsx";
 import { Card, Kbd } from "../ui/kit/basics.tsx";
 import { SegmentedControl } from "../ui/kit/Controls.tsx";
 import { toast } from "../ui/kit/Toast.tsx";
+import { type FormMap, formLettersOf, formSummary, sectionsOf, setLabel } from "./form-map.ts";
 import {
   type BarGrid,
   beatSecOfGrid,
   bpmFromTaps,
   downbeatFromTaps,
   formatTime,
+  type GridFeel,
+  isCompound,
   type Loop,
   nudgeDownbeat,
   scaleTempo,
   tapProgress,
 } from "./grid.ts";
-import { CHECK_LEVELS, checklistProgress, selfScoreOf } from "./import.ts";
+import { CHECK_LEVELS, checklistProgress, checklistRows, selfScoreOf } from "./import.ts";
 import type { Section } from "./SourceView.tsx";
 
-const METER_CHOICES: MeterId[] = ["4/4", "3/4", "6/8", "2/4"];
+const METER_CHOICES: MeterId[] = ["4/4", "3/4", "6/8", "12/8", "2/4"];
 /** Tonics as Oak spells keys (sharps up the circle, flats down it). */
 const TONICS = ["C", "G", "D", "A", "E", "B", "F#", "Db", "Ab", "Eb", "Bb", "F"] as const;
 const MODES = ["major", "minor"] as const;
@@ -50,6 +53,8 @@ export function TempoCard({
   playing,
   swing,
   onSwing,
+  feel,
+  onFeel,
   busy = false,
 }: {
   project: TranscriptionDetail;
@@ -69,7 +74,14 @@ export function TempoCard({
   playing: boolean;
   swing: boolean;
   onSwing(on: boolean): void;
+  /**
+   * Wave 6: the feel of the grid, with triplets as a third choice (the grid then divides each beat in three). When
+   * given, the feel switch offers all three and reports through `onFeel`; a compound meter needs no feel.
+   */
+  feel?: GridFeel;
+  onFeel?(feel: GridFeel): void;
 }) {
+  const compound = isCompound(project.meter);
   const bpm = bpmFromTaps(taps);
   const down = downbeatFromTaps(taps);
   const bpmId = useId();
@@ -105,6 +117,9 @@ export function TempoCard({
               ? "Tap on each beat, starting on a bar's first beat."
               : "Press Tap to start the recording, then tap on each beat from a bar's first beat."}{" "}
             Eight taps set the tempo and where bar 1 starts.
+            {compound
+              ? ` In ${project.meter} the beat is the dotted quarter: tap the slow pulse, ${project.meter === "12/8" ? "four" : project.meter === "9/8" ? "three" : "two"} to a bar.`
+              : ""}
           </p>
         ) : (
           <p className="text-sm text-text-2">Tap again to reset the tempo and bar 1.</p>
@@ -298,24 +313,44 @@ export function TempoCard({
           onChange={(m) => onApply({ meter: m })}
         />
         <span className="flex items-center gap-1.5" data-testid="swing-switch">
-          <SegmentedControl
-            label="Feel (W)"
-            size="sm"
-            value={swing ? "swing" : "straight"}
-            options={[
-              { value: "straight", label: "Straight" },
-              { value: "swing", label: "Swing 8ths", disabled: !swingMeter(project.meter) },
-            ]}
-            onChange={(v) => onSwing(v === "swing")}
-          />
+          {feel !== undefined && onFeel ? (
+            <SegmentedControl
+              label="Feel (W swings)"
+              size="sm"
+              value={compound ? "straight" : feel}
+              options={[
+                { value: "straight" as GridFeel, label: compound ? "In three" : "Straight" },
+                { value: "swing" as GridFeel, label: "Swing 8ths", disabled: !swingMeter(project.meter) },
+                { value: "triplet" as GridFeel, label: "Triplets", disabled: compound },
+              ]}
+              onChange={(v) => onFeel(v)}
+            />
+          ) : (
+            <SegmentedControl
+              label="Feel (W)"
+              size="sm"
+              value={swing ? "swing" : "straight"}
+              options={[
+                { value: "straight", label: "Straight" },
+                { value: "swing", label: "Swing 8ths", disabled: !swingMeter(project.meter) },
+              ]}
+              onChange={(v) => onSwing(v === "swing")}
+            />
+          )}
           <Kbd>W</Kbd>
         </span>
       </div>
       {grid ? (
         <p className="text-sm text-text-3">
           A bar is {grid.barSec.toFixed(2)} s.{" "}
-          {swing ? "The grid marks the swung off-beats at two thirds of each beat. " : ""}A/B plays your code
-          with the recording from the start of the bar the playhead is in.
+          {compound
+            ? `BPM counts the dotted quarter; the grid marks each beat's three eighths. `
+            : feel === "triplet"
+              ? "The grid marks three to each beat. "
+              : swing
+                ? "The grid marks the swung off-beats at two thirds of each beat. "
+                : ""}
+          A/B plays your code with the recording from the start of the bar the playhead is in.
         </p>
       ) : null}
     </Card>
@@ -344,6 +379,26 @@ export function projectSwing(p: {
 }): boolean {
   const kept = p.settings?.swing;
   return kept === undefined ? readSwing(p.id) : kept !== null;
+}
+const FEEL_KEY = (id: string) => `oak.transcribe.feel.${id}`;
+/**
+ * Triplets on the grid of an own-audio project. The server keeps the swing (`settings.swing`); it has no field for
+ * a triplet grid yet (apiNotes), so this browser remembers it.
+ */
+export function readTriplets(id: string): boolean {
+  try {
+    return localStorage.getItem(FEEL_KEY(id)) === "triplet";
+  } catch {
+    return false;
+  }
+}
+export function writeTriplets(id: string, on: boolean): void {
+  try {
+    if (on) localStorage.setItem(FEEL_KEY(id), "triplet");
+    else localStorage.removeItem(FEEL_KEY(id));
+  } catch {
+    // storage blocked: the choice lasts for this visit
+  }
 }
 /** The feel the swing switch stores: triplet swing on the eighths, or straight. */
 export const SWUNG_EIGHTHS: SwingSpec = { subdivision: 8, amount: 1 / 3 };
@@ -493,15 +548,23 @@ export function NotesCard({ project }: { project: TranscriptionDetail }) {
   );
 }
 
-export function ChecklistCard({ project }: { project: TranscriptionDetail }) {
+export function ChecklistCard({
+  project,
+  withForm = false,
+}: {
+  project: TranscriptionDetail;
+  /** The recording's sections are mapped (a full arrangement): the checklist asks about the form too. */
+  withForm?: boolean;
+}) {
   const patch = useTranscriptionPatch();
   const [list, setList] = useState<Record<string, number>>(project.checklist);
-  const prog = checklistProgress(list);
+  const rows = checklistRows(withForm || typeof list.form === "number");
+  const prog = checklistProgress(list, rows);
   const set = (id: string, v: number) => {
     const next = { ...list, [id]: v };
     setList(next);
     patch.mutate(
-      { params: { id: project.id }, body: { checklist: next, selfScore: selfScoreOf(next) } },
+      { params: { id: project.id }, body: { checklist: next, selfScore: selfScoreOf(next, rows) } },
       { onError: (e) => toast.error("Couldn't save the checklist", e.message) },
     );
   };
@@ -517,7 +580,7 @@ export function ChecklistCard({ project }: { project: TranscriptionDetail }) {
         Your own audio has no answer key: compare with A/B and judge each part yourself.
       </p>
       <ul className="flex flex-col gap-2.5">
-        {OWN_AUDIO_CHECKLIST.map((row) => {
+        {rows.map((row) => {
           const v = list[row.id];
           return (
             <li key={row.id} className="flex flex-col gap-1">
@@ -558,6 +621,83 @@ export function ChecklistCard({ project }: { project: TranscriptionDetail }) {
           {project.status === "done" ? "Mark as in progress" : "Mark as done"}
         </Button>
       </div>
+    </Card>
+  );
+}
+
+/**
+ * The form of the learner's own recording (L7, full arrangement; CF.md "Own audio"): the sections they cut on the
+ * strip under the waveform, each named here, looped with a click. Nothing is graded. The map is kept as the
+ * project's sections, so a backup exports it with the project; "Write it into my code" puts it at the top of the
+ * code as a comment, so every saved version carries it too.
+ */
+export function FormCard({
+  map,
+  onChange,
+  onLoop,
+  onWrite,
+}: {
+  map: FormMap;
+  onChange(m: FormMap): void;
+  onLoop(from: number, to: number): void;
+  /** Put the form at the top of the code as a comment. */
+  onWrite(): void;
+}) {
+  const sections = sectionsOf(map);
+  const mapped = sections.length > 1 || Boolean(sections[0]?.label);
+  return (
+    <Card className="flex flex-col gap-2 p-4" data-testid="form-card">
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="text-h3">Form</h2>
+        {mapped ? (
+          <span className="text-sm text-text-3" data-testid="form-summary">
+            {formLettersOf(map).split("").join(" ")}
+          </span>
+        ) : null}
+      </div>
+      {mapped ? (
+        <>
+          <ol className="flex flex-col gap-1.5">
+            {sections.map((s) => (
+              <li key={s.from} className="flex items-center gap-2 text-sm">
+                <span className="w-24 shrink-0 tabular-nums text-text-2">
+                  bars {s.from}–{s.to}
+                </span>
+                <input
+                  aria-label={`Name of section ${s.index + 1}, bars ${s.from} to ${s.to}`}
+                  defaultValue={s.label}
+                  key={`${s.from}-${s.label}`}
+                  maxLength={24}
+                  placeholder="verse, chorus, A…"
+                  onBlur={(e) => {
+                    if (e.target.value.trim() !== s.label) onChange(setLabel(map, s.index, e.target.value));
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                  }}
+                  className="h-8 min-w-0 flex-1 rounded-control border border-border bg-surface px-2 text-text"
+                  data-testid="form-name"
+                />
+                <Button size="sm" variant="ghost" onClick={() => onLoop(s.from, s.to)}>
+                  Loop
+                </Button>
+              </li>
+            ))}
+          </ol>
+          <p className="text-sm text-text-3">{formSummary(map)}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" onClick={onWrite} data-testid="form-to-code">
+              Write it into my code
+            </Button>
+            <span className="text-sm text-text-3">Kept with the project and in its backup.</span>
+          </div>
+        </>
+      ) : (
+        <p className="text-sm text-text-2">
+          Map the recording's sections on the strip under the waveform: press <Kbd>X</Kbd> while it plays
+          where a new section starts, or click a bar line. Then name them here.
+        </p>
+      )}
     </Card>
   );
 }

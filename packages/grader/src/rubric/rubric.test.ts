@@ -87,6 +87,9 @@ test("every rule name of the content contract has an analyzer", () => {
     // Wave 5 (docs/design/wave5.md §3.2): `bass-line` built on the bass view; `notates` a typed stub.
     "bass-line",
     "notates",
+    // Wave 6 (rubric/wave6-rules.ts): the same tune over new chords (U16.L05); a triplet somewhere (U13.L05).
+    "reharmonize",
+    "tuplets",
   ];
   expect(Object.keys(RULES).sort()).toEqual([...names].sort());
   expect(Object.keys(CUSTOM_RULES).sort()).toEqual(["allowed-tensions", "ii-v-chain", "walking-bass"]);
@@ -396,13 +399,21 @@ describe("harmony rules", () => {
     await passes(r, 'chords: chord("<Dm9 G7b9 C^9 C^9>").voicing()', 4, { key: C });
     await fails(r, 'chords: chord("<C7alt F^7 Dm7 G7#9>").voicing()', 4, { key: C });
   });
-  test("device-count (CF-A): a secondary dominant and a borrowed ♭VII", async () => {
+  test("device-count (CF-A): a secondary dominant and a borrowed chord; ♭VII alone is modal colour", async () => {
     const r = rule({
       rule: "device-count",
       devices: ["secondary dominant", "borrowed chord", "modulation"],
       min: 2,
     });
-    await passes(r, 'chords: chord("<C E7 Am Bb>").voicing()', 4, { key: C });
+    await passes(r, 'chords: chord("<C E7 Am Fm>").voicing()', 4, { key: C });
+    // One event, one device (Wave 6): ♭VII with no other borrowed chord beside it is the Mixolydian colour.
+    await fails(r, 'chords: chord("<C E7 Am Bb>").voicing()', 4, { key: C });
+    await passes(
+      rule({ rule: "device-count", devices: ["secondary dominant", "modal colour"], min: 2 }),
+      'chords: chord("<C E7 Am Bb>").voicing()',
+      4,
+      { key: C },
+    );
     await fails(r, 'chords: chord("<C G Am F>").voicing()', 4, { key: C });
   });
 });

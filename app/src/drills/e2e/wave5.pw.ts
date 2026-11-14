@@ -268,6 +268,11 @@ test("bass-line dictation: the line written as code, right and then wrong (root 
   const posts = trialPosts(page);
   await seed(page);
   await prepare(page);
+  // d23: trial 2 is drawn on purpose as a staged line (more notes than chords, eight roots at this level), the
+  // case whose feedback once pushed "Next" below the fold at 1280×800; before, one run in five drew it.
+  await page.addInitScript(() => {
+    (globalThis as { __oakDrillForce?: unknown }).__oakDrillForce = { 1: { category: "lines", level: 5 } };
+  });
   await startPractice(page, "fam.har.bass", 5);
   // The mode switch ("Write it as") is asserted visible in `writeLine`, once the line is asked for: a staged trial
   // (more notes than chords) asks for its roots first, and the switch is not offered on that step (a random draw;
@@ -283,6 +288,7 @@ test("bass-line dictation: the line written as code, right and then wrong (root 
   // Wrong: the first note a step off.
   await trialNo(page, 2, 4);
   const second = await bassLine(page);
+  expect(second.staged).toBe(true);
   const wrong = second.code.replace(/<\[?(\d)/, (m, d) => m.replace(d, String((Number(d) + 1) % 7)));
   await writeLine(page, second, wrong);
   await expect(feedback).toHaveAttribute("data-correct", "false");
@@ -431,10 +437,11 @@ test("major or minor: the tune alone, the scale it was in, and in context", asyn
   await prepare(page);
   await startPractice(page, "fam.key.mode", 1);
   const t = await trialNo(page, 1, 6);
-  await expect(page.getByTestId("trial-prompt")).toHaveText("Major or minor?");
+  // Wave 6: the engine may ask its own question for this level; the runner's words are the fallback.
+  await expect(page.getByTestId("trial-prompt")).toHaveText(/^(Major or minor\?|Which scale is this in\?)$/);
   const answer = page.getByRole("radiogroup", { name: /Your answer/ });
   await expect(answer.getByRole("radio", { name: "1. Major" })).toBeVisible();
-  await expect(answer.getByRole("radio", { name: "2. Minor" })).toBeVisible();
+  await expect(answer.getByRole("radio", { name: /^2\. (Minor|Natural minor)$/ })).toBeVisible();
   await page.keyboard.press(t.expected.choice?.[0] === "major" ? "1" : "2");
   await expect(page.getByTestId("trial-feedback")).toHaveAttribute("data-correct", "true");
   await expect(page.getByTestId("hear-alone")).toHaveText(/The tune alone/);

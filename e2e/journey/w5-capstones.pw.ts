@@ -2,18 +2,18 @@
 // sessions on the real stack (real server, real content, the scripted fake tutor, Chrome's fake microphone), each
 // from a dev seed, the dev clock moving one day between sessions. Every piece is the capstone suite's own
 // (app/src/capstone/e2e/w5-pieces.ts), graded against the briefs with the real grader in w5-pieces.test.ts.
-//   (d) "C3 open": C3 Verse–Chorus Demo over three sessions — groove and changes (the form strip reads A B A B),
-//       then the melodies, then the arrangement: every requirement met, the lead sheet with its sections, Claude's
-//       review, a recorded take of the whole 96-second demo, the release; the album track has its recording
-//       (≥ 90 s), cover, liner notes and review.
+//   (d) "C3 open": C3 Verse–Chorus Demo over four sessions (d13) — groove and changes (the form strip reads
+//       A B A B), then the melodies, then the arrangement: every requirement met, the lead sheet with its sections;
+//       then from "C3.S3 done" session 4: Claude's review, a recorded take of the whole 96-second demo, the
+//       release; the album track has its recording (≥ 90 s), cover, liner notes and review.
 //   (e) "C4 open": C4 Minor Indie Ballad — the Aeolian verse, then the chorus cadence with the major V; released.
 //       Walked in Quiet mode (j), the only C4 journey.
 //   (f) "C5 open": C5 12-Bar Shuffle — one swung chorus, then two with the riff answered; a review with two
 //       revisions; released.
 //   (g) "X2 open": X2 Blues Transcription — bass, then the changes, then the melody line by line the next day;
 //       released. The album then holds eight tracks: C0, C1, C2, X1, C3, C4, C5 and X2.
-// (d) runs longer than the suite's 90-second guide: its release records the whole demo in real time (C3's brief
-// asks for 96 seconds; no other spec records it). The other releases take a seeded take of the same window
+// (d)'s session 4 runs longer than the suite's 90-second guide: its release records the whole demo in real time
+// (C3's brief asks for 96 seconds; no other spec records it). The other releases take a seeded take of the same window
 // (app/src/capstone/e2e/seeded-take.ts); the real recorder is under test here (C3), in gate journey 5 (C0), in the
 // C1 journey and in the capstone suite.
 import { type APIRequestContext, expect, type Page, test } from "@playwright/test";
@@ -193,40 +193,73 @@ async function trackOf(page: Page, request: APIRequestContext, cap: string, titl
   return detail;
 }
 
-test("(d) C3 over its three sessions: groove and changes, melodies, the arrangement released with a 96-second take", async ({
+test("(d) C3 sessions 1–3: groove and changes, the melodies, then the arrangement and its lead sheet", async ({
   page,
   request,
 }) => {
-  test.setTimeout(330_000);
+  test.setTimeout(150_000);
   const w = await begin(page, request, "C3 open");
 
   // Day 1, C3.S1: groove and changes for verse and chorus, arranged V C V C.
-  await capstoneDay(page, "C3 Verse–Chorus Demo · session 1 of 3", "C3.S1");
-  await firstSession(page, 3);
+  await capstoneDay(page, "C3 Verse–Chorus Demo · session 1 of 4", "C3.S1");
+  await firstSession(page, 4);
   await setCapstoneCode(page, "C3", C3_GROOVE);
   await expect(page.getByTestId("form-letters")).toHaveText("A B A B", { timeout: 60_000 });
   await finishSession(page);
-  expect((await sessionsOf(request, "C3")).sessions.map((s) => s.status)).toEqual(["done", "open", "locked"]);
+  expect((await sessionsOf(request, "C3")).sessions.map((s) => s.status)).toEqual([
+    "done",
+    "open",
+    "locked",
+    "locked",
+  ]);
 
   // Day 2, C3.S2: the draft from the top; the melodies over it.
   await advanceDays(request, 1);
-  await capstoneDay(page, "C3 Verse–Chorus Demo · session 2 of 3", "C3.S2");
-  await resume(page, "Session 2 of 3");
+  await capstoneDay(page, "C3 Verse–Chorus Demo · session 2 of 4", "C3.S2");
+  await resume(page, "Session 2 of 4");
   await setCapstoneCode(page, "C3", C3_FULL);
   await finishSession(page);
 
-  // Day 3, C3.S3: the arrangement, every requirement, the lead sheet, the review, the release.
+  // Day 3, C3.S3 (d13): the arrangement, every requirement, the lead sheet. The take and the release are S4's.
   await advanceDays(request, 1);
-  await capstoneDay(page, "C3 Verse–Chorus Demo · session 3 of 3", "C3.S3");
-  await resume(page, "Session 3 of 3");
+  await capstoneDay(page, "C3 Verse–Chorus Demo · session 3 of 4", "C3.S3");
+  await resume(page, "Session 3 of 4");
   await checkAllMet(page);
   const sheet = page.getByTestId("lead-sheet");
   await expect(sheet).toBeVisible();
   await expect(sheet.locator(".oak-section").first()).toBeVisible({ timeout: 30_000 });
+  await finishSession(page);
+  expect((await sessionsOf(request, "C3")).sessions.map((s) => s.status)).toEqual([
+    "done",
+    "done",
+    "done",
+    "open",
+  ]);
+  expectClean(w);
+  await resetClock(request);
+});
+
+// (d) runs longer than the suite's 90-second guide: its release records the whole demo in real time (C3's brief
+// asks for 96 seconds; no other spec records it).
+test("(d) C3 session 4: Claude's review, a recorded take of the whole 96-second demo, the release", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(240_000);
+  const w = await begin(page, request, "C3.S3 done");
+  await capstoneDay(page, "C3 Verse–Chorus Demo · session 4 of 4", "C3.S4");
+  await resume(page, "Session 4 of 4");
+  // The release is of a checked version: the arranged demo is checked again in this session.
+  await checkAllMet(page);
   await review(page, 1);
-  await shootAll(page, "w5-journey-c3-s3");
+  await shootAll(page, "w5-journey-c3-s4");
   await release(page, "Two Rooms", "The verse waits low; the chorus climbs.", 150_000, "real");
-  expect((await sessionsOf(request, "C3")).sessions.map((s) => s.status)).toEqual(["done", "done", "done"]);
+  expect((await sessionsOf(request, "C3")).sessions.map((s) => s.status)).toEqual([
+    "done",
+    "done",
+    "done",
+    "done",
+  ]);
   const detail = await trackOf(page, request, "C3", "Two Rooms", "w5-journey-c3-track");
   expect(detail.versions[0]?.durationS ?? 0).toBeGreaterThan(90);
   await expect(page.getByTestId("liner-notes").first()).toContainText(

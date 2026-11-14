@@ -2,17 +2,21 @@
 // every state (idle, pending, correct, wrong, revealed) can be drawn from real data. Musical claims are checked
 // in `fixtures.test.ts` with headless Strudel and @oak/theory.
 import type { KeySpec } from "@oak/api";
-import { CADENCE_OPTIONS, FUNCTION_OPTIONS, formLetters } from "@oak/content-kit";
+import type { MeterSpec, Rat } from "@oak/content-kit";
+import { CADENCE_OPTIONS, FUNCTION_OPTIONS, formLetters, R } from "@oak/content-kit";
+import { parseNoteList } from "@oak/notation";
+import { METERS } from "@oak/theory";
 import { barGridStart } from "../bar-grid.ts";
 import { type AnswerEnv, appAudio, NEUTRAL_PROFILE } from "../env.tsx";
+import { formMapSections } from "../form-map.ts";
 import { rnMidis } from "../harmony.ts";
 import { parseSignatureValue } from "../keys/circle.ts";
 import { readsAs, type TextKind } from "../normalize.ts";
 import { emptyValue } from "../response.ts";
 import { valueDegrees } from "../scale.ts";
 import { centsText, degreeNotes } from "../sing.ts";
-import { engrave, staffChords, staffContext, staffNotes } from "../staff/model.ts";
-import { tapReport, targetSeconds } from "../tap.ts";
+import { engrave, normalizeStaffValue, staffChords, staffContext, staffNotes } from "../staff/model.ts";
+import { padGrid, tapReport, targetPlace, targetSeconds } from "../tap.ts";
 import type {
   AnswerFeedback,
   AnswerKind,
@@ -23,6 +27,7 @@ import type {
   SungSummary,
 } from "../types.ts";
 import { WAVE5_FIXTURES } from "./fixtures-wave5.ts";
+import { WAVE6_FIXTURES } from "./fixtures-wave6.ts";
 
 export interface Fixture<K extends AnswerKind = AnswerKind> {
   id: string;
@@ -669,6 +674,8 @@ export const FIXTURES: Fixture[] = [
   }),
   // --- Wave 5: form, the chord chart, the scale builder, minor everywhere, new pick kinds -----------------
   ...WAVE5_FIXTURES,
+  // --- Wave 6: rhythm II, sevenths, modes, chromatic harmony, key changes, the form map -------------------
+  ...WAVE6_FIXTURES,
 ];
 
 /** The staged-dictation gallery's loop: I V vi IV in C, chords and a root bass (checked in fixtures.test.ts). */
@@ -685,7 +692,12 @@ export const STAGED_ANSWER = {
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /** Per-part marks of `value` against `expected`, as a host would derive them from its GradeResult. */
-export function demoMarks(spec: AnswerSpec, value: AnswerValue, expected: AnswerValue): PartMark[] {
+export function demoMarks(
+  spec: AnswerSpec,
+  value: AnswerValue,
+  expected: AnswerValue,
+  meter: MeterSpec = METERS["4/4"],
+): PartMark[] {
   switch (spec.ui) {
     case "choice":
     case "same-different":
@@ -735,12 +747,16 @@ export function demoMarks(spec: AnswerSpec, value: AnswerValue, expected: Answer
         return parseSignatureValue(value as string).map((a, i) => ({ part: i, ok: a === want[i] }));
       }
       const names = (v: string) => {
-        const r = engrave(v, staffContext(spec));
+        const r = engrave(v, staffContext(spec, meter));
         if (!r.ok) return [];
         // Chords are marked per chord (the notes that start together), notes per note.
         if (spec.palette.chords)
           return staffChords(staffNotes(r.score)).map((c) => c.pitches.map((x) => x.name).join("+"));
-        return staffNotes(r.score).map((n) => n.pitches.map((x) => x.name).join("+"));
+        // A note is right when its pitch, its place and its length are (a tied note is one note).
+        return staffNotes(r.score).map(
+          (n) =>
+            `${n.pitches.map((x) => x.name).join("+")}@${R.str(n.onset)}+${R.str(noteLength(v, n.onset, meter))}`,
+        );
       };
       const want = names(expected as string);
       return names(value as string).map((n, i) => ({ part: i, ok: n === want[i] }));
@@ -751,6 +767,22 @@ export function demoMarks(spec: AnswerSpec, value: AnswerValue, expected: Answer
         ok: text.trim() === (expected as Record<string, string>)[id],
       }));
     case "form": {
+      if (spec.input === "map") {
+        // As the grader counts it: a section is right when it starts on a bar the tune's sections start on
+        // and carries the right letter by shape, among the sections that start right.
+        const want = formMapSections(expected as string[], spec.bars);
+        const got = formMapSections(value as string[], spec.bars);
+        const aligned = got.flatMap((g) => {
+          const w = want.find((x) => x.bar === g.bar);
+          return w ? [{ got: g.label, want: w.label, bar: g.bar }] : [];
+        });
+        const gotShape = formLetters(aligned.map((a) => a.got));
+        const wantShape = formLetters(aligned.map((a) => a.want));
+        return got.map((g, i) => {
+          const at = aligned.findIndex((a) => a.bar === g.bar);
+          return { part: i, ok: at >= 0 && g.label !== "" && gotShape[at] === wantShape[at] };
+        });
+      }
       // Letters are compared by shape (letters by first appearance, `formLetters`); names by the section's type
       // (`chorus2` is a chorus), so a learner who swaps verse and chorus is told so.
       if (spec.vocabulary === "letters") {
@@ -787,16 +819,33 @@ export function demoMarks(spec: AnswerSpec, value: AnswerValue, expected: Answer
   }
 }
 
+/** How a gallery tap take is reported: the targets on the take's clock, named as they are counted. */
+export function tapDemo(tap: NonNullable<AnswerEnv["tap"]>, startAt: number) {
+  const beats = padGrid(tap).beatsPerBar;
+  const cps = tap.bpm / 60 / beats;
+  const onsets = [...(tap.targets ?? [])].sort((a, b) => a - b);
+  return {
+    cps,
+    targets: targetSeconds(onsets, startAt, cps),
+    options: {
+      ...(tap.targetWord ? { word: tap.targetWord } : {}),
+      ...(tap.meter ? { places: onsets.map((o) => targetPlace(o, tap.meter as MeterSpec, tap.bars)) } : {}),
+    },
+  };
+}
+
 export function demoCheck(f: Fixture, value: AnswerValue): AnswerFeedback {
   if (f.spec.ui === "tap") {
     const tap = f.env?.tap;
-    const targets = targetSeconds(tap?.targets ?? [], tap?.startAt ?? 0, tap ? tap.bpm / 60 / 4 : 0.5);
-    return tapReport(value as number[], targets, NEUTRAL_PROFILE).feedback;
+    if (!tap) return tapReport(value as number[], [], NEUTRAL_PROFILE).feedback;
+    const demo = tapDemo(tap, tap.startAt ?? 0);
+    return tapReport(value as number[], demo.targets, NEUTRAL_PROFILE, demo.options).feedback;
   }
-  const marks = demoMarks(f.spec, value, f.expected);
+  const meter = f.env?.staff?.meter ?? METERS["4/4"];
+  const marks = demoMarks(f.spec, value, f.expected, meter);
   const sameLength =
-    (f.spec.ui !== "staff-input" && f.spec.ui !== "scale-builder") ||
-    marks.length === demoMarks(f.spec, f.expected, f.expected).length;
+    (f.spec.ui !== "staff-input" && f.spec.ui !== "scale-builder" && f.spec.ui !== "form") ||
+    marks.length === demoMarks(f.spec, f.expected, f.expected, meter).length;
   const ok =
     sameLength &&
     (f.spec.ui === "text"
@@ -806,6 +855,16 @@ export function demoCheck(f: Fixture, value: AnswerValue): AnswerFeedback {
         (f.spec.ui !== "choice" || (value as string[]).length === (f.expected as string[]).length));
   if (ok) return { state: "correct", marks };
   return { state: "wrong", marks, ...(f.wrongMessage ? { message: f.wrongMessage } : {}) };
+}
+
+/** The sounding length of the note that starts at `onset` in a staff value (tied pieces together). */
+function noteLength(value: string, onset: Rat, meter: MeterSpec = METERS["4/4"]): Rat {
+  try {
+    const ev = parseNoteList(normalizeStaffValue(value), { meter }).find((e) => R.eq(e.onset, onset));
+    return ev?.dur ?? [0, 1];
+  } catch {
+    return [0, 1];
+  }
 }
 
 export const STATES = ["idle", "pending", "correct", "wrong", "revealed"] as const;

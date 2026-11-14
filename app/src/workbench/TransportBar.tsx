@@ -5,6 +5,7 @@ import type { KeySpec, MeterSpec } from "@oak/content-kit";
 import type { MuteMap } from "@oak/strudel";
 import { useEffect, useRef } from "react";
 import type { WorkbenchClock } from "./clock.ts";
+import { keyName } from "./key-tools.ts";
 import type { RegionStep } from "./loop-math.ts";
 import { beatOf } from "./metronome.ts";
 import { barBeat, bpmText, chipState, type PracticeTempo } from "./transport-math.ts";
@@ -106,8 +107,7 @@ function SwitchGroup({
 }
 
 function keyText(k: KeySpec | null): string | null {
-  if (!k) return null;
-  return `${k.tonic.replace("#", "♯").replace(/(?<=[A-G])b/, "♭")} ${k.mode}`;
+  return k ? keyName(k) : null;
 }
 
 export function TransportBar(p: TransportBarProps) {

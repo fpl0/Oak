@@ -142,10 +142,14 @@ export function pickStandIn(
   unit: string,
   usable: ReadonlySet<string>,
   toolbox: readonly ToolEntry[],
+  /** The candidates, in course order (Wave 6 passes its own after these, seed-wave6.ts). */
+  candidates: readonly StandInCode[] = STAND_INS,
 ): StandInCode | null {
   const fits = (c: StandInCode) => toolsUsed(c.code, toolbox).every((u) => usable.has(u.id));
-  const core = STAND_INS.filter((c) => /^U\d{2}$/.test(c.unit) && (!/^U\d{2}$/.test(unit) || c.unit <= unit));
-  const own = unit.startsWith("A") ? STAND_INS.filter((c) => c.unit === unit) : [];
+  const core = candidates.filter(
+    (c) => /^U\d{2}$/.test(c.unit) && (!/^U\d{2}$/.test(unit) || c.unit <= unit),
+  );
+  const own = unit.startsWith("A") ? candidates.filter((c) => c.unit === unit) : [];
   for (const c of [...own].reverse()) if (fits(c)) return c;
   for (const c of [...core].reverse()) if (fits(c)) return c;
   return null;

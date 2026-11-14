@@ -9,6 +9,7 @@ import { clsx } from "clsx";
 import { Check, Hourglass, Lock, Mic } from "lucide-react";
 import {
   compositeLine,
+  compositesProgress,
   type FamilyStatus,
   familyAccuracy,
   familyStatus,
@@ -186,8 +187,35 @@ function Stages({ data }: { data: DrillData }) {
       ["unlocked", "resting", "mastered"].includes(familyStatus(d, data.states.get(d.id), data.completed)),
     ),
   );
+  const mixed = compositesProgress(data.content.families, data.states);
   return (
     <div className="flex flex-col gap-8">
+      {mixed.length > 0 && (
+        <section aria-labelledby="mixed-practice" data-testid="mixed-practice">
+          <div className="mb-3">
+            <h2 id="mixed-practice" className="text-h3">
+              Mixed practice
+            </h2>
+            <p className="text-sm text-text-2">
+              Families you have mastered move here. They keep their level, and your warm-ups keep them in the
+              ear.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {mixed.map((c) => (
+              <Card key={c.id} className="flex flex-col gap-1 p-4" data-testid={`composite-${c.id}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className="font-medium">{c.title}</h3>
+                  <Chip tone="accent">
+                    {c.members.length} {c.members.length === 1 ? "family" : "families"}
+                  </Chip>
+                </div>
+                <p className="text-sm text-text-2">{c.line}</p>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
       {!anyOpen && (
         <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
           <p className="text-text-2">

@@ -1,5 +1,5 @@
 // Key families: mode identification (vamps and melodies), scale spelling and the circle of fifths.
-import { type Degree, type KeySpec, MINOR_OPTIONS, type ScaleMode } from "@oak/content-kit";
+import { type Degree, type KeySpec, MINOR_OPTIONS, MODE_OPTIONS, type ScaleMode } from "@oak/content-kit";
 import { buildPiece } from "../build.ts";
 import { gradeAnswer, normalizeAnswerText, splitTyped } from "../grade.ts";
 import {
@@ -28,35 +28,79 @@ import {
 import { chordTrack, pickOctave, stepTrack } from "./keyed.ts";
 import { melodySteps } from "./melody.ts";
 
-/** Mode ID of the family → scale mode and its characteristic two-chord vamp. */
-export const MODE_VAMPS: Readonly<Record<string, { mode: ScaleMode; vamp: RnChord[]; colour: number }>> = {
-  major: { mode: "major", vamp: [rn("1", "maj"), rn("4", "maj"), rn("5", "maj"), rn("1", "maj")], colour: 6 },
+/**
+ * The colours `fam.key.mode` asks for (MODE_OPTIONS' ids): the scale, the 0-based scale steps the tune must touch
+ * so that no other colour fits what sounds (major needs its 4th and its 7th, natural minor its 2nd and its ♭6,
+ * each mode its one changed note), and the loops it is heard over. The loops come in near-miss pairs that differ
+ * by one note (content/specs/U14.md: a mode is a known scale with one note changed): i–iv against Dorian's
+ * i–IV, I–V–IV–I against Mixolydian's I–v–IV–I and I–♭VII–IV–I, I–ii against Lydian's I–II, i–♭VII against
+ * Phrygian's i–♭vii. So the shape of the loop never gives the answer away; the changed note does.
+ */
+export interface ModeColour {
+  mode: ScaleMode;
+  need: number[];
+  vamps: RnChord[][];
+}
+export const MODE_VAMPS: Readonly<Record<string, ModeColour>> = {
+  major: {
+    mode: "major",
+    need: [3, 6],
+    vamps: [
+      [rn("1", "maj"), rn("4", "maj"), rn("5", "maj"), rn("1", "maj")],
+      [rn("1", "maj"), rn("5", "maj"), rn("4", "maj"), rn("1", "maj")],
+      [rn("1", "maj"), rn("2", "min"), rn("1", "maj"), rn("2", "min")],
+    ],
+  },
   minor: {
     mode: "minor",
-    vamp: [rn("1", "min"), rn("b6", "maj"), rn("b7", "maj"), rn("1", "min")],
-    colour: 5,
+    need: [5, 1],
+    vamps: [
+      [rn("1", "min"), rn("b6", "maj"), rn("b7", "maj"), rn("1", "min")],
+      [rn("1", "min"), rn("4", "min"), rn("1", "min"), rn("4", "min")],
+      [rn("1", "min"), rn("b7", "maj"), rn("1", "min"), rn("b7", "maj")],
+    ],
   },
   dorian: {
     mode: "dorian",
-    vamp: [rn("1", "min"), rn("4", "maj"), rn("1", "min"), rn("4", "maj")],
-    colour: 5,
+    need: [5],
+    vamps: [
+      [rn("1", "min"), rn("4", "maj"), rn("1", "min"), rn("4", "maj")],
+      [rn("1", "min"), rn("2", "min"), rn("1", "min"), rn("2", "min")],
+      [rn("1", "min"), rn("4", "maj"), rn("b7", "maj"), rn("1", "min")],
+    ],
   },
   mixolydian: {
     mode: "mixolydian",
-    vamp: [rn("1", "maj"), rn("b7", "maj"), rn("1", "maj"), rn("b7", "maj")],
-    colour: 6,
+    need: [6],
+    vamps: [
+      [rn("1", "maj"), rn("b7", "maj"), rn("4", "maj"), rn("1", "maj")],
+      [rn("1", "maj"), rn("5", "min"), rn("4", "maj"), rn("1", "maj")],
+      [rn("1", "maj"), rn("b7", "maj"), rn("1", "maj"), rn("b7", "maj")],
+    ],
   },
   lydian: {
     mode: "lydian",
-    vamp: [rn("1", "maj"), rn("2", "maj"), rn("1", "maj"), rn("2", "maj")],
-    colour: 3,
+    need: [3],
+    vamps: [
+      [rn("1", "maj"), rn("2", "maj"), rn("1", "maj"), rn("2", "maj")],
+      [rn("1", "maj"), rn("2", "maj"), rn("3", "min"), rn("2", "maj")],
+    ],
   },
   phrygian: {
     mode: "phrygian",
-    vamp: [rn("1", "min"), rn("b2", "maj"), rn("1", "min"), rn("b2", "maj")],
-    colour: 1,
+    need: [1],
+    vamps: [
+      [rn("1", "min"), rn("b2", "maj"), rn("1", "min"), rn("b2", "maj")],
+      [rn("1", "min"), rn("b7", "min"), rn("1", "min"), rn("b7", "min")],
+      [rn("1", "min"), rn("b2", "maj"), rn("b3", "maj"), rn("b2", "maj")],
+    ],
   },
 };
+/** The order and the words of the answers (content-kit MODE_OPTIONS). */
+const MODE_ORDER: readonly string[] = MODE_OPTIONS.map((o) => o.id);
+const MODE_LABELS: Readonly<Record<string, string>> = Object.fromEntries(
+  MODE_OPTIONS.map((o) => [o.id, o.label]),
+);
 
 /**
  * "Which minor?" by ear (U10.L06–L08, MINOR_OPTIONS' ids): the same tune in each form, climbing home 5 · 6 · 7 · 1
@@ -77,18 +121,22 @@ export const modeId: Generator = {
   generate(ctx) {
     const minorForms = ctx.level.categories.some((c) => c === "harmonic minor" || c === "melodic minor");
     if (minorForms && CLIMBS[ctx.category]) return whichMinor(ctx);
-    const m = MODE_VAMPS[ctx.category] ?? (MODE_VAMPS.major as (typeof MODE_VAMPS)[string]);
+    const m = MODE_VAMPS[ctx.category] ?? (MODE_VAMPS.major as ModeColour);
     const key = pickKey(ctx, m.mode);
     const octave = pickOctave(ctx.rng, key, 60, 71);
     const melodyOnly = ctx.level.melodyOnly === true;
-    // A melody that touches the mode's colour note (Dorian ♮6, Mixolydian ♭7, Lydian ♯4, Phrygian ♭2).
+    // A tune that touches every note the colour is told by: its one changed note (Dorian ♮6, Mixolydian ♭7,
+    // Lydian ♯4, Phrygian ♭2), or for major and natural minor the two notes a mode would change.
     const steps = melodySteps(ctx.rng, { length: 7, lowest: 0, highest: 7, leaps: true, leapMax: 3 });
-    steps[ctx.rng.int(2, 5)] = m.colour;
+    const places = ctx.rng.shuffle([1, 2, 3, 4, 5]);
+    m.need.forEach((step, i) => {
+      steps[places[i] as number] = step;
+    });
     steps[steps.length - 1] = 0;
     const sound = pickSound(ctx);
     const tracks = [];
     if (!melodyOnly) {
-      const voiced = voiceProgression(m.vamp, key);
+      const voiced = voiceProgression(ctx.rng.pick(m.vamps), key);
       tracks.push(
         chordTrack(
           ctx,
@@ -102,7 +150,20 @@ export const modeId: Generator = {
       stepTrack(key, octave, [line(steps.slice(0, 4)), line(steps.slice(4, 7)), line([0]), line([0])], sound),
     );
     const piece = buildPiece({ bpm: pickTempo(ctx), bars: 4, tracks });
-    return trialOf(piece, { choice: [ctx.category] }, cueOf(ctx), { mode: "choice", key, steps });
+    // The answers are the level's colours the learner has met, in MODE_OPTIONS' order and words.
+    const open = ctx.level.categories.filter((c) => c === ctx.category || ctx.openCategories.includes(c));
+    const options = MODE_ORDER.filter((c) => open.includes(c));
+    return trialOf(piece, { choice: [ctx.category] }, cueOf(ctx), {
+      mode: "choice",
+      key,
+      steps,
+      options,
+      optionLabels: Object.fromEntries(options.map((o) => [o, MODE_LABELS[o] as string])),
+      prompt:
+        options.length > 2
+          ? "Which colour is it? Find home, hear whether the 3rd is major or minor, then listen for the one changed note."
+          : "Which scale is this in?",
+    });
   },
 };
 

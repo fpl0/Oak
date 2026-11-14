@@ -366,7 +366,7 @@ const melChorus = n("<[7 6 4 2] [4 ~ 2 ~]>")
 mel: arrange([4, melVerse], [4, melChorus], [4, melChorus]).scale("<C4:major!8 D4:major!4>").s("piano")
 ```
 
-A chord track written by degree (`n("[0,2,4]").add(n("<0 4 5 3>"))`) takes the same key plan after its own `arrange()`. A `chord("…")` track cannot be re-keyed by a scale: give the lifted section its own const with the new symbols (`chordsLift`).
+A chord track written by degree (`n("[0,2,4]").add(n("<0 4 5 3>"))`) takes the same key plan after its own `arrange()`. A `chord("…")` track cannot be re-keyed by a scale: give the lifted section its own const with the new symbols. Name it as the section it repeats, with a digit (`chordsChorus2`), so every track still calls the last section a chorus; a `chordsLift` beside a `melChorus` is two names for one section, and the form check reads it as `form.inconsistent-arrange`. Either every track has a `…Lift` const, or the lifted chords are `…Chorus2` (U17.L02 is the worked example).
 
 **Pickups** (anacrusis) are leading rests in bar 0, plus `pickup` metadata on the lesson, exercise or song. Bar 0 holds only the pickup; the melody's first full bar is the second cycle. Other parts rest in bar 0.
 

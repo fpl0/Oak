@@ -155,6 +155,8 @@ export const RELEASED_UNITS: readonly string[] = [
   ...["U00", "U01", "U02", "U03", "U04", "U05", "U06", "U07"],
   // Wave 5: U08–U11 and the side lessons A1.L01–L04.
   ...["U08", "U09", "U10", "U11", "A1"],
+  // Wave 6, the end of the core: U12–U17 (released in the Wave 6 content integration).
+  ...["U12", "U13", "U14", "U15", "U16", "U17"],
 ];
 const LESSON_SCOPED = ["step", "exercise", "example"];
 /** The unit of a lesson-scoped ID: "U08" of "U08.L01/S1", "A1" of "A1.L02@hook". */

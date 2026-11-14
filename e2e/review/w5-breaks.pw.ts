@@ -38,7 +38,7 @@ test("C3.S1 across 04:00 with a reload: one session, the day it began; session 2
   await today(page);
   await startSession(page);
   await skipWarmup(page);
-  const start = page.getByRole("button", { name: "Start session 1 of 3" });
+  const start = page.getByRole("button", { name: "Start session 1 of 4" });
   const ws = page.getByTestId("capstone-workspace");
   await expect(ws.or(start)).toBeVisible({ timeout: 60_000 });
   if (await start.isVisible()) await start.click();
@@ -84,8 +84,9 @@ test("C3.S1 across 04:00 with a reload: one session, the day it began; session 2
     "GET",
     "/api/capstones/C3/sessions",
   );
-  expect(sessions.sessions.map((s) => s.status)).toEqual(["done", "open", "locked"]);
-  // The next learner day: session 2 of 3.
+  // C3 has four sessions since contracts 1.6 (d13).
+  expect(sessions.sessions.map((s) => s.status)).toEqual(["done", "open", "locked", "locked"]);
+  // The next learner day: session 2 of 4.
   await advanceDays(request, 1);
   const next = await api<Plan>(request, "GET", "/api/session/today");
   expect(next).toMatchObject({ kind: "capstone", mapItemId: "C3.S2" });
@@ -180,13 +181,15 @@ test("Quiet mode switched on in another tab in the middle of a minor-degree set"
   await quietHmr(page);
   await useUiPrefs(page, { theme: "bark" });
   const problems = watch(page);
-  await page.goto("/practice/fam.deg.fet-minor");
-  await expect(page.getByTestId("start-set")).toBeVisible({ timeout: 60_000 });
-  await page.getByTestId("start-set").click();
   const block = page.getByTestId("listen-block");
   const counter = page.getByTestId("trial-counter");
-  await expect(block.or(counter)).toBeVisible({ timeout: 60_000 });
-  if (await block.isVisible()) await page.getByRole("button", { name: /Start the set/ }).click();
+  const startSet = async () => {
+    await page.goto("/practice/fam.deg.fet-minor");
+    await expect(page.getByTestId("start-set")).toBeVisible({ timeout: 60_000 });
+    await page.getByTestId("start-set").click();
+    await expect(block.or(counter)).toBeVisible({ timeout: 60_000 });
+    if (await block.isVisible()) await page.getByRole("button", { name: /Start the set/ }).click();
+  };
   type T = { expected: { degrees: string[] }; params: { key: { mode: string } } };
   const trial = async () =>
     (await page.evaluate(() => (globalThis as { __oakDrillTrial?: unknown }).__oakDrillTrial)) as T;
@@ -202,14 +205,31 @@ test("Quiet mode switched on in another tab in the middle of a minor-degree set"
       timeout: 30_000,
     });
   };
-  await expect(counter).toHaveText(/Trial 1 of/, { timeout: 60_000 });
-  // Answered until a trial asks for the way home to be sung (not every trial does).
-  let n = 1;
-  for (; n <= 6; n++) {
-    await answer();
-    if (/Sing it home/.test((await page.getByTestId("next-trial").textContent()) ?? "")) break;
-    await page.getByTestId("next-trial").click();
-    await expect(counter).toHaveText(new RegExp(`Trial ${n + 1} of`), { timeout: 60_000 });
+  // Answered until a trial asks for the way home to be sung (not every trial does, and a set is drawn at random:
+  // a set with no sung trial before its last is played to its summary and a new one started, at most three).
+  let sung = false;
+  let at = 0;
+  for (let set = 0; set < 3 && !sung; set++) {
+    await startSet();
+    await expect(counter).toHaveText(/Trial 1 of/, { timeout: 60_000 });
+    const total = Number(/of (\d+)/.exec((await counter.textContent()) ?? "")?.[1] ?? 0);
+    for (let n = 1; n <= total; n++) {
+      await answer();
+      // A sung trial with a trial after it (the test answers the next one once Quiet mode is on).
+      if (n < total && /Sing it home/.test((await page.getByTestId("next-trial").textContent()) ?? "")) {
+        sung = true;
+        at = n;
+        break;
+      }
+      if (n === total) {
+        // The set ends without a sung trial with one after it: its summary, then a new set.
+        await page.getByTestId("next-trial").click();
+        await expect(page.getByTestId("set-summary")).toBeVisible({ timeout: 30_000 });
+        break;
+      }
+      await page.getByTestId("next-trial").click();
+      await expect(counter).toHaveText(new RegExp(`Trial ${n + 1} of`), { timeout: 60_000 });
+    }
   }
   await expect(page.getByTestId("next-trial")).toContainText("Sing it home");
   const other = await context.newPage();
@@ -231,7 +251,7 @@ test("Quiet mode switched on in another tab in the middle of a minor-degree set"
     timeout: 30_000,
   });
   await page.getByTestId("next-trial").click();
-  await expect(counter).toHaveText(new RegExp(`Trial ${n + 1} of`), { timeout: 60_000 });
+  await expect(counter).toHaveText(new RegExp(`Trial ${at + 1} of`), { timeout: 60_000 });
   await answer();
   await expect(page.getByTestId("next-trial")).not.toContainText("Sing it home");
   // The answer alone and in context, after it.

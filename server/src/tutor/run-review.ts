@@ -5,7 +5,13 @@ import { classifyThrown, errorInfo, StructuredTurnError, TutorError } from "./er
 import type { UsageSummary } from "./events.ts";
 import type { TutorPorts } from "./ports.ts";
 import type { PreparedTurn } from "./prepare.ts";
-import { type ReviewValue, reviewJsonSchema, reviewNoteText, reviewSummaryLine } from "./reviews.ts";
+import {
+  type ReviewValue,
+  reviewJsonSchema,
+  reviewNoteText,
+  reviewRulesOf,
+  reviewSummaryLine,
+} from "./reviews.ts";
 import { persist, type RunResult, setUp, softMarker } from "./run.ts";
 import { MAX_REVIEW_SUBMITS } from "./tools/execute.ts";
 import { acceptReview } from "./tools/review-submit.ts";
@@ -27,7 +33,7 @@ export async function runReview(
   const kind = reviewKindOf(ctx.kind);
   if (kind === null || ctx.review === null)
     throw new TutorError("bad_request", { detail: "not a review turn" });
-  const rules = { revisions: ctx.review.revisions, totalBars: ctx.review.totalBars };
+  const rules = reviewRulesOf(ctx.review, ctx.terms, ctx.conversation.subjectId);
   const { session, input } = await setUp(prep, backend, emit, ports);
 
   // The CLI channel validates here; the API channel validates inside the submit tool. Both end in

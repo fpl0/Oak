@@ -5,8 +5,10 @@
 // be heard in place (the same code in that key; the editor is untouched).
 import type { KeySpec } from "@oak/content-kit";
 import { renderStaff } from "@oak/notation/render";
-import { keySignature, signatureOf } from "@oak/theory";
+import { characteristicTonesOf, keyDisplay, keySignature, signatureOf } from "@oak/theory";
 import { useEffect, useRef } from "react";
+import { type KeyExtras, LentChords, LIFT_LESSON, LiftRow, ModeList } from "./KeyExtras.tsx";
+import { modeSentence } from "./key-extras.ts";
 import { glyph, keyName, neighbours, sameKey, signatureText, spelledScale } from "./key-tools.ts";
 import { degreeStyle, themeOf } from "./palette.ts";
 import type { KeyPreview } from "./use-key-preview.ts";
@@ -82,9 +84,14 @@ export interface KeyPanelProps {
   /** Every key of the piece, in order. */
   keys: readonly KeySpec[];
   preview: KeyPreview | null;
+  /**
+   * Wave 6: what the learner has been taught, for the modes on this tonic (U14), the borrowed chords (U16) and
+   * the lift by a step (U17.L02). Absent: none of the three is offered.
+   */
+  extras?: KeyExtras;
 }
 
-export function KeyPanel({ current, keys, preview }: KeyPanelProps) {
+export function KeyPanel({ current, keys, preview, extras }: KeyPanelProps) {
   const theme = themeOf(typeof document === "undefined" ? null : document.documentElement);
   if (!current)
     return (
@@ -98,6 +105,9 @@ export function KeyPanel({ current, keys, preview }: KeyPanelProps) {
     );
   const sig = signatureOf(current);
   const order = sig.sharps.length ? "F C G D A E B" : sig.flats.length ? "B E A D G C F" : null;
+  // Wave 6: a mode is named as a mode ("G Mixolydian") and its colour note is marked in the scale row.
+  const modeText = modeSentence(current);
+  const colour = modeText ? new Set(characteristicTonesOf(current).map((t) => t.n + 1)) : new Set<number>();
   return (
     <section
       className="oak-wb-panel"
@@ -106,8 +116,14 @@ export function KeyPanel({ current, keys, preview }: KeyPanelProps) {
       data-key={keyName(current)}
     >
       <h3 className="oak-wb-panel-title">
-        <span className="oak-muted">Key</span> <span data-testid="key-panel-name">{keyName(current)}</span>
+        <span className="oak-muted">Key</span>{" "}
+        <span data-testid="key-panel-name">{modeText ? keyDisplay(current) : keyName(current)}</span>
       </h3>
+      {modeText ? (
+        <p className="oak-wb-panel-note" data-testid="key-panel-mode">
+          {modeText}
+        </p>
+      ) : null}
       {keys.length > 1 ? (
         <p className="oak-muted oak-wb-panel-note">
           This piece moves through {keys.map(keyName).join(" → ")}; the panel follows the bar that plays.
@@ -122,12 +138,15 @@ export function KeyPanel({ current, keys, preview }: KeyPanelProps) {
         {spelledScale(current).map((n) => {
           const st = degreeStyle(String(n.degree), theme);
           return (
-            <li key={n.degree}>
+            <li key={n.degree} data-colour={colour.has(n.degree) ? "1" : undefined}>
               <span className="oak-scale-deg" style={{ background: st.fill, color: st.label }} aria-hidden>
                 {n.degree}
               </span>
               <span>{n.name}</span>
-              <span className="sr-only">, degree {n.degree}</span>
+              <span className="sr-only">
+                , degree {n.degree}
+                {colour.has(n.degree) ? ", the colour note of the mode" : ""}
+              </span>
             </li>
           );
         })}
@@ -159,6 +178,13 @@ export function KeyPanel({ current, keys, preview }: KeyPanelProps) {
           );
         })}
       </ul>
+      {extras ? (
+        <>
+          <ModeList current={current} extras={extras} preview={preview} />
+          <LentChords current={current} extras={extras} />
+          {extras.taught(LIFT_LESSON) ? <LiftRow current={current} preview={preview} /> : null}
+        </>
+      ) : null}
     </section>
   );
 }

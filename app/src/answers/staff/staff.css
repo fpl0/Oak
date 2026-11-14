@@ -49,3 +49,13 @@
   stroke: var(--oak-accent-2);
   stroke-dasharray: 3 2;
 }
+/* "Swing 8ths" over an answer written straight (the engraver's tempo text): the app's own face, at text size, so it
+   reads as a note about the feel and leaves the room above the notes to their marks. */
+.oak-si-host .abcjs-tempo,
+.oak-si-host .abcjs-tempo text,
+.oak-si-host text.abcjs-tempo {
+  font-family: var(--oak-font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  fill: var(--oak-text-2);
+}

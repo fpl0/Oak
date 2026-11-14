@@ -3,6 +3,9 @@
 // lead-sheet symbol it reads with the grader's own normaliser, with the inversion a slash bass makes. The picker
 // writes the lead-sheet symbol into the field, so the field is always the one answer. "Hear it" plays the chord
 // named, never the answer. The value is the text as typed; the grader normalises it.
+// Wave 6 (U12): the five seventh qualities are entered as forgivingly (Cmaj7, C^7, CM7, CΔ; Cm7; C7; Cm7b5, Cø;
+// Cdim7, Co7) and shown back as the lead-sheet symbol (Cmaj7, Cm7♭5, C°7). A step about sevenths opens the
+// picker's seventh row from the start (`AnswerEnv.harmony.sevenths`).
 import type { ChordQuality } from "@oak/api";
 import { chordOf } from "@oak/theory";
 import { clsx } from "clsx";
@@ -74,8 +77,9 @@ export function ChordNameAnswer(p: AnswerWidgetProps<"text">) {
   const revealed = revealedOf<string>(feedback);
   const revealedRead = revealed === null ? null : readsAs("chord", revealed);
   const previewId = `${p.idBase}-reads`;
-  // Seventh chords arrive in U06.L10: the row opens on request, or when the typed chord is one.
-  const [askedSevenths, setShowSevenths] = useState(false);
+  // Seventh chords arrive in U06.L10: the row opens on request, when the typed chord is one, or from the start
+  // in a step about sevenths (U12).
+  const [askedSevenths, setShowSevenths] = useState(env.harmony?.sevenths === true);
   const showSevenths = askedSevenths || (parsed !== null && !TRIADS.includes(parsed.quality));
   const qualities = PICKER_QUALITIES.filter((q) => showSevenths || !q.seventh);
 
@@ -135,7 +139,7 @@ export function ChordNameAnswer(p: AnswerWidgetProps<"text">) {
               aria-describedby={previewId}
               aria-invalid={mark ? !mark.ok : undefined}
               readOnly={disabled}
-              placeholder="e.g. C, Am, B°, G/B"
+              placeholder={showSevenths ? "e.g. Cmaj7, Dm7, G7, Bø" : "e.g. C, Am, B°, G/B"}
               value={value}
               onChange={(e) => onChange(e.target.value)}
               className={clsx(

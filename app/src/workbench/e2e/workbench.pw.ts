@@ -55,6 +55,9 @@ test("play: the playhead moves and the roll and the staff light the same events,
   await expect(page.locator("[data-testid=staff-view]")).toHaveAttribute("data-status", "ready");
   await page.locator("[data-testid=play-toggle]").click();
   await expect(page.locator(WB)).toHaveAttribute("data-playing", "1", { timeout: 15_000 });
+  // A late start is a fact of a busy page (wave5.md §7.1): the samples begin once the first note is lit, not a
+  // fixed time after Play (under load the audible cycle was still before bar 1 at the first sample).
+  await expect.poll(async () => (await snapshot(page)).roll.length, { timeout: 10_000 }).toBeGreaterThan(0);
 
   const samples = [];
   for (let i = 0; i < 8; i++) {

@@ -488,9 +488,14 @@ describe("X2 Blues Transcription (contracts §6.6): bass ≥ 0.90, then changes 
     const [bass, changes, melody] = X2_CHECKS as [PhraseCheck, PhraseCheck, PhraseCheck];
     const head = "setcpm(96/4)\n\n";
     expect(phraseCheckPassed(await gradeX2(bass, `${head}bass: ${L.bass}`))).toBe(true);
-    // Root-position triads where the strain has sevenths: changes compare on the triad core.
+    expect(phraseCheckPassed(await gradeX2(changes, `${head}bass: ${L.bass}\nchords: ${L.chords}`))).toBe(
+      true,
+    );
+    // d11 (decision of 2026-11-13): plain triads where the strain has sevenths earn nothing for their bars.
     const triads = L.chords.replace(/7/g, "");
-    expect(phraseCheckPassed(await gradeX2(changes, `${head}bass: ${L.bass}\nchords: ${triads}`))).toBe(true);
+    const plain = await gradeX2(changes, `${head}bass: ${L.bass}\nchords: ${triads}`);
+    expect(phraseCheckPassed(plain)).toBe(false);
+    expect(plain.messages[0]?.text).toBe("Chord 1: right degree, but I7 is dominant 7th, not major (I).");
     const mel = await gradeX2(melody, `${head}mel: ${L.melody}`);
     expect(phraseCheckPassed(mel)).toBe(true);
     expect(mel.mode).toBe("capstone");
@@ -509,7 +514,8 @@ describe("X2 Blues Transcription (contracts §6.6): bass ≥ 0.90, then changes 
     expect(phraseCheckPassed(missed)).toBe(false);
     // IV where V belongs (bars 9 and 12): named chord by chord.
     const noV = await gradeX2(changes, `${head}bass: ${L.bass}\nchords: ${L.chords.replace(/D7/g, "C7")}`);
-    expect(noV.messages.map((m) => m.text)).toContain("Chord 6: IV7, expected V7.");
+    // One slot a bar since d11 ("changes ≥ 0.85 per bar"): the chord number is the bar number.
+    expect(noV.messages.map((m) => m.text)).toContain("Chord 9: IV7, expected V7.");
     // A strain that never leaves I in the first eight bars is no transcription of these changes.
     const flat = L.chords.replace("<G7 C7 G7 G7 C7 C7", "<G7 G7 G7 G7 G7 G7").replace(/D7/g, "C7");
     expect(phraseCheckPassed(await gradeX2(changes, `${head}bass: ${L.bass}\nchords: ${flat}`))).toBe(false);

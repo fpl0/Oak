@@ -13,6 +13,7 @@ import type { CourseService } from "./course.ts";
 import type { GatesService } from "./gates.ts";
 import type { LibraryService } from "./library.ts";
 import type { StreakService } from "./streak.ts";
+import type { TracksService } from "./tracks.ts";
 import type { UnlocksService } from "./unlocks.ts";
 
 export interface ReleaseDeps {
@@ -24,6 +25,8 @@ export interface ReleaseDeps {
   streak: StreakService;
   /** Wave 4: transcribe capstones release on their checks; revealed checks are named in the liner notes. */
   capstoneSessions?: CapstoneSessionsService;
+  /** Wave 6: the release that completes the core records the instant (wave6.md §5.5). */
+  tracks?: TracksService;
 }
 
 export class CapstoneReleaseService {
@@ -62,6 +65,13 @@ export class CapstoneReleaseService {
         );
       if (cleared === null && (row.lastResult === null || row.lastResult.status !== "pass"))
         throw conflict("every required rule of the brief has to pass before release; run the check first");
+      // Wave 6 (content-kit `CapstoneSessionDef.rubric`, CF-T.S4): a transcribe capstone whose last session has
+      // required rules of its own (the arrangement keeps the song's sections) releases once they pass too.
+      const sessionRubric = (this.ctx.content.capstoneDef(id)?.sessionDefs ?? []).some((s) =>
+        (s.rubric ?? []).some((r) => r.required),
+      );
+      if (cleared === true && sessionRubric && (row.lastResult === null || row.lastResult.status !== "pass"))
+        throw conflict("the arrangement's required lines have to pass before release; run the check first");
       // The first release must be of the code that passed: a draft checked, then edited, is checked again. (A
       // revision of a released track is the album's Revise flow; "completed stays completed", contracts §11.7.)
       if (cleared === null && row.status !== "released" && row.checked) {
@@ -141,6 +151,10 @@ export class CapstoneReleaseService {
       if (first) {
         unlocks.push(...this.d.unlocks.onComplete(id));
         canDo = this.d.cando.evaluate({ sourceId: id, evidence: { kind: "track", id } });
+        // The last piece of the core: the instant is kept; the session's Coda carries the moment (`sessions.end`).
+        this.d.tracks?.syncCore(
+          body.sessionId !== null && repos.sessions.get(body.sessionId) !== null ? body.sessionId : null,
+        );
       }
       return { trackId: track.id, unlocks, canDo };
     });

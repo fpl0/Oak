@@ -166,6 +166,12 @@ describe("labels and the givens", () => {
       "Phrases 1–4 · chords: chord qualities",
     );
   });
+  test("CF-T names its checks by the song's sections, by letter only once the form is known", () => {
+    const row = { phrase: 3, layer: "chords", stage: null } as const;
+    expect(rowLabel(row, ["A", "A", "B", "A"])).toBe("Section 3 (B) · changes");
+    expect(rowLabel(row, ["", "", "", ""])).toBe("Section 3 · changes");
+    expect(rowLabel(row)).toBe("Phrase 3 · changes");
+  });
   test("the givens name the meter, key, tonic, tempo and pickup", () => {
     const g = givenLines({ ...SONG, pickup: { units: [1, 1] } } as SongDef);
     expect(g.map((x) => x.label)).toEqual(["Meter", "Key", "Tonic (1)", "Tempo", "Pickup"]);

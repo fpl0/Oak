@@ -196,8 +196,20 @@ describe("golden: progressions, chromatic chords, modulation", () => {
         expect(plan.chords.length).toBe(8);
         const firstForeign = plan.chords.findIndex((c) => outside(c, C).length > 0);
         if (cat === "none") {
+          // No key change (Wave 6): the phrase starts again in the same key, or one secondary dominant
+          // visits and the phrase comes home: one chord outside the key at most, a dominant seventh that
+          // resolves a fifth down.
           expect(plan.at).toBeNull();
-          expect(firstForeign).toBe(-1);
+          const foreign = plan.chords.filter((c) => outside(c, C).length > 0);
+          expect(foreign.length).toBeLessThanOrEqual(1);
+          if (firstForeign >= 0) {
+            const v = plan.chords[firstForeign] as (typeof plan.chords)[number];
+            const next = plan.chords[firstForeign + 1] as (typeof plan.chords)[number];
+            expect(v.chord.quality).toBe("7");
+            expect(mod(rnRootPc(v.chord, v.key) - rnRootPc(next.chord, next.key), 12)).toBe(7);
+          }
+          // Every chord is spelled in the old key.
+          for (const c of plan.chords) expect(c.key).toEqual(C);
         } else {
           expect([cat, seed, plan.at]).toEqual([cat, seed, firstForeign + 1]);
           // From there on every chord fits the new key (a minor key with its raised leading tone).

@@ -126,11 +126,20 @@ export interface AnswerValueMap {
   /**
    * Wave 5 (docs/design/wave5.md §11; the answers engineer builds the widgets): one label per section heard
    * (`"verse"`, or a letter), sent as `answer.sections`.
+   *
+   * Wave 6, `input: "map"` (the form map of CF-T and ladder L8): one entry per section the learner has cut, in
+   * bar order, written `"<first bar>:<label>"` (`"1:A"`, `"9:A"`, `"17:"` for a section not named yet). The strip
+   * always starts with a section at bar 1, so the empty value is `["1:"]` (`emptyValue`). Sent as
+   * `answer.sections` (the labels) with `answer.bars` (the first bars). Read and write it with `formMapSections`
+   * and `formMapValue` (form-map.ts); per-part marks and a reveal use the same shape (part = index in the value).
    */
   form: string[];
   /** Wave 5: one entry per bar — a numeral (`entry: "rn"`, `answer.rn`) or a code-spelled symbol (`answer.text`); `""` empty. */
   "bar-grid": string[];
-  /** Wave 5: MIDI notes picked on the keyboard (`answer.midi`) or degrees ticked on the pad (`answer.degrees`). */
+  /**
+   * Wave 5: MIDI notes picked on the keyboard (`answer.midi`) or degrees ticked on the pad (`answer.degrees`).
+   * Wave 6, `from`: the builder opens holding that scale (`emptyValue` gives it), and the learner moves one note.
+   */
   "scale-builder": (number | string)[];
 }
 export type AnswerValue<K extends AnswerKind = AnswerKind> = AnswerValueMap[K];

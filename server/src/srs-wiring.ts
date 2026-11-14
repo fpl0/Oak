@@ -242,10 +242,12 @@ export class SrsAdapter implements SrsPort {
         ...(budgetSec === null ? {} : { budgetSec }),
         ...(continuation ? { continuation: true } : {}),
       });
-    // "A little more" stops at 12 minutes of review in the day (contracts §7.4), counted from the sets and
-    // fact cards already done today, so a reload of /practice/review cannot start the count again.
-    const done = this.reviewedTodaySec();
-    const left = REVIEW_DAY_MAX_SEC - done;
+    // "A little more" stops at 12 minutes on top of whatever the warm-up took (d22, the learner's decision of
+    // 2026-11-13, reversing decision 23: the warm-up's seconds are no longer counted against the cap). The count
+    // comes from the "more" sets and fact cards already done today, so a reload of /practice/review cannot start
+    // it again.
+    if (input.more) this.#markMore(now);
+    const left = REVIEW_DAY_MAX_SEC - this.moreDoneTodaySec();
     let { plan, items } = plan1(input.budgetSec, input.more);
     if (input.more) {
       if (left <= 0)
@@ -263,7 +265,8 @@ export class SrsAdapter implements SrsPort {
     // opens an empty block is a dead end.
     // The probe plans this block and the next together and looks for a card this block does not hold.
     let moreAvailable = false;
-    const space = left - plan.plannedSec;
+    // The first block (the warm-up) leaves the whole of "a little more" untouched; a "more" block uses it up.
+    const space = input.more ? left - plan.plannedSec : left;
     if (plan.overflow.length > 0 && space > 0) {
       const here = new Set(
         items.flatMap((i) => [...i.cardIds, ...(i.familyId === null ? [] : [i.familyId])]),
@@ -284,14 +287,25 @@ export class SrsAdapter implements SrsPort {
     };
   }
 
-  /** Estimated seconds of review done today: finished review sets (trials × the family's trial time) and fact cards. */
-  reviewedTodaySec(): number {
+  /** When "a little more" was first asked for on a learner day (d22): fact cards after it count against its cap. */
+  #firstMore: { day: string; at: string } | null = null;
+  #markMore(now: Date): void {
+    const day = this.services.streak.time.day();
+    if (this.#firstMore?.day !== day) this.#firstMore = { day, at: now.toISOString() };
+  }
+
+  #dayStart(): string {
     const time = this.services.streak.time;
     const p = time.profile();
-    const since = dayStartInstant(time.day(), p.timezone, p.rolloverHour).toISOString();
+    return dayStartInstant(time.day(), p.timezone, p.rolloverHour).toISOString();
+  }
+
+  /** Seconds of finished review sets since `since` (trials × the family's trial time), and how many sets. */
+  #setsSec(since: string, moreOnly: boolean): { sec: number; sets: number } {
     const sets = this.repos.db
       .query(
-        "SELECT family_ids, trials_total FROM drill_sessions WHERE finished_at >= ? AND purpose NOT IN ('lesson', 'checkpoint')",
+        `SELECT family_ids, trials_total FROM drill_sessions
+         WHERE finished_at >= ? AND purpose NOT IN ('lesson', 'checkpoint')${moreOnly ? " AND warmup_item_id LIKE '%:m:%'" : ""}`,
       )
       .all(since) as { family_ids: string; trials_total: number }[];
     let sec = 0;
@@ -305,11 +319,48 @@ export class SrsAdapter implements SrsPort {
       const per = Math.max(0, ...ids.map((id) => this.content.family(id)?.estTrialSec ?? 0));
       sec += s.trials_total * (per > 0 ? per : GOVERNOR.factCardSec);
     }
+    return { sec, sets: sets.length };
+  }
+
+  /** Estimated seconds of review done today: finished review sets (trials × the family's trial time) and fact cards. */
+  reviewedTodaySec(): number {
+    const since = this.#dayStart();
+    const { sec, sets } = this.#setsSec(since, false);
     const facts = this.repos.db
       .query("SELECT COUNT(*) AS n FROM srs_revlog WHERE drill_session_id IS NULL AND reviewed_at >= ?")
       .get(since) as { n: number };
     // The plan puts a listen-only block after every second perceptual set; it is time spent too.
-    return sec + Math.floor(sets.length / 2) * LISTEN_BLOCK_SEC + facts.n * GOVERNOR.factCardSec;
+    return sec + Math.floor(sets / 2) * LISTEN_BLOCK_SEC + facts.n * GOVERNOR.factCardSec;
+  }
+
+  /**
+   * d22: seconds of "a little more" done today — the sets of its blocks (their warm-up item ids carry `:m:`) and the
+   * fact cards answered since it was first asked for. The warm-up (the day's first block) is not in it.
+   */
+  moreDoneTodaySec(): number {
+    const since = this.#dayStart();
+    const { sec, sets } = this.#setsSec(since, true);
+    const firstSet = this.repos.db
+      .query(
+        "SELECT MIN(started_at) AS at FROM drill_sessions WHERE started_at >= ? AND warmup_item_id LIKE '%:m:%'",
+      )
+      .get(since) as { at: string | null };
+    const day = this.services.streak.time.day();
+    const marks = [firstSet.at, this.#firstMore?.day === day ? this.#firstMore.at : null].filter(
+      (x): x is string => x !== null,
+    );
+    const from = marks.sort()[0];
+    const facts =
+      from === undefined
+        ? 0
+        : (
+            this.repos.db
+              .query(
+                "SELECT COUNT(*) AS n FROM srs_revlog WHERE drill_session_id IS NULL AND reviewed_at >= ?",
+              )
+              .get(from) as { n: number }
+          ).n;
+    return sec + Math.floor(sets / 2) * LISTEN_BLOCK_SEC + facts * GOVERNOR.factCardSec;
   }
 
   /** One transaction: a failure part-way leaves no card without its revlog, no half-recorded set. */
@@ -893,11 +944,57 @@ export class CourseAdapter implements SessionPlanCoursePort {
       .filter((x) => !seen.has(x.id) && seen.add(x.id))
       .map((x) => x.id as SessionId);
   }
+  /**
+   * CF-T's next unfinished session once it is open (contracts §2.4: U15.L01 completed), or `null`: not open yet,
+   * released, or none of its standards has an answer key yet (then there is nothing to transcribe and the slot
+   * stays a gym session).
+   */
   nextCftSession(): SessionId | null {
-    if (!this.services.gates.lessonCompleted("U15.L01")) return null;
+    const meta = this.content.capstoneMeta("CF-T");
+    if (meta === null || !this.services.gates.capstoneOpen(meta)) return null;
+    const row = this.repos.capstones.get("CF-T");
+    if (row?.status === "released") return null;
     const ids = this.content.capstoneSessionIds("CF-T");
-    const done = new Set(this.repos.capstones.get("CF-T")?.sessions ?? []);
-    return (ids.find((s) => !done.has(s)) as SessionId | undefined) ?? null;
+    const done = new Set(row?.sessions ?? []);
+    const next = ids.find((s) => !done.has(s));
+    if (next === undefined || this.#songsMissing(next)) return null;
+    return next as SessionId;
+  }
+  cftTitle(): string {
+    return this.#title("CF-T.S1");
+  }
+  /**
+   * d19: reviews-only sessions ended since the last transcription session (a gym session, an `X#` or CF-T session),
+   * from U07.L01 on. They count towards the every-5th-session slot like core sessions do.
+   */
+  reviewSessionsSinceTranscription(): number {
+    const start = this.repos.lessons.progress("U07.L01");
+    if (start?.status !== "completed") return 0;
+    let since = start.completedAt ?? start.updatedAt;
+    for (const g of this.repos.gym.list()) if (g.at > since) since = g.at;
+    for (const c of this.repos.capstones.all()) {
+      if (!/^(X\d+|CF-T)$/.test(c.capstoneId)) continue;
+      for (const sid of c.sessions) {
+        const at = this.repos.capstoneSessions.get(sid)?.completedAt ?? c.updatedAt;
+        if (at > since) since = at;
+      }
+    }
+    // Once the core is complete the count starts there (the day after session 185 is a review day, wave6.md §5.5).
+    const done = this.repos.coreState.get()?.completedAt;
+    if (done !== undefined && done > since) since = done;
+    return (
+      this.repos.db
+        .query(
+          "SELECT COUNT(*) AS n FROM sessions WHERE kind = 'review' AND ended_at IS NOT NULL AND ended_at > ?",
+        )
+        .get(since) as { n: number }
+    ).n;
+  }
+  coreStage() {
+    return this.services.tracks.coreStage();
+  }
+  planTracks(): SessionPlan["tracks"] {
+    return this.services.tracks.planTracks();
   }
   gymCount(): number {
     return this.repos.gym.list().length;
@@ -934,7 +1031,9 @@ export class CourseAdapter implements SessionPlanCoursePort {
       const st = this.services.gates.capstoneStatus(c.id);
       if (st.status !== "open" && st.status !== "in_progress") continue;
       const next = this.content.capstoneSessionIds(c.id)[st.sessionsDone];
-      if (next !== undefined) out.push({ kind: "capstone", mapItemId: next as SessionId, title: c.title });
+      // A transcribe capstone none of whose songs is written yet has nothing to open (CF-T before its standards).
+      if (next !== undefined && !this.#songsMissing(next))
+        out.push({ kind: "capstone", mapItemId: next as SessionId, title: c.title });
     }
     // The Transcription Gym opens with U07.L01 (its slots run every 5th session from there, contracts §2.5); before
     // that it is not offered (the page is not part of the first units).

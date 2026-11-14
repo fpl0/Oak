@@ -13,7 +13,7 @@ import {
   OakApiError,
   type UnlockableId,
 } from "@oak/api";
-import { type FormView, formView, keyEstimate, type Normalized, normalize } from "@oak/grader";
+import { type FormView, formView, keyEstimate, modeView, type Normalized, normalize } from "@oak/grader";
 import type { Recording } from "@oak/strudel";
 import { sideOfCapstone } from "../album/model.ts";
 import { callApi } from "../lib/api.ts";
@@ -72,7 +72,9 @@ export async function checkPiece(
     const full = normalize(ev, { meter: def.meter });
     bars = pieceBars(code, full.all);
     n = truncate(full, bars);
-    if (!key && hasPitches(n)) key = keyEstimate(n.all)[0]?.key ?? null;
+    // A brief without a key (C6: the learner's own mode and home note) is read in the key the code states
+    // (`.scale("G4:mixolydian")`), else in the estimate: never a mode read as its parallel major.
+    if (!key && hasPitches(n)) key = statedKey(n, def.meter) ?? keyEstimate(n.all)[0]?.key ?? null;
   }
   const result = await host.grade(
     {
@@ -112,6 +114,15 @@ export async function checkPiece(
     key,
     form,
   };
+}
+
+/** The key the code itself states (its `.scale()`), as the grader's views read it; `null` when unreadable. */
+function statedKey(n: Normalized, meter: CapstoneDef["meter"]): KeySpec | null {
+  try {
+    return modeView(n, { meter }).stated;
+  } catch {
+    return null;
+  }
 }
 
 /** The form view of a piece; a view that cannot be read (an odd AST) is no sections, never a failed check. */
@@ -182,6 +193,8 @@ export interface ReleaseInput {
   /** Claude's liner note, appended by this client only when the server cannot release (see below). */
   reviewNote: string | null;
   recording: Recording | null;
+  /** d20: the other takes of the sitting, kept with the version beside the chosen one (`recording`). */
+  otherTakes?: readonly Recording[];
 }
 
 export interface ReleaseOutcome {
@@ -260,6 +273,28 @@ export async function releaseTrack(i: ReleaseInput): Promise<ReleaseOutcome> {
     } catch (e) {
       audioError = audioErrorText(e);
     }
+    // d20: the chosen take is the version's recording; the others of the sitting are kept beside it, and the
+    // chosen one stays the one that plays. A server without takes keeps the chosen one alone.
+    const others = audioError === null ? (i.otherTakes ?? []) : [];
+    let added = 0;
+    for (const take of others) {
+      try {
+        await callApi("album.addTake", {
+          params: { id: track.id, v: String(version) },
+          query: { durationS: String(Math.round(take.durationS * 10) / 10) },
+          body: take.blob,
+          contentType: take.mime.split(";")[0],
+        } as never);
+        added++;
+      } catch {
+        break;
+      }
+    }
+    if (added > 0)
+      await callApi("album.chooseTake", {
+        params: { id: track.id, v: String(version) },
+        body: { take: 1 },
+      }).catch(() => {});
   }
   return { track, version, result, audioError };
 }

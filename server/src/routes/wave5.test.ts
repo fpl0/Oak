@@ -164,7 +164,12 @@ describe("the song ladder L5 and L6 (wave5.md §5.3)", () => {
         expect.arrayContaining(["song.aura-lee", "song.red-river-valley"]),
       );
       // Dev (OAK_DEV=1) opens keys still being checked, for e2e.
-      expect(l5.every((s) => s.status === "open" && s.lockedReason === null)).toBe(true);
+      // A song that waits for a later lesson (Wave 6: Drunken Sailor from U14.L03) stays locked with that reason.
+      const later = (id: string) =>
+        (real.repertoire ?? []).find((m) => m.id === id)?.availableFrom !== undefined;
+      expect(
+        l5.filter((s) => !later(s.songId)).every((s) => s.status === "open" && s.lockedReason === null),
+      ).toBe(true);
       // L6: the repertoire's blues (Careless Love, St. Louis Blues) once written, else the test rendition.
       const blues = songs.find((s) => s.level === 6 && s.status === "open") as LadderSong;
       expect(blues).toBeDefined();
@@ -515,7 +520,7 @@ describe("carry-overs c2, c10, c11", () => {
     }
   }, 120_000);
 
-  test("c11: re-recording an album version needs the confirm nonce; a first recording needs none", async () => {
+  test("c11 → d20: re-recording an album version adds a take; no nonce is needed and none can delete one", async () => {
     const h = await seeded("C2 released", real);
     try {
       const st = await ok<CapstoneState>(h, "GET", "/api/capstones/C2");
@@ -523,24 +528,26 @@ describe("carry-overs c2, c10, c11", () => {
       expect(track.versions[0]?.hasAudio).toBe(true);
       const bytes = makeWav();
       const path = `/api/album/tracks/${st.trackId}/versions/1/audio`;
+      const first = new Uint8Array(await (await h.req("GET", path)).arrayBuffer());
+      // d20 (the learner's decision of 2026-11-13): a re-recording is another take, with or without the old nonce.
       const r1 = await h.req("PUT", path, bytes, { "content-type": "audio/wav" });
-      expect(r1.status).toBe(428);
+      expect(r1.status).toBe(200);
       const res = await h.req("POST", "/api/confirm", {
         action: "album.audio.replace",
         target: `${st.trackId}/v1`,
       });
       const { nonce } = (await res.json()) as { nonce: string };
-      const wrong = await h.req("POST", "/api/confirm", {
-        action: "album.audio.replace",
-        target: `${st.trackId}/v9`,
-      });
-      const other = ((await wrong.json()) as { nonce: string }).nonce;
+      // A second re-recording (other samples: the same bytes again are a retry of the first, review:robustness).
+      const again = makeWav();
+      again[again.length - 1] = (again[again.length - 1] ?? 0) ^ 1;
       expect(
-        (await h.req("PUT", path, bytes, { "content-type": "audio/wav", "x-oak-confirm": other })).status,
-      ).toBe(428);
-      expect(
-        (await h.req("PUT", path, bytes, { "content-type": "audio/wav", "x-oak-confirm": nonce })).status,
+        (await h.req("PUT", path, again, { "content-type": "audio/wav", "x-oak-confirm": nonce })).status,
       ).toBe(200);
+      const after = await ok<AlbumTrackDetail>(h, "GET", `/api/album/tracks/${st.trackId}`);
+      expect(after.versions[0]?.takes?.length).toBe(3);
+      expect(after.versions[0]?.currentTake).toBe(3);
+      const kept = new Uint8Array(await (await h.req("GET", `${path}?take=1`)).arrayBuffer());
+      expect(Buffer.from(kept).equals(Buffer.from(first))).toBe(true);
     } finally {
       await h.close();
     }

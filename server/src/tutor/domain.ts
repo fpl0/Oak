@@ -113,6 +113,13 @@ export interface StepSource {
    * answer guard reads it to know which forms of the answer to hold back below the reveal rung.
    */
   answerKind?: string | null;
+  /**
+   * Wave 6: the key plan of a step that changes key (content-kit `ExBase.keyPlan`, contracts §6.8): each key with
+   * the 1-based bar it starts on (0 is a pickup bar). The first entry equals `key`. Absent or one entry: one key.
+   */
+  keyPlan?: readonly { bar: number; key: string }[] | null;
+  /** Wave 6: the step's own meter when it differs from the lesson's (a 6/8 step inside a 4/4 lesson). */
+  meter?: string | null;
 }
 
 /** Server-side state of the learner on one step. The hint rung lives here and nowhere else. */
@@ -161,6 +168,11 @@ export interface ReviewSource {
   facts?: ReviewFacts | null;
   /** Wave 4: what exactly is being reviewed: one album version, or one transcription version. */
   target?: ReviewTarget | null;
+  /**
+   * Wave 6: how many strengths the review is asked for. The Core Finale's single (CF-A) asks for three, the
+   * strongest thing in the song first (the longest review the tutor writes); absent: two or three, as always.
+   */
+  strengthsWanted?: 2 | 3;
 }
 
 /** Wave 4: the version a review is about (contracts §10.6 storage; wave4.md §5.2). */
@@ -225,6 +237,96 @@ export interface ReviewFacts {
   swing?: FactSwing[];
   /** Wave 5: a transcription's checks, stage by stage (X2: bass, changes, melody; ladder L5 phrases, L6 stages). */
   stages?: FactStage[];
+  /** Wave 6: the mode of the piece, or of each section of an arranged piece (C6). */
+  modes?: FactMode[];
+  /** Wave 6: the chords from outside the key, with what each leans into (C7, CF-A). */
+  outside?: FactOutsideChord[];
+  /** Wave 6: seventh chords by quality (`maj7`, `7`, `m7`, `m7b5`, `dim7`), how many of each. */
+  sevenths?: Record<string, number>;
+  /** Wave 6: the guide-tone line from the 3rd of the first chord, note by note; `null` where a chord has none. */
+  guideLine?: (string | null)[];
+  /** Wave 6: the key bar by bar, when the piece changes key (C7, CF-A, U17). One span: the piece stays in one key. */
+  keyPlan?: FactKeySpan[];
+  /** Wave 6: the compositional devices Oak's analysis found (CF-A's rubric counts them). */
+  devices?: FactDevice[];
+  /** Wave 6: one pass of the piece in seconds (CF-A: at least 120). */
+  durationSec?: number | null;
+  /** Wave 6: pushes, ghost notes, ties, dotted values and tuplets per track (U13). */
+  rhythm?: FactRhythm[];
+  /** Wave 6: the meter's beat (compound: a dotted quarter in threes) and the BPM that counts it. */
+  beat?: { compound: boolean; beats: number; bpm: number } | null;
+}
+
+/** Wave 6. The mode a piece or one of its sections reads in (`modeView` of @oak/grader). */
+export interface FactMode {
+  /** The section as the ribbon prints it, or `null` for the whole piece. */
+  section: string | null;
+  /** Display bars of the section, `null` for the whole piece. */
+  bars: [number, number] | null;
+  /** The mode stated by the code or the brief (`"D dorian"`), `null` when neither names one. */
+  stated: string | null;
+  /** The taught modes on that home note whose scale holds every note, brightest first. */
+  fits: string[];
+  /** The mode's characteristic tone: its degree (`b7`), how often it sounds and how often on a strong beat. */
+  tone: { degree: string; count: number; strong: number } | null;
+  /** Notes outside the stated mode's scale. */
+  outsideNotes: number;
+  /** Share of bars on the home chord, 0–1; `null` without chords. */
+  homeChordShare: number | null;
+}
+
+/** Wave 6. A chord from outside the key (`chromaticHarmonyView` of @oak/grader). */
+export interface FactOutsideChord {
+  bar: number;
+  beat: number;
+  symbol: string;
+  /** The numeral in the key in force at its bar (`V7/V`, `bVI`). */
+  rn: string;
+  kind: "applied" | "borrowed" | "other";
+  /** Applied chords: the numeral it points at, and whether the next chord is that chord. */
+  target: string | null;
+  resolves: boolean | null;
+  /** The numeral of the chord that follows; `null` at the end. */
+  next: string | null;
+  /** The key it was read in (`"D major"`). */
+  key: string;
+}
+
+/** Wave 6. A stretch of the piece in one key, in display bars. */
+export interface FactKeySpan {
+  bars: [number, number];
+  key: string;
+  /** Where the key was read: the code's `.scale()`, the brief's key, or an estimate. */
+  source: string;
+  /** How the home note moved from the span before (`"up 2 half steps (a whole step)"`); `null` for the first. */
+  move: string | null;
+  /** Triads the two keys share (the possible pivots); `null` for the first span. */
+  pivots: number | null;
+}
+
+/** Wave 6. One device as `detectDevices` reports it (content-kit `DEVICE_NAMES`). */
+export interface FactDevice {
+  device: string;
+  bar: number;
+  /** Bars a stretch lasts (a key change, a modal section); 1 otherwise. */
+  bars: number;
+  text: string;
+}
+
+/** Wave 6. One track's rhythm as `rhythmView` reads it. */
+export interface FactRhythm {
+  track: string;
+  pushes: number;
+  /** Pushes that cross a bar line. */
+  pushesOverBar: number;
+  ghosts: number;
+  ties: number;
+  dotted: number;
+  /** Display bars that hold a triplet (a beat cut in three or six). */
+  tupletBars: number[];
+  feel: string;
+  /** Syncopated onsets. */
+  syncopated: number;
 }
 
 /** Wave 5. One section as the section ribbon prints it. Bars are display bars: 1-based, 0 is a pickup (c4). */

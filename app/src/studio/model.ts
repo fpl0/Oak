@@ -395,7 +395,7 @@ export interface HarmonyViewHint {
 }
 
 /**
- * The harmony views still locked for a sketch that plays chords: chord names (U05.L04), Roman
+ * The harmony views still locked for a sketch that plays chords: chord names (U05.L09), Roman
  * numerals (U06.L02), function bands, chord tones and the lead sheet. Nothing when the sketch has no chords.
  */
 export function harmonyViewHints(
@@ -405,7 +405,7 @@ export function harmonyViewHints(
 ): HarmonyViewHint[] {
   if (!hasChords) return [];
   const rows: [string, string][] = [
-    // Wave 5 (c14): the chord-symbol lens opens with its own row at U05.L04, no longer `tb.arp`.
+    // Wave 5 (c14): the chord-symbol lens opens with its own row (U05.L09 since contracts 1.6), no longer `tb.arp`.
     ["tb.feature.chord-symbols", "Chord names on the roll and the staff"],
     ["tb.feature.rn", "Roman numerals"],
     ["tb.lens.function", "Function bands"],
@@ -470,5 +470,104 @@ export function formSoundTips(facts: SketchSoundFacts, unlocked: ReadonlySet<str
     out.push("Click a section on the ribbon to loop it; Shift+E opens the form map and its energy curve.");
   if ((facts.filter || facts.envelope) && unlocked.has("tb.scope") && !facts.scope)
     out.push("Shift+W opens the scope: it draws the wave and the curve of your filter or envelope.");
+  return out;
+}
+
+// --- Wave 6: sevenths, rhythm II, modes and key changes in the Studio (hint, never block) ----------------------
+
+/** The modes a sketch's key can be set to: major and minor always, each colour mode once its scale is unlocked. */
+const MODE_ROWS: readonly [KeySpec["mode"], string | null][] = [
+  ["major", null],
+  ["minor", null],
+  ["mixolydian", "scale.mixolydian"],
+  ["dorian", "scale.dorian"],
+  ["lydian", "scale.lydian"],
+  ["phrygian", "scale.phrygian"],
+];
+export function studioModes(
+  unlocked: ReadonlySet<string>,
+  current?: KeySpec["mode"] | null,
+): KeySpec["mode"][] {
+  const out = MODE_ROWS.filter(([m, tool]) => tool === null || unlocked.has(tool) || m === current).map(
+    ([m]) => m,
+  );
+  // A key the sketch already has (a harmonic minor from a Make) stays selectable.
+  return current && !out.includes(current) ? [...out, current] : out;
+}
+
+/** The meters a sketch can be set to: 12/8 joins 6/8 once the compound meters are taught (U13.L04). */
+export function studioMeters(unlocked: ReadonlySet<string>, current?: MeterId | null): MeterId[] {
+  const out: MeterId[] = [...STUDIO_METERS];
+  if (unlocked.has("tb.meter.compound") || current === "12/8") out.push("12/8");
+  return current && !out.includes(current) ? [...out, current] : out;
+}
+
+/** What a sketch does that the Wave 6 lenses can show (read from its analysed model). */
+export interface SketchMusicFacts {
+  /** It plays a seventh chord. */
+  sevenths: boolean;
+  /** It changes key (a patterned `.scale()`). */
+  keyChange: boolean;
+  /** It is in a compound meter, or plays triplets. */
+  beatGrid: boolean;
+  /** A line comes in ahead of the beat (`.early()`). */
+  pushes: boolean;
+}
+
+/** The facts of an analysed sketch (`WorkbenchModel.colour`). */
+export function musicFactsOf(
+  colour:
+    | {
+        harmony: { chords: readonly { seventh: unknown }[] } | null;
+        keys: readonly unknown[];
+        rhythm: { grid: unknown; pushes: { size: number } } | null;
+      }
+    | null
+    | undefined,
+): SketchMusicFacts {
+  return {
+    sevenths: (colour?.harmony?.chords ?? []).some((c) => c.seventh !== null),
+    keyChange: (colour?.keys.length ?? 0) > 1,
+    beatGrid: (colour?.rhythm?.grid ?? null) !== null,
+    pushes: (colour?.rhythm?.pushes.size ?? 0) > 0,
+  };
+}
+
+/**
+ * Wave 6: the lenses a sketch could use, still locked: guide tones (with the seventh chords, U12.L01) and the beat
+ * grid (compound meters at U13.L04, triplets at U13.L05, pushes at U13.L01). A hint with the session that opens
+ * each, never a block: the sketch plays as it is, and its sevenths are written as triads until then.
+ */
+export function musicLensHints(
+  facts: SketchMusicFacts,
+  unlocked: ReadonlySet<string>,
+  sites: (id: string) => string | null,
+): HarmonyViewHint[] {
+  const has = (ids: readonly string[]) => ids.some((id) => unlocked.has(id));
+  const rows: [boolean, readonly string[], string][] = [
+    [facts.sevenths, ["chord.seventh"], "Guide tones: the 3rd and 7th of each chord, and their line"],
+    [facts.pushes, ["tb.early", "tb.late"], "Pushes drawn against the beat"],
+    [facts.beatGrid, ["tb.meter.compound", "tb.ply"], "The beat grid: counts in 6/8, triplets in thirds"],
+  ];
+  return rows.flatMap(([wanted, ids, what]) => {
+    if (!wanted || has(ids)) return [];
+    const id = ids[0] as string;
+    const at = sites(id);
+    return at ? [{ id, what, at }] : [];
+  });
+}
+
+/** Wave 6: one line saying how to reach a lens the sketch can already use. */
+export function musicLensTips(facts: SketchMusicFacts, unlocked: ReadonlySet<string>): string[] {
+  const out: string[] = [];
+  if (facts.sevenths && unlocked.has("chord.seventh"))
+    out.push("Shift+I shows the guide tones: each chord's 3rd and 7th, joined across the changes.");
+  if (facts.keyChange && unlocked.has("tb.scale.patterned"))
+    out.push("The ribbon over the roll names the key bar by bar; Shift+J hides it.");
+  if (
+    (facts.beatGrid && (unlocked.has("tb.meter.compound") || unlocked.has("tb.ply"))) ||
+    (facts.pushes && (unlocked.has("tb.early") || unlocked.has("tb.late")))
+  )
+    out.push("Shift+V shows the beat grid: the counts over the roll, and each push against its beat.");
   return out;
 }

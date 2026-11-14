@@ -10,7 +10,11 @@ import { BAD_LOG, evaluate, lint } from "./harness.ts";
 setDefaultTimeout(60_000);
 const fill = (code: string, key = "C4:major", beats = 4) =>
   `setcpm(96/${beats})\n\n${code.replaceAll("{{key}}", key).replaceAll("{{bpm}}", "96")}`;
-const beatsOf = (id: string) => Number(bandMeter(id).split("/")[0]);
+/** The divisor of a Band's tempo line: the beats in its bar, dotted quarters in a compound meter (contracts §6.9). */
+const beatsOf = (id: string) => {
+  const n = Number(bandMeter(id).split("/")[0]);
+  return bandMeter(id).endsWith("/8") ? n / 3 : n;
+};
 /** The 0-based bar of an event's begin ("a/b" or a whole number). */
 const barOf = (begin: string | number): number => {
   const [a, b] = String(begin).split("/").map(Number);

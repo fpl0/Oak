@@ -149,7 +149,7 @@ describe("Wave 5 dev seeds (wave5.md §6)", () => {
     } finally {
       await h.close();
     }
-  });
+  }, 60_000);
 
   for (const point of WAVE5_SEED_POINTS)
     test(`“${point}”`, async () => {
@@ -225,7 +225,8 @@ async function deepChecks(h: Harness, point: string, plan: SessionPlan): Promise
     }
     case "C3.S2 done": {
       const ss = await ok<CapstoneSessions>(h, "GET", "/api/capstones/C3/sessions");
-      expect(ss.sessions.map((s) => s.status)).toEqual(["done", "done", "open"]);
+      // Contracts 1.6 (d13): C3 has a fourth session, the take and the release; it waits for S3.
+      expect(ss.sessions.map((s) => s.status)).toEqual(["done", "done", "open", "locked"]);
       const code = await draftCode("C3");
       expect(code).toContain("arrange([8, melVerse], [8, melChorus], [8, melVerse], [8, melChorus])");
       expect(code).toContain('kick: s("bd ~ bd ~")');

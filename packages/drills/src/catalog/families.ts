@@ -157,7 +157,9 @@ const rhythm: FamilyDef[] = [
     domain: "rhythm",
     skills: "E01",
     lesson: "U01.L04",
-    gates: { 5: "U13.L01", 6: ["U11.L07", "U13.L05"], 7: "U13.L04" },
+    // Level 6 opens with its swing items (U11.L07, behind level 5's gate) and gets its triplet items at U13.L05
+    // (a level is filled from its open categories, contracts §7.3); an array gate would wait for both lessons.
+    gates: { 5: "U13.L01", 6: "U11.L07", 7: "U13.L04" },
     cats: [
       ["quarters", "U01.L04"],
       ["rests", "U01.L04"],
@@ -175,6 +177,9 @@ const rhythm: FamilyDef[] = [
       { categories: ["rests"], windowFactor: 0.93 },
       { categories: ["sixteenths"], windowFactor: 0.87 },
       { categories: ["dotted"], bars: 2, windowFactor: 0.8 },
+      // Rhythm II (U13), written with lengths (gen/written.ts): eighth-note pushes that hold over the beat or
+      // the bar line (never a sixteenth push: content/specs/U13.md "Tapping a push"), triplets beside
+      // quarters and eighths, then 3/4 and 6/8.
       { categories: ["syncopation"], bars: 2, windowFactor: 0.73 },
       { categories: ["swing", "triplets"], bars: 2, windowFactor: 0.67 },
       { categories: ["three-four", "compound"], bars: 2, windowFactor: 0.6 },
@@ -198,14 +203,17 @@ const rhythm: FamilyDef[] = [
       ["quarters", "U01.L05"],
       ["rests", "U01.L05"],
       ["sixteenths", "U01.L06"],
+      // U13.L03 "Ties Across the Beat": dotted values and ties, written with their lengths (gen/written.ts),
+      // so the staff shows the dot and the tie the learner reads.
       ["dotted", "U13.L03"],
+      ["tied", "U13.L03"],
     ],
     base: base(0, drums, "C", [70, 96], "none"),
     levels: [
       { categories: ["quarters"] },
       { categories: ["rests"] },
       { categories: ["sixteenths"] },
-      { categories: ["dotted"], bars: 2 },
+      { categories: ["dotted", "tied"], bars: 2 },
     ],
     mastery: 4,
     n: 4,
@@ -289,9 +297,12 @@ const rhythm: FamilyDef[] = [
       ["quarters", "U01.L09"],
       ["rests", "U01.L09"],
       ["sixteenths", "U01.L09"],
+      // U13.L06 "Rhythm Dictation II": the figures of U13 written down. Dotted values (U13.L03), pushes as ties
+      // (U13.L01, L03), triplets (U13.L05), and one bar of 12/8 on the twelve-step grid (U13.L04).
       ["dotted", "U13.L06"],
       ["syncopation", "U13.L06"],
       ["triplets", "U13.L06"],
+      ["compound", "U13.L06"],
     ],
     base: base(4, drums, "C", [70, 100], "none"),
     levels: [
@@ -302,6 +313,15 @@ const rhythm: FamilyDef[] = [
       { categories: ["dotted"], ui: "staff-input", bars: 2, replays: 3 },
       { categories: ["syncopation"], ui: "staff-input", bars: 2, replays: 2 },
       { categories: ["triplets"], ui: "staff-input", bars: 2, replays: 2 },
+      {
+        categories: ["compound"],
+        only: true,
+        ui: "grid",
+        meter: "12/8",
+        stepsPerBeat: 3,
+        bars: 1,
+        replays: 2,
+      },
     ],
     mastery: 4,
     n: 4,
@@ -671,11 +691,13 @@ const pitch: FamilyDef[] = [
       ["pentatonic", "U11.L01"],
       ["minor-pentatonic", "U11.L02"],
       ["blues", "U11.L03"],
-      ["mixolydian", "U14.L02"],
+      // Each mode from its own lesson (contracts §7.3; content/specs/U14.md): Mixolydian is U14.L01's scale.
+      // Locrian is not taught in the core: it waits for the jazz track's chord scales (J2.L04).
+      ["mixolydian", "U14.L01"],
       ["dorian", "U14.L03"],
       ["lydian", "U14.L04"],
       ["phrygian", "U14.L05"],
-      ["locrian", "U14.L06"],
+      ["locrian", "J2.L04"],
       ["ctx.flat-keys", "U03.L07"],
     ],
     base: base(-1, KEYS1, "≤2acc", [90, 90], "none"),
@@ -739,8 +761,11 @@ const pitch: FamilyDef[] = [
       ["minor", "U10.L01", ["major", "harmonic minor"]],
       ["harmonic minor", "U10.L06", ["minor", "melodic minor"]],
       ["melodic minor", "U10.L08", ["harmonic minor"]],
+      // The colours of U14 (MODE_OPTIONS' ids and labels), each the near miss of the scale it changes by one
+      // note: Mixolydian of major (U14.L01), Dorian of natural minor (U14.L03), Lydian of major (U14.L04),
+      // Phrygian of natural minor (U14.L05).
       ["dorian", "U14.L03", ["minor"]],
-      ["mixolydian", "U14.L02", ["major"]],
+      ["mixolydian", "U14.L01", ["major"]],
       ["lydian", "U14.L04", ["major"]],
       ["phrygian", "U14.L05", ["minor"]],
     ],
@@ -923,7 +948,8 @@ const degrees: FamilyDef[] = [
       [deg("#5"), "U15.L01", [deg("5"), deg("6")]],
       [deg("#1"), "U15.L01", [deg("1"), deg("2")]],
     ],
-    base: { ...base(2, KEYS2, "≤4acc", [84, 110], "cadence"), register: [57, 76] },
+    // Chromatic syllables arrive with U15.L01 (fi, te, then me, le, ra, si, di): the pad shows them.
+    base: { ...base(2, KEYS2, "≤4acc", [84, 110], "cadence"), register: [57, 76], syllables: true },
     levels: [
       { categories: [deg("#4"), deg("b7"), deg("4"), deg("5"), deg("6"), deg("7"), deg("1")] },
       { categories: [deg("b3"), deg("b6"), deg("3")] },
@@ -1023,7 +1049,11 @@ const degrees: FamilyDef[] = [
       ["n-to-deg", "U03.L02"],
       ["n-to-name", "U03.L06"],
       ["minor", "U10.L01"],
-      ["modes", "U14.L01"],
+      // One category per mode, from its own lesson (content/specs/U14.md): no Locrian in the core.
+      ["mixolydian", "U14.L01"],
+      ["dorian", "U14.L03"],
+      ["lydian", "U14.L04"],
+      ["phrygian", "U14.L05"],
       ["chromatic", "U15.L01"],
       // n → note name in D major is asked in U03.L05, flat keys from U03.L07.
       ...EAR_KEYS,
@@ -1033,7 +1063,7 @@ const degrees: FamilyDef[] = [
       { categories: ["deg-to-n", "n-to-deg"] },
       { categories: ["n-to-name"] },
       { categories: ["minor"] },
-      { categories: ["modes"] },
+      { categories: ["mixolydian", "dorian", "lydian", "phrygian"] },
       { categories: ["chromatic"] },
     ],
     mastery: 2,
@@ -1540,7 +1570,8 @@ const chords: FamilyDef[] = [
     domain: "chord",
     skills: "E11",
     lesson: "U12.L02",
-    gates: { 3: "U12.L03", 5: ["J1.L02", "J2.L02"] },
+    // Level 5 opens with 6 and m6 (J1.L02) and gets the minor-major seventh at J2.L02 (contracts §7.3).
+    gates: { 3: "U12.L03", 5: "J1.L02" },
     cats: [
       ["maj7", "U12.L02", ["7"]],
       ["7", "U12.L02", ["maj7"]],
@@ -1609,14 +1640,17 @@ const chords: FamilyDef[] = [
     cats: [
       ["triad-naturals", "U05.L02"],
       ["triads", "U05.L03"],
+      // U12.L01 names the major and minor seventh beside the dominant seventh of U11.L04; the half-diminished
+      // and diminished sevenths are U12.L03's.
       ["sevenths", "U12.L01"],
+      ["sevenths-dim", "U12.L03"],
       ["extended", "J2.L03"],
     ],
     base: base(-1, KEYS1, "all", [90, 90], "none"),
     levels: [
       { categories: ["triad-naturals"] },
       { categories: ["triads"] },
-      { categories: ["sevenths"] },
+      { categories: ["sevenths", "sevenths-dim"] },
       { categories: ["extended"] },
     ],
     mastery: 2,
@@ -1639,13 +1673,20 @@ const harmony: FamilyDef[] = [
     domain: "harmony",
     skills: "N06",
     lesson: "U06.L02",
-    gates: { 3: "U10.L04", 4: "U12.L04", 5: ["U15.L02", "U16.L01"] },
+    // Level 5 opens at U15.L02 with V7/V and is filled lesson by lesson (contracts §7.3 "L5 U15.L02, U16.L01";
+    // content/specs/U15.md, U16.md): the other secondary dominants at U15.L03, iv at U16.L01, ♭VI and ♭VII at
+    // U16.L02, ♭III at U16.L03. An array gate would hold every applied numeral back until U16.L01.
+    gates: { 3: "U10.L04", 4: "U12.L04", 5: "U15.L02" },
     cats: [
       ["major-triads", "U06.L02"],
       ["minor-triads", "U10.L04"],
       ["sevenths", "U12.L04"],
+      ["minor-sevenths", "U12.L05"],
       ["applied", "U15.L02"],
+      ["applied-visitors", "U15.L03"],
       ["borrowed", "U16.L01"],
+      ["borrowed-flats", "U16.L02"],
+      ["borrowed-bIII", "U16.L03"],
       // Minor keys are natural minor (v, VII) until U10.L06 adds the major V and vii° (contracts §7.3).
       [CTX_MAJOR_V, "U10.L06"],
     ],
@@ -1654,8 +1695,11 @@ const harmony: FamilyDef[] = [
       { categories: ["major-triads"] },
       { categories: [], keys: "all" },
       { categories: ["minor-triads"], keys: "all" },
-      { categories: ["sevenths"], keys: "all" },
-      { categories: ["applied", "borrowed"], keys: "all" },
+      { categories: ["sevenths", "minor-sevenths"], keys: "all" },
+      {
+        categories: ["applied", "applied-visitors", "borrowed", "borrowed-flats", "borrowed-bIII"],
+        keys: "≤4acc",
+      },
     ],
     mastery: 2,
     n: 8,
@@ -1713,13 +1757,15 @@ const harmony: FamilyDef[] = [
       ["bVII-I", "U14.L02", ["PC"]],
       ["minor-PAC", "U14.L02"],
       ["minor-HC", "U14.L02"],
+      // U16.L03 "♭III & Minor Plagal": IV–iv–I, the plagal cadence with a minor IV, against the plain one.
+      ["minor-plagal", "U16.L03", ["PC"]],
     ],
     base: base(2, KEYS2, "≤2acc", [72, 96], "none"),
     levels: [
       { categories: ["PAC", "HC"] },
       { categories: ["IAC"] },
       { categories: ["PC", "DC"], keys: "all" },
-      { categories: ["bVII-I", "minor-PAC", "minor-HC"], keys: "all", instruments: KEYS3 },
+      { categories: ["bVII-I", "minor-PAC", "minor-HC", "minor-plagal"], keys: "all", instruments: KEYS3 },
     ],
     mastery: 3,
     n: 6,
@@ -1740,7 +1786,9 @@ const harmony: FamilyDef[] = [
     // a bar wait for U06.L08 (harmonic rhythm), so level 4 is filled from what is open until then. A level
     // gate at U06.L11 here was measured: the recall it causes pushes the 15-minute steady-state overflow
     // past 1.2 budgets (decision 27's simulation), and it closes nothing the learner has not met.
-    gates: { 5: "U10.L04", 6: ["U15.L06", "U16.L05"] },
+    // Level 6 opens at U15.L06 with the bass under secondary dominants and gets the borrowed chords' roots
+    // (♭6, ♭7) at U16.L05 (contracts §7.3 "L6 U15.L06, U16.L05").
+    gates: { 5: "U10.L04", 6: "U15.L06" },
     cats: [
       ["schema-roots", "U06.L05"],
       ["diatonic-roots", "U06.L05"],
@@ -1750,6 +1798,7 @@ const harmony: FamilyDef[] = [
       // Bass-line dictation (U08): root and 5th (U08.L02), the octave and approach notes (U08.L03).
       ["lines", "U08.L03"],
       ["chromatic", "U15.L06"],
+      ["borrowed", "U16.L05"],
       [CTX_MAJOR_V, "U10.L06"],
       [CTX_ANDALUSIAN, "U10.L07"],
     ],
@@ -1762,7 +1811,7 @@ const harmony: FamilyDef[] = [
       // Level 5 (gate U10.L04): the bass under a minor loop, and bass lines with roots, 5ths, octaves and
       // approach notes (wave5.md §11 "bass-line dictation through fam.har.bass L5").
       { categories: ["minor", "lines"], keys: "all" },
-      { categories: ["chromatic"], keys: "all", instruments: KEYS3 },
+      { categories: ["chromatic", "borrowed"], keys: "≤4acc", instruments: KEYS3 },
     ],
     mastery: 3,
     n: 4,

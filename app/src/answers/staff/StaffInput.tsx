@@ -11,8 +11,15 @@
 // bass), `→` steps past it, and every change plays the whole chord. Marks are per chord (the `part` is the chord's
 // index), and under the staff each chord is spelled out with its lowest note; the chord's name and inversion
 // appear as `AnswerEnv.harmony.nameChords` says (live, after a check, or never).
+//
+// Wave 6 (rhythm II, wave6.md §3.4): ties, dotted values and triplets, by key (`t`, `.`, `;`) and by the Tie, Dot
+// and Triplet buttons of the palette row, each only when the step's palette offers it (rhythm.ts). A tie joins a
+// note to the same note after it, or holds it on over a rest or the bar line; a triplet is written one value at a
+// time inside its beat. In a compound meter the staff is beamed and counted by the dotted quarter (the host passes
+// `AnswerEnv.staff.meter`). `AnswerEnv.staff.rhythmOnly` writes every note on one line for rhythm dictation, and
+// `AnswerEnv.staff.swing` prints "Swing 8ths" over an answer written straight (d5).
 import "./staff.css";
-import { R, type Rat } from "@oak/content-kit";
+import { R, type Rat, rat } from "@oak/content-kit";
 import { noteAt, type StaffGeometry, stepY } from "@oak/notation";
 import { renderStaff } from "@oak/notation/render";
 import { METERS } from "@oak/theory";
@@ -37,6 +44,7 @@ import {
   durationName,
   type Engraved,
   engrave,
+  gridCycles,
   initialCursor,
   ledgerSteps,
   localGeometry,
@@ -45,6 +53,7 @@ import {
   type PointerHit,
   paletteDurations,
   parseDuration,
+  parsePitch,
   pitchAt,
   pointerHit,
   refusalText,
@@ -61,6 +70,22 @@ import {
   totalCycles,
   xOfOnset,
 } from "./model.ts";
+import {
+  applyRhythmEdit,
+  canonicalRhythmList,
+  groupAt,
+  lengthName,
+  parseTriplet,
+  RHYTHM_KEYS,
+  type RhythmKeyResult,
+  rhythmKey,
+  rhythmPalette,
+  rhythmRefusalText,
+  rhythmTokens,
+  tokenSpoken,
+  tripletGroupsOfValue,
+  tripletLen,
+} from "./rhythm.ts";
 
 /** Target line spacing in CSS pixels at full width (abcjs draws 8 units between lines at scale 1). */
 const SPACING = 11;
@@ -84,6 +109,18 @@ const STAFF_SHEET = {
   ],
 } as const;
 
+/** The rhythm rows of the shortcut sheet, while a staff that offers ties, dots or triplets is on screen. */
+const RHYTHM_SHEET = {
+  id: "staff-rhythm",
+  title: "Staff input: rhythm",
+  order: 47,
+  rows: [
+    ["T", "Tie the note to the same note after it, or hold it on (again: untie)"],
+    [".", "Dotted length for the next note"],
+    [";", "Triplet values: three notes fill one beat (again: plain values)"],
+  ],
+} as const;
+
 /** The chord rows of the shortcut sheet, while a chord staff is on screen. */
 const CHORD_SHEET = {
   id: "staff-chords",
@@ -103,7 +140,65 @@ export function StaffInputAnswer(p: AnswerWidgetProps<"staff-input">) {
   return <StaffNotesAnswer {...p} />;
 }
 
-const DURATION_GLYPH: Record<number, string> = { 1: "𝅝", 2: "𝅗𝅥", 4: "♩", 8: "♪", 16: "𝅘𝅥𝅯" };
+/**
+ * A note value drawn small (a whole note's open head, a half note's stem, flags for eighths and sixteenths, the
+ * dot): the palette's buttons and the reveal's rhythm line. Drawn, not typed: the music glyphs of the system
+ * fonts are missing or uneven (a half note came out as a box).
+ */
+export function NoteValue({
+  base,
+  dots = 0,
+  triplet = false,
+  rest = false,
+}: {
+  base: number;
+  dots?: number;
+  triplet?: boolean;
+  rest?: boolean;
+}) {
+  const open = base <= 2;
+  const flags = base >= 16 ? 2 : base >= 8 ? 1 : 0;
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 16 20"
+      className={clsx("inline-block h-5 w-4 shrink-0 align-middle", rest && "opacity-45")}
+      fill="none"
+      stroke="currentColor"
+    >
+      <ellipse
+        cx={5.2}
+        cy={15.2}
+        rx={3.5}
+        ry={2.5}
+        transform="rotate(-20 5.2 15.2)"
+        strokeWidth={open ? 1.4 : 0}
+        fill={open ? "none" : "currentColor"}
+      />
+      {base >= 2 ? <line x1={8.4} x2={8.4} y1={14.4} y2={2.5} strokeWidth={1.2} /> : null}
+      {flags >= 1 ? <path d="M8.4 2.5 C9.2 5.2 12.2 5.8 11.6 9.4" strokeWidth={1.2} /> : null}
+      {flags >= 2 ? <path d="M8.4 6 C9.2 8.7 12.2 9.3 11.6 12.6" strokeWidth={1.2} /> : null}
+      {dots >= 1 ? <circle cx={11.6} cy={15.2} r={1.1} fill="currentColor" strokeWidth={0} /> : null}
+      {triplet ? (
+        <text
+          x={12.6}
+          y={5}
+          fontSize={6}
+          fontStyle="italic"
+          fill="currentColor"
+          strokeWidth={0}
+          textAnchor="middle"
+        >
+          3
+        </text>
+      ) : null}
+    </svg>
+  );
+}
+const TOOL =
+  "inline-flex h-8 min-w-8 items-center justify-center gap-1 rounded-control border px-2 text-sm disabled:opacity-50";
+const TOOL_ON = "border-text bg-surface-2 text-text";
+const TOOL_OFF = "border-border bg-surface text-text-2";
 const DURATION_DIGIT: Record<string, string> = Object.fromEntries(
   Object.entries(DIGIT_DURATION).map(([digit, token]) => [token, digit]),
 );
@@ -127,7 +222,19 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
   const sound = env.staff?.sound ?? "piano";
   const meter = env.staff?.meter ?? METERS["4/4"];
   const ctx = useMemo(() => staffContext(spec, meter), [spec, meter]);
-  const engraved = useMemo(() => engrave(value, ctx), [value, ctx]);
+  const swing = env.staff?.swing;
+  const engraved = useMemo(() => engrave(value, ctx, swing ? { swing } : {}), [value, ctx, swing]);
+  // Wave 6: what the rhythm tools offer, the triplet groups of the answer, and a rhythm-only answer's one line.
+  const rhythm = useMemo(() => rhythmPalette(spec), [spec]);
+  const hasRhythmTools = (rhythm.ties || rhythm.dots || rhythm.triplets.length > 0) && !chordMode;
+  useEffect(() => (hasRhythmTools ? registerShortcutSection(RHYTHM_SHEET) : undefined), [hasRhythmTools]);
+  const groups = useMemo(() => tripletGroupsOfValue(value, ctx), [value, ctx]);
+  const rhythmOnly = env.staff?.rhythmOnly;
+  const fixedDia =
+    rhythmOnly === undefined || rhythmOnly === false || chordMode
+      ? undefined
+      : ((typeof rhythmOnly === "string" ? parsePitch(rhythmOnly)?.dia : undefined) ??
+        initialCursor(spec).dia);
   // The last list that engraved: a half-typed list keeps the staff as it was.
   const good = useRef<Engraved | null>(null);
   if (engraved.ok) good.current = engraved;
@@ -262,8 +369,20 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
     for (const m of midis) audio.playNote(m, { sound, dur: 0.5 });
   };
 
-  const apply = (r: ReturnType<typeof staffKey>) => {
+  const apply = (r: RhythmKeyResult | null) => {
     if (!r) return false;
+    if (r.rhythm) {
+      if (disabled) return true;
+      // A tie, a dot or a triplet value (rhythm.ts): refused edits leave the answer as it was and say why.
+      const out = applyRhythmEdit(value, r.rhythm, ctx, rhythm);
+      const why = rhythmRefusalText(out.refused) ?? refusalText(out as never);
+      setNotice(why);
+      if (out.refused) {
+        setSay(why ?? "That edit does not fit this answer.");
+        return true;
+      }
+      onChange(out.list);
+    }
     if (r.edit) {
       if (disabled) return true;
       const out = staffEditOutcome(value, r.edit, ctx);
@@ -278,7 +397,8 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
         setSay(why ?? "That edit does not fit this answer.");
         return true;
       }
-      onChange(out.list);
+      // An answer with triplets keeps each group as three triplet values, whatever edit touched it.
+      onChange(canonicalRhythmList(out.list, ctx, rhythm));
       if (why) {
         setCursor(r.cursor);
         setSay(why);
@@ -291,7 +411,23 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
     return true;
   };
 
-  const runKey = (input: StaffKeyInput) => apply(staffKey(cursor, input, { spec, ctx, notes }));
+  const keyCtx = { spec, ctx, notes, groups, ...(fixedDia !== undefined ? { fixedDia } : {}) };
+  /**
+   * A cursor left between the plain grid's places (a triplet value of a group that is gone, a jump by a bar from
+   * inside a group) goes back to the grid place before it: a plain note never starts on a triplet's second value.
+   */
+  const onGrid = (c: StaffCursor): StaffCursor => {
+    if (parseTriplet(c.dur) || groupAt(groups, c.onset)) return c;
+    const grid = gridCycles(spec, meter);
+    const at = R.mul(grid, rat(R.floor(R.div(c.onset, grid))));
+    return R.eq(at, c.onset) ? c : { ...c, onset: at };
+  };
+  const keyResult = (c: StaffCursor, input: StaffKeyInput): RhythmKeyResult | null => {
+    const at = onGrid(c);
+    return rhythmKey(at, input, keyCtx) ?? staffKey(at, input, keyCtx);
+  };
+  const runKey = (input: StaffKeyInput) => apply(keyResult(cursor, input));
+  const tripletMode = parseTriplet(cursor.dur);
 
   const onKey = (e: React.KeyboardEvent<HTMLElement>): boolean => {
     const t = e.target as HTMLElement;
@@ -306,8 +442,14 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
     const r = wrap.current?.getBoundingClientRect();
     return r ? { x: e.clientX - r.left, y: e.clientY - r.top } : { x: 0, y: 0 };
   };
+  // While the cursor writes triplet values the pointer snaps to them; a rhythm-only answer keeps its one line.
   const hitAt = (pt: { x: number; y: number }) =>
-    measured ? pointerHit(measured.geom, measured.anchors, pt, spec, meter) : null;
+    measured
+      ? pointerHit(measured.geom, measured.anchors, pt, spec, meter, {
+          ...(tripletMode ? { grid: tripletLen(tripletMode.base, meter) } : {}),
+          ...(fixedDia !== undefined ? { fixedDia } : {}),
+        })
+      : null;
   const onPointerMove = (e: React.PointerEvent) => {
     if (!measured || disabled) return;
     const pt = local(e);
@@ -349,6 +491,36 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
     if (d.note) {
       const first = d.note.pitches[0];
       const id = d.note.eventIds[0];
+      // A drag from a notehead to the next notehead of the same pitch draws a tie (wave6.md §3.4).
+      const overN = d.moved ? noteAt(measured.geom, local(e), 3) : null;
+      const over = overN === null ? null : (notes.find((x) => x.n === overN) ?? null);
+      if (
+        rhythm.ties &&
+        id &&
+        over &&
+        over.index !== d.note.index &&
+        over.pitches[0]?.midi === first?.midi &&
+        R.eq(over.onset, R.add(d.note.onset, d.note.dur))
+      ) {
+        apply({
+          cursor: { ...cursor, onset: d.note.onset, last: null },
+          rhythm: { op: "tie", eventId: id, on: true },
+          say: "Tied: one note, held across.",
+        });
+        return;
+      }
+      // A triplet note keeps its place in its group, and a rhythm-only note its line: no dragging.
+      if (
+        d.moved &&
+        (d.note.tuplet || fixedDia !== undefined || groupAt(groups, hit?.onset ?? d.note.onset))
+      ) {
+        setSay(
+          d.note.tuplet || groupAt(groups, hit?.onset ?? d.note.onset)
+            ? "Triplet notes are changed in place: select one and type a letter."
+            : "This answer is about the rhythm: delete the note and place it where it belongs.",
+        );
+        return;
+      }
       if (d.moved && hit && id) {
         if (R.lt(total, R.add(hit.onset, d.note.dur))) {
           setSay("No room for that note there.");
@@ -385,10 +557,9 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
     const dur = parseDuration(cursor.dur) ?? durations[0];
     if (!dur) return;
     apply(
-      staffKey(
+      keyResult(
         { ...cursor, onset: hit.onset, dia: hit.pitch.dia },
         { key: hit.pitch.letter.toLowerCase() === "b" ? "B" : hit.pitch.letter },
-        { spec, ctx, notes },
       ),
     );
   };
@@ -454,9 +625,27 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
   };
 
   const hasRhythm = durations.length > 1;
+  // The rhythm tools act on the note just placed, else the one under the cursor (as the `t` key does).
+  const tieTarget = (cursor.last ? noteAtOnset(notes, cursor.last) : null) ?? under;
+  const curDur = parseDuration(cursor.dur);
+  const dotOn = under ? under.written.dots > 0 && !under.tuplet : (curDur?.dots ?? 0) > 0;
+  const dotTool = () => {
+    const id = under?.eventIds[0];
+    // On a selected note the dot changes that note; else it changes the next note's length (the `.` key).
+    if (under && id && !under.tuplet && !under.tied)
+      apply({
+        cursor: { ...cursor, last: null },
+        rhythm: { op: "dot", eventId: id, dots: under.written.dots > 0 ? 0 : 1 },
+        say: under.written.dots > 0 ? "Dot removed." : "Dotted: half as long again.",
+      });
+    else runKey({ key: RHYTHM_KEYS.dot });
+  };
   const markList: (PartMark | null)[] = chordMode ? chords.map((c) => markOf(feedback, c.index)) : marks;
   const wrongCount = markList.filter((m) => m && !m.ok).length;
   const revealChords = chordMode ? staffChords(revealNotes) : [];
+  // With more than one length in play the answer is revealed as its written values, rests and ties included.
+  const revealTokens =
+    revealed !== null && !chordMode && (hasRhythm || hasRhythmTools) ? rhythmTokens(revealed, ctx) : null;
 
   return (
     <AnswerFrame
@@ -480,13 +669,18 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
             </>
           ) : (
             <>
-              <KeyHint keys={["A–G"]}>place a note</KeyHint>
+              <KeyHint keys={[fixedDia === undefined ? "A–G" : "N"]}>place a note</KeyHint>
               <KeyHint keys={["←", "→"]}>move</KeyHint>
             </>
           )}
-          <KeyHint keys={["↑", "↓"]}>step</KeyHint>
-          {spec.palette.accidentals ? <KeyHint keys={["#", "-"]}>sharp / flat</KeyHint> : null}
+          {fixedDia === undefined ? <KeyHint keys={["↑", "↓"]}>step</KeyHint> : null}
+          {spec.palette.accidentals && fixedDia === undefined ? (
+            <KeyHint keys={["#", "-"]}>sharp / flat</KeyHint>
+          ) : null}
           {hasRhythm ? <KeyHint keys={["2–6"]}>length</KeyHint> : null}
+          {hasRhythmTools && rhythm.dots ? <KeyHint keys={["."]}>dot</KeyHint> : null}
+          {hasRhythmTools && rhythm.ties ? <KeyHint keys={["T"]}>tie</KeyHint> : null}
+          {hasRhythmTools && rhythm.triplets.length > 0 ? <KeyHint keys={[";"]}>triplet</KeyHint> : null}
           {spec.palette.rests ? <KeyHint keys={["0"]}>rest</KeyHint> : null}
           <KeyHint keys={["⌫"]}>{chordMode ? "remove" : "delete"}</KeyHint>
           <KeyHint keys={["Enter"]}>{verb}</KeyHint>
@@ -511,7 +705,7 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
                     title={digit ? `${durationName(d)} (${digit})` : durationName(d)}
                     onClick={() => {
                       if (under && digit && d.dots === 0) runKey({ key: digit });
-                      else setCursor({ ...cursor, dur: d.token });
+                      else setCursor({ ...cursor, dur: d.token, last: null });
                       surface.current?.focus({ preventScroll: true });
                     }}
                     className={clsx(
@@ -519,17 +713,84 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
                       on ? "border-text bg-surface-2 text-text" : "border-border bg-surface text-text-2",
                     )}
                   >
-                    <span aria-hidden className="text-base leading-none">
-                      {DURATION_GLYPH[d.base] ?? ""}
-                      {d.dots ? "." : ""}
-                    </span>
+                    <NoteValue base={d.base} dots={d.dots} />
                     <span>{durationName(d)}</span>
                   </button>
                 );
               })}
             </div>
           ) : null}
-          {spec.palette.accidentals ? (
+          {hasRhythmTools ? (
+            // biome-ignore lint/a11y/useSemanticElements: a row of toggle buttons, see above
+            <div
+              role="group"
+              aria-label="Rhythm tools"
+              className="flex gap-1"
+              data-testid="staff-rhythm-tools"
+            >
+              {rhythm.ties ? (
+                <button
+                  type="button"
+                  data-enter="native"
+                  data-rhythm-tool="tie"
+                  aria-pressed={tieTarget?.tied === true}
+                  disabled={disabled || !tieTarget}
+                  title={`Tie the selected note to the same note after it, or hold it on (${RHYTHM_KEYS.tie.toUpperCase()})`}
+                  onClick={() => {
+                    runKey({ key: RHYTHM_KEYS.tie });
+                    surface.current?.focus({ preventScroll: true });
+                  }}
+                  className={clsx(TOOL, tieTarget?.tied ? TOOL_ON : TOOL_OFF)}
+                >
+                  <span aria-hidden className="text-base leading-none">
+                    ⁀
+                  </span>
+                  <span>Tie</span>
+                </button>
+              ) : null}
+              {rhythm.dots ? (
+                <button
+                  type="button"
+                  data-enter="native"
+                  data-rhythm-tool="dot"
+                  aria-pressed={dotOn}
+                  disabled={disabled || tripletMode !== null}
+                  title={`Dot: half as long again (${RHYTHM_KEYS.dot})`}
+                  onClick={() => {
+                    dotTool();
+                    surface.current?.focus({ preventScroll: true });
+                  }}
+                  className={clsx(TOOL, dotOn ? TOOL_ON : TOOL_OFF)}
+                >
+                  <span aria-hidden className="text-base leading-none font-bold">
+                    ·
+                  </span>
+                  <span>Dot</span>
+                </button>
+              ) : null}
+              {rhythm.triplets.length > 0 ? (
+                <button
+                  type="button"
+                  data-enter="native"
+                  data-rhythm-tool="triplet"
+                  aria-pressed={tripletMode !== null}
+                  disabled={disabled}
+                  title={`Triplet: three notes in the time of two (${RHYTHM_KEYS.triplet})`}
+                  onClick={() => {
+                    runKey({ key: RHYTHM_KEYS.triplet });
+                    surface.current?.focus({ preventScroll: true });
+                  }}
+                  className={clsx(TOOL, tripletMode ? TOOL_ON : TOOL_OFF)}
+                >
+                  <span aria-hidden className="text-[0.8125rem] leading-none font-semibold italic">
+                    3
+                  </span>
+                  <span>Triplet</span>
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {spec.palette.accidentals && fixedDia === undefined ? (
             // biome-ignore lint/a11y/useSemanticElements: a row of buttons, see above
             <div role="group" aria-label="Sharps and flats" className="flex gap-1">
               {(
@@ -725,15 +986,26 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
         <p id={helpId} className="sr-only">
           {chordMode
             ? "Letters A to G add that note above the chord at the cursor, Shift with a letter adds it under the lowest note; right arrow goes to the next chord; up and down move the selected note; Backspace removes it; "
-            : "Letters A to G place a note at the cursor; hash sharpens and minus flattens it; arrows move the cursor or the selected note; Backspace deletes; "}
+            : fixedDia !== undefined
+              ? "N places a note at the cursor; digits 2 to 6 set its length; left and right arrows move the cursor; Backspace deletes; "
+              : "Letters A to G place a note at the cursor; hash sharpens and minus flattens it; arrows move the cursor or the selected note; Backspace deletes; "}
+          {hasRhythmTools
+            ? `${rhythm.ties ? "T ties the note to the same note after it, or holds it on by the length set; " : ""}${rhythm.dots ? "full stop dots the next note; " : ""}${rhythm.triplets.length > 0 ? "semicolon switches to triplet values; " : ""}`
+            : ""}
           Enter {verb === "save" ? "saves" : "checks"}.
         </p>
         <p className="sr-only" aria-live="polite" data-testid="staff-say">
           {say}
         </p>
-        {notice ? (
-          <p className="text-sm text-text-2" data-testid="staff-notice">
-            {notice}
+        {notice || hasRhythmTools ? (
+          // With rhythm tools the line is always there (the length the next note takes), so a notice moves nothing.
+          <p className="min-h-6 text-sm text-text-2" data-testid="staff-notice">
+            {notice ?? (
+              <span className="text-text-3" data-testid="staff-length">
+                Next note: {lengthName(cursor.dur)}
+                {tripletMode ? ", three to a beat" : ""}
+              </span>
+            )}
           </p>
         ) : null}
         {chordMode ? (
@@ -784,7 +1056,37 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
           })}
         </ol>
         <p className="min-h-6 text-sm text-text-2" data-testid="staff-reveal">
-          {revealed !== null ? (
+          {revealed !== null && revealTokens ? (
+            // A rhythm is revealed value by value (the dashed heads on the staff show places, not lengths).
+            <>
+              <span>Answer: </span>
+              <span className="sr-only">
+                {revealTokens.map((t) => tokenSpoken(t, fixedDia === undefined)).join(", ")}
+              </span>
+              <span
+                aria-hidden
+                data-testid="staff-reveal-rhythm"
+                className="inline-flex flex-wrap items-end gap-x-2 gap-y-1 rounded-control border-2 border-dashed border-accent-2 px-1.5 py-0.5 align-middle font-semibold text-text"
+              >
+                {revealTokens.map((t, i) =>
+                  t.kind === "bar" ? (
+                    <span key={i} className="self-stretch border-l border-text-3" />
+                  ) : (
+                    <span key={i} className="inline-flex items-end gap-0.5">
+                      {t.kind === "note" && fixedDia === undefined ? (
+                        <span className="text-[0.8125rem]">{t.names.join("+")}</span>
+                      ) : null}
+                      <NoteValue base={t.base} dots={t.dots} triplet={t.triplet} rest={t.kind === "rest"} />
+                      {t.kind === "rest" ? (
+                        <span className="text-[0.7rem] font-normal text-text-3">rest</span>
+                      ) : null}
+                      {t.tie ? <span className="text-base leading-none">⁀</span> : null}
+                    </span>
+                  ),
+                )}
+              </span>
+            </>
+          ) : revealed !== null ? (
             <>
               <span>Answer: </span>
               <span className="rounded-control border-2 border-dashed border-accent-2 px-1.5 font-semibold text-text">
@@ -797,7 +1099,9 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
             <span>
               {chordMode
                 ? `${wrongCount === 1 ? "One chord is marked." : `${wrongCount} chords are marked.`} Select a note in it and move it, or add the missing one.`
-                : `${wrongCount === 1 ? "One note is marked." : `${wrongCount} notes are marked.`} Select it and move it, or place another.`}
+                : hasRhythm
+                  ? `${wrongCount === 1 ? "One note is marked" : `${wrongCount} notes are marked`}: check ${fixedDia === undefined ? "its pitch, " : ""}where it starts and how long it is.`
+                  : `${wrongCount === 1 ? "One note is marked." : `${wrongCount} notes are marked.`} Select it and move it, or place another.`}
             </span>
           ) : status === "error" ? (
             <span>
@@ -837,6 +1141,30 @@ function StaffNotesAnswer(p: AnswerWidgetProps<"staff-input">) {
                   One note per word: letter, octave, length (4 = a quarter), as in{" "}
                   <code className="font-mono">C4:4 E4:4</code>; <code className="font-mono">r:4</code> is a
                   rest.
+                  {hasRhythmTools ? (
+                    <>
+                      {rhythm.dots ? (
+                        <>
+                          {" "}
+                          A dot after the length dots it: <code className="font-mono">C4:4.</code>
+                        </>
+                      ) : null}
+                      {rhythm.ties ? (
+                        <>
+                          {" "}
+                          <code className="font-mono">~</code> ties a note to the same note after it:{" "}
+                          <code className="font-mono">E4:4~ E4:8</code>.
+                        </>
+                      ) : null}
+                      {rhythm.triplets.length > 0 ? (
+                        <>
+                          {" "}
+                          <code className="font-mono">t</code> makes a triplet value, three to a beat:{" "}
+                          <code className="font-mono">C4:8t D4:8t E4:8t</code>.
+                        </>
+                      ) : null}
+                    </>
+                  ) : null}
                   {chordMode ? (
                     <>
                       {" "}

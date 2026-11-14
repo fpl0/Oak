@@ -6,7 +6,7 @@ import type { Exercise, KeySpec, StepDef } from "@oak/content-kit";
 import { create } from "zustand";
 import { noteName } from "../answers/harmony.ts";
 import { qualityLabel } from "../answers/keys.ts";
-import type { LabelState, TutorAnswer, TutorSubject } from "../tutor/context.ts";
+import { answerText, type LabelState, type TutorAnswer, type TutorSubject } from "../tutor/context.ts";
 import type { LessonEvent, LessonSnapshot } from "./types.ts";
 
 export const useLessonPublic = create<{ lesson: LessonSnapshot | null }>(() => ({ lesson: null }));
@@ -73,7 +73,7 @@ export function tutorAnswerOf(
   response: AttemptResponse,
   o: { key?: KeySpec | null; tolCents?: number } = {},
 ): TutorAnswer | null {
-  if (ex.kind === "all") return null;
+  if (ex.kind === "all") return allAnswer(ex, response, o);
   if (ex.kind === "sing") {
     const degrees = ex.target.from === "degrees" ? ex.target.degrees.map(String) : [];
     if ("skipped" in response) return { kind: "sung", notes: [], quiet: true };
@@ -104,6 +104,8 @@ export function tutorAnswerOf(
         mode: "key-signature",
       };
   }
+  const w6 = "answer" in response ? wave6Answer(ex, response.answer as Wave6Answer) : null;
+  if (w6) return w6;
   const w5 = "answer" in response ? wave5Answer(ex, response.answer as Wave5Answer, o.key ?? null) : null;
   if (w5) return w5;
   const w4 = "answer" in response ? wave4Answer(ex, response.answer as Wave4Answer, o.key ?? null) : null;
@@ -118,7 +120,14 @@ export function tutorAnswerOf(
       return {
         kind: "text",
         prompt: ex.prompt,
-        value: `${a.degrees.length === 1 ? "degree" : "degrees"} ${a.degrees.join(" ")}`,
+        value: `${a.degrees.length === 1 ? "degree" : "degrees"} ${a.degrees.map(degreeWithSign).join(" ")}`,
+      };
+    if (a.choice && a.choice.length > 0 && "answer" in ex && ex.answer?.ui === "bar-buttons")
+      // A drawn "which bar" trial answered on its own bars (U15.L06 S2, U17.L03 S4).
+      return {
+        kind: "text",
+        prompt: ex.prompt,
+        value: a.choice.map((c) => (c === "none" ? "no key change" : `bar ${c}`)).join(", "),
       };
     if (a.choice && a.choice.length > 0) {
       const options = "answer" in ex && ex.answer && "options" in ex.answer ? ex.answer.options : [];
@@ -128,6 +137,87 @@ export function tutorAnswerOf(
     if (typeof a.number === "number") return { kind: "text", prompt: ex.prompt, value: String(a.number) };
   }
   return null;
+}
+
+/** A chromatic degree as the learner sees it on the pad: `#4` is ♯4, `b7` is ♭7 (U15 on). */
+function degreeWithSign(d: string): string {
+  return d.replace(/^#/, "♯").replace(/^b(?=\d)/, "♭");
+}
+
+interface Wave6Answer {
+  choice?: string[];
+}
+
+/**
+ * The Wave 6 answers the earlier shapes do not cover: the cells the learner switched on in a rhythm grid (U13's
+ * 6/8 and 12/8 grids; the family's "find the push" cells `c14`), by step number and count. Never the answer.
+ */
+function wave6Answer(ex: Exercise, a: Wave6Answer): TutorAnswer | null {
+  const spec = "answer" in ex && ex.answer && typeof ex.answer === "object" ? ex.answer : null;
+  const ui = spec && "ui" in spec ? spec.ui : null;
+  if (ui !== "grid" || !a.choice) return null;
+  const steps =
+    spec && "stepsPerBar" in spec && typeof spec.stepsPerBar === "number" ? spec.stepsPerBar : null;
+  // Cells are step numbers from 0 ("4"), a family's "find the push" cells ("c14"), or "row:step" on a drum grid.
+  const byRow = new Map<string, number[]>();
+  for (const c of a.choice) {
+    const m = /^(?:([^:]+):)?c?(\d+)$/.exec(c);
+    if (!m) continue;
+    const row = m[1] ?? "";
+    byRow.set(row, [...(byRow.get(row) ?? []), Number(m[2]) + 1]);
+  }
+  const of = steps ? ` (of ${steps} in the bar)` : "";
+  const rows = [...byRow].map(([row, ns]) => `${row ? `${row}: ` : ""}steps ${ns.join(", ")}`);
+  return {
+    kind: "text",
+    prompt: ex.prompt,
+    value: rows.length === 0 ? "no steps on yet" : `the steps I switched on${of}: ${rows.join("; ")}`,
+  };
+}
+
+/** One part's answer as a short value for a slot ("Cmaj7", "bar 5", "degrees ♯4 5"); null if unanswered. */
+function partValue(a: TutorAnswer | null): string | null {
+  if (!a) return null;
+  switch (a.kind) {
+    case "text":
+      return a.value;
+    case "chords":
+      return a.chords.map((c) => c.symbol).join(" ") || null;
+    case "numerals":
+      return a.numerals.map((n) => n.rn).join(" ") || null;
+    case "staff":
+      return a.notes.trim() || null;
+    case "slots":
+      return a.slots.map((x) => x.value ?? "(not answered)").join(", ");
+    case "sung":
+      return a.quiet
+        ? "done without singing (Quiet mode)"
+        : a.notes
+            .map((n) => (n.cents === null ? "no voice" : `${n.cents > 0 ? "+" : ""}${n.cents}¢`))
+            .join(" ");
+    default:
+      return answerText(a);
+  }
+}
+
+/**
+ * A step of several answers checked together (every Wave 6 ear step: four chord qualities, two bars, a mode per
+ * clip): what the learner gave for each part, as slots ("Part 2: m7"). Only the learner's side.
+ */
+function allAnswer(
+  ex: Extract<Exercise, { kind: "all" }>,
+  response: AttemptResponse,
+  o: { key?: KeySpec | null; tolCents?: number },
+): TutorAnswer | null {
+  const rs =
+    "parts" in response && Array.isArray(response.parts) ? (response.parts as AttemptResponse[]) : null;
+  if (!rs) return null;
+  const slots = ex.parts.map((part, i) => {
+    const r = rs[i];
+    return { label: `Part ${i + 1}`, value: r ? partValue(tutorAnswerOf(part as Exercise, r, o)) : null };
+  });
+  if (slots.every((x) => x.value === null)) return null;
+  return { kind: "slots", prompt: ex.prompt, slots };
 }
 
 interface Wave5Answer {

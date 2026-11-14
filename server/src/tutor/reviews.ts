@@ -5,6 +5,8 @@
 // A strict JSON Schema cannot express counts, word limits or tuple lengths, so `validate*`
 // checks those. A violation is returned as `problems` the model can read and fix once.
 import { z } from "zod";
+import type { IntroducedTerms, ReviewSource } from "./domain.ts";
+import { arrangeProblems, proseProblems, type ReviewLintContext, tryKeyProblem } from "./lint/review.ts";
 import { formatLintIssues, lintStrict } from "./lint/strict.ts";
 import { countWords } from "./markup.ts";
 import type { StructuredCheck } from "./types.ts";
@@ -156,6 +158,44 @@ export interface ReviewRules {
   revisions: 1 | 2;
   /** Length of the piece when known: bar anchors must lie inside it. */
   totalBars?: number | null;
+  /**
+   * Wave 6 (d2): the piece's keys and the learner's vocabulary, for the review lint (lint/review.ts): try-it code
+   * in the piece's key and in STYLE's arrange() form, prose inside the introduced terms. Absent: not checked.
+   */
+  lint?: ReviewLintContext | null;
+  /** 3 when the review must give exactly three strengths, the strongest first (the Core Finale's single). */
+  strengths?: 2 | 3 | undefined;
+}
+
+/**
+ * Strengths a capstone's review must give, when fixed: CF-A, the learner's album single, gets three, the first
+ * naming what is strongest in the song (wave6 tutor task; contracts §10.6 allows two or three everywhere).
+ */
+export function strengthsWantedFor(capstoneId: string | null | undefined): 3 | undefined {
+  return capstoneId === "CF-A" ? 3 : undefined;
+}
+
+/**
+ * The rules a review of this piece is held to: its revision count and length, the keys its try-it code may be in
+ * (the key plan's keys, else the piece's key) and the terms its prose may use.
+ */
+export function reviewRulesOf(
+  review: Pick<ReviewSource, "revisions" | "totalBars" | "facts" | "strengthsWanted">,
+  terms: IntroducedTerms | null,
+  subjectId?: string | null,
+): ReviewRules {
+  const plan = review.facts?.keyPlan ?? [];
+  const keys =
+    plan.length > 0 ? [...new Set(plan.map((k) => k.key))] : review.facts?.key ? [review.facts.key] : [];
+  // Only the whole list can say a term is NOT met: `recent` alone drops early terms (contracts §10.8), so without
+  // `all` the vocabulary is unknown and only names the course never uses are refused.
+  const introduced = terms?.all !== undefined ? new Set(terms.all) : null;
+  return {
+    revisions: review.revisions,
+    totalBars: review.totalBars,
+    lint: { keys, introduced },
+    strengths: review.strengthsWanted ?? strengthsWantedFor(subjectId),
+  };
 }
 
 /** Capstones that get one revision; every later capstone gets two (contracts §10.6). */
@@ -217,6 +257,21 @@ class Checker {
       this.problems.push(`${path}: bar ${to} is past the end (${total} bars)`);
   }
 
+  /** Wave 6 (d2): harmony names stay inside the learner's vocabulary. Not checked without the lint context. */
+  prose(path: string, text: string): void {
+    const lint = this.rules.lint;
+    if (!lint) return;
+    for (const p of proseProblems(text, lint.introduced)) this.problems.push(`${path}: ${p}`);
+  }
+
+  /** Wave 6 (d2): try-it code in the piece's key and in STYLE's arrange() form. */
+  tryCode(path: string, code: string): void {
+    for (const p of arrangeProblems(code)) this.problems.push(`${path}: ${p}`);
+    const keys = this.rules.lint?.keys ?? [];
+    const key = keys.length > 0 ? tryKeyProblem(code, keys) : null;
+    if (key !== null) this.problems.push(`${path}: ${key}`);
+  }
+
   /** Contracts §10.6: a review never states or implies pass or fail. */
   verdict(path: string, text: string): void {
     if (VERDICT.test(text))
@@ -231,6 +286,8 @@ class Checker {
     if ((q.match(/\?/g) ?? []).length !== 1 || !q.endsWith("?")) {
       this.problems.push("listeningQuestion: must be exactly one question ending in '?'");
     }
+    this.prose("listeningQuestion", review.listeningQuestion);
+    this.prose("linerNote", review.linerNote);
     this.words("linerNote", review.linerNote, REVIEW_LIMITS.linerNoteWords);
     if (/\byou(?:r|rs|'re|'ve|'ll)?\b/i.test(review.linerNote)) {
       this.problems.push("linerNote: write in the third person (no 'you')");
@@ -243,10 +300,12 @@ export function validateCapstoneReview(raw: unknown, rules: ReviewRules): Struct
   if (!parsed.success) return { ok: false, problems: zodProblems(parsed.error) };
   const r = parsed.data;
   const c = new Checker(rules);
-  c.count("strengths", r.strengths.length, REVIEW_LIMITS.strengths[0], REVIEW_LIMITS.strengths[1]);
+  const [minS, maxS] = rules.strengths === 3 ? [3, 3] : REVIEW_LIMITS.strengths;
+  c.count("strengths", r.strengths.length, minS, maxS);
   r.strengths.forEach((s, i) => {
     c.words(`strengths[${i}].text`, s.text, REVIEW_LIMITS.strengthWords);
     c.verdict(`strengths[${i}].text`, s.text);
+    c.prose(`strengths[${i}].text`, s.text);
     c.bars(`strengths[${i}].bars`, s.bars);
   });
   c.count("revisions", r.revisions.length, rules.revisions, rules.revisions);
@@ -255,6 +314,8 @@ export function validateCapstoneReview(raw: unknown, rules: ReviewRules): Struct
     c.words(`${at}.title`, rev.title, REVIEW_LIMITS.titleWords);
     c.words(`${at}.why`, rev.why, REVIEW_LIMITS.whyWords);
     c.verdict(`${at}.why`, rev.why);
+    c.prose(`${at}.title`, rev.title);
+    c.prose(`${at}.why`, rev.why);
     c.bars(`${at}.bars`, rev.bars);
     if (rev.skills.length > REVIEW_LIMITS.skills)
       c.problems.push(`${at}.skills: at most ${REVIEW_LIMITS.skills}`);
@@ -265,6 +326,7 @@ export function validateCapstoneReview(raw: unknown, rules: ReviewRules): Struct
     }
     // tryCode is code the learner did not type: it gets the same strict profile as a card.
     for (const line of formatLintIssues(lintStrict(rev.tryCode))) c.problems.push(`${at}.tryCode: ${line}`);
+    c.tryCode(`${at}.tryCode`, rev.tryCode);
   });
   c.common(r);
   return c.problems.length === 0 ? { ok: true, value: r } : { ok: false, problems: c.problems };
@@ -278,10 +340,12 @@ export function validateTranscriptionReview(
   if (!parsed.success) return { ok: false, problems: zodProblems(parsed.error) };
   const r = parsed.data;
   const c = new Checker(rules);
-  c.count("strengths", r.strengths.length, REVIEW_LIMITS.strengths[0], REVIEW_LIMITS.strengths[1]);
+  const [minS, maxS] = rules.strengths === 3 ? [3, 3] : REVIEW_LIMITS.strengths;
+  c.count("strengths", r.strengths.length, minS, maxS);
   r.strengths.forEach((s, i) => {
     c.words(`strengths[${i}].text`, s.text, REVIEW_LIMITS.strengthWords);
     c.verdict(`strengths[${i}].text`, s.text);
+    c.prose(`strengths[${i}].text`, s.text);
     c.bars(`strengths[${i}].bars`, s.bars);
   });
   c.count("revisions", r.revisions.length, rules.revisions, rules.revisions);
@@ -290,11 +354,15 @@ export function validateTranscriptionReview(
     c.words(`${at}.title`, rev.title, REVIEW_LIMITS.titleWords);
     c.words(`${at}.why`, rev.why, REVIEW_LIMITS.whyWords);
     c.verdict(`${at}.why`, rev.why);
+    c.prose(`${at}.title`, rev.title);
+    c.prose(`${at}.why`, rev.why);
+    c.prose(`${at}.listenFor`, rev.listenFor);
     c.words(`${at}.listenFor`, rev.listenFor, REVIEW_LIMITS.listenForWords);
     c.bars(`${at}.bars`, rev.bars);
   });
   c.count("plausibilityFlags", r.plausibilityFlags.length, 0, REVIEW_LIMITS.flags);
   r.plausibilityFlags.forEach((f, i) => {
+    c.prose(`plausibilityFlags[${i}].issue`, f.issue);
     c.words(`plausibilityFlags[${i}].issue`, f.issue, REVIEW_LIMITS.flagWords);
     c.bars(`plausibilityFlags[${i}].bars`, f.bars);
   });

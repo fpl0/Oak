@@ -19,9 +19,9 @@ import {
   type HumToDraftResult,
   humToDraft,
   type PitchFrame,
-  pitchFramesToNotes,
 } from "@oak/pitch";
 import { Cyclist, sequence, silence } from "@strudel/core";
+import { listenPass } from "./listen.ts";
 import { burstOnsets } from "./onsets.ts";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -302,24 +302,8 @@ async function humRun(o: {
   bpm: number;
   tuneSec: number;
 }): Promise<HumRun> {
-  const ctx = new AudioContext();
-  await ctx.resume();
-  const graph = createMicGraph(ctx);
-  const s = await graph.open();
-  await sleep(o.seconds * 1000);
-  const frames = s.frames();
-  s.close();
-  graph.dispose();
-  await ctx.close();
-  // Find the first onset after at least 1.2 s of silence: the start of a whole pass of the tune.
-  const notes = pitchFramesToNotes(frames);
-  let start: number | null = null;
-  for (let i = 1; i < notes.length; i++)
-    if ((notes[i] as { start: number }).start - (notes[i - 1] as { end: number }).end > 1.2) {
-      start = (notes[i] as { start: number }).start;
-      break;
-    }
-  if (start === null) throw new Error("no whole pass of the tune was captured");
+  // One whole pass of the tune, from its first note (`listenPass`; at most `seconds`).
+  const { frames, start } = await listenPass({ passSec: o.tuneSec, maxSec: o.seconds });
   const take = frames.filter((f) => f.t >= start - 0.15 && f.t <= start + o.tuneSec + 0.3);
   const d = humToDraft(take, {
     key: o.key,

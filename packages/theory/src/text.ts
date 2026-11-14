@@ -76,6 +76,10 @@ function normalizeIntervalText(text: string): string | null {
     seventh: "7",
     octave: "8",
     ninth: "9",
+    tenth: "10",
+    eleventh: "11",
+    twelfth: "12",
+    thirteenth: "13",
   };
   t = t
     .trim()
@@ -139,6 +143,9 @@ export function normalizeText(kind: NoteTextKind, text: string): string | null {
       // A forgiving entry: "g/b", "c#m/e" and "Cmaj7/g" read as G/B, C#m/E and Cmaj7/G (root and bass letters).
       const t = text
         .trim()
+        // A bare triangle is the major seventh (CΔ = Cmaj7), as the jazz glyph is written; with a number after
+        // it (CΔ7, CΔ9) the chord table reads it already.
+        .replace(/[∆Δ△](?!\d)/g, "^7")
         .replace(/^([a-g])/, (c) => c.toUpperCase())
         .replace(/\/\s*([a-g])(?=[#b♯♭]?\s*$)/, (_, c: string) => `/${c.toUpperCase()}`);
       const c = parseChordWithBass(t);

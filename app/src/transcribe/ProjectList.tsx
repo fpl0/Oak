@@ -27,6 +27,7 @@ import { toast } from "../ui/kit/Toast.tsx";
 import { AUDIO_ACCEPT, AUDIO_KINDS, fileProblem, PRIVACY_COPY, titleOf } from "./import.ts";
 import { type LadderLevel, LEVEL_TITLE, ladderSummary, REALISM_TEXT } from "./ladder.ts";
 import { rememberItem } from "./song.ts";
+import { songProgress } from "./standard.ts";
 
 const SOURCE_LABEL: Record<Transcription["sourceKind"], string> = {
   "own-audio": "your audio",
@@ -117,12 +118,9 @@ function ImportCard() {
   );
 }
 
-/** One song of the L5/L6 pool: what is passed, and Start or Continue (or why it is not open). */
+/** One song of the L5/L6/L8 pool: what is passed, and Start or Continue (or why it is not open). */
 function SongRow({ song, busy, onOpen }: { song: LadderSong; busy: boolean; onOpen(): void }) {
-  const progress =
-    song.level === 5
-      ? `${song.passedPhrases.length} of ${song.phrases.length} phrases`
-      : `${song.passedStages.length} of 3 stages`;
+  const progress = songProgress(song);
   const started = song.passedPhrases.length > 0 || song.passedStages.length > 0;
   return (
     <li className="flex flex-wrap items-center gap-x-2 gap-y-1 py-1.5 text-sm" data-testid="song-row">
@@ -133,7 +131,9 @@ function SongRow({ song, busy, onOpen }: { song: LadderSong; busy: boolean; onOp
           {song.status === "locked"
             ? song.level === 5
               ? `${song.phrases.length} phrases`
-              : "Bass, changes, melody"
+              : song.level === 8
+                ? "Form, bass, changes, melody"
+                : "Bass, changes, melody"
             : progress}
         </span>
       </span>
@@ -152,14 +152,14 @@ function SongRow({ song, busy, onOpen }: { song: LadderSong; busy: boolean; onOp
   );
 }
 
-/** L5/L6: the song pool (contracts §2.8) to pick from; locked and unchecked songs say why. */
+/** L5/L6/L8: the song pool (contracts §2.8) to pick from; locked and unchecked songs say why. */
 function SongPicker({
   level,
   onOpen,
   busy,
 }: {
-  level: 5 | 6;
-  onOpen(songId: string, level: 5 | 6): void;
+  level: 5 | 6 | 8;
+  onOpen(songId: string, level: 5 | 6 | 8): void;
   busy: boolean;
 }) {
   const songs = useLadderSongs();
@@ -175,7 +175,11 @@ function SongPicker({
   const pool = songs.data.items.filter((s) => s.level === level);
   if (pool.length === 0)
     return (
-      <p className="text-sm text-text-2">No songs at this level yet: their answer keys are being checked.</p>
+      <p className="text-sm text-text-2" data-testid="songs-empty">
+        {level === 8
+          ? "No standard is ready yet: each one's answer key is checked against the printed song first."
+          : "No songs at this level yet: their answer keys are being checked."}
+      </p>
     );
   return (
     <ul
@@ -184,7 +188,7 @@ function SongPicker({
       data-testid="song-picker"
     >
       {pool.map((s) => (
-        <SongRow key={s.songId} song={s} busy={busy} onOpen={() => onOpen(s.songId, s.level)} />
+        <SongRow key={s.songId} song={s} busy={busy} onOpen={() => onOpen(s.songId, level)} />
       ))}
     </ul>
   );
@@ -226,7 +230,7 @@ function LadderCard() {
           <h2 className="text-h3">The ladder</h2>
           <p className="mt-0.5 text-sm text-text-2">
             Short loops Oak generates and grades exactly (drums, bass lines, four-chord loops, melodies), then
-            songs: folk tunes phrase by phrase, and the blues in stages.
+            songs: folk tunes phrase by phrase, the blues in stages, and a whole standard, form first.
           </p>
         </div>
       </div>
@@ -250,6 +254,7 @@ function LadderCard() {
               {
                 onSuccess: () =>
                   toast.success(`Level ${to}: ${LEVEL_TITLE[to as LadderLevel]}`, "Items start clean (R0)."),
+                onError: (e) => toast.error("Couldn't move up yet", e.message),
               },
             )
           }
@@ -269,11 +274,11 @@ function LadderStatus({
   s: LadderState;
   busy: boolean;
   onNext(level?: LadderLevel): void;
-  onSong(songId: string, level: 5 | 6): void;
+  onSong(songId: string, level: 5 | 6 | 8): void;
   onLevelUp(to: number): void;
 }) {
   const level = s.level as LadderLevel;
-  const songLevel = level === 5 || level === 6;
+  const songLevel = level === 5 || level === 6 || level === 8;
   const lower = ([1, 2, 3, 4] as const).filter((l) => l < level);
   return (
     <div className="flex flex-col gap-2">
@@ -282,7 +287,19 @@ function LadderStatus({
       </p>
       <p className="text-sm text-text-3">{REALISM_TEXT[s.realism]}</p>
       {songLevel ? <SongPicker level={level} busy={busy} onOpen={onSong} /> : null}
-      {level === 6 ? (
+      {level === 8 ? (
+        <p className="text-sm text-text-2" data-testid="l8-note">
+          A standard takes several sessions: the form map first, then the bass, the changes and the melody, a
+          section at a time. What you pass is kept.
+        </p>
+      ) : null}
+      {level === 8 ? (
+        <details className="text-sm">
+          <summary className="cursor-pointer text-text-2">Blues strains (L6) to practise</summary>
+          <SongPicker level={6} busy={busy} onOpen={onSong} />
+        </details>
+      ) : null}
+      {level === 6 || level === 8 ? (
         <details className="text-sm">
           <summary className="cursor-pointer text-text-2">Folk songs (L5) to practise</summary>
           <SongPicker level={5} busy={busy} onOpen={onSong} />
@@ -295,7 +312,7 @@ function LadderStatus({
           onClick={() => onNext()}
           data-testid="ladder-next"
         >
-          {songLevel ? `Next song · L${level}` : `Next item · L${level}`}
+          {level === 8 ? "Next standard · L8" : songLevel ? `Next song · L${level}` : `Next item · L${level}`}
         </Button>
         {s.levelUp ? (
           <Button
@@ -318,6 +335,22 @@ function LadderStatus({
       </div>
       {s.levelUp ? <p className="text-sm text-text-2">{s.levelUp.reason}</p> : null}
     </div>
+  );
+}
+
+/** CF-T takes the transcription slots while it is open (wave6.md §5.2): say so, and where it is worked. */
+function CfTLine({ plan }: { plan: GymPlan }) {
+  const cfT = plan.cfT;
+  if (!cfT?.takesSlot) return null;
+  return (
+    <p className="text-sm text-text-2" data-testid="cft-line">
+      Your transcription sessions are the Standard Transcription for now
+      {cfT.nextSessionId ? ` (next: ${cfT.nextSessionId})` : ""}: a whole standard, form first.{" "}
+      <Link to="/capstone/$id" params={{ id: "CF-T" }} className="underline">
+        Open it
+      </Link>
+      . The gym comes back when it is released.
+    </p>
   );
 }
 
@@ -347,8 +380,9 @@ export function ProjectList() {
     <>
       <PageHeader title="Transcribe" sub="Hear it, write it in code, compare with A/B." />
       {gym.data ? (
-        <div className="mb-4">
+        <div className="mb-4 flex flex-col gap-1">
           <GymLine plan={gym.data} />
+          <CfTLine plan={gym.data} />
         </div>
       ) : null}
       <div className="mb-6 grid gap-4 md:grid-cols-2">

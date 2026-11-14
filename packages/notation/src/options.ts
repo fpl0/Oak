@@ -135,6 +135,23 @@ const LETTERS = "CDEFGAB";
 const MAJOR = [0, 2, 4, 5, 7, 9, 11];
 
 /**
+ * The key in force where a drawn pitch stands on its staff, with the degree and syllable its spelling has there
+ * (`labelSpelled`; in a blues the blue ♭5 whichever way it is spelled). `null` without a key. Used by the lens
+ * lines here and by `drawnLabels` (host.ts), so both read one rule.
+ */
+export function spelledLabel(
+  score: Score,
+  staff: Staff,
+  onset: Rat,
+  p: SpelledPitch,
+): { key: KeySpec; degree: string; syllable: string } | null {
+  const key = signatureAt(score, staff, onset);
+  if (!key) return null;
+  const l = score.blues ? (blueFive(p, key) ?? labelSpelled(p, key)) : labelSpelled(p, key);
+  return { key, degree: l.degree, syllable: l.syllable };
+}
+
+/**
  * The annotation texts of every engraved pitched note, by `n` (tied continuations are skipped: only the
  * first piece of a tie chain is labelled). Degree and solfège need a key: `key` or else `score.key`; without
  * one they are left out. Pure; the emitter and the DOM layer decide where the text goes.

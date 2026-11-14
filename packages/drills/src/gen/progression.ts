@@ -1,7 +1,7 @@
 // Harmony families built from whole progressions: `fam.har.progression` (Roman-numeral dictation),
 // `fam.har.chromatic` (find and name the secondary or borrowed chord) and `fam.har.modulation` (did the
 // key change, and where?). Chords are voiced by Oak's voicer with smooth upper voices over a bass line.
-import type { ChordQuality, Degree, KeySpec } from "@oak/content-kit";
+import { type ChordQuality, type Degree, type KeySpec, OUTSIDE_CHORD_OPTIONS } from "@oak/content-kit";
 import { buildPiece, type TrackSpec } from "../build.ts";
 import {
   CHORD_TONES,
@@ -269,36 +269,68 @@ interface ChromaticCase {
   /** 0-based bar of the chromatic chord. */
   at: number;
 }
-/** Two settings per chromatic chord, the chord in different bars. Every other chord is diatonic. */
+/**
+ * Settings per chromatic chord, the chord in different bars. Every other chord is diatonic, and one of them is
+ * the chord's near miss, so the loop cannot be solved by its outline: the key's own chord on the same root beside
+ * a secondary dominant (ii beside V7/V: D minor, then D7), the chord on the same degree beside a borrowed one
+ * (IV then iv, vi then ♭VI), V beside ♭VII.
+ */
 const CHROMATIC_CASES: Readonly<Record<string, ChromaticCase[]>> = {
   "V/V": [
-    { bars: [p("1", "maj", "I"), p("6", "min", "vi"), ap("5", "V7/V"), p("5", "maj", "V")], at: 2 },
+    { bars: [p("1", "maj", "I"), p("2", "min", "ii"), ap("5", "V7/V"), p("5", "maj", "V")], at: 2 },
     { bars: [p("1", "maj", "I"), ap("5", "V7/V"), p("5", "maj", "V"), p("1", "maj", "I")], at: 1 },
+    { bars: [p("2", "min", "ii"), p("5", "maj", "V"), p("1", "maj", "I"), ap("5", "V7/V")], at: 3 },
   ],
   "V/vi": [
     { bars: [p("1", "maj", "I"), ap("6", "V7/vi"), p("6", "min", "vi"), p("4", "maj", "IV")], at: 1 },
-    { bars: [p("1", "maj", "I"), p("4", "maj", "IV"), ap("6", "V7/vi"), p("6", "min", "vi")], at: 2 },
+    { bars: [p("1", "maj", "I"), p("3", "min", "iii"), ap("6", "V7/vi"), p("6", "min", "vi")], at: 2 },
+    { bars: [p("6", "min", "vi"), p("4", "maj", "IV"), p("1", "maj", "I"), ap("6", "V7/vi")], at: 3 },
   ],
   "V/ii": [
     { bars: [p("1", "maj", "I"), ap("2", "V7/ii"), p("2", "min", "ii"), p("5", "maj", "V")], at: 1 },
     { bars: [p("1", "maj", "I"), p("6", "min", "vi"), ap("2", "V7/ii"), p("2", "min", "ii")], at: 2 },
+    { bars: [p("2", "min", "ii"), p("5", "maj", "V"), p("1", "maj", "I"), ap("2", "V7/ii")], at: 3 },
   ],
   "V/IV": [
     { bars: [p("1", "maj", "I"), ap("4", "V7/IV"), p("4", "maj", "IV"), p("5", "maj", "V")], at: 1 },
+    { bars: [p("4", "maj", "IV"), p("5", "maj", "V"), p("1", "maj", "I"), ap("4", "V7/IV")], at: 3 },
     { bars: [p("1", "maj", "I"), p("5", "maj", "V"), ap("4", "V7/IV"), p("4", "maj", "IV")], at: 2 },
   ],
   iv: [
     { bars: [p("1", "maj", "I"), p("4", "maj", "IV"), p("4", "min", "iv"), p("1", "maj", "I")], at: 2 },
-    { bars: [p("1", "maj", "I"), p("4", "min", "iv"), p("1", "maj", "I"), p("5", "maj", "V")], at: 1 },
+    { bars: [p("1", "maj", "I"), p("4", "min", "iv"), p("1", "maj", "I"), p("4", "maj", "IV")], at: 1 },
+    { bars: [p("4", "maj", "IV"), p("1", "maj", "I"), p("5", "maj", "V"), p("4", "min", "iv")], at: 3 },
   ],
   bVI: [
-    { bars: [p("1", "maj", "I"), p("b6", "maj", "bVI"), p("5", "maj", "V"), p("1", "maj", "I")], at: 1 },
-    { bars: [p("1", "maj", "I"), p("4", "maj", "IV"), p("b6", "maj", "bVI"), p("1", "maj", "I")], at: 2 },
+    { bars: [p("1", "maj", "I"), p("6", "min", "vi"), p("b6", "maj", "bVI"), p("5", "maj", "V")], at: 2 },
+    { bars: [p("1", "maj", "I"), p("b6", "maj", "bVI"), p("5", "maj", "V"), p("6", "min", "vi")], at: 1 },
+    { bars: [p("6", "min", "vi"), p("4", "maj", "IV"), p("1", "maj", "I"), p("b6", "maj", "bVI")], at: 3 },
   ],
   bVII: [
     { bars: [p("1", "maj", "I"), p("b7", "maj", "bVII"), p("4", "maj", "IV"), p("1", "maj", "I")], at: 1 },
-    { bars: [p("1", "maj", "I"), p("4", "maj", "IV"), p("b7", "maj", "bVII"), p("1", "maj", "I")], at: 2 },
+    { bars: [p("1", "maj", "I"), p("5", "maj", "V"), p("b7", "maj", "bVII"), p("4", "maj", "IV")], at: 2 },
+    { bars: [p("1", "maj", "I"), p("4", "maj", "IV"), p("5", "maj", "V"), p("b7", "maj", "bVII")], at: 3 },
   ],
+};
+/** Where each chromatic chord is from (content-kit OUTSIDE_CHORD_OPTIONS' ids). */
+export const CHROMATIC_KIND: Readonly<Record<string, "secondary-dominant" | "borrowed">> = {
+  "V/V": "secondary-dominant",
+  "V/vi": "secondary-dominant",
+  "V/ii": "secondary-dominant",
+  "V/IV": "secondary-dominant",
+  iv: "borrowed",
+  bVI: "borrowed",
+  bVII: "borrowed",
+};
+/** The chord names as the learner reads them. */
+const CHROMATIC_LABELS: Readonly<Record<string, string>> = {
+  "V/V": "V7/V (the V of V)",
+  "V/vi": "V7/vi (the V of vi)",
+  "V/ii": "V7/ii (the V of ii)",
+  "V/IV": "V7/IV (the V of IV)",
+  iv: "iv (the minor IV)",
+  bVI: "♭VI",
+  bVII: "♭VII",
 };
 function p(degree: Degree, quality: ChordQuality, rnText: string): ProgChord {
   return { chord: rn(degree, quality), rn: rnText };
@@ -325,27 +357,52 @@ export const chromaticChord: Generator = {
       c.bars.map((b) => b.chord),
     );
     const piece = buildPiece({ bpm: pickTempo(ctx), bars: c.bars.length, tracks });
-    const named = ctx.level.categories.filter((x) => ctx.openCategories.includes(x) || x === ctx.category);
-    const name = named.length >= 2 && ctx.rng.next() < 0.5;
-    if (name) {
+    const kind = CHROMATIC_KIND[ctx.category] ?? "secondary-dominant";
+    const open = ctx.level.categories.filter((x) => ctx.openCategories.includes(x) || x === ctx.category);
+    // The chords of the same kind the learner could confuse it with (which target? which borrowed chord?).
+    const named = open.filter((x) => CHROMATIC_KIND[x] === kind);
+    const bothKinds = new Set(open.map((x) => CHROMATIC_KIND[x])).size > 1;
+    // Three questions, by what the level holds: in which bar is it (always possible); which chord is it
+    // (two or more of its kind are open); is it a secondary dominant or a borrowed chord (both kinds open).
+    const questions = ["bar", ...(named.length >= 2 ? ["name"] : []), ...(bothKinds ? ["kind"] : [])];
+    const question = questions.length === 1 ? "bar" : ctx.rng.pick([...questions, "bar"]);
+    const common = { key, chromaticBar: c.at + 1, chord: ctx.category, kind };
+    if (question === "name") {
       return trialOf(piece, { choice: [ctx.category] }, cueOf(ctx), {
         mode: "choice",
-        key,
-        options: [...new Set([...named, ctx.category])],
+        ...common,
+        question,
+        options: named,
+        optionLabels: Object.fromEntries(named.map((o) => [o, CHROMATIC_LABELS[o] ?? o])),
         markedBar: c.at + 1,
-        chromaticBar: c.at + 1,
         prompt: `The chord in bar ${c.at + 1} is not from the key. Which chord is it?`,
       });
     }
-    const options = c.bars.map((_, i) => String(i + 1)).filter((b) => b !== "1");
+    if (question === "kind") {
+      const options = OUTSIDE_CHORD_OPTIONS.filter(
+        (o) => o.id === "secondary-dominant" || o.id === "borrowed",
+      );
+      return trialOf(piece, { choice: [kind] }, cueOf(ctx), {
+        mode: "choice",
+        ...common,
+        question,
+        options: options.map((o) => o.id),
+        optionLabels: Object.fromEntries(options.map((o) => [o.id, o.label])),
+        markedBar: c.at + 1,
+        prompt: `The chord in bar ${c.at + 1} is not from the key. Where is it from?`,
+      });
+    }
+    // Any bar but the one that sets the key: bar 1 when the loop starts at home, else the bar of I.
+    const homeBar = c.bars.findIndex((b) => b.rn === "I") + 1;
+    const options = c.bars.map((_, i) => String(i + 1)).filter((b) => Number(b) !== homeBar);
     return trialOf(piece, { choice: [String(c.at + 1)] }, cueOf(ctx), {
       mode: "choice",
       ui: "bar-buttons",
-      key,
+      ...common,
+      question,
       bars: c.bars.length,
       options,
       optionLabels: Object.fromEntries(options.map((o) => [o, `Bar ${o}`])),
-      chromaticBar: c.at + 1,
       prompt: "In which bar does a chord step outside the key?",
     });
   },
@@ -358,6 +415,8 @@ interface Modulation {
   /** 1-based bar where the new key's first foreign chord sounds, or `null` with no key change. */
   at: number | null;
   newKey: KeySpec | null;
+  /** A direct lift: 1 (a half step) or 2 (a whole step). */
+  liftSemis?: number;
 }
 const shiftKey = (key: KeySpec, semis: number, mode: KeySpec["mode"] = key.mode): KeySpec => {
   const pc = mod(parsePc(key.tonic).pc + semis, 12);
@@ -369,11 +428,12 @@ export function modulationPlan(rng: Rng, cat: string, key: KeySpec): Modulation 
   const head = [rn("1", "maj"), rn("4", "maj"), rn("5", "maj"), rn("1", "maj"), rn("6", "min")];
   if (cat === "truck-driver") {
     const len = rng.int(3, 5);
-    const up = shiftKey(key, rng.pick([1, 2]));
+    const liftSemis = rng.pick([1, 2]);
+    const up = shiftKey(key, liftSemis);
     const phrase = [rn("1", "maj"), rn("6", "min"), rn("4", "maj"), rn("5", "maj"), rn("1", "maj")];
     const first = phrase.slice(0, len);
     const second = phrase.slice(0, 8 - len);
-    return { chords: [...inKey(key, ...first), ...inKey(up, ...second)], at: len + 1, newKey: up };
+    return { chords: [...inKey(key, ...first), ...inKey(up, ...second)], at: len + 1, newKey: up, liftSemis };
   }
   if (cat === "relative") {
     // Pivot: vi of the old key is i of the new; its V (with the raised leading tone) is the first foreign chord.
@@ -399,13 +459,28 @@ export function modulationPlan(rng: Rng, cat: string, key: KeySpec): Modulation 
     ].slice(0, 8);
     return { chords, at: len + 2, newKey: dom };
   }
+  // No key change, in the two shapes a change is mistaken for: the phrase starts again from the top where a lift
+  // would have come (the same bars as a truck-driver trial, a step lower than the ear braces for), or a
+  // secondary dominant visits and the phrase comes home (U17.L03: "a visit, not a move").
+  if (rng.next() < 0.5) {
+    const len = rng.int(3, 5);
+    const phrase = [rn("1", "maj"), rn("6", "min"), rn("4", "maj"), rn("5", "maj"), rn("1", "maj")];
+    return {
+      chords: inKey(key, ...phrase.slice(0, len), ...phrase.slice(0, 8 - len)),
+      at: null,
+      newKey: null,
+    };
+  }
+  const visit: RnChord =
+    rng.next() < 0.5 ? { degree: "5", quality: "7", of: "5" } : { degree: "5", quality: "7", of: "6" };
+  const target = visit.of === "5" ? rn("5", "maj") : rn("6", "min");
   const stay = [
     rn("1", "maj"),
     rn("6", "min"),
-    rn("4", "maj"),
-    rn("5", "maj"),
+    visit,
+    target,
     rn("1", "maj"),
-    rn("2", "min"),
+    rn("4", "maj"),
     rn("5", "maj"),
     rn("1", "maj"),
   ];
@@ -452,6 +527,8 @@ export const modulation: Generator = {
       ui: "bar-buttons",
       key,
       newKey: plan.newKey,
+      // A direct lift: by how many half steps (a half step as often as a whole step, U17.L02's two sounds).
+      ...(plan.liftSemis !== undefined ? { liftSemis: plan.liftSemis } : {}),
       bars: plan.chords.length,
       options,
       optionLabels: Object.fromEntries(options.map((o) => [o, o === "none" ? "No key change" : `Bar ${o}`])),

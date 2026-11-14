@@ -91,9 +91,16 @@ if (arg === "all") {
   checkpoints = cps.defs;
   // A brief is authored just in time (two units ahead of the learner): `all` checks the ones that carry
   // tests, and names the rest.
-  // A transcribe capstone is checked once its sessions carry phrase checks or stage exercises (Wave 4).
+  // A transcribe capstone is checked once its sessions carry phrase checks or stage exercises (Wave 4), a
+  // form map or a session rubric (Wave 6: CF-T).
   const authoredSessions = (c: (typeof capstones)[number]) =>
-    c.sessionDefs.some((s) => (s.checks?.length ?? 0) > 0 || (s.stages?.length ?? 0) > 0);
+    c.sessionDefs.some(
+      (s) =>
+        (s.checks?.length ?? 0) > 0 ||
+        (s.stages?.length ?? 0) > 0 ||
+        s.formMap !== undefined ||
+        (s.rubric?.length ?? 0) > 0,
+    );
   capstoneIds = capstones
     .filter((c) => (c.brief?.tests.length ?? 0) > 0 || (c.kind === "transcribe" && authoredSessions(c)))
     .map((c) => c.id);

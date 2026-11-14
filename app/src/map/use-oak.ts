@@ -6,6 +6,7 @@ import { useContent } from "../lib/content.ts";
 import { lessonTitles } from "../lib/content-model.ts";
 import { useCourseProgress, useFamilies, useSkillMap, useTodayPlan, useVoiceState } from "../lib/queries.ts";
 import { mapNextId } from "../session/edge.ts";
+import { authoredUnits, deriveTracks, type TrackRow, trackRows } from "../session/tracks-model.ts";
 import { buildMapGraph, type MapGraph } from "./graph.ts";
 import { type NextPath, unitProgress, whatsNext } from "./guide.ts";
 import { layoutOak, type MapLayout } from "./layout.ts";
@@ -25,6 +26,15 @@ export interface OakModel {
   authored: ReadonlySet<string>;
   /** Lessons done per unit and the unit holding the next map item (the map's row labels). */
   units: ReadonlyMap<string, { done: number; total: number; current: boolean }>;
+  /**
+   * Wave 6: the advanced tracks as branches (tracks-model.ts), from `CourseProgress.tracks` or, on a server that
+   * does not carry them, the same gates read from course progress. Empty while progress loads.
+   */
+  tracks: readonly TrackRow[];
+  /** Unit rows behind an open gate (`J1` → its track): drawn as an open branch, never as "not open yet". */
+  openUnits: ReadonlyMap<string, TrackRow>;
+  /** Where the core stands (`CourseProgress.core`). */
+  core: "in-progress" | "lessons-done" | "complete";
 }
 
 // The graph and layout depend only on the content bundle, which never changes while the app runs.
@@ -54,6 +64,13 @@ export function useOak() {
     const planned = plan.data?.mapItemId ?? null;
     const nextId = mapNextId(orderNext, planned, authored, bundle.syllabus?.defaultOrder);
     const lessonStatus = new Map((progress.data?.lessons ?? []).map((l) => [l.lessonId, l.status as string]));
+    const tracks = !progress.data
+      ? []
+      : progress.data.tracks && progress.data.tracks.length > 0
+        ? trackRows(progress.data.tracks)
+        : trackRows(deriveTracks(progress.data, authoredUnits(authored)));
+    const openUnits = new Map<string, TrackRow>();
+    for (const t of tracks) if (t.open) for (const u of t.openUnits) openUnits.set(u, t);
     model = {
       ...cached,
       states: withQuiet(
@@ -72,6 +89,9 @@ export function useOak() {
       lessonTitle: (id: string) => titles.get(id) ?? id,
       reviveSec: map.data?.reviveSec ?? 0,
       units: unitProgress(bundle.syllabus, lessonStatus, nextId),
+      tracks,
+      openUnits,
+      core: progress.data?.core ?? "in-progress",
     };
   }
   return { content, map, progress, families, model };

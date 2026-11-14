@@ -47,7 +47,7 @@ export const U05: UnitSpec = {
   unit: "U05",
   title: "Triads",
   summary:
-    'Eight lessons on chords, built by hand before any helper: a triad is three notes of the key stacked a 3rd apart, written `n("[0,2,4]")` from the first lesson; its quality (major, minor, diminished, augmented) comes from its two 3rds and is heard before it is named; it gets a lead-sheet name and an arpeggio; it can be turned upside down (inversions, slash chords); its low notes are read on the bass clef; and a progression of triads is voiced by hand so each note moves as little as possible. That last check (U05.L07 `hand-voiced-cadence`, ≥ 0.9, unrevealed) is the gate for `chord()` and `.voicing()`, which U05.L08 then compares with the learner\'s own voicing. Ear-training stage D starts here (`fam.chd.quality-triad`, `fam.chd.inversion`). U05.CP follows U06.L01 in the default order.',
+    'Nine lessons on chords (eight until contracts 1.6 split "Chord Names" out of U05.L04), built by hand before any helper: a triad is three notes of the key stacked a 3rd apart, written `n("[0,2,4]")` from the first lesson; its quality (major, minor, diminished, augmented) comes from its two 3rds and is heard before it is named; it gets a lead-sheet name and an arpeggio; it can be turned upside down (inversions, slash chords); its low notes are read on the bass clef; and a progression of triads is voiced by hand so each note moves as little as possible. That last check (U05.L07 `hand-voiced-cadence`, ≥ 0.9, unrevealed) is the gate for `chord()` and `.voicing()`, which U05.L08 then compares with the learner\'s own voicing. Ear-training stage D starts here (`fam.chd.quality-triad`, `fam.chd.inversion`). U05.CP follows U06.L01 in the default order.',
   conventions: [
     'Chords are stacked by hand from U05.L01: `n("[0,2,4]")` over `.scale("C3:major")` (chords an octave under the tune, STYLE §3 rule 4). The rule is "skip a degree, twice": `[k, k+2, k+4]` is the triad on degree k+1. `.add()` (stacking on every degree with arithmetic) is U06.L01\'s; `chord()` and `.voicing()` stay locked until U05.L08 and appear before it only in read-only `preview: true` examples (U05.L04 S5).',
     'A chord outside the key\'s own triads (A major, C augmented, a borrowed note) is written in note names with an octave: `note("[a3,c#4,e4]")`. Chromatic `n` steps (`n("4#")`) are U15.L01\'s; the lint refuses them here.',
@@ -257,7 +257,7 @@ export const U05: UnitSpec = {
       ],
       singOn: "syllables",
       mistakes: [
-        "`f#4` written as `gb4`: passes the pitch classes (`pcset`); the strict spelling is U05.L04's quiz, not this step",
+        "`f#4` written as `gb4`: passes the pitch classes (`pcset`); the strict spelling is U05.L09's quiz, not this step",
         "the bottom note moved instead (`[d#4,f4,a4]`): `harmony.pcset` + `harmony.bass`",
         "the unchanged starter: `code.unchanged`",
         "Make starter (all major): `rubric.unmet`",
@@ -366,7 +366,7 @@ export const U05: UnitSpec = {
       connects: {
         back: "U04.L03's tritone is the 5th of the diminished triad; U05.L02's two 3rds now come in pairs of the same size.",
         forward:
-          "U05.L04 gives every quality a name on paper (C, Cm, C°, C+) and plays chords one note at a time.",
+          "U05.L04 plays chords one note at a time; U05.L09 gives every quality a name on paper (C, Cm, C°, C+).",
       },
       notes: [
         'Augmented in note names only: `Caug` in `chord()` waits for U05.L08, and `dict("triads")` voices it wrongly (STYLE §5.2).',
@@ -376,7 +376,7 @@ export const U05: UnitSpec = {
     {
       id: "U05.L04",
       author: "U05b",
-      idea: "Every triad has a name on paper: the root's letter and a sign for the quality (C, Cm, C°, C+), and Strudel spells the same names in code (`C Cm Co Caug`). `.arp()` plays a stacked chord one note at a time.",
+      idea: "`.arp()` plays a stacked chord one note at a time: its numbers point into the stack, lowest note first. (Chord names, which shared this lesson until contracts 1.6, are U05.L09, taught next.)",
       hook: {
         hear: "The four-chord loop of U05.L01 as broken chords, one note at a time, up and back down, over the Band's drums and bass.",
         code: `${T(92)}chords: n("<[0,2,4] [4,6,8] [5,7,9] [3,5,7]>").arp("0 1 2 1").scale("C3:major").s("piano")`,
@@ -384,7 +384,7 @@ export const U05: UnitSpec = {
       key: C,
       meter: "4/4",
       bpm: 92,
-      canDo: ["cd.read.chord-symbols", "cd.code.arpeggio"],
+      canDo: ["cd.code.arpeggio"],
       uses: [...BASE, "tb.arp"],
       steps: [
         { kind: "listen", exercise: "listen", minutes: 0.5, what: "The hook." },
@@ -412,20 +412,6 @@ export const U05: UnitSpec = {
           term: "term.arpeggio",
         },
         {
-          kind: "concept",
-          minutes: 0.75,
-          what: 'Chord names: root letter + quality sign. C, Cm, C° (code `Co`), C+ (code `Caug`). A read-only `preview: true` example plays `chord("<C Am Bo Caug>").voicing()` beside the same chords stacked by hand; `chord()` itself is U05.L08\'s.',
-        },
-        {
-          kind: "quiz",
-          exercise: "fact",
-          answer: ["text"],
-          minutes: 1,
-          graded: true,
-          what: 'Name a stack shown on the staff and played: `[a3,c4,e4]` is Am, `[b3,d4,f4]` is B° (`text`, `normalize: "chord"`: Bo, Bdim and B° all pass; Bm fails).',
-          term: "term.chord-symbol",
-        },
-        {
           kind: "make",
           exercise: "code-make",
           answer: ["code"],
@@ -450,24 +436,121 @@ export const U05: UnitSpec = {
         tracks: ["drums", "bass"],
         flavours: "The Band's drums and bass follow the flavour; the broken chords stay `piano`.",
       },
-      srs: [
-        { deck: "deck.chd.symbols", cards: ["fact.chord.Cm", "fact.chord.Cdim"], mode: "seed" },
-        { family: "fam.chd.quality-triad", mode: "review-if-due", level: 4 },
-      ],
+      srs: [],
       singOn: "syllables",
       mistakes: [
         "`.arp()` written after `.s()` or with a bare number: an evaluation error or one note a bar; pin what the grader says",
         '`"0 1 2 3"` for an up-and-down pattern: index 3 wraps round to the lowest note (evaluated: C E G C, one octave), so the line climbs and drops; pin the code `--verbose` prints (`melody.wrong-degree` expected)',
-        "fact: Bm for B°: `id.wrong`; the unchanged starter: `code.unchanged`",
+        "the unchanged starter: `code.unchanged`",
         "Make starter (block chords): `rubric.unmet`",
       ],
       connects: {
-        back: "U05.L02–L03 heard and built the four qualities; here they get their names.",
-        forward: "U05.L05 puts a note other than the root at the bottom and names it with a slash: C/E.",
+        back: "U05.L01–L03 stacked the triads and heard their four qualities; here the same stacks move in time.",
+        forward:
+          "U05.L09 gives the four chords their names (C, G, Am, F) and reads a chart; U05.L05 then puts a note other than the root at the bottom.",
       },
       notes: [
         '`.arp()` takes the stack\'s notes from the lowest; it is written before `.scale()` on an `n` stack (evaluated: `n("[0,2,4]").arp("0 1 2 1").scale("C3:major")` plays C E G E). Check the events, not the intention (AUTHORING §9).',
+        'Contracts 1.6 (the learner\'s decision of 2026-11-13, d17) split this lesson: it was "Chord Names & Arpeggios", two ideas in one session (the learner review scored it 3 on "one idea"). The arpeggio stayed; the names are U05.L09. The lesson\'s ID, its exercise IDs and its Make are unchanged; steps S5 and S6 (the names) are retired in the ID ledger and the Make is now S5.',
+      ],
+    },
+    {
+      id: "U05.L09",
+      author: "content-lead",
+      idea: "Every triad has a name on paper: the root's letter and a sign for the quality (C, Cm, C°, C+), and Strudel spells the same names in code (`C Cm Co Caug`). A row of names is a chart: read it and you can play the song.",
+      hook: {
+        hear: "The four-chord loop the learner has stacked since U05.L01, as blocks over the Band's drums and bass, with its names said in the caption: C, G, A minor, F.",
+        code: `${T(92)}chords: n("<[0,2,4] [4,6,8] [5,7,9] [3,5,7]>").scale("C3:major").s("piano")`,
+      },
+      key: C,
+      meter: "4/4",
+      bpm: 92,
+      canDo: ["cd.read.chord-symbols"],
+      uses: [...BASE],
+      steps: [
+        { kind: "listen", exercise: "listen", minutes: 0.5, what: "The hook, named in its caption." },
+        {
+          kind: "predict",
+          exercise: "predict",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: "A page says A minor: which three notes? (A C E / A C♯ E / A B C); the code is the stack `[a3,c4,e4]`.",
+        },
+        {
+          kind: "concept",
+          minutes: 0.75,
+          what: 'Chord names: root letter + quality sign. C, Cm, C° (code `Co`), C+ (code `Caug`). A read-only `preview: true` example plays `chord("<C Am Bo Caug>").voicing()` beside the same chords stacked by hand; `chord()` itself is U05.L08\'s.',
+        },
+        {
+          kind: "quiz",
+          exercise: "fact",
+          answer: ["text"],
+          minutes: 1,
+          graded: true,
+          what: 'Name a stack shown on the staff and played: `[a3,c4,e4]` is Am, `[b3,d4,f4]` is B° (`text`, `normalize: "chord"`: Bo, Bdim and B° all pass; Bm fails).',
+          term: "term.chord-symbol",
+        },
+        {
+          kind: "quiz",
+          exercise: "keyboard",
+          answer: ["keyboard"],
+          minutes: 1,
+          graded: true,
+          what: "From the name to the keys: play Dm with D lowest (`expect: { pcs: [2, 5, 9], bassPc: 2 }`).",
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.5,
+          graded: true,
+          what: "Play the chart C, Am, Dm, G: bar 1 is stacked, bars 2–4 are bare roots to finish (`pcset`, `perOnset`, `bass: true`; `edit-only-regions`).",
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          what: "A four-bar chart of the learner's own over the Band's drums.",
+        },
+      ],
+      wrapAt: 5,
+      make: {
+        brief:
+          "A four-bar chart: bars 1 and 2 are C and F; choose bars 3 and 4 from Dm, Em, G and Am, with at least one minor name, and stack them.",
+        required: {
+          rule: "chord-qualities",
+          label: "A minor chord in your chart: a name with an m",
+          why: '`chord-qualities` `contains: ["min"]`: the starter\'s C and F are both major, and bars 3 and 4 are bare roots.',
+        },
+        suggestions: [
+          "four bars, each a full triad (`chord-qualities` `min: 4`)",
+          "a tune on top (`tracks`)",
+        ],
+        band: "band.axis-4bar",
+        tracks: ["drums"],
+        flavours: "The Band's drums follow the flavour; the chords stay `piano`.",
+      },
+      srs: [
+        { deck: "deck.chd.symbols", cards: ["fact.chord.Cm", "fact.chord.Cdim"], mode: "seed" },
+        { family: "fam.chd.quality-triad", mode: "review-if-due", level: 4 },
+      ],
+      mistakes: [
+        "fact: Bm for B°: `id.chord-quality`; Dm (named after the middle note): `id.chord-root`",
+        "keyboard: D major for Dm (`kb.extra-note`, `kb.missing-note`); F lowest (`kb.bass`)",
+        "chart: steps instead of 3rds, or Dm and G swapped: `harmony.pcset`; bar 1 changed: `code.edit-outside`; the unchanged starter: `code.unchanged`",
+        "Make: C F G C (no minor name): `rubric.unmet`; the starter as it is: `rubric.unmet`",
+      ],
+      connects: {
+        back: "U05.L02–L03 heard and built the four qualities and U05.L04 broke the loop into arpeggios; here the same chords get their names.",
+        forward:
+          "U05.L05 puts a note other than the root at the bottom and names it with a slash: C/E. U05.L08 lets the learner write chords by these names (`chord()`).",
+      },
+      notes: [
+        'New in contracts 1.6: split out of U05.L04 and taught directly after it (session 45 of the default order). The syllabus row carries `splitFrom: "U05.L04"`: a learner who completed U05.L04 before the split has had this material, and the server records this lesson as completed for them so the planner never sends them back.',
+        "`chord()` stays locked until U05.L08: the names are read, typed as answers and seen in one read-only `preview: true` example.",
         "The deck's `fact.chord.Cdim` card answers `C°` and accepts `Co` and `Cdim` (`accept`).",
+        "A chord rule reads the notes that start together, so the Make's chords stay blocks: an `.arp()` on them would hide the minor chord from `chord-qualities` (AUTHORING §17.6). The prompt does not invite it.",
       ],
     },
     {
@@ -559,7 +642,7 @@ export const U05: UnitSpec = {
         "the unchanged starter: `code.unchanged`; Make starter: `rubric.unmet`",
       ],
       connects: {
-        back: "U05.L01's root was always the lowest note. U05.L04 named chords; a slash adds the bass.",
+        back: "U05.L01's root was always the lowest note. U05.L09 named chords; a slash adds the bass.",
         forward:
           "U05.L06 reads those low notes on the bass clef; U05.L07 uses inversions to keep the voices close.",
       },

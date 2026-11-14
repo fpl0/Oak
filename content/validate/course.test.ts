@@ -175,25 +175,27 @@ describe("U03 and U04 are complete (contracts §2.3, §2.5)", () => {
   });
 });
 
-/** Wave 4's units, U05–U07 with their checkpoints, gym slots and C2/X1: sessions 42–82 of the default order. */
+/** Wave 4's units, U05–U07 with their checkpoints, gym slots and C2/X1: sessions 42–83 of the default order. */
 const WAVE4 = ORDER.slice(ORDER.indexOf("U05.L02" as SessionId), ORDER.indexOf("X1.S3" as SessionId) + 1);
 const W4_LESSONS = ["U05.L01", ...WAVE4.filter((s) => /^U0[5-7]\.L\d{2}$/.test(s))] as SessionId[];
 const w4course = W4_LESSONS.map((id) => byId.get(id)).filter((l): l is LoadedLesson => Boolean(l));
 
 describe("U05–U07, C2 and X1 are complete (contracts §2.3–§2.5)", () => {
   test("the default order runs U05.L02 … X1.S3 as §2.5 prints it, gym slots and capstone sessions included", () => {
-    expect(ORDER.slice(41, 82)).toEqual([
-      ...["U05.L02", "U05.L03", "U05.L04", "U05.L05", "U05.L06", "U05.L07", "U05.L08", "U06.L01", "U05.CP"],
+    // U05.L09 "Chord Names" follows U05.L04, the lesson it was split out of (contracts 1.6).
+    expect(ORDER.slice(41, 83)).toEqual([
+      ...["U05.L02", "U05.L03", "U05.L04", "U05.L09", "U05.L05", "U05.L06", "U05.L07", "U05.L08", "U06.L01"],
+      "U05.CP",
       ...["U06.L02", "U06.L03", "U06.L04", "U06.L05", "U06.L06", "U06.L07", "U06.L08", "U06.L09", "U06.L10"],
       ...["U06.L11", "U06.L12", "U07.L01", "U06.CP", "U07.L02", "U07.L03", "GYM.01", "U07.L04", "U07.L05"],
       ...["U07.L06", "U07.L07", "GYM.02", "U07.L08", "U07.L09", "U07.L10", "U08.L01", "GYM.03", "U07.CP"],
       ...["C2.S1", "C2.S2", "X1.S1", "X1.S2", "X1.S3"],
     ] as SessionId[]);
   });
-  test("all 30 lessons of U05–U07 are authored and load", () => {
+  test("all 31 lessons of U05–U07 are authored and load", () => {
     expect(errors.filter((e) => e.folderId && W4_LESSONS.includes(e.folderId as SessionId))).toEqual([]);
     expect(W4_LESSONS.filter((id) => !byId.has(id))).toEqual([]);
-    expect(W4_LESSONS.length).toBe(30);
+    expect(W4_LESSONS.length).toBe(31);
   });
   test("U05.CP, U06.CP and U07.CP have two or three authored items and a Make", async () => {
     const { defs } = await loadCheckpointFiles();
@@ -253,7 +255,7 @@ describe("U05–U07, C2 and X1 are complete (contracts §2.3–§2.5)", () => {
 });
 
 // Wave 5: U08–U11 with A1.L01–L04, the checkpoints U09.CP–U11.CP and the capstones C3–C5 and X2 (sessions
-// 75 and 83–129 of the default order). The cross-lesson scans below read them like every authored lesson.
+// 76 and 84–131 of the default order). The cross-lesson scans below read them like every authored lesson.
 const WAVE5 = ORDER.slice(ORDER.indexOf("U08.L02" as SessionId), ORDER.indexOf("X2.S2" as SessionId) + 1);
 const W5_LESSONS = [
   "U08.L01",
@@ -266,14 +268,15 @@ describe("U08–U11, A1, C3–C5 and X2 are complete (contracts §2.3–§2.6)",
   test("the default order runs U08.L02 … X2.S2 as §2.5 prints it, gym slots and capstone sessions included", () => {
     expect(WAVE5).toEqual([
       ...["U08.L02", "U08.L03", "U08.L04", "U08.L05", "GYM.04", "U09.L01", "U09.L02", "U09.L03", "U09.L04"],
-      ...["GYM.05", "U09.L05", "U10.L01", "U09.CP", "C3.S1", "C3.S2", "C3.S3", "GYM.06", "U10.L02"],
-      ...["U10.L03", "U10.L04", "U10.L05", "GYM.07", "U10.L06", "U10.L07", "U10.L08", "U10.L09", "GYM.08"],
+      ...["GYM.05", "U09.L05", "U10.L01", "U09.CP", "C3.S1", "C3.S2", "C3.S3", "C3.S4", "GYM.06"],
+      ...["U10.L02", "U10.L03", "U10.L04", "U10.L05", "GYM.07", "U10.L06", "U10.L07", "U10.L08", "U10.L09"],
+      "GYM.08",
       ...["U11.L01", "U10.CP", "C4.S1", "C4.S2", "GYM.09", "U11.L02", "U11.L03", "U11.L04", "U11.L05"],
       ...["GYM.10", "U11.L06", "U11.L07", "U11.L08", "U12.L01", "GYM.11", "U11.CP", "C5.S1", "C5.S2"],
       ...["X2.S1", "X2.S2"],
     ] as SessionId[]);
     expect([ORDER.indexOf("U08.L02" as SessionId) + 1, ORDER.indexOf("X2.S2" as SessionId) + 1]).toEqual([
-      83, 129,
+      84, 131,
     ]);
   });
   test("all 31 lessons of U08–U11 and the four side lessons are authored and load", () => {
@@ -290,7 +293,8 @@ describe("U08–U11, A1, C3–C5 and X2 are complete (contracts §2.3–§2.6)",
     }
   });
   test("C3–C5 have tested briefs and their sessions; X2's checks open bass → changes → melody", () => {
-    const sessions: Record<string, number> = { C3: 3, C4: 2, C5: 2, X2: 2 };
+    // C3 takes four sessions since contracts 1.6 (d13): the take and the release are its own session.
+    const sessions: Record<string, number> = { C3: 4, C4: 2, C5: 2, X2: 2 };
     for (const [id, n] of Object.entries(sessions)) {
       const c = capstones.find((x) => x.id === id);
       expect([id, c?.sessionDefs.length, c?.sessionDefs.at(-1)?.release]).toEqual([id, n, true]);
@@ -353,6 +357,146 @@ describe("U08–U11, A1, C3–C5 and X2 are complete (contracts §2.3–§2.6)",
       }
     }
     expect(found).toEqual([]);
+  });
+});
+
+// Wave 6, the end of the core: U12–U17 with U13.CP, U14.CP and U17.CP, the capstones C6 and C7 and the finale in
+// two parts, CF-T in gym slots from U15.L01 and CF-A at the very end (sessions 125 and 132–185 of the default
+// order). The cross-lesson scans below read them like every authored lesson; their music is
+// u12-u17-music.test.ts.
+const WAVE6 = ORDER.slice(ORDER.indexOf("U12.L02" as SessionId));
+const W6_LESSONS = ["U12.L01", ...WAVE6.filter((s) => /^U1[2-7]\.L\d{2}$/.test(s))] as SessionId[];
+const w6course = W6_LESSONS.map((id) => byId.get(id)).filter((l): l is LoadedLesson => Boolean(l));
+
+describe("U12–U17, C6, C7 and the core finale are complete (contracts §2.3–§2.5)", () => {
+  test("the default order runs U12.L02 … CF-A.S4 as §2.5 prints it, gym slots and capstone sessions included", () => {
+    expect(WAVE6).toEqual([
+      ...["U12.L02", "U12.L03", "U12.L04", "U12.L05", "GYM.12", "U12.L06", "U13.L01", "U13.L02", "U13.L03"],
+      ...["GYM.13", "U13.L04", "U13.L05", "U13.L06", "U14.L01", "GYM.14", "U13.CP", "U14.L02", "U14.L03"],
+      ...["U14.L04", "GYM.15", "U14.L05", "U14.L06", "U15.L01", "U14.CP", "CF-T.S1", "C6.S1", "C6.S2"],
+      ...["U15.L02", "U15.L03", "CF-T.S2", "U15.L04", "U15.L05", "U15.L06", "U16.L01", "CF-T.S3", "U16.L02"],
+      ...["U16.L03", "U16.L04", "U16.L05", "CF-T.S4", "U17.L01", "U17.L02", "U17.L03", "U17.L04", "GYM.16"],
+      ...["U17.CP", "C7.S1", "C7.S2", "C7.S3", "GYM.17", "CF-A.S1", "CF-A.S2", "CF-A.S3", "CF-A.S4"],
+    ] as SessionId[]);
+    // U12.L01 sits among the Wave 5 sessions (125); the core ends on CF-A.S4, session 185.
+    expect([ORDER.indexOf("U12.L01" as SessionId) + 1, ORDER.indexOf("U12.L02" as SessionId) + 1]).toEqual([
+      125, 132,
+    ]);
+    expect([ORDER.length, ORDER.at(-1)]).toEqual([185, "CF-A.S4"]);
+  });
+  test("all 33 lessons of U12–U17 are authored and load", () => {
+    expect(errors.filter((e) => e.folderId && W6_LESSONS.includes(e.folderId as SessionId))).toEqual([]);
+    expect(W6_LESSONS.filter((id) => !byId.has(id))).toEqual([]);
+    expect(W6_LESSONS.length).toBe(33);
+  });
+  test("U13.CP, U14.CP and U17.CP have two or three authored items and a Make", async () => {
+    const { defs } = await loadCheckpointFiles();
+    for (const id of ["U13.CP", "U14.CP", "U17.CP"]) {
+      const d = defs.find((x) => x.id === id);
+      const n = d?.authored.length ?? 0;
+      expect([id, Boolean(d), n >= 2 && n <= 3, Boolean(d?.make)]).toEqual([id, true, true, true]);
+    }
+  });
+  test("C6, C7 and CF-A have tested briefs and their sessions; CF-T maps the form, then bass → changes → melody", () => {
+    const sessions: Record<string, number> = { C6: 2, C7: 3, "CF-A": 4, "CF-T": 4 };
+    for (const [id, n] of Object.entries(sessions)) {
+      const c = capstones.find((x) => x.id === id);
+      expect([id, c?.sessionDefs.length, c?.sessionDefs.at(-1)?.release]).toEqual([id, n, true]);
+      if (id !== "CF-T") expect([id, (c?.brief?.tests ?? []).length >= 8]).toEqual([id, true]);
+    }
+    const cft = capstones.find((x) => x.id === "CF-T");
+    expect(
+      cft?.sessionDefs.map((sd) => [sd.id, Boolean(sd.formMap), (sd.checks ?? []).length, !!sd.rubric]),
+    ).toEqual([
+      ["CF-T.S1", true, 4, false],
+      ["CF-T.S2", false, 4, false],
+      ["CF-T.S3", false, 4, false],
+      ["CF-T.S4", false, 0, true],
+    ]);
+    // CF-T runs in gym slots (contracts §2.5): each of its sessions takes the place of a gym session.
+    for (const s of cft?.sessionDefs ?? [])
+      expect([s.id, ORDER.includes(s.id as SessionId)]).toEqual([s.id, true]);
+  });
+  test("every lesson, step, example and exercise ID of U12–U17 is in ids.lock.json", () => {
+    const lock = new Set(
+      (
+        JSON.parse(readFileSync(join(CONTENT_ROOT, "ids.lock.json"), "utf8")) as { ids: { id: string }[] }
+      ).ids.map((x) => x.id),
+    );
+    const missing: string[] = [];
+    for (const l of w6course) {
+      const ids = [
+        l.def.id,
+        ...l.def.steps.flatMap((s) => [
+          `${l.def.id}/${s.id}`,
+          ...(s.example ? [`${l.def.id}@${s.example.id}`] : []),
+        ]),
+        ...exercisesOf(l).map(({ e }) => `${l.def.id}/${e.id}`),
+      ];
+      missing.push(...ids.filter((id) => !lock.has(id)));
+    }
+    expect(missing).toEqual([]);
+  });
+  test("each can-do of U12–U17 is awarded once, by the lesson the registry names", () => {
+    const problems: string[] = [];
+    for (const c of candos) {
+      if (!W6_LESSONS.includes(c.source as SessionId)) continue;
+      const by = w6course.filter((l) => (l.def.canDo as string[]).includes(c.id)).map((l) => l.def.id);
+      if (by.join() !== c.source) problems.push(`${c.id}: source ${c.source}, awarded by [${by.join(" ")}]`);
+    }
+    expect(problems).toEqual([]);
+  });
+  test("no learner-facing text names a lesson or a unit by its ID: lessons and units are named by their titles", () => {
+    const found: string[] = [];
+    // "A7" is a chord: a side lesson is caught by its full ID only.
+    const id = /\b(U\d{2}(\.(L\d{2}|CP))?|A\d\.L\d{2})\b/;
+    for (const l of w6course) {
+      const mdx = mdxSteps(l.mdxSource ?? "");
+      for (const s of l.def.steps) {
+        const m = mdx.get(s.id);
+        const texts = [
+          ...(s.exercise ? exerciseTexts(s.exercise, s.id) : []),
+          ...(m ? [{ where: `${s.id} prose`, text: `${m.prose}\n${m.onPass}` }] : []),
+        ];
+        for (const t of texts)
+          if (id.test(t.text.replace(/\{\/\*[\s\S]*?\*\/\}/g, "")))
+            found.push(`${l.def.id} ${t.where}: ${t.text.slice(0, 60)}`);
+      }
+    }
+    expect(found).toEqual([]);
+  });
+  test("every lesson that says what comes next names the session that comes next in the default order", () => {
+    // A closing "Next: …" line keeps its promise (ux: RETURN): the lesson, checkpoint or capstone it names is the
+    // next core session after this one, gym slots aside. Each line is matched by the title it promises.
+    const PROMISES: Record<string, string> = {
+      "U12.L02": "U12.L03",
+      "U12.L03": "U12.L04",
+      "U12.L04": "U12.L05",
+      "U12.L05": "U12.L06",
+      "U13.L06": "U14.L01",
+      "U14.L02": "U14.L03",
+      "U14.L03": "U14.L04",
+      "U14.L04": "U14.L05",
+      "U14.L05": "U14.L06",
+      "U14.L06": "U15.L01",
+      "U15.L06": "U16.L01",
+      "U16.L01": "U16.L02",
+      "U16.L02": "U16.L03",
+      "U16.L03": "U16.L04",
+      "U16.L04": "U16.L05",
+      "U16.L05": "U17.L01",
+      "U17.L01": "U17.L02",
+      "U17.L03": "U17.L04",
+      "U17.L04": "U17.CP",
+    };
+    const next = (from: string) =>
+      ORDER.slice(ORDER.indexOf(from as SessionId) + 1).find(
+        (s) => !s.startsWith("GYM.") && !s.startsWith("CF-T."),
+      );
+    for (const [from, to] of Object.entries(PROMISES)) {
+      const l = byId.get(from);
+      expect([from, /\bNext\b/.test(l?.mdxSource ?? ""), next(from)]).toEqual([from, true, to]);
+    }
   });
 });
 
@@ -540,13 +684,16 @@ describe("can-dos and milestones", () => {
           expect([m.id, c, candos.some((x) => x.id === c)]).toEqual([m.id, c, true]);
       }
   });
-  test("the nine milestones of ux §5.5 are all defined, then Wave 5's five", () => {
+  test("the nine milestones of ux §5.5 are all defined, then Wave 5's five and Wave 6's six", () => {
     expect(milestones.map((m) => m.id)).toEqual(
       [
         ...["ms.01", "ms.02", "ms.03", "ms.04", "ms.05", "ms.06", "ms.07", "ms.08", "ms.09"],
         ...["ms.10", "ms.11", "ms.12", "ms.13", "ms.14"],
+        ...["ms.15", "ms.16", "ms.17", "ms.18", "ms.19", "ms.20"],
       ].map((x) => x as never),
     );
+    // The end of the core (ux §5.5 "Core Finale") needs both parts of the finale: CF-T ends before U17.
+    expect(milestones.find((m) => m.id === "ms.07")?.when).toEqual({ capstones: ["CF-A", "CF-T"] });
   });
 });
 

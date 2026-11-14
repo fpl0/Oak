@@ -9,6 +9,8 @@ type Dev = {
   setCode(c: string): void;
   submit(r: unknown): Promise<{ status: string } | null>;
   trial(): Record<string, unknown> | null;
+  /** The drawn trial of each part of an `all` step (`null` for an authored part). */
+  trials(): (Record<string, unknown> | null)[] | null;
 };
 
 export async function stepIs(page: Page, id: string): Promise<void> {
@@ -28,6 +30,30 @@ export async function submit(page: Page, response: unknown): Promise<{ status: s
 
 async function trialAnswer(page: Page): Promise<Record<string, unknown> | null> {
   return page.evaluate(() => (globalThis as unknown as { __oakLesson: Dev }).__oakLesson.trial());
+}
+
+type PartDef = {
+  kind: string;
+  stimulus?: { src?: string };
+  tests?: { response: TestResponse; expect: string }[];
+};
+
+/**
+ * An `all` step (U12.L01 S6, U15.L01 S5): each part answered with its own drawn trial (a part drawn from a family)
+ * or its own passing test (an authored part); a sung part is left out (singing never gates).
+ */
+async function allResponse(page: Page, step: StepDef): Promise<unknown | null> {
+  const ex = step.exercise as { kind?: string; parts?: PartDef[] } | undefined;
+  if (ex?.kind !== "all" || !ex.parts) return null;
+  const drawn =
+    (await page.evaluate(() => (globalThis as unknown as { __oakLesson: Dev }).__oakLesson.trials())) ?? [];
+  return {
+    parts: ex.parts.map((p, i) => {
+      if (p.stimulus?.src === "generator") return { answer: drawn[i] ?? {} };
+      const t = p.tests?.find((x) => x.expect === "pass" && !("pitchFixture" in x.response));
+      return t?.response ?? { skipped: true };
+    }),
+  };
 }
 
 /** The first authored passing response of a step (`tests[].expect === "pass"`), if it is one a page can give. */
@@ -96,7 +122,8 @@ export async function walkLesson(page: Page, def: LessonDef, o: WalkOptions = {}
     const keep = page.getByTestId("setup-keep");
     if (await keep.isVisible().catch(() => false)) await keep.click();
     if (ex && step.graded !== false) {
-      let response: unknown = o.answers?.[step.id] ?? passingResponse(step);
+      let response: unknown =
+        o.answers?.[step.id] ?? passingResponse(step) ?? (await allResponse(page, step));
       if (response === null || response === undefined) {
         const expected = await trialAnswer(page);
         if (expected) response = { answer: expected };

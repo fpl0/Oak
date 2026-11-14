@@ -16,6 +16,9 @@ import type { CapstoneDay } from "../capstone-day.ts";
 import { playbackLint } from "../playback.ts";
 import { markShown } from "../resume-once.ts";
 
+/** A draft longer than this is a whole song: the card says that moving on never waits for the play-through. */
+export const LONG_DRAFT_BARS = 24;
+
 /** The draft's length in bars: its `arrange()` sum, else what the capstone asks for (C2: 8; X1: 4 phrases of 4). */
 export function draftBars(code: string, kind: "compose" | "transcribe" | null): number {
   const ast = sectionsFromAst(code);
@@ -27,9 +30,12 @@ export function CapstoneResume({
   day,
   sessionId,
   kind,
+  where = null,
   onContinue,
 }: {
   day: CapstoneDay;
+  /** CF-T: where the learner is in the standard ("The form map and the bass are down. Today: the changes."). */
+  where?: string | null;
   /** The Oak session (`sessions` row) this capstone session runs in. */
   sessionId: string;
   kind: "compose" | "transcribe" | null;
@@ -165,8 +171,19 @@ export function CapstoneResume({
           </span>
         </div>
       )}
+      {/* A whole song takes two minutes to play through (CF-A, CF-T): the way on never waits for it. */}
+      {playing && bar && bar.of > LONG_DRAFT_BARS && (
+        <p className="text-sm text-text-3" data-testid="resume-long">
+          It plays once through. Move on whenever you have heard enough.
+        </p>
+      )}
       {error && <p className="text-sm text-text-2">{error}</p>}
       {day.checksLine && <p className="text-sm text-text-2">So far: {day.checksLine}.</p>}
+      {!day.checksLine && where && (
+        <p className="text-sm text-text-2" data-testid="resume-where">
+          {where}
+        </p>
+      )}
       <div>
         <Button ref={continueRef} variant="primary" size="lg" onClick={next} data-testid="resume-continue">
           On to session {day.index}

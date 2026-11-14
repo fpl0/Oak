@@ -1,11 +1,14 @@
 // The learner's own things: sketches, the album (tracks, versions, liner-note data, recorded audio),
 // their audio files, and transcription projects. Saving a sketch version after a successful Run
 // qualifies the streak day (contracts §7.8 b).
+
+import { readFileSync, statSync } from "node:fs";
 import {
   type AlbumTrackDetail,
   type AlbumTrackVersion,
   type AudioFile,
   DEFAULT_TRANSCRIPTION_SETTINGS,
+  type LessonSketch,
   type Sketch,
   type SketchDetail,
   type SketchSaved,
@@ -101,6 +104,23 @@ export class LibraryService {
     return { ...s, versions: this.#repos.sketches.versions(id) };
   }
 
+  /**
+   * `GET /lessons/:id/sketch` (d15): the newest unarchived Make sketch of a lesson with its versions, for a Make that
+   * builds on it ("your blues"); `sketch: null` when the learner saved none. 404 for an unknown lesson id.
+   */
+  lessonSketch(lessonId: string): LessonSketch {
+    if (this.ctx.content.lessonSite(lessonId) === null) throw notFound(`lesson ${lessonId}`);
+    const mine = this.#repos.sketches
+      .list({ origin: "lesson-make", archived: false })
+      .filter((x) => x.originId === lessonId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.createdAt.localeCompare(a.createdAt));
+    const newest = mine[0];
+    return {
+      lessonId: lessonId as LessonSketch["lessonId"],
+      sketch: newest === undefined ? null : this.sketch(newest.id),
+    };
+  }
+
   #version(sketchId: string, version: number, v: VersionInput, at: string): SketchVersion {
     return {
       sketchId,
@@ -173,7 +193,44 @@ export class LibraryService {
   track(id: string): AlbumTrackDetail {
     const t = this.#repos.album.track(id);
     if (t === null) throw notFound(`track ${id}`);
-    return { ...t, versions: this.#repos.album.versions(id) };
+    return { ...t, versions: this.#repos.album.versions(id).map((v) => this.#withTakes(v)) };
+  }
+
+  /**
+   * Wave 6 (d20): a version with every recording of it, oldest first, and the one that plays by default. The
+   * version's `hasAudio`, `audioMime` and `durationS` describe that take.
+   */
+  #withTakes(v: AlbumTrackVersion): AlbumTrackVersion {
+    const takes = this.#repos.takes.of(v.trackId, v.version).map((t) => {
+      let bytes = t.bytes;
+      if (bytes === 0) {
+        try {
+          bytes = statSync(this.d.store.resolveStored(t.audioPath)).size;
+        } catch {
+          bytes = 0;
+        }
+      }
+      return {
+        take: t.take,
+        audioMime: t.audioMime,
+        durationS: t.durationS,
+        bytes,
+        recordedAt: t.recordedAt,
+      };
+    });
+    return { ...v, takes, currentTake: this.#repos.takes.currentTake(v.trackId, v.version) };
+  }
+  /** Whether a stored recording holds exactly `bytes` (a missing or unreadable file is not the same). */
+  #sameBytes(stored: string, bytes: Uint8Array): boolean {
+    try {
+      return Buffer.from(readFileSync(this.d.store.resolveStored(stored))).equals(Buffer.from(bytes));
+    } catch {
+      return false;
+    }
+  }
+
+  #versionWithTakes(id: string, version: number): AlbumTrackVersion {
+    return this.#withTakes(this.#repos.album.version(id, version) as AlbumTrackVersion);
   }
 
   #trackVersion(
@@ -271,7 +328,25 @@ export class LibraryService {
     return this.track(id);
   }
 
+  /**
+   * `PUT /album/tracks/:id/versions/:v/audio`: the first recording of a version. Wave 6 (d20): on a version that
+   * already has one it is another take (nothing is replaced, nothing is deleted).
+   */
   putTrackAudio(
+    id: string,
+    version: number,
+    bytes: Uint8Array,
+    declaredMime: string,
+    durationS: number | null,
+  ): AlbumTrackVersion {
+    return this.addTrackTake(id, version, bytes, declaredMime, durationS);
+  }
+
+  /**
+   * `POST /album/tracks/:id/versions/:v/takes` (d20): one more recording of a version. It becomes the take that plays
+   * by default; every earlier take stays on disk, in the history and in backups.
+   */
+  addTrackTake(
     id: string,
     version: number,
     bytes: Uint8Array,
@@ -285,21 +360,56 @@ export class LibraryService {
     const sniffed = sniffAudio(bytes);
     if (sniffed === null) throw badRequest("not an audio file this app can store");
     const ext = extFor(sniffed, "");
-    const abs = this.d.store.albumPath(id, version, ext);
-    const old = this.#repos.album.audioOf(id, version);
-    this.d.store.write(abs, bytes);
-    if (old !== null && this.d.store.resolveStored(old.path) !== abs)
-      this.d.store.remove(this.d.store.resolveStored(old.path));
     const duration = durationS ?? wavInfo(bytes).durationS;
-    this.#repos.album.setAudio(id, version, this.d.store.storedName(abs), mimeFor(ext, sniffed), duration);
-    return this.#repos.album.version(id, version) as AlbumTrackVersion;
+    tx(this.#repos.db, () => {
+      const takes = this.#repos.takes.of(id, version);
+      // A retried upload (the same bytes again, a lost response, a double click) is the take it already made, not
+      // another one: only a new recording is a new take (d20; review:robustness, Wave 6).
+      const last = takes.at(-1);
+      if (last && last.bytes === bytes.length && this.#sameBytes(last.audioPath, bytes)) {
+        this.#repos.takes.setCurrent(last);
+        return;
+      }
+      const take = (takes.at(-1)?.take ?? 0) + 1;
+      const abs = this.d.store.albumTakePath(id, version, take, ext);
+      this.d.store.write(abs, bytes);
+      const row = {
+        trackId: id,
+        version,
+        take,
+        audioPath: this.d.store.storedName(abs),
+        audioMime: mimeFor(ext, sniffed),
+        durationS: duration,
+        bytes: bytes.length,
+        recordedAt: this.time.iso(),
+      };
+      this.#repos.takes.insert(row);
+      this.#repos.takes.setCurrent(row);
+    });
+    return this.#versionWithTakes(id, version);
   }
 
-  trackAudio(id: string, version: number): { abs: string; mime: string } {
-    const a = this.#repos.album.audioOf(id, version);
-    if (a === null) throw notFound(`audio of track ${id} v${version}`);
+  /** `PUT /album/tracks/:id/versions/:v/take` (d20): the take that plays by default and is exported. */
+  chooseTrackTake(id: string, version: number, take: number): AlbumTrackVersion {
+    if (this.#repos.album.version(id, version) === null) throw notFound(`track ${id} v${version}`);
+    const row = this.#repos.takes.get(id, version, take);
+    if (row === null) throw notFound(`take ${take} of track ${id} v${version}`);
+    this.#repos.takes.setCurrent(row);
+    return this.#versionWithTakes(id, version);
+  }
+
+  /** The audio of a version: its current take, or take `take` (d20). */
+  trackAudio(id: string, version: number, take: number | null = null): { abs: string; mime: string } {
+    const what = `audio of track ${id} v${version}${take === null ? "" : ` take ${take}`}`;
+    let a: { path: string; mime: string } | null;
+    if (take === null) a = this.#repos.album.audioOf(id, version);
+    else {
+      const row = this.#repos.takes.get(id, version, take);
+      a = row === null ? null : { path: row.audioPath, mime: row.audioMime };
+    }
+    if (a === null) throw notFound(what);
     const abs = this.d.store.resolveStored(a.path);
-    if (!this.d.store.exists(abs)) throw notFound(`audio of track ${id} v${version}`);
+    if (!this.d.store.exists(abs)) throw notFound(what);
     return { abs, mime: a.mime };
   }
 
@@ -344,7 +454,7 @@ export class LibraryService {
     return tx(this.#repos.db, () => {
       if (this.#repos.album.version(id, version) === null) throw notFound(`track ${id} v${version}`);
       this.#repos.album.patchVersion(id, version, patch);
-      return this.#repos.album.version(id, version) as AlbumTrackVersion;
+      return this.#versionWithTakes(id, version);
     });
   }
 
@@ -374,7 +484,7 @@ export class LibraryService {
       if (!same) throw conflict("that review was not submitted in that conversation");
       this.#repos.album.setReview(id, version, body.review, body.conversationId);
       this.#repos.album.patchVersion(id, version, { includeReviewNote: body.includeReviewNote });
-      return this.#repos.album.version(id, version) as AlbumTrackVersion;
+      return this.#versionWithTakes(id, version);
     });
   }
 
@@ -473,9 +583,28 @@ export class LibraryService {
     const song = t.songId === null ? undefined : this.ctx.content.source.songs.find((x) => x.id === t.songId);
     // Wave 5: a pd-song project gives the learner its pickup, feel and form (contracts §6.12; the transcribe page
     // and X1/X2 read them instead of guessing from the stimulus).
+    // Wave 6: an L8 standard's form is what its first stage asks for, so it is given only once the form map passed
+    // or was revealed; a tune that changes key gives its key plan (contracts §6.8).
+    const formAsked =
+      t.ladderLevel === 8 &&
+      !this.#repos.transcriptions
+        .versions(id)
+        .some(
+          (v) =>
+            v.stage === "form" &&
+            v.result !== null &&
+            (v.result.status === "pass" || v.result.assist.revealed || v.result.assist.rung >= 4),
+        );
     const given =
       t.sourceKind === "pd-song" && song !== undefined
-        ? { given: { pickup: song.pickup ?? null, swing: song.swing ?? null, form: song.form ?? null } }
+        ? {
+            given: {
+              pickup: song.pickup ?? null,
+              swing: song.swing ?? null,
+              form: formAsked ? null : (song.form ?? null),
+              ...(song.keyPlan === undefined ? {} : { keyPlan: song.keyPlan.map((k) => ({ ...k })) }),
+            },
+          }
         : {};
     return { ...rest, versions, stimulus: await this.#stimulus(t, hiddenCode), ...given };
   }
@@ -620,12 +749,14 @@ export class LibraryService {
     if (this.d.mastery === undefined) return;
     // c11: checklist toggles are self-reported evidence at most once per project per learner day.
     if (this.#repos.mastery.hasEvidenceOn("self-transcription", `${id}/`, this.time.day())) return;
-    const LAYER: Record<string, "melody" | "bass" | "chords"> = {
+    const LAYER: Record<string, "melody" | "bass" | "chords" | "form"> = {
       contour: "melody",
       rhythm: "melody",
       landing: "melody",
       bass: "bass",
       chords: "chords",
+      // Wave 6: the form row of the full-arrangement checklist (OWN_AUDIO_FORM_ROW).
+      form: "form",
     };
     const items: Parameters<MasteryService["addEvidence"]>[0][number][] = [];
     for (const [item, value] of Object.entries(after)) {

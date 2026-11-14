@@ -29,8 +29,6 @@ export type TransportLoad =
       engine: "stretch" | "transcription" | null;
     };
 
-const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
 /** Builds the transport for a project and tears it down on leave. */
 export function useTranscribeTransport(
   project: TranscriptionDetail,
@@ -70,7 +68,6 @@ export function useTranscribeTransport(
           cycle: () => oak.transport.cycle(),
           now: () => oak.ctx.currentTime,
           grid: gridRef.current,
-          settle: () => wait(60),
           lint: playLint(project),
           coordinator: oak.coordinator,
         });

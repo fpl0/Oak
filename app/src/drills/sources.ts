@@ -13,8 +13,25 @@ import {
   staircaseStep,
   trialSeed,
 } from "@oak/drills";
+import { devForceAt, devOpenAll } from "./dev.ts";
 import type { TrialSource } from "./machine.ts";
 import { type PlannedTrial, planDrillSet, type TrialOutcome } from "./model.ts";
+import { neighbourResolution } from "./wave6.ts";
+
+/**
+ * Every trial as the runner asks it (Wave 6): a chromatic degree's way home is its lean to the nearest note of the
+ * key, two notes, not the whole walk to 1. Deterministic, so a reload asks the same thing.
+ */
+export function asAsked(source: TrialSource): TrialSource {
+  return {
+    ...source,
+    at(i, outcomes) {
+      const planned = source.at(i, outcomes);
+      const trial = neighbourResolution(planned.trial);
+      return trial === planned.trial ? planned : { ...planned, trial };
+    },
+  };
+}
 
 export interface SourceEnv {
   registry: DrillRegistry;
@@ -112,7 +129,9 @@ export function staircaseSource(
     total: family.def.trialsPerSet,
     levelAt,
     at(i, outcomes) {
-      const level = levelAt(outcomes.slice(0, i));
+      // Dev only: a browser spec may name the category (and level) of a trial, so a rare case is tested every run.
+      const force = devForceAt(i);
+      const level = force?.level ?? levelAt(outcomes.slice(0, i));
       const key = `${i}|${level}`;
       const hit = cache.get(key);
       if (hit) return hit;
@@ -120,12 +139,13 @@ export function staircaseSource(
         index: i,
         family: id,
         level,
-        category: "",
-        seed: trialSeed(id, session.setId, i),
-        ...(sungAt.has(i) ? { sungResolution: true } : {}),
+        category: force?.category ?? "",
+        seed: trialSeed(id, session.setId, i) + (force?.seed ?? 0),
+        ...((force?.sung ?? sungAt.has(i)) ? { sungResolution: true } : {}),
       };
       const previous = i > 0 ? cache.get(`${i - 1}|${levelAt(outcomes.slice(0, i - 1))}`)?.trial : undefined;
-      const trial = generateTrial(family, spec, profile, session.openCategories[id] ?? [], previous) as Trial;
+      const open = devOpenAll() ? family.def.categories.map((c) => c.id) : (session.openCategories[id] ?? []);
+      const trial = generateTrial(family, spec, profile, open, previous) as Trial;
       const planned = { spec: { ...spec, category: trial.category }, trial };
       cache.set(key, planned);
       return planned;

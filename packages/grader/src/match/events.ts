@@ -8,7 +8,7 @@ import { keyOf } from "../analyze/key.ts";
 import { lineWord, selectTracks } from "../analyze/tracks.ts";
 import { diag } from "../feedback/catalog.ts";
 import type { MatchResult, NormalizeContext, Normalized } from "../types.ts";
-import { alignFeel, clampScore, f1, lengthLabel, pitchLabel } from "./common.ts";
+import { alignFeel, clampScore, f1, keyAtOnset, noteValueLabel, pitchLabel } from "./common.ts";
 import { pitchClassOfKey, stepIndex } from "./melody.ts";
 
 export type EventsMatcher = Extract<Matcher, { m: "events" }>;
@@ -82,7 +82,7 @@ export function eventsMatch(
         diagnostics.push(
           diag(
             "rhythm.duration",
-            { got: lengthLabel(ad, ctx.meter), expected: lengthLabel(td, ctx.meter) },
+            { got: noteValueLabel(ad, ctx.meter), expected: noteValueLabel(td, ctx.meter) },
             locOf(A[j] as NEvent, pos),
             "duration",
           ),
@@ -100,8 +100,12 @@ export function eventsMatch(
     if (j !== undefined && t.midi !== null && (A[j] as NEvent).midi !== null) {
       leftA.delete(j);
       const a = A[j] as NEvent;
-      const g = pitchLabel(a.midi as number, cfg.pitch === "key-relative" ? aKey : tKey);
-      const e = pitchLabel(t.midi as number, tKey);
+      // With a key plan (U17) a note is named in the key in force at its bar.
+      const g = pitchLabel(
+        a.midi as number,
+        keyAtOnset(ctx, a.onset, cfg.pitch === "key-relative" ? aKey : tKey),
+      );
+      const e = pitchLabel(t.midi as number, keyAtOnset(ctx, t.onset, tKey));
       const octave = cfg.pitch === "absolute" && mod12((a.midi as number) - (t.midi as number)) === 0;
       const d = octave
         ? diag(

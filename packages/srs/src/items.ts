@@ -32,7 +32,10 @@ export function isDueOn(srs: Srs, card: Pick<Card, "dueAt">, today: number): boo
   return dueDayOf(srs, card) <= today;
 }
 
-/** One `ReviewItem` for a card at `now`. A never-reviewed card is `fresh`: it fills only the room due items leave. */
+/**
+ * One `ReviewItem` for a card at `now`. A never-reviewed fact card is `fresh`: for its first two days it fills
+ * only the room due items leave, then it waits like any due card (planner.ts `freshPriority`).
+ */
 export function reviewItem(srs: Srs, card: Card, meta: ItemMeta, now: Date): ReviewItem {
   const item: ReviewItem = {
     cardId: card.id,

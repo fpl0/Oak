@@ -101,7 +101,7 @@ const STAFF = { roll: false, staff: "treble", keyboard: false } as const;
 
 export default defineLesson({
   id: "U11.L07",
-  version: 1,
+  version: 2,
   title: "Shuffle",
   objective: "I can swing my own lines in code and hear whether a groove is straight or swung.",
   key: { tonic: "C", mode: "blues" },
@@ -469,6 +469,9 @@ export default defineLesson({
         code: { starter: MAKE_STARTER },
         bars: [12, 24],
         saveAs: "sketch",
+        // Decision of 2026-11-13 (d15): this Make opens with the learner's own sketch from U11.L06 when one is
+        // saved, with "Start from Oak's copy" to put the starter back; without one it opens with the starter.
+        fromSketch: "U11.L06",
         rubric: [
           {
             id: "hats-swing",

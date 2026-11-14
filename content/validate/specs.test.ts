@@ -49,6 +49,16 @@ test("the skill graph is ordered in every legal order (contracts §4.2 rule 1)",
 const NO_BAND: Record<string, string> = {
   "U11.L07": "the shuffle's swung hats are the learner's; a Band's straight hats would flam against them",
   "U11.L08": "the swung shuffle of U11.L07 again, hats, kick and snare in the learner's code",
+  // U13 Rhythm II: the groove is the lesson, so kick, snare and hats are lines of the learner's code in every
+  // step (content/specs/U13.ts, conventions).
+  "U13.L01":
+    "a push is heard against the learner's own straight kick, snare and hats; the jazz-soul Band swings its ride",
+  "U13.L02": "the ghosted snare and the accented hats are the learner's; a Band's drums would double them",
+  "U13.L03": "the tune's ties are read against the U13.L01 rhythm section, which is in the learner's code",
+  "U13.L04": "no Band is written in 6/8; the kick and the snare that make the two beats are the learner's",
+  "U13.L05":
+    "the triplets are the learner's piano and hats; band.doo-wop plays the same triplets and would blur them",
+  "U13.L06": "the call's drums are the learner's lines, and the answer is written in the same lines",
 };
 
 for (const u of unitSpecs)
@@ -232,7 +242,7 @@ for (const u of unitSpecs)
           if (l.singOn === "syllables") expect([l.id, before]).toEqual([l.id, false]);
         });
         for (const r of l.repertoire ?? [])
-          test(`repertoire ${r.song}: the degrees are the cited tune, no pickup, no dot or tie`, async () => {
+          test(`repertoire ${r.song}: the degrees are the cited tune, no pickup or dot or tie before they are taught`, async () => {
             expect([r.song, !!songById.get(r.song)]).toEqual([r.song, true]);
             expect([r.song, songById.get(r.song)?.usedIn.includes(l.id)]).toEqual([r.song, true]);
             const tempo = `setcpm(${l.bpm}/4)\n\n`;
@@ -254,7 +264,12 @@ for (const u of unitSpecs)
               return b ? (a as number) / b : (a as number);
             };
             const plain = [1, 1 / 2, 1 / 4, 1 / 8];
-            for (const e of taught.events) {
+            // From U13.L03 on a fragment may hold dotted values and ties (the lesson that teaches them); from
+            // U07.L08 on it may start with a pickup (contracts §2.8).
+            const order = registries.syllabus.defaultOrder as readonly string[];
+            const dotsAndTies = orderPoint(l.id) >= order.indexOf("U13.L03");
+            const pickups = orderPoint(l.id) >= order.indexOf("U07.L08");
+            for (const e of dotsAndTies ? [] : taught.events) {
               const [b0, b1] = [rat(e.begin), rat(e.end)];
               // No dotted value, nothing held over a bar line (both would need a dot or a tie before U13.L03).
               expect([r.song, e.begin, plain.some((p) => Math.abs(b1 - b0 - p) < 1e-9)]).toEqual([
@@ -270,7 +285,7 @@ for (const u of unitSpecs)
             }
             // No pickup (contracts §2.8, before U07.L08): the first bar has a note or a rest on beat 1, and the
             // fragment is written from that bar on.
-            expect([r.song, rat(taught.events[0]?.begin ?? "1") < 1]).toEqual([r.song, true]);
+            if (!pickups) expect([r.song, rat(taught.events[0]?.begin ?? "1") < 1]).toEqual([r.song, true]);
             const lint1 = lint(`${tempo}mel: n("${r.degrees}").scale("${r.key}").s("piano")`, {
               session: l.id as SessionId,
               meter: l.meter,

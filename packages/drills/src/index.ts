@@ -25,6 +25,7 @@ export {
   listenBlock,
   maxOpenLevel,
   openCategoriesOf,
+  padMode,
   passiveSequence,
   planCompositeSet,
   planSet,
@@ -32,6 +33,7 @@ export {
   setOutcome,
   setPreload,
   staircaseStep,
+  stepTrialSpec,
   summarizeSet,
   sungResolutionTrials,
 } from "./engine.ts";

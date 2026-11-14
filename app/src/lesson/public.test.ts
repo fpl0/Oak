@@ -199,7 +199,8 @@ describe("Wave 4 answers for the tutor: what the learner entered, never the step
       kind: "text",
       value: "notes C4 E4 G4",
     });
-    const named = await stepOf("U05", "L04", "S6");
+    // Contracts 1.6 (d17): chord names moved from U05.L04 to U05.L09 "Chord Names" (S4 "Name the stack").
+    const named = await stepOf("U05", "L09", "S4");
     expect(tutorAnswerOf(named, { answer: { text: ["Cm"] } })).toMatchObject({
       kind: "chords",
       chords: [{ symbol: "Cm" }],

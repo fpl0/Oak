@@ -172,6 +172,12 @@ export interface AnalysisSummary {
   /** For example 'V/vi→vi bar 6', 'bVII borrowed bar 12'. */
   devices: string[];
   /**
+   * Wave 6. The same devices as data, in bar order (CF-A's device rows and the "Your devices so far" card):
+   * `device` is one of `DEVICE_NAMES`, `bar` the 1-based bar where it first sounds, `bars` how long a stretch
+   * lasts (a key change, a modal section), `text` the entry of `devices`.
+   */
+  deviceList?: { device: string; bar: number; bars?: number; text: string }[];
+  /**
    * Wave 3: the key each pitched track is read in, bar by bar (`.scale()` contexts, patterned ones
    * included; else the declared key or an estimate), so the degree labels of every bar are right.
    */

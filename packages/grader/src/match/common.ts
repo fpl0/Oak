@@ -2,7 +2,7 @@
 // pitch names for messages, and dimension folding.
 import type { Dimension, DimScore, KeySpec, MeterId, NEvent, Rat } from "@oak/content-kit";
 import { R, rat } from "@oak/content-kit";
-import { degreeOf, METERS, spellMidi } from "@oak/theory";
+import { chromaticLabel, degreeOf, METERS, spellMidi } from "@oak/theory";
 import { straighten, straightenExact, swingRatio, swingSlot } from "../analyze/swing.ts";
 import type { MatchResult, NormalizeContext } from "../types.ts";
 
@@ -75,6 +75,20 @@ export function lengthLabel(len: Rat, meter: MeterId): string {
   }
   return `${R.str(beats)} beat`;
 }
+/**
+ * A written note's length (`rhythm.duration`): `lengthLabel`, except that a dotted value is called by its name in a
+ * meter on the quarter ("a dotted quarter", not "3 8ths"; "a dotted 8th", not "3 16ths"), as the staff writes it
+ * (Wave 6, U13.L03). In a compound meter a dotted quarter is the beat already ("a beat").
+ */
+export function noteValueLabel(len: Rat, meter: MeterId): string {
+  const m = METERS[meter];
+  if (m.tempoUnit === "quarter") {
+    const beats = R.mul(R.abs(len), [m.unitsPerBar, 1]);
+    if (R.eq(beats, rat(3, 2))) return "a dotted quarter";
+    if (R.eq(beats, rat(3, 4))) return "a dotted 8th";
+  }
+  return lengthLabel(len, meter);
+}
 /** "an 8th later" / "a beat earlier" for an answer shifted against the target. */
 export const shiftLabel = (shift: Rat, meter: MeterId): string =>
   `${lengthLabel(shift, meter)} ${shift[0] > 0 ? "later" : "earlier"}`;
@@ -82,11 +96,25 @@ export const shiftLabel = (shift: Rat, meter: MeterId): string =>
 /** Note name for messages: re-spelled from MIDI and the key, never from the code (interfaces §3). */
 export const noteName = (midi: number, key: KeySpec | null): string =>
   spellMidi(Math.round(midi), { key }).name;
+/** A degree as it is printed: "b7" → "♭7", "#4" → "♯4". */
+export const degreeShown = (degree: string): string => degree.replace(/^b/, "♭").replace(/^#/, "♯");
 /** A degree and its syllable in a key, or the note name when no key is known. */
-export function pitchLabel(midi: number, key: KeySpec | null): { name: string; syl: string } {
+export function pitchLabel(
+  midi: number,
+  key: KeySpec | null,
+  direction?: 1 | -1,
+): { name: string; syl: string } {
   if (!key) return { name: noteName(midi, null), syl: noteName(midi, null) };
+  // A note from outside the key is named by where it goes (U15.L01): G♯ on its way up to A is ♯5 (si), on its
+  // way down to G it is ♭6 (le). Notes of the key, and a chromatic note with no direction, keep the key's label.
+  // The blue notes keep their own names (♭3, ♭5, ♭7) whichever way a riff moves (U11).
+  if (direction !== undefined && !/blues|pentatonic/.test(key.mode)) {
+    const c = chromaticLabel(Math.round(midi), key, { direction });
+    if (c.chromatic) return { name: degreeShown(c.degree), syl: c.syllable };
+  }
   const d = degreeOf(Math.round(midi), key);
-  return { name: d.degree, syl: d.syllable };
+  // As the learner reads a degree: ♭7 and ♯4, never the ASCII of the code ("b7", "#4").
+  return { name: degreeShown(d.degree), syl: d.syllable };
 }
 
 /** Folds dimension scores into one weighted mean (weights ≤ 0 are reported but not counted). */
@@ -104,3 +132,20 @@ export function weightedScore(dims: Partial<Record<Dimension, DimScore>>): numbe
 export const emptyResult = (score = 0): MatchResult => ({ score, dims: {}, diagnostics: [] });
 
 export const clampScore = (x: number): number => (Number.isFinite(x) ? Math.max(0, Math.min(1, x)) : 0);
+
+/**
+ * The key in force at an onset (contracts §6.8): the entry of the exercise's key plan whose bar the onset has
+ * reached, else `fallback`. Bars of a plan are 1-based; with a pickup, cycle 0 is bar 0.
+ */
+export function keyAtOnset(
+  ctx: Pick<NormalizeContext, "keyPlan" | "pickup">,
+  onset: Rat,
+  fallback: KeySpec | null,
+): KeySpec | null {
+  const plan = ctx.keyPlan;
+  if (!plan || plan.length === 0) return fallback;
+  const bar = R.floor(onset) + (ctx.pickup ? 0 : 1);
+  let key: KeySpec | null = fallback;
+  for (const e of plan) if (e.bar <= bar) key = e.key;
+  return key;
+}

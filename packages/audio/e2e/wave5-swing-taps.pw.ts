@@ -3,34 +3,14 @@
 // the spec presses Space on each beat and on its off-beat two thirds of the way through it. `gradeSwingTaps`
 // grades the take by the §8.4 rule and measures the swing: about 2:1, the feel right. Even eighths tapped against
 // the same shuffle measure 1:1 and miss the off-beat window.
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { MODE, openHarness } from "./helpers.ts";
+import { tapAt } from "./tap-helpers.ts";
 
 test.use({ launchOptions: { args: ["--autoplay-policy=no-user-gesture-required"] } });
 
 const BPM = 100;
 const SLOTS = 8;
-
-/** Presses Space at `offsets` (ms after the page's first counted beat), on the page's performance clock. */
-async function tapAt(page: Page, perfDownbeat: number, offsets: number[]): Promise<void> {
-  // The offset between this process's clock and the page's performance clock, from a round trip.
-  let best = { rtt: Number.POSITIVE_INFINITY, offset: 0 };
-  for (let i = 0; i < 7; i++) {
-    const t0 = performance.now();
-    const p = await page.evaluate(() => performance.now());
-    const t1 = performance.now();
-    if (t1 - t0 < best.rtt) best = { rtt: t1 - t0, offset: p - (t0 + t1) / 2 };
-  }
-  for (const ms of offsets) {
-    const due = perfDownbeat + ms - best.offset;
-    while (due - performance.now() > 12) await new Promise((r) => setTimeout(r, 4));
-    while (performance.now() < due) {
-      // spin the last few ms
-    }
-    await page.keyboard.down("Space");
-    await page.keyboard.up("Space");
-  }
-}
 
 for (const feel of ["shuffle", "straight"] as const) {
   test(`[${MODE}] swing taps: ${feel} eighths against a shuffle click`, async ({ page }) => {

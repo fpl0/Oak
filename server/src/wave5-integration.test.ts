@@ -148,7 +148,8 @@ describe("transcriptions: givens, feel, L6 lines", () => {
 
       const songs = await ok<{ items: LadderSong[] }>(h, "GET", "/api/ladder/songs");
       for (const s of songs.items) {
-        if (s.level === 6) expect(s.passedLines).toEqual(s.passedPhrases);
+        // L6 (and Wave 6's L8): the sections passed of the stage that is open are its lines.
+        if (s.level === 6 || s.level === 8) expect(s.passedLines).toEqual(s.passedPhrases);
         else expect(s.passedLines).toBeUndefined();
       }
     } finally {

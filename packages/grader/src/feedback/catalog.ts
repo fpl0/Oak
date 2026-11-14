@@ -95,6 +95,11 @@ const entries: [string, Sev, string][] = [
   ],
   ["code.mode-above", E, '`mode("above")` isn\'t used in Oak; use `below`, `root:<note>` or `duck`.'],
   [
+    "code.dict-after-voicing",
+    W,
+    '`.dict("{dict}")` after `.voicing()` changes nothing: the voicing is already chosen. Put it before: `.dict("{dict}").voicing()`.',
+  ],
+  [
     "code.transpose-after-scale",
     W,
     'A key change by `.transpose()` confuses the degrees; use a patterned `.scale("<…>")` instead.',
@@ -214,6 +219,12 @@ const entries: [string, Sev, string][] = [
     E,
     "Right tune, but in {gotKey}. This step wants it as it plays, in {expKey}: move every note {semis} {dir}.",
   ],
+  // Wave 6 (U17, `key-plan`): a stretch left in the key before a key change.
+  [
+    "melody.key-plan",
+    E,
+    "From bar {bar} the tune is in {expKey}; yours is still in {gotKey} there. Move those bars {semis} {dir}: give the line its key plan.",
+  ],
   [
     "melody.wrong-octave",
     E,
@@ -242,6 +253,8 @@ const entries: [string, Sev, string][] = [
   ["harmony.not-in-key", W, "{chord} isn't in {key}. Intended?"],
   ["harmony.pcset", E, "Bar {bar}, {beatLabel}: the chord has {got}; it should have {exp}."],
   ["harmony.no-chords", E, "No chords found{track}."],
+  // Wave 6 (U13): the right chords at another time, each moved by the same amount.
+  ["harmony.shifted", E, "The chords are right, but each starts {shift} than in the target{push}."],
   // Wave 5: the 12-bar blues (`blues-form`, the bar grid), the last chord under the tune (`ends-on-degree` over).
   ["harmony.blues-bar", E, "Bar {bar} of the blues should be {exp}; yours is {got}."],
   ["harmony.bar", E, "Bar {bar}: {exp}, not {got}. {why}"],
@@ -269,6 +282,13 @@ const entries: [string, Sev, string][] = [
     "Chord {slot}: {got} is built on degree {gotDeg} ({gotChord}); this chord is {exp}, built on degree {expDeg} ({expChord}).",
   ],
   ["harmony.rn-quality", E, "Chord {slot}: right degree, but {exp} is {expQ}, not {gotQ} ({got})."],
+  // Wave 6 (U15–U16): applied chords. The right chord under the wrong kind of name; one applied chord for another.
+  ["harmony.rn-applied", E, "Chord {slot}: {got} names the right notes ({chord}), but {why}: {exp}."],
+  [
+    "harmony.rn-target",
+    E,
+    "Chord {slot}: {got} is {gotChord}, which leads to {gotTarget}; this chord is {exp} ({expChord}): it leads to {expTarget}.",
+  ],
   [
     "harmony.rn-inversion",
     W,
@@ -333,6 +353,57 @@ const entries: [string, Sev, string][] = [
   ["tap.dragging", W, "You slowed down {ms} ms over the phrase."],
   // Wave 5 (U11.L07): the measured feel of a tapped shuffle (@oak/pitch `gradeSwingTaps`); warn when it is off.
   ["tap.swing", I, "Your off-beats sat at {got}, {gotFeel}; the pattern is {exp}, {expFeel}."],
+  // Wave 6 (U13): pushes, triplets and compound meter tapped against a click (@oak/pitch `gradeRhythmTaps`; the
+  // texts are pitch's `RHYTHM_TAP_FEEDBACK`, word for word).
+  [
+    "tap.push-on-beat",
+    W,
+    "{which} landed on the beat. A push comes {by} early: tap it just before the beat, then leave the beat itself empty.",
+  ],
+  [
+    "tap.push-late",
+    W,
+    "Your pushes are {ms} ms late, leaning toward the beat. Let them come a little sooner.",
+  ],
+  ["tap.push-early", W, "Your pushes are {ms} ms early: they come a touch sooner than the pattern has them."],
+  [
+    "tap.triplet-uneven",
+    W,
+    "{n} of {of} triplets came out as {shape}. A triplet is three even notes to the beat: 1-trip-let.",
+  ],
+  [
+    "tap.grouping",
+    W,
+    "You tapped {quarters} even beats to the bar. {meter} has {beats} beats of three eighths: {count}.",
+  ],
+  ["tap.kind-timing", I, "Your {kind} are {ms} ms {dir} against your on-beat notes."],
+  // Wave 6 (U12.L05, U14, U15.L01): sung chromatic degrees, a mode's colour tone and guide-tone lines
+  // (@oak/pitch `explainColourResult` / `gradeGuideTones`; the texts are pitch's `COLOUR_FEEDBACK`).
+  [
+    "sing.neighbour",
+    E,
+    "Note {i}: you sang {gotDeg} ({gotSyl}), the key's own note. {expDeg} ({expSyl}) is a half step {dir} it, leaning on to {leanDeg}.",
+  ],
+  [
+    "sing.plain-scale",
+    E,
+    "Note {i}: you sang {gotDeg} ({gotSyl}), the note of plain {plain}. The colour of {mode} is {expDeg} ({expSyl}), a half step {dir}.",
+  ],
+  [
+    "sing.neighbour-close",
+    I,
+    "Note {i} ({expDeg}) counted, but it was {cents}¢ {dir}: closer to {gotDeg} than to {expDeg}.",
+  ],
+  [
+    "sing.guide-tone",
+    E,
+    "Note {i}, over {chord}: you sang the {gotRole} ({got}). The guide tone here is the {expRole} ({exp}).",
+  ],
+  [
+    "sing.guide-tone-other",
+    W,
+    "Note {i}, over {chord}: you sang the {gotRole} ({got}), the chord's other guide tone. This line takes the {expRole} ({exp}), the smaller step.",
+  ],
   // --- answers
   ["id.wrong", E, "That was {exp}, not {got}. Listen to both."],
   ["id.partial", W, "Close: {got} is near {exp}."],
@@ -351,6 +422,8 @@ const entries: [string, Sev, string][] = [
   // Wave 5: the scale builder (U10–U11) and the form strip (U09).
   ["id.scale-missing", E, "{scale} also has {deg} ({syl}), the note {note}."],
   ["id.scale-extra", E, "{deg} ({note}) is not in {scale}."],
+  // Wave 6 (U14): the answer is another scale the learner knows, a note away per changed degree.
+  ["id.scale-other", E, "That is {got}; {scale} has {swaps}."],
   ["form.section", E, "Section {slot} is {exp}, not {got}."],
   [
     "id.interval-quality",
@@ -398,6 +471,13 @@ const entries: [string, Sev, string][] = [
   ["form.no-sections", E, "No sections found: write one `arrange()` per labelled track."],
   ["form.no-section", E, "There is no {section} in your sections ({have})."],
   ["form.contrast", E, "The {a} is no {list} than the {b}: change {need} of these."],
+  // Wave 6: the form map of a whole tune (CF-T.S1, ladder L8).
+  [
+    "form.map-start",
+    E,
+    "Bars {from}–{to} hold more than one section: listen through them for the bar where the tune starts again or turns somewhere new.",
+  ],
+  ["form.map-extra", W, "Bar {bar} is inside a section: nothing new starts there."],
   // --- make, rubric, pass
   ["make.beyond-brief", I, "You went past today's brief. Nice."],
   ["make.silent", E, "Nothing plays yet."],
@@ -492,6 +572,7 @@ export const OPTIONAL_SLOTS: Readonly<Record<string, readonly string[]>> = {
   "rhythm.extra": ["role"],
   "melody.no-line": ["track"],
   "harmony.no-chords": ["track"],
+  "harmony.shifted": ["push"],
   "code.uncatalogued": ["why"],
   "staff.accidental": ["why"],
   "staff.enharmonic": ["why"],

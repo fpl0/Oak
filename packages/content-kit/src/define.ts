@@ -208,6 +208,7 @@ export function checkExercise(
   issues.push(...checkWave3(ex, path));
   issues.push(...checkWave4(ex, path, where));
   issues.push(...checkWave5(ex, path));
+  issues.push(...checkWave6(ex, path, where));
   if (ex.kind === "predict" && ex.mode !== "hum" && ex.correct === undefined) {
     issues.push({
       path: `${path}.correct`,
@@ -561,6 +562,168 @@ function checkWave5(ex: Exercise, path: string): ContentIssue[] {
   return issues;
 }
 
+/** A note-list duration token (packages/notation `notelist.ts`): a value, up to two dots, an optional `t`. */
+const DURATION_TOKEN = /^(?:1|2|4|8|16|32)\.{0,2}t?$/;
+function harmonyMatchersIn(
+  m: Matcher | undefined,
+  p: string,
+): { m: Extract<Matcher, { m: "harmony" }>; path: string }[] {
+  if (!m) return [];
+  if (m.m === "harmony") return [{ m, path: p }];
+  if (m.m === "all") return m.of.flatMap((x, i) => harmonyMatchersIn(x, `${p}.of[${i}]`));
+  if (m.m === "rubric")
+    return m.rules.flatMap((r, i) =>
+      r.rule === "matches" ? harmonyMatchersIn(r.matcher, `${p}.rules[${i}].matcher`) : [],
+    );
+  return [];
+}
+/** Structural rules of one Wave 6 rubric rule; `where` says whether `@song` may be used. */
+export function checkWave6Rule(r: RubricRule, path: string, songForm: boolean): ContentIssue[] {
+  const issues: ContentIssue[] = [];
+  const add = (p: string, rule: string, message: string) =>
+    issues.push({ path: `${path}${p}`, rule, message });
+  if (r.rule === "contains-rn") {
+    if (r.rn.length === 0 && !r.kind)
+      add("", "rubric.contains-rn", "say which chords: numerals in `rn`, or a `kind`");
+    if (r.inOrder && (r.rn.length < 2 || r.kind))
+      add(".inOrder", "rubric.contains-rn", "inOrder asks for a run of two or more numerals, without `kind`");
+  }
+  if (r.rule === "form") {
+    for (const x of r.contains ?? [])
+      if (!/^[A-Z]$/.test(x) && !(FORM_SECTION_NAMES as readonly string[]).includes(x))
+        add(".contains", "rubric.form-contains", `"${x}" is not a section name or a letter`);
+    if (r.pattern === "@song" && !songForm)
+      add(
+        ".pattern",
+        "rubric.form-song",
+        "`@song` is the picked song's form: only in a session rubric of a transcribe capstone",
+      );
+    if (r.extra && r.pattern !== "@song")
+      add(".extra", "rubric.form-song", "`extra` names sections that may surround the song's own (`@song`)");
+    for (const x of r.extra ?? [])
+      if (!(FORM_SECTION_NAMES as readonly string[]).includes(x))
+        add(".extra", "rubric.form-song", `"${x}" is not a section name`);
+  }
+  if (r.rule === "mode" && r.anyOf && !r.anyOf.includes(r.mode))
+    add(".anyOf", "rubric.mode-any-of", "`mode` is one of `anyOf` (the one the brief shows first)");
+  if (r.rule === "device-count" && r.min > r.devices.length)
+    add(".min", "rubric.device-count", `min ${r.min} of ${r.devices.length} devices can never be met`);
+  if (r.rule === "matches")
+    for (const { m, path: p } of harmonyMatchersIn(r.matcher, ".matcher"))
+      if (m.wrongQuality === "none" && (m.level === "bass" || m.level === "root"))
+        add(p, "harmony.wrong-quality", "wrongQuality needs a level that reads quality: quality, rn or full");
+  return issues;
+}
+
+/**
+ * Structural rules of the Wave 6 additions (key plans, the pivot palette, staff duration tokens, the form
+ * map, the scale builder's starting scale, the new rule fields).
+ */
+function checkWave6(ex: Exercise, path: string, where: "lesson" | "capstone" | "checkpoint"): ContentIssue[] {
+  const issues: ContentIssue[] = [];
+  const add = (p: string, rule: string, message: string) =>
+    issues.push({ path: `${path}${p}`, rule, message });
+  if (ex.keyPlan) {
+    const first = ex.keyPlan[0];
+    if (!ex.key)
+      add(".keyPlan", "key-plan.first", "an exercise with a key plan declares `key`, its first key");
+    else if (first && (first.bar > 1 || first.key.tonic !== ex.key.tonic || first.key.mode !== ex.key.mode))
+      add(
+        ".keyPlan[0]",
+        "key-plan.first",
+        "the plan starts at bar 1 (0 with a pickup) in the exercise's `key`",
+      );
+    ex.keyPlan.forEach((e, i) => {
+      const prev = ex.keyPlan?.[i - 1];
+      if (prev && e.bar <= prev.bar) add(`.keyPlan[${i}]`, "key-plan.order", "entries are in bar order");
+      if (prev && e.key.tonic === prev.key.tonic && e.key.mode === prev.key.mode)
+        add(`.keyPlan[${i}]`, "key-plan.order", "an entry changes the key; the same key twice is one entry");
+    });
+  }
+  const uis: { ui: Extract<Exercise, { kind: "identify" }>["answer"]; p: string }[] = [];
+  if ("answer" in ex) uis.push({ ui: ex.answer, p: ".answer" });
+  if (ex.kind === "dictation")
+    for (const [st, ui] of Object.entries(ex.stageAnswers ?? {}))
+      if (ui) uis.push({ ui, p: `.stageAnswers.${st}` });
+  const correct =
+    "correct" in ex && typeof ex.correct === "object" && !Array.isArray(ex.correct) ? ex.correct : undefined;
+  for (const { ui, p } of uis) {
+    if (ui.ui === "rn-palette") {
+      if (ui.labels && ui.labels.length !== ui.slots)
+        add(`${p}.labels`, "rn-palette.labels", `one label per slot (${ui.slots})`);
+      if (ui.slotKeys && ui.slotKeys.length !== ui.slots)
+        add(`${p}.slotKeys`, "rn-palette.slot-keys", `one key per slot (${ui.slots})`);
+    }
+    if (ui.ui === "staff-input")
+      for (const d of ui.palette.durations)
+        if (!DURATION_TOKEN.test(d))
+          add(
+            `${p}.palette.durations`,
+            "staff.duration-token",
+            `"${d}" is not a duration token: 1 2 4 8 16, "4." dotted, "8t" a triplet eighth`,
+          );
+    if (ui.ui === "form" && ui.input === "map") {
+      if (ui.bars === undefined)
+        add(`${p}.bars`, "form.map-bars", "a form map says how many bars the tune has");
+      else if (ui.sectionBars && ui.sectionBars.reduce((a, b) => a + b, 0) !== ui.bars)
+        add(`${p}.sectionBars`, "form.map-bars", `the sections add up to the tune's ${ui.bars} bars`);
+      const starts = correct?.bars;
+      if (correct && (!starts || starts.length !== ui.sections || starts[0] !== 1))
+        add(
+          ".correct.bars",
+          "form.map-correct",
+          `the first bar of each section (${ui.sections}), starting at 1`,
+        );
+      else if (starts) {
+        if (starts.some((b, i) => i > 0 && b <= (starts[i - 1] as number)))
+          add(".correct.bars", "form.map-correct", "section starts are in order");
+        const total = ui.bars;
+        if (total !== undefined && starts.some((b) => b > total))
+          add(".correct.bars", "form.map-correct", "a section starts inside the tune");
+      }
+    }
+    if (ui.ui === "form" && ui.input !== "map" && ui.bars !== undefined)
+      add(`${p}.bars`, "form.map-bars", '`bars` belongs to a form map (input: "map")');
+    if (ui.ui === "scale-builder" && ui.from) {
+      const start = MODE_DEGREES[ui.from];
+      const want = correct?.degrees ?? [];
+      if (want.length === start.length && want.every((d) => start.includes(d)))
+        add(`${p}.from`, "scale-builder.from", "the answer is the starting scale: nothing to raise or lower");
+      if (ui.input === "degrees" && ui.palette)
+        for (const d of start)
+          if (!ui.palette.includes(d))
+            add(`${p}.palette`, "scale-builder.from", `degree ${d} of the starting scale is not on the pad`);
+    }
+  }
+  for (const { m, path: p } of [
+    ...("matcher" in ex ? harmonyMatchersIn(ex.matcher, ".matcher") : []),
+    ...(ex.kind === "dictation"
+      ? (ex.byEar?.parts ?? []).flatMap((x, i) => harmonyMatchersIn(x.matcher, `.byEar.parts[${i}].matcher`))
+      : []),
+    ...(ex.kind === "transcribe-step" && ex.grading.mode === "auto"
+      ? [
+          ...harmonyMatchersIn(ex.grading.matcher, ".grading.matcher"),
+          ...(ex.grading.stages ?? []).flatMap((st, i) =>
+            harmonyMatchersIn(st.matcher, `.grading.stages[${i}].matcher`),
+          ),
+        ]
+      : []),
+  ])
+    if (m.wrongQuality === "none" && (m.level === "bass" || m.level === "root"))
+      add(p, "harmony.wrong-quality", "wrongQuality needs a level that reads quality: quality, rn or full");
+  for (const { rule: r, path: p } of rubricRulesOf(ex))
+    issues.push(...checkWave6Rule(r, `${path}${p}`, false));
+  if (ex.kind === "sing" && ex.mode === "guide-tones" && ex.target.from === "stimulus" && !ex.target.track)
+    add(
+      ".target",
+      "sing.guide-tones-target",
+      "name the guide-tone line: a `track` of the stimulus, a reference track, or degrees",
+    );
+  if (ex.kind === "code-make" && ex.fromSketch && where !== "lesson")
+    add(".fromSketch", "make.from-sketch", "fromSketch belongs to a lesson's Make");
+  return issues;
+}
+
 /**
  * Wave 5. In a key whose 3rd is ♭3 (the minors, the minor pentatonic, the blues; `MINOR_THIRD_MODES`), a
  * degree pad offers the key's own degrees: ♭3, never 3, and every degree of the right answer is on it; a sung
@@ -715,6 +878,14 @@ function checkStep(step: StepDef, i: number, def: LessonDef): ContentIssue[] {
 export function checkLessonStructure(def: LessonDef): ContentIssue[] {
   const issues: ContentIssue[] = [];
   const steps = def.steps;
+  steps.forEach((s, i) => {
+    if (s.exercise?.kind === "code-make" && s.exercise.fromSketch === def.id)
+      issues.push({
+        path: `steps[${i}].exercise.fromSketch`,
+        rule: "make.from-sketch",
+        message: "fromSketch names an earlier lesson, not this one",
+      });
+  });
   for (const id of duplicates(steps.map((s) => s.id)))
     issues.push({ path: "steps", rule: "lesson.duplicate-step", message: `step id "${id}" is used twice` });
   if (steps.length > AUTHORING_CAPS.maxSteps)
@@ -937,6 +1108,16 @@ export function defineUnit(def: UnitDef): UnitDef {
           message: "a side lesson is an optional lesson of a track (optional: true, outside the core)",
         });
     });
+    u.lessons.forEach((l, i) => {
+      if (!l.splitFrom) return;
+      const at = u.lessons.findIndex((x) => x.id === l.splitFrom);
+      if (at < 0 || at >= i)
+        issues.push({
+          path: `lessons[${i}].splitFrom`,
+          rule: "unit.split-from",
+          message: `"${l.splitFrom}" is a lesson of ${u.id} that comes before ${l.id} in the unit's order`,
+        });
+    });
     if (u.checkpoint && u.track === "core" && !u.checkpoint.startsWith(u.id))
       issues.push({
         path: "checkpoint",
@@ -1149,6 +1330,45 @@ export function defineSong(def: SongDef): SongDef {
           message: `bar ${c.bar} is outside the tune`,
         });
     }
+    const sections = s.answerKey.sections;
+    if (sections) {
+      let next = 1;
+      sections.forEach((x, i) => {
+        if (x.bars[0] !== next || x.bars[1] < x.bars[0])
+          issues.push({
+            path: `answerKey.sections[${i}].bars`,
+            rule: "song.sections",
+            message: `sections follow one another without gaps: this one starts at bar ${next}`,
+          });
+        next = x.bars[1] + 1;
+      });
+      if (next - 1 !== s.answerKey.bars)
+        issues.push({
+          path: "answerKey.sections",
+          rule: "song.sections",
+          message: `the sections end at bar ${next - 1}; the tune has ${s.answerKey.bars}`,
+        });
+    }
+    if (s.keyPlan) {
+      const first = s.keyPlan[0];
+      if (first && (first.bar > 1 || first.key.tonic !== s.key.tonic || first.key.mode !== s.key.mode))
+        issues.push({
+          path: "keyPlan[0]",
+          rule: "song.key-plan",
+          message: "the plan starts at bar 1 (0 with a pickup) in the song's `key`",
+        });
+      s.keyPlan.forEach((e, i) => {
+        const prev = s.keyPlan?.[i - 1];
+        if (prev && e.bar <= prev.bar)
+          issues.push({ path: `keyPlan[${i}]`, rule: "song.key-plan", message: "entries are in bar order" });
+        if (e.bar > s.answerKey.bars)
+          issues.push({
+            path: `keyPlan[${i}]`,
+            rule: "song.key-plan",
+            message: `bar ${e.bar} is outside the tune`,
+          });
+      });
+    }
     return issues;
   });
 }
@@ -1185,7 +1405,10 @@ export function defineCapstone(def: CapstoneDef): CapstoneDef {
         rule: "capstone.release-last",
         message: "only the last session releases the piece",
       });
-    const checkIds = c.sessionDefs.flatMap((s) => (s.checks ?? []).map((x) => x.id));
+    const checkIds = c.sessionDefs.flatMap((s) => [
+      ...(s.formMap ? [s.formMap.id] : []),
+      ...(s.checks ?? []).map((x) => x.id),
+    ]);
     for (const id of duplicates(checkIds))
       issues.push({ path: "sessionDefs", rule: "capstone.check-id", message: `check "${id}" is used twice` });
     c.sessionDefs.forEach((s, i) => {
@@ -1211,7 +1434,10 @@ export function defineCapstone(def: CapstoneDef): CapstoneDef {
           });
         const earlier = c.sessionDefs
           .slice(0, i + 1)
-          .flatMap((t, k) => (t.checks ?? []).slice(0, k === i ? j : undefined).map((y) => y.id));
+          .flatMap((t, k) => [
+            ...(t.formMap ? [t.formMap.id] : []),
+            ...(t.checks ?? []).slice(0, k === i ? j : undefined).map((y) => y.id),
+          ]);
         for (const a of x.after ?? [])
           if (!earlier.includes(a))
             issues.push({
@@ -1226,6 +1452,27 @@ export function defineCapstone(def: CapstoneDef): CapstoneDef {
             message: "phrase [from, to], from ≤ to",
           });
       }
+      if (s.formMap && c.kind !== "transcribe")
+        issues.push({
+          path: `sessionDefs[${i}].formMap`,
+          rule: "capstone.form-map",
+          message: "a form map belongs to a transcribe capstone",
+        });
+      if (s.rubric && c.kind !== "transcribe")
+        issues.push({
+          path: `sessionDefs[${i}].rubric`,
+          rule: "capstone.session-rubric",
+          message:
+            "a compose capstone keeps its rules in the brief; a session rubric is for a transcribe capstone",
+        });
+      for (const id of duplicates((s.rubric ?? []).map((r) => r.id)))
+        issues.push({
+          path: `sessionDefs[${i}].rubric`,
+          rule: "rubric.duplicate-rule",
+          message: `rule id "${id}" is used twice`,
+        });
+      for (const [j, r] of (s.rubric ?? []).entries())
+        issues.push(...checkWave6Rule(r, `sessionDefs[${i}].rubric[${j}]`, true));
       for (const [j, st] of (s.stages ?? []).entries())
         issues.push(...checkExercise(st, `sessionDefs[${i}].stages[${j}]`, "capstone"));
     });

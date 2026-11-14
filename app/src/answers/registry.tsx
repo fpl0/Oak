@@ -1,4 +1,7 @@
-// The AnswerWidget registry (docs/design/wave2.md §3.1): one component per answer kind. Wave 5: `form` (a timeline
+// The AnswerWidget registry (docs/design/wave2.md §3.1): one component per answer kind. Wave 6 added no kind: the
+// same widgets take the new fields (ties, dots and triplets on the staff, 6- and 24-step grids, numerals with
+// applied chords and a key per slot, `form` with `input: "map"`, `scale-builder` with `from`) and what the host
+// tells them through `AnswerEnv` (the meter, a key change, a guide-tone chord). Wave 5: `form` (a timeline
 // of sections to label, or cards to order), `bar-grid` (a chord chart, a numeral or symbol per bar) and
 // `scale-builder` (a scale's notes on a keyboard or a degree pad). Wave 4: a `chord` text answer
 // gets the chord-name picker; `slot-choice` is the slot strip (function, cadence). Wave 3: `staff-input` is the

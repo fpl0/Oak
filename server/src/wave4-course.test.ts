@@ -140,7 +140,10 @@ describe("the Wave 4 dev seeds on the real content (wave4.md §6)", () => {
           case "after U05.L04":
             expect(seeded.done.at(-1)).toBe("U05.L04");
             expect(unlocked.has("tb.arp")).toBe(true);
-            if (written(real, "U05.L05"))
+            // Contracts 1.6 (d17): U05.L09 "Chord Names", split out of U05.L04, is taught directly after it.
+            if (written(real, "U05.L09"))
+              expect(plan).toMatchObject({ kind: "lesson", mapItemId: "U05.L09" });
+            else if (written(real, "U05.L05"))
               expect(plan).toMatchObject({ kind: "lesson", mapItemId: "U05.L05" });
             break;
           case "U05.L07 gate open":

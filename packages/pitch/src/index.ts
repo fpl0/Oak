@@ -19,6 +19,29 @@ export {
   playbackPitch,
   SINGING_MARGIN_SEC,
 } from "./bleed.ts";
+// Wave 6: sung chromatic degrees (U15), a mode's colour tone (U14) and guide-tone lines (U12.L05), each with the
+// neighbour error explained and a Quiet path (pick the note).
+export {
+  type ChordToneRole,
+  COLOUR_FEEDBACK,
+  type ColourTarget,
+  chordToneWord,
+  chromaticTargets,
+  colourFeedbackText,
+  colourQuietPicks,
+  explainColourResult,
+  type GuideToneNote,
+  type GuideToneResult,
+  type GuideToneTarget,
+  gradeGuideTones,
+  gradeQuietPicks,
+  guideToneQuietPicks,
+  guideToneTargets,
+  modalTargets,
+  type QuietOption,
+  type QuietPick,
+  type QuietPickResult,
+} from "./colour-lines.ts";
 // Wave 5: sung degrees in minor (do-based syllables) and blue notes.
 export {
   BLUE_BEND,
@@ -85,6 +108,29 @@ export {
   rmsDb,
   rmsOf,
 } from "./math.ts";
+// Wave 6 (U13): pushes, triplets and compound meter tapped against a click, reported onset by onset.
+export {
+  beatOnsets,
+  classifyRhythm,
+  gradeRhythmTaps,
+  pushWord,
+  RHYTHM_TAP_FEEDBACK,
+  type RhythmGrid,
+  type RhythmKindSummary,
+  type RhythmOnset,
+  type RhythmOnsetKind,
+  type RhythmOnsetReport,
+  type RhythmPattern,
+  type RhythmTapResult,
+  type RhythmVerdict,
+  rhythmBarSec,
+  rhythmBeatSec,
+  rhythmTapText,
+  rhythmTargets,
+  type TripletReport,
+  type TripletShape,
+  tripletShapeWords,
+} from "./rhythm-taps.ts";
 export {
   isSungEvidence,
   SUNG_STATS_WINDOW,
@@ -108,6 +154,7 @@ export {
   LENIENT_CENTS,
   LENIENT_SPAN_SEC,
   MAX_LATE_START_SEC,
+  neighbourSung,
   resolveSingTolerance,
   sungCredit,
 } from "./sung.ts";

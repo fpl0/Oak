@@ -8,7 +8,14 @@ import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { R } from "@oak/content-kit";
 import { CORPUS } from "../corpus/corpus.ts";
 import { readBack, runEntry } from "../corpus/harness.ts";
-import { parseNoteList, scoreToEvents, toNoteList } from "./index.ts";
+import {
+  drawnLabels,
+  guideToneMarks,
+  parseNoteList,
+  scoreRhythm,
+  scoreToEvents,
+  toNoteList,
+} from "./index.ts";
 
 setDefaultTimeout(30_000);
 
@@ -47,11 +54,28 @@ function straightened<E extends Ev>(
     const d = 3 * 64 * unitsPerBar;
     return [Math.round(x * d), d];
   };
+  // Wave 6: a slot of a track that holds a real triplet (an onset a third of the way in, under triplet swing) is
+  // not straightened, and a moved note that reached the end of its slot still reaches it.
+  const tripletSwing = Math.abs(swing.amount - 1 / 3) < 1e-9;
+  const slotStart = (on: number) => Math.floor(on / slot + 1e-9) * slot;
+  const hasTriplet = (track: string, start: number) =>
+    tripletSwing &&
+    events.some((o) => {
+      const on = R.toNum(o.onset as [number, number]);
+      return (
+        o.track === track && Math.abs(slotStart(on) - start) < 1e-9 && Math.abs(on - start - slot / 3) < 1e-9
+      );
+    });
   const moved = events.map((e) => {
     const on = R.toNum(e.onset as [number, number]);
-    const inSlot = on - Math.floor(on / slot + 1e-9) * slot;
-    const back = Math.abs(inSlot - (slot / 2 + shift)) < 1e-9 ? on - shift : on;
-    return { e, on: back, dur: R.toNum(e.dur as [number, number]) };
+    const dur = R.toNum(e.dur as [number, number]);
+    const start = slotStart(on);
+    const swung = Math.abs(on - start - (slot / 2 + shift)) < 1e-9 && !hasTriplet(e.track, start);
+    if (!swung) return { e, on, dur };
+    const stop = on + dur;
+    const slotEnd = start + slot;
+    const newStop = stop < slotEnd - 1e-9 ? stop - shift : Math.max(stop - shift, slotEnd);
+    return { e, on: on - shift, dur: newStop - (on - shift) };
   });
   return moved.map(({ e, on, dur }) => {
     const later = moved.filter((m) => m.e.track === e.track && m.on > on + 1e-9).map((m) => m.on);
@@ -59,6 +83,32 @@ function straightened<E extends Ev>(
     const end = on + dur;
     const clipped = next < end - 1e-9 && end - next <= dur / 2 + 1e-9 ? next - on : dur;
     return { ...e, onset: toRat(on), dur: toRat(clipped) };
+  });
+}
+
+/**
+ * A declared grid, written apart from the engine in integers: each onset and end goes to the nearest of `steps`
+ * equal steps a bar; exactly half-way, to the step whose fraction has the smaller denominator (the earlier one when
+ * they tie); a note keeps at least one step.
+ */
+function onGrid<E extends Ev>(
+  events: readonly E[],
+  steps: number,
+): (Omit<E, "onset" | "dur"> & { onset: [number, number]; dur: [number, number] })[] {
+  const gcd = (a: number, b: number): number => (b === 0 ? Math.abs(a) : gcd(b, a % b));
+  const den = (k: number) => steps / gcd(k, steps);
+  const near = ([n, d]: readonly [number, number]): number => {
+    const lo = Math.floor((n * steps) / d);
+    const twice = 2 * n * steps - 2 * lo * d;
+    if (twice < d) return lo;
+    if (twice > d) return lo + 1;
+    return den(lo + 1) < den(lo) ? lo + 1 : lo;
+  };
+  return events.map((e) => {
+    const a = near(e.onset);
+    const end: [number, number] = [e.onset[0] * e.dur[1] + e.dur[0] * e.onset[1], e.onset[1] * e.dur[1]];
+    const z = Math.max(a + 1, near(end));
+    return { ...e, onset: [a, steps], dur: [z - a, steps] };
   });
 }
 
@@ -89,8 +139,8 @@ describe("the independent read-back", () => {
 });
 
 describe("golden corpus", () => {
-  test("has at least 230 patterns (Wave 4: 40 more for harmony and lead sheets; Wave 5: 60 more)", () => {
-    expect(CORPUS.length).toBeGreaterThanOrEqual(231);
+  test("has at least 331 patterns (Wave 4: 40 more for harmony and lead sheets; Wave 5: 60 more; Wave 6: 90 more)", () => {
+    expect(CORPUS.length).toBeGreaterThanOrEqual(331);
     expect(new Set(CORPUS.map((e) => e.name)).size).toBe(CORPUS.length);
   });
 
@@ -133,6 +183,26 @@ describe("golden corpus", () => {
         expect(check.barTypes.filter((t) => t === "bar_thin_thin").length).toBe(
           new Set((score.sections ?? []).filter((m) => m.doubleBar && m.bar > firstBar).map((m) => m.bar))
             .size,
+        );
+      // Wave 6 golden facts: the rhythm as written, the signatures inside the tune, the labels of the drawn
+      // spelling, the guide tones.
+      if (x.rhythm) expect(scoreRhythm(score)).toMatchObject(x.rhythm);
+      if (x.keyMarks) expect([...abc.abc.matchAll(/\[K:([^\]]+)\]/g)].map((m) => m[1])).toEqual(x.keyMarks);
+      if (x.drawn) {
+        const labels = drawnLabels(score);
+        const order = (score.staves[0]?.voices[0]?.bars ?? []).flatMap((b) =>
+          b.items.filter((it) => it.kind !== "rest" && !it.tieFromPrev).flatMap((it) => it.eventIds),
+        );
+        expect(
+          order.flatMap((id) => {
+            const l = labels.get(id);
+            return l ? [`${l.written}=${l.degree ?? "?"}/${l.syllable ?? "?"}`] : [];
+          }),
+        ).toEqual(x.drawn);
+      }
+      if (x.guide)
+        expect(guideToneMarks(score, { events }).map((m) => `${m.pitch}=${m.role}/${m.chord}`)).toEqual(
+          x.guide,
         );
       if (x.names)
         expect(
@@ -209,12 +279,27 @@ describe("golden corpus", () => {
             for (const it of b.items) for (const id of it.eventIds) staffById.set(id, si);
       });
       const staffOf = (id: string) => staffById.get(id) ?? -1;
-      const melodic = events.filter((e) => e.midi !== null && (!lead || e.chordSymbol === undefined));
-      const swungOk = entry.swing && score.meter.tempoUnit === "quarter";
+      const melodic0 = events.filter((e) => e.midi !== null && (!lead || e.chordSymbol === undefined));
+      // The swing the staff was given: declared on the entry, or measured and handed over by the host helper (d5).
+      const swing = r.input.swing;
+      const swungOk = swing && score.meter.tempoUnit === "quarter";
+      // A declared grid (Wave 6): the truth is the input moved to the nearest step, computed here on its own.
+      const melodic = entry.grid ? onGrid(melodic0, entry.grid) : melodic0;
+      // The staff engraves its bars and no more: a note that rings past the last bar line (a chord pushed early
+      // into the repeat, Wave 6) is cut there, and one a declared grid moves onto the next page is not on this one.
+      const endOfPage: [number, number] = [score.startBar + score.bars, 1];
+      const inPage = <E extends Ev>(list: readonly E[]): E[] =>
+        list
+          .filter((e) => R.lt(e.onset as [number, number], endOfPage))
+          .map((e) =>
+            R.lt(endOfPage, R.add(e.onset as [number, number], e.dur as [number, number]))
+              ? { ...e, dur: R.sub(endOfPage, e.onset as [number, number]) }
+              : e,
+          );
       const truth =
-        !score.approximate && (!entry.swing || swungOk) && (entry.staff ?? "auto") !== "rhythm"
+        !score.approximate && (!swing || swungOk) && (entry.staff ?? "auto") !== "rhythm"
           ? dedupe(
-              swungOk && entry.swing ? straightened(melodic, score.meter.unitsPerBar, entry.swing) : melodic,
+              inPage(swungOk && swing ? straightened(melodic, score.meter.unitsPerBar, swing) : melodic),
               staffOf,
             )
           : engraved;
@@ -268,12 +353,13 @@ describe("golden corpus", () => {
       // Exact single-staff entries: the engraving gives back Strudel's events (ties merged).
       const exact =
         !score.approximate &&
-        !entry.swing &&
+        !swing &&
+        !entry.grid &&
         (entry.staff ?? "auto") !== "rhythm" &&
         score.staves.every((s) => s.clef !== "perc");
       if (exact) {
         const want = dedupe(
-          events.filter((e) => e.midi !== null && (!lead || e.chordSymbol === undefined)),
+          inPage(events.filter((e) => e.midi !== null && (!lead || e.chordSymbol === undefined))),
           staffOf,
         )
           .map(key3)

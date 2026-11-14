@@ -521,11 +521,11 @@ export interface StoredLadderItem {
   /** Cycles the reference plays (given bars, plus a pickup bar). */
   cycles: number;
   /** L3: bass → quality → rn; Wave 5, L6 songs: bass → changes → melody. */
-  stages: ("bass" | "quality" | "rn" | "changes" | "melody")[] | null;
+  stages: ("bass" | "quality" | "rn" | "changes" | "melody" | "form")[] | null;
   swing: { subdivision: number; amount: number } | null;
   title: string;
   /** Wave 5: an L5/L6 song item — the repertoire song, its level and the phrases the item works. */
-  song?: { songId: string; level: 5 | 6; phrases: [number, number][] };
+  song?: { songId: string; level: 5 | 6 | 8; phrases: [number, number][] };
   /** The stimulus as the pattern source plays it. */
   stimulus: {
     events: unknown[];
@@ -588,7 +588,7 @@ export interface TranscriptionVersionRow {
   /** Wave 4: a "Hum it, Oak drafts it" draft not yet edited (no evidence). */
   machineDraft?: boolean;
   /** Wave 4: the L3 stage this version answered; Wave 5: an L6 stage (`bass`, `changes`, `melody`). */
-  stage?: "bass" | "quality" | "rn" | "changes" | "melody" | null;
+  stage?: "bass" | "quality" | "rn" | "changes" | "melody" | "form" | null;
   /** Wave 5: the L5 phrase (1-based) this version answered. */
   phrase?: number | null;
   /** Wave 5 (c2): arrived through a backup import; runs only after the strict lint and the learner's confirmation. */

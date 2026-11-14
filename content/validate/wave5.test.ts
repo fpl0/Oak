@@ -75,8 +75,8 @@ describe("side lessons are judged at their gate", () => {
 });
 
 describe("the U08 exemplar and the default order", () => {
-  test("U08.L01 is session 75, before U07.CP; U08.L02–L05 follow X1 (contracts §2.5)", () => {
-    expect(ORDER.indexOf("U08.L01") + 1).toBe(75);
+  test("U08.L01 is session 76, before U07.CP; U08.L02–L05 follow X1 (contracts §2.5)", () => {
+    expect(ORDER.indexOf("U08.L01") + 1).toBe(76);
     expect(ORDER.indexOf("U07.CP")).toBeGreaterThan(ORDER.indexOf("U08.L01"));
     expect(ORDER.slice(ORDER.indexOf("X1.S3") + 1, ORDER.indexOf("X1.S3") + 5)).toEqual([
       "U08.L02",
@@ -85,9 +85,9 @@ describe("the U08 exemplar and the default order", () => {
       "U08.L05",
     ]);
   });
-  test("every Wave 5 session of §2.5 is in the default order, gym slots included, through X2.S2 (session 129)", () => {
-    expect(ORDER.indexOf("X2.S2") + 1).toBe(129);
-    const gyms = ORDER.slice(ORDER.indexOf("U08.L01"), 129).filter((s) => s.startsWith("GYM."));
+  test("every Wave 5 session of §2.5 is in the default order, gym slots included, through X2.S2 (session 131)", () => {
+    expect(ORDER.indexOf("X2.S2") + 1).toBe(131);
+    const gyms = ORDER.slice(ORDER.indexOf("U08.L01"), 131).filter((s) => s.startsWith("GYM."));
     expect(gyms).toEqual([
       "GYM.03",
       "GYM.04",
@@ -99,7 +99,7 @@ describe("the U08 exemplar and the default order", () => {
       "GYM.10",
       "GYM.11",
     ]);
-    for (const c of ["C3.S1", "C3.S2", "C3.S3", "C4.S1", "C4.S2", "C5.S1", "C5.S2", "X2.S1"])
+    for (const c of ["C3.S1", "C3.S2", "C3.S3", "C3.S4", "C4.S1", "C4.S2", "C5.S1", "C5.S2", "X2.S1"])
       expect(ORDER).toContain(c);
   });
 });

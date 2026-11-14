@@ -15,6 +15,7 @@ import { R, rat } from "@oak/content-kit";
 import type { ChordId } from "@oak/theory";
 import {
   degreeOf,
+  isMinorish,
   METERS,
   noteToMidi,
   parseRN,
@@ -24,7 +25,6 @@ import {
   romanOf,
   spellMidi,
   toLeadSheet,
-  transposeKey,
   triadCore,
 } from "@oak/theory";
 import type { ChordSlot } from "../analyze/chords.ts";
@@ -49,12 +49,12 @@ import {
 } from "../analyze/chords.ts";
 import { locAt, mean, mod12, onsets, pitched, ratKey, sounding } from "../analyze/events.ts";
 import { energyCurve, formMatches, registerSeparation, spanStats } from "../analyze/form.ts";
-import { claveType, euclidMatch, grooveLock, polyRatio, velocityGhosts } from "../analyze/groove.ts";
-import { keyFromContext, keyOf } from "../analyze/key.ts";
+import { claveType, euclidMatch, grooveLock, polyRatio } from "../analyze/groove.ts";
+import { keyEstimate, keyFromContext, keyOf } from "../analyze/key.ts";
+import { keysByBar } from "../analyze/key-plan.ts";
 import {
   chordToneRatio,
   degreeSequence,
-  isStrong,
   melodyLine,
   motifReuse,
   pitchRange,
@@ -63,9 +63,17 @@ import {
 } from "../analyze/melody.ts";
 import { syncopation } from "../analyze/meter.ts";
 import { detectDevices } from "../analyze/piece.ts";
+import { transposeAfterScaleTracks } from "../analyze/scale-context.ts";
 import { resolveSection, sectionsFromAst } from "../analyze/sections.ts";
 import { pickSwingTrack } from "../analyze/swing.ts";
-import { periodOf, selectTrack, selectTracks, sliceNormalized, tracksOfRole } from "../analyze/tracks.ts";
+import {
+  loopPassBars,
+  periodOf,
+  selectTrack,
+  selectTracks,
+  sliceNormalized,
+  tracksOfRole,
+} from "../analyze/tracks.ts";
 import { diag, toolText } from "../feedback/catalog.ts";
 import { runMatcher } from "../match/index.ts";
 import type { Normalized } from "../types.ts";
@@ -87,6 +95,22 @@ import {
   scopeToSection,
   unscope,
 } from "./wave5-rules.ts";
+import {
+  chordsLeftBehind,
+  containsRnWave6,
+  formWave6,
+  guideTonesWave6,
+  liftedChordName,
+  modeRule as modeWave6,
+  modulationRule,
+  notBuiltYet,
+  reharmonizeRule,
+  ruleKeys,
+  slotKeys,
+  tupletsRule,
+  unbuiltWave6,
+  velocityGhostsRule as velocityGhostsWave6,
+} from "./wave6-rules.ts";
 
 export interface RuleEval {
   ok: boolean;
@@ -256,12 +280,17 @@ const endsOnDegree: Impl<"ends-on-degree"> = (r, n, ctx) => {
     if (lastBar > 0 && before.some((e) => e.midi !== null)) events = before;
   }
   const line = melodyLine(events);
-  const key = keyOf(
+  const heard = keyOf(
     line.map((x) => x.event),
     ctx.key ?? null,
   );
   const last = line[line.length - 1];
-  if (!last || !key) return { ok: false, detail: "no melody to end" };
+  if (!last || !heard) return { ok: false, detail: "no melody to end" };
+  // With a key plan (a patterned `.scale()`, a declared plan) the tune ends in the key in force at its last bar:
+  // after `<C4:major!6 G3:major!2>` a tune that ends on G ends on 1 of G (contracts §6.8; U17.L01).
+  const plan = ruleKeys(n, ctx);
+  const changes = plan.some((k) => k.tonic !== plan[0]?.tonic || k.mode !== plan[0]?.mode);
+  const key = changes ? (plan[Math.max(0, Math.min(plan.length - 1, R.floor(last.onset)))] ?? heard) : heard;
   const d = degreeOf(last.midi, key).degree;
   const degreeOk = r.degrees.includes(d);
   const where = locAt(last.onset, ctx, {
@@ -464,7 +493,27 @@ const progression: Impl<"progression"> = (r, n, ctx) => {
     };
   }
   const got = romans.perBar ? chordPerBar(slots, pieceBars(n, ctx)) : chordChanges(slots);
-  const m = matchProgression(got, want, rotate);
+  // Read by chord changes, a held chord is one chord on both sides: a loop with two bars of one chord
+  // (I ♭VII IV I started on ♭VII: ♭VII IV I I; a chain with A7 held for two bars) is compared with its repeats
+  // folded, round the loop's end too, in every rotation the rule allows.
+  const folded = (xs: readonly (ChordId | null)[]): (ChordId | null)[] => {
+    const out = xs.filter((c, i) => i === 0 || !coreEq(c, xs[i - 1] ?? null));
+    while (out.length > 1 && coreEq(out[0] ?? null, out[out.length - 1] ?? null)) out.pop();
+    return out;
+  };
+  const hasRepeat = want.some((c, i) => coreEq(c, want[(i + 1) % want.length] ?? null)) && want.length > 1;
+  let m = matchProgression(got, want, rotate);
+  if (!romans.perBar && hasRepeat && m.matched < m.length) {
+    for (let r = 0; r < (rotate ? want.length : 1); r++) {
+      const turn = folded([...want.slice(r), ...want.slice(0, r)]);
+      const fm = matchProgression(got, turn, false);
+      // One whole turn of the folded loop is the progression: count it as every chord of the written one.
+      if (fm.matched >= turn.length && turn.length > 1) {
+        m = { matched: want.length, length: want.length, rotation: r };
+        break;
+      }
+    }
+  }
   const matched = m.matched >= m.length && m.length > 0;
   // A minor loop started on its III is the relative major's I–V–vi–IV (Am F C G from C: C G Am F): the ear hears
   // it in C major, so it is not the minor loop the rule asks for (contracts §6.8: the key is the tonic heard).
@@ -525,17 +574,38 @@ function rnMatches(
     const target = rnToChord({ ...parsed.of, inversion: 0 }, key);
     return { hit: true, resolved: !!next?.chord && next.chord.rootPc === target.rootPc };
   }
-  // A plain dominant resolves to the tonic.
-  return { hit: true, resolved: !!next?.chord && mod12(next.chord.rootPc - slot.chord.rootPc) === 5 };
+  // A plain dominant resolves to the tonic, a 4th up; a leading-tone chord (vii°, vii°7, viiø7) a half step up.
+  return { hit: true, resolved: !!next?.chord && resolvesByRoot(slot.chord, next.chord) };
+}
+const DIMINISHED: readonly string[] = ["dim", "dim7", "m7b5"];
+/**
+ * Whether a chord goes where its root points: up a 4th (V → I, iiø7 → V7), or, for a diminished chord, also up a
+ * half step (vii°7 → i: G♯°7 → Am; U12.L03). A half-diminished ii goes up a 4th, so both moves count for it.
+ */
+export function resolvesByRoot(
+  chord: { rootPc: number; quality: string },
+  next: { rootPc: number },
+): boolean {
+  const step = mod12(next.rootPc - chord.rootPc);
+  return step === 5 || (step === 1 && DIMINISHED.includes(chord.quality));
 }
 const containsRn: Impl<"contains-rn"> = (r, n, ctx) => {
+  // Wave 6: any chord of a kind, or a run of chords in order (rubric/wave6-rules.ts).
+  if (r.kind !== undefined || r.inOrder) return containsRnWave6(r, n, ctx);
   const key = pieceKey(n, ctx);
   if (!key) return { ok: false, detail: "no harmony found" };
   const slots = pieceSlots(n);
+  // Each chord in the key in force at its bar (contracts §6.8): a chorus lifted to D is read in D.
+  const keys = slotKeys(n, ctx, slots) ?? slots.map(() => key);
+  const keyAt = (i: number): KeySpec => keys[i] ?? key;
+  // "At least two" is counted on one pass of the loop: an eight-bar loop graded over sixteen bars holds its one
+  // V/vi once, not twice (Wave 6, U15). "At least one" reads the whole window, as it always has.
+  const pass = r.min > 1 ? loopPassBars(n.all, windowBars(n, ctx)) : Number.POSITIVE_INFINITY;
   let count = 0;
   let unresolved: number | null = null;
   slots.forEach((s, i) => {
-    const hit = r.rn.map((x) => rnMatches(s, slots[i + 1], x, key)).find((h) => h.hit);
+    if (R.floor(s.span[0]) >= pass) return;
+    const hit = r.rn.map((x) => rnMatches(s, slots[i + 1], x, keyAt(i))).find((h) => h.hit);
     if (!hit) return;
     if (r.mustResolve && !hit.resolved) {
       unresolved ??= i;
@@ -555,7 +625,7 @@ const containsRn: Impl<"contains-rn"> = (r, n, ctx) => {
     target: r.min,
     detail: ok
       ? `${base}${unresolved !== null ? " (one doesn't resolve)" : ""}`
-      : `${base}${containsRnFault(r, slots, key, unresolved)}`,
+      : `${base}${containsRnFault(r, slots, unresolved !== null ? keyAt(unresolved) : key, unresolved)}`,
     ...(where ? { where } : {}),
     ...(!ok && where === undefined ? nearMissWhere(r, slots, key, ctx) : {}),
   };
@@ -627,6 +697,15 @@ function containsRnFault(
     const next = slots[unresolved + 1];
     const home = parseRN(key.mode.includes("minor") ? "i" : "I", key);
     const homeText = home ? chordWords(rnToChord(home, key), key) : "the tonic";
+    // An applied chord points at its own target, not at home: V/vi (E7) goes to vi (Am).
+    const applied = s.chord ? romanOf(s.chord, key, next?.chord ?? undefined) : null;
+    if (s.chord && applied?.of) {
+      const self = `${romanShown({ ...applied, inversion: 0 })} (${toLeadSheet({ ...s.chord, bassPc: s.chord.rootPc })})`;
+      const goal = chordWords(rnToChord({ ...applied.of, inversion: 0 }, key), key);
+      return next?.chord
+        ? ` (${self} doesn't resolve: it goes to ${chordWords(next.chord, key)}, not to ${goal})`
+        : ` (${self} doesn't resolve: it is the last chord; follow it with ${goal})`;
+    }
     return next?.chord
       ? ` (${chordWords(s.chord, key)} doesn't resolve: it goes to ${chordWords(next.chord, key)}, not home to ${homeText})`
       : ` (${chordWords(s.chord, key)} doesn't resolve: it is the last chord; follow it with ${homeText})`;
@@ -845,15 +924,34 @@ const swingRule: Impl<"swing"> = (r, n, ctx) => {
   };
 };
 const syncopationRule: Impl<"syncopation"> = (r, n, ctx) => {
-  const s = syncopation(selectTrack(n, r.track), ctx.meter);
+  // Each line (each drum of a kit) holds its own notes: on `*` the hats' eighths must not cut short the pushed
+  // chord they play beside. A push two lines play together counts once.
+  const at = new Set<string>();
+  for (const line of linesOf(selectTrack(n, r.track)))
+    for (const x of syncopation(line, ctx.meter).at) at.add(`${x[0]}/${x[1]}`);
+  const count = at.size;
   return {
-    ok: s.count >= r.min,
-    value: s.count,
+    ok: count >= r.min,
+    value: count,
     target: r.min,
-    detail: `${s.count} syncopated note(s); at least ${r.min}`,
+    detail: `${count} syncopated note(s); at least ${r.min}`,
   };
 };
+/** The events of a selection split into lines: one per track, and one per drum sound inside a drum track. */
+export function linesOf(events: readonly NEvent[]): NEvent[][] {
+  const by = new Map<string, NEvent[]>();
+  for (const e of events) {
+    const k = `${e.track}|${e.drum ?? ""}`;
+    const list = by.get(k) ?? [];
+    list.push(e);
+    by.set(k, list);
+  }
+  return [...by.values()];
+}
 const form: Impl<"form"> = (r, _n, ctx) => {
+  // Wave 6: a section somewhere in the form (`contains`, `*`), the picked song's form (`@song`, `extra`).
+  if (r.contains !== undefined || r.extra !== undefined || r.pattern === "*" || r.pattern === "@song")
+    return formWave6(r, ctx, formMatches);
   const s = sectionsFromAst(ctx.code);
   if (!s)
     return {
@@ -896,7 +994,8 @@ const voiceLeadingRule: Impl<"voice-leading"> = (r, n, ctx) => {
     ...(bad ? { where: { bar: R.floor(bad.at) + 1 } } : {}),
   };
 };
-const guideTones: Impl<"guide-tones"> = (r, n) => {
+const guideTones: Impl<"guide-tones"> = (r, n, ctx) => {
+  if (r.at !== undefined || r.maxMoveSemis !== undefined) return guideTonesWave6(r, n, ctx);
   const g = guideToneLine(
     melodyLine(selectTrack(n, r.track)),
     pieceSlots(n, r.harmony, { exclude: r.track }),
@@ -907,79 +1006,6 @@ const guideTones: Impl<"guide-tones"> = (r, n) => {
     value: g.ratio,
     target: r.minRatio,
     detail: `${pct(g.ratio)} of changes meet a 3rd or 7th (largest move ${g.maxMove}); at least ${pct(r.minRatio)}, moves ≤ 2`,
-  };
-};
-const modulation: Impl<"modulation"> = (r, n, ctx) => {
-  const total = pieceBars(n, ctx);
-  const start = keyOf(
-    n.all.filter((e) => R.floor(e.onset) < Math.min(4, total)),
-    ctx.key ?? null,
-  );
-  if (!start) return { ok: false, detail: "no pitched notes" };
-  const target: KeySpec =
-    typeof r.to === "object"
-      ? r.to
-      : r.to === "up-step"
-        ? transposeKey(start, 2)
-        : r.to === "up-half"
-          ? transposeKey(start, 1)
-          : r.to === "dominant"
-            ? transposeKey(start, 7)
-            : relativeKey(start);
-  // Each 4-bar window's key: the `.scale()` context first, then the estimate.
-  for (let b = 4; b < total; b += 4) {
-    if (r.atBar !== undefined && Math.abs(b + 1 - r.atBar) > 3) continue;
-    const k = keyOf(
-      n.all.filter((e) => R.floor(e.onset) >= b && R.floor(e.onset) < b + 4),
-      null,
-    );
-    if (k && pcOf(k.tonic) === pcOf(target.tonic) && (k.mode === "minor") === (target.mode === "minor"))
-      return { ok: true, detail: `moves to ${keyName(target)} at bar ${b + 1}` };
-  }
-  return { ok: false, detail: `no move to ${keyName(target)}${r.atBar ? ` near bar ${r.atBar}` : ""}` };
-};
-const CHARACTERISTIC: Record<string, number> = {
-  dorian: 9,
-  mixolydian: 10,
-  lydian: 6,
-  phrygian: 1,
-  minor: 8,
-  locrian: 6,
-};
-const AVOID: Record<string, number[]> = {
-  mixolydian: [11],
-  dorian: [8],
-  lydian: [5],
-  phrygian: [2],
-  minor: [11, 9],
-  major: [10],
-};
-const modeRule: Impl<"mode"> = (r, n, ctx) => {
-  const tonic = pcOf(r.tonic);
-  const notes = pitched(n.all);
-  if (notes.length === 0) return { ok: false, detail: "no pitched notes" };
-  const avoided = notes.filter((e) => (AVOID[r.mode] ?? []).includes(mod12(e.midi - tonic)));
-  const ch = CHARACTERISTIC[r.mode];
-  const strongChar =
-    ch === undefined
-      ? 0
-      : notes.filter((e) => mod12(e.midi - tonic) === ch && isStrong(e.onset, ctx.meter, "strong")).length;
-  const b = windowBars(n, ctx);
-  const perBar = chordPerBar(pieceSlots(n), b);
-  const tonicBars = perBar.filter((c) => c && c.rootPc === tonic).length;
-  const problems: string[] = [];
-  if (avoided.length > 0) problems.push(`${avoided.length} note(s) outside ${r.tonic} ${r.mode}`);
-  if (r.requireCharacteristic && strongChar < 2)
-    problems.push(`its colour tone is on a strong beat ${strongChar}× (at least 2)`);
-  if (perBar.some((c) => c) && tonicBars / Math.max(1, b) < 0.4)
-    problems.push(`the ${r.tonic} chord is in ${pct(tonicBars / Math.max(1, b))} of bars (at least 40%)`);
-  const first = avoided[0];
-  return {
-    ok: problems.length === 0,
-    detail: problems.length ? problems.join("; ") : `${r.tonic} ${r.mode} with its colour tone`,
-    ...(first
-      ? { where: locAt(first.onset, ctx, { track: first.track, noteIds: avoided.map((e) => e.id) }) }
-      : {}),
   };
 };
 const bluesFormRule: Impl<"blues-form"> = (r, n, ctx) =>
@@ -1223,12 +1249,19 @@ const keyChange: Impl<"key-change"> = (r, n, ctx) => {
   if (!here || !before) return { ok: false, detail: "the key change needs a section before it" };
   const inSpan = (from: number, to: number): NEvent[] =>
     pitched(n.all).filter((e) => R.floor(e.onset) >= from && R.floor(e.onset) < to);
-  const kOld =
-    keyFromContext(inSpan(before.startBar, before.startBar + before.bars)) ??
-    keyOf(inSpan(before.startBar, before.startBar + before.bars), null);
-  const kNew =
-    keyFromContext(inSpan(here.startBar, here.startBar + here.bars)) ??
-    keyOf(inSpan(here.startBar, here.startBar + here.bars), null);
+  // Contracts §6.8 item 3: a track with `.transpose()` after `.scale()` keeps its old `scaleCtx`, so its context
+  // is not read; such a stretch is read by ear, in the mode family of the brief (review:robustness, Wave 6).
+  const distrust = new Set(transposeAfterScaleTracks(ctx.code));
+  const keyIn = (from: number, to: number, family: KeySpec | null): KeySpec | null => {
+    const ev = inSpan(from, to);
+    const trusted = keyFromContext(ev.filter((e) => !distrust.has(e.track)));
+    if (trusted) return trusted;
+    const est = keyEstimate(ev);
+    const same = family ? est.find((k) => isMinorish(k.key.mode) === isMinorish(family.mode)) : undefined;
+    return (same ?? est[0])?.key ?? null;
+  };
+  const kOld = keyIn(before.startBar, before.startBar + before.bars, ctx.key ?? null);
+  const kNew = keyIn(here.startBar, here.startBar + here.bars, kOld);
   if (!kOld || !kNew) return { ok: false, detail: "no pitched notes to read the keys from" };
   const diff = mod12(pcOf(kNew.tonic) - pcOf(kOld.tonic));
   const problems: string[] = [];
@@ -1237,8 +1270,24 @@ const keyChange: Impl<"key-change"> = (r, n, ctx) => {
       `${keyName(kOld)} → ${keyName(kNew)} is +${diff}; the brief asks for +${r.semitones.join(" or +")}`,
     );
   const minAfter = r.minBarsAfter ?? 8;
-  if (here.bars < minAfter) problems.push(`the new key lasts ${here.bars} bars; at least ${minAfter}`);
-  if (r.sameMelody) {
+  // The new key counts from the bar the key plan reaches it: a lift two bars into the last chorus lasts six.
+  const plan = keysByBar(n, here.startBar + here.bars, { code: ctx.code, pickup: !!ctx.pickup });
+  const isNew = (b: number): boolean => {
+    const k = plan[b];
+    return !!k && pcOf(k.tonic) === pcOf(kNew.tonic) && isMinorish(k.mode) === isMinorish(kNew.mode);
+  };
+  let liftAt = here.startBar;
+  if (diff !== 0 && plan.length > 0 && !isNew(here.startBar)) {
+    const first = Array.from({ length: here.bars }, (_, i) => here.startBar + i).find(isNew);
+    if (first !== undefined) liftAt = first;
+  }
+  const lasts = here.startBar + here.bars - liftAt;
+  if (liftAt > here.startBar)
+    problems.push(
+      `the key changes at bar ${liftAt + 1}, ${liftAt - here.startBar} bar${liftAt - here.startBar === 1 ? "" : "s"} into ${here.tag} (bar ${here.startBar + 1}): change it where the section starts${lasts < minAfter ? `; the new key lasts ${lasts} bars, at least ${minAfter}` : ""}`,
+    );
+  else if (here.bars < minAfter) problems.push(`the new key lasts ${here.bars} bars; at least ${minAfter}`);
+  if (r.sameMelody && liftAt === here.startBar) {
     const prevSame = [...s.sections.slice(0, idx)].reverse().find((x) => x.label === here.label) ?? before;
     const mel = selectTrack(n, "@melody");
     const degs = (from: number, to: number, k: KeySpec): string =>
@@ -1254,25 +1303,21 @@ const keyChange: Impl<"key-change"> = (r, n, ctx) => {
     )
       problems.push(`the melody of ${here.tag} isn't the ${prevSame.tag} melody moved to the new key`);
   }
+  // The chords move with the tune: chord names left in the old key under a lifted tune are two keys at once.
+  if (diff !== 0) {
+    const earlier = [...s.sections.slice(0, idx)].reverse().find((x) => x.label === here.label) ?? before;
+    const left = chordsLeftBehind(n, earlier, here, diff);
+    if (left)
+      problems.push(
+        `the tune of ${here.tag} is in ${keyName(kNew)}, but its chords are still the ${keyName(kOld)} ones: bar ${left.bar + 1} is ${toLeadSheet({ ...left.got, bassPc: left.got.rootPc })}; lifted, it is ${liftedChordName(left.want, kNew)}`,
+      );
+  }
   return {
     ok: problems.length === 0,
     detail: problems.length
       ? problems.join("; ")
       : `${keyName(kOld)} → ${keyName(kNew)} at bar ${here.startBar + 1}`,
     where: { bar: here.startBar + 1 },
-  };
-};
-const velocityGhostsRule: Impl<"velocity-ghosts"> = (r, n, ctx) => {
-  const g = velocityGhosts(selectTrack(n, r.track), {
-    meter: ctx.meter,
-    ...(r.maxGain !== undefined ? { maxGain: r.maxGain } : {}),
-    ...(r.on ? { on: r.on } : {}),
-  });
-  return {
-    ok: g.length >= r.min,
-    value: g.length,
-    target: r.min,
-    detail: `${g.length} ghost note(s)${r.on === "16th-offbeat" ? " on 16th off-beats" : ""}; at least ${r.min}`,
   };
 };
 const onsetsRule: Impl<"onsets"> = (r, n, ctx) => {
@@ -1309,8 +1354,14 @@ const onsetsRule: Impl<"onsets"> = (r, n, ctx) => {
   };
 };
 const degreeSet: Impl<"degree-set"> = (r, n, ctx) => {
-  const ev = pitched(selectTrack(n, r.track));
-  const key = keyOf(ev, ctx.key ?? null);
+  const whole = pitched(selectTrack(n, r.track));
+  // A count ("twice or more") is made on one pass of the line's own loop, as `motif-reuse` reads a riff: a
+  // two-bar loop with one ♭7 has it once, however long it plays (Wave 6; "at least once" is unchanged).
+  const reach = whole.reduce((m, e) => Math.max(m, R.floor(e.onset) + 1), 0);
+  const window = Math.max(1, Math.min(ctx.bars ?? reach, reach || 1));
+  const period = (r.minCount ?? 1) > 1 ? periodOf(whole, MOTIF_PERIOD_CAP, window) : window;
+  const ev = period < window ? whole.filter((e) => R.floor(e.onset) < period) : whole;
+  const key = keyOf(whole, ctx.key ?? null);
   if (!key || ev.length === 0) return { ok: false, detail: "no pitched notes" };
   const degs = ev.map((e) => degreeOf(e.midi, key).degree);
   const problems: string[] = [];
@@ -1367,13 +1418,21 @@ const distinctPitches: Impl<"distinct-pitches"> = (r, n) => {
   return { ok: d >= r.min, value: d, target: r.min, detail: `${d} different pitch(es); at least ${r.min}` };
 };
 const deviceCount: Impl<"device-count"> = (r, n, ctx) => {
-  const found = new Set(detectDevices(n, { ...ctx, bars: windowBars(n, ctx) }).map((d) => d.device));
-  const hit = r.devices.filter((d) => found.has(d));
+  const all = detectDevices(n, { ...ctx, bars: windowBars(n, ctx) });
+  // Each device once, with the bar it first sounds in ("each detected and named with its bar", CF-A).
+  const first = new Map<string, number>();
+  for (const d of all) if (!first.has(d.device)) first.set(d.device, d.bar);
+  const hit = r.devices.filter((d) => first.has(d));
+  const open = r.devices.filter((d) => !first.has(d));
+  const named = hit.map((d) => `${d} (bar ${first.get(d)})`).join(", ");
+  const ok = hit.length >= r.min;
   return {
-    ok: hit.length >= r.min,
+    ok,
     value: hit.length,
     target: r.min,
-    detail: `${hit.length} of ${r.devices.join(", ")}${hit.length ? ` (${hit.join(", ")})` : ""}; at least ${r.min}`,
+    detail: ok
+      ? `${hit.length} of ${r.devices.length}: ${named}`
+      : `${hit.length} of the ${r.min} asked for${hit.length ? `: ${named}` : ""}; still open: ${open.join(", ")}`,
   };
 };
 const matches: Impl<"matches"> = (r, n, ctx) => {
@@ -1381,7 +1440,11 @@ const matches: Impl<"matches"> = (r, n, ctx) => {
   if (!ref) return { ok: false, detail: "the reference could not be evaluated" };
   // The piece is queried longer than the reference (a Make reads 16 bars, a capstone more): compare the
   // reference's bars only, so a 4-bar loop played for 16 bars is not 12 bars of "extra" chords (Wave 4 fix).
-  const m = runMatcher(r.matcher, ref, sliceNormalized(n, 0, Math.max(1, r.reference.bars)), ctx);
+  const piece = sliceNormalized(n, 0, Math.max(1, r.reference.bars));
+  const all = ctx.resolveReferences?.(r.reference) ?? [];
+  const m = (all.length > 1 ? all : [ref])
+    .map((x) => runMatcher(r.matcher, x, piece, ctx))
+    .reduce((best, x) => (x.score > best.score ? x : best));
   return {
     ok: m.score >= r.min - 1e-9,
     value: m.score,
@@ -1530,8 +1593,9 @@ export const RULES: { [K in RubricRule["rule"]]: Impl<K> } = {
   form,
   "voice-leading": voiceLeadingRule,
   "guide-tones": guideTones,
-  modulation,
-  mode: modeRule,
+  // Wave 6 (rubric/wave6-rules.ts): the key plan and `via`; `anyOf` and the declared tonic.
+  modulation: modulationRule,
+  mode: modeWave6,
   "blues-form": bluesFormRule,
   euclid,
   clave,
@@ -1543,7 +1607,7 @@ export const RULES: { [K in RubricRule["rule"]]: Impl<K> } = {
   "motif-reuse": motifReuseRule,
   contrast,
   "key-change": keyChange,
-  "velocity-ghosts": velocityGhostsRule,
+  "velocity-ghosts": velocityGhostsWave6,
   onsets: onsetsRule,
   "degree-set": degreeSet,
   sounds,
@@ -1557,6 +1621,10 @@ export const RULES: { [K in RubricRule["rule"]]: Impl<K> } = {
   // Wave 5 (docs/design/wave5.md §3.2): `bass-line` on the bass view; `notates` through @oak/notation.
   "bass-line": (r, n, ctx) => bassLineRule(r, n, ctx, pieceSlots),
   notates: (r, n, ctx) => notatesRule(r, n, ctx, pieceSlots, pieceBars(n, ctx)),
+  // Wave 6 (docs/design/wave6.md §3.2; rubric/wave6-rules.ts): the same tune over new chords (U16.L05).
+  reharmonize: reharmonizeRule,
+  // Wave 6 Build (U13.L05): a triplet somewhere in the line.
+  tuplets: tupletsRule,
 };
 
 /**
@@ -1572,11 +1640,18 @@ export function evalRule(rule: RubricRule, n: Normalized, ctx: RubricContext): R
       detail: `unknown rule ${rule.rule}`,
       extra: [diag("rubric.unknown", { rule: rule.rule })],
     };
+  // A Wave 6 field with no analyzer yet is never silently ignored (rubric/wave6-rules.ts `WAVE6_UNBUILT`).
+  const unbuilt = unbuiltWave6(rule);
+  if (unbuilt) return notBuiltYet(rule, unbuilt);
   const run = impl as (r: RubricRule, n: Normalized, c: RubricContext) => RuleEval;
   if (rule.section && rule.rule !== "contrast" && rule.rule !== "key-change") {
     const scoped = scopeToSection(rule.section, n, ctx);
     if ("error" in scoped) return scoped.error;
-    return unscope(run(rule, scoped.n, scoped.ctx), rule.section, scoped.from);
+    // The section keeps the key the whole piece gives it (a lifted last chorus is read in its own key).
+    const keys = ruleKeys(n, ctx);
+    const keyByBar = keys.slice(scoped.from, scoped.from + (scoped.ctx.bars ?? keys.length));
+    const sctx = keyByBar.length > 0 ? { ...scoped.ctx, keyByBar } : scoped.ctx;
+    return unscope(run(rule, scoped.n, sctx), rule.section, scoped.from);
   }
   return run(rule, n, ctx);
 }

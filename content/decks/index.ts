@@ -173,10 +173,10 @@ const ORDER_CARDS: FactCardDef[] = [
  * the symbol as Strudel's `chord()` takes it (`C^7`, not `Cmaj7`, which is silent there).
  */
 export const CHORD_SYMBOL_ROWS: readonly [string, string, LessonId][] = [
-  ["", "major", "U05.L04"],
-  ["m", "minor", "U05.L04"],
-  ["o", "diminished", "U05.L04"],
-  ["aug", "augmented", "U05.L04"],
+  ["", "major", "U05.L09"],
+  ["m", "minor", "U05.L09"],
+  ["o", "diminished", "U05.L09"],
+  ["aug", "augmented", "U05.L09"],
   ["7", "dominant seventh", "U11.L04"],
   ["^7", "major seventh", "U12.L01"],
   ["m7", "minor seventh", "U12.L01"],
@@ -225,12 +225,12 @@ export const KEY_SIGNATURES: FactDeck = defineDeck({
 export const CHORD_SYMBOLS: FactDeck = defineDeck({
   id: "deck.chd.symbols" as DeckId,
   title: "Chord symbols",
-  unlock: { skill: "N05", lesson: "U05.L04" },
+  unlock: { skill: "N05", lesson: "U05.L09" },
   cards: CHORD_SYMBOL_ROWS.flatMap(([suffix, name, gate]) =>
     CHORD_ROOTS.map(
       (root): FactCardDef => ({
         id: chordCardId(root, suffix),
-        ...(gate !== "U05.L04" ? { gate } : {}),
+        ...(gate !== "U05.L09" ? { gate } : {}),
         prompt: { text: `Write ${display(root)} ${name} as a chord symbol for \`chord()\`.` },
         answer: { text: [`${root}${suffix}`] },
       }),
@@ -273,10 +273,15 @@ const semisToName = ([name, semis, code, words, gate]: (typeof INTERVAL_ROWS)[nu
   answer: { text: [name === "TT" ? "tritone" : name] },
   accept: [...(name === "TT" ? ["TT", "A4", "d5", "4A", "5d"] : [code, words]).map((t) => ({ text: [t] }))],
 });
+/** The lesson from which the "how many half steps" cards are dealt (contracts §7.3 `deck.int.names`). */
+export const HALF_STEP_COUNTS_FROM: LessonId = "U12.L06";
 /** The half steps from the name: "How many half steps in a major 3rd?" → 4. */
-const nameToSemis = ([name, semis, , words, gate]: (typeof INTERVAL_ROWS)[number]): FactCardDef => ({
+const nameToSemis = ([name, semis, , words]: (typeof INTERVAL_ROWS)[number]): FactCardDef => ({
   id: `fact.int.${name}-semis` as FactId,
-  ...(gate ? { gate } : {}),
+  // The reverse direction waits for U12.L06, where intervals come back (inversion, compound intervals, the
+  // isolated-interval ear family): until then the deck is its 18 name and code cards, which keeps the U04–U07
+  // review load inside contracts §7.4 (see the note on `INTERVAL_NAMES`).
+  gate: HALF_STEP_COUNTS_FROM,
   prompt: { text: `How many half steps in ${article(words)} ${words}? Write the number.` },
   answer: { text: [String(semis)] },
 });
@@ -291,9 +296,10 @@ const nameToCode = ([name, , code, words]: (typeof INTERVAL_ROWS)[number]): Fact
 });
 
 /**
- * Interval names (I02, I03): ready, not yet in `decks`. Contracts §7.3 lists the course's fact decks and
- * content/validate/contracts-sync.test.ts holds the catalog to it, so this deck joins `decks` (and its card
- * IDs the ledger) when the row is added there (Wave 3 report).
+ * Interval names (I02, I03). In `decks` since contracts 1.6 (the §7.3 row `deck.int.names`), with one new card
+ * a day like every deck promoted with it. Its twelve "how many half steps" cards are dealt from U12.L06: with
+ * all thirty cards from U04.L02 the 300-day simulation's oldest due card waited 9 to 13 days on three of thirty
+ * runs (contracts §7.4 allows 7); Wave 6 Foundation's result lists the runs tried.
  */
 export const INTERVAL_NAMES: FactDeck = defineDeck({
   id: "deck.int.names" as DeckId,
@@ -304,7 +310,7 @@ export const INTERVAL_NAMES: FactDeck = defineDeck({
     ...INTERVAL_ROWS.map(nameToSemis),
     ...INTERVAL_ROWS.filter(([name]) => CODE_FORMS.includes(name)).map(nameToCode),
   ],
-  newPerDay: 3,
+  newPerDay: 1,
   fastRtMs: 4000,
   answer: "text",
 });
@@ -837,8 +843,418 @@ export const DOMINANT_SEVENTHS: FactDeck = defineDeck({
   answer: "text",
 });
 
+// --- U12–U17: seventh chords, diatonic sevenths, modes, applied dominants, borrowed chords, pivots ----
+
+const FOUR_NOTES = "Write its four note names, separated by spaces.";
+const SEVENTH_SYMBOL_FORMAT = "Write its chord symbol for `chord()`: the root, then ^7, 7, m7, m7b5 or o7.";
 /**
- * The U10–U11 decks, each waiting for its contracts §7.3 row (see INTERVAL_NAMES). One new card a day each: U10
+ * [root, quality suffix as `chord()` takes it, quality in words, the notes from the root up, gate]: the major and
+ * minor sevenths of C major (U12.L01: I and IV, ii and vi), and the two with a diminished 5th on B (U12.L03).
+ * `deck.chd.symbols` asks for the symbol and `deck.chd.dom7` spells the dominant sevenths; this deck spells the
+ * other four qualities and says what each adds to its triad.
+ */
+export const SEVENTH_SPELLING_ROWS: readonly [string, string, string, string[], LessonId | undefined][] = [
+  ["C", "^7", "major seventh", ["C", "E", "G", "B"], undefined],
+  ["F", "^7", "major seventh", ["F", "A", "C", "E"], undefined],
+  ["G", "^7", "major seventh", ["G", "B", "D", "F#"], undefined],
+  ["D", "m7", "minor seventh", ["D", "F", "A", "C"], undefined],
+  ["A", "m7", "minor seventh", ["A", "C", "E", "G"], undefined],
+  ["E", "m7", "minor seventh", ["E", "G", "B", "D"], undefined],
+  ["B", "m7b5", "half-diminished seventh", ["B", "D", "F", "A"], "U12.L03"],
+  ["B", "o7", "diminished seventh", ["B", "D", "F", "Ab"], "U12.L03"],
+];
+const seventhSlug = (suffix: string) => suffix.replace("^7", "maj7").replace("o7", "dim7");
+/** [id, the chord in words, its triad, the interval above the root it adds, accepted, gate]. */
+export const SEVENTH_FORMULA_ROWS: readonly [
+  string,
+  string,
+  string,
+  string,
+  string[][],
+  LessonId | undefined,
+][] = [
+  ["maj7", "major seventh chord", "major", "M7", [["major 7th"], ["7M"], ["major seventh"]], undefined],
+  ["m7", "minor seventh chord", "minor", "m7", [["minor 7th"], ["7m"], ["minor seventh"]], undefined],
+  [
+    "m7b5",
+    "half-diminished seventh",
+    "diminished",
+    "m7",
+    [["minor 7th"], ["7m"], ["minor seventh"]],
+    "U12.L03",
+  ],
+];
+/** Seventh chords (C07): four spellings each of the major and minor seventh, ø7 and °7 on B, what each adds. */
+export const SEVENTH_CHORDS_DECK: FactDeck = defineDeck({
+  id: "deck.chd.sevenths" as DeckId,
+  title: "Seventh chords",
+  unlock: { skill: "C07", lesson: "U12.L01" },
+  cards: [
+    ...SEVENTH_SPELLING_ROWS.map(([root, suffix, words, notes, gate]) =>
+      card(
+        `seventh.${slug(root)}${seventhSlug(suffix)}`,
+        `Spell ${display(root)} ${words} from the root up. ${FOUR_NOTES}`,
+        notes,
+        gate ? { gate } : {},
+      ),
+    ),
+    ...SEVENTH_FORMULA_ROWS.map(([id, words, triad, interval, accept, gate]) =>
+      card(
+        `seventh.${id}-adds`,
+        `A ${words} is a ${triad} triad plus which interval above the root? Write its quality letter and number (M7, m7) or its name.`,
+        [interval],
+        { ...(gate ? { gate } : {}), accept },
+      ),
+    ),
+    card(
+      "seventh.dim7-half-steps",
+      "A diminished seventh chord stacks the same interval three times. How many half steps is it? Write the number.",
+      ["3"],
+      { gate: "U12.L03", accept: [["three"]] },
+    ),
+  ],
+  newPerDay: 1,
+  fastRtMs: 6000,
+  answer: "text",
+});
+
+/** The seventh chord on each degree of a major key: [degree, numeral, quality as `chord()` writes it]. */
+export const DIATONIC_SEVENTH_ROWS: readonly [number, string, string][] = [
+  [1, "Imaj7", "^7"],
+  [2, "ii7", "m7"],
+  [3, "iii7", "m7"],
+  [4, "IVmaj7", "^7"],
+  [5, "V7", "7"],
+  [6, "vi7", "m7"],
+  [7, "viiø7", "m7b5"],
+];
+const SEVENTH_QUALITY_FORMAT = "Write maj7, 7, m7 or m7b5.";
+const QUALITY_ANSWERS: Readonly<Record<string, [string, string[][]]>> = {
+  "^7": ["maj7", [["^7"], ["M7"], ["major seventh"], ["major 7"]]],
+  m7: ["m7", [["min7"], ["minor seventh"], ["minor 7"]]],
+  "7": ["7", [["dom7"], ["dominant seventh"], ["dominant 7"]]],
+  m7b5: ["m7b5", [["ø7"], ["half-diminished"], ["half-diminished seventh"]]],
+};
+/** [key, numeral as prose shows it, id, the chord as `chord()` takes it, accepted, gate]. */
+export const SEVENTH_NUMERAL_ROWS: readonly [
+  string,
+  string,
+  string,
+  string,
+  string[][],
+  LessonId | undefined,
+][] = [
+  ["C major", "V7", "C-V7", "G7", [], undefined],
+  ["C major", "ii7", "C-ii7", "Dm7", [["Dmin7"]], undefined],
+  ["C major", "IVmaj7", "C-IVmaj7", "F^7", [["Fmaj7"], ["FM7"]], undefined],
+  ["C major", "viiø7", "C-vii7", "Bm7b5", [["Bø7"], ["Bø"]], undefined],
+  ["A minor", "V7", "Am-V7", "E7", [], "U12.L05"],
+  ["A minor", "iiø7", "Am-ii7", "Bm7b5", [["Bø7"], ["Bø"]], "U12.L05"],
+  ["A minor", "i7", "Am-i7", "Am7", [["Amin7"]], "U12.L05"],
+];
+/**
+ * Diatonic sevenths (C08): the quality on each degree of a major key and a few numerals as chords in C (U12.L04),
+ * then A minor's i7, iiø7 and the V7 its raised 7th makes (U12.L05).
+ */
+export const DIATONIC_SEVENTHS_DECK: FactDeck = defineDeck({
+  id: "deck.har.sevenths" as DeckId,
+  title: "Diatonic sevenths",
+  unlock: { skill: "C08", lesson: "U12.L04" },
+  cards: [
+    ...DIATONIC_SEVENTH_ROWS.map(([degree, , quality]) => {
+      const [answer, accept] = QUALITY_ANSWERS[quality] as [string, string[][]];
+      return card(
+        `diatonic7.quality-${degree}`,
+        `In any major key, which seventh chord is built on degree ${degree}? ${SEVENTH_QUALITY_FORMAT}`,
+        [answer],
+        { accept },
+      );
+    }),
+    ...SEVENTH_NUMERAL_ROWS.map(([key, numeral, id, symbol, accept, gate]) =>
+      card(`diatonic7.${id}`, `In ${key}, which chord is ${numeral}? ${SEVENTH_SYMBOL_FORMAT}`, [symbol], {
+        ...(gate ? { gate } : {}),
+        ...(accept.length > 0 ? { accept } : {}),
+      }),
+    ),
+  ],
+  newPerDay: 1,
+  fastRtMs: 5000,
+  answer: "text",
+});
+
+const CHANGED_DEGREE_FORMAT = "Write the degree with b or # before it (b7, #4).";
+/**
+ * [mode, the scale it changes, the changed degree, its solfège, the chord that shows it (numeral), the white-key
+ * home U14 plays it on with its spelling, gate]: a mode is a known scale with one note changed (content/specs/U14.md).
+ */
+export const MODE_ROWS: readonly [
+  string,
+  "major" | "natural minor",
+  string,
+  string,
+  string,
+  string,
+  string[],
+  LessonId,
+][] = [
+  ["Mixolydian", "major", "b7", "te", "bVII", "G", ["G", "A", "B", "C", "D", "E", "F"], "U14.L01"],
+  ["Dorian", "natural minor", "6", "la", "IV", "D", ["D", "E", "F", "G", "A", "B", "C"], "U14.L03"],
+  ["Lydian", "major", "#4", "fi", "II", "F", ["F", "G", "A", "B", "C", "D", "E"], "U14.L04"],
+  ["Phrygian", "natural minor", "b2", "ra", "bII", "E", ["E", "F", "G", "A", "B", "C", "D"], "U14.L05"],
+];
+/** The lesson that names each mode's characteristic chord: ♭VII in U14.L02, the others with their own lesson. */
+const MODE_CHORD_GATE: Readonly<Record<string, LessonId>> = { Mixolydian: "U14.L02" };
+/**
+ * Modes as one changed note (S12, S13, H11): which scale each mode changes and which degree, the chord that shows
+ * the colour, and each mode spelled on the white-key home U14 plays it on. Mixolydian from U14.L01 (its ♭VII from
+ * U14.L02), Dorian U14.L03, Lydian U14.L04, Phrygian U14.L05.
+ */
+export const MODES_DECK: FactDeck = defineDeck({
+  id: "deck.scl.modes" as DeckId,
+  title: "Modes as one changed note",
+  unlock: { skill: "S12", lesson: "U14.L01" },
+  cards: MODE_ROWS.flatMap(([mode, parent, degree, syllable, chord, home, notes, gate]) => {
+    const g = gate !== "U14.L01" ? { gate } : {};
+    const raised = degree === "6";
+    return [
+      card(
+        `mode.${mode.toLowerCase()}-degree`,
+        raised
+          ? `${mode} is ${parent} with which degree raised a half step? Write the number.`
+          : `${mode} is ${parent} with which degree changed? ${CHANGED_DEGREE_FORMAT}`,
+        [degree],
+        {
+          ...g,
+          accept: [
+            [degree.replace("b", "♭").replace("#", "♯")],
+            [syllable],
+            ...(raised ? [["#6"], ["♯6"], ["♮6"]] : []),
+          ],
+        },
+      ),
+      card(
+        `mode.${mode.toLowerCase()}-parent`,
+        `${mode} differs by one note from which scale: major or natural minor? Write its name.`,
+        [parent === "major" ? "major" : "minor"],
+        { ...g, accept: parent === "major" ? [["the major scale"]] : [["natural minor"], ["aeolian"]] },
+      ),
+      card(
+        `mode.${mode.toLowerCase()}-chord`,
+        `Which chord, beside the home chord, shows the ${mode} colour? Write its Roman numeral: upper case for major, with b before a lowered root (bVII).`,
+        [chord],
+        { gate: MODE_CHORD_GATE[mode] ?? gate, accept: [[chord.replace("b", "♭")]] },
+      ),
+      card(`mode.${slug(home)}-${mode.toLowerCase()}`, `Spell ${home} ${mode}. ${SPELL_FORMAT}`, notes, g),
+    ];
+  }),
+  newPerDay: 1,
+  fastRtMs: 6000,
+  answer: "text",
+});
+
+const DOM7_SYMBOL_FORMAT = "Write its chord symbol: the root, then 7.";
+/**
+ * [key, target numeral, the secondary dominant, the chromatic degree it brings (code, prose), gate]: the V7 of V
+ * (U15.L02) and of vi, ii and IV (U15.L03) in C, and V7/V in the two neighbouring keys.
+ */
+export const APPLIED_ROWS: readonly [string, string, string, LessonId | undefined][] = [
+  ["C", "V", "D7", undefined],
+  ["G", "V", "A7", undefined],
+  ["F", "V", "G7", undefined],
+  ["C", "vi", "E7", "U15.L03"],
+  ["C", "ii", "A7", "U15.L03"],
+  ["C", "IV", "C7", "U15.L03"],
+];
+/** [target numeral, the degree its V7 adds to the key, its syllable, gate] (U15.L01's leaning notes under a chord). */
+export const APPLIED_DEGREE_ROWS: readonly [string, string, string, LessonId | undefined][] = [
+  ["V", "#4", "fi", undefined],
+  ["vi", "#5", "si", "U15.L03"],
+  ["ii", "#1", "di", "U15.L03"],
+  ["IV", "b7", "te", "U15.L03"],
+];
+/**
+ * Secondary dominants (H12): V7 of V in three keys (U15.L02), V7 of vi, ii and IV in C (U15.L03), the chromatic
+ * degree each one brings, where its root sits above its target, and the leading-tone chord of V (U15.L04).
+ */
+export const APPLIED_DOMINANTS_DECK: FactDeck = defineDeck({
+  id: "deck.har.applied" as DeckId,
+  title: "Secondary dominants",
+  unlock: { skill: "H12", lesson: "U15.L02" },
+  cards: [
+    ...APPLIED_ROWS.map(([key, target, symbol, gate]) =>
+      card(
+        `applied.${key}-V7-of-${target}`,
+        `In ${display(key)} major, which chord is V7/${target}? ${DOM7_SYMBOL_FORMAT}`,
+        [symbol],
+        gate ? { gate } : {},
+      ),
+    ),
+    ...APPLIED_DEGREE_ROWS.map(([target, degree, syllable, gate]) =>
+      card(
+        `applied.degree-of-${target}`,
+        `V7/${target} brings which note from outside the key? ${CHANGED_DEGREE_FORMAT}`,
+        [degree],
+        {
+          ...(gate ? { gate } : {}),
+          accept: [[degree.replace("b", "♭").replace("#", "♯")], [syllable]],
+        },
+      ),
+    ),
+    card(
+      "applied.root-above-target",
+      "A secondary dominant's root is which interval above the root of its target? Write its quality letter and number (P5) or its name.",
+      ["P5"],
+      { accept: [["perfect 5th"], ["5P"], ["perfect fifth"], ["a fifth"], ["fifth"]] },
+    ),
+    card(
+      "applied.C-viio-of-V",
+      "In C major, which diminished triad leads into V, its root a half step below V's root (vii°/V)? Write its chord symbol: the root, then o.",
+      ["F#o"],
+      { gate: "U15.L04", accept: [["F#dim"], ["F#°"], ["F♯°"]] },
+    ),
+  ],
+  newPerDay: 1,
+  fastRtMs: 5000,
+  answer: "text",
+});
+
+/**
+ * [numeral, the chord in C, in G, gate]: the chords a major key borrows from its parallel minor, in lesson order:
+ * iv (U16.L01), ♭VI and ♭VII (U16.L02), ♭III (U16.L03).
+ */
+export const BORROWED_ROWS: readonly [string, string, string, LessonId | undefined][] = [
+  ["iv", "Fm", "Cm", undefined],
+  ["bVI", "Ab", "Eb", "U16.L02"],
+  ["bVII", "Bb", "F", "U16.L02"],
+  ["bIII", "Eb", "Bb", "U16.L03"],
+];
+const shownNumeral = (n: string) => n.replace("b", "♭");
+/**
+ * Borrowed chords (H13): each as a chord in C and in G, where they come from, the note that turns IV into iv, and
+ * the two loans a minor key takes (the Picardy third and the Dorian IV, U16.L04).
+ */
+export const BORROWED_CHORDS_DECK: FactDeck = defineDeck({
+  id: "deck.har.borrowed" as DeckId,
+  title: "Borrowed chords",
+  unlock: { skill: "H13", lesson: "U16.L01" },
+  cards: [
+    ...BORROWED_ROWS.flatMap(([numeral, inC, inG, gate]) =>
+      (
+        [
+          ["C", inC],
+          ["G", inG],
+        ] as const
+      ).map(([key, symbol]) =>
+        card(
+          `borrowed.${key}-${numeral}`,
+          `In ${key} major, which chord is ${shownNumeral(numeral)}? ${SYMBOL_FORMAT}`,
+          [symbol],
+          { ...(gate ? { gate } : {}), accept: symbolWords(symbol).map((t) => [t]) },
+        ),
+      ),
+    ),
+    card(
+      "borrowed.source",
+      "A major key borrows iv, ♭VI, ♭VII and ♭III from which minor key: the parallel or the relative one? Write the word.",
+      ["parallel"],
+      { accept: [["parallel minor"], ["the parallel minor"]] },
+    ),
+    card(
+      "borrowed.iv-lowers",
+      "IV becomes iv by lowering which degree of the key a half step? Write the number.",
+      ["6"],
+      { accept: [["la"], ["b6"], ["♭6"]] },
+    ),
+    card(
+      "borrowed.picardy",
+      "A Picardy third ends a minor-key piece on which chord? Write its Roman numeral: upper case for major.",
+      ["I"],
+      { gate: "U16.L04" },
+    ),
+    card(
+      "borrowed.dorian-iv",
+      "In a minor key, the major IV is borrowed from which mode on the same home? Write its name.",
+      ["Dorian"],
+      { gate: "U16.L04", accept: [["dorian mode"], ["the dorian mode"]] },
+    ),
+  ],
+  newPerDay: 1,
+  fastRtMs: 5000,
+  answer: "text",
+});
+
+const PIVOT_NUMERAL_FORMAT = "Write its Roman numeral: upper case for major, lower case for minor.";
+/** [chord, numeral in C major, the other key, numeral there]: the chords C major shares with G major and A minor. */
+export const PIVOT_ROWS: readonly [string, string, string, string][] = [
+  ["Am", "vi", "G major", "ii"],
+  ["C", "I", "G major", "IV"],
+  ["Em", "iii", "G major", "vi"],
+  ["G", "V", "G major", "I"],
+  ["Am", "vi", "A minor", "i"],
+  ["Dm", "ii", "A minor", "iv"],
+];
+/**
+ * Pivot chords and key changes (H14): one chord named in two keys (U17.L01: C major to its dominant; its relative
+ * minor), the dominant that confirms the new key, and where a direct lift lands (U17.L02).
+ */
+export const PIVOT_CHORDS_DECK: FactDeck = defineDeck({
+  id: "deck.har.pivots" as DeckId,
+  title: "Pivot chords and key changes",
+  unlock: { skill: "H14", lesson: "U17.L01" },
+  cards: [
+    ...PIVOT_ROWS.map(([chord, inC, other, there]) =>
+      card(
+        `pivot.${chord}-in-${other.replace(" ", "-")}`,
+        `${chord} is ${inC} in C major. Which numeral is it in ${other}? ${PIVOT_NUMERAL_FORMAT}`,
+        [there],
+      ),
+    ),
+    card(
+      "pivot.confirm-G",
+      `After a pivot from C major to G major, which dominant seventh confirms the new key? ${DOM7_SYMBOL_FORMAT}`,
+      ["D7"],
+    ),
+    card(
+      "pivot.confirm-Am",
+      `After a pivot from C major to A minor, which dominant seventh confirms the new key? ${DOM7_SYMBOL_FORMAT}`,
+      ["E7"],
+    ),
+    card(
+      "pivot.lift-whole",
+      `A last chorus in C major lifts a whole step with no preparation. Which key is it in now? ${KEY_FORMAT}`,
+      ["D major"],
+      { gate: "U17.L02", accept: [["D"]] },
+    ),
+    card(
+      "pivot.lift-half",
+      `A last chorus in C major lifts a half step with no preparation. Which key is it in now? ${KEY_FORMAT}`,
+      ["Db major"],
+      { gate: "U17.L02", accept: [["Db"], ["C# major"], ["C#"]] },
+    ),
+  ],
+  newPerDay: 1,
+  fastRtMs: 5000,
+  answer: "text",
+});
+
+/**
+ * The U12–U17 decks, written and tested in Wave 6 Build. They are NOT in `decks` (no learner gets them yet): a
+ * deck joins the catalog with its contracts §7.3 row (contracts-sync.test.ts holds `decks` to that table), and
+ * the contracts were frozen at 1.6 before these were written. The rows to add are in the Wave 6 result of the
+ * drills engine; packages/srs simulation-wave6.test.ts proves §7.4 holds with all six in the catalog, one new
+ * card a day each. (They are kept out of `PENDING_DECKS`, which content/validate/wave6.test.ts pins empty.)
+ */
+export const WAVE6_DECKS: readonly FactDeck[] = [
+  SEVENTH_CHORDS_DECK,
+  DIATONIC_SEVENTHS_DECK,
+  MODES_DECK,
+  APPLIED_DOMINANTS_DECK,
+  BORROWED_CHORDS_DECK,
+  PIVOT_CHORDS_DECK,
+];
+
+/**
+ * The U10–U11 decks (in `decks` since contracts 1.6). One new card a day each: U10
  * opens three of them in eight lessons, and at two a day the 25-minute simulation's oldest due card waited
  * 14 days on one seed (contracts §7.4 allows 7); at one a day every run holds (packages/srs
  * simulation-wave5.test.ts).
@@ -852,11 +1268,12 @@ export const WAVE5_DECKS: readonly FactDeck[] = [
 ];
 
 /**
- * Decks written and tested but waiting for their contracts row (see INTERVAL_NAMES). The U05–U07 and U10–U11 decks
- * bring one new card a day: at two, U05–U07's decks alone pushed the 15-minute simulation's oldest due card to 13
- * days on a held-out seed (contracts §7.4 allows 7); at one, every gate and held-out run holds with all of them.
+ * The decks promoted by contracts 1.6 (their §7.3 rows): the U04–U07 decks and the U10–U11 decks. Each brings
+ * one new card a day: at two, U05–U07's decks alone pushed the 15-minute simulation's oldest due card to 13
+ * days on a held-out seed (contracts §7.4 allows 7); at one, every gate and held-out run holds with all of
+ * them (packages/srs simulation-wave5.test.ts, simulation-pending.test.ts).
  */
-export const PENDING_DECKS: readonly FactDeck[] = [
+export const PROMOTED_DECKS: readonly FactDeck[] = [
   INTERVAL_NAMES,
   TRIAD_SPELLINGS,
   NUMERALS,
@@ -864,5 +1281,25 @@ export const PENDING_DECKS: readonly FactDeck[] = [
   ...WAVE5_DECKS,
 ];
 
-export const decks: readonly FactDeck[] = [STAFF_NAMES, KEY_SIGNATURES, CHORD_SYMBOLS];
+/**
+ * Decks written and tested but waiting for their contracts §7.3 row. Empty since contracts 1.6; a deck written
+ * after a contracts freeze waits here (in no learner's catalog) until its row lands.
+ */
+export const PENDING_DECKS: readonly FactDeck[] = [];
+
+/** The course's fact decks, in course order of their unlock lessons (contracts §7.3). */
+export const decks: readonly FactDeck[] = [
+  STAFF_NAMES,
+  KEY_SIGNATURES,
+  INTERVAL_NAMES,
+  TRIAD_SPELLINGS,
+  CHORD_SYMBOLS,
+  NUMERALS,
+  CADENCE_NAMES,
+  SCALE_DEGREES,
+  MINOR_KEYS,
+  MINOR_CHORDS,
+  DOMINANT_SEVENTHS,
+  TWELVE_BAR,
+];
 export const deckById: ReadonlyMap<string, FactDeck> = new Map(decks.map((d) => [d.id, d] as const));

@@ -132,7 +132,14 @@ interface Parts {
   chordsVelocity: string;
   /** `.swingBy(…)` for drums and chords, or "". */
   swing?: string;
+  /**
+   * The chords' gain over the kit's (default 1): a sparse two-note comp sits under the kit's drums by more than the
+   * 10 LU a balanced mix allows (packages/strudel/e2e/wave5.pw.ts measures every Band in every flavour).
+   */
+  chordsLift?: number;
 }
+/** The kit's chord gain, lifted for a sparse comp, to two decimals. */
+const chordsGainOf = (k: Kit, lift = 1): number => Math.round(k.chordsGain * lift * 100) / 100;
 /** One flavour's code: three labelled tracks with the kit's sounds and production numbers. */
 function layers(f: Flavour, p: Parts): string {
   const k = KITS[f];
@@ -142,7 +149,7 @@ function layers(f: Flavour, p: Parts): string {
   return [
     `drums: s("${p.drums}")${bank}${swing}.velocity(${p.drumsVelocity}).gain(${num(k.drumsGain)})`,
     `bass: n(${p.bass}).scale("{{key}}").s("${k.bass}").lpf(${prod.bassLpf}).gain(${num(k.bassGain)})`,
-    `chords: n(${p.chords}).scale("{{key}}").struct("${p.struct}")${swing}.s("${k.chords}").velocity(${p.chordsVelocity}).gain(${num(k.chordsGain)}).pan(${num(prod.pan.chords ?? 0.42)}).room(${num(prod.room)})`,
+    `chords: n(${p.chords}).scale("{{key}}").struct("${p.struct}")${swing}.s("${k.chords}").velocity(${p.chordsVelocity}).gain(${num(chordsGainOf(k, p.chordsLift))}).pan(${num(prod.pan.chords ?? 0.42)}).room(${num(prod.room)})`,
   ].join("\n");
 }
 
@@ -383,6 +390,8 @@ interface SemiParts {
   swing?: string;
   /** `.swingBy(…)` for the bass: a shuffle's bass swings its eighths. */
   bassSwing?: string;
+  /** The chords' gain over the kit's (see `Parts.chordsLift`). */
+  chordsLift?: number;
 }
 /** One flavour's code with its parts in half steps from the tonic (see the comment above). */
 function semiLayers(f: Flavour, p: SemiParts): string {
@@ -393,7 +402,7 @@ function semiLayers(f: Flavour, p: SemiParts): string {
   return [
     `drums: s("${p.drums}")${bank}${swing}.velocity(${p.drumsVelocity}).gain(${num(k.drumsGain)})`,
     `bass: note(${p.bass}).add(${TONIC})${p.bassSwing ?? ""}.s("${k.bass}").lpf(${prod.bassLpf}).gain(${num(k.bassGain)})`,
-    `chords: note(${p.chords}).add(${TONIC}).struct("${p.struct}")${swing}.s("${k.chords}").velocity(${p.chordsVelocity}).gain(${num(k.chordsGain)}).pan(${num(prod.pan.chords ?? 0.42)}).room(${num(prod.room)})`,
+    `chords: note(${p.chords}).add(${TONIC}).struct("${p.struct}")${swing}.s("${k.chords}").velocity(${p.chordsVelocity}).gain(${num(chordsGainOf(k, p.chordsLift))}).pan(${num(prod.pan.chords ?? 0.42)}).room(${num(prod.room)})`,
   ].join("\n");
 }
 
@@ -620,10 +629,227 @@ const sections = (f: Flavour): string => {
   }
 };
 
+// ---- Wave 6 (U12–U17, C6, C7, the rhythm and jazz tracks) ---------------------------------------------------
+//
+// Four kinds of Band, each for a sound the core reaches in this wave:
+//
+// 1. Modal vamps (U14, C6, the jazz track's modal tunes): two bars, home and the mode's own chord, written in half
+//    steps above the tonic like the Aeolian loop, so one code serves every home note. A vamp never sounds the note
+//    that would turn the mode back into major or minor (Mixolydian's 7, Dorian's ♭6, Lydian's 4, Phrygian's 2):
+//    content/bands/index.test.ts checks every flavour in all twelve keys. Lydian holds its home note in the bass
+//    under both chords (U14.L04: I–II over a held bass); the others move the root.
+// 2. Compound meter (U13.L04 on, the rhythm track): a 6/8 soul ballad (two dotted-quarter beats a bar, the snare on
+//    the second) and a slow 12/8 (four beats of three). No swing: compound beats are already in threes (STYLE §7).
+// 3. Seventh chords with the learner's register left free (U12 on, the jazz track): a ii–V–I whose chords are the
+//    guide tones only, the 3rd and 7th of each chord (U12.L05), two notes between A2 and F3, under the tune and
+//    below the learner's own voicings; its bass stays at or under G2. Under a Make where the learner voices the
+//    chords, take `tracks: ["drums", "bass"]`.
+// 4. A key plan: every Band follows one when the step sets `followsLearnerKey` (packages/strudel `bandCodeFor`
+//    rewrites the Band's key to the learner's plan, a step up played a step up); the tests below play the
+//    four-chord loop and a modal vamp under a lifted plan.
+
+/** A mode's two chords, its bass, and what each kit's chord track plays, in half steps from the tonic (C4 = 0). */
+interface ModalVamp {
+  /** Triads (pop, indie). */
+  triads: string;
+  /** Four-note chords (jazz-soul, funk). */
+  fours: string;
+  /** One root a bar, two octaves down. */
+  roots: readonly [number, number];
+}
+const MODAL: Readonly<Record<"mixolydian" | "dorian" | "lydian" | "phrygian", ModalVamp>> = {
+  // I–♭VII: C E G, B♭ D F (C to B♭ and E to D a step each, G to F). Four notes: C7 (B♭ C E G) and B♭6 (B♭ D F G).
+  mixolydian: {
+    triads: '"<[-12,-8,-5] [-14,-10,-7]>"',
+    fours: '"<[-14,-12,-8,-5] [-14,-10,-7,-5]>"',
+    roots: [-24, -26],
+  },
+  // i–IV: C E♭ G, C F A (C stays). Four notes: Cm7 (B♭ C E♭ G) and F7 (C E♭ F A): IV's 7th is minor's own ♭3.
+  dorian: {
+    triads: '"<[-12,-9,-5] [-12,-7,-3]>"',
+    fours: '"<[-14,-12,-9,-5] [-12,-9,-7,-3]>"',
+    roots: [-24, -19],
+  },
+  // I–II over the held home bass: C E G, D F♯ A. Four notes: Cadd9 (C D E G) and D7 over C (C D F♯ A).
+  lydian: {
+    triads: '"<[-12,-8,-5] [-10,-6,-3]>"',
+    fours: '"<[-12,-10,-8,-5] [-12,-10,-6,-3]>"',
+    roots: [-24, -24],
+  },
+  // i–♭II: C E♭ G, D♭ F A♭ (each voice a half or a whole step). Four notes: Cm7 and D♭6 (B♭ D♭ F A♭).
+  phrygian: {
+    triads: '"<[-12,-9,-5] [-11,-7,-4]>"',
+    fours: '"<[-14,-12,-9,-5] [-14,-11,-7,-4]>"',
+    roots: [-24, -23],
+  },
+};
+type ModeName = keyof typeof MODAL;
+/** The half step (above the tonic) a modal vamp never plays, and the colour note it does. */
+export const MODAL_GUARDS: Readonly<Record<ModeName, { never: number; colour: number }>> = {
+  mixolydian: { never: 11, colour: 10 },
+  dorian: { never: 8, colour: 9 },
+  lydian: { never: 5, colour: 6 },
+  phrygian: { never: 2, colour: 1 },
+};
+const modalBass = (roots: readonly [number, number], cell: (r: number) => string) =>
+  `"<${roots.map(cell).join(" ")}>"`;
+/** A two-bar modal vamp in every kit: rock eighths, a swung soul ride, an indie strum, a funk stab. */
+const modal = (f: Flavour, mode: ModeName): string => {
+  const m = MODAL[mode];
+  switch (f) {
+    case "flavour.pop":
+      return semiLayers(f, {
+        ...POP_4,
+        struct: "x ~ x x ~ x x ~",
+        chordsVelocity: HUMAN_8THS,
+        bass: modalBass(m.roots, (r) => `[${r}*8]`),
+        chords: m.triads,
+      });
+    case "flavour.jazz-soul":
+      // Root, then the 5th above it; Lydian's held bass walks to the 5th and back to home.
+      return semiLayers(f, {
+        drums: "bd ~ sd ~, rd*8",
+        drumsVelocity: HUMAN_8THS,
+        bass: modalBass(m.roots, (r) => `[${r} ~ ${r + 7} ~]`),
+        chords: m.fours,
+        ...COMP_SWUNG,
+        swing: SWING_4,
+        // Two swung hits a bar under the ride: 11.4 LU under the drums at the kit's gain, 8.5 with this lift.
+        chordsLift: 1.4,
+      });
+    case "flavour.indie":
+      return semiLayers(f, {
+        ...INDIE_4,
+        struct: "x*8",
+        chordsVelocity: HUMAN_8THS,
+        bass: modalBass(m.roots, (r) => `${r}`),
+        chords: m.triads,
+      });
+    case "flavour.funk":
+      return semiLayers(f, {
+        ...FUNK_4,
+        ...STAB,
+        bass: modalBass(m.roots, (r) => `[${r} ~ ${r} ${r + 12}]`),
+        chords: m.fours,
+      });
+  }
+};
+
+/** Six eighths: the first of each three leans, the downbeat most. */
+const SIX_8THS = '"1 .86 .9 .94 .86 .9"';
+/** Twelve sixteenths in 6/8: the eighths' accents, each followed by a lighter sixteenth. */
+const SIX_8THS_16 = '"[1 .86 .9 .86 .9 .86]*2"';
+/** The 6/8 ballad's bass on the two beats: root, then the 5th (under vi, IV and V the 5th below). */
+const SOUL68_BASS = '"<[-14 ~ ~ -10 ~ ~] [-9 ~ ~ -12 ~ ~] [-11 ~ ~ -14 ~ ~] [-10 ~ ~ -13 ~ ~]>"';
+/**
+ * A 6/8 soul ballad, I–vi–IV–V (U13.L04: 60 to the dotted quarter): kick on beat 1, snare on beat 2 (the fourth
+ * eighth), the keys rocking in eighths. Jazz-soul and funk play the four-note loop (C6 Am7 F6 G7).
+ */
+const soul68 = (f: Flavour): string => {
+  switch (f) {
+    case "flavour.pop":
+      return layers(f, {
+        drums: "bd ~ ~ sd ~ ~, hh*6",
+        drumsVelocity: SIX_8THS,
+        bass: SOUL68_BASS,
+        chords: DOOWOP_TRIADS,
+        struct: "x*6",
+        chordsVelocity: SIX_8THS,
+      });
+    case "flavour.jazz-soul":
+      return layers(f, {
+        drums: "bd ~ ~ sd ~ ~, rd*6",
+        drumsVelocity: SIX_8THS,
+        bass: SOUL68_BASS,
+        chords: DOOWOP_FOURS,
+        struct: "x ~ x x ~ x",
+        chordsVelocity: SIX_8THS,
+      });
+    case "flavour.indie":
+      return layers(f, {
+        drums: "bd ~ ~ sd ~ ~, hh*6",
+        drumsVelocity: SIX_8THS,
+        bass: '"<[-14 ~ ~ -14 ~ ~] [-9 ~ ~ -9 ~ ~] [-11 ~ ~ -11 ~ ~] [-10 ~ ~ -10 ~ ~]>"',
+        chords: DOOWOP_TRIADS,
+        struct: "x ~ ~ x ~ ~",
+        chordsVelocity: '"1 .9"',
+      });
+    case "flavour.funk":
+      return layers(f, {
+        drums: "bd ~ bd sd ~ ~, hh*12",
+        drumsVelocity: SIX_8THS_16,
+        bass: '"<[-14 ~ -14 -10 ~ -7] [-9 ~ -9 -12 ~ -5] [-11 ~ -11 -14 ~ -7] [-10 ~ -10 -13 ~ -6]>"',
+        chords: DOOWOP_FOURS,
+        struct: "~ x ~ ~ x ~",
+        chordsVelocity: '"1 .86"',
+      });
+  }
+};
+
+/** ii7 V7 I6 I6 as guide tones (3rd and 7th; the 3rd and 6th on I): C F, B F, A E, A E in C, between A2 and F3. */
+const GUIDE_TONES = '"<[-7,-4] [-8,-4] [-9,-5] [-9,-5]>"';
+/** A two-feel under the guide tones, never above G2: D A | G D | C G | C G (the 5th below where it would cross). */
+const TWO_FEEL = '"<[-13 -16] [-10 -13] [-14 -10] [-14 -10]>"';
+/** The ii–V–I in every kit, the guide tones on the kit's keys. */
+const twoFiveOne = (f: Flavour): string => {
+  switch (f) {
+    case "flavour.pop":
+      return layers(f, { ...POP_4, ...PIANO_4, bass: TWO_FEEL, chords: GUIDE_TONES });
+    case "flavour.jazz-soul":
+      return layers(f, {
+        drums: "bd ~ sd ~, rd*8",
+        drumsVelocity: HUMAN_8THS,
+        bass: TWO_FEEL,
+        chords: GUIDE_TONES,
+        ...COMP_SWUNG,
+        swing: SWING_4,
+        // Two notes, two hits a bar: 14.2 LU under the ride at the kit's gain (measured), about 9.6 with this lift.
+        chordsLift: 1.7,
+      });
+    case "flavour.indie":
+      // The guide tones under LinnDrum: 12.7 LU apart at the kit's gain, about 9.2 with this lift.
+      return layers(f, { ...INDIE_4, ...COMP, bass: TWO_FEEL, chords: GUIDE_TONES, chordsLift: 1.5 });
+    case "flavour.funk":
+      return layers(f, {
+        ...FUNK_4,
+        ...STAB,
+        bass: '"<[-13 ~ -13 -6] [-10 ~ -10 -6] [-14 ~ -14 -7] [-14 ~ -14 -7]>"',
+        chords: GUIDE_TONES,
+        // Two-note stabs on the off-beats: 11.3 LU under the bass at the kit's gain, about 9.0 with this lift.
+        chordsLift: 1.3,
+      });
+  }
+};
+
 const FLAVOURS: readonly Flavour[] = ["flavour.pop", "flavour.jazz-soul", "flavour.indie", "flavour.funk"];
 const each = (code: (f: Flavour) => string): Record<FlavourId, string> =>
   Object.fromEntries(FLAVOURS.map((f) => [f, code(f)])) as Record<FlavourId, string>;
 const EARLY = { jazz: TWO_TRIADS, funk: TWO_TRIADS };
+
+/**
+ * Wave 6. The compound-meter Bands (U13.L04 on, the rhythm track), at the end of `bands`: their tempo line counts
+ * the dotted-quarter beat, `setcpm(bpm/2)` in 6/8 and `setcpm(bpm/4)` in 12/8 (contracts §6.9), as
+ * content/validate/bands.test.ts and content/bands/index.test.ts write it. Studio offers them to a sketch in their
+ * meter only (`bandsForMeter`).
+ */
+export const COMPOUND_BANDS: readonly BandDef[] = [
+  defineBand({
+    id: "band.soul-68",
+    title: "6/8 soul ballad (I–vi–IV–V)",
+    bars: 4,
+    roles: ["drums", "bass", "chords"],
+    params: { key: true, bpm: false },
+    code: each((f) => soul68(f)),
+  }),
+  defineBand({
+    id: "band.slow-128",
+    title: "Slow 12/8 (I–vi–IV–V)",
+    bars: 4,
+    roles: ["drums", "bass", "chords"],
+    params: { key: true, bpm: false },
+    code: each((f) => doowop(f, { jazz: DOOWOP_FOURS, funk: DOOWOP_FOURS })),
+  }),
+];
 
 export const bands: readonly BandDef[] = [
   defineBand({
@@ -714,6 +940,49 @@ export const bands: readonly BandDef[] = [
     params: { key: true, bpm: false },
     code: each((f) => sections(f)),
   }),
+  // Wave 6. U14 on, C6 and the jazz track's modal tunes: two-bar vamps on any home note (see TONIC).
+  defineBand({
+    id: "band.mixolydian-vamp",
+    title: "Mixolydian vamp (I–♭VII)",
+    bars: 2,
+    roles: ["drums", "bass", "chords"],
+    params: { key: true, bpm: false },
+    code: each((f) => modal(f, "mixolydian")),
+  }),
+  defineBand({
+    id: "band.dorian-vamp",
+    title: "Dorian vamp (i–IV)",
+    bars: 2,
+    roles: ["drums", "bass", "chords"],
+    params: { key: true, bpm: false },
+    code: each((f) => modal(f, "dorian")),
+  }),
+  defineBand({
+    id: "band.lydian-vamp",
+    title: "Lydian vamp (I–II over home)",
+    bars: 2,
+    roles: ["drums", "bass", "chords"],
+    params: { key: true, bpm: false },
+    code: each((f) => modal(f, "lydian")),
+  }),
+  defineBand({
+    id: "band.phrygian-vamp",
+    title: "Phrygian vamp (i–♭II)",
+    bars: 2,
+    roles: ["drums", "bass", "chords"],
+    params: { key: true, bpm: false },
+    code: each((f) => modal(f, "phrygian")),
+  }),
+  // U12 on and the jazz track: the guide tones of ii–V–I, the register of the learner's voicings left free.
+  defineBand({
+    id: "band.two-five-one",
+    title: "ii–V–I guide tones",
+    bars: 4,
+    roles: ["drums", "bass", "chords"],
+    params: { key: true, bpm: false },
+    code: each((f) => twoFiveOne(f)),
+  }),
+  ...COMPOUND_BANDS,
 ];
 export default bands;
 
@@ -726,7 +995,18 @@ export const TONIC_BANDS: ReadonlySet<string> = new Set([
   "band.aeolian-4bar",
   "band.blues-12bar",
   "band.blues-12bar-qc",
+  "band.mixolydian-vamp",
+  "band.dorian-vamp",
+  "band.lydian-vamp",
+  "band.phrygian-vamp",
 ]);
+/** The modal vamps and the mode each is written for (Wave 6). */
+export const MODAL_BANDS: Readonly<Record<string, ModeName>> = {
+  "band.mixolydian-vamp": "mixolydian",
+  "band.dorian-vamp": "dorian",
+  "band.lydian-vamp": "lydian",
+  "band.phrygian-vamp": "phrygian",
+};
 /** Bands written in sections: they follow the learner's `arrange()` (packages/strudel band-form.ts). */
 export const SECTION_BANDS: ReadonlySet<string> = new Set(["band.sections"]);
 /** The harmony each Wave 5 Band plays, one chord a bar, in C (or C minor for the Aeolian loop). */
@@ -735,6 +1015,14 @@ export const BAND_CHANGES: Readonly<Record<string, readonly string[]>> = {
   "band.blues-12bar": STANDARD.map((s) => ({ I: "C7", IV: "F7", V: "G7" })[s]),
   "band.blues-12bar-qc": QUICK.map((s) => ({ I: "C7", IV: "F7", V: "G7" })[s]),
   "band.sections": ["C", "Am", "F", "G", "F", "G", "C", "C", "C", "Am", "F", "G", "F", "G", "C", "C"],
+  // Wave 6, on a home note of C.
+  "band.mixolydian-vamp": ["C", "Bb"],
+  "band.dorian-vamp": ["Cm", "F"],
+  "band.lydian-vamp": ["C", "D/C"],
+  "band.phrygian-vamp": ["Cm", "Db"],
+  "band.soul-68": ["C", "Am", "F", "G"],
+  "band.slow-128": ["C", "Am", "F", "G"],
+  "band.two-five-one": ["Dm7", "G7", "C6", "C6"],
 };
 
 /**
@@ -869,7 +1157,11 @@ export const AXIS_MAJOR_SEVENTH_CHORDS = AXIS_MAJOR_SEVENTHS;
  * Bands whose bar is not four beats. BandDef carries no meter (contracts §5.10): the Band takes the
  * session's tempo line, so a lesson in 3/4 must pick a Band written in three. Content CI checks the match.
  */
-export const BAND_METERS: Readonly<Record<string, MeterId>> = { "band.waltz-vamp": "3/4" };
+export const BAND_METERS: Readonly<Record<string, MeterId>> = {
+  "band.waltz-vamp": "3/4",
+  "band.soul-68": "6/8",
+  "band.slow-128": "12/8",
+};
 export const bandMeter = (id: string): MeterId => BAND_METERS[id] ?? "4/4";
 
 export const bandById: ReadonlyMap<string, BandDef> = new Map(bands.map((b) => [b.id, b] as const));

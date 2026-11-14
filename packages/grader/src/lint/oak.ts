@@ -413,6 +413,16 @@ function scanProgram(code: string, ast: AstNode, ctx: LintContext): Scan {
         find("code.swing-convention", site.call, { fn: name, got: n, beats: units, double: 2 * units });
       }
     }
+    if (name === "dict") {
+      // `.dict()` after `.voicing()` sets a control the voicing has already read: the chords sound as before
+      // (verified in Strudel 1.2.6: `chord("<Dm7 G7>").voicing().dict("lefthand")` plays the default voicings).
+      const ch = chainOfCall.get(site.call);
+      const names = ch?.links.map((l) => l.name) ?? [];
+      const idx = ch ? ch.links.findIndex((l) => l.call === site.call) : -1;
+      const v = names.indexOf("voicing");
+      if (v >= 0 && idx > v)
+        find("code.dict-after-voicing", site.call, { dict: stringLit(site.args[0] ?? null)?.value ?? "…" });
+    }
     if (name === "transpose") {
       const ch = chainOfCall.get(site.call);
       const names = ch?.links.map((l) => l.name) ?? [];
@@ -502,7 +512,11 @@ function scanProgram(code: string, ast: AstNode, ctx: LintContext): Scan {
         suggest: lit.value.replace(/\s*\.\.\s*/g, " .. "),
       });
     }
-    if (!callee || !NO_MINI_OPS.has(callee)) {
+    // A fraction in quotes to a time shift (`.early("1/8")`) is one finding, `code.time-fraction-string`: the `/`
+    // in it is not a division the learner wrote on purpose, so it is not looked up as a mini-notation operator.
+    const quotedFraction =
+      !!callee && TIME_SHIFTS.has(callee) && lit.argIndex === 0 && /\d\s*\/\s*\d/.test(lit.value);
+    if ((!callee || !NO_MINI_OPS.has(callee)) && !quotedFraction) {
       for (const op of mini.ops) {
         // "G/B" inside chord() is a slash chord (code.slash-chord says so), not a division to look up.
         if (special && op.op === "slow" && /[A-Ga-g][#b]?[^\s<>[\]{},/]*\/[A-Ga-g]/.test(lit.value)) continue;
@@ -1006,6 +1020,9 @@ export function lintStrict(code: string): LintDiagnostic[] {
 }
 
 /** Every catalogued thing the code uses, in source order. `[]` when the code does not parse. */
+/** The methods that shift a pattern in time by a number of cycles (`code.time-fraction-string`). */
+const TIME_SHIFTS: ReadonlySet<string> = new Set(["late", "early", "off", "nudge"]);
+
 export function toolsUsed(
   code: string,
   toolbox: readonly ToolEntry[],

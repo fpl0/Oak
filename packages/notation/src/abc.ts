@@ -7,7 +7,10 @@
 //   note of a letter and octave after a bar that altered it, and a note whose letter is altered in another
 //   octave of the same bar, are written out (abcjs has no parenthesised form: ABCJS_LIMITS).
 // - Theoretical keys (more than seven accidentals) get an explicit signature (`K:C exp ^^f ^c …`).
-// - Key changes (`score.keyChanges`): `[K:…]` at the bar line, in every pitched voice; a change inside a bar
+// - Key changes (`score.keyChanges`): `[K:…]` after a double barline, in every pitched voice (abcjs draws the
+//   cancelling naturals of the old signature before the new one, and a change that starts a system as a courtesy
+//   signature at the end of the system before); a change to a key with the same signature (C major to A minor) is
+//   not marked at all (Wave 6); a change inside a bar
 //   (`beat` > 1) is written before the item at its beat (the build cut every voice there), and the accidentals of
 //   that bar start again under the new signature (a letter altered earlier in the bar is restated).
 // - Chord symbols over the top staff, Roman numerals (`"_…"`) under the bottom pitched staff; a lead sheet numbers
@@ -267,12 +270,29 @@ export function toAbc(score: Score, opts: AbcOptions = {}): AbcResult {
       ? { key: st.key, keyChanges: st.keyChanges ?? [] }
       : { key: score.key, keyChanges: score.keyChanges ?? [] };
   };
+  // Wave 6: a change to a key with the signature already in force (C major to A minor, G major to G Mixolydian's
+  // parent, a mode to its relative) is not marked: engravers write no double bar and no signature where nothing on
+  // the staff changes. The notes are still spelled, and their labels read, in the new key (`Score.keyChanges`).
+  const sameSig = (a: KeySpec | null, b: KeySpec | null) => {
+    const x = keySig(a).sig;
+    const y = keySig(b).sig;
+    return "CDEFGAB".split("").every((l) => (x[l] ?? 0) === (y[l] ?? 0));
+  };
+  const shownChangesOf = score.staves.map((_s, si) => {
+    const plan = planOf(si);
+    const sorted = [...plan.keyChanges].sort((a, b) => a.bar - b.bar || (a.beat ?? 1) - (b.beat ?? 1));
+    const out: KeyChange[] = [];
+    let current = plan.key;
+    for (const c of sorted) {
+      if (!sameSig(current, c.key)) out.push(c);
+      current = c.key;
+    }
+    return out;
+  });
   const changeAtOf = score.staves.map(
     (_s, si) =>
       new Map(
-        planOf(si)
-          .keyChanges.filter((c) => (c.beat ?? 1) <= 1)
-          .map((c) => [c.bar, c.key] as const),
+        (shownChangesOf[si] ?? []).filter((c) => (c.beat ?? 1) <= 1).map((c) => [c.bar, c.key] as const),
       ),
   );
   const sigOfBar = (bi: number, si: number) => {
@@ -288,8 +308,8 @@ export function toAbc(score: Score, opts: AbcOptions = {}): AbcResult {
   };
   // Changes inside a bar (`beat` > 1), per staff and bar index.
   const midBarOf = (si: number, bi: number): { at: Rat; key: KeySpec | null }[] =>
-    planOf(si)
-      .keyChanges.filter((c: KeyChange) => (c.beat ?? 1) > 1 && c.bar === barCycle(bi))
+    (shownChangesOf[si] ?? [])
+      .filter((c: KeyChange) => (c.beat ?? 1) > 1 && c.bar === barCycle(bi))
       .map((c) => ({ at: changeAt(c, score.meter.unitsPerBar), key: c.key }));
   const midBarSigs = (bi: number, si: number) =>
     score.staves[si]?.clef === "perc"

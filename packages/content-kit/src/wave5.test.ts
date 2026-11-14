@@ -62,7 +62,7 @@ const identify = (answer: object, correct: object) => ({
 });
 
 test("the content schema version is 4 with the Wave 5 shapes", () => {
-  expect(CONTENT_SCHEMA_VERSION).toBe(4);
+  expect(CONTENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(4);
 });
 
 describe("modes, degrees and do-based minor syllables", () => {

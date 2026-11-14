@@ -427,12 +427,17 @@ test("the Practice hub shows stage D honestly: levels, mixed practice and its co
   // Graduated at its mastery level: mastered, and practised now in Mixed harmony with the others.
   const quality = stage.locator('[data-family="fam.chd.quality-triad"]');
   await expect(quality).toHaveAttribute("data-status", "mastered");
-  await expect(quality).toContainText("Level 5 of 6");
   // Wave 5: graduation reads as progress (where it lives now, its level kept).
   // The company it keeps is the server's: every other family graduated into the same composite.
   const fams = (await (
     await page.request.get(`${stack.apiURL}/api/drills/families`, { headers: HEADERS })
-  ).json()) as { families: { familyId: string; compositeId: string | null; graduatedAt: string | null }[] };
+  ).json()) as {
+    families: { familyId: string; level: number; compositeId: string | null; graduatedAt: string | null }[];
+  };
+  // The level the card shows is the server's, at or past the family's mastery level (4 of 6), never more than it.
+  const level = fams.families.find((f) => f.familyId === "fam.chd.quality-triad")?.level ?? 0;
+  expect(level).toBeGreaterThanOrEqual(4);
+  await expect(quality).toContainText(`Level ${level} of 6`);
   const others = fams.families.filter(
     (f) =>
       f.compositeId === "fam.mix.harmony" && f.graduatedAt !== null && f.familyId !== "fam.chd.quality-triad",

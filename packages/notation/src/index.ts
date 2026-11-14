@@ -34,6 +34,7 @@ export {
   slicedNoteList,
   staffStepAtY,
   stepToPitch,
+  tripletTokens,
   writtenToCycles,
   xToOnset,
 } from "./edit.ts";
@@ -109,6 +110,21 @@ export function notate(input: NotationInput, opts?: AbcOptions): { score: Score;
 export function drumStaffPosition(s: string): { pitch: string; head: "normal" | "x" } | null {
   return drumPos(s);
 }
+// Wave 6 (guide.ts): the 3rd and 7th of each chord on the staff, for the guide-tone lens.
+export { GUIDE_TONE_CLASSES, type GuideToneMark, guideToneMarks } from "./guide.ts";
+// Wave 6 carry-over d5 (host.ts): what every staff host engraves and how it names the notes it drew.
+export {
+  alteredStepName,
+  alteredSteps,
+  type DrawnLabel,
+  drawnLabels,
+  drawnLabelsOf,
+  type StaffHostOptions,
+  staffHostInput,
+  staffSwingOf,
+  swingTextOf,
+  type TrackSwingInput,
+} from "./host.ts";
 // Wave 5 (docs/design/wave5.md §3.3): section marks, the 12-bar chart (layout and engraved).
 export {
   type ChartAbc,
@@ -124,3 +140,17 @@ export {
   type SectionSpanInput,
   sectionMarks,
 } from "./wave5.ts";
+// Wave 6 (docs/design/wave6.md §3.3): what a host passes for key plans, modal pieces, chord and numeral labels;
+// the rhythm a Score writes (ties, dots, tuplets).
+export {
+  type HarmonyLabelInput,
+  harmonyLabels,
+  type KeySpanInput,
+  keyChangesOf,
+  MODAL_SIGNATURE_DEFAULT,
+  MODAL_SIGNATURE_STYLES,
+  type ModalSignatureStyle,
+  modalSignatureKey,
+  type ScoreRhythm,
+  scoreRhythm,
+} from "./wave6.ts";

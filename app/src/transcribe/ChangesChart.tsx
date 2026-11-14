@@ -2,7 +2,7 @@
 // changes"): the answers engineer's bar-grid widget, one chord symbol a bar, four bars a line, written into the
 // code's `chords:` line by the page (song.ts `withChanges`). Until that widget exists, the chart shows what the code
 // says, bar by bar, laid out by @oak/notation's `chartLayout`, and the learner writes the line in the editor.
-import type { KeySpec, MeterId } from "@oak/content-kit";
+import type { ChordQuality, KeySpec, MeterId } from "@oak/content-kit";
 import { chartChordText, chartLayout } from "@oak/notation";
 import { METERS } from "@oak/theory";
 import { clsx } from "clsx";
@@ -12,8 +12,11 @@ import type { AnswerFeedback, AnswerSpecOf } from "../answers/types.ts";
 import type { BarMark } from "./song.ts";
 
 /** The bar-grid answer the chart uses: code-spelled symbols, triads and dominant sevenths. */
-export function chartSpec(bars: number): AnswerSpecOf<"bar-grid"> {
-  return { ui: "bar-grid", bars, perRow: 4, entry: "symbol", qualities: ["maj", "min", "7"] };
+export function chartSpec(
+  bars: number,
+  qualities: readonly ChordQuality[] = ["maj", "min", "7"],
+): AnswerSpecOf<"bar-grid"> {
+  return { ui: "bar-grid", bars, perRow: 4, entry: "symbol", qualities: [...qualities] };
 }
 
 /** The chart's per-bar marks as the widget's feedback (bar index 0-based). */
@@ -38,6 +41,8 @@ export function ChangesChart({
   firstCycle,
   disabled = false,
   onSubmit,
+  qualities,
+  idBase = "tr-changes",
 }: {
   /** One symbol per full bar (`""` empty). */
   chart: readonly string[];
@@ -54,8 +59,12 @@ export function ChangesChart({
   firstCycle: number;
   disabled?: boolean;
   onSubmit(): void;
+  /** The palette's qualities (default: triads and the dominant 7th of a blues; a standard adds the sevenths). */
+  qualities?: readonly ChordQuality[];
+  /** A stable ID per chart on the page (a standard has one chart per section). */
+  idBase?: string;
 }) {
-  const spec = chartSpec(bars);
+  const spec = chartSpec(bars, qualities);
   const Widget = answerWidgetFor(spec);
   if (Widget)
     return (
@@ -77,7 +86,7 @@ export function ChangesChart({
             disabled={disabled}
             feedback={chartFeedback(marks, firstCycle)}
             label="The changes: one chord a bar"
-            idBase="tr-changes"
+            idBase={idBase}
           />
         </AnswerEnvProvider>
       </div>

@@ -35,6 +35,11 @@ export interface GenCtx<L extends LevelParams = LevelParams> {
   openCategories: readonly string[];
   previous: Trial<Answer> | undefined;
   def: FamilyDef<L>;
+  /**
+   * The key mode the caller needs (a lesson step in a minor key asks for minor-key trials only, d8). A
+   * generator that chooses between major and minor material honours it; the others ignore it.
+   */
+  mode?: "major" | "minor";
 }
 
 export interface Generator<L extends LevelParams = LevelParams> {

@@ -8,8 +8,20 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { degreeCanvasFill, functionStyle } from "../ui/theme/palette.ts";
 import type { AnnotationKinds } from "./annotate.ts";
 import type { WorkbenchClock } from "./clock.ts";
+import {
+  type BandChord,
+  type GuideTones,
+  guideLineShort,
+  guideLineText,
+  type KeyRibbonSpan,
+  type ModeMark,
+  type PushMark,
+  pushWords,
+  type RollBeatGrid,
+} from "./colour.ts";
 import { type ChordRegion, type MelodyMark, type RangeLine, ROLE_TAG, ROLE_WORDS } from "./harmony.ts";
 import type { BusState, HighlightBus } from "./highlight-bus.ts";
+import { KeyRibbon } from "./KeyRibbon.tsx";
 import { noteText, type RollColorMode, type RollLabelMode } from "./lens-view.ts";
 import { type BassMark, blueTag, blueWords } from "./lines.ts";
 import type { ViewEvent, WorkbenchModel } from "./model.ts";
@@ -80,6 +92,28 @@ export interface PianoRollProps {
   bassMarks?: ReadonlyMap<string, BassMark>;
   /** Wave 5: the blue-note lens: blue notes ringed and tagged (♭3, ♭5, ♭7). */
   blueNotes?: ReadonlyMap<string, BlueNote>;
+  /** Wave 6: guide tones, the beat grid with pushes, the key ribbon, the mode's colour tone (colour.ts). */
+  music?: RollMusic;
+}
+
+/** What U12–U17 add to the roll (docs/design/wave6.md §4.3). Each part is drawn only when given. */
+export interface RollMusic {
+  /** The guide-tone lens: 3rds and 7ths marked and joined into their lines across the changes. */
+  guide?: GuideTones | null;
+  /** The beat-grid lens: the meter's beats with their counts (dotted-quarter beats in 6/8), triplets in thirds. */
+  grid?: RollBeatGrid | null;
+  /** With the beat grid: each anticipation drawn against the beat it comes in ahead of. */
+  pushes?: ReadonlyMap<string, PushMark> | null;
+  /** Ghost notes (the grader's `velocityGhosts`): drawn hollow and small. Loudness is always drawn by size. */
+  ghosts?: ReadonlySet<string> | null;
+  /** The colour tone of the mode in force, ringed and tagged (the key panel is open on a mode). */
+  modeTones?: ReadonlyMap<string, ModeMark> | null;
+  /** The key lens: the key in force along the timeline (drawn only when the piece changes key). */
+  keys?: readonly KeyRibbonSpan[] | null;
+  /** The bar that plays (0-based), for the ribbon's current key; `null` when stopped. */
+  currentBar?: number | null;
+  /** False before U15.L01: a gutter row outside the key shows its degree without a chromatic syllable. */
+  chromaticSyllables?: boolean;
 }
 
 export interface ChordBandProps {
@@ -91,6 +125,11 @@ export interface ChordBandProps {
   fn: boolean;
   /** A declared pickup: cycle 0 is bar 0, so a region's bar number is its cycle (contracts §6.11). */
   pickup?: boolean;
+  /**
+   * Wave 6: what each region is in its key, by index (`bandChords`): an applied chord's arrow to its target, a
+   * borrowed chord's mark, a label written quieter because something is not taught yet.
+   */
+  chords?: readonly BandChord[];
 }
 
 /** Height of the chord band (ux §3.4: 28 px at the bottom of the roll). */
@@ -275,6 +314,9 @@ export function PianoRoll(props: PianoRollProps) {
   // Long loops: a page of `followBars` bars that follows the playhead (manual page while stopped).
   const [manualPage, setManualPage] = useState(0);
   const [playPage, setPlayPage] = useState<number | null>(null);
+  // A page the learner asked for while it plays (the ribbon's arrows reaching a section on another page): shown
+  // until the playhead next turns the page.
+  const [heldPage, setHeldPage] = useState<number | null>(null);
   const content = useMemo(
     () => contentWindow(inputs, model.bars, props.minBars ?? 1),
     [inputs, model.bars, props.minBars],
@@ -282,8 +324,8 @@ export function PianoRoll(props: PianoRollProps) {
   const follow =
     props.followBars && props.followBars > 0
       ? followWindow(content, props.followBars, {
-          playhead: playPage === null ? null : content[0] + playPage * props.followBars,
-          page: manualPage,
+          playhead: playPage === null || heldPage !== null ? null : content[0] + playPage * props.followBars,
+          page: heldPage ?? manualPage,
         })
       : null;
   const followRef = useRef(follow);
@@ -301,6 +343,9 @@ export function PianoRoll(props: PianoRollProps) {
         labels: props.labels ?? (model.key ? "degree" : "note"),
         extra: props.ghosts ?? [],
         pitchHeight: props.height ?? 180,
+        // The beat grid writes its counts on a second line of the ruler.
+        ...(props.music?.grid ? { rulerHeight: COUNT_RULER_PX } : {}),
+        ...(props.music?.chromaticSyllables === false ? { lateSyllables: false } : {}),
       }),
     [
       inputs,
@@ -312,8 +357,16 @@ export function PianoRoll(props: PianoRollProps) {
       props.height,
       follow?.window[0],
       follow?.window[1],
+      props.music?.grid,
+      props.music?.chromaticSyllables,
     ],
   );
+  // Loudness by track: a note is drawn against the loudest of its own line.
+  const loudest = useMemo(() => {
+    const out = new Map<string, number>();
+    for (const e of model.events) out.set(e.track, Math.max(out.get(e.track) ?? 0, e.gain));
+    return out;
+  }, [model]);
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
 
@@ -404,8 +457,45 @@ export function PianoRoll(props: PianoRollProps) {
       if (line.kind === "bar" && line.bar !== undefined && line.label && line.x < L.width - 8) {
         g.fillStyle = c.text2;
         g.font = "10px ui-monospace, monospace";
-        g.fillText(String(line.bar), line.x + 3, L.rulerHeight / 2);
+        g.fillText(String(line.bar), line.x + 3, Math.min(L.rulerHeight / 2, 9));
       }
+    }
+    // the beat-grid lens: the felt beats firm, their divisions light, the counts on the ruler's second line
+    const beatGridOn = p.music?.grid ?? null;
+    const counts: string[] = [];
+    if (beatGridOn) {
+      const pxPerBar = L.pxPerCycle;
+      g.save();
+      g.font = "9px ui-monospace, monospace";
+      for (let b = Math.floor(L.from); b < Math.ceil(L.to); b++) {
+        const lines = beatGridOn.linesOf(b);
+        if (lines.length === 0) continue;
+        const gap = pxPerBar / lines.length;
+        for (const line of lines) {
+          const cyc = b + line.at;
+          if (cyc < L.from - 1e-9 || cyc >= L.to - 1e-9) continue;
+          const x = Math.round(xOfCycle(L, cyc)) + 0.5;
+          if (line.at > 1e-9) {
+            g.strokeStyle = line.triplet ? c.accent : line.level === "beat" ? c.text3 : c.border;
+            g.globalAlpha = line.level === "beat" ? 0.9 : line.triplet ? 0.55 : 0.6;
+            g.lineWidth = line.level === "beat" ? 1.5 : 1;
+            if (line.triplet) g.setLineDash([2, 2]);
+            g.beginPath();
+            g.moveTo(x, L.rulerHeight);
+            g.lineTo(x, L.height);
+            g.stroke();
+            g.setLineDash([]);
+            g.globalAlpha = 1;
+          }
+          if (line.label && (gap >= 13 || (line.level === "beat" && gap * beatGridOn.beats >= 13))) {
+            g.fillStyle = line.level === "beat" ? c.text : line.triplet ? c.accent : c.text2;
+            g.font = `${line.level === "beat" ? "bold " : ""}9px ui-monospace, monospace`;
+            g.fillText(line.label, x + 2, L.rulerHeight - 7, Math.max(8, gap - 3));
+            if (b === Math.floor(L.from)) counts.push(line.label);
+          } else if (b === Math.floor(L.from) && line.label) counts.push(line.label);
+        }
+      }
+      g.restore();
     }
     g.strokeStyle = c.border;
     g.beginPath();
@@ -459,16 +549,27 @@ export function PianoRoll(props: PianoRollProps) {
       );
       const silent = p.silenced?.(e.track) ?? false;
       const playing = s.playing.has(e.id);
-      g.globalAlpha = silent ? 0.22 : e.band ? 0.55 : playing ? 1 : 0.8;
+      // Loudness (Wave 6, `.velocity()`): a quieter hit of a line is drawn smaller and lighter, a ghost note
+      // hollow. A line played at one level looks as it always did.
+      const level = loudnessOf(e.gain, loudest.get(e.track) ?? e.gain);
+      const ghost = p.music?.ghosts?.has(e.id) === true && level < 1;
+      const base = silent ? 0.22 : e.band ? 0.55 : playing ? 1 : 0.8;
+      g.globalAlpha = base * (level < 1 ? 0.5 + 0.5 * level : 1);
       if (playing && !silent) {
         g.shadowColor = typeof st.fill === "string" ? st.fill : c.accent;
         g.shadowBlur = 8;
       }
-      if (r.kind === "drum") diamond(g, r);
+      const drawn = r.kind === "drum" && level < 1 ? shrink(r, 0.5 + 0.5 * level) : r;
+      if (r.kind === "drum") diamond(g, drawn);
       else roundRect(g, r.x, r.y, r.w, r.h, 3);
-      g.fillStyle = st.fill;
+      g.fillStyle = ghost && r.kind === "drum" ? c.surface : st.fill;
       g.fill();
       g.shadowBlur = 0;
+      if (ghost && r.kind === "drum") {
+        g.lineWidth = 1.5;
+        g.strokeStyle = typeof st.fill === "string" ? st.fill : c.text2;
+        g.stroke();
+      }
       if (st.stroke) {
         g.save();
         if (st.dashed) g.setLineDash([3, 2]);
@@ -578,6 +679,142 @@ export function PianoRoll(props: PianoRollProps) {
       }
     }
 
+    // the mode's colour tone (the key panel open on a mode): ringed, with its degree over it
+    const modeTones = p.music?.modeTones;
+    if (modeTones && modeTones.size > 0) {
+      for (const r of L.rects) {
+        const m = modeTones.get(r.id);
+        if (!m || r.kind !== "note") continue;
+        g.save();
+        g.strokeStyle = c.issue;
+        g.lineWidth = 2;
+        roundRect(g, r.x - 2, r.y - 2, r.w + 4, r.h + 4, 4);
+        g.stroke();
+        if (r.y - L.rulerHeight >= 11) {
+          g.fillStyle = c.issue;
+          g.font = "bold 9px ui-monospace, monospace";
+          g.textBaseline = "bottom";
+          g.fillText(m.display, r.x, r.y - 3);
+          g.textBaseline = "middle";
+        }
+        g.restore();
+      }
+    }
+
+    // the guide-tone lens: the line the 3rds and 7ths make across the changes, then a tag on each of them
+    const guide = p.music?.guide;
+    if (guide && L.pitch) {
+      const pitchTop = L.pitch.top;
+      const hi = L.pitch.hi;
+      const lo = L.pitch.lo;
+      const rowH = L.pitch.rowH;
+      const yOf = (midi: number) => pitchTop + (hi - midi) * rowH + rowH / 2;
+      guide.lines.forEach((line, li) => {
+        const path = () => {
+          g.beginPath();
+          let pen = false;
+          for (const pt of line) {
+            // A chord whose voicing leaves the guide tone out breaks the line; so does a row off the roll.
+            if (pt.eventId === null || pt.midi > hi || pt.midi < lo || pt.to <= L.from) {
+              pen = false;
+              continue;
+            }
+            if (pt.from >= L.to) break;
+            const x0 = xOfCycle(L, Math.max(L.from, pt.from));
+            const x1 = xOfCycle(L, Math.min(L.to, pt.to));
+            const y = yOf(pt.midi);
+            if (pen) g.lineTo(x0, y);
+            else g.moveTo(x0, y);
+            g.lineTo(x1, y);
+            pen = true;
+          }
+        };
+        g.save();
+        g.lineJoin = "round";
+        // A light edge under the line keeps it readable over a note of any colour.
+        g.strokeStyle = c.surface;
+        g.lineWidth = 5;
+        g.globalAlpha = 0.9;
+        path();
+        g.stroke();
+        g.strokeStyle = c.text;
+        g.lineWidth = 2;
+        g.globalAlpha = 1;
+        if (li === 1) g.setLineDash([6, 3]);
+        path();
+        g.stroke();
+        g.restore();
+      });
+      for (const r of L.rects) {
+        const m = guide.marks.get(r.id);
+        if (!m || r.kind !== "note") continue;
+        g.save();
+        const w = 11;
+        const x = r.x + r.w - w - 1;
+        if (r.w >= w + 4) {
+          g.fillStyle = c.text;
+          roundRect(g, x, r.y + 1, w, Math.max(6, r.h - 2), 2.5);
+          g.fill();
+          g.fillStyle = c.surface;
+          g.font = "bold 8px ui-monospace, monospace";
+          g.fillText(m.tag, x + 3, r.y + r.h / 2 + 0.5);
+        } else {
+          g.strokeStyle = c.text;
+          g.lineWidth = 2;
+          roundRect(g, r.x - 1.5, r.y - 1.5, r.w + 3, r.h + 3, 4);
+          g.stroke();
+        }
+        g.restore();
+      }
+    }
+
+    // pushes against the grid: a bracket from where the note comes in to the beat it anticipates
+    const pushes = beatGridOn || p.music?.pushes ? (p.music?.pushes ?? null) : null;
+    if (pushes && pushes.size > 0) {
+      const seen = new Set<string>();
+      for (const r of L.rects) {
+        const pm = pushes.get(r.id);
+        if (!pm || pm.beat < L.from || pm.beat > L.to) continue;
+        const xb = Math.round(xOfCycle(L, pm.beat)) + 0.5;
+        // One bracket per pushed onset and row, not one per note of a chord drawn on the same row.
+        const key = `${Math.round(r.x)}:${Math.round(r.y)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        g.save();
+        g.strokeStyle = c.issue;
+        g.fillStyle = c.issue;
+        g.lineWidth = 1.5;
+        const y = r.y - 2.5;
+        g.beginPath();
+        g.moveTo(r.x, y + 3);
+        g.lineTo(r.x, y);
+        g.lineTo(xb, y);
+        g.stroke();
+        // the beat it comes in ahead of: a tick through the note
+        g.setLineDash([2, 2]);
+        g.beginPath();
+        g.moveTo(xb, y);
+        g.lineTo(xb, r.y + r.h + 2);
+        g.stroke();
+        g.restore();
+      }
+    }
+
+    // the key lens: a line through the roll where the key changes
+    for (const k of p.music?.keys ?? []) {
+      if (!k.change || k.from <= L.from || k.from >= L.to) continue;
+      const x = Math.round(xOfCycle(L, k.from)) + 0.5;
+      g.save();
+      g.strokeStyle = c.blue;
+      g.lineWidth = 2;
+      g.setLineDash([6, 3]);
+      g.beginPath();
+      g.moveTo(x, 0);
+      g.lineTo(x, L.height);
+      g.stroke();
+      g.restore();
+    }
+
     // the bass-role lens: R, 5, 8, 3, 7 or → just under each bass note
     if (p.bassMarks && p.bassMarks.size > 0) {
       for (const r of L.rects) {
@@ -657,8 +894,9 @@ export function PianoRoll(props: PianoRollProps) {
     }
     if (canvas.dataset) {
       canvas.dataset.playhead = f.playing ? playheadCycle(f.audibleCycle, model.bars).toFixed(3) : "";
+      canvas.dataset.counts = counts.join(" ");
     }
-  }, [model, clock, inputs]);
+  }, [model, clock, inputs, loudest]);
 
   const invalidate = useCallback(() => {
     if (frame.current) return;
@@ -680,6 +918,7 @@ export function PianoRoll(props: PianoRollProps) {
     props.ranges,
     props.bassMarks,
     props.blueNotes,
+    props.music,
   ]);
   useEffect(
     () =>
@@ -709,6 +948,7 @@ export function PianoRoll(props: PianoRollProps) {
           if (next !== playPageRef.current) {
             playPageRef.current = next;
             setPlayPage(next);
+            setHeldPage(null);
             if (next !== null) setManualPage(next);
           }
         }
@@ -753,6 +993,10 @@ export function PianoRoll(props: PianoRollProps) {
         const role = props.chordTones?.marks.get(id)?.role;
         const bass = props.bassMarks?.get(id);
         const blue = props.blueNotes?.get(id);
+        const guide = props.music?.guide?.marks.get(id);
+        const mode = props.music?.modeTones?.get(id);
+        const push = props.music?.pushes?.get(id);
+        const ghost = props.music?.ghosts?.has(id);
         setTip({
           x: pt.x,
           y: pt.y,
@@ -761,6 +1005,10 @@ export function PianoRoll(props: PianoRollProps) {
             role && role !== "no-chord" ? ROLE_WORDS[role] : null,
             bass ? `bass: ${bass.words}` : null,
             blue ? blueWords(blue) : null,
+            guide ? `guide tone: ${guide.words}` : null,
+            mode ? `${mode.display}: the colour note of ${mode.mode}` : null,
+            push ? pushWords(push, model.meter.unitsPerBar) : null,
+            ghost ? "ghost note: played very quietly" : null,
           ]
             .filter(Boolean)
             .join(" · "),
@@ -789,6 +1037,8 @@ export function PianoRoll(props: PianoRollProps) {
     }
     bus.select({ events: [id] }, "roll");
   };
+
+  const guideLines = (props.music?.guide?.lines ?? []).map(guideLineText).filter((t) => t.includes("→"));
 
   return (
     <div className="oak-roll" ref={wrapRef} data-testid="piano-roll">
@@ -834,6 +1084,24 @@ export function PianoRoll(props: PianoRollProps) {
             No melody line to measure yet
           </span>
         ) : null}
+        {guideLines.length > 0 ? (
+          <span
+            className="oak-roll-fact"
+            data-testid="guide-facts"
+            title={`Guide tones: ${guideLines.join(" · ")}`}
+          >
+            Guide tones:{" "}
+            {(props.music?.guide?.lines ?? [])
+              .map((l) => guideLineShort(l))
+              .filter((t) => t.includes("→"))
+              .join(" · ")}
+          </span>
+        ) : null}
+        {props.music?.grid ? (
+          <span className="oak-roll-fact" data-testid="beat-grid-facts">
+            {props.music.grid.text}
+          </span>
+        ) : null}
         {props.stale ? (
           <span className="oak-badge" data-testid="roll-stale">
             preview · not playing
@@ -851,6 +1119,32 @@ export function PianoRoll(props: PianoRollProps) {
       {props.ribbon ? (
         <SectionRibbon
           {...props.ribbon}
+          {...(follow && props.followBars
+            ? {
+                onReveal: (bar: number) => {
+                  const page = Math.max(
+                    0,
+                    Math.min(follow.pages - 1, Math.floor((bar - content[0]) / (props.followBars as number))),
+                  );
+                  if (playPage !== null) setHeldPage(page);
+                  else setManualPage(page);
+                },
+              }
+            : {})}
+          axis={{
+            left: layout.gutter,
+            width: layout.width,
+            from: layout.from,
+            to: layout.to,
+            xOf: (c) => xOfCycle(layout, c),
+          }}
+        />
+      ) : null}
+      {props.music?.keys && props.music.keys.length > 1 ? (
+        <KeyRibbon
+          spans={props.music.keys}
+          currentBar={props.music.currentBar ?? null}
+          pickup={props.chordBand?.pickup === true || props.ribbon?.pickup === true}
           axis={{
             left: layout.gutter,
             width: layout.width,
@@ -864,7 +1158,19 @@ export function PianoRoll(props: PianoRollProps) {
         ref={canvasRef}
         className="oak-roll-canvas"
         role="img"
-        aria-label={`Piano roll, ${model.events.length} notes in ${model.bars} bars`}
+        aria-label={[
+          `Piano roll, ${model.events.length} notes in ${model.bars} bars`,
+          guideLines.length > 0 ? `guide tones ${guideLines.join("; ")}` : null,
+          props.music?.grid ? props.music.grid.text : null,
+        ]
+          .filter(Boolean)
+          .join(". ")}
+        data-guide={props.music?.guide ? props.music.guide.marks.size : undefined}
+        data-guide-lines={guideLines.length > 0 ? guideLines.join(" | ") : undefined}
+        data-beat-grid={props.music?.grid ? (props.music.grid.compound ? "compound" : "triplets") : undefined}
+        data-pushes={props.music?.pushes ? props.music.pushes.size : undefined}
+        data-ghosts={props.music?.ghosts ? props.music.ghosts.size : undefined}
+        data-mode-tones={props.music?.modeTones ? props.music.modeTones.size : undefined}
         onMouseMove={onMove}
         onMouseLeave={onLeave}
         onClick={onClick}
@@ -890,6 +1196,24 @@ export function PianoRoll(props: PianoRollProps) {
   );
 }
 
+/** The ruler's height when the beat grid writes its counts under the bar numbers. */
+export const COUNT_RULER_PX = 32;
+
+/**
+ * How loud a hit is against the loudest of its line, 0.3 … 1; 1 for a line played at one level (within 10 %), so
+ * only a line that uses `.velocity()` or a patterned `.gain()` is drawn by loudness.
+ */
+export function loudnessOf(gain: number, loudest: number): number {
+  if (!(loudest > 0) || gain >= loudest * 0.9) return 1;
+  return Math.max(0.3, Math.min(1, gain / loudest));
+}
+
+function shrink(r: RollRect, f: number): RollRect {
+  const w = r.w * f;
+  const h = r.h * f;
+  return { ...r, x: r.x + (r.w - w) / 2, y: r.y + (r.h - h) / 2, w, h };
+}
+
 function rangeText(r: RangeLine, model: WorkbenchModel): string {
   const name = (midi: number) => pitchLabel(midi, model.key).display;
   return `${r.track}: ${name(r.low.midi)}–${name(r.high.midi)}, ${r.span} half step${r.span === 1 ? "" : "s"}, high point bar ${r.high.bar}`;
@@ -910,6 +1234,9 @@ function ChordBand({ band, layout }: { band: ChordBandProps; layout: RollLayout 
   useLayoutEffect(() => {
     for (const li of ref.current?.querySelectorAll<HTMLElement>("li.oak-chord-region") ?? []) {
       li.dataset.fit = "all";
+      if (li.scrollWidth <= li.clientWidth + 0.5) continue;
+      // Wave 6: the arrow's target and the "borrowed" word go first (the border and the title still say them).
+      li.dataset.fit = "rn";
       if (li.scrollWidth <= li.clientWidth + 0.5) continue;
       li.dataset.fit = "symbol";
       if (li.scrollWidth > li.clientWidth + 0.5) li.dataset.fit = "none";
@@ -933,9 +1260,19 @@ function ChordBand({ band, layout }: { band: ChordBandProps; layout: RollLayout 
         const fn = band.fn && r.fn ? r.fn : null;
         const st = fn && fn !== "chromatic" ? functionStyle(fn, theme) : null;
         const text = [band.symbols ? r.symbol : null, band.romans ? r.rn : null].filter(Boolean);
+        // Wave 6: an applied chord points at its target, a borrowed chord says where it comes from (numerals on).
+        const bc = band.chords?.[band.regions.indexOf(r)] ?? null;
+        const arrow = band.romans && r.rn && bc?.arrow ? bc.arrow : null;
+        const lent = band.romans && r.rn && bc?.borrowed ? bc.borrowed : null;
         const said = [
           band.symbols ? r.symbol : null,
           band.romans && r.rn ? r.rn : null,
+          arrow
+            ? arrow.resolves
+              ? `points at ${arrow.target} and resolves to it`
+              : `points at ${arrow.target}, which does not follow`
+            : null,
+          lent,
           fn ? FN_WORDS[fn] : null,
         ]
           .filter(Boolean)
@@ -943,7 +1280,12 @@ function ChordBand({ band, layout }: { band: ChordBandProps; layout: RollLayout 
         return (
           <li
             key={`${r.slot}-${r.from}`}
-            className={`oak-chord-region${fn ? ` oak-chord-region--fn` : ""}${fn === "chromatic" ? " oak-chord-region--chromatic" : ""}`}
+            className={`oak-chord-region${fn ? ` oak-chord-region--fn` : ""}${fn === "chromatic" ? " oak-chord-region--chromatic" : ""}${arrow ? " oak-chord-region--applied" : ""}${lent ? " oak-chord-region--borrowed" : ""}${bc?.reduced ? " oak-chord-region--quiet" : ""}`}
+            data-kind={bc?.kind ?? undefined}
+            data-target={arrow ? arrow.target : undefined}
+            data-resolves={arrow ? (arrow.resolves ? "1" : "0") : undefined}
+            data-borrowed={lent ? "1" : undefined}
+            data-reduced={bc?.reduced ? "1" : undefined}
             style={{
               left,
               width: Math.max(2, right - left - 1),
@@ -959,6 +1301,16 @@ function ChordBand({ band, layout }: { band: ChordBandProps; layout: RollLayout 
               <>
                 {band.symbols ? <b className="oak-chord-symbol">{r.symbol}</b> : null}
                 {band.romans && r.rn ? <span className="oak-chord-rn">{r.rn}</span> : null}
+                {arrow ? (
+                  <span className="oak-chord-arrow" data-resolves={arrow.resolves ? "1" : "0"} aria-hidden>
+                    {arrow.resolves ? "→" : "⇢"} {arrow.target}
+                  </span>
+                ) : null}
+                {lent ? (
+                  <span className="oak-chord-lent" aria-hidden>
+                    borrowed
+                  </span>
+                ) : null}
               </>
             ) : fn ? (
               <b className="oak-chord-symbol">{fn === "chromatic" ? "·" : fn}</b>
@@ -1005,7 +1357,7 @@ function NotesTable({
             <td>{e.beatLabel}</td>
             <td>{e.track}</td>
             {show.degree ? <td>{e.label?.degree?.label ?? "—"}</td> : null}
-            {show.solfege ? <td>{e.label?.degree?.syllable ?? "—"}</td> : null}
+            {show.solfege ? <td>{e.label?.degree?.syllable || "—"}</td> : null}
             <td>{e.label?.display ?? e.s ?? "—"}</td>
             <td>
               {e.durRat[0]}/{e.durRat[1]}

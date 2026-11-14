@@ -125,7 +125,10 @@ describe("Wave 4 contract additions", () => {
   test("ladder requests: levels 1–6 (L5–L6 joined in Wave 5), a rung, an idempotency key", () => {
     expect(LadderNextSchema.safeParse({ sessionId: null, gymId: "GYM.01" }).success).toBe(true);
     expect(LadderNextSchema.safeParse({ sessionId: null, gymId: "GYM.1" }).success).toBe(false);
+    // Wave 6: L8 (a standard) is an item; L7 is own audio and never one.
     expect(LadderNextSchema.safeParse({ sessionId: null, gymId: null, level: 7 }).success).toBe(false);
+    expect(LadderNextSchema.safeParse({ sessionId: null, gymId: null, level: 8 }).success).toBe(true);
+    expect(LadderNextSchema.safeParse({ sessionId: null, gymId: null, level: 9 }).success).toBe(false);
     expect(
       LadderSubmitSchema.safeParse({
         sessionId: null,

@@ -9,9 +9,11 @@ import { Link } from "@tanstack/react-router";
 import { clsx } from "clsx";
 import { LayoutList, Lock, Repeat } from "lucide-react";
 import { type ReactNode, useId, useRef, useState } from "react";
+import { useLenses } from "../lib/lenses.ts";
 import { degreeBackgroundCss, degreeStyle } from "../ui/theme/palette.ts";
 import { highlightReference, showBars, showSection } from "./context.ts";
 import { useThemeName } from "./hooks.ts";
+import { switchLensOn } from "./lens-switch.ts";
 import { describeToken, type TokenContext, type TokenInfo } from "./music-tokens.ts";
 import { playChords } from "./preview.ts";
 import { describeSection, type FormViewSection } from "./sections.ts";
@@ -111,6 +113,8 @@ export function TokenChip({
   const theme = useThemeName();
   const def = useDefinition();
   const id = useId();
+  const lenses = useLenses();
+  const [lensOn, setLensOn] = useState<string | null>(null);
   const info = describeToken(token, ctx);
   if (!info) return <>{raw}</>;
 
@@ -177,6 +181,9 @@ export function TokenChip({
       if (info.midi !== undefined) highlightReference({ kind: "note", thread, midi: info.midi });
       // A chord or numeral lights the bars it sounds in, without moving the loop (Wave 4).
       if (info.highlight) highlightReference({ kind: "bars", thread, ...info.highlight });
+      // Wave 6: an applied or borrowed numeral, a key or a mode switches its lens on, so the roll and the staff
+      // show what the tutor named.
+      if (info.lens && switchLensOn(lenses, info.lens)) setLensOn(info.lens.label);
       if (info.play) void playChords(info.play);
       else if (info.bars) showBars(thread, info.bars.from, info.bars.to);
       else if (info.kind === "term") def.pinned ? def.close() : def.pin();
@@ -196,6 +203,7 @@ export function TokenChip({
           (info.kind === "note" || info.kind === "chord") && "font-mono text-[0.8125rem]",
         )}
         data-variant={info.variant}
+        data-lens={info.lens ? `${info.lens.group}.${info.lens.id}` : undefined}
         data-bars={info.where && info.where.length > 0 ? info.where.join(" ") : undefined}
         {...handlers}
       >
@@ -209,6 +217,11 @@ export function TokenChip({
         )}
         {(info.kind === "term" || info.kind === "chord" || info.kind === "rn") && info.preview && (
           <PreviewBadge />
+        )}
+        {lensOn && (
+          <span role="status" className="sr-only">
+            {lensOn} lens on
+          </span>
         )}
       </button>
     );

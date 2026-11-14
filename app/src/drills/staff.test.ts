@@ -109,3 +109,49 @@ describe("rhythm dictation on the staff (levels 5–7)", () => {
     }
   });
 });
+
+describe("rhythm II on the staff (Wave 6: ties and triplets as the generator wrote them)", () => {
+  test("a line written with a tie offers the tie; a line without one does not", () => {
+    let tied = 0;
+    for (const level of [5, 6, 7]) {
+      for (let seed = 1; seed <= 24; seed++) {
+        const t = trialAt("fam.rhy.dictation", level, seed);
+        const needs = t.params.staffNeeds as { ties?: boolean } | undefined;
+        const spec = staffSpecOf(t);
+        expect(spec.palette.ties).toBe(needs?.ties === true);
+        if (needs?.ties) tied++;
+      }
+    }
+    // The generators write ties at these levels (U13.L03): the case is exercised, not assumed.
+    expect(tied).toBeGreaterThan(0);
+  });
+
+  test("a held note written as a tie over the bar line grades as the same rhythm as the reveal", () => {
+    // Two bars of 4/4: a half note, a quarter, then a quarter tied over the bar line into a half and a quarter.
+    const tiedValue = "B4:2 B4:4 B4:4~ | B4:2 B4:4";
+    const plain = "B4:2 B4:4 B4:4 | r:2 B4:4";
+    // The staff value becomes the same onsets in code whether the held note is tied or rests (grading is on onsets).
+    const a = staffToCode(tiedValue, 2);
+    const b = staffToCode(plain, 2);
+    expect(a).not.toBeNull();
+    expect(b).not.toBeNull();
+    const onsets = (code: string) => code.replace(/@\d+/g, "").replace(/~/g, "").replace(/\s+/g, " ");
+    expect(onsets(a as string).match(/b4/g)?.length).toBe(onsets(b as string).match(/b4/g)?.length);
+  });
+
+  test("level 7: the triplet values are on the palette and the written answer grades right", () => {
+    for (let seed = 1; seed <= 12; seed++) {
+      const t = generateTrial(
+        registry.family("fam.rhy.dictation" as never),
+        { index: 0, family: "fam.rhy.dictation" as never, level: 7, category: "triplets", seed },
+        DEFAULT_PROFILE,
+        ["triplets"],
+      ) as Trial;
+      expect(t.category).toBe("triplets");
+      const spec = staffSpecOf(t);
+      expect(spec.palette.durations).toEqual(expect.arrayContaining(["4t", "8t"]));
+      const value = expectedStaffValue(t) as string;
+      expect(grade(t, value).correct).toBe(true);
+    }
+  });
+});

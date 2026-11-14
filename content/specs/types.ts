@@ -74,7 +74,33 @@ export type Author =
   | "U11c"
   | "A1"
   | "capstones"
-  | "repertoire";
+  | "repertoire"
+  // Wave 6 (the wave plan's ownership): the content lead writes U12 and its exemplar U12.L01; six spec
+  // writers write U13 (exemplar U13.L01), U14 with C6 (U14.L01), U15 (U15.L02), U16 (U16.L01), U17 with C7
+  // (U17.L02) and the finale (CF-A, CF-T, ladder L7–L8); twenty authors write the rest.
+  | "spec-U13"
+  | "spec-U14"
+  | "spec-U15"
+  | "spec-U16"
+  | "spec-U17"
+  | "spec-finale"
+  | "U12a"
+  | "U12b"
+  | "U12c"
+  | "U13a"
+  | "U13b"
+  | "U13c"
+  | "U14a"
+  | "U14b"
+  | "U14c"
+  | "U15a"
+  | "U15b"
+  | "U15c"
+  | "U16a"
+  | "U16b"
+  | "U17a"
+  | "U17b"
+  | "finale";
 
 /**
  * The Wave 3 schema a step uses (AUTHORING §16), so the author and the app engineers know which new shape
@@ -217,6 +243,24 @@ export interface CapstoneSessionSpec {
   checks: string[];
   /** How the session ends: the draft saved (the Make), a review offered, the release. */
   ends: string;
+  /**
+   * Wave 6 (the finale spec): the session's enjoyment, pace and return lines, as a lesson spec's `epr`: what
+   * the learner hears of their own at the end, what keeps the session inside its minutes, and what the Coda
+   * says opens next.
+   */
+  epr?: { enjoyment: string; pace: string; return: string };
+}
+
+/**
+ * Wave 6 (the finale spec): a titled list inside a capstone spec, for what the sessions refer to and the
+ * registries do not hold: the six devices of CF-A and what counts as each, what "master" asks, the three
+ * standards of CF-T.
+ */
+export interface SpecSection {
+  title: string;
+  /** One paragraph before the list. */
+  lead?: string;
+  items: string[];
 }
 
 export interface CapstoneSpec {
@@ -229,6 +273,8 @@ export interface CapstoneSpec {
   opens?: string;
   /** Wave 4: the Band under the learner's draft (or why there is none). */
   band?: string;
+  /** Wave 6: titled lists the sessions refer to, rendered before them. */
+  sections?: SpecSection[];
   /** Wave 4: the sessions, in order. */
   sessions?: CapstoneSessionSpec[];
   /** Wave 4: what the deterministic liner notes say about this track, and the learner's own inputs. */
@@ -282,6 +328,58 @@ export interface UnitSpec {
   capstones: CapstoneSpec[];
   /** Wave 4: the Transcription Gym, in the spec of the unit where its slots start (U07). */
   gym?: GymSpec;
+  /** Wave 6: the end of the core (content/specs/END.ts), a spec of surfaces instead of lessons. */
+  ending?: EndOfCoreSpec;
   /** Cross-lesson notes: the arc of the unit, shared conventions, things every author must know. */
   conventions: string[];
+}
+
+/** Wave 6: one surface of the end of the core, as the engineer who owns it builds it. */
+export interface EndSurfaceSpec {
+  /** A slug the acceptance lines and the tests name: `coda`, `record`, `can-do`, `oak`, `open`, `today`. */
+  id: string;
+  title: string;
+  /** The Build-phase owner (the ownership table of docs/design/wave6.md §1). */
+  owner: string;
+  /** Where it lives: the route, and the component when it is shared between routes. */
+  where: string;
+  /** What it is for, in one or two sentences. */
+  purpose: string;
+  /** What the learner sees, top to bottom. */
+  sees: string[];
+  /** What the learner hears, when the surface plays anything. */
+  hears?: string;
+  /** What the learner can do, the primary action first. */
+  actions: string[];
+  /** Where each fact comes from: the endpoint and the field. Nothing on the surface is made up in the page. */
+  data: string[];
+  /** The copy, word for word. `where` names the element. */
+  copy: { where: string; text: string }[];
+  /** The states the surface must draw besides the plain one. */
+  states: string[];
+}
+
+/**
+ * Wave 6: the end of the core (contracts §2.5 "core complete"; docs/design/wave6.md §5.5; ux §5.5 M7): what
+ * the learner sees when the last piece of the core lands, and on the days after. The session, capstone and
+ * server engineers build from it.
+ */
+export interface EndOfCoreSpec {
+  summary: string;
+  /** When it happens: the stages, the trigger, and what it is not. */
+  when: string[];
+  /** What every surface is judged by. */
+  principles: string[];
+  surfaces: EndSurfaceSpec[];
+  /** What the server computes and promises (`course.completion`, the summary, the plan). */
+  server: string[];
+  /** What never appears. */
+  never: string[];
+  /** Enjoyment, pace and return, for the ending as a whole. */
+  epr: { enjoyment: string; pace: string; return: string };
+  /** What must be true for the work to be done: each line is one test (a bun test unless it says browser). */
+  acceptance: string[];
+  /** The dev seeds the tests start from. */
+  seeds: string[];
+  notes: string[];
 }

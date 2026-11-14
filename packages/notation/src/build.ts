@@ -121,7 +121,15 @@ export function estimateKey(events: readonly NEvent[]): KeySpec | null {
 
 // --- swing ---------------------------------------------------------------------------------------
 
-/** contracts §6.10.6: subtract amount/2 × slot from the onset of each off-beat event; lengths stay. */
+/**
+ * contracts §6.10.6: subtract amount/2 × slot from the onset of each off-beat event; lengths stay.
+ * Wave 6, for the staff only:
+ * - a moved note that reached the end of its slot still reaches it (a shuffle the code writes as triplets,
+ *   `[c4@2 d4]`, has an off-beat a third of the beat long: straightened it is an eighth, not a triplet eighth and a
+ *   rest; a `swingBy` off-beat, which rings a sixth into the next beat, ends on the beat as before);
+ * - a slot that holds a real triplet on a track (an onset a third of the way in, under triplet swing) is left
+ *   alone on that track: the three notes keep their bracket instead of being bent into two eighths.
+ */
 export function straightenSwing(
   events: NEvent[],
   unitsPerBar: number,
@@ -130,11 +138,67 @@ export function straightenSwing(
   const slot = rat(1, swing.subdivision === 8 ? unitsPerBar : 2 * unitsPerBar);
   const shift = R.mul(R.mul(toRat(swing.amount), [1, 2]), slot);
   const swungAt = R.add(R.mul(slot, [1, 2]), shift);
+  const slotOf = (t: Rat): Rat => R.mul(rat(Math.floor(R.toNum(R.div(t, slot)) + 1e-9)), slot);
+  // Triplet swing only: the slots of each track that hold an onset on the second triplet eighth.
+  const tripletSwing = R.eq(swungAt, R.mul(slot, [2, 3]));
+  const triplets = new Set<string>();
+  if (tripletSwing)
+    for (const e of events) {
+      const start = slotOf(e.onset);
+      if (R.eq(R.sub(e.onset, start), R.mul(slot, [1, 3]))) triplets.add(`${e.track}|${R.str(start)}`);
+    }
   return events.map((e) => {
-    const inSlot = R.sub(e.onset, R.mul(rat(Math.floor(R.toNum(R.div(e.onset, slot)) + 1e-9)), slot));
-    if (Math.abs(R.toNum(inSlot) - R.toNum(swungAt)) < 1e-9) return { ...e, onset: R.sub(e.onset, shift) };
-    return e;
+    const start = slotOf(e.onset);
+    const inSlot = R.sub(e.onset, start);
+    if (Math.abs(R.toNum(inSlot) - R.toNum(swungAt)) >= 1e-9) return e;
+    if (triplets.has(`${e.track}|${R.str(start)}`)) return e;
+    const onset = R.sub(e.onset, shift);
+    const slotEnd = R.add(start, slot);
+    const stop = end(e);
+    const newStop = R.lt(stop, slotEnd) ? R.sub(stop, shift) : R.max(R.sub(stop, shift), slotEnd);
+    return { ...e, onset, dur: R.sub(newStop, onset) };
   });
+}
+
+// --- the declared grid ---------------------------------------------------------------------------
+
+/**
+ * The nearest multiple of `1/steps` cycles. A value exactly between two steps goes to the metrically stronger one
+ * (the smaller denominator: the beat rather than the off-beat sixteenth), the earlier one when they tie.
+ */
+export function nearestStep(x: Rat, steps: number): Rat {
+  const scaled = R.mul(x, [steps, 1]);
+  const lo = Math.floor(scaled[0] / scaled[1]);
+  const twice = R.sub(R.mul(scaled, [2, 1]), [2 * lo, 1]);
+  const a = rat(lo, steps);
+  const b = rat(lo + 1, steps);
+  if (R.lt(twice, [1, 1])) return a;
+  if (R.lt([1, 1], twice)) return b;
+  return b[1] < a[1] ? b : a;
+}
+/**
+ * Moves every onset and end to the declared grid (`NotationInput.grid`). Returns the first event that landed on a
+ * step another note of its track and pitch (or drum) already holds, when there is one: the staff cannot show both.
+ */
+export function snapToGrid(events: NEvent[], steps: number): { events: NEvent[]; collision: NEvent | null } {
+  const step: Rat = rat(1, steps);
+  const seen = new Map<string, Rat>();
+  let collision: NEvent | null = null;
+  const out: NEvent[] = [];
+  for (const e of [...events].sort((x, y) => R.cmp(x.onset, y.onset))) {
+    const onset = nearestStep(e.onset, steps);
+    let stop = nearestStep(end(e), steps);
+    if (R.lte(stop, onset)) stop = R.add(onset, step);
+    const k = `${e.track}|${e.midi ?? e.s ?? e.drum ?? ""}|${R.str(onset)}`;
+    const first = seen.get(k);
+    if (first && !R.eq(first, e.onset)) {
+      collision ??= e;
+      continue;
+    }
+    seen.set(k, e.onset);
+    out.push(R.eq(onset, e.onset) && R.eq(stop, end(e)) ? e : { ...e, onset, dur: R.sub(stop, onset) });
+  }
+  return { events: out, collision };
 }
 
 // --- staves --------------------------------------------------------------------------------------
@@ -199,10 +263,25 @@ function planStaves(input: NotationInput, events: NEvent[], warnings: NotationWa
     let rh: NEvent[] = [];
     let lh: NEvent[] = [];
     const wantTrack = input.split === "track" || (input.split === undefined && tracks.length > 1);
+    // Wave 6: a track the host names (`trackClefs`) goes whole to that staff whatever the other tracks do (the
+    // left-hand voicings of U12.L06 on the bass staff over a bass line: every track is low, and a split by
+    // register would cut each voicing in two at middle C).
+    const named = tracks.filter((t) => input.trackClefs?.[t] !== undefined);
     if (wantTrack && byTrack) {
       const low = new Set(lowTracks);
       rh = pitched.filter((e) => !low.has(e.track));
       lh = pitched.filter((e) => low.has(e.track));
+    } else if (named.length > 0 && input.split !== "register") {
+      const isNamed = new Set(named);
+      const rest = pitched.filter((e) => !isNamed.has(e.track));
+      rh = [
+        ...pitched.filter((e) => input.trackClefs?.[e.track] === "treble"),
+        ...rest.filter((e) => (e.midi as number) >= split),
+      ];
+      lh = [
+        ...pitched.filter((e) => input.trackClefs?.[e.track] === "bass"),
+        ...rest.filter((e) => (e.midi as number) < split),
+      ];
     } else {
       rh = pitched.filter((e) => (e.midi as number) >= split);
       lh = pitched.filter((e) => (e.midi as number) < split);
@@ -336,6 +415,42 @@ function assignVoices(slots: Slot[], warnings: NotationWarning[]): { slots: Slot
   }
   const avg = (v: { slots: Slot[] }) => v.slots.reduce((a, s) => a + top(s), 0) / Math.max(1, v.slots.length);
   return voices.sort((a, b) => avg(b) - avg(a));
+}
+
+/**
+ * The voices of a pitched staff. Lines are found greedily in time (`assignVoices`); Wave 6: when that would pass one
+ * track's notes back and forth between voices (comping stabs under a walking bass, horn hits around a tune), every
+ * track keeps its own voice or voices instead, so each line reads as the part the code names. At most four voices
+ * a staff: a staff whose tracks need more keeps the greedy lines.
+ */
+function voicesOf(events: NEvent[], warnings: NotationWarning[]): Slot[][] {
+  const greedyWarnings: NotationWarning[] = [];
+  const greedy = assignVoices(groupSlots(events), greedyWarnings).map((v) => v.slots);
+  const tracks = [...new Set(events.map((e) => e.track))];
+  const useGreedy = () => {
+    warnings.push(...greedyWarnings);
+    return greedy;
+  };
+  if (tracks.length < 2 || greedy.length < 2) return useGreedy();
+  // A track is torn when its notes sit in more voices than the track alone needs.
+  const alone = new Map(
+    tracks.map((t) => {
+      const w: NotationWarning[] = [];
+      const vs = assignVoices(groupSlots(events.filter((e) => e.track === t)), w).map((v) => v.slots);
+      return [t, { voices: vs, warnings: w }] as const;
+    }),
+  );
+  const torn = tracks.some((t) => {
+    const inVoices = greedy.filter((v) => v.some((s) => s.events.some((e) => e.track === t))).length;
+    return inVoices > (alone.get(t)?.voices.length ?? 1);
+  });
+  if (!torn) return useGreedy();
+  const perTrack = tracks.flatMap((t) => alone.get(t)?.voices ?? []);
+  if (perTrack.length > 4) return useGreedy();
+  for (const t of tracks) warnings.push(...(alone.get(t)?.warnings ?? []));
+  const top = (s: Slot) => Math.max(...s.events.map((e) => e.midi ?? 0));
+  const avg = (v: Slot[]) => v.reduce((a, s) => a + top(s), 0) / Math.max(1, v.length);
+  return perTrack.sort((a, b) => avg(b) - avg(a));
 }
 
 /** Drums: hits in one voice are clipped at the next onset and simultaneous hits form one chord. */
@@ -506,6 +621,22 @@ export function buildScore(input: NotationInput): Score {
       bar: startBar,
       message: `swing is not written in ${meter.num}/${meter.den} (contracts §6.10): the notes are engraved as played`,
     });
+  const grid =
+    input.grid !== undefined && Number.isInteger(input.grid) && input.grid >= 1 && input.grid <= 96
+      ? input.grid
+      : undefined;
+  if (grid !== undefined) {
+    const snapped = snapToGrid(events, grid);
+    events = snapped.events;
+    if (snapped.collision) {
+      approximate = true;
+      warnings.push({
+        code: "snapped-to-grid",
+        bar: R.floor(snapped.collision.onset),
+        message: `two notes of "${snapped.collision.track}" fall on one step of the declared grid of ${grid}; one is not shown`,
+      });
+    }
+  }
   events = events
     .filter((e) => R.lt(e.onset, [stop, 1]) && R.lt([startBar, 1], end(e)))
     .map((e) => (e.midi !== null && !Number.isInteger(e.midi) ? { ...e, midi: Math.round(e.midi) } : e));
@@ -612,7 +743,7 @@ export function buildScore(input: NotationInput): Score {
     }
     // Clipping at the next onset belongs to a declared swing (§6.10.6); otherwise overlaps are polyphony.
     const evs = input.swing ? clipWithinTracks(p.events) : p.events;
-    const voices = assignVoices(groupSlots(evs), warnings).map((v) => v.slots);
+    const voices = voicesOf(evs, warnings);
     for (const v of voices) spellVoice(v, spellKey, chordList, blues);
     const ms = p.events.map((e) => e.midi as number);
     const lo = p.clef === "treble" ? 48 : 26;
@@ -818,6 +949,7 @@ export function buildScore(input: NotationInput): Score {
     ...(keyChanges.length ? { keyChanges } : {}),
     ...(input.tempoBpm !== undefined ? { tempoBpm: input.tempoBpm } : {}),
     ...(swingText ? { swingText } : {}),
+    ...(grid !== undefined ? { grid } : {}),
     staves,
     bars: nBars,
     startBar,

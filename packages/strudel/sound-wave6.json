@@ -1,0 +1,2280 @@
+{
+  "generatedBy": "packages/strudel/e2e/wave6.pw.ts",
+  "audibility": {
+    "rule": "as packages/strudel/audibility.json, each tool in its lesson's loop (content/specs/U12.ts … U17.ts) at the lesson's tempo; tuning: the first partial within ±10 c in the asked-for octave at the pitches the U12–U17 lessons play each new sound",
+    "lessons": [
+      {
+        "lesson": "U12.L01",
+        "claim": "C then C^7 on the Rhodes: the added 7th is heard over the bass",
+        "id": "chord.seventh",
+        "control": "chord",
+        "value": "=",
+        "base": "stack(chord(\"<C C>\").voicing().s(\"rhodes\"), chord(\"<C C>\").rootNotes(2).s(\"upright\"))",
+        "code": "stack(chord(\"<C C^7>\").voicing().s(\"rhodes\"), chord(\"<C C>\").rootNotes(2).s(\"upright\"))",
+        "audible": true,
+        "diffDb": -4.2,
+        "repeatDb": -143.9,
+        "spectralDb": -8.8,
+        "spectralRepeatDb": -165,
+        "width": [
+          0,
+          0
+        ],
+        "levelDb": -0.3,
+        "centroidHz": [
+          470,
+          470
+        ],
+        "balance": [
+          0,
+          0
+        ],
+        "tail": [
+          0.2437,
+          0.2265
+        ]
+      },
+      {
+        "lesson": "U12.L03",
+        "claim": "half-diminished against diminished seventh: one voice a half step lower",
+        "id": "chord.seventh-dim",
+        "control": "chord",
+        "value": "=",
+        "base": "stack(chord(\"Bm7b5\").voicing().s(\"rhodes\"), chord(\"B\").rootNotes(2).s(\"upright\"))",
+        "code": "stack(chord(\"Bo7\").voicing().s(\"rhodes\"), chord(\"B\").rootNotes(2).s(\"upright\"))",
+        "audible": true,
+        "diffDb": -0.6,
+        "repeatDb": -143.5,
+        "spectralDb": -1.6,
+        "spectralRepeatDb": -163.7,
+        "width": [
+          0,
+          0
+        ],
+        "levelDb": -0.2,
+        "centroidHz": [
+          506,
+          484
+        ],
+        "balance": [
+          0,
+          0
+        ],
+        "tail": [
+          0,
+          0
+        ]
+      },
+      {
+        "lesson": "U12.L06",
+        "claim": "the hook with and without .dict(\"lefthand\"): the rootless voicing is another sound",
+        "id": "tb.dict.lefthand",
+        "control": "dict",
+        "value": "=",
+        "base": "stack(chord(\"<Dm7 G7>\").voicing().struct(\"~ x ~ ~ x ~ ~ ~\").s(\"rhodes\"), chord(\"<Dm7 G7>\").rootNotes(2).struct(\"x x x x\").s(\"upright\"))",
+        "code": "stack(chord(\"<Dm7 G7>\").dict(\"lefthand\").voicing().struct(\"~ x ~ ~ x ~ ~ ~\").s(\"rhodes\"), chord(\"<Dm7 G7>\").rootNotes(2).struct(\"x x x x\").s(\"upright\"))",
+        "audible": true,
+        "diffDb": -1.9,
+        "repeatDb": -146.5,
+        "spectralDb": -6.1,
+        "spectralRepeatDb": -164.8,
+        "width": [
+          0,
+          0
+        ],
+        "levelDb": -0.4,
+        "centroidHz": [
+          517,
+          524
+        ],
+        "balance": [
+          0,
+          0
+        ],
+        "tail": [
+          0.1671,
+          0.1604
+        ]
+      },
+      {
+        "lesson": "U13.L01",
+        "claim": "the Rhodes an eighth early over drums and bass that stay on the beat",
+        "id": "tb.early",
+        "control": "early",
+        "value": "=",
+        "base": "stack(s(\"bd ~ bd ~\"), s(\"~ sd ~ sd\"), s(\"hh*8\").gain(.5), chord(\"<Dm7 G7>\").rootNotes(2).struct(\"x ~ ~ ~ x ~ x ~\").s(\"fingerbass\").lpf(800), chord(\"<Dm7 G7>\").voicing().s(\"rhodes\"))",
+        "code": "stack(s(\"bd ~ bd ~\"), s(\"~ sd ~ sd\"), s(\"hh*8\").gain(.5), chord(\"<Dm7 G7>\").rootNotes(2).struct(\"x ~ ~ ~ x ~ x ~\").s(\"fingerbass\").lpf(800), chord(\"<Dm7 G7>\").voicing().early(1/8).s(\"rhodes\"))",
+        "audible": true,
+        "diffDb": -1.6,
+        "repeatDb": -145.4,
+        "spectralDb": -13.8,
+        "spectralRepeatDb": -163.4,
+        "width": [
+          0,
+          0
+        ],
+        "levelDb": -0.2,
+        "centroidHz": [
+          4220,
+          4460
+        ],
+        "balance": [
+          0,
+          0
+        ],
+        "tail": [
+          0.2395,
+          0.3558
+        ]
+      },
+      {
+        "lesson": "U13.L01",
+        "claim": "organ stabs an eighth late: off the beat, between the hats' accents",
+        "id": "tb.late",
+        "control": "late",
+        "value": "=",
+        "base": "stack(s(\"bd ~ bd ~\"), s(\"~ sd ~ sd\"), s(\"hh*8\").gain(.5), chord(\"<Dm7 G7>\").rootNotes(2).struct(\"x ~ ~ ~ x ~ x ~\").s(\"fingerbass\").lpf(800), chord(\"<Dm7 G7>\").voicing().struct(\"x x x x\").s(\"organ\"))",
+        "code": "stack(s(\"bd ~ bd ~\"), s(\"~ sd ~ sd\"), s(\"hh*8\").gain(.5), chord(\"<Dm7 G7>\").rootNotes(2).struct(\"x ~ ~ ~ x ~ x ~\").s(\"fingerbass\").lpf(800), chord(\"<Dm7 G7>\").voicing().struct(\"x x x x\").late(1/8).s(\"organ\"))",
+        "audible": true,
+        "diffDb": -1.7,
+        "repeatDb": -143.4,
+        "spectralDb": -27.9,
+        "spectralRepeatDb": -162.7,
+        "width": [
+          0,
+          0
+        ],
+        "levelDb": -0.1,
+        "centroidHz": [
+          4072,
+          4135
+        ],
+        "balance": [
+          0,
+          0
+        ],
+        "tail": [
+          0.3048,
+          0.3304
+        ]
+      },
+      {
+        "lesson": "U13.L02",
+        "claim": "the vamp with no .velocity() anywhere against the hook (S1's two items)",
+        "id": "tb.velocity",
+        "control": "velocity",
+        "value": "=",
+        "base": "stack(s(\"bd ~ ~ ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~ ~ ~\"), s(\"~ ~ ~ ~ sd ~ ~ sd ~ sd ~ ~ sd ~ ~ sd\"), s(\"hh*16\").gain(.5), chord(\"<Dm7 G7>\").rootNotes(2).struct(\"x ~ ~ ~ ~ ~ x ~ ~ ~ x ~ ~ ~ ~ ~\").s(\"fingerbass\").lpf(800), chord(\"<Dm7 G7>\").voicing().struct(\"x*16\").s(\"cleangtr\").clip(.5).gain(.6))",
+        "code": "stack(s(\"bd ~ ~ ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~ ~ ~\"), s(\"~ ~ ~ ~ sd ~ ~ sd ~ sd ~ ~ sd ~ ~ sd\").velocity(\"1 1 1 1 1 1 1 .3 1 .3 1 1 1 1 1 .3\"), s(\"hh*16\").velocity(\"[1 .4 .7 .4]*4\").gain(.5), chord(\"<Dm7 G7>\").rootNotes(2).struct(\"x ~ ~ ~ ~ ~ x ~ ~ ~ x ~ ~ ~ ~ ~\").s(\"fingerbass\").lpf(800), chord(\"<Dm7 G7>\").voicing().struct(\"x*16\").s(\"cleangtr\").velocity(\"[.25 .25 1 .25 .25 1 .25 .25]*2\").clip(.5).gain(.6))",
+        "audible": true,
+        "diffDb": -6.5,
+        "repeatDb": -146.2,
+        "spectralDb": -7.6,
+        "spectralRepeatDb": -161.9,
+        "width": [
+          0,
+          0
+        ],
+        "levelDb": -2.1,
+        "centroidHz": [
+          3691,
+          3611
+        ],
+        "balance": [
+          0,
+          0
+        ],
+        "tail": [
+          0.4292,
+          0.3859
+        ]
+      },
+      {
+        "lesson": "U13.L02",
+        "claim": "the three ghost notes at .3 are heard in the full groove (the hook against the hook without them)",
+        "id": "tb.velocity",
+        "control": "velocity",
+        "value": "=",
+        "base": "stack(s(\"bd ~ ~ ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~ ~ ~\"), s(\"~ ~ ~ ~ sd ~ ~ ~ ~ ~ ~ ~ sd ~ ~ ~\"), s(\"hh*16\").velocity(\"[1 .4 .7 .4]*4\").gain(.5), chord(\"<Dm7 G7>\").rootNotes(2).struct(\"x ~ ~ ~ ~ ~ x ~ ~ ~ x ~ ~ ~ ~ ~\").s(\"fingerbass\").lpf(800), chord(\"<Dm7 G7>\").voicing().struct(\"x*16\").s(\"cleangtr\").velocity(\"[.25 .25 1 .25 .25 1 .25 .25]*2\").clip(.5).gain(.6))",
+        "code": "stack(s(\"bd ~ ~ ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~ ~ ~\"), s(\"~ ~ ~ ~ sd ~ ~ sd ~ sd ~ ~ sd ~ ~ sd\").velocity(\"1 1 1 1 1 1 1 .3 1 .3 1 1 1 1 1 .3\"), s(\"hh*16\").velocity(\"[1 .4 .7 .4]*4\").gain(.5), chord(\"<Dm7 G7>\").rootNotes(2).struct(\"x ~ ~ ~ ~ ~ x ~ ~ ~ x ~ ~ ~ ~ ~\").s(\"fingerbass\").lpf(800), chord(\"<Dm7 G7>\").voicing().struct(\"x*16\").s(\"cleangtr\").velocity(\"[.25 .25 1 .25 .25 1 .25 .25]*2\").clip(.5).gain(.6))",
+        "audible": true,
+        "diffDb": -14.6,
+        "repeatDb": -144.2,
+        "spectralDb": -17.7,
+        "spectralRepeatDb": -162.4,
+        "width": [
+          0,
+          0
+        ],
+        "levelDb": 0.1,
+        "centroidHz": [
+          3607,
+          3611
+        ],
+        "balance": [
+          0,
+          0
+        ],
+        "tail": [
+          0.3781,
+          0.3859
+        ]
+      },
+      {
+        "lesson": "U13.L04",
+        "claim": "six eighths as a waltz bar (three twos) against 6/8 (two threes), at 60 to the dotted quarter",
+        "id": "tb.meter.compound",
+        "control": "meter",
+        "value": "=",
+        "base": "stack(s(\"bd ~ ~ ~ ~ ~\"), s(\"~ ~ sd ~ sd ~\"), s(\"hh*6\").velocity(\"[1 .5]*3\").gain(.5), chord(\"<C^7 Am7>\").rootNotes(2).struct(\"x ~ x ~ x ~\").s(\"fingerbass\").lpf(800))",
+        "code": "stack(s(\"bd ~ ~ ~ ~ bd\"), s(\"~ ~ ~ sd ~ ~\"), s(\"hh*6\").velocity(\"[1 .5 .6]*2\").gain(.5), chord(\"<C^7 Am7>\").rootNotes(2).struct(\"x ~ ~ x ~ ~\").s(\"fingerbass\").lpf(800))",
+        "audible": true,
+        "diffDb": 1.1,
+        "repeatDb": -156.1,
+        "spectralDb": -9.6,
+        "spectralRepeatDb": -172,
+        "width": [
+          0,
+          0
+        ],
+        "levelDb": 0.4,
+        "centroidHz": [
+          5148,
+          5147
+        ],
+        "balance": [
+          0,
+          0
+        ],
+        "tail": [
+          0.1479,
+          0.1824
+        ]
+      },
+      {
+        "lesson": "U13.L05",
+        "claim": "hats in triplets and a snare roll with .ply(3)",
+        "id": "tb.ply",
+        "control": "ply",
+        "value": "=",
+        "base": "stack(s(\"bd ~ bd ~\"), s(\"~ sd ~ sd\"), s(\"hh*4\").gain(.5), chord(\"<C^7 Am7>\").rootNotes(2).struct(\"x ~ x ~\").s(\"fingerbass\").lpf(800))",
+        "code": "stack(s(\"bd ~ bd ~\"), s(\"~ sd ~ sd\").ply(\"1 1 1 3\"), s(\"hh*4\").ply(3).velocity(\"[1 .5 .6]*4\").gain(.5), chord(\"<C^7 Am7>\").rootNotes(2).struct(\"x ~ x ~\").s(\"fingerbass\").lpf(800))",
+        "audible": true,
+        "diffDb": -4.2,
+        "repeatDb": -150.2,
+        "spectralDb": -7.6,
+        "spectralRepeatDb": -167.1,
+        "width": [
+          0,
+          0
+        ],
+        "levelDb": 1.4,
+        "centroidHz": [
+          4682,
+          4700
+        ],
+        "balance": [
+          0,
+          0
+        ],
+        "tail": [
+          0,
+          0
+        ]
+      },
+      {
+        "lesson": "U14.L01",
+        "claim": "the riff on G major and on G Mixolydian: one note lower",
+        "id": "scale.mixolydian",
+        "control": "scale",
+        "value": "=",
+        "base": "stack(n(\"<[0 ~ 2 4 ~ 6 4 ~] [7 ~ 6 4 ~ 3 1 0]>\").scale(\"G3:major\").s(\"crunch\"))",
+        "code": "stack(n(\"<[0 ~ 2 4 ~ 6 4 ~] [7 ~ 6 4 ~ 3 1 0]>\").scale(\"G3:mixolydian\").s(\"crunch\"))",
+        "audible": true,
+        "diffDb": -4.8,
+        "repeatDb": "-Infinity",
+        "spectralDb": -7.9,
+        "spectralRepeatDb": "-Infinity",
+        "width": [
+          0,
+          0
+        ],
+        "levelDb": 0,
+        "centroidHz": [
+          2545,
+          2545
+        ],
+        "balance": [
+          0,
+          0
+        ],
+        "tail": [
+          0.3551,
+          0.3558
+        ]
+      },
+      {
+        "lesson": "U14.L03",
+        "claim": "D minor against D Dorian on the i–IV vamp: the raised 6th in the IV chord and the riff",
+        "id": "scale.dorian",
+        "control": "scale",
+        "value": "=",
+        "base": "stack(n(\"<[0,2,4] [3,5,7]>\").struct(\"~ x ~ x ~ ~ x ~\").scale(\"D3:minor\").s(\"rhodes\"), n(\"<[0 ~ 2 4 ~ 5 4 ~] [7 ~ 5 4 ~ 3 2 0]>\").scale(\"D4:minor\").s(\"piano\"))",
+        "code": "stack(n(\"<[0,2,4] [3,5,7]>\").struct(\"~ x ~ x ~ ~ x ~\").scale(\"D3:dorian\").s(\"rhodes\"), n(\"<[0 ~ 2 4 ~ 5 4 ~] [7 ~ 5 4 ~ 3 2 0]>\").scale(\"D4:dorian\").s(\"piano\"))",
+        "audible": true,
+        "diffDb": -4.3,
+        "repeatDb": -143.1,
+        "spectralDb": -9.1,
+        "spectralRepeatDb": -164.2,
+        "width": [
+          0.635,
+          0.659
+        ],
+        "levelDb": 0.1,
+        "centroidHz": [
+          681,
+          681
+        ],
+        "balance": [
+          0.3,
+          0.25
+        ],
+        "tail": [
+          0.3666,
+          0.3782
+        ]
+      },
+      {
+        "lesson": "U14.L04",
+        "claim": "F major against F Lydian on the pad and the piano: the raised 4th",
+        "id": "scale.lydian",
+        "control": "scale",
+        "value": "=",
+        "base": "stack(n(\"<[0,2,4] [1,3,5]>\").scale(\"F3:major\").s(\"pad\"), n(\"<[0 ~ 2 4 ~ 6 4 ~] [7 ~ 6 4 ~ 3 1 0]>\").scale(\"F4:major\").s(\"piano\"))",
+        "code": "stack(n(\"<[0,2,4] [1,3,5]>\").scale(\"F3:lydian\").s(\"pad\"), n(\"<[0 ~ 2 4 ~ 6 4 ~] [7 ~ 6 4 ~ 3 1 0]>\").scale(\"F4:lydian\").s(\"piano\"))",
+        "audible": true,
+        "diffDb": -5.4,
+        "repeatDb": -142.9,
+        "spectralDb": -10,
+        "spectralRepeatDb": -166.2,
+        "width": [
+          0.357,
+          0.364
+        ],
+        "levelDb": 0,
+        "centroidHz": [
+          3547,
+          3547
+        ],
+        "balance": [
+          0.1,
+          0.1
+        ],
+        "tail": [
+          0.408,
+          0.4064
+        ]
+      },
+      {
+        "lesson": "U14.L05",
+        "claim": "E minor's diminished ii against E Phrygian's ♭II on the guitar, three-three-two",
+        "id": "scale.phrygian",
+        "control": "scale",
+        "value": "=",
+        "base": "stack(n(\"<[0,2,4] [1,3,5]>\").scale(\"E3:minor\").struct(\"x ~ ~ x ~ ~ x ~\").s(\"acgtr\"))",
+        "code": "stack(n(\"<[0,2,4] [1,3,5]>\").scale(\"E3:phrygian\").struct(\"x ~ ~ x ~ ~ x ~\").s(\"acgtr\"))",
+        "audible": true,
+        "diffDb": -2.7,
+        "repeatDb": -147.5,
+        "spectralDb": -10.7,
+        "spectralRepeatDb": -164.5,
+        "width": [
+          0,
+          0
+        ],
+        "levelDb": 0.1,
+        "centroidHz": [
+          1592,
+          1592
+        ],
+        "balance": [
+          0,
+          0
+        ],
+        "tail": [
+          0.251,
+          0.2643
+        ]
+      },
+      {
+        "lesson": "U14.L06",
+        "claim": "the Rhodes moved left with .pan(.3) in the vamp",
+        "id": "tb.pan",
+        "control": "pan",
+        "value": "=",
+        "base": "stack(chord(\"<Dm7 Dm7>\").voicing().struct(\"~ x ~ x ~ ~ x ~\").s(\"rhodes\"), chord(\"<Dm7 Dm7>\").rootNotes(2).struct(\"x ~ ~ x ~ ~ x ~\").s(\"fingerbass\").lpf(800), n(\"<[0 ~ 2 3 ~ 4 6 ~] [7 ~ 6 4 ~ 3 2 0]>\").scale(\"D3:dorian\").s(\"cleangtr\"))",
+        "code": "stack(chord(\"<Dm7 Dm7>\").voicing().struct(\"~ x ~ x ~ ~ x ~\").s(\"rhodes\").pan(.3), chord(\"<Dm7 Dm7>\").rootNotes(2).struct(\"x ~ ~ x ~ ~ x ~\").s(\"fingerbass\").lpf(800), n(\"<[0 ~ 2 3 ~ 4 6 ~] [7 ~ 6 4 ~ 3 2 0]>\").scale(\"D3:dorian\").s(\"cleangtr\"))",
+        "audible": true,
+        "diffDb": -10.7,
+        "repeatDb": -146.6,
+        "spectralDb": -13.3,
+        "spectralRepeatDb": -167.5,
+        "width": [
+          0,
+          0.197
+        ],
+        "levelDb": -1.6,
+        "centroidHz": [
+          632,
+          629
+        ],
+        "balance": [
+          0,
+          -0.26
+        ],
+        "tail": [
+          0.3689,
+          0.376
+        ]
+      },
+      {
+        "lesson": "U14.L06",
+        "claim": "the riff doubled backwards on the right with .jux(rev)",
+        "id": "tb.jux",
+        "control": "jux",
+        "value": "=",
+        "base": "stack(chord(\"<Dm7 Dm7>\").voicing().struct(\"~ x ~ x ~ ~ x ~\").s(\"rhodes\").pan(.3), chord(\"<Dm7 Dm7>\").rootNotes(2).struct(\"x ~ ~ x ~ ~ x ~\").s(\"fingerbass\").lpf(800), n(\"<[0 ~ 2 3 ~ 4 6 ~] [7 ~ 6 4 ~ 3 2 0]>\").scale(\"D3:dorian\").s(\"cleangtr\"))",
+        "code": "stack(chord(\"<Dm7 Dm7>\").voicing().struct(\"~ x ~ x ~ ~ x ~\").s(\"rhodes\").pan(.3), chord(\"<Dm7 Dm7>\").rootNotes(2).struct(\"x ~ ~ x ~ ~ x ~\").s(\"fingerbass\").lpf(800), n(\"<[0 ~ 2 3 ~ 4 6 ~] [7 ~ 6 4 ~ 3 2 0]>\").scale(\"D3:dorian\").s(\"cleangtr\").jux(rev))",
+        "audible": true,
+        "diffDb": -4.4,
+        "repeatDb": -145.2,
+        "spectralDb": -29.2,
+        "spectralRepeatDb": -167.5,
+        "width": [
+          0.197,
+          0.53
+        ],
+        "levelDb": 0,
+        "centroidHz": [
+          629,
+          648
+        ],
+        "balance": [
+          -0.26,
+          -0.27
+        ],
+        "tail": [
+          0.376,
+          0.3407
+        ]
+      },
+      {
+        "lesson": "U15.L01",
+        "claim": "the leaning notes ♯4 and ♯5 against the plain 4 and 5",
+        "id": "tb.n.chromatic",
+        "control": "n",
+        "value": "=",
+        "base": "stack(n(\"<[4 3 4 7] [5 4 5 ~]>\").scale(\"C4:major\").s(\"piano\"), note(\"<c2 a1>\").s(\"ebass\").lpf(800))",
+        "code": "stack(n(\"<[4 3# 4 7] [5 4# 5 ~]>\").scale(\"C4:major\").s(\"piano\"), note(\"<c2 a1>\").s(\"ebass\").lpf(800))",
+        "audible": true,
+        "diffDb": -6.3,
+        "repeatDb": -146.4,
+        "spectralDb": -14.9,
+        "spectralRepeatDb": -170,
+        "width": [
+          0.422,
+          0.464
+        ],
+        "levelDb": 0.1,
+        "centroidHz": [
+          603,
+          626
+        ],
+        "balance": [
+          0.12,
+          0.16
+        ],
+        "tail": [
+          0.3243,
+          0.3304
+        ]
+      },
+      {
+        "lesson": "U17.L02",
+        "claim": "the lift: the second bar a whole step up, tune and bass",
+        "id": "tb.scale.patterned",
+        "control": "scale",
+        "value": "=",
+        "base": "stack(n(\"<[4 ~ 2 4] [2 ~ 0 ~]>\").scale(\"C4:major\").s(\"piano\"), n(\"<0 5>\").struct(\"x ~ x x\").scale(\"C2:major\").s(\"ebass\").lpf(700))",
+        "code": "stack(n(\"<[4 ~ 2 4] [2 ~ 0 ~]>\").scale(\"<C4:major D4:major>\").s(\"piano\"), n(\"<0 5>\").struct(\"x ~ x x\").scale(\"<C2:major D2:major>\").s(\"ebass\").lpf(700))",
+        "audible": true,
+        "diffDb": -0.1,
+        "repeatDb": -146.1,
+        "spectralDb": -2.6,
+        "spectralRepeatDb": -167.8,
+        "width": [
+          0.343,
+          0.311
+        ],
+        "levelDb": -0.1,
+        "centroidHz": [
+          582,
+          582
+        ],
+        "balance": [
+          0.1,
+          0.05
+        ],
+        "tail": [
+          0.2766,
+          0.2434
+        ]
+      }
+    ],
+    "tuning": {
+      "jazzgtr": [
+        {
+          "midi": 55,
+          "expectedHz": 196,
+          "hz": 196.01,
+          "cents": 0.1,
+          "octave": 0,
+          "clarity": 1,
+          "share": 0.92
+        },
+        {
+          "midi": 62,
+          "expectedHz": 293.66,
+          "hz": 294.07,
+          "cents": 2.4,
+          "octave": 0,
+          "clarity": 1,
+          "share": 0.996
+        },
+        {
+          "midi": 69,
+          "expectedHz": 440,
+          "hz": 440.64,
+          "cents": 2.5,
+          "octave": 0,
+          "clarity": 1,
+          "share": 0.995
+        }
+      ],
+      "cleangtr": [
+        {
+          "midi": 57,
+          "expectedHz": 220,
+          "hz": 219.85,
+          "cents": -1.2,
+          "octave": 0,
+          "clarity": 1,
+          "share": 0.87
+        },
+        {
+          "midi": 64,
+          "expectedHz": 329.63,
+          "hz": 329.71,
+          "cents": 0.4,
+          "octave": 0,
+          "clarity": 1,
+          "share": 0.807
+        },
+        {
+          "midi": 71,
+          "expectedHz": 493.88,
+          "hz": 493.56,
+          "cents": -1.1,
+          "octave": 0,
+          "clarity": 0.999,
+          "share": 0.87
+        }
+      ],
+      "trumpet": [
+        {
+          "midi": 60,
+          "expectedHz": 261.63,
+          "hz": 261.47,
+          "cents": -1,
+          "octave": 0,
+          "clarity": 0.995,
+          "share": 0.233
+        },
+        {
+          "midi": 67,
+          "expectedHz": 392,
+          "hz": 391.76,
+          "cents": -1,
+          "octave": 0,
+          "clarity": 0.982,
+          "share": 0.353
+        },
+        {
+          "midi": 74,
+          "expectedHz": 587.33,
+          "hz": 587.45,
+          "cents": 0.3,
+          "octave": 0,
+          "clarity": 0.996,
+          "share": 0.19
+        }
+      ],
+      "horns": [
+        {
+          "midi": 55,
+          "expectedHz": 196,
+          "hz": 196.19,
+          "cents": 1.7,
+          "octave": 0,
+          "clarity": 0.979,
+          "share": 0.395
+        },
+        {
+          "midi": 62,
+          "expectedHz": 293.66,
+          "hz": 294.52,
+          "cents": 5,
+          "octave": 0,
+          "clarity": 0.986,
+          "share": 0.33
+        },
+        {
+          "midi": 67,
+          "expectedHz": 392,
+          "hz": 392.71,
+          "cents": 3.1,
+          "octave": 0,
+          "clarity": 0.995,
+          "share": 0.717
+        }
+      ],
+      "tenor": [
+        {
+          "midi": 58,
+          "expectedHz": 233.08,
+          "hz": 233.58,
+          "cents": 3.7,
+          "octave": 0,
+          "clarity": 0.998,
+          "share": 0.907
+        },
+        {
+          "midi": 65,
+          "expectedHz": 349.23,
+          "hz": 349.63,
+          "cents": 2,
+          "octave": 0,
+          "clarity": 0.999,
+          "share": 0.613
+        },
+        {
+          "midi": 77,
+          "expectedHz": 698.46,
+          "hz": 699.84,
+          "cents": 3.4,
+          "octave": 0,
+          "clarity": 1,
+          "share": 1
+        }
+      ]
+    }
+  },
+  "bands": {
+    "rule": "one bar of each proposed Wave 6 Band (packages/strudel/e2e/wave6-bands.ts) in C (its own mode), compound Bands at 60 to the dotted quarter and the rest at 96: parts within 10 LU of each other; the mix between −32 and −14 LUFS, peak under 0 dBFS (offline, before the master limiter)",
+    "mixes": [
+      {
+        "band": "band.compound-6-8",
+        "flavour": "flavour.pop",
+        "drums": -16.5,
+        "bass": -21.1,
+        "chords": -19.8,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ ~ sd ~ ~\").gain(.7), s(\"hh*6\").velocity(\"[1 .86 .9]*2\").gain(.5)),\nn(\"<[-14 -14] [-9 -9] [-11 -11] [-10 -10]>\").scale(\"C4:major\").s(\"ebass\").lpf(800).gain(.9),\nn(\"<[-7,-5,-3] [-7,-5,-2] [-7,-4,-2] [-8,-6,-3]>\").scale(\"C4:major\").struct(\"x*6\").s(\"piano\").velocity(\"[1 .86 .9]*2\").gain(.4).pan(.42).room(.25))",
+          "lufs": -16.5,
+          "peakDb": -0.6
+        }
+      },
+      {
+        "band": "band.compound-6-8",
+        "flavour": "flavour.jazz-soul",
+        "drums": -21,
+        "bass": -24.5,
+        "chords": -30.9,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ ~ sd ~ ~\").gain(.65), s(\"rd*6\").velocity(\"[1 .86 .9]*2\").gain(.55)).bank(\"jazzkit\"),\nn(\"<[-14 -10] [-9 -12] [-11 -7] [-10 -13]>\").scale(\"C4:major\").s(\"upright\").lpf(900).gain(.9),\nn(\"<[-7,-5,-3,-2] [-9,-7,-5,-3] [-7,-6,-4,-2] [-8,-6,-4,-3]>\").scale(\"C4:major\").struct(\"x ~ ~ x ~ x\").s(\"rhodes\").velocity(\"1 .86 .9\").gain(.5).pan(.4).room(.35))",
+          "lufs": -19.4,
+          "peakDb": -4.1
+        }
+      },
+      {
+        "band": "band.compound-6-8",
+        "flavour": "flavour.indie",
+        "drums": -21.7,
+        "bass": -20.5,
+        "chords": -24.8,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ ~ sd ~ ~\").gain(.6), s(\"hh*6\").velocity(\"[1 .86 .9]*2\").gain(.25)).bank(\"LinnDrum\"),\nn(\"<[-14*6] [-9*6] [-11*6] [-10*6]>\").scale(\"C4:major\").s(\"ebass\").lpf(750).gain(.9),\nn(\"<[-7,-5,-3] [-7,-5,-2] [-7,-4,-2] [-8,-6,-3]>\").scale(\"C4:major\").struct(\"x*6\").s(\"cleangtr\").velocity(\"[1 .86 .9]*2\").gain(.4).pan(.38).room(.3))",
+          "lufs": -17.2,
+          "peakDb": -0.9
+        }
+      },
+      {
+        "band": "band.compound-6-8",
+        "flavour": "flavour.funk",
+        "drums": -24.2,
+        "bass": -24.2,
+        "chords": -29.2,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ ~ sd ~ bd\").gain(.9), s(\"hh*12\").velocity(\"[1 .86 .94 .86 .9 .86]*2\").gain(.6)).bank(\"RolandTR808\"),\nn(\"<[-14 ~ ~ -14 ~ -10] [-9 ~ ~ -9 ~ -12] [-11 ~ ~ -11 ~ -7] [-10 ~ ~ -10 ~ -13]>\").scale(\"C4:major\").s(\"fingerbass\").lpf(850).gain(.9),\nn(\"<[-7,-5,-3,-2] [-9,-7,-5,-3] [-7,-6,-4,-2] [-8,-6,-4,-3]>\").scale(\"C4:major\").struct(\"~ x x ~ x x\").s(\"clav\").velocity(\"[1 .86 .9]*2\").gain(.4).pan(.42).room(.2))",
+          "lufs": -21.1,
+          "peakDb": -2.7
+        }
+      },
+      {
+        "band": "band.compound-12-8",
+        "flavour": "flavour.pop",
+        "drums": -15.6,
+        "bass": -20.7,
+        "chords": -18.4,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ ~ sd ~ ~ bd ~ ~ sd ~ ~\").gain(.7), s(\"hh*12\").velocity(\"[1 .86 .9]*4\").gain(.5)),\nn(\"<[-14*4] [-11*4] [-14*4] [-10*4]>\").scale(\"C4:major\").s(\"ebass\").lpf(800).gain(.9),\nn(\"<[-7,-5,-3] [-7,-4,-2] [-7,-5,-3] [-8,-6,-3]>\").scale(\"C4:major\").struct(\"x*12\").s(\"piano\").velocity(\"[1 .86 .9]*4\").gain(.4).pan(.42).room(.25))",
+          "lufs": -14.8,
+          "peakDb": -0.6
+        }
+      },
+      {
+        "band": "band.compound-12-8",
+        "flavour": "flavour.jazz-soul",
+        "drums": -20.7,
+        "bass": -23.3,
+        "chords": -29.8,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ ~ sd ~ ~ bd ~ ~ sd ~ ~\").gain(.65), s(\"rd*12\").velocity(\"[1 .86 .9]*4\").gain(.55)).bank(\"jazzkit\"),\nn(\"<[-14 -12 -10 -12] [-11 -9 -7 -9] [-14 -12 -10 -12] [-10 -12 -13 -12]>\").scale(\"C4:major\").s(\"upright\").lpf(900).gain(.9),\nn(\"<[-7,-5,-3,-2] [-7,-6,-4,-2] [-7,-5,-3,-2] [-8,-6,-4,-3]>\").scale(\"C4:major\").struct(\"[x ~ ~] [x ~ x] [x ~ ~] [x ~ x]\").s(\"rhodes\").velocity(\"[1 .86 .9]*4\").gain(.5).pan(.4).room(.35))",
+          "lufs": -18.5,
+          "peakDb": -3.6
+        }
+      },
+      {
+        "band": "band.compound-12-8",
+        "flavour": "flavour.indie",
+        "drums": -21.7,
+        "bass": -20.7,
+        "chords": -24.4,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ ~ sd ~ ~ bd ~ ~ sd ~ ~\").gain(.6), s(\"hh*12\").velocity(\"[1 .86 .9]*4\").gain(.25)).bank(\"LinnDrum\"),\nn(\"<[-14*4] [-11*4] [-14*4] [-10*4]>\").scale(\"C4:major\").s(\"ebass\").lpf(750).gain(.9),\nn(\"<[-7,-5,-3] [-7,-4,-2] [-7,-5,-3] [-8,-6,-3]>\").scale(\"C4:major\").struct(\"x*12\").s(\"cleangtr\").velocity(\"[1 .86 .9]*4\").gain(.4).pan(.38).room(.3))",
+          "lufs": -16.9,
+          "peakDb": -0.9
+        }
+      },
+      {
+        "band": "band.compound-12-8",
+        "flavour": "flavour.funk",
+        "drums": -25.3,
+        "bass": -23.7,
+        "chords": -29.1,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ ~ sd ~ bd bd ~ ~ sd ~ ~\").gain(.9), s(\"hh*12\").velocity(\"[1 .86 .9]*4\").gain(.6)).bank(\"RolandTR808\"),\nn(\"<[-14 ~ ~ -14 ~ -10 -14 ~ ~ ~ ~ ~] [-11 ~ ~ -11 ~ -7 -11 ~ ~ ~ ~ ~] [-14 ~ ~ -14 ~ -10 -14 ~ ~ ~ ~ ~] [-10 ~ ~ -10 ~ -13 -10 ~ ~ ~ ~ ~]>\").scale(\"C4:major\").s(\"fingerbass\").lpf(850).gain(.9),\nn(\"<[-7,-5,-3,-2] [-7,-6,-4,-2] [-7,-5,-3,-2] [-8,-6,-4,-3]>\").scale(\"C4:major\").struct(\"[~ x x]*4\").s(\"clav\").velocity(\"[1 .86 .9]*4\").gain(.4).pan(.42).room(.2))",
+          "lufs": -21.5,
+          "peakDb": -2.3
+        }
+      },
+      {
+        "band": "band.funk-push",
+        "flavour": "flavour.pop",
+        "drums": -16,
+        "bass": -23.1,
+        "chords": -25.3,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ ~ bd ~ ~ ~ bd, ~ ~ ~ ~ sd ~ ~ sd ~ sd ~ ~ sd ~ ~ sd\").velocity(\"1 1 1 1 1 1 1 .35 1 .35 1 1 1 1 1 .35\").gain(.7), s(\"hh*16\").velocity(\"[1 .86 .94 .86]*4\").gain(.5)),\nn(\"<[-13 ~ ~ -13 ~ ~ ~ -10] [-10 ~ ~ -10 ~ ~ ~ -13]>\").scale(\"C4:major\").s(\"ebass\").lpf(800).gain(.9),\nn(\"<[-6,-4,-2] [-8,-6,-3]>\").scale(\"C4:major\").struct(\"x ~ x ~\").early(1/8).s(\"piano\").velocity(\"1 .86\").gain(.4).pan(.42).room(.25))",
+          "lufs": -15.7,
+          "peakDb": -0.8
+        }
+      },
+      {
+        "band": "band.funk-push",
+        "flavour": "flavour.jazz-soul",
+        "drums": -20.5,
+        "bass": -22.8,
+        "chords": -30.2,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ ~ bd ~ ~ ~ bd, ~ ~ ~ ~ sd ~ ~ sd ~ sd ~ ~ sd ~ ~ sd\").velocity(\"1 1 1 1 1 1 1 .35 1 .35 1 1 1 1 1 .35\").gain(.65), s(\"rd*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.55)).bank(\"jazzkit\"),\nn(\"<[-13 ~ ~ -13 ~ ~ ~ -10] [-10 ~ ~ -10 ~ ~ ~ -13]>\").scale(\"C4:major\").s(\"upright\").lpf(900).gain(.9),\nn(\"<[-7,-6,-4,-2] [-8,-6,-4,-3]>\").scale(\"C4:major\").struct(\"x ~ x ~\").early(1/8).s(\"rhodes\").velocity(\"1 .86\").gain(.5).pan(.4).room(.35))",
+          "lufs": -18.9,
+          "peakDb": -4.2
+        }
+      },
+      {
+        "band": "band.funk-push",
+        "flavour": "flavour.indie",
+        "drums": -18.5,
+        "bass": -23,
+        "chords": -27.7,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ ~ bd ~ ~ ~ bd, ~ ~ ~ ~ sd ~ ~ sd ~ sd ~ ~ sd ~ ~ sd\").velocity(\"1 1 1 1 1 1 1 .35 1 .35 1 1 1 1 1 .35\").gain(.6), s(\"hh*16\").velocity(\"[1 .86 .94 .86]*4\").gain(.25)).bank(\"LinnDrum\"),\nn(\"<[-13 ~ ~ -13 ~ ~ ~ -10] [-10 ~ ~ -10 ~ ~ ~ -13]>\").scale(\"C4:major\").s(\"ebass\").lpf(750).gain(.9),\nn(\"<[-6,-4,-2] [-8,-6,-3]>\").scale(\"C4:major\").struct(\"x ~ x ~\").early(1/8).s(\"cleangtr\").velocity(\"1 .86\").gain(.4).pan(.38).room(.3))",
+          "lufs": -17.4,
+          "peakDb": -1.4
+        }
+      },
+      {
+        "band": "band.funk-push",
+        "flavour": "flavour.funk",
+        "drums": -23.3,
+        "bass": -24.2,
+        "chords": -30.3,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ ~ bd ~ ~ ~ bd, ~ ~ ~ ~ sd ~ ~ sd ~ sd ~ ~ sd ~ ~ sd\").velocity(\"1 1 1 1 1 1 1 .35 1 .35 1 1 1 1 1 .35\").gain(.9), s(\"hh*16\").velocity(\"[1 .86 .94 .86]*4\").gain(.6)).bank(\"RolandTR808\"),\nn(\"<[-13 ~ ~ -13 ~ ~ ~ -10] [-10 ~ ~ -10 ~ ~ ~ -13]>\").scale(\"C4:major\").s(\"fingerbass\").lpf(850).gain(.9),\nn(\"<[-7,-6,-4,-2] [-8,-6,-4,-3]>\").scale(\"C4:major\").struct(\"x ~ x ~\").early(1/8).s(\"clav\").velocity(\"1 .86\").gain(.4).pan(.42).room(.2))",
+          "lufs": -21.8,
+          "peakDb": -2.8
+        }
+      },
+      {
+        "band": "band.mixolydian-rock",
+        "flavour": "flavour.pop",
+        "drums": -15.6,
+        "bass": -20.4,
+        "chords": -23.1,
+        "mix": {
+          "code": "stack(stack(s(\"bd sd [~ bd] sd\").gain(.7), s(\"hh*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.5)),\nn(\"<[-14*8] [-8*8] [-11*8] [-14*8]>\").scale(\"C4:mixolydian\").s(\"ebass\").lpf(800).gain(.9),\nn(\"<[-7,-5,-3] [-8,-6,-4] [-7,-4,-2] [-7,-5,-3]>\").scale(\"C4:mixolydian\").struct(\"x x x x\").s(\"piano\").velocity(\"1 .86 .92 .86\").gain(.4).pan(.42).room(.25))",
+          "lufs": -15.3,
+          "peakDb": -1.5
+        }
+      },
+      {
+        "band": "band.mixolydian-rock",
+        "flavour": "flavour.jazz-soul",
+        "drums": -21.7,
+        "bass": -25.2,
+        "chords": -30,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ sd [~ bd]\").gain(.65), s(\"rd*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.55)).bank(\"jazzkit\"),\nn(\"<[-14 -10] [-8 -11] [-11 -7] [-14 -10]>\").scale(\"C4:mixolydian\").s(\"upright\").lpf(900).gain(.9),\nn(\"<[-7,-5,-3,-1] [-8,-6,-4,-2] [-7,-5,-4,-2] [-7,-5,-3,-1]>\").scale(\"C4:mixolydian\").struct(\"x ~ ~ [~ x]\").s(\"rhodes\").velocity(\"1 .86\").gain(.5).pan(.4).room(.35))",
+          "lufs": -20,
+          "peakDb": -3.7
+        }
+      },
+      {
+        "band": "band.mixolydian-rock",
+        "flavour": "flavour.indie",
+        "drums": -22.9,
+        "bass": -20.4,
+        "chords": -26,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ sd ~\").gain(.6), s(\"hh*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.25)).bank(\"LinnDrum\"),\nn(\"<[-14*8] [-8*8] [-11*8] [-14*8]>\").scale(\"C4:mixolydian\").s(\"ebass\").lpf(750).gain(.9),\nn(\"<[-7,-5,-3] [-8,-6,-4] [-7,-4,-2] [-7,-5,-3]>\").scale(\"C4:mixolydian\").struct(\"x x x x\").s(\"cleangtr\").velocity(\"1 .86 .92 .86\").gain(.4).pan(.38).room(.3))",
+          "lufs": -18,
+          "peakDb": -0.9
+        }
+      },
+      {
+        "band": "band.mixolydian-rock",
+        "flavour": "flavour.funk",
+        "drums": -26.4,
+        "bass": -22.6,
+        "chords": -29.7,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ sd ~\").gain(.9), s(\"hh*16\").velocity(\"[1 .86 .94 .86]*4\").gain(.6)).bank(\"RolandTR808\"),\nn(\"<[-14 ~ -14 -10] [-8 ~ -8 -11] [-11 ~ -11 -7] [-14 ~ -14 -10]>\").scale(\"C4:mixolydian\").s(\"fingerbass\").lpf(850).gain(.9),\nn(\"<[-7,-5,-3,-1] [-8,-6,-4,-2] [-7,-5,-4,-2] [-7,-5,-3,-1]>\").scale(\"C4:mixolydian\").struct(\"~ x ~ [~ x]\").s(\"clav\").velocity(\"1 .86\").gain(.4).pan(.42).room(.2))",
+          "lufs": -21.2,
+          "peakDb": -2.7
+        }
+      },
+      {
+        "band": "band.dorian-soul",
+        "flavour": "flavour.pop",
+        "drums": -15.6,
+        "bass": -22.5,
+        "chords": -22.5,
+        "mix": {
+          "code": "stack(stack(s(\"bd sd [~ bd] sd\").gain(.7), s(\"hh*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.5)),\nn(\"<[-14 ~ -14 ~] [-11 ~ -11 ~]>\").scale(\"C4:dorian\").s(\"ebass\").lpf(800).gain(.9),\nn(\"<[-7,-5,-3] [-7,-4,-2]>\").scale(\"C4:dorian\").struct(\"x x x x\").s(\"piano\").velocity(\"1 .86 .92 .86\").gain(.4).pan(.42).room(.25))",
+          "lufs": -15.3,
+          "peakDb": -1.2
+        }
+      },
+      {
+        "band": "band.dorian-soul",
+        "flavour": "flavour.jazz-soul",
+        "drums": -21.7,
+        "bass": -23.4,
+        "chords": -29.7,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ sd [~ bd]\").gain(.65), s(\"rd*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.55)).bank(\"jazzkit\"),\nn(\"<[-14 ~ -14 -10] [-11 ~ -11 -7]>\").scale(\"C4:dorian\").s(\"upright\").lpf(900).gain(.9),\nn(\"<[-7,-5,-3,-1] [-7,-5,-4,-2]>\").scale(\"C4:dorian\").struct(\"x ~ ~ [~ x]\").s(\"rhodes\").velocity(\"1 .86\").gain(.5).pan(.4).room(.35))",
+          "lufs": -19.7,
+          "peakDb": -3.5
+        }
+      },
+      {
+        "band": "band.dorian-soul",
+        "flavour": "flavour.indie",
+        "drums": -22.9,
+        "bass": -22.5,
+        "chords": -26,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ sd ~\").gain(.6), s(\"hh*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.25)).bank(\"LinnDrum\"),\nn(\"<[-14 ~ -14 ~] [-11 ~ -11 ~]>\").scale(\"C4:dorian\").s(\"ebass\").lpf(750).gain(.9),\nn(\"<[-7,-5,-3] [-7,-4,-2]>\").scale(\"C4:dorian\").struct(\"x x x x\").s(\"cleangtr\").velocity(\"1 .86 .92 .86\").gain(.4).pan(.38).room(.3))",
+          "lufs": -18.9,
+          "peakDb": -0.6
+        }
+      },
+      {
+        "band": "band.dorian-soul",
+        "flavour": "flavour.funk",
+        "drums": -26.4,
+        "bass": -22.6,
+        "chords": -29.8,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ sd ~\").gain(.9), s(\"hh*16\").velocity(\"[1 .86 .94 .86]*4\").gain(.6)).bank(\"RolandTR808\"),\nn(\"<[-14 ~ -14 -10] [-11 ~ -11 -7]>\").scale(\"C4:dorian\").s(\"fingerbass\").lpf(850).gain(.9),\nn(\"<[-7,-5,-3,-1] [-7,-5,-4,-2]>\").scale(\"C4:dorian\").struct(\"~ x ~ [~ x]\").s(\"clav\").velocity(\"1 .86\").gain(.4).pan(.42).room(.2))",
+          "lufs": -21.2,
+          "peakDb": -2.7
+        }
+      },
+      {
+        "band": "band.lydian-pad",
+        "flavour": "flavour.pop",
+        "drums": -17.7,
+        "bass": -21.2,
+        "chords": -27.1,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ ~ ~ ~ ~ bd ~\").gain(.7), s(\"hh*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.5)),\nn(\"<-14 -14>\").scale(\"C4:lydian\").s(\"ebass\").lpf(800).gain(.9),\nn(\"<[-7,-5,-3] [-6,-4,-2]>\").scale(\"C4:lydian\").s(\"pad\").velocity(\"<1 .9>\").gain(.35).pan(.42).room(.25))",
+          "lufs": -18.2,
+          "peakDb": -1.5
+        }
+      },
+      {
+        "band": "band.lydian-pad",
+        "flavour": "flavour.jazz-soul",
+        "drums": -24.5,
+        "bass": -28.5,
+        "chords": -27,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ ~ ~ ~ ~ bd ~\").gain(.65), s(\"rd*4\").velocity(\"1 .86 .92 .86\").gain(.55)).bank(\"jazzkit\"),\nn(\"<-14 -14>\").scale(\"C4:lydian\").s(\"upright\").lpf(900).gain(.9),\nn(\"<[-7,-5,-3] [-6,-4,-2]>\").scale(\"C4:lydian\").s(\"pad\").velocity(\"<1 .9>\").gain(.35).pan(.4).room(.35))",
+          "lufs": -21.9,
+          "peakDb": -4
+        }
+      },
+      {
+        "band": "band.lydian-pad",
+        "flavour": "flavour.indie",
+        "drums": -23.8,
+        "bass": -21.1,
+        "chords": -27.1,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ ~ ~ ~ ~ bd ~\").gain(.6), s(\"hh*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.25)).bank(\"LinnDrum\"),\nn(\"<-14 -14>\").scale(\"C4:lydian\").s(\"ebass\").lpf(750).gain(.9),\nn(\"<[-7,-5,-3] [-6,-4,-2]>\").scale(\"C4:lydian\").s(\"pad\").velocity(\"<1 .9>\").gain(.35).pan(.38).room(.3))",
+          "lufs": -18.7,
+          "peakDb": -1.3
+        }
+      },
+      {
+        "band": "band.lydian-pad",
+        "flavour": "flavour.funk",
+        "drums": -28.1,
+        "bass": -22.4,
+        "chords": -27.1,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ ~ ~ ~ ~ bd ~\").gain(.9), s(\"hh*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.6)).bank(\"RolandTR808\"),\nn(\"<-14 -14>\").scale(\"C4:lydian\").s(\"fingerbass\").lpf(850).gain(.9),\nn(\"<[-7,-5,-3] [-6,-4,-2]>\").scale(\"C4:lydian\").s(\"pad\").velocity(\"<1 .9>\").gain(.35).pan(.42).room(.2))",
+          "lufs": -20.7,
+          "peakDb": -2.3
+        }
+      },
+      {
+        "band": "band.phrygian-figure",
+        "flavour": "flavour.pop",
+        "drums": -15.5,
+        "bass": -23.3,
+        "chords": -24,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ ~ bd ~ ~ bd ~, ~ ~ ~ ~ sd ~ ~ ~\").gain(.7), s(\"hh*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.5)),\nn(\"<[-14 ~ ~ -14 ~ ~ -14 ~] [-13 ~ ~ -13 ~ ~ -13 ~]>\").scale(\"C4:phrygian\").s(\"ebass\").lpf(800).gain(.9),\nn(\"<[-5,-3,0] [-4,-2,1]>\").scale(\"C4:phrygian\").struct(\"x ~ ~ x ~ ~ x ~\").s(\"piano\").velocity(\"1 .86 .9\").gain(.4).pan(.42).room(.25))",
+          "lufs": -16.3,
+          "peakDb": -1.7
+        }
+      },
+      {
+        "band": "band.phrygian-figure",
+        "flavour": "flavour.jazz-soul",
+        "drums": -21.2,
+        "bass": -23.6,
+        "chords": -29.9,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ ~ bd ~ ~ bd ~, ~ ~ ~ ~ sd ~ ~ ~\").gain(.65), s(\"rd*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.55)).bank(\"jazzkit\"),\nn(\"<[-14 ~ ~ -14 ~ ~ -14 ~] [-13 ~ ~ -13 ~ ~ -13 ~]>\").scale(\"C4:phrygian\").s(\"upright\").lpf(900).gain(.9),\nn(\"<[-5,-3,0] [-4,-2,1]>\").scale(\"C4:phrygian\").struct(\"x ~ ~ x ~ ~ x ~\").s(\"rhodes\").velocity(\"1 .86 .9\").gain(.6).pan(.4).room(.35))",
+          "lufs": -19.1,
+          "peakDb": -3.7
+        }
+      },
+      {
+        "band": "band.phrygian-figure",
+        "flavour": "flavour.indie",
+        "drums": -20.2,
+        "bass": -23.2,
+        "chords": -29,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ ~ bd ~ ~ bd ~, ~ ~ ~ ~ sd ~ ~ ~\").gain(.6), s(\"hh*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.25)).bank(\"LinnDrum\"),\nn(\"<[-14 ~ ~ -14 ~ ~ -14 ~] [-13 ~ ~ -13 ~ ~ -13 ~]>\").scale(\"C4:phrygian\").s(\"ebass\").lpf(750).gain(.9),\nn(\"<[-5,-3,0] [-4,-2,1]>\").scale(\"C4:phrygian\").struct(\"x ~ ~ x ~ ~ x ~\").s(\"cleangtr\").velocity(\"1 .86 .9\").gain(.4).pan(.38).room(.3))",
+          "lufs": -18.1,
+          "peakDb": -1.1
+        }
+      },
+      {
+        "band": "band.phrygian-figure",
+        "flavour": "flavour.funk",
+        "drums": -24.5,
+        "bass": -24.7,
+        "chords": -32.3,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ ~ bd ~ ~ bd ~, ~ ~ ~ ~ sd ~ ~ ~\").gain(.9), s(\"hh*16\").velocity(\"[1 .86 .94 .86]*4\").gain(.6)).bank(\"RolandTR808\"),\nn(\"<[-14 ~ ~ -14 ~ ~ -14 ~] [-13 ~ ~ -13 ~ ~ -13 ~]>\").scale(\"C4:phrygian\").s(\"fingerbass\").lpf(850).gain(.9),\nn(\"<[-5,-3,0] [-4,-2,1]>\").scale(\"C4:phrygian\").struct(\"x ~ ~ x ~ ~ x ~\").s(\"clav\").velocity(\"1 .86 .9\").gain(.4).pan(.42).room(.2))",
+          "lufs": -22.1,
+          "peakDb": -2.9
+        }
+      },
+      {
+        "band": "band.applied-4bar",
+        "flavour": "flavour.pop",
+        "drums": -15.6,
+        "bass": -21.2,
+        "chords": -23.1,
+        "mix": {
+          "code": "stack(stack(s(\"bd sd [~ bd] sd\").gain(.7), s(\"hh*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.5)),\nn(\"<-14 -12 -9 [-13 -10]>\").scale(\"C4:major\").s(\"ebass\").lpf(800).gain(.9),\nn(\"<[-7,-5,-3] [-6,-5,-3#,-1] [-7,-5,-2] [[-7,-6,-4#,-2] [-8,-6,-4,-3]]>\").scale(\"C4:major\").struct(\"x x x x\").s(\"piano\").velocity(\"1 .86 .92 .86\").gain(.4).pan(.42).room(.25))",
+          "lufs": -15.7,
+          "peakDb": -0.7
+        }
+      },
+      {
+        "band": "band.applied-4bar",
+        "flavour": "flavour.jazz-soul",
+        "drums": -21.7,
+        "bass": -25.2,
+        "chords": -30.4,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ sd [~ bd]\").gain(.65), s(\"rd*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.55)).bank(\"jazzkit\"),\nn(\"<[-14 -10] [-12 -8] [-9 -12] [-13 -10]>\").scale(\"C4:major\").s(\"upright\").lpf(900).gain(.9),\nn(\"<[-7,-5,-3,-2] [-6,-5,-3#,-1] [-9,-7,-5,-3] [[-7,-6,-4#,-2] [-8,-6,-4,-3]]>\").scale(\"C4:major\").struct(\"x ~ [~ x] ~\").s(\"rhodes\").velocity(\"1 .86\").gain(.5).pan(.4).room(.35))",
+          "lufs": -20,
+          "peakDb": -4.1
+        }
+      },
+      {
+        "band": "band.applied-4bar",
+        "flavour": "flavour.indie",
+        "drums": -22.9,
+        "bass": -21.1,
+        "chords": -26,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ sd ~\").gain(.6), s(\"hh*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.25)).bank(\"LinnDrum\"),\nn(\"<-14 -12 -9 [-13 -10]>\").scale(\"C4:major\").s(\"ebass\").lpf(750).gain(.9),\nn(\"<[-7,-5,-3] [-6,-5,-3#,-1] [-7,-5,-2] [[-7,-6,-4#,-2] [-8,-6,-4,-3]]>\").scale(\"C4:major\").struct(\"x x x x\").s(\"cleangtr\").velocity(\"1 .86 .92 .86\").gain(.4).pan(.38).room(.3))",
+          "lufs": -18.1,
+          "peakDb": -0.9
+        }
+      },
+      {
+        "band": "band.applied-4bar",
+        "flavour": "flavour.funk",
+        "drums": -26.4,
+        "bass": -22.6,
+        "chords": -29.3,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ sd ~\").gain(.9), s(\"hh*16\").velocity(\"[1 .86 .94 .86]*4\").gain(.6)).bank(\"RolandTR808\"),\nn(\"<[-14 ~ -14 -10] [-12 ~ -12 -8] [-9 ~ -9 -12] [-13 ~ -10 ~]>\").scale(\"C4:major\").s(\"fingerbass\").lpf(850).gain(.9),\nn(\"<[-7,-5,-3,-2] [-6,-5,-3#,-1] [-9,-7,-5,-3] [[-7,-6,-4#,-2] [-8,-6,-4,-3]]>\").scale(\"C4:major\").struct(\"~ x [~ x] ~\").s(\"clav\").velocity(\"1 .86\").gain(.4).pan(.42).room(.2))",
+          "lufs": -21.1,
+          "peakDb": -2.7
+        }
+      },
+      {
+        "band": "band.borrowed-4bar",
+        "flavour": "flavour.pop",
+        "drums": -15.6,
+        "bass": -21.2,
+        "chords": -23.1,
+        "mix": {
+          "code": "stack(stack(s(\"bd sd [~ bd] sd\").gain(.7), s(\"hh*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.5)),\nn(\"<-14 -11 -9 -8>\").scale(\"C4:major\").add(note(\"<0 0 -1 -1>\")).s(\"ebass\").lpf(800).gain(.9),\nn(\"<[-7,-5,-3] [-7,-4,-2b] [-7,-5b,-2b] [-6,-4,-1b]>\").scale(\"C4:major\").struct(\"x x x x\").s(\"piano\").velocity(\"1 .86 .92 .86\").gain(.4).pan(.42).room(.25))",
+          "lufs": -15.7,
+          "peakDb": -0.7
+        }
+      },
+      {
+        "band": "band.borrowed-4bar",
+        "flavour": "flavour.jazz-soul",
+        "drums": -21.7,
+        "bass": -25.2,
+        "chords": -30.1,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ sd [~ bd]\").gain(.65), s(\"rd*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.55)).bank(\"jazzkit\"),\nn(\"<[-14 -10] [-11 -7] [-9 -7] [-8 -11]>\").scale(\"C4:major\").add(note(\"<0 0 [-1 0] [-1 0]>\")).s(\"upright\").lpf(900).gain(.9),\nn(\"<[-7,-5,-3,-2] [-7,-6,-4,-2b] [-7,-5b,-3,-2b] [-6,-4,-2b,-1b]>\").scale(\"C4:major\").struct(\"x ~ ~ [~ x]\").s(\"rhodes\").velocity(\"1 .86\").gain(.5).pan(.4).room(.35))",
+          "lufs": -20,
+          "peakDb": -4.1
+        }
+      },
+      {
+        "band": "band.borrowed-4bar",
+        "flavour": "flavour.indie",
+        "drums": -22.9,
+        "bass": -21.1,
+        "chords": -26,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ sd ~\").gain(.6), s(\"hh*8\").velocity(\"[1 .86 .94 .86]*2\").gain(.25)).bank(\"LinnDrum\"),\nn(\"<-14 -11 -9 -8>\").scale(\"C4:major\").add(note(\"<0 0 -1 -1>\")).s(\"ebass\").lpf(750).gain(.9),\nn(\"<[-7,-5,-3] [-7,-4,-2b] [-7,-5b,-2b] [-6,-4,-1b]>\").scale(\"C4:major\").struct(\"x x x x\").s(\"cleangtr\").velocity(\"1 .86 .92 .86\").gain(.4).pan(.38).room(.3))",
+          "lufs": -18.1,
+          "peakDb": -0.9
+        }
+      },
+      {
+        "band": "band.borrowed-4bar",
+        "flavour": "flavour.funk",
+        "drums": -26.4,
+        "bass": -22.6,
+        "chords": -29.3,
+        "mix": {
+          "code": "stack(stack(s(\"bd ~ sd ~\").gain(.9), s(\"hh*16\").velocity(\"[1 .86 .94 .86]*4\").gain(.6)).bank(\"RolandTR808\"),\nn(\"<[-14 ~ -14 -10] [-11 ~ -11 -7] [-9 ~ -9 -7] [-8 ~ -8 -11]>\").scale(\"C4:major\").add(note(\"<0 0 [-1 -1 -1 0] [-1 -1 -1 0]>\")).s(\"fingerbass\").lpf(850).gain(.9),\nn(\"<[-7,-5,-3,-2] [-7,-6,-4,-2b] [-7,-5b,-3,-2b] [-6,-4,-2b,-1b]>\").scale(\"C4:major\").struct(\"~ x ~ [~ x]\").s(\"clav\").velocity(\"1 .86\").gain(.4).pan(.42).room(.2))",
+          "lufs": -21.2,
+          "peakDb": -2.7
+        }
+      }
+    ]
+  },
+  "cfa": {
+    "rule": "the CF-A single (wave6-fixtures.ts cfaArrangement: 56 bars, 134.4 s at 100 BPM, a bridge with an applied dominant and a borrowed iv, the last chorus a whole step up) played live in the editor: the whole song at 4× its tempo on a pack that answers every audio file 700 ms late, then the lifted chorus for 8 s at its own tempo. No audio underrun (AudioContext.playbackStats), no skipped or missing sound, no main-thread stall over 200 ms, no stretch of 300 ms under −50 dBFS while the song plays, an audio-thread peak load under 0.7 where Chrome reports renderCapacity; every sound the bridge and the last chorus bring decoded before its first bar; the lifted chorus offline faster than real time (the CPU headroom)",
+    "bars": 56,
+    "seconds": 134.4,
+    "fast": {
+      "ok": true,
+      "startMs": 804,
+      "loads": [],
+      "longTasks": [],
+      "late": 0,
+      "skips": [],
+      "notFound": 0,
+      "underruns": 0,
+      "longestGapMs": 0
+    },
+    "own": {
+      "ok": true,
+      "startMs": 26,
+      "loads": [],
+      "longTasks": [],
+      "late": 0,
+      "skips": [],
+      "notFound": 0,
+      "underruns": 0,
+      "longestGapMs": 0
+    },
+    "warmed": [
+      {
+        "section": "bridge",
+        "sound": "strings",
+        "file": "v3/webaudiofontdata/sound/0480_Aspirin_sf2_file.js",
+        "doneBeforeMs": 19335
+      },
+      {
+        "section": "chorus2",
+        "sound": "horns",
+        "file": "v3/webaudiofontdata/sound/0610_FluidR3_GM_sf2_file.js",
+        "doneBeforeMs": 23408
+      },
+      {
+        "section": "chorus2",
+        "sound": "cr",
+        "file": "v3/uzu-drumkit/cr/10_cr_switchangel.wav",
+        "doneBeforeMs": 23412
+      }
+    ],
+    "offline": {
+      "audioSec": 20.2,
+      "renderMs": 10284,
+      "timings": {
+        "scheduleMs": 7934,
+        "renderMs": 2275
+      },
+      "haps": 270,
+      "realtimeFactor": 8.9
+    }
+  },
+  "earlyJazz": {
+    "rule": "the first four bars of each CF-T standard's backing (src/early-jazz.ts) at 132 BPM, R0: brushes, two-beat upright and the right hand on 2 and 4 within 10 LU of each other, the bass no more than 6 LU under the piano; the mix between −32 and −14 LUFS; no peak at 0 dBFS",
+    "songs": [
+      {
+        "title": "Five Foot Two",
+        "drums": {
+          "lufs": -24.7,
+          "peakDb": -8.5,
+          "haps": 48
+        },
+        "bass": {
+          "lufs": -22.8,
+          "peakDb": -11.2,
+          "haps": 8
+        },
+        "chords": {
+          "lufs": -22.2,
+          "peakDb": -6.9,
+          "haps": 30
+        },
+        "all": {
+          "lufs": -18.9,
+          "peakDb": -2.9,
+          "haps": 86
+        }
+      },
+      {
+        "title": "Ain't She Sweet",
+        "drums": {
+          "lufs": -24.7,
+          "peakDb": -8.5,
+          "haps": 48
+        },
+        "bass": {
+          "lufs": -23,
+          "peakDb": -11.2,
+          "haps": 8
+        },
+        "chords": {
+          "lufs": -22.1,
+          "peakDb": -8,
+          "haps": 30
+        },
+        "all": {
+          "lufs": -19,
+          "peakDb": -4.5,
+          "haps": 86
+        }
+      },
+      {
+        "title": "Bye Bye Blackbird",
+        "drums": {
+          "lufs": -24.7,
+          "peakDb": -8.5,
+          "haps": 48
+        },
+        "bass": {
+          "lufs": -22.8,
+          "peakDb": -11.2,
+          "haps": 8
+        },
+        "chords": {
+          "lufs": -22.7,
+          "peakDb": -8.2,
+          "haps": 28
+        },
+        "all": {
+          "lufs": -19.2,
+          "peakDb": -3.9,
+          "haps": 84
+        }
+      }
+    ]
+  },
+  "lift": {
+    "rule": "band.axis-4bar under a learner tune whose key plan rises a whole step at bar 2, bass and chords only, at 96 BPM: the worst high-frequency jump in the 150 ms after the change is no more than 3 dB over the same Band in one key at the same bar line; no 50 ms around the change falls 20 dB under the bar before it; no clipping",
+    "rows": [
+      {
+        "flavour": "flavour.pop",
+        "lift": true,
+        "changeDb": 9.7,
+        "startDb": 2.2,
+        "levelsDb": [
+          -21.9,
+          -22.6,
+          -23,
+          -22.1,
+          -19.7,
+          -19.8,
+          -20.4,
+          -19.6,
+          -19.7,
+          -20,
+          -21.9
+        ],
+        "peakDb": -6.8
+      },
+      {
+        "flavour": "flavour.pop",
+        "lift": false,
+        "changeDb": 9.5,
+        "startDb": 2.2,
+        "levelsDb": [
+          -21.9,
+          -22.6,
+          -23,
+          -22.1,
+          -19.2,
+          -19.5,
+          -20.3,
+          -20.3,
+          -19.4,
+          -19.5,
+          -20.3
+        ],
+        "peakDb": -6.8
+      },
+      {
+        "flavour": "flavour.jazz-soul",
+        "lift": true,
+        "changeDb": 6.6,
+        "startDb": 3.2,
+        "levelsDb": [
+          -29.7,
+          -30,
+          -30,
+          -29.8,
+          -20,
+          -17.8,
+          -20.3,
+          -23,
+          -27.1,
+          -29.2,
+          -30.7
+        ],
+        "peakDb": -11.1
+      },
+      {
+        "flavour": "flavour.jazz-soul",
+        "lift": false,
+        "changeDb": 7.3,
+        "startDb": 3.2,
+        "levelsDb": [
+          -29.7,
+          -30,
+          -30,
+          -29.8,
+          -21.1,
+          -17.4,
+          -19.5,
+          -21.7,
+          -25.2,
+          -28.1,
+          -29.6
+        ],
+        "peakDb": -11
+      },
+      {
+        "flavour": "flavour.indie",
+        "lift": true,
+        "changeDb": 13.1,
+        "startDb": 2.4,
+        "levelsDb": [
+          -23.9,
+          -24.3,
+          -23.8,
+          -23.1,
+          -20.4,
+          -19.1,
+          -19.5,
+          -19.8,
+          -20.9,
+          -20.2,
+          -20.7
+        ],
+        "peakDb": -8.7
+      },
+      {
+        "flavour": "flavour.indie",
+        "lift": false,
+        "changeDb": 11.5,
+        "startDb": 2.4,
+        "levelsDb": [
+          -23.9,
+          -24.3,
+          -23.8,
+          -23.1,
+          -20.1,
+          -19.4,
+          -19.5,
+          -20,
+          -20.8,
+          -21,
+          -20.7
+        ],
+        "peakDb": -8.8
+      },
+      {
+        "flavour": "flavour.funk",
+        "lift": true,
+        "changeDb": 3.6,
+        "startDb": 4.8,
+        "levelsDb": [
+          -23.2,
+          -22.8,
+          -22.3,
+          -22.1,
+          -21.3,
+          -22.9,
+          -22.5,
+          -23.6,
+          -23.1,
+          -23.7,
+          -23
+        ],
+        "peakDb": -10.2
+      },
+      {
+        "flavour": "flavour.funk",
+        "lift": false,
+        "changeDb": 3.7,
+        "startDb": 4.8,
+        "levelsDb": [
+          -23.2,
+          -22.8,
+          -22.3,
+          -22.1,
+          -21.5,
+          -22.4,
+          -22.7,
+          -23.1,
+          -23.4,
+          -23.5,
+          -23.4
+        ],
+        "peakDb": -11
+      }
+    ]
+  },
+  "sevenths": {
+    "rule": "per sound and voicing (default dictionary, close stack from C3, left hand): two qualities a half step apart in one voice differ by more than −12 dB of the chord and sit within 3 LU of each other (an ear step compares them by their notes, not their level); the five qualities struck in turn (half a second each) within ±3 LU of the piano's phrase in the same voicing (±5 LU for the close stack from C3, low in every instrument's range); no peak at 0 dBFS. (A chord held alone for a second is not matched across sounds: the piano's E4–G4 samples decay 4–6 LU under its C4, so a held piano chord reads quieter than its phrase.)",
+    "qualities": [
+      "^7",
+      "7",
+      "m7",
+      "m7b5",
+      "o7"
+    ],
+    "rows": [
+      {
+        "sound": "piano",
+        "voicing": "default",
+        "lufs": [
+          -23.6,
+          -21.9,
+          -23.4,
+          -23.4,
+          -20.4
+        ],
+        "peak": [
+          -4.2,
+          -3.6,
+          -2.9,
+          -2.6,
+          -1.5
+        ],
+        "pairDb": {
+          "^7|7": 0.6,
+          "7|m7": -0.7,
+          "m7|m7b5": -3.7,
+          "m7b5|o7": 0.6
+        },
+        "pairLu": {
+          "^7|7": 1.7,
+          "7|m7": 1.5,
+          "m7|m7b5": 0,
+          "m7b5|o7": 3
+        },
+        "phraseLufs": -15.4,
+        "phrasePeak": -1.7
+      },
+      {
+        "sound": "piano",
+        "voicing": "close",
+        "lufs": [
+          -21.1,
+          -22,
+          -22.2,
+          -22,
+          -21.9
+        ],
+        "peak": [
+          -3.6,
+          -4.4,
+          -3.5,
+          -5,
+          -3.6
+        ],
+        "pairDb": {
+          "^7|7": -3.8,
+          "7|m7": -1.8,
+          "m7|m7b5": -3.4,
+          "m7b5|o7": -4.9
+        },
+        "pairLu": {
+          "^7|7": 0.9,
+          "7|m7": 0.2,
+          "m7|m7b5": 0.2,
+          "m7b5|o7": 0.1
+        },
+        "phraseLufs": -16,
+        "phrasePeak": -2.5
+      },
+      {
+        "sound": "piano",
+        "voicing": "lefthand",
+        "lufs": [
+          -23.1,
+          -24.4,
+          -24.3,
+          -23.9,
+          -22.2
+        ],
+        "peak": [
+          -2.6,
+          -4.4,
+          -4.9,
+          -5,
+          -2.4
+        ],
+        "pairDb": {
+          "^7|7": 0,
+          "7|m7": 0,
+          "m7|m7b5": 1.9,
+          "m7b5|o7": -0.3
+        },
+        "pairLu": {
+          "^7|7": 1.3,
+          "7|m7": 0.1,
+          "m7|m7b5": 0.4,
+          "m7b5|o7": 1.7
+        },
+        "phraseLufs": -16.2,
+        "phrasePeak": -2
+      },
+      {
+        "sound": "rhodes",
+        "voicing": "default",
+        "lufs": [
+          -17.4,
+          -17.2,
+          -16.1,
+          -16.1,
+          -16.3
+        ],
+        "peak": [
+          -8.3,
+          -8.1,
+          -6.7,
+          -6.4,
+          -7.7
+        ],
+        "pairDb": {
+          "^7|7": -0.4,
+          "7|m7": -2.7,
+          "m7|m7b5": -2.9,
+          "m7b5|o7": -0.8
+        },
+        "pairLu": {
+          "^7|7": 0.2,
+          "7|m7": 1.1,
+          "m7|m7b5": 0,
+          "m7b5|o7": 0.2
+        },
+        "phraseLufs": -14.9,
+        "phrasePeak": -6.4
+      },
+      {
+        "sound": "rhodes",
+        "voicing": "close",
+        "lufs": [
+          -21.2,
+          -22.3,
+          -22.2,
+          -22.3,
+          -22.4
+        ],
+        "peak": [
+          -11.8,
+          -13,
+          -12.7,
+          -12.1,
+          -12.8
+        ],
+        "pairDb": {
+          "^7|7": -1.6,
+          "7|m7": -5.2,
+          "m7|m7b5": -1.9,
+          "m7b5|o7": -2
+        },
+        "pairLu": {
+          "^7|7": 1.1,
+          "7|m7": 0.1,
+          "m7|m7b5": 0.1,
+          "m7b5|o7": 0.1
+        },
+        "phraseLufs": -20.7,
+        "phrasePeak": -11.8
+      },
+      {
+        "sound": "rhodes",
+        "voicing": "lefthand",
+        "lufs": [
+          -17.9,
+          -18.5,
+          -18.4,
+          -16.7,
+          -17.3
+        ],
+        "peak": [
+          -8.4,
+          -8.4,
+          -9.1,
+          -6.9,
+          -7.3
+        ],
+        "pairDb": {
+          "^7|7": 0.3,
+          "7|m7": 1,
+          "m7|m7b5": 1.3,
+          "m7b5|o7": -0.1
+        },
+        "pairLu": {
+          "^7|7": 0.6,
+          "7|m7": 0.1,
+          "m7|m7b5": 1.7,
+          "m7b5|o7": 0.6
+        },
+        "phraseLufs": -16.1,
+        "phrasePeak": -6.9
+      },
+      {
+        "sound": "organ",
+        "voicing": "default",
+        "lufs": [
+          -17.6,
+          -17.8,
+          -17.9,
+          -17.9,
+          -17.7
+        ],
+        "peak": [
+          -5.8,
+          -6.5,
+          -6.3,
+          -7.3,
+          -6.5
+        ],
+        "pairDb": {
+          "^7|7": 0.9,
+          "7|m7": -1.4,
+          "m7|m7b5": -2.9,
+          "m7b5|o7": 2.2
+        },
+        "pairLu": {
+          "^7|7": 0.2,
+          "7|m7": 0.1,
+          "m7|m7b5": 0,
+          "m7b5|o7": 0.2
+        },
+        "phraseLufs": -16.1,
+        "phrasePeak": -5.8
+      },
+      {
+        "sound": "organ",
+        "voicing": "close",
+        "lufs": [
+          -17.2,
+          -17.3,
+          -17.2,
+          -17.3,
+          -17.3
+        ],
+        "peak": [
+          -7,
+          -5.6,
+          -6.5,
+          -5.9,
+          -6.3
+        ],
+        "pairDb": {
+          "^7|7": -3.5,
+          "7|m7": -3,
+          "m7|m7b5": -3.3,
+          "m7b5|o7": -3.5
+        },
+        "pairLu": {
+          "^7|7": 0.1,
+          "7|m7": 0.1,
+          "m7|m7b5": 0.1,
+          "m7b5|o7": 0
+        },
+        "phraseLufs": -15.2,
+        "phrasePeak": -5.6
+      },
+      {
+        "sound": "organ",
+        "voicing": "lefthand",
+        "lufs": [
+          -17.9,
+          -17.8,
+          -17.8,
+          -17.7,
+          -17.8
+        ],
+        "peak": [
+          -5.8,
+          -6.9,
+          -6.1,
+          -6.3,
+          -6.3
+        ],
+        "pairDb": {
+          "^7|7": 0.1,
+          "7|m7": -0.3,
+          "m7|m7b5": 2.4,
+          "m7b5|o7": 1
+        },
+        "pairLu": {
+          "^7|7": 0.1,
+          "7|m7": 0,
+          "m7|m7b5": 0.1,
+          "m7b5|o7": 0.1
+        },
+        "phraseLufs": -15.9,
+        "phrasePeak": -5.8
+      },
+      {
+        "sound": "jazzgtr",
+        "voicing": "default",
+        "lufs": [
+          -17.7,
+          -16,
+          -16.7,
+          -16.7,
+          -16.9
+        ],
+        "peak": [
+          -2.8,
+          -2.5,
+          -2.6,
+          -1.1,
+          -2.9
+        ],
+        "pairDb": {
+          "^7|7": 0.5,
+          "7|m7": -1.5,
+          "m7|m7b5": -4.3,
+          "m7b5|o7": 0.7
+        },
+        "pairLu": {
+          "^7|7": 1.7,
+          "7|m7": 0.7,
+          "m7|m7b5": 0,
+          "m7b5|o7": 0.2
+        },
+        "phraseLufs": -13.4,
+        "phrasePeak": -1.1
+      },
+      {
+        "sound": "jazzgtr",
+        "voicing": "close",
+        "lufs": [
+          -15.6,
+          -15.6,
+          -15.5,
+          -15.5,
+          -15.4
+        ],
+        "peak": [
+          -3.5,
+          -3.2,
+          -4.1,
+          -3.6,
+          -3.2
+        ],
+        "pairDb": {
+          "^7|7": -3.6,
+          "7|m7": -2.4,
+          "m7|m7b5": -3.5,
+          "m7b5|o7": -3.6
+        },
+        "pairLu": {
+          "^7|7": 0,
+          "7|m7": 0.1,
+          "m7|m7b5": 0,
+          "m7b5|o7": 0.1
+        },
+        "phraseLufs": -12.8,
+        "phrasePeak": -3.2
+      },
+      {
+        "sound": "jazzgtr",
+        "voicing": "lefthand",
+        "lufs": [
+          -18.9,
+          -19,
+          -18.8,
+          -18.6,
+          -19.8
+        ],
+        "peak": [
+          -4.4,
+          -5.2,
+          -4.7,
+          -4,
+          -4.9
+        ],
+        "pairDb": {
+          "^7|7": 1.5,
+          "7|m7": -1.2,
+          "m7|m7b5": 1.9,
+          "m7b5|o7": -0.1
+        },
+        "pairLu": {
+          "^7|7": 0.1,
+          "7|m7": 0.2,
+          "m7|m7b5": 0.2,
+          "m7b5|o7": 1.2
+        },
+        "phraseLufs": -15.3,
+        "phrasePeak": -4
+      },
+      {
+        "sound": "cleangtr",
+        "voicing": "default",
+        "lufs": [
+          -18.6,
+          -16.9,
+          -17.7,
+          -17.6,
+          -17.5
+        ],
+        "peak": [
+          -5.2,
+          -4.5,
+          -5.3,
+          -3.6,
+          -5.2
+        ],
+        "pairDb": {
+          "^7|7": -1.5,
+          "7|m7": -2.1,
+          "m7|m7b5": -6.4,
+          "m7b5|o7": -1
+        },
+        "pairLu": {
+          "^7|7": 1.7,
+          "7|m7": 0.8,
+          "m7|m7b5": 0.1,
+          "m7b5|o7": 0.1
+        },
+        "phraseLufs": -14.6,
+        "phrasePeak": -3.6
+      },
+      {
+        "sound": "cleangtr",
+        "voicing": "close",
+        "lufs": [
+          -17,
+          -17.1,
+          -17,
+          -17.1,
+          -17.2
+        ],
+        "peak": [
+          -6.3,
+          -6.4,
+          -5.6,
+          -6.4,
+          -6.6
+        ],
+        "pairDb": {
+          "^7|7": -4.8,
+          "7|m7": -4.3,
+          "m7|m7b5": -4.3,
+          "m7b5|o7": -4.5
+        },
+        "pairLu": {
+          "^7|7": 0.1,
+          "7|m7": 0.1,
+          "m7|m7b5": 0.1,
+          "m7b5|o7": 0.1
+        },
+        "phraseLufs": -15,
+        "phrasePeak": -5.6
+      },
+      {
+        "sound": "cleangtr",
+        "voicing": "lefthand",
+        "lufs": [
+          -18.2,
+          -18.2,
+          -18.1,
+          -19.5,
+          -18.5
+        ],
+        "peak": [
+          -6.7,
+          -5.3,
+          -7.1,
+          -4.9,
+          -6.6
+        ],
+        "pairDb": {
+          "^7|7": -1.4,
+          "7|m7": -2,
+          "m7|m7b5": -0.4,
+          "m7b5|o7": -2.4
+        },
+        "pairLu": {
+          "^7|7": 0,
+          "7|m7": 0.1,
+          "m7|m7b5": 1.4,
+          "m7b5|o7": 1
+        },
+        "phraseLufs": -15.9,
+        "phrasePeak": -4.9
+      },
+      {
+        "sound": "pad",
+        "voicing": "default",
+        "lufs": [
+          -16.5,
+          -15.1,
+          -15.2,
+          -15.3,
+          -15.1
+        ],
+        "peak": [
+          -6.4,
+          -4.5,
+          -5.1,
+          -4,
+          -6
+        ],
+        "pairDb": {
+          "^7|7": 0,
+          "7|m7": -1.2,
+          "m7|m7b5": -4,
+          "m7b5|o7": 0.8
+        },
+        "pairLu": {
+          "^7|7": 1.4,
+          "7|m7": 0.1,
+          "m7|m7b5": 0.1,
+          "m7b5|o7": 0.2
+        },
+        "phraseLufs": -14.8,
+        "phrasePeak": -4
+      },
+      {
+        "sound": "pad",
+        "voicing": "close",
+        "lufs": [
+          -16.1,
+          -16,
+          -16.1,
+          -16.2,
+          -16.1
+        ],
+        "peak": [
+          -6.1,
+          -6.3,
+          -5.4,
+          -5.8,
+          -6.7
+        ],
+        "pairDb": {
+          "^7|7": -2.9,
+          "7|m7": -3,
+          "m7|m7b5": -2.9,
+          "m7b5|o7": -2.8
+        },
+        "pairLu": {
+          "^7|7": 0.1,
+          "7|m7": 0.1,
+          "m7|m7b5": 0.1,
+          "m7b5|o7": 0.1
+        },
+        "phraseLufs": -15.8,
+        "phrasePeak": -5.8
+      },
+      {
+        "sound": "pad",
+        "voicing": "lefthand",
+        "lufs": [
+          -16,
+          -16.1,
+          -16.1,
+          -16.3,
+          -16.2
+        ],
+        "peak": [
+          -6.3,
+          -7.1,
+          -7.1,
+          -4.9,
+          -6.7
+        ],
+        "pairDb": {
+          "^7|7": 0,
+          "7|m7": -0.5,
+          "m7|m7b5": 1.6,
+          "m7b5|o7": -0.1
+        },
+        "pairLu": {
+          "^7|7": 0.1,
+          "7|m7": 0,
+          "m7|m7b5": 0.2,
+          "m7b5|o7": 0.1
+        },
+        "phraseLufs": -15.6,
+        "phrasePeak": -4.9
+      }
+    ]
+  },
+  "velocity": {
+    "rule": "velocity is linear gain on every sound: .4 is −7.96 dB and .3 is −10.46 dB within ±0.3 dB; in U13.L02's hook (96 BPM: kick, snare, accented hats, finger bass, Rhodes; ghosts on the 'a' of 2, the 'e' of 3 and the 'a' of 4) each ghost note at .3 and at .4 carries more than −20 dB of everything else in its 60 ms and sits 6 dB or more under the backbeat",
+    "mapping": [
+      {
+        "id": "default sd",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "default hh",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "default bd",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "jazzkit sd",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "jazzkit hh",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "jazzkit bd",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "LinnDrum sd",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "LinnDrum hh",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "LinnDrum bd",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "RolandTR808 sd",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "RolandTR808 hh",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "RolandTR808 bd",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "RolandTR909 sd",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "RolandTR909 hh",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "RolandTR909 bd",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "piano",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "rhodes",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "clav",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "cleangtr",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "organ",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "ebass",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "fingerbass",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      },
+      {
+        "id": "upright",
+        "v0.4": -7.96,
+        "v0.3": -10.46
+      }
+    ],
+    "inGroove": [
+      {
+        "kit": "default",
+        "0.3": {
+          "diffDb": -14.4,
+          "overMixDb": [
+            10.7,
+            1.1,
+            21
+          ],
+          "underAccentDb": [
+            -10.5,
+            -10.5,
+            -10.5
+          ],
+          "peakDb": -0.5
+        },
+        "0.4": {
+          "diffDb": -11.9,
+          "overMixDb": [
+            13.2,
+            3.6,
+            23.5
+          ],
+          "underAccentDb": [
+            -8,
+            -8,
+            -8
+          ],
+          "peakDb": -0.5
+        }
+      },
+      {
+        "kit": "jazzkit",
+        "0.3": {
+          "diffDb": -18.3,
+          "overMixDb": [
+            6.2,
+            -7.2,
+            14.8
+          ],
+          "underAccentDb": [
+            -10.4,
+            -10.4,
+            -10.4
+          ],
+          "peakDb": -5.1
+        },
+        "0.4": {
+          "diffDb": -15.8,
+          "overMixDb": [
+            8.7,
+            -4.7,
+            17.3
+          ],
+          "underAccentDb": [
+            -7.9,
+            -7.9,
+            -7.9
+          ],
+          "peakDb": -5.1
+        }
+      },
+      {
+        "kit": "LinnDrum",
+        "0.3": {
+          "diffDb": -14,
+          "overMixDb": [
+            7.9,
+            0,
+            7.9
+          ],
+          "underAccentDb": [
+            -10.5,
+            -10.5,
+            -10.5
+          ],
+          "peakDb": 2
+        },
+        "0.4": {
+          "diffDb": -11.5,
+          "overMixDb": [
+            10.4,
+            2.5,
+            10.4
+          ],
+          "underAccentDb": [
+            -8,
+            -8,
+            -8
+          ],
+          "peakDb": 2
+        }
+      },
+      {
+        "kit": "RolandTR808",
+        "0.3": {
+          "diffDb": -16.3,
+          "overMixDb": [
+            10.6,
+            -7.5,
+            12.3
+          ],
+          "underAccentDb": [
+            -10.5,
+            -10.5,
+            -10.5
+          ],
+          "peakDb": -4
+        },
+        "0.4": {
+          "diffDb": -13.8,
+          "overMixDb": [
+            13.1,
+            -5,
+            14.8
+          ],
+          "underAccentDb": [
+            -8,
+            -8,
+            -8
+          ],
+          "peakDb": -4
+        }
+      },
+      {
+        "kit": "RolandTR909",
+        "0.3": {
+          "diffDb": -21.2,
+          "overMixDb": [
+            5.8,
+            -5.5,
+            6.2
+          ],
+          "underAccentDb": [
+            -10.4,
+            -10.4,
+            -10.4
+          ],
+          "peakDb": 1.2
+        },
+        "0.4": {
+          "diffDb": -18.7,
+          "overMixDb": [
+            8.3,
+            -3,
+            8.7
+          ],
+          "underAccentDb": [
+            -7.9,
+            -7.9,
+            -7.9
+          ],
+          "peakDb": 1.2
+        }
+      }
+    ]
+  }
+}

@@ -76,6 +76,7 @@ export function bindFamily<L extends LevelParams = LevelParams>(def: FamilyDef<L
         openCategories: opts.openCategories,
         previous: opts.previous as Trial<Answer> | undefined,
         def,
+        ...(opts.mode ? { mode: opts.mode } : {}),
       };
       const body = gen.generate(ctx);
       return { seed: rng.seed, family: def.id, level: levelNo, category, ...body } as Trial<Answer>;
@@ -433,10 +434,88 @@ export function generateTrial<E = Answer>(
       category: spec.category,
       openCategories,
       ...(previous ? { previous } : {}),
+      ...(spec.mode ? { mode: spec.mode } : {}),
     },
   );
   if (spec.sungResolution) trial.params = { ...trial.params, sungResolution: true };
   return trial;
+}
+
+/** Whether a key is minor-like (a minor 3rd above its tonic): natural, harmonic and melodic minor, Dorian, Phrygian. */
+const minorLike = (key: KeySpec | undefined): boolean =>
+  key !== undefined &&
+  ["minor", "harmonic minor", "melodic minor", "dorian", "phrygian", "minor pentatonic", "blues"].includes(
+    key.mode,
+  );
+
+/**
+ * The key mode an authored degree pad commits a step to (d8): `"minor"` when it offers ♭3 and no 3 (U10.L04 S6:
+ * 1 2 ♭3 4 5 ♭6 ♭7), `"major"` when it offers 3 and no ♭3, `undefined` when it offers both or neither (a
+ * chromatic pad, or a pad that does not reach the 3rd) and so fits either. A lesson host passes it to
+ * `stepTrialSpec` so that the trial never asks for a degree the pad does not have.
+ */
+export function padMode(set: readonly string[]): "major" | "minor" | undefined {
+  const flat3 = set.includes("b3");
+  const natural3 = set.includes("3");
+  if (flat3 === natural3) return undefined;
+  return flat3 ? "minor" : "major";
+}
+
+/**
+ * The trial a lesson step's generator stimulus plays (`stimulus: { src: "generator", family, level }`), as a
+ * `TrialSpec` for `generateTrial`: one of the level's open categories, chosen by the seed.
+ *
+ * With `mode` (the step's key mode, d8) the trial is in a key of that mode: the categories that cannot give one
+ * are left out (each is probed with the family's own generator) and the generator is told the mode, so a category
+ * that has both follows it. U10.L04 S6 "Hear the minor bass" (A minor, a minor degree pad) therefore draws the
+ * bass under a minor loop or a bass line in a minor key, never a major-key loop. A family with nothing in that
+ * mode is left as it is, and without `mode` nothing is restricted.
+ */
+export function stepTrialSpec(
+  family: DrillFamilyRuntime,
+  args: {
+    level: number;
+    seed: number;
+    openCategories: readonly string[];
+    mode?: "major" | "minor";
+    profile?: LearnerProfile;
+  },
+): TrialSpec {
+  const def = family.def;
+  const levelNo = Math.max(1, Math.min(def.levels.length, args.level));
+  const cur = levelParams(def, levelNo);
+  let pool = openCategoriesOf(cur, args.openCategories);
+  const mode = args.mode;
+  if (mode) {
+    const fits = (category: string): boolean => {
+      const probe = generateTrial(
+        family,
+        {
+          index: 0,
+          family: def.id,
+          level: levelNo,
+          category,
+          seed: hashString(`${def.id}|probe|${category}`),
+          mode,
+        },
+        args.profile ?? DEFAULT_PROFILE,
+        args.openCategories,
+      );
+      const key = probe.params.key as KeySpec | undefined;
+      return key !== undefined && minorLike(key) === (mode === "minor");
+    };
+    const inMode = pool.filter(fits);
+    if (inMode.length > 0) pool = inMode;
+  }
+  const category = pool[args.seed % Math.max(1, pool.length)] ?? cur.categories[0] ?? "";
+  return {
+    index: 0,
+    family: def.id,
+    level: levelNo,
+    category,
+    seed: args.seed,
+    ...(mode ? { mode } : {}),
+  };
 }
 
 /**

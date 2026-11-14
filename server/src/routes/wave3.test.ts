@@ -163,6 +163,7 @@ describe("Today's done state on the server and one open session per learner day 
     expect(day0).toEqual({
       day: "2026-11-11",
       open: null,
+      openSessions: [],
       ended: [],
       doneForToday: false,
       summarySessionId: null,
@@ -236,6 +237,7 @@ describe("Today's done state on the server and one open session per learner day 
     expect(await ok<SessionDay>("GET", "/api/session/day")).toEqual({
       day: "2026-11-11",
       open: null,
+      openSessions: [],
       ended: [],
       doneForToday: true,
       summarySessionId: null, // its Coda lives in the onboarding flow

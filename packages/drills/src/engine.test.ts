@@ -91,7 +91,8 @@ describe("registry", () => {
     expect(createRegistry(FAMILIES, DECKS).families().length).toBe(FAMILIES.length);
     expect(FAMILIES.every((f) => !isPendingGenerator(f.generator))).toBe(true);
     expect(() => reg.family("fam.nope.x")).toThrow(/unknown/);
-    expect(reg.decks().length).toBe(3);
+    // Twelve since contracts 1.6 promoted the nine written decks (three before).
+    expect(reg.decks().length).toBe(12);
     expect(() => bindFamily({ ...fam("fam.pit.compare"), generator: "nope" })).toThrow(/unknown generator/);
   });
   test("category skills", () => {

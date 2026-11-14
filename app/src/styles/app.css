@@ -223,6 +223,14 @@
   scroll-behavior: auto !important;
 }
 
+/* A key hint inside an accent-filled control (the primary button's "⏎") is never dimmed: at 70 % opacity it read
+   4.0:1 on Paper and 4.4:1 on Bark, under AA for 12 px text (found by the Wave 6 consistency pass on Today and the
+   Coda). Unlayered, so it holds over an `opacity-*` utility; `Kbd tone="onAccent"` (kit) draws the same on purpose. */
+.bg-accent kbd {
+  opacity: 1;
+  color: var(--oak-on-accent);
+}
+
 /* The /dev tool pages (workbench playground, Listen QA, telemetry, QA) sit on the same 24 px page gutter as
    every other page instead of touching the nav rail. */
 @layer components {

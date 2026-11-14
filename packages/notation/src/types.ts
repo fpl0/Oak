@@ -74,6 +74,17 @@ export interface NotationInput {
    */
   swing?: SwingSpec;
   /**
+   * Wave 6 (U13): the grid the lesson declares, in steps per bar (8, 12, 16, 24: the unit of a `grid` answer's
+   * `stepsPerBar`). Every onset and end is moved to the nearest step before the bar is written, so a push or a
+   * lazy hit made with `.early()` / `.late()` is engraved where a reader would write it: `.late(1/32)` on a
+   * sixteen-step grid stays on its sixteenth, `.early(.02)` on its beat. A note exactly between two steps goes to
+   * the metrically stronger one (the step with the smaller denominator; the earlier one when they tie); a note never
+   * becomes shorter than one step. The Score is exact on that grid (`approximate` stays false) unless two notes of
+   * one track land on the same step: then it warns (`snapped-to-grid`) and is approximate. Absent: no snapping; a
+   * rhythm finer than a 32nd is snapped to 1/16 and reported, as before.
+   */
+  grid?: number;
+  /**
    * The piece declares a pickup (contracts §6.11): cycle 0 is "the pickup bar" (bar 0) and bar numbers start at 1
    * on cycle 1. With `startBar` 0 bar 0 is engraved as a partial measure holding only the pickup (leading rests in
    * bar 0 are not drawn, a drum count-in before the pickup is left out); a later page (`startBar` > 0) only takes
@@ -225,6 +236,8 @@ export interface Score {
   tempoBpm?: number;
   /** "Swing 8ths" or "Swing 16ths" when the input declared a swing. */
   swingText?: string;
+  /** The declared grid the notes were moved to (`NotationInput.grid`), in steps per bar. */
+  grid?: number;
   staves: Staff[];
   bars: number;
   startBar: number;

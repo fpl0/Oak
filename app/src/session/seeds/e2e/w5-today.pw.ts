@@ -195,7 +195,12 @@ test("past X2: the edge of what's written — a review day with Studio and the g
   const errors = watch(page);
   await seed(request, "X2 released");
   const plan = await api<{ kind: string; mapItemId: string | null }>(request, "GET", "/api/session/today");
-  // U12.L02 is not written: past X2 every day is a review day until it is (wave5.md §6 "X2 released").
+  // Wave 6 writes U12–U17: the day after X2 is a lesson again, and the core has no unwritten edge left. Today after
+  // the core (never an edge, never empty) is w6-today.pw.ts "the day after the ending".
+  test.skip(
+    plan.kind !== "review",
+    "U12 is written now: no edge of the written course before the end of the core",
+  );
   expect(plan.kind).toBe("review");
   await useUiPrefs(page, { theme: "paper" });
   const open = async (p: Page) => {

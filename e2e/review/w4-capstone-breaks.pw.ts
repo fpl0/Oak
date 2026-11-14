@@ -1,5 +1,6 @@
 // Wave 4 review (review:journey): a capstone day broken on purpose. C2.S1 from Today: the chords written and saved,
-// then the page reloaded in the middle of the session, then the same capstone opened in a second tab. Defect found
+// then the page reloaded in the middle of the session, then the same capstone opened in a second tab (which, since
+// d21, starts its own session from Today). Defect found
 // and fixed: after the reload the resume card said "The draft doesn't run as it is" for a draft that runs. It
 // played the draft through the pattern player's default lint (the content profile), which refuses a part named
 // `melody:`; the learner's own code is now linted as Studio lints it (session/playback.ts), and it plays.
@@ -41,11 +42,14 @@ test("C2.S1: reload mid-session, then a second tab", async ({ page, context, req
   await expect(ws).toBeVisible({ timeout: 60_000 });
   await expect(page.locator(".cm-content").first()).toContainText("[5,7,9]", { timeout: 30_000 });
 
-  // The same capstone in a second tab: the same resume card, the same draft.
+  // The same capstone in a second tab. A tab starts its own session (d21: no joining the open one); its New block
+  // is the same capstone session, and it resumes the same draft from the top.
   const other = await context.newPage();
   await quietHmr(other);
   const p2 = watch(other);
-  await other.goto("/session");
+  await today(other);
+  await startSession(other);
+  await skipWarmup(other);
   await expect(other.getByTestId("capstone-resume")).toBeVisible({ timeout: 60_000 });
   await expect(other.getByTestId("resume-bar")).toHaveText(/Bar \d+ of 8/, { timeout: 30_000 });
   await other.getByTestId("resume-continue").click();

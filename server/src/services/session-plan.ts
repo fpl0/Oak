@@ -42,6 +42,8 @@ export interface SessionPlanCoursePort {
   history(): SessionId[];
   /** CF-T is open (U15.L01 completed) and its next unfinished session, or `null`. */
   nextCftSession(): SessionId | null;
+  /** CF-T's title as Today shows it. */
+  cftTitle?(): string;
   /** How many gym sessions the learner has started (the next is `GYM.(n+1)`). */
   gymCount(): number;
   hasAudioProject(): boolean;
@@ -69,6 +71,15 @@ export interface SessionPlanCoursePort {
   sideLesson?(
     plan: Pick<SessionPlan, "kind" | "returning" | "day" | "targetMinutes">,
   ): SessionPlan["sideLesson"];
+  /**
+   * Wave 6 (d19): reviews-only sessions ended since the last transcription session. They count towards the
+   * every-5th-session slot, so the gym goes on when there is no new lesson to offer.
+   */
+  reviewSessionsSinceTranscription?(): number;
+  /** Wave 6 (wave6.md §5.5): where the core stands. Absent: `in-progress`. */
+  coreStage?(): NonNullable<SessionPlan["core"]>;
+  /** Wave 6 (wave6.md §5.3): the open tracks with no lesson to start, in one line; `null` when there is none. */
+  planTracks?(): SessionPlan["tracks"];
 }
 export interface SessionPlanLearnerPort {
   profile(): { targetMinutes: 15 | 20 | 25; timeZone: string; rolloverHour: number };
@@ -126,15 +137,26 @@ const capstoneSessionNo = (id: string): number | null => {
  * except that a capstone in progress is never interrupted and an `X#` session that is next anyway takes
  * the slot. The rule does not run in the advanced tracks.
  */
-export function transcriptionSlotDue(history: readonly string[], next: string | null): boolean {
+export function transcriptionSlotDue(
+  history: readonly string[],
+  next: string | null,
+  /** d19: reviews-only sessions since the last transcription session count as sessions too. */
+  reviewSessions = 0,
+  /**
+   * `false` once the core is complete (wave6.md §5.5): the sessions of the core are behind the learner, and the
+   * every-5th-session slot goes on over the reviews-only sessions since (the day after session 185 is a review day).
+   */
+  coreCounts = true,
+): boolean {
   // `null`: no other map item can be offered today (the next lessons are not written yet): the slot still runs.
   if (next !== null && !isCoreItem(next)) return false;
-  const count = sessionsSinceTranscription(history);
-  if (count === null) return false;
+  const core = sessionsSinceTranscription(history);
+  if (core === null) return false;
+  const count = coreCounts ? core : 0;
   if (next !== null && /^X\d+\.S\d+$/.test(next)) return false;
   const n = next === null ? null : capstoneSessionNo(next);
   if (n !== null && n > 1) return false;
-  return count >= GYM.slotEvery;
+  return count + Math.max(0, reviewSessions) >= GYM.slotEvery;
 }
 
 /**
@@ -214,12 +236,17 @@ export class SessionPlanService {
             offerLoosen: mode === "light+loosen",
           }
         : null;
+    // Wave 6: where the core stands and the tracks' line ride on every plan; `slot` is set on a slot day.
+    const core = course.coreStage?.() ?? "in-progress";
     const base = {
       day,
       targetMinutes: target,
       returning,
       alternatives: course.alternatives(),
       tutorNote: learner.tutorNote(),
+      slot: null as SessionPlan["slot"],
+      tracks: course.planTracks?.() ?? null,
+      core,
     };
 
     // A Light lesson after a break of 10 days or more: the last lesson's Make with one new constraint.
@@ -245,22 +272,33 @@ export class SessionPlanService {
     // `GYM.nn` has two digits (contracts §1.2): after GYM.99 the gym is no longer scheduled.
     const gymRoom = course.gymCount() < MAX_GYM;
     const gymNote = gymRoom ? (course.capstoneGymNote?.() ?? null) : null;
-    // A transcription slot (contracts §2.5), also on a day whose next lessons are not written yet.
-    if (gymRoom && transcriptionSlotDue(course.history(), next?.id ?? null)) {
-      const cft = course.nextCftSession();
-      if (cft !== null) {
-        return {
-          ...base,
-          kind: "gym",
-          mapItemId: cft,
-          title: "Transcription: CF-T",
-          note: null,
-          warmup: this.warmup(now, WARMUP_GYM_SEC, gap),
-          main: { resumeStep: null, splitPart: null, light: null, estMinutes: MAIN_MINUTES.gym[target] },
-        };
-      }
-      return { ...base, ...this.gym(now, gap, target, gymNote) };
+    const history = course.history();
+    const reviewSessions = course.reviewSessionsSinceTranscription?.() ?? 0;
+    const coreCounts = core !== "complete";
+    const sinceLast = (coreCounts ? (sessionsSinceTranscription(history) ?? 0) : 0) + reviewSessions;
+    const cft = course.nextCftSession();
+    // A CF-T session is a capstone day (3 + work + 1, contracts §9.1) that fills the transcription slot.
+    const cftDay = (id: SessionId) => ({
+      ...base,
+      kind: "capstone" as const,
+      mapItemId: id,
+      title: course.cftTitle?.() ?? "Standard Transcription",
+      note: null,
+      slot: { fills: "cf-t" as const, sinceLast },
+      warmup: this.warmup(now, WARMUP_SHORT_SEC, gap),
+      main: { resumeStep: null, splitPart: null, light: null, estMinutes: MAIN_MINUTES.capstone[target] },
+    });
+    // A transcription slot (contracts §2.5), also on a day whose next lessons are not written yet and on a
+    // reviews-only day (d19). While CF-T is open and unfinished the slot is its next session; else a gym session.
+    if (transcriptionSlotDue(history, next?.id ?? null, reviewSessions, coreCounts)) {
+      if (cft !== null) return cftDay(cft);
+      if (gymRoom)
+        return { ...base, ...this.gym(now, gap, target, gymNote), slot: { fills: "gym", sinceLast } };
     }
+    // The lessons and checkpoints of the core are behind the learner and only CF-T is left of the map: its next
+    // session is today's (a capstone left open comes first after the core, wave6.md §5.5); it is the transcription
+    // session of its slot whenever it is worked.
+    if (next === null && cft !== null && core !== "in-progress") return cftDay(cft);
     // X1 waits for its gym sets (contracts §6.6): on a day with no other map item, schedule a gym session.
     if (next === null && gymNote !== null) return { ...base, ...this.gym(now, gap, target, gymNote) };
     if (next === null) {
@@ -299,12 +337,18 @@ export class SessionPlanService {
       };
     }
     if (next.kind === "capstone") {
+      // An `X#` session that is next anyway takes the slot (contracts §2.5).
+      const takesSlot =
+        /^X\d+\.S\d+$/.test(next.id) &&
+        sessionsSinceTranscription(history) !== null &&
+        sinceLast >= GYM.slotEvery;
       return {
         ...base,
         kind: "capstone",
         mapItemId: next.id,
         title: next.title,
         note: null,
+        slot: takesSlot ? { fills: "x", sinceLast } : null,
         warmup: this.warmup(now, WARMUP_SHORT_SEC, gap),
         main: { resumeStep: null, splitPart: null, light: null, estMinutes: MAIN_MINUTES.capstone[target] },
       };

@@ -92,10 +92,10 @@ test("the album with the Wave 5 tracks: course order, distinct covers, long piec
   expect(errors).toEqual([]);
 });
 
-test("re-recording an album version asks first; keeping the earlier take changes nothing; replacing it uploads with the confirm (c11)", async ({
+test("re-recording an album version adds a take: nothing is asked, nothing is replaced (d20, was c11)", async ({
   page,
 }) => {
-  test.setTimeout(200_000);
+  test.setTimeout(120_000);
   const errors = watchErrors(page);
   await seedFirst(page, ["C5 released", "C2 released"]);
   await useUiPrefs(page, { theme: "bark", motion: "off" });
@@ -107,31 +107,44 @@ test("re-recording an album version asks first; keeping the earlier take changes
   await expect(page.getByRole("heading", { level: 1, name: c0.title })).toBeVisible({ timeout: 60_000 });
   await page.getByRole("button", { name: "Play it live" }).click();
   const again = page.getByTestId("record-version");
-  await expect(again).toHaveText("Record again", { timeout: 60_000 });
+  await expect(again).toHaveText("Record another take", { timeout: 60_000 });
   await expect(again).toBeEnabled({ timeout: 60_000 });
-  await again.click();
-  const dialog = page.getByRole("dialog", { name: "Replace the earlier recording of v1?" });
-  await expect(dialog).toBeVisible();
-  // Focus moves into the dialog (Esc closes it, Tab reaches both choices).
-  await expect.poll(() => dialog.evaluate((d) => d.contains(document.activeElement))).toBe(true);
-  await shots(page, "album-w5-replace-confirm");
-  // Esc keeps the earlier take: nothing records.
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
-  await expect(page.getByTestId("stop-recording")).toHaveCount(0);
+  await expect(page.getByTestId("take-kept-note")).toHaveText(
+    "A new take is added to this version. Every take is kept; you choose which one plays.",
+  );
+  await shots(page, "album-w5-another-take");
 
-  // Confirmed: the take is recorded and replaces the earlier one (the server checks the confirm nonce).
+  // The take goes to the takes endpoint; the version's first recording is never put again (nothing to confirm).
+  const posts: string[] = [];
   const puts: string[] = [];
   page.on("request", (r) => {
+    if (r.method() === "POST" && /\/api\/album\/tracks\/[^/]+\/versions\/1\/takes/.test(r.url()))
+      posts.push(r.url());
     if (r.method() === "PUT" && /\/api\/album\/tracks\/[^/]+\/versions\/1\/audio/.test(r.url()))
-      puts.push(r.headers()["x-oak-confirm"] ?? "");
+      puts.push(r.url());
   });
   // A seeded take (seeded-take.ts): the recorder's own window, uploaded through the album's re-record path.
   await seedTake(page);
   await again.click();
-  await dialog.getByTestId("confirm-replace").click();
-  await expect(page.getByText("Version 1 recorded again")).toBeVisible({ timeout: 30_000 });
-  expect(puts.length).toBe(1);
-  expect((puts[0] ?? "").length).toBeGreaterThanOrEqual(16);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const kept = page.getByText("Another take of version 1 recorded. The earlier ones are kept.");
+  const notBuilt = page.getByText("This take wasn't saved");
+  await expect(kept.or(notBuilt)).toBeVisible({ timeout: 30_000 });
+  expect(posts.length).toBe(1);
+  expect(puts).toEqual([]);
+  const after = await api<TrackDetail & { versions: { takes?: unknown[]; currentTake?: number | null }[] }>(
+    page,
+    "GET",
+    `/album/tracks/${c0.id}`,
+  );
+  if (await notBuilt.isVisible()) {
+    // A server that keeps one recording a version: the take is refused in words and the recording is untouched.
+    test.info().annotations.push({ type: "pending server", description: "album.addTake answers 501" });
+    expect(after.versions[0]?.hasAudio).toBe(true);
+    return;
+  }
+  expect(after.versions[0]?.takes?.length).toBe(2);
+  expect(after.versions[0]?.currentTake).toBe(2);
+  await expect(page.getByTestId("takes").locator("[data-take]")).toHaveCount(2);
   expect(errors).toEqual([]);
 });

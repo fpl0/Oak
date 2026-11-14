@@ -169,7 +169,7 @@ export class CapstoneSessionsRepo {
 // --- the generated ladder -------------------------------------------------------------------------
 
 export interface LadderStateRow {
-  level: 1 | 2 | 3 | 4 | 5 | 6;
+  level: 1 | 2 | 3 | 4 | 5 | 6 | 8;
   realism: 0 | 1 | 2 | 3 | 4;
   updatedAt: string | null;
 }

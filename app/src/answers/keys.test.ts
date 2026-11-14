@@ -3,6 +3,9 @@ import type { Degree } from "@oak/api";
 import { evalHeadless } from "@oak/grader/testing";
 import { parseRN, rnToChord, toLeadSheet } from "@oak/theory";
 import {
+  APPLIED_KIND_RNS,
+  appliedRn,
+  appliedTargetsOf,
   beatSyllables,
   chromaticMidi,
   cycleInversion,
@@ -73,7 +76,18 @@ describe("Roman numeral palette", () => {
   });
   test("every palette numeral parses and names the chord it says (C major)", () => {
     const key = { tonic: "C", mode: "major" } as const;
-    const all = rnPalette(["triads", "sevenths", "secondary", "borrowed"]).flatMap((g) => g.buttons);
+    // The applied chords are a second pick since Wave 6 ("V7 of …"): every kind on every target.
+    const applied = APPLIED_KIND_RNS.flatMap((kind) =>
+      appliedTargetsOf(key).map((t) => {
+        const rn = appliedRn(kind, t.rn);
+        return { rn, display: rnDisplay(rn) };
+      }),
+    );
+    const all = [
+      ...rnPalette(["triads", "sevenths", "secondary", "borrowed"]).flatMap((g) => g.buttons),
+      ...applied,
+    ];
+    expect(applied).toHaveLength(20);
     const named = Object.fromEntries(
       all.map((b) => {
         const rn = parseRN(b.rn, key);

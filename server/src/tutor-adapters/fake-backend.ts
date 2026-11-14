@@ -156,14 +156,36 @@ const sleep = (ms: number, signal: AbortSignal) =>
     signal.addEventListener("abort", done, { once: true });
   });
 
+/**
+ * Wave 6 (d2): the try-it code in the piece's key. Oak's context names it (`try_code_key: A minor` or
+ * `try_code_key: C major, then D major`); the snippet uses degrees on that key's `.scale()`, so it is the same music
+ * moved home. Absent: the C major card code.
+ */
+export function fakeTryCode(oakContext: string | null | undefined): string {
+  const m = /^try_code_key: ([A-G][#b]?) ([a-z]+)/m.exec(oakContext ?? "");
+  if (m === null) return FAKE_CARD_CODE;
+  const [, tonic, mode] = m as unknown as [string, string, string];
+  return [
+    "setcpm(90/4)",
+    "",
+    `bass: n("<0 3 4 0>").scale("${tonic}2:${mode}").s("ebass")`,
+    `mel: n("<[0 2 4 2] [3 5 7 5] [4 6 8 6] [7 4 2 0]>").scale("${tonic}4:${mode}").s("piano")`,
+  ].join("\n");
+}
+
 /** A capstone review that satisfies contracts §10.6 for a piece of `bars` bars with `revisions` revisions. */
-export function fakeCapstoneReview(revisions: number, bars: number) {
+export function fakeCapstoneReview(
+  revisions: number,
+  bars: number,
+  tryCode: string = FAKE_CARD_CODE,
+  strengths: 2 | 3 = 2,
+) {
   const span = (a: number, b: number): [number, number] => [Math.min(a, bars), Math.min(b, bars)];
   const rev = (i: number) => ({
     title: i === 0 ? "Land the last phrase on 1" : "Thin the chords in bar 2",
     bars: span(i === 0 ? 3 : 2, i === 0 ? 4 : 2),
     why: "The melody ends on 5, so the loop sounds open. Ending on 1 over the tonic chord closes the phrase.",
-    tryCode: FAKE_CARD_CODE,
+    tryCode,
     skills: [],
   });
   return {
@@ -173,6 +195,15 @@ export function fakeCapstoneReview(revisions: number, bars: number) {
         text: "The melody outlines each chord above the bass, so every bar sounds settled.",
         bars: span(1, 1),
       },
+      // CF-A (strengths_wanted: 3): a third, anchored to the piece's last bars.
+      ...(strengths === 3
+        ? [
+            {
+              text: "The last phrase comes home to 1 under the home chord, so the song ends settled.",
+              bars: span(bars, bars),
+            },
+          ]
+        : []),
     ],
     revisions: Array.from({ length: revisions }, (_, i) => rev(i)),
     listeningQuestion: "Does the last bar sound finished or open when the loop comes round?",
@@ -374,6 +405,8 @@ export class FakeTutorBackend implements TutorBackend {
     const capstone = input.kind === "review-capstone";
     let revisions = capstone ? (/^(?:C[0-4]|X1)$/.test(subject.id) ? 1 : 2) : 1;
     let bars = 4;
+    // CF-A's review wants three strengths: Oak's context says so (`strengths_wanted: 3`), and so does the validator.
+    let strengths: 2 | 3 = /^strengths_wanted: 3\b/m.test(input.user.oakContext ?? "") ? 3 : 2;
     let n = 0;
     // Like a model that reads Oak's problems and resubmits: the count of revisions and the piece's length
     // are only known to the validator.
@@ -381,12 +414,16 @@ export class FakeTutorBackend implements TutorBackend {
       if (signal.aborted) throw new TutorError("aborted");
       await sleep(this.#delay * 4, signal);
       n++;
-      const raw = capstone ? fakeCapstoneReview(revisions, bars) : fakeTranscriptionReview(revisions, bars);
+      const raw = capstone
+        ? fakeCapstoneReview(revisions, bars, fakeTryCode(input.user.oakContext), strengths)
+        : fakeTranscriptionReview(revisions, bars);
       const check = await input.validate(raw, signal);
       if (check.ok) return { value: check.value, ...this.#usage(n) };
       for (const p of check.problems) {
         const need = /^revisions: need exactly (\d+)/.exec(p);
         if (need) revisions = Number(need[1]);
+        const want = /^strengths: need exactly (\d+)/.exec(p);
+        if (want) strengths = Number(want[1]) === 3 ? 3 : 2;
         const end = /past the end \((\d+) bars\)/.exec(p);
         if (end) bars = Math.max(1, Number(end[1]));
       }

@@ -16,6 +16,7 @@ import { CHECKPOINT } from "@oak/srs";
 import type { AnswerSpec, SungSummary } from "../../answers/types.ts";
 import { surfaceOf } from "../../drills/model.ts";
 import { staffAnswer } from "../../drills/staff.ts";
+import { clickCellAnswer, clickCellsOf, padAnswer } from "../../drills/wave6.ts";
 import { sungPerformance } from "../grading.ts";
 
 export interface ItemRecord {
@@ -82,6 +83,12 @@ export function familyAnswerSpec(
   /** The family, for the surfaces this table leaves to the drill runner's (code, contours, choices by label). */
   def?: FamilyDef,
 ): AnswerSpec | null {
+  // Chromatic degrees (U17.CP, `fam.deg.fet-chromatic`): the drill runner's pad, one key per pitch with the
+  // usual spelling (♯4, ♭6), never the category IDs ("deg.s4").
+  if (def?.id === "fam.deg.fet-chromatic") {
+    const s = surfaceOf(trial as Trial<unknown>, def);
+    if (s.kind === "widget") return s.spec;
+  }
   const own = ownSpec(answer, trial, categories);
   if (own || !def) return own;
   const s = surfaceOf(trial as Trial<unknown>, def);
@@ -126,7 +133,10 @@ function ownSpec(
       // Categories named by degree (`deg.5`) are the pad's keys. A family whose categories are something else
       // (intervals in a key: "3rd", "up") leaves the pad to the drill runner's surface, which knows its degrees;
       // an empty pad had no keys at all (U04.CP "Intervals in a key").
-      const set = categories.filter((c) => c.startsWith("deg.")).map((c) => c.slice(4));
+      // A raised degree's category is spelled with an `s` ("deg.s4"); the pad's key is "#4".
+      const set = categories
+        .filter((c) => c.startsWith("deg."))
+        .map((c) => c.slice(4).replace(/^s(?=\d)/, "#"));
       if (set.length === 0) return null;
       const len = trial.expected.degrees?.length ?? 1;
       return {
@@ -141,7 +151,8 @@ function ownSpec(
     case "text":
       return { ui: "text", normalize: (typeof p.textKind === "string" ? p.textKind : "free") as never };
     case "grid": {
-      const stepsPerBar = (typeof p.stepsPerBar === "number" ? p.stepsPerBar : 8) as 8 | 12 | 16;
+      // Wave 6: 6 steps for a bar of 6/8, 24 for sixteenth-note triplets (content-kit `grid.steps`).
+      const stepsPerBar = (typeof p.stepsPerBar === "number" ? p.stepsPerBar : 8) as 6 | 8 | 12 | 16 | 24;
       const bars = typeof p.gridBars === "number" ? p.gridBars : 1;
       return { ui: "grid", rows: ["hit"], stepsPerBar, bars };
     }
@@ -150,6 +161,21 @@ function ownSpec(
     default:
       return null;
   }
+}
+
+/**
+ * A widget's answer as the drill engine reads it for this trial, as the drill runner converts it (drills/model.ts
+ * `trialAnswerOf`): the steps marked on the rhythm grid of a "find the push" trial are the family's own cells
+ * (`14` → `c14`), and a chromatic degree picked on its pad key is the asked spelling of that pitch (♭6 for ♯5).
+ * Without these a right answer on the widget graded wrong in a checkpoint (U09.CP's bass and kick items).
+ */
+export function drillAnswer(a: Answer, expected?: Answer, trial?: Trial<unknown>): Answer {
+  if (!trial) return a;
+  if (a.choice && clickCellsOf(trial))
+    return { ...a, ...clickCellAnswer(a.choice.map((c) => String(c).replace(/^c(?=\d+$)/, ""))) };
+  if (trial.family === "fam.deg.fet-chromatic" && a.degrees && expected?.degrees)
+    return { ...a, degrees: padAnswer(a.degrees, expected.degrees) };
+  return a;
 }
 
 /** The drill response a family item is graded with (`gradeTrial`). */
@@ -165,7 +191,7 @@ export function familyResponse(
   trial?: Trial<unknown>,
 ): TrialResponse {
   if ("answer" in response) {
-    const a = response.answer as Answer;
+    const a = drillAnswer(response.answer as Answer, expected, trial);
     const parts = expected?.text?.length ?? 1;
     if (a.text && a.text.length === 1 && parts > 1) {
       const split = (a.text[0] as string).split(/[\s,]+/).filter(Boolean);
@@ -235,6 +261,54 @@ export function resultCopy(o: Pick<CheckpointOutcome, "passed" | "softPass">): {
     title: "Not yet",
     body: "Practice plan: two short sets for each skill below go into your next warm-ups. Retake it on another day; Studio and Practice stay open.",
   };
+}
+
+/** One advanced-track gate as a checkpoint outcome reports it (`CheckpointOutcome.gatesOpened`, contracts §4.3). */
+type OpenedGate = NonNullable<CheckpointOutcome["gatesOpened"]>[number];
+
+/** "Jazz", "Jazz and Rhythm", "Jazz, Rhythm and Sound". */
+function nameList(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/**
+ * What a pass says about the advanced tracks it opened (contracts §2.6, §4.3; wave6.md §5.3): U13.CP opens the
+ * Jazz and Rhythm tracks, U14.CP, and U17.CP a further part of Jazz. Said once, honestly: a track whose lessons
+ * are not written yet is open and still being written, never offered as something to start; and never as a turn
+ * off the road, the core goes on tomorrow either way. Tracks are named by their titles (`titles`: track ID →
+ * title, from the syllabus), never by an ID; `null` when the pass opened none.
+ */
+export function tracksOpenedCopy(
+  gates: readonly OpenedGate[] | undefined,
+  titles: ReadonlyMap<string, string>,
+): { title: string; body: string; authored: boolean } | null {
+  const open = (gates ?? []).filter((g) => g.open);
+  if (open.length === 0) return null;
+  const firstTime = open.filter((g) => g.gateId.endsWith(".main"));
+  const tracks = [...new Set((firstTime.length > 0 ? firstTime : open).map((g) => g.trackId))];
+  // By title only: a track the syllabus does not name is not printed as its ID.
+  const named = tracks
+    .map((id) => titles.get(id))
+    .filter((t): t is string => typeof t === "string" && t !== "")
+    .map((t) => t.replace(/\s+track$/i, ""));
+  const many = tracks.length > 1;
+  const names = nameList(named);
+  const authored = open.some((g) => g.lessonsAuthored > 0);
+  const title =
+    named.length === 0
+      ? "New optional lessons are open"
+      : firstTime.length > 0
+        ? `The ${names} ${many ? "tracks are" : "track is"} open`
+        : `More of the ${names} ${many ? "tracks" : "track"} is open`;
+  const what =
+    firstTime.length > 0
+      ? `${many ? "They are optional side roads" : "It is an optional side road"} off the core`
+      : "It is an optional part of that side road";
+  const body = authored
+    ? `${what}: ${firstTime.length > 0 && many ? "their" : "its"} lessons are on the course map whenever you want them. Your daily session stays on the core, and the next lesson is waiting as usual.`
+    : `${what}, and ${firstTime.length > 0 && many ? "their" : "its"} first lessons are still being written. Nothing changes today: the core goes on with your next lesson.`;
+  return { title, body, authored };
 }
 
 const KEY = (cpId: string, attemptNo: number) => `oak.checkpoint.${cpId}.${attemptNo}`;

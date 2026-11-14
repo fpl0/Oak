@@ -2,6 +2,8 @@
 import type { MeterId, NEvent, Rat } from "@oak/content-kit";
 import { R, rat } from "@oak/content-kit";
 import { METERS } from "@oak/theory";
+import type { AstNode } from "../lint/ast.ts";
+import { chainOf, numericValue, parseProgram, programInfo } from "../lint/ast.ts";
 import { median, modeOf, onsets, ratKey, toRat } from "./events.ts";
 
 export type SwingClass = "straight" | "light" | "triplet" | "hard";
@@ -95,4 +97,51 @@ export function pickSwingTrack<T extends { events: readonly NEvent[] }>(
     if (measure.n >= 4) return { candidate, measure };
   }
   return null;
+}
+
+/**
+ * The labelled tracks the code swings, with the amount and the slot `swingBy` / `swing` gives them (a slot is a
+ * cycle over the second argument: `.swingBy(1/3, 4)` swings the 8ths of a 4/4 bar). Only literal numbers count:
+ * a patterned amount is left alone. A swung line is long–short eighths, never a triplet (contracts §6.10; U13.L05
+ * teaches the difference), so rhythm views straighten it first (review:robustness, Wave 6).
+ */
+export function swungTracks(code: string): Map<string, { x: Rat; slot: Rat }> {
+  const out = new Map<string, { x: Rat; slot: Rat }>();
+  const parsed = parseProgram(code);
+  if (!parsed.ok) return out;
+  const info = programInfo(parsed.ast);
+  const consts = new Map(info.consts.map((c) => [c.name, c.init]));
+  const links = (expr: AstNode | null, depth = 0): { name: string; args: AstNode[] }[] => {
+    if (!expr || depth > 4) return [];
+    const ch = chainOf(expr);
+    const base =
+      ch.base?.type === "Identifier" ? links(consts.get(ch.base.name as string) ?? null, depth + 1) : [];
+    return [...base, ...ch.links.map((l) => ({ name: l.name, args: l.args }))];
+  };
+  for (const l of info.labels) {
+    for (const link of links(l.expr)) {
+      const amount =
+        link.name === "swingBy" ? numericValue(link.args[0] ?? null) : link.name === "swing" ? 1 / 3 : null;
+      const n = numericValue((link.name === "swingBy" ? link.args[1] : link.args[0]) ?? null);
+      if (amount === null || n === null || amount <= 0 || amount >= 1 || n <= 0 || !Number.isInteger(n))
+        continue;
+      out.set(l.label, { x: toRat(amount, 1000), slot: [1, n] as Rat });
+    }
+  }
+  return out;
+}
+
+/** `events` with every line the code swings straightened back to the grid (see `swungTracks`). */
+export function straightenSwungLines<T extends NEvent>(events: readonly T[], code: string | undefined): T[] {
+  if (!code) return [...events];
+  const swung = swungTracks(code);
+  if (swung.size === 0) return [...events];
+  const byTrack = new Map<string, T[]>();
+  for (const e of events) byTrack.set(e.track, [...(byTrack.get(e.track) ?? []), e]);
+  const out: T[] = [];
+  for (const [track, list] of byTrack) {
+    const s = swung.get(track);
+    out.push(...(s ? straightenExact(list, s.x, s.slot) : list));
+  }
+  return out;
 }

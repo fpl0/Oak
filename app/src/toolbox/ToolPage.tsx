@@ -249,11 +249,11 @@ function LiveExample({ tool }: { tool: ToolEntry }) {
   const navigate = useNavigate();
   const create = useSketchCreate();
   const { unlocked } = useUnlockedSet();
-  // Wave 5: the tools of U08–U11 and A1 play inside a short groove (demos.ts), with their panel or probe.
+  // Waves 5 and 6: the tools of U08–U17 and A1 play inside a short groove (demos.ts), with their panel or probe.
   const wave5 = toolDemo(tool.id);
   const demo = wave5?.code ?? tool.catalog.demo;
   const [code, setCode] = useState(demo);
-  const meter = demoMeter(demo);
+  const meter = wave5?.meter ?? demoMeter(demo);
   const key = demoKey(demo) as { tonic: string; mode: "major" } | null;
   // A feature's page shows the feature at work: roll and staff side by side, its panel open, its lens switch.
   const feature =
@@ -262,7 +262,7 @@ function LiveExample({ tool }: { tool: ToolEntry }) {
 
   const openInStudio = async () => {
     try {
-      const saved = await create.mutateAsync({ body: toolSketchBody(tool, code) });
+      const saved = await create.mutateAsync({ body: toolSketchBody(tool, code, wave5?.meter) });
       void navigate({ to: "/studio/$sketchId", params: { sketchId: saved.sketch.id } });
     } catch (e) {
       toast.error("Couldn't open it in the Studio", e instanceof Error ? e.message : undefined);

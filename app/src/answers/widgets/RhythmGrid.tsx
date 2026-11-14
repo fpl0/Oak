@@ -1,16 +1,25 @@
 // Rhythm grid entry (contracts §5.4 `grid`): toggle cells per subdivision, one row per drum (or one row of hits),
 // counted `1 e & a`. Arrows walk the cells (one tab stop), Space or a click toggles, `X` toggles too, `P` plays
 // the grid back through the shared adapter (`audition`). Cells are marked by their choice ID (`"6"`, `"kick:6"`).
+// Wave 6 (`grid.steps`, `meter.compound`): six steps are the six eighths of 6/8, grouped 3 + 3 and counted
+// "1 la li 2 la li"; twelve in 12/8 are four such beats; 24 are sixteenth-note triplets (or the sixteenths of
+// 12/8). The host passes the meter (`AnswerEnv.grid.meter`); the tempo then counts the dotted quarter.
 import type { DrumRole } from "@oak/api";
 import { clsx } from "clsx";
 import { Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../ui/kit/index.ts";
 import { useAnswerEnv } from "../env.tsx";
-import { gridCounts, gridToCode, rowLabel } from "../keys.ts";
+import { gridLayout, gridToCode, rowLabel } from "../keys.ts";
 import { gridSteps } from "../response.ts";
 import type { AnswerWidgetProps } from "../types.ts";
 import { AnswerFrame, KeyHint, markOf, revealedOf, SubmitHint } from "../ui.tsx";
+
+/** A step as a screen reader says it: the count syllable, or its place in the beat when the label is a dot. */
+function stepSpoken(label: string, i: number, per: number): string {
+  if (label !== "" && label !== "·") return label;
+  return i === 0 ? "the beat" : `step ${i + 1} of ${per}`;
+}
 
 export function RhythmGridAnswer(p: AnswerWidgetProps<"grid">) {
   const { spec, value, onChange, disabled, feedback } = p;
@@ -18,10 +27,17 @@ export function RhythmGridAnswer(p: AnswerWidgetProps<"grid">) {
   const root = useRef<HTMLDivElement>(null);
   const steps = gridSteps(spec);
   const rows = spec.rows as readonly (DrumRole | "hit")[];
-  const beatsPerBar = env.grid?.beatsPerBar ?? 4;
-  const bpm = env.grid?.bpm ?? 90;
-  const per = Math.max(1, Math.round(spec.stepsPerBar / beatsPerBar));
-  const counts = gridCounts(spec.stepsPerBar, spec.bars, beatsPerBar);
+  const layout = gridLayout(spec.stepsPerBar, spec.bars, {
+    ...(env.grid?.beatsPerBar !== undefined ? { beatsPerBar: env.grid.beatsPerBar } : {}),
+    ...(env.grid?.meter ? { meter: env.grid.meter } : {}),
+    ...(env.grid?.triplets ? { triplets: true } : {}),
+  });
+  const beatsPerBar = layout.beats;
+  const bpm = env.grid?.bpm ?? (layout.compound ? 60 : 90);
+  const per = layout.per;
+  const counts = layout.counts;
+  // Many steps to a bar: narrower cells, so a bar of sixteenth-note triplets still fits a lesson column.
+  const dense = spec.stepsPerBar >= 24;
   const [focus, setFocus] = useState<[number, number]>([0, 0]);
   const [head, setHead] = useState<number | null>(null);
   const correct = revealedOf<boolean[][]>(feedback);
@@ -126,7 +142,8 @@ export function RhythmGridAnswer(p: AnswerWidgetProps<"grid">) {
                     key={c}
                     scope="col"
                     className={clsx(
-                      "h-5 min-w-7 px-0 text-center text-[0.7rem] font-normal tabular-nums",
+                      "h-5 px-0 text-center font-normal tabular-nums",
+                      dense ? "min-w-6 text-[0.6rem]" : "min-w-7 text-[0.7rem]",
                       c % per === 0 ? "text-text-2" : "text-text-3",
                       head === c && "text-accent",
                     )}
@@ -171,12 +188,13 @@ export function RhythmGridAnswer(p: AnswerWidgetProps<"grid">) {
                           data-cell={`${r}:${c}`}
                           aria-pressed={on}
                           aria-disabled={disabled || undefined}
-                          aria-label={`${one ? "Hit" : rowLabel(row)} at ${counts[c] || "·"} of beat ${Math.floor((c % spec.stepsPerBar) / per) + 1}, bar ${Math.floor(c / spec.stepsPerBar) + 1}${mark ? (mark.ok ? ", right" : ", not this one") : ""}${want ? ", in the answer" : ""}`}
+                          aria-label={`${one ? "Hit" : rowLabel(row)} at ${stepSpoken(counts[c] ?? "", c % per, per)} of beat ${Math.floor((c % spec.stepsPerBar) / per) + 1}, bar ${Math.floor(c / spec.stepsPerBar) + 1}${mark ? (mark.ok ? ", right" : ", not this one") : ""}${want ? ", in the answer" : ""}`}
                           tabIndex={focus[0] === r && focus[1] === c ? 0 : -1}
                           onFocus={() => setFocus([r, c])}
                           onClick={() => toggle(r, c)}
                           className={clsx(
-                            "flex size-7 items-center justify-center rounded-[5px] border-2",
+                            "flex items-center justify-center rounded-[5px] border-2",
+                            dense ? "h-7 w-5" : "size-7",
                             on
                               ? "border-text bg-text"
                               : beatStart

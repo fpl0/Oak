@@ -7,10 +7,10 @@
 //
 // Deterministic: every draw is mulberry32(FNV-1a(seed | event key)); no Math.random, no wall clock.
 //
-// Simplifications (each named so a reader can judge the result): level gates inside a ladder are not
-// modelled (every level of a family is open once it unlocks); repair queues, debt and checkpoint
-// failure are not modelled (checkpoints and capstones are always passed); the anchor set is evidence
-// only and changes no level; a gym session gives evidence to the dictation families like a lesson.
+// Simplifications (each named so a reader can judge the result): a level opens at its gate lessons (the
+// catalog's `levelGates`), but the categories inside a level are not modelled; repair queues, debt and
+// checkpoint failure are not modelled (checkpoints and capstones are always passed); the anchor set is
+// evidence only and changes no level; a gym session gives evidence to the dictation families like a lesson.
 
 import { compositeSetSec, memberNeedsRecall, planCompositeSet } from "../composite.ts";
 import {
@@ -180,8 +180,16 @@ export interface SessionRow {
   overflowSec: number;
   /** Days since the oldest due card still undelivered after the warm-up was due (0 with none). */
   oldestUndeliveredDays: number;
+  /** The card that has waited longest among the undelivered ones, and its class (`null` with none). */
+  oldestUndelivered: { cardId: string; cls: ReviewItem["cls"] } | null;
   /** A reviews-only day planned from the same due items (`planReviewDay`), in seconds. */
   reviewDaySec: number;
+  /**
+   * The same day when the warm-up does not count against the 12-minute cap (d22): the whole day, and the part
+   * "a little more" adds after the first block.
+   */
+  reviewDayOpenSec: number;
+  reviewMoreSec: number;
   activePerceptual: number;
   deferredCards: number;
   deferredFamilies: number;
@@ -200,6 +208,9 @@ export interface SimSummary {
   deferredFamiliesP95: { all: number; perceptual: number };
   deckPending: { p95: number; atEnd: number };
   reviewDaySec: { p95: number; max: number };
+  /** d22 (the warm-up outside the cap): the whole reviews-only day, and its "a little more" part. */
+  reviewDayOpenSec: { p95: number; max: number };
+  reviewMoreSec: { p95: number; max: number };
   maxActivePerceptual: number;
   overflowSteadySec: { p95: number };
   lateDays: { p95: number };
@@ -625,6 +636,12 @@ export function simulate(srs: Srs, o: SimOptions): SimResult {
       { today, gapDays: gap, anchorFallback },
       { ...cfg, budgetSec: lessonBudget },
     );
+    const reviewDayOpen = planReviewDay(
+      due,
+      { today, gapDays: gap, anchorFallback },
+      { ...cfg, budgetSec: lessonBudget },
+      { warmupCounts: false },
+    );
 
     // (4) Run it.
     const loadByDay = new Map<number, number>();
@@ -794,10 +811,15 @@ export function simulate(srs: Srs, o: SimOptions): SimResult {
       if ((it.deferUntilDay ?? today) > today) continue;
       if (!firstOffer.has(it.cardId)) firstOffer.set(it.cardId, today);
     }
-    const oldest = Math.max(
-      0,
-      ...undelivered.map((it) => ageDays(firstOffer.get(it.cardId) ?? today, today)),
-    );
+    let oldest = 0;
+    let oldestItem: ReviewItem | null = null;
+    for (const it of undelivered) {
+      const age = ageDays(firstOffer.get(it.cardId) ?? today, today);
+      if (age > oldest) {
+        oldest = age;
+        oldestItem = it;
+      }
+    }
     const overflowSec = undelivered.filter((it) => !it.fresh).reduce((a, it) => a + it.sec, 0);
 
     // (5) The New block.
@@ -878,7 +900,10 @@ export function simulate(srs: Srs, o: SimOptions): SimResult {
       dueSec,
       overflowSec,
       oldestUndeliveredDays: oldest,
+      oldestUndelivered: oldestItem ? { cardId: oldestItem.cardId, cls: oldestItem.cls } : null,
       reviewDaySec: reviewDay.plannedSec,
+      reviewDayOpenSec: reviewDayOpen.plannedSec,
+      reviewMoreSec: reviewDayOpen.moreSec,
       activePerceptual: activeP(),
       deferredCards: deferredCount(),
       deferredFamilies: fams.filter((f) => f.card?.status === "deferred").length,
@@ -1209,6 +1234,20 @@ export function simulate(srs: Srs, o: SimOptions): SimResult {
         95,
       ),
       max: Math.max(0, ...rows.map((r) => r.reviewDaySec)),
+    },
+    reviewDayOpenSec: {
+      p95: percentile(
+        rows.map((r) => r.reviewDayOpenSec),
+        95,
+      ),
+      max: Math.max(0, ...rows.map((r) => r.reviewDayOpenSec)),
+    },
+    reviewMoreSec: {
+      p95: percentile(
+        rows.map((r) => r.reviewMoreSec),
+        95,
+      ),
+      max: Math.max(0, ...rows.map((r) => r.reviewMoreSec)),
     },
     maxActivePerceptual: Math.max(0, ...rows.map((r) => r.activePerceptual)),
     overflowSteadySec: {

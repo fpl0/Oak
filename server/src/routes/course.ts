@@ -71,7 +71,12 @@ export function courseRoutes(mount: Mounter, d: AppDeps): void {
   });
   mount("session.end", async ({ params, body }) => s.sessions.end(params.id, body, await endMeasures(d)));
 
-  mount("lessons.progress", () => s.gates.courseProgress());
+  // Wave 6 (wave6.md §5.3, §5.5): the tracks with their gates, and where the core stands.
+  mount("lessons.progress", () => ({
+    ...s.gates.courseProgress(),
+    tracks: s.tracks.list(),
+    core: s.tracks.coreStage(),
+  }));
   mount("steps.state", ({ params }) => s.course.stepState(params.id, params.stepId));
   // Wave 3 (wave3.md §5.2): a retried or double-submitted attempt with the same key counts once.
   mount("steps.attempt", ({ params, body }) => {
@@ -107,7 +112,8 @@ export function courseRoutes(mount: Mounter, d: AppDeps): void {
   mount("capstones.release", ({ params, body }) => s.release.release(params.id, body));
 
   // Wave 3 (docs/design/wave3.md §5.1): today's sessions on the server, Today's done state.
-  mount("session.day", () => s.sessions.dayState());
+  // Wave 6 (d21): `?tab=` names the calling tab; `open` is then that tab's own session.
+  mount("session.day", ({ query }) => s.sessions.dayState(query.tab));
 
   // Wave 4 (docs/design/wave4.md §5.1, §5.5, §5.6): multi-session capstones, the gym plan, the voicing gate.
   mount("capstones.sessions", ({ params }) => s.capstoneSessions.sessions(params.id));
@@ -129,4 +135,9 @@ export function courseRoutes(mount: Mounter, d: AppDeps): void {
 
   // Wave 5 (docs/design/wave5.md §5.1): the optional side lessons A1.L01–L04 and the one Today would offer next.
   mount("sideLessons.list", () => s.sideLessons.list());
+
+  // Wave 6 (docs/design/wave6.md §5.3, §5.5): the advanced tracks with their recorded gates (contracts §4.3), and
+  // where the core stands, what the learner can do and what stays open after it.
+  mount("tracks.list", () => ({ items: s.tracks.list() }));
+  mount("course.completion", () => s.tracks.completion());
 }

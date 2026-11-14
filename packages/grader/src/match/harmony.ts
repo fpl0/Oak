@@ -20,9 +20,10 @@ import { chordSlots, romanShown, romanText, slotLabel } from "../analyze/chords.
 import { locAt, mod12, num, pitched, simultaneities, sounding } from "../analyze/events.ts";
 import { keyOf } from "../analyze/key.ts";
 import { selectTrack, selectTracks, tracksOfRole } from "../analyze/tracks.ts";
+import { pushesOf } from "../analyze/wave6-views.ts";
 import { diag } from "../feedback/catalog.ts";
 import type { MatchResult, NormalizeContext, Normalized } from "../types.ts";
-import { alignFeel, clampScore, f1 } from "./common.ts";
+import { alignFeel, clampScore, f1, keyAtOnset, shiftLabel } from "./common.ts";
 
 export type HarmonyMatcher = Extract<Matcher, { m: "harmony" }>;
 export type PcsetMatcher = Extract<Matcher, { m: "pcset" }>;
@@ -113,6 +114,37 @@ const pcName = (pc: number, key: KeySpec | null): string =>
   spellMidi(60 + mod12(pc), { key }).name.replace(/-?\d+$/, "");
 
 /**
+ * The root a diminished 7th is named on (its four notes are a minor 3rd apart, so no note is its root by sound):
+ * the one whose spelling needs the fewest notes outside the key's own spelling, then the bass, then the reading's
+ * own. With D in the bass: B D F A♭ in C, G♯ B D F in A minor, never D F A♭ C♭ (U12.L03). An augmented triad
+ * keeps the reading's root (the bass), as the learner most often writes it.
+ */
+function symmetricRoot(
+  reading: { chord: { rootPc: number }; quality: ChordQuality },
+  set: readonly number[],
+  bassPc: number | null,
+  key: KeySpec | null,
+): number {
+  if (reading.quality !== "dim7") return reading.chord.rootPc;
+  const cost = (root: number): number => {
+    const c = chordOf(pcName(root, key), reading.quality);
+    const names = chordNotes(c);
+    const pcs = chordPcs(c) as number[];
+    return names.reduce(
+      (n, name, i) => n + (/(bb|##|x)$/.test(name) ? 2 : name === pcName(pcs[i] ?? 0, key) ? 0 : 1),
+      0,
+    );
+  };
+  const ranked = [...set].sort(
+    (a, b) =>
+      cost(a) - cost(b) ||
+      Number(b === bassPc) - Number(a === bassPc) ||
+      Number(b === reading.chord.rootPc) - Number(a === reading.chord.rootPc),
+  );
+  return ranked[0] ?? reading.chord.rootPc;
+}
+
+/**
  * The notes of a sounding chord, named as the chord they make: root first and spelled by that chord (C E G♯
  * for C+, B D♯ F♯ for B major), the root spelled by the key. Pitch classes that make no readable chord are
  * spelled by the key, in ascending order. "nothing" for an empty set.
@@ -122,7 +154,7 @@ export function spellChordPcs(pcs: readonly number[], bassPc: number | null, key
   if (set.length === 0) return "nothing";
   const reading = set.length >= 2 ? readChord(set, bassPc ?? (set[0] as number)) : null;
   if (reading) {
-    const chord = chordOf(pcName(reading.chord.rootPc, key), reading.quality);
+    const chord = chordOf(pcName(symmetricRoot(reading, set, bassPc, key), key), reading.quality);
     const names = chordNotes(chord);
     const pcsOf = chordPcs(chord) as number[];
     const ordered = pcsOf.map((pc, i) => ({ pc, name: names[i] })).filter((x) => set.includes(x.pc));
@@ -180,16 +212,44 @@ export function splitAtAnswerBars(t: readonly ChordSlot[], a: readonly ChordSlot
   return out;
 }
 
+/** Every reference slot cut at the bar lines inside it: one slot per bar (and per change inside a bar). */
+export function splitAtBars(t: readonly ChordSlot[]): ChordSlot[] {
+  const out: ChordSlot[] = [];
+  for (const ts of t) {
+    let from = ts.span[0];
+    for (let b = R.floor(ts.span[0]) + 1; R.lt([b, 1], ts.span[1]); b++) {
+      out.push({ ...ts, span: [from, [b, 1]] });
+      from = [b, 1];
+    }
+    out.push({ ...ts, span: [from, ts.span[1]] });
+  }
+  return out;
+}
+
+/**
+ * The answer is the reference's plain triad with a 7th or a 6th added (F7 where the key has F): not one of the
+ * two faults d11 names (a minor chord for a dominant; a plain triad for a seventh chord), so it keeps the partial
+ * credit it always had.
+ */
+function addsSeventhOnly(target: ChordId, answer: ChordId): boolean {
+  const plain = ["maj", "min", "dim", "aug"].includes(seventhOf(target.quality));
+  return plain && triadCore(target).quality === triadCore(answer).quality;
+}
+
 export function compareSlots(
   tIn: readonly ChordSlot[],
   a: readonly ChordSlot[],
   cfg: HarmonyMatcher,
-  key: KeySpec | null,
+  pieceKey: KeySpec | null,
   ctx: NormalizeContext,
 ): MatchResult {
+  const key = pieceKey;
   // Numeral-level reading (the L3/L6 ladder, X2's changes, numeral steps): per bar where the answer changes.
   const byNumeral = cfg.level === "rn" || cfg.level === "full";
-  const t = byNumeral ? splitAtAnswerBars(tIn, a) : tIn;
+  const strict = cfg.wrongQuality === "none";
+  // With `wrongQuality: "none"` every bar is judged on its own ("changes ≥ 0.85 per bar", contracts §6.6): a
+  // reference chord held over several bars is one slot per bar, so the first wrong bar is the one named.
+  const t = strict ? splitAtBars(tIn) : byNumeral ? splitAtAnswerBars(tIn, a) : tIn;
   const base = { ...LEVEL_WEIGHTS[cfg.level], ...(cfg.weights ?? {}) };
   if (!cfg.inversion) delete base.inversion;
   // A part weighted 0 is not graded at all (no credit and no message): X2's changes leave the bass to its own check.
@@ -199,15 +259,21 @@ export function compareSlots(
   const rnLabel = (rn: RomanNumeral): string => romanShown(cfg.inversion ? rn : { ...rn, inversion: 0 });
   // At triad depth a chord is read on its triad core, so an applied reading never names it: C7 in C is I7 (a
   // blues' I7), not V7/IV. The quality (the 7) is kept for the label.
+  // At seventh depth the same holds for a chord whose triad is the key's own (a blues' I7 and IV7 stay I7 and IV7);
+  // a chord from outside the key (D7 in C) keeps its applied name, V7/V.
   const rnFor = (c: ChordId, k: KeySpec): RomanNumeral => {
     const rn = romanOf(c, k);
-    if (cfg.qualityDepth !== "triad" || !rn.of) return rn;
-    return { ...romanOf({ ...c, quality: triadCore(c).quality }, k), quality: c.quality };
+    if (!rn.of) return rn;
+    const core = romanOf({ ...c, quality: triadCore(c).quality }, k);
+    if (cfg.qualityDepth !== "triad" && core.of) return rn;
+    return { ...core, quality: c.quality };
   };
   const diagnostics: Diagnostic[] = [];
   const sums = { bass: 0, root: 0, quality: 0, inversion: 0, rn: 0 };
   let totalDur = 0;
   let scoreSum = 0;
+  // Per slot of `t`: its credit (0 until a matching answer slot earns more) and its length, for the per-bar score.
+  const slotCredit: number[] = t.map(() => 0);
   const used = new Set<number>();
   const overlayAnswer: { id: string; ok: boolean }[] = [];
   const missing: NEvent[] = [];
@@ -231,6 +297,8 @@ export function compareSlots(
       return;
     }
     used.add(best);
+    // Wave 6 (`key-plan`): each bar's numerals are read in the key in force there.
+    const key = keyAtOnset(ctx, ts.span[0], pieceKey);
     const tc = ts.chord;
     const ac = as.chord;
     if (!ac) {
@@ -264,8 +332,16 @@ export function compareSlots(
       v += s[k] * wt;
       w += wt;
     }
-    const slotScore = w === 0 ? 0 : v / w;
+    // d11 (`wrongQuality: "none"`; L6, X2, L8 and CF-T changes): the right root with the wrong quality earns
+    // nothing for its bar: a minor chord for a dominant, a plain triad where the reference has a seventh.
+    const wrongQuality = strict && rootOk && "quality" in base && s.quality < 1 && !addsSeventhOnly(tc, ac);
+    const slotScore = wrongQuality ? 0 : w === 0 ? 0 : v / w;
+    if (wrongQuality) {
+      s.quality = 0;
+      s.inversion = 0;
+    }
     scoreSum += slotScore * dur;
+    slotCredit[i] = slotScore;
     for (const k of Object.keys(sums) as (keyof typeof sums)[]) sums[k] += s[k] * dur;
     for (const id of as.ids) overlayAnswer.push({ id, ok: slotScore >= 0.999 });
 
@@ -305,6 +381,21 @@ export function compareSlots(
         ((tq === "maj" && aq === "min") || (tq === "min" && aq === "maj"));
       if ((cfg.level === "rn" || cfg.level === "full") && rnA && rnT && caseOnly)
         diagnostics.push(diag("harmony.rn-case", { got: rnLabel(rnA), exp: rnLabel(rnT) }, atBar, "quality"));
+      else if (strict && rnA && rnT && tq === aq)
+        // The same triad with another 7th (or none): "right degree, but V7 is a dominant 7th, not major (V)".
+        diagnostics.push(
+          diag(
+            "harmony.rn-quality",
+            {
+              got: rnLabel(rnA),
+              exp: rnLabel(rnT),
+              gotQ: qualityWord(seventhOf(ac.quality)),
+              expQ: qualityWord(seventhOf(tc.quality)),
+            },
+            atBar,
+            "quality",
+          ),
+        );
       else if ((cfg.level === "rn" || cfg.level === "full") && rnA && rnT)
         diagnostics.push(diag("harmony.rn", { got: rnLabel(rnA), exp: rnLabel(rnT) }, atBar, "rn"));
       else
@@ -355,6 +446,20 @@ export function compareSlots(
           );
           break;
         }
+  }
+  if (strict) {
+    // d11 with contracts §6.6 "changes ≥ 0.85 per bar" (CF.md): a bar counts when EVERY chord in it is right, so
+    // one wrong chord of a two-chord bar costs the bar, not half of it (Bye Bye Blackbird bar 25). `t` is already
+    // cut at the bar lines, so each slot belongs to exactly one bar.
+    const bars = new Map<number, { credit: number; dur: number }>();
+    t.forEach((ts, i) => {
+      const bar = R.floor(ts.span[0]);
+      const b = bars.get(bar) ?? { credit: 1, dur: 0 };
+      b.credit = Math.min(b.credit, slotCredit[i] ?? 0);
+      b.dur += num(R.sub(ts.span[1], ts.span[0]));
+      bars.set(bar, b);
+    });
+    scoreSum = [...bars.values()].reduce((sum, b) => sum + b.credit * b.dur, 0);
   }
   let score = totalDur === 0 ? (a.length === 0 ? 1 : 0) : scoreSum / totalDur;
   if (dims.harmonicRhythm) score = score * 0.85 + dims.harmonicRhythm.score * 0.15;
@@ -443,6 +548,57 @@ const pcOfName = (name: string): number => mod12((noteToMidi(`${name}4`) ?? 60) 
 export const slotText = (s: ChordSlot, key: KeySpec | null): string =>
   key && s.chord ? `${slotLabel(s)} (${romanText(romanOf(s.chord, key))})` : slotLabel(s);
 
+const PUSH_WORD: Record<8 | 16, string> = { 8: "an eighth note", 16: "a sixteenth note" };
+/**
+ * The answer is the target moved in time by one constant amount (every chord, pitch classes intact): the finding
+ * that says so, with the two pushes named when both lines anticipate the beat ("your push lands a sixteenth note
+ * early; the step asks for an eighth note"). `null` when the chords themselves differ.
+ */
+function shiftedChords(
+  tp: readonly (NEvent & { midi: number })[],
+  ap: readonly (NEvent & { midi: number })[],
+  points: readonly Rat[],
+  pcsAt: (ev: readonly NEvent[], at: Rat) => number[],
+  ctx: NormalizeContext,
+): Diagnostic | null {
+  const aOn = simultaneities(ap).map((x) => x.onset);
+  if (points.length < 2 || aOn.length < 2) return null;
+  // Candidate shifts: the first answer chords against the first target chords (a pushed line has no chord at the
+  // very start, so the two lists may be one apart).
+  const candidates: Rat[] = [];
+  for (const a of aOn.slice(0, 2)) for (const t of points.slice(0, 2)) candidates.push(R.sub(a, t));
+  for (const shift of candidates) {
+    if (shift[0] === 0 || Math.abs(num(shift)) >= 1) continue;
+    let fits = 0;
+    let judged = 0;
+    // Chords moved out of the compared bars (before the first, past the last) are not judged.
+    const end = [...tp, ...ap].reduce((m, e) => Math.max(m, R.floor(e.onset) + 1), 1);
+    for (const t of points) {
+      const at = R.add(t, shift);
+      if (R.lt(at, [0, 1]) || !R.lt(at, [end, 1])) continue;
+      judged++;
+      const want = pcsAt(tp, t);
+      const got = pcsAt(ap, at);
+      if (aOn.some((x) => R.eq(x, at)) && want.length === got.length && want.every((p) => got.includes(p)))
+        fits++;
+    }
+    if (judged < 2 || fits / judged < 0.8) continue;
+    const mine = pushesOf(ap, ctx.meter)[0]?.by;
+    const theirs = pushesOf(tp, ctx.meter)[0]?.by;
+    const push =
+      mine && theirs && mine !== theirs
+        ? ` (your push lands ${PUSH_WORD[mine]} early; the step asks for ${PUSH_WORD[theirs]})`
+        : "";
+    return diag(
+      "harmony.shifted",
+      { shift: shiftLabel(shift, ctx.meter), push },
+      locAt(R.add(points[0] as Rat, shift), ctx),
+      "rhythm",
+    );
+  }
+  return null;
+}
+
 /**
  * Pitch-class sets per onset (or per target chord slot): the only matcher for `voicing()` output, which
  * differs between Strudel versions in octave, top note and note count (contracts §6.7 item 1). Per onset:
@@ -497,17 +653,26 @@ export function pcsetMatch(
     for (const id of ids) overlayAnswer.push({ id, ok: same && (!cfg.bass || bassSame) });
     if (!same) {
       missing.push(...sounding(tp, at).filter((e) => R.eq(e.onset, at) && !got.includes(mod12(e.midi))));
-      diagnostics.push(
-        diag(
-          "harmony.pcset",
-          {
-            got: spellChordPcs(got, bassAt(ap, at), key),
-            exp: spellChordPcs(want, bassAt(tp, at), key),
-          },
-          { ...where, ...(ids.length ? { noteIds: ids } : {}) },
-          "quality",
-        ),
+      const params = {
+        got: spellChordPcs(got, bassAt(ap, at), key),
+        exp: spellChordPcs(want, bassAt(tp, at), key),
+      };
+      // A chord struck several times in a bar (a Rhodes `.struct("x x x")`) is one finding for that bar: the
+      // later strokes add their notes to the first finding's marks instead of repeating its sentence (U14.L03).
+      const again = diagnostics.find(
+        (d) =>
+          d.id === "harmony.pcset" &&
+          d.where?.bar === where.bar &&
+          d.params?.got === params.got &&
+          d.params?.exp === params.exp,
       );
+      if (again) {
+        if (ids.length && again.where)
+          again.where = { ...again.where, noteIds: [...(again.where.noteIds ?? []), ...ids] };
+      } else
+        diagnostics.push(
+          diag("harmony.pcset", params, { ...where, ...(ids.length ? { noteIds: ids } : {}) }, "quality"),
+        );
     } else if (cfg.bass && !bassSame) {
       const gb = bassAt(ap, at);
       const tb = bassAt(tp, at);
@@ -524,6 +689,21 @@ export function pcsetMatch(
         ),
       );
     }
+  }
+  // The right chords at another time (U13: `.early(1/16)` where the step asks for `.early(1/8)`): one finding
+  // that says how far off they are, ahead of the per-onset ones (of which the first stays, as a note).
+  // A push of the wrong size can leave every target onset inside an answer chord of the same notes (`.early(1/4)`
+  // where the step asks for `.early(1/8)`): no pc-set differs, yet no answer chord starts where the target's do.
+  const aStarts = simultaneities(ap).map((x) => x.onset);
+  const unstruck =
+    cfg.perOnset === true &&
+    points.filter((p) => !aStarts.some((a) => R.eq(a, p))).length * 2 > points.length;
+  const moved = diagnostics.length > 0 || unstruck ? shiftedChords(tp, ap, points, pcsAt, ctx) : null;
+  if (moved) {
+    const first = diagnostics.find((d) => d.id === "harmony.pcset");
+    diagnostics.length = 0;
+    diagnostics.push(moved);
+    if (first) diagnostics.push({ ...first, severity: "info" });
   }
   // Answer onsets where the target has no chord count against the answer.
   const extraOnsets = simultaneities(ap).filter(

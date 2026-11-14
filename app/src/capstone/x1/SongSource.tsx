@@ -182,6 +182,7 @@ export function SongSource({
       aria-label="The song"
       className="flex flex-col gap-2"
       data-testid="song-source"
+      data-song={song.id}
       {...keyScope("transcription")}
     >
       <TransportControls

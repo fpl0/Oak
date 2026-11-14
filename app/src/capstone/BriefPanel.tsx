@@ -3,7 +3,7 @@
 import type { CapstoneDef, CapstoneReview, CapstoneState, FlavourId } from "@oak/api";
 import { clsx } from "clsx";
 import { Check, Circle, Lock, MessageSquareText, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Button } from "../ui/kit/Button.tsx";
 import { SegmentedControl } from "../ui/kit/Controls.tsx";
 import { Checklist } from "./Checklist.tsx";
@@ -32,6 +32,8 @@ export interface BriefPanelProps {
   checking: boolean;
   stale: boolean;
   beyond: readonly string[];
+  /** CF-A: the "Your devices so far" card, under the checklist. */
+  devices?: ReactNode;
   flavour: FlavourId;
   shipping: readonly FlavourId[];
   onFlavour(f: FlavourId): void;
@@ -88,6 +90,8 @@ export function BriefPanel(p: BriefPanelProps) {
         onBars={p.onBars}
         extras={p.extras ?? {}}
       />
+
+      {p.devices}
 
       {p.beyond.length > 0 && (
         <div role="status" className="flex gap-2 rounded-card border border-accent/30 bg-lane-in p-3 text-sm">

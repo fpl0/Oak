@@ -12,9 +12,10 @@ import { useMediaQuery } from "../../lib/use-media.ts";
 import { OakGlance as MapGlance } from "../../map/index.ts";
 import { AcornIcon, LeafIcon, RingIcon } from "../../ui/icons/index.tsx";
 import { Card, Skeleton } from "../../ui/kit/basics.tsx";
+import { capstoneDayTitle } from "../capstone-day.ts";
 import { goalGradient } from "../coda-model.ts";
 import { isWritten, unitTitleOf } from "../edge.ts";
-import { albumWindow, doneItems, nextUnlocksFrom } from "../progress-model.ts";
+import { albumStripSlots, doneItems, nextUnlocksFrom } from "../progress-model.ts";
 import { toolName as toolLabel } from "../tool-name.ts";
 
 function CardTitle({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
@@ -115,8 +116,8 @@ export function AlbumStrip() {
   const content = useContent();
   const course = useCourseProgress();
   const released = new Set((album.data?.tracks ?? []).map((t) => t.capstoneId as string | null));
-  const slots = albumWindow(
-    (content.data?.capstones ?? []).filter((c) => /^(C|X)\d+$/.test(c.id)),
+  const slots = albumStripSlots(
+    content.data?.capstones ?? [],
     (content.data?.syllabus?.defaultOrder ?? []) as readonly string[],
     released,
     3,
@@ -153,9 +154,10 @@ export function AlbumStrip() {
                   )}
                   <span
                     className="line-clamp-2 w-full break-words text-[0.75rem] leading-tight text-text-2"
-                    title={c.title}
+                    title={capstoneDayTitle(c.title)}
+                    data-slot={c.id}
                   >
-                    {c.title}
+                    {capstoneDayTitle(c.title)}
                   </span>
                   <span className="sr-only">
                     {track ? "released" : status === "locked" ? "not open yet" : status.replace("_", " ")}

@@ -286,6 +286,27 @@ describe("verdicts and bar marks", () => {
       songVerdict({ passed: true, result: result(0.95, []) }, { level: 6, span: 2, stage: "melody" }),
     ).toBe("Melody, line 2: that's it (95 %).");
   });
+  test("d12: from L5 a tune written in another key fails, and the verdict says both keys first", () => {
+    const transposed = {
+      ...result(0, []),
+      messages: [
+        { id: "melody.wrong-key", text: "Right tune, but in D major, not G major." },
+        { id: "melody.wrong-degree", text: "Bar 2, 1: 2 where the song has 5.", where: { bar: 2 } },
+      ],
+    } as unknown as GradeResult;
+    expect(songVerdict({ passed: false, result: transposed }, { level: 5, span: 1, stage: null })).toBe(
+      "Phrase 1: not yet. Right tune, but in D major, not G major. Write it in the recording's key.",
+    );
+    const chords = {
+      ...result(0.2, [1]),
+      messages: [
+        { id: "harmony.key-mismatch", text: "These chords are in F major; the recording is in C major." },
+      ],
+    } as unknown as GradeResult;
+    expect(songVerdict({ passed: false, result: chords }, { level: 6, span: null, stage: "changes" })).toBe(
+      "The changes: not yet. These chords are in F major; the recording is in C major. Write it in the recording's key.",
+    );
+  });
   test("per-bar marks on the timeline, in cycles", () => {
     const m = barMarks(result(0.6, [6]), [5, 8], true);
     expect([...m.entries()]).toEqual([

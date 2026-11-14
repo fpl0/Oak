@@ -16,7 +16,7 @@ import {
   spellMidi,
   toLeadSheet,
 } from "@oak/theory";
-import { keyName } from "./normalize.ts";
+import { chordTyped, keyName } from "./normalize.ts";
 
 type ChordId = ReturnType<typeof chordOf>;
 
@@ -73,7 +73,7 @@ const pcName = (letter: Letter, acc: Acc) => `${letter}${acc === 1 ? "#" : acc =
 export function chordParts(text: string): ChordParts | null {
   let canonical: string | null = null;
   try {
-    canonical = normalizeText("chord", text);
+    canonical = normalizeText("chord", chordTyped(text));
   } catch {
     canonical = null;
   }

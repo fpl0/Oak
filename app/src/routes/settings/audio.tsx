@@ -1,7 +1,8 @@
-// Settings › Audio (ux §2.3; contracts §8.6): volumes, a live output level meter with a test phrase, a left/right
-// output check, the limiter, what the computer reports as the output now (AirPods guidance, and a nudge to
+// Settings › Audio (ux §2.3; contracts §8.6): volumes, a live output level meter with a test phrase (measured:
+// its average level, its loudest moment and what the limiter did, Wave 6), a left/right output check, the limiter, what the computer reports as the output now (AirPods guidance, and a nudge to
 // re-measure timing when it changed), timing (with re-runs through /settings/voice/setup), and the sound pack:
 // its version, what is cached for offline use, and "Preload all".
+import { createMasterMeter, type MasterMeter } from "@oak/audio";
 import { LIMITER } from "@oak/strudel";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Music, Play } from "lucide-react";
@@ -16,7 +17,7 @@ import { Callout } from "../../ui/kit/Controls.tsx";
 import { Field, ReadOnlyRow, Section, Slider } from "../../ui/kit/Field.tsx";
 import { QueryView } from "../../ui/kit/QueryState.tsx";
 import { toast } from "../../ui/kit/Toast.tsx";
-import { outputChangeAdvice, outputChoiceOf, outputGuidance } from "../../voice/logic.ts";
+import { outputChangeAdvice, outputChoiceOf, outputGuidance, phraseReadout } from "../../voice/logic.ts";
 import { browserPackDeps, type PackStatus, packLine, readPackStatus } from "../../voice/pack-status.ts";
 import { OutputMeter } from "../../voice/panels.tsx";
 import { playAt, voiceAudio } from "../../voice/services.ts";
@@ -67,23 +68,41 @@ function OutputCheck({ onPlayed }: { onPlayed(): void }) {
   );
 }
 
-/** A short piano phrase through the master bus at practice volume, so the output meter has something to show. */
-function TestPhrase() {
+/** Seconds the test phrase is measured for: its four notes, the chord and most of the chord's ring. */
+const PHRASE_SEC = 3.2;
+
+/**
+ * A short piano phrase through the master bus at practice volume, so the output meter has something to show.
+ * While it plays, the phrase is measured sample by sample before and after the limiter (@oak/audio's Master
+ * meter, the one the single's Master card uses) and the read-out is handed to `onMeasured`.
+ */
+function TestPhrase({ onMeasured }: { onMeasured(readout: string | null): void }) {
   const [playing, setPlaying] = useState(false);
   const play = async () => {
     setPlaying(true);
+    onMeasured(null);
+    let meter: MasterMeter | null = null;
     try {
       const { oak } = await voiceAudio();
       await oak.unlock();
+      // The meter is a side branch of the bus; without AudioWorklet the phrase plays unmeasured.
+      meter = createMasterMeter(oak.ctx, { pre: oak.master.input, post: oak.master.analyser });
+      const ready = await meter.prepare().then(
+        () => true,
+        () => false,
+      );
       const at = oak.ctx.currentTime + 0.1;
+      const reading = ready ? meter.measure({ at, seconds: PHRASE_SEC }) : null;
       // C E G C′, then the chord: the range most lessons play in.
       for (const [i, note] of [60, 64, 67, 72].entries())
         playAt(oak, { s: "piano", note, gain: 0.7 }, at + i * 0.35, 0.5);
       for (const note of [48, 60, 64, 67]) playAt(oak, { s: "piano", note, gain: 0.5 }, at + 1.5, 1.6);
-      await new Promise((r) => setTimeout(r, 3300));
+      if (reading) onMeasured(phraseReadout(await reading));
+      else await new Promise((r) => setTimeout(r, PHRASE_SEC * 1000 + 100));
     } catch (e) {
       toast.error("Sound didn't start", e instanceof Error ? e.message : undefined);
     } finally {
+      meter?.dispose();
       setPlaying(false);
     }
   };
@@ -120,6 +139,7 @@ function AudioSettings() {
   const update = useUpdateSetting();
   const audio = useShell((s) => s.audio);
   const [played, setPlayed] = useState(0);
+  const [readout, setReadout] = useState<string | null>(null);
   const pack = usePackStatus(`${audio.kind}:${played}`);
   const device = useOutputDevice();
   const preloadAll = async () => {
@@ -224,11 +244,19 @@ function AudioSettings() {
               <div className="flex flex-col gap-3 py-3">
                 <OutputMeter />
                 <div className="flex flex-wrap items-center gap-3">
-                  <TestPhrase />
+                  <TestPhrase onMeasured={setReadout} />
                   <span className="text-sm text-text-2">
                     The meter shows what Oak sends to your headphones, whatever is playing.
                   </span>
                 </div>
+                {/* Kept in the page so a screen reader hears the result when the phrase ends. */}
+                <p
+                  className={readout ? "text-sm text-text-2" : "sr-only"}
+                  aria-live="polite"
+                  data-testid="audio-readout"
+                >
+                  {readout}
+                </p>
               </div>
               <OutputCheck onPlayed={() => setPlayed((n) => n + 1)} />
               <div className="pb-1">

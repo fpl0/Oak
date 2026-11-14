@@ -10,11 +10,16 @@ import {
   bpmFromTaps,
   clampRate,
   downbeatFromTaps,
+  feelOfOnsets,
+  feelText,
   formatCents,
   formatRate,
   formatSemitones,
   formatTime,
+  GRID_FEELS,
   gridOf,
+  gridTicks,
+  isCompound,
   loopInBars,
   loopLabel,
   loopOf,
@@ -219,5 +224,59 @@ describe("the playhead between position updates (tap tempo)", () => {
   test("no update yet, or a stale one (playback just started): the transport's own time, never the end", () => {
     expect(playheadAt({ t: 0, at: 0 }, 5_000_000, 0.02, 1, 43.6)).toBe(0.02);
     expect(playheadAt({ t: 3, at: 1000 }, 1000 + STAMP_FRESH_SEC * 1000 + 1, 3, 1, 43.6)).toBe(3);
+  });
+});
+
+describe("the beat grid inside a bar (Wave 6: swing, triplets, compound meter)", () => {
+  const at = (ts: { at: number }[]) => ts.map((t) => Math.round(t.at * 1000) / 1000);
+  test("4/4 straight is four beats and their &s; swung, each & sits at two thirds of its beat", () => {
+    const straight = gridTicks("4/4", "straight");
+    expect(at(straight)).toEqual([0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875]);
+    expect(straight.map((t) => t.label)).toEqual(["1", "&", "2", "&", "3", "&", "4", "&"]);
+    expect(straight.map((t) => t.kind)).toEqual(["beat", "off", "beat", "off", "beat", "off", "beat", "off"]);
+    const swung = gridTicks("4/4", "swing");
+    expect(at(swung)).toEqual([0, 0.167, 0.25, 0.417, 0.5, 0.667, 0.75, 0.917]);
+    // The same ticks as the Wave 5 grid drew.
+    expect(at(swung)).toEqual(at(beatTicks(4, true)));
+  });
+  test("triplets: three to the beat, counted 1 trip let", () => {
+    const t = gridTicks("4/4", "triplet");
+    expect(t).toHaveLength(12);
+    expect(at(t).slice(0, 4)).toEqual([0, 0.083, 0.167, 0.25]);
+    expect(t.slice(0, 3).map((x) => x.label)).toEqual(["1", "trip", "let"]);
+    expect(t.filter((x) => x.kind === "beat")).toHaveLength(4);
+  });
+  test("6/8 is two dotted-quarter beats, each in three (1 la li), whatever the feel says; 12/8 is four", () => {
+    for (const feel of GRID_FEELS) {
+      const t = gridTicks("6/8", feel);
+      expect(at(t)).toEqual([0, 0.167, 0.333, 0.5, 0.667, 0.833]);
+      expect(t.map((x) => x.label)).toEqual(["1", "la", "li", "2", "la", "li"]);
+      expect(t.filter((x) => x.kind === "beat")).toHaveLength(2);
+    }
+    expect(gridTicks("12/8", "straight").filter((x) => x.kind === "beat")).toHaveLength(4);
+    expect(isCompound("6/8")).toBe(true);
+    expect(isCompound("3/4")).toBe(false);
+    expect(isCompound(null)).toBe(false);
+  });
+  test("3/4 has three beats; an odd meter shows its units alone; no meter is 4/4", () => {
+    expect(gridTicks("3/4", "straight").filter((x) => x.kind === "beat")).toHaveLength(3);
+    expect(gridTicks("7/8", "swing").map((x) => x.kind)).toEqual(Array(7).fill("beat"));
+    expect(gridTicks(null, "straight")).toHaveLength(8);
+  });
+  test("the feel in words", () => {
+    expect(feelText("4/4", "swing")).toBe("Swing 8ths");
+    expect(feelText("4/4", "triplet")).toBe("Triplets");
+    expect(feelText("4/4", "straight")).toBeNull();
+    expect(feelText("6/8", "swing")).toBe("6/8: the beat is the dotted quarter, in three");
+  });
+  test("a source's own onsets say its feel: thirds are triplets, two thirds alone are swing", () => {
+    const beat = 1 / 4;
+    expect(feelOfOnsets([0, beat * (2 / 3), beat, beat * (1 + 2 / 3)], "4/4")).toBe("swing");
+    expect(feelOfOnsets([0, beat / 3, beat * (2 / 3), beat], "4/4")).toBe("triplet");
+    expect(feelOfOnsets([0, beat / 2, beat, beat * 1.5], "4/4")).toBe("straight");
+    // A swung ride with a straight fill somewhere is not called swing by the grid.
+    expect(feelOfOnsets([0, beat * (2 / 3), beat * 1.5], "4/4")).toBe("straight");
+    expect(feelOfOnsets([0, 1 / 6, 2 / 6], "6/8")).toBe("straight");
+    expect(feelOfOnsets([], "4/4")).toBe("straight");
   });
 });

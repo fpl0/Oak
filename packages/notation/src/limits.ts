@@ -176,6 +176,87 @@ export const ABCJS_LIMITS: readonly AbcjsLimit[] = [
     fallback: "annotations above the staff are one stacked text per note (degree, solfège, name).",
     warns: null,
   },
+  // --- Wave 6 ---------------------------------------------------------------------------------------
+  {
+    id: "key-change-naturals",
+    abcjs:
+      "an inline [K:…] at a bar line draws the new signature with naturals cancelling what the old one had and the new one lacks (D to C: two naturals; F to G: a natural on B, then F sharp); one that starts a system is drawn as a courtesy signature at the end of the system before.",
+    fallback:
+      "nothing to add: the change is written [K:…] after a double barline (||) in every pitched voice, and abcjs draws the naturals.",
+    warns: null,
+  },
+  {
+    id: "key-change-at-system-break",
+    abcjs:
+      "when a change starts a system, abcjs draws the cancelling naturals twice: in the courtesy signature at the end of the system before, and again in the new system's own signature (they are gone from the system after that). Writing the key twice removes them there but repeats the new accidentals at the end of the line.",
+    fallback:
+      "left as abcjs draws it: every sign is true, the second set of naturals is only redundant. A host that wants a change to read cleanly keeps it inside a system (bars per line that do not end on the change).",
+    warns: null,
+  },
+  {
+    id: "same-signature-key-change",
+    abcjs:
+      "[K:Am] after K:C draws no signature (nothing changes), but the double barline before it would still mark a change the staff does not show.",
+    fallback:
+      "a change to a key with the signature already in force (C major to A minor, a mode to its parent) writes no [K:…] and no double barline; the notes are spelled and labelled in the new key (Score.keyChanges).",
+    warns: null,
+  },
+  {
+    id: "modal-signature",
+    abcjs:
+      "K:Ddor, K:Gmix, K:Flyd, K:Ephr draw the parent scale's signature; abcjs has no way to show a mode's colour tone in the signature area or to name the mode on the staff.",
+    fallback:
+      "the mode's own signature by default (MODAL_SIGNATURE_DEFAULT); modalSignatureKey(key, 'parallel') / keyChangesOf(plan, { modal: 'parallel' }) writes the tonic's major or minor signature and the colour tone as an accidental every time.",
+    warns: null,
+  },
+  {
+    id: "label-splits-held-note",
+    abcjs:
+      "a chord symbol or numeral attaches to a note or rest: it cannot stand over the middle of a held note (the second chord of a bar over a whole note) or of a whole-bar rest.",
+    fallback:
+      "the note is split where the label stands and tied (C8- C8 under Ab and Bb), a rest is split in two; inside a tuplet the label moves instead (label-in-tuplet).",
+    warns: null,
+  },
+  {
+    id: "tuplet-across-beats",
+    abcjs:
+      "a tuplet bracket spans whatever it is given: a line pushed by a triplet eighth can be written as one bar-wide (3:2:5 with dotted and tied values inside, which parses and hides every beat.",
+    fallback:
+      "when a tuplet wider than a beat would need dotted or tied values inside its bracket and the same notes fit triplets inside single beats, they are written per beat and tied over the beats ((3 z4 E2- (3 E4 G2- …); a plain quarter-note or half-note triplet keeps one bracket.",
+    warns: null,
+  },
+  {
+    id: "tie-out-of-the-last-bar",
+    abcjs:
+      "a tie after the last note of the tune (a chord pushed early into the repeat) has no note to end on; abcjs draws it open towards the final barline and reports nothing.",
+    fallback:
+      "kept: the open tie says the note rings on (into the repeat, or onto the next page, where the note arrives tied in); the first bar of a pushed loop starts with a rest, as it sounds on the first pass.",
+    warns: null,
+  },
+  {
+    id: "notehead-classes",
+    abcjs:
+      "a class can only be given to a whole element (!class=…! before the chord brackets), so one member of a chord cannot be marked in the ABC (a guide tone inside a voicing).",
+    fallback:
+      "guideToneMarks(score) lists the heads (n, member) and markGuideTones (render.dom.ts) adds oak-guide / oak-guide-third / oak-guide-seventh to the drawn notehead paths after the render.",
+    warns: null,
+  },
+  {
+    id: "ghost-notes",
+    abcjs:
+      "no parenthesised or small notehead per note: a ghost note (U13.L02, .velocity(.3)) cannot be drawn as drummers write it.",
+    fallback:
+      "not drawn: every stroke has a normal head. U13.L02 shows ghost notes on the roll (the staff arrives in U13.L03); content must not ask a learner to read loud and quiet strokes from the staff.",
+    warns: null,
+  },
+  {
+    id: "declared-grid",
+    abcjs:
+      "nothing in abcjs: a hit moved by .late(1/32) or .early(.02) is engraved to the 32nd (z/2 c7/2- …) or snapped and reported, which no reader wants for a lazy snare.",
+    fallback:
+      "NotationInput.grid (steps per bar) moves every onset and end to the grid the lesson declares before writing; two notes of one track that land on one step cannot both be shown: the Score warns and is approximate.",
+    warns: "snapped-to-grid",
+  },
 ];
 
 /** The `abcjs-limit` warnings of a Score (theoretical key, same-step chords). Pure. */

@@ -10,6 +10,7 @@ import {
   type JsonEndpointName,
   type OakClient,
 } from "@oak/api";
+import { tabId } from "./tab-session.ts";
 
 let client: OakClient = createClient();
 
@@ -39,7 +40,26 @@ export function callApi<N extends JsonEndpointName>(
   input?: EndpointInput<N>,
   opts?: CallOptions,
 ): Promise<EndpointOutput<N>> {
-  return (client.call as unknown as LooseCall)(name, input, opts) as Promise<EndpointOutput<N>>;
+  return (client.call as unknown as LooseCall)(name, withTab(name, input), opts) as Promise<
+    EndpointOutput<N>
+  >;
+}
+
+/**
+ * Wave 6 (decision d21; docs/design/wave6.md §5.6): every tab has its own session. `session.start` carries this
+ * tab's id and `session.day` asks for this tab's open session, whoever calls them, so no caller can forget it. A
+ * caller that passes its own `tabId` / `tab` keeps it.
+ */
+export function withTab(name: string, input: unknown): unknown {
+  if (name === "session.start") {
+    const i = (input ?? {}) as { body?: Record<string, unknown> };
+    return i.body && i.body.tabId === undefined ? { ...i, body: { ...i.body, tabId: tabId() } } : input;
+  }
+  if (name === "session.day") {
+    const i = (input ?? {}) as { query?: Record<string, unknown> };
+    return i.query?.tab === undefined ? { ...i, query: { ...i.query, tab: tabId() } } : input;
+  }
+  return input;
 }
 
 /** Destructive call: the native confirm dialog first (it names the action), then nonce plus call. */

@@ -17,7 +17,17 @@ import { AB_DRIFT_GATE_BARS, AB_DRIFT_GATE_MS } from "../../../../packages/audio
 import { NAMING } from "../../capstone/review-w5-pieces.ts";
 import { makeBarBurstWav } from "../../transcribe/e2e/wav.ts";
 import { stack } from "./playwright.config.ts";
-import { api, blockHmr, ownProject, seed, startCapture, stopCapture, watchErrors, wavOf } from "./support.ts";
+import {
+  api,
+  blockHmr,
+  ownProject,
+  seed,
+  setEditorCode,
+  startCapture,
+  stopCapture,
+  watchErrors,
+  wavOf,
+} from "./support.ts";
 
 const SHOTS = new URL("./screenshots", import.meta.url).pathname;
 
@@ -47,21 +57,7 @@ const shown = (re: RegExp) => new RegExp(re.source.replace(/`/g, ""));
 
 const capEditor = (cap: string) => `oak_capstone-${cap}_0_`;
 async function setCapstoneCode(page: Page, cap: string, code: string) {
-  await page.waitForFunction(
-    (id) =>
-      !!(globalThis as { __oakStrudel?: { editors: Map<string, unknown> } }).__oakStrudel?.editors.get(id),
-    capEditor(cap),
-    { timeout: 60_000 },
-  );
-  await page.evaluate(
-    ([id, c]) =>
-      (
-        globalThis as unknown as { __oakStrudel: { editors: Map<string, { setCode(c: string): void }> } }
-      ).__oakStrudel.editors
-        .get(id as string)
-        ?.setCode(c as string),
-    [capEditor(cap), code],
-  );
+  await setEditorCode(page, capEditor(cap), code);
 }
 
 test("C3 with a beginner's section names: the strip and the checklist say what to write; renamed, it reads", async ({

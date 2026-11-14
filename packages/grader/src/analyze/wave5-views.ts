@@ -18,7 +18,7 @@ import {
 } from "@oak/theory";
 import type { NormalizeContext, Normalized, SectionInfo } from "../types.ts";
 import { type BluesForm, bluesForm, type ChordSlot, chordPerBar, harmonicRhythm, slotAt } from "./chords.ts";
-import { mean, onsets, pitched } from "./events.ts";
+import { mean, num, onsets, pitched } from "./events.ts";
 import { energyCurve, formLabels } from "./form.ts";
 import { type GrooveLock, grooveLock } from "./groove.ts";
 import { keyOf } from "./key.ts";
@@ -225,14 +225,39 @@ export function bassNotes(
 ): { notes: BassNoteView[]; changes: number; rootsOnChange: number } {
   const key: KeySpec | null = ctx.key ?? null;
   const line = pitched(bass);
-  const named = slots.filter((s) => s.chord);
+  // A chord struck again is no change (`.struct("x ~ x ~")`: one chord a bar, two strokes): consecutive slots of
+  // one chord are one slot, so a root then a 5th under it is a root on the change (U17.L04).
+  const named: ChordSlot[] = [];
+  for (const s of slots) {
+    if (!s.chord) continue;
+    const last = named[named.length - 1];
+    if (last?.chord && last.chord.rootPc === s.chord.rootPc && last.chord.quality === s.chord.quality)
+      named[named.length - 1] = { ...last, span: [last.span[0], R.max(last.span[1], s.span[1])] };
+    else named.push(s);
+  }
   const kicks = ctx.kicks ?? [];
   let changes = 0;
   let rootsOnChange = 0;
   let lastSlot: ChordSlot | undefined;
   let rootMidi: number | null = null;
+  // A bass note on the beat under comping that enters just after it (`"~ x ~ ~ x ~ ~ ~"`: the chord comes on the
+  // & of 1) belongs to the chord that enters while it sounds, within the same beat and bar (U12.L06's held bass).
+  const beat: Rat = [1, METERS[ctx.meter].unitsPerBar];
+  const slotOf = (e: NEvent): ChordSlot | undefined => {
+    const here = slotAt(named, e.onset);
+    const next = named.find((s) => R.lt(e.onset, s.span[0]));
+    if (
+      next &&
+      next !== here &&
+      R.lt(R.sub(next.span[0], e.onset), beat) &&
+      Math.floor(num(next.span[0])) === Math.floor(num(e.onset)) &&
+      R.lt(next.span[0], R.add(e.onset, e.dur))
+    )
+      return next;
+    return here;
+  };
   const notes = line.map((e, i) => {
-    const slot = slotAt(named, e.onset);
+    const slot = slotOf(e);
     const chord = slot?.chord ?? null;
     if (slot !== lastSlot) {
       rootMidi = null;
@@ -243,7 +268,7 @@ export function bassNotes(
       lastSlot = slot;
     }
     const next = line[i + 1];
-    const nextSlot = next ? slotAt(named, next.onset) : undefined;
+    const nextSlot = next ? slotOf(next) : undefined;
     const beforeChange = !!next && !!nextSlot && nextSlot !== slot;
     const nextChord = nextSlot?.chord ?? null;
     const role = chord ? bassRole(e.midi, chord, { rootMidi, nextChord, beforeChange, key }) : null;

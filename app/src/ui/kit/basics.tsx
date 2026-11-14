@@ -68,12 +68,24 @@ export function Chip({
   );
 }
 
-export function Kbd({ children, tone = "default" }: { children: ReactNode; tone?: "default" | "inverse" }) {
+/**
+ * A key cap. `inverse` sits on the tooltip's dark fill; `onAccent` sits inside a primary button (the "⏎" of Start
+ * and Done for today) at the button's own text colour, which keeps 12 px text AA on the accent in both themes.
+ */
+export function Kbd({
+  children,
+  tone = "default",
+}: {
+  children: ReactNode;
+  tone?: "default" | "inverse" | "onAccent";
+}) {
   return (
     <kbd
       className={clsx(
         "inline-flex min-w-5 items-center justify-center rounded border px-1 font-mono text-[0.75rem] leading-5",
-        tone === "default" ? "border-border bg-surface-2 text-text-2" : "border-bg/30 text-bg/80",
+        tone === "default" && "border-border bg-surface-2 text-text-2",
+        tone === "inverse" && "border-bg/30 text-bg/80",
+        tone === "onAccent" && "border-on-accent/40 text-on-accent",
       )}
     >
       {children}

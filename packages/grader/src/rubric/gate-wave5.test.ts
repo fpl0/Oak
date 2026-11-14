@@ -96,7 +96,8 @@ describe("L6 changes read by numeral, bar by bar", () => {
     );
     expect(r.status).toBe("fail");
     const bars = (r.diagnostics ?? []).filter((d) => d.id === "harmony.rn").map((d) => d.where?.bar);
-    expect(bars).toEqual([9]);
+    // Every bar is its own slot since d11: both wrong bars are named, the first one first.
+    expect(bars).toEqual([9, 10]);
   });
   test("Careless Love with B♭ in bars 5–6 under a held F: the change at bar 5 is named", async () => {
     const code = `chord("<F C7 F F Bb Bb C7 C7 F F Bb Bb F C7 F F>").voicing().s("piano")`;
@@ -110,7 +111,7 @@ describe("L6 changes read by numeral, bar by bar", () => {
       deps,
     );
     const bars = (r.diagnostics ?? []).filter((d) => d.id === "harmony.rn").map((d) => d.where?.bar);
-    expect(bars).toEqual([5]);
+    expect(bars).toEqual([5, 6]);
     expect(r.score).toBeLessThan(0.9);
   });
 });

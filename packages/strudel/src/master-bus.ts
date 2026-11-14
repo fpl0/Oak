@@ -3,7 +3,7 @@
 //   superdough destinationGain ─┐
 //   transcription player ───────┼─▶ input ─▶ limiter ─▶ trim ─┬─▶ volume ─▶ ctx.destination
 //                               │     └─▶ preAnalyser         ├─▶ analyser (meter, Oak scope)
-//                               │                             └─▶ tap (MediaStream, the recorder)
+//                               │                             └─▶ tapGain ─▶ tap (MediaStream, the recorder)
 //
 // The DynamicsCompressor adds makeup gain even below threshold; `trim` undoes it. superdough rebuilds
 // `destinationGain` on `resetGlobalEffects()` and connects it straight to the destination, so the bus
@@ -24,6 +24,8 @@ export function limiterMakeupDb(
 export interface MasterBusInternals extends MasterBus {
   /** Route superdough's destinationGain into the bus (after `initAudio`). Idempotent. */
   attachSuperdough(): void;
+  /** The recorder's own level before the tap: a take fades out on it, never what the listener hears. */
+  readonly tapGain: GainNode;
   /** Duck the input to silence for `ms`, then restore: cuts every ringing voice (panic). */
   duck(ms?: number): void;
   dispose(): void;
@@ -57,13 +59,15 @@ export function createMasterBus(ctx: AudioContext): MasterBusInternals {
   const analyser = new AnalyserNode(ctx, { fftSize: 2048, smoothingTimeConstant: 0 });
   const preAnalyser = new AnalyserNode(ctx, { fftSize: 2048, smoothingTimeConstant: 0 });
   const tap = ctx.createMediaStreamDestination();
+  const tapGain = new GainNode(ctx, { gain: 1 });
   input.connect(limiter);
   input.connect(preAnalyser);
   limiter.connect(trim);
   trim.connect(volume);
   volume.connect(ctx.destination);
   trim.connect(analyser);
-  trim.connect(tap);
+  trim.connect(tapGain);
+  tapGain.connect(tap);
 
   let attached = 0;
   let attachedGain: GainNode | null = null;
@@ -90,6 +94,7 @@ export function createMasterBus(ctx: AudioContext): MasterBusInternals {
     analyser,
     preAnalyser,
     tap,
+    tapGain,
     setVolume(v) {
       const value = Math.max(0, Math.min(1, v));
       volume.gain.setTargetAtTime(value, ctx.currentTime, 0.01);
@@ -119,7 +124,7 @@ export function createMasterBus(ctx: AudioContext): MasterBusInternals {
       input.gain.linearRampToValueAtTime(1, t + ms / 1000 + 0.01);
     },
     dispose() {
-      for (const node of [input, limiter, trim, volume, analyser, preAnalyser, tap]) {
+      for (const node of [input, limiter, trim, volume, analyser, preAnalyser, tapGain, tap]) {
         try {
           node.disconnect();
         } catch {

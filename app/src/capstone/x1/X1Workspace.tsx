@@ -1,7 +1,7 @@
 // X1 "Folk Transcription" (contracts §2.4, §6.6 X1; wave4.md §5.1): the song the learner picked, worked phrase by
 // phrase over three sessions — phrases 1–2, phrases 3–4, then the chords bass-first — with the song beside the code
 // (A/B, loop a phrase, slower) and a check per phrase graded in the browser in capstone mode (key-relative melody at
-// 0.85, chord stages at 0.80). The givens come first: meter, key, tonic, pickup, the rhythm of phrase 1. A phrase
+// 0.85, chord stages at 0.85 since contracts 1.6). The givens come first: meter, key, tonic, pickup, the rhythm of phrase 1. A phrase
 // can be revealed (hint 4): it earns no evidence and is named in the liner notes. Drafts save continuously; the
 // last session ends with the tutor review on offer and the release to the album.
 import {
@@ -32,13 +32,17 @@ import {
   useBootstrap,
   useCapstoneSessionComplete,
   useCapstoneSessions,
+  useSessionDay,
   useUnlocks,
 } from "../../lib/queries.ts";
+import { ownOpenSession } from "../../lib/tab-session.ts";
 import { currentSessionId, reportBlockDone } from "../../session/store.ts";
 import { ChangesChart } from "../../transcribe/ChangesChart.tsx";
+import type { FormMap } from "../../transcribe/form-map.ts";
 import { checkLines, lineText } from "../../transcribe/ladder.ts";
 import { ReferenceStaff } from "../../transcribe/ReferenceView.tsx";
 import { barMarks, changesOfCode, withChanges } from "../../transcribe/song.ts";
+import { isBareDraft, skeletonOfForm } from "../../transcribe/standard.ts";
 import {
   askReview,
   clearSubject,
@@ -55,6 +59,21 @@ import { Callout } from "../../ui/kit/Controls.tsx";
 import { toast } from "../../ui/kit/Toast.tsx";
 import { useWorkbenchServices } from "../../workbench/services.tsx";
 import { Workbench } from "../../workbench/Workbench.tsx";
+import { Checklist } from "../Checklist.tsx";
+import { checklistOf, readiness } from "../checklist.ts";
+import {
+  capstoneStarter,
+  FORM_MAP_NAME,
+  type FormMapFeedback,
+  formMapGrade,
+  formMapOf,
+  formMapSettled,
+  formMapState,
+  sessionRubric,
+  sessionRubricRequest,
+  songFormMap,
+} from "./cft.ts";
+import { FormMapPanel } from "./FormMapPanel.tsx";
 import "../../workbench/index.ts";
 import { Report, ReviewWaitNote, SessionList } from "../BriefPanel.tsx";
 import { trackTitleOf } from "../CapstoneScreen.tsx";
@@ -90,11 +109,11 @@ import {
   rowLabel,
   sessionComplete,
   songCycles,
-  transcribeStarter,
+  songGivenFromDef,
 } from "./phrases.ts";
 import { type SongLayer, SongSource, type SongSourceHandle } from "./SongSource.tsx";
 import { songOfDraft } from "./song-of-draft.ts";
-import { usePhrase1Rhythm, useSong, useSongs } from "./songs.ts";
+import { songWritten, usePhrase1Rhythm, useSong } from "./songs.ts";
 
 export { songOfDraft };
 
@@ -116,18 +135,12 @@ export function X1Workspace({
   const ready = !draftRef.pending && (draftRef.id === null || draft.data !== undefined);
   const [opened, setOpened] = useState(false);
   if (ready && !opened) setOpened(true);
-  const written = useSongs(def.song ?? []);
-  const songId = written.isPending
-    ? null
-    : songOfDraft(
-        def,
-        draft.data?.tags ?? [],
-        (written.data ?? []).map((x) => x.id),
-      );
+  // Which songs have answer keys, without loading them: only the draft's own song is fetched.
+  const songId = songOfDraft(def, draft.data?.tags ?? [], (def.song ?? []).filter(songWritten));
   const song = useSong((songId as SongDef["id"]) ?? null);
   const entry = content.repertoire.find((r) => r.id === songId);
   let body: React.ReactNode;
-  if (!(ready || opened) || written.isPending || song.isPending)
+  if (!(ready || opened) || song.isPending)
     body = (
       <div
         className="flex flex-1 flex-col gap-3 p-4"
@@ -223,9 +236,10 @@ function X1Loaded({
   const done = sessionsDone(views);
   const allDone = done >= total || state.sessionsDone >= total;
   const released = state.status === "released" && state.trackId !== null;
-  const sessionId =
-    currentSessionId() ??
-    (boot.data?.openSession?.mapItemId?.startsWith(`${def.id}.`) ? boot.data.openSession.id : null);
+  // d21: the session this tab left open (never another tab's), when it is one of this capstone's.
+  const day = useSessionDay();
+  const own = ownOpenSession(day.data);
+  const sessionId = currentSessionId() ?? (own?.mapItemId?.startsWith(`${def.id}.`) ? own.id : null);
   const currentId = useRef<string | null>(null);
   currentId.current = allDone ? null : (current?.id ?? null);
   const unlocked = new Set((unlocksQ.data?.items ?? []).map((u) => u.itemId as UnlockableId));
@@ -233,7 +247,7 @@ function X1Loaded({
   // --- code and saving ------------------------------------------------------------------------------
   const allChecks = def.sessionDefs.flatMap((sd) => sd.checks ?? []);
   const staged = bassFirst(allChecks);
-  const initialCode = latest?.code ?? transcribeStarter(allChecks, song);
+  const initialCode = latest?.code ?? capstoneStarter(def, song);
   const [code, setCode] = useState(initialCode);
   const codeRef = useRef(code);
   codeRef.current = code;
@@ -267,14 +281,27 @@ function X1Loaded({
   const checksOf = (i: number): PhraseCheck[] => def.sessionDefs[i]?.checks ?? [];
   // Every session's rows in order, so a check waits for one of an earlier session (X2: the melody after S1's
   // changes; contracts §6.6 "stages in that order").
+  // CF-T: session 1 opens with the form map; the phrase checks wait for it (`after: ["form-map"]`).
+  const fm = formMapOf(def);
+  const fmState = fm ? formMapState(fm.check, views[fm.sessionIndex]?.checks ?? [], local) : null;
+  // CF-T: its checks are the song's own sections, named by letter only once the form is mapped or shown
+  // ("Section 3 (B) · changes"; before that "Section 3 · bass", which gives nothing away).
+  const formKnown = fmState !== null && (fmState.passed || fmState.revealed);
+  const sectionNames = fm ? (song.answerKey.sections ?? []).map((x) => (formKnown ? x.label : "")) : null;
   const bySession = capstoneRows(
     def.sessionDefs.map((_, i) => ({ checks: checksOf(i), server: views[i]?.checks ?? [] })),
     local,
+    fm && fmState ? formMapSettled(fm.check, fmState) : undefined,
   );
   const allRows = bySession.flat();
   const sessionIndex = current?.index ?? 0;
   const rows = bySession[sessionIndex] ?? [];
-  const complete = sessionComplete(rows);
+  const formHere = fm !== null && fmState !== null && fm.sessionIndex === sessionIndex && !allDone;
+  const formSettledNow = fmState === null || fmState.passed || fmState.revealed;
+  // CF-T.S4: the session's own rubric (the four roles, the song's sections) on the whole arrangement.
+  const rubric = sessionRubric(def.sessionDefs[allDone ? total - 1 : sessionIndex]);
+  const complete =
+    (rows.length === 0 && rubric.length > 0 ? true : sessionComplete(rows)) && (!formHere || formSettledNow);
   const releaseSession = current?.release === true;
   const qa = useApiMutation("qa.report");
   const completeSession = useCapstoneSessionComplete();
@@ -346,6 +373,99 @@ function X1Loaded({
     }
   };
 
+  // The form map's check: graded here (`gradeFormMap`, no Strudel), stored as the capstone's `form` check. A map
+  // that passed, or was shown, writes the draft's skeleton over the bare starter: one const per distinct section.
+  const [formFeedback, setFormFeedback] = useState<FormMapFeedback | null>(null);
+  const checkForm = async (map: FormMap, reveal: boolean) => {
+    if (!fm || !fmState || !current || busy) return;
+    setBusy(fm.check.id);
+    try {
+      const g = formMapGrade({
+        capstoneId: def.id,
+        check: fm.check,
+        song,
+        map,
+        attemptNo: fmState.attempts + 1,
+        reveal,
+      });
+      setLocal((prev) => ({ ...prev, [fm.check.id]: applyResult(prev[fm.check.id], g.result, g.passed) }));
+      setFormFeedback({ map, result: g.result, passed: g.passed });
+      let src = codeRef.current;
+      if (g.passed || reveal) {
+        const settledMap = reveal ? (songFormMap(song) ?? map) : map;
+        if (isBareDraft(src)) {
+          src = skeletonOfForm(songGivenFromDef(song), settledMap);
+          const h = editorHandle();
+          if (h) h.setCode(src, { undoable: true });
+          setCode(src);
+          saver.changed(src);
+          source.current?.setMine(src);
+        }
+      }
+      const { sketchId, version } = await saver.save(src, true);
+      if (!recordOff.current)
+        await callApi("capstones.recordCheck", {
+          params: { id: def.id, checkId: fm.check.id },
+          body: {
+            capstoneSessionId: current.id as never,
+            stage: null,
+            sketchId,
+            sketchVersion: version,
+            result: g.result,
+            idempotencyKey: idempotencyKey(),
+          },
+        })
+          .then((s) => {
+            if (sessionId === null)
+              qc.setQueryData(apiQuery("capstones.sessions", { params: { id: def.id } }).queryKey, s);
+          })
+          .catch((e: unknown) => {
+            if (notBuilt(e)) recordOff.current = true;
+            else toast.error("The check wasn't stored", e instanceof Error ? e.message : undefined);
+          });
+    } catch (e) {
+      toast.error("The form check didn't run", e instanceof Error ? e.message : undefined);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // The session rubric, live: re-read a moment after each edit, like a compose capstone's checklist.
+  const [rubricResult, setRubricResult] = useState<{ code: string; result: GradeResult } | null>(null);
+  const rubricSeq = useRef(0);
+  const unlockKey = [...unlocked].sort().join(",");
+  useEffect(() => {
+    if (rubric.length === 0) return;
+    const my = ++rubricSeq.current;
+    const t = setTimeout(() => {
+      gradeInBrowser(
+        sessionRubricRequest({
+          capstoneId: def.id,
+          sessionId: def.sessionDefs.at(-1)?.id ?? def.id,
+          rubric,
+          song,
+          code,
+          lint: {
+            profile: "graded",
+            unlocked: new Set(unlockKey ? (unlockKey.split(",") as UnlockableId[]) : []),
+            allowPreview: false,
+            meter: song.meter,
+            key: song.key,
+          },
+        }),
+      ).then(
+        (result) => {
+          if (my === rubricSeq.current) setRubricResult({ code, result });
+        },
+        () => {},
+      );
+    }, 650);
+    return () => clearTimeout(t);
+    // `rubric` is the session's own list; its length stands for it.
+  }, [def, song, code, unlockKey, rubric.length]);
+  const rubricRows = checklistOf(rubric, rubricResult?.result ?? null, {}, [], true);
+  const rubricReady = rubric.length === 0 || (readiness(rubricRows).ready && rubricResult?.code === code);
+
   const finish = async () => {
     if (!current) return;
     try {
@@ -405,16 +525,23 @@ function X1Loaded({
     enabled: state.trackId !== null,
   });
   const tryRevision = useTryRevision();
-  const canRelease = (releaseSession || allDone) && (complete || allDone || released);
+  const canRelease = (releaseSession || allDone) && (complete || allDone || released) && rubricReady;
   const openRelease = async () => {
     try {
       const src = codeRef.current;
-      const { version } = await saver.save(src, true);
+      const { sketchId, version } = await saver.save(src, true);
       const a = await analyzeDraft(src, { meter: song.meter, key: song.key, unlocked });
       if (a.error) {
         setNotice({ tone: "attention", title: "The transcription doesn't run yet", body: a.error });
         return;
       }
+      // CF-T.S4: the session's own rubric is graded live here; the server releases on the run it has stored
+      // (capstone-release.ts), so the passing run of this very version is recorded first.
+      if (rubric.length > 0 && rubricResult && rubricResult.code === src)
+        await callApi("capstones.check", {
+          params: { id: def.id },
+          body: { sessionId, sketchId, sketchVersion: version, result: rubricResult.result },
+        });
       setPiece({ code: src, version, bars: a.bars, n: a.n, analysis: a.analysis, key: song.key });
       setReleaseOpen(true);
     } catch (e) {
@@ -447,7 +574,7 @@ function X1Loaded({
       meter: song.meter,
       theory: [...theory, ...analysisTheory(p.analysis)],
       previewTools: [],
-      revealed: revealedItems(allRows),
+      revealed: [...(fmState?.revealed && !fmState.passed ? [FORM_MAP_NAME] : []), ...revealedItems(allRows)],
     });
 
   // --- tutor ---------------------------------------------------------------------------------------
@@ -563,11 +690,18 @@ function X1Loaded({
             <h2 id="x1-checks" className="font-sans text-sm font-semibold text-text-2">
               {allDone ? "Checks" : `Checks · session ${sessionIndex + 1}`}
             </h2>
-            <span className="text-sm text-text-3 tabular-nums" data-testid="x1-check-count">
-              {rows.filter((r) => r.passed || r.revealed).length} of {rows.length} done
-            </span>
+            {rows.length > 0 && (
+              <span className="text-sm text-text-3 tabular-nums" data-testid="x1-check-count">
+                {rows.filter((r) => r.passed || r.revealed).length} of {rows.length} done
+              </span>
+            )}
           </div>
-          {rows.length === 0 ? (
+          {rows.length === 0 && rubric.length > 0 ? (
+            <p className="text-sm text-text-2">
+              Every section is transcribed. This session is checked on the whole arrangement: the requirements
+              below.
+            </p>
+          ) : rows.length === 0 ? (
             <p className="text-sm text-text-2">
               This session's phrase checks are still being written. Work by ear meanwhile: your draft saves as
               you go.
@@ -576,6 +710,7 @@ function X1Loaded({
             <ul className="flex flex-col gap-1.5">
               {rows.map((r) => (
                 <CheckRowView
+                  sections={sectionNames}
                   key={r.key}
                   row={r}
                   busy={busy === r.key}
@@ -591,6 +726,17 @@ function X1Loaded({
             </ul>
           )}
         </section>
+        {rubric.length > 0 && (
+          <div data-testid="session-rubric">
+            <Checklist
+              rows={rubricRows}
+              ready={readiness(rubricRows)}
+              checking={rubricResult?.code !== code}
+              stale={rubricResult !== null && rubricResult.code !== code}
+              onBars={onBars}
+            />
+          </div>
+        )}
         {(releaseSession || allDone) && (
           <section aria-labelledby="x1-review" className="flex flex-col gap-2 border-t border-border pt-4">
             <h2 id="x1-review" className="font-sans text-sm font-semibold text-text-2">
@@ -707,7 +853,13 @@ function X1Loaded({
               <Button
                 variant={complete ? "primary" : "secondary"}
                 disabled={!complete}
-                title={complete ? undefined : "Each phrase is checked (or revealed) first"}
+                title={
+                  complete
+                    ? undefined
+                    : formHere && !formSettledNow
+                      ? "The form map is checked first, then each section"
+                      : "Each phrase is checked (or revealed) first"
+                }
                 loading={completeSession.isPending}
                 onClick={() => void finish()}
                 data-testid="finish-session"
@@ -719,7 +871,13 @@ function X1Loaded({
               <Button
                 variant={canRelease ? "primary" : "secondary"}
                 disabled={!canRelease}
-                title={canRelease ? undefined : "Every stage of the chords is checked (or revealed) first"}
+                title={
+                  canRelease
+                    ? undefined
+                    : rubric.length > 0 && !rubricReady
+                      ? "The two lines of this session's checklist are met first"
+                      : "Every stage of the chords is checked (or revealed) first"
+                }
                 icon={<Disc3 aria-hidden className="size-4" />}
                 onClick={() => void openRelease()}
                 data-testid="release"
@@ -776,6 +934,20 @@ function X1Loaded({
               </Callout>
             )}
             <SongSource song={song} layers={layers} code={code} onReady={onSource} />
+            {fm && fmState && (formHere || formSettledNow) && (
+              <FormMapPanel
+                storeId={`${def.id}.${initialSketch ?? "new"}`}
+                bars={song.answerKey.bars}
+                pickup={song.pickup !== undefined}
+                state={fmState}
+                known={songFormMap(song)}
+                feedback={formFeedback}
+                busy={busy === fm.check.id}
+                onCheck={(m) => void checkForm(m, false)}
+                onReveal={(m) => void checkForm(m, true)}
+                onSection={(from, to) => onBars(from, to)}
+              />
+            )}
             {changesRow?.open && (
               <section aria-label="The changes" className="flex flex-col gap-1.5" data-testid="x2-changes">
                 {chart ? (
@@ -801,8 +973,15 @@ function X1Loaded({
                 )}
               </section>
             )}
-            {feedback && <FeedbackView fb={feedback} rows={rows} onDismiss={() => setFeedback(null)} />}
-            {revealedRow && <Revealed song={song} row={revealedRow} />}
+            {feedback && (
+              <FeedbackView
+                fb={feedback}
+                rows={rows}
+                sections={sectionNames}
+                onDismiss={() => setFeedback(null)}
+              />
+            )}
+            {revealedRow && <Revealed song={song} row={revealedRow} sections={sectionNames} />}
             <Workbench
               tutorBars
               id={slug(def.id)}
@@ -890,8 +1069,11 @@ function CheckRowView({
   onReveal,
   onConfirmReveal,
   onCancelReveal,
+  sections,
 }: {
   row: CheckRow;
+  /** CF-T: the song's section letters, so a row reads "Section 3 (B) · changes". */
+  sections: readonly string[] | null;
   busy: boolean;
   disabled: boolean;
   confirming: boolean;
@@ -901,7 +1083,7 @@ function CheckRowView({
   onConfirmReveal(): void;
   onCancelReveal(): void;
 }) {
-  const label = rowLabel(row);
+  const label = rowLabel(row, sections);
   const state = row.passed
     ? "passed"
     : row.revealed
@@ -1021,14 +1203,16 @@ function CheckRowView({
 function FeedbackView({
   fb,
   rows,
+  sections,
   onDismiss,
 }: {
   fb: Feedback;
   rows: readonly CheckRow[];
+  sections: readonly string[] | null;
   onDismiss(): void;
 }) {
   const row = rows.find((r) => r.key === fb.key);
-  const label = row ? rowLabel(row) : "The check";
+  const label = row ? rowLabel(row, sections) : "The check";
   const pct = Math.round(fb.result.score * 100);
   const lines = checkLines(fb.result).slice(0, 4);
   if (fb.result.status === "error")
@@ -1069,7 +1253,15 @@ function FeedbackView({
 }
 
 /** The answer of a revealed check: the phrase on a staff, or the chords of a stage with their numerals. */
-function Revealed({ song, row }: { song: SongDef; row: CheckRow }) {
+function Revealed({
+  song,
+  row,
+  sections,
+}: {
+  song: SongDef;
+  row: CheckRow;
+  sections: readonly string[] | null;
+}) {
   const melody = row.layer === "melody" || row.stage === null;
   const q = useQuery({
     queryKey: ["x1-reveal", song.id, JSON.stringify(row.phrase)],
@@ -1109,7 +1301,7 @@ function Revealed({ song, row }: { song: SongDef; row: CheckRow }) {
         className="rounded-card border border-border bg-surface p-3 text-sm"
         data-testid="x1-revealed"
       >
-        <p className="mb-1 font-medium">{rowLabel(row)}: the answer</p>
+        <p className="mb-1 font-medium">{rowLabel(row, sections)}: the answer</p>
         {chords.length === 0 ? (
           <p className="text-text-2">The answer key lists no chords for these bars.</p>
         ) : (
@@ -1134,7 +1326,7 @@ function Revealed({ song, row }: { song: SongDef; row: CheckRow }) {
       className="rounded-card border border-border bg-surface p-3"
       data-testid="x1-revealed"
     >
-      <p className="mb-1 text-sm font-medium">{rowLabel(row)}: the answer</p>
+      <p className="mb-1 text-sm font-medium">{rowLabel(row, sections)}: the answer</p>
       {q.data ? (
         <ReferenceStaff events={q.data.events} bars={q.data.bars} meter={song.meter} keySpec={song.key} />
       ) : q.isPending ? (

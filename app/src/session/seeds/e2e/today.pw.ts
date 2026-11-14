@@ -1,11 +1,12 @@
 // Today and the session against the real server, each test from a dev seed (wave3.md §5.5): a capstone day with
-// a sung warm-up set, Pause on Alt+P, a second browser joining the one open session; "done for today" from the
+// a sung warm-up set, Pause on Alt+P, a second browser starting a session of its own (d21); "done for today" from the
 // server; a checkpoint day; the 15-minute split with save-and-wrap; returns after 3+ and 10+ days.
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { shoot, useUiPrefs } from "../../../../../e2e/support/ui.ts";
 import { stack } from "./playwright.config.ts";
 import {
   advanceDays,
+  api,
   blockHmr,
   blockHmrIn,
   expectNoOverflow,
@@ -39,7 +40,7 @@ async function secondBrowser(browser: Browser): Promise<Page> {
   return ctx.newPage();
 }
 
-test("C1 ready: a capstone day whose warm-up sings; Alt+P pauses; a second browser joins the open session", async ({
+test("C1 ready: a capstone day whose warm-up sings; Alt+P pauses; a second browser starts its own session (d21)", async ({
   page,
   request,
   browser,
@@ -50,7 +51,12 @@ test("C1 ready: a capstone day whose warm-up sings; Alt+P pauses; a second brows
   const card = page.getByTestId("today-card");
   await expect(card).toHaveAttribute("data-state", "capstone");
   await expect(page.getByRole("heading", { name: "Capstone day" })).toBeVisible();
-  await expect(page.getByTestId("setlist").locator('[data-row="warmup"]')).toContainText("with singing");
+  // The warm-up row says "with singing" exactly when the planner put a mic set in it (which sets come up on a
+  // given day is the SRS planner's, contracts §7.4; Wave 6 deals fact decks beside the ear sets).
+  const warm = await api<{ warmup: { items: { mic: boolean }[] } }>(request, "GET", "/api/session/today");
+  const row = page.getByTestId("setlist").locator('[data-row="warmup"]');
+  if (warm.warmup.items.some((i) => i.mic)) await expect(row).toContainText("with singing");
+  else await expect(row).not.toContainText("with singing");
   await expect(page.getByTestId("setlist").locator('[data-row="new"]')).toContainText(
     "the draft is the Make",
   );
@@ -100,15 +106,23 @@ test("C1 ready: a capstone day whose warm-up sings; Alt+P pauses; a second brows
     }
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  // Another browser (its own storage): Today offers to resume, not to start a second session; it joins.
+  // Another browser (its own storage, its own tab id): Today does not join the open session (decision of
+  // 2026-11-13, d21). It offers to start one of its own and says that another tab has one open.
   const other = await secondBrowser(browser);
   await today(other);
-  await expect(other.getByTestId("today-card")).toHaveAttribute("data-state", "in-session");
-  await expect(other.getByTestId("start-session")).toHaveText(/Resume session/);
+  await expect(other.getByTestId("today-card")).toHaveAttribute("data-state", "capstone");
+  await expect(other.getByTestId("start-session")).toHaveText(/Start session/);
+  await expect(other.getByTestId("other-tab")).toContainText("Another tab has a session open.");
   await other.getByTestId("start-session").click();
   await other.waitForURL(/\/session\/?$/);
   await expect(other.getByTestId("session-header")).toBeVisible();
-  expect((await sessionState(other)).id).toBe(first.id);
+  const second = (await sessionState(other)).id;
+  expect(second).not.toBeNull();
+  expect(second).not.toBe(first.id);
+  // The first browser's session is still its own after a reload.
+  await page.reload();
+  await expect(page.getByTestId("session-header")).toBeVisible({ timeout: 30_000 });
+  expect((await sessionState(page)).id).toBe(first.id);
   await other.context().close();
 });
 

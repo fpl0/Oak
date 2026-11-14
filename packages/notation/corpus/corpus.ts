@@ -6,6 +6,7 @@
 // inside a bar and two keys on one staff, much of it the U05–U07 material of content/specs; 182– (Wave 5,
 // corpus-w5.ts) cover minor keys, blues, swing, bass lines, sections and the U08–U11 material.
 import { CORPUS_W5 } from "./corpus-w5.ts";
+import { CORPUS_W6 } from "./corpus-w6.ts";
 import type { CorpusEntry } from "./harness.ts";
 
 export const CORPUS: CorpusEntry[] = [
@@ -3660,4 +3661,6 @@ export const CORPUS: CorpusEntry[] = [
   },
   // --- Wave 5 (corpus-w5.ts) ----------------------------------------------------------------------
   ...CORPUS_W5,
+  // --- Wave 6 (corpus-w6.ts) ----------------------------------------------------------------------
+  ...CORPUS_W6,
 ];

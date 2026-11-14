@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { MasterReading } from "@oak/audio/master-meter";
 import type { PitchFrame } from "@oak/pitch";
 import { firstSingPasses, midiToHz } from "@oak/pitch";
 import {
@@ -16,6 +17,7 @@ import {
   outputChangeAdvice,
   outputChoiceOf,
   outputGuidance,
+  phraseReadout,
   rangeOk,
   rangeSummary,
   singLatencyVerdict,
@@ -169,5 +171,39 @@ describe("the pitch match and the output-change advice", () => {
     expect(outputChangeAdvice("AirPods Pro", "bluetooth", "bluetooth")).toBeNull();
     expect(outputChangeAdvice(null, null, "wired")).toBeNull();
     expect(outputChangeAdvice("MacBook Pro Speakers", "speakers", "unknown")).toBeNull();
+  });
+});
+
+describe("the test phrase's read-out", () => {
+  const reading = (over: Partial<MasterReading> = {}): MasterReading => ({
+    seconds: 3.2,
+    levelDb: -21.4,
+    preLevelDb: -21.4,
+    peakDb: -8.7,
+    outPeakDb: -8.7,
+    loudest: null,
+    limiter: { state: "resting", maxReductionDb: 0, workingShare: 0, firstAtSec: null },
+    silentShare: 0.1,
+    ...over,
+  });
+  test("the level, the loudest moment and the limiter, in dB below full scale", () => {
+    expect(phraseReadout(reading())).toBe(
+      "Measured over that phrase: average level −21.4 dB, loudest moment −8.7 dB before the limiter (0 dB is full scale). The limiter rested.",
+    );
+    expect(
+      phraseReadout(
+        reading({
+          peakDb: 1.2,
+          limiter: { state: "touching", maxReductionDb: 3.1, workingShare: 0.04, firstAtSec: 1.5 },
+        }),
+      ),
+    ).toBe(
+      "Measured over that phrase: average level −21.4 dB, loudest moment +1.2 dB before the limiter (0 dB is full scale). The limiter caught the loudest hits (up to 3.1 dB).",
+    );
+  });
+  test("a muted output says so instead of printing minus infinity", () => {
+    expect(phraseReadout(reading({ levelDb: Number.NEGATIVE_INFINITY }))).toBe(
+      "Nothing reached the output while Oak was measuring.",
+    );
   });
 });

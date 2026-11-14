@@ -23,6 +23,7 @@ import {
 import { mod12 } from "../analyze/events.ts";
 import { diag } from "../feedback/catalog.ts";
 import type { AnswerCheck } from "./answers.ts";
+import { type FormMapAnswer, gradeFormMap } from "./standard-ladder.ts";
 
 const shown = (d: string): string => d.replace(/^b/, "♭").replace(/^#/, "♯");
 const result = (slots: number[], diagnostics: Diagnostic[], n = slots.length): AnswerCheck => {
@@ -53,6 +54,7 @@ function sectionWords(seq: readonly string[], i: number, letters: string): strin
  * and what the answer made it.
  */
 export function formCheck(ui: Extract<AnswerUi, { ui: "form" }>, correct: Answer, got: Answer): AnswerCheck {
+  if (ui.input === "map") return formMapCheck(ui, correct, got);
   const expected = correct.sections ?? [];
   const answer = got.sections ?? [];
   const eL = formLetters(expected);
@@ -97,6 +99,76 @@ export function formCheck(ui: Extract<AnswerUi, { ui: "form" }>, correct: Answer
   if (answer.length > n)
     diagnostics.push(diag("id.wrong", { exp: `${n} sections`, got: `${answer.length}` }));
   return result(slots, diagnostics, n);
+}
+
+/**
+ * Wave 6 (`form.map`; CF-T.S1, ladder L8): the form map of a whole tune. The learner cuts the bar strip into
+ * sections and labels each; a section counts when it starts on the right bar and has the right label by shape
+ * (`gradeFormMap`: A A B A, verse verse bridge verse and X X Y X are one answer). A missing boundary, a boundary
+ * where the tune has none and a wrong label are each named with their bar.
+ */
+export function formMapCheck(
+  ui: Extract<AnswerUi, { ui: "form" }>,
+  correct: Answer,
+  got: Answer,
+): AnswerCheck {
+  const labels = correct.sections ?? [];
+  const starts = correct.bars ?? [];
+  const total = ui.bars ?? Math.max(...starts, 1);
+  const song = {
+    answerKey: {
+      bars: total,
+      code: "",
+      layers: {},
+      sections: labels.map((label, i) => ({
+        label,
+        bars: [starts[i] ?? 1, (starts[i + 1] ?? total + 1) - 1] as [number, number],
+      })),
+    },
+  };
+  const answer: FormMapAnswer = { sections: got.sections ?? [], bars: got.bars ?? [] };
+  if (labels.length === 0 || answer.sections.length === 0 || answer.bars.length === 0)
+    return result(
+      labels.map(() => 0),
+      [diag("id.missing", { n: Math.max(1, labels.length) }, undefined, "choice")],
+      Math.max(1, labels.length),
+    );
+  const r = gradeFormMap(answer, song);
+  const diagnostics: Diagnostic[] = [];
+  for (const row of r.sections) {
+    if (!row.startOk) {
+      // Never the answer (content/specs/CF.md): the learner's own section that holds the missed boundary, to
+      // listen through again. `bar` stays in the params for a host that marks the strip after a reveal.
+      const cuts = [...new Set(answer.bars)].filter((b) => b <= row.expected.bar).sort((a, b) => a - b);
+      const from = cuts.at(-1) ?? 1;
+      const next = [...answer.bars].filter((b) => b > from).sort((a, b) => a - b)[0];
+      const to = (next ?? total + 1) - 1;
+      diagnostics.push(
+        diag("form.map-start", { bar: row.expected.bar, from, to }, { slot: row.index + 1 }, "order"),
+      );
+    } else if (!row.labelOk) {
+      const at = answer.bars.indexOf(row.expected.bar);
+      diagnostics.push(
+        diag(
+          "form.section",
+          {
+            exp: sectionWords(labels, row.index, r.expected),
+            got: sectionWords([...answer.sections], at, r.got),
+          },
+          { slot: row.index + 1 },
+          "order",
+        ),
+      );
+    }
+  }
+  for (const bar of r.extra) diagnostics.push(diag("form.map-extra", { bar }, undefined, "order"));
+  const slots = r.sections.map((x) => (x.ok ? 1 : 0));
+  return {
+    score: r.score,
+    dims: { choice: { score: r.score, weight: 1, n: slots.length } },
+    diagnostics,
+    slots,
+  };
 }
 
 // --- the bar grid -----------------------------------------------------------------------------------------
@@ -220,9 +292,16 @@ function scaleName(degrees: readonly string[]): string {
     [["1", "2", "b3", "4", "5", "b6", "7"].sort().join(" ")]: "Harmonic minor",
     [["1", "2", "b3", "4", "5", "6", "7"].sort().join(" ")]: "Melodic minor",
     [["1", "2", "3", "4", "5", "6", "7"].sort().join(" ")]: "The major scale",
+    // Wave 6 (U14): the four colour modes.
+    [["1", "2", "3", "4", "5", "6", "b7"].sort().join(" ")]: "Mixolydian",
+    [["1", "2", "b3", "4", "5", "6", "b7"].sort().join(" ")]: "Dorian",
+    [["1", "2", "3", "#4", "5", "6", "7"].sort().join(" ")]: "Lydian",
+    [["1", "b2", "b3", "4", "5", "b6", "b7"].sort().join(" ")]: "Phrygian",
   };
   return NAMES[k] ?? "This scale";
 }
+/** The degree number of a degree label: "b7" → 7, "#4" → 4. */
+const degreeNumber = (d: string): number => Number(d.replace(/^[b#]+/, ""));
 
 /**
  * The `scale-builder` answer (U10–U11; `fam.key.scale-spell`): the scale as a set, degrees ticked on a pad
@@ -258,28 +337,71 @@ export function scaleBuilderCheck(
       .replace(/^([A-G])#/, "$1♯")
       .replace(/^([A-G])b/, "$1♭");
   };
-  const diagnostics: Diagnostic[] = [
-    ...missing.map((s) =>
-      diag(
-        "id.scale-missing",
-        { scale: name, deg: shown(asDegree(s)), syl: syllableOf(asDegree(s) as Degree), note: note(s) },
-        undefined,
-        "choice",
+  // Another scale altogether, one note off per changed degree (U14: the major scale ticked for Mixolydian): one
+  // sentence that names the scale it is and what the asked one has in its place, instead of a pair per note.
+  const answeredDegrees = answered.map((x) => degreeOf(60 + tonicPc + x, major).degree);
+  const gotName = scaleName(answeredDegrees);
+  // Only where a mode is asked for (or the builder opens on a scale to change): U10's three minors keep their
+  // note-by-note findings.
+  const modal = ui.from !== undefined || ["Mixolydian", "Dorian", "Lydian", "Phrygian"].includes(name);
+  const swaps =
+    modal &&
+    missing.length > 0 &&
+    missing.length === extra.length &&
+    gotName !== "This scale" &&
+    name !== "This scale"
+      ? missing.map((m) => {
+          const e = extra.find((x) => degreeNumber(asDegree(x)) === degreeNumber(asDegree(m)));
+          return e === undefined
+            ? null
+            : `${shown(asDegree(m))} (${note(m)}) in place of ${shown(asDegree(e))} (${note(e)})`;
+        })
+      : [];
+  if (swaps.length > 0 && swaps.every((x) => x !== null)) {
+    const total = wantSemis.length + answered.length;
+    const score = total === 0 ? 1 : (2 * hits.length) / total;
+    const lower = (x: string): string => (x.startsWith("The ") ? `t${x.slice(1)}` : x);
+    return {
+      score,
+      dims: { choice: { score, weight: 1, n: wantSemis.length } },
+      diagnostics: [
+        diag(
+          "id.scale-other",
+          { got: lower(gotName), scale: name.replace(/^The /, "the "), swaps: swaps.join(" and ") },
+          undefined,
+          "choice",
+        ),
+        // The note-by-note findings stay behind it as notes (a lesson may word them itself).
+        ...perNote().map((d): Diagnostic => ({ ...d, severity: "info" })),
+      ],
+      slots: wantSemis.map((x) => (answered.includes(x) ? 1 : 0)),
+    };
+  }
+  const diagnostics: Diagnostic[] = perNote();
+  function perNote(): Diagnostic[] {
+    return [
+      ...missing.map((s) =>
+        diag(
+          "id.scale-missing",
+          { scale: name, deg: shown(asDegree(s)), syl: syllableOf(asDegree(s) as Degree), note: note(s) },
+          undefined,
+          "choice",
+        ),
       ),
-    ),
-    ...extra.map((s) =>
-      diag(
-        "id.scale-extra",
-        {
-          scale: `${name.charAt(0).toLowerCase()}${name.slice(1)}`,
-          deg: shown(asDegree(s)),
-          note: note(s),
-        },
-        undefined,
-        "choice",
+      ...extra.map((s) =>
+        diag(
+          "id.scale-extra",
+          {
+            scale: `${name.charAt(0).toLowerCase()}${name.slice(1)}`,
+            deg: shown(asDegree(s)),
+            note: note(s),
+          },
+          undefined,
+          "choice",
+        ),
       ),
-    ),
-  ];
+    ];
+  }
   const total = wantSemis.length + answered.length;
   const score = total === 0 ? 1 : (2 * hits.length) / total;
   return {

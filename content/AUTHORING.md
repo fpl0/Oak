@@ -2,7 +2,7 @@
 
 For every agent or person who writes or reviews Oak content. It applies `docs/design/contracts.md` (schemas, budgets, IDs, unlocks, grading) and `content/STYLE.md` (the code dialect). If this guide and those disagree, they win; fix this guide.
 
-Start here, in this order: this guide, STYLE, your unit's spec (`content/specs/Uxx.md`), then the exemplar lessons `content/core/U01/L01` ("Heartbeat"), `content/core/U02/L01` ("High & Low"), for U03 on `content/core/U03/L02` ("Degrees in Code"), which also shows the Wave 3 shapes of §16, and for U05 on `content/core/U05/L01` ("Stacking Thirds"), which shows how chords are written, graded and made into a song (§17). All of them pass every check with the real grader; copy their shape, not their words. U06.L02 and U07.L08 are the U06 and U07 exemplars. From Wave 5: `content/core/U08/L01` ("Roots Down Low") shows a bass line written and graded against the chords (§18); U09.L02, U10.L01, U11.L05 and A1.L01 are the U09, U10, U11 and side-lesson exemplars.
+Start here, in this order: this guide, STYLE, your unit's spec (`content/specs/Uxx.md`), then the exemplar lessons `content/core/U01/L01` ("Heartbeat"), `content/core/U02/L01` ("High & Low"), for U03 on `content/core/U03/L02` ("Degrees in Code"), which also shows the Wave 3 shapes of §16, and for U05 on `content/core/U05/L01` ("Stacking Thirds"), which shows how chords are written, graded and made into a song (§17). All of them pass every check with the real grader; copy their shape, not their words. U06.L02 and U07.L08 are the U06 and U07 exemplars. From Wave 5: `content/core/U08/L01` ("Roots Down Low") shows a bass line written and graded against the chords (§18); U09.L02, U10.L01, U11.L05 and A1.L01 are the U09, U10, U11 and side-lesson exemplars. From Wave 6: `content/core/U12/L01` ("Major 7 & Minor 7") shows seventh chords written by name, built, heard and graded (§19); U13.L01, U14.L01, U15.L02, U16.L01 and U17.L02 are the exemplars of their units.
 
 ## 1. How content gets made
 
@@ -364,7 +364,7 @@ Several authors run these at the same time. `content:check` only reads, and a le
 
 ## 14. Asking for a registry change
 
-During the Build phase the registries are frozen: `content/syllabus.ts`, `skills.ts`, `toolbox.ts`, `terms.ts` (and `glossary.ts`), `candos.ts`, `flavours.ts`, `milestones.ts`, `content/specs/**`, `content/validate/**` and `scripts/content/**`. One named owner edits each of the rest: in Wave 3 the checkpoint author (author:CP) edits `content/checkpoints.ts`, the checkpoint folders, `content/bands/` and `content/repertoire/`; the drills engineer edits `content/families.ts` and `content/decks/`. If your lesson needs a change:
+During the Build phase the registries are frozen: `content/syllabus.ts`, `skills.ts`, `toolbox.ts`, `terms.ts` (and `glossary.ts`), `candos.ts`, `flavours.ts`, `milestones.ts`, `content/specs/**`, `content/validate/**`, `content/lib/**` and `scripts/content/**`. One named owner edits each of the rest: the checkpoint author (author:CP) edits `content/checkpoints.ts`, the checkpoint folders and `content/bands/`; the repertoire author `content/repertoire/` (from Wave 5 on); the capstone authors their own entries of `content/capstones.ts` (re-read the file before each edit; change only your entries); the drills engineer edits `content/families.ts`, `content/decks/` and `content/gym/`. If your lesson needs a change:
 
 1. Do not edit the registry. Write the lesson as if the entry existed only if the check still passes; otherwise leave that part out.
 2. In your result's `apiNotes`, give the **exact entry** you need, as code, with its reason: for a term, the `t(...)` line with id, word, one-sentence sound-first definition, example code legal at your lesson, your lesson ID; for a can-do, the `c(...)` line; for a tool, the unlock row and its contracts §3.2 justification; for a Band, the meter, harmony and all four flavour codes.
@@ -674,10 +674,119 @@ matcher: { m: "controls", track: "bass", controls: [
 
 `control` is the method as written; content CI requires its toolbox row to be `audible: true` and unlocked at the lesson. A control listed twice is `controls.unique`; the matcher grades code only (`controls.kind`).
 
-### 18.6 Capstones in three sessions, X2 in stages
+### 18.6 Capstones in several sessions, X2 in stages
 
-C3 has three sessions (`sessions: 3`, three `sessionDefs`, only the last releases). X2's checks open in order with `after` (feature `capstone.check-after`): the changes after the bass, the melody after the changes, each naming checks defined before it (`capstone.check-after`). `bun run content:check X2` lists every planned shape a capstone's sessions use.
+C3 has four sessions since contracts 1.6 (`sessions: 4`, four `sessionDefs`, only the last releases: the third arranges and writes the lead sheet, the fourth records the take, reviews and releases). X2's checks open in order with `after` (feature `capstone.check-after`): the changes after the bass, the melody after the changes, each naming checks defined before it (`capstone.check-after`). `bun run content:check X2` lists every planned shape a capstone's sessions use.
 
 ### 18.7 Specs: enjoyment, pace and return
 
 From U08 every lesson of a unit spec carries `epr: { enjoyment, pace, return }`, one line each (content/validate/specs.test.ts and `bun scripts/content/spec.ts --check` fail without them): what the learner makes and would replay, the single new idea and what was cut to keep it single, and what the Coda says they can now do and what opens next. A spec may cover part of a unit (`covers`: the A1 spec covers A1.L01–L04).
+
+## 19. The Wave 6 shapes (sevenths, rhythm II, modes, chromatic harmony, key changes, the finale)
+
+Wave 6 added these to `@oak/content-kit` (`CONTENT_SCHEMA_VERSION` 5). There is no new exercise kind, answer widget or matcher: the wave is new fields on kinds you know, one new rule (`reharmonize`), and rules that have had an analyzer since Wave 1 and now meet authored content. As in §17 and §18, a shape marked (planned) sits in `PLANNED`: a unit spec may use it, and a lesson that does fails check 2 until the Build phase moves it into `IMPLEMENTED`. `bun run content:check <id>` names them. `docs/design/wave6.md` §11 says who renders and who grades each one.
+
+### 19.1 Seventh chords by name (the worked example: U12.L01)
+
+A seventh chord in code is its symbol inside `chord()` (STYLE §5.1): `C^7`, `C7`, `Cm7`, `Cm7b5`, `Co7`. Prose uses the lead-sheet form (Cmaj7, Cm7♭5, C°7); show both once. Each family unlocks with its lesson (`chord.seventh` U12.L01, `chord.seventh-dim` U12.L03), so `Cm7b5` in a U12.L01 answer is `code.locked-chord` and `Cmaj7` is `code.unknown-chord`: pin both where a learner would write them. The default dictionary does not always put the root lowest (`Dm7` voices F3 C4 D4 F4 C5), so every loop carries a `bass:` line on `.rootNotes(2)` and no prose points at a voice of the voicing.
+
+Graded today, as U12.L01 does it:
+
+```ts
+// S5 modify: a named chord is its pitch classes and its lowest note at each onset
+code: { starter: loop("<⟪C Am Dm⟫ G7>") },
+reference: { solutions: [loop("<C^7 Am7 Dm7 G7>")], bars: 4 },
+matcher: { m: "pcset", perOnset: true, bass: true, tracks: ["chords"] },   // C7 for C^7: harmony.pcset
+// S4 keyboard: build Fmaj7
+expect: { pcs: [5, 9, 0, 4], bassPc: 5 }, pitchMode: "octave-free",
+// S6 ear: which of the lesson's qualities (a fixed item until `fam.chd.quality-7th` opens in U12.L02)
+answer: { ui: "quality-pad", set: ["maj7", "m7"] }, correct: { qualities: ["maj7"] },   // id.quality
+// S7 Make: one required rule, read at seventh depth
+{ rule: "chord-qualities", track: "chords", contains: ["maj7", "m7"], depth: "seventh", required: true, … }
+```
+
+`SEVENTH_QUALITIES` lists the five qualities in teaching order (offer a quality only from its lesson), `SEVENTH_DEGREES` each one as degrees above its root, `DIATONIC_SEVENTHS` the quality on each degree of a major and of a natural-minor key. Numerals with sevenths are an `rn-palette` with `allow: ["sevenths"]` (`Imaj7 vi7 ii7 V7`, `viiø7`, `vii°7`), graded by degree and quality at seventh depth: `V` for `V7` and `I7` for `Imaj7` are `harmony.rn-quality`. A twelve-bar or four-bar chart of sevenths is a `bar-grid` with `qualities` from `SEVENTH_QUALITIES`. Left-hand voicings are `.dict("lefthand")` before `.voicing()` (U12.L06; sevenths and sixths only, STYLE §5.2), graded by `pcset` against a reference in the same dictionary, with `must-use tb.dict.lefthand`.
+
+### 19.2 Guide tones
+
+"The 3rd and 7th as a thread" (U12.L05; the jazz track builds on it). A guide-tone line the learner writes note by note is an `events` match on its track. A tune that lands on guide tones is the `guide-tones` rule (planned): `{ rule: "guide-tones", track: "mel", harmony: "chords", minRatio: 0.75, at: "change", maxMoveSemis: 2 }`: the share of chord changes at which the line sounds the new chord's 3rd or 7th; `at` says which notes are judged (`change`, every `strong` beat, or `all`), `maxMoveSemis` how far the line may move between them. Singing the thread is a `sing` step with `mode: "guide-tones"` (planned, feature `sing.guide-tones`): the target is a reference track or degrees (`sing.guide-tones-target`), and like every sung step it declares `fallback` (Quiet mode picks the notes) and never gates.
+
+### 19.3 Rhythm II: pushes, ghost notes, ties and dots, compound meter, triplets
+
+- **Pushes** are `.early(1/8)` and `.late(1/16)` with a number, never a fraction inside a string (§9; contracts §0.16). They move onsets, so a `rhythm` or `events` matcher sees them; `nudge` never unlocks. "On the beat or pushed" by ear is an `identify` with `PUSH_OPTIONS`; a Make that asks for off-beat accents uses `syncopation` (`track`, `min`).
+- **Ghost notes** are `.velocity("…")` with one value per step (a control pattern takes its rhythm from the left: evaluate and read the events). A graded step and a Make both use `velocity-ghosts` (planned; in a modify step inside `{ m: "rubric", rules: […] }`), since the `controls` matcher does not read `velocity` yet (ask the grader engineer if a step needs "match these dynamics" value by value): `{ rule: "velocity-ghosts", track: "snare", min: 4, on: "16th-offbeat", accents: 2 }`: at least `min` hits at an effective gain (`gain × velocity`) of `maxGain` (0.4) or less, and with `accents` that many hits at full level, so a line that is quiet throughout does not pass.
+- **Ties, dots and triplets on the staff**: the staff input's `palette.durations` are note-list tokens (`staff.duration-token`): `4` `8` `16`, `4.` a dotted quarter, `8t` a triplet eighth; `ties: true` lets a note be tied to the next one of the same pitch, across the bar line too. Tests answer in the same DSL: `{ staff: "C4:4. D4:8 E4:4~ E4:8 F4:8" }`, `"(3:2 C4:8 D4:8 E4:8)"` or `C4:8t D4:8t E4:8t`. Each is a planned feature (`staff-input.dots`, `.triplets`, `.ties`). Before U13.L03 nothing needs a tie or a dot (contracts §2.8).
+- **Compound meter**: the lesson (or one exercise) declares `meter: "6/8"` (or `9/8`, `12/8`); BPM counts the dotted quarter and the tempo line is `setcpm(bpm/2)` in 6/8 (contracts §6.9; `tb.meter.compound`, U13.L04). A lesson or exercise in a compound meter is the planned feature `meter.compound` until every surface draws it. A step grid is `stepsPerBar: 6` for the six eighths of a 6/8 bar and `12` for 12/8 or for eighth-note triplets in 4/4; `24` is sixteenth-note triplets (6 and 24 are the planned feature `grid.steps`). Swing is not used in compound meters (STYLE §7). "Simple or compound" is `METER_FEEL_OPTIONS`; "two or three to the beat" inside 4/4 is `BEAT_DIVISION_OPTIONS`.
+- **Triplets in code** are a bracket of three (`[hh hh hh]`) or `.ply(3)` on a beat (U13.L05); a rule that asks for them is `onsets` with `contains: [[1, 12], [1, 6]]`.
+
+### 19.4 Modes
+
+A mode is a `KeySpec` like any key: `{ tonic: "G", mode: "mixolydian" }`, and `.scale("G4:mixolydian")` in code; each scale name unlocks with its lesson (U14.L01, L03, L04, L05). `MODE_DEGREES` gives a mode's degrees against major (Dorian 1 2 ♭3 4 5 6 ♭7), `MODE_CHARACTERISTIC` its parent (major or minor), its characteristic tone and the parent's degree it replaces. "Which mode" is an `identify` with `MODE_OPTIONS` (offer each from its lesson). "Raise or lower one note to get the mode" is the scale builder opened on a scale (planned, feature `scale-builder.from`):
+
+```ts
+answer: { ui: "scale-builder", tonic: "G", input: "degrees", from: "major",
+  palette: ["1", "2", "3", "4", "#4", "5", "6", "b7", "7"] },
+correct: { degrees: ["1", "2", "3", "4", "5", "6", "b7"] },      // untick 7, tick ♭7
+```
+
+The palette holds every degree of the starting scale and of the answer, and the answer differs from the start (`scale-builder.from`). A modal piece is checked with the `mode` rule (planned): the characteristic tone on a strong beat at least twice (`requireCharacteristic`), none of the degree it replaces, the tonic chord in at least 40% of the bars. `anyOf` lets the learner choose and `tonic: "declared"` reads the tonic from the piece's own `.scale()` (feature `mode.any-of`): C6 is `{ rule: "mode", tonic: "declared", mode: "mixolydian", anyOf: ["mixolydian", "dorian"], requireCharacteristic: true }`.
+
+### 19.5 Chromatic degrees
+
+From U15.L01 a degree may come from outside the key: ♯4 ♭7 ♯5 ♯1 ♭2 ♭3 ♭6 (`CHROMATIC_DEGREES`), sung fi te si di ra me le (`DEGREE_SYLLABLES`), written in code as step strings, `n("3#")` for ♯4 and `n("6b")` for ♭7 (`CHROMATIC_STEPS`; the number is the step, not the degree: STYLE §6.3). A degree pad lists them in its `set` with `syllables: true`; a sung target writes them in `degrees` and declares `fallback: "identify"`, which is the Quiet path. **Before U15.L01 a degree pad and a sung target stay inside the key's own degrees** (check 14, `chromatic.before-u15`): a mode's own degrees are not chromatic in that mode (♭7 in G Mixolydian, ♭3 in C blues), and the three minors count as one key.
+
+### 19.6 Chords from outside the key: applied and borrowed
+
+- **Name it**: an `rn-palette` with `allow: ["triads", "sevenths", "secondary"]` (V/V, V7/ii, vii°/V) or `"borrowed"` (iv, ♭III, ♭VI, ♭VII, the Picardy I). `labels` names the slots, so one step can ask for the chord and where it goes: `{ slots: 2, labels: ["The chord", "It leads to"] }`, `correct: { rn: ["V7/V", "V"] }`. Numerals are read by degree, chroma and quality, never as strings (`♭VI` and `bVI` are one answer; `II7` for `V7/V` is `harmony.rn-degree`).
+- **Build it**: the keyboard (`expect: { pcs, bassPc }`) or code graded with `pcset`.
+- **Find it**: "which bar has the chord from outside the key" is `{ ui: "bar-buttons", bars: 4 }` with `correct: { number: 2 }`; "where is this chord from" is a `choice` with `OUTSIDE_CHORD_OPTIONS` (offer each kind from its lesson).
+- **In a Make or a brief** (planned features of `contains-rn`): `kind: ["secondary-dominant"]` counts any chord of that kind (`OUTSIDE_CHORD_KINDS`: `secondary-dominant`, `applied-leading-tone`, `borrowed`), with `rn: []`; `mustResolve` asks that it go to its target. `inOrder: true` asks for a run: `{ rule: "contains-rn", rn: ["bVI", "bVII", "I"], min: 1, inOrder: true }`.
+- **A reharmonization** (U16.L05) is one rule, so a lesson Make can require it: `{ rule: "reharmonize", melody: "mel", reference: { solutions: [ORIGINAL], bars: 8 }, min: 2, kinds: ["borrowed", "secondary-dominant"] }` (planned): the tune's notes are the reference's, note for note, and at least `min` chords are of the asked kinds (without `kinds`: at least `min` bars carry another chord than the original's).
+
+### 19.7 Key changes
+
+A key change is written with a patterned `.scale()` (contracts §6.8, STYLE §9), counted in bars of the whole piece and placed after `arrange()` when the piece has sections; `.transpose()` after `.scale()` is refused. An exercise whose example or answer changes key declares its plan (planned, feature `key-plan`):
+
+```ts
+key: { tonic: "C", mode: "major" },
+keyPlan: [{ bar: 1, key: { tonic: "C", mode: "major" } }, { bar: 9, key: { tonic: "D", mode: "major" } }],
+```
+
+Degrees, syllables and numerals of a bar are then read in the key in force at that bar. The plan starts at bar 1 (0 with a pickup) in the exercise's `key`, in bar order (`key-plan.first`, `key-plan.order`). "Where does it change" is `bar-buttons`; "to what" a `text` answer with `normalize: "key"`; "how" a `choice` with `KEY_CHANGE_OPTIONS`. A pivot chord is one chord named in two keys (planned, feature `rn-palette.slot-keys`): `{ ui: "rn-palette", slots: 2, allow: ["triads"], labels: ["In C major", "In G major"], slotKeys: [C, G] }`, `correct: { rn: ["vi", "ii"] }`. In a Make: a lift is `key-change` (`at`, `semitones`, `minBarsAfter`, `sameMelody`; C7), a modulation through a pivot is `modulation` with `via: "pivot"` (both planned).
+
+### 19.8 C6, C7 and the finale
+
+The briefs of contracts §6.6 are written without `custom` rules (`packages/content-kit/src/wave6.test.ts` holds a parsing version of each):
+
+| Capstone | Rules |
+|---|---|
+| C6 Modal Vamp | `mode` with `anyOf` and `tonic: "declared"`; `bars` ≥ 16 |
+| C7 Chromatic Colour | `contains-rn` `kind: ["secondary-dominant"]` with `mustResolve`; `contains-rn` `["bVI", "bVII", "I"]` `inOrder`; `key-change` `at: "last"`, `semitones: [1, 2]`, `minBarsAfter: 8`, `sameMelody`; `bars` ≥ 32 |
+| CF-A Album Single | `device-count` `devices: [...CORE_DEVICES]`, `min: 4` (the names are `DEVICE_NAMES`, as the grader reports them); `form` `pattern: "*"`, `contains: ["bridge"]`; `duration-sec` ≥ 120 |
+
+A capstone may have any number of sessions (C3 and both finales have four); only the last releases. CF-T is a transcribe capstone that runs in gym slots (`inGymSlots: true`, opened by U15.L01: from then on every slot is its next session until it is released; `content/validate/gym.test.ts` proves its four sessions sit on slots). Its sessions use three Wave 6 shapes (planned):
+
+```ts
+// S1: the form map, then the bass
+formMap: { id: "form-map", vocabulary: "letters", boundaries: "asked", pass: 1 },
+checks: [{ id: "bass", phrase: [1, 4], layer: "bass", pass: 0.9, matcher: BASS, after: ["form-map"] }],
+// S2: the changes; a right root with the wrong quality earns nothing for its bar (d11)
+checks: [{ id: "changes", phrase: [1, 4], layer: "chords", pass: 0.85, after: ["bass"], stages: ["bass", "quality", "rn"],
+  matcher: { m: "harmony", level: "rn", qualityDepth: "seventh", inversion: false, harmonicRhythm: "given", wrongQuality: "none" } }],
+// S4: the arrangement keeps the song's own sections
+rubric: [{ rule: "tracks", min: 4, roles: ["drums", "bass", "chords", "melody"], required: true, … },
+         { rule: "form", pattern: "@song", extra: ["intro", "outro"], required: true, … }],
+```
+
+The form map is the `form` answer in `input: "map"`: the learner cuts the tune's bars into sections and labels them (`answer.sections` with `answer.bars`, the first bar of each); it is read against the song's `answerKey.sections` (`{ label, bars: [from, to] }`, covering the tune without gaps: `song.sections`), which every CF-T standard therefore carries. `@song` in a `form` rule is that same list, and belongs only in a session rubric of a transcribe capstone (`rubric.form-song`). A song that changes key carries `keyPlan` (Body and Soul's A section into its bridge).
+
+### 19.9 A Make that opens with an earlier sketch
+
+A Make whose prompt says "your blues" or "your Aeolian loop" names the lesson whose sketch it means: `fromSketch: "U10.L05"` on the `code-make` exercise. The Make then opens with the learner's latest saved sketch of that lesson when there is one, with a "Start from Oak's copy" button that puts `code.starter` back; with no sketch it opens with the starter. The starter stays a complete starter and every test grades against it. The lesson named is completed before this one in every legal order (check 14, `make.from-sketch`): never a side lesson, never a later lesson. Use it only where the learner's own sketch does not already meet the required rule (U12.L01's Make starts from Oak's copy for that reason). U06.L10, U10.L06 and U11.L07 carry it.
+
+### 19.10 What contracts 1.6 changed for authors
+
+- The default order has 185 sessions: U05.L09 "Chord Names" follows U05.L04 "Arpeggios" (the lesson it was split out of; the syllabus row carries `splitFrom`, and unit rows are in teaching order), and C3 has a fourth session. Session numbers in specs written before 1.6 were moved: U12.L01 is session 125, U13.CP 147, U14.CP 155, U17.CP 177, CF-A.S4 185.
+- Twelve fact decks are in the catalog (`content/decks`), the nine promoted ones at one new card a day. A lesson may `seed` or `review-if-due` any of them from its unlock lesson on.
+- X1's chord stages pass at 0.85.
+

@@ -3,6 +3,7 @@
 // implemented when the first capstone that needs them is authored.
 import { flattenExercise } from "./define.ts";
 import type {
+  AnswerUi,
   AnswerUiKind,
   AstConstraintName,
   CapstoneDef,
@@ -11,6 +12,7 @@ import type {
   LessonDef,
   Matcher,
   MatcherName,
+  MeterId,
   RubricRule,
   RubricRuleName,
 } from "./schema/index.ts";
@@ -71,6 +73,51 @@ export const SCHEMA_FEATURES = [
   "panel.wave5",
   /** `PhraseCheck.after`: a capstone check that opens after others (X2: bass → changes → melody). */
   "capstone.check-after",
+  // Wave 6 (U12–U17, C6, C7, CF-A, CF-T; AUTHORING §19).
+  /** `ExBase.keyPlan`: an exercise whose example or answer changes key, read bar by bar in the key in force. */
+  "key-plan",
+  /** `rn-palette` with `labels` or `slotKeys` (a pivot chord named in two keys). */
+  "rn-palette.slot-keys",
+  /** `grid` with `stepsPerBar` 6 (a 6/8 bar) or 24 (sixteenth-note triplets). */
+  "grid.steps",
+  /** `form` with `input: "map"` and `Answer.bars` (the form map of a whole tune). */
+  "form.map",
+  /** `scale-builder` with `from` ("raise or lower one note to get the mode"). */
+  "scale-builder.from",
+  /** `staff-input` with `palette.ties: true`. */
+  "staff-input.ties",
+  /** `staff-input` with a dotted duration token (`4.`). */
+  "staff-input.dots",
+  /** `staff-input` with a triplet duration token (`8t`). */
+  "staff-input.triplets",
+  /** A lesson or exercise in 6/8, 9/8 or 12/8: the dotted-quarter beat in the roll, the staff, taps and grids. */
+  "meter.compound",
+  /** `SingEx` with `mode: "guide-tones"`. */
+  "sing.guide-tones",
+  /** The `harmony` matcher with `wrongQuality: "none"` (d11: no credit for a right root with the wrong quality). */
+  "harmony.wrong-quality",
+  /** `contains-rn` with `kind` (any secondary dominant, any borrowed chord). */
+  "contains-rn.kind",
+  /** `contains-rn` with `inOrder` (♭VI–♭VII–I somewhere in the piece). */
+  "contains-rn.in-order",
+  /** `form` with `contains` and the `*` pattern (the form contains a bridge). */
+  "form.contains",
+  /** `form` with the `@song` pattern and `extra` (CF-T.S4: the arrangement keeps the song's sections). */
+  "form.song",
+  /** `mode` with `anyOf` or `tonic: "declared"` (C6: Mixolydian or Dorian). */
+  "mode.any-of",
+  /** `guide-tones` with `at` or `maxMoveSemis`. */
+  "guide-tones.motion",
+  /** `modulation` with `via` (a pivot chord, or none). */
+  "modulation.via",
+  /** `velocity-ghosts` with `drum` or `accents`. */
+  "velocity-ghosts.accents",
+  /** `CodeMakeEx.fromSketch` (d15: a Make that opens with the learner's sketch of an earlier lesson). */
+  "make.from-sketch",
+  /** `CapstoneSessionDef.formMap` (CF-T.S1). */
+  "capstone.form-map",
+  /** `CapstoneSessionDef.rubric` (CF-T.S4). */
+  "capstone.session-rubric",
 ] as const;
 export type SchemaFeature = (typeof SCHEMA_FEATURES)[number];
 
@@ -166,6 +213,20 @@ export const IMPLEMENTED: Implemented = {
     "swing",
     "syncopation",
     "blues-form",
+    // Wave 6 Build (grader), each with its golden tests: the §6.6 rubrics of C6, C7 and CF-A with one passing
+    // piece per shipped flavour and the known-wrong pieces (packages/grader/src/grade/capstone-wave6.test.ts),
+    // the rule tests on real Strudel output (rubric/wave6-rules.test.ts) and the device detector with the bar of
+    // each device (analyze/devices-wave6.test.ts).
+    "mode",
+    "key-change",
+    "modulation",
+    "guide-tones",
+    "velocity-ghosts",
+    "device-count",
+    "reharmonize",
+    // Added in the Wave 6 Build at the U13 spec's request ("a triplet somewhere"); graded with tests
+    // (rubric/wave6-rules.test.ts).
+    "tuplets",
   ],
   answerUis: [
     "choice",
@@ -220,6 +281,49 @@ export const IMPLEMENTED: Implemented = {
     "capstone.check-after",
     "step.probe",
     "panel.wave5",
+    // Wave 6 Foundation: `CodeMakeEx.fromSketch` changes nothing a grader or a test reads (the starter stays a
+    // complete starter, and every test grades against it). Until the lesson host and the Workbench open the
+    // learner's saved sketch (Wave 6 Build, d15) the Make opens with Oak's copy, as it always has, so content
+    // may carry the field from now on: the three Makes that say "your loop" or "your blues" do (U06.L10,
+    // U10.L06, U11.L07), and the host's tests read them.
+    "make.from-sketch",
+    // Wave 6 Build (grader): fields that only the grader reads, graded with tests (packages/grader/src
+    // rubric/wave6-rules.test.ts, grade/decisions-wave6.test.ts for d11, grade/capstone-wave6.test.ts,
+    // grade/standard-ladder.test.ts). A Make line and the capstone checklist draw them as any rule.
+    "harmony.wrong-quality",
+    "contains-rn.kind",
+    "contains-rn.in-order",
+    "form.contains",
+    "form.song",
+    "mode.any-of",
+    "guide-tones.motion",
+    "modulation.via",
+    "velocity-ghosts.accents",
+    // Wave 6 Build: rendered by their owners and graded with tests, moved here on the renderer owner's request.
+    //   staff-input.ties / .dots / .triplets  answers (staff/rhythm.ts → StaffInput.tsx) on notation's note list; a
+    //                          tied note is one event, `4.` lasts three 8ths, `8t` a third of a beat (packages/grader
+    //                          grade/staff-rhythm-wave6.test.ts against Strudel's own `@` and brackets)
+    //   grid.steps             answers (RhythmGrid grouped by the meter), drills-ui; graded as the cells chosen
+    //   meter.compound         lesson (tap pad and grid in the meter, counted on the dotted quarter), workbench (beat
+    //                          grid, 12/8 in Studio), notation (beams by the dotted quarter); the grader has been
+    //                          meter-aware since Wave 3 (match/rhythm-wave6.test.ts: tempo unit, grid, no tuplets)
+    //   form.map, scale-builder.from, rn-palette.slot-keys  answers (FormMap, ScaleBuilder `from`, RnPalette labels
+    //                          and slot keys); graded in grade/answers-wave6.test.ts and grade/key-plan-wave6.test.ts
+    "staff-input.ties",
+    "staff-input.dots",
+    "staff-input.triplets",
+    "grid.steps",
+    "meter.compound",
+    "form.map",
+    "scale-builder.from",
+    "rn-palette.slot-keys",
+    // Wave 6 integration (packages): rendered by the capstone engineer and graded with tests.
+    //   capstone.form-map      the CF-T workspace opens S1 with the map (app/src/capstone/x1/FormMapPanel.tsx,
+    //                          cft.ts `formMapGrade` → `gradeFormMap`; grade/standard-ladder.test.ts)
+    //   capstone.session-rubric  CF-T.S4 grades its own rules on the whole arrangement (cft.ts
+    //                          `sessionRubricRequest`, with `songFormOf(song)` for `@song`; capstone-wave6.test.ts)
+    "capstone.form-map",
+    "capstone.session-rubric",
   ],
 };
 
@@ -232,7 +336,15 @@ export const GRADER_READY: Pick<Implemented, "answerUis" | "features"> = {
   answerUis: [],
   // Rendered by Transcribe (ladder items) and the capstone X1 workspace, which read them from the API and
   // content/capstones.ts; no lesson host renders a staged `transcribe-step` or a `capstone-song` stimulus yet.
-  features: ["transcribe.stages", "stimulus.capstone-song"],
+  features: [
+    "transcribe.stages",
+    "stimulus.capstone-song",
+    // Wave 6 Build (grader): graded and tested, waiting for their renderer. The owner of the renderer asks for the
+    // move into `IMPLEMENTED` (this file is the grader engineer's during Build; the integrators' afterwards).
+    //   key-plan               melody, events and harmony matchers and every rule read the key in force at each bar
+    //                          (packages/grader grade/key-plan-wave6.test.ts); the hosts draw it (notation, workbench)
+    "key-plan",
+  ],
 };
 
 /**
@@ -247,6 +359,8 @@ export const PLANNED: Implemented = {
   // contrast, swing, syncopation and blues-form moved into `IMPLEMENTED` with their golden tests.
   matchers: [],
   constraints: [],
+  // Wave 6 Build (grader): mode, key-change, modulation, guide-tones, velocity-ghosts, device-count and
+  // reharmonize moved into `IMPLEMENTED` with their golden tests.
   rubricRules: [],
   // Wave 5 integration moved the form strip, the twelve-bar chart and the scale builder into `IMPLEMENTED`.
   answerUis: [],
@@ -280,6 +394,7 @@ export interface UnimplementedUse {
 
 function matcherUses(m: Matcher, ex: string, impl: Implemented, out: UnimplementedUse[]): void {
   if (!impl.matchers.includes(m.m)) out.push({ what: "matcher", name: m.m, exercise: ex });
+  if (m.m === "harmony" && m.wrongQuality === "none") featureUse("harmony.wrong-quality", ex, impl, out);
   if (m.m === "all") for (const sub of m.of) matcherUses(sub, ex, impl, out);
   if (m.m === "rubric") for (const r of m.rules) ruleUses(r, ex, impl, out);
 }
@@ -302,9 +417,37 @@ function ruleUses(r: RubricRule, ex: string, impl: Implemented, out: Unimplement
   if (r.rule === "ends-on-degree" && r.over) featureUse("ends-on-degree.over", ex, impl, out);
   if (r.rule === "blues-form" && (r.choruses !== undefined || r.quickChangeOk))
     featureUse("blues-form.choruses", ex, impl, out);
+  if (r.rule === "contains-rn" && r.kind) featureUse("contains-rn.kind", ex, impl, out);
+  if (r.rule === "contains-rn" && r.inOrder) featureUse("contains-rn.in-order", ex, impl, out);
+  if (r.rule === "form" && (r.contains || r.pattern === "*")) featureUse("form.contains", ex, impl, out);
+  if (r.rule === "form" && (r.pattern === "@song" || r.extra)) featureUse("form.song", ex, impl, out);
+  if (r.rule === "mode" && (r.anyOf || r.tonic === "declared")) featureUse("mode.any-of", ex, impl, out);
+  if (r.rule === "guide-tones" && (r.at !== undefined || r.maxMoveSemis !== undefined))
+    featureUse("guide-tones.motion", ex, impl, out);
+  if (r.rule === "modulation" && r.via) featureUse("modulation.via", ex, impl, out);
+  if (r.rule === "velocity-ghosts" && (r.drum || r.accents !== undefined))
+    featureUse("velocity-ghosts.accents", ex, impl, out);
+  if (r.rule === "reharmonize") {
+    if (r.kinds) featureUse("contains-rn.kind", ex, impl, out);
+  }
   if (r.rule === "custom" && !impl.customRules.includes(r.fn))
     out.push({ what: "custom-rule", name: r.fn, exercise: ex });
   if (r.rule === "matches") matcherUses(r.matcher, ex, impl, out);
+}
+
+/** Wave 6. The compound meters (contracts §6.9: the dotted-quarter beat). */
+export const COMPOUND_METERS: readonly MeterId[] = ["6/8", "9/8", "12/8"];
+function answerUiFeatures(ui: AnswerUi, ex: string, impl: Implemented, out: UnimplementedUse[]): void {
+  if (ui.ui === "rn-palette" && (ui.labels || ui.slotKeys)) featureUse("rn-palette.slot-keys", ex, impl, out);
+  if (ui.ui === "grid" && (ui.stepsPerBar === 6 || ui.stepsPerBar === 24))
+    featureUse("grid.steps", ex, impl, out);
+  if (ui.ui === "form" && ui.input === "map") featureUse("form.map", ex, impl, out);
+  if (ui.ui === "scale-builder" && ui.from) featureUse("scale-builder.from", ex, impl, out);
+  if (ui.ui === "staff-input") {
+    if (ui.palette.ties) featureUse("staff-input.ties", ex, impl, out);
+    if (ui.palette.durations.some((d) => d.includes("."))) featureUse("staff-input.dots", ex, impl, out);
+    if (ui.palette.durations.some((d) => d.endsWith("t"))) featureUse("staff-input.triplets", ex, impl, out);
+  }
 }
 
 /** Everything an exercise uses that `impl` does not list. Empty = the exercise can ship in this wave. */
@@ -319,6 +462,13 @@ export function unimplementedIn(exercise: Exercise, impl: Implemented = IMPLEMEN
         if (!impl.constraints.includes(c.c)) out.push({ what: "constraint", name: c.c, exercise: ex.id });
     if ("answer" in ex && !impl.answerUis.includes(ex.answer.ui))
       out.push({ what: "answer-ui", name: ex.answer.ui, exercise: ex.id });
+    if ("answer" in ex) answerUiFeatures(ex.answer, ex.id, impl, out);
+    if (ex.kind === "dictation")
+      for (const ui of Object.values(ex.stageAnswers ?? {})) if (ui) answerUiFeatures(ui, ex.id, impl, out);
+    if (ex.keyPlan) featureUse("key-plan", ex.id, impl, out);
+    if (ex.meter && COMPOUND_METERS.includes(ex.meter)) featureUse("meter.compound", ex.id, impl, out);
+    if (ex.kind === "sing" && ex.mode === "guide-tones") featureUse("sing.guide-tones", ex.id, impl, out);
+    if (ex.kind === "code-make" && ex.fromSketch) featureUse("make.from-sketch", ex.id, impl, out);
     if ("stimulus" in ex && ex.stimulus) {
       if (ex.stimulus.src === "capstone-song") featureUse("stimulus.capstone-song", ex.id, impl, out);
       if (ex.stimulus.src === "code" && ex.stimulus.showLeadSheet) featureUse("lead-sheet", ex.id, impl, out);
@@ -354,8 +504,10 @@ export function unimplementedIn(exercise: Exercise, impl: Implemented = IMPLEMEN
 }
 
 export function unimplementedInLesson(def: LessonDef, impl: Implemented = IMPLEMENTED): UnimplementedUse[] {
-  return def.steps.flatMap((s) => {
+  return def.steps.flatMap((s, i) => {
     const out = s.exercise ? unimplementedIn(s.exercise, impl) : [];
+    // A lesson in a compound meter needs the whole surface in that meter: reported once, on its first step.
+    if (i === 0 && COMPOUND_METERS.includes(def.meter)) featureUse("meter.compound", s.id, impl, out);
     if (s.ui.initialPanels) featureUse("step.initial-panels", s.id, impl, out);
     if (s.ui.initialPanels?.some((p) => p === "form" || p === "scope" || p === "spectrum"))
       featureUse("panel.wave5", s.id, impl, out);
@@ -381,6 +533,14 @@ export function unimplementedInCapstoneSessions(
       if (x.after) featureUse("capstone.check-after", x.id, impl, out);
     }
     for (const st of s.stages ?? []) out.push(...unimplementedIn(st, impl));
+    if (s.formMap) {
+      featureUse("capstone.form-map", s.formMap.id, impl, out);
+      if (s.formMap.boundaries === "asked") featureUse("form.map", s.formMap.id, impl, out);
+    }
+    if (s.rubric) {
+      featureUse("capstone.session-rubric", s.id, impl, out);
+      for (const r of s.rubric) ruleUses(r, s.id, impl, out);
+    }
   }
   return out;
 }

@@ -66,25 +66,48 @@ export function diatonicInKey(key: KeySpec, index: number, seventh: boolean, har
   return { chord: c, root, symbol: chordCode(root, c.quality), rn: scaleRn(index, c.quality) };
 }
 
-const APPLIED_TARGETS: readonly { index: number; degree: Degree }[] = [
-  { index: 2, degree: "2" },
-  { index: 4, degree: "4" },
-  { index: 5, degree: "5" },
-  { index: 6, degree: "6" },
-];
-const BORROWED: readonly { rn: string; chord: RnChord }[] = [
-  { rn: "iv", chord: rn("4", "min") },
-  { rn: "bVI", chord: rn("b6", "maj") },
-  { rn: "bVII", chord: rn("b7", "maj") },
-  { rn: "bIII", chord: rn("b3", "maj") },
-];
+/** V7 of a target degree: [scale step of the target, the target's degree]. */
+const APPLIED_TARGETS: Readonly<Record<string, readonly { index: number; degree: Degree }[]>> = {
+  // U15.L02 "Five of Five"; U15.L03 "Visiting Other Chords" (V7/vi, V7/ii, V7/IV).
+  applied: [{ index: 5, degree: "5" }],
+  "applied-visitors": [
+    { index: 6, degree: "6" },
+    { index: 2, degree: "2" },
+    { index: 4, degree: "4" },
+  ],
+};
+/**
+ * Borrowed chords by lesson, each with the key's own chord it is the near miss of (one changed note, or the
+ * chord on the same degree): iv against IV (U16.L01), ♭VI against vi and ♭VII against vii° (U16.L02), ♭III
+ * against iii (U16.L03).
+ */
+const BORROWED: Readonly<Record<string, readonly { rn: string; chord: RnChord; twin: number }[]>> = {
+  borrowed: [{ rn: "iv", chord: rn("4", "min"), twin: 4 }],
+  "borrowed-flats": [
+    { rn: "bVI", chord: rn("b6", "maj"), twin: 6 },
+    { rn: "bVII", chord: rn("b7", "maj"), twin: 7 },
+  ],
+  "borrowed-bIII": [{ rn: "bIII", chord: rn("b3", "maj"), twin: 3 }],
+};
+/** The palette a numeral answer needs (the drill runner's `rn-palette.allow`). */
+const RN_ALLOW: Readonly<Record<string, string[]>> = {
+  sevenths: ["triads", "sevenths"],
+  "minor-sevenths": ["triads", "sevenths"],
+  applied: ["triads", "sevenths", "secondary"],
+  "applied-visitors": ["triads", "sevenths", "secondary"],
+  borrowed: ["triads", "borrowed"],
+  "borrowed-flats": ["triads", "borrowed"],
+  "borrowed-bIII": ["triads", "borrowed"],
+};
+/** How often a chromatic category asks for the key's own chord on the same root instead (the near miss). */
+const TWIN_SHARE = 0.25;
 
 export const rnFacts: Generator = {
   name: "harmony-rn",
   generate(ctx) {
     const cue = cueOf(ctx, { replays: -1 });
     const cat = ctx.category;
-    const minor = cat === "minor-triads";
+    const minor = cat === "minor-triads" || cat === "minor-sevenths";
     // Natural minor (i ii° III iv v VI VII) from U10.L04; the major V and vii° of harmonic minor join at U10.L06,
     // so v against V and VII against vii° become the near misses.
     const majorV = minor && contextOpen(ctx, CTX.majorV);
@@ -92,38 +115,63 @@ export const rnFacts: Generator = {
     const key = pickKey(ctx, minor ? "minor" : "major", minor ? "≤4acc" : ctx.level.keys);
     let rnText: string;
     let symbol: string;
-    if (cat === "applied") {
-      const t = ctx.rng.pick(APPLIED_TARGETS);
+    let twinOf: string | null = null;
+    const applied = APPLIED_TARGETS[cat];
+    const borrowed = BORROWED[cat];
+    if (applied) {
+      const t = ctx.rng.pick(applied);
       const target = diatonicInKey(key, t.index, false);
       const c: RnChord = { degree: "5", quality: "7", of: t.degree };
       const root = rnRoot(c, key);
       symbol = chordCode(root, "7");
       rnText = `V7/${target.rn}`;
-    } else if (cat === "borrowed") {
-      const b = ctx.rng.pick(BORROWED);
+      // The near miss: the key's own chord on the same root (D7 is V7/V in C; Dm is ii).
+      if (ctx.rng.next() < TWIN_SHARE) {
+        const twin = diatonicInKey(key, ((t.index + 3) % 7) + 1, false);
+        twinOf = rnText;
+        symbol = twin.symbol;
+        rnText = twin.rn;
+      }
+    } else if (borrowed) {
+      const b = ctx.rng.pick(borrowed);
       symbol = chordCode(rnRoot(b.chord, key), b.chord.quality);
       rnText = b.rn;
+      // The near miss: the key's own chord on that degree (A♭ is ♭VI in C; Am is vi).
+      if (ctx.rng.next() < TWIN_SHARE) {
+        const twin = diatonicInKey(key, b.twin, false);
+        twinOf = rnText;
+        symbol = twin.symbol;
+        rnText = twin.rn;
+      }
     } else {
       const index = ctx.rng.int(1, 7);
+      const sevenths = cat === "sevenths" || cat === "minor-sevenths";
+      // Sevenths in a minor key (U12.L05) are written with the key's V7 and vii°7 as often as with v7 and VII7.
       const harmonic = majorV && (index === 5 || index === 7) && ctx.rng.next() < 0.5;
-      const d = diatonicInKey(key, index, cat === "sevenths", harmonic);
+      const d = diatonicInKey(key, index, sevenths, harmonic);
       symbol = d.symbol;
       rnText = d.rn;
     }
     const keyName = shownKey(key);
     const toChord = ctx.rng.next() < 0.5;
+    const extra = {
+      ...(RN_ALLOW[cat] ? { rnAllow: RN_ALLOW[cat] } : {}),
+      ...(twinOf ? { nearMissOf: twinOf } : {}),
+    };
     return toChord
       ? silentTrial({ text: [symbol] }, cue, {
           key,
           ui: "text",
           textKind: "chord",
           rn: rnText,
+          ...extra,
           prompt: `In ${keyName}, which chord is ${shownRn(rnText, key)}? (code spelling, e.g. F#m)`,
         })
       : silentTrial({ rn: [rnText] }, cue, {
           key,
           ui: "rn-palette",
           symbol,
+          ...extra,
           prompt: `In ${keyName}, ${shownSymbol(symbol)} is which Roman numeral?`,
         });
   },
@@ -326,28 +374,29 @@ const BASS_LOOPS: Readonly<Record<string, { mode: ScaleMode; chords: RnChord[][]
     { mode: "minor", chords: [[rn("1", "min")], [rn("4", "min")], [rn("b7", "maj")], [rn("b3", "maj")]] },
     { mode: "minor", chords: [[rn("1", "min")], [rn("b6", "maj")], [rn("b7", "maj")], [rn("1", "min")]] },
   ],
+  // The bass under secondary dominants (U15.L06): its root is a note of the key (2 under V7/V, 3 under V7/vi,
+  // 6 under V7/ii, 1 under V7/IV), so the line is heard in degrees the learner knows while the chord above it
+  // steps outside; and the dominant chain of U15.L05 (3 6 2 5).
   chromatic: [
+    { mode: "major", chords: [[rn("1", "maj")], [rn("6", "min")], [ap7("5")], [rn("5", "maj")]] },
+    { mode: "major", chords: [[rn("1", "maj")], [ap7("6")], [rn("6", "min")], [rn("4", "maj")]] },
+    { mode: "major", chords: [[rn("1", "maj")], [ap7("2")], [rn("2", "min")], [rn("5", "maj")]] },
+    { mode: "major", chords: [[rn("1", "maj")], [ap7("4")], [rn("4", "maj")], [rn("5", "maj")]] },
+    { mode: "major", chords: [[ap7("6")], [ap7("2")], [ap7("5")], [rn("5", "7")]] },
+  ],
+  // The roots of the borrowed chords (U16): ♭6 and ♭7 climbing home, 4 under iv, ♭3 on the way to IV.
+  borrowed: [
     { mode: "major", chords: [[rn("1", "maj")], [rn("b6", "maj")], [rn("b7", "maj")], [rn("1", "maj")]] },
-    {
-      mode: "major",
-      chords: [
-        [rn("1", "maj")],
-        [rn("6", "min")],
-        [{ degree: "5", quality: "maj", of: "5" }],
-        [rn("5", "maj")],
-      ],
-    },
-    {
-      mode: "major",
-      chords: [
-        [rn("1", "maj")],
-        [{ degree: "5", quality: "maj", of: "6" }],
-        [rn("6", "min")],
-        [rn("4", "maj")],
-      ],
-    },
+    { mode: "major", chords: [[rn("1", "maj")], [rn("4", "maj")], [rn("4", "min")], [rn("1", "maj")]] },
+    { mode: "major", chords: [[rn("1", "maj")], [rn("b3", "maj")], [rn("4", "maj")], [rn("1", "maj")]] },
+    { mode: "major", chords: [[rn("1", "maj")], [rn("b7", "maj")], [rn("4", "maj")], [rn("1", "maj")]] },
+    { mode: "major", chords: [[rn("1", "maj")], [rn("6", "min")], [rn("b6", "maj")], [rn("5", "maj")]] },
   ],
 };
+/** V7 of a target degree. */
+function ap7(target: Degree): RnChord {
+  return { degree: "5", quality: "7", of: target };
+}
 /** Minor loops that wait for a later lesson: the major V (U10.L06), the Andalusian cadence (U10.L07). */
 const MINOR_BASS_LOOPS: readonly { needs: string; mode: ScaleMode; chords: RnChord[][] }[] = [
   {
@@ -379,6 +428,8 @@ export const bassDegrees: Generator = {
   name: "harmony-bass",
   generate(ctx) {
     if (ctx.category === "lines") return bassLine(ctx);
+    // Each category has its own mode (the loops of a major key, or `minor`); only `lines` has both and follows
+    // the mode a lesson step asks for (`ctx.mode`, d8).
     const loop =
       ctx.category === "diatonic-roots"
         ? diatonicRootsLoop(ctx)
@@ -410,10 +461,9 @@ export type BassMove = "fifth" | "octave" | "approach";
  */
 function bassLine(ctx: GenCtx) {
   // Level 5 opens at U10.L04, so a line may be in a minor key as well (its natural chords).
-  const loop =
-    ctx.rng.next() < 0.4
-      ? ctx.rng.pick(BASS_LOOPS.minor ?? [])
-      : ctx.rng.pick(BASS_LOOPS["schema-roots"] ?? []);
+  const roll = ctx.rng.next();
+  const minor = ctx.mode === "minor" || (ctx.mode !== "major" && roll < 0.4);
+  const loop = minor ? ctx.rng.pick(BASS_LOOPS.minor ?? []) : ctx.rng.pick(BASS_LOOPS["schema-roots"] ?? []);
   const key = pickKey(ctx, loop.mode);
   const { tracks, bass: roots } = arrangement(ctx, key, loop.chords);
   const steps = MODE_STEPS[key.mode];
@@ -554,7 +604,7 @@ export const schema: Generator = {
 
 /** Phrase chords and the soprano's last two scale steps (0 = tonic). */
 const CADENCE_PHRASES: Readonly<
-  Record<string, { mode: ScaleMode; answer: string; chords: RnChord[]; soprano: number[][] }>
+  Record<string, { mode: ScaleMode; answer: string; chords: RnChord[]; soprano: (number | string)[][] }>
 > = {
   PAC: {
     mode: "major",
@@ -616,6 +666,17 @@ const CADENCE_PHRASES: Readonly<
       [0, 0, 1, 0],
     ],
   },
+  // U16.L03: the plagal cadence with a minor IV (IV–iv–I), the tune leaning la–le–sol or holding fa.
+  "minor-plagal": {
+    mode: "major",
+    answer: "minor-plagal",
+    chords: [rn("1", "maj"), rn("4", "maj"), rn("4", "min"), rn("1", "maj")],
+    soprano: [
+      [4, 5, "5b", 4],
+      [2, 3, 3, 2],
+      [0, 0, 0, 0],
+    ],
+  },
   "minor-PAC": {
     mode: "minor",
     answer: "PAC",
@@ -634,6 +695,11 @@ const CADENCE_PHRASES: Readonly<
       [4, 5, 5, 4],
     ],
   },
+};
+/** The cadence answers in teaching order (CADENCE_OPTIONS' ids, then ♭VII–I and the minor plagal cadence). */
+const CADENCE_ORDER: readonly string[] = ["PAC", "IAC", "HC", "PC", "DC", "bVII-I", "minor-plagal"];
+const CADENCE_LABELS: Readonly<Record<string, string>> = {
+  "minor-plagal": "Plagal with a minor IV (IV–iv–I)",
 };
 export const cadence: Generator = {
   name: "harmony-cadence",
@@ -672,10 +738,18 @@ export const cadence: Generator = {
         stepTrack(key, octave, [line(sop)], "piano", { gain: 0.7 }),
       ],
     });
+    // The answers the learner has met, each once: a minor-key phrase is still a perfect authentic or a half
+    // cadence, so "minor-PAC" and "minor-HC" are categories (what is practised), never answers of their own.
+    const open = ctx.level.categories.filter((c) => c === ctx.category || ctx.openCategories.includes(c));
+    const answers = new Set(open.map((c) => CADENCE_PHRASES[c]?.answer ?? c));
+    const options = CADENCE_ORDER.filter((a) => answers.has(a));
     return trialOf(piece, { choice: [phrase.answer] }, cueOf(ctx), {
       mode: "choice",
       key,
       phrase: ctx.category,
+      options,
+      // Words for the answers the runner has no label of its own for.
+      optionLabels: CADENCE_LABELS,
     });
   },
 };

@@ -22,7 +22,7 @@ import {
 import { type KeySpec, keyOf } from "@oak/theory";
 import { create } from "zustand";
 import type { FormViewSection, SectionLoop } from "../lib/form-view.ts";
-import type { ChordAt } from "./harmony-chips.ts";
+import type { ChordAt, KeySpanAt } from "./harmony-chips.ts";
 import { displayBars, formLetters, sectionRequest, sectionsFromCode, sectionsLine } from "./sections.ts";
 
 /** One context chip: exactly what the next turn will carry (contracts §10.2, ux §6.2). */
@@ -170,6 +170,12 @@ export interface TutorSubject {
   sections?: FormViewSection[];
   /** Wave 5: the music on screen has a pickup: bar 0 is the pickup and section bars count from the first full bar. */
   pickup?: boolean;
+  /**
+   * Wave 6: the key plan of the music on screen (`keyPlanView` spans in display bars; kept in step by
+   * `useSubjectHarmony`). Key and mode chips light the bars a key is in force; numerals are read in that key.
+   * Absent: read from the code's patterned `.scale()`.
+   */
+  keyPlan?: KeySpanAt[];
 }
 
 export interface TutorAsk {

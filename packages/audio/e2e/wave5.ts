@@ -2,13 +2,7 @@
 // sample for sample; a track's analyser hears that track alone), the long-take recorder on a 3-minute piece rendered
 // offline and a short real-time take, sung minor and blue notes through the fake microphone, and a shuffle tapped on
 // the keyboard against a click. Everything goes through the public API of @oak/audio and @oak/pitch as the app uses it.
-import {
-  createMicGraph,
-  createPcmRecorder,
-  createScopeTaps,
-  createTapInput,
-  harmonicLevels,
-} from "@oak/audio";
+import { createPcmRecorder, createScopeTaps, createTapInput, harmonicLevels } from "@oak/audio";
 import type { KeySpec, LearnerProfile, SingTolerance } from "@oak/content-kit";
 import {
   type DegreeNote,
@@ -16,10 +10,9 @@ import {
   gradeSung,
   gradeSwingTaps,
   labelSungResult,
-  type PitchFrame,
-  pitchFramesToNotes,
   type SungResult,
 } from "@oak/pitch";
+import { listenPass } from "./listen.ts";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -239,11 +232,13 @@ export interface SingRun {
     notes: { credit: number; cents: number | null; blue: boolean }[];
   };
   syllables: string[];
+  /** With `comparePlain`: the same take graded against the same targets with no blue notes marked. */
+  plain?: { notes: { credit: number }[] };
 }
 
 /**
- * Listens through the mic graph for `seconds`, finds the first whole pass of the looping fixture (the first onset
- * after at least 1.2 s of silence), and grades it against degree targets laid out from that onset.
+ * Listens through the mic graph until one whole pass of the fixture has been heard (`listenPass`; at most
+ * `seconds`), and grades it against degree targets laid out from its first note.
  */
 async function singRun(o: {
   seconds: number;
@@ -253,24 +248,10 @@ async function singRun(o: {
   blues?: boolean;
   mode: "pitch" | "sight";
   tol: SingTolerance;
+  comparePlain?: boolean;
 }): Promise<SingRun> {
-  const ctx = new AudioContext();
-  await ctx.resume();
-  const g = createMicGraph(ctx);
-  const s = await g.open();
-  await sleep(o.seconds * 1000);
-  const all: PitchFrame[] = s.frames();
-  s.close();
-  g.dispose();
-  await ctx.close();
-  const heard = pitchFramesToNotes(all);
-  let start: number | null = null;
-  for (let i = 1; i < heard.length; i++)
-    if ((heard[i] as { start: number }).start - (heard[i - 1] as { end: number }).end > 1.2) {
-      start = (heard[i] as { start: number }).start;
-      break;
-    }
-  if (start === null) throw new Error("no whole pass of the phrase was captured");
+  const phraseSec = Math.max(...o.notes.map((n) => n.at + n.dur));
+  const { frames: all, start } = await listenPass({ passSec: phraseSec, maxSec: o.seconds });
   const targets = degreeTargets({
     key: o.key,
     tonicMidi: o.tonicMidi,
@@ -281,7 +262,16 @@ async function singRun(o: {
   const end = (targets[targets.length - 1] as { off: number }).off;
   const frames = all.filter((f) => f.t >= start - 0.3 && f.t <= end + 0.4);
   const r = labelSungResult(gradeSung(frames, targets, o.tol, o.mode, PROFILE), o.key, targets);
+  const plainTargets = degreeTargets({ key: o.key, tonicMidi: o.tonicMidi, notes: o.notes, startAt: start });
+  const plain = o.comparePlain
+    ? {
+        notes: gradeSung(frames, plainTargets, o.tol, o.mode, PROFILE).notes.map((n) => ({
+          credit: n.credit,
+        })),
+      }
+    : undefined;
   return {
+    ...(plain ? { plain } : {}),
     frames: frames.length,
     result: {
       pass: r.pass,

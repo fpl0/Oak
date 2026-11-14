@@ -28,17 +28,36 @@ export function renderer(
     if (catalog) {
       try {
         const t = catalog(d, ex?.feedbackText);
-        if (t && t !== d.id) return t;
+        if (t && t !== d.id) return degreeSigns(t);
       } catch {
         // fall through
       }
     }
-    return (
+    return degreeSigns(
       result?.messages.find((m) => m.id === d.id && m.where?.slot === d.where?.slot)?.text ??
-      result?.messages.find((m) => m.id === d.id)?.text ??
-      d.id
+        result?.messages.find((m) => m.id === d.id)?.text ??
+        d.id,
     );
   };
+}
+
+/**
+ * Chromatic degrees as the course prints them (U15.L01 on): `#4` → `♯4`, `b7` → `♭7`. Only an accidental that
+ * stands in front of a degree number on its own: a chord name (`Bb7`, `F#7`), a Strudel step (`3#`, `6b`) and
+ * code inside backticks keep their spelling.
+ */
+export function degreeSigns(text: string): string {
+  return text
+    .split(/(`[^`]*`)/)
+    .map((seg) =>
+      seg.startsWith("`")
+        ? seg
+        : seg.replace(
+            /(^|[^\w♯♭#])([#b])(?=[1-7](?![\w#]))/g,
+            (_m, pre: string, acc: string) => `${pre}${acc === "#" ? "♯" : "♭"}`,
+          ),
+    )
+    .join("");
 }
 
 /**
@@ -82,8 +101,11 @@ export interface AnswerShape {
    * What a slot is called: "bar" for the RN palette, one numeral a bar in a lesson or a checkpoint, whose slots
    * read "bar 1" … (review:journey: the verdict said "Answer 3" under a slot labelled "bar 3"); else "answer".
    */
-  slotNoun?: "bar" | "section";
+  slotNoun?: "bar" | "section" | "part";
 }
+
+/** The answer kinds an `all` step checks together and names by part (grading.ts `isAnswerAll`). */
+const ANSWER_PARTS = new Set(["identify", "fact", "staff-read", "keyboard"]);
 
 export function shapeOf(ex: Exercise | undefined): AnswerShape {
   if (!ex) return { kind: "code" };
@@ -96,6 +118,11 @@ export function shapeOf(ex: Exercise | undefined): AnswerShape {
     return { kind: "notes" };
   const code = ["code-modify", "error-hunt", "code-make", "compose-brief", "transcribe-step", "code-fill"];
   if (code.includes(ex.kind) || (ex.kind === "dictation" && ex.byEar)) return { kind: "code" };
+  // Several answers checked together (four chords by ear): each part is named ("Part 2 is not right yet").
+  if (ex.kind === "all" && ex.parts.length > 1 && ex.parts.every((p) => ANSWER_PARTS.has(p.kind))) {
+    const heard = ex.parts.some((p) => "stimulus" in p && p.stimulus !== undefined);
+    return { kind: "answer", listen: heard, slotted: true, slotNoun: "part" };
+  }
   if (ex.kind === "all") return { kind: "code" };
   // A sound to answer (an ear step, a dictation, cards to play); a question to reason out (a drawn spelling or
   // circle question has a stimulus too, but nothing to hear) reads "Look again".
@@ -181,7 +208,13 @@ export function summaryOf(
       return `Not there yet: ${n} ${n === 1 ? "note" : "notes"} to sing again.`;
     }
     if (shape.kind === "tapped") {
-      const n = view.issues.filter((i) => i.severity === "error" || i.severity === "warn").length;
+      // A named rhythm finding (a push on the beat, an uneven triplet, a 6/8 bar in quarters) is about the
+      // rhythm, not one tap: it is said in its own line, and only the taps left over are counted.
+      const n = view.issues.filter(
+        (i) =>
+          (i.severity === "error" || i.severity === "warn") &&
+          !/^tap\.(push-|triplet-|grouping)/.test((i.id as string | undefined) ?? ""),
+      ).length;
       return n > 0
         ? `Not in time yet: ${n} ${n === 1 ? "tap" : "taps"} to look at. Listen, then tap along again.`
         : "Not in time yet. Listen, then tap along again.";
@@ -212,6 +245,12 @@ export function summaryOf(
     if (notes === 0 && only?.what) return only.what;
   }
   return summaryText(view);
+}
+
+/** A place without its track name. */
+function withoutTrack(w: GradeView["issues"][number]["where"]): GradeView["issues"][number]["where"] {
+  const { track: _track, ...rest } = w;
+  return rest;
 }
 
 export function issueLines(
@@ -249,9 +288,11 @@ export function issueLines(
       const where = slotOnly
         ? sung
           ? ""
-          : `${shape.kind === "questions" ? "Question" : shape.kind === "notes" ? "Note" : shape.slotNoun === "bar" ? "Bar" : shape.slotNoun === "section" ? "Section" : "Answer"} ${w.slot}`
+          : `${shape.kind === "questions" ? "Question" : shape.kind === "notes" ? "Note" : shape.slotNoun === "bar" ? "Bar" : shape.slotNoun === "section" ? "Section" : shape.slotNoun === "part" ? "Part" : "Answer"} ${w.slot}`
         : placed && !(sung && w.bar === undefined)
-          ? whereText(i)
+          ? // Notes on a staff have one voice, which the grader calls "main": the place is the bar and beat
+            // ("main, Bar 1, beat 1" read as a raw label to the learner; Wave 6 review).
+            whereText(shape.kind === "notes" ? { where: withoutTrack(w) } : i)
           : "";
       return {
         key: `${n}-${w.bar ?? ""}-${w.slot ?? ""}-${i.id ?? ""}`,

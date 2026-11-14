@@ -4,6 +4,30 @@ import type { FamilyDef, Trial } from "@oak/api";
 import type { Stage } from "./machine.ts";
 import { choiceOptionsOf } from "./model.ts";
 import { stageEPrompt, swingPrompt } from "./wave5.ts";
+import { chromaticAskedOf, clickCellsOf, meterLine } from "./wave6.ts";
+
+/** The prompt of a Wave 6 trial where the runner asks it its own way, else null. */
+function stageFPrompt(trial: Trial<unknown>, def: FamilyDef): string | null {
+  // Find the push: marked on the grid, not clicked among thirty-two buttons.
+  const cells = clickCellsOf(trial);
+  if (cells && def.generator === "rhythm-syncopation")
+    return cells.expected.length > 1
+      ? "Mark the two kicks that land off the beat."
+      : "Mark the kick that lands off the beat.";
+  if (
+    def.id === "fam.deg.fet-chromatic" &&
+    ((trial.expected as { degrees?: unknown[] }).degrees ?? []).length === 1
+  )
+    return chromaticAskedOf(trial) !== null || trial.params.key
+      ? "After the cadence: which degree was the last note? Some come from outside the key."
+      : null;
+  // A tapped bar in 6/8: the beat is the dotted quarter, and the prompt says so.
+  if (trial.params.mode === "tap" && meterLine(trial) !== null && typeof trial.params.prompt !== "string")
+    return def.generator === "rhythm-echo"
+      ? "Listen to the bar, then tap it back over the click: two beats, each in three."
+      : null;
+  return null;
+}
 
 const PROMPTS: Record<string, string> = {
   "rhythm-pulse": "Tap along on the beat from the second bar.",
@@ -45,8 +69,17 @@ const PROMPTS: Record<string, string> = {
 export function promptOf(trial: Trial<unknown>, def: FamilyDef): string {
   const p = trial.params;
   // Stage E (Wave 5): form by ear on the form widget, major or minor, which minor, scale colours, degrees in minor.
-  const stageE = stageEPrompt(trial, def);
+  // A mode trial that brings its own question (Wave 6: the engine says how to listen for the one changed note)
+  // asks it; the runner's own words are for a generator that gives none.
+  const ownMode =
+    (def.generator === "key-mode" || def.generator === "key-minor") &&
+    typeof p.prompt === "string" &&
+    p.prompt.trim() !== "" &&
+    Array.isArray(p.options);
+  const stageE = ownMode ? null : stageEPrompt(trial, def);
   if (stageE) return stageE;
+  const stageF = stageFPrompt(trial, def);
+  if (stageF) return stageF;
   if (def.generator === "rhythm-swing" && typeof p.prompt !== "string")
     return swingPrompt(choiceOptionsOf(trial, def).length);
   // Chord dictation names its key in its own prompt; the runner says how it is answered (bass first).

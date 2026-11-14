@@ -1,7 +1,15 @@
 // The capstone content the workspace and the album need beyond the shared bundle (`useContent` carries only
 // `CapstoneMeta`): the full definitions with briefs and rubrics, the flavour kits and rules, the Band layers and
 // the can-do statements. One lazy chunk of the isomorphic registries, loaded once.
-import type { BandDef, CanDoDef, CapstoneDef, FlavourId, FlavourKit, KeySpec } from "@oak/content-kit";
+import type {
+  BandDef,
+  CanDoDef,
+  CapstoneDef,
+  FlavourId,
+  FlavourKit,
+  KeySpec,
+  TermEntry,
+} from "@oak/content-kit";
 import type { BandSetup } from "@oak/strudel";
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { bandCodeAt } from "../../../content/bands/index.ts";
@@ -17,6 +25,8 @@ export interface CapstoneContent {
   skillNames: ReadonlyMap<string, string>;
   /** The repertoire registry (titles, years, sources) for the songs a transcribe capstone offers. */
   repertoire: readonly RepertoireEntry[];
+  /** The glossary (CF-A's devices card plays a term's example for a device not yet on the learner's record). */
+  terms: readonly TermEntry[];
 }
 
 /** The registry with folder files in place of their registry entries. */
@@ -47,6 +57,7 @@ async function load(): Promise<CapstoneContent> {
     candos: registries.candos,
     skillNames: new Map(registries.skills.map((s) => [String(s.id), s.name] as const)),
     repertoire: registries.repertoire,
+    terms: registries.terms,
   };
 }
 

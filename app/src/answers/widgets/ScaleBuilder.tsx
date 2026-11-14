@@ -6,15 +6,21 @@
 // The minors are do-based (1 is home; ♭3 ♭6 ♭7 are me le te, raised 6 and 7 la and ti): syllables show with the
 // solfège lens, degrees under the keys with the degree lens. Marks are per picked note; a reveal outlines the
 // answer's notes in place, so nothing moves.
+// Wave 6 (`scale-builder.from`, U14): the builder opens holding a scale the learner knows (the host's value starts
+// from `emptyValue`), and the line under it says which note has moved and which way ("7 lowered a half step: ♭7"),
+// as the learner moves it. "Start again" puts the starting scale back.
 import type { Degree } from "@oak/api";
+import { MODE_DEGREES } from "@oak/content-kit";
 import { clsx } from "clsx";
 import { Home, Play, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../ui/kit/index.ts";
 import { degreeBackgroundCss, degreeStyle } from "../../ui/theme/palette.ts";
 import { appAudio, useAnswerEnv } from "../env.tsx";
+import { scaleMove, scaleNameOf } from "../facts.ts";
 import { CHROMATIC_CODES, degreeForDigit, padOrder } from "../keys.ts";
 import { degreeDisplay, degreeSpoken, keySpoken } from "../normalize.ts";
+import { scaleStart } from "../response.ts";
 import {
   builderRange,
   CHROMATIC_PALETTE,
@@ -101,6 +107,56 @@ function BuiltLine({
             );
           })}
         </>
+      )}
+    </p>
+  );
+}
+
+const SCALE_WORD: Record<string, string> = { minor: "natural minor" };
+
+/**
+ * The line of a builder that started from a scale: what has moved so far. It describes the learner's own change
+ * and never the answer; with `AnswerEnv.facts`, a checked-right scale is also named.
+ */
+function MoveLine({
+  spec,
+  degrees,
+  named,
+}: {
+  spec: AnswerWidgetProps<"scale-builder">["spec"];
+  degrees: readonly string[];
+  named: boolean;
+}) {
+  if (!spec.from) return null;
+  const from = MODE_DEGREES[spec.from];
+  const move = scaleMove(from, degrees);
+  const fromName = SCALE_WORD[spec.from] ?? spec.from;
+  const sounds = (ds: readonly string[]) =>
+    [...new Set(ds.map((d) => degreeSemis(d)))].sort((a, b) => a - b).join(",");
+  const unchanged = sounds(degrees) === sounds(from);
+  const have = new Set(degrees.map((d) => degreeSemis(d)));
+  const gone = from.filter((d) => !have.has(degreeSemis(d)));
+  const added = [...have].filter((x) => !from.some((d) => degreeSemis(d) === x)).length;
+  const name = named ? scaleNameOf(degrees) : null;
+  return (
+    <p className="min-h-6 text-sm text-text-2" data-testid="scale-move" aria-live="polite">
+      {unchanged ? (
+        <span className="text-text-3">
+          This is {nameDisplay(spec.tonic)} {fromName}. Move one note to make the new scale.
+        </span>
+      ) : move ? (
+        <>
+          From {fromName}: <span className="font-semibold text-text">{move.text}</span>.
+          {name ? <span> That is {name}.</span> : null}
+        </>
+      ) : gone.length === 1 && added === 0 ? (
+        <span>
+          {degreeDisplay(gone[0] as string)} is out. Put in the note that takes its place, a half step away.
+        </span>
+      ) : gone.length === 0 && added === 1 ? (
+        <span>One note more than {fromName} has. Take out the note it replaces.</span>
+      ) : (
+        <span>More than one note differs from {fromName} now. The new scale is one note away.</span>
       )}
     </p>
   );
@@ -317,13 +373,13 @@ function ScaleKeys(p: AnswerWidgetProps<"scale-builder">) {
             variant="ghost"
             data-enter="native"
             icon={<RotateCcw aria-hidden className="size-4" />}
-            disabled={disabled || midis.length === 0}
+            disabled={disabled || (midis.length === 0 && !spec.from)}
             onClick={() => {
               picks.current = [];
-              onChange([]);
+              onChange(scaleStart(spec));
             }}
           >
-            Clear
+            {spec.from ? "Start again" : "Clear"}
           </Button>
         </div>
         <BuiltLine
@@ -333,6 +389,7 @@ function ScaleKeys(p: AnswerWidgetProps<"scale-builder">) {
           showSyllables={showSyllables}
           marks={marksByDegree}
         />
+        <MoveLine spec={spec} degrees={degrees} named={env.facts === true && feedback.state === "correct"} />
       </div>
     </AnswerFrame>
   );
@@ -502,13 +559,13 @@ function ScalePad(p: AnswerWidgetProps<"scale-builder">) {
             variant="ghost"
             data-enter="native"
             icon={<RotateCcw aria-hidden className="size-4" />}
-            disabled={disabled || degrees.length === 0}
+            disabled={disabled || (degrees.length === 0 && !spec.from)}
             onClick={() => {
               picks.current = [];
-              onChange([]);
+              onChange(scaleStart(spec));
             }}
           >
-            Clear
+            {spec.from ? "Start again" : "Clear"}
           </Button>
         </div>
         <BuiltLine
@@ -518,6 +575,7 @@ function ScalePad(p: AnswerWidgetProps<"scale-builder">) {
           showSyllables={showSyllables}
           marks={marks}
         />
+        <MoveLine spec={spec} degrees={degrees} named={env.facts === true && feedback.state === "correct"} />
         <p className="sr-only" aria-live="polite">
           {prefix ? `${prefix} — now a digit` : ""}
         </p>

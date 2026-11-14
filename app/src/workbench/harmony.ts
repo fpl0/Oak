@@ -36,6 +36,8 @@ export interface WorkbenchHarmony {
   view: HarmonyView;
   /** Whose chords these are: the learner's code, or the Band's under a learner melody. */
   source: "learner" | "band";
+  /** The piece the chords were read from (the Band's bass or chords read as the learner's, where that applied). */
+  piece: Normalized;
   regions: ChordRegion[];
   /** One label per region (bar = 0-based cycle, beat 1-based in tempo units), for the staff and the lead sheet. */
   labels: ChordLabel[];
@@ -50,6 +52,12 @@ export interface HarmonyContext {
   key: KeySpec | null;
   bars: number;
   pickup?: PickupSpec;
+  /**
+   * Wave 6 (contracts §6.8, wave6.md §3.2): the key in force along the piece, in cycles, when it changes key (a
+   * patterned `.scale()`). Each chord's numeral, function and spelling is then read in the key at its bar, so a
+   * piece lifted from C to D keeps I IV V I after the lift. Absent or one span: the piece's one key.
+   */
+  keyPlan?: readonly { from: number; to: number; key: KeySpec }[];
 }
 
 /** The numeral as printed: Oak's dialect ("viio", "bVII") in display form ("vii°", "♭VII"), through theory. */
@@ -125,23 +133,43 @@ export function spelledSymbol(
 
 /** The harmony the Workbench shows for a normalized piece, or null when it has no chords at all. */
 export function workbenchHarmony(n: Normalized, ctx: HarmonyContext): WorkbenchHarmony | null {
-  let v = view(withBandBass(n), ctx);
+  let piece = withBandBass(n);
+  let v = view(piece, ctx);
   let source: WorkbenchHarmony["source"] = "learner";
   if (!v || v.slots.length === 0) {
     const withBand = withBandHarmony(n);
     const bandView = withBand ? view(withBand, ctx) : null;
-    if (bandView && bandView.slots.length > 0) {
+    if (withBand && bandView && bandView.slots.length > 0) {
       v = bandView;
+      piece = withBand;
       source = "band";
     }
   }
   if (!v || v.slots.length === 0) return null;
-  const key = v.key;
+  const main = v;
+  // A piece that changes key: the same chords read again in each other key of the plan (same slots, other
+  // numerals and functions). A reading that does not line up with the first is not used.
+  const plan = ctx.keyPlan ?? [];
+  const others = new Map<string, HarmonyView | null>();
+  const viewAt = (cycle: number): HarmonyView => {
+    let k: KeySpec | null = null;
+    for (const s of plan) if (s.from <= cycle + 1e-9) k = s.key;
+    if (!k || !main.key || (k.tonic === main.key.tonic && k.mode === main.key.mode)) return main;
+    const id = `${k.tonic}:${k.mode}`;
+    if (!others.has(id)) {
+      const other = view(piece, { ...ctx, key: k });
+      others.set(id, other && other.slots.length === main.slots.length ? other : null);
+    }
+    return others.get(id) ?? main;
+  };
   const units = METERS[ctx.meter].unitsPerBar;
   const regions: ChordRegion[] = [];
-  for (const s of v.slots) {
-    const from = R.toNum(s.span[0]);
-    const to = R.toNum(s.span[1]);
+  for (const [i, s0] of main.slots.entries()) {
+    const from = R.toNum(s0.span[0]);
+    const to = R.toNum(s0.span[1]);
+    const sv = plan.length > 1 ? viewAt(from) : main;
+    const s = sv.slots[i] ?? s0;
+    const key = sv.key;
     const symbol = spelledSymbol(s, key);
     const last = regions[regions.length - 1];
     if (last && last.symbol === symbol && Math.abs(last.to - from) < 1e-9) {
@@ -173,7 +201,7 @@ export function workbenchHarmony(n: Normalized, ctx: HarmonyContext): WorkbenchH
       if (m.role === "chord-tone") chordTones++;
     }
   }
-  return { view: v, source, regions, labels, melody, strong: { total, chordTones } };
+  return { view: v, source, piece, regions, labels, melody, strong: { total, chordTones } };
 }
 
 /** The share of strong-beat melody notes that are chord tones, 0–100, or null when there are none. */

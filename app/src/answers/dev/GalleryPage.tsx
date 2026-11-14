@@ -13,7 +13,7 @@ import { buildModel, type WorkbenchModel } from "../../workbench/model.ts";
 import { type AnswerEnv, AnswerEnvProvider, appAudio, NEUTRAL_PROFILE, type QuietEvidence } from "../env.tsx";
 import { AnswerView } from "../registry.tsx";
 import { singFeedback, targetLabel } from "../sing.ts";
-import { tapReport, targetSeconds } from "../tap.ts";
+import { tapReport } from "../tap.ts";
 import type { AnswerFeedback, AnswerValue } from "../types.ts";
 import { useThemeName } from "../ui.tsx";
 import {
@@ -24,6 +24,7 @@ import {
   MELODY_CODE,
   STATES,
   stateOf,
+  tapDemo,
 } from "./fixtures.ts";
 import { StagedSection } from "./StagedGallery.tsx";
 
@@ -88,8 +89,8 @@ function LiveWidget({ f, env }: { f: Fixture; env: AnswerEnv }) {
     liveEnv.tap = {
       ...tap,
       onTake: (t) => {
-        const targets = targetSeconds(tap.targets ?? [], t.startAt, t.cps);
-        setTake(tapReport(t.taps, targets, env.profile ?? NEUTRAL_PROFILE).feedback);
+        const demo = tapDemo(tap, t.startAt);
+        setTake(tapReport(t.taps, demo.targets, env.profile ?? NEUTRAL_PROFILE, demo.options).feedback);
       },
     };
   }
@@ -254,6 +255,18 @@ export function Gallery() {
         }
       : {}),
     ...(f.env ?? {}),
+    // `?lenses=off` wins over an example that turns a lens on.
+    ...(lensesOff && f.env?.lenses
+      ? {
+          lenses: {
+            degrees: false,
+            solfege: false,
+            noteNames: false,
+            chordSymbols: false,
+            romanNumerals: false,
+          },
+        }
+      : {}),
     ...(f.kind === "click-staff" || f.kind === "click-roll" ? { music: music.model } : {}),
   });
   const ready =

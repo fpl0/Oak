@@ -4,7 +4,7 @@
 // FeedbackPanel, all linked through one HighlightBus per instance. The roll and the staff come from the
 // static analysis path (the browser grader host), so they show code that has not been played; while it
 // plays, the adapter's paint clock drives the playhead and the highlights.
-import type { ChordLensId, LensId, LineLensId } from "@oak/api";
+import type { ChordLensId, LensId, LineLensId, MusicLensId } from "@oak/api";
 import type {
   GradeResult,
   HintLadder,
@@ -33,6 +33,8 @@ import { probeOf, type VisualProbe } from "@oak/strudel/probes";
 import { METERS } from "@oak/theory";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SectionLoop } from "../lib/form-view.ts";
+import { FULL_HARMONY_DEPTH, type HarmonyDepth, harmonyDepth } from "../lib/harmony-lens.ts";
+import { MUSIC_LENS_UNLOCKS } from "../lib/lenses.ts";
 import { probeFromHaps, probeUnlocked, type ScopePanelHostProps } from "../lib/scope-panel.ts";
 import {
   HIGHLIGHT_MS,
@@ -44,17 +46,21 @@ import {
 import { ChartPanel } from "./ChartPanel.tsx";
 import { CircleOfFifths } from "./CircleOfFifths.tsx";
 import { WorkbenchClock } from "./clock.ts";
+import { isColourMode, keyPlanBars } from "./colour.ts";
+import { applyDepth, depthKey } from "./depth.ts";
 import { FeedbackPanel, viewOf } from "./FeedbackPanel.tsx";
 import { FormMap } from "./FormMap.tsx";
 import { ghostEvents, marksOf, unlocks } from "./feedback.ts";
 import { chordTonePercent, rangeLines } from "./harmony.ts";
 import { HighlightBus } from "./highlight-bus.ts";
 import { Keyboard } from "./Keyboard.tsx";
+import type { KeyExtras } from "./KeyExtras.tsx";
 import { KeyPanel } from "./KeyPanel.tsx";
+import { MODE_TOOLS } from "./key-extras.ts";
 import { TYPING_MAP, typedMidi } from "./keyboard-layout.ts";
 import { type LensSource, useAppLensSource, useLensSourceKind } from "./lens-source.tsx";
 import { type StaffLabelMode, showsSwitcher, viewLabels } from "./lens-view.ts";
-import { alternationBars, barOfCycle, pieceBarsOf, swingBadges } from "./lines.ts";
+import { alternationBars, barOfCycle, MAX_PIECE_BARS, pieceBarsOf, swingBadges } from "./lines.ts";
 import {
   clampRegion,
   defaultRegion,
@@ -66,7 +72,7 @@ import {
 } from "./loop-math.ts";
 import { Metronome } from "./metronome.ts";
 import { activeAt, keyAtCycle, leadEvents, pieceKeys, type WorkbenchModel } from "./model.ts";
-import { PianoRoll, type RollColorMode, type RollLabelMode } from "./PianoRoll.tsx";
+import { PianoRoll, type RollColorMode, type RollLabelMode, type RollMusic } from "./PianoRoll.tsx";
 import {
   chordDisplay,
   initialPanelState,
@@ -201,6 +207,27 @@ export interface WorkbenchProps {
    * tool is unlocked. A step's own probe (`scopePanel.probe`) wins.
    */
   probeKinds?: readonly VisualProbe["kind"][];
+  /**
+   * Wave 6 (wave6.md §4.3): how deep the chord and degree lenses write, when the host knows it better than the
+   * Workbench (a tutor card, a reviewer's page). By default it is `harmonyDepth(lint.unlocked, completed lessons)`
+   * with `lessonId` counted as completed, and everything open where there are no lenses at all (the standalone page).
+   */
+  harmonyDepth?: HarmonyDepth;
+  /**
+   * The lesson being taken (`U15.L02`): its own steps already show what it teaches (the applied numeral, the
+   * borrowed chord, the lift by a step), as `unlocksOf(currentSession)` does for tools.
+   */
+  lessonId?: string;
+  /**
+   * Wave 6: a host's choice for the guide-tone lens, the key ribbon or the beat grid (a lesson step that needs one
+   * shown, or hidden); it wins over the learner's switch. Without it the shared lenses decide, inside a step too.
+   */
+  musicLenses?: Partial<Record<MusicLensId, boolean>>;
+  /**
+   * A change of this value puts `code` into the editor again even when `code` is the same string as before (d15:
+   * "Start from Oak's copy" pressed after the learner edited a Make that opened with Oak's copy or their sketch).
+   */
+  codeKey?: string | number;
 }
 
 interface RunIssue {
@@ -240,6 +267,32 @@ const LINE_SWITCHES: readonly { id: LineLensId; label: string; keys: string; tit
   },
   { id: "blueNotes", label: "Blue notes", keys: "Shift+U", title: "Blue notes: ♭3, ♭5 and ♭7" },
 ];
+
+/** The music-lens switches (Wave 6, wave6.md §4.3): label, key and title. */
+const MUSIC_SWITCHES: readonly { id: MusicLensId; label: string; keys: string; title: string }[] = [
+  {
+    id: "guideTones",
+    label: "Guide tones",
+    keys: "Shift+I",
+    title: "The 3rd and 7th of each chord, and the line they make across the changes",
+  },
+  {
+    id: "keyPlan",
+    label: "Key ribbon",
+    keys: "Shift+J",
+    title: "The key in force along the piece, with each key change",
+  },
+  {
+    id: "beatGrid",
+    label: "Beat grid",
+    keys: "Shift+V",
+    title: "The beat and its divisions: counts in 6/8, triplets in thirds, pushes against the beat",
+  },
+];
+/** Pushes arrive with U13.L01, before the compound meters: the beat grid opens with them too (drawn against the plain grid). */
+const PUSH_TOOLS: readonly string[] = ["tb.early", "tb.late"];
+const VELOCITY_TOOL = "tb.velocity";
+const NO_LESSONS: ReadonlySet<string> = new Set<string>();
 
 /** The scope and spectrum panels' toolbox rows (contracts §3.2; `WORKBENCH_PANEL_TOOLS`). */
 const SCOPE_TOOL = "tb.scope";
@@ -303,8 +356,9 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
   const variant = props.variant ?? "full";
   const meter = METERS[props.lessonCtx.meter];
   // An arranged song is analysed, drawn and looped whole (Wave 5): its bars, not the step's loop, when longer.
+  // Wave 6: so is a key plan (`.scale("<C4:major!4 D4:major!4>")`): the lift is inside what is read and looped.
   const loopBars = useMemo(
-    () => pieceBarsOf(code, props.lessonCtx.loopBars),
+    () => Math.max(pieceBarsOf(code, props.lessonCtx.loopBars), Math.min(MAX_PIECE_BARS, keyPlanBars(code))),
     [code, props.lessonCtx.loopBars],
   );
   const loopControls = (props.loopControls ?? true) && variant !== "mini";
@@ -334,11 +388,26 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
     debounceMs: props.analysisDebounceMs ?? 300,
     pickup: props.pickup ?? null,
   });
-  const model = analysis.model;
+  const source = props.source;
+  // --- Wave 6: how deep the labels write for this learner (never ahead of the course) -----------------
+  const unlockedKey = [...(props.lint.unlocked as ReadonlySet<string>)].sort().join(",");
+  const completed = source?.completedLessons ?? NO_LESSONS;
+  const depth: HarmonyDepth = useMemo(() => {
+    if (props.harmonyDepth) return props.harmonyDepth;
+    if (!source) return FULL_HARMONY_DEPTH;
+    const done = props.lessonId ? new Set([...completed, props.lessonId]) : completed;
+    return harmonyDepth(props.lint.unlocked as ReadonlySet<string>, done);
+    // `unlockedKey` stands for the set's contents (hosts pass a new Set each render).
+  }, [props.harmonyDepth, source === null, completed, props.lessonId, unlockedKey]);
+  const dKey = depthKey(depth);
+  const model = useMemo(
+    () => (analysis.model ? applyDepth(analysis.model, depth) : null),
+    // `dKey` stands for `depth`.
+    [analysis.model, dKey],
+  );
   const keySpec: KeySpec | null = model?.key ?? props.lessonCtx.key;
 
   // --- labels: the lenses or the content (wave3.md §4.3) -------------------------------------------
-  const source = props.source;
   const labels = viewLabels({
     ...(props.roll?.labels === undefined ? {} : { rollLabels: props.roll.labels }),
     ...(props.roll?.color === undefined ? {} : { rollColor: props.roll.color }),
@@ -358,6 +427,40 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
   const lineLensBar = lineLenses !== null && LINE_SWITCHES.some((l) => lineLenses.available[l.id] === true);
   const lensBar = variant !== "mini" && (showsSwitcher(source, labels.mode) || chordLensBar || lineLensBar);
   const unlockedSet = props.lint.unlocked as ReadonlySet<string>;
+  // Wave 6: guide tones, the key ribbon and the beat grid. No step names them, so the learner's switch decides
+  // inside a step too (a host's `musicLenses` wins); each exists once its tool is unlocked, the lesson being
+  // taken included, and its switch shows only where the piece has something for it to draw.
+  const music = variant !== "mini" ? (source?.music ?? null) : null;
+  const colour = model?.colour ?? null;
+  const musicOpen = (id: MusicLensId): boolean =>
+    music !== null &&
+    (music.available[id] ||
+      MUSIC_LENS_UNLOCKS[id].some((t) => unlockedSet.has(t)) ||
+      (id === "beatGrid" && PUSH_TOOLS.some((t) => unlockedSet.has(t))));
+  const musicHas: Record<MusicLensId, boolean> = {
+    guideTones: (colour?.guide.marks.size ?? 0) > 0,
+    keyPlan: (colour?.keys.length ?? 0) > 1,
+    beatGrid: (colour?.rhythm?.grid ?? null) !== null || (colour?.rhythm?.pushes.size ?? 0) > 0,
+  };
+  const musicOn = (id: MusicLensId): boolean => {
+    if (variant === "mini") return false;
+    const host = props.musicLenses?.[id];
+    if (host !== undefined) return host;
+    return music !== null && musicOpen(id) && music.prefs[id];
+  };
+  const musicSwitches = MUSIC_SWITCHES.filter(
+    (m) => props.musicLenses?.[m.id] === undefined && musicOpen(m.id) && musicHas[m.id],
+  );
+  const toggleMusicLens = (id: MusicLensId) => {
+    if (!music || !musicSwitches.some((m) => m.id === id)) return;
+    music.toggle(id);
+  };
+  // What the learner has been taught, for the key panel's Wave 6 rows.
+  const taught = (lesson: string): boolean =>
+    source === null ||
+    props.harmonyDepth === FULL_HARMONY_DEPTH ||
+    completed.has(lesson) ||
+    props.lessonId === lesson;
   // Panels: the lenses decide outside a step, the step's `initialPanels` inside one (wave4.md §4.4).
   const panelMode: "lenses" | "content" = labels.mode === "lenses" && source !== null ? "lenses" : "content";
   const panelAvailable = panelAvailability({
@@ -555,7 +658,8 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
       handle.setCode(props.code);
       setCode(props.code);
     }
-  }, [handle, props.code]);
+    // `codeKey`: the host asks for `code` again although the prop's text did not change (d15).
+  }, [handle, props.code, props.codeKey]);
   useEffect(() => {
     if (handle && !handle.disposed) handle.setEditable(props.readOnly);
   }, [handle, props.readOnly]);
@@ -816,8 +920,9 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
   const onToggle = useCallback(async () => {
     if (!handle) return;
     if (ab?.active) ab.stop();
-    if (previewRef.current.playing || previewRef.current.pending) {
-      previewRef.current.stop();
+    const pv = previewRef.current;
+    if (pv.playing || pv.pending || pv.lifting || pv.liftPending) {
+      pv.stop();
       return;
     }
     setBusy(true);
@@ -939,6 +1044,15 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
     }
     // Loop region and metronome (ux §7.10): L, [ ], Shift+[ Shift+], M. Not in text fields.
     const textField = target.closest?.("input, select, textarea, [contenteditable]");
+    // Wave 6: Shift+I guide tones, Shift+J the key ribbon, Shift+V the beat grid (inside a lesson step too).
+    if (!typing && !textField && !ev.repeat && ev.shiftKey && musicSwitches.length > 0) {
+      const hit = musicSwitches.find((m) => m.keys === `Shift+${k.toUpperCase()}`);
+      if (hit) {
+        ev.preventDefault();
+        toggleMusicLens(hit.id);
+        return;
+      }
+    }
     // The lens bar (Wave 3): D degrees, S solfège, Shift+N note names, Shift+K key panel, Shift+C circle; Wave 4:
     // Shift+H chord symbols, Shift+R numerals, Shift+F function, Shift+T chord tones, Shift+G range, Shift+L lead.
     if (!typing && !textField && !ev.repeat && (lensBar || anyPanelAvailable)) {
@@ -1038,8 +1152,8 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
   };
 
   const lensSwitches: TransportLenses = {
-    labels:
-      lensBar && source
+    labels: [
+      ...(lensBar && source
         ? [
             ...(source.available.degrees
               ? [
@@ -1083,12 +1197,15 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
                 }))
               : []),
           ]
-        : [],
+        : []),
+      ...musicSwitches.map((m) => ({ ...m, on: musicOn(m.id) })),
+    ],
     panels: PANEL_SWITCHES.filter((p) => panelAvailable[p.id]).map((p) => ({ ...p, on: panelsOpen[p.id] })),
     onToggle: (id) => {
       if (PANEL_SWITCHES.some((p) => p.id === id)) togglePanel(id as PanelId);
       else if (id === "chordSymbols" || id === "romanNumerals") toggleChordLens(id);
       else if (LINE_SWITCHES.some((l) => l.id === id)) toggleLineLens(id as LineLensId);
+      else if (MUSIC_SWITCHES.some((m) => m.id === id)) toggleMusicLens(id as MusicLensId);
       else toggleLens(id as LensId);
     },
   };
@@ -1137,6 +1254,38 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
         showEnergy: panelsOpen.form === true,
       }
     : null;
+  // --- Wave 6: what U12–U17 add to the roll ----------------------------------------------------------
+  const guideOn = musicOn("guideTones");
+  const keyRibbonOn = musicOn("keyPlan") && musicHas.keyPlan;
+  const beatGridOn = musicOn("beatGrid");
+  // The mode's colour note is ringed while the key panel is open on a mode the learner knows (or wrote).
+  const modeKnown =
+    keyNow !== null &&
+    isColourMode(keyNow) &&
+    (source === null || unlockedSet.has(MODE_TOOLS[keyNow.mode as keyof typeof MODE_TOOLS] ?? ""));
+  const modeOn = panelsOpen.key && modeKnown && (colour?.mode.size ?? 0) > 0;
+  const ghostsOn = source === null || unlockedSet.has(VELOCITY_TOOL);
+  const rollMusic: RollMusic = useMemo(
+    () => ({
+      guide: guideOn ? (colour?.guide ?? null) : null,
+      grid: beatGridOn ? (colour?.rhythm?.grid ?? null) : null,
+      pushes: beatGridOn ? (colour?.rhythm?.pushes ?? null) : null,
+      ghosts: ghostsOn ? (colour?.rhythm?.ghosts ?? null) : null,
+      modeTones: modeOn ? (colour?.mode ?? null) : null,
+      keys: keyRibbonOn ? (colour?.keys ?? null) : null,
+      currentBar,
+      chromaticSyllables: depth.chromatic,
+    }),
+    [colour, guideOn, beatGridOn, ghostsOn, modeOn, keyRibbonOn, currentBar, depth.chromatic],
+  );
+  const guideMarks = guideOn ? (colour?.guide.marks ?? null) : null;
+  const keyExtras: KeyExtras = {
+    unlocked: source === null ? null : unlockedSet,
+    taught,
+    onChord: (midis) => {
+      for (const m of midis) audition(m);
+    },
+  };
   const bassMarks = lineLenses?.shown.bassRoles ? (lines?.bassMarks ?? null) : null;
   const blueNotes = lineLenses?.shown.blueNotes ? (lines?.blue ?? null) : null;
   const badges = useMemo(() => swingBadges(lines?.swing ?? []), [lines]);
@@ -1169,6 +1318,7 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
                   romans: chords.romans,
                   fn: chords.fn,
                   pickup: Boolean(props.pickup),
+                  chords: model.band,
                 },
               }
             : {})}
@@ -1185,6 +1335,7 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
           {...(ribbon ? { ribbon } : {})}
           {...(bassMarks && bassMarks.size > 0 ? { bassMarks } : {})}
           {...(blueNotes && blueNotes.size > 0 ? { blueNotes } : {})}
+          music={rollMusic}
           {...(variant !== "mini" && (props.rollFollowBars ?? FOLLOW_PAGE_BARS) > 0
             ? { followBars: props.rollFollowBars ?? FOLLOW_PAGE_BARS }
             : {})}
@@ -1204,6 +1355,8 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
             hover={labels.hover}
             annotations={labels.staff}
             chordSet={chordSet}
+            playBar={currentBar}
+            {...(guideMarks && guideMarks.size > 0 ? { guide: guideMarks } : {})}
             {...(lead ? { lead } : {})}
           />
         </>
@@ -1249,6 +1402,20 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
           : undefined
       }
       data-piece-bars={loopBars}
+      data-music-lenses={MUSIC_SWITCHES.filter((m) => musicOn(m.id) && musicHas[m.id])
+        .map((m) => m.id)
+        .join(" ")}
+      data-depth={[
+        depth.sevenths ? "sevenths" : "",
+        depth.applied ? "applied" : "",
+        depth.borrowed ? "borrowed" : "",
+        depth.chromatic ? "chromatic" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      data-key-plan={
+        colour && colour.keys.length > 1 ? colour.keys.map((k) => k.text).join(" → ") : undefined
+      }
       // Focusable (not a tab stop) so a click on the roll or the staff gives the workbench its keys.
       tabIndex={-1}
       onKeyDown={onKeyDown}
@@ -1275,7 +1442,7 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
         practiceTempo={practice}
         onPracticeTempo={onPracticeTempo}
         readOnly={props.readOnly === true}
-        {...(lensBar || anyPanelAvailable ? { lenses: lensSwitches } : {})}
+        {...(lensBar || anyPanelAvailable || musicSwitches.length > 0 ? { lenses: lensSwitches } : {})}
         {...(loopControls
           ? {
               loop: {
@@ -1374,9 +1541,11 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
           className={`oak-wb-panels${[panelsOpen.key, panelsOpen.circle, panelsOpen.form, panelsOpen.chart, scopeShown].filter(Boolean).length > 1 ? " oak-wb-panels--two" : ""}`}
         >
           <div className="oak-wb-panels-grid">
-            {panelsOpen.key ? <KeyPanel current={keyNow} keys={keysOfPiece} preview={preview} /> : null}
+            {panelsOpen.key ? (
+              <KeyPanel current={keyNow} keys={keysOfPiece} preview={preview} extras={keyExtras} />
+            ) : null}
             {panelsOpen.circle ? (
-              <CircleOfFifths current={keyNow} keys={keysOfPiece} preview={preview} />
+              <CircleOfFifths current={keyNow} keys={keysOfPiece} preview={preview} extras={keyExtras} />
             ) : null}
             {panelsOpen.form ? (
               <FormMap

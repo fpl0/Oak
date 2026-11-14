@@ -400,11 +400,14 @@ const gymPlan = (next: GymPlan["next"]): GymPlan => ({
 });
 
 describe("gym days on ladder L5 and L6", () => {
-  test("the rungs a learner sets now run to 6, named in plain words", () => {
+  test("the rungs a learner sets are named in plain words (Wave 6 adds L8, standards; L7 is own audio, never a rung)", () => {
     expect(levelName(5)).toBe("folk songs");
     expect(levelName(6)).toBe("blues");
-    expect(levelName(9)).toBe("blues");
-    expect(Object.keys(LADDER_LEVELS)).toEqual(["1", "2", "3", "4", "5", "6"]);
+    expect(levelName(7)).toBe("your own audio");
+    expect(levelName(8)).toBe("standards");
+    expect(levelName(9)).toBe("standards");
+    expect(levelName(0)).toBe("drum loops");
+    expect(Object.keys(LADDER_LEVELS)).toEqual(["1", "2", "3", "4", "5", "6", "8"]);
   });
 
   test("L5: the song under way and the next phrase; graded per phrase at 85%", () => {

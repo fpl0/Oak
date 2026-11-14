@@ -9,13 +9,17 @@ import { answerForms, answerKindOf, answerLeaks } from "./answer-guard.ts";
 import type { GradeSnapshot, ReviewSource, TutorNote } from "./domain.ts";
 import { hintsShown, type IssueView, redactGrade } from "./redaction.ts";
 import { factLines } from "./review-facts.ts";
+import { strengthsWantedFor } from "./reviews.ts";
 import type { TurnContext, UserTurn } from "./types.ts";
 import {
+  keyPlanLine,
   keyScaleLine,
   vocabularyLines,
   vocabularyOf,
   w5VocabularyLines,
   w5VocabularyOf,
+  w6VocabularyLines,
+  w6VocabularyOf,
 } from "./vocabulary.ts";
 
 export const CONTEXT_VERSION = "1";
@@ -101,6 +105,30 @@ function reviewLines(kind: string, subjectId: string, r: ReviewSource): string[]
     lines.push(`review_target: album track ${inline(r.target.trackId, 80)} version ${r.target.version}`);
   else if (r.target?.kind === "transcription")
     lines.push(`review_target: transcription version ${r.target.version}`);
+  // Wave 6: the Core Finale's single asks for the longest review: three strengths, the strongest first.
+  if ((r.strengthsWanted ?? strengthsWantedFor(subjectId)) === 3)
+    lines.push(
+      "strengths_wanted: 3 · the first names what is strongest in this song, in the learner's own bars; each is anchored to bars from the facts below",
+    );
+  // Wave 6 (d2): what a review's try-it code and prose are held to. Oak refuses a review that breaks these.
+  if (kind === "capstone" || kind === "track") {
+    const plan = r.facts?.keyPlan ?? [];
+    const keys = plan.length > 0 ? [...new Set(plan.map((k) => k.key))] : r.facts?.key ? [r.facts.key] : [];
+    if (keys.length > 0)
+      lines.push(
+        `try_code_key: ${keys.join(", then ")} · every tryCode is written in ${keys.length > 1 ? "the key of the bars it is for" : "this key"}: its .scale() and its chord symbols, never moved to another key`,
+      );
+    lines.push(
+      `try_code_form: ${
+        r.facts?.form?.kind === "sections"
+          ? "this piece is in sections: a tryCode shows one section as a const named like the piece's (chordsVerse, melChorus2) on a labelled track"
+          : "a tryCode is a few labelled tracks"
+      }; if it uses arrange(), each entry is [bars, sectionConst] over consts declared in the tryCode, one arrange() per labelled track, never over inline patterns`,
+    );
+  }
+  lines.push(
+    "review_terms: prose uses only course terms the learner has met (the vocabulary and forms lines); anything else is said by sound and degree numbers, never as a new name",
+  );
   // Oak's analysis, fact by fact: every strength and revision is anchored to bars listed here (contracts §10.6).
   if (r.facts) lines.push(...factLines(r.facts).map((l) => inline(l, 400)));
   // Only present once a graded ladder piece has passed (contracts §10.6).
@@ -138,7 +166,10 @@ export function buildOakContext(ctx: TurnContext): string {
   // The step's own key wins over the lesson's (wave4.md §5.6): a step in G inside a lesson in C is in G.
   const stepKey = step?.key ?? lesson?.key ?? null;
   if (lesson) {
-    lines.push(`key: ${stepKey ?? "none"} · meter: ${lesson.meter ?? "none"} · bpm: ${lesson.bpm ?? "none"}`);
+    // Wave 6: a step may be in its own meter (a 6/8 step inside a 4/4 lesson).
+    lines.push(
+      `key: ${stepKey ?? "none"} · meter: ${step?.meter ?? lesson.meter ?? "none"} · bpm: ${lesson.bpm ?? "none"}`,
+    );
   } else if (step?.key) lines.push(`key: ${step.key}`);
   // Wave 5: the key's mode in full (degrees, do-based syllables, minor numerals), so a minor step is never read
   // in its relative major (wave5.md §10 item 12).
@@ -148,6 +179,13 @@ export function buildOakContext(ctx: TurnContext): string {
   if (scale && answerLeaks(scale, scaleForms, ctx.disclosure).length > 0)
     lines.push(`${scale.split(" · ")[0]} · its degrees are this step's answer: withheld until the reveal`);
   else if (scale) lines.push(scale);
+  // Wave 6: a step that changes key says where and to what, unless that is what the learner is asked to find.
+  const plan = keyPlanLine(step?.keyPlan);
+  if (plan && answerLeaks(plan, scaleForms, ctx.disclosure).length > 0)
+    lines.push(
+      "key_plan: this step changes key; where and to which key is its answer: withheld until the reveal",
+    );
+  else if (plan) lines.push(plan);
   const answerKind = step ? answerKindOf(step) : null;
   if (answerKind) lines.push(`answer_kind: ${inline(answerKind, 60)}`);
   if (step) {
@@ -182,8 +220,14 @@ export function buildOakContext(ctx: TurnContext): string {
   const terms = ctx.terms.recent.slice(0, MAX_RECENT_TERMS);
   lines.push(`terms_introduced: ${ctx.terms.count} · recent: ${terms.length ? terms.join(", ") : "none"}`);
   lines.push(...vocabularyLines(vocab));
+  const w5 = w5VocabularyOf(ctx.terms);
+  lines.push(...w5VocabularyLines(w5, vocab, stepKey ?? ctx.review?.facts?.key ?? null));
   lines.push(
-    ...w5VocabularyLines(w5VocabularyOf(ctx.terms), vocab, stepKey ?? ctx.review?.facts?.key ?? null),
+    ...w6VocabularyLines(w6VocabularyOf(ctx.terms), vocab, {
+      key: stepKey ?? ctx.review?.facts?.key ?? null,
+      keyPlan: plan !== null || (ctx.review?.facts?.keyPlan?.length ?? 0) > 1,
+      dominantSeventh: w5.dominantSeventh,
+    }),
   );
   const tools = ctx.progress.unlocked.recent.slice(0, MAX_RECENT_TOOLS);
   lines.push(

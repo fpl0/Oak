@@ -20,7 +20,20 @@ import type {
   SingTolerance,
 } from "@oak/content-kit";
 import { CADENCE_OPTIONS, FUNCTION_OPTIONS, rat } from "@oak/content-kit";
-import { degreeTargets, gradeSung, gradeSwingTaps, gradeTaps } from "@oak/pitch";
+import {
+  chromaticTargets,
+  classifyRhythm,
+  degreeTargets,
+  explainColourResult,
+  gradeGuideTones,
+  gradeRhythmTaps,
+  gradeSung,
+  gradeSwingTaps,
+  gradeTaps,
+  guideToneTargets,
+  modalTargets,
+  rhythmTargets,
+} from "@oak/pitch";
 import { PROFILE as PITCH_PROFILE } from "../../../pitch/src/fixtures.test-data.ts";
 import { ev, line, norm, strudel } from "../analyze/__support__/fixtures.ts";
 import {
@@ -204,6 +217,8 @@ beforeAll(async () => {
       `${T}const v = s("<bd sd>")\nconst w = s("<hh oh>")\ndrums: arrange([3, v], [2, v])\nhats: arrange([3, w], [2, w])`,
       { profile: "content" },
     ],
+    // Wave 6 (U12.L04): a dictionary named after the voicing is chosen.
+    [`${T}chords: chord("<Dm7 G7>").voicing().dict("lefthand").s("piano")`],
   ];
   for (const [code, o] of lintCases)
     collect(
@@ -514,6 +529,34 @@ beforeAll(async () => {
     ).diagnostics,
   );
 
+  // Wave 6 (`key-plan`): a lifted stretch left in the first key is one finding.
+  collect(
+    "melody",
+    runMatcher(
+      { m: "melody", pitch: "key-relative", wPitch: 0.6, wRhythm: 0.4, rhythmTol: rat(1, 32) },
+      await strudel('mel: n("<[4 4 5 4] [7 ~ 6 ~]>").scale("<C4:major!2 D4:major!2>")', 4),
+      await strudel('mel: n("<[4 4 5 4] [7 ~ 6 ~]>").scale("C4:major")', 4),
+      {
+        ...nctx,
+        keyPlan: [
+          { bar: 1, key: { tonic: "C", mode: "major" } },
+          { bar: 3, key: { tonic: "D", mode: "major" } },
+        ],
+      },
+    ).diagnostics,
+  );
+
+  // Wave 6 (U13): the right chords, each a sixteenth off the pushed target.
+  collect(
+    "harmony",
+    runMatcher(
+      { m: "pcset", perOnset: true, bass: false, tracks: ["chords"] },
+      await strudel('chords: chord("<C F G C>").voicing().early(1/8)', 4),
+      await strudel('chords: chord("<C F G C>").voicing().early(1/16)', 4),
+      nctx,
+    ).diagnostics,
+  );
+
   const RHYTHM_ALL: Matcher = {
     m: "rhythm",
     tol: rat(1, 32),
@@ -763,6 +806,176 @@ beforeAll(async () => {
         .diagnostics,
     );
 
+  // Wave 6 (U13): pushes tapped on the beat, pushes that lean late and early, uneven triplets, 6/8 tapped in
+  // quarters, and a kind of note that sits apart from the beats (@oak/pitch `gradeRhythmTaps`).
+  {
+    const PUSHED = {
+      downbeat: 2,
+      bpm: 100,
+      meter: "4/4" as const,
+      onsets: [0, 1 / 4, 3 / 8, 3 / 4, 7 / 8, 1 + 1 / 4, 1 + 3 / 8, 1 + 3 / 4],
+    };
+    const kinds = classifyRhythm(PUSHED).map((o) => o.kind);
+    const targets = rhythmTargets(PUSHED);
+    const eighth = 60 / PUSHED.bpm / 2;
+    const moved = (by: (i: number) => number) => targets.map((t, i) => t + by(i));
+    const tapsOf = (taps: number[], p: typeof PUSHED | typeof TRIP | typeof SIX, level = 1) =>
+      gradeRhythmTaps(taps, p, tapTol, PITCH_PROFILE, { level, levels: 4 }).diagnostics;
+    const TRIP = {
+      downbeat: 1,
+      bpm: 80,
+      meter: "4/4" as const,
+      onsets: [0, 1, 2, 3, 4, 5, 6, 7].flatMap((b) =>
+        b % 2 === 0 ? [b / 4, b / 4 + 1 / 12, b / 4 + 2 / 12] : [b / 4],
+      ),
+    };
+    const SIX = { downbeat: 1, bpm: 72, meter: "6/8" as const, onsets: [0, 1 / 2, 1, 3 / 2] };
+    collect(
+      "taps",
+      tapsOf(
+        moved((i) => (kinds[i] === "push" ? eighth : 0)),
+        PUSHED,
+      ),
+    );
+    collect(
+      "taps",
+      tapsOf(
+        moved((i) => (kinds[i] === "push" ? 0.048 : 0.002)),
+        PUSHED,
+        3,
+      ),
+    );
+    collect(
+      "taps",
+      tapsOf(
+        moved((i) => (kinds[i] === "push" ? -0.048 : -0.002)),
+        PUSHED,
+        3,
+      ),
+    );
+    const tk = classifyRhythm(TRIP);
+    const beatSec = 60 / TRIP.bpm;
+    const tt = rhythmTargets(TRIP);
+    collect(
+      "taps",
+      tapsOf(
+        tt.map((t, i) => {
+          const o = tk[i];
+          if (o?.kind !== "triplet") return t;
+          return t + (o.inBeat < 0.5 ? 1 / 4 - 1 / 3 : 1 / 2 - 2 / 3) * beatSec;
+        }),
+        TRIP,
+        4,
+      ),
+    );
+    // Every triplet note a little late against the beats: the kind sits apart.
+    collect(
+      "taps",
+      tapsOf(
+        tt.map((t, i) => t + (tk[i]?.kind === "triplet" ? 0.045 : 0)),
+        TRIP,
+        3,
+      ),
+    );
+    const bar = (60 / SIX.bpm) * 2;
+    collect(
+      "taps",
+      tapsOf(
+        [0, 1, 2, 3, 4, 5].map((k) => 1 + (k / 3) * bar),
+        SIX,
+      ),
+    );
+  }
+
+  // Wave 6 (U12.L05, U14, U15.L01): a chromatic degree sung as the key's own note, a mode's colour tone sung as
+  // the plain scale's note, one sung nearer its neighbour but inside the tolerance, and a guide-tone line sung
+  // on the roots and on the other guide tone (@oak/pitch `explainColourResult`, `gradeGuideTones`).
+  {
+    const until = (segs: { midi: number | null; from: number; to: number }[], end: number) => {
+      const out = [];
+      for (let t = 0; t < end; t += 512 / 48000) {
+        const n = segs.find((x) => x.midi !== null && t >= x.from && t < x.to);
+        out.push({ t, hz: n ? hz(n.midi as number) : 0, clarity: n ? 0.97 : 0.1, rms: n ? 0.1 : 0.0005 });
+      }
+      return out;
+    };
+    const sing = (ts: readonly { midi: number; on: number; off: number }[], cents: (i: number) => number) =>
+      until(
+        ts.map((t, i) => ({ midi: t.midi + cents(i) / 100, from: t.on, to: t.off })),
+        Math.max(...ts.map((t) => t.off)) + 0.4,
+      );
+    // The learner's own tolerance (contracts §8.1), so the profile's rung decides how far a note may sit.
+    const colourTol: SingTolerance = { ...tol, cents: "learner", octave: "per-note", driftCompCents: 0 };
+    const line = (degrees: readonly string[]) =>
+      degrees.map((degree, k) => ({ degree: degree as never, at: k * 0.6, dur: 0.54 }));
+    const C = { tonic: "C", mode: "major" as const };
+    const chrom = chromaticTargets({ key: C, tonicMidi: 60, notes: line(["5", "#4", "5"]), startAt: 1 });
+    collect(
+      "pitch",
+      explainColourResult(
+        gradeSung(
+          sing(chrom, (i) => (i === 1 ? -100 : 0)),
+          chrom,
+          colourTol,
+          "degree",
+          PITCH_PROFILE,
+        ),
+        C,
+        chrom,
+      ).diagnostics,
+    );
+    collect(
+      "pitch",
+      explainColourResult(
+        gradeSung(
+          sing(chrom, (i) => (i === 1 ? -60 : 0)),
+          chrom,
+          colourTol,
+          "degree",
+          {
+            ...PITCH_PROFILE,
+            singTolCents: 70,
+          },
+        ),
+        C,
+        chrom,
+      ).diagnostics,
+    );
+    const D = { tonic: "D", mode: "dorian" as const };
+    const modal = modalTargets({ key: D, tonicMidi: 62, notes: line(["1", "5", "6", "5"]), startAt: 1 });
+    collect(
+      "pitch",
+      explainColourResult(
+        gradeSung(
+          sing(modal, (i) => (i === 2 ? -100 : 0)),
+          modal,
+          colourTol,
+          "degree",
+          PITCH_PROFILE,
+        ),
+        D,
+        modal,
+      ).diagnostics,
+    );
+    const guide = guideToneTargets({ chords: ["Dm7", "G7", "C^7"], around: 64, startAt: 2, chordSec: 1.2 });
+    for (const sung of [
+      [62, 67, 60],
+      [65, 59, 64],
+    ])
+      collect(
+        "pitch",
+        gradeGuideTones(
+          until(
+            guide.map((t, i) => ({ midi: sung[i] as number, from: t.on, to: t.off })),
+            6,
+          ),
+          guide,
+          colourTol,
+          PITCH_PROFILE,
+        ).diagnostics,
+      );
+  }
+
   // Wave 4: chord names, qualities, numerals, strips, chords on the staff, staged dictation, the voicing gate.
   const C = { tonic: "C", mode: "major" } as const;
   const chordText = { ui: "text", normalize: "chord" } as const;
@@ -791,6 +1004,33 @@ beforeAll(async () => {
   collect(
     "answers",
     gradeAnswer(palette, { rn: ["vi", "viio", "V6"] }, { rn: ["IV", "vii", "V"] }, { key: C }).diagnostics,
+  );
+  // Wave 6: the form map (CF-T.S1, L8) and the scale builder on a mode (U14).
+  collect(
+    "answers",
+    gradeAnswer(
+      { ui: "form", sections: 4, vocabulary: "letters", input: "map", bars: 32, sectionBars: [8, 8, 8, 8] },
+      { sections: ["A", "A", "B", "A"], bars: [1, 9, 17, 25] },
+      { sections: ["A", "A", "B"], bars: [1, 5, 17] },
+    ).diagnostics,
+  );
+  collect(
+    "answers",
+    gradeAnswer(
+      { ui: "scale-builder", tonic: "G", input: "degrees", from: "major" } as AnswerUi,
+      { degrees: ["1", "2", "3", "4", "5", "6", "b7"] },
+      { degrees: ["1", "2", "3", "4", "5", "6", "7"] },
+    ).diagnostics,
+  );
+  // Wave 6 (U15): the right chord under its root name, one applied chord for another, a missing 7th.
+  collect(
+    "answers",
+    gradeAnswer(
+      { ui: "rn-palette", slots: 3, allow: ["triads", "sevenths", "secondary"] },
+      { rn: ["V7/V", "V7/vi", "V7"] },
+      { rn: ["II7", "V7/ii", "V"] },
+      { key: C },
+    ).diagnostics,
   );
   collect(
     "answers",
@@ -1055,6 +1295,20 @@ describe("every reached diagnostic renders whole", () => {
   test("U03.L02 home-is-g: the scale with no octave is named in the message", () => {
     const d = reached.get("code.scale-no-octave")?.[0]?.d as Diagnostic;
     expect(renderFeedback(d)).toBe('"G:major" has no octave, so it plays in octave 3. Write "G4:major".');
+  });
+
+  test("a degree is printed with its sign (♯4, ♭7), never as code spells it (#4, b7)", () => {
+    const bad: string[] = [];
+    for (const [id, list] of reached)
+      for (const { d, source } of list) {
+        // Code in backticks and quoted Strudel strings keep their spelling ("3#", `n("6b")`).
+        const prose = renderFeedback(d)
+          .replace(/`[^`]*`/g, "")
+          .replace(/"[^"]*"/g, "");
+        if (/(^|[\s(,/])[#b][1-7](?![\d#b])/.test(prose))
+          bad.push(`${id} (${source}): "${renderFeedback(d)}"`);
+      }
+    expect(bad).toEqual([]);
   });
 
   test("a tool is named as it is written, never by its ID", () => {

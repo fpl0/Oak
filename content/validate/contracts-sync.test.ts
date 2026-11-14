@@ -46,7 +46,7 @@ test("default order (§2.5)", () => {
   const block = doc.slice(doc.indexOf("**Default linear order of the core**"));
   const code = block.slice(block.indexOf("```") + 3, block.indexOf("```", block.indexOf("```") + 3));
   const order = [...code.matchAll(/(\d+):(\S+)/g)].map((m) => m[2]);
-  expect<unknown>(order.length).toBe(183);
+  expect<unknown>(order.length).toBe(185);
   expect<unknown>(syllabus.defaultOrder).toEqual(order as never);
 });
 

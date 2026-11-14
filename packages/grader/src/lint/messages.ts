@@ -60,6 +60,8 @@ export const LINT_TEMPLATES = {
   "code.setcpm-form": "{detail}",
   "code.transpose-after-scale":
     'Change key with a patterned `.scale("<…>")`, not `.transpose()` after `.scale()`.',
+  "code.dict-after-voicing":
+    '`.dict("{dict}")` after `.voicing()` changes nothing: the voicing is already chosen. Put it before: `.dict("{dict}").voicing()`.',
   "code.nudge-studio-only":
     "`.nudge()` does not move the notes the checker sees: use `.late(…)` or `.early(…)`.",
   "form.inconsistent-arrange": "The arrange() sections differ between tracks: {detail}.",
@@ -103,6 +105,7 @@ const DIALECT: Partial<Record<LintCode, readonly [LintSeverity, LintSeverity]>> 
   "code.setcpm-missing": ["error", "warn"],
   "code.setcpm-form": ["error", "info"],
   "code.transpose-after-scale": ["error", "warn"],
+  "code.dict-after-voicing": ["error", "warn"],
   "code.nudge-studio-only": ["error", "error"],
   "form.inconsistent-arrange": ["error", "warn"],
   "form.section-period": ["error", "warn"],

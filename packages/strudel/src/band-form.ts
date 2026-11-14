@@ -29,7 +29,7 @@ export function sectionTypeOf(ident: string): string | null {
   return name.length > 0 ? name.toLowerCase() : null;
 }
 
-interface ArrangeCall {
+export interface ArrangeCall {
   /** Offsets of `arrange` and of the closing parenthesis (exclusive). */
   start: number;
   end: number;
@@ -86,7 +86,7 @@ function topLevelItems(inner: string): string[] {
 }
 
 /** Every `arrange(…)` call in comment-stripped code, with its sections when each is `[bars, identifier]`. */
-function arrangeCalls(text: string): ArrangeCall[] {
+export function arrangeCalls(text: string): ArrangeCall[] {
   const out: ArrangeCall[] = [];
   const re = /(^|[^A-Za-z0-9_$.])arrange\s*\(/g;
   for (const m of text.matchAll(re)) {

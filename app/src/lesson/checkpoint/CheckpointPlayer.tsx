@@ -19,6 +19,7 @@ import {
   type KeySpec,
   type LearnerProfile,
   type LessonDef,
+  type MeterId,
   type SessionId,
   type SingEx,
   type StepDef,
@@ -28,6 +29,7 @@ import {
   type UnlockableId,
 } from "@oak/api";
 import { createRegistry, FAMILIES, gradeTrial } from "@oak/drills";
+import { METERS } from "@oak/theory";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -69,6 +71,7 @@ import { viewsOf } from "../model.ts";
 import { MakeRenderer, rendererFor } from "../renderers.tsx";
 import { browserGrader, catalogText, lessonServices } from "../services.ts";
 import { answerMissing, registryHas, stepScopePanel } from "../wave5.ts";
+import { stepMusicLenses } from "../wave6.ts";
 import {
   clearRecords,
   familyAnswerSpec,
@@ -85,6 +88,7 @@ import {
   scoreLocal,
   skillLine,
   sungItemScore,
+  tracksOpenedCopy,
 } from "./model.ts";
 
 const CP_KEY = { tonic: "C", mode: "major" } as const;
@@ -334,6 +338,11 @@ function itemKey(ex: Exercise, trial: Trial | null, fallback: KeySpec): KeySpec 
   return ex.key ?? tk ?? fallback;
 }
 
+/** A drawn trial's own meter (`params.meter`), when it names one the course counts in. */
+function trialMeter(m: unknown): MeterId | null {
+  return typeof m === "string" && m in METERS ? (m as MeterId) : null;
+}
+
 const registry = createRegistry(FAMILIES, decks);
 const HAS_WIDGET = registryHas(lessonWidgetFor);
 
@@ -416,6 +425,8 @@ function buildItems(
       };
       const p = trial.params as Record<string, unknown>;
       const tkey = (p.key as KeySpec | undefined) ?? undefined;
+      // Wave 6: a trial in its own meter (fam.rhy.meter in 6/8) is counted, tapped and drawn in it.
+      const tmeter = trialMeter(p.meter);
       const exercise: Exercise =
         // Reading from the page (`showStaff`, not played first): the staff, and no Play.
         p.showStaff === true && p.playFirst === false && answer && answer.ui !== "tap"
@@ -423,6 +434,7 @@ function buildItems(
               ...common,
               kind: "staff-read",
               ...(tkey ? { key: tkey } : {}),
+              ...(tmeter ? { meter: tmeter } : {}),
               source: trial.code,
               bars: typeof p.bars === "number" ? p.bars : 2,
               answer: answer as never,
@@ -432,6 +444,7 @@ function buildItems(
             ? {
                 ...common,
                 kind: "tap",
+                ...(tmeter ? { meter: tmeter } : {}),
                 mode: "echo",
                 stimulus: { src: "generator", family: src.familyId, level: src.level, seed: src.seed },
                 cue: trial.cue,
@@ -442,6 +455,7 @@ function buildItems(
             : {
                 ...common,
                 kind: "identify",
+                ...(tmeter ? { meter: tmeter } : {}),
                 stimulus: { src: "generator", family: src.familyId, level: src.level, seed: src.seed },
                 cue: trial.cue,
                 answer: (answer ?? { ui: "choice", options: [] }) as never,
@@ -854,6 +868,9 @@ function Runner(p: {
       ...(stepScopePanel(item.step.ui) ? { scopePanel: stepScopePanel(item.step.ui) } : {}),
       band: item.kind === "make" ? makeBand : null,
       roll: { labels: "none", color: "part" },
+      // Wave 6: a checkpoint item shows no guide-tone marks (on "write the 3rds and 7ths" they are the answer),
+      // whatever the learner's switch; an item in 6/8 keeps its beat grid, which is how the meter is read.
+      musicLenses: { guideTones: false, ...stepMusicLenses({ lessonId: p.cpId, meter: env.meter }) },
     },
     trial: item.trial,
     trials: [item.trial],
@@ -1035,10 +1052,15 @@ function ResultScreen({
   const copy = resultCopy(outcome);
   const name = (id: string) => content?.skills.nodes.find((n) => n.id === id)?.name ?? id;
   const titles = lessonTitles(content?.syllabus ?? null);
+  // Wave 6: a pass that met an advanced-track gate says so once (U13.CP: the Jazz and Rhythm tracks).
+  const tracksCopy = tracksOpenedCopy(
+    outcome.gatesOpened,
+    new Map((content?.syllabus?.tracks ?? []).map((t) => [t.id, t.title])),
+  );
   return (
     <Page width="narrow">
       <div
-        className="flex flex-col gap-5"
+        className={`flex flex-col ${outcome.perSkill.length > 6 ? "gap-4" : "gap-5"}`}
         data-testid="checkpoint-result"
         data-passed={outcome.passed ? "1" : "0"}
       >
@@ -1055,7 +1077,12 @@ function ResultScreen({
             Score on the counted items: {pct(outcome.score)} (85% passes).
           </p>
         </header>
-        <section aria-label="By skill" className="flex flex-col gap-3">
+        {/* Wave 6 checkpoints count up to ten skills: the rows close up so the result's action stays on a
+            1280×800 screen. */}
+        <section
+          aria-label="By skill"
+          className={`flex flex-col ${outcome.perSkill.length > 6 ? "gap-2" : "gap-3"}`}
+        >
           {outcome.perSkill.map((s) => {
             const line = skillLine(s);
             return (
@@ -1089,6 +1116,13 @@ function ResultScreen({
           <p className="text-sm text-text-2" data-testid="checkpoint-opened">
             Open now: {openedText(outcome.opened, titles)}.
           </p>
+        )}
+        {tracksCopy && (
+          <div data-testid="tracks-opened" data-authored={tracksCopy.authored ? "1" : "0"}>
+            <Callout tone="info" title={tracksCopy.title}>
+              {tracksCopy.body}
+            </Callout>
+          </div>
         )}
         <div className="flex flex-wrap gap-2">
           {inSession ? (

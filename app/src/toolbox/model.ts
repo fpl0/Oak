@@ -215,7 +215,7 @@ export function unlockArpeggio(tonic = 60): { midi: number; at: number; dur: num
 }
 
 /** The body of `sketches.create` for "Try it in Studio": a free sketch starting from the tool's demo (or an edit of it). */
-export function toolSketchBody(tool: Pick<ToolEntry, "code">, code: string) {
+export function toolSketchBody(tool: Pick<ToolEntry, "code">, code: string, meter?: MeterId) {
   return {
     title: tryTitle(tool),
     originKind: "free" as const,
@@ -223,7 +223,7 @@ export function toolSketchBody(tool: Pick<ToolEntry, "code">, code: string) {
     sessionId: null,
     code,
     bpm: null,
-    meter: demoMeter(code),
+    meter: meter ?? demoMeter(code),
     key: demoKey(code) as { tonic: string; mode: "major" } | null,
     analysis: null,
     note: `From the toolbox: ${tool.code}`,

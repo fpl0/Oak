@@ -2,7 +2,15 @@
 // learner's calibration for taps and singing, the music a click question points into, the notes to sing, the
 // take's timing. A host wraps the widget in `<AnswerEnvProvider value={…}>`; every field is optional and a
 // widget that lacks what it needs says so in words instead of showing a dead control.
-import type { Choice, KeySpec, LearnerProfile, MeterSpec, SingMode, SingTolerance } from "@oak/content-kit";
+import type {
+  Choice,
+  KeySpec,
+  LearnerProfile,
+  MeterSpec,
+  SingMode,
+  SingTolerance,
+  SwingSpec,
+} from "@oak/content-kit";
 import type { PitchFrame, SungResult } from "@oak/pitch";
 import { createContext, type ReactNode, useContext } from "react";
 import type { WorkbenchModel } from "../workbench/model.ts";
@@ -29,8 +37,19 @@ export interface TapEnv {
   bpm: number;
   /** Default 4. */
   beatsPerBar?: number;
-  /** Grid lines per beat on the pad: 2 = eighths, 4 = sixteenths (default 4). */
+  /**
+   * Grid lines per beat on the pad: 2 = eighths, 4 = sixteenths (default 4; 3 in a compound meter). Wave 6: 3 in a
+   * simple meter draws triplets, counted "1 trip let".
+   */
   stepsPerBeat?: number;
+  /**
+   * Wave 6 (U13.L04, contracts §6.9): the meter of the take. In a compound meter (6/8, 9/8, 12/8) the beat is the
+   * dotted quarter: `bpm` counts that beat, the count-in clicks it, and the pad draws each beat in three, counted
+   * "1 la li". Wins over `beatsPerBar`.
+   */
+  meter?: MeterSpec;
+  /** What a target is called in the report: "beat" (default), or "hit" for a rhythm with notes off the beat. */
+  targetWord?: "beat" | "hit";
   /** Count-in bars before bar 1 (default 1). Ignored when `start` is given. */
   countInBars?: 0 | 1 | 2;
   /** F/J two-voice taps (kick/snare) instead of Space. */
@@ -139,6 +158,33 @@ export interface HarmonyEnv {
    * the numerals whose chord contains the target slot's bass and dims the rest (they stay pickable).
    */
   bassDegrees?: readonly string[];
+  /**
+   * Wave 6 (U12): the chord-name picker shows its seventh-chord row from the start (a step about sevenths).
+   * Without it the row opens on request or when the typed chord is a seventh.
+   */
+  sevenths?: boolean;
+  /** Wave 6 (U12.L06): the interval pad offers "+ an octave" (9ths to 14ths) from the start. */
+  compoundIntervals?: boolean;
+  /**
+   * Wave 6 (U12.L05), the guide-tone pick: a `keyboard` answer in `chord` mode that asks for the 3rd and the 7th of
+   * this chord (code spelling, `"G7"`). Once the answer is checked (or live, as `nameChords` says) each picked key
+   * is named by its place in the chord ("B, the 3rd · F, the 7th"); nothing is named before.
+   */
+  guideChord?: string;
+}
+
+/**
+ * Wave 6 (U17; `fam.har.modulation`): a "where does the key change" answer (`bar-buttons`, or a `choice` whose
+ * options are bars and "none") is drawn as a bar timeline. With `from`, the bars before the chosen one are labelled
+ * with that key; `to` is printed over the bars after it once the answer is checked right or revealed, with the
+ * distance in words ("up a whole step"). A `choice` of chords with both keys names the chosen chord in each
+ * ("vi in C major, ii in G major": the pivot). Nothing here is graded: the host grades the answer as before.
+ */
+export interface KeyChangeEnv {
+  from?: KeySpec;
+  to?: KeySpec | null;
+  /** Plays the music from one bar (1-based): `P` on the focused bar. */
+  play?: (bar: number) => void;
 }
 
 export interface AnswerEnv {
@@ -150,8 +196,12 @@ export interface AnswerEnv {
   sing?: SingEnv;
   /** Hum-to-predict: how long the hum window lasts (default 2 bars at the given tempo, or 6 s). */
   hum?: { seconds?: number; play?: () => void };
-  /** Rhythm grid playback tempo and meter. */
-  grid?: { bpm?: number; beatsPerBar?: number };
+  /**
+   * Rhythm grid playback tempo and meter. Wave 6: `meter` groups the steps as the meter does (6 steps in 6/8 are
+   * 3 + 3, counted "1 la li 2 la li"; `bpm` then counts the dotted quarter) and wins over `beatsPerBar`;
+   * `triplets` counts a simple meter's three-to-a-beat grid "1 trip let" (12 or 24 steps in 4/4).
+   */
+  grid?: { bpm?: number; beatsPerBar?: number; meter?: MeterSpec; triplets?: boolean };
   /** Click-code: the clean code the learner points into. */
   code?: string;
   /** Click-staff and click-roll: the analysed music (the workbench's `onModel`). */
@@ -163,8 +213,13 @@ export interface AnswerEnv {
   choiceThumb?: (choice: Choice) => ReactNode;
   /** Keyboard pick: the typing-row octave and the sound. */
   keyboard?: { octave?: number; sound?: string };
-  /** Staff input: the meter the answer is written in (default 4/4) and the sound of a placed note. */
-  staff?: { meter?: MeterSpec; sound?: string };
+  /**
+   * Staff input: the meter the answer is written in (default 4/4) and the sound of a placed note. Wave 6:
+   * `rhythmOnly` writes every note on one pitch (default the middle line; or a pitch such as `"B4"`), for rhythm
+   * dictation: letters, clicks and the `N` key all place that note, and the pitch keys are off. `swing` prints
+   * "Swing 8ths" over a staff whose answer is written straight (contracts §6.10 item 3; d5).
+   */
+  staff?: { meter?: MeterSpec; sound?: string; rhythmOnly?: boolean | string; swing?: SwingSpec };
   /**
    * The note-label lenses the learner has on (wave3.md §4.3: the host passes `useLenses().shown`). Widgets only
    * read them: a degree pad shows syllables when the solfège lens is on. Absent: no lens.
@@ -184,6 +239,15 @@ export interface AnswerEnv {
   harmony?: HarmonyEnv;
   /** Wave 4: a slot strip (`slot-choice`) can play the music under one slot ("Hear bar 2"). */
   slots?: { play?: (slot: number) => void };
+  /** Wave 6: the key change a bar timeline or a pivot-chord pick is about. */
+  keyChange?: KeyChangeEnv;
+  /**
+   * Wave 6: after a check, a "which mode" pick says the one changed note of the mode picked (or, revealed, of the
+   * answer): "Mixolydian is major with one note changed: 7 becomes ♭7. From G: F♯ becomes F." (the tonic from
+   * `harmony.key`), and a scale builder with `from` names the scale built. Off by default: a host that already
+   * says so in its own feedback (the drill runner's fact line) leaves it off.
+   */
+  facts?: boolean;
   /**
    * What Enter does to the answer, as a verb for the key hints: "check" (default), or "save" in a checkpoint,
    * which stores the answer without grading it.

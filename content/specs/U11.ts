@@ -72,7 +72,7 @@ export const U11: UnitSpec = {
   unit: "U11",
   title: "Pentatonic & Blues",
   summary:
-    'Eight lessons and a checkpoint on the sound of the blues and of most rock, soul and funk melody. Two five-note scales first: the major pentatonic, the major scale without its two half steps, where no note clashes with the four-chord loop ("five notes, no wrong ones": improvise by editing over a Band), and the minor pentatonic, the same five notes from 6, the scale of a riff. Then the blue notes: ♭3, ♭5 and ♭7 against a major sound, gathered in the blues scale (`.scale("C4:blues")`), and the chord that carries them, the dominant seventh (`C7`). The form follows: twelve bars of I7, IV7 and V7 in a fixed order (U11.L05, the exemplar), its two standard variations, the quick change and the turnaround, then the shuffle: swung eighths with `.swingBy(1/3, 4)`, written straight and printed "Swing 8ths". The unit closes with riffs that answer each other and the first line of St. Louis Blues (1914). U11.L01 sits before U10.CP in the default order (session 110); U11.L02–L08 follow C4, with GYM.10 after L05 and U12.L01 and GYM.11 before U11.CP (session 125). Then C5 "12-Bar Shuffle" (sessions 126–127) and X2 "Blues Transcription" (128–129).',
+    'Eight lessons and a checkpoint on the sound of the blues and of most rock, soul and funk melody. Two five-note scales first: the major pentatonic, the major scale without its two half steps, where no note clashes with the four-chord loop ("five notes, no wrong ones": improvise by editing over a Band), and the minor pentatonic, the same five notes from 6, the scale of a riff. Then the blue notes: ♭3, ♭5 and ♭7 against a major sound, gathered in the blues scale (`.scale("C4:blues")`), and the chord that carries them, the dominant seventh (`C7`). The form follows: twelve bars of I7, IV7 and V7 in a fixed order (U11.L05, the exemplar), its two standard variations, the quick change and the turnaround, then the shuffle: swung eighths with `.swingBy(1/3, 4)`, written straight and printed "Swing 8ths". The unit closes with riffs that answer each other and the first line of St. Louis Blues (1914). U11.L01 sits before U10.CP in the default order (session 112); U11.L02–L08 follow C4, with GYM.10 after L05 and U12.L01 and GYM.11 before U11.CP (session 127). Then C5 "12-Bar Shuffle" (sessions 128–129) and X2 "Blues Transcription" (130–131).',
   conventions: [
     "Degrees are spelled against major and sung do-based (contracts §8.3; content-kit `MODE_DEGREES`, `DEGREE_SYLLABLES`): the major pentatonic is 1 2 3 5 6 (do re mi sol la), the minor pentatonic 1 ♭3 4 5 ♭7 (do me fa sol te), the blues scale 1 ♭3 4 ♭5 5 ♭7 (do me fa se sol te). The blue notes are ♭3, ♭5 and ♭7 (theory `BLUE_NOTES`); the lens spells ♭5 as F♯ going up and G♭ going down (wave5.md §0).",
     'In a pentatonic or blues scale `n` counts that scale\'s own notes, so "degree − 1" no longer holds: in `C4:major:pentatonic` n 0–4 are C D E G A (n 3 is degree 5, n 4 is degree 6); in `A3:minor:pentatonic` n 0–4 are A C D E G (n 1 is ♭3); in `C4:blues` n 0–5 are C E♭ F G♭ G B♭ (evaluated: MIDI 60 63 65 66 67 70). Writing degree − 1 on a pentatonic (degree 5 as n 4, which plays A) is the realistic mistake of U11.L01–L03: every graded step that moves a line onto one of these scales pins it (`melody.wrong-degree`), and the degree labels on the roll always show the degree, never the `n`.',
@@ -196,7 +196,7 @@ export const U11: UnitSpec = {
       },
       notes: [
         'Evaluated: `n("0 1 2 3 4 5").scale("C4:major:pentatonic")` plays C4 D4 E4 G4 A4 C5 (MIDI 60 62 64 67 69 72). The hook\'s tune is A G E D | C D E | G A C5 A | E D C under C G Am F: no 4 (F) or 7 (B) anywhere. "No wrong ones" is honest, not absolute: E over F sounds as Fmaj7 and C over G as a suspended 4th, colours a pop tune uses; the half-step rubs (F over C or Am, B over C or F) are the ones the pentatonic removes. The pass text says "no clashes", never "every note is a chord tone".',
-        "U11.L01 is session 110, the day before U10.CP: it asks for nothing from U10, so a learner who has not yet passed the minor checkpoint meets nothing minor here.",
+        "U11.L01 is session 112, the day before U10.CP: it asks for nothing from U10, so a learner who has not yet passed the minor checkpoint meets nothing minor here.",
         "The quiz step needs the planned `scale-builder`; the compare step is graded with fixed items, because no drill family generates scale colour yet.",
       ],
     },
@@ -307,7 +307,7 @@ export const U11: UnitSpec = {
       },
       notes: [
         'Evaluated: `n("0 1 2 3 4 5").scale("A3:minor:pentatonic")` plays A3 C4 D4 E4 G4 A4 (MIDI 57 60 62 64 67 69), the notes of C major pentatonic from A.',
-        "U11.L02 follows C4 (session 115), so minor keys, do-based solfège and `scale.minor` are the learner's.",
+        "U11.L02 follows C4 (session 117), so minor keys, do-based solfège and `scale.minor` are the learner's.",
         "The riff needs no chords: the Band's drums keep time, and the Make's rule reads only the riff. A chord loop under the riff waits for the dominant seventh (L04) and the form (L05).",
       ],
     },
@@ -1057,7 +1057,7 @@ export const U11: UnitSpec = {
         'M08: `motif-reuse` `track: "@melody"`, `minRatio: 0.5`, `unitBars: 2` (the riff returns in half the 2-bar units). Suggestions: `blues-form` standard or quick change (H10, F04), `chord-qualities` `subsetOf: ["7"]` `depth: "seventh"` (C06), `swing` on the hats (R13).',
     },
     notes: [
-      "The checkpoint follows U12.L01 and GYM.11 in the default order (session 125), so it always falls on a later day than U11.L08. It opens C5 (contracts §2.4) and, with A.CP, AC1 (§2.6). U12.L03 onward and all of U13 need it (contracts §7.6 rule 2).",
+      "The checkpoint follows U12.L01 and GYM.11 in the default order (session 127), so it always falls on a later day than U11.L08. It opens C5 (contracts §2.4) and, with A.CP, AC1 (§2.6). U12.L03 onward and all of U13 need it (contracts §7.6 rule 2).",
       "Two of three authored items use planned answer UIs (`scale-builder`, `bar-grid`) and one a planned rule (`swing`): author:CP writes them now and they pass content:check when the answers and grader engineers list them. Fallbacks named per item keep the checkpoint shippable without them.",
       "No sung item is gated (contracts §7.6, §8): a learner in Quiet mode passes the same checkpoint.",
       "U11.CP's Make uses the drums of `band.axis-4bar` until `band.blues-12bar` (requested of author:CP, who owns content/bands) exists.",
@@ -1068,7 +1068,7 @@ export const U11: UnitSpec = {
       id: "C5",
       author: "capstones",
       intent:
-        "The fourth composed track on the album (sessions 126–127 in the default order): two choruses of a 12-bar blues in the learner's key, every chord a dominant seventh, a shuffle on the hats, a turnaround in bar 12, a riff that answers itself and the blue notes in the tune. Session 1 builds one chorus (changes, feel, riff); session 2 adds the second chorus with call and response, checks the whole rubric and releases. Everything was taught in U08–U11; nothing new is introduced. From C5 on the tutor review carries two revisions (`reviewRevisions: 2`).",
+        "The fourth composed track on the album (sessions 128–129 in the default order): two choruses of a 12-bar blues in the learner's key, every chord a dominant seventh, a shuffle on the hats, a turnaround in bar 12, a riff that answers itself and the blue notes in the tune. Session 1 builds one chorus (changes, feel, riff); session 2 adds the second chorus with call and response, checks the whole rubric and releases. Everything was taught in U08–U11; nothing new is introduced. From C5 on the tutor review carries two revisions (`reviewRevisions: 2`).",
       opens:
         "When U11.CP is passed or soft-passed (contracts §2.4). Today then offers C5.S1 as the New block; a learner who puts it off keeps going into U12 (a capstone never gates a lesson). In progress, no gym slot interrupts it: the slot waits until C5.S2 is done (§2.5). Its release opens X2.",
       band: "None: a capstone is the learner's whole song, so the starter carries its own `hats:` and `drums:` lines; the swing rule reads the learner's hats. The flavour sets the starter's kit and sounds (§5.10 rule 8: jazz-soul swaps `piano` for `rhodes`; a bass line the learner adds takes `upright` in jazz-soul and `fingerbass` in funk) and never changes the rubric (§6.6).",
@@ -1133,7 +1133,7 @@ export const U11: UnitSpec = {
       id: "X2",
       author: "capstones",
       intent:
-        "The second transcription on the album (sessions 128–129 in the default order): a blues by ear, the 12-bar strain of St. Louis Blues (W. C. Handy, 1914) or Careless Love (trad), in stages that must pass in order: the bass (≥ 0.90), the changes (≥ 0.85), then the melody (≥ 0.85). Session 1 takes down the bass and the changes; session 2 the melody, then the arrangement, the review and the release. The learner is told the meter, the key and its tonic, the form, the pickup and the feel (swing 8ths); everything else is heard.",
+        "The second transcription on the album (sessions 130–131 in the default order): a blues by ear, the 12-bar strain of St. Louis Blues (W. C. Handy, 1914) or Careless Love (trad), in stages that must pass in order: the bass (≥ 0.90), the changes (≥ 0.85), then the melody (≥ 0.85). Session 1 takes down the bass and the changes; session 2 the melody, then the arrangement, the review and the release. The learner is told the meter, the key and its tonic, the form, the pickup and the feel (swing 8ths); everything else is heard.",
       opens:
         'When C5 is released (contracts §2.4). While it is closed, `capstones.gate` lists the condition with `met`; Today says "X2 opens when C5 is released". X2 never gates a lesson or a checkpoint; a learner may leave it closed and carry on into U12. In progress it takes the gym slot (§2.5): no separate gym session until X2.S2 is done.',
       band: "None while transcribing: the source is the song itself, Oak's rendition played as a pattern source (hidden reference code in a hidden adapter instance, contracts §6.12) with Oak's accompaniment (a shuffle on the drums, block dominant sevenths and a root bass) at realism R1, the same for every learner. In the X2.S2 arrangement the learner adds what they like under melody, bass and changes; the whole arrangement is their code.",
@@ -1152,7 +1152,7 @@ export const U11: UnitSpec = {
           ],
           checks: [
             '`PhraseCheck` `bass`: `phrase: [1, 12]` (16 for Careless Love), `layer: "bass"`, the L3 bass matcher (`melody` on `@bass`, octave-free; `SONG_LADDER_MATCHERS.bass`), pass ≥ 0.90.',
-            '`PhraseCheck` `changes`, `after: ["bass"]` (feature `capstone.check-after`): `layer: "chords"`, `{ m: "harmony", level: "rn", qualityDepth: "triad", inversion: false, harmonicRhythm: "given" }` (I7 counts as I), pass ≥ 0.85. Graded in capstone mode (contracts §6.4) and recorded with `capstones.recordCheck`.',
+            '`PhraseCheck` `changes`, `after: ["bass"]` (feature `capstone.check-after`): `layer: "chords"`, `{ m: "harmony", level: "rn", qualityDepth: "seventh", inversion: false, harmonicRhythm: "given", weights: { bass: 0 }, wrongQuality: "none" }` (Wave 6, d11: the dominant sevenths are part of the answer, and a wrong quality earns nothing, as on ladder L6), pass ≥ 0.85. Graded in capstone mode (contracts §6.4) and recorded with `capstones.recordCheck`.',
           ],
           ends: 'Draft saved and bound to X2.S1; the session completes when both checks are recorded (passed or revealed). Coda: "Bass and changes are down; next time the melody".',
         },
@@ -1243,7 +1243,7 @@ export const U11: UnitSpec = {
         given:
           'Tempo, meter, key and tonic, the form ("one 12-bar strain", "a 16-bar verse"), the pickup, the feel ("Swing 8ths": grading straightens the reference, so a straight answer still matches), the harmonic rhythm (one chord a bar; two-chord bars marked).',
         grading:
-          "Staged, in order (`SONG_LADDER_STAGES`, `nextSongStage`): `bass` (melody on `@bass`, octave-free) ≥ 0.90 → `changes` (`harmony`, level `rn`, triad depth: sevenths pass on the triad core) ≥ 0.85 → `melody` (key-relative, per 4-bar line) ≥ 0.85 (`SONG_LADDER_PASS[6]`, as X2); capstone mode (contracts §6.4: gym L6 is graded like a capstone); each stage opens after the one before passed.",
+          "Staged, in order (`SONG_LADDER_STAGES`, `nextSongStage`): `bass` (melody on `@bass`, octave-free) ≥ 0.90 → `changes` (`harmony`, level `rn`, seventh depth, a wrong quality earns nothing: Wave 6, d11) ≥ 0.85 → `melody` (key-relative, per 4-bar line) ≥ 0.85 (`SONG_LADDER_PASS[6]`, as X2); capstone mode (contracts §6.4: gym L6 is graded like a capstone); each stage opens after the one before passed.",
       },
     ],
     realism: [

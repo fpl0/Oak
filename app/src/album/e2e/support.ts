@@ -76,7 +76,15 @@ export function sineWav(o: { seconds: number; hz: number; sr?: number; amp?: num
 export async function ownProject(
   page: Page,
   wav: Buffer,
-  o: { bpm: number; downbeatS: number; code?: string; settings?: Record<string, unknown>; title?: string },
+  o: {
+    bpm: number;
+    downbeatS: number;
+    code?: string;
+    settings?: Record<string, unknown>;
+    title?: string;
+    /** The project's meter (default 4/4): 12/8 counts dotted quarters, four to the bar. */
+    meter?: string;
+  },
 ): Promise<string> {
   const up = await page.request.fetch(`${stack.apiURL}/api/audio?name=review.wav`, {
     method: "POST",
@@ -99,7 +107,7 @@ export async function ownProject(
   const id = made.body.id;
   const p = await api(page, "PATCH", `/transcriptions/${id}`, {
     bpm: o.bpm,
-    meter: "4/4",
+    meter: o.meter ?? "4/4",
     downbeatS: o.downbeatS,
     key: { tonic: "C", mode: "major" },
   });
@@ -332,4 +340,34 @@ export async function position(page: Page): Promise<number> {
   const text = (await page.getByTestId("position").textContent()) ?? "";
   const [m, s] = (text.split(" / ")[0] ?? "0:0").split(":");
   return Number(m) * 60 + Number(s);
+}
+
+// --- the editor -----------------------------------------------------------------------------------------------
+
+/**
+ * Puts `code` in an editor (`__oakStrudel.editors`) and keeps it there: a workspace loads the saved draft into its
+ * editor after the editor exists, and a draft that arrives after the code was set replaces it (a cold dev server
+ * is slow enough for that). The code is set again until it has held for a second.
+ */
+export async function setEditorCode(page: Page, editor: string, code: string): Promise<void> {
+  type Editors = { __oakStrudel?: { editors: Map<string, { getCode(): string; setCode(c: string): void }> } };
+  await page.waitForFunction((id) => !!(globalThis as Editors).__oakStrudel?.editors.get(id), editor, {
+    timeout: 60_000,
+  });
+  const set = () =>
+    page.evaluate(
+      ([id, c]) => (globalThis as Editors).__oakStrudel?.editors.get(id as string)?.setCode(c as string),
+      [editor, code],
+    );
+  const held = () =>
+    page.evaluate(
+      ([id, c]) => (globalThis as Editors).__oakStrudel?.editors.get(id as string)?.getCode() === c,
+      [editor, code],
+    );
+  for (let i = 0; i < 10; i++) {
+    await set();
+    await page.waitForTimeout(1000);
+    if (await held()) return;
+  }
+  throw new Error(`the code did not stay in ${editor}`);
 }

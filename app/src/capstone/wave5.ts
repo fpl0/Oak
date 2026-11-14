@@ -8,7 +8,9 @@ import { contrastAxes, type FormSectionView, type FormView } from "@oak/grader";
 import { METERS } from "@oak/theory";
 import { type FormViewSection, formProblemOf, formSectionsOf } from "../lib/form-view.ts";
 import { sectionRefAnchor } from "./anchors.ts";
+import type { DeviceRow } from "./devices.ts";
 import { type ArrangeLine, arrangeLines, clock } from "./piece.ts";
+import type { FoundItem } from "./wave6.ts";
 
 export { type ArrangeLine, arrangeLines };
 
@@ -342,7 +344,11 @@ export type RowExtra =
   /** A line under the rule's own detail (how the section names read). */
   | { kind: "note"; text: string }
   /** Said instead of the rule's detail: the rule cannot read the piece until the parts agree on the sections. */
-  | { kind: "unread"; text: string };
+  | { kind: "unread"; text: string }
+  /** Wave 6 (wave6.ts): what a rule found, each with the bars to look at (C6's colour note, C7's chords and lift). */
+  | { kind: "found"; items: FoundItem[]; note?: string }
+  /** Wave 6: CF-A's device counter, one row per device with the bars where the song has it. */
+  | { kind: "devices"; rows: DeviceRow[]; found: number; need: number };
 
 /** The rules that read the sections (and so cannot be read while the arranged parts disagree). */
 const READS_SECTIONS = new Set(["form", "contrast", "key-change", "duration-sec", "groove-lock"]);

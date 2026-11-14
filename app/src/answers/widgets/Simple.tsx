@@ -1,5 +1,8 @@
 // Small answers: bar buttons (error hunt "which bar?"), A/B same-different, a slider estimate (tempo, swing
 // amount), and hum-to-predict (records nothing: a timed "hum it, then run" affordance, completion only).
+// Wave 6: the bar buttons are a bar timeline (BarStrip.tsx); with `AnswerEnv.keyChange` (U17: "where does the key
+// change") the bars from the pick on are the new key, `P` plays from the focused bar, and the line under the strip
+// names the keys once the answer is known.
 import { clsx } from "clsx";
 import { Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -17,6 +20,7 @@ import {
   revealedOf,
   SubmitHint,
 } from "../ui.tsx";
+import { BarStrip, keyChangeLine } from "./BarStrip.tsx";
 
 function radioKeys(
   root: HTMLElement | null,
@@ -48,6 +52,9 @@ export function BarButtonsAnswer(p: AnswerWidgetProps<"bar-buttons">) {
   const chosen = value.at(-1) ?? null;
   const correct = revealedOf<number[]>(feedback)?.at(-1) ?? null;
   const mark = markOf(feedback, 0);
+  const kc = useAnswerEnv().keyChange;
+  const known = feedback.state === "correct" || feedback.state === "revealed";
+  const shownBar = feedback.state === "revealed" ? correct : chosen;
   useEffect(() => {
     if (p.autoFocus) focusFirst(root.current);
   }, [p.autoFocus]);
@@ -55,6 +62,13 @@ export function BarButtonsAnswer(p: AnswerWidgetProps<"bar-buttons">) {
     if (!disabled) onChange([bar]);
   };
   const onKey = (e: React.KeyboardEvent<HTMLElement>) => {
+    if ((e.key === "p" || e.key === "P") && kc?.play && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const at = [...(root.current?.querySelectorAll<HTMLButtonElement>("[role=radio]") ?? [])].indexOf(
+        document.activeElement as HTMLButtonElement,
+      );
+      kc.play(at >= 0 ? at + 1 : (chosen ?? 1));
+      return true;
+    }
     const n = digitOf(e);
     if (n !== null && n >= 1 && n <= spec.bars) {
       pick(n);
@@ -75,39 +89,54 @@ export function BarButtonsAnswer(p: AnswerWidgetProps<"bar-buttons">) {
       keys={
         <>
           <KeyHint keys={[`1–${Math.min(9, spec.bars)}`]}>bar</KeyHint>
+          {kc?.play ? <KeyHint keys={["P"]}>hear from this bar</KeyHint> : null}
           <SubmitHint />
         </>
       }
     >
-      <div ref={root} role="radiogroup" aria-label={p.label} className="flex flex-wrap gap-2">
-        {Array.from({ length: spec.bars }, (_, i) => {
-          const bar = i + 1;
-          const on = chosen === bar;
-          return (
-            // biome-ignore lint/a11y/useSemanticElements: a styled custom control with roving focus (ux §7.9); native radios and fieldsets cannot take this layout
-            <button
-              key={bar}
-              type="button"
-              role="radio"
-              aria-checked={on}
-              aria-disabled={disabled || undefined}
-              aria-label={`Bar ${bar}${correct === bar ? " (the answer)" : ""}`}
-              tabIndex={(chosen ?? 1) === bar ? 0 : -1}
-              onClick={() => pick(bar)}
-              className={clsx(
-                RADIO,
-                "h-10 min-w-20 px-3",
-                on ? "border-accent bg-lane-in" : "border-border bg-surface hover:border-text-3",
-                on && mark?.ok === true && "ring-1 ring-accent",
-                on && mark?.ok === false && "border-issue ring-1 ring-issue",
-                correct === bar && !on && "border-dashed border-accent-2",
-              )}
-            >
-              Bar {bar}
-              {on && mark ? <MarkBadge mark={mark.ok ? "ok" : "bad"} note={mark.note} /> : null}
-            </button>
-          );
-        })}
+      <div
+        ref={root}
+        role="radiogroup"
+        aria-label={p.label}
+        aria-describedby={kc ? `${p.idBase}-keyline` : undefined}
+      >
+        <BarStrip
+          bars={spec.bars}
+          idBase={p.idBase}
+          from={kc ? shownBar : null}
+          keyChange={kc}
+          line={kc ? keyChangeLine({ from: kc.from, to: kc.to, bar: shownBar, known }) : null}
+          renderCell={(bar) => {
+            const on = chosen === bar;
+            return (
+              // biome-ignore lint/a11y/useSemanticElements: a styled custom control with roving focus (ux §7.9); native radios and fieldsets cannot take this layout
+              <button
+                key={bar}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                aria-disabled={disabled || undefined}
+                aria-label={`Bar ${bar}${kc && on ? ", the new key begins here" : ""}${correct === bar ? " (the answer)" : ""}`}
+                tabIndex={(chosen ?? 1) === bar ? 0 : -1}
+                onClick={() => pick(bar)}
+                className={clsx(
+                  RADIO,
+                  "h-11 w-full min-w-0 flex-col px-1 leading-tight",
+                  on ? "border-accent bg-lane-in" : "border-border bg-surface hover:border-text-3",
+                  on && mark?.ok === true && "ring-1 ring-accent",
+                  on && mark?.ok === false && "border-issue ring-1 ring-issue",
+                  correct === bar && !on && "border-dashed border-accent-2",
+                )}
+              >
+                <span aria-hidden className="text-[0.65rem] font-normal text-text-3">
+                  bar
+                </span>
+                <span>{bar}</span>
+                {on && mark ? <MarkBadge mark={mark.ok ? "ok" : "bad"} note={mark.note} /> : null}
+              </button>
+            );
+          }}
+        />
       </div>
     </AnswerFrame>
   );

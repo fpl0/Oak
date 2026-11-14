@@ -32,8 +32,9 @@ import {
   Skeleton,
 } from "../../ui/kit/basics.tsx";
 import { ErrorState, LoadingState } from "../../ui/kit/QueryState.tsx";
-import { useGymOpen } from "../day-hooks.ts";
+import { useCompletionWhen, useGymOpen } from "../day-hooks.ts";
 import { courseEdge, edgeLead, mapNextId } from "../edge.ts";
+import { leftToRelease, progressEnding } from "../finale-model.ts";
 import { REALISM_LINES } from "../gym-day.ts";
 import {
   doneItems,
@@ -53,6 +54,7 @@ import {
 import { sideLessonsLine } from "../side-lessons.ts";
 import { restsLine, streakLine, weekStatusLabel } from "../streak-model.ts";
 import { itemTitle } from "../titles.ts";
+import { EndingEntry, TracksCard } from "./ProgressWave6.tsx";
 
 const AREAS = ["hear", "read", "write", "compose", "transcribe", "sing", "code"] as const;
 const AREA_LABEL: Record<(typeof AREAS)[number], string> = {
@@ -489,19 +491,31 @@ export function ProgressPage() {
   const lastClosed = streak.data?.weeks.filter((w) => w.status !== "open").at(-1) ?? null;
   const boot = useBootstrap();
   const today = boot.data?.day ?? null;
+  // Wave 6: where the core stands (`CourseProgress.core`). Once its lessons are done there is no map left to
+  // estimate: the pace line gives way to what is left to release, then to nothing (END.md `progress`).
+  const course = useCourseProgress();
+  const core = course.data?.core ?? "in-progress";
+  const completion = useCompletionWhen(core);
+  const ending = progressEnding(completion.data);
+  const left = leftToRelease(completion.data);
   return (
     <Page>
       <PageHeader
         title="Progress"
         sub={
-          report.data?.paceEstimate
-            ? `At ${report.data.paceEstimate.sessionsPerWeek} sessions a week you'll finish the core around ${formatMonth(report.data.paceEstimate.coreDoneBy)}.`
-            : "What you can do now, in plain words."
+          core === "lessons-done"
+            ? (left ?? "The lessons of the core are done.")
+            : core !== "complete" && report.data?.paceEstimate
+              ? `At ${report.data.paceEstimate.sessionsPerWeek} sessions a week you'll finish the core around ${formatMonth(report.data.paceEstimate.coreDoneBy)}.`
+              : "What you can do now, in plain words."
         }
       />
       <div className="grid gap-6 lg:grid-cols-3">
         <section aria-label="Course and can-do ledger" className="flex flex-col gap-4 lg:col-span-2">
+          {ending && <EndingEntry ending={ending} />}
           <CourseCard />
+          <TracksCard />
+          <span id="ledger" className="-mt-4" />
           <Ledger />
         </section>
         <aside className="flex flex-col gap-4" aria-label="Time, rhythm and milestones">

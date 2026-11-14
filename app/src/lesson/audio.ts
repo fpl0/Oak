@@ -30,6 +30,25 @@ export interface StimulusSource {
    * No count-in or home cue is played before a span.
    */
   span?: { fromBar: number; bars: number };
+  /**
+   * Plays only these tracks of a code stimulus ("the tune alone" after an ear step, ear-after.ts): the labels of
+   * the code's own lines (`mel`, `chords`, `bass`). No Band, no count-in, no home cue.
+   */
+  tracks?: readonly string[];
+}
+
+/** The labels of the pitched and drum lines a code stimulus plays, in the order of the code. */
+export async function stimulusTracks(
+  src: Pick<StimulusSource, "code" | "bars" | "meter">,
+): Promise<string[]> {
+  const res = await analyzeCode(src.code ?? "", {
+    mode: "lesson",
+    bars: src.bars,
+    lint: null,
+    meter: src.meter,
+  });
+  if (!res.ok) return [];
+  return res.tracks.filter((t) => !t.startsWith("band."));
 }
 
 /** One bar of ii–V–I (or the tonic chord) in the key at `cps`: the cue a code stimulus plays first. */
@@ -69,6 +88,11 @@ async function planOf(src: StimulusSource): Promise<{ plan: AudioPlan; cue: Audi
   const res = await analyzeCode(code, { mode: "lesson", bars: src.bars, lint: null, meter: src.meter });
   if (!res.ok) throw new Error("the example did not run");
   const n = normalize(res, src.key ? { meter: src.meter, key: src.key } : { meter: src.meter });
+  if (src.tracks) {
+    const only = new Set(src.tracks);
+    const events = n.all.filter((e) => only.has(e.track));
+    return { plan: eventsToAudioPlan(events, n.cps, { bars: src.bars }), cue: null, cps: n.cps };
+  }
   const cue = src.key && src.context ? homeCuePlan(src.key, src.context, n.cps) : null;
   return { plan: eventsToAudioPlan([...n.all, ...n.band], n.cps, { bars: src.bars }), cue, cps: n.cps };
 }
@@ -113,6 +137,21 @@ export async function playStimulus(src: StimulusSource): Promise<Playing> {
     stop: () => {
       for (const h of handles) h.stop();
     },
+  };
+}
+
+/** Plays one ready plan (a drill trial's "the note alone") on the same clock as a stimulus. */
+export async function playPlan(plan: AudioPlan): Promise<Playing> {
+  const oak = await getOak();
+  await oak.unlock();
+  await oak.preload({ sounds: plan.preload.map((s) => ({ s })) });
+  const startAt = oak.ctx.currentTime + 0.12;
+  const handle = oak.playEvents(plan, { at: startAt });
+  return {
+    startAt,
+    barSec: plan.durationSec,
+    done: handle.done.then(() => undefined),
+    stop: () => handle.stop(),
   };
 }
 

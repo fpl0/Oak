@@ -9,27 +9,47 @@ import {
   type SongId,
   type ToolEntry,
 } from "@oak/api";
+import type { PatternPlayer } from "@oak/strudel";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Check, Lock, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { Check, Lock, Play, Sparkles, Square } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { tidyReason } from "../album/model.ts";
+import { ownSketchOf } from "../lesson/make-start.ts";
 import { useContent } from "../lib/content.ts";
+import { formatDate } from "../lib/format.ts";
 import { usePageTitle } from "../lib/nav.ts";
-import { useBootstrap, useCapstone, useCapstoneGate } from "../lib/queries.ts";
+import { getOak } from "../lib/oak.ts";
+import {
+  apiQuery,
+  useBootstrap,
+  useCapstone,
+  useCapstoneGate,
+  useLessonSketch,
+  useSessionDay,
+  useSketches,
+} from "../lib/queries.ts";
+import { ownOpenSession } from "../lib/tab-session.ts";
 import { currentSessionId } from "../session/store.ts";
 import { Button, buttonClass } from "../ui/kit/Button.tsx";
 import { Card, Chip, EmptyState, Page, Skeleton } from "../ui/kit/basics.tsx";
 import { SegmentedControl } from "../ui/kit/Controls.tsx";
+import { Select } from "../ui/kit/Field.tsx";
 import { ErrorState } from "../ui/kit/QueryState.tsx";
 import { toast } from "../ui/kit/Toast.tsx";
 import { FLAVOUR_TITLE, useCapstoneContent } from "./content.ts";
 import { useCreateDraft, usePatchDraft, useStartCapstoneSession } from "./queries.ts";
+import { GROWN_FROM, planFromSketch } from "./sketch-plan.ts";
 import { starterOf, Workspace } from "./Workspace.tsx";
-import { bassFirst, transcribeStarter } from "./x1/phrases.ts";
-import { useSongs } from "./x1/songs.ts";
+import { capstoneStarter } from "./x1/cft.ts";
+import { bassFirst } from "./x1/phrases.ts";
+import { songWritten, useSong } from "./x1/songs.ts";
 import { X1Workspace } from "./x1/X1Workspace.tsx";
 
 /** "C0 Intro" → "Intro": the track's default title. */
+/** Capstones that open with the learner's own sketch of a lesson's Make when there is one (lesson ID). */
+export const CAPSTONE_FROM_SKETCH: Readonly<Record<string, string>> = { C6: "U14.L06" };
+
 export function trackTitleOf(def: Pick<CapstoneDef, "id" | "title">): string {
   return def.title.startsWith(`${def.id} `) ? def.title.slice(def.id.length + 1) : def.title;
 }
@@ -106,7 +126,7 @@ function WorkspaceSkeleton() {
 function SessionPlan({ def, state }: { def: CapstoneDef; state: Pick<CapstoneState, "sessions"> }) {
   const total = def.sessionDefs.length;
   return (
-    <ol className="flex flex-col gap-2">
+    <ol className={total >= 4 ? "grid gap-x-8 gap-y-2 sm:grid-cols-2" : "flex flex-col gap-2"}>
       {def.sessionDefs.map((sd, i) => (
         <li key={sd.id} className="flex gap-3">
           <span className="w-8 shrink-0 font-mono text-sm text-text-3 tabular-nums">
@@ -224,20 +244,54 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
   const first = def.sessionDefs[0];
   const unlocks = first ? startUnlocks(shared.data?.toolbox ?? [], first.id) : [];
   const transcribe = def.kind === "transcribe";
-  const songs = useSongs(transcribe ? (def.song ?? []) : []);
   const offered = (def.song ?? []).map((id) => ({
     id,
     entry: capContent.data?.repertoire.find((r) => r.id === id) ?? null,
-    song: songs.data?.find((x) => x.id === id) ?? null,
+    written: songWritten(id),
   }));
   const [songId, setSongId] = useState<SongId | null>(null);
-  const chosenSong = offered.find((o) => o.id === songId && o.song) ?? offered.find((o) => o.song) ?? null;
-  // A learner day holds one open session (decision 28): started from the map while another is open, the server
-  // would hand that one back. Say so, and send the learner to finish it, instead of a button that does nothing.
-  const open = boot.data?.openSession ?? null;
+  // Only the chosen song's module (its answer key) is loaded; the others stay on the server.
+  const chosenId =
+    offered.find((o) => o.id === songId && o.written)?.id ?? offered.find((o) => o.written)?.id ?? null;
+  const chosenQuery = useSong(transcribe ? chosenId : null);
+  const chosenSong = chosenId ? { id: chosenId, song: chosenQuery.data ?? null } : null;
+  // CF-A: the single starts from the plan, or from one of the learner's own sketches as its verse.
+  const twoStarts = def.id === "CF-A";
+  const [startFrom, setStartFrom] = useState<"plan" | "sketch">("plan");
+  const sketchList = useSketches();
+  const ownSketches = twoStarts
+    ? (sketchList.data?.items ?? [])
+        .filter((x) => !x.archived && (x.originKind === "free" || x.originKind === "lesson-make"))
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    : [];
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const picked = ownSketches.find((x) => x.id === pickedId) ?? ownSketches[0] ?? null;
+  const pickedDetail = useQuery({
+    ...apiQuery("sketches.get", { params: { id: picked?.id ?? "none" } }),
+    enabled: twoStarts && startFrom === "sketch" && picked !== null,
+  });
+  const pickedCode = pickedDetail.data?.versions.at(-1)?.code ?? null;
+  const grown = startFrom === "sketch" && pickedCode !== null ? planFromSketch(pickedCode) : null;
+  const sketchBlocked = twoStarts && startFrom === "sketch" && (grown === null || !grown.ok);
+  // A capstone that grows out of a lesson's Make (C6 from the Mode Lab vamp of U14.L06) opens with the learner's
+  // own sketch of it when there is one, with Oak's starter beside it (as a lesson Make with `fromSketch`, d15).
+  const vampFrom = CAPSTONE_FROM_SKETCH[def.id] ?? null;
+  const vampQ = useLessonSketch(vampFrom);
+  const ownVamp = vampFrom ? ownSketchOf(vampQ.data) : null;
+  const ownVampKey =
+    ownVamp && vampQ.data?.sketch
+      ? (vampQ.data.sketch.versions.reduce((a, b) => (b.version > a.version ? b : a)).key ?? null)
+      : null;
+  const [vampStart, setVampStart] = useState<"own" | "oak">("own");
+  const fromOwnVamp = ownVamp !== null && vampStart === "own";
+  // A tab holds one open session (d21: each tab its own; another tab's never blocks this one). Started from the
+  // map while this tab's session is open, the server would hand that one back. Say so, and send the learner to
+  // finish it, instead of a button that does nothing.
+  const day = useSessionDay();
+  const open = ownOpenSession(day.data);
   const blocked = !currentSessionId() && open !== null && open.mapItemId !== first?.id;
   const onStart = async () => {
-    if (!first || !boot.data || blocked) return;
+    if (!first || !boot.data || blocked || sketchBlocked) return;
     if (transcribe && !chosenSong?.song) return;
     try {
       // The draft first, so the flavour chosen here stays with it (the server stores it at completion) and the
@@ -251,16 +305,30 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
           sessionId: currentSessionId(),
           code:
             transcribe && chosenSong?.song
-              ? transcribeStarter(
-                  def.sessionDefs.flatMap((sd) => sd.checks ?? []),
-                  chosenSong.song,
-                )
-              : starterOf(def),
+              ? capstoneStarter(def, chosenSong.song)
+              : grown?.ok
+                ? grown.code
+                : fromOwnVamp && ownVamp
+                  ? ownVamp.code
+                  : starterOf(def),
           bpm: transcribe && chosenSong?.song ? chosenSong.song.bpm : null,
           meter: transcribe && chosenSong?.song ? chosenSong.song.meter : def.meter,
-          key: transcribe && chosenSong?.song ? chosenSong.song.key : (def.key ?? null),
+          key:
+            transcribe && chosenSong?.song
+              ? chosenSong.song.key
+              : grown?.ok
+                ? (pickedDetail.data?.versions.at(-1)?.key ?? null)
+                : fromOwnVamp
+                  ? (ownVampKey ?? def.key ?? null)
+                  : (def.key ?? null),
           analysis: null,
-          note: null,
+          // The sleeve says where the single came from ("Grown from …", content/specs/CF.md Liner notes).
+          note:
+            grown?.ok && picked
+              ? `${GROWN_FROM} “${picked.title}”`
+              : fromOwnVamp && ownVamp
+                ? `${GROWN_FROM} “${ownVamp.title}”`
+                : null,
           tutorAssisted: false,
           band: null,
           flags: { lockedTools: [], previewTools: [] },
@@ -301,16 +369,14 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
                 ? "Pick one; you transcribe it by ear, bass first, then the changes, then the melody. Its meter, key, tempo, pickup, form and feel are given."
                 : "Pick one; you transcribe it by ear. Its meter, key, tonic, pickup and the rhythm of the first phrase are given."}
             </p>
-            {songs.isPending ? (
-              <p className="text-sm text-text-3">Loading the songs…</p>
-            ) : offered.some((o) => o.song) ? (
+            {offered.some((o) => o.written) ? (
               <SegmentedControl<string>
                 label="The song"
                 value={chosenSong?.id ?? ""}
                 options={offered.map((o) => ({
                   value: o.id,
-                  label: o.entry?.title ?? o.song?.title ?? o.id,
-                  disabled: !o.song,
+                  label: o.entry?.title ?? o.id,
+                  disabled: !o.written,
                 }))}
                 onChange={(v) => setSongId(v as SongId)}
               />
@@ -320,10 +386,10 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
                 This capstone starts once one is ready; nothing else waits on it.
               </p>
             )}
-            {offered.some((o) => !o.song) && offered.some((o) => o.song) && (
+            {offered.some((o) => !o.written) && offered.some((o) => o.written) && (
               <p className="mt-1 text-sm text-text-3">
                 {offered
-                  .filter((o) => !o.song)
+                  .filter((o) => !o.written)
                   .map((o) => o.entry?.title ?? o.id)
                   .join(" and ")}{" "}
                 is not ready yet.
@@ -343,6 +409,81 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
               options={shipping.map((f) => ({ value: f, label: FLAVOUR_TITLE[f] }))}
               onChange={setFlavour}
             />
+          </div>
+        )}
+        {twoStarts && (
+          <div data-testid="single-start">
+            <h2 className="mb-1 text-h3">Start from</h2>
+            <p className="mb-2 text-sm text-text-2">
+              The plan is a verse, a chorus and a bridge laid out at full length. Or take one of your own
+              sketches as the verse: its parts, key and tempo stay as you wrote them.
+            </p>
+            <SegmentedControl<"plan" | "sketch">
+              label="Start from"
+              value={startFrom}
+              options={[
+                { value: "plan", label: "The plan" },
+                { value: "sketch", label: "One of your sketches", disabled: ownSketches.length === 0 },
+              ]}
+              onChange={setStartFrom}
+            />
+            {ownSketches.length === 0 && !sketchList.isPending && (
+              <p className="mt-1 text-sm text-text-3">Your sketchbook is empty, so the plan it is.</p>
+            )}
+            {startFrom === "sketch" && picked && (
+              <div className="mt-3 flex flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label htmlFor="single-sketch" className="text-sm font-medium">
+                    Sketch
+                  </label>
+                  <Select<string>
+                    id="single-sketch"
+                    value={picked.id}
+                    options={ownSketches.map((x) => ({
+                      value: x.id,
+                      label: `${x.title} · ${formatDate(x.updatedAt, true)}`,
+                    }))}
+                    onChange={setPickedId}
+                  />
+                  <HearSketch code={pickedCode} />
+                </div>
+                {pickedDetail.isPending ? (
+                  <p className="text-sm text-text-3">Reading the sketch…</p>
+                ) : grown && !grown.ok ? (
+                  <p className="text-sm text-text-2" role="status" data-testid="sketch-problem">
+                    {grown.problem.replaceAll("`", "")}
+                  </p>
+                ) : grown?.ok ? (
+                  <p className="text-sm text-text-2" role="status" data-testid="sketch-plan">
+                    It becomes the verse of a {grown.bars}-bar plan: verse, chorus, verse, chorus, bridge,
+                    chorus. The chorus and the bridge start as the same notes, for you to rewrite.
+                  </p>
+                ) : null}
+              </div>
+            )}
+          </div>
+        )}
+        {ownVamp && (
+          <div data-testid="vamp-start">
+            <h2 className="mb-1 text-h3">Start from</h2>
+            <p className="mb-2 text-sm text-text-2">
+              Your vamp from the Mode Lab, “{ownVamp.title}”, can be the first bars of this one: its mode, key
+              and groove stay as you wrote them. Oak's starter is a two-bar loop on G.
+            </p>
+            <SegmentedControl<"own" | "oak">
+              label="Start from"
+              value={vampStart}
+              options={[
+                { value: "own", label: "Your Mode Lab vamp" },
+                { value: "oak", label: "Oak's starter" },
+              ]}
+              onChange={setVampStart}
+            />
+            {vampStart === "own" && (
+              <div className="mt-2">
+                <HearSketch code={ownVamp.code} />
+              </div>
+            )}
           </div>
         )}
         {unlocks.length > 0 && (
@@ -384,7 +525,7 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
               variant="primary"
               size="lg"
               loading={start.isPending || create.isPending || patch.isPending}
-              disabled={transcribe && !chosenSong?.song}
+              disabled={(transcribe && !chosenSong?.song) || sketchBlocked}
               onClick={() => void onStart()}
               autoFocus
             >
@@ -405,5 +546,64 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
             : "When you release it, it joins your album with a cover grown from the music."}
       </p>
     </Page>
+  );
+}
+
+/** Two bars of a sketch, to choose it by ear. */
+function HearSketch({ code }: { code: string | null }) {
+  const player = useRef<PatternPlayer | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const stop = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    player.current?.stop();
+    setPlaying(false);
+  };
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+      player.current?.dispose();
+    },
+    [],
+  );
+  // Another sketch chosen: the one that was playing stops.
+  useEffect(() => stop, [code]);
+  const hear = async () => {
+    if (playing) return stop();
+    if (!code) return;
+    setBusy(true);
+    try {
+      const oak = await getOak();
+      await oak.unlock();
+      player.current ??= oak.createPatternPlayer();
+      const out = await player.current.load(code, { bars: 4, cps: 0 });
+      if (!out.ok) {
+        toast.info("This sketch doesn't run as it is", "Open it in the Studio to fix it, or pick another.");
+        return;
+      }
+      await player.current.play();
+      setPlaying(true);
+      const cps = out.cps && out.cps > 0 ? out.cps : oak.transport.cps() || 0.5;
+      timer.current = setTimeout(stop, Math.min(20_000, (4 / cps) * 1000));
+    } catch (e) {
+      toast.error("Sound did not start", e instanceof Error ? e.message : undefined);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Button
+      size="sm"
+      loading={busy}
+      disabled={!code}
+      aria-pressed={playing}
+      icon={playing ? <Square aria-hidden className="size-3.5" /> : <Play aria-hidden className="size-3.5" />}
+      onClick={() => void hear()}
+      data-testid="hear-sketch"
+    >
+      {playing ? "Stop" : "Hear four bars"}
+    </Button>
   );
 }

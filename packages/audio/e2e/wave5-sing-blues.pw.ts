@@ -24,7 +24,12 @@ test(`[${MODE}] a sung blues line: bent blue notes judged against their neighbou
     mode: "pitch" as const,
     tol: SING_TOL,
   };
-  const blue = await page.evaluate((o) => window.oakAudioE2E.wave5.singRun(o), { ...base, blues: true });
+  // One take, graded twice: with the blue notes marked, and against plain targets.
+  const blue = await page.evaluate((o) => window.oakAudioE2E.wave5.singRun(o), {
+    ...base,
+    blues: true,
+    comparePlain: true,
+  });
   console.log(`[${MODE}] blues: ${JSON.stringify(blue.result.notes)}`);
   expect(blue.result.notes.map((n) => n.credit)).toEqual([1, 1, 1, 1, 1, 1, 1]);
   expect(blue.result.notes.map((n) => n.blue)).toEqual([false, true, false, true, false, true, false]);
@@ -34,7 +39,6 @@ test(`[${MODE}] a sung blues line: bent blue notes judged against their neighbou
   expect(said[1]?.params).toMatchObject({ towardDeg: "4", dir: "below" });
   expect(blue.result.pass).toBe(true);
   // The same take against plain targets: each bent note is only half right.
-  const plain = await page.evaluate((o) => window.oakAudioE2E.wave5.singRun(o), { ...base, blues: false });
-  expect(plain.result.notes.filter((n) => n.credit === 0.5).length).toBe(3);
+  expect(blue.plain?.notes.filter((n) => n.credit === 0.5).length).toBe(3);
   expect(problems).toEqual([]);
 });

@@ -76,7 +76,7 @@ export const skills: readonly SkillDef[] = defineSkills([
   node("pitch-staff", "N02", "Treble clef & ledger lines", "notation", "fact", "P02", "U02.L04", "U02.CP"),
   node("pitch-staff", "N03", "Key signatures on the staff", "notation", "fact", "S04 N02", "U03.L06", "U03.CP"),
   node("pitch-staff", "N04", "Bass clef & grand staff", "notation", "fact", "N02", "U05.L06", "U05.CP"),
-  node("pitch-staff", "N05", "Chord symbols (lead sheet)", "notation", "fact", "C03", "U05.L04", "U05.CP"),
+  node("pitch-staff", "N05", "Chord symbols (lead sheet)", "notation", "fact", "C03", "U05.L09", "U05.CP"),
   node("pitch-staff", "N06", "Roman numerals", "notation", "concept", "H01", "U06.L02", "U06.CP"),
   node("pitch-staff", "N07", "Lead sheets", "notation", "concept", "N05 M03", "U07.L09", "U07.CP"),
   node("pitch-staff", "N08", "Ties, dots & beaming", "notation", "concept", "N01 R09", "U13.L03", "U13.CP"),

@@ -10,7 +10,7 @@ import { R } from "@oak/content-kit";
 import { scaleName } from "@oak/pitch";
 import { METERS, tempoLine, tonicDisplay } from "@oak/theory";
 import { formatKey } from "../lib/format.ts";
-import { checkLines } from "./ladder.ts";
+import { checkLines, keyMismatchText } from "./ladder.ts";
 
 export type SongLevel = 5 | 6;
 export const SONG_STAGES = ["bass", "changes", "melody"] as const;
@@ -484,6 +484,9 @@ export function songVerdict(r: Pick<LadderSubmitResult, "passed" | "result">, t:
   if (r.result.status === "error") return `${what}: that code didn't run, so nothing was checked.`;
   const mark = passMarkOf(t.level, t.stage);
   if (r.passed) return `${what}: that's it (${pct(r.result.score)} %).`;
+  // d12: a song is written in the recording's key. An answer in another key says both keys, before any bar.
+  const key = keyMismatchText(r.result);
+  if (key) return `${what}: not yet. ${key} Write it in the recording's key.`;
   const bars = [...new Set(checkLines(r.result).flatMap((l) => (l.bar === null ? [] : [l.bar])))];
   const where =
     bars.length === 0

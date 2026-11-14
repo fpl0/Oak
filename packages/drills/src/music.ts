@@ -275,7 +275,8 @@ export const stepIndex = (step: number | string): number =>
 
 /**
  * The FET resolution of a step: degrees 2–4 resolve down, 5–7 up, by step to the tonic; a chromatic
- * note first moves to the diatonic step of its number (♯4 → 5 up, ♭7 → 6 down … → 1).
+ * note first leans a half step to its neighbour (♯4 → 5 and on up; ♭7 → 6, then 7, 1; ♭6 → 5, then up;
+ * ♭3 → 2 → 1).
  */
 export function resolutionSteps(step: number | string, key: KeySpec): (number | string)[] {
   const steps = MODE_STEPS[key.mode];
@@ -294,7 +295,14 @@ export function resolutionSteps(step: number | string, key: KeySpec): (number | 
     for (let i = idx + 2; i <= base + len; i++) out.push(i);
     return out;
   }
-  // ♯4 and everything from 5 up resolve upwards; 2, ♭3, 3, 4 resolve down.
+  // A chromatic note of a seven-note scale leans by a half step first, the way U15.L01 teaches it: a raised
+  // note up to the next degree (fi–sol, si–la, di–re), a lowered one down to the degree below (te–la, le–sol,
+  // me–re, ra–do). From there it goes home as that degree does (te la ti do; le sol la ti do; me re do), so
+  // every path still ends on the tonic. Before Wave 6 a lowered 6 or 7 climbed through the natural note
+  // (te ti do), which is not how the course says they move.
+  if (len === 7 && acc > 0) return [step, ...resolutionSteps(idx + 1, key)];
+  if (len === 7 && acc < 0) return [step, ...resolutionSteps(idx - 1, key)];
+  // 5 and everything above resolve upwards; 2, 3 and 4 resolve down.
   if (semis >= 6) {
     for (let i = acc < 0 ? idx : idx + 1; i <= base + len; i++) out.push(i);
   } else {

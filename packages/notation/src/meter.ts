@@ -60,7 +60,18 @@ export function gridOf(meter: MeterSpec): Grid {
   } else {
     for (let i = 0; i < meter.num; i++) sub.push({ start: rat(i, 8), end: R.add(rat(i, 8), eighth) });
   }
-  const levels: Window[][] = [sub, intervals(beats, W)];
+  // Compound meters: two eighths inside one beat (either pair of a three-eighth group), where a triplet over two
+  // eighths is written `(3:2:3` instead of one 9:6 bracket over the whole beat with a dotted value inside it.
+  const pairs: Window[] = [];
+  if (compound)
+    for (const b of intervals(beats, W))
+      for (
+        let s = b.start;
+        R.lte(R.add(s, [1, 4]), b.end) && R.lt([1, 4], R.sub(b.end, b.start));
+        s = R.add(s, eighth)
+      )
+        pairs.push({ start: s, end: R.add(s, [1, 4]) });
+  const levels: Window[][] = pairs.length ? [sub, pairs, intervals(beats, W)] : [sub, intervals(beats, W)];
   if (strong.length) levels.push(intervals([[0, 1], ...strong], W));
   levels.push([{ start: [0, 1], end: W }]);
   return { meter, W, unit, beats, strong, compound, windowLevels: levels };

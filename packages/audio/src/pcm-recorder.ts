@@ -30,6 +30,11 @@ export const PCM_RECORDER_SOURCE = `class OakPcmRecorder extends AudioWorkletPro
     this.written = 0;
     this.peak = 0;
     this.alive = true;
+    // Armed at construction (Wave 6): an offline render may finish before a message could arrive.
+    if (o.arm) {
+      this.start = o.arm.startFrame;
+      this.end = o.arm.startFrame + o.arm.frames;
+    }
     this.port.onmessage = (e) => {
       const d = e.data || {};
       if (d.type === "arm") {
@@ -128,6 +133,11 @@ export interface PcmRecording extends ExactRecording {
   peak: number;
   /** Frames padded with silence at the start because the recording was asked for after `at` had passed. */
   latePadFrames: number;
+  /**
+   * Wave 6: frames of the span the audio thread never delivered (padded with silence at the end so the length
+   * still holds). 0 for a whole take; a host releases a take only when this and `latePadFrames` are both 0.
+   */
+  missingFrames: number;
 }
 
 export interface PcmRecorderStats {
@@ -214,7 +224,12 @@ export function createPcmRecorderWith(deps: PcmRecorderDeps): PcmRecorder {
     return p;
   };
 
-  const ensureNode = (): PcmWorkletNodeLike => {
+  /**
+   * The node. A recorder's first take arms the worklet as it is built (`arm` in its options), not by a message:
+   * an OfflineAudioContext can render a whole piece before a message posted just ahead of `startRendering()` is
+   * delivered (Wave 6: found with a meter and two recorders on one offline render).
+   */
+  const ensureNode = (arm?: { startFrame: number; frames: number }): PcmWorkletNodeLike => {
     if (node) return node;
     node = createNode(PCM_RECORDER_PROCESSOR, {
       numberOfInputs: 1,
@@ -222,7 +237,7 @@ export function createPcmRecorderWith(deps: PcmRecorderDeps): PcmRecorder {
       channelCount: channels,
       channelCountMode: "explicit",
       channelInterpretation: "speakers",
-      processorOptions: { channels, chunkFrames },
+      processorOptions: { channels, chunkFrames, ...(arm ? { arm } : {}) },
     });
     deps.source.connect(node as never);
     return node;
@@ -259,9 +274,10 @@ export function createPcmRecorderWith(deps: PcmRecorderDeps): PcmRecorder {
         active = null;
         throw cancelled;
       }
-      const n = ensureNode();
       const startAt = opts.at ?? ctx.currentTime;
       const startFrame = Math.round(startAt * sr);
+      const fresh = node === null;
+      const n = ensureNode({ startFrame, frames });
       return new Promise<PcmRecording>((resolve, reject) => {
         const parts: BlobPart[] = [wavHeader(frames, channels, sr)];
         let pending: Int16Array[] = [];
@@ -321,9 +337,10 @@ export function createPcmRecorderWith(deps: PcmRecorderDeps): PcmRecorder {
             frames,
             peak: d.peak,
             latePadFrames,
+            missingFrames: missing,
           });
         };
-        n.port.postMessage({ type: "arm", startFrame, frames });
+        if (!fresh) n.port.postMessage({ type: "arm", startFrame, frames });
       });
     },
     cancel() {

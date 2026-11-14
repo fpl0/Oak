@@ -55,16 +55,19 @@ export function pastSlots(id: string | null, order: readonly string[] | null | u
 }
 
 export function courseEdge(
-  progress: Pick<CourseProgress, "next"> | null | undefined,
+  progress: (Pick<CourseProgress, "next"> & Pick<Partial<CourseProgress>, "core">) | null | undefined,
   syllabus: SyllabusDef | null,
   authored: ReadonlySet<string>,
   /**
    * Today's plan, when known: a day whose New block is a written item (U04.CP is planned while U05.L01, before
    * it in the default order, is not written) is not the edge yet.
    */
-  plan?: { mapItemId: string | null } | null,
+  plan?: { mapItemId: string | null; core?: string | undefined } | null,
 ): CourseEdge | null {
   if (!progress || !syllabus) return null;
+  // The core is complete (wave6.md §5.5): nothing "is still being written" on the path the learner walked. What is
+  // open next (reviews, the gym, Studio, the tracks with their honest note) is said by finale-model.ts.
+  if (progress.core === "complete" || plan?.core === "complete") return null;
   if (plan && plan.mapItemId !== null && isWritten(plan.mapItemId, authored)) return null;
   const next = pastSlots(progress.next, syllabus.defaultOrder as readonly string[]);
   if (next !== null && isWritten(next, authored)) return null;

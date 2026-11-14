@@ -24,11 +24,18 @@ import type {
   Trial,
   UnlockableId,
 } from "@oak/api";
-import { createRegistry, type DrillRegistry, FAMILIES, generateTrial } from "@oak/drills";
+import {
+  createRegistry,
+  type DrillRegistry,
+  FAMILIES,
+  generateTrial,
+  padMode,
+  stepTrialSpec,
+} from "@oak/drills";
 import type { EvalResult, ExerciseResponse, GradeRequest, MatchResult } from "@oak/grader";
 import { normalize, singTargets, tapTargets } from "@oak/grader";
 import { parseNoteList } from "@oak/notation";
-import { gradeTaps } from "@oak/pitch";
+import { gradeRhythmTaps, gradeTaps, type RhythmTapResult } from "@oak/pitch";
 import { METERS } from "@oak/theory";
 import type { SungSummary } from "../answers/types.ts";
 import { globalExerciseId, withParams } from "./model.ts";
@@ -117,13 +124,80 @@ export function stimulusTrial(
   const st = ex.stimulus;
   const fam = drills().family(st.family);
   const seed = st.seed ?? hash(`${globalExerciseId(ownerId, ex)}#${seriesNo}`);
-  const category = categories[seed % Math.max(1, categories.length)] ?? fam.def.categories[0]?.id ?? "";
-  return generateTrial(
-    fam,
-    { index: 0, family: st.family, level: st.level, category, seed },
-    profile,
-    categories,
-  );
+  // d8: a step whose degree pad is minor (or major) draws trials in a key of that mode only; an identification
+  // step (major or minor?) keeps both, so the step's own key mode is never passed blindly.
+  const answer =
+    "answer" in ex ? (ex.answer as { ui?: string; set?: readonly string[] } | undefined) : undefined;
+  const mode = answer?.ui === "degree-pad" && answer.set ? padMode(answer.set) : undefined;
+  const draw = (s: number) =>
+    generateTrial(
+      fam,
+      stepTrialSpec(fam, {
+        level: st.level,
+        seed: s,
+        openCategories: categories,
+        profile,
+        ...(mode ? { mode } : {}),
+      }),
+      profile,
+      categories,
+    );
+  // A family draws every category the learner has met, but a step's answer can be narrower than the family (U13.L02
+  // offers only the sixteenths between the eighths, U12.L04's palette only sevenths, a bar-buttons step only the
+  // trials that ask "which bar"): the series draws on until a trial its own answer can take. Seeded, so a retry
+  // hears the same question; a step whose answer takes every trial draws exactly as before.
+  for (let k = 0; k < 40; k++) {
+    const t = draw((seed + k * 7919) >>> 0);
+    if (answerTakes(ex, t)) return t;
+  }
+  return draw(seed);
+}
+
+/** Bar options of a drawn trial ("1", "4", "none"): the "which bar" question a bar timeline can take. */
+function barOptions(trial: Trial): string[] | null {
+  const own = trial.params.options;
+  if (!Array.isArray(own) || own.length === 0) return null;
+  return own.every((o) => typeof o === "string" && (/^\d+$/.test(o) || o === "none"))
+    ? (own as string[])
+    : null;
+}
+
+/**
+ * Whether the step's own answer can take this drawn trial's expected answer: its choice among the options shown
+ * (the trial's own when it brings them), its qualities on the pad, its numerals on the palette the step allows, a
+ * bar on the bar timeline. Other answers (degree pads, taps, text) take every trial.
+ */
+export function answerTakes(ex: Exercise, trial: Trial): boolean {
+  const spec = "answer" in ex ? (ex.answer as Record<string, unknown> | undefined) : undefined;
+  const exp = trial.expected as { choice?: string[]; qualities?: string[]; rn?: string[] };
+  const ui = spec?.ui;
+  if (ui === "choice") {
+    const own = trial.params.options;
+    const ids = Array.isArray(own)
+      ? (own as string[])
+      : ((spec?.options as { id: string }[] | undefined) ?? []).map((o) => o.id);
+    return (exp.choice ?? []).every((c) => ids.includes(c));
+  }
+  if (ui === "bar-buttons") {
+    const bars = barOptions(trial);
+    return (
+      bars !== null && (exp.choice ?? []).length > 0 && (exp.choice ?? []).every((c) => bars.includes(c))
+    );
+  }
+  if (ui === "quality-pad" && Array.isArray(spec?.set))
+    return (exp.qualities ?? []).every((q) => (spec.set as string[]).includes(q));
+  if (ui === "rn-palette" && Array.isArray(spec?.allow)) {
+    const allow = spec.allow as string[];
+    const rns = exp.rn ?? [];
+    if (typeof spec.slots === "number" && rns.length !== spec.slots) return false;
+    const seventhsOnly = allow.includes("sevenths") && !allow.includes("triads");
+    if (seventhsOnly && !rns.every((r) => /7|ø/.test(r))) return false;
+    if (!allow.includes("secondary") && rns.some((r) => r.includes("/"))) return false;
+    if (!allow.includes("inversions") && rns.some((r) => /(?:64|6|65|43|42|2)$/.test(r.replace(/7$/, ""))))
+      return false;
+    return true;
+  }
+  return true;
 }
 
 /** A checkpoint family item: one trial of `familyId` at `level` from the server's seed. */
@@ -171,8 +245,30 @@ export function withTrials<E extends Exercise>(ex: E, trials: readonly (Trial | 
 }
 
 /** The exercise as graded against a drawn trial: the trial's expected answer is the correct one. */
+/**
+ * The tap targets of a drawn tap trial (an echo: hear the figure, tap it back), in seconds from the start of the
+ * stimulus the tap pad plays: the trial's own targets after its response point. Kept beside the exercise
+ * `withTrial` returns, for `tapPerformance`.
+ */
+const DRAWN_TAPS = new WeakMap<object, readonly number[]>();
+
+/** The tap targets of a drawn trial, in seconds from the stimulus start (`null`: not a tap trial). */
+export function drawnTapTargets(trial: Trial): number[] | null {
+  const targets = trial.params.tapTargets;
+  if (!Array.isArray(targets) || targets.length === 0) return null;
+  const at = typeof trial.params.responseAt === "number" ? trial.params.responseAt : 0;
+  return (targets as number[]).map((t) => t + at);
+}
+
 export function withTrial<E extends Exercise>(ex: E, trial: Trial | null): E {
   if (!trial) return ex;
+  if (ex.kind === "tap") {
+    const targets = drawnTapTargets(trial);
+    if (!targets) return ex;
+    const out = { ...ex } as E;
+    DRAWN_TAPS.set(out, targets);
+    return out;
+  }
   if (ex.kind === "identify") return { ...ex, correct: trial.expected } as E;
   if (ex.kind === "dictation" && ex.answer.ui === "degree-pad" && trial.expected.degrees) {
     // A drawn melody written on the degree pad is checked against the trial's own answer, as the drills check
@@ -274,14 +370,69 @@ async function tapPerformance(
   ex: TapEx,
   taps: number[],
 ): Promise<MatchResult> {
+  const drawn = DRAWN_TAPS.get(ex);
+  if (drawn) return gradeTaps(taps, drawn, ex.tol, env.profile) as unknown as MatchResult;
   const meter = ex.meter ?? env.meter;
   if (ex.stimulus.src !== "code") return { score: 0, dims: {}, diagnostics: [] };
   const res = await deps.evaluate(ex.stimulus.code, ex.bars, meter);
   if (!res.ok) return { score: 0, dims: {}, diagnostics: [] };
   const n = normalize(res, { meter, key: ex.key ?? env.key });
   const targets = tapTargets(ex.target, n, ex.bars, meter);
-  return gradeTaps(taps, targets, ex.tol, env.profile) as unknown as MatchResult;
+  if (targets.length === 0 || !(n.cps > 0))
+    return gradeTaps(taps, targets, ex.tol, env.profile) as unknown as MatchResult;
+  // The same grade (`gradeRhythmTaps` grades with `gradeTaps`, unchanged), read as a rhythm: a push tapped on the
+  // beat it comes before, a triplet tapped as two-plus-one, a 6/8 bar tapped in quarters are named for what they
+  // are (U13), first, instead of only "a chord came in without a tap" and "a tap was one too many".
+  const r = gradeRhythmTaps(
+    taps,
+    {
+      downbeat: 0,
+      bpm: n.cps * 60 * METERS[meter].unitsPerBar,
+      meter,
+      onsets: targets.map((t) => t * n.cps),
+      bars: ex.bars,
+    },
+    ex.tol,
+    env.profile,
+  );
+  return { ...r, diagnostics: rhythmFirst(r) } as unknown as MatchResult;
 }
+
+/**
+ * A take that did not pass says its named rhythm mistake first, as the verdict's lead line (the grader lists
+ * errors before warnings and shows three): without this, four pushes tapped on the beat read as "a chord came in
+ * without a tap" three times and "6 more", and the line that says why sat unseen behind them. The per-tap lines
+ * a push on the beat explains (its missing tap, the tap on the beat after it) are left out; the rest stay.
+ */
+export function rhythmFirst(r: RhythmTapResult): RhythmTapResult["diagnostics"] {
+  const named = (id: string) => RHYTHM_NAMED.has(id);
+  if (r.pass) return r.diagnostics;
+  const onBeat = r.onsets.filter((o) => o.verdict === "on-the-beat");
+  const explainedSlots = new Set(onBeat.map((o) => o.index));
+  const beats = onBeat.flatMap((o) => (o.push ? [o.push.beatAt] : []));
+  const near = (t: number | undefined) =>
+    t !== undefined && beats.some((b) => Math.abs(t - b) * 1000 <= Math.max(r.windowMs, 60));
+  const rest = r.diagnostics.filter((d) => {
+    if (named(d.id as string)) return false;
+    if (d.id === "tap.missed" && d.where?.slot !== undefined && explainedSlots.has(d.where.slot))
+      return false;
+    if (d.id === "tap.extra" && near(d.where?.tSec)) return false;
+    return true;
+  });
+  const lead = r.diagnostics
+    .filter((d) => named(d.id as string))
+    .map((d) => (d.severity === "warn" ? { ...d, severity: "error" as const } : d));
+  return [...lead, ...rest];
+}
+
+/** The rhythm mistakes `gradeRhythmTaps` names (@oak/pitch rhythm-taps.ts): said before the per-tap lines. */
+const RHYTHM_NAMED: ReadonlySet<string> = new Set([
+  "tap.push-on-beat",
+  "tap.push-late",
+  "tap.push-early",
+  "tap.triplet-uneven",
+  "tap.grouping",
+]);
 
 async function singPerformance(
   deps: GraderDeps,
@@ -411,25 +562,77 @@ export async function gradeStep(
   const graderResponse = await toGraderResponse(deps, env, ex, response, o.takeOf);
   const key = ex.key ?? env.key;
   const meter = ex.meter ?? env.meter;
-  return deps.grade({
-    exercise: ex,
-    response: graderResponse,
-    ctx: {
-      exerciseGlobalId: o.globalId ?? globalExerciseId(env.ownerId, ex),
-      mode: "lesson",
-      key,
-      meter,
-      bpm: typeof ex.bpm === "number" ? ex.bpm : env.bpm,
-      ...((ex.swing ?? env.swing) ? { swing: (ex.swing ?? env.swing) as SwingSpec } : {}),
-      ...((ex.pickup ?? env.pickup) ? { pickup: (ex.pickup ?? env.pickup) as PickupSpec } : {}),
-      params: o.params,
-      attemptNo: o.attemptNo,
-      firstAttempt: o.attemptNo === 1,
-      rung: o.rung,
-      tutorHints: o.tutorHints ?? 0,
-      extraReplays: o.extraReplays,
-      lint: gradedLint({ ...env, meter, key }),
-      profile: env.profile,
-    },
+  const ctxOf = (part: Exercise, globalId: string): GradeRequest["ctx"] => ({
+    exerciseGlobalId: globalId,
+    mode: "lesson",
+    key: part.key ?? key,
+    meter: part.meter ?? meter,
+    bpm: typeof part.bpm === "number" ? part.bpm : typeof ex.bpm === "number" ? ex.bpm : env.bpm,
+    ...((ex.swing ?? env.swing) ? { swing: (ex.swing ?? env.swing) as SwingSpec } : {}),
+    ...((ex.pickup ?? env.pickup) ? { pickup: (ex.pickup ?? env.pickup) as PickupSpec } : {}),
+    params: o.params,
+    attemptNo: o.attemptNo,
+    firstAttempt: o.attemptNo === 1,
+    rung: o.rung,
+    tutorHints: o.tutorHints ?? 0,
+    extraReplays: o.extraReplays,
+    lint: gradedLint({ ...env, meter: part.meter ?? meter, key: part.key ?? key }),
+    profile: env.profile,
   });
+  const globalId = o.globalId ?? globalExerciseId(env.ownerId, ex);
+  const result = await deps.grade({ exercise: ex, response: graderResponse, ctx: ctxOf(ex, globalId) });
+  // Several answers checked together (four chords by ear, U12.L01 S6): the verdict names the part that is off.
+  if (ex.kind === "all" && result.status === "fail" && isAnswerAll(ex) && "parts" in graderResponse) {
+    const responses = graderResponse.parts as ExerciseResponse[];
+    const alone = await Promise.all(
+      ex.parts.map((part, i) =>
+        deps
+          .grade({
+            exercise: part,
+            response: responses[i] ?? { skipped: true },
+            ctx: ctxOf(part, `${globalId}#${i + 1}`),
+          })
+          .catch(() => null),
+      ),
+    );
+    return withPartSlots(result, alone);
+  }
+  return result;
+}
+
+/** The answer kinds an `all` step can check together and name by part (never code, a take or taps). */
+const ANSWER_PART_KINDS: ReadonlySet<Exercise["kind"]> = new Set<Exercise["kind"]>([
+  "identify",
+  "fact",
+  "staff-read",
+  "keyboard",
+]);
+
+/** An `all` whose every part is an answer picked or typed (U12.L01 S6: four chords, one quality each). */
+export function isAnswerAll(ex: Exercise): boolean {
+  return ex.kind === "all" && ex.parts.length > 1 && ex.parts.every((p) => ANSWER_PART_KINDS.has(p.kind));
+}
+
+/**
+ * The step's result with each finding placed on its part (`where.slot` = the part's number, 1-based), from the
+ * parts graded one by one. The verdict itself (status, score, dims) stays the whole step's. When the parts'
+ * findings are not the step's own (another count, another code), nothing is changed: a wrong place is worse than
+ * none.
+ */
+export function withPartSlots(whole: GradeResult, parts: readonly (GradeResult | null)[]): GradeResult {
+  const counted = (ds: GradeResult["diagnostics"]) =>
+    ds
+      .filter((d) => d.severity === "error" || d.severity === "warn")
+      .map((d) => d.id as string)
+      .sort()
+      .join("|");
+  if (parts.some((p) => p === null)) return whole;
+  const placed = parts.flatMap((p, i) =>
+    (p as GradeResult).diagnostics
+      .filter((d) => d.severity === "error" || d.severity === "warn")
+      .map((d) => ({ ...d, where: { slot: i + 1 } })),
+  );
+  if (placed.length === 0 || counted(placed) !== counted(whole.diagnostics)) return whole;
+  const rest = whole.diagnostics.filter((d) => d.severity !== "error" && d.severity !== "warn");
+  return { ...whole, diagnostics: [...placed, ...rest] };
 }

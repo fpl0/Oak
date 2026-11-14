@@ -103,6 +103,12 @@ describe("Transcribe keys", () => {
     // A focused button keeps PageDown (and Space) for itself.
     km.handle(ev("PageDown", {}, "PageDown"), ctx({ onControl: true }));
     expect(hits).toHaveLength(9);
+    // Wave 6: the form map. X cuts at the playing bar (the key the form answer cuts with), Shift+X goes to the strip.
+    km.handle(ev("x", {}, "KeyX"), ctx());
+    km.handle(ev("X", { shiftKey: true }, "KeyX"), ctx());
+    expect(hits.slice(9)).toEqual(["formCut", "formFocus"]);
+    km.handle(ev("x", {}, "KeyX"), ctx({ inEditable: true }));
+    expect(hits).toHaveLength(11);
     // One row in the sheet stands for the nine digits.
     const grouped = transcribeBindings(() => {}).filter(
       (b) => b.id.startsWith("transcribe:loopLine") && b.group,

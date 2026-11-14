@@ -2,7 +2,7 @@
 // treble staff), and the highlighted key for keyboard naming. Engraved by @oak/notation from the trial's own
 // events, the same way the Workbench does.
 import type { KeySpec, MeterId, Trial } from "@oak/api";
-import { notate, type StaffKind } from "@oak/notation";
+import { notate, type StaffKind, staffHostInput } from "@oak/notation";
 import { renderStaff } from "@oak/notation/render";
 import { METERS } from "@oak/theory";
 import { useEffect, useRef, useState } from "react";
@@ -25,7 +25,10 @@ export function trialAbc(trial: Trial<unknown>): string | null {
   const track = typeof trial.params.answerTrack === "string" ? trial.params.answerTrack : null;
   const events = trial.events.filter((e) => track === null || e.track === track);
   try {
-    return notate({ events, meter, key, bars, staff, labels: "none" }, { barsPerLine: 4 }).abc.abc;
+    // Through the shared host helper (d5), as every staff host. A reading trial's events are written straight and
+    // carry no code, so the helper changes nothing today; a swung or coded trial would be printed as elsewhere.
+    const input = staffHostInput({ events, meter, key, bars, staff, labels: "none" });
+    return notate(input, { barsPerLine: 4 }).abc.abc;
   } catch {
     return null;
   }

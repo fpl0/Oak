@@ -54,6 +54,15 @@ import {
   stageECategoryLabel,
   stageEOptionLabel,
 } from "./wave5.ts";
+import {
+  categoryDegree,
+  chromaticPadSet,
+  clickCellAnswer,
+  clickCellsOf,
+  padAnswer,
+  stageFCategoryLabel,
+  stageFOptionLabel,
+} from "./wave6.ts";
 
 // --- answer surfaces -----------------------------------------------------------------------------
 
@@ -137,7 +146,9 @@ const CATEGORY_WORDS: Record<string, string> = {
 
 /** A category as the level picker and the level news name it. */
 export function categoryLabel(id: string, generator?: string): string {
-  const stageE = generator ? stageECategoryLabel(generator, id) : null;
+  const stageE = generator
+    ? (stageECategoryLabel(generator, id) ?? stageFCategoryLabel(generator, id))
+    : null;
   if (stageE) return stageE.charAt(0).toUpperCase() + stageE.slice(1);
   const own = CATEGORY_WORDS[id];
   if (own) return own.charAt(0).toUpperCase() + own.slice(1);
@@ -145,11 +156,13 @@ export function categoryLabel(id: string, generator?: string): string {
 }
 
 export function optionLabel(id: string, generator?: string, options: readonly string[] = []): string {
-  const own = generator ? stageEOptionLabel(generator, id, options) : null;
+  const own = generator
+    ? (stageEOptionLabel(generator, id, options) ?? stageFOptionLabel(generator, id))
+    : null;
   if (own) return own;
-  // Degree categories ("deg.5", "deg.b6") read as the learner's word for them, never as an ID.
-  const deg = /^deg\.([#b]?[1-7])$/.exec(id);
-  if (deg) return `Degree ${(deg[1] as string).replace("b", "♭").replace("#", "♯")}`;
+  // Degree categories ("deg.5", "deg.b6", "deg.s4") read as the learner's word for them, never as an ID.
+  const deg = /^deg\./.test(id) ? categoryDegree(id) : null;
+  if (deg) return `Degree ${deg.replace("b", "♭").replace("#", "♯")}`;
   return OPTION_LABELS[id] ?? id.replace(/b(?=\d)/g, "♭").replace(/#(?=\d)/g, "♯");
 }
 
@@ -161,10 +174,12 @@ function keyOf(trial: Trial<unknown>): KeySpec | null {
 /** The degree pad's contrast set: the level's own degree categories, else the key's diatonic degrees. */
 export function degreeSetOf(trial: Trial<unknown>, def: FamilyDef): Degree[] {
   const level = def.levels[Math.max(0, Math.min(def.levels.length, trial.level) - 1)];
-  const cats = (level?.categories ?? []).map((c) => DEGREE_RE.exec(c)?.[1] ?? null);
+  const cats = (level?.categories ?? []).map((c) => DEGREE_RE.exec(c)?.[1] ?? categoryDegree(c));
   const expected = ((trial.expected as Answer).degrees ?? []) as Degree[];
   if (cats.length > 0 && cats.every((c) => c !== null)) {
     const set = [...new Set([...(cats as Degree[]), ...expected])];
+    // Chromatic degrees (Wave 6): one pad key per pitch, so the pad never shows which spelling was asked.
+    if (def.id === "fam.deg.fet-chromatic") return chromaticPadSet(set);
     return set.sort((a, b) => degreeSemitones(a) - degreeSemitones(b));
   }
   const key = keyOf(trial);
@@ -240,9 +255,13 @@ export function surfaceOf(
     }
     return { kind: "widget", spec: { ui: "bar-buttons", bars } };
   }
+  // Find the push (Wave 6): the loop's cells on the rhythm grid, grouped by the beat.
+  const cells = clickCellsOf(trial);
+  if (cells) return { kind: "widget", spec: cells.spec };
   if (ui === "grid") {
     const steps = Number(p.stepsPerBar ?? 8);
-    const stepsPerBar = (steps === 12 || steps === 16 ? steps : 8) as 8 | 12 | 16;
+    // 6 and 24 steps (Wave 6): a bar of 6/8, and sixteenth-note triplets.
+    const stepsPerBar = ([6, 12, 16, 24].includes(steps) ? steps : 8) as 6 | 8 | 12 | 16 | 24;
     return {
       kind: "widget",
       spec: { ui: "grid", rows: ["hit"], stepsPerBar, bars: Number(p.gridBars ?? p.bars ?? 1) },
@@ -484,7 +503,18 @@ export function trialAnswerOf(trial: Trial<unknown>, spec: AnswerSpec, value: An
   const form = spec.ui === "form" ? formModeOf(trial) : null;
   if (form) return formAnswer(form, value as string[]);
   const expected = trial.expected as Answer;
-  return answerOf(spec, value, expected.text?.length ?? 1, expected);
+  const answer = answerOf(spec, value, expected.text?.length ?? 1, expected);
+  // Find the push: the grid's marked steps are the family's own cells ("c14").
+  if (spec.ui === "grid" && clickCellsOf(trial)) return clickCellAnswer(answer?.choice ?? []);
+  // A chromatic degree picked on its pad key is read as the asked spelling of that pitch (♭6 for ♯5).
+  if (
+    spec.ui === "degree-pad" &&
+    trial.family === "fam.deg.fet-chromatic" &&
+    answer?.degrees &&
+    expected.degrees
+  )
+    return { degrees: padAnswer(answer.degrees, expected.degrees) };
+  return answer;
 }
 
 /** The expected answer in the widget's value shape, for the "it was …" side of the feedback. */
@@ -498,8 +528,16 @@ export function expectedValueOf(spec: AnswerSpec, expected: Answer): AnswerValue
         : expected.choice
           ? expected.choice.map(Number).filter(Number.isFinite)
           : null;
-    case "degree-pad":
-      return expected.degrees ?? null;
+    case "degree-pad": {
+      if (!expected.degrees) return null;
+      // The pad key of each expected degree: its own, or the key of the same pitch (♭6 where ♯5 was asked).
+      return expected.degrees.map(
+        (d) =>
+          spec.set.find((k) => k === d) ??
+          spec.set.find((k) => (degreeSemitones(k) - degreeSemitones(d)) % 12 === 0) ??
+          d,
+      );
+    }
     case "quality-pad":
       return expected.qualities ?? null;
     case "rn-palette":
@@ -514,7 +552,7 @@ export function expectedValueOf(spec: AnswerSpec, expected: Answer): AnswerValue
     case "number":
       return expected.number ?? null;
     case "grid": {
-      const cells = new Set(expected.choice ?? []);
+      const cells = new Set((expected.choice ?? []).map((c) => c.replace(/^c/, "")));
       const n = spec.stepsPerBar * spec.bars;
       return [Array.from({ length: n }, (_, i) => cells.has(String(i)))];
     }
@@ -845,7 +883,9 @@ export function levelNews(
       `${added
         .map(
           (c) =>
-            (def.generator ? stageECategoryLabel(def.generator, c) : null) ??
+            (def.generator
+              ? (stageECategoryLabel(def.generator, c) ?? stageFCategoryLabel(def.generator, c))
+              : null) ??
             CATEGORY_WORDS[c] ??
             lowerWord(optionLabel(c, def.generator, cur.categories)),
         )
@@ -1002,6 +1042,48 @@ export function compositeLine(
   return `In ${title}${company}: two trials whenever it comes up, and its own sets come back if it needs them.`;
 }
 
+export interface CompositeProgress {
+  id: string;
+  title: string;
+  /** Titles of the families that graduated into it, in catalog order. */
+  members: string[];
+  line: string;
+}
+
+const listWords = (items: readonly string[]): string =>
+  items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+
+/**
+ * Mixed practice as progress (contracts §7.4): each composite with the families that have graduated into it. A
+ * family that moves there has not gone away; the composite has grown. Composites with no member yet are left out.
+ */
+export function compositesProgress(
+  defs: readonly FamilyDef[],
+  states: ReadonlyMap<string, FamilyState>,
+): CompositeProgress[] {
+  return defs
+    .filter((d) => isCompositeGenerator(d.generator))
+    .map((c) => {
+      const members = defs
+        .filter((d) => {
+          const st = states.get(d.id);
+          return st !== undefined && st.compositeId === c.id && st.graduatedAt !== null;
+        })
+        .map((d) => d.title);
+      const n = members.length;
+      return {
+        id: c.id,
+        title: c.title,
+        members,
+        // A long list names its first four and counts the rest: the card says how much it holds, not every title.
+        line: `${n === 1 ? "One family lives" : `${n} families live`} here now: ${
+          n > 5 ? `${members.slice(0, 4).join(", ")} and ${n - 4} more` : listWords(members)
+        }. Each comes up two trials at a time, at the level you reached.`,
+      };
+    })
+    .filter((c) => c.members.length > 0);
+}
+
 /** Composite reviews are not practised by hand: they appear only through the warm-up. */
 export const isCompositeFamily = (def: FamilyDef): boolean => isCompositeGenerator(def.generator);
 
@@ -1024,9 +1106,15 @@ export const STAGE_TITLES: Record<StageKey | "concepts", { title: string; sub: s
     title: "Stage E · Minor, sevenths and the blues",
     sub: "Degrees in minor, which minor, bass lines, sevenths, sections and the twelve bars.",
   },
-  F: { title: "Stage F · Chromatic colour", sub: "Notes and chords from outside the key." },
+  F: {
+    title: "Stage F · Chromatic colour",
+    sub: "Notes and chords from outside the key, and the moment home itself moves.",
+  },
   G: { title: "Stage G · Jazz harmony", sub: "ii–V–I, guide tones, extensions, substitutions." },
-  H: { title: "Stage H · Groove and feel", sub: "Syncopation, swing, clave and odd groupings." },
+  H: {
+    title: "Stage H · Groove and feel",
+    sub: "Pushes, triplets and the beat in three, swing, clave and odd groupings.",
+  },
   concepts: { title: "Reading and facts", sub: "Counting, reading rhythm and notes, spelling, keys." },
 };
 
@@ -1049,6 +1137,9 @@ export const HUB_STAGE_EXTRAS: Readonly<Record<string, StageKey>> = {
   // Wave 5: form by ear and the bass locked with the kick are heard with stage E (wave5.md §11).
   "fam.frm.sections": "E",
   "fam.rhy.groove-lock": "E",
+  // Wave 6: intervals by name arrive with the sevenths (U12.L06); the hats' division is heard with the groove.
+  "fam.int.isolated": "E",
+  "fam.rhy.subdivision": "H",
 };
 
 /** Families grouped by ear-training stage (contracts §7.3), concept families after them. */

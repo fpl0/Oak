@@ -1,12 +1,43 @@
 // The album as a record (ux §5.3): side A holds the core capstones in course order, side B the advanced ones,
 // then the B-sides. Released tracks fill their slots; empty slots say what opens them. Pure.
-import type { AlbumTrack, CapstoneMeta, CapstoneStatus } from "@oak/api";
+import type {
+  AlbumTake,
+  AlbumTrack,
+  AlbumTrackDetail,
+  AlbumTrackVersion,
+  CapstoneMeta,
+  CapstoneStatus,
+} from "@oak/api";
 
 export type Side = AlbumTrack["side"];
 
 /** Advanced-track capstones (JC*, RC*, AC*) go on side B; every other capstone is core, side A. */
 export function sideOfCapstone(id: string): Exclude<Side, "Bside"> {
   return /^(JC|RC|AC)\d/.test(id) ? "B" : "A";
+}
+
+/**
+ * Side A's running order (content/specs/END.md "The record"): the core capstones in course order with the single
+ * last, so the record closes on the learner's own song; the standard, released earlier, sits before it.
+ */
+export const SIDE_A_ORDER = [
+  "C0",
+  "C1",
+  "C2",
+  "X1",
+  "C3",
+  "C4",
+  "C5",
+  "X2",
+  "C6",
+  "C7",
+  "CF-T",
+  "CF-A",
+] as const;
+
+/** A side's capstones in running order: the course's order, the album single (CF-A) moved to the end. */
+export function runningOrder<T extends { id: string }>(capstones: readonly T[]): T[] {
+  return [...capstones.filter((c) => c.id !== "CF-A"), ...capstones.filter((c) => c.id === "CF-A")];
 }
 
 export type Slot =
@@ -43,7 +74,7 @@ export function albumSides(
   const statusOf = new Map(statuses.map((s) => [s.capstoneId as string, s] as const));
   const sideSlots = (side: "A" | "B"): Slot[] => {
     const slots: Slot[] = [];
-    const listed = capstones.filter((c) => sideOfCapstone(c.id) === side);
+    const listed = runningOrder(capstones.filter((c) => sideOfCapstone(c.id) === side));
     listed.forEach((c, i) => {
       const t = byCapstone.get(c.id);
       if (t) slots.push({ kind: "track", no: i + 1, track: t });
@@ -126,4 +157,190 @@ export function audioFileName(title: string, version: number, mime: string | nul
         ? "m4a"
         : "webm";
   return `${slug}-v${version}.${ext}`;
+}
+
+// --- takes (d20) ------------------------------------------------------------------------------------
+
+/**
+ * Every recording of a version, oldest first. A server that lists no takes has at most one recording: it is
+ * take 1.
+ */
+export function takesOf(
+  v: Pick<AlbumTrackVersion, "takes" | "hasAudio" | "audioMime" | "durationS" | "createdAt">,
+): AlbumTake[] {
+  if (v.takes && v.takes.length > 0) return [...v.takes].sort((a, b) => a.take - b.take);
+  if (!v.hasAudio) return [];
+  return [
+    {
+      take: 1,
+      audioMime: v.audioMime ?? "audio/webm",
+      durationS: v.durationS,
+      bytes: 0,
+      recordedAt: v.createdAt,
+    },
+  ];
+}
+
+/** The take that plays by default and is exported: the chosen one, else the newest. */
+export function currentTakeOf(
+  v: Pick<AlbumTrackVersion, "takes" | "currentTake" | "hasAudio">,
+): number | null {
+  if (v.currentTake) return v.currentTake;
+  const last = v.takes?.at(-1)?.take;
+  return last ?? (v.hasAudio ? 1 : null);
+}
+
+/** "four-chord-song-v2-take3.webm"; a version with one take keeps the plain name. */
+export function takeFileName(
+  title: string,
+  version: number,
+  take: number,
+  mime: string | null,
+  takes: number,
+): string {
+  const plain = audioFileName(title, version, mime);
+  return takes <= 1 ? plain : plain.replace(/(\.[a-z0-9]+)$/, `-take${take}$1`);
+}
+
+// --- the finished record (content/specs/END.md "The record: Side A, finished") --------------------------
+
+/** The breath between two tracks when Side A plays through, ms. */
+export const TRACK_GAP_MS = 1500;
+
+export interface RecordTrack {
+  /** 1-based place in the running order. */
+  no: number;
+  capstoneId: string;
+  /** `null`: not released yet. */
+  trackId: string | null;
+  title: string;
+  version: number | null;
+  /** The chosen take's length; `null` without a recording. */
+  durationS: number | null;
+  hasAudio: boolean;
+  coverSeed: string | null;
+  flavour: AlbumTrack["flavour"];
+  sketch: { sketchId: string; sketchVersion: number } | null;
+  audioMime: string | null;
+}
+
+export interface SideARecordView {
+  tracks: RecordTrack[];
+  released: number;
+  total: number;
+  /** Every track of Side A is released. */
+  complete: boolean;
+  /** Tracks with a recording, in running order: what "Play Side A" plays. */
+  playable: RecordTrack[];
+  /** The running time: the recordings' lengths (tracks without one are not counted). */
+  seconds: number;
+  /** Some track's detail has not arrived yet: lengths may still change. */
+  loading: boolean;
+}
+
+const plainTitle = (c: { id: string; title: string }): string =>
+  (c.title.startsWith(`${c.id} `) ? c.title.slice(c.id.length + 1) : c.title).replace(/^Core Finale: /, "");
+
+/** Side A as a record: every core capstone in running order with its released track, its length and its take. */
+export function sideARecord(
+  tracks: readonly AlbumTrack[],
+  details: ReadonlyMap<string, AlbumTrackDetail>,
+  capstones: readonly { id: string; title: string }[],
+): SideARecordView {
+  const core = runningOrder(capstones.filter((c) => sideOfCapstone(c.id) === "A"));
+  let loading = false;
+  const out = core.map((c, i): RecordTrack => {
+    const t = tracks.find((x) => x.capstoneId === c.id) ?? null;
+    if (!t)
+      return {
+        no: i + 1,
+        capstoneId: c.id,
+        trackId: null,
+        title: plainTitle(c),
+        version: null,
+        durationS: null,
+        hasAudio: false,
+        coverSeed: null,
+        flavour: null,
+        sketch: null,
+        audioMime: null,
+      };
+    const d = details.get(t.id);
+    if (!d) loading = true;
+    const v = d?.versions.find((x) => x.version === t.currentVersion) ?? null;
+    return {
+      no: i + 1,
+      capstoneId: c.id,
+      trackId: t.id,
+      title: t.title,
+      version: t.currentVersion,
+      durationS: v?.hasAudio ? (v.durationS ?? null) : null,
+      hasAudio: v?.hasAudio === true,
+      coverSeed: t.coverSeed,
+      flavour: t.flavour,
+      sketch: v ? { sketchId: v.sketchId, sketchVersion: v.sketchVersion } : null,
+      audioMime: v?.audioMime ?? null,
+    };
+  });
+  const playable = out.filter((t) => t.hasAudio);
+  const released = out.filter((t) => t.trackId !== null).length;
+  return {
+    tracks: out,
+    released,
+    total: out.length,
+    complete: out.length > 0 && released === out.length,
+    playable,
+    seconds: playable.reduce((sum, t) => sum + (t.durationS ?? 0), 0),
+    loading,
+  };
+}
+
+/** "{album title} · Side A · 12 tracks · 10:42" (no time while nothing is recorded). */
+export function recordTitleLine(
+  albumTitle: string,
+  r: Pick<SideARecordView, "released" | "seconds" | "playable">,
+): string {
+  const tracks = `${r.released} ${r.released === 1 ? "track" : "tracks"}`;
+  const time = r.playable.length > 0 ? ` · ${runtime(r.seconds)}` : "";
+  return `${albumTitle} · Side A · ${tracks}${time}`;
+}
+
+/** "3 of 12 · Four-Chord Song · 0:14 / 0:20". */
+export function nowPlayingLine(
+  t: Pick<RecordTrack, "no" | "title" | "durationS">,
+  total: number,
+  elapsedS: number,
+): string {
+  const length = t.durationS ? ` / ${runtime(t.durationS)}` : "";
+  return `${t.no} of ${total} · ${t.title} · ${runtime(Math.max(0, elapsedS))}${length}`;
+}
+
+/**
+ * Whether a paused player stands at the end of its track (within 50 ms): Chromium can stop a WAV on its last frame
+ * without "ended", and the record must read that as the end of the track, not as a stop.
+ */
+export function atTrackEnd(p: { currentTime: number; duration: number }, epsilonS = 0.05): boolean {
+  return Number.isFinite(p.duration) && p.duration > 0 && p.currentTime >= p.duration - epsilonS;
+}
+
+/** The playable track that follows `no` in running order, or `null` at the end of the side. */
+export function nextPlayable(r: Pick<SideARecordView, "playable">, no: number): RecordTrack | null {
+  return r.playable.find((t) => t.no > no) ?? null;
+}
+
+/** The cover to move to with Left / Right (released tracks only; it stops at the ends). */
+export function neighbourCover(
+  r: Pick<SideARecordView, "tracks">,
+  no: number,
+  dir: 1 | -1,
+): RecordTrack | null {
+  const released = r.tracks.filter((t) => t.trackId !== null);
+  const at = released.findIndex((t) => t.no === no);
+  return released[at + dir] ?? null;
+}
+
+/** "01-intro.webm": a recording's name inside the download of the whole side. */
+export function recordFileName(t: Pick<RecordTrack, "no" | "title" | "version" | "audioMime">): string {
+  const base = audioFileName(t.title, t.version ?? 1, t.audioMime).replace(/-v\d+(\.[a-z0-9]+)$/, "$1");
+  return `${String(t.no).padStart(2, "0")}-${base}`;
 }

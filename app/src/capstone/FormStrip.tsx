@@ -13,6 +13,7 @@ export function FormStrip({
   onBars,
   stale,
   loop = null,
+  length = null,
 }: {
   form: PieceForm;
   /** 1-based inclusive bars: light and loop them. */
@@ -21,6 +22,8 @@ export function FormStrip({
   stale: boolean;
   /** The Workbench's loop region (0-based first bar, length) while it loops: the section it covers is selected. */
   loop?: { from: number; bars: number } | null;
+  /** CF-A: the running length against the brief's minimum ("56 bars · 2:14 of 2:00"), read from the plan. */
+  length?: { text: string; ok: boolean } | null;
 }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const total = Math.max(1, form.totalBars);
@@ -54,9 +57,21 @@ export function FormStrip({
             {form.letters}
           </span>
         )}
-        {form.sections.length > 0 && (
-          <span className="text-sm text-text-3">{form.totalBars} bars · select a section to loop it</span>
-        )}
+        {form.sections.length > 0 &&
+          (length ? (
+            <span className="text-sm text-text-3">
+              <span
+                className={clsx("tabular-nums", length.ok ? "text-text-2" : "font-medium text-text")}
+                data-testid="form-length"
+                data-ok={length.ok ? "true" : "false"}
+              >
+                {length.text}
+              </span>{" "}
+              · select a section to loop it
+            </span>
+          ) : (
+            <span className="text-sm text-text-3">{form.totalBars} bars · select a section to loop it</span>
+          ))}
       </div>
       {form.problem ? (
         <p className="rounded-control border border-accent-2/40 bg-accent-2/8 px-2.5 py-1.5 text-sm">
@@ -97,7 +112,11 @@ export function FormStrip({
                   className={clsx(
                     "flex w-full min-w-0 flex-col gap-1 rounded-control border px-2 py-1.5 text-left",
                     "hover:border-accent",
-                    s.letter === "A" ? "border-border bg-surface" : "border-accent/40 bg-lane-in",
+                    s.label === "bridge"
+                      ? "border-accent-2/60 bg-accent-2/8"
+                      : s.letter === "A"
+                        ? "border-border bg-surface"
+                        : "border-accent/40 bg-lane-in",
                     looping && "ring-2 ring-accent",
                   )}
                 >

@@ -32,6 +32,7 @@ export interface PartLike {
     set?: string[];
     allow?: string[];
     multi?: boolean;
+    rows?: string[];
   };
   stageAnswers?: Record<string, unknown>;
   stages?: string[];
@@ -77,6 +78,13 @@ type Dev = {
 };
 const drawnAnswer = (page: Page) =>
   page.evaluate(() => (globalThis as unknown as { __oakLesson: Dev }).__oakLesson.trial());
+/** The drawn trial of each part of an `all` step (`null` for an authored part). */
+const drawnAnswers = (page: Page) =>
+  page.evaluate(() =>
+    (
+      globalThis as unknown as { __oakLesson: { trials(): (Record<string, unknown> | null)[] } }
+    ).__oakLesson.trials(),
+  );
 const singTargetsOf = (page: Page) =>
   page.evaluate(() => (globalThis as unknown as { __oakLesson: Dev }).__oakLesson.singTargets());
 
@@ -306,7 +314,29 @@ async function pickDegrees(
   const pad = step.locator("[data-degree]").first();
   await pad.focus();
   for (let i = 0; i < degrees.length + 2; i++) await page.keyboard.press("Backspace");
-  for (const d of degrees) await step.locator(`[data-degree="${d}"]`).first().click();
+  for (const d of degrees) {
+    // A chromatic pad offers each pitch once (U15, U17.CP: ♭2 for ♯1, ♭6 for ♯5): the asked spelling's key, else
+    // the key of the same pitch, which the player reads as the asked spelling.
+    const own = step.locator(`[data-degree="${d}"]`);
+    if ((await own.count()) > 0) {
+      await own.first().click();
+      continue;
+    }
+    const shown = await step
+      .locator("[data-degree]")
+      .evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute("data-degree") ?? ""))]);
+    const same = shown.find((x) => semisOf(x) === semisOf(d));
+    expect(same, `the pad has a key for ${d}`).toBeDefined();
+    await step.locator(`[data-degree="${same}"]`).first().click();
+  }
+}
+
+/** Semitones above home of a degree ("#4" 6, "b6" 8), for a pad that spells a pitch once. */
+function semisOf(d: string): number {
+  const m = /^([#b]?)(\d+)$/.exec(d);
+  if (!m) return Number.NaN;
+  const base = [0, 2, 4, 5, 7, 9, 11][(Number(m[2]) - 1) % 7] ?? 0;
+  return (base + (m[1] === "#" ? 1 : m[1] === "b" ? -1 : 0) + 12) % 12;
 }
 
 /** The fake microphone sings one take (whatever it hears), Check reads it out; then the targets pass. */
@@ -463,6 +493,31 @@ export async function answerWidget(
     return true;
   }
   if (ui === "form" || ui === "bar-grid" || ui === "scale-builder") return answerWave5(part, response, step);
+  if (ui === "grid") {
+    // A rhythm grid (fam.rhy.dictation in a checkpoint; U13's 6- and 12-step grids): exactly these cells on. One
+    // row answers with step numbers ("0", "4"), several rows with "row:step".
+    // A "find the push" trial names its cells `c14`; on the grid that is step 14.
+    const want = new Set((a.choice ?? []).map((c) => c.replace(/^c(?=\d+$)/, "")));
+    const cells = step.locator("[data-cell]");
+    const n = await cells.count();
+    if (n === 0) return false;
+    const rows = part.answer?.rows ?? [];
+    for (let i = 0; i < n; i++) {
+      const cell = cells.nth(i);
+      const [r, c] = ((await cell.getAttribute("data-cell")) ?? "0:0").split(":") as [string, string];
+      const id = rows.length > 1 ? `${rows[Number(r)] ?? r}:${c}` : c;
+      const on = (await cell.getAttribute("aria-pressed")) === "true";
+      if (on !== want.has(id)) await cell.click();
+    }
+    return true;
+  }
+  if (ui === "bar-buttons" && a.choice?.[0] !== undefined) {
+    // A drawn "which bar" trial (U15.L06 S2, U17.L03 S4) brings its own bars ("none" too): a choice drawn as the
+    // same bar timeline, its options by ID.
+    if ((await step.locator(`[data-option="${a.choice[0]}"]`).count()) === 0) return false;
+    await clickOption(page, a.choice[0], step);
+    return true;
+  }
   if (ui === "bar-buttons") {
     // "Which bar?" (U09.L01 S6, U09.L05 S6, U11.L08 S5): the bar's own button.
     if (a.number === undefined) return false;
@@ -617,12 +672,16 @@ export async function enterNumerals(page: Page, step: Locator, rns: readonly str
 }
 
 /** A wrong answer to a drawn trial: another option, another first degree, another letter. */
-export async function wrongFor(page: Page, part: PartLike, expected: Record<string, unknown>) {
+export async function wrongFor(
+  page: Page,
+  part: PartLike,
+  expected: Record<string, unknown>,
+  scope: Locator = page.getByTestId("lesson-step"),
+) {
   const ui = part.answer?.ui;
-  if (ui === "choice") {
+  if (ui === "choice" || (ui === "bar-buttons" && Array.isArray(expected.choice))) {
     const right = (expected.choice as string[])[0];
-    const ids = await page
-      .getByTestId("lesson-step")
+    const ids = await scope
       .locator("[data-option]")
       .evaluateAll((els) => els.map((e) => e.getAttribute("data-option") ?? ""));
     expect(ids, `${part.id}: the drawn answer is one of the options shown`).toContain(right);
@@ -630,8 +689,7 @@ export async function wrongFor(page: Page, part: PartLike, expected: Record<stri
   }
   if (ui === "degree-pad") {
     const right = expected.degrees as string[];
-    const shown = await page
-      .getByTestId("lesson-step")
+    const shown = await scope
       .locator("[data-degree]")
       .evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute("data-degree") ?? ""))]);
     const other = shown.find((d) => d !== right[0]) as string;
@@ -639,16 +697,14 @@ export async function wrongFor(page: Page, part: PartLike, expected: Record<stri
   }
   if (ui === "quality-pad") {
     const right = (expected.qualities as string[])[0];
-    const shown = await page
-      .getByTestId("lesson-step")
+    const shown = await scope
       .locator("[data-quality]")
       .evaluateAll((els) => els.map((e) => e.getAttribute("data-quality") ?? ""));
     return { answer: { qualities: [shown.find((q) => q !== right) as string] } };
   }
   if (ui === "rn-palette") {
     const right = expected.rn as string[];
-    const shown = await page
-      .getByTestId("lesson-step")
+    const shown = await scope
       .locator("[data-rn]")
       .evaluateAll((els) => els.map((e) => e.getAttribute("data-rn") ?? ""));
     return { answer: { rn: [shown.find((r) => r !== right[0]) as string, ...right.slice(1)] } };
@@ -807,7 +863,7 @@ export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): P
     }
     const codeKind =
       ["code-modify", "code-make", "error-hunt", "compose-brief"].includes(ex.kind) ||
-      (ex.kind === "dictation" && ex.answer?.ui === "code");
+      ((ex.kind === "dictation" || ex.kind === "staff-read") && ex.answer?.ui === "code");
     if (codeKind) {
       const leaks = answerLeaks(ex, null);
       // A real mistake (the lesson's own pinned one), not the untouched starter, when there is one.
@@ -821,6 +877,10 @@ export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): P
         continue;
       }
       if (wrong) {
+        // What the learner wrote themselves is not a leak: a quoted pattern of the reference that is also in the
+        // wrong code ("lefthand" put after .voicing(), U12.L06 S5) may be named back to them.
+        const own = leaks.filter((l) => !(wrong.response.code as string).includes(l));
+        leaks.splice(0, leaks.length, ...own);
         await setCode(page, wrong.response.code as string);
         await check(page);
         await expectHonestFeedback(page, leaks, `${label} wrong (${wrong.name})`);
@@ -859,6 +919,25 @@ export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): P
         await play.click();
         await expect(play, `${label}: the stimulus plays`).toHaveText(/Stop|Play again/);
       }
+    }
+    if (generator && ex.kind === "tap") {
+      // A drawn echo (U13.L05 S2): taps never gate. The figure tapped a sixteenth late everywhere is read back as
+      // late, then the trial's own targets pass.
+      const targets = await page.evaluate(() =>
+        (
+          globalThis as unknown as { __oakLesson: { tapTargets(): number[] | null } }
+        ).__oakLesson.tapTargets(),
+      );
+      expect(targets?.length ?? 0, `${label}: a drawn tap trial`).toBeGreaterThan(0);
+      await expect(page.getByTestId("continue"), `${label}: tapping never gates`).toBeEnabled();
+      const all = targets as number[];
+      const w = await submit(page, { taps: all.slice(0, Math.ceil(all.length / 2)) });
+      expect(w?.status, `${label}: half the figure does not pass`).not.toBe("pass");
+      await expectHonestFeedback(page, [], `${label} wrong (half the figure)`);
+      const r = await submit(page, { taps: all });
+      expect(r?.status, `${label}: on the targets passes`).toBe("pass");
+      await next(page);
+      continue;
     }
     if (generator) {
       const expected = (await drawnAnswer(page)) as Record<string, unknown>;
@@ -1011,7 +1090,7 @@ async function partsStep(
       const text = ((await mark(part.track).textContent()) ?? "").trim();
       expect(text, `${label}: the part's verdict`).not.toMatch(RAW);
       for (const l of leaks) expect(text, `${label}: the part does not print the answer`).not.toContain(l);
-      expect(text, `${label}: says where`).toMatch(/[Bb]ar \d/);
+      expect(text, `${label}: says where`).toMatch(/[Bb]ars? \d/);
       console.log(`[part] ${label} ${part.track} wrong (${wrong.name}): ${text.replace(/\s+/g, " ")}`);
       break;
     }
@@ -1039,21 +1118,39 @@ async function partsStep(
  */
 async function allAnswersStep(page: Page, parts: readonly PartLike[], label: string) {
   const box = (i: number) => page.getByTestId("lesson-step").locator(`li[data-part="${i + 1}"]`);
-  const passOf = (p: PartLike) => (p.tests.find((t) => t.expect === "pass") as TestCaseLike).response;
+  // A part drawn from a family (U12.L02 S5, U15.L01 S5) is answered with its own drawn trial; an authored one with
+  // its passing test.
+  const drawn = (await drawnAnswers(page)) ?? [];
+  const passOf = (p: PartLike, i: number): Record<string, unknown> =>
+    p.stimulus?.src === "generator"
+      ? { answer: drawn[i] ?? {} }
+      : (p.tests.find((t) => t.expect === "pass") as TestCaseLike).response;
   for (const [i, p] of parts.entries()) {
+    if (p.stimulus?.src === "generator")
+      expect(drawn[i], `${label} part ${i + 1}: a drawn trial`).toBeTruthy();
     const play = box(i).getByTestId("play-stimulus");
     if ((await play.count()) > 0) await play.first().click();
-    if (i > 0) expect(await answerWidget(page, p, passOf(p), box(i)), `${label} part ${i + 1}`).toBe(true);
+    if (i > 0) expect(await answerWidget(page, p, passOf(p, i), box(i)), `${label} part ${i + 1}`).toBe(true);
   }
   const first = parts[0] as PartLike;
-  for (const wrong of first.tests.filter((t) => t.expect === "fail")) {
-    if (!(await answerWidget(page, first, wrong.response, box(0)))) continue;
+  if (first.stimulus?.src === "generator") {
+    const wrong = await wrongFor(page, first, drawn[0] ?? {}, box(0));
+    expect(await answerWidget(page, first, wrong, box(0)), `${label} part 1 wrong`).toBe(true);
     await check(page);
-    await expectHonestFeedback(page, answerLeaks(first, null), `${label} part 1 wrong (${wrong.name})`);
-    await expectPinned(page, wrong, label);
-    break;
-  }
-  expect(await answerWidget(page, first, passOf(first), box(0)), `${label} part 1`).toBe(true);
+    await expectHonestFeedback(
+      page,
+      answerLeaks(first, drawn[0] ?? null),
+      `${label} part 1 wrong (another pick)`,
+    );
+  } else
+    for (const wrong of first.tests.filter((t) => t.expect === "fail")) {
+      if (!(await answerWidget(page, first, wrong.response, box(0)))) continue;
+      await check(page);
+      await expectHonestFeedback(page, answerLeaks(first, null), `${label} part 1 wrong (${wrong.name})`);
+      await expectPinned(page, wrong, label);
+      break;
+    }
+  expect(await answerWidget(page, first, passOf(first, 0), box(0)), `${label} part 1`).toBe(true);
   await check(page);
   await expectPass(page, label);
 }
@@ -1066,7 +1163,9 @@ export const BEFORE: Record<string, string> = {
   "U05.L02": "U04.CP",
   "U05.L03": "U05.L02",
   "U05.L04": "U05.L03",
-  "U05.L05": "U05.L04",
+  // Contracts 1.6 (d17): U05.L09 "Chord Names" was split out of U05.L04 and follows it in the order.
+  "U05.L09": "U05.L04",
+  "U05.L05": "U05.L09",
   "U05.L06": "U05.L05",
   "U05.L07": "U05.L06",
   "U05.L08": "U05.L07",

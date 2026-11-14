@@ -6,6 +6,7 @@ import {
   WAVE3_ENDPOINTS,
   WAVE4_ENDPOINTS,
   WAVE5_ENDPOINTS,
+  WAVE6_ENDPOINTS,
 } from "@oak/api";
 import { gradeResult, type Harness, harness } from "../testing/harness.ts";
 
@@ -46,7 +47,7 @@ describe("meta", () => {
     }>("GET", "/api/health");
     expect(r.status).toBe(200);
     expect(r.body.ok).toBe(true);
-    expect(r.body.schemaVersion).toBe(6);
+    expect(r.body.schemaVersion).toBe(7);
     expect(r.body.contentVersion).toBe("fixture-1");
     expect(r.body.tutor).toBe("unreachable");
     expect(r.body.dev).toBe(false);
@@ -721,6 +722,79 @@ describe("Wave 5 endpoints", () => {
       expect(up.status).toBe(409);
       const songs = await full.json<{ items: unknown[] }>("GET", "/api/ladder/songs");
       expect(songs.status).toBe(200);
+    } finally {
+      await full.close();
+    }
+  });
+});
+
+/**
+ * The Wave 6 endpoints still answering their typed 501 stub (docs/design/wave6.md §5). The server engineer removes
+ * a name here as its handler lands; the test then checks it no longer answers 501.
+ */
+const WAVE6_PENDING: readonly (typeof WAVE6_ENDPOINTS)[number][] = [];
+const WAVE6_BODIES: Partial<Record<(typeof WAVE6_ENDPOINTS)[number], unknown>> = {
+  "album.chooseTake": { take: 1 },
+};
+
+describe("Wave 6 endpoints", () => {
+  test("a pending endpoint answers the typed 501 stub; a built one never does", async () => {
+    const full = await harness({ dev: true });
+    try {
+      for (const name of WAVE6_ENDPOINTS) {
+        const def = contract[name] as { method: string; path: string; body?: unknown };
+        // `U11.L05` satisfies the lesson-id path; `1` the numeric ones.
+        const path = `/api${def.path.replace("/lessons/:id", "/lessons/U11.L05").replace(/:([A-Za-z]+)/g, "1")}`;
+        const r = await full.json<{ error?: { code: string } }>(
+          def.method,
+          path,
+          def.body === "binary" ? new Uint8Array([1, 2, 3]) : WAVE6_BODIES[name],
+          def.body === "binary" ? { "content-type": "audio/wav" } : undefined,
+        );
+        if (WAVE6_PENDING.includes(name))
+          expect({ name, status: r.status, code: r.body?.error?.code }).toEqual({
+            name,
+            status: 501,
+            code: "not_implemented",
+          });
+        else expect({ name, status: r.status }).not.toEqual({ name, status: 501 });
+      }
+    } finally {
+      await full.close();
+    }
+  });
+  test("ladder L8 is built: refused until offered (409 with the reason), never an L6 item, never a 501", async () => {
+    const full = await harness({ dev: true });
+    try {
+      const next = await full.json<{ error?: { code: string; message: string } }>(
+        "POST",
+        "/api/ladder/items",
+        {
+          sessionId: null,
+          gymId: null,
+          level: 8,
+        },
+      );
+      expect(next.status).toBe(409);
+      const up = await full.json<{ error?: { code: string } }>("PUT", "/api/ladder", { level: 8 });
+      expect(up.status).toBe(409);
+      // L7 is own audio: the schema refuses it as an item level.
+      const seven = await full.json("PUT", "/api/ladder", { level: 7 });
+      expect(seven.status).toBe(400);
+      const state = await full.json<{ level: number }>("GET", "/api/ladder");
+      expect(state.body.level).toBe(1);
+    } finally {
+      await full.close();
+    }
+  });
+  test("the additive request fields are accepted by today's handlers (ignored until built)", async () => {
+    const full = await harness({ dev: true });
+    try {
+      // d21: the tab id on the day read and on the start. The server engineer gives each tab its own session.
+      const day = await full.json<{ day: string }>("GET", "/api/session/day?tab=tab_12345678");
+      expect(day.status).toBe(200);
+      const bad = await full.json<{ error?: { code: string } }>("GET", "/api/session/day?tab=x");
+      expect(bad.status).toBe(400);
     } finally {
       await full.close();
     }

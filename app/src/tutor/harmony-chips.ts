@@ -3,7 +3,44 @@
 // map (`TutorSubject.harmony`, which a surface fills from the Workbench's `harmonyView`), else from the code's
 // first `chord("…")` pattern read statically. Two chords are the same when @oak/theory reads the same root,
 // quality and bass from them; a numeral is turned into its chord in the subject's key first. Pure.
-import { type ChordId, chordOfRoman, type KeySpec, parseChordWithBass, romanText } from "@oak/theory";
+import {
+  type ChordId,
+  chordOfRoman,
+  type KeySpec,
+  parseChordWithBass,
+  parseKeyPlan,
+  romanText,
+} from "@oak/theory";
+
+/**
+ * Wave 6: one key of the music on screen's key plan, in display bars (1-based, inclusive): where a key or mode chip
+ * lights, and the key a numeral is read in at those bars.
+ */
+export interface KeySpanAt {
+  from: number;
+  to: number;
+  key: KeySpec;
+}
+
+/** The key plan a patterned `.scale("<C4:major!16 D4:major!8>")` writes; `[]` for a piece in one key. */
+export function keyPlanFromCode(code: string | null | undefined): KeySpanAt[] {
+  if (!code) return [];
+  for (const m of code.matchAll(/\.scale\(\s*["'`]([^"'`]{1,200})["'`]/g)) {
+    const plan = parseKeyPlan(m[1] as string);
+    if (plan && plan.spans.length > 1)
+      return plan.spans.map((sp) => ({ from: sp.fromBar + 1, to: sp.fromBar + sp.bars, key: sp.key }));
+  }
+  return [];
+}
+
+/** The key in force at a display bar: the plan's span, else the subject's key. */
+export function keyAtBar(
+  plan: readonly KeySpanAt[] | undefined,
+  bar: number,
+  key: KeySpec | null,
+): KeySpec | null {
+  return plan?.find((sp) => bar >= sp.from && bar <= sp.to)?.key ?? key;
+}
 
 /** One chord of the piece on screen: 1-based display bar (0 = a pickup bar), optional beat. */
 export interface ChordAt {
@@ -74,12 +111,18 @@ export function barsWhere(
   map: readonly ChordAt[],
   token: { kind: "chord" | "rn"; value: string },
   key: KeySpec | null,
+  plan?: readonly KeySpanAt[],
 ): number[] {
-  let want: ChordId | null = null;
-  if (token.kind === "chord") want = parseChordWithBass(token.value);
-  else if (key) want = chordOfRoman(token.value, key);
+  const fixed = token.kind === "chord" ? parseChordWithBass(token.value) : null;
+  // Wave 6: a numeral names a chord in the key in force at its bar (after a lift, V7/vi in D is F♯7).
+  const wantAt = (bar: number): ChordId | null => {
+    if (token.kind === "chord") return fixed;
+    const k = keyAtBar(plan, bar, key);
+    return k ? chordOfRoman(token.value, k) : null;
+  };
   const bars = new Set<number>();
   for (const c of map) {
+    const want = wantAt(c.bar);
     const have = parseChordWithBass(c.symbol);
     const byChord = want !== null && have !== null && same(want, have);
     // Without a key to build the numeral's chord, the analysis's own numeral is compared as written.

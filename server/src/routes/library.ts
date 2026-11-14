@@ -1,7 +1,6 @@
 // sketches, album, audio (media GETs with Range), transcriptions.
-import { HEADERS } from "@oak/api";
 import type { AppDeps } from "../deps.ts";
-import { ApiError, badRequest } from "../errors.ts";
+import { badRequest } from "../errors.ts";
 import { serveFile } from "../services/audio-store.ts";
 import type { Mounter } from "./define.ts";
 
@@ -14,6 +13,13 @@ function versionParam(v: string): number {
   const n = Number(v);
   if (!Number.isInteger(n) || n < 1) throw badRequest("version must be a positive integer");
   return n;
+}
+
+function durationParam(v: string | undefined): number | null {
+  const duration = v === undefined ? null : Number(v);
+  if (duration !== null && !(Number.isFinite(duration) && duration >= 0))
+    throw badRequest("durationS must be a number of seconds");
+  return duration;
 }
 
 export function libraryRoutes(mount: Mounter, d: AppDeps): void {
@@ -38,25 +44,14 @@ export function libraryRoutes(mount: Mounter, d: AppDeps): void {
   mount("album.track", ({ params }) => lib.track(params.id));
   mount("album.createTrack", ({ body }) => lib.createTrack(body));
   mount("album.addVersion", ({ params, body }) => lib.addTrackVersion(params.id, body));
-  mount("album.putAudio", ({ params, query, bytes, contentType }, c) => {
-    const duration = query.durationS === undefined ? null : Number(query.durationS);
-    if (duration !== null && !(Number.isFinite(duration) && duration >= 0))
-      throw badRequest("durationS must be a number of seconds");
-    const version = versionParam(params.v);
-    // c11 (`confirmIf: album.audio.replace`): re-recording a version replaces its earlier recording, so it needs the
-    // confirm nonce for `<trackId>/v<v>`; a first recording needs none.
-    if (
-      d.repos.album.audioOf(params.id, version) !== null &&
-      !d.confirm.consume(c.req.header(HEADERS.confirm), "album.audio.replace", `${params.id}/v${version}`)
-    )
-      throw new ApiError(
-        "confirm_required",
-        "confirm replacing the earlier recording first (album.audio.replace)",
-      );
-    return lib.putTrackAudio(params.id, version, bytes, contentType, duration);
-  });
-  mount("album.getAudio", ({ params }, c) => {
-    const a = lib.trackAudio(params.id, versionParam(params.v));
+  // Wave 6 (d20): a recording on a version that already has one is another take; nothing is replaced, so the
+  // `album.audio.replace` nonce is accepted and no longer needed (an older client cannot delete a recording).
+  mount("album.putAudio", ({ params, query, bytes, contentType }) =>
+    lib.putTrackAudio(params.id, versionParam(params.v), bytes, contentType, durationParam(query.durationS)),
+  );
+  mount("album.getAudio", ({ params, query }, c) => {
+    const take = query.take === undefined ? null : Number(query.take);
+    const a = lib.trackAudio(params.id, versionParam(params.v), take);
     return serveFile(a.abs, c.req.raw, { mime: a.mime, media: true });
   });
   mount("album.deleteTrack", ({ params }) => {
@@ -122,4 +117,15 @@ export function libraryRoutes(mount: Mounter, d: AppDeps): void {
     if (!Number.isInteger(v) || v < 1) throw badRequest("the version must be a positive integer");
     return lib.confirmTranscriptionVersion(params.id, v);
   });
+
+  // Wave 6 (docs/design/wave6.md §5.7).
+  // d15: the learner's latest saved Make sketch of a lesson (a Make that builds on an earlier lesson's sketch).
+  mount("lessons.sketch", ({ params }) => lib.lessonSketch(params.id));
+  // d20: re-recording keeps both takes; the newest plays by default, an older one can be chosen and exported.
+  mount("album.addTake", ({ params, query, bytes, contentType }) =>
+    lib.addTrackTake(params.id, versionParam(params.v), bytes, contentType, durationParam(query.durationS)),
+  );
+  mount("album.chooseTake", ({ params, body }) =>
+    lib.chooseTrackTake(params.id, versionParam(params.v), body.take),
+  );
 }

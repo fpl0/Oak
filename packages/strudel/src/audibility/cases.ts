@@ -131,6 +131,54 @@ export function wave5Cases(): ControlCase[] {
   ];
 }
 
+/**
+ * The U12–U17 tools that change what is heard (Wave 6): the four new seventh qualities, the left-hand dictionary,
+ * pushes, triplet repeats, the compound grouping, chromatic steps and the four modes, each as the same music
+ * without the tool and with it. (`tb.velocity`, `tb.pan` and `tb.jux` are group-H rows above; the sounds U12–U17
+ * unlock are in SOUND_CASES.)
+ */
+export function wave6Cases(): ControlCase[] {
+  const run = (name: string) => `n("0 1 2 3 4 5 6 7").scale("C4:${name}").s("piano")`;
+  const mode = (id: string, from: string, name: string): ControlCase =>
+    pair(id, "scale", run(from), run(name));
+  const LINE = 'note("c3 e3 g3 c4").s("piano")';
+  return [
+    pair(
+      "chord.seventh",
+      "chord",
+      'chord("C C Am Am").voicing().s("piano")',
+      'chord("C C^7 Am Am7").voicing().s("piano")',
+    ),
+    pair(
+      "chord.seventh-dim",
+      "chord",
+      'chord("Bm7 Bm7 Bm7b5 Bm7b5").voicing().s("piano")',
+      'chord("Bm7 Bm7b5 Bm7b5 Bo7").voicing().s("piano")',
+    ),
+    pair(
+      "tb.dict.lefthand",
+      "dict",
+      'chord("Dm7 G7 C^7 C^7").voicing().s("piano")',
+      'chord("Dm7 G7 C^7 C^7").dict("lefthand").voicing().s("piano")',
+    ),
+    pair("tb.early", "early", LINE, 'note("c3 e3 g3 c4").early(1/8).s("piano")'),
+    pair("tb.late", "late", LINE, 'note("c3 e3 g3 c4").late(1/8).s("piano")'),
+    pair("tb.ply", "ply", 's("hh*4")', 's("hh*4").ply(3)'),
+    // Six eighths a bar: three groups of two (3/4) against two groups of three (6/8, `setcpm(bpm/2)`).
+    pair("tb.meter.compound", "meter", 's("[bd hh]*3")', 's("[bd hh hh]*2")'),
+    pair(
+      "tb.n.chromatic",
+      "n",
+      'n("4 3 4 7 6 6 5 ~").scale("C4:major").s("piano")',
+      'n("4 3# 4 7 6 6b 5 ~").scale("C4:major").s("piano")',
+    ),
+    mode("scale.mixolydian", "major", "mixolydian"),
+    mode("scale.dorian", "minor", "dorian"),
+    mode("scale.lydian", "major", "lydian"),
+    mode("scale.phrygian", "minor", "phrygian"),
+  ];
+}
+
 export const CONTROL_CASES: ControlCase[] = [
   { id: "tb.room", control: "room", value: 0.6 },
   { id: "tb.clip", control: "clip", value: 0.25 },
@@ -217,6 +265,8 @@ export const CONTROL_CASES: ControlCase[] = [
   ...wave4Cases(),
   // Wave 5: the tools U08–U11 unlock.
   ...wave5Cases(),
+  // Wave 6: the tools, chords and scales U12–U17 unlock.
+  ...wave6Cases(),
   // Known silent no-ops (contracts §3.1 rule 7): never taught; listed so a Strudel update that changes them shows.
   { id: "noop.leslie", control: "leslie", value: 1 },
   { id: "noop.lrate", control: "lrate", value: 4 },
@@ -622,3 +672,260 @@ export const BASS_TONE_CASES: LessonCase[] = (
 
 /** Every U08–U11 lesson context and A1 row, in the order audibility.pw.ts renders them. */
 export const LESSON_CASES: LessonCase[] = [...A1_CASES, ...BASS_TONE_CASES];
+
+// Wave 6: what U12–U17 teach, heard in the lessons' own loops (content/specs/U12.ts … U17.ts: the hooks and the
+// Make starters, at their tempos). The render frame takes one expression, so a lesson's labelled tracks are the
+// elements of a `stack(…)` here; the code of each element is the lesson's own.
+const w6 = (
+  lesson: string,
+  id: string,
+  control: string,
+  bpm: number,
+  base: readonly string[],
+  withCode: readonly string[],
+  claim: string,
+  extra: Partial<LessonCase> = {},
+): LessonCase => ({
+  id,
+  lesson,
+  control,
+  value: "=",
+  base: `stack(${base.join(", ")})`,
+  withCode: `stack(${withCode.join(", ")})`,
+  claim,
+  cps: bpm / 240,
+  cycles: 2,
+  ...extra,
+});
+const U12_BASS = (changes: string) => `chord("${changes}").rootNotes(2).s("upright")`;
+/** U13.L01 (content/specs/U13.ts PUSHED): kick, snare and hats on the grid, the bass on 1, 3 and 4. */
+const U13_GRID = ['s("bd ~ bd ~")', 's("~ sd ~ sd")', 's("hh*8").gain(.5)'];
+const U13_PUSH_BASS = 'chord("<Dm7 G7>").rootNotes(2).struct("x ~ ~ ~ x ~ x ~").s("fingerbass").lpf(800)';
+/** U13.L02 (FUNK): the sixteenth-note vamp, with every `.velocity()` of the hook or with none. */
+const U13_KICK = 's("bd ~ ~ ~ ~ ~ bd ~ ~ ~ bd ~ ~ ~ ~ ~")';
+const U13_SNARE = 's("~ ~ ~ ~ sd ~ ~ sd ~ sd ~ ~ sd ~ ~ sd")';
+const U13_SNARE_VELOCITY = '.velocity("1 1 1 1 1 1 1 .3 1 .3 1 1 1 1 1 .3")';
+const U13_FUNK_BASS =
+  'chord("<Dm7 G7>").rootNotes(2).struct("x ~ ~ ~ ~ ~ x ~ ~ ~ x ~ ~ ~ ~ ~").s("fingerbass").lpf(800)';
+const u13Gtr = (velocity: string) =>
+  `chord("<Dm7 G7>").voicing().struct("x*16").s("cleangtr")${velocity}.clip(.5).gain(.6)`;
+const U13_GTR_VELOCITY = '.velocity("[.25 .25 1 .25 .25 1 .25 .25]*2")';
+/** U13.L04 and L05: the ballad's changes, one bar here. */
+const U13_BALLAD_BASS = (struct: string) =>
+  `chord("<C^7 Am7>").rootNotes(2).struct("${struct}").s("fingerbass").lpf(800)`;
+/** U14.L06's Make starter: the Dorian vamp. */
+const U14_VAMP = (pan: string, jux: string) => [
+  `chord("<Dm7 Dm7>").voicing().struct("~ x ~ x ~ ~ x ~").s("rhodes")${pan}`,
+  'chord("<Dm7 Dm7>").rootNotes(2).struct("x ~ ~ x ~ ~ x ~").s("fingerbass").lpf(800)',
+  `n("<[0 ~ 2 3 ~ 4 6 ~] [7 ~ 6 4 ~ 3 2 0]>").scale("D3:dorian").s("cleangtr")${jux}`,
+];
+const riff = (scale: string, sound: string) =>
+  `n("<[0 ~ 2 4 ~ 6 4 ~] [7 ~ 6 4 ~ 3 1 0]>").scale("${scale}").s("${sound}")`;
+
+/** U14.L03's i–IV vamp (content/specs U14.ts): the Rhodes on i and IV, the riff through the 6th. */
+const dorianVamp = (scale: string) =>
+  `n("<[0,2,4] [3,5,7]>").struct("~ x ~ x ~ ~ x ~").scale("${scale}").s("rhodes"), n("<[0 ~ 2 4 ~ 5 4 ~] [7 ~ 5 4 ~ 3 2 0]>").scale("${scale.replace("3:", "4:")}").s("piano")`;
+
+export const W6_LESSON_CASES: LessonCase[] = [
+  w6(
+    "U12.L01",
+    "chord.seventh",
+    "chord",
+    90,
+    ['chord("<C C>").voicing().s("rhodes")', U12_BASS("<C C>")],
+    ['chord("<C C^7>").voicing().s("rhodes")', U12_BASS("<C C>")],
+    "C then C^7 on the Rhodes: the added 7th is heard over the bass",
+  ),
+  w6(
+    "U12.L03",
+    "chord.seventh-dim",
+    "chord",
+    76,
+    ['chord("Bm7b5").voicing().s("rhodes")', U12_BASS("B")],
+    ['chord("Bo7").voicing().s("rhodes")', U12_BASS("B")],
+    "half-diminished against diminished seventh: one voice a half step lower",
+    { cycles: 1 },
+  ),
+  w6(
+    "U12.L06",
+    "tb.dict.lefthand",
+    "dict",
+    112,
+    [
+      'chord("<Dm7 G7>").voicing().struct("~ x ~ ~ x ~ ~ ~").s("rhodes")',
+      'chord("<Dm7 G7>").rootNotes(2).struct("x x x x").s("upright")',
+    ],
+    [
+      'chord("<Dm7 G7>").dict("lefthand").voicing().struct("~ x ~ ~ x ~ ~ ~").s("rhodes")',
+      'chord("<Dm7 G7>").rootNotes(2).struct("x x x x").s("upright")',
+    ],
+    'the hook with and without .dict("lefthand"): the rootless voicing is another sound',
+  ),
+  w6(
+    "U13.L01",
+    "tb.early",
+    "early",
+    96,
+    [...U13_GRID, U13_PUSH_BASS, 'chord("<Dm7 G7>").voicing().s("rhodes")'],
+    [...U13_GRID, U13_PUSH_BASS, 'chord("<Dm7 G7>").voicing().early(1/8).s("rhodes")'],
+    "the Rhodes an eighth early over drums and bass that stay on the beat",
+  ),
+  w6(
+    "U13.L01",
+    "tb.late",
+    "late",
+    96,
+    [...U13_GRID, U13_PUSH_BASS, 'chord("<Dm7 G7>").voicing().struct("x x x x").s("organ")'],
+    [...U13_GRID, U13_PUSH_BASS, 'chord("<Dm7 G7>").voicing().struct("x x x x").late(1/8).s("organ")'],
+    "organ stabs an eighth late: off the beat, between the hats' accents",
+  ),
+  w6(
+    "U13.L02",
+    "tb.velocity",
+    "velocity",
+    96,
+    [U13_KICK, U13_SNARE, 's("hh*16").gain(.5)', U13_FUNK_BASS, u13Gtr("")],
+    [
+      U13_KICK,
+      `${U13_SNARE}${U13_SNARE_VELOCITY}`,
+      's("hh*16").velocity("[1 .4 .7 .4]*4").gain(.5)',
+      U13_FUNK_BASS,
+      u13Gtr(U13_GTR_VELOCITY),
+    ],
+    "the vamp with no .velocity() anywhere against the hook (S1's two items)",
+  ),
+  w6(
+    "U13.L02",
+    "tb.velocity",
+    "velocity",
+    96,
+    [
+      U13_KICK,
+      's("~ ~ ~ ~ sd ~ ~ ~ ~ ~ ~ ~ sd ~ ~ ~")',
+      's("hh*16").velocity("[1 .4 .7 .4]*4").gain(.5)',
+      U13_FUNK_BASS,
+      u13Gtr(U13_GTR_VELOCITY),
+    ],
+    [
+      U13_KICK,
+      `${U13_SNARE}${U13_SNARE_VELOCITY}`,
+      's("hh*16").velocity("[1 .4 .7 .4]*4").gain(.5)',
+      U13_FUNK_BASS,
+      u13Gtr(U13_GTR_VELOCITY),
+    ],
+    "the three ghost notes at .3 are heard in the full groove (the hook against the hook without them)",
+  ),
+  w6(
+    "U13.L04",
+    "tb.meter.compound",
+    "meter",
+    60,
+    [
+      's("bd ~ ~ ~ ~ ~")',
+      's("~ ~ sd ~ sd ~")',
+      's("hh*6").velocity("[1 .5]*3").gain(.5)',
+      U13_BALLAD_BASS("x ~ x ~ x ~"),
+    ],
+    [
+      's("bd ~ ~ ~ ~ bd")',
+      's("~ ~ ~ sd ~ ~")',
+      's("hh*6").velocity("[1 .5 .6]*2").gain(.5)',
+      U13_BALLAD_BASS("x ~ ~ x ~ ~"),
+    ],
+    "six eighths as a waltz bar (three twos) against 6/8 (two threes), at 60 to the dotted quarter",
+    { cps: 60 / 120 },
+  ),
+  w6(
+    "U13.L05",
+    "tb.ply",
+    "ply",
+    76,
+    ['s("bd ~ bd ~")', 's("~ sd ~ sd")', 's("hh*4").gain(.5)', U13_BALLAD_BASS("x ~ x ~")],
+    [
+      's("bd ~ bd ~")',
+      's("~ sd ~ sd").ply("1 1 1 3")',
+      's("hh*4").ply(3).velocity("[1 .5 .6]*4").gain(.5)',
+      U13_BALLAD_BASS("x ~ x ~"),
+    ],
+    "hats in triplets and a snare roll with .ply(3)",
+    { cycles: 1 },
+  ),
+  w6(
+    "U14.L01",
+    "scale.mixolydian",
+    "scale",
+    104,
+    [riff("G3:major", "crunch")],
+    [riff("G3:mixolydian", "crunch")],
+    "the riff on G major and on G Mixolydian: one note lower",
+  ),
+  w6(
+    "U14.L03",
+    "scale.dorian",
+    "scale",
+    96,
+    [dorianVamp("D3:minor")],
+    [dorianVamp("D3:dorian")],
+    "D minor against D Dorian on the i–IV vamp: the raised 6th in the IV chord and the riff",
+  ),
+  w6(
+    "U14.L04",
+    "scale.lydian",
+    "scale",
+    84,
+    ['n("<[0,2,4] [1,3,5]>").scale("F3:major").s("pad")', riff("F4:major", "piano")],
+    ['n("<[0,2,4] [1,3,5]>").scale("F3:lydian").s("pad")', riff("F4:lydian", "piano")],
+    "F major against F Lydian on the pad and the piano: the raised 4th",
+  ),
+  w6(
+    "U14.L05",
+    "scale.phrygian",
+    "scale",
+    100,
+    ['n("<[0,2,4] [1,3,5]>").scale("E3:minor").struct("x ~ ~ x ~ ~ x ~").s("acgtr")'],
+    ['n("<[0,2,4] [1,3,5]>").scale("E3:phrygian").struct("x ~ ~ x ~ ~ x ~").s("acgtr")'],
+    "E minor's diminished ii against E Phrygian's ♭II on the guitar, three-three-two",
+  ),
+  w6(
+    "U14.L06",
+    "tb.pan",
+    "pan",
+    100,
+    U14_VAMP("", ""),
+    U14_VAMP(".pan(.3)", ""),
+    "the Rhodes moved left with .pan(.3) in the vamp",
+  ),
+  w6(
+    "U14.L06",
+    "tb.jux",
+    "jux",
+    100,
+    U14_VAMP(".pan(.3)", ""),
+    U14_VAMP(".pan(.3)", ".jux(rev)"),
+    "the riff doubled backwards on the right with .jux(rev)",
+  ),
+  w6(
+    "U15.L01",
+    "tb.n.chromatic",
+    "n",
+    92,
+    ['n("<[4 3 4 7] [5 4 5 ~]>").scale("C4:major").s("piano")', 'note("<c2 a1>").s("ebass").lpf(800)'],
+    ['n("<[4 3# 4 7] [5 4# 5 ~]>").scale("C4:major").s("piano")', 'note("<c2 a1>").s("ebass").lpf(800)'],
+    "the leaning notes ♯4 and ♯5 against the plain 4 and 5",
+  ),
+  w6(
+    "U17.L02",
+    "tb.scale.patterned",
+    "scale",
+    112,
+    [
+      'n("<[4 ~ 2 4] [2 ~ 0 ~]>").scale("C4:major").s("piano")',
+      'n("<0 5>").struct("x ~ x x").scale("C2:major").s("ebass").lpf(700)',
+    ],
+    [
+      'n("<[4 ~ 2 4] [2 ~ 0 ~]>").scale("<C4:major D4:major>").s("piano")',
+      'n("<0 5>").struct("x ~ x x").scale("<C2:major D2:major>").s("ebass").lpf(700)',
+    ],
+    "the lift: the second bar a whole step up, tune and bass",
+  ),
+];

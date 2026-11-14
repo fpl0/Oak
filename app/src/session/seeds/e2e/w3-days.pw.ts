@@ -219,7 +219,11 @@ test("back after three weeks: the one-tap loosen calls the ladder endpoint and t
   page,
   request,
 }) => {
-  await seed(request, "21-day gap");
+  // At midday: a seed places its days back from "now", and between 00:00 and 04:00 "now" is still yesterday's
+  // learner day (the 04:00 rollover), so the gap would read one day short of the 21 the point names.
+  await api(request, "PUT", "/api/dev/clock", { reset: true });
+  await api(request, "PUT", "/api/dev/clock", { advanceMs: (12 - new Date().getHours()) * 3_600_000 });
+  await api(request, "POST", "/api/dev/seed", { point: "21-day gap" });
   // A learner whose ladder had tightened to ±35¢ before the break.
   await api(request, "PUT", "/api/voice/ladder", { mode: "fixed", cents: 35 });
   await api(request, "PUT", "/api/voice/ladder", { mode: "auto" });

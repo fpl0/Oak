@@ -1,7 +1,7 @@
 // Shared domain DTOs: what crosses the wire between the app and the server. Each is a zod schema plus
 // its inferred type. Field names are camelCase; the SQLite columns they come from are in
 // docs/design/interfaces.md. Absent values are `null` in responses (never a missing key).
-import { DEGREES, FLAVOUR_IDS, type LearnerProfile, schemas } from "@oak/content-kit";
+import { DEGREES, FLAVOUR_IDS, type LearnerProfile, schemas, type TrackId } from "@oak/content-kit";
 import { z } from "zod";
 import {
   BACKEND_IDS,
@@ -176,6 +176,15 @@ export const LensPrefsSchema = z.strictObject({
   bassRoles: z.boolean().optional(),
   /** Wave 5: blue notes (♭3 ♭5 ♭7 against a major key) marked on roll and staff. Absent = on. Gated by scale.blues (U11.L03). */
   blueNotes: z.boolean().optional(),
+  /**
+   * Wave 6 (docs/design/wave6.md §4.3): the 3rd and the 7th of each chord marked on roll and staff, and the line
+   * they make through the changes. Absent = on. Gated by the seventh-chord unlock (U12).
+   */
+  guideTones: z.boolean().optional(),
+  /** Wave 6: the key in force along the timeline when a piece changes key. Absent = on. Gated by tb.scale.patterned. */
+  keyPlan: z.boolean().optional(),
+  /** Wave 6: the beat grid of a compound meter, or of triplets, on the roll. Absent = on. Gated by U13.L04 / L05. */
+  beatGrid: z.boolean().optional(),
 });
 export type LensPrefs = z.infer<typeof LensPrefsSchema>;
 export const LENS_IDS = ["degrees", "solfege", "noteNames"] as const;
@@ -186,6 +195,9 @@ export type ChordLensId = (typeof CHORD_LENS_IDS)[number];
 /** Wave 5: the form and line lenses (sections, bass roles, blue notes), stored beside the others. */
 export const LINE_LENS_IDS = ["sections", "bassRoles", "blueNotes"] as const;
 export type LineLensId = (typeof LINE_LENS_IDS)[number];
+/** Wave 6: the harmony and time lenses of U12–U17 (guide tones, the key plan, the compound / triplet beat grid). */
+export const MUSIC_LENS_IDS = ["guideTones", "keyPlan", "beatGrid"] as const;
+export type MusicLensId = (typeof MUSIC_LENS_IDS)[number];
 
 /** `settings` rows by key. `PUT /api/settings/:key` validates the value with this shape's entry. */
 export const SettingsSchema = z.object({
@@ -685,6 +697,178 @@ export const LessonProgressSchema = z.object({
 });
 export type LessonProgress = z.infer<typeof LessonProgressSchema>;
 
+// --- Wave 6 shared shapes (docs/design/wave6.md §5): advanced-track gates, the end of the core, album takes ----
+// Defined here because the progress, plan and summary schemas below carry them.
+
+/** The advanced tracks of contracts §2.6. */
+export const TRACK_IDS = ["J", "R", "A"] as const satisfies readonly TrackId[];
+export const TRACK_TITLES: Readonly<Record<TrackId, string>> = {
+  J: "Jazz Harmony",
+  R: "Advanced Rhythm",
+  A: "Arrangement & Sound",
+};
+/**
+ * The lesson gates of contracts §4.3 (the capstone gates J.CP1 → JC1 and so on are capstone gates, `capstones.gate`).
+ * A gate is met when every `requires` item is done: a checkpoint passed or soft-passed, a lesson completed. The
+ * server RECORDS each gate the moment it is met (and at start-up for a learner already past it), whether or not the
+ * lessons behind it exist yet: in Wave 6 no J or R lesson is authored, and the plan says so (`SessionPlan.tracks`).
+ * `A.side` (A1.L01–L04, optional side lessons) is the Wave 5 gate `SIDE_LESSON_GATE`, listed for completeness.
+ */
+export const TRACK_GATES = [
+  { gateId: "A.side", trackId: "A", requires: ["U03.L02"], opens: "A1.L01–L04", units: ["A1"] },
+  { gateId: "A.sound", trackId: "A", requires: ["U09.CP"], opens: "A1.L05–L07", units: ["A1"] },
+  { gateId: "A.arrangement", trackId: "A", requires: ["U10.CP"], opens: "A2", units: ["A2"] },
+  {
+    gateId: "J.main",
+    trackId: "J",
+    requires: ["U13.CP"],
+    opens: "J1, J2.L01–L03, J3",
+    units: ["J1", "J2", "J3"],
+  },
+  { gateId: "R.main", trackId: "R", requires: ["U13.CP"], opens: "R1–R3", units: ["R1", "R2", "R3"] },
+  { gateId: "J.chord-scales", trackId: "J", requires: ["U14.CP"], opens: "J2.L04", units: ["J2"] },
+  { gateId: "J.forms", trackId: "J", requires: ["U15.L06"], opens: "J4", units: ["J4"] },
+  { gateId: "J.reharmonization", trackId: "J", requires: ["U17.CP"], opens: "J5", units: ["J5"] },
+] as const satisfies readonly {
+  gateId: string;
+  trackId: TrackId;
+  requires: readonly string[];
+  opens: string;
+  units: readonly string[];
+}[];
+export type TrackGateId = (typeof TRACK_GATES)[number]["gateId"];
+/** One gate as the server reports it. */
+export const TrackGateStateSchema = z.object({
+  gateId: z.string(),
+  trackId: z.enum(TRACK_IDS),
+  /** What it opens, as the contracts name it: "J1, J2.L01–L03, J3". */
+  opens: z.string(),
+  requires: z.array(
+    z.object({
+      /** `U13.CP`, `U15.L06`. */
+      ref: z.string(),
+      kind: z.enum(["checkpoint", "lesson"]),
+      /** Plain copy: "U13 checkpoint passed", "U15.L06 completed". */
+      label: z.string(),
+      met: z.boolean(),
+    }),
+  ),
+  open: z.boolean(),
+  /** When the gate was recorded as met; `null` while closed. */
+  openedAt: Instant.nullable(),
+  /** Lessons behind this gate that this content version ships, and how many the contracts list. */
+  lessonsAuthored: z.number().int().nonnegative(),
+  lessonsTotal: z.number().int().nonnegative(),
+});
+export type TrackGateState = z.infer<typeof TrackGateStateSchema>;
+/** One advanced track: its gates, what is done, and what Today may plan from it. */
+export const TrackStateSchema = z.object({
+  trackId: z.enum(TRACK_IDS),
+  title: z.string(),
+  /** `open` once its first lesson gate is met (J and R: U13.CP; A: U03.L02). */
+  status: z.enum(["locked", "open"]),
+  openedAt: Instant.nullable(),
+  gates: z.array(TrackGateStateSchema),
+  /** Sessions done and in the track (contracts §2.6: J 34, R 20, A 20). */
+  sessionsDone: z.number().int().nonnegative(),
+  sessionsTotal: z.number().int().nonnegative(),
+  /** The next lesson of the track the learner may start now; `null` when none is open or none is authored. */
+  next: lessonId.nullable(),
+  /**
+   * The one honest line every surface shows for this track now: "Opens with the U13 checkpoint.", "Open. Its first
+   * lessons are still being written.", "Next: J1.L01 Swing Feel & the Ride." Never a count of what is missing.
+   */
+  note: z.string(),
+});
+export type TrackState = z.infer<typeof TrackStateSchema>;
+/** `GET /tracks`. */
+export const TracksSchema = z.object({ items: z.array(TrackStateSchema) });
+export type Tracks = z.infer<typeof TracksSchema>;
+
+/**
+ * The end of the core (contracts §2.5, version 1.6: the core is complete at session 185; ux §5.5 M7). `stage`:
+ * - `in-progress`: core lessons or checkpoints remain;
+ * - `lessons-done`: every core lesson is completed and every core checkpoint passed or soft-passed, and at least one
+ *   core capstone (C0–C7, X1, X2, CF-A, CF-T) is not released yet (a capstone never gates, contracts §7.6, so a
+ *   learner can stand here for a while);
+ * - `complete`: all of it, both finales released. `completedAt` is the instant the last piece landed.
+ * The same object rides on `SessionSummary.coreComplete` in the Coda of the session that completed the core, once.
+ */
+export const CORE_STAGES = ["in-progress", "lessons-done", "complete"] as const;
+export const CoreCompletionSchema = z.object({
+  stage: z.enum(CORE_STAGES),
+  completedAt: Instant.nullable(),
+  /**
+   * The session whose Coda carried the moment (its stored summary holds `coreComplete`), so the ending can be
+   * reopened with that day's cards; `null` before the core is complete, or when no session's Coda carried it.
+   */
+  sessionId: z.string().nullable().optional(),
+  /** Core map sessions done and in the core (lessons, checkpoints, capstone sessions, gym slots, CF-T). */
+  sessionsDone: z.number().int().nonnegative(),
+  sessionsTotal: z.number().int().positive(),
+  /** What is still open, in map order (at most 12): the next lessons, an unpassed checkpoint, an unreleased capstone. */
+  remaining: z.array(
+    z.object({ kind: z.enum(["lesson", "checkpoint", "capstone"]), id: z.string(), title: z.string() }),
+  ),
+  /** The core-complete milestone of `content/milestones.ts` (ms.07), reached or not. */
+  milestone: z
+    .object({ id: z.string(), title: z.string(), description: z.string(), reachedAt: Instant.nullable() })
+    .nullable(),
+  /** The road behind, in the learner's own numbers. Never compared with a plan, never "days missed". */
+  stats: z.object({
+    firstDay: Day.nullable(),
+    /** Learner days with a session, and sessions ended. */
+    days: z.number().int().nonnegative(),
+    sessions: z.number().int().nonnegative(),
+    activeMinutes: z.number().nonnegative(),
+    lessons: z.number().int().nonnegative(),
+    /** Album tracks released on Side A, transcriptions finished (X1, X2, CF-T and graded ladder songs), sketches saved. */
+    tracksReleased: z.number().int().nonnegative(),
+    transcriptions: z.number().int().nonnegative(),
+    sketches: z.number().int().nonnegative(),
+  }),
+  /**
+   * What the learner can now do: one can-do statement per area (compose, transcribe, hear, write, read, code,
+   * sing) at `solid` or `strong`, at most seven.
+   */
+  canDo: z.array(z.object({ candoId: canDoId, text: z.string(), status: z.enum(CANDO_STATUSES) })),
+  /** Side A of the album: released core tracks out of the core's capstones, and the newest track (the banner plays it). */
+  album: z.object({
+    released: z.number().int().nonnegative(),
+    total: z.number().int().positive(),
+    latestTrackId: z.string().nullable(),
+  }),
+  /**
+   * What stays open after the core, in the order Today offers it: the advanced tracks (with their honest note),
+   * the Transcription Gym (ladder L8 once CF-T is released, own audio), Studio, reviews, side lessons, and any
+   * capstone left unreleased. `available: false` with a `note` when it cannot be started yet.
+   */
+  open: z.array(
+    z.object({
+      kind: z.enum(["track", "gym", "studio", "review", "side-lesson", "capstone"]),
+      /** A track id, a capstone id, a lesson id; `null` for gym, Studio and reviews. */
+      id: z.string().nullable(),
+      title: z.string(),
+      note: z.string(),
+      available: z.boolean(),
+    }),
+  ),
+});
+export type CoreCompletion = z.infer<typeof CoreCompletionSchema>;
+
+/**
+ * One recording of an album track version (decision of 2026-11-13, d20: re-recording keeps both takes; nothing is
+ * deleted). Takes are numbered from 1 in the order recorded.
+ */
+export const AlbumTakeSchema = z.object({
+  take: z.number().int().positive(),
+  audioMime: z.string(),
+  durationS: z.number().nullable(),
+  bytes: z.number().int().nonnegative(),
+  recordedAt: Instant,
+});
+export type AlbumTake = z.infer<typeof AlbumTakeSchema>;
+
 export const CheckpointStatusSchema = z.object({
   cpId: checkpointId,
   status: z.enum(["locked", "open", "passed", "soft-passed", "failed"]),
@@ -717,7 +901,7 @@ export const CourseProgressSchema = z.object({
   gym: z.array(z.object({ gymId: z.string(), kind: z.enum(["ladder", "own-audio"]), at: Instant })),
   /** The next map item in the default order. */
   next: SessionIdSchema.nullable(),
-  /** Map sessions completed out of the 183 core (plus track sessions once a track is open). */
+  /** Map sessions completed out of the 185 of the core (plus track sessions once a track is open). */
   mapDone: z.number().int(),
   mapTotal: z.number().int(),
   /**
@@ -727,6 +911,9 @@ export const CourseProgressSchema = z.object({
   sideLessons: z
     .object({ done: z.number().int().nonnegative(), total: z.number().int().nonnegative() })
     .optional(),
+  /** Wave 6 (wave6.md §5.3, §5.5): the advanced tracks with their gates, and where the core stands. */
+  tracks: z.array(TrackStateSchema).optional(),
+  core: z.enum(CORE_STAGES).optional(),
 });
 export type CourseProgress = z.infer<typeof CourseProgressSchema>;
 
@@ -844,6 +1031,8 @@ export const LessonCompleteRequestSchema = z.strictObject({
 });
 export const LessonCompleteResultSchema = z.object({
   progress: LessonProgressSchema,
+  /** Wave 6: the advanced-track gates this completion met (U15.L06 opens `J.forms`), announced once. */
+  gatesOpened: z.array(TrackGateStateSchema).optional(),
   unlocks: z.array(UnlockSchema),
   canDo: z.array(CanDoEntrySchema),
   terms: z.array(TermIntroducedSchema),
@@ -921,6 +1110,12 @@ export const CheckpointOutcomeSchema = z.object({
   debts: z.array(skillId),
   opened: z.array(z.string()),
   unlocks: z.array(UnlockSchema),
+  /**
+   * Wave 6 (contracts §4.3): the advanced-track gates this pass (or soft pass) met, announced once: U13.CP opens
+   * `J.main` and `R.main`, U14.CP `J.chord-scales`, U17.CP `J.reharmonization`. Empty on a fail and on a retake of a
+   * checkpoint already passed.
+   */
+  gatesOpened: z.array(TrackGateStateSchema).optional(),
 });
 export type CheckpointOutcome = z.infer<typeof CheckpointOutcomeSchema>;
 
@@ -1035,6 +1230,30 @@ export const SessionPlanSchema = z.object({
     })
     .nullable()
     .optional(),
+  /**
+   * Wave 6 (contracts §2.5; docs/design/wave6.md §5.2): this session fills the every-5th transcription slot, and
+   * with what: a gym session (`kind: "gym"`), the next CF-T session while CF-T is open and unfinished (`kind:
+   * "capstone"`, `mapItemId: "CF-T.S2"`), or an `X#` session that was next anyway. `null` on other days.
+   */
+  slot: z
+    .object({ fills: z.enum(["gym", "cf-t", "x"]), sinceLast: z.number().int().nonnegative() })
+    .nullable()
+    .optional(),
+  /**
+   * Wave 6 (contracts §2.6, §4.3; wave6.md §5.3): the advanced tracks whose gate is met, while they have no lesson
+   * to plan. `note` is the honest line Today shows ("The Jazz and Rhythm tracks are open. Their first lessons are
+   * still being written."). `null` before any gate is met or once a track lesson can be planned.
+   */
+  tracks: z
+    .object({ open: z.array(z.enum(["J", "R", "A"])), lessonsAuthored: z.boolean(), note: z.string() })
+    .nullable()
+    .optional(),
+  /**
+   * Wave 6 (wave6.md §5.5): where the learner stands at the end of the core. `lessons-done`: every core lesson and
+   * checkpoint is behind them and a capstone is still open (it is then today's session or an alternative);
+   * `complete`: session 185 is done and today is a review, gym or Studio day. Absent or `in-progress` before.
+   */
+  core: z.enum(["in-progress", "lessons-done", "complete"]).optional(),
 });
 export type SessionPlan = z.infer<typeof SessionPlanSchema>;
 
@@ -1042,6 +1261,13 @@ export const SessionStartSchema = z.strictObject({
   kind: z.enum(SESSION_KINDS),
   mapItemId: SessionIdSchema.nullable(),
   targetMinutes: TargetMinutesSchema,
+  /**
+   * Wave 6 (decision of 2026-11-13, d21; docs/design/wave6.md §5.6): the browser tab's own id (`tabId()` of
+   * `app/src/lib/tab-session.ts`, kept in sessionStorage). A second tab or browser starts its OWN session; the
+   * same tab starting again on the same learner day (a reload, a retry) gets its open session back. Absent (an
+   * older client): the caller is one anonymous tab.
+   */
+  tabId: z.string().min(8).max(64).optional(),
 });
 export const SESSION_PHASES = ["idle", "warmup", "main", "make", "coda", "done"] as const;
 /** `sessions` row. */
@@ -1056,6 +1282,8 @@ export const SessionSchema = z.object({
   endedAt: Instant.nullable(),
   activeMinutes: z.number(),
   phase: z.enum(SESSION_PHASES),
+  /** Wave 6 (d21): the tab that started it (`SessionStart.tabId`); `null` or absent for an older client's session. */
+  tabId: z.string().nullable().optional(),
 });
 export type Session = z.infer<typeof SessionSchema>;
 export const SessionHeartbeatSchema = z.strictObject({
@@ -1080,6 +1308,14 @@ export const SessionSummarySchema = z.object({
   listeningNote: z.enum(["offer", "auto", "off"]),
   teaser: z.object({ mapItemId: SessionIdSchema, title: z.string() }).nullable(),
   /**
+   * Wave 6 (wave6.md §5.3, §5.5). `gatesOpened`: the advanced-track gates met in this session (the U13.CP Coda:
+   * "The Jazz and Rhythm tracks are open"), each announced once. `coreComplete`: set in the summary of the session
+   * that completed the core (stage `complete`), and only there; the Coda then shows the finale card instead of a
+   * teaser. `null` or absent on every other day.
+   */
+  gatesOpened: z.array(TrackGateStateSchema).optional(),
+  coreComplete: CoreCompletionSchema.nullable().optional(),
+  /**
    * Wave 5 (carry-over c10, docs/design/wave5.md §5.4): what a gym day's Coda shows — the ladder item (level,
    * realism, a realism change or an offered level-up, announced once) or the own-audio project (its checklist and
    * versions today). `null` on other days; absent from older servers.
@@ -1092,14 +1328,14 @@ export const SessionSummarySchema = z.object({
       title: z.string(),
       ladder: z
         .object({
-          level: z.number().int().min(1).max(6),
+          level: z.number().int().min(1).max(8),
           realism: z.number().int().min(0).max(4),
           bestScore: z.number().min(0).max(1).nullable(),
           gradedPass: z.boolean(),
           realismChange: z
             .object({ from: z.number().int().min(0).max(4), to: z.number().int().min(0).max(4) })
             .nullable(),
-          levelUp: z.object({ to: z.number().int().min(1).max(6), reason: z.string() }).nullable(),
+          levelUp: z.object({ to: z.number().int().min(1).max(8), reason: z.string() }).nullable(),
         })
         .nullable(),
       ownAudio: z
@@ -1236,6 +1472,13 @@ export const AlbumTrackVersionSchema = z.object({
   createdAt: Instant,
   /** Wave 4: whether the review's liner note shows in the album for this version (absent: not chosen yet). */
   includeReviewNote: z.boolean().optional(),
+  /**
+   * Wave 6 (d20): every recording of this version, oldest first, and the one that plays by default (`currentTake`:
+   * the newest unless the learner chose an older one). `hasAudio`, `audioMime` and `durationS` above describe the
+   * current take. Absent from older servers (then there is at most one recording).
+   */
+  takes: z.array(AlbumTakeSchema).optional(),
+  currentTake: z.number().int().positive().nullable().optional(),
 });
 export type AlbumTrackVersion = z.infer<typeof AlbumTrackVersionSchema>;
 /** `album_tracks` row. Side A: core capstones; side B: advanced capstones; Bside: promoted sketches. */
@@ -1407,7 +1650,16 @@ export const TranscriptionDetailSchema = TranscriptionSchema.extend({
     .object({
       pickup: PickupSpecSchema.nullable(),
       swing: SwingSpecSchema.nullable(),
+      /** `null` for an L8 standard until its form map passed or was revealed (the form is what the stage asks). */
       form: z.string().nullable(),
+      /**
+       * Wave 6 (contracts §6.8): the keys of a tune that changes key, by bar (`SongDef.keyPlan`; the first entry is
+       * the song's key); `null` or absent when it stays in one key. The key ribbon reads it.
+       */
+      keyPlan: z
+        .array(z.strictObject({ bar: z.number().int().min(0), key: KeySpecSchema }))
+        .nullable()
+        .optional(),
     })
     .optional(),
 });
@@ -1942,8 +2194,13 @@ export type DevClockSet = z.infer<typeof DevClockSetSchema>;
  */
 export const SessionDaySchema = z.object({
   day: Day,
-  /** The session left open today (also `bootstrap.openSession`). */
+  /**
+   * The session left open today (also `bootstrap.openSession`). Wave 6 (d21): with `?tab=<tabId>` it is THAT tab's
+   * open session (`null` when the tab has none, even if another tab has one); without `tab` the newest open one.
+   */
   open: SessionSchema.nullable(),
+  /** Wave 6 (d21): every session open today, oldest first (two tabs: two). Absent from older servers. */
+  openSessions: z.array(SessionSchema).optional(),
   /** Sessions ended today, oldest first. */
   ended: z.array(SessionSchema),
   /**
@@ -2074,13 +2331,23 @@ export type Wave3SeedPoint = (typeof WAVE3_SEED_POINTS)[number];
 
 const gymId = z.string().regex(/^GYM\.\d{2}$/);
 const capstoneSessionId = idSchema("capstoneSession");
-/** Wave 5: L5 (PD folk, per phrase) and L6 (blues, staged) join the generated L1–L4 (contracts §2.9). */
-const ladderLevel = z.number().int().min(1).max(6);
+/**
+ * Wave 5: L5 (PD folk, per phrase) and L6 (blues, staged) join the generated L1–L4 (contracts §2.9). Wave 6: L7 (the
+ * learner's own audio, self-assessed: reported, never an item) and L8 (a full arrangement of a public-domain
+ * standard, staged form → bass → changes → melody; docs/design/wave6.md §5.4).
+ */
+const ladderLevel = z.number().int().min(1).max(8);
+/** A level an item can be drawn at or the ladder set to: 1–6 and 8. L7 is own audio: a project, never an item. */
+const ladderItemLevel = ladderLevel.refine((l) => l !== 7, {
+  message: "L7 is your own audio, not a ladder item",
+});
 /**
  * Wave 5: ladder stages. L3 (generated chords): `bass` → `quality` → `rn`. L6 (blues and standards, X2's order):
- * `bass` → `changes` → `melody`. L5 is per phrase and has no stages.
+ * `bass` → `changes` → `melody`. L5 is per phrase and has no stages. Wave 6, L8 (a standard, CF-T's order):
+ * `form` → `bass` → `changes` → `melody`; `form` is the form map (an answer, no code) and is appended here so the
+ * Wave 5 order of the array is unchanged.
  */
-export const LADDER_STAGES = ["bass", "quality", "rn", "changes", "melody"] as const;
+export const LADDER_STAGES = ["bass", "quality", "rn", "changes", "melody", "form"] as const;
 export type LadderStageId = (typeof LADDER_STAGES)[number];
 const realismLevel = z.number().int().min(0).max(4);
 
@@ -2097,7 +2364,8 @@ export const CapstoneCheckStateSchema = z.object({
   checkId: z.string(),
   /** 1-based phrase, or `[from, to]` for several phrases checked together. */
   phrase: z.union([z.number().int().min(1), z.tuple([z.number().int().min(1), z.number().int().min(1)])]),
-  layer: z.enum(["melody", "bass", "chords"]),
+  /** Wave 6: `form` is the form map of a transcribe capstone session (content-kit `FormMapCheck`, CF-T.S1). */
+  layer: z.enum(["melody", "bass", "chords", "form"]),
   /** The stage of a staged chords check; `null` otherwise. */
   stage: z.enum(["bass", "quality", "rn"]).nullable(),
   /** Locked until the stage before it passed. */
@@ -2258,6 +2526,14 @@ export const OWN_AUDIO_CHECKLIST = [
   { id: "bass", label: "The bass notes match the recording's bass" },
   { id: "chords", label: "The chords change where the recording's chords change" },
 ] as const;
+/**
+ * Wave 6 (ladder L8 on own audio, Transcribe's full-arrangement mode): the row the checklist gains once the
+ * recording's sections are mapped. Self-reported evidence for the form skills (`fam.frm.sections`), weight 0.3.
+ */
+export const OWN_AUDIO_FORM_ROW = {
+  id: "form",
+  label: "The sections start where the recording's sections start",
+} as const;
 /** `PUT /transcriptions/:id/settings`: remember the player and the notes (partial). */
 export const TranscriptionSettingsPatchSchema = TranscriptionSettingsSchema.partial().refine(
   (b) => Object.keys(b).length > 0,
@@ -2295,7 +2571,7 @@ export const LadderNextSchema = z.strictObject({
   sessionId: z.string().nullable(),
   gymId: gymId.nullable(),
   /** Default: the learner's level. A lower level is allowed (practice); a higher one only when offered. */
-  level: ladderLevel.optional(),
+  level: ladderItemLevel.optional(),
   /** Default: a fresh seed. A seed replays the same item (tests, "try this one again"). */
   seed: z.number().int().nonnegative().optional(),
   /** Wave 5, L5/L6: the repertoire song to work (`ladder.songs`); default: the next unfinished one at the level. */
@@ -2306,7 +2582,7 @@ export type LadderNext = z.infer<typeof LadderNextSchema>;
 export const LadderItemSchema = z.object({
   /** = the transcription project ID; submissions go to `/ladder/items/:id/submissions`. */
   itemId: z.string(),
-  level: ladderLevel,
+  level: ladderItemLevel,
   realism: realismLevel,
   seed: z.number().int().nonnegative(),
   /**
@@ -2321,6 +2597,11 @@ export const LadderItemSchema = z.object({
     key: KeySpecSchema,
     pickup: PickupSpecSchema.nullable(),
     bars: z.number().int().positive(),
+    /** Wave 6: the keys of a tune that changes key, by bar (`SongDef.keyPlan`); absent when it stays in one key. */
+    keyPlan: z
+      .array(z.strictObject({ bar: z.number().int().min(0), key: KeySpecSchema }))
+      .nullable()
+      .optional(),
   }),
   project: TranscriptionDetailSchema,
   /**
@@ -2345,6 +2626,16 @@ export const LadderSubmitSchema = z.strictObject({
   stage: z.enum(LADDER_STAGES).optional(),
   /** Wave 5, L5: the 1-based phrase this submission answers. */
   phrase: z.number().int().min(1).optional(),
+  /**
+   * Wave 6, L8 `stage: "form"`: the form map (a label per section and the 1-based bar each starts on); `code` is
+   * then the draft so far (may be empty). Graded on the server by `@oak/grader` `gradeFormMap`.
+   */
+  formMap: z
+    .strictObject({
+      sections: z.array(z.string().min(1).max(24)).min(1).max(16),
+      bars: z.array(z.number().int().min(1)).min(1).max(16),
+    })
+    .optional(),
   /** Hint ladder state of the item (rung 4 = revealed: no graded pass). */
   rung: RungSchema,
   idempotencyKey: IdempotencyKeySchema.optional(),
@@ -2364,7 +2655,7 @@ export const LadderSubmitResultSchema = z.object({
 });
 export type LadderSubmitResult = z.infer<typeof LadderSubmitResultSchema>;
 /** `PUT /ladder`: take an offered level-up, or move down a level. */
-export const LadderLevelSetSchema = z.strictObject({ level: ladderLevel });
+export const LadderLevelSetSchema = z.strictObject({ level: ladderItemLevel });
 export type LadderLevelSet = z.infer<typeof LadderLevelSetSchema>;
 
 // the Transcription Gym (contracts §2.5, §9.1) ---------------------------------------------------------
@@ -2395,6 +2686,21 @@ export const GymPlanSchema = z.object({
   history: z.array(GymSessionSchema),
   /** X1's gate, while X1 is not open (Today: "Two more gym sets open X1"). */
   x1: CapstoneGateSchema.nullable(),
+  /**
+   * Wave 6 (contracts §2.5 "What fills a slot"): CF-T, once U15.L01 is completed. While it is open and unfinished
+   * the next transcription slot is `nextSessionId` (`takesSlot: true`, and `next` above is `null`); once released
+   * the slots are gym sessions again. `null` before U15.L01.
+   */
+  cfT: z
+    .object({
+      status: z.enum(["open", "in_progress", "released"]),
+      nextSessionId: capstoneSessionId.nullable(),
+      takesSlot: z.boolean(),
+      /** The standard the learner picked (`song.five-foot-two` …); `null` before CF-T.S1 starts. */
+      songId: z.string().nullable(),
+    })
+    .nullable()
+    .optional(),
 });
 export type GymPlan = z.infer<typeof GymPlanSchema>;
 
@@ -2496,7 +2802,8 @@ export const LadderSongSchema = z.object({
   songId: z.string(),
   title: z.string(),
   year: z.union([z.number().int(), z.literal("trad")]),
-  level: z.union([z.literal(5), z.literal(6)]),
+  /** Wave 6: 8 is a standard for L8 and CF-T (Five Foot Two, Ain't She Sweet, Bye Bye Blackbird). */
+  level: z.union([z.literal(5), z.literal(6), z.literal(8)]),
   /** Phrases (L5) as the lead sheet numbers bars, 1-based inclusive. */
   phrases: z.array(z.tuple([z.number().int().min(0), z.number().int().min(0)])),
   /** `locked` before its `availableFrom` lesson (Drunken Sailor: U14) or while its answer key is unverified. */
@@ -2505,7 +2812,7 @@ export const LadderSongSchema = z.object({
   lockedReason: z.string().nullable(),
   /** L5: 1-based phrases with a graded pass (L6: the melody lines passed, = `passedLines`). `passedStages`: L6 stages passed, in order. */
   passedPhrases: z.array(z.number().int().min(1)),
-  passedStages: z.array(z.enum(["bass", "changes", "melody"])),
+  passedStages: z.array(z.enum(["bass", "changes", "melody", "form"])),
   /** Wave 5 (additive), L6: the 1-based 4-bar melody lines with a pass, while the melody stage is open. */
   passedLines: z.array(z.number().int().min(1)).optional(),
 });
@@ -2558,3 +2865,63 @@ export const WAVE5_SEED_POINTS = [
   "imported own-audio (c2)",
 ] as const;
 export type Wave5SeedPoint = (typeof WAVE5_SEED_POINTS)[number];
+
+// --- Wave 6 additions (docs/design/wave6.md §5) ----------------------------------------------------
+// Sevenths, rhythm II, modes, secondary dominants, borrowed chords, modulation; C6, C7 and the core finale; the
+// advanced-track gates; the end of the core; ladder L8. Additive: existing shapes only gained optional fields
+// (above; the shared shapes `TrackStateSchema`, `CoreCompletionSchema` and `AlbumTakeSchema` are defined before the
+// progress schemas that carry them); every new endpoint answers a typed 501 until the server engineer builds it
+// (`WAVE6_ENDPOINTS` in contract.ts).
+
+/** `GET /lessons/:id/sketch` (d15): the learner's latest saved Make sketch of that lesson, for a Make that builds on it. */
+export const LessonSketchSchema = z.object({
+  lessonId,
+  /** The newest unarchived `lesson-make` sketch whose origin is this lesson, with its versions; `null` when none. */
+  sketch: SketchDetailSchema.nullable(),
+});
+export type LessonSketch = z.infer<typeof LessonSketchSchema>;
+
+/** `PUT /album/tracks/:id/versions/:v/take` (d20): choose which recording plays by default and is exported. */
+export const AlbumTakeChooseSchema = z.strictObject({ take: z.number().int().positive() });
+export type AlbumTakeChoose = z.infer<typeof AlbumTakeChooseSchema>;
+
+/** The standards CF-T and ladder L8 draw from at v1 (contracts §2.4 "Repertoire limits"). */
+export const CF_T_SONG_IDS = ["song.five-foot-two", "song.aint-she-sweet", "song.bye-bye-blackbird"] as const;
+/** The lesson whose completion opens CF-T (contracts §2.4: "U15.L01 reached; runs in gym slots"). */
+export const CF_T_GATE = "U15.L01" as const;
+
+/**
+ * Dev seed points Wave 6 e2e needs (`POST /dev/seed`, `point`). The server engineer implements them FIRST;
+ * `GET /dev/seed` lists what exists; wave6.md §6 says what each must contain. Until a lesson they walk through is
+ * authored the point answers 400 naming it.
+ */
+export const WAVE6_SEED_POINTS = [
+  "after X2 (U12.L02 next)",
+  "after U12.L05",
+  "after U13.L03",
+  "U13.CP due",
+  "tracks open (after U13.CP)",
+  "after U14.L03",
+  "U14.CP due",
+  "C6 open",
+  "C6 released",
+  "CF-T open (U15.L01 done)",
+  "CF-T.S2 done",
+  "after U15.L05",
+  "after U16.L03",
+  "after U17.L02",
+  "U17.CP due",
+  "C7 open",
+  "C7.S2 done",
+  "C7 released",
+  "CF-A open",
+  "CF-A.S3 done",
+  "core complete",
+  "ladder L8",
+  // Carry-overs that need their own state (wave6.md §6): d13 a learner part-way through the old three-session C3;
+  // d20 a released track with two takes; d21 a session left open by another tab.
+  "C3.S3 in progress (d13)",
+  "two takes (d20)",
+  "second tab (d21)",
+] as const;
+export type Wave6SeedPoint = (typeof WAVE6_SEED_POINTS)[number];

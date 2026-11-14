@@ -3,7 +3,7 @@
 // blue notes and dominant sevenths, every control A1.L01–L04 and U08.L05 teach heard in its own lesson loop, the
 // visual probes' defaults pinned against superdough's real output, Oak's scope on one track, a Band that follows
 // the learner's sections, the Bands of all four flavours as a mix, and a 90-second C3 arrangement that preloads
-// with no skipped first note and leaves CPU headroom. Offline renders run through the production prebake on the
+// with no skipped first note (its CPU headroom moved to wave6.pw.ts, on the CF-A single). Offline renders run through the production prebake on the
 // locked pack (port 5192). Results are written to packages/strudel/sound-wave5.json (committed).
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -20,7 +20,6 @@ import {
   BLUES_NOTES,
   BLUES_SOUNDS,
   C3_ARRANGEMENT,
-  C3_BARS,
   C3_CHORUS_CYCLE,
   C3_CHORUS_ONLY,
   DOMINANT_SEVENTHS,
@@ -804,126 +803,7 @@ test("a 90-second C3 arrangement: the chorus's new sounds are warmed before bar 
   for (const s of C3_CHORUS_ONLY) expect(s.length).toBeGreaterThan(0);
 });
 
-test("CPU headroom for a full C3 arrangement: no underrun or stall live at its tempo and at twice it; offline faster than real time", async ({
-  page,
-}) => {
-  test.setTimeout(240_000);
-  await open(page);
-  const r = await page.evaluate(
-    async ([code, bars]) => {
-      const w = (window as unknown as W).__oak;
-      // 1. Offline: the whole 90 s through the production prebake (every voice, reverb, the soundfont pitches).
-      const h = w.createHarness({ frameUrl: "/render.html", seconds: 90, timeoutMs: 180_000 });
-      const t0 = performance.now();
-      // The render frame evaluates a plain pattern at a given cps: no `setcpm`, no labels (`.p` is the repl's).
-      const lines = code.split("\n").filter((l: string) => !l.startsWith("setcpm("));
-      const consts = lines.filter((l: string) => l.startsWith("const "));
-      const tracks = lines
-        .filter((l: string) => !l.startsWith("const "))
-        .map((l: string) => l.replace(/^\w+:\s*/, ""));
-      const out = await h.renderInFrame(`${consts.join("\n")}\nstack(${tracks.join(",\n")})`, bars, 96 / 240);
-      const renderMs = performance.now() - t0;
-      // the same 90 s with the kick alone: what the machine renders when the graph is nearly empty
-      const baseline = await h.renderInFrame('s("bd*4")', bars, 96 / 240);
-      let peak = 0;
-      for (const x of out.left) peak = Math.max(peak, Math.abs(x));
-      // 2. Live: 8 s of the first chorus at its own tempo in an editor, with long tasks and audio glitches counted.
-      const longTasks: number[] = [];
-      const obs = new PerformanceObserver((list) => {
-        for (const entry of list.getEntries()) longTasks.push(Math.round(entry.duration));
-      });
-      try {
-        obs.observe({ type: "longtask", buffered: false });
-      } catch {
-        // not supported
-      }
-      const ctx = w.oak.ctx as AudioContext & {
-        playbackStats?: { underrunEvents?: number; underrunDuration?: number };
-      };
-      const statsBefore = ctx.playbackStats ? { ...ctx.playbackStats } : null;
-      const chorusFirst = code.replace(/arrange\(\[8, (\w+)\], \[8, (\w+)\]/g, "arrange([8, $2], [8, $1]");
-      // Chrome's render capacity (where the browser has it): the audio thread's load, 0–1, per second.
-      type Capacity = EventTarget & { start(o: { updateInterval: number }): void; stop(): void };
-      const capacity = (ctx as unknown as { renderCapacity?: Capacity }).renderCapacity;
-      const live = async (id: string, code: string, ms: number) => {
-        const before = ctx.playbackStats ? { ...ctx.playbackStats } : null;
-        const loads: { average: number; peak: number }[] = [];
-        const onLoad = (ev: Event) => {
-          const u = ev as Event & { averageLoad: number; peakLoad: number };
-          loads.push({
-            average: Math.round(u.averageLoad * 1000) / 1000,
-            peak: Math.round(u.peakLoad * 1000) / 1000,
-          });
-        };
-        if (capacity) {
-          capacity.addEventListener("update", onLoad);
-          capacity.start({ updateInterval: 1 });
-        }
-        longTasks.length = 0;
-        const e = w.mountImperative(id, code);
-        const played = await e.play();
-        const lateBefore = w.logs.filter((l: { message: string }) => /late|behind/i.test(l.message)).length;
-        const level = await w.maxLevel(ms);
-        w.oak.stopAll();
-        await new Promise((x) => setTimeout(x, 200));
-        const after = ctx.playbackStats ? { ...ctx.playbackStats } : null;
-        if (capacity) {
-          capacity.stop();
-          capacity.removeEventListener("update", onLoad);
-        }
-        const late =
-          w.logs.filter((l: { message: string }) => /late|behind/i.test(l.message)).length - lateBefore;
-        e.dispose();
-        return {
-          loads,
-          ok: played.ok,
-          rms: level.rms,
-          longTasks: [...longTasks],
-          late,
-          underruns: before && after ? (after.underrunEvents ?? 0) - (before.underrunEvents ?? 0) : null,
-        };
-      };
-      // the densest section at its own tempo, then the whole piece at twice the tempo (twice the notes a second)
-      const chorus = await live("oak_cpu_0_", chorusFirst, 8000);
-      const double = await live("oak_cpu_1_", code.replace("setcpm(96/4)", "setcpm(192/4)"), 10000);
-      obs.disconnect();
-      return {
-        audioSec: out.left.length / 44100,
-        renderMs: Math.round(renderMs),
-        timings: out.timings,
-        baseline: baseline.timings,
-        haps: out.haps,
-        peak,
-        playbackStats: statsBefore !== null,
-        live: { chorus, double },
-      };
-    },
-    [C3_ARRANGEMENT, C3_BARS] as const,
-  );
-  // The audio graph's own work: the voices are queued first (loads included), then rendered.
-  const graphMs = r.timings?.renderMs ?? r.renderMs;
-  const speed = r.audioSec / (graphMs / 1000);
-  const baselineSpeed = r.audioSec / ((r.baseline?.renderMs ?? 1) / 1000);
-  record("cpu", {
-    rule: "live (what decides): 8 s of the chorus at its tempo and 10 s of the whole piece at twice its tempo, with no audio underrun (AudioContext.playbackStats), no main-thread stall over 200 ms and, where Chrome reports AudioContext.renderCapacity, an audio-thread peak load under 0.7; offline: 90 s renders faster than real time (recorded with a kick-only baseline; an offline render keeps ended voices connected until the main thread can release them, so its cost grows with length and is not the live headroom)",
-    audioSec: r.audioSec,
-    haps: r.haps,
-    wallMs: r.renderMs,
-    timings: r.timings,
-    realtimeFactor: Math.round(speed * 10) / 10,
-    baselineRealtimeFactor: Math.round(baselineSpeed * 10) / 10,
-    peakDbfsBeforeLimiter: Math.round(20 * Math.log10(r.peak) * 10) / 10,
-    playbackStats: r.playbackStats,
-    live: r.live,
-  });
-  expect(r.audioSec).toBeCloseTo(90, 0);
-  expect(speed).toBeGreaterThan(1);
-  for (const k of ["chorus", "double"] as const) {
-    const l = r.live[k];
-    expect(l.ok, k).toBe(true);
-    expect(l.rms, k).toBeGreaterThan(0.01);
-    expect(Math.max(0, ...l.longTasks), k).toBeLessThan(200);
-    if (l.underruns !== null) expect(l.underruns, k).toBe(0);
-    for (const load of l.loads) expect(load.peak, k).toBeLessThan(0.7);
-  }
-});
+// The C3 CPU-headroom test (90 s offline render, 8 s of the chorus live, 10 s at twice the tempo) was superseded in
+// Wave 6 by wave6.pw.ts "CF-A: a two-minute single…": a longer, denser piece played live from start to end at four
+// times its tempo and its densest section at its own, with the same underrun, stall and render-capacity gates. Its
+// last measurement stays in sound-wave5.json ("cpu").

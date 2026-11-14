@@ -50,8 +50,8 @@ describe("build", () => {
     const course = JSON.parse(readFileSync(join(tmp, "a", "course-index.json"), "utf8")) as {
       sessions: { id: string; defaultOrder: number | null; earStages?: string[] }[];
     };
-    expect(course.sessions.length).toBe(257);
-    expect(course.sessions.filter((s) => s.defaultOrder !== null).length).toBe(183);
+    expect(course.sessions.length).toBe(259);
+    expect(course.sessions.filter((s) => s.defaultOrder !== null).length).toBe(185);
     expect(course.sessions.find((s) => s.id === "U03.L02")?.earStages).toEqual(["B"]);
     const graph = JSON.parse(readFileSync(join(tmp, "a", "skill-graph.json"), "utf8")) as {
       nodes: unknown[];
@@ -113,8 +113,9 @@ describe("ID ledger (contracts §1.1 rule 4)", () => {
   });
   test("step, exercise and example IDs are ledgered once their unit is released", () => {
     const { lock } = updateLock([], {
-      exercise: ["U01.L02/silence-beat-3", "U12.L01/draft-name", "A1.L02/released-side"],
-      step: ["U02.L01/S5", "U12.L01/S1", "A1.L02/S1"],
+      // J1 (the jazz track) is not released yet: its IDs stay free until it is.
+      exercise: ["U01.L02/silence-beat-3", "J1.L01/draft-name", "A1.L02/released-side"],
+      step: ["U02.L01/S5", "J1.L01/S1", "A1.L02/S1"],
     });
     expect(lock.map((e) => e.id)).toEqual([
       "A1.L02/released-side",

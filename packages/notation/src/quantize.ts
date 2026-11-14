@@ -108,9 +108,11 @@ function findWindows<S>(segs: Seg<S>[], g: Grid): TWindow[] | WindowFailure {
   for (const x of points) {
     if (covered(x)) continue;
     let found: TWindow | null = null;
-    for (const level of g.windowLevels) {
-      const w = level.find((c) => R.lt(c.start, x) && R.lt(x, c.end));
-      if (!w) continue;
+    // Every candidate of a level that holds x, in order (two-eighth windows of a compound beat overlap).
+    const candidates = g.windowLevels.flatMap((level) =>
+      level.filter((c) => R.lt(c.start, x) && R.lt(x, c.end)),
+    );
+    for (const w of candidates) {
       const size = R.sub(w.end, w.start);
       const crossing = segs.some(
         (s) =>
@@ -295,6 +297,43 @@ function decompose<S>(g: Grid, segs: Seg<S>[], windows: TWindow[], wholeBar: boo
   return items;
 }
 
+/**
+ * Wave 6: where a rest that leaves a tuplet is cut. A rest with one end off the grid and the other on it, reaching
+ * over a beat (the silence after a single triplet eighth, up to the end of the bar), is cut at the beat next to its
+ * off-grid end, so the tuplet stays inside that beat and the rest of the silence is written in plain values
+ * (`(3 C2 z4` then `z4 z8`), not as one bracket over the whole bar. A rest inside a tuplet (both ends off the grid:
+ * the middle of `[c ~ e]`) is left alone.
+ */
+function restCuts<S>(g: Grid, segs: Seg<S>[]): Rat[] {
+  const out: Rat[] = [];
+  for (const s of segs) {
+    if (s.slot !== null) continue;
+    const startOff = !onBinaryGrid(s.start, FINEST);
+    const endOff = !onBinaryGrid(s.end, FINEST);
+    if (startOff === endOff) continue;
+    const cut = startOff ? nextBeat(g, s.start) : beatStart(g, s.end);
+    if (R.lt(s.start, cut) && R.lt(cut, s.end)) out.push(cut);
+  }
+  return out;
+}
+
+/** A window no longer than the beat it lies in. */
+function isBeatWindow(g: Grid, w: Window): boolean {
+  return R.lte(w.end, nextBeat(g, w.start));
+}
+/**
+ * Whether a tuplet window holds what a reader cannot count: a dotted value, or one note written as two tied values
+ * inside the bracket. (`dotsOnly`: ties inside the bracket are accepted, for the per-beat rewrite.)
+ */
+function crowded<S>(items: QItem<S>[], w: Window, dotsOnly = false): boolean {
+  const group = items.filter((it) => it.inTuplet && R.lte(w.start, it.start) && R.lt(it.start, w.end));
+  return group.some((it, i) => {
+    const dotted = (writtenOf(it.written)?.dots ?? 0) > 0;
+    const tiedInside = !dotsOnly && it.slot !== null && it.tieToNext && group[i + 1]?.slot === it.slot;
+    return dotted || tiedInside;
+  });
+}
+
 function marksAndBeams<S>(g: Grid, items: QItem<S>[], windows: TWindow[]): number {
   let maxR = 0;
   for (const w of windows) {
@@ -329,7 +368,7 @@ export function quantizeBar<S>(g: Grid, input: Seg<S>[], cuts: Rat[]): BarResult
   const warnings: Omit<NotationWarning, "bar">[] = [];
   let approximate = false;
   const wholeBar = input.length === 1 && input[0]?.slot === null;
-  let segs = splitAt(input, cuts);
+  let segs = splitAt(input, [...cuts, ...restCuts(g, input)].sort(R.cmp));
   let found = findWindows(segs, g);
   if (typeof found === "string") {
     approximate = true;
@@ -348,12 +387,38 @@ export function quantizeBar<S>(g: Grid, input: Seg<S>[], cuts: Rat[]): BarResult
     );
     found = [];
   }
-  const windows = found;
+  let windows = found;
   segs = splitAt(
     segs,
     windows.flatMap((w) => [w.start, w.end]),
   );
   let items = decompose(g, segs, windows, wholeBar);
+  // Wave 6 (U13.L05): a tuplet wider than a beat that needs dotted or tied values inside its bracket (a line pushed
+  // by a triplet eighth: `(3:2:5 z4 E6 G6 c6 C2`) hides every beat. When the same notes can be written as tuplets
+  // inside single beats, tied over the beats, they are: `(3 z4 E2- (3 E4 G2- …`, the way a shuffle push is printed.
+  // A plain quarter-note or half-note triplet keeps its one bracket.
+  if (items && windows.some((w) => !isBeatWindow(g, w) && crowded(items as QItem<S>[], w))) {
+    const byBeat = splitAt(segs, g.beats);
+    const again = findWindows(byBeat, g);
+    const oneRatio = (ws: TWindow[]) => ws.every((w) => w.p === ws[0]?.p && w.q === ws[0]?.q);
+    if (
+      typeof again !== "string" &&
+      again.length > 0 &&
+      again.every((w) => isBeatWindow(g, w)) &&
+      oneRatio(again)
+    ) {
+      const beatSegs = splitAt(
+        byBeat,
+        again.flatMap((w) => [w.start, w.end]),
+      );
+      const beatItems = decompose(g, beatSegs, again, wholeBar);
+      if (beatItems && !again.some((w) => crowded(beatItems, w, true))) {
+        windows = again;
+        segs = beatSegs;
+        items = beatItems;
+      }
+    }
+  }
   let maxR = items ? marksAndBeams(g, items, windows) : 0;
   if (!items || maxR > 9) {
     approximate = true;

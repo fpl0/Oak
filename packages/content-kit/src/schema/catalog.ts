@@ -22,7 +22,16 @@ import type {
   TermId,
   ToolId,
 } from "../ids.ts";
-import type { KeySpec, Md, MeterId, PickupSpec, SkillRef, SkillWeight, SwingSpec } from "./common.ts";
+import type {
+  KeyPlanEntry,
+  KeySpec,
+  Md,
+  MeterId,
+  PickupSpec,
+  SkillRef,
+  SkillWeight,
+  SwingSpec,
+} from "./common.ts";
 import type { Answer, AnswerUiKind, Cue, KeyPool, Stimulus } from "./exercise.ts";
 import type { LadderLevel } from "./lesson.ts";
 import type { Diagnostic, NEvent } from "./results.ts";
@@ -282,7 +291,8 @@ export interface MilestoneDef {
   description: Md;
   /**
    * Reached when every condition listed here holds and, when `anyOf` is given (Wave 3), at least one of
-   * its condition sets holds as well (ms.07: either core finale released).
+   * its condition sets holds as well (ms.07 used it until Wave 6: "either core finale released"; the end of the
+   * core now needs both parts, CF-A and CF-T).
    */
   when: MilestoneCondition & { anyOf?: MilestoneCondition[] };
 }
@@ -313,7 +323,18 @@ export interface SongDef {
     /** Lead-sheet chords in code spelling (STYLE §5). */
     chords?: { bar: number; beat: number; symbol: string }[];
     phrases?: [number, number][];
+    /**
+     * Wave 6. The form map (CF-T, ladder L8; `FormMapCheck`, the `@song` form pattern): the sections in
+     * order, each with its label (a letter by first appearance, `A A B A`, or a section name) and its bars
+     * `[from, to]`, 1-based and inclusive. They cover bars 1 to `bars` without gaps (`song.sections`).
+     */
+    sections?: { label: string; bars: [number, number] }[];
   };
+  /**
+   * Wave 6. The keys of a tune that changes key, by bar (contracts §6.8; Body and Soul's A section into its
+   * bridge, U17.L04): the first entry is at bar 1 (or 0 with a pickup) and equals `key`.
+   */
+  keyPlan?: KeyPlanEntry[];
   /** Where it may be used (ladder level, lessons), and from when (`Drunken Sailor`: from U14). */
   availableFrom?: LessonId;
   schema?: SchemaId;

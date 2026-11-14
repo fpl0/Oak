@@ -94,7 +94,7 @@ export function ReviewCard({
       <p className="text-text-3">{REVIEW_HEADER}</p>
       <div>
         <H className="mb-1 font-sans text-sm font-semibold text-text-2">What works</H>
-        <ul className="flex flex-col gap-1.5">
+        <ul className="flex flex-col gap-1.5" data-testid="review-strengths">
           {review.strengths.map((s) => (
             <li key={s.text} className="flex items-start gap-2">
               <BarLink bars={s.bars} onBars={onBars} className="mt-0.5" />

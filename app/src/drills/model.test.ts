@@ -147,7 +147,8 @@ describe("answer surfaces of generated trials", () => {
     expect(ui("fam.rhy.dictation")).toBe("grid");
     expect(ui("fam.chd.quality-triad")).toBe("quality-pad");
     expect(ui("fam.har.rn")).toBe("rn-palette");
-    expect(ui("fam.rhy.syncopation")).toBe("choice");
+    // Wave 6: "find the push" is marked on the rhythm grid (wave6.test.ts), not clicked among thirty-two buttons.
+    expect(ui("fam.rhy.syncopation")).toBe("grid");
   });
 });
 

@@ -1,11 +1,16 @@
 // Single and multiple choice (contracts §5.4 `choice`): buttons, cards or audio cards. `1`–`9` pick the n-th
 // option (toggle when multi), `Shift+1`–`9` plays its audio, arrows move between options (and pick, for a single
 // choice, as a radio group does). Marks per option ID; a reveal outlines the right ones.
+// Wave 6: a single choice whose options are bars (and "none": `fam.har.modulation`) is drawn as a bar timeline
+// (BarStrip.tsx), with the keys named from `AnswerEnv.keyChange`. After a check, a "which mode" pick can say the
+// one changed note of the mode (`AnswerEnv.facts`), and a pick among chords, when the host names both keys of a
+// modulation, says what the chord is in each (the pivot). Those lines have reserved height: nothing moves.
 import type { Choice } from "@oak/api";
 import { clsx } from "clsx";
 import { Play } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useAnswerEnv } from "../env.tsx";
+import { isBarChoice, isChordChoice, isModeChoice, modeFact, pivotFact } from "../facts.ts";
 import type { AnswerWidgetProps } from "../types.ts";
 import {
   AnswerFrame,
@@ -18,17 +23,39 @@ import {
   revealedOf,
   SubmitHint,
 } from "../ui.tsx";
+import { BarStrip, keyChangeLine } from "./BarStrip.tsx";
 import { InlineMd, plainMd } from "./InlineMd.tsx";
 
 export function ChoiceAnswer(p: AnswerWidgetProps<"choice">) {
   const { spec, value, onChange, disabled, feedback } = p;
   const root = useRef<HTMLDivElement>(null);
-  const thumbOf = useAnswerEnv().choiceThumb;
+  const env = useAnswerEnv();
+  const thumbOf = env.choiceThumb;
   const multi = spec.multi === true;
   const layout = spec.layout ?? "buttons";
   const cards = layout !== "buttons";
   const correct = revealedOf<string[]>(feedback) ?? [];
   const canPlay = Boolean(p.audition) && spec.options.some((o) => o.audio);
+  // Wave 6: a bar timeline, and the lines that say what a pick means once it is checked.
+  const kc = env.keyChange;
+  const barPick = !multi && layout === "buttons" && isBarChoice(spec.options);
+  const modePick = env.facts === true && !multi && isModeChoice(spec.options);
+  const pivotPick =
+    !multi && !modePick && !barPick && Boolean(kc?.from && kc.to) && isChordChoice(spec.options);
+  const answered =
+    feedback.state === "correct" || feedback.state === "wrong" || feedback.state === "revealed";
+  const known = feedback.state === "correct" || feedback.state === "revealed";
+  // The option the line is about: the answer when it is shown, else the learner's own pick (never the answer).
+  const aboutId = feedback.state === "revealed" ? (correct[0] ?? null) : answered ? (value[0] ?? null) : null;
+  const about = aboutId === null ? null : (spec.options.find((o) => o.id === aboutId) ?? null);
+  const fact = !about
+    ? null
+    : modePick
+      ? modeFact(about.id, env.harmony?.key?.tonic)
+      : pivotPick && kc?.from && kc.to
+        ? pivotFact(about, kc.from, kc.to)
+        : null;
+  const factLead = feedback.state === "wrong" ? "Your pick: " : "";
 
   useEffect(() => {
     if (p.autoFocus) focusFirst(root.current);
@@ -46,6 +73,20 @@ export function ChoiceAnswer(p: AnswerWidgetProps<"choice">) {
 
   const onKey = (e: React.KeyboardEvent<HTMLElement>): boolean => {
     const n = digitOf(e);
+    // On a bar timeline a digit is the bar's own number and 0 is "No key change" (Wave 6 review: digits counted
+    // the options, so with bar 1 not offered and "No key change" last, 5 picked bar 6, one bar late).
+    if (barPick && n !== null) {
+      const id = n === 0 ? "none" : String(n);
+      const i = spec.options.findIndex((o) => o.id === id);
+      if (i < 0) return true;
+      const o = spec.options[i] as Choice;
+      if (e.shiftKey) play(o);
+      else {
+        pick(o);
+        root.current?.querySelector<HTMLButtonElement>(`[data-option="${id}"]`)?.focus();
+      }
+      return true;
+    }
     if (n !== null && n >= 1 && n <= spec.options.length) {
       const o = spec.options[n - 1] as Choice;
       if (e.shiftKey) play(o);
@@ -72,6 +113,110 @@ export function ChoiceAnswer(p: AnswerWidgetProps<"choice">) {
   };
 
   const tabStop = multi ? null : (value[0] ?? spec.options[0]?.id);
+  if (barPick) {
+    /** The key that picks an option on the timeline: the bar's number, 0 for "No key change". */
+    const keyOf = (o: Choice) => (o.id === "none" ? "0" : o.id);
+    const bars = Math.max(...spec.options.map((o) => Number(o.id)).filter((n) => Number.isFinite(n)));
+    const shownId = feedback.state === "revealed" ? (correct[0] ?? null) : (value[0] ?? null);
+    const shownBar = shownId === null ? null : shownId === "none" ? "none" : Number(shownId);
+    const cell = (o: Choice, wide: boolean) => {
+      const on = value.includes(o.id);
+      const mark = markOf(feedback, o.id);
+      const isAnswer = correct.includes(o.id);
+      return (
+        // biome-ignore lint/a11y/useSemanticElements: a styled custom control with roving focus (ux §7.9); native radios cannot take this layout
+        <button
+          type="button"
+          data-option={o.id}
+          role="radio"
+          aria-checked={on}
+          aria-disabled={disabled || undefined}
+          aria-label={`${keyOf(o)}. ${plainMd(o.label)}${kc && on && !wide ? ", the new key begins here" : ""}${isAnswer ? " (the answer)" : ""}`}
+          tabIndex={o.id === tabStop ? 0 : -1}
+          onClick={() => pick(o)}
+          className={clsx(
+            "relative flex items-center justify-center rounded-control border-2 font-medium tabular-nums transition-colors",
+            wide ? "min-h-10 gap-2 px-3 py-1.5" : "h-11 w-full min-w-0 flex-col px-1 leading-tight",
+            on
+              ? "border-accent bg-lane-in text-text"
+              : "border-border bg-surface text-text hover:border-text-3",
+            markRing(mark ? (mark.ok ? "ok" : "bad") : null),
+            isAnswer && !on && "border-dashed border-accent-2",
+            disabled && "cursor-default opacity-80",
+          )}
+        >
+          {wide ? (
+            <>
+              <span
+                aria-hidden
+                className={clsx(
+                  "inline-flex size-5 shrink-0 items-center justify-center rounded border text-[0.75rem]",
+                  on ? "border-accent bg-accent text-on-accent" : "border-border text-text-3",
+                )}
+              >
+                {keyOf(o)}
+              </span>
+              <InlineMd text={o.label} />
+            </>
+          ) : (
+            <>
+              <span aria-hidden className="text-[0.65rem] font-normal text-text-3">
+                bar
+              </span>
+              <span aria-hidden>{o.id}</span>
+            </>
+          )}
+          <MarkBadge mark={mark ? (mark.ok ? "ok" : "bad") : null} note={mark?.note} />
+        </button>
+      );
+    };
+    const noneAt = spec.options.findIndex((o) => o.id === "none");
+    const none = noneAt >= 0 ? (spec.options[noneAt] as Choice) : null;
+    const offered = spec.options
+      .map((o) => Number(o.id))
+      .filter((b) => Number.isInteger(b) && b >= 1 && b <= 9);
+    const barKeys = offered.length === 0 ? "1–9" : `${Math.min(...offered)}–${Math.max(...offered)}`;
+    return (
+      <AnswerFrame
+        kind="choice"
+        idBase={p.idBase}
+        label={p.label}
+        feedback={feedback}
+        disabled={disabled}
+        onSubmit={p.onSubmit}
+        onKey={onKey}
+        keys={
+          <>
+            <KeyHint keys={[`${barKeys}`]}>bar</KeyHint>
+            {none ? <KeyHint keys={["0"]}>no key change</KeyHint> : null}
+            <KeyHint keys={["←", "→"]}>move</KeyHint>
+            <SubmitHint />
+          </>
+        }
+      >
+        <div
+          ref={root}
+          role="radiogroup"
+          aria-label={p.label}
+          aria-describedby={kc ? `${p.idBase}-keyline` : undefined}
+          data-choice-layout="bars"
+        >
+          <BarStrip
+            bars={bars}
+            idBase={p.idBase}
+            from={kc && typeof shownBar === "number" ? shownBar : null}
+            keyChange={kc}
+            none={none ? cell(none, true) : undefined}
+            line={kc ? keyChangeLine({ from: kc.from, to: kc.to, bar: shownBar, known }) : null}
+            renderCell={(bar) => {
+              const i = spec.options.findIndex((o) => o.id === String(bar));
+              return i < 0 ? null : cell(spec.options[i] as Choice, false);
+            }}
+          />
+        </div>
+      </AnswerFrame>
+    );
+  }
   return (
     <AnswerFrame
       kind="choice"
@@ -165,6 +310,16 @@ export function ChoiceAnswer(p: AnswerWidgetProps<"choice">) {
           );
         })}
       </div>
+      {modePick || pivotPick ? (
+        <p className="min-h-12 text-sm text-text-2" data-testid="choice-fact" aria-live="polite">
+          {fact ? (
+            <>
+              {factLead}
+              {fact}
+            </>
+          ) : null}
+        </p>
+      ) : null}
     </AnswerFrame>
   );
 }

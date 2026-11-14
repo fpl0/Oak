@@ -222,10 +222,22 @@ export const units: UnitDef[] = [
     ),
     lesson(
       "U05.L04",
-      "Chord Names & Arpeggios",
-      "Lead-sheet symbols C Cm C° C+ and their code spellings `C Cm Co Caug`, read and typed as answers and seen in read-only `preview` examples (`chord()` stays locked until L08); `.arp()` on hand-stacked triads.",
-      "N05",
+      "Arpeggios",
+      "`.arp()` on hand-stacked triads: a chord played one note at a time.",
+      "",
+      "C01",
     ),
+    // Split out of U05.L04 in contracts 1.6 and taught directly after it (the rows are in teaching order, so
+    // U05.L09 sits before U05.L05). A learner who completed U05.L04 before the split has had this lesson.
+    {
+      ...lesson(
+        "U05.L09",
+        "Chord Names",
+        "Lead-sheet symbols C Cm C° C+ and their code spellings `C Cm Co Caug`, read and typed as answers and seen in read-only `preview` examples (`chord()` stays locked until L08).",
+        "N05",
+      ),
+      splitFrom: "U05.L04",
+    },
     lesson(
       "U05.L05",
       "Inversions",
@@ -637,21 +649,21 @@ export const trackGates: TrackGate[] = [
 ];
 
 /**
- * The default linear order of the core (contracts §2.5): 183 sessions, gym slots included as GYM.nn.
+ * The default linear order of the core (contracts §2.5): 185 sessions, gym slots included as GYM.nn.
  * A checkpoint sits after the next unit's L01 so it falls on a later day than the unit's last lesson.
  */
-// biome-ignore format: ten sessions to a line, as in contracts §2.5
+// biome-ignore format: about ten sessions to a line, as in contracts §2.5
 export const defaultOrder: SessionId[] = [
   "U00.L01", "U00.L02", "U01.L01", "U01.L02", "U01.L03", "U01.L04", "U01.L05", "U01.L06", "U01.L07", "U01.L08",
   "U01.L09", "U02.L01", "U01.CP", "C0.S1", "U02.L02", "U02.L03", "U02.L04", "U02.L05", "U02.L06", "U02.L07",
   "U02.L08", "U03.L01", "U02.CP", "C1.S1", "U03.L02", "U03.L03", "U03.L04", "U03.L05", "U03.L06", "U03.L07",
   "U03.L08", "U03.L09", "U03.L10", "U03.L11", "U04.L01", "U03.CP", "U04.L02", "U04.L03", "U04.L04", "U05.L01",
-  "U04.CP", "U05.L02", "U05.L03", "U05.L04", "U05.L05", "U05.L06", "U05.L07", "U05.L08", "U06.L01", "U05.CP",
+  "U04.CP", "U05.L02", "U05.L03", "U05.L04", "U05.L09", "U05.L05", "U05.L06", "U05.L07", "U05.L08", "U06.L01", "U05.CP",
   "U06.L02", "U06.L03", "U06.L04", "U06.L05", "U06.L06", "U06.L07", "U06.L08", "U06.L09", "U06.L10", "U06.L11",
   "U06.L12", "U07.L01", "U06.CP", "U07.L02", "U07.L03", "GYM.01", "U07.L04", "U07.L05", "U07.L06", "U07.L07",
   "GYM.02", "U07.L08", "U07.L09", "U07.L10", "U08.L01", "GYM.03", "U07.CP", "C2.S1", "C2.S2", "X1.S1",
   "X1.S2", "X1.S3", "U08.L02", "U08.L03", "U08.L04", "U08.L05", "GYM.04", "U09.L01", "U09.L02", "U09.L03",
-  "U09.L04", "GYM.05", "U09.L05", "U10.L01", "U09.CP", "C3.S1", "C3.S2", "C3.S3", "GYM.06", "U10.L02",
+  "U09.L04", "GYM.05", "U09.L05", "U10.L01", "U09.CP", "C3.S1", "C3.S2", "C3.S3", "C3.S4", "GYM.06", "U10.L02",
   "U10.L03", "U10.L04", "U10.L05", "GYM.07", "U10.L06", "U10.L07", "U10.L08", "U10.L09", "GYM.08", "U11.L01",
   "U10.CP", "C4.S1", "C4.S2", "GYM.09", "U11.L02", "U11.L03", "U11.L04", "U11.L05", "GYM.10", "U11.L06",
   "U11.L07", "U11.L08", "U12.L01", "GYM.11", "U11.CP", "C5.S1", "C5.S2", "X2.S1", "X2.S2", "U12.L02",
@@ -694,25 +706,25 @@ export default syllabus;
 
 /** Session counts of contracts §2.7; content/validate proves the data adds up to them. */
 export const SESSION_COUNTS = {
-  coreLessons: 124,
+  coreLessons: 125,
   coreCheckpoints: 13,
-  coreCapstoneSessions: 29,
+  coreCapstoneSessions: 30,
   gymSessions: 17,
-  core: 183,
+  core: 185,
   jazz: 34,
   rhythm: 20,
   arrangement: 20,
   advanced: 74,
-  total: 257,
+  total: 259,
 } as const;
 
 /** Landmarks of the default order (contracts §2.5), as 1-based session numbers. */
 export const LANDMARKS: Record<string, { session: SessionId; n: number }> = {
   firstAlbumTrack: { session: "C0.S1", n: 14 },
   firstChordsInOwnCode: { session: "U05.L01", n: 40 },
-  firstComposedSong: { session: "C2.S2", n: 79 },
-  tracksOpen: { session: "U13.CP", n: 145 },
-  coreComplete: { session: "CF-A.S4", n: 183 },
+  firstComposedSong: { session: "C2.S2", n: 80 },
+  tracksOpen: { session: "U13.CP", n: 147 },
+  coreComplete: { session: "CF-A.S4", n: 185 },
 };
 
 export type { CapstoneId, CheckpointId, LessonId };

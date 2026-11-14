@@ -49,6 +49,16 @@ export function chordPcs(chord: ChordId): number[] {
     return p ? [((p.midi % 12) + 12) % 12] : [];
   });
 }
+/**
+ * The pitch classes of a chord's guide tones (its 3rd and its 7th; `null` where it has none), or `null` for a
+ * symbol the chord table does not know. Slash chords read as the chord over the bass.
+ */
+export function guideTonePcs(symbol: string): { third: number | null; seventh: number | null } | null {
+  const chord = theory.parseChordWithBass(symbol);
+  if (!chord) return null;
+  const g = theory.guideTones(chord);
+  return { third: g.third?.pc ?? null, seventh: g.seventh?.pc ?? null };
+}
 export function keyFromScaleCtx(scaleCtx: string): KeySpec | null {
   return theory.keyFromScaleCtx(scaleCtx);
 }

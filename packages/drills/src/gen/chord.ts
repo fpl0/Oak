@@ -202,7 +202,10 @@ const ALL_ROOTS = ["C", "C#", "Db", "D", "Eb", "E", "F", "F#", "Gb", "G", "Ab", 
 const SPELL_QUALITIES: Readonly<Record<string, ChordQuality[]>> = {
   "triad-naturals": ["maj", "min"],
   triads: ["maj", "min", "dim", "aug"],
-  sevenths: ["maj7", "7", "m7", "m7b5", "dim7"],
+  // U12.L01: the major and minor seventh, beside the dominant seventh of U11.L04. U12.L03: the two with a
+  // diminished 5th.
+  sevenths: ["maj7", "m7", "7"],
+  "sevenths-dim": ["m7b5", "dim7"],
   extended: ["9", "maj9", "m9", "13", "7b9", "7#9", "7#11", "m11"],
 };
 export const spell: Generator = {
@@ -217,7 +220,13 @@ export const spell: Generator = {
       const notes = spellChord(root, quality);
       // Triple accidentals never; double accidentals only from the 7th level on.
       if (notes.some((n) => /bbb|###/.test(n))) continue;
-      if (ctx.category !== "extended" && ctx.category !== "sevenths" && notes.some((n) => /bb|##/.test(n)))
+      // A diminished seventh may need one (C°7 is C E♭ G♭ B𝄫); a major or minor seventh on a readable root
+      // never does.
+      if (
+        ctx.category !== "extended" &&
+        ctx.category !== "sevenths-dim" &&
+        notes.some((n) => /bb|##/.test(n))
+      )
         continue;
       return silentTrial({ text: notes }, cueOf(ctx, { replays: -1 }), {
         ui: "text",

@@ -323,6 +323,13 @@ export const contract = {
     method: "GET",
     path: "/album/tracks/:id/versions/:v/audio",
     params: p("id", "v"),
+    /** Wave 6 (d20): one take of the version (1-based); absent: the current take. Not personal data. */
+    query: z.strictObject({
+      take: z
+        .string()
+        .regex(/^[1-9]\d{0,3}$/)
+        .optional(),
+    }),
     res: "binary",
     media: true,
   },
@@ -587,7 +594,13 @@ export const contract = {
   // --- Wave 3 additions (docs/design/wave3.md §5). Until the server engineer builds a handler, each answers
   // 501 `not_implemented` (`WAVE3_ENDPOINTS`; routes.test.ts keeps the list of those still pending). ---
   /** Today's sessions on the server: the "done for today" state across reloads and browsers. */
-  "session.day": { method: "GET", path: "/session/day", res: D.SessionDaySchema },
+  "session.day": {
+    method: "GET",
+    path: "/session/day",
+    /** Wave 6 (d21): the calling tab's id; `open` is then that tab's own open session. */
+    query: z.strictObject({ tab: z.string().min(8).max(64).optional() }),
+    res: D.SessionDaySchema,
+  },
   /** Quiet mode for today, vocal range and the tolerance ladder: read before any mic is asked for. */
   "voice.get": { method: "GET", path: "/voice", res: D.VoiceStateSchema },
   /** The mic chip and Settings → Voice: Quiet mode for today or always. */
@@ -713,7 +726,50 @@ export const contract = {
     body: D.TranscriptionVersionConfirmSchema,
     res: D.TranscriptionVersionSchema,
   },
+
+  // --- Wave 6 additions (docs/design/wave6.md §5). Until the server engineer builds a handler, each answers
+  // 501 `not_implemented` (`WAVE6_ENDPOINTS`; routes.test.ts keeps the list of those still pending). ---
+  /** The advanced tracks (J, R, A): their gates as recorded, what is done, what Today may plan (contracts §4.3). */
+  "tracks.list": { method: "GET", path: "/tracks", res: D.TracksSchema },
+  /** Where the core stands, what the learner can now do and what stays open after it (the end of the core). */
+  "course.completion": { method: "GET", path: "/course/completion", res: D.CoreCompletionSchema },
+  /** The learner's latest saved Make sketch of a lesson (d15: a Make that builds on an earlier lesson's sketch). */
+  "lessons.sketch": {
+    method: "GET",
+    path: "/lessons/:id/sketch",
+    params: p("id"),
+    res: D.LessonSketchSchema,
+  },
+  /** Record another take of an album version; the earlier takes are kept and stay playable (d20). */
+  "album.addTake": {
+    method: "POST",
+    path: "/album/tracks/:id/versions/:v/takes",
+    params: p("id", "v"),
+    query: z.strictObject({ durationS: z.string().optional() }),
+    body: "binary",
+    res: D.AlbumTrackVersionSchema,
+  },
+  /** Choose the take that plays by default and is exported. */
+  "album.chooseTake": {
+    method: "PUT",
+    path: "/album/tracks/:id/versions/:v/take",
+    params: p("id", "v"),
+    body: D.AlbumTakeChooseSchema,
+    res: D.AlbumTrackVersionSchema,
+  },
 } as const satisfies Record<string, EndpointDef>;
+
+/**
+ * The Wave 6 endpoints of docs/design/wave6.md §5. Each answers a typed 501 until built; `routes.test.ts` lists the
+ * ones still pending (`WAVE6_PENDING`), and the server engineer removes a name there as each lands.
+ */
+export const WAVE6_ENDPOINTS = [
+  "tracks.list",
+  "course.completion",
+  "lessons.sketch",
+  "album.addTake",
+  "album.chooseTake",
+] as const satisfies readonly (keyof typeof contract)[];
 
 /**
  * The Wave 5 endpoints of docs/design/wave5.md §5. Each answers a typed 501 until built; `routes.test.ts` lists the

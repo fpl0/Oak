@@ -193,7 +193,12 @@ export class GatesService {
     if (this.#content.lessonSite(id) !== null) return this.lessonCompleted(id);
     if (this.#content.checkpointMeta(id) !== null) return this.checkpointPassed(id);
     const m = /^(.+)\.S(\d+)$/.exec(id);
-    if (m !== null) return this.#repos.capstones.get(m[1] as string)?.sessions.includes(id) ?? false;
+    if (m !== null) {
+      const row = this.#repos.capstones.get(m[1] as string);
+      // A released capstone has every session behind it, however many its definition has now (d13: C3 was
+      // released in three sessions before it had four; the planner never offers C3.S4 of a released C3).
+      return row?.status === "released" || (row?.sessions.includes(id) ?? false);
+    }
     return false;
   }
 
@@ -223,6 +228,9 @@ export class GatesService {
       if (
         site.unit.track !== "core" &&
         site.meta.side !== true &&
+        // Wave 6 (wave6.md §5.3): a track whose gate is met but whose lessons are not written yet is never the
+        // next item (the plan stays honest: `SessionPlan.tracks` says the track is open).
+        this.#content.lessonDef(site.meta.id) !== null &&
         this.lessonStatus(site.meta.id) !== "completed" &&
         this.lessonOpen(site.meta.id)
       )
@@ -240,7 +248,12 @@ export class GatesService {
     const trackLessons = this.#content
       .allLessons()
       .filter(
-        (s) => s.unit.track !== "core" && s.meta.side !== true && this.lessonStatus(s.meta.id) !== "locked",
+        (s) =>
+          s.unit.track !== "core" &&
+          s.meta.side !== true &&
+          // `mapTotal` stays the core's count until a track has lessons to count (wave6.md §5.3).
+          this.#content.lessonDef(s.meta.id) !== null &&
+          this.lessonStatus(s.meta.id) !== "locked",
       )
       .map((s) => s.meta.id as string);
     const all = [...order, ...trackLessons.filter((l) => !order.includes(l as SessionId))];

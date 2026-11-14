@@ -31,7 +31,10 @@ export type TranscribeAction =
   | "listenNoMelody"
   | "downbeatEarlier"
   | "downbeatLater"
-  | "swing";
+  | "swing"
+  // Wave 6: the form map of a standard (L8) and of the learner's own recording.
+  | "formCut"
+  | "formFocus";
 
 export const TRANSCRIBE_KEYS: readonly { action: TranscribeAction; keys: string; description: string }[] = [
   { action: "play", keys: "Space", description: "Play or pause" },
@@ -52,7 +55,11 @@ export const TRANSCRIBE_KEYS: readonly { action: TranscribeAction; keys: string;
   { action: "zoomIn", keys: ">", description: "Zoom the waveform in" },
   { action: "zoomOut", keys: "<", description: "Zoom the waveform out" },
   { action: "spectrogram", keys: "Shift+S", description: "Spectrogram on or off" },
-  { action: "loopLine", keys: "1", description: "Loop phrase or line 1 of a song (2 to 9 likewise)" },
+  {
+    action: "loopLine",
+    keys: "1",
+    description: "Loop phrase, line or section 1 of a song (2 to 9 likewise)",
+  },
   { action: "prevLine", keys: "PageUp", description: "Loop the previous phrase or 4-bar line" },
   { action: "nextLine", keys: "PageDown", description: "Loop the next phrase or 4-bar line" },
   { action: "loopChorus", keys: "C", description: "Loop the chorus at the playhead (a blues: its 12 bars)" },
@@ -69,6 +76,12 @@ export const TRANSCRIBE_KEYS: readonly { action: TranscribeAction; keys: string;
   },
   { action: "downbeatLater", keys: "Shift+ArrowRight", description: "Your audio: move bar 1 a beat later" },
   { action: "swing", keys: "W", description: "Your audio: swing 8ths on the bar grid, on or off" },
+  {
+    action: "formCut",
+    keys: "X",
+    description: "Form map: cut a section at the bar now playing (again: join it back)",
+  },
+  { action: "formFocus", keys: "Shift+X", description: "Form map: go to the form strip" },
 ];
 
 export const TRANSCRIBE_KEY_GROUP = "Transcribe";

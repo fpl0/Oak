@@ -35,6 +35,8 @@ export interface ShowOptions {
   pickup?: NotationInput["pickup"];
   trackClefs?: NotationInput["trackClefs"];
   split?: NotationInput["split"];
+  /** Wave 6: mark the guide tones (`guideToneMarks` + `markGuideTones`) after the render. */
+  guide?: boolean;
 }
 
 /** A lead sheet laid out for a host `width` px wide (`leadSheetLayout`), every page shown (`leadSheetPages`). */
@@ -68,6 +70,11 @@ export interface Shown {
   want: { symbols: { text: string; at: number }[]; romans: { text: string; at: number }[] };
   /** Bar numbers abcjs drew (`abcjs-bar-number`), in order. */
   barNumbers: string[];
+  /** Wave 6: the guide tones marked ("F4=third"), and the classes of each marked head, in mark order. */
+  guide: { marks: string[]; heads: string[] };
+  /** Wave 6: what the Score says of itself. */
+  approximate: boolean;
+  warnings: string[];
   geometry: StaffGeometry;
   idMap: { n: number; pitches: string[]; bar: number; beat: number; eventIds: string[]; onset: number }[];
 }
@@ -124,6 +131,8 @@ async function show(o: ShowOptions): Promise<Shown> {
   if (o.annotations) dom.placeAnnotations(el, notation.noteAnnotations(score, o.annotations), o.annotations);
   dom.tagChordLabels(el, score);
   dom.tagSections(el, score);
+  const guideMarks = o.guide ? notation.guideToneMarks(score, { events: input.events }) : [];
+  const guideHeads = o.guide ? dom.markGuideTones(el, guideMarks) : [];
   const geometry = dom.measureStaff(el, abc, score);
   const { symbol, roman, at } = notation.CHORD_LABEL_CLASSES;
   const labels: ShownLabel[] = [...el.querySelectorAll(`.${symbol}, .${roman}`)].map((t) => {
@@ -151,6 +160,12 @@ async function show(o: ShowOptions): Promise<Shown> {
       romans: (score.romans ?? []).map((a) => ({ text: a.text, at: pos(a) })),
     },
     barNumbers: [...el.querySelectorAll(".abcjs-bar-number")].map((t) => t.textContent ?? ""),
+    guide: {
+      marks: guideMarks.map((m) => `${m.pitch}=${m.role}`),
+      heads: guideHeads.map((h) => h.getAttribute("class") ?? ""),
+    },
+    approximate: score.approximate,
+    warnings: score.warnings.map((w) => `${w.code}: ${w.message}`),
     geometry,
     idMap: abc.idMap.map((e) => ({
       n: e.n,

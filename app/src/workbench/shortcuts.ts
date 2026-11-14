@@ -33,6 +33,10 @@ export const WORKBENCH_LENS_SHORTCUTS: readonly (readonly [string, string])[] = 
   ["Shift+W", "Scope: the wave of what plays"],
   ["Shift+Y", "Spectrum of what plays"],
   ["Shift+P", "Chord chart, four bars a line"],
+  // Wave 6: the harmony and time lenses of U12–U17, each once unlocked.
+  ["Shift+I", "Guide tones (3rds and 7ths, and their line) on / off"],
+  ["Shift+J", "Key ribbon (the key along the piece) on / off"],
+  ["Shift+V", "Beat grid (counts, triplets, pushes) on / off"],
 ];
 
 /**

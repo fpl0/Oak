@@ -9,7 +9,7 @@ import { ladder as ladderLevels } from "../gym/ladder.ts";
 import { GYM_SLOT_RULE, gymSlotKind, LADDER_OPENS } from "../gym/slots.ts";
 import { registries } from "../index.ts";
 import { termById } from "../terms.ts";
-import type { CapstoneSpec, GymSpec, LessonSpec, StepSpec, UnitSpec } from "./types.ts";
+import type { CapstoneSpec, EndOfCoreSpec, GymSpec, LessonSpec, StepSpec, UnitSpec } from "./types.ts";
 
 const skillName = new Map(registries.skills.map((s) => [s.id as string, s] as const));
 const metaOf = (id: string): LessonMeta | undefined =>
@@ -213,6 +213,11 @@ function capstoneDetail(c: CapstoneSpec): string {
   const def = capstones.find((x) => x.id === c.id);
   if (c.opens) out.push(`**Opens.** ${c.opens}`, "");
   if (c.band) out.push(`**Band.** ${c.band}`, "");
+  for (const x of c.sections ?? []) {
+    out.push(`**${x.title}.**${x.lead ? ` ${x.lead}` : ""}`, "");
+    for (const i of x.items) out.push(`- ${i}`);
+    out.push("");
+  }
   for (const s of c.sessions ?? []) {
     const sd = def?.sessionDefs.find((x) => x.id === s.id);
     const flags = sd ? [sd.review ? "review" : "", sd.release ? "release" : ""].filter(Boolean) : [];
@@ -225,7 +230,14 @@ function capstoneDetail(c: CapstoneSpec): string {
     for (const [i, w] of s.work.entries()) out.push(`  ${i + 1}. ${w}`);
     out.push("- **Checks.**");
     for (const x of s.checks) out.push(`  - ${x}`);
-    out.push(`- **Ends.** ${s.ends}`, "");
+    out.push(`- **Ends.** ${s.ends}`);
+    if (s.epr)
+      out.push(
+        `- **Enjoyment.** ${s.epr.enjoyment}`,
+        `- **Pace.** ${s.epr.pace}`,
+        `- **Return.** ${s.epr.return}`,
+      );
+    out.push("");
   }
   if (c.linerNotes?.length) {
     out.push("**Liner notes.**", "");
@@ -285,6 +297,52 @@ function gymSection(g: GymSpec): string {
   return out.join("\n");
 }
 
+/** Wave 6: the end of the core (EndOfCoreSpec): when it happens, each surface as its owner builds it, the server's part. */
+function endSection(e: EndOfCoreSpec): string {
+  const out: string[] = ["## The end of the core", "", e.summary, ""];
+  const bullets = (title: string, xs: readonly string[]) => {
+    if (xs.length === 0) return;
+    out.push(`**${title}.**`, "");
+    for (const x of xs) out.push(`- ${x}`);
+    out.push("");
+  };
+  bullets("When", e.when);
+  bullets("What every surface is judged by", e.principles);
+  out.push(
+    `**Enjoyment.** ${e.epr.enjoyment}`,
+    "",
+    `**Pace.** ${e.epr.pace}`,
+    "",
+    `**Return.** ${e.epr.return}`,
+    "",
+  );
+  for (const s of e.surfaces) {
+    out.push(`### ${s.title} (\`${s.id}\`)`, "");
+    out.push(`Owner: **${s.owner}**. Where: ${s.where}`, "", s.purpose, "");
+    out.push("- **Sees.**");
+    for (const [i, x] of s.sees.entries()) out.push(`  ${i + 1}. ${x}`);
+    if (s.hears) out.push(`- **Hears.** ${s.hears}`);
+    out.push("- **Can do.**");
+    for (const x of s.actions) out.push(`  - ${x}`);
+    out.push("- **Data.**");
+    for (const x of s.data) out.push(`  - ${x}`);
+    out.push("- **States.**");
+    for (const x of s.states) out.push(`  - ${x}`);
+    out.push("");
+    if (s.copy.length) {
+      out.push("| Copy: where | Text |", "|---|---|");
+      for (const c of s.copy) out.push(`| ${cell(c.where)} | ${cell(c.text)} |`);
+      out.push("");
+    }
+  }
+  bullets("The server's part", e.server);
+  bullets("Never", e.never);
+  bullets("Acceptance", e.acceptance);
+  bullets("Dev seeds", e.seeds);
+  bullets("Notes", e.notes);
+  return out.join("\n");
+}
+
 export function renderUnit(u: UnitSpec): string {
   const unit = registries.syllabus.units.find((x) => x.id === u.unit);
   const out: string[] = [
@@ -294,16 +352,15 @@ export function renderUnit(u: UnitSpec): string {
     "",
     u.summary,
     "",
-    "Checked by `bun test content/validate/specs.test.ts`: every skill's prerequisites come earlier in every legal order, every tool a lesson's code uses is unlocked at or before it, every term and can-do exists and belongs to its lesson, budgets hold, the Band fits the meter, and the hook code evaluates and lints in its lesson.",
+    u.lessons.length
+      ? "Checked by `bun test content/validate/specs.test.ts`: every skill's prerequisites come earlier in every legal order, every tool a lesson's code uses is unlocked at or before it, every term and can-do exists and belongs to its lesson, budgets hold, the Band fits the meter, and the hook code evaluates and lints in its lesson."
+      : "This spec has no lessons. `bun test content/validate/specs.test.ts` checks that this document is the current rendering of its source; the capstone rubrics, session flags, slots and ladder titles it prints are read from the registries.",
     "",
     "## Conventions for this unit",
     "",
     ...u.conventions.map((c) => `- ${c}`),
     "",
-    "## Overview",
-    "",
-    overview(u),
-    "",
+    ...(u.lessons.length ? ["## Overview", "", overview(u), ""] : []),
     ...u.lessons.map(lesson),
   ];
   if (u.checkpoint) {
@@ -340,6 +397,7 @@ export function renderUnit(u: UnitSpec): string {
     out.push("");
   }
   if (u.gym) out.push(gymSection(u.gym));
+  if (u.ending) out.push(endSection(u.ending));
   return `${out
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")

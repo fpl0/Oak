@@ -2,12 +2,16 @@
 // and return state is unit-tested from fixture plans (today-model.test.ts). The page (TodayPage.tsx) renders it.
 import type { Bootstrap, SessionDay, SessionPlan, SideLessons, WarmupItem } from "@oak/api";
 import { learnerDay } from "@oak/srs";
+import { otherOpenSessions, ownOpenSession, tabId } from "../lib/tab-session.ts";
 import type { CapstoneDay } from "./capstone-day.ts";
+import type { CftDay } from "./cft-day.ts";
 import { type CourseEdge, edgeLead } from "./edge.ts";
+import type { AfterCore } from "./finale-model.ts";
 import type { GymDay } from "./gym-day.ts";
 import { type SideOffer, sideOffer } from "./side-lessons.ts";
 import { blockBudget } from "./store.ts";
 import { isRestDay } from "./streak-model.ts";
+import { tracksLine } from "./tracks-model.ts";
 
 export type TodayState =
   /** Before onboarding: the only action is to begin it. */
@@ -62,6 +66,16 @@ export interface TodayView {
    * done, as "one more" (`after-core`). Never the primary action; null on checkpoint, capstone and return days.
    */
   side: SideOffer | null;
+  /** Wave 6: today's New block is a session of the learner's standard (cft-day.ts), with where they are in it. */
+  cft: CftDay | null;
+  /** Wave 6: a compose capstone under way that waits behind today's CF-T session, in one line. */
+  waiting: string | null;
+  /** Wave 6: the advanced tracks' honest line (`plan.tracks.note`), or null before any gate is met. */
+  tracksLine: string | null;
+  /** Wave 6: the lessons of the core are done (finale-model.ts `afterCore`): what is open, under the session. */
+  after: AfterCore | null;
+  /** Wave 6 (d21): sessions other tabs have open today. This tab starts its own; the day counts once. */
+  otherTabs: number;
 }
 
 export interface TodayInput {
@@ -78,7 +92,9 @@ export interface TodayInput {
    * today" and of the one open session, so a second browser, a moved dev clock and a seed all agree. `null`
    * while it loads or when the server has not built it (501): then `boot.openSession` and `lastEnded` decide.
    */
-  server?: Pick<SessionDay, "day" | "open" | "doneForToday"> | null;
+  server?: Pick<SessionDay, "day" | "open" | "doneForToday" | "openSessions"> | null;
+  /** This tab's id (d21; `tabId()` when absent): the open session Today resumes is this tab's own. */
+  tab?: string;
   /** Map item titles (lessons, checkpoints, capstones). */
   titleOf: (id: string) => string;
   /** Step count of a lesson, for "from step 4 of 8". */
@@ -100,6 +116,11 @@ export interface TodayInput {
    * `null` while it loads; then the plan's return note and the profile decide, as in Wave 2.
    */
   ladder?: { cents: 25 | 35 | 50 | 70; offerLoosen: boolean } | null;
+  /** Wave 6: the CF-T day of today's plan (cft-day.ts), and the capstone that waits behind it. */
+  cft?: CftDay | null;
+  waiting?: string | null;
+  /** Wave 6: what is open once the lessons of the core are done (finale-model.ts). */
+  after?: AfterCore | null;
 }
 
 const WARMUP_LABEL: Record<WarmupItem["kind"], [string, string]> = {
@@ -133,6 +154,7 @@ export function setlistRows(
   days: {
     capstone?: CapstoneDay | null;
     gym?: GymDay | null;
+    cft?: CftDay | null;
     objectiveOf?: ((id: string) => string | null) | undefined;
   } = {},
 ): SetlistRow[] {
@@ -215,6 +237,19 @@ export function setlistRows(
       });
       break;
     case "capstone":
+      // CF-T fills the transcription slot (contracts §2.5): the row reads as the slot it is, with the song.
+      if (days.cft) {
+        rows.push({
+          key: "new",
+          label: "Transcribe",
+          amount: b.new,
+          unit: "min",
+          detail: `${days.capstone ? days.capstone.detail : title}${
+            days.cft.songTitle ? ` · ${days.cft.songTitle}` : ""
+          } · the saved draft is the Make`,
+        });
+        break;
+      }
       rows.push({
         key: "new",
         label: "Capstone",
@@ -328,12 +363,20 @@ function leadOf(state: TodayState, input: TodayInput): string | null {
       return plan.note ? `No hints, no rush. ${plan.note}.` : "No hints, no rush.";
     case "capstone":
       return (
-        input.capstone?.lead ?? plan.note ?? "Today's work is a draft for your album. It saves as you go."
+        input.cft?.lead ??
+        input.capstone?.lead ??
+        plan.note ??
+        "Today's work is a draft for your album. It saves as you go."
       );
     case "gym":
       return input.gym?.lead ?? plan.note ?? "Listen, then write down what you hear.";
     case "review":
-      return plan.note ?? "Nothing new is open right now. Today keeps what you know fresh.";
+      return (
+        plan.note ??
+        (plan.core === "complete"
+          ? "Reviews keep what you know fresh and the Oak green. Studio is open when they are done."
+          : "Nothing new is open right now. Today keeps what you know fresh.")
+      );
     case "edge":
       return input.edge ? edgeLead(input.edge, { gym: input.gymOpen === true }) : plan.note;
     default:
@@ -369,7 +412,8 @@ function endedOn(
 function activeState({ plan, boot, edge }: TodayInput): TodayState {
   if (boot.settings.pausedWeeks.includes(weekStartOf(boot.day))) return "paused-week";
   const state = stateOfPlan(plan);
-  return state === "review" && edge ? "edge" : state;
+  // Once the core is complete a review day is an ordinary day, never "the edge of what's written".
+  return state === "review" && edge && plan.core !== "complete" ? "edge" : state;
 }
 
 export function todayView(input: TodayInput): TodayView {
@@ -377,6 +421,7 @@ export function todayView(input: TodayInput): TodayView {
   const rows = setlistRows(plan, input.titleOf, {
     capstone: input.capstone ?? null,
     gym: input.gym ?? null,
+    cft: input.cft ?? null,
     objectiveOf: input.objectiveOf,
   });
   // A review day is as long as its sets, not the day's target (the server plans what is due, nothing more).
@@ -389,19 +434,22 @@ export function todayView(input: TodayInput): TodayView {
         : `${plan.targetMinutes} min`;
   let state: TodayState;
   const server = input.server && input.server.day === boot.day ? input.server : null;
+  const tab = input.tab ?? tabId();
+  // d21: the session this tab resumes is its own. Another tab's open session is never joined.
+  const own = server ? ownOpenSession(server, tab) : null;
+  const bootOwn =
+    boot.openSession && (boot.openSession.tabId == null || boot.openSession.tabId === tab)
+      ? boot.openSession
+      : null;
   if (!boot.profile.onboardedAt) state = "first-run";
   else if (server) {
     // The server is the record. Only one thing is newer than its answer: the session this tab just ended
     // (a `session.day` read before the end still lists it as open).
     const justEnded = input.lastEnded?.sessionId ?? null;
-    if (server.open && server.open.id !== justEnded) state = "in-session";
-    else if (server.doneForToday || (server.open !== null && server.open.id === justEnded)) state = "done";
+    if (own && own.id !== justEnded) state = "in-session";
+    else if (server.doneForToday || (own !== null && own.id === justEnded)) state = "done";
     else state = activeState(input);
-  } else if (
-    boot.openSession &&
-    boot.openSession.day === boot.day &&
-    boot.openSession.id !== input.lastEnded?.sessionId
-  )
+  } else if (bootOwn && bootOwn.day === boot.day && bootOwn.id !== input.lastEnded?.sessionId)
     state = "in-session";
   else if (input.lastEnded && endedOn(input.lastEnded, boot.profile) === boot.day) state = "done";
   else state = activeState(input);
@@ -420,9 +468,10 @@ export function todayView(input: TodayInput): TodayView {
     active || state === "done"
       ? sideOffer(plan, input.sideLessons, { done: state === "done", titleOf: input.titleOf })
       : null;
+  const cft = state === "capstone" ? (input.cft ?? null) : null;
   return {
     state,
-    heading: HEADING[state],
+    heading: cft ? (cft.fillsSlot ? "Transcription slot: your standard" : "Your standard") : HEADING[state],
     lead: leadOf(state, input),
     rows,
     length,
@@ -435,6 +484,11 @@ export function todayView(input: TodayInput): TodayView {
         : plan.returning?.offerLoosen === true && boot.profile.singToleranceCents < 70),
     keepAlive: active && plan.kind !== "review" && plan.warmup.items.length > 0,
     side,
+    cft,
+    waiting: cft ? (input.waiting ?? null) : null,
+    tracksLine: state === "first-run" ? null : tracksLine(plan),
+    after: state === "first-run" ? null : (input.after ?? null),
+    otherTabs: server && state !== "first-run" ? otherOpenSessions(server, tab).length : 0,
   };
 }
 

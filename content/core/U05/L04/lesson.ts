@@ -1,14 +1,13 @@
-// U05.L04 Chord Names & Arpeggios. Two things a chord can do besides sound as a block: be played one note
-// at a time (`.arp()`, which picks notes out of a stack by position, counting from the lowest as 0), and be
-// written down as a name (the root's letter and a sign for the quality: C, Cm, C°, C+; in Strudel's code
-// `C Cm Co Caug`). What the learner has: triads stacked by hand (U05.L01), the four qualities by ear and by
-// their 3rds (U05.L02–L03), the quality signs seen once in U05.L03's spelling quiz. Not yet: `chord()` and
-// `.voicing()` (U05.L08, behind the gate of U05.L07), which appear here only in a read-only preview;
-// inversions and slash names (U05.L05). Spec: content/specs/U05.md.
+// U05.L04 Arpeggios. One thing a chord can do besides sound as a block: be played one note at a time
+// (`.arp()`, which picks notes out of a stack by position, counting from the lowest as 0). What the learner
+// has: triads stacked by hand (U05.L01), the four qualities by ear and by their 3rds (U05.L02–L03). Not yet:
+// chord names (U05.L09 "Chord Names", the next lesson: split out of this one in contracts 1.6, so this
+// lesson keeps one idea), `chord()` and `.voicing()` (U05.L08), inversions (U05.L05).
+// Spec: content/specs/U05.md.
 //
 // How it is graded: the arpeggio step compares the notes and their onsets (`events`, absolute pitch), since
-// order and timing are the point; the name is a `fact` with `normalize: "chord"`, so B°, Bo and Bdim are one
-// answer. The Make's one required rule is `uses tb.arp`: the starter plays the same four triads as blocks.
+// order and timing are the point. The Make's one required rule is `uses tb.arp`: the starter plays the same
+// four triads as blocks.
 import { defineLesson, type HintLadder } from "@oak/content-kit";
 
 const BPM = 92;
@@ -37,19 +36,6 @@ const ONE_STACK = (arp: string) => code(broken("[0,2,4]", arp));
 const EIGHTHS = code(broken(LOOP, "0 1 2 1 0 1 2 1"));
 const eighthsTry = (arp: string) => code(broken(LOOP, arp));
 
-/**
- * The concept card (preview: `chord()` is U05.L08's). Each bar plays a stack written by hand, then, half a
- * bar later, the same chord by its name. The named chords come voiced by Strudel (five notes, not always
- * with the root lowest), with the same pitch classes as the hand-made stacks.
- */
-const BY_NAME = code(
-  'chords: note("<[[c4,e4,g4] ~] [[a3,c4,e4] ~] [[b3,d4,f4] ~] [[c4,e4,g#4] ~]>").s("piano")',
-  'keys: chord("<[~ C] [~ Am] [~ Bo] [~ Caug]>").voicing().s("piano")',
-);
-
-/** The quiz: the stack on degree 7, B D F, on the treble staff. */
-const NAME_IT = code('chords: note("[b3,d4,f4]").s("piano")');
-
 /** A tune for the rich Make sketch: chord notes on the beats it plays (G E | B G | C A | A F). */
 const TUNE = "<[4 ~ 2 ~] [6 ~ 4 ~] [7 ~ 5 ~] [5 ~ 3 ~]>";
 const MAKE_STARTER = code(blocks(LOOP));
@@ -61,19 +47,16 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U05.L04",
-  version: 1,
-  title: "Chord Names & Arpeggios",
-  objective: "I can play a chord one note at a time with .arp() and read a chord's name: C, Cm, C°, C+.",
+  version: 2,
+  title: "Arpeggios",
+  objective: "I can play a chord one note at a time with .arp().",
   key: { tonic: "C", mode: "major" },
   meter: "4/4",
   bpm: BPM,
-  introduces: ["N05"],
-  practises: [],
-  terms: [
-    { id: "term.arpeggio", step: "S4" },
-    { id: "term.chord-symbol", step: "S6" },
-  ],
-  canDo: ["cd.read.chord-symbols", "cd.code.arpeggio"],
+  introduces: [],
+  practises: ["C01"],
+  terms: [{ id: "term.arpeggio", step: "S4" }],
+  canDo: ["cd.code.arpeggio"],
   wrapAt: "S4",
   steps: [
     {
@@ -90,7 +73,7 @@ export default defineLesson({
         role: "practice",
         prompt:
           "Press Play. These are the four chords of Stacking Thirds, but the piano plays each one a note at a time: up, and back down.",
-        skills: [{ skill: "N05", w: 1 }],
+        skills: [{ skill: "C01", w: 1 }],
         hints: null,
         tests: [],
         items: [
@@ -117,7 +100,7 @@ export default defineLesson({
         role: "practice",
         prompt:
           '`.arp()` picks notes out of the stack by position, counting from the lowest as 0. In what order will `n("[0,2,4]").arp("0 2 1")` play C, E and G?',
-        skills: [{ skill: "N05", w: 1 }],
+        skills: [{ skill: "C01", w: 1 }],
         hints: null,
         tests: [],
         code: ONE_STACK("0 2 1"),
@@ -145,7 +128,7 @@ export default defineLesson({
         role: "practice",
         prompt:
           'Run the loop and count the notes in one bar on the roll. Then try other patterns inside `.arp("…")`, such as `2 1 0` or `0 2 1`, and watch the roll.',
-        skills: [{ skill: "N05", w: 1 }],
+        skills: [{ skill: "C01", w: 1 }],
         feedbackText: {
           "investigate.wrong":
             "Not quite. In `.arp()` each number is a position in the stack: 0 is the lowest note, 2 the highest.",
@@ -205,7 +188,7 @@ export default defineLesson({
         role: "check",
         prompt:
           "Play the target first: every chord now goes up and back down twice in a bar, eight notes instead of four. Change the pattern inside `.arp()` to match it.",
-        skills: [{ skill: "N05", w: 1 }],
+        skills: [{ skill: "C01", w: 1 }],
         code: { starter: code(broken(LOOP, "⟪0 1 2 1⟫")) },
         reference: { solutions: [EIGHTHS], bars: 4 },
         // The order and the timing are the point here, so the notes are compared with their onsets.
@@ -253,62 +236,6 @@ export default defineLesson({
     },
     {
       id: "S5",
-      kind: "concept",
-      title: "Names on paper",
-      minutes: 0.75,
-      ui: { panels: ROLL, rollLabels: "note" },
-      example: { id: "by-name", code: BY_NAME, bars: 4, preview: true },
-    },
-    {
-      id: "S6",
-      kind: "quiz",
-      title: "Name the stack",
-      minutes: 1,
-      graded: true,
-      ui: { panels: NONE },
-      exercise: {
-        kind: "fact",
-        id: "name-the-stack",
-        version: 1,
-        role: "check",
-        prompt:
-          "A triad from the key of C, on the staff and played. Type its name: the root's letter, then the sign for its quality.",
-        skills: [{ skill: "N05", w: 1 }],
-        hints: ladder(
-          "Which of the three notes is the root, the one the others stack on in 3rds?",
-          "Count the half steps of each 3rd, from the bottom note up: 4 then 3 is major, 3 then 4 minor, 3 and 3 diminished, 4 and 4 augmented.",
-          "B up to D is three half steps. Count D up to F the same way.",
-        ),
-        stimulus: { src: "code", code: NAME_IT, bars: 1, showCode: false, showStaff: true },
-        answer: { ui: "text", normalize: "chord" },
-        correct: { text: ["B°"] },
-        spelling: "enharmonic",
-        order: "sequence",
-        srs: [
-          { deck: "deck.chd.symbols", cards: ["fact.chord.Cm", "fact.chord.Cdim"], mode: "seed" },
-          { family: "fam.chd.quality-triad", mode: "review-if-due" },
-        ],
-        tests: [
-          { name: "B°", response: { answer: { text: ["B°"] } }, expect: "pass" },
-          { name: "Bo, as in code", response: { answer: { text: ["Bo"] } }, expect: "pass" },
-          { name: "Bdim", response: { answer: { text: ["Bdim"] } }, expect: "pass" },
-          {
-            name: "minor instead of diminished",
-            response: { answer: { text: ["Bm"] } },
-            expect: "fail",
-            feedback: ["id.chord-quality"],
-          },
-          {
-            name: "named after the middle note",
-            response: { answer: { text: ["Dm"] } },
-            expect: "fail",
-            feedback: ["id.chord-root"],
-          },
-        ],
-      },
-    },
-    {
-      id: "S7",
       kind: "make",
       title: "Broken chords on the bass",
       minutes: 2.75,
@@ -320,7 +247,7 @@ export default defineLesson({
         role: "practice",
         prompt:
           "The band plays drums and the bass line, degrees 1, 5, 6 and 4. Your four triads play as blocks. Break them up with `.arp()` in a pattern of your own: up, down, skipping, with gaps.",
-        skills: [{ skill: "N05", w: 1 }],
+        skills: [{ skill: "C01", w: 1 }],
         // The catalog's text is "{label}: {detail}", and a progression's detail names the chords in Roman
         // numerals (U06.L02). The same text serves every rule, so it says only "not yet".
         feedbackText: { "rubric.unmet": "{label}: not yet." },
@@ -332,7 +259,7 @@ export default defineLesson({
             id: "broken-with-arp",
             label: "The chords are broken with `.arp()`",
             required: true,
-            skills: ["N05"],
+            skills: ["C01"],
             rule: "uses",
             tool: "tb.arp",
           },

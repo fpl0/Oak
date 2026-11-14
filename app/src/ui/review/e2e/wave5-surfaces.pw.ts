@@ -245,7 +245,11 @@ test("arrange() with a section const that is not defined: said in words, no ribb
   await shoot(page, SHOTS, "w5s-undefined-const", "bark");
   // The message names the missing const (its wording is @oak/strudel's friendly error).
   // Define the missing consts in the editor and run: the form appears.
-  await page.locator(".cm-content .cm-line", { hasText: "const melVerse" }).click();
+  // The editor wraps long lines (d3): Home goes to the start of the visual row, so the click lands at the very start
+  // of the line's first row.
+  await page
+    .locator(".cm-content .cm-line", { hasText: "const melVerse" })
+    .click({ position: { x: 1, y: 4 } });
   await page.keyboard.press("Home");
   await page.keyboard.insertText(
     'const drumsChorus = s("bd bd sd ~")\nconst melChorus = n("7 9 7 4").scale("C4:major").s("piano")\n',

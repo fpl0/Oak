@@ -315,6 +315,123 @@ test("blues-signature: K:Cm is three flats; a blues key is written K:C", () => {
   expect(keyAcc("C")).toEqual([]);
 });
 
+// --- Wave 6 ---------------------------------------------------------------------------------------------------
+
+// biome-ignore lint/suspicious/noExplicitAny: abcjs parse tree
+const keysOf = (t: any): string[] =>
+  t.lines[0].staff[0].voices[0]
+    // biome-ignore lint/suspicious/noExplicitAny: abcjs element
+    .filter((e: any) => e.el_type === "key")
+    // biome-ignore lint/suspicious/noExplicitAny: abcjs element
+    .map((k: any) =>
+      k.accidentals.map((a: { acc: string; note: string }) => `${a.acc} ${a.note.toUpperCase()}`).join(", "),
+    );
+
+test("key-change-naturals: an inline [K:] cancels the old signature with naturals, then writes the new one", () => {
+  // D (F♯ C♯) to C: two naturals. C to A: three sharps, nothing to cancel. A to E: four sharps. E to D minor: the
+  // four sharps cancelled, then B flat.
+  expect(keysOf(tune(`${HEAD.replace("K:C", "K:D")}D16 || [K:C] C16 |]`))).toEqual(["natural F, natural C"]);
+  expect(keysOf(tune(`${HEAD}C16 || [K:A] A16 || [K:E] E16 || [K:Dm] D16 |]`))).toEqual([
+    "sharp F, sharp C, sharp G",
+    "sharp F, sharp C, sharp G, sharp D",
+    "natural F, natural C, natural G, natural D, flat B",
+  ]);
+  // F to G: the flat cancelled before the sharp.
+  expect(keysOf(tune(`${HEAD.replace("K:C", "K:F")}F16 || [K:G] G16 |]`))).toEqual(["natural B, sharp F"]);
+});
+
+test("key-change-naturals: a change that starts a system is a courtesy signature at the end of the one before", () => {
+  const t = tune(`${HEAD}C4 E4 G4 E4 | C16 ||\n[K:D] D4 F4 A4 F4 | D16 |]`);
+  // biome-ignore lint/suspicious/noExplicitAny: abcjs element
+  const first = t.lines[0].staff[0].voices[0].map((e: any) => e.el_type);
+  expect(first.slice(-2)).toEqual(["bar", "key"]);
+  expect(t.lines[1].staff[0].key.accidentals.map((a: { note: string }) => a.note)).toEqual(["f", "c"]);
+  // biome-ignore lint/suspicious/noExplicitAny: abcjs element
+  expect(t.lines[1].staff[0].voices[0].some((e: any) => e.el_type === "key")).toBe(false);
+});
+
+test("key-change-at-system-break: the next system's signature repeats the naturals; the one after has none", () => {
+  const t = tune(`${HEAD.replace("K:C", "K:D")}D16 | D16 ||\n[K:C] C16 | C16 |\nC16 | C16 |]`);
+  const sig = (i: number) =>
+    t.lines[i].staff[0].key.accidentals.map((a: { acc: string; note: string }) => `${a.acc} ${a.note}`);
+  expect(sig(1)).toEqual(["natural f", "natural c"]);
+  expect(sig(2)).toEqual([]);
+  // Writing the key twice clears the new system but repeats a key that has accidentals at the end of the line.
+  const twice = tune(`${HEAD.replace("K:C", "K:D")}D16 | D16 || [K:Dm]\n[K:Dm] D16 | D16 |]`);
+  expect(twice.lines[1].staff[0].key.accidentals.map((a: { acc: string }) => a.acc)).toEqual(["flat"]);
+  // biome-ignore lint/suspicious/noExplicitAny: abcjs element
+  expect(twice.lines[0].staff[0].voices[0].filter((e: any) => e.el_type === "key").length).toBe(2);
+});
+
+test("same-signature-key-change: [K:Am] after K:C is a key element with nothing to draw", () => {
+  expect(keysOf(tune(`${HEAD}C16 | [K:Am] A16 |]`))).toEqual([""]);
+});
+
+test("modal-signature: K:Gmix and K:Ddor are the parent scale's signatures; the mode is not drawn", () => {
+  const mix = tune("X:1\nM:4/4\nL:1/16\nK:Gmix\nG4 B4 d4 f4 |]").lines[0].staff[0].key;
+  expect([mix.root, mix.mode, mix.accidentals.length]).toEqual(["G", "Mix", 0]);
+  const dor = tune("X:1\nM:4/4\nL:1/16\nK:Ddor\nD4 F4 A4 B4 |]").lines[0].staff[0].key;
+  expect([dor.root, dor.mode, dor.accidentals.length]).toEqual(["D", "Dor", 0]);
+  const lyd = tune("X:1\nM:4/4\nL:1/16\nK:Flyd\nF4 A4 B4 c4 |]").lines[0].staff[0].key;
+  expect(lyd.accidentals.length).toBe(0);
+  const phr = tune("X:1\nM:4/4\nL:1/16\nK:Ephr\nE4 F4 G4 A4 |]").lines[0].staff[0].key;
+  expect(phr.accidentals.length).toBe(0);
+});
+
+test("label-splits-held-note: a symbol needs a note or rest of its own; tied halves carry two chords", () => {
+  const { warnings, notes } = parse('"Ab"C8- "Bb"C8 | "C"z8 "G7"z8 |]');
+  expect(warnings).toEqual([]);
+  // biome-ignore lint/suspicious/noExplicitAny: abcjs chord
+  expect(notes.map((n) => (n.chord ?? []).map((c: any) => c.name).join())).toEqual(["A♭", "B♭", "C", "G7"]);
+  expect(notes[0].pitches[0].startTie).toBeDefined();
+  expect(notes[1].pitches[0].endTie).toBe(true);
+});
+
+test("tuplet-across-beats: a bar-wide (3:2:5 with dotted values parses; so do triplets per beat with ties", () => {
+  const wide = parse("(3:2:5z4 E6 G6 c6 C2- | C16 |]");
+  expect(wide.warnings).toEqual([]);
+  expect([wide.notes[0].startTriplet, wide.notes[0].tripletR]).toEqual([3, 5]);
+  const perBeat = parse("(3:2:2z4 E2- (3:2:2E4 G2- (3:2:2G4 c2- (3:2:2c4 C2- | C16 |]");
+  expect(perBeat.warnings).toEqual([]);
+  expect(perBeat.notes.filter((n) => n.startTriplet).map((n) => n.tripletR)).toEqual([2, 2, 2, 2]);
+});
+
+test("tie-out-of-the-last-bar: a tie with no note to end on parses without a warning", () => {
+  const { warnings, notes } = parse("C4 D4 E4 F4- |]");
+  expect(warnings).toEqual([]);
+  expect(notes[3].pitches[0].startTie).toBeDefined();
+});
+
+test("ghost-notes: there is no ghost or parenthesised notehead; an unknown decoration is a warning", () => {
+  expect(parse("!ghost!C4 z12 |]").warnings.join(" ")).toContain("Unknown decoration");
+  // The notehead styles abcjs knows are whole-note styles: x (drums) parses, a parenthesis is not one of them.
+  expect(parse("!style=x!C4 z12 |]").warnings).toEqual([]);
+});
+
+test("notehead-classes: a class inside chord brackets is dropped, so one chord member cannot be marked in ABC", () => {
+  expect(parse("[!class=oak-guide!CE]8 z8 |]").notes[0].extraClass).toBeUndefined();
+});
+
+test("ABCJS_LIMITS: the Wave 6 rows are listed, and only the declared grid can warn", async () => {
+  const { ABCJS_LIMITS } = await import("./limits.ts");
+  const w6 = [
+    "key-change-naturals",
+    "key-change-at-system-break",
+    "same-signature-key-change",
+    "modal-signature",
+    "label-splits-held-note",
+    "tuplet-across-beats",
+    "tie-out-of-the-last-bar",
+    "notehead-classes",
+    "ghost-notes",
+    "declared-grid",
+  ];
+  for (const id of w6) expect(ABCJS_LIMITS.some((l) => l.id === id)).toBe(true);
+  expect(ABCJS_LIMITS.filter((l) => w6.includes(l.id) && l.warns !== null).map((l) => l.id)).toEqual([
+    "declared-grid",
+  ]);
+});
+
 test("ABCJS_LIMITS: every row has an id, says what abcjs does and what Oak writes; ids are unique", async () => {
   const { ABCJS_LIMITS } = await import("./limits.ts");
   expect(new Set(ABCJS_LIMITS.map((l) => l.id)).size).toBe(ABCJS_LIMITS.length);

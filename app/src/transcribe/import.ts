@@ -59,21 +59,44 @@ export const CHECK_LEVELS = [
   { value: 2, label: "Yes" },
 ] as const;
 
+/**
+ * The row a mapped recording adds (L7 in full-arrangement mode; content/specs/CF.md "Own audio"): the API's list
+ * has no form row yet (requested of the server engineer with this ID and label), and the checklist record takes
+ * any ID.
+ */
+export const FORM_CHECK_ROW = {
+  id: "form",
+  label: "The sections start where the recording's sections start",
+} as const;
+
+export type ChecklistRow = { readonly id: string; readonly label: string };
+
+/** The checklist's rows: the API's, and the form row once the recording's sections are mapped. */
+export function checklistRows(withForm: boolean): readonly ChecklistRow[] {
+  if (!withForm || OWN_AUDIO_CHECKLIST.some((r) => (r.id as string) === FORM_CHECK_ROW.id))
+    return OWN_AUDIO_CHECKLIST;
+  return [FORM_CHECK_ROW, ...OWN_AUDIO_CHECKLIST];
+}
+
 /** The self score (0–1) of a checklist: the mean of the answered rows over 2; `null` until one is answered. */
-export function selfScoreOf(checklist: Readonly<Record<string, number>>): number | null {
-  const vals = OWN_AUDIO_CHECKLIST.map((r) => checklist[r.id]).filter(
-    (v): v is number => typeof v === "number",
-  );
+export function selfScoreOf(
+  checklist: Readonly<Record<string, number>>,
+  rows: readonly ChecklistRow[] = OWN_AUDIO_CHECKLIST,
+): number | null {
+  const vals = rows.map((r) => checklist[r.id]).filter((v): v is number => typeof v === "number");
   if (vals.length === 0) return null;
   return Math.round((vals.reduce((a, b) => a + b, 0) / (vals.length * 2)) * 100) / 100;
 }
 
-export function checklistProgress(checklist: Readonly<Record<string, number>>): {
+export function checklistProgress(
+  checklist: Readonly<Record<string, number>>,
+  rows: readonly ChecklistRow[] = OWN_AUDIO_CHECKLIST,
+): {
   answered: number;
   total: number;
 } {
   return {
-    answered: OWN_AUDIO_CHECKLIST.filter((r) => typeof checklist[r.id] === "number").length,
-    total: OWN_AUDIO_CHECKLIST.length,
+    answered: rows.filter((r) => typeof checklist[r.id] === "number").length,
+    total: rows.length,
   };
 }

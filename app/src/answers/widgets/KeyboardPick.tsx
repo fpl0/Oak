@@ -9,6 +9,7 @@ import { Play, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../ui/kit/index.ts";
 import { appAudio, useAnswerEnv } from "../env.tsx";
+import { guideToneFacts } from "../facts.ts";
 import { buildChord, describeBuilt } from "../harmony.ts";
 import { chromaticMidi, pickKey, typingLetter, undoPick } from "../keys.ts";
 import { keyName, keySpoken, midiRange } from "../normalize.ts";
@@ -68,6 +69,10 @@ export function KeyboardAnswer(p: AnswerWidgetProps<"keyboard">) {
     nameChords === "live" ||
     (nameChords === "after" && feedback.state !== "idle" && feedback.state !== "pending");
   const line = built ? describeBuilt(built, naming) : null;
+  // Wave 6, the guide-tone pick (U12.L05): each picked key's place in the chord the host names, shown when the
+  // chord's name would be (after a check by default), instead of the name of what was built.
+  const guideChord = chordMode ? env.harmony?.guideChord : undefined;
+  const guide = guideChord && naming && value.length > 0 ? guideToneFacts(value, guideChord) : null;
   const focusKey = (m: number) => {
     const c = Math.max(lo, Math.min(hi, m));
     setFocusMidi(c);
@@ -213,7 +218,11 @@ export function KeyboardAnswer(p: AnswerWidgetProps<"keyboard">) {
                 <span className="font-medium text-text">
                   {built.bassName.replace(/-?\d+$/, "")} at the bottom
                 </span>
-                {line.name ? <span data-testid="chord-name">. {line.name}</span> : null}
+                {guide ? (
+                  <span data-testid="guide-tones">. {guide.map((g) => g.text).join(" · ")}</span>
+                ) : line.name && !guideChord ? (
+                  <span data-testid="chord-name">. {line.name}</span>
+                ) : null}
               </>
             ) : null}
           </span>

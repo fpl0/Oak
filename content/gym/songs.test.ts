@@ -24,6 +24,7 @@ import {
   songLadderStatus,
   transposeSong,
 } from "./songs.ts";
+import { cycles, itemAt, itemStartingAt } from "./test-cycles.ts";
 
 setDefaultTimeout(240_000);
 await grader.initRealm({ toolbox: [...toolbox], lockdown: false });
@@ -45,29 +46,6 @@ const ctx = {
 const grade = (plan: SongLadderPlan, check: SongLadderCheck, code: string) =>
   grader.gradeSongLadder({ item: check, song: plan.song, code, ctx });
 
-/** The top-level items of a layer's `<…>` (one cycle each), with their offsets in the code. */
-function cycles(code: string, label: string): { at: number; text: string }[] {
-  const line = code.split("\n").find((l) => l.startsWith(`${label}:`)) as string;
-  const lineAt = code.indexOf(line);
-  const open = line.indexOf("<");
-  const out: { at: number; text: string }[] = [];
-  let depth = 0;
-  let start = -1;
-  for (let i = open + 1; i < line.length; i++) {
-    const ch = line[i] as string;
-    if (ch === ">" && depth === 0) {
-      if (start >= 0) out.push({ at: lineAt + start, text: line.slice(start, i) });
-      break;
-    }
-    if (ch === "[") depth++;
-    if (ch === "]") depth--;
-    if (ch === " " && depth === 0) {
-      if (start >= 0) out.push({ at: lineAt + start, text: line.slice(start, i) });
-      start = -1;
-    } else if (start < 0) start = i;
-  }
-  return out;
-}
 /** The check's lead-sheet bars. */
 function barsOf(plan: SongLadderPlan, check: SongLadderCheck): [number, number] {
   const [a, b] = Array.isArray(check.phrase) ? check.phrase : [check.phrase, check.phrase];
@@ -89,15 +67,19 @@ function oneNoteWrong(plan: SongLadderPlan, check: SongLadderCheck): string {
     // Chords are compared slot by slot (a chord held over several bars is one slot): change a bar that is a slot
     // of its own (a chord change on each side) to another chord of the song.
     for (let bar = from; bar <= to; bar++) {
-      const i = bar + offset;
-      const item = items[i];
-      if (!item || items[i - 1]?.text === item.text || items[i + 1]?.text === item.text) continue;
+      const item = itemStartingAt(items, bar + offset);
+      // A tied group is not a bar of its own to swap.
+      if (item === undefined || item.span > 1) continue;
+      const before = itemAt(items, item.start - 1);
+      const after = itemAt(items, item.start + 1);
+      if (before?.text === item.text || after?.text === item.text) continue;
       const other = items.find((x) => x.text !== item.text) as { text: string };
       return `${code.slice(0, item.at)}${other.text}${code.slice(item.at + item.text.length)}`;
     }
   }
   for (let bar = from; bar <= to; bar++) {
-    const item = items[bar + offset];
+    // A tied group starts on its first bar; a bar inside one is not a place of its own to change.
+    const item = itemStartingAt(items, bar + offset);
     if (!item) continue;
     const num = /-?\d+/.exec(item.text);
     if (num) {

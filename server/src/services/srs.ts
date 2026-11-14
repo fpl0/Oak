@@ -710,6 +710,9 @@ export class SrsService {
       this.offeredDue(now, s),
       { today: this.todayIndex(now), gapDays, anchorFallback: this.anchorFallback(now) },
       this.governor(),
+      // d22 (the learner's decision of 2026-11-13, reversing decision 23): the 12-minute cap covers "a little more"
+      // alone, on top of whatever the first block (the warm-up) took.
+      { warmupCounts: false },
     );
   }
 

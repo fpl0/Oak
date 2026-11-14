@@ -13,7 +13,8 @@ import {
   type SessionSummary,
 } from "@oak/api";
 
-export type LadderLevel = 1 | 2 | 3 | 4 | 5 | 6;
+/** The rungs a learner can stand on. L7 is the learner's own audio (even slots): reported, never a level to move to. */
+export type LadderLevel = 1 | 2 | 3 | 4 | 5 | 6 | 8;
 export type Realism = 0 | 1 | 2 | 3 | 4;
 
 /** The rungs a learner sets (contracts §2.9): four generated, then public-domain songs (L5) and blues (L6). */
@@ -33,7 +34,18 @@ export const LADDER_LEVELS: Readonly<Record<LadderLevel, { name: string; what: s
     name: "blues",
     what: "a blues from before 1930, in three stages: the bass, then the changes, then the melody",
   },
+  8: {
+    name: "standards",
+    what: "a standard from the 1920s, in four stages: the form map, then the bass, the changes and the melody",
+  },
 };
+
+/** The rung a level number names: 1–6 and 8 as they are, 7 (own audio) and anything else clamped to a real rung. */
+function rungOf(level: number): LadderLevel {
+  const l = Math.round(level);
+  if (l >= 8) return 8;
+  return Math.min(6, Math.max(1, l)) as LadderLevel;
+}
 
 /** What each realism level adds (contracts §6.12). Grading never changes with it. */
 export const REALISM_LINES: Readonly<Record<Realism, string>> = {
@@ -45,7 +57,7 @@ export const REALISM_LINES: Readonly<Record<Realism, string>> = {
 };
 
 export const levelName = (level: number): string =>
-  LADDER_LEVELS[Math.min(6, Math.max(1, Math.round(level))) as LadderLevel].name;
+  Math.round(level) === 7 ? "your own audio" : LADDER_LEVELS[rungOf(level)].name;
 
 export interface GymDay {
   gymId: string | null;
@@ -67,7 +79,8 @@ const gymNo = (id: string | null): number | null => {
   return m ? Number(m[1]) : null;
 };
 
-const STAGE_NAME: Record<"bass" | "changes" | "melody", string> = {
+const STAGE_NAME: Record<"form" | "bass" | "changes" | "melody", string> = {
+  form: "the form map",
   bass: "the bass",
   changes: "the changes",
   melody: "the melody",
@@ -78,7 +91,7 @@ export function currentSong(
   songs: readonly LadderSong[] | null | undefined,
   level: number | null,
 ): LadderSong | null {
-  if (!songs || (level !== 5 && level !== 6)) return null;
+  if (!songs || (level !== 5 && level !== 6 && level !== 8)) return null;
   const at = songs.filter((s) => s.level === level && s.status === "open");
   return at.find((s) => s.passedPhrases.length > 0 || s.passedStages.length > 0) ?? at[0] ?? null;
 }
@@ -87,11 +100,15 @@ export function currentSong(
 export function songLine(
   song: Pick<LadderSong, "title" | "level" | "phrases" | "passedPhrases" | "passedStages">,
 ): string {
-  if (song.level === 6) {
-    const stage = (["bass", "changes", "melody"] as const).find((s) => !song.passedStages.includes(s));
+  if (song.level === 6 || song.level === 8) {
+    const stages =
+      song.level === 8
+        ? (["form", "bass", "changes", "melody"] as const)
+        : (["bass", "changes", "melody"] as const);
+    const stage = stages.find((s) => !song.passedStages.includes(s));
     if (!stage) return `${song.title}: every stage passed`;
     return song.passedStages.length === 0
-      ? `${song.title}, the bass first`
+      ? `${song.title}, ${STAGE_NAME[stages[0]]} first`
       : `${song.title}: ${STAGE_NAME[stage]} next`;
   }
   const total = song.phrases.length;
@@ -167,6 +184,10 @@ export function gymDay(
     explain.push(
       "The stages open in order: the bass passes at 90%, the changes and the melody at 85%. Nothing revealed; the song waits in Transcribe between days.",
     );
+  else if (level === 8)
+    explain.push(
+      "The stages open in order: the form map exact, the bass at 90%, the changes at 85% of the bars, the melody at 90%. Nothing revealed; the song waits in Transcribe between days.",
+    );
   else explain.push("It is graded exactly: 85% or better is a pass. A revealed answer earns no pass.");
   return {
     gymId: id,
@@ -181,7 +202,9 @@ export function gymDay(
         ? "Every fifth session is a transcription slot: today, a public-domain folk song, written down in code a phrase at a time."
         : level === 6
           ? "Every fifth session is a transcription slot: today, a blues, written down in code stage by stage: bass, changes, melody."
-          : "Every fifth session is a transcription slot: you listen to a short generated piece and write it down in code.",
+          : level === 8
+            ? "Every fifth session is a transcription slot: today, a standard, taken down stage by stage: form, bass, changes, melody."
+            : "Every fifth session is a transcription slot: you listen to a short generated piece and write it down in code.",
     explain,
   };
 }
@@ -337,11 +360,13 @@ export function summaryLadderCoda(g: SummaryGym | null | undefined): LadderCoda 
   const l = g.ladder;
   const name = levelName(l.level);
   const pass =
-    l.level === 6
-      ? "A stage passes at 85% or better, the bass at 90%"
-      : l.level === 5
-        ? "A phrase passes at 85% or better"
-        : "A pass is 85% or better";
+    l.level === 8
+      ? "The form map passes exact, the bass and the melody at 90%, the changes at 85% of the bars"
+      : l.level === 6
+        ? "A stage passes at 85% or better, the bass at 90%"
+        : l.level === 5
+          ? "A phrase passes at 85% or better"
+          : "A pass is 85% or better";
   const today: LadderCoda["today"] =
     l.bestScore === null
       ? {
@@ -383,6 +408,6 @@ export function summaryLadderCoda(g: SummaryGym | null | undefined): LadderCoda 
 
 /** What a new level holds, in one sentence (the Coda's level-up offer). */
 export function levelUpWhat(to: number): string {
-  const what = LADDER_LEVELS[Math.min(6, Math.max(1, Math.round(to))) as LadderLevel].what;
+  const what = LADDER_LEVELS[rungOf(to)].what;
   return `On level ${Math.round(to)} you hear ${what}.`;
 }

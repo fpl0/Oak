@@ -31,8 +31,10 @@ import {
   singLabelsFor,
   targetLabel,
   targetMarks,
+  tonicPc,
 } from "./rules.ts";
 import type { ExerciseRendererProps } from "./types.ts";
+import { guideToneFallback, singHowText } from "./wave6.ts";
 
 const WORD: Record<"on" | "close" | "off" | "missed", string> = {
   on: "on the note",
@@ -275,7 +277,13 @@ export function SingRenderer(props: ExerciseRendererProps) {
     if (value.length > 0) h.markDone();
   }, [value.length, h.markDone]);
 
-  const fallback = singFallback(ex);
+  // A guide-tone line read from music has no degrees of its own: in Quiet mode they are read from its notes.
+  const key = ex.key ?? h.env.key;
+  const read =
+    quiet && ex.mode === "guide-tones" && ex.fallback === "identify" && ex.target.from !== "degrees"
+      ? guideToneFallback(env.sing?.notes ?? [], key, tonicPc(key.tonic))
+      : null;
+  const fallback: ReturnType<typeof singFallback> = read ? { kind: "identify", ...read } : singFallback(ex);
   const chip = quiet ? (
     <Chip tone="neutral" className="self-start" data-testid="quiet-chip">
       <MicOff aria-hidden className="mr-1 inline size-3.5" />
@@ -322,9 +330,7 @@ export function SingRenderer(props: ExerciseRendererProps) {
           {sight && credits === null ? null : <Targets ex={ex} labels={labels} credits={credits} />}
           {sight ? null : (
             <p className="text-sm text-text-2" data-testid="sing-how">
-              {ex.mode === "echo"
-                ? "Press Sing: Oak plays it once, then you sing it back."
-                : `Press Sing: the chords set home${ex.cue.countInBars > 0 ? ", a bar of clicks counts you in" : ""}, then you sing, on ${labels === "syllables" ? "the syllables (the numbers work too)" : "the numbers or any vowel"}.`}
+              {singHowText({ mode: ex.mode, countIn: ex.cue.countInBars > 0, labels })}
             </p>
           )}
           {/* The targets come back here after a take, each with how it went in words. */}

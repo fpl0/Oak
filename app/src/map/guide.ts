@@ -17,6 +17,11 @@ export interface NextPath {
   edges: Set<string>;
   /** False for a lesson nobody has written yet (the edge of the written course): shown, never opened. */
   written: boolean;
+  /**
+   * The next lesson introduces these skills (a new leaf grows); false when it deepens leaves that already exist
+   * (U15.L03–L06 all practise H12) and for a checkpoint or capstone, which check them.
+   */
+  grows: boolean;
 }
 
 export const edgeKey = (from: string, to: string) => `${from}>${to}`;
@@ -29,6 +34,7 @@ const EMPTY: NextPath = {
   feeders: [],
   edges: new Set(),
   written: true,
+  grows: false,
 };
 
 function lessonOf(syllabus: SyllabusDef | null, id: string) {
@@ -55,9 +61,11 @@ export function whatsNext(
   let kind: NextPath["kind"] = null;
   let title: string = next;
   let targets: string[] = [];
+  let grows = false;
   const lesson = lessonOf(syllabus, next);
   if (lesson) {
     kind = "lesson";
+    grows = lesson.introduces.length > 0;
     title = `${lesson.id} · ${lesson.title}`;
     targets = lesson.introduces.length > 0 ? [...lesson.introduces] : [...lesson.practises];
   } else if (/\.CP\d*$/.test(next)) {
@@ -92,7 +100,7 @@ export function whatsNext(
     if (!targetSet.has(a)) feeders.add(a);
   }
   const written = kind !== "lesson" || !authored || authored.size === 0 || authored.has(next);
-  return { sessionId: next, kind, title, targets, feeders: [...feeders].sort(), edges, written };
+  return { sessionId: next, kind, title, targets, feeders: [...feeders].sort(), edges, written, grows };
 }
 
 export type PractiseTarget =

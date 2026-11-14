@@ -6,6 +6,7 @@ import { type AudioPlan, clickPlan, eventsToAudioPlan, parseMiniCode, trialAudio
 import { degreeSemitones, labelPitch, METERS } from "@oak/theory";
 import type { SungSummary } from "../answers/types.ts";
 import { chordComparePlan, harmonyCuePlan, isHarmonyTrial, singCuePlan } from "./harmony.ts";
+import { leanPath } from "./wave6.ts";
 
 /** The comfortable range the reference cadence of a sung part is placed in (contracts §8.1 rule 3). */
 export type ComfortRange = Pick<LearnerProfile, "comfLow" | "comfHigh">;
@@ -293,6 +294,9 @@ export function resolutionPath(trial: Trial<unknown>): Degree[] {
   const key = keyOfTrial(trial);
   const targets = (trial.params.resolutionTargets as { midi: number }[] | undefined) ?? [];
   if (!key || targets.length === 0) return [];
+  // A chromatic lean is recorded as it was asked (♯5 6, never ♭6 6): the spelling is the degree's, not the pitch's.
+  const lean = leanPath(trial);
+  if (lean) return lean;
   return targets.map((t) => labelPitch(t.midi, key).degree);
 }
 

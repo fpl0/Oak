@@ -6,12 +6,14 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { toolbox } from "../../content/toolbox.ts";
+import { W6_TUNING } from "../../packages/strudel/e2e/wave6-fixtures.ts";
 import {
   A1_CASES,
   BASS_TONE_CASES,
   CONTROL_CASES,
   QUALITY_CASES,
   SOUND_CASES,
+  W6_LESSON_CASES,
 } from "../../packages/strudel/src/audibility/cases.ts";
 import { OAK_ALIASES, OAK_KITS } from "./pack.config.ts";
 
@@ -126,6 +128,46 @@ describe("Wave 5: U08–U11 and the A1 side lessons", () => {
     // and the bass and blues registers they are played in
     expect(Object.keys(wave5.bass.tuning).sort()).toEqual(["ebass", "fingerbass", "synthbass", "upright"]);
     expect(Object.keys(wave5.blues.tuning).sort()).toEqual(["cleangtr", "crunch", "organ", "piano"]);
+  });
+});
+
+describe("Wave 6: U12–U17", () => {
+  const wave6 = JSON.parse(readFileSync(join(ROOT, "packages/strudel/sound-wave6.json"), "utf8")) as {
+    audibility: {
+      lessons: { id?: string; audible: boolean; lesson: string }[];
+      tuning: Record<string, unknown[]>;
+    };
+  };
+  const unlockedIn = (re: RegExp) =>
+    toolbox.filter((t) => {
+      const at = Array.isArray(t.unlock.at) ? t.unlock.at : [t.unlock.at];
+      return at.some((s) => re.test(String(s)));
+    });
+  const rows = unlockedIn(/^U1[2-7]\./).filter((t) => ["sound", "tool", "chord", "scale"].includes(t.kind));
+
+  test("every tool, chord, scale and sound U12–U17 unlock has a case and is proven audible", () => {
+    expect(rows.length).toBeGreaterThanOrEqual(20);
+    const cased = new Set([...CONTROL_CASES, ...SOUND_CASES].map((c) => c.id));
+    expect(rows.map((t) => t.id).filter((id) => !cased.has(id))).toEqual([]);
+    expect(rows.map((t) => t.id).filter((id) => table.audible[id] !== true)).toEqual([]);
+  });
+
+  test("every tool, chord and scale U12–U17 unlock is also heard in its lesson's own loop", () => {
+    const taught = rows.filter((t) => t.kind !== "sound").map((t) => t.id);
+    const inLesson = new Set(W6_LESSON_CASES.map((c) => c.id));
+    expect(taught.filter((id) => !inLesson.has(id))).toEqual([]);
+    const measured = wave6.audibility.lessons;
+    expect(measured.length).toBe(W6_LESSON_CASES.length);
+    expect(measured.filter((r) => !r.audible).map((r) => `${r.lesson} ${r.id}`)).toEqual([]);
+  });
+
+  test("the tuning table covers every pitched sound U12–U17 unlock, at the pitches its lessons play", () => {
+    const pitched = rows.filter((t) => t.kind === "sound").map((t) => t.id.replace(/^snd\./, ""));
+    expect(pitched.filter((s) => !(s in W6_TUNING))).toEqual([]);
+    for (const [sound, midis] of Object.entries(W6_TUNING))
+      expect([sound, wave6.audibility.tuning[sound]?.length]).toEqual([sound, midis.length]);
+    const measured = new Set(QUALITY_CASES.map((c) => c.id));
+    expect(pitched.map((s) => `snd.${s}`).filter((id) => !measured.has(id))).toEqual([]);
   });
 });
 

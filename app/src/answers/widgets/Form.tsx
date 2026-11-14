@@ -39,6 +39,7 @@ import {
   revealedOf,
   SubmitHint,
 } from "../ui.tsx";
+import { FormMapAnswer } from "./FormMap.tsx";
 
 /** A stable colour per section type, by first appearance in the answer (the same letter, the same colour). */
 function colourOf(value: readonly string[], id: string): string | null {
@@ -53,6 +54,8 @@ function colourOf(value: readonly string[], id: string): string | null {
 }
 
 export function FormAnswer(p: AnswerWidgetProps<"form">) {
+  // Wave 6: `input: "map"` is the form map of a whole tune (cut the bar strip, name the sections).
+  if (p.spec.input === "map") return <FormMapAnswer {...p} />;
   return p.spec.input === "order" ? <FormOrder {...p} /> : <FormLabels {...p} />;
 }
 

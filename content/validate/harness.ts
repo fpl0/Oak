@@ -272,14 +272,20 @@ export async function notateCode(
       available: true,
       error: `nothing to engrave on the ${staff} staff (no ${staff === "perc" ? "drum" : "pitched"} events)`,
     };
-  const { score, abc } = notation.notate({
-    events,
-    meter: METERS[meter],
-    key,
-    bars,
-    staff: staff === "perc" ? "percussion" : staff,
-    ...(opts.swing ? { swing: opts.swing } : {}),
-  });
+  // As the lesson host does (`staffHostInput` with the code): a chromatic step is drawn as the code writes it
+  // (`n("3#")` a ♯4, `n("4b")` a ♭5), not by the direction it moves in.
+  const input = notation.staffHostInput(
+    {
+      events,
+      meter: METERS[meter],
+      key,
+      bars,
+      staff: staff === "perc" ? "percussion" : staff,
+      ...(opts.swing ? { swing: opts.swing } : {}),
+    },
+    { code },
+  );
+  const { score, abc } = notation.notate(input);
   used.notation.add("package");
   return { available: true, approximate: score.approximate, warnings: score.warnings.length, abc: abc.abc };
 }

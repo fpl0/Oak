@@ -4,7 +4,14 @@
 import { describe, expect, test } from "bun:test";
 import { evalHeadless } from "@oak/grader/testing";
 import { BAND_STAGES, bandCodeAt, bands } from "../../../content/bands/index.ts";
-import { bandCodeFor, bandOctave, foldBandRegister, tonicOffset } from "./band.ts";
+import {
+  bandCodeFor,
+  bandOctave,
+  foldBandRegister,
+  keyPlanAt,
+  learnerKeyPlanOf,
+  tonicOffset,
+} from "./band.ts";
 import type { BandSetup } from "./types.ts";
 
 const TONICS = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"] as const;
@@ -115,6 +122,133 @@ describe("a Band that follows the learner's key", () => {
     expect(keysOf("bass")).toEqual([["C4 major"], ["G3 major"], ["D4 major"]]);
     // The learner's line is untouched.
     expect(keysOf("mel")).toEqual([["C4 major"], ["G4 major"], ["D4 major"]]);
+  });
+  // Wave 6 (U17, C7, CF-A): the lift. Contracts §6.8 item 4 writes a key change after arrange() or as a lifted
+  // section const; the Band follows both, and a key a step up is played a step up.
+  test("the lift after arrange(): the Band rises a whole step with the last chorus, on every track", async () => {
+    const learner = [
+      'const melVerse = n("<[0 2 4 2] [4 2 1 ~]>")',
+      'const melChorus = n("<[7 6 4 2] [4 ~ 2 ~]>")',
+      'const bassVerse = n("<0 3>")',
+      'kick: s("bd*4")',
+      'bass: arrange([2, bassVerse], [2, bassVerse], [2, bassVerse]).scale("<F2:major!4 G2:major!2>").s("ebass")',
+      'mel: arrange([2, melVerse], [2, melChorus], [2, melChorus]).scale("<F4:major!4 G4:major!2>").s("piano")',
+    ].join("\n");
+    expect(learnerKeyPlanOf(learner)).toBe("<F2:major!4 G2:major!2>");
+    const band = bandCodeFor(setupOf(code, "F", true), ctx("F", learner));
+    // F is the top of the register (octave 4); G alone would fold to octave 3, a seventh down. It is a lift: up.
+    expect(band).toContain('.scale("<F4:major!4 G4:major!2>")');
+    const r = await evalHeadless(`setcpm(90/4)\n${learner}\n${band}`, 6);
+    const lowest = (track: string, from: number, to: number) =>
+      Math.min(
+        ...r.events
+          .filter((e) => e.track === track && e.onset >= from && e.onset < to && e.midi !== null)
+          .map((e) => e.midi as number),
+      );
+    for (const track of ["bass", "chords"]) {
+      // The vamp is two bars: bars 3–4 (in F) and bars 5–6 (in G) play the same degrees, a whole step apart.
+      expect([track, lowest(track, 4, 6) - lowest(track, 2, 4)]).toEqual([track, 2]);
+      const keys = [...new Set(r.events.filter((e) => e.track === track).map((e) => e.scale))];
+      expect(keys).toEqual(["F4 major", "G4 major"]);
+    }
+  });
+  test("a half-step lift and a lift out of B: up a step, never down a seventh", () => {
+    const plan = (arg: string) => keyPlanAt(arg, 4);
+    expect(plan("<F4:major!16 F#4:major!8>")).toBe("<F4:major!16 F#4:major!8>");
+    expect(plan("<C4:major!16 D4:major!8>")).toBe("<C4:major!16 D4:major!8>");
+    expect(plan("<B4:major!16 C4:major!8>")).toBe("<B3:major!16 C4:major!8>");
+    expect(plan("<A4:major!8 B4:major!8 C#4:major!8>")).toBe("<A3:major!8 B3:major!8 C#4:major!8>");
+    // Two lifts in a row keep rising; the Band is then a step above its register for the last section.
+    expect(plan("<E4:major!8 F4:major!8 G4:major!8>")).toBe("<E4:major!8 F4:major!8 G4:major!8>");
+    // A step down is a step down.
+    expect(plan("<G4:major!8 F4:major!8>")).toBe("<G3:major!8 F3:major!8>");
+  });
+  test("a wider move goes back to the register: to the dominant and round the fifths without drifting", () => {
+    expect(keyPlanAt("<C4:major!8 G4:major!8 C4:major!8>", 4)).toBe("<C4:major!8 G3:major!8 C4:major!8>");
+    expect(keyPlanAt("<C4:major G4:major D4:major A4:major E4:major B4:major>", 4)).toBe(
+      "<C4:major G3:major D4:major A3:major E4:major B3:major>",
+    );
+    // The relative minor and back (U17.L01's neighbours): each in its own register.
+    expect(keyPlanAt("<C4:major!8 A4:minor!8>", 4)).toBe("<C4:major!8 A3:minor!8>");
+    // The Band line's own octave is kept (a bass line written at octave 2).
+    expect(keyPlanAt("<F4:major!4 G4:major!2>", 2)).toBe("<F2:major!4 G2:major!2>");
+  });
+  test("the plan is found on whichever track carries it, behind a part in one key", () => {
+    const learner = [
+      'pad: n("[0,2,4]").scale("C3:major").s("pad")',
+      'mel: arrange([8, melVerse], [8, melChorus]).scale("<C4:major!8 D4:major!8>").s("piano")',
+    ].join("\n");
+    expect(learnerKeyPlanOf(learner)).toBe("<C4:major!8 D4:major!8>");
+    expect(bandCodeFor(setupOf(code, "C", true), ctx("C", learner))).toContain(
+      '.scale("<C4:major!8 D4:major!8>")',
+    );
+  });
+  test("a lifted section const (the other form of §6.8) is read as a plan, bar counts from arrange()", async () => {
+    const learner = [
+      'const melVerse = n("<[0 2 4 2] [4 2 1 ~]>").scale("C4:major")',
+      'const melChorus = n("<[7 6 4 2] [4 ~ 2 ~]>").scale("C4:major")',
+      'const melChorus2 = n("<[7 6 4 2] [4 ~ 2 ~]>").scale("D4:major")',
+      "",
+      'mel: arrange([8, melVerse], [8, melChorus], [4, silence], [8, melChorus2]).s("piano")',
+    ].join("\n");
+    // The rest stays in the key before it; the lift starts where the lifted section does.
+    expect(learnerKeyPlanOf(learner)).toBe("<C4:major!20 D4:major!8>");
+    const band = bandCodeFor(setupOf(code, "C", true), ctx("C", learner));
+    expect(band).toContain('.scale("<C4:major!20 D4:major!8>")');
+    const r = await evalHeadless(`setcpm(90/4)\n${learner}\n${band}`, 28);
+    const keyAt = (bar: number) => [
+      ...new Set(
+        r.events.filter((e) => e.track === "bass" && Math.floor(e.onset) === bar).map((e) => e.scale),
+      ),
+    ];
+    expect([keyAt(0), keyAt(19), keyAt(20), keyAt(27)]).toEqual([
+      ["C4 major"],
+      ["C4 major"],
+      ["D4 major"],
+      ["D4 major"],
+    ]);
+  });
+  test("sections in one key, and code with chord names only, are no plan", () => {
+    expect(
+      learnerKeyPlanOf(
+        'const melVerse = n("0").scale("C4:major")\nconst melChorus = n("4").scale("C4:major")\nmel: arrange([4, melVerse], [4, melChorus])',
+      ),
+    ).toBeNull();
+    expect(learnerKeyPlanOf('chords: chord("<C F G C>").voicing()')).toBeNull();
+    expect(learnerKeyPlanOf('// .scale("<C4:major D4:major>")\nmel: n("0").scale("C4:major")')).toBeNull();
+  });
+  test("a Band in sections follows the form and the key plan at once", async () => {
+    const sectioned = bands.find((b) => b.id === "band.sections");
+    if (!sectioned) throw new Error("band.sections is missing");
+    const learner = [
+      'const melVerse = n("<[0 2 4 2] [4 2 1 ~]>")',
+      'const melChorus = n("<[7 6 4 2] [4 ~ 2 ~]>")',
+      'const melChorus2 = n("<[7 6 4 2] [4 ~ 2 ~]>")',
+      'mel: arrange([4, melVerse], [4, melChorus], [4, melChorus2]).scale("<C4:major!8 D4:major!4>").s("piano")',
+    ].join("\n");
+    const band = bandCodeFor(
+      setupOf(
+        bandCodeAt(sectioned, "flavour.pop", () => true),
+        "C",
+        true,
+      ),
+      ctx("C", learner),
+    );
+    expect(band).toContain("arrange([4, bassVerse], [4, bassChorus], [4, bassChorus])");
+    expect(band).toContain('.scale("<C4:major!8 D4:major!4>")');
+    const r = await evalHeadless(`setcpm(90/4)\n${learner}\n${band}`, 12);
+    const pcsOf = (track: string, bar: number) =>
+      r.events
+        .filter((e) => e.track === track && Math.floor(e.onset) === bar && e.midi !== null)
+        .map((e) => (e.midi as number) % 12);
+    // The second chorus plays the first chorus's bars a whole step up, bar for bar.
+    for (let bar = 0; bar < 4; bar++)
+      for (const track of ["bass", "chords"])
+        expect([track, bar, pcsOf(track, 8 + bar)]).toEqual([
+          track,
+          bar,
+          pcsOf(track, 4 + bar).map((pc) => (pc + 2) % 12),
+        ]);
   });
   test("without a patterned key, the Band keeps one key and the step key folds", () => {
     const band = bandCodeFor(setupOf(code, "A", true), ctx("A", 's("bd")'));

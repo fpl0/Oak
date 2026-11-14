@@ -167,8 +167,10 @@ mel: arrange([12, riff], [12, answer]).s("piano")`;
 
 const STEADY =
   "[0 1 2 3] [0 1 2 3] [0 1 2 3] [0 ~ ~ ~] [0 1 2 3] [0 1 2 3] [0 1 2 3] [0 ~ ~ ~] [0 1 2 3] [0 1 2 3] [0 1 2 3] [4 ~ ~ ~]";
+// Half the bars repeat an earlier shape (6 of 12), the others each go their own way. Since d6 a bar of one note
+// counts when its rhythm repeats (bars 4 and 12 here), so the restless bars differ in rhythm, not only in notes.
 const RESTLESS =
-  "[0 1 2 3] [0 1 2 3] [0 1 2 3] [0 ~ ~ ~] [3 ~ 2 1] [3 ~ 2 1] [0 1 2 3] [0 ~ ~ ~] [4 ~ 3 ~] [3 ~ 2 ~] [0 1 2 3] [4 ~ ~ ~]";
+  "[0 1 2 3] [0 1 2 3] [0 1 2 3] [0 ~ ~ ~] [3 ~ 2 1] [3 2 ~ 1] [2 1 ~ 0] [~ 0 ~ 2] [4 ~ 3 ~] [3 ~ ~ 2] [0 1 2 3] [4 ~ ~ ~]";
 
 /** The quick change at 126 BPM: one drums line with a swung ride, the riff on the blues scale in n(). */
 const C5_QUICK_RIDE = `setcpm(126/4)

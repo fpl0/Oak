@@ -44,7 +44,13 @@ describe("the release flow", () => {
     a.send({ type: "RELEASE" });
     await waitFor(a, (s) => s.matches("released"));
     expect(seen).toEqual([
-      { title: "Intro", line: "Four bars, then the toms.", includeReviewNote: false, recording: take },
+      {
+        title: "Intro",
+        line: "Four bars, then the toms.",
+        includeReviewNote: false,
+        recording: take,
+        otherTakes: [],
+      },
     ]);
     expect(a.getSnapshot().context).toMatchObject({ trackId: "trk_1", version: 1, audioError: null });
   });
@@ -81,5 +87,54 @@ describe("the release flow", () => {
     a.send({ type: "RELEASE_WITHOUT_AUDIO" });
     await waitFor(a, (s) => s.matches("released"));
     expect(seen[0]?.recording).toBeNull();
+  });
+
+  test("d20: every take of the sitting is kept; the newest is chosen unless the learner picks another", async () => {
+    const second: Recording = {
+      blob: new Blob([new Uint8Array([4, 5])]),
+      mime: "audio/webm",
+      durationS: 12.4,
+    };
+    const queue = [take, second];
+    const { a, seen } = actor({ record: async () => queue.shift() as Recording });
+    a.send({ type: "EDIT", patch: { title: "Single" } });
+    a.send({ type: "RECORD" });
+    await waitFor(a, (s) => s.matches("take"));
+    a.send({ type: "RECORD" });
+    await waitFor(a, (s) => s.matches("take") && s.context.takes.length === 2);
+    expect(a.getSnapshot().context).toMatchObject({ chosen: 1, recording: second });
+    // Out of range changes nothing; the first take can be chosen again.
+    a.send({ type: "CHOOSE", index: 5 });
+    expect(a.getSnapshot().context.chosen).toBe(1);
+    a.send({ type: "CHOOSE", index: 0 });
+    expect(a.getSnapshot().context).toMatchObject({ chosen: 0, recording: take });
+    a.send({ type: "RELEASE" });
+    await waitFor(a, (s) => s.matches("released"));
+    expect(seen[0]).toMatchObject({ recording: take, otherTakes: [second] });
+  });
+
+  test("d20: a second take that fails leaves the first as it was, with the reason", async () => {
+    let n = 0;
+    const { a, seen } = actor({
+      record: async () => {
+        n++;
+        if (n === 2) throw new Error("Recording stopped. Record again when you're ready.");
+        return take;
+      },
+    });
+    a.send({ type: "EDIT", patch: { title: "Single" } });
+    a.send({ type: "RECORD" });
+    await waitFor(a, (s) => s.matches("take"));
+    a.send({ type: "RECORD" });
+    await waitFor(a, (s) => s.matches("take") && s.context.error !== null);
+    expect(a.getSnapshot().context).toMatchObject({
+      takes: [take],
+      chosen: 0,
+      recording: take,
+      error: "Recording stopped. Record again when you're ready.",
+    });
+    a.send({ type: "RELEASE" });
+    await waitFor(a, (s) => s.matches("released"));
+    expect(seen[0]).toMatchObject({ recording: take, otherTakes: [] });
   });
 });

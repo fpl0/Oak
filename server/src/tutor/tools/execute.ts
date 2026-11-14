@@ -13,7 +13,7 @@ import type { StepSource } from "../domain.ts";
 import { lintStrict } from "../lint/strict.ts";
 import type { TutorPorts } from "../ports.ts";
 import { compareView, disclosureLevel, findLeaks, leakMarkers, lessonContextView } from "../redaction.ts";
-import type { ReviewValue } from "../reviews.ts";
+import { type ReviewValue, reviewRulesOf } from "../reviews.ts";
 import type { Emit, ExecuteTool, ToolCall, ToolResult, TurnContext } from "../types.ts";
 import { reviewKindOf } from "../types.ts";
 import { isToolName, type ToolName } from "./defs.ts";
@@ -172,7 +172,7 @@ export function createToolSession(deps: ToolSessionDeps): ToolSession {
     if (review !== undefined) return refused("a review has already been accepted");
     if (reviewSubmits >= MAX_REVIEW_SUBMITS) return refused("no resubmissions left");
     reviewSubmits++;
-    const rules = { revisions: ctx.review.revisions, totalBars: ctx.review.totalBars };
+    const rules = reviewRulesOf(ctx.review, ctx.terms, ctx.conversation.subjectId);
     const check = await acceptReview(wanted, input, rules, ports.grader, signal);
     if (!check.ok) return data({ accepted: false, problems: check.problems }, "review not accepted");
     review = check.value;

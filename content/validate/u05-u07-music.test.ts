@@ -10,10 +10,10 @@ import { evalHeadless } from "@oak/grader/testing";
 import { capstones } from "../capstones.ts";
 import { checkpoint as U05CP } from "../core/U05/CP/checkpoint.ts";
 import U05L03 from "../core/U05/L03/lesson.ts";
-import U05L04 from "../core/U05/L04/lesson.ts";
 import U05L05 from "../core/U05/L05/lesson.ts";
 import U05L07 from "../core/U05/L07/lesson.ts";
 import U05L08 from "../core/U05/L08/lesson.ts";
+import U05L09 from "../core/U05/L09/lesson.ts";
 import U06L02 from "../core/U06/L02/lesson.ts";
 import U06L06 from "../core/U06/L06/lesson.ts";
 import U06L10 from "../core/U06/L10/lesson.ts";
@@ -165,10 +165,10 @@ describe("the diatonic triads (U05.L02, U06.L01, U06.L02)", () => {
   });
 });
 
-describe("named chords (U05.L04 S5)", () => {
+describe("named chords (U05.L09 S3; U05.L04 S5 before contracts 1.6 split the lesson)", () => {
   // Added in review: the prose now says Strudel's voicing need not put the root lowest, as the roll shows.
   test("by name, each chord has the same three letters as the stack; C's lowest note is E", async () => {
-    const evs = await events(exampleOf(U05L04, "by-name").code, 4);
+    const evs = await events(exampleOf(U05L09, "by-name").code, 4);
     for (let bar = 0; bar < 4; bar++) {
       const hand = chordAt(evs, "chords", bar).map(mod12);
       const named = chordAt(evs, "keys", bar + 0.5).map(mod12);

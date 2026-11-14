@@ -76,7 +76,7 @@ describe("capstone review of one album version (C2)", () => {
       "review_target: album track trk-c2 version 2",
       "chords bar 3: Am (vi, T)",
       "chords bar 7: F (IV, PD) then G (V, D) on beat 3",
-      "cadence: bar 8 PAC",
+      "cadence: bar 8 authentic cadence (V to I, melody on 1)",
       "motif: mel bar 1 returns exact at bar 5",
       "range: mel C4-A4 (9 semitones), highest note in bar 6",
       "chord_tones_on_strong_beats: 100%",

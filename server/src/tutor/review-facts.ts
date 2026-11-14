@@ -11,14 +11,20 @@ import type {
   FactBlues,
   FactChord,
   FactContrast,
+  FactDevice,
   FactForm,
+  FactKeySpan,
+  FactMode,
   FactMotif,
+  FactOutsideChord,
   FactRange,
+  FactRhythm,
   FactSection,
   FactStage,
   FactSwing,
   ReviewFacts,
 } from "./domain.ts";
+import { DEGREE_SYLLABLES, keyMoveText, MODE_COLOUR, modeOf } from "./vocabulary.ts";
 
 /** The part of `@oak/grader`'s `HarmonyView` the facts read. */
 export interface HarmonyViewLike {
@@ -72,6 +78,83 @@ export interface ReviewFactsInput {
   checks?: readonly CheckLike[] | null;
   /** A declared pickup: cycle 0 is bar 0 and section bars count from the first full bar (c4). */
   pickupBars?: boolean;
+  // --- Wave 6 (wave6.md §3.2): the U12–U17 views as they are ---
+  /** `chromaticHarmonyView(...)`: sevenths, applied and borrowed chords, guide tones, numerals in the key in force. */
+  chromatic?: ChromaticViewLike | null;
+  /**
+   * `modeView` of the whole piece (`span` null) or of the cycles `[from, to)` of one section. Called once for the
+   * piece and once per section of the form view, so C6's review can say which mode each section is in.
+   */
+  mode?: ((span: readonly [number, number] | null) => ModeViewLike | null) | null;
+  /** `keyPlanView(...)`. */
+  keyPlan?: KeyPlanViewLike | null;
+  /** `detectDevices(...)` (or `AnalysisSummary.deviceList`). */
+  devices?: readonly DeviceLike[] | null;
+  /** One pass of the piece in seconds (`AnalysisSummary.durationSec`). */
+  durationSec?: number | null;
+  /** `rhythmView(...)`. */
+  rhythm?: RhythmViewLike | null;
+}
+
+export interface KeySpecLike {
+  tonic: string;
+  mode: string;
+}
+
+/** The part of @oak/grader's `ChromaticHarmonyView` the facts read. */
+export interface ChromaticViewLike {
+  chords: readonly {
+    bar: number;
+    beat: number;
+    symbol: string;
+    key: KeySpecLike;
+    rn: string;
+    seventh: string | null;
+    kind: string;
+    target: string | null;
+    resolves: boolean | null;
+    next: string | null;
+  }[];
+  guideLines?: { fromThird: readonly ({ name: string } | null)[] } | null;
+}
+
+/** The part of @oak/grader's `ModeView` the facts read. */
+export interface ModeViewLike {
+  tonic: string | null;
+  stated: KeySpecLike | null;
+  fits: readonly string[];
+  characteristic: { degree: string; count: number; strong: number } | null;
+  outside: readonly string[];
+  tonicChordShare: number | null;
+}
+
+/** The part of @oak/grader's `KeyPlanView` the facts read (bars 1-based on cycles). */
+export interface KeyPlanViewLike {
+  spans: readonly { fromBar: number; toBar: number; key: KeySpecLike; source: string }[];
+  changes: readonly { bar: number; distance: { pivots: number } }[];
+}
+
+export interface DeviceLike {
+  device: string;
+  bar: number;
+  bars?: number;
+  text: string;
+}
+
+/** The part of @oak/grader's `RhythmView` the facts read. */
+export interface RhythmViewLike {
+  compound: boolean;
+  beats: number;
+  bpm: number;
+  tracks: readonly {
+    track: string;
+    pushes: readonly { acrossBar: boolean }[];
+    ghosts: readonly string[];
+    written: { ties: number; dotted: number };
+    tuplets: readonly { bar: number; division?: number }[];
+    feel: string;
+    syncopation: { count: number };
+  }[];
 }
 
 /** The part of `SectionFeatures` the facts read; the rest is passed through to `contrast`. */
@@ -149,12 +232,25 @@ const round3 = (n: number) => Math.round(n * 1000) / 1000;
 function chordsOf(input: ReviewFactsInput): FactChord[] {
   const view = input.view;
   if (view) {
+    // Wave 6: a piece that changes key keeps its numerals right after the change: where the chromatic view read
+    // the same chord at the same place, its numeral (in the key in force at that bar) wins.
+    const inForce = new Map<string, string>();
+    if (input.keyPlan && input.keyPlan.spans.length > 1)
+      for (const c of input.chromatic?.chords ?? []) inForce.set(`${c.bar}:${round3(c.beat)}`, c.rn);
     const out: FactChord[] = [];
     for (const b of view.beats) {
       if (!b.change || b.chord === null) continue;
       const slot = view.slots[b.chord];
       if (!slot) continue;
-      out.push({ bar: b.bar, beat: b.beat, symbol: slot.symbol, rn: slot.rn, fn: slot.function });
+      const rn = inForce.get(`${b.bar}:${round3(b.beat)}`) ?? slot.rn;
+      // A numeral read in another key than the piece's first has no function from the first key's reading.
+      out.push({
+        bar: b.bar,
+        beat: b.beat,
+        symbol: slot.symbol,
+        rn,
+        fn: rn === slot.rn ? slot.function : null,
+      });
     }
     return out;
   }
@@ -382,7 +478,12 @@ export function stageFacts(checks: readonly CheckLike[] | null | undefined): Fac
     check: c.checkId,
     layer: c.layer,
     stage: c.stage,
-    phrase: typeof c.phrase === "number" ? `phrase ${c.phrase}` : `phrases ${c.phrase[0]}-${c.phrase[1]}`,
+    phrase:
+      c.layer === "form"
+        ? "the whole tune"
+        : typeof c.phrase === "number"
+          ? `phrase ${c.phrase}`
+          : `phrases ${c.phrase[0]}-${c.phrase[1]}`,
     score: c.score === null ? null : round2(c.score),
     passed: c.passed,
     revealed: c.revealed,
@@ -421,6 +522,7 @@ export function reviewFactsFrom(input: ReviewFactsInput): ReviewFacts {
   if (swing.length > 0) w5.swing = swing;
   const stages = stageFacts(input.checks);
   if (stages.length > 0) w5.stages = stages;
+  Object.assign(w5, w6Facts({ ...input, pickupBars: pickup }, form));
   return {
     // The key the brief gives wins over an estimate (contracts §6.8 item 1); a minor piece is never read in its
     // relative major.
@@ -444,6 +546,30 @@ export function reviewFactsFrom(input: ReviewFactsInput): ReviewFacts {
 
 const span = ([a, b]: readonly [number, number]) => (a === b ? `bar ${a}` : `bars ${a}-${b}`);
 
+/**
+ * A cadence as the glossary names it (Wave 6, d2). The analysis's own codes (`PAC`, `HC`) are not course words: a
+ * review that read "PAC" wrote "perfect authentic cadence", a name the glossary does not have. The glossary's terms
+ * are authentic, half, plagal and deceptive cadence; where the melody lands is said in plain words.
+ */
+export function cadenceName(type: string): string {
+  switch (type) {
+    case "PAC":
+      return "authentic cadence (V to I, melody on 1)";
+    case "IAC":
+      return "authentic cadence (V to I, melody not on 1)";
+    case "HC":
+      return "half cadence (stops on V)";
+    case "PC":
+      return "plagal cadence (IV to I)";
+    case "DC":
+      return "deceptive cadence (V to vi)";
+    case "bVII-I":
+      return "bVII to I";
+    default:
+      return type;
+  }
+}
+
 /** The facts as `<oak_context>` lines, one fact per line, in a fixed order. */
 export function factLines(f: ReviewFacts): string[] {
   const lines = [
@@ -463,7 +589,7 @@ export function factLines(f: ReviewFacts): string[] {
   if (byBar.size === 0) lines.push("chords: none found");
   if (f.harmonicRhythm.length > 0)
     lines.push(`harmonic_rhythm (changes per bar): ${f.harmonicRhythm.join(" ")}`);
-  for (const c of f.cadences) lines.push(`cadence: bar ${c.bar} ${c.type}`);
+  for (const c of f.cadences) lines.push(`cadence: bar ${c.bar} ${cadenceName(c.type)}`);
   for (const s of f.schemas) lines.push(`schema: ${s.schema} ${span(s.bars)}`);
   for (const m of f.motifs)
     lines.push(`motif: ${m.track} ${span(m.bars)} returns ${m.how} at ${m.at.map(span).join(", ")}`);
@@ -475,6 +601,7 @@ export function factLines(f: ReviewFacts): string[] {
   if (f.chordToneShare !== null)
     lines.push(`chord_tones_on_strong_beats: ${Math.round(f.chordToneShare * 100)}%`);
   lines.push(...w5FactLines(f));
+  lines.push(...w6FactLines(f));
   return lines;
 }
 
@@ -538,5 +665,305 @@ export function w5FactLines(f: ReviewFacts): string[] {
     lines.push(
       `check ${s.check}: ${s.layer}${s.stage ? ` stage ${s.stage}` : ""} · ${s.phrase} · ${s.score === null ? "not checked yet" : `best ${pct(s.score)}`}${s.passAt === null ? "" : ` · mark ${pct(s.passAt)}`} · ${s.revealed ? "revealed" : s.passed ? "passed" : s.open ? "open" : "locked until the checks before it pass"}`,
     );
+  return lines;
+}
+
+// --- Wave 6: modes, applied and borrowed chords, the key plan, devices, length, rhythm -------------------------------
+
+const keyName = (k: KeySpecLike) => `${k.tonic} ${k.mode}`;
+/** A numeral without its seventh or inversion figure: `V7` and `V43` are the chord `V`. */
+const rnCore = (rn: string) => rn.replace(/(?:maj7|ø7|o7|7|65|64|43|42|6|2)(?=\/|$)/, "");
+
+function modeFact(
+  view: ModeViewLike | null | undefined,
+  section: string | null,
+  bars: [number, number] | null,
+): FactMode | null {
+  if (!view || view.tonic === null) return null;
+  return {
+    section,
+    bars,
+    stated: view.stated ? keyName(view.stated) : null,
+    fits: [...view.fits],
+    tone: view.characteristic
+      ? {
+          degree: view.characteristic.degree,
+          count: view.characteristic.count,
+          strong: view.characteristic.strong,
+        }
+      : null,
+    outsideNotes: view.outside.length,
+    homeChordShare: view.tonicChordShare === null ? null : round2(view.tonicChordShare),
+  };
+}
+
+/** A mode worth a line: the piece or section states a colour mode, or only one colour mode fits its notes. */
+const isModal = (m: FactMode): boolean =>
+  (modeOf(m.stated) ?? "") in MODE_COLOUR || (m.fits.length === 1 && (m.fits[0] as string) in MODE_COLOUR);
+
+/** The Wave 6 facts; every part is left out when its view is absent or says nothing. */
+export function w6Facts(input: ReviewFactsInput, form: FactForm | null): Partial<ReviewFacts> {
+  const out: Partial<ReviewFacts> = {};
+  const safe = <T>(f: () => T): T | null => {
+    try {
+      return f();
+    } catch {
+      return null;
+    }
+  };
+
+  if (input.mode) {
+    const ask = input.mode;
+    const modes: FactMode[] = [];
+    const whole = modeFact(
+      safe(() => ask(null)),
+      null,
+      null,
+    );
+    const raw = input.form?.kind === "sections" ? (input.form.sections ?? []) : [];
+    raw.forEach((s, i) => {
+      const fact = modeFact(
+        safe(() => ask([s.startBar, s.startBar + Math.max(1, s.bars)])),
+        form?.sections[i]?.name ?? sectionName(s.tag),
+        form?.sections[i]?.bars ?? null,
+      );
+      if (fact) modes.push(fact);
+    });
+    // The whole piece first; sections only when they are worth telling apart (one of them is modal).
+    const sections = modes.some(isModal) ? modes : [];
+    const all = [...(whole && (isModal(whole) || sections.length > 0) ? [whole] : []), ...sections];
+    if (all.length > 0) out.modes = all;
+  }
+
+  const chroma = input.chromatic;
+  if (chroma) {
+    const outside: FactOutsideChord[] = [];
+    const sevenths: Record<string, number> = {};
+    for (const c of chroma.chords) {
+      if (c.seventh) sevenths[c.seventh] = (sevenths[c.seventh] ?? 0) + 1;
+      if (c.kind !== "applied" && c.kind !== "borrowed" && c.kind !== "other") continue;
+      outside.push({
+        bar: c.bar,
+        beat: c.beat,
+        symbol: c.symbol,
+        rn: c.rn,
+        kind: c.kind,
+        target: c.target,
+        resolves: c.resolves,
+        next: c.next,
+        key: keyName(c.key),
+      });
+    }
+    if (outside.length > 0) out.outside = outside;
+    if (Object.keys(sevenths).length > 0) out.sevenths = sevenths;
+    const line = chroma.guideLines?.fromThird ?? [];
+    if (Object.keys(sevenths).length > 0 && line.some((x) => x !== null))
+      out.guideLine = line.slice(0, MAX_FACT_BARS).map((x) => x?.name ?? null);
+  }
+
+  const plan = input.keyPlan;
+  if (plan && plan.spans.length > 0) {
+    const off = input.pickupBars ? 1 : 0;
+    const spans: FactKeySpan[] = plan.spans.map((sp, i) => {
+      const prev = plan.spans[i - 1];
+      const change = plan.changes.find((c) => c.bar === sp.fromBar);
+      return {
+        bars: [sp.fromBar - off, sp.toBar - off],
+        key: keyName(sp.key),
+        source: sp.source,
+        move: prev ? keyMoveText(keyName(prev.key), keyName(sp.key)) : null,
+        pivots: prev ? (change?.distance.pivots ?? null) : null,
+      };
+    });
+    if (spans.length > 1) out.keyPlan = spans;
+  }
+
+  if (input.devices && input.devices.length > 0) {
+    const devices: FactDevice[] = input.devices.map((d) => ({
+      device: d.device,
+      bar: d.bar,
+      bars: d.bars ?? 1,
+      text: d.text,
+    }));
+    out.devices = devices.sort((a, b) => a.bar - b.bar || (a.device < b.device ? -1 : 1));
+  }
+  if (typeof input.durationSec === "number" && Number.isFinite(input.durationSec))
+    out.durationSec = Math.round(input.durationSec * 10) / 10;
+
+  const rhythm = input.rhythm;
+  if (rhythm) {
+    const pitched = new Set((input.notes ?? []).map((x) => x.track));
+    const tracks: FactRhythm[] = rhythm.tracks
+      .map((t) => ({
+        track: t.track,
+        pushes: t.pushes.length,
+        pushesOverBar: t.pushes.filter((p) => p.acrossBar).length,
+        ghosts: t.ghosts.length,
+        ties: t.written.ties,
+        dotted: t.written.dotted,
+        // A triplet is a beat in three (or six); other tuplets are not a course word and are left out.
+        tupletBars: [...new Set(t.tuplets.filter((x) => (x.division ?? 3) % 3 === 0).map((x) => x.bar))].sort(
+          (a, b) => a - b,
+        ),
+        feel: t.feel,
+        syncopated: t.syncopation.count,
+      }))
+      // Only lines with something to say. A backbeat counts as syncopated and a quiet hi-hat as all ghost notes:
+      // a drum line is told only for its pushes, its triplets, or ghost notes among accents; a pitched line also
+      // for landing between the beats.
+      .filter(
+        (t) =>
+          t.pushes > 0 ||
+          t.tupletBars.length > 0 ||
+          (pitched.has(t.track)
+            ? t.syncopated > 0 || t.feel === "ternary"
+            : t.ghosts > 0 && t.syncopated > 0),
+      );
+    if (tracks.length > 0) out.rhythm = tracks;
+    if (rhythm.compound || tracks.length > 0)
+      out.beat = { compound: rhythm.compound, beats: rhythm.beats, bpm: Math.round(rhythm.bpm) };
+  }
+  return out;
+}
+
+/** "2:14" for 134 seconds. */
+export function clock(sec: number): string {
+  const s = Math.round(sec);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+/** The six devices CF-A's rubric counts (content-kit `CORE_DEVICES`; wave6.music.test.ts keeps them equal). */
+export const CORE_DEVICE_NAMES = [
+  "secondary dominant",
+  "borrowed chord",
+  "modulation",
+  "suspension",
+  "syncopated bass",
+  "modal colour",
+] as const;
+
+/**
+ * Wave 6 facts as `<oak_context>` lines: the mode and its characteristic tone per section, applied and borrowed
+ * chords with their bars and resolutions, the key plan, the device list, the length, the rhythm of each line.
+ */
+export function w6FactLines(f: ReviewFacts): string[] {
+  const lines: string[] = [];
+  for (const m of f.modes ?? []) {
+    const where = m.section === null ? "piece" : `${m.section}${m.bars ? ` (${span(m.bars)})` : ""}`;
+    const stated =
+      m.stated ?? (m.fits.length === 1 ? `${m.fits[0]} (the only mode that fits)` : "none stated");
+    const parts = [`mode ${where}: ${stated}`];
+    if (m.tone) {
+      const syl = DEGREE_SYLLABLES[m.tone.degree];
+      parts.push(
+        `characteristic tone ${m.tone.degree}${syl ? ` (${syl})` : ""} sounds ${m.tone.count} time${m.tone.count === 1 ? "" : "s"}, ${m.tone.strong} on a strong beat`,
+      );
+    }
+    if (m.fits.length > 0 && m.stated !== null) parts.push(`notes fit ${m.fits.join(", ")}`);
+    parts.push(`${m.outsideNotes} note${m.outsideNotes === 1 ? "" : "s"} outside the mode`);
+    if (m.homeChordShare !== null) parts.push(`home chord in ${pct(m.homeChordShare)} of bars`);
+    lines.push(parts.join(" · "));
+  }
+
+  const outside = f.outside ?? [];
+  // The same chord doing the same thing in several bars is one line with its bars (a chorus that returns).
+  const groups = new Map<string, { c: FactOutsideChord; at: string[] }>();
+  for (const c of outside) {
+    const key = [c.kind, c.symbol, c.rn, c.target, c.resolves, c.next, c.key].join("|");
+    const g = groups.get(key) ?? { c, at: [] };
+    g.at.push(`${c.bar}${c.beat === 1 ? "" : ` (beat ${c.beat})`}`);
+    groups.set(key, g);
+  }
+  for (const { c, at } of [...groups.values()].slice(0, MAX_FACT_BARS)) {
+    const where = `bar${at.length === 1 ? "" : "s"} ${at.join(", ")}`;
+    if (c.kind === "applied")
+      lines.push(
+        `applied: ${c.symbol} (${c.rn}) ${where} · leans into ${c.target ?? "?"} · ${
+          !c.resolves
+            ? `does not resolve: goes to ${c.next ?? "the end"}`
+            : c.next === null || rnCore(c.next) === rnCore(c.target ?? "")
+              ? "resolves there"
+              : `goes to ${c.next}, a chord on that root (a chain)`
+        } · read in ${c.key}`,
+      );
+    else if (c.kind === "borrowed")
+      lines.push(
+        `borrowed: ${c.symbol} (${c.rn}) ${where}${c.next ? ` · goes to ${c.next}` : ""} · read in ${c.key}`,
+      );
+    else lines.push(`outside_chord: ${c.symbol} ${where} · no numeral the course teaches · read in ${c.key}`);
+  }
+  if (outside.length > 0) {
+    const applied = outside.filter((c) => c.kind === "applied");
+    lines.push(
+      `outside_chords: ${applied.length} applied (${applied.filter((c) => c.resolves).length} resolve) · ${outside.filter((c) => c.kind === "borrowed").length} borrowed`,
+    );
+  }
+  if (f.sevenths) lines.push(`sevenths: ${counts(f.sevenths)}`);
+  if (f.guideLine && f.guideLine.length > 1)
+    lines.push(
+      `guide_tone_line (from the 3rd, chord by chord): ${f.guideLine.map((x) => x ?? "-").join(" ")}`,
+    );
+
+  const plan = f.keyPlan ?? [];
+  if (plan.length > 1) {
+    lines.push(
+      `key_plan: ${plan.map((k) => `${k.key} ${span(k.bars)}`).join(" · ")} · numerals above are read in the key in force at each bar`,
+    );
+    plan.slice(1).forEach((k, i) => {
+      const from = plan[i] as FactKeySpan;
+      lines.push(
+        `key_change: bar ${k.bars[0]} · ${from.key} to ${k.key}${k.move ? ` · ${k.move}` : ""}${
+          k.pivots === null ? "" : ` · ${k.pivots} shared triad${k.pivots === 1 ? "" : "s"}`
+        } · the new key lasts ${k.bars[1] - k.bars[0] + 1} bar${k.bars[1] === k.bars[0] ? "" : "s"}`,
+      );
+    });
+  }
+
+  // The six devices of the core (CF-A's rubric). The jazz track's four are not core vocabulary and are left out.
+  const core: readonly string[] = CORE_DEVICE_NAMES;
+  const devices = (f.devices ?? []).filter((d) => core.includes(d.device));
+  if ((f.devices ?? []).length > 0) {
+    const byWhat = new Map<string, { d: FactDevice; bars: number[] }>();
+    for (const d of devices) {
+      // "V7/vi→vi bar 11" and "V7/vi→vi bar 27" are one device heard twice.
+      const what = d.text.replace(/\s+bar\s+\d+$/, "");
+      const g = byWhat.get(`${d.device}|${what}|${d.bars}`) ?? { d: { ...d, text: what }, bars: [] };
+      g.bars.push(d.bar);
+      byWhat.set(`${d.device}|${what}|${d.bars}`, g);
+    }
+    for (const { d, bars } of byWhat.values())
+      lines.push(
+        `device: ${d.device} · bar${bars.length === 1 ? "" : "s"} ${bars.join(", ")}${d.bars > 1 ? ` for ${d.bars} bars` : ""}${d.text === d.device ? "" : ` · ${d.text}`}`,
+      );
+    const have = new Set(devices.map((d) => d.device));
+    const found = CORE_DEVICE_NAMES.filter((d) => have.has(d));
+    const missing = CORE_DEVICE_NAMES.filter((d) => !have.has(d));
+    lines.push(
+      `devices: ${found.length} of the six core devices (${found.join(", ") || "none"})${missing.length > 0 ? ` · not found: ${missing.join(", ")}` : ""}`,
+    );
+  }
+  if (f.durationSec !== undefined && f.durationSec !== null)
+    lines.push(`length: ${clock(f.durationSec)} (${Math.round(f.durationSec)} s) · ${f.bars} bars`);
+
+  if (f.beat?.compound)
+    lines.push(
+      `beat: compound meter · ${f.beat.beats} beats a bar, each a dotted quarter in three · ${f.beat.bpm} BPM to the dotted quarter`,
+    );
+  for (const r of f.rhythm ?? []) {
+    const parts = [`rhythm: ${r.track}`];
+    if (r.pushes > 0)
+      parts.push(
+        `${r.pushes} push${r.pushes === 1 ? "" : "es"}${r.pushesOverBar > 0 ? ` (${r.pushesOverBar} over a bar line)` : ""}`,
+      );
+    if (r.syncopated > 0) parts.push(`${r.syncopated} syncopated note${r.syncopated === 1 ? "" : "s"}`);
+    if (r.ghosts > 0) parts.push(`${r.ghosts} ghost note${r.ghosts === 1 ? "" : "s"}`);
+    if (r.ties > 0 || r.dotted > 0) parts.push(`written with ${r.ties} tied and ${r.dotted} dotted`);
+    if (r.tupletBars.length > 0)
+      parts.push(`triplets in bar${r.tupletBars.length === 1 ? "" : "s"} ${r.tupletBars.join(", ")}`);
+    parts.push(
+      `the beat divides ${r.feel === "ternary" ? "in three" : r.feel === "mixed" ? "in two and in three" : r.feel === "beat" ? "not at all" : "in two"}`,
+    );
+    lines.push(parts.join(" · "));
+  }
   return lines;
 }

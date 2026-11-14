@@ -89,7 +89,8 @@ class Sim {
     for (let i = this.history.length - 1; i >= start; i--) {
       const id = this.history[i] as string;
       if (isTranscription(id)) break;
-      if (isCore(id)) n++;
+      // d19: a reviews-only session counts towards the slot like a core session.
+      if (isCore(id) || id.startsWith("review:")) n++;
     }
     return n;
   }
@@ -197,6 +198,7 @@ class Sim {
         break;
       default:
         if (this.done("X1.S3")) this.reviewDaysAfterX1++;
+        if (plan.kind === "review" && this.done("U07.L01")) this.history.push(`review:${day}`);
         break;
     }
     await this.me.endSession(ses.id);

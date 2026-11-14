@@ -60,18 +60,22 @@ import {
   type LockedHint,
   linerFlags,
   lockedHints,
-  MODES,
+  musicFactsOf,
+  musicLensHints,
+  musicLensTips,
   muteMapOf,
   needsReview,
   type SketchBand,
+  type SketchMusicFacts,
   STUDIO_FLAVOURS,
-  STUDIO_METERS,
   sinceText,
   soundFactsOf,
   strictLint,
   strictVerdict,
   studioFlavour,
   studioLint,
+  studioMeters,
+  studioModes,
   TONICS,
   type VersionDraft,
   versionBody,
@@ -278,6 +282,21 @@ export function SketchEditor({ sketch }: { sketch: SketchDetail }) {
       .join(" or ");
   }).slice(0, 2);
   const soundTips = formSoundTips(soundFacts, unlocked as ReadonlySet<string>);
+  // Wave 6: guide tones, the key ribbon and the beat grid: a tip once the lens is there, a hint before.
+  const [musicFacts, setMusicFacts] = useState<SketchMusicFacts>({
+    sevenths: false,
+    keyChange: false,
+    beatGrid: false,
+    pushes: false,
+  });
+  const musicHints = musicLensHints(musicFacts, unlocked as ReadonlySet<string>, (tid) => {
+    const t = toolbox.find((x) => x.id === tid);
+    if (!t) return null;
+    return sitesOf(t)
+      .map((s) => siteText(s, titles))
+      .join(" or ");
+  }).slice(0, 2);
+  const musicTips = musicLensTips(musicFacts, unlocked as ReadonlySet<string>);
 
   // --- the tutor's subject: this sketch -----------------------------------------------------------------
   const thread = { subjectKind: "sketch" as const, subjectId: id };
@@ -489,7 +508,7 @@ export function SketchEditor({ sketch }: { sketch: SketchDetail }) {
             onChange={(e) => keySpec && setKeySpec({ ...keySpec, mode: e.target.value as KeySpec["mode"] })}
             className="h-8 rounded-control border border-border bg-surface px-1.5 text-text disabled:opacity-50"
           >
-            {MODES.map((m) => (
+            {studioModes(unlocked as ReadonlySet<string>, keySpec?.mode ?? null).map((m) => (
               <option key={m} value={m}>
                 {m}
               </option>
@@ -512,7 +531,7 @@ export function SketchEditor({ sketch }: { sketch: SketchDetail }) {
             }}
             className="h-8 rounded-control border border-border bg-surface px-1.5 text-text"
           >
-            {STUDIO_METERS.map((m) => (
+            {studioMeters(unlocked as ReadonlySet<string>, meter).map((m) => (
               <option key={m} value={m}>
                 {m}
               </option>
@@ -639,6 +658,15 @@ export function SketchEditor({ sketch }: { sketch: SketchDetail }) {
                 onModel={(m) => {
                   setHasChords(m.harmony !== null && m.harmony.source === "learner");
                   setHasSections((m.lines?.sections.length ?? 0) > 0);
+                  const facts = musicFactsOf(m.colour);
+                  setMusicFacts((f) =>
+                    f.sevenths === facts.sevenths &&
+                    f.keyChange === facts.keyChange &&
+                    f.beatGrid === facts.beatGrid &&
+                    f.pushes === facts.pushes
+                      ? f
+                      : facts,
+                  );
                   onHarmony(m);
                 }}
                 tutorBars
@@ -673,6 +701,20 @@ export function SketchEditor({ sketch }: { sketch: SketchDetail }) {
                   <li key={t}>{t}</li>
                 ))}
                 {soundHints.map((h) => (
+                  <li key={h.id}>
+                    {h.what}: from {h.at}.
+                  </li>
+                ))}
+              </ul>
+            </Callout>
+          ) : null}
+          {(musicHints.length > 0 || musicTips.length > 0) && !review ? (
+            <Callout tone="info" title="Lenses for this sketch" className="text-sm">
+              <ul className="flex flex-col gap-0.5" data-testid="music-hints">
+                {musicTips.map((t) => (
+                  <li key={t}>{t}</li>
+                ))}
+                {musicHints.map((h) => (
                   <li key={h.id}>
                     {h.what}: from {h.at}.
                   </li>

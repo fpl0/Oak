@@ -699,6 +699,17 @@
   stroke: var(--wb-link);
   stroke-width: 2;
 }
+/* Wave 6: the parallel key that lends its chords (dashed), a whole step up (dotted). */
+.oak-circle-slot[data-lends="1"] .oak-circle-major {
+  stroke: var(--wb-sec-b);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}
+.oak-circle-slot[data-lift="1"] .oak-circle-major {
+  stroke: var(--wb-blue);
+  stroke-width: 2;
+  stroke-dasharray: 1 3;
+}
 .oak-circle-slot[data-visited="1"] .oak-circle-major {
   stroke: var(--wb-accent);
   stroke-dasharray: 3 2;
@@ -1201,4 +1212,166 @@ ul.oak-chord-band {
   padding: 0 0.25em;
   border-radius: 3px;
   background: var(--wb-surface-2);
+}
+
+/* --- Wave 6: the key ribbon, applied and borrowed chords on the band, the key panel's modes -------------- */
+ol.oak-keyribbon {
+  position: relative;
+  height: 22px;
+  max-width: 100%;
+  margin: 0 0 2px;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+}
+.oak-keyribbon-span {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--wb-blue) 45%, var(--wb-border));
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--wb-blue) 8%, var(--wb-surface));
+  color: var(--wb-text);
+  font: 600 11px var(--wb-font-ui);
+  white-space: nowrap;
+}
+.oak-keyribbon-span--change {
+  border-left: 3px solid var(--wb-blue);
+}
+.oak-keyribbon-span[data-current="1"] {
+  box-shadow: inset 0 -3px 0 var(--wb-blue);
+}
+.oak-keyribbon-change {
+  flex: none;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--wb-blue);
+  color: var(--wb-surface);
+  font: 700 10px var(--wb-font-code);
+}
+.oak-keyribbon-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.oak-chord-arrow {
+  color: var(--wb-accent);
+  font-weight: 700;
+}
+.oak-chord-arrow[data-resolves="0"] {
+  color: var(--wb-text-2);
+  font-weight: 400;
+}
+.oak-chord-region--applied {
+  border-color: color-mix(in srgb, var(--wb-accent) 60%, var(--wb-border));
+}
+.oak-chord-region--borrowed {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--wb-sec-b) 70%, var(--wb-border));
+}
+.oak-chord-lent {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--wb-sec-b) 22%, var(--wb-surface));
+  color: var(--wb-text);
+  font: 600 9px var(--wb-font-ui);
+  letter-spacing: 0.02em;
+}
+/* Something not taught yet was left out (a seventh, a numeral): the label is quieter, never a lock. */
+.oak-chord-region--quiet .oak-chord-symbol {
+  font-weight: 600;
+  color: var(--wb-text-2);
+}
+.oak-chord-region--fn.oak-chord-region--quiet .oak-chord-symbol {
+  color: inherit;
+}
+.oak-chord-region[data-fit="rn"] .oak-chord-arrow,
+.oak-chord-region[data-fit="rn"] .oak-chord-lent,
+.oak-chord-region[data-fit="rn"] .oak-chord-fn,
+.oak-chord-region[data-fit="symbol"] .oak-chord-arrow,
+.oak-chord-region[data-fit="symbol"] .oak-chord-lent {
+  display: none;
+}
+.oak-key-extra {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--wb-border);
+}
+.oak-key-extra-title {
+  margin: 0 0 3px;
+  font: 600 12px var(--wb-font-ui);
+  color: var(--wb-text-2);
+}
+.oak-mode-list,
+.oak-lent-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 14px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+}
+.oak-mode-list li[data-here="1"] strong {
+  text-decoration: underline;
+  text-decoration-color: var(--wb-accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+.oak-mode-colour {
+  margin-left: 5px;
+  font: 600 11px var(--wb-font-code);
+}
+.oak-lent-list li {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.oak-lent-rn {
+  font-family: var(--wb-font-code);
+  opacity: 0.85;
+}
+.oak-lent-how {
+  font-size: 11px;
+}
+.oak-key-lift-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.oak-key-extra code {
+  font-family: var(--wb-font-code);
+  font-size: 12px;
+}
+/* The colour note of a mode in the key panel's scale row. */
+.oak-scale-row li[data-colour="1"] {
+  padding: 0 4px 0 0;
+  border-radius: 5px;
+  outline: 2px solid var(--wb-issue);
+  outline-offset: 1px;
+}
+/* The guide-tone lens on the staff: a firm ring round the 3rd and the 7th of each chord (notation's `oak-guide`
+   classes); the head keeps its degree colour. */
+.oak-staff-host .oak-guide {
+  stroke: var(--wb-text);
+  stroke-width: 2.4;
+  paint-order: stroke;
+}
+/* d3: long lines wrap inside the editor instead of scrolling it sideways (CodeMirror reads the wrapping from the
+   content's white-space, as its own lineWrapping extension sets it). */
+.oak-wb-editor .cm-content {
+  white-space: break-spaces;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  flex-shrink: 1;
+  min-width: 0;
+}
+/* A fact over the roll gives way before it pushes out of the view: it shortens with an ellipsis. */
+.oak-view-head > .oak-roll-fact {
+  flex-shrink: 1;
 }

@@ -33,6 +33,11 @@ export interface RollOptions {
   laneHeight?: number;
   /** Extra events (ghost notes) that widen the pitch range. */
   extra?: readonly RollInputEvent[];
+  /**
+   * Wave 6: false before chromatic solfège is taught (U15.L01): a row outside the key shows its degree without a
+   * chromatic syllable ("♯4", not "♯4 fi"). Default true.
+   */
+  lateSyllables?: boolean;
 }
 
 export interface RollRect {
@@ -202,7 +207,12 @@ export function layoutRoll(events: readonly RollInputEvent[], opts: RollOptions)
       rowInfo.push({
         midi: m,
         y: y + (range.hi - m) * rowH,
-        label: rowLabel(m, opts.key, opts.labels ?? (opts.key ? "degree" : "note")),
+        label: rowLabel(
+          m,
+          opts.key,
+          opts.labels ?? (opts.key ? "degree" : "note"),
+          opts.lateSyllables ?? true,
+        ),
         inKey: opts.key ? inKey(m, opts.key) : true,
         tonic: opts.key ? rowLabel(m, opts.key, "degree") === "1" : false,
       });

@@ -82,7 +82,10 @@ async function skipRestOfWarmup(page: Page): Promise<void> {
 }
 
 /** The Coda: the unlock moment (when the session granted tools), then "Done for today" back to Today. */
-export async function coda(page: Page, o: { unlocks: boolean | "auto"; shots?: string }): Promise<void> {
+export async function coda(
+  page: Page,
+  o: { unlocks: boolean | "auto"; shots?: string; inspect?: () => Promise<void> },
+): Promise<void> {
   await expect(page).toHaveURL(/\/session\/coda$/, { timeout: 60_000 });
   await expect(page.getByTestId("coda-title")).toBeVisible();
   const moment = page.getByTestId("coda-unlock-moment");
@@ -97,6 +100,8 @@ export async function coda(page: Page, o: { unlocks: boolean | "auto"; shots?: s
     await moment.getByRole("button", { name: "See the rest of today" }).click();
     await expect(page.getByTestId("coda-tools")).toBeVisible();
   }
+  // What the day's Coda says beyond the unlocks (a journey's own reading), before the day is closed.
+  await o.inspect?.();
   await page.getByTestId("done-for-today").click();
   await expect(page).toHaveURL(/\/$/, { timeout: 30_000 });
   await expect(page.getByTestId("today-card")).toHaveAttribute("data-state", "done");
@@ -136,6 +141,7 @@ export async function lessonDay(
     unlocks?: boolean | "auto";
     shots?: string;
     warmupSets?: number;
+    inspectCoda?: () => Promise<void>;
   } = {},
 ): Promise<Plan & { run: WarmupRun | null }> {
   const plan = await startToday(
@@ -145,6 +151,10 @@ export async function lessonDay(
   );
   expect(plan).toMatchObject({ kind: "lesson", mapItemId: def.id });
   await walkLesson(page, def, o);
-  await coda(page, { unlocks: o.unlocks ?? true, shots: o.shots ?? `coda-unlock-${def.id}` });
+  await coda(page, {
+    unlocks: o.unlocks ?? true,
+    shots: o.shots ?? `coda-unlock-${def.id}`,
+    ...(o.inspectCoda ? { inspect: o.inspectCoda } : {}),
+  });
   return plan;
 }

@@ -23,6 +23,7 @@ import { loadCheckpointFiles, loadLessons } from "../../../content/lib/load.bun.
 import { readBack } from "../../../packages/notation/corpus/harness.ts";
 import { bandCodeFor } from "../../../packages/strudel/src/band.ts";
 import { bandSetupOf } from "../lesson/band.ts";
+import { keyOfRibbon } from "./colour.ts";
 import { pieceBarsOf } from "./lines.ts";
 import { buildModel, staffPage, staffPageCount, type WorkbenchModel } from "./model.ts";
 
@@ -242,7 +243,9 @@ function regionProblems(s: Shown, m: WorkbenchModel): string[] {
     );
     if (!reading) continue;
     if (reading.quality === "aug") continue;
-    const k = m.key ?? s.key;
+    // Wave 6 (definition of done 16): a chord is read in the key in force at its bar, not in the piece's first key
+    // (U10.L01's hook plays the same loop in C major, then in C minor).
+    const k = keyOfRibbon(m.colour?.keys ?? [], r.from) ?? m.key ?? s.key;
     const rnRaw = romanText(reading.chord, k);
     const inKeyChord = rnRaw.includes("/") ? null : chordOfRoman(rnRaw, k);
     const symbol = inKeyChord ? toLeadSheet(inKeyChord) : reading.leadSheet;

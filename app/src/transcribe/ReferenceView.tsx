@@ -80,11 +80,17 @@ export function ReferenceStaff({
   bars,
   meter,
   keySpec,
+  swing = false,
 }: {
   events: readonly NEvent[];
   bars: number;
   meter: MeterId;
   keySpec: KeySpec | null;
+  /**
+   * The source swings its eighths: the staff prints them straight under "Swing 8ths", as the Workbench does (d5;
+   * contracts §6.10), through @oak/notation's shared `staffHostInput`.
+   */
+  swing?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
@@ -93,7 +99,7 @@ export function ReferenceStaff({
     if (!el) return;
     let live = true;
     (async () => {
-      const [{ notate }, { renderStaff }] = await Promise.all([
+      const [{ notate, staffHostInput }, { renderStaff }] = await Promise.all([
         import("@oak/notation"),
         import("@oak/notation/render"),
       ]);
@@ -102,13 +108,18 @@ export function ReferenceStaff({
       const lowTracks = new Set(pitched.filter((e) => (e.midi as number) < 55).map((e) => e.track));
       const highTracks = new Set(pitched.filter((e) => (e.midi as number) >= 55).map((e) => e.track));
       const grand = lowTracks.size > 0 && highTracks.size > 0;
-      const { abc } = notate({
-        events: [...(drumsOnly ? events : pitched)],
-        meter: METERS[meter],
-        key: keySpec,
-        bars,
-        staff: drumsOnly ? "percussion" : grand ? "grand" : "auto",
-      });
+      const { abc } = notate(
+        staffHostInput(
+          {
+            events: [...(drumsOnly ? events : pitched)],
+            meter: METERS[meter],
+            key: keySpec,
+            bars,
+            staff: drumsOnly ? "percussion" : grand ? "grand" : "auto",
+          },
+          { swing: swing ? { subdivision: 8, amount: 1 / 3 } : null },
+        ),
+      );
       if (!live) return;
       await renderStaff(el, abc.abc, { params: { responsive: "resize" } as never });
     })().catch(() => {
@@ -117,7 +128,7 @@ export function ReferenceStaff({
     return () => {
       live = false;
     };
-  }, [events, bars, meter, keySpec]);
+  }, [events, bars, meter, keySpec, swing]);
   return failed ? (
     <p className="text-sm text-text-2">The staff could not be drawn for this item.</p>
   ) : (

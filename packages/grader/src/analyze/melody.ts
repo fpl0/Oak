@@ -170,7 +170,8 @@ export function diatonicIndex(midi: number, key: KeySpec): number {
 
 /**
  * Share of melody units (default one bar) whose interval sequence matches an earlier unit, exactly or
- * transposed, by edit similarity ≥ 0.75 (contracts §5.6). A unit needs at least two notes to match. With
+ * transposed, by edit similarity ≥ 0.75 (contracts §5.6). A unit of one note matches an earlier one-note unit
+ * with the same rhythm (d6). With
  * `periodBars`, only one period is read; with `shape`, the intervals are half steps, scale steps or either.
  */
 export function motifReuse(
@@ -194,9 +195,17 @@ export function motifReuse(
     byUnit.set(u, list);
   }
   const units = [...byUnit.entries()].sort((a, b) => a[0] - b[0]);
-  const seen: { semis: number[]; steps: number[] }[] = [];
+  const seen: { semis: number[]; steps: number[]; rhythm: string }[] = [];
   const reusedAt: number[] = [];
   const key = o.key ?? null;
+  // Where each note of a unit starts and how long it lasts: what a one-note bar has in place of a shape.
+  const rhythmOf = (u: number, list: readonly Note[]): string =>
+    list
+      .map((n) => {
+        const at = R.sub(n.onset, [u * unitBars, 1]);
+        return `${at[0]}/${at[1]}:${n.dur[0]}/${n.dur[1]}`;
+      })
+      .join(" ");
   for (const [u, list] of units) {
     const semis = list.slice(1).map((n, i) => n.midi - (list[i] as Note).midi);
     const steps = key
@@ -209,8 +218,12 @@ export function motifReuse(
       ((shape === "steps" || shape === "either") &&
         s.steps.length > 0 &&
         editSimilarity(s.steps, steps) >= minSimilarity);
-    if (semis.length > 0 && seen.some(like)) reusedAt.push(u * unitBars);
-    seen.push({ semis, steps });
+    const rhythm = rhythmOf(u, list);
+    // A bar of one note has no interval to compare (d6: C5's riff with its landing bars scored 7 of 12): it
+    // reuses an earlier one-note bar when its rhythm is the same, whatever the pitch.
+    const single = semis.length === 0 && seen.some((s) => s.semis.length === 0 && s.rhythm === rhythm);
+    if ((semis.length > 0 && seen.some(like)) || single) reusedAt.push(u * unitBars);
+    seen.push({ semis, steps, rhythm });
   }
   const last = read.reduce((m, n) => Math.max(m, R.floor(n.onset) + 1), 0);
   return {
@@ -236,6 +249,18 @@ export function isStrong(onset: Rat, meter: MeterId, strength: BeatStrength): bo
 }
 
 /** Share of the melody's onsets on strong positions that are tones of the chord sounding there. */
+/**
+ * The chord of the bar under a note that falls where no chord sounds: comping on the off-beats (`.struct("~ x ~ x")`,
+ * a 1920s guitar) leaves beats 1 and 3 silent, but the harmony is still that bar's chord. The chord struck last
+ * before the note in the same bar, else the first one struck after it in the same bar; `undefined` across a bar
+ * line (Wave 6, U15.L05).
+ */
+export function barChordAt(slots: readonly ChordSlot[], at: Rat): ChordSlot | undefined {
+  const bar = R.floor(at);
+  const inBar = slots.filter((s) => s.chord && R.floor(s.span[0]) === bar);
+  const before = inBar.filter((s) => R.lte(s.span[0], at));
+  return before[before.length - 1] ?? inBar.find((s) => R.lt(at, s.span[0]));
+}
 export function chordToneRatio(
   melody: readonly Note[],
   slots: readonly ChordSlot[],
@@ -246,7 +271,7 @@ export function chordToneRatio(
   let n = 0;
   for (const note of melody) {
     if (!isStrong(note.onset, meter, strength)) continue;
-    const slot = slotAt(slots, note.onset);
+    const slot = slotAt(slots, note.onset) ?? barChordAt(slots, note.onset);
     if (!slot) continue;
     n++;
     if (!slotPcs(slot).includes(mod12(note.midi))) misses.push(note);

@@ -41,21 +41,11 @@ export function useSong(id: SongId | null) {
   return useQuery({ ...songQuery(id), enabled: id !== null });
 }
 
-/** The songs of a capstone whose answer keys exist, for the picker. */
-export function useSongs(ids: readonly SongId[]) {
-  return useQuery({
-    queryKey: ["capstone-songs", ...ids] as const,
-    queryFn: async () => {
-      const out: SongDef[] = [];
-      for (const id of ids) {
-        const s = await loadSong(id);
-        if (s) out.push(s);
-      }
-      return out;
-    },
-    staleTime: Number.POSITIVE_INFINITY,
-  });
-}
+/**
+ * Whether a song's module (its answer key) exists, without loading it: the picker loads only the chosen song,
+ * so the answer keys of the songs not chosen never reach the page or its network panel (Wave 6 gate).
+ */
+export const songWritten = (id: SongId): boolean => fileOf(id) !== null;
 
 /**
  * The rhythm of phrase 1 a song's module gives the learner in X1.S1 (`export const phrase1Rhythm`: one hit per

@@ -30,7 +30,31 @@ import { checkSlots } from "./capstone-sessions.ts";
 import { LearnerTime } from "./context.ts";
 import type { DevClock } from "./dev-clock.ts";
 import { seedCacheOf } from "./dev-seed-cache.ts";
-import { CAPSTONE_DRAFTS, CAPSTONE_KEYS, pickStandIn, WAVE5_SEED_DESCRIPTIONS } from "./seed-wave5.ts";
+import {
+  pickStandIn,
+  STAND_INS,
+  CAPSTONE_DRAFTS as WAVE5_DRAFTS,
+  CAPSTONE_KEYS as WAVE5_KEYS,
+  WAVE5_SEED_DESCRIPTIONS,
+} from "./seed-wave5.ts";
+import {
+  SECOND_TAB_ID,
+  WAVE6_CAPSTONE_DRAFTS,
+  WAVE6_CAPSTONE_KEYS,
+  WAVE6_SEED_DESCRIPTIONS,
+  WAVE6_STAND_INS,
+} from "./seed-wave6.ts";
+import { standardGaps } from "./standard-ladder.ts";
+
+const CAPSTONE_DRAFTS: Readonly<Record<string, readonly string[]>> = {
+  ...WAVE5_DRAFTS,
+  ...WAVE6_CAPSTONE_DRAFTS,
+};
+const CAPSTONE_KEYS: Readonly<Record<string, KeySpec>> = {
+  ...(WAVE5_KEYS as Record<string, KeySpec>),
+  ...(WAVE6_CAPSTONE_KEYS as Record<string, KeySpec>),
+};
+const ALL_STAND_INS = [...STAND_INS, ...WAVE6_STAND_INS];
 
 const DAY_MS = 86_400_000;
 
@@ -190,6 +214,11 @@ export const SEED_POINTS: readonly DevSeedPoint[] = [
   // Wave 5 (wave5.md §6). Lessons not written yet are completed as stand-ins (evidence for their skills, a Make of
   // real course code from seed-wave5.ts); a point whose own content is missing (X2's songs, an L6 song) answers 400.
   ...WAVE5_SEED_DESCRIPTIONS,
+  // Wave 6 (wave6.md §6). A U12–U17 lesson not written yet is completed as a stand-in (seed-wave6.ts); a point that
+  // is about CF-T or ladder L8 answers 400 naming the standard that has no answer key yet, and every other point
+  // walks a gym session in each slot CF-T would take until one exists (as Today does: with nothing to transcribe the
+  // slot is a gym session).
+  ...WAVE6_SEED_DESCRIPTIONS,
 ];
 
 /** What a point expands to. */
@@ -206,7 +235,11 @@ interface SeedPlan {
     | { kind: "onboarding-at"; step: "react"; firstEdit: number }
     // Wave 5
     | { kind: "side"; lessons: string[] }
-    | { kind: "ladder-song"; level: 5 | 6; realism: number }
+    | { kind: "ladder-song"; level: 5 | 6 | 8; realism: number }
+    // Wave 6
+    | { kind: "capstone-open"; capstoneSessionId: string }
+    | { kind: "second-take" }
+    | { kind: "second-tab" }
     | { kind: "ladder-levelup" }
     | { kind: "ladder-realism" }
     | null;
@@ -215,6 +248,11 @@ interface SeedPlan {
   gapDays: number | null;
   /** An item of the unit the point is about (`U03.CP due` → U03.CP), when `upTo` is of another unit. */
   unit?: string;
+  /**
+   * Wave 6: the point is about CF-T (or needs it released): with no standard written it answers 400. Without the
+   * flag CF-T's sessions are left out of the walk until a standard has an answer key.
+   */
+  needsCft?: boolean;
 }
 
 export function needDevClock(d: AppDeps): DevClock {
@@ -320,6 +358,38 @@ export function planSeed(point: string, order: readonly string[]): SeedPlan {
       gapDays: null,
       unit: "U03.L02",
     }),
+    // Wave 6 (wave6.md §6).
+    "after x2 (u12.l02 next)": () => ({ upTo: inOrder("X2.S2"), extra: null, gapDays: null }),
+    "tracks open (after u13.cp)": () => ({ upTo: inOrder("U13.CP"), extra: null, gapDays: null }),
+    "cf-t open (u15.l01 done)": () => ({
+      upTo: inOrder("U14.CP"),
+      extra: null,
+      gapDays: null,
+      // U15.L01 (CF-T's gate) precedes U14.CP in the order: it is walked (as a stand-in until it is written).
+      unit: "U15.L01",
+      needsCft: true,
+    }),
+    "c6 open": () => ({ upTo: before("C6.S1"), extra: null, gapDays: null }),
+    "cf-t.s2 done": () => ({ upTo: inOrder("CF-T.S2"), extra: null, gapDays: null, needsCft: true }),
+    "c7 open": () => ({ upTo: inOrder("U17.CP"), extra: null, gapDays: null }),
+    "c7.s2 done": () => ({ upTo: inOrder("C7.S2"), extra: null, gapDays: null }),
+    "cf-a open": () => ({ upTo: before("CF-A.S1"), extra: null, gapDays: null }),
+    "cf-a.s3 done": () => ({ upTo: inOrder("CF-A.S3"), extra: null, gapDays: null }),
+    "core complete": () => ({ upTo: inOrder("CF-A.S4"), extra: null, gapDays: null, needsCft: true }),
+    "ladder l8": () => ({
+      upTo: inOrder("U17.L02"),
+      extra: { kind: "ladder-song", level: 8, realism: 1 },
+      gapDays: null,
+      needsCft: true,
+    }),
+    "c3.s3 in progress (d13)": () => ({
+      upTo: inOrder("C3.S2"),
+      extra: { kind: "capstone-open", capstoneSessionId: inOrder("C3.S3") },
+      gapDays: null,
+    }),
+    "c3.s3 done": () => ({ upTo: inOrder("C3.S3"), extra: null, gapDays: null }),
+    "two takes (d20)": () => ({ upTo: inOrder("C3.S4"), extra: { kind: "second-take" }, gapDays: null }),
+    "second tab (d21)": () => ({ upTo: inOrder("X2.S2"), extra: { kind: "second-tab" }, gapDays: null }),
   };
   const namedPlan = named[lower.replace(/\s+/g, " ")];
   if (namedPlan !== undefined) return namedPlan();
@@ -329,14 +399,18 @@ export function planSeed(point: string, order: readonly string[]): SeedPlan {
   m = /^(U\d{2}\.CP)\s+due$/i.exec(p);
   if (m !== null) {
     const cpId = (m[1] as string).toUpperCase();
-    return { upTo: before(cpId), extra: null, gapDays: null, unit: cpId };
+    const upTo = before(cpId);
+    // Wave 6 (wave6.md §6): `U14.CP due` holds U15.L01 (CF-T's gate) whether or not it is written yet, so the unit
+    // the point reaches is that of its last item, not the checkpoint's.
+    const wave6 = Number(cpId.slice(1, 3)) >= 13;
+    return { upTo, extra: null, gapDays: null, unit: wave6 && upTo !== null ? upTo : cpId };
   }
   m = /^(U\d{2}\.CP)\s+failed(\s+twice)?$/i.exec(p);
   if (m !== null) {
     const cpId = (m[1] as string).toUpperCase();
     return { upTo: before(cpId), extra: { kind: "cp-failed", cpId, times: m[2] ? 2 : 1 }, gapDays: null };
   }
-  m = /^(C\d+)\s+(ready|in progress|released)$/i.exec(p);
+  m = /^(C\d+|CF-A)\s+(ready|in progress|released)$/i.exec(p);
   if (m !== null) {
     const cap = (m[1] as string).toUpperCase();
     const sessions = order.filter((id) => id.startsWith(`${cap}.S`));
@@ -366,11 +440,30 @@ export function seedItems(d: Pick<AppDeps, "content">, order: readonly string[],
   if (plan.upTo === null) return [];
   const unitOf = (id: string) => /^(U\d{2})\./.exec(id)?.[1] ?? null;
   const own = unitOf(plan.unit ?? (plan.extra?.kind === "cp-failed" ? plan.extra.cpId : plan.upTo));
-  return order.slice(0, order.indexOf(plan.upTo) + 1).filter((id) => {
-    if (d.content.lessonSite(id) === null || d.content.lessonDef(id) !== null) return true;
-    const unit = unitOf(id);
-    return own === null || unit === null || unit <= own;
-  });
+  const cft = cftStandards(d);
+  return order
+    .slice(0, order.indexOf(plan.upTo) + 1)
+    .filter((id) => {
+      if (d.content.lessonSite(id) === null || d.content.lessonDef(id) !== null) return true;
+      const unit = unitOf(id);
+      return own === null || unit === null || unit <= own;
+    })
+    .map((id) =>
+      // Wave 6: with no standard written CF-T has nothing to transcribe. Today then fills its transcription slot with
+      // a gym session (contracts §2.5), so the walk does the same: one gym session where each CF-T session stood.
+      id.startsWith("CF-T.") && cft.length === 0 ? CFT_SLOT_AS_GYM : id,
+    );
+}
+
+/** A walk item: the transcription slot CF-T would take, worked as a gym session (no CF-T standard written yet). */
+export const CFT_SLOT_AS_GYM = "GYM.slot";
+
+/** The CF-T standards that have an answer key complete enough to work (form map, bass, changes, melody). */
+export function cftStandards(d: Pick<AppDeps, "content">): SongDef[] {
+  const ids = (d.content.capstoneDef("CF-T") as { song?: readonly string[] } | null)?.song ?? [];
+  return ids
+    .map((id) => d.content.source.songs.find((x) => x.id === id))
+    .filter((x): x is SongDef => x !== undefined && standardGaps(x).length === 0);
 }
 
 /** A tiny seeded generator so a seed is the same every time. */
@@ -475,7 +568,7 @@ class Seeder {
       for (const t of this.d.content.unlockRowsAt(sessionId, "complete")) have.add(t.id);
       for (const t of this.d.content.unlockRowsAt(sessionId, "start")) have.add(t.id);
       const unit = /^([A-Z]\d{1,2})\./.exec(sessionId)?.[1] ?? "";
-      const pick = pickStandIn(unit, have, this.d.content.toolbox());
+      const pick = pickStandIn(unit, have, this.d.content.toolbox(), ALL_STAND_INS);
       if (pick !== null) return pick.code;
     }
     return DEGREE_LINE_TOOLS.every((t) => have.has(t)) ? DEGREE_LINE : CHECKPOINT_GROOVE;
@@ -556,6 +649,7 @@ class Seeder {
     if (content.lessonSite(id) !== null) return this.#lesson(id);
     if (content.checkpointMeta(id) !== null) return this.#checkpoint(id, 0.95);
     if (/^GYM\.\d{2}$/.test(id)) return this.#gym(id);
+    if (id === CFT_SLOT_AS_GYM) return this.#gym(`GYM.${String(this.#s.gym.nextOrdinal()).padStart(2, "0")}`);
     const m = /^(.+)\.S(\d+)$/.exec(id);
     if (m !== null && content.capstoneMeta(m[1] as string) !== null)
       return this.#capstone(m[1] as string, id, true);
@@ -770,7 +864,12 @@ class Seeder {
    * course code: the brief's own passing piece, C2's loop then the song, X1's song in Oak's rendition), X1's
    * phrase checks recorded, then the session completed, or the capstone released at its last session.
    */
-  async #capstone(capstoneId: string, sessionId: string, finish: boolean): Promise<void> {
+  async #capstone(
+    capstoneId: string,
+    sessionId: string,
+    finish: boolean,
+    opts: { check?: boolean } = {},
+  ): Promise<void> {
     const s = this.#s;
     const content = this.d.content;
     const ids = content.capstoneSessionIds(capstoneId);
@@ -837,11 +936,17 @@ class Seeder {
         result,
       });
     }
-    // The rubric run of the draft (compose capstones): the session's check of the whole piece.
-    if (brief !== undefined && (last || ids.length === 1)) {
+    // The rubric run of the draft (compose capstones): the session's check of the whole piece. Wave 6: a transcribe
+    // capstone whose last session has required rules of its own (CF-T.S4: the arrangement) is checked the same way.
+    const sessionRubric = (sessionDef?.rubric ?? []).some((r) => r.required);
+    if (brief !== undefined && (last || ids.length === 1 || opts.check === true)) {
       const result = syntheticGrade(`${capstoneId}/${brief.id}`, brief, 0.95);
       s.course.capstoneCheck(capstoneId, { sketchId: sk.id, sketchVersion: sk.currentVersion, result });
-    } else if (brief === undefined && last && s.capstoneSessions.checksCleared(capstoneId) === null) {
+    } else if (
+      brief === undefined &&
+      last &&
+      (s.capstoneSessions.checksCleared(capstoneId) === null || sessionRubric)
+    ) {
       const result = syntheticGrade(
         `${capstoneId}/brief`,
         { kind: "compose-brief", id: "brief" } as unknown as Exercise,
@@ -1000,8 +1105,9 @@ class Seeder {
    * `ladder L5` / `ladder L6`: the ladder at that level and realism, one song item started from the first open song
    * of the level and its first check answered with the answer key (L5 phrase 1, L6 the bass stage): a pass.
    */
-  async ladderSong(level: 5 | 6, realism: number): Promise<void> {
+  async ladderSong(level: 5 | 6 | 8, realism: number): Promise<void> {
     const s = this.#s;
+    if (level === 8) return this.#ladderStandard(realism);
     this.d.repos.ladder.saveState(level, realism, this.d.clock.now().toISOString());
     let item: Awaited<ReturnType<typeof s.ladder.next>>;
     try {
@@ -1025,6 +1131,74 @@ class Seeder {
       rung: 0,
       ...(level === 5 ? { phrase: 1 } : { stage: "bass" as const }),
     });
+  }
+
+  /**
+   * `ladder L8`: the ladder at L8 and `realism`, one standard that is not CF-T's song started, its form map answered
+   * from the answer key's sections and its bass written from the key's bass layer: both pass, the changes are next.
+   */
+  async #ladderStandard(realism: number): Promise<void> {
+    const s = this.#s;
+    const standards = cftStandards(this.d);
+    if (standards.length < 2)
+      throw badRequest(
+        `the point "ladder L8" needs two standards with complete answer keys in content/repertoire (one for CF-T, one for the ladder); ${standards.length} written`,
+      );
+    this.d.repos.ladder.saveState(8, realism, this.d.clock.now().toISOString());
+    const item = await s.ladder.next({
+      sessionId: null,
+      gymId: null,
+      level: 8,
+      seed: 8000 + this.done.length,
+    });
+    const song = this.d.content.source.songs.find((x) => x.id === item.song?.songId);
+    if (song === undefined) throw badRequest("the L8 standard has no answer key");
+    const sections = song.answerKey.sections ?? [];
+    await s.ladder.submit(item.itemId, {
+      sessionId: null,
+      code: "",
+      rung: 0,
+      stage: "form",
+      formMap: { sections: sections.map((x) => x.label), bars: sections.map((x) => x.bars[0]) },
+    });
+    await s.ladder.submit(item.itemId, {
+      sessionId: null,
+      code: transcriptionDraft(song, ["bass"]),
+      rung: 0,
+      stage: "bass",
+    });
+  }
+
+  /**
+   * `C3.S3 in progress (d13)`: the session started, its draft saved and the rubric check of the draft recorded (the
+   * lead sheet writes the song), not completed: as the three-session C3 stood before its take.
+   */
+  async capstoneOpen(capstoneSessionId: string): Promise<void> {
+    const capstoneId = capstoneSessionId.replace(/\.S\d+$/, "");
+    await this.#capstone(capstoneId, capstoneSessionId, false, { check: true });
+  }
+
+  /** `two takes (d20)`: a second recording of the released track's version 1; it becomes the current take. */
+  secondTake(): void {
+    if (this.trackId === null) throw badRequest("the point needs a released track");
+    const track = this.#s.library.track(this.trackId);
+    const first = track.versions.find((v) => v.version === 1);
+    const seconds = first?.durationS ?? 12;
+    this.#s.library.addTrackTake(this.trackId, 1, makeWav(8000, seconds, 330), "audio/wav", seconds);
+  }
+
+  /** `second tab (d21)`: a lesson session open today from another tab, in its main phase. */
+  secondTab(): void {
+    const next = this.#s.gates.nextMapItem();
+    if (next === null || this.d.content.lessonSite(next) === null)
+      throw badRequest("the point needs a lesson to be next");
+    const ses = this.#s.sessions.start({
+      kind: "lesson",
+      mapItemId: next,
+      targetMinutes: this.target,
+      tabId: SECOND_TAB_ID,
+    });
+    this.#s.sessions.heartbeat(ses.id, { phase: "main", activeMs: 180_000, stepId: null });
   }
 
   /** `ladder level-up due`: the ladder at L4, R2, and one graded L4 pass (called on two different days). */
@@ -1066,13 +1240,22 @@ export async function buildSeed(d: AppDeps, body: DevSeedRequest): Promise<DevSe
   const order = d.content.defaultOrder();
   const plan = planSeed(body.point, order);
   const gapDays = body.gapDays ?? plan.gapDays ?? 0;
+  // Wave 6: a point about CF-T (or one that needs it released) cannot be built before a standard has an answer key.
+  if (plan.needsCft === true && cftStandards(d).length === 0) {
+    const ids = (d.content.capstoneDef("CF-T") as { song?: readonly string[] } | null)?.song ?? [];
+    throw badRequest(
+      `the point "${body.point}" needs a CF-T standard with a complete answer key (form sections, bass, chords, melody) in content/repertoire: none of ${ids.join(", ") || "its songs"} is written yet`,
+    );
+  }
   const items = seedItems(d, order, plan);
   const extraDays =
     plan.extra === null
       ? 0
       : plan.extra.kind === "cp-failed"
         ? plan.extra.times
-        : plan.extra.kind === "draft" || plan.extra.kind === "gate-open"
+        : plan.extra.kind === "draft" ||
+            plan.extra.kind === "gate-open" ||
+            plan.extra.kind === "capstone-open"
           ? 1
           : plan.extra.kind === "side"
             ? plan.extra.lessons.length
@@ -1119,6 +1302,12 @@ export async function buildSeed(d: AppDeps, body: DevSeedRequest): Promise<DevSe
     await clock.at(dayAt(k), () => seeder.gateOpen());
     k++;
   }
+  // Wave 6 (d13): a capstone session started the day after the walk, with its draft and its check, not completed.
+  if (plan.extra?.kind === "capstone-open") {
+    const sid = plan.extra.capstoneSessionId;
+    await clock.at(dayAt(k), () => seeder.capstoneOpen(sid));
+    k++;
+  }
   // Wave 5: two graded L4 passes at R2 on two days after the walk (learner days never run backwards).
   if (plan.extra?.kind === "ladder-levelup")
     for (let n = 0; n < 2; n++) {
@@ -1153,6 +1342,9 @@ export async function buildSeed(d: AppDeps, body: DevSeedRequest): Promise<DevSe
     await clock.at(lastDay, () => seeder.ladderSong(extra.level, extra.realism));
 
   if (extra?.kind === "ladder-realism") await clock.at(lastDay, () => seeder.realismPass());
+  // Wave 6: a second take on the released track (d20), yesterday; another tab's open session (d21), today.
+  if (extra?.kind === "second-take") await clock.at(lastDay, () => seeder.secondTake());
+  if (extra?.kind === "second-tab") seeder.secondTab();
   if (plan.familyLevels !== undefined)
     await clock.at(lastDay, () => {
       for (const f of plan.familyLevels ?? []) setFamilyLevel(d, f.family, f.level, false);
@@ -1306,6 +1498,10 @@ export function capstoneSessionCode(
       );
     const melody = song.answerKey.layers.melody;
     const last = index === d.content.capstoneSessionIds(capstoneId).length - 1;
+    // CF-T (Wave 6): the draft grows a layer a session — the bass, then the changes, then the tune — and the last
+    // session saves the whole arrangement.
+    if (capstoneId === "CF-T" && !last)
+      return transcriptionDraft(song, (["bass", "chords", "melody"] as const).slice(0, index + 1));
     return last || melody === undefined ? song.answerKey.code : melody;
   }
   return capstoneDraftCode(def?.brief);
@@ -1313,12 +1509,30 @@ export function capstoneSessionCode(
 
 /** The first written song a transcribe capstone offers (X1, X2), as the Start page picks it; null for a compose one. */
 export function capstoneSong(d: Pick<AppDeps, "content">, capstoneId: string): SongDef | null {
+  // CF-T: the first standard whose answer key is complete (the form map needs its sections).
+  if (capstoneId === "CF-T") return cftStandards(d)[0] ?? null;
   const def = d.content.capstoneDef(capstoneId);
   return (
     (def?.song ?? [])
       .map((id) => d.content.source.songs.find((x) => x.id === id))
       .find((x) => x !== undefined) ?? null
   );
+}
+
+/**
+ * A transcription draft as a learner has it part-way: the song's tempo line, the consts its answer key defines and
+ * the layers written so far, each on its own labelled line (`bass:`, `chords:`, `mel:`).
+ */
+export function transcriptionDraft(song: SongDef, layers: readonly ("bass" | "chords" | "melody")[]): string {
+  const code = song.answerKey.code;
+  const tempo = /^\s*setcpm\([^)]*\)/m.exec(code)?.[0]?.trim();
+  const consts = code.split("\n").filter((l) => /^const\s/.test(l));
+  const label = { bass: "bass", chords: "chords", melody: "mel" } as const;
+  const lines = layers
+    .map((l) => [l, song.answerKey.layers[l]] as const)
+    .filter((x): x is readonly ["bass" | "chords" | "melody", string] => typeof x[1] === "string")
+    .map(([l, text]) => (/^[a-z][A-Za-z0-9]*:\s/.test(text) ? text : `${label[l]}: ${text}`));
+  return [tempo, consts.join("\n"), lines.join("\n")].filter((x) => x !== undefined && x !== "").join("\n\n");
 }
 
 /** A sketch version body for a draft. */

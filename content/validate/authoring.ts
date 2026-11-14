@@ -5,10 +5,13 @@
 // sketch that fails with `rubric.unmet`). Pure functions over the definitions: shared by content:check,
 // the lesson suite and the checkpoint/capstone checks.
 import {
+  type Degree,
   type Exercise,
   flattenExercise,
+  type KeySpec,
   type LessonDef,
   type Matcher,
+  MODE_DEGREES,
   type RubricRule,
   stripMarkers,
   type TermEntry,
@@ -165,6 +168,70 @@ export function orderPoint(lessonId: string): number {
   return before.length ? Math.max(...before) + 0.5 : -1;
 }
 
+/** The lesson that teaches chromatic degrees and their syllables (contracts §2.3: U15.L01, `tb.n.chromatic`). */
+export const CHROMATIC_FROM = "U15.L01";
+/**
+ * The degrees a pad or a sung target may hold in a key before U15.L01: the key's own (`MODE_DEGREES`). The three
+ * minors are one key to the learner (U10.L06 and U10.L08 teach the raised 7 and 6 as the minor key's own, and
+ * melodic minor comes down as natural minor), so in any of them all three sets count.
+ */
+function ownDegrees(key: KeySpec): ReadonlySet<Degree> {
+  const minor = key.mode === "minor" || key.mode === "harmonic minor" || key.mode === "melodic minor";
+  return new Set<Degree>(
+    minor
+      ? [...MODE_DEGREES.minor, ...MODE_DEGREES["harmonic minor"], ...MODE_DEGREES["melodic minor"]]
+      : MODE_DEGREES[key.mode],
+  );
+}
+/**
+ * Wave 6 (`chromatic.before-u15`). Chromatic degrees and their syllables (fi, te, si, di, ra, me, le against a
+ * major key) are taught in U15.L01: before it, a degree pad and a sung degree target stay inside the key's own
+ * degrees. The key is the exercise's, else the lesson's. A lesson outside the default order is judged at the
+ * earliest point a learner can take it (`orderPoint`).
+ */
+export function chromaticDegreeIssues(
+  e: Exercise,
+  where: string,
+  lessonKey: KeySpec,
+  lessonId: string,
+): string[] {
+  const order = registries.syllabus.defaultOrder as readonly string[];
+  const at = orderPoint(lessonId);
+  if (at < 0 || at >= order.indexOf(CHROMATIC_FROM)) return [];
+  const key = e.key ?? lessonKey;
+  const own = ownDegrees(key);
+  const out: string[] = [];
+  const say = (what: string, degrees: readonly Degree[]) => {
+    const outside = degrees.filter((d) => !own.has(d));
+    if (outside.length)
+      out.push(
+        `${where}: ${what} ${outside.join(" ")} ${outside.length === 1 ? "is" : "are"} outside ${key.tonic} ${key.mode}; chromatic degrees and their syllables wait for ${CHROMATIC_FROM}`,
+      );
+  };
+  if ("answer" in e && e.answer.ui === "degree-pad") say("the degree pad offers", e.answer.set);
+  if (e.kind === "dictation")
+    for (const ui of Object.values(e.stageAnswers ?? {}))
+      if (ui?.ui === "degree-pad") say("the degree pad offers", ui.set);
+  if (e.kind === "sing" && e.target.from === "degrees") say("the sung target", e.target.degrees);
+  return out;
+}
+
+/**
+ * Wave 6 (`make.from-sketch`, d15). A Make that opens with the learner's sketch of another lesson names a
+ * lesson that exists and is completed before this one in every legal order, so the sketch can be there.
+ */
+export function fromSketchIssues(e: Exercise, where: string, lessonId: string): string[] {
+  if (e.kind !== "code-make" || !e.fromSketch) return [];
+  const g = courseGraph();
+  if (!g.nodes.has(e.fromSketch as never) || !/\.L\d{2}$/.test(e.fromSketch))
+    return [`${where}: fromSketch "${e.fromSketch}" is not a lesson of the course`];
+  if (e.fromSketch === lessonId || !atOrBefore(g, e.fromSketch as never, lessonId as never))
+    return [
+      `${where}: fromSketch "${e.fromSketch}" is not completed before ${lessonId} in every legal order, so its sketch may not exist`,
+    ];
+  return [];
+}
+
 export interface AuthoringResult {
   issues: string[];
   warnings: string[];
@@ -245,7 +312,9 @@ export function lessonAuthoring(def: LessonDef, mdxSource: string | null, sample
       if (beforeDegrees) issues.push(...degreeWordIssues(e, `${s.id}/${e.id}`));
       if (beforeSyllables) issues.push(...syllableWordIssues(e, `${s.id}/${e.id}`));
       issues.push(...singIssues(e, `${s.id}/${e.id}`, { lesson: def.id, beforeSyllables }));
+      if (!sample) issues.push(...chromaticDegreeIssues(e, `${s.id}/${e.id}`, def.key, def.id));
     }
+    if (!sample) issues.push(...fromSketchIssues(s.exercise, `${s.id}/${s.exercise.id}`, def.id));
     if (s.kind === "make" && (s.minutes < 2 || s.minutes > 3))
       warnings.push(`${s.id}: a Make is budgeted at 2.5–3 expert minutes (found ${s.minutes})`);
     const make = s.exercise;

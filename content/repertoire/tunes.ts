@@ -1,7 +1,8 @@
-// Oak's own renditions of the minor and blues songs U10, X2 and ladder L6 use (contracts §2.4, §2.8, §2.9), built
+// Oak's own renditions of the minor, blues and modal songs U10, U14, X2 and ladders L5–L6 use (contracts §2.4, §2.8, §2.9), built
 // from their registry entries (content/repertoire/index.ts) so title, year, status, provenance, key, meter, pickup
 // and form are stated once. The folk songs of L5 are built by folk.ts, in degrees of a major key; these songs need
-// notes outside one diatonic scale (the raised 7 of harmonic minor, a blues passing note), so a setting here is
+// notes outside one diatonic scale (the raised 7 of harmonic minor, a blues passing note) or a modal key (Old Joe
+// Clark in A Mixolydian, Drunken Sailor in D Dorian, from U14), so a setting here is
 // written in note names, one mini-notation group a bar (the pickup bar first when the song has one), with the
 // harmony as chord symbols, one a bar or two (the second on beat 3).
 //
@@ -9,7 +10,7 @@
 // transcription puts it; a dotted or tied value is cut to the longest plain value (whole, half, quarter, eighth)
 // that fits before the next attack, and a rest fills the rest of its time. A half note starts on a beat, a whole
 // note on beat 1, and nothing crosses a bar line. Where a source figure cannot be kept on the eighth grid, the
-// setting moves the attack and says so (`moved`).
+// setting moves the attack and says so (`moved`). The modal tunes come after U13 and keep their dotted values.
 //
 // The layers a transcription checks are a root bass (one note a chord) and block chords in close position over a
 // fixed table of voicings, plus the melody; the full reference code is the three labelled tracks. The swing a song
@@ -36,6 +37,7 @@ export const VOICINGS: Readonly<Record<string, readonly string[]>> = {
   G7: ["g3", "b3", "d4", "f4"],
   Gm: ["g3", "bb3", "d4"],
   Am: ["a2", "c3", "e3"],
+  A: ["a2", "c#3", "e3"],
   A7: ["a2", "c#3", "e3", "g3"],
   Bb: ["bb2", "d3", "f3"],
   B: ["b2", "d#3", "f#3"],

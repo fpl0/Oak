@@ -21,9 +21,17 @@ export function glyph(name: string): string {
   return name.replace(/#/g, "♯").replace(/(?<=[A-G]b*)b/g, "♭");
 }
 
-/** "D major", "F♯ minor". */
+/** The four colour modes of U14 are proper names ("G Mixolydian"); every other mode reads as written. */
+const MODE_NAMES: Readonly<Record<string, string>> = {
+  mixolydian: "Mixolydian",
+  dorian: "Dorian",
+  lydian: "Lydian",
+  phrygian: "Phrygian",
+};
+
+/** "D major", "F♯ minor", "G Mixolydian" (as `@oak/theory` `keyDisplay` names a mode). */
 export function keyName(k: KeySpec): string {
-  return `${glyph(k.tonic)} ${k.mode}`;
+  return `${glyph(k.tonic)} ${MODE_NAMES[k.mode] ?? k.mode}`;
 }
 
 export const sameKey = (a: KeySpec | null, b: KeySpec | null): boolean =>

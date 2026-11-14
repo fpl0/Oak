@@ -1110,7 +1110,7 @@ export const U07: UnitSpec = {
     },
     notes: [
       "Contracts §7.6 allows two or three authored items, so the spec's earlier five became three: `vary-the-motif` (M02) is measured by `answer-the-question`'s `motif-reuse` and the Make's `.scaleTranspose()` suggestion, `respond` (M07) by the Make's two-track suggestion.",
-      "The checkpoint follows U08.L01 and GYM.03 in the default order (session 77). It opens C2 (contracts §2.4) and is one of X1's conditions.",
+      "The checkpoint follows U08.L01 and GYM.03 in the default order (session 78). It opens C2 (contracts §2.4) and is one of X1's conditions.",
       "Authored items use only implemented kinds; the lead-sheet item needs the planned `lead-sheet` feature: until it lands, show the page as the treble staff with the chord symbols as the step's text (and keep the lead sheet for C3).",
       "No by-ear item is gated: `fam.mel.dictation` (E07) belongs to U03.CP; its level is what opens X1, and the gym raises it.",
     ],
@@ -1120,7 +1120,7 @@ export const U07: UnitSpec = {
       id: "C2",
       author: "songs",
       intent:
-        'The first composed song on the album (session 78–79 in the default order): eight bars, "loop, then land". Session 1 writes the chords (a four-chord schema loop in bars 1–6, a cadence in bars 7–8); session 2 writes a melody over them that lands on chord tones and reuses its bar-1 idea, and releases the track. Everything it asks for was taught in U05–U07; nothing new is introduced.',
+        'The first composed song on the album (session 79–80 in the default order): eight bars, "loop, then land". Session 1 writes the chords (a four-chord schema loop in bars 1–6, a cadence in bars 7–8); session 2 writes a melody over them that lands on chord tones and reuses its bar-1 idea, and releases the track. Everything it asks for was taught in U05–U07; nothing new is introduced.',
       opens:
         "When U07.CP is passed or soft-passed (contracts §2.4). Today then offers C2.S1 as the New block; a learner who puts it off keeps going (a capstone never gates a lesson). In progress, no gym slot interrupts it: the slot waits until C2.S2 is done (§2.5).",
       band: "None: a capstone is the learner's whole song, so the starter carries its own `drums:` line (as the brief's starter in content/capstones.ts does) and the recording, the cover and the liner notes cover everything that plays. The learner writes the chords and the bass (a Band bass on I–V–vi–IV would fight a rotation and the cadence). The flavour sets the starter's kit and sounds (§5.10 rule 8: jazz-soul swaps `piano` for `rhodes` on the chords) and never changes the rubric (§6.6).",
@@ -1187,7 +1187,7 @@ export const U07: UnitSpec = {
       id: "X1",
       author: "songs",
       intent:
-        "The first transcription on the album (sessions 80–82 in the default order): a whole public-domain folk tune by ear, Aura Lee (1861) or Red River Valley (trad), phrase by phrase, then its chords bass first, then arranged and released. The learner is told the meter, the key and its tonic, where the pickup falls and the rhythm of phrase 1; everything else is heard. Pass is 0.85 per melody phrase.",
+        "The first transcription on the album (sessions 81–83 in the default order): a whole public-domain folk tune by ear, Aura Lee (1861) or Red River Valley (trad), phrase by phrase, then its chords bass first, then arranged and released. The learner is told the meter, the key and its tonic, where the pickup falls and the rhythm of phrase 1; everything else is heard. Pass is 0.85 per melody phrase.",
       opens:
         'When U07.CP is passed (a soft pass counts), C2 is released, and `fam.mel.dictation` is at level ≥ 4 (contracts §2.4, §6.6). While it is closed, `capstones.gate` lists each condition with `met`; when only the dictation level is short, Today says "Two more gym sets open X1" (`gymSetsToOpen`) and the planner schedules the gym\'s dictation sets. X1 never gates a lesson; a learner may leave it closed and carry on into U08.',
       band: "None while transcribing: the source is the song itself, played as a pattern source (hidden reference code in a hidden adapter instance, contracts §6.12) with Oak's plain accompaniment (block chords and a root bass) at realism R1, the same for every learner. In X1.S3's arrangement the learner adds what they like under their melody, bass and chords: a `drums:` line, a second sound; the whole arrangement is their code.",
@@ -1238,7 +1238,7 @@ export const U07: UnitSpec = {
             "Arrange: melody, bass, chords and, if wanted, a `drums:` line; a short intro allowed. The arrangement is the learner's (not graded).",
           ],
           checks: [
-            '`PhraseCheck` `chords`, `phrase: [1, 4]`, `layer: "chords"`, `stages: ["bass", "quality", "rn"]`, `matcher: { m: "harmony", level: "rn", qualityDepth: "triad", inversion: false, harmonicRhythm: "given" }`, pass ≥ 0.80 per stage (contracts §6.6).',
+            '`PhraseCheck` `chords`, `phrase: [1, 4]`, `layer: "chords"`, `stages: ["bass", "quality", "rn"]`, `matcher: { m: "harmony", level: "rn", qualityDepth: "triad", inversion: false, harmonicRhythm: "given" }`, pass ≥ 0.85 per stage (contracts §6.6 as of 1.6; it was 0.80).',
             "The arrangement is not graded; release needs the four phrase checks and the three stages recorded (passed or revealed).",
           ],
           ends: "Tutor transcription review offered (`review: true`, contracts §10.6: sections, plausibility flags, next focus; never pass or fail), then release (`release: true`): album track X1 v1, recording, cover, liner notes.",
@@ -1380,7 +1380,7 @@ export const U07: UnitSpec = {
       'With no project, Today offers "Add a song you love" on the gym card; if the learner skips, the slot is a ladder session one realism level up.',
     ],
     notes: [
-      "In the default order the first three slots fall inside U07 (GYM.01 ladder L1, GYM.02 own audio or its fallback, GYM.03 ladder), and X1.S1–S3 take the slot after C2 (sessions 80–82).",
+      "In the default order the first three slots fall inside U07 (GYM.01 ladder L1, GYM.02 own audio or its fallback, GYM.03 ladder), and X1.S1–S3 take the slot after C2 (sessions 81–83).",
       "Ladder stimuli have no audio file: the hidden reference plays through the pattern source (§6.12); the browser receives events, never the hidden code (Wave 1 decision, wave4.md §5.3).",
       "content/gym/ladder.ts gives L3 `pass: 0.8` (per stage), which matches X1's and X2's stage rule; contracts §6.12 says ladder answers pass at ≥ 0.85 \"unless §6.6 says otherwise\". The level-up rule above uses each level's own pass mark.",
       "Two checklists exist: content/gym/templates.ts gives each layer mode its own rows; the API's `OWN_AUDIO_CHECKLIST` has five fixed rows. The gym's even slots should use one: this spec uses the API's five rows, filtered by layer, and the templates' rows as the prompts under each (transcribe and server to settle).",

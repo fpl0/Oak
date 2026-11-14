@@ -99,6 +99,29 @@ export function adsrValues(set: { attack?: number; decay?: number; sustain?: num
     release: Math.max(r ?? 0, 0.01),
   };
 }
+const FILTER_ENVELOPE = ["lpattack", "lpdecay", "lpsustain", "lprelease"] as const;
+/** superdough's filter-envelope defaults (`createFilter`: `getADSRValues(…, "exponential", [0.005, 0.14, 0, 0.1])`). */
+const FILTER_ENVELOPE_DEFAULTS = { lpattack: 0.005, lpdecay: 0.14, lpsustain: 0, lprelease: 0.1 } as const;
+/**
+ * The filter envelope superdough plays for what the code set (d6; A1.L02 S6): with `.lpenv()` alone the defaults
+ * above (so `.lpenv(4)` sweeps for 0.14 s); with some of `.lpa() .lpd() .lps() .lpr()` set, the missing ones fall
+ * to the minimum exactly as the amplitude envelope's do; with neither, there is no envelope (`null`).
+ */
+export function filterEnvelopeValues(
+  c: Readonly<Record<string, unknown>>,
+): Record<(typeof FILTER_ENVELOPE)[number], number> | null {
+  const num = (k: string): number | undefined => (typeof c[k] === "number" ? (c[k] as number) : undefined);
+  const [a, d, s, r] = FILTER_ENVELOPE.map(num);
+  if (a === undefined && d === undefined && s === undefined && r === undefined)
+    return c.lpenv === undefined ? null : { ...FILTER_ENVELOPE_DEFAULTS };
+  const v = adsrValues({
+    ...(a !== undefined ? { attack: a } : {}),
+    ...(d !== undefined ? { decay: d } : {}),
+    ...(s !== undefined ? { sustain: s } : {}),
+    ...(r !== undefined ? { release: r } : {}),
+  });
+  return { lpattack: v.attack, lpdecay: v.decay, lpsustain: v.sustain, lprelease: v.release };
+}
 /** The wave a pitched note plays with no `.s()` (superdough's default synth). */
 const DEFAULT_WAVE = "triangle";
 
@@ -115,6 +138,8 @@ export function controlValue(e: NEvent, key: string, cps: number): number | stri
     for (const k of ENVELOPE) if (typeof c[k] === "number") set[k as keyof typeof set] = c[k] as number;
     return adsrValues(set)[key as "attack" | "decay" | "sustain" | "release"];
   }
+  if ((FILTER_ENVELOPE as readonly string[]).includes(key))
+    return filterEnvelopeValues(c)?.[key as (typeof FILTER_ENVELOPE)[number]] ?? null;
   const v = c[key];
   if (v !== undefined) return v;
   switch (key) {
@@ -236,7 +261,11 @@ export function controlsMatch(
         key === "s" ||
         (ENVELOPE.has(key)
           ? [...ENVELOPE].some((k) => e.controls?.[k] !== undefined)
-          : e.controls?.[key] !== undefined);
+          : (FILTER_ENVELOPE as readonly string[]).includes(key)
+            ? // A filter envelope is there as soon as `.lpenv()` or one of its four times is: its other values
+              // then play superdough's, which may be off the target but are not "left out".
+              filterEnvelopeValues(e.controls ?? {}) !== null
+            : e.controls?.[key] !== undefined);
       if (sets(ref[i] as NEvent) && !sets(gotEvent)) missing++;
       if (typeof got === "number" && typeof want === "number") {
         if (got > want) high++;

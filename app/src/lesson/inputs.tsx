@@ -35,13 +35,21 @@ import { answerResponse } from "./answer-response.ts";
 import { lessonWidgetFor } from "./answers.tsx";
 import { type Playing, playLead, playStimulus } from "./audio.ts";
 import { InlineMd, useStepHost } from "./frame.tsx";
-import type { TakeLookup } from "./grading.ts";
+import { drawnTapTargets, type TakeLookup } from "./grading.ts";
 import { LeadSheetView, leadSheetOf } from "./lead-sheet.tsx";
-import { answerSpecOf, givenStart, questionSpec, revealCode, withTrialOptions } from "./model.ts";
+import {
+  answerSpecOf,
+  codeAnswerStarter,
+  givenStart,
+  questionSpec,
+  revealCode,
+  withTrialOptions,
+} from "./model.ts";
 import { CodeMusic } from "./music.tsx";
 import { byEarSource, isByEar, keySignatureResponse, singLabelsFor, tonicPc } from "./rules.ts";
 import { useTargetMarks } from "./target-marks.ts";
 import { isMatchSound, MATCH_SOUND_LABELS } from "./wave5.ts";
+import { chromaticNeighbours, guideChordOf, keyChangeOf, seventhsTaught } from "./wave6.ts";
 
 type Part = Exclude<Exercise, AllEx>;
 
@@ -66,9 +74,12 @@ const CODE_INPUT = new Set<Exercise["kind"]>([
   "transcribe-step",
 ]);
 
-/** A dictation written as code: by ear, or from the page (U07.CP "from the page": a staff to write in `n()`). */
+/**
+ * A dictation written as code: by ear, or from the page (U07.CP "from the page": a staff to write in `n()`); and a
+ * staff read back in code (U13.L05 S6).
+ */
 function isCodeDictation(ex: Exercise): boolean {
-  return ex.kind === "dictation" && ex.answer.ui === "code";
+  return codeAnswerStarter(ex) !== null;
 }
 
 export function isCodeInput(ex: Exercise): boolean {
@@ -81,21 +92,23 @@ export function starterOf(ex: Exercise): { code: string; editable: CodeRange[] |
     const c = stripMarkers(ex.code.starter);
     return { code: c.code, editable: c.editable };
   }
-  if (ex.kind === "dictation" && ex.answer.ui === "code") {
-    const c = stripMarkers(ex.answer.starter);
+  const coded = codeAnswerStarter(ex);
+  if (coded !== null) {
+    const c = stripMarkers(coded);
     return { code: c.code, editable: c.editable };
   }
   return { code: "", editable: null };
 }
 
-export function initialInput(ex: Part): unknown {
+export function initialInput(ex: Part, trial: Trial | null = null): unknown {
   if (isCodeInput(ex)) return starterOf(ex).code;
   if (ex.kind === "run-investigate")
     return {
       code: starterOf(ex).code,
       answers: ex.questions.map((q) => emptyValue(questionSpec(q) as AnswerSpecOf<AnswerKind>)),
     } satisfies InvestigateValue;
-  const spec = answerSpecOf(ex);
+  // A drawn trial can bring its own answer shape (a "which bar" trial is a choice among its bars).
+  const spec = withTrialOptions(answerSpecOf(ex), trial);
   const given = givenStart(ex, spec);
   if (given) return given;
   return spec ? emptyValue(spec as AnswerSpecOf<AnswerKind>) : null;
@@ -113,13 +126,18 @@ export function inputReady(ex: Part, value: unknown, trial: Trial | null = null)
   return isComplete(spec, value as AnswerValue);
 }
 
-export function inputResponse(ex: Part, value: unknown, rt: InputRuntime): AttemptResponse {
+export function inputResponse(
+  ex: Part,
+  value: unknown,
+  rt: InputRuntime,
+  trial: Trial | null = null,
+): AttemptResponse {
   if (isCodeInput(ex)) return { code: value as string };
   if (ex.kind === "run-investigate") {
     const v = value as InvestigateValue;
     return { parts: ex.questions.map((q, i) => responseOf(questionSpec(q), v.answers[i] as AnswerValue)) };
   }
-  const spec = answerSpecOf(ex);
+  const spec = withTrialOptions(answerSpecOf(ex), trial);
   if (!spec) return { skipped: true };
   // A key signature is placed as accidentals in order; the grader reads them as `answer.text` (wave3.md §10).
   if (spec.ui === "staff-input" && spec.mode === "key-signature")
@@ -494,6 +512,53 @@ export function useAnswerEnvFor(
       bpm: typeof ex.bpm === "number" ? ex.bpm : h.env.bpm,
       // A graded chord is named once it is checked, never while it is built (that would give the answer away).
       nameChords: "after",
+      // Wave 6: from U12.L01 the chord-name picker shows its seventh row from the start; before it, never.
+      ...(seventhsTaught(h.env.ownerId) ? { sevenths: true } : {}),
+      // U12.L05: a pick of a chord's 3rd and 7th names each key by its place in the chord once it is checked.
+      ...(guideChordOf(ex) ? { guideChord: guideChordOf(ex) as string } : {}),
+    };
+  }
+  // Wave 6 (U14): after the check, a mode pick says the one note its own pick changes ("Mixolydian is major with
+  // one note changed: 7 becomes ♭7"), and a scale built `from` a parent says which note moved: never before the
+  // check, never in a checkpoint (nothing is marked there).
+  if (h.mode !== "checkpoint" && (harmonyUi === "choice" || harmonyUi === "scale-builder")) env.facts = true;
+  // Wave 6 (U17): a "where does the key change" answer is drawn over the piece's keys (the exercise's key plan);
+  // the widget names the new key only once the answer is right or revealed. `P` plays from the focused bar.
+  const change = keyChangeOf(ex);
+  const changeStim = "stimulus" in ex ? ex.stimulus : undefined;
+  if (change && (harmonyUi === "bar-buttons" || harmonyUi === "choice")) {
+    const meter = ex.meter ?? h.env.meter;
+    env.keyChange = {
+      from: change.from,
+      to: change.to,
+      ...(changeStim?.src === "code"
+        ? {
+            play: (bar: number) => {
+              runtime.slotPlaying?.stop();
+              const fromBar = Math.max(0, bar - 1);
+              void playStimulus({
+                code: changeStim.code,
+                bars: changeStim.bars,
+                meter,
+                key: ex.key ?? h.env.key,
+                span: { fromBar, bars: Math.max(1, Math.min(2, changeStim.bars - fromBar)) },
+              })
+                .then((p) => {
+                  runtime.slotPlaying = p;
+                })
+                .catch(() => null);
+            },
+          }
+        : {}),
+    };
+  }
+  // Wave 6 (U13): a rhythm grid is grouped and counted in the step's meter (6 steps in 6/8 are 3 + 3, "1 la li").
+  if (harmonyUi === "grid") {
+    const meter = ex.meter ?? h.env.meter;
+    env.grid = {
+      bpm: typeof ex.bpm === "number" ? ex.bpm : h.env.bpm,
+      beatsPerBar: METERS[meter].unitsPerBar,
+      meter: METERS[meter],
     };
   }
   // A slot strip hears its selected slot alone (`P`): slot i is the i-th equal span of the stimulus (a bar, half a
@@ -522,19 +587,31 @@ export function useAnswerEnvFor(
         },
       };
   }
-  if (ex.kind === "staff-write" || ex.kind === "staff-read" || ex.kind === "dictation")
-    env.staff = { meter: METERS[ex.meter ?? h.env.meter] };
+  if (ex.kind === "staff-write" || ex.kind === "staff-read" || ex.kind === "dictation") {
+    // d5: a swung step's staff is written straight and says "Swing 8ths" (contracts §6.10 item 3).
+    const swing = ex.swing ?? h.env.swing;
+    env.staff = { meter: METERS[ex.meter ?? h.env.meter], ...(swing ? { swing } : {}) };
+  }
   if (ex.kind === "tap") {
     const meter = ex.meter ?? h.env.meter;
+    // A drawn echo (U13.L05 S2, U13.L06 S3): the pad runs at the trial's tempo and stays open through the echo,
+    // the figure heard first, then tapped back where the trial's targets are.
+    const echo = trial ? drawnTapTargets(trial) : null;
+    const trialBpm = trial && typeof trial.params.bpm === "number" ? trial.params.bpm : null;
+    const bpm = trialBpm ?? (typeof ex.bpm === "number" ? ex.bpm : h.env.bpm);
+    const barSec = (60 / bpm) * METERS[meter].unitsPerBar;
+    const bars = echo ? Math.max(ex.bars, Math.ceil(((echo[echo.length - 1] ?? 0) + 0.3) / barSec)) : ex.bars;
     env.tap = {
-      bars: ex.bars,
-      bpm: typeof ex.bpm === "number" ? ex.bpm : h.env.bpm,
+      bars,
+      bpm,
       beatsPerBar: METERS[meter].unitsPerBar,
+      // Wave 6 (U13.L04): in 6/8, 9/8 and 12/8 the beat is the dotted quarter; the pad draws each beat in three.
+      meter: METERS[meter],
       countInBars: ex.cue.countInBars,
       start: async () => {
         const p = await playStimulus({
           ...(ex.stimulus.src === "code" ? { code: ex.stimulus.code } : { trial }),
-          bars: ex.bars,
+          bars: trial ? Number(trial.params.bars ?? ex.bars) : ex.bars,
           meter,
           key: ex.key ?? h.env.key,
           countInBars: Math.max(1, ex.cue.countInBars),
@@ -556,7 +633,8 @@ export function useAnswerEnvFor(
     const labels = singLabelsFor(ex, h.lesson.id);
     env.sing = {
       notes: trialTargets.map((t, i) => {
-        return { midi: t.midi, at: t.on, dur: t.off - t.on, label: degrees[i] ?? "" };
+        const d = degrees[i];
+        return { midi: t.midi, at: t.on, dur: t.off - t.on, ...(d ? { degree: d } : { label: "" }) };
       }),
       mode: ex.mode,
       tol: ex.tol,
@@ -598,8 +676,14 @@ export function useAnswerEnvFor(
               midi: t.midi,
               at: t.on,
               dur: t.off - t.on,
-              // A sight-sing's lane does not number the notes: the staff is what is read.
-              label: ex.mode === "sight" ? "" : (degrees[i] ?? ""),
+              // A sight-sing's lane does not number the notes: the staff is what is read. Otherwise the degree
+              // itself, which the widget prints as the pad does (♯4, with fi under the syllables).
+              ...(ex.mode === "sight" || !degrees[i] ? { label: "" } : { degree: degrees[i] }),
+              // A chromatic degree (fi, te, le) names the key's notes beside it: fa sung for fi is fa.
+              ...(() => {
+                const nb = chromaticNeighbours(t.midi, key);
+                return nb ? { neighbours: nb } : {};
+              })(),
             }))
           : (fromMusic ?? []),
       mode: ex.mode,

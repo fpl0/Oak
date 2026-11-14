@@ -2,7 +2,7 @@
 // odd-meter grouping (exercises §4.4 "Rhythm"). Rhythms are built beat by beat; each beat prints with the
 // smallest division that holds its onsets, so the shown code reads like the counting the learner does.
 import type { Answer, MeterId, Rat } from "@oak/content-kit";
-import { FEEL_OPTIONS, R, rat } from "@oak/content-kit";
+import { BEAT_DIVISION_OPTIONS, FEEL_OPTIONS, R, rat } from "@oak/content-kit";
 import { METERS } from "@oak/theory";
 import { buildPiece, fmtNum, type Piece, type TrackSpec } from "../build.ts";
 import { atom, line, type Node, query, rest, seq } from "../pat.ts";
@@ -20,6 +20,16 @@ import {
   type TrialBody,
   trialOf,
 } from "./common.ts";
+import {
+  isWritten,
+  type Span,
+  type WrittenCategory,
+  writtenMeter,
+  writtenNeeds,
+  writtenNode,
+  writtenOnsets,
+  writtenPhrase,
+} from "./written.ts";
 
 /** A quarter-note tempo expressed in the meter's tempo unit (eighths ×2, dotted quarters ×2/3). */
 export function unitBpm(quarterBpm: number, meter: MeterId): number {
@@ -94,11 +104,19 @@ const VOCAB: Readonly<Record<string, Beat[]>> = {
   quarters: [B(1), B(1), B(1, 1)],
   rests: [B(0), B(0, 1), B(1, 1), B(1)],
   sixteenths: [B(1, 1, 1, 1), B(1, 1, 1, 0), B(1, 0, 1, 1)],
+  // The echo family's "dotted" figure of U01.L06 (a hit, then one on the last sixteenth). Dotted values as
+  // written lengths, ties, triplets and the compound bar are gen/written.ts (Rhythm II, U13).
   dotted: [B(1, 0, 0, 1)],
-  syncopation: [B(0, 1, 0, 1), B(0, 1, 1, 1), B(0, 0, 1, 0), B(0, 1)],
-  triplets: [B(1, 1, 1), B(1, 0, 1)],
-  compound: [B(1, 1, 1), B(1, 0, 1), B(1, 0, 0), B(1, 1, 0)],
 };
+/**
+ * The categories a family writes with lengths (gen/written.ts). The echo family's "dotted" is the older
+ * beat figure; the reading and dictation families' "dotted" is U13.L03's dotted value.
+ */
+function writtenCategory(ctx: GenCtx, category: string): WrittenCategory | null {
+  if (!isWritten(category)) return null;
+  if (category === "dotted" && ctx.def.generator === "rhythm-echo") return null;
+  return category;
+}
 /** Random bars from a vocabulary: the first beat always sounds (it anchors the echo), no bar is empty. */
 export function randomBars(
   rng: Rng,
@@ -122,21 +140,52 @@ export function randomBars(
   return out;
 }
 
-function echoMaterial(ctx: GenCtx): { piece: Piece; bars: number; meter: MeterId; beats: Beat[][] } {
+interface EchoMaterial {
+  piece: Piece;
+  bars: number;
+  meter: MeterId;
+  /** The beat-by-beat bars of the older levels (empty for a written phrase). */
+  beats: Beat[][];
+  /** A written phrase (Rhythm II): its spans, and what the staff needs to write it back. */
+  written: { spans: Span[]; category: WrittenCategory; needs: ReturnType<typeof writtenNeeds> } | null;
+}
+function echoMaterial(ctx: GenCtx, over: { meter?: MeterId; bars?: number } = {}): EchoMaterial {
   // The category is the figure being asked; the vocabulary is every open figure of the level.
   const cat = ctx.category;
-  const meter: MeterId =
-    cat === "compound" ? "6/8" : cat === "three-four" ? "3/4" : str<MeterId>(ctx.level, "meter", "4/4");
+  const wcat = writtenCategory(ctx, cat);
+  const sound = pickClick(ctx);
+  if (wcat) {
+    // A written phrase: dotted values, ties, triplets, 3/4 and 6/8 with their lengths in the code.
+    const meter = writtenMeter(wcat);
+    const bars = over.bars ?? num(ctx.level, "bars", 2);
+    const tied = wcat === "tied" || wcat === "syncopation";
+    const spans = writtenPhrase(ctx.rng, wcat, bars, {
+      acrossBar: tied && bars >= 2 && ctx.rng.next() < 0.4,
+    });
+    const track: TrackSpec = {
+      label: "perc",
+      src: "s",
+      pat: writtenNode(spans, sound),
+      gain: jitter(ctx, 0.8),
+    };
+    const piece = buildPiece({ bpm: unitBpm(pickTempo(ctx), meter), meter, bars, tracks: [track] });
+    return {
+      piece,
+      bars,
+      meter,
+      beats: [],
+      written: { spans, category: wcat, needs: writtenNeeds(spans, wcat) },
+    };
+  }
+  const meter: MeterId = str<MeterId>(ctx.level, "meter", "4/4");
   const spec = METERS[meter];
   const bars = num(ctx.level, "bars", 1);
   const open = ctx.level.categories.filter((c) => ctx.openCategories.includes(c));
-  const vocab =
-    meter === "6/8"
-      ? (VOCAB.compound ?? [])
-      : [...new Set(["quarters", ...open])].flatMap((n) => (n === "compound" ? [] : (VOCAB[n] ?? [])));
-  const newest = meter === "6/8" ? [] : (VOCAB[cat] ?? []);
+  const vocab = [...new Set(["quarters", ...open])].flatMap((n) =>
+    writtenCategory(ctx, n) ? [] : (VOCAB[n] ?? []),
+  );
+  const newest = VOCAB[cat] ?? [];
   const beats = randomBars(ctx.rng, vocab, spec.unitsPerBar, bars, newest);
-  const sound = pickClick(ctx);
   const swung = cat === "swing" && beats.flat().every((b) => b.div <= 2);
   if (cat === "swing" && !swung)
     for (const bar of beats)
@@ -149,7 +198,7 @@ function echoMaterial(ctx: GenCtx): { piece: Piece; bars: number; meter: MeterId
     ...(cat === "swing" ? { swing: { amount: rat(1, 3), per: spec.unitsPerBar } } : {}),
   };
   const piece = buildPiece({ bpm: unitBpm(pickTempo(ctx), meter), meter, bars, tracks: [track] });
-  return { piece, bars, meter, beats };
+  return { piece, bars, meter, beats, written: null };
 }
 
 // --- rhy.pulse ----------------------------------------------------------------------------------
@@ -204,11 +253,12 @@ export const pulse: Generator = {
 export const echo: Generator = {
   name: "rhythm-echo",
   generate(ctx) {
-    const { piece, bars, meter } = echoMaterial(ctx);
+    const { piece, bars, meter, written } = echoMaterial(ctx);
     // The echo is tapped in the bars right after the stimulus, over the locked click.
     return trialOf(piece, {}, cueOf(ctx, { countInBars: 1, click: true }), {
       mode: "tap",
       meter,
+      ...(written ? { figure: written.category } : {}),
       tapTargets: onsetsSec(piece, "perc"),
       responseAt: bars / piece.cps,
       levels: ctx.levels,
@@ -218,11 +268,12 @@ export const echo: Generator = {
 export const read: Generator = {
   name: "rhythm-read",
   generate(ctx) {
-    const { piece, meter } = echoMaterial(ctx);
+    const { piece, meter, written } = echoMaterial(ctx);
     // Shown on the staff, tapped after a count-in; the audio is the reveal.
     return trialOf(piece, {}, cueOf(ctx, { countInBars: 1, click: true, replays: 0 }), {
       mode: "tap",
       meter,
+      ...(written ? { staffNeeds: written.needs, figure: written.category } : {}),
       showStaff: true,
       playFirst: false,
       tapTargets: onsetsSec(piece, "perc"),
@@ -237,11 +288,12 @@ export const read: Generator = {
 export const dictation: Generator = {
   name: "rhythm-dictation",
   generate(ctx) {
-    const { piece, bars, meter, beats } = echoMaterial(ctx);
+    if (ctx.category === "compound") return compoundDictation(ctx);
+    const { piece, bars, meter, beats, written } = echoMaterial(ctx);
     const spec = METERS[meter];
     const ui = str(ctx.level, "ui", "grid");
     const cue = cueOf(ctx, { countInBars: 1, click: true });
-    if (ui === "grid") {
+    if (ui === "grid" && !written) {
       // Grid answer: the indices of the sounding cells, `stepsPerBar` per bar.
       const per = num(ctx.level, "stepsPerBeat", 2);
       const cells: string[] = [];
@@ -260,16 +312,44 @@ export const dictation: Generator = {
         gridBars: bars,
       });
     }
-    // Code (L3+) and staff (L5+): the learner writes the rhythm; graded on onsets.
+    // Code (L3+) and staff (L5+): the learner writes the rhythm; graded on onsets. A written phrase tells the
+    // staff which values it needs (dots, ties, triplets), so the palette offers them and the reveal shows them.
     return trialOf(piece, {}, cue, {
       mode: "code",
-      ui,
+      ui: written && ui === "grid" ? "staff-input" : ui,
       answerTrack: "perc",
       answerFromBar: 0,
       answerBars: bars,
+      ...(written ? { staffNeeds: written.needs, figure: written.category } : {}),
     });
   },
 };
+
+/**
+ * Compound-meter dictation (U13.L04, U13.L06): one bar of 12/8 on a twelve-step grid in four groups of three
+ * ("1 la li 2 la li …"), the grid U13.L06 uses. The answer is the sounding cells.
+ */
+function compoundDictation(ctx: GenCtx): TrialBody {
+  const meter: MeterId = "12/8";
+  const halves = writtenPhrase(ctx.rng, "compound", 2);
+  const span: Span = { bars: 1, values: halves.flatMap((h) => h.values) };
+  const sound = pickClick(ctx);
+  const piece = buildPiece({
+    bpm: unitBpm(pickTempo(ctx), meter),
+    meter,
+    bars: 1,
+    tracks: [{ label: "perc", src: "s", pat: writtenNode([span], sound), gain: jitter(ctx, 0.8) }],
+  });
+  const cells = writtenOnsets([span]).map((u) => String(u));
+  return trialOf(piece, { choice: cells }, cueOf(ctx, { countInBars: 1, click: true }), {
+    mode: "choice",
+    ui: "grid",
+    stepsPerBar: 12,
+    gridBars: 1,
+    gridGroups: [3, 3, 3, 3],
+    figure: "compound",
+  });
+}
 
 // --- rhy.count ----------------------------------------------------------------------------------
 
@@ -412,6 +492,12 @@ function replaceAtoms(node: Node, s: string): Node {
 // --- rhy.subdivision ----------------------------------------------------------------------------
 
 const SUBDIVISIONS: Readonly<Record<string, number>> = { eighths: 2, triplets: 3, sixteenths: 4 };
+/** The answers in U13.L05's words (BEAT_DIVISION_OPTIONS for two and three to the beat). */
+const DIVISION_LABELS: Readonly<Record<string, string>> = {
+  eighths: BEAT_DIVISION_OPTIONS.find((o) => o.id === "duple")?.label ?? "Two to the beat (eighths)",
+  triplets: BEAT_DIVISION_OPTIONS.find((o) => o.id === "triplet")?.label ?? "Three to the beat (triplets)",
+  sixteenths: "Four to the beat (sixteenths)",
+};
 export const subdivision: Generator = {
   name: "rhythm-subdivision",
   generate(ctx) {
@@ -438,8 +524,13 @@ export const subdivision: Generator = {
         { label: "snare", src: "s", pat: line([null, "sd", null, "sd"]), ...(bank ? { bank } : {}) },
       ],
     });
+    // The level's divisions the learner has met, slowest first, in BEAT_DIVISION_OPTIONS' words.
+    const open = ctx.level.categories.filter((c) => ctx.openCategories.includes(c) || c === ctx.category);
+    const options = Object.keys(SUBDIVISIONS).filter((c) => open.includes(c));
     return trialOf(piece, { choice: [ctx.category] }, cueOf(ctx), {
       mode: "choice",
+      options,
+      optionLabels: Object.fromEntries(options.map((o) => [o, DIVISION_LABELS[o] as string])),
       prompt: mixed ? "How do the hats move in beats 3 and 4?" : "How do the hats move?",
     });
   },
@@ -467,7 +558,10 @@ export const syncopation: Generator = {
         }
       }
     })();
-    const bassHits = [0, ...cells].sort((a, b) => a - b);
+    // The kick keeps beats 1 and 3, except that a push into beat 3 takes its place ("it arrives early"): the
+    // near miss of every pushed kick is the kick on the beat next to it.
+    const pushesThree = cells.some((c) => c === 6 || c === 7);
+    const bassHits = [...new Set([0, ...(pushesThree ? [] : [8]), ...cells])].sort((a, b) => a - b);
     const piece = buildPiece({
       bpm: pickTempo(ctx),
       bars: 2,

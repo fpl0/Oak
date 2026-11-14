@@ -23,10 +23,12 @@ import type {
   CodeMakeEx,
   ComposeBriefEx,
   Exercise,
+  FormSectionName,
   Matcher,
   TranscribeGiven,
   TranscribeStepEx,
 } from "./exercise.ts";
+import type { RubricRule } from "./rubric.ts";
 
 /** Presentation only (UX §3.2). The warm-up and the Coda are engine-driven and never authored as steps. */
 export const STEP_KINDS = [
@@ -247,6 +249,15 @@ export interface LessonMeta {
    * earliest legal point (the gate). Implies `optional`.
    */
   side?: boolean;
+  /**
+   * Wave 6 (decision of 2026-11-13, d17). This lesson was split out of `splitFrom` after learners had already
+   * completed that lesson with this material in it (U05.L09 "Chord Names" out of U05.L04). A learner whose
+   * completion of `splitFrom` is older than the split has met everything this lesson teaches: the server
+   * records this lesson as completed for them at start-up (no evidence, no new cards beyond the ones the old
+   * lesson seeded, no unlock ceremony), so the planner never sends them back. Both lessons are in the same
+   * unit, and `splitFrom` comes first in the unit's order (`unit.split-from`).
+   */
+  splitFrom?: LessonId;
 }
 export interface UnitDef {
   id: UnitId;
@@ -349,6 +360,36 @@ export interface CapstoneSessionDef {
   review?: boolean;
   /** Wave 4. This session ends by releasing the piece to the album (cover, liner notes, version). */
   release?: boolean;
+  /**
+   * Wave 6 (feature `capstone.form-map`). Transcribe capstones: the session starts with the form map of the
+   * song the learner picked (CF-T.S1: "form map and bass"), checked against the song's answer key
+   * (`SongDef.answerKey.sections`). A phrase check may wait for it (`after: ["form-map"]`).
+   */
+  formMap?: FormMapCheck;
+  /**
+   * Wave 6 (feature `capstone.session-rubric`). Transcribe capstones: rules the session's draft must meet
+   * beside its phrase checks, graded in `capstone` mode on the whole piece (CF-T.S4: the arrangement has
+   * drums, bass, chords and melody, and its sections are the song's, `{ rule: "form", pattern: "@song" }`).
+   * Rules marked `required` gate the release; the others are suggestions. A compose capstone keeps its rules
+   * in the brief (`capstone.session-rubric`).
+   */
+  rubric?: RubricRule[];
+}
+/**
+ * Wave 6. The form map of a transcribe capstone (contracts §6.6 CF-T "form map correct"; ladder L8): the
+ * learner hears the whole tune, cuts it into sections and labels them, through the `form` answer in
+ * `input: "map"` (or `"label"` when `boundaries` are given). Correct means every section starts at the right
+ * bar and carries the right label by shape (AABA; `formLetters`). `pass` is the share of sections that must
+ * be right (1 for CF-T). A revealed map earns no evidence and is named in the liner notes, like a phrase.
+ */
+export interface FormMapCheck {
+  /** Slug, unique among the capstone's checks; a `PhraseCheck.after` may name it. */
+  id: string;
+  vocabulary: "letters" | FormSectionName[];
+  /** `asked`: the learner finds where each section starts. `given`: the sections are marked; only the labels are asked. */
+  boundaries: "asked" | "given";
+  pass: number;
+  given?: TranscribeGiven;
 }
 /**
  * Wave 4. One graded check of a transcribe capstone, against the song the learner picked: a phrase's

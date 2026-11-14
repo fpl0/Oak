@@ -3,7 +3,7 @@
 // (`editNoteList`, wave3.md §3.1): the context a spec engraves in, the notes as the learner reads them ("E4,
 // quarter, bar 1 beat 2"), the cursor and its keyboard grammar, and pointer → (onset, staff step → pitch) through
 // the measured geometry. Pure: tested with `bun test`; the DOM half is `measure.ts`.
-import type { KeySpec, MeterSpec, Rat } from "@oak/content-kit";
+import type { KeySpec, MeterSpec, Rat, SwingSpec } from "@oak/content-kit";
 import { R, rat } from "@oak/content-kit";
 import {
   editNoteList,
@@ -67,11 +67,14 @@ export interface Engraved {
 }
 export type EngraveResult = Engraved | { ok: false; error: string };
 
-/** The value engraved: Score and ABC (never throws; a list the DSL cannot read says why). */
-export function engrave(value: string, ctx: NoteListContext): EngraveResult {
+/**
+ * The value engraved: Score and ABC (never throws; a list the DSL cannot read says why). `swing` (Wave 6, d5) prints
+ * "Swing 8ths" over an answer that is written straight, as the Workbench's staff does (contracts §6.10 item 3).
+ */
+export function engrave(value: string, ctx: NoteListContext, o: { swing?: SwingSpec } = {}): EngraveResult {
   const list = normalizeStaffValue(value);
   try {
-    const { score, abc } = notate(noteListInput(list, ctx));
+    const { score, abc } = notate({ ...noteListInput(list, ctx), ...(o.swing ? { swing: o.swing } : {}) });
     return { ok: true, list, score, abc };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
@@ -301,6 +304,10 @@ export interface StaffNote {
   /** 1-based bar and beat (beat in tempo units, fractional off the beat). */
   bar: number;
   beat: number;
+  /** Wave 6: the note is written as tied pieces (a tie leaves its first piece). */
+  tied: boolean;
+  /** Wave 6: the note is one value of a tuplet (a triplet). */
+  tuplet: boolean;
 }
 
 function pitchOfSpelled(p: { letter: string; alt: number; oct: number }): StaffPitch {
@@ -334,24 +341,35 @@ export function staffNotes(score: Score): StaffNote[] {
       staff,
       bar: cycle + 1,
       beat: 1 + R.toNum(R.mul(inBar, unit)),
+      tied: item.tieToNext,
+      tuplet: item.inTuplet,
     };
   });
 }
 
 function beatText(beat: number): string {
-  const whole = Math.floor(beat);
+  const whole = Math.floor(beat + 1e-9);
   const frac = beat - whole;
-  if (Math.abs(frac) < 1e-9) return `beat ${whole}`;
-  if (Math.abs(frac - 0.5) < 1e-9) return `the and of beat ${whole}`;
+  if (Math.abs(frac) < 1e-6) return `beat ${whole}`;
+  if (Math.abs(frac - 0.5) < 1e-6) return `the and of beat ${whole}`;
+  // A beat in three (a triplet, or the dotted-quarter beat of 6/8).
+  if (Math.abs(frac - 1 / 3) < 1e-6) return `beat ${whole}, second of three`;
+  if (Math.abs(frac - 2 / 3) < 1e-6) return `beat ${whole}, third of three`;
   return `beat ${Math.round(beat * 100) / 100}`;
 }
 
+const TUPLET_VALUE: Record<number, string> = { 4: "quarter", 8: "eighth", 16: "sixteenth" };
+
 /** The screen-reader line of a note: "E4, quarter, bar 1 beat 2" (sharps and flats spoken). */
-export function describeNote(note: Pick<StaffNote, "pitches" | "written" | "bar" | "beat">): string {
+export function describeNote(
+  note: Pick<StaffNote, "pitches" | "written" | "bar" | "beat"> & Partial<Pick<StaffNote, "tied" | "tuplet">>,
+): string {
   const names = note.pitches.map(
     (p) => `${p.letter}${p.alt > 0 ? " sharp" : p.alt < 0 ? " flat" : ""}${p.oct}`,
   );
-  return `${names.join(" ")}, ${durationName(note.written)}, bar ${note.bar} ${beatText(note.beat)}`;
+  const tupletValue = note.tuplet ? TUPLET_VALUE[note.written.base] : undefined;
+  const value = tupletValue ? `${tupletValue}-note triplet` : durationName(note.written);
+  return `${names.join(" ")}, ${value}${note.tied ? ", tied on" : ""}, bar ${note.bar} ${beatText(note.beat)}`;
 }
 
 /** A place in the bars, spoken: "bar 2 beat 3". */
@@ -464,6 +482,21 @@ export function initialCursor(spec: StaffSpec): StaffCursor {
   return { onset: [0, 1], dia: middle, dur: (quarter ?? (ds[0] as DurationToken)).token, last: null };
 }
 
+/** F4, the bottom space of the treble staff: from it, every letter lands between middle C and the B above it. */
+const FIRST_LETTER_FROM_TREBLE = 4 * 7 + 3;
+
+/**
+ * Where a letter looks for its nearest note. The first letter on an empty treble staff, before the ghost has
+ * been moved, lands in middle C's octave (C4–B4), where the course's melodies live (`n().scale("C4:major")`):
+ * from the ghost on the middle line it took C5, so "C D E" typed on a fresh staff came out an octave high and
+ * the check said only that every note differed (Wave 6 review). After that, each letter is nearest to the note
+ * before it, or to wherever the learner moved the ghost.
+ */
+function letterFrom(cursor: StaffCursor, k: StaffKeyContext): number {
+  if (k.spec.clef !== "treble" || k.notes.length > 0) return cursor.dia;
+  return cursor.dia === initialCursor(k.spec).dia ? FIRST_LETTER_FROM_TREBLE : cursor.dia;
+}
+
 export interface StaffKeyInput {
   key: string;
   shift?: boolean;
@@ -484,6 +517,11 @@ export interface StaffKeyContext {
   spec: StaffSpec;
   ctx: NoteListContext;
   notes: readonly StaffNote[];
+  /**
+   * Wave 6, a rhythm-only answer (`AnswerEnv.staff.rhythmOnly`): every note is written on this line (a diatonic
+   * number). Letters and `N` all place it; the keys that change a pitch say that this answer is about rhythm.
+   */
+  fixedDia?: number;
 }
 
 /** Total length of the answer in cycles. */
@@ -694,6 +732,8 @@ export function staffKey(
   if (key === "Home" || key === "End") {
     return moved({ ...cursor, onset: key === "Home" ? [0, 1] : clampOnset(totalCycles(ctx), k) });
   }
+  if (k.fixedDia !== undefined && (key === "ArrowUp" || key === "ArrowDown" || /^[#+\-=]$/.test(key)))
+    return { cursor, say: "This answer is about the rhythm: every note sits on the same line." };
   if (key === "ArrowUp" || key === "ArrowDown") {
     if (input.alt) return null;
     const dir = key === "ArrowUp" ? 1 : -1;
@@ -744,20 +784,23 @@ export function staffKey(
   if (key === "-") return accidental(-1) ?? { cursor, say: "Put the cursor on a note first." };
   if (key === "=") return accidental("natural") ?? { cursor, say: "Put the cursor on a note first." };
 
-  if (/^[a-gA-G]$/.test(key)) {
+  if (/^[a-gA-G]$/.test(key) || (k.fixedDia !== undefined && /^[nNxX]$/.test(key))) {
     const d = parseDuration(cursor.dur) ?? (paletteDurations(spec)[0] as DurationToken);
     const len = durCycles(d, meter);
     if (R.lt(totalCycles(ctx), R.add(cursor.onset, len)))
       return { cursor, say: `No room for a ${durationName(d)} here. Pick a shorter value or move left.` };
-    const dia = nearestLetter(key, cursor.dia);
-    const p = pitchAt(dia, ctx.key);
+    const dia = k.fixedDia ?? nearestLetter(key, letterFrom(cursor, k));
+    const p = k.fixedDia !== undefined ? pitchAt(dia, null) : pitchAt(dia, ctx.key);
     const next = clampOnset(R.add(cursor.onset, len), k);
     const atEnd = R.eq(R.add(cursor.onset, len), totalCycles(ctx));
     return {
       cursor: { onset: atEnd ? cursor.onset : next, dia, dur: cursor.dur, last: cursor.onset },
       edit: { op: "insert", onset: cursor.onset, dur: len, pitch: p.name },
       play: [p.midi],
-      say: `${p.display}, ${durationName(d)}, ${describePlace(cursor.onset, meter)}`,
+      say:
+        k.fixedDia !== undefined
+          ? `${durationName(d)}, ${describePlace(cursor.onset, meter)}`
+          : `${p.display}, ${durationName(d)}, ${describePlace(cursor.onset, meter)}`,
     };
   }
   if (/^[2-6]$/.test(key)) {
@@ -879,6 +922,8 @@ export function pointerHit(
   point: { x: number; y: number },
   spec: StaffSpec,
   meter: MeterSpec,
+  /** Wave 6: the snap grid in cycles when it is not the palette's (triplet values), and a fixed line. */
+  o: { grid?: Rat; fixedDia?: number } = {},
 ): PointerHit | null {
   const band = staffAt(geom, point.y);
   if (!band || band.clef === "perc") return null;
@@ -887,8 +932,11 @@ export function pointerHit(
     (point.x >= (band.bars.at(-1)?.x1 ?? Number.POSITIVE_INFINITY) ? band.bars.at(-1) : undefined) ??
     (point.x < (band.bars[0]?.x0 ?? 0) - 24 ? undefined : band.bars[0]);
   if (!bar) return null;
-  const snapped = snapX(bar, anchors, point.x, gridCycles(spec, meter));
-  const step = Math.round(((point.y - band.topLineY) * 2) / band.lineSpacing);
+  const snapped = snapX(bar, anchors, point.x, o.grid ?? gridCycles(spec, meter));
+  const step =
+    o.fixedDia !== undefined
+      ? TOP_LINE_DIA[band.clef] - o.fixedDia
+      : Math.round(((point.y - band.topLineY) * 2) / band.lineSpacing);
   const clamped = Math.max(-8, Math.min(16, step));
   const dia = TOP_LINE_DIA[band.clef] - clamped;
   return {
@@ -897,7 +945,7 @@ export function pointerHit(
     x: snapped.x,
     y: band.topLineY + (clamped * band.lineSpacing) / 2,
     step: clamped,
-    pitch: pitchAt(dia, spec.key ?? null),
+    pitch: o.fixedDia !== undefined ? pitchAt(dia, null) : pitchAt(dia, spec.key ?? null),
   };
 }
 

@@ -7,9 +7,10 @@
 //    solution-bearing field cannot leak by default;
 //  - a withheld field is ABSENT, not null, so "no `expected` field below its rung" can be tested;
 //  - the level comes from server state (`disclosureLevel`). It is never model or browser input.
-import { type AnswerForm, answerLeaks, maskAnswers } from "./answer-guard.ts";
+import { type AnswerForm, answerForms, answerLeaks, maskAnswers } from "./answer-guard.ts";
 import type { GradeSnapshot, LessonSource, RawIssue, Rung, StepSource, StepState } from "./domain.ts";
 import type { AnswerPolicy } from "./types.ts";
+import { keyPlanLine } from "./vocabulary.ts";
 
 /** First level at which each row of the matrix may be returned. */
 export const MIN_LEVEL = {
@@ -178,6 +179,13 @@ export interface LessonContextView {
     grading: StepSource["grading"];
     /** Wave 4: the step's own key, else the lesson's. */
     key: string | null;
+    /**
+     * Wave 6: the keys by bar when the step changes key (`"C major from bar 1 · D major from bar 9 (…)"`); `null`
+     * for one key, and withheld (`"withheld"`) while naming the new key is the step's answer.
+     */
+    key_plan: string | null;
+    /** Wave 6: the step's own meter when it differs from the lesson's. */
+    meter: string | null;
     prompt: string;
     starter_code: string | null;
     constraints: string[];
@@ -190,6 +198,14 @@ export interface LessonContextView {
     known_mistakes: { feedback: string; description: string; code?: string | null }[];
     solution: string | null;
   } | null;
+}
+
+/** The step's key plan as one line, or `"withheld"` while it names what the learner is asked to find. */
+function keyPlanView(step: StepSource, level: Rung): string | null {
+  const line = keyPlanLine(step.keyPlan);
+  if (line === null) return null;
+  const text = line.replace(/^key_plan: /, "");
+  return answerLeaks(text, answerForms(step), level).length > 0 ? "withheld" : text;
 }
 
 /** The `get_lesson_context` result. `level` must be `disclosureLevel(state)` for this very step. */
@@ -231,6 +247,8 @@ export function lessonContextView(
     kind: step.kind,
     grading: step.grading,
     key: step.key ?? lesson.key,
+    key_plan: keyPlanView(step, level),
+    meter: step.meter ?? lesson.meter,
     prompt: step.prompt,
     starter_code: step.starterCode,
     constraints: [...step.constraints],

@@ -2,7 +2,7 @@
  * Version of docs/design/contracts.md that this package implements. Bump it in the same commit as any
  * contract change (contracts "Changing a contract").
  */
-export const CONTRACTS_VERSION = "1.5";
+export const CONTRACTS_VERSION = "1.6";
 
 /**
  * Bump when the shape of a content schema changes in a way that old generated content or an older reader
@@ -17,6 +17,11 @@ export const CONTRACTS_VERSION = "1.5";
  * `scale-builder` widgets and `Answer.sections`, the `controls` matcher, the `bass-line` and `notates` rules,
  * `section` on every rubric rule, `chord-qualities.depth`, `degree-set.anyOf`, `ends-on-degree.over`,
  * `blues-form.choruses`, the `form`/`scope`/`spectrum` panels and `StepUi.probe`, `LessonMeta.side`,
- * `PhraseCheck.after`).
+ * `PhraseCheck.after`). 5: the Wave 6 shapes (`keyPlan` on exercises and songs, `rn-palette` labels and slot
+ * keys, grids of 6 and 24 steps, the form map and `Answer.bars`, `scale-builder.from`, the `guide-tones` sing
+ * mode, `harmony.wrongQuality`, `contains-rn.kind`/`inOrder`, `form.contains`/`extra` and the `*` and `@song`
+ * patterns, `mode.anyOf`, `guide-tones.at`/`maxMoveSemis`, `modulation.via`, `velocity-ghosts.drum`/`accents`,
+ * typed `device-count` names, the `reharmonize` rule, `CodeMakeEx.fromSketch`, `LessonMeta.splitFrom`,
+ * capstone session `formMap` and `rubric`, song `sections`).
  */
-export const CONTENT_SCHEMA_VERSION = 4;
+export const CONTENT_SCHEMA_VERSION = 5;

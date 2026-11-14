@@ -30,10 +30,12 @@ export interface CapstoneSessionsDeps {
  * The drill family whose skills a transcription of each layer exercises, first that exists in the catalog
  * (`fam.har.rn` and `fam.har.progression` are planned U06 families): evidence for a check or a ladder item.
  */
-export const LAYER_FAMILIES: Record<"melody" | "bass" | "chords", readonly string[]> = {
+export const LAYER_FAMILIES: Record<"melody" | "bass" | "chords" | "form", readonly string[]> = {
   melody: ["fam.mel.dictation"],
   bass: ["fam.har.bass"],
   chords: ["fam.har.rn", "fam.har.progression", "fam.har.function"],
+  // Wave 6: the own-audio checklist's form row (OWN_AUDIO_FORM_ROW, full-arrangement mode).
+  form: ["fam.frm.sections"],
 };
 export function familyForLayer(content: ServiceContext["content"], layer: keyof typeof LAYER_FAMILIES) {
   for (const id of LAYER_FAMILIES[layer]) {
@@ -51,11 +53,23 @@ export function gymSetsMessage(sets: number, capstoneId: string): string {
   return sets === 1 ? `${n} more gym set opens ${capstoneId}` : `${n} more gym sets open ${capstoneId}`;
 }
 
-/** The (check, stage) rows a session's checks expand to, in order: a staged check gives one row per stage. */
+/**
+ * A check as the server keeps it: a phrase check of the content, or (Wave 6) the session's form map, which is one
+ * more check with the layer `form`, no stages and no phrase of its own (reported as phrase 1).
+ */
+export type SlotCheck = Omit<PhraseCheck, "layer" | "matcher"> & { layer: PhraseCheck["layer"] | "form" };
+
+/**
+ * The (check, stage) rows a session's checks expand to, in order: the form map first when the session has one
+ * (CF-T.S1, content-kit `FormMapCheck`), then each phrase check, a staged one giving one row per stage.
+ */
 export function checkSlots(
   def: CapstoneSessionDef | undefined,
-): { check: PhraseCheck; stage: CheckStage | null }[] {
-  const out: { check: PhraseCheck; stage: CheckStage | null }[] = [];
+): { check: SlotCheck; stage: CheckStage | null }[] {
+  const out: { check: SlotCheck; stage: CheckStage | null }[] = [];
+  const map = def?.formMap;
+  if (map !== undefined)
+    out.push({ check: { id: map.id, phrase: 1, layer: "form", pass: map.pass }, stage: null });
   for (const check of def?.checks ?? []) {
     if (check.stages !== undefined && check.stages.length > 0)
       for (const stage of check.stages) out.push({ check, stage });
@@ -300,7 +314,7 @@ export class CapstoneSessionsService {
       const slots = checkSlots(this.#sessionDef(id, body.capstoneSessionId));
       const ofCheck = slots.filter((s) => s.check.id === checkId);
       if (ofCheck.length === 0) throw notFound(`check ${checkId} in ${body.capstoneSessionId}`);
-      const check = (ofCheck[0] as { check: PhraseCheck }).check;
+      const check = (ofCheck[0] as { check: SlotCheck }).check;
       const staged = ofCheck.some((s) => s.stage !== null);
       if (staged && body.stage === null)
         throw badRequest(`${checkId} is checked stage by stage: name the stage`);
@@ -342,7 +356,8 @@ export class CapstoneSessionsService {
       const firstAttempt = graded && (prev?.attempts ?? 0) === 0;
       const firstPass = passedNow && !(prev?.passed ?? false);
       if (graded && !revealed && !version.tutorAssisted && (firstAttempt || firstPass)) {
-        const fam = familyForLayer(this.#content, check.layer);
+        // The form map has no drill family of its own: its evidence is the capstone's release and the form lessons'.
+        const fam = check.layer === "form" ? null : familyForLayer(this.#content, check.layer);
         const skills = fam?.skills.map((s) => skillOf(s.skill)) ?? [];
         const evidence: Omit<Evidence, "at" | "day">[] = [...new Set(skills)].map((skillId) => ({
           skillId: skillId as Evidence["skillId"],
@@ -365,6 +380,10 @@ export class CapstoneSessionsService {
     for (const r of this.#repos.capstoneSessions.checks(id)) {
       if (!r.revealed) continue;
       const check = def?.sessionDefs.flatMap((s) => s.checks ?? []).find((c) => c.id === r.checkId);
+      if (def?.sessionDefs.some((s) => s.formMap?.id === r.checkId)) {
+        out.push("The form map was revealed with a hint, so it is not counted as heard.");
+        continue;
+      }
       const phrase = check?.phrase;
       const what =
         phrase === undefined

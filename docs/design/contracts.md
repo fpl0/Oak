@@ -25,7 +25,7 @@ These are facts that the plan or the design docs state loosely or wrongly. The c
 | 0.7 | Patterned swing `.swingBy("<0 .1 .2 .33>",4)` | Works with decimals. A fraction inside the string (`"1/3"`) is parsed as a slow-down and silently gives no swing. | Literal amount: the JS expression `1/3`. Patterned amount: decimals only. |
 | 0.8 | Bank short names `tr909`, `linn` | `.bank("tr909")` puts `bank:"tr909"` on the hap; it only sounds if `aliasBank` maps it at the audio layer. | Full names only (`RolandTR909`), as planned. |
 | 0.9 | "Any label starting with capital S solos" | Confirmed in `repl.mjs` 1.2.6: a label longer than one character that starts with `S` solos. | Labels come from the fixed lowercase set (STYLE §2). |
-| 0.10 | Session counts: "about 250", U07 = 15, U15–U17 = 16, gym "about 15" | Applying every decision in the plan gives 124 core lessons, 13 checkpoints, 29 core capstone sessions (4 of them CF-T in gym slots) and 17 gym sessions: **183 core sessions**, plus **74 advanced**, **257 in total**. The plan's row for U07 forgot one of {pickup lesson, third X1 session}; its U15–U17 row left out C7; C0 was not counted. | The counts in §2.7. |
+| 0.10 | Session counts: "about 250", U07 = 15, U15–U17 = 16, gym "about 15" | Applying every decision in the plan gives 124 core lessons, 13 checkpoints, 29 core capstone sessions (4 of them CF-T in gym slots) and 17 gym sessions: **183 core sessions**, plus **74 advanced**, **257 in total**. The plan's row for U07 forgot one of {pickup lesson, third X1 session}; its U15–U17 row left out C7; C0 was not counted. Version 1.6 adds one lesson (U05.L09) and one capstone session (C3.S4): 125 lessons, 30 capstone sessions, **185 core sessions**, **259 in total**. | The counts in §2.7. |
 | 0.11 | `docs/design/exercises.md` | The saved file is truncated: it starts in the middle of §2.2 (`…ange[] }`). §0–§2.2 (foundations, the exercise catalog, `ExBase`, `Hint`, `Stimulus`, `Cue`, `AnswerUi`, `CodeSpec`, `Reference`, `Matcher`, `AstConstraint`, tolerances, the first six kinds) were recovered from the designer's transcript. | §5 below reproduces every kept type in full, so this document does not depend on the truncated file. |
 | 0.12 | Skill graph "139 nodes" | The re-edging adds E12a, E12b (E12 retired), N09, M10, C10. | 143 live nodes, 1 retired ID (§4). |
 | 0.13 | `Caug` "resolves" in `triads` (first version of this document) | It sounds, but wrongly. `voicings.mjs` 1.2.6 defines `aug: ['1P 3m 5A', …]` (a minor third) in `triads` and `legacy`, so `chord("Caug").dict("triads").voicing()` plays E♭4 A♭4 C5: the pitch classes of an **A♭ major** triad. `ireal` and `ireal-ext` play C E G♯. | `Caug` with `.dict("triads")` is the lint error `code.chord-not-in-dict`. Augmented triads are voiced with the default dictionary or by hand (`note("[c4,e4,g#4]")`). |
@@ -114,6 +114,8 @@ This replaces curriculum §1. `content/syllabus.ts` is written from these tables
 | Jazz track reordered so music comes first; JC1 is a ii–V Ballad; chord-scales gated on U14.CP. | J1–J3, JC1 |
 | R2.L05 teaches metric modulation only as implied regrouping; R1.L05 uses `.late()`; RC2 uses the 2-bar 8th-grid clave. | R1, R2, RC2 |
 | A1.L01–L04 open as optional side lessons once U03.L02 is done. | A1 |
+| U05.L04 split (1.6): `.arp()` stays in U05.L04 "Arpeggios"; chord-symbol names are U05.L09 "Chord Names", taught directly after it. No lesson ID changed; a learner who completed U05.L04 before the split is recorded as having completed U05.L09. | U05.L04, U05.L09 |
+| C3 takes four sessions (1.6): C3.S3 arranges and writes the lead sheet; C3.S4 records the take, reviews and releases. | C3.S3, C3.S4 |
 
 ### 2.2 Reading the tables
 
@@ -186,14 +188,15 @@ This replaces curriculum §1. `content/syllabus.ts` is written from these tables
 | U04.L04 | Interval Ear Lab | In-key pairs ascending, descending and harmonic, with passive-listen blocks. | — | E06 |
 | U04.CP | Interval checkpoint | Checkpoint over U04. | — | — |
 
-**U05 Triads** — 8 lessons + CP = 9 sessions
+**U05 Triads** — 9 lessons + CP = 10 sessions (U05.L09 is taught directly after U05.L04: the rows are in teaching order)
 
 | ID | Title | Objective | Introduces | Practises |
 |---|---|---|---|---|
 | U05.L01 | Stacking Thirds | `n("[0,2,4]")`: root, 3rd, 5th. | C01 | — |
 | U05.L02 | Major & Minor | Triad quality by intervals and by ear. | C02 E08 | — |
 | U05.L03 | Diminished & Augmented | The two unstable triads; augmented and diminished interval names. | C03 | E08 I03 |
-| U05.L04 | Chord Names & Arpeggios | Lead-sheet symbols C Cm C° C+ and their code spellings `C Cm Co Caug`, read and typed as answers and seen in read-only `preview` examples (`chord()` stays locked until L08); `.arp()` on hand-stacked triads. | N05 | — |
+| U05.L04 | Arpeggios | `.arp()` on hand-stacked triads: a chord played one note at a time. | — | C01 |
+| U05.L09 | Chord Names | Lead-sheet symbols C Cm C° C+ and their code spellings `C Cm Co Caug`, read and typed as answers and seen in read-only `preview` examples (`chord()` stays locked until L08). | N05 | — |
 | U05.L05 | Inversions | First and second inversion; slash-chord names; the lowest note decides. | C04 | — |
 | U05.L06 | Bass Clef & Grand Staff | Reading the low register. | N04 | — |
 | U05.L07 | Voice Leading by Hand | Voice I–IV–V–I with note lists: common tones, nearest motion. Holds the gate check for `voicing()`. | C05 | — |
@@ -366,7 +369,8 @@ A capstone opens when the checkpoint named in "Opens after" is passed or soft-pa
 | X1.S3 | X1 Folk Transcription | C2 + `fam.mel.dictation` level ≥ 4 | Chords bass-first, arrange, review, release. |
 | C3.S1 | C3 Verse–Chorus Demo | U09.CP | Groove and changes for verse and chorus. |
 | C3.S2 | C3 Verse–Chorus Demo | U09.CP | Melodies and section contrast. |
-| C3.S3 | C3 Verse–Chorus Demo | U09.CP | Arrange V C V C, lead sheet, review, release. |
+| C3.S3 | C3 Verse–Chorus Demo | U09.CP | Arrange V C V C; lead sheet. |
+| C3.S4 | C3 Verse–Chorus Demo | U09.CP | Record the full take, review, release. |
 | C4.S1 | C4 Minor Indie Ballad | U10.CP | Aeolian verse i–VI–III–VII. |
 | C4.S2 | C4 Minor Indie Ballad | U10.CP | Chorus cadence with the major V; release. |
 | C5.S1 | C5 12-Bar Shuffle | U11.CP | Changes, shuffle feel and riff. |
@@ -401,28 +405,28 @@ Repertoire limits for capstones: X1 uses Aura Lee (1861) or Red River Valley (tr
 **Default linear order of the core** (session number : ID). A checkpoint is placed after the next unit's L01 so it always falls on a later day than the unit's last lesson; the last checkpoint (U17.CP) follows a gym slot for the same reason. The planner follows this order unless the learner chooses otherwise.
 
 ```
-1:U00.L01 2:U00.L02 3:U01.L01 4:U01.L02 5:U01.L03 6:U01.L04 7:U01.L05 8:U01.L06 9:U01.L07 10:U01.L08
-11:U01.L09 12:U02.L01 13:U01.CP 14:C0.S1 15:U02.L02 16:U02.L03 17:U02.L04 18:U02.L05 19:U02.L06 20:U02.L07
-21:U02.L08 22:U03.L01 23:U02.CP 24:C1.S1 25:U03.L02 26:U03.L03 27:U03.L04 28:U03.L05 29:U03.L06 30:U03.L07
-31:U03.L08 32:U03.L09 33:U03.L10 34:U03.L11 35:U04.L01 36:U03.CP 37:U04.L02 38:U04.L03 39:U04.L04 40:U05.L01
-41:U04.CP 42:U05.L02 43:U05.L03 44:U05.L04 45:U05.L05 46:U05.L06 47:U05.L07 48:U05.L08 49:U06.L01 50:U05.CP
-51:U06.L02 52:U06.L03 53:U06.L04 54:U06.L05 55:U06.L06 56:U06.L07 57:U06.L08 58:U06.L09 59:U06.L10 60:U06.L11
-61:U06.L12 62:U07.L01 63:U06.CP 64:U07.L02 65:U07.L03 66:GYM.01 67:U07.L04 68:U07.L05 69:U07.L06 70:U07.L07
-71:GYM.02 72:U07.L08 73:U07.L09 74:U07.L10 75:U08.L01 76:GYM.03 77:U07.CP 78:C2.S1 79:C2.S2 80:X1.S1 81:X1.S2
-82:X1.S3 83:U08.L02 84:U08.L03 85:U08.L04 86:U08.L05 87:GYM.04 88:U09.L01 89:U09.L02 90:U09.L03 91:U09.L04
-92:GYM.05 93:U09.L05 94:U10.L01 95:U09.CP 96:C3.S1 97:C3.S2 98:C3.S3 99:GYM.06 100:U10.L02 101:U10.L03
-102:U10.L04 103:U10.L05 104:GYM.07 105:U10.L06 106:U10.L07 107:U10.L08 108:U10.L09 109:GYM.08 110:U11.L01
-111:U10.CP 112:C4.S1 113:C4.S2 114:GYM.09 115:U11.L02 116:U11.L03 117:U11.L04 118:U11.L05 119:GYM.10
-120:U11.L06 121:U11.L07 122:U11.L08 123:U12.L01 124:GYM.11 125:U11.CP 126:C5.S1 127:C5.S2 128:X2.S1 129:X2.S2
-130:U12.L02 131:U12.L03 132:U12.L04 133:U12.L05 134:GYM.12 135:U12.L06 136:U13.L01 137:U13.L02 138:U13.L03
-139:GYM.13 140:U13.L04 141:U13.L05 142:U13.L06 143:U14.L01 144:GYM.14 145:U13.CP 146:U14.L02 147:U14.L03
-148:U14.L04 149:GYM.15 150:U14.L05 151:U14.L06 152:U15.L01 153:U14.CP 154:CF-T.S1 155:C6.S1 156:C6.S2
-157:U15.L02 158:U15.L03 159:CF-T.S2 160:U15.L04 161:U15.L05 162:U15.L06 163:U16.L01 164:CF-T.S3 165:U16.L02
-166:U16.L03 167:U16.L04 168:U16.L05 169:CF-T.S4 170:U17.L01 171:U17.L02 172:U17.L03 173:U17.L04 174:GYM.16
-175:U17.CP 176:C7.S1 177:C7.S2 178:C7.S3 179:GYM.17 180:CF-A.S1 181:CF-A.S2 182:CF-A.S3 183:CF-A.S4
+1:U00.L01 2:U00.L02 3:U01.L01 4:U01.L02 5:U01.L03 6:U01.L04 7:U01.L05 8:U01.L06 9:U01.L07 10:U01.L08 11:U01.L09
+12:U02.L01 13:U01.CP 14:C0.S1 15:U02.L02 16:U02.L03 17:U02.L04 18:U02.L05 19:U02.L06 20:U02.L07 21:U02.L08
+22:U03.L01 23:U02.CP 24:C1.S1 25:U03.L02 26:U03.L03 27:U03.L04 28:U03.L05 29:U03.L06 30:U03.L07 31:U03.L08
+32:U03.L09 33:U03.L10 34:U03.L11 35:U04.L01 36:U03.CP 37:U04.L02 38:U04.L03 39:U04.L04 40:U05.L01 41:U04.CP
+42:U05.L02 43:U05.L03 44:U05.L04 45:U05.L09 46:U05.L05 47:U05.L06 48:U05.L07 49:U05.L08 50:U06.L01 51:U05.CP
+52:U06.L02 53:U06.L03 54:U06.L04 55:U06.L05 56:U06.L06 57:U06.L07 58:U06.L08 59:U06.L09 60:U06.L10 61:U06.L11
+62:U06.L12 63:U07.L01 64:U06.CP 65:U07.L02 66:U07.L03 67:GYM.01 68:U07.L04 69:U07.L05 70:U07.L06 71:U07.L07
+72:GYM.02 73:U07.L08 74:U07.L09 75:U07.L10 76:U08.L01 77:GYM.03 78:U07.CP 79:C2.S1 80:C2.S2 81:X1.S1 82:X1.S2
+83:X1.S3 84:U08.L02 85:U08.L03 86:U08.L04 87:U08.L05 88:GYM.04 89:U09.L01 90:U09.L02 91:U09.L03 92:U09.L04
+93:GYM.05 94:U09.L05 95:U10.L01 96:U09.CP 97:C3.S1 98:C3.S2 99:C3.S3 100:C3.S4 101:GYM.06 102:U10.L02
+103:U10.L03 104:U10.L04 105:U10.L05 106:GYM.07 107:U10.L06 108:U10.L07 109:U10.L08 110:U10.L09 111:GYM.08
+112:U11.L01 113:U10.CP 114:C4.S1 115:C4.S2 116:GYM.09 117:U11.L02 118:U11.L03 119:U11.L04 120:U11.L05 121:GYM.10
+122:U11.L06 123:U11.L07 124:U11.L08 125:U12.L01 126:GYM.11 127:U11.CP 128:C5.S1 129:C5.S2 130:X2.S1 131:X2.S2
+132:U12.L02 133:U12.L03 134:U12.L04 135:U12.L05 136:GYM.12 137:U12.L06 138:U13.L01 139:U13.L02 140:U13.L03
+141:GYM.13 142:U13.L04 143:U13.L05 144:U13.L06 145:U14.L01 146:GYM.14 147:U13.CP 148:U14.L02 149:U14.L03
+150:U14.L04 151:GYM.15 152:U14.L05 153:U14.L06 154:U15.L01 155:U14.CP 156:CF-T.S1 157:C6.S1 158:C6.S2
+159:U15.L02 160:U15.L03 161:CF-T.S2 162:U15.L04 163:U15.L05 164:U15.L06 165:U16.L01 166:CF-T.S3 167:U16.L02
+168:U16.L03 169:U16.L04 170:U16.L05 171:CF-T.S4 172:U17.L01 173:U17.L02 174:U17.L03 175:U17.L04 176:GYM.16
+177:U17.CP 178:C7.S1 179:C7.S2 180:C7.S3 181:GYM.17 182:CF-A.S1 183:CF-A.S2 184:CF-A.S3 185:CF-A.S4
 ```
 
-Landmarks: first album track (C0) at session 14; first chords in the learner's own code (U05.L01) at session 40; first composed song (C2) released at session 79; J and R tracks open at session 145; core complete at session 183.
+Landmarks: first album track (C0) at session 14; first chords in the learner's own code (U05.L01) at session 40; first composed song (C2) released at session 80; J and R tracks open at session 147; core complete at session 185.
 
 ### 2.6 Advanced tracks
 
@@ -527,11 +531,11 @@ Each track opens at its gate and can interleave with U14–U17. Order inside a t
 | U02 Pitch, Keyboard & Treble Staff | 8 | 1 | C1 (1) | 10 |
 | U03 Major Scale & Degrees | 11 | 1 | — | 12 |
 | U04 Intervals (compressed) | 4 | 1 | — | 5 |
-| U05 Triads | 8 | 1 | — | 9 |
+| U05 Triads | 9 | 1 | — | 10 |
 | U06 Diatonic Harmony | 12 | 1 | — | 13 |
 | U07 Melody | 10 | 1 | C2 (2), X1 (3) | 16 |
 | U08 Bass Lines | 5 | 0 | — | 5 |
-| U09 Form | 5 | 1 | C3 (3) | 9 |
+| U09 Form | 5 | 1 | C3 (4) | 10 |
 | U10 Minor | 9 | 1 | C4 (2) | 12 |
 | U11 Pentatonic & Blues | 8 | 1 | C5 (2), X2 (2) | 13 |
 | U12 Seventh Chords | 6 | 0 | — | 6 |
@@ -542,12 +546,12 @@ Each track opens at its gate and can interleave with U14–U17. Order inside a t
 | U17 Modulation | 4 | 1 | C7 (3), CF-A (4) | 12 |
 | Transcription Gym (GYM.01–GYM.17) | — | — | — | 17 |
 | CF-T in gym slots | — | — | CF-T (4) | 4 |
-| **Core total** | **124** | **13** | **29** | **183** |
+| **Core total** | **125** | **13** | **30** | **185** |
 | Jazz Harmony | 22 | 2 | 10 | 34 |
 | Advanced Rhythm | 15 | 1 | 4 | 20 |
 | Arrangement & Sound | 13 | 1 | 6 | 20 |
 | **Advanced total** | | | | **74** |
-| **Grand total** | | | | **257** |
+| **Grand total** | | | | **259** |
 
 At 5 sessions a week the core takes about 37 weeks and the whole course about 52. The pace estimate on `/progress` is computed from measured session data, never from these numbers.
 
@@ -708,7 +712,7 @@ L1–L4 are generated by code, never authored by hand. Ladder stimuli play throu
 | `tb.legato` | `.legato(x)` | U03.L09 | phrasing | — | the same control as `.clip(x)` under its phrasing name (§0.20) |
 | `tb.transpose.interval` | interval strings `.transpose("3M")` | U04.L02 | interval names | — |  |
 | `tb.arp` | `.arp("0 1 2 1")` | U05.L04 | chord tones in time | — |  |
-| `tb.feature.chord-symbols` | Chord-symbol labels (chord band and staff) | U05.L04 | chord names | — |  |
+| `tb.feature.chord-symbols` | Chord-symbol labels (chord band and staff) | U05.L09 | chord names | — |  |
 | `tb.chord` | `chord("<C Am F G>")` | U05.L08* | chord symbols as code | U00.L01; Band from U01 |  |
 | `tb.voicing` | `.voicing()` | U05.L08* | automatic voice leading, after doing it by hand | U00.L01; Band from U01 |  |
 | `tb.anchor` | `.anchor("c5")` | U05.L08* | where a voicing sits | — |  |
@@ -927,7 +931,7 @@ Severity by profile:
 | N02 | Treble clef & ledger lines | notation | fact | P02 | U02.L04 |  |
 | N03 | Key signatures on the staff | notation | fact | S04 N02 | U03.L06 |  |
 | N04 | Bass clef & grand staff | notation | fact | N02 | U05.L06 |  |
-| N05 | Chord symbols (lead sheet) | notation | fact | C03 | U05.L04 |  |
+| N05 | Chord symbols (lead sheet) | notation | fact | C03 | U05.L09 | lesson split out of U05.L04 in 1.6 |
 | N06 | Roman numerals | notation | concept | H01 | U06.L02 |  |
 | N07 | Lead sheets | notation | concept | N05 M03 | U07.L09 |  |
 | N08 | Ties, dots & beaming | notation | concept | N01 R09 | U13.L03 | was "Ties, beaming, tuplets & meter notation" ← N01 R12; tuplets moved to N09 |
@@ -1535,7 +1539,7 @@ All capstones: flavour never changes a rubric; progressions compare on the **tri
 | **C0 Intro** | 4/4; `bars` 4–8; `tracks` ≥2 drum-role lines; `onsets` snare ⊇ {1/4, 3/4} per bar in ≥3 bars; hats on an 8th or 16th grid; the last bar's drum onsets differ from bar 1 (a fill); `tempo-bpm` 70–140 |
 | **C1 First Loop** | roles drums + bass + melody present; `bars` = 4; snare ⊇ {1/4, 3/4}; bass within c1–c3 with `distinct-pitches` ≥ 3; melody `range` ≤ 15 st; `tempo-bpm` 70–140 |
 | **C2 Four-Chord Song** | `bars` = 8; roles chords + melody; `progression`: bars 1–6 are an H04-family schema loop in any rotation (bars 1–4 one full turn, bars 5–6 its first two chords), one chord per bar; `cadence` at bars 7–8 of type PAC, IAC or PC (authentic, perfect or imperfect: V→I, or vii°→I as an imperfect cadence; or plagal: IV→I or iv→I), ending on I; `chord-tones-strong` ≥ 0.6 on beats 1 and 3; melody `range` ≤ 19 st; `motif-reuse` ≥ 0.5 (`shape: 'either'`), labelled "Repeat or vary your bar-1 idea in half the bars or more". Suggestion only: melody ends on 1. The brief shows the "loop, then land" template. |
-| **X1 Folk Transcription** | Opens when U07.CP is passed (soft pass counts), C2 is released and `fam.mel.dictation` is at level ≥ 4; otherwise Today says "Two more gym sets open X1" and schedules them. Given to the learner: meter, key, tonic, pickup position, the rhythm skeleton of phrase 1. Worked phrase by phrase (4 bars each) with A/B and a check per phrase: `Matcher {m:'melody', pitch:'key-relative'}` ≥ **0.85** per phrase. Chords in S3 by bass-first stages (`harmony`, level `rn`, triad depth) ≥ 0.80 per stage. A revealed phrase earns no evidence and is named in the liner notes. |
+| **X1 Folk Transcription** | Opens when U07.CP is passed (soft pass counts), C2 is released and `fam.mel.dictation` is at level ≥ 4; otherwise Today says "Two more gym sets open X1" and schedules them. Given to the learner: meter, key, tonic, pickup position, the rhythm skeleton of phrase 1. Worked phrase by phrase (4 bars each) with A/B and a check per phrase: `Matcher {m:'melody', pitch:'key-relative'}` ≥ **0.85** per phrase. Chords in S3 by bass-first stages (`harmony`, level `rn`, triad depth) ≥ **0.85** per stage. A revealed phrase earns no evidence and is named in the liner notes. |
 | **C3 Verse–Chorus Demo** | `form` = `verse chorus verse chorus` (tags allowed); `contrast(chorus, verse)` on ≥ 2 axes; `duration-sec` ≥ 90 (from the AST); `groove-lock` bass-on-kick ≥ 0.5; the lead sheet renders with `approximate = false` (a declared `swing` is carried by the notation, so swung flavours pass) |
 | **C4 Minor Indie Ballad** | verse `progression` = `schema.aeolian`; `contains-rn` V (major, with the raised 7) followed by i, ≥ 1; melody `degree-set` contains ♭3 and ♭6; `ends-on-degree` 1 over i; `tempo-bpm` 60–95 |
 | **C5 12-Bar Shuffle** | `blues-form` standard or quick-change, ≥ 2 choruses; every chord is a dominant seventh (read from its symbol; from the pitch-class set only for a hand-voiced chord); `swing` (subdivision 8) on the hi-hat or ride line, ratio in [1.6, 2.4]; bar 12 contains V; melody uses ♭3 or ♭5 ≥ 2×; riff `motif-reuse` ≥ 0.6 |
@@ -1704,23 +1708,32 @@ Families are the exercises §4.4 catalog with the `fam.` prefix, re-pointed at t
 | `fam.mel.echo` | Pr | U03.L10 | V03 | pitch |
 | `fam.int.in-key` | P | U04.L01 | E06 | pitch |
 | `fam.int.spell` | C | U04.L02 (aug/dim U05.L03) | I02, I03 | — |
+| `deck.int.names` | F | U04.L02 (tritone U04.L03; the half-step counts U12.L06) | I02, I03 | — |
 | `fam.int.sing` | Pr | U04.L04 | V03 | pitch |
 | `fam.int.isolated` | P | U12.L06 | E06, I04 | pitch |
 | `fam.chd.quality-triad` | P | U05.L02 (L3 U05.L03) | E08 | harmony |
 | `fam.chd.spell` | C | U05.L02 (L2 U05.L03; L3 U12.L01; L4 J2.L03) | C02, C03, C07 | — |
-| `deck.chd.symbols` | F | U05.L04 (U11.L04, U12.L01, U12.L03, J1.L02) | N05, J01 | — |
+| `deck.chd.triads` | F | U05.L02 (diminished and augmented U05.L03) | C02, C03 | — |
+| `deck.chd.symbols` | F | U05.L09 (U11.L04, U12.L01, U12.L03, J1.L02) | N05, J01 | — |
 | `fam.chd.inversion` | P | U05.L05 (L3 U12.L04) | C04 | harmony |
 | `fam.har.rn` | C | U06.L02 (L3 U10.L04, the harmonic-minor V from U10.L06; L4 U12.L04; L5 U15.L02, U16.L01) | N06 | — |
+| `deck.har.rn` | F | U06.L02 | N06 | — |
 | `fam.har.function` | C/P | U06.L03 (L3 U10.L04; L4 U12.L04, applied chords from U15.L02) | H02 | harmony |
 | `fam.har.cadence` | P | U06.L04. Ladder re-cut to the merged lesson: L1 PAC vs HC · L2 + IAC · ★L3 + plagal and deceptive (gate U06.L07) · L4 + ♭VII–I and minor cadences (gate U14.L02) | H03 | harmony |
+| `deck.har.cadence` | F | U06.L04 (deceptive U06.L06; plagal U06.L07) | H03 | — |
 | `fam.har.bass` | P | U06.L05 (L5 U10.L04; L6 U15.L06, U16.L05) | E09, V05 | harmony |
 | `fam.har.schema` | P | U06.L06. Ladder re-cut to the lesson order: L1 axis vs three-chord · L2 + axis-vi, doo-wop (U06.L07) · ★L3 + aeolian, andalusian (U10.L07) · L4 + blues12 (U11.L05) · L5 + mixolydian, dorian vamp (U14.L06) · L6 + ii–V–I (J1.L03) | H04, H05 | harmony |
 | `fam.har.progression` | P | U06.L09 (L4 U10.L04; L5 U12.L04; L6 U16.L05) | E09 | harmony |
 | `fam.mel.nct` | P/C | U07.L04 (L2 U07.L05) | M04, M05 | pitch |
 | `fam.frm.sections` | P | U09.L03 | F02, F03 | harmony |
 | `fam.key.mode` | P | U10.L01 (L3 and L4 U14.L03; L5 U14.L05) | E10 | pitch |
+| `deck.scl.degrees` | F | U10.L01 (harmonic U10.L06; melodic U10.L08; pentatonic U11.L01–L02; blues U11.L03) | S05, S07, S08, S09, S10, S11 | — |
+| `deck.key.minor` | F | U10.L02 (harmonic minor U10.L06; melodic minor U10.L08) | S06, S07, S08 | — |
 | `fam.deg.fet-minor` | P | U10.L03 | E10 | pitch |
+| `deck.har.minor` | F | U10.L04 (Aeolian loop U10.L05; major V U10.L06; Andalusian U10.L07) | H07, H08, H09 | — |
+| `deck.chd.dom7` | F | U11.L04 | C06 | — |
 | `fam.frm.blues` | P/C | U11.L05 (L4 J4.L02) | F04 | harmony |
+| `deck.frm.twelve-bar` | F | U11.L05 (quick change and turnaround U11.L06) | F04, H10 | — |
 | `fam.chd.quality-7th` | P | U12.L02 (L3 U12.L03; L5 J1.L02 for 6 and m6, J2.L02 for the minor-major seventh) | E11 | harmony |
 | `fam.deg.fet-chromatic` | P | U15.L01 | E12a | pitch |
 | `fam.har.chromatic` | P | U15.L06 (L3 U16.L05) | H12, E12b | harmony |
@@ -2519,3 +2532,4 @@ Every issue and every MISSING item in `docs/design/critiques.md`, with where thi
 | 1.3 | 2026-11-12 | Wave 3. §7.4: the CI criterion "deferred queue p95 ≤ 4 cards" is replaced by the first-review bound of 7 days (decisions 27 and 30), with the release, resting and return rules that meet it; a family's first set is planned first and is exempt from the Again cascade (§7.9); no family graduates before its first review set. §8.2: the tolerance hold starts when a checkpoint is offered and lapses after 14 practised days without an offer (decisions 29 and 31). §5.6: `motif-reuse` gains `shape` and is measured over one period of the loop. |
 | 1.4 | 2026-11-13 | Wave 4. §6.6: C2's motif rule is labelled as it is checked ("in half the bars or more", `shape: 'either'`) and its cadence text lists what the grader accepts (vii°→I, iv→I); a first release must be of the code the latest passing check graded. §7.3: `fam.not.read` trains N04 too. §10.7: a chord token may carry a slash bass. §11.11: `capstone_state` records the checked sketch version. |
 | 1.5 | 2026-11-13 | Wave 5. §2.4: X2.S1 names Careless Love, and St. Louis Blues only once a verified answer key exists. §3.2: the row for `tb.feature.chord-symbols` (U05.L04). §6.8: a failing capstone check names a key mismatch first (`harmony.key-mismatch`). §7.3: stages are groupings, so `rhy.swing` is practised from U11.L07. §7.8: a session started before the 04:00 rollover stays open for 3 hours. The §7.3 rows for the written fact decks follow in 1.6, in the same change that moves those decks out of `PENDING_DECKS`. |
+| 1.6 | 2026-11-13 | Wave 6 Foundation, the learner's decisions of 2026-11-13. §7.3: rows for the nine written fact decks (`deck.int.names`, `deck.chd.triads`, `deck.har.rn`, `deck.har.cadence`, `deck.scl.degrees`, `deck.key.minor`, `deck.har.minor`, `deck.chd.dom7`, `deck.frm.twelve-bar`), which join `decks` with one new card a day each. §2.3, §3.2, §4.1, §7.3: U05.L04 is split; it keeps `.arp()` as "Arpeggios", and chord-symbol names (N05, `tb.feature.chord-symbols`, `deck.chd.symbols`) are the new lesson U05.L09 "Chord Names", taught directly after it; no lesson ID changes, and a learner who completed U05.L04 before the split counts as having completed U05.L09 (content-kit `LessonMeta.splitFrom`). §2.4: C3 takes four sessions (C3.S3 arranges and writes the lead sheet; C3.S4 records the take, reviews and releases). §2.5, §2.7, §0.10: the default order has 185 sessions (125 lessons, 13 checkpoints, 30 capstone sessions, 17 gym sessions), 259 with the tracks; the landmarks move with it. §6.6: X1's chord stages pass at 0.85, like its melody. |

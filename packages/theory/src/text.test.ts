@@ -61,6 +61,9 @@ describe("normalizeText (exercises §3.9)", () => {
     expect(i("M3")).toBe("M3");
     expect(i("minor 3rd")).toBe("m3");
     expect(i("major sixth")).toBe("M6");
+    // Compound intervals in words (U12.L06): "major tenth" as "major 10th".
+    expect(i("major tenth")).toBe("M10");
+    expect(i("perfect eleventh")).toBe("P11");
     expect(i("perfect octave")).toBe("P8");
     expect(i("augmented fourth")).toBe("A4");
     expect(i("maj6")).toBe("M6");
@@ -90,4 +93,13 @@ describe("normalizeText (exercises §3.9)", () => {
     expect(k("X major")).toBeNull();
     expect(parseKeyText("G mixolydian")).toEqual({ tonic: "G", mode: "mixolydian" });
   });
+});
+
+test("a bare triangle is the major seventh: CΔ, C∆ and CΔ7 are C^7 (Wave 6, typed chord names)", () => {
+  for (const typed of ["CΔ", "C∆", "C△", "CΔ7", "Cmaj7", "CM7", "C^7"])
+    expect([typed, normalizeText("chord", typed)]).toEqual([typed, "C^7"]);
+  expect(normalizeText("chord", "bbΔ")).toBe("Bb^7");
+  expect(normalizeText("chord", "CΔ9")).toBe(normalizeText("chord", "Cmaj9"));
+  // A plain C is still a triad.
+  expect(normalizeText("chord", "C")).toBe("C");
 });

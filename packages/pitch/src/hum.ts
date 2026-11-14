@@ -18,6 +18,7 @@ import type {
   HumDraftNote,
   HumDraftOptions,
   HumDraftWarning,
+  HumKeySpan,
   PitchFrame,
   SungNote,
 } from "./types.ts";
@@ -226,9 +227,15 @@ export function defaultSlotsPerBar(meter: MeterId, swing?: SwingSpec | null): nu
  * dropped. Each bar becomes one step of a `<…>` sequence, reduced to the coarsest grid that keeps every onset
  * and length. When a note is held across a bar line (c7) the whole line is one sequence over the bars with
  * `.slow(bars)`, so a `_` carries the note over the bar line: never a rest on the next beat 1.
+ *
+ * Wave 6. With `rhythm` the bars are written beat by beat, long values with `@` when `weights` is set, a beat on
+ * thirds as a triplet when `triplets` is set, and a tie as a bracket over its bars (`[…]@2`). With `keyPlan` the
+ * draft follows the piece's key changes: each note is read in the key of its bar and the line takes the
+ * patterned `.scale()` over the draft's bars.
  */
 export function draftFromHum(notes: readonly SungNote[], opts: HumDraftOptions): HumDraft {
   const meter: MeterId = opts.meter ?? "4/4";
+  const m = METERS[meter];
   const warnings: HumDraftWarning[] = [];
   const asked = opts.swing && opts.swing.amount > 0 ? opts.swing : null;
   const swingUnits = asked ? swingByArgs(meter, asked.subdivision) : null;
@@ -239,9 +246,7 @@ export function draftFromHum(notes: readonly SungNote[], opts: HumDraftOptions):
   const latency = (opts.latencyMs ?? 0) / 1000;
   const label = opts.label ?? "mel";
   const chromatic = opts.chromatic ?? "snap";
-  const keep = opts.keepDegrees ?? defaultKeepDegrees(opts.key.mode);
   const barSec = barSeconds(opts.bpm, meter);
-  const slotSec = barSec / slots;
   const swingSlotSec = swing && swingUnits ? barSec / swingUnits : 0;
   const straight = (t: number) => (swing ? straightenTime(t, swingSlotSec, swing.amount) : t);
 
@@ -253,15 +258,28 @@ export function draftFromHum(notes: readonly SungNote[], opts: HumDraftOptions):
   const tuningCents = tuningOffsetCents(sung.map((n) => n.midi));
   const corrected = sung.map((n) => n.midi - tuningCents / 100);
 
+  // The key in force at each bar of the draft (Wave 6: a key plan counted in bars of the whole piece).
+  const firstBar = Math.max(0, Math.round(opts.firstBar ?? 0));
+  const plan = [...(opts.keyPlan ?? [])].sort((a, b) => a.fromBar - b.fromBar);
+  const spanAt = (bar: number): HumKeySpan | null => {
+    let found: HumKeySpan | null = null;
+    for (const span of plan) if (span.fromBar <= firstBar + bar) found = span;
+    return found;
+  };
+  const span0 = spanAt(0);
+  const key0 = span0?.key ?? opts.key;
+  const planOctave = typeof span0?.octave === "number" ? span0.octave : undefined;
+  const askedOctave = opts.tonicOctave ?? planOctave;
+
   // Octave of the scale: the tonic octave given, the line moved by whole octaves onto it; otherwise the
   // octave whose tonic-to-tonic span holds most of the line (ties: the lower one).
-  const pc = tonicPc(opts.key.tonic);
+  const pc = tonicPc(key0.tonic);
   let octaveShift = 0;
   let octave: number;
   const centre = corrected.length > 0 ? median(corrected) : 60;
-  if (opts.tonicOctave !== undefined) {
-    octave = opts.tonicOctave;
-    const t = tonicMidi(opts.key.tonic, octave);
+  if (askedOctave !== undefined) {
+    octave = askedOctave;
+    const t = tonicMidi(key0.tonic, octave);
     // Put the line's centre inside the octave above the tonic (a melody around 5 sits at t + 7).
     octaveShift = Math.round((t + 6 - centre) / 12);
   } else {
@@ -269,19 +287,108 @@ export function draftFromHum(notes: readonly SungNote[], opts: HumDraftOptions):
     octave = 4;
     for (let o = 0; o <= 8; o++) {
       const t = 12 * (o + 1) + pc;
-      const count = corrected.filter((m) => m >= t - 0.5 && m < t + 11.5).length;
+      const count = corrected.filter((x) => x >= t - 0.5 && x < t + 11.5).length;
       if (count > bestCount) {
         bestCount = count;
         octave = o;
       }
     }
   }
-  const tonic = tonicMidi(opts.key.tonic, octave);
-  const scale = scaleName(opts.key, octave);
+  const tonic0 = tonicMidi(key0.tonic, octave);
 
-  // Pitch and grid position of every note.
+  interface KeyCtx {
+    key: KeySpec;
+    tonic: number;
+    scale: string;
+    keep: readonly Degree[];
+  }
+  const ctxs = new Map<string, KeyCtx>();
+  /** The sung pitches of each key's bars (filled before the first note is placed): they choose its octave. */
+  const pitchesOf = new Map<string, number[]>();
+  const keyIdAt = (bar: number): string => {
+    const span = spanAt(bar);
+    const key = span?.key ?? opts.key;
+    const own = opts.tonicOctave === undefined && typeof span?.octave === "number" ? span.octave : null;
+    return `${key.tonic}|${key.mode}|${own ?? ""}`;
+  };
+  const ctxAt = (bar: number): KeyCtx => {
+    const span = spanAt(bar);
+    const key = span?.key ?? opts.key;
+    const own = opts.tonicOctave === undefined && typeof span?.octave === "number" ? span.octave : null;
+    const id = keyIdAt(bar);
+    let c = ctxs.get(id);
+    if (!c) {
+      let tonic: number;
+      if (own !== null) tonic = tonicMidi(key.tonic, own);
+      else if (tonicPc(key.tonic) === pc) tonic = tonic0;
+      else {
+        // A later key: the tonic nearest the first key's (C4 → D4, C4 → B♭3), or the one an octave from it
+        // when that octave holds more of the notes sung in this key (C4 → G4 for a tune that sits above G4).
+        const d = (((tonicPc(key.tonic) - pc) % 12) + 12) % 12;
+        const near = tonic0 + (d > 6 ? d - 12 : d);
+        const sungHere = pitchesOf.get(id) ?? [];
+        const holds = (t: number) => sungHere.filter((x) => x >= t - 0.5 && x < t + 11.5).length;
+        tonic = near;
+        for (const t of [near - 12, near + 12]) if (holds(t) > holds(tonic)) tonic = t;
+      }
+      const written = Math.round((tonic - tonicMidi(key.tonic, 0)) / 12);
+      c = {
+        key,
+        tonic,
+        scale: scaleName(key, written),
+        keep: opts.keepDegrees ?? defaultKeepDegrees(key.mode),
+      };
+      ctxs.set(id, c);
+    }
+    return c;
+  };
+
+  // The grid. Plain: `slots` equal slots a bar. With `rhythm` (Wave 6): beats, each on the duple grid or — when
+  // triplets are allowed and its onsets sit on thirds — on a triple grid; positions are counted in fine units
+  // that both grids share.
+  const rhythm = opts.rhythm ?? null;
+  const dps = slots / m.unitsPerBar;
+  const beatwise = rhythm !== null && Number.isInteger(dps) && dps >= 1 && m.tempoUnit !== "eighth";
+  const tripletsOk = beatwise && rhythm?.triplets === true && m.tempoUnit === "quarter" && dps % 3 !== 0;
+  /** Fine units per beat, beats per bar, units per bar. Without `rhythm`: one unit is one slot. */
+  const F = beatwise ? (tripletsOk ? dps * 3 : dps) : 1;
+  const beatsPerBar = beatwise ? m.unitsPerBar : slots;
+  const U = F * beatsPerBar;
+  const beatSec = barSec / beatsPerBar;
+  const duple = beatwise ? dps : 1;
+
   // The downbeat is musical time (a click, a Strudel cycle): only the sung notes carry the latency.
   const downbeat = opts.downbeat === undefined ? (sung[0]?.start ?? 0) : opts.downbeat;
+  // Position of a time in beats, the beat it belongs to (a note just ahead of a beat belongs to that beat).
+  const inBeats = (t: number) => straight(t - downbeat) / beatSec;
+  const lead = 0.5 / Math.max(duple, tripletsOk ? 3 : 1);
+  const beatOf = (p: number) => Math.floor(p + lead);
+  const tripleBeats = new Set<number>();
+  if (tripletsOk) {
+    const byBeat = new Map<number, number[]>();
+    for (const n of sung) {
+      const p = inBeats(n.start);
+      const k = beatOf(p);
+      byBeat.set(k, [...(byBeat.get(k) ?? []), p - k]);
+    }
+    const err = (fs: readonly number[], g: number) =>
+      fs.reduce((sum, f) => sum + (f - Math.round(f * g) / g) ** 2, 0);
+    for (const [k, fs] of byBeat) {
+      const onThird = fs.some((f) => {
+        const r = Math.round(f * 3);
+        return r === 1 || r === 2;
+      });
+      if (fs.length >= 2 && onThird && err(fs, 3) < 0.5 * err(fs, duple)) tripleBeats.add(k);
+    }
+  }
+  const gridOf = (k: number) => (tripleBeats.has(k) ? 3 : duple);
+  const place = (t: number): number => {
+    const p = inBeats(t);
+    const k = beatOf(p);
+    const g = gridOf(k);
+    return k * F + Math.round((p - k) * g) * (F / g);
+  };
+
   interface Placed {
     source: number;
     on: number;
@@ -289,26 +396,35 @@ export function draftFromHum(notes: readonly SungNote[], opts: HumDraftOptions):
     secs: number;
     choice: Choice;
     m: number;
+    ctx: KeyCtx;
   }
   const placed: Placed[] = [];
   sung.forEach((n, k) => {
-    const m = (corrected[k] as number) + 12 * octaveShift;
-    const on = Math.round(straight(n.start - downbeat) / slotSec);
-    const off = Math.max(on + 1, Math.round(straight(n.end - downbeat) / slotSec));
+    const on = place(n.start);
+    if (on < 0) return;
+    const id = keyIdAt(Math.floor(on / U));
+    pitchesOf.set(id, [...(pitchesOf.get(id) ?? []), (corrected[k] as number) + 12 * octaveShift]);
+  });
+  sung.forEach((n, k) => {
+    const x = (corrected[k] as number) + 12 * octaveShift;
+    const on = place(n.start);
+    const step = F / gridOf(Math.floor(on / F));
+    const off = Math.max(on + step, place(n.end));
     if (on < 0) {
       warnings.push({ code: "before-downbeat", source: n.source });
       return;
     }
-    const choice = chooseStep(m, tonic, opts.key, chromatic, keep);
+    const ctx = ctxAt(Math.floor(on / U));
+    const choice = chooseStep(x, ctx.tonic, ctx.key, chromatic, ctx.keep);
     if (choice.snapped) {
       warnings.push({
         code: "chromatic-snapped",
         source: n.source,
-        sungMidi: Math.round(m * 100) / 100,
+        sungMidi: Math.round(x * 100) / 100,
         midi: choice.midi,
       });
     }
-    placed.push({ source: n.source, on, off, secs: n.end - n.start, choice, m });
+    placed.push({ source: n.source, on, off, secs: n.end - n.start, choice, m: x, ctx });
   });
 
   // One note per onset slot: the longer one wins.
@@ -322,7 +438,7 @@ export function draftFromHum(notes: readonly SungNote[], opts: HumDraftOptions):
     } else warnings.push({ code: "collision-dropped", source: p.source });
   }
   let kept = [...bySlot.values()].sort((a, b) => a.on - b.on);
-  const limit = maxBars * slots;
+  const limit = maxBars * U;
   if (kept.some((p) => p.on >= limit)) {
     kept = kept.filter((p) => p.on < limit);
     warnings.push({ code: "truncated", bars: maxBars });
@@ -330,38 +446,75 @@ export function draftFromHum(notes: readonly SungNote[], opts: HumDraftOptions):
 
   // A note ends at the next onset and inside the draft; one held across a bar line is tied over it (c7).
   const draftNotes: HumDraftNote[] = [];
-  const events: { on: number; off: number; step: string }[] = [];
+  const events: SpanEvent[] = [];
   let tied = false;
   kept.forEach((p, k) => {
     const next = kept[k + 1];
-    const bar = Math.floor(p.on / slots);
+    const bar = Math.floor(p.on / U);
     const off = Math.min(p.off, next ? next.on : p.off, limit);
-    const crosses = off > (bar + 1) * slots;
+    const crosses = off > (bar + 1) * U;
     if (crosses) tied = true;
-    const onIn = p.on - bar * slots;
+    const onIn = p.on - bar * U;
     events.push({ on: p.on, off, step: p.choice.step });
     const note: HumDraftNote = {
       source: p.source,
       bar,
-      onset: rat(onIn, slots),
-      dur: rat(off - p.on, slots),
+      onset: rat(onIn, U),
+      dur: rat(off - p.on, U),
       step: p.choice.step,
       midi: p.choice.midi,
       cents: Math.round((p.m - p.choice.midi) * 1000) / 10,
-      degree: p.choice.degree ?? labelPitch(p.choice.midi, opts.key).degree,
-      octave: Math.floor((p.choice.midi - tonic) / 12),
+      degree: p.choice.degree ?? labelPitch(p.choice.midi, p.ctx.key).degree,
+      octave: Math.floor((p.choice.midi - p.ctx.tonic) / 12),
     };
     if (crosses) note.tied = true;
+    if (plan.length > 0) note.key = p.ctx.key;
+    if (tripleBeats.has(Math.floor(p.on / F))) note.triplet = true;
     draftNotes.push(note);
   });
 
   const lastOff = events.length > 0 ? (events[events.length - 1] as { off: number }).off : 0;
-  const bars = events.length > 0 ? Math.min(maxBars, Math.ceil(lastOff / slots)) : 0;
+  const bars = events.length > 0 ? Math.min(maxBars, Math.ceil(lastOff / U)) : 0;
   if (events.length === 0) warnings.push({ code: "empty" });
   let pattern: string;
   let timing = "";
   if (bars === 0) pattern = "~";
-  else if (tied) {
+  else if (rhythm !== null) {
+    // Wave 6: beat by beat; bars joined by a tie are one bracket over those bars.
+    const groups: { from: number; bars: number }[] = [];
+    for (let b = 0; b < bars; ) {
+      let end = b + 1;
+      for (const e of events) if (e.on < end * U && e.off > end * U) end = Math.ceil(e.off / U);
+      // A later tie may start inside the bars just added.
+      for (let grew = true; grew; ) {
+        grew = false;
+        for (const e of events)
+          if (e.on < end * U && e.off > end * U) {
+            end = Math.ceil(e.off / U);
+            grew = true;
+          }
+      }
+      groups.push({ from: b, bars: Math.min(end, bars) - b });
+      b = Math.min(end, bars);
+    }
+    const texts = groups.map((g) => {
+      const from = g.from * U;
+      const text = spanText(
+        events
+          .filter((e) => e.on >= from && e.on < from + g.bars * U)
+          .map((e) => ({ on: e.on - from, off: e.off - from, step: e.step })),
+        g.bars * U,
+        {
+          unitsPerBeat: beatwise ? F : 0,
+          triple: new Set([...tripleBeats].map((k) => k - g.from * beatsPerBar)),
+          weights: rhythm.weights === true,
+        },
+      );
+      return g.bars > 1 ? `${text}@${g.bars}` : text;
+    });
+    pattern =
+      texts.length === 1 && groups[0]?.bars === 1 ? unwrap(texts[0] as string) : `<${texts.join(" ")}>`;
+  } else if (tied) {
     // One sequence over every bar: `_` continues a note across a bar line.
     pattern = unwrap(cellsText(events, bars * slots));
     timing = `.slow(${bars})`;
@@ -378,10 +531,26 @@ export function draftFromHum(notes: readonly SungNote[], opts: HumDraftOptions):
       );
     pattern = bars === 1 ? unwrap(barTexts[0] as string) : `<${barTexts.join(" ")}>`;
   }
-  if (swing && swingUnits !== null) timing += `.swingBy(${amountText(swing.amount)}, ${swingUnits})`;
+
+  // The scale: one key, or the plan over the draft's bars as a patterned `.scale()` (contracts §6.8).
+  const runs: { key: KeySpec; scale: string; fromBar: number; bars: number }[] = [];
+  for (let b = 0; b < Math.max(1, bars); b++) {
+    const c = ctxAt(b);
+    const last = runs[runs.length - 1];
+    if (last && last.scale === c.scale) last.bars++;
+    else runs.push({ key: c.key, scale: c.scale, fromBar: b, bars: 1 });
+  }
+  const scale =
+    runs.length === 1
+      ? (runs[0] as { scale: string }).scale
+      : `<${runs.map((r) => (r.bars > 1 ? `${r.scale}!${r.bars}` : r.scale)).join(" ")}>`;
+  // A patterned scale is read bar by bar, so a `.slow(bars)` line is slowed before the scale is applied.
+  const scaled = runs.length > 1 && timing ? `${timing}.scale("${scale}")` : `.scale("${scale}")${timing}`;
+  let after = "";
+  if (swing && swingUnits !== null) after = `.swingBy(${amountText(swing.amount)}, ${swingUnits})`;
   const tempo = tempoLine(opts.bpm, meter);
   const sound = opts.sound ? `.s("${opts.sound}")` : "";
-  const line = `${label}: n("${pattern}").scale("${scale}")${timing}${sound}`;
+  const line = `${label}: n("${pattern}")${scaled}${after}${sound}`;
   return {
     machineMade: true,
     tempoLine: tempo,
@@ -391,12 +560,121 @@ export function draftFromHum(notes: readonly SungNote[], opts: HumDraftOptions):
     scale,
     bars,
     layout: tied ? "tied" : "bars",
+    keyPlan: plan.length > 0 ? runs : null,
     swing,
     notes: draftNotes,
     tuningCents: Math.round(tuningCents * 10) / 10,
     octaveShift,
     warnings,
   };
+}
+
+interface SpanEvent {
+  on: number;
+  off: number;
+  step: string;
+}
+interface SpanItem {
+  text: string;
+  len: number;
+  rest?: true;
+}
+
+/** Items as tokens: `0@3 1` with weights, `0 _ _ 1` as cells; rests `~@2` or `~ ~`. */
+function itemsText(items: readonly SpanItem[], weights: boolean): string {
+  const out: string[] = [];
+  for (const it of items) {
+    if (weights) out.push(it.len > 1 ? `${it.text}@${it.len}` : it.text);
+    else {
+      out.push(it.text);
+      for (let i = 1; i < it.len; i++) out.push(it.rest ? "~" : "_");
+    }
+  }
+  return out.length === 1 && !/[@ ]/.test(out[0] as string) ? (out[0] as string) : `[${out.join(" ")}]`;
+}
+
+/** Notes and the rests between them over `[from, to)`, lengths divided by their common unit. */
+function flatItems(events: readonly SpanEvent[], from: number, to: number): SpanItem[] {
+  let g = to - from;
+  for (const e of events) g = gcd(gcd(g, e.on - from), e.off - from);
+  const items: SpanItem[] = [];
+  let at = from;
+  for (const e of events) {
+    if (e.on > at) items.push({ text: "~", len: (e.on - at) / g, rest: true });
+    items.push({ text: e.step, len: (e.off - e.on) / g });
+    at = e.off;
+  }
+  if (at < to) items.push({ text: "~", len: (to - at) / g, rest: true });
+  return items;
+}
+
+/**
+ * Wave 6: a span of `units` fine units as mini-notation, beat by beat when every note lies inside one beat or
+ * fills whole beats (`[0 [1 2] 3 4]`, a triplet beat `[1 2 3]`), otherwise as one flat sequence of weighted
+ * values with the triplet beats that stand alone kept as brackets (`[1@3 0 0@4]`, `[0@3 [1 2 3]@2 4@3]`).
+ * `unitsPerBeat` 0: no beat structure (a flat sequence on the span's coarsest grid).
+ */
+function spanText(
+  events: readonly SpanEvent[],
+  units: number,
+  o: { unitsPerBeat: number; triple: ReadonlySet<number>; weights: boolean },
+): string {
+  if (events.length === 0) return "~";
+  const F = o.unitsPerBeat;
+  if (F <= 0) return itemsText(flatItems(events, 0, units), o.weights);
+  const beatOf = (u: number) => Math.floor(u / F);
+  const whole = (e: SpanEvent) => e.on % F === 0 && e.off % F === 0;
+  const inside = (e: SpanEvent) => beatOf(e.on) === beatOf(e.off - 1);
+  const beatText = (b: number): string =>
+    itemsText(
+      flatItems(
+        events.filter((e) => beatOf(e.on) === b),
+        b * F,
+        (b + 1) * F,
+      ),
+      o.weights,
+    );
+  if (events.every((e) => whole(e) || inside(e))) {
+    const items: SpanItem[] = [];
+    const beats = units / F;
+    for (let b = 0; b < beats; ) {
+      const here = events.filter((e) => beatOf(e.on) === b);
+      const first = here[0];
+      if (first && here.length === 1 && whole(first)) {
+        const len = (first.off - first.on) / F;
+        items.push({ text: first.step, len });
+        b += len;
+      } else if (here.length === 0) {
+        const last = items[items.length - 1];
+        if (last?.rest) last.len++;
+        else items.push({ text: "~", len: 1, rest: true });
+        b++;
+      } else {
+        items.push({ text: beatText(b), len: 1 });
+        b++;
+      }
+    }
+    // Whole notes and halves read as such: lengths are counted in their common unit, not in beats.
+    let g = 0;
+    for (const it of items) g = gcd(g, it.len);
+    if (g > 1) for (const it of items) it.len /= g;
+    return itemsText(items, o.weights);
+  }
+  // Flat: weighted values on the fine grid; a triplet beat that nothing crosses stays a bracket.
+  const grouped = new Set<number>();
+  for (const b of o.triple) {
+    const start = b * F;
+    const end = start + F;
+    const own = events.filter((e) => beatOf(e.on) === b);
+    const crossed = events.some((e) => (e.on < start && e.off > start) || (e.on < end && e.off > end));
+    if (own.length >= 2 && !crossed) grouped.add(b);
+  }
+  const tops: SpanEvent[] = [];
+  for (const b of [...grouped].sort((x, y) => x - y))
+    tops.push({ on: b * F, off: (b + 1) * F, step: beatText(b) });
+  for (const e of events) if (!grouped.has(beatOf(e.on))) tops.push(e);
+  tops.sort((x, y) => x.on - y.on);
+  return itemsText(flatItems(tops, 0, units), o.weights);
 }
 
 /**

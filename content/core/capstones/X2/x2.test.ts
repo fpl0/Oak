@@ -153,7 +153,7 @@ describe("X2 on the stand-in strain (12 bars in G, swing 8ths)", () => {
     expect(passed(missed)).toBe(false);
   });
 
-  test("changes: the sevenths pass, and plain triads too (the triad core)", async () => {
+  test("changes: the sevenths pass; plain triads for the dominant sevenths fail (d11: a wrong quality earns nothing)", async () => {
     const sevenths = await grade(STAND_IN, check("changes"), draft(`bass: ${L.bass}`, `chords: ${L.chords}`));
     expect(passed(sevenths)).toBe(true);
     const triads = await grade(
@@ -161,7 +161,7 @@ describe("X2 on the stand-in strain (12 bars in G, swing 8ths)", () => {
       check("changes"),
       draft(`bass: ${L.bass}`, `chords: ${chordsOf(CHANGES.map((c) => c.replace("7", "")))}`),
     );
-    expect(passed(triads)).toBe(true);
+    expect(passed(triads)).toBe(false);
   });
 
   test("changes: IV for V in bar 9 alone passes (11 of 12); the whole last line wrong fails", async () => {

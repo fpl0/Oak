@@ -125,6 +125,16 @@ export interface EditorOptions {
   onEvicted?(): void;
 }
 
+export interface EvaluateOptions {
+  autostart?: boolean;
+  /**
+   * Play the piece once: only the notes that start before this cycle sound, so what started rings out and nothing
+   * starts again (a recorded take ends where the song ends instead of starting it over in its tail). Applies to
+   * this evaluation only; the next one plays the code as written, looping.
+   */
+  once?: number;
+}
+
 export interface EditorHandle {
   readonly id: string;
   readonly view: EditorView;
@@ -137,8 +147,9 @@ export interface EditorHandle {
    * mirror's own entry points (Ctrl-Enter, toggle, the repl-evaluate event). Never rejects for a
    * problem in the code: read `outcome.ok`.
    */
-  evaluate(opts?: { autostart?: boolean }): Promise<EvalOutcome>;
-  play(): Promise<EvalOutcome>;
+  evaluate(opts?: EvaluateOptions): Promise<EvalOutcome>;
+  /** Evaluate and start. `once`: play the piece's first `once` bars from bar 1, then nothing (a take). */
+  play(opts?: { once?: number }): Promise<EvalOutcome>;
   stop(): void;
   toggle(): Promise<void>;
   setDiagnostics(diagnostics: readonly LintDiagnostic[]): void;

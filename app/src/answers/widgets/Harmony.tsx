@@ -5,7 +5,14 @@
 // `Backspace` clears, `←`/`→` choose a slot, `P` plays the progression. Wave 4: one slot per bar or per half bar
 // (`AnswerEnv.harmony.slotsPerBar`); with the step's key every numeral sounds as it is placed and each button
 // shows its chord in the key ("IV · F", only with the chord-symbol lens on); figures print as figured bass.
-import type { ChordQuality } from "@oak/api";
+//
+// Wave 6: the quality pad prints each seventh as its lead-sheet symbol (maj7, 7, m7, ø7, °7; `@oak/theory`
+// `SEVENTH_CHORDS`). The palette names its slots with the step's `labels`, and a slot with its own key (`slotKeys`:
+// one pivot chord named in two keys, U17.L01) shows that key's chords while it is the slot being filled. In a colour
+// mode (U14) the columns hold the mode's own chords (♭VII, IV, II, ♭II). Applied chords (U15) are a second pick,
+// "V7 of …": choose the kind, then what it leans on; by keyboard `/` then the target's digit.
+import type { ChordQuality, KeySpec } from "@oak/api";
+import { keyDisplay } from "@oak/theory";
 import { clsx } from "clsx";
 import { Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -14,7 +21,13 @@ import { functionStyle, type HarmonicFn } from "../../ui/theme/palette.ts";
 import { appAudio, useAnswerEnv } from "../env.tsx";
 import { progressionHits, rnHasDegree, rnMidis, rnSymbol, slotLabels } from "../harmony.ts";
 import {
+  APPLIED_KIND_RNS,
+  type AppliedKindRn,
+  appliedRn,
+  appliedTargetsOf,
+  applyOf,
   cycleInversion,
+  isModalKey,
   qualityLabel,
   type RnAllow,
   type RnButton,
@@ -94,6 +107,8 @@ export function QualityPadAnswer(p: AnswerWidgetProps<"quality-pad">) {
           const on = value[0] === q;
           const l = qualityLabel(q);
           const isAnswer = correct === q;
+          // A seventh prints as it stands on a lead sheet, after a C: Cmaj7, C7, Cm7, Cm7♭5, C°7.
+          const seventh = SEVENTH_SHORT[q] !== undefined;
           return (
             // biome-ignore lint/a11y/useSemanticElements: a styled custom control with roving focus (ux §7.9); native radios and fieldsets cannot take this layout
             <button
@@ -117,7 +132,7 @@ export function QualityPadAnswer(p: AnswerWidgetProps<"quality-pad">) {
                 <span aria-hidden className="text-[0.75rem] text-text-3 tabular-nums">
                   {i + 1}
                 </span>
-                <span className="font-semibold">{l.short}</span>
+                <span className="font-semibold">{seventh ? SEVENTH_SHORT[q] : l.short}</span>
               </span>
               <span className="text-sm text-text-2">{l.long}</span>
               {on && mark ? <MarkBadge mark={mark.ok ? "ok" : "bad"} note={mark.note} /> : null}
@@ -128,6 +143,15 @@ export function QualityPadAnswer(p: AnswerWidgetProps<"quality-pad">) {
     </AnswerFrame>
   );
 }
+
+/** The five seventh qualities of U12 as a lead sheet prints them after the root (Cmaj7, C7, Cm7, Cm7♭5, C°7). */
+const SEVENTH_SHORT: Partial<Record<ChordQuality, string>> = {
+  maj7: "maj7",
+  "7": "7",
+  m7: "m7",
+  m7b5: "m7♭5 · ø7",
+  dim7: "°7",
+};
 
 const INVERSIONS = [
   { value: "0", label: "Root" },
@@ -180,7 +204,7 @@ export function rnSpoken(rn: string): string {
         : g.mark === "+"
           ? " augmented"
           : g.mark === "maj"
-            ? " major 7"
+            ? " major"
             : "";
   const acc = g.acc === "♭" ? "flat " : g.acc === "♯" ? "sharp " : "";
   const fig = g.figures.length ? ` ${g.figures.join("-")}` : "";
@@ -197,15 +221,13 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
   const env = useAnswerEnv();
   const audio = env.audio ?? appAudio;
   const h = env.harmony;
-  const key = h?.key;
-  const symbols = key !== undefined && env.lenses?.chordSymbols !== false;
   const root = useRef<HTMLDivElement>(null);
   const timers = useRef<number[]>([]);
   const allow = spec.allow as readonly RnAllow[];
-  const mode = rnModeOf(key);
-  const groups = rnPalette(allow, mode);
   const [flat, setFlat] = useState(false);
   const [raised, setRaised] = useState(false);
+  const [of, setOf] = useState(false);
+  const [kind, setKind] = useState<AppliedKindRn>("V7");
   const [slot, setSlot] = useState<number | null>(null);
   const [inversion, setInversion] = useState<"0" | "1" | "2" | "3">("0");
   const correct = revealedOf<string[]>(feedback);
@@ -214,11 +236,24 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
   const labels = slotLabels(spec.slots, {
     ...(h?.slotsPerBar ? { slotsPerBar: h.slotsPerBar } : {}),
     ...(h?.beatsPerBar ? { beatsPerBar: h.beatsPerBar } : {}),
+    ...(spec.labels ? { labels: spec.labels } : {}),
   });
-  const half = (h?.slotsPerBar ?? 1) === 2;
-  const canPlay = Boolean(h?.playProgression) || key !== undefined;
+  const half = (h?.slotsPerBar ?? 1) === 2 && !spec.labels;
   /** The slot the next numeral goes into: the chosen one, else the first empty one. */
   const target = slot ?? (slots.indexOf("") < 0 ? null : slots.indexOf(""));
+  // Wave 6: a slot may have its own key (a pivot chord named in two keys); the palette follows the slot being
+  // filled, and every numeral sounds and prints its symbol in its own slot's key.
+  const keyOf = (i: number | null): KeySpec | undefined =>
+    (i !== null ? spec.slotKeys?.[i] : undefined) ?? h?.key;
+  const key = keyOf(target ?? Math.max(0, spec.slots - 1));
+  const ownKeys = (spec.slotKeys?.length ?? 0) > 0;
+  const symbols = key !== undefined && env.lenses?.chordSymbols !== false;
+  const mode = rnModeOf(key);
+  const modal = isModalKey(key);
+  const groups = rnPalette(allow, mode, key);
+  const applied = allow.includes("secondary");
+  const targets = applied ? appliedTargetsOf(key) : [];
+  const canPlay = Boolean(h?.playProgression) || key !== undefined;
   /** The bass under the target slot, from a staged dictation's bass stage (ux §4.5), when there is one. */
   const bassHere = target !== null && !disabled ? (h?.bassDegrees?.[target] ?? null) : null;
   const offBass = (rn: string) => bassHere !== null && bassHere !== "" && !rnHasDegree(rn, bassHere, key);
@@ -239,9 +274,10 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
     root.current.querySelector<HTMLButtonElement>(`[data-rn-slot="${target}"]`)?.focus();
   }, [target]);
 
-  const sound = (rn: string) => {
-    if (!key) return;
-    const m = rnMidis(rn, key);
+  const sound = (rn: string, at: number | null = target) => {
+    const k = keyOf(at);
+    if (!k) return;
+    const m = rnMidis(rn, k);
     if (m) audio.playNote(m, { sound: h?.sound ?? "piano", dur: 0.9 });
   };
   const playAll = () => {
@@ -251,6 +287,18 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
     }
     if (!key) return;
     for (const t of timers.current) window.clearTimeout(t);
+    if (ownKeys) {
+      // Each slot in its own key, one after the other (the same chord twice when it is a pivot).
+      timers.current = slots.flatMap((rn, i) => {
+        const k = keyOf(i);
+        const m = k ? rnMidis(rn, k) : null;
+        if (!m) return [];
+        return [
+          window.setTimeout(() => audio.playNote(m, { sound: h?.sound ?? "piano", dur: 1.1 }), i * 1200),
+        ];
+      });
+      return;
+    }
     timers.current = progressionHits(slots, key, {
       ...(h?.bpm ? { bpm: h.bpm } : {}),
       ...(h?.beatsPerBar ? { beatsPerBar: h.beatsPerBar } : {}),
@@ -269,12 +317,42 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
     const text = inv === 0 ? rn : (withInversion(rn, inv) ?? rn);
     const next = [...slots];
     const at = slot ?? next.indexOf("");
-    next[at < 0 ? spec.slots - 1 : at] = text;
+    const i = at < 0 ? spec.slots - 1 : at;
+    next[i] = text;
     onChange(next);
-    sound(text);
+    sound(text, i);
     setSlot(null);
     setFlat(false);
     setRaised(false);
+    setOf(false);
+  };
+  /**
+   * "of …" from the keyboard: a V, V7, vii° or vii°7 in the slot just filled (or chosen) becomes that chord of the
+   * target; anything else leaves it alone and places the dominant seventh of the target in the next slot.
+   */
+  const placeOf = (digit: number) => {
+    setOf(false);
+    if (disabled) return;
+    let i = slot !== null && slots[slot] !== "" ? slot : -1;
+    if (i < 0)
+      for (let k = slots.length - 1; k >= 0; k--)
+        if (slots[k] !== "") {
+          i = k;
+          break;
+        }
+    const cur = i >= 0 ? (slots[i] as string) : "";
+    const head = cur.split("/")[0] ?? "";
+    if (i >= 0 && (APPLIED_KIND_RNS as readonly string[]).includes(head)) {
+      const rn = applyOf(cur, digit, keyOf(i));
+      if (!rn) return;
+      const next = [...slots];
+      next[i] = rn;
+      onChange(next);
+      sound(rn, i);
+      return;
+    }
+    const rn = applyOf("", digit, key, kind);
+    if (rn) place(rn);
   };
   const clearLast = () => {
     if (disabled) return;
@@ -304,23 +382,35 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
     const next = [...slots];
     next[i] = f(cur);
     onChange(next);
-    sound(next[i] as string);
+    sound(next[i] as string, i);
   };
 
   const onKey = (e: React.KeyboardEvent<HTMLElement>): boolean => {
-    if (e.key === "-") {
-      setFlat(true);
+    if (e.key === "/" && applied) {
+      setOf(true);
+      setFlat(false);
       setRaised(false);
       return true;
     }
-    if ((e.key === "+" || e.key === "#") && mode !== "major") {
+    if (e.key === "-") {
+      setFlat(true);
+      setRaised(false);
+      setOf(false);
+      return true;
+    }
+    if ((e.key === "+" || e.key === "#") && mode !== "major" && !modal) {
       setRaised(true);
       setFlat(false);
+      setOf(false);
       return true;
     }
     const n = digitOf(e);
+    if (n !== null && of) {
+      placeOf(n);
+      return true;
+    }
     if (n !== null) {
-      const rn = rnForKey(n, { shift: e.shiftKey, flat, raised, allow, mode });
+      const rn = rnForKey(n, { shift: e.shiftKey, flat, raised, allow, mode, key: key ?? null });
       setFlat(false);
       setRaised(false);
       if (rn) place(rn);
@@ -368,9 +458,10 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
         <>
           <KeyHint keys={["1–7"]}>triad</KeyHint>
           {allow.includes("sevenths") ? <KeyHint keys={["⇧ + digit"]}>seventh</KeyHint> : null}
-          {mode !== "major" ? (
+          {mode !== "major" && !modal ? (
             <KeyHint keys={["+ then 5 or 7"]}>{mode === "minor" ? "raised 7th: V, vii°" : "v, VII"}</KeyHint>
           ) : null}
+          {applied ? <KeyHint keys={["/ then digit"]}>of … (applied)</KeyHint> : null}
           {allow.includes("borrowed") ? (
             <KeyHint keys={[mode === "major" ? "- then digit" : "- then 2"]}>♭ degree</KeyHint>
           ) : null}
@@ -398,12 +489,18 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
                   <span aria-hidden className="text-[0.7rem] whitespace-nowrap text-text-3">
                     {half && l.barStart ? `bar ${l.bar}` : l.short}
                   </span>
+                  {/* A slot with its own key says which, once: "in G major" is usually the label already. */}
+                  {ownKeys && !spec.labels && keyOf(i) ? (
+                    <span aria-hidden className="text-[0.7rem] whitespace-nowrap text-text-3">
+                      in {keyDisplay(keyOf(i) as KeySpec)}
+                    </span>
+                  ) : null}
                   <button
                     type="button"
                     data-rn-slot={i}
                     aria-pressed={active}
                     aria-disabled={disabled || undefined}
-                    aria-label={`${l.spoken}: ${rn ? rnSpoken(rn) : "empty"}${mark ? (mark.ok ? ", right" : ", not this one") : ""}`}
+                    aria-label={`${l.spoken}${ownKeys && !spec.labels && keyOf(i) ? `, in ${keyDisplay(keyOf(i) as KeySpec)}` : ""}: ${rn ? rnSpoken(rn) : "empty"}${mark ? (mark.ok ? ", right" : ", not this one") : ""}`}
                     tabIndex={i === (target ?? 0) ? 0 : -1}
                     onFocus={() => setSlot(i)}
                     onClick={() => setSlot(i)}
@@ -463,8 +560,62 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
             .
           </p>
         ) : null}
+        {ownKeys && key ? (
+          <p className="text-sm text-text-2" data-testid="rn-palette-key">
+            {labels[target ?? spec.slots - 1]?.spoken ?? "This slot"}: pick from the chords of{" "}
+            {keyDisplay(key)}.
+          </p>
+        ) : null}
         <div className="flex flex-wrap gap-3">
           {groups.map((g) => {
+            if (g.id === "secondary")
+              return (
+                <fieldset key={g.id} className="flex min-w-0 flex-col gap-1.5" data-rn-applied>
+                  <legend className="mb-1 text-sm text-text-2">Applied: the dominant of another chord</legend>
+                  <div className="w-fit">
+                    <SegmentedControl
+                      label="Kind of applied chord"
+                      value={kind}
+                      options={APPLIED_KIND_RNS.map((k) => ({ value: k, label: rnDisplay(k) }))}
+                      onChange={(v) => setKind(v)}
+                      size="sm"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {targets.map((t) => {
+                      const rn = appliedRn(kind, t.rn);
+                      const sym = symbols && key ? rnSymbol(rn, key) : null;
+                      return (
+                        <button
+                          key={t.rn}
+                          type="button"
+                          data-rn={rn}
+                          data-rn-of={t.rn}
+                          aria-disabled={disabled || undefined}
+                          aria-label={`${rnSpoken(rn)}${sym ? `, ${sym}` : ""}, key slash then ${t.degree}`}
+                          onClick={() => place(rn)}
+                          className="inline-flex h-9 min-w-16 items-center justify-between gap-2 rounded-control border border-dashed border-border bg-surface px-2 font-medium hover:bg-surface-2"
+                        >
+                          <span className="inline-flex items-center gap-1.5">
+                            <span aria-hidden className="text-[0.8125rem] font-normal text-text-2">
+                              of
+                            </span>
+                            <RnGlyph rn={t.rn} />
+                            {sym ? (
+                              <span aria-hidden className="text-[0.75rem] font-normal text-text-2">
+                                · {sym}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span aria-hidden className="font-sans text-[0.7rem] text-text-3">
+                            /{t.degree}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              );
             const fn = g.id === "T" || g.id === "PD" || g.id === "D" ? g.id : null;
             const st = fn ? functionStyle(fn, theme) : null;
             return (
@@ -537,7 +688,13 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
           })}
         </div>
         <p className="sr-only" aria-live="polite">
-          {flat ? "flat — now a digit" : raised ? "raised — now 5 or 7" : ""}
+          {flat
+            ? "flat — now a digit"
+            : raised
+              ? "raised — now 5 or 7"
+              : of
+                ? "of — now the digit of the chord it leans on"
+                : ""}
         </p>
       </div>
     </AnswerFrame>

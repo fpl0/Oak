@@ -4,7 +4,7 @@
 // nothing. Pure: the tables come from the owners (workbench panels, app lenses) and the course from the content
 // bundle, so nothing here repeats an unlock site (tested in locks.test.ts against content/toolbox.ts).
 import type { SyllabusDef, ToolEntry } from "@oak/content-kit";
-import { CHORD_LENS_UNLOCKS, LENS_UNLOCKS, LINE_LENS_UNLOCKS } from "../../lib/lenses.ts";
+import { CHORD_LENS_UNLOCKS, LENS_UNLOCKS, LINE_LENS_UNLOCKS, MUSIC_LENS_UNLOCKS } from "../../lib/lenses.ts";
 import { PANEL_SWITCHES, PANEL_UNLOCKS } from "../../workbench/panels.ts";
 
 /** Workbench keys → the toolbox row each needs (keys in the sheet's syntax, as `WORKBENCH_LENS_SHORTCUTS` writes them). */
@@ -21,6 +21,17 @@ export const WORKBENCH_KEY_UNLOCKS: Readonly<Record<string, string>> = (() => {
   for (const p of PANEL_SWITCHES) out[p.keys] = PANEL_UNLOCKS[p.id];
   return out;
 })();
+
+/**
+ * Wave 6: the music lenses (guide tones, the key ribbon, the beat grid) open with ANY ONE of their tools
+ * (`MUSIC_LENS_UNLOCKS`: the beat grid with compound meter, U13.L04, or with `.ply()`, U13.L05). A locked row names
+ * the first of them: where the course reaches the lens first.
+ */
+export const WORKBENCH_KEY_ANY_UNLOCKS: Readonly<Record<string, readonly string[]>> = {
+  "Shift+I": MUSIC_LENS_UNLOCKS.guideTones,
+  "Shift+J": MUSIC_LENS_UNLOCKS.keyPlan,
+  "Shift+V": MUSIC_LENS_UNLOCKS.beatGrid,
+};
 
 /** Which sheet sections carry Workbench keys (their rows are checked against `WORKBENCH_KEY_UNLOCKS`). */
 export const LOCKABLE_SECTIONS: ReadonlySet<string> = new Set(["workbench"]);
@@ -72,7 +83,9 @@ export function rowLock(
   syllabus: SyllabusDef | null,
 ): RowLock | null {
   if (!ready || !LOCKABLE_SECTIONS.has(sectionId)) return null;
-  const need = WORKBENCH_KEY_UNLOCKS[keys];
+  const anyOf = WORKBENCH_KEY_ANY_UNLOCKS[keys];
+  if (anyOf?.some((id) => unlocked.has(id))) return null;
+  const need = WORKBENCH_KEY_UNLOCKS[keys] ?? anyOf?.[0];
   if (!need || unlocked.has(need)) return null;
   const where = opensWith(need, toolbox, syllabus);
   return { locked: true, note: where ? `Opens with ${where}` : "Not open yet" };

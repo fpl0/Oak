@@ -36,6 +36,12 @@ export interface SingNote {
   label?: string;
   /** The scale degree (1-based, "b3"): the lane prints it, with its syllable when the labels are syllables. */
   degree?: Degree;
+  /**
+   * Wave 6 (U15 chromatic degrees, U14 colour tones): the notes a half step away a learner is likely to sing
+   * instead (fa for fi). Passed to @oak/pitch, whose neighbour rule then gives a pitch nearer to one of them,
+   * outside the band, no credit: "sol fa sol" no longer passes for "sol fi sol".
+   */
+  neighbours?: SungTarget["neighbours"];
 }
 
 /**
@@ -47,7 +53,8 @@ export function targetLabel(
   labels: "numbers" | "syllables" = "numbers",
 ): string {
   if (!n.degree) return n.label ?? "";
-  const num = n.label ?? degreeDisplay(n.degree);
+  // A host that passes the content's own spelling as the label ("#4") gets it printed as the pad prints it (♯4).
+  const num = n.label && n.label !== n.degree ? n.label : degreeDisplay(n.degree);
   return labels === "syllables" ? `${num} · ${SYLLABLES[n.degree]}` : num;
 }
 
@@ -146,7 +153,12 @@ export function fitNotes(
 
 /** The targets `gradeSung` reads, on the AudioContext clock. */
 export function targetsAt(notes: readonly SingNote[], startAt: number): SungTarget[] {
-  return notes.map((n) => ({ midi: n.midi, on: startAt + n.at, off: startAt + n.at + n.dur }));
+  return notes.map((n) => ({
+    midi: n.midi,
+    on: startAt + n.at,
+    off: startAt + n.at + n.dur,
+    ...(n.neighbours && n.neighbours.length > 0 ? { neighbours: n.neighbours } : {}),
+  }));
 }
 
 /** Seconds from the take's start to the end of its last note. */

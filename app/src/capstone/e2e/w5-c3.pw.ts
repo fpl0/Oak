@@ -1,9 +1,9 @@
-// C3 "Verse–Chorus Demo" over three sessions on the capstone stack (5210/8810, the fake tutor), each from a seed:
-// - S1 from "C3 open": the plan names three sessions; the groove and changes for verse and chorus arranged V C V C;
+// C3 "Verse–Chorus Demo" over four sessions (d13) on the capstone stack (5210/8810, the fake tutor), each from a seed:
+// - S1 from "C3 open": the plan names four sessions; the groove and changes for verse and chorus arranged V C V C;
 //   the form strip reads A B A B and a section loops from the keyboard; the contrast row says which axes the chorus
 //   already differs on; the length is read from the code; the session finishes;
-// - S3 from "C3.S2 done" (the melodies written): the demo too fast is too short, with the bars still to add; at
-//   80 BPM every requirement is met; the lead sheet of the arranged piece shows its sections; an edit after the
+// - S4 from "C3.S3 done" (arranged, the lead sheet checked; the take and the release are left): the demo too
+//   fast is too short, with the bars still to add; at 80 BPM every requirement is met; the lead sheet of the arranged piece shows its sections; an edit after the
 //   check says "check again before you release" (c1); release by keyboard with a 96-second take; the album track
 //   plays it and offers the download. The take is seeded (seeded-take.ts: the recorder's own 96-second window,
 //   uploaded through the app's release path); the real 96-second recording is the journey's (e2e/journey/
@@ -47,7 +47,7 @@ test("C3 session 1 from “C3 open”: groove and changes, the form strip, contr
   });
   await expect(page.getByText("Groove and changes for verse and chorus.").first()).toBeVisible();
   await shots(page, "c3-start");
-  const start = page.getByRole("button", { name: "Start session 1 of 3" });
+  const start = page.getByRole("button", { name: "Start session 1 of 4" });
   await start.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("capstone-workspace")).toBeVisible({ timeout: 60_000 });
@@ -97,7 +97,7 @@ test("C3 session 1 from “C3 open”: groove and changes, the form strip, contr
 
   await expect(page.getByTestId("saved-state")).toContainText(/Version \d+ saved/, { timeout: 30_000 });
   await page.getByTestId("finish-session").click();
-  await expect(page.getByRole("status").filter({ hasText: "Session 1 of 3 done." })).toBeVisible({
+  await expect(page.getByRole("status").filter({ hasText: "Session 1 of 4 done." })).toBeVisible({
     timeout: 30_000,
   });
   const state = await api<{ sessions: string[] }>(page, "GET", "/capstones/C3");
@@ -105,17 +105,17 @@ test("C3 session 1 from “C3 open”: groove and changes, the form strip, contr
   expect(errors).toEqual([]);
 });
 
-test("C3 session 3 from “C3.S2 done”: too short, then 96 seconds; the lead sheet; check again after an edit; release", async ({
+test("C3 session 4 from “C3.S3 done”: too short, then 96 seconds; the lead sheet; check again after an edit; the take and the release", async ({
   page,
 }) => {
   test.setTimeout(150_000);
   const errors = watchErrors(page);
-  await seedFirst(page, ["C3.S2 done", "after C3.S2"]);
+  await seedFirst(page, ["C3.S3 done"]);
   await useUiPrefs(page, { theme: "bark", motion: "off" });
   await page.goto("/capstone/C3");
   await expect(page.getByTestId("capstone-workspace")).toBeVisible({ timeout: 60_000 });
   await editor(page, "C3");
-  await expect(page.locator('[data-session="C3.S3"]')).toHaveAttribute("aria-current", "step");
+  await expect(page.locator('[data-session="C3.S4"]')).toHaveAttribute("aria-current", "step");
   await seedTake(page);
 
   // At 120 BPM the 32 bars last 64 seconds: the row says how many bars are missing at this tempo.

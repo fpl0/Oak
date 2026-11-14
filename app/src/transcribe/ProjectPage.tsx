@@ -7,11 +7,13 @@
 // backup is reviewed as text before it runs (c2, ImportReview.tsx); own audio's first run sets the bars by tapping
 // along and a beat nudge, and a swing switch marks the swung off-beats on the grid.
 import type { LadderSubmitResult, TranscriptionDetail } from "@oak/api";
-import type { KeySpec, MeterId } from "@oak/content-kit";
+import type { KeyPlanEntry, KeySpec, MeterId } from "@oak/content-kit";
+import { R } from "@oak/content-kit";
 import type { EvalOutcome } from "@oak/strudel";
 import { METERS, tempoLine } from "@oak/theory";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { clsx } from "clsx";
 import { AudioLines, ChevronLeft, MessageSquareText, Mic, Save, Trash2, ZoomIn, ZoomOut } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api.ts";
@@ -49,13 +51,28 @@ import { useVoice } from "../voice/use-voice.ts";
 import "../workbench/index.ts";
 import { ServicesGate } from "../workbench/ServicesGate.tsx";
 import { Workbench } from "../workbench/Workbench.tsx";
+import { FormMapStrip } from "./FormMap.tsx";
+import {
+  type BarClock,
+  barsInRecording,
+  emptyFormMap,
+  type FormMap,
+  formComment,
+  formMapOfRegions,
+  toggleCut,
+  withFormComment,
+  withFormRegions,
+} from "./form-map.ts";
 import {
   addTap,
   barAt,
   beatSecOfGrid,
   bpmFromTaps,
   downbeatFromTaps,
+  feelOfOnsets,
+  type GridFeel,
   gridOf,
+  isCompound,
   type Loop,
   loopOf,
   loopOfBars,
@@ -73,21 +90,26 @@ import { HumDialog } from "./HumDialog.tsx";
 import type { HumTarget } from "./hum.ts";
 import { ImportReview, needsReview } from "./ImportReview.tsx";
 import { PRIVACY_COPY } from "./import.ts";
+import { keyAtBar, keyPlanText, keyRibbon, keySpansOf } from "./keyplan.ts";
 import { type TranscribeAction, transcribeBindings } from "./keys.ts";
 import { givenOfProject, LadderPanel } from "./LadderPanel.tsx";
 import { type LadderLevel, starterCode } from "./ladder.ts";
 import {
   ChecklistCard,
+  FormCard,
   NotesCard,
   projectSwing,
+  readTriplets,
   SectionsCard,
   SWUNG_EIGHTHS,
   swingMeter,
   TempoCard,
   writeSwing,
+  writeTriplets,
 } from "./OwnAudioPanel.tsx";
 import { type SongFocus, SongPanel } from "./SongPanel.tsx";
 import { BarTimeline, type Section, Waveform } from "./SourceView.tsx";
+import { StandardPanel, useStandard } from "./StandardPanel.tsx";
 import {
   chorusSpans,
   cycleOfBar,
@@ -99,6 +121,7 @@ import {
   listenAllowed,
   listenMutes,
   rememberedItem,
+  type SongGiven,
   type SongLevel,
   songGivenOf,
   songStarter,
@@ -107,6 +130,7 @@ import {
   stageListenMode,
   timelineMarks,
 } from "./song.ts";
+import { isStandardLevel, standardStarter } from "./standard.ts";
 import { TransportControls } from "./TransportControls.tsx";
 import { useRememberSettings, useTranscribeTransport, useTransportState } from "./use-transport.ts";
 
@@ -121,6 +145,21 @@ const ZOOMS = [0, 100, 200, 400, 800] as const;
  * per minute of audio (a 40-minute file froze it for 7 s). Longer recordings show the waveform only.
  */
 export const SPECTROGRAM_MAX_SEC = 8 * 60;
+
+/** What `useStandard` is given on a page that shows no standard (hooks run for every project). */
+const FALLBACK_GIVEN: SongGiven = {
+  songId: null,
+  title: "",
+  year: null,
+  bpm: 100,
+  meter: "4/4",
+  key: null,
+  pickupBeats: null,
+  bars: 1,
+  phrases: [],
+  swing: false,
+  form: null,
+};
 
 function ownAudioStarter(p: TranscriptionDetail, swing = false): string {
   const bpm = Math.round(p.bpm ?? 90);
@@ -146,13 +185,23 @@ export function ProjectPage({
   const level = (project.ladderLevel ?? 1) as LadderLevel;
   const songLevel: SongLevel | null =
     pattern && isSongLevel(project.ladderLevel) ? (level as SongLevel) : null;
+  // Wave 6, L8: a standard in four stages (form, bass, changes, melody); its form is never among the givens.
+  const standard = pattern && isStandardLevel(project.ladderLevel);
   // The song pool is read only for a song item (a server without it answers 501, never on other pages).
-  const songs = useQuery({ ...apiQuery("ladder.songs"), enabled: songLevel !== null });
+  const songs = useQuery({ ...apiQuery("ladder.songs"), enabled: songLevel !== null || standard });
   const listedSong = songs.data?.items.find((x) => x.songId === project.songId) ?? null;
-  const songGiven = useMemo(
-    () => (songLevel ? songGivenOf(project, rememberedItem(project.id), listedSong) : null),
-    [songLevel, project, listedSong],
-  );
+  const songGiven = useMemo(() => {
+    if (!songLevel && !standard) return null;
+    const g = songGivenOf(project, rememberedItem(project.id), listedSong);
+    if (!standard) return g;
+    // A standard's feel is given: the server's word for it, else what its own rhythm section plays.
+    const meter = g.meter;
+    const onsets = (project.stimulus?.events ?? []).map((e) => R.toNum(e.onset));
+    return {
+      ...g,
+      swing: project.given?.swing !== undefined ? g.swing : feelOfOnsets(onsets, meter) === "swing",
+    };
+  }, [songLevel, standard, project, listedSong]);
   const songPickup = songGiven?.pickupBeats !== null && songGiven !== null;
   const [focus, setFocus] = useState<SongFocus>({ span: null, marks: null, stage: null });
   const navigate = useNavigate();
@@ -198,11 +247,13 @@ export function ProjectPage({
   // --- the learner's code ----------------------------------------------------------------------------
   const latest = project.versions.at(-1) ?? null;
   const starter = () =>
-    songLevel && songGiven
-      ? songStarter(songLevel, songGiven)
-      : pattern
-        ? starterCode(level, given)
-        : ownAudioStarter(project, projectSwing(project));
+    standard && songGiven
+      ? standardStarter(songGiven)
+      : songLevel && songGiven
+        ? songStarter(songLevel, songGiven)
+        : pattern
+          ? starterCode(level, given)
+          : ownAudioStarter(project, projectSwing(project));
   // c2: a version imported in a backup is shown as text until the learner reviews it; the editor starts fresh.
   const [reviewing, setReviewing] = useState<{ version: number; code: string } | null>(() =>
     latest && needsReview(latest) ? { version: latest.version, code: latest.code } : null,
@@ -224,11 +275,11 @@ export function ProjectPage({
   const onChange = useCallback(
     (code: string) => {
       live.current = code;
-      if (songLevel !== 6) return;
+      if (songLevel !== 6 && !standard) return;
       if (liveTimer.current) clearTimeout(liveTimer.current);
       liveTimer.current = setTimeout(() => setLiveCode(code), 300);
     },
-    [songLevel],
+    [songLevel, standard],
   );
   useEffect(
     () => () => {
@@ -248,6 +299,8 @@ export function ProjectPage({
     setSeed((x) => ({ code, n: x.n + 1 }));
     void transport?.setMineCode(code);
   };
+  const putCodeRef = useRef(putCode);
+  putCodeRef.current = putCode;
   const onEvaluated = useCallback(
     (o: EvalOutcome) => {
       if (!o.ok) return;
@@ -309,6 +362,34 @@ export function ProjectPage({
   useEffect(() => {
     if (lastResult) patchSubject(thread, { lastResult: lastResult.result, code: live.current });
   }, [lastResult, thread]);
+  // --- a standard (L8): the form map, the stage and the section worked now -----------------------------
+  // Where the bars sit in source seconds: the map is kept as the project's `section` regions (a backup exports it).
+  const patternClock: BarClock | null =
+    pattern && grid ? { firstBarS: songPickup ? grid.barSec : 0, barSec: grid.barSec } : null;
+  const std = useStandard({
+    project,
+    given: songGiven ?? FALLBACK_GIVEN,
+    listed: standard ? listedSong : null,
+    clock: standard ? patternClock : null,
+    formLetters: standard ? (project.given?.form ?? null) : null,
+    getCode: () => live.current,
+    setCode: (code) => putCodeRef.current(code),
+    onResult: setLastResult,
+  });
+  const stdView = standard ? std.view : null;
+  // The song's key plan (contracts §6.8), when it changes key: a ribbon over the timeline, and each section's
+  // chart read in the key in force there. `given.keyPlan` is requested of the server (apiNotes); read when present.
+  const keyPlan =
+    (project.given as { keyPlan?: readonly KeyPlanEntry[] | null } | undefined)?.keyPlan ??
+    (rememberedItem(project.id)?.given as { keyPlan?: readonly KeyPlanEntry[] | null } | undefined)
+      ?.keyPlan ??
+    null;
+  const keySpans = useMemo(
+    () =>
+      songGiven ? keySpansOf(keyPlan, songGiven.key, songGiven.bars, songGiven.pickupBeats !== null) : [],
+    [keyPlan, songGiven],
+  );
+
   useEffect(
     () =>
       registerTutorHost({
@@ -336,6 +417,29 @@ export function ProjectPage({
       { params: { id }, body: { regions: next } },
       { onError: (e) => toast.error("Couldn't save the sections", e.message) },
     );
+
+  // Own audio (L7): the recording's form on a strip under the waveform, kept as the project's sections.
+  const ownClock: BarClock | null =
+    !pattern && grid ? { firstBarS: grid.downbeatS, barSec: grid.barSec } : null;
+  const ownDuration = load.kind === "ready" && load.buffer ? load.buffer.duration : 0;
+  const ownBars = ownClock && ownDuration > 0 ? barsInRecording(ownDuration, ownClock) : 0;
+  const [ownDraft, setOwnDraft] = useState<FormMap | null>(null);
+  const savedOwnMap = useMemo(
+    () =>
+      ownClock && ownBars > 0
+        ? (formMapOfRegions(project.regions, ownClock, ownBars) ?? emptyFormMap(ownBars))
+        : null,
+    [project.regions, ownClock?.firstBarS, ownClock?.barSec, ownBars],
+  );
+  useEffect(() => setOwnDraft(null), [savedOwnMap]);
+  const ownMap = ownDraft ?? savedOwnMap;
+  const saveOwnMap = (m: FormMap) => {
+    if (!ownClock) return;
+    setOwnDraft(m);
+    saveRegions(withFormRegions(project.regions, m, ownClock));
+  };
+  const ownMapped = ownMap !== null && (ownMap.cuts.length > 1 || Boolean(ownMap.labels[0]));
+  const [formCursor, setFormCursor] = useState(1);
 
   const [pendingA, setPendingA] = useState<number | null>(null);
 
@@ -396,6 +500,23 @@ export function ProjectPage({
       { onError: (e) => toast.error("Couldn't save the feel", e.message) },
     );
   };
+  // Wave 6: triplets on the grid (a third feel), and a compound meter's beat in three whatever the feel.
+  const [triplets, setTripletsState] = useState(() => !pattern && readTriplets(id));
+  const ownFeel: GridFeel = swing ? "swing" : triplets ? "triplet" : "straight";
+  const setFeel = (f: GridFeel) => {
+    const t = f === "triplet" && !isCompound(project.meter);
+    setTripletsState(t);
+    writeTriplets(id, t);
+    if ((f === "swing") !== swing) setSwing(f === "swing");
+  };
+  // A pattern source's feel is given (a song's swing) or read from what its rhythm section plays (triplets).
+  const sourceFeel: GridFeel = useMemo(() => {
+    if (!pattern) return "straight";
+    if (songGiven?.swing) return "swing";
+    const onsets = (project.stimulus?.events ?? []).map((e) => R.toNum(e.onset));
+    const f = feelOfOnsets(onsets, project.meter);
+    return f === "triplet" ? "triplet" : "straight";
+  }, [pattern, songGiven?.swing, project.stimulus, project.meter]);
   const unitsPerBar = METERS[(project.meter ?? "4/4") as MeterId]?.unitsPerBar ?? 4;
   useEffect(() => {
     if (pattern || ownStarter.current === null) return;
@@ -408,17 +529,24 @@ export function ProjectPage({
     ownStarter.current = next;
     putCode(next);
   }, [project.bpm, project.key?.tonic, project.key?.mode, project.meter, swing]);
-  /** The spans the digit keys loop: a song's phrases (L5) or 4-bar lines (L6), a generated item's bars. */
+  /** The code stage worked now: L6's (the song panel reports it) or the standard's. */
+  const workStage = standard ? (std.codeStage ?? null) : focus.stage;
+  /**
+   * The spans the digit keys loop: a song's phrases (L5) or 4-bar lines (L6), a standard's sections once its form
+   * is mapped (4-bar lines before), a generated item's bars.
+   */
   const spans: [number, number][] = songGiven
-    ? songLevel === 5
-      ? songGiven.phrases
-      : lineSpans(songGiven.bars)
+    ? stdView?.formDone
+      ? stdView.sections.map((x) => [x.from, x.to] as [number, number])
+      : songLevel === 5
+        ? songGiven.phrases
+        : lineSpans(songGiven.bars)
     : pattern
       ? Array.from({ length: given.bars }, (_, b) => [b + 1, b + 1] as [number, number])
       : [];
   const loopSpan = (span: readonly [number, number]) => {
     if (!transport || !grid) return;
-    const l = spanLoop(span, songPickup, songLevel === 5 || focus.stage === "melody");
+    const l = spanLoop(span, songPickup, songLevel === 5 || workStage === "melody");
     transport.setLoop(loopOfBars(grid, l.fromBar, l.bars));
   };
   /** The span the loop (or the playhead) is in, as an index into `spans`. */
@@ -432,16 +560,17 @@ export function ProjectPage({
     return spanAt(spans, bar);
   };
   const realism = project.realism ?? 0;
-  const canListen = songLevel === 6 && listenAllowed(realism);
+  const canListen = (songLevel === 6 || standard) && listenAllowed(realism);
   const [listen, setListen] = useState<ListenMode>("full");
   useEffect(() => {
-    if (songLevel === 6 && focus.stage) setListen(stageListenMode(focus.stage));
-  }, [songLevel, focus.stage]);
+    if ((songLevel === 6 || standard) && workStage) setListen(stageListenMode(workStage));
+  }, [songLevel, standard, workStage]);
   useEffect(() => {
     if (!transport) return;
     transport.setSourceMutes(canListen ? listenMutes(listen, transport.state.sourceTracks ?? []) : []);
   }, [transport, listen, canListen]);
-  const humAllowed = !(pattern && level === 1);
+  // A standard is written section by section in consts: a hummed line has no one line to land in.
+  const humAllowed = !(pattern && (level === 1 || standard));
 
   // --- keys -------------------------------------------------------------------------------------------
   const act = (a: TranscribeAction, n?: number) => {
@@ -565,7 +694,30 @@ export function ProjectPage({
       case "swing":
         setSwing(!swing);
         return;
+      case "formCut": {
+        // A section starts at the bar the playhead is in (the loop's first bar while a loop plays).
+        const bar = barNow();
+        if (bar === null || bar < 1) return;
+        if (stdView && !stdView.formDone) {
+          stdView.setMap(toggleCut(stdView.map, bar));
+          setFormCursor(bar);
+        } else if (!pattern && ownMap && ownClock) {
+          saveOwnMap(toggleCut(ownMap, bar));
+          setFormCursor(bar);
+        }
+        return;
+      }
+      case "formFocus":
+        root.current?.querySelector<HTMLElement>('[data-testid="form-strip"]')?.focus();
+        return;
     }
+  };
+  /** The 1-based bar at the playhead (0: a song's pickup bar), `null` without a bar grid. */
+  const barNow = (): number | null => {
+    if (!grid || !transport) return null;
+    const at = transport.state.loop ? transport.state.loop.startS + 1e-3 : timeNow();
+    const cycle = Math.floor(barAt(grid, at) + 1e-6);
+    return pattern ? (songPickup ? cycle : cycle + 1) : cycle + 1;
   };
   const defaultLoop = (): Loop | null => {
     if (!transport) return null;
@@ -588,6 +740,8 @@ export function ProjectPage({
   ];
   const enabled = (a: TranscribeAction) => {
     if (!transport) return false;
+    if (a === "formCut") return stdView ? !stdView.formDone : !pattern && grid !== null && ownMap !== null;
+    if (a === "formFocus") return stdView !== null || (!pattern && ownMap !== null);
     if (a === "spectrogram" && tooLongForSpectrogram) return false;
     if (pattern && OWN_AUDIO_ONLY.includes(a)) return false;
     if (pattern && (a === "prevBar" || a === "nextBar")) return transport.state.loop !== null;
@@ -665,7 +819,7 @@ export function ProjectPage({
     key: project.key ?? given.key,
     meter: (project.meter ?? "4/4") as MeterId,
     defaultBpm: Math.round(project.bpm ?? given.bpm),
-    loopBars: songLevel ? (project.stimulus?.bars ?? given.bars) : pattern ? given.bars : 4,
+    loopBars: songLevel || standard ? (project.stimulus?.bars ?? given.bars) : pattern ? given.bars : 4,
   };
   const lint = studioLint(unlocked, lessonCtx.meter, lessonCtx.key);
   const sub = [
@@ -675,11 +829,21 @@ export function ProjectPage({
     project.bpm ? `${Math.round(project.bpm)} BPM` : null,
     project.meter,
     (songGiven?.swing ?? swing) ? "Swing 8ths" : null,
+    !pattern && triplets && !swing && !isCompound(project.meter) ? "Triplets" : null,
   ].filter(Boolean);
   const timelineBars = project.stimulus?.bars ?? given.bars;
-  const current = focus.span
-    ? spanLoop(focus.span, songPickup, songLevel === 5 || focus.stage === "melody")
-    : null;
+  const loopHint = songGiven ? (
+    <>
+      <Kbd>1</Kbd>–<Kbd>{Math.min(9, spans.length)}</Kbd> loop a{" "}
+      {songLevel === 5 ? "phrase" : stdView?.formDone ? "section" : "line"} · <Kbd>PageUp</Kbd>{" "}
+      <Kbd>PageDown</Kbd> the one before or after · <Kbd>C</Kbd>{" "}
+      {songLevel === 6 ? "the chorus" : "the whole song"}
+    </>
+  ) : null;
+  const workSpan = standard ? (stdView?.span ?? null) : focus.span;
+  const current = workSpan ? spanLoop(workSpan, songPickup, songLevel === 5 || workStage === "melody") : null;
+  const workMarks = standard ? (stdView?.barMarks ?? null) : focus.marks;
+  const ribbon = keySpans.length > 1 ? keyRibbon(keySpans, state?.semitones ?? 0) : null;
 
   return (
     <div
@@ -773,11 +937,49 @@ export function ProjectPage({
                 marks={songLevel && songGiven ? timelineMarks(songLevel, songGiven) : []}
                 swing={songGiven?.swing ?? false}
                 unitsPerBar={unitsPerBar}
+                meter={project.meter ?? "4/4"}
+                feel={sourceFeel}
+                keys={ribbon}
+                barButtons={!standard}
+                height={standard ? 80 : 112}
                 current={current}
-                {...(focus.marks ? { barMarks: focus.marks } : {})}
+                {...(workMarks ? { barMarks: workMarks } : {})}
               />
-              {songLevel === 6 ? (
-                <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="listen">
+              {stdView ? (
+                <FormMapStrip
+                  map={stdView.map}
+                  onChange={stdView.formDone ? undefined : stdView.setMap}
+                  pickup={songPickup}
+                  marks={stdView.formMarks}
+                  active={stdView.active}
+                  cursor={formCursor}
+                  onCursor={setFormCursor}
+                  onSection={(x) => {
+                    loopSpan([x.from, x.to]);
+                    stdView.pick(x.index);
+                  }}
+                  label={
+                    stdView.formDone
+                      ? "The form: click a section to loop it"
+                      : "The form: cut the tune into sections and name them"
+                  }
+                  hint={
+                    stdView.formDone ? null : (
+                      <>
+                        <Kbd>X</Kbd> cuts a section at the bar now playing · <Kbd>⇧X</Kbd> go to the strip ·
+                        click a bar line to cut
+                      </>
+                    )
+                  }
+                />
+              ) : null}
+              {ribbon ? (
+                <p className="text-sm text-text-3" data-testid="key-plan-text">
+                  The key is given: {keyPlanText(keySpans)}. Write each section in the key in force there.
+                </p>
+              ) : null}
+              {songLevel === 6 || standard ? (
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" data-testid="listen">
                   <SegmentedControl
                     label="Listen to (Shift+B bass only, Shift+M without melody)"
                     size="sm"
@@ -794,15 +996,10 @@ export function ProjectPage({
                       ? "The source only: your code plays as written."
                       : `At R${realism} the whole mix plays: hearing the part through it is the exercise.`}
                   </span>
+                  {standard ? <span className="ml-auto text-text-3">{loopHint}</span> : null}
                 </div>
               ) : null}
-              {songGiven ? (
-                <p className="text-sm text-text-3">
-                  <Kbd>1</Kbd>–<Kbd>{Math.min(9, spans.length)}</Kbd> loop a{" "}
-                  {songLevel === 5 ? "phrase" : "line"} · <Kbd>PageUp</Kbd> <Kbd>PageDown</Kbd> the one before
-                  or after · <Kbd>C</Kbd> {songLevel === 5 ? "the whole song" : "the chorus"}
-                </p>
-              ) : null}
+              {songGiven && !standard ? <p className="text-sm text-text-3">{loopHint}</p> : null}
             </>
           ) : load.buffer ? (
             <>
@@ -817,7 +1014,29 @@ export function ProjectPage({
                 theme={theme}
                 unitsPerBar={unitsPerBar}
                 swing={swing}
+                meter={project.meter ?? "4/4"}
+                feel={ownFeel}
               />
+              {ownMap && ownBars > 1 ? (
+                <FormMapStrip
+                  map={ownMap}
+                  onChange={saveOwnMap}
+                  cursor={formCursor}
+                  onCursor={setFormCursor}
+                  compact={ownBars > 48}
+                  onSection={(x) => {
+                    if (ownClock)
+                      transport.setLoop(loopOfBars(grid as NonNullable<typeof grid>, x.from - 1, x.bars));
+                  }}
+                  label="Form: your recording's sections, bar by bar"
+                  hint={
+                    <>
+                      <Kbd>X</Kbd> cuts a section at the bar now playing · click a bar line to cut · click a
+                      section to loop it
+                    </>
+                  }
+                />
+              ) : null}
               <div className="flex flex-wrap items-center gap-1.5 text-sm">
                 <Button
                   size="sm"
@@ -896,7 +1115,15 @@ export function ProjectPage({
         </p>
       ) : null}
 
-      <div className="grid gap-4 @min-[60rem]:grid-cols-[minmax(0,1fr)_20rem]">
+      <div
+        className={clsx(
+          "grid gap-4",
+          // A standard's chart offers the seventh chords: its palette needs the wider column.
+          standard
+            ? "@min-[60rem]:grid-cols-[minmax(0,1fr)_23rem]"
+            : "@min-[60rem]:grid-cols-[minmax(0,1fr)_20rem]",
+        )}
+      >
         <div className="flex min-w-0 flex-col gap-3">
           {reviewing ? (
             <ImportReview
@@ -966,7 +1193,18 @@ export function ProjectPage({
           )}
         </div>
         <aside className="flex min-w-0 flex-col gap-3" aria-label={pattern ? "The item" : "Your recording"}>
-          {songLevel && songGiven ? (
+          {standard && songGiven ? (
+            <StandardPanel
+              project={project}
+              given={songGiven}
+              std={std}
+              code={liveCode}
+              getCode={() => live.current}
+              setCode={putCode}
+              sectionKey={(bar) => keyAtBar(keySpans, bar)}
+              onLoopSpan={loopSpan}
+            />
+          ) : songLevel && songGiven ? (
             <SongPanel
               project={project}
               level={songLevel}
@@ -998,8 +1236,20 @@ export function ProjectPage({
                 playing={state?.playing ?? false}
                 swing={swing}
                 onSwing={setSwing}
+                feel={ownFeel}
+                onFeel={setFeel}
                 busy={patch.isPending}
               />
+              {ownMap && ownClock ? (
+                <FormCard
+                  map={ownMap}
+                  onChange={saveOwnMap}
+                  onLoop={(from, to) => {
+                    if (grid) transport?.setLoop(loopOfBars(grid, from - 1, to - from + 1));
+                  }}
+                  onWrite={() => putCode(withFormComment(live.current, formComment(ownMap)))}
+                />
+              ) : null}
               <SectionsCard
                 sections={sections}
                 loop={state?.loop ?? null}
@@ -1019,7 +1269,7 @@ export function ProjectPage({
                 onRemove={(sid) => saveRegions(project.regions.filter((r) => r.id !== sid))}
                 onLoop={(s) => transport?.setLoop({ startS: s.startS, endS: s.endS })}
               />
-              <ChecklistCard project={project} />
+              <ChecklistCard project={project} withForm={ownMapped} />
               <NotesCard project={project} />
             </>
           )}

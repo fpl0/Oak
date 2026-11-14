@@ -15,6 +15,11 @@ import { MAX_GYM, sessionsSinceTranscription, transcriptionSlotDue } from "./ses
 export interface GymCoursePort {
   next(): { id: string } | null;
   history(): string[];
+  /** Wave 6: CF-T's next session while it is open and unfinished (it then fills the slot). */
+  nextCftSession?(): string | null;
+  /** d19: reviews-only sessions since the last transcription session. */
+  reviewSessionsSinceTranscription?(): number;
+  coreStage?(): "in-progress" | "lessons-done" | "complete";
 }
 
 export interface GymDeps {
@@ -53,11 +58,17 @@ export class GymService {
   plan(): GymPlan {
     const course = this.d.course();
     const history = course.history();
-    const since = sessionsSinceTranscription(history);
-    const active = since !== null;
+    const core = sessionsSinceTranscription(history);
+    const active = core !== null;
+    // d19: reviews-only sessions count towards the slot like core sessions.
+    const reviews = active ? (course.reviewSessionsSinceTranscription?.() ?? 0) : 0;
+    // Once the core is complete only the reviews-only sessions since count (wave6.md §5.5).
+    const coreCounts = (course.coreStage?.() ?? "in-progress") !== "complete";
+    const since = core === null ? null : (coreCounts ? core : 0) + reviews;
     const next = active ? course.next() : null;
     const xNext = next !== null && /^X\d+\.S\d+$/.test(next.id);
-    const slotDue = active && transcriptionSlotDue(history, next?.id ?? null);
+    const slotDue = active && transcriptionSlotDue(history, next?.id ?? null, reviews, coreCounts);
+    const cfT = this.cft(course.nextCftSession?.() ?? null);
     const n = this.nextOrdinal();
     const audio = this.audioProject();
     const ladder = n % 2 === 1 || audio === null;
@@ -72,7 +83,7 @@ export class GymService {
       sinceLast: since ?? 0,
       slotDue,
       next:
-        !active || (xNext && (since ?? 0) >= 4) || n > MAX_GYM
+        !active || (xNext && (since ?? 0) >= 4) || n > MAX_GYM || cfT?.takesSlot === true
           ? null
           : {
               gymId: `GYM.${String(n).padStart(2, "0")}` as NonNullable<GymPlan["next"]>["gymId"],
@@ -84,6 +95,28 @@ export class GymService {
             },
       history: this.ctx.repos.gym.list(),
       x1: x1 !== null && !x1.open ? x1 : null,
+      cfT,
+    };
+  }
+
+  /**
+   * Wave 6 (contracts §2.5; wave6.md §5.2): CF-T beside the gym. From U15.L01 on, while it is open and unfinished,
+   * the transcription slot is its next session (`takesSlot`, and the plan's `next` is `null`); once released the
+   * slots are gym sessions again. `null` before its gate is met.
+   */
+  cft(nextSessionId: string | null): GymPlan["cfT"] {
+    const meta = this.ctx.content.capstoneMeta("CF-T");
+    if (meta === null || !this.d.gates.capstoneOpen(meta)) return null;
+    const row = this.ctx.repos.capstones.get("CF-T");
+    const status = row?.status === "released" ? "released" : row === null ? "open" : "in_progress";
+    const sketch = row?.sketchId == null ? null : this.ctx.repos.sketches.get(row.sketchId);
+    return {
+      status:
+        status === "in_progress" && (row?.sessions.length ?? 0) === 0 && sketch === null ? "open" : status,
+      nextSessionId:
+        status === "released" ? null : (nextSessionId as NonNullable<GymPlan["cfT"]>["nextSessionId"]),
+      takesSlot: status !== "released" && nextSessionId !== null,
+      songId: sketch?.tags.find((t) => t.startsWith("song.")) ?? null,
     };
   }
 

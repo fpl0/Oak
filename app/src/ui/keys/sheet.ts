@@ -75,6 +75,21 @@ export const CORE_SECTIONS: readonly SheetSection[] = [
     ],
   },
   {
+    // Wave 6: the kit's key strip and record player (app/src/ui/kit: KeyStrip, AlbumPlayerBar), wherever a page
+    // shows them. The Workbench's own key ribbon is a lens (Shift+J, in its section above).
+    id: "keys-record",
+    title: "Key strip and the record",
+    order: 25,
+    rows: [
+      ["ArrowRight", "Key strip: the next key (ArrowLeft: back; Home, End: first, last)"],
+      ["Enter", "Key strip: pick the focused key (also Space)"],
+      ["Space", "Record: play it through, or stop"],
+      ["ArrowRight", "Record: next track (ArrowLeft: the one before)"],
+      ["Enter", "Record: play from the focused cover on"],
+      ["Escape", "Record: stop"],
+    ],
+  },
+  {
     id: "answers",
     title: "Answers",
     order: 30,
@@ -93,6 +108,8 @@ export const CORE_SECTIONS: readonly SheetSection[] = [
       ["P", "Rhythm grid and blocks: play"],
       ["Space", "Tap pad: tap (also F and J)"],
       ["B", "Degree pad: flat before a degree, when the pad has flat degrees"],
+      ["X", "Form map: cut a section at the focused bar line, or join the two that meet there"],
+      ["A", "Form map: name the section at the focused bar (the letters the map offers)"],
     ],
   },
   {
@@ -116,6 +133,18 @@ export const CORE_SECTIONS: readonly SheetSection[] = [
       ["0", "Rest"],
       ["Backspace", "Delete the note (also Delete)"],
       ["Enter", "Check"],
+    ],
+  },
+  {
+    // Wave 6: ties, dots and triplets on the staff (app/src/answers/staff/rhythm.ts `RHYTHM_KEYS`). A staff that
+    // offers them registers the same section while it is on screen (same id: it replaces this one).
+    id: "staff-rhythm",
+    title: "Staff input: rhythm",
+    order: 33,
+    rows: [
+      ["T", "Tie the note to the same note after it, or hold it on (again: untie)"],
+      [".", "Dotted length for the next note"],
+      [";", "Triplet values: three notes fill one beat (again: plain values)"],
     ],
   },
   {
@@ -146,6 +175,7 @@ export const CORE_SECTIONS: readonly SheetSection[] = [
       ["5", "Numerals: the triad on that degree (1 to 7)"],
       ["Shift+5", "Numerals: the seventh chord on that degree, when sevenths are allowed"],
       ["-", "Numerals: flat the next degree (borrowed chords)"],
+      ["/", "Numerals: the next degree is the target of an applied chord (V7/V), when those are allowed"],
       ["M", "Numerals: major / minor"],
       ["I", "Numerals: next inversion, when inversions are allowed"],
       ["ArrowRight", "Numerals and slot strips: next slot (ArrowLeft: back)"],

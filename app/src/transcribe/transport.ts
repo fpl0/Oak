@@ -108,6 +108,12 @@ export interface PatternPlayerPort {
 const START_MARGIN_SEC = 0.03;
 /** Source seconds the stretch starts before the bar (`@oak/audio` `AB_PRE_ROLL_SEC`). */
 const PRE_ROLL_SEC = 0.1;
+/**
+ * How often a start that came too late for the pattern's first bar is taken again (d10) before the file joins
+ * the pattern part-way: both sides then begin at bar 0 together, a little later, instead of the recording
+ * coming in after its own first beat.
+ */
+export const LATE_START_RETRIES = 2;
 
 /**
  * Where the stretch starts so that `fromS` sounds on time: `pre` source seconds before it. Inside a loop the run-up
@@ -349,7 +355,11 @@ export interface AudioTransportDeps {
   cycle: () => number;
   now: () => number;
   grid: BarGrid | null;
-  /** Wait for the pattern player's scheduler to have started (it starts a tick after `play()`). */
+  /**
+   * A wait between the pattern's start and reading its clock, for a scheduler whose clock is not set by the time
+   * `play()` resolves. Oak's is (the first tick runs inside `start()`), so the app passes none: any wait here is
+   * time a busy page can stretch past the pattern's first bar (d10).
+   */
   settle?: () => Promise<void>;
   /** How the hidden player lints the learner's code (default: the player's own). */
   lint?: LintContext;
@@ -522,14 +532,25 @@ export function createAudioTransport(d: AudioTransportDeps): TranscribeTransport
     mine.setTranspose(st.get().semitones);
     mine.setLoop(lb ? { fromBar: lb.fromBar, bars: lb.bars } : { fromBar: bar0, bars: 1024 });
     applySide();
-    await mine.play();
-    mineRunning = true;
-    if (d.settle) await d.settle();
-    if (gen !== generation || disposed) return;
-    // The file comes in with the pattern's first bar (cycle 0: the scheduler starts 0.1 s ahead of the clock). A
-    // busy page can be past that moment by now: then the file joins the pattern where it is, part-way into the
-    // bar, so it neither skips a bar of the recording nor lags the code for the rest of the take.
-    const t0 = d.timeOfCycle(0);
+    // Both sides start from ONE moment in the near future: the pattern's first bar (cycle 0, which the scheduler
+    // puts its latency ahead of the clock, about 0.11 s). The file is scheduled for that moment in the same turn
+    // as the pattern's start, with nothing awaited in between that could let a busy page in (d10: a 60 ms timer
+    // stood here, and a page busy for longer than its slack left the file to join part-way into bar 0 without
+    // its run-up). Should the moment be (nearly) gone all the same (the clock moved on while the scheduler
+    // started), the pattern is started again, so the code and the recording still begin together at bar 0.
+    let t0 = 0;
+    for (let attempt = 0; ; attempt++) {
+      await mine.play();
+      mineRunning = true;
+      if (d.settle) await d.settle();
+      if (gen !== generation || disposed) return;
+      t0 = d.timeOfCycle(0);
+      if (t0 - d.now() >= START_MARGIN_SEC || attempt >= LATE_START_RETRIES) break;
+      mine.stop();
+      mineRunning = false;
+    }
+    // Still late after starting again (a page that stays busy): the file joins the pattern where it is, part-way
+    // into the bar, so it neither skips a bar of the recording nor lags the code for the rest of the take.
     const cycleSec = d.timeOfCycle(1) - t0;
     const earliest = d.now() + START_MARGIN_SEC;
     const c = t0 >= earliest || !(cycleSec > 0) ? 0 : (earliest - t0) / cycleSec;

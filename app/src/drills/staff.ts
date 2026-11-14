@@ -14,8 +14,26 @@ export type StaffInputSpec = AnswerSpecOf<"staff-input">;
 
 /** The values a dictated line is written with (generators write no ties; dots only in dotted rhythm levels). */
 const PALETTE = ["1", "2", "2.", "4", "4.", "8", "8.", "16"] as const;
+/** Wave 6 (U13.L05): the triplet values, offered only when the line has a note a third of the way through a beat. */
+const TRIPLET_PALETTE = ["4t", "8t"] as const;
+
+/** Whether the answer has an onset or an end on a triplet grid (a third of a beat, or of half a beat). */
+export function hasTriplets(trial: Trial<unknown>): boolean {
+  return answerEvents(trial).some((e) => {
+    const on = e.onset[0] / e.onset[1];
+    // In twelfths of a bar but not in sixteenths: a triplet position.
+    const x = on * 48;
+    return Math.abs(x - Math.round(x)) < 1e-6 && Math.round(x) % 3 !== 0;
+  });
+}
+/** What the generator says the written line needs (`params.staffNeeds`, Wave 6 rhythm II). */
+function needs(trial: Trial<unknown>): { ties: boolean; dots: boolean; triplets: boolean } {
+  const n = trial.params.staffNeeds as { ties?: unknown; dots?: unknown; triplets?: unknown } | undefined;
+  return { ties: n?.ties === true, dots: n?.dots === true, triplets: n?.triplets === true };
+}
+
 /** The pitch a rhythm-only answer is written on: the treble staff's middle line. */
-const RHYTHM_PITCH = "B4";
+export const RHYTHM_PITCH = "B4";
 
 export const isStaffTrial = (trial: Trial<unknown>): boolean => trial.params.ui === "staff-input";
 
@@ -64,7 +82,15 @@ export function staffSpecOf(trial: Trial<unknown>): StaffInputSpec {
     ui: "staff-input",
     clef: pitched && (median as number) < 57 ? "bass" : "treble",
     bars: barsOf(trial),
-    palette: { durations: [...PALETTE], accidentals: pitched, ties: false, rests: true },
+    palette: {
+      durations:
+        hasTriplets(trial) || needs(trial).triplets ? [...PALETTE, ...TRIPLET_PALETTE] : [...PALETTE],
+      accidentals: pitched,
+      // Wave 6 (U13.L03): a line the generator wrote with a tie offers the tie (over a beat or a bar line). Grading
+      // reads onsets, so a rest where the tie holds is never marked wrong; the tie is how the line is written.
+      ties: needs(trial).ties,
+      rests: true,
+    },
     ...(key ? { key } : {}),
   };
 }
@@ -172,10 +198,29 @@ const VALUE_OF: readonly [number, string][] = [
   [1 / 16, "16"],
 ];
 
+/** Triplet values: a third of a half note, of a quarter. */
+const TRIPLET_VALUE_OF: readonly [number, string][] = [
+  [1 / 6, "4t"],
+  [1 / 12, "8t"],
+];
+
 /** The tokens for a length (in whole notes), greedily: one value, or rests that add up. */
 function valuesFor(whole: number): string[] {
   const out: string[] = [];
   let left = whole;
+  // A length on the triplet grid (twelfths of a whole note that are not sixteenths) is written in triplet values.
+  const twelfths = whole * 12;
+  if (
+    Math.abs(twelfths - Math.round(twelfths)) < 1e-6 &&
+    Math.abs(whole * 16 - Math.round(whole * 16)) > 1e-6
+  ) {
+    for (const [v, t] of TRIPLET_VALUE_OF)
+      while (left >= v - 1e-9) {
+        out.push(t);
+        left -= v;
+      }
+    return out;
+  }
   for (const [v, t] of VALUE_OF) {
     while (left >= v - 1e-9) {
       out.push(t);

@@ -1,8 +1,9 @@
-// The live examples of the tools U08–U11 and the A1 side lessons unlock (Wave 5): each plays the tool inside a
+// The live examples of the tools U08–U17 and the A1 side lessons unlock (Waves 5 and 6): each plays the tool inside a
 // short groove that sounds like music, not a bare test tone (the catalog's own demo is the tool alone, which the
 // unlock moment and the locked teaser keep). Each uses only what its unlock site guarantees (the A1 examples stay
 // inside U03.L02's tools: note(), s(), drums, no chords), and each was played in headless Strudel
 // (demos.test.ts). The page also says which panel or probe shows the tool at work.
+import type { MeterId } from "@oak/content-kit";
 import type { VisualProbe } from "@oak/strudel/probes";
 import type { PanelId } from "../workbench/panels.ts";
 
@@ -14,6 +15,8 @@ export interface ToolDemo {
   probes?: VisualProbe["kind"][];
   /** One line over the example: what to listen and look for, and what to change. */
   hint: string;
+  /** The example's meter when its tempo line alone does not say it (6/8: `setcpm(60/2)`). */
+  meter?: MeterId;
 }
 
 const FORM_SONG = `setcpm(100/4)
@@ -299,6 +302,200 @@ mel: note("<[c4 ~ e4 ~] [g4 ~ ~ ~]>").s("piano").delay(.4).delayfeedback(.6)`,
 kick: s("bd ~ ~ ~")
 mel: note("<[c4 ~ g4 ~] [e4 ~ ~ ~]>").s("piano").room(.6).orbit(2)`,
     hint: "A separate orbit gives this track its own reverb, so the kick stays dry.",
+  },
+  // --- U12 Seventh Chords ------------------------------------------------------------------------------
+  "chord.seventh": {
+    code: `setcpm(84/4)
+
+drums: s("bd ~ sd ~")
+hats: s("hh*8").gain(.35)
+chords: chord("<C^7 Am7 Dm7 G7>").voicing().s("rhodes").gain(.6)
+bass: chord("<C^7 Am7 Dm7 G7>").rootNotes(2).s("fingerbass")`,
+    hint: "Four sevenths in C: Cmaj7, Am7, Dm7, G7, each a triad with one more third on top. With guide tones on (Shift+I) the roll marks every chord's 3rd and 7th and joins them into their line. Delete the ^7 and 7s to hear the plain triads.",
+  },
+  "chord.seventh-dim": {
+    code: `setcpm(84/4)
+
+drums: s("bd ~ sd ~")
+hats: s("hh*8").gain(.35)
+chords: chord("<Bm7b5 E7 Am7 [Am7 G#o7]>").voicing().s("rhodes").gain(.6)
+bass: chord("<Bm7b5 E7 Am7 [Am7 G#o7]>").rootNotes(2).s("fingerbass")`,
+    hint: "A minor's own two-five-one: Bm7♭5 (half-diminished) leans into E7, E7 into Am7. The last half bar is G♯°7, the fully diminished seventh: every note a minor third apart, pulling back to the start.",
+  },
+  "tb.dict.lefthand": {
+    code: `setcpm(116/4)
+
+drums: s("bd ~ sd ~")
+hats: s("hh*8").swing(4).gain(.35)
+chords: chord("<Dm7 G7 C^7 A7>").dict("lefthand").voicing().struct("~ x ~ x").s("piano").gain(.6)
+bass: chord("<Dm7 G7 C^7 A7>").rootNotes(2).s("fingerbass")`,
+    hint: 'Left-hand voicings leave the root to the bass and keep the 3rd and the 7th close together in the middle of the piano. Delete .dict("lefthand") and press Run to hear the default voicing jump about.',
+  },
+  "snd.jazzgtr": {
+    code: `setcpm(116/4)
+
+drums: s("bd ~ sd ~")
+hats: s("hh*8").swing(4).gain(.35)
+chords: chord("<Dm7 G7 C^7 A7>").voicing().struct("~ x ~ [~ x]").s("jazzgtr").gain(.7)
+bass: note("<[d2 f2 a2 c3] [g2 b2 d3 f2] [c2 e2 g2 b2] [a2 g2 e2 c#2]>").s("fingerbass")`,
+    hint: "A jazz guitar comping seventh chords off the beat over a walking bass. Move the x's in .struct() to change where the chords fall.",
+  },
+  // --- U13 Rhythm II -----------------------------------------------------------------------------------
+  "tb.early": {
+    code: `setcpm(96/4)
+
+drums: s("bd ~ sd ~")
+hats: s("hh*8").gain(.4)
+chords: chord("<C F Am G>").voicing().s("rhodes").gain(.6).early(1/8)
+bass: note("<c2 f2 a1 g1>").s("fingerbass")`,
+    hint: "Every chord comes in an eighth early, ahead of the bar line, while the drums and the bass stay on the beat: a push. With the beat grid on (Shift+V) the roll draws each push against the beat it comes in ahead of. Try 1/16, or delete .early(1/8).",
+  },
+  "tb.late": {
+    code: `setcpm(96/4)
+
+drums: s("bd ~ sd ~")
+hats: s("hh*8").gain(.4)
+chords: chord("<Am F C G>").voicing().struct("x ~ x ~").s("piano").gain(.6).late(1/8)
+bass: note("<a1 f1 c2 g1>").s("fingerbass")`,
+    hint: "The chords are written on beats 1 and 3 and land an eighth later: an answer to the kick on the off-beat. Delete .late(1/8) to put them back on the beat.",
+  },
+  "tb.velocity": {
+    code: `setcpm(100/4)
+
+kick: s("bd ~ ~ bd ~ ~ bd ~")
+snare: s("~ sd ~ sd")
+hats: s("hh*16").velocity("[1 .35 .6 .35]*4")
+bass: note("<[d2 ~ d2 ~ ~ d2 f2 g2] [g1 ~ g1 ~ ~ g1 a1 c2]>").s("fingerbass")`,
+    hint: "Sixteen hats a bar, but only one in four at full strength: the quiet ones are ghost notes, drawn small and hollow on the roll. Change .35 to 1 and the groove turns stiff.",
+  },
+  "snd.cleangtr": {
+    code: `setcpm(100/4)
+
+drums: s("bd ~ sd ~")
+hats: s("hh*16").velocity("[1 .35 .6 .35]*4")
+gtr: n("<[0 2 4 2 0 2 4 7] [3 5 7 5 3 5 7 9]>").scale("C3:major").s("cleangtr").gain(.7)
+bass: note("<c2 f1>").s("fingerbass")`,
+    hint: "A clean electric guitar picking through C and F in even eighths over sixteenth hats.",
+  },
+  "tb.meter.compound": {
+    code: `setcpm(60/2)
+
+drums: s("bd ~ ~ sd ~ ~")
+hats: s("hh*6").gain(.4)
+chords: chord("<C Am F G>").voicing().s("rhodes").gain(.55)
+bass: note("<c2 a1 f1 g1>").s("fingerbass")
+mel: n("<[4 ~ 2 0 ~ 2] [4 ~ 5 4 ~ ~] [3 ~ 2 0 ~ 2] [1 ~ ~ ~ ~ ~]>").scale("C4:major").s("piano")`,
+    meter: "6/8",
+    hint: "6/8: two beats in a bar, each of three eighths. setcpm(60/2) sets the dotted-quarter beat to 60. The beat grid (Shift+V) counts 1 la li 2 la li over the roll; the snare falls on 2.",
+  },
+  "tb.ply": {
+    code: `setcpm(72/4)
+
+drums: s("bd ~ sd ~")
+hats: s("hh hh hh hh").ply(3).gain(.45)
+chords: chord("<C Am F G>").voicing().struct("x x x x").ply(3).s("piano").gain(.45)
+bass: note("<c2 a1 f1 g1>").s("fingerbass")`,
+    hint: ".ply(3) plays every hit three times inside its own beat: four beats become four triplets, the slow-dance feel. The beat grid (Shift+V) shows each beat cut in three: 1 trip let. Try .ply(2) for plain eighths.",
+  },
+  // --- U14 Modes ---------------------------------------------------------------------------------------
+  "scale.mixolydian": {
+    code: `setcpm(104/4)
+
+drums: s("bd ~ sd ~")
+hats: s("hh*8").gain(.4)
+chords: chord("<G F C G>").voicing().s("organ").gain(.5)
+bass: note("<g1 f1 c2 g1>").s("fingerbass")
+riff: n("<[0 2 4 6] [6 5 4 2] [3 5 6 5] [4 ~ 0 ~]>").scale("G4:mixolydian").s("piano")`,
+    panels: { key: true },
+    hint: "Mixolydian is major with a lowered 7. In G that note is F: the riff leans on it and the F chord (♭VII) is built on it. The Key panel names the mode and rings its colour note on the roll. Change mixolydian to major and press Run: F♯ comes back.",
+  },
+  "scale.dorian": {
+    code: `setcpm(96/4)
+
+drums: s("bd ~ sd ~")
+hats: s("hh*8").gain(.4)
+chords: chord("<Dm G>").voicing().s("rhodes").gain(.55)
+bass: note("<[d2 ~ d2 a1] [g1 ~ g1 d2]>").s("fingerbass")
+mel: n("<[0 2 4 5] [5 4 2 ~]>").scale("D4:dorian").s("piano")`,
+    panels: { key: true },
+    hint: "Dorian is minor with a raised 6. In D that note is B: it turns the IV chord major (G) and gives the vamp its lift. Change dorian to minor and press Run to hear B♭ darken it.",
+  },
+  "scale.lydian": {
+    code: `setcpm(88/4)
+
+drums: s("bd ~ ~ ~, ~ ~ sd ~")
+chords: chord("<F G>").voicing().s("pad").gain(.5)
+bass: note("f1").s("fingerbass")
+mel: n("<[0 2 3 4] [3 ~ 2 ~]>").scale("F4:lydian").s("piano").delay(.3)`,
+    panels: { key: true },
+    hint: "Lydian is major with a raised 4. In F that note is B: it floats over the held F in the bass, and the G chord (II) is built on it. Change lydian to major to hear B♭ settle it.",
+  },
+  "scale.phrygian": {
+    code: `setcpm(92/4)
+
+drums: s("bd ~ sd ~")
+hats: s("hh*8").gain(.4)
+chords: chord("<Em F>").voicing().s("strings").gain(.5)
+bass: note("<e1 f1>").s("fingerbass")
+mel: n("<[0 1 0 ~] [4 3 1 0]>").scale("E4:phrygian").s("piano")`,
+    panels: { key: true },
+    hint: "Phrygian is minor with a lowered 2. In E that note is F, a half step above home: the F chord (♭II) falls back onto E minor. Change phrygian to minor to hear F♯ take the tension out.",
+  },
+  "tb.pan": {
+    code: `setcpm(96/4)
+
+drums: s("bd ~ sd ~")
+hats: s("hh*8").gain(.4).pan(.85)
+keys: chord("<Dm G>").voicing().s("rhodes").gain(.55).pan(.2)
+mel: n("<[0 2 4 5] [5 4 2 ~]>").scale("D4:dorian").s("piano").pan(.7)
+bass: note("<d2 g1>").s("fingerbass")`,
+    hint: "0 is hard left, 1 hard right, .5 the middle. The keys sit left, the tune and the hats right, the kick and the bass stay in the middle. Best heard on headphones.",
+  },
+  "tb.jux": {
+    code: `setcpm(96/4)
+
+drums: s("bd ~ sd ~")
+mel: n("0 2 4 5 4 2 0 ~").scale("D4:dorian").s("piano").jux(rev)
+bass: note("<d2 g1>").s("fingerbass")`,
+    hint: ".jux(rev) plays the line in your left ear and the same line backwards in your right: one tune, twice as wide. Try .jux(x => x.fast(2)).",
+  },
+  // --- U15 Secondary Dominants and U16 Borrowed Chords ------------------------------------------------
+  "tb.n.chromatic": {
+    code: `setcpm(92/4)
+
+drums: s("bd ~ sd ~")
+chords: chord("<C F F G>").voicing().s("rhodes").gain(.5)
+bass: note("<c2 f1 f1 g1>").s("fingerbass")
+mel: n("<[4 3# 4 ~] [7 6b 5 ~] [5 4# 5 ~] [4 ~ 1 ~]>").scale("C4:major").s("piano")`,
+    hint: "A number with # or b is a note from outside the key. 3# is ♯4 (fi) and leans up to 5; 6b is ♭7 (te) and leans down to 6; 4# is ♯5 (si), up to 6. Turn on Degrees and Solfège to read them on the roll.",
+  },
+  "snd.horns": {
+    code: `setcpm(120/4)
+
+drums: s("bd ~ sd ~")
+hats: s("hh*8").swing(4).gain(.35)
+horns: chord("<C E7 A7 A7 D7 G7 C G7>").voicing().struct("x ~ ~ x ~ ~ x ~").s("horns").gain(.6)
+bass: chord("<C E7 A7 A7 D7 G7 C G7>").rootNotes(2).s("fingerbass")`,
+    hint: "Horn stabs on a chain of dominants: E7 leads to A7, A7 to D7, D7 to G7, G7 home to C. Once you know them, the chord band writes each as V7 of the chord it points at.",
+  },
+  "snd.trumpet": {
+    code: `setcpm(120/4)
+
+drums: s("bd ~ sd ~")
+hats: s("hh*8").swing(4).gain(.35)
+chords: chord("<C E7 A7 D7>").voicing().s("rhodes").gain(.5)
+bass: chord("<C E7 A7 D7>").rootNotes(2).s("fingerbass")
+mel: n("<[4 ~ 2 0] [4# ~ 2 1] [5 ~ 4 0#] [3# ~ 1 ~]>").scale("C4:major").s("trumpet").gain(.7)`,
+    hint: "A trumpet lead over dominants: each bar's raised note (G♯, C♯, F♯) is the new chord's 3rd, the note that pulls on to the next chord.",
+  },
+  "snd.tenor": {
+    code: `setcpm(80/4)
+
+drums: s("bd ~ sd ~")
+chords: chord("<C Fm C [Ab Bb]>").voicing().s("rhodes").gain(.55)
+bass: note("<c2 f1 c2 [ab1 bb1]>").s("fingerbass")
+mel: n("<[4 ~ 2 0] [5b ~ 3 0] [2 ~ 1 0] [5b 2b 6b 1]>").scale("C4:major").s("tenor").gain(.7)`,
+    hint: "A tenor sax over chords borrowed from C minor: Fm in bar 2, then A♭ and B♭ climbing back home. The flats in the tune (5b, 2b, 6b) are the borrowed chords' own notes.",
   },
 };
 

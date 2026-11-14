@@ -18,6 +18,7 @@ import type {
   StepAttemptResult,
   StepState,
   TermIntroduced,
+  TrackGateState,
   Unlock,
 } from "@oak/api";
 import {
@@ -44,6 +45,7 @@ import { GatesService } from "./gates.ts";
 import { evidenceWeight, type MasteryService } from "./mastery.ts";
 import type { SrsPort } from "./ports.ts";
 import type { StreakService } from "./streak.ts";
+import type { TracksService } from "./tracks.ts";
 import type { UnlocksService } from "./unlocks.ts";
 import type { VoiceService } from "./voice.ts";
 
@@ -60,6 +62,8 @@ export interface CourseDeps {
   srs: () => SrsPort | null;
   /** Wave 4: capstone sessions remember when each was completed. */
   capstoneSessions?: CapstoneSessionsService;
+  /** Wave 6: the advanced-track gates a completion or a checkpoint pass meets are recorded with it. */
+  tracks?: TracksService;
 }
 
 type EvidenceInput = Omit<Evidence, "at" | "day">;
@@ -504,6 +508,7 @@ export class CourseService {
           terms: [] as TermIntroduced[],
           opened: [] as string[],
           first: false,
+          gatesOpened: [] as TrackGateState[],
         };
       }
       const before = this.#openItems();
@@ -528,7 +533,9 @@ export class CourseService {
       const canDo = this.d.cando.evaluate({ sourceId: lessonId, evidence: { kind: "lesson", id: lessonId } });
       const after = this.#openItems();
       const opened = [...after].filter((x) => !before.has(x));
-      return { progress, unlocks, canDo, terms, opened, first };
+      // Wave 6 (wave6.md §5.3): a gate this completion meets is recorded now and reported once, here.
+      const gatesOpened = first ? (this.d.tracks?.recordGates(lessonId) ?? []) : [];
+      return { progress, unlocks, canDo, terms, opened, first, gatesOpened };
     });
 
     const srs = this.d.srs();
@@ -539,8 +546,13 @@ export class CourseService {
       canDo: done.canDo,
       terms: done.terms,
       seeded,
-      opened: done.opened as LessonCompleteResult["opened"],
+      // `opened` lists session IDs: a capstone this completion opens (CF-T at U15.L01, Wave 6) is named by its first
+      // session, as the map and Today name it.
+      opened: done.opened.map((x) =>
+        this.#content.capstoneMeta(x) !== null ? (this.#content.capstoneSessionIds(x)[0] ?? `${x}.S1`) : x,
+      ) as LessonCompleteResult["opened"],
       streak: this.d.streak.summary(),
+      ...(done.gatesOpened.length > 0 ? { gatesOpened: done.gatesOpened } : {}),
     };
   }
 
@@ -636,6 +648,7 @@ export class CourseService {
       const debts: string[] = [];
       let repairQueue: CheckpointOutcome["repairQueue"] = [];
       let unlocks: Unlock[] = [];
+      let gatesOpened: TrackGateState[] = [];
       if (s.passed || softPass) {
         this.#repos.checkpoints.clearRepairs(cpId);
         unlocks = this.d.unlocks.onComplete(cpId);
@@ -654,6 +667,8 @@ export class CourseService {
         // Skills in range become eligible for `mastered`.
         for (const sk of [...meta.gated, ...meta.levelSetting]) this.d.mastery.recompute(sk);
         this.d.cando.evaluate({ sourceId: cpId, evidence: { kind: "checkpoint", id: cpId } });
+        // Wave 6 (wave6.md §5.3): the tracks this pass opens are recorded now and reported once, here.
+        gatesOpened = this.d.tracks?.recordGates(cpId) ?? [];
       } else {
         const def = this.#content.checkpointDef(cpId);
         repairQueue = s.perSkill
@@ -684,6 +699,7 @@ export class CourseService {
         debts: debts as CheckpointOutcome["debts"],
         opened: [...after].filter((x) => !before.has(x)),
         unlocks,
+        ...(gatesOpened.length > 0 ? { gatesOpened } : {}),
       };
     });
   }

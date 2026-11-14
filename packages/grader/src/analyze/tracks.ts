@@ -119,6 +119,17 @@ function barSignature(events: readonly NEvent[]): string {
  * Smallest number of bars after which the events repeat, up to `maxBars`. `bars` is the length of the
  * queried window (default: through the last event). A window too short to show a repeat is its own period.
  */
+/**
+ * Bars of one pass of the piece's own loop: the smallest period after which EVERY event repeats inside the window,
+ * else the whole window (an arranged piece that never repeats is one pass). A count a rule makes "over one pass"
+ * (`contains-rn` with `min` above 1, a `guide-tones` move) never counts the loop's playback twice, and never reads
+ * the jump from its last bar back to its first as part of the line (Wave 6, U12.L05, U15).
+ */
+export function loopPassBars(events: readonly NEvent[], bars?: number): number {
+  const reach = events.reduce((m, e) => Math.max(m, R.floor(e.onset) + 1), 0);
+  const window = Math.max(1, Math.min(bars ?? reach, reach || 1));
+  return periodOf(events, window, window);
+}
 export function periodOf(events: readonly NEvent[], maxBars: number, bars?: number): number {
   const window = Math.max(1, bars ?? events.reduce((m, e) => Math.max(m, R.floor(e.onset) + 1), 1));
   const sigs: string[] = [];

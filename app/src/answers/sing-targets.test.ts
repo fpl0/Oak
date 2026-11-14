@@ -34,6 +34,9 @@ describe("sung degree patterns", () => {
     expect(targetLabel({ degree: "5" }, "syllables")).toBe("5 · sol");
     expect(targetLabel({ degree: "b3" }, "syllables")).toBe("♭3 · me");
     expect(targetLabel({ label: "A" })).toBe("A");
+    // A host passing the content's spelling as the label (U15.L02 S7) gets the signs the pad prints.
+    expect(targetLabel({ degree: "#4", label: "#4" }, "syllables")).toBe("♯4 · fi");
+    expect(targetLabel({ degree: "b7", label: "b7" })).toBe("♭7");
     expect(targetSpoken({ degree: "7" }, "syllables")).toBe("degree 7, ti");
   });
 });

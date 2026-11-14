@@ -125,6 +125,12 @@ export class AudioStore {
     if (!/^[A-Za-z0-9_-]+$/.test(trackId)) throw new Error("bad track id");
     return this.#inside(this.albumDir, join(trackId, `v${version}.${ext}`));
   }
+  /** Wave 6 (d20): take 1 keeps the version's own file name (`v1.wav`); later takes are `v1-t2.wav`, … */
+  albumTakePath(trackId: string, version: number, take: number, ext: string): string {
+    if (take <= 1) return this.albumPath(trackId, version, ext);
+    if (!/^[A-Za-z0-9_-]+$/.test(trackId)) throw new Error("bad track id");
+    return this.#inside(this.albumDir, join(trackId, `v${version}-t${take}.${ext}`));
+  }
   /** Stored paths are relative to the data directory's audio or album folder. */
   resolveStored(stored: string): string {
     if (stored.startsWith("album/")) return this.#inside(this.albumDir, stored.slice("album/".length));

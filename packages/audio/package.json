@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./pitch-worklet": "./src/worklets/pitch.worklet.ts",
-    "./waveview": "./src/waveview.ts"
+    "./waveview": "./src/waveview.ts",
+    "./master-meter": "./src/master-meter.ts"
   }
 }

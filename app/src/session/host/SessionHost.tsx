@@ -9,7 +9,8 @@ import { useLessonPublic } from "../../lesson/public.ts";
 import { useContent } from "../../lib/content.ts";
 import { lessonTitles } from "../../lib/content-model.ts";
 import { usePageTitle } from "../../lib/nav.ts";
-import { useBootstrap, useTodayPlan } from "../../lib/queries.ts";
+import { useBootstrap, useSessionDay, useTodayPlan } from "../../lib/queries.ts";
+import { ownOpenSession } from "../../lib/tab-session.ts";
 import { useHotkeys } from "../../ui/keys/KeymapProvider.tsx";
 import { Button } from "../../ui/kit/Button.tsx";
 import { Card, Kbd, Page } from "../../ui/kit/basics.tsx";
@@ -19,7 +20,7 @@ import { itemTitle as titleOf } from "../titles.ts";
 
 const useRunnerViewState = () => sessionRunner.view.getState();
 
-import { useCapstoneDay, useCapstoneDaySettled, useCapstoneDef } from "../day-hooks.ts";
+import { useCapstoneDay, useCapstoneDaySettled, useCapstoneDef, useCftDay } from "../day-hooks.ts";
 import { sessionRunner } from "../live.ts";
 import { resumeDecision } from "../resume-once.ts";
 import { useSession } from "../store.ts";
@@ -67,6 +68,7 @@ function Body() {
   const capstone = useCapstoneDay(plan);
   const capDef = useCapstoneDef(capstone?.capstoneId ?? null);
   const capstoneSettled = useCapstoneDaySettled(plan);
+  const cft = useCftDay(plan);
   const [resumed, setResumed] = useState(false);
   if (!plan || !session || !block) return null;
   const sessionId = session.id;
@@ -90,6 +92,7 @@ function Body() {
                 day={capstone}
                 sessionId={session.id}
                 kind={capDef?.kind ?? null}
+                where={cft?.where ?? null}
                 onContinue={() => setResumed(true)}
               />
             );
@@ -155,13 +158,16 @@ export function SessionHost() {
     },
   ]);
 
-  // No session in this tab (a reload, a bookmark): resume the one open today, or go back to Today.
+  // No session in this tab (a reload, a bookmark): resume the one THIS tab left open today, or go back to Today.
+  // d21: another tab's open session is never joined (`ownOpenSession`); while today's sessions load, wait.
+  const day = useSessionDay();
   useEffect(() => {
     if (sessionRunner.active() || !boot.data || !today.data) return;
-    const open = boot.data.openSession;
+    if (day.isPending) return;
+    const open = day.data ? ownOpenSession(day.data) : null;
     if (open && open.day === boot.data.day) void sessionRunner.resume(open, today.data).catch(() => {});
     else void navigate({ to: "/", replace: true });
-  }, [boot.data, today.data, navigate]);
+  }, [boot.data, today.data, navigate, day.isPending, day.data]);
 
   if (!live || !plan) {
     if (boot.isError)

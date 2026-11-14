@@ -287,12 +287,14 @@ const SHOT_IDS = [
   "sing-minor",
 ] as const;
 
-for (const m of SCREENSHOT_MATRIX) {
-  test(`Wave 5 widgets: ${m.theme} ${m.width}x${m.height}`, async ({ page }) => {
-    await page.setViewportSize({ width: m.width, height: m.height });
-    await useUiPrefs(page, { theme: m.theme });
-    for (const id of SHOT_IDS) {
-      await openGallery(page, `?only=${id}&state=wrong,revealed`);
+// Each example is loaded once; the size and the theme then change in place (wave5.md §7.1).
+test("Wave 5 widgets: both themes, both sizes, no overflow", async ({ page }) => {
+  for (const id of SHOT_IDS) {
+    await openGallery(page, `?only=${id}&state=wrong,revealed`);
+    for (const m of SCREENSHOT_MATRIX) {
+      await page.setViewportSize({ width: m.width, height: m.height });
+      await page.getByRole("radio", { name: m.theme === "paper" ? "Paper" : "Bark" }).click();
+      await expect(page.locator("html")).toHaveAttribute("data-theme", m.theme);
       const overflow = await page.evaluate(() => {
         const main = document.getElementById("main");
         return {
@@ -300,8 +302,10 @@ for (const m of SCREENSHOT_MATRIX) {
           main: main ? main.scrollWidth - main.clientWidth : 0,
         };
       });
-      expect(`${id}: ${overflow.page} ${overflow.main}`).toBe(`${id}: 0 0`);
+      expect(`${id} ${m.theme} ${m.width}: ${overflow.page} ${overflow.main}`).toBe(
+        `${id} ${m.theme} ${m.width}: 0 0`,
+      );
       await shoot(page, SHOTS, `w5-${id}`, m.theme);
     }
-  });
-}
+  }
+});

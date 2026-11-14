@@ -343,7 +343,7 @@ beforeAll(async () => {
 });
 
 describe("X1 phrase checks against each song's answer key", () => {
-  test("the checks: four melody phrases at 0.85 (key-relative), then the chords bass first at 0.80", () => {
+  test("the checks: four melody phrases at 0.85 (key-relative), then the chords bass first at 0.85 (contracts 1.6, d18)", () => {
     expect(melodyChecks.map((c) => [c.id, c.phrase, c.layer, c.pass])).toEqual([
       ["phrase-1", 1, "melody", 0.85],
       ["phrase-2", 2, "melody", 0.85],
@@ -353,7 +353,7 @@ describe("X1 phrase checks against each song's answer key", () => {
     expect([chordsCheck.phrase, chordsCheck.layer, chordsCheck.pass, chordsCheck.stages]).toEqual([
       [1, 4],
       "chords",
-      0.8,
+      0.85,
       ["bass", "quality", "rn"],
     ]);
   });
