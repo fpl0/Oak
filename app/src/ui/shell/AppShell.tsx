@@ -130,15 +130,7 @@ function NavRail({ path }: { path: string }) {
         </li>
         {main.map(item)}
       </ul>
-      <ul className="flex flex-col items-center gap-1">
-        {settings && item(settings)}
-        <li>
-          <AudioStatus compact />
-        </li>
-        <li>
-          <TutorToggle side="right" />
-        </li>
-      </ul>
+      <ul className="flex flex-col items-center gap-1">{settings && item(settings)}</ul>
     </nav>
   );
 }

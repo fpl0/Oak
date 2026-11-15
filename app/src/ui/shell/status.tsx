@@ -10,7 +10,7 @@ import { IconButton } from "../kit/Button.tsx";
 import { Tooltip } from "../kit/Tooltip.tsx";
 import { usePrefs } from "../theme/prefs.ts";
 
-export function AudioStatus({ compact = false }: { compact?: boolean }) {
+export function AudioStatus() {
   const audio = useShell((s) => s.audio);
   // Onboarding's Welcome says how sound starts ("Start sound"); the header does not give a second instruction
   // beside it (docs/design/retry.md §6.3).
@@ -28,25 +28,19 @@ export function AudioStatus({ compact = false }: { compact?: boolean }) {
             : "bg-accent-2 animate-pulse reduced:animate-none";
   const full = audio.kind === "error" ? `${label}: ${audio.message}` : label;
   return (
-    <Tooltip content={full} side={compact ? "right" : "bottom"}>
+    <Tooltip content={full} side="bottom">
       <button
         type="button"
         onClick={() => wakeAudio()}
         aria-label={`Audio: ${full}`}
         data-testid="audio-status"
-        className={clsx(
-          "inline-flex h-8 items-center gap-2 rounded-control px-2 text-sm text-text-2 hover:bg-surface-2",
-          compact && "w-8 justify-center px-0",
-          !compact && "max-sm:w-8 max-sm:justify-center max-sm:px-0",
-        )}
+        className="inline-flex h-8 items-center gap-2 rounded-control px-2 text-sm text-text-2 hover:bg-surface-2 max-sm:w-8 max-sm:justify-center max-sm:px-0"
       >
         <span aria-hidden className={clsx("size-2 rounded-full", dot)} />
         {/* Below 640 px the dot alone stays in the bar; the label remains for screen readers. */}
-        {!compact && (
-          <span aria-live="polite" className="whitespace-nowrap max-sm:sr-only">
-            {label}
-          </span>
-        )}
+        <span aria-live="polite" className="whitespace-nowrap max-sm:sr-only">
+          {label}
+        </span>
       </button>
     </Tooltip>
   );
@@ -88,7 +82,7 @@ export function useTutorToggle(): { open: boolean; toggle(): void } {
   };
 }
 
-export function TutorToggle({ side = "bottom" }: { side?: "bottom" | "right" }) {
+export function TutorToggle() {
   const { open, toggle } = useTutorToggle();
   const health = useHealth();
   const off = health.data ? health.data.tutorBackend === null : false;
@@ -96,7 +90,6 @@ export function TutorToggle({ side = "bottom" }: { side?: "bottom" | "right" }) 
     <IconButton
       label={off ? "Tutor (off — see Settings › Tutor)" : open ? "Hide tutor" : "Show tutor"}
       shortcut="⌘J"
-      tooltipSide={side}
       pressed={open}
       onClick={toggle}
       data-testid="tutor-toggle"
