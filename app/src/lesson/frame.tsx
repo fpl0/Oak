@@ -35,8 +35,18 @@ export interface StepHost {
   rung: HintRung;
   passed: boolean;
   checking: boolean;
-  /** A passed step revisited (read-only replay, "Try a new one"). */
+  /**
+   * An earlier step revisited (Looking back) or a step of a completed lesson: it works as practice (docs/design/
+   * retry.md §5 row 9); the server stores its attempts as practice.
+   */
   review: boolean;
+  /**
+   * A verdict (a checkpoint's saved answer) is on screen: the answer cannot change until "Try again"
+   * (docs/design/retry.md §2.5). Playback and auditions still work; a code editor stays editable.
+   */
+  locked: boolean;
+  /** "Try again" presses on this step in this visit: a take widget starts a new take when it rises. */
+  retake: number;
   env: GradeEnv;
   /**
    * Quiet mode (server state, `voice.get`; the profile's flag until that answers) and the learner's singing
@@ -185,7 +195,11 @@ export function StepLayout({ stage, answer, actions, hidePrompt, answerFirst }: 
               <InlineMd text={prompt} />
             </p>
           ) : null}
-          {answer ? <div className="mt-4 flex flex-col gap-4">{answer}</div> : null}
+          {answer ? (
+            <div className="mt-4 flex flex-col gap-4" data-answer-area>
+              {answer}
+            </div>
+          ) : null}
           {answerFirst ? prose : null}
         </div>
         <footer className="shrink-0 border-t border-border bg-bg px-5 py-3" data-testid="step-footer">

@@ -126,7 +126,7 @@ test("C4 from “C4 open”: the Aeolian verse, then the chorus cadence with the
     C4_FULL.replace('drums: s("bd ~ sd ~, hh*8")', 'drums: s("bd ~ sd ~, hh*8").gain(.9)'),
   );
   await expect(page.getByTestId("check-again")).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByTestId("check-again")).toContainText("Check again before you release");
+  await expect(page.getByTestId("check-again")).toContainText("Check this version before you release");
   await expect(page.getByTestId("release")).toBeDisabled();
   await shots(page, "c4-s2-check-again");
   await page.getByTestId("check-track").focus();

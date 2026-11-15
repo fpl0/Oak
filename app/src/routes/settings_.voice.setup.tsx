@@ -30,12 +30,12 @@ export const Route = createFileRoute("/settings_/voice/setup")({
 const LABEL: Record<WizardPart, string> = {
   headphones: "Headphones",
   mic: "Microphone",
-  range: "Range",
+  range: "Your voice",
   latency: "Timing",
   match: "Match three notes",
-  "first-sing": "First note",
+  "first-sing": "Your first note",
   noise: "Quiet check",
-  bleed: "Bleed check",
+  bleed: "Speaker check",
 };
 
 function VoiceSetup() {
@@ -81,7 +81,10 @@ function VoiceSetup() {
               </section>
             );
           const next = wizardNext(parts, current, p.quiet);
+          const at = parts.indexOf(current);
+          const prev = at > 0 ? (parts[at - 1] as WizardPart) : null;
           return renderPart(p, {
+            back: prev ? { label: LABEL[prev], onBack: () => go(prev) } : null,
             part: current,
             context: "settings",
             onDone: () => {

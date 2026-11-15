@@ -73,9 +73,9 @@ test("a whole session from the keyboard, with reduced motion", async ({ page, re
   await onStep(page, "S2");
   await press(page, { id: "mic-allow" });
   await expect(page.getByTestId("mic-live")).toBeVisible();
-  await expect(page.getByText("Oak can hear you.")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Oak can hear you.", { exact: true })).toBeVisible({ timeout: 15_000 });
   // The mic part ends once Oak hears the learner ("Done"); focus moves straight to the quiet check's button.
-  await press(page, { id: "part-continue" });
+  await press(page, { id: "result-continue" });
   // Wave 3: the "onboarded" seed has measured the room and the bleed already, so the quiet and bleed parts read
   // "Already set up" and focus moves to their "Keep it" in turn, then to Continue — never onto <body>.
   for (const part of ["noise", "bleed"]) {
@@ -88,8 +88,8 @@ test("a whole session from the keyboard, with reduced motion", async ({ page, re
     await expect.poll(async () => (await active(page)).id).toBe(`${part}-start`);
     await expect(page.getByTestId(`${part}-start`)).toHaveCount(1);
     await page.keyboard.press("Enter");
-    await expect(page.getByTestId("part-continue")).toBeVisible({ timeout: 15_000 });
-    await press(page, { id: "part-continue" });
+    await expect(page.getByTestId("result-continue")).toBeVisible({ timeout: 15_000 });
+    await press(page, { id: "result-continue" });
   }
   await expect.poll(async () => (await active(page)).id).toBe("continue");
   await shootAll(page, "keyboard-mic-step-done");
@@ -132,6 +132,8 @@ test("a whole session from the keyboard, with reduced motion", async ({ page, re
   await expect(page).toHaveURL(/\/session\/coda$/, { timeout: 60_000 });
   const moment = page.getByTestId("coda-unlock-moment");
   if (await moment.isVisible().catch(() => false)) await press(page, { text: /See the rest of today/ });
+  // The session closes first ("Closing the session…"); Done for today appears when it has.
+  await expect(page.getByTestId("done-for-today")).toBeVisible({ timeout: 30_000 });
   await press(page, { id: "done-for-today" });
   await expect(page.getByTestId("today-card")).toHaveAttribute("data-state", "done");
   expect(problems).toEqual([]);

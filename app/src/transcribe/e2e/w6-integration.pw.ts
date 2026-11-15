@@ -9,7 +9,7 @@
 // the project's stimulus carries the recording's notes, not its chord symbols.
 import { expect, type Page, test } from "@playwright/test";
 import { useUiPrefs } from "../../../../e2e/support/ui.ts";
-import { api } from "./support.ts";
+import { api, checkIt } from "./support.ts";
 
 test.beforeEach(async ({ page }) => {
   await page.routeWebSocket(/.*/, () => {});
@@ -122,14 +122,14 @@ test("ladder L8: a standard opens at its changes stage; a wrong chart names a ba
   // 0.85): not a pass, and the result names the first of them.
   const wrong = chart.map((c, i) => (i === 1 || i === 2 ? (c.includes("F#o7") ? "Bb7" : "F#o7") : c));
   await setEditor(page, withChart(wrong));
-  await page.getByTestId("check").click();
+  await checkIt(page);
   await expect(page.getByTestId("verdict")).toContainText(/Changes, section 1.*not yet/);
   await expect(page.getByTestId("check-lines")).toContainText(new RegExp(`Bar ${from + 1}\\b`));
   await expect(page.getByTestId("bar-marks")).toContainText("bar");
 
   // The chart as played passes.
   await setEditor(page, withChart(chart));
-  await page.getByTestId("check").click();
+  await checkIt(page);
   await expect(page.getByTestId("verdict")).toContainText(/Changes, section 1.*that's it/);
   await expect(page.getByTestId("phrase-progress")).toContainText("1 of");
 });
@@ -167,7 +167,7 @@ test("ladder L8: another standard starts at its form map; a wrong map says what 
   await page.locator(`[data-testid="form-line"][data-bar="${half}"]`).click();
   await page.getByTestId("form-name").nth(0).fill("A");
   await page.getByTestId("form-name").nth(1).fill("B");
-  await page.getByTestId("check").click();
+  await checkIt(page);
   await expect(page.getByTestId("verdict")).toContainText("The form: not yet.");
   await expect(page.getByTestId("check-lines").locator("li").first()).not.toBeEmpty();
   await expect(page.getByTestId("stages").locator("li").nth(0)).toHaveAttribute("data-status", "open");
@@ -182,7 +182,7 @@ test("ladder L8: another standard starts at its form map; a wrong map says what 
   }
   for (const [i, s] of sections.entries()) await page.getByTestId("form-name").nth(i).fill(s.label);
   await expect(page.getByTestId("form-section")).toHaveCount(sections.length);
-  await page.getByTestId("check").click();
+  await checkIt(page);
   await expect(page.getByTestId("verdict")).toContainText("The form: that's it");
   await expect(page.getByTestId("stages").locator("li").nth(0)).toHaveAttribute("data-status", "passed");
   await expect(page.getByTestId("stages").locator("li").nth(1)).toHaveAttribute("data-status", "open");

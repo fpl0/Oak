@@ -166,6 +166,55 @@ describe("calibration", () => {
     expect(seen.length).toBeGreaterThan(100);
   });
 
+  test("Stop ends a take early and measures what was heard (range, taps, sung 'da's)", async () => {
+    // Range: the learner sweeps for 4 s of the 10 and presses Stop.
+    const r = rig(() => (tc) => {
+      const k = Math.floor((tc - 0.2) / 0.3);
+      return k >= 0 && k <= 10 && (tc - 0.2) % 0.3 < 0.26 ? { midi: 48 + k } : { midi: null };
+    });
+    const stop = new AbortController();
+    const seen: number[] = [];
+    const sweep = r.cal.rangeSweep((f) => {
+      seen.push(f.t);
+      if (f.t >= 4) stop.abort();
+    }, stop.signal);
+    const res = await sweep;
+    expect(r.ctx.currentTime).toBeLessThan(5);
+    expect(res.lowMidi).toBe(48);
+    expect(res.highMidi).toBeGreaterThanOrEqual(58);
+    expect(r.state()).toBe("closed");
+
+    // Taps: Stop after 5 clicks; the result counts the 5 taps (the part judges whether that is enough).
+    const t = rig(() => silent);
+    const tapStop = new AbortController();
+    async function* taps() {
+      while (t.clicks.length === 0) await Promise.resolve();
+      for (const c of t.clicks.slice(0, 5)) yield c + 0.05;
+      tapStop.abort();
+      // The learner stops tapping; the stream stays open.
+      await new Promise(() => {});
+    }
+    const tr = await t.cal.tapLatency(taps(), undefined, tapStop.signal);
+    expect(t.ctx.currentTime).toBeLessThan(CALIBRATION.leadIn + 16 * CALIBRATION.tapSpacing);
+    expect(tr.taps).toBe(5);
+    expect(tr.latencyMs).toBeCloseTo(50, 0);
+
+    // Sung 'da's: Stop half-way; the latency is measured from the clicks heard so far.
+    let clicks: number[] = [];
+    const s = rig(() => (tc) => {
+      const c = clicks.find((x) => tc >= x + 0.14 && tc < x + 0.44);
+      return c === undefined ? { midi: null } : { midi: 57 };
+    });
+    const singStop = new AbortController();
+    const p = s.cal.singLatency((i) => {
+      if (i === 4) singStop.abort();
+    }, singStop.signal);
+    clicks = s.clicks;
+    const ms = await p;
+    expect(s.ctx.currentTime).toBeLessThan(CALIBRATION.leadIn + 6 * CALIBRATION.singSpacing);
+    expect(Math.abs(ms - 140)).toBeLessThan(15);
+  });
+
   test("range sweep with no voice rejects", async () => {
     const r = rig(() => silent);
     await expect(r.cal.rangeSweep()).rejects.toBeInstanceOf(RangeError);

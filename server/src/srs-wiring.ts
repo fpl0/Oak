@@ -44,6 +44,7 @@ import { openFamilyLevels } from "./services/family-levels.ts";
 import type { Services } from "./services/index.ts";
 import { evidenceWeight } from "./services/mastery.ts";
 import type { DrillSessionCreate, SessionPlannerPort, SrsPort, StepReviewInput } from "./services/ports.ts";
+import { keepFirstAnswer } from "./services/retry.ts";
 import {
   type CourseItem,
   type SessionPlanCoursePort,
@@ -522,8 +523,12 @@ export class SrsAdapter implements SrsPort {
     for (const t of trials)
       if (!drill.familyIds.includes(t.familyId))
         throw badRequest(`trial ${t.idx} is not of this set's families`);
-    // A revealed trial has credit 0 and gives no evidence (wave3.md §5.3), whatever the client sent.
-    const stored = trials.map((t) => (t.revealed === true ? { ...t, credit: 0, correct: false } : t));
+    // A revealed trial has credit 0 and gives no evidence (wave3.md §5.3), whatever the client sent. A trial
+    // already stored keeps its first answer (docs/design/retry.md §3.3): a retry inside a trial is practice.
+    const before = new Map(this.repos.srs.trials(drillSessionId).map((t) => [t.idx, t]));
+    const stored = trials
+      .map((t) => (t.revealed === true ? { ...t, credit: 0, correct: false } : t))
+      .map((t) => keepFirstAnswer(before.get(t.idx), t));
     this.repos.srs.saveTrials(drillSessionId, stored);
     // Graded sung notes (sung trials, sung resolutions) feed the tolerance ladder; a re-post replaces them.
     for (const t of stored)

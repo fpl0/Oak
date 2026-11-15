@@ -1,4 +1,5 @@
 // Small status widgets of the shell chrome: AudioStatus, the Mic-live dot, the tutor toggle, now playing.
+import { useRouterState } from "@tanstack/react-router";
 import { clsx } from "clsx";
 import { MessageCircle, Mic, Square } from "lucide-react";
 import { wakeAudio } from "../../lib/oak.ts";
@@ -11,7 +12,10 @@ import { usePrefs } from "../theme/prefs.ts";
 
 export function AudioStatus({ compact = false }: { compact?: boolean }) {
   const audio = useShell((s) => s.audio);
-  const label = audioStatusLabel(audio);
+  // Onboarding's Welcome says how sound starts ("Start sound"); the header does not give a second instruction
+  // beside it (docs/design/retry.md §6.3).
+  const welcome = useRouterState({ select: (r) => r.location.pathname.endsWith("/onboarding/welcome") });
+  const label = welcome && audio.kind === "asleep" ? "Sound asleep" : audioStatusLabel(audio);
   const dot =
     audio.kind === "ready"
       ? "bg-accent"

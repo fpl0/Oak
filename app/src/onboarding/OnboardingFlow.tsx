@@ -1,11 +1,13 @@
 // /onboarding/$step: the first ten minutes (ux §8; contracts §2.3 U00, §8). The machine (machine.ts) owns where
 // the learner is; the URL mirrors it; every change is saved through `PUT /api/onboarding` (persist.ts), so a
 // reload resumes on the same screen. The screens are the onboarding's own (loop, edit, reaction, preferences,
-// tutor, sketch, coda) and the shared set-up parts of app/src/voice.
+// tutor, sketch, coda) and the shared set-up parts of app/src/voice, all in one frame (docs/design/retry.md §6.1):
+// the header says "Step N of 13 · name" (with the mic's and timing's sub-steps) and its done dots go back; every
+// screen has its name as the heading, one sentence of what to do, and the same footer, with "Back: <name>" at its
+// left and the primary at its right.
 import type { OnboardingStep, Profile } from "@oak/api";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useMachine } from "@xstate/react";
-import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { usePageTitle } from "../lib/nav.ts";
 import { useBootstrap, useProfile, useProfileUpdate, useTutorStatus } from "../lib/queries.ts";
@@ -17,12 +19,15 @@ import { Callout } from "../ui/kit/Controls.tsx";
 import { ErrorState, LoadingState } from "../ui/kit/QueryState.tsx";
 import { toast } from "../ui/kit/Toast.tsx";
 import { useFocusHeaderContent } from "../ui/shell/focus-header.ts";
+import type { PartBack } from "../voice/parts/common.tsx";
 import { FirstSingPart } from "../voice/parts/FirstSingPart.tsx";
 import { HeadphonesPart } from "../voice/parts/HeadphonesPart.tsx";
 import { LatencyPart } from "../voice/parts/LatencyPart.tsx";
 import { MicPart } from "../voice/parts/MicPart.tsx";
 import { RangePart } from "../voice/parts/RangePart.tsx";
-import { canVisit, prevBefore, railOf, STEP_META, stepFromParam } from "./flow.ts";
+import { useVoiceSync } from "../voice/sync.ts";
+import { useQuietChosen, useVoice } from "../voice/use-voice.ts";
+import { canVisit, isOnboardingStep, prevBefore, railOf, STEP_META, stepFromParam } from "./flow.ts";
 import { LoopStage } from "./LoopStage.tsx";
 import { ONBOARDING_LOOP, withEdit } from "./loop.ts";
 import { onboardingMachine, patchOf } from "./machine.ts";
@@ -57,6 +62,11 @@ function Flow({ param, profile }: { param: string; profile: Profile }) {
   const ctx = snap.context;
   const step = ctx.step;
   const finished = snap.status === "done";
+  // Quiet mode as the learner chose it, wherever (Settings › Voice "just for today" in another tab included): this
+  // tab hears the change (`useVoiceSync`) and the flow follows it, so no step asks for the mic in Quiet mode.
+  useVoiceSync();
+  const voice = useVoice();
+  const quietNow = useQuietChosen(profile);
 
   // Load once: the server's copy (or the local mirror while the endpoint is not there).
   // Deliberately once per mount
@@ -75,6 +85,16 @@ function Flow({ param, profile }: { param: string; profile: Profile }) {
       live = false;
     };
   }, []);
+
+  // The flow follows Quiet mode switched on or off outside the mic step (the mic step tells the machine itself).
+  const lastQuiet = useRef<boolean | null>(null);
+  // Deliberately keyed on the chosen Quiet mode only
+  useEffect(() => {
+    if (!loaded || finished) return;
+    const was = lastQuiet.current;
+    lastQuiet.current = quietNow;
+    if (was === null ? quietNow !== ctx.quiet : was !== quietNow) send({ type: "QUIET", on: quietNow });
+  }, [quietNow, loaded]);
 
   // Save every change of the resumable state.
   useEffect(() => {
@@ -115,9 +135,17 @@ function Flow({ param, profile }: { param: string; profile: Profile }) {
     });
   }, [step, loaded]);
 
+  // The current step's own sub-step (the mic's three, timing's two), for the header's progress. The part sets it
+  // while mounted and clears it when it unmounts.
+  const [sub, setSub] = useState<string | null>(null);
   const label = STEP_META[step].label;
   usePageTitle(`Hello, Loop · ${label}`);
-  useFocusHeaderContent("Hello, Loop", loaded && !finished ? railOf(ctx, step) : null);
+  useFocusHeaderContent("Hello, Loop", loaded && !finished ? railOf(ctx, step, sub) : null, {
+    position: true,
+    onVisit: (id) => {
+      if (isOnboardingStep(id)) send({ type: "VISIT", step: id });
+    },
+  });
 
   const code = ctx.firstEdit === null ? ONBOARDING_LOOP : withEdit(ONBOARDING_LOOP, ctx.firstEdit);
   const [liveCode, setLiveCode] = useState<string | null>(null);
@@ -200,8 +228,11 @@ function Flow({ param, profile }: { param: string; profile: Profile }) {
       </Page>
     );
 
-  const back = prevBefore(ctx, step);
-  const partCommon = { profile, context: "onboarding" as const };
+  const prev = step === "coda" ? "sketch" : prevBefore(ctx, step);
+  const back: PartBack | null = prev
+    ? { label: STEP_META[prev].label, onBack: () => send({ type: "VISIT", step: prev }) }
+    : null;
+  const partCommon = { profile, context: "onboarding" as const, back, onSub: setSub };
   const skipIf = (s: OnboardingStep) => (STEP_META[s].skippable ? () => skip(s) : undefined);
 
   let body: React.ReactNode;
@@ -217,8 +248,11 @@ function Flow({ param, profile }: { param: string; profile: Profile }) {
           <LoopStage
             step={step}
             firstEdit={ctx.firstEdit}
+            back={back}
             onEdited={(value) => {
+              // The edit screen finishes with the first number that runs; on the reaction every run is theirs.
               if (step === "edit") done("edit", { firstEdit: value });
+              else if (step === "react") send({ type: "EDITED", value });
             }}
             onContinue={() => done(step)}
             onCode={setLiveCode}
@@ -227,7 +261,7 @@ function Flow({ param, profile }: { param: string; profile: Profile }) {
       );
       break;
     case "prefs":
-      body = <PrefsScreen profile={profile} onDone={() => done("prefs")} />;
+      body = <PrefsScreen profile={profile} onDone={() => done("prefs")} back={back} />;
       break;
     case "tutor":
       body = (
@@ -236,6 +270,7 @@ function Flow({ param, profile }: { param: string; profile: Profile }) {
           code={code}
           onDone={() => done("tutor")}
           onSkip={() => skip("tutor")}
+          back={back}
         />
       );
       break;
@@ -250,6 +285,8 @@ function Flow({ param, profile }: { param: string; profile: Profile }) {
           {...partCommon}
           onDone={() => {
             if (ctx.quiet) send({ type: "QUIET", on: false });
+            // Allowing the mic ends a Quiet mode chosen for today (or for good) too: the sung steps come back.
+            if (quietNow) void voice.setQuiet(false, voice.quiet.reason === "today" ? "today" : "always");
             done("mic");
           }}
           onQuiet={() => {
@@ -277,6 +314,7 @@ function Flow({ param, profile }: { param: string; profile: Profile }) {
             code={code}
             heard={ctx.firstEdit !== null}
             sketchId={ctx.sketchId}
+            back={back}
             onSaved={(id) => done("sketch", { sketchId: id })}
           />
         </SoundGate>
@@ -289,6 +327,7 @@ function Flow({ param, profile }: { param: string; profile: Profile }) {
           profile={profile}
           tutorReady={tutor.data?.tutor === "ready" && tutor.data.active !== null}
           finishing={finishing}
+          back={back}
           onFinish={() => void finish()}
         />
       );
@@ -303,19 +342,6 @@ function Flow({ param, profile }: { param: string; profile: Profile }) {
         data-step={step}
         data-quiet={ctx.quiet ? "1" : "0"}
       >
-        {back && step !== "coda" && (
-          <div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => send({ type: "VISIT", step: back })}
-              icon={<ArrowLeft aria-hidden className="size-4" />}
-              data-testid="onb-back"
-            >
-              Back to {STEP_META[back].label.toLowerCase()}
-            </Button>
-          </div>
-        )}
         {body}
       </div>
     </Page>

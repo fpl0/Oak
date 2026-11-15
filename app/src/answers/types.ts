@@ -199,6 +199,25 @@ export interface AnswerWidgetProps<K extends AnswerKind = AnswerKind> {
   solfege?: "numbers" | "syllables";
   /** Stable ID prefix for labels and `aria-describedby`. */
   idBase: string;
+  /**
+   * A verdict is on screen (lessons and checkpoints, docs/design/retry.md §2.5): the answer cannot change until
+   * the host's "Try again". A take widget (sing, tap, hum) keeps its playback but offers no new take of its own;
+   * other widgets are also `disabled`. Absent: the widget offers its own new take as before (drills).
+   */
+  locked?: boolean;
+  /** Rises with each "Try again" of the host: a take widget (sing, tap, hum) starts a new take at once. */
+  retake?: number;
+}
+
+/** Widget kinds whose answer is a take in time (a new one starts on "Try again"; playback stays while locked). */
+export const TAKE_KINDS: readonly AnswerKind[] = ["mic", "tap", "hum"];
+
+/**
+ * Whether a widget is disabled (docs/design/retry.md §2.5): while a verdict is on screen every answer widget is,
+ * except a take (sing, tap, hum), which keeps its playback and hides its own new take (`locked`).
+ */
+export function widgetDisabled(ui: AnswerKind, disabled: boolean, locked: boolean): boolean {
+  return disabled || (locked && !TAKE_KINDS.includes(ui));
 }
 
 export type AnswerWidget<K extends AnswerKind = AnswerKind> = ComponentType<AnswerWidgetProps<K>>;

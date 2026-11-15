@@ -1,17 +1,19 @@
 // `onb.tutor` (ux §8, contracts §2.3 U00.L01, §10.A): meet the tutor. Oak looks for a Claude login (or a key the
 // server already has) through `/api/tutor/status`, says exactly what a question sends, and offers one first
-// question about the learner's edit. Skippable; an API key is asked for only if the learner opens the advanced
-// option. Nothing streams from here: the docked panel runs the ask.
+// question about the learner's edit (as often as they like). Skippable ("Set up later"); an API key is asked for
+// only if the learner opens the advanced option. Nothing streams from here: the docked panel runs the ask, and the
+// conversation stays there for the rest of onboarding (the flow clears it when onboarding ends).
 import type { TutorStatus } from "@oak/api";
 import { Link } from "@tanstack/react-router";
-import { MessageCircle, RefreshCw } from "lucide-react";
+import { ArrowRight, MessageCircle, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAnthropicKeySet, useTutorStatus } from "../../lib/queries.ts";
-import { askChat, clearSubject, setSubject } from "../../tutor/context.ts";
+import { askChat, setSubject } from "../../tutor/context.ts";
 import { Button } from "../../ui/kit/Button.tsx";
 import { Chip, Skeleton } from "../../ui/kit/basics.tsx";
 import { Callout } from "../../ui/kit/Controls.tsx";
 import { toast } from "../../ui/kit/Toast.tsx";
+import { PartActions, type PartBack, SKIP_LABEL } from "../../voice/parts/common.tsx";
 import { ONBOARDING_THREAD } from "../thread.ts";
 
 export function firstQuestion(firstEdit: number | null): string {
@@ -74,20 +76,22 @@ export function TutorScreen({
   code,
   onDone,
   onSkip,
+  back,
 }: {
   firstEdit: number | null;
   code: string;
   onDone(): void;
   onSkip(): void;
+  back?: PartBack | null;
 }) {
   const [refresh, setRefresh] = useState(false);
   const status = useTutorStatus(refresh);
-  const [asked, setAsked] = useState(false);
+  const [asked, setAsked] = useState(0);
 
-  // The tutor sees the onboarding loop as it is now (with the learner's number).
+  // The tutor sees the onboarding loop as it is now (with the learner's number). The subject stays after this
+  // screen, so the conversation stays in the panel; the flow clears it when onboarding ends.
   useEffect(() => {
     setSubject({ thread: ONBOARDING_THREAD, title: "Hello, Loop", tutorOpen: true, code });
-    return () => clearSubject(ONBOARDING_THREAD);
   }, [code]);
 
   const s = status.data;
@@ -98,9 +102,12 @@ export function TutorScreen({
     <section className="flex flex-col gap-5" data-testid="screen-tutor" aria-labelledby="tutor-title">
       <header className="flex flex-col gap-1.5">
         <h1 id="tutor-title" className="text-h1 outline-none" tabIndex={-1}>
-          Meet your tutor
+          Your tutor
         </h1>
-        <p className="max-w-measure text-text-2">
+        <p className="max-w-[60ch] font-medium text-text" data-testid="step-instruction">
+          Ask the tutor about your change, or go on without it.
+        </p>
+        <p className="max-w-[60ch] text-text-2">
           Claude sits beside every lesson. Ask it what you're hearing, why a check failed, or for a nudge when
           you're stuck. Oak works fully without it.
         </p>
@@ -150,16 +157,20 @@ export function TutorScreen({
             <Button
               onClick={() => {
                 const r = askChat(firstQuestion(firstEdit));
-                setAsked(r.ok);
+                if (r.ok) setAsked((n) => n + 1);
               }}
-              disabled={asked}
               icon={<MessageCircle aria-hidden className="size-4" />}
               data-testid="tutor-ask"
             >
-              {asked ? "Asked: the answer is in the panel" : "Ask about your change"}
+              Ask about your change
             </Button>
             <Chip>"{firstQuestion(firstEdit)}"</Chip>
           </div>
+          {asked > 0 && (
+            <p className="text-sm text-text-2" aria-live="polite" data-testid="tutor-asked">
+              The answer is in the tutor panel. Ask again whenever you like.
+            </p>
+          )}
         </div>
       ) : (
         <div className="flex flex-col gap-3" data-testid="tutor-off">
@@ -200,17 +211,32 @@ export function TutorScreen({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        {ready ? (
-          <Button variant="primary" onClick={onDone} data-testid="tutor-continue">
-            Continue
-          </Button>
-        ) : (
-          <Button variant="primary" onClick={onSkip} data-testid="part-skip">
-            Continue without the tutor
-          </Button>
-        )}
-      </div>
+      <PartActions
+        context="onboarding"
+        back={back}
+        resultKey={null}
+        onRetry={null}
+        onContinue={null}
+        testId="tutor-actions"
+        action={
+          ready ? (
+            <Button
+              variant="primary"
+              onClick={onDone}
+              icon={<ArrowRight aria-hidden className="size-4" />}
+              data-testid="tutor-continue"
+              autoFocus
+            >
+              Continue
+            </Button>
+          ) : (
+            // Without a tutor the way on is to set it up later (Settings › Tutor); Oak works fully without it.
+            <Button variant="primary" onClick={onSkip} data-testid="part-skip">
+              {SKIP_LABEL}
+            </Button>
+          )
+        }
+      />
     </section>
   );
 }

@@ -33,7 +33,14 @@ import {
 } from "../answers/env.tsx";
 import { emptyValue, isComplete, responseOf } from "../answers/response.ts";
 import { summarize } from "../answers/sing.ts";
-import type { AnswerFeedback, AnswerKind, AnswerSpec, AnswerSpecOf, AnswerValue } from "../answers/types.ts";
+import {
+  type AnswerFeedback,
+  type AnswerKind,
+  type AnswerSpec,
+  type AnswerSpecOf,
+  type AnswerValue,
+  widgetDisabled,
+} from "../answers/types.ts";
 import { auditionCode } from "../lib/audition.ts";
 import { analyzeCode } from "../lib/grader-client.ts";
 import { useLenses } from "../lib/lenses.ts";
@@ -258,6 +265,13 @@ export interface PartInputProps {
   result: GradeResult | null;
   rung: HintRung;
   disabled: boolean;
+  /**
+   * A verdict is on screen (docs/design/retry.md §2.5): answer widgets are disabled until "Try again"; a take
+   * keeps its playback; a code editor stays editable.
+   */
+  locked?: boolean;
+  /** "Try again" presses on this step: a take widget starts a new take when it rises. */
+  retake?: number;
   onSubmit(): void;
   runtime: InputRuntime;
   trial: Trial | null;
@@ -357,8 +371,12 @@ export function AnswerWidgetHost(p: {
   idBase: string;
   label: string;
   autoFocus?: boolean;
+  /** A verdict is on screen: a take keeps its playback, every other widget is disabled. */
+  locked?: boolean;
+  retake?: number;
 }) {
   const Widget = lessonWidgetFor(p.spec as AnswerSpecOf<AnswerKind>);
+  const locked = p.locked === true;
   if (!Widget)
     return (
       <p className="text-sm text-text-2" data-testid="answer-unavailable">
@@ -371,13 +389,15 @@ export function AnswerWidgetHost(p: {
       value={p.value}
       onChange={p.onChange}
       onSubmit={p.onSubmit}
-      disabled={p.disabled}
+      disabled={widgetDisabled(p.spec.ui, p.disabled, locked)}
       feedback={p.feedback}
       label={p.label}
       rung={p.rung}
       idBase={p.idBase}
       audition={(code) => auditionCode(code, 1)}
       {...(p.autoFocus ? { autoFocus: true } : {})}
+      {...(locked ? { locked: true } : {})}
+      {...(p.retake ? { retake: p.retake } : {})}
     />
   );
 }
@@ -869,6 +889,7 @@ export function PartInput(p: PartInputProps) {
         onChange={(v) => p.onChange(v)}
         feedback={p.feedback}
         disabled={p.disabled}
+        {...lockProps(p)}
         onSubmit={p.onSubmit}
         rung={p.rung}
         idBase={`${p.wbId}-fill`}
@@ -908,6 +929,7 @@ export function PartInput(p: PartInputProps) {
                 }}
                 feedback={questionFeedback(p.feedback, i)}
                 disabled={p.disabled}
+                {...lockProps(p)}
                 onSubmit={p.onSubmit}
                 rung={p.rung}
                 idBase={`${p.wbId}-q${i}`}
@@ -936,6 +958,7 @@ export function PartInput(p: PartInputProps) {
           onChange={(v) => p.onChange(v)}
           feedback={p.feedback}
           disabled={p.disabled}
+          {...lockProps(p)}
           onSubmit={p.onSubmit}
           rung={p.rung}
           idBase={`${p.wbId}-answer`}
@@ -945,6 +968,14 @@ export function PartInput(p: PartInputProps) {
       </div>
     </AnswerEnvProvider>
   );
+}
+
+/** The retry state a part passes on to its widget (absent keys stay absent: exactOptionalPropertyTypes). */
+function lockProps(p: PartInputProps): { locked?: boolean; retake?: number } {
+  return {
+    ...(p.locked ? { locked: true } : {}),
+    ...(p.retake ? { retake: p.retake } : {}),
+  };
 }
 
 /** A question's share of the step feedback: its slot's mark only. */

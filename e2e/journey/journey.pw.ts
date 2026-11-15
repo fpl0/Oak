@@ -10,6 +10,8 @@ import { expect, type Page, test } from "@playwright/test";
 import {
   expectStep,
   fakeMic,
+  partContinue,
+  reactContinue,
   shootAll as shootOnboarding,
   throughTheLoop,
   watchErrors,
@@ -83,10 +85,8 @@ test("gate journey 1: a fresh learner goes through onboarding with a microphone"
   // walked these same screens in real time): its choices, checks and reference screenshots
   // (app/src/onboarding/e2e/screenshots, both themes at both sizes) are made here.
   await throughTheLoop(page, 6, { shots: true });
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("6 plays B, leaning up toward home", {
-    timeout: 5_000,
-  });
-  await page.getByTestId("react-continue").click();
+  await expect(page.getByText("6 plays B, leaning up toward home")).toBeVisible({ timeout: 5_000 });
+  await reactContinue(page).click();
 
   // Preferences: a flavour previewed and chosen, 25 minutes a day.
   await expectStep(page, "prefs");
@@ -102,7 +102,7 @@ test("gate journey 1: a fresh learner goes through onboarding with a microphone"
   await expect(page.getByTestId("tutor-ready")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("tutor-sends")).toContainText("Never your voice", { timeout: 5_000 });
   await page.getByTestId("tutor-ask").click();
-  await expect(page.getByTestId("tutor-ask")).toBeDisabled({ timeout: 5_000 });
+  await expect(page.getByTestId("tutor-asked")).toBeVisible({ timeout: 5_000 });
   await shootOnboarding(page, "06-tutor");
   await page.getByTestId("tutor-continue").click();
 
@@ -111,7 +111,7 @@ test("gate journey 1: a fresh learner goes through onboarding with a microphone"
   await page.getByTestId("lr-play").click();
   await page.getByTestId("lr-left").click({ timeout: 10_000 });
   await shootOnboarding(page, "07-headphones");
-  await page.getByTestId("part-continue").click();
+  await partContinue(page).click();
 
   // Microphone: the privacy line, permission, a live signal, the quiet room, no bleed.
   await expectStep(page, "mic");
@@ -125,26 +125,26 @@ test("gate journey 1: a fresh learner goes through onboarding with a microphone"
   await expect(page.getByTestId("mic-live")).toBeVisible({ timeout: 15_000 });
   // The shell's indicator is truthful: on while the stream is open.
   await expect(page.getByRole("button", { name: /Microphone is live/ })).toBeVisible({ timeout: 5_000 });
-  await expect(page.getByText("Oak can hear you.")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Oak can hear you.", { exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("mic-note")).toHaveText(/^C4 /, { timeout: 5_000 });
   await shootOnboarding(page, "09-mic-live");
-  await page.getByTestId("part-continue").click();
+  await partContinue(page).click();
   await page.getByTestId("noise-start").click();
   await expect(page.getByText("Quiet enough")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("button", { name: /Microphone is live/ })).toHaveCount(0, { timeout: 5_000 });
-  await page.getByTestId("part-continue").click();
+  await partContinue(page).click();
   await page.getByTestId("bleed-start").click();
-  await expect(page.getByText("No bleed")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("The mic doesn't hear your speakers")).toBeVisible({ timeout: 15_000 });
   await shootOnboarding(page, "10-mic-done");
-  await page.getByTestId("part-continue").click();
+  await partContinue(page).click();
 
   // Range: the sweep hears A2 and E4.
   await expectStep(page, "range");
   await page.getByTestId("range-start").click();
   await expect(page.getByTestId("range-sweeping")).toBeVisible({ timeout: 5_000 });
-  await expect(page.getByText(/Your singing zone: A2–E4/)).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("range-detail")).toContainText("A2–E4", { timeout: 20_000 });
   await shootOnboarding(page, "11-range");
-  await page.getByTestId("part-continue").click();
+  await partContinue(page).click();
 
   // Timing: 16 taps (dispatched on each click as the dots light), then 8 sung "da"s from the fake mic.
   await expectStep(page, "latency");
@@ -152,10 +152,12 @@ test("gate journey 1: a fresh learner goes through onboarding with a microphone"
   await expect(page.getByText(/Your taps land \d+ ms (after|before) the click/)).toBeVisible({
     timeout: 20_000,
   });
+  // Timing has two sub-steps: tapping, then singing.
+  await partContinue(page).click();
   await page.getByTestId("sing-start").click();
   await expect(page.getByText(/Your voice lands \d+ ms/)).toBeVisible({ timeout: 20_000 });
   await shootOnboarding(page, "12-latency");
-  await page.getByTestId("part-continue").click();
+  await partContinue(page).click();
 
   // The first sung note: C, any octave.
   await expectStep(page, "first-sing");
@@ -163,7 +165,7 @@ test("gate journey 1: a fresh learner goes through onboarding with a microphone"
   await expect(page.getByText("That note is 1: home.")).toBeVisible({ timeout: 25_000 });
   await expect(page.getByRole("button", { name: /Microphone is live/ })).toHaveCount(0, { timeout: 5_000 });
   await shootOnboarding(page, "13-first-sing");
-  await page.getByTestId("part-continue").click();
+  await partContinue(page).click();
 
   // Sketch 001.
   await expectStep(page, "sketch");
@@ -420,7 +422,7 @@ test("Quiet mode: onboarding without a microphone, then one session", async ({ p
   await openToday(page);
   await page.getByTestId("begin-onboarding").click();
   await throughTheLoop(page, 5);
-  await page.getByTestId("react-continue").click();
+  await reactContinue(page).click();
   await expectStep(page, "prefs");
   await page.getByTestId("prefs-continue").click();
   await expectStep(page, "tutor");
@@ -428,13 +430,17 @@ test("Quiet mode: onboarding without a microphone, then one session", async ({ p
   await expectStep(page, "headphones");
   await page.getByTestId("lr-play").click();
   await page.getByTestId("lr-left").click({ timeout: 10_000 });
-  await page.getByTestId("part-continue").click();
+  await partContinue(page).click();
   await expectStep(page, "mic");
   await page.getByTestId("mic-quiet").click();
-  // Quiet mode passes over range and the first note; the latency screen keeps only taps, which can wait.
+  // Quiet mode passes over the range; the latency screen keeps only taps, which can wait; the first note is a
+  // listening step.
   await expectStep(page, "latency");
   await expect(page.getByTestId("onboarding")).toHaveAttribute("data-quiet", "1");
   await page.getByTestId("part-skip").click();
+  await expectStep(page, "first-sing");
+  await page.getByTestId("first-sing-start").click();
+  await partContinue(page).click();
   await expectStep(page, "sketch");
   await expect(page.getByTestId("workbench")).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("sketch-save").click();

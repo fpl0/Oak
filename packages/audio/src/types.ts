@@ -117,12 +117,19 @@ export interface Calibration {
   noiseCheck(seconds?: number): Promise<QuietCheck>;
   /** Plays 880, 1175 and 1568 Hz with the mic open: true when the mic hears the speakers. */
   bleedTest(): Promise<boolean>;
-  /** 16 clicks; the learner taps along. `onClick` reports progress. */
-  tapLatency(taps: AsyncIterable<number>, onClick?: (i: number) => void): Promise<TapLatencyResult>;
-  /** 8 clicks; the learner sings "da" on each. */
-  singLatency(onClick?: (i: number) => void): Promise<number>;
-  /** Lowest and highest comfortable notes. */
-  rangeSweep(onFrame?: (frame: PitchFrame) => void): Promise<RangeResult>;
+  /**
+   * 16 clicks; the learner taps along. `onClick` reports progress. `signal` (the learner's Stop) ends the take
+   * early: the result is measured from the taps so far.
+   */
+  tapLatency(
+    taps: AsyncIterable<number>,
+    onClick?: (i: number) => void,
+    signal?: AbortSignal,
+  ): Promise<TapLatencyResult>;
+  /** 8 clicks; the learner sings "da" on each. `signal` ends the take early (measured from what was heard). */
+  singLatency(onClick?: (i: number) => void, signal?: AbortSignal): Promise<number>;
+  /** Lowest and highest comfortable notes. `signal` ends the sweep early (estimated from what was heard). */
+  rangeSweep(onFrame?: (frame: PitchFrame) => void, signal?: AbortSignal): Promise<RangeResult>;
   /** Three pitch-match trials inside the measured range; cents error of each. */
   pitchMatch(targets: number[]): Promise<number[]>;
 }

@@ -24,7 +24,7 @@ test("a take with no voice says Oak didn't hear one (never 'Code didn't run.')",
   const summary = page.getByTestId("step-feedback-summary");
   await expect(summary).toContainText("didn't hear a voice");
   await expect(summary).not.toContainText("Code");
-  // The learner is never stuck: Skip stays, and singing again is offered.
-  await expect(page.getByRole("button", { name: "Sing it again" })).toBeEnabled();
+  // The learner is never stuck: Skip stays, and singing again is offered (the result row's Try again).
+  await expect(page.getByTestId("result-retry")).toBeEnabled();
   expect(problems).toEqual([]);
 });

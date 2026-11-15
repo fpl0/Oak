@@ -70,13 +70,14 @@ export async function throughTheLoop(page: Page, value: number, opts: { shots?: 
   if (opts.shots) await shootAll(page, "02-loop-building");
   await expect(page.locator('[data-layer="mel"]')).toHaveAttribute("data-on", "1", { timeout: 20_000 });
   await expect(page.getByTestId("loop-continue")).toBeEnabled();
-  await page.getByTestId("loop-continue").focus();
+  await expect(page.getByTestId("loop-continue")).toBeFocused();
   await page.keyboard.press("Enter");
   await expectStep(page, "edit");
   const box = page.locator(".oak-mark-target");
   await expect(box).toHaveText("4");
+  // The cursor is already on the boxed number: the learner just types the new one (keyboard only).
+  await expect(page.locator(".cm-content")).toBeFocused();
   if (opts.shots) await shootAll(page, "03-edit");
-  await box.dblclick();
   await page.keyboard.type(String(value));
   await page.keyboard.press("ControlOrMeta+Enter");
   await expectStep(page, "react");
@@ -104,7 +105,33 @@ export async function fromTheReaction(
   await page.goto("/onboarding/1");
   await expectStep(page, "react");
   await page.getByTestId("gate-start").click();
-  await expect(page.getByTestId("react-continue")).toBeVisible();
+  await expect(reactContinue(page)).toBeVisible();
+}
+
+/** The reaction screen's Continue (the kit's result row: Try again, then Continue). */
+export const reactContinue = (page: Page) => page.getByTestId("react-actions").getByTestId("result-continue");
+
+/** The primary of a set-up part's result row (Continue), and its Try again. */
+export const partContinue = (page: Page) => page.getByTestId("part-actions").getByTestId("result-continue");
+export const partRetry = (page: Page) => page.getByTestId("part-actions").getByTestId("result-retry");
+
+/** The header's visible progress ("Step 8 of 13 · Microphone · 2 of 3: a quiet moment"). */
+export const position = (page: Page) => page.getByTestId("rail-position");
+
+/** Taps Space as each of the 16 clicks lights (the tap must already be started). */
+export async function tapAlong(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const list = document.querySelector('[data-testid="latency-tap"] ol');
+    let last = -1;
+    const obs = new MutationObserver(() => {
+      const i = [...(list?.children ?? [])].findIndex((li) => li.getAttribute("aria-current") === "step");
+      if (i > last) {
+        last = i;
+        setTimeout(() => window.dispatchEvent(new KeyboardEvent("keydown", { code: "Space", key: " " })), 15);
+      }
+    });
+    if (list) obs.observe(list, { subtree: true, attributes: true });
+  });
 }
 
 /** Wipes the stack's data between tests (the data dir is shared by every test of a run). */
@@ -123,4 +150,35 @@ export async function resetData(request: import("@playwright/test").APIRequestCo
  */
 export async function noHmr(page: Page): Promise<void> {
   await page.routeWebSocket(/\/(\?token=|@vite)/, () => {});
+}
+
+/** Steps before the microphone, as `completed` in `PUT /api/onboarding`. */
+export const BEFORE_MIC = ["welcome", "loop", "edit", "react", "prefs", "tutor", "headphones"] as const;
+
+/**
+ * The dev seed's learner (at the reaction), placed at `step` with the steps before it done and a working mic
+ * measured (the room at −70 dBFS): a spec about one late step starts there without walking the set-up.
+ */
+export async function placeAt(
+  request: import("@playwright/test").APIRequestContext,
+  apiURL: string,
+  step: string,
+  completed: readonly string[],
+) {
+  const h = { "x-oak": "1", "content-type": "application/json", origin: apiURL };
+  expect((await request.put(`${apiURL}/api/dev/clock`, { headers: h, data: { reset: true } })).ok()).toBe(
+    true,
+  );
+  const point = "onboarding at react (edit 6)";
+  expect((await request.post(`${apiURL}/api/dev/seed`, { headers: h, data: { point } })).ok()).toBe(true);
+  const onb = await request.put(`${apiURL}/api/onboarding`, {
+    headers: h,
+    data: { step, completed, skipped: [] },
+  });
+  expect(onb.ok()).toBe(true);
+  const profile = await request.put(`${apiURL}/api/profile`, {
+    headers: h,
+    data: { inputKind: "builtin", noiseFloorDb: -70, outputKind: "wired" },
+  });
+  expect(profile.ok()).toBe(true);
 }

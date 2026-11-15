@@ -55,7 +55,7 @@ test("the mic hears the playback: sing.bleed with its fallback, Quiet mode for t
   await expect(rows).toHaveCount(1);
   await expect(rows.nth(0)).toContainText("the mic heard the playback");
   await expect(page.getByTestId("match-verdict")).toHaveCount(0);
-  await expect(page.getByTestId("match-start")).toHaveText("Try the three notes again");
+  await expect(page.getByTestId("result-retry")).toBeVisible();
   await expect(page.getByTestId("bleed-check")).toHaveAttribute("href", /part=bleed/);
   await shootAll(page, "50-match-bleed");
   await expectNoOverflow(page);
@@ -79,7 +79,7 @@ test("the hint's other way out: the bleed check of the set-up, on its own", asyn
   await expect(page.getByTestId("recheck-hint")).toHaveAttribute("data-kind", "bleed", { timeout: 20_000 });
   await page.getByTestId("bleed-check").click();
   await expect(page).toHaveURL(/part=bleed/);
-  await expect(page.getByRole("heading", { name: "Bleed check" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Speaker check" })).toBeVisible();
   await shootAll(page, "51-bleed-check");
   await expectNoOverflow(page);
   expect(problems).toEqual([]);

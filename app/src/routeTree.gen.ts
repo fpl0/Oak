@@ -24,6 +24,7 @@ import { Route as DevQaRouteImport } from "./routes/dev/qa";
 import { Route as DevTelemetryRouteImport } from "./routes/dev/telemetry";
 import { Route as DevWorkbenchRouteImport } from "./routes/dev/workbench";
 import { Route as LearnLessonIdRouteImport } from "./routes/learn/$lessonId";
+import { Route as OnboardingIndexRouteImport } from "./routes/onboarding/index";
 import { Route as OnboardingStepRouteImport } from "./routes/onboarding/$step";
 import { Route as PracticeIndexRouteImport } from "./routes/practice/index";
 import { Route as PracticeFamilyIdRouteImport } from "./routes/practice/$familyId";
@@ -121,6 +122,11 @@ const DevWorkbenchRoute = DevWorkbenchRouteImport.update({
 const LearnLessonIdRoute = LearnLessonIdRouteImport.update({
   id: "/learn/$lessonId",
   path: "/learn/$lessonId",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const OnboardingIndexRoute = OnboardingIndexRouteImport.update({
+  id: "/onboarding/",
+  path: "/onboarding/",
   getParentRoute: () => rootRouteImport,
 } as any);
 const OnboardingStepRoute = OnboardingStepRouteImport.update({
@@ -271,6 +277,7 @@ export interface FileRoutesByFullPath {
   "/toolbox/$toolId": typeof ToolboxToolIdRoute;
   "/transcribe/$projectId": typeof TranscribeProjectIdRoute;
   "/album/": typeof AlbumIndexRoute;
+  "/onboarding/": typeof OnboardingIndexRoute;
   "/practice/": typeof PracticeIndexRoute;
   "/session/": typeof SessionIndexRoute;
   "/settings/": typeof SettingsIndexRoute;
@@ -310,6 +317,7 @@ export interface FileRoutesByTo {
   "/toolbox/$toolId": typeof ToolboxToolIdRoute;
   "/transcribe/$projectId": typeof TranscribeProjectIdRoute;
   "/album": typeof AlbumIndexRoute;
+  "/onboarding": typeof OnboardingIndexRoute;
   "/practice": typeof PracticeIndexRoute;
   "/session": typeof SessionIndexRoute;
   "/settings": typeof SettingsIndexRoute;
@@ -351,6 +359,7 @@ export interface FileRoutesById {
   "/toolbox/$toolId": typeof ToolboxToolIdRoute;
   "/transcribe/$projectId": typeof TranscribeProjectIdRoute;
   "/album/": typeof AlbumIndexRoute;
+  "/onboarding/": typeof OnboardingIndexRoute;
   "/practice/": typeof PracticeIndexRoute;
   "/session/": typeof SessionIndexRoute;
   "/settings/": typeof SettingsIndexRoute;
@@ -393,6 +402,7 @@ export interface FileRouteTypes {
     | "/toolbox/$toolId"
     | "/transcribe/$projectId"
     | "/album/"
+    | "/onboarding/"
     | "/practice/"
     | "/session/"
     | "/settings/"
@@ -432,6 +442,7 @@ export interface FileRouteTypes {
     | "/toolbox/$toolId"
     | "/transcribe/$projectId"
     | "/album"
+    | "/onboarding"
     | "/practice"
     | "/session"
     | "/settings"
@@ -472,6 +483,7 @@ export interface FileRouteTypes {
     | "/toolbox/$toolId"
     | "/transcribe/$projectId"
     | "/album/"
+    | "/onboarding/"
     | "/practice/"
     | "/session/"
     | "/settings/"
@@ -505,6 +517,7 @@ export interface RootRouteChildren {
   ToolboxToolIdRoute: typeof ToolboxToolIdRoute;
   TranscribeProjectIdRoute: typeof TranscribeProjectIdRoute;
   AlbumIndexRoute: typeof AlbumIndexRoute;
+  OnboardingIndexRoute: typeof OnboardingIndexRoute;
   PracticeIndexRoute: typeof PracticeIndexRoute;
   SessionIndexRoute: typeof SessionIndexRoute;
   StudioIndexRoute: typeof StudioIndexRoute;
@@ -618,6 +631,13 @@ declare module "@tanstack/react-router" {
       path: "/learn/$lessonId";
       fullPath: "/learn/$lessonId";
       preLoaderRoute: typeof LearnLessonIdRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/onboarding/": {
+      id: "/onboarding/";
+      path: "/onboarding";
+      fullPath: "/onboarding/";
+      preLoaderRoute: typeof OnboardingIndexRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/onboarding/$step": {
@@ -836,6 +856,7 @@ const rootRouteChildren: RootRouteChildren = {
   ToolboxToolIdRoute: ToolboxToolIdRoute,
   TranscribeProjectIdRoute: TranscribeProjectIdRoute,
   AlbumIndexRoute: AlbumIndexRoute,
+  OnboardingIndexRoute: OnboardingIndexRoute,
   PracticeIndexRoute: PracticeIndexRoute,
   SessionIndexRoute: SessionIndexRoute,
   StudioIndexRoute: StudioIndexRoute,

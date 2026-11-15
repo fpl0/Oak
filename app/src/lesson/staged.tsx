@@ -178,10 +178,18 @@ export function StagedRenderer(props: ExerciseRendererProps) {
     writeStagedMemo(memo, value, found);
   });
   const [own, setOwn] = useState<{ stage: DictationStage; result: GradeResult } | null>(null);
+  // "Try again" (docs/design/retry.md §2.5): the stages open again from the first, the answers kept.
+  const retakes = useRef(h.retake);
+  useEffect(() => {
+    if (h.retake <= retakes.current) return;
+    retakes.current = h.retake;
+    setFeedback({});
+    setOwn(null);
+  }, [h.retake]);
   const last = spec.stages[spec.stages.length - 1] ?? null;
   const ready = spec.stages.every((s) => stageComplete(spec, s, value));
   const { check } = useCheck(props, () => (ready ? stagedResponse(spec, value) : null), rt);
-  // A step passed before (a revisit) or revealed shows every stage done.
+  // A step passed before (a revisit, a replay) opens its stages again as practice (docs/design/retry.md §5 row 9).
   // A reveal (rung 4: "Show me", the hint ladder's last rung, the tutor panel's Reveal) shows each stage not yet
   // right with its answer, and every stage is open.
   // (The host counts a reveal as `passed` for display; the step's own state says whether it was really passed.)
@@ -196,12 +204,10 @@ export function StagedRenderer(props: ExerciseRendererProps) {
             : ({ state: "revealed", correct: reveal[s] ?? [] } as const),
         ]),
       )
-    : h.passed || h.review
-      ? Object.fromEntries(spec.stages.map((s) => [s, { state: "correct" } as const]))
-      : feedback;
+    : feedback;
   const current = currentStage(spec, shown);
   const checkStage = async (stage: DictationStage) => {
-    if (!stageComplete(spec, stage, value) || h.checking) return;
+    if (!stageComplete(spec, stage, value) || h.checking || h.locked) return;
     // The last stage, a `together` flow and a checkpoint check everything: graded, saved, the step's verdict.
     if (together || stage === last) {
       setFeedback((f) => ({ ...f, [stage]: { state: "pending" } }));
@@ -229,13 +235,12 @@ export function StagedRenderer(props: ExerciseRendererProps) {
   };
   // The step's verdict marks the last stage (or, `together`, every stage) right once it passes.
   const final = h.result?.status === "pass";
-  const fb: StagedFeedback =
-    final && !h.review
-      ? {
-          ...shown,
-          ...Object.fromEntries((together ? spec.stages : [last]).map((s) => [s, { state: "correct" }])),
-        }
-      : shown;
+  const fb: StagedFeedback = final
+    ? {
+        ...shown,
+        ...Object.fromEntries((together ? spec.stages : [last]).map((s) => [s, { state: "correct" }])),
+      }
+    : shown;
   const stageRef = useRef(checkStage);
   stageRef.current = checkStage;
   useEffect(() => {
@@ -275,7 +280,7 @@ export function StagedRenderer(props: ExerciseRendererProps) {
               onChange={setValue}
               onCheckStage={(s) => void checkStage(s)}
               feedback={fb}
-              disabled={h.checking || h.review}
+              disabled={h.checking || h.locked}
               label="Your answer, stage by stage"
               idBase={`l-${h.step.id.toLowerCase()}-${h.seriesNo}-staged`}
               autoFocus
@@ -296,7 +301,7 @@ export function StagedRenderer(props: ExerciseRendererProps) {
       }
       actions={
         // The stage that is open, from the footer too: on a short screen its own button is below the fold.
-        current && !h.review ? (
+        current && !h.locked ? (
           <Button
             variant="primary"
             onClick={() => void checkStage(current)}
@@ -393,7 +398,7 @@ export function ByEarParts({
           variant="secondary"
           onClick={() => void checkPart()}
           loading={busy}
-          disabled={busy || h.review}
+          disabled={busy}
           data-testid="check-part"
         >
           Check this part

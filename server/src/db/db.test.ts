@@ -12,10 +12,10 @@ const repos = () => {
 };
 
 describe("schema", () => {
-  test("0001 to 0008 create every table of interfaces.md §7 plus Waves 2 to 7, and set user_version", () => {
+  test("0001 to 0010 create every table of interfaces.md §7 plus Waves 2 to 7, and set user_version", () => {
     const db = openDb(":memory:");
-    expect(schemaVersion(db)).toBe(9);
-    expect(latestVersion()).toBe(9);
+    expect(schemaVersion(db)).toBe(10);
+    expect(latestVersion()).toBe(10);
     const expected = [
       "settings",
       "learner_profile",
@@ -134,7 +134,7 @@ describe("schema", () => {
     try {
       const path = join(dir, "oak.db");
       const db = openDb(path);
-      db.run("PRAGMA user_version = 10");
+      db.run("PRAGMA user_version = 11");
       db.close();
       expect(() => openDb(path)).toThrow(/newer than this build/);
     } finally {

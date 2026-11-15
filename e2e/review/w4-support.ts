@@ -2,7 +2,10 @@
 // capstone days on this suite's real stack (Vite 5221, API 8821, the scripted fake tutor). Every spec starts from a
 // dev seed (wave4.md §6) and blocks Vite's HMR socket, so another engineer's save cannot remount a step mid-test.
 import { type APIRequestContext, expect, type Locator, type Page } from "@playwright/test";
+import { tryAgainIfShown } from "../journey/lesson-walk.ts";
 import { api } from "./support.ts";
+
+export { tryAgainIfShown };
 
 /** Seeds a named point (`mic: false` gives a learner without a mic: Quiet mode, reason no-mic). */
 export const seedPoint = (request: APIRequestContext, point: string, o: { mic?: boolean } = {}) =>
@@ -29,6 +32,8 @@ export async function openStep(page: Page, lessonId: string, stepId: string): Pr
 
 /** The keyboard step's chord builder: picks these MIDI notes by mouse, after clearing. */
 export async function buildChord(page: Page, midis: readonly number[]): Promise<void> {
+  // A verdict on screen: the answer is changed through Try again (docs/design/retry.md §2.5).
+  await tryAgainIfShown(page);
   const s = step(page);
   const clear = s.getByRole("button", { name: "Clear", exact: true });
   if (await clear.isEnabled()) await clear.click();

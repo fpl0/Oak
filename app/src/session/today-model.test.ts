@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { STEP_META } from "../onboarding/flow.ts";
 import { DAY, fixtureBootstrap, fixturePlan, fixtureSession, fixtureStreak, PLANS } from "./fixtures.ts";
 import {
   keepAlivePlan,
+  learnerObjective,
   looserTolerance,
+  onboardingPlace,
   setlistRows,
   type TodayInput,
   todayView,
@@ -42,6 +45,30 @@ describe("Today states (ux §1.4)", () => {
     expect(v.state).toBe("first-run");
     expect(v.primary?.action).toBe("onboarding");
     expect(v.keepAlive).toBe(false);
+  });
+
+  test("first run left half-way → where they are, and Continue (never Begin again)", () => {
+    const boot = fixtureBootstrap();
+    const fresh = { ...boot, profile: { ...boot.profile, onboardedAt: null } };
+    const begin = todayView(input({ boot: fresh, onboarding: { step: "welcome", completed: [] } }));
+    expect(begin.heading).toBe("Welcome to Oak");
+    expect(begin.primary).toEqual({ action: "onboarding", label: "Begin" });
+    expect(begin.lead).toBe(
+      "Your first loop in a minute, then about ten minutes to set up sound and your voice.",
+    );
+    const mid = todayView(
+      input({ boot: fresh, onboarding: { step: "mic", completed: ["welcome", "loop", "edit", "react"] } }),
+    );
+    expect(mid.state).toBe("first-run");
+    expect(mid.heading).toBe("Carry on setting up");
+    expect(mid.lead).toBe(`Step 8 of 13: ${STEP_META.mic.label}. Everything you have set up so far is kept.`);
+    expect(mid.primary).toEqual({ action: "onboarding", label: "Continue" });
+    expect(onboardingPlace({ step: "welcome", completed: ["welcome"] })).toEqual({
+      n: 1,
+      total: 13,
+      label: STEP_META.welcome.label,
+    });
+    expect(onboardingPlace(null)).toBeNull();
   });
 
   test("a session open today → Resume session", () => {
@@ -346,5 +373,20 @@ describe("Today from the server's record of the day (wave3.md §5.1)", () => {
       }),
     );
     expect(v.state).toBe("paused-week");
+  });
+});
+
+describe("learnerObjective (retry pass: Today after onboarding)", () => {
+  test("U00.L02 says what is new, not the set-up the learner just did", () => {
+    const line = learnerObjective(
+      "U00.L02",
+      "~12 min. Headphones (with AirPods guidance), mic, noise and bleed",
+    );
+    expect(line).toContain("What you set up today is kept");
+    expect(line).not.toMatch(/bleed|¢|octave folding|tonic/);
+  });
+  test("other lessons keep their syllabus objective", () => {
+    expect(learnerObjective("U01.L01", "Feel pulse and beat.")).toBe("Feel pulse and beat.");
+    expect(learnerObjective("U01.L01", null)).toBeNull();
   });
 });

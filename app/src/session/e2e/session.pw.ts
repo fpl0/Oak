@@ -61,6 +61,19 @@ test("a fresh learner sees one action: begin onboarding", async ({ page, request
   await expect(page.getByTestId("start-session")).toHaveCount(0);
   await settle(page);
   await shoot(page, SHOTS, "today-first-run", "paper");
+  // Left half-way (at the microphone): Today says where they are and carries on there, never "Begin" again.
+  await api(request, "PUT", "/api/onboarding", {
+    step: "mic",
+    completed: ["welcome", "loop", "edit", "react", "prefs", "tutor", "headphones"],
+  });
+  await today(page);
+  await expect(page.getByRole("heading", { name: "Carry on setting up" })).toBeVisible();
+  await expect(page.getByTestId("today-card")).toContainText(/Step 8 of 13: Microphone\./);
+  const carryOn = page.getByTestId("begin-onboarding");
+  await expect(carryOn).toHaveText("Continue");
+  await expect(carryOn).toHaveAttribute("href", /\/onboarding\/mic$/);
+  await settle(page);
+  await shoot(page, SHOTS, "today-onboarding-half-way", "paper");
 });
 
 test("after onboarding: the setlist for U01.L01, keyboard first, every glance card", async ({

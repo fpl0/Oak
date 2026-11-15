@@ -1267,6 +1267,11 @@ Second person, short, musical words, no exclamation marks on failure, no guilt.
 
 ## 8. Onboarding (first 10 minutes) = lesson U0.1 "Hello, loop"
 
+> **Superseded in part (2026-11-15).** The built order is welcome → loop → edit → react → prefs → tutor →
+> headphones → mic → range → latency → first-sing → sketch → coda (`app/src/onboarding/flow.ts`). The frame every
+> step uses, its words, each step's states, the paths without a mic and the retry rule are in
+> `docs/design/retry.md` §2 and §6, which win over the table below.
+
 **Wow loop** (shipped as `content/units/u00-start/l01-hello-loop.lesson.ts`; only the final melody token is editable):
 ```js
 // Oak · first loop

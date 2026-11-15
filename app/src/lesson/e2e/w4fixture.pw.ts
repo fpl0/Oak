@@ -15,7 +15,7 @@ import {
   PARTS_BASS_ONLY,
   PARTS_REF,
 } from "../dev/wave4-fixture.ts";
-import { expect, setCode, stepIs, test } from "./support.ts";
+import { expect, setCode, stepIs, test, tryAgainIfShown } from "./support.ts";
 import { noOverflow, reseedFresh, setQuiet } from "./w3support.ts";
 import { openFixture } from "./w4support.ts";
 
@@ -179,6 +179,8 @@ test("a lead sheet, the key panel over the grand staff, the bass clef, the Make"
   await page.getByTestId("lesson-step").locator('[data-option="F"]').click();
   await check(page);
   await verdict(page, /fail/);
+  // The verdict locks the answer until Try again (docs/design/retry.md §2.5).
+  await tryAgainIfShown(page);
   await page.getByTestId("lesson-step").locator('[data-option="Am"]').click();
   await check(page);
   await verdict(page, /pass/);
@@ -197,6 +199,7 @@ test("a lead sheet, the key panel over the grand staff, the bass clef, the Make"
   await typed.fill("C4:4 E4:4 G4:4");
   await check(page);
   await verdict(page, /fail/);
+  await tryAgainIfShown(page);
   await typed.fill("C3:4 E3:4 G3:4");
   await check(page);
   await verdict(page, /pass/);

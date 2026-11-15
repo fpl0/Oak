@@ -2,7 +2,7 @@
 // with `onCheck`, the Check button (Mod+Shift+Enter; "Save answer" in a checkpoint) and the step's own feedback
 // line, redacted to the rung. A by-ear step adds where its first difference is.
 import type { AttemptResponse, Exercise } from "@oak/api";
-import { useEffect, useRef, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { takeProblem } from "../answers/sing.ts";
 import type { AnswerFeedback } from "../answers/types.ts";
 import { IS_MAC } from "../ui/keys/KeymapProvider.tsx";
@@ -12,6 +12,7 @@ import { issueLines, shapeOf, summaryOf, viewFor } from "./feedback.ts";
 import { InlineMd, useStepHost } from "./frame.tsx";
 import type { InputRuntime } from "./inputs.tsx";
 import { firstWrongBar, isByEar } from "./rules.ts";
+import { CheckReasonContext } from "./StepFooter.tsx";
 import type { ExerciseRendererProps } from "./types.ts";
 
 export const CHECK_KEYS = IS_MAC ? "⌘⇧↵" : "Ctrl+Shift+Enter";
@@ -27,16 +28,21 @@ export function quietIn(mode: "lesson" | "checkpoint", checking: boolean): Answe
   return checking ? { state: "pending" } : { state: "idle" };
 }
 
-/** The check flow every renderer shares: grade in the browser, then report to the host. */
+/**
+ * The check flow every renderer shares: grade in the browser, then report to the host. While a verdict is on
+ * screen the answer is locked and a Check waits for "Try again" (docs/design/retry.md §2.5), except where the
+ * learner fixes the answer in a code editor (`whileLocked`: Run and Mod+Shift+Enter check again from there).
+ */
 export function useCheck(
   props: ExerciseRendererProps,
   build: () => AttemptResponse | null,
   rt: InputRuntime,
+  opts: { whileLocked?: boolean } = {},
 ) {
   const h = useStepHost();
   const [checked, setChecked] = useState(false);
   const run = async () => {
-    if (h.checking || h.review) return;
+    if (h.checking || (h.locked && opts.whileLocked !== true)) return;
     const response = build();
     if (!response) return;
     const result = await h.grade(response);
@@ -66,18 +72,25 @@ export function CheckButton({
 }) {
   const h = useStepHost();
   const label = h.mode === "checkpoint" ? "Save answer" : wanted;
-  const off = disabled || h.review;
-  const why = off && !h.review && !h.checking ? reason : null;
-  const whyId = `${h.mode}-${h.step.id}-check-why`;
+  const off = disabled || h.locked;
+  const why = off && !h.locked && !h.checking ? reason : null;
+  const whyId = checkReasonId(h.mode, h.step.id);
+  // The footer draws the reason above its row (the button sits in the row's primary place); a host without one
+  // (none today) gets it beside the button.
+  const toFooter = use(CheckReasonContext);
+  useEffect(() => {
+    toFooter?.(why);
+    return () => toFooter?.(null);
+  }, [toFooter, why]);
   return (
     <>
-      {why ? (
+      {why && !toFooter ? (
         <p id={whyId} className="basis-full text-right text-sm text-text-2" data-testid="check-reason">
           {why}
         </p>
       ) : null}
       <Button
-        variant={h.passed ? "secondary" : "primary"}
+        variant="primary"
         onClick={onClick}
         disabled={off}
         loading={h.checking}
@@ -85,10 +98,15 @@ export function CheckButton({
         title={why ?? `${label} (${CHECK_KEYS})`}
         {...(why ? { "aria-describedby": whyId } : {})}
       >
-        {label} <Kbd tone={h.passed ? "default" : "inverse"}>{CHECK_KEYS}</Kbd>
+        {label} <Kbd tone="inverse">{CHECK_KEYS}</Kbd>
       </Button>
     </>
   );
+}
+
+/** The id of a step's "why Check is not open" line (the footer draws it). */
+export function checkReasonId(mode: string, stepId: string): string {
+  return `${mode}-${stepId}-check-why`;
 }
 
 /** The step's own feedback line(s), redacted to the rung; announced politely. */
@@ -110,10 +128,12 @@ export function StepFeedback({ detail }: { detail: boolean }) {
         data-testid="step-feedback"
         data-status={r ? "saved" : "open"}
       >
-        {r ? "Answer saved. You can change it and save again, or go on." : ""}
+        {r ? "Answer saved." : ""}
       </p>
     );
-  if (!r) return <div aria-live="polite" className="sr-only" />;
+  // The same live region before and with the verdict (one element, filled by it): a region added together with
+  // its content is not announced by screen readers, so the verdict would go unheard before the focus moves on.
+  if (!r) return <section ref={box} aria-live="polite" aria-label="Check result" className="sr-only" />;
   const view = viewFor(r, h.rung, h.passed, h.render);
   // A take Oak could not hear (no voice, bleed, no taps) is said once by the summary; its diagnostic as a
   // "Somewhere in the piece: …" line would only repeat it in grader words.

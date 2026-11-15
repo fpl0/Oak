@@ -165,6 +165,7 @@ function toTrial(r: TrialRow): DrillTrialRecord {
     revealed?: boolean;
     modality?: DrillTrialRecord["modality"];
     sungResolution?: DrillTrialRecord["sungResolution"];
+    retries?: number;
   }>(r.trial_json, {
     params: {},
     confusion: null,
@@ -193,6 +194,7 @@ function toTrial(r: TrialRow): DrillTrialRecord {
     ...(trial.revealed === undefined ? {} : { revealed: trial.revealed }),
     ...(trial.modality === undefined ? {} : { modality: trial.modality }),
     ...(trial.sungResolution === undefined ? {} : { sungResolution: trial.sungResolution }),
+    ...(trial.retries === undefined ? {} : { retries: trial.retries }),
   };
 }
 
@@ -441,6 +443,7 @@ export class SrsRepo {
           ...(t.revealed === undefined ? {} : { revealed: t.revealed }),
           ...(t.modality === undefined ? {} : { modality: t.modality }),
           ...(t.sungResolution === undefined ? {} : { sungResolution: t.sungResolution }),
+          ...(t.retries === undefined ? {} : { retries: t.retries }),
         }),
         toJson(t.response),
         t.credit,

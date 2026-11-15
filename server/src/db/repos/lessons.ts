@@ -60,6 +60,8 @@ export interface NewAttempt {
   modality: "normal" | "fallback";
   disputed: boolean;
   tutorAssisted: boolean;
+  /** docs/design/retry.md §4: taken after the step already counted; stored, never counted. Default false. */
+  practice?: boolean;
   at: string;
 }
 
@@ -88,6 +90,8 @@ interface AttemptRow {
   at: string;
   /** Wave 5 (migration 0006, c2): the attempt arrived through a backup import. */
   imported?: number;
+  /** Migration 0010 (docs/design/retry.md §4): a practice attempt. */
+  practice?: number;
 }
 const toAttempt = (r: AttemptRow): StepAttempt => ({
   id: r.id,
@@ -105,6 +109,7 @@ const toAttempt = (r: AttemptRow): StepAttempt => ({
   feedbackCodes: fromJson<string[]>(r.feedback_codes, []),
   modality: r.modality as StepAttempt["modality"],
   disputed: bool(r.disputed),
+  practice: r.practice === 1,
   at: r.at,
 });
 
@@ -251,8 +256,8 @@ export class LessonsRepo {
       this.db,
       `INSERT INTO step_attempts (session_id, lesson_id, step_id, exercise_id, exercise_version, series_no, attempt_no,
          params_json, code, response_json, result_json, passed, score, adjusted, feedback_codes, hint_rung, assisted,
-         modality, disputed, tutor_assisted, at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         modality, disputed, tutor_assisted, practice, at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       a.sessionId,
       a.lessonId,
       a.stepId,
@@ -273,6 +278,7 @@ export class LessonsRepo {
       a.modality,
       int(a.disputed),
       int(a.tutorAssisted),
+      int(a.practice === true),
       a.at,
     );
     return this.attempt(lastInsertRowid) as StepAttempt;

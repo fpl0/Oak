@@ -11,7 +11,7 @@
 import { expect, test } from "@playwright/test";
 import { useUiPrefs } from "../support/ui.ts";
 import { shootAll, watch } from "./support.ts";
-import { openStep, quietHmr, seedPoint, step } from "./w4-support.ts";
+import { openStep, quietHmr, seedPoint, step, tryAgainIfShown } from "./w4-support.ts";
 import { checkFor, forgetLesson, noSideScroll, RAW } from "./w5-support.ts";
 
 const trialOf = (page: import("@playwright/test").Page) =>
@@ -148,6 +148,7 @@ test("U11.L07 S6: straight or swung answered wrong five times: never a dead end"
   expect(right).toMatch(/straight|swung/);
   const wrong = right === "swung" ? "straight" : "swung";
   for (let i = 0; i < 5; i++) {
+    await tryAgainIfShown(page);
     await step(page).locator(`[data-option="${wrong}"]`).click();
     const v = await checkFor(page, /fail/);
     expect(v).not.toMatch(RAW);

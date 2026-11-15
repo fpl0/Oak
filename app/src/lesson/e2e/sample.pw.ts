@@ -48,6 +48,8 @@ test("the gate sample plays end to end", async ({ page }) => {
   await page.locator('[data-question="2"] input').fill("4");
   await page.getByTestId("check").click();
   await expect(page.getByTestId("step-feedback")).toHaveAttribute("data-status", "fail");
+  // The verdict locks the answer until Try again (docs/design/retry.md §2.5).
+  await page.getByTestId("result-retry").click();
   await page.locator('[data-question="1"] [data-option="n0"]').click();
   await page.getByTestId("check").click();
   await expect(page.getByTestId("step-feedback")).toHaveAttribute("data-status", "pass");

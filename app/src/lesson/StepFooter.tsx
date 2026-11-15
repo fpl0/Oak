@@ -1,13 +1,36 @@
 // The prompt column's sticky footer (ux §3.1, §3.7, §3.8, contracts §11.8): the hint ladder (4 rungs, the server
 // keeps the rung; Reveal after 2 graded attempts, 3 for sing and tap), Ask Claude, "Report a grading problem",
-// "Try a new one", Wrap up, and Continue. Hints are free; the copy never shames.
+// "Try a new one", Wrap up, and the result row (docs/design/retry.md §2): Check before a result, then "Try again"
+// and Continue, through the kit's `useResultActions` (result-row.tsx). Hints are free; the copy never shames.
 import type { Exercise, HintLadder, HintRung, StepDef } from "@oak/api";
 import { ArrowRight, Lightbulb, MessageCircle } from "lucide-react";
-import type { ReactNode } from "react";
+import { createContext, type ReactNode, useState } from "react";
 import { Button, buttonClass } from "../ui/kit/Button.tsx";
 import { Kbd } from "../ui/kit/basics.tsx";
 import { InlineMd } from "./frame.tsx";
 import { hintText } from "./model.ts";
+import { ResultRow } from "./result-row.tsx";
+
+/**
+ * Where a Check button says why it is not open yet ("Bar 3 is still empty."): the footer draws the line above its
+ * row, so the button itself can sit in the row's primary place (`ResultActions` keeps that pair on one line).
+ */
+export const CheckReasonContext = createContext<((why: string | null) => void) | null>(null);
+
+/** Draws a Check button's reason line (with `id`, the button's `aria-describedby`) above the row it wraps. */
+export function CheckReasonSlot({ id, children }: { id: string; children: ReactNode }) {
+  const [reason, setReason] = useState<string | null>(null);
+  return (
+    <>
+      {reason ? (
+        <p id={id} className="text-right text-sm text-text-2" data-testid="check-reason">
+          {reason}
+        </p>
+      ) : null}
+      <CheckReasonContext value={setReason}>{children}</CheckReasonContext>
+    </>
+  );
+}
 
 const DEFAULT_NOTE = "Pass the check, or show the answer, to go on.";
 
@@ -27,8 +50,20 @@ export interface StepFooterProps {
   notice: string | null;
   canContinue: boolean;
   continueLabel: string;
-  /** The renderer's own buttons (Check). */
+  /** The renderer's own buttons (Check): the primary place before a result, hidden while one is shown. */
   actions: ReactNode;
+  /** The result on screen (a new value per verdict), or null: Try again shows with a result. */
+  resultKey: string | null;
+  /** Try again (null where nothing can be tried again: a Make, a step without an exercise). */
+  onRetry: (() => void) | null;
+  /** Where the focus goes after Try again (the pad, the editor, the take). */
+  retryFocus?: () => HTMLElement | null;
+  /** Move the focus to the row when a result appears in this visit (not when a step is revisited). */
+  focusOnResult: boolean;
+  /** The practice or reveal line (lib/retry.ts `retryLine`). */
+  line: string | null;
+  /** The id the Check button's reason line gets (its `aria-describedby`). */
+  reasonId: string;
   onHint(reveal: boolean): void;
   onContinue(): void;
   onAsk(): void;
@@ -183,26 +218,55 @@ export function StepFooter(p: StepFooterProps) {
           )}
         </div>
       )}
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {p.actions}
-        {p.step.kind !== "make" && (
-          <Button
-            variant={p.canContinue && p.continueLabel !== "Skip" ? "primary" : "secondary"}
-            onClick={p.onContinue}
-            disabled={!p.canContinue || p.busy}
-            data-testid="continue"
-            title={p.canContinue ? undefined : (p.continueNote ?? DEFAULT_NOTE)}
-            icon={<ArrowRight aria-hidden className="size-4" />}
-          >
-            {p.continueLabel}
-          </Button>
-        )}
-      </div>
-      {!p.canContinue && p.step.kind !== "make" && (
-        <p className="text-right text-xs text-text-3" data-testid="continue-note">
-          {p.continueNote ?? DEFAULT_NOTE}
-        </p>
-      )}
+      <CheckReasonSlot id={p.reasonId}>
+        <StepActions p={p} />
+      </CheckReasonSlot>
     </div>
+  );
+}
+
+/**
+ * The row (docs/design/retry.md §2.2). Before a result the renderer's Check holds the primary place and an open
+ * Continue (an ungraded step, a passed step looked back at, "Skip" on a sung step) waits at the left as a
+ * secondary, so one green button shows at a time. With a result: "Try again" and Continue, Continue last and
+ * focused when it is open (Enter goes on), Try again focused when it is held.
+ */
+function StepActions({ p }: { p: StepFooterProps }) {
+  const make = p.step.kind === "make";
+  const shown = p.resultKey !== null;
+  const checkHere = !shown && p.actions !== null && p.actions !== undefined && p.actions !== false;
+  const continueOpen = p.canContinue && !p.busy;
+  // Continue waits at the left while Check is the primary, or when it only skips.
+  const continueAside = !make && (checkHere || (p.continueLabel === "Skip" && !shown)) && p.canContinue;
+  const aside = continueAside ? (
+    <Button
+      variant="secondary"
+      onClick={p.onContinue}
+      disabled={!continueOpen}
+      data-testid="continue"
+      icon={<ArrowRight aria-hidden className="size-4" />}
+    >
+      {p.continueLabel}
+    </Button>
+  ) : null;
+  return (
+    <ResultRow
+      testId="step-actions"
+      continueTestId="continue"
+      resultKey={p.resultKey}
+      onRetry={p.onRetry}
+      retryDisabled={p.busy}
+      {...(p.retryFocus ? { retryFocus: p.retryFocus } : {})}
+      focusOnResult={p.focusOnResult}
+      onContinue={make || continueAside ? null : p.onContinue}
+      continueDisabled={!continueOpen}
+      continueLabel={p.continueLabel}
+      continueKeys="Enter"
+      continueNote={p.continueNote ?? DEFAULT_NOTE}
+      line={p.line}
+      action={checkHere || make ? p.actions : null}
+    >
+      {aside}
+    </ResultRow>
   );
 }

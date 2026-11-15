@@ -99,9 +99,18 @@ test("RN palette: numerals by digit, the wrong case named by bar and fixed with 
   await expect(page.getByTestId("step-feedback-summary")).toHaveText("Bar 3 is not right yet.");
   await expect(step(page).locator('[data-rn-slot="2"]')).toHaveAttribute("aria-label", /not this one/);
   await shootAll(page, "w4-chords-rn-case");
-  // Fixed by keys: the focus is on a slot, ← to bar 3, M.
-  expect((await active(page)).slot).not.toBeNull();
-  await page.keyboard.press("ArrowLeft");
+  // Fixed by keys: Try again (Alt+R) puts the focus back on a slot, ← to bar 3, M.
+  await expect(step(page).getByTestId("result-retry")).toBeEnabled();
+  await page.keyboard.press("Alt+KeyR");
+  await expect(step(page).getByTestId("result-retry")).toHaveCount(0);
+  await expect.poll(async () => (await active(page)).slot).not.toBeNull();
+  // ← and → walk the slots to bar 3 (the third slot), then M swaps its case.
+  for (let i = 0; i < 6; i++) {
+    const at = Number((await active(page)).slot);
+    if (at === 2) break;
+    await page.keyboard.press(at > 2 ? "ArrowLeft" : "ArrowRight");
+  }
+  expect((await active(page)).slot).toBe("2");
   await page.keyboard.press("m");
   await expect(step(page).locator('[data-rn-slot="2"]')).toHaveAttribute("aria-label", /^Bar 3: vi/);
   await checkStep(page, /pass/);
@@ -115,6 +124,9 @@ test("RN palette: numerals by digit, the wrong case named by bar and fixed with 
   // The field is read-only while a check runs, and the feedback's status can land a frame before the field opens
   // again: keys typed in that frame were dropped beside other suites (the race of this test). Wait for the field.
   const field = step(page).locator("[data-chord-name] input");
+  // The verdict locks the field; Try again (Alt+R) opens it and gives it the focus.
+  await expect(step(page).getByTestId("result-retry")).toBeEnabled();
+  await page.keyboard.press("Alt+KeyR");
   await expect(field).toBeFocused();
   await expect(field).toBeEditable();
   await page.keyboard.press("ControlOrMeta+A");

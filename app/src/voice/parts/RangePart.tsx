@@ -1,17 +1,20 @@
 // `voice.range` (ux §4.7, contracts §8.6): a ten-second sweep with a live pitch trace. Stores the range and the
 // comfortable middle of it, which Oak uses to move sung targets into the learner's own octave. No voice-type
-// labels, ever.
+// labels, ever. Any result can be measured again (docs/design/retry.md §3.4): a new sweep replaces the saved range
+// only when Oak caught one; a range saved earlier (a reload, Back) opens in its result, and "Set up later" is gone
+// once a range is saved (Continue is the way on).
 import type { PitchFrame } from "@oak/pitch";
 import { Mic } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { formatNoteMidi } from "../../lib/notes.ts";
+import { MEASURE_LINE } from "../../lib/retry.ts";
 import { Button } from "../../ui/kit/Button.tsx";
 import { Progress } from "../../ui/kit/basics.tsx";
 import { Callout } from "../../ui/kit/Controls.tsx";
-import { liveMidi, noteReadout, type RangeLike, rangeOk, rangeSummary } from "../logic.ts";
+import { liveMidi, noteReadout, type RangeLike, rangeOk, rangeWords } from "../logic.ts";
 import { PitchTrace } from "../PitchTrace.tsx";
 import { closeInput, voiceAudio } from "../services.ts";
-import { PartFooter, PartFrame, type PartProps, useSaveRun } from "./common.tsx";
+import { PartActions, PartFrame, type PartProps, StatusSlot, useSaveRun } from "./common.tsx";
 
 const SWEEP_SEC = 10;
 
@@ -22,27 +25,33 @@ export function sweepPrompt(t: number): string {
   return "…and settle on a comfortable middle note.";
 }
 
-type Phase = "intro" | "sweeping" | "result" | "unclear";
+type Phase = "ready" | "sweeping" | "result" | "unclear";
 
-export function RangePart({ profile, onDone, onSkip }: PartProps) {
-  const [phase, setPhase] = useState<Phase>("intro");
+function savedRange(p: PartProps["profile"]): RangeLike | null {
+  return p.vocalLowMidi !== null &&
+    p.vocalHighMidi !== null &&
+    p.comfortLowMidi !== null &&
+    p.comfortHighMidi !== null
+    ? {
+        lowMidi: p.vocalLowMidi,
+        highMidi: p.vocalHighMidi,
+        comfortLowMidi: p.comfortLowMidi,
+        comfortHighMidi: p.comfortHighMidi,
+      }
+    : null;
+}
+
+export function RangePart({ profile, onDone, onSkip, context, back }: PartProps) {
+  // Onboarding opens on a range saved earlier (a reload, Back); Settings' re-run starts a new sweep.
+  const resume = context === "onboarding";
+  const [range, setRange] = useState<RangeLike | null>(() => (resume ? savedRange(profile) : null));
+  const [phase, setPhase] = useState<Phase>(() => (resume && savedRange(profile) ? "result" : "ready"));
+  const [takes, setTakes] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [note, setNote] = useState<number | null>(null);
-  const [range, setRange] = useState<RangeLike | null>(
-    profile.vocalLowMidi !== null &&
-      profile.vocalHighMidi !== null &&
-      profile.comfortLowMidi !== null &&
-      profile.comfortHighMidi !== null
-      ? {
-          lowMidi: profile.vocalLowMidi,
-          highMidi: profile.vocalHighMidi,
-          comfortLowMidi: profile.comfortLowMidi,
-          comfortHighMidi: profile.comfortHighMidi,
-        }
-      : null,
-  );
   const [error, setError] = useState<string | null>(null);
   const frames = useRef<PitchFrame[]>([]);
+  const stop = useRef<AbortController | null>(null);
   const alive = useRef(true);
   const run = useSaveRun();
 
@@ -50,6 +59,7 @@ export function RangePart({ profile, onDone, onSkip }: PartProps) {
     alive.current = true;
     return () => {
       alive.current = false;
+      stop.current?.abort();
       closeInput();
     };
   }, []);
@@ -57,20 +67,27 @@ export function RangePart({ profile, onDone, onSkip }: PartProps) {
   const sweep = async () => {
     setError(null);
     frames.current = [];
+    setElapsed(0);
     setPhase("sweeping");
+    const ctl = new AbortController();
+    stop.current = ctl;
     const t0 = performance.now();
     const iv = setInterval(() => {
       setElapsed((performance.now() - t0) / 1000);
       setNote(liveMidi(frames.current));
     }, 100);
+    const end = (p: Phase) => {
+      setTakes((n) => n + 1);
+      setPhase(p);
+    };
     try {
       const { calibration } = await voiceAudio();
       const r = await calibration.rangeSweep((f) => {
         frames.current.push(f);
-      });
+      }, ctl.signal);
       if (!alive.current) return;
       if (!rangeOk(r)) {
-        setPhase("unclear");
+        end("unclear");
         return;
       }
       const saved = await run.save({
@@ -86,20 +103,23 @@ export function RangePart({ profile, onDone, onSkip }: PartProps) {
       if (!alive.current) return;
       if (saved) {
         setRange(r);
-        setPhase("result");
-      } else setPhase("intro");
+        end("result");
+      } else end(range ? "result" : "ready");
     } catch (e) {
       if (!alive.current) return;
-      if (e instanceof RangeError) setPhase("unclear");
+      if (e instanceof RangeError) end("unclear");
       else {
-        setPhase("intro");
+        setPhase(range ? "result" : "ready");
         setError(e instanceof Error ? e.message : String(e));
       }
     } finally {
       clearInterval(iv);
+      stop.current = null;
     }
   };
 
+  const shown = phase === "result" || phase === "unclear";
+  const words = range ? rangeWords(range) : null;
   const marks =
     range && phase === "result"
       ? [
@@ -111,8 +131,10 @@ export function RangePart({ profile, onDone, onSkip }: PartProps) {
   return (
     <PartFrame
       testId="part-range"
+      context={context}
       title="Your voice"
-      lead="Ten seconds: slide down to your lowest comfortable note, up to your highest, then settle in the middle. It tells Oak which keys suit your voice. There are no right answers and no voice types."
+      instruction="Sing an 'ooh' from your lowest comfortable note up to your highest, then settle in the middle."
+      lead="Ten seconds. It tells Oak which keys suit your voice. There are no right answers and no voice types."
     >
       <PitchTrace
         frames={() => frames.current}
@@ -134,49 +156,55 @@ export function RangePart({ profile, onDone, onSkip }: PartProps) {
           </p>
         </div>
       )}
-      {phase === "result" && range && (
-        <Callout tone="success" title={rangeSummary(range)}>
-          You can measure it again any time in Settings › Voice.
-        </Callout>
-      )}
-      {phase === "unclear" && (
-        <Callout tone="attention" title="Oak didn't catch a range">
-          It heard little or no change in pitch. Sing an "ooh" a little louder and slide further down and up,
-          or set this up later.
-        </Callout>
-      )}
-      {error && (
-        <Callout tone="issue" title="The microphone didn't open">
-          {error}
-        </Callout>
-      )}
-      <PartFooter
-        onSkip={phase === "sweeping" ? undefined : onSkip}
-        primary={
-          phase === "result" ? (
-            <Button variant="primary" onClick={onDone} data-testid="part-continue" autoFocus>
-              Continue
-            </Button>
-          ) : (
+      <StatusSlot>
+        {phase === "result" && words && (
+          <Callout tone="success" title={words.title}>
+            <span data-testid="range-result">Oak will choose keys that sit there.</span>
+            <span className="mt-1 block text-text-3" data-testid="range-detail">
+              {words.detail}
+            </span>
+          </Callout>
+        )}
+        {phase === "unclear" && (
+          <Callout tone="attention" title="Oak didn't catch a range">
+            <span data-testid="range-unclear">
+              It heard little or no change in pitch. Sing an "ooh" a little louder and slide further down and
+              up.
+              {range ? " Your saved range stays until a new one works." : ""}
+            </span>
+          </Callout>
+        )}
+        {error && (
+          <Callout tone="issue" title="The microphone didn't open">
+            {error}
+          </Callout>
+        )}
+      </StatusSlot>
+      <PartActions
+        context={context}
+        back={back}
+        onSkip={range ? null : onSkip}
+        running={phase === "sweeping" ? { label: "Listening…", onStop: () => stop.current?.abort() } : null}
+        resultKey={shown ? `${phase}-${takes}` : null}
+        onRetry={shown ? () => void sweep() : null}
+        onContinue={shown || range ? onDone : null}
+        continueDisabled={range === null || phase === "sweeping"}
+        continueNote="Sing a sweep Oak can measure to go on, or set it up later."
+        line={shown && range ? MEASURE_LINE : null}
+        action={
+          phase === "ready" ? (
             <Button
               variant="primary"
-              loading={phase === "sweeping"}
               onClick={() => void sweep()}
               icon={<Mic aria-hidden className="size-4" />}
               data-testid="range-start"
               autoFocus
             >
-              {phase === "intro" ? "Start the sweep" : "Sweep again"}
+              Start the sweep
             </Button>
-          )
+          ) : null
         }
-      >
-        {phase === "result" && (
-          <Button onClick={() => void sweep()} data-testid="range-again">
-            Sweep again
-          </Button>
-        )}
-      </PartFooter>
+      />
     </PartFrame>
   );
 }

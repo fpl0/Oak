@@ -1,8 +1,9 @@
 // What Today shows (ux §1.4): one decision — start the session — and the state around it. Pure, so every plan
 // and return state is unit-tested from fixture plans (today-model.test.ts). The page (TodayPage.tsx) renders it.
-import type { Bootstrap, SessionDay, SessionPlan, SideLessons, WarmupItem } from "@oak/api";
+import type { Bootstrap, OnboardingState, SessionDay, SessionPlan, SideLessons, WarmupItem } from "@oak/api";
 import { learnerDay } from "@oak/srs";
 import { otherOpenSessions, ownOpenSession, tabId } from "../lib/tab-session.ts";
+import { FLOW, STEP_META } from "../onboarding/flow.ts";
 import type { CapstoneDay } from "./capstone-day.ts";
 import type { CftDay } from "./cft-day.ts";
 import { type CourseEdge, edgeLead } from "./edge.ts";
@@ -36,6 +37,21 @@ export type TodayState =
   | "normal";
 
 export type RowKey = "warmup" | "recap" | "new" | "make" | "coda";
+/**
+ * The line Today shows under "Next time" for a lesson whose syllabus objective is written for authors, not for the
+ * learner who just did half of it: U00.L02 repeats nothing onboarding set up (its set-up parts say "Already set
+ * up"), so its line says what is new — the same words as the onboarding coda.
+ */
+export const LEARNER_NEXT_LINE: Readonly<Record<string, string>> = {
+  "U00.L02":
+    "What you set up today is kept, so it goes straight to the music: you sing the loop's home note, then make the tune end on it.",
+};
+
+/** What Today says a lesson is for: the learner line when there is one, else the syllabus objective. */
+export function learnerObjective(id: string, objective: string | null): string | null {
+  return LEARNER_NEXT_LINE[id] ?? objective;
+}
+
 export interface SetlistRow {
   key: RowKey;
   label: string;
@@ -121,6 +137,21 @@ export interface TodayInput {
   waiting?: string | null;
   /** Wave 6: what is open once the lessons of the core are done (finale-model.ts). */
   after?: AfterCore | null;
+  /**
+   * Onboarding as the server keeps it (`GET /onboarding`): a learner who left it half-way is told where they are
+   * and carries on ("Step 8 of 13: Microphone" + Continue), never "Begin" again (docs/design/retry.md §6.4).
+   */
+  onboarding?: Pick<OnboardingState, "step" | "completed"> | null;
+}
+
+/** Where a learner who left onboarding half-way stands, or null when they have not begun it. */
+export function onboardingPlace(
+  o: Pick<OnboardingState, "step" | "completed"> | null | undefined,
+): { n: number; total: number; label: string } | null {
+  if (!o || (o.step === "welcome" && o.completed.length === 0)) return null;
+  const n = FLOW.indexOf(o.step);
+  if (n < 0) return null;
+  return { n: n + 1, total: FLOW.length, label: STEP_META[o.step].label };
 }
 
 const WARMUP_LABEL: Record<WarmupItem["kind"], [string, string]> = {
@@ -336,8 +367,12 @@ function leadOf(state: TodayState, input: TodayInput): string | null {
   const { plan } = input;
   const title = plan.mapItemId ? input.titleOf(plan.mapItemId) : plan.title;
   switch (state) {
-    case "first-run":
-      return "About ten minutes to set up sound and your voice, then your first loop.";
+    case "first-run": {
+      const place = onboardingPlace(input.onboarding);
+      return place
+        ? `Step ${place.n} of ${place.total}: ${place.label}. Everything you have set up so far is kept.`
+        : "Your first loop in a minute, then about ten minutes to set up sound and your voice.";
+    }
     case "in-session":
       return "Everything you did is saved. Carry on from the block you were in.";
     case "done":
@@ -460,7 +495,7 @@ export function todayView(input: TodayInput): TodayView {
 
   const primary: TodayView["primary"] =
     state === "first-run"
-      ? { action: "onboarding", label: "Begin" }
+      ? { action: "onboarding", label: onboardingPlace(input.onboarding) ? "Continue" : "Begin" }
       : state === "in-session"
         ? { action: "resume", label: "Resume session" }
         : state === "done"
@@ -475,7 +510,13 @@ export function todayView(input: TodayInput): TodayView {
   const cft = state === "capstone" ? (input.cft ?? null) : null;
   return {
     state,
-    heading: cft ? (cft.fillsSlot ? "Transcription slot: your standard" : "Your standard") : HEADING[state],
+    heading: cft
+      ? cft.fillsSlot
+        ? "Transcription slot: your standard"
+        : "Your standard"
+      : state === "first-run" && onboardingPlace(input.onboarding)
+        ? "Carry on setting up"
+        : HEADING[state],
     lead: leadOf(state, input),
     rows,
     length,

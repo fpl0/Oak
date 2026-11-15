@@ -59,8 +59,18 @@ export async function noOverflow(page: Page): Promise<void> {
   expect(overflow).toBeLessThanOrEqual(0);
 }
 
+/**
+ * "check" means the answer's own control: Check before a verdict, "Try again" while one is on screen (the verdict
+ * locks the answer until then, docs/design/retry.md §2.5). Any other test id is itself.
+ */
+export function answerControl(page: Page, testId: string) {
+  return testId === "check"
+    ? page.getByTestId("check").or(page.getByTestId("lesson-step").getByTestId("result-retry"))
+    : page.getByTestId(testId);
+}
+
 export async function onScreen(page: Page, testId: string): Promise<void> {
-  const box = await page.getByTestId(testId).first().boundingBox();
+  const box = await answerControl(page, testId).first().boundingBox();
   const vp = page.viewportSize();
   expect(box, `${testId} on screen`).not.toBeNull();
   if (box && vp) {

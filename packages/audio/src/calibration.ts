@@ -41,13 +41,17 @@ export const CALIBRATION = {
   highTapLatencyMs: 120,
 } as const;
 
-/** Waits until the context clock reaches `t` (polling: AudioContext has no timer of its own). */
+/**
+ * Waits until the context clock reaches `t` (polling: AudioContext has no timer of its own), or until `signal`
+ * aborts (the learner pressed Stop).
+ */
 export async function waitUntil(
   ctx: Pick<BaseAudioContext, "currentTime">,
   t: number,
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+  signal?: AbortSignal,
 ): Promise<void> {
-  for (let guard = 0; ctx.currentTime < t && guard < 100_000; guard++) {
+  for (let guard = 0; ctx.currentTime < t && guard < 100_000 && signal?.aborted !== true; guard++) {
     await sleep(Math.min(50, Math.max(5, (t - ctx.currentTime) * 1000)));
   }
 }
@@ -128,7 +132,7 @@ export interface CalibrationExtras {
 export function createCalibration(deps: CalibrationDeps & CalibrationExtras): Calibration {
   const { ctx, mic } = deps;
   const sleep = deps.sleep;
-  const wait = (t: number) => waitUntil(ctx, t, sleep);
+  const wait = (t: number, signal?: AbortSignal) => waitUntil(ctx, t, sleep, signal);
   const panned = deps.playPanned ?? ((hz, pan, at, dur) => playPannedTone(ctx, hz, pan, at, dur));
 
   /** Opens the mic, runs `body`, always closes it. */
@@ -180,7 +184,7 @@ export function createCalibration(deps: CalibrationDeps & CalibrationExtras): Ca
       });
     },
 
-    async tapLatency(taps, onClick) {
+    async tapLatency(taps, onClick, signal) {
       const start = ctx.currentTime + CALIBRATION.leadIn;
       const clicks = Array.from(
         { length: CALIBRATION.tapClicks },
@@ -199,19 +203,21 @@ export function createCalibration(deps: CalibrationDeps & CalibrationExtras): Ca
       // Consume taps until the last click has passed, reporting click progress on the way.
       for (;;) {
         progress();
-        if (ctx.currentTime >= end) break;
+        if (ctx.currentTime >= end || signal?.aborted === true) break;
         const next = await Promise.race([
           it.next(),
           (sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms))))(50).then(() => null),
         ]);
         if (next === null) continue;
         if (next.done) {
-          await wait(end);
+          await wait(end, signal);
           break;
         }
         got.push(next.value);
       }
-      await it.return?.();
+      // After a Stop the source may still be waiting for a tap: close it without waiting on it.
+      if (signal?.aborted === true) void it.return?.();
+      else await it.return?.();
       progress();
       const r = calibrateTapLatency(got, clicks);
       const result: TapLatencyResult = {
@@ -223,7 +229,7 @@ export function createCalibration(deps: CalibrationDeps & CalibrationExtras): Ca
       return result;
     },
 
-    async singLatency(onClick) {
+    async singLatency(onClick, signal) {
       return withMic(async (s) => {
         const start = ctx.currentTime + CALIBRATION.leadIn;
         const clicks = Array.from(
@@ -233,8 +239,8 @@ export function createCalibration(deps: CalibrationDeps & CalibrationExtras): Ca
         for (const at of clicks) deps.playClick(at);
         let reported = -1;
         const end = (clicks[clicks.length - 1] as number) + 0.7;
-        while (ctx.currentTime < end) {
-          await wait(Math.min(end, ctx.currentTime + 0.05));
+        while (ctx.currentTime < end && signal?.aborted !== true) {
+          await wait(Math.min(end, ctx.currentTime + 0.05), signal);
           while (
             onClick &&
             reported + 1 < clicks.length &&
@@ -255,10 +261,10 @@ export function createCalibration(deps: CalibrationDeps & CalibrationExtras): Ca
       });
     },
 
-    async rangeSweep(onFrame) {
+    async rangeSweep(onFrame, signal) {
       return withMic(async (s) => {
         const off = onFrame ? s.onFrame(onFrame) : null;
-        await wait(ctx.currentTime + CALIBRATION.rangeSweepSec);
+        await wait(ctx.currentTime + CALIBRATION.rangeSweepSec, signal);
         off?.();
         const r = estimateRange(s.frames());
         if (!r) throw new RangeError("@oak/audio: the range sweep heard no sustained voice");

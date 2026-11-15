@@ -223,6 +223,8 @@ export function previewDeps(lesson: LessonDef): LessonDeps {
           ...s,
           attempts: s.attempts + (graded ? 1 : 0),
           passed: s.passed || a.result.status === "pass",
+          // docs/design/retry.md §3.1: after a pass, the next attempt is practice (said before the take).
+          practiceNext: s.passed || a.result.status === "pass",
         }),
         testedOut: [],
       };

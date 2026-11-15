@@ -58,7 +58,7 @@ test("the mic revoked mid-step: the next take says why and offers a way on; noth
   // The step is never stuck: Continue (or Skip) is open.
   await expect(page.getByTestId("continue")).toBeEnabled();
   // The second pattern asks for the mic again and is refused: the learner is told why, and can self-check.
-  const again = page.getByRole("button", { name: /^(Sing|Sing it again)$/ });
+  const again = page.getByRole("button", { name: /^(Sing|Try again)$/ });
   await again.last().click();
   await expect(
     page.getByText(/microphone is blocked|blocked for Oak|can't use the microphone/i).first(),

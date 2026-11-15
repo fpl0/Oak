@@ -5,22 +5,34 @@ import { firstSingPasses, midiToHz } from "@oak/pitch";
 import {
   bleedVerdict,
   centsWords,
+  FIRST_SING_MAX_SEC,
+  FIRST_SING_TAIL_SEC,
+  firstSingTake,
+  firstSingTakeOver,
   firstSingTonic,
   foldedCents,
   ladderSummary,
+  latencyResumeAt,
+  latencyWords,
   liveMidi,
   matchTargets,
   matchVerdict,
   matchWords,
+  micProblemOf,
+  micResumeAt,
   noiseVerdict,
   noteReadout,
+  offerRoomAnyway,
   outputChangeAdvice,
   outputChoiceOf,
   outputGuidance,
   phraseReadout,
+  quietChosen,
   rangeOk,
   rangeSummary,
+  rangeWords,
   singLatencyVerdict,
+  takeWords,
   tapVerdict,
 } from "./logic.ts";
 
@@ -31,7 +43,11 @@ describe("verdicts", () => {
   test("noise floor: below −45 dBFS is quiet", () => {
     expect(noiseVerdict(-60).ok).toBe(true);
     expect(noiseVerdict(-40).ok).toBe(false);
-    expect(noiseVerdict(-40).body).toContain("-40 dBFS");
+    // Plain words first, the number second (docs/design/retry.md §6.2).
+    expect(noiseVerdict(-60).title).toBe("Your room is quiet enough");
+    expect(`${noiseVerdict(-40).title} ${noiseVerdict(-40).body}`).not.toContain("dBFS");
+    expect(noiseVerdict(-40).detail).toBe("Room noise: -40 dBFS");
+    expect(`${bleedVerdict(true).title} ${bleedVerdict(false).title}`).not.toMatch(/bleed/i);
   });
   test("bleed", () => {
     expect(bleedVerdict(false).ok).toBe(true);
@@ -43,11 +59,21 @@ describe("verdicts", () => {
       "Your taps land 34 ms after the click",
     );
     expect(tapVerdict({ latencyMs: 180, jitterMs: 8, taps: 16 }).body).toContain("Bluetooth");
+    // Early taps say "before", never "-118 ms before".
+    expect(tapVerdict({ latencyMs: -118, jitterMs: 8, taps: 16 }).title).toBe(
+      "Your taps land 118 ms before the click",
+    );
   });
   test("sing latency: implausible values are not stored", () => {
     expect(singLatencyVerdict(Number.NaN).ok).toBe(false);
     expect(singLatencyVerdict(900).ok).toBe(false);
     expect(singLatencyVerdict(85).ok).toBe(true);
+    // A voice cannot answer a click before it: off-beat singing measured early is unclear, never saved.
+    expect(singLatencyVerdict(-222).ok).toBe(false);
+    expect(singLatencyVerdict(-31).ok).toBe(false);
+    expect(singLatencyVerdict(-30).ok).toBe(true);
+    expect(singLatencyVerdict(400).ok).toBe(true);
+    expect(singLatencyVerdict(401).ok).toBe(false);
   });
   test("copy is calm: no exclamation marks anywhere", () => {
     const all = [
@@ -62,6 +88,68 @@ describe("verdicts", () => {
       outputGuidance("wired"),
     ];
     for (const v of all) expect(`${v.title} ${v.body}`).not.toContain("!");
+  });
+});
+
+describe("range in plain words", () => {
+  test("size and place first, the note names in the details", () => {
+    const w = rangeWords({ lowMidi: 45, highMidi: 64, comfortLowMidi: 48, comfortHighMidi: 60 });
+    expect(w.title).toBe("Your comfortable range is about an octave, low to middle.");
+    expect(w.title).not.toMatch(/[A-G][♭♯]?\d/);
+    expect(w.detail).toBe("Comfortable notes C3–C4 · everything Oak heard A2–E4");
+    expect(rangeWords({ lowMidi: 55, highMidi: 76, comfortLowMidi: 57, comfortHighMidi: 69 }).title).toBe(
+      "Your comfortable range is about an octave, middle to high.",
+    );
+    expect(rangeWords({ lowMidi: 50, highMidi: 60, comfortLowMidi: 55, comfortHighMidi: 60 }).title).toBe(
+      "Your comfortable range is a little less than an octave, middle.",
+    );
+  });
+});
+
+describe("the first sung note's take", () => {
+  test("never ends on the pass itself: it waits for the voice to stop, at most 12 s", () => {
+    // The pass arrives half a second into the note: the learner is still singing, so the take goes on.
+    expect(firstSingTakeOver({ elapsed: 6.9, passed: true, silentFor: null })).toBe(false);
+    expect(firstSingTakeOver({ elapsed: 8, passed: true, silentFor: 0.4 })).toBe(false);
+    // One second after the voice stops, the result shows.
+    expect(firstSingTakeOver({ elapsed: 9, passed: true, silentFor: FIRST_SING_TAIL_SEC })).toBe(true);
+    // Silence without a pass keeps listening (the learner may come in late), until the window ends.
+    expect(firstSingTakeOver({ elapsed: 5, passed: false, silentFor: 4 })).toBe(false);
+    expect(firstSingTakeOver({ elapsed: FIRST_SING_MAX_SEC, passed: false, silentFor: null })).toBe(true);
+    expect(firstSingTakeOver({ elapsed: FIRST_SING_MAX_SEC, passed: true, silentFor: null })).toBe(true);
+  });
+});
+
+describe("what a retry counts for, and where a step resumes", () => {
+  test("the first sung note: the first pass is saved once; every take after it is practice", () => {
+    expect(firstSingTake(false, false)).toEqual({ practice: false, save: false });
+    expect(firstSingTake(false, true)).toEqual({ practice: false, save: true });
+    expect(firstSingTake(true, true)).toEqual({ practice: true, save: false });
+    // A practice take that misses never undoes the pass.
+    expect(firstSingTake(true, false)).toEqual({ practice: true, save: false });
+    expect(takeWords({ passed: true, cents: -4 })).toBe("on the note, spot on");
+    expect(takeWords({ passed: false, cents: 700 })).toBe("a steady note, but not this one");
+    expect(takeWords({ passed: false, cents: null })).toBe("no steady note heard");
+  });
+  test("the mic resumes at its first unmeasured sub-step", () => {
+    expect(micResumeAt({ noiseFloorDb: null, bleedMeasured: false })).toBe("ask");
+    expect(micResumeAt({ noiseFloorDb: null, bleedMeasured: true })).toBe("ask");
+    expect(micResumeAt({ noiseFloorDb: -70, bleedMeasured: false })).toBe("bleed");
+    expect(micResumeAt({ noiseFloorDb: -70, bleedMeasured: true })).toBe("bleed-done");
+  });
+  test("timing resumes at singing once tapping is measured", () => {
+    const both = { withTap: true, withSing: true };
+    expect(latencyResumeAt({ ...both, tapSaved: false, singSaved: false })).toBe("tap");
+    expect(latencyResumeAt({ ...both, tapSaved: true, singSaved: false })).toBe("sing");
+    expect(latencyResumeAt({ ...both, tapSaved: true, singSaved: true })).toBe("tap");
+    expect(latencyResumeAt({ withTap: true, withSing: false, tapSaved: true, singSaved: false })).toBe("tap");
+    expect(latencyResumeAt({ withTap: false, withSing: true, tapSaved: false, singSaved: false })).toBe(
+      "sing",
+    );
+  });
+  test("a room that is never quiet: 'Use this room anyway' after two voiced checks", () => {
+    expect(offerRoomAnyway(1)).toBe(false);
+    expect(offerRoomAnyway(2)).toBe(true);
   });
 });
 
@@ -205,5 +293,36 @@ describe("the test phrase's read-out", () => {
     expect(phraseReadout(reading({ levelDb: Number.NEGATIVE_INFINITY }))).toBe(
       "Nothing reached the output while Oak was measuring.",
     );
+  });
+});
+
+describe("Quiet mode as chosen, and a mic that fails mid-step", () => {
+  test("Quiet for today chosen in Settings counts, though the profile's own flag is off", () => {
+    const off = { quiet: false };
+    expect(quietChosen({ quiet: true, quietReason: "today" }, off)).toBe(true);
+    expect(quietChosen({ quiet: true, quietReason: "always" }, off)).toBe(true);
+    // No mic set up yet is not a choice: onboarding's mic step is where it is set up.
+    expect(quietChosen({ quiet: true, quietReason: "no-mic" }, off)).toBe(false);
+    expect(quietChosen({ quiet: false, quietReason: null }, { quiet: true })).toBe(false);
+    // Before GET /voice answers (or on an older server), the profile decides.
+    expect(quietChosen(null, { quiet: true })).toBe(true);
+    expect(quietChosen(undefined, off)).toBe(false);
+  });
+  test("an unplugged or refused mic is named; anything else keeps its own words", () => {
+    const mic = (reason: string) => Object.assign(new Error("x"), { name: "MicError", reason });
+    expect(micProblemOf(mic("no-device"))).toEqual({ problem: "no-device" });
+    expect(micProblemOf(mic("denied"))).toEqual({ problem: "denied" });
+    expect(micProblemOf(new DOMException("gone", "NotFoundError"))).toEqual({ problem: "no-device" });
+    expect(micProblemOf(new DOMException("no", "NotAllowedError"))).toEqual({ problem: "denied" });
+    expect(micProblemOf(mic("worklet"))).toEqual({ message: "x" });
+    expect(micProblemOf("boom")).toEqual({ message: "boom" });
+  });
+  test("latencies in words: early, late, on the click", () => {
+    expect(latencyWords(-136.4)).toBe("136 ms early");
+    expect(latencyWords(91)).toBe("91 ms late");
+    expect(latencyWords(0.3)).toBe("on the click");
+  });
+  test("a good speaker check reads as good news", () => {
+    expect(bleedVerdict(false).body).toBe("You can sing along while Oak plays.");
   });
 });

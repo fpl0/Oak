@@ -4,7 +4,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { expect, type Page } from "@playwright/test";
 import { stack } from "./playwright.config.ts";
-import { step } from "./w4-support.ts";
+import { step, tryAgainIfShown } from "./w4-support.ts";
 
 /**
  * The server's data dir: this suite's stack, or `OAK_REVIEW_DATA_DIR` when the specs run against a stack started
@@ -36,6 +36,8 @@ export async function verdict(page: Page): Promise<string> {
 
 /** Check (the step's own button) and wait for a verdict of this status. */
 export async function checkFor(page: Page, status: RegExp): Promise<string> {
+  // After a verdict, Check comes back through Try again (docs/design/retry.md §2.5).
+  await tryAgainIfShown(page);
   await step(page).page().getByTestId("check").click();
   await expect(feedback(page)).toHaveAttribute("data-status", status, { timeout: 30_000 });
   return verdict(page);

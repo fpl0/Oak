@@ -7,7 +7,7 @@
 // holds what checkpoint-w3.pw.ts asked of a whole U03.CP (the key signature, sung items and the Make among the items,
 // nothing set aside out of Quiet mode, ear and voice skills only setting the practice level, N03's line).
 import type { Page } from "@playwright/test";
-import { expect, test } from "./support.ts";
+import { expect, test, tryAgainIfShown } from "./support.ts";
 import { api, reseedFresh, seed, setQuiet } from "./w3support.ts";
 import { clickOption } from "./walk.ts";
 
@@ -81,6 +81,8 @@ async function fill(
   mode: string | undefined,
   a: Record<string, unknown>,
 ) {
+  // A saved answer is locked until Try again re-opens the item (docs/design/retry.md §3.2).
+  await tryAgainIfShown(page);
   const step = page.getByTestId("lesson-step");
   if (ui === "choice" && Array.isArray(a.choice)) {
     await clickOption(page, String(a.choice[0]));

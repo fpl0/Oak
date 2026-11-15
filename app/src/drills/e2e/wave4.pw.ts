@@ -129,16 +129,16 @@ test("a chord-quality set: the key first, the chord, then the bass alone, broken
       await expect(page.getByTestId("answer-in-context")).toBeVisible();
       await page.keyboard.press("b");
       await expect(page.getByTestId("stage-text")).toHaveText("Playing…");
-      await expect(page.getByTestId("stage-text")).toHaveText("Listen back, or move on.", {
+      await expect(page.getByTestId("stage-text")).toHaveText("Listen back, try again, or move on.", {
         timeout: 15_000,
       });
       await page.keyboard.press("g");
-      await expect(page.getByTestId("stage-text")).toHaveText("Listen back, or move on.", {
+      await expect(page.getByTestId("stage-text")).toHaveText("Listen back, try again, or move on.", {
         timeout: 15_000,
       });
       await page.keyboard.press("k");
       await expect(page.getByTestId("stage-text")).toHaveText("Playing…");
-      await expect(page.getByTestId("stage-text")).toHaveText("Listen back, or move on.", {
+      await expect(page.getByTestId("stage-text")).toHaveText("Listen back, try again, or move on.", {
         timeout: 20_000,
       });
       // The chord lenses: symbols and numerals appear only when switched on.
@@ -355,7 +355,9 @@ test("a schema set: name the loop; the answer in context lists each bar", async 
     await expect(page.getByTestId("answer-in-context").locator("li")).toHaveCount(4);
     if (i === 0) await shoot(page, SHOTS, "w4-schema-feedback", "paper");
     await page.getByTestId("hear-broken").click();
-    await expect(page.getByTestId("stage-text")).toHaveText("Listen back, or move on.", { timeout: 30_000 });
+    await expect(page.getByTestId("stage-text")).toHaveText("Listen back, try again, or move on.", {
+      timeout: 30_000,
+    });
     await page.getByTestId("next-trial").click();
   }
   expect(posts.size).toBe(3);

@@ -98,6 +98,7 @@ export {
 export * from "./PartLevels.tsx";
 export * from "./PlaySlider.tsx";
 export * from "./QueryState.tsx";
+export * from "./ResultActions.tsx";
 export * from "./ScopeFrame.tsx";
 export * from "./SectionRibbon.tsx";
 export * from "./Tabs.tsx";

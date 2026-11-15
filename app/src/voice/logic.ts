@@ -17,35 +17,47 @@ export const HIGH_TAP_MS = 120;
 export const MIN_TAPS = 8;
 /** A sing latency outside this window is a mis-detection (an onset found on the wrong click), not a latency. */
 export const SING_LATENCY_MAX_MS = 400;
+/**
+ * A voice cannot answer a click before it: a sung "da" measured more than 30 ms early was sung off the beat (or
+ * found on the wrong click). Such a take is "unclear" and never saved (docs/design/retry.md §6.5 item 3).
+ */
+export const SING_LATENCY_MIN_MS = -30;
 
 export type OutputChoice = "wired" | "bluetooth" | "speakers";
 
-export function noiseVerdict(db: number): { ok: boolean; title: string; body: string } {
-  const at = `${Math.round(db)} dBFS`;
+/**
+ * The quiet check in plain words (docs/design/retry.md §6.2): the words first, the number second (`detail`, shown
+ * small under the result).
+ */
+export function noiseVerdict(db: number): { ok: boolean; title: string; body: string; detail: string } {
+  const detail = `Room noise: ${Math.round(db)} dBFS`;
   if (db < NOISE_OK_DB)
     return {
       ok: true,
-      title: "Quiet enough",
-      body: `The room measured ${at}. Oak can hear a soft voice clearly.`,
+      title: "Your room is quiet enough",
+      body: "Oak can hear a soft voice clearly.",
+      detail,
     };
   return {
     ok: false,
-    title: "A little noisy here",
-    body: `The room measured ${at}. A quieter spot helps Oak hear you; you can carry on and re-check later.`,
+    title: "Your room is a little noisy",
+    body: "A quieter spot helps Oak hear you. You can carry on and check again later.",
+    detail,
   };
 }
 
+/** The speaker check ("bleed": the mic hearing Oak's own sound) in plain words. */
 export function bleedVerdict(heard: boolean): { ok: boolean; title: string; body: string } {
   return heard
     ? {
         ok: false,
-        title: "The mic hears the speakers",
-        body: "Singing along with playback would confuse it. Headphones fix this; until then Oak plays first and listens after.",
+        title: "The mic hears your speakers",
+        body: "When you sing, Oak plays first and listens after, so its own sound is never taken for your voice. Headphones let the two overlap.",
       }
     : {
         ok: true,
-        title: "No bleed",
-        body: "The mic did not hear the test tones. Playback and singing can overlap.",
+        title: "The mic doesn't hear your speakers",
+        body: "You can sing along while Oak plays.",
       };
 }
 
@@ -71,13 +83,13 @@ export function tapVerdict(r: { latencyMs: number; jitterMs: number; taps: numbe
     };
   return {
     ok: true,
-    title: `Your taps land ${ms} ms ${ms >= 0 ? "after" : "before"} the click`,
+    title: `Your taps land ${Math.abs(ms)} ms ${ms >= 0 ? "after" : "before"} the click`,
     body: `Oak subtracts that from every tap. Your taps vary by about ${Math.round(r.jitterMs)} ms.`,
   };
 }
 
 export function singLatencyVerdict(ms: number): { ok: boolean; title: string; body: string } {
-  if (!Number.isFinite(ms) || Math.abs(ms) > SING_LATENCY_MAX_MS)
+  if (!Number.isFinite(ms) || ms > SING_LATENCY_MAX_MS || ms < SING_LATENCY_MIN_MS)
     return {
       ok: false,
       title: "Oak couldn't line your voice up with the clicks",
@@ -104,6 +116,32 @@ export function rangeSummary(r: RangeLike): string {
   return `Your singing zone: ${zone} (comfortable ${comf}). Oak will choose keys that sit there.`;
 }
 
+/** Where a note sits for a voice, in words: below F3 low, above E4 high (no voice types, ever). */
+function registerWord(midi: number): "low" | "middle" | "high" {
+  if (midi < 53) return "low";
+  if (midi > 64) return "high";
+  return "middle";
+}
+
+/**
+ * The range in plain words (docs/design/retry.md §6.2): "Your comfortable range is about an octave, low to
+ * middle." The note names go in `detail`, shown small under it.
+ */
+export function rangeWords(r: RangeLike): { title: string; detail: string } {
+  const span = r.comfortHighMidi - r.comfortLowMidi;
+  const size =
+    span < 10 ? "a little less than an octave" : span <= 14 ? "about an octave" : "more than an octave";
+  const from = registerWord(r.comfortLowMidi);
+  const to = registerWord(r.comfortHighMidi);
+  const where = from === to ? from : `${from} to ${to}`;
+  const comf = `${formatNoteMidi(r.comfortLowMidi)}–${formatNoteMidi(r.comfortHighMidi)}`;
+  const zone = `${formatNoteMidi(r.lowMidi)}–${formatNoteMidi(r.highMidi)}`;
+  return {
+    title: `Your comfortable range is ${size}, ${where}.`,
+    detail: `Comfortable notes ${comf} · everything Oak heard ${zone}`,
+  };
+}
+
 /** A range is believable when it spans at least a few notes and sits inside the human voice (E1–C6). */
 export function rangeOk(r: RangeLike): boolean {
   return r.highMidi - r.lowMidi >= 3 && r.lowMidi >= 28 && r.highMidi <= 84;
@@ -119,6 +157,108 @@ export function firstSingTonic(p: Pick<Profile, "comfortLowMidi" | "comfortHighM
   const below = Math.floor(mid / 12) * 12;
   return mid - below <= 6 ? below : below + 12;
 }
+
+// --- the first sung note's take (docs/design/retry.md §2.5, §6.5 item 1) ------------------------------
+
+/** The longest a first-sing take listens, in seconds. */
+export const FIRST_SING_MAX_SEC = 12;
+/** Once the note has been held long enough to pass, the take ends this long after the voice stops. */
+export const FIRST_SING_TAIL_SEC = 1;
+
+/**
+ * Whether a first-sing take is over. It never ends the instant the live grade reaches a pass (that cut learners
+ * off half a second into their note): it runs while the learner holds the note, ends `FIRST_SING_TAIL_SEC` after
+ * the voice stops once a pass has been heard, and at most `FIRST_SING_MAX_SEC` after it began.
+ */
+export function firstSingTakeOver(s: {
+  /** Seconds since the take began listening. */
+  elapsed: number;
+  /** The live grade has credited the note. */
+  passed: boolean;
+  /** Seconds since the last voiced frame, or null while the voice is on (or none was heard yet). */
+  silentFor: number | null;
+}): boolean {
+  if (s.elapsed >= FIRST_SING_MAX_SEC) return true;
+  return s.passed && s.silentFor !== null && s.silentFor >= FIRST_SING_TAIL_SEC;
+}
+
+/** What one first-sing take says in the list of takes, in words (the cents stay in the details). */
+export function takeWords(t: { passed: boolean; cents: number | null }): string {
+  if (t.passed) return t.cents === null ? "on the note" : `on the note, ${centsWords(t.cents)}`;
+  if (t.cents !== null) return "a steady note, but not this one";
+  return "no steady note heard";
+}
+
+/**
+ * What a first-sing take is (docs/design/retry.md §3.4): once a take has passed, the step stays passed and every
+ * later take is practice; only the first passing take is saved (`first: true`).
+ */
+export function firstSingTake(counted: boolean, passed: boolean): { practice: boolean; save: boolean } {
+  return { practice: counted, save: !counted && passed };
+}
+
+// --- where a set-up step resumes after a reload or Back (docs/design/retry.md §6.4) --------------------------
+
+/** The mic step's sub-step to open on: the first not yet measured, its result shown when all are. */
+export function micResumeAt(s: {
+  noiseFloorDb: number | null;
+  bleedMeasured: boolean;
+}): "ask" | "bleed" | "bleed-done" {
+  if (s.noiseFloorDb === null) return "ask";
+  return s.bleedMeasured ? "bleed-done" : "bleed";
+}
+
+/** The timing step's sub-step to open on: singing once tapping is measured and singing is not. */
+export function latencyResumeAt(s: {
+  withTap: boolean;
+  withSing: boolean;
+  tapSaved: boolean;
+  singSaved: boolean;
+}): "tap" | "sing" {
+  if (!s.withTap) return "sing";
+  return s.withSing && s.tapSaved && !s.singSaved ? "sing" : "tap";
+}
+
+// --- Quiet mode and a mic that fails mid-step (docs/design/retry.md §6.4: no dead ends) ----------------------
+
+/**
+ * Quiet mode as the learner chose it (contracts §8.5): "just for today" or "until I switch it off", from
+ * `GET /voice` when the server answers it, else the profile's flag. "No microphone set up yet" is not a choice:
+ * onboarding's own mic step is where that gets set up, so it does not count here.
+ */
+export function quietChosen(
+  voice: { quiet: boolean; quietReason: string | null } | null | undefined,
+  profile: Pick<Profile, "quiet">,
+): boolean {
+  if (!voice) return profile.quiet;
+  return voice.quiet && voice.quietReason !== "no-mic";
+}
+
+/**
+ * What a failed measurement tells the learner: the browser refused the mic, there is no mic (unplugged mid-step),
+ * or the error's own words. Never nothing: a measurement that fails silently leaves the learner pressing Start.
+ */
+export function micProblemOf(e: unknown): { problem: "denied" | "no-device" } | { message: string } {
+  const name = e instanceof Error ? e.name : "";
+  const reason =
+    typeof e === "object" && e !== null && "reason" in e ? (e as { reason: unknown }).reason : null;
+  if ((name === "MicError" && reason === "denied") || name === "NotAllowedError")
+    return { problem: "denied" };
+  if ((name === "MicError" && reason === "no-device") || name === "NotFoundError")
+    return { problem: "no-device" };
+  return { message: e instanceof Error ? e.message : String(e) };
+}
+
+/** A latency in words for the result rows: "136 ms early", "91 ms late", "on the click". */
+export function latencyWords(ms: number): string {
+  const r = Math.round(ms);
+  if (r === 0) return "on the click";
+  return `${Math.abs(r)} ms ${r < 0 ? "early" : "late"}`;
+}
+
+/** Quiet checks that heard a voice before "Use this room anyway" is offered (a room that is never quiet). */
+export const VOICED_CHECKS_BEFORE_ANYWAY = 2;
+export const offerRoomAnyway = (voicedChecks: number) => voicedChecks >= VOICED_CHECKS_BEFORE_ANYWAY;
 
 /** A frame is voiced at the pipeline's clarity gate (contracts §8.1 rule 1). */
 export const voiced = (f: PitchFrame, clarity = 0.9) => f.clarity >= clarity && f.hz > 0;

@@ -1728,3 +1728,29 @@ beats this list; `docs/design/wave7.md` "Wave 7 state" is the summary, `docs/dec
   by capstones.ts) and `JC3_STAND_IN`; JC3's brief has ten tests. `content/validate/harness.ts`
   `GradeExtra.songForm`, `songFormOfId(songId)`; `briefContext` passes the song's chart to a brief with
   `device-count`. AC2's brief has a required `tune` line (`tracks`, role melody).
+
+## 27. Retry pass (2026-11-15): "Try again" on every judged exercise
+
+The learner's first feedback from real use ("when I get prompted to sing a note, there's no option to retry! Allow
+exercises to be retried!") made one control and one rule binding: docs/design/retry.md (§10 is what was built).
+
+- **The control.** `ResultActions` / `useResultActions` (`app/src/ui/kit/ResultActions.tsx`, exported from `ui/kit`):
+  `[secondaries…] … [action] [Try again ⌥R] [primary]`. Props: `resultKey` (a new value per result, `null` while
+  none), `onRetry`, `retryDisabled`, `retryFocus`, `onContinue`, `continueDisabled`, `continueLabel`, `continueKeys`,
+  `continueNote`, `continueTestId` (default `result-continue`), `line` (`lib/retry.ts` `retryLine`), `action`,
+  `describedBy`, `focusOnResult`, `shortcut` (only one row on screen binds the key). Test ids: `result-retry`,
+  `result-continue` (or the surface's own), `result-line`.
+- **Label and key.** `RETRY_LABEL` "Try again", `RETRY_KEYS` `Alt+R` (physical `KeyR`, global, allowed in inputs and the
+  editor; shown ⌥R on macOS). The shortcut sheet lists it under "Answers" (`ui/keys/sheet.ts`): "Alt+R Try again (after
+  any result: a check, a trial, a take, a measurement)" and "Enter" on a focused Continue.
+- **Focus.** On a new result: stays in an editable field (not a read-only one); else Continue when open; else Try
+  again. After Try again: `retryFocus()`.
+- **What a retry counts for** (server-decided; retry.md §3): `server/src/services/retry.ts` `countAttempt` (a lesson
+  attempt after a pass, in a completed lesson, or a second `predict` answer is practice: stored with
+  `step_attempts.practice = 1`, no evidence, no SRS, no test-out, no tolerance ladder; `step_state.attempts` +1) and
+  `keepFirstAnswer` (a drill trial's first answer stays its credit; `retries` counts). Migration
+  `0010_practice.sql`. API (additive, `@oak/api`): `StepAttempt.practice?`, `StepState.practiceNext?`,
+  `DrillTrialRecord.retries?`. A capstone version's rubric gives evidence once.
+- **Onboarding.** The focus header shows "Step N of 13 · name · sub" (`StepRail` `position`, `railPositionText`);
+  done and skipped dots are links (`onVisit`); `/onboarding` redirects to `/onboarding/1`. Each set-up part's footer
+  is `PartActions` (`voice/parts/common.tsx`); "Set up later" is the one skip word.

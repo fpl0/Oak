@@ -2,6 +2,22 @@
 
 Owner: **kit** (docs/design/wave4.md §1). Everyone else imports from here and never edits it; ask under `apiNotes`.
 
+## Retry pass (docs/design/retry.md; use these, never a local copy)
+
+- **`ResultActions`** (`kit/ResultActions.tsx`): the row every judged exercise shows after a result. Left: your
+  secondaries (auditions, Set up later, Back, Report). Right, never wrapping apart: **Try again** (secondary, ↺, key
+  cap ⌥R, `aria-keyshortcuts="Alt+R"`, described by the line) immediately before the **primary** (Continue, "Next
+  trial", "Next item"; drawn secondary while held). `action` holds your Check / Start before a result. `resultKey`
+  (new value per result, `null` while none) moves the focus: to Continue when open (Enter continues), else to Try
+  again, never out of the editor. `retryFocus` gets the focus after Try again. Binds `Alt+R` (global, works in the
+  editor and pads) while Try again is shown; `shortcut={false}` on every other row on screen. `useResultActions` is
+  the same logic for a bespoke layout. Lines and labels: `lib/retry.ts` (`RETRY_LABEL`, `PRACTICE_LINE`,
+  `retryLine`, `retryCount`). Specimens: `kit/gallery/KitRetry.tsx` (`mountKitRetry`), spec `kit/e2e/retry.pw.ts`.
+- **`StepRail`** gains `position` ("Step 8 of 13 · Microphone · 2 of 3: a quiet moment", `railPositionText`),
+  `onVisit` (done and skipped dots become buttons) and the `skipped` state; `useFocusHeaderContent(title, steps,
+  { position, onVisit })` passes them to the focus header.
+- The shortcut sheet's "Answers" section lists `Alt+R` (Try again) and Enter on a focused Continue.
+
 ## New in Wave 7 (use these instead of a local copy)
 
 `TrackCard`, `TwoLaneTapPad`, `VersionSwitch`, `ExportButton`, `PartLevels`, `EuclidRing`, `PlaySlider` — all exported

@@ -4,7 +4,12 @@
 // moves a learner who is mid-U03 onto the production server the way a person would (a backup made on the dev
 // stack, imported with the confirm nonce of contracts §11.6), starts that day's U03 session, and reloads it offline.
 import { expect, test } from "@playwright/test";
-import { expectStep, throughTheLoop } from "../../app/src/onboarding/e2e/helpers.ts";
+import {
+  expectStep,
+  partContinue,
+  reactContinue,
+  throughTheLoop,
+} from "../../app/src/onboarding/e2e/helpers.ts";
 import { PROD_URL, stack } from "./playwright.config.ts";
 import { expectClean, resetClock, seed, watch } from "./support.ts";
 
@@ -23,7 +28,7 @@ test("production: onboarding to Today, then an offline reload", async ({ browser
   });
   await page.getByTestId("begin-onboarding").click();
   await throughTheLoop(page, 6);
-  await page.getByTestId("react-continue").click();
+  await reactContinue(page).click();
   await expectStep(page, "prefs");
   await page.getByTestId("prefs-continue").click();
   await expectStep(page, "tutor");
@@ -31,13 +36,17 @@ test("production: onboarding to Today, then an offline reload", async ({ browser
   await expectStep(page, "headphones");
   await page.getByTestId("lr-play").click();
   await page.getByTestId("lr-left").click({ timeout: 10_000 });
-  await page.getByTestId("part-continue").click();
+  await partContinue(page).click();
   await expectStep(page, "mic");
   await page.getByTestId("mic-quiet").click();
-  // Quiet mode passes over range and the first note; the latency screen keeps only taps, which can wait.
+  // Quiet mode passes over the range; the latency screen keeps only taps, which can wait; the first note is a
+  // listening step.
   await expectStep(page, "latency");
   await expect(page.getByTestId("onboarding")).toHaveAttribute("data-quiet", "1");
   await page.getByTestId("part-skip").click();
+  await expectStep(page, "first-sing");
+  await page.getByTestId("first-sing-start").click();
+  await partContinue(page).click();
   await expectStep(page, "sketch");
   await expect(page.getByTestId("workbench")).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("sketch-save").click();

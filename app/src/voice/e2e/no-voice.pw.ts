@@ -37,8 +37,8 @@ test("no voice heard: the re-check suggestion appears in Settings › Voice and 
   await page.getByTestId("recheck-run").click();
   await expect(page).toHaveURL(/part=noise/);
   await page.getByTestId("noise-start").click();
-  await expect(page.getByText("Quiet enough")).toBeVisible({ timeout: 15_000 });
-  await page.getByTestId("part-continue").click();
+  await expect(page.getByText("Your room is quiet enough")).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId("result-continue").click();
   await expect(page.getByTestId("setup-done")).toBeVisible();
   await page.goto("/settings/voice");
   await expect(page.getByTestId("ladder-now")).toBeVisible();

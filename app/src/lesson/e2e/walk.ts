@@ -10,7 +10,7 @@
 // file is heard through, every other one is heard playing and moving, then skipped (listening never gates; see
 // `playUntilDone`). The Make is solved from its passing test and saved; the lesson must end complete on the server.
 import { type Locator, type Page, test as pwTest } from "@playwright/test";
-import { expect, setCode, snapshot, stepIs, submit } from "./support.ts";
+import { expect, setCode, snapshot, stepIs, submit, tryAgainIfShown } from "./support.ts";
 import { api } from "./w3support.ts";
 
 /** The lesson file's shape as far as the walker reads it (content-kit types stay out of the e2e project). */
@@ -269,6 +269,7 @@ const check = (page: Page) => page.getByTestId("check").click();
 
 /** Answers one investigate/run response through the question widgets. */
 async function answerQuestions(page: Page, part: PartLike, response: Record<string, unknown>) {
+  await tryAgainIfShown(page);
   const qs = part.questions ?? [];
   const parts = Array.isArray(response.parts) ? (response.parts as Record<string, unknown>[]) : null;
   for (const [i, q] of qs.entries()) {
@@ -453,6 +454,7 @@ export async function answerWidget(
   response: Record<string, unknown>,
   scope: Locator = page.getByTestId("lesson-step"),
 ): Promise<boolean> {
+  await tryAgainIfShown(page);
   const a = (response.answer ?? {}) as {
     choice?: string[];
     text?: string[];
@@ -674,6 +676,7 @@ export async function answerOrSubmit(
   response: Record<string, unknown>,
   scope: Locator = page.getByTestId("lesson-step"),
 ): Promise<"widget" | "submitted" | "none"> {
+  await tryAgainIfShown(page);
   if (part.kind !== "tap" && (await answerWidget(page, part, response, scope))) return "widget";
   if (part.kind === "tap" || WAVE5_UIS.has(part.answer?.ui ?? "")) {
     await submit(page, response);

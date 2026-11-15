@@ -3,13 +3,14 @@
 import type { Profile } from "@oak/api";
 import type { PatternPlayer } from "@oak/strudel";
 import { clsx } from "clsx";
-import { Pause, Play } from "lucide-react";
+import { ArrowRight, Pause, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { getOak } from "../../lib/oak.ts";
 import { useProfileUpdate } from "../../lib/queries.ts";
 import { Button } from "../../ui/kit/Button.tsx";
 import { Callout, SegmentedControl, type SegmentOption, Stepper } from "../../ui/kit/Controls.tsx";
 import { toast } from "../../ui/kit/Toast.tsx";
+import { PartActions, type PartBack } from "../../voice/parts/common.tsx";
 import type { PrefFlavour } from "../prefs.ts";
 import { PREVIEW_BPM, previewCode, withInstalledBanks } from "../prefs.ts";
 
@@ -26,7 +27,15 @@ const MINUTES: readonly SegmentOption<"15" | "20" | "25">[] = [
   { value: "20", label: "20 min" },
   { value: "25", label: "25 min" },
 ];
-export function PrefsScreen({ profile, onDone }: { profile: Profile; onDone(): void }) {
+export function PrefsScreen({
+  profile,
+  onDone,
+  back,
+}: {
+  profile: Profile;
+  onDone(): void;
+  back?: PartBack | null;
+}) {
   const [flavour, setFlavour] = useState<PrefFlavour>(
     profile.flavour === "flavour.jazz-soul" ? "flavour.jazz-soul" : "flavour.pop",
   );
@@ -92,7 +101,10 @@ export function PrefsScreen({ profile, onDone }: { profile: Profile; onDone(): v
         <h1 id="prefs-title" className="text-h1 outline-none" tabIndex={-1}>
           Your sound and your week
         </h1>
-        <p className="max-w-measure text-text-2">
+        <p className="max-w-[60ch] font-medium text-text" data-testid="step-instruction">
+          Pick a backing band and how much time you have; the defaults are fine.
+        </p>
+        <p className="max-w-[60ch] text-text-2">
           Most lessons put your part inside a small backing band. Pick the one you'd rather hear; it changes
           the sounds, never what you learn. You can change all of this in Settings.
         </p>
@@ -192,16 +204,27 @@ export function PrefsScreen({ profile, onDone }: { profile: Profile; onDone(): v
         </div>
       </div>
 
-      <div>
-        <Button
-          variant="primary"
-          onClick={() => void finish()}
-          loading={save.isPending}
-          data-testid="prefs-continue"
-        >
-          Continue
-        </Button>
-      </div>
+      <PartActions
+        context="onboarding"
+        back={back}
+        resultKey={null}
+        onRetry={null}
+        onContinue={null}
+        testId="prefs-actions"
+        action={
+          <Button
+            variant="primary"
+            onClick={() => void finish()}
+            loading={save.isPending}
+            icon={<ArrowRight aria-hidden className="size-4" />}
+            data-testid="prefs-continue"
+            // The defaults are fine: Enter goes on, as on every other step (Shift+Tab reaches the choices).
+            autoFocus
+          >
+            Continue
+          </Button>
+        }
+      />
     </section>
   );
 }

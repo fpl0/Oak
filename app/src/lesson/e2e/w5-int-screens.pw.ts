@@ -72,9 +72,10 @@ test("U09.L01: the tap verdict, the bar buttons and the end, in both themes and 
     "aria-checked",
     "true",
   );
-  // Keyboard: the digit picks a bar, Enter checks it.
+  await matrix(page, "w5-int-bar-buttons", ["result-retry", "continue"]);
+  // The verdict locks the bars until Try again (docs/design/retry.md §2.5); then the digit picks a bar.
+  await page.getByTestId("lesson-step").getByTestId("result-retry").click();
   await page.getByRole("radio", { name: "Bar 5", exact: true }).focus();
-  await matrix(page, "w5-int-bar-buttons", ["check", "continue"]);
   await page.keyboard.press("9");
   await expect(page.getByRole("radio", { name: "Bar 9", exact: true })).toHaveAttribute(
     "aria-checked",

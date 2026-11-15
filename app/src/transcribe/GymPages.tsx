@@ -5,13 +5,14 @@
 // again inside two weeks.
 import type { SongId } from "@oak/content-kit";
 import type { ChordSymbolStyle } from "@oak/notation";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useGymPlan, useUnlocks } from "../lib/queries.ts";
 import { Button } from "../ui/kit/Button.tsx";
 import { Card, PageHeader, Skeleton } from "../ui/kit/basics.tsx";
 import { Callout } from "../ui/kit/Controls.tsx";
+import { ResultActions } from "../ui/kit/ResultActions.tsx";
 import { AnalysisStage } from "./AnalysisStage.tsx";
 import { analysable, analysisSourceOf } from "./analysis-source.ts";
 import { localDay } from "./gym-after-core.ts";
@@ -65,7 +66,16 @@ function ItemBody({ item }: { item: GymItem }) {
   const [answers, setAnswers] = useState<Record<string, RhythmAnswer>>({});
   const [labCheck, setLabCheck] = useState<RhythmLabCheck | null>(null);
   const [revealed, setRevealed] = useState(false);
+  /** Checks run on this item: each one is a new result for the row (focus, Alt+R). */
+  const [checks, setChecks] = useState(0);
+  const navigate = useNavigate();
   const checked = chartCheck !== null || labCheck !== null;
+  /** Try again (docs/design/retry.md §5 #21): the marks and a shown answer go; the answer stays to be changed. */
+  const tryAgain = () => {
+    setChartCheck(null);
+    setLabCheck(null);
+    setRevealed(false);
+  };
   const passed = chartCheck?.passed || labCheck?.passed;
   const barMarks =
     item.kind === "jazz" && chartCheck
@@ -106,14 +116,15 @@ function ItemBody({ item }: { item: GymItem }) {
             style={style}
             check={revealed ? null : chartCheck}
             revealed={revealed ? item.chart : null}
-            onCheck={() =>
+            onCheck={() => {
               setChartCheck(
                 checkJazzChart(
                   item.chart,
                   cells.map((c) => parseChartCell(c)),
                 ),
-              )
-            }
+              );
+              setChecks((n) => n + 1);
+            }}
             label="Your chart"
           />
         ) : (
@@ -122,17 +133,15 @@ function ItemBody({ item }: { item: GymItem }) {
             answers={answers}
             onAnswer={(id, a) => setAnswers((x) => ({ ...x, [id]: a }))}
             check={revealed ? null : labCheck}
-            onCheck={() => setLabCheck(checkRhythmLab(item.tasks, answers))}
+            onCheck={() => {
+              setLabCheck(checkRhythmLab(item.tasks, answers));
+              setChecks((n) => n + 1);
+            }}
             revealed={revealed}
             groups={item.grouping}
           />
         )}
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {checked && !passed && !revealed ? (
-            <Button variant="ghost" onClick={() => setRevealed(true)} data-testid="gym-reveal">
-              {item.kind === "jazz" ? "Show the chart" : "Show the answers"}
-            </Button>
-          ) : null}
+        <div className="mt-3 flex flex-col gap-2">
           {revealed ? (
             <p className="text-sm text-text-2" role="status" data-testid="gym-revealed">
               Shown. Loop the bars you missed and listen for them now that you know where they are.
@@ -140,12 +149,28 @@ function ItemBody({ item }: { item: GymItem }) {
           ) : null}
           {passed ? (
             <p className="text-sm" role="status" data-testid="gym-done">
-              Done. The gym won't serve this one again for two weeks.{" "}
-              <Link to="/transcribe" className="underline">
-                Back to the gym
-              </Link>
+              Done. The gym won't serve this one again for two weeks.
             </p>
           ) : null}
+          <ResultActions
+            resultKey={checked || revealed ? `${checks}:${revealed}` : null}
+            onRetry={checked || revealed ? tryAgain : null}
+            retryFocus={() =>
+              document.querySelector<HTMLElement>(
+                '[data-testid="gym-item"] :is([data-testid="chart-cell"], [role="radio"][tabindex="0"], [data-testid="step"])',
+              )
+            }
+            onContinue={passed ? () => void navigate({ to: "/transcribe" }) : null}
+            continueLabel="Back to the gym"
+            continueTestId="gym-back"
+            testId="gym-actions"
+          >
+            {checked && !passed && !revealed ? (
+              <Button variant="ghost" onClick={() => setRevealed(true)} data-testid="gym-reveal">
+                {item.kind === "jazz" ? "Show the chart" : "Show the answers"}
+              </Button>
+            ) : null}
+          </ResultActions>
         </div>
       </Card>
     </div>

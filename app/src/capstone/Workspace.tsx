@@ -49,6 +49,7 @@ import { useHotkeys } from "../ui/keys/KeymapProvider.tsx";
 import { Button } from "../ui/kit/Button.tsx";
 import { Chip, Kbd } from "../ui/kit/basics.tsx";
 import { Callout } from "../ui/kit/Controls.tsx";
+import { ResultActions } from "../ui/kit/ResultActions.tsx";
 import { toast } from "../ui/kit/Toast.tsx";
 import { useWorkbenchServices } from "../workbench/services.tsx";
 import { Workbench } from "../workbench/Workbench.tsx";
@@ -392,6 +393,8 @@ export function Loaded({
   const complete = useCapstoneSessionComplete();
   const qa = useApiMutation("qa.report");
   const [official, setOfficial] = useState<Official | null>(null);
+  /** How many checks ran here: each one is a new result for the row's focus and Alt+R. */
+  const [checks, setChecks] = useState(0);
   const [checkingNow, setCheckingNow] = useState(false);
   const [notice, setNotice] = useState<{
     tone: "success" | "attention" | "info";
@@ -427,6 +430,7 @@ export function Loaded({
       });
       const rec = { code: src, version, outcome };
       setOfficial(rec);
+      setChecks((n) => n + 1);
       const rows = checklistOf(brief.rubric, outcome.result);
       const r = readiness(rows);
       // CF-A: the check names the devices it found, with their bars, and which are still open.
@@ -1013,14 +1017,30 @@ export function Loaded({
                     </Button>
                   }
                 >
-                  {neverChecked ? "Check it" : "Check again"} before you release: the album gets the version a
-                  check passed.
+                  Check this version before you release: the album gets the version a check passed.
                 </Callout>
               </div>
             )}
             {/* A check's notice speaks for the code it checked; a session's ("Session 3 of 4 done.") stands on. */}
             {notice && (notice.code === undefined || (!checkAgain && notice.code === code)) && (
-              <Callout tone={notice.tone} title={notice.title} onDismiss={() => setNotice(null)}>
+              <Callout
+                tone={notice.tone}
+                title={notice.title}
+                onDismiss={() => setNotice(null)}
+                actions={
+                  // A check's verdict gets the result row (docs/design/retry.md §3.6): Try again re-runs the check
+                  // on the code as it is now; a version's rubric counts once on the server.
+                  notice.code !== undefined && official !== null ? (
+                    <ResultActions
+                      resultKey={`check:${official.version}:${checks}`}
+                      onRetry={() => void checkMyTrack()}
+                      retryDisabled={checkingNow}
+                      onContinue={null}
+                      testId="check-result-actions"
+                    />
+                  ) : undefined
+                }
+              >
                 {notice.body}
               </Callout>
             )}

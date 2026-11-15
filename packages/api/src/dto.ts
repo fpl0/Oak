@@ -700,6 +700,12 @@ export const DrillTrialRecordSchema = z.strictObject({
   modality: z.enum(["normal", "quiet", "fallback"]).optional(),
   /** FET trials: the sung resolution after the answer (contracts §8.3). `null` when none was asked. */
   sungResolution: SungResolutionSchema.nullable().optional(),
+  /**
+   * docs/design/retry.md §3: practice takes inside this trial after its first answer ("Try again"). Telemetry
+   * only: the trial's credit, answer and sung resolution stay those of the first answer, and the server keeps the
+   * first ones it stored whatever a re-post says.
+   */
+  retries: z.number().int().nonnegative().max(99).optional(),
 });
 export type DrillTrialRecord = z.infer<typeof DrillTrialRecordSchema>;
 export const DrillFinishSchema = z.object({
@@ -1047,6 +1053,14 @@ export const StepAttemptSchema = z.object({
   feedbackCodes: z.array(z.string()),
   modality: z.enum(["normal", "fallback"]),
   disputed: z.boolean(),
+  /**
+   * The retry policy (docs/design/retry.md §3): taken after the step already counted (it passed, the lesson is
+   * complete, a predict was already answered). Stored with its grade; gives no evidence, no SRS rating, no test-out
+   * and leaves `passed`, `exercise_results` and the lesson's best score as they were (it is one more graded attempt
+   * in `StepState.attempts`). The server
+   * decides it; a client never sends it. Absent from servers before the policy (read as false).
+   */
+  practice: z.boolean().optional(),
   at: Instant,
 });
 export type StepAttempt = z.infer<typeof StepAttemptSchema>;
@@ -1077,6 +1091,12 @@ export const StepStateSchema = z.object({
   /** Reveal is available after 2 graded attempts (3 for sing and tap). */
   revealAvailable: z.boolean(),
   result: ExerciseResultSchema.nullable(),
+  /**
+   * docs/design/retry.md §3: the next graded attempt on this step will be stored as practice (the step passed,
+   * the lesson is complete, or a predict was already answered), so the step shows the practice line before the
+   * take. Absent from servers before the policy (read as false).
+   */
+  practiceNext: z.boolean().optional(),
 });
 export type StepState = z.infer<typeof StepStateSchema>;
 

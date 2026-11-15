@@ -106,6 +106,13 @@ export class MasteryRepo {
       )?.n ?? 0) > 0
     );
   }
+  /** docs/design/retry.md §3.6: whether one source (exact ID) already gave evidence, on any day. */
+  hasEvidenceFrom(sourceId: string): boolean {
+    return (
+      (get<{ n: number }>(this.db, "SELECT COUNT(*) AS n FROM evidence WHERE source_id = ?", sourceId)?.n ??
+        0) > 0
+    );
+  }
   /** Removes the evidence one source produced (a disputed attempt gives none, contracts §11.8). Returns the skills touched. */
   removeEvidenceOf(sourceKinds: readonly string[], sourceId: string): string[] {
     const marks = sourceKinds.map(() => "?").join(", ");

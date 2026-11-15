@@ -38,7 +38,14 @@ import {
   traceSegments,
 } from "../sing.ts";
 import type { AnswerWidgetProps } from "../types.ts";
-import { AnswerFrame, KeyHint, SubmitHint } from "../ui.tsx";
+import {
+  AnswerFrame,
+  KeyHint,
+  SubmitHint,
+  TAKE_RETRY_PROPS,
+  TakeRetryLabel,
+  useTakeRetryKey,
+} from "../ui.tsx";
 
 type Phase = "idle" | "cue" | "opening" | "singing" | "done" | "quiet";
 
@@ -292,6 +299,15 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
   useEffect(() => {
     if (p.autoFocus) btn.current?.focus();
   }, [p.autoFocus]);
+  // The host's "Try again" (docs/design/retry.md §2.5): a new take starts at once, no second press.
+  const retakes = useRef(p.retake ?? 0);
+  useEffect(() => {
+    const n = p.retake ?? 0;
+    if (n <= retakes.current) return;
+    retakes.current = n;
+    if (phase !== "quiet" && phase !== "singing" && phase !== "opening" && phase !== "cue") void sing();
+  }, [p.retake]);
+  const locked = p.locked === true;
   useEffect(() => () => session.current?.close(), []);
 
   // What the lane and the chips show: the live or final result, else a stored take's summary (`value`).
@@ -418,6 +434,9 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
       }
     }
   };
+
+  // The take's own Try again (before a verdict): Alt+R as the button, the same key as the host's row after one.
+  useTakeRetryKey(phase === "done" && !locked && !disabled && !!setup, () => void sing());
 
   const report = (check: QuietEvidence["selfCheck"]) => {
     setSelfCheck(check);
@@ -605,10 +624,11 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
               >
                 Stop
               </Button>
-            ) : (
+            ) : locked && (phase === "done" || phase === "idle") ? null : (
               <Button
                 ref={btn}
                 data-enter="native"
+                {...(phase === "done" ? TAKE_RETRY_PROPS : {})}
                 variant={phase === "done" ? "secondary" : "primary"}
                 icon={
                   phase === "done" ? (
@@ -621,7 +641,7 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
                 disabled={disabled || phase === "cue" || phase === "opening"}
                 loading={phase === "opening"}
               >
-                {phase === "done" ? "Sing it again" : phase === "cue" ? "Listen…" : "Sing"}
+                {phase === "done" ? <TakeRetryLabel /> : phase === "cue" ? "Listen…" : "Sing"}
               </Button>
             )}
             {refButtons}
@@ -649,7 +669,7 @@ export function SingCaptureAnswer(p: AnswerWidgetProps<"mic">) {
                 Hear my take
               </Button>
             ) : null}
-            {phase !== "singing" ? (
+            {phase !== "singing" && !locked ? (
               <Button
                 variant="ghost"
                 size="sm"

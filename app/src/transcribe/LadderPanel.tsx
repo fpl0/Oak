@@ -11,10 +11,12 @@ import { useMemo, useState } from "react";
 import { formatKey } from "../lib/format.ts";
 import { idempotencyKey } from "../lib/idempotency.ts";
 import { useLadderNext, useLadderSubmit } from "../lib/queries.ts";
+import { PRACTICE_LINE } from "../lib/retry.ts";
 import { currentSessionId } from "../session/store.ts";
 import { Button } from "../ui/kit/Button.tsx";
 import { Card, Chip } from "../ui/kit/basics.tsx";
 import { Callout } from "../ui/kit/Controls.tsx";
+import { ResultActions } from "../ui/kit/ResultActions.tsx";
 import { toast } from "../ui/kit/Toast.tsx";
 import {
   checkLines,
@@ -87,13 +89,22 @@ export function LadderPanel({
   const level = (project.ladderLevel ?? 1) as LadderLevel;
   const stages = level === 3 ? L3_STAGES : null;
   const [marks, setMarksState] = useState<ItemMarks>(() => readMarks(project.id));
-  const [last, setLast] = useState<{ r: LadderSubmitResult; stage: LadderStage | null } | null>(null);
+  /** The verdict on screen; `practice` when it was checked after the item was already solved. */
+  const [last, setLast] = useState<{
+    r: LadderSubmitResult;
+    stage: LadderStage | null;
+    practice: boolean;
+    n: number;
+  } | null>(null);
   const [confirmReveal, setConfirmReveal] = useState(false);
   const submit = useLadderSubmit();
   const next = useLadderNext();
   const navigate = useNavigate();
-  const stage = currentStage(stages, marks.stages);
-  const done = marks.solved || (stages !== null && stage === null);
+  /** A passed L3 stage the learner chose to try again (practice: it stays passed). */
+  const [again, setAgain] = useState<LadderStage | null>(null);
+  const open = currentStage(stages, marks.stages);
+  const done = marks.solved || (stages !== null && open === null);
+  const stage = again ?? open;
   const setMarks = (m: ItemMarks) => {
     setMarksState(m);
     writeMarks(project.id, m);
@@ -111,9 +122,11 @@ export function LadderPanel({
           idempotencyKey: idempotencyKey(),
         },
       });
-      setLast({ r, stage });
+      const practice = done || (stage !== null && marks.stages[stage] === "passed");
+      setLast({ r, stage, practice, n: (last?.n ?? 0) + 1 });
+      setAgain(null);
       onResult(r);
-      if (r.passed) {
+      if (r.passed && !practice) {
         const stagesNext = stage ? { ...marks.stages, [stage]: "passed" as const } : marks.stages;
         const allDone = stages === null || currentStage(stages, stagesNext) === null;
         setMarks({ ...marks, stages: stagesNext, solved: allDone });
@@ -157,6 +170,13 @@ export function LadderPanel({
       revealed: true,
       stages: stage ? { ...marks.stages, [stage]: "revealed" } : marks.stages,
     });
+  };
+
+  /** Try again (docs/design/retry.md §3.6): the verdict goes, the editor gets the cursor, Check is back. */
+  const tryAgain = () => {
+    if (last?.r.passed && last.stage !== null && !done) setAgain(last.stage);
+    setLast(null);
+    onResult(null);
   };
 
   const nextItem = async () => {
@@ -250,31 +270,32 @@ export function LadderPanel({
       ) : null}
 
       <Card className="flex flex-col gap-2 p-4" aria-live="polite">
-        <div className="flex flex-wrap items-center gap-2">
-          {done ? (
-            <Button
-              variant="primary"
-              loading={next.isPending}
-              onClick={() => void nextItem()}
-              data-testid="next-item"
-            >
-              Next item
-            </Button>
-          ) : (
-            <Button
-              variant="primary"
-              loading={submit.isPending}
-              onClick={() => void check()}
-              data-testid="check"
-            >
-              {stage ? `Check the ${STAGE_NOUN[stage]}` : "Check"}
-            </Button>
-          )}
-          {done ? (
-            <Button variant="ghost" loading={submit.isPending} onClick={() => void check()}>
-              Check again
-            </Button>
-          ) : marks.revealed && !stage ? null : (
+        <ResultActions
+          resultKey={last ? last.n : null}
+          onRetry={last ? tryAgain : null}
+          retryFocus={() => document.querySelector<HTMLElement>(".cm-content")}
+          onContinue={done ? () => void nextItem() : null}
+          continueDisabled={next.isPending}
+          continueLabel="Next item"
+          continueTestId="next-item"
+          line={last?.practice ? PRACTICE_LINE : null}
+          testId="ladder-actions"
+          // After a failed check the answer is changed through Try again (as in a lesson); after a passed stage the
+          // next stage's Check is open beside it.
+          action={
+            last === null || (last.r.passed && !done) ? (
+              <Button
+                variant={done && again === null ? "secondary" : "primary"}
+                loading={submit.isPending}
+                onClick={() => void check()}
+                data-testid="check"
+              >
+                {stage ? `Check the ${STAGE_NOUN[stage]}` : "Check"}
+              </Button>
+            ) : null
+          }
+        >
+          {done || again !== null || (marks.revealed && !stage) ? null : (
             <Button
               variant="ghost"
               icon={<Eye aria-hidden className="size-4" />}
@@ -284,7 +305,7 @@ export function LadderPanel({
               {stage ? `Show the ${STAGE_NOUN[stage]}` : "Show the answer"}
             </Button>
           )}
-        </div>
+        </ResultActions>
         {confirmReveal ? (
           <Callout
             tone="attention"

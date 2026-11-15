@@ -165,6 +165,7 @@ export function WarmUp(props: WarmUpProps) {
           key={item.id}
           data={data}
           cardIds={step.cardIds}
+          sittingId={item.id}
           doneLabel={continueLabel}
           onDone={(results) =>
             advance(index, {

@@ -15,10 +15,12 @@ import { Check, CircleCheck, Eye, Lock, PenLine, Split } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { idempotencyKey } from "../lib/idempotency.ts";
 import { useLadderNext, useLadderSubmit, useTranscriptionPatch } from "../lib/queries.ts";
+import { PRACTICE_LINE } from "../lib/retry.ts";
 import { currentSessionId } from "../session/store.ts";
 import { Button } from "../ui/kit/Button.tsx";
 import { Card, Chip, Kbd } from "../ui/kit/basics.tsx";
 import { Callout } from "../ui/kit/Controls.tsx";
+import { ResultActions } from "../ui/kit/ResultActions.tsx";
 import { toast } from "../ui/kit/Toast.tsx";
 import { ChangesChart } from "./ChangesChart.tsx";
 import {
@@ -247,7 +249,14 @@ export function useStandard(o: {
   const section = codeStage ? (picked ?? openSection) : null;
   const sectionOf = section !== null ? (sections[section - 1] ?? null) : null;
 
-  const [last, setLast] = useState<{ r: LadderSubmitResult; target: StandardCheckTarget } | null>(null);
+  const [last, setLast] = useState<{
+    r: LadderSubmitResult;
+    target: StandardCheckTarget;
+    /** Checked after its section had passed: practice (docs/design/retry.md §3.6). */
+    practice: boolean;
+  } | null>(null);
+  /** Checks run here: each one is a new result for the row (focus, Alt+R). */
+  const [checks, setChecks] = useState(0);
   const [lastForm, setLastForm] = useState<{ r: LadderSubmitResult; map: FormMap } | null>(null);
   const [shown, setShown] = useState<{ span: [number, number]; layer: "melody" | "bass" | "chords" } | null>(
     null,
@@ -296,16 +305,18 @@ export function useStandard(o: {
   const check = async (chartCode?: string) => {
     const t = target();
     try {
+      const practice = t.section !== null && codeStage !== null && progress.passed.includes(t.section);
       const r = await send(chartCode ?? o.getCode(), 0, t);
       o.onResult(r);
+      setChecks((n) => n + 1);
       if (t.stage === "form") {
         setLastForm({ r, map: draft });
         setLast(null);
         if (r.passed) settleForm(draft, "passed");
         return;
       }
-      setLast({ r, target: t });
-      if (r.passed && t.section !== null && codeStage) {
+      setLast({ r, target: t, practice });
+      if (r.passed && !practice && t.section !== null && codeStage) {
         setLocal(markSection(local, codeStage, t.section, "passed", sections.length));
         setPicked(null);
       }
@@ -371,6 +382,18 @@ export function useStandard(o: {
     busy: submit.isPending,
     check,
     reveal,
+    checks,
+    /**
+     * Try again (docs/design/retry.md §3.6): the verdict goes and its section opens again — even one that has just
+     * passed (its check is then practice). A form that passed is settled into the sections; its verdict just goes.
+     */
+    retry: () => {
+      if (last && last.target.section !== null && last.target.stage === codeStage)
+        setPicked(last.target.section);
+      setLast(null);
+      setLastForm(null);
+      o.onResult(null);
+    },
     /** A section name typed in the panel (a word like "chorus"), during the form stage. */
     name: (index: number, label: string) => setDraft(setLabel(draft, index, label)),
     /** A repeat that ends differently gets its own lines (and its own name on the strip). */
@@ -502,28 +525,33 @@ export function StandardPanel({
             </Chip>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {done ? (
-            <Button
-              variant="primary"
-              loading={next.isPending}
-              onClick={() => void nextStandard()}
-              data-testid="next-item"
-            >
-              Next standard
-            </Button>
-          ) : (
-            <Button
-              variant="primary"
-              loading={std.busy}
-              disabled={problem !== null}
-              aria-describedby={problem ? "standard-check-why" : undefined}
-              onClick={() => void check()}
-              data-testid="check"
-            >
-              {checkLabel}
-            </Button>
-          )}
+        <ResultActions
+          resultKey={verdict !== null ? std.checks : null}
+          onRetry={verdict !== null ? std.retry : null}
+          retryFocus={() => document.querySelector<HTMLElement>(".cm-content")}
+          onContinue={done ? () => void nextStandard() : null}
+          continueDisabled={next.isPending}
+          continueLabel="Next standard"
+          continueTestId="next-item"
+          line={last?.practice ? PRACTICE_LINE : null}
+          testId="standard-actions"
+          // After a failed check the answer is changed through Try again (as in a lesson); after a pass the next
+          // section's or stage's Check is open beside it.
+          action={
+            !done && (verdict === null || passed) ? (
+              <Button
+                variant="primary"
+                loading={std.busy}
+                disabled={problem !== null}
+                aria-describedby={problem ? "standard-check-why" : undefined}
+                onClick={() => void check()}
+                data-testid="check"
+              >
+                {checkLabel}
+              </Button>
+            ) : null
+          }
+        >
           {done ? null : (
             <Button
               variant="ghost"
@@ -537,7 +565,7 @@ export function StandardPanel({
           {!done && stage ? (
             <span className="text-sm text-text-3">passes with {passMarkText(stage)}</span>
           ) : null}
-        </div>
+        </ResultActions>
         {problem ? (
           <p id="standard-check-why" className="text-sm text-text-2" data-testid="check-why">
             {problem}

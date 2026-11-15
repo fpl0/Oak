@@ -1,15 +1,17 @@
 // `voice.match` (ux §4.7, contracts §8.6): three pitch-match trials inside the comfort zone. Oak plays a note, the
 // learner sings it back; each trial is judged by the one rule for a sung note (`gradeSung`, ±50¢, any octave) and
 // shown in words and arrows, never red or green. The result is stored as a `pitch-match` calibration run; it
-// informs, it never gates (every learner starts the ladder at ±70¢, contracts §8.2).
+// informs, it never gates (every learner starts the ladder at ±70¢, contracts §8.2). The three notes can be sung
+// again after any result (docs/design/retry.md §5 row 23); Stop ends a run without keeping it.
 import { toLearnerProfile } from "@oak/api";
 import type { MicSession } from "@oak/audio";
 import { MicError } from "@oak/audio";
 import type { SingTolerance } from "@oak/content-kit";
 import { gradeSung, type PitchFrame } from "@oak/pitch";
-import { Mic, Play } from "lucide-react";
+import { Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { formatNoteMidi } from "../../lib/notes.ts";
+import { MEASURE_LINE } from "../../lib/retry.ts";
 import { Button } from "../../ui/kit/Button.tsx";
 import { Callout } from "../../ui/kit/Controls.tsx";
 import {
@@ -24,7 +26,7 @@ import { PitchTrace } from "../PitchTrace.tsx";
 import { RecheckHint } from "../panels.tsx";
 import { reportTake } from "../recheck.ts";
 import { closeInput, openInput, playAt, voiceAudio } from "../services.ts";
-import { PartFooter, PartFrame, type PartProps, useSaveRun } from "./common.tsx";
+import { PartActions, PartFrame, type PartProps, StatusSlot, useSaveRun } from "./common.tsx";
 
 const NOTE_SEC = 1.3;
 const MATCH_TOL: SingTolerance = {
@@ -37,7 +39,9 @@ const MATCH_TOL: SingTolerance = {
 
 type Phase = "intro" | "playing" | "listening" | "between" | "done" | "bleed" | "error";
 
-export function PitchMatchPart({ profile, onDone, onSkip }: PartProps) {
+class Stopped extends Error {}
+
+export function PitchMatchPart({ profile, onDone, onSkip, context, back }: PartProps) {
   const targets = matchTargets(profile);
   const [phase, setPhase] = useState<Phase>("intro");
   const [trial, setTrial] = useState(0);
@@ -46,6 +50,9 @@ export function PitchMatchPart({ profile, onDone, onSkip }: PartProps) {
   const frames = useRef<PitchFrame[]>([]);
   const session = useRef<MicSession | null>(null);
   const alive = useRef(true);
+  const stopped = useRef(false);
+  const [runs, setRuns] = useState(0);
+  const [savedOnce, setSavedOnce] = useState(false);
   const run = useSaveRun();
   const learner = toLearnerProfile(profile);
 
@@ -80,6 +87,7 @@ export function PitchMatchPart({ profile, onDone, onSkip }: PartProps) {
     const noteAt = oak.ctx.currentTime + 0.05;
     playAt(oak, { s: "piano", note: midi, gain: 0.7 }, noteAt, NOTE_SEC);
     await wait(NOTE_SEC * 1000 + 150);
+    if (stopped.current) throw new Stopped();
     if (!alive.current) return { midi, cents: null };
     const from = oak.ctx.currentTime;
     const window = { midi, on: from + 0.15, off: from + MATCH_SING_SEC - 0.1 };
@@ -88,6 +96,7 @@ export function PitchMatchPart({ profile, onDone, onSkip }: PartProps) {
     await wait(MATCH_SING_SEC * 1000);
     off();
     close();
+    if (stopped.current) throw new Stopped();
     const r = gradeSung(frames.current, [window], MATCH_TOL, "pitch", learner);
     reportTake({ diagnostics: r.diagnostics, frames: frames.current, floorDb: profile.noiseFloorDb });
     if (r.diagnostics.some((d) => d.id === "sing.bleed")) return { midi, cents: null, bleed: true };
@@ -98,6 +107,9 @@ export function PitchMatchPart({ profile, onDone, onSkip }: PartProps) {
 
   const start = async () => {
     setError(null);
+    stopped.current = false;
+    const before = phase;
+    const kept = trials;
     setTrials([]);
     const got: MatchTrial[] = [];
     try {
@@ -109,6 +121,7 @@ export function PitchMatchPart({ profile, onDone, onSkip }: PartProps) {
         setTrials([...got]);
         if (t.bleed) {
           // Nothing is saved from a run the playback spoke over: the hint offers the fallback.
+          setRuns((n) => n + 1);
           setPhase("bleed");
           return;
         }
@@ -117,16 +130,25 @@ export function PitchMatchPart({ profile, onDone, onSkip }: PartProps) {
           await wait(900);
         }
       }
+      setRuns((n) => n + 1);
       setPhase("done");
       const verdict = matchVerdict(got);
-      await run.save({
+      const ok = await run.save({
         kind: "pitch-match",
         result: { trials: got, within: verdict.within, windowCents: MATCH_CENTS },
         patch: {},
       });
+      if (ok) setSavedOnce(true);
     } catch (e) {
       close();
       if (!alive.current) return;
+      if (e instanceof Stopped) {
+        // Stop: nothing from this run is kept; the screen goes back to where it was.
+        setTrials(kept);
+        setPhase(before === "done" || before === "bleed" || before === "error" ? before : "intro");
+        return;
+      }
+      setRuns((n) => n + 1);
       setPhase("error");
       setError(
         e instanceof MicError && e.reason === "denied"
@@ -139,13 +161,16 @@ export function PitchMatchPart({ profile, onDone, onSkip }: PartProps) {
   };
 
   const busy = phase === "playing" || phase === "listening" || phase === "between";
+  const shown = phase === "done" || phase === "bleed" || phase === "error";
   const verdict = phase === "done" ? matchVerdict(trials) : null;
   const current = targets[trial] as number;
   return (
     <PartFrame
       testId="part-match"
+      context={context}
       title="Match three notes"
-      lead="Oak plays a note; sing it straight back on 'ooh' and hold it, in whatever octave is comfortable. Three notes, about twenty seconds."
+      instruction="Sing each note straight back after Oak plays it, and hold it."
+      lead="Sing on 'ooh', in whatever octave is comfortable. Three notes, about twenty seconds."
     >
       <PitchTrace
         frames={() => frames.current}
@@ -177,50 +202,53 @@ export function PitchMatchPart({ profile, onDone, onSkip }: PartProps) {
           ))}
         </ol>
       )}
-      {verdict && (
-        <Callout tone={verdict.within >= 2 ? "success" : "info"} title={verdict.title}>
-          <span data-testid="match-verdict">{verdict.body}</span>
-        </Callout>
-      )}
-      {phase === "bleed" && <RecheckHint />}
-      {error && (
-        <Callout tone="issue" title="The microphone didn't open">
-          {error}
-        </Callout>
-      )}
-      <PartFooter
-        onSkip={busy || phase === "done" ? undefined : onSkip}
-        primary={
-          phase === "done" ? (
-            <Button variant="primary" onClick={onDone} data-testid="part-continue" autoFocus>
-              Continue
-            </Button>
-          ) : (
+      <StatusSlot>
+        {verdict && (
+          <Callout tone={verdict.within >= 2 ? "success" : "info"} title={verdict.title}>
+            <span data-testid="match-verdict">{verdict.body}</span>
+          </Callout>
+        )}
+        {phase === "bleed" && <RecheckHint />}
+        {error && (
+          <Callout tone="issue" title="The microphone didn't open">
+            {error}
+          </Callout>
+        )}
+      </StatusSlot>
+      <PartActions
+        context={context}
+        back={back}
+        onSkip={phase === "done" ? null : onSkip}
+        running={
+          busy
+            ? {
+                label: "Listening…",
+                onStop: () => {
+                  stopped.current = true;
+                },
+              }
+            : null
+        }
+        resultKey={shown ? `${phase}-${runs}` : null}
+        onRetry={shown ? () => void start() : null}
+        onContinue={shown ? onDone : null}
+        continueDisabled={phase !== "done" && !savedOnce}
+        continueNote="Sing the three notes to go on, or set it up later."
+        line={phase === "done" && savedOnce ? MEASURE_LINE : null}
+        action={
+          phase === "intro" ? (
             <Button
               variant="primary"
-              loading={busy}
               onClick={() => void start()}
-              icon={
-                phase === "intro" ? (
-                  <Play aria-hidden className="size-4" />
-                ) : (
-                  <Mic aria-hidden className="size-4" />
-                )
-              }
+              icon={<Play aria-hidden className="size-4" />}
               data-testid="match-start"
               autoFocus
             >
-              {phase === "intro" ? "Play the first note" : "Try the three notes again"}
+              Start the three notes
             </Button>
-          )
+          ) : null
         }
-      >
-        {phase === "done" && (
-          <Button onClick={() => void start()} data-testid="match-again">
-            Try again
-          </Button>
-        )}
-      </PartFooter>
+      />
     </PartFrame>
   );
 }

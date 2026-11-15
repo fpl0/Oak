@@ -347,6 +347,17 @@ export function canContinue(step: StepDef, p: StepProgress, gate: GateState | nu
   return p.result?.status === "pass";
 }
 
+/**
+ * Whether a step shows a result the learner can try again after (docs/design/retry.md §2.2): a verdict from this
+ * visit, or a predict's outcome (a guess already locked in, here or before a reload) until "Try again" re-opens the
+ * guess. A Make's live checklist is not a result (Save completes it), nor is a step without an exercise.
+ */
+export function resultOnScreen(step: StepDef, p: StepProgress, retried: number): boolean {
+  if (step.kind === "make" || !step.exercise) return false;
+  if (p.result !== null) return true;
+  return step.exercise.kind === "predict" && (p.state?.attempts ?? 0) > 0 && retried === 0;
+}
+
 /** "Continue" on an ungraded step the learner did not finish reads "Skip" (it can always be skipped). */
 export function continueLabel(step: StepDef, p: StepProgress): "Continue" | "Skip" {
   if (step.exercise && step.graded && isSungStep(step)) return stepDone(step, p) ? "Continue" : "Skip";

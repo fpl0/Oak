@@ -40,6 +40,12 @@ async function writeSignature(page: Page, keys: string[], expected: "pass" | "fa
 }
 
 async function clearSignature(page: Page, n: number): Promise<void> {
+  // A verdict on screen: the answer is changed through Try again, by its key (docs/design/retry.md §2.5).
+  const retry = page.getByTestId("lesson-step").getByTestId("result-retry");
+  if (await retry.isVisible()) {
+    await page.keyboard.press("Alt+KeyR");
+    await expect(retry).toHaveCount(0);
+  }
   await tabTo(page, page.getByTestId("keysig-surface"));
   for (let i = 0; i < n; i++) await page.keyboard.press("Backspace");
   await expect(page.getByRole("list", { name: "Your key signature" }).locator("li")).toHaveText([

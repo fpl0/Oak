@@ -27,9 +27,12 @@ test("Settings › Voice: re-run the range from its link, see it saved, the ladd
   await page.getByTestId("rerun-range").click();
   await expect(page).toHaveURL(/\/settings\/voice\/setup\?part=range/);
   await page.getByTestId("range-start").click();
-  await expect(page.getByText(/Your singing zone: A2–E4/)).toBeVisible({ timeout: 20_000 });
+  // Plain words first, the note names second (docs/design/retry.md §6.2); Try again beside Continue.
+  await expect(page.getByTestId("range-detail")).toContainText("A2–E4", { timeout: 20_000 });
+  await expect(page.getByText("Your comfortable range is about an octave")).toBeVisible();
+  await expect(page.getByTestId("result-retry")).toBeVisible();
   await shootAll(page, "31-setup-range");
-  await page.getByTestId("part-continue").click();
+  await page.getByTestId("result-continue").click();
   await expect(page.getByTestId("setup-done")).toBeVisible();
   await page.getByRole("link", { name: "Back to Settings › Voice" }).click();
   await expect(page.getByText("A2 – E4")).toBeVisible();

@@ -64,6 +64,8 @@ test("U01.L01 Heartbeat: every step, a wrong variant first, keyboard only on S6,
   await page.locator('[data-option="hits"]').click();
   await page.getByTestId("check").click();
   await expect(page.getByTestId("step-feedback")).toHaveAttribute("data-status", "fail");
+  // The verdict locks the answer until Try again (docs/design/retry.md §2.5).
+  await page.getByTestId("result-retry").click();
   await page.locator('[data-option="bpm"]').click();
   await page.getByTestId("check").click();
   await expect(page.getByTestId("step-feedback")).toHaveAttribute("data-status", "pass");
@@ -75,6 +77,7 @@ test("U01.L01 Heartbeat: every step, a wrong variant first, keyboard only on S6,
   await page.locator('[data-question="2"] [data-option="squeeze"]').click();
   await page.getByTestId("check").click();
   await expect(page.getByTestId("step-feedback")).toHaveAttribute("data-status", "fail");
+  await page.getByTestId("result-retry").click();
   await page.locator('[data-question="1"] input').fill("4");
   await page.getByTestId("check").click();
   await expect(page.getByTestId("step-feedback")).toHaveAttribute("data-status", "pass");
@@ -228,6 +231,7 @@ test("U02.L01 High & Low: every step, the generated ear check, wrap up and resum
   await page.locator(`[data-option="${wrong}"]`).click();
   await page.getByTestId("check").click();
   await expect(page.getByTestId("step-feedback")).toHaveAttribute("data-status", "fail");
+  await page.getByTestId("result-retry").click();
   await page.locator(`[data-option="${answer}"]`).click();
   await page.getByTestId("check").click();
   await expect(page.getByTestId("step-feedback")).toHaveAttribute("data-status", "pass");

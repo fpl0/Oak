@@ -6,7 +6,7 @@
 // pattern graded through the player's path, the Make saved under the lesson title, idempotency keys on every
 // attempt, and the lesson complete on the server.
 import type { Request } from "@playwright/test";
-import { expect, setCode, stepIs, submit, test, trialAnswer } from "./support.ts";
+import { expect, setCode, stepIs, submit, test, trialAnswer, tryAgainIfShown } from "./support.ts";
 import { api, reseedFresh, seed } from "./w3support.ts";
 
 test.afterAll(async ({ request }) => {
@@ -56,6 +56,8 @@ test("U03.L02 Degrees in Code: every step, wrong variants first, the Make, compl
   await page.locator('[data-question="2"] input').fill("4");
   await page.getByTestId("check").click();
   await expect(page.getByTestId("step-feedback")).toHaveAttribute("data-status", "fail");
+  // The verdict locks the answer until Try again (docs/design/retry.md §2.5).
+  await tryAgainIfShown(page);
   await page.locator('[data-question="1"] [data-option="one"]').click();
   await page.getByTestId("check").click();
   await expect(page.getByTestId("step-feedback")).toHaveAttribute("data-status", "pass");
@@ -96,6 +98,7 @@ test("U03.L02 Degrees in Code: every step, wrong variants first, the Make, compl
   await page.locator('[data-option="one"]').click();
   await page.getByTestId("check").click();
   await expect(page.getByTestId("step-feedback")).toHaveAttribute("data-status", "fail");
+  await tryAgainIfShown(page);
   await page.locator('[data-option="five"]').click();
   await page.getByTestId("check").click();
   await expect(page.getByTestId("step-feedback")).toHaveAttribute("data-status", "pass");

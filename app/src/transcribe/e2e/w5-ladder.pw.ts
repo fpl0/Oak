@@ -10,7 +10,7 @@ import { SCREENSHOT_MATRIX } from "../../../../e2e/support/stack.ts";
 import { shoot, useUiPrefs } from "../../../../e2e/support/ui.ts";
 import { layerOfTrack, withChanges } from "../song.ts";
 import { stimulusCode } from "../stimulus-code.ts";
-import { api } from "./support.ts";
+import { api, checkIt } from "./support.ts";
 
 const SHOTS = new URL("./screenshots", import.meta.url).pathname;
 
@@ -136,7 +136,7 @@ test("ladder L5 (real server): phrase 2 fails with a message naming its bars, th
     `melody: n("<${Array.from({ length: project.stimulus?.bars ?? 16 }, () => "0").join(" ")}>").scale("C4:major").s("piano")`,
   );
   await write(page, placeholder);
-  await page.getByTestId("check").click();
+  await checkIt(page);
   await expect(page.getByTestId("verdict")).toHaveText(/^Phrase 2: not yet, \d+ % of 85 %\./, {
     timeout: 60_000,
   });
@@ -150,7 +150,7 @@ test("ladder L5 (real server): phrase 2 fails with a message naming its bars, th
 
   // The tune as heard passes phrase 2.
   await write(page, replaceLine(placeholder, "melody", layerLine(project, "melody", "melody")));
-  await page.getByTestId("check").click();
+  await checkIt(page);
   await expect(page.getByTestId("verdict")).toHaveText(/^Phrase 2: that's it \(\d+ %\)\.$/, {
     timeout: 60_000,
   });
@@ -191,20 +191,23 @@ test("ladder L6 (real server): the changes on the chart, then the melody line by
     `chords: chord("<${pickup ? "~ " : ""}${Array.from({ length: full }, () => "Ebm").join(" ")}>").voicing().s("piano")`,
   );
   await write(page, wrong);
-  await page.getByTestId("check").click();
+  await checkIt(page);
   await expect(page.getByTestId("verdict")).toHaveText(/^The changes: not yet, \d+ % of 85 %\./, {
     timeout: 60_000,
   });
   await expect(stages.nth(1)).toHaveAttribute("data-status", "open");
-  await expect(page.getByTestId("check")).toHaveText("Check the changes");
+  // After a fail the answer is changed through Try again; the same stage's Check comes back.
+  await expect(page.getByTestId("result-retry")).toBeVisible();
   await shots(page, "w5-real-l6-failed");
+  await page.getByTestId("result-retry").click();
+  await expect(page.getByTestId("check")).toHaveText("Check the changes");
 
   code = chart.every((c) => c)
     ? withChanges(code, chart, pickup)
     : replaceLine(code, "chords", layerLine(project, "chords", "chords"));
   code = replaceLine(code, "bass", layerLine(project, "bass", "bass"));
   await write(page, code);
-  await page.getByTestId("check").click();
+  await checkIt(page);
   await expect(page.getByTestId("verdict")).toHaveText(/^The changes: that's it/, { timeout: 60_000 });
   await expect(stages.nth(2)).toHaveAttribute("data-status", "open");
 
@@ -212,7 +215,7 @@ test("ladder L6 (real server): the changes on the chart, then the melody line by
   await write(page, replaceLine(code, "melody", layerLine(project, "melody", "melody")));
   for (let line = 1; line <= Math.ceil(full / 4); line++) {
     await expect(page.getByTestId("check")).toHaveText(`Check line ${line}`);
-    await page.getByTestId("check").click();
+    await checkIt(page);
     await expect(page.getByTestId("verdict")).toHaveText(new RegExp(`^Melody, line ${line}: that's it`), {
       timeout: 60_000,
     });

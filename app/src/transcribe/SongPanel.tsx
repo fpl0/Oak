@@ -13,10 +13,12 @@ import { Check, CircleCheck, Eye, Lock, PenLine } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { idempotencyKey } from "../lib/idempotency.ts";
 import { useLadderNext, useLadderSongs, useLadderSubmit } from "../lib/queries.ts";
+import { PRACTICE_LINE } from "../lib/retry.ts";
 import { currentSessionId } from "../session/store.ts";
 import { Button } from "../ui/kit/Button.tsx";
 import { Card, Chip } from "../ui/kit/basics.tsx";
 import { Callout } from "../ui/kit/Controls.tsx";
+import { ResultActions } from "../ui/kit/ResultActions.tsx";
 import { toast } from "../ui/kit/Toast.tsx";
 import { ChangesChart } from "./ChangesChart.tsx";
 import { checkLines, lineText, REALISM_TEXT } from "./ladder.ts";
@@ -164,7 +166,9 @@ export function SongPanel({
     (listed?.passedStages ?? []).filter((s) => s !== "form"),
     marks.stages,
   );
-  const stage = level === 6 ? currentSongStage(stageMarks) : null;
+  /** A passed L6 stage the learner chose to try again (practice: it stays passed). */
+  const [againStage, setAgainStage] = useState<SongStage | null>(null);
+  const stage = level === 6 ? (againStage ?? currentSongStage(stageMarks)) : null;
   const phraseNow = level === 5 ? currentPhrase(given.phrases.length, passedPhrases, marks.revealed) : null;
   const lineNow =
     level === 6 && stage === "melody"
@@ -176,7 +180,13 @@ export function SongPanel({
   const spanBars = span !== null ? (given.phrases[span - 1] ?? null) : null;
   const done = level === 5 ? phraseNow === null : stage === null || (stage === "melody" && lineNow === null);
 
-  const [last, setLast] = useState<{ r: LadderSubmitResult; target: SongCheckTarget } | null>(null);
+  /** The verdict on screen; `practice` when its target had already passed; `n` counts checks for the row. */
+  const [last, setLast] = useState<{
+    r: LadderSubmitResult;
+    target: SongCheckTarget;
+    practice: boolean;
+    n: number;
+  } | null>(null);
   const [confirmReveal, setConfirmReveal] = useState(false);
   const [shown, setShown] = useState<{ span: [number, number]; layer: "melody" | "bass" | "chords" } | null>(
     null,
@@ -257,9 +267,11 @@ export function SongPanel({
   const check = async () => {
     try {
       const { r, t } = await send(0);
-      setLast({ r, target: t });
+      const practice = alreadyPassed(t);
+      setLast({ r, target: t, practice, n: (last?.n ?? 0) + 1 });
+      setAgainStage(null);
       onResult(r);
-      if (!r.passed) return;
+      if (!r.passed || practice) return;
       if (level === 5 && t.span !== null) {
         setMarks({ ...marks, passed: [...new Set([...marks.passed, t.span])] });
         setPicked(null);
@@ -303,6 +315,26 @@ export function SongPanel({
     }
   };
 
+  /** Whether a target had passed before this check: a check of it now is practice (docs/design/retry.md §3.6). */
+  const alreadyPassed = (t: SongCheckTarget): boolean =>
+    t.span !== null
+      ? level === 5
+        ? passedPhrases.includes(t.span)
+        : marks.lines.includes(t.span)
+      : t.stage !== null && stageMarks[t.stage] === "passed";
+
+  /**
+   * Try again (docs/design/retry.md §3.6): the verdict goes and its target opens again — the same phrase, line or
+   * stage, even one that has just passed (then the check is practice) — and the editor gets the cursor.
+   */
+  const tryAgain = () => {
+    if (last) {
+      if (last.target.span !== null) setPicked(last.target.span);
+      else if (last.target.stage !== null && last.r.passed) setAgainStage(last.target.stage);
+    }
+    setLast(null);
+  };
+
   const nextSong = async () => {
     try {
       const item = await next.mutateAsync({
@@ -338,6 +370,10 @@ export function SongPanel({
         : stage === "changes"
           ? "Check the changes"
           : "Check the bass";
+  // Opening a target that already passed (Try again after a pass, or picking a passed phrase) checks as practice.
+  const retrying =
+    againStage !== null || (span !== null && (level === 5 ? passedPhrases : marks.lines).includes(span));
+  const checkOpen = (last === null || (last.r.passed && !done)) && (!done || (last === null && retrying));
   const revealLabel =
     level === 5
       ? `Show phrase ${span ?? ""}`.trim()
@@ -363,27 +399,32 @@ export function SongPanel({
             </Chip>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {done ? (
-            <Button
-              variant="primary"
-              loading={next.isPending}
-              onClick={() => void nextSong()}
-              data-testid="next-item"
-            >
-              Next song
-            </Button>
-          ) : (
-            <Button
-              variant="primary"
-              loading={submit.isPending}
-              onClick={() => void check()}
-              data-testid="check"
-            >
-              {checkLabel}
-            </Button>
-          )}
-          {done ? null : (
+        <ResultActions
+          resultKey={last ? last.n : null}
+          onRetry={last ? tryAgain : null}
+          retryFocus={() => document.querySelector<HTMLElement>(".cm-content")}
+          onContinue={done ? () => void nextSong() : null}
+          continueDisabled={next.isPending}
+          continueLabel="Next song"
+          continueTestId="next-item"
+          line={last?.practice ? PRACTICE_LINE : null}
+          testId="song-actions"
+          // After a failed check the answer is changed through Try again (as in a lesson); after a pass the next
+          // phrase's or stage's Check is open beside it.
+          action={
+            checkOpen ? (
+              <Button
+                variant="primary"
+                loading={submit.isPending}
+                onClick={() => void check()}
+                data-testid="check"
+              >
+                {checkLabel}
+              </Button>
+            ) : null
+          }
+        >
+          {done || retrying ? null : (
             <Button
               variant="ghost"
               icon={<Eye aria-hidden className="size-4" />}
@@ -394,7 +435,7 @@ export function SongPanel({
             </Button>
           )}
           {!done ? <span className="text-sm text-text-3">passes at {Math.round(mark * 100)} %</span> : null}
-        </div>
+        </ResultActions>
         {confirmReveal ? (
           <Callout
             tone="attention"

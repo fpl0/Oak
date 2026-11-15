@@ -17,7 +17,15 @@ import { Button } from "../../ui/kit/index.ts";
 import { appAudio, NEUTRAL_PROFILE, useAnswerEnv } from "../env.tsx";
 import { padGrid, padPoint } from "../tap.ts";
 import type { AnswerWidgetProps } from "../types.ts";
-import { AnswerFrame, KeyHint, markOf, SubmitHint } from "../ui.tsx";
+import {
+  AnswerFrame,
+  KeyHint,
+  markOf,
+  SubmitHint,
+  TAKE_RETRY_PROPS,
+  TakeRetryLabel,
+  useTakeRetryKey,
+} from "../ui.tsx";
 
 type Phase = "idle" | "starting" | "count-in" | "taking" | "done";
 
@@ -121,6 +129,18 @@ export function TapPadAnswer(p: AnswerWidgetProps<"tap">) {
       setProblem(e instanceof Error ? `Sound did not start: ${e.message}` : "Sound did not start.");
     }
   };
+
+  // The take's own Try again before a verdict: Alt+R as the button, the same key as the host's row after one.
+  useTakeRetryKey(phase === "done" && p.locked !== true && !disabled, () => void start());
+
+  // The host's "Try again" (docs/design/retry.md §2.5): the pad re-arms and the count-in starts at once.
+  const retakes = useRef(p.retake ?? 0);
+  useEffect(() => {
+    const n = p.retake ?? 0;
+    if (n <= retakes.current) return;
+    retakes.current = n;
+    if (phase === "idle" || phase === "done") void start();
+  }, [p.retake]);
 
   const onKey = (e: React.KeyboardEvent<HTMLElement>): boolean => {
     // The tap input already took Space/F/J while armed; keep them from scrolling or reaching the workbench.
@@ -260,10 +280,11 @@ export function TapPadAnswer(p: AnswerWidgetProps<"tap">) {
         data-taps={taps.map((t) => (startAt === null ? 0 : Math.round((t.time - startAt) * 1000))).join(" ")}
       >
         <div className="flex min-h-10 flex-wrap items-center gap-3">
-          {phase === "idle" || phase === "done" ? (
+          {(phase === "idle" || phase === "done") && p.locked !== true ? (
             <Button
               variant={phase === "idle" ? "primary" : "secondary"}
               data-enter="native"
+              {...(phase === "done" ? TAKE_RETRY_PROPS : {})}
               icon={
                 phase === "idle" ? (
                   <Hand aria-hidden className="size-4" />
@@ -274,7 +295,7 @@ export function TapPadAnswer(p: AnswerWidgetProps<"tap">) {
               onClick={() => void start()}
               disabled={disabled}
             >
-              {phase === "idle" ? "Start tapping" : "Tap it again"}
+              {phase === "idle" ? "Start tapping" : <TakeRetryLabel />}
             </Button>
           ) : null}
           <span className="text-sm text-text-2" aria-live="polite" data-testid="tap-phase">

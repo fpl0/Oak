@@ -183,7 +183,7 @@ function Elapsed({ since }: { since: number }) {
 }
 
 function FocusBar() {
-  const { title, steps, startedAt } = useFocusHeader();
+  const { title, steps, startedAt, position, onVisit } = useFocusHeader();
   const shellTitle = useShell((s) => s.title);
   return (
     <header className="flex h-[var(--oak-focusbar-h)] shrink-0 items-center gap-4 border-b border-border bg-bg px-3">
@@ -198,7 +198,7 @@ function FocusBar() {
       <p className="min-w-0 flex-1 truncate font-display text-h3 font-semibold" data-testid="page-title">
         {title ?? shellTitle}
       </p>
-      {steps && <StepRail steps={steps} />}
+      {steps && <StepRail steps={steps} position={position} onVisit={onVisit} />}
       {startedAt && <Elapsed since={startedAt} />}
       <MicLiveDot />
       <AudioStatus />

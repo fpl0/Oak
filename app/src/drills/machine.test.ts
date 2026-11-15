@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { DrillFinish, DrillSession, FamilyDef, Trial } from "@oak/api";
+import type { DrillFinish, DrillSession, DrillTrialRecord, FamilyDef, Trial } from "@oak/api";
 import { createRegistry, DEFAULT_PROFILE, gradeTrial, type TrialResponse } from "@oak/drills";
 import { createActor, fromCallback, fromPromise, waitFor } from "xstate";
 import { families } from "../../../content/families.ts";
@@ -9,6 +9,7 @@ import {
   type DrillInput,
   drillMachine,
   type ResumeState,
+  shownOutcome,
   type TrialSource,
 } from "./machine.ts";
 import { answerOf, expectedValueOf, planDrillSet, surfaceOf } from "./model.ts";
@@ -40,10 +41,16 @@ function sourceFor(s: DrillSession): TrialSource {
 }
 
 let clock = 1_000;
+/** The credit the fake resolution grader gives (a practice take of the way home can be graded differently). */
+let resolutionCredit = 0.75;
 const deps: DrillDeps = {
   grade: (trial, response: TrialResponse) =>
     gradeTrial(registry.family(trial.family), trial, response, DEFAULT_PROFILE),
-  gradeResolution: () => ({ credit: 0.75, passed: false, sung: [{ midi: 64, cents: 12, credit: 1 }] }),
+  gradeResolution: () => ({
+    credit: resolutionCredit,
+    passed: resolutionCredit >= 0.8,
+    sung: [{ midi: 64, cents: resolutionCredit >= 0.8 ? 4 : 40, credit: resolutionCredit }],
+  }),
   sungOf: () => [{ midi: 61, cents: 30, credit: 1 }],
   now: () => clock,
   iso: () => "2026-11-11T10:01:00.000Z",
@@ -51,7 +58,11 @@ const deps: DrillDeps = {
 
 interface Spy {
   persisted: number[];
+  /** What the runtime would save for a reload, as the last persist left it (runtime.ts `persist`). */
+  saved: Omit<ResumeState, "session"> | null;
   sent: number[];
+  /** Every record sent, in order (the runner re-sends a trial's record after a practice take). */
+  sentRecords: DrillTrialRecord[];
   finished: number[] | null;
   done: number;
 }
@@ -60,7 +71,7 @@ function run(
   s: DrillSession,
   opts: { resume?: ResumeState | null; source?: TrialSource; failStart?: number; quiet?: boolean } = {},
 ) {
-  const spy: Spy = { persisted: [], sent: [], finished: null, done: 0 };
+  const spy: Spy = { persisted: [], saved: null, sent: [], sentRecords: [], finished: null, done: 0 };
   let starts = 0;
   const machine = drillMachine.provide({
     actors: {
@@ -88,8 +99,17 @@ function run(
       }),
     },
     actions: {
-      persist: (_, p) => spy.persisted.push(p.ctx.index),
-      send: (_, p) => spy.sent.push(p.record.idx),
+      persist: (_, p) => {
+        spy.persisted.push(p.ctx.index);
+        spy.saved = {
+          outcomes: p.ctx.outcomes.slice(0, p.ctx.index),
+          records: p.ctx.records.slice(0, p.ctx.index),
+        };
+      },
+      send: (_, p) => {
+        spy.sent.push(p.record.idx);
+        spy.sentRecords.push(p.record);
+      },
       done: () => {
         spy.done++;
       },
@@ -124,6 +144,14 @@ function answer(actor: ReturnType<typeof run>["actor"], right: boolean) {
           "x") as string,
       ];
   actor.send({ type: "SUBMIT", answer: answerOf(surface.spec, value) });
+}
+
+/** Answers the current FET trial with its degree (or a wrong one). */
+function answerDegree(actor: ReturnType<typeof run>["actor"], right: boolean) {
+  const trial = actor.getSnapshot().context.current?.trial as Trial;
+  const want = (trial.expected as { degrees: string[] }).degrees;
+  const got = right ? want : [want[0] === "1" ? "5" : "1"];
+  actor.send({ type: "SUBMIT", answer: { degrees: got as never } });
 }
 
 describe("drill machine", () => {
@@ -341,13 +369,6 @@ describe("drill machine", () => {
   // --- Wave 3: functional ear training --------------------------------------------------------------
 
   /** Answers the current FET trial on the degree pad, right or with a wrong degree of its set. */
-  function answerDegree(actor: ReturnType<typeof run>["actor"], right: boolean) {
-    const trial = actor.getSnapshot().context.current?.trial as Trial;
-    const want = (trial.expected as { degrees: string[] }).degrees;
-    const got = right ? want : [want[0] === "1" ? "5" : "1"];
-    actor.send({ type: "SUBMIT", answer: { degrees: got as never } });
-  }
-
   test("an FET answer is followed by hearing it resolve (right) or yours vs it (wrong)", async () => {
     const s = session("fam.deg.fet-major", 8);
     const { actor } = run(s, {
@@ -519,5 +540,274 @@ describe("drill machine", () => {
     actor.send({ type: "LISTENED" });
     expect(actor.getSnapshot().context.replays).toBe(2);
     expect(actor.getSnapshot().matches({ trial: "answering" })).toBe(true);
+  });
+});
+
+// docs/design/retry.md §3.3: "Try again" after any result re-opens the same trial (or its sung resolution) as a
+// practice take. The first answer stays the record (it grades the card, contracts §7.2); nothing moves on by itself.
+describe("drill machine: Try again", () => {
+  async function toFeedback(actor: ReturnType<typeof run>["actor"], right: boolean) {
+    await waitFor(actor, (st) => st.matches({ trial: "presenting" }));
+    actor.send({ type: "PRESENTED" });
+    clock += 700;
+    answer(actor, right);
+    expect(actor.getSnapshot().matches("feedback")).toBe(true);
+  }
+
+  test("a right trial and a wrong trial are each retried: the first answers stay the records", async () => {
+    const s = session("fam.pit.compare", 3);
+    const { actor, spy } = run(s);
+    // Trial 1: right, then a WRONG practice take (a retry never punishes).
+    await toFeedback(actor, true);
+    const seed = actor.getSnapshot().context.current?.trial.seed;
+    const first = actor.getSnapshot().context.records[0];
+    expect(first?.credit).toBe(1);
+    actor.send({ type: "RETRY" });
+    let snap = actor.getSnapshot();
+    expect(snap.matches({ trial: "presenting" })).toBe(true);
+    // The same trial (not a new one), at the same index, with the answer open again.
+    expect(snap.context.index).toBe(0);
+    expect(snap.context.current?.trial.seed).toBe(seed);
+    expect(snap.context.practice).toEqual({ of: "trial", outcome: null });
+    expect(shownOutcome(snap.context)).toBeUndefined();
+    expect(snap.context.replays).toBe(0);
+    actor.send({ type: "PRESENTED" });
+    answer(actor, false);
+    snap = actor.getSnapshot();
+    expect(snap.matches("feedback")).toBe(true);
+    // The practice take is shown…
+    expect(shownOutcome(snap.context)?.result.correct).toBe(false);
+    // …and never recorded: the record keeps the first answer and counts the take.
+    expect(snap.context.outcomes[0]?.result.correct).toBe(true);
+    expect(snap.context.records[0]).toEqual({ ...(first as DrillTrialRecord), retries: 1 });
+    // Nothing moves on by itself: still on trial 1 until NEXT.
+    expect(snap.context.index).toBe(0);
+    actor.send({ type: "NEXT" });
+    // Trial 2: wrong, then a RIGHT practice take, twice.
+    await toFeedback(actor, false);
+    expect(actor.getSnapshot().context.practice).toBeNull();
+    for (let take = 1; take <= 2; take++) {
+      actor.send({ type: "RETRY" });
+      actor.send({ type: "PRESENTED" });
+      answer(actor, true);
+      expect(shownOutcome(actor.getSnapshot().context)?.result.correct).toBe(true);
+    }
+    snap = actor.getSnapshot();
+    expect(snap.context.records[1]).toMatchObject({ credit: 0, correct: false, retries: 2 });
+    expect(snap.context.outcomes[1]?.result.correct).toBe(false);
+    actor.send({ type: "NEXT" });
+    // Trial 3: no retry; its record has no practice count.
+    await toFeedback(actor, true);
+    expect(actor.getSnapshot().context.records[2]?.retries).toBeUndefined();
+    actor.send({ type: "NEXT" });
+    await waitFor(actor, (st) => st.matches("summary"));
+    // Every re-send carries the first answer (the server keeps the first stored answer anyway).
+    expect(spy.sentRecords.map((r) => [r.idx, r.credit, r.retries ?? 0])).toEqual([
+      [0, 1, 0],
+      [0, 1, 1],
+      [1, 0, 0],
+      [1, 0, 1],
+      [1, 0, 2],
+      [2, 1, 0],
+    ]);
+    expect(spy.finished).toEqual([0, 1, 2]);
+  });
+
+  test("a revealed trial and a skipped sung trial can be tried again; the reveal stays the record", async () => {
+    const { actor } = run(session("fam.pit.compare", 1));
+    await waitFor(actor, (st) => st.matches({ trial: "presenting" }));
+    actor.send({ type: "PRESENTED" });
+    actor.send({ type: "REVEAL" });
+    actor.send({ type: "RETRY" });
+    actor.send({ type: "PRESENTED" });
+    answer(actor, true);
+    const ctx = actor.getSnapshot().context;
+    expect(shownOutcome(ctx)?.result.correct).toBe(true);
+    expect(ctx.records[0]).toMatchObject({ credit: 0, revealed: true, retries: 1 });
+
+    const sung = run(session("fam.pit.match", 1));
+    await waitFor(sung.actor, (st) => st.matches({ trial: "presenting" }));
+    sung.actor.send({ type: "SKIP_SUNG" });
+    sung.actor.send({ type: "RETRY" });
+    expect(sung.actor.getSnapshot().matches({ trial: "presenting" })).toBe(true);
+    sung.actor.send({ type: "CAPTURED", frames: [] });
+    const c2 = sung.actor.getSnapshot().context;
+    expect(shownOutcome(c2)?.result.skipped).toBeFalsy();
+    expect(c2.records[0]?.response.skipped).toBe(true);
+    expect(c2.records[0]?.retries).toBe(1);
+  });
+
+  test("a tapped trial is tapped again as practice; the first taps stay the record", async () => {
+    const { actor } = run(session("fam.rhy.pulse", 1));
+    await waitFor(actor, (st) => st.matches({ trial: "presenting" }));
+    const trial = actor.getSnapshot().context.current?.trial as Trial;
+    const taps = trial.params.tapTargets as number[];
+    actor.send({ type: "CAPTURED", taps: taps.map((t) => t + 0.01) });
+    expect(actor.getSnapshot().context.records[0]?.correct).toBe(true);
+    actor.send({ type: "RETRY" });
+    expect(actor.getSnapshot().matches({ trial: "presenting" })).toBe(true);
+    // A late, sparse take: graded and shown, not recorded.
+    actor.send({ type: "CAPTURED", taps: [taps[0] as number] });
+    const ctx = actor.getSnapshot().context;
+    expect(shownOutcome(ctx)?.result.correct).toBe(false);
+    expect(ctx.captured.taps).toEqual([taps[0] as number]);
+    expect(ctx.records[0]?.correct).toBe(true);
+    expect(ctx.records[0]?.response.taps).toHaveLength(taps.length);
+    expect(ctx.records[0]?.retries).toBe(1);
+  });
+
+  test("Quiet mode: a sung trial heard in the head is heard again as practice; the mic never opens", async () => {
+    const s = session("fam.pit.match", 2);
+    const presented: { quiet: boolean }[] = [];
+    const machine = drillMachine.provide({
+      actors: {
+        start: fromPromise(async () => ({ session: s, source: sourceFor(s) })),
+        present: fromCallback(({ input }) => {
+          presented.push(input as { quiet: boolean });
+          return () => {};
+        }),
+      },
+      actions: { persist: () => {}, send: () => {}, done: () => {} },
+    });
+    const actor = createActor(machine, {
+      input: {
+        purpose: "srs",
+        familyIds: s.familyIds,
+        warmupItemId: null,
+        sessionId: null,
+        quiet: true,
+        tolCents: 50,
+        resume: null,
+        deps,
+      },
+    });
+    actor.start();
+    await waitFor(actor, (st) => st.matches({ trial: "presenting" }));
+    actor.send({ type: "HEARD" });
+    expect(actor.getSnapshot().context.records[0]).toMatchObject({ modality: "quiet", credit: 0 });
+    actor.send({ type: "RETRY" });
+    expect(actor.getSnapshot().matches({ trial: "presenting" })).toBe(true);
+    actor.send({ type: "PRESENTED" });
+    actor.send({ type: "HEARD" });
+    const ctx = actor.getSnapshot().context;
+    expect(actor.getSnapshot().matches("feedback")).toBe(true);
+    expect(shownOutcome(ctx)?.result.skipped).toBe(true);
+    expect(ctx.records[0]).toMatchObject({ modality: "quiet", retries: 1 });
+    // Both takes were presented in Quiet mode: the present actor never opens the mic then.
+    expect(presented.map((p) => p.quiet)).toEqual([true, true]);
+    actor.send({ type: "NEXT" });
+    expect(actor.getSnapshot().context.index).toBe(1);
+    expect(actor.getSnapshot().context.practice).toBeNull();
+    actor.stop();
+  });
+
+  test("a reload during a practice take resumes at the next trial with the first answer kept", async () => {
+    const s = session("fam.pit.compare", 3);
+    const first = run(s);
+    await toFeedback(first.actor, false);
+    first.actor.send({ type: "RETRY" });
+    // Persisted on entering the practice take: pointing past the trial (its first answer is saved).
+    expect(first.spy.persisted.at(-1)).toBe(1);
+    first.actor.send({ type: "PRESENTED" });
+    answer(first.actor, true);
+    const saved = first.spy.saved as NonNullable<Spy["saved"]>;
+    first.actor.stop();
+    expect(saved.records.map((r) => [r.idx, r.credit, r.retries])).toEqual([[0, 0, 1]]);
+    const second = run(s, { resume: { session: s, ...saved } });
+    await waitFor(second.actor, (st) => st.matches({ trial: "presenting" }));
+    const ctx = second.actor.getSnapshot().context;
+    expect(ctx.index).toBe(1);
+    expect(ctx.practice).toBeNull();
+    expect(ctx.outcomes[0]?.result.correct).toBe(false);
+    second.actor.stop();
+  });
+
+  test("the sung way home is sung again as practice: the first take stays the sung resolution", async () => {
+    const base = sourceFor(session("fam.deg.fet-major", 2));
+    const source: TrialSource = {
+      total: 2,
+      at: (i) => {
+        const p = base.at(i, []);
+        return i === 0
+          ? { ...p, trial: { ...p.trial, params: { ...p.trial.params, sungResolution: true } } }
+          : p;
+      },
+    };
+    const { actor, spy } = run(session("fam.deg.fet-major", 2), { source });
+    await waitFor(actor, (st) => st.matches({ trial: "presenting" }));
+    actor.send({ type: "PRESENTED" });
+    answerDegree(actor, true);
+    // A practice take of the trial before the resolution: the resolution still follows, and still counts.
+    actor.send({ type: "RETRY" });
+    actor.send({ type: "PRESENTED" });
+    answerDegree(actor, false);
+    expect(shownOutcome(actor.getSnapshot().context)?.result.correct).toBe(false);
+    actor.send({ type: "NEXT" });
+    expect(actor.getSnapshot().matches({ resolution: "running" })).toBe(true);
+    resolutionCredit = 0.5;
+    actor.send({ type: "CAPTURED", frames: [] });
+    expect(actor.getSnapshot().matches({ resolution: "done" })).toBe(true);
+    const counted = actor.getSnapshot().context.records[0]?.sungResolution;
+    expect(counted?.credit).toBe(0.5);
+    // Try again after the way home: running again, the first take shown until the new one is in.
+    actor.send({ type: "RETRY" });
+    let snap = actor.getSnapshot();
+    expect(snap.matches({ resolution: "running" })).toBe(true);
+    expect(shownOutcome(snap.context)?.resolutionCredit).toBe(0.5);
+    resolutionCredit = 1;
+    actor.send({ type: "CAPTURED", frames: [] });
+    snap = actor.getSnapshot();
+    expect(snap.matches({ resolution: "done" })).toBe(true);
+    expect(shownOutcome(snap.context)?.resolutionCredit).toBe(1);
+    // Recorded: the first take and the identification credit of the first answer; two practice takes counted.
+    expect(snap.context.records[0]?.sungResolution).toEqual(counted);
+    expect(snap.context.outcomes[0]?.resolutionCredit).toBe(0.5);
+    expect(snap.context.records[0]).toMatchObject({ credit: 1, retries: 2 });
+    expect(spy.sentRecords.at(-1)?.sungResolution).toEqual(counted);
+    resolutionCredit = 0.75;
+    actor.send({ type: "NEXT" });
+    expect(actor.getSnapshot().context.index).toBe(1);
+    expect(actor.getSnapshot().context.retries).toBe(0);
+    actor.stop();
+  });
+
+  test("Quiet mode: the way home heard in the head can be heard again; nothing is sent for it", async () => {
+    // imagining → done → Try again → imagining → done.
+    const base = sourceFor(session("fam.deg.fet-major", 1));
+    const source: TrialSource = {
+      total: 1,
+      at: (i) => {
+        const p = base.at(i, []);
+        return { ...p, trial: { ...p.trial, params: { ...p.trial.params, sungResolution: true } } };
+      },
+    };
+    const q = run(session("fam.deg.fet-major", 1), { source, quiet: true });
+    await waitFor(q.actor, (st) => st.matches({ trial: "presenting" }));
+    q.actor.send({ type: "PRESENTED" });
+    answerDegree(q.actor, true);
+    q.actor.send({ type: "NEXT" });
+    q.actor.send({ type: "PRESENTED" });
+    expect(q.actor.getSnapshot().matches({ resolution: "imagining" })).toBe(true);
+    q.actor.send({ type: "HEARD" });
+    const counted = q.actor.getSnapshot().context.records[0]?.sungResolution;
+    expect(counted).toMatchObject({ quiet: true });
+    q.actor.send({ type: "RETRY" });
+    q.actor.send({ type: "PRESENTED" });
+    expect(q.actor.getSnapshot().matches({ resolution: "imagining" })).toBe(true);
+    q.actor.send({ type: "HEARD" });
+    const ctx = q.actor.getSnapshot().context;
+    expect(ctx.records[0]?.sungResolution).toEqual(counted);
+    expect(ctx.records[0]?.retries).toBe(1);
+    q.actor.send({ type: "NEXT" });
+    await waitFor(q.actor, (st) => st.matches("summary"));
+  });
+
+  test("RETRY means nothing while a trial is being answered", async () => {
+    const { actor } = run(session("fam.pit.compare", 1));
+    await waitFor(actor, (st) => st.matches({ trial: "presenting" }));
+    actor.send({ type: "PRESENTED" });
+    actor.send({ type: "RETRY" });
+    expect(actor.getSnapshot().matches({ trial: "answering" })).toBe(true);
+    expect(actor.getSnapshot().context.retries).toBe(0);
   });
 });

@@ -12,6 +12,7 @@ import { Button } from "../../ui/kit/Button.tsx";
 import { Kbd } from "../../ui/kit/basics.tsx";
 import { Callout } from "../../ui/kit/Controls.tsx";
 import { toast } from "../../ui/kit/Toast.tsx";
+import { PartActions, type PartBack, PartFrame, StatusSlot } from "../../voice/parts/common.tsx";
 import { Workbench } from "../../workbench/index.ts";
 import { LOOP_BPM, melodyRange } from "../loop.ts";
 import { LOOP_LESSON_CTX, ONBOARDING_LINT, U00_LINT } from "../services.ts";
@@ -23,7 +24,9 @@ export function SketchScreen({
   sketchId,
   heard = false,
   onSaved,
+  back,
 }: {
+  back?: PartBack | null;
   code: string;
   sketchId: string | null;
   /**
@@ -37,6 +40,7 @@ export function SketchScreen({
   const [code, setCode] = useState(initial);
   const [ranOk, setRanOk] = useState(heard);
   const [silent, setSilent] = useState(false);
+  const [saveError, setSaveError] = useState<{ text: string; n: number } | null>(null);
   const ro = useRef<true | { editable: { from: number; to: number }[] } | null>(null);
   if (ro.current === null) {
     const r = melodyRange(initial);
@@ -53,6 +57,7 @@ export function SketchScreen({
   };
 
   const save = async () => {
+    setSaveError(null);
     let lint: LintResult | null = null;
     try {
       lint = await lintInBrowser(code, U00_LINT);
@@ -83,42 +88,29 @@ export function SketchScreen({
               ...version,
             },
           });
-      toast.success(`${SKETCH_TITLE} saved`, "It's in your sketchbook in Studio.");
+      // No toast: the coda says where it is, and a toast would sit over the footer's primary.
       onSaved(saved.sketch.id);
     } catch (e) {
-      toast.error("The sketch wasn't saved", e instanceof Error ? e.message : undefined);
+      const text = e instanceof Error ? e.message : "Oak couldn't reach its server.";
+      toast.error("The sketch wasn't saved", text);
+      setSaveError((p) => ({ text, n: (p?.n ?? 0) + 1 }));
     }
   };
 
+  const pending = create.isPending || addVersion.isPending;
   return (
-    <section className="flex flex-col gap-4" data-testid="screen-sketch" aria-labelledby="sketch-title">
-      <header className="flex flex-col gap-1.5">
-        <h1 id="sketch-title" className="text-h1 outline-none" tabIndex={-1}>
-          Make it yours
-        </h1>
-        <p className="max-w-measure text-text-2">
-          Change anything in the melody's pattern: numbers from 0 to 7, a <span className="font-mono">~</span>{" "}
-          for a rest. Run it with <Kbd>{mod}</Kbd> <Kbd>Enter</Kbd>, then save it as {SKETCH_TITLE}. Every
-          session ends with a sketch like this one.
-        </p>
-      </header>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="primary"
-          onClick={() => void save()}
-          loading={create.isPending || addVersion.isPending}
-          icon={<Save aria-hidden className="size-4" />}
-          data-testid="sketch-save"
-        >
-          {sketchId ? `Save ${SKETCH_TITLE} again` : `Save as ${SKETCH_TITLE}`}
-        </Button>
-        {!ranOk && <span className="text-sm text-text-3">Run it once to hear your version first.</span>}
-      </div>
-      {silent && (
-        <Callout tone="attention" title="The loop runs, but it plays no notes">
-          You can still save it; or undo with {mod}+Z to bring the melody back.
-        </Callout>
-      )}
+    <PartFrame
+      testId="screen-sketch"
+      context="onboarding"
+      title={SKETCH_TITLE}
+      instruction={`Change anything in the melody, run it, then save it as ${SKETCH_TITLE}.`}
+      lead={
+        <>
+          Numbers from 0 to 7 are notes, a <span className="font-mono">~</span> is a rest. Run it with{" "}
+          <Kbd>{mod}</Kbd> <Kbd>Enter</Kbd>. Every session ends with a sketch like this one.
+        </>
+      }
+    >
       <Workbench
         id="onb-sketch"
         code={code}
@@ -128,10 +120,48 @@ export function SketchScreen({
         views={["roll"]}
         variant="compact"
         roll={{ color: "part", labels: "none" }}
+        lenses={null}
         readOnly={ro.current}
         onChange={setCode}
         onEvaluated={onEvaluated}
       />
-    </section>
+      <StatusSlot>
+        {silent && (
+          <Callout tone="attention" title="The loop runs, but it plays no notes">
+            You can still save it; or undo with {mod}+Z to bring the melody back.
+          </Callout>
+        )}
+        {saveError && (
+          <Callout tone="issue" title="The sketch wasn't saved">
+            {saveError.text}
+          </Callout>
+        )}
+        {!ranOk && !saveError && (
+          <p className="text-sm text-text-3">Run it once to hear your version first.</p>
+        )}
+      </StatusSlot>
+      <PartActions
+        context="onboarding"
+        back={back}
+        resultKey={saveError ? `save-error-${saveError.n}` : null}
+        onRetry={saveError ? () => void save() : null}
+        retryDisabled={pending}
+        onContinue={null}
+        testId="sketch-actions"
+        action={
+          saveError ? null : (
+            <Button
+              variant="primary"
+              onClick={() => void save()}
+              loading={pending}
+              icon={<Save aria-hidden className="size-4" />}
+              data-testid="sketch-save"
+            >
+              {sketchId ? `Save ${SKETCH_TITLE} again` : `Save as ${SKETCH_TITLE}`}
+            </Button>
+          )
+        }
+      />
+    </PartFrame>
   );
 }

@@ -23,7 +23,7 @@ import { capstoneDay, checkAllMet, intoWorkspace, releaseToCoda } from "../journ
 import { useUiPrefs } from "../support/ui.ts";
 import { stack } from "./playwright.config.ts";
 import { advanceMinutes, api, clockTo, resetClock, shootAll, snap, watch } from "./support.ts";
-import { quietHmr, seedPoint, step } from "./w4-support.ts";
+import { quietHmr, seedPoint, step, tryAgainIfShown } from "./w4-support.ts";
 import { feedback, verdict } from "./w5-support.ts";
 
 test.use({ reducedMotion: "reduce", viewport: { width: 1280, height: 800 } });
@@ -102,6 +102,8 @@ test("J3.L01 S3: the keys picked survive a reload; the B voicing five times leav
   // The B voicing (E G A C) where the A (A C E G) is asked, five times.
   const down = s.locator('[data-midi][aria-pressed="true"]');
   for (let i = 0; i < 5; i++) {
+    // After each verdict the answer is changed through Try again (docs/design/retry.md §2.5).
+    await tryAgainIfShown(page);
     const clear = s.getByRole("button", { name: "Clear", exact: true });
     if ((await down.count()) > 0) await clear.click();
     await expect(down).toHaveCount(0);
@@ -116,6 +118,7 @@ test("J3.L01 S3: the keys picked survive a reload; the B voicing five times leav
   // The hint ladder's second rung says what kind of mistake it is, in words (it said only "bass"), never the notes.
   await page.getByRole("button", { name: /^Hint/ }).click();
   await page.getByRole("button", { name: /^Hint/ }).click();
+  await tryAgainIfShown(page);
   await page.getByTestId("check").click();
   await expect(feedback(page)).toContainText("The lowest note is not the one this chord stands on.", {
     timeout: 30_000,

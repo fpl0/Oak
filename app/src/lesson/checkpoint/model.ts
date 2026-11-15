@@ -396,3 +396,38 @@ export function reviewTitle(records: readonly Pick<ItemRecord, "skipped">[], tot
   const answered = records.length - skipped;
   return `${answered} of ${total} items answered, ${skipped} skipped`;
 }
+
+// --- Try again before hand-in (docs/design/retry.md §3.2, contracts §7.6) -------------------------------------
+
+/**
+ * Saving an item: the new answer replaces the item's last one (one record per item, the last saved counts). Once
+ * the attempt is handed in nothing in it changes: the retry of a checkpoint is the retake, with new items.
+ */
+export function recordItem(records: readonly ItemRecord[], r: ItemRecord, handedIn = false): ItemRecord[] {
+  if (handedIn) return [...records];
+  return [...records.filter((x) => x.idx !== r.idx), r];
+}
+
+/** What "Hand it in" sends per item of the attempt: its last saved answer, or skipped when it has none. */
+export function handInItems(
+  items: readonly { idx: number }[],
+  records: readonly ItemRecord[],
+): { idx: number; score: number; skipped: boolean; response: AttemptResponse; result: GradeResult | null }[] {
+  const rec = new Map(records.map((r) => [r.idx, r]));
+  return items.map((it) => {
+    const r = rec.get(it.idx);
+    return {
+      idx: it.idx,
+      score: r?.score ?? 0,
+      skipped: r?.skipped ?? true,
+      response: r?.response ?? { skipped: true },
+      result: r?.result ?? null,
+    };
+  });
+}
+
+/** An item as the review lists it: answered (it can be changed), skipped or not reached (it can be answered). */
+export function itemState(r: Pick<ItemRecord, "skipped"> | undefined): "answered" | "skipped" | "open" {
+  if (!r) return "open";
+  return r.skipped ? "skipped" : "answered";
+}

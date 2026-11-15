@@ -23,6 +23,7 @@ import {
   type EditorStart,
   editorStart,
   partRange,
+  resultOnScreen,
   type SplitPart,
   type StepProgress,
   startIndex,
@@ -121,6 +122,14 @@ export interface LessonContext extends LessonInput {
   completion: LessonCompleteResult | null;
   /** Wave 4: the voicing gate, for U05.L07 and U05.L08 (`null` for every other lesson). */
   gate: GateState | null;
+  /**
+   * "Try again" presses per step in this visit (docs/design/retry.md §2.5): a retry clears the step's verdict and
+   * re-opens the same question with the same series and params. Not kept over a reload: a reloaded step opens on
+   * the server's state with no verdict on screen, which is where a retry leaves it too.
+   */
+  retried: Record<string, number>;
+  /** Counts verdicts as they appear, so each one has its own identity (the result row's focus rule). */
+  resultNo: number;
 }
 
 /** Events the player sends besides the public `LessonEvent`s. */
@@ -153,7 +162,14 @@ export type LessonInternalEvent =
   | { type: "SAVE_QUICK"; code: string; title: string }
   | { type: "CANCEL_WRAP" }
   | { type: "DISMISS_NOTICE" }
-  | { type: "RETRY" };
+  /** The lesson failed to load: load it again. */
+  | { type: "RETRY" }
+  /**
+   * "Try again" after any result (docs/design/retry.md): the verdict goes, the widget re-opens on the same
+   * question (same series, same params, same rung). Nothing is posted: the next Check is the next attempt, and
+   * the server decides what it counts for (`StepState.practiceNext`).
+   */
+  | { type: "TRY_AGAIN" };
 
 export type LessonMachineEvent = LessonEvent | LessonInternalEvent;
 
@@ -204,7 +220,17 @@ function attemptSig(e: Extract<LessonInternalEvent, { type: "SUBMIT" }>): string
 function keepErrorResult({ context, event }: { context: LessonContext; event: LessonMachineEvent }) {
   const s = current(context);
   if (!s || event.type !== "SUBMIT") return {};
-  return { results: { ...context.results, [s.id]: event.result }, notice: null };
+  return {
+    results: { ...context.results, [s.id]: event.result },
+    notice: null,
+    resultNo: context.resultNo + 1,
+  };
+}
+
+/** Whether the current step has a verdict (or a predict's outcome) on screen, so Try again is offered. */
+export function resultShown(c: LessonContext): boolean {
+  const s = current(c);
+  return s !== null && resultOnScreen(s, progressOf(c, s.id), c.retried[s.id] ?? 0);
 }
 
 export const lessonMachine = setup({
@@ -245,6 +271,8 @@ export const lessonMachine = setup({
     canGoBack: ({ context }) => context.index > context.range[0],
     canGoForward: ({ context }) => context.index < context.furthest,
     isError: ({ event }) => event.type === "SUBMIT" && event.result.status === "error",
+    resultShown: ({ context }) => resultShown(context),
+    noResultShown: ({ context }) => !resultShown(context),
     hasHints: ({ context }) => {
       const ex = current(context)?.exercise;
       return !!ex && ex.hints !== null && ex.kind !== "predict" && ex.kind !== "listen";
@@ -285,6 +313,8 @@ export const lessonMachine = setup({
     sketchId: null,
     completion: null,
     gate: null,
+    retried: {},
+    resultNo: 0,
   }),
   initial: "loading",
   on: {
@@ -374,11 +404,38 @@ export const lessonMachine = setup({
           actions: assign(({ context, event }) => ({
             results: { ...context.results, [event.attempt.state.stepId]: event.result },
             states: { ...context.states, [event.attempt.state.stepId]: event.attempt.state },
+            resultNo: context.resultNo + 1,
           })),
         },
       },
       states: {
+        // Waiting for the learner. `answering`: the question is open; `result`: a verdict is on screen and the
+        // answer is locked until "Try again" (docs/design/retry.md §2.5). Which one follows the step on screen,
+        // so moving between steps, a reload, a hint or a new series lands in the right one by itself.
         idle: {
+          initial: "answering",
+          states: {
+            answering: {
+              always: { guard: "resultShown", target: "result" },
+            },
+            result: {
+              always: { guard: "noResultShown", target: "answering" },
+              on: {
+                TRY_AGAIN: {
+                  target: "answering",
+                  actions: assign(({ context }) => {
+                    const s = current(context);
+                    if (!s) return {};
+                    return {
+                      results: { ...context.results, [s.id]: null },
+                      retried: { ...context.retried, [s.id]: (context.retried[s.id] ?? 0) + 1 },
+                      notice: null,
+                    };
+                  }),
+                },
+              },
+            },
+          },
           on: {
             CHECK: "grading",
             SUBMIT: [{ guard: "isError", actions: assign(keepErrorResult) }, { target: "posting" }],
@@ -502,7 +559,8 @@ export const lessonMachine = setup({
             onError: {
               target: "idle",
               actions: assign({
-                notice: "Your answer was checked, but Oak could not save it. Check again to retry.",
+                notice:
+                  "Your answer was checked, but Oak could not save it. Press Try again, then Check, to save it.",
               }),
             },
           },
@@ -520,6 +578,7 @@ export const lessonMachine = setup({
               gateMetBy(event.result, context.gate.rule.minScore);
             return {
               results: { ...context.results, [s.id]: event.result },
+              resultNo: context.resultNo + 1,
               attemptKeys: { ...context.attemptKeys, [s.id]: { sig, key } },
               ...(opens && context.gate ? { gate: { ...context.gate, passed: true } } : {}),
             };

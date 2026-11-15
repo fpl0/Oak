@@ -1,6 +1,8 @@
 // A fact mini-set (contracts §7.4: up to 10 due fact cards): each card is answered by typing, or flipped to see
-// the answer (a flip counts as revealed: Again). Each card is one `POST /srs/review`; the server rates it
-// (wrong → Again; right but slow → Hard; right within fastRtMs → Easy; else Good).
+// the answer (a flip counts as revealed: Again). Each card is one `POST /srs/review`, at its FIRST answer; the
+// server rates it (wrong → Again; right but slow → Hard; right within fastRtMs → Easy; else Good). After any
+// answer "Try again" asks the same card again as practice: the verdict is shown, nothing is posted
+// (docs/design/retry.md §3.3; the rule is `factStep` in retry.ts).
 import type { Answer, FactCardDef, FactDeck } from "@oak/api";
 import { gradeFactCard } from "@oak/drills";
 import { notate, parseNoteList } from "@oak/notation";
@@ -12,6 +14,8 @@ import { idempotencyKey } from "../lib/idempotency.ts";
 import { Button } from "../ui/kit/Button.tsx";
 import { Card, Kbd } from "../ui/kit/basics.tsx";
 import { ProgressRing } from "../ui/kit/Meters.tsx";
+import { ResultActions } from "../ui/kit/ResultActions.tsx";
+import { type FactCardState, type FactEvent, factLine, factSitting, factStart, factStep } from "./retry.ts";
 import type { DrillData } from "./use-drill-data.ts";
 
 export interface FactResult {
@@ -19,6 +23,15 @@ export interface FactResult {
   correct: boolean;
   revealed: boolean;
   rtMs: number;
+}
+
+/** The browser's storage, or null where it is blocked (a private window, a preview). */
+function browserStorage(): Storage | null {
+  try {
+    return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function findFactCard(
@@ -64,29 +77,34 @@ export function FactSet({
   cardIds,
   onDone,
   doneLabel,
+  sittingId = null,
 }: {
   data: DrillData;
   cardIds: readonly string[];
   onDone(results: FactResult[]): void;
   doneLabel: string;
+  /** The sitting these cards belong to (the warm-up item's id): a card is rated once in it, reloads included. */
+  sittingId?: string | null;
 }) {
   const cards = cardIds
     .map((id) => findFactCard(data.content.decks, id))
     .filter((c): c is { deck: FactDeck; card: FactCardDef } => c !== null);
+  const [sitting] = useState(() => factSitting(sittingId, browserStorage()));
+  const startOf = (i: number) => factStart(sitting.first(cards[i]?.card.id ?? ""));
   const [index, setIndex] = useState(0);
   const [typed, setTyped] = useState("");
-  const [state, setState] = useState<"asking" | "right" | "wrong" | "flipped">("asking");
+  const [fact, setFact] = useState<FactCardState>(() => startOf(0));
+  const state = fact.phase;
   const [results, setResults] = useState<FactResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const shownAt = useRef(performance.now());
   const input = useRef<HTMLInputElement>(null);
-  const next = useRef<HTMLButtonElement>(null);
   const id = useId();
   const cur = cards[index];
 
+  // The answer field has the focus while asking; once answered, the result row moves it (to Next card).
   useEffect(() => {
     if (state === "asking") input.current?.focus();
-    else next.current?.focus();
   }, [state]);
 
   if (cards.length === 0)
@@ -130,9 +148,23 @@ export function FactSet({
   }
   const { deck, card } = cur as { deck: FactDeck; card: FactCardDef };
 
+  /**
+   * Applies an event; the card's first answer in the sitting is its one review (posted), every later one is
+   * practice. A card answered before a reload (or in another tab) keeps that first answer in the summary.
+   */
+  const apply = (e: FactEvent) => {
+    const r = factStep(fact, e);
+    setFact(r.state);
+    if (r.post) void record(r.post.correct, r.post.revealed);
+    else if (fact.phase === "asking" && r.state.phase !== "asking" && fact.tries === 0) {
+      const first = sitting.first(card.id);
+      if (first) setResults((rs) => [...rs, { cardId: card.id, ...first, rtMs: 0 }]);
+    }
+  };
   const record = async (correct: boolean, revealed: boolean) => {
     const rtMs = Math.round(performance.now() - shownAt.current);
     setResults((r) => [...r, { cardId: card.id, correct, revealed, rtMs }]);
+    sitting.record(card.id, { correct, revealed });
     const key = idempotencyKey();
     try {
       await callApi("srs.review", {
@@ -160,17 +192,18 @@ export function FactSet({
   const check = () => {
     if (!typed.trim()) return;
     const r = gradeFactCard(card, { text: [typed.trim()] }, performance.now() - shownAt.current);
-    setState(r.correct ? "right" : "wrong");
-    void record(r.correct, false);
+    apply({ type: "answer", correct: r.correct });
   };
-  const flip = () => {
-    setState("flipped");
-    void record(false, true);
+  const flip = () => apply({ type: "flip" });
+  const retry = () => {
+    apply({ type: "retry" });
+    setTyped("");
+    shownAt.current = performance.now();
   };
   const advance = () => {
     setIndex((i) => i + 1);
     setTyped("");
-    setState("asking");
+    setFact(startOf(index + 1));
     shownAt.current = performance.now();
   };
 
@@ -217,21 +250,32 @@ export function FactSet({
             Flip the card
           </Button>
         </form>
-      ) : (
-        <div className="flex flex-col gap-3">
-          <p role="status" className="font-medium">
-            {state === "right"
+      ) : null}
+      {/* One live region for the card, on the page before its verdict and filled by it (docs/design/retry.md
+          §2.3): a region added together with its content is not announced before the focus reaches Next card. */}
+      <div className={state === "asking" ? "sr-only" : "flex flex-col gap-3"}>
+        <p role="status" className="font-medium" data-testid="fact-verdict">
+          {state === "asking"
+            ? ""
+            : state === "right"
               ? `That's it: ${answerText(card.answer)}.`
               : state === "wrong"
                 ? `It is ${answerText(card.answer)}. It comes back soon.`
                 : `${answerText(card.answer)}. It comes back soon.`}
-          </p>
-          {error && <p className="text-sm text-issue">{error}</p>}
-          <Button ref={next} variant="primary" className="self-start" onClick={advance}>
-            {index + 1 < cards.length ? "Next card" : "Finish"} <Kbd tone="inverse">Enter</Kbd>
-          </Button>
-        </div>
-      )}
+        </p>
+        {error && state !== "asking" && <p className="text-sm text-issue">{error}</p>}
+      </div>
+      {/* Mounted for the whole card (not with the verdict), so the row sees each new result arrive and moves the
+          focus to Next card; while asking it is empty. */}
+      <ResultActions
+        resultKey={state === "asking" ? null : `${index}:${fact.tries}`}
+        onRetry={state === "asking" ? null : retry}
+        retryFocus={() => input.current}
+        onContinue={state === "asking" ? null : advance}
+        continueLabel={index + 1 < cards.length ? "Next card" : "Finish"}
+        continueKeys="Enter"
+        line={factLine(fact)}
+      />
     </Card>
   );
 }

@@ -151,6 +151,8 @@ function SingleRenderer(props: ExerciseRendererProps) {
       return inputResponse(ex, value, rt, h.trial);
     },
     rt,
+    // Code is fixed in the editor with the verdict in view: Run and Mod+Shift+Enter check again from there.
+    { whileLocked: code },
   );
   const spec: AnswerSpec | null = withTrialOptions(answerSpecOf(ex), h.trial);
   const reason = code || ready ? null : checkReason(ex, value, initialInput(ex, h.trial), h.trial);
@@ -175,7 +177,9 @@ function SingleRenderer(props: ExerciseRendererProps) {
     feedback,
     result: h.result,
     rung: h.rung,
-    disabled: h.checking || h.review,
+    disabled: h.checking,
+    locked: h.locked,
+    retake: h.retake,
     onSubmit: () => void check(),
     runtime: rt,
     trial: h.trial,
@@ -324,7 +328,9 @@ function PredictRenderer(props: ExerciseRendererProps) {
   const ex = h.exercise as Extract<Exercise, { kind: "predict" }>;
   const rt = useRef<InputRuntime>({ tapStart: null, plays: 0 }).current;
   const [value, setValue] = useState<unknown>(() => initialInput(ex));
-  const answered = h.result !== null || (h.state?.attempts ?? 0) > 0 || h.review;
+  // The outcome is on screen once a guess is locked in (here, or before a reload) until "Try again" re-opens the
+  // guess; a second guess is practice (the first gave the evidence, docs/design/retry.md §3.1).
+  const answered = h.locked;
   const ready = inputReady(ex, value);
   const { check } = useCheck(props, () => (ready ? inputResponse(ex, value, rt) : null), rt);
   useEffect(() => {
@@ -364,7 +370,9 @@ function PredictRenderer(props: ExerciseRendererProps) {
             feedback={{ state: "idle" }}
             result={null}
             rung={0}
-            disabled={answered || h.checking}
+            disabled={h.checking}
+            locked={answered}
+            retake={h.retake}
             onSubmit={() => void check()}
             runtime={rt}
             trial={null}
@@ -402,6 +410,7 @@ function AllRenderer(props: ExerciseRendererProps) {
   const ex = h.exercise as AllEx;
   const parts = ex.parts;
   const runtimes = useRef<InputRuntime[]>(parts.map(() => ({ tapStart: null, plays: 0 }))).current;
+  const anyCode = parts.some((p) => isCodeInput(p) || p.kind === "code-fill" || p.kind === "run-investigate");
   const drafts = useDrafts(parts);
   const [values, setValues] = useState<unknown[]>(() =>
     parts.map((p, i) => {
@@ -425,6 +434,7 @@ function AllRenderer(props: ExerciseRendererProps) {
           })()
         : null,
     rt,
+    { whileLocked: parts.some((p) => isCodeInput(p)) },
   );
   const reason = ready
     ? null
@@ -434,7 +444,6 @@ function AllRenderer(props: ExerciseRendererProps) {
         parts.map((p, i) => initialInput(p, h.trials[i] ?? null)),
         h.trials,
       );
-  const anyCode = parts.some((p) => isCodeInput(p) || p.kind === "code-fill" || p.kind === "run-investigate");
   const fb =
     quietIn(h.mode, h.checking) ??
     answerFeedback({ result: h.result, checking: h.checking, rung: h.rung, spec: null, reveal: null });
@@ -457,7 +466,9 @@ function AllRenderer(props: ExerciseRendererProps) {
           feedback: partFeedback(fb, h.result, i),
           result: null as GradeResult | null,
           rung: h.rung,
-          disabled: h.checking || h.review,
+          disabled: h.checking,
+          locked: h.locked,
+          retake: h.retake,
           onSubmit: () => void check(),
           runtime: runtimes[i] as InputRuntime,
           trial: h.trials[i] ?? null,

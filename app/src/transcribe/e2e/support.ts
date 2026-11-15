@@ -26,3 +26,15 @@ export async function seed(page: Page, point: string): Promise<void> {
   const r = await api(page, "POST", "/dev/seed", { point });
   expect(r.status, JSON.stringify(r.body)).toBe(200);
 }
+
+/**
+ * Check what is written (the panel's Check). After a failed check the answer is changed through Try again
+ * (docs/design/retry.md §3.6): Check comes back once the verdict goes, so Try again is pressed first when it is the
+ * way back to Check.
+ */
+export async function checkIt(page: Page): Promise<void> {
+  const check = page.getByTestId("check");
+  const retry = page.getByTestId("result-retry");
+  if (!(await check.isVisible()) && (await retry.isVisible())) await retry.click();
+  await check.click();
+}

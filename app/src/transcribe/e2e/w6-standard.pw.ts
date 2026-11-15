@@ -9,7 +9,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { SCREENSHOT_MATRIX } from "../../../../e2e/support/stack.ts";
 import { shoot, useUiPrefs } from "../../../../e2e/support/ui.ts";
 import { A_CHART, STANDARD_ID, standardPool, standardStandIn } from "./standard-fixtures.ts";
-import { seed } from "./support.ts";
+import { checkIt, seed } from "./support.ts";
 
 const SHOTS = new URL("./screenshots", import.meta.url).pathname;
 const URL_OF = `/transcribe/${STANDARD_ID}`;
@@ -106,7 +106,7 @@ test("L8, the form map: a wrong map marks its sections and says what to compare;
 
   // Two halves: wrong. The verdict counts, each line names a place, the strip marks the sections, no answer shown.
   await expect(page.getByTestId("check")).toBeEnabled();
-  await page.getByTestId("check").click();
+  await checkIt(page);
   await expect(page.getByTestId("verdict")).toContainText("The form: not yet.");
   await expect(page.getByTestId("check-lines")).toContainText(
     "A new section starts at bar 9; your map has no boundary there.",
@@ -138,7 +138,7 @@ test("L8, the form map: a wrong map marks its sections and says what to compare;
   await page.reload();
   await expect(page.getByTestId("form-map")).toHaveAttribute("data-form", "AABA");
 
-  await page.getByTestId("check").click();
+  await checkIt(page);
   await expect(page.getByTestId("verdict")).toHaveText("The form: that's it, A A B A.");
   await expect(page.getByTestId("stages").locator("li").nth(0)).toHaveAttribute("data-status", "passed");
   await expect(page.getByTestId("stages").locator("li").nth(1)).toHaveAttribute("data-status", "open");
@@ -188,7 +188,7 @@ test("L8, a stage section by section: the changes fail naming their bars, pass o
 
   // A wrong chart: minor where the song has a dominant, a wrong root later.
   await setConst(page, "chordsA", 'chord("<C Em A7 A7 D7 D7 F G7>").voicing().s("piano").gain(.6)');
-  await page.getByTestId("check").click();
+  await checkIt(page);
   await expect(page.getByTestId("verdict")).toHaveText(
     "Changes, section 1 (A): not yet, 75 % of 85 %. Bars 2 and 7 differ. Loop the section and listen again.",
   );
@@ -200,12 +200,12 @@ test("L8, a stage section by section: the changes fail naming their bars, pass o
 
   // Written as heard: it passes, and the next section opens.
   await setConst(page, "chordsA", `chord("<${A_CHART.join(" ")}>").voicing().s("piano").gain(.6)`);
-  await page.getByTestId("check").click();
+  await checkIt(page);
   await expect(page.getByTestId("verdict")).toHaveText("Changes, section 1 (A): that's it (96 %).");
   await expect(page.getByTestId("phrase-progress")).toHaveText("1 of 4 passed");
   await expect(page.getByTestId("check")).toHaveText(/Check section 2 \(A\)/);
   // The A that comes back is the same const: it passes as it stands.
-  await page.getByTestId("check").click();
+  await checkIt(page);
   await expect(page.getByTestId("phrase-progress")).toHaveText("2 of 4 passed");
   await expect(page.getByTestId("chart-title")).toHaveText("Section 3 (B): bars 17–24");
   expect(server.submissions.at(-1)).toMatchObject({ stage: "changes", phrase: 2 });

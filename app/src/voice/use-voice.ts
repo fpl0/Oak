@@ -8,6 +8,7 @@ import type { Profile, VoiceLadderSet, VoiceState } from "@oak/api";
 import { useProfile, useVoiceLadder, useVoiceQuiet, useVoiceState } from "../lib/queries.ts";
 import { useUpdateProfile } from "../lib/settings.ts";
 import { toast } from "../ui/kit/Toast.tsx";
+import { quietChosen } from "./logic.ts";
 import { isNotBuilt, type LadderView, ladderViewOf, type QuietView, quietViewOf } from "./state.ts";
 import { announceQuiet } from "./sync.ts";
 
@@ -83,4 +84,15 @@ export function useVoice(): Voice {
     setQuiet,
     setLadder,
   };
+}
+
+/**
+ * Quiet mode as the learner chose it ("just for today" in Settings, or until switched off), read where onboarding
+ * and the set-up parts decide whether to ask for the mic: a choice made in another tab reaches them through
+ * `useVoiceSync` (voice/sync.ts) and the shared `GET /voice` query. "No microphone yet" is not a choice (see
+ * `quietChosen`).
+ */
+export function useQuietChosen(profile: Pick<Profile, "quiet">): boolean {
+  const voiceQ = useVoiceState();
+  return quietChosen(voiceQ.data ?? null, profile);
 }

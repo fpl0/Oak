@@ -24,6 +24,7 @@ import {
   StimulusView,
   useAnswerEnvFor,
 } from "./inputs.tsx";
+import { ResultRow } from "./result-row.tsx";
 import {
   fallbackCorrect,
   type SingLabels,
@@ -209,11 +210,15 @@ function IdentifyFallback({
   };
   const [value, setValue] = useState<Degree[]>([]);
   const [verdict, setVerdict] = useState<boolean | null>(null);
+  // Each verdict has its own identity, so the row moves the focus to it (docs/design/retry.md §2.4).
+  const [verdictNo, setVerdictNo] = useState(0);
   const check = () => {
-    if (value.length !== degrees.length) return;
+    if (value.length !== degrees.length || verdict !== null) return;
     setVerdict(fallbackCorrect(degrees, value));
+    setVerdictNo((n) => n + 1);
     h.markDone();
   };
+  const padId = `l-${h.step.id.toLowerCase()}-quiet`;
   return (
     <div className="flex flex-col gap-3" data-testid="sing-quiet-identify">
       <p className="text-sm text-text-2">Quiet mode: hear the pattern, then name its degrees in order.</p>
@@ -221,29 +226,43 @@ function IdentifyFallback({
       <AnswerWidgetHost
         spec={spec}
         value={value as AnswerValue}
-        onChange={(v) => {
-          setValue(v as Degree[]);
-          setVerdict(null);
-        }}
+        onChange={(v) => setValue(v as Degree[])}
         feedback={verdict === null ? { state: "idle" } : verdict ? { state: "correct" } : { state: "wrong" }}
-        disabled={false}
+        disabled={verdict !== null}
         onSubmit={check}
         rung={0}
-        idBase={`l-${h.step.id.toLowerCase()}-quiet`}
+        idBase={padId}
         label="The degrees you heard, in order"
       />
-      <div className="flex items-center gap-3">
-        <Button onClick={check} disabled={value.length !== degrees.length} data-testid="quiet-check">
-          Check
-        </Button>
-        {verdict !== null && (
-          <span role="status" className="text-sm" data-testid="quiet-verdict">
-            {verdict
-              ? "That's the pattern."
-              : `It goes ${degrees.map((d) => targetLabel(d, labels).main).join(" ")}. Hear it once more.`}
-          </span>
-        )}
-      </div>
+      {verdict !== null && (
+        <p role="status" className="text-sm" data-testid="quiet-verdict">
+          {verdict
+            ? "That's the pattern."
+            : `It goes ${degrees.map((d) => targetLabel(d, labels).main).join(" ")}. Hear it once more.`}
+        </p>
+      )}
+      {/* A local verdict (never posted, contracts §8.5) with the same row as every other answer: Check, then
+          Try again. The step's own footer has no result here, so this row is the one Alt+R reaches. */}
+      <ResultRow
+        testId="quiet-actions"
+        resultKey={verdict === null ? null : verdictNo}
+        onRetry={verdict === null ? null : () => setVerdict(null)}
+        retryFocus={() =>
+          document.querySelector<HTMLElement>(
+            `[data-testid="sing-quiet-identify"] [data-answer] :is([tabindex="0"], button:not(:disabled))`,
+          )
+        }
+        onContinue={null}
+        continueLabel=""
+        continueTestId="quiet-continue"
+        action={
+          verdict === null ? (
+            <Button onClick={check} disabled={value.length !== degrees.length} data-testid="quiet-check">
+              Check
+            </Button>
+          ) : null
+        }
+      />
     </div>
   );
 }
@@ -340,7 +359,9 @@ export function SingRenderer(props: ExerciseRendererProps) {
               value={value}
               onChange={(v) => setValue(v as SungSummary[])}
               feedback={feedback}
-              disabled={h.checking || h.review}
+              disabled={h.checking}
+              locked={h.locked}
+              retake={h.retake}
               onSubmit={() => void check()}
               rung={h.rung}
               idBase={`l-${h.step.id.toLowerCase()}-${h.seriesNo}-sing`}

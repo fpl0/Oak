@@ -32,6 +32,7 @@ import { createRegistry, FAMILIES, gradeTrial } from "@oak/drills";
 import { METERS } from "@oak/theory";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { courseGraph } from "../../../../content/index.ts";
 import { unlockedAt } from "../../../../content/lib/course.ts";
@@ -54,8 +55,10 @@ import { useFocusHeader, useFocusHeaderContent } from "../../ui/shell/focus-head
 import { ServicesGate } from "../../workbench/ServicesGate.tsx";
 import "../../workbench/workbench.css";
 import { promptOf } from "../../drills/copy.ts";
+import { retryLine } from "../../lib/retry.ts";
 import { lessonWidgetFor } from "../answers.tsx";
 import { bandMutesOf, bandSetupOf, checkpointMakeBand } from "../band.ts";
+import { checkReasonId } from "../check.tsx";
 import { useCheckpointDef, useLessonContent } from "../content.ts";
 import { renderer as feedbackRenderer } from "../feedback.ts";
 import { type StepHost, StepHostContext } from "../frame.tsx";
@@ -67,8 +70,11 @@ import {
   gradeStep,
   NEUTRAL_PROFILE,
 } from "../grading.ts";
-import { viewsOf } from "../model.ts";
+import { isCodeInput } from "../inputs.tsx";
+import { partsOf, viewsOf } from "../model.ts";
 import { MakeRenderer, rendererFor } from "../renderers.tsx";
+import { answerFocus, ResultRow } from "../result-row.tsx";
+import { CheckReasonSlot } from "../StepFooter.tsx";
 import { browserGrader, catalogText, lessonServices } from "../services.ts";
 import { answerMissing, registryHas, stepScopePanel } from "../wave5.ts";
 import { stepMusicLenses } from "../wave6.ts";
@@ -79,13 +85,16 @@ import {
   clearRecords,
   familyAnswerSpec,
   familyResponse,
+  handInItems,
   type ItemRecord,
   isSungTrial,
   itemKey,
+  itemState,
   loadRecords,
   openedText,
   progressLine,
   quietNote,
+  recordItem,
   resultCopy,
   reviewTitle,
   saveRecords,
@@ -608,6 +617,12 @@ function Runner(p: {
   const [code, setCode] = useState<Record<number, string>>({});
   const [checking, setChecking] = useState(false);
   const [makeSketch, setMakeSketch] = useState<string | null>(null);
+  // "Try again" on a saved item re-opens it (docs/design/retry.md §3.2): its last saved answer still counts until
+  // it is saved again. Per item: how many times it was re-opened (a take widget starts a new take on it).
+  const [reopened, setReopened] = useState<ReadonlySet<number>>(new Set());
+  const [retakes, setRetakes] = useState<Record<number, number>>({});
+  const [saveNo, setSaveNo] = useState(0);
+  const handedIn = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const started = useRef(Date.now());
@@ -637,17 +652,34 @@ function Runner(p: {
 
   // The rail of items in the focus header (the page owns the title).
   const setHeader = useFocusHeader((s) => s.set);
-  const railSig = items.map((it, i) => (i === index ? "c" : rec.has(it.idx) ? "d" : "t")).join("");
+  const railSig = items
+    .map((it, i) => (i === index ? "c" : rec.get(it.idx)?.skipped ? "s" : rec.has(it.idx) ? "d" : "t"))
+    .join("");
+  // Answered and skipped items can be opened again from the rail before hand-in (contracts §7.6: the score is
+  // the hand-in's).
+  const visitItem = useRef<(id: string) => void>(() => {});
+  visitItem.current = (id) => {
+    const i = items.findIndex((it) => String(it.idx) === id);
+    if (i >= 0) setIndex(i);
+  };
   useEffect(() => {
     setHeader({
       steps: items.map((it, i) => ({
         id: String(it.idx),
         label: it.step.title,
-        state: railSig[i] === "c" ? "current" : railSig[i] === "d" ? "done" : "todo",
+        state:
+          railSig[i] === "c"
+            ? "current"
+            : railSig[i] === "d"
+              ? "done"
+              : railSig[i] === "s"
+                ? "skipped"
+                : "todo",
       })),
+      onVisit: (id: string) => visitItem.current(id),
     });
   }, [railSig, items, setHeader]);
-  useEffect(() => () => setHeader({ steps: null }), [setHeader]);
+  useEffect(() => () => setHeader({ steps: null, onVisit: null }), [setHeader]);
   useEffect(() => saveRecords(p.cpId, p.attempt.attemptNo, records), [p.cpId, p.attempt.attemptNo, records]);
   useEffect(() => {
     started.current = Date.now();
@@ -673,8 +705,25 @@ function Runner(p: {
     },
   ]);
 
-  const record = (r: ItemRecord) => setRecords((rs) => [...rs.filter((x) => x.idx !== r.idx), r]);
+  const record = (r: ItemRecord) => {
+    if (handedIn.current) return;
+    setRecords((rs) => recordItem(rs, r, handedIn.current));
+    setReopened((s) => {
+      if (!s.has(r.idx)) return s;
+      const n = new Set(s);
+      n.delete(r.idx);
+      return n;
+    });
+    setSaveNo((n) => n + 1);
+  };
+  const reopen = (idx: number) => {
+    setReopened((s) => new Set([...s, idx]));
+    setRetakes((m) => ({ ...m, [idx]: (m[idx] ?? 0) + 1 }));
+  };
   const next = () => setIndex((i) => Math.min(items.length, i + 1));
+  // The saves counted when this item came on screen: a later one moves the focus to "Next item".
+  const visit = useRef<{ index: number; saveNo: number }>({ index: -1, saveNo: 0 });
+  if (visit.current.index !== index) visit.current = { index, saveNo };
   const cpKey: KeySpec = p.def?.make.key ?? CP_KEY;
   const cpBpm = typeof p.def?.make.bpm === "number" ? p.def.make.bpm : CP_BPM;
   const makeBand = bandSetupOf(p.band ?? undefined, {
@@ -696,6 +745,7 @@ function Runner(p: {
   };
 
   const submit = async (acceptSoftPass: boolean) => {
+    if (submitting || handedIn.current) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -704,20 +754,12 @@ function Runner(p: {
         body: {
           sessionId: currentSessionId(),
           attemptNo: p.attempt.attemptNo,
-          items: all.map((it) => {
-            const r = rec.get(it.idx);
-            return {
-              idx: it.idx,
-              score: r?.score ?? 0,
-              skipped: r?.skipped ?? true,
-              response: r?.response ?? { skipped: true },
-              result: r?.result ?? null,
-            };
-          }),
+          items: handInItems(all, records),
           makeSketchId: makeSketch,
           acceptSoftPass,
         },
       });
+      handedIn.current = true;
       clearRecords(p.cpId, p.attempt.attemptNo);
       for (const k of ["lessons.progress", "skills.map", "unlocks.list", "session.today", "srs.due"])
         void qc.invalidateQueries({ queryKey: ["api", k] });
@@ -750,7 +792,10 @@ function Runner(p: {
           >
             {reviewTitle(records, items.length)}
           </h2>
-          <p className="text-text-2">Hand it in to see how each skill went.</p>
+          <p className="text-text-2">
+            Hand it in to see how each skill went. Until then you can change any answer: the last one you save
+            is the one that counts.
+          </p>
           {quietNote(setAside) && (
             <p className="text-sm text-text-3" data-testid="quiet-set-aside">
               {quietNote(setAside)}
@@ -787,13 +832,55 @@ function Runner(p: {
               "Continue anyway" opens the next lessons now; any skill under 70% comes back in your warm-ups.
             </p>
           )}
+          <ol
+            className="flex flex-col divide-y divide-border rounded-card border border-border"
+            aria-label="Items"
+          >
+            {items.map((it, i) => {
+              const state = itemState(rec.get(it.idx));
+              return (
+                <li
+                  key={it.idx}
+                  className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+                  data-testid="review-item"
+                  data-state={state}
+                >
+                  <span className="min-w-0">
+                    <span className="mr-2 inline-block w-6 text-right text-text-3 tabular-nums">
+                      {i + 1}.
+                    </span>
+                    {it.step.title}
+                    <span className="ml-2 text-sm text-text-2">
+                      {state === "answered" ? "answered" : state === "skipped" ? "skipped" : "not answered"}
+                    </span>
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={submitting}
+                    onClick={() => {
+                      if (state === "answered" && it.kind !== "make") reopen(it.idx);
+                      setIndex(i);
+                    }}
+                    data-testid="review-change"
+                    aria-label={`${state === "answered" ? "Change" : "Answer"} item ${i + 1}: ${it.step.title}`}
+                  >
+                    {state === "answered" ? "Change" : "Answer it"}
+                  </Button>
+                </li>
+              );
+            })}
+          </ol>
         </div>
       </Page>
     );
   }
 
   const done = rec.get(item.idx);
+  // A saved answer is on screen (no verdict, contracts §7.6) until "Try again" re-opens the item.
+  const saved = done !== undefined && !done.skipped && !reopened.has(item.idx);
   const ex = item.exercise;
+  const codeItem = partsOf(ex).some((x) => isCodeInput(x));
   devItem.current = item;
   const grade = async (response: AttemptResponse, override?: Exercise): Promise<GradeResult | null> => {
     setChecking(true);
@@ -853,11 +940,13 @@ function Runner(p: {
     params: {},
     seriesNo: 0,
     state: null,
-    result: done?.result ?? null,
+    result: saved ? (done?.result ?? null) : null,
     rung: 0,
     passed: false,
     checking,
     review: false,
+    locked: saved,
+    retake: retakes[item.idx] ?? 0,
     env,
     voice: { quiet: p.quiet, labels: null },
     workbench: {
@@ -956,36 +1045,58 @@ function Runner(p: {
       </Callout>
     ) : null,
     renderFooter: (actions: ReactNode) => (
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-col gap-2">
         <span className="text-sm text-text-3" data-testid="checkpoint-progress">
           {progressLine(records, items.length)}
         </span>
-        <div className="flex flex-wrap items-center gap-2">
-          {item.kind !== "make" && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                record({ idx: item.idx, score: 0, skipped: true, response: { skipped: true }, result: null });
-                next();
-              }}
-              data-testid="skip-item"
-            >
-              Skip this one
-            </Button>
-          )}
-          {item.unavailable ? null : actions}
-          {item.kind !== "make" && (
-            <Button
-              variant={done ? "primary" : "secondary"}
-              disabled={!done}
-              onClick={next}
-              data-testid="next-item"
-            >
-              Next item
-            </Button>
-          )}
-        </div>
+        <CheckReasonSlot id={checkReasonId("checkpoint", item.step.id)}>
+          <ResultRow
+            testId="item-actions"
+            resultKey={saved ? `${item.idx}:${saveNo}:${checking ? "saving" : "saved"}` : null}
+            onRetry={saved && item.kind !== "make" ? () => reopen(item.idx) : null}
+            retryDisabled={checking}
+            retryFocus={() => answerFocus(codeItem)}
+            focusOnResult={saveNo > visit.current.saveNo}
+            onContinue={item.kind === "make" ? null : next}
+            continueDisabled={!done || checking}
+            continueLabel="Next item"
+            continueTestId="next-item"
+            continueNote="Save an answer, or skip this one, to go on."
+            line={saved ? retryLine({ surface: "checkpoint-item", counted: true }) : null}
+            action={item.unavailable || saved ? null : actions}
+          >
+            {index > 0 ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<ArrowLeft aria-hidden className="size-4" />}
+                onClick={() => setIndex(index - 1)}
+                data-testid="previous-item"
+              >
+                Back to item {index}
+              </Button>
+            ) : null}
+            {item.kind !== "make" && !saved ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  record({
+                    idx: item.idx,
+                    score: 0,
+                    skipped: true,
+                    response: { skipped: true },
+                    result: null,
+                  });
+                  next();
+                }}
+                data-testid="skip-item"
+              >
+                Skip this one
+              </Button>
+            ) : null}
+          </ResultRow>
+        </CheckReasonSlot>
       </div>
     ),
   };

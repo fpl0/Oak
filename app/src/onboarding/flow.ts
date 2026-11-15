@@ -23,11 +23,17 @@ export const FLOW: readonly OnboardingStep[] = [
 ];
 
 export interface StepMeta {
-  /** The focus header and the step rail. */
+  /**
+   * The step's one name (docs/design/retry.md §6.3): the rail and the header's "Step N of 13 · name", the step's
+   * `h1`, and the "Back: name" of the step after it.
+   */
   label: string;
   /** Skippable by the learner ("Set up later"). Everything else is completed by doing it. */
   skippable: boolean;
-  /** Needs a microphone: skipped automatically in Quiet mode (contracts §8.5). */
+  /**
+   * Needs a microphone: skipped automatically in Quiet mode (contracts §8.5). The first sung note is not one: in
+   * Quiet mode it is a listening step (hear the note, learn that it is 1, home), never passed over silently.
+   */
   needsMic: boolean;
 }
 
@@ -37,12 +43,12 @@ export const STEP_META: Readonly<Record<OnboardingStep, StepMeta>> = {
   edit: { label: "Change one number", skippable: false, needsMic: false },
   react: { label: "What you changed", skippable: false, needsMic: false },
   prefs: { label: "Your sound and your week", skippable: false, needsMic: false },
-  tutor: { label: "Meet the tutor", skippable: true, needsMic: false },
+  tutor: { label: "Your tutor", skippable: true, needsMic: false },
   headphones: { label: "Headphones", skippable: true, needsMic: false },
   mic: { label: "Microphone", skippable: false, needsMic: false },
   range: { label: "Your voice", skippable: true, needsMic: true },
   latency: { label: "Timing", skippable: true, needsMic: false },
-  "first-sing": { label: "First note", skippable: true, needsMic: true },
+  "first-sing": { label: "Your first note", skippable: true, needsMic: false },
   sketch: { label: "Sketch 001", skippable: false, needsMic: false },
   coda: { label: "Done for today", skippable: false, needsMic: false },
 };
@@ -77,8 +83,8 @@ export function canVisit(st: Pick<OnboardingState, "completed" | "skipped">, s: 
 }
 
 /**
- * The step after `s`. In Quiet mode the mic-only steps (range, first sing) are passed over and reported as
- * `autoSkipped`, so the server records them as skipped (set up later in Settings → Voice).
+ * The step after `s`. In Quiet mode the mic-only steps (the range) are passed over and reported as `autoSkipped`,
+ * so the server records them as skipped (set up later in Settings → Voice).
  */
 export function nextAfter(
   s: OnboardingStep,
@@ -107,23 +113,36 @@ export function prevBefore(st: Pick<OnboardingState, "completed" | "skipped">, s
   return null;
 }
 
-/** The focus header's step rail: one dot per screen, done/current/to do; skipped steps show as optional. */
+/**
+ * The focus header's step rail: one dot per screen, done / current / skipped / to do (a step set up later, or
+ * passed over in Quiet mode, reads "skipped"), and the current step's own sub-step ("2 of 3: a quiet moment").
+ */
 export function railOf(
   st: Pick<OnboardingState, "completed" | "skipped">,
   current: OnboardingStep,
+  sub: string | null = null,
 ): RailStep[] {
-  return FLOW.map((s) => ({
-    id: s,
-    label: STEP_META[s].label,
-    state:
-      s === current
-        ? "current"
-        : st.completed.includes(s)
-          ? "done"
-          : st.skipped.includes(s)
-            ? "optional"
-            : "todo",
-  }));
+  return FLOW.map((s) => {
+    const step: RailStep = {
+      id: s,
+      label: STEP_META[s].label,
+      state:
+        s === current
+          ? "current"
+          : st.completed.includes(s)
+            ? "done"
+            : st.skipped.includes(s)
+              ? "skipped"
+              : "todo",
+    };
+    if (s === current && sub) step.sub = sub;
+    return step;
+  });
+}
+
+/** The position text the header shows ("Step 8 of 13 · Microphone · 2 of 3: a quiet moment"). */
+export function positionOf(current: OnboardingStep, sub: string | null = null): string {
+  return `Step ${indexOf(current) + 1} of ${FLOW.length} · ${STEP_META[current].label}${sub ? ` · ${sub}` : ""}`;
 }
 
 /** The state of a learner who has not started. */

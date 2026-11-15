@@ -35,6 +35,7 @@ import { applyToEditor } from "../lib/editors.ts";
 import { usePageTitle } from "../lib/nav.ts";
 import { initialPanelsOf } from "../lib/panels.ts";
 import { useCourseProgress, useHealth, useProfile, useUnlocks, useVoiceState } from "../lib/queries.ts";
+import { retryLine } from "../lib/retry.ts";
 import { ActivityClock, logStep } from "../lib/telemetry.ts";
 import { currentSessionId, reportBlockDone, useSession } from "../session/store.ts";
 import {
@@ -58,6 +59,7 @@ import { ServicesGate } from "../workbench/ServicesGate.tsx";
 import "../workbench/workbench.css";
 import { lessonWidgetFor } from "./answers.tsx";
 import { bandMutesOf, bandSetupOf } from "./band.ts";
+import { checkReasonId } from "./check.tsx";
 import { type LoadedLesson, useLessonContent } from "./content.ts";
 import { clearStepDrafts } from "./drafts.ts";
 import { FeatureMoment, useFeatureSwitch } from "./feature-moment.tsx";
@@ -74,7 +76,7 @@ import {
   openCategories,
   stimulusTrial,
 } from "./grading.ts";
-import { devSingTargets, lessonTakes, starterOf } from "./inputs.tsx";
+import { devSingTargets, isCodeInput, lessonTakes, starterOf } from "./inputs.tsx";
 import { codeOf, type LessonDeps, latestCode, lessonMachine, progressOf, snapshotOf } from "./machine.ts";
 import { lessonMdxComponents, MdxStepProvider } from "./mdx.tsx";
 import {
@@ -82,9 +84,11 @@ import {
   continueLabel,
   globalExerciseId,
   initialTabOf,
+  isCheckable,
   ladderOf,
   partsOf,
   railOf,
+  resultOnScreen,
   splitPartFor,
   stepParams,
   viewsOf,
@@ -101,6 +105,7 @@ import {
   useStepAnswer,
 } from "./public.ts";
 import { MakeRenderer, rendererFor } from "./renderers.tsx";
+import { answerFocus } from "./result-row.tsx";
 import {
   featureMoment,
   featuresUnlockedAt,
@@ -578,6 +583,11 @@ function PlayerCore(props: CoreProps) {
   const quickSaving = useSelector(actor, (s) => s.matches({ wrapping: "saving" }));
 
   const step = ctx.steps[ctx.index] ?? null;
+  // The verdicts counted when this step came on screen: one that appears later moves the focus to the result row
+  // (docs/design/retry.md §2.4); coming back to a step that already shows one leaves the focus on its title.
+  const visit = useRef<{ stepId: string | null; resultNo: number }>({ stepId: null, resultNo: 0 });
+  if (visit.current.stepId !== (step?.id ?? null))
+    visit.current = { stepId: step?.id ?? null, resultNo: ctx.resultNo };
   // A feature tool this lesson unlocks (degree labels at U03.L02 …) switches on in the Workbench at the first
   // step that shows it, unless the learner already holds it (a replay, a lesson done before).
   const fresh =
@@ -880,7 +890,25 @@ function PlayerCore(props: CoreProps) {
   // A revealed voicing-gate check never opens the gate: offer a fresh series (rung 0) to write it again.
   const freshGateTry = gateNeedsFreshTry(ctx.gate, ex ? globalExerciseId(def.id, ex) : null, rung);
   const passed = st?.passed === true || p.result?.status === "pass";
+  // Looking back at a step, or any step of a completed lesson: it works as practice (the server stores it so).
   const review = ctx.index < ctx.furthest && (passed || p.done);
+  // A verdict on screen locks the answer until "Try again" (docs/design/retry.md §2.5).
+  const retried = ctx.retried[step.id] ?? 0;
+  const shown = resultOnScreen(step, p, retried);
+  // A verdict being saved has its own identity: the row moves the focus once it is saved (Continue opens then).
+  const resultKey = shown
+    ? `${step.id}:${seriesNo}:${ctx.resultNo}:${retried}:${checking ? "saving" : "saved"}`
+    : null;
+  const codeStep = ex !== undefined && partsOf(ex).some((x) => isCodeInput(x));
+  const quietSing = ex?.kind === "sing" && props.voice.quiet;
+  const practiceLine =
+    ex && isCheckable(ex) && step.kind !== "make" && !quietSing
+      ? retryLine({
+          surface: ex.kind === "predict" ? "predict" : "lesson-step",
+          counted: st?.practiceNext === true,
+          revealed: rung >= 4 && !passed,
+        })
+      : null;
   const render = feedbackRenderer(
     catalogText,
     p.result,
@@ -1107,6 +1135,8 @@ function PlayerCore(props: CoreProps) {
     passed: passed || rung >= 4,
     checking,
     review,
+    locked: shown,
+    retake: retried,
     env,
     voice: props.voice,
     workbench: workbenchBase(step),
@@ -1151,6 +1181,12 @@ function PlayerCore(props: CoreProps) {
         hintBusy={hintBusy}
         notice={ctx.notice}
         canContinue={canContinue(step, p)}
+        resultKey={resultKey}
+        onRetry={shown ? () => actor.send({ type: "TRY_AGAIN" }) : null}
+        retryFocus={() => answerFocus(codeStep)}
+        focusOnResult={ctx.resultNo > visit.current.resultNo}
+        line={practiceLine}
+        reasonId={checkReasonId("lesson", step.id)}
         continueLabel={
           ctx.splitPart === "A" && ctx.index >= ctx.range[1] ? "Finish part A" : continueLabel(step, p)
         }

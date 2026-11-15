@@ -3,7 +3,7 @@
 import type { Profile } from "@oak/api";
 import { useProfile } from "../lib/queries.ts";
 import { QueryView } from "../ui/kit/QueryState.tsx";
-import type { PartContext } from "./parts/common.tsx";
+import type { PartBack, PartContext } from "./parts/common.tsx";
 import { FirstSingPart } from "./parts/FirstSingPart.tsx";
 import { HeadphonesPart } from "./parts/HeadphonesPart.tsx";
 import { LatencyPart } from "./parts/LatencyPart.tsx";
@@ -13,7 +13,7 @@ import { RangePart } from "./parts/RangePart.tsx";
 import type { RenderablePart } from "./setup-parts.ts";
 
 export { LadderCard, OutputMeter, QuietControl, RecheckHint } from "./panels.tsx";
-export type { PartContext, PartProps } from "./parts/common.tsx";
+export type { PartBack, PartContext, PartProps } from "./parts/common.tsx";
 export { FirstSingPart } from "./parts/FirstSingPart.tsx";
 export { HeadphonesPart } from "./parts/HeadphonesPart.tsx";
 export { LatencyPart } from "./parts/LatencyPart.tsx";
@@ -40,6 +40,8 @@ export interface SetupPartProps {
   /** The learner chose Quiet mode (no mic): the host records it and moves on. */
   onQuiet?: () => void;
   context?: PartContext;
+  /** The part before this one (Settings' wizard), drawn as "Back: <name>". */
+  back?: PartBack | null;
 }
 
 export function renderPart(profile: Profile, p: SetupPartProps) {
@@ -48,6 +50,7 @@ export function renderPart(profile: Profile, p: SetupPartProps) {
     context: p.context ?? "lesson",
     onDone: p.onDone,
     ...(p.onSkip ? { onSkip: p.onSkip } : {}),
+    ...(p.back ? { back: p.back } : {}),
   };
   switch (p.part) {
     case "headphones":

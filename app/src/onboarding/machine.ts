@@ -14,6 +14,8 @@ export interface OnboardingContext extends OnboardingState {
 export type OnboardingEvent =
   | { type: "LOADED"; state: OnboardingState; quiet: boolean }
   | { type: "DONE"; step: OnboardingStep; firstEdit?: number; sketchId?: string; at?: string }
+  /** The learner ran another number on the reaction screen: it is their number now (sketch and coda follow it). */
+  | { type: "EDITED"; value: number }
   | { type: "SKIP"; step: OnboardingStep }
   | { type: "VISIT"; step: OnboardingStep }
   | { type: "QUIET"; on: boolean };
@@ -57,6 +59,34 @@ function frontierAfter(
 }
 
 const laterOf = (a: OnboardingStep, b: OnboardingStep) => (FLOW.indexOf(a) >= FLOW.indexOf(b) ? a : b);
+
+/**
+ * Quiet mode switched on or off. Switching it off (Back to the microphone, then Allow) offers the mic-only steps
+ * again: the ones passed over in Quiet mode are no longer recorded as skipped, so the frontier returns to them.
+ * Switching it on in the middle of a mic-only step passes over that step.
+ */
+export function applyQuiet(c: OnboardingContext, on: boolean): OnboardingContext {
+  if (on) {
+    if (c.quiet) return c;
+    // Switched on while a mic-only step is on screen (Settings › Voice in another tab): that step is passed over
+    // as it would have been, and the learner lands on the next one; a step already done stays where it is.
+    if (!STEP_META[c.step].needsMic || c.completed.includes(c.step)) return { ...c, quiet: true };
+    const { next, autoSkipped } = nextAfter(c.step, true);
+    const skipped = add(c.skipped, c.step, ...autoSkipped.filter((s) => !c.completed.includes(s)));
+    return { ...c, quiet: true, skipped, step: next ?? "coda" };
+  }
+  if (!c.quiet) return c;
+  const reopen = FLOW.filter(
+    (s) => STEP_META[s].needsMic && c.skipped.includes(s) && !c.completed.includes(s),
+  );
+  return { ...c, quiet: false, skipped: without(c.skipped, ...reopen) };
+}
+
+/** Another successful run on the reaction screen: the learner's number is the last one run (pure). */
+export function applyEdited(c: OnboardingContext, value: number): OnboardingContext {
+  if (!Number.isInteger(value) || value < 0 || value > 7) return c;
+  return { ...c, firstEdit: value };
+}
 
 /** The learner skipped `step` ("Set up later"). Only skippable steps can be skipped. */
 export function applySkip(c: OnboardingContext, step: OnboardingStep): OnboardingContext {
@@ -125,7 +155,8 @@ export const onboardingMachine = setup({
         ],
         SKIP: { actions: assign(({ context, event }) => applySkip(context, event.step)) },
         VISIT: { guard: "visitable", actions: assign({ step: ({ event }) => event.step }) },
-        QUIET: { actions: assign({ quiet: ({ event }) => event.on }) },
+        QUIET: { actions: assign(({ context, event }) => applyQuiet(context, event.on)) },
+        EDITED: { actions: assign(({ context, event }) => applyEdited(context, event.value)) },
       },
     },
     finished: { type: "final" },

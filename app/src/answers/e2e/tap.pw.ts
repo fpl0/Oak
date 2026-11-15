@@ -81,8 +81,12 @@ test("tap the fixture rhythm: a sloppy take is marked, a clean take passes", asy
   // After the attempt the targets are drawn: 5 diamonds.
   await expect(w.locator("[data-tap-surface] span.rotate-45")).toHaveCount(5);
 
-  await w.getByRole("button", { name: "Tap it again" }).focus();
-  await page.keyboard.press("Enter");
+  // A take shows how it went before the check: taking it again is the one "Try again", Alt+R included
+  // (docs/design/retry.md §2.1), wherever the focus is.
+  const again = w.getByRole("button", { name: "Try again" });
+  await expect(again).toHaveAttribute("aria-keyshortcuts", "Alt+R");
+  await page.locator("body").focus();
+  await page.keyboard.press("Alt+KeyR");
   await expect(phase).toHaveText(/Count-in|Tap now/);
   await tapTake(page, [8, -12, 4, 10, -6]);
   await expect(phase).toHaveText("5 taps recorded.", { timeout: 10_000 });

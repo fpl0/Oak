@@ -2,7 +2,10 @@
 // height so feedback never shifts the layout), per-part marks, the theme for degree colours, the key hints.
 import { clsx } from "clsx";
 import { Check, Eye, Loader2, X } from "lucide-react";
-import type { KeyboardEvent, ReactNode } from "react";
+import { type KeyboardEvent, type ReactNode, useEffect, useRef } from "react";
+import { RETRY_KEYS, RETRY_LABEL } from "../lib/retry.ts";
+import { IS_MAC } from "../ui/keys/KeymapProvider.tsx";
+import { formatKeys } from "../ui/keys/keymap.ts";
 import { Kbd } from "../ui/kit/index.ts";
 import { useSubmitVerb } from "./env.tsx";
 import type { AnswerFeedback, AnswerValue, PartMark } from "./types.ts";
@@ -127,6 +130,54 @@ export interface FrameProps {
 }
 
 /** True for the platform's command modifier. */
+// --- a take's own "Try again" ------------------------------------------------------------------------
+
+/**
+ * A finished take (sung, tapped, hummed) before it is checked already shows how it went ("Done: 2 of 3 in tune.",
+ * "8 taps recorded."): taking it again is the same "Try again" as after a verdict (docs/design/retry.md §2.1) —
+ * the same words, the same counter-clockwise arrow, the same key. The widget draws it beside its take while no
+ * verdict is on screen; once one is, the host's result row has the only Try again (the widget is `locked`).
+ */
+export const TAKE_RETRY_PROPS = {
+  "aria-label": RETRY_LABEL,
+  "aria-keyshortcuts": RETRY_KEYS,
+  "data-take-retry": "",
+} as const;
+
+/** The words and key cap of a take's own Try again. */
+export function TakeRetryLabel() {
+  return (
+    <>
+      {RETRY_LABEL}
+      <span aria-hidden className="contents">
+        <Kbd>{formatKeys(RETRY_KEYS, IS_MAC)}</Kbd>
+      </span>
+    </>
+  );
+}
+
+/**
+ * Alt+R for a take's own Try again while it is shown (`active`). The host's row binds the same key only while a
+ * verdict is on screen (and then marks the key handled), so the two never both act; with two takes on one
+ * screen the key stays with the row (it never starts two takes at once).
+ */
+export function useTakeRetryKey(active: boolean, run: () => void): void {
+  const latest = useRef(run);
+  latest.current = run;
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing || e.repeat) return;
+      if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.code !== "KeyR") return;
+      if (document.querySelectorAll("[data-take-retry]").length !== 1) return;
+      e.preventDefault();
+      latest.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [active]);
+}
+
 export function isMod(e: { metaKey: boolean; ctrlKey: boolean }): boolean {
   return e.metaKey || e.ctrlKey;
 }
@@ -139,6 +190,8 @@ export function AnswerFrame(p: FrameProps) {
   const statusId = `${p.idBase}-status`;
   const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
     if (e.nativeEvent.isComposing) return;
+    // Alt+R is the host's "Try again" (docs/design/retry.md §2.1): it reaches the keymap from inside any widget.
+    if (e.altKey && e.code === "KeyR") return;
     if (p.onKey?.(e)) {
       e.preventDefault();
       e.stopPropagation();

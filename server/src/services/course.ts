@@ -44,6 +44,7 @@ import { openFamilyLevels } from "./family-levels.ts";
 import { GatesService } from "./gates.ts";
 import { evidenceWeight, type MasteryService } from "./mastery.ts";
 import type { SrsPort } from "./ports.ts";
+import { countAttempt, type PriorAttempt } from "./retry.ts";
 import type { StreakService } from "./streak.ts";
 import type { TracksService } from "./tracks.ts";
 import type { UnlocksService } from "./unlocks.ts";
@@ -147,7 +148,26 @@ export class CourseService {
       seriesNo: row.seriesNo,
       revealAvailable: row.attempts >= needed && ex !== undefined && ex.hints !== null,
       result,
+      practiceNext: ex !== undefined && this.#countNext(lessonId, stepId, ex, row).count === "practice",
     };
+  }
+
+  /** Earlier attempts of a step, any series, as the retry policy reads them. */
+  #prior(lessonId: string, stepId: string): PriorAttempt[] {
+    return this.#repos.lessons.attemptsOfStep(lessonId, stepId).map((a) => ({
+      graded: a.result !== null && a.result.status !== "error",
+      practice: a.practice === true,
+      disputed: a.disputed,
+    }));
+  }
+
+  /** What the next graded attempt on a step counts for (docs/design/retry.md §3.1). */
+  #countNext(lessonId: string, stepId: string, ex: Exercise, row: StepStateRow) {
+    const lessonCompleted = this.#repos.lessons.progress(lessonId)?.status === "completed";
+    // Only a predict looks at the history; every other kind is decided by `passed` and the lesson's status.
+    const prior =
+      ex.kind === "predict" && !lessonCompleted && !row.passed ? this.#prior(lessonId, stepId) : [];
+    return countAttempt({ kind: ex.kind, stepPassed: row.passed, lessonCompleted, prior });
   }
 
   /**
@@ -296,8 +316,17 @@ export class CourseService {
       const row = this.#stepRow(lessonId, stepId);
       // The rung is the server's (contracts §10.4); the client's copy is ignored.
       const rung = row.rung;
+      // The retry policy (docs/design/retry.md §3.1): "first" is first in the step, not in the series ("Try a
+      // new one" never earns a second first attempt), and every attempt after the step counted is practice.
+      const counted = countAttempt({
+        kind: ex.kind,
+        stepPassed: row.passed,
+        lessonCompleted: this.#repos.lessons.progress(lessonId)?.status === "completed",
+        prior: this.#prior(lessonId, stepId),
+      });
+      const practice = graded && counted.count === "practice";
       const attemptNo = graded ? row.attempts + 1 : Math.max(1, row.attempts);
-      const firstAttempt = graded && row.attempts === 0;
+      const firstAttempt = graded && (counted.count === "first" || counted.count === "predict");
       const adjusted = adjustScore(result.score, rung, body.extraReplays);
       const passed = result.status === "pass";
       const at = this.time.iso();
@@ -332,16 +361,21 @@ export class CourseService {
         modality: result.modality ?? "normal",
         disputed: false,
         tutorAssisted: body.tutorAssisted,
+        practice,
         at,
       });
 
-      if (graded) {
+      // Every graded attempt is one more in the series (one learner action, one count: wave3.md §5.2), practice
+      // included; a practice attempt changes nothing else that counts (docs/design/retry.md §4): not `passed`,
+      // not the exercise's results, not the lesson's best score.
+      if (graded)
         this.#repos.lessons.saveStepState({
           ...row,
           attempts: row.attempts + 1,
-          passed: row.passed || passed,
+          passed: practice ? row.passed : row.passed || passed,
           updatedAt: at,
         });
+      if (graded && !practice) {
         const prev = this.#repos.lessons.exerciseResult(lessonId, body.exerciseId, body.exerciseVersion);
         this.#repos.lessons.saveExerciseResult({
           exerciseId: body.exerciseId,
@@ -367,7 +401,13 @@ export class CourseService {
       // rules 1.5 each. Tutor-typed code and errors give none; a disputed attempt never gets here.
       const evidence: EvidenceInput[] = [];
       const sourceId = `${globalId}#${attempt.id}`;
-      if (graded && !body.tutorAssisted && result.status !== "ungraded" && !NO_EVIDENCE_KINDS.has(ex.kind)) {
+      if (
+        graded &&
+        !practice &&
+        !body.tutorAssisted &&
+        result.status !== "ungraded" &&
+        !NO_EVIDENCE_KINDS.has(ex.kind)
+      ) {
         if (ex.kind === "code-make" || ex.kind === "compose-brief") {
           evidence.push(...this.#rubricEvidence(ex, result, sourceId));
         } else {
@@ -377,19 +417,21 @@ export class CourseService {
         }
       }
       const added = this.d.mastery.addEvidence(evidence);
-      // Graded sung notes feed the tolerance ladder (contracts §8.2); they never gate anything.
-      this.d.voice.recordStep({
-        attemptId: attempt.id,
-        exercise: ex,
-        sung: "sung" in body.response ? body.response.sung : null,
-        modality: result.modality,
-        status: result.status,
-        tutorAssisted: body.tutorAssisted,
-      });
+      // Graded sung notes feed the tolerance ladder (contracts §8.2); they never gate anything. A practice take
+      // does not: the ladder reads the takes that count, not the best of many (docs/design/retry.md §3.4).
+      if (!practice)
+        this.d.voice.recordStep({
+          attemptId: attempt.id,
+          exercise: ex,
+          sung: "sung" in body.response ? body.response.sung : null,
+          modality: result.modality,
+          status: result.status,
+          tutorAssisted: body.tutorAssisted,
+        });
 
-      // Test-out (contracts §9.5): a pass marks the scaffold steps it skips as done.
+      // Test-out (contracts §9.5): a first-attempt pass marks the scaffold steps it skips as done.
       const testedOut: string[] = [];
-      if (passed && step.testOut !== undefined && row.attempts === 0) {
+      if (passed && step.testOut !== undefined && counted.count === "first") {
         for (const skipped of step.testOut.skips) {
           const s = this.#stepRow(lessonId, skipped);
           if (!s.passed) this.#repos.lessons.saveStepState({ ...s, passed: true, updatedAt: at });
@@ -403,12 +445,12 @@ export class CourseService {
         skills: added.map((e) => e.skillId),
         evidence: { kind: "lesson", id: lessonId },
       });
-      return { attempt, evidence: added, testedOut, unlocked, canDo, firstAttempt, adjusted, rung };
+      return { attempt, evidence: added, testedOut, unlocked, canDo, firstAttempt, adjusted, rung, practice };
     });
 
     let reviews: SrsReviewResult[] = [];
     const srs = this.d.srs();
-    if (srs !== null && graded && !body.tutorAssisted)
+    if (srs !== null && graded && !committed.practice && !body.tutorAssisted)
       reviews = await srs.afterStep({
         lessonId,
         stepId,
@@ -810,10 +852,16 @@ export class CourseService {
         updatedAt: now,
       });
       const def: CapstoneDef | null = this.#content.capstoneDef(id);
-      if (!version.tutorAssisted && def?.brief !== undefined && body.result.status !== "error") {
-        const added = this.d.mastery.addEvidence(
-          this.#rubricEvidence(def.brief, body.result, `${id}:${body.sketchId}#v${body.sketchVersion}`),
-        );
+      // A re-check of a version that already gave rubric evidence is practice (docs/design/retry.md §3.6): the
+      // check runs and is stored as `lastResult`; the rules count once per version.
+      const sourceId = `${id}:${body.sketchId}#v${body.sketchVersion}`;
+      if (
+        !version.tutorAssisted &&
+        def?.brief !== undefined &&
+        body.result.status !== "error" &&
+        !this.#repos.mastery.hasEvidenceFrom(sourceId)
+      ) {
+        const added = this.d.mastery.addEvidence(this.#rubricEvidence(def.brief, body.result, sourceId));
         this.d.cando.evaluate({
           skills: added.map((e) => e.skillId),
           evidence: { kind: "sketch", id: body.sketchId },

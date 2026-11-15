@@ -5,6 +5,7 @@
 // chance that was a dead end: U05.L08 could never be completed. Now a revealed gate check offers "Start a fresh
 // try" (a new series: rung and attempts start again), the box says so, and the second chance's note names the 90%.
 import { expect, type Page, test } from "@playwright/test";
+import { tryAgainIfShown } from "../journey/lesson-walk.ts";
 import { useUiPrefs } from "../support/ui.ts";
 import { api, resetClock, shootAll, watch } from "./support.ts";
 import { quietHmr, seedPoint, step } from "./w4-support.ts";
@@ -17,10 +18,13 @@ async function lessonDef(id: string): Promise<Lesson> {
   return ((await import(`../../content/core/${unit}/${lesson}/lesson.ts`)) as { default: Lesson }).default;
 }
 
-const setCode = (page: Page, code: string) =>
-  page.evaluate((c) => {
+// A verdict on screen is left through Try again before the code changes (docs/design/retry.md §2.5).
+const setCode = async (page: Page, code: string) => {
+  await tryAgainIfShown(page);
+  await page.evaluate((c) => {
     (globalThis as unknown as { __oakLesson: { setCode(c: string): void } }).__oakLesson.setCode(c);
   }, code);
+};
 
 const codes = (ex: Ex | undefined) => ({
   wrong: ex?.tests.find((t) => t.expect === "fail" && t.response.code && !/unchanged/i.test(t.name))?.response
@@ -33,7 +37,10 @@ async function failFiveTimes(page: Page, wrong: string): Promise<void> {
     await setCode(page, wrong);
     await page.getByTestId("check").click();
     await expect(page.getByTestId("gate-box")).toHaveAttribute("data-tone", "near", { timeout: 30_000 });
-    await expect(page.getByTestId("check")).toBeEnabled({ timeout: 30_000 });
+    // Every fail can be tried again.
+    await expect(page.getByTestId("lesson-step").getByTestId("result-retry")).toBeEnabled({
+      timeout: 30_000,
+    });
   }
   // Five fails: what to fix is still named, and every way on is offered (hints, the tutor, the answer).
   expect(((await page.getByTestId("gate-fixes").textContent()) ?? "").length).toBeGreaterThan(12);

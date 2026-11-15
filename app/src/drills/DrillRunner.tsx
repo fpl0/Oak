@@ -18,7 +18,7 @@ import { formLetters } from "@oak/content-kit";
 import { labelPitch } from "@oak/theory";
 import { useMachine } from "@xstate/react";
 import { clsx } from "clsx";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { AnswerEnvProvider } from "../answers/env.tsx";
 import { rnDisplay } from "../answers/keys.ts";
 import { emptyValue, isComplete } from "../answers/response.ts";
@@ -33,6 +33,7 @@ import { Button } from "../ui/kit/Button.tsx";
 import { Card, Chip, Kbd } from "../ui/kit/basics.tsx";
 import { Callout } from "../ui/kit/Controls.tsx";
 import { ErrorState, LoadingState } from "../ui/kit/QueryState.tsx";
+import { ResultActions } from "../ui/kit/ResultActions.tsx";
 import { RecheckHint } from "../voice/panels.tsx";
 import { reportTake } from "../voice/recheck.ts";
 import { useVoiceSync } from "../voice/sync.ts";
@@ -75,6 +76,7 @@ import {
   onInnerStep,
   type ResumeState,
   type StepsState,
+  shownOutcome,
 } from "./machine.ts";
 import {
   DICTATION_MODE_LABELS,
@@ -101,6 +103,7 @@ import {
   stagingOf,
   targetMidisOf,
 } from "./plans.ts";
+import { type DrillRowState, drillLine, drillResultKey } from "./retry.ts";
 import { auditionCode, drillDeps, drillImplementations } from "./runtime.ts";
 import { SetSummary } from "./SetSummary.tsx";
 import { SingPanel } from "./SingPanel.tsx";
@@ -357,7 +360,8 @@ function RunnerCore(props: DrillRunnerProps & { inflight: string; resume: Resume
       className="outline-none"
       data-testid="drill-runner"
     >
-      <TrialView key={ctx.index} props={props} snap={snap} send={send} region={region} />
+      {/* A practice take ("Try again") opens the same trial afresh: a new answer, nothing carried over. */}
+      <TrialView key={`${ctx.index}:${ctx.retries}`} props={props} snap={snap} send={send} region={region} />
     </div>
   );
 }
@@ -399,7 +403,8 @@ function TrialView({
   // Pads show syllables when the solfège lens is shown (wave3.md §4.3); the degree number is always printed.
   const solfegeShown = lenses.shown.solfege;
   const solfege = solfegeShown ? ("syllables" as const) : ("numbers" as const);
-  const outcome = ctx.outcomes[ctx.index];
+  // The verdict on screen: a practice take's while one is shown, else the trial's first answer (retry.md §3.3).
+  const outcome = shownOutcome(ctx);
   const inFeedback = snap.matches("feedback") || snap.matches("resolution");
   const presenting =
     snap.matches({ trial: "presenting" }) ||
@@ -480,6 +485,8 @@ function TrialView({
   // Wave 7: a sung trial in Quiet mode is heard in the head while it plays (the mic never opens), then Space.
   const quietSing = isSing && quietNow;
   const isTap = surface.kind === "tap";
+  // The microphone failed mid-trial: Try again (listen again) and Skip singing are the row's.
+  const micRow = ctx.micError !== null && !inFeedback;
   const total = ctx.source?.total ?? 0;
   const hasCue = !isTap && !isSing && cuePlan(trial, data.profile) !== null;
   const cueLabel = Number(trial.params.cueBars ?? 0) > 0 || harmony ? "Cadence" : "Hear the key";
@@ -647,6 +654,8 @@ function TrialView({
   // A finished sung take that heard no voice (or mostly noise) leaves the "re-run the quiet check" suggestion
   // (app/src/voice/recheck.ts), shown under the feedback; once per trial.
   const reported = useRef(false);
+  const footer = useRef<HTMLElement>(null);
+  const verdictId = useId();
   useEffect(() => {
     if (!outcome || !isSing || reported.current || outcome.result.skipped) return;
     reported.current = true;
@@ -937,6 +946,26 @@ function TrialView({
         ? "Yours, then it…"
         : "Playing…";
   const showKey = typeof trial.params.showKey === "number" ? trial.params.showKey : null;
+  // The result row (docs/design/retry.md §2.2, §3.3): which result is on screen, and the primary's words. Its
+  // primary keeps the drill's own test id ("next-trial"), which the drill, session and review suites address.
+  const rowState: DrillRowState = snap.matches("feedback")
+    ? "trial"
+    : snap.matches({ resolution: "done" })
+      ? "resolution"
+      : "running";
+  const resultKey = drillResultKey({ index: ctx.index, retries: ctx.retries, state: rowState });
+  const continueLabel =
+    snap.matches("feedback") && trial.params.sungResolution === true && !ctx.outcomes[ctx.index]?.revealed
+      ? lean
+        ? quietNow
+          ? "Hear it lean"
+          : "Sing the lean"
+        : quietNow
+          ? "Hear it home"
+          : "Sing it home"
+      : ctx.index + 1 < total
+        ? "Next trial"
+        : "Finish set";
   const singTargets = resolving
     ? resolutionOf(trial).targets
     : singingPart
@@ -1002,7 +1031,7 @@ function TrialView({
               (inFeedback
                 ? auditioning
                   ? auditionText
-                  : "Listen back, or move on."
+                  : "Listen back, try again, or move on."
                 : answering
                   ? quietSing
                     ? "Hear it in your head, then press Space."
@@ -1091,23 +1120,9 @@ function TrialView({
             }}
           />
         )}
-        {ctx.micError && !inFeedback && (
-          <Callout
-            tone="attention"
-            title={quietNow ? "Quiet mode is on" : "The microphone is not available"}
-            actions={
-              <>
-                {!quietNow && (
-                  <Button size="sm" onClick={() => send({ type: "REPLAY" })}>
-                    Try again
-                  </Button>
-                )}
-                <Button size="sm" variant="primary" onClick={() => send({ type: "SKIP_SUNG" })}>
-                  Skip singing <Kbd tone="inverse">⇧S</Kbd>
-                </Button>
-              </>
-            }
-          >
+        {/* Its Try again and Skip singing are the result row's (docs/design/retry.md §5 #19). */}
+        {micRow && (
+          <Callout tone="attention" title={quietNow ? "Quiet mode is on" : "The microphone is not available"}>
             {ctx.micError}
           </Callout>
         )}
@@ -1287,26 +1302,32 @@ function TrialView({
         />
       )}
 
-      {outcome && (
-        <FeedbackLine
-          outcome={outcome}
-          text={
-            lineTrial && bassLineCodeOf(trial)
-              ? `${bassLineCodeOf(trial)}, roots ${expectedText(null, expected) ?? ""}`
-              : (clickCellText(trial) ?? expectedText(spec, expected, data.solfege === "syllables"))
-          }
-          def={def}
-          trial={trial}
-          resolving={resolving || imagining}
-          lean={lean}
-          quiet={quietNow}
-          resolutionDone={snap.matches({ resolution: "done" })}
-          answer={ctx.captured.answer}
-          micError={ctx.micError}
-          onQuietToday={() => void voice.setQuiet(true, "today")}
-          heardInHead={ctx.records[ctx.index]?.modality === "quiet" && isSing}
-        />
-      )}
+      {/* One live region for the whole trial, filled by its verdict (docs/design/retry.md §2.3): a region added
+          together with its content is not announced, so the verdict would go unheard before the focus reaches
+          Next trial. It reads out what the feedback says, before the row in reading order. */}
+      <div role="status" id={verdictId} data-testid="trial-live" className={outcome ? undefined : "sr-only"}>
+        {outcome && (
+          <FeedbackLine
+            outcome={outcome}
+            text={
+              lineTrial && bassLineCodeOf(trial)
+                ? `${bassLineCodeOf(trial)}, roots ${expectedText(null, expected) ?? ""}`
+                : (clickCellText(trial) ?? expectedText(spec, expected, data.solfege === "syllables"))
+            }
+            def={def}
+            trial={trial}
+            resolving={resolving || imagining}
+            lean={lean}
+            quiet={quietNow}
+            resolutionDone={snap.matches({ resolution: "done" })}
+            answer={ctx.captured.answer}
+            micError={ctx.micError}
+            onQuietToday={() => void voice.setQuiet(true, "today")}
+            heardInHead={(ctx.practice ? quietNow : ctx.records[ctx.index]?.modality === "quiet") && isSing}
+            practice={ctx.practice !== null}
+          />
+        )}
+      </div>
       {outcome && isSing && !quietSing && inFeedback && <RecheckHint />}
       {fet &&
         outcome &&
@@ -1341,14 +1362,64 @@ function TrialView({
 
       <footer
         className={clsx(
-          "flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3",
+          "border-t border-border pt-3",
           // d23: the primary action stays in view however tall the feedback above it grows (a long answer in
           // context, a second question, a key ribbon): the footer holds the bottom of the window.
           "sticky bottom-0 z-10 -mx-2 bg-bg px-2 pb-3",
         )}
         data-testid="trial-footer"
+        ref={footer}
       >
-        <div className="flex flex-wrap items-center gap-2">
+        {/* The result row (docs/design/retry.md §2): auditions and lenses at the left; Check before an answer;
+            after any result Try again (⌥R, a practice take of this trial) then the primary, which has the focus so
+            Enter moves on. Nothing moves on by itself. */}
+        <ResultActions
+          resultKey={micRow ? `mic:${ctx.index}:${ctx.replays}` : resultKey}
+          onRetry={
+            micRow
+              ? quietNow
+                ? null
+                : () => send({ type: "REPLAY" })
+              : resultKey !== null
+                ? () => send({ type: "RETRY" })
+                : null
+          }
+          // A tapped take ends on the learner's keys: a late Space must never land on Next trial, so the focus
+          // stays in the runner (Enter still moves on, ⌥R tries again).
+          focusOnResult={!isTap}
+          retryFocus={() =>
+            region.current && !region.current.contains(document.activeElement) ? region.current : null
+          }
+          onContinue={
+            inFeedback ? () => send({ type: "NEXT" }) : micRow ? () => send({ type: "SKIP_SUNG" }) : null
+          }
+          continueDisabled={resolving || imagining}
+          continueLabel={micRow ? "Skip singing" : continueLabel}
+          continueTestId="next-trial"
+          // The focused Next trial / Try again also describe the verdict, for a reader that drops the live region.
+          describedBy={outcome ? verdictId : undefined}
+          continueKeys={micRow ? "Shift+S" : "Enter"}
+          line={micRow ? null : drillLine(rowState)}
+          action={
+            (answering || (presenting && steps !== null)) &&
+            spec &&
+            !autoSubmit && (
+              <Button
+                variant="primary"
+                disabled={value === null || !complete(value)}
+                onClick={() => submit()}
+                data-testid="check-answer"
+              >
+                {innerStep && lineStep
+                  ? "Check the roots"
+                  : innerStep && step
+                    ? `Check the ${step === "bass" ? "bass" : "qualities"}`
+                    : "Check"}{" "}
+                {spec.ui === "code" ? null : <Kbd tone="inverse">Enter</Kbd>}
+              </Button>
+            )
+          }
+        >
           {canReplay && (
             <Button
               onClick={() =>
@@ -1439,7 +1510,10 @@ function TrialView({
               Show me
             </Button>
           )}
-          {((isSing && !quietSing && (presenting || answering)) || resolving || imagining || singingPart) && (
+          {((isSing && !quietSing && !micRow && (presenting || answering)) ||
+            resolving ||
+            imagining ||
+            singingPart) && (
             <Button variant="ghost" onClick={() => send({ type: "SKIP_SUNG" })}>
               Skip singing <Kbd>⇧S</Kbd>
             </Button>
@@ -1451,8 +1525,6 @@ function TrialView({
                 : "Extra replays count as help; that's fine."}
             </span>
           )}
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
           {/* Wave 7: the jazz families' sentences name chords, so their chord lenses switch here too. */}
           {!unlabelled && (
             <LensSwitches lenses={lenses} chords={harmony || trial.family.startsWith("fam.jzz.")} />
@@ -1460,43 +1532,7 @@ function TrialView({
           {unlabelled && trackLensIds.length > 0 && (
             <LensSwitches lenses={lenses} notes={false} track={trackLensIds} />
           )}
-          {(answering || (presenting && steps !== null)) && spec && !autoSubmit && (
-            <Button
-              variant="primary"
-              disabled={value === null || !complete(value)}
-              onClick={() => submit()}
-              data-testid="check-answer"
-            >
-              {innerStep && lineStep
-                ? "Check the roots"
-                : innerStep && step
-                  ? `Check the ${step === "bass" ? "bass" : "qualities"}`
-                  : "Check"}{" "}
-              {spec.ui === "code" ? null : <Kbd tone="inverse">Enter</Kbd>}
-            </Button>
-          )}
-          {inFeedback && (
-            <Button
-              variant="primary"
-              disabled={resolving || imagining}
-              onClick={() => send({ type: "NEXT" })}
-              data-testid="next-trial"
-            >
-              {snap.matches("feedback") && trial.params.sungResolution === true && !outcome?.revealed
-                ? lean
-                  ? quietNow
-                    ? "Hear it lean"
-                    : "Sing the lean"
-                  : quietNow
-                    ? "Hear it home"
-                    : "Sing it home"
-                : ctx.index + 1 < total
-                  ? "Next"
-                  : "Finish set"}{" "}
-              <Kbd tone="inverse">Enter</Kbd>
-            </Button>
-          )}
-        </div>
+        </ResultActions>
       </footer>
     </div>
   );
@@ -1569,6 +1605,7 @@ function FeedbackLine({
   micError,
   onQuietToday,
   heardInHead = false,
+  practice = false,
 }: {
   outcome: TrialOutcome;
   /** The sung part is a chromatic degree's lean to the note beside it, not the walk home. */
@@ -1584,6 +1621,8 @@ function FeedbackLine({
   onQuietToday(): void;
   /** Wave 7: a sung trial heard in the head in Quiet mode (its record says `quiet`). */
   heardInHead?: boolean;
+  /** The verdict of a practice take ("Try again"), not of the first answer (docs/design/retry.md §3.3). */
+  practice?: boolean;
 }) {
   const r = outcome.result;
   let line: string;
@@ -1608,9 +1647,9 @@ function FeedbackLine({
   const tip = !r.correct && got && exp ? def.confusionTips?.[`${exp}|${got}`] : undefined;
   return (
     <div
-      role="status"
       data-testid="trial-feedback"
       data-correct={r.correct ? "true" : "false"}
+      data-practice={practice ? "true" : undefined}
       className={clsx(
         "rounded-control border px-4 py-3",
         r.correct ? "border-accent/40 bg-lane-in" : "border-border bg-surface-2",

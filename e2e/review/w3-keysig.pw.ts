@@ -60,6 +60,13 @@ test("U03.L06 S4: D major's sharps by mouse and by keyboard, wrong ways first", 
   expect(reversed).not.toContain("Somewhere in the piece");
   expect(reversed).not.toMatch(/note differs/);
   expect(reversed).toContain("order");
+  // The answer is changed through Try again (docs/design/retry.md §2.5), by its key.
+  await page.keyboard.press("Alt+KeyR");
+  await expect(page.getByTestId("lesson-step").getByTestId("result-retry")).toHaveCount(0);
+  // Try again hands the focus to the answer on the next frame: let it land, then go on from the staff.
+  await page.evaluate(
+    () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
+  );
   await surface.focus();
   await page.keyboard.press("Backspace");
   await page.keyboard.press("Backspace");

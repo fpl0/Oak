@@ -63,8 +63,25 @@ export async function stepIs(page: Page, id: string): Promise<void> {
   await expect(page.getByTestId("lesson-step")).toHaveAttribute("data-step", id, { timeout: 30_000 });
 }
 
+/**
+ * A verdict locks the answer until "Try again" (docs/design/retry.md §2.5): a helper that answers a step again
+ * presses it first, as a learner would. Nothing when no verdict is on screen.
+ */
+export async function tryAgainIfShown(page: Page): Promise<void> {
+  const retry = page.getByTestId("lesson-step").getByTestId("result-retry");
+  if (!(await retry.isVisible().catch(() => false))) return;
+  if (!(await retry.isEnabled().catch(() => false))) await expect(retry).toBeEnabled();
+  await retry.click();
+  await expect(retry).toHaveCount(0);
+  // Try again moves the focus to the answer on the next frame: let it land before the helper types anywhere.
+  await page.evaluate(
+    () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
+  );
+}
+
 /** Replaces the code of the step's editor (the dev hook drives the same CODE event as typing). */
 export async function setCode(page: Page, code: string): Promise<void> {
+  await tryAgainIfShown(page);
   await page.evaluate((c) => {
     (globalThis as unknown as { __oakLesson: { setCode(c: string): void } }).__oakLesson.setCode(c);
   }, code);

@@ -4,7 +4,7 @@
 // change") the bars from the pick on are the new key, `P` plays from the focused bar, and the line under the strip
 // names the keys once the answer is known.
 import { clsx } from "clsx";
-import { Play } from "lucide-react";
+import { Play, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, Progress } from "../../ui/kit/index.ts";
 import { appAudio, useAnswerEnv } from "../env.tsx";
@@ -21,6 +21,9 @@ import {
   markOf,
   revealedOf,
   SubmitHint,
+  TAKE_RETRY_PROPS,
+  TakeRetryLabel,
+  useTakeRetryKey,
 } from "../ui.tsx";
 import { BarStrip, keyChangeLine } from "./BarStrip.tsx";
 import { playHits } from "./W7Parts.tsx";
@@ -477,7 +480,17 @@ export function HumAnswer(p: AnswerWidgetProps<"hum">) {
     setNow(0);
     setStartedAt(performance.now());
   };
+  // The host's "Try again" (docs/design/retry.md §2.5): a new hum starts at once.
+  const retakes = useRef(p.retake ?? 0);
+  useEffect(() => {
+    const n = p.retake ?? 0;
+    if (n <= retakes.current) return;
+    retakes.current = n;
+    if (startedAt === null) start();
+  }, [p.retake]);
   const humming = startedAt !== null;
+  // The hum's own Try again before a verdict: Alt+R as the button, the same key as the host's row after one.
+  useTakeRetryKey(done && !humming && p.locked !== true && !disabled, start);
   const left = Math.max(0, Math.ceil(seconds - now));
   return (
     <AnswerFrame
@@ -491,15 +504,19 @@ export function HumAnswer(p: AnswerWidgetProps<"hum">) {
     >
       <div className="flex max-w-[32rem] flex-col gap-2">
         <div className="flex flex-wrap items-center gap-3">
-          <Button
-            ref={btn}
-            data-enter="native"
-            variant={done ? "secondary" : "primary"}
-            onClick={start}
-            disabled={humming || disabled}
-          >
-            {humming ? "Humming…" : done ? "Hum it again" : "Hum it"}
-          </Button>
+          {p.locked === true && done && !humming ? null : (
+            <Button
+              ref={btn}
+              data-enter="native"
+              {...(done && !humming ? TAKE_RETRY_PROPS : {})}
+              {...(done && !humming ? { icon: <RotateCcw aria-hidden className="size-4" /> } : {})}
+              variant={done ? "secondary" : "primary"}
+              onClick={start}
+              disabled={humming || disabled}
+            >
+              {humming ? "Humming…" : done ? <TakeRetryLabel /> : "Hum it"}
+            </Button>
+          )}
           <span className="text-sm text-text-2" aria-live="polite">
             {humming
               ? `Hum what you expect to hear. ${left} s`

@@ -17,7 +17,24 @@ export async function stepIs(page: Page, id: string): Promise<void> {
   await expect(page.getByTestId("lesson-step")).toHaveAttribute("data-step", id, { timeout: 60_000 });
 }
 
+/**
+ * Try again, when a verdict is on screen (docs/design/retry.md §2.5): the answer is changed through it, and Check
+ * comes back once the verdict goes.
+ */
+export async function tryAgainIfShown(page: Page): Promise<void> {
+  const retry = page.getByTestId("lesson-step").getByTestId("result-retry");
+  if (!(await retry.isVisible().catch(() => false))) return;
+  if (!(await retry.isEnabled().catch(() => false))) await expect(retry).toBeEnabled();
+  await retry.click();
+  await expect(retry).toHaveCount(0);
+  // Try again moves the focus to the answer on the next frame: let it land before anything is typed.
+  await page.evaluate(
+    () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
+  );
+}
+
 export async function setCode(page: Page, code: string): Promise<void> {
+  await tryAgainIfShown(page);
   await page.evaluate((c) => (globalThis as unknown as { __oakLesson: Dev }).__oakLesson.setCode(c), code);
 }
 

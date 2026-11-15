@@ -18,7 +18,7 @@ import {
   folkProject,
   standIn,
 } from "./song-fixtures.ts";
-import { seed } from "./support.ts";
+import { checkIt, seed } from "./support.ts";
 
 const SHOTS = new URL("./screenshots", import.meta.url).pathname;
 
@@ -99,7 +99,7 @@ test("L5: phrase by phrase — a wrong phrase names its bars, the right one pass
   await page.keyboard.press("Space");
 
   // The starter fails phrase 1: the verdict names the bars, each line its bar and beat, the timeline marks them.
-  await page.getByTestId("check").click();
+  await checkIt(page);
   await expect(page.getByTestId("verdict")).toHaveText(
     "Phrase 1: not yet, 40 % of 85 %. Bars 2 and 3 differ. Loop it and listen again.",
   );
@@ -111,7 +111,7 @@ test("L5: phrase by phrase — a wrong phrase names its bars, the right one pass
 
   // The tune as heard passes phrase 1; phrase 2 opens.
   await replaceLine(page, "melody", `melody: n("${FOLK_MELODY}").scale("C4:major").s("piano")`);
-  await page.getByTestId("check").click();
+  await checkIt(page);
   await expect(page.getByTestId("verdict")).toHaveText("Phrase 1: that's it (100 %).");
   await expect(page.getByTestId("phrase-map").locator("button").first()).toHaveAttribute(
     "data-status",
@@ -119,7 +119,7 @@ test("L5: phrase by phrase — a wrong phrase names its bars, the right one pass
   );
   await expect(page.getByTestId("check")).toHaveText("Check phrase 2");
   await expect(page.getByTestId("phrase-progress")).toHaveText("1 of 2 passed");
-  await page.getByTestId("check").click();
+  await checkIt(page);
   await expect(page.getByTestId("song-done")).toBeVisible();
   await expect(page.getByTestId("next-item")).toHaveText("Next song");
   expect(server.submissions.at(-1)).toMatchObject({ phrase: 2, rung: 0 });
@@ -167,12 +167,12 @@ test("L6: bass, then changes, then melody — listening to the bass alone, the c
   await expect(page.getByTestId("loop-label")).toHaveText("bars 9–12");
 
   // A wrong bass names its bar; the roots as heard pass and the changes open, listening without the melody.
-  await page.getByTestId("check").click();
+  await checkIt(page);
   await expect(page.getByTestId("verdict")).toHaveText(
     "The bass: not yet, 50 % of 90 %. Bar 2 differs. Loop it and listen again.",
   );
   await replaceLine(page, "bass", `bass: n("<${BLUES_ROOTS.join(" ")}>").scale("G2:major").s("ebass")`);
-  await page.getByTestId("check").click();
+  await checkIt(page);
   await expect(page.getByTestId("verdict")).toHaveText("The bass: that's it (95 %).");
   await expect(stages.nth(0)).toHaveAttribute("data-status", "passed");
   await expect(stages.nth(1)).toHaveAttribute("data-status", "open");
@@ -188,7 +188,7 @@ test("L6: bass, then changes, then melody — listening to the bass alone, the c
   );
   await expect(page.getByTestId("changes-chart")).toContainText("D7");
   await shots(page, "w5-l6-changes");
-  await page.getByTestId("check").click();
+  await checkIt(page);
   await expect(page.getByTestId("verdict")).toHaveText("The changes: that's it (95 %).");
   expect(server.submissions.at(-1)?.stage).toBe("changes");
   expect(server.submissions.at(-1)?.code).toContain(`chord("<${BLUES_CHART.join(" ")}>")`);
@@ -199,7 +199,7 @@ test("L6: bass, then changes, then melody — listening to the bass alone, the c
   await replaceLine(page, "melody", `melody: n("${BLUES_MELODY}").scale("G4:major").s("piano")`);
   for (const line of [1, 2, 3]) {
     await expect(page.getByTestId("check")).toHaveText(`Check line ${line}`);
-    await page.getByTestId("check").click();
+    await checkIt(page);
     await expect(page.getByTestId("verdict")).toHaveText(`Melody, line ${line}: that's it (95 %).`);
   }
   expect(server.submissions.filter((x) => x.stage === "melody").map((x) => x.phrase)).toEqual([1, 2, 3]);

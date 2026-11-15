@@ -15,6 +15,14 @@
 // mic never opens, nothing counts, the record says `quiet`), and Quiet mode switched on while a sung trial is
 // presented closes the mic at once and offers the same.
 //
+// The retry pass (docs/design/retry.md §3.3): after any result — right, wrong, shown, sung, tapped, skipped — `RETRY`
+// re-opens the SAME trial (same seed, key, register and instrument; the trial is not regenerated) for a practice
+// take, and `RETRY` after a sung resolution re-opens the resolution. The first answer stays the trial's record (its
+// credit grades the card, contracts §7.2) and the first resolution stays `sungResolution` (§8.3): a practice take is
+// graded and shown (`practice.outcome`) but never written into `outcomes`/`records`; the record only counts it in
+// `retries` (telemetry; the server keeps the first stored answer whatever a re-post says). Nothing moves on by itself:
+// the learner presses NEXT. A reload during a practice take resumes at the next trial (the first answer is saved).
+//
 // Side effects are actors the runtime provides (`drillActors` in runtime.ts); the machine itself only decides.
 // `start` resolves the server's drill session and the trial source (a resumed set keeps its session and its
 // recorded trials); `present` plays a trial and, for tap and sing trials, captures the response; `audition`
@@ -182,7 +190,19 @@ export type DrillEvent =
   | { type: "BASS_ALONE" }
   | { type: "AUDITION_DONE" }
   | { type: "NEXT" }
+  /**
+   * In `failed`/`finishFailed`: try the request again. In `feedback` or `resolution.done` (docs/design/retry.md
+   * §3.3): "Try again" — a practice take of the same trial (or of its sung resolution).
+   */
   | { type: "RETRY" };
+
+/** A practice take inside the current trial (docs/design/retry.md §3.3): never recorded as its answer. */
+export interface PracticeTake {
+  /** What is taken again: the trial itself, or its sung resolution. */
+  of: "trial" | "resolution";
+  /** The practice take's own verdict once it is in (shown in place of the first answer's); null while it runs. */
+  outcome: TrialOutcome | null;
+}
 
 export interface DrillContext {
   input: Omit<DrillInput, "resume" | "deps">;
@@ -217,6 +237,10 @@ export interface DrillContext {
   auditionPart: number | null;
   finish: DrillFinish | null;
   error: string | null;
+  /** The practice take in progress or shown (null: the trial's first answer is what is on screen). */
+  practice: PracticeTake | null;
+  /** "Try again" presses in the current trial (its resolution's included): `DrillTrialRecord.retries`. */
+  retries: number;
 }
 
 export interface PresentInput {
@@ -257,7 +281,7 @@ function outcomeFrom(
   revealed: boolean,
   sung: SungSummary[] | null,
   modality?: Modality,
-): Pick<DrillContext, "outcomes" | "records"> {
+): Partial<Pick<DrillContext, "outcomes" | "records" | "practice">> {
   const cur = ctx.current as PlannedTrial;
   const outcome: TrialOutcome = {
     index: ctx.index,
@@ -268,6 +292,8 @@ function outcomeFrom(
     resolutionCredit: null,
     sungResolution: null,
   };
+  // A practice take is graded and shown, never recorded: the first answer stays the trial's record.
+  if (ctx.practice) return { practice: { ...ctx.practice, outcome } };
   const record = trialRecord(
     cur.trial,
     ctx.index,
@@ -342,10 +368,47 @@ function withResolution(
   return { outcomes, records };
 }
 
+/**
+ * A sung resolution taken (sung, heard in the head, skipped): the first one is the trial's `sungResolution`; a
+ * practice take (docs/design/retry.md §3.3) is folded into `practice.outcome` only and never sent.
+ */
+function resolutionTaken(
+  ctx: DrillContext,
+  taken: Parameters<typeof sungResolutionOf>[2],
+  modality: Modality,
+): Partial<Pick<DrillContext, "outcomes" | "records" | "practice">> {
+  const folded = withResolution(ctx, taken, modality);
+  if (ctx.practice) return { practice: { ...ctx.practice, outcome: folded.outcomes[ctx.index] ?? null } };
+  return folded;
+}
+
+/**
+ * The outcome on screen (docs/design/retry.md §3.3): the practice take's while one is shown; nothing while a
+ * practice take of the trial runs (the widget is open again); else the trial's first answer. A practice take of the
+ * resolution shows the first answer's verdict until the take is in.
+ */
+export function shownOutcome(
+  ctx: Pick<DrillContext, "practice" | "outcomes" | "index">,
+): TrialOutcome | undefined {
+  const p = ctx.practice;
+  if (p?.of === "trial") return p.outcome ?? undefined;
+  if (p?.of === "resolution") return p.outcome ?? ctx.outcomes[ctx.index];
+  return ctx.outcomes[ctx.index];
+}
+
+/** The record with one more practice take counted (telemetry; the answer, credit and resolution are kept). */
+function withRetry(ctx: DrillContext): Pick<DrillContext, "records" | "retries"> {
+  const retries = ctx.retries + 1;
+  const records = [...ctx.records];
+  const rec = records[ctx.index];
+  if (rec) records[ctx.index] = { ...rec, retries };
+  return { records, retries };
+}
+
 /** The feedback's automatic listen-back on an FET trial (ux §4.2): right → it walks home; wrong → yours vs it. */
 function autoAudition(ctx: DrillContext): Audition | null {
   const trial = ctx.current?.trial;
-  const outcome = ctx.outcomes[ctx.index];
+  const outcome = shownOutcome(ctx);
   if (!trial || !outcome || !isFetTrial(trial) || outcome.result.skipped) return null;
   // A sung resolution comes next: from level 3 the learner sings before hearing the path (audiation).
   if (trial.params.sungResolution === true && !outcome.revealed) return null;
@@ -519,6 +582,8 @@ export const drillMachine = setup({
       auditionPart: null,
       finish: null,
       error: null,
+      practice: null,
+      retries: 0,
     };
   },
   initial: "loading",
@@ -568,12 +633,17 @@ export const drillMachine = setup({
     trial: {
       entry: [
         assign(({ context }) => {
-          const current = (context.source as TrialSource).at(context.index, context.outcomes);
+          // A practice take ("Try again") asks the very same trial again; a new trial is generated otherwise.
+          const current =
+            context.practice && context.current
+              ? context.current
+              : (context.source as TrialSource).at(context.index, context.outcomes);
           const trials = [...context.trials];
           trials[context.index] = current.trial;
           return {
             current,
             trials,
+            retries: context.practice ? context.retries : 0,
             replays: 0,
             answerAt: null,
             stage: null,
@@ -586,7 +656,13 @@ export const drillMachine = setup({
             auditionPart: null,
           };
         }),
-        { type: "persist", params: ({ context }) => ({ ctx: context }) },
+        // During a practice take the first answer is already saved: a reload resumes at the next trial.
+        {
+          type: "persist",
+          params: ({ context }) => ({
+            ctx: context.practice ? { ...context, index: context.index + 1 } : context,
+          }),
+        },
       ],
       initial: "presenting",
       on: {
@@ -817,14 +893,25 @@ export const drillMachine = setup({
       },
       on: {
         NEXT: [
-          { guard: "needsResolution", target: "resolution" },
+          { guard: "needsResolution", target: "resolution", actions: assign({ practice: null }) },
           {
             guard: "hasMore",
             target: "trial",
-            actions: assign({ index: ({ context }) => context.index + 1 }),
+            actions: assign({ index: ({ context }) => context.index + 1, practice: null }),
           },
-          { target: "finishing", actions: assign({ index: ({ context }) => context.index + 1 }) },
+          {
+            target: "finishing",
+            actions: assign({ index: ({ context }) => context.index + 1, practice: null }),
+          },
         ],
+        // "Try again" after any result: the same trial again, as practice (docs/design/retry.md §3.3).
+        RETRY: {
+          target: "trial",
+          actions: assign(({ context }) => ({
+            ...withRetry(context),
+            practice: { of: "trial" as const, outcome: null },
+          })),
+        },
       },
     },
     resolution: {
@@ -850,11 +937,15 @@ export const drillMachine = setup({
               actions: assign(({ context, event }) => {
                 const trial = (context.current as PlannedTrial).trial;
                 const graded = context.deps.gradeResolution(trial, event.frames ?? []);
-                const folded = withResolution(
-                  context,
-                  { kind: "sung", notes: graded.sung, credit: graded.credit, passed: graded.passed },
-                  "normal",
-                );
+                const taken = {
+                  kind: "sung" as const,
+                  notes: graded.sung,
+                  credit: graded.credit,
+                  passed: graded.passed,
+                };
+                // A practice take of the resolution is drawn and graded, never sent (retry.md §3.3).
+                if (context.practice) return { ...resolutionTaken(context, taken, "normal"), stage: null };
+                const folded = withResolution(context, taken, "normal");
                 const records = [...folded.records];
                 const rec = records[context.index] as DrillTrialRecord;
                 records[context.index] = { ...rec, response: { ...rec.response, sung: graded.sung } };
@@ -874,7 +965,7 @@ export const drillMachine = setup({
               guard: ({ context }) => context.input.quiet,
               target: "done",
               actions: assign(({ context }) => ({
-                ...withResolution(context, { kind: "quiet" }, "quiet"),
+                ...resolutionTaken(context, { kind: "quiet" }, "quiet"),
                 stage: null,
               })),
             },
@@ -883,7 +974,7 @@ export const drillMachine = setup({
                 guard: ({ context, event }) => event.quiet && !context.input.quiet,
                 target: "done",
                 actions: assign(({ context }) => ({
-                  ...withResolution(context, { kind: "skipped" }, "quiet"),
+                  ...resolutionTaken(context, { kind: "skipped" }, "quiet"),
                   input: { ...context.input, quiet: true },
                   stage: null,
                 })),
@@ -897,7 +988,7 @@ export const drillMachine = setup({
             MIC_ERROR: {
               target: "done",
               actions: assign(({ context, event }) => ({
-                ...withResolution(context, { kind: "skipped" }, "fallback"),
+                ...resolutionTaken(context, { kind: "skipped" }, "fallback"),
                 micError: event.message,
                 stage: null,
               })),
@@ -905,7 +996,7 @@ export const drillMachine = setup({
             SKIP_SUNG: {
               target: "done",
               actions: assign(({ context }) => ({
-                ...withResolution(context, { kind: "skipped" }, context.input.quiet ? "quiet" : "normal"),
+                ...resolutionTaken(context, { kind: "skipped" }, context.input.quiet ? "quiet" : "normal"),
                 stage: null,
               })),
             },
@@ -915,11 +1006,11 @@ export const drillMachine = setup({
           on: {
             HEARD: {
               target: "done",
-              actions: assign(({ context }) => withResolution(context, { kind: "quiet" }, "quiet")),
+              actions: assign(({ context }) => resolutionTaken(context, { kind: "quiet" }, "quiet")),
             },
             SKIP_SUNG: {
               target: "done",
-              actions: assign(({ context }) => withResolution(context, { kind: "skipped" }, "quiet")),
+              actions: assign(({ context }) => resolutionTaken(context, { kind: "skipped" }, "quiet")),
             },
           },
         },
@@ -939,10 +1030,21 @@ export const drillMachine = setup({
               {
                 guard: "hasMore",
                 target: "#drill.trial",
-                actions: assign({ index: ({ context }) => context.index + 1 }),
+                actions: assign({ index: ({ context }) => context.index + 1, practice: null }),
               },
-              { target: "#drill.finishing", actions: assign({ index: ({ context }) => context.index + 1 }) },
+              {
+                target: "#drill.finishing",
+                actions: assign({ index: ({ context }) => context.index + 1, practice: null }),
+              },
             ],
+            // "Try again" after the way home: a practice take of it (the first stays `sungResolution`).
+            RETRY: {
+              target: "running",
+              actions: assign(({ context }) => ({
+                ...withRetry(context),
+                practice: { of: "resolution" as const, outcome: null },
+              })),
+            },
           },
         },
       },

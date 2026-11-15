@@ -56,6 +56,7 @@ import { daysLine, goalLine, repairLine, restsLine, streakLine } from "../streak
 import { itemTitle as titleOf } from "../titles.ts";
 import {
   keepAlivePlan,
+  learnerObjective,
   looserTolerance,
   type SetlistRow,
   type TodayView,
@@ -172,7 +173,7 @@ function PrimaryAction({
         className={buttonClass("primary", "lg")}
         data-testid="begin-onboarding"
       >
-        Begin <ArrowRight aria-hidden className="size-4" />
+        {view.primary.label} <ArrowRight aria-hidden className="size-4" />
       </Link>
     );
   const resume = view.primary.action === "resume";
@@ -276,12 +277,17 @@ export function TodayPage() {
   const progress = useCourseProgress();
   const sideLessons = useSideLessons();
   const ended = useLastEnded();
+  // Where a learner who left onboarding half-way stands ("Carry on setting up · Step 8 of 13").
+  const onboarding = useOnboarding();
   const starting = useRunnerView((v) => v.starting);
   const qc = useQueryClient();
   const titles = lessonTitles(content.data?.syllabus ?? null);
   const stepsOf = (id: string) => content.data?.lessons.find((l) => l.id === id)?.steps.length ?? null;
   const objectiveOf = (id: string) =>
-    content.data?.syllabus?.units.flatMap((u) => u.lessons).find((l) => l.id === id)?.objective ?? null;
+    learnerObjective(
+      id,
+      content.data?.syllabus?.units.flatMap((u) => u.lessons).find((l) => l.id === id)?.objective ?? null,
+    );
   // A capstone in progress is never interrupted by a gym slot (contracts §2.5): the plan Today runs keeps it.
   const inProgress = useCapstoneInProgress();
   const planData = plan.data ? keepCapstone(plan.data, inProgress, (id) => titleOf(id, titles)) : undefined;
@@ -350,6 +356,7 @@ export function TodayPage() {
           cft,
           waiting,
           after,
+          onboarding: onboarding.data ?? null,
         })
       : null;
   const extra = planData ? extraGym(planData) : null;

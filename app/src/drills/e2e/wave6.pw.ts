@@ -136,7 +136,9 @@ async function pick(page: Page, id: string): Promise<void> {
 async function listen(page: Page, key: string): Promise<void> {
   await page.keyboard.press(key);
   await expect(page.getByTestId("stage-text")).toHaveText("Playing…");
-  await expect(page.getByTestId("stage-text")).toHaveText("Listen back, or move on.", { timeout: 30_000 });
+  await expect(page.getByTestId("stage-text")).toHaveText("Listen back, try again, or move on.", {
+    timeout: 30_000,
+  });
 }
 
 /** Both themes at both sizes: the primary action in view, no horizontal overflow; back to Paper 1440×900. */

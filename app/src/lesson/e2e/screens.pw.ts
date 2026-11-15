@@ -7,6 +7,7 @@ import type { Page } from "@playwright/test";
 import { SCREENSHOT_MATRIX } from "../../../../e2e/support/stack.ts";
 import { shoot, useUiPrefs } from "../../../../e2e/support/ui.ts";
 import { expect, setCode, stepIs, test } from "./support.ts";
+import { answerControl } from "./w3support.ts";
 
 const SHOTS = fileURLToPath(new URL("./screenshots", import.meta.url));
 const mel = (d: string) => `setcpm(90/4)\n\nmel: n("${d}").scale("C4:major").s("piano")`;
@@ -16,7 +17,7 @@ async function noOverflow(page: Page) {
   expect(overflow).toBeLessThanOrEqual(0);
 }
 async function onScreen(page: Page, testId: string) {
-  const box = await page.getByTestId(testId).boundingBox();
+  const box = await answerControl(page, testId).first().boundingBox();
   const vp = page.viewportSize();
   expect(box).not.toBeNull();
   if (box && vp) {

@@ -23,6 +23,20 @@ async function tabTo(page: Page, target: Locator, max = 40): Promise<void> {
 
 test.describe.configure({ mode: "serial" });
 
+/**
+ * Alt+R, from wherever the focus is: Try again re-opens the answer a verdict locked (docs/design/retry.md §2.5),
+ * once the verdict is saved; then the focus has landed on the answer.
+ */
+async function altR(page: Page): Promise<void> {
+  const retry = page.getByTestId("lesson-step").getByTestId("result-retry");
+  await expect(retry).toBeEnabled();
+  await page.keyboard.press("Alt+r");
+  await expect(retry).toHaveCount(0);
+  await page.evaluate(
+    () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
+  );
+}
+
 /** The staff's value, as its typed alternative mirrors it. */
 const staffValue = (page: Page) => page.locator('input[aria-label$="(as text)"]').inputValue();
 
@@ -56,7 +70,9 @@ test("U02.L04 S5: the notes written on the staff itself with the keyboard, an oc
   const fb = page.getByTestId("step-feedback");
   await expect(fb).toHaveAttribute("data-status", "fail");
   await expect(fb).not.toContainText(/C5|c5/);
-  // Mod+↑ on the last note: an octave up. Checked again: a pass, stored on the server.
+  // Alt+R: Try again re-opens the staff (the verdict locked it, docs/design/retry.md §2.5). Mod+↑ on the last
+  // note: an octave up. Checked again: a pass, stored on the server.
+  await altR(page);
   await surface.focus();
   await toFourth();
   await page.keyboard.press("ControlOrMeta+ArrowUp");
@@ -118,7 +134,9 @@ test("U02.L04 S5: notes through the typed alternative, keyboard only, against th
   await expect(page.getByTestId("step-feedback")).toContainText("Note 2");
   await expect(page.getByTestId("continue")).toBeDisabled();
 
-  // Fix the second note and check again: a pass, stored on the server.
+  // Alt+R: Try again re-opens the list (the verdict locked it, docs/design/retry.md §2.5). Fix the second note and
+  // check again: a pass, stored on the server.
+  await altR(page);
   await typed.focus();
   await page.keyboard.press("ControlOrMeta+A");
   await page.keyboard.type("C4:4 E4:4 G4:4 C5:4");
@@ -141,6 +159,7 @@ test("a key signature placed in order with letter keys (dev fixture)", async ({ 
   await page.keyboard.type("f");
   await page.keyboard.press("ControlOrMeta+Shift+Enter");
   await expect(page.getByTestId("step-feedback")).toHaveAttribute("data-status", "fail");
+  await altR(page);
   await staff.first().focus();
   await page.keyboard.type("c");
   await page.keyboard.press("ControlOrMeta+Shift+Enter");
@@ -177,6 +196,7 @@ test("notes with a key signature: G major, F♯ by the signature (dev fixture)",
   await page.keyboard.type("G4:4 A4:4 B4:4 C5:4 | D5:4 E5:4 F5:4 G5:4");
   await page.keyboard.press("ControlOrMeta+Shift+Enter");
   await expect(page.getByTestId("step-feedback")).toHaveAttribute("data-status", "fail");
+  await altR(page);
   await typed.focus();
   await page.keyboard.press("ControlOrMeta+A");
   await page.keyboard.type("G4:4 A4:4 B4:4 C5:4 | D5:4 E5:4 F#5:4 G5:4");

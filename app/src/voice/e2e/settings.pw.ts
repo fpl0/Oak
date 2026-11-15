@@ -108,8 +108,10 @@ test("Match three notes: Oak plays, the learner sings back; the result is kept a
   await expect(rows.nth(1)).toContainText("↓");
   await expect(rows.nth(2)).toContainText("↑");
   await expect(page.getByTestId("match-verdict")).toContainText("starts wide");
+  await expect(page.getByTestId("result-retry")).toBeVisible();
+  await expect(page.getByTestId("result-continue")).toBeFocused();
   await shootAll(page, "43-match-result");
-  await page.getByTestId("part-continue").click();
+  await page.getByTestId("result-continue").click();
   await expect(page.getByTestId("setup-done")).toBeVisible();
   await page.getByRole("link", { name: "Back to Settings › Voice" }).click();
   await expect(page.getByTestId("match-last")).toHaveText("1 of 3 within ±50¢");
@@ -117,7 +119,7 @@ test("Match three notes: Oak plays, the learner sings back; the result is kept a
   expect(problems).toEqual([]);
 });
 
-test("the quiet check notices a voice and measures again instead of storing it", async ({
+test("the quiet check notices a voice and offers Try again instead of storing it", async ({
   page,
   request,
 }) => {
@@ -126,7 +128,9 @@ test("the quiet check notices a voice and measures again instead of storing it",
   await page.goto("/settings/voice/setup?part=noise");
   await page.getByTestId("noise-start").click();
   await expect(page.getByTestId("noise-voice")).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByTestId("noise-start")).toHaveText("Measure again");
+  // The take is not kept: Try again measures again; Continue keeps the room measured before (−62 dBFS).
+  await expect(page.getByTestId("result-retry")).toBeVisible();
+  await expect(page.getByTestId("result-continue")).toBeEnabled();
   await shootAll(page, "44-quiet-check-voice");
   // Nothing was stored: the floor is still the quiet room's.
   const p = await (await request.get(`${stack.apiURL}/api/profile`, { headers: { "x-oak": "1" } })).json();

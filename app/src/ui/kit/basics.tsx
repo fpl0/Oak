@@ -157,36 +157,95 @@ export function Progress({
 export interface RailStep {
   id: string;
   label: string;
-  state: "done" | "current" | "todo" | "optional";
+  /** `skipped`: set up later, or passed over in Quiet mode (drawn like `optional`, read "skipped"). */
+  state: "done" | "current" | "todo" | "optional" | "skipped";
+  /** The current step's own part ("2 of 3: a quiet moment"), shown after its name in the position text. */
+  sub?: string;
 }
 
-/** The lesson step rail (ux §7.9: a `list` with `aria-current="step"`). */
-export function StepRail({ steps, label = "Steps" }: { steps: RailStep[]; label?: string }) {
+const RAIL_WORD: Record<RailStep["state"], string> = {
+  done: "done",
+  current: "current",
+  todo: "to do",
+  optional: "optional",
+  skipped: "skipped",
+};
+
+/** "Step 8 of 13 · Microphone · 2 of 3: a quiet moment" for the current step; null when none is current. */
+export function railPositionText(steps: readonly RailStep[]): string | null {
+  const i = steps.findIndex((s) => s.state === "current");
+  const cur = steps[i];
+  if (cur === undefined) return null;
+  return `Step ${i + 1} of ${steps.length} · ${cur.label}${cur.sub ? ` · ${cur.sub}` : ""}`;
+}
+
+/**
+ * The lesson step rail (ux §7.9: a `list` with `aria-current="step"`). `position` adds the visible "Step N of M ·
+ * name" (onboarding, docs/design/retry.md §6.1); `onVisit` makes done and skipped dots buttons that open that step.
+ */
+export function StepRail({
+  steps,
+  label = "Steps",
+  position = false,
+  onVisit,
+}: {
+  steps: RailStep[];
+  label?: string;
+  position?: boolean;
+  onVisit?: ((id: string) => void) | null;
+}) {
+  const text = position ? railPositionText(steps) : null;
   return (
-    <ol aria-label={label} className="flex items-center gap-1.5">
-      {steps.map((s, i) => (
-        <li
-          key={s.id}
-          aria-current={s.state === "current" ? "step" : undefined}
-          title={`${i + 1}. ${s.label}`}
-          className="flex items-center"
-        >
-          <span className="sr-only">
-            {i + 1}. {s.label} ({s.state === "done" ? "done" : s.state === "current" ? "current" : "to do"})
-          </span>
-          <span
-            aria-hidden
-            className={clsx(
-              "block h-2 rounded-full transition-all",
-              s.state === "current" ? "w-6 bg-accent" : "w-2",
-              s.state === "done" && "bg-accent/60",
-              s.state === "todo" && "bg-border",
-              s.state === "optional" && "border border-dashed border-text-3",
-            )}
-          />
-        </li>
-      ))}
-    </ol>
+    <div className="flex min-w-0 items-center gap-3">
+      {text && (
+        <p className="truncate text-sm text-text-2" data-testid="rail-position">
+          {text}
+        </p>
+      )}
+      <ol aria-label={label} className="flex shrink-0 items-center gap-1.5">
+        {steps.map((s, i) => {
+          const name = `${i + 1}. ${s.label} (${RAIL_WORD[s.state]})`;
+          const dot = (
+            <span
+              aria-hidden
+              className={clsx(
+                "block h-2 rounded-full transition-all reduced:transition-none",
+                s.state === "current" ? "w-6 bg-accent" : "w-2",
+                s.state === "done" && "bg-accent/60",
+                s.state === "todo" && "bg-border",
+                (s.state === "optional" || s.state === "skipped") && "border border-dashed border-text-3",
+              )}
+            />
+          );
+          const visitable = onVisit && (s.state === "done" || s.state === "skipped");
+          return (
+            <li
+              key={s.id}
+              aria-current={s.state === "current" ? "step" : undefined}
+              title={`${i + 1}. ${s.label}`}
+              className="flex items-center"
+            >
+              {visitable ? (
+                <button
+                  type="button"
+                  onClick={() => onVisit(s.id)}
+                  aria-label={`Go back to ${name}`}
+                  className="-m-1.5 flex items-center rounded-full p-1.5 hover:bg-surface-2"
+                  data-rail-step={s.id}
+                >
+                  {dot}
+                </button>
+              ) : (
+                <>
+                  <span className="sr-only">{name}</span>
+                  {dot}
+                </>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 

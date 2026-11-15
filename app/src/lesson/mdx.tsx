@@ -392,7 +392,12 @@ function Setup(p: P) {
       if (a && a !== document.body && a.isConnected) return;
       const next = after
         .filter((el) => el.isConnected)
-        .map((el) => el.querySelector<HTMLElement>("button:not([disabled])"))
+        // Its primary (the start of its measurement, in the result row's pair), never "Set up later" at the left.
+        .map(
+          (el) =>
+            el.querySelector<HTMLElement>("[data-result-pair] button:not([disabled])") ??
+            el.querySelector<HTMLElement>("button:not([disabled])"),
+        )
         .find(Boolean);
       (next ?? document.querySelector<HTMLElement>('[data-testid="continue"]'))?.focus();
     }, 0);

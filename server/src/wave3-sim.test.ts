@@ -457,8 +457,10 @@ class Sim {
         this.fail(plan.day, `a lesson day for ${id}, which is not written`);
         this.endOfCourse = true;
       } else {
-        await this.me.doLesson(id, ses.id);
+        // The sung takes come first: a take on a step that already passed is practice and never reaches the
+        // ladder (docs/design/retry.md §3.4), so the counted take is the one this check measures.
         await this.singSteps(id, ses.id, plan.day);
+        await this.me.doLesson(id, ses.id);
         const done = await this.me.completeLesson(id, ses.id);
         void done;
         for (const f of course.families)
