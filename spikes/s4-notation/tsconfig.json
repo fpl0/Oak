@@ -1,6 +1,0 @@
-{
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "resolveJsonModule": true, "lib": ["es2023", "dom", "dom.iterable"], "types": [] },
-  "include": ["quantize.ts", "abc.ts", "corpus.ts", "web/main.ts", "types-probe.ts"],
-  "exclude": []
-}

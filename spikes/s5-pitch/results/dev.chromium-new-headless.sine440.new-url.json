@@ -1,8 +1,0 @@
-{
-  "mode": "dev",
-  "ok": true,
-  "frames": 182,
-  "workletUrl": "http://127.0.0.1:5185/src/pitch.worklet.ts",
-  "workletHead": "/**\n* S5 spike — AudioWorkletProcessor 'oak-pitch'.\n* Thin shell around PitchFrameAnalyzer (pure, unit-tested). Posts one PitchFrame per 512-sample hop.\n*\n* Loa",
-  "problems": []
-}
