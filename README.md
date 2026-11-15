@@ -33,6 +33,20 @@ The **Music Workbench** keeps three views linked: the Strudel editor, a piano ro
 - **Streaks without guilt.** The main streak counts weeks in which you met your goal. Rest days are banked, and a missed day can be repaired within 48 hours.
 - **A Socratic tutor (Claude).** A docked panel that knows your lesson, step, code and progress. It gives graded answers only through a four-rung hint ladder (nudge → pointer → partial → reveal), and the server withholds solutions until the last rung. It reviews capstones and transcriptions, but **it never decides pass or fail**; deterministic graders do.
 
+## Desktop app
+
+On an Apple Silicon Mac you can skip the setup below. Download `Oak-macos-arm64.dmg` from the [latest release](https://github.com/fpl0/Oak/releases/latest) and drag Oak to Applications. The app bundles Chromium (via Electron), Bun, the course and the sound pack, and it runs the same local server on `127.0.0.1:8797`. Progress lives in the same `~/.oak`, so the app and `bun run start` share it. The server log is at `~/Library/Logs/Oak/server.log`.
+
+The build is ad hoc signed and not notarized, so the first time you open it, right-click Oak and choose **Open**. The tutor finds `claude` on your login shell's `PATH`.
+
+To build it yourself (after `bun run build` and `bun run sounds:mirror`):
+
+```bash
+cd desktop && npm install && npm run dist
+```
+
+The DMG and zip land in `desktop/release/`. `OAK_SRC=<checkout>` stages from another checkout, such as a clean worktree of a release commit.
+
 ## Quick start
 
 **Requirements**

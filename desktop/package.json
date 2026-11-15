@@ -1,0 +1,20 @@
+{
+  "name": "oak-desktop",
+  "productName": "Oak",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Oak — learn music theory by writing music in Strudel.",
+  "author": "Filipe Lima",
+  "license": "AGPL-3.0-or-later",
+  "main": "main.cjs",
+  "scripts": {
+    "icon": "node scripts/render-icon.mjs",
+    "stage": "bash scripts/stage.sh",
+    "start": "electron .",
+    "dist": "bash scripts/stage.sh && electron-builder --mac --arm64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "45.3.2",
+    "electron-builder": "26.18.0"
+  }
+}
