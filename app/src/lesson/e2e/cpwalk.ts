@@ -3,18 +3,47 @@
 // wherever it has one (walk.ts `answerWidget`), else through the player's own grading path (`__oakCheckpoint`: code
 // items, sung items on their targets, the Make from its passing test); the first widget item is answered wrong
 // first and saved again right. Then the hand-in and the result screen, read for raw IDs.
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { REPO_ROOT } from "../../../../e2e/support/stack.ts";
 import { expect } from "./support.ts";
 import { api } from "./w3support.ts";
+import { lookAt } from "./w7look.ts";
 import { answerWidget, enterStage, type PartLike, wrongFor } from "./walk.ts";
 
-/** A core unit with a checkpoint (`U09`: its checkpoint is `U09.CP`, its route `/checkpoint/U09`). */
-export type Unit = `U${number}`;
+/**
+ * A core unit with a checkpoint (`U09`: its checkpoint is `U09.CP`, its route `/checkpoint/U09`), or a track
+ * checkpoint by its full ID (Wave 7: `J.CP1`, `R.CP`; its route `/checkpoint/J.CP1`).
+ */
+export type Unit = `U${number}` | "J.CP1" | "J.CP2" | "R.CP" | "A.CP";
+
+/** The checkpoint ID of a unit (`U09` → `U09.CP`; a track checkpoint is its own ID). */
+export const cpIdOf = (unit: Unit): string => (/^U\d\d$/.test(unit) ? `${unit}.CP` : unit);
+
+/** Every `checkpoint.ts` under content/advanced (author:CP names the track checkpoints' folders). */
+function advancedCheckpointFiles(dir = `${REPO_ROOT}content/advanced`): string[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory()
+      ? advancedCheckpointFiles(`${dir}/${e.name}`)
+      : e.name === "checkpoint.ts"
+        ? [`${dir}/${e.name}`]
+        : [],
+  );
+}
+
+/** The file that defines the checkpoint's authored items and Make, or `null` while it is not written. */
+export function checkpointFile(unit: Unit): string | null {
+  if (/^U\d\d$/.test(unit)) {
+    const f = `${REPO_ROOT}content/core/${unit}/CP/checkpoint.ts`;
+    return existsSync(f) ? f : null;
+  }
+  // A track checkpoint's file names its ID in `id: "J.CP1"` (read as text: nothing is imported to look).
+  return advancedCheckpointFiles().find((f) => readFileSync(f, "utf8").includes(`id: "${unit}"`)) ?? null;
+}
 
 /** Whether author:CP has written the checkpoint's authored items and Make (`content/core/Uxx/CP/checkpoint.ts`). */
-export const written = (unit: Unit) => existsSync(`${REPO_ROOT}content/core/${unit}/CP/checkpoint.ts`);
+export const written = (unit: Unit) => checkpointFile(unit) !== null;
 export type Info = {
   kind: "family" | "authored" | "make" | null;
   idx: number | null;
@@ -54,6 +83,20 @@ export const devAnswer = (page: Page, r: unknown) =>
       ).__oakCheckpoint.answer(x),
     r,
   );
+
+/**
+ * After an answer through the dev hook, the item on screen has moved on (or the review is up): the hook resolves
+ * when the answer is graded, before the runner shows the next item, and the walk must not answer that next item
+ * with this one's answer (seen in R.CP: a dictation's code recorded on the item after it).
+ */
+async function movedOn(page: Page, idx: number | null): Promise<void> {
+  await expect
+    .poll(
+      async () => (await page.getByTestId("checkpoint-review").isVisible()) || (await info(page)).idx !== idx,
+      { message: `item ${idx} moved on`, timeout: 20_000 },
+    )
+    .toBe(true);
+}
 
 export const RAW = /\btb\.|\bfam\.|\bcd\.|[{}]|undefined|NaN|\[object/;
 
@@ -98,7 +141,12 @@ export async function startAttempt(page: Page, unit: Unit) {
 }
 
 export async function makeCode(unit: Unit): Promise<string> {
-  const def = (await import(`../../../../content/core/${unit}/CP/checkpoint.ts`)).default as {
+  const file = checkpointFile(unit);
+  expect(file, `${cpIdOf(unit)} is written`).not.toBeNull();
+  const mod = (await import(file as string)) as Record<string, unknown>;
+  const def = (Object.values(mod).find(
+    (v) => !!v && typeof v === "object" && (v as { id?: unknown }).id === cpIdOf(unit),
+  ) ?? mod.default) as {
     make: { tests: { expect: string; response: { code?: string } }[] };
   };
   const pass = def.make.tests.find((t) => t.expect === "pass" && typeof t.response.code === "string");
@@ -146,6 +194,7 @@ export async function answerAll(
       const t = (it.params?.singTargets as { midi: number }[] | undefined) ?? [];
       expect(t.length, "a sung item has its targets").toBeGreaterThan(0);
       await devAnswer(page, { sung: t.map((x) => ({ midi: x.midi, cents: 3, credit: 1 })) });
+      await movedOn(page, it.idx);
       kinds.push("sing");
       continue;
     }
@@ -172,6 +221,7 @@ export async function answerAll(
         timeout: 30_000,
       });
       await devAnswer(page, { code: passTest.response.code });
+      await movedOn(page, it.idx);
       kinds.push(`code:${ex?.id}`);
       continue;
     }
@@ -179,15 +229,28 @@ export async function answerAll(
       const code = (it.trialCode && answerBarsCode(it.trialCode)) ?? it.trialCode;
       expect(code, `${ex.id}: something to write`).toBeTruthy();
       await devAnswer(page, { code });
+      await movedOn(page, it.idx);
       kinds.push("code-family");
       continue;
     }
     const response: Record<string, unknown> =
       it.kind === "authored"
         ? (passTest?.response ?? { answer: ex?.correct ?? {} })
-        : ex?.kind === "tap"
-          ? { taps: (it.params?.tapTimes as number[] | undefined) ?? [] }
-          : { answer: it.exp ?? {} };
+        : ex?.kind === "tap" && Array.isArray(it.params?.tapLanes)
+          ? // Wave 7: a polyrhythm tapped with two hands (R.CP): each lane on its own targets, as `{ lanes }`.
+            { lanes: (it.params.tapLanes as { targets: number[] }[]).map((l) => l.targets) }
+          : ex?.kind === "tap"
+            ? { taps: (it.params?.tapTimes as number[] | undefined) ?? [] }
+            : { answer: it.exp ?? {} };
+    if (ex?.kind === "tap" && Array.isArray(it.params?.tapLanes)) {
+      // The pad draws the two lanes the trial names, F and J, before anything is tapped.
+      const lanes = page.getByTestId("lesson-step").locator("[data-lane]");
+      await expect(lanes.first()).toBeVisible({ timeout: 20_000 });
+      expect(await lanes.count(), "a two-lane pad").toBeGreaterThanOrEqual(2);
+      await expect(page.getByTestId("lesson-step")).toContainText("Left hand");
+      await lookAt(page, `w7-${unit.toLowerCase().replace(".", "")}-two-lanes`);
+      kinds.push("two-lanes");
+    }
     if (ex?.stageAnswers) {
       const stages = (response.answer as { stages?: Record<string, string[]> }).stages ?? {};
       for (const [id, values] of Object.entries(stages)) await enterStage(page, ex, id, values);
@@ -216,10 +279,11 @@ export async function answerAll(
       await page.getByTestId("next-item").click();
     } else {
       await devAnswer(page, response);
+      await movedOn(page, it.idx);
       kinds.push(`dev:${ui ?? ex?.kind}`);
     }
   }
-  console.log(`[${unit}.CP items${o.quiet ? ", Quiet" : ""}] ${kinds.join(", ")}`);
+  console.log(`[${cpIdOf(unit)} items${o.quiet ? ", Quiet" : ""}] ${kinds.join(", ")}`);
   return kinds;
 }
 
@@ -229,7 +293,7 @@ export async function cpStatus(page: Page, unit: Unit) {
     "GET",
     "/lessons/progress",
   );
-  return prog.body?.checkpoints.find((c) => c.cpId === `${unit}.CP`);
+  return prog.body?.checkpoints.find((c) => c.cpId === cpIdOf(unit));
 }
 
 export async function handIn(page: Page, unit: Unit) {
@@ -240,7 +304,7 @@ export async function handIn(page: Page, unit: Unit) {
   await expect(result).toBeVisible({ timeout: 30_000 });
   expect(await visibleText(page, "checkpoint-result")).not.toMatch(RAW);
   console.log(
-    `[${unit}.CP result] ${((await result.textContent()) ?? "").replace(/\s+/g, " ").slice(0, 400)}`,
+    `[${cpIdOf(unit)} result] ${((await result.textContent()) ?? "").replace(/\s+/g, " ").slice(0, 400)}`,
   );
   return result;
 }
@@ -252,7 +316,7 @@ export async function attemptItems(page: Page, unit: Unit) {
   const r = await api<{ attemptNo: number; items: AttemptItem[] }>(
     page,
     "POST",
-    `/checkpoints/${unit}.CP/start`,
+    `/checkpoints/${cpIdOf(unit)}/start`,
   );
   expect(r.status, "the pending attempt").toBe(200);
   return r.body as { attemptNo: number; items: AttemptItem[] };

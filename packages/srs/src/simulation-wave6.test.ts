@@ -3,7 +3,8 @@
 // six U12–U17 decks among them (content/decks `WAVE6_DECKS`, in `decks` since contracts 1.7: seventh chords,
 // diatonic sevenths, modes, secondary dominants, borrowed chords, pivots; one new card a day each), introduced in
 // the default course order to its last session, CF-A.S4 (session 185 of the order since contracts 1.6), and on
-// into the tracks.
+// into the tracks. The decks are the core's (content/decks/index.ts `decks`): the advanced tracks' ten are
+// simulated with the whole course, all 259 sessions in every order, in simulation-wave7.test.ts.
 //
 // At 20 and 25 minutes a lesson is one session and the 300 days of the gate hold the whole core. At 15 minutes a
 // lesson takes two, so the run is 480 days: the first time the 15-minute learner's review load is simulated past
@@ -21,8 +22,8 @@
 // d22), the whole day under d22 (the warm-up outside the cap, which the server builds), and its "a little more"
 // part, which is what §7.4 holds.
 import { describe, expect, test } from "bun:test";
-import { WAVE6_DECKS } from "../../../content/decks/index.ts";
-import { decks, families } from "../../../content/families.ts";
+import { decks, WAVE6_DECKS } from "../../../content/decks/index.ts";
+import { families } from "../../../content/families.ts";
 import { defaultOrder } from "../../../content/syllabus.ts";
 import { terms } from "../../../content/terms.ts";
 import {

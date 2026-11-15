@@ -327,7 +327,16 @@ export function classifyNct(
     const strong = isStrong(note.onset, meter, "beat");
     const nextSlot = next ? slotAt(slots, next.onset) : slots[slots.indexOf(slot) + 1];
     let type: NctType = "other";
-    if (into === 0 && outOf !== null && outOf < 0 && isStep(outOf) && strong) type = "suspension";
+    // A suspension is prepared under another chord: the same note sounded as that chord's tone, then struck again
+    // over this one and resolved down by step. A note repeated within one chord is not one (X2 bar 10: B♭ B♭ B♭ A
+    // over D7 is a held neighbour, not a suspension; wave 7 closer).
+    const prevSlot = prev ? slotAt(slots, prev.onset) : undefined;
+    const prepared =
+      prev !== undefined &&
+      prevSlot !== undefined &&
+      prevSlot !== slot &&
+      slotPcs(prevSlot).includes(mod12(prev.midi));
+    if (into === 0 && prepared && outOf !== null && outOf < 0 && isStep(outOf) && strong) type = "suspension";
     else if (!strong && nextSlot && nextSlot !== slot && slotPcs(nextSlot).includes(mod12(note.midi)))
       type = "anticipation";
     else if (into !== null && outOf !== null && isStep(into) && isStep(outOf))

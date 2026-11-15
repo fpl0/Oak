@@ -287,10 +287,17 @@ export function lessonAuthoring(def: LessonDef, mdxSource: string | null, sample
       if ((x.i < at || (x.i === at && x.before)) && re.test(plain(x.text)))
         issues.push(`${x.where}: uses "${t.term}" before ${decl.step} introduces it`);
   }
+  // A later lesson's word inside one of this lesson's own terms ("modulation" inside R2.L05's "metric modulation",
+  // the key change of U17.L01) is that term, not the later one: own terms are blanked before the later scan.
+  const ownTerms = def.terms.flatMap((d) => {
+    const o = termById.get(d.id);
+    return o ? [new RegExp(termRe(o).source, "giu")] : [];
+  });
+  const withoutOwn = (s: string) => ownTerms.reduce((acc, re) => acc.replace(re, " "), plain(s));
   if (!sample)
     for (const t of laterTerms(def.id))
       for (const x of texts)
-        if (termRe(t).test(plain(x.text)))
+        if (termRe(t).test(withoutOwn(x.text)))
           warnings.push(
             `${x.where}: "${t.term}" is a term of ${t.introducedBy}; say it another way unless it is plain English here`,
           );

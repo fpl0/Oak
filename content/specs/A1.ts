@@ -1,5 +1,9 @@
-// A1 Sound Design, the side lessons A1.L01–L04: the spec (rendered to content/specs/A1.md by
-// `bun scripts/content/spec.ts`). A1.L05–L07 open after U09.CP and are specified in a later wave (`covers`).
+// A1 Sound Design: the spec (rendered to content/specs/A1.md by `bun scripts/content/spec.ts`). A1.L01–L04 are the
+// side lessons of Wave 5 (open after U03.L02); A1.L05–L07 (grit, movement, FM) open after U09.CP and were added in
+// the Wave 7 Foundation by spec-A, with the pre-flight settled by the content lead (A1.L07 requires FM and only
+// compares the supersaw). Every superdough fact quoted for A1.L05–L07 was read from
+// node_modules/superdough@1.3.0 (superdough.mjs, helpers.mjs, worklets.mjs, synth.mjs, sampler.mjs) and every
+// level claim computed by running the waveshaper and the bit crusher on a sine.
 // Every hook was evaluated with headless Strudel and linted at its lesson; every superdough default quoted
 // below was read from node_modules/superdough (synth.mjs, helpers.mjs, superdough.mjs, superdoughoutput.mjs).
 // A1.L01 is the exemplar, written and passing with the real grader (content/advanced/A1/L01).
@@ -40,19 +44,38 @@ const BASE = [
 /** What A1.L01 unlocks; A1.L02–L04 follow it in every legal order (a track's lessons are in order). */
 const L01 = ["tb.scope", "tb.partials"] as const;
 const L02 = ["tb.lpf", "tb.hpf", "tb.bpf", "tb.lpq", "tb.lpenv"] as const;
+/** What A1.L03 and A1.L04 unlock: every A1.L05–L07 learner has them (the track's order). */
+const L04 = [
+  "tb.adsr",
+  "tb.room",
+  "tb.roomsize",
+  "tb.delay",
+  "tb.delaytime",
+  "tb.delayfeedback",
+  "tb.orbit",
+] as const;
+/** A1.L05's, A1.L06's and A1.L07's own unlocks (contracts §3.2). */
+const L05 = ["tb.distort", "tb.crush", "tb.coarse", "tb.distorttype"] as const;
+const L06 = ["tb.vib", "tb.phaser", "tb.tremolo", "tb.lpmod"] as const;
+const L07 = ["tb.fm", "tb.unison", "tb.pw", "snd.wave.supersaw", "snd.wave.pulse"] as const;
 
 /** The A1 loop: the learner's kind of loop (C1's shape), over the Band's chords C | F. */
 const DRUMS = 'kick: s("bd ~ bd ~")\nsnare: s("~ sd ~ sd")\nhats: s("hh*8").gain(.5)';
 const BASS = 'bass: note("<[c2 ~ c2 g1] [f1 ~ f1 c2]>")';
 const RIFF = 'mel: n("<[4 4 2 4 ~ 2 0 ~] [5 5 3 5 ~ 3 0 ~]>").scale("C4:major")';
 const loop = (bass: string, riff: string, drums = DRUMS) => `${T}${drums}\n${BASS}${bass}\n${RIFF}${riff}`;
+/** The A1 loop as A1.L04 left it: a plucked, filtered bass, the riff on a square with echoes on its own orbit. */
+const PLACED_SNARE = 'snare: s("~ sd ~ sd").room(.5).roomsize(6)';
+const PLACED_BASS = `${BASS}.s("sawtooth").lpf(500).decay(.2).sustain(0)`;
+const PLACED_RIFF = `${RIFF}.s("square").lpf(2000).delay(.4).delaytime(.3).delayfeedback(.4).orbit(2)`;
+const placed = (bass: string, riff: string, hats = "") =>
+  `${T}kick: s("bd ~ bd ~")\n${PLACED_SNARE}\nhats: s("hh*8").gain(.5)${hats}\n${PLACED_BASS}${bass}\n${PLACED_RIFF}${riff}`;
 
 export const A1: UnitSpec = {
   unit: "A1",
-  title: "Sound Design (side lessons A1.L01–L04)",
-  covers: ["A1.L01", "A1.L02", "A1.L03", "A1.L04"],
+  title: "Sound Design",
   summary:
-    "Four optional side lessons on the sound of the learner's own loop. They open once U03.L02 is done (contracts §2.6, §4.3) and may be taken on any day after it, at any point of the course; they never gate anything and nothing in the core waits for them. Each is one session's New block within §9.2 and each starts from the same loop, the A1 loop: kick, snare, hats, a bass in note names and a two-bar riff in degrees over the Band's chords, the shape of the learner's C1 loop. A1.L01 gives its bass and riff waves with harmonics (and shows the waves on Oak's scope), A1.L02 filters them, A1.L03 shapes each note in time, A1.L04 puts the parts in a room and gives the riff echoes in time. By the end of A1.L04 the loop the learner started with sounds like a record. In order inside the track (A1.L02 opens after A1.L01, and so on, wave5.md §5.1); each lesson counts 1 in track A, a streak day and 1 in the pace estimate (§9.6), never in the core map.",
+    "Four optional side lessons on the sound of the learner's own loop. They open once U03.L02 is done (contracts §2.6, §4.3) and may be taken on any day after it, at any point of the course; they never gate anything and nothing in the core waits for them. Each is one session's New block within §9.2 and each starts from the same loop, the A1 loop: kick, snare, hats, a bass in note names and a two-bar riff in degrees over the Band's chords, the shape of the learner's C1 loop. A1.L01 gives its bass and riff waves with harmonics (and shows the waves on Oak's scope), A1.L02 filters them, A1.L03 shapes each note in time, A1.L04 puts the parts in a room and gives the riff echoes in time. By the end of A1.L04 the loop the learner started with sounds like a record. In order inside the track (A1.L02 opens after A1.L01, and so on, wave5.md §5.1); each lesson counts 1 in track A, a streak day and 1 in the pace estimate (§9.6), never in the core map. A1.L05–L07 (Wave 7) are track lessons, not side lessons: they open after U09.CP, follow A1.L04 in the track's order and lead into A2. They take the same loop further: grit (saturation and bit reduction, A1.L05), movement (a slow wave that moves the pitch, the cutoff, the level or a phaser, A1.L06) and a richer source (FM, A1.L07, with the supersaw heard beside it). Each is heard first as a before and after on a part of the loop and ends with the learner's loop sounding like a record they would replay.",
   conventions: [
     "Written for the learner at the gate. A side lesson is judged at the earliest point it can be taken, just after U03.L02 (AUTHORING §18.5): tools in every legal order are U03.L02's (labels, `setcpm`, mini-notation without `,`, `.gain()`, `s`, `note` with names and accidentals, `n` with `.scale()`, the drums, the four waves, `.room()`, `.clip()`) plus what A1 itself unlocks (`tb.scope` and `tb.partials` from A1.L01, the filters from A1.L02, `tb.adsr` from A1.L03); terms through `laterTerms`; singing, if any, on numbers. A learner at U11 reads the same lesson, so nothing in it may look backward at their level either: no chords by name, no numerals, no minor, no `arrange()`, no `.add()`, no `,` inside mini-notation (U04.L03; stack lines with labels), no `ebass` (C1.S1 or U03.L03; the bass is a synth wave). `.lpf()` is A1.L02's own alternative site (contracts §3.1 rule 11), so A1.L01 never uses it and A1.L02–L04 do.",
     'The A1 loop, in C major at 100 BPM, over `band.two-chord-vamp` with `tracks: ["chords"]` (I | IV, C | F): `kick: s("bd ~ bd ~")`, `snare: s("~ sd ~ sd")`, `hats: s("hh*8").gain(.5)`, `bass: note("<[c2 ~ c2 g1] [f1 ~ f1 c2]>")` (root, root, the 5th below) and `mel: n("<[4 4 2 4 ~ 2 0 ~] [5 5 3 5 ~ 3 0 ~]>").scale("C4:major")` (G G E G – E C – | A A F A – F C –: every note on a beat is in the Band\'s chord). Each lesson\'s Make starts from the loop as the previous lesson leaves it (A1.L01: on sines; A1.L02: sawtooth bass and square riff, unfiltered; A1.L03: filtered; A1.L04: shaped and dry), and its brief invites the learner to paste a loop of their own instead: the rubric reads only what the lesson taught, so any loop with a bass and a tune works.',
@@ -63,6 +86,13 @@ export const A1: UnitSpec = {
     'Grading. A sound cannot be graded by its notes, so the "match this sound" steps use the `controls` matcher (PLANNED: `{ m: "controls", track, controls: [{ control, scale, tol }] }`, AUTHORING §18.5): `lpf`, `roomsize` on a `log` scale in octaves (tol 0.5 = within half an octave), `lpq`, `lpenv`, `attack`, `decay`, `sustain`, `release`, `delaytime`, `delayfeedback` on a `linear` scale, `orbit` and `s` `exact`. Until the grader lists it, an author grades the same step as A1.L01 S5 does, which content CI accepts today: an `events` match on the notes (they must not change) plus an `arg-matches` constraint on the control\'s argument (a regex over the number, generous enough for equivalent spellings), with the feedback override naming the control; switch to `controls` when it lands. The Makes require one `uses` rule (implemented) on the lesson\'s new tool; `sounds`, `tracks` and other `uses` rules are suggestions. Ear steps draw on `fam.snd.params` (seeded by A1.L02; levels 1 cutoff, 2 resonance, 3 attack and release (A1.L03), 4 room and delay (A1.L04), 5 two changes).',
     'Terms (eight, all in content/terms.ts): "frequency" and "harmonic series" (A1.L01), "filter", "cutoff" and "resonance" (A1.L02), "envelope" (A1.L03), "delay" and "feedback" (A1.L04). "Waveform", "timbre", "reverb" and "octave" are the learner\'s already (U00–U02). Words that wait: "spectrum" (A2.L01), "LFO" and "modulation" (A1.L06), "saturation" (A1.L05), "mix" as a term (A2.L05), "attack" and friends are plain English until A1.L03 names the envelope. Hertz are taught as "times a second" first.',
     "Scaffolds: roll on where notes matter, staff off (a sound lesson; the U03–U04 rule of at most two of roll, staff and keyboard holds). No singing step: these are sound lessons, and a learner at U03 sings on numbers only. Flavours change nothing here: the learner's synth sounds are the point, and the Band's chords carry the flavour's sound.",
+    "A1.L05–L07 (Wave 7): written for the learner at their gate, U09.CP with A1.L01–L04 behind them (AUTHORING §20.1). Tools in every legal order: everything A1.L01–L04 unlocks, plus the core through U09.CP: chords by name with `.voicing()` (U05.L09), stacks with `,` (U04.L03), `ebass` and `.lpf()` (C1.S1 or U03.L03), `arrange()` and section consts (U09). Not yet: minor keys and `strings` (U10), dominant sevenths, the blues, `crunch` and `.swingBy()` (U11), sevenths by name (U12), `.pan()` (U14.L06 or A2.L05), `.late()` (U13.L01). A learner at session 185 reads the same lessons, so none of them calls a core idea new. They are track lessons (no `side` flag): they count in track A, appear on the Oak's A branch and are offered by the planner like any track lesson (wave7.md §5).",
+    'A1.L05–L07 keep the A1 loop, as A1.L04 left it (a plucked, filtered sawtooth bass; the riff on a square with echoes on orbit 2; the snare in a big room), in C major at 100 BPM over `band.two-chord-vamp` with `tracks: ["chords"]`. A1.L06 and A1.L07 add a held line (`pad:` or a long-note lead) because movement and FM are heard on notes that last. Each graded step is a before and after on one part of that loop; each Make starts from it and invites the learner\'s own loop instead (their C3 verse, a Studio sketch): the required rule reads any line.',
+    "Only controls the audibility harness marks audible (packages/strudel/audibility.json: `tb.distort`, `tb.crush`, `tb.coarse`, `tb.distorttype`, `tb.vib`, `tb.phaser`, `tb.tremolo`, `tb.lpmod`, `tb.fm`, `tb.unison`, `tb.pw` are all `true`), and each at a value that is heard. The harness proved one value per control (`distort` 2, `crush` 4, `coarse` 8, `vib` 6, `phaser` 4, `tremolosync` 4, `lprate` 2 over `.lpf(500)`, `fm` 4, `unison` 5, `pw` .2); the thresholds below are computed (spec-A ran superdough's own curves on a sine): `.distort(x)` shapes with k = e^x − 1, so .25 adds harmonics at about −37 dB, .5 at −30 dB, 1 at −23 dB and 2 at −16 dB of the sound (on a sine at a third of full scale), and it also makes the part louder (+3 dB at .5, +6 dB at 1, +9 dB at 2: compare at equal loudness); `.crush(b)` rounds every sample to 2^(b−1) steps a side, so 16 bits is −87 dB (nothing heard), 8 bits −39 dB (barely), 6 bits −27 dB, 4 bits −16 dB: fewer bits, more grit; `.coarse(n)` holds every n-th sample, so `.coarse(1)` changes nothing.",
+    "Superdough facts for A1.L05–L07 (read from superdough@1.3.0): `.vib(hz)` wobbles the pitch hz times a second by `.vibmod(st)` semitones each way (default .5 when only `.vib()` is set; `.vibmod(0)` is no vibrato), on synths, samples and the soundfont instruments alike. `.phaser(hz)` sweeps a notch filter hz times a second (depth .75 unless set). `.tremolosync(n)` dips the level n times a bar, `.tremolodepth(x)` how far (default 1, all the way). `.lprate(hz)` and `.lpdepth(x)` move the low-pass cutoff (depth 1 = up and down by the cutoff itself) and need `.lpf()` on the line: without a cutoff they do nothing. `.fm(i)` sets how far a second sine bends the note's pitch (0: none) and `.fmh(r)` that sine's speed as a multiple of the note's (default 1); FM works on the synth waves only (`sine`, `triangle`, `square`, `sawtooth`, `supersaw`, `pulse`): on `piano`, `rhodes` or any sample it does nothing (sampler.mjs and the soundfont loader never call it). Whole-number ratios put the new partials on the harmonic series (bright, brassy at 1, hollow at 2); others (1.41, 3.5) put them between the harmonics: a bell or a clang. `s(\"supersaw\")` is already five detuned saws (unison 5, detune .18, spread .6 by default): `.detune(0)` puts the five saws on one pitch, so they stop beating and the sound turns narrow and still; `.detune(.4)` spreads them further and it gets wider.",
+    'Grading A1.L05–L07 (the corrections-pass standard, AUTHORING §20.2). "Match this sound" steps use the `controls` matcher (implemented) on the line, with the notes held by an `events` match. The Makes require the corrections rule `control-set` (implemented) on what is heard, never a bare `uses`. Grader requests (apiNotes): (1) `SOUND_CONTROL_KEYS` (packages/grader/src/normalize/hap.ts) lacks `vib`, `vibmod`, `phaserrate`, `phaserdepth`, `tremolosync`, `tremolodepth`, `lprate`, `lpdepth`, `fmi`, `fmh`, `unison`, `detune`, `spread`, `pw`, `postgain`, `compressor`, `begin`, `end`, `speed`, `duckorbit`, `duckdepth`: until they are added, `control-set` and `controls` cannot see A1.L06–L07\'s controls (`distort`, `crush`, `coarse` are there today). (2) `control-set` gains `anyOf: [{ control, above?, below?, not? }]` (one of these controls heard) and `below` (for `crush`, where fewer is more), and judges each control with its silencers: `vib` with `vibmod` 0, `phaserrate` with `phaserdepth` 0, `tremolosync` with `tremolodepth` 0, `lprate` without a cutoff or with `lpdepth` 0, `fmi` on a sound that is not a synth wave, any control on a line at `.gain(0)` or masked (decision 71). Each silencer is pinned below as a WRONG ANSWER THAT USES THE RIGHT FUNCTION.',
+    'Terms: "saturation" and "bitcrusher" (A1.L05), "vibrato" and "LFO" (A1.L06), "FM synthesis" and "detune" (A1.L07), all in content/terms.ts. "Grit", "lo-fi", "wobble", "sweep", "bell", "wide" stay plain English. Words that wait: "spectrum" (A2.L01; A1.L05–L07 show waves with `.scope()` only), "register" (A2.L01), "mix" and "compression" (A2.L05), "sample" (A2.L04: a soundfont instrument is "a recorded instrument").',
+    "Ear steps: `fam.snd.params` covers cutoff, resonance, envelope and space (A1.L02–L04), not grit, movement or FM, so A1.L05–L07 ask with a fixed `identify` item each (tests in the lesson) and review `fam.snd.params` level 5 (two changes) when due. The planned deck `deck.snd.controls` (content/decks/planned.ts) deals its grit, movement and FM cards from these lessons once the drills engine writes it; until then the lessons list no deck.",
   ],
   lessons: [
     {
@@ -140,9 +170,9 @@ export const A1: UnitSpec = {
         brief:
           "Your kind of loop, with the bass and the riff on a sine. Give each a wave with harmonics, and choose the harmonics of at least one with `.partials()`: a full bass under a riff that cuts through. Add `.scope()` to a line to see it.",
         required: {
-          rule: "uses",
+          rule: "custom",
           label: "One part's harmonics chosen with .partials()",
-          why: "`uses` `tb.partials` (min 1): the lesson's new tool. The starter (all sines) fails; so does a loop that only swaps the waves. The brief and hint 2 say `.partials()` works on a sawtooth, square or triangle (on a sine it changes nothing).",
+          why: '`custom` `control-set` `{ control: "partials", above: 1, call: "partials" }` (carry f4, Wave 7: the bare `uses` `tb.partials` passed `.partials([1])`, a plain sine): two harmonics or more, heard. The starter (all sines) fails; so does a loop that only swaps the waves. The brief and hint 2 say `.partials()` works on a sawtooth, square or triangle (on a sine it changes nothing).',
         },
         suggestions: [
           'a part on a wave with harmonics (`sounds`, `anyOf: ["snd.wave.sawtooth", "snd.wave.square", "snd.wave.triangle"]`)',
@@ -263,9 +293,9 @@ export const A1: UnitSpec = {
         brief:
           "The loop from Waves & Harmonics, raw: a sawtooth bass and a square riff with nothing taken away. Put the bass under a low-pass so the riff sits on top, then give one part movement with a filter envelope. Or bring a loop of your own.",
         required: {
-          rule: "uses",
+          rule: "custom",
           label: "One part moves with a filter envelope",
-          why: "`uses` `tb.lpenv` (min 1; the toolbox row matches `lpenv`, `lpa`, `lpd`, `lps` and `lpr`). The starter (no filter) fails; a loop with only `.lpf()` fails too: the static filter is C1's preset already, the movement is this lesson's. Override `rubric.unmet` with \"{label}: not yet.\"",
+          why: '`custom` `control-set` `{ control: "lpenv", call: "lpenv", not: 0, example: "3", alsoUses: ["tb.lpenv"] }` (the corrections gate, fix:leftovers, replaced the Wave 5 `uses` `tb.lpenv`: `.lpenv(0)` moves nothing and now fails). The starter (no filter) fails; a loop with only `.lpf()` fails too: the static filter is C1\'s preset already, the movement is this lesson\'s. Override `rubric.unmet` with "{label}: not yet."',
         },
         suggestions: ["a low-pass on the bass (`uses` `tb.lpf`)", "resonance somewhere (`uses` `tb.lpq`)"],
         band: "band.two-chord-vamp",
@@ -375,9 +405,9 @@ export const A1: UnitSpec = {
         brief:
           "The loop from Filters, every note in its default shape. Give the bass a shape and the riff another: a punchy pluck, a slow swell, a long tail. Or bring a loop of your own.",
         required: {
-          rule: "uses",
+          rule: "custom",
           label: "A part shaped with attack, decay, sustain or release",
-          why: '`uses` `tb.adsr` (min 1; the row matches `.attack()`, `.decay()`, `.sustain()` and `.release()`). The starter fails. Override `rubric.unmet` with "{label}: not yet."',
+          why: '`custom` `control-set` `{ envelope: true }` (carry f4, Wave 7: the bare `uses` `tb.adsr` passed an envelope set to superdough\'s default): an attack, decay, sustain or release that changes the note you hear. The starter fails. Override `rubric.unmet` with "{label}: not yet."',
         },
         suggestions: [
           "two parts with different shapes (`uses` `tb.adsr`, `min: 2`)",
@@ -498,9 +528,9 @@ export const A1: UnitSpec = {
         brief:
           "The loop from Envelopes, dry. Put it somewhere: a room for the drums or the riff, echoes timed to the beat (60 ÷ BPM seconds a beat), and an orbit of its own for any part that needs a different space. Or bring a loop of your own.",
         required: {
-          rule: "uses",
+          rule: "custom",
           label: "A space you set: a room size or an echo time",
-          why: '`uses` `["tb.roomsize", "tb.delaytime"]` (min 1): the lesson\'s two new dials. The starter (dry) fails; `.room()` alone fails (U02.L08\'s, already the learner\'s). Override `rubric.unmet` with "{label}: not yet."',
+          why: '`custom` `control-set` `{ anyOf: [{ control: "roomsize", above: 2.5 }, { control: "delaytime", above: 0 }] }` (carry f4, Wave 7; the room size counts only with `.room()` above 0, the echo time only with `.delay()` above 0): the lesson\'s two new dials, heard. The starter (dry) fails; `.room()` alone fails (U02.L08\'s, already the learner\'s). Override `rubric.unmet` with "{label}: not yet."',
         },
         suggestions: ["echoes on a part (`uses` `tb.delay`)", "a part on its own orbit (`uses` `tb.orbit`)"],
         band: "band.two-chord-vamp",
@@ -532,6 +562,349 @@ export const A1: UnitSpec = {
         "Evaluated: the hook's snare carries `room: 0.5, roomsize: 6`; the riff `delay: 0.4, delaytime: 0.3, delayfeedback: 0.4, orbit: 2`. At 100 BPM a beat is 0.6 s, so 0.3 is half a beat (an eighth).",
         "`tb.delay` has two sites (U10.L09 or A1.L04): granted here for a learner who has not reached U10.L09, silently if already granted. The orbit fact is superdough's (superdoughoutput.mjs `getDelay`/`getReverb` are per orbit; the last note to set a time, feedback or size sets it for the orbit).",
         "S5's grading accepts either part moving: two reference solutions (riff on orbit 2; snare on orbit 2), an `events` matcher on the notes, `must-use tb.orbit` and `arg-matches` on the first `.orbit(…)` argument.",
+      ],
+    },
+    {
+      id: "A1.L05",
+      author: "A1a",
+      idea: "Grit is damage you choose. Saturation (`.distort()`) pushes a sound until its peaks round off and flatten, which adds new harmonics: warm and thick a little, harsh a lot, and louder either way. A bitcrusher (`.crush()`) rebuilds the sound from fewer steps of level: the fewer bits, the grainier and more lo-fi. `.coarse()` does the same to time, holding every n-th sample.",
+      hook: {
+        hear: "The A1 loop as A1.L04 left it, clean; then the same loop with the bass saturated and the hats crushed to five bits: the bass growls under the riff and the hats turn to grain, within the first 20 seconds.",
+        code: placed(".distort(1.5).gain(.6)", "", ".crush(5)"),
+      },
+      key: C,
+      meter: "4/4",
+      bpm: BPM,
+      canDo: ["cd.code.grit"],
+      uses: [...BASE, ...L01, ...L02, ...L04, ...L05],
+      steps: [
+        {
+          kind: "listen",
+          exercise: "listen",
+          minutes: 0.5,
+          what: "Clean and gritty: the placed A1 loop, then the same loop with `.distort(1.5)` on the bass (turned down to match) and `.crush(5)` on the hats.",
+        },
+        {
+          kind: "predict",
+          exercise: "predict",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: 'The A1 bass with `.distort("<0 .5 1 2>")`, a bar each: what happens bar by bar? (`choose`: it gets dirtier and louder / it gets darker / it gets higher). The pass text says why it gets louder and that a fair comparison turns it back down.',
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["number", "choice"],
+          minutes: 1,
+          what: '`note("c3").s("sine").distort("<0 1 3>").gain(.5).scope()`: which bar draws a wave with flat tops (number: 3); what flattening the round sine added (choice: "more harmonics: it buzzes" / "a lower note" / "an echo"; A1.L01\'s harmonics).',
+          term: "term.saturation",
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          what: "Warm the bass: the placed bass with `.distort(⟪0⟫)`; the target (audible only) is `.distort(1)`. Graded: `controls` on `bass`, `distort` `linear` tol .5 (implemented today: `distort` is in the grader's control keys) with `events` on the notes. Right answers: `.distort(1.2)`, `.distort(.8).gain(.7)` (quieter to match), `.distort(1.4)`. Wrong with the right function: `.distort(4)` (harsh, out of the window), `.distort(1)` on the riff (the bass is unchanged), `.distort(1)` with the bass at `.gain(0)` (nothing heard).",
+        },
+        {
+          kind: "compare",
+          exercise: "identify",
+          answer: ["choice"],
+          minutes: 1,
+          what: 'Fewer bits: two cards, the riff with `.crush(16)` and with `.crush(4)` (`SOUND_COMPARE_OPTIONS` "grit"): which is grittier? The pass text says 16 bits is too fine to hear and each bit fewer halves the steps.',
+          term: "term.bitcrusher",
+        },
+        {
+          kind: "ear",
+          exercise: "identify",
+          answer: ["choice"],
+          minutes: 1.25,
+          graded: true,
+          what: "Which grit: the placed loop twice, and in bar 2 the riff changed (a fixed item, tests in the lesson). Options: saturated (warmer, thicker, louder), bit-crushed (grainy, lo-fi), darker (the filter closed). The stimulus is `.crush(4)`; a second item in the tests checks saturation is told apart.",
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          what: "Dirty it up: the placed A1 loop, clean; give one part grit you can hear, saturated or crushed, and keep it in proportion.",
+        },
+      ],
+      wrapAt: 4,
+      make: {
+        brief:
+          "The loop from Space, clean. Give it some dirt: a bass that growls, crushed hats, a riff that sounds like an old record. Saturate or crush at least one part so you can hear it, and turn a saturated part down so it does not just win by being louder. Or bring a loop of your own.",
+        required: {
+          rule: "custom",
+          label: "A part with grit you can hear",
+          why: '`custom` `control-set` with the planned param `anyOf`: `[{ control: "distort", above: .5 }, { control: "crush", below: 7 }, { control: "coarse", above: 3 }]` on any learner line (`.distort(.5)` adds harmonics at about −30 dB, 6 bits about −27 dB; 8 bits is about −40 dB, at the edge of hearing). Until the grader lands `anyOf` and `below`, the lesson ships with `{ control: "distort", above: .5 }` (implemented today) and the brief says "saturate"; crushing is then a suggestion. Fails: the starter (clean), `.distort(.2)`, `.crush(16)` and `.coarse(1)` (the right function, nothing heard), a saturated part at `.gain(0)` or masked. Passes: `.distort(2).gain(.5)` on the bass, `.crush(5)` on the hats, `.coarse(6)` on the riff, `.distorttype("diode").distort(1)`.',
+        },
+        suggestions: [
+          "a second part with another kind of grit (`control-set` on `crush` or `coarse`)",
+          'a saturation curve of your own (`uses` `tb.distorttype`: `"soft"`, `"diode"`, `"fold"`)',
+        ],
+        band: "band.two-chord-vamp",
+        tracks: ["chords"],
+        flavours: "No sound swaps; the Band's chords carry the flavour.",
+      },
+      srs: [{ family: "fam.snd.params", mode: "review-if-due", level: 5 }],
+      mistakes: [
+        'S4: `.distort(4)`: the `controls` miss on `distort` (pin the text; the override describes the sound: "Rougher than the target: listen to the low notes, they should growl, not rasp.")',
+        "S4: the grit put on the riff: the `controls` miss on `bass` (nothing changed there)",
+        "S4: the right value with the bass at `.gain(0)`: no events heard, `melody.missing-note` from the `events` part",
+        "S4 unchanged: `code.unchanged`",
+        "S6: saturation or filter for the crushed riff: `id.wrong`, overridden to name the grain and the lo-fi edge",
+        "Make starter, `.distort(.2)`, `.crush(16)`, `.coarse(1)`, a gritty part at `.gain(0)`: `rubric.unmet`",
+      ],
+      connects: {
+        back: "A1.L01: a wave's colour is its harmonics; saturation adds harmonics to any sound. A1.L02 took harmonics away with a filter; grit puts new ones back. U11.L03 (if taken) put `.distort()` on a blues riff as a preset; here it is a dial (no ceremony if already granted, contracts §3.1 rule 11).",
+        forward:
+          "A1.L06 makes a sound move over time with a slow wave; A2.L05 balances a gritty part against the others so it sits in the loop instead of on top of it.",
+      },
+      epr: {
+        enjoyment:
+          "The learner's own loop gets a bass that growls and hats like a dusty record, at an amount they chose by ear: the first of their loops with an attitude.",
+        pace: "One idea: grit is new harmonics from a damaged wave, made two ways (saturation, fewer bits). `.coarse()` and the saturation curves are named once and left to the Make; amp simulation, parallel distortion and the mix wait for A2.L05.",
+        return:
+          "The Coda says: you can add warmth or grit with saturation and a bitcrusher. Next: a slow wave that makes a sound move, vibrato and sweeps.",
+      },
+      notes: [
+        'Today offer (track lesson, wave7.md §5): "Give your loop some dirt: a growling bass, crushed hats, a riff like an old record."',
+        'Evaluated: the hook\'s bass carries `distort: 1.5`, the hats `crush: 5`; `.distorttype("diode")` reaches the events as `distorttype: "diode"`. Superdough\'s distortion is k = e^x − 1 through an S-curve, `(1 + k)x / (1 + k|x|)`: computed on a sine at a third of full scale, the new harmonics sit at −37 dB (.25), −30 (.5), −23 (1), −16 (2), and the level rises +1.6, +3, +5.6, +9.3 dB. `.crush(b)` rounds to 2^(b−1) steps: −87 dB at 16 bits, −64 at 12, −39 at 8, −27 at 6, −16 at 4.',
+        "S3's flat tops: at `.distort(3)` (k = 19) a sine at half level comes out within a few percent of the same height across most of each half cycle; at `.distort(1)` it only rounds. If the scope panel does not show the difference clearly at the learner's zoom, the question reads \"which bar sounds buzziest\" instead (number 3).",
+        "`tb.distort` has two sites (U11.L03 or A1.L05): granted here silently if already granted.",
+      ],
+    },
+    {
+      id: "A1.L06",
+      author: "A1a",
+      idea: "A sound that moves stays alive. A slow wave, too slow to hear as a pitch, can push a setting up and down while a note sounds: that slow wave is an LFO. On the pitch it is vibrato (`.vib()` how many times a second, `.vibmod()` how far); on a notch filter it is a phaser (`.phaser()`); on the level, tremolo (`.tremolosync()`); on the cutoff, a filter sweep (`.lprate()` with `.lpf()`).",
+      hook: {
+        hear: "The A1 loop with a held pad and a long-note lead, first still, then moving: the lead sings with vibrato and the pad's cutoff opens and closes slowly, within the first 20 seconds.",
+        code: `${T}kick: s("bd ~ bd ~")\n${PLACED_SNARE}\nhats: s("hh*8").gain(.5)\n${PLACED_BASS}\npad: note("<[c4,e4,g4] [c4,f4,a4]>").s("sawtooth").lpf(900).lprate(.5).lpdepth(.6).gain(.3)\nmel: n("<[4@3 2] [5@3 3]>").scale("C5:major").s("triangle").vib(5).vibmod(.25)`,
+      },
+      key: C,
+      meter: "4/4",
+      bpm: BPM,
+      canDo: ["cd.code.movement"],
+      uses: [...BASE, ...L01, ...L02, ...L04, ...L05, ...L06, "tb.mini.stack", "tb.mini.elongate"],
+      steps: [
+        {
+          kind: "listen",
+          exercise: "listen",
+          minutes: 0.5,
+          what: "Still and moving: the loop with a pad and a long-note lead held still, then with vibrato on the lead and a slow filter sweep on the pad.",
+        },
+        {
+          kind: "predict",
+          exercise: "predict",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: '`note("g4@4").s("triangle").vib("<0 5>")`: what changes in bar 2? (`choose`: the pitch wobbles up and down / it gets louder and softer / it echoes)',
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["number", "choice"],
+          minutes: 1,
+          what: '`note("g4@4").s("triangle").vib("<2 6>").vibmod(.3)`: how many wobbles a second in bar 2 (number: 6); which call sets how far the pitch moves (choice: `.vibmod()`, in semitones each way; `.vib()` is how often).',
+          term: "term.vibrato",
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          what: "Match the vibrato: the lead held on the triangle, `⟪⟫` after it; the target (audible only) sings with `.vib(5).vibmod(.3)`. Graded: `controls` on `mel`, `vib` `linear` tol 1.5 and `vibmod` `linear` tol .15, with `events` on the notes (PLANNED until `vib`/`vibmod` join the grader's control keys; until then `must-use tb.vib` and `arg-matches` on `vib` `^[4-6](\\.\\d+)?$` and on `vibmod` `^0?\\.(1[5-9]|[2-4])\\d*$`). Right answers: `.vib(5.5).vibmod(.25)`, `.vibmod(.3).vib(5)`, `.vib(4).vibmod(.4)`. Wrong with the right function: `.vib(5).vibmod(0)` (no wobble at all), `.vib(30)` (a fast buzz, not a singer's wobble), `.vib(5)` alone (it passes on `vib`, and the default `vibmod` .5 is out of the window: pin it).",
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["choice", "number"],
+          minutes: 1,
+          what: "Other things a slow wave can move: one chord a bar on three lines, `.phaser(2)` in bar 1, `.tremolosync(4)` in bar 2, `.lpf(800).lprate(1)` in bar 3. In which bar does the loudness dip and swell (choice: bar 2); how many dips in that bar (number: 4). The pass text names the **LFO** and says the phaser and the filter sweep are the same idea on other settings.",
+          term: "term.lfo",
+        },
+        {
+          kind: "ear",
+          exercise: "identify",
+          answer: ["choice"],
+          minutes: 1.25,
+          graded: true,
+          what: "What moves: a held pad, one setting moved by a slow wave (a fixed item, tests in the lesson). Options: the pitch (vibrato), the loudness (tremolo), the brightness (a filter sweep). The stimulus is `.lpf(700).lprate(1).lpdepth(.8)`: the brightness.",
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          what: "Make it move: the A1 loop with a still pad and lead; give at least one held part a movement you can hear.",
+        },
+      ],
+      wrapAt: 4,
+      make: {
+        brief:
+          "The loop with a pad and a long-note lead, both perfectly still. Make something move: vibrato on the lead, a phaser on the pad, a slow filter sweep, a level that pulses with the beat. Choose how fast and how far by ear. Or bring a loop of your own with a held part.",
+        required: {
+          rule: "custom",
+          label: "A part that moves: you can hear it change while a note sounds",
+          why: '`custom` `control-set` with the planned `anyOf`: `[{ control: "vib", above: 0 }, { control: "phaserrate", above: 0 }, { control: "tremolosync", above: 0 }, { control: "lprate", above: 0 }]`, each judged with its silencers (grader request 2 in the conventions): `.vibmod(0)`, `.phaserdepth(0)`, `.tremolodepth(0)`, `.lprate()` on a line with no `.lpf()` or with `.lpdepth(0)`, any of them at `.gain(0)` or masked: all fail. PLANNED (the control keys and `anyOf`): the lesson fails check 2 until the grader lands them; there is no bare `uses` fallback (a `.vib(5).vibmod(0)` would pass it). Passes: `.vib(5)`, `.phaser(2)`, `.tremolosync(4)`, `.lpf(700).lprate(.5)`.',
+        },
+        suggestions: [
+          "two parts that move differently (`control-set` on two lines)",
+          'a sweep in time with the bar (`uses` `tb.lpmod`; `.lpsync()` is not catalogued: say "a slow rate" instead)',
+        ],
+        band: "band.two-chord-vamp",
+        tracks: ["chords"],
+        flavours: "No sound swaps; the Band's chords carry the flavour.",
+      },
+      srs: [{ family: "fam.snd.params", mode: "review-if-due", level: 5 }],
+      mistakes: [
+        'S4: `.vib(5).vibmod(0)`: the `controls` miss on `vibmod` (the wobble has no width); override: "Nothing wobbles yet: the pitch has to move."',
+        "S4: `.vib(30)`: the miss on `vib` (a fast buzz, not a singer's vibrato)",
+        "S4: `.vib(5)` alone: the miss on `vibmod` (the default .5 is twice as wide as the target)",
+        "S4 unchanged: `code.unchanged`; the lead's notes changed: the `events` part",
+        "S6: pitch or loudness for the filter sweep: `id.wrong`, overridden to say the notes stay on their pitch and level and only the brightness moves",
+        "Make: `.lprate(1)` with no `.lpf()`, `.vibmod(0)`, the moving part muted: `rubric.unmet`",
+      ],
+      connects: {
+        back: "A1.L02 moved the cutoff once per note with an envelope; an LFO moves it in a cycle that ignores the notes. A1.L03 shaped loudness per note; tremolo moves it on a clock. U07 (`sine.range()` as a signal, if the learner used it) is an LFO written by hand.",
+        forward:
+          "A1.L07 replaces the plain waves with richer sources: FM and the supersaw. A2.L03 gives a moving pad a counter-melody to sit under.",
+      },
+      epr: {
+        enjoyment:
+          "The pad breathes and the lead sings: the learner's loop stops sounding like a machine holding notes and starts sounding like a synth player leaning into them.",
+        pace: "One idea: a slow wave moving one setting. Vibrato is practised and graded; the phaser, tremolo and filter sweep are heard and named as the same idea, chosen freely in the Make. LFO shapes, sync to the bar and FM (a fast wave) wait.",
+        return:
+          "The Coda says: you can make a sound move with vibrato and a slow modulation. Next: two richer sources, FM and the supersaw.",
+      },
+      notes: [
+        'Today offer: "Make your loop breathe: vibrato on a lead, a slow sweep on a pad."',
+        "Evaluated: the hook's pad carries `cutoff: 900, lprate: 0.5, lpdepth: 0.6`, the lead `vib: 5, vibmod: 0.25`; `.phaser(2)` reaches the events as `phaserrate: 2`, `.tremolosync(4)` as `tremolosync: 4`. The lead G5 E5 | A5 F5 holds chord tones of C and of F over the Band.",
+        "`.lpsync()`, `.lpshape()`, `.phaserdepth()` are superdough controls without a toolbox row: never in authored code (they would be a lint error); `.phaserdepth(0)` appears only in a grader test as a silencer.",
+        "S5's three lines each play in one bar (`<[c4,e4,g4] ~ ~>`, `<~ [c4,e4,g4] ~>`, `<~ ~ [c4,e4,g4]>`), so each movement is heard alone.",
+      ],
+    },
+    {
+      id: "A1.L07",
+      author: "A1b",
+      idea: "FM synthesis lets a second sine bend a note's pitch hundreds of times a second: `.fm()` says how far (0 is a plain wave, more is brighter), `.fmh()` how fast, as a multiple of the note. Whole-number ratios give bright or hollow tones on the harmonic series; ratios between them give bells and clangs. FM works on the synth waves, not on recorded instruments. Beside it, the supersaw stacks five saws a little out of tune with each other: detune makes it wide.",
+      hook: {
+        hear: "The A1 loop with its riff on a plain sine, then rung like a bell with FM, over a wide supersaw pad: within the first 20 seconds.",
+        code: `${T}kick: s("bd ~ bd ~")\n${PLACED_SNARE}\nhats: s("hh*8").gain(.5)\n${PLACED_BASS}\n${RIFF}.s("sine").fm(3).fmh(3.5).decay(.4).sustain(0).delay(.3).delaytime(.3).orbit(2)\npad: note("<[c3,g3,e4] [f3,c4,a4]>").s("supersaw").lpf(2000).gain(.25)`,
+      },
+      key: C,
+      meter: "4/4",
+      bpm: BPM,
+      canDo: ["cd.code.fm"],
+      uses: [...BASE, ...L01, ...L02, ...L04, ...L05, ...L06, ...L07, "tb.mini.stack"],
+      steps: [
+        {
+          kind: "listen",
+          exercise: "listen",
+          minutes: 0.5,
+          what: "Plain and rich: the riff on a plain sine, then the same notes with FM, over a supersaw pad.",
+        },
+        {
+          kind: "predict",
+          exercise: "predict",
+          answer: ["choice"],
+          minutes: 0.5,
+          what: '`note("c4").s("sine").fm("<0 1 2 4>")`, a bar each: what happens? (`choose`: it gets brighter each bar / it gets louder / it gets higher)',
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["number", "choice"],
+          minutes: 1,
+          what: '`note("c4").s("sine").fm("<0 3 3>").fmh("<1 2 3.5>").scope()`: which bar draws a plain round wave (number: 1); which bar rings like a bell, its new tones between the harmonics (choice: bar 3, ratio 3.5). Pass text: whole-number ratios keep the new tones on the harmonic series.',
+          term: "term.fm-synthesis",
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          what: 'Ring the riff: the riff on `.s("sine")⟪⟫`; the target (audible only) is `.fm(3).fmh(3.5)`. Graded: `controls` on `mel`, `fm` (value key `fmi`) `linear` tol 1 and `fmh` `linear` tol .3, with `events` on the notes (PLANNED until `fmi`/`fmh` join the grader\'s control keys and the matcher knows FM is silent on a recorded instrument; until then `arg-matches` on `fm` `^(2|3|4)(\\.\\d+)?$` and on `fmh` `^3\\.[2-8]\\d*$` plus `must-not-use` a sample sound on `mel`). Right answers: `.fm(2.5).fmh(3.5)`, `.fmh(3.5).fm(3)`, `.s("triangle").fm(3).fmh(3.5)`. Wrong with the right function: the riff moved to `.s("piano")` with `.fm(3).fmh(3.5)` (FM does nothing on a recorded instrument), `.fm(3)` alone (ratio 1: brassy, not a bell), `.fm(0).fmh(3.5)`.',
+        },
+        {
+          kind: "compare",
+          exercise: "identify",
+          answer: ["choice"],
+          minutes: 1,
+          what: 'Wide and narrow: two cards, the supersaw pad with `.detune(0)` and with `.detune(.4)` (`SOUND_COMPARE_OPTIONS` "width"): which is wider? The pass text says a supersaw is five saws; pulled apart in pitch they beat against each other and spread.',
+          term: "term.detune",
+        },
+        {
+          kind: "ear",
+          exercise: "identify",
+          answer: ["choice"],
+          minutes: 1.25,
+          graded: true,
+          what: "Which source: a riff on one of three (a fixed item, tests in the lesson). Options: a plain sine, FM (bright, bell-like), a supersaw (wide and thick). The stimulus is FM at ratio 3.5.",
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          optional: true,
+          what: 'Stretch (25-minute target only, never graded): thicken the pad. The supersaw pad with `.unison(⟪5⟫).detune(⟪.18⟫)`: more voices and more detune until it fills the space behind the riff. `must-use tb.unison`; the notes must not change (`events`). The pulse wave (`s("pulse").pw(.2)`) is named in its hint as another source.',
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          what: "A richer source: the A1 loop with its riff on a plain sine; give a part an FM sound of your choice, bright, hollow or bell-like, and a supersaw if you like.",
+        },
+      ],
+      wrapAt: 4,
+      make: {
+        brief:
+          "The loop with its riff on a plain sine. Give a part an FM sound: a bright lead, a hollow bass, a bell that rings over the chords. Choose how far and how fast by ear. Then, if you like, put a wide supersaw pad behind it. Or bring a loop of your own.",
+        required: {
+          rule: "custom",
+          label: "A part with FM you can hear",
+          why: '`custom` `control-set` `{ control: "fmi", above: .5 }` (the value key `.fm()` writes), judged with its silencer: on a recorded instrument (`piano`, `rhodes`, any `gm_` sound or sample) FM does nothing and the rule fails. PLANNED until `fmi` joins the grader\'s control keys and the silencer lands; no bare `uses` fallback (a `.s("piano").fm(4)` would pass it). Fails: the starter (plain sine), `.fm(0)`, `.fm(.2)`, `.s("rhodes").fm(4)`, an FM part at `.gain(0)`. Passes: `.fm(2)` on the riff, `.s("square").fm(1).fmh(2)` on the bass, `.fm(4).fmh(1.41)` on a bell line, the hook itself.',
+        },
+        suggestions: [
+          'a supersaw part (`sounds` `anyOf: ["snd.wave.supersaw"]`)',
+          "a ratio between the harmonics for a bell (`uses` `tb.fm`, its `.fmh()` half)",
+        ],
+        band: "band.two-chord-vamp",
+        tracks: ["chords"],
+        flavours: "No sound swaps; the Band's chords carry the flavour.",
+      },
+      srs: [{ family: "fam.snd.params", mode: "review-if-due", level: 5 }],
+      mistakes: [
+        'S4: the riff moved to `piano` with the right FM values: the `controls` miss (FM silent on a recorded instrument); override: "A recorded instrument has no wave for FM to bend: the riff needs a synth wave."',
+        "S4: `.fm(3)` with no `.fmh()`: the miss on `fmh` (ratio 1 sounds brassy, not a bell)",
+        "S4 unchanged: `code.unchanged`; the riff's notes changed: the `events` part",
+        "S6: supersaw or sine for the FM bell: `id.wrong`, overridden to name the clang between the harmonics",
+        'Make: `.fm(0)`, `.s("rhodes").fm(4)`, the starter: `rubric.unmet`',
+      ],
+      connects: {
+        back: "A1.L01: a wave's colour is its harmonics, chosen there by hand with `.partials()`; FM makes many at once, and not only on the harmonic series. A1.L06: a slow wave moving the pitch is vibrato; a fast one is FM.",
+        forward:
+          "A2 (after U10.CP) arranges with these sounds: registers, density, a counter-melody, the mix. AC1 and AC2 ask the learner to design the sounds of a whole track; the supersaw is applied there.",
+      },
+      epr: {
+        enjoyment:
+          "A bell-like FM riff over a wide supersaw pad in the learner's own loop: a sound no preset gave them, and the end of the sound-design unit.",
+        pace: "One idea: FM, one wave bending another. The supersaw is heard and named in a comparison and written only in an optional stretch; the pulse wave is named in a hint; FM envelopes and multi-operator FM are uncatalogued and never appear.",
+        return:
+          "The Coda says: you can build a bright, bell-like sound with FM (milestone: You can now shape a sound). Next: Arrangement & Mix, which opens after the minor-key checkpoint: each part's place, how full the music is, a second line, the mix.",
+      },
+      notes: [
+        'Today offer: "Build a bell-like FM riff and a wide supersaw pad for your loop."',
+        "Evaluated: the hook's riff carries `fmi: 3, fmh: 3.5` on a sine with `decay: 0.4, sustain: 0`; the pad `unison`, `detune` and `spread` absent (the supersaw's defaults: 5, .18, .6). FM's new tones sit at the note's frequency ± whole multiples of the modulator's (`fmh` × the note): at 3.5 they fall at 2.5, 4.5, 6, 8 … times the note, between the harmonics; at 2 at 1, 3, 5 … (hollow, odd harmonics); at 1 on every harmonic (brassy).",
+        'ms.26 ("You can now shape a sound") is reached here (content/milestones.ts).',
+        "The FM envelope methods (`fmenv`, `fmattack` …) are uncatalogued (AUTHORING §20.5) and never appear; FM that fades within a note is made with the amplitude envelope of A1.L03 instead (the hook's `.decay(.4).sustain(0)`).",
       ],
     },
   ],

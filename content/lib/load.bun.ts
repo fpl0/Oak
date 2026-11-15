@@ -96,18 +96,23 @@ export async function loadLessons(
 
 export async function loadCheckpointFiles(
   root = CONTENT_ROOT,
-): Promise<{ defs: CheckpointDef[]; errors: LoadError[] }> {
+): Promise<{ defs: CheckpointDef[]; errors: LoadError[]; files: Map<string, string> }> {
   const defs: CheckpointDef[] = [];
   const errors: LoadError[] = [];
+  /** Each checkpoint's file (a track checkpoint sits in the folder of the last unit it covers: J2/CP, A2/CP). */
+  const files = new Map<string, string>();
   for (const file of walk(root).filter((f) => f.endsWith("/CP/checkpoint.ts"))) {
     try {
       const mod = (await import(file)) as { default?: CheckpointDef };
-      if (mod.default) defs.push(mod.default);
+      if (mod.default) {
+        defs.push(mod.default);
+        files.set(mod.default.id, file);
+      }
     } catch (e) {
       errors.push({ file: relative(root, file), error: e instanceof Error ? e.message : String(e) });
     }
   }
-  return { defs, errors };
+  return { defs, errors, files };
 }
 
 /** Every content source file, for the watch mode and the content hash. */

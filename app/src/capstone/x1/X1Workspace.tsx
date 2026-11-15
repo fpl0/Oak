@@ -93,6 +93,7 @@ import { ReleaseDialog, type ReleasePiece } from "../ReleaseDialog.tsx";
 import { ReviewCard } from "../ReviewCard.tsx";
 import { useTryRevision } from "../revision.ts";
 import { currentSession, isResume, sessionsDone, sessionViews } from "../sessions.ts";
+import { useSongMelody } from "../song-melody.ts";
 import { WorkbenchServicesLoader } from "../WorkbenchServicesLoader.tsx";
 import { refreshAfterRelease } from "../Workspace.tsx";
 import {
@@ -430,6 +431,8 @@ function X1Loaded({
     }
   };
 
+  // Carry f4: the song's own melody, so the arrangement's rules can tell a kept tune from a changed one.
+  const songMelody = useSongMelody(rubric.length > 0 ? song : null);
   // The session rubric, live: re-read a moment after each edit, like a compose capstone's checklist.
   const [rubricResult, setRubricResult] = useState<{ code: string; result: GradeResult } | null>(null);
   const rubricSeq = useRef(0);
@@ -445,6 +448,7 @@ function X1Loaded({
           rubric,
           song,
           code,
+          songMelody: songMelody.data ?? null,
           lint: {
             profile: "graded",
             unlocked: new Set(unlockKey ? (unlockKey.split(",") as UnlockableId[]) : []),
@@ -462,7 +466,7 @@ function X1Loaded({
     }, 650);
     return () => clearTimeout(t);
     // `rubric` is the session's own list; its length stands for it.
-  }, [def, song, code, unlockKey, rubric.length]);
+  }, [def, song, code, unlockKey, rubric.length, songMelody.data]);
   const rubricRows = checklistOf(rubric, rubricResult?.result ?? null, {}, [], true);
   const rubricReady = rubric.length === 0 || (readiness(rubricRows).ready && rubricResult?.code === code);
 

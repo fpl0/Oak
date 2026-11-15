@@ -148,6 +148,27 @@ describe("non-chord tones", () => {
     const nct = classifyNct(melodyLine(selectTrack(n, "mel")), chordSlots(selectTrack(n, "chords")), "4/4");
     expect(nct.map((x) => x.type)).toEqual(["passing", "suspension", "neighbor"]);
   });
+  test("regression (wave 7 closer): a note repeated over one chord, then a step down, is no suspension", async () => {
+    // X2 bar 10: B♭ B♭ B♭ A over D7 (the chord struck twice is one chord held): the B♭ is never prepared under
+    // another chord, so the Blues Transcription has no suspension; the same figure over a chord change still has one.
+    const n = await strudel(
+      'chords: note("<[d3,f#3,a3,c4] [d3,f#3,a3,c4]>")\nmel: note("<[f#4 a4 f#4 d4@2 ~@3] [~@2 bb4 bb4 bb4 a4@2 ~]>")',
+      2,
+    );
+    const slots = chordSlots(selectTrack(n, "chords"));
+    const nct = classifyNct(melodyLine(selectTrack(n, "mel")), slots, "4/4");
+    expect(nct.some((x) => x.type === "suspension")).toBe(false);
+    const moved = await strudel(
+      'chords: chord("<C G>").voicing()\nmel: note("<[e5 d5 c5 c5] [c5 b4 a4 b4]>")',
+      2,
+    );
+    const again = classifyNct(
+      melodyLine(selectTrack(moved, "mel")),
+      chordSlots(selectTrack(moved, "chords")),
+      "4/4",
+    );
+    expect(again.filter((x) => x.type === "suspension")).toHaveLength(1);
+  });
 });
 
 describe("meter, pickups and compound time", () => {

@@ -431,6 +431,24 @@ export interface CapstoneDef extends CapstoneMeta {
   reviewRevisions: 1 | 2;
   canDo: CanDoId[];
   flavours?: Partial<Record<FlavourId, { band?: BandId; sounds?: Record<string, SoundId> }>>;
+  /**
+   * Wave 7 (feature `capstone.versions`, AC1 "One Tune, Two Genres"): the capstone is two pieces of code, one
+   * per version, each its own draft with its own tempo line, evaluated on its own. The brief's rules run on each
+   * version; a rule named in `across` (`two-versions-differ`) reads both at once (the other version arrives as
+   * `GradeContext.otherVersion`). Only the last session releases, as one album track with both versions
+   * (side A and side B of the track). Exactly two versions, `a` first.
+   */
+  versions?: CapstoneVersionDef[];
+}
+/** Wave 7. One version of a two-version capstone (`CapstoneDef.versions`). */
+export interface CapstoneVersionDef {
+  id: "a" | "b";
+  /** What the learner calls it in the workspace: "Version one". */
+  label: string;
+  /** The session that starts this version (AC1.S1 and AC1.S2). */
+  startsIn: CapstoneSessionId;
+  /** The version's own starter; later sessions open its draft. */
+  starter?: string;
 }
 
 // --- gym and the transcription ladder -----------------------------------------------------------

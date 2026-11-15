@@ -24,6 +24,8 @@ export interface AnalysisOptions {
   pickup?: PickupSpec | null;
   /** The Band parts heard (the step's tracks less the muted ones); the harmony reads only these. */
   bandHeard?: readonly ("drums" | "bass" | "chords")[] | null;
+  /** Wave 7: chord symbols on the staff in jazz glyphs (`tb.feature.jazz-glyphs`). */
+  chordStyle?: "lead-sheet" | "jazz";
 }
 
 export interface AnalysisState {
@@ -78,6 +80,7 @@ export function useAnalysis(
             staffLabels: o.staffLabels,
             pickup: o.pickup ?? null,
             bandHeard: o.bandHeard ?? null,
+            ...(o.chordStyle ? { chordStyle: o.chordStyle } : {}),
           });
           if (out.ok) setState({ model: out.model, code: src, error: null, errorCode: null, pending: false });
           else setState((s) => ({ ...s, error: out.error, errorCode: src, pending: false }));
@@ -108,7 +111,7 @@ export function useAnalysis(
   // (the learner's unlocked set often arrives after the first analysis: without this the "locked" errors of an
   // empty set stay on screen).
   const lintKey = `${opts.lint.profile}|${opts.lint.allowPreview}|${[...opts.lint.unlocked].sort().join(",")}`;
-  const shape = `${opts.bars}|${opts.meter}|${opts.key?.tonic}:${opts.key?.mode}|${opts.band?.code ?? ""}:${opts.band?.tracks.join("+") ?? ""}|${opts.staff}|${opts.staffLabels}|${opts.pickup ? opts.pickup.units.join("/") : ""}|${opts.bandHeard?.join("+") ?? "*"}|${lintKey}`;
+  const shape = `${opts.bars}|${opts.meter}|${opts.key?.tonic}:${opts.key?.mode}|${opts.band?.code ?? ""}:${opts.band?.tracks.join("+") ?? ""}|${opts.staff}|${opts.staffLabels}|${opts.pickup ? opts.pickup.units.join("/") : ""}|${opts.bandHeard?.join("+") ?? "*"}|${opts.chordStyle ?? ""}|${lintKey}`;
   const lastShape = useRef(shape);
   useEffect(() => {
     if (lastShape.current === shape) return;

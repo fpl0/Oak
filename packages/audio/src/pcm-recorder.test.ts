@@ -296,6 +296,107 @@ describe("the PCM long-take recorder", () => {
     expect(rec.stats().peakHeldBytes).toBeLessThanOrEqual(8 * sr * 4);
   });
 
+  // Wave 7: a gap stays where it happened, and the longest capstone takes come out whole.
+  test("a lost chunk leaves silence in its own place: every later sample stays on its frame, and the gap is listed", async () => {
+    const sr = 8000;
+    const h = harness(sr);
+    const rec = createPcmRecorderWith({
+      ctx: h.ctx,
+      source: h.source,
+      createNode: h.createNode,
+      channels: 1,
+      chunkSec: 0.5,
+    });
+    await rec.prepare();
+    const take = rec.record({ seconds: 3, at: 0, tailSec: 0 });
+    const deliver = h.node.port.onmessage as (e: { data: unknown }) => void;
+    let chunks = 0;
+    h.node.port.onmessage = (e) => {
+      const d = e.data as { type: string };
+      if (d.type === "chunk" && ++chunks === 3) return;
+      deliver(e);
+    };
+    // A click every 1000 frames: where each lands after the take shows whether anything moved.
+    await h.render(3.2 * sr, (f) => (f % 1000 === 0 ? 0.5 : 0));
+    const r = await take;
+    expect(r.missingFrames).toBe(sr / 2);
+    expect(r.dropouts).toEqual([{ atS: 1, seconds: 0.5 }]);
+    const wav = await readWav(r.blob);
+    expect(wav.frames).toBe(3 * sr);
+    const clicks: number[] = [];
+    for (let f = 0; f < wav.frames; f++) if ((wav.pcm[f] as number) > 10000) clicks.push(f);
+    // Clicks 0 … 23000 every 1000, except the ones inside the lost half second (8000 … 11999).
+    expect(clicks).toEqual(
+      Array.from({ length: 24 }, (_, k) => k * 1000).filter((f) => f < 8000 || f >= 12000),
+    );
+  });
+
+  test("render quanta the audio thread skipped are silence in their place, counted as missing", async () => {
+    const sr = 8000;
+    const h = harness(sr);
+    const rec = createPcmRecorderWith({
+      ctx: h.ctx,
+      source: h.source,
+      createNode: h.createNode,
+      channels: 1,
+    });
+    await rec.prepare();
+    const take = rec.record({ seconds: 1, at: 0, tailSec: 0 });
+    const signal = (f: number) => (f % 1000 === 0 ? 0.5 : 0);
+    await h.render(2048, signal);
+    h.frame.v += 3 * 128; // three quanta never processed
+    await h.render(sr, signal);
+    const r = await take;
+    expect(r.missingFrames).toBe(384);
+    expect(r.dropouts).toEqual([{ atS: 2048 / sr, seconds: 384 / sr }]);
+    const wav = await readWav(r.blob);
+    expect(wav.frames).toBe(sr);
+    expect(wav.pcm[3000]).toBe(Math.trunc(0.5 * 0x7fff));
+    expect(wav.pcm[2048 + 100]).toBe(0);
+  });
+
+  test("the longest capstone takes: JC3's two choruses at its slowest tempo, and AC1's two versions at the longest legal length", async () => {
+    // JC3: rhythm changes, 32 bars AABA (the bridge is bars 17–24), two choruses = 64 bars at the brief's slowest
+    // 120 BPM = 128 s. AC1: two versions, each up to MAX_CAPSTONE_BARS (128) at its slowest 60 BPM = 512 s,
+    // recorded one after the other on one recorder. Every take: exact length, every click on its frame, no gap.
+    const sr = 48000;
+    const h = harness(sr);
+    const rec = createPcmRecorderWith({ ctx: h.ctx, source: h.source, createNode: h.createNode });
+    await rec.prepare();
+    const takes = [
+      { name: "JC3", seconds: 64 * 4 * (60 / 120) },
+      { name: "AC1 version one", seconds: 128 * 4 * (60 / 60) },
+      { name: "AC1 version two", seconds: 128 * 4 * (60 / 60) },
+    ];
+    expect(takes.map((t) => t.seconds)).toEqual([128, 512, 512]);
+    for (const t of takes) {
+      const at = h.frame.v / sr + 0.25;
+      const startFrame = Math.round(at * sr);
+      // A click on every beat of the take (one second at 60 BPM, half a second at 120), from its first frame.
+      const beat = t.name === "JC3" ? sr / 2 : sr;
+      const click = (f: number) => (f >= startFrame && (f - startFrame) % beat === 0 ? 0.6 : 0);
+      const take = rec.record({ seconds: t.seconds, at, tailSec: 2 });
+      await h.render(Math.ceil((0.3 + t.seconds + 2.1) * sr), (f) => click(f));
+      const r = await take;
+      expect(r.frames).toBe((t.seconds + 2) * sr);
+      expect(r.missingFrames).toBe(0);
+      expect(r.latePadFrames).toBe(0);
+      expect(r.dropouts).toEqual([]);
+      const wav = await readWav(r.blob);
+      expect(wav.frames).toBe((t.seconds + 2) * sr);
+      let n = 0;
+      let off = 0;
+      for (let f = 0; f < wav.frames; f++)
+        if ((wav.pcm[2 * f] as number) > 10000) {
+          n++;
+          if (f % beat !== 0) off++;
+        }
+      expect(off).toBe(0);
+      expect(n).toBe(Math.floor(((t.seconds + 2) * sr - 1) / beat) + 1);
+      expect(rec.stats().peakHeldBytes).toBeLessThanOrEqual(8 * sr * 4);
+    }
+  });
+
   test("a chunk that never arrives is reported as missing frames; the length still holds", async () => {
     const sr = 8000;
     const h = harness(sr);

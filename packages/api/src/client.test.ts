@@ -30,7 +30,7 @@ const json = (value: unknown, status = 200): Response =>
 const health: Health = {
   ok: true,
   appVersion: "0.0.0",
-  contractsVersion: "1.7",
+  contractsVersion: "1.8",
   schemaVersion: 1,
   contentVersion: null,
   tutor: "missing_key",

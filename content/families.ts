@@ -9,6 +9,7 @@
 import {
   type CompositeGroup,
   defineFamily,
+  type FactDeck,
   type FamilyDef,
   type FamilyId,
   type LessonId,
@@ -16,7 +17,19 @@ import {
 } from "@oak/content-kit";
 import { FAMILIES as DRILL_FAMILIES } from "@oak/drills";
 
-export { CHORD_SYMBOLS, deckById, decks, KEY_SIGNATURES, STAFF_NAMES } from "./decks/index.ts";
+import { decks as CORE_DECKS } from "./decks/index.ts";
+import { WAVE7_DECKS } from "./decks/wave7.ts";
+
+export { CHORD_SYMBOLS, KEY_SIGNATURES, STAFF_NAMES } from "./decks/index.ts";
+export { WAVE7_DECKS } from "./decks/wave7.ts";
+
+/**
+ * Every fact deck of the course: the core's (content/decks/index.ts `decks`, in the order of their unlock lessons
+ * in the default order) and the advanced tracks' ten (contracts 1.8 §7.3, content/decks/wave7.ts), all switched
+ * on. The server, the app and the simulation read this list.
+ */
+export const decks: readonly FactDeck[] = [...CORE_DECKS, ...WAVE7_DECKS];
+export const deckById: ReadonlyMap<string, FactDeck> = new Map(decks.map((d) => [d.id, d] as const));
 
 const GROUPS: readonly CompositeGroup[] = ["pitch", "harmony", "rhythm"];
 /** The lesson that opens each composite: the first lesson that seeds one of its members. */

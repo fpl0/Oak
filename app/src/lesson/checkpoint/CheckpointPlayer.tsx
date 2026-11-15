@@ -72,12 +72,16 @@ import { MakeRenderer, rendererFor } from "../renderers.tsx";
 import { browserGrader, catalogText, lessonServices } from "../services.ts";
 import { answerMissing, registryHas, stepScopePanel } from "../wave5.ts";
 import { stepMusicLenses } from "../wave6.ts";
+import { trackCheckpointIntro, trackCheckpointOf, trackCheckpointResult } from "../wave7.ts";
 import {
+  CP_BPM,
+  CP_KEY,
   clearRecords,
   familyAnswerSpec,
   familyResponse,
   type ItemRecord,
   isSungTrial,
+  itemKey,
   loadRecords,
   openedText,
   progressLine,
@@ -89,10 +93,8 @@ import {
   skillLine,
   sungItemScore,
   tracksOpenedCopy,
+  trialTapLanes,
 } from "./model.ts";
-
-const CP_KEY = { tonic: "C", mode: "major" } as const;
-const CP_BPM = 100;
 
 export function CheckpointPlayer({ unitId }: { unitId: string }) {
   const cpId = checkpointFromRouteParam(unitId);
@@ -223,6 +225,7 @@ export function CheckpointPlayer({ unitId }: { unitId: string }) {
       cpId={cpId}
       title={meta?.title ?? cpId}
       covers={meta?.covers ?? []}
+      titles={lessonTitles(content.data?.syllabus ?? null)}
       status={status}
       hasItems={def.data !== null}
       starting={starting}
@@ -236,6 +239,7 @@ function Intro(p: {
   cpId: string;
   title: string;
   covers: readonly string[];
+  titles: ReadonlyMap<string, string>;
   status: CheckpointStatus | null;
   hasItems: boolean;
   starting: boolean;
@@ -245,6 +249,10 @@ function Intro(p: {
   const s = p.status;
   const locked = !s || s.status === "locked";
   const done = s?.status === "passed" || s?.status === "soft-passed";
+  // Wave 7: a track checkpoint (J.CP1, J.CP2, R.CP, A.CP) holds back only its track's capstones (contracts §7.6
+  // rule 5): it says so before anything else, and its "not open yet" names the lesson it follows.
+  const trackCp = trackCheckpointOf(p.cpId);
+  const track = trackCp ? trackCheckpointIntro(trackCp, p.titles, s) : null;
   return (
     <Page width="narrow">
       <div className="flex flex-col gap-5" data-testid="checkpoint-intro">
@@ -252,9 +260,15 @@ function Intro(p: {
           <p className="font-mono text-sm text-text-3">{p.cpId}</p>
           <h1 className="font-display text-h1 font-semibold">{p.title}</h1>
           <p className="mt-1 max-w-[60ch] text-text-2">
-            A short check of {p.covers.join(" and ") || "this unit"}: about 12 minutes of mixed items, then a
-            small Make. No hints, no rush. Claude goes over it with you afterwards.
+            {track
+              ? track.covers
+              : `A short check of ${p.covers.join(" and ") || "this unit"}: about 12 minutes of mixed items, then a small Make. No hints, no rush. Claude goes over it with you afterwards.`}
           </p>
+          {track && (
+            <p className="mt-2 max-w-[60ch] text-sm text-text-2" data-testid="checkpoint-holds">
+              {track.holds}
+            </p>
+          )}
         </header>
         <Card className="flex flex-wrap items-center gap-3 p-4">
           <Chip tone={done ? "accent" : s?.status === "failed" ? "amber" : "neutral"}>
@@ -269,7 +283,8 @@ function Intro(p: {
         {p.error ? <ErrorState error={p.error} onRetry={p.onStart} /> : null}
         {locked ? (
           <Callout tone="info" title="Not open yet">
-            This checkpoint opens when the lessons it covers are done. Today has your next step.
+            {track?.locked ??
+              "This checkpoint opens when the lessons it covers are done. Today has your next step."}
           </Callout>
         ) : done ? (
           <Callout tone="success" title="Already passed">
@@ -330,12 +345,6 @@ function authoredTitle(ex: Exercise): string {
   if (ex.kind === "staff-read") return "Read it";
   if ("stimulus" in ex && ex.stimulus) return "Listen and answer";
   return "Answer this one";
-}
-
-/** The key an item is played and graded in: its own, its trial's, else the checkpoint's. */
-function itemKey(ex: Exercise, trial: Trial | null, fallback: KeySpec): KeySpec {
-  const tk = (trial?.params as { key?: KeySpec } | undefined)?.key;
-  return ex.key ?? tk ?? fallback;
 }
 
 /** A drawn trial's own meter (`params.meter`), when it names one the course counts in. */
@@ -427,6 +436,8 @@ function buildItems(
       const tkey = (p.key as KeySpec | undefined) ?? undefined;
       // Wave 6: a trial in its own meter (fam.rhy.meter in 6/8) is counted, tapped and drawn in it.
       const tmeter = trialMeter(p.meter);
+      // Wave 7: a polyrhythm trial tapped with two hands is drawn with its two lanes (F and J).
+      const lanes = trialTapLanes(trial);
       const exercise: Exercise =
         // Reading from the page (`showStaff`, not played first): the staff, and no Play.
         p.showStaff === true && p.playFirst === false && answer && answer.ui !== "tap"
@@ -446,6 +457,7 @@ function buildItems(
                 kind: "tap",
                 ...(tmeter ? { meter: tmeter } : {}),
                 mode: "echo",
+                ...(lanes ? { lanes } : {}),
                 stimulus: { src: "generator", family: src.familyId, level: src.level, seed: src.seed },
                 cue: trial.cue,
                 bars: typeof trial.params.bars === "number" ? trial.params.bars : 1,
@@ -1049,9 +1061,11 @@ function ResultScreen({
   inSession: boolean;
   onContinue(): void;
 }) {
-  const copy = resultCopy(outcome);
-  const name = (id: string) => content?.skills.nodes.find((n) => n.id === id)?.name ?? id;
   const titles = lessonTitles(content?.syllabus ?? null);
+  // Wave 7: a track checkpoint's result names the capstones it opens or holds back, and only them.
+  const trackCp = trackCheckpointOf(outcome.cpId);
+  const copy = trackCp ? trackCheckpointResult(outcome, trackCp, titles) : resultCopy(outcome);
+  const name = (id: string) => content?.skills.nodes.find((n) => n.id === id)?.name ?? id;
   // Wave 6: a pass that met an advanced-track gate says so once (U13.CP: the Jazz and Rhythm tracks).
   const tracksCopy = tracksOpenedCopy(
     outcome.gatesOpened,
@@ -1063,6 +1077,7 @@ function ResultScreen({
         className={`flex flex-col ${outcome.perSkill.length > 6 ? "gap-4" : "gap-5"}`}
         data-testid="checkpoint-result"
         data-passed={outcome.passed ? "1" : "0"}
+        {...(trackCp ? { "data-track": trackCp.trackId } : {})}
       >
         <header>
           <h1
@@ -1112,7 +1127,8 @@ function ResultScreen({
             your next warm-ups. Then retake it on another day.
           </Callout>
         )}
-        {openedText(outcome.opened, titles) !== "" && (
+        {/* A track checkpoint's headline already names what it opened (and what still waits). */}
+        {!trackCp && openedText(outcome.opened, titles) !== "" && (
           <p className="text-sm text-text-2" data-testid="checkpoint-opened">
             Open now: {openedText(outcome.opened, titles)}.
           </p>

@@ -341,3 +341,38 @@ export function followWindow(
   const start = Math.min(from + page * size, to - size);
   return { window: [start, size], page, pages };
 }
+
+/**
+ * Wave 7, the microtiming view: where a note's "+48 ms" label goes (its left edge and vertical middle), or null when
+ * there is no free room near the note. Tried in order: on the note's own row before where it should have started
+ * (or the note, whichever is earlier), after the later of the two, then just under the note. A place is free when it
+ * crosses no note and no note's label (degree labels stand just above their notes) and stays inside the plot.
+ */
+export function microLabelAt(
+  rects: readonly RollRect[],
+  r: RollRect,
+  gridX: number,
+  textW: number,
+  gutter: number,
+  width: number,
+): { x: number; y: number } | null {
+  const PAD = 4;
+  const mid = r.y + r.h / 2;
+  const tries = [
+    { x: Math.min(gridX, r.x) - PAD - textW, y: mid },
+    { x: Math.max(gridX, r.x + r.w) + PAD, y: mid },
+    { x: Math.min(gridX, r.x), y: r.y + r.h + 7 },
+  ];
+  const hits = (x0: number, y0: number, x1: number, y1: number, o: RollRect): boolean => {
+    const note = o.x < x1 && o.x + o.w > x0 && o.y < y1 && o.y + o.h > y0;
+    const label = o.kind === "note" && o.x < x1 && o.x + Math.max(o.w, 24) > x0 && o.y - 10 < y1 && o.y > y0;
+    return note || label;
+  };
+  for (const t of tries) {
+    const [x0, x1, y0, y1] = [t.x - 2, t.x + textW + 2, t.y - 6, t.y + 6];
+    if (x0 < gutter + 1 || x1 > width - 1) continue;
+    if (rects.some((o) => o !== r && hits(x0, y0, x1, y1, o))) continue;
+    return t;
+  }
+  return null;
+}

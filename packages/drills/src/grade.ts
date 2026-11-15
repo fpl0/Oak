@@ -15,7 +15,7 @@ import type {
   TrialResult,
 } from "@oak/content-kit";
 import type { SungTarget } from "@oak/pitch";
-import { parseRN, rnToChord } from "@oak/theory";
+import { euclid, parseRN, rnToChord } from "@oak/theory";
 import { parsePc } from "./kernel.ts";
 import { parseMiniCode } from "./mini.ts";
 import { pitch } from "./pitch-seam.ts";
@@ -136,6 +136,18 @@ function positional<T>(
   return { credit: hits / denom, firstMiss };
 }
 
+/** Whether two Euclidean answers `[k, n]` / `[k, n, r]` make the same onsets (Strudel's `(k,n,r)`). */
+export function sameEuclid(a: readonly number[], b: readonly number[] | undefined): boolean {
+  if (!b || a.length < 2 || b.length < 2) return false;
+  try {
+    const x = euclid(a[0] as number, a[1] as number, a[2] ?? 0);
+    const y = euclid(b[0] as number, b[1] as number, b[2] ?? 0);
+    return x.length === y.length && x.every((v, i) => v === y[i]);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Grades an identification answer against `expected`. Every field present in `expected` is graded; the
  * credit is the mean over fields. Sequences earn positional partial credit; a single choice is all or nothing.
@@ -159,7 +171,12 @@ export function gradeAnswer(
   };
   if (exp.choice) {
     const e = [...exp.choice].sort();
-    const g = [...(got.choice ?? [])].sort();
+    // A grouping trial answered on the grouping widget (wave7.md §11): `[2, 2, 3]` is the choice "2+2+3".
+    const fromGrouping =
+      got.choice === undefined && got.grouping !== undefined && Array.isArray(trial.params.grouping)
+        ? [got.grouping.join("+")]
+        : undefined;
+    const g = [...(got.choice ?? fromGrouping ?? [])].sort();
     const ok = e.length === g.length && e.every((x, i) => x === g[i]);
     scores.push(ok ? 1 : 0);
     if (!ok) note(e.join("+"), g.join("+") || "—");
@@ -185,6 +202,19 @@ export function gradeAnswer(
   if (exp.midi) {
     const pcOnly = trial.params.pcOnly === true;
     seq(exp.midi, got.midi, (a, b) => (pcOnly ? (((a - b) % 12) + 12) % 12 === 0 : a === b));
+  }
+  if (exp.grouping) {
+    // The sequence of group sizes; a rotation is another grouping (2+2+3 is not 3+2+2).
+    const g = got.grouping ?? [];
+    const ok = g.length === exp.grouping.length && g.every((x, i) => x === exp.grouping?.[i]);
+    scores.push(ok ? 1 : 0);
+    if (!ok) note(exp.grouping.join("+"), g.join("+") || "—");
+  }
+  if (exp.euclid) {
+    // By the onsets the numbers make: two spellings of one rhythm are one answer ((3,8) and (3,8,0)).
+    const ok = sameEuclid(exp.euclid, got.euclid);
+    scores.push(ok ? 1 : 0);
+    if (!ok) note(`(${exp.euclid.join(",")})`, got.euclid ? `(${got.euclid.join(",")})` : "—");
   }
   if (exp.number !== undefined) {
     const ok = got.number === exp.number;
@@ -245,8 +275,43 @@ export function gradeTapTrial(
     passF1: 0.9,
     passTiming: 0.5,
   };
+  // Two hands (`params.tapLanes`, `response.lanes`): @oak/pitch `gradeLaneTaps`, which forgives only the offset both
+  // hands share and passes when both lanes pass (build-audio: grading each lane alone forgives a lane that leans).
+  const lanes = tapLanesOfTrial(trial);
+  if (lanes && response.lanes) {
+    const all = lanes.flatMap((l) => l.targets).sort((a, b) => a - b);
+    let ioi = Number.POSITIVE_INFINITY;
+    for (let i = 1; i < all.length; i++)
+      if ((all[i] as number) - (all[i - 1] as number) > 1e-6)
+        ioi = Math.min(ioi, (all[i] as number) - (all[i - 1] as number));
+    const laneTol: TapTolerance = {
+      ...tol,
+      windowMs: pitch.tapWindowMs(Number.isFinite(ioi) ? ioi * 1000 : 500, trial.level, levels, profile),
+    };
+    const r = pitch.gradeLaneTaps(response.lanes, lanes, laneTol, profile, { level: trial.level, levels });
+    return { ...base, credit: r.score, correct: r.pass, diagnostics: r.diagnostics };
+  }
   const res = pitch.gradeTaps(response.taps ?? [], targets, tol, profile, { level: trial.level, levels });
   return { ...base, credit: res.score, correct: res.pass, diagnostics: res.diagnostics };
+}
+
+/** The two lanes a two-hand tap trial asks for (`params.tapLanes`: label, key, targets in seconds), or null. */
+export function tapLanesOfTrial(
+  trial: Trial<Answer>,
+): { label: string; key: string; targets: number[] }[] | null {
+  const own = trial.params.tapLanes;
+  if (!Array.isArray(own) || own.length !== 2) return null;
+  const lanes = own.map((l, i) => {
+    const lane = l as { label?: unknown; key?: unknown; targets?: unknown };
+    return {
+      label: String(lane.label ?? `Lane ${i + 1}`),
+      key: String(lane.key ?? (i === 0 ? "f" : "j")).toUpperCase(),
+      targets: Array.isArray(lane.targets)
+        ? (lane.targets as unknown[]).filter((t): t is number => typeof t === "number")
+        : [],
+    };
+  });
+  return lanes.every((l) => l.targets.length > 0) ? lanes : null;
 }
 
 // --- singing ------------------------------------------------------------------------------------

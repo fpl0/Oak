@@ -89,6 +89,11 @@ export interface WalkOptions {
   makeTitle?: string;
   /** Stop at this step (it is on screen, not answered). */
   stopAt?: string;
+  /**
+   * The Make's required rule is heard in the piece (its checklist row ticks: `data-ok="1"`) before it plays and is
+   * saved (Wave 7 journeys: a swinging loop, a grit you can hear).
+   */
+  makeRuleMet?: boolean;
 }
 
 /** Answers every step from its reference and saves the Make. Ends on the lesson's completion screen. */
@@ -106,6 +111,14 @@ export async function walkLesson(page: Page, def: LessonDef, o: WalkOptions = {}
     if (step.kind === "make") {
       const code = o.makeCode ?? codeOf(passingResponse(step)) ?? null;
       if (code) await setCode(page, code);
+      const required = (
+        (ex as { rubric?: { id: string; required?: boolean }[] } | undefined)?.rubric ?? []
+      ).find((r) => r.required);
+      if (o.makeRuleMet && required)
+        await expect(
+          page.locator(`[data-rule="${required.id}"]`),
+          `${def.id}: the Make's required rule`,
+        ).toHaveAttribute("data-ok", "1", { timeout: 30_000 });
       // The Make is heard: it plays and the transport moves past where it started, then it stops.
       const run = page.getByTestId("play-toggle").first();
       const counter = page.getByTestId("bar-counter").first();

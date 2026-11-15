@@ -79,6 +79,11 @@ export function chordDisplay(symbol: string): string {
   const text = chord ? theory.toAbcChord(chord) : symbol;
   return text.replace(/h7?$/, "ø7");
 }
+/** Wave 7: the jazz-glyph display of a code symbol (`C^7` → C∆7, `Cm7b5` → Cø7); unknown text as written. */
+export function jazzChordDisplay(symbol: string): string {
+  const chord = theory.parseChordWithBass(symbol);
+  return chord ? theory.toJazzGlyph(chord) : symbol;
+}
 /**
  * A Roman numeral in Oak's dialect (`V6`, `viio7`, `bVII`, `iih7`, `V65/V`) as printed under the staff: theory's
  * display (`displayRN`: ° and ø, ♭ and ♯ before the numeral), figures as digits after it ("V65", "I64": abcjs
@@ -86,12 +91,18 @@ export function chordDisplay(symbol: string): string {
  * Unicode here (chord symbols are ASCII: abcjs turns b, # and o into glyphs itself). Unknown text is kept.
  */
 export function romanDisplay(rn: string): string {
-  return rn
-    .trim()
-    .replace(/h7/g, "ø7")
-    .replace(/(^|\/)b(?=[IViv])/g, "$1♭")
-    .replace(/(^|\/)#(?=[IViv])/g, "$1♯")
-    .replace(/([iv])o(?=\d|\/|$)/g, "$1°");
+  return (
+    rn
+      .trim()
+      .replace(/h7/g, "ø7")
+      .replace(/(^|\/)b(?=[IViv])/g, "$1♭")
+      .replace(/(^|\/)#(?=[IViv])/g, "$1♯")
+      .replace(/([iv])o(?=\d|\/|$)/g, "$1°")
+      // Wave 7: an altered tension in the figure is a glyph as in the chord symbol above it (V7♭9, Imaj7♯11),
+      // never the ASCII letter beside the jazz symbol's ♭.
+      .replace(/(?<=\d)b(?=\d)/g, "♭")
+      .replace(/(?<=\d)#(?=\d)/g, "♯")
+  );
 }
 export function degreeLabel(p: SpelledPitch, key: KeySpec): { degree: string; syllable: string } {
   const d = theory.degreeOf(p.midi, key);
@@ -117,4 +128,34 @@ export function makePitch(letter: number, alt: number, midi: number): SpelledPit
   const l = LETTERS[letter] as string;
   const acc = alt > 0 ? "#".repeat(alt) : "b".repeat(-alt);
   return { midi, name: `${l}${acc}${oct}`, letter: l, alt, oct };
+}
+/** Letter steps and alteration of a tension above a chord's root, by semitones (♭9 9 ♯9 11 ♯11 ♭13 13). */
+const TENSIONS: Record<number, [number, number]> = {
+  1: [1, -1],
+  2: [1, 0],
+  3: [1, 1],
+  5: [3, 0],
+  6: [3, 1],
+  8: [5, -1],
+  9: [5, 0],
+};
+/**
+ * Wave 7: a note that is not a tone of `chord` spelled as the tension it is above the chord's root (the 9th of E♭
+ * is F, not the E♯ the key of B would give; the ♭9 of G is A♭), or null when it is no tension or that spelling would
+ * need a double accidental or a white-key enharmonic (E♯, B♯, C♭, F♭).
+ */
+export function spellTension(midi: number, chord: ChordId): SpelledPitch | null {
+  const m = Math.round(midi);
+  const semis = (((m - chord.rootPc) % 12) + 12) % 12;
+  const t = TENSIONS[semis];
+  const rootLetter = LETTERS.indexOf(chord.root.charAt(0));
+  if (!t || rootLetter < 0) return null;
+  const letter = (rootLetter + t[0]) % 7;
+  const pc = ((m % 12) + 12) % 12;
+  let alt = pc - (NATURAL[letter] as number);
+  if (alt > 6) alt -= 12;
+  if (alt < -6) alt += 12;
+  if (Math.abs(alt) > 1) return null;
+  const p = makePitch(letter, alt, m);
+  return /^(?:E#|B#|Cb|Fb)/.test(p.name) ? null : p;
 }

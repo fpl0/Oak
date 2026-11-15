@@ -81,7 +81,13 @@ export function chordSlots(
     for (const e of sorted) {
       const end = R.add(e.onset, e.dur);
       const last = slots[slots.length - 1];
-      if (last && last.symbol === e.chordSymbol && R.lte(e.onset, last.span[1])) {
+      // A chord struck again (comping stabs, `.struct("x ~ ~ x")`) is the same chord held until the next one,
+      // as long as the gap is under a bar: Dm7 Dm7 G7 G7 reads as Dm7 G7, and a ii–V comped in stabs resolves.
+      if (
+        last &&
+        last.symbol === e.chordSymbol &&
+        (R.lte(e.onset, last.span[1]) || R.lt(R.sub(e.onset, last.span[1]), rat(1)))
+      ) {
         last.span[1] = R.max(last.span[1], end);
         if (R.eq(e.onset, last.span[0]) && e.midi !== null) last.midis.push(e.midi);
         last.ids.push(e.id);
@@ -268,7 +274,13 @@ export function harmonicRhythm(slots: readonly ChordSlot[], bars: number): numbe
 
 /** The chord sounding at the start of every bar; a bar keeps the previous chord when nothing changes. */
 export function chordPerBar(slots: readonly ChordSlot[], bars: number): (ChordId | null)[] {
-  return Array.from({ length: bars }, (_, b) => slotAt(slots, rat(b))?.chord ?? null);
+  // Wave 7 Build: comping that leaves beat 1 empty (Charleston, chords on 2 and 4) still names the bar's chord: with
+  // nothing sounding as the bar begins, the first chord that starts in the bar is the bar's chord.
+  return Array.from(
+    { length: bars },
+    (_, b) =>
+      slotAt(slots, rat(b))?.chord ?? slots.find((s) => R.floor(s.span[0]) === b && s.chord)?.chord ?? null,
+  );
 }
 
 type Core = { rootPc: number; quality: string };
@@ -437,7 +449,9 @@ export function cadenceChords(
 const BLUES_FORMS: Record<"standard" | "quick-change" | "jazz", number[][]> = {
   standard: [[0], [0], [0], [0], [5], [5], [0], [0], [7], [5, 7], [0], [0, 7]],
   "quick-change": [[0], [5], [0], [0], [5], [5], [0], [0], [7], [5, 7], [0], [0, 7]],
-  jazz: [[0], [5], [0], [0], [5], [5, 6], [0], [9, 4], [2], [7], [0], [2, 7, 0]],
+  // Wave 7 Build: bar 2 may stay on I (F7 | F7 is still a jazz blues), bar 4 may move to the ii–V of IV
+  // (Cm7 F7 in F, the chart @oak/theory `jazzBlues`, term.jazz-blues and J4.L02 teach).
+  jazz: [[0], [5, 0], [0], [0, 7], [5], [5, 6], [0], [9, 4], [2], [7], [0], [2, 7, 0]],
 };
 export interface BluesForm {
   variant: "standard" | "quick-change" | "jazz" | null;
@@ -447,7 +461,12 @@ export interface BluesForm {
   wrongBars: number[];
 }
 /** Which 12-bar blues the chords follow, compared on the root of each bar. */
-export function bluesForm(slots: readonly ChordSlot[], key: KeySpec, bars: number): BluesForm {
+export function bluesForm(
+  slots: readonly ChordSlot[],
+  key: KeySpec,
+  bars: number,
+  only?: readonly ("standard" | "quick-change" | "jazz")[],
+): BluesForm {
   const perBar = chordPerBar(slots, bars).map((c) => (c ? degreeOf(c.rootPc, key).semitones : null));
   const choruses = Math.floor(bars / 12);
   let best: BluesForm = {
@@ -457,7 +476,9 @@ export function bluesForm(slots: readonly ChordSlot[], key: KeySpec, bars: numbe
   };
   if (choruses === 0) return best;
   // `standard` is tested last so a form that fits two variants is named by its distinguishing bar.
-  for (const variant of ["jazz", "quick-change", "standard"] as const) {
+  for (const variant of (["jazz", "quick-change", "standard"] as const).filter(
+    (v) => !only || only.includes(v),
+  )) {
     const wrong: number[] = [];
     for (let b = 0; b < choruses * 12; b++) {
       const root = perBar[b];

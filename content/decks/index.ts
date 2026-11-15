@@ -1292,7 +1292,11 @@ export const PROMOTED_DECKS: readonly FactDeck[] = [
  */
 export const PENDING_DECKS: readonly FactDeck[] = [];
 
-/** The course's fact decks, in course order of their unlock lessons (contracts §7.3). */
+/**
+ * The core's fact decks, in course order of their unlock lessons (contracts §7.3). The whole course's list, with the
+ * advanced tracks' ten (content/decks/wave7.ts), is content/families.ts `decks`, which the server, the app and the
+ * simulation read.
+ */
 export const decks: readonly FactDeck[] = [
   STAFF_NAMES,
   KEY_SIGNATURES,

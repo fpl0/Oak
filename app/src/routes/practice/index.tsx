@@ -1,6 +1,8 @@
 // Practice hub (ux §2.3, contracts §7.3–7.4): today's review, then every drill family grouped by ear-training
 // stage with its state — locked ("Unlocks in U04"), arriving later (its generator is not built yet), open with
-// its level and recall, or mastered. Raw due counts are never shown (§7.4 Display).
+// its level and recall, or mastered. Raw due counts are never shown (§7.4 Display). Wave 7: the families the
+// advanced tracks open (stage G, the rest of stage H, the sound families) are grouped by track after the core's
+// stages, each track with its own honest line (closed until its gate, or the lesson that opens each family).
 
 import { EAR_STAGES } from "@content/families.ts";
 import type { FamilyDef } from "@oak/api";
@@ -14,6 +16,7 @@ import {
   familyAccuracy,
   familyStatus,
   groupByStage,
+  isCompositeFamily as isComposite,
   levelLine,
   pctText,
   pendingText,
@@ -23,8 +26,18 @@ import {
 } from "../../drills/model.ts";
 import { type DrillData, useDrillData } from "../../drills/use-drill-data.ts";
 import { graduatedLine } from "../../drills/wave5.ts";
+import {
+  familiesByTrack,
+  quietPracticeOf,
+  TRACK_EAR_LINES,
+  TRACK_TITLES,
+  type TrackKey,
+  type TrackLine,
+  trackLockedText,
+} from "../../drills/wave7.ts";
 import { usePageTitle } from "../../lib/nav.ts";
-import { useDue } from "../../lib/queries.ts";
+import { useDue, useTracks } from "../../lib/queries.ts";
+import { trackNote } from "../../session/tracks-model.ts";
 import { buttonClass } from "../../ui/kit/Button.tsx";
 import { Card, Chip, EmptyState, Page, PageHeader } from "../../ui/kit/basics.tsx";
 import { ErrorState, LoadingState } from "../../ui/kit/QueryState.tsx";
@@ -53,14 +66,17 @@ const STATUS_CHIP: Record<FamilyStatus, { label: string; tone: "neutral" | "acce
   mastered: { label: "Mastered", tone: "amber" },
 };
 
-function FamilyCard({ def, data }: { def: FamilyDef; data: DrillData }) {
+function FamilyCard({ def, data, track }: { def: FamilyDef; data: DrillData; track?: TrackLine | null }) {
   const state = data.states.get(def.id);
   const status = familyStatus(def, state, data.completed);
   const card = data.cards.get(def.id);
   const recall = recallOf(card);
   const { n, acc } = familyAccuracy(state);
   const playable = status === "unlocked" || status === "resting" || status === "mastered";
-  const quietBlocked = playable && def.mic === true && data.profile.quiet;
+  // A sung family with a listening half still runs in Quiet mode (its sung trials heard in the head); one that is only
+  // sung waits for the microphone.
+  const quiet = quietPracticeOf(def, data.profile.quiet);
+  const quietBlocked = playable && quiet === "waits";
   const chip = STATUS_CHIP[status];
   const compositeTitle = state?.compositeId ? (data.defs.get(state.compositeId)?.title ?? null) : null;
   const others = state?.compositeId
@@ -96,7 +112,8 @@ function FamilyCard({ def, data }: { def: FamilyDef; data: DrillData }) {
       </div>
       {status === "locked" && (
         <p className="flex items-center gap-1.5 text-sm text-text-2">
-          <Lock aria-hidden className="size-3.5" /> {lockedText(def, data.completed)}
+          <Lock aria-hidden className="size-3.5" />{" "}
+          {track !== undefined ? trackLockedText(def, track) : lockedText(def, data.completed)}
         </p>
       )}
       {status === "pending" && (
@@ -124,6 +141,11 @@ function FamilyCard({ def, data }: { def: FamilyDef; data: DrillData }) {
               data-testid={graduated ? "family-graduated" : "family-composite"}
             >
               {mix}
+            </p>
+          )}
+          {playable && quiet === "listening" && (
+            <p className="text-sm text-text-3" data-testid="family-quiet">
+              Quiet mode is on: its sung lines are heard in your head, and its listening trials run as usual.
             </p>
           )}
           {quietBlocked ? (
@@ -179,7 +201,8 @@ function PracticeHub() {
 }
 
 function Stages({ data }: { data: DrillData }) {
-  const groups = groupByStage(data.content.families, EAR_STAGES);
+  const split = familiesByTrack(data.content.families);
+  const groups = groupByStage(split.core, EAR_STAGES);
   if (groups.length === 0)
     return <EmptyState title="No drill families yet">Families open as lessons introduce them.</EmptyState>;
   const anyOpen = groups.some((g) =>
@@ -257,6 +280,71 @@ function Stages({ data }: { data: DrillData }) {
           </section>
         );
       })}
+      <Tracks data={data} families={split.tracks} />
     </div>
+  );
+}
+
+/** The advanced tracks' families, one group per track, each with the track's honest line. */
+function Tracks({ data, families }: { data: DrillData; families: Record<TrackKey, FamilyDef[]> }) {
+  const tracks = useTracks();
+  const keys = (["J", "R", "A"] as const).filter((k) => families[k].some((d) => !isComposite(d)));
+  if (keys.length === 0) return null;
+  const lineOf = (k: TrackKey): TrackLine | null => {
+    const t = tracks.data?.items.find((i) => i.trackId === k);
+    if (!t) return null;
+    // What the learner may start in the track now, as Today offers it (a side lesson, a lesson, its checkpoint or a
+    // capstone session); the server's note names only the next track LESSON, which may not be the next thing.
+    const n = t.nextSession;
+    const note = n
+      ? `Next: ${n.title.startsWith(n.mapItemId) ? n.title : `${n.mapItemId} ${n.title}`}.`
+      : trackNote(t);
+    return { status: t.status, note };
+  };
+  return (
+    <section aria-labelledby="tracks-heading" className="flex flex-col gap-6" data-testid="practice-tracks">
+      <div className="border-t border-border pt-6">
+        <h2 id="tracks-heading" className="text-h3">
+          The advanced tracks
+        </h2>
+        <p className="max-w-[70ch] text-sm text-text-2">
+          Optional, open from the U13 checkpoint, beside the core or after it. Each track's ear training opens
+          lesson by lesson, like the core's.
+        </p>
+      </div>
+      {keys.map((k) => {
+        const fams = families[k].filter((d) => !isComposite(d));
+        const status = (d: FamilyDef) => familyStatus(d, data.states.get(d.id), data.completed);
+        const open = fams.filter((d) => ["unlocked", "resting", "mastered"].includes(status(d))).length;
+        const mastered = fams.filter((d) => status(d) === "mastered").length;
+        const line = lineOf(k);
+        return (
+          <section key={k} aria-labelledby={`track-${k}`} data-testid={`track-${k}`}>
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+              <div>
+                <h3 id={`track-${k}`} className="font-sans text-lg font-semibold">
+                  {TRACK_TITLES[k]}
+                </h3>
+                <p className="text-sm text-text-2">{TRACK_EAR_LINES[k]}</p>
+                {line && (
+                  <p className="text-sm text-text-3" data-testid={`track-${k}-note`}>
+                    {line.note}
+                  </p>
+                )}
+              </div>
+              <span className="text-sm text-text-3" data-testid={`track-${k}-count`}>
+                {open} of {fams.length} open
+                {mastered > 0 ? ` · ${mastered} mastered` : ""}
+              </span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {fams.map((d) => (
+                <FamilyCard key={d.id} def={d} data={data} track={line} />
+              ))}
+            </div>
+          </section>
+        );
+      })}
+    </section>
   );
 }

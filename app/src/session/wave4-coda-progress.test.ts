@@ -55,6 +55,10 @@ describe("the Coda after a capstone release", () => {
     expect(releaseOf("X1", [track], d, since)).toBeNull();
     expect(releaseOf(null, [track], d, since)).toBeNull();
   });
+  test("AC1's first release puts both versions on the track at once: a first release, shown by version one", () => {
+    const d = detail([version(1, "2026-11-12T10:40:00.000Z"), version(2, "2026-11-12T10:40:00.000Z")]);
+    expect(releaseOf("C2", [track], d, since)).toMatchObject({ revision: false, version: { version: 1 } });
+  });
   test("what you used names the tools learned since the last track first, never the basics or sounds", () => {
     const order = syllabus.defaultOrder as readonly string[];
     const used = [

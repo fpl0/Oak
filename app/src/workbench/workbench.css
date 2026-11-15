@@ -287,7 +287,8 @@
 /* Lens lines: abcjs draws them in Helvetica, which has no sharp or flat sign (macOS then sets "F ♯ 5" with a
    full-width glyph). The UI face's fallback, system-ui, has compact ones; the app sets the same globally. */
 .oak-staff-host .abcjs-lyric,
-.oak-staff-host .abcjs-annotation {
+.oak-staff-host .abcjs-annotation,
+.oak-staff-host .abcjs-chord {
   font-family: var(--oak-font-ui, system-ui, -apple-system, "Segoe UI", "Segoe UI Symbol", sans-serif);
 }
 .oak-staff-host .oak-playing {
@@ -1374,4 +1375,219 @@ ol.oak-keyribbon {
 /* A fact over the roll gives way before it pushes out of the view: it shortens with an ellipsis. */
 .oak-view-head > .oak-roll-fact {
   flex-shrink: 1;
+}
+
+/* --- Wave 7: the advanced tracks' strips (clave, pulse lanes, density), the jazz row, register bands --------- */
+.oak-track-strip {
+  position: relative;
+  max-width: 100%;
+  overflow: hidden;
+  border-top: 1px solid var(--wb-border);
+  background: var(--wb-surface);
+}
+.oak-track-strip-gutter {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  padding-left: 4px;
+  color: var(--wb-text-2);
+  font-family: var(--wb-font-ui);
+  font-size: 10px;
+}
+.oak-track-strip-svg {
+  display: block;
+  max-width: 100%;
+}
+.oak-track-strip-label {
+  fill: var(--wb-text-2);
+  font-family: var(--wb-font-code);
+  font-size: 9px;
+}
+.oak-track-strip-caption {
+  margin: 0;
+  padding: 2px 4px 4px;
+  color: var(--wb-text-2);
+  font-size: 11px;
+}
+.oak-clave-stroke {
+  fill: var(--wb-accent);
+}
+.oak-clave-dot {
+  fill: var(--wb-text-3);
+}
+.oak-pulse-tick {
+  fill: var(--wb-blue);
+}
+.oak-pulse-meet {
+  fill: var(--wb-issue);
+}
+.oak-pulse-bar {
+  fill: var(--wb-text-3);
+}
+ul.oak-density-list,
+ul.oak-two-fives,
+ul.oak-jazz-cells {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-width: 100%;
+}
+.oak-density-span {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+  border: 1px solid var(--wb-border);
+  border-radius: 3px;
+  background: var(--wb-surface);
+}
+.oak-density-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--wb-accent);
+  opacity: 0.22;
+}
+.oak-density-text {
+  position: relative;
+  padding: 0 4px 2px;
+  color: var(--wb-text);
+  font-family: var(--wb-font-code);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.oak-jazz-row {
+  position: relative;
+  max-width: 100%;
+  overflow: hidden;
+  background: var(--wb-surface);
+}
+ul.oak-two-fives {
+  height: 18px;
+}
+.oak-two-five {
+  position: absolute;
+  top: 2px;
+  height: 14px;
+  padding: 0 4px;
+  border: 1px solid var(--wb-text-2);
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  color: var(--wb-text);
+  font-family: var(--wb-font-code);
+  font-size: 10px;
+  line-height: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.oak-two-five[data-resolves="0"] {
+  border-style: dashed;
+  color: var(--wb-text-2);
+}
+ul.oak-jazz-cells {
+  height: 18px;
+}
+.oak-jazz-cell {
+  position: absolute;
+  top: 1px;
+  height: 16px;
+  padding: 0 4px;
+  color: var(--wb-text-2);
+  font-family: var(--wb-font-code);
+  font-size: 10px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.oak-jazz-cell--sub {
+  color: var(--wb-issue);
+  font-weight: 600;
+}
+.oak-register-bands {
+  margin-top: 4px;
+  font-size: 11px;
+}
+.oak-register-bands svg {
+  display: block;
+  width: 100%;
+}
+.oak-register-role {
+  fill: var(--wb-text-3);
+  opacity: 0.35;
+}
+.oak-register-role--1,
+.oak-register-role--3 {
+  fill: var(--wb-accent);
+}
+.oak-register-part {
+  fill: var(--wb-blue);
+  opacity: 0.85;
+}
+.oak-register-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--wb-text-2);
+  font-family: var(--wb-font-code);
+  font-size: 10px;
+}
+.oak-register-legend b {
+  color: var(--wb-text);
+}
+.oak-register-note {
+  margin: 2px 0 0;
+  color: var(--wb-text-2);
+}
+.oak-register-title {
+  margin: 0 0 2px;
+  color: var(--wb-text-2);
+  font-size: 11px;
+}
+.oak-register-title b {
+  color: var(--wb-text);
+}
+.oak-register-role-label,
+.oak-register-part-label,
+.oak-register-axis {
+  font-family: var(--wb-font-code);
+  font-size: 9px;
+}
+.oak-register-role-label {
+  fill: var(--wb-text);
+}
+.oak-register-part-label {
+  fill: var(--wb-text);
+  font-weight: 600;
+}
+.oak-register-axis {
+  fill: var(--wb-text-2);
+}
+.oak-register-tick {
+  stroke: var(--wb-border);
+  stroke-dasharray: 2 2;
+}
+.oak-track-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin: 0;
+  padding: 3px 4px;
+  border-top: 1px solid var(--wb-border);
+  color: var(--wb-text-2);
+  font-size: 11px;
+}
+.oak-track-facts span {
+  white-space: nowrap;
 }

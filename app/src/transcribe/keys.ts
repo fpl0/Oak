@@ -34,7 +34,10 @@ export type TranscribeAction =
   | "swing"
   // Wave 6: the form map of a standard (L8) and of the learner's own recording.
   | "formCut"
-  | "formFocus";
+  | "formFocus"
+  // Wave 7: swung 16ths on own audio's grid, and the two-bar clave grid over any timeline.
+  | "swing16"
+  | "clave";
 
 export const TRANSCRIBE_KEYS: readonly { action: TranscribeAction; keys: string; description: string }[] = [
   { action: "play", keys: "Space", description: "Play or pause" },
@@ -82,6 +85,12 @@ export const TRANSCRIBE_KEYS: readonly { action: TranscribeAction; keys: string;
     description: "Form map: cut a section at the bar now playing (again: join it back)",
   },
   { action: "formFocus", keys: "Shift+X", description: "Form map: go to the form strip" },
+  { action: "swing16", keys: "G", description: "Your audio: swung 16ths on the bar grid, on or off" },
+  {
+    action: "clave",
+    keys: "K",
+    description: "The two-bar clave grid over the bars: son 3-2, son 2-3, rumba 3-2, rumba 2-3, off",
+  },
 ];
 
 export const TRANSCRIBE_KEY_GROUP = "Transcribe";

@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { toolbox } from "../../content/toolbox.ts";
 import { W6_TUNING } from "../../packages/strudel/e2e/wave6-fixtures.ts";
+import { W7_KNOWN_TUNING, W7_TUNING } from "../../packages/strudel/e2e/wave7-fixtures.ts";
 import {
   A1_CASES,
   BASS_TONE_CASES,
@@ -14,6 +15,7 @@ import {
   QUALITY_CASES,
   SOUND_CASES,
   W6_LESSON_CASES,
+  W7_LESSON_CASES,
 } from "../../packages/strudel/src/audibility/cases.ts";
 import { OAK_ALIASES, OAK_KITS } from "./pack.config.ts";
 
@@ -168,6 +170,61 @@ describe("Wave 6: U12–U17", () => {
       expect([sound, wave6.audibility.tuning[sound]?.length]).toEqual([sound, midis.length]);
     const measured = new Set(QUALITY_CASES.map((c) => c.id));
     expect(pitched.map((s) => `snd.${s}`).filter((id) => !measured.has(id))).toEqual([]);
+  });
+});
+
+describe("Wave 7: the advanced tracks", () => {
+  const wave7 = JSON.parse(readFileSync(join(ROOT, "packages/strudel/sound-wave7.json"), "utf8")) as {
+    audibility: {
+      lessons: { id?: string; audible: boolean; lesson: string; same: boolean }[];
+      tuning: Record<string, { midi: number; cents: number | null }[]>;
+    };
+  };
+  const unlockedIn = (re: RegExp) =>
+    toolbox.filter((t) => {
+      const at = Array.isArray(t.unlock.at) ? t.unlock.at : [t.unlock.at];
+      return at.some((s) => re.test(String(s)));
+    });
+  const TRACKS = /^(A1\.L0[5-7]|A2\.|J[1-5]\.|R[1-3]\.|JC[1-4]|RC[12]|AC[12])/;
+  const rows = unlockedIn(TRACKS).filter(
+    (t) => ["sound", "tool", "chord", "scale"].includes(t.kind) && !VISUAL.has(t.id),
+  );
+
+  test("every tool, chord, scale and sound the tracks unlock has a case and is proven audible", () => {
+    expect(rows.length).toBeGreaterThanOrEqual(40);
+    const cased = new Set([...CONTROL_CASES, ...SOUND_CASES].map((c) => c.id));
+    expect(rows.map((t) => t.id).filter((id) => !cased.has(id))).toEqual([]);
+    expect(rows.map((t) => t.id).filter((id) => table.audible[id] !== true)).toEqual([]);
+  });
+
+  test("every sound control A1.L05–L07 and A2 teach is heard in its lesson's loop; every silencer row is not", () => {
+    const taught = unlockedIn(/^(A1\.L0[5-7]|A2\.)/).filter((t) => t.group === "H" && !VISUAL.has(t.id));
+    expect(taught.length).toBeGreaterThanOrEqual(15);
+    const inLesson = new Set(W7_LESSON_CASES.map((c) => c.id).filter((id) => id !== ""));
+    expect(taught.map((t) => t.id).filter((id) => !inLesson.has(id))).toEqual([]);
+    const measured = wave7.audibility.lessons;
+    expect(measured.length).toBe(W7_LESSON_CASES.length);
+    for (const r of measured) expect([r.lesson, r.id, r.audible]).toEqual([r.lesson, r.id, !r.same]);
+    expect(measured.filter((r) => r.same).length).toBeGreaterThanOrEqual(5);
+  });
+
+  test("the tuning table covers every pitched sound the tracks unlock, at the pitches their lessons play", () => {
+    const pitched = rows
+      .filter((t) => t.kind === "sound" && t.group === "G" && !t.id.startsWith("snd.wave."))
+      .map((t) => t.id.replace(/^snd\./, ""));
+    const tuned = new Set([...Object.keys(W6_TUNING), ...Object.keys(W7_TUNING)]);
+    expect(pitched.filter((s) => !tuned.has(s))).toEqual([]);
+    for (const [sound, midis] of Object.entries(W7_TUNING)) {
+      const got = wave7.audibility.tuning[sound] ?? [];
+      expect([sound, got.length]).toEqual([sound, midis.length]);
+      for (const t of got) {
+        const known = W7_KNOWN_TUNING[sound]?.[t.midi];
+        const ok =
+          t.cents !== null &&
+          (known !== undefined ? Math.abs(t.cents - known) <= 0.5 : Math.abs(t.cents) <= 10);
+        expect([sound, t.midi, ok]).toEqual([sound, t.midi, true]);
+      }
+    }
   });
 });
 

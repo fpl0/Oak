@@ -63,6 +63,13 @@ const SUGGEST: Readonly<Record<string, string>> = {
   min: "m",
   mi: "m",
   min7: "m7",
+  // Wave 7 integration (build-author-J2b, J4a): the long spellings a jazz chart uses, which Strudel cannot voice.
+  mi7: "m7",
+  min9: "m9",
+  min11: "m11",
+  dom7: "7",
+  dom9: "9",
+  dom13: "13",
   sus4: "sus",
   sus2: "2",
   "+": "aug",

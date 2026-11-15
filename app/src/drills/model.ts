@@ -63,6 +63,20 @@ import {
   stageFCategoryLabel,
   stageFOptionLabel,
 } from "./wave6.ts";
+import {
+  laneTaps,
+  lessonWithTrack,
+  stageGCategoryLabel,
+  stageGOptionLabel,
+  stageGOptionsOf,
+  tapLanesOf,
+} from "./wave7.ts";
+
+/**
+ * A trial's response as the runner hands it to the grader: `@oak/drills`' own, plus (Wave 7) the voice of each tap of
+ * a two-lane take (0: F, 1: J; `@oak/audio`'s `TapEvent.voice`), so each hand is graded against its own pulse.
+ */
+export type DrillResponse = TrialResponse & { tapVoices?: (0 | 1)[] };
 
 // --- answer surfaces -----------------------------------------------------------------------------
 
@@ -147,7 +161,9 @@ const CATEGORY_WORDS: Record<string, string> = {
 /** A category as the level picker and the level news name it. */
 export function categoryLabel(id: string, generator?: string): string {
   const stageE = generator
-    ? (stageECategoryLabel(generator, id) ?? stageFCategoryLabel(generator, id))
+    ? (stageECategoryLabel(generator, id) ??
+      stageFCategoryLabel(generator, id) ??
+      stageGCategoryLabel(generator, id))
     : null;
   if (stageE) return stageE.charAt(0).toUpperCase() + stageE.slice(1);
   const own = CATEGORY_WORDS[id];
@@ -157,7 +173,9 @@ export function categoryLabel(id: string, generator?: string): string {
 
 export function optionLabel(id: string, generator?: string, options: readonly string[] = []): string {
   const own = generator
-    ? (stageEOptionLabel(generator, id, options) ?? stageFOptionLabel(generator, id))
+    ? (stageEOptionLabel(generator, id, options) ??
+      stageFOptionLabel(generator, id) ??
+      stageGOptionLabel(generator, id))
     : null;
   if (own) return own;
   // Degree categories ("deg.5", "deg.b6", "deg.s4") read as the learner's word for them, never as an ID.
@@ -194,6 +212,9 @@ function levelCategories(trial: Trial<unknown>, def: FamilyDef): string[] {
 
 /** Choice options: the trial's own `options`, else the categories of the level it was played at. */
 export function choiceOptionsOf(trial: Trial<unknown>, def: FamilyDef): string[] {
+  // Wave 7: an odd-grouping trial answers with the grouping alone, so its options are groupings of its meter.
+  const grouped = stageGOptionsOf(trial, def);
+  if (grouped) return grouped;
   const own = trial.params.options;
   if (Array.isArray(own) && own.every((o) => typeof o === "string")) return own as string[];
   const expected = (trial.expected as Answer).choice ?? [];
@@ -221,7 +242,8 @@ export function surfaceOf(
 ): Surface {
   const p = trial.params;
   const expected = trial.expected as Answer;
-  if (p.mode === "tap") return { kind: "tap", twoVoices: p.twoVoices === true };
+  // Wave 7: a two-lane take (one hand per pulse) taps with F and J.
+  if (p.mode === "tap") return { kind: "tap", twoVoices: p.twoVoices === true || tapLanesOf(trial) !== null };
   if (p.mode === "sing") return { kind: "sing" };
   const ui = typeof p.ui === "string" ? p.ui : null;
   // Form by ear (Wave 5): the sections labelled one by one on the form widget.
@@ -399,9 +421,27 @@ export function dictationSurface(
 export function gradeDrillTrial(
   family: DrillFamilyRuntime,
   trial: Trial,
-  response: TrialResponse,
+  response: DrillResponse,
   profile: LearnerProfile,
 ): DrillTrialResult {
+  // Wave 7: a two-lane take. The taps are split by hand (F, J) in the order of the trial's own `params.tapLanes` and
+  // graded by the family together (`response.lanes`: @oak/pitch `gradeLaneTaps`), which forgives only the offset both
+  // hands share; a hand that leans against the other is never forgiven (grading each lane alone would forgive it).
+  const lanes = response.taps && !response.skipped ? tapLanesOf(trial) : null;
+  if (lanes && response.taps) {
+    const taps = response.taps;
+    return gradeTrial(
+      family,
+      trial,
+      {
+        taps,
+        lanes: lanes.map((l) => laneTaps(taps, response.tapVoices, l.voice)),
+        rtMs: response.rtMs,
+        replays: response.replays,
+      },
+      profile,
+    ) as DrillTrialResult;
+  }
   // Wave 5: a bass line written as code or on the staff (octave-free), and section labels (form by ear).
   const text = response.answer?.text?.[0];
   const line = text !== undefined && isBassTrial(trial) ? bassLineTrialOf(trial) : null;
@@ -1200,8 +1240,9 @@ export function levelLine(def: FamilyDef, state: FamilyState | undefined): strin
   if (open > level) return `${head} · up to level ${open} for now`;
   // At the highest open level: say which lesson opens the next one.
   const lesson = nextLevelLesson(def, open + 1);
+  // A level that opens with a lesson of an advanced track says which track (Wave 7): "R1.L02 (Advanced Rhythm)".
   return lesson
-    ? `${head} · level ${open + 1} opens with ${lesson}`
+    ? `${head} · level ${open + 1} opens with ${lessonWithTrack(lesson)}`
     : `${head} · up to level ${open} for now`;
 }
 

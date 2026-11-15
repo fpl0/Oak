@@ -10,10 +10,13 @@ import type {
   SingMode,
   SingTolerance,
   SwingSpec,
+  VoicingShape,
 } from "@oak/content-kit";
 import type { PitchFrame, SungResult } from "@oak/pitch";
 import { createContext, type ReactNode, useContext } from "react";
 import type { WorkbenchModel } from "../workbench/model.ts";
+import type { ChordStyle } from "./jazz.ts";
+import type { Hit, LaneSetup } from "./rhythm7.ts";
 import type { SingNote } from "./sing.ts";
 
 /** Sound for the widgets: the app's one adapter by default (`app/src/lib/oak.ts`). */
@@ -29,6 +32,12 @@ export interface AnswerAudio {
    * trial hears. Optional: a host without it gets the piano through `playNote`.
    */
   reference?(kind: "tonic" | "cadence", tonicMidi: number, mode?: "major" | "minor"): void;
+  /**
+   * Wave 7: a short pattern of drum hits now (seconds from now), for the widgets that play what the learner set:
+   * the swing and lay-back sliders, a grouping's accents, a Euclidean ring, a clave. Optional: a host without it
+   * gets clicks through `click`.
+   */
+  hits?(hits: readonly Hit[]): void;
 }
 
 /** A tap take (contracts §8.4, ux §4.4). Targets are drawn only after an attempt (feedback not idle). */
@@ -65,6 +74,17 @@ export interface TapEnv {
   startAt?: number;
   /** Every finished take, with the clock time of bar 1, so the host can grade it (`tapReport`). */
   onTake?: (take: TapTake) => void;
+  /**
+   * Wave 7 (feature `tap.lanes`, R2.L04's 3 against 2): two lanes at once, one per hand, F taps the first and J
+   * the second (the tap input listens to those two keys; a lane's own `key` is shown, not bound). Each lane is
+   * drawn on its own row with its own targets after an attempt. The value stays one list of tap times; which
+   * lane each tap is on comes with the take (`TapTake.voices`: 0 = F, 1 = J), and the host splits and grades them
+   * with `splitLanes` and `lanesReport` (rhythm7.ts), whose marks are `lane:index`. Only the first two lanes are
+   * drawn. Wins over `twoVoices` and `targets`.
+   */
+  lanes?: readonly LaneSetup[];
+  /** Showing a stored two-lane take (`value` holds its taps): the lane of each tap, 0 for F and 1 for J. */
+  voices?: readonly (0 | 1)[];
 }
 
 /** The take a host grades: tap times and the clock time of bar 1 (`tapReport(taps, targetSeconds(…))`). */
@@ -171,6 +191,23 @@ export interface HarmonyEnv {
    * is named by its place in the chord ("B, the 3rd · F, the 7th"); nothing is named before.
    */
   guideChord?: string;
+  /**
+   * Wave 7 (features `keyboard.voicing`, `staff-expect.voicing`; J1.L05, J3.L01–L02): the chord a voicing is
+   * built for (`symbol`, code or lead-sheet spelling; one per written chord on a staff) and the shapes the step
+   * asks for. The keyboard and the staff say what was built ("D3 F3 C4: root, 3rd, 7th. A shell voicing of
+   * Dm7."): live with the VOICINGS lens on (`lenses.voicings`), else once the answer is checked.
+   */
+  voicing?: { symbol: string | readonly string[]; shape?: VoicingShape | readonly VoicingShape[] };
+  /**
+   * Wave 7 (`tb.feature.jazz-glyphs`, J1.L02): how chord symbols are printed back: lead sheet (default) or jazz
+   * glyphs (∆ – ø °). The jazz chord entry shows the other style beside it either way.
+   */
+  chordStyle?: ChordStyle;
+  /**
+   * Wave 7 (J2–J5): the numeral palette offers the jazz row (II7 VI7 III7, the tritone sub ♭II7, the backdoor
+   * iv7 ♭VII7, iiø7) and draws ii–V brackets over the learner's numerals.
+   */
+  jazz?: boolean;
 }
 
 /**
@@ -185,6 +222,34 @@ export interface KeyChangeEnv {
   to?: KeySpec | null;
   /** Plays the music from one bar (1-based): `P` on the focused bar. */
   play?: (bar: number) => void;
+}
+
+/**
+ * Wave 7: "what is this note over the chord" (J2.L03): the chord and the held melody note the tension pick is
+ * about, drawn above the options; `play` sounds them (the host's; else the widget plays a piano voicing).
+ */
+export interface TensionEnv {
+  chord: string;
+  note: string;
+  play?: () => void;
+}
+
+/** Wave 7: an A/B sound pick ("which is brighter"): the two cards' code (played through `audition`) or a player. */
+export interface CompareEnv {
+  a?: string;
+  b?: string;
+  play?: (card: "A" | "B") => void;
+}
+
+/**
+ * Wave 7: what a slider plays. `swing` and `layback` sliders play a two-bar groove at `bpm` by themselves; a
+ * `control` slider ("match the cutoff by ear") plays through the host: `play(value)` the learner's setting and
+ * `playTarget()` the sound to match.
+ */
+export interface SliderEnv {
+  bpm?: number;
+  play?: (value: number) => void;
+  playTarget?: () => void;
 }
 
 export interface AnswerEnv {
@@ -234,6 +299,14 @@ export interface AnswerEnv {
      */
     chordSymbols?: boolean;
     romanNumerals?: boolean;
+    /**
+     * Wave 7 track lenses (`useLenses().track.shown`, wave7.md §4.2) the answers read: VOICINGS names a keyboard
+     * or staff voicing while it is built; TENSIONS names each picked note's role over the chord; CLAVE draws
+     * the two-bar grid on a clave pick. Absent: off (each opens with its lesson).
+     */
+    voicings?: boolean;
+    tensions?: boolean;
+    clave?: boolean;
   };
   /** Wave 4: chords, numerals and slot strips. */
   harmony?: HarmonyEnv;
@@ -241,6 +314,17 @@ export interface AnswerEnv {
   slots?: { play?: (slot: number) => void };
   /** Wave 6: the key change a bar timeline or a pivot-chord pick is about. */
   keyChange?: KeyChangeEnv;
+  /** Wave 7: the chord and melody note of a tension pick. */
+  tension?: TensionEnv;
+  /** Wave 7: the A and B cards of a sound comparison. */
+  compare?: CompareEnv;
+  /** Wave 7: what a swing, lay-back or control slider plays. */
+  slider?: SliderEnv;
+  /**
+   * Wave 7: grouping, Euclid and clave playback: the tempo in the meter's own counting unit (an eighth in 7/8, a
+   * quarter in 4/4; default 120), and the sound of a Euclidean ring (default "rim").
+   */
+  rhythm?: { bpm?: number; sound?: string };
   /**
    * Wave 6: after a check, a "which mode" pick says the one changed note of the mode picked (or, revealed, of the
    * answer): "Mixolydian is major with one note changed: 7 becomes ♭7. From G: F♯ becomes F." (the tonic from
@@ -298,6 +382,20 @@ export const appAudio: AnswerAudio = {
       const oak = await getOak();
       const notes = typeof midi === "number" ? midi : [...midi];
       oak.playNote({ s: o.sound ?? "piano", note: notes, dur: o.dur ?? 0.6 });
+    });
+  },
+  hits(hits) {
+    void import("../lib/oak.ts").then(async ({ getOak }) => {
+      const oak = await getOak();
+      const end = hits.reduce((m, h) => Math.max(m, h.at), 0) + 0.3;
+      oak.playEvents(
+        {
+          events: hits.map((h) => ({ at: h.at, dur: 0.1, value: { s: h.s, gain: h.gain } })),
+          durationSec: end,
+          preload: [...new Set(hits.map((h) => h.s))],
+        },
+        { exclusive: false },
+      );
     });
   },
   click(at, accent = false) {

@@ -289,10 +289,12 @@ export const pitchFns = defineFns([
     tool: "tb.mode.duck",
     kind: "argument",
     signature: '.mode("duck")',
-    explanation: "Keeps the voicing out of the way of the anchor note: the chord ducks under the melody.",
+    explanation:
+      "Voices the chord at or below the anchor and leaves out the note equal to the anchor, so a chord under a melody note never doubles it. It does not remove the root: anchored on G4, Cmaj7 in `lefthand` plays B3 D4 E4 and drops the G4.",
     example: ex(
       110,
-      'chords: chord("<Dm7 G7 C^7 C^7>").dict("lefthand").anchor("c5").mode("duck").voicing().s("piano")',
+      'chords: chord("<Dm7 G7 C^7 C^7>").dict("lefthand").anchor("<f4 f4 e4 e4>").mode("duck").voicing().s("piano")',
+      'mel: note("<f4 f4 e4 e4>").s("vibes")',
     ),
   },
   {
@@ -301,7 +303,7 @@ export const pitchFns = defineFns([
     kind: "control",
     signature: ".offset(n)",
     explanation:
-      "Picks the next voicing up or down from the one .voicing() would choose: the A and B positions.",
+      "Picks the next voicing up (or, negative, down) from the one .voicing() would choose. In `lefthand` that moves between the two rootless positions: Cmaj7 plays B D E G (7th lowest, the B position) and with `.offset(1)` E G B D (3rd lowest, the A position).",
     example: ex(110, 'chords: chord("<Dm7 G7 C^7 C^7>").dict("lefthand").offset(1).voicing().s("piano")'),
   },
 ]);

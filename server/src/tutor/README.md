@@ -88,6 +88,16 @@ Bun.serve({ hostname: "127.0.0.1", port: 8787, fetch: root.fetch }); // c.env is
   review on that version. The contract routes must forward `albumTrackId`, `albumVersion` and
   `transcriptionVersion` in review bodies.
 
+- **Wave 7 adapters** (the advanced tracks): pass the track views to `reviewFactsFrom` through `W7FactsInput`
+  (review-facts-w7.ts) — `twoFiveView`, `voicingView` per chord track (with one symbol a bar from `harmonyView` as
+  `changes`), `walkingBassView`, `reharmView` (the original's changes and melody, `reharmMelodyGiven`),
+  `contrafactView` (the model's changes and head), `tensionView`, `feelView`, `claveView` and `claveAlignmentView`,
+  `registerClashView`, `levelsView`, `euclidView`, `polyrhythmView`, `densityView`; `wave7.music.test.ts`'s
+  `factsOf7` is the reference. For a two-version capstone (AC1) fill `ReviewSource.versions` (each version's code
+  and facts) and `versionsCompared` (`compareIdioms`). In `referenceAnswers`, push a grouping as `2+2+3`, a Euclid
+  answer as `(k,n)` or `(k,n,r)`, and a keyboard or staff voicing expectation as `voicing: <shape>` (each shape of a
+  list): the answer guard reads those (answer-guard-w7.ts).
+
 - **Store reviews** in `onReview`. **Attribution**: when a sketch version is saved from an applied
   card (`ConversationStore.card(id).applied`), set `tutor_assisted = 1` (contracts §10.7). Review
   `tryCode` has no card and no Apply route: the UI shows it preview-only before the first release.

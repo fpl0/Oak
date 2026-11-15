@@ -69,6 +69,8 @@ const TODAY: Record<string, { kind: SessionPlan["kind"]; id: string | null }> = 
   "two takes (d20)": { kind: "gym", id: "GYM.06" },
   "second tab (d21)": { kind: "lesson", id: "U12.L02" },
 };
+/** Points built with their warm-ups (as e2e seeds them): the ones whose checks read the reviews or the gym. */
+const WITH_PRACTICE = new Set(["core complete", "tracks open (after U13.CP)", "ladder L8", "after U12.L05"]);
 /** Points that answer 400 on content with no CF-T standard yet. */
 const NEEDS_CFT = new Set(["CF-T open (U15.L01 done)", "CF-T.S2 done", "core complete", "ladder L8"]);
 
@@ -177,8 +179,11 @@ describe("Wave 6 dev seeds (wave6.md §6)", () => {
       const h = await harness({ dev: true, content: full, now: NOW });
       try {
         await h.json("PUT", "/api/profile", { timezone: "UTC" });
+        // Built with the warm-ups as e2e builds them where a check reads the reviews; elsewhere without them (the
+        // New block, the unlocks, the capstones and the album do not depend on them), which halves the build.
         const r = await h.json<DevSeedResult & { error?: { message: string } }>("POST", "/api/dev/seed", {
           point,
+          ...(WITH_PRACTICE.has(point) ? {} : { practice: false }),
         });
         expect({ point, status: r.status, error: r.body.error?.message }).toEqual({
           point,
@@ -258,26 +263,36 @@ async function deepChecks(h: Harness, point: string, plan: SessionPlan): Promise
     case "tracks open (after U13.CP)": {
       const summary = lastSummary(h);
       expect((summary.gatesOpened ?? []).map((g) => g.gateId).sort()).toEqual(["J.main", "R.main"]);
-      expect(plan.tracks).toEqual({
-        open: ["J", "R"],
-        lessonsAuthored: false,
-        note: "The Jazz and Rhythm tracks are open. Their first lessons are still being written.",
-      });
+      // Wave 7: the first lessons of J and R are written (J1.L01, R1.L01, the Foundation exemplars). The core stays
+      // the New block and each open track is offered beside it (wave7.md §5.2); the map counts all 259 sessions.
+      const written = (id: string) => full.lessons.some((l) => l.id === id);
+      const first = { J: "J1.L01", R: "R1.L01" } as const;
       const tracks = await ok<Tracks>(h, "GET", "/api/tracks");
       for (const id of ["J", "R"] as const) {
         const t = tracks.items.find((x) => x.trackId === id);
-        expect({ id, status: t?.status, next: t?.next, note: t?.note }).toEqual({
+        const w = written(first[id]);
+        expect({ id, status: t?.status, next: t?.next ?? null }).toEqual({
           id,
           status: "open",
-          next: null,
-          note: "Open. Its first lessons are still being written.",
+          next: w ? first[id] : null,
         });
+        if (w) expect(t?.note).toMatch(new RegExp(`^Next: ${first[id].replace(".", "\\.")} `));
+        else expect(t?.note).toBe("Open. Its first lessons are still being written.");
         expect(t?.openedAt).not.toBeNull();
       }
       const p = await progress();
       expect(p.tracks?.find((t) => t.trackId === "J")?.status).toBe("open");
-      // The map counts the core alone until a track has lessons to count (contracts 1.6: 185 sessions).
-      expect(p.mapTotal).toBe(185);
+      if (written("J1.L01") && written("R1.L01")) {
+        expect(plan.tracks ?? null).toBeNull();
+        expect((plan.trackOffers ?? []).slice(0, 2).map((o) => o.next.mapItemId)).toEqual([
+          "J1.L01",
+          "R1.L01",
+        ]);
+        expect(p.mapTotal).toBe(259);
+      } else {
+        const unwritten: ("J" | "R")[] = (["J", "R"] as const).filter((t) => !written(first[t]));
+        expect(plan.tracks?.open as string[] | undefined).toEqual(unwritten);
+      }
       break;
     }
     case "after U14.L03": {
@@ -411,7 +426,16 @@ async function deepChecks(h: Harness, point: string, plan: SessionPlan): Promise
     }
     case "core complete": {
       expect(plan.core).toBe("complete");
-      expect(plan.tracks?.open).toEqual(["J", "R"]);
+      // Wave 7: with J1.L01 and R1.L01 written, the open tracks are offered (wave7.md §5.2), not named as unwritten.
+      const writtenFirst = ["J1.L01", "R1.L01"].every((id) => full.lessons.some((l) => l.id === id));
+      if (writtenFirst) {
+        expect(plan.tracks ?? null).toBeNull();
+        expect(plan.kind === "review" || plan.kind === "gym").toBe(true);
+        expect((plan.trackOffers ?? []).slice(0, 2).map((o) => o.next.mapItemId)).toEqual([
+          "J1.L01",
+          "R1.L01",
+        ]);
+      } else expect(plan.tracks?.open).toEqual(["J", "R"]);
       const summary = lastSummary(h);
       expect(summary.coreComplete?.stage).toBe("complete");
       const c = await ok<CoreCompletion>(h, "GET", "/api/course/completion");
@@ -431,11 +455,21 @@ async function deepChecks(h: Harness, point: string, plan: SessionPlan): Promise
       const p = await progress();
       expect(p.core).toBe("complete");
       expect(p.next).toBeNull();
-      // What is open: no track lesson is authored, so the tracks are last and cannot be started.
-      const kinds = c.open.map((o) => `${o.kind}:${o.available}`);
+      // What is open: the tracks whose first lesson is written lead (they can be started), then reviews, the gym
+      // and Studio.
+      const kinds = c.open.map((o) => `${o.kind}:${o.available}`).filter((k) => !k.startsWith("track"));
       expect(kinds.slice(0, 3)).toEqual(["review:true", "gym:true", "studio:true"]);
-      expect(c.open.filter((o) => o.kind === "track").every((o) => !o.available)).toBe(true);
-      expect(c.open.find((o) => o.id === "J")?.note).toBe("Open. Its first lessons are still being written.");
+      if (writtenFirst) {
+        expect(c.open.slice(0, 2).map((o) => [o.kind, o.id, o.available])).toEqual([
+          ["track", "J1.L01", true],
+          ["track", "R1.L01", true],
+        ]);
+      } else {
+        expect(c.open.filter((o) => o.kind === "track").every((o) => !o.available)).toBe(true);
+        expect(c.open.find((o) => o.id === "J")?.note).toBe(
+          "Open. Its first lessons are still being written.",
+        );
+      }
       break;
     }
     case "ladder L8": {

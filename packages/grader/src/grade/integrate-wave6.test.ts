@@ -235,6 +235,18 @@ mel: n("<[0 2 5 4] [5 4 2 0]>").scale("E4:dorian").s("piano")`;
     const r = await grade([rule({ rule: "bars", min: 16 })], { code: CODE });
     expect(r.diagnostics.map((d) => d.id)).toContain("harmony.key-mismatch");
   });
+  test("a brief with no key of its own (keyFree, JC1) never says the brief is in another key (W7 gate)", async () => {
+    const r = await gradeWith(
+      {
+        exercise: brief([rule({ rule: "bars", min: 16 })]),
+        response: { code: CODE },
+        ctx: { ...ctx(), keyFree: true },
+      },
+      deps,
+    );
+    expect(r.status).toBe("fail");
+    expect(r.diagnostics.map((d) => d.id)).not.toContain("harmony.key-mismatch");
+  });
 });
 
 describe("syncopation and tuplets on `*` read each line on its own (U13)", () => {

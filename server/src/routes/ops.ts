@@ -16,7 +16,8 @@ import type { Mounter } from "./define.ts";
 const DEFAULT_KEY: KeySpec = { tonic: "C", mode: "major" };
 
 function toExerciseResponse(r: Record<string, unknown>): ExerciseResponse {
-  if ("taps" in r || "sung" in r) throw badRequest("sung and tapped answers are graded in the browser");
+  if ("taps" in r || "lanes" in r || "sung" in r)
+    throw badRequest("sung and tapped answers are graded in the browser");
   if ("skipped" in r) throw badRequest("a skipped answer has nothing to grade");
   return r as ExerciseResponse;
 }

@@ -9,7 +9,7 @@ import { api } from "../../lib/api.ts";
 import { formatBytes, formatDate } from "../../lib/format.ts";
 import { usePageTitle } from "../../lib/nav.ts";
 import {
-  backupExportUrl,
+  downloadBackup,
   useBackupImport,
   useBackupInfo,
   useBootstrap,
@@ -41,6 +41,30 @@ import {
 } from "./-data/own-audio.ts";
 
 export const Route = createFileRoute("/settings/data")({ component: DataSettings });
+
+/** "Export backup": fetched with X-Oak and saved as a file (a plain link is refused by the server, §11.1 rule 4). */
+function ExportBackupButton({ withAudio }: { withAudio: boolean }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      variant="primary"
+      loading={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          const name = await downloadBackup(withAudio);
+          toast.success("Backup saved", name);
+        } catch (e) {
+          toast.error("The backup was not saved", e instanceof Error ? e.message : undefined);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      Export backup
+    </Button>
+  );
+}
 
 function DataSettings() {
   usePageTitle("Settings · Data");
@@ -107,9 +131,7 @@ function DataSettings() {
                 value={i.lastAutomatic ? formatDate(i.lastAutomatic) : "none yet"}
               />
               <div className="py-3">
-                <a href={backupExportUrl(withAudio)} download className={buttonClass("primary")}>
-                  Export backup
-                </a>
+                <ExportBackupButton withAudio={withAudio} />
               </div>
             </>
           )}

@@ -4,9 +4,11 @@
 import type {
   AnalysisSummary,
   Answer,
+  CapstoneDef,
   Exercise,
   KeySpec,
   MeterId,
+  SongDef,
   StepDef,
   TestCase,
 } from "@oak/content-kit";
@@ -17,12 +19,35 @@ import type { Repos } from "../db/repos/index.ts";
 import type { StoredTranscription } from "../db/repos/library.ts";
 import { checkSlots } from "../services/capstone-sessions.ts";
 import { checkKeyOf, checkOf, songChecks } from "../services/song-ladder.ts";
-import type { LessonSource, ReviewSource, ReviewTarget, StepSource, SubjectFacts } from "../tutor/domain.ts";
+import type {
+  LessonSource,
+  ReviewSource,
+  ReviewTarget,
+  ReviewVersion,
+  StepSource,
+  SubjectFacts,
+} from "../tutor/domain.ts";
 import type { LessonContextPort } from "../tutor/ports.ts";
 import type { CheckLike } from "../tutor/review-facts.ts";
 import { revisionCountFor } from "../tutor/reviews.ts";
 import type { SubjectRef } from "../tutor/types.ts";
-import type { ReviewFactsPort } from "./review-facts.ts";
+import type { ReviewFactsPort, ReviewW7Port } from "./review-facts.ts";
+import { songOfCapstone, type W7ViewPlan, w7PlanFor } from "./review-facts-w7.ts";
+
+/** One version of a two-version capstone (AC1) as the review reads it. */
+type VersionCode = { id: "a" | "b"; label: string; code: string };
+
+/** A reviewed piece before its facts: a capstone's (Wave 7: its plan's inputs and AC1's versions) or a transcription's. */
+interface CapstoneReviewSource {
+  source: ReviewSource;
+  key: KeySpec | null;
+  meter: MeterId | null;
+  target: ReviewTarget | null;
+  checks?: CheckLike[];
+  pickup?: boolean;
+  w7?: { def: CapstoneDef; song: SongDef | null };
+  versions?: VersionCode[];
+}
 
 /**
  * A step ID as the tool schema documents it (`U03.L02/S5`) or as the app sends it (`S5`): the local ID.
@@ -108,7 +133,16 @@ function answerTexts(
   // ("1 9 17 25"), the form the answer guard reads as a map's boundaries.
   const bars = (answer as { bars?: readonly number[] }).bars;
   if (bars !== undefined && bars.length > 0) out.push(bars.join(" "));
+  // Wave 7: a grouping ("2+2+3", the form the answer guard reads) and a Euclidean rhythm ("(3,8)", "(5,16,10)").
+  if (answer.grouping !== undefined && answer.grouping.length > 0) out.push(answer.grouping.join("+"));
+  if (answer.euclid !== undefined && answer.euclid.length >= 2) out.push(`(${answer.euclid.join(",")})`);
   return out;
+}
+
+/** Wave 7: a voicing a step grades (`keyboard.voicing`, a staff voicing), as "voicing: <shape>", one per shape. */
+function voicingTexts(shape: string | readonly string[] | undefined): string[] {
+  if (shape === undefined) return [];
+  return (typeof shape === "string" ? [shape] : [...shape]).map((x) => `voicing: ${x}`);
 }
 
 /**
@@ -169,8 +203,10 @@ export function referenceAnswers(ex: Exercise | undefined): string[] {
         const sig = signatureOf(e.key);
         const acc = sig.sharps.length > 0 ? sig.sharps : sig.flats;
         if (acc.length > 0) out.push(acc.join(" "));
-      } else if (e.e === "chords") out.push(e.symbols.join(" "));
-      else if ("solutions" in e.reference) out.push(...(e.reference as { solutions: string[] }).solutions);
+      } else if (e.e === "chords") {
+        out.push(e.symbols.join(" "));
+        out.push(...voicingTexts(e.voicing));
+      } else if ("solutions" in e.reference) out.push(...(e.reference as { solutions: string[] }).solutions);
       break;
     }
     case "dictation":
@@ -184,6 +220,19 @@ export function referenceAnswers(ex: Exercise | undefined): string[] {
           out.push(...answerTexts(pass.response.answer as Partial<Answer>));
       }
       break;
+    case "all":
+      // Wave 7 (R3.L03's quiz): a step of several parts withholds every part's answer.
+      for (const part of ex.parts) out.push(...referenceAnswers(part));
+      break;
+    case "keyboard": {
+      // A keyboard answer's notes as a MIDI list (the guard reads it as a set of pitch classes), and Wave 7's
+      // voicing shape the chord must be built in.
+      const e = ex.expect;
+      if (e.midi !== undefined && e.midi.length > 0) out.push(e.midi.join(" "));
+      if (e.sequence !== undefined && e.sequence.length > 0) out.push(e.sequence.join(" "));
+      out.push(...voicingTexts(e.voicing?.shape));
+      break;
+    }
     case "run-investigate":
       for (const q of ex.questions)
         if (q.q === "choice")
@@ -261,6 +310,8 @@ export class LessonContextAdapter implements LessonContextPort {
     private readonly repos: Repos,
     /** Wave 4: the reviewed piece's analysed facts (`ReviewSource.facts`); absent: the text analysis only. */
     private readonly facts?: ReviewFactsPort,
+    /** Wave 7: a song's melody (JC3, JC4) and two versions compared (AC1); absent: neither. */
+    private readonly w7?: ReviewW7Port,
   ) {}
 
   async lesson(lessonId: string): Promise<LessonSource | null> {
@@ -363,23 +414,48 @@ export class LessonContextAdapter implements LessonContextPort {
   }
 
   async review(ref: SubjectRef, target: ReviewTarget | null = null): Promise<ReviewSource | null> {
-    const source =
+    const source: CapstoneReviewSource | null =
       ref.subjectKind === "capstone"
         ? this.#capstoneReview(ref.subjectId, target?.kind === "album" ? target : null)
         : ref.subjectKind === "transcription"
           ? this.#transcriptionReview(ref.subjectId, target?.kind === "transcription" ? target.version : null)
           : null;
     if (source === null) return null;
+    // Wave 7: the track capstones' views, read from the capstone's own rubric, with the song it is on (JC3's model
+    // head, JC4's standard) evaluated once from its answer key.
+    let w7: W7ViewPlan | null = null;
+    if (ref.subjectKind === "capstone" && source.w7 !== undefined) {
+      const { def, song } = source.w7;
+      const melody = song !== null && this.w7 !== undefined ? await this.w7.songMelody(song) : null;
+      w7 = w7PlanFor(def, song, melody);
+    }
     // Wave 4: what Oak's analysis found in the reviewed code, so every comment can point at a real bar.
-    const facts =
+    const factsOf = (code: string) =>
       this.facts === undefined
-        ? null
-        : await this.facts(source.source.code, {
+        ? Promise.resolve(null)
+        : this.facts(code, {
             key: source.key,
             meter: source.meter,
             checks: source.checks ?? null,
             pickup: source.pickup === true,
+            ...(w7 === null ? {} : { w7 }),
           });
+    const facts = await factsOf(source.source.code);
+    // Wave 7 (AC1): both versions, each with its own facts, and what differs between them; the review is as long
+    // as the longer of the two.
+    const vs = source.versions ?? [];
+    if (vs.length >= 2) {
+      const versions: ReviewVersion[] = [];
+      for (const v of vs) versions.push({ ...v, facts: await factsOf(v.code) });
+      const [a, b] = vs as [VersionCode, VersionCode];
+      const versionsCompared =
+        this.w7 === undefined
+          ? null
+          : await this.w7.compare(a.code, b.code, { key: source.key, meter: source.meter });
+      const lengths = versions.map((v) => v.facts?.bars ?? 0);
+      const totalBars = Math.max(source.source.totalBars ?? 0, ...lengths) || source.source.totalBars;
+      return { ...source.source, totalBars, facts, target: source.target, versions, versionsCompared };
+    }
     return { ...source.source, facts, target: source.target };
   }
 
@@ -390,14 +466,7 @@ export class LessonContextAdapter implements LessonContextPort {
   #capstoneReview(
     id: string,
     target: { trackId: string; version: number } | null,
-  ): {
-    source: ReviewSource;
-    key: KeySpec | null;
-    meter: MeterId | null;
-    target: ReviewTarget | null;
-    checks?: CheckLike[];
-    pickup?: boolean;
-  } | null {
+  ): CapstoneReviewSource | null {
     const meta = this.content.capstoneMeta(id);
     const row = this.repos.capstones.get(id);
     if (meta === null || row === null) return null;
@@ -445,7 +514,41 @@ export class LessonContextAdapter implements LessonContextPort {
       meter: version.meter ?? def?.meter ?? null,
       target: reviewTarget,
       checks: this.#capstoneChecks(id),
+      ...(def === null
+        ? {}
+        : { w7: { def, song: songOfCapstone(def, sketch.tags, this.content.source.songs) } }),
+      ...this.#versionCodes(id, def, target),
     };
+  }
+
+  /**
+   * Wave 7 (AC1, `CapstoneDef.versions`): the code of each version, labelled as the brief labels it. A released
+   * track holds version one as album version 1 and version two as album version 2 (the capstone engineer's
+   * release); a draft reads the latest save of each version (`capstone_versions`). Fewer than two: none.
+   */
+  #versionCodes(
+    id: string,
+    def: CapstoneDef | null,
+    target: { trackId: string; version: number } | null,
+  ): { versions?: VersionCode[] } {
+    const defs = (def as { versions?: { id: string; label?: string }[] } | null)?.versions ?? [];
+    if (defs.length < 2) return {};
+    const out: VersionCode[] = [];
+    defs.forEach((d, i) => {
+      const vid = d.id === "a" || d.id === "b" ? d.id : null;
+      if (vid === null) return;
+      let code: string | null = null;
+      if (target !== null) {
+        const v = this.repos.album.version(target.trackId, i + 1);
+        if (v) code = this.repos.sketches.version(v.sketchId, v.sketchVersion)?.code ?? null;
+      }
+      if (code === null) {
+        const row = this.repos.capstoneVersions.of(id).find((r) => r.versionId === vid);
+        if (row) code = this.repos.sketches.version(row.sketchId, row.sketchVersion)?.code ?? null;
+      }
+      if (code !== null) out.push({ id: vid, label: d.label ?? `Version ${vid}`, code });
+    });
+    return out.length >= 2 ? { versions: out } : {};
   }
 
   /**

@@ -6,6 +6,7 @@ import { useBootstrap } from "../../lib/queries.ts";
 import { useUpdateProfile, useUpdateSetting } from "../../lib/settings.ts";
 import { Field, Section, Select, Switch } from "../../ui/kit/Field.tsx";
 import { QueryView } from "../../ui/kit/QueryState.tsx";
+import { TrackSettings } from "./-tracks/TrackSettings.tsx";
 
 export const Route = createFileRoute("/settings/learning")({ component: LearningSettings });
 
@@ -95,6 +96,7 @@ function LearningSettings() {
               )}
             </Field>
           </Section>
+          <TrackSettings />
         </div>
       )}
     </QueryView>

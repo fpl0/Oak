@@ -25,7 +25,10 @@ async function readManifest(): Promise<SoundManifest> {
 
 /** Same-origin shell files this page loaded (index, chunks, CSS, fonts), for the worker's shell cache. */
 export function shellUrls(): string[] {
-  const out = new Set<string>([new URL("/", location.origin).href]);
+  // The offline renderer's frame page too: an export works with the server unreachable (@oak/strudel/offline).
+  const out = new Set<string>(
+    ["/", "/offline-render.html"].map((path) => new URL(path, location.origin).href),
+  );
   const add = (u: string | null | undefined) => {
     if (!u) return;
     const url = new URL(u, location.href);

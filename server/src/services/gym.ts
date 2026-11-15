@@ -186,6 +186,8 @@ export class GymService {
     sessionId: string | null;
     kind: "ladder" | "own-audio";
     transcriptionId: string | null;
+    /** Wave 7: the source served after the core (`own:<id>`, `song:<id>` …); absent or null: none recorded. */
+    source?: string | null | undefined;
   }): GymSession {
     return tx(this.ctx.repos.db, () => {
       // One gym session per Oak session: a retried start (a reload, a second tab, a double click) is answered with
@@ -215,6 +217,7 @@ export class GymService {
         realism: body.kind === "ladder" ? this.d.ladder.realismFor(level, fallback) : null,
         transcriptionId: body.transcriptionId,
         at: this.time.iso(),
+        ...(body.source ? { source: body.source } : {}),
       });
     });
   }

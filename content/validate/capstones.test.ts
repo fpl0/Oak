@@ -80,7 +80,7 @@ test("gates of §2.4 and §4.3", () => {
 test("transcription capstones draw on the verified-later repertoire pools of §2.4", () => {
   const pool = (id: string) => capstones.find((c) => c.id === id)?.song ?? [];
   expect(pool("X1")).toEqual(["song.aura-lee", "song.red-river-valley"]);
-  expect(pool("X2")).toEqual(["song.st-louis-blues", "song.careless-love"]);
+  expect(pool("X2")).toEqual(["song.careless-love", "song.st-louis-blues"]);
   expect(pool("CF-T")).toEqual(["song.five-foot-two", "song.aint-she-sweet", "song.bye-bye-blackbird"]);
   for (const id of ["X1", "X2", "CF-T"]) for (const s of pool(id)) expect(songById.has(s)).toBe(true);
   expect(pool("X1")).not.toContain("song.amazing-grace");

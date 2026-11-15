@@ -11,16 +11,24 @@ import "./cover.css";
 import { useCapstoneContent } from "../capstone/content.ts";
 import { FLAVOUR_LABEL, formatDate, formatDuration } from "../lib/format.ts";
 import { usePageTitle } from "../lib/nav.ts";
-import { albumAudioUrl, apiQuery, useAlbum, useCoreCompletion, useCourseProgress } from "../lib/queries.ts";
+import {
+  albumAudioUrl,
+  apiQuery,
+  useAlbum,
+  useCoreCompletion,
+  useCourseProgress,
+  useWholeCourse,
+} from "../lib/queries.ts";
 import { AlbumCover } from "../ui/AlbumCover.tsx";
 import { Button, buttonClass, IconButton } from "../ui/kit/Button.tsx";
 import { Chip, Page, Skeleton } from "../ui/kit/basics.tsx";
 import { ErrorState } from "../ui/kit/QueryState.tsx";
 import { albumSides, audioFileName, runtime, type Slot, sideARecord } from "./model.ts";
 import { useCoverMusic } from "./music.ts";
-import { pauseOtherAudio, SideARecord } from "./SideARecord.tsx";
+import { pauseOtherAudio, SideARecord, SideRecord } from "./SideARecord.tsx";
 import { ALBUM_TITLE_MAX, cleanAlbumTitle, DEFAULT_ALBUM_TITLE, useAlbumTitle } from "./title.ts";
 import { Vinyl } from "./Vinyl.tsx";
+import { CourseCompleteHeading, PlayEverything, useWholeRecord } from "./WholeRecord.tsx";
 
 interface Playing {
   trackId: string;
@@ -33,6 +41,8 @@ export function AlbumPage() {
   const content = useCapstoneContent();
   const progress = useCourseProgress();
   const completion = useCoreCompletion();
+  const wholeCourse = useWholeCourse();
+  const whole = useWholeRecord();
   const tracks = album.data?.tracks ?? [];
   const details = useQueries({
     queries: tracks.map((t) => apiQuery("album.track", { params: { id: t.id } })),
@@ -104,6 +114,10 @@ export function AlbumPage() {
   // Side A finished (every core track released): the album's own page is the record (content/specs/END.md).
   const finished = sideARecord(tracks, detailOf, content.data?.capstones ?? []).complete;
   const finishedAt = completion.data?.stage === "complete" ? completion.data.completedAt : null;
+  // Wave 7: Side B (the track capstones) beside Side A, and the whole course complete (session 259).
+  const sideB = tracks.some((t) => t.side === "B");
+  const courseComplete =
+    wholeCourse.data?.stage === "complete" || (whole.record !== null && whole.record.complete);
 
   return (
     <Page>
@@ -126,14 +140,31 @@ export function AlbumPage() {
         <header className="mb-10" data-testid="album-finished">
           <p className="text-sm tracking-[0.2em] text-text-3 uppercase">Album</p>
           <AlbumTitleHeading />
-          <p className="mt-1 max-w-[70ch] text-text-2" data-testid="album-meta">
-            Side A is complete: {tracks.filter((t) => t.side === "A").length} tracks of your own, in the order
-            you made them, the single last.
-            {finishedAt ? ` Finished on ${formatDate(finishedAt)}.` : ""}
-          </p>
+          {courseComplete && whole.record ? (
+            <div className="mt-1" data-testid="album-meta">
+              <CourseCompleteHeading whole={wholeCourse.data ?? null} record={whole.record} />
+            </div>
+          ) : (
+            <p className="mt-1 max-w-[70ch] text-text-2" data-testid="album-meta">
+              Side A is complete: {tracks.filter((t) => t.side === "A").length} tracks of your own, in the
+              order you made them, the single last.
+              {finishedAt ? ` Finished on ${formatDate(finishedAt)}.` : ""}
+              {sideB ? " Side B grows with the tracks you take on." : ""}
+            </p>
+          )}
+          {sideB && (
+            <div className="mt-4">
+              <PlayEverything />
+            </div>
+          )}
           <div className="mt-6 rounded-card border border-border bg-surface p-5 shadow-card">
             <SideARecord />
           </div>
+          {sideB && (
+            <div className="mt-6 rounded-card border border-border bg-surface p-5 shadow-card">
+              <SideRecord side="B" />
+            </div>
+          )}
         </header>
       ) : (
         <header className="mb-10 grid items-center gap-8 md:grid-cols-[minmax(0,440px)_1fr]">

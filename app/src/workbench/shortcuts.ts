@@ -37,6 +37,10 @@ export const WORKBENCH_LENS_SHORTCUTS: readonly (readonly [string, string])[] = 
   ["Shift+I", "Guide tones (3rds and 7ths, and their line) on / off"],
   ["Shift+J", "Key ribbon (the key along the piece) on / off"],
   ["Shift+V", "Beat grid (counts, triplets, pushes) on / off"],
+  // Wave 7: the advanced tracks' lenses with a key of their own (the other five: the lens bar and the palette).
+  ["Shift+X", "Tensions (9, 11, 13 against each chord) on / off"],
+  ["Shift+Q", "Chord-scales under the chord band on / off"],
+  ["Shift+D", "Density of each section on / off"],
 ];
 
 /**

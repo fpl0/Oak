@@ -3,7 +3,7 @@
 // block), the strict check an imported version must pass before it runs, liner flags, version labels, the
 // tree-ring cover and the export file. No DOM, no network: tested in model.test.ts.
 
-import type { Sketch, SketchVersion, SketchVersionCreate } from "@oak/api";
+import type { Sketch, SketchVersion, SketchVersionCreate, TrackLensId } from "@oak/api";
 import type {
   BandDef,
   FlavourId,
@@ -495,11 +495,29 @@ export function studioModes(
   return current && !out.includes(current) ? [...out, current] : out;
 }
 
-/** The meters a sketch can be set to: 12/8 joins 6/8 once the compound meters are taught (U13.L04). */
+/** The odd meters `tb.meter.odd` opens (R2.L01: 5/4 written, 7/8 heard; R2.L02: 7/8 and 9/8 as 2+2+2+3). */
+export const ODD_METERS: readonly MeterId[] = ["5/4", "5/8", "7/8", "9/8i"];
+
+/**
+ * The meters a sketch can be set to: 12/8 joins 6/8 once the compound meters are taught (U13.L04), the odd meters
+ * once R2.L01 opens their tempo lines (`tb.meter.odd`). A meter the sketch already has stays selectable.
+ */
 export function studioMeters(unlocked: ReadonlySet<string>, current?: MeterId | null): MeterId[] {
   const out: MeterId[] = [...STUDIO_METERS];
   if (unlocked.has("tb.meter.compound") || current === "12/8") out.push("12/8");
+  if (unlocked.has("tb.meter.odd")) out.push(...ODD_METERS);
   return current && !out.includes(current) ? [...out, current] : out;
+}
+
+/** How the meter menu names a meter: an odd meter with its grouping ("7/8 (2+2+3)", "9/8 (2+2+2+3)"). */
+export function meterLabel(m: MeterId): string {
+  const groups: Partial<Record<MeterId, string>> = {
+    "5/4": "5/4 (3+2)",
+    "5/8": "5/8 (2+3)",
+    "7/8": "7/8 (2+2+3)",
+    "9/8i": "9/8 (2+2+2+3)",
+  };
+  return groups[m] ?? m;
 }
 
 /** What a sketch does that the Wave 6 lenses can show (read from its analysed model). */
@@ -570,4 +588,104 @@ export function musicLensTips(facts: SketchMusicFacts, unlocked: ReadonlySet<str
   )
     out.push("Shift+V shows the beat grid: the counts over the roll, and each push against its beat.");
   return out;
+}
+
+// --- Wave 7: the advanced tracks' lenses (docs/design/wave7.md §4.2) -------------------------------------------
+
+/** What a sketch does that each Wave 7 lens can show (read from its analysed model's `track`). */
+export type SketchTrackFacts = Record<TrackLensId, boolean>;
+
+export const NO_TRACK_FACTS: SketchTrackFacts = {
+  tensions: false,
+  voicings: false,
+  chordScales: false,
+  clave: false,
+  polyLanes: false,
+  microtiming: false,
+  registers: false,
+  density: false,
+};
+
+/** The facts of an analysed sketch (`WorkbenchModel.track` and its chords). */
+export function trackFactsOf(
+  track:
+    | {
+        tensions: { size: number };
+        voicings: readonly unknown[];
+        regions: readonly { scale: string | null; jazz: string }[];
+        clave: unknown;
+        poly: unknown;
+        micro: { marks: { size: number } };
+        registers: { parts: readonly unknown[]; clashes: readonly unknown[] } | null;
+        density: readonly unknown[] | null;
+      }
+    | null
+    | undefined,
+): SketchTrackFacts {
+  if (!track) return NO_TRACK_FACTS;
+  return {
+    tensions: track.tensions.size > 0,
+    voicings: track.voicings.length > 0,
+    // Changes to read scales over: two chords or more, each with a scale.
+    chordScales:
+      track.regions.some((r) => r.scale !== null) && new Set(track.regions.map((r) => r.jazz)).size >= 2,
+    clave: track.clave !== null,
+    polyLanes: track.poly !== null,
+    microtiming: track.micro.marks.size > 0,
+    // Worth a look when parts crowd each other low down.
+    registers: (track.registers?.parts.length ?? 0) >= 2 && (track.registers?.clashes.length ?? 0) > 0,
+    density: track.density !== null,
+  };
+}
+
+export const sameTrackFacts = (a: SketchTrackFacts, b: SketchTrackFacts): boolean =>
+  (Object.keys(a) as TrackLensId[]).every((k) => a[k] === b[k]);
+
+/** What each lens would show, as a hint says it before its lesson. */
+const TRACK_LENS_WHAT: Readonly<Record<TrackLensId, string>> = {
+  tensions: "Tensions: the 9, 11 and 13 your tune plays over each chord",
+  voicings: "Voicings: shell, rootless or drop-2 over each chord you voice by hand",
+  chordScales: "Chord-scales: a common scale for each chord",
+  clave: "The clave's two-bar grid behind the roll, its direction named",
+  polyLanes: "Pulse lanes for the cross-rhythm",
+  microtiming: "Microtiming: how far each note sits from the grid, in milliseconds",
+  registers: "Register bands and each part's range on the spectrum",
+  density: "The density of each section",
+};
+
+/** How to reach a lens the sketch can already use. */
+const TRACK_LENS_TIP: Readonly<Record<TrackLensId, string>> = {
+  tensions: "Shift+X names the tensions of your tune over each chord.",
+  voicings: "The Voicings switch labels each chord you voice by hand: shell, rootless A or B, drop-2.",
+  chordScales: "Shift+Q writes a common chord-scale under each chord.",
+  clave: "The Clave switch draws the clave's grid behind the roll.",
+  polyLanes: "The Pulse lanes switch draws a lane for each pulse.",
+  microtiming: "The Microtiming switch shows how far each note sits from the grid, in milliseconds.",
+  registers: "With the spectrum open (Shift+Y), the Registers switch shows where each part sits.",
+  density: "Shift+D shows how busy each section is.",
+};
+
+/**
+ * Wave 7: the lenses a sketch could use, not open yet: a hint with the lesson that opens each (hint, never a block;
+ * the sketch plays as it is). Opened lenses give a one-line tip instead (`trackLensTips`).
+ */
+export function trackLensHints(
+  facts: SketchTrackFacts,
+  open: Readonly<Record<TrackLensId, boolean>>,
+  lessonOf: (id: TrackLensId) => string | null,
+): HarmonyViewHint[] {
+  return (Object.keys(facts) as TrackLensId[]).flatMap((id) => {
+    if (!facts[id] || open[id]) return [];
+    const at = lessonOf(id);
+    return at ? [{ id: `lens.${id}`, what: TRACK_LENS_WHAT[id], at }] : [];
+  });
+}
+
+export function trackLensTips(
+  facts: SketchTrackFacts,
+  open: Readonly<Record<TrackLensId, boolean>>,
+): string[] {
+  return (Object.keys(facts) as TrackLensId[]).flatMap((id) =>
+    facts[id] && open[id] ? [TRACK_LENS_TIP[id]] : [],
+  );
 }

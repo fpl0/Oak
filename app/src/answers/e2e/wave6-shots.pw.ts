@@ -76,9 +76,11 @@ for (const [group, ids] of Object.entries(GROUPS)) {
 
 test("every Wave 6 example is in one of the walks above", () => {
   const first = FIXTURE_IDS.findIndex(([id]) => id === "staff-rhythm");
+  // Wave 7's examples follow from "jazz-chord" on; wave7.pw.ts walks them.
+  const last = FIXTURE_IDS.findIndex(([id]) => id === "jazz-chord");
   const walked = new Set(Object.values(GROUPS).flat());
   expect(
-    FIXTURE_IDS.slice(first)
+    FIXTURE_IDS.slice(first, last < 0 ? undefined : last)
       .map(([id]) => id)
       .filter((id) => !walked.has(id)),
   ).toEqual([]);

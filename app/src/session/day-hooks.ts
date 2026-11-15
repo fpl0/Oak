@@ -6,6 +6,7 @@ import type { Bootstrap, CapstoneGate, CoreCompletion, SessionPlan } from "@oak/
 import { useQuery } from "@tanstack/react-query";
 import { useCapstoneContent } from "../capstone/content.ts";
 import { useContent } from "../lib/content.ts";
+import { lessonTitles } from "../lib/content-model.ts";
 import {
   apiQuery,
   useCapstoneGate,
@@ -199,7 +200,26 @@ export function useTrackRows(): TrackRow[] {
   const course = useCourseProgress();
   const content = useContent();
   if (!course.data) return [];
-  if (course.data.tracks && course.data.tracks.length > 0) return trackRows(course.data.tracks);
+  const titles = lessonTitles(content.data?.syllabus ?? null);
+  const name = (id: string) => titles.get(id) ?? id;
+  if (course.data.tracks && course.data.tracks.length > 0) return trackRows(course.data.tracks, name);
   const authored = authoredUnits((content.data?.lessons ?? []).map((l) => l.id as string));
-  return trackRows(deriveTracks(course.data, authored));
+  return trackRows(deriveTracks(course.data, authored), name);
+}
+
+// --- Wave 7 ---------------------------------------------------------------------------------------------------
+
+/**
+ * `GET /course/whole` (wave7.md §5.8), asked only once the course is complete (`SessionPlan.course`,
+ * `CourseProgress.course`): before that every surface reads what it needs from the plan and the tracks, and a server
+ * that has not built the endpoint (501) is never asked.
+ */
+export function useWholeCourseWhen(
+  plan: (Partial<Pick<SessionPlan, "course">> & { core?: string | undefined }) | null,
+  always = false,
+) {
+  return useQuery({
+    ...apiQuery("course.whole"),
+    enabled: always || plan?.course === "complete",
+  });
 }

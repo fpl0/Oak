@@ -10,6 +10,9 @@ import {
   NEUTRAL,
   parseDegree,
   type ThemeName,
+  TREE_COLOURS,
+  TREE_LINE_SCALE,
+  TREE_LINES,
 } from "./palette.ts";
 import { DEFAULT_PREFS, resolveReducedMotion, resolveTheme, sanitizePrefs } from "./prefs.ts";
 
@@ -186,5 +189,58 @@ describe("UI preferences", () => {
     expect(resolveReducedMotion("system", true)).toBe(true);
     expect(resolveReducedMotion("off", true)).toBe(false);
     expect(resolveReducedMotion("on", false)).toBe(true);
+  });
+});
+
+describe("the illustrated Oak's colours and lines come from the tokens (Wave 7)", () => {
+  /** Every `--oak-*` of a theme's block, with `var(--oak-x)` resolved inside the same block. */
+  function resolved(theme: ThemeName): Record<string, string> {
+    const css = readFileSync(join(import.meta.dir, "tokens.css"), "utf8");
+    const block =
+      theme === "paper"
+        ? /:root,\s*:root\[data-theme="paper"\]\s*\{([^}]*)\}/.exec(css)?.[1]
+        : /:root\[data-theme="bark"\]\s*\{([^}]*)\}/.exec(css)?.[1];
+    const raw: Record<string, string> = {};
+    for (const m of (block ?? "").matchAll(/--oak-([\w-]+):\s*([^;]+);/g))
+      raw[m[1] as string] = (m[2] as string).trim();
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      const ref = /^var\(--oak-([\w-]+)\)$/.exec(v)?.[1];
+      out[k] = (ref ? raw[ref] : v)?.toLowerCase() ?? "";
+    }
+    return out;
+  }
+  for (const theme of ["paper", "bark"] as const) {
+    test(`${theme}: TREE_COLOURS equals tokens.css, and every leaf holds 3:1 on the tree's paper and ground`, () => {
+      const t = resolved(theme);
+      const c = TREE_COLOURS[theme];
+      expect({
+        bg: t["tree-bg"],
+        ground: t["tree-ground"],
+        wood: t["tree-wood"],
+        grain: t["tree-grain"],
+        ink: t["tree-ink"],
+        accent: t.accent,
+        issue: t.issue,
+        acorn: t["tree-acorn"],
+        leaf: {
+          introduced: t["leaf-introduced"],
+          practising: t["leaf-practising"],
+          mastered: t["leaf-mastered"],
+        },
+      }).toEqual(c);
+      // The tree's shared meanings are the chrome's own tokens.
+      expect(c.bg).toBe(t.surface as string);
+      expect(c.ink).toBe(t["text-2"] as string);
+      for (const fill of [...Object.values(c.leaf), c.acorn, c.wood, c.ink, c.accent, c.issue])
+        for (const under of [c.bg, c.ground])
+          expect({ fill, under, ok: contrast(fill, under) >= 3 }).toEqual({ fill, under, ok: true });
+    });
+  }
+  test("one scale of line weights, the same as tokens.css", () => {
+    const css = readFileSync(join(import.meta.dir, "tokens.css"), "utf8");
+    for (const [name, w] of Object.entries(TREE_LINE_SCALE))
+      expect(new RegExp(`--oak-tree-line-${name}:\\s*${w};`).test(css)).toBe(true);
+    for (const w of Object.values(TREE_LINES)) expect(Object.values(TREE_LINE_SCALE)).toContain(w);
   });
 });

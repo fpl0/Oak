@@ -114,6 +114,8 @@ export const useSessionEnd = () =>
     // Wave 6: the session that ends may have met a track gate or completed the core.
     "tracks.list",
     "course.completion",
+    // Wave 7: or completed the whole course.
+    "course.whole",
   ]);
 
 // --- lessons, steps, checkpoints, capstones, gym ----------------------------------------------------
@@ -263,6 +265,34 @@ export const useQaReport = () => useApiMutation("qa.report", ["dev.qa"]);
 export const useBackupInfo = () => useQuery(apiQuery("backup.info"));
 export const backupExportUrl = (withAudio: boolean) =>
   apiUrl("backup.export", { query: { audio: withAudio ? "1" : "0" } });
+
+/** The backup's file name from the server's `content-disposition`, or a dated fallback. */
+export function backupFileName(disposition: string | null, now = new Date()): string {
+  const m = /filename="([^"]+)"/.exec(disposition ?? "");
+  return m?.[1] ?? `oak-${now.toISOString().slice(0, 10)}.oakbackup`;
+}
+
+/**
+ * Downloads the backup (W7 gate; contracts §11.1 rule 4): a plain `<a href download>` is a navigation, which
+ * carries no `X-Oak` header, so the server refuses it with 403. The export is fetched through the client
+ * (X-Oak set) and handed to the browser as a Blob.
+ */
+export async function downloadBackup(withAudio: boolean): Promise<string> {
+  const res = (await callApi("backup.export", {
+    query: { audio: withAudio ? "1" : "0" },
+  })) as unknown as Response;
+  const blob = await res.blob();
+  const name = backupFileName(res.headers.get("content-disposition"));
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return name;
+}
 export const useBackupImport = () =>
   useDestructiveMutation("backup.import", ["bootstrap", "profile.get", "lessons.progress", "sketches.list"]);
 
@@ -426,3 +456,25 @@ export function albumTakeUrl(trackId: string, version: number, take?: number): s
     ...(take === undefined ? {} : { query: { take: String(take) } }),
   });
 }
+
+// --- Wave 7 additions (docs/design/wave7.md §5) -------------------------------------------------------
+// Until the server engineer builds them these answer 501 (`OakApiError.code === "not_implemented"`, never
+// retried); a surface shows its own "not built yet" copy through `ErrorState`. The planner's real next session
+// rides on `SessionSummary.next` (carry f6) and the plan's track offers on `SessionPlan.trackOffers`: no new hook.
+
+/** The learner's choice between the core and the tracks (`core` by default, contracts §2.6). */
+export const useTrackFocus = () => useQuery(apiQuery("tracks.focus"));
+/** Choose where the New block comes from; Today, the tracks and the plan follow. */
+export const useSetTrackFocus = () =>
+  useApiMutation("tracks.setFocus", ["tracks.focus", "tracks.list", "session.today", "lessons.progress"]);
+/** The whole course (259 sessions): its stage, the tracks, both sides of the album, what stays open after it. */
+export const useWholeCourse = () => useQuery(apiQuery("course.whole"));
+/**
+ * Exactly what a released album version plays, for "Export" (carry f2): the capstone surface renders it with
+ * `renderPiece` (`@oak/strudel/offline`) and offers the WAV as a download. Fetched on demand (`enabled`).
+ */
+export const useAlbumSource = (trackId: string | null, version: number | null) =>
+  useQuery({
+    ...apiQuery("album.source", { params: { id: trackId ?? "none", v: String(version ?? 1) } }),
+    enabled: trackId !== null && version !== null,
+  });

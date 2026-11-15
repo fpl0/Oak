@@ -15,7 +15,13 @@ import type {
   SongDef,
 } from "@oak/api";
 import type { ExerciseOf } from "@oak/content-kit";
-import { type FormMapResult, type GradeRequest, gradeFormMap, songFormOf } from "@oak/grader";
+import {
+  type FormMapResult,
+  type GradeRequest,
+  gradeFormMap,
+  type SongMelodyNote,
+  songFormOf,
+} from "@oak/grader";
 import { type FormMap, formMapAnswer } from "../../transcribe/form-map.ts";
 import { standardStarter } from "../../transcribe/standard.ts";
 import { type LocalCheck, type SettledChecks, songGivenFromDef, transcribeStarter } from "./phrases.ts";
@@ -187,6 +193,11 @@ export function sessionRubricRequest(o: {
   song: Pick<SongDef, "answerKey" | "key" | "meter" | "bpm" | "swing" | "pickup">;
   code: string;
   lint: GradeRequest["ctx"]["lint"];
+  /**
+   * Carry f4: the song's own melody (`songMelodyOf`), so a rule that keeps the tune (`song-melody-kept`) compares
+   * the arrangement's melody with the song's, not only its chords.
+   */
+  songMelody?: readonly SongMelodyNote[] | null;
 }): GradeRequest {
   const exercise = {
     kind: "compose-brief",
@@ -216,6 +227,7 @@ export function sessionRubricRequest(o: {
       ...(o.song.swing ? { swing: o.song.swing } : {}),
       ...(o.song.pickup ? { pickup: o.song.pickup } : {}),
       ...(songForm ? { songForm } : {}),
+      ...(o.songMelody && o.songMelody.length > 0 ? { songMelody: o.songMelody } : {}),
       params: {},
       attemptNo: 1,
       firstAttempt: true,

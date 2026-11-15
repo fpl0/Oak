@@ -383,3 +383,91 @@ test("production (Wave 6): a U15 session, then the finished album of twelve trac
   await context.setOffline(false);
   await context.close();
 });
+
+test("production (Wave 7): a jazz session, the album's Side B and an Export rendered offline, each reloaded offline", async ({
+  browser,
+  request,
+}) => {
+  test.setTimeout(240_000);
+  const up = await fetch(`${PROD_URL}/api/health`, { headers: { "X-Oak": "1" } }).catch(() => null);
+  test.skip(up === null, `no production server on ${PROD_URL}`);
+  const j3l02 = (await import("../../content/advanced/J3/L02/lesson.ts")).default;
+
+  // A jazz learner (J3.L01 done yesterday): today's session is J3.L02, Drop-2 & Spread.
+  await importSeed(request, "J3.L02 next");
+  const context = await browser.newContext({ baseURL: PROD_URL, viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  const w = watch(page);
+  await page.goto("/");
+  const today = page.getByTestId("today-card");
+  await expect(today).toBeVisible({ timeout: 30_000 });
+  await expect(today).toContainText(j3l02.title);
+  await page.getByTestId("start-session").click();
+  await expect(page).toHaveURL(/\/session\/?$/);
+  await expect(page.getByTestId("warmup").or(page.getByTestId("lesson-step")).first()).toBeVisible({
+    timeout: 60_000,
+  });
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => (await navigator.serviceWorker.getRegistration())?.active?.scriptURL ?? ""),
+      { timeout: 30_000 },
+    )
+    .toMatch(/\/sw\.js/);
+  await page.reload();
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 30_000 });
+  // The shell is warmed with the offline renderer's document (Export renders in a frame of it).
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          async () => !!(await (await caches.open("oak-shell-v1")).match("/offline-render.html")),
+        ),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+  expectClean(w);
+  await context.setOffline(true);
+  w.problems.length = 0;
+  await page.reload();
+  await expect(page.locator("#main")).toBeVisible({ timeout: 30_000 });
+  await context.setOffline(false);
+
+  // JC1 released: Side B holds it; its Export renders a WAV offline (two bars of it, wave7.md §7.3).
+  await importSeed(request, "JC1 released");
+  await page.route(/\/api\/album\/tracks\/[^/]+\/versions\/\d+\/source$/, async (route) => {
+    const res = await route.fetch();
+    const body = (await res.json()) as { code: string };
+    const tempo = body.code.split("\n")[0] ?? "setcpm(72/4)";
+    await route.fulfill({
+      response: res,
+      json: { ...body, code: `${tempo}\n\nkeys: note("<[d4,f4,a4,c5] [g3,b3,d4,f4]>").s("rhodes").gain(.5)` },
+    });
+  });
+  await page.goto("/album");
+  const sideB = page.locator("section[data-side='B']");
+  await expect(sideB).toBeVisible({ timeout: 60_000 });
+  await sideB.locator("li[data-track]").first().getByRole("link").first().click();
+  await expect(page.getByTestId("export")).toBeVisible({ timeout: 60_000 });
+  const download = page.waitForEvent("download", { timeout: 90_000 });
+  await page.getByTestId("export-wav").click();
+  const file = await download;
+  expect(file.suggestedFilename()).toMatch(/\.wav$/);
+  const bytes = (await import("node:fs")).readFileSync(await file.path());
+  expect(bytes.subarray(0, 4).toString()).toBe("RIFF");
+  expect(bytes.subarray(8, 12).toString()).toBe("WAVE");
+  await expect(page.getByTestId("export-done")).toContainText("The release recording stays as it is.");
+  await page.unroute(/\/api\/album\/tracks\/[^/]+\/versions\/\d+\/source$/);
+  // The track page reloads offline.
+  await context.setOffline(true);
+  w.problems.length = 0;
+  await page.reload();
+  await expect(page.locator("#main")).toBeVisible({ timeout: 30_000 });
+  const offlineProblems = w.problems.filter(
+    (p) => !/Failed to load resource|net::ERR_INTERNET_DISCONNECTED|fetch/i.test(p),
+  );
+  expect(offlineProblems).toEqual([]);
+  expect(w.remote).toEqual([]);
+  await context.setOffline(false);
+  await context.close();
+});

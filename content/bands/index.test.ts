@@ -16,6 +16,7 @@ import {
   stripMarkers,
 } from "@oak/content-kit";
 import { evalHeadless } from "@oak/grader/testing";
+import { METERS } from "@oak/theory";
 import { CHECKPOINT_MAKE_BANDS } from "../checkpoints.ts";
 import { flavourById, flavours } from "../flavours.ts";
 import { courseGraph } from "../index.ts";
@@ -56,11 +57,11 @@ const at = (session: string) => (from: string) => atOrBefore(g, from as SessionI
 const KEYS = ["C", "G", "D", "A", "E", "B", "F#", "Db", "Ab", "Eb", "Bb", "F"].map((t) => `${t}4:major`);
 const fill = (code: string, key = "C4:major", beats = 4, bpm = 96) =>
   `setcpm(${bpm}/${beats})\n\n${code.replaceAll("{{key}}", key).replaceAll("{{bpm}}", String(bpm))}`;
-/** The divisor of a Band's tempo line: the beats in its bar, dotted quarters in a compound meter (contracts §6.9). */
-const beatsOf = (id: string) => {
-  const n = Number(bandMeter(id).split("/")[0]);
-  return bandMeter(id).endsWith("/8") ? n / 3 : n;
-};
+/**
+ * The divisor of a Band's tempo line (contracts §6.9): the meter's tempo units in a bar — beats, dotted quarters in
+ * a compound meter (6/8 → 2), eighths in an odd /8 meter (7/8 → 7, `setcpm(bpm/7)`).
+ */
+const beatsOf = (id: string) => METERS[bandMeter(id) as keyof typeof METERS].unitsPerBar;
 const rat = (x: string | number): number => {
   const [a, b] = String(x).split("/").map(Number);
   return b ? (a as number) / b : (a as number);
@@ -983,5 +984,172 @@ describe("Wave 6 Bands", () => {
     }
     // U13.CP: the drums are the learner's lines (the unit's rule).
     expect(CHECKPOINT_MAKE_BANDS["U13.CP"]).toBeUndefined();
+  });
+});
+
+describe("Wave 7 Bands (author:CP)", () => {
+  /** One track's notes in bar `i`, in time order: [beat in quarters, midi]. */
+  const notesIn = (
+    events: { track: string; begin: string | number; midi: number | null }[],
+    track: string,
+    i: number,
+  ) =>
+    events
+      .filter((e) => e.track === track && e.midi !== null && Math.floor(rat(e.begin) + 1e-9) === i)
+      .map((e) => [Math.round((rat(e.begin) - i) * 4 * 1000) / 1000, e.midi as number] as const)
+      .sort((a, b) => a[0] - b[0]);
+  const PC: Record<string, number> = {
+    C: 0,
+    Db: 1,
+    D: 2,
+    Eb: 3,
+    E: 4,
+    F: 5,
+    "F#": 6,
+    G: 7,
+    Ab: 8,
+    A: 9,
+    Bb: 10,
+    B: 11,
+  };
+  const rootPc = (name: string) => PC[/^[A-G][b#]?/.exec(name)?.[0] ?? "C"] as number;
+  const firstChord = (bar: string) => bar.replace(/^\[/, "").split(" ")[0] as string;
+
+  for (const id of ["band.jazz-blues", "band.rhythm-changes"]) {
+    test(`${id}: the bass walks, a root on 1, the chord's own fifth, a half step into every bar; the chords sit above it`, async () => {
+      const changes = BAND_CHANGES[id] ?? [];
+      const bars = changes.length;
+      for (const f of flavours) {
+        const r = await evalHeadless(fill(bandById.get(id)?.code[f.id] ?? ""), bars);
+        for (let i = 0; i < bars; i++) {
+          const bass = notesIn(r.events, "bass", i);
+          const next = notesIn(r.events, "bass", (i + 1) % bars)[0]?.[1] as number;
+          expect([f.id, i, bass.map(([t]) => t)]).toEqual([f.id, i, [0, 1, 2, 3]]);
+          expect([f.id, i, (bass[0]?.[1] as number) % 12]).toEqual([
+            f.id,
+            i,
+            rootPc(firstChord(changes[i] ?? "")),
+          ]);
+          // A half step into the next bar: from below, or from above into the lowest root (A1 in C: B♭1 to A1),
+          // so a key folded a tritone down never walks under E1.
+          expect([f.id, i, Math.abs(next - (bass[3]?.[1] as number))]).toEqual([f.id, i, 1]);
+          const chordsLow = Math.min(...notesIn(r.events, "chords", i).map(([, m]) => m));
+          expect([f.id, i, chordsLow > Math.max(...bass.map(([, m]) => m))]).toEqual([f.id, i, true]);
+        }
+      }
+    });
+  }
+
+  test("the jazz blues plays F7 B♭7 F7 C–7 F7 | B♭7 B°7 F7 D7 | G–7 C7 F7 D7 G–7 C7 in F, every chord on its bar", async () => {
+    const code = bandById.get("band.jazz-blues")?.code["flavour.pop"] ?? "";
+    const r = await evalHeadless(
+      fill(lineOf(code, "chords").replace(/\.swingBy\([^)]*\)/, ""), "F4:major"),
+      12,
+    );
+    // The pitch classes of each bar's first chord: F9 E♭ G A C, B♭9 A♭ C D F, B°7 B D F A♭, D9 F♯ A C E …
+    const firstPcs = [...Array(12).keys()].map((i) => {
+      const inBar = notesIn(r.events, "chords", i);
+      return [...new Set(inBar.filter(([t]) => t === inBar[0]?.[0]).map(([, m]) => m % 12))].sort(
+        (a, b) => a - b,
+      );
+    });
+    expect(firstPcs[0]).toEqual([0, 3, 7, 9]); // F9 without its root
+    expect(firstPcs[1]).toEqual([0, 2, 5, 8]); // B♭9 without its root
+    expect(firstPcs[5]).toEqual([2, 5, 8, 11]); // B°7
+    expect(firstPcs[7]).toEqual([0, 4, 6, 9]); // D9 (F♯ A C E) without its root
+    expect(firstPcs[8]).toEqual([2, 5, 9, 10]); // G–9 (B♭ D F A) without its root
+  });
+
+  test("rhythm changes: A A B A, the bridge D7 G7 C7 F7 two bars each in B♭, the last A home on B♭", async () => {
+    const changes = BAND_CHANGES["band.rhythm-changes"] ?? [];
+    expect(changes.length).toBe(32);
+    expect(changes.slice(16, 24)).toEqual(["E7", "E7", "A7", "A7", "D7", "D7", "G7", "G7"]);
+    expect(changes.slice(0, 8)).toEqual(changes.slice(8, 16));
+    expect(changes[31]).toBe("C6");
+    const code = bandById.get("band.rhythm-changes")?.code["flavour.jazz-soul"] ?? "";
+    const r = await evalHeadless(fill(lineOf(code, "bass"), "Bb4:major"), 32);
+    const roots = [16, 18, 20, 22].map((i) => (notesIn(r.events, "bass", i)[0]?.[1] as number) % 12);
+    expect(roots).toEqual([2, 7, 0, 5]); // D G C F
+  });
+
+  test("the comping above a walking bass: rootless, from E3 to E4 in C, over the two-feel", async () => {
+    for (const f of flavours) {
+      const code = bandById.get("band.ii-v-i-comp")?.code[f.id] ?? "";
+      const r = await evalHeadless(fill(lineOf(code, "chords").replace(/\.swingBy\([^)]*\)/, "")), 4);
+      const midis = r.events.map((e) => e.midi as number);
+      expect([f.id, Math.min(...midis), Math.max(...midis)]).toEqual([f.id, 52, 64]);
+      // D–9 F A C E, G13 F A B E, C6/9 E G A D: no chord holds its own root.
+      const pcs = (i: number) =>
+        [...new Set(notesIn(r.events, "chords", i).map(([, m]) => m % 12))].sort((a, b) => a - b);
+      expect([f.id, pcs(0), pcs(1), pcs(2)]).toEqual([f.id, [0, 4, 5, 9], [4, 5, 9, 11], [2, 4, 7, 9]]);
+    }
+  });
+
+  test("the son groove leaves the one and the clave to the learner: no bass or kick on beat 1, no rimshot", async () => {
+    for (const f of flavours) {
+      const code = bandById.get("band.son-montuno")?.code[f.id] ?? "";
+      expect([f.id, /\brim\b|\bcb\b/.test(code)]).toEqual([f.id, false]);
+      const r = await evalHeadless(fill(code), 2);
+      const at0 = (track: string) =>
+        r.events.some(
+          (e) =>
+            e.track === track &&
+            rat(e.begin) % 1 < 1e-9 &&
+            (track !== "drums" || /bd/.test(String(e.s ?? ""))),
+        );
+      expect([f.id, at0("bass"), at0("chords")]).toEqual([f.id, false, false]);
+      // The tumbao: the "and" of 2 and beat 4, the second anticipating the next chord's root (G, then C).
+      const bass = [0, 1].map((i) => notesIn(r.events, "bass", i));
+      expect([f.id, bass.map((b) => b.map(([t]) => t))]).toEqual([
+        f.id,
+        [
+          [1.5, 3],
+          [1.5, 3],
+        ],
+      ]);
+      expect([f.id, bass.map((b) => (b[1]?.[1] as number) % 12)]).toEqual([f.id, [7, 0]]);
+    }
+  });
+
+  test("the neo-soul loop: C6/9 D–11 E–7 A–9, no major 7th on I, its sixteenths swung lightly", async () => {
+    const code = bandById.get("band.neo-soul")?.code["flavour.jazz-soul"] ?? "";
+    const r = await evalHeadless(fill(lineOf(code, "chords").replace(/\.swingBy\([^)]*\)/, "")), 4);
+    const pcs = (i: number) =>
+      [...new Set(notesIn(r.events, "chords", i).map(([, m]) => m % 12))].sort((a, b) => a - b);
+    expect([pcs(0), pcs(1), pcs(2), pcs(3)]).toEqual([
+      [2, 4, 7, 9],
+      [0, 4, 5, 7],
+      [2, 4, 7, 11],
+      [0, 4, 7, 11],
+    ]);
+    expect(pcs(0)).not.toContain(11);
+    expect(code).toContain(".swingBy(1/6, 8)");
+  });
+
+  test("the 5/4 vamp: five beats a bar, grouped 3+2, kick and bass on beats 1 and 4", async () => {
+    expect(bandMeter("band.odd-54")).toBe("5/4");
+    for (const f of flavours) {
+      const code = bandById.get("band.odd-54")?.code[f.id] ?? "";
+      const r = await evalHeadless(fill(code, "C4:major", 5), 2);
+      const fifths = (track: string, filter = () => true) =>
+        [
+          ...new Set(
+            r.events
+              .filter((e) => e.track === track && rat(e.begin) < 1 && filter())
+              .map((e) => Math.round(rat(e.begin) * 5 * 1000) / 1000),
+          ),
+        ].sort((a, b) => a - b);
+      expect([f.id, fifths("bass")]).toEqual([f.id, [0, 3]]);
+    }
+  });
+
+  test("the track checkpoints' Makes: the Band in 4/4, its harmony left to the learner where the rule reads it", () => {
+    expect(CHECKPOINT_MAKE_BANDS["J.CP1"]).toEqual({ band: "band.two-five-one", tracks: ["drums"] });
+    expect(CHECKPOINT_MAKE_BANDS["J.CP2"]).toEqual({ band: "band.two-five-one", tracks: ["drums"] });
+    // R.CP: the son groove's straight off-beat chords under the learner's straight clave and sixteenth hats.
+    expect(CHECKPOINT_MAKE_BANDS["R.CP"]).toEqual({ band: "band.son-montuno", tracks: ["chords"] });
+    expect(CHECKPOINT_MAKE_BANDS["A.CP"]).toEqual({ band: "band.aeolian-4bar", tracks: ["drums"] });
+    for (const id of ["J.CP1", "J.CP2", "R.CP", "A.CP"] as const)
+      expect([id, bandMeter(CHECKPOINT_MAKE_BANDS[id]?.band ?? "")]).toEqual([id, "4/4"]);
   });
 });

@@ -2,7 +2,7 @@
  * Version of docs/design/contracts.md that this package implements. Bump it in the same commit as any
  * contract change (contracts "Changing a contract").
  */
-export const CONTRACTS_VERSION = "1.7";
+export const CONTRACTS_VERSION = "1.8";
 
 /**
  * Bump when the shape of a content schema changes in a way that old generated content or an older reader
@@ -22,6 +22,9 @@ export const CONTRACTS_VERSION = "1.7";
  * mode, `harmony.wrongQuality`, `contains-rn.kind`/`inOrder`, `form.contains`/`extra` and the `*` and `@song`
  * patterns, `mode.anyOf`, `guide-tones.at`/`maxMoveSemis`, `modulation.via`, `velocity-ghosts.drum`/`accents`,
  * typed `device-count` names, the `reharmonize` rule, `CodeMakeEx.fromSketch`, `LessonMeta.splitFrom`,
- * capstone session `formMap` and `rubric`, song `sections`).
+ * capstone session `formMap` and `rubric`, song `sections`). 6: the Wave 7 shapes (the `grouping` and `euclid`
+ * widgets and their `Answer` fields, `text.jazz`, `KeyboardEx.expect.voicing`, `StaffExpect` chords `voicing`,
+ * `TapEx.lanes` and the `lanes` test response, `clave.minBars`/`exact`, `polyrhythm.minBars`/`span`,
+ * `voice-leading.voice`/`minRatio`, `reharmonize.devices`, `CapstoneDef.versions`).
  */
-export const CONTENT_SCHEMA_VERSION = 5;
+export const CONTENT_SCHEMA_VERSION = 6;

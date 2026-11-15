@@ -71,7 +71,7 @@ const NEEDS: Record<string, RegExp> = {
   "X2 released": /X2's songs are not written yet/,
   "ladder L6": /needs an L6 song/,
 };
-const X2_SONGS = ["song.st-louis-blues", "song.careless-love"];
+const X2_SONGS = ["song.careless-love", "song.st-louis-blues"];
 
 async function ok<T>(h: Harness, method: string, path: string): Promise<T> {
   const r = await h.json<T>(method, path);
@@ -131,8 +131,11 @@ describe("Wave 5 dev seeds (wave5.md §6)", () => {
       const h = await harness({ dev: true, content: real, now: NOW });
       try {
         await h.json("PUT", "/api/profile", { timezone: "UTC" });
+        // With the warm-ups as e2e builds them where a check reads the reviews or the ladder; elsewhere without them
+        // (the New block, the unlocks, the capstones and the album do not depend on them).
         const r = await h.json<DevSeedResult & { error?: { message: string } }>("POST", "/api/dev/seed", {
           point,
+          ...(/ladder|side|after X1|C3 released/i.test(point) ? {} : { practice: false }),
         });
         const need = NEEDS[point];
         const x2Written = real.songs.some((s) => X2_SONGS.includes(s.id));
@@ -221,7 +224,8 @@ async function deepChecks(h: Harness, point: string, plan: SessionPlan): Promise
     }
     case "X2 released": {
       // X2's seeded draft is tagged with its song and kept in the song's key (closer).
-      const song = real.songs.find((x) => X2_SONGS.includes(x.id) && x.answerKey.layers.bass !== undefined);
+      // The seeder works X2's first written song, in the order X2 lists them (St. Louis Blues once it is written).
+      const song = X2_SONGS.map((id) => real.songs.find((x) => x.id === id)).find((x) => x !== undefined);
       if (song === undefined) break;
       const list = await ok<{ items: { id: string; originId: string | null; tags: string[] }[] }>(
         h,

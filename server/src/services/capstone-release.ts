@@ -123,7 +123,14 @@ export class CapstoneReleaseService {
         )
           return { trackId: existing.id, unlocks, canDo: [] as CanDoEntry[] };
       }
-      const track =
+      // Wave 7 (content-kit `CapstoneDef.versions`, AC1): a two-version capstone is released as ONE album track
+      // holding both versions, version one first (track version 1) and version two after it (track version 2).
+      const drafts = this.d.capstoneSessions?.versions(id) ?? null;
+      const both =
+        existing === null && drafts !== null && drafts.every((v) => v.draft !== null)
+          ? drafts.map((v) => v.draft as { sketchId: string; sketchVersion: number })
+          : null;
+      let track =
         existing === null
           ? this.d.library.createTrack({
               capstoneId: id as AlbumTrackDetail["capstoneId"],
@@ -131,8 +138,11 @@ export class CapstoneReleaseService {
               title: body.title,
               flavour: body.flavour,
               ...version,
+              ...(both === null ? {} : (both[0] as { sketchId: string; sketchVersion: number })),
             })
           : this.d.library.addTrackVersion(existing.id, version);
+      if (both !== null)
+        for (const d of both.slice(1)) track = this.d.library.addTrackVersion(track.id, { ...version, ...d });
       if (review.success) repos.album.setReview(track.id, track.currentVersion, review.data);
       const first = row.status !== "released";
       repos.capstones.save({

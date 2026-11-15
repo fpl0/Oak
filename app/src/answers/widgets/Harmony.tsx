@@ -11,6 +11,10 @@
 // one pivot chord named in two keys, U17.L01) shows that key's chords while it is the slot being filled. In a colour
 // mode (U14) the columns hold the mode's own chords (♭VII, IV, II, ♭II). Applied chords (U15) are a second pick,
 // "V7 of …": choose the kind, then what it leans on; by keyboard `/` then the target's digit.
+//
+// Wave 7 (`AnswerEnv.harmony.jazz`, J2–J5): a jazz row (II7 VI7 III7, the tritone sub ♭II7, the backdoor iv7 ♭VII7,
+// iiø7), each with what it does, and brackets over the learner's numerals where they make a ii–V, a ii–♭II, a
+// tritone sub sliding down a half step, or the backdoor home (`rnBrackets`): what was written, never what to write.
 import type { ChordQuality, KeySpec } from "@oak/api";
 import { keyDisplay } from "@oak/theory";
 import { clsx } from "clsx";
@@ -20,6 +24,7 @@ import { Button, SegmentedControl } from "../../ui/kit/index.ts";
 import { functionStyle, type HarmonicFn } from "../../ui/theme/palette.ts";
 import { appAudio, useAnswerEnv } from "../env.tsx";
 import { progressionHits, rnHasDegree, rnMidis, rnSymbol, slotLabels } from "../harmony.ts";
+import { jazzRnButtons, type RnBracket, rnBrackets } from "../jazz.ts";
 import {
   APPLIED_KIND_RNS,
   type AppliedKindRn,
@@ -254,6 +259,10 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
   const applied = allow.includes("secondary");
   const targets = applied ? appliedTargetsOf(key) : [];
   const canPlay = Boolean(h?.playProgression) || key !== undefined;
+  // Wave 7: the jazz row and the ii–V brackets over what the learner wrote.
+  const jazz = h?.jazz === true;
+  const brackets: RnBracket[] = jazz ? rnBrackets(slots, key ?? { tonic: "C", mode: "major" }) : [];
+  const bracketAt = (i: number) => brackets.find((b) => i >= b.from && i <= b.to) ?? null;
   /** The bass under the target slot, from a staged dictation's bass stage (ux §4.5), when there is one. */
   const bassHere = target !== null && !disabled ? (h?.bassDegrees?.[target] ?? null) : null;
   const offBass = (rn: string) => bassHere !== null && bassHere !== "" && !rnHasDegree(rn, bassHere, key);
@@ -486,6 +495,36 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
                   key={l.spoken}
                   className={clsx("flex flex-col items-center gap-1", half && l.barStart && i > 0 && "ml-2")}
                 >
+                  {jazz ? (
+                    // Reserved height: a bracket over the slots it spans, its name over its first slot.
+                    <span
+                      aria-hidden
+                      className="relative h-6 self-stretch"
+                      data-rn-bracket={bracketAt(i)?.kind}
+                    >
+                      {(() => {
+                        const b = bracketAt(i);
+                        if (!b) return null;
+                        return (
+                          <>
+                            {i === b.from ? (
+                              <span className="absolute top-0 left-1 text-[0.65rem] leading-none font-semibold whitespace-nowrap text-accent-2">
+                                {b.kind}
+                              </span>
+                            ) : null}
+                            <span
+                              className={clsx(
+                                "absolute bottom-0 left-0 h-2 border-t-2 border-accent-2",
+                                i === b.from && "rounded-tl border-l-2",
+                                i === b.to && "rounded-tr border-r-2",
+                              )}
+                              style={{ width: i < b.to ? "calc(100% + 0.5rem)" : "100%" }}
+                            />
+                          </>
+                        );
+                      })()}
+                    </span>
+                  ) : null}
                   <span aria-hidden className="text-[0.7rem] whitespace-nowrap text-text-3">
                     {half && l.barStart ? `bar ${l.bar}` : l.short}
                   </span>
@@ -687,6 +726,40 @@ export function RnPaletteAnswer(p: AnswerWidgetProps<"rn-palette">) {
             );
           })}
         </div>
+        {jazz ? (
+          <fieldset className="flex min-w-0 flex-col gap-1.5" data-rn-jazz>
+            <legend className="mb-1 text-sm text-text-2">
+              Jazz: dominants, the tritone sub, the backdoor
+            </legend>
+            <div className="flex flex-wrap gap-1.5">
+              {jazzRnButtons(mode === "major" ? "major" : "minor").map((b) => {
+                const sym = symbols && key ? rnSymbol(b.rn, key) : null;
+                return (
+                  <button
+                    key={b.rn}
+                    type="button"
+                    data-rn={b.rn}
+                    aria-disabled={disabled || undefined}
+                    aria-label={`${rnSpoken(b.rn)}${sym ? `, ${sym}` : ""}: ${b.role}`}
+                    title={b.role}
+                    onClick={() => place(b.rn)}
+                    className="inline-flex h-9 min-w-16 items-center gap-1.5 rounded-control border border-dashed border-border bg-surface px-2 font-medium hover:bg-surface-2"
+                  >
+                    <RnGlyph rn={b.rn} />
+                    {sym ? (
+                      <span aria-hidden className="text-[0.75rem] font-normal text-text-2">
+                        · {sym}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[0.8125rem] text-text-3" data-testid="rn-brackets">
+              {brackets.length > 0 ? brackets.map((b) => b.text).join(". ") : ""}
+            </p>
+          </fieldset>
+        ) : null}
         <p className="sr-only" aria-live="polite">
           {flat
             ? "flat — now a digit"

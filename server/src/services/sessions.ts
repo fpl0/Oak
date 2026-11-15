@@ -1,6 +1,6 @@
 // Sessions: start (START unlocks, capstone state), heartbeat, end (minutes, keep-alive qualification,
 // session telemetry, the Coda summary). Today's plan itself comes from the SRS engineer's planner.
-import type { Session, SessionDay, SessionSummary, SessionTelemetry } from "@oak/api";
+import type { NextSession, Session, SessionDay, SessionSummary, SessionTelemetry } from "@oak/api";
 import { STREAK } from "@oak/srs";
 import { tx } from "../db/index.ts";
 import { badRequest, conflict, notFound } from "../errors.ts";
@@ -10,6 +10,7 @@ import { LearnerTime, newId, type ServiceContext } from "./context.ts";
 import type { CourseService } from "./course.ts";
 import type { GatesService } from "./gates.ts";
 import type { StreakService } from "./streak.ts";
+import { type TrackPlanService, trackOf } from "./track-plan.ts";
 import type { TracksService } from "./tracks.ts";
 import type { UnlocksService } from "./unlocks.ts";
 import type { VoiceService } from "./voice.ts";
@@ -28,6 +29,13 @@ export interface SessionsDeps {
   gymSummary?: (sessionId: string) => SessionSummary["gym"];
   /** Wave 6: the gates a session's Coda announces and the end of the core (wave6.md §5.3, §5.5). */
   tracks?: TracksService;
+  /** Wave 7: the learner's focus between the tracks (wave7.md §5.2). */
+  trackPlan?: TrackPlanService;
+  /**
+   * Wave 7 (carry f6; wave7.md §5.7): the New block the planner will put on the next learner day, given everything
+   * the session just changed; `null` when nothing is planned.
+   */
+  nextSession?: () => NextSession | null;
 }
 
 /** Stored as `sessions.plan_json` at start: the planned warm-up and all review due then. */
@@ -172,6 +180,10 @@ export class SessionsService {
         tabId: tab,
       };
       this.ctx.repos.sessions.create(session, plan);
+      // Wave 7 (wave7.md §5.2): after the core, the track the learner picks (an offer) is recorded as the focus.
+      const track = id === null ? null : trackOf(id);
+      if (track !== null && this.d.trackPlan !== undefined && this.d.tracks?.coreStage() === "complete")
+        this.d.trackPlan.setFocus(track);
       if (id !== null) {
         this.d.unlocks.onStart(id);
         // A checkpoint started from the map was offered too (decision 29: it holds the ladder until passed).
@@ -210,6 +222,8 @@ export class SessionsService {
     id: string,
     body: { wrappedEarly: boolean; phaseMs: { warmup: number; main: number; make: number; coda: number } },
     measured: { dueSecAfter: number; deferredCards: number } | null = null,
+    /** Dev seeds: leave `next` out (the seeder fills it for the last session it ends, `refreshNext`). */
+    opts: { skipNext?: boolean } = {},
   ): SessionSummary {
     const s = this.get(id);
     if (s.endedAt !== null) {
@@ -285,8 +299,7 @@ export class SessionsService {
       // Wave 6: a track gate met in this session is announced here, once (wave6.md §5.3), and the session whose
       // end finds the core complete carries the moment, once (§5.5); every other summary has `coreComplete: null`.
       const gatesOpened = this.d.tracks?.announceGates(id) ?? [];
-      const coreComplete = this.d.tracks?.announceCore(id) ?? null;
-      const summary: SessionSummary = {
+      const base: SessionSummary = {
         session: ended,
         streak: this.d.streak.summary(),
         sketchesSaved: this.ctx.repos.sketches.savedSince(s.startedAt),
@@ -297,11 +310,37 @@ export class SessionsService {
         teaser,
         ...(s.kind === "gym" && this.d.gymSummary !== undefined ? { gym: this.d.gymSummary(id) } : {}),
         ...(gatesOpened.length > 0 ? { gatesOpened } : {}),
-        ...(this.d.tracks === undefined ? {} : { coreComplete }),
+      };
+      // The session is ended first, so the moments' stats count it (`ended_at` set): the session that completes the
+      // core or the course reads "259 sessions on 259 days", not one short (wave 7 closer; sessions-moment test).
+      this.ctx.repos.sessions.end(id, now, minutes, base);
+      const coreComplete = this.d.tracks?.announceCore(id) ?? null;
+      // Wave 7: the whole course's moment (once), and the planner's real next session (carry f6).
+      const courseComplete = this.d.tracks?.announceWhole(id) ?? null;
+      const summary: SessionSummary = {
+        ...base,
+        ...(this.d.tracks === undefined ? {} : { coreComplete, courseComplete }),
       };
       this.ctx.repos.sessions.end(id, now, minutes, summary);
-      return summary;
+      // The planner reads this session as ended (a reviews-only day counts towards the gym slot, d19).
+      const coming = opts.skipNext === true ? undefined : this.d.nextSession?.();
+      if (coming === undefined) return summary;
+      const withNext: SessionSummary = { ...summary, next: coming };
+      this.ctx.repos.sessions.end(id, now, minutes, withNext);
+      return withNext;
     });
+  }
+
+  /**
+   * Wave 7 (dev seeds): recomputes an ended session's `next` from the learner as they stand now (a seed that sets
+   * the focus after its last session). The rest of the summary is kept.
+   */
+  refreshNext(id: string): void {
+    const s = this.get(id);
+    const stored = this.ctx.repos.sessions.summary(id) as SessionSummary | null;
+    const coming = this.d.nextSession?.();
+    if (s.endedAt === null || stored === null || coming === undefined) return;
+    this.ctx.repos.sessions.end(id, s.endedAt, s.activeMinutes, { ...stored, next: coming });
   }
 
   /** The Coda after a reload (wave2 §4 `session.summary`): the summary `end` stored. */

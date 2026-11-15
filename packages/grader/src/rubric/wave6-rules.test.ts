@@ -330,7 +330,7 @@ describe("velocity-ghosts: one drum, with accents beside the ghost notes (U13.L0
   test("no velocity at all; every hit quiet; the cell written once over the whole line", async () => {
     const flat = await run(r, SNARE.replace(/\.velocity\(.*\)/, ""), C, 4);
     expect(flat.detail).toBe(
-      "every hit is at the same strength: give the small ones `.velocity()` values of .4 or less (0 ghost notes on 16th off-beats; at least 3)",
+      "every hit you can hear is at the same strength: a ghost note sounds at .4 of full strength or less (0 ghost notes on 16th off-beats; at least 3)",
     );
     const quiet = await run(r, SNARE.replace(/\.velocity\(.*\)/, ".velocity(.3)"), C, 4);
     expect(quiet.ok).toBe(false);

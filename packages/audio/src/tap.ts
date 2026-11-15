@@ -41,6 +41,18 @@ export function tapsToOnsets(
 
 const KEY_VOICE: Readonly<Record<string, 0 | 1>> = { Space: 0, KeyF: 0, KeyJ: 1 };
 
+/**
+ * Wave 7 (`TapLane.key`): a lane's key as a `KeyboardEvent.code` — a letter ("f", "J") is `KeyF`, a digit `Digit5`,
+ * anything else is taken as a code already ("Semicolon"). `null` for an empty key.
+ */
+export function laneKeyCode(key: string): string | null {
+  const k = key.trim();
+  if (k === "") return null;
+  if (/^[a-z]$/i.test(k)) return `Key${k.toUpperCase()}`;
+  if (/^[0-9]$/.test(k)) return `Digit${k}`;
+  return k;
+}
+
 function isEditable(target: EventTarget | null): boolean {
   const el = target as (HTMLElement & { isContentEditable?: boolean }) | null;
   if (!el || typeof el !== "object" || !("tagName" in el)) return false;
@@ -67,6 +79,8 @@ export function createTapInput(
   let latencyMs = opts.latencyMs ?? 0;
   let armed = false;
   let twoVoices = false;
+  /** Two-voice keys by code (Wave 7: a step's lanes may name their own keys; F and J otherwise). */
+  let voiceOf: Readonly<Record<string, 0 | 1>> = KEY_VOICE;
   let list: TapEvent[] = [];
   const subs = new Set<(tap: TapEvent) => void>();
 
@@ -80,10 +94,9 @@ export function createTapInput(
     if (!armed) return;
     const k = e as KeyboardEvent;
     if (k.repeat || k.metaKey || k.ctrlKey || k.altKey || isEditable(k.target)) return;
-    const voice = KEY_VOICE[k.code];
+    const voice = twoVoices ? voiceOf[k.code] : k.code === "Space" ? 0 : undefined;
     if (voice === undefined) return;
-    if (k.code !== "Space" && !twoVoices) return;
-    if (k.code === "Space" && twoVoices) return; // two voices: F and J only
+    if (k.code === "Space" && twoVoices) return; // two voices: the two lane keys only
     k.preventDefault();
     record(voice, k.timeStamp);
   };
@@ -93,6 +106,9 @@ export function createTapInput(
     arm(o = {}) {
       armed = true;
       twoVoices = o.twoVoices ?? false;
+      const a = o.keys ? laneKeyCode(o.keys[0]) : null;
+      const b = o.keys ? laneKeyCode(o.keys[1]) : null;
+      voiceOf = a && b && a !== b && a !== "Space" && b !== "Space" ? { [a]: 0, [b]: 1 } : KEY_VOICE;
       list = [];
     },
     disarm() {

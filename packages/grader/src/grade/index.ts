@@ -69,6 +69,7 @@ import {
   spelledNotes,
   staffName,
 } from "./answers.ts";
+import { keyboardVoicingCheck } from "./answers-wave7.ts";
 import type { ConstraintRow } from "./constraints.ts";
 import { checkConstraints } from "./constraints.ts";
 import { judgeSungPattern } from "./sing.ts";
@@ -311,6 +312,19 @@ async function gradeAgainstReference(
       eval: evalSummary(res),
     });
 
+  // Wave 7 integration (build-author-CP, J.CP2): a `rubric` matcher's own `matches` and `reharmonize` rules carry
+  // references; they are evaluated here as a Make's are, so the rule runs instead of answering `rubric.unknown`.
+  const ruleRefs = new Map<Reference, Normalized>();
+  const ruleRefsAll = new Map<Reference, Normalized[]>();
+  for (const r of rubricRulesOf(matcher))
+    if ((r.rule === "matches" || r.rule === "reharmonize") && !ruleRefs.has(r.reference)) {
+      const sols = r.rule === "matches" ? r.reference.solutions : r.reference.solutions.slice(0, 1);
+      const all: Normalized[] = [];
+      for (const sol of sols.length ? sols : [""])
+        all.push((await evaluateReference(deps, sol, r.reference.bars, ex, ctx)).n);
+      ruleRefs.set(r.reference, all[0] as Normalized);
+      ruleRefsAll.set(r.reference, all);
+    }
   let best: MatchResult | null = null;
   for (const solution of ref.solutions) {
     const refEv = await evaluateReference(deps, solution, bars, ex, ctx);
@@ -319,6 +333,12 @@ async function gradeAgainstReference(
       code: spec.code,
       params: ctx.params,
       bars,
+      ...(ruleRefs.size > 0
+        ? {
+            resolveReference: (r: Reference) => ruleRefs.get(r) ?? null,
+            resolveReferences: (r: Reference) => ruleRefsAll.get(r) ?? [],
+          }
+        : {}),
       ...(deps.toolsUsed ? { toolsUsed: deps.toolsUsed } : {}),
       ...(deps.toolCode ? { toolCode: deps.toolCode } : {}),
       ...(spec.transcription ? { transcription: true } : {}),
@@ -331,6 +351,12 @@ async function gradeAgainstReference(
   }
   const m = best as MatchResult;
   return foldCode(ex, ctx, m, constraintRows, extra, res);
+}
+/** The rubric rules inside a matcher (`rubric`, and inside `all`). */
+function rubricRulesOf(m: Matcher): RubricRule[] {
+  if (m.m === "rubric") return [...m.rules];
+  if (m.m === "all") return m.of.flatMap(rubricRulesOf);
+  return [];
 }
 /** Events with an onset in `[from, to)` cycles (a phrase window, `GradeContext.window`). */
 function onsetWindow(
@@ -635,16 +661,27 @@ async function gradeRubricPiece(
       refs.set(r.reference, all[0] as Normalized);
       refsAll.set(r.reference, all);
     }
+  // Wave 7 (AC1, `capstone.versions`): the other version of a two-version capstone, evaluated in the same realm, for
+  // the rules that read both (`two-versions-differ`). One that does not evaluate is left out (the rule says so).
+  let otherVersion: RubricContext["otherVersion"];
+  if (ctx.otherVersion && ctx.otherVersion.code.trim() !== "") {
+    const oAst = arrangedTotal(sectionsFromAst(ctx.otherVersion.code));
+    const oBars = Math.min(cap, Math.max(want, oAst ?? Math.min(cap, ctx.mode === "capstone" ? 64 : 16)));
+    const other = await evaluateCode(deps, ctx.otherVersion.code, oBars, ex, ctx, false);
+    if (other.ok) otherVersion = { id: ctx.otherVersion.id, n: other.ev.n };
+  }
   const rctx: RubricContext = {
     ...nc,
     code,
     params: ctx.params,
     bars,
     totalBars,
+    ...(otherVersion ? { otherVersion } : {}),
     ...(deps.toolsUsed ? { toolsUsed: deps.toolsUsed } : {}),
     ...(deps.toolCode ? { toolCode: deps.toolCode } : {}),
     ...(ctx.profile ? { profile: ctx.profile } : {}),
     ...(ctx.songForm ? { songForm: ctx.songForm } : {}),
+    ...(ctx.songMelody ? { songMelody: ctx.songMelody } : {}),
     resolveReference: (ref) => refs.get(ref) ?? null,
     resolveReferences: (ref) => refsAll.get(ref) ?? [],
   };
@@ -663,7 +700,9 @@ async function gradeRubricPiece(
   // A brief whose home is the learner's (`mode` with `tonic: "declared"`, C6) has no key to be in.
   const ownTonic = rules.some((r) => r.rule === "mode" && r.tonic === "declared");
   const mismatch =
-    !requiredOk && ex.kind === "compose-brief" && !ownTonic ? keyMismatch(n, ctx.key ?? null) : null;
+    !requiredOk && ex.kind === "compose-brief" && !ownTonic && !ctx.keyFree
+      ? keyMismatch(n, ctx.key ?? null)
+      : null;
   if (mismatch) ds.unshift(diag("harmony.key-mismatch", mismatch));
   if (ex.kind === "code-make" && pieceBars(n, rctx) > ex.bars[1]) ds.push(diag("make.beyond-brief"));
   if (res.truncated) ds.push(diag("eval.truncated", { bars: res.bars }));
@@ -1135,6 +1174,30 @@ export async function gradeWith(req: GradeRequest, deps: GradeDeps): Promise<Gra
     }
     case "keyboard": {
       if (!("answer" in resp)) return wrongShape();
+      // Wave 7 (`keyboard.voicing`): "build this voicing" is graded on the shape, octave-aware, in any register;
+      // any other expectation of the step (notes, bass) still holds beside it.
+      if (ex.expect.voicing) {
+        const shape = keyboardVoicingCheck(ex.expect.voicing, resp.answer.midi ?? []);
+        const { voicing: _v, ...rest } = ex.expect;
+        const others =
+          rest.midi || rest.pcs || rest.bassPc !== undefined || rest.sequence
+            ? keyboardCheck(rest, resp.answer.midi ?? [], ex.pitchMode, ex.answer.mode, {
+                key: ex.key ?? ctx.key ?? null,
+              })
+            : null;
+        return answerFold(
+          ex,
+          ctx,
+          others
+            ? {
+                score: Math.min(shape.score, others.score),
+                dims: shape.dims,
+                diagnostics: [...shape.diagnostics, ...others.diagnostics],
+                slots: [...shape.slots, ...others.slots],
+              }
+            : shape,
+        );
+      }
       return answerFold(
         ex,
         ctx,

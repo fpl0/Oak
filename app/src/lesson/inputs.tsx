@@ -13,6 +13,8 @@ import type {
   HintRung,
   InvestigateQ,
   KeySpec,
+  MeterId,
+  TrackLensId,
   Trial,
 } from "@oak/api";
 import { fillBlanks, stripMarkers } from "@oak/api";
@@ -21,7 +23,14 @@ import type { SungResult } from "@oak/pitch";
 import { METERS } from "@oak/theory";
 import { Play, Square } from "lucide-react";
 import { useEffect, useState } from "react";
-import { type AnswerEnv, AnswerEnvProvider, appAudio, type SingTake } from "../answers/env.tsx";
+import {
+  type AnswerEnv,
+  AnswerEnvProvider,
+  appAudio,
+  type HarmonyEnv,
+  type SingTake,
+  type TapEnv,
+} from "../answers/env.tsx";
 import { emptyValue, isComplete, responseOf } from "../answers/response.ts";
 import { summarize } from "../answers/sing.ts";
 import type { AnswerFeedback, AnswerKind, AnswerSpec, AnswerSpecOf, AnswerValue } from "../answers/types.ts";
@@ -50,6 +59,15 @@ import { byEarSource, isByEar, keySignatureResponse, singLabelsFor, tonicPc } fr
 import { useTargetMarks } from "./target-marks.ts";
 import { isMatchSound, MATCH_SOUND_LABELS } from "./wave5.ts";
 import { chromaticNeighbours, guideChordOf, keyChangeOf, seventhsTaught } from "./wave6.ts";
+import {
+  bpmInUnit,
+  chordStyleFor,
+  jazzNumerals,
+  lanesResponse,
+  lessonTrackLenses,
+  tapLanesOf,
+  voicingAskOf,
+} from "./wave7.ts";
 
 type Part = Exclude<Exercise, AllEx>;
 
@@ -59,6 +77,8 @@ export interface InputRuntime {
   plays: number;
   /** The slot a slot strip is playing (`P`), stopped when another slot plays. */
   slotPlaying?: { stop(): void } | null;
+  /** Wave 7 (`tap.lanes`): the lane of each tap of the last two-lane take (0 = F, the first lane). */
+  tapVoices?: (0 | 1)[];
 }
 
 export interface InvestigateValue {
@@ -142,6 +162,10 @@ export function inputResponse(
   // A key signature is placed as accidentals in order; the grader reads them as `answer.text` (wave3.md §10).
   if (spec.ui === "staff-input" && spec.mode === "key-signature")
     return keySignatureResponse(value as string);
+  // Wave 7 (`tap.lanes`, R2.L04): a two-lane pad's value is one list of AudioContext seconds per lane; the grader
+  // reads `{ lanes }`, seconds from bar 1 of the stimulus, in the exercise's lane order.
+  if (ex.kind === "tap" && tapLanesOf(ex) && Array.isArray(value))
+    return lanesResponse(value as number[], rt.tapVoices ?? [], rt.tapStart);
   const r = answerResponse(ex.kind, spec, value as AnswerValue);
   // The tap pad reports AudioContext seconds; the grader reads seconds from bar 1 of the stimulus.
   if ("taps" in r && rt.tapStart !== null) {
@@ -492,6 +516,10 @@ export function useAnswerEnvFor(
     chordSymbols: allLenses.chords.shown.chordSymbols,
     romanNumerals: allLenses.chords.shown.romanNumerals,
   };
+  // Wave 7 (wave7.md §4.2, §4.4): the tracks' lenses a widget reads — the keyboard labels a hand voicing's type
+  // (voicings), a melody pick its tension (tensions) — open inside the lesson that teaches them. Added beside the
+  // label lenses; a widget that does not read them ignores them.
+  env.lenses = { ...env.lenses, ...trackEnvLenses(h.env.ownerId, allLenses.track) };
   // Chords, numerals and slot strips are heard and named in the step's own key and tempo (wave4.md §4.3).
   const harmonyUi = "answer" in ex && ex.answer && typeof ex.answer === "object" ? ex.answer.ui : null;
   const staged = ex.kind === "dictation" && ex.stageAnswers !== undefined;
@@ -516,6 +544,9 @@ export function useAnswerEnvFor(
       ...(seventhsTaught(h.env.ownerId) ? { sevenths: true } : {}),
       // U12.L05: a pick of a chord's 3rd and 7th names each key by its place in the chord once it is checked.
       ...(guideChordOf(ex) ? { guideChord: guideChordOf(ex) as string } : {}),
+      // Wave 7 (`text.jazz-chord`, wave7.md §3.3): chord symbols are read back in the style the learner chose —
+      // jazz glyphs once `tb.feature.jazz-glyphs` is on (J1.L02), else lead-sheet.
+      ...wave7Harmony(ex, h.env.ownerId, h.env.unlocked),
     };
   }
   // Wave 6 (U14): after the check, a mode pick says the one note its own pick changes ("Mixolydian is major with
@@ -551,6 +582,15 @@ export function useAnswerEnvFor(
           }
         : {}),
     };
+  }
+  // Wave 7 (R2.L01–L02, R3.L01–L03): a grouping, a Euclidean ring and a clave pick play at the step's tempo, counted
+  // in the answer's own meter (an eighth in 7/8: the grouping names its meter), as `AnswerEnv.rhythm` reads it.
+  if (harmonyUi === "grouping" || harmonyUi === "euclid" || harmonyUi === "choice") {
+    const own =
+      harmonyUi === "grouping" && "answer" in ex ? (ex.answer as { meter?: MeterId }).meter : undefined;
+    const stepMeter = ex.meter ?? h.env.meter;
+    const bpm = typeof ex.bpm === "number" ? ex.bpm : h.env.bpm;
+    env.rhythm = { bpm: bpmInUnit(bpm, METERS[stepMeter].tempoUnit, METERS[own ?? stepMeter].tempoUnit) };
   }
   // Wave 6 (U13): a rhythm grid is grouped and counted in the step's meter (6 steps in 6/8 are 3 + 3, "1 la li").
   if (harmonyUi === "grid") {
@@ -608,6 +648,12 @@ export function useAnswerEnvFor(
       // Wave 6 (U13.L04): in 6/8, 9/8 and 12/8 the beat is the dotted quarter; the pad draws each beat in three.
       meter: METERS[meter],
       countInBars: ex.cue.countInBars,
+      // Wave 7 (`tap.lanes`): two lanes, F for the first and J for the second; the pad says which lane each tap
+      // came on, kept for the response (`lanesResponse`).
+      ...tapLanesEnv(ex),
+      onTake: (take) => {
+        runtime.tapVoices = [...take.voices];
+      },
       start: async () => {
         const p = await playStimulus({
           ...(ex.stimulus.src === "code" ? { code: ex.stimulus.code } : { trial }),
@@ -906,4 +952,38 @@ function questionFeedback(fb: AnswerFeedback, i: number): AnswerFeedback {
   if (fb.state !== "wrong") return fb.state === "revealed" ? { state: "idle" } : fb;
   const mark = fb.marks?.find((m) => m.part === i);
   return mark ? { state: "wrong", marks: [{ part: 0, ok: false }] } : { state: "correct" };
+}
+
+// --- Wave 7: what the host adds to the answer environment (wave7.md §4.2, §11) ------------------------------------
+
+/**
+ * The tracks' lenses as the answer widgets read them, beside the label lenses: the learner's switch, opened by a
+ * tool, a completed lesson, or the lesson being taken when it teaches the lens (`lessonTrackLenses`).
+ */
+function trackEnvLenses(
+  ownerId: string,
+  track: Parameters<typeof lessonTrackLenses>[1],
+): Partial<Record<TrackLensId, boolean>> {
+  return lessonTrackLenses(ownerId, track);
+}
+
+/**
+ * What a chord answer of the jazz track adds to `HarmonyEnv`: the chord style the learner reads (jazz glyphs once
+ * `tb.feature.jazz-glyphs` is on, J1.L02), the jazz numerals from J2 on, and the voicing a keyboard or staff step
+ * asks for (its chord and shape, as the prompt names them).
+ */
+function wave7Harmony(ex: Part, ownerId: string, unlocked: ReadonlySet<string>): Partial<HarmonyEnv> {
+  const voicing = voicingAskOf(ex);
+  const style = chordStyleFor(unlocked);
+  return {
+    ...(style === "jazz" ? { chordStyle: style } : {}),
+    ...(jazzNumerals(ownerId) ? { jazz: true } : {}),
+    ...(voicing ? { voicing: voicing as HarmonyEnv["voicing"] & object } : {}),
+  };
+}
+
+/** Two-lane taps: the lanes the pad draws (a label each), nothing for a one-lane tap. */
+function tapLanesEnv(ex: Part): Pick<TapEnv, "lanes"> {
+  const lanes = tapLanesOf(ex);
+  return lanes ? { lanes } : {};
 }

@@ -1,0 +1,57 @@
+{/* J3.L01 Rootless A/B Voicings: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+The same trio, the same ii–V–I in F, comped two ways. The first is the shells you wrote in J1. Listen to where the second one sits.
+
+<Example id="rootless-trio" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+The four chords of the second take, held a bar each over the bass. Read them on the roll.
+
+<Example id="rootless-held" views="code,roll" />
+
+<OnPass>The root has gone to the bass, and the chord keeps its colour notes: Gm7 is B♭ D F A, its 3rd, 5th, 7th and 9th, stacked from the 3rd. That is an **A voicing**. C7 keeps three of those notes and moves one: B♭ D E A, its 7th, 9th, 3rd and 13th, stacked from the 7th. That is a **B voicing**. On a dominant the 13th stands in for the 5th. Fmaj7 is an A voicing again. A B A: the hand hardly moves.</OnPass>
+</Step>
+
+<Step id="S3">
+Now with your hands. Fmaj7 is F A C E, and its 9th is G.
+
+<OnPass>A C E G: Fmaj7 without its root, standing on its 3rd. Over an F in the bass it is the whole chord with a 9th on top.</OnPass>
+</Step>
+
+<Step id="S4">
+The trio comps in shells. Give the root to the bass and play the four notes in the middle, alternating as you heard.
+
+<Editor exercise="shells-to-rootless" />
+
+<OnPass>A B A by hand. Between Gm7 and C7 a single note moves a half step, and the chords still change colour. A good place to stop for today if you need to.</OnPass>
+</Step>
+
+<Step id="S5">
+The left-hand dictionary holds both shapes of each chord. Anchored at A4 it plays your A B A. One call before `.voicing()` moves every chord to the next place the dictionary has for it.
+
+<Editor exercise="offset-to-b" />
+
+<OnPass>`.offset(1)` moved each chord one place up, and in `lefthand` the next place is the other shape: B A B, the hand starting on F. `.offset(2)` would be the first shapes again, an octave higher. Without an anchor the dictionary keeps every chord's top note at or below C5, and in F that makes Fmaj7 jump to a B voicing: set the anchor and the alternation follows.</OnPass>
+</Step>
+
+<Step id="S6">
+A melody on top. The vibes hold A4, and the comping's hand is anchored on the same note.
+
+<Example id="duck" views="code,roll" />
+
+<OnPass>`.mode("duck")` leaves out the one note equal to the anchor, so the comping never doubles the tune: Gm7 and C7 play three notes under the vibes. The A3 in Fmaj7 stays, because only the anchor's own note is left out, not the same letter an octave lower. Duck takes nothing else away: the root was never in these shapes.</OnPass>
+</Step>
+
+<Step id="S7">
+The Band plays the drums and the bass in F. The comping starts in shells; make it rootless, with each chord sounding on the first beat of its bar, then make it yours.
+
+<Make exercise="your-rootless-comping" />
+
+<CanDo id="cd.code.rootless" />
+
+Next: wider voicings, with the notes spread over two octaves.
+
+<Recap />
+</Step>

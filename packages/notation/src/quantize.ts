@@ -364,10 +364,33 @@ function marksAndBeams<S>(g: Grid, items: QItem<S>[], windows: TWindow[]): numbe
  * Notates one bar of one voice. `segs` must cover [0, W) contiguously (rests included). `cuts` are
  * extra positions where an item must start (chord symbols, the pickup boundary).
  */
-export function quantizeBar<S>(g: Grid, input: Seg<S>[], cuts: Rat[]): BarResult<S> {
+export function quantizeBar<S>(
+  g: Grid,
+  input: Seg<S>[],
+  cuts: Rat[],
+  forced?: { p: number; q: number },
+): BarResult<S> {
   const warnings: Omit<NotationWarning, "bar">[] = [];
   let approximate = false;
   const wholeBar = input.length === 1 && input[0]?.slot === null;
+  // Wave 7: a bar-wide tuplet asked for (`NotationInput.polyTuplets`, 4:3 over a 3/4 bar): taken when every
+  // boundary of the bar lies on the p grid and the written value (W/q) exists; otherwise the bar is written as usual.
+  if (forced) {
+    const written = R.div(g.W, rat(forced.q));
+    const fit = splitAt(input, cuts);
+    const onGrid = fit.every((s) =>
+      [s.start, s.end].every((x) => R.mul(R.div(x, g.W), rat(forced.p))[1] === 1),
+    );
+    const sounds = fit.some((s) => s.slot !== null);
+    if (forced.p > forced.q && forced.q >= 1 && forced.p <= 9 && onGrid && sounds && notatable(written)) {
+      const w: TWindow = { start: [0, 1], end: g.W, p: forced.p, q: forced.q };
+      const items = decompose(g, fit, [w], false);
+      if (items && !crowded(items, w)) {
+        marksAndBeams(g, items, [w]);
+        return { items, approximate, warnings };
+      }
+    }
+  }
   let segs = splitAt(input, [...cuts, ...restCuts(g, input)].sort(R.cmp));
   let found = findWindows(segs, g);
   if (typeof found === "string") {

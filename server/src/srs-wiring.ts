@@ -8,9 +8,13 @@ import type {
   DueBatch,
   Evidence,
   FamilyState,
+  NextSession,
   SessionPlan,
   SrsCard,
   SrsReviewResult,
+  TrackFocusId,
+  TrackOffer,
+  WarmupItem,
 } from "@oak/api";
 import {
   type FamilyDef,
@@ -21,14 +25,21 @@ import {
   type SkillId,
   skillOf,
 } from "@oak/content-kit";
-import { dayIndex, forecastLoad, GOVERNOR, LISTEN_BLOCK_SEC, REVIEW_DAY_MAX_SEC } from "@oak/srs";
+import {
+  dayIndex,
+  forecastLoad,
+  GOVERNOR,
+  LISTEN_BLOCK_SEC,
+  REVIEW_DAY_MAX_SEC,
+  type WarmupPlan,
+} from "@oak/srs";
 import type { ContentIndex } from "./content/index.ts";
 import { tx } from "./db/index.ts";
 import type { Repos } from "./db/repos/index.ts";
 import type { FamilyStateRow } from "./db/repos/srs.ts";
 import { badRequest, notFound } from "./errors.ts";
 import { dayStartInstant } from "./lib/days.ts";
-import { type Clock, newId } from "./services/context.ts";
+import { type Clock, LearnerTime, newId } from "./services/context.ts";
 import { openFamilyLevels } from "./services/family-levels.ts";
 import type { Services } from "./services/index.ts";
 import { evidenceWeight } from "./services/mastery.ts";
@@ -38,6 +49,7 @@ import {
   type SessionPlanCoursePort,
   type SessionPlanLearnerPort,
   SessionPlanService,
+  type SessionPlanSrsPort,
   SPLIT_ABOVE_MIN,
   warmupLabel,
 } from "./services/session-plan.ts";
@@ -49,6 +61,7 @@ import {
   type SrsStatePort,
   type SrsWorkingState,
 } from "./services/srs.ts";
+import { SESSION_TOTAL } from "./services/track-plan.ts";
 
 const STATE_KEY = "srs.state";
 /** The family sung resolutions are evidence for (contracts §7.3, §8.3). */
@@ -757,6 +770,27 @@ export class SrsAdapter implements SrsPort {
     ];
   }
 
+  /**
+   * Wave 7 (start-up): every family whose unlock lesson is completed and that has no card yet is seeded through its
+   * lesson (cards that exist are never touched). Returns the families seeded.
+   */
+  backfillFamilies(): string[] | Promise<string[]> {
+    const missing = new Map<string, string[]>();
+    for (const f of this.content.families()) {
+      if (f.id.startsWith("fam.mix.") || f.generator.startsWith("mix.")) continue;
+      if (this.repos.lessons.progress(f.unlock.lesson)?.status !== "completed") continue;
+      if (this.repos.srs.card(f.id) !== null) continue;
+      missing.set(f.unlock.lesson, [...(missing.get(f.unlock.lesson) ?? []), f.id]);
+    }
+    if (missing.size === 0) return [];
+    return this.#zoned(() =>
+      tx(this.repos.db, () => {
+        for (const lessonId of missing.keys()) this.#seedLesson(lessonId);
+        return [...missing.values()].flat().filter((id) => this.repos.srs.card(id) !== null);
+      }),
+    );
+  }
+
   /** One transaction: a failure part-way leaves no card without its revlog, no half-recorded set. */
   afterStep(input: StepReviewInput): SrsReviewResult[] | Promise<SrsReviewResult[]> {
     return this.#zoned(() => tx(this.repos.db, () => this.#afterStep(input)));
@@ -853,10 +887,10 @@ export class CourseAdapter implements SessionPlanCoursePort {
    * is a review day (`pause` says why). A checkpoint is never offered on the day its unit's last lesson was
    * completed (contracts §2.5: it falls on a later day).
    */
-  next(): CourseItem | null {
+  next(day?: string): CourseItem | null {
     this.#pause = null;
     const g = this.services.gates;
-    const today = this.services.streak.time.day();
+    const today = day ?? this.services.streak.time.day();
     let unwritten = false;
     for (const id of this.content.defaultOrder()) {
       if (isTranscriptionSlot(id) || g.sessionDone(id) || !g.sessionOpen(id)) continue;
@@ -876,14 +910,36 @@ export class CourseAdapter implements SessionPlanCoursePort {
       }
       return { id: id as SessionId, kind: this.#kind(id), title: this.#title(id) };
     }
-    const track = g.nextMapItem();
-    if (track !== null && !isTranscriptionSlot(track) && !this.#songsMissing(track)) {
-      if (this.content.lessonSite(track) === null || this.content.lessonDef(track) !== null)
-        return { id: track, kind: this.#kind(track), title: this.#title(track) };
-      unwritten = true;
-    }
+    // Wave 7 (wave7.md §5.2): the tracks are never the core's next item. With the focus on the core they are
+    // offered beside it (`SessionPlan.trackOffers`); with the focus on a track the planner asks `trackNext`.
     if (unwritten) this.#pause = "The next lessons are still being written. Today: a review, then Studio.";
     return null;
+  }
+  /** Wave 7: the learner's focus (`tracks.focus`). */
+  focus(): TrackFocusId {
+    return this.services.trackPlan.focus().focus;
+  }
+  /** Wave 7: what a track lets the learner start on `day`. */
+  trackNext(trackId: "J" | "R" | "A", day: string): CourseItem | null {
+    const n = this.services.trackPlan.nextSession(trackId, day);
+    return n === null ? null : { id: n.id as SessionId, kind: n.kind, title: n.title, trackId };
+  }
+  trackNextLesson(trackId: "J" | "R" | "A"): CourseItem | null {
+    const n = this.services.trackPlan.nextLesson(trackId);
+    return n === null ? null : { id: n.id as SessionId, kind: n.kind, title: n.title, trackId };
+  }
+  trackOffers(target: 15 | 20 | 25, day: string, except: string | null): TrackOffer[] {
+    return this.services.trackPlan.offers(target, { day, except });
+  }
+  trackPosition(trackId: "J" | "R" | "A") {
+    const p = this.services.trackPlan;
+    return {
+      sessionIndex: Math.min(p.sessionsTotal(trackId), p.sessionsDone(trackId) + 1),
+      sessionsTotal: p.sessionsTotal(trackId),
+    };
+  }
+  courseStage() {
+    return this.services.tracks.courseStage();
   }
   #pause: string | null = null;
   /** A session of a transcribe capstone none of whose songs has an answer key yet. */
@@ -1040,7 +1096,8 @@ export class CourseAdapter implements SessionPlanCoursePort {
     const gymOpen = this.repos.lessons
       .allProgress()
       .some((p) => p.lessonId === "U07.L01" && p.status === "completed");
-    if (gymOpen) {
+    // `GYM.nn` has two digits (contracts §1.2): after GYM.99 the gym is no longer offered.
+    if (gymOpen && this.gymCount() < 99) {
       const gym = `GYM.${String(this.gymCount() + 1).padStart(2, "0")}` as SessionId;
       out.push({ kind: "gym", mapItemId: gym, title: "Transcription Gym" });
     }
@@ -1067,6 +1124,78 @@ export class PlanLearnerAdapter implements SessionPlanLearnerPort {
     const note = this.repos.tutor.notes({ limit: 1 })[0];
     return note === undefined ? null : note.text;
   }
+}
+
+/** The SRS side of a planner that only peeks at the New block: no day preparation, no warm-up (wave7.md §5.7). */
+function peekSrs(time: LearnerTime): SessionPlanSrsPort {
+  const empty = { plan: { plannedSec: 0 } as WarmupPlan, items: [] as WarmupItem[] };
+  return {
+    day: (now) => time.day(now),
+    prepareDay: () => {},
+    planWarmup: () => empty,
+    planReviewDay: () => ({ blocks: [], overflow: [] }),
+  };
+}
+
+/**
+ * Wave 7 (carry f6; wave7.md §5.7): what the planner will put in the New block on the next learner day, given the
+ * learner's state now, as the Coda's "next" line: a core or track lesson, a checkpoint, a capstone session (CF-T
+ * included), a gym slot, or a reviews-only day (`mapItemId: null`); `null` once the whole course is complete and
+ * nothing is due tomorrow.
+ */
+export function nextSessionOf(services: Services): NextSession | null {
+  const ctx = services.ctx;
+  const time = new LearnerTime(ctx);
+  const course = new CourseAdapter(ctx.repos, ctx.content, services);
+  const plan = new SessionPlanService({
+    srs: peekSrs(time),
+    course,
+    learner: new PlanLearnerAdapter(ctx.repos),
+  });
+  // The next learner day: the rollover after now (a day later at this time of day is that day for every zone).
+  const tomorrow = new Date(ctx.clock.now().getTime() + 86_400_000);
+  const p = plan.peek(tomorrow);
+  const target = p.targetMinutes;
+  const trackId = (p.track?.trackId ?? null) as NextSession["trackId"];
+  const id = p.mapItemId as string | null;
+  if (id === null) {
+    const due = ctx.repos.srs.due(new Date(tomorrow.getTime() + 86_400_000).toISOString()).length;
+    if (services.tracks.courseStage() === "complete" && due === 0) return null;
+    return {
+      kind: p.kind,
+      mapItemId: null,
+      title: p.kind === "review" ? "Review" : p.title,
+      goal:
+        due > 0
+          ? "Today's reviews, then Studio or the gym."
+          : "A short review, then Studio: start the next song.",
+      estMinutes: SESSION_TOTAL.review[target],
+      trackId: null,
+      slot: null,
+      day: "tomorrow",
+    };
+  }
+  const kind = p.kind === "light" || p.kind === "keepalive" || p.kind === "studio" ? "lesson" : p.kind;
+  const total =
+    kind === "lesson" || kind === "checkpoint" || kind === "capstone" || kind === "gym"
+      ? SESSION_TOTAL[kind][target]
+      : SESSION_TOTAL.review[target];
+  const gymLevel = kind === "gym" ? ctx.repos.ladder.state().level : null;
+  return {
+    kind: p.kind,
+    mapItemId: id as NextSession["mapItemId"],
+    title: p.title,
+    goal:
+      kind === "gym"
+        ? p.title.includes("own audio")
+          ? "Transcription Gym: your own audio."
+          : `Transcription Gym: ladder L${gymLevel}.`
+        : services.trackPlan.goal(id),
+    estMinutes: total,
+    trackId,
+    slot: p.slot?.fills ?? null,
+    day: "tomorrow",
+  };
 }
 
 export interface SrsWiring {

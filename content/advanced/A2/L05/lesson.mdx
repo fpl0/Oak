@@ -1,0 +1,57 @@
+{/* A2.L05 Mix & Dynamics: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+The A2 loop with a strings pad added. First the chords and the pad play over the tune, every part from the middle; then the same notes with each part at its own level and on its own side.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+Your parts already have their own heights. How loud each one plays decides what the ear follows first.
+
+<Predict exercise="what-gets-lost" />
+</Step>
+
+<Step id="S3">
+Two new controls of where a part sits: how loud, and from which side. <CodeRef fn="pan" />
+
+<Example id="levels-and-sides" views="code" />
+
+<OnPass>Two halvings, 12 dB down; bars 1 and 3 from the left, 2 and 4 from the right. Level, side and the room around each part together make the **mix**: the balance of everything that plays.</OnPass>
+</Step>
+
+<Step id="S4">
+The chords are louder than the tune, so the tune gets lost behind them.
+
+<Editor exercise="put-the-tune-on-top" />
+
+<OnPass>The tune leads and the chords sit under it, still there. A few dB is enough: far less, and the parts fight; far more, and the chords drop out of hearing. `.postgain()` sets a part's level after its effects, the same way. A good place to stop for today if you need to. <CodeRef fn="postgain" /></OnPass>
+</Step>
+
+<Step id="S5">
+A line with loud and soft notes jumps out and falls back. One control evens it out as it plays. <CodeRef fn="compressor" />
+
+<Choice exercise="which-sits-steadier" />
+
+<OnPass>Card B: each loud note is turned down as it sounds, so the line sits steadier and closer. That is **compression**. You hear it rather than count it: it changes how a part feels in the balance, and the levels you set with `.gain()` still decide which part leads.</OnPass>
+</Step>
+
+<Step id="S6">
+One part has been pushed far above its place. Listen for what you hear first.
+
+<Choice exercise="what-is-too-loud" />
+
+<OnPass>The bass: low and loud, it fills the bottom and pushes everything else back. A part too loud for its role covers the others, whatever its register.</OnPass>
+</Step>
+
+<Step id="S7">
+Every part at one level, all from the middle: a stack, not yet a balance. Set the levels first, then the sides, then the room. If the pad crowds the tune, one more tool can help: `.duckorbit(2)` on the tune dips whatever plays on `.orbit(2)` each time the tune plays, so put the pad there. <CodeRef fn="duckorbit" />
+
+<Make exercise="mix-it" />
+
+<CanDo id="cd.code.mix" />
+
+Next: the same tune in two styles, a ballad and a driving version, and what changes between them.
+
+<Recap />
+</Step>

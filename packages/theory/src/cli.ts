@@ -103,6 +103,7 @@ import {
 const mod12 = (x: number): number => ((Math.round(x) % 12) + 12) % 12;
 
 import { CLI_HELP_WAVE6, runWave6Op, seventhsTable } from "./cli-wave6.ts";
+import { CLI_HELP_WAVE7, runWave7Op } from "./cli-wave7.ts";
 import type { ChordId, NoteTextKind, RomanNumeral, SchemaDef } from "./types.ts";
 
 export const CLI_HELP = `theory <op> [args]   (keys: C:major, Eb, F#m, A:harmonic:minor, D_dorian; output is JSON)
@@ -164,6 +165,8 @@ time
 text
   normalize <note|chord|rn|interval|key> <text>
 ${CLI_HELP_WAVE6}
+
+${CLI_HELP_WAVE7}
   sevenths-table                 the five seventh qualities with their code and lead-sheet spellings`;
 
 class CliError extends Error {}
@@ -742,7 +745,8 @@ function run(op: string, a: string[], flags: Set<string>, opts: Map<string, stri
       return seventhsTable();
     default: {
       // Wave 6 (U12–U17): cli-wave6.ts.
-      const out = runWave6Op(op, a, flags, opts);
+      const w6 = runWave6Op(op, a, flags, opts);
+      const out = w6 === undefined ? runWave7Op(op, a, flags, opts) : w6;
       return out === undefined ? fail(`unknown op "${op}"`) : out;
     }
   }
@@ -769,6 +773,9 @@ export function runTheoryCli(argv: readonly string[]): { code: number; out: stri
         "--dict",
         "--from",
         "--kind",
+        "--scale",
+        "--ratio",
+        "--ms",
       ].includes(t)
     ) {
       opts.set(t.slice(2), rest[++i] ?? "");

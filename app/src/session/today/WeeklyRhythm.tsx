@@ -46,7 +46,7 @@ export function WeeklyRhythm({
   const slots = rhythmSlots(streak, today);
   return (
     <ol
-      aria-label={`This week: ${streak.thisWeek.qualifyingDays} of ${streak.thisWeek.goal} days`}
+      aria-label={`This week: ${streak.thisWeek.qualifyingDays} of ${streak.thisWeek.goal} ${streak.thisWeek.goal === 1 ? "day" : "days"}`}
       className={clsx("flex items-end", size === "lg" ? "gap-3" : "gap-1.5")}
       data-testid="weekly-rhythm"
     >

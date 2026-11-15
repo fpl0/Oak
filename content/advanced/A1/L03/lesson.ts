@@ -14,7 +14,8 @@
 // How it is graded: S4 and S5 are "match this sound" steps on the `controls` matcher, which applies
 // superdough's envelope rules to what the code leaves out (`.decay(.2)` alone falls to nothing; `.attack()`
 // alone holds at full level), with `edit-only-regions` keeping the notes; S6 is a `fam.snd.params` level 3
-// ear step (softer start or longer tail); the Make requires an envelope control (`uses tb.adsr`). S3 opens
+// ear step (softer start or longer tail); the Make requires an envelope you hear (`control-set` with
+// `envelope: true`, carry f4). S3 opens
 // the scope panel and S3–S5 draw the `envelope` probe beside the part they shape (`ui.probe`, feature
 // `step.probe`).
 import { defineLesson, type HintLadder } from "@oak/content-kit";
@@ -403,8 +404,12 @@ export default defineLesson({
             label: "A part shaped with attack, decay, sustain or release",
             required: true,
             skills: ["D04"],
-            rule: "uses",
-            tool: "tb.adsr",
+            // Carry f4 (corrections pass): what is heard, not the call. The envelope superdough plays must differ
+            // from the default: a start of 20 ms or more, a tail of 100 ms or more, or a fall to .4 or under.
+            // `.attack(.001)` or `.sustain(.6)` is where the sound already is.
+            rule: "custom",
+            fn: "control-set",
+            params: { envelope: true },
           },
           {
             id: "two-shapes",
@@ -450,6 +455,52 @@ export default defineLesson({
             expect: "pass",
           },
           { name: "beyond the brief: pluck and swell", response: { code: SHAPED }, expect: "pass" },
+          {
+            name: "the riff swelling in, on a line of its own",
+            response: {
+              code: code(
+                ...DRUMS,
+                bass('.s("sawtooth").lpf(500)'),
+                riff('.s("square").lpf(2000).attack(.2).gain(.8)'),
+              ),
+            },
+            expect: "pass",
+          },
+          {
+            name: "a long tail on the riff",
+            response: {
+              code: code(
+                ...DRUMS,
+                bass('.s("sawtooth").lpf(500)'),
+                riff('.s("square").lpf(2000).release(.6).gain(.8)'),
+              ),
+            },
+            expect: "pass",
+          },
+          {
+            name: "right function, the default shape written out",
+            response: {
+              code: code(
+                ...DRUMS,
+                bass('.s("sawtooth").lpf(500).attack(.001).sustain(.6)'),
+                riff('.s("square").lpf(2000).gain(.8)'),
+              ),
+            },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "plucked, then muted",
+            response: {
+              code: code(
+                ...DRUMS,
+                bass('.s("sawtooth").lpf(500).decay(.15).gain(0)'),
+                riff('.s("square").lpf(2000).gain(.8)'),
+              ),
+            },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
           {
             name: "short notes with .clip() instead",
             response: {

@@ -74,8 +74,9 @@ export function rhythmSlots(streak: StreakSummary, today: string): RhythmSlot[] 
 /** "3 of 5 days this week" (the first week's goal is pro-rated by the server). */
 export function goalLine(streak: StreakSummary): string {
   const { qualifyingDays: q, goal } = streak.thisWeek;
-  if (q >= goal) return `This week's goal is met: ${q} of ${goal} days`;
-  return `${q} of ${goal} days this week`;
+  const days = goal === 1 ? "day" : "days";
+  if (q >= goal) return `This week's goal is met: ${q} of ${goal} ${days}`;
+  return `${q} of ${goal} ${days} this week`;
 }
 
 /** Whether today is a free rest: this week's goal is already met and today has nothing yet. */

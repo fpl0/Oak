@@ -188,8 +188,9 @@ describe("Wave 5 Bands: swing, minor keys and the twelve-bar form", () => {
   }
 
   // A twelve-bar Band (U11.L05 on, C5, X2): its bass roots make a 12-bar chorus in every blues lesson key, and every
-  // chord it plays is a dominant seventh.
-  for (const band of bands.filter((b) => b.bars === 12)) {
+  // chord it plays is a dominant seventh. Wave 7's jazz blues (its ii–Vs, its °7: the J4 changes) is checked as a
+  // jazz blues in packages/strudel/e2e/wave7-bands.test.ts.
+  for (const band of bands.filter((b) => b.bars === 12 && b.id !== "band.jazz-blues")) {
     for (const flavour of SHIPPED) {
       test(`${band.id} in ${flavour} is a twelve-bar chorus of dominant sevenths in ${BLUES_KEYS.join(" ")}`, async () => {
         for (const tonic of BLUES_KEYS) {

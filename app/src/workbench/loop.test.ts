@@ -166,7 +166,7 @@ describe("a roll that follows the playhead on long loops", () => {
 });
 
 describe("shortcut sheet rows", () => {
-  test("every Wave 2–6 workbench key is listed, display-only", () => {
+  test("every Wave 2–7 workbench key is listed, display-only", () => {
     const rows = shortcutRows();
     expect(rows.map((r) => r.keys)).toEqual(WORKBENCH_LOOP_SHORTCUTS.map(([k]) => k));
     expect(rows.every((r) => r.when?.({} as never) === false && r.scope === "workbench")).toBe(true);
@@ -198,6 +198,10 @@ describe("shortcut sheet rows", () => {
       "Shift+I",
       "Shift+J",
       "Shift+V",
+      // Wave 7: tensions, chord-scales, density (the only Shift+letters left).
+      "Shift+X",
+      "Shift+Q",
+      "Shift+D",
     ]);
   });
 });

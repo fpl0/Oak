@@ -8,6 +8,8 @@ import { unknownCodes } from "../feedback/catalog.ts";
 import type { RubricContext } from "./context.ts";
 import { evaluateRubric, type runRubric } from "./index.ts";
 import { CUSTOM_RULES, RULES } from "./rules.ts";
+import { WAVE7_BUILT_CUSTOM } from "./wave7-custom.ts";
+import { wave7UnbuiltCustom } from "./wave7-rules.ts";
 
 setDefaultTimeout(30_000);
 
@@ -93,35 +95,34 @@ test("every rule name of the content contract has an analyzer", () => {
   ];
   expect(Object.keys(RULES).sort()).toEqual([...names].sort());
   // Corrections pass: the effect checks of the lesson fixes (rubric/corrections-rules.ts).
-  expect(Object.keys(CUSTOM_RULES).sort()).toEqual(
-    [
-      "allowed-tensions",
-      "ii-v-chain",
-      "walking-bass",
-      "silent-beat",
-      "split-beat",
-      "held",
-      "bars-differ",
-      "speed-change",
-      "transposed-copy",
-      "distinct-keys",
-      "orbits-differ",
-      "call-response",
-      "stack-intervals",
-      "chords-per-bar",
-      "control-set",
-      "parts-enter",
-      "last-chord",
-      "song-kept",
-      "tuplets-every-bar",
-      "swung-offbeats",
-      "voiced-with",
-      "broken-chord",
-      "black-keys",
-      "chance-varies",
-      "echo",
-    ].sort(),
-  );
+  const built = [
+    ...WAVE7_BUILT_CUSTOM,
+    "silent-beat",
+    "split-beat",
+    "held",
+    "bars-differ",
+    "speed-change",
+    "transposed-copy",
+    "distinct-keys",
+    "orbits-differ",
+    "call-response",
+    "stack-intervals",
+    "chords-per-bar",
+    "control-set",
+    "parts-enter",
+    "last-chord",
+    "song-kept",
+    "tuplets-every-bar",
+    "swung-offbeats",
+    "voiced-with",
+    "broken-chord",
+    "black-keys",
+    "chance-varies",
+    "echo",
+  ];
+  // Wave 7 Build (rubric/wave7-custom.ts): every planned custom rule of the advanced tracks is built.
+  expect(wave7UnbuiltCustom(built)).toEqual([]);
+  expect(Object.keys(CUSTOM_RULES).sort()).toEqual([...built].sort());
 });
 
 describe("form-free rules", () => {
@@ -423,10 +424,15 @@ describe("harmony rules", () => {
     const { extra } = await fails(rule({ rule: "custom", fn: "nope" }), 'mel: note("c4")');
     expect(extra[0]?.id).toBe("rubric.unknown");
   });
-  test("custom allowed-tensions (JC4): an altered dominant that resolves fits; one that does not, does not", async () => {
-    const r = rule({ rule: "custom", fn: "allowed-tensions", params: { min: 0.85 } });
-    await passes(r, 'chords: chord("<Dm9 G7b9 C^9 C^9>").voicing()', 4, { key: C });
-    await fails(r, 'chords: chord("<C7alt F^7 Dm7 G7#9>").voicing()', 4, { key: C });
+  test("custom allowed-tensions (J2.L03, JC4): reads the MELODY against the chords (w7plan A4)", async () => {
+    const r = rule({ rule: "custom", fn: "allowed-tensions", params: { minRatio: 0.85 } });
+    const chords = 'chords: chord("<Dm7 G7 C^7 C^7>").voicing()';
+    // The 9th over Dm7, the 13th over G7, the 9th and the ♯11 over Cmaj7: tensions the chords take.
+    await passes(r, `${chords}\nmel: note("<e5 e5 d5 f#5>").s("piano")`, 4, { key: C });
+    // A sustained C♯ over Cmaj7: outside the chord and its tensions (the pre-flight's counterexample).
+    await fails(r, `${chords}\nmel: note("<e5 e5 c#5 c#5>").s("piano")`, 4, { key: C });
+    // The 11th held over Cmaj7 (a half step above its 3rd): the avoid note.
+    await fails(r, `${chords}\nmel: note("<e5 e5 f5 f5>").s("piano")`, 4, { key: C });
   });
   test("device-count (CF-A): a secondary dominant and a borrowed chord; ♭VII alone is modal colour", async () => {
     const r = rule({

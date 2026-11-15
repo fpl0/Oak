@@ -204,7 +204,6 @@ export function barGridCheck(
   const expected = (rn ? correct.rn : correct.text) ?? [];
   const answer = (rn ? got.rn : got.text) ?? [];
   const sevenths = ui.qualities.some((q) => !["maj", "min", "dim", "aug"].includes(q));
-  const blues = (ui.bars === 12 || ui.bars === 24) && expected.every((x) => /7$/.test(x.trim()));
   const read = (s: string | undefined): GridChord | null => {
     if (!s?.trim()) return null;
     if (rn) {
@@ -220,6 +219,9 @@ export function barGridCheck(
     const c = parseChordWithBass(s.trim());
     return c ? { chord: c, text: toLeadSheet({ ...c, bassPc: c.rootPc }) } : null;
   };
+  // An all-dominant twelve-bar blues, read by quality (Wave 7: a jazz blues' Cm7 and B°7 end in "7" too, and its
+  // bar 9 is ii, not V, so the twelve-bar sentences would be false there).
+  const blues = (ui.bars === 12 || ui.bars === 24) && expected.every((x) => read(x)?.chord.quality === "7");
   const same = (a: ChordId, b: ChordId): boolean =>
     sevenths
       ? a.rootPc === b.rootPc && a.quality === b.quality

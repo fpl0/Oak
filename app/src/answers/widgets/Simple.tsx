@@ -7,8 +7,10 @@ import { clsx } from "clsx";
 import { Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, Progress } from "../../ui/kit/index.ts";
-import { useAnswerEnv } from "../env.tsx";
+import { appAudio, useAnswerEnv } from "../env.tsx";
 import { sliderText, snapToStep } from "../keys.ts";
+import { laybackHits, laybackWords, swingHits, swingWords } from "../rhythm7.ts";
+import { fromLog, snapLog, toLog } from "../sound7.ts";
 import type { AnswerWidgetProps } from "../types.ts";
 import {
   AnswerFrame,
@@ -21,6 +23,7 @@ import {
   SubmitHint,
 } from "../ui.tsx";
 import { BarStrip, keyChangeLine } from "./BarStrip.tsx";
+import { playHits } from "./W7Parts.tsx";
 
 function radioKeys(
   root: HTMLElement | null,
@@ -259,18 +262,56 @@ export function SameDifferentAnswer(p: AnswerWidgetProps<"same-different">) {
   );
 }
 
+/**
+ * The words under a value that plays (Wave 7): a swing amount with the long:short ratio it gives, a lay-back in
+ * milliseconds with the `.late()` it takes at the piece's tempo (wave7.md §10 item 21: time is measured, never
+ * "small"), a cutoff in Hz.
+ */
+function sliderMeaning(spec: AnswerWidgetProps<"slider">["spec"], v: number, bpm: number): string | null {
+  if (spec.format === "swing") {
+    const w = swingWords(v);
+    return `long:short ${w.ratio}, ${w.feel}`;
+  }
+  if (spec.format === "ms") {
+    const w = laybackWords(v, bpm);
+    return `${w.ms}: ${w.code}, ${w.feel}`;
+  }
+  return null;
+}
+
 export function SliderAnswer(p: AnswerWidgetProps<"slider">) {
   const { spec, value, onChange, disabled, feedback } = p;
+  const env = useAnswerEnv();
+  const audio = env.audio ?? appAudio;
   const ref = useRef<HTMLInputElement>(null);
-  const mid = snapToStep((spec.min + spec.max) / 2, spec.min, spec.max, spec.step);
+  const log = spec.scale === "log" && spec.min > 0;
+  const mid = log
+    ? snapLog(fromLog(0.5, spec.min, spec.max))
+    : snapToStep((spec.min + spec.max) / 2, spec.min, spec.max, spec.step);
   const shown = value ?? mid;
   const correct = revealedOf<number>(feedback);
   const mark = markOf(feedback, 0);
+  const bpm = env.slider?.bpm ?? 96;
   useEffect(() => {
     if (p.autoFocus) ref.current?.focus();
   }, [p.autoFocus]);
-  const pct = (v: number) => ((v - spec.min) / (spec.max - spec.min)) * 100;
+  // Position on the track, 0–100: linear, or logarithmic for a cutoff.
+  const pct = (v: number) =>
+    log ? toLog(v, spec.min, spec.max) * 100 : ((v - spec.min) / (spec.max - spec.min)) * 100;
+  const LOG_STEPS = 1000;
+  const fromPos = (pos: number) =>
+    log
+      ? Math.max(spec.min, Math.min(spec.max, snapLog(fromLog(pos / LOG_STEPS, spec.min, spec.max))))
+      : snapToStep(pos, spec.min, spec.max, spec.step);
   const fmt = { ...(spec.unit ? { unit: spec.unit } : {}), ...(spec.format ? { format: spec.format } : {}) };
+  const plays = spec.play === "control" ? Boolean(env.slider?.play) : spec.play !== undefined;
+  const target = spec.play === "control" ? env.slider?.playTarget : undefined;
+  const play = (v: number) => {
+    if (spec.play === "swing") playHits(audio, swingHits(v, bpm, 2));
+    else if (spec.play === "layback") playHits(audio, laybackHits(v, bpm, 2));
+    else env.slider?.play?.(v);
+  };
+  const meaning = value === null ? null : sliderMeaning(spec, value, bpm);
   return (
     <AnswerFrame
       kind="slider"
@@ -279,10 +320,24 @@ export function SliderAnswer(p: AnswerWidgetProps<"slider">) {
       feedback={feedback}
       disabled={disabled}
       onSubmit={p.onSubmit}
+      onKey={(e) => {
+        if (e.metaKey || e.ctrlKey || e.altKey) return false;
+        if ((e.key === "p" || e.key === "P") && plays) {
+          play(shown);
+          return true;
+        }
+        if ((e.key === "t" || e.key === "T") && target) {
+          target();
+          return true;
+        }
+        return false;
+      }}
       keys={
         <>
           <KeyHint keys={["←", "→"]}>adjust</KeyHint>
           <KeyHint keys={["PgUp", "PgDn"]}>by ten</KeyHint>
+          {plays ? <KeyHint keys={["P"]}>play yours</KeyHint> : null}
+          {target ? <KeyHint keys={["T"]}>hear the target</KeyHint> : null}
           <SubmitHint />
         </>
       }
@@ -305,18 +360,23 @@ export function SliderAnswer(p: AnswerWidgetProps<"slider">) {
             ref={ref}
             type="range"
             aria-label={p.label}
-            aria-valuetext={sliderText(value, fmt)}
-            min={spec.min}
-            max={spec.max}
-            step={spec.step}
-            value={shown}
+            aria-valuetext={`${sliderText(value, fmt)}${meaning ? `, ${meaning}` : ""}`}
+            min={log ? 0 : spec.min}
+            max={log ? LOG_STEPS : spec.max}
+            step={log ? 1 : spec.step}
+            value={log ? Math.round(toLog(shown, spec.min, spec.max) * LOG_STEPS) : shown}
             disabled={disabled}
-            onChange={(e) => onChange(snapToStep(Number(e.target.value), spec.min, spec.max, spec.step))}
+            onChange={(e) => onChange(fromPos(Number(e.target.value)))}
+            onPointerUp={() => {
+              if (plays && value !== null) play(value);
+            }}
             onKeyDown={(e) => {
               if (e.key !== "PageUp" && e.key !== "PageDown") return;
               e.preventDefault();
-              const by = spec.step * 10 * (e.key === "PageUp" ? 1 : -1);
-              onChange(snapToStep(shown + by, spec.min, spec.max, spec.step));
+              const dir = e.key === "PageUp" ? 1 : -1;
+              if (log)
+                onChange(fromPos(Math.round(toLog(shown, spec.min, spec.max) * LOG_STEPS) + dir * 100));
+              else onChange(snapToStep(shown + spec.step * 10 * dir, spec.min, spec.max, spec.step));
             }}
             className={clsx("h-6 w-full accent-[var(--oak-accent)]", value === null && "opacity-60")}
           />
@@ -341,6 +401,35 @@ export function SliderAnswer(p: AnswerWidgetProps<"slider">) {
           ))}
           <span className="absolute right-0">{sliderText(spec.max, fmt)}</span>
         </div>
+        {spec.play ? (
+          <div className="mt-1 flex min-h-9 flex-wrap items-center gap-2 text-sm text-text-2">
+            {plays ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                data-enter="native"
+                icon={<Play aria-hidden className="size-4" />}
+                onClick={() => play(shown)}
+              >
+                Play yours
+              </Button>
+            ) : null}
+            {target ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                data-enter="native"
+                icon={<Play aria-hidden className="size-4" />}
+                onClick={target}
+              >
+                Hear the target
+              </Button>
+            ) : null}
+            <span data-testid="slider-meaning" aria-hidden>
+              {meaning ?? ""}
+            </span>
+          </div>
+        ) : null}
         <p className="min-h-6 text-sm text-text-2">
           {correct !== null ? (
             <>
@@ -348,6 +437,7 @@ export function SliderAnswer(p: AnswerWidgetProps<"slider">) {
               <span className="rounded-control border-2 border-dashed border-accent-2 px-1.5 font-semibold text-text">
                 {sliderText(correct, fmt)}
               </span>
+              {sliderMeaning(spec, correct, bpm) ? <span> ({sliderMeaning(spec, correct, bpm)})</span> : null}
             </>
           ) : null}
         </p>

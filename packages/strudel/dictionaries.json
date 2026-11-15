@@ -1,0 +1,1177 @@
+{
+  "generatedBy": "packages/strudel/e2e/wave7-dictionaries.test.ts (OAK_WRITE_TABLES=1 rewrites it)",
+  "strudel": "1.2.6",
+  "note": "chord(symbol).dict(dict).voicing() on C with the default anchor (c5) and mode (below). verdict: @oak/theory chordInDict (ok / missing = silent / wrong = sounds with wrong notes, STYLE §5.2). shape: @oak/theory voicingType of the notes played. root: whether C sounds.",
+  "rows": [
+    {
+      "symbol": "C",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "E3 C4 E4 G4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "E3 C4 E4 A4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C",
+      "dict": "triads",
+      "verdict": "ok",
+      "notes": "E4 G4 C5",
+      "count": 3,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C",
+      "dict": "lefthand",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C",
+      "dict": "guidetones",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "Cm",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "G3 C4 Eb4 G4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Cm",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "G3 C4 Eb4 G4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Cm",
+      "dict": "triads",
+      "verdict": "ok",
+      "notes": "Eb4 G4 C5",
+      "count": 3,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Cm",
+      "dict": "lefthand",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "Cm",
+      "dict": "guidetones",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "Co",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "Eb3 C4 Eb4 Gb4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Co",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "Eb3 C4 Gb4 A4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Co",
+      "dict": "triads",
+      "verdict": "ok",
+      "notes": "Eb4 Gb4 C5",
+      "count": 3,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Co",
+      "dict": "lefthand",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "Co",
+      "dict": "guidetones",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "Caug",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "E3 C4 E4 Ab4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Caug",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "E3 C4 E4 Ab4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Caug",
+      "dict": "triads",
+      "verdict": "wrong",
+      "notes": "Eb4 Ab4 C5",
+      "count": 3,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Caug",
+      "dict": "lefthand",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "Caug",
+      "dict": "guidetones",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C^7",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "C3 E4 G4 B4",
+      "count": 4,
+      "root": true,
+      "shape": "spread"
+    },
+    {
+      "symbol": "C^7",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "E3 B3 D4 A4 B4",
+      "count": 5,
+      "root": false,
+      "shape": "other"
+    },
+    {
+      "symbol": "C^7",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C^7",
+      "dict": "lefthand",
+      "verdict": "ok",
+      "notes": "B3 D4 E4 G4",
+      "count": 4,
+      "root": false,
+      "shape": "rootless-b"
+    },
+    {
+      "symbol": "C^7",
+      "dict": "guidetones",
+      "verdict": "ok",
+      "notes": "E4 B4",
+      "count": 2,
+      "root": false,
+      "shape": "guide-tones"
+    },
+    {
+      "symbol": "Cm7",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "Bb3 Eb4 G4 Bb4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Cm7",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "Bb3 Eb4 F4 Bb4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Cm7",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "Cm7",
+      "dict": "lefthand",
+      "verdict": "ok",
+      "notes": "Bb3 D4 Eb4 G4",
+      "count": 4,
+      "root": false,
+      "shape": "rootless-b"
+    },
+    {
+      "symbol": "Cm7",
+      "dict": "guidetones",
+      "verdict": "ok",
+      "notes": "Eb4 Bb4",
+      "count": 2,
+      "root": false,
+      "shape": "guide-tones"
+    },
+    {
+      "symbol": "C7",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "E3 Bb3 E4 G4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C7",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "E3 Bb3 E4 G4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C7",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C7",
+      "dict": "lefthand",
+      "verdict": "ok",
+      "notes": "Bb3 D4 E4 A4",
+      "count": 4,
+      "root": false,
+      "shape": "rootless-b"
+    },
+    {
+      "symbol": "C7",
+      "dict": "guidetones",
+      "verdict": "ok",
+      "notes": "E4 Bb4",
+      "count": 2,
+      "root": false,
+      "shape": "guide-tones"
+    },
+    {
+      "symbol": "Cm7b5",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "Bb3 Eb4 Gb4 Bb4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Cm7b5",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "Bb3 Eb4 Gb4 Bb4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Cm7b5",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "Cm7b5",
+      "dict": "lefthand",
+      "verdict": "ok",
+      "notes": "Eb4 Gb4 Bb4 C5",
+      "count": 4,
+      "root": true,
+      "shape": "close"
+    },
+    {
+      "symbol": "Cm7b5",
+      "dict": "guidetones",
+      "verdict": "ok",
+      "notes": "Eb4 Bb4",
+      "count": 2,
+      "root": false,
+      "shape": "guide-tones"
+    },
+    {
+      "symbol": "Co7",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "Eb3 C4 Gb4 A4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Co7",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "Eb3 C4 Gb4 A4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Co7",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "Co7",
+      "dict": "lefthand",
+      "verdict": "ok",
+      "notes": "C4 Eb4 Gb4 A4",
+      "count": 4,
+      "root": true,
+      "shape": "close"
+    },
+    {
+      "symbol": "Co7",
+      "dict": "guidetones",
+      "verdict": "ok",
+      "notes": "Eb4 A4",
+      "count": 2,
+      "root": false,
+      "shape": "other"
+    },
+    {
+      "symbol": "C6",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "C3 G3 C4 E4 A4",
+      "count": 5,
+      "root": true,
+      "shape": "spread"
+    },
+    {
+      "symbol": "C6",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "E3 A3 D4 G4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C6",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C6",
+      "dict": "lefthand",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C6",
+      "dict": "guidetones",
+      "verdict": "ok",
+      "notes": "E4 A4",
+      "count": 2,
+      "root": false,
+      "shape": "other"
+    },
+    {
+      "symbol": "Cm6",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "C4 Eb4 G4 A4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Cm6",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "C3 G3 D4 Eb4 A4",
+      "count": 5,
+      "root": true,
+      "shape": "spread"
+    },
+    {
+      "symbol": "Cm6",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "Cm6",
+      "dict": "lefthand",
+      "verdict": "ok",
+      "notes": "A3 D4 Eb4 G4",
+      "count": 4,
+      "root": false,
+      "shape": "other"
+    },
+    {
+      "symbol": "Cm6",
+      "dict": "guidetones",
+      "verdict": "ok",
+      "notes": "Eb4 A4",
+      "count": 2,
+      "root": false,
+      "shape": "other"
+    },
+    {
+      "symbol": "Csus",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "C4 F4 G4 C5",
+      "count": 4,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Csus",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "G3 C4 F4 A4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Csus",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "Csus",
+      "dict": "lefthand",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "Csus",
+      "dict": "guidetones",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C7sus",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "G3 C4 F4 G4 Bb4",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C7sus",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "Bb3 D4 F4 A4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C7sus",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C7sus",
+      "dict": "lefthand",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C7sus",
+      "dict": "guidetones",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C69",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "C3 G3 D4 E4 A4",
+      "count": 5,
+      "root": true,
+      "shape": "spread"
+    },
+    {
+      "symbol": "C69",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "E3 A3 D4 G4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C69",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C69",
+      "dict": "lefthand",
+      "verdict": "wrong",
+      "notes": "E3 G3 Bb3 D4",
+      "count": 4,
+      "root": false,
+      "shape": "rootless-a"
+    },
+    {
+      "symbol": "C69",
+      "dict": "guidetones",
+      "verdict": "ok",
+      "notes": "E4 A4",
+      "count": 2,
+      "root": false,
+      "shape": "other"
+    },
+    {
+      "symbol": "C^9",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "C3 B3 D4 E4 G4",
+      "count": 5,
+      "root": true,
+      "shape": "spread"
+    },
+    {
+      "symbol": "C^9",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "E3 B3 D4 A4 B4",
+      "count": 5,
+      "root": false,
+      "shape": "other"
+    },
+    {
+      "symbol": "C^9",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C^9",
+      "dict": "lefthand",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C^9",
+      "dict": "guidetones",
+      "verdict": "ok",
+      "notes": "E4 B4",
+      "count": 2,
+      "root": false,
+      "shape": "guide-tones"
+    },
+    {
+      "symbol": "Cm9",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "Eb3 Bb3 D4 G4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Cm9",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "Eb3 Bb3 D4 G4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Cm9",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "Cm9",
+      "dict": "lefthand",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "Cm9",
+      "dict": "guidetones",
+      "verdict": "ok",
+      "notes": "Eb4 Bb4",
+      "count": 2,
+      "root": false,
+      "shape": "guide-tones"
+    },
+    {
+      "symbol": "C9",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "Bb3 D4 E4 Bb4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C9",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "E3 Bb3 D4 G4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C9",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C9",
+      "dict": "lefthand",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C9",
+      "dict": "guidetones",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "Cm11",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "Eb3 Bb3 D4 F4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Cm11",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "Eb3 Bb3 D4 F4 Bb4",
+      "count": 5,
+      "root": false,
+      "shape": "other"
+    },
+    {
+      "symbol": "Cm11",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "Cm11",
+      "dict": "lefthand",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "Cm11",
+      "dict": "guidetones",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C13",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "Bb3 D4 E4 A4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C13",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "E3 Bb3 D4 A4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C13",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C13",
+      "dict": "lefthand",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C13",
+      "dict": "guidetones",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C7b9",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "Bb3 Db4 E4 Bb4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C7b9",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "Bb3 Db4 E4 Bb4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C7b9",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C7b9",
+      "dict": "lefthand",
+      "verdict": "ok",
+      "notes": "Bb3 Db4 E4 Ab4",
+      "count": 4,
+      "root": false,
+      "shape": "rootless-b"
+    },
+    {
+      "symbol": "C7b9",
+      "dict": "guidetones",
+      "verdict": "ok",
+      "notes": "E4 Bb4",
+      "count": 2,
+      "root": false,
+      "shape": "guide-tones"
+    },
+    {
+      "symbol": "C7#9",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "Bb3 Eb4 E4 Bb4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C7#9",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "E3 Bb3 Eb4 G4 Bb4",
+      "count": 5,
+      "root": false,
+      "shape": "other"
+    },
+    {
+      "symbol": "C7#9",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C7#9",
+      "dict": "lefthand",
+      "verdict": "ok",
+      "notes": "E3 Bb3 Eb4",
+      "count": 3,
+      "root": false,
+      "shape": "other"
+    },
+    {
+      "symbol": "C7#9",
+      "dict": "guidetones",
+      "verdict": "ok",
+      "notes": "E4 Bb4",
+      "count": 2,
+      "root": false,
+      "shape": "guide-tones"
+    },
+    {
+      "symbol": "C7#11",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "Bb3 E4 Gb4 Bb4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C7#11",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "E3 Bb3 D4 Gb4 A4",
+      "count": 5,
+      "root": false,
+      "shape": "other"
+    },
+    {
+      "symbol": "C7#11",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C7#11",
+      "dict": "lefthand",
+      "verdict": "ok",
+      "notes": "Bb3 D4 Gb4 Bb4",
+      "count": 4,
+      "root": false,
+      "shape": "other"
+    },
+    {
+      "symbol": "C7#11",
+      "dict": "guidetones",
+      "verdict": "ok",
+      "notes": "E4 Bb4",
+      "count": 2,
+      "root": false,
+      "shape": "guide-tones"
+    },
+    {
+      "symbol": "C7b13",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "Bb3 E4 Ab4 Bb4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C7b13",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "Bb3 E4 Ab4 Bb4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C7b13",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C7b13",
+      "dict": "lefthand",
+      "verdict": "ok",
+      "notes": "Bb3 Db4 E4 Ab4",
+      "count": 4,
+      "root": false,
+      "shape": "rootless-b"
+    },
+    {
+      "symbol": "C7b13",
+      "dict": "guidetones",
+      "verdict": "ok",
+      "notes": "E4 Bb4",
+      "count": 2,
+      "root": false,
+      "shape": "guide-tones"
+    },
+    {
+      "symbol": "C7alt",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "E3 Bb3 Db4 Gb4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C7alt",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "E3 Bb3 Eb4 Ab4 C5",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "C7alt",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C7alt",
+      "dict": "lefthand",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C7alt",
+      "dict": "guidetones",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C^7#11",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "C3 B3 E4 Gb4 B4",
+      "count": 5,
+      "root": true,
+      "shape": "spread"
+    },
+    {
+      "symbol": "C^7#11",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "E3 B3 E4 Gb4 B4",
+      "count": 5,
+      "root": false,
+      "shape": "other"
+    },
+    {
+      "symbol": "C^7#11",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C^7#11",
+      "dict": "lefthand",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "C^7#11",
+      "dict": "guidetones",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "Cm^7",
+      "dict": "ireal",
+      "verdict": "ok",
+      "notes": "G3 B3 C4 Eb4 B4",
+      "count": 5,
+      "root": true,
+      "shape": "other"
+    },
+    {
+      "symbol": "Cm^7",
+      "dict": "ireal-ext",
+      "verdict": "ok",
+      "notes": "Eb3 B3 D4 G4 B4",
+      "count": 5,
+      "root": false,
+      "shape": "other"
+    },
+    {
+      "symbol": "Cm^7",
+      "dict": "triads",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "Cm^7",
+      "dict": "lefthand",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    },
+    {
+      "symbol": "Cm^7",
+      "dict": "guidetones",
+      "verdict": "missing",
+      "notes": "",
+      "count": 0,
+      "root": false,
+      "shape": "silent"
+    }
+  ]
+}

@@ -578,3 +578,41 @@ test("the album holds C0, C1 and C2 with covers, liner notes and versions; a rev
   await shots(page, "track-c2-review");
   expect(errors).toEqual([]);
 });
+
+test("W7 gate: an imported capstone draft opens as text and runs only after the strict check passes", async ({
+  page,
+}) => {
+  const errors = watchErrors(page);
+  await seed(page, "C2.S1 done");
+  const state = await api<{ sketchId: string | null }>(page, "GET", "/capstones/C2");
+  expect(state.sketchId).not.toBeNull();
+  // A version as a restored backup marks it: review before running.
+  await api(page, "POST", `/sketches/${state.sketchId}/versions`, {
+    sessionId: null,
+    code: `${C2_CHORDS}\nconst w = globalThis\n`,
+    bpm: 96,
+    meter: "4/4",
+    key: { tonic: "C", mode: "major" },
+    analysis: null,
+    note: null,
+    tutorAssisted: false,
+    band: null,
+    flags: { lockedTools: [], previewTools: [], reviewBeforeRun: true },
+    ranOk: false,
+  });
+  await page.goto("/capstone/C2");
+  const review = page.getByTestId("review-panel");
+  await expect(review).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("review-code")).toContainText("globalThis");
+  await expect(page.locator(".oak-workbench, [data-testid=workbench]")).toHaveCount(0);
+  await page.getByTestId("review-check").click();
+  await expect(page.getByTestId("review-problems")).toBeVisible({ timeout: 20_000 });
+  await review.getByRole("button", { name: "Edit as text" }).click();
+  await review.getByRole("textbox").fill(C2_CHORDS);
+  await page.getByTestId("review-check").click();
+  await expect(review.getByText("The check passed")).toBeVisible({ timeout: 20_000 });
+  await page.getByTestId("review-open").click();
+  await editor(page, "C2");
+  await expect(review).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

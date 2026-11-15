@@ -39,7 +39,13 @@ export {
 } from "./engine.ts";
 export { CTX, isContextCategory } from "./gen/common.ts";
 export { gradeSungResolution } from "./gen/degree.ts";
-export { type DrillTrialResult, gradeAnswer, normalizeAnswerText, sameRnAnswer } from "./grade.ts";
+export {
+  type DrillTrialResult,
+  gradeAnswer,
+  normalizeAnswerText,
+  sameRnAnswer,
+  tapLanesOfTrial,
+} from "./grade.ts";
 export {
   generateLadderPiece,
   LADDER_FEATURE_GATES,

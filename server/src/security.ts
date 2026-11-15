@@ -133,20 +133,34 @@ export function contentSecurityPolicy(dev: boolean): string {
   ].join("; ");
 }
 
+/**
+ * Carry f2 (contracts §11.2 since 1.8; wave7.md §5.5): the offline renderer's frame page, the ONLY document Oak lets
+ * be framed, and only by Oak itself (Export renders a piece in a hidden same-origin iframe).
+ */
+export const OFFLINE_FRAME_PATH = "/offline-render.html";
+
+/** The policy of the offline renderer's frame page: the same, framed by Oak only. */
+export function frameContentSecurityPolicy(dev: boolean): string {
+  return contentSecurityPolicy(dev).replace("frame-ancestors 'none'", "frame-ancestors 'self'");
+}
+
 /** Adds the CSP (and the usual hardening headers) to any HTML or SVG response. */
 export function cspOnHtml(dev: boolean): MiddlewareHandler {
   const csp = contentSecurityPolicy(dev);
+  const frameCsp = frameContentSecurityPolicy(dev);
   return async (c, next) => {
     await next();
     const type = c.res.headers.get("content-type") ?? "";
     // SVG is a document too: opened on its own it runs its scripts with the page's origin.
     if (type.includes("text/html") || type.includes("image/svg+xml")) {
+      // Exactly the frame page, served as HTML; every other document (the SPA fallback included) keeps 'none'.
+      const frame = c.req.path === OFFLINE_FRAME_PATH && type.includes("text/html");
       // Copy first: a response built around a file or a fetch may carry immutable headers.
       c.res = new Response(c.res.body, c.res);
-      c.res.headers.set("content-security-policy", csp);
+      c.res.headers.set("content-security-policy", frame ? frameCsp : csp);
       c.res.headers.set("x-content-type-options", "nosniff");
       c.res.headers.set("referrer-policy", "no-referrer");
-      c.res.headers.set("x-frame-options", "DENY");
+      c.res.headers.set("x-frame-options", frame ? "SAMEORIGIN" : "DENY");
     }
   };
 }

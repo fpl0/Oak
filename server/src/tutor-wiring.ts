@@ -4,6 +4,7 @@
 // The contract routes whose wire shape differs from the tutor's own routes (timeline, usage, notes,
 // card applied, note retract) are served by routes/tutor.ts and mounted before the tutor's app.
 import type { BackendId } from "@oak/api";
+import { lintStrict as graderStrict } from "@oak/grader";
 import type { Hono } from "hono";
 import type { ContentIndex } from "./content/index.ts";
 import type { Repos } from "./db/repos/index.ts";
@@ -12,13 +13,14 @@ import type { Secrets } from "./secrets.ts";
 import type { Services } from "./services/index.ts";
 import { createDefaultTutor, type DefaultTutorDeps } from "./tutor/compose.ts";
 import { createTutorApp, createTutorService, localSecurity, type TutorLogEntry } from "./tutor/index.ts";
+import { type LintIssue, type LintRule, setHostStrictLint } from "./tutor/lint/strict.ts";
 import type { TutorPorts } from "./tutor/ports.ts";
 import type { TutorService } from "./tutor/service-types.ts";
 import { FakeTutorBackend, type FakeTutorOptions } from "./tutor-adapters/fake-backend.ts";
 import { GraderAdapter } from "./tutor-adapters/grader.ts";
 import { LessonContextAdapter } from "./tutor-adapters/lessons.ts";
 import { ProgressAdapter } from "./tutor-adapters/progress.ts";
-import { reviewFactsPort } from "./tutor-adapters/review-facts.ts";
+import { reviewFactsPort, reviewW7Port } from "./tutor-adapters/review-facts.ts";
 import {
   learnerClock,
   SettingsAdapter,
@@ -26,6 +28,33 @@ import {
   SqliteNotesStore,
   SqliteUsageSink,
 } from "./tutor-adapters/stores.ts";
+
+const GRADER_RULES: ReadonlySet<string> = new Set<LintRule>([
+  "lint.base.import",
+  "lint.base.with",
+  "lint.base.identifier",
+  "lint.base.member",
+  "lint.base.remote-samples",
+  "lint.strict.computed-member",
+  "lint.strict.this",
+  "lint.strict.reserved-string",
+  "lint.strict.construct",
+]);
+
+/** The grader's strict profile as tutor lint issues (an unknown id, e.g. `eval.syntax`, reads as `lint.parse`). */
+export function graderStrictIssues(code: string): LintIssue[] {
+  return graderStrict(code)
+    .filter((d) => d.severity === "error")
+    .map((d) => ({
+      rule: (GRADER_RULES.has(d.id) ? d.id : "lint.parse") as LintRule,
+      message: d.message,
+      line: d.line,
+      from: d.range.from,
+      to: d.range.to,
+    }));
+}
+// Every server that wires the tutor holds the model's code to the grader's strict profile too (review:security).
+setHostStrictLint(graderStrictIssues);
 
 export type TutorHealth = "ready" | "missing_key" | "invalid_key" | "unreachable";
 
@@ -60,7 +89,12 @@ export interface TutorWiringDeps {
 
 export function createTutorWiring(d: TutorWiringDeps): TutorWiring {
   const clock = learnerClock(d.repos, d.now);
-  const lessons = new LessonContextAdapter(d.content, d.repos, reviewFactsPort(d.graders, d.repos));
+  const lessons = new LessonContextAdapter(
+    d.content,
+    d.repos,
+    reviewFactsPort(d.graders, d.repos),
+    reviewW7Port(d.graders, d.repos),
+  );
   const ports: TutorPorts = {
     grader: new GraderAdapter(d.graders.tutor, d.repos, d.content),
     conversations: new SqliteConversationStore(d.repos, clock),

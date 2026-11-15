@@ -18,9 +18,11 @@ import {
   checkNotation,
   checkSchema,
   checkSounds,
+  checkStandard,
   checkTheory,
 } from "./checks.ts";
 import { backends } from "./harness.ts";
+import { isTrackLesson } from "./standard.ts";
 
 setDefaultTimeout(120_000);
 const { lessons, errors } = await loadLessons();
@@ -63,7 +65,9 @@ for (const l of lessons)
         pending.push(...(r.pending ?? []).map((p) => `${l.def.id} ${r.name}: ${p}`));
         expect(r.issues).toEqual([]);
       });
-    for (const check of [checkEvaluation, checkGrading, checkNotation])
+    // The corrections-pass standard (decision 71) binds the advanced tracks' lessons (./standard.ts).
+    const standard = isTrackLesson(l.def.id) && !l.sample ? [checkStandard] : [];
+    for (const check of [checkEvaluation, checkGrading, checkNotation, ...standard])
       test(check.name.replace(/^check/, ""), async () => {
         const r = await check(l);
         pending.push(...(r.pending ?? []).map((p) => `${l.def.id} ${r.name}: ${p}`));

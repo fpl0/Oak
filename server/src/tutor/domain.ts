@@ -173,6 +173,13 @@ export interface ReviewSource {
    * strongest thing in the song first (the longest review the tutor writes); absent: two or three, as always.
    */
   strengthsWanted?: 2 | 3;
+  /**
+   * Wave 7: a capstone with two versions (AC1): both, each with its own facts, and what differs between them
+   * (`compareIdioms` of @oak/grader). The review compares them and says which version each comment is about.
+   */
+  versions?: ReviewVersion[];
+  /** Wave 7: the two versions compared: the same tune, and the axes that differ (tempo, sound, swing, …). */
+  versionsCompared?: { sameTune: boolean; axes: string[] } | null;
 }
 
 /** Wave 4: the version a review is about (contracts §10.6 storage; wave4.md §5.2). */
@@ -255,6 +262,164 @@ export interface ReviewFacts {
   rhythm?: FactRhythm[];
   /** Wave 6: the meter's beat (compound: a dotted quarter in threes) and the BPM that counts it. */
   beat?: { compound: boolean; beats: number; bpm: number } | null;
+  // --- Wave 7 (wave7.md §3.2): the advanced tracks' views, so a review of JC1–AC2 names what the analysis found ---
+  /** Wave 7: every ii–V and the key it aims at (JC1's keys visited, JC3). */
+  twoFives?: FactTwoFive[];
+  /** Wave 7: the voicing type of each hand-voiced chord, grouped by type; a `voicing()` line is "dictionary". */
+  voicings?: FactVoicing[];
+  /** Wave 7: the walking bass bar by bar, with each bar's faults (JC2, JC3). */
+  walking?: FactWalking | null;
+  /** Wave 7: the comping rhythm of the chords, by figure (Charleston, push, on the beat). */
+  comping?: FactComping | null;
+  /** Wave 7: the jazz devices a reharmonisation added, each against the original's chord in its bar (JC4). */
+  reharm?: FactReharm | null;
+  /** Wave 7: a contrafact against its model's changes and head (JC3). */
+  contrafact?: FactContrafact | null;
+  /** Wave 7: the melody's tensions over its chords, and held avoid notes (JC4, AC2). */
+  tensions?: FactTensions | null;
+  /** Wave 7: each part's distance from the grid in milliseconds at the piece's tempo (RC1, AC2). */
+  feel?: FactFeel[];
+  /** Wave 7: the clave, its direction and how many bars hold it from bar 1 (RC2). */
+  clave?: FactClave | null;
+  /** Wave 7: each part against the clave, window by window: strokes met as written and crossed (RC2). */
+  claveAlign?: FactClaveAlign[];
+  /** Wave 7: notes sounding together under their low-interval limit (AC1, AC2). */
+  registerClashes?: FactRegisterClash[];
+  /** Wave 7: each part's level against the loudest; more than 24 dB under it is not heard (AC1, AC2). */
+  levels?: FactLevel[];
+  /** Wave 7: the Euclidean rhythm a part plays, with its bars (RC2). */
+  euclid?: FactEuclid[];
+  /** Wave 7: two parts as a polyrhythm, with the bars where both pulses sound (RC2). */
+  polyrhythm?: FactPolyrhythm | null;
+  /** Wave 7: density by section (or by four bars): onsets per bar and parts (A2, AC1). */
+  density?: FactDensity[];
+}
+
+/** Wave 7. A ii–V and the key it aims at (`twoFiveView`). */
+export interface FactTwoFive {
+  bar: number;
+  ii: string;
+  v: string;
+  /** "Eb major", "A minor". */
+  target: string;
+  resolved: boolean;
+}
+
+/** Wave 7. One voicing type and the display bars it sounds in. */
+export interface FactVoicing {
+  track: string;
+  /** "shell", "rootless-a", "rootless-b", "drop-2", "close", "spread", "guide-tones", "other", or "dictionary". */
+  type: string;
+  bars: number[];
+}
+
+/** Wave 7. A walking bass line read on the quarters. */
+export interface FactWalking {
+  track: string;
+  bars: number;
+  /** Bars with no fault. */
+  clean: number;
+  /** Each bar with a fault, and what it is ("not a note on every beat", "beat 1 is not the root"). */
+  faults: { bar: number; faults: string[] }[];
+}
+
+export interface FactComping {
+  track: string;
+  /** Figure ("charleston", "push", "on-the-beat", "other", "rest") to display bars. */
+  figures: Record<string, number[]>;
+}
+
+export interface FactReharm {
+  /** The tune note for note; `null` when no original melody was given to compare. */
+  melodyKept: boolean | null;
+  devices: { device: string; bar: number; was: string; now: string }[];
+}
+
+export interface FactContrafact {
+  changesRatio: number;
+  changedBars: number[];
+  sharedMelodyRatio: number;
+  sharedBars: number[];
+}
+
+export interface FactTensions {
+  /** Tension label ("9", "#11", "13", "b9") to the display bars it sounds in. */
+  byLabel: Record<string, number[]>;
+  /** Melody notes heard as tensions, of all melody notes over a chord. */
+  share: number;
+  /** Held or on-beat notes a half step above a chord tone. */
+  avoid: { bar: number; label: string; chord: string; note: string }[];
+}
+
+export interface FactFeel {
+  track: string;
+  /** Median distance from the 16th grid, ms at the piece's tempo: + behind (late), − ahead. */
+  offsetMs: number;
+  onsets: number;
+}
+
+export interface FactClave {
+  track: string;
+  /** "son" or "rumba", "3-2" or "2-3": the first window that holds one. */
+  type: string | null;
+  direction: string | null;
+  /** Bars from bar 1 held by consecutive windows with that clave. */
+  coveredBars: number;
+  /** First bars of the two-bar windows that do not hold it. */
+  missing: number[];
+}
+
+export interface FactClaveAlign {
+  track: string;
+  windows: { bar: number; shared: number; crossed: number }[];
+}
+
+export interface FactRegisterClash {
+  bar: number;
+  low: string;
+  high: string;
+  interval: number;
+}
+
+export interface FactLevel {
+  track: string;
+  relDb: number;
+  heard: boolean;
+}
+
+export interface FactEuclid {
+  track: string;
+  pulses: number;
+  steps: number;
+  rotation: number;
+  bars: number[];
+}
+
+export interface FactPolyrhythm {
+  a: string;
+  b: string;
+  /** "3:2": the counts heard together most often. */
+  ratio: string;
+  /** Bars where both pulses sound evenly together. */
+  bars: number[];
+  /** Bars the piece has. */
+  of: number;
+}
+
+export interface FactDensity {
+  /** A section name, or "bars 1-4". */
+  where: string;
+  bars: [number, number];
+  onsetsPerBar: number;
+  parts: number;
+}
+
+/** Wave 7. One version of a two-version capstone (AC1 "One Tune, Two Genres"), for a review that compares them. */
+export interface ReviewVersion {
+  id: "a" | "b";
+  label: string;
+  code: string;
+  facts: ReviewFacts | null;
 }
 
 /** Wave 6. The mode a piece or one of its sections reads in (`modeView` of @oak/grader). */

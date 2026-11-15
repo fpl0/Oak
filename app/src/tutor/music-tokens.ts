@@ -12,7 +12,7 @@
 // - a `term` that is not a glossary ID but names an interval (`[[term:m3]]`, `[[term:perfect-fifth]]`), a key
 //   (`[[term:e-flat-major]]`) or a key signature (`[[term:2-sharps]]`) becomes a playable chip described by
 //   @oak/theory; a glossary ID always wins (`[[term:tritone]]` is the glossary's, and it also plays one).
-import type { MusicToken } from "@oak/api";
+import type { MusicToken, TrackLensId } from "@oak/api";
 import type { TermEntry, ToolEntry } from "@oak/content-kit";
 import {
   characteristicTonesOf,
@@ -44,6 +44,15 @@ import {
 } from "@oak/theory";
 import type { FormViewSection } from "../lib/form-view.ts";
 import { barsPhrase, barsWhere, type ChordAt, type KeySpanAt, runsOf } from "./harmony-chips.ts";
+import {
+  barsText,
+  claveFromSlug,
+  claveText,
+  TRACK_WORDS,
+  type TrackMarks,
+  type TrackWord,
+  trackLensLabel,
+} from "./track-chips.ts";
 
 export const PLAY_KEY: KeySpec = { tonic: "C", mode: "major" } as KeySpec;
 
@@ -81,9 +90,25 @@ export interface TokenContext {
    * force and a numeral is read in the key of its bar. Absent or one key: the subject's key everywhere.
    */
   keyPlan?: readonly KeySpanAt[];
+  /**
+   * Wave 7: what the Workbench's track lenses found in the music on screen (voicing types, tensions, the clave,
+   * register clashes, by bar), so a voicing, tension, clave or register chip lights its bars. Absent: the chip
+   * switches its lens on and says what it is, without bars.
+   */
+  track?: TrackMarks | null;
 }
 
-export type TokenVariant = "interval" | "key" | "signature" | "mode";
+export type TokenVariant =
+  | "interval"
+  | "key"
+  | "signature"
+  | "mode"
+  // Wave 7: the advanced tracks' words (track-chips.ts).
+  | "voicing"
+  | "tension"
+  | "clave"
+  | "register"
+  | "lens";
 
 /**
  * Wave 6: the lens a chip switches on when clicked, so the learner sees on the roll and the staff what the tutor
@@ -93,7 +118,9 @@ export type TokenVariant = "interval" | "key" | "signature" | "mode";
 export type TokenLens =
   | { group: "chords"; id: "romanNumerals"; label: string }
   | { group: "music"; id: "keyPlan"; label: string }
-  | { group: "base"; id: "degrees"; label: string };
+  | { group: "base"; id: "degrees"; label: string }
+  // Wave 7: a voicing, tension, clave, register (and the other track words) switch their track lens on.
+  | { group: "track"; id: TrackLensId; label: string };
 
 export interface TokenInfo {
   kind: MusicToken["kind"];
@@ -610,6 +637,58 @@ const GLOSSARY_INTERVAL: Record<string, string> = {
   "term.whole-step": "M2",
 };
 
+/**
+ * Wave 7: a voicing type, a tension, the clave or a register (and the other track lenses' words) as a chip: it lights
+ * the bars where the music on screen has it and switches its lens on; a voicing chip plays the learner's own chord of
+ * that type (else a model on Dm7).
+ */
+function trackInfo(word: TrackWord, entry: TermEntry, preview: boolean, ctx: TokenContext): TokenInfo {
+  const bars = ctx.track ? word.bars(ctx.track) : [];
+  const first = runsOf(bars)[0];
+  const lens = trackLensLabel(word.lens);
+  const where =
+    bars.length > 0
+      ? ` Here: ${word.what} in ${barsText(bars)}. Click to light them on the roll and turn the ${lens} lens on.`
+      : word.what && ctx.track
+        ? ` The music on screen has none. Click to turn the ${lens} lens on.`
+        : ` Click to turn the ${lens} lens on.`;
+  const play = word.play?.(ctx.track ?? null);
+  return {
+    kind: "term",
+    variant: word.variant,
+    label: entry.term,
+    title: `${entry.term}: ${entry.definition}${preview ? ` (Comes in ${entry.introducedBy}.)` : ""}${where}`,
+    aria: `term ${entry.term}${preview ? ", preview" : ""}${bars.length > 0 ? `, in ${barsText(bars)}` : ""}`,
+    ...(play ? { play } : {}),
+    ...(preview ? { preview: true } : {}),
+    ...(first ? { highlight: first, where: bars } : {}),
+    lens: { group: "track", id: word.lens, label: lens },
+  };
+}
+
+/** Wave 7: a clave named by type and direction (`[[term:son-3-2]]`): its strokes, and the bars that hold it here. */
+function claveInfo(c: { type: "son" | "rumba"; direction: "3-2" | "2-3" }, ctx: TokenContext): TokenInfo {
+  const name = `${c.type === "son" ? "Son" : "Rumba"} clave, ${c.direction}`;
+  const here = ctx.track?.clave ?? null;
+  const same = here !== null && here.type === c.type && here.direction === c.direction;
+  const bars = same ? here.bars : [];
+  const first = runsOf(bars)[0];
+  const note = same
+    ? ` Here it holds in ${barsText(bars)}.`
+    : here
+      ? ` The music on screen plays ${here.type} ${here.direction}.`
+      : "";
+  return {
+    kind: "term",
+    variant: "clave",
+    label: `${c.type} ${c.direction}`,
+    title: `${name}: strokes on the eighths of two bars, ${claveText(c.type, c.direction)}; the ${c.direction.startsWith("3") ? "three" : "two"} side first.${note} Click to turn the Clave lens on.`,
+    aria: `clave ${c.type} ${c.direction}${bars.length > 0 ? `, in ${barsText(bars)}` : ""}`,
+    ...(first ? { highlight: first, where: bars } : {}),
+    lens: { group: "track", id: "clave", label: trackLensLabel("clave") },
+  };
+}
+
 function termInfo(value: string, ctx: TokenContext): TokenInfo {
   const id = value.startsWith("term.") ? value : `term.${value}`;
   const entry = ctx.terms.find((t) => t.id === id);
@@ -617,6 +696,8 @@ function termInfo(value: string, ctx: TokenContext): TokenInfo {
   if (entry) {
     const mode = MODE_TERMS[id];
     if (mode) return modeInfo(mode, entry, preview, ctx);
+    const word = TRACK_WORDS[id];
+    if (word) return trackInfo(word, entry, preview, ctx);
     const iv = GLOSSARY_INTERVAL[id];
     if (iv)
       return {
@@ -632,6 +713,8 @@ function termInfo(value: string, ctx: TokenContext): TokenInfo {
     if (key) return keyInfo(key, ctx);
     const fifths = fifthsFromSlug(slug);
     if (fifths !== null) return signatureInfo(fifths);
+    const clave = claveFromSlug(slug);
+    if (clave) return claveInfo(clave, ctx);
   }
   const word = entry?.term ?? value.replace(/^term\./, "").replace(/-/g, " ");
   return {

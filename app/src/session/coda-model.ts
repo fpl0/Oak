@@ -214,10 +214,13 @@ export function releaseOf(
   const track = tracks.find((t) => t.capstoneId === capstoneId);
   if (!track || !detail || detail.id !== track.id) return null;
   const fresh = detail.versions.filter((v) => v.createdAt >= since);
-  const version = fresh.at(-1);
+  // A revision is a version added to a track that was on the album before this session. A first release that puts
+  // several versions on the track at once (AC1's two versions) is a first release, shown by its first version.
+  const revision = detail.versions.some((v) => v.createdAt < since);
+  const version = revision ? fresh.at(-1) : fresh[0];
   if (!version) return null;
   const side = track.side === "Bside" ? "B-side" : `Side ${track.side}`;
-  return { track, version, place: `${side} · track ${track.trackNo}`, revision: version.version > 1 };
+  return { track, version, place: `${side} · track ${track.trackNo}`, revision };
 }
 
 /** "What you used" on a release: the version's theory tags, then the code tools it uses, without repeats. */

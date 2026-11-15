@@ -1,7 +1,17 @@
 // The unit specs written so far (AUTHORING §1 step 1). Each renders to content/specs/<unit>.md.
 import { A1 } from "./A1.ts";
+import { A2 } from "./A2.ts";
 import { CF } from "./CF.ts";
 import { END } from "./END.ts";
+import { J1 } from "./J1.ts";
+import { J2 } from "./J2.ts";
+import { J3 } from "./J3.ts";
+import { J4 } from "./J4.ts";
+import { J5 } from "./J5.ts";
+import { JC2 } from "./JC2.ts";
+import { R1 } from "./R1.ts";
+import { R2 } from "./R2.ts";
+import { R3 } from "./R3.ts";
 import type { UnitSpec } from "./types.ts";
 import { U00 } from "./U00.ts";
 import { U01 } from "./U01.ts";
@@ -42,8 +52,18 @@ export const unitSpecs: readonly UnitSpec[] = [
   U16,
   U17,
   A1,
+  A2,
   CF,
   END,
+  J1,
+  J2,
+  J3,
+  J4,
+  JC2,
+  J5,
+  R1,
+  R2,
+  R3,
 ];
 export type {
   CapstoneSessionSpec,

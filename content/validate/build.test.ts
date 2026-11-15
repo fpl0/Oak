@@ -113,14 +113,17 @@ describe("ID ledger (contracts §1.1 rule 4)", () => {
   });
   test("step, exercise and example IDs are ledgered once their unit is released", () => {
     const { lock } = updateLock([], {
-      // J1 (the jazz track) is not released yet: its IDs stay free until it is.
-      exercise: ["U01.L02/silence-beat-3", "J1.L01/draft-name", "A1.L02/released-side"],
-      step: ["U02.L01/S5", "J1.L01/S1", "A1.L02/S1"],
+      // Every unit of the course is released since Wave 7 (the tracks); "K1" stands for a unit still being written,
+      // whose IDs stay free until it is released.
+      exercise: ["U01.L02/silence-beat-3", "K1.L01/draft-name", "J1.L01/draft-name", "A1.L02/released-side"],
+      step: ["U02.L01/S5", "K1.L01/S1", "J1.L01/S1", "A1.L02/S1"],
     });
     expect(lock.map((e) => e.id)).toEqual([
       "A1.L02/released-side",
+      "J1.L01/draft-name",
       "U01.L02/silence-beat-3",
       "A1.L02/S1",
+      "J1.L01/S1",
       "U02.L01/S5",
     ]);
     const renamed = updateLock([{ id: "U01.L02/silence-beat-3", kind: "exercise" }], {

@@ -122,6 +122,7 @@ import {
   sideInfo,
   sideMinutes,
 } from "./side.ts";
+import { LockedLine } from "./track-ui.tsx";
 import { answerMissing, registryHas, stepScopePanel } from "./wave5.ts";
 import { stepMusicLenses } from "./wave6.ts";
 
@@ -219,7 +220,11 @@ export function LessonPlayer({ lessonId, step, preview, from }: LessonPlayerProp
             </div>
           }
         >
-          {loaded.data.def.title} opens when the lessons before it are done. Today has your next step.
+          <LockedLine
+            lessonId={lessonId}
+            title={loaded.data.def.title}
+            syllabus={bundle.data?.syllabus ?? null}
+          />
         </EmptyState>
       </Page>
     );

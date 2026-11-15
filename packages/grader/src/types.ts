@@ -278,6 +278,31 @@ export interface GradeContext {
    * Corrections pass: `chords`, the song's lead-sheet symbols bar by bar, for the `song-kept` rule.
    */
   songForm?: readonly { label: string; bars: number; chords?: readonly (readonly string[])[] }[];
+  /**
+   * Wave 7 (carry f4; docs/design/wave7.md §3.2): the song's own melody, note by note, for the rules that keep a
+   * tune (CF-T.S4's arrangement, JC4's reharmonisation, AC1's two versions; `song-melody-kept`). Onsets in bars from
+   * the first full bar (a pickup's notes are negative), MIDI as the answer key writes it. The capstone host fills it
+   * from `SongDef.answerKey` (the song the learner picked); absent, those rules fail "not built yet" or name it.
+   */
+  songMelody?: readonly SongMelodyNote[];
+  /**
+   * Wave 7 (content-kit `CapstoneDef.versions`, AC1): the OTHER version's code of a two-version capstone, for the
+   * rules named in the brief's `across` (`two-versions-differ`). The grader engineer evaluates it in the same realm
+   * and passes it to the rubric as `RubricContext.otherVersion`; until then those rules answer "not built yet".
+   */
+  otherVersion?: { id: "a" | "b"; code: string };
+  /**
+   * W7 gate: the brief names no key (JC1 travels through three; `CapstoneDef.key` absent), so `key` is the host's
+   * reading of the piece, not a key the brief asks for: no `harmony.key-mismatch` note is given.
+   */
+  keyFree?: boolean;
+}
+
+/** One note of a song's melody (`GradeContext.songMelody`). */
+export interface SongMelodyNote {
+  onset: Rat;
+  dur: Rat;
+  midi: number;
 }
 
 export interface GradeRequest {

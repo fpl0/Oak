@@ -52,6 +52,7 @@ import { gradeDrillTrial } from "./model.ts";
 import { cuePlan, resolutionOf, stagingOf } from "./plans.ts";
 import { asAsked, compositeSource, plannedSource, staircaseSource } from "./sources.ts";
 import { gradeRoots, isBassLineTrial } from "./wave5.ts";
+import { tapLanesOf } from "./wave7.ts";
 
 export { alonePlan, auditionPlan };
 
@@ -65,6 +66,8 @@ export interface LiveFrame {
 }
 interface Live {
   taps: number[];
+  /** Wave 7: the hand of each live tap of a two-lane take (0: F, 1: J), in the order of `taps`. */
+  voices: (0 | 1)[];
   frames: LiveFrame[];
   /** Seconds the response window lasts (0: none open). */
   windowSec: number;
@@ -73,8 +76,8 @@ interface Live {
   clock: (() => number) | null;
   /** Input level, dBFS (singing). */
   levelDb: number;
-  /** A pointer tap on the on-screen pad while armed (`timeStamp` from the DOM event). */
-  tapNow: ((timeStamp: number) => void) | null;
+  /** A pointer tap on the on-screen pad while armed (`timeStamp` from the DOM event; `voice` 1 is the J lane). */
+  tapNow: ((timeStamp: number, voice?: 0 | 1) => void) | null;
   /**
    * Wave 5: where the passage is while it plays (the twelve-bar chart lights the bar that sounds): its start on the
    * AudioContext clock, the clock, its tempo, the passage bar it starts at (0-based) and how many bars it plays.
@@ -84,6 +87,7 @@ interface Live {
 }
 export const useLive = create<Live>((set) => ({
   taps: [],
+  voices: [],
   frames: [],
   windowSec: 0,
   windowStart: null,
@@ -92,7 +96,16 @@ export const useLive = create<Live>((set) => ({
   tapNow: null,
   playhead: null,
   reset: () =>
-    set({ taps: [], frames: [], windowSec: 0, windowStart: null, clock: null, levelDb: -100, tapNow: null }),
+    set({
+      taps: [],
+      voices: [],
+      frames: [],
+      windowSec: 0,
+      windowStart: null,
+      clock: null,
+      levelDb: -100,
+      tapNow: null,
+    }),
 }));
 
 // --- audio helpers ------------------------------------------------------------------------------
@@ -397,10 +410,16 @@ function presentActor(env: DrillEnv) {
           windowStart: origin,
           clock: () => oak.ctx.currentTime,
         });
-        tap.arm({ twoVoices: trial.params.twoVoices === true });
-        useLive.setState({ tapNow: (ts) => void tap.tapAt(0, ts) });
+        // Wave 7: a two-lane take (one hand per pulse) taps with F and J; each tap keeps its hand.
+        const lanes = tapLanesOf(trial);
+        tap.arm({ twoVoices: trial.params.twoVoices === true || lanes !== null });
+        useLive.setState({ tapNow: (ts, voice) => void tap.tapAt(voice ?? 0, ts) });
         cleanups.push(() => useLive.setState({ tapNow: null }));
-        cleanups.push(tap.onTap((e) => useLive.setState((s) => ({ taps: [...s.taps, e.time - origin] }))));
+        cleanups.push(
+          tap.onTap((e) =>
+            useLive.setState((s) => ({ taps: [...s.taps, e.time - origin], voices: [...s.voices, e.voice] })),
+          ),
+        );
         handles.push(play(oak, st.cue, t0));
         handles.push(play(oak, st.stimulus, t0 + st.stimulusAt));
         handles.push(play(oak, st.windowClick, origin));
@@ -416,15 +435,30 @@ function presentActor(env: DrillEnv) {
         );
         timers.push(
           atTime(oak, t0 + st.endAt, () => {
-            const taps = tap
+            const kept = tap
               .taps()
-              .map((e) => e.time - origin)
-              .filter((t) => t >= -0.25 && t <= st.responseSec + 0.3);
+              .map((e) => ({ t: e.time - origin, voice: e.voice }))
+              .filter((e) => e.t >= -0.25 && e.t <= st.responseSec + 0.3);
+            const taps = kept.map((e) => e.t);
             tap.disarm();
             useLive.setState({ tapNow: null });
-            sendBack({ type: "CAPTURED", taps });
+            sendBack(
+              lanes
+                ? { type: "CAPTURED", taps, voices: kept.map((e) => e.voice) }
+                : { type: "CAPTURED", taps },
+            );
           }),
         );
+        return;
+      }
+      // Wave 7: a sung trial in Quiet mode is heard in the head while it plays: the mic never opens (contracts §8.5).
+      if (kind === "sing" && input.quiet) {
+        handles.push(play(oak, st.cue, t0));
+        const stim = play(oak, st.stimulus, t0 + st.stimulusAt);
+        handles.push(stim);
+        sendBack({ type: "STAGE", stage: "listen" });
+        if (stim) await stim.done;
+        if (!cancelled) sendBack({ type: "PRESENTED" });
         return;
       }
       if (kind === "sing") {

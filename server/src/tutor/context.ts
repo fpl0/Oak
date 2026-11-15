@@ -5,21 +5,24 @@
 // Everything in it is redacted to the turn's level by redaction.ts. It is deterministic: fixed
 // line order, sorted keys, nothing finer than the learner-local day, so equal inputs give equal
 // bytes and the transcript stays cache-friendly.
-import { answerForms, answerKindOf, answerLeaks } from "./answer-guard.ts";
+import { answerForms, answerKindOf, answerLeaks, maskAnswers } from "./answer-guard.ts";
 import type { GradeSnapshot, ReviewSource, TutorNote } from "./domain.ts";
 import { hintsShown, type IssueView, redactGrade } from "./redaction.ts";
 import { factLines } from "./review-facts.ts";
-import { strengthsWantedFor } from "./reviews.ts";
+import { reviewKeys, strengthsWantedFor, versionNames } from "./reviews.ts";
 import type { TurnContext, UserTurn } from "./types.ts";
 import {
   keyPlanLine,
   keyScaleLine,
+  trackOfSubject,
   vocabularyLines,
   vocabularyOf,
   w5VocabularyLines,
   w5VocabularyOf,
   w6VocabularyLines,
   w6VocabularyOf,
+  w7VocabularyLines,
+  w7VocabularyOf,
 } from "./vocabulary.ts";
 
 export const CONTEXT_VERSION = "1";
@@ -112,8 +115,8 @@ function reviewLines(kind: string, subjectId: string, r: ReviewSource): string[]
     );
   // Wave 6 (d2): what a review's try-it code and prose are held to. Oak refuses a review that breaks these.
   if (kind === "capstone" || kind === "track") {
-    const plan = r.facts?.keyPlan ?? [];
-    const keys = plan.length > 0 ? [...new Set(plan.map((k) => k.key))] : r.facts?.key ? [r.facts.key] : [];
+    // Wave 7: the keys a ii–V aims at (JC1 visits three) and both versions' keys count as the piece's keys.
+    const keys = reviewKeys(r);
     if (keys.length > 0)
       lines.push(
         `try_code_key: ${keys.join(", then ")} · every tryCode is written in ${keys.length > 1 ? "the key of the bars it is for" : "this key"}: its .scale() and its chord symbols, never moved to another key`,
@@ -131,6 +134,24 @@ function reviewLines(kind: string, subjectId: string, r: ReviewSource): string[]
   );
   // Oak's analysis, fact by fact: every strength and revision is anchored to bars listed here (contracts §10.6).
   if (r.facts) lines.push(...factLines(r.facts).map((l) => inline(l, 400)));
+  // Wave 7 (AC1): two versions of one tune. Each version's facts, prefixed with its id, and what differs.
+  const versions = versionNames(r);
+  if (versions.length > 1) {
+    lines.push(
+      `versions: ${versions.map((v) => `${v.id} "${inline(v.label, 40)}"`).join(" · ")} · the review compares them: every strength and revision names the version it is about ("${inline(versions[0]?.label ?? "", 40)}" or "version ${versions[0]?.id}"), with that version's bars`,
+    );
+    if (r.versionsCompared)
+      lines.push(
+        `versions_compared: ${r.versionsCompared.sameTune ? "the same tune in both" : "NOT the same tune: the melodies differ"} · they differ in ${r.versionsCompared.axes.length > 0 ? r.versionsCompared.axes.join(", ") : "nothing Oak measures"}`,
+      );
+    for (const v of r.versions ?? []) {
+      const bpm = /\bsetcpm\(\s*(\d+(?:\.\d+)?)\s*\/\s*4\s*\)/.exec(v.code)?.[1];
+      lines.push(
+        `version ${v.id} "${inline(v.label, 40)}": ${bpm ? `${bpm} BPM (setcpm), ` : ""}${v.code.split("\n").length} lines of code`,
+      );
+      if (v.facts) lines.push(...factLines(v.facts).map((l) => `[${v.id}] ${inline(l, 400)}`));
+    }
+  }
   // Only present once a graded ladder piece has passed (contracts §10.6).
   if (r.reference !== null) lines.push(`reference: ${block(r.reference)}`);
   return lines;
@@ -219,6 +240,9 @@ export function buildOakContext(ctx: TurnContext): string {
 
   const terms = ctx.terms.recent.slice(0, MAX_RECENT_TERMS);
   lines.push(`terms_introduced: ${ctx.terms.count} · recent: ${terms.length ? terms.join(", ") : "none"}`);
+  // The vocabulary lines give examples (a [[chord:Dm7]], .swingBy(1/3, 8), son 3-2): on a step whose answer one of
+  // them is, the example is withheld like any other place the answer could appear (Wave 7).
+  const vocabStart = lines.length;
   lines.push(...vocabularyLines(vocab));
   const w5 = w5VocabularyOf(ctx.terms);
   lines.push(...w5VocabularyLines(w5, vocab, stepKey ?? ctx.review?.facts?.key ?? null));
@@ -229,6 +253,15 @@ export function buildOakContext(ctx: TurnContext): string {
       dominantSeventh: w5.dominantSeventh,
     }),
   );
+  // Wave 7: the advanced tracks the learner has started, or the one this subject belongs to.
+  lines.push(
+    ...w7VocabularyLines(w7VocabularyOf(ctx.terms), vocab, {
+      track: trackOfSubject(step?.lessonId ?? key.subjectId),
+    }),
+  );
+  if (scaleForms.length > 0)
+    for (let i = vocabStart; i < lines.length; i++)
+      lines[i] = maskAnswers(lines[i] as string, scaleForms, ctx.disclosure);
   const tools = ctx.progress.unlocked.recent.slice(0, MAX_RECENT_TOOLS);
   lines.push(
     `tools_unlocked: ${ctx.progress.unlocked.count} · recent: ${tools.length ? tools.join(", ") : "none"}`,

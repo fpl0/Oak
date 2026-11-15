@@ -152,7 +152,10 @@ describe("prose stays inside the learner's vocabulary", () => {
     expect(
       proseProblems(text, new Set(["term.secondary-dominant", "term.pivot-chord", "term.modulation"])),
     ).toEqual([]);
-    expect(proseProblems("A tritone substitution over the subdominant.", null)).toHaveLength(2);
+    // Wave 7: tritone substitution is a jazz-track term now (J5.L01), refused only when the learner has not met it.
+    expect(proseProblems("A tritone substitution over the subdominant.", null)).toHaveLength(1);
+    expect(proseProblems("A tritone substitution over the subdominant.", new Set())).toHaveLength(2);
+    expect(proseProblems("A tritone substitution here.", new Set(["term.tritone-sub"]))).toEqual([]);
   });
 
   test("everyday words and bar-anchored description are left alone", () => {
@@ -166,8 +169,18 @@ describe("prose stays inside the learner's vocabulary", () => {
   });
 
   test("every rule compiles, is case-insensitive and names what to say instead", () => {
+    // Wave 7: where case carries the meaning (numerals ii–V–i, the letters of A and B voicings, LFO and FM), the rule
+    // is case-sensitive, so "ii-v" in a word or "a voicing" in plain prose is not taken for the name.
+    const caseMatters = new Set([
+      "term.minor-ii-v-i",
+      "term.ii-v-i",
+      "term.a-voicing",
+      "term.b-voicing",
+      "term.lfo",
+      "term.fm-synthesis",
+    ]);
     for (const r of HARMONY_TERMS) {
-      expect(r.re.flags).toContain("i");
+      if (!caseMatters.has(r.term ?? "")) expect(r.re.flags).toContain("i");
       expect(r.say.length).toBeGreaterThan(8);
       expect(r.term === null || r.term.startsWith("term.")).toBe(true);
     }

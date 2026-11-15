@@ -4,7 +4,7 @@
 // no facts (the review still gets the text analysis). Wave 5: the grader's form, bass, blues and swing views (the
 // same functions the rubric grades with) and a transcription's checks, so a review of C3–C5, X2 or a ladder song
 // can name sections, the bass's roles, the 12-bar form, the swing and where each check stands.
-import type { KeySpec, MeterId, UnlockableId } from "@oak/content-kit";
+import type { KeySpec, MeterId, SongDef, UnlockableId } from "@oak/content-kit";
 import { R } from "@oak/content-kit";
 import {
   analyzePiece,
@@ -14,12 +14,15 @@ import {
   chromaticHarmonyView,
   contrastAxes,
   detectDevices,
+  type EvalResult,
   formView,
   harmonyView,
   keyPlanView,
   modeView,
+  type Normalized,
   normalize,
   rhythmView,
+  type SongMelodyNote,
   swingView,
 } from "@oak/grader";
 import type { Repos } from "../db/repos/index.ts";
@@ -41,6 +44,7 @@ import {
   type SectionFeaturesLike,
   type TrackSwingLike,
 } from "../tutor/review-facts.ts";
+import { compareVersions, songMelodyOf, type W7ViewPlan, w7Inputs } from "./review-facts-w7.ts";
 
 export type ReviewFactsPort = (
   code: string,
@@ -51,33 +55,91 @@ export type ReviewFactsPort = (
     checks?: readonly CheckLike[] | null;
     /** Wave 5: the piece declares a pickup (bar numbers count from the first full bar, c4). */
     pickup?: boolean;
+    /** Wave 7: which of the track capstones' views to read (`w7PlanFor`); absent or empty: none of them. */
+    w7?: W7ViewPlan | null;
   },
 ) => Promise<ReviewFacts | null>;
 
+/**
+ * Wave 7 (AC1): two versions of one tune compared (`compareIdioms`), each evaluated as the review evaluates a piece;
+ * and a song's melody from its answer key (JC3's model head, JC4's standard), evaluated on the learner host.
+ */
+export interface ReviewW7Port {
+  compare(
+    a: string,
+    b: string,
+    opts: { key: KeySpec | null; meter: MeterId | null },
+  ): Promise<{
+    sameTune: boolean;
+    axes: string[];
+  } | null>;
+  songMelody(song: SongDef): Promise<SongMelodyNote[]>;
+}
+
 /** Bars a review analyses at most (the capstone mode's cap, contracts §6.4). */
 const MAX_BARS = 128;
+
+/** One pass of a reviewed piece, evaluated on the learner host (it is the learner's code); null when it fails. */
+async function evaluateOnePass(
+  graders: GraderHosts,
+  repos: Repos,
+  code: string,
+  key: KeySpec | null,
+  meter: MeterId,
+): Promise<{ r: EvalResult & { ok: true }; n: Normalized; ctx: { meter: MeterId; key?: KeySpec } } | null> {
+  const lint = {
+    profile: "studio" as const,
+    unlocked: repos.unlocks.ids() as Set<UnlockableId>,
+    allowPreview: true,
+    meter,
+    key,
+  };
+  const ctx = { meter, ...(key === null ? {} : { key }) };
+  let r = await graders.learner().analyze(code, { mode: "capstone", bars: MAX_BARS, lint });
+  if (!r.ok) return null;
+  // One pass of the piece (the capstone mode's length rule, contracts §6.4): a looping 8-bar song is 8 bars.
+  const len = capstoneLength(code, normalize(r, ctx).all, r.cps);
+  if (len.queriedBars < MAX_BARS) {
+    r = await graders.learner().analyze(code, { mode: "capstone", bars: len.queriedBars, lint });
+    if (!r.ok) return null;
+  }
+  return { r, n: normalize(r, ctx), ctx };
+}
+
+export function reviewW7Port(graders: GraderHosts, repos: Repos): ReviewW7Port {
+  const melodies = new Map<string, Promise<SongMelodyNote[]>>();
+  return {
+    async compare(a, b, opts) {
+      const meter: MeterId = opts.meter ?? "4/4";
+      try {
+        const [ea, eb] = await Promise.all([
+          evaluateOnePass(graders, repos, a, opts.key, meter),
+          evaluateOnePass(graders, repos, b, opts.key, meter),
+        ]);
+        return ea && eb ? compareVersions(ea.n, eb.n, meter) : null;
+      } catch {
+        return null;
+      }
+    },
+    songMelody(song) {
+      // One evaluation per song for the server's life: an answer key never changes while it runs.
+      let p = melodies.get(song.id);
+      if (p === undefined) {
+        p = songMelodyOf(song, (code, o) => graders.learner().analyze(code, o)).catch(() => []);
+        melodies.set(song.id, p);
+      }
+      return p;
+    },
+  };
+}
 
 export function reviewFactsPort(graders: GraderHosts, repos: Repos): ReviewFactsPort {
   return async (code, opts) => {
     const meter: MeterId = opts.meter ?? "4/4";
     try {
-      const lint = {
-        profile: "studio" as const,
-        unlocked: repos.unlocks.ids() as Set<UnlockableId>,
-        allowPreview: true,
-        meter,
-        key: opts.key,
-      };
-      const ctx = { meter, ...(opts.key === null ? {} : { key: opts.key }) };
-      let r = await graders.learner().analyze(code, { mode: "capstone", bars: MAX_BARS, lint });
-      if (!r.ok) return null;
-      // One pass of the piece (the capstone mode's length rule, contracts §6.4): a looping 8-bar song is 8 bars.
-      const len = capstoneLength(code, normalize(r, ctx).all, r.cps);
-      if (len.queriedBars < MAX_BARS) {
-        r = await graders.learner().analyze(code, { mode: "capstone", bars: len.queriedBars, lint });
-        if (!r.ok) return null;
-      }
-      const n = normalize(r, ctx);
+      const ev = await evaluateOnePass(graders, repos, code, opts.key, meter);
+      if (ev === null) return null;
+      const { r, n, ctx } = ev;
       const view = harmonyView(n, ctx);
       const analysis = analyzePiece(n, { ...ctx, code });
       // Wave 5 views, each on its own: one that throws on an odd piece leaves the others standing.
@@ -137,9 +199,23 @@ export function reviewFactsPort(graders: GraderHosts, repos: Repos): ReviewFacts
         durationSec,
         rhythm: rhythm as unknown as RhythmViewLike | null,
         ...(opts.pickup === true ? { pickupBars: true } : {}),
+        // Wave 7: the track capstones' views, as the plan names them (empty for every core capstone).
+        ...(opts.w7 ? w7Inputs(n, { ...ctx, bars, code }, opts.w7, changesByBar(view, bars)) : {}),
       });
     } catch {
       return null;
     }
   };
+}
+
+/** One chord symbol a bar (the chord sounding at each bar's start), `""` where none: what a hand voicing is read
+ * against (the tutor's `factsOf7`). */
+function changesByBar(view: ReturnType<typeof harmonyView>, bars: number): string[] {
+  const out: string[] = [];
+  for (let b = 1; b <= bars; b++) {
+    const beat = view.beats.find((x) => x.bar === b && x.chord !== null);
+    const slot = beat ? view.slots[beat.chord as number] : undefined;
+    out.push(slot?.symbol ?? "");
+  }
+  return out;
 }

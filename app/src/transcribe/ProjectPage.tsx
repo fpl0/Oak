@@ -68,14 +68,17 @@ import {
   barAt,
   beatSecOfGrid,
   bpmFromTaps,
+  type ClaveSpec,
   downbeatFromTaps,
   feelOfOnsets,
   type GridFeel,
   gridOf,
   isCompound,
+  isOddEighths,
   type Loop,
   loopOf,
   loopOfBars,
+  nextClave,
   nudgeDownbeat,
   playheadAt,
   setLoopPoint,
@@ -99,9 +102,11 @@ import {
   FormCard,
   NotesCard,
   projectSwing,
+  projectSwing16,
   readTriplets,
   SectionsCard,
   SWUNG_EIGHTHS,
+  SWUNG_SIXTEENTHS,
   swingMeter,
   TempoCard,
   writeSwing,
@@ -165,7 +170,11 @@ function ownAudioStarter(p: TranscriptionDetail, swing = false): string {
   const bpm = Math.round(p.bpm ?? 90);
   const key: KeySpec = p.key ?? { tonic: "C", mode: "major" };
   const meter = (p.meter ?? "4/4") as MeterId;
-  const feel = swing ? "\n// Swing 8ths: write straight eighths; .swingBy(1/3, 4) plays them swung." : "";
+  const feel = !swing
+    ? ""
+    : projectSwing16(p)
+      ? "\n// Swing 16ths: write straight 16ths; .swingBy(1/3, 8) plays them swung."
+      : "\n// Swing 8ths: write straight eighths; .swingBy(1/3, 4) plays them swung.";
   return `${tempoLine(bpm, meter)}\n// ${p.title} · ${formatKey(key)}${feel}\n\nmelody: n("0").scale("${key.tonic}4:${key.mode.replace(/ /g, ":")}").s("piano")\n`;
 }
 
@@ -491,23 +500,29 @@ export function ProjectPage({
   // --- own audio's feel; a song's phrases, lines and choruses; listening to one layer -----------------
   // The own-audio feel is kept with the project on the server (`settings.swing`, PATCH { swing }).
   const [swing, setSwingState] = useState(() => !pattern && projectSwing(project));
-  const setSwing = (on: boolean) => {
+  // Wave 7: swung 16ths (`settings.swing.subdivision` 16), the funk and neo-soul feel of R1.L02.
+  const [swing16, setSwing16State] = useState(() => !pattern && projectSwing16(project));
+  const setSwing = (on: boolean, sixteenths = false) => {
     const v = on && swingMeter(project.meter);
     setSwingState(v);
+    setSwing16State(v && sixteenths);
     writeSwing(id, v);
     patch.mutate(
-      { params: { id }, body: { swing: v ? SWUNG_EIGHTHS : null } },
+      { params: { id }, body: { swing: v ? (sixteenths ? SWUNG_SIXTEENTHS : SWUNG_EIGHTHS) : null } },
       { onError: (e) => toast.error("Couldn't save the feel", e.message) },
     );
   };
+  // Wave 7: the two-bar clave grid over the bars (K cycles son 3-2, son 2-3, rumba 3-2, rumba 2-3, off).
+  const [clave, setClave] = useState<ClaveSpec | null>(null);
   // Wave 6: triplets on the grid (a third feel), and a compound meter's beat in three whatever the feel.
   const [triplets, setTripletsState] = useState(() => !pattern && readTriplets(id));
-  const ownFeel: GridFeel = swing ? "swing" : triplets ? "triplet" : "straight";
+  const ownFeel: GridFeel = swing ? (swing16 ? "swing16" : "swing") : triplets ? "triplet" : "straight";
   const setFeel = (f: GridFeel) => {
     const t = f === "triplet" && !isCompound(project.meter);
     setTripletsState(t);
     writeTriplets(id, t);
-    if ((f === "swing") !== swing) setSwing(f === "swing");
+    const want = f === "swing" || f === "swing16";
+    if (want !== swing || (f === "swing16") !== swing16) setSwing(want, f === "swing16");
   };
   // A pattern source's feel is given (a song's swing) or read from what its rhythm section plays (triplets).
   const sourceFeel: GridFeel = useMemo(() => {
@@ -692,7 +707,13 @@ export function ProjectPage({
         return;
       }
       case "swing":
-        setSwing(!swing);
+        setSwing(!(swing && !swing16));
+        return;
+      case "swing16":
+        setSwing(!swing16, true);
+        return;
+      case "clave":
+        setClave((c) => nextClave(c));
         return;
       case "formCut": {
         // A section starts at the bar the playhead is in (the loop's first bar while a loop plays).
@@ -737,6 +758,7 @@ export function ProjectPage({
     "downbeatEarlier",
     "downbeatLater",
     "swing",
+    "swing16",
   ];
   const enabled = (a: TranscribeAction) => {
     if (!transport) return false;
@@ -749,7 +771,8 @@ export function ProjectPage({
     if (a === "loopChorus") return songGiven !== null;
     if (a === "listenBass" || a === "listenNoMelody") return canListen;
     if (a === "downbeatEarlier" || a === "downbeatLater") return grid !== null && project.downbeatS !== null;
-    if (a === "swing") return swingMeter(project.meter);
+    if (a === "swing" || a === "swing16") return swingMeter(project.meter) && !isOddEighths(project.meter);
+    if (a === "clave") return grid !== null || pattern;
     return true;
   };
   useHotkeys(transcribeBindings(act, enabled));
@@ -828,7 +851,7 @@ export function ProjectPage({
     project.key ? formatKey(project.key) : null,
     project.bpm ? `${Math.round(project.bpm)} BPM` : null,
     project.meter,
-    (songGiven?.swing ?? swing) ? "Swing 8ths" : null,
+    (songGiven?.swing ?? swing) ? (swing16 && !pattern ? "Swing 16ths" : "Swing 8ths") : null,
     !pattern && triplets && !swing && !isCompound(project.meter) ? "Triplets" : null,
   ].filter(Boolean);
   const timelineBars = project.stimulus?.bars ?? given.bars;
@@ -939,6 +962,7 @@ export function ProjectPage({
                 unitsPerBar={unitsPerBar}
                 meter={project.meter ?? "4/4"}
                 feel={sourceFeel}
+                clave={clave}
                 keys={ribbon}
                 barButtons={!standard}
                 height={standard ? 80 : 112}
@@ -1016,6 +1040,7 @@ export function ProjectPage({
                 swing={swing}
                 meter={project.meter ?? "4/4"}
                 feel={ownFeel}
+                clave={clave}
               />
               {ownMap && ownBars > 1 ? (
                 <FormMapStrip

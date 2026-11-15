@@ -2,7 +2,7 @@
 // is the notes that start together. Each chord must hold exactly its symbol's pitch classes (any octave, any
 // stacking); `spelling: "strict"` checks the letters too; `bass: true` checks the lowest note (the root, or
 // the note after the slash). A miss names the actual mistake: a wrong note, a misspelling, the bass.
-import type { Diagnostic, KeySpec, MeterId, NEvent, PickupSpec, Rat } from "@oak/content-kit";
+import type { Diagnostic, KeySpec, MeterId, NEvent, PickupSpec, Rat, VoicingShape } from "@oak/content-kit";
 import { R } from "@oak/content-kit";
 import type { ChordId } from "@oak/theory";
 import { chordNotes, chordPcs, parseChordWithBass, toLeadSheet } from "@oak/theory";
@@ -11,11 +11,14 @@ import { diag } from "../feedback/catalog.ts";
 import { bassMember } from "../match/harmony.ts";
 import type { AnswerCheck } from "./answers.ts";
 import { staffName, staffSlip } from "./answers.ts";
+import { voicingShapeCheck } from "./answers-wave7.ts";
 
 export interface StaffChordsExpect {
   symbols: readonly string[];
   spelling: "strict" | "enharmonic";
   bass: boolean;
+  /** Wave 7 (`staff-expect.voicing`): each chord also written in this shape, octave-aware. */
+  voicing?: VoicingShape | VoicingShape[];
 }
 
 /** The chords of a staff answer: notes that start together, in time order. */
@@ -86,11 +89,26 @@ export function staffChordsCheck(
     const target = [...new Set(chordPcs(chord).map(mod12))].sort((a, b) => a - b);
     const have = [...new Set(g.notes.map((x) => mod12(x.midi)))].sort((a, b) => a - b);
     const where = locAt(g.at, pos, { slot: i + 1, noteIds: g.notes.map((x) => x.id) });
-    const samePcs = target.length === have.length && target.every((p, k) => p === have[k]);
+    // Wave 7 (`staff-expect.voicing`): a shell has no 5th and a rootless voicing no root, so the chord is read by
+    // its shape over the symbol (octave-aware), not by the triad's pitch classes.
+    const shaped = expect.voicing
+      ? voicingShapeCheck(
+          g.notes.map((x) => x.midi),
+          expect.symbols[i] ?? "",
+          expect.voicing,
+        )
+      : null;
+    const samePcs = shaped
+      ? shaped.ok
+      : target.length === have.length && target.every((p, k) => p === have[k]);
     const inter = target.filter((p) => have.includes(p)).length;
     const union = new Set([...target, ...have]).size;
     const pcsCredit = samePcs ? 1 : union === 0 ? 0 : (inter / union) * 0.5;
     if (samePcs) pcsOk++;
+    else if (shaped)
+      diagnostics.push(
+        diag("harmony.voicing-shape", { slot: i + 1, got: shaped.got, want: shaped.want }, where, "quality"),
+      );
     else
       diagnostics.push(
         diag(

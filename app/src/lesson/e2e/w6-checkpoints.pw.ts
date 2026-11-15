@@ -3,7 +3,8 @@
 // (cpwalk.ts; the first widget item wrong first, then right), handed in, passed and stored on the server; and what a
 // pass says about the advanced tracks it opens (contracts §4.3; wave6.md §5.3): after U13.CP the Jazz Harmony and
 // Advanced Rhythm tracks are open, named by title, honestly (their lessons are still being written), and the
-// result's one primary action still leads on with the core. Then U13.CP to a soft pass (it counts eight gated
+// result's one primary action still leads on with the core. (Since Wave 7 the tracks' first lessons are written:
+// the card says they are on the course map, and the server names J1.L01 and R1.L01 as next.) Then U13.CP to a soft pass (it counts eight gated
 // skills, so one can be left out above the soft-pass line; U17.CP's three cannot): the first attempt handed in
 // empty is "Not yet", the retake with one gated skill left out offers "Continue anyway", and the result names that
 // skill as worth another look, never a failure.
@@ -86,9 +87,11 @@ for (const unit of ["U13", "U14", "U17"] as const satisfies readonly Unit[]) {
         "/tracks",
       );
       expect(tracks.status).toBe(200);
+      // Wave 7: both tracks have their first lesson written (J1.L01, R1.L01), so the one line names it.
       for (const t of ["J", "R"]) {
         const st = tracks.body?.items.find((x) => x.trackId === t);
-        expect(st?.note, `track ${t} is open on the server`).toMatch(/^Open\./);
+        expect(st?.status, `track ${t} is open on the server`).toBe("open");
+        expect(st?.note, `track ${t}'s next lesson`).toMatch(new RegExp(`^Next: ${t}1\\.L01 `));
       }
     }
     // Both sizes and both themes, on the one result screen (it is this visit's: a reload would lose it).

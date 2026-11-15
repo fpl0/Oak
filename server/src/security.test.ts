@@ -270,4 +270,70 @@ describe("static files", () => {
       await dist.close();
     }
   });
+
+  test("carry f2 (contracts §11.2, 1.8): /offline-render.html alone may be framed, and only by Oak", async () => {
+    const dist = await harness();
+    try {
+      const { config } = dist.server.deps;
+      const { createServer } = await import("./app.ts");
+      const { fixtureContent } = await import("./content/fixture.ts");
+      const { mkdirSync, rmSync, writeFileSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      mkdirSync(join(config.distDir, "assets"), { recursive: true });
+      writeFileSync(join(config.distDir, "index.html"), "<!doctype html><title>Oak</title>");
+      writeFileSync(join(config.distDir, "offline-render.html"), "<!doctype html><title>Oak render</title>");
+      writeFileSync(join(config.distDir, "other.html"), "<!doctype html><title>Other</title>");
+      writeFileSync(join(config.distDir, "assets", "logo.svg"), "<svg xmlns='http://www.w3.org/2000/svg'/>");
+      const s = await createServer({
+        config: { ...config, serveDist: true, dbPath: ":memory:" },
+        content: fixtureContent(),
+        graders: { learner: () => dist.learner, tutor: () => dist.tutorHost },
+        tutor: false,
+        env: {},
+        log: () => {},
+      });
+      const get = (path: string) => s.app.request(`http://127.0.0.1:8787${path}`, { headers: BROWSER });
+      const frame = await get("/offline-render.html");
+      expect(frame.status).toBe(200);
+      expect(await frame.text()).toContain("Oak render");
+      const fcsp = frame.headers.get("content-security-policy") ?? "";
+      expect(fcsp).toContain("frame-ancestors 'self'");
+      expect(fcsp).not.toContain("frame-ancestors 'none'");
+      expect(fcsp).toContain("default-src 'self'");
+      expect(frame.headers.get("x-frame-options")).toBe("SAMEORIGIN");
+      expect(frame.headers.get("x-content-type-options")).toBe("nosniff");
+      // With a query string it is the same document; every other document keeps 'none' and DENY: the SPA routes,
+      // the app's index, another HTML file, a path that only looks like the frame, an SVG.
+      expect((await get("/offline-render.html?x=1")).headers.get("x-frame-options")).toBe("SAMEORIGIN");
+      for (const path of [
+        "/",
+        "/learn/U01.L01",
+        "/album",
+        "/index.html",
+        "/other.html",
+        "/offline-render.html/",
+        "/x/offline-render.html",
+        "/OFFLINE-RENDER.HTML",
+        "/assets/logo.svg",
+      ]) {
+        const r = await get(path);
+        const type = r.headers.get("content-type") ?? "";
+        if (!type.includes("html") && !type.includes("svg")) continue;
+        expect({
+          path,
+          csp: r.headers.get("content-security-policy")?.includes("frame-ancestors 'none'"),
+        }).toEqual({
+          path,
+          csp: true,
+        });
+        expect({ path, xfo: r.headers.get("x-frame-options") }).toEqual({ path, xfo: "DENY" });
+      }
+      // Without a built frame page the path is not answered with the app's own document.
+      rmSync(join(config.distDir, "offline-render.html"));
+      expect((await get("/offline-render.html")).status).toBe(404);
+      await s.close();
+    } finally {
+      await dist.close();
+    }
+  });
 });

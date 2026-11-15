@@ -16,6 +16,7 @@ import type {
   RubricRule,
   RubricRuleName,
 } from "./schema/index.ts";
+import { TRACK_CUSTOM_RULES } from "./schema/wave7.ts";
 
 export interface Implemented {
   exerciseKinds: readonly ExerciseKind[];
@@ -143,6 +144,25 @@ export const SCHEMA_FEATURES = [
   "modulation.cadence",
   /** The `pcset` matcher with `durations` (each chord lasts as the target's does). */
   "pcset.durations",
+  // Wave 7 (the advanced tracks; AUTHORING §20, docs/design/wave7.md). Planned until the Build lands each one.
+  /** `text` with `normalize: "chord"` and `jazz: true` (jazz glyphs and extensions read as chords; J1.L02). */
+  "text.jazz-chord",
+  /** `KeyboardEx.expect.voicing` ("build this voicing": shell, rootless A/B, drop-2; J1.L05, J3.L01–L02). */
+  "keyboard.voicing",
+  /** `StaffExpect` `chords` with `voicing` (the same, written on the staff). */
+  "staff-expect.voicing",
+  /** `TapEx.lanes` (two lanes at once, one per hand: R2.L04's 3 against 2). */
+  "tap.lanes",
+  /** `clave` with `minBars` or `exact` (every two-bar window holds the whole clave; RC2). */
+  "clave.coverage",
+  /** `polyrhythm` with `minBars` or `span` (both pulses in the same bars; R2.L04, RC2). */
+  "polyrhythm.together",
+  /** `voice-leading` with `voice: "top"` or `minRatio` (AC2's top voice). */
+  "voice-leading.top",
+  /** `reharmonize` with `devices` (the jazz devices; J5.L01–L04). */
+  "reharmonize.devices",
+  /** `CapstoneDef.versions` (AC1: one tune, two versions, two pieces of code). */
+  "capstone.versions",
 ] as const;
 export type SchemaFeature = (typeof SCHEMA_FEATURES)[number];
 
@@ -255,6 +275,15 @@ export const IMPLEMENTED: Implemented = {
     // Corrections pass: the `custom` rule itself. Which functions exist is `customRules` below; `ruleUses` reports
     // an unregistered `fn` as a "custom-rule" use.
     "custom",
+    // Wave 7 Build (grader): rebuilt on the views of analyze/wave7-views.ts and golden-tested on real Strudel output
+    // with the pre-flight's counterexamples (packages/grader/src/rubric/wave7-rules.test.ts): every bar of a pass is
+    // E(k, n) from the onsets heard; the clave in every two-bar window; both pulses in the same bars; the low-interval
+    // limits of @oak/theory; the parts not crossing.
+    "euclid",
+    "clave",
+    "polyrhythm",
+    "register-separation",
+    "no-muddy-low",
   ],
   answerUis: [
     "choice",
@@ -280,6 +309,11 @@ export const IMPLEMENTED: Implemented = {
     "form",
     "bar-grid",
     "scale-builder",
+    // Wave 7 integration (packages): graded (packages/grader grade/answers-wave7.test.ts) and rendered (app/src/answers
+    // widgets Grouping.tsx and Euclid.tsx, registry, gallery, answers/e2e/wave7.pw.ts); the lesson host passes
+    // `rhythm.bpm` and a reveal shows `correct` (build-answers, build-lesson).
+    "grouping",
+    "euclid",
   ],
   // Corrections pass (grader): effect checks for the lesson fixes, each unit-tested on a right and a wrong piece in
   // packages/grader/src/rubric/corrections-rules.test.ts (`CORRECTION_RULES` in rubric/corrections-rules.ts).
@@ -311,6 +345,11 @@ export const IMPLEMENTED: Implemented = {
     "black-keys",
     "chance-varies",
     "echo",
+    // Wave 7 Build (grader): every custom rule of `TRACK_CUSTOM_RULES` (walking-bass, allowed-tensions and
+    // ii-v-chain rebuilt to their Wave 7 definitions), each built on its view and tested with right answers, the
+    // pre-flight's counterexample and a wrong answer that uses the right function
+    // (packages/grader/src/rubric/wave7-custom.test.ts).
+    ...Object.keys(TRACK_CUSTOM_RULES),
   ],
   // Wave 4 Build (grader): shapes that need only the grader (no renderer), graded with tests. Wave 4
   // integration: the shapes whose grading is tested here and whose renderer has landed — staff chords
@@ -396,6 +435,25 @@ export const IMPLEMENTED: Implemented = {
     "onsets.excludes",
     "modulation.cadence",
     "pcset.durations",
+    // Wave 7 Build (grader): fields that only the grader reads, golden-tested in packages/grader/src/rubric/
+    // wave7-rules.test.ts. A Make line and the capstone checklist draw them as any rule.
+    "clave.coverage",
+    "polyrhythm.together",
+    "voice-leading.top",
+    "reharmonize.devices",
+    // Wave 7 integration (packages): graded (grader grade/answers-wave7.test.ts) and rendered (answers JazzChord.tsx,
+    // VoicingLine.tsx with the keyboard and the grand staff, answers/e2e/wave7.pw.ts); the lesson host passes
+    // `harmony.chordStyle`, `harmony.jazz` and `harmony.voicing` (build-answers, build-lesson).
+    "text.jazz-chord",
+    "keyboard.voicing",
+    "staff-expect.voicing",
+    // Wave 7 integration (closer): `tap.lanes` renders (answers TapPad lanes), the API accepts `{ lanes }`
+    // (packages/api AttemptResponseSchema), the lesson host and content/validate/harness.ts grade both hands at once
+    // with @oak/pitch `gradeLaneTaps` against `tapLaneTargets(...)`. `capstone.versions` renders in the capstone
+    // workspace (app/src/capstone/Versions.tsx; two drafts, A/B at matched loudness, `two-versions-differ` graded with
+    // the other version in `GradeContext.otherVersion`; capstone wave7.test.ts, w7-capstones.pw.ts).
+    "tap.lanes",
+    "capstone.versions",
   ],
 };
 
@@ -405,6 +463,7 @@ export const IMPLEMENTED: Implemented = {
  * capstone). The renderer's owner moves the shape from `PLANNED` into `IMPLEMENTED` once it renders.
  */
 export const GRADER_READY: Pick<Implemented, "answerUis" | "features"> = {
+  // Wave 7 Build (grader) graded `grouping` and `euclid`; Wave 7 integration moved both into `IMPLEMENTED`.
   answerUis: [],
   // Rendered by Transcribe (ladder items) and the capstone X1 workspace, which read them from the API and
   // content/capstones.ts; no lesson host renders a staged `transcribe-step` or a `capstone-song` stimulus yet.
@@ -416,6 +475,8 @@ export const GRADER_READY: Pick<Implemented, "answerUis" | "features"> = {
     //   key-plan               melody, events and harmony matchers and every rule read the key in force at each bar
     //                          (packages/grader grade/key-plan-wave6.test.ts); the hosts draw it (notation, workbench)
     "key-plan",
+    // Wave 7 Build (grader), graded and tested in packages/grader/src/grade/answers-wave7.test.ts. Wave 7 integration
+    // moved text.jazz-chord, keyboard.voicing, staff-expect.voicing, tap.lanes and capstone.versions into `IMPLEMENTED`.
   ],
 };
 
@@ -432,11 +493,17 @@ export const PLANNED: Implemented = {
   matchers: [],
   constraints: [],
   // Wave 6 Build (grader): mode, key-change, modulation, guide-tones, velocity-ghosts, device-count and
-  // reharmonize moved into `IMPLEMENTED` with their golden tests.
+  // reharmonize moved into `IMPLEMENTED` with their golden tests. Wave 7 Foundation: the rhythm and arrangement
+  // rules that have sat in the schema since Wave 0 (contracts §5.6) meet the tracks; the Build implements each
+  // with its golden tests and the pre-flight's counterexamples (clave coverage, simultaneous polyrhythm).
+  // Wave 7 Build (grader): all five moved into `IMPLEMENTED` with their golden tests.
   rubricRules: [],
   // Wave 5 integration moved the form strip, the twelve-bar chart and the scale builder into `IMPLEMENTED`.
+  // Wave 7 Foundation: the odd-meter grouping and the Euclid numbers; Wave 7 integration moved both into `IMPLEMENTED`.
   answerUis: [],
-  customRules: [],
+  // Wave 7 Foundation: the advanced tracks' effect rules, each with its parameters (`TRACK_CUSTOM_RULES`).
+  // Wave 7 Build (grader): every one moved into `IMPLEMENTED` with its golden tests.
+  customRules: Object.keys(TRACK_CUSTOM_RULES).filter((fn) => !IMPLEMENTED.customRules.includes(fn)),
   features: SCHEMA_FEATURES.filter((f) => !(IMPLEMENTED.features ?? []).includes(f)),
 };
 
@@ -514,6 +581,13 @@ function ruleUses(r: RubricRule, ex: string, impl: Implemented, out: Unimplement
   if (r.rule === "voice-leading" && r.loop) featureUse("voice-leading.loop", ex, impl, out);
   if (r.rule === "sounds" && r.track) featureUse("sounds.track", ex, impl, out);
   if (r.rule === "pickup" && r.leadsIn) featureUse("pickup.leads-in", ex, impl, out);
+  if (r.rule === "clave" && (r.minBars !== undefined || r.exact !== undefined))
+    featureUse("clave.coverage", ex, impl, out);
+  if (r.rule === "polyrhythm" && (r.minBars !== undefined || r.span !== undefined))
+    featureUse("polyrhythm.together", ex, impl, out);
+  if (r.rule === "voice-leading" && (r.voice !== undefined || r.minRatio !== undefined))
+    featureUse("voice-leading.top", ex, impl, out);
+  if (r.rule === "reharmonize" && r.devices) featureUse("reharmonize.devices", ex, impl, out);
   if (r.rule === "custom" && !impl.customRules.includes(r.fn))
     out.push({ what: "custom-rule", name: r.fn, exercise: ex });
   if (r.rule === "matches") matcherUses(r.matcher, ex, impl, out);
@@ -522,6 +596,7 @@ function ruleUses(r: RubricRule, ex: string, impl: Implemented, out: Unimplement
 /** Wave 6. The compound meters (contracts §6.9: the dotted-quarter beat). */
 export const COMPOUND_METERS: readonly MeterId[] = ["6/8", "9/8", "12/8"];
 function answerUiFeatures(ui: AnswerUi, ex: string, impl: Implemented, out: UnimplementedUse[]): void {
+  if (ui.ui === "text" && ui.jazz) featureUse("text.jazz-chord", ex, impl, out);
   if (ui.ui === "rn-palette" && (ui.labels || ui.slotKeys)) featureUse("rn-palette.slot-keys", ex, impl, out);
   if (ui.ui === "grid" && (ui.stepsPerBar === 6 || ui.stepsPerBar === 24))
     featureUse("grid.steps", ex, impl, out);
@@ -559,6 +634,10 @@ export function unimplementedIn(exercise: Exercise, impl: Implemented = IMPLEMEN
     }
     if (ex.kind === "staff-write" && (ex.expect.e === "chords" || ex.answer.palette.chords))
       featureUse("staff-expect.chords", ex.id, impl, out);
+    if (ex.kind === "staff-write" && ex.expect.e === "chords" && ex.expect.voicing)
+      featureUse("staff-expect.voicing", ex.id, impl, out);
+    if (ex.kind === "keyboard" && ex.expect.voicing) featureUse("keyboard.voicing", ex.id, impl, out);
+    if (ex.kind === "tap" && ex.lanes) featureUse("tap.lanes", ex.id, impl, out);
     if (ex.kind === "dictation") {
       if (ex.stageAnswers || ex.stageFlow || ex.stagePass !== undefined)
         featureUse("dictation.stage-answers", ex.id, impl, out);
@@ -611,6 +690,7 @@ export function unimplementedInCapstoneSessions(
   impl: Implemented = IMPLEMENTED,
 ): UnimplementedUse[] {
   const out: UnimplementedUse[] = [];
+  if (def.versions) featureUse("capstone.versions", def.id, impl, out);
   for (const s of def.sessionDefs) {
     for (const x of s.checks ?? []) {
       matcherUses(x.matcher, x.id, impl, out);

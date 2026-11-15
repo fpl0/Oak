@@ -137,9 +137,16 @@ interface Parts {
    * 10 LU a balanced mix allows (packages/strudel/e2e/wave5.pw.ts measures every Band in every flavour).
    */
   chordsLift?: number;
+  /**
+   * The drums' gain over the kit's (default 1): a busy groove (a son's toms, a 16th-note neo-soul kick) on LinnDrum or
+   * the pop kit sums past full scale and buries the keys; Wave 7 closer, measured in packages/strudel/e2e/wave5.pw.ts.
+   */
+  drumsLift?: number;
 }
 /** The kit's chord gain, lifted for a sparse comp, to two decimals. */
 const chordsGainOf = (k: Kit, lift = 1): number => Math.round(k.chordsGain * lift * 100) / 100;
+/** The kit's drum gain, lowered for a busy groove, to two decimals. */
+const drumsGainOf = (k: Kit, lift = 1): number => Math.round(k.drumsGain * lift * 100) / 100;
 /** One flavour's code: three labelled tracks with the kit's sounds and production numbers. */
 function layers(f: Flavour, p: Parts): string {
   const k = KITS[f];
@@ -147,7 +154,7 @@ function layers(f: Flavour, p: Parts): string {
   const swing = p.swing ?? "";
   const bank = k.bank ? `.bank("${k.bank}")` : "";
   return [
-    `drums: s("${p.drums}")${bank}${swing}.velocity(${p.drumsVelocity}).gain(${num(k.drumsGain)})`,
+    `drums: s("${p.drums}")${bank}${swing}.velocity(${p.drumsVelocity}).gain(${num(drumsGainOf(k, p.drumsLift))})`,
     `bass: n(${p.bass}).scale("{{key}}").s("${k.bass}").lpf(${prod.bassLpf}).gain(${num(k.bassGain)})`,
     `chords: n(${p.chords}).scale("{{key}}").struct("${p.struct}")${swing}.s("${k.chords}").velocity(${p.chordsVelocity}).gain(${num(chordsGainOf(k, p.chordsLift))}).pan(${num(prod.pan.chords ?? 0.42)}).room(${num(prod.room)})`,
   ].join("\n");
@@ -392,6 +399,8 @@ interface SemiParts {
   bassSwing?: string;
   /** The chords' gain over the kit's (see `Parts.chordsLift`). */
   chordsLift?: number;
+  /** The drums' gain over the kit's (see `Parts.drumsLift`). */
+  drumsLift?: number;
 }
 /** One flavour's code with its parts in half steps from the tonic (see the comment above). */
 function semiLayers(f: Flavour, p: SemiParts): string {
@@ -400,7 +409,7 @@ function semiLayers(f: Flavour, p: SemiParts): string {
   const swing = p.swing ?? "";
   const bank = k.bank ? `.bank("${k.bank}")` : "";
   return [
-    `drums: s("${p.drums}")${bank}${swing}.velocity(${p.drumsVelocity}).gain(${num(k.drumsGain)})`,
+    `drums: s("${p.drums}")${bank}${swing}.velocity(${p.drumsVelocity}).gain(${num(drumsGainOf(k, p.drumsLift))})`,
     `bass: note(${p.bass}).add(${TONIC})${p.bassSwing ?? ""}.s("${k.bass}").lpf(${prod.bassLpf}).gain(${num(k.bassGain)})`,
     `chords: note(${p.chords}).add(${TONIC}).struct("${p.struct}")${swing}.s("${k.chords}").velocity(${p.chordsVelocity}).gain(${num(chordsGainOf(k, p.chordsLift))}).pan(${num(prod.pan.chords ?? 0.42)}).room(${num(prod.room)})`,
   ].join("\n");
@@ -821,6 +830,207 @@ const twoFiveOne = (f: Flavour): string => {
   }
 };
 
+// Wave 7: the advanced tracks' Bands (author:CP). Each one serves Makes and Studio sketches the Wave 6 Bands could
+// not: a jazz form with its own walking bass, comping that leaves a walking bass its register, a son groove with
+// no clave of its own, a neo-soul loop, and the odd meters.
+//
+// 1. Two jazz forms in half steps above the tonic (see TONIC), so a B♭ step plays rhythm changes in B♭ and an F step
+//    the jazz blues in F: the jazz blues of J4.L02 (theory `jazzBlues`) and rhythm changes, 32 bars A A B A (theory
+//    `rhythmChanges`, J4.L03). The comping is four-note rootless voicings between E♭3 and E4 (written in C), each
+//    chord moving its voices by a step or two; the bass walks in quarter notes, root on 1, a chord tone after it, and
+//    beat 4 a half step from the next bar's root (under it, over the lowest root A1) (in a bar of two chords, the second chord's root on beat 3). The
+//    tonic chords are sixth chords, never a major seventh under a tune on 1 or 4 (see the top of this file).
+const WALK_VOICINGS: Readonly<Record<string, { root: number; third: number; voicing: readonly number[] }>> = {
+  // Written in C: C6/9 E G A D, C9 E G B♭ D, F9 E♭ G A C, F6/9 G A C D, F♯°7 E♭ F♯ A C, G–9 F A B♭ D, G13 F A B E,
+  // A–9 E G B C, A9 E G B C♯, D–9 F A C E, D9 F♯ A C E, E–7 E G B D, E9 D F♯ G♯ B.
+  C6: { root: 0, third: 4, voicing: [-8, -5, -3, 2] },
+  C7: { root: 0, third: 4, voicing: [-8, -5, -2, 2] },
+  F7: { root: 5, third: 4, voicing: [-9, -5, -3, 0] },
+  F6: { root: 5, third: 4, voicing: [-5, -3, 0, 2] },
+  "F#o7": { root: 6, third: 3, voicing: [-9, -6, -3, 0] },
+  Gm7: { root: 7, third: 3, voicing: [-7, -3, -2, 2] },
+  G7: { root: 7, third: 4, voicing: [-7, -3, -1, 4] },
+  Am7: { root: 9, third: 3, voicing: [-8, -5, -1, 0] },
+  A7: { root: 9, third: 4, voicing: [-8, -5, -1, 1] },
+  Dm7: { root: 2, third: 3, voicing: [-7, -3, 0, 4] },
+  D7: { root: 2, third: 4, voicing: [-6, -3, 0, 4] },
+  Em7: { root: 4, third: 3, voicing: [-8, -5, -1, 2] },
+  E7: { root: 4, third: 4, voicing: [-10, -6, -4, -1] },
+};
+/** A chord's root in the walking register: C2 to G2, A♭1 to B1 (written in C). */
+const walkRoot = (name: string): number => {
+  const pc = WALK_VOICINGS[name]?.root ?? 0;
+  return pc <= 7 ? pc - 24 : pc - 36;
+};
+/**
+ * The half step that leads into a root on beat 4: from below, except into the lowest root (A1 written in C), which
+ * is approached from above (B♭1), so the walk never drops under E1 when a key folds a tritone down (G: D♯1).
+ */
+const approachTo = (root: number): number => (root <= -27 ? root + 1 : root - 1);
+/** The quarter notes of one bar of walking bass, from the bar's chords and the next bar's first chord. */
+const walkBar = (bar: readonly string[], next: string): number[] => {
+  const [a, b] = [bar[0] as string, bar[1]];
+  const r = walkRoot(a);
+  const third = r + (WALK_VOICINGS[a]?.third ?? 4);
+  // The fifth on beat 3 is the chord's own: diminished in a °7 chord (F♯°7: C, never C♯).
+  const fifth = r + (a.endsWith("o7") ? 6 : 7);
+  const approach = approachTo(walkRoot(next));
+  return b === undefined ? [r, third, fifth, approach] : [r, third, walkRoot(b), approach];
+};
+type Chart = readonly (readonly string[])[];
+const chartChords = (chart: Chart) =>
+  `"<${chart.map((bar) => (bar.length === 1 ? `[${(WALK_VOICINGS[bar[0] as string]?.voicing ?? []).join(",")}]` : `[${bar.map((c) => `[${(WALK_VOICINGS[c]?.voicing ?? []).join(",")}]`).join(" ")}]`)).join(" ")}>"`;
+const chartWalk = (chart: Chart) =>
+  `"<${chart.map((bar, i) => `[${walkBar(bar, (chart[(i + 1) % chart.length] as readonly string[])[0] as string).join(" ")}]`).join(" ")}>"`;
+/** The jazz blues of J4.L02 in C (F in F): I7 | IV7 | I7 | v7 I7 | IV7 | ♯iv°7 | I7 | VI7 | ii7 | V7 | I7 VI7 | ii7 V7. */
+const JAZZ_BLUES: Chart = [
+  ["C7"],
+  ["F7"],
+  ["C7"],
+  ["Gm7", "C7"],
+  ["F7"],
+  ["F#o7"],
+  ["C7"],
+  ["A7"],
+  ["Dm7"],
+  ["G7"],
+  ["C7", "A7"],
+  ["Dm7", "G7"],
+];
+/** Rhythm changes in C (B♭ in B♭): the A section's I vi ii V, the bridge III7 VI7 II7 V7 two bars each, A A B A. */
+const rhythmA = (last: boolean): Chart => [
+  ["C6", "Am7"],
+  ["Dm7", "G7"],
+  ["C6", "Am7"],
+  ["Dm7", "G7"],
+  ["Gm7", "C7"],
+  ["F6", "F#o7"],
+  last ? ["Dm7", "G7"] : ["Em7", "A7"],
+  last ? ["C6"] : ["Dm7", "G7"],
+];
+const RHYTHM_CHANGES: Chart = [
+  ...rhythmA(false),
+  ...rhythmA(false),
+  ["E7"],
+  ["E7"],
+  ["A7"],
+  ["A7"],
+  ["D7"],
+  ["D7"],
+  ["G7"],
+  ["G7"],
+  ...rhythmA(true),
+];
+/** Comping on 1, then on the "and" of 3 and of 4: the second chord of a two-chord bar always sounds. */
+const JAZZ_COMP = { struct: "x ~ [~ x] [~ x]", chordsVelocity: PUSH };
+/** The jazz forms in every kit: a swung ride in jazz-soul, swung hats elsewhere; the bass walks in all four. */
+const jazzForm = (f: Flavour, chart: Chart): string => {
+  const parts = { bass: chartWalk(chart), chords: chartChords(chart), ...JAZZ_COMP, swing: SWING_4 };
+  // LinnDrum's hats under every swung eighth clip the mix by 2.8 dB at the kit's gain (measured): lowered 4 dB.
+  switch (f) {
+    case "flavour.pop":
+      return semiLayers(f, { drums: "bd ~ sd ~, hh*8", drumsVelocity: HUMAN_8THS, ...parts });
+    case "flavour.jazz-soul":
+      return semiLayers(f, {
+        drums: "bd ~ ~ ~, rd [rd rd] rd [rd rd], ~ hh ~ hh",
+        drumsVelocity: HUMAN_8THS,
+        ...parts,
+      });
+    case "flavour.indie":
+      return semiLayers(f, {
+        drums: "bd ~ sd ~, hh*8",
+        drumsVelocity: HUMAN_8THS,
+        ...parts,
+        drumsLift: 0.63,
+      });
+    case "flavour.funk":
+      return semiLayers(f, { drums: "bd ~ sd bd, hh*8", drumsVelocity: HUMAN_8THS, ...parts });
+  }
+};
+const chartNames = (chart: Chart) =>
+  chart.map((bar) => (bar.length === 1 ? (bar[0] as string) : `[${bar.join(" ")}]`));
+
+// 2. A ii–V–I whose comping sits above a walking bass (J3.L04, JC2): rootless four-note voicings from E3 to E4 in C
+//    (D–9 F A C E, G13 F A B E, C6/9 E G A D), each change moving a voice by a step at most, over J3's two-feel.
+//    Take `tracks: ["drums", "chords"]` under a bass the learner walks: in G its lowest note is B3, so a walk up to
+//    A3 never meets it (`band.two-five-one`'s guide tones sit between A2 and F3, in the walk's own register).
+const HIGH_COMP = '"<[-4,-2,0,2] [-4,-2,-1,2] [-5,-3,-2,1] [-5,-3,-2,1]>"';
+const iiVIComp = (f: Flavour): string => {
+  switch (f) {
+    case "flavour.pop":
+      return layers(f, { ...POP_4, ...COMP, bass: TWO_FEEL, chords: HIGH_COMP, drumsLift: 0.8 });
+    case "flavour.jazz-soul":
+      return layers(f, {
+        drums: "bd ~ ~ ~, rd [rd rd] rd [rd rd], ~ hh ~ hh",
+        drumsVelocity: HUMAN_8THS,
+        bass: TWO_FEEL,
+        chords: HIGH_COMP,
+        ...COMP_SWUNG,
+        swing: SWING_4,
+      });
+    case "flavour.indie":
+      return layers(f, { ...INDIE_4, ...COMP, bass: TWO_FEEL, chords: HIGH_COMP, drumsLift: 0.63 });
+    case "flavour.funk":
+      return layers(f, {
+        ...FUNK_4,
+        ...STAB,
+        bass: '"<[-13 ~ -13 -6] [-10 ~ -10 -6] [-14 ~ -14 -7] [-14 ~ -14 -7]>"',
+        chords: HIGH_COMP,
+      });
+  }
+};
+
+// 3. A son groove with no clave of its own (R3, RC2, R.CP's world): I–V7 over two bars, a tumbao bass (the "and" of
+//    2 on the chord's 5th, beat 4 anticipating the next chord's root, nothing on the one) and offbeat keys, the toms
+//    playing a conga part. The learner's clave decides the direction; nothing in the Band leans either way.
+const SON_BASS = '"<[~ ~ ~ -10 ~ ~ -10 ~] [~ ~ ~ -13 ~ ~ -14 ~]>"';
+/** C (E G C) and G7 (F B D) close round middle C, on every offbeat eighth. */
+const SON_KEYS = '"<[-5,-3,0] [-4,-1,1]>"';
+const SON_DRUMS = { drums: "[~ ~ ~ bd ~ ~ bd ~], [~ mt ~ mt ~ lt lt ~], hh*8", drumsVelocity: HUMAN_8THS };
+const OFFBEATS = { struct: "[~ x]*4", chordsVelocity: '"[1 .86]*2"' };
+// The toms and hats sum past full scale on LinnDrum and the pop kit and sit 11–14 LU over the offbeat keys (measured):
+// the drums 4.4 dB down, the keys 4.1 dB up, in every kit.
+const son = (f: Flavour): string =>
+  layers(f, { ...SON_DRUMS, ...OFFBEATS, bass: SON_BASS, chords: SON_KEYS, drumsLift: 0.6, chordsLift: 1.6 });
+
+// 4. A neo-soul loop (A2, AC2's world): I6/9 ii11 iii7 vi9, four bars, voiced close between E3 and E4 in C (C6/9 E G A
+//    D, D–11 F G C E, E–7 E G B D, A–9 E G B C), each change a step at most, the sixteenths swung lightly (ratio 1.4)
+//    and the keys laid on the "a" of 3. No major seventh on I (see the top of this file).
+const NEO_CHORDS = '"<[-5,-3,-2,1] [-4,-3,0,2] [-5,-3,-1,1] [-5,-3,-1,0]>"';
+const NEO_BASS =
+  '"<[-14 ~ ~ -14 ~ ~ -10 ~] [-13 ~ ~ -13 ~ ~ -9 ~] [-12 ~ ~ -12 ~ ~ -8 ~] [-16 ~ ~ -16 ~ ~ -12 ~]>"';
+const SWING_16 = ".swingBy(1/6, 8)";
+const neoSoul = (f: Flavour): string =>
+  layers(f, {
+    drums: "bd ~ ~ bd ~ ~ ~ ~ ~ ~ bd ~ ~ ~ ~ ~, ~ sd ~ sd, hh*16",
+    drumsVelocity: HUMAN_16THS,
+    bass: NEO_BASS,
+    chords: NEO_CHORDS,
+    struct: "x ~ ~ ~ ~ ~ [~ x] ~",
+    chordsVelocity: PUSH,
+    swing: SWING_16,
+    // Two hits a bar of keys under a 16th-note groove: measured 14 LU apart on LinnDrum, clipping by 2.8 dB.
+    drumsLift: 0.6,
+    chordsLift: 1.6,
+  });
+
+// 5. An odd meter (R2.L01, Studio sketches in 5/4): I–IV over two bars in 5/4 grouped 3+2 (quarters: the second
+//    group starts on beat 4), the kick and the bass on the group starts, the snare on 3 and 5. The tempo line counts
+//    quarters (contracts §6.9): `setcpm(bpm/5)`. A 7/8 vamp waits for the frozen content/validate/bands.test.ts,
+//    whose tempo line divides a /8 meter by its dotted quarters (7/3) where 7/8 counts eighths (`setcpm(bpm/7)`).
+const FIVE_FOUR = { drums: "bd ~ ~ bd ~, ~ ~ sd ~ sd, hh*10", drumsVelocity: '"1 .86 .9 .94 .86"' };
+const fiveFour = (f: Flavour): string =>
+  layers(f, {
+    ...FIVE_FOUR,
+    bass: '"<[-14 ~ ~ -10 ~] [-11 ~ ~ -14 ~]>"',
+    chords: f === "flavour.jazz-soul" || f === "flavour.funk" ? TWO_SIXTHS : TWO_TRIADS,
+    struct: "~ x x ~ x",
+    chordsVelocity: FIVE_FOUR.drumsVelocity,
+    // Measured 11.7 LU apart on LinnDrum, clipping by 2.6 dB: the drums 4.4 dB down, the keys 2.9 dB up.
+    drumsLift: 0.6,
+    chordsLift: 1.4,
+  });
+
 const FLAVOURS: readonly Flavour[] = ["flavour.pop", "flavour.jazz-soul", "flavour.indie", "flavour.funk"];
 const each = (code: (f: Flavour) => string): Record<FlavourId, string> =>
   Object.fromEntries(FLAVOURS.map((f) => [f, code(f)])) as Record<FlavourId, string>;
@@ -982,6 +1192,60 @@ export const bands: readonly BandDef[] = [
     params: { key: true, bpm: false },
     code: each((f) => twoFiveOne(f)),
   }),
+  // Wave 7 (author:CP). J3.L04 and JC2: rootless comping above the register a walking bass needs.
+  defineBand({
+    id: "band.ii-v-i-comp",
+    title: "ii–V–I comping (rootless, above a walking bass)",
+    bars: 4,
+    roles: ["drums", "bass", "chords"],
+    params: { key: true, bpm: false },
+    code: each((f) => iiVIComp(f)),
+  }),
+  // J4.L02, JC2 and Studio: the jazz blues, twelve bars with a walking bass, in any key (see TONIC).
+  defineBand({
+    id: "band.jazz-blues",
+    title: "Jazz blues (12 bars, walking bass)",
+    bars: 12,
+    roles: ["drums", "bass", "chords"],
+    params: { key: true, bpm: false },
+    code: each((f) => jazzForm(f, JAZZ_BLUES)),
+  }),
+  // J4.L03, J.CP2, JC3 and Studio: rhythm changes, 32 bars A A B A with a walking bass, in any key (see TONIC).
+  defineBand({
+    id: "band.rhythm-changes",
+    title: "Rhythm changes (32 bars, A A B A, walking bass)",
+    bars: 32,
+    roles: ["drums", "bass", "chords"],
+    params: { key: true, bpm: false },
+    code: each((f) => jazzForm(f, RHYTHM_CHANGES)),
+  }),
+  // R3, RC2 and Studio: a son groove, I–V7, tumbao bass and offbeat keys, the clave left to the learner.
+  defineBand({
+    id: "band.son-montuno",
+    title: "Son groove (I–V7, tumbao, no clave)",
+    bars: 2,
+    roles: ["drums", "bass", "chords"],
+    params: { key: true, bpm: false },
+    code: each((f) => son(f)),
+  }),
+  // A2, AC2 and Studio: a neo-soul loop, I6/9 ii11 iii7 vi9, sixteenths swung lightly.
+  defineBand({
+    id: "band.neo-soul",
+    title: "Neo-soul loop (I–ii–iii–vi, extended)",
+    bars: 4,
+    roles: ["drums", "bass", "chords"],
+    params: { key: true, bpm: false },
+    code: each((f) => neoSoul(f)),
+  }),
+  // R2.L01 and Studio sketches in 5/4 (3+2): I–IV, kick and bass on the group starts.
+  defineBand({
+    id: "band.odd-54",
+    title: "5/4 vamp (I–IV, 3+2)",
+    bars: 2,
+    roles: ["drums", "bass", "chords"],
+    params: { key: true, bpm: false },
+    code: each((f) => fiveFour(f)),
+  }),
   ...COMPOUND_BANDS,
 ];
 export default bands;
@@ -999,6 +1263,8 @@ export const TONIC_BANDS: ReadonlySet<string> = new Set([
   "band.dorian-vamp",
   "band.lydian-vamp",
   "band.phrygian-vamp",
+  "band.jazz-blues",
+  "band.rhythm-changes",
 ]);
 /** The modal vamps and the mode each is written for (Wave 6). */
 export const MODAL_BANDS: Readonly<Record<string, ModeName>> = {
@@ -1023,6 +1289,13 @@ export const BAND_CHANGES: Readonly<Record<string, readonly string[]>> = {
   "band.soul-68": ["C", "Am", "F", "G"],
   "band.slow-128": ["C", "Am", "F", "G"],
   "band.two-five-one": ["Dm7", "G7", "C6", "C6"],
+  // Wave 7, in C (the jazz forms on a tonic of C: F's blues and B♭'s rhythm changes played in C).
+  "band.ii-v-i-comp": ["Dm9", "G13", "C6/9", "C6/9"],
+  "band.jazz-blues": chartNames(JAZZ_BLUES),
+  "band.rhythm-changes": chartNames(RHYTHM_CHANGES),
+  "band.son-montuno": ["C", "G7"],
+  "band.neo-soul": ["C6/9", "Dm11", "Em7", "Am9"],
+  "band.odd-54": ["C", "F"],
 };
 
 /**
@@ -1161,6 +1434,7 @@ export const BAND_METERS: Readonly<Record<string, MeterId>> = {
   "band.waltz-vamp": "3/4",
   "band.soul-68": "6/8",
   "band.slow-128": "12/8",
+  "band.odd-54": "5/4",
 };
 export const bandMeter = (id: string): MeterId => BAND_METERS[id] ?? "4/4";
 

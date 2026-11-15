@@ -438,6 +438,12 @@ export interface WalkOptions {
    * first short one; a walk suite passes "short" for every lesson but its last.
    */
   listen?: "first" | "short";
+  /**
+   * Each graded step takes the lesson's own pinned mistake first (default). `false` (Wave 7's unit smoke walks,
+   * w7walk.ts): every step is opened, played and given its reference only — the mistakes are proven by the full
+   * walks and, for every authored test, by wave7-grading.test.ts.
+   */
+  mistakes?: boolean;
 }
 
 /** Answers a single answer-kind part through its widget; `false` when the widget cannot enter this answer. */
@@ -472,6 +478,38 @@ export async function answerWidget(
     const clear = step.getByRole("button", { name: "Clear", exact: true });
     if ((await clear.count()) > 0 && (await clear.isEnabled())) await clear.click();
     for (const m of a.midi ?? []) await step.locator(`[data-midi="${m}"]`).first().click();
+    return true;
+  }
+  if (ui === "euclid") {
+    // Wave 7 (R3.L03 S6): the Steps, Hits and Rotation steppers, set by keyboard (Home, then ArrowUp) in that
+    // order, since the hits cannot exceed the steps.
+    const [k, n, r] = (response.answer as { euclid?: number[] } | undefined)?.euclid ?? [];
+    if (k === undefined || n === undefined) return false;
+    const spin = (id: string) => step.locator(`[data-stepper="${id}"] [role="spinbutton"]`).first();
+    if ((await spin("n").count()) === 0) return false;
+    const setTo = async (id: string, v: number, min: number) => {
+      await spin(id).focus();
+      await page.keyboard.press("Home");
+      for (let i = min; i < v; i++) await page.keyboard.press("ArrowUp");
+      await expect(spin(id)).toHaveAttribute("aria-valuenow", String(v));
+    };
+    await setTo("n", n, 2);
+    await setTo("k", k, 1);
+    if (r !== undefined && (await spin("r").count()) > 0) await setTo("r", r, 0);
+    return true;
+  }
+  if (ui === "grouping") {
+    // Wave 7: the bar cut into groups of 2 and 3, by keyboard (Backspace clears, 2 and 3 add a group).
+    const groups = (response.answer as { grouping?: number[] } | undefined)?.grouping ?? [];
+    const add = step.locator("[data-add='2']").first();
+    if ((await add.count()) === 0) return false;
+    await add.focus();
+    for (let i = 0; i < 8; i++) await page.keyboard.press("Backspace");
+    for (const g of groups) await step.locator(`[data-add='${g}']`).first().click();
+    await expect(step.locator("[data-grouping]").first()).toHaveAttribute(
+      "data-grouping",
+      groups.join(" + "),
+    );
     return true;
   }
   if (ui === "rn-palette") return enterNumerals(page, step, a.rn ?? []);
@@ -768,6 +806,7 @@ export function shownFrom(def: LessonLike, from?: string): string[] {
 /** Walks the whole lesson from the step on screen to completion. */
 export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): Promise<string[]> {
   const seen: string[] = [];
+  const mistakes = o.mistakes !== false;
   let started = o.from === undefined;
   for (const step of def.steps) {
     if (!started && step.id !== o.from) continue;
@@ -849,7 +888,7 @@ export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): P
     if (ex.kind === "run-investigate") {
       const wrong = ex.tests.find((t) => t.expect === "fail");
       const pass = ex.tests.find((t) => t.expect === "pass");
-      if (wrong) {
+      if (wrong && mistakes) {
         await answerQuestions(page, ex, wrong.response);
         await check(page);
         await expectHonestFeedback(page, [], `${label} wrong`);
@@ -872,11 +911,11 @@ export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): P
         fails.find((t) => !(t.feedback ?? []).includes("code.unchanged") && !/unchanged/i.test(t.name)) ??
         fails[0];
       if (ex.byEar?.parts && ex.byEar.parts.length > 0) {
-        await partsStep(page, ex, wrong ?? null, leaks, label);
+        await partsStep(page, ex, mistakes ? (wrong ?? null) : null, leaks, label);
         await next(page);
         continue;
       }
-      if (wrong) {
+      if (wrong && mistakes) {
         // What the learner wrote themselves is not a leak: a quoted pattern of the reference that is also in the
         // wrong code ("lefthand" put after .voicing(), U12.L06 S5) may be named back to them.
         const own = leaks.filter((l) => !(wrong.response.code as string).includes(l));
@@ -907,7 +946,7 @@ export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): P
       continue;
     }
     if (ex.kind === "all") {
-      await allAnswersStep(page, ex.parts ?? [], label);
+      await allAnswersStep(page, ex.parts ?? [], label, mistakes);
       await next(page);
       continue;
     }
@@ -931,9 +970,11 @@ export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): P
       expect(targets?.length ?? 0, `${label}: a drawn tap trial`).toBeGreaterThan(0);
       await expect(page.getByTestId("continue"), `${label}: tapping never gates`).toBeEnabled();
       const all = targets as number[];
-      const w = await submit(page, { taps: all.slice(0, Math.ceil(all.length / 2)) });
-      expect(w?.status, `${label}: half the figure does not pass`).not.toBe("pass");
-      await expectHonestFeedback(page, [], `${label} wrong (half the figure)`);
+      if (mistakes) {
+        const w = await submit(page, { taps: all.slice(0, Math.ceil(all.length / 2)) });
+        expect(w?.status, `${label}: half the figure does not pass`).not.toBe("pass");
+        await expectHonestFeedback(page, [], `${label} wrong (half the figure)`);
+      }
       const r = await submit(page, { taps: all });
       expect(r?.status, `${label}: on the targets passes`).toBe("pass");
       await next(page);
@@ -942,9 +983,11 @@ export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): P
     if (generator) {
       const expected = (await drawnAnswer(page)) as Record<string, unknown>;
       expect(expected, `${label}: a drawn trial`).not.toBeNull();
-      const wrong = await wrongFor(page, ex, expected);
-      if ((await answerOrSubmit(page, ex, wrong)) === "widget") await check(page);
-      await expectHonestFeedback(page, answerLeaks(ex, expected), `${label} wrong`);
+      if (mistakes) {
+        const wrong = await wrongFor(page, ex, expected);
+        if ((await answerOrSubmit(page, ex, wrong)) === "widget") await check(page);
+        await expectHonestFeedback(page, answerLeaks(ex, expected), `${label} wrong`);
+      }
       if ((await answerOrSubmit(page, ex, { answer: expected })) === "widget") await check(page);
       await expectPass(page, label);
       await next(page);
@@ -954,7 +997,7 @@ export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): P
     expect(pass, `${label}: a passing test`).toBeDefined();
     // The lesson's own pinned mistake: the first failing test the widget can enter (Wave 5 kinds without a widget
     // yet, and taps, through the player's own grading path).
-    for (const wrong of ex.tests.filter((t) => t.expect === "fail")) {
+    for (const wrong of mistakes ? ex.tests.filter((t) => t.expect === "fail") : []) {
       const how = await answerOrSubmit(page, ex, wrong.response);
       if (how === "none") continue;
       if (how === "widget") await check(page);
@@ -976,9 +1019,10 @@ export async function walkLesson(page: Page, def: LessonLike, o: WalkOptions): P
   } else
     await expect(page.getByTestId("lesson-complete"), `${def.id}: complete`).toBeVisible({ timeout: 30_000 });
   if (o.inSession) return checkCompleted(page, def.id, seen);
-  // What opens next is named by title, never by ID ("Blues checkpoint", not "U11.CP").
+  // What opens next is named by title, never by ID ("Blues checkpoint", not "U11.CP"; Wave 7: "Shells", not
+  // "J1.L05"; "ii–V Ballad", not "JC1"; "Jazz checkpoint 1", not "J.CP1").
   await expect(page.getByTestId("lesson-complete"), `${def.id}: no lesson IDs`).not.toContainText(
-    /\b(U\d\d|A\d)\.(L\d\d|CP)\b/,
+    /\b(U\d\d|[JRA]\d)\.(L\d\d|CP)\b|\b[JRA]\.CP\d?\b|\b[JRA]C\d\.?/,
   );
   if (o.preview) return seen;
   return checkCompleted(page, def.id, seen);
@@ -1116,7 +1160,7 @@ async function partsStep(
  * An `all` of answer parts (U07.L01 S6, U07.L03 S4, U07.L09 S6): the first part takes its own pinned mistake
  * while the others are right, the step fails and says so; then the first part is put right and the step passes.
  */
-async function allAnswersStep(page: Page, parts: readonly PartLike[], label: string) {
+async function allAnswersStep(page: Page, parts: readonly PartLike[], label: string, mistakes = true) {
   const box = (i: number) => page.getByTestId("lesson-step").locator(`li[data-part="${i + 1}"]`);
   // A part drawn from a family (U12.L02 S5, U15.L01 S5) is answered with its own drawn trial; an authored one with
   // its passing test.
@@ -1133,7 +1177,9 @@ async function allAnswersStep(page: Page, parts: readonly PartLike[], label: str
     if (i > 0) expect(await answerWidget(page, p, passOf(p, i), box(i)), `${label} part ${i + 1}`).toBe(true);
   }
   const first = parts[0] as PartLike;
-  if (first.stimulus?.src === "generator") {
+  if (!mistakes) {
+    // A smoke walk: the reference only.
+  } else if (first.stimulus?.src === "generator") {
     const wrong = await wrongFor(page, first, drawn[0] ?? {}, box(0));
     expect(await answerWidget(page, first, wrong, box(0)), `${label} part 1 wrong`).toBe(true);
     await check(page);

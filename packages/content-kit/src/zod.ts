@@ -37,6 +37,7 @@ import {
   SKILL_REGIONS,
   STEP_KINDS,
   TOOL_KINDS,
+  VOICING_SHAPES,
   WORKBENCH_PANELS,
 } from "./schema/index.ts";
 
@@ -249,7 +250,11 @@ export const AnswerSchema: z.ZodType<S.Answer> = z.strictObject({
   stages: z.partialRecord(dictationStage, z.array(z.string())).exactOptional(),
   sections: z.array(z.string().min(1)).exactOptional(),
   bars: z.array(z.number().int().positive()).exactOptional(),
+  grouping: z.array(z.number().int().positive()).min(1).exactOptional(),
+  euclid: z.array(z.number().int().nonnegative()).min(2).max(3).exactOptional(),
 });
+const voicingShape = z.enum(VOICING_SHAPES);
+const voicingShapes = z.union([voicingShape, z.array(voicingShape).min(1)]);
 const partialMap: z.ZodType<S.PartialMap> = z.record(
   z.string(),
   z.record(z.string(), z.number().min(0).max(1)),
@@ -506,6 +511,8 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       noCrossing: z.boolean().exactOptional(),
       bassFree: z.boolean().exactOptional(),
       loop: z.boolean().exactOptional(),
+      voice: z.enum(["all", "top"]).exactOptional(),
+      minRatio: z.number().min(0).max(1).exactOptional(),
     }),
     z.strictObject({
       ...ruleBase,
@@ -554,8 +561,18 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       track: trackRef,
       type: z.enum(["son", "rumba"]),
       direction: z.enum(["3-2", "2-3"]),
+      minBars: z.number().int().positive().exactOptional(),
+      exact: z.boolean().exactOptional(),
     }),
-    z.strictObject({ ...ruleBase, rule: z.literal("polyrhythm"), a: trackRef, b: trackRef, ratio: ratio2 }),
+    z.strictObject({
+      ...ruleBase,
+      rule: z.literal("polyrhythm"),
+      a: trackRef,
+      b: trackRef,
+      ratio: ratio2,
+      minBars: z.number().int().positive().exactOptional(),
+      span: z.number().int().positive().exactOptional(),
+    }),
     z.strictObject({
       ...ruleBase,
       rule: z.literal("register-separation"),
@@ -739,6 +756,7 @@ export const RubricRuleSchema: z.ZodType<S.RubricRule> = z.lazy(() =>
       min: z.number().int().positive(),
       kinds: z.array(outsideChordKind).min(1).exactOptional(),
       harmony: trackRef.exactOptional(),
+      devices: z.array(z.enum(DEVICE_NAMES)).min(1).exactOptional(),
     }),
     z.strictObject({
       ...ruleBase,
@@ -796,6 +814,7 @@ export const AnswerUiSchema: z.ZodType<S.AnswerUi> = z.discriminatedUnion("ui", 
   z.strictObject({
     ui: z.literal("text"),
     normalize: z.enum(["note", "chord", "rn", "interval", "key", "free"]),
+    jazz: z.boolean().exactOptional(),
   }),
   z.strictObject({ ui: z.literal("number") }),
   keyboardUi,
@@ -840,6 +859,12 @@ export const AnswerUiSchema: z.ZodType<S.AnswerUi> = z.discriminatedUnion("ui", 
     ui: z.literal("code"),
     starter: z.string(),
     constraints: z.array(AstConstraintSchema).exactOptional(),
+  }),
+  z.strictObject({ ui: z.literal("grouping"), meter: meterId }),
+  z.strictObject({
+    ui: z.literal("euclid"),
+    maxSteps: z.number().int().min(2).max(32),
+    rotation: z.boolean(),
   }),
   z.strictObject({ ui: z.literal("tap") }),
   z.strictObject({ ui: z.literal("mic") }),
@@ -890,6 +915,7 @@ export const TestResponseSchema: z.ZodType<S.TestResponse> = z.union([
   z.strictObject({ order: z.array(z.string()) }),
   z.strictObject({ answer: AnswerSchema }),
   z.strictObject({ taps: z.array(z.number()) }),
+  z.strictObject({ lanes: z.array(z.array(z.number())).min(2) }),
   z.strictObject({ pitchFixture: z.string().min(1) }),
   z.strictObject({ staff: z.string() }),
   z.strictObject({ click: z.union([CodeRangeSchema, z.string()]) }),
@@ -901,6 +927,15 @@ export const TestCaseSchema: z.ZodType<S.TestCase> = z.strictObject({
   expect: z.enum(["pass", "fail", "error"]),
   score: z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]).exactOptional(),
   feedback: z.array(feedbackId).exactOptional(),
+  context: z
+    .strictObject({
+      song: z
+        .string()
+        .regex(/^song\.[a-z0-9-]+$/)
+        .exactOptional(),
+      otherVersion: z.string().min(1).exactOptional(),
+    })
+    .exactOptional(),
 });
 
 // --- exercises ----------------------------------------------------------------------------------
@@ -983,6 +1018,7 @@ const staffExpect: z.ZodType<S.StaffExpect> = z.discriminatedUnion("e", [
     symbols: z.array(z.string().min(1)).min(1),
     spelling: z.enum(["strict", "enharmonic"]),
     bass: z.boolean(),
+    voicing: voicingShapes.exactOptional(),
   }),
 ]);
 const singTarget: z.ZodType<S.SingTarget> = z.discriminatedUnion("from", [
@@ -1120,6 +1156,7 @@ const keyboardEx = z.strictObject({
     pcs: z.array(z.number().int().min(0).max(11)).exactOptional(),
     bassPc: z.number().int().min(0).max(11).exactOptional(),
     sequence: z.array(z.number()).exactOptional(),
+    voicing: z.strictObject({ shape: voicingShapes, symbol: z.string().min(1) }).exactOptional(),
   }),
   pitchMode,
 });
@@ -1151,6 +1188,13 @@ const tapEx = z.strictObject({
     z.strictObject({ track: trackRef.exactOptional(), drum: z.array(drumRole).exactOptional() }),
   ]),
   tol: TapToleranceSchema,
+  lanes: z
+    .array(
+      z.strictObject({ label: z.string().min(1), track: trackRef, key: z.string().min(1).exactOptional() }),
+    )
+    .min(2)
+    .max(2)
+    .exactOptional(),
 });
 const singEx = z.strictObject({
   ...exBase,
@@ -1626,6 +1670,22 @@ export const CapstoneDefSchema: z.ZodType<S.CapstoneDef> = z.strictObject({
   reviewRevisions: z.union([z.literal(1), z.literal(2)]),
   canDo: z.array(canDoId),
   flavours: flavourOverrides.exactOptional(),
+  versions: z
+    .tuple([
+      z.strictObject({
+        id: z.literal("a"),
+        label: z.string().min(1),
+        startsIn: capstoneSessionId,
+        starter: z.string().min(1).exactOptional(),
+      }),
+      z.strictObject({
+        id: z.literal("b"),
+        label: z.string().min(1),
+        startsIn: capstoneSessionId,
+        starter: z.string().min(1).exactOptional(),
+      }),
+    ])
+    .exactOptional(),
 });
 
 // --- registries ---------------------------------------------------------------------------------
@@ -1704,6 +1764,8 @@ const answerUiKind = z.enum([
   "form",
   "bar-grid",
   "scale-builder",
+  "grouping",
+  "euclid",
 ]);
 const familyKind = z.enum(FAMILY_KINDS);
 export const FamilyDefSchema: z.ZodType<S.FamilyDef> = z.strictObject({

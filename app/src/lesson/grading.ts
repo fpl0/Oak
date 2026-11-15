@@ -33,10 +33,18 @@ import {
   stepTrialSpec,
 } from "@oak/drills";
 import type { EvalResult, ExerciseResponse, GradeRequest, MatchResult } from "@oak/grader";
-import { normalize, singTargets, tapTargets } from "@oak/grader";
+import { normalize, singTargets, tapLaneTargets, tapTargets } from "@oak/grader";
 import { parseNoteList } from "@oak/notation";
-import { gradeRhythmTaps, gradeTaps, type RhythmTapResult } from "@oak/pitch";
-import { METERS } from "@oak/theory";
+import {
+  type ClaveTapResult,
+  gradeClaveTaps,
+  gradeLaneTaps,
+  gradeRhythmTaps,
+  gradeTaps,
+  type LaneTapResult,
+  type RhythmTapResult,
+} from "@oak/pitch";
+import { type ClaveDirection, type ClaveType, claveOf, METERS } from "@oak/theory";
 import type { SungSummary } from "../answers/types.ts";
 import { globalExerciseId, withParams } from "./model.ts";
 
@@ -395,7 +403,131 @@ async function tapPerformance(
     ex.tol,
     env.profile,
   );
+  const bpm = n.cps * 60 * METERS[meter].unitsPerBar;
+  const clave = r.pass ? null : claveAsked(targets, bpm, meter, ex.bars);
+  if (clave) {
+    const named = gradeClaveTaps(
+      taps,
+      { downbeat: 0, bpm, type: clave.type, direction: clave.direction, bars: ex.bars },
+      ex.tol,
+      env.profile,
+    );
+    if (named.clave.heard) return { ...r, diagnostics: claveFirst(r, named) } as unknown as MatchResult;
+  }
   return { ...r, diagnostics: rhythmFirst(r) } as unknown as MatchResult;
+}
+
+/**
+ * The clave a tap step's targets are (review:journey, Wave 7): every two-bar cycle of a 4/4 stimulus holds
+ * exactly one clave of `claveSteps` on the eighth grid (R3.L02 S2: the rimshot's son 3-2). `null` for anything
+ * else, so only a clave step is read as one.
+ */
+export function claveAsked(
+  targets: readonly number[],
+  bpm: number,
+  meter: MeterId,
+  bars: number,
+): { type: ClaveType; direction: ClaveDirection } | null {
+  if (meter !== "4/4" || bars < 2 || bars % 2 !== 0 || !(bpm > 0) || targets.length === 0) return null;
+  const eighth = 30 / bpm;
+  const steps: number[] = [];
+  for (const t of targets) {
+    const s = t / eighth;
+    if (Math.abs(s - Math.round(s)) > 0.05) return null;
+    steps.push(Math.round(s));
+  }
+  let found: { type: ClaveType; direction: ClaveDirection } | null = null;
+  for (let c = 0; c < bars / 2; c++) {
+    const cycle = steps.filter((s) => s >= c * 16 && s < (c + 1) * 16).map((s) => s - c * 16);
+    const k = claveOf(cycle);
+    if (!k || (found && (found.type !== k.type || found.direction !== k.direction))) return null;
+    found = k;
+  }
+  return found;
+}
+
+/**
+ * A clave tapped from its other side (2-3 for 3-2) or as the other clave is said as that, first and alone
+ * (`tap.clave-direction`, `tap.clave-type` of @oak/pitch `gradeClaveTaps`): read as single taps it was "a
+ * rimshot without a tap" eight times, "a tap where it is quiet" eight times and, falsely, "your pushes landed on
+ * the beat" (review:journey: a 2-3 tapped for 3-2 five times running never heard which way round it was). The
+ * per-tap lines and the push reading are what the swapped clave explains, so they go; nothing changes `pass`.
+ */
+export function claveFirst(r: RhythmTapResult, named: ClaveTapResult): RhythmTapResult["diagnostics"] {
+  const lead = named.diagnostics.filter((d) => d.id === "tap.clave-direction" || d.id === "tap.clave-type");
+  if (lead.length === 0) return rhythmFirst(r);
+  const rest = r.diagnostics.filter(
+    (d) => !RHYTHM_NAMED.has(d.id as string) && d.id !== "tap.missed" && d.id !== "tap.extra",
+  );
+  return [...lead.map((d) => ({ ...d, severity: "error" as const })), ...rest];
+}
+
+/**
+ * Wave 7 (`tap.lanes`, R2.L04's 3 against 2; contracts §8.4): both hands graded at once by @oak/pitch
+ * `gradeLaneTaps` against each lane's targets read off the evaluated stimulus (`tapLaneTargets`, the lanes' own
+ * tracks), passed as the step's performance (content-kit `IMPLEMENTED` note on `tap.lanes`): it forgives only the
+ * offset both hands share, names a hand that rushes against the other, swapped hands and a flam, and passes when
+ * both lanes do. Grading each lane alone would forgive each lane's own lean.
+ */
+async function lanePerformance(
+  deps: GraderDeps,
+  env: GradeEnv,
+  ex: TapEx,
+  lanes: readonly (readonly number[])[],
+): Promise<MatchResult> {
+  const spec = ex.lanes ?? [];
+  const meter = ex.meter ?? env.meter;
+  if (spec.length !== 2 || ex.stimulus.src !== "code") return { score: 0, dims: {}, diagnostics: [] };
+  const res = await deps.evaluate(ex.stimulus.code, ex.bars, meter);
+  if (!res.ok) return { score: 0, dims: {}, diagnostics: [] };
+  const n = normalize(res, { meter, key: ex.key ?? env.key });
+  const targets = tapLaneTargets(spec, n, ex.bars, meter);
+  const r = gradeLaneTaps(
+    [lanes[0] ?? [], lanes[1] ?? []],
+    spec.map((l, k) => ({
+      label: l.label,
+      name: laneName(l.label),
+      key: (l.key ?? (k === 0 ? "f" : "j")).toUpperCase(),
+      targets: targets[k] ?? [],
+    })),
+    ex.tol,
+    env.profile,
+  );
+  return { ...r, diagnostics: laneFirst(r) } as unknown as MatchResult;
+}
+
+/**
+ * The pulse a lane taps, in a sentence: "Left hand: the two, with the kick" → "two" (review:journey: the whole
+ * label read "that hand plays the three, with the cowbell while the other plays the two, with the kick").
+ */
+export function laneName(label: string): string {
+  const m = /\bthe\s+([^,;:()]+)/i.exec(label);
+  return (m?.[1] ?? label).trim().toLowerCase();
+}
+
+/**
+ * A hand left silent is said once (`tap.lane-silent`): its every target also read "No tap for note n of the
+ * rhythm" (twelve lines under the one that says why), and taps of that pulse played by the other hand read as
+ * that hand's "one too many" (review:journey: a polyrhythm tapped one lane at a time). Those lines go; the rest
+ * stay, in the grader's order. Nothing changes `pass`.
+ */
+export function laneFirst(r: LaneTapResult): LaneTapResult["diagnostics"] {
+  const silent = r.diagnostics.filter((d) => d.id === "tap.lane-silent").map((d) => String(d.params.lane));
+  if (silent.length === 0) return r.diagnostics;
+  const quietTargets = r.diagnostics.flatMap((d) =>
+    d.id === "tap.missed" && silent.includes(String(d.params.lane)) && typeof d.where?.tSec === "number"
+      ? [d.where.tSec]
+      : [],
+  );
+  const near = (t: unknown) =>
+    typeof t === "number" && quietTargets.some((q) => Math.abs(q - t) * 1000 <= Math.max(r.windowMs, 60));
+  return r.diagnostics.filter((d) => {
+    const lane = d.params.lane;
+    if (d.id === "tap.missed" && typeof lane === "string" && silent.includes(lane)) return false;
+    if (d.id === "tap.extra" && typeof lane === "string" && !silent.includes(lane) && near(d.where?.tSec))
+      return false;
+    return true;
+  });
 }
 
 /**
@@ -498,6 +630,12 @@ export async function toGraderResponse(
   if ("taps" in r) {
     if (ex.kind !== "tap") return { skipped: true };
     return { performance: await tapPerformance(deps, env, ex, r.taps) };
+  }
+  // Wave 7 (`tap.lanes`): a two-hand take, one list of seconds per lane from bar 1 of the stimulus.
+  const lanes = (r as { lanes?: unknown }).lanes;
+  if (Array.isArray(lanes) && lanes.every((l) => Array.isArray(l))) {
+    if (ex.kind !== "tap" || !ex.lanes || ex.lanes.length !== 2) return { skipped: true };
+    return { performance: await lanePerformance(deps, env, ex, lanes as number[][]) };
   }
   if ("sung" in r) {
     if (ex.kind === "predict") return { answer: {} };

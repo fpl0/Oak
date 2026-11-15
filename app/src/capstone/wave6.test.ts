@@ -87,6 +87,8 @@ describe("words", () => {
     expect(listBars([3])).toBe("3");
     expect(listBars([5, 1, 3, 1])).toBe("1, 3 and 5");
     expect(listBars([1, 2, 4, 5, 6, 8])).toBe("1, 2, 4, 5 and 2 more");
+    expect(listBars([1, 2, 3, 4, 5, 6, 7, 8])).toBe("1–8");
+    expect(listBars([3, 4])).toBe("3 and 4");
   });
 });
 

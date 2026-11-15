@@ -372,10 +372,14 @@ function leadOf(state: TodayState, input: TodayInput): string | null {
       return input.gym?.lead ?? plan.note ?? "Listen, then write down what you hear.";
     case "review":
       return (
-        plan.note ??
-        (plan.core === "complete"
-          ? "Reviews keep what you know fresh and the Oak green. Studio is open when they are done."
-          : "Nothing new is open right now. Today keeps what you know fresh.")
+        // After the whole course the planner's "nothing of the track you chose…" fallback is not news: every track
+        // is complete, and the day is an ordinary review day.
+        (plan.course === "complete" && plan.note && /track|focus/i.test(plan.note) ? null : plan.note) ??
+        (plan.course === "complete"
+          ? "Reviews keep what you know fresh and the Oak green. The gym and Studio are open when they are done."
+          : plan.core === "complete"
+            ? "Reviews keep what you know fresh and the Oak green. Studio is open when they are done."
+            : "Nothing new is open right now. Today keeps what you know fresh.")
       );
     case "edge":
       return input.edge ? edgeLead(input.edge, { gym: input.gymOpen === true }) : plan.note;

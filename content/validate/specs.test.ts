@@ -59,6 +59,14 @@ const NO_BAND: Record<string, string> = {
   "U13.L05":
     "the triplets are the learner's piano and hats; band.doo-wop plays the same triplets and would blur them",
   "U13.L06": "the call's drums are the learner's lines, and the answer is written in the same lines",
+  // Wave 7, the rhythm track (content/specs/R1.ts, R2.ts, conventions "Bands").
+  "R1.L03": "the funk pocket is the lesson: kick, ghosted snare, bass and clav are all the learner's",
+  "R1.L04": "the three interlocking parts and the drums they fit around are the learner's",
+  "R1.L05": "the displaced figure is heard against the learner's own steady drums and bass",
+  "R2.L01": "no Band is written in 5/4; the kick that groups the bar is the learner's",
+  "R2.L02": "no Band is written in 7/8 or 9/8i; the accents that group the bar are the learner's",
+  "R2.L04": "both pulses of the polyrhythm are the learner's; a Band's drums would add a third",
+  "R2.L05": "the line that drifts and the line that keeps the bar are both the learner's",
 };
 
 for (const u of unitSpecs)

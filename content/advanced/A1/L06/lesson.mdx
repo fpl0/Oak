@@ -1,0 +1,57 @@
+{/* A1.L06 Movement: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+Your loop from Space, with a held pad of chords and a lead that holds its notes, in place of the riff. First every long note perfectly still, then the same notes moving while they sound.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+A machine holds a note perfectly still; a singer never does. Before you run it, pick what the second call changes. <CodeRef fn="vib" />
+
+<Predict exercise="one-long-g" />
+</Step>
+
+<Step id="S3">
+A wobble has two dials: how fast it goes, and how far it moves.
+
+<Example id="how-fast" views="code" />
+
+<OnPass>Six wobbles a second in bar 2, and the same small width in both bars. A small, regular wobble in a note's pitch is **vibrato**, as a singer or a violinist adds it: `.vib()` sets how often, `.vibmod()` how far, in semitones each way.</OnPass>
+</Step>
+
+<Step id="S4">
+Match a singer's vibrato by ear. Too fast and it buzzes; too wide and it sounds seasick.
+
+<Editor exercise="match-the-vibrato" />
+
+<OnPass>The lead leans into its long notes now, the way a singer does. Vibrato on the held notes, none on the short ones, is how many singers and players use it: here every note gets it, and the long ones show it. A good place to stop for today if you need to.</OnPass>
+</Step>
+
+<Step id="S5">
+The pitch is one thing a slow wobble can move. Here are three others, one bar each. <CodeRef fn="tremolosync" />
+
+<Example id="three-moves" views="code" />
+
+<OnPass>Four dips in bar 2: the level falls and comes back with every beat. That is tremolo; in bar 1 a phaser sweeps the colour, in bar 3 the cutoff opens and closes. Each time a slow wave, too slow to hear as a pitch, pushes one setting up and down: that slow wave is an **LFO**. Vibrato is an LFO on the pitch.</OnPass>
+</Step>
+
+<Step id="S6">
+Your ear for movement. One pad, one thing moving.
+
+<Choice exercise="what-moves" />
+
+<OnPass>The brightness: an LFO on the cutoff. The notes and the level stay put; only the top of the sound opens and closes.</OnPass>
+</Step>
+
+<Step id="S7">
+Back to the still loop, or a loop of your own with a held part. Give it movement you can hear, and choose how fast by ear: slow movement breathes, fast movement shimmers.
+
+<Make exercise="make-it-move" />
+
+<CanDo id="cd.code.movement" />
+
+You can now make any held part move: vibrato on a lead, a phaser, a pulse in time, a slow sweep. Next in this track: richer sources than the four plain waves, a second wave that bends the first for bells and brass, and the wide sound of five saws at once.
+
+<Recap />
+</Step>

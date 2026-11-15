@@ -25,6 +25,7 @@ import {
 import { PassiveListen } from "../../drills/PassiveListen.tsx";
 import { PASSIVE_GENERATORS } from "../../drills/passive.ts";
 import { type DrillData, useAfterSet, useDrillData } from "../../drills/use-drill-data.ts";
+import { quietPracticeOf, TRACK_TITLES, trackOfFamily } from "../../drills/wave7.ts";
 import { usePageTitle } from "../../lib/nav.ts";
 import { keyScope, useHotkeys } from "../../ui/keys/KeymapProvider.tsx";
 import { Button, buttonClass } from "../../ui/kit/Button.tsx";
@@ -95,13 +96,17 @@ function Family({ def, data }: { def: FamilyDef; data: DrillData }) {
         {pendingText(def, data.completed)}. Its lessons still teach it; the drills come with a later update.
       </EmptyState>
     );
+  const track = trackOfFamily(def);
   if (status === "locked")
     return (
       <EmptyState icon={<Lock aria-hidden />} title={def.title} action={back}>
-        Unlocks in {unitOf(def.unlock.lesson)}, with the lesson that introduces it.
+        {track
+          ? `Opens with ${def.unlock.lesson} in the ${TRACK_TITLES[track]} track, the lesson that introduces it.`
+          : `Unlocks in ${unitOf(def.unlock.lesson)}, with the lesson that introduces it.`}
       </EmptyState>
     );
-  if (def.mic === true && data.profile.quiet)
+  // A sung family with a listening half runs in Quiet mode (its sung trials heard in the head); one only sung waits.
+  if (quietPracticeOf(def, data.profile.quiet) === "waits")
     return (
       <EmptyState
         icon={<MicOff aria-hidden />}
@@ -296,11 +301,16 @@ function Setup({
           )}
         </Card>
       )}
-      {def.mic && (
+      {def.mic && quietPracticeOf(def, data.profile.quiet) === "listening" ? (
+        <Callout tone="info" title="Quiet mode is on">
+          The sung trials are heard in your head while the chords play, then Space: the microphone stays
+          closed and nothing is recorded for them. The listening trials count as usual.
+        </Callout>
+      ) : def.mic ? (
         <Callout tone="info" title="This one uses the microphone">
           Headphones on. The mic opens only while you sing, and your voice never leaves this computer.
         </Callout>
-      )}
+      ) : null}
     </div>
   );
 }

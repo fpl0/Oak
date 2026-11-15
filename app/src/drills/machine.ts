@@ -10,6 +10,11 @@
 // (`SING_PART` → `trial.singingPart`, never in Quiet mode): the sung notes prefill the pad and are recorded
 // note by note; the pick is what is graded.
 //
+// Wave 7: a two-lane tap (one hand per pulse) captures the voice of each tap with the taps (`CAPTURED.voices`), so
+// each hand is graded against its own pulse; a sung trial in Quiet mode is heard in the head instead (`HEARD`: the
+// mic never opens, nothing counts, the record says `quiet`), and Quiet mode switched on while a sung trial is
+// presented closes the mic at once and offers the same.
+//
 // Side effects are actors the runtime provides (`drillActors` in runtime.ts); the machine itself only decides.
 // `start` resolves the server's drill session and the trial source (a resumed set keeps its session and its
 // recorded trials); `present` plays a trial and, for tap and sing trials, captures the response; `audition`
@@ -26,12 +31,13 @@ import type {
   SungResolution,
   Trial,
 } from "@oak/api";
-import type { DrillTrialResult, TrialResponse } from "@oak/drills";
+import type { DrillTrialResult } from "@oak/drills";
 import type { PitchFrame } from "@oak/pitch";
 import { assign, fromCallback, fromPromise, setup } from "xstate";
 import type { SungSummary } from "../answers/types.ts";
 import { bassAloneWhileAnswering } from "./harmony.ts";
 import {
+  type DrillResponse,
   type Modality,
   type PlannedTrial,
   revealedResult,
@@ -84,7 +90,7 @@ export interface SungPart {
 }
 
 export interface DrillDeps {
-  grade(trial: Trial, response: TrialResponse): DrillTrialResult;
+  grade(trial: Trial, response: DrillResponse): DrillTrialResult;
   /** The steps of a staged trial in order, or null for a trial with one answer (default: none). */
   stepsOf?(trial: Trial): TrialStep[] | null;
   /** One step checked on its own (pass mark 0.8). */
@@ -147,7 +153,8 @@ export type Audition =
 export type DrillEvent =
   | { type: "PRESENTED" }
   | { type: "STAGE"; stage: Stage; startedAt?: number }
-  | { type: "CAPTURED"; taps?: number[]; frames?: PitchFrame[] }
+  /** `voices`: a two-lane tap's voice per tap (0: F, 1: J), in the order of `taps`. */
+  | { type: "CAPTURED"; taps?: number[]; voices?: (0 | 1)[]; frames?: PitchFrame[] }
   | { type: "MIC_ERROR"; message: string }
   | { type: "CHANGE" }
   | { type: "SUBMIT"; answer: Answer | null }
@@ -155,7 +162,7 @@ export type DrillEvent =
   | { type: "REPLAY" }
   | { type: "CUE" }
   | { type: "SKIP_SUNG" }
-  /** Quiet mode: the learner heard the way home in their head (Space). */
+  /** Quiet mode: the learner heard the way home (or, Wave 7, a sung trial) in their head (Space). */
   | { type: "HEARD" }
   /**
    * Quiet mode changed while the set runs (the mic chip, Settings): later trials follow it; a way home being
@@ -193,8 +200,13 @@ export interface DrillContext {
   answerAt: number | null;
   stage: Stage;
   stageAt: number | null;
-  /** Taps or frames of the current trial (compare plays them back). */
-  captured: { taps: number[] | null; frames: PitchFrame[] | null; answer: Answer | null };
+  /** Taps or frames of the current trial (compare plays them back); `voices`: a two-lane take's hand per tap. */
+  captured: {
+    taps: number[] | null;
+    frames: PitchFrame[] | null;
+    answer: Answer | null;
+    voices?: (0 | 1)[] | null;
+  };
   /** A staged trial's steps (null: one answer). */
   steps: StepsState | null;
   /** The part sung before the pick (null: none sung). */
@@ -236,12 +248,15 @@ const message = (e: unknown): string => (e instanceof Error ? e.message : String
 const isTap = (t: Trial | undefined): boolean => t?.params.mode === "tap";
 const isSing = (t: Trial | undefined): boolean => t?.params.mode === "sing";
 const capturesResponse = (t: Trial | undefined): boolean => isTap(t) || isSing(t);
+/** A sung trial in Quiet mode: heard in the head, never through the mic (contracts §8.5). */
+const quietSing = (ctx: DrillContext): boolean => ctx.input.quiet && isSing(ctx.current?.trial);
 
 function outcomeFrom(
   ctx: DrillContext,
   result: DrillTrialResult,
   revealed: boolean,
   sung: SungSummary[] | null,
+  modality?: Modality,
 ): Pick<DrillContext, "outcomes" | "records"> {
   const cur = ctx.current as PlannedTrial;
   const outcome: TrialOutcome = {
@@ -257,7 +272,7 @@ function outcomeFrom(
     cur.trial,
     ctx.index,
     { result, answer: ctx.captured.answer },
-    { taps: ctx.captured.taps, sung, at: ctx.deps.iso(), revealed },
+    { taps: ctx.captured.taps, sung, at: ctx.deps.iso(), revealed, ...(modality ? { modality } : {}) },
   );
   const outcomes = [...ctx.outcomes];
   outcomes[ctx.index] = outcome;
@@ -374,7 +389,7 @@ export const drillMachine = setup({
       const answer =
         steps && event.answer ? { ...event.answer, stages: stagesAnswer(steps, event.answer) } : event.answer;
       const shown = steps ? steps.order.filter((s) => steps.results[s]?.revealed === true).length : 0;
-      const response: TrialResponse = {
+      const response: DrillResponse = {
         ...(answer ? { answer } : {}),
         rtMs: rtOf(context),
         replays: replaysWithHelp(context.replays, trial.cue.replays, shown),
@@ -427,15 +442,21 @@ export const drillMachine = setup({
     gradeCaptured: assign(({ context, event }) => {
       if (event.type !== "CAPTURED") return {};
       const trial = (context.current as PlannedTrial).trial;
-      const response: TrialResponse = {
+      const response: DrillResponse = {
         ...(event.taps ? { taps: event.taps } : {}),
+        ...(event.voices ? { tapVoices: event.voices } : {}),
         ...(event.frames ? { frames: event.frames } : {}),
         rtMs: rtOf(context),
         replays: context.replays,
       };
       const result = context.deps.grade(trial, response);
       const sung = event.frames ? context.deps.sungOf(trial, event.frames) : null;
-      const captured = { taps: event.taps ?? null, frames: event.frames ?? null, answer: null };
+      const captured = {
+        taps: event.taps ?? null,
+        frames: event.frames ?? null,
+        answer: null,
+        voices: event.voices ?? null,
+      };
       return { captured, ...outcomeFrom({ ...context, captured }, result, false, sung) };
     }),
     gradeRevealed: assign(({ context }) =>
@@ -443,6 +464,10 @@ export const drillMachine = setup({
     ),
     gradeSkipped: assign(({ context }) =>
       outcomeFrom(context, skippedResult(rtOf(context), context.replays), false, null),
+    ),
+    /** Wave 7: a sung trial heard in the head in Quiet mode — no evidence, no penalty, recorded as `quiet`. */
+    gradeQuiet: assign(({ context }) =>
+      outcomeFrom(context, skippedResult(rtOf(context), context.replays), false, null, "quiet"),
     ),
   },
   guards: {
@@ -454,6 +479,7 @@ export const drillMachine = setup({
       ),
     capturesResponse: ({ context }) => capturesResponse(context.current?.trial),
     sing: ({ context }) => isSing(context.current?.trial),
+    quietSing: ({ context }) => quietSing(context),
     needsResolution: ({ context }) =>
       context.current?.trial.params.sungResolution === true &&
       context.outcomes[context.index]?.revealed !== true &&
@@ -597,6 +623,17 @@ export const drillMachine = setup({
             STEP_CHECK: { guard: "innerStep", actions: "checkStep" },
             STEP_REVEAL: { guard: "innerStep", actions: "revealStep" },
             SKIP_SUNG: { guard: "capturesResponse", target: "#drill.feedback", actions: "gradeSkipped" },
+            // Wave 7: a sung trial in Quiet mode is heard in the head while it plays (the mic never opens).
+            HEARD: { guard: "quietSing", target: "#drill.feedback", actions: "gradeQuiet" },
+            // Quiet mode switched on while a sung trial listens: the mic closes at once (the present actor stops).
+            QUIET: {
+              guard: ({ context, event }) => event.quiet && isSing(context.current?.trial),
+              target: "answering",
+              actions: assign({
+                input: ({ context }) => ({ ...context.input, quiet: true }),
+                stage: null,
+              }),
+            },
           },
         },
         answering: {
@@ -628,6 +665,7 @@ export const drillMachine = setup({
             },
             LISTENED: { actions: assign({ replays: ({ context }) => context.replays + 1 }) },
             SKIP_SUNG: { guard: "capturesResponse", target: "#drill.feedback", actions: "gradeSkipped" },
+            HEARD: { guard: "quietSing", target: "#drill.feedback", actions: "gradeQuiet" },
           },
         },
         cueing: {

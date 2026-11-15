@@ -401,8 +401,30 @@ export class MasteryService {
         freshness: r.freshness,
         drying: r.freshness < 1 && linked.some((id) => plannedCardIds.has(id)),
         updatedAt: this.ctx.repos.mastery.state(def.id)?.updatedAt ?? this.time.iso(),
+        introducedAt: this.introducedAt(def, input),
       });
     }
     return { nodes, reviveSec };
+  }
+
+  /**
+   * Wave 7 (carry f1; wave7.md §5.6): when the skill was first introduced to this learner — the first evidence from
+   * its introducing lesson, or that lesson's completion when the learner was found past it (the earlier of the two),
+   * else the first evidence of any kind. Derived from append-only rows that never move (evidence, a lesson's
+   * `completedAt`), so it is set once and never changes, through a backup round trip too. `null` while not introduced.
+   */
+  introducedAt(def: SkillDef, input: SkillInput | null = this.inputOf(def.id)): string | null {
+    if (input === null || !input.introduced) return null;
+    const by = def.introducedBy ?? null;
+    let at: string | null = null;
+    const take = (x: string | null | undefined) => {
+      if (x !== null && x !== undefined && (at === null || x < at)) at = x;
+    };
+    if (by !== null) {
+      for (const e of input.evidence) if (e.sourceId === by || e.sourceId.startsWith(`${by}/`)) take(e.at);
+      take(this.ctx.repos.lessons.progress(by)?.completedAt);
+    }
+    if (at === null) for (const e of input.evidence) take(e.at);
+    return at;
   }
 }

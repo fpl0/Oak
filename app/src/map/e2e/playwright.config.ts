@@ -2,7 +2,14 @@
 // progress fixture before the server starts (app/src/routes/dev/-lib/seed.bun.ts), the fake tutor.
 // Run: bunx playwright test -c app/src/map/e2e/playwright.config.ts
 import { fileURLToPath } from "node:url";
-import { type Area, areaConfig, oakStack, stackUse } from "../../../../e2e/support/stack.ts";
+import {
+  type Area,
+  areaConfig,
+  oakStack,
+  REPO_ROOT,
+  shifted,
+  stackUse,
+} from "../../../../e2e/support/stack.ts";
 
 export const stack = oakStack({
   vitePort: 5207,
@@ -21,6 +28,22 @@ const webServer = stack.webServer.map((w) =>
       }
     : w,
 );
+
+// The illustrated tree's own harness page (app/src/map/illustrated/e2e): seeded learners and a 180-leaf stress
+// fixture, no API. `illustrated.pw.ts` reaches it at `ILLUSTRATED_URL`.
+const ILLUSTRATED_PORT = shifted(5247);
+export const ILLUSTRATED_URL = `http://127.0.0.1:${ILLUSTRATED_PORT}`;
+webServer.push({
+  name: `oak-illustrated:${ILLUSTRATED_PORT}`,
+  command: `node ${REPO_ROOT}node_modules/vite/bin/vite.js --config app/src/map/illustrated/e2e/vite.config.ts`,
+  cwd: REPO_ROOT,
+  url: `${ILLUSTRATED_URL}/`,
+  timeout: 90_000,
+  reuseExistingServer: false,
+  stdout: "pipe",
+  stderr: "pipe",
+  gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
+});
 
 export const area: Area = {
   name: "map",

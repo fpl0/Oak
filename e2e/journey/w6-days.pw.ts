@@ -145,17 +145,28 @@ test("(c) U13.CP passed as a session: the Jazz Harmony and Advanced Rhythm track
     "The Jazz Harmony and Advanced Rhythm tracks are open",
   );
   await expect(result).not.toContainText(/\bU\d{2}\.L\d{2}\b|\bfam\.|\btb\./);
-  const tracks = await api<{ items: { trackId: string; note: string }[] }>(request, "GET", "/api/tracks");
-  for (const t of ["J", "R"])
-    expect(tracks.items.find((x) => x.trackId === t)?.note, `track ${t} is open on the server`).toMatch(
-      /^Open\./,
-    );
+  const tracks = await api<{ items: { trackId: string; status: string; note: string }[] }>(
+    request,
+    "GET",
+    "/api/tracks",
+  );
+  // Open, and since Wave 7 wrote its lessons, naming the first one (wave7.md §5.1).
+  for (const t of ["J", "R"]) {
+    const row = tracks.items.find((x) => x.trackId === t);
+    expect(row?.status, `track ${t} is open on the server`).toBe("open");
+    expect(row?.note, `track ${t} names its first lesson`).toMatch(new RegExp(`^Next: ${t}1\\.L01 `));
+  }
   await page.getByTestId("checkpoint-done").click();
   await coda(page, { unlocks: "auto" });
-  // Tomorrow: the core is still the session; the tracks are one line on Today.
+  // Tomorrow: the core is still the session; the open tracks are offered beside it (Wave 7: their first lessons are
+  // written, so each is a row with its next session, never in the core's place).
   await api(request, "PUT", "/api/dev/clock", { advanceDays: 1 });
   await today(page);
-  await expect(page.getByTestId("tracks-line")).toBeVisible({ timeout: 20_000 });
+  const offers = page.getByTestId("track-offers");
+  await expect(offers).toBeVisible({ timeout: 20_000 });
+  await expect(offers).toContainText("The core is today's session");
+  await expect(offers.locator('[data-offer="J"]')).toContainText("J1.L01");
+  await expect(offers.locator('[data-offer="R"]')).toContainText("R1.L01");
   const next = await api<{ kind: string; mapItemId: string | null }>(request, "GET", "/api/session/today");
   expect(next).toMatchObject({ kind: "lesson", mapItemId: "U14.L02" });
   expectClean(w);

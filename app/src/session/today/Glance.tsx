@@ -1,21 +1,25 @@
 // The right column of Today (ux §1.4): the next unlock (goal gradient), the Oak in miniature, the album's first
 // slots, the last sketch and Claude's one-line note. Each card renders its own loading and empty state and links
 // out to the full surface.
+
 import type { NextUnlock } from "@oak/api";
+import { ALBUM_SIDES } from "@oak/api";
 import { Link } from "@tanstack/react-router";
 import { clsx } from "clsx";
 import { Sprout } from "lucide-react";
 import { TrackCover } from "../../album/TrackCover.tsx";
 import { useContent } from "../../lib/content.ts";
 import { useAlbum, useBootstrap, useCourseProgress, useNextUnlocks, useSketches } from "../../lib/queries.ts";
+import { useUnlockedSet } from "../../lib/unlocked.ts";
 import { useMediaQuery } from "../../lib/use-media.ts";
 import { OakGlance as MapGlance } from "../../map/index.ts";
+import { Markdown } from "../../tutor/Markdown.tsx";
 import { AcornIcon, LeafIcon, RingIcon } from "../../ui/icons/index.tsx";
 import { Card, Skeleton } from "../../ui/kit/basics.tsx";
 import { capstoneDayTitle } from "../capstone-day.ts";
 import { goalGradient } from "../coda-model.ts";
 import { isWritten, unitTitleOf } from "../edge.ts";
-import { albumStripSlots, doneItems, nextUnlocksFrom } from "../progress-model.ts";
+import { albumStripSlotsAB, doneItems, nextUnlocksFrom } from "../progress-model.ts";
 import { toolName as toolLabel } from "../tool-name.ts";
 
 function CardTitle({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
@@ -116,10 +120,16 @@ export function AlbumStrip() {
   const content = useContent();
   const course = useCourseProgress();
   const released = new Set((album.data?.tracks ?? []).map((t) => t.capstoneId as string | null));
-  const slots = albumStripSlots(
+  const slots = albumStripSlotsAB(
     content.data?.capstones ?? [],
     (content.data?.syllabus?.defaultOrder ?? []) as readonly string[],
     released,
+    new Map(
+      (album.data?.tracks ?? []).flatMap((t) =>
+        t.capstoneId ? [[t.capstoneId as string, t.createdAt]] : [],
+      ),
+    ),
+    ALBUM_SIDES.find((s) => s.side === "B")?.capstones ?? [],
     3,
   );
   return (
@@ -201,11 +211,29 @@ export function LastSketchCard() {
   );
 }
 
+/** The note's thread on Today: a general one (its chips name what they name; no workbench to point into). */
+const TODAY_THREAD = { subjectKind: "general", subjectId: "today" } as const;
+
+/**
+ * Claude's latest note, in the tutor's own markup: its music tokens (`[[deg:1]]`, `[[bars:3]]`) become the chips
+ * the tutor panel shows (Wave 7 review: they were printed raw on Today, "steps up to [[deg:4]] in [[bars:3]]").
+ */
 export function TutorNoteCard({ note }: { note: string }) {
+  const content = useContent();
+  const { unlocked } = useUnlockedSet();
   return (
-    <Card className="p-4" data-testid="tutor-note">
+    <Card className="p-4 text-text-2" data-testid="tutor-note">
       <h2 className="mb-1 font-sans text-sm font-semibold text-text-2">Claude's note</h2>
-      <p className="text-text-2">{note}</p>
+      <Markdown
+        text={note}
+        thread={TODAY_THREAD}
+        ctx={{
+          terms: content.data?.terms ?? [],
+          introduced: null,
+          tools: content.data?.toolbox ?? [],
+          unlocked: unlocked as ReadonlySet<string>,
+        }}
+      />
     </Card>
   );
 }

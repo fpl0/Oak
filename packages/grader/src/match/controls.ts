@@ -59,12 +59,47 @@ export const CONTROL_KEYS: Readonly<Record<string, string>> = {
   orbit: "orbit",
   vowel: "vowel",
   partials: "partials",
+  // Wave 7 integration (build-author-A1b, A1.L05–L07): the methods whose value key differs (@strudel/core
+  // controls.mjs: `fm` sets `fmi`, `phaser`/`ph` set `phaserrate`, `tremolo` sets `tremolodepth`, `vibrato`/`v`
+  // set `vib`, `vmod` sets `vibmod`), so a `controls` matcher on `{ control: "fm" }` reads the value it sets.
+  fm: "fmi",
+  fmi: "fmi",
+  fmh: "fmh",
+  phaser: "phaserrate",
+  ph: "phaserrate",
+  phaserrate: "phaserrate",
+  phaserdepth: "phaserdepth",
+  phd: "phaserdepth",
+  tremolo: "tremolodepth",
+  trem: "tremolodepth",
+  tremolodepth: "tremolodepth",
+  tremolosync: "tremolosync",
+  vib: "vib",
+  vibrato: "vib",
+  vibmod: "vibmod",
+  vmod: "vibmod",
+  lprate: "lprate",
+  lpdepth: "lpdepth",
   s: "s",
   sound: "s",
   gain: "gain",
 };
 
 const ENVELOPE = new Set(["attack", "decay", "sustain", "release"]);
+/** The sounds superdough applies FM to: its synth waves (synth.mjs), never a sample or a soundfont. */
+const FM_WAVES = new Set([
+  "sine",
+  "sin",
+  "sawtooth",
+  "saw",
+  "square",
+  "sqr",
+  "triangle",
+  "tri",
+  "user",
+  "supersaw",
+  "pulse",
+]);
 
 // superdough's defaults as installed, the same numbers as `@oak/strudel/probes` (SYNTH_ENVELOPE_DEFAULTS,
 // DELAY_DEFAULTS, FILTER_Q_DEFAULT, `adsrValues`). Copied, not imported: that module re-exports DOM types the
@@ -140,6 +175,9 @@ export function controlValue(e: NEvent, key: string, cps: number): number | stri
   }
   if ((FILTER_ENVELOPE as readonly string[]).includes(key))
     return filterEnvelopeValues(c)?.[key as (typeof FILTER_ENVELOPE)[number]] ?? null;
+  // FM on a sample is silent: superdough's sampler never calls `applyFM`, so `.s("piano").fm(3)` plays no FM
+  // (the A1 spec's FM silencer; A1.L07 S4 pins it as a fail).
+  if ((key === "fmi" || key === "fmh") && e.s !== undefined && !FM_WAVES.has(e.s)) return null;
   const v = c[key];
   if (v !== undefined) return v;
   switch (key) {

@@ -3,12 +3,14 @@
 // numeral chips light the bars the chords really sound in, for any code (not only a `chord("…")` pattern).
 // Wave 5: the same callback keeps the form view's sections (`model.lines.sections`) and the pickup, so section
 // names in tutor text select the sections the ribbon draws. Wave 6: and the key plan (`model.colour.keyPlan`), so a
-// key or mode chip lights the bars it is in force and a numeral is read in the key of its bar.
+// key or mode chip lights the bars it is in force and a numeral is read in the key of its bar. Wave 7: and the track
+// lenses' findings (`model.track`), so a voicing, tension, clave or register chip lights the bars the lens draws.
 import type { SubjectRef } from "@oak/api";
 import { useCallback, useRef } from "react";
 import type { FormViewSection } from "../lib/form-view.ts";
 import { patchSubject } from "./context.ts";
 import { type ChordAt, chordAtsOfView, type HarmonyViewLike, type KeySpanAt } from "./harmony-chips.ts";
+import { type TrackMarks, trackMarksOf, type ViewEventLike, type WorkbenchTrackLike } from "./track-chips.ts";
 
 /** The part of the Workbench's `colour.keyPlan` (`keyPlanView`) a key plan is read from: 1-based display bars. */
 export interface KeyPlanViewLike {
@@ -21,13 +23,14 @@ export function keySpansOfView(view: KeyPlanViewLike | null | undefined): KeySpa
   return spans.length > 1 ? spans.map((sp) => ({ from: sp.fromBar, to: sp.toBar, key: sp.key })) : [];
 }
 
-export function useSubjectHarmony(
-  thread: SubjectRef | null,
-): (model: {
+export function useSubjectHarmony(thread: SubjectRef | null): (model: {
   harmony: { view: HarmonyViewLike } | null;
   lines?: { sections: FormViewSection[] } | null;
   pickup?: unknown;
   colour?: { keyPlan: KeyPlanViewLike } | null;
+  /** Wave 7: the Workbench's track lenses and the events they point at (bars of voicings, tensions …). */
+  track?: WorkbenchTrackLike | null;
+  events?: readonly ViewEventLike[];
 }) => void {
   const last = useRef<string | null>(null);
   const kind = thread?.subjectKind ?? null;
@@ -41,7 +44,10 @@ export function useSubjectHarmony(
       const pickup = model.pickup !== null && model.pickup !== undefined;
       // A model built without the colour views says nothing about the key plan: the code's `.scale()` is read.
       const keyPlan = model.colour === undefined ? undefined : keySpansOfView(model.colour?.keyPlan ?? null);
-      const key = `${kind}:${id}:${JSON.stringify(harmony)}:${JSON.stringify(sections ?? null)}:${pickup}:${JSON.stringify(keyPlan ?? null)}`;
+      // Wave 7: a model built without the track lenses says nothing about them: the chips switch lenses only.
+      const track: TrackMarks | null | undefined =
+        model.track === undefined ? undefined : trackMarksOf(model.track, model.events ?? []);
+      const key = `${kind}:${id}:${JSON.stringify(harmony)}:${JSON.stringify(sections ?? null)}:${pickup}:${JSON.stringify(keyPlan ?? null)}:${JSON.stringify(track ?? null)}`;
       if (key === last.current) return;
       last.current = key;
       patchSubject({ subjectKind: kind, subjectId: id } as SubjectRef, {
@@ -49,6 +55,7 @@ export function useSubjectHarmony(
         pickup,
         ...(sections === undefined ? {} : { sections }),
         ...(keyPlan === undefined ? {} : { keyPlan }),
+        ...(track === undefined ? {} : { track }),
       });
     },
     [kind, id],

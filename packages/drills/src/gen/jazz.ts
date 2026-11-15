@@ -2,10 +2,12 @@
 // voicings (shell, rootless A, drop 2), hearing extensions, chord-scales and avoid notes, and tritone and
 // backdoor substitutions. Chords are spelled from their own root (STYLE §5), never from Strudel's voicer.
 import type { ChordQuality, KeySpec } from "@oak/content-kit";
+import { CHORD_SCALE_NAMES, type ChordScaleId, chordScales, tensionsOf } from "@oak/theory";
 import { buildPiece, type TrackSpec } from "../build.ts";
 import {
   CHORD_SUFFIX,
   CHORD_TONES,
+  chordCode,
   chordDisplay,
   keysFor,
   mod,
@@ -27,6 +29,7 @@ import {
   pickKey,
   pickTempo,
   silentTrial,
+  type TrialBody,
   trialOf,
 } from "./common.ts";
 import { singTargets } from "./keyed.ts";
@@ -215,11 +218,18 @@ export const jazzVoicing: Generator = {
     let wrong: string[];
     let prompt: string;
     if (ctx.category === "rootless") {
+      // J3.L01 teaches both forms: ask for A or B; the near misses are the other form of the same chord, the
+      // same notes with the root put back at the bottom, and the same form of the chord one note away.
+      const form = ctx.rng.pick(["A", "B"] as const);
       const r = ROOTLESS[q];
-      correct = list(r.A);
+      correct = list(r[form]);
       const other = q === "m7" ? "7" : "m7";
-      wrong = [list(r.B), list([0, ...r.A.slice(0, 3)]), noteList(root, other, rootMidi, ROOTLESS[other].A)];
-      prompt = `Which is the rootless A voicing of ${name}?`;
+      wrong = [
+        list(r[form === "A" ? "B" : "A"]),
+        list([0, ...r[form].slice(0, 3)]),
+        noteList(root, other, rootMidi, ROOTLESS[other][form]),
+      ];
+      prompt = `Which is the rootless ${form} voicing of ${name}, lowest note first?`;
     } else if (ctx.category === "drop2") {
       // Close position under a top note, then the second voice from the top dropped an octave.
       const close = [...CHORD_TONES[q].semis];
@@ -238,7 +248,7 @@ export const jazzVoicing: Generator = {
         list([0, CHORD_TONES[q].semis[1] as number, 7]),
         noteList(root, other, rootMidi, SHELL[other]),
       ];
-      prompt = `Which is a shell voicing (root, 3rd, 7th) of ${name}?`;
+      prompt = `Which is a shell voicing (root, 3rd, 7th) of ${name}, lowest note first?`;
     }
     const options = ctx.rng.shuffle([correct, ...[...new Set(wrong)].filter((w) => w !== correct)]);
     return silentTrial({ choice: [correct] }, cueOf(ctx, { replays: -1 }), {
@@ -278,179 +288,190 @@ export const EXTENSION_VOICINGS: Readonly<Partial<Record<ChordQuality, number[]>
   "7b13": [4, 10, 20],
 };
 
+/**
+ * Where each colour sits in the four-bar I–ii–V–I a trial plays (the chord whose job it colours): the minor
+ * colours on the ii (bar 2), the dominant colours on the V (bar 3), the major colours on the closing I (bar 4).
+ * The bars before the target are plain sevenths in the same key, so the key and the plain chord are heard
+ * before the coloured or altered one (J2.L03 S1 plays the plain chart, then the coloured one).
+ */
+export const EXTENSION_TARGET_BAR: Readonly<Record<string, 2 | 3 | 4>> = {
+  "7-9-13": 3,
+  "9-b9-s9": 3,
+  "alt-13-b13": 3,
+  "maj7-s11-69": 4,
+  "m7-m9-m11": 2,
+};
+/** The plain I–ii–V–I around the target: [degree above the tonic in semitones, quality]. */
+const EXTENSION_FRAME: readonly [number, ChordQuality][] = [
+  [0, "maj7"],
+  [2, "m7"],
+  [7, "7"],
+  [0, "maj7"],
+];
+const ORDINAL = { 2: "the ii (bar 2)", 3: "the V (bar 3)", 4: "the I (bar 4)" } as const;
+
 export const jazzExtension: Generator = {
   name: "jazz-extension",
   generate(ctx) {
     const set = EXTENSION_SETS[ctx.category] ?? (EXTENSION_SETS["7-9-13"] as ChordQuality[]);
     const quality = ctx.rng.pick(set);
-    const rootPc = ctx.rng.int(0, 11);
-    const bass = above(rootPc, 36);
-    const upperRoot = above(rootPc, 48);
-    const upper = (EXTENSION_VOICINGS[quality] as number[]).map((s) => upperRoot + s);
-    const piece = compPiece(ctx, { tonic: spellMidi(rootPc + 60, null).pc, mode: "major" }, [
-      { upper, rootPc, quality },
-    ]);
+    const targetBar = EXTENSION_TARGET_BAR[ctx.category] ?? 3;
+    const key = pickKey(ctx, "major");
+    const tonicPc = parsePc(key.tonic).pc;
+    // Upper structures near the middle of the keyboard (A2–C6), the bass root under each.
+    const chords: Comp[] = EXTENSION_FRAME.map(([deg, plain], i) => {
+      const rootPc = mod(tonicPc + deg, 12);
+      const q = i + 1 === targetBar ? quality : plain;
+      const upperRoot = above(rootPc, 50);
+      return { upper: (EXTENSION_VOICINGS[q] as number[]).map((x) => upperRoot + x), rootPc, quality: q };
+    });
+    const target = chords[targetBar - 1] as Comp;
+    const piece = compPiece(ctx, key, chords);
     return trialOf(piece, { choice: [quality] }, cueOf(ctx), {
       mode: "choice",
+      key,
       options: [...set],
-      optionLabels: Object.fromEntries(set.map((q) => [q, CHORD_SUFFIX[q].lead])),
-      rootPc,
-      midis: [bass, ...upper],
-      prompt: "Which chord is it?",
+      optionLabels: Object.fromEntries(set.map((q) => [q, CHORD_SUFFIX[q].lead || "maj"])),
+      rootPc: target.rootPc,
+      targetBar,
+      midis: [above(target.rootPc, 36), ...target.upper],
+      prompt: `An I–ii–V–I. Which chord is ${ORDINAL[targetBar]}?`,
     });
   },
 };
 
 // --- fam.jzz.chord-scale ------------------------------------------------------------------------
 
-/** Diatonic chord-scales: the mode of the key from each degree. */
-const DIATONIC_SCALE: Readonly<
-  Record<number, { d: "1" | "2" | "3" | "4" | "5" | "6" | "7"; q: ChordQuality; scale: string }>
-> = {
-  1: { d: "1", q: "maj7", scale: "ionian" },
-  2: { d: "2", q: "m7", scale: "dorian" },
-  3: { d: "3", q: "m7", scale: "phrygian" },
-  4: { d: "4", q: "maj7", scale: "lydian" },
-  5: { d: "5", q: "7", scale: "mixolydian" },
-  6: { d: "6", q: "m7", scale: "aeolian" },
-  7: { d: "7", q: "m7b5", scale: "locrian" },
+/** A scale's name as an answer label ("Lydian dominant", "Altered"). */
+const scaleLabel = (id: ChordScaleId): string => {
+  const n = CHORD_SCALE_NAMES[id];
+  return n.charAt(0).toUpperCase() + n.slice(1);
 };
-const SCALE_LABELS: Readonly<Record<string, string>> = {
-  ionian: "Ionian (major)",
-  dorian: "Dorian",
-  phrygian: "Phrygian",
-  lydian: "Lydian",
-  mixolydian: "Mixolydian",
-  aeolian: "Aeolian (natural minor)",
-  locrian: "Locrian",
-  "locrian-nat2": "Locrian ♮2",
-  "whole-half": "Whole–half diminished",
-  altered: "Altered",
-  "lydian-dominant": "Lydian dominant",
-};
-/** Scales a chord of each quality could take: the near misses of a question. */
-const SAME_QUALITY: Readonly<Partial<Record<ChordQuality, string[]>>> = {
-  maj7: ["ionian", "lydian", "mixolydian"],
-  m7: ["dorian", "phrygian", "aeolian"],
-  "7": ["mixolydian", "ionian", "dorian"],
-  m7b5: ["locrian", "locrian-nat2", "aeolian"],
-};
-/** Avoid notes (semitones above the root) of the diatonic chord-scales that have one. */
-const AVOID: Readonly<Record<string, number>> = {
-  ionian: 5,
-  mixolydian: 5,
-  aeolian: 8,
-  phrygian: 1,
-  locrian: 1,
-};
+/** Scales with a minor third (the near misses of a minor chord's scale) and with a major third. */
+const MINOR_SCALES: readonly ChordScaleId[] = ["dorian", "phrygian", "aeolian", "locrian", "locrian-nat2"];
+const MAJOR_SCALES: readonly ChordScaleId[] = [
+  "ionian",
+  "lydian",
+  "mixolydian",
+  "lydian-dominant",
+  "altered",
+];
+
+/**
+ * One chord-scale question: the first choice `chordScales` (@oak/theory) gives for the chord in its key is the
+ * answer; the distractors are scales of the same third that are NOT among its alternatives (so Lydian is never a
+ * wrong answer over the I, nor Ionian over IVmaj7), one of them with the other third. Named "a common first
+ * choice", never "the right scale" (wave7.md §10 item 20).
+ */
+function scaleQuestion(
+  ctx: GenCtx,
+  chord: string,
+  key: KeySpec,
+  next: string | undefined,
+  prompt: string,
+): TrialBody {
+  const fits = chordScales(chord, { key, ...(next ? { next } : {}) });
+  const answer = fits[0] as ChordScaleId;
+  const minor = MINOR_SCALES.includes(answer);
+  const same = (minor ? MINOR_SCALES : MAJOR_SCALES).filter((x) => !fits.includes(x));
+  const other = (minor ? MAJOR_SCALES : MINOR_SCALES).filter((x) => !fits.includes(x));
+  const picks = [ctx.rng.pick(same), ctx.rng.pick(other)];
+  const options = ctx.rng.shuffle([answer, ...picks]);
+  return silentTrial({ choice: [answer] }, cueOf(ctx, { replays: -1 }), {
+    mode: "choice",
+    key,
+    chord,
+    alternatives: fits.slice(1),
+    options,
+    optionLabels: Object.fromEntries(options.map((o) => [o, scaleLabel(o)])),
+    prompt,
+  });
+}
+/** The chord of a degree and quality in a key, in code spelling ("F^7", "Bm7b5"). */
+const codeOf = (c: RnChord, key: KeySpec): string => chordCode(rnRoot(c, key), c.quality);
+const shown = (c: RnChord, key: KeySpec): string => chordDisplay(rnRoot(c, key), c.quality);
+const keyName = (key: KeySpec): string =>
+  `${key.tonic.replace("#", "♯").replace(/^([A-G])b/, "$1♭")} ${key.mode}`;
 
 export const jazzChordScale: Generator = {
   name: "jazz-chord-scale",
   generate(ctx) {
     const key = pickKey(ctx, "major");
-    const cue = cueOf(ctx, { replays: -1 });
     const cat = ctx.category;
-    const choice = (
-      answer: string,
-      pool: readonly string[],
-      prompt: string,
-      extra: Record<string, unknown> = {},
-    ) => {
-      const opts = ctx.rng.shuffle([
-        answer,
-        ...ctx.rng.shuffle(pool.filter((x) => x !== answer)).slice(0, 2),
-      ]);
-      return silentTrial({ choice: [answer] }, cue, {
-        mode: "choice",
-        key,
-        options: opts,
-        optionLabels: Object.fromEntries(opts.map((o) => [o, SCALE_LABELS[o] ?? o])),
-        prompt,
-        ...extra,
-      });
-    };
     if (cat === "half-dim-dim") {
-      // Minor ii–V: iiø7 takes Locrian ♮2; a passing dim7 takes the whole–half scale.
-      const minor = keysFor(ctx.level.keys, "minor");
-      const mk = ctx.rng.pick(minor);
       if (ctx.rng.next() < 0.5) {
-        const root = rnRoot(rn("2", "m7b5"), mk);
-        return choice(
-          "locrian-nat2",
-          ["locrian-nat2", "locrian", "aeolian"],
-          `In ${mk.tonic} minor, which scale fits ${chordDisplay(root, "m7b5")} (iiø7)?`,
-          { key: mk },
+        // The minor ii–V–i's iiø7, in a minor key.
+        const mk = ctx.rng.pick(keysFor(ctx.level.keys, "minor"));
+        const ii = rn("2", "m7b5");
+        return scaleQuestion(
+          ctx,
+          codeOf(ii, mk),
+          mk,
+          codeOf(rn("5", "7b9"), mk),
+          `In ${keyName(mk)}, ${shown(ii, mk)} is the iiø7. Which scale is a common first choice over it?`,
         );
       }
-      const root = spellMidi(rnRootPc(rn("#4", "dim7"), key) + 60, key).pc;
-      return choice(
-        "whole-half",
-        ["whole-half", "locrian", "altered"],
-        `Which scale fits the passing ${chordDisplay(root, "dim7")}?`,
+      // A passing diminished seventh between I and ii (♯I°7).
+      const dim = rn("#1", "dim7");
+      return scaleQuestion(
+        ctx,
+        codeOf(dim, key),
+        key,
+        codeOf(rn("2", "m7"), key),
+        `In ${keyName(key)}, ${shown(dim, key)} passes from the I to the ii. Which scale is a common first choice over it?`,
       );
     }
     if (cat === "altered-lydian") {
       const pick = ctx.rng.int(0, 2);
-      if (pick === 0) {
-        const root = rnRoot(rn("5", "7alt"), key);
-        return choice(
-          "altered",
-          ["altered", "mixolydian", "lydian-dominant"],
-          `Which scale fits ${chordDisplay(root, "7alt")} resolving to ${key.tonic}?`,
-        );
-      }
-      if (pick === 1) {
-        const root = rnRoot(rn("4", "maj7"), key);
-        return choice(
-          "lydian",
-          ["lydian", "ionian", "mixolydian"],
-          `In ${key.tonic} major, which scale fits ${chordDisplay(root, "maj7")} (IVmaj7)?`,
-        );
-      }
-      const root = rnRoot(rn("b7", "7#11"), key);
-      return choice(
-        "lydian-dominant",
-        ["lydian-dominant", "mixolydian", "altered"],
-        `Which scale fits ${chordDisplay(root, "7#11")} (a dominant that does not resolve down a fifth)?`,
+      const c = pick === 0 ? rn("5", "7alt") : pick === 1 ? rn("4", "maj7") : rn("b7", "7#11");
+      const what =
+        pick === 0
+          ? "the altered V, resolving home"
+          : pick === 1
+            ? "the IVmaj7"
+            : "a dominant on ♭7 that does not resolve down a 5th";
+      return scaleQuestion(
+        ctx,
+        codeOf(c, key),
+        key,
+        pick === 0 ? codeOf(rn("1", "maj7"), key) : undefined,
+        `In ${keyName(key)}, ${shown(c, key)} is ${what}. Which scale is a common first choice over it?`,
       );
     }
     if (cat === "avoid-notes") {
-      const degs = [1, 5, 6, 3, 7].filter(
-        (d) => AVOID[(DIATONIC_SCALE[d] as { scale: string }).scale] !== undefined,
-      );
-      const d = DIATONIC_SCALE[ctx.rng.pick(degs)] as { d: "1"; q: ChordQuality; scale: string };
-      const root = rnRoot(rn(d.d, d.q), key);
-      const rootMidi = above(parsePc(root).pc, 60);
-      const avoid = AVOID[d.scale] as number;
-      // Scale tones as the key spells them; the avoid note and two other non-chord scale tones as options.
-      const name = (semis: number) => spellMidi(rootMidi + semis, key).pc;
-      const chordSemis = CHORD_TONES[d.q].semis.map((s) => mod(s, 12));
-      // Other non-chord tones of the same scale (the key's own notes): the near misses.
-      const tonic = parsePc(key.tonic).pc;
-      const tensions = [1, 2, 5, 6, 8, 9].filter(
-        (x) =>
-          x !== avoid &&
-          !chordSemis.includes(x) &&
-          [0, 2, 4, 5, 7, 9, 11].includes(mod(rootMidi + x - tonic, 12)),
-      );
-      const opts = ctx.rng.shuffle([avoid, ...ctx.rng.shuffle(tensions).slice(0, 2)]).map(name);
-      return silentTrial({ choice: [name(avoid)] }, cue, {
+      // A diatonic seventh chord with its mode of the key; one avoid note among two tensions that are not.
+      const c = ctx.rng.pick([rn("1", "maj7"), rn("5", "7"), rn("6", "m7"), rn("3", "m7"), rn("7", "m7b5")]);
+      const code = codeOf(c, key);
+      const scale = chordScales(code, { key })[0] as ChordScaleId;
+      const all = tensionsOf(code, scale);
+      const avoid = ctx.rng.pick(all.filter((t) => t.avoid));
+      // Two notes that do not clash beside it: the scale's other tensions, then (Phrygian has one only) the
+      // chord's 5th, a chord tone that never clashes.
+      const fine = ctx.rng.shuffle(all.filter((t) => !t.avoid)).slice(0, 2);
+      const rootPc = parsePc(rnRoot(c, key)).pc;
+      const pcs: number[] = fine.map((t) => t.pc);
+      if (pcs.length < 2) pcs.push(mod(rootPc + (CHORD_TONES[c.quality].semis[2] as number), 12));
+      const name = (pc: number) => spellMidi(pc + 60, key).pc;
+      const options = ctx.rng.shuffle([avoid.pc, ...pcs]).map(name);
+      return silentTrial({ choice: [name(avoid.pc)] }, cueOf(ctx, { replays: -1 }), {
         mode: "choice",
         key,
         textKind: "pc",
-        options: opts,
-        scale: d.scale,
-        prompt: `In ${key.tonic} major, over ${chordDisplay(root, d.q)} (${SCALE_LABELS[d.scale]}), which note is the avoid note?`,
+        options,
+        scale,
+        chord: code,
+        prompt: `In ${keyName(key)}, over ${shown(c, key)} (${scaleLabel(scale)}, the key's own notes), which note clashes when it is held: a half step above a chord tone?`,
       });
     }
-    // basic: the ii, V and I of the key.
-    const d = DIATONIC_SCALE[ctx.rng.pick([1, 2, 5])] as { d: "1"; q: ChordQuality; scale: string };
-    const root = rnRoot(rn(d.d, d.q), key);
-    const numeral = d.d === "1" ? "Imaj7" : d.d === "2" ? "ii7" : "V7";
-    return choice(
-      d.scale,
-      SAME_QUALITY[d.q] ?? [d.scale],
-      `In ${key.tonic} major, which scale fits ${chordDisplay(root, d.q)} (${numeral})?`,
+    // basic: the ii, the V and the I of the key.
+    const c = ctx.rng.pick([rn("2", "m7"), rn("5", "7"), rn("1", "maj7")]);
+    const numeral = c.degree === "1" ? "Imaj7" : c.degree === "2" ? "ii7" : "V7";
+    return scaleQuestion(
+      ctx,
+      codeOf(c, key),
+      key,
+      c.degree === "5" ? codeOf(rn("1", "maj7"), key) : undefined,
+      `In ${keyName(key)}, ${shown(c, key)} is the ${numeral}. Which scale is a common first choice over it?`,
     );
   },
 };
@@ -458,10 +479,15 @@ export const jazzChordScale: Generator = {
 // --- fam.jzz.subs -------------------------------------------------------------------------------
 
 type Cadence = "V7-I" | "bII7-I" | "backdoor";
-const CADENCES: Readonly<Record<Cadence, RnChord[]>> = {
-  "V7-I": [rn("2", "m7"), rn("5", "7"), rn("1", "maj7"), rn("1", "maj7")],
-  "bII7-I": [rn("2", "m7"), rn("b2", "7"), rn("1", "maj7"), rn("1", "maj7")],
-  backdoor: [rn("4", "m7"), rn("b7", "7"), rn("1", "maj7"), rn("1", "maj7")],
+/**
+ * The ways home of `fam.jzz.subs`, each after a bar of the tonic: the key is heard before the chromatic chord
+ * (♭II7, ♭VII7) arrives. ii–V7–I against ii–♭II7–I share the ii and the landing (the tritone sub's near miss);
+ * the backdoor (J5.L02) comes from iv7–♭VII7.
+ */
+export const CADENCES: Readonly<Record<Cadence, RnChord[]>> = {
+  "V7-I": [rn("1", "maj7"), rn("2", "m7"), rn("5", "7"), rn("1", "maj7")],
+  "bII7-I": [rn("1", "maj7"), rn("2", "m7"), rn("b2", "7"), rn("1", "maj7")],
+  backdoor: [rn("1", "maj7"), rn("4", "m7"), rn("b7", "7"), rn("1", "maj7")],
 };
 /** Close voicings of 7th chords with the bass root, upper voices around middle C. */
 function seventhVoicings(chords: readonly RnChord[], key: KeySpec): Comp[] {
@@ -535,7 +561,7 @@ export const jazzSubs: Generator = {
         "bII7-I": "ii–♭II7–I (tritone sub)",
         backdoor: "iv7–♭VII7–I (backdoor)",
       },
-      prompt: "Which way into the tonic?",
+      prompt: "After a bar of home: which way back into it?",
     });
   },
 };

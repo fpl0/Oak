@@ -5,14 +5,21 @@
 // successful Run and every pause in typing saves a version of the draft, bound to the session (`useDraftSaver`).
 // Opened again outside Today's runner, the draft is offered from the top. Release names the track, records the
 // performance and puts it on the album; a released capstone stays open for revision.
-import type { CapstoneDef, CapstoneState, FlavourId, SketchVersion, UnlockableId } from "@oak/api";
+import type {
+  CapstoneDef,
+  CapstoneState,
+  CapstoneVersionDef,
+  FlavourId,
+  SketchVersion,
+  UnlockableId,
+} from "@oak/api";
 import { renderFeedback, toolsUsed } from "@oak/grader";
 import { editorId } from "@oak/strudel";
 import { type QueryClient, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { clsx } from "clsx";
 import { Check, CheckCheck, CircleDot, Disc3, Music4, Play, Save, Square } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useContent } from "../lib/content.ts";
 import {
   apiQuery,
@@ -46,7 +53,8 @@ import { toast } from "../ui/kit/Toast.tsx";
 import { useWorkbenchServices } from "../workbench/services.tsx";
 import { Workbench } from "../workbench/Workbench.tsx";
 import "../workbench/index.ts";
-import { bandReached } from "../studio/model.ts";
+import { bandReached, needsReview } from "../studio/model.ts";
+import { ReviewPanel } from "../studio/ReviewPanel.tsx";
 import { BriefPanel } from "./BriefPanel.tsx";
 import { trackTitleOf } from "./CapstoneScreen.tsx";
 import { Ceremony, type CeremonyData } from "./Ceremony.tsx";
@@ -76,9 +84,22 @@ import { useRecordDevices } from "./record-devices.ts";
 import { useTryRevision } from "./revision.ts";
 import { currentSession, isResume, sessionsDone, sessionViews, starterOf } from "./sessions.ts";
 import { grownFromLine } from "./sketch-plan.ts";
+import { useSongMelody } from "./song-melody.ts";
+import { TrackSessionCards } from "./TrackSession.tsx";
+import {
+  lockedMelodyEditable,
+  songFormFor,
+  songOfDraft,
+  versionsOf,
+  versionTag,
+  withSessionLines,
+} from "./tracks.ts";
+import { VersionsWorkspace } from "./Versions.tsx";
 import { WorkbenchServicesLoader } from "./WorkbenchServicesLoader.tsx";
 import { pieceForm, releaseGate, rowExtras, rubricUsesSections } from "./wave5.ts";
 import { mergeExtras, runningLength, showsLeadSheet, wave6Extras } from "./wave6.ts";
+import { wave7Extras } from "./wave7.ts";
+import { useSong } from "./x1/songs.ts";
 
 export { starterOf };
 
@@ -86,6 +107,20 @@ export { starterOf };
 export const wbSlug = (id: string) => `capstone-${id}`;
 
 export function Workspace({
+  def,
+  state,
+  content,
+}: {
+  def: CapstoneDef;
+  state: CapstoneState;
+  content: CapstoneContent;
+}) {
+  // AC1 (`capstone.versions`): two pieces of code, each its own draft, side by side.
+  if (versionsOf(def).length === 2) return <VersionsWorkspace def={def} state={state} content={content} />;
+  return <SingleWorkspace def={def} state={state} content={content} />;
+}
+
+function SingleWorkspace({
   def,
   state,
   content,
@@ -130,7 +165,25 @@ interface Official {
   outcome: CheckOutcome;
 }
 
-function Loaded({
+/** AC1: the version this editor holds, and what the workspace knows of the other one. */
+export interface VersionCtx {
+  id: "a" | "b";
+  label: string;
+  versions: readonly CapstoneVersionDef[];
+  /** The code this version opens with when it has no draft yet. */
+  starter: string;
+  other: { id: "a" | "b"; label: string; code: string | null };
+  /** Whether every requirement is met on the other version's draft (`null`: not checked yet). */
+  otherReady: boolean | null;
+  /** This version's readiness on the code now in the editor, for the other tab and the release. */
+  onReadiness(r: { code: string; ready: boolean; met: number; required: number }): void;
+  /** The A/B compare at matched loudness, and the version switch: drawn above the Workbench. */
+  header: ReactNode;
+  /** This version's draft sketch once a save made it (a new sketch is tagged after the list was read). */
+  onSketch(id: string): void;
+}
+
+export function Loaded({
   def,
   state,
   content,
@@ -138,6 +191,7 @@ function Loaded({
   latest,
   tags,
   grown,
+  version,
 }: {
   def: CapstoneDef;
   state: CapstoneState;
@@ -147,6 +201,8 @@ function Loaded({
   tags: readonly string[];
   /** "Grown from “…”.": the sketch a single started from, for its liner notes. */
   grown: string | null;
+  /** AC1: the version this editor holds. */
+  version?: VersionCtx;
 }) {
   const { oak } = useWorkbenchServices();
   const qc = useQueryClient();
@@ -171,6 +227,28 @@ function Loaded({
   const sessionId = currentSessionId() ?? (own?.mapItemId?.startsWith(`${def.id}.`) ? own.id : null);
   const currentRef = useRef(current?.id ?? null);
   currentRef.current = allDone ? null : (current?.id ?? null);
+  // Wave 7: the editor of this capstone (AC1's version two has its own), and the song it works on (JC3's model,
+  // JC4's standard, AC1's tune) with its melody for the rules that keep or avoid it.
+  const slug = version?.id === "b" ? wbSlug(`${def.id}-b`) : wbSlug(def.id);
+  const songId = songOfDraft(def, tags);
+  const songQ = useSong(songId);
+  const song = songQ.data ?? null;
+  const songMelody = useSongMelody(song);
+  // The song's chart for a device-counting brief (JC4), keyed by the brief and the song's id only, so a re-render
+  // that hands over equal objects never restarts the live check (the check waits 650 ms of quiet).
+  const countsDevices = (def.brief?.rubric ?? []).some((r) => r.rule === "device-count");
+  const songKey = song?.id ?? null;
+  const songForm = useMemo(() => (countsDevices ? songFormFor(def, song) : null), [countsDevices, songKey]);
+  const checkExtras = useMemo(
+    () => ({
+      songMelody: songMelody.data ?? null,
+      songForm,
+      otherVersion: version?.other.code ? { id: version.other.id, code: version.other.code } : null,
+    }),
+    [songMelody.data, version?.other.id, version?.other.code, songForm],
+  );
+  const checkExtrasRef = useRef(checkExtras);
+  checkExtrasRef.current = checkExtras;
 
   // --- unlocked set and flavour ------------------------------------------------------------------
   const unlockIds = (unlocksQ.data?.items ?? []).map((u) => u.itemId as UnlockableId);
@@ -196,10 +274,21 @@ function Loaded({
   flavourRef.current = flavour;
 
   // --- code ----------------------------------------------------------------------------------------
-  const initialCode = latest?.code ?? starterOf(def, nextIndex);
+  const initialCode = latest?.code ?? version?.starter ?? starterOf(def, nextIndex);
   const [code, setCode] = useState(initialCode);
+  // W7 gate (contracts §11.3): a draft that arrived in an imported backup opens as text, as Studio's does. It runs
+  // (and is checked) only after Oak's strict lint passes; the workbench then opens on the reviewed code.
+  const [importReview, setImportReview] = useState<{ code: string; version: number } | null>(() =>
+    latest && needsReview(latest) ? { code: latest.code, version: latest.version } : null,
+  );
+  const [workbenchCode, setWorkbenchCode] = useState(initialCode);
   const codeRef = useRef(code);
   codeRef.current = code;
+  // JC4 from its second session: the melody line is read-only, the chords are the learner's (wave7.md §4.4). The
+  // ranges are taken from the code when the lock begins; the editor carries them through every edit after.
+  const lockOn = def.id === "JC4" && nextIndex >= 1 && !released;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the ranges are read once, when the lock turns on.
+  const melodyLock = useMemo(() => (lockOn ? lockedMelodyEditable(codeRef.current) : undefined), [lockOn]);
   const [bandOn, setBandOn] = useState(latest?.band != null);
   const assisted = useRef<string | null>(null);
   const patch = usePatchDraft();
@@ -214,11 +303,11 @@ function Loaded({
   // the Workbench's own analysis.
   const seq = useRef(0);
   useEffect(() => {
-    if (unlocksQ.isPending) return;
+    if (unlocksQ.isPending || importReview !== null) return;
     const my = ++seq.current;
     setLive((s) => ({ ...s, checking: true }));
     const t = setTimeout(() => {
-      checkPiece(def, code, unlocked).then(
+      checkPiece(def, code, unlocked, undefined, checkExtras).then(
         (outcome) => {
           if (my === seq.current) setLive({ outcome, checking: false, error: null });
         },
@@ -229,7 +318,7 @@ function Loaded({
       );
     }, 650);
     return () => clearTimeout(t);
-  }, [def, code, unlocked, unlocksQ.isPending]);
+  }, [def, code, unlocked, unlocksQ.isPending, checkExtras, importReview]);
 
   const band = bandOn
     ? bandFor(
@@ -255,13 +344,19 @@ function Loaded({
 
   const draftSaver = useDraftSaver({
     capstoneId: def.id,
-    title: def.title,
+    title: version ? `${def.title} · ${version.label}` : def.title,
+    // The server binds a draft to a version only for a brief that declares its versions (content-kit 6).
+    ...(version && def.versions?.length === 2 ? { versionId: version.id } : {}),
     initialSketch,
     latest: latest ? { version: latest.version, code: latest.code, createdAt: latest.createdAt } : null,
     initialCode,
     sessionId,
     capstoneSessionId: () => currentRef.current,
-    tags: () => [flavourRef.current],
+    tags: () => [
+      flavourRef.current,
+      ...(songId ? [songId] : []),
+      ...(version ? [versionTag(version.id)] : []),
+    ],
     body: (src, ranOk) => {
       const o = liveRef.current.outcome;
       const fresh = o && o.code === src ? o : null;
@@ -285,6 +380,10 @@ function Loaded({
     },
   });
   const save = draftSaver.save;
+  const versionSketch = draftSaver.sketchId;
+  useEffect(() => {
+    if (version && versionSketch) version.onSketch(versionSketch);
+  }, [versionSketch, draftSaver.saved?.version]);
   const saveQuietly = draftSaver.saveQuietly;
   const savedInfo = draftSaver.saved;
 
@@ -312,7 +411,7 @@ function Loaded({
 
   const outcomeFor = async (src: string): Promise<CheckOutcome> => {
     const o = liveRef.current.outcome;
-    return o && o.code === src ? o : checkPiece(def, src, unlocked);
+    return o && o.code === src ? o : checkPiece(def, src, unlocked, undefined, checkExtrasRef.current);
   };
 
   const checkMyTrack = async (): Promise<Official | null> => {
@@ -401,7 +500,7 @@ function Loaded({
 
   // --- play from the top (a return outside Today's runner; the runner plays it itself) ----------------
   const editorHandle = () => {
-    const h = oak.editors.get(editorId(wbSlug(def.id)));
+    const h = oak.editors.get(editorId(slug));
     return h && !h.disposed ? h : null;
   };
   const [resume, setResume] = useState(
@@ -466,7 +565,7 @@ function Loaded({
         ...(released
           ? {
               applyCode: (next: string, card: { cardId: string; title: string }) => {
-                const h = oak.editors.get(editorId(wbSlug(def.id)));
+                const h = oak.editors.get(editorId(slug));
                 if (!h || h.disposed) return;
                 assisted.current = `Revision suggested by Claude (${card.title})`;
                 h.setCode(next, { undoable: true });
@@ -516,6 +615,9 @@ function Loaded({
     lastSession || allDone || released,
   );
   const ready = readiness(rows);
+  // JC4.S1 is the analysis (transcribe's analysis stage): the session ends once it is checked or shown.
+  const [analysisDone, setAnalysisDone] = useState(false);
+  const analysisGate = def.id === "JC4" && nextIndex === 0 && !allDone && song !== null && !analysisDone;
   const beyond =
     outcome && !stale
       ? beyondBrief(brief.rubric, outcome.result, {
@@ -571,12 +673,28 @@ function Loaded({
         ),
       )
     : {};
+  // Wave 7: the track capstones' rows (keys reached, guide tones, the walking bass, the clave, the swing in a
+  // ratio and the lean in milliseconds, the top voice …), read from the grader's Wave 7 views.
+  const extras7 = outcome?.n
+    ? wave7Extras(brief.rubric, outcome.result, {
+        n: outcome.n,
+        code: outcome.code,
+        meter: def.meter,
+        bars: outcome.bars,
+        analysis: outcome.analysis,
+        form,
+        songMelody: songMelody.data ?? null,
+        songTitle: song?.title ?? null,
+      })
+    : {};
+  const allExtras = mergeExtras(extras, extras7);
   // CF-A: the running length against two minutes, beside the form (decided in the first session, never found late).
   const length = outcome
     ? runningLength(brief.rubric, { bars: outcome.bars, durationSec: outcome.analysis?.durationSec ?? null })
     : null;
   // CF-A: "Your devices so far" (the learner's own released tracks per device) and, in its last session, the Master.
-  const deviceRule = brief.rubric.find((r) => r.rule === "device-count");
+  // The core finale's card; JC4 names its jazz devices in its own reharmonisation card.
+  const deviceRule = def.id === "JC4" ? undefined : brief.rubric.find((r) => r.rule === "device-count");
   const record = useRecordDevices(def.id, deviceRule !== undefined);
   const recordDevices =
     deviceRule && deviceRule.rule === "device-count" ? recordRows(deviceRule.devices, record.tracks) : null;
@@ -621,8 +739,18 @@ function Loaded({
     editedSinceLoad: code !== initialCode,
     released,
   });
-  const canRelease = (lastSession || allDone) && gate.kind === "ready";
+  // AC1: the album holds both versions, so the first release waits until the other one meets the brief too.
+  const otherBlocks = version !== undefined && !released && version.otherReady !== true;
+  const canRelease = (lastSession || allDone) && gate.kind === "ready" && !otherBlocks;
+  // Only a settled reading is reported: a version left mid-check must not stand as "not yet" for the other tab
+  // (which then checks this version's draft itself).
+  useEffect(() => {
+    if (stale || live.checking || live.outcome?.code !== code) return;
+    version?.onReadiness({ code, ready: ready.ready, met: ready.met, required: ready.required });
+  }, [code, ready.ready, ready.met, ready.required, stale, live.checking, live.outcome?.code]);
   const checkAgain = (lastSession || allDone) && !released && gate.kind === "check-again";
+  // No check recorded for this capstone yet (a seeded or carried-over draft): nothing was "edited since" one.
+  const neverChecked = official === null && (state.lastResult ?? null) === null;
   const skillName = (id: string) => content.skillNames.get(id) ?? null;
   const bandTitle = band ? `${content.bands.find((b) => b.id === band.band)?.title ?? "the Band"}` : null;
   const releaseTheory = (o: CheckOutcome) =>
@@ -650,7 +778,7 @@ function Loaded({
         views={views}
         current={allDone ? null : current}
         rows={rows}
-        extras={extras}
+        extras={allExtras}
         ready={ready}
         checking={live.checking || checkingNow}
         stale={stale}
@@ -774,6 +902,12 @@ function Loaded({
               <Button
                 variant="primary"
                 loading={complete.isPending}
+                disabled={analysisGate}
+                title={
+                  analysisGate
+                    ? "Check the analysis first (or show it): this session is the analysis"
+                    : undefined
+                }
                 onClick={() => void finishSession()}
                 data-testid="finish-session"
               >
@@ -790,12 +924,18 @@ function Loaded({
                     ? undefined
                     : checkAgain
                       ? "Check this version first: the release is of the code a check passed"
-                      : "Every requirement in the brief is met first"
+                      : otherBlocks && gate.kind === "ready"
+                        ? `${version?.other.label} meets the brief first: the album holds both versions`
+                        : "Every requirement in the brief is met first"
                 }
                 onClick={() => void openRelease()}
                 data-testid="release"
               >
-                {released ? "Release a new version" : "Release to album"}
+                {version && released
+                  ? `Add ${version.label.toLowerCase()} to the track`
+                  : released
+                    ? "Release a new version"
+                    : "Release to album"}
               </Button>
             )}
           </div>
@@ -860,7 +1000,7 @@ function Loaded({
               <div data-testid="check-again" role="status">
                 <Callout
                   tone="info"
-                  title="Edited since the last check"
+                  title={neverChecked ? "Not checked yet" : "Edited since the last check"}
                   actions={
                     <Button
                       size="sm"
@@ -873,7 +1013,8 @@ function Loaded({
                     </Button>
                   }
                 >
-                  Check again before you release: the album gets the version a check passed.
+                  {neverChecked ? "Check it" : "Check again"} before you release: the album gets the version a
+                  check passed.
                 </Callout>
               </div>
             )}
@@ -901,6 +1042,32 @@ function Loaded({
             {showForm && form && (
               <FormStrip form={form} onBars={onBars} stale={stale} loop={wbLoop} length={length} />
             )}
+            {version?.header}
+            <TrackSessionCards
+              def={def}
+              sessionId={allDone ? null : (current?.id ?? null)}
+              sessionIndex={nextIndex}
+              unlocked={unlocked}
+              toolbox={shared.data?.toolbox ?? []}
+              outcome={stale ? null : outcome}
+              form={form}
+              song={song}
+              songLoading={songId !== null && songQ.isPending}
+              songMelody={songMelody.data ?? null}
+              sketchId={draftSaver.sketchId}
+              band={band}
+              songKey={def.key ?? live.outcome?.key ?? null}
+              code={code}
+              onAddLines={(lines) => {
+                const next = withSessionLines(codeRef.current, lines);
+                const h = oak.editors.get(editorId(slug));
+                if (h && !h.disposed) h.setCode(next, { undoable: true });
+                codeRef.current = next;
+                setCode(next);
+              }}
+              onBars={onBars}
+              onAnalysis={setAnalysisDone}
+            />
             {masterStep && (
               <MasterCard
                 sections={form?.sections ?? []}
@@ -909,33 +1076,50 @@ function Loaded({
                 onOutcome={setMaster}
               />
             )}
-            <Workbench
-              tutorBars
-              onLoopChange={(l) => setWbLoop(l.on ? l.region : null)}
-              id={wbSlug(def.id)}
-              onModel={onHarmony}
-              code={initialCode}
-              lessonCtx={{
-                key: def.key ?? outcome?.key ?? null,
-                meter: def.meter,
-                defaultBpm: def.bpm ? Math.round((def.bpm[0] + def.bpm[1]) / 2) : 100,
-                loopBars: Math.max(1, Math.min(64, outcome?.bars ?? 4)),
-              }}
-              lint={lintFor(def, unlocked)}
-              views={["roll", "staff"]}
-              band={band}
-              staff={{ kind: def.id === "C0" ? "percussion" : "auto" }}
-              onChange={(c) => {
-                // A check reads `codeRef`: set it now, not at the next render (a check pressed in the frame after an
-                // edit graded the code before it; the capstone-silent race of the corrections gate's run).
-                codeRef.current = c;
-                setCode(c);
-                draftSaver.changed(c);
-              }}
-              onEvaluated={(o) => {
-                if (o.ok) saveQuietly(o.code, true);
-              }}
-            />
+            {importReview ? (
+              <ReviewPanel
+                key={importReview.version}
+                code={importReview.code}
+                version={importReview.version}
+                meter={def.meter}
+                keySpec={def.key ?? null}
+                onCleared={(cleared) => {
+                  codeRef.current = cleared;
+                  setCode(cleared);
+                  setWorkbenchCode(cleared);
+                  setImportReview(null);
+                }}
+              />
+            ) : (
+              <Workbench
+                tutorBars
+                onLoopChange={(l) => setWbLoop(l.on ? l.region : null)}
+                id={slug}
+                onModel={onHarmony}
+                code={workbenchCode}
+                lessonCtx={{
+                  key: def.key ?? outcome?.key ?? null,
+                  meter: def.meter,
+                  defaultBpm: def.bpm ? Math.round((def.bpm[0] + def.bpm[1]) / 2) : 100,
+                  loopBars: Math.max(1, Math.min(64, outcome?.bars ?? 4)),
+                }}
+                lint={lintFor(def, unlocked)}
+                views={["roll", "staff"]}
+                {...(melodyLock ? { readOnly: melodyLock } : {})}
+                band={band}
+                staff={{ kind: def.id === "C0" ? "percussion" : "auto" }}
+                onChange={(c) => {
+                  // A check reads `codeRef`: set it now, not at the next render (a check pressed in the frame after an
+                  // edit graded the code before it; the capstone-silent race of the corrections gate's run).
+                  codeRef.current = c;
+                  setCode(c);
+                  draftSaver.changed(c);
+                }}
+                onEvaluated={(o) => {
+                  if (o.ok) saveQuietly(o.code, true);
+                }}
+              />
+            )}
             {showLeadSheet && outcome?.n && (
               <LeadSheetCard
                 stale={stale}
@@ -975,7 +1159,7 @@ function Loaded({
           notesFor={notesFor(official.outcome)}
           tags={theoryTags(brief.rubric, official.outcome.result, official.outcome.analysis, skillName)}
           defaultTitle={track.data?.title ?? trackTitleOf(def)}
-          editor={() => oak.editors.get(editorId(wbSlug(def.id))) ?? null}
+          editor={() => oak.editors.get(editorId(slug)) ?? null}
           onClose={() => setReleaseOpen(false)}
           onReleased={(data) => {
             setReleaseOpen(false);

@@ -227,8 +227,11 @@ class Sim {
         );
       if ((again.sideLesson ?? null) !== null) this.fail(day, "a second side lesson offered the same day");
       const after = await this.me.api<CourseProgress>("GET", "/api/lessons/progress");
-      if (after.mapDone !== before.mapDone)
-        this.fail(day, `a side lesson moved the core map ${before.mapDone}→${after.mapDone}`);
+      // Wave 7: the map counts all 259 sessions and a side lesson is 1 in track A (contracts §9.6); the core's part
+      // (the map without the side lessons) never moves.
+      const core = (p: CourseProgress) => p.mapDone - (p.sideLessons?.done ?? 0);
+      if (core(after) !== core(before))
+        this.fail(day, `a side lesson moved the core map ${core(before)}→${core(after)}`);
       if ((after.sideLessons?.done ?? 0) !== (before.sideLessons?.done ?? 0) + 1)
         this.fail(day, "a side lesson was not counted in track A");
       return;

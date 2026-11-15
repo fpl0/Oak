@@ -109,10 +109,8 @@ export async function proposeCode(
     ]);
   }
 
-  const lint = lintStrict(input.code);
-  if (lint.length > 0) return rejected(formatLintIssues(lint));
-
-  // Below the reveal rung a card may model the idea, never spell out the step's own answer (wave4.md §5.6).
+  // Below the reveal rung a card may model the idea, never spell out the step's own answer (wave4.md §5.6). This
+  // reads the text only; it comes first so the model hears about a leak even when the lint refuses the code too.
   if (ctx.answerPolicy === "socratic" && ctx.step) {
     const leaks = answerLeaks(
       [input.title, input.code, input.explanation].join("\n"),
@@ -124,6 +122,9 @@ export async function proposeCode(
         "the card spells out this step's answer: model the idea in another key or on other bars, or offer [[reveal]] when the learner asks for the answer",
       ]);
   }
+
+  const lint = lintStrict(input.code);
+  if (lint.length > 0) return rejected(formatLintIssues(lint));
 
   const key = ctx.step?.key ?? ctx.lesson?.key ?? null;
   const run = await deps.grader.evaluate(

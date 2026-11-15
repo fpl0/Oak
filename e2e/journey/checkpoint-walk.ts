@@ -28,15 +28,37 @@ export async function walkCheckpoint(page: Page, tapLatencyMs = 0): Promise<{ pa
     await page.waitForFunction(() => !!(globalThis as { __oakCheckpoint?: unknown }).__oakCheckpoint);
     const response = await page.evaluate((lat) => {
       const cp = (globalThis as unknown as { __oakCheckpoint: Cp }).__oakCheckpoint;
+      // A sung item is set aside: singing never gates (contracts §7.6, §8), and the gate journeys do not sing.
+      if ((cp.exercise() as { kind?: string } | null)?.kind === "sing") return null;
       // A tapped item: on its targets, in the response window (an echo is tapped after the stimulus).
       const params = cp.params();
+      // Wave 7: a polyrhythm tapped with two hands (`params.tapLanes`): each lane on its own targets, as `{ lanes }`.
+      if (Array.isArray(params?.tapLanes))
+        return {
+          lanes: (params.tapLanes as { targets: number[] }[]).map((l) =>
+            l.targets.map((t) => t + lat / 1000),
+          ),
+        };
       if (params?.mode === "tap" && Array.isArray(params.tapTargets)) {
         const at = typeof params.responseAt === "number" ? params.responseAt : 0;
         return { taps: (params.tapTargets as number[]).map((t) => t + at + lat / 1000) };
       }
+      // Several answers in one item (J.CP1's read-the-chart): each authored part with its own passing test.
+      const ex = cp.exercise() as {
+        kind?: string;
+        parts?: { tests?: { response: unknown; expect: string }[] }[];
+      };
+      if (ex?.kind === "all" && ex.parts)
+        return {
+          parts: ex.parts.map(
+            (p) => p.tests?.find((t) => t.expect === "pass")?.response ?? { skipped: true },
+          ),
+        };
+      // An authored item (and the Make) answers with its own passing test; a drawn trial with its expected answer.
+      const pass = cp.exercise()?.tests?.find((t) => t.expect === "pass" && !("pitchFixture" in t.response));
+      if (cp.kind() !== "family" && pass) return pass.response;
       const expected = cp.expected();
       if (expected) return { answer: expected };
-      const pass = cp.exercise()?.tests?.find((t) => t.expect === "pass" && !("pitchFixture" in t.response));
       return pass?.response ?? null;
     }, tapLatencyMs);
     if (response === null) {

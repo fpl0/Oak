@@ -48,6 +48,19 @@
   --oak-code-gutter: #8a7f72;
   --oak-code-active-line: rgba(31, 26, 20, 0.04);
   --oak-code-selection: rgba(47, 107, 69, 0.2);
+  /* Wave 7: the illustrated Oak (app/src/map/illustrated) draws with these, mirrored in palette.ts TREE_COLOURS for
+     its SVG (tested equal in theme.test.ts). Chrome tokens where the tree shares a meaning (paper, ground, ink,
+     accent, issue, the acorn's amber); wood, grain and the practising leaf are the tree's own. Every leaf fill
+     holds 3:1 on the tree's paper and ground (non-text contrast, WCAG 1.4.11). */
+  --oak-tree-bg: var(--oak-surface);
+  --oak-tree-ground: var(--oak-surface-2);
+  --oak-tree-wood: #86715a;
+  --oak-tree-grain: #5c5247;
+  --oak-tree-ink: var(--oak-text-2);
+  --oak-tree-acorn: var(--oak-accent-2);
+  --oak-leaf-introduced: var(--oak-accent-2);
+  --oak-leaf-practising: #2a7f80;
+  --oak-leaf-mastered: var(--oak-accent);
 }
 
 :root[data-theme="bark"] {
@@ -95,6 +108,15 @@
   --oak-code-gutter: #8c8172;
   --oak-code-active-line: rgba(242, 235, 223, 0.04);
   --oak-code-selection: rgba(111, 191, 138, 0.25);
+  --oak-tree-bg: var(--oak-surface);
+  --oak-tree-ground: var(--oak-surface-2);
+  --oak-tree-wood: #887460;
+  --oak-tree-grain: #d5c0a5;
+  --oak-tree-ink: var(--oak-text-2);
+  --oak-tree-acorn: var(--oak-accent-2);
+  --oak-leaf-introduced: var(--oak-accent-2);
+  --oak-leaf-practising: #5fc0be;
+  --oak-leaf-mastered: var(--oak-accent);
 }
 
 /* High contrast (Settings → Appearance). */
@@ -122,6 +144,12 @@
   --oak-topbar-h: 48px;
   --oak-focusbar-h: 56px;
   --oak-tutor-w: 360px;
+  /* Wave 7: the illustrated Oak's line weights, in the drawing's own units (palette.ts TREE_LINES): one scale for
+     both themes, so a limb, a vein and a focus ring weigh the same in Paper and Bark. */
+  --oak-tree-line-hair: 0.8;
+  --oak-tree-line-fine: 1.2;
+  --oak-tree-line-firm: 1.5;
+  --oak-tree-line-bold: 2;
   /* Page columns (ux §7.5): one width per kind of page, so a flow never changes width between its screens.
      wide = most pages; focus = a guided flow with a workbench in it (onboarding, setup); narrow = a form or a
      single column of reading; measure = a paragraph's line length. */

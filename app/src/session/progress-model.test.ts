@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { milestones } from "../../../content/milestones.ts";
-import { ledger, ledgerCounts, milestonesReached, milestoneTimeline } from "./progress-model.ts";
+import {
+  albumStripSlotsAB,
+  ledger,
+  ledgerCounts,
+  milestonesReached,
+  milestoneTimeline,
+} from "./progress-model.ts";
 
 const rows = milestones.map((m) => ({
   id: m.id,
@@ -67,5 +73,35 @@ describe("ledger counts are honest", () => {
       shown: 3,
       solid: 2,
     });
+  });
+});
+
+describe("Wave 7: the album strip goes on with Side B once Side A is complete", () => {
+  const ids = ["C0", "C1", "C2", "X1", "C3", "C4", "C5", "X2", "C6", "C7", "CF-T", "CF-A"];
+  const b = ["JC1", "JC2", "JC3", "JC4", "RC1", "RC2", "AC1", "AC2"];
+  const caps = [...ids, ...b].map((id) => ({ id }));
+  const order = [...ids.map((id) => `${id}.S1`)];
+  test("Side A unfinished, or Side B not begun: Side A as before; then released Side B in release order, then the next", () => {
+    expect(albumStripSlotsAB(caps, order, new Set(["C0"]), new Map(), b, 3).map((c) => c.id)).toEqual([
+      "C0",
+      "C1",
+      "C2",
+    ]);
+    const released = new Set([...ids, "RC1", "JC1"]);
+    const at = new Map([
+      ["RC1", "2027-01-02T00:00:00Z"],
+      ["JC1", "2027-02-01T00:00:00Z"],
+    ]);
+    expect(albumStripSlotsAB(caps, order, released, at, b, 3).map((c) => c.id)).toEqual([
+      "RC1",
+      "JC1",
+      "JC2",
+    ]);
+    // Side A complete, nothing on Side B yet: the record's last tracks, never three empty optional slots.
+    expect(albumStripSlotsAB(caps, order, new Set(ids), new Map(), b, 3).map((c) => c.id)).toEqual([
+      "C7",
+      "CF-T",
+      "CF-A",
+    ]);
   });
 });

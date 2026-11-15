@@ -165,6 +165,11 @@ export interface ReviewRules {
   lint?: ReviewLintContext | null;
   /** 3 when the review must give exactly three strengths, the strongest first (the Core Finale's single). */
   strengths?: 2 | 3 | undefined;
+  /**
+   * Wave 7: a two-version capstone (AC1): every strength and revision says which version it is about (by its label
+   * or "version a"), and the review as a whole speaks of both.
+   */
+  versions?: readonly { id: string; label: string }[];
 }
 
 /**
@@ -176,17 +181,34 @@ export function strengthsWantedFor(capstoneId: string | null | undefined): 3 | u
 }
 
 /**
+ * The keys a review's try-it code may be written in: the key plan's keys, else the piece's key; Wave 7: plus every
+ * key a ii–V of the piece aims at (JC1 visits three keys) and the keys of both versions of a two-version capstone.
+ */
+export function reviewKeys(review: Pick<ReviewSource, "facts" | "versions">): string[] {
+  const of = (f: ReviewSource["facts"]): string[] => {
+    const plan = f?.keyPlan ?? [];
+    const base = plan.length > 0 ? plan.map((k) => k.key) : f?.key ? [f.key] : [];
+    return [...base, ...(f?.twoFives ?? []).map((t) => t.target)];
+  };
+  return [...new Set([...of(review.facts), ...(review.versions ?? []).flatMap((v) => of(v.facts))])];
+}
+
+/** Wave 7: the versions a review must tell apart (AC1), by id and label; empty for a one-version capstone. */
+export function versionNames(review: Pick<ReviewSource, "versions">): { id: string; label: string }[] {
+  const vs = review.versions ?? [];
+  return vs.length > 1 ? vs.map((v) => ({ id: v.id, label: v.label })) : [];
+}
+
+/**
  * The rules a review of this piece is held to: its revision count and length, the keys its try-it code may be in
  * (the key plan's keys, else the piece's key) and the terms its prose may use.
  */
 export function reviewRulesOf(
-  review: Pick<ReviewSource, "revisions" | "totalBars" | "facts" | "strengthsWanted">,
+  review: Pick<ReviewSource, "revisions" | "totalBars" | "facts" | "strengthsWanted" | "versions">,
   terms: IntroducedTerms | null,
   subjectId?: string | null,
 ): ReviewRules {
-  const plan = review.facts?.keyPlan ?? [];
-  const keys =
-    plan.length > 0 ? [...new Set(plan.map((k) => k.key))] : review.facts?.key ? [review.facts.key] : [];
+  const keys = reviewKeys(review);
   // Only the whole list can say a term is NOT met: `recent` alone drops early terms (contracts §10.8), so without
   // `all` the vocabulary is unknown and only names the course never uses are refused.
   const introduced = terms?.all !== undefined ? new Set(terms.all) : null;
@@ -195,6 +217,7 @@ export function reviewRulesOf(
     totalBars: review.totalBars,
     lint: { keys, introduced },
     strengths: review.strengthsWanted ?? strengthsWantedFor(subjectId),
+    versions: versionNames(review),
   };
 }
 
@@ -272,6 +295,26 @@ class Checker {
     if (key !== null) this.problems.push(`${path}: ${key}`);
   }
 
+  /** Wave 7 (AC1): each comment says which version it is about, and the review speaks of both. */
+  versions(items: readonly (readonly [string, string])[]): void {
+    const vs = this.rules.versions ?? [];
+    if (vs.length < 2) return;
+    const named = new Set<string>();
+    for (const [path, text] of items) {
+      const which = vs.filter((v) => namesVersion(text, v));
+      for (const v of which) named.add(v.id);
+      if (which.length === 0)
+        this.problems.push(
+          `${path}: say which version it is about (${vs.map((v) => `"${v.label}" or "version ${v.id}"`).join(", ")}); its bars are that version's bars`,
+        );
+    }
+    const missing = vs.filter((v) => !named.has(v.id));
+    if (missing.length > 0)
+      this.problems.push(
+        `the review compares the two versions: no strength or revision is about ${missing.map((v) => `"${v.label}"`).join(" or ")}`,
+      );
+  }
+
   /** Contracts §10.6: a review never states or implies pass or fail. */
   verdict(path: string, text: string): void {
     if (VERDICT.test(text))
@@ -329,7 +372,21 @@ export function validateCapstoneReview(raw: unknown, rules: ReviewRules): Struct
     c.tryCode(`${at}.tryCode`, rev.tryCode);
   });
   c.common(r);
+  c.versions([
+    ...r.strengths.map((s, i) => [`strengths[${i}].text`, s.text] as const),
+    ...r.revisions.map((rev, i) => [`revisions[${i}]`, `${rev.title} ${rev.why}`] as const),
+  ]);
   return c.problems.length === 0 ? { ok: true, value: r } : { ok: false, problems: c.problems };
+}
+
+/** Whether a text names a version: its label ("Swing"), "version a", "the a version", or "(a)". */
+export function namesVersion(text: string, v: { id: string; label: string }): boolean {
+  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+  const id = esc(v.id);
+  return (
+    new RegExp(`(?<![A-Za-z])${esc(v.label.trim())}(?![A-Za-z])`, "i").test(text) ||
+    new RegExp(`\\bversion\\s+${id}\\b|\\bthe\\s+${id}\\s+version\\b|\\(${id}\\)`, "i").test(text)
+  );
 }
 
 export function validateTranscriptionReview(

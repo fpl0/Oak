@@ -1,0 +1,65 @@
+{/* A1.L07 FM & Supersaw: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+Your loop as Space left it: a plucked bass, a snare in a big room, a riff that echoes. First the riff on a plain sine over a quiet pad, then the same notes on two richer sounds.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+In Movement a slow wave moved a note's pitch a few times a second, and you heard a wobble. Make that second wave fast, hundreds of times a second, and you no longer hear a wobble. Pick what you will hear instead. <CodeRef fn="fm" />
+
+<Predict exercise="bend-it-further" />
+</Step>
+
+<Step id="S3">
+The same bend in bars 2 and 3. Only the speed of the second sine changes.
+
+<Example id="three-ratios" views="code" />
+
+<OnPass>Bar 1 is a plain sine. Bar 2's second sine runs at twice the note, so the new tones land on harmonics of the note and it still sounds like one clear pitch, hollow and reedy. Bar 3's runs at 3.5 times the note, so some of its new tones fall between the harmonics, and the note clangs like a bell. Letting one wave bend another's pitch this fast is **FM synthesis**: `.fm()` is how far, `.fmh()` how fast.</OnPass>
+</Step>
+
+<Step id="S4">
+Match a sound by ear: a bell for the riff.
+
+<Editor exercise="ring-the-riff" />
+
+<OnPass>A deep bend, at a speed between two whole-number multiples: a struck bell, from one sine wave. Bend less for something softer, use a whole number for a brighter, brassier tone. FM bends an oscillator, so it works on the synth waves and does nothing on a recorded instrument such as the piano. A good place to stop for today if you need to.</OnPass>
+</Step>
+
+<Step id="S5">
+The other rich source of this lesson is the pad from the first step: a supersaw, five sawtooth waves for every note.
+
+<Choice exercise="wide-and-narrow" />
+
+<OnPass>Card B. Waves a little out of tune with each other drift in and out of step, so the chord shimmers and spreads; on one pitch the five add up to a single still wave. Copies of a sound tuned a fraction of a half step apart are **detune**: `.detune()` sets how far apart, and `.unison()` how many copies.</OnPass>
+</Step>
+
+<Step id="S6">
+Your ear for sources. One riff, one sound.
+
+<Choice exercise="which-source" />
+
+<OnPass>The ring between the harmonics gives FM away: one pitch, with a metallic edge that fades as the note dies. Oak brings sound questions back in your warm-ups.</OnPass>
+</Step>
+
+<Step id="S7">
+For a longer session: the pad behind your bell riff, made wider by ear. <CodeRef fn="unison" />
+
+<Editor exercise="thicken-the-pad" />
+
+<OnPass>More copies, pulled further apart: a pad that fills the space behind the riff. Too much detune and the chord starts to sound out of tune; stop just before that. The pulse wave, `s("pulse")`, is another source to try, its tone set with `.pw()`.</OnPass>
+</Step>
+
+<Step id="S8">
+Back to the plain loop. Pick a part and give it a sound of your own: bend it a little for brightness, a lot for a clang, and choose the speed by ear. Synth waves only.
+
+<Make exercise="a-richer-source" />
+
+<CanDo id="cd.code.fm" />
+
+You can now build a sound from scratch: harmonics, filters, envelopes, space, grit, movement, and FM for bright leads and bells, with a supersaw for width. That closes the sound-design lessons. Next in this track: arranging, giving each part of a song its own place and its own job, once the minor-key checkpoint is behind you.
+
+<Recap />
+</Step>

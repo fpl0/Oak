@@ -35,6 +35,8 @@ export interface OakModel {
   openUnits: ReadonlyMap<string, TrackRow>;
   /** Where the core stands (`CourseProgress.core`). */
   core: "in-progress" | "lessons-done" | "complete";
+  /** Wave 7: where the whole course stands, the core and the three tracks (`CourseProgress.course`). */
+  course: "in-progress" | "complete";
 }
 
 // The graph and layout depend only on the content bundle, which never changes while the app runs.
@@ -67,8 +69,8 @@ export function useOak() {
     const tracks = !progress.data
       ? []
       : progress.data.tracks && progress.data.tracks.length > 0
-        ? trackRows(progress.data.tracks)
-        : trackRows(deriveTracks(progress.data, authoredUnits(authored)));
+        ? trackRows(progress.data.tracks, (id) => titles.get(id) ?? id)
+        : trackRows(deriveTracks(progress.data, authoredUnits(authored)), (id) => titles.get(id) ?? id);
     const openUnits = new Map<string, TrackRow>();
     for (const t of tracks) if (t.open) for (const u of t.openUnits) openUnits.set(u, t);
     model = {
@@ -92,6 +94,7 @@ export function useOak() {
       tracks,
       openUnits,
       core: progress.data?.core ?? "in-progress",
+      course: progress.data?.course ?? "in-progress",
     };
   }
   return { content, map, progress, families, model };

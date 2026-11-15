@@ -94,6 +94,7 @@ export function buildApp(d: AppDeps): Hono {
     soundsDir: d.config.soundsDir,
     distDir: d.config.distDir,
     serveDist: d.config.serveDist,
+    dev: d.config.dev,
   });
   app.notFound((c) => {
     if (c.req.path.startsWith("/api")) return errorResponse(new ApiError("not_found", "no such endpoint"));
@@ -191,7 +192,16 @@ export async function createServer(o: ServerOptions): Promise<OakServer> {
     });
     if (tutorFake) log("tutor: the scripted fake backend answers (OAK_TUTOR_FAKE=1); no model is called");
   }
-  if (o.startup !== false) startupTasks(deps);
+  if (o.startup !== false) {
+    startupTasks(deps);
+    // Wave 7: families added to the content after the learner passed their lesson (the tracks' decks need nothing:
+    // a deck's cards open from its lesson's completion whenever the deck arrives).
+    try {
+      await deps.srs()?.backfillFamilies?.();
+    } catch (e) {
+      log(`family backfill failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
   const app = buildApp(deps);
   return {
     app,

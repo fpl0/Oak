@@ -756,19 +756,41 @@ export const cadence: Generator = {
 
 // --- jzz.ii-v -----------------------------------------------------------------------------------
 
-const II_V: Readonly<Record<string, { mode: ScaleMode; chords: RnChord[] }>> = {
-  "ii-V-I": { mode: "major", chords: [rn("2", "m7"), rn("5", "7"), rn("1", "maj7"), rn("1", "maj7")] },
-  "I-IV-V": { mode: "major", chords: [rn("1", "maj7"), rn("4", "maj7"), rn("5", "7"), rn("1", "maj7")] },
+/**
+ * Four-bar phrases of `fam.jzz.ii-v`, every chord a seventh so the quality never gives the answer away.
+ * Level 1 (J1.L03, content/specs/J1.md S6): does the phrase END with a ii–V–I? Bar 1 is the tonic, which sets the
+ * key before anything is asked; the two near misses share most of the gesture: ii–V–vi (the same ii and V, the
+ * deceptive landing) and IV–V–I (the same landing, approached from IV). Level 2 (J2.L02): the major ii–V–I against
+ * the minor ii–V–i with one altered colour, the ♭9 of the key's own 6th (iiø7–V7♭9–i7).
+ */
+export const II_V_PHRASES: Readonly<Record<string, { mode: ScaleMode; chords: RnChord[] }>> = {
+  "ii-V-I": { mode: "major", chords: [rn("1", "maj7"), rn("2", "m7"), rn("5", "7"), rn("1", "maj7")] },
+  "ii-V-vi": { mode: "major", chords: [rn("1", "maj7"), rn("2", "m7"), rn("5", "7"), rn("6", "m7")] },
+  "IV-V-I": { mode: "major", chords: [rn("1", "maj7"), rn("4", "maj7"), rn("5", "7"), rn("1", "maj7")] },
   "major-ii-V": { mode: "major", chords: [rn("2", "m7"), rn("5", "7"), rn("1", "maj7"), rn("1", "maj7")] },
-  "minor-ii-V": { mode: "minor", chords: [rn("2", "m7b5"), rn("5", "7"), rn("1", "min"), rn("1", "min")] },
+  "minor-ii-V": { mode: "minor", chords: [rn("2", "m7b5"), rn("5", "7b9"), rn("1", "m7"), rn("1", "m7")] },
 };
+/** Level 1 answers: the phrase ends with a ii–V–I, or it does not (J1.L03 S6). */
+const ENDS_LABELS = {
+  "ii-V-I": "It ends with a ii–V–I",
+  other: "It does not end with a ii–V–I",
+} as const;
+/** Level 2 answers (J2.L02): the two cadences by name. */
+const MODE_II_V_LABELS = {
+  "major-ii-V": "Major ii–V–I (ii7 V7 Imaj7)",
+  "minor-ii-V": "Minor ii–V–i (iiø7 V7♭9 i7)",
+} as const;
+/** How the keys of a chain move (level 4): down a whole step (the Tune-Up chain) or up a 4th (J2.L01's cycle). */
+export const CHAIN_MOVES = { "down-whole-step": -2, "up-fourth": 5 } as const;
+
 export const iiV: Generator = {
   name: "jazz-ii-v",
   generate(ctx) {
     if (ctx.category === "locate") {
-      // Eight bars of I/vi/IV fillers with one or two ii–V pairs; answer: the bars where each ii starts.
+      // Eight bars of I/vi/IV/iii fillers with one or two ii–V–I runs; answer: the bars where each ii starts.
+      // Bar 1 is always the tonic (the key before the question), and a ii–V never ends the phrase unresolved.
       const key = pickKey(ctx, "major");
-      const bars: RnChord[] = [];
+      const bars: RnChord[] = [rn("1", "maj7")];
       const starts: number[] = [];
       while (bars.length < 8) {
         const room = 8 - bars.length;
@@ -793,49 +815,73 @@ export const iiV: Generator = {
         ui: "bar-buttons",
         bars: 8,
         key,
+        multi: true,
+        prompt: "In which bars does a ii–V–I start? Pick every one.",
       });
     }
     if (ctx.category === "chain") {
-      // Descending ii–V–I chain by whole steps: name the key of each.
+      // Three ii–V–Is, each into a new key. The first key is named and sounds first; the learner names the
+      // other two (heard against it, never from absolute pitch).
       const first = pickKey(ctx, "major");
-      const keys = [0, -2, -4].map((s) => {
-        const pc = mod(tonicMidi(first.tonic, 4) + s, 12);
+      const move = ctx.rng.pick(Object.keys(CHAIN_MOVES) as (keyof typeof CHAIN_MOVES)[]);
+      const keys = [0, 1, 2].map((i) => {
+        const pc = mod(tonicMidi(first.tonic, 4) + i * CHAIN_MOVES[move], 12);
         return keysFor("all", "major").find((k) => mod(tonicMidi(k.tonic, 4), 12) === pc) as KeySpec;
       });
-      const slots: RnChord[][] = [];
-      const tracks: TrackSpec[] = [];
       const chordNodes: Node[] = [];
       for (const k of keys) {
         const voiced = voiceProgression([rn("2", "m7"), rn("5", "7"), rn("1", "maj7")], k);
         for (const v of voiced) chordNodes.push(seq([voicedNode(v, k)]));
-        slots.push([]);
       }
-      tracks.push({
-        label: "chords",
-        src: "note",
-        pat: { t: "alt", items: chordNodes },
-        s: "rhodes",
-        gain: jitter(ctx, 0.55),
-      });
+      const tracks: TrackSpec[] = [
+        {
+          label: "chords",
+          src: "note",
+          pat: { t: "alt", items: chordNodes },
+          s: "rhodes",
+          gain: jitter(ctx, 0.55),
+        },
+      ];
       const piece = buildPiece({ bpm: pickTempo(ctx), bars: chordNodes.length, tracks });
-      return trialOf(piece, { text: keys.map((k) => k.tonic) }, cueOf(ctx), {
+      return trialOf(piece, { text: keys.slice(1).map((k) => k.tonic) }, cueOf(ctx), {
         mode: "choice",
         ui: "text",
         textKind: "pc",
+        key: first,
         keys,
-        prompt: "Name the key each ii–V–I lands in.",
+        firstKey: first.tonic,
+        move,
+        prompt: `The first ii–V–I lands in ${first.tonic.replace("#", "♯").replace(/^([A-G])b/, "$1♭")}. Name the keys the next two land in.`,
       });
     }
-    const prog = II_V[ctx.category] ?? (II_V["ii-V-I"] as (typeof II_V)[string]);
-    const key = pickKey(ctx, prog.mode);
+    const phrase = II_V_PHRASES[ctx.category] ?? (II_V_PHRASES["ii-V-I"] as (typeof II_V_PHRASES)[string]);
+    const key = pickKey(ctx, phrase.mode);
     const { tracks } = arrangement(
       ctx,
       key,
-      prog.chords.map((c) => [c]),
+      phrase.chords.map((c) => [c]),
       { chordSound: ctx.rng.pick(["rhodes", "piano"]), bassSound: "upright" },
     );
     const piece = buildPiece({ bpm: pickTempo(ctx), bars: 4, tracks });
-    return trialOf(piece, { choice: [ctx.category] }, cueOf(ctx), { mode: "choice", key });
+    if (ctx.category === "major-ii-V" || ctx.category === "minor-ii-V") {
+      const options = Object.keys(MODE_II_V_LABELS);
+      return trialOf(piece, { choice: [ctx.category] }, cueOf(ctx), {
+        mode: "choice",
+        key,
+        options,
+        optionLabels: MODE_II_V_LABELS,
+        prompt: "A major ii–V–I or a minor ii–V–i?",
+      });
+    }
+    const answer = ctx.category === "ii-V-I" ? "ii-V-I" : "other";
+    return trialOf(piece, { choice: [answer] }, cueOf(ctx), {
+      mode: "choice",
+      key,
+      phrase: ctx.category,
+      options: Object.keys(ENDS_LABELS),
+      optionLabels: ENDS_LABELS,
+      prompt: "Does the phrase end with a ii–V–I?",
+    });
   },
 };
 

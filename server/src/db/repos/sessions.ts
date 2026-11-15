@@ -134,6 +134,7 @@ interface GymRow {
   realism: number | null;
   transcription_id: string | null;
   at: string;
+  source: string | null;
 }
 const toGym = (r: GymRow): GymSession => ({
   gymId: r.gym_id,
@@ -143,6 +144,7 @@ const toGym = (r: GymRow): GymSession => ({
   realism: r.realism,
   transcriptionId: r.transcription_id,
   at: r.at,
+  ...(r.source === null ? {} : { source: r.source }),
 });
 
 export class GymRepo {
@@ -153,7 +155,7 @@ export class GymRepo {
   insert(g: GymSession): GymSession {
     run(
       this.db,
-      "INSERT INTO gym_sessions (gym_id, session_id, kind, ladder_level, realism, transcription_id, at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO gym_sessions (gym_id, session_id, kind, ladder_level, realism, transcription_id, at, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       g.gymId,
       g.sessionId,
       g.kind,
@@ -161,6 +163,7 @@ export class GymRepo {
       g.realism,
       g.transcriptionId,
       g.at,
+      g.source ?? null,
     );
     return g;
   }

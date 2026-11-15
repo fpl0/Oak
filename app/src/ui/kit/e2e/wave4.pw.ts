@@ -385,6 +385,17 @@ test("Settings › Data lists the learner's own recordings with sizes; deleting 
   }
   await page.setViewportSize({ width: 1440, height: 900 });
 
+  // W7 gate: "Export backup" saves a file through the UI. A plain link is a navigation without X-Oak, which the
+  // server answers with 403; the button fetches with the header and hands the browser a Blob.
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Export backup" }).click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/\.oakbackup$|\.zip$/);
+  const saved = await download.path();
+  expect(saved).toBeTruthy();
+  await expect(page.getByText("Backup saved")).toBeVisible();
+
   // Cancelling the confirm deletes nothing.
   const questions: string[] = [];
   page.once("dialog", (d) => {

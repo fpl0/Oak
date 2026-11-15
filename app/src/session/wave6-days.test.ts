@@ -818,6 +818,38 @@ describe("after the core, nothing is 'still being written' on the path the learn
     );
     expect(v.primary?.label).toBe("Start session");
   });
+
+  test("after the whole course, the planner's track fallback is not said: every track is complete", () => {
+    const plan = fixturePlan({
+      kind: "review",
+      mapItemId: null,
+      title: "Review",
+      main: null,
+      core: "complete",
+      course: "complete",
+      focus: "A",
+      note: "Nothing of the track you chose can be started today: the core's next session instead.",
+    });
+    const v = todayView({
+      plan,
+      boot: boot(),
+      lastEnded: null,
+      titleOf,
+      edge: { nextId: null, nextUnit: null, doneUnit: null },
+    });
+    expect(v.lead).toBe(
+      "Reviews keep what you know fresh and the Oak green. The gym and Studio are open when they are done.",
+    );
+    // Before it, the same fallback is the planner's honest line.
+    const before = todayView({
+      plan: { ...plan, course: "in-progress" },
+      boot: boot(),
+      lastEnded: null,
+      titleOf,
+      edge: { nextId: null, nextUnit: null, doneUnit: null },
+    });
+    expect(before.lead).toBe(plan.note);
+  });
 });
 
 describe("titles of the finale's sessions", () => {

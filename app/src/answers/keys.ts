@@ -765,10 +765,13 @@ export function snapToStep(v: number, min: number, max: number, step: number): n
 /** How a slider value reads: `96 BPM`, `40%`, `0.33 (triplet swing)`. */
 export function sliderText(
   v: number | null,
-  o: { unit?: string; format?: "number" | "percent" | "swing" },
+  o: { unit?: string; format?: "number" | "percent" | "swing" | "ms" | "hz" },
 ): string {
   if (v === null) return "Not set";
   if (o.format === "percent") return `${Math.round(v * 100)}%`;
+  if (o.format === "ms") return `${Math.round(v)} ms`;
+  if (o.format === "hz")
+    return v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)} kHz` : `${Math.round(v)} Hz`;
   if (o.format === "swing") {
     if (Math.abs(v) < 1e-6) return "0 (straight)";
     if (Math.abs(v - 1 / 3) < 0.005) return "1/3 (triplet swing)";

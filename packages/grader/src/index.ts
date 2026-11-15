@@ -371,3 +371,78 @@ export {
 export function gradeStandardLadder(req: StandardLadderGradeRequest): Promise<GradeResult> {
   return gradeExercise(standardLadderRequestImpl(req));
 }
+// Wave 7 seam (docs/design/wave7.md §3.2): the advanced tracks' views (built ones and typed `NotBuilt` stubs), the
+// rule fields and planned custom rules that fail "not built yet", and the song melody a capstone passes.
+export {
+  // Wave 7 Build (grader).
+  type ClaveAlignmentWindow,
+  type ClaveView,
+  type ClaveWindowView,
+  type CompingBar,
+  type ContrafactView,
+  claveAlignmentView,
+  claveView,
+  compareIdioms,
+  compingView,
+  contrafactView,
+  counterMelodyView,
+  type DensityBarView,
+  densityView,
+  type EuclidBarView,
+  euclidView,
+  type FeelView,
+  feelView,
+  type GroupingView,
+  groupingView,
+  hemiolaView,
+  type IdiomView,
+  type InterlockView,
+  idiomView,
+  interlockView,
+  isNotBuilt,
+  JAZZ_DEVICE_NAMES,
+  type LevelView,
+  levelsView,
+  NEUTRAL_CONTROL,
+  type NotBuilt,
+  notBuilt,
+  type PolyrhythmBar,
+  polymeterView,
+  polyrhythmView,
+  type RegisterClashView,
+  type ReharmView,
+  registerClashView,
+  reharmView,
+  sampleChopView,
+  soundControlView,
+  type TensionNoteView,
+  type TwoFiveView,
+  tensionView,
+  twoFiveView,
+  type VoicingView,
+  voicedChordOf,
+  voicingView,
+  type WalkingBassBar,
+  walkingBassView,
+} from "./analyze/wave7-views.ts";
+// Wave 7 Build (grader): the answers the tracks add (grouping, Euclid numbers, jazz chord text, voicings, two-lane
+// taps) and the custom rules (rubric/wave7-custom.ts).
+export {
+  combineLanePerformances,
+  euclidCheck,
+  groupingCheck,
+  jazzChordText,
+  keyboardVoicingCheck,
+  parseJazzChord,
+  tapLaneTargets,
+  voicingShapeCheck,
+} from "./grade/answers-wave7.ts";
+export { standInModel, WAVE7_BUILT_CUSTOM } from "./rubric/wave7-custom.ts";
+export {
+  notBuiltCustom,
+  unbuiltWave7,
+  WAVE7_REBUILD,
+  WAVE7_UNBUILT,
+  wave7CustomStubs,
+  wave7UnbuiltCustom,
+} from "./rubric/wave7-rules.ts";

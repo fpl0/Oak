@@ -47,6 +47,11 @@ export interface SrsPort {
   finishDrill(drillSessionId: string): MaybePromise<Omit<DrillFinish, "streak">>;
   /** Families and fact cards a completed lesson seeds: `active` or `deferred` by the governor. */
   seedLesson(lessonId: string): MaybePromise<{ cardId: string; status: SrsCard["status"] }[]>;
+  /**
+   * Wave 7: the families of every completed lesson that have no card yet (a family a content update added after the
+   * learner passed its lesson, the advanced tracks' among them) are seeded as their lesson would have seeded them.
+   */
+  backfillFamilies?(): MaybePromise<string[]>;
   /** A graded lesson step that reviews a linked card when it is due within 2 days. */
   afterStep(input: StepReviewInput): MaybePromise<SrsReviewResult[]>;
   /** Current recall of a card for mastery R and shading; `null` for an unknown or never-reviewed card. */

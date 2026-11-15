@@ -4,8 +4,15 @@
 // nothing. Pure: the tables come from the owners (workbench panels, app lenses) and the course from the content
 // bundle, so nothing here repeats an unlock site (tested in locks.test.ts against content/toolbox.ts).
 import type { SyllabusDef, ToolEntry } from "@oak/content-kit";
-import { CHORD_LENS_UNLOCKS, LENS_UNLOCKS, LINE_LENS_UNLOCKS, MUSIC_LENS_UNLOCKS } from "../../lib/lenses.ts";
+import {
+  CHORD_LENS_UNLOCKS,
+  LENS_UNLOCKS,
+  LINE_LENS_UNLOCKS,
+  MUSIC_LENS_UNLOCKS,
+  TRACK_LENS_GATES,
+} from "../../lib/lenses.ts";
 import { PANEL_SWITCHES, PANEL_UNLOCKS } from "../../workbench/panels.ts";
+import { TRACK_LENS_OF_KEY, trackLensOpens } from "../shell/track-lenses.ts";
 
 /** Workbench keys → the toolbox row each needs (keys in the sheet's syntax, as `WORKBENCH_LENS_SHORTCUTS` writes them). */
 export const WORKBENCH_KEY_UNLOCKS: Readonly<Record<string, string>> = (() => {
@@ -81,8 +88,20 @@ export function rowLock(
   ready: boolean,
   toolbox: readonly ToolEntry[],
   syllabus: SyllabusDef | null,
+  /**
+   * Wave 7: the lessons the learner has completed — a track lens (Shift+X, Shift+Q, Shift+D) opens with its tool OR
+   * its lesson (`TRACK_LENS_GATES`). `null` while the course progress has not loaded: those rows are not marked.
+   */
+  completed: ReadonlySet<string> | null = null,
 ): RowLock | null {
   if (!ready || !LOCKABLE_SECTIONS.has(sectionId)) return null;
+  const lens = TRACK_LENS_OF_KEY[keys];
+  if (lens) {
+    if (completed === null) return null;
+    const gate = TRACK_LENS_GATES[lens];
+    if (gate.tools.some((t) => unlocked.has(t)) || completed.has(gate.lesson)) return null;
+    return { locked: true, note: trackLensOpens(lens, syllabus) };
+  }
   const anyOf = WORKBENCH_KEY_ANY_UNLOCKS[keys];
   if (anyOf?.some((id) => unlocked.has(id))) return null;
   const need = WORKBENCH_KEY_UNLOCKS[keys] ?? anyOf?.[0];

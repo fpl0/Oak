@@ -4,12 +4,13 @@
 import type { GymPlan, LadderSong, LadderState, Transcription } from "@oak/api";
 import { AUDIO_UPLOAD_MAX_BYTES, OakApiError } from "@oak/api";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowUp, AudioWaveform, Dumbbell, Lock } from "lucide-react";
+import { ArrowUp, AudioWaveform, Dumbbell, Lock, Repeat2 } from "lucide-react";
 import { useState } from "react";
 import { formatDate, formatKey } from "../lib/format.ts";
 import { getOak } from "../lib/oak.ts";
 import {
   useAudioUpload,
+  useCourseProgress,
   useGymPlan,
   useLadder,
   useLadderNext,
@@ -24,9 +25,12 @@ import { Card, Chip, EmptyState, PageHeader, Skeleton } from "../ui/kit/basics.t
 import { FileDropZone } from "../ui/kit/FileDropZone.tsx";
 import { QueryView } from "../ui/kit/QueryState.tsx";
 import { toast } from "../ui/kit/Toast.tsx";
+import { type GymSource, gymChoices, gymSources, localDay } from "./gym-after-core.ts";
+import { logGymSource, readGymLog } from "./gym-log.ts";
 import { AUDIO_ACCEPT, AUDIO_KINDS, fileProblem, PRIVACY_COPY, titleOf } from "./import.ts";
 import { type LadderLevel, LEVEL_TITLE, ladderSummary, REALISM_TEXT } from "./ladder.ts";
 import { rememberItem } from "./song.ts";
+import { songWrittenHere } from "./songs.ts";
 import { songProgress } from "./standard.ts";
 
 const SOURCE_LABEL: Record<Transcription["sourceKind"], string> = {
@@ -373,6 +377,121 @@ function GymLine({ plan }: { plan: GymPlan }) {
   );
 }
 
+/**
+ * After the core (contracts §2.5: the slot rule stops; the gym is offered once a week and on review days): what the
+ * gym serves next, drawn from every stage the learner has opened, own audio to jazz and rhythm, never a source
+ * served in the last two weeks (gym-after-core.ts).
+ */
+function GymAfterCore({ plan }: { plan: GymPlan | undefined }) {
+  const progress = useCourseProgress();
+  const ladder = useLadder();
+  const songs = useLadderSongs();
+  const list = useTranscriptions();
+  const next = useLadderNext();
+  const navigate = useNavigate();
+  const [log, setLog] = useState(readGymLog);
+  const p = progress.data;
+  if (!p || (p.core !== "complete" && p.course !== "complete")) return null;
+  const sources = gymSources({
+    coreComplete: true,
+    completed: new Set(p.lessons.filter((l) => l.status === "completed").map((l) => l.lessonId)),
+    ladderLevel: ladder.data?.level ?? 1,
+    ownAudio: (list.data?.items ?? [])
+      .filter((t) => t.sourceKind === "own-audio")
+      .map((t) => ({ id: t.id, title: t.title })),
+    songs: (songs.data?.items ?? []).map((s) => ({
+      songId: s.songId,
+      title: s.title,
+      level: s.level,
+      status: s.status,
+    })),
+    cfTReleased: plan?.cfT?.status === "released",
+    analysable: new Set(
+      (songs.data?.items ?? []).filter((s) => songWrittenHere(s.songId)).map((s) => s.songId),
+    ),
+  });
+  const today = localDay();
+  const choices = gymChoices(sources, log, today, 4);
+  const open = async (c: GymSource) => {
+    setLog(logGymSource(c.id, today));
+    const o = c.open;
+    if (o.via === "project") {
+      void navigate({ to: "/transcribe/$projectId", params: { projectId: o.projectId } });
+      return;
+    }
+    if (o.via === "item") {
+      void navigate({ to: "/transcribe", search: { item: o.itemId } });
+      return;
+    }
+    if (o.via === "analysis") {
+      void navigate({ to: "/transcribe", search: { analyse: o.songId } });
+      return;
+    }
+    try {
+      const item = await next.mutateAsync({
+        body: {
+          sessionId: currentSessionId(),
+          gymId: null,
+          level: o.level as LadderLevel,
+          ...(o.songId ? { songId: o.songId } : {}),
+        },
+      });
+      rememberItem(item);
+      void navigate({ to: "/transcribe/$projectId", params: { projectId: item.itemId } });
+    } catch (e) {
+      toast.error("Couldn't make a ladder item", e instanceof Error ? e.message : undefined);
+    }
+  };
+  return (
+    <Card className="mb-6 flex flex-col gap-3 p-4" data-testid="gym-after-core">
+      <div className="flex items-start gap-3">
+        <Repeat2 aria-hidden className="mt-0.5 size-5 shrink-0 text-text-3" />
+        <div className="min-w-0">
+          <h2 className="text-h3">The gym goes on</h2>
+          <p className="mt-0.5 text-sm text-text-2">
+            Drawn from everything you have opened: your own audio, the ladder, the standards, and the jazz and
+            rhythm of the tracks you have started. Nothing comes back within two weeks.
+          </p>
+        </div>
+      </div>
+      {choices.length === 0 ? (
+        <p className="text-sm text-text-2" data-testid="gym-rested">
+          Everything the gym has for you was served in the last two weeks. Studio is open, and the ladder
+          above.
+        </p>
+      ) : (
+        <ul
+          className="m-0 flex list-none flex-col divide-y divide-border p-0"
+          aria-label="What the gym serves"
+        >
+          {choices.map((c, i) => (
+            <li
+              key={c.id}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2"
+              data-testid="gym-choice"
+              data-source={c.id}
+            >
+              <Chip tone={i === 0 ? "accent" : "neutral"}>{c.stage}</Chip>
+              <span className="min-w-0 flex-1 text-sm">
+                <span className="font-medium">{c.title}</span>
+                <span className="block text-text-2">{c.detail}</span>
+              </span>
+              <Button
+                size="sm"
+                variant={i === 0 ? "primary" : "secondary"}
+                loading={next.isPending}
+                onClick={() => void open(c)}
+              >
+                {i === 0 ? "Start the next" : "Start"}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
 export function ProjectList() {
   const list = useTranscriptions();
   const gym = useGymPlan();
@@ -385,6 +504,7 @@ export function ProjectList() {
           <CfTLine plan={gym.data} />
         </div>
       ) : null}
+      <GymAfterCore plan={gym.data} />
       <div className="mb-6 grid gap-4 md:grid-cols-2">
         <LadderCard />
         <ImportCard />

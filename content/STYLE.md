@@ -186,7 +186,8 @@ What the dictionaries are for, so that no check asks them for something else:
 
 - `ireal` (default): full voicings, 4–5 notes, root usually present. The 3rd or 5th is often the lowest note.
 - `triads`: exactly three notes, close position.
-- `lefthand`: four-note **rootless** voicings with a 9th or 13th (`C7` → B♭ D E A). Its altered-dominant entries are loose (`C7b9` and `C7b13` are the same four notes; `C7#11` has no 3rd): fine for comping, never the subject of a pitch-class check.
+- `lefthand`: left-hand recipes for sevenths and sixths, MOSTLY rootless four-note shapes with a 9th or 13th (`C7` → B♭ D E A; `C^7` → B D E G, the 7th lowest; `G7` → B E F A, the 3rd lowest), with exceptions: `Cm7b5` keeps its root (E♭ G♭ B♭ C, no 9th), `C7#9` has three notes. Never describe it as uniformly rootless or four-note, and never check "root absent" on its output. `.offset(1)` moves to the other rootless position (`C^7` → E G B D). Its altered-dominant entries are loose (`C7b9` and `C7b13` are the same four notes; `C7#11` has no 3rd): fine for comping, never the subject of a pitch-class check. Rootless A and B voicings, shells and drop-2 as *shapes* are hand-voiced (`note("[f3,a3,c4,e4]")`) and graded by shape (`voicing-shape`, `VOICING_SHAPES` in `@oak/content-kit`); no Strudel dictionary makes them.
+- `.mode("duck")` (J3.L01) voices at or below the anchor and leaves out the note equal to the anchor, so a chord under a melody note does not double it (anchored on G4, `C^7` in `lefthand` plays B3 D4 E4). It does not remove the root and is not a "rootless" switch.
 - `guidetones`: two notes, the 3rd and the 7th (or 6th).
 - `ireal-ext` (J2.L03): adds colour to plain symbols too (`C` → C E A, `Co` → C E♭ G♭ A).
 
@@ -380,7 +381,7 @@ with `pickup: { units: [1, 1] }` (one quarter note). Without the metadata, leadi
 
 ## 10. Sections, variables and `arrange()`
 
-1. Section patterns are `const`s named **`<role><Section>`** in camelCase: `drumsVerse`, `bassChorus`, `chordsBridge`, `melChorus2`. Roles are the labels of §2. Section words: `intro verse pre chorus bridge solo break head vamp lift outro` or a single letter `a b c`, with an optional digit for a variant.
+1. Section patterns are `const`s named **`<role><Section>`** in camelCase: `drumsVerse`, `bassChorus`, `chordsBridge`, `melChorus2`. Roles are the labels of §2. Section words: `intro verse pre chorus bridge solo break head vamp lift outro`, the two idioms of a genre translation `ballad drive` (A2.L06), or a single letter `a b c`, with an optional digit for a variant.
 2. **One `arrange()` per labelled track.** Every arranged track lists the same sections with the same bar counts. A part that rests in a section uses `silence`.
 3. A track that plays the same thing throughout may skip `arrange()`.
 4. `const` is the only declaration keyword. Names are never reused. A helper that is not a section is named for what it is (`changes`, `groove`).

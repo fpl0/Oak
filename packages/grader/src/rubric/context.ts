@@ -30,6 +30,15 @@ export interface RubricContext extends NormalizeContext {
    * what the `form` pattern `@song` compares with (CF-T.S4). `bars` is the section's length.
    */
   songForm?: readonly { label: string; bars: number; chords?: readonly (readonly string[])[] }[];
+  /**
+   * Wave 7 (carry f4; docs/design/wave7.md §3.2): the song's own melody, note by note, for the rules that keep a
+   * tune (CF-T.S4's arrangement, JC4's reharmonisation, AC1's two versions; `song-melody-kept`). Onsets in bars from
+   * the first full bar (a pickup's notes are negative), MIDI as the answer key writes it. The capstone host fills it
+   * from `SongDef.answerKey` (the song the learner picked); absent, those rules fail "not built yet" or name it.
+   */
+  songMelody?: readonly import("../types.ts").SongMelodyNote[];
+  /** Wave 7 (AC1): the other version of a two-version capstone, evaluated (`GradeContext.otherVersion`). */
+  otherVersion?: { id: "a" | "b"; n: Normalized };
 }
 
 /** The learner tracks a rubric reads; Band tracks are never counted (contracts §6.2 item 5). */

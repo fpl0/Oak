@@ -361,6 +361,35 @@ export function albumStripSlots<T extends { id: string }>(
   return albumWindow(core, finaleLast, released, size);
 }
 
+/**
+ * Wave 7: once Side A is complete and Side B's first track is released, the strip goes on with Side B (wave7.md §5.5):
+ * the eight track capstones, the
+ * released ones in the order they were released (Side B is numbered in release order), then the rest in the order of
+ * `ALBUM_SIDES`; the window ends on the next unreleased one, as on Side A. Before that, Side A as before.
+ */
+export function albumStripSlotsAB<T extends { id: string }>(
+  capstones: readonly T[],
+  order: readonly string[],
+  released: ReadonlySet<string | null>,
+  releasedAt: ReadonlyMap<string, string>,
+  sideB: readonly string[],
+  size = 3,
+): T[] {
+  const sideA = capstones.filter((c) => /^(C|X)\d+$/.test(c.id) || FINALE.includes(c.id));
+  const aDone = sideA.length > 0 && sideA.every((c) => released.has(c.id));
+  const b = capstones.filter((c) => sideB.includes(c.id));
+  // Side B shows once its first track is released (as the album page does, wave7.md §5.5): before that the tracks
+  // are optional, and three empty Side B slots would read as the next thing to do.
+  if (!aDone || b.length === 0 || !b.some((c) => released.has(c.id)))
+    return albumStripSlots(capstones, order, released, size);
+  const rank = (id: string) => {
+    const at = releasedAt.get(id);
+    return at ? `0 ${at}` : `1 ${String(sideB.indexOf(id)).padStart(2, "0")}`;
+  };
+  const bOrder = [...b].sort((x, y) => rank(x.id).localeCompare(rank(y.id))).map((c) => `${c.id}.S1`);
+  return albumWindow(b, bOrder, released, size);
+}
+
 // --- Wave 5: what backs each milestone ------------------------------------------------------------------------
 
 export interface MilestoneConditionLike {

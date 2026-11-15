@@ -8,8 +8,10 @@ import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { R } from "@oak/content-kit";
 import { CORPUS } from "../corpus/corpus.ts";
 import { readBack, runEntry } from "../corpus/harness.ts";
+import { standardEntries } from "../corpus/standards-w7.ts";
 import {
   drawnLabels,
+  ghostMarks,
   guideToneMarks,
   parseNoteList,
   scoreRhythm,
@@ -18,6 +20,9 @@ import {
 } from "./index.ts";
 
 setDefaultTimeout(30_000);
+
+// The jazz track's standards from content/repertoire's answer keys, as soon as each exists (standards-w7.ts).
+const standards = await standardEntries();
 
 const key3 = (e: {
   onset: readonly [number, number];
@@ -139,12 +144,15 @@ describe("the independent read-back", () => {
 });
 
 describe("golden corpus", () => {
-  test("has at least 331 patterns (Wave 4: 40 more for harmony and lead sheets; Wave 5: 60 more; Wave 6: 90 more)", () => {
-    expect(CORPUS.length).toBeGreaterThanOrEqual(331);
+  test("has at least 407 patterns (Wave 4: 40 more for harmony and lead sheets; Wave 5: 60 more; Wave 6: 90 more; Wave 7: 76 more)", () => {
+    expect(CORPUS.length).toBeGreaterThanOrEqual(407);
     expect(new Set(CORPUS.map((e) => e.name)).size).toBe(CORPUS.length);
   });
 
-  for (const entry of CORPUS) {
+  for (const slug of standards.missing)
+    test.todo(`standard ${slug}: no answer key in content/repertoire yet`);
+
+  for (const entry of [...CORPUS, ...standards.entries]) {
     test(entry.name, async () => {
       const r = await runEntry(entry);
       const { score, abc, check } = r;
@@ -267,7 +275,7 @@ describe("golden corpus", () => {
       }) =>
         `${num(R.toNum(e.onset as [number, number]))}+${num(R.toNum(e.dur as [number, number]))}:${e.midi}`;
       const engraved = scoreToEvents(score).filter((e) => e.midi !== null);
-      const lead = (entry.staff ?? "auto") === "lead";
+      const lead = r.input.staff === "lead";
       // A lead sheet engraves the melody only: the events with no chord symbol. Two events in unison in one slot
       // are one notehead (c5). A declared swing is checked against the input straightened by contracts §6.10
       // item 6, computed here on its own: the off-beat moves back by amount/2 of a slot, and each note ends at the
@@ -297,7 +305,7 @@ describe("golden corpus", () => {
               : e,
           );
       const truth =
-        !score.approximate && (!swing || swungOk) && (entry.staff ?? "auto") !== "rhythm"
+        !score.approximate && (!swing || swungOk) && r.input.staff !== "rhythm"
           ? dedupe(
               inPage(swungOk && swing ? straightened(melodic, score.meter.unitsPerBar, swing) : melodic),
               staffOf,
@@ -323,6 +331,51 @@ describe("golden corpus", () => {
       // ... and every label stands where it was asked for, unless the Score says why not.
       if (!score.warnings.some((w) => w.code === "abcjs-limit"))
         for (const a of [...(score.chords ?? []), ...(score.romans ?? [])]) expect(a.drawnAt).toBeUndefined();
+      // Wave 7: bracket texts read back over the top staff's first voice where they start; the additive time
+      // signature; slash heads on every stroke of a slash staff and nowhere else; accents where the Score put them;
+      // ghost heads.
+      if (x.above)
+        expect(check.labels.filter((l) => l.position === "above").map((l) => l.text)).toEqual(x.above);
+      if (score.brackets && !score.annotations)
+        expect(labelsBack("above", 0)).toEqual(
+          score.brackets.map((b) => `${num(R.toNum(b.drawnAt ?? b.at))}:${glyphs(b.text)}`),
+        );
+      expect(check.meter).toBe(`${score.groupingText ?? score.meter.num}/${score.meter.den}`);
+      if (x.meter) expect(check.meter).toBe(x.meter);
+      const styles = check.styles.flat(2);
+      if (score.slashes) expect(styles.every((st) => st === "rhythm") && styles.length > 0).toBe(true);
+      else expect(styles.filter((st) => st === "rhythm")).toEqual([]);
+      const accented = score.staves.flatMap((st) =>
+        st.voices.flatMap((v) => v.bars.flatMap((b) => b.items.filter((it) => it.kind !== "rest"))),
+      );
+      expect(check.accents.flat(2).filter(Boolean).length).toBe(accented.filter((it) => it.accent).length);
+      if (x.accents !== undefined) expect(accented.filter((it) => it.accent).length).toBe(x.accents);
+      if (x.ghosts) expect(ghostMarks(score).map((g) => `${g.drum}@${R.str(g.onset)}`)).toEqual(x.ghosts);
+      // Slash comping: the strokes read back from the ABC are the comping track's attacks, computed here from the
+      // events on their own (one per onset, as long as the longest note there, cut at the next attack and at the
+      // page's end).
+      if (entry.comping) {
+        const byOnset = new Map<string, { on: number; dur: number }>();
+        for (const e of events) {
+          if (e.track !== entry.comping) continue;
+          const on = R.toNum(e.onset);
+          const end = Math.min(on + R.toNum(e.dur), score.startBar + score.bars);
+          const k = num(on);
+          byOnset.set(k, { on, dur: Math.max(byOnset.get(k)?.dur ?? 0, end - on) });
+        }
+        const attacks = [...byOnset.values()].sort((a, b) => a.on - b.on);
+        const want = attacks
+          .map((o, i) => {
+            const next = attacks[i + 1]?.on ?? Number.POSITIVE_INFINITY;
+            return `${num(o.on)}+${num(Math.min(o.dur, next - o.on))}:1`;
+          })
+          .sort();
+        const got = rb.staves
+          .filter((st) => st.perc)
+          .flatMap((st) => st.voices.flat().map((n) => fromAbc(n.onset, n.dur, n.heads)))
+          .sort();
+        expect(got).toEqual(want);
+      }
       // Percussion: every stroke at its time with its heads.
       const percBack = rb.staves
         .filter((s) => s.perc)
@@ -355,7 +408,7 @@ describe("golden corpus", () => {
         !score.approximate &&
         !swing &&
         !entry.grid &&
-        (entry.staff ?? "auto") !== "rhythm" &&
+        r.input.staff !== "rhythm" &&
         score.staves.every((s) => s.clef !== "perc");
       if (exact) {
         const want = dedupe(
@@ -377,6 +430,7 @@ describe("golden corpus", () => {
         expect(back.map(key3).sort()).toEqual(scoreToEvents(score).map(key3).sort());
       }
 
+      if (entry.snapshot === false) return;
       expect({
         code: entry.code,
         abc: abc.abc.trimEnd().split("\n"),

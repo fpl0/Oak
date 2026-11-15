@@ -11,6 +11,11 @@ import {
   barLabelEvery,
   barLines,
   beatTicks,
+  type ClaveSpec,
+  claveSideOfBar,
+  claveStrokesInBar,
+  claveText,
+  feelText,
   formatTime,
   type GridFeel,
   type GridTick,
@@ -57,6 +62,8 @@ export function Waveform({
   swing = false,
   meter,
   feel,
+  grouping = null,
+  clave = null,
 }: {
   transport: TranscribeTransport;
   state: TransportState;
@@ -77,6 +84,10 @@ export function Waveform({
    */
   meter?: string | null;
   feel?: GridFeel;
+  /** Wave 7: an odd meter's declared grouping (7/8 as 3+2+2); default the meter's own. */
+  grouping?: readonly number[] | null;
+  /** Wave 7: the two-bar clave grid laid over the bars (K cycles it), each stroke marked. */
+  clave?: ClaveSpec | null;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<WaveView | null>(null);
@@ -193,12 +204,31 @@ export function Waveform({
       // Beats (and the off-beat eighths, swung or straight) once there is room to see them.
       const all: readonly Pick<GridTick, "at" | "kind">[] =
         meter !== undefined
-          ? gridTicks(meter, feel ?? (swing ? "swing" : "straight"))
+          ? gridTicks(meter, feel ?? (swing ? "swing" : "straight"), grouping)
           : beatTicks(unitsPerBar, swing);
       const beats = all.filter((t) => t.kind === "beat").length || unitsPerBar;
       const marked =
         meter !== undefined ? feel === "swing" || feel === "triplet" || all.length > beats * 2 : swing;
       const pxPerBeat = (pxPerSec * grid.barSec) / beats;
+      // The clave's strokes, from the first downbeat on, once a bar is wide enough to tell its eighths apart.
+      if (clave && pxPerSec * grid.barSec >= 48 && lines.length <= 400) {
+        const strokeColor = cssVar("--oak-accent-2", "#b7791f");
+        for (const l of lines)
+          for (const at of claveStrokesInBar(clave, l.bar)) {
+            const t = l.t + at * grid.barSec;
+            if (t > buffer.duration) continue;
+            made.push(
+              regions.addRegion({
+                id: `clave-${l.bar}-${at.toFixed(4)}`,
+                start: t,
+                end: t + Math.min(0.06, grid.barSec / 16),
+                drag: false,
+                resize: false,
+                color: withAlpha(strokeColor, 0.55),
+              }),
+            );
+          }
+      }
       if (pxPerBeat >= 18 && lines.length * beats <= 1600) {
         const ticks = all.filter((t) => t.at > 0 && (t.kind === "beat" || pxPerBeat >= 36));
         for (const l of lines)
@@ -220,7 +250,20 @@ export function Waveform({
     return () => {
       for (const r of made) r.remove();
     };
-  }, [view, grid?.barSec, grid?.downbeatS, buffer, zoom, unitsPerBar, swing, meter, feel]);
+  }, [
+    view,
+    grid?.barSec,
+    grid?.downbeatS,
+    buffer,
+    zoom,
+    unitsPerBar,
+    swing,
+    meter,
+    feel,
+    grouping?.join("+"),
+    clave?.type,
+    clave?.direction,
+  ]);
 
   return (
     <div className="relative">
@@ -229,7 +272,7 @@ export function Waveform({
         className="oak-wave min-h-[128px] overflow-hidden rounded-control bg-surface-2"
         data-testid="waveform"
         role="img"
-        aria-label={`Waveform of your recording, ${formatTime(buffer.duration)} long. Drag across it to set a loop.`}
+        aria-label={`Waveform of your recording, ${formatTime(buffer.duration)} long. Drag across it to set a loop.${clave ? ` ${claveText(clave)} marked over the bars.` : ""}`}
       />
       {failed ? <p className="mt-1 text-sm text-issue">The waveform could not be drawn: {failed}</p> : null}
     </div>
@@ -263,6 +306,8 @@ export function BarTimeline({
   keys = null,
   barButtons = true,
   height = 112,
+  grouping = null,
+  clave = null,
 }: {
   transport: TranscribeTransport;
   state: TransportState;
@@ -292,6 +337,13 @@ export function BarTimeline({
   barButtons?: boolean;
   /** Pixels (default 112). */
   height?: number;
+  /** Wave 7: an odd meter's declared grouping (7/8 as 3+2+2); default the meter's own. */
+  grouping?: readonly number[] | null;
+  /**
+   * Wave 7: the two-bar clave grid (R3.L02, the CLAVE lens's strip): each bar's strokes marked and the side it
+   * holds ("3" or "2"), counted from the first full bar.
+   */
+  clave?: ClaveSpec | null;
 }) {
   const barSec = state.durationS / Math.max(1, bars);
   const drag = useRef<number | null>(null);
@@ -314,21 +366,25 @@ export function BarTimeline({
   const short = (b: number) => (pickup ? (b === 0 ? "pickup" : String(b)) : String(b + 1));
   const theFeel: GridFeel = feel ?? (swing ? "swing" : "straight");
   const allTicks: readonly Pick<GridTick, "at" | "kind">[] =
-    meter !== undefined ? gridTicks(meter, theFeel) : beatTicks(unitsPerBar, swing);
+    meter !== undefined ? gridTicks(meter, theFeel, grouping) : beatTicks(unitsPerBar, swing);
   const beatCount = allTicks.filter((t) => t.kind === "beat").length;
   // The divisions are drawn when they are the point: a swung or triplet feel, or a compound meter's three.
   const divided = theFeel !== "straight" || allTicks.length > beatCount * 2;
   // Many bars (a whole tune): the beats alone, so the bars stay readable; the feel is still named beside them.
   const ticks = allTicks.filter((t) => (divided && bars <= 16) || t.kind === "beat");
   const compound = allTicks.length > beatCount * 2 && theFeel !== "triplet";
+  const named = meter !== undefined ? feelText(meter ?? null, theFeel, grouping) : null;
   const feelLabel = compound
     ? `${meter} · ${beatCount} beats, each in three`
     : theFeel === "swing"
       ? "Swing 8ths"
       : theFeel === "triplet"
         ? "Triplets"
-        : null;
-  const hasMarks = marks.length > 0 || feelLabel !== null;
+        : named;
+  const claveLabel = clave ? claveText(clave) : null;
+  /** The clave's bar number of a cycle: counted from the first full bar. */
+  const claveBar = (b: number) => (pickup ? b - 1 : b);
+  const hasMarks = marks.length > 0 || feelLabel !== null || claveLabel !== null;
   const ribbon = keys && keys.length > 1 ? keys : null;
   return (
     <div>
@@ -349,12 +405,10 @@ export function BarTimeline({
               {m.text}
             </span>
           ))}
-          {feelLabel ? (
-            <span
-              className="absolute top-0 right-0 bg-surface pl-2 leading-5 text-text-2"
-              data-testid="swing-label"
-            >
-              {feelLabel}
+          {feelLabel || claveLabel ? (
+            <span className="absolute top-0 right-0 flex gap-3 bg-surface pl-2 leading-5 text-text-2">
+              {claveLabel ? <span data-testid="clave-label">{claveLabel}</span> : null}
+              {feelLabel ? <span data-testid="swing-label">{feelLabel}</span> : null}
             </span>
           ) : null}
         </div>
@@ -449,6 +503,23 @@ export function BarTimeline({
                   />
                 ))}
               </span>
+              {clave && claveBar(b) >= 0 ? (
+                <span aria-hidden className="absolute inset-x-0 top-10 h-3" data-testid="clave-strokes">
+                  {claveStrokesInBar(clave, claveBar(b)).map((at) => (
+                    <span
+                      key={at}
+                      className={clsx(
+                        "absolute top-0 size-2.5 rounded-full bg-accent-2",
+                        at > 0 && "-translate-x-1/2",
+                      )}
+                      style={{ left: `${at * 100}%` }}
+                    />
+                  ))}
+                  <span className="absolute top-0 right-1 text-[0.7rem] leading-3 text-text-3">
+                    {claveSideOfBar(clave, claveBar(b))}
+                  </span>
+                </span>
+              ) : null}
               {mark ? (
                 <span
                   aria-hidden

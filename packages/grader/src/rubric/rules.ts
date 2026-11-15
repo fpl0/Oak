@@ -19,6 +19,7 @@ import {
   isMinorish,
   METERS,
   noteToMidi,
+  parseChordSymbol,
   parseRN,
   pcOf,
   relativeKey,
@@ -40,7 +41,6 @@ import {
   findSchema,
   guideToneLine,
   harmonicRhythm,
-  lowIntervalViolations,
   matchProgression,
   romanShown,
   romanText,
@@ -51,8 +51,8 @@ import {
   voiceLeadingOfSlots,
 } from "../analyze/chords.ts";
 import { locAt, mean, mod12, onsets, pitched, ratKey, sounding } from "../analyze/events.ts";
-import { energyCurve, formMatches, registerSeparation, spanStats } from "../analyze/form.ts";
-import { claveType, euclidMatch, grooveLock, polyRatio } from "../analyze/groove.ts";
+import { energyCurve, formMatches, spanStats } from "../analyze/form.ts";
+import { grooveLock } from "../analyze/groove.ts";
 import { keyEstimate, keyFromContext, keyOf } from "../analyze/key.ts";
 import { keysByBar } from "../analyze/key-plan.ts";
 import {
@@ -67,10 +67,10 @@ import {
   stepLeap,
 } from "../analyze/melody.ts";
 import { syncopation } from "../analyze/meter.ts";
-import { detectDevices } from "../analyze/piece.ts";
+import { detectDevices, harmonySlots, heardSymbols } from "../analyze/piece.ts";
 import { transposeAfterScaleTracks } from "../analyze/scale-context.ts";
 import { resolveSection, sectionsFromAst } from "../analyze/sections.ts";
-import { pickSwingTrack } from "../analyze/swing.ts";
+import { pickSwingTrack, swingRatio } from "../analyze/swing.ts";
 import {
   loopPassBars,
   periodOf,
@@ -84,6 +84,7 @@ import { noteName } from "../match/common.ts";
 import { runMatcher } from "../match/index.ts";
 import type { Normalized } from "../types.ts";
 import type { RubricContext } from "./context.ts";
+import type { CorrectionDeps } from "./corrections-rules.ts";
 import { correctionRules, placeText } from "./corrections-rules.ts";
 import {
   chordInversionsRule,
@@ -118,6 +119,17 @@ import {
   unbuiltWave6,
   velocityGhostsRule as velocityGhostsWave6,
 } from "./wave6-rules.ts";
+import { wave7CustomRules } from "./wave7-custom.ts";
+import {
+  claveRule,
+  euclidRule,
+  noMuddyLowRule,
+  polyrhythmRule,
+  registerSepRule,
+  unbuiltWave7,
+  voiceLeadingTopRule,
+  wave7CustomStubs,
+} from "./wave7-rules.ts";
 
 export interface RuleEval {
   ok: boolean;
@@ -164,7 +176,18 @@ export function pieceKey(n: Normalized, ctx: RubricContext): KeySpec | null {
 export function pieceSlots(n: Normalized, track?: string, opts: { exclude?: string } = {}): ChordSlot[] {
   const out = opts.exclude ? new Set(selectTrack(n, opts.exclude).map((e) => e.id)) : null;
   const keep = (es: readonly NEvent[]): NEvent[] => (out ? es.filter((e) => !out.has(e.id)) : [...es]);
-  const all = keep(selectTrack(n, track ?? "*"));
+  // A symbol counts only where it is heard as a chord (`heardSymbols`): `chord(changes).rootNotes(2)` under a
+  // muted chords line is a bass line, so the right names on a silent comping line never pass (J4.L01, J4.L02).
+  // An unheard symbol's notes stay as plain notes.
+  const plainOf = (es: readonly NEvent[]): NEvent[] => {
+    const heard = new Set(heardSymbols(es).map((e) => e.id));
+    return es.map((e) => {
+      if (e.chordSymbol === undefined || heard.has(e.id)) return e;
+      const { chordSymbol: _unheard, ...rest } = e;
+      return rest as NEvent;
+    });
+  };
+  const all = plainOf(keep(selectTrack(n, track ?? "*")));
   const symbolic = all.filter((e) => e.chordSymbol !== undefined);
   // The harmony tracks' own hand-voiced chords count beside their symbols (a chorus voiced by hand under a
   // verse of `chord()`); a melody or bass track never makes a chord here.
@@ -174,7 +197,7 @@ export function pieceSlots(n: Normalized, track?: string, opts: { exclude?: stri
       ? all.filter((e) => e.chordSymbol !== undefined || (e.midi !== null && symTracks.has(e.track)))
       : track
         ? all
-        : keep(tracksOfRole(n, "chords").flatMap((t) => n.byTrack[t] ?? []));
+        : plainOf(keep(tracksOfRole(n, "chords").flatMap((t) => n.byTrack[t] ?? [])));
   const bass = pitched(keep(n.all));
   const slots = chordSlots(chords.length > 0 ? chords : all, { bass }).map(unclustered);
   // A chord track played as a broken chord (`.arp()`) sounds one note at a time: read it bar by bar.
@@ -189,6 +212,26 @@ function isBroken(events: readonly NEvent[]): boolean {
 }
 const coreEq = (a: ChordId | null, b: ChordId | null): boolean =>
   !!a && !!b && triadCore(a).rootPc === triadCore(b).rootPc && triadCore(a).quality === triadCore(b).quality;
+/** A chord's seventh, as a family (a 9th or 13th keeps its seventh's family); null for a triad or a sixth. */
+function seventhFamily(c: ChordId): "dom" | "maj7" | "m7" | "m7b5" | "dim7" | "mMaj7" | null {
+  const q = c.quality;
+  if (q === "m7b5") return "m7b5";
+  if (q === "dim7") return "dim7";
+  if (q === "mMaj7") return "mMaj7";
+  if (/^maj(7|9|13)/.test(q)) return "maj7";
+  if (/^m(7|9|11|13)/.test(q)) return "m7";
+  if (/^(7|9|11|13)/.test(q)) return "dom";
+  return null;
+}
+/**
+ * W7 gate (review:teaching-jazz): where the numeral asks for a seventh (III7, ii7, I∆7) the heard chord's seventh
+ * must be that one: a maj7 bridge is not "four dominant sevenths". A numeral without a seventh reads the triad only.
+ */
+const seventhEq = (heard: ChordId | null, want: ChordId | null): boolean => {
+  if (!coreEq(heard, want)) return false;
+  const w = want ? seventhFamily(want) : null;
+  return w === null || (heard ? seventhFamily(heard) : null) === w;
+};
 const keyName = (k: KeySpec): string => `${k.tonic} ${k.mode}`;
 
 // --- rules --------------------------------------------------------------------------------------
@@ -526,7 +569,7 @@ const progression: Impl<"progression"> = (r, n, ctx) => {
     let best = { matched: -1, rotation: 0 };
     for (let rot = 0; rot < (rotate ? loop.length : 1); rot++) {
       let m = 0;
-      while (m < perBar.length && coreEq(perBar[m] ?? null, loop[(m + rot) % loop.length] ?? null)) m++;
+      while (m < perBar.length && seventhEq(perBar[m] ?? null, loop[(m + rot) % loop.length] ?? null)) m++;
       if (m > best.matched) best = { matched: m, rotation: rot };
     }
     // One chord a bar (contracts §6.6): a second chord inside a bar breaks the loop even when every downbeat
@@ -536,7 +579,9 @@ const progression: Impl<"progression"> = (r, n, ctx) => {
       const cores = slots
         .filter((sl) => sl.chord && R.lte(rat(c), sl.span[0]) && R.lt(sl.span[0], rat(c + 1)))
         .map((sl) => sl.chord as ChordId);
-      const first = slotAt(slots, rat(c))?.chord ?? null;
+      // Comping that leaves beat 1 empty (chords on 2 and 4) names the bar by the first chord struck in it,
+      // as `chordPerBar` does (build-author-capstones-jazz-b, JC3's bridge).
+      const first = slotAt(slots, rat(c))?.chord ?? cores[0] ?? null;
       return cores.some((x) => !coreEq(x, first));
     });
     if (crowded !== undefined && crowded < from + Math.min(best.matched, span)) {
@@ -564,7 +609,10 @@ const progression: Impl<"progression"> = (r, n, ctx) => {
       target: span,
       detail: ok
         ? `bars ${from}–${to}: ${perBar.map(rn).join(" ")}${best.rotation ? " (the loop from another chord)" : ""}`
-        : `bar ${badBar} is ${named(perBar[best.matched] ?? null)}; the loop wants ${named(exp)} there (bars ${from}–${to}: ${romans.rn.join(" ")}${rotate ? ", from any chord" : ""}, one chord per bar)`,
+        : coreEq(perBar[best.matched] ?? null, exp)
+          ? // The right root and triad with another seventh: name both sevenths (a ∆7 where a dominant 7th goes).
+            `bar ${badBar} is ${rn(perBar[best.matched] ?? null)} (${toLeadSheet(perBar[best.matched] as ChordId)}); the loop wants ${romans.rn[(best.matched + best.rotation) % romans.rn.length] ?? rn(exp)} there, another seventh on the same root (bars ${from}–${to}: ${romans.rn.join(" ")}, one chord per bar)`
+          : `bar ${badBar} is ${named(perBar[best.matched] ?? null)}; the loop wants ${named(exp)} there (bars ${from}–${to}: ${romans.rn.join(" ")}${rotate ? ", from any chord" : ""}, one chord per bar)`,
       ...(!ok ? { where: { bar: badBar } } : {}),
     };
   }
@@ -689,8 +737,12 @@ const containsRn: Impl<"contains-rn"> = (r, n, ctx) => {
   const pass = r.min > 1 ? loopPassBars(n.all, windowBars(n, ctx)) : Number.POSITIVE_INFINITY;
   let count = 0;
   let unresolved: number | null = null;
+  // Wave 7 Build (carry f4, corrections gate AS-35): a chord heard for less than a beat (an E as the last 16th of a
+  // G bar) is a passing sound, not the chord the brief asks for; with `mustResolve` it must last a beat.
+  const beat = rat(1, METERS[ctx.meter].unitsPerBar);
   slots.forEach((s, i) => {
     if (R.floor(s.span[0]) >= pass) return;
+    if (r.mustResolve && R.lt(R.sub(s.span[1], s.span[0]), beat)) return;
     const hit = r.rn.map((x) => rnMatches(s, slots[i + 1], x, keyAt(i))).find((h) => h.hit);
     if (!hit) return;
     if (r.mustResolve && !hit.resolved) {
@@ -952,17 +1004,49 @@ const swingRule: Impl<"swing"> = (r, n, ctx) => {
       const whole = selectTrack(n, ref);
       if (own.length >= 4 && whole.length > own.length) candidates.push({ ref, events: whole });
     }
-  const picked = pickSwingTrack(candidates, ctx.meter, r.subdivision);
-  const units = METERS[ctx.meter].unitsPerBar;
-  const fix = `.swingBy(1/3, ${r.subdivision === 8 ? units : 2 * units})`;
   const notes = r.subdivision === 8 ? "8ths" : "16ths";
+  // The first line the brief names that plays is the one measured: when it plays triplets, a later candidate (the
+  // whole kit) must not lend it a swing it does not have (review:robustness: `hats: s("hh*12")` passed AC2).
+  const firstLive = candidates.find((c) => c.events.length > 0);
+  const triplet =
+    firstLive && swingRatio(firstLive.events, ctx.meter, r.subdivision).triplets ? firstLive : undefined;
+  // The first named line swings, but on the other subdivision (hats swung in 8ths where 16ths are asked): say so
+  // before a later candidate (the whole kit) is measured in its place.
+  const otherSub: 8 | 16 = r.subdivision === 8 ? 16 : 8;
+  const firstElsewhere =
+    firstLive && !triplet && swingRatio(firstLive.events, ctx.meter, r.subdivision).n < 4
+      ? swingRatio(firstLive.events, ctx.meter, otherSub)
+      : null;
+  const swingsElsewhere = !!firstElsewhere && firstElsewhere.n >= 4 && firstElsewhere.ratio >= 1.15;
+  const picked = triplet || swingsElsewhere ? null : pickSwingTrack(candidates, ctx.meter, r.subdivision);
   if (!picked) {
     // The first listed line that is a real track (`hats`), else the role (`@drums`) by its own name.
     const live = refs.find((ref) => selectTrack(n, ref).length > 0) ?? refs[0] ?? "hats";
     const line = live.startsWith("@") ? live.slice(1) : live;
+    // A triplet line (three to a beat) is not a swung one: say what it plays (review:robustness).
+    if (triplet) {
+      const tLine = triplet.ref.startsWith("@")
+        ? (triplet.events[0]?.track ?? triplet.ref.slice(1))
+        : triplet.ref;
+      return {
+        ok: false,
+        detail: `\`${tLine}\` plays triplets, every note of the three; swung ${notes} are pairs, long–short`,
+        extra: [
+          diag(
+            "rhythm.swing-missing",
+            { got: `triplets on \`${tLine}\``, expected: `swung ${notes}` },
+            { track: tLine },
+            "rhythm",
+          ),
+        ],
+      };
+    }
     // The line swings, but on the other subdivision: say so instead of "no steady 8ths".
-    const other: 8 | 16 = r.subdivision === 8 ? 16 : 8;
-    const elsewhere = pickSwingTrack(candidates, ctx.meter, other);
+    const other = otherSub;
+    const elsewhere =
+      swingsElsewhere && firstLive && firstElsewhere
+        ? { candidate: firstLive, measure: firstElsewhere }
+        : pickSwingTrack(candidates, ctx.meter, other);
     if (elsewhere && elsewhere.measure.ratio >= 1.15) {
       const otherLine = elsewhere.candidate.ref.startsWith("@")
         ? (elsewhere.candidate.events[0]?.track ?? elsewhere.candidate.ref.slice(1))
@@ -970,11 +1054,11 @@ const swingRule: Impl<"swing"> = (r, n, ctx) => {
       const otherNotes = other === 8 ? "8ths" : "16ths";
       return {
         ok: false,
-        detail: `\`${otherLine}\` swings ${otherNotes}; the brief asks for swung ${notes}: play ${notes} and use \`${fix}\``,
+        detail: `\`${otherLine}\` swings ${otherNotes}; the brief asks for swung ${notes}: swing the ${notes} instead`,
         extra: [
           diag(
             "rhythm.swing-missing",
-            { got: `swung ${otherNotes} on \`${otherLine}\``, expected: `swung ${notes} (add \`${fix}\`)` },
+            { got: `swung ${otherNotes} on \`${otherLine}\``, expected: `swung ${notes}` },
             { track: otherLine },
             "rhythm",
           ),
@@ -983,11 +1067,11 @@ const swingRule: Impl<"swing"> = (r, n, ctx) => {
     }
     return {
       ok: false,
-      detail: `no line plays steady ${notes} to swing; give \`${line}\` ${notes} and add \`${fix}\``,
+      detail: `no line plays steady ${notes} to swing; give \`${line}\` ${notes} and swing them`,
       extra: [
         diag(
           "rhythm.swing-missing",
-          { got: `no steady ${notes} on \`${line}\``, expected: `swung ${notes} (add \`${fix}\`)` },
+          { got: `no steady ${notes} on \`${line}\``, expected: `swung ${notes}` },
           { track: line },
           "rhythm",
         ),
@@ -997,8 +1081,12 @@ const swingRule: Impl<"swing"> = (r, n, ctx) => {
   const ratio = picked.measure.ratio;
   const [lo, hi] = r.ratio;
   const ok = ratio >= lo - 1e-9 && ratio <= hi + 1e-9;
+  // A role (`@drums`) measured across several lines is named as the role, not by its first line's name.
+  const lines = new Set(picked.candidate.events.map((e) => e.track));
   const line = picked.candidate.ref.startsWith("@")
-    ? (picked.candidate.events[0]?.track ?? picked.candidate.ref.slice(1))
+    ? lines.size === 1
+      ? (picked.candidate.events[0]?.track ?? picked.candidate.ref.slice(1))
+      : picked.candidate.ref.slice(1)
     : picked.candidate.ref;
   const straight = picked.measure.cls === "straight" || ratio < 1.15;
   return {
@@ -1008,7 +1096,7 @@ const swingRule: Impl<"swing"> = (r, n, ctx) => {
     detail: ok
       ? `\`${line}\` swings at ${fmt(ratio)}:1`
       : straight
-        ? `\`${line}\` plays straight ${notes}; add \`${fix}\``
+        ? `\`${line}\` plays straight ${notes}; swing them, long–short`
         : `\`${line}\` swings at ${fmt(ratio)}:1; the brief asks for ${lo}–${hi}:1`,
     ...(!ok
       ? {
@@ -1016,7 +1104,7 @@ const swingRule: Impl<"swing"> = (r, n, ctx) => {
             straight
               ? diag(
                   "rhythm.swing-missing",
-                  { got: `straight ${notes} on \`${line}\``, expected: `swung ${notes} (add \`${fix}\`)` },
+                  { got: `straight ${notes} on \`${line}\``, expected: `swung ${notes}` },
                   { track: line },
                   "rhythm",
                 )
@@ -1028,8 +1116,8 @@ const swingRule: Impl<"swing"> = (r, n, ctx) => {
                     range: `${lo}–${hi}`,
                     tip:
                       ratio > hi
-                        ? `swing it less: \`${fix}\` is a shuffle`
-                        : `swing it more: \`${fix}\` is a shuffle`,
+                        ? "swing it less: the off-beat comes back toward the middle"
+                        : "swing it more: the off-beat comes later",
                   },
                   { track: line },
                   "rhythm",
@@ -1092,6 +1180,7 @@ const form: Impl<"form"> = (r, _n, ctx) => {
   };
 };
 const voiceLeadingRule: Impl<"voice-leading"> = (r, n, ctx) => {
+  if (r.voice === "top") return voiceLeadingTopRule(r, n, ctx);
   if (isGateRule(r)) return voiceLeadingGateRule(r, n, ctx);
   let slots = chordSlots(selectTrack(n, r.track));
   // Corrections pass (`loop`): one pass of the loop, then its first chord again (the move back to the top).
@@ -1141,57 +1230,6 @@ const bluesFormRule: Impl<"blues-form"> = (r, n, ctx) =>
   // The piece as written (the AST total, else one period of the loop): a 12-bar loop is one chorus however
   // long it plays; the second chorus is the learner's own (contracts §6.4, §6.6 C5).
   bluesFormWave5(r, n, ctx, pieceSlots, pieceBars(n, ctx));
-const euclid: Impl<"euclid"> = (r, n) => {
-  const m = euclidMatch(onsets(selectTrack(n, r.track)), r.k, r.n);
-  const ok = m.ok && (r.rotationFree || m.rotation === 0);
-  return {
-    ok,
-    detail: ok ? `E(${r.k},${r.n})` : `the rhythm isn't E(${r.k},${r.n})${m.ok ? " in this rotation" : ""}`,
-  };
-};
-const clave: Impl<"clave"> = (r, n) => {
-  const c = claveType(onsets(selectTrack(n, r.track)));
-  const ok = c.type === r.type && c.direction === r.direction;
-  return {
-    ok,
-    value: c.bars,
-    detail: ok
-      ? `${r.type} ${r.direction} for ${c.bars} bars`
-      : `that's ${c.type === "none" ? "no clave" : `${c.type}${c.direction ? ` ${c.direction}` : ""}`}; the brief asks for ${r.type} ${r.direction}`,
-  };
-};
-const polyrhythm: Impl<"polyrhythm"> = (r, n) => {
-  const p = polyRatio(onsets(selectTrack(n, r.a)), onsets(selectTrack(n, r.b)));
-  const ok = !!p && p[0] === r.ratio[0] && p[1] === r.ratio[1];
-  return {
-    ok,
-    detail: p
-      ? `${p[0]}:${p[1]}; the brief asks for ${r.ratio.join(":")}`
-      : "the two lines aren't evenly spaced",
-  };
-};
-const registerSep: Impl<"register-separation"> = (r, n) => {
-  const s = registerSeparation(selectTrack(n, r.low), selectTrack(n, r.high));
-  return {
-    ok: s.gap >= r.minGapSemis,
-    value: s.gap,
-    target: r.minGapSemis,
-    detail: `${s.gap} half steps apart; at least ${r.minGapSemis}`,
-  };
-};
-const noMuddyLow: Impl<"no-muddy-low"> = (r, n, ctx) => {
-  const v = lowIntervalViolations(selectTrack(n, r.track));
-  const first = v[0];
-  return {
-    ok: v.length === 0,
-    value: v.length,
-    credit: v.length === 0 ? 1 : 0,
-    detail: first
-      ? `a ${first.interval}-half-step interval low down (bass note ${first.low}) sounds muddy`
-      : "the low end is clear",
-    ...(first ? { where: locAt(first.at, ctx) } : {}),
-  };
-};
 /** Source fallback when no toolbox is given: `tb.x.y` → a call or method named `y`; `tb.mini.euclid` → `(k,n)`. */
 function usesInSource(code: string, tool: string): number {
   const last = tool.split(".").pop() ?? tool;
@@ -1237,8 +1275,16 @@ export function withoutUnheardLines(code: string, n: Normalized): string {
     })
     .join("\n");
 }
+/**
+ * A tool written in a fuller form of itself counts as a use of it: `x(k,n,r)` is a rhythm written with `(k,n)`
+ * (build-author-capstones-rhythm: R3.L03's own rotated bell failed RC2's "A rhythm written with (k,n)").
+ */
+const WRITTEN_AS: Readonly<Record<string, readonly string[]>> = {
+  "tb.mini.euclid": ["tb.mini.euclid-rot"],
+};
 const uses: Impl<"uses"> = (r, n, ctx) => {
-  const tools = Array.isArray(r.tool) ? r.tool : [r.tool];
+  const asked = Array.isArray(r.tool) ? r.tool : [r.tool];
+  const tools = [...new Set(asked.flatMap((t) => [t, ...(WRITTEN_AS[t] ?? [])]))];
   const min = r.min ?? 1;
   const code = withoutUnheardLines(ctx.code, n);
   const used = ctx.toolsUsed ? ctx.toolsUsed(code).map((t) => t.id) : null;
@@ -1246,7 +1292,7 @@ const uses: Impl<"uses"> = (r, n, ctx) => {
     (a, t) => a + (used ? used.filter((u) => u === t).length : usesInSource(code, t)),
     0,
   );
-  const label = tools.map((t) => toolText(t, ctx.toolCode)).join(" or ");
+  const label = asked.map((t) => toolText(t, ctx.toolCode)).join(" or ");
   return {
     ok: count >= min,
     value: count,
@@ -1399,7 +1445,12 @@ const contrast: Impl<"contrast"> = (r, n, ctx) => {
     target: r.minAxes,
     detail: ok
       ? `${an} and ${bn} differ in ${met.join(", ")}`
-      : `the ${an} is no ${list} than the ${bn}${met.length ? ` (it differs only in ${met.join(", ")})` : ""}: change ${need === 1 ? "one" : need === 2 ? "two" : need} of these`,
+      : `the ${an} is no ${list} than the ${bn}${met.length ? ` (it differs only in ${met.join(", ")})` : ""}: ${
+          // One axis asked: say it plainly ("one of these" of one reads oddly; build-author-A2a).
+          missingAxes.length === 1
+            ? `make it ${list}`
+            : `change ${need === 1 ? "one" : need === 2 ? "two" : need} of these`
+        }`,
     ...(ok
       ? {}
       : {
@@ -1560,10 +1611,18 @@ const onsetsRule: Impl<"onsets"> = (r, n, ctx) => {
     const ok = check(new Set(onsets(ev).map(ratKey)));
     return { ok, detail: ok ? "the onsets are right" : "the onsets differ from the brief" };
   }
-  const total = windowBars(n, ctx);
+  // The bars of the piece: an arranged piece shorter than the rendered window (RC2's eight bars of `arrange()`
+  // under a 16-bar render) is counted over its own bars, never over the silence after it ends
+  // (build-author-capstones-rhythm). A bar past `totalBars` in which nothing at all plays is not a bar of the piece.
+  const playing = new Set(n.all.map((e) => R.floor(e.onset)));
+  const window = windowBars(n, ctx);
+  const total = Array.from({ length: window }, (_, b) => b).filter(
+    (b) => !(ctx.totalBars && b >= ctx.totalBars && !playing.has(b)),
+  ).length;
   let good = 0;
   let firstBad: number | null = null;
-  for (let b = 0; b < total; b++) {
+  for (let b = 0; b < window; b++) {
+    if (ctx.totalBars && b >= ctx.totalBars && !playing.has(b)) continue;
     const got = new Set(onsets(ev.filter((e) => R.floor(e.onset) === b)).map((o) => ratKey(R.frac(o))));
     if (check(got)) good++;
     else firstBad ??= b;
@@ -1670,8 +1729,52 @@ const distinctPitches: Impl<"distinct-pitches"> = (r, n) => {
   const d = new Set(pitched(selectTrack(n, r.track)).map((e) => e.midi)).size;
   return { ok: d >= r.min, value: d, target: r.min, detail: `${d} different pitch(es); at least ${r.min}` };
 };
+/**
+ * The song's own chords, bar by bar (1-based from the first full bar), from `songForm` when the host passes it, as
+ * roots in order (a chord repeated in a bar once). `null` without a chart.
+ */
+function songChartRoots(ctx: RubricContext): (number[] | undefined)[] | null {
+  const form = ctx.songForm;
+  if (!form?.some((s) => s.chords)) return null;
+  const out: (number[] | undefined)[] = [undefined];
+  for (const s of form)
+    for (let i = 0; i < s.bars; i++) {
+      const roots = (s.chords?.[i] ?? []).flatMap((sym) => {
+        const c = parseChordSymbol(sym);
+        return c ? [c.rootPc] : [];
+      });
+      out.push(roots.length > 0 ? roots.filter((x, j) => j === 0 || roots[j - 1] !== x) : undefined);
+    }
+  return out;
+}
+/** The piece's chord roots, bar by bar (the same numbering as `detectDevices`). */
+function pieceRootsByBar(n: Normalized, ctx: RubricContext): Map<number, number[]> {
+  const shift = ctx.pickup ? 0 : 1;
+  const out = new Map<number, number[]>();
+  for (const s of harmonySlots(n)) {
+    if (!s.chord) continue;
+    const bar = R.floor(s.span[0]) + shift;
+    const here = out.get(bar) ?? [];
+    if (here[here.length - 1] !== s.chord.rootPc) here.push(s.chord.rootPc);
+    out.set(bar, here);
+  }
+  return out;
+}
 const deviceCount: Impl<"device-count"> = (r, n, ctx) => {
-  const all = detectDevices(n, { ...ctx, bars: windowBars(n, ctx) });
+  const found = detectDevices(n, { ...ctx, bars: windowBars(n, ctx) });
+  // A song's own devices are not the learner's (JC4, review:robustness): with the song's chart passed (`songForm`),
+  // a device counts only in a bar where the learner changed the chords (the bar its first chord sounds in).
+  const chart = songChartRoots(ctx);
+  const piece = chart ? pieceRootsByBar(n, ctx) : null;
+  // The piece is read past the song's end when it loops (the 64-bar window): bar 34 of a 32-bar song is its bar 2.
+  const songBars = chart ? chart.length - 1 : 0;
+  const changedAt = (bar: number): boolean => {
+    const want = chart?.[songBars > 0 && bar > songBars ? ((bar - 1) % songBars) + 1 : bar];
+    if (!want) return true;
+    const got = piece?.get(bar) ?? [];
+    return got.length !== want.length || got.some((x, i) => x !== want[i]);
+  };
+  const all = chart ? found.filter((d) => changedAt(d.bar)) : found;
   // Each device once, with the bar it first sounds in ("each detected and named with its bar", CF-A).
   const first = new Map<string, number>();
   for (const d of all) if (!first.has(d.device)) first.set(d.device, d.bar);
@@ -1710,124 +1813,35 @@ const matches: Impl<"matches"> = (r, n, ctx) => {
 // --- custom rules (registered by name, each with a unit test) ------------------------------------
 
 export type CustomRule = (n: Normalized, ctx: RubricContext, params: Record<string, unknown>) => RuleEval;
-const numParam = (p: Record<string, unknown>, k: string, d: number): number =>
-  typeof p[k] === "number" ? (p[k] as number) : d;
-const strParam = (p: Record<string, unknown>, k: string, d: string): string =>
-  typeof p[k] === "string" ? (p[k] as string) : d;
 
-/** Walking bass (JC2): 4 onsets per bar, the chord root on beat 1 ≥ 75%, a step or 5th approach on beat 4 ≥ 50%. */
-const walkingBass: CustomRule = (n, ctx, p) => {
-  const bassRef = strParam(p, "track", "@bass");
-  const bass = pitched(selectTrack(n, bassRef));
-  const slots = pieceSlots(n, typeof p.harmony === "string" ? p.harmony : undefined, { exclude: bassRef });
-  const total = windowBars(n, ctx);
-  let four = 0;
-  let rootOn1 = 0;
-  let approach = 0;
-  let approachN = 0;
-  for (let b = 0; b < total; b++) {
-    const inBar = bass.filter((e) => R.floor(e.onset) === b).sort((x, y) => R.cmp(x.onset, y.onset));
-    if (inBar.length === 4) four++;
-    const first = inBar[0];
-    const chord = slotAt(slots, rat(b))?.chord;
-    if (first && chord && R.eq(first.onset, rat(b)) && mod12(first.midi) === chord.rootPc) rootOn1++;
-    const last = inBar[inBar.length - 1];
-    const next = slotAt(slots, rat(b + 1))?.chord;
-    if (last && next && b + 1 < total) {
-      approachN++;
-      const d = mod12(next.rootPc - last.midi);
-      if (d === 1 || d === 2 || d === 10 || d === 11 || d === 5 || d === 7) approach++;
-    }
-  }
-  const r4 = total ? four / total : 0;
-  const r1 = total ? rootOn1 / total : 0;
-  const ra = approachN ? approach / approachN : 0;
-  const ok =
-    r4 >= numParam(p, "min4", 1) &&
-    r1 >= numParam(p, "minRoot", 0.75) &&
-    ra >= numParam(p, "minApproach", 0.5);
-  return {
-    ok,
-    value: Math.min(r4, r1 / 0.75, ra / 0.5),
-    target: 1,
-    detail: `4 notes in ${pct(r4)} of bars, root on beat 1 in ${pct(r1)}, approach on beat 4 in ${pct(ra)}`,
-  };
+const CUSTOM_DEPS: CorrectionDeps = {
+  pieceSlots,
+  ruleKeys,
+  pieceBars,
+  toolUse: (ctx, tools, n) => {
+    const code = n ? withoutUnheardLines(ctx.code, n) : withoutMutedLines(ctx.code);
+    const used = ctx.toolsUsed ? ctx.toolsUsed(code).map((t) => t.id) : null;
+    const count = tools.reduce(
+      (a, t) => a + (used ? used.filter((u) => u === t).length : usesInSource(code, t)),
+      0,
+    );
+    return { used: count > 0, label: tools.map((t) => toolText(t, ctx.toolCode)).join(" or ") };
+  },
 };
-const DOMINANTS = ["7", "9", "13", "7b9", "7#9", "7#11", "7b13", "7alt", "7sus4"];
-const ALTERED = ["7b9", "7#9", "7b13", "7alt"];
-/**
- * Tensions that fit their chord's function (JC4): altered dominants only where they resolve (down a 5th
- * or a half step), dominant colours on chords that resolve or on the blues tonic/subdominant, #11 on major
- * chords; everything else is a plain chord. Value = share of chords that fit.
- */
-const allowedTensions: CustomRule = (n, ctx, p) => {
-  const key = pieceKey(n, ctx);
-  const slots = chordSlotsMerged(pieceSlots(n)).filter((s) => s.chord);
-  if (!key || slots.length === 0) return { ok: false, detail: "no chords found" };
-  let fit = 0;
-  let firstBad: number | null = null;
-  slots.forEach((s, i) => {
-    const c = s.chord as ChordId;
-    const next = slots[i + 1]?.chord;
-    const resolves = !!next && (mod12(next.rootPc - c.rootPc) === 5 || mod12(next.rootPc - c.rootPc) === 11);
-    let ok = true;
-    if (ALTERED.includes(c.quality)) ok = resolves;
-    else if (DOMINANTS.includes(c.quality))
-      ok = resolves || [0, 5].includes(mod12(c.rootPc - pcOf(key.tonic)));
-    if (ok) fit++;
-    else firstBad ??= i;
-  });
-  const ratio = fit / slots.length;
-  const min = numParam(p, "min", 0.85);
-  return {
-    ok: ratio >= min,
-    value: ratio,
-    target: min,
-    detail: `${pct(ratio)} of the chords carry tensions that fit; at least ${pct(min)}`,
-    ...(firstBad !== null ? { where: { slot: firstBad + 1 } } : {}),
-  };
-};
-/** ii–V chains (JC1): a minor 7th (or half-diminished) chord followed by a dominant a 4th up; counts distinct target keys. */
-const iiVChain: CustomRule = (n, _ctx, p) => {
-  const slots = chordSlotsMerged(pieceSlots(n)).filter((s) => s.chord);
-  const targets = new Set<number>();
-  for (let i = 0; i + 1 < slots.length; i++) {
-    const a = (slots[i] as ChordSlot).chord as ChordId;
-    const b = (slots[i + 1] as ChordSlot).chord as ChordId;
-    if (
-      ["m7", "m7b5", "min", "m9", "m11"].includes(a.quality) &&
-      DOMINANTS.includes(b.quality) &&
-      mod12(b.rootPc - a.rootPc) === 5
-    )
-      targets.add(mod12(b.rootPc + 5));
-  }
-  const min = numParam(p, "minKeys", 3);
-  return {
-    ok: targets.size >= min,
-    value: targets.size,
-    target: min,
-    detail: `ii–V pairs into ${targets.size} key(s); at least ${min}`,
-  };
-};
-export const CUSTOM_RULES: Readonly<Record<string, CustomRule>> = {
-  "walking-bass": walkingBass,
-  "allowed-tensions": allowedTensions,
-  "ii-v-chain": iiVChain,
+const BUILT_CUSTOM_RULES: Readonly<Record<string, CustomRule>> = {
   // Corrections pass: effect checks for the lesson fixes (rubric/corrections-rules.ts).
-  ...correctionRules({
-    pieceSlots,
-    ruleKeys,
-    pieceBars,
-    toolUse: (ctx, tools, n) => {
-      const code = n ? withoutUnheardLines(ctx.code, n) : withoutMutedLines(ctx.code);
-      const used = ctx.toolsUsed ? ctx.toolsUsed(code).map((t) => t.id) : null;
-      const count = tools.reduce(
-        (a, t) => a + (used ? used.filter((u) => u === t).length : usesInSource(code, t)),
-        0,
-      );
-      return { used: count > 0, label: tools.map((t) => toolText(t, ctx.toolCode)).join(" or ") };
-    },
-  }),
+  ...correctionRules(CUSTOM_DEPS),
+  // Wave 7 Build: the advanced tracks' rules (rubric/wave7-custom.ts), walking-bass, allowed-tensions and
+  // ii-v-chain rebuilt to their content-kit definitions (w7plan A3, A4).
+  ...wave7CustomRules(CUSTOM_DEPS),
+};
+/**
+ * Every custom rule by name. Wave 7 (rubric/wave7-rules.ts): each planned rule of the advanced tracks
+ * (`TRACK_CUSTOM_RULES`) that is not built yet answers "not built yet" with `rubric.unknown`, never "no custom rule".
+ */
+export const CUSTOM_RULES: Readonly<Record<string, CustomRule>> = {
+  ...wave7CustomStubs(Object.keys(BUILT_CUSTOM_RULES)),
+  ...BUILT_CUSTOM_RULES,
 };
 const custom: Impl<"custom"> = (r, n, ctx) => {
   const fn = CUSTOM_RULES[r.fn];
@@ -1865,11 +1879,12 @@ export const RULES: { [K in RubricRule["rule"]]: Impl<K> } = {
   modulation: modulationRule,
   mode: modeWave6,
   "blues-form": bluesFormRule,
-  euclid,
-  clave,
-  polyrhythm,
-  "register-separation": registerSep,
-  "no-muddy-low": noMuddyLow,
+  // Wave 7 Build: on the views of analyze/wave7-views.ts, golden-tested (rubric/wave7-rules.test.ts).
+  euclid: euclidRule,
+  clave: claveRule,
+  polyrhythm: polyrhythmRule,
+  "register-separation": registerSepRule,
+  "no-muddy-low": noMuddyLowRule,
   uses,
   custom,
   "motif-reuse": motifReuseRule,
@@ -1909,7 +1924,7 @@ export function evalRule(rule: RubricRule, n: Normalized, ctx: RubricContext): R
       extra: [diag("rubric.unknown", { rule: rule.rule })],
     };
   // A Wave 6 field with no analyzer yet is never silently ignored (rubric/wave6-rules.ts `WAVE6_UNBUILT`).
-  const unbuilt = unbuiltWave6(rule);
+  const unbuilt = unbuiltWave6(rule) ?? unbuiltWave7(rule);
   if (unbuilt) return notBuiltYet(rule, unbuilt);
   const run = impl as (r: RubricRule, n: Normalized, c: RubricContext) => RuleEval;
   if (rule.section && rule.rule !== "contrast" && rule.rule !== "key-change") {

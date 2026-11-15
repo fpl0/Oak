@@ -271,7 +271,9 @@ class Robust {
     await this.me.endSession(ses.id);
     this.sideDone.push(lessonId);
     const after = await this.me.api<CourseProgress>("GET", "/api/lessons/progress");
-    if (after.mapDone !== before.mapDone) this.fail(day, `side lesson ${lessonId} moved the core map`);
+    // Wave 7: a side lesson is 1 in track A of the 259-session map (contracts §9.6); the core's part never moves.
+    if (after.mapDone - (after.sideLessons?.done ?? 0) !== before.mapDone - (before.sideLessons?.done ?? 0))
+      this.fail(day, `side lesson ${lessonId} moved the core map`);
     if ((after.sideLessons?.done ?? 0) !== this.sideDone.length)
       this.fail(day, `track A counts ${after.sideLessons?.done}, want ${this.sideDone.length}`);
     const again = await this.me.today();

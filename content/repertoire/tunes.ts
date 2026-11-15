@@ -29,6 +29,7 @@ export const VOICINGS: Readonly<Record<string, readonly string[]>> = {
   C: ["c3", "e3", "g3"],
   C7: ["c3", "e3", "g3", "bb3"],
   D: ["d3", "f#3", "a3"],
+  D7: ["d3", "f#3", "a3", "c4"],
   Dm: ["d3", "f3", "a3"],
   E: ["e3", "g#3", "b3"],
   Em: ["e3", "g3", "b3"],

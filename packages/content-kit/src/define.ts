@@ -35,9 +35,11 @@ import {
   FORM_SECTION_NAMES,
   formLetters,
   HINTLESS_KINDS,
+  METER_GROUPINGS,
   MINOR_THIRD_MODES,
   MODE_DEGREES,
   STEP_EXERCISE_KINDS,
+  trackCustomParamIssues,
 } from "./schema/index.ts";
 import {
   BandDefSchema,
@@ -209,6 +211,7 @@ export function checkExercise(
   issues.push(...checkWave4(ex, path, where));
   issues.push(...checkWave5(ex, path));
   issues.push(...checkWave6(ex, path, where));
+  issues.push(...checkWave7(ex, path));
   if (ex.kind === "predict" && ex.mode !== "hum" && ex.correct === undefined) {
     issues.push({
       path: `${path}.correct`,
@@ -453,6 +456,64 @@ function checkWave4(ex: Exercise, path: string, where: "lesson" | "capstone" | "
 }
 
 /** Every rubric rule an exercise carries: a Make's or brief's rubric, a rubric matcher (inside `all` too). */
+/**
+ * Structural rules of the Wave 7 additions (the advanced tracks): the planned custom rules' params, the voicing
+ * expectation, two-lane taps, the grouping and Euclid answers, clave coverage, the top voice.
+ */
+export function checkWave7(ex: Exercise, path: string): ContentIssue[] {
+  const issues: ContentIssue[] = [];
+  const add = (p: string, rule: string, message: string) =>
+    issues.push({ path: `${path}${p}`, rule, message });
+  for (const { rule: r, path: p } of rubricRulesOf(ex)) issues.push(...checkWave7Rule(r, `${path}${p}`));
+  if (ex.kind === "keyboard" && ex.expect.voicing) {
+    if (ex.answer.mode !== "chord")
+      add(".answer.mode", "keyboard.voicing", 'a voicing is built as one chord: `mode: "chord"`');
+    if (ex.pitchMode !== "absolute")
+      add(".pitchMode", "keyboard.voicing", 'a voicing shape lives in its octaves: `pitchMode: "absolute"`');
+  }
+  if (ex.kind === "tap" && ex.lanes) {
+    const [a, b] = ex.lanes;
+    if (a && b && (a.track === b.track || a.label === b.label))
+      add(".lanes", "tap.lanes", "the two lanes follow two tracks, with two labels");
+  }
+  const correct =
+    "correct" in ex && typeof ex.correct === "object" && !Array.isArray(ex.correct) ? ex.correct : undefined;
+  if ("answer" in ex && ex.answer.ui === "grouping") {
+    const allowed = METER_GROUPINGS[ex.answer.meter];
+    if (!allowed) add(".answer.meter", "grouping.meter", `${ex.answer.meter} has no odd-meter grouping`);
+    const g = correct?.grouping;
+    if (correct && (!g || !allowed?.some((x) => x.length === g.length && x.every((v, i) => v === g[i]))))
+      add(".correct.grouping", "grouping.correct", `one of ${ex.answer.meter}'s groupings (METER_GROUPINGS)`);
+  }
+  if ("answer" in ex && ex.answer.ui === "euclid") {
+    const e = correct?.euclid;
+    const [k, n, r] = e ?? [];
+    if (correct && (k === undefined || n === undefined || k > n || n > ex.answer.maxSteps || k < 1))
+      add(".correct.euclid", "euclid.correct", `[k, n(, r)] with 1 ≤ k ≤ n ≤ ${ex.answer.maxSteps}`);
+    if (r !== undefined && (!ex.answer.rotation || (n !== undefined && r >= n)))
+      add(
+        ".correct.euclid",
+        "euclid.correct",
+        "a rotation needs `rotation: true` and is smaller than the step count",
+      );
+  }
+  return issues;
+}
+function checkWave7Rule(r: RubricRule, path: string): ContentIssue[] {
+  const issues: ContentIssue[] = [];
+  const add = (p: string, rule: string, message: string) =>
+    issues.push({ path: `${path}${p}`, rule, message });
+  if (r.rule === "custom")
+    for (const m of trackCustomParamIssues(r.fn, r.params ?? {})) add(".params", "rubric.custom-params", m);
+  if (r.rule === "clave" && r.minBars !== undefined && (r.minBars < 2 || r.minBars % 2 !== 0))
+    add(".minBars", "rubric.clave", "the clave is two bars long: `minBars` is an even number, at least 2");
+  if (r.rule === "polyrhythm" && (r.ratio[0] === r.ratio[1] || r.ratio.some((x) => x < 2)))
+    add(".ratio", "rubric.polyrhythm", "two different pulses, each of at least 2 attacks (3:2, 4:3)");
+  if (r.rule === "voice-leading" && r.minRatio !== undefined && r.voice !== "top" && r.minRatio < 1)
+    add(".minRatio", "voice-leading.top", 'a share of changes is read on the top voice: `voice: "top"`');
+  return issues;
+}
+
 function rubricRulesOf(ex: Exercise): { rule: RubricRule; path: string }[] {
   const out: { rule: RubricRule; path: string }[] = [];
   const fromMatcher = (m: Matcher, p: string): void => {
@@ -1392,6 +1453,29 @@ export function defineCapstone(def: CapstoneDef): CapstoneDef {
     });
     if (c.kind === "compose" && !c.brief)
       issues.push({ path: "brief", rule: "capstone.brief", message: "a compose capstone has a brief" });
+    if (c.versions) {
+      const ids = new Set(c.sessionDefs.map((s) => s.id as string));
+      const [a, b] = c.versions;
+      if (c.kind !== "compose")
+        issues.push({
+          path: "versions",
+          rule: "capstone.versions",
+          message: "only a compose capstone has versions",
+        });
+      for (const [i, v] of c.versions.entries())
+        if (!ids.has(v.startsIn))
+          issues.push({
+            path: `versions[${i}].startsIn`,
+            rule: "capstone.versions",
+            message: `${v.startsIn} is not a session of ${c.id}`,
+          });
+      if (a && b && a.startsIn >= b.startsIn)
+        issues.push({
+          path: "versions",
+          rule: "capstone.versions",
+          message: "version a starts in an earlier session than version b",
+        });
+    }
     if (c.kind === "transcribe" && (!c.song || c.song.length === 0))
       issues.push({
         path: "song",

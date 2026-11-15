@@ -24,6 +24,7 @@ import { create } from "zustand";
 import type { FormViewSection, SectionLoop } from "../lib/form-view.ts";
 import type { ChordAt, KeySpanAt } from "./harmony-chips.ts";
 import { displayBars, formLetters, sectionRequest, sectionsFromCode, sectionsLine } from "./sections.ts";
+import type { TrackMarks } from "./track-chips.ts";
 
 /** One context chip: exactly what the next turn will carry (contracts §10.2, ux §6.2). */
 export interface ContextChip {
@@ -176,6 +177,12 @@ export interface TutorSubject {
    * Absent: read from the code's patterned `.scale()`.
    */
   keyPlan?: KeySpanAt[];
+  /**
+   * Wave 7: what the Workbench's track lenses found (voicing types, tensions, the clave, register clashes, by bar;
+   * kept in step by `useSubjectHarmony`). Voicing, tension, clave and register chips light their bars. Absent: those
+   * chips switch their lens on without bars.
+   */
+  track?: TrackMarks | null;
 }
 
 export interface TutorAsk {

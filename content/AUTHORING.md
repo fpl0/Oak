@@ -2,7 +2,7 @@
 
 For every agent or person who writes or reviews Oak content. It applies `docs/design/contracts.md` (schemas, budgets, IDs, unlocks, grading) and `content/STYLE.md` (the code dialect). If this guide and those disagree, they win; fix this guide.
 
-Start here, in this order: this guide, STYLE, your unit's spec (`content/specs/Uxx.md`), then the exemplar lessons `content/core/U01/L01` ("Heartbeat"), `content/core/U02/L01` ("High & Low"), for U03 on `content/core/U03/L02` ("Degrees in Code"), which also shows the Wave 3 shapes of §16, and for U05 on `content/core/U05/L01` ("Stacking Thirds"), which shows how chords are written, graded and made into a song (§17). All of them pass every check with the real grader; copy their shape, not their words. U06.L02 and U07.L08 are the U06 and U07 exemplars. From Wave 5: `content/core/U08/L01` ("Roots Down Low") shows a bass line written and graded against the chords (§18); U09.L02, U10.L01, U11.L05 and A1.L01 are the U09, U10, U11 and side-lesson exemplars. From Wave 6: `content/core/U12/L01` ("Major 7 & Minor 7") shows seventh chords written by name, built, heard and graded (§19); U13.L01, U14.L01, U15.L02, U16.L01 and U17.L02 are the exemplars of their units.
+Start here, in this order: this guide, STYLE, your unit's spec (`content/specs/Uxx.md`), then the exemplar lessons `content/core/U01/L01` ("Heartbeat"), `content/core/U02/L01` ("High & Low"), for U03 on `content/core/U03/L02` ("Degrees in Code"), which also shows the Wave 3 shapes of §16, and for U05 on `content/core/U05/L01` ("Stacking Thirds"), which shows how chords are written, graded and made into a song (§17). All of them pass every check with the real grader; copy their shape, not their words. U06.L02 and U07.L08 are the U06 and U07 exemplars. From Wave 5: `content/core/U08/L01` ("Roots Down Low") shows a bass line written and graded against the chords (§18); U09.L02, U10.L01, U11.L05 and A1.L01 are the U09, U10, U11 and side-lesson exemplars. From Wave 6: `content/core/U12/L01` ("Major 7 & Minor 7") shows seventh chords written by name, built, heard and graded (§19); U13.L01, U14.L01, U15.L02, U16.L01 and U17.L02 are the exemplars of their units. From Wave 7: `content/advanced/J1/L01` ("Swing Feel & the Ride") is the advanced tracks' exemplar and the worked example of the corrections-pass standard (§20.2): every graded step checks what is heard, pins a wrong answer that uses the right function, and passes three other right answers; J2.L01, J3.L01, J5.L01, R1.L01, R3.L01 and A2.L01 are the exemplars of their units, written by the spec writers from the unit specs.
 
 ## 1. How content gets made
 
@@ -183,6 +183,13 @@ Rules:
 | `band.aeolian-4bar` | 4/4 | i–VI–III–VII | minor Makes (U10.L03 on), U10.CP and C4. Written in half steps above the tonic, so it plays the same chords in natural, harmonic or melodic minor; no major 7th under a tune on ♭3 or ♭6 |
 | `band.blues-12bar` | 4/4 | the standard 12-bar blues, every chord a dominant seventh | U11.L05 on, U11.CP and C5. Its drums are kick and snare on quarter notes only: the hats are the learner's (straight or swung), so nothing flams; the swing lives in the bass and the chords' push |
 | `band.blues-12bar-qc` | 4/4 | the 12-bar blues with the quick change (IV in bar 2) | U11.L06 on and C5's quick-change pieces; drums as `band.blues-12bar` |
+| `band.two-five-one` | 4/4 | ii–V–I guide tones, the register of the learner's voicings left free | U12 on and the jazz track's Makes (`tracks: ["drums"]` when the learner comps, `["drums", "bass"]` when the learner writes the chords) |
+| `band.ii-v-i-comp` | 4/4 | ii–V–I in rootless voicings, the lowest note B3 in G, above a walking bass | J3.L04 and JC2 when the learner walks (`tracks: ["drums", "chords"]`): `band.two-five-one`'s guide tones sit in the walk's register |
+| `band.jazz-blues` | 4/4 | the jazz blues in F (written from the tonic: any key), walking bass | J4.L02, JC2 and Studio |
+| `band.rhythm-changes` | 4/4 | 32 bars A A B A in B♭ (from the tonic), walking bass; the A's bars 5–6 `[Fm7 Bb7] [Eb6 Eo7]` | J4.L03, J.CP2, JC3 and Studio |
+| `band.son-montuno` | 4/4 | I–V7 over two bars, tumbao bass, keys on the off-beats, toms for the conga, NO clave and nothing on the one | R3.L04, R3.L05, RC2 and Studio: under a learner's clave it never plays a clave of its own |
+| `band.neo-soul` | 4/4 | I6/9 ii11 iii7 vi9, sixteenths swung lightly | A2, AC2's world and Studio |
+| `band.odd-54` | 5/4 (3+2) | I–IV, kick and bass on the group starts, `setcpm(bpm/5)` | R2.L01 and Studio sketches in 5/4 |
 
 A Band written in major degrees (`band.two-chord-vamp`, `band.phrase-8bar`, `band.axis-4bar`, `band.doo-wop`, `band.three-chord`, `band.sections`) plays its bass and chords only under a major key: under a minor, pentatonic or blues key it would play the major key's chords, so a step in such a key takes `tracks: ["drums"]` or one of the tonic-written Bands above (`content/bands/index.test.ts` enforces it).
 
@@ -283,7 +290,7 @@ Write the tests with your best guess, run `bun run content:check <id> --verbose`
 
 ## 10. Checkpoint items
 
-A checkpoint (contracts §7.6) is mostly generated: 12–18 items drawn from the drill families at each skill's level. You author the rest in `content/core/Uxx/CP/checkpoint.ts` with `defineCheckpoint`:
+A checkpoint (contracts §7.6) is mostly generated: 12–18 items drawn from the drill families at each skill's level. You author the rest in `content/core/Uxx/CP/checkpoint.ts` (a track checkpoint in the folder of the last unit it covers: J.CP1 `content/advanced/J2/CP/`, J.CP2 `J5/CP/`, R.CP `R3/CP/`, A.CP `A2/CP/`) with `defineCheckpoint`:
 
 - `id`, `title`, `covers`, `gated`, `levelSetting` copied **exactly** from `content/checkpoints.ts` (the checkpoint map; the check compares them).
 - `authored`: **2 or 3** items, every one `role: "checkpoint"` and `hints: null`; code items follow §9 (reference, an equivalent pass, the unchanged starter failing with `code.unchanged`, two distinct failure codes).
@@ -332,6 +339,7 @@ Several authors run these at the same time. `content:check` only reads, and a le
 11. **Budget**: scaled minutes, step count, graded checks, terms, panels, split halves, the test counts of code kinds and Makes.
 12. **Make**: the last step is a Make with exactly one required rule; a Band from U01 on, written in the lesson's meter.
 13. **Theory**: declared keys match `.scale()` usage (the exercise's `key` when it has one; a starter may also sit in the lesson's key, for a step that moves the tune to another).
+15. **Corrections standard** (the advanced tracks: J1–J5, R1–R3, A1.L05–L07, A2, their checkpoints and capstones; `content/validate/standard.ts`): §20.2 checked by machine on every graded step and Make. Listed after 14 in the output.
 14. **Voice, terms and test shape**: §5 and §7 (no exclamation marks, hype words or emoji; prompts ≤ 60 words; concept cards ≤ 120; every term bolded once in its step's pass text and never used before it), §9 (the starter fails with `code.unchanged`; the Make has a `rubric.unmet` sketch; sing and tap tolerances; degree-worded feedback overridden before U03.L02, syllable-worded feedback before U03.L08), §16 (degree labels on the roll or staff only from U03.L02, syllable labels and `labels: "syllables"` only from U03.L08, `lenient` only in U00.L02). Advice lines also report terms of later lessons and where the lesson departs from its unit spec.
 
 ## 13. Mistakes the checks caught in the first lessons
@@ -790,3 +798,100 @@ A Make whose prompt says "your blues" or "your Aeolian loop" names the lesson wh
 - Twelve fact decks are in the catalog (`content/decks`), the nine promoted ones at one new card a day. A lesson may `seed` or `review-if-due` any of them from its unlock lesson on.
 - X1's chord stages pass at 0.85.
 
+## 20. The Wave 7 shapes (the advanced tracks) and the corrections-pass standard
+
+Wave 7 added these to `@oak/content-kit` (`CONTENT_SCHEMA_VERSION` 6; contracts 1.8 §5.6). As in §17–§19, a shape marked (planned) sits in `PLANNED`: a unit spec may use it, and a lesson that does fails check 2 until the Build moves it into `IMPLEMENTED`. `bun run content:check <id>` names them. The definitions live in `packages/content-kit/src/schema/wave7.ts`; read it once.
+
+### 20.1 Written for the learner at the gate
+
+A track lesson is judged at the earliest point a learner can take it (contracts §7.6 rule 5; the course graph in `content/lib/course.ts` computes it, and content:check lints every code string against it). The tracks may interleave with U14–U17, so "the learner has finished the core" is never an assumption:
+
+| Lessons | Earliest route | So, not yet |
+|---|---|---|
+| J1, J2.L01–L03, J3, R1–R3 | U13.CP | mode names and modal scales (U14), chromatic `n` steps (U15.L01: write an altered note by name), secondary dominants by name (U15), `horns` `trumpet` (U15.L05), `tenor` (U16.L05), `.pan()` `.jux()` (U14.L06) |
+| J2.L04 | U14.CP (it may be passed over; J.CP1 and J3 never wait for it) | U15–U17 |
+| J4 | U15.L06 | borrowed chords by name (U16), key changes (U17) |
+| J5 | U17.CP | — |
+| A1.L05–L07 | U09.CP and A1.L01–L04 | minor keys (U10), dominant sevenths and the blues (U11), swing (U11.L07), sevenths (U12) |
+| A2 | U10.CP and A1.L07 | dominant sevenths, `.swingBy()`, `crunch`, the blues scale (U11) |
+
+A learner at session 185 reads the same lesson, so nothing in it calls a core idea new. Terms of other track lessons are "later" for each other unless the graph orders them; check 14 advises on them (`head`, `mix`, `register`, `sample` and `density` are common words: rephrase before their lessons).
+
+### 20.2 The corrections-pass standard (every graded step, every Make)
+
+The corrections pass found about 180 places where a rule accepted the right syntax without the musical result (docs/decisions.md decision 71). Do not write that class of defect again.
+
+1. **Every required rule checks what is heard.** Reach for an effect rule before a bare `uses`: `silent-beat`, `split-beat`, `held`, `bars-differ`, `speed-change`, `transposed-copy`, `distinct-keys`, `orbits-differ`, `call-response`, `stack-intervals`, `chords-per-bar`, `last-chord`, `song-kept`, `tuplets-every-bar`, `swung-offbeats`, `voiced-with`, `control-set`, `parts-enter`, `broken-chord`, `black-keys`, `chance-varies`, `echo` (implemented; `packages/grader/src/rubric/corrections-rules.ts`), the track rules of §20.3, and fields such as `onsets.excludes`, `pcset.durations`, `melody.durations`, `cadence.before`. Each custom rule takes `params.alsoUses`: once the effect is heard, the code must also use one of these tools (credit 0.5 otherwise), so "written with `[ ]`" stays inside the Make's ONE required rule.
+2. **Tests for every graded code step**: the reference; at least **three other right answers** (another spelling, the short form, a lighter amount inside the window, another sound); the unchanged starter (markers stripped) failing with `code.unchanged`; at least **one wrong answer that uses the right function** and fails on the effect (`.swingBy(1/3, 8)`, which leaves eighths even; `.swingBy(0, 4)`; the right places at `.gain(0)`; `.dict("lefthand")` after `.voicing()`; a `^7` where the chart says `7`); and the usual two realistic mistakes with different feedback codes (§9).
+3. **What is heard**: an event at effective gain ≤ 0.01 is dropped by the grader; treat a part more than 24 dB under the loudest part as not heard, and never let a required rule pass on it.
+4. **No feedback or hint below rung 4 names the answer.** A `feedbackText` override describes the sound and the place ("the two hits inside beats 2 and 4 sit an equal distance apart"), never the code that fixes it.
+5. **Every sentence about music is checked by running it**: evaluate the code (`evalHeadless`, `midisOf` from `@oak/grader/testing`) or `bun run theory …`, and read the events. "Every note on a beat is in its chord" is a claim; the J1.L01 author found it false of the first draft's vibes line (E over Dm7) and changed the line.
+
+Content CI checks 1, 2 and 4 on every graded step and Make of the tracks (`content:check` section 15, `content/validate/standard.ts`): a code step's matcher compares something heard and a Make's required rules include one that is not about the code's shape (`uses`, `tracks`, `bars`, a tempo or a length); beside the reference, three other right answers pass (a Make: four passing pieces); a failing test that is not the starter calls every function the answer adds to the starter (the right call, the wrong result); and neither rungs 1–3, nor a `feedbackText` override, nor any line the learner reads on a failing test quotes the answer (the shortest edit from the starter to a right answer, read as the whole call it sits in: `.swingBy(1/3, 4)`, not `4`). A non-code graded step pins one right and one wrong answer, and no low rung quotes the right option's label. A capstone brief is graded beside the song's melody and, for AC1, a pinned second version (`briefContext` in `content/validate/owners.ts`), as the capstone host grades it.
+
+The worked example is `content/advanced/J1/L01`. Its S4 asks for the ride pattern; the matcher is the rhythm on the straightened grid plus the measured swing of the skip notes:
+
+```ts
+matcher: { m: "all", of: [
+  { m: "rhythm", tol: [1, 16], durations: false, perRole: false, displacementCredit: 0.5, tracks: ["drums"] },
+  { m: "rubric", rules: [{ id: "skips-swing", label: "The short hits swing", required: true, skills: ["R13"],
+      rule: "custom", fn: "swung-offbeats", params: { track: "drums", min: 2 } }] } ] },
+// passes: the reference, `.swing(4)`, the pattern as eighths with rests, the swing written on the triplet
+// grid with no call, `.swingBy(.3, 4)`; fails: the unchanged starter (code.unchanged), `.swingBy(1/3, 8)` and
+// `.swingBy(0, 4)` (rubric.unmet: the right function, no swing heard), the skip notes after 1 and 3
+// (rhythm.displaced), `.swingBy("1/3", 4)` (code.swing-fraction-string)
+```
+
+Its S6 asks for the hi-hat on 2 and 4 with `onsets` (`contains` 2 and 4, `excludes` 1 and 3, `perBar`), so hats on every beat, on 1 and 3, or silent at `.gain(0)` all fail; its Make requires `swing` on the ride (`drums: ["ride"]`).
+
+### 20.3 New shapes and rules
+
+| The learner … | Shape | Feature / status |
+|---|---|---|
+| writes a jazz symbol (C–7, B♭∆7, G7♭9) | `{ ui: "text", normalize: "chord", jazz: true }`: glyphs and extensions read as chords, graded on root, quality and extensions | `text.jazz-chord` (graded; waits for its renderer in `IMPLEMENTED`) |
+| builds a shell, a rootless A or B, a drop-2 | `KeyboardEx.expect.voicing: { shape, symbol }` with `mode: "chord"`, `pitchMode: "absolute"` (`keyboard.voicing`); on the staff, `StaffExpect` chords with `voicing` | `keyboard.voicing`, `staff-expect.voicing` (graded; wait for `IMPLEMENTED`: until then `expect: { pcs, bassPc }` octave-free, or absolute `midi`) |
+| writes voicings of a shape in code | `custom` `voicing-shape` (`shape`, `changes`, `minRatio`) on a hand-voiced track; a `voicing()` line fails with a message | implemented |
+| names an odd-meter grouping | `{ ui: "grouping", meter }`, `correct: { grouping: [2, 2, 3] }` (one of `METER_GROUPINGS`) | graded and rendered; `choice` until it moves into `IMPLEMENTED` |
+| gives a Euclidean rhythm's numbers | `{ ui: "euclid", maxSteps, rotation }`, `correct: { euclid: [5, 8, 1] }`, graded by the onsets they make | graded and rendered; R3.L03 switches by itself once `IMPLEMENTED` lists it |
+| taps two pulses at once | `TapEx.lanes: [{ label, track }, { label, track }]`; tests answer `{ lanes: [[…], […]] }` | `tap.lanes` (graded; one lane until it renders) |
+| picks a swing feel, a microtiming, a clave, a tension | `identify` with `SWING_RATIO_OPTIONS`, `MICROTIMING_OPTIONS`, `CLAVE_OPTIONS`, `TENSION_OPTIONS`; a sound comparison is a `compare` step with a pair of `SOUND_COMPARE_OPTIONS` | implemented (choices) |
+| plays a clave for 8 bars | `clave` with `minBars: 8` (every two-bar window from bar 1 holds the whole clave) and `exact` | implemented |
+| plays 3 against 2 | `polyrhythm` with `minBars` (both pulses in the same bars) | implemented (one pass of the loop: a two-bar loop takes `minBars: 2`) |
+| moves a top voice smoothly | `voice-leading` with `voice: "top"`, `minRatio: 0.8` on a hand-voiced track | implemented |
+| reharmonizes with jazz devices | `reharmonize` with `devices: ["tritone sub", …]` (`JAZZ_DEVICES`) | implemented (in a Make or brief rubric; a code step's `rubric` matcher cannot resolve a reference yet: use `device-count`) |
+| arranges one tune twice (AC1) | `CapstoneDef.versions` (two pieces of code, each with its tempo line) and `two-versions-differ` across them | rendered by the capstone workspace; waits for `IMPLEMENTED` |
+| plays a Euclidean layer | `euclid` (`k`, `n`, `rotationFree`), graded by onsets | implemented |
+| keeps parts in their registers | `register-separation`, `no-muddy-low` | implemented |
+
+The custom rules of the tracks (`TRACK_CUSTOM_RULES`, each with its parameters; `trackCustomParamIssues` refuses a misspelt one): `walking-bass` (an attack on every quarter, root on 1, a chord tone on 3, beat 4 a step from the next downbeat), `allowed-tensions` (reads the melody's structural notes against the chord sounding), `ii-v-chain`, `voicing-shape`, `song-melody-kept`, `contrafact`, `two-versions-differ`, `same-tune-two-ways`, `extended-share`, `microtiming`, `displaced-copy`, `metric-weight`, `grouping-accents`, `regrouped`, `polymeter-cycle`, `clave-aligned`, `stabs`, `chord-scale-fit`, `tensions-used`, `counter-melody`, `slices-reordered`, `level-balance`. All of them are implemented (Wave 7 Build), plus `interlock` (R1.L04).
+
+Sounds that unlock at a capstone session (`snd.choir` at AC2.S1, `snd.horns` at RC1.S2) are START rows of the toolbox (contracts §3.1 rules 11–12): the capstone's starter and rules may use them from that session on.
+
+### 20.4 Canonical timing fixtures
+
+Compute these one way (`@oak/content-kit`), in prose, generators and rules:
+
+- **Swing**: `swingRatio(amount)` = (1 + a) / (1 − a): `.1` → 1.22, `.2` → 3:2, `1/3` → 2:1, `.5` → 3:1 (`SWING_FEELS`). A check's window is [1.6, 2.4]; a Make that invites a lighter swing, [1.45, 2.4].
+- **Microtiming**: `.late(x)` moves by `x` bars, so it is tempo-dependent: `lateMs(1/32, 76)` is 99 ms, a displacement you hear as rhythm; a laid-back feel is 8–45 ms (`FEEL_MS`): `lateCycles(20, 90)` = 0.0075. Prose gives milliseconds and the code the decimal for the lesson's tempo.
+- **Clave**: `CLAVE_GRIDS` on the two-bar 8th grid, 1 cycle = 1 bar: son 3-2 bar A {0, 3/8, 6/8}, bar B {2/8, 4/8}; rumba moves the three-side's last hit to 7/8; 2-3 swaps the bars. The direction is read from bar 1 (`claveDirectionOf`); `claveMini` writes it.
+- **Polymeter**: `polymeterPeriodBars(steps, perBar)`: `{bd ~ ~}%4` meets the bar again after 3 bars (evaluated: kicks at 0, 3/4, 3/2, 9/4).
+- **Odd meters**: `METER_GROUPINGS` (5/4, 5/8, 7/8, 9/8i) and `groupStarts`; `9/8i` is the irregular 9/8 (2+2+2+3), never compound 9/8.
+- **Euclid**: `(k,n,r)` and `.euclidRot(k, n, r)` move every pulse r steps LATER (evaluated: `cb(3,8,2)` plays 0, 1/4, 5/8; `.euclidRot(5, 8, 1)` plays 1/8, 3/8, 1/2, 3/4, 7/8).
+
+### 20.5 Strudel facts the tracks rest on (evaluated)
+
+- `lefthand` is mostly rootless, not uniformly (STYLE §5.2): `C^7` → B D E G (the 7th lowest), `G7` → B E F A, `Dm7` → C E F A; `Cm7b5` keeps its root; `7#9` has three notes; `G7alt` is silent in it. `.offset(1)` moves to the other rootless position (`C^7` → E G B D). Rootless A and B, shells and drop-2 as shapes are hand-voiced and graded by `voicing-shape`.
+- `.mode("duck")` leaves out the note equal to the anchor so a chord does not double the melody (anchored on G4, `C^7` in `lefthand` plays B3 D4 E4); it does not remove the root.
+- `Cø` is silent: write `Cm7b5`; ø is display only. `C7alt` sounds in `ireal` and `ireal-ext` only.
+- `polymeter()` and `pm()` are not substitutes for `{ }%n` (they time differently) and are uncatalogued; `euclidLegato`, `fmenv` and the FM envelope methods are uncatalogued; `.nrpn()` does not exist.
+- `chop(4)` and `striate(4)` on a single event give the same slices: explain them on a multi-event pattern. `slice` plays slices; `splice` also sets the playback speed.
+- The Charleston (`.struct("x ~ ~ x ~ ~ ~ ~")`) strikes twice in the first half of the bar, so the second chord of a two-chord bar (`[Gm7 C7]`) is never heard from the comping (J4, J5, JC2, JC3): comp such bars on 1, the and of 2 and the and of 3 (`"x ~ ~ x ~ x ~ ~"`) or on 1, the and of 2 and 3.
+- `lefthand` under a tune that sits on chord 3rds puts the voicing's 9th a half step under the tune (Gm7's A under B♭, Dm7's E under F; evaluated): comp such a tune in `guidetones` or anchor the hand below the tune's register.
+- `.swingBy(1/3, 8)` on eighths changes nothing (each slice is one eighth): eighths swing with `.swingBy(1/3, 4)`; on sixteenths `.swingBy(1/3, 4)` moves the and and the a of each beat together, and `.swingBy(x, 8)` swings the sixteenths.
+- `walking-bass` reads a bar's beat 4 against the NEXT bar's downbeat and does not wrap: grade a looped walk over 8 rendered bars (`reference.bars: 8`) so its last approach is heard.
+- An investigate step holds one choice question (a test answers one `choice`): ask a second fact as a number. `SrsLink` has no `level`: a family's level gates its own items.
+- In a lesson in 4/4, a stimulus in another meter declares the item's `meter` and writes that meter's tempo line (`setcpm(240/7)` for 7/8, eighths a minute).
+
+### 20.6 What contracts 1.8 settled
+
+No lesson is split. J5.L03 requires the secondary ii–V and hears the passing diminished chord in a comparison step (J5.L04 applies it); R1.L05 requires displacement and compares the laid-back feel (AC2.S2 applies it); A1.L07 requires FM and compares the supersaw (an optional stretch writes it); A2.L03 requires the counter-melody and leaves re-voicing per section to an optional stretch and A2.L06. J1.L02 reads the sevenths in jazz glyphs and adds two colours (6, sus); J2.L02 introduces one altered dominant (♭9) and leaves ♯9 and alt to J2.L03; twelve-key practice is spread over the track (J2.L01 tours the keys; later Makes rotate keys; `deck.jzz.ii-v`). A2.L06 uses only tools of its earliest route (no swing: ballad against drive, not swung against straight). The ten fact decks of the tracks are in §7.3; until the drills engine writes them they are listed in `content/decks/planned.ts`.

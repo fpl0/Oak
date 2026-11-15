@@ -3,9 +3,9 @@
 // (which instrument plays the bass, the pad or the lead; which part muddies the bass).
 import type { KeySpec } from "@oak/content-kit";
 import { buildPiece, type TrackSpec } from "../build.ts";
-import { spellMidi, stepToMidi } from "../kernel.ts";
+import { mod, spellMidi, stepToMidi } from "../kernel.ts";
 import { above, rn, voiceProgression } from "../music.ts";
-import { atom, chordOf, line, type Node, seq } from "../pat.ts";
+import { atom, chordOf, line, type Node, rest, seq } from "../pat.ts";
 import { cueOf, type Generator, jitter, pickKey, pickTempo, trialOf } from "./common.ts";
 
 // --- fam.snd.params -----------------------------------------------------------------------------
@@ -164,24 +164,34 @@ export const soundParams: Generator = {
 
 // --- fam.snd.roles ------------------------------------------------------------------------------
 
-const ROLE_SOUNDS = {
+/**
+ * The instruments of each role, all unlocked by U10.CP (A2's gate, contracts §4.3): the stimulus never plays a
+ * sound the learner has not met by name (no vibes before J1.L01, no trumpet before U15.L05).
+ */
+export const ROLE_SOUNDS = {
   bass: ["ebass", "upright", "fingerbass"],
   pad: ["pad", "strings", "organ"],
-  lead: ["vibes", "piano", "trumpet"],
+  lead: ["piano", "acgtr", "square"],
 } as const;
 type Role = keyof typeof ROLE_SOUNDS;
-const SOUND_LABELS: Readonly<Record<string, string>> = {
-  ebass: "Electric bass",
-  upright: "Upright bass",
-  fingerbass: "Finger bass",
-  pad: "Warm pad",
-  strings: "Strings",
-  organ: "Organ",
-  vibes: "Vibraphone",
-  piano: "Piano",
-  trumpet: "Trumpet",
+/** Fixed answers in A2.L01's words, the same on every trial (lessons and warm-ups ask the same question). */
+export const ROLE_LABELS: Readonly<Record<Role, string>> = {
+  bass: "The bass (the low line)",
+  pad: "The pad (the held chords)",
+  lead: "The lead (the tune)",
 };
+export const MASK_LABELS = {
+  pad: "The chords: they sit down in the bass's octave",
+  lead: "The tune: it sits down in the bass's octave",
+  none: "Neither: the bass has its octave to itself",
+} as const;
 
+/**
+ * `fam.snd.roles` (A2.L01, content/specs/A2.md). Level 1 "roles": two bars of bass, pad and lead, then two bars
+ * with one of them gone; which part dropped out? Level 2 "masking": one of the upper parts dropped into the
+ * bass's register (close thirds under C3, or the tune two octaves down), or neither; which one crowds the bass?
+ * The clean mix is the near miss of each muddy one (the same notes, the register changed).
+ */
 export const soundRoles: Generator = {
   name: "sound-roles",
   generate(ctx) {
@@ -193,64 +203,62 @@ export const soundRoles: Generator = {
     };
     const chords = [rn("1", "maj"), rn("6", "min"), rn("4", "maj"), rn("5", "maj")];
     const masking = ctx.category === "masking";
-    // Masking: one of the two upper parts is voiced down in the bass register (close thirds under C3).
-    const muddy: Role = ctx.rng.pick(["pad", "lead"]);
+    const muddy: Role | "none" = masking ? ctx.rng.pick(["pad", "lead", "none"] as const) : "none";
     const voiced = voiceProgression(chords, key);
-    // A muddy pad: the same chord tones packed in close position from E2 up, inside the bass register.
-    const padNotes = voiced.map((v) => {
-      if (!(masking && muddy === "pad")) return v.midis.slice(1);
-      const pcs = [...new Set(v.midis.map((m) => ((m % 12) + 12) % 12))];
-      let floor = 40;
-      return pcs
-        .sort((a, b) => above(a, 40) - above(b, 40))
-        .map((pc) => {
-          const m = above(pc, floor);
-          floor = m + 1;
-          return m;
-        });
-    });
+    // A muddy part sits in the bass's own octave (C2–B2, where the bass's roots A1–A♭2 sound): every note
+    // folded into it. The clean mix keeps the pad around middle C and the tune an octave above.
+    const fold = (m: number): number => 36 + mod(m - 36, 12);
+    const padNotes = voiced.map((v) =>
+      muddy === "pad" ? [...new Set(v.midis.slice(1).map(fold))].sort((a, b) => a - b) : v.midis.slice(1),
+    );
     const padBars = padNotes.map((ns) => seq([chordOf(ns.map((m) => spellMidi(m, key).code))]));
     const bassBars = voiced.map((v) =>
       line([spellMidi(above(v.rootPc, 33), key).code, null, spellMidi(above(v.rootPc, 33), key).code, null]),
     );
-    const leadOct = masking && muddy === "lead" ? 2 : 4;
     const leadBars = chords.map((_c, i) =>
       line(
-        [0, 2, 4, 2].map(
-          (s) => spellMidi(stepToMidi(s + ([0, 5, 3, 4][i] as number), key, leadOct), key).code,
-        ),
+        [0, 2, 4, 2].map((s) => {
+          const m = stepToMidi(s + ([0, 5, 3, 4][i] as number), key, 4);
+          return spellMidi(muddy === "lead" ? fold(m) : m, key).code;
+        }),
       ),
     );
-    const alt = (items: Node[]): Node => ({ t: "alt", items });
+    const dropped: Role | null = masking ? null : ctx.rng.pick(["bass", "pad", "lead"] as const);
+    // Roles: bars 3–4 repeat bars 1–2 without the dropped part (a rest in its place).
+    const lineOf = (role: Role, bars: Node[]): Node => {
+      if (dropped !== role) return { t: "alt", items: bars };
+      return { t: "alt", items: [bars[0] as Node, bars[1] as Node, seq([rest]), seq([rest])] };
+    };
     const piece = buildPiece({
       bpm: pickTempo(ctx),
       bars: 4,
       tracks: [
-        { label: "bass", src: "note", pat: alt(bassBars), s: sounds.bass, gain: jitter(ctx, 0.8) },
-        { label: "pad", src: "note", pat: alt(padBars), s: sounds.pad, gain: jitter(ctx, 0.45) },
-        { label: "mel", src: "note", pat: alt(leadBars), s: sounds.lead, gain: jitter(ctx, 0.65) },
+        { label: "bass", src: "note", pat: lineOf("bass", bassBars), s: sounds.bass, gain: jitter(ctx, 0.8) },
+        { label: "pad", src: "note", pat: lineOf("pad", padBars), s: sounds.pad, gain: jitter(ctx, 0.45) },
+        { label: "mel", src: "note", pat: lineOf("lead", leadBars), s: sounds.lead, gain: jitter(ctx, 0.65) },
       ],
     });
     if (masking) {
-      const options = [sounds.pad, sounds.lead];
-      return trialOf(piece, { choice: [sounds[muddy]] }, cueOf(ctx), {
+      const options = Object.keys(MASK_LABELS);
+      return trialOf(piece, { choice: [muddy] }, cueOf(ctx), {
         mode: "choice",
         key,
         options,
-        optionLabels: Object.fromEntries(options.map((o) => [o, SOUND_LABELS[o] ?? o])),
+        optionLabels: MASK_LABELS,
         muddy,
-        prompt: "One part sits down in the bass register and muddies it. Which one?",
+        sounds,
+        prompt: "Does a part crowd the bass's register? Which one?",
       });
     }
-    const role = ctx.rng.pick(["bass", "pad", "lead"] as const);
-    const options = ctx.rng.shuffle([sounds.bass, sounds.pad, sounds.lead]);
-    return trialOf(piece, { choice: [sounds[role]] }, cueOf(ctx), {
+    const options = Object.keys(ROLE_LABELS);
+    return trialOf(piece, { choice: [dropped as Role] }, cueOf(ctx), {
       mode: "choice",
       key,
       options,
-      optionLabels: Object.fromEntries(options.map((o) => [o, SOUND_LABELS[o] ?? o])),
-      role,
-      prompt: `Which instrument plays the ${role === "pad" ? "pad (the sustained chords)" : role === "lead" ? "lead (the tune)" : "bass"}?`,
+      optionLabels: ROLE_LABELS,
+      dropped,
+      sounds,
+      prompt: "Bars 3 and 4 lose one part. Which part dropped out?",
     });
   },
 };

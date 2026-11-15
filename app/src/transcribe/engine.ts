@@ -4,6 +4,26 @@
 // throws `AudioNotBuiltError` and the Wave 1 `createTranscriptionPlayer` (the same stretch node, already built)
 // plays instead. Both are seen through one `SourceEngine`.
 import type { StretchPlayer, TranscriptionPlayer } from "@oak/audio";
+import type { StretchNode } from "signalsmith-stretch";
+
+/**
+ * How the stretch cuts the audio (carry f7). signalsmith-stretch's default preset analyses 120 ms blocks every
+ * 30 ms; at 0.25× a transient then lands in the output wherever that 30 ms frame grid puts it, and its onset moved
+ * by up to ±20 ms from bar to bar and take to take. Measured on the Transcribe page (bar bursts against the code's
+ * blips, 0.25×, 6 bars a take): the default, SD 9.0 ms, worst 19.5 ms against the 20 ms A/B gate (quiet), SD 9.9 ms,
+ * worst 29.3 ms with ten cores busy; the same 120 ms block every 10 ms, SD 6.8 ms, worst 17.2 ms (busy); every 5 ms,
+ * SD 3.5 ms, worst 11.3 ms (busy). The 120 ms block keeps the frequency resolution a bass line needs at 0.25×; the
+ * finer interval costs six times the default's FFTs (a few percent of one core). 1× and 0.75× stay within 3 ms.
+ */
+export const STRETCH_CONFIG = { blockMs: 120, intervalMs: 5 } as const;
+type StretchConfig = { blockMs: number; intervalMs: number };
+
+async function createConfiguredStretch(c: BaseAudioContext, config: StretchConfig): Promise<StretchNode> {
+  const mod = await import("signalsmith-stretch");
+  const node = await mod.default(c);
+  await (node as unknown as { configure(o: StretchConfig): Promise<void> }).configure(config);
+  return node;
+}
 
 export interface SourceEngineState {
   loaded: boolean;
@@ -110,7 +130,11 @@ export async function createSourceEngine(
 ): Promise<SourceEngine> {
   const audio = await import("@oak/audio");
   try {
-    const p = await audio.createStretchPlayer({ ctx, output });
+    // `createStretch` is the engine's own injection point (`StretchEngineDeps`), passed through the seam.
+    const deps: Parameters<typeof audio.createStretchPlayer>[0] & {
+      createStretch(c: BaseAudioContext): Promise<StretchNode>;
+    } = { ctx, output, createStretch: (c) => createConfiguredStretch(c, STRETCH_CONFIG) };
+    const p = await audio.createStretchPlayer(deps);
     await p.load(buffer);
     return fromStretchPlayer(p, buffer);
   } catch (e) {

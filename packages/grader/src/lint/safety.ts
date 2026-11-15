@@ -8,7 +8,13 @@
 // strict profile is never evaluated anywhere.
 //
 // This is one layer, not a sandbox: the realm also shadows globals, neuters Function and bans import().
-import { type AstNode, child, children, stringLit, walk } from "./ast.ts";
+// In the PAGE (a card's Preview, an imported sketch, an Export) it is the only layer: the page keeps the
+// Function constructor (Strudel's evaluate needs it) and every global. So the strict profile is an
+// ALLOWLIST of the names code may read from outside itself (review:security, Wave 7): Strudel's own scope
+// as the grader realm has it, minus the functions that hand back a host object or turn a string into a
+// property key, plus a few plain ES builtins. Before it, `getDrawContext().canvas.ownerDocument` reached
+// the DOM (and a `data:` script ran), and `parseFractional("con" + "structor")` returned `Object`.
+import { type AstNode, child, children, staticString, stringLit, walk } from "./ast.ts";
 
 export interface SafetyFinding {
   id:
@@ -47,6 +53,50 @@ export const STRICT_IDENTIFIERS: ReadonlySet<string> = new Set(
 );
 
 export const RESERVED_WORDS: readonly string[] = ["constructor", "__proto__", "prototype"];
+
+/**
+ * Strict: names of Strudel's scope that code the learner did not type may not read. Each either hands back
+ * something of the host (a clock, a trigger, the keyboard state, the realm's registries), changes the realm's
+ * shared state, compiles a string into code (bytebeat) or looks a caller's string up as a property key
+ * (`parseFractional("con" + "structor")` is `Object`; `fractionalArgs` applies it to every argument).
+ */
+export const STRICT_GADGETS: ReadonlySet<string> = new Set(
+  (
+    "parseFractional fractionalArgs getCurrentKeyboardState keyDown _keyDown logKey ClockCollator Cyclist " +
+    "createClock getTrigger getTriggerFunc getPattern getTime getIsStarted setCpsFunc setIsStarted setPattern " +
+    "setStringParser setTime setTriggerFunc reset_state reset_timelines cleanupUi backgroundImage logger " +
+    "errorLogger controls bbexpr byteBeatExpression byteBeatStartTime Pattern Hap State TimeSpan StartRules " +
+    "SyntaxError getLeafLocation getLeafLocations getLeaves mini2ast miniAllStrings minify parse " +
+    "patternifyAST addVoicings resetVoicings registerVoicings setDefaultVoicings setVoicingRange voicingAlias " +
+    "voicingRegistry packageName"
+  ).split(" "),
+);
+
+/**
+ * Strict: plain ES builtins code may read besides Strudel's scope (the grader realm's safe builtins without
+ * `Object`, `Symbol`, `Reflect` and `Proxy`, which reach `Function`, and without the constructors only `new`
+ * would use).
+ */
+export const STRICT_SAFE_GLOBALS: ReadonlySet<string> = new Set(
+  (
+    "undefined NaN Infinity Math Number String Boolean Array JSON isNaN isFinite parseInt parseFloat " +
+    "encodeURIComponent decodeURIComponent"
+  ).split(" "),
+);
+
+/**
+ * Strict: property names that walk from a value Oak hands to a callback (a canvas context in `.onPaint`,
+ * `.draw`) to the document or the window, that reflect on objects, or that compile a string into code in the
+ * audio thread (bytebeat). Refused wherever the name appears.
+ */
+export const STRICT_MEMBER_NAMES: ReadonlySet<string> = new Set(
+  (
+    "canvas ownerDocument defaultView getRootNode parentNode parentElement contentWindow contentDocument " +
+    "documentElement ownerElement frameElement opener audioWorklet srcElement baseURI cookie " +
+    "getOwnPropertyDescriptor getOwnPropertyDescriptors getPrototypeOf setPrototypeOf defineProperty " +
+    "defineProperties getOwnPropertyNames getOwnPropertySymbols bbexpr byteBeatExpression"
+  ).split(" "),
+);
 
 /** Is this Identifier a reference or binding (not a property name after `.` or an object key)? */
 function isReference(node: AstNode, parent: AstNode | undefined): boolean {
@@ -181,11 +231,17 @@ export function baseFindings(ast: AstNode): SafetyFinding[] {
 }
 
 const isNumericLiteral = (n: AstNode | null) => !!n && n.type === "Literal" && typeof n.value === "number";
+/** An array written out in place (`f(...[a, b])` is `f(a, b)`): its length is in the source. */
 const isLiteralArray = (n: AstNode | null) =>
-  !!n && n.type === "ArrayExpression" && children(n, "elements").every((e) => e.type === "Literal");
+  !!n && n.type === "ArrayExpression" && children(n, "elements").every((e) => e.type !== "SpreadElement");
 
-export function strictFindings(ast: AstNode): SafetyFinding[] {
+/**
+ * The strict rules. `allowedFree`: the names code may read from outside itself (`strictAllowedNames` in
+ * oak.ts); every other free name is refused.
+ */
+export function strictFindings(ast: AstNode, allowedFree?: ReadonlySet<string>): SafetyFinding[] {
   const out: SafetyFinding[] = [];
+  if (allowedFree) out.push(...freeNameFindings(ast, allowedFree));
   const construct = (n: AstNode, what: string) =>
     out.push({ id: "lint.strict.construct", start: n.start, end: n.end, params: { what } });
   const reserved = (n: AstNode, word: string) =>
@@ -228,6 +284,7 @@ export function strictFindings(ast: AstNode): SafetyFinding[] {
         const name = n.name as string;
         if (RESERVED_WORDS.includes(name)) reserved(n, name);
         else if (name.startsWith("__")) construct(n, `The name \`${name}\``);
+        else if (STRICT_MEMBER_NAMES.has(name)) construct(n, `The name \`${name}\``);
         else if (STRICT_IDENTIFIERS.has(name) && isReference(n, parent)) construct(n, `\`${name}\``);
         break;
       }
@@ -302,7 +359,141 @@ export function strictFindings(ast: AstNode): SafetyFinding[] {
       case "SequenceExpression":
         construct(n, "The comma operator");
         break;
+      case "BinaryExpression": {
+        // `"con" + "structor"`: the parts pass rule 3, the text they make does not.
+        if (n.operator !== "+" || parent?.type === "BinaryExpression") break;
+        const text = staticString(n);
+        if (text !== null) checkText(text, n);
+        break;
+      }
     }
+    return undefined;
+  });
+  return out;
+}
+
+/** Every name a pattern binds (`const {a, b: [c]} = …`, arrow parameters). */
+function patternNames(p: AstNode | null, into: Set<AstNode>, names: Set<string>): void {
+  if (!p) return;
+  switch (p.type) {
+    case "Identifier":
+      into.add(p);
+      names.add(p.name as string);
+      break;
+    case "ObjectPattern":
+      for (const prop of children(p, "properties"))
+        patternNames(
+          prop.type === "RestElement" ? child(prop, "argument") : child(prop, "value"),
+          into,
+          names,
+        );
+      break;
+    case "ArrayPattern":
+      for (const e of children(p, "elements")) patternNames(e, into, names);
+      break;
+    case "RestElement":
+      patternNames(child(p, "argument"), into, names);
+      break;
+    case "AssignmentPattern":
+      patternNames(child(p, "left"), into, names);
+      break;
+  }
+}
+
+const SCOPES = new Set([
+  "Program",
+  "BlockStatement",
+  "StaticBlock",
+  "SwitchStatement",
+  "ForStatement",
+  "ForInStatement",
+  "ForOfStatement",
+  "CatchClause",
+  "ArrowFunctionExpression",
+  "FunctionExpression",
+  "FunctionDeclaration",
+  "ClassExpression",
+]);
+
+/**
+ * Strict: a name the code reads but never binds must be one of `allowed`. Scopes are lexical: a name bound
+ * in one arrow does not make the same name free elsewhere (`(open => 1); open("…")` is refused).
+ */
+export function freeNameFindings(ast: AstNode, allowed: ReadonlySet<string>): SafetyFinding[] {
+  const binders = new Set<AstNode>();
+  const declared = new Map<AstNode, Set<string>>();
+  const declare = (scope: AstNode | undefined, pattern: AstNode | null) => {
+    if (!scope) return;
+    const names = declared.get(scope) ?? new Set<string>();
+    declared.set(scope, names);
+    patternNames(pattern, binders, names);
+  };
+  const nearestScope = (ancestors: readonly AstNode[]) => {
+    for (let i = ancestors.length - 1; i >= 0; i--) {
+      const a = ancestors[i] as AstNode;
+      if (SCOPES.has(a.type)) return a;
+    }
+    return undefined;
+  };
+  walk(ast, (n, ancestors) => {
+    switch (n.type) {
+      case "VariableDeclarator":
+        declare(nearestScope(ancestors), child(n, "id"));
+        break;
+      case "FunctionDeclaration":
+      case "ClassDeclaration":
+        declare(nearestScope(ancestors), child(n, "id"));
+        if (n.type === "FunctionDeclaration") for (const p of children(n, "params")) declare(n, p);
+        break;
+      case "FunctionExpression":
+      case "ArrowFunctionExpression":
+        declare(n, child(n, "id"));
+        for (const p of children(n, "params")) declare(n, p);
+        break;
+      case "ClassExpression":
+        declare(n, child(n, "id"));
+        break;
+      case "CatchClause":
+        declare(n, child(n, "param"));
+        break;
+    }
+    return undefined;
+  });
+
+  const out: SafetyFinding[] = [];
+  walk(ast, (n, ancestors) => {
+    if (n.type === "MetaProperty") return false;
+    if (n.type !== "Identifier" || binders.has(n)) return undefined;
+    const parent = ancestors[ancestors.length - 1];
+    const name = n.name as string;
+    if (parent) {
+      // Property names, labels and keys are not reads (a shorthand `{ a }` reads its value copy).
+      if (parent.type === "MemberExpression" && parent.property === n && !parent.computed) return undefined;
+      if (
+        (parent.type === "Property" ||
+          parent.type === "MethodDefinition" ||
+          parent.type === "PropertyDefinition") &&
+        parent.key === n &&
+        !parent.computed
+      )
+        return undefined;
+      if (
+        parent.type === "LabeledStatement" ||
+        parent.type === "BreakStatement" ||
+        parent.type === "ContinueStatement"
+      )
+        return undefined;
+    }
+    // The base and strict identifier rules already name these.
+    if (BASE_IDENTIFIERS.has(name) || STRICT_IDENTIFIERS.has(name)) return undefined;
+    if (ancestors.some((a) => declared.get(a)?.has(name))) return undefined;
+    if (allowed.has(name)) return undefined;
+    out.push({
+      id: "lint.strict.construct",
+      start: n.start,
+      end: n.end,
+      params: { what: `\`${name}\` (not a Strudel function this code may use)` },
+    });
     return undefined;
   });
   return out;

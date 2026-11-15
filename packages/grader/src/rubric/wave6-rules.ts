@@ -51,6 +51,7 @@ import { velocityGhosts } from "../analyze/groove.ts";
 import { keyOf } from "../analyze/key.ts";
 import { chordKeys, keyChangesByBar, keysByBar } from "../analyze/key-plan.ts";
 import { barChordAt, isStrong, melodyLine, type Note } from "../analyze/melody.ts";
+import { detectDevices } from "../analyze/piece.ts";
 import { sectionsFromAst } from "../analyze/sections.ts";
 import { straightenSwungLines } from "../analyze/swing.ts";
 import { loopPassBars, selectTrack, tracksOfRole } from "../analyze/tracks.ts";
@@ -1107,7 +1108,13 @@ export function velocityGhostsRule(
   const maxGain = r.maxGain ?? 0.4;
   const ghosts = velocityGhosts(line, { meter: ctx.meter, maxGain, ...(r.on ? { on: r.on } : {}) });
   const where16 = r.on === "16th-offbeat" ? " on 16th off-beats" : "";
-  const base = `${ghosts.length} ghost note(s)${where16}; at least ${r.min}`;
+  // A rule that counts every note there (`maxGain` at full strength or above: RC1's bass between the eighths) is
+  // not about ghost notes, and says so in the line's own words (W7 gate, review:teaching-rest).
+  const anyLevel = maxGain >= 1;
+  const noteWord = (k: number) => `${k} ${anyLevel ? "note" : "ghost note"}${k === 1 ? "" : "s"}`;
+  const base = anyLevel
+    ? `${noteWord(ghosts.length)} on \`${r.track.replace(/^@/, "")}\`${r.on === "16th-offbeat" ? " on the 16ths between the eighths" : ""}; at least ${r.min}`
+    : `${ghosts.length} ghost note(s)${where16}; at least ${r.min}`;
   if (r.drum === undefined && r.accents === undefined)
     return { ok: ghosts.length >= r.min, value: ghosts.length, target: r.min, detail: base };
   const what = r.drum ? `${DRUM_WORDS[r.drum] ?? r.drum} hit` : "hit";
@@ -1142,7 +1149,7 @@ export function velocityGhostsRule(
       );
     else if (quietAnywhere.length === 0)
       parts.push(
-        `every ${what} is at the same strength: give the small ones \`.velocity()\` values of .4 or less (${ghosts.length} ghost notes${where16}; at least ${r.min})`,
+        `every ${what} you can hear is at the same strength: a ghost note sounds at .4 of full strength or less (${ghosts.length} ghost notes${where16}; at least ${r.min})`,
       );
     else if (r.on === "16th-offbeat" && quietAnywhere.length > ghosts.length) {
       const onBeat = quietAnywhere.find((e) => !ghosts.includes(e)) as NEvent;
@@ -1280,6 +1287,66 @@ export function reharmonizeRule(r: RuleOf<"reharmonize">, n: Normalized, ctx: Ru
       target: r.min,
       detail: `${cap(barWord(w.bar ?? 0))}, ${w.beatLabel}: ${tuneFault.text}. The tune stays as it is; only the chords change`,
       where: w,
+    };
+  }
+  // 2. Wave 7 (feature `reharmonize.devices`, J5.L01–L04, JC4): the new chords count only as the jazz devices
+  // named, each detected as `device-count` detects it (every chord of a bar is read, not only its downbeat), in a bar
+  // where a chord differs from the reference's; `min` counts DIFFERENT devices.
+  if (r.devices && r.devices.length > 0) {
+    const theirs = pieceSlots(sliceBars(ref, bars), r.harmony);
+    const own = pieceSlots(sliceBars(n, bars), r.harmony);
+    const differs = (b: number): boolean => {
+      const was = new Set(
+        theirs
+          .filter((x) => R.floor(x.span[0]) === b && x.chord)
+          .map((x) => `${x.chord?.rootPc}|${x.chord?.quality}`),
+      );
+      return own.some(
+        (x) => R.floor(x.span[0]) === b && x.chord && !was.has(`${x.chord.rootPc}|${x.chord.quality}`),
+      );
+    };
+    const shift = ctx.pickup ? 0 : 1;
+    const found = detectDevices(sliceBars(n, bars), { ...ctx, bars }).filter(
+      (d) => (r.devices as string[]).includes(d.device) && differs(d.bar - shift),
+    );
+    const kinds = [...new Set(found.map((d) => d.device))];
+    // The new chords arrive with the bar, as the original's do (review:robustness: the right devices with the whole
+    // harmony moved a beat late passed). Where the reference changes chord on a downbeat, the learner's harmony
+    // sounds there too: a chord, or the bass under comping on 2 and 4, on the bar line or up to an eighth before it
+    // (a push); three in four of those bar lines at least.
+    const eighth = 1 / (2 * METERS[ctx.meter].unitsPerBar);
+    const harmonyOnsets = [
+      ...own.filter((x) => x.chord).map((x) => R.toNum(x.span[0])),
+      ...pitched(selectTrack(n, "@bass")).map((e) => R.toNum(e.onset)),
+    ];
+    const lines: number[] = [];
+    for (let b = 1; b < bars; b++) {
+      const before =
+        theirs.find((x) => x.chord && R.lt(x.span[0], rat(b)) && R.lte(rat(b), x.span[1]))?.chord ?? null;
+      const at = theirs.find((x) => R.eq(x.span[0], rat(b)) && x.chord)?.chord ?? null;
+      if (at && !(before && coreEq(before, at))) lines.push(b);
+    }
+    const kept = lines.filter((b) => harmonyOnsets.some((t) => t >= b - eighth - 1e-9 && t <= b + 1e-9));
+    if (lines.length >= 2 && kept.length < 0.75 * lines.length) {
+      const late = lines.find((b) => !kept.includes(b)) as number;
+      return {
+        ok: false,
+        value: kinds.length,
+        target: r.min,
+        detail: `the tune is unchanged, but your harmony changes after the bar line, not on it: ${lines.length - kept.length} of the ${lines.length} bars where the original moves to a new chord on beat 1 (first ${barWord(late + (ctx.pickup ? 0 : 1))}). The harmony moves with the bar`,
+      };
+    }
+    const ok = kinds.length >= r.min;
+    const list = kinds.map((k) => `${k} (bar ${found.find((d) => d.device === k)?.bar})`).join(", ");
+    return {
+      ok,
+      value: kinds.length,
+      target: r.min,
+      detail: ok
+        ? `the tune is unchanged; ${list}`
+        : kinds.length === 0
+          ? `the tune is unchanged, but none of the new chords works as ${r.devices.join(" or ")} against the original's chord in its bar`
+          : `the tune is unchanged; ${kinds.length} different device${kinds.length === 1 ? "" : "s"} (${list}); the brief asks for ${r.min}`,
     };
   }
   // 2. The chords: new ones, of the kinds the brief names.

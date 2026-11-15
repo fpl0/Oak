@@ -3,6 +3,9 @@
 // @oak/grader, `notate` from @oak/notation, `gradeTaps` from @oak/pitch and `evalHeadless` from
 // @oak/grader/testing. There is no stand-in: a test the real packages cannot decide (a sung response
 // without a recorded fixture) is reported as pending, never counted as a pass.
+
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type {
   Exercise,
   KeySpec,
@@ -11,16 +14,18 @@ import type {
   LintResult,
   MeterId,
   SessionId,
+  SongDef,
   SwingSpec,
   TapEx,
   TestCase,
   TestResponse,
   UnlockableId,
 } from "@oak/content-kit";
+import { R } from "@oak/content-kit";
 import * as grader from "@oak/grader";
 import { evalHeadless, type HeadlessEvent } from "@oak/grader/testing";
 import * as notation from "@oak/notation";
-import { gradeTaps } from "@oak/pitch";
+import { gradeLaneTaps, gradeTaps } from "@oak/pitch";
 import { METERS } from "@oak/theory";
 import { courseGraph } from "../index.ts";
 import { unlockedAt } from "../lib/course.ts";
@@ -158,6 +163,38 @@ async function tapPerformance(ex: TapEx, taps: number[], lesson: Lesson): Promis
   return gradeTaps(taps, targets, ex.tol, NEUTRAL_PROFILE) as unknown as grader.MatchResult;
 }
 
+/**
+ * Two-lane taps (`tap.lanes`) are graded as the lesson host grades them (app/src/lesson/grading.ts
+ * `lanePerformance`): both hands at once by @oak/pitch `gradeLaneTaps` against each lane's targets
+ * (`tapLaneTargets`), so a hand that leans against the other is heard.
+ */
+async function lanePerformance(
+  ex: TapEx,
+  lanes: readonly (readonly number[])[],
+  lesson: Lesson,
+): Promise<grader.MatchResult> {
+  await ensureRealm();
+  const spec = ex.lanes ?? [];
+  if (spec.length !== 2) throw new Error(`${ex.id}: lane tests need a tap with two lanes`);
+  const meter = ex.meter ?? lesson.meter;
+  const code = ex.stimulus.src === "code" ? ex.stimulus.code : null;
+  if (code === null) throw new Error(`${ex.id}: tap tests need a code stimulus`);
+  const res = await grader.evaluateForGrading(code, { mode: "lesson", bars: ex.bars, lint: null, meter });
+  if (!res.ok) throw new Error(`${ex.id}: the stimulus does not evaluate: ${res.error.message}`);
+  const n = grader.normalize(res, { meter, key: ex.key ?? lesson.key });
+  const targets = grader.tapLaneTargets(spec, n, ex.bars, meter);
+  return gradeLaneTaps(
+    [lanes[0] ?? [], lanes[1] ?? []],
+    spec.map((l, k) => ({
+      label: l.label,
+      key: (l.key ?? (k === 0 ? "f" : "j")).toUpperCase(),
+      targets: targets[k] ?? [],
+    })),
+    ex.tol,
+    NEUTRAL_PROFILE,
+  ) as unknown as grader.MatchResult;
+}
+
 async function toExerciseResponse(
   ex: Exercise,
   r: TestResponse,
@@ -167,16 +204,94 @@ async function toExerciseResponse(
     return { staff: notation.parseNoteList(r.staff, { meter: METERS[ex.meter ?? lesson.meter] }) };
   if ("taps" in r)
     return ex.kind === "tap" ? { performance: await tapPerformance(ex, r.taps, lesson) } : null;
+  if ("lanes" in r)
+    return ex.kind === "tap" ? { performance: await lanePerformance(ex, r.lanes, lesson) } : null;
   if ("pitchFixture" in r) return null;
   return r as grader.ExerciseResponse;
 }
 
-export async function grade(
+/**
+ * Every grade in this process, per exercise object and test: content:check grades each test once for its own
+ * check and the corrections standard (./standard.ts) reads the same outcome.
+ */
+const gradeMemo = new WeakMap<Exercise, Map<string, Promise<GradeOutcome>>>();
+
+/**
+ * What a capstone host passes beside the code (wave7.md §3.2): the picked song's melody from its answer key
+ * (`song-melody-kept`, `contrafact`) and the learner's other version (`two-versions-differ`).
+ */
+export interface GradeExtra {
+  songMelody?: readonly grader.SongMelodyNote[];
+  otherVersion?: { id: "a" | "b"; code: string };
+  /**
+   * The picked song's sections with its chart (`songFormOf`), for a brief that counts reharmonisation devices
+   * (JC4's `device-count`): the song's own devices are not the learner's (W7 gate, as the app's host passes it).
+   */
+  songForm?: NonNullable<ReturnType<typeof grader.songFormOf>>;
+}
+
+export function grade(
   ex: Exercise,
   test: TestCase,
   lesson: Lesson,
   session: SessionId,
   mode: "lesson" | "capstone" = "lesson",
+  extra: GradeExtra = {},
+): Promise<GradeOutcome> {
+  let byTest = gradeMemo.get(ex);
+  if (!byTest) {
+    byTest = new Map();
+    gradeMemo.set(ex, byTest);
+  }
+  const key = JSON.stringify([
+    test.response,
+    test.params ?? null,
+    test.expect,
+    lesson.id,
+    lesson.key,
+    lesson.meter,
+    lesson.bpm,
+    session,
+    mode,
+    extra.songMelody?.length ?? 0,
+    extra.songForm?.length ?? 0,
+    extra.otherVersion?.code ?? null,
+    test.context ?? null,
+  ]);
+  let p = byTest.get(key);
+  if (!p) {
+    p = withTestContext(test, extra).then((x) => gradeOnce(ex, test, lesson, session, mode, x));
+    byTest.set(key, p);
+  }
+  return p;
+}
+
+/** A test that names its song or the other version (`TestCase.context`) is graded beside those, not the defaults. */
+async function withTestContext(test: TestCase, extra: GradeExtra): Promise<GradeExtra> {
+  const c = test.context;
+  if (!c) return extra;
+  const out: GradeExtra = { ...extra };
+  if (c.song) {
+    const melody = await songMelodyOf(c.song);
+    if (!melody) throw new Error(`${test.name}: ${c.song} has no answer key to grade against`);
+    out.songMelody = melody;
+    if (extra.songForm) {
+      const form = await songFormOfId(c.song);
+      if (form) out.songForm = form;
+      else delete out.songForm;
+    }
+  }
+  if (c.otherVersion !== undefined) out.otherVersion = { id: "b", code: c.otherVersion };
+  return out;
+}
+
+async function gradeOnce(
+  ex: Exercise,
+  test: TestCase,
+  lesson: Lesson,
+  session: SessionId,
+  mode: "lesson" | "capstone",
+  extra: GradeExtra,
 ): Promise<GradeOutcome> {
   await ensureRealm();
   const response = await toExerciseResponse(ex, test.response, lesson);
@@ -201,6 +316,9 @@ export async function grade(
       ...(lesson.swing ? { swing: lesson.swing } : {}),
       // The exercise's own pickup first, as the app grades (app/src/lesson/grading.ts).
       ...((ex.pickup ?? lesson.pickup) ? { pickup: ex.pickup ?? lesson.pickup } : {}),
+      ...(extra.songMelody ? { songMelody: extra.songMelody } : {}),
+      ...(extra.songForm ? { songForm: extra.songForm } : {}),
+      ...(extra.otherVersion ? { otherVersion: extra.otherVersion } : {}),
       params: test.params ?? {},
       attemptNo: 1,
       firstAttempt: true,
@@ -292,3 +410,44 @@ export async function notateCode(
 
 /** Kept for callers that only have headless events: the event list is re-evaluated through the grader. */
 export type { HeadlessEvent };
+
+// --- a capstone's song -------------------------------------------------------------------------------------------
+
+/**
+ * A song's melody as the capstone host passes it (app/src/capstone/song-melody.ts, mirrored): the answer key's
+ * melody layer evaluated once, note by note, bars counted from the first full bar (a pickup's notes negative).
+ * `null` while the song has no answer key (content/repertoire/<slug>/song.ts).
+ */
+/** A song's sections with its chart (`songFormOf`), as the host passes it beside a device-counting brief. */
+export async function songFormOfId(
+  songId: string,
+): Promise<NonNullable<ReturnType<typeof grader.songFormOf>> | null> {
+  const file = join(import.meta.dir, "..", "repertoire", songId.replace(/^song\./, ""), "song.ts");
+  if (!existsSync(file)) return null;
+  const song = ((await import(file)) as { default: SongDef }).default;
+  return grader.songFormOf(song);
+}
+
+export async function songMelodyOf(songId: string): Promise<grader.SongMelodyNote[] | null> {
+  const file = join(import.meta.dir, "..", "repertoire", songId.replace(/^song\./, ""), "song.ts");
+  if (!existsSync(file)) return null;
+  const song = ((await import(file)) as { default: SongDef }).default;
+  const layer = song.answerKey.layers.melody?.trim();
+  if (!layer) return null;
+  await ensureRealm();
+  const shift = song.pickup ? 1 : 0;
+  const bars = song.answerKey.bars + shift;
+  const meter = song.meter as MeterId;
+  const ev = await grader.evaluateForGrading(`melody: ${layer.replace(/^[A-Za-z_$][\w$]*\s*:\s*/, "")}`, {
+    mode: "capstone",
+    bars,
+    lint: null,
+    meter,
+  });
+  if (!ev.ok) return null;
+  const n = grader.normalize(ev, { meter });
+  return (n.byTrack.melody ?? [])
+    .filter((e) => e.midi !== null && R.toNum(e.onset) < bars - 1e-9)
+    .sort((a, b) => R.cmp(a.onset, b.onset) || (a.midi as number) - (b.midi as number))
+    .map((e) => ({ onset: R.sub(e.onset, [shift, 1]), dur: e.dur, midi: e.midi as number }));
+}

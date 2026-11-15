@@ -129,3 +129,39 @@ export async function expectNoHorizontalOverflow(page: Page): Promise<void> {
 export function contrastIssues(page: Page): Promise<string[]> {
   return contrastIssuesIn(page, ["#main", '[data-testid="tutor-chat"]']);
 }
+
+/**
+ * Tabs through the first `stops` focus stops from the top of `#main` and returns those without a visible ring: an
+ * outline of at least 1.5 px, a box-shadow ring, or (in the code editor) the ring on the editor's frame.
+ */
+export async function focusRingGaps(page: Page, stops = 16): Promise<string[]> {
+  await page.locator("#main").focus();
+  const gaps: string[] = [];
+  for (let i = 0; i < stops; i++) {
+    await page.keyboard.press("Tab");
+    const r = await page.evaluate(() => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el || el === document.body) return null;
+      const main = document.getElementById("main");
+      if (main && !main.contains(el)) return { inMain: false, ok: true, name: "" };
+      const cs = getComputedStyle(el);
+      const outline = cs.outlineStyle !== "none" && Number.parseFloat(cs.outlineWidth) >= 1.5;
+      const ring = cs.boxShadow !== "none" && cs.boxShadow !== "";
+      let editorRing = false;
+      if (el.closest(".cm-editor"))
+        for (let e: HTMLElement | null = el.parentElement, n = 0; e && n < 6; e = e.parentElement, n++) {
+          const ecs = getComputedStyle(e);
+          if (ecs.outlineStyle !== "none" && Number.parseFloat(ecs.outlineWidth) >= 1.5) editorRing = true;
+        }
+      const name = (el.getAttribute("aria-label") ?? el.textContent ?? el.tagName).trim().slice(0, 40);
+      return {
+        inMain: true,
+        ok: outline || ring || editorRing,
+        name: `${el.tagName.toLowerCase()} “${name}”`,
+      };
+    });
+    if (!r) break;
+    if (r.inMain && !r.ok) gaps.push(r.name);
+  }
+  return gaps;
+}

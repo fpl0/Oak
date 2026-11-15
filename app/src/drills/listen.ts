@@ -29,8 +29,9 @@ import {
   withoutSeventhPlan,
 } from "./wave5.ts";
 import { nearMissOf, wave6Alone } from "./wave6.ts";
+import { lanesAnswerPlan, lanesComparePlan, wave7Alone, wave7Context, wave7Near } from "./wave7.ts";
 
-type Captured = { taps: number[] | null; answer: Answer | null };
+type Captured = { taps: number[] | null; answer: Answer | null; voices?: (0 | 1)[] | null };
 type Comfort = Pick<LearnerProfile, "comfLow" | "comfHigh">;
 
 /** Families whose "alone" has its own name; an FET trial's is "The note alone", anything else "Alone". */
@@ -48,6 +49,9 @@ const ALONE_LABELS: Readonly<Record<string, string>> = {
  * where it goes, the two homes of a key change, the kick of a push, else the tune by itself.
  */
 export function alonePlan(trial: Trial): AudioPlan | null {
+  // Wave 7: the 3rds and 7ths of a ii–V, the sung line, the colour note, the clave, the accents, the changed bar.
+  const w7 = wave7Alone(trial);
+  if (w7) return w7.plan;
   const w6 = wave6Alone(trial);
   if (w6) return w6.plan;
   if (trial.family === "fam.rhy.swing") return tracksPlan(trial, ["hats", "hatClosed", "hatOpen"]);
@@ -60,12 +64,17 @@ export function alonePlan(trial: Trial): AudioPlan | null {
 /** The button's words for `alonePlan`. */
 export function aloneLabel(trial: Trial): string {
   return (
-    wave6Alone(trial)?.label ?? ALONE_LABELS[trial.family] ?? (isFetTrial(trial) ? "The note alone" : "Alone")
+    wave7Alone(trial)?.label ??
+    wave6Alone(trial)?.label ??
+    ALONE_LABELS[trial.family] ??
+    (isFetTrial(trial) ? "The note alone" : "Alone")
   );
 }
 
-/** The passage again from its cue: the thing in context. */
+/** The passage again from its cue: the thing in context (Wave 7: a family's own context, the line over its chords). */
 function againPlan(trial: Trial, profile: Comfort): AudioPlan {
+  const own = wave7Context(trial);
+  if (own) return own.plan;
   const st = stagingOf(trial, profile);
   return sequence(
     [st.cue, st.stimulus ?? answerPlan(trial)],
@@ -86,7 +95,11 @@ export function auditionPlan(
     case "alone":
       return alonePlan(trial);
     case "near":
-      return nearMissOf(trial, def, captured.answer)?.plan ?? null;
+      return (
+        wave7Near(trial, def as Parameters<typeof wave7Near>[1], captured.answer)?.plan ??
+        nearMissOf(trial, def, captured.answer)?.plan ??
+        null
+      );
     case "other":
       return trial.family === "fam.rhy.swing" ? otherFeelPlan(trial) : withoutSeventhPlan(trial);
     case "scale":
@@ -98,7 +111,8 @@ export function auditionPlan(
       return section ?? barPlan(trial, part);
     }
     case "answer":
-      return answerPlan(trial);
+      // A two-lane take (Wave 7): both pulses all the way through.
+      return lanesAnswerPlan(trial) ?? answerPlan(trial);
     case "resolve": {
       // "Hear it resolve": the asked degree walks home to 1 (a chromatic degree: to the note it leans on).
       const own = resolutionOf(trial).plan;
@@ -113,7 +127,7 @@ export function auditionPlan(
     case "cue":
       return cuePlan(trial, profile);
     case "compare":
-      return comparePlan(trial, captured, null);
+      return lanesComparePlan(trial, captured.taps, captured.voices) ?? comparePlan(trial, captured, null);
     case "bass":
       return bassPlan(trial);
     case "arpeggio":

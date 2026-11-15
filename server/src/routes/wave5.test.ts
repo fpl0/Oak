@@ -114,7 +114,8 @@ describe("side lessons (contracts §2.6, §9.6; wave5.md §5.1)", () => {
       expect(again).toMatchObject({ kind: "lesson", mapItemId: "U03.L03", sideLesson: null });
       expect(again.alternatives.some((a) => a.mapItemId === "A1.L01")).toBe(false);
       const progress1 = await ok<CourseProgress>(h, "GET", "/api/lessons/progress");
-      expect(progress1.mapDone).toBe(progress0.mapDone);
+      // Wave 7: the map counts track A's side lessons once a track lesson is written (contracts §9.6: 1 in track A).
+      expect(progress1.mapDone).toBe(progress0.mapDone + (progress0.mapTotal === 259 ? 1 : 0));
       expect(progress1.mapTotal).toBe(progress0.mapTotal);
       expect(progress1.sideLessons).toEqual({ done: 1, total: 4 });
       expect(progress1.next).toBe("U03.L03");

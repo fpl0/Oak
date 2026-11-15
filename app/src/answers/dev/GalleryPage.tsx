@@ -168,6 +168,8 @@ const WIDE = new Set([
   "form",
   "bar-grid",
   "scale-builder",
+  "grouping",
+  "euclid",
 ]);
 
 function Section({ f, env, states }: { f: Fixture; env: AnswerEnv; states: readonly GalleryState[] }) {
@@ -234,7 +236,8 @@ export function Gallery() {
     const events = music.model.events;
     const top = events.reduce((a, b) => ((b.midi ?? 0) > (a.midi ?? 0) ? b : a));
     return { ...f, expected: top.id, sample: events[0]?.id ?? null } as Fixture;
-  }).filter((f) => !only || f.id === only);
+    // `?only=a,b,c` shows several examples on one page (the Wave 7 overflow walk loads them once).
+  }).filter((f) => !only || only.split(",").includes(f.id));
 
   // `?verb=save` draws every widget as a checkpoint does (Enter saves); `?lenses=off` turns every lens off.
   const save = params.get("verb") === "save";

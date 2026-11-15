@@ -35,6 +35,11 @@ export interface TrialResponse {
   answer?: Answer;
   /** Seconds on the AudioContext clock, minus the calibrated tap latency. */
   taps?: number[];
+  /**
+   * Wave 7 (`tap.lanes`, contracts §8.4): a two-hand take, one list per lane in `params.tapLanes` order (F first),
+   * on the same clock as `taps`. A trial with `tapLanes` is graded on these when they are sent.
+   */
+  lanes?: number[][];
   frames?: PitchFrame[];
   rtMs: number;
   replays: number;

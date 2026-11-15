@@ -1610,3 +1610,121 @@ Every change is additive unless it says otherwise. Contracts 1.7 (the six Wave 6
 - **`@oak/theory`.** `arrivesOn(next, target)`; `alterSpelling`, `alterDegree`; `keySevenths` refuses melodic minor.
 - **App.** `X1Workspace` sets `codeRef` in the editor's `onChange` (a check pressed in the frame after an edit
   graded the code before it).
+
+## 25. Wave 7 (the advanced tracks: jazz harmony, advanced rhythm, arrangement & sound; the whole course)
+
+`docs/design/wave7.md` is the Wave 7 seam document; its "Wave 7 state" section is the current summary. This section
+records what the build, the integrators and the closer changed in the cross-package API. The code beats this list.
+Contracts 1.8 (`CONTRACTS_VERSION` "1.8").
+
+- **`@oak/strudel`.** New exports `@oak/strudel/offline` (the offline renderer: `renderPiece`, `encodeWav`, `PieceRenderError`,
+  `MAX_NOTES`/`MAX_LITERAL`) and `@oak/strudel/offline/frame` (the page `app/offline-render.html` runs; served with
+  `frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN`, every other document keeps `'none'` and `DENY`,
+  contracts §11.2). A render is bounded by the piece's computed length and refused in a plain sentence otherwise.
+  `./swing-backing`, `./early-jazz`, `./audibility` as before.
+- **`@oak/audio`.** `@oak/audio/mix-meter`: `measureMix(…)` renders the mix and each part alone offline
+  and reads their levels (AC2's mix step).
+- **`@oak/content-kit`.**
+  - `IMPLEMENTED.features` adds the Wave 7 fields `clave.coverage`, `polyrhythm.together`, `voice-leading.top`,
+    `reharmonize.devices`, `text.jazz-chord`, `keyboard.voicing`, `staff-expect.voicing` and, at the close,
+    **`tap.lanes`** (two lanes, one per hand; the API, the lesson host and content/validate/harness.ts grade both
+    hands at once with @oak/pitch `gradeLaneTaps` against `tapLaneTargets`) and **`capstone.versions`** (AC1; rendered
+    by app/src/capstone/Versions.tsx). `answerUis` adds `grouping` and `euclid`. `GRADER_READY.features` keeps
+    `transcribe.stages`, `stimulus.capstone-song` and `key-plan`; `PLANNED` is empty.
+  - `TestCase.context { song?, otherVersion? }`: what a capstone test grades against beside its code (filled into
+    `GradeContext.songMelody` / `songForm` / `otherVersion` by the content harness).
+  - `TestResponse` `{ lanes: number[][] }` (one list of seconds per lane). `SOUND_COMPARE_OPTIONS.density`.
+  - `TRACK_CUSTOM_RULES` and their golden-tested rules (wave7.md §3.2); `voicingShapeOf` requires a chord's own four
+    notes for close and drop-2.
+- **`@oak/api`.** `AttemptResponseSchema` accepts `{ lanes }` (2–4 lanes, at most 512 taps each); `GymSourceSchema`
+  (`own:|song:|analysis:|jazz:|rhythm:…`) on `GymSessionCreate` / `GymSession`; the track endpoints of wave7.md §5
+  (focus, track states with `nextSession`, `checkpoints`, `capstones`; `course.whole`; `album.source` with the stored
+  Band `{ bandId, flavour, mutes }`; `SessionSummary.next` and `courseComplete`; `SkillState.introducedAt`).
+- **`@oak/drills`.** `tapLanesOfTrial(trial)`; `TrialResponse.lanes`; a two-lane take is graded with
+  `gradeLaneTaps` (`fam.rhy.polyrhythm` "tap-3-over-2" writes `params.tapLanes`).
+- **`@oak/grader`.** The Wave 7 views and rules of wave7.md §3.2; `pieceSlots`/`slotsFor` read heard symbols only; a
+  chord struck again within a bar of itself is one chord held (`chordSlots`); `tensionView` judges against the
+  chord's own tones; `song-melody-kept` judges one pass and accepts a declared swing; `blues-form` `variant: "jazz"`.
+  At the close: **`classifyNct` reads a suspension only when the repeated note was a chord tone under another chord**
+  (a note repeated within one chord, then a step down, is no suspension: the Blues Transcription's bar 10).
+  `ArrangedTrack.sections[].wrapped` (lint/ast).
+- **Server.** Migrations `0008_wave7.sql` and `0009_gym_source.sql` (schema version 9). Every Wave 7 dev seed point of
+  wave7.md §6 builds, plus the generic `after <track session>` (the core, then J, R, A one session a day up to that
+  session). At the close:
+  - `SessionsService.end` ends the session before it takes the core's and the whole course's moments, so their
+    numbers count it (the Coda of session 259 read "258 sessions on 258 days").
+  - `TrackState.note` of a track whose sessions are all done is "All N sessions done. Its lessons stay open to replay."
+  - `SessionPlan.note` says "Nothing of the track you chose … the core's next session instead" only while the core
+    is unfinished.
+  - Checkpoint composition: an item drawn from a mic family (a sung item) is `level-setting` whatever the skill it gives
+    evidence for, and is left out in Quiet mode (contracts §7.6 "Singing never gates anything"; J.CP1's J07 items).
+- **Content.** `content/validate/song-tests.ts` `withSongBriefTests(capstone)`: brief tests that read a song's answer
+  key (JC4 on Georgia on My Mind, `content/advanced/capstones/JC4/brief-tests.ts`) join the brief in content CI only;
+  no module the app loads imports a repertoire `song.ts` (pinned in song-tests.test.ts). `content/bands`: the jazz
+  forms' walking bass leads into the lowest root (A1) from above and plays a °7 chord's own fifth. R2.L04 S2 is the
+  two-lane tap of its spec.
+- **App.**
+  - `app/src/capstone/release-version.ts` `releasedVersionOf(track, sketchId, sketchVersion)`: a release's take goes on
+    the track version whose draft was released (AC1's one release puts both versions on the track; version one's take
+    is version one's).
+  - `coda-model.ts` `releaseOf`: a revision is a version added to a track that was on the album before the session; a
+    first release that puts several versions on the track at once is shown by its first version.
+  - `app/public/sw.js`: the shell warm-up caches `/offline-render.html`, and a navigation to it never falls back to
+    the SPA index.
+- **Browser specs.** `e2e/journey/w7-support.ts` (a day from a seed, the Coda's next line against
+  `SessionSummary.next`, a track capstone session walked as a day); `e2e/journey/lesson-walk.ts` `makeRuleMet` (the
+  Make's required rule ticks before it is saved); `e2e/journey/checkpoint-walk.ts` answers an `all` item part by part,
+  a two-lane item with `{ lanes }`, and sets sung items aside.
+
+## 26. Wave 7 reviews and final gate (2026-11-15)
+
+What the eight reviewers and the final gate changed in the cross-package API (all additive unless said). The code
+beats this list; `docs/design/wave7.md` "Wave 7 state" is the summary, `docs/decisions.md` rows 80–84 the reasons.
+
+- **`@oak/grader`.**
+  - `GradeContext.keyFree?: boolean`: the brief names no key (JC1); `key` is the host's reading of the piece, so no
+    `harmony.key-mismatch` note ("the brief is in C major") is given.
+  - `contrafact` takes `standIn: { name, at: number[], notes: [onsetNum, onsetDen, durNum, durDen, midi][] }`, the
+    model head it reads when the host passes no `songMelody`; `standInModel(params)` (exported) expands it. JC3's brief
+    names J4.L04's head (decision 80).
+  - `governingSlot(slots, t)` (analyze/wave7-views): the chord held between comping hits. `allowed-tensions` and
+    `tensionView` judge every structural tune note against it; none is skipped for falling between hits.
+  - `progression` with `bars` (and `rn`): a numeral with a seventh (III7, ii7, I∆7) needs that seventh's family on the
+    heard chord (dominant, major, minor, half-diminished, diminished, minor-major); a ninth or thirteenth keeps its
+    seventh's family. Numerals without a seventh read the triad, as before.
+  - `device-count` with `songForm`: bars past the song's end wrap onto the song's bars (a looping piece read for 64
+    bars), so the song's own devices are never counted as the learner's.
+  - `displaced-copy`: the same rhythm moved over another chord is a displacement (rhythm-only pass after the
+    same-pitch pass). `hemiolaView`: a grouping written with velocities (only the group starts heard) is read.
+  - `velocity-ghosts` with `maxGain ≥ 1` (every note counts: RC1's bass) says "N notes on `bass` on the 16ths between
+    the eighths", never "ghost notes". A Wave 7 rule's empty part reads "nothing plays in X that you can hear: it is
+    silent, or more than 24 dB under the loudest part".
+  - From the reviews: `strictAllowedNames()` and the strict profile as an allowlist of free names (Strudel's scope
+    minus `STRICT_GADGETS`, plus plain builtins), refused DOM/reflection member names, static `+` concatenations read
+    (security); `WalkingBassBar.distinct` (a walk keeps moving), `SwingMeasure.triplets?` and `onTripletGrid`,
+    `control-set` refusing a filter envelope with no filter, `microtiming` leaning against the band's median
+    (robustness); `walking-bass` half the bars with three or more notes.
+- **`@oak/content-kit`.** `ParamKind` adds `"model"` (validated `{ name, at, notes }`); `contrafact` declares
+  `standIn`.
+- **`@oak/notation`.** `abcChordText` (a slash that starts no bass note is written "∕", so "C6/9" keeps its 9),
+  `ChartInput.chordStyle?: "lead-sheet" | "jazz"`, `chartChordTextIn(symbol, style)` (review:surfaces).
+- **Server.** `services/gates.ts` `TRACK_CP_PROSE`: a locked track capstone's `lockedReason` names its checkpoint as
+  Today does ("Opens after the first jazz checkpoint."). `SessionPlanCoursePort.trackNextLesson?(trackId)`,
+  `TrackPlan.nextLesson`: a failed track checkpoint keeps the track's next lesson as the first alternative.
+  `album.source` answers 409 for an imported version that fails the strict lint. `static.ts` `isDevScreen`: `/dev/*`
+  is 404 without OAK_DEV. `server/src/tutor/lint/strict.ts` `setHostStrictLint` (the grader's allowlist, registered by
+  `tutor-wiring.ts`).
+- **App.**
+  - `lib/queries.ts` `downloadBackup(withAudio)` and `backupFileName(disposition)`: "Export backup" fetches with X-Oak
+    and saves a Blob (a plain link is a navigation without X-Oak, which the server refuses with 403).
+  - `capstone/tracks.ts` `songFormFor(def, song)`; `engine.ts` `CheckExtras.songForm` and `keyFree` passed for a brief
+    with no key. The capstone workspace opens an imported draft (`reviewBeforeRun`) in Studio's `ReviewPanel` and
+    neither runs nor checks it until the strict lint passes.
+  - `capstone/wave7.ts` `contrafactFound` reads the brief's stand-in when the song has no key.
+  - `capstone/export.ts` `versionBandOf` (the album page plays a release's Band); `wave7.ts` `silentPartText`.
+  - `public/sw.js`: `/dev`, `/dev/…` (any case or escape) are never intercepted.
+  - `session/course-end.ts` `COURSE_END_COPY.under` is ms.28's description word for word (pinned).
+- **Content.** `content/advanced/capstones/JC3/pieces.ts` (`JC3_PIECES`, `jc3Head`, `JC3_CHANGES_A/B`, re-exported
+  by capstones.ts) and `JC3_STAND_IN`; JC3's brief has ten tests. `content/validate/harness.ts`
+  `GradeExtra.songForm`, `songFormOfId(songId)`; `briefContext` passes the song's chart to a brief with
+  `device-count`. AC2's brief has a required `tune` line (`tracks`, role melody).

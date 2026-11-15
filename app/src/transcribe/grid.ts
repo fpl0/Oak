@@ -2,7 +2,17 @@
 // laid over the learner's audio from its tempo and first downbeat, the A–B loop set at the playhead, and the
 // transport steps (rate ±5 %, ±1 semitone, ±5 cents). Pure, so every rule is unit-tested.
 import type { MeterId } from "@oak/content-kit";
-import { barSeconds, beatGrid, METERS } from "@oak/theory";
+import {
+  barSeconds,
+  beatGrid,
+  type ClaveDirection,
+  type ClaveType,
+  claveSteps,
+  METERS,
+  meterWith,
+  swingOffbeat,
+  swingRatio,
+} from "@oak/theory";
 
 /** Transcribe's rate range (contracts §6.12: 25–100 %; `TranscriptionSettingsSchema.rate` stores at most 1). */
 export const RATE_MIN = 0.25;
@@ -340,17 +350,21 @@ export function tapProgress(taps: readonly number[]): { count: number; of: numbe
 
 /**
  * How a beat divides on the grid: `straight` in two, `swing` in two with the off-beat at two thirds (§6.10),
- * `triplet` in three. A compound meter (6/8, 9/8, 12/8) always divides its dotted-quarter beat in three, whatever
- * the feel says (contracts §6.9: the beat is the dotted quarter everywhere).
+ * `triplet` in three, and (Wave 7, R1.L02) `swing16`: four 16ths a beat with every second one late, the
+ * patterned 16th swing of funk and neo-soul (`swingBy(1/3, 8)` in 4/4). A compound meter (6/8, 9/8, 12/8) always
+ * divides its dotted-quarter beat in three, whatever the feel says (contracts §6.9: the beat is the dotted quarter
+ * everywhere). An odd meter counted in eighths (5/8, 7/8, 9/8i) is drawn by its groups (R2.L01–L02).
  */
-export type GridFeel = "straight" | "swing" | "triplet";
-export const GRID_FEELS: readonly GridFeel[] = ["straight", "swing", "triplet"];
+export type GridFeel = "straight" | "swing" | "triplet" | "swing16";
+export const GRID_FEELS: readonly GridFeel[] = ["straight", "swing", "triplet", "swing16"];
+/** The 16th-swing amount the grid draws (`swingBy(1/3, 8)` in 4/4: 2:1 inside each eighth). */
+export const SWING16_AMOUNT = 1 / 3;
 
 export interface GridTick {
   /** Position inside the bar, 0–1. */
   at: number;
   kind: "beat" | "off";
-  /** What the count says there: "1", "&", "la", "li", "trip", "let". */
+  /** What the count says there: "1", "&", "la", "li", "trip", "let", "e", "a"; in a group "1 2 | 1 2 3". */
   label: string;
 }
 
@@ -358,21 +372,64 @@ export interface GridTick {
 export const isCompound = (meter: MeterId | string | null): boolean =>
   meter !== null && METERS[meter as MeterId]?.tempoUnit === "dottedQuarter";
 
+/** Whether a meter is counted in eighths and grouped in 2s and 3s (5/8, 7/8, 9/8i). */
+export const isOddEighths = (meter: MeterId | string | null): boolean =>
+  meter !== null && METERS[meter as MeterId]?.tempoUnit === "eighth";
+
+/** A meter's grouping as the grid draws it ("2+2+3"), the declared one when legal (`meterWith`). */
+export function groupingText(
+  meter: MeterId | string | null,
+  grouping?: readonly number[] | null,
+): string | null {
+  const m = METERS[(meter ?? "4/4") as MeterId];
+  if (!m || m.grouping.every((g) => g === 1) || m.tempoUnit === "dottedQuarter") return null;
+  return groupsOf(m.id, grouping).join("+");
+}
+
+function groupsOf(meter: MeterId, grouping?: readonly number[] | null): number[] {
+  if (!grouping) return [...METERS[meter].grouping];
+  try {
+    return [...meterWith(meter, [...grouping]).grouping];
+  } catch {
+    return [...METERS[meter].grouping];
+  }
+}
+
 /**
  * The beat and division ticks inside one bar of `meter` with `feel`, from `@oak/theory` `beatGrid` (the same
  * lines the roll's beat-grid lens draws): 4/4 straight is "1 & 2 & …", swung the same with each "&" at two
- * thirds, in triplets "1 trip let …"; 6/8 is two beats of "1 la li". A meter the grid does not cover (5/8, 7/8)
- * shows its tempo units alone.
+ * thirds, in triplets "1 trip let …", in swung 16ths "1 e & a" with each "e" and "a" late; 6/8 is two beats of
+ * "1 la li". An odd meter in eighths (5/8, 7/8, 9/8i) is its groups: a beat tick on each group's first eighth,
+ * counted "1 2 | 1 2 | 1 2 3" (`meterGroups`), with a declared grouping (7/8 as 3+2+2) when one is given.
  */
-export function gridTicks(meter: MeterId | string | null, feel: GridFeel): GridTick[] {
+export function gridTicks(
+  meter: MeterId | string | null,
+  feel: GridFeel,
+  grouping?: readonly number[] | null,
+): GridTick[] {
   const m = METERS[(meter ?? "4/4") as MeterId] ?? METERS["4/4"];
-  if (m.tempoUnit === "eighth")
-    return Array.from({ length: m.unitsPerBar }, (_, k) => ({
-      at: k / m.unitsPerBar,
-      kind: "beat" as const,
-      label: String(k + 1),
-    }));
+  if (m.tempoUnit === "eighth") {
+    const groups = groupsOf(m.id, grouping);
+    const out: GridTick[] = [];
+    let k = 0;
+    for (const g of groups)
+      for (let i = 0; i < g; i++, k++)
+        out.push({ at: k / m.unitsPerBar, kind: i === 0 ? "beat" : "off", label: String(i + 1) });
+    return out;
+  }
   const compound = m.tempoUnit === "dottedQuarter";
+  if (feel === "swing16" && !compound) {
+    // Swung 16ths: each eighth holds a long and a short 16th (`swingOffbeat(a, 16)`, as Strudel's swingBy places it).
+    const late = swingOffbeat(SWING16_AMOUNT, 16, m) * m.unitsPerBar;
+    const out: GridTick[] = [];
+    for (let b = 0; b < m.unitsPerBar; b++) {
+      out.push({ at: b / m.unitsPerBar, kind: "beat", label: String(b + 1) });
+      out.push({ at: (b + late) / m.unitsPerBar, kind: "off", label: "e" });
+      out.push({ at: (b + 0.5) / m.unitsPerBar, kind: "off", label: "&" });
+      out.push({ at: (b + 0.5 + late) / m.unitsPerBar, kind: "off", label: "a" });
+    }
+    return out;
+  }
   const g = beatGrid(m, { triplets: !compound && feel === "triplet" });
   const ticks: GridTick[] = g.lines.map((l) => ({
     at: l.at[0] / l.at[1],
@@ -386,10 +443,65 @@ export function gridTicks(meter: MeterId | string | null, feel: GridFeel): GridT
   );
 }
 
-/** The feel as the grid names it: "Swing 8ths", "Triplets", "Dotted-quarter beat, in three" (compound), or `null`. */
-export function feelText(meter: MeterId | string | null, feel: GridFeel): string | null {
+/**
+ * The feel as the grid names it: "Swing 8ths", "Swing 16ths (2:1)", "Triplets", "Dotted-quarter beat, in three"
+ * (compound), "7/8 · 2+2+3" (an odd meter in eighths), or `null`.
+ */
+export function feelText(
+  meter: MeterId | string | null,
+  feel: GridFeel,
+  grouping?: readonly number[] | null,
+): string | null {
   if (isCompound(meter)) return `${meter}: the beat is the dotted quarter, in three`;
+  if (isOddEighths(meter)) return `${meter} · ${groupingText(meter, grouping)}`;
+  if (feel === "swing16") return `Swing 16ths (${Math.round(swingRatio(SWING16_AMOUNT) * 10) / 10}:1)`;
   return feel === "swing" ? "Swing 8ths" : feel === "triplet" ? "Triplets" : null;
+}
+
+// --- the two-bar clave grid (R3.L02, R3.L05) ------------------------------------------------------------
+
+export interface ClaveSpec {
+  type: ClaveType;
+  direction: ClaveDirection;
+}
+
+/** The clave settings the grid cycles through (K): off, then son and rumba, each 3-2 and 2-3. */
+export const CLAVE_CYCLE: readonly (ClaveSpec | null)[] = [
+  null,
+  { type: "son", direction: "3-2" },
+  { type: "son", direction: "2-3" },
+  { type: "rumba", direction: "3-2" },
+  { type: "rumba", direction: "2-3" },
+];
+
+export function nextClave(now: ClaveSpec | null): ClaveSpec | null {
+  const i = CLAVE_CYCLE.findIndex(
+    (c) =>
+      (c === null && now === null) ||
+      (c !== null && now !== null && c.type === now.type && c.direction === now.direction),
+  );
+  return CLAVE_CYCLE[(i + 1) % CLAVE_CYCLE.length] ?? null;
+}
+
+/** "Son clave, 3-2" — the clave named as the CLAVE lens and R3.L02 name it. */
+export const claveText = (c: ClaveSpec): string =>
+  `${c.type === "son" ? "Son" : "Rumba"} clave, ${c.direction}`;
+
+/**
+ * Where the clave's strokes fall inside bar `barNo` (0-based from the first full bar), as fractions of the bar: the
+ * clave spans two bars on the eighth grid (`claveSteps`, 8 a bar), so even bars hold its first side and odd bars
+ * its second. A 3-2 clave plays three strokes in bar 1, two in bar 2.
+ */
+export function claveStrokesInBar(c: ClaveSpec, barNo: number): number[] {
+  const side = ((barNo % 2) + 2) % 2;
+  return claveSteps(c.type, c.direction)
+    .filter((s) => Math.floor(s / 8) === side)
+    .map((s) => (s - side * 8) / 8);
+}
+
+/** The side of the clave bar `barNo` holds: "3" or "2". */
+export function claveSideOfBar(c: ClaveSpec, barNo: number): "3" | "2" {
+  return claveStrokesInBar(c, barNo).length === 3 ? "3" : "2";
 }
 
 /**
@@ -403,12 +515,19 @@ export function feelOfOnsets(onsetsInBars: readonly number[], meter: MeterId | s
   let thirds = 0;
   let twoThirds = 0;
   let halves = 0;
+  let fiveSixths = 0;
+  let quarters = 0;
   for (const on of onsetsInBars) {
     const inBeat = (((on * m.unitsPerBar) % 1) + 1) % 1;
     if (Math.abs(inBeat - 1 / 3) < 0.02) thirds++;
     else if (Math.abs(inBeat - 2 / 3) < 0.02) twoThirds++;
     else if (Math.abs(inBeat - 1 / 2) < 0.02) halves++;
+    else if (Math.abs(inBeat - 5 / 6) < 0.02) fiveSixths++;
+    else if (Math.abs(inBeat - 1 / 4) < 0.02 || Math.abs(inBeat - 3 / 4) < 0.02) quarters++;
   }
+  // Swung 16ths put their late 16ths at a third and five sixths of the beat, beside a straight "&" at the half
+  // (a triplet never plays at five sixths; straight 16ths sit at the quarters).
+  if (fiveSixths > 0 && twoThirds === 0 && quarters === 0) return "swing16";
   if (thirds > 0) return "triplet";
   return twoThirds > 0 && halves === 0 ? "swing" : "straight";
 }

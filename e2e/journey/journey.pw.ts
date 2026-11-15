@@ -239,7 +239,8 @@ test("gate journey 1: a fresh learner goes through onboarding with a microphone"
   );
   expect(boot.streak.todayQualified).toBe(true);
   expect(boot.streak.thisWeek.qualifyingDays).toBe(1);
-  await expect(page.getByText(/1 of \d days this week/)).toBeVisible();
+  // The first week's goal is pro-rated by the server: on a Sunday it is one day, and the day's session meets it.
+  await expect(page.getByText(/1 of \d days? this week|This week's goal is met: 1 of 1 day/)).toBeVisible();
   await shootAll(page, "today-day1");
   // A reload keeps the done state (it is remembered in this browser).
   await page.reload();

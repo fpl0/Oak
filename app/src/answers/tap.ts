@@ -134,7 +134,15 @@ export interface PadGrid {
   /** One label per step of a bar: "1", "la", "li", "2" … */
   counts: string[];
   compound: boolean;
+  /**
+   * Wave 7: in an odd meter (5/4, 5/8, 7/8, 9/8i) the steps where a group of the meter's grouping starts (2+2+3
+   * in 7/8): the pad draws them as strong lines. Absent in the other meters.
+   */
+  groupStarts?: boolean[];
 }
+
+/** The odd meters whose bar is felt in groups of 2 and 3 (contracts §6.9, `METER_GROUPINGS`). */
+const ODD_METERS = new Set(["5/4", "5/8", "7/8", "9/8i"]);
 
 /**
  * The pad's grid (contracts §6.9): in a compound meter the beat is the dotted quarter and is drawn in three,
@@ -142,6 +150,26 @@ export interface PadGrid {
  */
 export function padGrid(o: { meter?: MeterSpec; beatsPerBar?: number; stepsPerBeat?: number }): PadGrid {
   const compound = o.meter?.tempoUnit === "dottedQuarter";
+  if (o.meter && ODD_METERS.has(o.meter.id)) {
+    // The beat is the meter's counting unit (an eighth in 7/8, a quarter in 5/4), counted within its group:
+    // 7/8 is "1 & 2 & | 1 & 2 & | 1 & 2 & 3 &" on a sixteenth grid, 5/4 "1 e & a 2 e & a 3 … | 1 … 2 …".
+    const m = o.meter;
+    const beatsPerBar = m.unitsPerBar;
+    const eighth = m.tempoUnit === "eighth";
+    const stepsPerBeat = o.stepsPerBeat ?? (eighth ? 2 : 4);
+    const sub = eighth ? ["&"] : ["e", "&", "a"];
+    const counts: string[] = [];
+    const groupStarts: boolean[] = [];
+    for (const g of m.grouping)
+      for (let k = 0; k < g; k++)
+        for (let st = 0; st < stepsPerBeat; st++) {
+          counts.push(
+            st === 0 ? String(k + 1) : stepsPerBeat === sub.length + 1 ? (sub[st - 1] as string) : "",
+          );
+          groupStarts.push(k === 0 && st === 0);
+        }
+    return { beatsPerBar, stepsPerBeat, counts, compound: false, groupStarts };
+  }
   const beatsPerBar = o.meter ? o.meter.unitsPerBar : (o.beatsPerBar ?? 4);
   const stepsPerBeat = o.stepsPerBeat ?? (compound ? 3 : 4);
   const layout = gridLayout(beatsPerBar * stepsPerBeat, 1, {

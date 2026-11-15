@@ -4,7 +4,7 @@
 // FeedbackPanel, all linked through one HighlightBus per instance. The roll and the staff come from the
 // static analysis path (the browser grader host), so they show code that has not been played; while it
 // plays, the adapter's paint clock drives the playhead and the highlights.
-import type { ChordLensId, LensId, LineLensId, MusicLensId } from "@oak/api";
+import type { ChordLensId, LensId, LineLensId, MusicLensId, TrackLensId } from "@oak/api";
 import type {
   GradeResult,
   HintLadder,
@@ -34,7 +34,7 @@ import { METERS } from "@oak/theory";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SectionLoop } from "../lib/form-view.ts";
 import { FULL_HARMONY_DEPTH, type HarmonyDepth, harmonyDepth } from "../lib/harmony-lens.ts";
-import { MUSIC_LENS_UNLOCKS } from "../lib/lenses.ts";
+import { MUSIC_LENS_UNLOCKS, TRACK_LENS_GATES } from "../lib/lenses.ts";
 import { probeFromHaps, probeUnlocked, type ScopePanelHostProps } from "../lib/scope-panel.ts";
 import {
   HIGHLIGHT_MS,
@@ -72,7 +72,13 @@ import {
 } from "./loop-math.ts";
 import { Metronome } from "./metronome.ts";
 import { activeAt, keyAtCycle, leadEvents, pieceKeys, type WorkbenchModel } from "./model.ts";
-import { PianoRoll, type RollColorMode, type RollLabelMode, type RollMusic } from "./PianoRoll.tsx";
+import {
+  PianoRoll,
+  type RollColorMode,
+  type RollLabelMode,
+  type RollMusic,
+  type RollTrack,
+} from "./PianoRoll.tsx";
 import {
   chordDisplay,
   initialPanelState,
@@ -90,6 +96,13 @@ import { StaffView } from "./StaffView.tsx";
 import { f0OfHap, probesInHap } from "./scope-view.ts";
 import { useWorkbenchServices } from "./services.tsx";
 import { TransportBar, type TransportLenses } from "./TransportBar.tsx";
+import {
+  DEVICE_LESSONS,
+  JAZZ_GLYPHS_TOOL,
+  PATTERNED_SWING_TOOL,
+  TRACK_SWITCHES,
+  TWO_FIVE_LESSON,
+} from "./track-switches.ts";
 import {
   isSilenced,
   nextPracticeTempo,
@@ -223,6 +236,11 @@ export interface WorkbenchProps {
    * shown, or hidden); it wins over the learner's switch. Without it the shared lenses decide, inside a step too.
    */
   musicLenses?: Partial<Record<MusicLensId, boolean>>;
+  /**
+   * Wave 7 (wave7.md §4.2): a host's choice for one of the advanced tracks' lenses (a lesson step that needs the
+   * clave shown); it wins over the learner's switch. Without it the shared lenses decide, inside a step too.
+   */
+  trackLenses?: Partial<Record<TrackLensId, boolean>>;
   /**
    * A change of this value puts `code` into the editor again even when `code` is the same string as before (d15:
    * "Start from Oak's copy" pressed after the learner edited a Make that opened with Oak's copy or their sketch).
@@ -376,6 +394,9 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
 
   // The Band parts heard: the step's tracks, less the ones muted here (the chord band reads only these).
   const bandHeard = props.band ? props.band.tracks.filter((r) => !mutes.muted.has(`band.${r}`)) : null;
+  // Wave 7: jazz glyphs once the learner reads them (J1.L02), on the chord band and the staff alike.
+  const jazzGlyphs =
+    props.source !== null && (props.lint.unlocked as ReadonlySet<string>).has(JAZZ_GLYPHS_TOOL);
   const analysis = useAnalysis(grader, code, {
     bandHeard,
     bars: loopBars,
@@ -387,6 +408,7 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
     staffLabels: props.staff?.labels === "counts" ? "counts" : "none",
     debounceMs: props.analysisDebounceMs ?? 300,
     pickup: props.pickup ?? null,
+    chordStyle: jazzGlyphs ? "jazz" : "lead-sheet",
   });
   const source = props.source;
   // --- Wave 6: how deep the labels write for this learner (never ahead of the course) -----------------
@@ -958,6 +980,88 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
     [oak],
   );
 
+  // --- Wave 7: the advanced tracks' lenses (wave7.md §4.2) ------------------------------------------------
+  // Each opens with its lesson or one of its tools (the lesson being taken included); its switch shows only where
+  // the piece has something for it to draw; a host's `trackLenses` wins. No step names them: they apply in a step too.
+  const trackSrc = variant !== "mini" ? (source?.track ?? null) : null;
+  const tk = model?.track ?? null;
+  const trackOpen = (id: TrackLensId): boolean =>
+    trackSrc !== null &&
+    (trackSrc.available[id] ||
+      TRACK_LENS_GATES[id].tools.some((t) => unlockedSet.has(t)) ||
+      props.lessonId === TRACK_LENS_GATES[id].lesson);
+  // Swung 16ths (R1.L02, `tb.swing.patterned`) are drawn against their straight places before the microtiming lens
+  // opens (R1.L05): the switch then shows the swing alone, named "Swing".
+  const swingOnly = trackSrc !== null && !trackOpen("microtiming") && unlockedSet.has(PATTERNED_SWING_TOOL);
+  const swingMarks = useMemo(() => {
+    const micro = tk?.micro;
+    if (!micro) return null;
+    return {
+      marks: new Map([...micro.marks].filter(([, m]) => m.kind === "swing")),
+      tracks: micro.tracks.filter((t) => t.swing !== null),
+    };
+  }, [tk]);
+  const trackHas: Record<TrackLensId, boolean> = {
+    tensions: (tk?.tensions.size ?? 0) > 0,
+    voicings: (tk?.voicings.length ?? 0) > 0,
+    chordScales:
+      chords.band && (model?.harmony?.regions.length ?? 0) > 0 && (tk?.regions.some((r) => r.scale) ?? false),
+    clave: (tk?.clave ?? null) !== null,
+    polyLanes: (tk?.poly ?? null) !== null,
+    microtiming: swingOnly ? (swingMarks?.marks.size ?? 0) > 0 : (tk?.micro.marks.size ?? 0) > 0,
+    registers: (tk?.registers ?? null) !== null && wantSpectrum,
+    density: (tk?.density ?? null) !== null,
+  };
+  const trackOpenNow = (id: TrackLensId): boolean => trackOpen(id) || (id === "microtiming" && swingOnly);
+  const trackOn = (id: TrackLensId): boolean => {
+    if (variant === "mini") return false;
+    const host = props.trackLenses?.[id];
+    if (host !== undefined) return host && trackHas[id];
+    return trackSrc !== null && trackOpenNow(id) && trackSrc.prefs[id] && trackHas[id];
+  };
+  const trackSwitches = TRACK_SWITCHES.filter(
+    (m) => props.trackLenses?.[m.id] === undefined && trackOpenNow(m.id) && trackHas[m.id],
+  ).map((m) =>
+    m.id === "microtiming" && swingOnly
+      ? { ...m, label: "Swing", title: "Each swung note against its straight place, with the swing ratio" }
+      : m,
+  );
+  const toggleTrackLens = (id: TrackLensId) => {
+    if (!trackSrc || !trackSwitches.some((m) => m.id === id)) return;
+    trackSrc.toggle(id);
+  };
+  const subsTaught = [...Object.entries(DEVICE_LESSONS)].filter(([, l]) => taught(l)).map(([d]) => d);
+  const twoFivesOn = chords.symbols && taught(TWO_FIVE_LESSON);
+  const onKey = TRACK_SWITCHES.map((m) => (trackOn(m.id) ? "1" : "0")).join("");
+  const rollTrack: RollTrack = useMemo(() => {
+    const on = (i: number) => onKey[i] === "1";
+    const subs = new Set(subsTaught);
+    const jazzOn = on(1) || on(2) || subs.size > 0 || (twoFivesOn && (tk?.twoFives.length ?? 0) > 0);
+    return {
+      tensions: on(0) ? (tk?.tensions ?? null) : null,
+      voicings: on(1) ? (tk?.voicings ?? null) : null,
+      clave: on(3) ? (tk?.clave ?? null) : null,
+      poly: on(4) ? (tk?.poly ?? null) : null,
+      micro: on(5) ? (swingOnly ? swingMarks : (tk?.micro ?? null)) : null,
+      density: on(7) ? (tk?.density ?? null) : null,
+      odd: tk?.odd ?? null,
+      jazz:
+        tk && jazzOn
+          ? {
+              regions: tk.regions,
+              show: { voicings: on(1), scales: on(2) },
+              subs,
+              twoFives: twoFivesOn ? tk.twoFives : null,
+            }
+          : null,
+    };
+    // `onKey` stands for which lenses are on; the taught substitutions by their text.
+  }, [tk, onKey, subsTaught.join("|"), twoFivesOn, swingOnly, swingMarks]);
+  const jazzSymbols = useMemo(
+    () => (jazzGlyphs && tk ? tk.regions.map((r) => r.jazz) : null),
+    [jazzGlyphs, tk],
+  );
+
   // --- layout -----------------------------------------------------------------------------------
   useEffect(() => {
     const el = rootRef.current;
@@ -1044,6 +1148,15 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
     }
     // Loop region and metronome (ux §7.10): L, [ ], Shift+[ Shift+], M. Not in text fields.
     const textField = target.closest?.("input, select, textarea, [contenteditable]");
+    // Wave 7: Shift+X tensions, Shift+Q chord-scales, Shift+D density (the other five from the lens bar).
+    if (!typing && !textField && !ev.repeat && ev.shiftKey && trackSwitches.length > 0) {
+      const hit = trackSwitches.find((m) => m.keys !== "" && m.keys === `Shift+${k.toUpperCase()}`);
+      if (hit) {
+        ev.preventDefault();
+        toggleTrackLens(hit.id);
+        return;
+      }
+    }
     // Wave 6: Shift+I guide tones, Shift+J the key ribbon, Shift+V the beat grid (inside a lesson step too).
     if (!typing && !textField && !ev.repeat && ev.shiftKey && musicSwitches.length > 0) {
       const hit = musicSwitches.find((m) => m.keys === `Shift+${k.toUpperCase()}`);
@@ -1201,8 +1314,10 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
       ...musicSwitches.map((m) => ({ ...m, on: musicOn(m.id) })),
     ],
     panels: PANEL_SWITCHES.filter((p) => panelAvailable[p.id]).map((p) => ({ ...p, on: panelsOpen[p.id] })),
+    track: trackSwitches.map((m) => ({ ...m, on: trackOn(m.id) })),
     onToggle: (id) => {
       if (PANEL_SWITCHES.some((p) => p.id === id)) togglePanel(id as PanelId);
+      else if (TRACK_SWITCHES.some((m) => m.id === id)) toggleTrackLens(id as TrackLensId);
       else if (id === "chordSymbols" || id === "romanNumerals") toggleChordLens(id);
       else if (LINE_SWITCHES.some((l) => l.id === id)) toggleLineLens(id as LineLensId);
       else if (MUSIC_SWITCHES.some((m) => m.id === id)) toggleMusicLens(id as MusicLensId);
@@ -1319,6 +1434,7 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
                   fn: chords.fn,
                   pickup: Boolean(props.pickup),
                   chords: model.band,
+                  ...(jazzSymbols ? { jazz: jazzSymbols } : {}),
                 },
               }
             : {})}
@@ -1336,6 +1452,7 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
           {...(bassMarks && bassMarks.size > 0 ? { bassMarks } : {})}
           {...(blueNotes && blueNotes.size > 0 ? { blueNotes } : {})}
           music={rollMusic}
+          track={rollTrack}
           {...(variant !== "mini" && (props.rollFollowBars ?? FOLLOW_PAGE_BARS) > 0
             ? { followBars: props.rollFollowBars ?? FOLLOW_PAGE_BARS }
             : {})}
@@ -1405,6 +1522,10 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
       data-music-lenses={MUSIC_SWITCHES.filter((m) => musicOn(m.id) && musicHas[m.id])
         .map((m) => m.id)
         .join(" ")}
+      data-track-lenses={TRACK_SWITCHES.filter((m) => trackOn(m.id))
+        .map((m) => m.id)
+        .join(" ")}
+      data-chord-style={jazzGlyphs ? "jazz" : undefined}
       data-depth={[
         depth.sevenths ? "sevenths" : "",
         depth.applied ? "applied" : "",
@@ -1442,7 +1563,9 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
         practiceTempo={practice}
         onPracticeTempo={onPracticeTempo}
         readOnly={props.readOnly === true}
-        {...(lensBar || anyPanelAvailable || musicSwitches.length > 0 ? { lenses: lensSwitches } : {})}
+        {...(lensBar || anyPanelAvailable || musicSwitches.length > 0 || trackSwitches.length > 0
+          ? { lenses: lensSwitches }
+          : {})}
         {...(loopControls
           ? {
               loop: {
@@ -1569,6 +1692,7 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
                 blues={lines?.blues ?? null}
                 currentBar={currentBar}
                 period={Math.max(model.totalBars ?? 0, alternationBars(model.code))}
+                chordStyle={jazzGlyphs ? "jazz" : "lead-sheet"}
               />
             ) : null}
             {scopeShown ? (
@@ -1582,6 +1706,7 @@ function WorkbenchView(props: WorkbenchProps & { source: LensSource | null }) {
                   f0={probes[0]?.f0 ?? null}
                   sourceNote={sourceNote}
                   ran={runHaps !== null}
+                  registers={trackOn("registers") ? (tk?.registers ?? null) : null}
                 />
               ) : (
                 <section className="oak-wb-panel oak-scope" aria-label="Sound" data-testid="probe-panel">

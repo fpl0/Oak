@@ -2,6 +2,8 @@
 // the advanced tracks' lesson gates, recorded the moment each is met and announced once, and the end of the core —
 // its stage, the instant it was reached, what the learner can now do and what stays open after it.
 import {
+  ALBUM_SIDES,
+  COURSE_SESSIONS,
   type CoreCompletion,
   type SessionPlan,
   TRACK_GATES,
@@ -9,9 +11,11 @@ import {
   TRACK_TITLES,
   type TrackGateState,
   type TrackState,
+  type WholeCourse,
 } from "@oak/api";
 import { LearnerTime, type ServiceContext } from "./context.ts";
 import { checkpointName, type GatesService } from "./gates.ts";
+import { TRACK_ORDER, type TrackPlanService } from "./track-plan.ts";
 import { CANDO_AREAS_ORDER } from "./tracks-order.ts";
 
 type TrackId = (typeof TRACK_IDS)[number];
@@ -34,6 +38,8 @@ export interface TracksDeps {
   dueTomorrow: () => number;
   /** The next L8 standard the ladder would draw (ladder at 8, one left), or `null`. */
   nextStandard: () => string | null;
+  /** Wave 7: what each track lets the learner start, the focus, the whole course (wave7.md §5). */
+  plan?: TrackPlanService;
 }
 
 export class TracksService {
@@ -179,8 +185,16 @@ export class TracksService {
       capSessions.filter((s) => this.d.gates.sessionDone(s)).length;
     const next = open ? this.#nextOf(trackId) : null;
     const authored = lessons.filter((l) => this.#content.lessonDef(l) !== null);
+    // Wave 7 (wave7.md §5.1): the next session of any kind, the learner's focus, the checkpoints and capstones.
+    const plan = this.d.plan;
+    const target = this.#repos.profile.get().targetMinutes;
+    const nextSession = plan === undefined ? undefined : open ? plan.nextSessionState(trackId, target) : null;
     let note: string;
-    if (!open) {
+    const sessionsTotal = lessons.length + cps.length + capSessions.length;
+    if (open && sessionsTotal > 0 && sessionsDone >= sessionsTotal)
+      // Every session of the track is done (wave 7 closer): say so, never "still being written".
+      note = `All ${sessionsTotal} sessions done. Its lessons stay open to replay.`;
+    else if (!open) {
       const first = main?.requires.find((r) => !r.met) ?? main?.requires[0];
       note =
         first === undefined
@@ -188,7 +202,9 @@ export class TracksService {
           : first.kind === "checkpoint"
             ? `Opens with the ${first.ref.replace(/\.CP\d*$/, "")} checkpoint.`
             : `Opens with ${first.ref}.`;
-    } else if (next !== null) note = `Next: ${next} ${this.#content.lessonTitle(next)}.`;
+    } else if (nextSession !== null && nextSession !== undefined && nextSession.kind !== "lesson")
+      note = `Next: ${nextSession.mapItemId} ${nextSession.title}.`;
+    else if (next !== null) note = `Next: ${next} ${this.#content.lessonTitle(next)}.`;
     else if (authored.length === 0) note = "Open. Its first lessons are still being written.";
     else if (authored.every((l) => this.d.gates.lessonCompleted(l)))
       note = "Open. Its next lessons are still being written.";
@@ -202,9 +218,17 @@ export class TracksService {
       openedAt: open ? (main?.openedAt ?? null) : null,
       gates,
       sessionsDone,
-      sessionsTotal: lessons.length + cps.length + capSessions.length,
+      sessionsTotal,
       next: next as TrackState["next"],
       note,
+      ...(plan === undefined
+        ? {}
+        : {
+            nextSession: nextSession ?? null,
+            focus: plan.focus().focus === trackId,
+            checkpoints: plan.checkpointsOf(trackId),
+            capstones: plan.capstonesOf(trackId),
+          }),
     };
   }
 
@@ -491,9 +515,112 @@ export class TracksService {
     return out;
   }
 
+  // --- the whole course (wave7.md §5.8) -------------------------------------------------------------
+
+  /** `complete` once the core is complete and every track lesson, checkpoint and capstone is done or released. */
+  courseStage(): "in-progress" | "complete" {
+    const plan = this.d.plan;
+    if (plan === undefined || this.coreStage() !== "complete") return "in-progress";
+    return plan.tracksComplete() ? "complete" : "in-progress";
+  }
+
+  /** Records the end of the whole course the first time it is complete (as `syncCore`). */
+  syncWhole(sessionId: string | null, startup = false): boolean {
+    if (this.#repos.courseState.get() !== null) return false;
+    if (this.courseStage() !== "complete") return false;
+    const made = this.#repos.courseState.record(this.time.iso(), sessionId);
+    if (made && startup) this.#repos.courseState.announce(NOT_ANNOUNCED);
+    return made;
+  }
+
+  /** The session's Coda carries the whole course's moment once: the first session to end after it was complete. */
+  announceWhole(sessionId: string): WholeCourse | null {
+    this.syncWhole(sessionId);
+    const row = this.#repos.courseState.get();
+    if (row === null || row.announcedSession !== null) return null;
+    this.#repos.courseState.announce(sessionId);
+    return this.whole();
+  }
+
+  /** `GET /course/whole`. */
+  whole(): WholeCourse {
+    const g = this.d.gates;
+    const stage = this.courseStage();
+    const row = this.#repos.courseState.get();
+    const core = this.completion();
+    const tracks = this.list();
+    const trackDone = this.d.plan?.tracksSessionsDone() ?? 0;
+    const sideB = new Set(ALBUM_SIDES.find((s) => s.side === "B")?.capstones ?? []);
+    const course = new Set([...this.coreCapstones(), ...sideB]);
+    const released = this.#repos.album
+      .tracks()
+      .filter((t) => t.capstoneId !== null && course.has(t.capstoneId));
+    const latest = [...released].sort((a, b) => {
+      const ra = this.#repos.capstones.get(a.capstoneId as string)?.releasedAt ?? a.createdAt;
+      const rb = this.#repos.capstones.get(b.capstoneId as string)?.releasedAt ?? b.createdAt;
+      return ra.localeCompare(rb);
+    });
+    const trackLessons = TRACK_IDS.flatMap((t) => TRACK_ORDER[t]).filter(
+      (id) => this.#content.lessonSite(id) !== null,
+    );
+    const stats: WholeCourse["stats"] = {
+      ...core.stats,
+      lessons: core.stats.lessons + trackLessons.filter((l) => g.lessonCompleted(l)).length,
+      tracksReleased: released.length,
+    };
+    return {
+      stage,
+      completedAt: stage === "complete" ? (row?.completedAt ?? null) : null,
+      sessionId:
+        stage === "complete" && row !== null && row.announcedSession !== NOT_ANNOUNCED
+          ? (row.announcedSession ?? row.sessionId)
+          : null,
+      sessionsDone: Math.min(COURSE_SESSIONS.total, core.sessionsDone + trackDone),
+      sessionsTotal: COURSE_SESSIONS.total,
+      core: core.stage,
+      tracks,
+      album: {
+        released: released.length,
+        total: Math.max(1, course.size),
+        latestTrackId: latest.at(-1)?.id ?? null,
+      },
+      stats,
+      canDo: this.wholeCanDo(),
+      open: this.open(core.stage).filter((o) => stage !== "complete" || o.kind !== "capstone"),
+    };
+  }
+
+  /**
+   * What the learner can now do across the whole course: the core's statements (one per area) and then one of each
+   * track's own (a can-do whose source is a track lesson, checkpoint or capstone), at most ten.
+   */
+  wholeCanDo(): WholeCourse["canDo"] {
+    const out = [...this.canDo()];
+    const current = new Map(this.#repos.cando.current().map((c) => [c.candoId as string, c.status]));
+    for (const t of TRACK_IDS) {
+      const sources = new Set<string>([
+        ...TRACK_ORDER[t],
+        ...TRACK_ORDER[t].map((id) => id.replace(/\.S\d+$/, "")),
+      ]);
+      const held = this.#content.source.canDos
+        .filter((c) => sources.has(c.source) && !out.some((o) => o.candoId === c.id))
+        .map((c) => ({ c, status: current.get(c.id) }))
+        .filter((x) => x.status === "solid" || x.status === "strong");
+      const best = held.find((x) => x.status === "strong") ?? held.at(-1);
+      if (best !== undefined)
+        out.push({
+          candoId: best.c.id,
+          text: best.c.statement,
+          status: best.status as "solid" | "strong",
+        });
+    }
+    return out.slice(0, 10);
+  }
+
   /** Start-up: a learner already past a gate, or past the end of the core, gets the rows without any announcement. */
   backfill(): void {
     this.recordGates(null);
     this.syncCore(null, true);
+    this.syncWhole(null, true);
   }
 }

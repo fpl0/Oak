@@ -140,7 +140,11 @@ export interface TapEvent {
  * `F` / `J` for two voices) are captured only while armed; otherwise they keep their usual meaning.
  */
 export interface TapInput {
-  arm(opts?: { twoVoices?: boolean }): void;
+  /**
+   * `twoVoices`: two lanes at once, one key each (F and J, voices 0 and 1). Wave 7: `keys` names the two lanes' keys
+   * (`TapLane.key`: "f", "j", or a `KeyboardEvent.code`); two different keys other than Space, else F and J.
+   */
+  arm(opts?: { twoVoices?: boolean; keys?: readonly [string, string] }): void;
   disarm(): void;
   readonly armed: boolean;
   onTap(cb: (tap: TapEvent) => void): () => void;

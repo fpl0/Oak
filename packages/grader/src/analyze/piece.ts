@@ -7,6 +7,7 @@ import type {
   GradeResult,
   KeySpec,
   Layer,
+  NEvent,
 } from "@oak/content-kit";
 import { R, rat } from "@oak/content-kit";
 import type { ChordId } from "@oak/theory";
@@ -48,10 +49,24 @@ export interface Device {
 
 /** Chord slots of a piece: chord symbols when the events carry them, else the chord-role tracks; the bass is the lowest pitched learner note. */
 export function harmonySlots(n: Normalized): ChordSlot[] {
-  const symbolic = n.all.filter((e) => e.chordSymbol !== undefined);
+  const symbolic = heardSymbols(n.all);
   const chords =
     symbolic.length > 0 ? symbolic : tracksOfRole(n, "chords").flatMap((t) => n.byTrack[t] ?? []);
   return chordSlots(chords, { bass: pitched(n.all) });
+}
+/**
+ * The events whose chord symbol is heard as a chord (Wave 7 Build): a symbol counts where at least two of its
+ * pitch classes sound in that line during the bar, so `chord(changes).rootNotes(2)` under a muted chords line
+ * is a bass line, not the chords (a chord heard only as its root is not that chord). Unvoiced symbols (no
+ * pitch) and broken chords (`.arp()`, several pitch classes over the bar) keep their symbol.
+ */
+export function heardSymbols(events: readonly NEvent[]): NEvent[] {
+  const symbolic = events.filter((e) => e.chordSymbol !== undefined);
+  const pcs = new Map<string, Set<number>>();
+  const keyOf = (e: NEvent) => `${e.track}|${e.chordSymbol}|${R.floor(e.onset)}`;
+  for (const e of symbolic)
+    if (e.midi !== null) pcs.set(keyOf(e), (pcs.get(keyOf(e)) ?? new Set()).add(mod12(e.midi)));
+  return symbolic.filter((e) => e.midi === null || (pcs.get(keyOf(e))?.size ?? 0) >= 2);
 }
 const DOM = ["7", "9", "13", "7b9", "7#9", "7#11", "7b13", "7alt"];
 /** Bars a new key must last to be a modulation, and syncopated bass notes that make a device (CF-A). */
@@ -217,12 +232,15 @@ export function detectDevices(
           text: `${toLeadSheet(c)} tritone sub bar ${barOf(s)}`,
         });
       const after = slots[i + 2]?.chord;
+      // A secondary ii–V counts only where its target arrives (the chord after the V, a 5th below it).
       if (
         next &&
+        after &&
         ["m7", "m7b5", "m9"].includes(c.quality) &&
         DOM.includes(next.quality) &&
         mod12(next.rootPc - c.rootPc) === 5 &&
-        mod12(next.rootPc + 5 - tonic) !== 0
+        mod12(next.rootPc + 5 - tonic) !== 0 &&
+        after.rootPc === mod12(next.rootPc + 5)
       )
         out.push({ device: "secondary ii–V", bar: barOf(s), text: `secondary ii–V bar ${barOf(s)}` });
       if (
@@ -231,6 +249,8 @@ export function detectDevices(
         triadCore(c).quality === "min" &&
         mod12(c.rootPc - tonic) === 5 &&
         mod12(next.rootPc - tonic) === 10 &&
+        // The backdoor's ♭VII is a dominant (B♭7 in C): a ♭VIImaj7 or a triad is not one.
+        DOM.includes(next.quality) &&
         mod12(after.rootPc - tonic) === 0
       )
         out.push({ device: "backdoor", bar: barOf(s), text: `backdoor iv–♭VII–I bar ${barOf(s)}` });

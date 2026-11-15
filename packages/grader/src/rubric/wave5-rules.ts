@@ -9,7 +9,9 @@ import type { ChordId, KeySpec } from "@oak/theory";
 import {
   chordOf,
   degreeOf,
+  jazzBlues,
   METERS,
+  parseChordSymbol,
   parseRN,
   pcOf,
   rnToChord,
@@ -58,6 +60,21 @@ export function bassLineRule(
   const slots = slotsOf(n, r.harmony, { exclude: r.track });
   if (!slots.some((s) => s.chord)) return { ok: false, detail: "no chords to play the bass against" };
   const { notes, changes, rootsOnChange } = bassNotes(bass, slots, { ...ctx, ...(key ? { key } : {}) });
+  // Wave 7 Build (carry f4, corrections gate AS-52): a "bass" that plays above the chords is no bass. At most of its
+  // notes, something else sounds lower than it: the roots up at C5 over chords at C4 are a tune, not the floor.
+  const others = pitched(n.all).filter((e) => !bass.some((b) => b.id === e.id));
+  const above = bass.filter((b) =>
+    others.some(
+      (o) => R.lte(o.onset, b.onset) && R.lt(b.onset, R.add(o.onset, o.dur)) && o.midi < b.midi - 2,
+    ),
+  );
+  if (others.length > 0 && above.length > bass.length / 2)
+    return {
+      ok: false,
+      value: 0,
+      target: 1,
+      detail: `the bass sits above the chords at ${pct(above.length / bass.length)} of its notes: the bass is the lowest part, under everything else`,
+    };
   const parts: { ok: boolean; credit: number; text: string }[] = [];
   if (r.roots) {
     let ratio: number;
@@ -396,6 +413,88 @@ const PLAN_NUMERAL: Record<number, string> = {
  * many choruses as asked, the standard form also taking the quick change. A broken bar is named with the
  * numeral it should move to: "bar 5 should move to IV (F7); it stays on I (C7)".
  */
+/** Every event of the second twelve bars is an event of the first moved by twelve bars, and the other way round. */
+function choruseRepeat(n: Normalized, shift: number): boolean {
+  const key = (e: NEvent, by: number) =>
+    `${e.track}|${e.midi ?? e.drum ?? e.s ?? ""}|${R.toNum(R.sub(e.onset, rat(by)))}|${R.toNum(e.dur)}`;
+  const inChorus = (e: NEvent, c: number) => {
+    const bar = R.floor(e.onset) - shift;
+    return bar >= c * 12 && bar < (c + 1) * 12;
+  };
+  const first = n.all.filter((e) => inChorus(e, 0));
+  const second = n.all.filter((e) => inChorus(e, 1));
+  if (first.length === 0 || second.length === 0) return false;
+  const a = new Set(first.map((e) => key(e, 0)));
+  const b = new Set(second.map((e) => key(e, 12)));
+  return a.size === b.size && [...a].every((x) => b.has(x));
+}
+/** The jazz blues' numerals bar by bar, as @oak/theory `jazzBlues` writes the chart (J4.L02, JC2). */
+const JAZZ_NUMERALS: readonly (readonly string[])[] = [
+  ["I7"],
+  ["IV7"],
+  ["I7"],
+  ["v7", "I7"],
+  ["IV7"],
+  ["♯iv°7"],
+  ["I7"],
+  ["VI7"],
+  ["ii7"],
+  ["V7"],
+  ["I7", "VI7"],
+  ["ii7", "V7"],
+];
+/**
+ * A missed bar of a jazz blues, said against the jazz chart (Wave 7 integration; build-author-capstones-jazz-a): the
+ * standard twelve-bar plan said "bar 8 should stay on I (F7); it is I (F7)" to U11's blues under a jazz brief.
+ */
+function jazzBluesMiss(
+  wrongBars: readonly number[],
+  slots: readonly ChordSlot[],
+  k: KeySpec,
+  choruses: number,
+  windowBars: number,
+): RuleEval {
+  const bar = wrongBars[0] as number;
+  const i = (bar - 1) % 12;
+  const chart = jazzBlues(k.tonic)[i] ?? [];
+  const names = chart.map((c) => {
+    const id = parseChordSymbol(c);
+    return id ? toLeadSheet(id) : c;
+  });
+  const nums = JAZZ_NUMERALS[i] ?? [];
+  const want = nums.map((n, j) => `${n} (${names[j] ?? ""})`).join(" then ");
+  const prev = i === 0 ? null : (JAZZ_NUMERALS[i - 1] ?? []).join(" ");
+  const verb = i === 0 ? "be" : prev === nums.join(" ") ? "stay on" : "move to";
+  const per = chordPerBar(slots, bar)[bar - 1] ?? null;
+  // The numeral by root and triad quality, as the twelve-bar text says it (F7 in F is I, never V7/IV).
+  const planNum = per ? PLAN_NUMERAL[mod12(per.rootPc - pcOf(k.tonic))] : undefined;
+  const q = per ? triadCore(per).quality : null;
+  const num = !per
+    ? ""
+    : planNum && /^[IV]+$/.test(planNum) && q !== "maj"
+      ? q === "min"
+        ? planNum.toLowerCase()
+        : q === "dim"
+          ? `${planNum.toLowerCase()}°`
+          : romanShown(romanOf(per, k))
+      : (planNum ?? romanShown(romanOf(per, k)));
+  // Sevenths written as the jazz chart writes them (I7, ii7), beside the chart's own numerals.
+  const seventh: Record<string, string> = { "7": "7", m7: "7", maj7: "maj7", m7b5: "ø7", dim7: "7" };
+  const shown = per && !/\d/.test(num) ? `${num}${seventh[per.quality] ?? ""}` : num;
+  const got = per ? `${shown} (${toLeadSheet({ ...per, bassPc: per.rootPc })})` : "no chord";
+  const more =
+    wrongBars.length > 1 ? ` (and ${wrongBars.length - 1} more bar${wrongBars.length > 2 ? "s" : ""})` : "";
+  return {
+    ok: false,
+    value: 0,
+    target: choruses,
+    credit: Math.max(0, 1 - wrongBars.length / Math.max(12, windowBars)),
+    detail: `bar ${bar} of a jazz blues should ${verb} ${want}; it ${per ? `is ${got}` : "has no chord"}${more}`,
+    where: { bar },
+    extra: [diag("harmony.blues-bar", { bar, exp: want, got }, { bar })],
+  };
+}
+
 export function bluesFormRule(
   r: RuleOf<"blues-form">,
   n: Normalized,
@@ -424,11 +523,23 @@ export function bluesFormRule(
   if (!tonic) return { ok: false, detail: "no harmony found" };
   const k: KeySpec = { tonic: tonic.replace("♯", "#").replace("♭", "b"), mode: "major" };
   const choruses = r.choruses ?? 1;
-  const b = bluesForm(slots, k, windowBars);
+  let b = bluesForm(slots, k, windowBars);
   const accepted =
     b.variant === r.variant ||
     (r.variant === "standard" && b.variant === "quick-change") ||
     (r.variant === "quick-change" && r.quickChangeOk && b.variant === "standard");
+  // A jazz blues of two choruses: the second must not be the first again note for note (JC2's brief: `arrange([12,
+  // head], [12, head])` read as two choruses because the length comes from the code; build-author-capstones-jazz-a).
+  // C5's shipped brief (Wave 5) keeps its minimal piece, the riff on both choruses, as a pass.
+  const same =
+    r.variant === "jazz" && accepted && b.choruses >= choruses && choruses >= 2 && choruseRepeat(n, shift);
+  if (same)
+    return {
+      ok: false,
+      value: 1,
+      target: choruses,
+      detail: `${b.choruses} choruses written, but the second plays the first again note for note: change something in it (the tune, an answer, the comping)`,
+    };
   const ok = accepted && b.choruses >= choruses;
   if (ok)
     return {
@@ -437,7 +548,7 @@ export function bluesFormRule(
       target: choruses,
       detail: `${b.choruses} chorus${b.choruses === 1 ? "" : "es"} of ${b.variant === "quick-change" ? "quick-change" : b.variant} blues`,
     };
-  if (accepted || (b.variant !== null && b.wrongBars.length === 0)) {
+  if (accepted) {
     const need = choruses * 12;
     return {
       ok: false,
@@ -448,6 +559,17 @@ export function bluesFormRule(
       detail: `${b.choruses} chorus${b.choruses === 1 ? "" : "es"} (${b.choruses * 12} bars); the brief asks for ${choruses} (${need} bars): write the next chorus out with \`arrange([12, …], [12, …])\` and change something in it (the riff, an answer, the drums), since a chorus that only repeats the last one reads as the same 12 bars looping`,
     };
   }
+  // Another variant fits (a jazz blues under "standard"): name the first bar that breaks the variant asked for
+  // (Wave 7 Build; the jazz variant now takes bar 4's ii–V of IV, so it is no longer the closest by accident).
+  if (b.variant !== null) {
+    const asked: ("standard" | "quick-change" | "jazz")[] =
+      r.variant === "standard"
+        ? ["quick-change", "standard"]
+        : r.variant === "quick-change" && r.quickChangeOk
+          ? ["quick-change", "standard"]
+          : [r.variant];
+    b = bluesForm(slots, k, windowBars, asked);
+  }
   const bar = b.wrongBars[0];
   if (bar === undefined || windowBars < 12)
     return {
@@ -456,6 +578,7 @@ export function bluesFormRule(
       target: choruses,
       detail: `${windowBars} bars; a 12-bar blues needs 12 bars a chorus`,
     };
+  if (r.variant === "jazz") return jazzBluesMiss(b.wrongBars, slots, k, choruses, windowBars);
   const plan = twelveBarPlan({
     variant: r.variant === "quick-change" ? "quick-change" : "standard",
     turnaround: false,

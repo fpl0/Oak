@@ -13,7 +13,16 @@ import {
   OakApiError,
   type UnlockableId,
 } from "@oak/api";
-import { type FormView, formView, keyEstimate, modeView, type Normalized, normalize } from "@oak/grader";
+import {
+  type FormView,
+  formView,
+  keyEstimate,
+  modeView,
+  type Normalized,
+  normalize,
+  type SongMelodyNote,
+  type songFormOf,
+} from "@oak/grader";
 import type { Recording } from "@oak/strudel";
 import { sideOfCapstone } from "../album/model.ts";
 import { callApi } from "../lib/api.ts";
@@ -25,6 +34,7 @@ export { isSilentTake, recordPerformance, SILENT_PEAK, SILENT_TAKE } from "./rec
 
 import { hasPitches, MAX_CAPSTONE_BARS, pieceAnalysis, pieceBars, truncate } from "./piece.ts";
 import { audioErrorText } from "./release-text.ts";
+import { releasedVersionOf } from "./release-version.ts";
 
 export interface CheckOutcome {
   code: string;
@@ -49,12 +59,27 @@ export function lintFor(def: CapstoneDef, unlocked: ReadonlySet<UnlockableId>) {
   };
 }
 
+/**
+ * Wave 7: what a track capstone's check carries beyond the brief: the picked song's melody (JC3's model head, JC4's
+ * tune, AC1's tune; `song-melody-kept`, `contrafact`) and AC1's other version (`two-versions-differ`).
+ */
+export interface CheckExtras {
+  songMelody?: readonly SongMelodyNote[] | null;
+  otherVersion?: { id: "a" | "b"; code: string } | null;
+  /**
+   * The picked song's sections with its chart (`songFormOf`) for a brief that counts reharmonisation devices (JC4's
+   * `device-count`): the song's own devices are not the learner's (W7 gate; content CI grades the same way).
+   */
+  songForm?: NonNullable<ReturnType<typeof songFormOf>> | null;
+}
+
 /** Grades the brief in capstone mode and analyses the piece's first pass. */
 export async function checkPiece(
   def: CapstoneDef,
   code: string,
   unlocked: ReadonlySet<UnlockableId>,
   signal?: AbortSignal,
+  extras: CheckExtras = {},
 ): Promise<CheckOutcome> {
   const brief = def.brief;
   if (!brief) throw new Error(`${def.id} has no brief`);
@@ -87,6 +112,11 @@ export async function checkPiece(
         meter: def.meter,
         bpm: def.bpm ? Math.round((def.bpm[0] + def.bpm[1]) / 2) : 100,
         ...(def.swing ? { swing: def.swing } : {}),
+        ...(extras.songMelody && extras.songMelody.length > 0 ? { songMelody: extras.songMelody } : {}),
+        ...(extras.songForm ? { songForm: extras.songForm } : {}),
+        // A brief with no key of its own (JC1): the key above is the piece's reading, never "the brief's".
+        ...(def.key ? {} : { keyFree: true }),
+        ...(extras.otherVersion ? { otherVersion: extras.otherVersion } : {}),
         params: {},
         attemptNo: 1,
         firstAttempt: true,
@@ -260,7 +290,10 @@ export async function releaseTrack(i: ReleaseInput): Promise<ReleaseOutcome> {
           },
         });
   }
-  const version = track.currentVersion;
+  // The take is of the code released: AC1's release puts both of its versions on the one track (track version 1 is
+  // version one, 2 is version two; server capstone-release.ts), so the recording belongs to the track version whose
+  // draft this is, which is not always the newest (wave 7 closer: version one's take landed on version two).
+  const version = releasedVersionOf(track, i.sketchId, i.sketchVersion);
   let audioError: string | null = null;
   if (i.recording) {
     try {

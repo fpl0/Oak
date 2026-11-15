@@ -5,9 +5,14 @@ import type { KeySpec, MeterId, NEvent, PickupSpec, Rat, SwingSpec } from "@oak/
 import { parseRat, R } from "@oak/content-kit";
 import { evalHeadless } from "@oak/grader/testing";
 import { METERS, meterWith } from "@oak/theory";
+import translateChordJs from "abcjs/src/write/creation/translate-chord.js";
+
+const translateChord = translateChordJs;
+
 import {
   type AbcOptions,
   type AnnotationSet,
+  compingInput,
   type HarmonyLabelInput,
   harmonyLabels,
   keyChangesOf,
@@ -72,8 +77,29 @@ export interface CorpusEntry {
   /** A key plan (1-based bars; content-kit `KeyPlanEntry`): `keyChangesOf`, with the modal signature style. */
   keyPlan?: { bar: number; key: KeySpec }[];
   modal?: ModalSignatureStyle;
+  // --- Wave 7 -------------------------------------------------------------------------------------------------
+  /** Chord symbols in jazz glyphs (`NotationInput.chordStyle`). */
+  chordStyle?: NotationInput["chordStyle"];
+  /** Engrave this track's attacks as slash comping (`compingInput`) under `chords`. */
+  comping?: string;
+  showGrouping?: boolean;
+  brackets?: NotationInput["brackets"];
+  polyTuplets?: NotationInput["polyTuplets"];
+  cycleAccents?: NotationInput["cycleAccents"];
+  ghosts?: boolean;
+  trackVoices?: boolean;
+  /** False: read back and checked, but no snapshot (an answer key another author still edits). */
+  snapshot?: boolean;
   /** Golden facts: the note list of each (staff, voice), bars joined by " | ". */
   expect: {
+    /** Wave 7: the texts abcjs parsed above the top staff (bracket texts), in order. */
+    above?: string[];
+    /** Wave 7: how many elements carry an accent. */
+    accents?: number;
+    /** Wave 7: `ghostMarks` as "drum@onset". */
+    ghosts?: string[];
+    /** Wave 7: the time signature as written (`M:` line). */
+    meter?: string;
     /** Wave 6: what `scoreRhythm` must report (the fields given). */
     rhythm?: Partial<ScoreRhythm>;
     /** Wave 6: the key signatures written inside the tune, in order of first appearance per change (`[K:…]`). */
@@ -89,7 +115,7 @@ export interface CorpusEntry {
     /** Substrings the ABC must contain. */
     abc?: string[];
     staves?: string[];
-    /** Chord symbols as abcjs parses them (what the learner sees). */
+    /** Chord symbols as abcjs draws them (what the learner sees: its chord translation applied). */
     chordTexts?: string[];
     /** Roman numerals as abcjs parses them (annotations below the staff). */
     romanTexts?: string[];
@@ -100,6 +126,12 @@ export interface CorpusEntry {
     /** Wave 5: spelled pitch names of the top staff's first voice in time order, one per head ("Eb4"). */
     names?: string[];
   };
+}
+
+/** The grader's effective gain (`NEvent.gain`): (gain ?? 0.8) · (velocity ?? 1) · (postgain ?? 1). */
+function effectiveGain(v: Record<string, unknown>): number {
+  const n = (x: unknown, d: number) => (typeof x === "number" && Number.isFinite(x) ? x : d);
+  return n(v.gain, 0.8) * n(v.velocity, 1) * n(v.postgain, 1);
 }
 
 export async function eventsOf(
@@ -135,7 +167,7 @@ export async function eventsOf(
       ...(typeof note === "string" && !isN && !chordSymbol ? { written: note } : {}),
       ...(chordSymbol && h.midi !== null ? { chordSymbol } : {}),
       ...(h.s ? { s: h.s } : {}),
-      gain: 0.8,
+      gain: effectiveGain(h.value),
       ...(h.scale ? { scaleCtx: h.scale } : {}),
       locs: h.locations.map((l) => ({ from: l.start, to: l.end })),
     };
@@ -152,11 +184,21 @@ export function inputOf(e: CorpusEntry, events: NEvent[]): NotationInput {
       })
     : {};
   const labels = e.harmony ? harmonyLabels(e.harmony, e.pickup ? { pickup: true } : {}) : {};
+  const comp = e.comping
+    ? compingInput(events, {
+        track: e.comping,
+        meter: base.meter,
+        bars: e.bars,
+        ...(e.startBar !== undefined ? { startBar: e.startBar } : {}),
+        ...(e.chords ? { chords: e.chords } : {}),
+      })
+    : null;
   const input: NotationInput = {
     ...base,
     ...plan,
     ...labels,
     ...(e.grid !== undefined ? { grid: e.grid } : {}),
+    ...(comp ? { events: comp.events, staff: comp.staff, slashes: comp.slashes ?? false } : {}),
   };
   return e.host
     ? staffHostInput(input, { code: e.code, ...(e.hostSwing ? { swing: e.hostSwing } : {}) })
@@ -186,6 +228,13 @@ function baseInputOf(e: CorpusEntry, events: NEvent[]): NotationInput {
     ...(e.endsPiece !== undefined ? { endsPiece: e.endsPiece } : {}),
     ...(e.sections ? { sections: e.sections } : {}),
     ...(e.blues !== undefined ? { blues: e.blues } : {}),
+    ...(e.chordStyle ? { chordStyle: e.chordStyle } : {}),
+    ...(e.showGrouping ? { showGrouping: true } : {}),
+    ...(e.brackets ? { brackets: e.brackets } : {}),
+    ...(e.polyTuplets ? { polyTuplets: e.polyTuplets } : {}),
+    ...(e.cycleAccents ? { cycleAccents: e.cycleAccents } : {}),
+    ...(e.ghosts ? { ghosts: true } : {}),
+    ...(e.trackVoices ? { trackVoices: true } : {}),
   };
 }
 
@@ -213,6 +262,12 @@ export interface AbcCheck {
   parts: { si: number; vi: number; title: string }[];
   /** Every barline abcjs parsed on staff 0 voice 0, by type (`bar_thin`, `bar_thin_thin`, `bar_thin_thick`). */
   barTypes: string[];
+  /** Wave 7: per staff, per voice: the notehead style of each note element ("rhythm" for a slash, "" otherwise). */
+  styles: string[][][];
+  /** Wave 7: per staff, per voice: whether each note element carries an accent. */
+  accents: boolean[][][];
+  /** Wave 7: the time signature abcjs parsed (`2+2+3/8`). */
+  meter: string;
 }
 /** Parses with abcjs (headless) and returns what the renderer will see. */
 export function checkAbc(abc: string): AbcCheck {
@@ -225,6 +280,8 @@ export function checkAbc(abc: string): AbcCheck {
   const barNumbers: number[] = [];
   const parts: AbcCheck["parts"] = [];
   const barTypes: string[] = [];
+  const styles: string[][][] = [];
+  const accents: boolean[][][] = [];
   const clock: number[][] = [];
   for (const line of tune.lines) {
     const n0 = line.staff?.[0]?.barNumber;
@@ -239,6 +296,14 @@ export function checkAbc(abc: string): AbcCheck {
         const cls = staffClasses[vi] ?? [];
         staffTotals[vi] = totals;
         staffClasses[vi] = cls;
+        const stStaff = styles[si] ?? [];
+        styles[si] = stStaff;
+        const acStaff = accents[si] ?? [];
+        accents[si] = acStaff;
+        const st = stStaff[vi] ?? [];
+        stStaff[vi] = st;
+        const ac = acStaff[vi] ?? [];
+        acStaff[vi] = ac;
         let total = 0;
         let mult = 1;
         let left = 0;
@@ -259,13 +324,21 @@ export function checkAbc(abc: string): AbcCheck {
             const d = el.duration * (left > 0 ? mult : 1);
             total += d;
             if (left > 0) left--;
-            if (!el.rest) cls.push(el.extraClass ?? "");
+            if (!el.rest) {
+              cls.push(el.extraClass ?? "");
+              st.push(el.style ?? "");
+              ac.push((el.decoration ?? []).includes("accent"));
+            }
             if (si === 0 && vi === 0 && !el.rest)
               lyrics.push(el.lyric?.map((l: { syllable: string }) => l.syllable).join("") ?? null);
             for (const c of el.chord ?? []) {
-              if (c.position === "default") chordTexts.push(c.name);
-              if (c.position === "default" || c.position === "below")
-                labels.push({ si, vi, onset: Math.round(t * 1e9) / 1e9, text: c.name, position: c.position });
+              // What abcjs draws: its own chord translation (it cuts a "/" that starts no bass note), the
+              // division slash Oak writes for one (`abcChordText`) read back as the slash it looks like.
+              const drawn =
+                c.position === "default" ? translateChord(c.name, false, false).replace(/∕/g, "/") : c.name;
+              if (c.position === "default") chordTexts.push(drawn);
+              if (c.position === "default" || c.position === "below" || c.position === "above")
+                labels.push({ si, vi, onset: Math.round(t * 1e9) / 1e9, text: drawn, position: c.position });
             }
             t += d;
           }
@@ -274,7 +347,11 @@ export function checkAbc(abc: string): AbcCheck {
       });
     });
   }
+  const m0 = tune.lines[0]?.staff?.[0]?.meter?.value?.[0];
   return {
+    styles,
+    accents,
+    meter: m0 ? `${m0.num}/${m0.den}` : "",
     warnings: tune.warnings ?? [],
     barTotals,
     classes,

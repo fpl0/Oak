@@ -140,6 +140,71 @@ export const milestones: readonly MilestoneDef[] = [
     description: "Form, bass, changes and melody of a 1920s standard, taken down by ear and arranged.",
     when: { capstones: ["CF-T"] },
   }),
+  // Wave 7: the advanced tracks. One milestone per thing the learner can now do, and the end of the course.
+  defineMilestone({
+    id: "ms.21",
+    title: "You can now comp a ii–V–I.",
+    description:
+      "Shell voicings of your own, swinging over a walking bass: the sound of a jazz rhythm section.",
+    when: { sessions: ["J1.L05"] },
+  }),
+  defineMilestone({
+    id: "ms.22",
+    title: "You can now walk a bass line.",
+    description: "A note on every beat, roots on the strong ones, a step into every change.",
+    when: { sessions: ["J3.L04"] },
+  }),
+  defineMilestone({
+    id: "ms.23",
+    title: "You can now reharmonise a tune.",
+    description: "Tritone substitutes, the backdoor and secondary ii–Vs under a melody that does not change.",
+    when: { sessions: ["J5.L04"] },
+  }),
+  defineMilestone({
+    id: "ms.24",
+    title: "You can now write a funk pocket.",
+    description:
+      "Ghosted sixteenths, a syncopated bass that still lands on the one, and horn stabs, released.",
+    when: { capstones: ["RC1"] },
+  }),
+  defineMilestone({
+    id: "ms.25",
+    title: "You can now play three against two.",
+    description:
+      "Two pulses at once, meeting on the downbeat: the polyrhythm under Afro-Cuban and West African music.",
+    when: { sessions: ["R2.L04"] },
+  }),
+  defineMilestone({
+    id: "ms.26",
+    title: "You can now shape a sound.",
+    description:
+      "Waves, filters, envelopes, space, grit, movement and FM: every sound in your songs is yours.",
+    when: { sessions: ["A1.L07"] },
+  }),
+  defineMilestone({
+    id: "ms.27",
+    title: "You can now arrange one tune two ways.",
+    description:
+      "The same melody in two genres, with its own tempo, feel and instruments each time, released.",
+    when: { capstones: ["AC1"] },
+  }),
+  defineMilestone({
+    id: "ms.28",
+    title: "You have completed Oak.",
+    description:
+      "Every unit, every track and every capstone: twenty album tracks, and two songs and a standard taken down by ear. What you write next is up to you; Studio and the sketchbook stay open for it.",
+    // Every capstone released (a capstone gates no lesson, so each is named) and the last lesson and checkpoint
+    // of each track: with them every one of the 259 sessions is done but the gym slots, which are scheduling, not
+    // sessions of the map (contracts §2.5, §2.7; content/validate/wave7.test.ts proves the coverage).
+    when: {
+      sessions: ["J5.L05", "J.CP2", "R.CP", "A.CP"],
+      // biome-ignore format: the core's capstones, then the tracks'
+      capstones: [
+        "C0", "C1", "C2", "X1", "C3", "C4", "C5", "X2", "C6", "C7", "CF-A", "CF-T",
+        "JC1", "JC2", "JC3", "JC4", "RC1", "RC2", "AC1", "AC2",
+      ],
+    },
+  }),
 ];
 export default milestones;
 

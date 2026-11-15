@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import type { SyllabusDef, ToolEntry } from "@oak/content-kit";
 import { syllabus } from "../../../../content/syllabus.ts";
 import { toolbox } from "../../../../content/toolbox.ts";
+import { TRACK_LENS_GATES } from "../../lib/lenses.ts";
 import { WORKBENCH_LENS_SHORTCUTS } from "../../workbench/shortcuts.ts";
+import { TRACK_LENS_OF_KEY } from "../shell/track-lenses.ts";
 import { opensWith, rowLock, WORKBENCH_KEY_ANY_UNLOCKS, WORKBENCH_KEY_UNLOCKS } from "./locks.ts";
 
 const S = syllabus as unknown as SyllabusDef;
@@ -67,5 +69,32 @@ describe("locked rows in the shortcut sheet", () => {
     expect(rowLock("editor", "Mod+Enter", none, true, T, S)).toBeNull();
     expect(rowLock("workbench", "L", none, true, T, S)).toBeNull();
     expect(rowLock("workbench", "Shift+W", none, true, T, S)?.note).toMatch(/^Opens with the side lesson /);
+  });
+
+  test("Wave 7: a track lens key opens with its tool or its lesson; nothing is marked before the progress loads", () => {
+    const none = new Set<string>();
+    // Every track lens key the Workbench lists has a gate, and the gates' tools are real toolbox rows.
+    const listed = new Set(WORKBENCH_LENS_SHORTCUTS.map(([k]) => k));
+    for (const [keys, lens] of Object.entries(TRACK_LENS_OF_KEY)) {
+      expect({ keys, listed: listed.has(keys) }).toEqual({ keys, listed: true });
+      for (const t of TRACK_LENS_GATES[lens].tools)
+        expect({ t, known: ids.has(t) }).toEqual({ t, known: true });
+    }
+    expect(rowLock("workbench", "Shift+X", none, true, T, S, null)).toBeNull();
+    expect(rowLock("workbench", "Shift+X", none, true, T, S, new Set())).toEqual({
+      locked: true,
+      note: "Opens with J2.L03 Extensions",
+    });
+    expect(rowLock("workbench", "Shift+D", none, true, T, S, new Set())?.note).toMatch(
+      /^Opens with A2\.L02 /,
+    );
+    // The lesson opens it; so does the tool, wherever it unlocks.
+    expect(rowLock("workbench", "Shift+X", none, true, T, S, new Set(["J2.L03"]))).toBeNull();
+    expect(rowLock("workbench", "Shift+X", new Set(["chord.ext"]), true, T, S, new Set())).toBeNull();
+    expect(rowLock("workbench", "Shift+Q", new Set(["scale.altered"]), true, T, S, new Set())).toBeNull();
+    // Density has no tool: only its lesson opens it.
+    expect(
+      rowLock("workbench", "Shift+D", new Set(T.map((t) => t.id as string)), true, T, S, new Set())?.locked,
+    ).toBe(true);
   });
 });

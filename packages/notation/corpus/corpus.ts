@@ -7,6 +7,7 @@
 // corpus-w5.ts) cover minor keys, blues, swing, bass lines, sections and the U08–U11 material.
 import { CORPUS_W5 } from "./corpus-w5.ts";
 import { CORPUS_W6 } from "./corpus-w6.ts";
+import { CORPUS_W7 } from "./corpus-w7.ts";
 import type { CorpusEntry } from "./harness.ts";
 
 export const CORPUS: CorpusEntry[] = [
@@ -3663,4 +3664,6 @@ export const CORPUS: CorpusEntry[] = [
   ...CORPUS_W5,
   // --- Wave 6 (corpus-w6.ts) ----------------------------------------------------------------------
   ...CORPUS_W6,
+  // --- Wave 7 (corpus-w7.ts) ----------------------------------------------------------------------
+  ...CORPUS_W7,
 ];

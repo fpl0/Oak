@@ -173,33 +173,59 @@ export function fakeTryCode(oakContext: string | null | undefined): string {
   ].join("\n");
 }
 
-/** A capstone review that satisfies contracts §10.6 for a piece of `bars` bars with `revisions` revisions. */
+/**
+ * Wave 7 (AC1): the labels of the versions a review must tell apart, read from Oak's context line
+ * `versions: a "Version one" · b "Version two" · the review compares them…`; empty for a one-version capstone.
+ */
+export function fakeVersionLabels(oakContext: string | null | undefined): string[] {
+  const line = /^versions: (.*)$/m.exec(oakContext ?? "")?.[1] ?? "";
+  return [...line.matchAll(/(?:^|· )[ab] "([^"]+)"/g)].map((m) => m[1] as string);
+}
+
+/**
+ * A capstone review that satisfies contracts §10.6 for a piece of `bars` bars with `revisions` revisions. With two
+ * versions (AC1), each strength and revision names the version it is about, alternating between them.
+ */
 export function fakeCapstoneReview(
   revisions: number,
   bars: number,
   tryCode: string = FAKE_CARD_CODE,
   strengths: 2 | 3 = 2,
+  versions: readonly string[] = [],
 ) {
   const span = (a: number, b: number): [number, number] => [Math.min(a, bars), Math.min(b, bars)];
+  const about = (i: number, text: string) =>
+    versions.length > 1
+      ? `In ${versions[i % versions.length]}: ${text.charAt(0).toLowerCase()}${text.slice(1)}`
+      : text;
   const rev = (i: number) => ({
     title: i === 0 ? "Land the last phrase on 1" : "Thin the chords in bar 2",
     bars: span(i === 0 ? 3 : 2, i === 0 ? 4 : 2),
-    why: "The melody ends on 5, so the loop sounds open. Ending on 1 over the tonic chord closes the phrase.",
+    why: about(
+      i,
+      "The melody ends on 5, so the loop sounds open. Ending on 1 over the tonic chord closes the phrase.",
+    ),
     tryCode,
     skills: [],
   });
   return {
     strengths: [
-      { text: "The bass and kick lock together on beat 1, so the groove feels steady.", bars: span(1, 2) },
       {
-        text: "The melody outlines each chord above the bass, so every bar sounds settled.",
+        text: about(0, "The bass and kick lock together on beat 1, so the groove feels steady."),
+        bars: span(1, 2),
+      },
+      {
+        text: about(1, "The melody outlines each chord above the bass, so every bar sounds settled."),
         bars: span(1, 1),
       },
       // CF-A (strengths_wanted: 3): a third, anchored to the piece's last bars.
       ...(strengths === 3
         ? [
             {
-              text: "The last phrase comes home to 1 under the home chord, so the song ends settled.",
+              text: about(
+                2,
+                "The last phrase comes home to 1 under the home chord, so the song ends settled.",
+              ),
               bars: span(bars, bars),
             },
           ]
@@ -415,7 +441,13 @@ export class FakeTutorBackend implements TutorBackend {
       await sleep(this.#delay * 4, signal);
       n++;
       const raw = capstone
-        ? fakeCapstoneReview(revisions, bars, fakeTryCode(input.user.oakContext), strengths)
+        ? fakeCapstoneReview(
+            revisions,
+            bars,
+            fakeTryCode(input.user.oakContext),
+            strengths,
+            fakeVersionLabels(input.user.oakContext),
+          )
         : fakeTranscriptionReview(revisions, bars);
       const check = await input.validate(raw, signal);
       if (check.ok) return { value: check.value, ...this.#usage(n) };

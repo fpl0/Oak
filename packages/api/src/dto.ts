@@ -185,6 +185,21 @@ export const LensPrefsSchema = z.strictObject({
   keyPlan: z.boolean().optional(),
   /** Wave 6: the beat grid of a compound meter, or of triplets, on the roll. Absent = on. Gated by U13.L04 / L05. */
   beatGrid: z.boolean().optional(),
+  /**
+   * Wave 7 (docs/design/wave7.md §4.3): the advanced tracks' lenses, each absent = on and shown only once its
+   * lesson or tool has opened it (`TRACK_LENS_GATES` in app/src/lib/lenses.ts): the 9, 11 and 13 of each melody
+   * note against its chord with avoid notes marked; the type of each voicing; the chord-scale of each chord; the
+   * two-bar clave grid; polyrhythm and polymeter lanes on the roll; how far each onset sits from the grid; register
+   * bands on the spectrum panel; a density strip per section.
+   */
+  tensions: z.boolean().optional(),
+  voicings: z.boolean().optional(),
+  chordScales: z.boolean().optional(),
+  clave: z.boolean().optional(),
+  polyLanes: z.boolean().optional(),
+  microtiming: z.boolean().optional(),
+  registers: z.boolean().optional(),
+  density: z.boolean().optional(),
 });
 export type LensPrefs = z.infer<typeof LensPrefsSchema>;
 export const LENS_IDS = ["degrees", "solfege", "noteNames"] as const;
@@ -198,6 +213,18 @@ export type LineLensId = (typeof LINE_LENS_IDS)[number];
 /** Wave 6: the harmony and time lenses of U12–U17 (guide tones, the key plan, the compound / triplet beat grid). */
 export const MUSIC_LENS_IDS = ["guideTones", "keyPlan", "beatGrid"] as const;
 export type MusicLensId = (typeof MUSIC_LENS_IDS)[number];
+/** Wave 7: the advanced tracks' lenses (jazz harmony, rhythm, sound), stored beside the others. */
+export const TRACK_LENS_IDS = [
+  "tensions",
+  "voicings",
+  "chordScales",
+  "clave",
+  "polyLanes",
+  "microtiming",
+  "registers",
+  "density",
+] as const;
+export type TrackLensId = (typeof TRACK_LENS_IDS)[number];
 
 /** `settings` rows by key. `PUT /api/settings/:key` validates the value with this shape's entry. */
 export const SettingsSchema = z.object({
@@ -390,6 +417,14 @@ export const SkillStateSchema = z.object({
   /** Its stale cards are in today's planned warm-up: draw it drying, with "Revive". */
   drying: z.boolean(),
   updatedAt: Instant,
+  /**
+   * Wave 7 (carry f1; docs/design/wave7.md §5.6): when the skill was first introduced to this learner (the first
+   * evidence from its introducing lesson, or the backfilled completion of that lesson), never changed afterwards.
+   * The illustrated Oak marks a leaf "newly learned" for 48 hours after it. `updatedAt` is when the state was last
+   * recalculated and is NOT an introduction date. `null` while the skill is not introduced; absent from an older
+   * server.
+   */
+  introducedAt: Instant.nullable().optional(),
 });
 export type SkillState = z.infer<typeof SkillStateSchema>;
 export const SkillMapSchema = z.object({ nodes: z.array(SkillStateSchema), reviveSec: z.number() });
@@ -779,6 +814,39 @@ export const TrackStateSchema = z.object({
    * lessons are still being written.", "Next: J1.L01 Swing Feel & the Ride." Never a count of what is missing.
    */
   note: z.string(),
+  /**
+   * Wave 7 (docs/design/wave7.md §5.2). `nextSession`: the next thing of the track the learner may start now —
+   * a lesson, the track checkpoint or a capstone session (`next` above stays the next LESSON only); `null` when
+   * nothing of the track can be started. `focus`: the learner chose this track (`tracks.focus`). `checkpoints` and
+   * `capstones`: the track's checkpoints and capstones with their status. All absent from an older server.
+   */
+  nextSession: z
+    .object({
+      kind: z.enum(["lesson", "checkpoint", "capstone"]),
+      mapItemId: SessionIdSchema,
+      title: z.string(),
+      estMinutes: z.number().nonnegative(),
+    })
+    .nullable()
+    .optional(),
+  focus: z.boolean().optional(),
+  checkpoints: z
+    .array(
+      z.object({
+        cpId: checkpointId,
+        status: z.enum(["locked", "open", "passed", "soft-passed", "failed"]),
+      }),
+    )
+    .optional(),
+  capstones: z
+    .array(
+      z.object({
+        capstoneId,
+        status: z.enum(["locked", "open", "in_progress", "released"]),
+        lockedReason: z.string().nullable(),
+      }),
+    )
+    .optional(),
 });
 export type TrackState = z.infer<typeof TrackStateSchema>;
 /** `GET /tracks`. */
@@ -914,6 +982,8 @@ export const CourseProgressSchema = z.object({
   /** Wave 6 (wave6.md §5.3, §5.5): the advanced tracks with their gates, and where the core stands. */
   tracks: z.array(TrackStateSchema).optional(),
   core: z.enum(CORE_STAGES).optional(),
+  /** Wave 7 (wave7.md §5.8): the whole course's stage; `mapTotal` counts 259 once a track has lessons. */
+  course: z.enum(["in-progress", "complete"]).optional(),
 });
 export type CourseProgress = z.infer<typeof CourseProgressSchema>;
 
@@ -924,6 +994,8 @@ export const AttemptResponseSchema = z.union([
   z.strictObject({ order: z.array(z.string()) }),
   z.strictObject({ answer: AnswerSchema }),
   z.strictObject({ taps: z.array(z.number()) }),
+  /** Wave 7 (`tap.lanes`, R2.L04 and R.CP): two lanes tapped at once, one per hand, each in seconds. */
+  z.strictObject({ lanes: z.array(z.array(z.number()).max(512)).min(2).max(4) }),
   z.strictObject({
     sung: z.array(
       z.strictObject({ midi: z.number().nullable(), cents: z.number().nullable(), credit: z.number() }),
@@ -1151,10 +1223,20 @@ export const CapstoneSessionCompleteSchema = z.strictObject({
   flavour: flavour.nullable(),
 });
 
+/**
+ * Wave 7: what a gym session after the core serves (app/src/transcribe gym-after-core.ts `GymSource`): the learner's
+ * own audio, a repertoire song, an analysis, a jazz form in a key, a rhythm item.
+ */
+export const GymSourceSchema = z
+  .string()
+  .max(120)
+  .regex(/^(?:own|song|analysis|jazz|rhythm):[A-Za-z0-9._#♭♯:-]+$/);
 export const GymSessionCreateSchema = z.strictObject({
   sessionId: z.string().nullable(),
   kind: z.enum(["ladder", "own-audio"]),
   transcriptionId: z.string().nullable(),
+  /** Wave 7: the source served (absent: none recorded, as before). */
+  source: GymSourceSchema.nullable().optional(),
 });
 /** `gym_sessions` row. The ID is the next free `GYM.nn` when the session starts. */
 export const GymSessionSchema = z.object({
@@ -1166,6 +1248,8 @@ export const GymSessionSchema = z.object({
   realism: z.number().int().min(0).max(4).nullable(),
   transcriptionId: z.string().nullable(),
   at: Instant,
+  /** Wave 7: the source this session served, kept so the two-week rule survives devices and backups. */
+  source: GymSourceSchema.nullable().optional(),
 });
 export type GymSession = z.infer<typeof GymSessionSchema>;
 
@@ -1181,6 +1265,92 @@ export const SESSION_KINDS = [
   "studio",
   "review",
 ] as const;
+// --- Wave 7 shared shapes (docs/design/wave7.md §5): the next session, track offers, the whole course ----------
+
+/**
+ * One session the planner would run, as the Coda's "next" line, Today's track offers and a track's next session
+ * show it (carry f6: taken from the planner, never composed in the app). `goal` is the session's objective as the
+ * content states it (a lesson's objective, a capstone session's goal, "Transcription Gym: ladder L6"). `day` says
+ * when the planner would run it: `tomorrow` (the next learner day), `today` (a "one more" offer after the planned
+ * session) or `later` (an alternative).
+ */
+export const NextSessionSchema = z.object({
+  kind: z.enum(SESSION_KINDS),
+  /** A lesson, checkpoint, capstone session or `GYM.nn`; `null` for a reviews-only or Studio day. */
+  mapItemId: SessionIdSchema.nullable(),
+  title: z.string(),
+  goal: z.string(),
+  estMinutes: z.number().nonnegative(),
+  /** The advanced track it belongs to; `null` for the core, the gym and reviews. */
+  trackId: z.enum(["J", "R", "A"]).nullable(),
+  /** It fills the every-5th transcription slot, and with what (as `SessionPlan.slot.fills`); `null` otherwise. */
+  slot: z.enum(["gym", "cf-t", "x"]).nullable(),
+  day: z.enum(["today", "tomorrow", "later"]),
+});
+export type NextSession = z.infer<typeof NextSessionSchema>;
+
+/**
+ * Where the learner's attention goes between the core and the tracks (contracts §2.6: order inside a track is fixed,
+ * order between tracks is the learner's). `core` (the default, and what `null` means): the core's next item is the
+ * New block while the core is unfinished, and open tracks are offered beside it. A track id: that track's next
+ * session is the New block; the core's next item becomes the first alternative. A due core checkpoint stays the New
+ * block whatever the focus (it is scheduled, §7.6), and a focus on a track with nothing open falls back to `core`
+ * for that day (`SessionPlan.note` says so).
+ */
+export const TRACK_FOCUS = ["core", "J", "R", "A"] as const;
+export type TrackFocusId = (typeof TRACK_FOCUS)[number];
+export const TrackFocusSetSchema = z.strictObject({ focus: z.enum(TRACK_FOCUS) });
+export type TrackFocusSet = z.infer<typeof TrackFocusSetSchema>;
+export const TrackFocusSchema = z.object({
+  focus: z.enum(TRACK_FOCUS),
+  /** When the learner last chose; `null` while they never did (the default `core`). */
+  chosenAt: Instant.nullable(),
+});
+export type TrackFocus = z.infer<typeof TrackFocusSchema>;
+
+/** One open track Today may offer instead of (or, with a focus, as) the New block. */
+export const TrackOfferSchema = z.object({
+  trackId: z.enum(["J", "R", "A"]),
+  title: z.string(),
+  next: NextSessionSchema,
+  /** Sessions done and in the track. */
+  sessionsDone: z.number().int().nonnegative(),
+  sessionsTotal: z.number().int().nonnegative(),
+  /** One plain line: "Jazz Harmony · next: J1.L03 The Major ii–V–I (about 20 minutes)". */
+  note: z.string(),
+});
+export type TrackOffer = z.infer<typeof TrackOfferSchema>;
+
+/**
+ * The whole course (contracts §2.7: 259 sessions — the core's 185 and the tracks' 74). `stage`: `in-progress`
+ * until every lesson and checkpoint of the core and of all three tracks is done (passed or soft-passed) and every
+ * capstone released; then `complete`. Session 259 is the last of those in whatever order the learner took them.
+ */
+export const COURSE_STAGES = ["in-progress", "complete"] as const;
+export const WholeCourseSchema = z.object({
+  stage: z.enum(COURSE_STAGES),
+  completedAt: Instant.nullable(),
+  /** The session whose Coda carried the moment; `null` before. */
+  sessionId: z.string().nullable(),
+  sessionsDone: z.number().int().nonnegative(),
+  sessionsTotal: z.number().int().positive(),
+  core: z.enum(CORE_STAGES),
+  tracks: z.array(TrackStateSchema),
+  /** The album: released tracks of the course's capstones (Side A 12, Side B 8). */
+  album: z.object({
+    released: z.number().int().nonnegative(),
+    total: z.number().int().positive(),
+    latestTrackId: z.string().nullable(),
+  }),
+  /** The learner's own numbers, as `CoreCompletion.stats`. */
+  stats: CoreCompletionSchema.shape.stats,
+  /** What the learner can now do, newest first, at most 10 (one per area plus the tracks' own). */
+  canDo: CoreCompletionSchema.shape.canDo,
+  /** What stays open after the course: the gym (L8 on other standards, own audio), Studio, reviews, replays. */
+  open: CoreCompletionSchema.shape.open,
+});
+export type WholeCourse = z.infer<typeof WholeCourseSchema>;
+
 export const SessionPlanSchema = z.object({
   day: Day,
   targetMinutes: TargetMinutesSchema,
@@ -1254,6 +1424,24 @@ export const SessionPlanSchema = z.object({
    * `complete`: session 185 is done and today is a review, gym or Studio day. Absent or `in-progress` before.
    */
   core: z.enum(["in-progress", "lessons-done", "complete"]).optional(),
+  /**
+   * Wave 7 (docs/design/wave7.md §5.2). `track`: the New block is a track session, and where it stands in its track.
+   * `trackOffers`: the open tracks with a session the learner may start now, in the order J, R, A with the focused
+   * track first (Today shows them beside the New block; `alternatives` keeps listing them too). `focus`: the learner's
+   * choice (`tracks.focus`). `course`: `complete` once the whole course is (wave7.md §5.8). All absent from an older
+   * server.
+   */
+  track: z
+    .object({
+      trackId: z.enum(["J", "R", "A"]),
+      sessionIndex: z.number().int().positive(),
+      sessionsTotal: z.number().int().positive(),
+    })
+    .nullable()
+    .optional(),
+  trackOffers: z.array(TrackOfferSchema).optional(),
+  focus: z.enum(TRACK_FOCUS).optional(),
+  course: z.enum(COURSE_STAGES).optional(),
 });
 export type SessionPlan = z.infer<typeof SessionPlanSchema>;
 
@@ -1350,6 +1538,15 @@ export const SessionSummarySchema = z.object({
     })
     .nullable()
     .optional(),
+  /**
+   * Wave 7 (carry f6; wave7.md §5.7): the planner's real next session — what Today will plan on the next learner day
+   * given everything this session changed (a track lesson, a checkpoint, a capstone session, a gym slot, a reviews
+   * day). The Coda's "next" line is drawn from it, never composed in the app. `null` when nothing is planned (the
+   * whole course complete and nothing due); absent from an older server.
+   */
+  next: NextSessionSchema.nullable().optional(),
+  /** Wave 7 (wave7.md §5.8): set in the summary of the session that completed the WHOLE course, once. */
+  courseComplete: WholeCourseSchema.nullable().optional(),
 });
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;
 
@@ -1497,7 +1694,25 @@ export const AlbumTrackSchema = z.object({
 export type AlbumTrack = z.infer<typeof AlbumTrackSchema>;
 export const AlbumTrackDetailSchema = AlbumTrackSchema.extend({ versions: z.array(AlbumTrackVersionSchema) });
 export type AlbumTrackDetail = z.infer<typeof AlbumTrackDetailSchema>;
-export const AlbumSchema = z.object({ tracks: z.array(AlbumTrackSchema) });
+export const AlbumSchema = z.object({
+  tracks: z.array(AlbumTrackSchema),
+  /**
+   * Wave 7 (wave7.md §5.5): the two sides of the record. Side A: the twelve core capstones; Side B: the eight
+   * advanced-track capstones (`ALBUM_SIDES`). `released` counts released tracks of the side. Absent from an older
+   * server (then every track is Side A, B-sides apart).
+   */
+  sides: z
+    .array(
+      z.object({
+        side: z.enum(["A", "B"]),
+        title: z.string(),
+        released: z.number().int().nonnegative(),
+        total: z.number().int().positive(),
+      }),
+    )
+    .optional(),
+});
+export type Album = z.infer<typeof AlbumSchema>;
 const trackVersionInput = {
   sketchId: z.string(),
   sketchVersion: z.number().int().positive(),
@@ -2408,6 +2623,23 @@ export const CapstoneSessionsSchema = z.object({
   sessions: z.array(CapstoneSessionStateSchema),
   /** The session to work in next (`X1.S2`), `null` once all are done. */
   current: capstoneSessionId.nullable(),
+  /**
+   * Wave 7 (docs/design/wave7.md §5.4; content-kit `CapstoneDef.versions`, AC1 "One Tune, Two Genres"): a capstone
+   * made of two pieces of code, each its own draft (its own sketch), released together as one album track with both
+   * versions. Absent for every other capstone and from an older server.
+   */
+  versions: z
+    .array(
+      z.object({
+        id: z.enum(["a", "b"]),
+        label: z.string(),
+        startsIn: capstoneSessionId,
+        draft: z
+          .object({ sketchId: z.string(), sketchVersion: z.number().int().positive(), savedAt: Instant })
+          .nullable(),
+      }),
+    )
+    .optional(),
 });
 export type CapstoneSessions = z.infer<typeof CapstoneSessionsSchema>;
 /** `POST /capstones/:id/drafts`: a draft saved in a capstone session (also counts as the session's Make). */
@@ -2416,6 +2648,8 @@ export const CapstoneDraftSaveSchema = z.strictObject({
   sessionId: z.string().nullable(),
   sketchId: z.string(),
   sketchVersion: z.number().int().positive(),
+  /** Wave 7: which version of a two-version capstone this draft belongs to (AC1); absent for every other capstone. */
+  versionId: z.enum(["a", "b"]).optional(),
 });
 export type CapstoneDraftSave = z.infer<typeof CapstoneDraftSaveSchema>;
 /** `POST /capstones/:id/checks/:checkId`: one transcribe-capstone check (or stage) graded in the browser. */
@@ -2450,6 +2684,22 @@ export const CapstoneGateSchema = z.object({
   gymSetsToOpen: z.number().int().nonnegative().nullable(),
   /** The one line Today and the capstone page show while closed ("Two more gym sets open X1"); `null` when open. */
   message: z.string().nullable(),
+  /**
+   * Wave 7 (wave7.md §5.3): a capstone whose tunes open separately (AC1: St. Louis Blues with the capstone, Sweet
+   * Georgia Brown once U15.L05 is completed, and only songs whose answer key passed review are listed). Absent for
+   * every other capstone.
+   */
+  tunes: z
+    .array(
+      z.object({
+        songId: z.string(),
+        title: z.string(),
+        open: z.boolean(),
+        /** Why it is closed ("Opens after U15.L05"), or `null`. */
+        reason: z.string().nullable(),
+      }),
+    )
+    .optional(),
 });
 export type CapstoneGate = z.infer<typeof CapstoneGateSchema>;
 
@@ -2925,3 +3175,150 @@ export const WAVE6_SEED_POINTS = [
   "second tab (d21)",
 ] as const;
 export type Wave6SeedPoint = (typeof WAVE6_SEED_POINTS)[number];
+
+// --- Wave 7 additions (docs/design/wave7.md §5) ----------------------------------------------------
+// The advanced tracks (contracts §2.6): track lessons as sessions, the learner's choice between tracks, the track
+// checkpoints that gate only track capstones, JC1–JC4, RC1–RC2, AC1–AC2 and their gates, sounds that unlock at a
+// capstone session, the album's Side B, export, the planner's real next session and the whole course complete.
+// Additive: existing shapes only gained optional fields (above, before the schemas that carry them); every new
+// endpoint answers a typed 501 until the server engineer builds it (`WAVE7_ENDPOINTS` in contract.ts).
+
+/** Sessions per part of the course (contracts §2.7). The map counts the tracks once a track lesson is authored. */
+export const COURSE_SESSIONS = { core: 185, J: 34, R: 20, A: 20, total: 259 } as const;
+
+/**
+ * The track checkpoints (contracts §2.6, §7.6 rule 5): each covers part of its track and gates ONLY that track's
+ * capstones (never a lesson). `afterLesson` is the last lesson it covers (it opens when that lesson is completed
+ * and the planner places it after any one intervening session). J5.L05 (Coltrane changes) is enrichment and in no
+ * checkpoint; J2.L04 belongs to J.CP2 so J.CP1 never waits for U14.CP. A lesson the content lead splits (wave7.md
+ * §0, f9) joins its original's checkpoint.
+ */
+export const TRACK_CHECKPOINTS = [
+  { cpId: "J.CP1", trackId: "J", covers: "J1, J2.L01–L03", afterLesson: "J2.L03", gates: ["JC1"] },
+  {
+    cpId: "J.CP2",
+    trackId: "J",
+    covers: "J2.L04, J3, J4, J5.L01–L04",
+    afterLesson: "J5.L04",
+    gates: ["JC3", "JC4"],
+  },
+  { cpId: "R.CP", trackId: "R", covers: "R1–R3", afterLesson: "R3.L05", gates: ["RC1", "RC2"] },
+  { cpId: "A.CP", trackId: "A", covers: "A1–A2", afterLesson: "A2.L06", gates: ["AC1", "AC2"] },
+] as const satisfies readonly {
+  cpId: string;
+  trackId: TrackId;
+  covers: string;
+  afterLesson: string;
+  gates: readonly string[];
+}[];
+export type TrackCheckpointId = (typeof TRACK_CHECKPOINTS)[number]["cpId"];
+
+/**
+ * The capstone gates of contracts §4.3 for the eight track capstones, as `capstones.gate` reports them (each
+ * requirement one `CapstoneGateCondition`: a checkpoint passed or soft-passed, a lesson completed). AC2 is the one
+ * three-way gate. AC1's second tune has its own gate (`tunes`: Sweet Georgia Brown also needs U15.L05). A track
+ * capstone never gates a lesson (§7.6 rule 4).
+ */
+export const TRACK_CAPSTONE_GATES = [
+  { capstoneId: "JC1", trackId: "J", sessions: 2, requires: ["J.CP1"] },
+  { capstoneId: "JC2", trackId: "J", sessions: 2, requires: ["J4.L04"] },
+  { capstoneId: "JC3", trackId: "J", sessions: 3, requires: ["J.CP2"] },
+  { capstoneId: "JC4", trackId: "J", sessions: 3, requires: ["J.CP2"] },
+  { capstoneId: "RC1", trackId: "R", sessions: 2, requires: ["R.CP"] },
+  { capstoneId: "RC2", trackId: "R", sessions: 2, requires: ["R.CP"] },
+  {
+    capstoneId: "AC1",
+    trackId: "A",
+    sessions: 3,
+    requires: ["A.CP", "U11.CP"],
+    tunes: [
+      { songId: "song.st-louis-blues", requires: [] },
+      { songId: "song.sweet-georgia-brown", requires: ["U15.L05"] },
+    ],
+  },
+  { capstoneId: "AC2", trackId: "A", sessions: 3, requires: ["A.CP", "J3.L04", "R1.L05"] },
+] as const satisfies readonly {
+  capstoneId: string;
+  trackId: TrackId;
+  sessions: number;
+  requires: readonly string[];
+  tunes?: readonly { songId: string; requires: readonly string[] }[];
+}[];
+export type TrackCapstoneId = (typeof TRACK_CAPSTONE_GATES)[number]["capstoneId"];
+
+/**
+ * Sounds granted at the START of a capstone session (contracts §3.2 rule 11; content/toolbox.ts `when: "start"`):
+ * `horns` at RC1.S2 unless U15.L05 already granted it, `choir` at AC2.S1. The grant is reported like any unlock
+ * (`SessionSummary.unlocks` of that session, and the capstone's start screen shows the ceremony).
+ */
+export const CAPSTONE_SESSION_SOUNDS = [
+  { capstoneSessionId: "RC1.S2", sound: "snd.horns", unlessLesson: "U15.L05" },
+  { capstoneSessionId: "AC2.S1", sound: "snd.choir", unlessLesson: null },
+] as const;
+
+/** The two sides of the album (wave7.md §5.5): Side A the core's twelve capstones, Side B the tracks' eight. */
+export const ALBUM_SIDES = [
+  {
+    side: "A",
+    title: "Side A",
+    capstones: ["C0", "C1", "C2", "X1", "C3", "C4", "C5", "X2", "C6", "C7", "CF-T", "CF-A"],
+  },
+  { side: "B", title: "Side B", capstones: ["JC1", "JC2", "JC3", "JC4", "RC1", "RC2", "AC1", "AC2"] },
+] as const;
+
+/**
+ * `GET /album/tracks/:id/versions/:v/source` (carry f2, wave7.md §5.5): exactly what a released version plays —
+ * its code (the sketch version it was released from), its Band and key — so "Export" renders that version offline
+ * (`@oak/strudel/offline` `renderPiece`) whatever the sketch became later. The real-time take stays the release
+ * recording; a rendered file is a download, never stored as a take.
+ */
+export const AlbumSourceSchema = z.object({
+  trackId: z.string(),
+  version: z.number().int().positive(),
+  title: z.string(),
+  code: z.string(),
+  /** The Band as it played at release (`BandSetup` of @oak/strudel), or `null` with no Band. */
+  band: z.unknown().nullable(),
+  key: KeySpecSchema.nullable(),
+  /** Tracks muted at release (label → true). */
+  mutes: z.record(z.string(), z.boolean()),
+  /** A safe file name for the download, without extension: "oak-side-a-03-first-light-v2". */
+  fileName: z.string(),
+});
+export type AlbumSource = z.infer<typeof AlbumSourceSchema>;
+
+/**
+ * Dev seed points Wave 7 e2e needs (`POST /dev/seed`, `point`). The server engineer implements them FIRST;
+ * wave7.md §6 says what each must contain. Until a lesson a point walks through is authored, it answers 400 naming
+ * that lesson.
+ */
+export const WAVE7_SEED_POINTS = [
+  "core complete, tracks untouched",
+  "J1.L03 next",
+  "J.CP1 due",
+  "JC1 open",
+  "JC1 released",
+  "J2.L04 locked (U14.CP not passed)",
+  "J3.L02 next",
+  "J4.L03 next",
+  "JC2 open",
+  "J.CP2 due",
+  "JC3 open",
+  "JC4 open",
+  "JC4.S2 done",
+  "R1.L03 next",
+  "R2.L04 next",
+  "R3.L02 next",
+  "R.CP due",
+  "RC1 open",
+  "RC2 open",
+  "A1.L05 next",
+  "A2.L04 next",
+  "A.CP due",
+  "AC1 open",
+  "AC1.S2 done",
+  "AC2 open",
+  "two tracks in progress",
+  "whole course complete",
+] as const;
+export type Wave7SeedPoint = (typeof WAVE7_SEED_POINTS)[number];

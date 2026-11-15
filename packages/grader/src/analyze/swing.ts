@@ -17,6 +17,11 @@ export interface SwingMeasure {
   cls: SwingClass;
   /** The most common off-beat position inside a slot, exact; `null` when nothing is measurable. */
   p: Rat | null;
+  /**
+   * The line plays on a triplet grid (three to a slot pair: `hh*12`, `[rd rd rd]*4`), not long–short pairs: as many
+   * onsets fall early inside a slot (before its middle) as slots measure. Such a line is not swung (n = 0).
+   */
+  triplets?: boolean;
 }
 
 /** One swung slot in cycles: a tempo unit for 8th swing, half of one for 16th swing. */
@@ -27,6 +32,26 @@ export function swingSlot(meter: MeterId, subdivision: 8 | 16): Rat {
 export function swingClass(ratio: number): SwingClass {
   return ratio < 1.2 ? "straight" : ratio < 1.6 ? "light" : ratio < 2.4 ? "triplet" : "hard";
 }
+
+/**
+ * Triplets: nearly every onset (90 % or more) on the 8th-note triplet grid (three to a beat) and a quarter of them or
+ * more on a triplet's middle note, which swing leaves out (a swung pair is the triplet's first and last notes).
+ */
+export function onTripletGrid(events: readonly NEvent[], meter: MeterId): boolean {
+  const ons = onsets(events);
+  if (ons.length < 6) return false;
+  const third = rat(1, METERS[meter].unitsPerBar * 3);
+  let onGrid = 0;
+  let middle = 0;
+  for (const o of ons) {
+    const q = R.div(o, third);
+    if (R.frac(q)[0] !== 0) continue;
+    onGrid++;
+    if (mod3(R.floor(q)) === 1) middle++;
+  }
+  return onGrid >= 0.9 * ons.length && middle >= 0.25 * ons.length;
+}
+const mod3 = (x: number): number => ((x % 3) + 3) % 3;
 
 /**
  * For each slot with an onset at its start and exactly one inside it, at fraction `p` of the slot:
@@ -42,6 +67,10 @@ export function swingRatio(events: readonly NEvent[], meter: MeterId, subdivisio
     list.push(R.frac(q));
     bySlot.set(i, list);
   }
+  // A line on the triplet grid that plays the triplet's middle note is triplets, not swing (review:robustness:
+  // `hh*12` read as 16ths swung 2:1, `[rd rd rd]*4` as 16ths swung).
+  if (onTripletGrid(events, meter))
+    return { ratio: Number.NaN, x: 0, n: 0, cls: "straight", p: null, triplets: true };
   const ps: Rat[] = [];
   for (const fr of bySlot.values()) {
     if (!fr.some((f) => f[0] === 0)) continue;

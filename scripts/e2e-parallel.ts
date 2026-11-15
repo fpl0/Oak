@@ -12,7 +12,7 @@
 //      OAK_E2E_BUNDLE=<dir>): no two processes write dist/, content/.generated or a WAV another Chromium is reading;
 //   2. the QUIET files first, with nothing loud beside them: the specs that measure milliseconds or cents on real
 //      audio (QUIET below), `--quiet-jobs` streams at a time (default 2, longest first);
-//   3. every other file, `--jobs` processes at a time (default: from the machine's cores and memory, 8 on 12 cores),
+//   3. every other file, `--jobs` processes at a time (default: from the machine's performance cores and memory, 6 on this 12-core machine),
 //      longest first. A project whose files add up to more than CHAIN_MINUTES is cut into SHARDS (up to MAX_SHARDS),
 //      files balanced by their measured seconds, shard k on the base shift + 100·k, so no serial chain sets the
 //      floor of the run. This pass records no Playwright trace;
@@ -54,6 +54,7 @@ import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFi
 import { availableParallelism, totalmem } from "node:os";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { startLoadProfile } from "./e2e-load.ts";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const playwright = `${root}node_modules/.bin/playwright`;
@@ -377,16 +378,30 @@ export function parseArgs(argv: string[]): Args {
 }
 
 /**
- * Processes at once on a machine to ourselves, from its size, never from the load at start (a load average lags by
- * minutes and halved the pool on an idle machine). Measured (docs/design/wave5.md §7.1): a loud unit on the bundle
- * uses about 0.7 cores and at most ~2.5 GB (Chromium, the Oak server, the front end), and its test time does not
- * stretch with 10 other cores busy. So: two thirds of the cores, at most one per 3 GB of memory, 2 to 10.
+ * Processes at once, from the machine's size, never from the load at start (a load average lags by minutes and
+ * halved the pool on an idle machine). Measured in Wave 7 Foundation (docs/design/wave7.md §7.2, the load profile of
+ * scripts/e2e-load.ts): a loud unit uses about 0.55 cores alone but about 1 core beside seven others, and at 8 jobs on
+ * this 12-core machine (8 performance + 4 efficiency cores) the loud pool ran at 89 % of all cores busy, load 17,
+ * with every file ~20 % slower than at 6 jobs (163 against 135 minutes of test time) for the SAME pool wall time
+ * (21.6 against 21.7 minutes): the extra processes only queued for cores. So: three quarters of the performance cores
+ * where the machine reports them (`hw.perflevel0.physicalcpu`), else half the cores; at most one per 3 GB; 2 to 10.
  * A shared machine passes `--jobs`.
  */
-export function autoJobs(cores: number = availableParallelism(), memBytes: number = totalmem()): number {
-  const byCpu = Math.floor((cores * 2) / 3);
+export function autoJobs(
+  cores: number = availableParallelism(),
+  memBytes: number = totalmem(),
+  perfCores: number | null = performanceCores(),
+): number {
+  const byCpu = perfCores ? Math.floor((perfCores * 3) / 4) : Math.floor(cores / 2);
   const byMem = Math.floor(memBytes / 2 ** 30 / 3);
   return Math.max(2, Math.min(10, byCpu, byMem));
+}
+/** The machine's performance cores (Apple silicon `hw.perflevel0.physicalcpu`), or `null` where it has no such split. */
+export function performanceCores(): number | null {
+  if (process.platform !== "darwin") return null;
+  const r = spawnSync("sysctl", ["-n", "hw.perflevel0.physicalcpu"], { encoding: "utf8" });
+  const n = Number(r.stdout?.trim());
+  return r.status === 0 && Number.isInteger(n) && n > 0 ? n : null;
 }
 
 // --- discovery ---------------------------------------------------------------------------------------------------
@@ -1161,9 +1176,17 @@ if (import.meta.main) {
     const n = (x: Outcome): number => [...o.values()].filter((v) => v === x).length;
     return `${n("passed")} passed, ${n("failed")} failed, ${n("skipped")} skipped${n("notRun") ? `, ${n("notRun")} did not run` : ""}`;
   };
+  // The load profile (scripts/e2e-load.ts): what ran beside each unit, and how busy the cores were.
+  let runningUnits = 0;
+  const profile = startLoadProfile(() => runningUnits);
   const runUnit = async (u: Unit): Promise<Result> => {
     const started = performance.now();
-    const r = await runPlaywright(u, u.files.map(fileFilter), "", args.rest);
+    runningUnits++;
+    const done = profile.unit(u.name);
+    const r = await runPlaywright(u, u.files.map(fileFilter), "", args.rest).finally(() => {
+      runningUnits--;
+      done();
+    });
     Object.assign(times, r.times.files);
     Object.assign(tests, r.times.tests);
     const s = settle(given(u), r);
@@ -1261,10 +1284,27 @@ if (import.meta.main) {
   };
   writeFileSync(durationsOut ?? where.durations, `${JSON.stringify(next, null, 1)}\n`);
 
+  const load = profile.stop();
+  const loadOf = new Map(load.units.map((x) => [x.name, x]));
+  writeFileSync(
+    (durationsOut ?? where.durations).replace("e2e-durations", "e2e-load"),
+    `${JSON.stringify({ generated: new Date().toISOString(), jobs, units: load.units, samples: load.samples }, null, 1)}\n`,
+  );
+  const testMinutesOf = (u: Unit): number =>
+    Object.entries(times)
+      .filter(([k]) => {
+        const [p, f] = k.split(" › ");
+        return u.projects.includes(p as string) && (u.files.length === 0 || u.files.includes(f as string));
+      })
+      .reduce((s, [, v]) => s + v / 60, 0);
   console.log("");
-  console.log("Units (wall minutes):");
-  for (const r of [...results].sort((a, b) => b.minutes - a.minutes))
-    console.log(`  ${r.minutes.toFixed(1).padStart(5)}  ${r.unit.name}`);
+  console.log("Units (wall minutes; test minutes; beside it: mean units running, mean share of cores busy):");
+  for (const r of [...results].sort((a, b) => b.minutes - a.minutes)) {
+    const l = loadOf.get(r.unit.name);
+    console.log(
+      `  ${r.minutes.toFixed(1).padStart(5)}  ${testMinutesOf(r.unit).toFixed(1).padStart(5)}  ${l ? `${l.meanRunning.toFixed(1).padStart(4)} units ${(l.meanBusy * 100).toFixed(0).padStart(3)}% busy` : "".padEnd(19)}  ${r.unit.name}`,
+    );
+  }
   console.log("Slowest ten files (seconds of test time, this run):");
   for (const [k, v] of Object.entries(times)
     .sort((a, b) => b[1] - a[1])

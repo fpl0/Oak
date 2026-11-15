@@ -50,6 +50,8 @@ export function useTokenContext(): TokenContext {
     // Wave 5: section names in tutor text select the section in the form view.
     ...(sections.length > 0 ? { sections, pickup: subject.pickup === true } : {}),
     ...(keyPlan.length > 1 ? { keyPlan } : {}),
+    // Wave 7: the Workbench's track lenses, so voicing, tension, clave and register chips light their bars.
+    ...(subject.track ? { track: subject.track } : {}),
   };
 }
 

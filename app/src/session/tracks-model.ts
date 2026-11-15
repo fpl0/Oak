@@ -42,7 +42,14 @@ export interface TrackRow {
   /** The track's next lesson, when one can be started; null in this wave for J and R. */
   next: string | null;
   /** Its gates, in course order: what each opens and whether it is met. */
-  gates: { gateId: string; opens: string; label: string; met: boolean }[];
+  gates: {
+    gateId: string;
+    opens: string;
+    label: string;
+    met: boolean;
+    /** Wave 7: what the gate requires, each with whether it is met (tracks-day.ts names them in a sentence). */
+    requires: { ref: string; met: boolean }[];
+  }[];
   /** Units whose rows on the Oak belong to this track's open gates (`J1`, `J2`, …). */
   openUnits: string[];
 }
@@ -53,8 +60,42 @@ const listOf = (names: readonly string[]): string =>
 const gateUnits = (gateId: string): readonly string[] =>
   TRACK_GATES.find((g) => g.gateId === gateId)?.units ?? [];
 
+/** "J1.L01 Swing Feel & the Ride" for a bare lesson id the title table knows; the id (or null) otherwise. */
+const named = (id: string | null, titleOf?: (id: string) => string): string | null => {
+  const title = id ? titleOf?.(id) : undefined;
+  return id && title && title !== id ? `${id} ${title}` : id;
+};
+
+/**
+ * Whether every session of a track is done (its lessons, checkpoints and capstones) with nothing left to start. The
+ * server's note then still reads as for an unwritten lesson ("its next lessons are still being written"), which
+ * would be false: `trackNote` says what is true instead.
+ */
+export function trackComplete(
+  t: Pick<TrackState, "status" | "sessionsDone" | "sessionsTotal" | "next" | "nextSession">,
+): boolean {
+  return (
+    t.status === "open" &&
+    t.sessionsTotal > 0 &&
+    t.sessionsDone >= t.sessionsTotal &&
+    !t.nextSession &&
+    (t.next === null || t.next === undefined)
+  );
+}
+
+/** The track's honest line: the server's own, or for a complete track what it now is. */
+export function trackNote(
+  t: Pick<TrackState, "status" | "sessionsDone" | "sessionsTotal" | "next" | "nextSession" | "note">,
+): string {
+  return trackComplete(t) ? `All ${t.sessionsTotal} sessions done. Its lessons stay open to replay.` : t.note;
+}
+
 /** The rows Progress, the Oak and the finale read, from the server's track states. */
-export function trackRows(tracks: readonly TrackState[] | null | undefined): TrackRow[] {
+export function trackRows(
+  tracks: readonly TrackState[] | null | undefined,
+  /** Wave 7: names a bare next lesson id ("J1.L01" → "J1.L01 Swing Feel & the Ride"); the id alone without it. */
+  titleOf?: (id: string) => string,
+): TrackRow[] {
   const out: TrackRow[] = [];
   for (const id of TRACK_IDS) {
     const t = tracks?.find((x) => x.trackId === id);
@@ -66,13 +107,19 @@ export function trackRows(tracks: readonly TrackState[] | null | undefined): Tra
       title: t.title || TRACK_TITLES[id],
       what: TRACK_WHAT[id],
       open: t.status === "open",
-      note: t.note,
-      next: t.next,
+      note: trackNote(t),
+      // Wave 7: the next thing of the track the learner may start (a lesson, its checkpoint or a capstone session).
+      next: t.nextSession
+        ? t.nextSession.title.startsWith(t.nextSession.mapItemId)
+          ? t.nextSession.title
+          : `${t.nextSession.mapItemId} ${t.nextSession.title}`
+        : named(t.next, titleOf),
       gates: t.gates.map((g) => ({
         gateId: g.gateId,
         opens: g.opens,
         label: g.requires.map((r) => r.label).join(", "),
         met: g.open,
+        requires: g.requires.map((r) => ({ ref: r.ref, met: r.met })),
       })),
       openUnits: [...openUnits],
     });

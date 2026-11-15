@@ -244,7 +244,7 @@ export class SimLearner {
     sessionId: string | null,
     scores: { gating: number; levelSetting: number; acceptSoftPass?: boolean },
   ): Promise<{ start: CheckpointAttemptStart; outcome: CheckpointOutcome }> {
-    const route = cpId.replace(/\.CP$/, "");
+    const route = /^U\d{2}\.CP$/.test(cpId) ? cpId.slice(0, 3) : cpId;
     const start = await this.api<CheckpointAttemptStart>("POST", `/api/checkpoints/${route}/start`);
     const sk = await this.sketch(`${cpId} Make`, "checkpoint", cpId, sessionId);
     const outcome = await this.api<CheckpointOutcome>("POST", `/api/checkpoints/${route}/attempts`, {

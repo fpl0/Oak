@@ -330,13 +330,13 @@ export const toolbox: readonly ToolEntry[] = defineToolbox([
   row("C", "tb.rev", "tool", ".rev()", "U07.L02", "retrograde"),
   row("C", "tb.scaleTranspose", "tool", ".scaleTranspose(steps) after .scale()", "U07.L02", "sequence"),
   row("C", "tb.rootNotes", "tool", ".rootNotes(2)", "U08.L01", "root bass lines from chords"),
-  row("C", "tb.dict.lefthand", "tool", '.dict("lefthand")', "U12.L06", "left-hand piano voicings"),
+  row("C", "tb.dict.lefthand", "tool", '.dict("lefthand")', "U12.L06", "left-hand piano voicings (mostly rootless, not all)"),
   row("C", "tb.n.chromatic", "tool", 'chromatic steps n("3#") n("6b") n("2b") n("5b") n("1b")', "U15.L01", "chromatic degrees"),
   row("C", "tb.dict.guidetones", "tool", '.dict("guidetones")', "J1.L04", "3rds and 7ths"),
   row("C", "tb.set", "tool", ".set(pattern)", "J1.L05", "one chord pattern drives every part"),
   row("C", "tb.voicing.n", "tool", 'n("0 1 2 3").chord(changes).voicing()', "J1.L05", "shells and arpeggiated voicings"),
   row("C", "tb.dict.ireal-ext", "tool", '.dict("ireal-ext")', "J2.L03", "extended voicings"),
-  row("C", "tb.mode.duck", "tool", '.mode("duck")', "J3.L01", "rootless voicings"),
+  row("C", "tb.mode.duck", "tool", '.mode("duck")', "J3.L01", "keeping the chord off the melody note"),
   row("C", "tb.offset", "tool", ".offset(n)", "J3.L01", "A/B voicing positions"),
 
   // D. Scale names

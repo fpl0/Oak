@@ -92,6 +92,18 @@ export const CHECKPOINT_MAKE_BANDS: Partial<Record<CheckpointId, BandRef>> = {
   "U14.CP": { band: "band.axis-4bar", tracks: ["drums"] },
   // U17.CP: a song in sections whose last chorus lifts; the Band's chords would stay in the old key.
   "U17.CP": { band: "band.axis-4bar", tracks: ["drums"] },
+  // Wave 7, the track checkpoints (their files sit in the folder of the last unit each covers:
+  // content/advanced/J2/CP, J5/CP, R3/CP and A2/CP).
+  // J.CP1: a ii–V–I trio in D major whose chords and bass the rule reads: the Band keeps time on its swung ride.
+  "J.CP1": { band: "band.two-five-one", tracks: ["drums"] },
+  // J.CP2: the A section of rhythm changes, comped, walked or played over by the learner: drums only.
+  "J.CP2": { band: "band.two-five-one", tracks: ["drums"] },
+  // R.CP: the learner writes the drums, the bass and the clave; the Band plays the son groove's two chords, C then
+  // G7, on the off-beats (band.son-montuno: straight in every flavour, where the two-chord vamp's jazz-soul comping
+  // swings against the straight clave and sixteenth hats).
+  "R.CP": { band: "band.son-montuno", tracks: ["chords"] },
+  // A.CP: the A2 loop in A minor arranged by the learner (every part is theirs): the Band's drums only.
+  "A.CP": { band: "band.aeolian-4bar", tracks: ["drums"] },
 };
 
 /** Pass rules (contracts §7.6). The numbers are also in @oak/srs `CHECKPOINT`; content CI compares them. */

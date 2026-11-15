@@ -4,6 +4,9 @@
 
 import { readFileSync, statSync } from "node:fs";
 import {
+  ALBUM_SIDES,
+  type Album,
+  type AlbumSource,
   type AlbumTrackDetail,
   type AlbumTrackVersion,
   type AudioFile,
@@ -187,8 +190,64 @@ export class LibraryService {
 
   // --- album ------------------------------------------------------------------------------------
 
-  album() {
-    return { tracks: this.#repos.album.tracks() };
+  /** `GET /album`. Wave 7 (wave7.md §5.5): with the two sides of the record, released and total per side. */
+  album(): Album {
+    const tracks = this.#repos.album.tracks();
+    const sides = ALBUM_SIDES.map((side) => {
+      const caps = new Set<string>(side.capstones);
+      return {
+        side: side.side,
+        title: side.title,
+        released: tracks.filter((t) => t.capstoneId !== null && caps.has(t.capstoneId)).length,
+        total: side.capstones.length,
+      };
+    });
+    return { tracks, sides };
+  }
+
+  /**
+   * `GET /album/tracks/:id/versions/:v/source` (carry f2; wave7.md §5.5): exactly what a released version plays —
+   * the sketch version it was released from, the Band setting and the key it was released with, the parts muted —
+   * and a safe file name for the WAV the app renders offline. Nothing is stored.
+   */
+  albumSource(trackId: string, version: number): AlbumSource {
+    const track = this.#repos.album.track(trackId);
+    if (track === null) throw notFound(`track ${trackId}`);
+    const v = this.#repos.album.version(trackId, version);
+    if (v === null) throw notFound(`track ${trackId} v${version}`);
+    const sk = this.#repos.sketches.version(v.sketchId, v.sketchVersion);
+    if (sk === null) throw notFound(`sketch ${v.sketchId} v${v.sketchVersion}`);
+    // Code from an imported backup runs only after the strict lint (contracts §11.3, §11.10). The offline
+    // renderer reads this code with the base lint only, so a version that fails it is not handed out at all.
+    if (
+      (sk.flags.reviewBeforeRun === true || v.flags.reviewBeforeRun === true) &&
+      lintStrict(sk.code).some((d) => d.severity === "error")
+    )
+      throw conflict(
+        "This version came from an imported backup and its code does not pass Oak's safety check, so it cannot be exported.",
+      );
+    const band = v.band ?? sk.band ?? null;
+    const mutes: Record<string, boolean> = {};
+    for (const m of band?.mutes ?? []) mutes[m] = true;
+    const slug = track.title
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48);
+    const side = track.side === "Bside" ? "b-sides" : `side-${track.side.toLowerCase()}`;
+    const no = String(Math.max(0, track.trackNo)).padStart(2, "0");
+    return {
+      trackId,
+      version,
+      title: track.title,
+      code: sk.code,
+      band,
+      key: sk.key ?? null,
+      mutes,
+      fileName: `oak-${side}-${no}${slug === "" ? "" : `-${slug}`}-v${version}`,
+    };
   }
   track(id: string): AlbumTrackDetail {
     const t = this.#repos.album.track(id);

@@ -18,6 +18,7 @@ import {
   useOnboarding,
   useProfileUpdate,
   useSessionDay,
+  useSetTrackFocus,
   useSideLessons,
   useStreak,
   useTodayPlan,
@@ -34,6 +35,7 @@ import { Callout } from "../../ui/kit/Controls.tsx";
 import { ErrorState, LoadingState } from "../../ui/kit/QueryState.tsx";
 import { toast } from "../../ui/kit/Toast.tsx";
 import { capstoneDayTitle, keepCapstone } from "../capstone-day.ts";
+import { afterCourse } from "../course-end.ts";
 import {
   useAfterCore,
   useCapstoneDay,
@@ -42,6 +44,7 @@ import {
   useGymDay,
   useGymOpen,
   useWaitingLine,
+  useWholeCourseWhen,
   useX1Gate,
 } from "../day-hooks.ts";
 import { type CourseEdge, courseEdge, edgeShort } from "../edge.ts";
@@ -58,9 +61,11 @@ import {
   type TodayView,
   todayView,
 } from "../today-model.ts";
+import { type OfferRow, offerPlan, offersFromTracks, trackDay } from "../tracks-day.ts";
 import { AlbumStrip, LastSketchCard, NextUnlockCard, OakGlanceCard, TutorNoteCard } from "./Glance.tsx";
 import { InlineCodeText, SideOfferLine } from "./SideOffer.tsx";
 import { CftStrip, FirstDayLine, OpenToYou, OtherTabLine, TracksLine } from "./TodayWave6.tsx";
+import { CourseFirstDayLine, KeepPlayingLine, TrackOffers, TrackSessionLine } from "./TodayWave7.tsx";
 import { WeeklyRhythm } from "./WeeklyRhythm.tsx";
 
 function amountOf(r: SetlistRow): string {
@@ -288,6 +293,33 @@ export function TodayPage() {
   const waiting = useWaitingLine(planData ?? null);
   const { after } = useAfterCore(planData ?? null, boot.data);
   const x1 = x1Line(useX1Gate());
+  // Wave 7: the open tracks beside the day's session, the focus switch, and the days after the whole course.
+  const setFocus = useSetTrackFocus();
+  // A server whose plan has no `trackOffers` yet (Wave 6): the open tracks' own next lessons are offered instead.
+  const tday = planData
+    ? trackDay(
+        planData.trackOffers === undefined
+          ? {
+              ...planData,
+              trackOffers: offersFromTracks(progress.data?.tracks, {
+                titleOf: (id) => titleOf(id, titles),
+                objectiveOf,
+                minutes: planData.targetMinutes,
+              }),
+            }
+          : planData,
+        (id) => titleOf(id, titles),
+      )
+    : null;
+  const whole = useWholeCourseWhen(planData ?? null);
+  const courseAfter =
+    planData && boot.data
+      ? afterCourse(planData, whole.data, {
+          day: boot.data.day,
+          timezone: boot.data.profile.timezone,
+          rolloverHour: boot.data.profile.rolloverHour,
+        })
+      : null;
   const edge = courseEdge(
     progress.data,
     content.data?.syllabus ?? null,
@@ -321,6 +353,8 @@ export function TodayPage() {
         })
       : null;
   const extra = planData ? extraGym(planData) : null;
+  // The A track's own offer (Wave 7) and the Wave 5 side-lesson line would name the same lesson twice: the offer wins.
+  const side = view?.side && !tday?.offers.some((o) => o.trackId === "A") ? view.side : null;
   // A compose capstone that waits behind today's CF-T session stays one click away (cft-day.ts): the plan's own
   // alternative when the server lists it, else the capstone's next session.
   const alternatives = planData
@@ -364,6 +398,25 @@ export function TodayPage() {
     } catch (e) {
       toast.error("The session didn't resume", e instanceof Error ? e.message : undefined);
     }
+  };
+  // An offer starts in place of the New block. After the core a pick is also remembered as the focus, so tomorrow
+  // plans the same track; it is never locked in (the switch changes it any day).
+  const onOffer = async (row: OfferRow) => {
+    if (!planData) return;
+    if (tday?.rememberPick && row.trackId !== "core" && row.trackId !== planData.focus) {
+      try {
+        await setFocus.mutateAsync({ body: { focus: row.trackId } });
+      } catch {
+        // The pick still starts today; only the memory of it failed.
+      }
+    }
+    await onStart(offerPlan(planData, row));
+  };
+  const onFocus = (focus: NonNullable<typeof tday>["focus"]) => {
+    setFocus.mutate(
+      { body: { focus } },
+      { onError: (e) => toast.error("That didn't save", e instanceof Error ? e.message : undefined) },
+    );
   };
   const loosenFrom = ladder?.cents ?? boot.data?.profile.singToleranceCents ?? 70;
   const loosen = async () => {
@@ -419,7 +472,8 @@ export function TodayPage() {
   return (
     <Page>
       <Header boot={boot} />
-      {view?.after?.firstDay && view.state !== "done" && <FirstDayLine />}
+      {courseAfter?.firstDay && view?.state !== "done" && <CourseFirstDayLine />}
+      {view?.after?.firstDay && !courseAfter && view.state !== "done" && <FirstDayLine />}
       <div className="grid gap-6 lg:grid-cols-12">
         <section aria-labelledby="setlist-h" className="flex flex-col gap-4 lg:col-span-8">
           <Card className="p-5" data-testid="today-card" data-state={view?.state}>
@@ -437,6 +491,9 @@ export function TodayPage() {
                     <span className="shrink-0 text-sm text-text-3">{view.length}</span>
                   )}
                 </div>
+                {tday?.trackLine && view.state !== "done" && view.state !== "in-session" && (
+                  <TrackSessionLine line={tday.trackLine} />
+                )}
                 {view.lead && <p className="mb-2 max-w-[62ch] text-text-2">{view.lead}</p>}
                 {view.state === "done" ? (
                   <DoneCard
@@ -450,11 +507,11 @@ export function TodayPage() {
                     }
                     objective={planData.mapItemId ? objectiveOf(planData.mapItemId) : null}
                     side={
-                      view.side && (
+                      side && (
                         <SideOfferLine
-                          offer={view.side}
+                          offer={side}
                           disabled={starting}
-                          onStart={() => view.side && void onStart(sideLessonPlan(planData, view.side))}
+                          onStart={() => void onStart(sideLessonPlan(planData, side))}
                         />
                       )
                     }
@@ -498,12 +555,12 @@ export function TodayPage() {
                           Short on time? A Keep-alive: one easy set, about 2 minutes
                         </button>
                       )}
-                      {view.side && view.state !== "in-session" && (
+                      {side && view.state !== "in-session" && (
                         <div className="mt-2 w-full">
                           <SideOfferLine
-                            offer={view.side}
+                            offer={side}
                             disabled={starting}
-                            onStart={() => view.side && void onStart(sideLessonPlan(planData, view.side))}
+                            onStart={() => void onStart(sideLessonPlan(planData, side))}
                           />
                         </div>
                       )}
@@ -513,6 +570,20 @@ export function TodayPage() {
               </>
             )}
           </Card>
+          {tday &&
+            planData &&
+            view &&
+            view.state !== "first-run" &&
+            view.state !== "in-session" &&
+            view.state !== "done" && (
+              <TrackOffers
+                day={tday}
+                disabled={starting}
+                saving={setFocus.isPending}
+                onStart={(row) => void onOffer(row)}
+                onFocus={onFocus}
+              />
+            )}
           {view?.restDay && (
             <Callout tone="success" title="This week's goal is met">
               Today is a free rest. Playing is welcome, and nothing is lost by resting.
@@ -550,16 +621,28 @@ export function TodayPage() {
             </div>
           )}
           {/* Once the lessons of the core are done: what is open, under the planned session (END.md). */}
-          {planData && view?.after && view.state !== "in-session" && (
+          {planData && (courseAfter || view?.after) && view && view.state !== "in-session" && (
             <OpenToYou
-              after={view.after}
+              after={
+                courseAfter
+                  ? {
+                      stage: "complete",
+                      firstDay: courseAfter.firstDay,
+                      left: null,
+                      open: courseAfter.open,
+                      waiting: [],
+                    }
+                  : (view.after as NonNullable<typeof view.after>)
+              }
               disabled={starting}
               skipSideLesson={view.side !== null}
-              tracksLine={view.tracksLine}
+              skipTracks={tday !== null}
+              tracksLine={tday || courseAfter ? null : view.tracksLine}
+              footer={courseAfter ? <KeepPlayingLine /> : undefined}
               onGym={extra ? () => void onStart(alternativePlan(planData, { kind: "gym", ...extra })) : null}
             />
           )}
-          {view?.tracksLine && !view.after && view.state !== "in-session" && (
+          {view?.tracksLine && !tday && !view.after && view.state !== "in-session" && (
             <TracksLine line={view.tracksLine} />
           )}
           {/* The done card carries its own ways on (Studio, free practice): never twice. */}

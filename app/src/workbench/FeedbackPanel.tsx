@@ -69,18 +69,29 @@ const DIM_LABEL: Partial<Record<string, string>> = {
   constraints: "Code",
 };
 
-/** The result's own rendered message for a diagnostic (same ID and place). */
-function messageOf(result: GradeResult, d: Diagnostic): string | null {
+/** The grader's "3 more" line after its first messages: a count, never the text of a finding. */
+const MORE = /^\d+ more$/;
+
+/**
+ * The result's own rendered message for a diagnostic (same ID and place): the grader renders it with the step's own
+ * `feedbackText` where the step overrides that finding, so it is the step's sentence, else the catalog's.
+ */
+export function messageOf(result: GradeResult, d: Diagnostic): string | null {
   return (
     result.messages.find(
-      (m) => m.id === d.id && m.where?.bar === d.where?.bar && m.where?.beat === d.where?.beat,
+      (m) =>
+        m.id === d.id &&
+        m.where?.bar === d.where?.bar &&
+        m.where?.beat === d.where?.beat &&
+        !MORE.test(m.text),
     )?.text ?? null
   );
 }
 
 /**
- * The redacted view. Catalog text comes from `render` (@oak/grader `renderFeedback`); when it cannot
- * render a code (it throws or echoes the ID), the result's own message is used.
+ * The redacted view. The step's own sentence comes first (carry f5): the result's own message for the finding, which
+ * the grader rendered with the step's `feedbackText`. The catalog's general sentence (`render`, @oak/grader
+ * `renderFeedback`) is used only for a finding the result has no message for (it lists the first few).
  */
 export function viewOf(
   result: GradeResult,
@@ -89,15 +100,17 @@ export function viewOf(
 ): GradeView {
   const custom = opts.render;
   const render = (d: Diagnostic): string => {
+    const own = messageOf(result, d);
+    if (own) return own;
     if (custom) {
       try {
         const text = custom(d);
         if (text && text !== d.id) return text;
       } catch {
-        // fall through to the result's message
+        // fall through to the ID
       }
     }
-    return messageOf(result, d) ?? d.id;
+    return d.id;
   };
   return toIssueView(result, rung, {
     ...(opts.passed === undefined ? {} : { passed: opts.passed }),

@@ -21,7 +21,9 @@ import {
   downbeatFromTaps,
   formatTime,
   type GridFeel,
+  groupingText,
   isCompound,
+  isOddEighths,
   type Loop,
   nudgeDownbeat,
   scaleTempo,
@@ -30,7 +32,7 @@ import {
 import { CHECK_LEVELS, checklistProgress, checklistRows, selfScoreOf } from "./import.ts";
 import type { Section } from "./SourceView.tsx";
 
-const METER_CHOICES: MeterId[] = ["4/4", "3/4", "6/8", "12/8", "2/4"];
+const METER_CHOICES: MeterId[] = ["4/4", "3/4", "6/8", "12/8", "2/4", "5/4", "7/8", "9/8i"];
 /** Tonics as Oak spells keys (sharps up the circle, flats down it). */
 const TONICS = ["C", "G", "D", "A", "E", "B", "F#", "Db", "Ab", "Eb", "Bb", "F"] as const;
 const MODES = ["major", "minor"] as const;
@@ -82,6 +84,8 @@ export function TempoCard({
   onFeel?(feel: GridFeel): void;
 }) {
   const compound = isCompound(project.meter);
+  // An odd meter in eighths (7/8, 9/8i) is drawn by its groups; it is never swung here.
+  const odd = isOddEighths(project.meter);
   const bpm = bpmFromTaps(taps);
   const down = downbeatFromTaps(taps);
   const bpmId = useId();
@@ -308,20 +312,32 @@ export function TempoCard({
         <SegmentedControl
           label="Meter"
           size="sm"
+          className="max-w-full flex-wrap"
           value={(project.meter ?? "4/4") as MeterId}
           options={METER_CHOICES.map((m) => ({ value: m, label: m }))}
           onChange={(m) => onApply({ meter: m })}
         />
-        <span className="flex items-center gap-1.5" data-testid="swing-switch">
+        {/* The panel is a 20rem column: four feels wrap inside the control rather than run out of it. */}
+        <span className="flex min-w-0 flex-wrap items-center gap-1.5" data-testid="swing-switch">
           {feel !== undefined && onFeel ? (
             <SegmentedControl
-              label="Feel (W swings)"
+              label="Feel (W swings 8ths, G swings 16ths)"
               size="sm"
+              className="max-w-full flex-wrap"
               value={compound ? "straight" : feel}
               options={[
                 { value: "straight" as GridFeel, label: compound ? "In three" : "Straight" },
-                { value: "swing" as GridFeel, label: "Swing 8ths", disabled: !swingMeter(project.meter) },
-                { value: "triplet" as GridFeel, label: "Triplets", disabled: compound },
+                {
+                  value: "swing" as GridFeel,
+                  label: "Swing 8ths",
+                  disabled: !swingMeter(project.meter) || odd,
+                },
+                {
+                  value: "swing16" as GridFeel,
+                  label: "Swing 16ths",
+                  disabled: !swingMeter(project.meter) || odd,
+                },
+                { value: "triplet" as GridFeel, label: "Triplets", disabled: compound || odd },
               ]}
               onChange={(v) => onFeel(v)}
             />
@@ -338,6 +354,7 @@ export function TempoCard({
             />
           )}
           <Kbd>W</Kbd>
+          {feel !== undefined && onFeel ? <Kbd>G</Kbd> : null}
         </span>
       </div>
       {grid ? (
@@ -345,11 +362,15 @@ export function TempoCard({
           A bar is {grid.barSec.toFixed(2)} s.{" "}
           {compound
             ? `BPM counts the dotted quarter; the grid marks each beat's three eighths. `
-            : feel === "triplet"
-              ? "The grid marks three to each beat. "
-              : swing
-                ? "The grid marks the swung off-beats at two thirds of each beat. "
-                : ""}
+            : odd
+              ? `The grid marks the eighths in their groups (${groupingText(project.meter, null)}); BPM counts the eighth. `
+              : feel === "triplet"
+                ? "The grid marks three to each beat. "
+                : feel === "swing16"
+                  ? "The grid marks the swung 16ths: the second of each pair two thirds of the way through its eighth. "
+                  : swing
+                    ? "The grid marks the swung off-beats at two thirds of each beat. "
+                    : ""}
           A/B plays your code with the recording from the start of the bar the playhead is in.
         </p>
       ) : null}
@@ -402,6 +423,14 @@ export function writeTriplets(id: string, on: boolean): void {
 }
 /** The feel the swing switch stores: triplet swing on the eighths, or straight. */
 export const SWUNG_EIGHTHS: SwingSpec = { subdivision: 8, amount: 1 / 3 };
+/** Wave 7: swung 16ths (R1.L02, `swingBy(1/3, 8)` in 4/4), the second swing the feel switch stores. */
+export const SWUNG_SIXTEENTHS: SwingSpec = { subdivision: 16, amount: 1 / 3 };
+/** Whether the own-audio feel kept on the server is swung 16ths. */
+export function projectSwing16(p: {
+  settings?: { swing?: SwingSpec | null | undefined } | undefined;
+}): boolean {
+  return p.settings?.swing?.subdivision === 16;
+}
 export function writeSwing(id: string, on: boolean): void {
   try {
     if (on) localStorage.setItem(SWING_KEY(id), "1");

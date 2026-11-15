@@ -9,6 +9,7 @@ import type {
   CourseProgress,
   LessonProgress,
 } from "@oak/api";
+import { TRACK_CHECKPOINTS } from "@oak/api";
 import {
   type CapstoneMeta,
   type FamilyId,
@@ -23,6 +24,7 @@ import { CHECKPOINT, MASTERY } from "@oak/srs";
 import { dayIndex } from "../lib/days.ts";
 import { LearnerTime, type ServiceContext } from "./context.ts";
 import { openFamilyLevels } from "./family-levels.ts";
+import { TRACK_ORDER } from "./track-plan.ts";
 
 export type LessonStatus = LessonProgress["status"];
 
@@ -60,7 +62,9 @@ export class GatesService {
     const out: string[] = [];
     for (const cp of gate.checkpoints ?? [])
       if (!this.checkpointPassed(cp))
-        out.push(`the ${checkpointName(this.#content.checkpointMeta(cp)?.title ?? cp)}`);
+        out.push(
+          TRACK_CP_PROSE[cp] ?? `the ${checkpointName(this.#content.checkpointMeta(cp)?.title ?? cp)}`,
+        );
     for (const l of gate.lessonsCompleted ?? [])
       if (!this.lessonCompleted(l)) out.push(`the lesson “${this.#content.lessonTitle(l)}”`);
     for (const c of gate.capstones ?? [])
@@ -131,9 +135,12 @@ export class GatesService {
 
   /** Rule 3: a checkpoint opens when the last lesson it covers is completed. */
   checkpointOpen(cpId: string): boolean {
+    // Wave 7: a track checkpoint waits for every lesson it covers, the optional ones included (J.CP2 tests J03,
+    // which J2.L04 teaches; A.CP tests D02–D04, which the side lessons A1.L01–L03 teach).
+    const track = isTrackCheckpoint(cpId);
     const lessons = this.#content
       .lessonsCovered(cpId)
-      .filter((l) => this.#content.lessonSite(l)?.meta.optional !== true);
+      .filter((l) => track || this.#content.lessonSite(l)?.meta.optional !== true);
     if (lessons.length === 0) return false;
     return lessons.every((l) => this.lessonCompleted(l));
   }
@@ -222,19 +229,8 @@ export class GatesService {
   nextMapItem(): SessionId | null {
     for (const id of this.#content.defaultOrder())
       if (!this.sessionDone(id) && this.sessionOpen(id)) return id as SessionId;
-    // Then any open track lesson. Never a side lesson (A1.L01–L04): Today offers those beside the core session,
-    // never as its next item (contracts §9.6, wave5.md §5.1).
-    for (const site of this.#content.allLessons())
-      if (
-        site.unit.track !== "core" &&
-        site.meta.side !== true &&
-        // Wave 6 (wave6.md §5.3): a track whose gate is met but whose lessons are not written yet is never the
-        // next item (the plan stays honest: `SessionPlan.tracks` says the track is open).
-        this.#content.lessonDef(site.meta.id) !== null &&
-        this.lessonStatus(site.meta.id) !== "completed" &&
-        this.lessonOpen(site.meta.id)
-      )
-        return site.meta.id;
+    // Wave 7 (wave7.md §5.2): the tracks are never the core's next item: Today offers them beside it, and the
+    // learner's focus decides whether one is the New block (`TrackPlanService.nextSession`).
     return null;
   }
 
@@ -256,7 +252,16 @@ export class GatesService {
           this.lessonStatus(s.meta.id) !== "locked",
       )
       .map((s) => s.meta.id as string);
-    const all = [...order, ...trackLessons.filter((l) => !order.includes(l as SessionId))];
+    let all = [...order, ...trackLessons.filter((l) => !order.includes(l as SessionId))];
+    // Wave 7 (wave7.md §5): once a track lesson is written the map counts the whole course, 259 sessions: the core's
+    // order and each track's (its lessons, side lessons included, its checkpoints and its capstone sessions).
+    const trackOrder = Object.values(TRACK_ORDER).flat();
+    if (
+      trackOrder.some(
+        (id) => this.#content.lessonDef(id) !== null && this.#content.lessonSite(id)?.meta.side !== true,
+      )
+    )
+      all = [...order, ...trackOrder];
     const side = this.#content.allLessons().filter((s) => s.meta.side === true);
     return {
       lessons,
@@ -327,13 +332,18 @@ export class GatesService {
       n += 1;
       if (familyId === undefined) return null;
       const fam = this.#content.family(familyId);
+      // A sung item (a mic family) is production whatever the skill it gives evidence for: level-setting, never
+      // blocking, and left out in Quiet mode (contracts §7.6 "Singing never gates anything", §8.5). J.CP1 draws its
+      // J07 items (a concept skill) from the sung guide-tone family: they set the level and never decide the pass.
+      const sung = fam?.mic === true;
+      if (sung && opts.quiet) return null;
       // At the mastery level, but never above the family's open level (§7.3): a checkpoint never asks for
       // material whose lesson is still ahead, and its level-setting result cannot carry the family past it.
       const open = fam === null ? 1 : openFamilyLevels(fam, (l) => this.lessonCompleted(l)).maxOpenLevel;
       const level = Math.max(1, Math.min(fam?.masteryLevel ?? 1, fam?.levels.length ?? 1, open));
       return {
         skillId: skill as SkillId,
-        role: this.roleOf(skill),
+        role: sung ? "level-setting" : this.roleOf(skill),
         source: {
           kind: "family",
           familyId: familyId as FamilyId,
@@ -495,12 +505,29 @@ export function interleave<T extends { skillId: string }>(items: readonly T[], s
   return out;
 }
 
+/** A checkpoint of an advanced track (J.CP1, J.CP2, R.CP, A.CP): it gates only its track's capstones. */
+export function isTrackCheckpoint(cpId: string): boolean {
+  return TRACK_CHECKPOINTS.some((c) => c.cpId === cpId);
+}
+
 function joinWords(parts: readonly string[]): string {
   if (parts.length <= 1) return parts[0] ?? "";
   return `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
 }
 
 /** "the U07 checkpoint" from a checkpoint title: "Melody checkpoint" stays as it is, "Melody" gains the word. */
+/**
+ * How a sentence names a track checkpoint (W7 gate): the registry titles are labels ("Jazz checkpoint 1"), so a
+ * locked capstone read "Opens after the Jazz checkpoint 1." while Today and Progress said "the first jazz
+ * checkpoint" (app/src/session/tracks-day.ts `TRACK_CP_NAME`). Both now say the same.
+ */
+export const TRACK_CP_PROSE: Readonly<Record<string, string>> = {
+  "J.CP1": "the first jazz checkpoint",
+  "J.CP2": "the second jazz checkpoint",
+  "R.CP": "the rhythm checkpoint",
+  "A.CP": "the sound checkpoint",
+};
+
 export function checkpointName(title: string): string {
   return /checkpoint/i.test(title) ? title : `${title} checkpoint`;
 }

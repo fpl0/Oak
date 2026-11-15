@@ -128,4 +128,6 @@ export function libraryRoutes(mount: Mounter, d: AppDeps): void {
   mount("album.chooseTake", ({ params, body }) =>
     lib.chooseTrackTake(params.id, versionParam(params.v), body.take),
   );
+  // Wave 7 (docs/design/wave7.md §5.5, carry f2): exactly what a released version plays, for the offline Export.
+  mount("album.source", ({ params }) => lib.albumSource(params.id, versionParam(params.v)));
 }

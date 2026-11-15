@@ -66,8 +66,16 @@ export function rnDisplay(rn: string | null, key: KeySpec | null): string | null
   if (!key) return rn;
   const parsed = parseRN(rn, key);
   // An applied chord ("V7/V") keeps its written form; theory's display covers the primary numeral only.
-  if (!parsed || rn.includes("/")) return rn.replace(/o/g, "°");
-  return displayRN(parsed);
+  if (!parsed || rn.includes("/")) return figureGlyphs(rn.replace(/o/g, "°"));
+  return figureGlyphs(displayRN(parsed));
+}
+
+/**
+ * Wave 7: an altered tension in a numeral's figure as a glyph (V7♭9, Imaj7♯11, V7♯9♭13), as the jazz chord symbol
+ * beside it prints it; theory's display leaves the figure in Oak's ASCII dialect.
+ */
+export function figureGlyphs(rn: string): string {
+  return rn.replace(/(?<=\d)b(?=\d)/g, "♭").replace(/(?<=\d)#(?=\d)/g, "♯");
 }
 
 function view(n: Normalized, ctx: HarmonyContext): HarmonyView | null {

@@ -51,7 +51,19 @@ const course = LESSONS.map((id) => byId.get(id)).filter((l): l is LoadedLesson =
 const SIDE_LESSONS = registries.syllabus.units.flatMap((u) =>
   u.lessons.filter((l) => l.side).map((l) => l.id as SessionId),
 );
-const authored = [...ORDER.filter((s) => /\.L\d{2}$/.test(s)), ...SIDE_LESSONS]
+/**
+ * Wave 7: the advanced tracks' lessons, in the order of each track (contracts §2.6). Like the side lessons they sit
+ * outside the default order; each is judged at the earliest point a learner can take it, which the course graph
+ * gives (a track lesson may be reached with U14–U17 unfinished). Authored ones join every cross-lesson scan.
+ */
+const TRACK_LESSONS = registries.syllabus.tracks.flatMap((t) =>
+  t.units.flatMap(
+    (u) => registries.syllabus.units.find((x) => x.id === u)?.lessons.map((l) => l.id as SessionId) ?? [],
+  ),
+);
+const authored = [
+  ...new Set([...ORDER.filter((s) => /\.L\d{2}$/.test(s)), ...SIDE_LESSONS, ...TRACK_LESSONS]),
+]
   .map((id) => byId.get(id))
   .filter((l): l is LoadedLesson => Boolean(l));
 const g = courseGraph();
@@ -684,12 +696,13 @@ describe("can-dos and milestones", () => {
           expect([m.id, c, candos.some((x) => x.id === c)]).toEqual([m.id, c, true]);
       }
   });
-  test("the nine milestones of ux §5.5 are all defined, then Wave 5's five and Wave 6's six", () => {
+  test("the nine milestones of ux §5.5 are all defined, then Wave 5's five, Wave 6's six and Wave 7's eight", () => {
     expect(milestones.map((m) => m.id)).toEqual(
       [
         ...["ms.01", "ms.02", "ms.03", "ms.04", "ms.05", "ms.06", "ms.07", "ms.08", "ms.09"],
         ...["ms.10", "ms.11", "ms.12", "ms.13", "ms.14"],
         ...["ms.15", "ms.16", "ms.17", "ms.18", "ms.19", "ms.20"],
+        ...["ms.21", "ms.22", "ms.23", "ms.24", "ms.25", "ms.26", "ms.27", "ms.28"],
       ].map((x) => x as never),
     );
     // The end of the core (ux §5.5 "Core Finale") needs both parts of the finale: CF-T ends before U17.

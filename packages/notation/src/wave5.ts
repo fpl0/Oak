@@ -6,7 +6,8 @@
 // `toAbc` (spelling through `@oak/theory`).
 import type { KeySpec, MeterSpec, SwingSpec } from "@oak/content-kit";
 import { chordSymbol } from "@oak/theory";
-import { chordDisplay, keySig } from "./theory-port.ts";
+import { abcChordText } from "./abc.ts";
+import { chordDisplay, jazzChordDisplay, keySig } from "./theory-port.ts";
 import type { NotationWarning, SectionMark } from "./types.ts";
 
 /** One section of the list `sectionsFromAst` / `formView` gives (0-based `startBar`). */
@@ -63,6 +64,11 @@ export interface ChartInput {
   title?: string;
   /** Section marks over the chart (a chart of a sectioned piece). */
   sections?: readonly SectionMark[];
+  /**
+   * Wave 7: the chord-symbol style, as `NotationInput.chordStyle` (default lead-sheet). A learner who turned on jazz
+   * glyphs (J1.L02) reads the chart in the same names as the chord band and the staff (D–7, C∆7, Bø7).
+   */
+  chordStyle?: "lead-sheet" | "jazz";
 }
 export interface ChartChord {
   /** 1-based beat inside the bar. */
@@ -97,6 +103,8 @@ export function chartLayout(input: ChartInput): ChartLayout {
   const start = Math.max(0, Math.floor(input.startBar ?? 0));
   const sorted = [...input.chords].sort((a, b) => a.bar - b.bar || a.beat - b.beat);
   const beats = input.meter.unitsPerBar;
+  const style = input.chordStyle ?? "lead-sheet";
+  const chartChordText = (symbol: string): string => chartChordTextIn(symbol, style);
   // The chord sounding when the chart starts (it began in an earlier bar, or in the pickup).
   const before = sorted.filter((c) => c.bar < start);
   const prior = before[before.length - 1];
@@ -151,6 +159,10 @@ export function chartBarText(bar: ChartBar): string {
  */
 export function chartChordText(symbol: string): string {
   return chordSymbol(symbol, "lead-sheet") ?? symbol;
+}
+/** A chord symbol as a chart prints it in a style: lead-sheet (`chartChordText`) or jazz glyphs (D–7, C∆7, Bø7). */
+export function chartChordTextIn(symbol: string, style: "lead-sheet" | "jazz"): string {
+  return style === "jazz" ? jazzChordDisplay(symbol) : chartChordText(symbol);
 }
 
 // --- the chart engraved (slash noteheads) -------------------------------------------------------------
@@ -209,7 +221,8 @@ export function chartAbc(input: ChartInput, opts: ChartAbcOptions = {}): ChartAb
             bar: start + bar.bar - 1,
             message: `the chord "${c.text}" starts between beats ${beat} and ${beat + 1}: a chart has a slash per beat, so it is drawn on beat ${beat}`,
           });
-        byBeat.set(beat, [...(byBeat.get(beat) ?? []), chordDisplay(c.symbol).replace(/"/g, "'")]);
+        const shown = input.chordStyle === "jazz" ? jazzChordDisplay(c.symbol) : chordDisplay(c.symbol);
+        byBeat.set(beat, [...(byBeat.get(beat) ?? []), abcChordText(shown.replace(/"/g, "'"))]);
       }
       const slashes: string[] = [];
       for (let beat = 1; beat <= bar.slashes; beat++) {

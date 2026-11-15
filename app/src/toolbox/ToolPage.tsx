@@ -303,7 +303,7 @@ function LiveExample({ tool }: { tool: ToolEntry }) {
             : chordTool
               ? { variant: "compact" as const, views: ["roll"] as "roll"[] }
               : { variant: "mini" as const })}
-          lessonCtx={{ key, meter, defaultBpm: 90, loopBars: demoBars(demo) }}
+          lessonCtx={{ key, meter, defaultBpm: 90, loopBars: wave5?.bars ?? demoBars(demo) }}
           {...(wave5?.probes ? { probeKinds: wave5.probes } : {})}
           lint={{
             profile: "studio",

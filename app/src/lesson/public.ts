@@ -8,6 +8,7 @@ import { noteName } from "../answers/harmony.ts";
 import { qualityLabel } from "../answers/keys.ts";
 import { answerText, type LabelState, type TutorAnswer, type TutorSubject } from "../tutor/context.ts";
 import type { LessonEvent, LessonSnapshot } from "./types.ts";
+import { wave7TutorText } from "./wave7.ts";
 
 export const useLessonPublic = create<{ lesson: LessonSnapshot | null }>(() => ({ lesson: null }));
 
@@ -104,6 +105,9 @@ export function tutorAnswerOf(
         mode: "key-signature",
       };
   }
+  // Wave 7: a grouping, a Euclidean rhythm, two-lane taps, in words (never the step's `correct`).
+  const w7 = wave7TutorText(ex, response);
+  if (w7) return { kind: "text", prompt: ex.prompt, value: w7 };
   const w6 = "answer" in response ? wave6Answer(ex, response.answer as Wave6Answer) : null;
   if (w6) return w6;
   const w5 = "answer" in response ? wave5Answer(ex, response.answer as Wave5Answer, o.key ?? null) : null;

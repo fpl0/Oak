@@ -10,7 +10,7 @@ type Progress = { lessons: { lessonId: string; status: string }[] };
 
 /** The lesson a seed point `after <lesson>` ends on (`null` for a checkpoint, a gym session or a named point). */
 export function lessonBefore(point: string): string | null {
-  const m = /^after ((?:U\d\d|A\d)\.L\d\d)$/.exec(point);
+  const m = /^after ((?:U\d\d|[AJR]\d)\.L\d\d)$/.exec(point);
   return m ? (m[1] as string) : null;
 }
 

@@ -14,7 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Check, Lock, Play, Sparkles, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { tidyReason } from "../album/model.ts";
+import { sideOfCapstone, tidyReason } from "../album/model.ts";
 import { ownSketchOf } from "../lesson/make-start.ts";
 import { useContent } from "../lib/content.ts";
 import { formatDate } from "../lib/format.ts";
@@ -40,6 +40,7 @@ import { toast } from "../ui/kit/Toast.tsx";
 import { FLAVOUR_TITLE, useCapstoneContent } from "./content.ts";
 import { useCreateDraft, usePatchDraft, useStartCapstoneSession } from "./queries.ts";
 import { GROWN_FROM, planFromSketch } from "./sketch-plan.ts";
+import { arrangeStarter, picksSong, reharmStarter, songsOf, versionsOf, versionTag } from "./tracks.ts";
 import { starterOf, Workspace } from "./Workspace.tsx";
 import { capstoneStarter } from "./x1/cft.ts";
 import { bassFirst } from "./x1/phrases.ts";
@@ -244,16 +245,25 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
   const first = def.sessionDefs[0];
   const unlocks = first ? startUnlocks(shared.data?.toolbox ?? [], first.id) : [];
   const transcribe = def.kind === "transcribe";
-  const offered = (def.song ?? []).map((id) => ({
-    id,
-    entry: capContent.data?.repertoire.find((r) => r.id === id) ?? null,
-    written: songWritten(id),
-  }));
+  // Wave 7: JC4 and AC1 work on a song the learner picks (AC1's tunes open separately: `CapstoneGate.tunes`).
+  const pickSong = picksSong(def);
+  const gate = useCapstoneGate(pickSong ? def.id : null);
+  const tunes = gate.data?.tunes ?? null;
+  const offered = (transcribe ? (def.song ?? []) : pickSong ? songsOf(def) : []).map((id) => {
+    const tune = tunes?.find((t) => t.songId === id) ?? null;
+    const written = songWritten(id);
+    return {
+      id,
+      entry: capContent.data?.repertoire.find((r) => r.id === id) ?? null,
+      written: written && (tune === null || tune.open),
+      reason: !written ? null : tune && !tune.open ? (tune.reason ?? "Not open yet") : null,
+    };
+  });
   const [songId, setSongId] = useState<SongId | null>(null);
   // Only the chosen song's module (its answer key) is loaded; the others stay on the server.
   const chosenId =
     offered.find((o) => o.id === songId && o.written)?.id ?? offered.find((o) => o.written)?.id ?? null;
-  const chosenQuery = useSong(transcribe ? chosenId : null);
+  const chosenQuery = useSong(transcribe || pickSong ? chosenId : null);
   const chosenSong = chosenId ? { id: chosenId, song: chosenQuery.data ?? null } : null;
   // CF-A: the single starts from the plan, or from one of the learner's own sketches as its verse.
   const twoStarts = def.id === "CF-A";
@@ -292,7 +302,8 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
   const blocked = !currentSessionId() && open !== null && open.mapItemId !== first?.id;
   const onStart = async () => {
     if (!first || !boot.data || blocked || sketchBlocked) return;
-    if (transcribe && !chosenSong?.song) return;
+    if ((transcribe || pickSong) && !chosenSong?.song) return;
+    const picked = pickSong && chosenSong?.song ? chosenSong.song : null;
     try {
       // The draft first, so the flavour chosen here stays with it (the server stores it at completion) and the
       // workspace opens on it; then the session, which flips the capstone to "in progress" and grants its START
@@ -306,15 +317,19 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
           code:
             transcribe && chosenSong?.song
               ? capstoneStarter(def, chosenSong.song)
-              : grown?.ok
-                ? grown.code
-                : fromOwnVamp && ownVamp
-                  ? ownVamp.code
-                  : starterOf(def),
-          bpm: transcribe && chosenSong?.song ? chosenSong.song.bpm : null,
+              : picked
+                ? def.id === "JC4"
+                  ? reharmStarter(picked)
+                  : arrangeStarter(picked)
+                : grown?.ok
+                  ? grown.code
+                  : fromOwnVamp && ownVamp
+                    ? ownVamp.code
+                    : starterOf(def),
+          bpm: (transcribe || picked) && chosenSong?.song ? chosenSong.song.bpm : null,
           meter: transcribe && chosenSong?.song ? chosenSong.song.meter : def.meter,
           key:
-            transcribe && chosenSong?.song
+            (transcribe || picked) && chosenSong?.song
               ? chosenSong.song.key
               : grown?.ok
                 ? (pickedDetail.data?.versions.at(-1)?.key ?? null)
@@ -337,7 +352,16 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
       });
       await patch.mutateAsync({
         params: { id: draft.sketch.id },
-        body: { tags: transcribe && chosenSong ? [chosenSong.id] : [flavour] },
+        body: {
+          tags:
+            transcribe && chosenSong
+              ? [chosenSong.id]
+              : [
+                  flavour,
+                  ...(picked && chosenSong ? [chosenSong.id] : []),
+                  ...(versionsOf(def).length === 2 ? [versionTag("a")] : []),
+                ],
+        },
       });
       if (!currentSessionId())
         await start.mutateAsync({
@@ -361,6 +385,41 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
           <h2 className="mb-2 text-h3">The plan</h2>
           <SessionPlan def={def} state={state} />
         </div>
+        {pickSong && (
+          <div data-testid="song-pick">
+            <h2 className="mb-1 text-h3">The song</h2>
+            <p className="mb-2 text-sm text-text-2">
+              {def.id === "JC4"
+                ? "Pick one. Its melody and its original changes are given; the melody stays exactly as written, the chords become yours."
+                : "Pick one. Its melody is given; you arrange it twice, in two genres."}
+            </p>
+            {offered.some((o) => o.written) ? (
+              <SegmentedControl<string>
+                label="The song"
+                value={chosenSong?.id ?? ""}
+                options={offered.map((o) => ({
+                  value: o.id,
+                  label: o.entry?.title ?? o.id,
+                  disabled: !o.written,
+                }))}
+                onChange={(v) => setSongId(v as SongId)}
+              />
+            ) : (
+              <p className="text-sm text-text-2" data-testid="no-answer-keys">
+                Oak's renditions of {offered.map((o) => o.entry?.title ?? o.id).join(" and ")} are still being
+                written and checked against their sources. This capstone starts once one is ready; nothing
+                else waits on it.
+              </p>
+            )}
+            {offered
+              .filter((o) => !o.written)
+              .map((o) => (
+                <p key={o.id} className="mt-1 text-sm text-text-3" data-testid="song-closed">
+                  {o.entry?.title ?? o.id}: {o.reason ?? "not ready yet"}.
+                </p>
+              ))}
+          </div>
+        )}
         {transcribe ? (
           <div>
             <h2 className="mb-1 text-h3">The song</h2>
@@ -525,7 +584,7 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
               variant="primary"
               size="lg"
               loading={start.isPending || create.isPending || patch.isPending}
-              disabled={(transcribe && !chosenSong?.song) || sketchBlocked}
+              disabled={((transcribe || pickSong) && !chosenSong?.song) || sketchBlocked}
               onClick={() => void onStart()}
               autoFocus
             >
@@ -543,7 +602,11 @@ function Start({ def, state }: { def: CapstoneDef; state: CapstoneState }) {
           ? "This is the track that opens your album."
           : transcribe
             ? "When you release it, your transcription joins your album with a cover grown from the music."
-            : "When you release it, it joins your album with a cover grown from the music."}
+            : sideOfCapstone(def.id) === "B"
+              ? versionsOf(def).length === 2
+                ? "When you release it, both versions join Side B of your album as one track, with a cover grown from the music."
+                : "When you release it, it joins Side B of your album with a cover grown from the music."
+              : "When you release it, it joins your album with a cover grown from the music."}
       </p>
     </Page>
   );

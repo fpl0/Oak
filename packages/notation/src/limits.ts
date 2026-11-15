@@ -244,9 +244,9 @@ export const ABCJS_LIMITS: readonly AbcjsLimit[] = [
   {
     id: "ghost-notes",
     abcjs:
-      "no parenthesised or small notehead per note: a ghost note (U13.L02, .velocity(.3)) cannot be drawn as drummers write it.",
+      "no parenthesised notehead, and no way to style one member of a chord: a ghost note (U13.L02, R1.L03, .velocity(.3)) cannot be written in the ABC as drummers write it. A voice at cue size (V: cue=on, %%voicescale) shrinks every head of an element, the hi-hat beside a ghost snare too.",
     fallback:
-      "not drawn: every stroke has a normal head. U13.L02 shows ghost notes on the roll (the staff arrives in U13.L03); content must not ask a learner to read loud and quiet strokes from the staff.",
+      "Wave 7: NotationInput.ghosts lists the ghost heads (NoteItem.ghosts, ghostMarks: effective gain ≤ 0.4 on a track whose loudest stroke is twice as loud) and markGhostNotes (render.dom.ts) draws each in parentheses after the render. A host that does not call it shows normal heads: content asks a learner to read ghost notes from the staff only where the host marks them.",
     warns: null,
   },
   {
@@ -256,6 +256,55 @@ export const ABCJS_LIMITS: readonly AbcjsLimit[] = [
     fallback:
       "NotationInput.grid (steps per bar) moves every onset and end to the grid the lesson declares before writing; two notes of one track that land on one step cannot both be shown: the Score warns and is approximate.",
     warns: "snapped-to-grid",
+  },
+  // --- Wave 7 ---------------------------------------------------------------------------------------
+  {
+    id: "slash-noteheads",
+    abcjs:
+      "slash noteheads come from !style=rhythm! on an element (or style=rhythm on a voice), and a tied continuation without the decoration is drawn with a normal head; a rest is never a slash.",
+    fallback:
+      "comping on the rhythm staff (compingInput, NotationInput.slashes) writes !style=rhythm! on every piece of every stroke, tied pieces included; rests stay rests.",
+    warns: null,
+  },
+  {
+    id: "rhythm-bracket",
+    abcjs:
+      "the only bracket abcjs draws over notes is a tuplet's (with its number p, never the ratio p:q); there is no bracket or line over an arbitrary span (a hemiola across the bar line), and a slur would read as phrasing.",
+    fallback:
+      'a RhythmBracket\'s text ("3:2", "3 × 2", "3 over 4") stands over the note or rest that starts its span (an annotation above the top staff); a tuplet in the span draws its own bracket. A bracket that starts inside a tuplet is drawn at the note sounding there, and the Score warns.',
+    warns: "abcjs-limit",
+  },
+  {
+    id: "polymeter",
+    abcjs:
+      "one meter for the whole system: an inline [M:3/4] in one voice of a two-staff score parses with no warning and changes nothing (both staves stay 4/4), so two staves with their own bar lines cannot be drawn.",
+    fallback:
+      'a polymeter is engraved in the piece\'s meter, with an accent (!>!) on every note that starts the shorter pattern again (NotationInput.cycleAccents, polymeterMarks) and a bracket text ("3 over 4") over the bars it takes to come round.',
+    warns: null,
+  },
+  {
+    id: "tuplet-ratio-text",
+    abcjs:
+      "a tuplet prints its first number only ((4:3:4 shows 4), and a group of plain values (four dotted eighths over a 3/4 bar) has no bracket at all.",
+    fallback:
+      'NotationInput.polyTuplets writes a polyrhythm\'s other pulse as one bar-wide tuplet ((4:3:4 four quarters over 3/4; 3 over 2 halves in 4/4), and the ratio ("4:3") is a bracket text over it (polyrhythmMarks).',
+    warns: null,
+  },
+  {
+    id: "additive-meter",
+    abcjs:
+      "an additive time signature (M:2+2+3/8, M:3+2/4) is parsed and drawn as the groups over the denominator; abcjs's own beaming does not read it (Oak writes the beam breaks itself).",
+    fallback:
+      "NotationInput.showGrouping writes the meter's grouping as the additive signature; the beams follow the grouping with or without it (meterWith).",
+    warns: null,
+  },
+  {
+    id: "jazz-chord-glyphs",
+    abcjs:
+      "a chord symbol is drawn as its text, with b and # after a letter turned into ♭ and ♯; the jazz glyphs (∆, –, ø, °) are drawn as the Unicode characters, and the symbol cannot be set with a raised extension or stacked alterations.",
+    fallback:
+      'chordStyle "jazz" writes the symbol from the one chord table in Unicode on one line (C∆9, D–7, G7♭9, Cø7, C7alt, C7/E); lead-sheet style keeps the ASCII form abcjs turns into glyphs (Cmaj9, Dm7, G7b9).',
+    warns: null,
   },
 ];
 

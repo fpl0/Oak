@@ -11,7 +11,14 @@ import { useShell } from "../../lib/shell-store.ts";
 import { useUnlockedSet } from "../../lib/unlocked.ts";
 import { IS_MAC } from "../keys/KeymapProvider.tsx";
 import { formatKeys } from "../keys/keymap.ts";
-import { openCommands, shellTracks, trackHint, tracksListedOpen, unwrittenHint } from "./course-state.ts";
+import {
+  openCommands,
+  shellTracks,
+  trackHint,
+  trackSessionTarget,
+  tracksListedOpen,
+  unwrittenHint,
+} from "./course-state.ts";
 import { sideLessonHint } from "./side-lessons.ts";
 
 function useSearchCommands(open: boolean): Command[] {
@@ -62,11 +69,18 @@ function useSearchCommands(open: boolean): Command[] {
         title: t.title,
         group: "Lessons",
         hint: trackHint(t),
+        // Not the next session's id: typing a lesson's id finds that lesson first, not the track around it.
         keywords: ["track", "advanced track", t.trackId],
+        // Wave 7: a track is a place: its next session (a lesson, its checkpoint or a capstone session) when one
+        // can start, else the Oak's course view, where the track and the gate that holds it are drawn.
         run: () => {
-          const next = t.next;
-          if (t.state === "ready" && next)
-            void navigate({ to: "/learn/$lessonId", params: { lessonId: next } });
+          const to = t.state === "ready" ? trackSessionTarget(t) : null;
+          if (to?.kind === "lesson")
+            void navigate({ to: "/learn/$lessonId", params: { lessonId: to.lessonId } });
+          else if (to?.kind === "checkpoint")
+            void navigate({ to: "/checkpoint/$unitId", params: { unitId: to.unitId } });
+          else if (to?.kind === "capstone")
+            void navigate({ to: "/capstone/$id", params: { id: to.capstoneId } });
           else toCourse();
         },
       });
@@ -117,7 +131,7 @@ function useSearchCommands(open: boolean): Command[] {
         id: `track:${t.id}`,
         title: t.title,
         group: "Tracks",
-        hint: `Side ${t.side === "Bside" ? "B-side" : t.side}`,
+        hint: `Album · ${t.side === "Bside" ? "B-side" : `Side ${t.side}`}`,
         run: () => void navigate({ to: "/album/$trackId", params: { trackId: t.id } }),
       });
     return out;

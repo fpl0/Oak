@@ -51,7 +51,7 @@ export const LINT_TEMPLATES = {
   "code.swing-convention":
     "`{fn}(…, {got})`: the second argument is the beats per bar ({beats}), or {double} for 16ths.",
   "code.swing-fraction-string":
-    'A fraction inside quotes ("{text}") gives no swing: write the amount as a plain number, `.swingBy(1/3, 4)`.',
+    'A fraction inside quotes ("{text}") gives no swing: write the amount as a plain number, without quotes.',
   "code.time-fraction-string":
     '`.{fn}("{text}")` does not shift anything: write `.{fn}({text})` without quotes.',
   "code.arranged-scale-pattern":

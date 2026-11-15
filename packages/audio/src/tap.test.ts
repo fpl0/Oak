@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { FakeContext } from "./fakes.test-data.ts";
-import { createTapInput, eventTimeToContextTime, tapsToOnsets } from "./tap.ts";
+import { createTapInput, eventTimeToContextTime, laneKeyCode, tapsToOnsets } from "./tap.ts";
 
 function key(
   target: EventTarget,
@@ -65,6 +65,37 @@ describe("createTapInput", () => {
     expect(input.taps().map((t) => t.voice)).toEqual([0, 1]);
     input.arm(); // re-arming clears
     expect(input.taps()).toEqual([]);
+  });
+
+  test("two lanes with their own keys (TapLane.key): those keys are the voices, F and J are not", () => {
+    expect(laneKeyCode("d")).toBe("KeyD");
+    expect(laneKeyCode("K")).toBe("KeyK");
+    expect(laneKeyCode("4")).toBe("Digit4");
+    expect(laneKeyCode("Semicolon")).toBe("Semicolon");
+    expect(laneKeyCode(" ")).toBeNull();
+    const ctx = new FakeContext();
+    const target = new EventTarget();
+    const input = createTapInput(ctx as unknown as AudioContext, { target });
+    input.arm({ twoVoices: true, keys: ["d", "k"] });
+    expect(key(target, "KeyD", 1100)).toBe(true);
+    key(target, "KeyK", 1200);
+    key(target, "KeyF", 1300);
+    key(target, "KeyJ", 1400);
+    expect(input.taps().map((t) => t.voice)).toEqual([0, 1]);
+    // The same key twice, or Space, falls back to F and J.
+    input.arm({ twoVoices: true, keys: ["f", "f"] });
+    key(target, "KeyF", 1500);
+    key(target, "KeyJ", 1600);
+    expect(input.taps().map((t) => t.voice)).toEqual([0, 1]);
+    input.arm({ twoVoices: true, keys: ["Space", "j"] });
+    key(target, "Space", 1700);
+    expect(input.taps()).toEqual([]);
+    // One lane's keys are forgotten when the pad is armed for a single voice.
+    input.arm();
+    key(target, "KeyD", 1800);
+    key(target, "Space", 1900);
+    expect(input.taps().map((t) => t.voice)).toEqual([0]);
+    input.dispose();
   });
 
   test("keys typed into a text field are not taps", () => {

@@ -57,6 +57,16 @@ export interface LoadedLesson {
 /** The dev-only fixture of the Wave 3 step kinds (`app/src/lesson/dev/wave3-fixture.ts`); never in a build. */
 async function devFixture(id: string): Promise<LoadedLesson | null> {
   if (!import.meta.env.DEV) return null;
+  if (id === "R2.L99") {
+    const w7 = await import("./dev/wave7-fixture.ts");
+    return {
+      def: w7.default,
+      Mdx: null,
+      sample: true,
+      context: w7.FIXTURE7_CONTEXT,
+      note: "A dev fixture of the Wave 7 two-hand tap, played with the tools of R2.L04. Nothing here is saved.",
+    };
+  }
   if (id === "U11.L99") {
     const w5 = await import("./dev/wave5-fixture.ts");
     return {

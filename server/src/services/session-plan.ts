@@ -3,7 +3,7 @@
 // (the "every 5th session" rule from U07.L01), a Light lesson after a 10+ day break, or a reviews-only day
 // when nothing is left. Storage and the course order are behind the ports below; the server implements
 // them over SQLite and the content index (gates are applied by `services/gates.ts` before `next()`).
-import type { DueBatch, SessionPlan, WarmupItem } from "@oak/api";
+import type { DueBatch, SessionPlan, TrackFocusId, TrackOffer, WarmupItem } from "@oak/api";
 import type { CanDoId, LessonId, SessionId } from "@oak/content-kit";
 import {
   dayIndex,
@@ -25,6 +25,8 @@ export interface CourseItem {
   id: SessionId;
   kind: Exclude<MapItemKind, "gym">;
   title: string;
+  /** Wave 7: the advanced track the item belongs to; absent for the core. */
+  trackId?: "J" | "R" | "A";
 }
 export interface LessonProgressView {
   status: "locked" | "available" | "in_progress" | "completed";
@@ -37,7 +39,7 @@ export interface SessionPlanCoursePort {
    * The next item of the learner's order with gates applied, never a gym or CF-T session (those fill
    * transcription slots, decided here). `null` when nothing is left.
    */
-  next(): CourseItem | null;
+  next(day?: string): CourseItem | null;
   /** Completed map sessions in order, oldest first, gym and CF-T sessions included. */
   history(): SessionId[];
   /** CF-T is open (U15.L01 completed) and its next unfinished session, or `null`. */
@@ -80,6 +82,18 @@ export interface SessionPlanCoursePort {
   coreStage?(): NonNullable<SessionPlan["core"]>;
   /** Wave 6 (wave6.md §5.3): the open tracks with no lesson to start, in one line; `null` when there is none. */
   planTracks?(): SessionPlan["tracks"];
+  /** Wave 7 (wave7.md §5.2): the learner's choice between the core and the tracks; absent: `core`. */
+  focus?(): TrackFocusId;
+  /** Wave 7: what a track lets the learner start on `day` (a lesson, its checkpoint when due, a capstone session). */
+  trackNext?(trackId: "J" | "R" | "A", day: string): CourseItem | null;
+  /** Wave 7: the first open lesson of a track not done yet (offered beside its due checkpoint). */
+  trackNextLesson?(trackId: "J" | "R" | "A"): CourseItem | null;
+  /** Wave 7: Today's track offers, the focused track first, without the session already planned. */
+  trackOffers?(target: 15 | 20 | 25, day: string, except: string | null): TrackOffer[];
+  /** Wave 7: where a track session stands in its track (`SessionPlan.track`). */
+  trackPosition?(trackId: "J" | "R" | "A"): { sessionIndex: number; sessionsTotal: number };
+  /** Wave 7 (wave7.md §5.8): the whole course's stage. */
+  courseStage?(): NonNullable<SessionPlan["course"]>;
 }
 export interface SessionPlanLearnerPort {
   profile(): { targetMinutes: 15 | 20 | 25; timeZone: string; rolloverHour: number };
@@ -204,6 +218,21 @@ export function warmupLabel(plannedSec: number): string {
 
 export class SessionPlanService {
   constructor(private readonly deps: SessionPlanDeps) {}
+  /** While `peek` runs: no SRS day preparation and no warm-up planning (the New block only). */
+  #peeking = false;
+
+  /**
+   * Wave 7 (carry f6; wave7.md §5.7): the plan the planner would make at `at` (the next learner day) for its New
+   * block, without preparing that day's reviews or planning a warm-up (both belong to that day). Read-only.
+   */
+  peek(at: Date, targetMinutes?: 15 | 20 | 25): SessionPlan {
+    this.#peeking = true;
+    try {
+      return this.#today(at, targetMinutes);
+    } finally {
+      this.#peeking = false;
+    }
+  }
 
   /**
    * `GET /api/session/today`. Idempotent within a day (the SRS day preparation runs once per day). Wave 5: the
@@ -227,7 +256,7 @@ export class SessionPlanService {
     const day = srs.day(now);
     const gap = gapDays(learner.lastQualifyingDayBefore(day), day);
     const mode: ReturnMode = returnMode(gap);
-    srs.prepareDay(now, gap);
+    if (!this.#peeking) srs.prepareDay(now, gap);
 
     const returning: SessionPlan["returning"] =
       gap >= RETURN.warmupGap
@@ -238,6 +267,10 @@ export class SessionPlanService {
         : null;
     // Wave 6: where the core stands and the tracks' line ride on every plan; `slot` is set on a slot day.
     const core = course.coreStage?.() ?? "in-progress";
+    // Wave 7: the learner's focus, the whole course's stage, Today's track offers (filled in once the New block is
+    // known, so the offers never repeat it).
+    const focus = course.focus?.() ?? "core";
+    const wave7 = course.focus !== undefined;
     const base = {
       day,
       targetMinutes: target,
@@ -247,6 +280,14 @@ export class SessionPlanService {
       slot: null as SessionPlan["slot"],
       tracks: course.planTracks?.() ?? null,
       core,
+      ...(wave7
+        ? {
+            focus,
+            course: course.courseStage?.() ?? "in-progress",
+            track: null as SessionPlan["track"],
+            trackOffers: [] as TrackOffer[],
+          }
+        : {}),
     };
 
     // A Light lesson after a break of 10 days or more: the last lesson's Make with one new constraint.
@@ -268,7 +309,66 @@ export class SessionPlanService {
       };
     }
 
-    const next = course.next();
+    let next = course.next(day);
+    // Wave 7 (wave7.md §5.2): with the focus on a track, that track's next session is the New block and the core's
+    // next item the first alternative — except that a due core checkpoint and a core capstone already under way stay
+    // the New block (they are scheduled, §7.6). A track with nothing to start falls back to the core for the day.
+    let trackNote: string | null = null;
+    if (focus !== "core" && course.trackNext !== undefined) {
+      const t = course.trackNext(focus, day);
+      const coreHolds =
+        next !== null && (next.kind === "checkpoint" || (capstoneSessionNo(next.id) ?? 0) > 1);
+      if (t !== null && !coreHolds) {
+        if (next !== null && !base.alternatives.some((a) => a.mapItemId === next?.id))
+          base.alternatives = [
+            { kind: next.kind, mapItemId: next.id, title: next.title },
+            ...base.alternatives,
+          ];
+        next = t;
+        // A track checkpoint gates only its capstones (§7.6 rule 5): while it is the New block (due, or its retake
+        // after a failed attempt) the track's next lesson stays open and is offered beside it (review:robustness:
+        // after a failed J.CP1, J2.L04 could not be started from Today until the checkpoint was passed).
+        const lesson = t.kind === "checkpoint" ? (course.trackNextLesson?.(focus) ?? null) : null;
+        if (lesson !== null && !base.alternatives.some((a) => a.mapItemId === lesson.id))
+          base.alternatives = [
+            { kind: lesson.kind, mapItemId: lesson.id, title: lesson.title },
+            ...base.alternatives,
+          ];
+      } else if (t === null && next !== null && core !== "complete")
+        // Only while the core has a session to give instead (after the core there is none: wave 7 closer).
+        trackNote = "Nothing of the track you chose can be started today: the core's next session instead.";
+    }
+    const withTracks = <P extends SessionPlan>(plan: P): P => {
+      if (!wave7) return plan;
+      const offers = course.trackOffers?.(target, day, plan.mapItemId as string | null) ?? [];
+      const trackId = next?.trackId;
+      const isTrack = trackId !== undefined && plan.mapItemId === next?.id;
+      return {
+        ...plan,
+        trackOffers: offers,
+        track:
+          isTrack && course.trackPosition !== undefined
+            ? { trackId, ...course.trackPosition(trackId) }
+            : null,
+        note: plan.note ?? (plan.mapItemId === null || !isTrack ? trackNote : null),
+      };
+    };
+    return withTracks(this.#main(now, target, gap, mode, base, next, day));
+  }
+
+  #main(
+    now: Date,
+    target: 15 | 20 | 25,
+    gap: number,
+    _mode: ReturnMode,
+    base: Omit<SessionPlan, "kind" | "mapItemId" | "title" | "note" | "warmup" | "main"> & {
+      alternatives: SessionPlan["alternatives"];
+    },
+    next: CourseItem | null,
+    _day: string,
+  ): SessionPlan {
+    const { srs, course } = this.deps;
+    const core = base.core ?? "in-progress";
     // `GYM.nn` has two digits (contracts §1.2): after GYM.99 the gym is no longer scheduled.
     const gymRoom = course.gymCount() < MAX_GYM;
     const gymNote = gymRoom ? (course.capstoneGymNote?.() ?? null) : null;

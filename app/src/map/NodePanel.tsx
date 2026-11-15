@@ -43,8 +43,8 @@ export interface NodePanelProps {
   /** Quiet mode today: voice leaves wait for the mic. */
   quiet?: { on: boolean; reason: "today" | "always" | "no-mic" | null };
   /**
-   * Wave 6: the leaf sits on an open branch (an advanced track whose gate is met) with no lesson written yet. The
-   * panel says so in the track's own words; it never reads "not open yet" on an open track.
+   * Wave 6: the leaf sits on an open branch (an advanced track whose gate is met). The panel says so in the track's
+   * own words — with its lesson named once that is written (Wave 7) — and never reads "not open yet" on an open track.
    */
   branch?: { title: string; note: string } | null;
   onSelect: (id: string) => void;
@@ -79,9 +79,11 @@ function ReviveLink({ action }: { action: Extract<ReviveAction, { kind: "revive"
 function PractiseAction({
   target,
   branch = null,
+  authored,
 }: {
   target: PractiseTarget;
   branch?: { title: string; note: string } | null;
+  authored?: ReadonlySet<string> | undefined;
 }) {
   if (target.kind === "family")
     return (
@@ -113,7 +115,11 @@ function PractiseAction({
         className="rounded-control border border-dashed border-border px-3 py-2 text-sm text-text-2"
         data-testid="leaf-branch"
       >
-        {branch.title} is open, and this leaf grows on it. {branch.note.replace(/^Open\.\s*/, "")}
+        {/* Wave 7: the track's lessons are written; the leaf grows with its own lesson, in the track's order. */}
+        {target.lessonId && authored?.has(target.lessonId)
+          ? `${branch.title} is open, and this leaf grows with ${target.lessonId} · ${target.title}.`
+          : `${branch.title} is open, and this leaf grows on it.`}{" "}
+        {branch.note.replace(/^Open\.\s*/, "")}
       </p>
     );
   return (
@@ -203,7 +209,10 @@ export function NodePanel(p: NodePanelProps) {
           </p>
           <p className="text-sm text-text-2">
             {p.branch && v.status === "locked"
-              ? "Its branch is open. Its lesson is still being written."
+              ? node.introducedBy && p.authored?.has(node.introducedBy)
+                ? // Wave 7: the track's lessons are written; this leaf waits for its lesson in the track's order.
+                  `Its branch is open. ${node.introducedBy} ${p.lessonTitle(node.introducedBy)} grows it, in the track's order.`
+                : "Its branch is open. Its lesson is still being written."
               : STATUS_HELP[v.status]}
           </p>
         </section>
@@ -335,7 +344,7 @@ export function NodePanel(p: NodePanelProps) {
             Quiet mode and the mic: Settings → Voice
           </Link>
         ) : (
-          <PractiseAction target={target} branch={p.branch ?? null} />
+          <PractiseAction target={target} branch={p.branch ?? null} authored={p.authored} />
         )}
       </div>
     </aside>

@@ -192,6 +192,15 @@ function annotationsAt(list: Score["chords"], onset: Rat): string[] {
   return (list ?? []).filter((a) => R.eq(a.drawnAt ?? a.at, onset)).map((a) => a.text.replace(/"/g, "'"));
 }
 
+/**
+ * A chord symbol as written into the ABC. abcjs reads a "/" in a chord symbol as the start of a bass note and drops
+ * what follows when it is not one (`translateChord`): "C6/9" was drawn "C6". A slash that does not start a bass note
+ * is written as the division slash "∕", which looks the same and which abcjs leaves alone.
+ */
+export function abcChordText(text: string): string {
+  return text.replace(/\/(?![A-G](?:[#b♯♭])?(?:$|\n))/g, "∕");
+}
+
 function emitBar(
   ctx: Ctx,
   staff: Staff,
@@ -210,7 +219,12 @@ function emitBar(
     if (change) out += ` [K:${change.text}] `;
     else if (ii > 0) out += it.breakBefore ? " " : "";
     if (it.tupletStart) out += `(${it.tupletStart.p}:${it.tupletStart.q}:${it.tupletStart.r}`;
-    if (flags.chords) for (const t of annotationsAt(ctx.score.chords, it.onset)) out += `"${t}"`;
+    if (flags.chords)
+      for (const t of annotationsAt(ctx.score.chords, it.onset)) out += `"${abcChordText(t)}"`;
+    // Wave 7: a bracket's text over the note or rest that starts its span (`ABCJS_LIMITS` "rhythm-bracket").
+    if (flags.chords)
+      for (const b of ctx.score.brackets ?? [])
+        if (R.eq(b.drawnAt ?? b.at, it.onset)) out += `"^${b.text.replace(/"/g, "'")}"`;
     if (flags.romans) for (const t of annotationsAt(ctx.score.romans, it.onset)) out += `"_${t}"`;
     if (flags.above && it.n !== null && !it.tieFromPrev && it.kind !== "rest")
       for (const t of annotationTexts(ctx.ann.get(it.n), ctx.score))
@@ -221,6 +235,9 @@ function emitBar(
       return;
     }
     out += `!class=${ctx.prefix}${it.n}!`;
+    // Wave 7: slash noteheads on the rhythm staff (every tied piece), the accent of a polymeter's cycle start.
+    if (ctx.score.slashes && staff.lines === 1) out += "!style=rhythm!";
+    if (it.accent && !it.tieFromPrev) out += "!>!";
     const tok = (p: SpelledPitch, pi: number): string => {
       const head = staff.clef === "perc" ? ((it.drums?.[pi] ?? it.drum)?.head ?? "normal") : "normal";
       const acc = ctx.acc.get(`${si}|${bi}|${vi}|${ii}|${pi}`) ?? "";
@@ -322,7 +339,8 @@ export function toAbc(score: Score, opts: AbcOptions = {}): AbcResult {
   const multi = voices.length > 1;
   const header: string[] = ["X:1"];
   if (score.title) header.push(`T:${score.title.replace(/\n/g, " ")}`);
-  header.push(`M:${score.meter.num}/${score.meter.den}`, "L:1/16");
+  // Wave 7: an additive time signature (`M:2+2+3/8`, drawn as 2+2+3 over 8) prints the grouping where engravers do.
+  header.push(`M:${score.groupingText ?? score.meter.num}/${score.meter.den}`, "L:1/16");
   // The tempo line: "Swing 8ths" (contracts §6.10 item 3) as its text, where engravers write the feel, so it never
   // stacks with the first bar's chord symbol; then the tempo.
   const tempo: string[] = [];

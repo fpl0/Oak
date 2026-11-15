@@ -25,13 +25,14 @@ import goDownMoses from "./go-down-moses/song.ts";
 import greensleeves from "./greensleeves/song.ts";
 import { songById } from "./index.ts";
 import joshua from "./joshua-fit-the-battle/song.ts";
+import stLouis from "./st-louis-blues/song.ts";
 import { VOICINGS } from "./tunes.ts";
 import wayfaring from "./wayfaring-stranger/song.ts";
 
 setDefaultTimeout(120_000);
 
-const songs: SongDef[] = [goDownMoses, joshua, wayfaring, greensleeves, carelessLove, frankie];
-const L6 = [carelessLove, frankie];
+const songs: SongDef[] = [goDownMoses, joshua, wayfaring, greensleeves, carelessLove, frankie, stLouis];
+const L6 = [carelessLove, frankie, stLouis];
 
 // --- 1. the separate transcriptions -----------------------------------------------------------------------
 
@@ -49,6 +50,8 @@ interface Source {
   bars?: number;
   /** Bars (Oak's numbering) where the setting follows the cited edition instead of this transcription; left out. */
   differs?: number[];
+  /** Oak's beats per source beat (2 when the setting doubles the note values, St. Louis Blues). */
+  scale?: number;
 }
 
 const SOURCES: Record<string, Source[]> = {
@@ -132,6 +135,39 @@ K:F
  d2 B2| F2 G- ^G| A3 F| E C E G| F4-| F2 z2|`,
     },
   ],
+  "song.st-louis-blues": [
+    {
+      // The first strain and its repeat with the second verse's words (lines 4–6); the first 12 bars are compared.
+      // In bar 9 Campin attacks the held D again on the second beat of Handy's bar (Oak's beat 3), where the
+      // reading of the print below ties it; Oak follows the print, so bar 9 is left out here.
+      from: 'J. Campin, Jack Campin\'s Nine-Note Tunebook, "Saint Louis Blues" (ABC, last edited 2013, in G, 2/4), the first strain',
+      rhythm: true,
+      tonic: "G",
+      scale: 2,
+      bars: 12,
+      differs: [9],
+      abc: `M:2/4
+L:1/16
+K:G
+  z2|{^A}BdBG- G4 |z ^DEG _B A3|G8-  |G6 \\
+  z2|    zEGA- A4 |z  EGA _B A3|G8-  |G6
+  z2|    FAFD  D4 |z2 _BB  B A3|G8-  |G6 \\
+  z2|{^A}BdBG- GG3|z ^DEG _B A3|G8-  |G6
+  z2|    zEGA- AA3|z ^DEG _B A3|G8-  |G6 \\
+  z2|    FAFD- DD3|z2 _BB  B A3|G8-  |G4||`,
+    },
+    {
+      from: "an outside reviewer's reading of Handy's 1914 print, pp. 2–3 (in G, 2/4), written here as ABC from its table of degrees and values, the grace note left out",
+      rhythm: true,
+      tonic: "G",
+      scale: 2,
+      abc: `M:2/4
+L:1/16
+K:G
+BdBG- G4|z ^DEG _BA3|G8-|G6 z2|zEGA- A4|zEGA _BA3|G8-|G6 z2|
+FAFD- D4|z2 _B_B_B A3|G8-|G6 z2|]`,
+    },
+  ],
   "song.frankie-and-johnny": [
     {
       from: 'The Digital Tradition, "Frankie and Johnnie" (C)',
@@ -171,6 +207,7 @@ function readAbc(abc: string, pickupBar: boolean): { beat: number; midi: number 
     .filter((l) => !/^[A-Za-z]:/.test(l))
     .join(" ")
     .replace(/"[^"]*"/g, "")
+    .replace(/\{[^}]*\}/g, "")
     .replace(/[\\()[\]]/g, "");
   const out: { beat: number; midi: number; bar: number }[] = [];
   const token = /(\^|_|=)?([A-Ga-gz])([,']*)(\d*)(\/?)(\d*)|(-)|(\|+)/g;
@@ -247,7 +284,9 @@ describe("each answer key plays the notes of a separate transcription", () => {
         const end = (src.bars ?? s.answerKey.bars) * beatsOf(s);
         const kept = (beat: number) =>
           beat < end - 1e-9 && !src.differs?.includes(Math.floor(beat / beatsOf(s) + 1e-9) + 1);
-        const theirs = readAbc(src.abc, !!s.pickup).filter((a) => kept(a.beat));
+        const theirs = readAbc(src.abc, !!s.pickup)
+          .map((a) => ({ ...a, beat: round(a.beat * (src.scale ?? 1)) }))
+          .filter((a) => kept(a.beat));
         const ours = (await melodyOf(s)).filter((n) => kept(n.beat));
         expect(ours.length).toBe(theirs.length);
         // Pitches: one fixed interval, the difference of the two keys (any octave).
@@ -422,6 +461,32 @@ describe("what the song files say about the tunes", () => {
   });
   test("Wayfaring Stranger: natural minor only (D E F G A C, no B or C♯)", async () => {
     expect([...(await pcs(wayfaring))].sort((a, b) => a - b)).toEqual([0, 2, 4, 5, 7, 9]);
+  });
+  test("St. Louis Blues: the blue third (B♭, ♭3) in bars 2, 6 and 10, the ♯5 below (D♯) once, in bar 2; each line's held 1 a whole bar, then a bar of rest", async () => {
+    const notes = await melodyOf(stLouis);
+    const barOf = (n: { beat: number }) => Math.floor(n.beat / 4) + 1;
+    expect([...new Set(notes.filter((n) => n.midi === 70).map(barOf))]).toEqual([2, 6, 10]);
+    expect(notes.filter((n) => n.midi === 63).map(barOf)).toEqual([2]);
+    for (const b of [3, 7, 11]) {
+      const inBar = notes.filter((n) => barOf(n) === b);
+      expect([b, inBar.map((n) => [n.midi, n.len])]).toEqual([b, [[67, 4]]]);
+      expect([b + 1, notes.filter((n) => barOf(n) === b + 1)]).toEqual([b + 1, []]);
+    }
+    // Bar 9 attacks the held 5 below (D) once: the print reading's tie, not Campin's second attack.
+    expect(notes.filter((n) => barOf(n) === 9).map((n) => n.midi)).toEqual([66, 69, 66, 62]);
+  });
+  test("St. Louis Blues: both sources really differ from each other only in bar 9 (an extra attack of D in Campin's)", () => {
+    const [campin, print] = SOURCES["song.st-louis-blues"] ?? [];
+    const first12 = (src?: Source) =>
+      readAbc(src?.abc ?? "", false)
+        .map((a) => ({ beat: round(a.beat * 2), midi: a.midi }))
+        .filter((a) => a.beat < 48);
+    const a = first12(campin);
+    const b = first12(print);
+    const key = (x: { beat: number; midi: number }) => `${x.beat}:${x.midi}`;
+    const onlyA = a.filter((x) => !b.some((y) => key(y) === key(x)));
+    const onlyB = b.filter((x) => !a.some((y) => key(y) === key(x)));
+    expect([onlyA, onlyB]).toEqual([[{ beat: 34, midi: 62 }], []]);
   });
   test("Careless Love: one chromatic passing note, G♯ between G and A (bar 12)", async () => {
     const notes = await melodyOf(carelessLove);

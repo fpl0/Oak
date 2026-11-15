@@ -22,6 +22,7 @@ import {
   stripMarkers,
 } from "@oak/content-kit";
 import { analyzePiece, capstoneLength, linerNotes, normalize } from "@oak/grader";
+import { triggerDdl } from "../db/migrate.ts";
 import type { AppDeps } from "../deps.ts";
 import { ApiError, badRequest } from "../errors.ts";
 import { finishDrill, reviewCard } from "../routes/practice.ts";
@@ -44,17 +45,33 @@ import {
   WAVE6_SEED_DESCRIPTIONS,
   WAVE6_STAND_INS,
 } from "./seed-wave6.ts";
+import {
+  ac1Versions,
+  afterTrackWalk,
+  jc4Reharm,
+  REVIEW_DAY,
+  TRACK_CHECKPOINT_UNIT,
+  WAVE7_CAPSTONE_DRAFTS,
+  WAVE7_CAPSTONE_KEYS,
+  WAVE7_SEED_DESCRIPTIONS,
+  WAVE7_STAND_INS,
+  WAVE7_WALKS,
+  type Wave7Walk,
+} from "./seed-wave7.ts";
 import { standardGaps } from "./standard-ladder.ts";
+import { CAPSTONE_SONGS } from "./track-plan.ts";
 
 const CAPSTONE_DRAFTS: Readonly<Record<string, readonly string[]>> = {
   ...WAVE5_DRAFTS,
   ...WAVE6_CAPSTONE_DRAFTS,
+  ...WAVE7_CAPSTONE_DRAFTS,
 };
 const CAPSTONE_KEYS: Readonly<Record<string, KeySpec>> = {
   ...(WAVE5_KEYS as Record<string, KeySpec>),
   ...(WAVE6_CAPSTONE_KEYS as Record<string, KeySpec>),
+  ...(WAVE7_CAPSTONE_KEYS as Record<string, KeySpec>),
 };
-const ALL_STAND_INS = [...STAND_INS, ...WAVE6_STAND_INS];
+const ALL_STAND_INS = [...STAND_INS, ...WAVE6_STAND_INS, ...WAVE7_STAND_INS];
 
 const DAY_MS = 86_400_000;
 
@@ -69,7 +86,7 @@ export const SEED_POINTS: readonly DevSeedPoint[] = [
   {
     point: "after <SessionId>",
     description:
-      "Every default-order session up to and including <SessionId> completed, one per day, the last yesterday (after U01.L03, after U01.CP, after C0.S1).",
+      "Every default-order session up to and including <SessionId> completed, one per day, the last yesterday (after U01.L03, after U01.CP, after C0.S1). Wave 7: a track session (after J1.L03, after J.CP1, after RC1.S2, after A2.L04) walks the core complete, then the tracks J, R, A in order up to it, the focus on its track.",
   },
   { point: "U01.CP due", description: "U02.L01 done yesterday: today's New block is the U01 checkpoint." },
   {
@@ -219,6 +236,10 @@ export const SEED_POINTS: readonly DevSeedPoint[] = [
   // walks a gym session in each slot CF-T would take until one exists (as Today does: with nothing to transcribe the
   // slot is a gym session).
   ...WAVE6_SEED_DESCRIPTIONS,
+  // Wave 7 (wave7.md §6): the core complete (or through U13.CP), then the tracks in the order J, R, A unless the point
+  // says otherwise. A track lesson not written yet is completed as a stand-in (seed-wave7.ts), as Wave 6's were; a
+  // point that needs a standard JC4 can work on, or a tune AC1 can work on, answers 400 naming what is missing.
+  ...WAVE7_SEED_DESCRIPTIONS,
 ];
 
 /** What a point expands to. */
@@ -253,6 +274,8 @@ interface SeedPlan {
    * flag CF-T's sessions are left out of the walk until a standard has an answer key.
    */
   needsCft?: boolean;
+  /** Wave 7: the track sessions walked after the core walk, the focus, the horns taken away. */
+  wave7?: Wave7Walk;
 }
 
 export function needDevClock(d: AppDeps): DevClock {
@@ -393,9 +416,26 @@ export function planSeed(point: string, order: readonly string[]): SeedPlan {
   };
   const namedPlan = named[lower.replace(/\s+/g, " ")];
   if (namedPlan !== undefined) return namedPlan();
+  // Wave 7 (wave7.md §6).
+  const w7 = Object.entries(WAVE7_WALKS).find(([k]) => k.toLowerCase() === lower.replace(/\s+/g, " "));
+  if (w7 !== undefined)
+    return {
+      upTo: inOrder(w7[1].coreTo),
+      extra: null,
+      gapDays: null,
+      wave7: w7[1],
+      needsCft: w7[1].coreTo === "CF-A.S4",
+    };
   if (lower === "onboarded") return { upTo: inOrder("U00.L01"), extra: null, gapDays: null };
   let m = /^after\s+(\S+)$/i.exec(p);
-  if (m !== null) return { upTo: inOrder((m[1] as string).toUpperCase()), extra: null, gapDays: null };
+  if (m !== null) {
+    const id = (m[1] as string).toUpperCase();
+    // Wave 7: a track session (J1.L03, J.CP1, JC1.S2, R2.L04, A.CP …): the core, then J, R and A up to it.
+    const track = order.includes(id) ? null : afterTrackWalk(id);
+    if (track !== null)
+      return { upTo: inOrder(track.coreTo), extra: null, gapDays: null, wave7: track, needsCft: true };
+    return { upTo: inOrder(id), extra: null, gapDays: null };
+  }
   m = /^(U\d{2}\.CP)\s+due$/i.exec(p);
   if (m !== null) {
     const cpId = (m[1] as string).toUpperCase();
@@ -567,7 +607,7 @@ class Seeder {
     if (sessionId !== undefined) {
       for (const t of this.d.content.unlockRowsAt(sessionId, "complete")) have.add(t.id);
       for (const t of this.d.content.unlockRowsAt(sessionId, "start")) have.add(t.id);
-      const unit = /^([A-Z]\d{1,2})\./.exec(sessionId)?.[1] ?? "";
+      const unit = TRACK_CHECKPOINT_UNIT[sessionId] ?? /^([A-Z]\d{1,2})\./.exec(sessionId)?.[1] ?? "";
       const pick = pickStandIn(unit, have, this.d.content.toolbox(), ALL_STAND_INS);
       if (pick !== null) return pick.code;
     }
@@ -640,12 +680,14 @@ class Seeder {
   }
 
   end(sessionId: string): void {
-    this.#s.sessions.end(sessionId, { wrappedEarly: false, phaseMs: PHASE_MS });
+    // The Coda's `next` is filled for the last session of the seed only (buildSeed), as the learner then stands.
+    this.#s.sessions.end(sessionId, { wrappedEarly: false, phaseMs: PHASE_MS }, null, { skipNext: true });
   }
 
   /** One map session on the current (simulated) day. */
   async item(id: string): Promise<void> {
     const content = this.d.content;
+    if (id === REVIEW_DAY) return this.#review();
     if (content.lessonSite(id) !== null) return this.#lesson(id);
     if (content.checkpointMeta(id) !== null) return this.#checkpoint(id, 0.95);
     if (/^GYM\.\d{2}$/.test(id)) return this.#gym(id);
@@ -654,6 +696,13 @@ class Seeder {
     if (m !== null && content.capstoneMeta(m[1] as string) !== null)
       return this.#capstone(m[1] as string, id, true);
     throw badRequest(`the seeder does not know how to complete ${id}`);
+  }
+
+  /** Wave 7: a reviews-only session (the warm-up and nothing else), as Today plans on a day with no map item. */
+  async #review(): Promise<void> {
+    const ses = this.#s.sessions.start({ kind: "review", mapItemId: null, targetMinutes: this.target });
+    await this.warmup(ses.id);
+    this.end(ses.id);
   }
 
   async #lesson(lessonId: string): Promise<void> {
@@ -1248,6 +1297,21 @@ export async function buildSeed(d: AppDeps, body: DevSeedRequest): Promise<DevSe
     );
   }
   const items = seedItems(d, order, plan);
+  // Wave 7: what the track walk needs that content may not have yet, named before anything is wiped.
+  const walk = plan.wave7?.walk ?? [];
+  if ((walk.some((id) => id.startsWith("JC4.")) || /^JC4\b/i.test(body.point.trim())) && jc4Song(d) === null)
+    throw badRequest(
+      `the point "${body.point}" needs a standard JC4 can reharmonize with an answer key in content/repertoire (${(CAPSTONE_SONGS.JC4 ?? []).join(" or ")}): none is written yet`,
+    );
+  if (
+    walk.some((id) => id.startsWith("AC1.")) &&
+    !["song.st-louis-blues", "song.sweet-georgia-brown"].some((id) =>
+      d.content.source.songs.some((x) => x.id === id),
+    )
+  )
+    throw badRequest(
+      `the point "${body.point}" needs a tune AC1 can work on with an answer key in content/repertoire (song.st-louis-blues, or song.sweet-georgia-brown once U15.L05 is done): none is written yet`,
+    );
   const extraDays =
     plan.extra === null
       ? 0
@@ -1262,7 +1326,7 @@ export async function buildSeed(d: AppDeps, body: DevSeedRequest): Promise<DevSe
             : plan.extra.kind === "ladder-levelup"
               ? 2
               : 0;
-  const days = items.length + extraDays;
+  const days = items.length + walk.length + extraDays;
 
   // Wipe, keeping the /dev/listen verdicts.
   const marks = d.repos.listen.list();
@@ -1287,6 +1351,17 @@ export async function buildSeed(d: AppDeps, body: DevSeedRequest): Promise<DevSe
     await clock.at(dayAt(k), () => seeder.item(id));
     k++;
   }
+  // Wave 7: the track sessions after the core walk, one a day, then the point's own settings on its last day.
+  for (const id of walk) {
+    await clock.at(dayAt(k), () => seeder.item(id));
+    k++;
+  }
+  const w7 = plan.wave7;
+  if (w7 !== undefined)
+    await clock.at(dayAt(Math.max(0, k - 1)), () => {
+      if (w7.focus !== null) d.services.trackPlan.setFocus(w7.focus);
+      if (w7.removeHorns === true) removeUnlock(d, "snd.horns");
+    });
   if (plan.extra?.kind === "cp-failed")
     for (let n = 1; n <= plan.extra.times; n++) {
       const cpId = plan.extra.cpId;
@@ -1349,11 +1424,17 @@ export async function buildSeed(d: AppDeps, body: DevSeedRequest): Promise<DevSe
     await clock.at(lastDay, () => {
       for (const f of plan.familyLevels ?? []) setFamilyLevel(d, f.family, f.level, false);
     });
+  // Yesterday's Coda names the planner's next session as the learner now stands (Wave 7 carry f6: the focus included).
+  const lastEnded = d.repos.db
+    .query("SELECT id, ended_at FROM sessions WHERE ended_at IS NOT NULL ORDER BY ended_at DESC LIMIT 1")
+    .get() as { id: string; ended_at: string } | null;
+  if (lastEnded !== null)
+    await clock.at(new Date(lastEnded.ended_at), () => d.services.sessions.refreshNext(lastEnded.id));
   const time = new LearnerTime(d.services.ctx);
   return {
     point: body.point,
     done: seeder.done,
-    next: d.services.gates.nextMapItem(),
+    next: seededNext(d),
     day: time.day(),
     lastActiveDay: days === 0 ? null : time.day(dayAt(days - 1)),
     gapDays: days === 0 ? 0 : gapDays,
@@ -1482,6 +1563,22 @@ export function capstoneSessionCode(
 ): string {
   if (capstoneId === "C2") return index === 0 && !releasing ? C2_CHORDS : C2_SONG;
   const def = d.content.capstoneDef(capstoneId);
+  // Wave 7: AC1's two versions of its tune (S1 version one, S2 and S3 version two) and JC4's standard reharmonized.
+  if (capstoneId === "AC1") {
+    const song = ac1Song(d);
+    if (song === null) throw badRequest("AC1 has no tune with an answer key yet");
+    const v = ac1Versions(song.answerKey.code);
+    return index === 0 ? v.a : v.b;
+  }
+  if (capstoneId === "JC4") {
+    const song = jc4Song(d);
+    if (song === null) throw badRequest("JC4 has no standard with an answer key yet");
+    if (index === 0) return song.answerKey.code;
+    // The brief's own passing piece once it is written for this standard (content CI grades it: three devices, the
+    // tune untouched, its long notes fitting the new chords), else Oak's generic reharmonisation.
+    const own = def?.song?.[0] === song.id ? firstPassingCode(def?.brief, false) : null;
+    return own ?? jc4Reharm(song);
+  }
   // Wave 5 compose capstones: the session's own draft (seed-wave5.ts); the release is the brief's own passing piece
   // once the capstones author pins one, else the seeded song.
   const drafts = CAPSTONE_DRAFTS[capstoneId];
@@ -1511,6 +1608,8 @@ export function capstoneSessionCode(
 export function capstoneSong(d: Pick<AppDeps, "content">, capstoneId: string): SongDef | null {
   // CF-T: the first standard whose answer key is complete (the form map needs its sections).
   if (capstoneId === "CF-T") return cftStandards(d)[0] ?? null;
+  if (capstoneId === "AC1") return ac1Song(d);
+  if (capstoneId === "JC4") return jc4Song(d);
   const def = d.content.capstoneDef(capstoneId);
   return (
     (def?.song ?? [])
@@ -1585,4 +1684,42 @@ export function makeWav(sampleRate: number, seconds: number, hz: number): Uint8A
   for (let i = 0; i < n; i++)
     v.setInt16(44 + i * 2, Math.round(3000 * Math.sin((2 * Math.PI * hz * i) / sampleRate)), true);
   return buf;
+}
+
+/** Wave 7: the tune AC1's seeded versions take: the first tune of `CapstoneGate.tunes` that is open. */
+export function ac1Song(d: Pick<AppDeps, "content"> & Partial<Pick<AppDeps, "services">>): SongDef | null {
+  const tunes = d.services?.trackPlan.tunes("AC1") ?? [];
+  const open = tunes.find((t) => t.open) ?? tunes[0] ?? null;
+  return open === null ? null : (d.content.source.songs.find((s) => s.id === open.songId) ?? null);
+}
+
+/** Wave 7: the standard JC4's seeded drafts reharmonize: the first of its songs with an answer key. */
+export function jc4Song(d: Pick<AppDeps, "content">): SongDef | null {
+  for (const id of CAPSTONE_SONGS.JC4 ?? []) {
+    const s = d.content.source.songs.find((x) => x.id === id);
+    if (s !== undefined) return s;
+  }
+  return null;
+}
+
+/**
+ * Wave 7 (dev only): takes an unlock away (`RC1 open`: the horns U15.L05 granted, so RC1.S2's own grant is seen).
+ * Unlock rows are never revoked in the product; the append-only trigger is lifted for this one delete and restored.
+ */
+export function removeUnlock(d: Pick<AppDeps, "db">, itemId: string): void {
+  const trigger = triggerDdl(d.db).find((t) => t.name === "unlocks_no_delete");
+  d.db.transaction(() => {
+    if (trigger !== undefined) d.db.run("DROP TRIGGER unlocks_no_delete");
+    d.db.run("DELETE FROM unlocks WHERE item_id = ?", [itemId]);
+    if (trigger !== undefined) d.db.run(trigger.sql);
+  })();
+}
+
+/** The seed result's `next`: the core's next item, else (Wave 7) the session of the track the learner chose. */
+export function seededNext(d: Pick<AppDeps, "services">): DevSeedResult["next"] {
+  const core = d.services.gates.nextMapItem();
+  if (core !== null) return core;
+  const focus = d.services.trackPlan.focus().focus;
+  if (focus === "core") return null;
+  return (d.services.trackPlan.nextSession(focus)?.id ?? null) as DevSeedResult["next"];
 }

@@ -32,6 +32,7 @@ import {
   followWindow,
   hitTest,
   layoutRoll,
+  microLabelAt,
   playheadCycle,
   type RollInputEvent,
   type RollLayout,
@@ -39,6 +40,18 @@ import {
   xOfCycle,
 } from "./roll-layout.ts";
 import { SectionRibbon, type SectionRibbonProps } from "./SectionRibbon.tsx";
+import { ClaveStrip, DensityStrip, JazzRow, PulseLanes } from "./TrackStrips.tsx";
+import type {
+  ClaveLens,
+  DensitySpan,
+  MicroLens,
+  OddMeterGrid,
+  PolyLanes,
+  RegionJazz,
+  TensionMark,
+  TwoFiveBracket,
+  VoicedChord,
+} from "./track-lens.ts";
 
 export type { RollColorMode, RollLabelMode };
 
@@ -94,6 +107,33 @@ export interface PianoRollProps {
   blueNotes?: ReadonlyMap<string, BlueNote>;
   /** Wave 6: guide tones, the beat grid with pushes, the key ribbon, the mode's colour tone (colour.ts). */
   music?: RollMusic;
+  /** Wave 7: the advanced tracks' lenses on the roll (track-lens.ts). Each part is drawn only when given. */
+  track?: RollTrack;
+}
+
+/** What the advanced tracks add to the roll (docs/design/wave7.md §4.2). */
+export interface RollTrack {
+  /** The tension lens: each melody note's 9, 11, 13 against its chord; held avoid notes ringed. */
+  tensions?: ReadonlyMap<string, TensionMark> | null;
+  /** The voicing lens: the type of each hand-voiced chord over its top note. */
+  voicings?: readonly VoicedChord[] | null;
+  /** The clave lens: its strokes behind the roll and its two-bar grid under it. */
+  clave?: ClaveLens | null;
+  /** Pulse lanes: a lane per pulse of a polyrhythm, or a polymeter's cycle against the bar. */
+  poly?: PolyLanes | null;
+  /** The microtiming view: each onset's distance from the grid in ms; swung notes against their straight place. */
+  micro?: MicroLens | null;
+  /** The density strip, one bar per section. */
+  density?: DensitySpan[] | null;
+  /** An odd meter's groups, drawn firm and counted on the ruler (always, like the bar lines). */
+  odd?: OddMeterGrid | null;
+  /** Under the chord band: voicings, chord-scales, substitutions taught, ii–V brackets. */
+  jazz?: {
+    regions: readonly RegionJazz[];
+    show: { voicings: boolean; scales: boolean };
+    subs: ReadonlySet<string>;
+    twoFives: readonly TwoFiveBracket[] | null;
+  } | null;
 }
 
 /** What U12–U17 add to the roll (docs/design/wave6.md §4.3). Each part is drawn only when given. */
@@ -130,6 +170,11 @@ export interface ChordBandProps {
    * borrowed chord's mark, a label written quieter because something is not taught yet.
    */
   chords?: readonly BandChord[];
+  /**
+   * Wave 7: each region's symbol in jazz glyphs ("D–7", "C∆7", "Bø7"), by index, once the learner reads them
+   * (`tb.feature.jazz-glyphs`, J1.L02). Absent: the lead-sheet spelling.
+   */
+  jazz?: readonly string[] | null;
 }
 
 /** Height of the chord band (ux §3.4: 28 px at the bottom of the roll). */
@@ -344,7 +389,7 @@ export function PianoRoll(props: PianoRollProps) {
         extra: props.ghosts ?? [],
         pitchHeight: props.height ?? 180,
         // The beat grid writes its counts on a second line of the ruler.
-        ...(props.music?.grid ? { rulerHeight: COUNT_RULER_PX } : {}),
+        ...(props.music?.grid || props.track?.odd ? { rulerHeight: COUNT_RULER_PX } : {}),
         ...(props.music?.chromaticSyllables === false ? { lateSyllables: false } : {}),
       }),
     [
@@ -358,6 +403,7 @@ export function PianoRoll(props: PianoRollProps) {
       follow?.window[0],
       follow?.window[1],
       props.music?.grid,
+      props.track?.odd,
       props.music?.chromaticSyllables,
     ],
   );
@@ -460,9 +506,58 @@ export function PianoRoll(props: PianoRollProps) {
         g.fillText(String(line.bar), line.x + 3, Math.min(L.rulerHeight / 2, 9));
       }
     }
+    const counts: string[] = [];
+    // Wave 7: an odd meter's groups firm, every count of the bar on the ruler's second line (1 2 | 1 2 | 1 2 3)
+    const odd = p.track?.odd ?? null;
+    if (odd && !p.music?.grid) {
+      const pxPerBar = L.pxPerCycle;
+      const gap = pxPerBar / Math.max(1, odd.lines.length);
+      g.save();
+      for (let b = Math.floor(L.from); b < Math.ceil(L.to); b++) {
+        for (const line of odd.lines) {
+          const cyc = b + line.at;
+          if (cyc < L.from - 1e-9 || cyc >= L.to - 1e-9) continue;
+          const x = Math.round(xOfCycle(L, cyc)) + 0.5;
+          if (line.at > 1e-9 && line.level === "group") {
+            g.strokeStyle = c.text3;
+            g.globalAlpha = 0.95;
+            g.lineWidth = 1.5;
+            g.beginPath();
+            g.moveTo(x, L.rulerHeight);
+            g.lineTo(x, L.height);
+            g.stroke();
+            g.globalAlpha = 1;
+          }
+          if (gap >= 11 || line.level === "group") {
+            g.fillStyle = line.level === "group" ? c.text : c.text2;
+            g.font = `${line.level === "group" ? "bold " : ""}9px ui-monospace, monospace`;
+            g.fillText(line.label, x + 2, L.rulerHeight - 7, Math.max(8, gap - 3));
+          }
+          if (b === Math.floor(L.from)) counts.push(line.label);
+        }
+      }
+      g.restore();
+    }
+    // Wave 7: the clave's strokes behind the notes, an eighth wide, on its two-bar grid from bar 1
+    const clave = p.track?.clave ?? null;
+    if (clave) {
+      g.save();
+      g.fillStyle = c.accent;
+      g.globalAlpha = 0.13;
+      const eighth = L.pxPerCycle / 8;
+      for (let b = Math.floor(L.from); b < Math.ceil(L.to); b++) {
+        const inWindow = b % 2;
+        for (const step of clave.steps) {
+          if (Math.floor(step / 8) !== inWindow) continue;
+          const cyc = b + (step % 8) / 8;
+          if (cyc < L.from - 1e-9 || cyc >= L.to - 1e-9) continue;
+          g.fillRect(xOfCycle(L, cyc), L.rulerHeight, Math.max(2, eighth - 1), L.height - L.rulerHeight);
+        }
+      }
+      g.restore();
+    }
     // the beat-grid lens: the felt beats firm, their divisions light, the counts on the ruler's second line
     const beatGridOn = p.music?.grid ?? null;
-    const counts: string[] = [];
     if (beatGridOn) {
       const pxPerBar = L.pxPerCycle;
       g.save();
@@ -647,8 +742,11 @@ export function PianoRoll(props: PianoRollProps) {
           const tag = ROLE_TAG[m.role];
           if (tag && r.y - L.rulerHeight >= 12) {
             g.setLineDash([]);
-            g.fillStyle = c.text;
             g.font = "bold 9px ui-monospace, monospace";
+            // On a chip of the roll's surface: it stands where a thin row's degree label stands (review:surfaces,
+            // "♭3" was struck through "♭3 me"); the tag replaces the label's degree, its syllable still shows.
+            tagChip(g, tag, r.x, r.y - 3, c.surface);
+            g.fillStyle = c.text;
             g.textBaseline = "bottom";
             g.fillText(tag, r.x, r.y - 3);
             g.textBaseline = "middle";
@@ -669,8 +767,11 @@ export function PianoRoll(props: PianoRollProps) {
         roundRect(g, r.x - 2, r.y - 2, r.w + 4, r.h + 4, 4);
         g.stroke();
         if (r.y - L.rulerHeight >= 11) {
-          g.fillStyle = c.blue;
           g.font = "bold 9px ui-monospace, monospace";
+          // On a chip of the roll's surface: it stands where a thin row's degree label stands (review:surfaces,
+          // "♭3" was struck through "♭3 me"); the tag replaces the label's degree, its syllable still shows.
+          tagChip(g, blueTag(b), r.x, r.y - 3, c.surface);
+          g.fillStyle = c.blue;
           g.textBaseline = "bottom";
           g.fillText(blueTag(b), r.x, r.y - 3);
           g.textBaseline = "middle";
@@ -691,8 +792,11 @@ export function PianoRoll(props: PianoRollProps) {
         roundRect(g, r.x - 2, r.y - 2, r.w + 4, r.h + 4, 4);
         g.stroke();
         if (r.y - L.rulerHeight >= 11) {
-          g.fillStyle = c.issue;
           g.font = "bold 9px ui-monospace, monospace";
+          // On a chip of the roll's surface: it stands where a thin row's degree label stands (review:surfaces,
+          // "♭3" was struck through "♭3 me"); the tag replaces the label's degree, its syllable still shows.
+          tagChip(g, m.display, r.x, r.y - 3, c.surface);
+          g.fillStyle = c.issue;
           g.textBaseline = "bottom";
           g.fillText(m.display, r.x, r.y - 3);
           g.textBaseline = "middle";
@@ -763,6 +867,118 @@ export function PianoRoll(props: PianoRollProps) {
           g.lineWidth = 2;
           roundRect(g, r.x - 1.5, r.y - 1.5, r.w + 3, r.h + 3, 4);
           g.stroke();
+        }
+        g.restore();
+      }
+    }
+
+    // Wave 7, the tension lens: the tension's name over each note; a held avoid note ringed in the issue colour
+    const tensions = p.track?.tensions;
+    if (tensions && tensions.size > 0) {
+      for (const r of L.rects) {
+        const t = tensions.get(r.id);
+        if (!t || r.kind !== "note") continue;
+        g.save();
+        g.strokeStyle = t.avoid ? c.issue : c.blue;
+        g.lineWidth = t.avoid ? 2 : 1.5;
+        if (t.avoid) g.setLineDash([3, 2]);
+        roundRect(g, r.x - 2, r.y - 2, r.w + 4, r.h + 4, 4);
+        g.stroke();
+        if (r.y - L.rulerHeight >= 11) {
+          // On a chip of the roll's own surface, so the tag reads over the row labels and the lanes.
+          g.setLineDash([]);
+          g.font = "bold 9px ui-monospace, monospace";
+          const text = t.avoid ? `avoid ${t.tag}` : t.tag;
+          const w = g.measureText(text).width + 4;
+          // At the note's end, clear of its own label at its start (or just past a short note).
+          const x = r.w >= w + 24 ? r.x + r.w - w : r.x + r.w + 2;
+          g.fillStyle = c.surface;
+          g.globalAlpha = 0.92;
+          roundRect(g, x - 1, r.y - 13, w, 10, 2);
+          g.fill();
+          g.globalAlpha = 1;
+          g.fillStyle = t.avoid ? c.issue : c.blue;
+          g.textBaseline = "bottom";
+          g.fillText(text, x + 1, r.y - 3);
+          g.textBaseline = "middle";
+        }
+        g.restore();
+      }
+    }
+    // Wave 7, the voicing lens: the type of each hand-voiced chord over its top note (when there is room for it)
+    const voicings = p.track?.voicings;
+    if (voicings && voicings.length > 0 && L.pitch) {
+      g.save();
+      g.font = "bold 9px ui-monospace, monospace";
+      g.textBaseline = "bottom";
+      let lastRight = Number.NEGATIVE_INFINITY;
+      let lastText = "";
+      for (const v of voicings) {
+        if (v.at < L.from - 1e-9 || v.at >= L.to - 1e-9 || v.top > L.pitch.hi || v.top < L.pitch.lo) continue;
+        const x = xOfCycle(L, v.at);
+        const text = v.label;
+        const w = g.measureText(text).width;
+        // Over the top note's own degree label when the row above is free there (it stood on that label, which
+        // showed through it as stray strokes); else on the top note's row, on an opaque chip.
+        const yRow = L.pitch.top + (L.pitch.hi - v.top) * L.pitch.rowH - 2;
+        const lifted = yRow - 10;
+        const y =
+          lifted - L.rulerHeight >= 10 &&
+          !L.rects.some((o) => o.x < x + w + 4 && o.x + o.w > x && o.y < lifted && o.y + o.h > lifted - 10)
+            ? lifted
+            : yRow;
+        // A run of the same type is labelled once; a label never runs into the one before it.
+        if (
+          (text === lastText && x - lastRight < L.pxPerCycle) ||
+          x < lastRight + 4 ||
+          y - L.rulerHeight < 10
+        )
+          continue;
+        g.fillStyle = c.surface;
+        g.fillRect(x, y - 10, w + 4, 10);
+        g.fillStyle = v.label === "dictionary voicing" ? c.text2 : c.text;
+        g.fillText(text, x + 2, y);
+        lastRight = x + w + 4;
+        lastText = text;
+      }
+      g.restore();
+    }
+    // Wave 7, the microtiming view: from the grid place to the note, the distance in ms over the first of each bar
+    const micro = p.track?.micro;
+    if (micro && micro.marks.size > 0) {
+      const labelled = new Set<string>();
+      for (const r of L.rects) {
+        const mk = micro.marks.get(r.id);
+        const e = model.byId.get(r.id);
+        if (!mk || !e) continue;
+        const xg = xOfCycle(L, mk.gridAt);
+        const y = r.y + r.h / 2;
+        g.save();
+        g.strokeStyle = mk.kind === "swing" ? c.accent : c.issue;
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.moveTo(xg, y - 4);
+        g.lineTo(xg, y + 4);
+        g.moveTo(xg, y);
+        g.lineTo(r.x, y);
+        g.stroke();
+        const key = `${e.track}:${e.bar}`;
+        if (!labelled.has(key)) {
+          // On the note's own row, in the free space before where it should have started or after it ends:
+          // above the note it sat on the note's degree label ("+48 ms" over "1 do"). With no free space on either
+          // side the next note of the bar takes the label (the facts line under the roll says it in words).
+          const text = `${mk.ms >= 0 ? "+" : "−"}${Math.round(Math.abs(mk.ms))} ms`;
+          g.font = "bold 9px ui-monospace, monospace";
+          const tw = g.measureText(text).width;
+          const at = microLabelAt(L.rects, r, xg, tw, L.gutter, L.width);
+          if (at) {
+            labelled.add(key);
+            g.fillStyle = c.surface;
+            g.fillRect(at.x - 2, at.y - 6, tw + 4, 12);
+            g.fillStyle = mk.kind === "swing" ? c.accent : c.issue;
+            g.textBaseline = "middle";
+            g.fillText(text, at.x, at.y);
+          }
         }
         g.restore();
       }
@@ -919,6 +1135,7 @@ export function PianoRoll(props: PianoRollProps) {
     props.bassMarks,
     props.blueNotes,
     props.music,
+    props.track,
   ]);
   useEffect(
     () =>
@@ -997,6 +1214,9 @@ export function PianoRoll(props: PianoRollProps) {
         const mode = props.music?.modeTones?.get(id);
         const push = props.music?.pushes?.get(id);
         const ghost = props.music?.ghosts?.has(id);
+        const tension = props.track?.tensions?.get(id);
+        const timing = props.track?.micro?.marks.get(id);
+        const voiced = props.track?.voicings?.find((v) => v.ids.includes(id));
         setTip({
           x: pt.x,
           y: pt.y,
@@ -1009,6 +1229,13 @@ export function PianoRoll(props: PianoRollProps) {
             mode ? `${mode.display}: the colour note of ${mode.mode}` : null,
             push ? pushWords(push, model.meter.unitsPerBar) : null,
             ghost ? "ghost note: played very quietly" : null,
+            tension ? tension.words : null,
+            voiced
+              ? `voicing: ${voiced.label}${voiced.roles ? ` (${voiced.roles} from the bottom)` : ""} over ${voiced.chord}`
+              : null,
+            timing
+              ? `${Math.round(Math.abs(timing.ms))} ms ${timing.ms >= 0 ? "behind" : "ahead of"} ${timing.kind === "swing" ? "its straight place (swing)" : "the grid"}`
+              : null,
           ]
             .filter(Boolean)
             .join(" · "),
@@ -1171,6 +1398,16 @@ export function PianoRoll(props: PianoRollProps) {
         data-pushes={props.music?.pushes ? props.music.pushes.size : undefined}
         data-ghosts={props.music?.ghosts ? props.music.ghosts.size : undefined}
         data-mode-tones={props.music?.modeTones ? props.music.modeTones.size : undefined}
+        data-tensions={
+          props.track?.tensions
+            ? [...props.track.tensions.values()].map((t) => (t.avoid ? `avoid ${t.tag}` : t.tag)).join(" ")
+            : undefined
+        }
+        data-voicings={
+          props.track?.voicings ? props.track.voicings.map((v) => v.label).join(" | ") : undefined
+        }
+        data-micro={props.track?.micro ? props.track.micro.marks.size : undefined}
+        data-odd={props.track?.odd ? props.track.odd.count : undefined}
         onMouseMove={onMove}
         onMouseLeave={onLeave}
         onClick={onClick}
@@ -1179,6 +1416,29 @@ export function PianoRoll(props: PianoRollProps) {
         data-window={`${layout.from}-${layout.to}`}
       />
       {props.chordBand ? <ChordBand band={props.chordBand} layout={layout} /> : null}
+      {props.chordBand && props.track?.jazz ? (
+        <JazzRow
+          regions={props.chordBand.regions}
+          jazz={props.track.jazz.regions}
+          show={props.track.jazz.show}
+          subs={props.track.jazz.subs}
+          twoFives={props.track.jazz.twoFives}
+          axis={axisOf(layout)}
+        />
+      ) : null}
+      {props.track?.clave ? <ClaveStrip clave={props.track.clave} axis={axisOf(layout)} /> : null}
+      {props.track?.poly ? <PulseLanes poly={props.track.poly} axis={axisOf(layout)} /> : null}
+      {props.track?.density ? <DensityStrip spans={props.track.density} axis={axisOf(layout)} /> : null}
+      {props.track?.odd || props.track?.clave || (props.track?.micro?.tracks.length ?? 0) > 0 ? (
+        // The track lenses' facts in words, under the roll where they have room (the head is the Wave 4–6 facts').
+        <p className="oak-track-facts" data-testid="track-facts">
+          {props.track?.odd ? <span data-testid="odd-meter-facts">{props.track.odd.text}</span> : null}
+          {props.track?.clave ? <span data-testid="clave-facts">{props.track.clave.text}</span> : null}
+          {props.track?.micro && props.track.micro.tracks.length > 0 ? (
+            <span data-testid="micro-facts">{props.track.micro.tracks.map((t) => t.text).join(" · ")}</span>
+          ) : null}
+        </p>
+      ) : null}
       {tip ? (
         <div
           className="oak-tooltip"
@@ -1194,6 +1454,17 @@ export function PianoRoll(props: PianoRollProps) {
       ) : null}
     </div>
   );
+}
+
+/** The roll's time axis for the strips under it. */
+function axisOf(layout: RollLayout) {
+  return {
+    left: layout.gutter,
+    width: layout.width,
+    from: layout.from,
+    to: layout.to,
+    xOf: (c: number) => xOfCycle(layout, c),
+  };
 }
 
 /** The ruler's height when the beat grid writes its counts under the bar numbers. */
@@ -1260,12 +1531,14 @@ function ChordBand({ band, layout }: { band: ChordBandProps; layout: RollLayout 
         const fn = band.fn && r.fn ? r.fn : null;
         const st = fn && fn !== "chromatic" ? functionStyle(fn, theme) : null;
         const text = [band.symbols ? r.symbol : null, band.romans ? r.rn : null].filter(Boolean);
+        const jazz = band.jazz?.[band.regions.indexOf(r)] ?? null;
+        const shown = jazz && jazz !== r.symbol ? jazz : r.symbol;
         // Wave 6: an applied chord points at its target, a borrowed chord says where it comes from (numerals on).
         const bc = band.chords?.[band.regions.indexOf(r)] ?? null;
         const arrow = band.romans && r.rn && bc?.arrow ? bc.arrow : null;
         const lent = band.romans && r.rn && bc?.borrowed ? bc.borrowed : null;
         const said = [
-          band.symbols ? r.symbol : null,
+          band.symbols ? (shown !== r.symbol ? `${shown} (${r.symbol})` : r.symbol) : null,
           band.romans && r.rn ? r.rn : null,
           arrow
             ? arrow.resolves
@@ -1294,12 +1567,13 @@ function ChordBand({ band, layout }: { band: ChordBandProps; layout: RollLayout 
             title={said}
             aria-label={`Bar ${Math.floor(r.from) + (band.pickup ? 0 : 1)}: ${said}`}
             data-symbol={r.symbol}
+            data-jazz={jazz ?? undefined}
             data-rn={r.rn ?? undefined}
             data-fn={r.fn ?? undefined}
           >
             {text.length > 0 ? (
               <>
-                {band.symbols ? <b className="oak-chord-symbol">{r.symbol}</b> : null}
+                {band.symbols ? <b className="oak-chord-symbol">{shown}</b> : null}
                 {band.romans && r.rn ? <span className="oak-chord-rn">{r.rn}</span> : null}
                 {arrow ? (
                   <span className="oak-chord-arrow" data-resolves={arrow.resolves ? "1" : "0"} aria-hidden>
@@ -1367,4 +1641,18 @@ function NotesTable({
       </tbody>
     </table>
   );
+}
+
+/** An opaque chip of the roll's surface under a 9 px tag set with its bottom at `bottom` (the tag's font set). */
+function tagChip(
+  g: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  bottom: number,
+  surface: string,
+): void {
+  const prev = g.fillStyle;
+  g.fillStyle = surface;
+  g.fillRect(x - 1, bottom - 10, g.measureText(text).width + 2, 11);
+  g.fillStyle = prev;
 }

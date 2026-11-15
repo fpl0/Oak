@@ -1,5 +1,7 @@
 // The content index: the raw content set plus every lookup the services need (course order, gates,
 // exercises by global ID, unlock rows by session, skills by checkpoint). Built once at start-up.
+
+import { TRACK_CHECKPOINTS } from "@oak/api";
 import {
   type CanDoDef,
   type CapstoneDef,
@@ -191,10 +193,24 @@ export class ContentIndex {
     if (meta === undefined) return [];
     return Array.from({ length: meta.sessions }, (_, i) => formatCapstoneSessionId(meta.id, i + 1));
   }
-  /** Lessons a checkpoint covers, in course order. */
+  /**
+   * Lessons a checkpoint covers, in course order. Wave 7 (contracts §2.6, `TRACK_CHECKPOINTS`): a track checkpoint
+   * covers the lessons of its track after the previous track checkpoint's last lesson up to its own `afterLesson`:
+   * J.CP1 is J1 and J2.L01–L03 (J2.L04 belongs to J.CP2, so J.CP1 never waits for U14.CP), J.CP2 is J2.L04, J3, J4
+   * and J5.L01–L04 (J5.L05 is enrichment, in no checkpoint), R.CP is R1–R3, A.CP is A1–A2.
+   */
   lessonsCovered(cpId: string): LessonId[] {
     const meta = this.#checkpointMeta.get(cpId);
     if (meta === undefined) return [];
+    const track = TRACK_CHECKPOINTS.find((c) => c.cpId === cpId);
+    if (track !== undefined) {
+      const order = this.trackLessons(track.trackId);
+      const before = TRACK_CHECKPOINTS.filter((c) => c.trackId === track.trackId);
+      const prev = before[before.indexOf(track) - 1];
+      const from = prev === undefined ? 0 : order.indexOf(prev.afterLesson as LessonId) + 1;
+      const to = order.indexOf(track.afterLesson as LessonId);
+      if (to >= 0) return order.slice(from, to + 1);
+    }
     const covered = new Set<string>(meta.covers);
     return this.source.syllabus.units
       .filter((u) => covered.has(u.id))

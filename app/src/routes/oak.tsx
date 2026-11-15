@@ -1,15 +1,18 @@
 // The Oak (skill map v1, ux §5.2, contracts §4 and §7.10). Three views: Tree (the skill graph by strand and
 // unit, shaded by the server's mastery and freshness), Course (units and lessons with their status) and
-// Leaves (a sortable table of every skill). The illustrated tree arrives in a later wave.
+// Leaves (a sortable table of every skill). The Tree is the illustrated Oak (Wave 7, app/src/map/illustrated).
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { clsx } from "clsx";
 import { GitBranch } from "lucide-react";
 import { Fragment } from "react";
 import { z } from "zod";
+import { lessonTitles } from "../lib/content-model.ts";
 import { usePageTitle } from "../lib/nav.ts";
 import { LeavesTable, OakTree, useOak } from "../map/index.ts";
 import { countLeaves } from "../map/state.ts";
 import { isWritten } from "../session/edge.ts";
+import { itemTitle } from "../session/titles.ts";
+import { waitingLines } from "../session/tracks-day.ts";
 import { Card, Chip, EmptyState, Page, PageHeader } from "../ui/kit/basics.tsx";
 import { ErrorState, LoadingState } from "../ui/kit/QueryState.tsx";
 import { Tabs } from "../ui/kit/Tabs.tsx";
@@ -36,6 +39,7 @@ function CourseView() {
   if (content.isError) return <ErrorState error={content.error} onRetry={() => void content.refetch()} />;
   if (content.isPending || progress.isPending) return <LoadingState rows={4} label="Loading the course" />;
   const units = content.data?.syllabus?.units ?? [];
+  const titles = lessonTitles(content.data?.syllabus ?? null);
   if (units.length === 0)
     return (
       <EmptyState title="No course content">
@@ -91,6 +95,22 @@ function CourseView() {
                 <span className="text-sm text-text-2">
                   {header.next ? `Next: ${header.next}.` : header.note}
                 </span>
+                {/* Wave 7: what a closed gate of the track holds back, one line each (never a count). */}
+                {waitingLines(
+                  {
+                    status: header.open ? "open" : "locked",
+                    gates: header.gates.map((g) => ({ ...g, open: g.met })),
+                  },
+                  (id) => itemTitle(id, titles),
+                ).map((w) => (
+                  <span
+                    key={w}
+                    className="basis-full text-sm text-text-3"
+                    data-testid="course-branch-waiting"
+                  >
+                    {w}
+                  </span>
+                ))}
               </div>
             )}
             <Card className={clsx("p-4", p?.current && "border-accent-2")}>

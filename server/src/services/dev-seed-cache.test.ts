@@ -442,12 +442,42 @@ const AGED: DevSeedRequest[] = [
   { point: "after U16.L03" },
   { point: "ladder L8" },
   { point: "core complete" },
+  // Wave 7: a track walk beside the core with the focus set; a reviews-only day, a checkpoint and the horns taken
+  // away; a two-version capstone's drafts.
+  { point: "J2.L04 locked (U14.CP not passed)" },
+  { point: "RC1 open", practice: false },
+  { point: "AC1.S2 done", practice: false },
 ];
 /**
  * Named points left out of the aged proof, each a plain walk up to an item or a capstone state on a path a kept point
  * takes (see AGED). Each is still built and checked where it is used: the wave seed and course tests, the browser specs.
  */
 const AGED_LEFT_OUT = [
+  // Wave 7: the other track walks are the same walk builder over other lists (seed-wave7.ts WAVE7_WALKS).
+  "core complete, tracks untouched",
+  "J1.L03 next",
+  "J.CP1 due",
+  "JC1 open",
+  "JC1 released",
+  "J3.L02 next",
+  "J4.L03 next",
+  "JC2 open",
+  "J.CP2 due",
+  "JC3 open",
+  "JC4 open",
+  "JC4.S2 done",
+  "R1.L03 next",
+  "R2.L04 next",
+  "R3.L02 next",
+  "R.CP due",
+  "RC2 open",
+  "A1.L05 next",
+  "A2.L04 next",
+  "A.CP due",
+  "AC1 open",
+  "AC2 open",
+  "two tracks in progress",
+  "whole course complete",
   // Plain walks and capstone states of U01–U07, C0–C2, X1: the same builder code as the kept points of those units.
   "C0 ready",
   "U02.CP due",

@@ -119,6 +119,47 @@ describe("gradeLadder marks every answer key exactly right, and a one-note or on
       });
 });
 
+describe("the advanced tracks' items (the gym after the core): every key graded right, one change wrong", () => {
+  const TRACKS = { completed: new Set<string>(Object.values(LADDER_FEATURE_GATES)) };
+  for (const f of ["ride", "funk16", "clave", "walking", "twoFive", "turnaround"] as const)
+    test(f, async () => {
+      const level: LadderLevelNo = ["ride", "funk16", "clave"].includes(f) ? 1 : f === "walking" ? 2 : 3;
+      const items: LadderPiece[] = [];
+      for (let seed = 1; items.length < 3 && seed < 400; seed++)
+        for (const realism of [1, 3, 4] as const) {
+          const p = generateLadderPiece(level, realism, seed, DEFAULT_PROFILE, TRACKS);
+          if (p.feature === f && items.length < 3) items.push(p);
+        }
+      expect([f, items.length]).toEqual([f, 3]);
+      for (const p of items) {
+        const stages: (LadderStageId | undefined)[] = p.stages ?? [undefined];
+        for (const stage of stages) {
+          const answer = stage ? (p.stageAnswers as Record<LadderStageId, string>)[stage] : p.answer;
+          const ok = await grade(p, answer, stage);
+          expect([f, p.seed, stage, ok.status, ok.score, grader.ladderGradedPass(ok)]).toEqual([
+            f,
+            p.seed,
+            stage,
+            "pass",
+            1,
+            true,
+          ]);
+          const wrong =
+            level === 1
+              ? [{ what: "one hit removed", code: answer.replace(/(?<=s\("[^"]*?)\b(rd|bd|rim)\b/, "~") }]
+              : stage === "quality" || stage === "rn"
+                ? mutations(answer, "chords", true)
+                : mutations(answer, "bass");
+          for (const m of wrong) {
+            expect([f, m.what, m.code !== answer]).toEqual([f, m.what, true]);
+            const r = await grade(p, m.code, stage);
+            expect([f, p.seed, stage, m.what, r.score < 1]).toEqual([f, p.seed, stage, m.what, true]);
+          }
+        }
+      }
+    });
+});
+
 describe("a whole wrong answer fails", () => {
   test("the bass of another loop, a melody a step off throughout", async () => {
     const p = generateLadderPiece(2, 0, 3, DEFAULT_PROFILE);
@@ -142,11 +183,18 @@ describe("a whole wrong answer fails", () => {
 
 describe("vocabulary gates", () => {
   const g = courseGraph();
-  test("every feature gate is a lesson, at or after the level's first gym session", () => {
+  test("every feature gate is a lesson of the course, at or after the level's first gym session", () => {
     for (const [, lesson] of Object.entries(LADDER_FEATURE_GATES)) {
-      expect(defaultOrder.includes(lesson as SessionId)).toBe(true);
-      expect(atOrBefore(g, LADDER_OPENS[4], lesson as SessionId)).toBe(true);
+      expect([lesson, g.nodes.has(lesson as SessionId), /\.L\d\d$/.test(lesson)]).toEqual([
+        lesson,
+        true,
+        true,
+      ]);
+      expect([lesson, atOrBefore(g, LADDER_OPENS[4], lesson as SessionId)]).toEqual([lesson, true]);
     }
+    // The advanced tracks' features open with track lessons, after the core's own (wave 7, the gym after the core).
+    for (const f of ["ride", "funk16", "clave", "walking", "twoFive", "turnaround"] as const)
+      expect([f, defaultOrder.includes(LADDER_FEATURE_GATES[f] as SessionId)]).toEqual([f, false]);
   });
   test("the default vocabulary (no `completed`) is GYM.01's: U07.L08 comes after it, so no pickups", () => {
     const gym1 = defaultOrder.indexOf("GYM.01" as SessionId);

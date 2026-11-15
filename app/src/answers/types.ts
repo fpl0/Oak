@@ -57,10 +57,22 @@ export type AnswerSpec =
       step: number;
       /** Printed after the value: "BPM", "%". */
       unit?: string;
-      /** How the value reads: plain number, a percentage of 0–1, or a swing amount (0 straight, 1/3 triplet). */
-      format?: "number" | "percent" | "swing";
+      /**
+       * How the value reads: plain number, a percentage of 0–1, or a swing amount (0 straight, 1/3 triplet). Wave 7:
+       * `ms`, a lay-back in milliseconds (read with the `.late()` it takes at `AnswerEnv.slider.bpm`); `hz`, a
+       * cutoff ("800 Hz", "2.4 kHz").
+       */
+      format?: "number" | "percent" | "swing" | "ms" | "hz";
       /** Landmarks under the track ("straight", "triplet"). */
       marks?: { at: number; label: string }[];
+      /** Wave 7: `log` spreads the track logarithmically (a cutoff from 100 Hz to 10 kHz). Default linear. */
+      scale?: "linear" | "log";
+      /**
+       * Wave 7, a slider that plays (R1.L02 "set the swing", R1.L05 "set the lay-back", A1 "match the control by
+       * ear"): `swing` and `layback` play a two-bar groove at the learner's setting by themselves; `control`
+       * plays through the host (`AnswerEnv.slider.play`, with `playTarget` the sound to match).
+       */
+      play?: "swing" | "layback" | "control";
     };
 export type AnswerKind = AnswerSpec["ui"];
 /**
@@ -98,6 +110,10 @@ export interface AnswerValueMap {
   "staff-input": string;
   /** Sounding cells, `row × (stepsPerBar × bars)`; row order is `spec.rows`. */
   grid: boolean[][];
+  /** Wave 7 (planned; the answers engineer builds the widget): group sizes in order, `[2, 2, 3]`. */
+  grouping: number[];
+  /** Wave 7 (planned): a Euclidean rhythm's numbers, `[k, n]` or `[k, n, r]`. */
+  euclid: number[];
   code: string;
   /** Tap times in seconds on the AudioContext clock, latency-corrected by the tap input. */
   tap: number[];

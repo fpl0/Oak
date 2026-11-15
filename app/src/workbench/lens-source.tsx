@@ -2,10 +2,10 @@
 // store (one preference for every view, gated by unlocks) and Settings → Learning's "Roll labels"; outside the app
 // (the standalone e2e page, tests) a host can provide a lens source through `WorkbenchLensProvider`, and with
 // neither the Workbench keeps its Wave 2 labels. The app hooks run only under a QueryClient.
-import type { ChordLensId, LensId, LensPrefs, LineLensId, MusicLensId } from "@oak/api";
+import type { ChordLensId, LensId, LensPrefs, LineLensId, MusicLensId, TrackLensId } from "@oak/api";
 import { QueryClientContext, useQueryClient } from "@tanstack/react-query";
 import { createContext, type ReactNode, useContext, useMemo } from "react";
-import { chordLensPrefs, lineLensPrefs, musicLensPrefs, useLenses } from "../lib/lenses.ts";
+import { chordLensPrefs, lineLensPrefs, musicLensPrefs, trackLensPrefs, useLenses } from "../lib/lenses.ts";
 import { apiKey, useBootstrap, useCourseProgress } from "../lib/queries.ts";
 import type { LensState, RollLabelSetting } from "./lens-view.ts";
 
@@ -30,6 +30,11 @@ export interface LensSource extends LensState {
    */
   music?: MusicLensSource;
   /**
+   * Wave 7 (wave7.md §4.2): the advanced tracks' eight lenses, from the same store. Each opens with its lesson or one
+   * of its tools (the Workbench adds the lesson being taken). Absent: none of them.
+   */
+  track?: TrackLensSource;
+  /**
    * Wave 6: the lessons the learner has completed, for how deep the chord and degree lenses write
    * (`harmonyDepth`: applied numerals from U15.L02, borrowed ones from U16.L01) and for the key panel's rows.
    * Absent: none (a host that knows better passes `harmonyDepth` to the Workbench).
@@ -43,6 +48,14 @@ export interface MusicLensSource {
   /** Which of them the learner's unlocks open (the Workbench adds the tools of the lesson being taken). */
   available: Record<MusicLensId, boolean>;
   toggle(id: MusicLensId): void;
+}
+
+export interface TrackLensSource {
+  /** The stored preference (absent = on), whatever is open. */
+  prefs: Record<TrackLensId, boolean>;
+  /** Which of them the learner's tools or completed lessons open. */
+  available: Record<TrackLensId, boolean>;
+  toggle(id: TrackLensId): void;
 }
 
 export interface LineLensSource {
@@ -108,6 +121,11 @@ export function useAppLensSource(): LensSource {
       prefs: lenses.music.prefs,
       available: lenses.music.available,
       toggle: (id) => lenses.music.set(id, !musicLensPrefs(stored())[id]),
+    },
+    track: {
+      prefs: lenses.track.prefs,
+      available: lenses.track.available,
+      toggle: (id) => lenses.track.set(id, !trackLensPrefs(stored())[id]),
     },
     completedLessons,
   };

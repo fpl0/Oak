@@ -99,6 +99,43 @@ export {
   micConstraints,
   PITCH_PROCESSOR,
 } from "./mic.ts";
+// Wave 7 (A2.L01, A2.L05, AC1, AC2): meters for mixing — a level per part, its register from the spectrum, shared
+// registers and a compressor's gain reduction, read from the offline renders of each part.
+export {
+  averagedSpectrum,
+  type CompressorSettings,
+  compressionCurveDb,
+  type GainReductionReading,
+  gainReductionLine,
+  HEARD_WITHIN_DB,
+  LOWEST_WITHIN_DB,
+  levelLine,
+  MIX_BLOCK_FRAMES,
+  MIX_SILENCE_DB,
+  type MixReading,
+  makeupGainDb,
+  measureGainReduction,
+  measureMix,
+  NEUTRAL_COMPRESSOR,
+  type PartLevel,
+  type PartPcm,
+  type PartReading,
+  parseCompressor,
+  partLevel,
+  partRegister,
+  type RegisterOverlap,
+  type RegisterReading,
+  readMix,
+  registerLine,
+  registerOfSpectrum,
+  registerOverlaps,
+  registerRole,
+  type SoloRender,
+  SPECTRUM_FFT,
+  SPECTRUM_MIN_HZ,
+  SUPERDOUGH_COMPRESSOR_DEFAULTS,
+  staticGainReductionDb,
+} from "./mix-meter.ts";
 export {
   audioSource,
   createPatternSource,
@@ -176,7 +213,13 @@ export {
   STRETCH_MIN_LOOP_SEC,
   type StretchEngineDeps,
 } from "./stretch-player.ts";
-export { createTapInput, eventTimeToContextTime, type TapInputExtras, tapsToOnsets } from "./tap.ts";
+export {
+  createTapInput,
+  eventTimeToContextTime,
+  laneKeyCode,
+  type TapInputExtras,
+  tapsToOnsets,
+} from "./tap.ts";
 export {
   computePeaks,
   createTranscriptionPlayer,

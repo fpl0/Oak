@@ -17,6 +17,7 @@
 //     2 + R degrees from R2 (turning back by step after a leap), stays between degrees 1 and 8 in the learner's
 //     comfortable range, and ends on 1 over I; a 4-bar melody is a question (ends on a note of V) and an
 //     answer that brings bar 1's motif back.
+
 import type {
   Degree,
   KeySpec,
@@ -26,11 +27,12 @@ import type {
   PickupSpec,
   SwingSpec,
 } from "@oak/content-kit";
-import { rat } from "@oak/content-kit";
+import { CLAVE_GRIDS, rat } from "@oak/content-kit";
 import { buildPiece, type TrackSpec } from "./build.ts";
 import { barNode, gridBeats } from "./gen/rhythm.ts";
 import {
   CHORD_SUFFIX,
+  CHORD_TONES,
   degreeOfMidi,
   formatRn,
   keysFor,
@@ -40,7 +42,7 @@ import {
   stepToMidi,
   tonicMidi,
 } from "./kernel.ts";
-import { closeVoices, rn, spellVoiced } from "./music.ts";
+import { closeVoices, rn, spellVoiced, voiceProgression } from "./music.ts";
 import { atom, chordOf, type Node, print as printPat, rest, seq } from "./pat.ts";
 import { KITS } from "./pools.ts";
 import { createRng, hashString } from "./rng.ts";
@@ -59,6 +61,20 @@ export type LadderFlavour = "pop" | "jazz-soul";
 export const LADDER_FEATURE_GATES = {
   /** A one-beat pickup before bar 1 (L4, from R2). */
   pickup: "U07.L08",
+  // --- the advanced tracks (Wave 7): the gym after the core serves the grooves and changes the tracks teach,
+  // each only once its lesson is done (half of the items of the level, from R1).
+  /** L1: the jazz ride pattern on the jazz kit, swung by the player (J1.L01 "Swing Feel & the Ride"). */
+  ride: "J1.L01",
+  /** L1: sixteenth-note funk drums with ghost notes on the snare (R1.L03 "The One"). */
+  funk16: "R1.L03",
+  /** L1: a son or rumba clave on the rim over the groove, 3-2 or 2-3 (R3.L02 "Clave Direction"). */
+  clave: "R3.L02",
+  /** L2: a walking bass, four to the bar: root on 1, a chord tone on 3, a step into the next root on 4 (J3.L04). */
+  walking: "J3.L04",
+  /** L3: the ii–V–I in seventh chords (J1.L03), answered on the triad core like every L3 loop. */
+  twoFive: "J1.L03",
+  /** L3: the I–vi–ii–V turnaround in seventh chords (J4.L01). */
+  turnaround: "J4.L01",
 } as const;
 export type LadderFeature = keyof typeof LADDER_FEATURE_GATES;
 
@@ -127,9 +143,21 @@ export interface LadderPiece {
   degrees: Degree[] | null;
   /** Hints for `@oak/strudel` `realismSpec(level, { seed, target, swung, vocalLead })`. */
   performance: { target: string; swung: boolean; vocalLead: "tenor" | "choir" | null };
+  /** The advanced tracks' material the item uses (`LADDER_FEATURE_GATES`), when it uses one. */
+  feature?: LadderFeature;
   /** A short title for the gym screen ("Drum loop · 2 bars"). */
   title: string;
 }
+/** The gym screen's title of an item with a track feature. */
+export const TRACK_TITLES: Readonly<Record<LadderFeature, string>> = {
+  pickup: "Short melody",
+  ride: "Jazz ride",
+  funk16: "Sixteenth-note funk",
+  clave: "Clave groove",
+  walking: "Walking bass",
+  twoFive: "ii–V–I in sevenths",
+  turnaround: "Turnaround in sevenths",
+};
 
 /** The structural `LadderItemSpec` of `@oak/grader` (`gradeLadder`), built from a piece. */
 export interface LadderItemFields {
@@ -172,6 +200,25 @@ export const LADDER_LOOPS: readonly { id: string; chords: readonly RnChord[]; fr
   { id: "axis-V", chords: [rn("5", "maj"), rn("6", "min"), rn("4", "maj"), rn("1", "maj")], from: 3 },
 ];
 
+/** The advanced tracks' loops of seventh chords (one a bar), each with the feature that opens it. */
+export const JAZZ_LOOPS: readonly { id: string; chords: readonly RnChord[]; feature: LadderFeature }[] = [
+  {
+    id: "ii-V-I",
+    chords: [rn("2", "m7"), rn("5", "7"), rn("1", "maj7"), rn("1", "maj7")],
+    feature: "twoFive",
+  },
+  {
+    id: "I-ii-V-I",
+    chords: [rn("1", "maj7"), rn("2", "m7"), rn("5", "7"), rn("1", "maj7")],
+    feature: "twoFive",
+  },
+  {
+    id: "I-vi-ii-V",
+    chords: [rn("1", "maj7"), rn("6", "m7"), rn("2", "m7"), rn("5", "7")],
+    feature: "turnaround",
+  },
+];
+
 /** Kick patterns on a 16-step bar, with the realism level from which they appear (U01 grooves). */
 const KICKS: readonly { hits: number[]; from: LadderRealism }[] = [
   { hits: [0, 8], from: 0 },
@@ -202,6 +249,114 @@ const SOUNDS: Readonly<Record<LadderFlavour, { bass: string; chords: string; lea
 
 const feature = (opts: LadderOptions | undefined, f: LadderFeature): boolean =>
   opts?.completed?.has(LADDER_FEATURE_GATES[f]) === true;
+/** The track features of a level the learner has opened. */
+const TRACK_FEATURES: Readonly<Record<1 | 2 | 3, readonly LadderFeature[]>> = {
+  1: ["ride", "funk16", "clave"],
+  2: ["walking"],
+  3: ["twoFive", "turnaround"],
+};
+/** One track feature for this item, or none: from R1, half the items once at least one is open. */
+function trackFeature(
+  rng: Rng,
+  level: LadderLevelNo,
+  realism: LadderRealism,
+  opts: LadderOptions | undefined,
+): LadderFeature | null {
+  if (level === 4 || realism === 0) return null;
+  const open = TRACK_FEATURES[level].filter((f) => feature(opts, f));
+  if (open.length === 0 || rng.next() >= 0.5) return null;
+  return rng.pick(open);
+}
+
+// --- the tracks' grooves (L1) and lines (L2) -------------------------------------------------------
+
+/** Steps (16 a bar) of the ride's spang-a-lang: 1, 2, the "and" of 2, 3, 4, the "and" of 4. */
+export const RIDE_STEPS = [0, 4, 6, 8, 12, 14] as const;
+/** Sixteenth-note funk kicks (R1.L03), the backbeat on 2 and 4 and the ghost notes around it. */
+export const FUNK_KICKS: readonly number[][] = [
+  [0, 3, 8, 11],
+  [0, 6, 9, 12],
+  [0, 3, 6, 10],
+  [0, 7, 10],
+];
+export const FUNK_GHOSTS: readonly number[][] = [
+  [7, 9, 15],
+  [3, 7, 10],
+  [6, 9, 14],
+  [2, 7, 11, 15],
+];
+/** The clave of an item on the 16-step grid, from content-kit's `CLAVE_GRIDS` (two bars). */
+function claveBars(type: "son" | "rumba", dir: "3-2" | "2-3"): number[][] {
+  return CLAVE_GRIDS[type][dir].map((bar) => bar.map(([n, d]) => (n * 16) / d));
+}
+
+/** L1 track grooves: the drum lines of the item (labels STYLE §2), the sounds it names, its swing. */
+function trackDrums(
+  rng: Rng,
+  f: LadderFeature,
+  realism: LadderRealism,
+  bars: number,
+): { tracks: TrackSpec[]; sounds: string[]; swung: boolean; flavour: LadderFlavour } {
+  const node = (steps: readonly number[], word: string) => barNode(gridBeats([...steps], 4, 4), word);
+  if (f === "ride") {
+    // The jazz kit: the ride's pattern, the hi-hat foot on 2 and 4, a feathered kick on the beat at R3+.
+    const tracks: TrackSpec[] = [
+      { label: "drums", src: "s", pat: node(RIDE_STEPS, "rd"), bank: "jazzkit", gain: 0.6 },
+      { label: "hats", src: "s", pat: node([4, 12], "hh"), bank: "jazzkit", gain: 0.5 },
+    ];
+    if (realism >= 3)
+      tracks.push({ label: "kick", src: "s", pat: node([0, 8], "bd"), bank: "jazzkit", gain: 0.35 });
+    return {
+      tracks,
+      sounds: ["rd", "hh", ...(realism >= 3 ? ["bd"] : [])],
+      swung: true,
+      flavour: "jazz-soul",
+    };
+  }
+  if (f === "funk16") {
+    // Busy everywhere except the one: sixteenth hats, the kick on 1 and around it, ghost notes on the snare.
+    const kick = rng.pick(FUNK_KICKS);
+    // Two ghost notes at least, never on a kick or the backbeat.
+    const ghosts = rng.pick(FUNK_GHOSTS).filter((g) => !kick.includes(g));
+    for (const g of [7, 9, 14, 2, 10, 15])
+      if (ghosts.length < 2 && !kick.includes(g) && !ghosts.includes(g)) ghosts.push(g);
+    ghosts.sort((a, b) => a - b);
+    const tracks: TrackSpec[] = [
+      { label: "kick", src: "s", pat: node(kick, "bd") },
+      { label: "snare", src: "s", pat: node([4, 12], "sd") },
+      { label: "perc", src: "s", pat: node(ghosts, "sd"), gain: 0.25 },
+      { label: "hats", src: "s", pat: seq([atom("hh", 16)]), gain: 0.45 },
+    ];
+    return { tracks, sounds: ["bd", "sd", "hh"], swung: false, flavour: "pop" };
+  }
+  // A clave on the rim over a groove that keeps both bars the same (the kick on 1 and the "and" of 2 and 4).
+  const bank = realism >= 2 ? rng.pick(KITS.filter((k): k is string => k !== null)) : undefined;
+  const kit = bank ? { bank } : {};
+  const type = realism >= 3 ? rng.pick(["son", "rumba"] as const) : "son";
+  const dir = rng.pick(["3-2", "2-3"] as const);
+  const clave = claveBars(type, dir);
+  const claveNodes = Array.from({ length: bars }, (_, b) => node(clave[b % 2] as number[], "rim"));
+  const tracks: TrackSpec[] = [
+    { label: "kick", src: "s", pat: node([0, 6, 12], "bd"), ...kit },
+    { label: "hats", src: "s", pat: seq([atom("hh", 8)]), gain: 0.4, ...kit },
+    { label: "perc", src: "s", pat: { t: "alt", items: claveNodes }, ...kit },
+  ];
+  return { tracks, sounds: ["bd", "hh", "rim"], swung: false, flavour: "pop" };
+}
+
+/**
+ * A walking bass bar (J3.L04) as scale steps, four quarters: the root on 1, a chord tone (the 3rd or the 5th) on
+ * 3, a passing step between them on 2, and on 4 the scale step next to the NEXT bar's root (a step into it, from
+ * above or below, whichever is nearer beat 3). Diatonic: every approach is one or two half steps.
+ */
+export function walkingBar(root: number, next: number, rng: Rng, high = 11): number[] {
+  // Walk up from a low root, down from a high one, so the line stays in the bass's register.
+  const up = root <= high - 4;
+  const three = up ? root + rng.pick([2, 4]) : root - 3;
+  const two = up ? (three - root === 4 ? root + 2 : root + 1) : root - 1;
+  const approach = Math.abs(next + 1 - three) <= Math.abs(next - 1 - three) ? next + 1 : next - 1;
+  return [root, two, three, approach];
+}
 
 /** The key pool of an item: up to 2 accidentals at R0–R1, 4 from R2 (major keys only before U10). */
 export function ladderKeys(realism: LadderRealism): KeySpec[] {
@@ -216,16 +371,28 @@ const rootStep = (c: RnChord): number => DEGREE_NUM(c.degree) - 1;
 /** Chord tones of a diatonic triad as scale steps mod 7. */
 const chordSteps = (c: RnChord): number[] => [0, 2, 4].map((k) => mod(rootStep(c) + k, 7));
 
+/** The triad a seventh chord is graded on at L3 (`qualityDepth: "triad"`): Dm7 → minor, G7 and Cmaj7 → major. */
+const TRIAD_CORE: Readonly<Partial<Record<RnChord["quality"], LadderChord["quality"]>>> = {
+  maj: "maj",
+  min: "min",
+  dim: "dim",
+  maj7: "maj",
+  "7": "maj",
+  m7: "min",
+  m7b5: "dim",
+};
 function chordInfo(c: RnChord, key: KeySpec, bar: number): LadderChord {
   const root = rnRoot(c, key);
-  const quality = c.quality as LadderChord["quality"];
+  const quality = TRIAD_CORE[c.quality] ?? "maj";
+  const core: RnChord = { ...c, quality };
+  // The symbol and code name the chord that sounds (a seventh in a jazz loop); quality and rn its triad core.
   return {
     bar,
     degree: c.degree,
     quality,
-    rn: formatRn(c),
-    symbol: `${root.replace(/#/g, "♯").replace(/(?<=[A-G])b/g, "♭")}${CHORD_SUFFIX[quality].lead}`,
-    code: `${root}${CHORD_SUFFIX[quality].code}`,
+    rn: formatRn(core),
+    symbol: `${root.replace(/#/g, "♯").replace(/(?<=[A-G])b/g, "♭")}${CHORD_SUFFIX[c.quality].lead}`,
+    code: `${root}${CHORD_SUFFIX[c.quality].code}`,
   };
 }
 
@@ -671,6 +838,37 @@ export function generateLadderPiece(
 
   if (level === 1) {
     const bars = realism >= 3 ? 4 : 2;
+    const tf = trackFeature(rng, level, realism, opts);
+    if (tf) {
+      const groove = trackDrums(rng, tf, realism, bars);
+      const piece = buildPiece({ bpm, bars, tracks: groove.tracks });
+      const answer = buildPiece({
+        bpm,
+        bars,
+        tracks: groove.tracks.map(({ bank: _b, gain: _g, ...t }) => t),
+      }).code;
+      return {
+        ...base,
+        flavour: groove.flavour,
+        code: piece.code,
+        events: piece.events,
+        cps: piece.cps,
+        bars,
+        preload: piece.preload,
+        pickup: null,
+        swing: groove.swung ? { subdivision: 8, amount: 1 / 3 } : null,
+        given: { bpm, meter: "4/4", key, pickup: null, bars, sounds: groove.sounds, chordsPerBar: null },
+        target: groove.tracks.map((t) => t.label),
+        stages: null,
+        answer,
+        stageAnswers: null,
+        chords: null,
+        degrees: null,
+        performance: { target: groove.tracks[0]?.label ?? "drums", swung: groove.swung, vocalLead: null },
+        feature: tf,
+        title: `${TRACK_TITLES[tf]} · ${bars} bars`,
+      };
+    }
     const drums = drumPart(rng, realism, bars, { pickupBar: false, flavour });
     const piece = buildPiece({ bpm, bars, tracks: drums.tracks });
     const answer = buildPiece({
@@ -700,13 +898,29 @@ export function generateLadderPiece(
   }
 
   if (level === 2 || level === 3) {
-    const pool = LADDER_LOOPS.filter((l) => l.from <= realism);
-    const loop = rng.pick(pool);
-    const chords = [...loop.chords];
+    const tf = trackFeature(rng, level, realism, opts);
+    // A jazz loop of the chosen feature (or, under a walking bass, any jazz loop the learner has met).
+    const jazzPool = JAZZ_LOOPS.filter(
+      (l) => feature(opts, l.feature) && (tf === "walking" || l.feature === tf),
+    );
+    const loopChords: readonly RnChord[] =
+      tf && jazzPool.length > 0
+        ? rng.pick(jazzPool).chords
+        : rng.pick(LADDER_LOOPS.filter((l) => l.from <= realism)).chords;
+    const chords = [...loopChords];
     const bars = chords.length;
     // Figures with an octave keep the roots low enough for the octave to stay a bass note (≤ A3).
-    const roots = bassRoots(chords, key, realism >= 2 ? 45 : 50);
-    const bassNodes = roots.map((r, i) => bassBar(rng, r, roots[(i + 1) % roots.length] as number, realism));
+    const roots = bassRoots(chords, key, realism >= 2 || tf === "walking" ? 45 : 50);
+    const bassNodes = roots.map((r, i) => {
+      const next = roots[(i + 1) % roots.length] as number;
+      if (tf !== "walking") return bassBar(rng, r, next, realism);
+      // Up from a root low enough that its 5th stays under A2, down from a higher one.
+      const high = stepToMidi(r + 4, key, 2) <= 45 ? r + 4 : r;
+      const walk = walkingBar(r, next, rng, high);
+      // Never under E1: approach a low root from above.
+      if (stepToMidi(walk[3] as number, key, 2) < 28) walk[3] = next + 1;
+      return seq(walk.map((x) => atom(String(x))));
+    });
     const bassTrack: TrackSpec = {
       label: "bass",
       src: "n",
@@ -720,7 +934,11 @@ export function generateLadderPiece(
     const wantDrums = realism >= 2;
     if (wantDrums)
       tracks.push(...drumPart(rng, realism, bars, { pickupBar: false, flavour, gain: 0.7 }).tracks);
-    const voices = chordVoices(chords, key);
+    // Seventh chords sound as sevenths (a jazz loop's Rhodes); the U06 loops as close triads.
+    const sevenths = chords.some((c) => CHORD_TONES[c.quality].semis.length === 4);
+    const voices = sevenths
+      ? voiceProgression(chords, key).map((v) => spellVoiced(v, key).slice(1))
+      : chordVoices(chords, key);
     const wantChords = level === 3 || realism >= 3;
     if (wantChords)
       tracks.push({
@@ -752,7 +970,7 @@ export function generateLadderPiece(
     const bassText = altText(bassNodes.map((n) => printNode(n)));
     const bassAnswer = `setcpm(${bpm}/4)\n\nbass: n("${bassText}").scale("${key.tonic}2:major").s("${sounds.bass}")`;
     const info = chords.map((c, i) => chordInfo(c, key, i + 1));
-    const chordAnswer = `chords: n("[0,2,4]").add(n("<${chords.map(rootStep).join(" ")}>")).scale("${key.tonic}3:major").s("piano")`;
+    const chordAnswer = `chords: n("${sevenths ? "[0,2,4,6]" : "[0,2,4]"}").add(n("<${chords.map(rootStep).join(" ")}>")).scale("${key.tonic}3:major").s("piano")`;
     const bassDegrees = piece.events
       .filter((e) => e.track === "bass" && e.midi !== null)
       .map((e) => degreeOfMidi(e.midi as number, key));
@@ -773,8 +991,11 @@ export function generateLadderPiece(
         stageAnswers: null,
         chords: null,
         degrees: bassDegrees,
-        performance: { target: "bass", swung, vocalLead: null },
-        title: `Bass line · ${bars} bars`,
+        performance: { target: "bass", swung: swung || tf === "walking", vocalLead: null },
+        ...(tf
+          ? { feature: tf, swing: { subdivision: 8, amount: 1 / 3 }, flavour: "jazz-soul" as const }
+          : {}),
+        title: tf === "walking" ? `Walking bass · ${bars} bars` : `Bass line · ${bars} bars`,
       };
     return {
       ...base,
@@ -796,8 +1017,9 @@ export function generateLadderPiece(
       },
       chords: info,
       degrees: bassDegrees,
-      performance: { target: "chords", swung, vocalLead: null },
-      title: `Four-chord loop · ${bars} bars`,
+      performance: { target: "chords", swung: swung || tf !== null, vocalLead: null },
+      ...(tf ? { feature: tf, swing: { subdivision: 8, amount: 1 / 3 }, flavour: "jazz-soul" as const } : {}),
+      title: tf ? `${TRACK_TITLES[tf]} · ${bars} bars` : `Four-chord loop · ${bars} bars`,
     };
   }
 

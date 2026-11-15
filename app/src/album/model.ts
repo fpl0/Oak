@@ -40,6 +40,48 @@ export function runningOrder<T extends { id: string }>(capstones: readonly T[]):
   return [...capstones.filter((c) => c.id !== "CF-A"), ...capstones.filter((c) => c.id === "CF-A")];
 }
 
+/** Side B's eight capstones (wave7.md §5.5, `ALBUM_SIDES`): jazz, rhythm, sound, as the course lists them. */
+export const SIDE_B_CAPSTONES = ["JC1", "JC2", "JC3", "JC4", "RC1", "RC2", "AC1", "AC2"] as const;
+
+/** The track family a Side B capstone belongs to (its cover sits with the others of its track). */
+export function trackFamilyOf(capstoneId: string): "jazz" | "rhythm" | "sound" | null {
+  if (capstoneId.startsWith("JC")) return "jazz";
+  if (capstoneId.startsWith("RC")) return "rhythm";
+  if (capstoneId.startsWith("AC")) return "sound";
+  return null;
+}
+
+export const TRACK_FAMILY_LABEL = { jazz: "Jazz", rhythm: "Rhythm", sound: "Sound" } as const;
+
+/**
+ * Side B's running order (wave7.md §5.5: numbered in release order): the released tracks in the order they were
+ * released, then the capstones still to come in the course's order.
+ */
+export function sideBOrder<T extends { id: string }>(
+  capstones: readonly T[],
+  tracks: readonly Pick<AlbumTrack, "capstoneId" | "createdAt" | "trackNo">[],
+): T[] {
+  const released = (id: string) => tracks.find((t) => t.capstoneId === id) ?? null;
+  const done = capstones
+    .filter((c) => released(c.id))
+    .sort((a, b) => {
+      const x = released(a.id) as Pick<AlbumTrack, "createdAt" | "trackNo">;
+      const y = released(b.id) as Pick<AlbumTrack, "createdAt" | "trackNo">;
+      return x.createdAt.localeCompare(y.createdAt) || x.trackNo - y.trackNo;
+    });
+  return [...done, ...capstones.filter((c) => !released(c.id))];
+}
+
+/** A side's capstones in its running order. */
+export function sideOrder<T extends { id: string }>(
+  side: "A" | "B",
+  capstones: readonly T[],
+  tracks: readonly Pick<AlbumTrack, "capstoneId" | "createdAt" | "trackNo">[],
+): T[] {
+  const mine = capstones.filter((c) => sideOfCapstone(c.id) === side);
+  return side === "A" ? runningOrder(mine) : sideBOrder(mine, tracks);
+}
+
 export type Slot =
   | { kind: "track"; no: number; track: AlbumTrack }
   | {
@@ -74,7 +116,7 @@ export function albumSides(
   const statusOf = new Map(statuses.map((s) => [s.capstoneId as string, s] as const));
   const sideSlots = (side: "A" | "B"): Slot[] => {
     const slots: Slot[] = [];
-    const listed = runningOrder(capstones.filter((c) => sideOfCapstone(c.id) === side));
+    const listed = sideOrder(side, capstones, tracks);
     listed.forEach((c, i) => {
       const t = byCapstone.get(c.id);
       if (t) slots.push({ kind: "track", no: i + 1, track: t });
@@ -100,7 +142,7 @@ export function albumSides(
   const out: SideView[] = [{ side: "A", title: "Side A", sub: "Core", slots: sideSlots("A") }];
   const b = sideSlots("B");
   if (b.some((s) => s.kind === "track" || s.status === "open" || s.status === "in_progress"))
-    out.push({ side: "B", title: "Side B", sub: "Advanced", slots: b });
+    out.push({ side: "B", title: "Side B", sub: "Jazz, rhythm and sound", slots: b });
   const bsides = tracks
     .filter((t) => t.side === "Bside")
     .sort((x, y) => x.trackNo - y.trackNo || x.createdAt.localeCompare(y.createdAt))
@@ -247,7 +289,17 @@ export function sideARecord(
   details: ReadonlyMap<string, AlbumTrackDetail>,
   capstones: readonly { id: string; title: string }[],
 ): SideARecordView {
-  const core = runningOrder(capstones.filter((c) => sideOfCapstone(c.id) === "A"));
+  return sideRecord("A", tracks, details, capstones);
+}
+
+/** One side as a record (Side A: the core in running order; Side B: the eight track capstones in release order). */
+export function sideRecord(
+  side: "A" | "B",
+  tracks: readonly AlbumTrack[],
+  details: ReadonlyMap<string, AlbumTrackDetail>,
+  capstones: readonly { id: string; title: string }[],
+): SideARecordView {
+  const core = sideOrder(side, capstones, tracks);
   let loading = false;
   const out = core.map((c, i): RecordTrack => {
     const t = tracks.find((x) => x.capstoneId === c.id) ?? null;
@@ -299,10 +351,45 @@ export function sideARecord(
 export function recordTitleLine(
   albumTitle: string,
   r: Pick<SideARecordView, "released" | "seconds" | "playable">,
+  side: "A" | "B" = "A",
 ): string {
   const tracks = `${r.released} ${r.released === 1 ? "track" : "tracks"}`;
   const time = r.playable.length > 0 ? ` · ${runtime(r.seconds)}` : "";
-  return `${albumTitle} · Side A · ${tracks}${time}`;
+  return `${albumTitle} · Side ${side} · ${tracks}${time}`;
+}
+
+/** The whole record played through: Side A's recordings, then Side B's, each side in its running order. */
+export interface WholeRecord {
+  queue: (RecordTrack & { side: "A" | "B" })[];
+  seconds: number;
+  /** Released tracks over both sides, and how many the course has (12 + 8). */
+  released: number;
+  total: number;
+  /** Every track of both sides is released. */
+  complete: boolean;
+}
+
+export function wholeRecord(a: SideARecordView, b: SideARecordView): WholeRecord {
+  const queue = [
+    ...a.playable.map((t) => ({ ...t, side: "A" as const })),
+    ...b.playable.map((t) => ({ ...t, side: "B" as const })),
+  ];
+  return {
+    queue,
+    seconds: queue.reduce((sum, t) => sum + (t.durationS ?? 0), 0),
+    released: a.released + b.released,
+    total: a.total + b.total,
+    complete: a.complete && b.complete,
+  };
+}
+
+/** "Side B · 3 of 8 · Blues in F · 0:14 / 2:01" while the whole record plays. */
+export function wholeNowPlaying(
+  t: Pick<RecordTrack, "no" | "title" | "durationS"> & { side: "A" | "B" },
+  sideTotal: number,
+  elapsedS: number,
+): string {
+  return `Side ${t.side} · ${nowPlayingLine(t, sideTotal, elapsedS)}`;
 }
 
 /** "3 of 12 · Four-Chord Song · 0:14 / 0:20". */

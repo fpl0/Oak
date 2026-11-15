@@ -5,14 +5,17 @@ import type { SkillState } from "@oak/api";
 import { Link } from "@tanstack/react-router";
 import { clsx } from "clsx";
 import { GitBranch, Maximize2, MicOff, Minus, MoveHorizontal, Plus, Route as RouteIcon } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useAlbum } from "../lib/queries.ts";
 import { useHotkeys } from "../ui/keys/KeymapProvider.tsx";
 import { Button, buttonClass, IconButton } from "../ui/kit/Button.tsx";
 import { EmptyState } from "../ui/kit/basics.tsx";
 import { ErrorState, LoadingState } from "../ui/kit/QueryState.tsx";
+import { IllustratedOakMap as OakMap } from "./illustrated/index.ts";
 import { LeafSwatch } from "./Leaf.tsx";
 import { NodePanel } from "./NodePanel.tsx";
-import { type MapCommand, OakMap, PANEL_WIDTH } from "./OakMap.tsx";
+import { newlyLearned } from "./newly-learned.ts";
+import { type MapCommand, PANEL_WIDTH } from "./OakMap.tsx";
 import { minutesOf } from "./revive.ts";
 import { countLeaves, LEAF_STATUSES, leafView, STATUS_HELP, STATUS_LABEL } from "./state.ts";
 import { type OakModel, useOak } from "./use-oak.ts";
@@ -108,8 +111,13 @@ function ReviveBar({ model }: { model: OakModel }) {
  */
 function BranchBar({ model, onGo }: { model: OakModel; onGo: (leafId: string) => void }) {
   // Jazz and Rhythm: the branches that open at the U13 checkpoint. Arrangement & Sound has had its side lessons
-  // since U03 (their own line on Today and Progress); the Course view lists all three.
-  const rows = model.tracks.filter((t) => t.open && t.trackId !== "A");
+  // since U03 (their own line on Today and Progress): it joins the bar once its track lessons are what comes next
+  // (A1.L05 on), or the core is complete. The Course view lists all three.
+  const rows = model.tracks.filter(
+    (t) =>
+      t.open &&
+      (t.trackId !== "A" || model.core === "complete" || (t.next !== null && !/^A1\.L0[1-4]\b/.test(t.next))),
+  );
   if (rows.length === 0) return null;
   const firstLeaf = (units: readonly string[]) =>
     model.layout.nodes.find((n) => units.includes(n.unit))?.id ?? null;
@@ -157,6 +165,17 @@ function TreeBody({
   "families" | "cards" | "familyStates"
 >) {
   const { graph, layout, states, next } = model;
+  const album = useAlbum();
+  // Acorns: released capstones where their unit grows; B-sides (no capstone) on the ground, oldest first.
+  const released = useMemo(
+    () =>
+      [...(album.data?.tracks ?? [])].sort(
+        (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+      ),
+    [album.data],
+  );
+  // A leaf glints for 48 hours after the server first saw it introduced (`introducedAt`), never from `updatedAt`.
+  const fresh = useMemo(() => newlyLearned([...states.values()], Date.now()), [states]);
   const [selected, setSelected] = useState<string | null>(leaf && model.layout.byId.has(leaf) ? leaf : null);
   const [showNext, setShowNext] = useState(true);
   const [command, setCommand] = useState<MapCommand | null>(null);
@@ -167,13 +186,18 @@ function TreeBody({
   const node = selected ? graph.nodes.find((n) => n.id === selected) : undefined;
   const close = () => {
     const id = selected;
+    const from = document.activeElement;
     setSelected(null);
+    // Focus goes back to the leaf on the next frame — unless the learner has moved it since (a fast key after Esc,
+    // such as N for what's next, must not be undone by this frame).
     if (id)
-      requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const now = document.activeElement;
+        if (now !== from && now !== null && now !== document.body) return;
         document
           .querySelector<SVGGElement>(`[data-node="${CSS.escape(id)}"]`)
-          ?.focus({ preventScroll: true }),
-      );
+          ?.focus({ preventScroll: true });
+      });
   };
   const goNext = () => {
     if (!firstNext) return;
@@ -293,9 +317,11 @@ function TreeBody({
             </>
           ) : (
             <p className="text-sm text-text-2" data-testid="oak-no-next">
-              {model.core === "complete"
-                ? "Every limb of the core is at full length. Reviews keep it green; the tracks are its open branches."
-                : "Every open lesson is done. New leaves appear as the course opens."}
+              {model.course === "complete"
+                ? "Every limb and every branch is grown: the core and its three tracks. Reviews keep it green."
+                : model.core === "complete"
+                  ? "Every limb of the core is at full length. Reviews keep it green; the tracks are its open branches."
+                  : "Every open lesson is done. New leaves appear as the course opens."}
             </p>
           )}
         </div>
@@ -351,6 +377,8 @@ function TreeBody({
         )}
       >
         <OakMap
+          releasedTracks={released}
+          newlyLearned={fresh}
           layout={layout}
           states={states}
           next={next}
@@ -383,12 +411,9 @@ function TreeBody({
               reviveSec={model.reviveSec}
               quiet={model.quiet}
               isNext={next.targets.includes(node.id)}
-              branch={
-                // An open branch with no lesson written for this leaf's unit (a core unit never is one).
-                model.openUnits.has(node.unit) && !model.authored.has(node.introducedBy ?? "")
-                  ? (model.openUnits.get(node.unit) ?? null)
-                  : null
-              }
+              // The open branch this leaf's unit grows on (a core unit never is one); the panel names the leaf's
+              // lesson when it is written, else says the track's own line.
+              branch={model.openUnits.get(node.unit) ?? null}
               onSelect={(id) => {
                 setSelected(id);
                 send("focus", id);

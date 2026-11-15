@@ -142,7 +142,7 @@ export const FIXTURES = {
   health: {
     ok: true,
     appVersion: "0.0.0-e2e",
-    contractsVersion: "1.7",
+    contractsVersion: "1.8",
     schemaVersion: 1,
     contentVersion: null,
     tutor: "ready",
@@ -153,7 +153,7 @@ export const FIXTURES = {
     health: {
       ok: true,
       appVersion: "0.0.0-e2e",
-      contractsVersion: "1.7",
+      contractsVersion: "1.8",
       schemaVersion: 1,
       contentVersion: null,
       tutor: "ready",
@@ -614,6 +614,51 @@ export const FIXTURES = {
     album: { released: 1, total: 12, latestTrackId: "tr_1" },
     open: [],
   },
+  // Wave 7: the advanced tracks (Practice names each track's ear stage): a U01 learner has none open.
+  "tracks.list": {
+    items: (
+      [
+        ["J", "Jazz Harmony", 34, "Opens with the U13 checkpoint."],
+        ["R", "Advanced Rhythm", 20, "Opens with the U13 checkpoint."],
+        ["A", "Arrangement & Sound", 20, "Opens with U03.L02."],
+      ] as const
+    ).map(([trackId, title, sessionsTotal, note]) => ({
+      trackId,
+      title,
+      status: "locked" as const,
+      openedAt: null,
+      gates: [],
+      sessionsDone: 0,
+      sessionsTotal,
+      next: null,
+      note,
+    })),
+  },
+  // Wave 7: the whole course (the album page reads it; a U01 learner is early in it) and the ladder's songs (none
+  // reached yet at U01).
+  "course.whole": {
+    stage: "in-progress",
+    completedAt: null,
+    sessionId: null,
+    sessionsDone: 3,
+    sessionsTotal: 259,
+    core: "in-progress",
+    tracks: [],
+    album: { released: 1, total: 20, latestTrackId: "tr_1" },
+    stats: {
+      firstDay: "2026-11-01",
+      days: 3,
+      sessions: 3,
+      activeMinutes: 45,
+      lessons: 2,
+      tracksReleased: 1,
+      transcriptions: 0,
+      sketches: 2,
+    },
+    canDo: [],
+    open: [],
+  },
+  "ladder.songs": { items: [] },
 } satisfies Partial<Record<JsonEndpointName, unknown>>;
 
 FIXTURES["profile.get"] = FIXTURES.bootstrap.profile;

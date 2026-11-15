@@ -39,6 +39,12 @@ export const CSP = [
   "frame-ancestors 'none'",
 ].join("; ");
 
+/** The offline renderer's frame (`/offline-render.html`, @oak/strudel/offline) is the ONE document that may be
+ *  framed, and only by Oak itself (contracts §11.2 as of 1.8): `frame-ancestors 'self'`. Every other document
+ *  keeps `'none'`. The Oak server applies the same exception (server/src/security.ts). */
+export const OFFLINE_FRAME_PATH = "/offline-render.html";
+export const FRAME_CSP = CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'");
+
 export default defineConfig(({ mode }) => ({
   root: appRoot,
   // Keep Vite's dependency cache inside app/ (never the shared node_modules/.vite).
@@ -65,6 +71,18 @@ export default defineConfig(({ mode }) => ({
       presets: [reactCompilerPreset()],
     }) as PluginOption,
     tailwindcss(),
+    {
+      // `vite preview` (the production build and the e2e bundle): the frame exception above, nothing else.
+      name: "oak-offline-frame-csp",
+      configurePreviewServer(server) {
+        server.middlewares.use((req, res, next) => {
+          const frame = new URL(req.url ?? "/", "http://oak.local").pathname === OFFLINE_FRAME_PATH;
+          res.setHeader("Content-Security-Policy", frame ? FRAME_CSP : CSP);
+          res.setHeader("X-Frame-Options", frame ? "SAMEORIGIN" : "DENY");
+          next();
+        });
+      },
+    } as PluginOption,
   ],
   resolve: {
     alias: {
@@ -90,7 +108,6 @@ export default defineConfig(({ mode }) => ({
     host: "127.0.0.1",
     port: VITE_PORT,
     strictPort: true,
-    headers: { "Content-Security-Policy": CSP },
     proxy: {
       "/api": { target: API, changeOrigin: false },
       "/sounds": { target: API, changeOrigin: false },
@@ -105,6 +122,10 @@ export default defineConfig(({ mode }) => ({
     // Every emitted file, for the Service Worker's shell cache (app/public/sw.js "warm-shell"): the routes the
     // learner has not opened yet must still load offline after the first visit.
     manifest: "asset-manifest.json",
+    // Two pages: the app, and the offline renderer's frame (a hidden same-origin iframe; @oak/strudel/offline).
+    rolldownOptions: {
+      input: { app: `${appRoot}index.html`, offline: `${appRoot}offline-render.html` },
+    },
     // CSP font-src is 'self' only: never inline a (small) font subset as a data: URI.
     assetsInlineLimit: (file: string) => (/\.(woff2?|ttf|otf)$/.test(file) ? false : undefined),
   },

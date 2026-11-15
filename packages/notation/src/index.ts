@@ -110,6 +110,8 @@ export function notate(input: NotationInput, opts?: AbcOptions): { score: Score;
 export function drumStaffPosition(s: string): { pitch: string; head: "normal" | "x" } | null {
   return drumPos(s);
 }
+// Wave 7 Build: ghost notes (ghost.ts; `markGhostNotes` in render.dom.ts draws them).
+export { GHOST_CLASSES, GHOST_MAX_GAIN, type GhostMark, ghostMarks } from "./ghost.ts";
 // Wave 6 (guide.ts): the 3rd and 7th of each chord on the staff, for the guide-tone lens.
 export { GUIDE_TONE_CLASSES, type GuideToneMark, guideToneMarks } from "./guide.ts";
 // Wave 6 carry-over d5 (host.ts): what every staff host engraves and how it names the notes it drew.
@@ -154,3 +156,17 @@ export {
   type ScoreRhythm,
   scoreRhythm,
 } from "./wave6.ts";
+// Wave 7 seam (docs/design/wave7.md §3.3): jazz glyph chord symbols, the clave line, section letters, comping.
+export {
+  CHORD_SYMBOL_STYLES,
+  type ChordSymbolStyle,
+  chordSymbolText,
+  claveLineInput,
+  compingInput,
+  formSectionMarks,
+  hemiolaBracket,
+  polymeterMarks,
+  polyrhythmMarks,
+  type RhythmBracket,
+  WAVE7_NOTATION_UNBUILT,
+} from "./wave7.ts";

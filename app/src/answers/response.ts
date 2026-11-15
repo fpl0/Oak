@@ -7,6 +7,7 @@ import { EMPTY_FORM_MAP, formMapAnswer, formMapComplete, mapMissing } from "./fo
 import { slotLabels } from "./harmony.ts";
 import { parseSignatureValue } from "./keys/circle.ts";
 import { chordTyped } from "./normalize.ts";
+import { groupingComplete, groupingUnits, sumOf } from "./rhythm7.ts";
 import { degreeSemis, tonicMidi } from "./scale.ts";
 import { normalizeStaffValue } from "./staff/model.ts";
 import type { AnswerKind, AnswerSpec, AnswerSpecOf, AnswerValue, AnswerValueMap } from "./types.ts";
@@ -108,6 +109,13 @@ export function isComplete(spec: AnswerSpec, value: AnswerValue): boolean {
       );
     case "scale-builder":
       return Array.isArray(value) && value.length > 0;
+    // Wave 7: a grouping fills its bar with 2s and 3s; a Euclidean answer is a rhythm (1 ≤ k ≤ n, n ≥ 2).
+    case "grouping":
+      return Array.isArray(value) && groupingComplete(value as number[], groupingUnits(spec.meter).units);
+    case "euclid": {
+      const [k, n] = Array.isArray(value) ? (value as number[]) : [];
+      return k !== undefined && n !== undefined && k >= 1 && n >= 2 && k <= n;
+    }
     case "keyboard":
     case "choice":
     case "quality-pad":
@@ -217,6 +225,14 @@ export function responseOf(spec: AnswerSpec, value: AnswerValue): AttemptRespons
               ) as never,
             },
           };
+    // Wave 7: the numbers as the learner set them.
+    // An empty grouping or Euclid answer is not an answer yet (the schema asks for a group, and for k and n).
+    case "grouping":
+      return (value as number[]).length === 0
+        ? { skipped: true }
+        : { answer: { grouping: value as number[] } };
+    case "euclid":
+      return (value as number[]).length < 2 ? { skipped: true } : { answer: { euclid: value as number[] } };
   }
 }
 
@@ -270,6 +286,15 @@ export function incompleteReason(
     }
     case "scale-builder":
       return "Pick the notes of the scale.";
+    case "grouping": {
+      const { units, word } = groupingUnits(spec.meter);
+      const left = units - sumOf(Array.isArray(value) ? (value as number[]) : []);
+      return left > 0
+        ? `${left} ${left === 1 ? word : `${word}s`} still to group.`
+        : "Use groups of 2 and 3.";
+    }
+    case "euclid":
+      return "Set the hits and the steps.";
     default:
       return null;
   }

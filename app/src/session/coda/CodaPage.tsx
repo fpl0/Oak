@@ -49,6 +49,7 @@ import {
   tomorrowLine,
   toolCards,
 } from "../coda-model.ts";
+import { isCourseEnding } from "../course-end.ts";
 import { useCapstoneDef, useCompletionWhen } from "../day-hooks.ts";
 import { courseEdge, edgeShort, mapNextId } from "../edge.ts";
 import { isEnding, leftToRelease, openList } from "../finale-model.ts";
@@ -64,9 +65,11 @@ import { useNextUnlockList } from "../today/Glance.tsx";
 import { InlineCodeText, SideOfferLine } from "../today/SideOffer.tsx";
 import { WeeklyRhythm } from "../today/WeeklyRhythm.tsx";
 import { toolName as toolLabel } from "../tool-name.ts";
+import { nextLine } from "../tracks-day.ts";
 import { CodaUnlock } from "./CodaUnlock.tsx";
 import { LadderCard, OwnAudioCard, ReleaseCard } from "./CodaWave4.tsx";
 import { CanNow, CftOpenedCard, Finale, GatesOpenedCard } from "./CodaWave6.tsx";
+import { CodaCourseFinale, PlannerNext } from "./CodaWave7.tsx";
 
 /** Server reads that a finished session changes. */
 const SESSION_ENDED_KEYS = [
@@ -85,6 +88,9 @@ const SESSION_ENDED_KEYS = [
   // Wave 6: a checkpoint or a lesson may meet a track gate; a release may complete the core.
   "tracks.list",
   "course.completion",
+  // Wave 7: the whole course, the track focus and offers move with every track session.
+  "course.whole",
+  "tracks.focus",
   // Wave 4: a release fills an album slot; a gym session moves the ladder and the slot rule.
   "album.get",
   "album.track",
@@ -194,11 +200,15 @@ function CodaBody({ summary, ended }: { summary: SessionSummary; ended: EndedRec
   const report = useProgressReport();
   // The day the core is completed (END.md): the finale section says the milestone ms.07 itself, once, in place of
   // the day's banner, can-do card, tree card and teaser.
-  const ending = isEnding(summary);
+  // Wave 7: the day the WHOLE course is completed (wave7.md §5.8) is its own ending; it takes the place of the core's
+  // when one session finished both (the core done last).
+  const courseEnd = isCourseEnding(summary);
+  const ending = isEnding(summary) && !courseEnd;
+  const finale = ending || courseEnd;
   const endingMilestone = summary.coreComplete?.milestone?.id ?? null;
   const reached = (
     report.data ? milestonesReached(report.data.milestones, summary.session.startedAt) : []
-  ).filter((m) => !(ending && m.id === endingMilestone));
+  ).filter((m) => !(ending && m.id === endingMilestone) && !(courseEnd && m.id === "ms.28"));
   // What the learner can now do, said first (U12–U17 specs): the statements of the lesson finished today, or of
   // the capstone released today. `completed` is this browser's own report, else the server's course progress.
   const mainId = summary.session.mapItemId;
@@ -234,8 +244,11 @@ function CodaBody({ summary, ended }: { summary: SessionSummary; ended: EndedRec
   const edge = courseEdge(course.data, content.data?.syllabus ?? null, authored, plan.data ?? null);
   // A capstone session reads with its place and goal ("C4 Minor Indie Ballad · session 2 of 2: Chorus
   // cadence"), and a transcription slot due first is named before the lesson it delays.
+  // The planner's own next session first (Wave 7), else the map's next item.
+  const capstoneOf = (id: string | null | undefined) =>
+    id && !id.startsWith("GYM.") ? (/^(.+)\.S\d+$/.exec(id)?.[1] ?? null) : null;
   const nextCapstone =
-    nextId && !nextId.startsWith("GYM.") ? (/^(.+)\.S\d+$/.exec(nextId)?.[1] ?? null) : null;
+    (summary.next?.kind === "capstone" ? capstoneOf(summary.next.mapItemId) : null) ?? capstoneOf(nextId);
   const nextCapDef = useCapstoneDef(nextCapstone);
   const gymPlan = useGymPlan();
   const cftDef = useCapstoneDef(gymPlan.data?.cfT?.takesSlot ? "CF-T" : null);
@@ -257,11 +270,26 @@ function CodaBody({ summary, ended }: { summary: SessionSummary; ended: EndedRec
     core === "complete" && completion.data
       ? (openList(completion.data.open).tomorrow?.replace(/^Tomorrow:/, "Next time:") ?? null)
       : null;
-  const tomorrow =
+  // Carry f6: the planner's real next session when the server sends it (Wave 7); `null` means nothing is planned (the
+  // whole course complete, nothing due) and the Coda shows no next line. An older server: the Wave 6 line below.
+  const planned =
+    summary.next === undefined
+      ? undefined
+      : nextLine(
+          summary.next,
+          (id) => titleOf(id, titles),
+          (id) =>
+            nextCapDef && capstoneOf(id) === nextCapDef.id
+              ? (capstoneDay({ kind: "capstone", mapItemId: id as never, title: "" }, nextCapDef, null, null)
+                  ?.detail ?? null)
+              : null,
+        );
+  const composed =
     edge && !summary.teaser
       ? `Next time: a review day. ${edgeShort(edge)}.`
       : (tomorrowLine(summary, nextId && nextTitle ? { id: nextId, title: nextTitle } : null, slotLabel) ??
         afterCoreNext);
+  const tomorrow = planned === undefined ? composed : summary.teaser ? composed : null;
   // After one of the standard's first three sessions: when it comes back, and what it asks then.
   const cftAfter = cftAfterLine(
     summary.session.kind === "capstone" ? summary.session.mapItemId : null,
@@ -315,8 +343,12 @@ function CodaBody({ summary, ended }: { summary: SessionSummary; ended: EndedRec
             Today you: {lines.join(" · ")}
           </p>
         )}
-        {!ending && <CanNow lines={canNow} />}
+        {!finale && <CanNow lines={canNow} />}
       </header>
+
+      {/* The Coda of session 259 shows what the learner made and can now do before anything else (wave7.md §10
+          item 23; review:journey: it sat under the release card and the sketch, below the fold at 1280×800). */}
+      {courseEnd && summary.courseComplete && <CodaCourseFinale snapshot={summary.courseComplete} />}
 
       <ReleaseCard session={summary.session} />
 
@@ -328,8 +360,7 @@ function CodaBody({ summary, ended }: { summary: SessionSummary; ended: EndedRec
       {ending && summary.coreComplete && (
         <Finale completion={summary.coreComplete} since={summary.session.startedAt} />
       )}
-
-      {cando.length > 0 && !ending && (
+      {cando.length > 0 && !finale && (
         <Section title="What you can do now" testId="coda-cando">
           <ul className="flex flex-col gap-2">
             {cando.map((c) => (
@@ -413,10 +444,10 @@ function CodaBody({ summary, ended }: { summary: SessionSummary; ended: EndedRec
         </Section>
       )}
 
-      {!ending && <GatesOpenedCard gates={summary.gatesOpened} />}
+      {!finale && <GatesOpenedCard gates={summary.gatesOpened} />}
       {cftOpened && !ceremony && <CftOpenedCard />}
 
-      {moves.length > 0 && !ending && (
+      {moves.length > 0 && !finale && (
         <Section title="On the Oak" testId="coda-oak">
           <ul className="flex flex-col gap-1.5">
             {moves.slice(0, 6).map((m) => (
@@ -452,8 +483,9 @@ function CodaBody({ summary, ended }: { summary: SessionSummary; ended: EndedRec
         </div>
       </Section>
 
-      {(tomorrow || gradient || coreLeft || cftAfter) && !ending && (
+      {(tomorrow || planned || gradient || coreLeft || cftAfter) && !finale && (
         <Section title="Next" testId="coda-next">
+          {planned && !tomorrow && <PlannerNext next={planned} />}
           {tomorrow && <p data-testid="coda-tomorrow">{tomorrow}</p>}
           {cftAfter && (
             <p className="text-sm text-text-2" data-testid="coda-cft-after">
@@ -465,7 +497,7 @@ function CodaBody({ summary, ended }: { summary: SessionSummary; ended: EndedRec
               {coreLeft}
             </p>
           )}
-          {tomorrow && nextObjective && !summary.teaser && (
+          {tomorrow && nextObjective && !summary.teaser && planned === undefined && (
             <p className="text-sm text-text-2" data-testid="coda-tomorrow-what">
               <InlineCodeText text={nextObjective} />
             </p>

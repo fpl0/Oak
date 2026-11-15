@@ -303,8 +303,28 @@ export function lintCode(code: string, profile: LintProfile): LintIssue[] {
   return issues.sort((a, b) => a.from - b.from);
 }
 
+/**
+ * A second strict profile the host adds: the server registers @oak/grader's (server/src/tutor-wiring.ts), the
+ * profile the page applies again before a card's Preview and an imported sketch's first run. Its allowlist of the
+ * names such code may read (no `getDrawContext`, no `parseFractional`, no window global) is the only layer in the
+ * page, which keeps `Function` and every global (review:security, Wave 7). This folder stays free of Strudel.
+ */
+let hostStrict: ((code: string) => LintIssue[]) | null = null;
+export function setHostStrictLint(lint: ((code: string) => LintIssue[]) | null): void {
+  hostStrict = lint;
+}
+
 export function lintStrict(code: string): LintIssue[] {
-  return lintCode(code, "strict");
+  const issues = lintCode(code, "strict");
+  if (hostStrict === null || issues.some((i) => i.rule === "lint.parse")) return issues;
+  const seen = new Set(issues.map((i) => `${i.rule}@${i.from}`));
+  for (const i of hostStrict(code)) {
+    const key = `${i.rule}@${i.from}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    issues.push(i);
+  }
+  return issues.sort((a, b) => a.from - b.from);
 }
 
 /** Short, model-readable lines: `line 2: lint.strict.this: \`this\` is not allowed`. */

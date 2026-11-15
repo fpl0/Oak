@@ -249,8 +249,10 @@ class Sim {
         this.fail(day, `after the core Today is ${plan.kind}`);
       if (plan.kind === "lesson" || plan.kind === "checkpoint")
         this.fail(day, `after the core: ${plan.kind} ${id}`);
-      if (plan.tracks === null || plan.tracks === undefined)
-        this.fail(day, "after the core plan.tracks is null");
+      // Wave 7 (wave7.md §5.2): an open track whose lessons are written is offered (`trackOffers`); one whose lessons
+      // are not written yet is named in `plan.tracks`. Either way the tracks are on the plan after the core.
+      if ((plan.tracks ?? null) === null && (plan.trackOffers ?? []).length === 0)
+        this.fail(day, "after the core the plan names no track");
     }
   }
 

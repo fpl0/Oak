@@ -138,7 +138,35 @@ export class CapstoneSessionsService {
       };
     });
     const current = sessions.find((s) => s.status !== "done")?.capstoneSessionId ?? null;
-    return { capstoneId: id as CapstoneSessions["capstoneId"], sessions, current };
+    const versions = this.versions(id);
+    return {
+      capstoneId: id as CapstoneSessions["capstoneId"],
+      sessions,
+      current,
+      ...(versions === null ? {} : { versions }),
+    };
+  }
+
+  /**
+   * Wave 7 (content-kit `CapstoneDef.versions`, AC1): the capstone's two versions, each with its latest draft;
+   * `null` for a capstone of one piece.
+   */
+  versions(id: string): NonNullable<CapstoneSessions["versions"]> | null {
+    const defs = this.#content.capstoneDef(id)?.versions;
+    if (defs === undefined || defs.length === 0) return null;
+    const rows = this.#repos.capstoneVersions.of(id);
+    return defs.map((v) => {
+      const r = rows.find((x) => x.versionId === v.id);
+      return {
+        id: v.id,
+        label: v.label,
+        startsIn: v.startsIn as NonNullable<CapstoneSessions["versions"]>[number]["startsIn"],
+        draft:
+          r === undefined
+            ? null
+            : { sketchId: r.sketchId, sketchVersion: r.sketchVersion, savedAt: r.savedAt },
+      };
+    });
   }
 
   #checkStates(
@@ -287,6 +315,25 @@ export class CapstoneSessionsService {
       if (this.#repos.sketches.version(body.sketchId, body.sketchVersion) === null)
         throw notFound(`sketch ${body.sketchId} v${body.sketchVersion}`);
       const now = this.time.iso();
+      // Wave 7: a draft of one version of a two-version capstone (AC1), in or after the session that starts it.
+      // Without `versionId` the draft belongs to the latest version started by this session.
+      const defs = this.#content.capstoneDef(id)?.versions ?? [];
+      const ids = this.#content.capstoneSessionIds(id);
+      const at = ids.indexOf(body.capstoneSessionId);
+      const versionId =
+        body.versionId ?? defs.filter((x) => ids.indexOf(x.startsIn) <= at).at(-1)?.id ?? undefined;
+      if (versionId !== undefined) {
+        const v = defs.find((x) => x.id === versionId);
+        if (v === undefined) throw badRequest(`${id} has no version ${versionId}`);
+        if (at < ids.indexOf(v.startsIn)) throw conflict(`${v.label} starts in ${v.startsIn}`);
+        this.#repos.capstoneVersions.save({
+          capstoneId: id,
+          versionId,
+          sketchId: body.sketchId,
+          sketchVersion: body.sketchVersion,
+          savedAt: now,
+        });
+      }
       const next = this.#touch(id, body.capstoneSessionId, body.sessionId, now);
       this.#repos.capstoneSessions.save({
         ...next,

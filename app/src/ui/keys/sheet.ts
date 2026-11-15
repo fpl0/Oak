@@ -90,6 +90,21 @@ export const CORE_SECTIONS: readonly SheetSection[] = [
     ],
   },
   {
+    // Wave 7: the kit's two-lane tap pad, version switch, Euclid ring and slider that plays (app/src/ui/kit), wherever
+    // a page shows them (drills, the tracks' lessons and capstones, Studio).
+    id: "tracks-kit",
+    title: "Lanes, versions, rings and sliders",
+    order: 26,
+    rows: [
+      ["F", "Two-lane tap pad: tap the first lane (J: the second)"],
+      ["ArrowRight", "Version switch: the next version (ArrowLeft: the one before)"],
+      ["ArrowUp", "Euclid ring: one hit more (ArrowDown: one fewer)"],
+      ["ArrowLeft", "Euclid ring: rotate a step (ArrowRight: the other way; Home: no rotation)"],
+      ["Shift+ArrowUp", "Euclid ring: one step more (Shift+ArrowDown: one fewer)"],
+      ["Space", "Slider that plays: play or stop (the arrows move it; each settled value is heard)"],
+    ],
+  },
+  {
     id: "answers",
     title: "Answers",
     order: 30,

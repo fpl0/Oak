@@ -40,6 +40,7 @@ import {
   SAMPLE_CONTEXT,
   unlockedFor,
 } from "./harness.ts";
+import { isTrackLesson, lessonItems, standardIssues } from "./standard.ts";
 
 export interface CheckSection {
   /** AUTHORING §12.1 numbering. */
@@ -521,6 +522,19 @@ export function chordSymbolsOf(def: LessonDef): { where: string; symbol: string 
   return out;
 }
 
+/**
+ * The corrections-pass standard (decision 71, AUTHORING §20.2; ./standard.ts) on every graded step and Make of an
+ * advanced-track lesson: a heard required rule, a right-function wrong answer, three other right answers, no
+ * answer named below rung 4.
+ */
+export async function checkStandard(l: LoadedLesson): Promise<CheckSection> {
+  const issues: string[] = [];
+  const session = sessionOf(l);
+  for (const it of lessonItems(l.def))
+    issues.push(...(await standardIssues(it, (e, t) => grade(e, t, l.def, session))));
+  return { n: 15, name: "Corrections standard (decision 71)", issues };
+}
+
 /** All checks in AUTHORING §12.1 order. */
 export async function checkLesson(l: LoadedLesson): Promise<CheckSection[]> {
   return [
@@ -537,5 +551,6 @@ export async function checkLesson(l: LoadedLesson): Promise<CheckSection[]> {
     checkMake(l),
     checkTheory(l),
     checkAuthoring(l),
+    ...(isTrackLesson(l.def.id) && !l.sample ? [await checkStandard(l)] : []),
   ];
 }

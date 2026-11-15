@@ -6,6 +6,9 @@
 // Wave 6 (U13): with `AnswerEnv.tap.meter` in a compound meter the beat is the dotted quarter (the count-in clicks
 // it, the pad draws it in three, "1 la li"); `stepsPerBeat: 3` in a simple meter is a triplet grid ("1 trip let").
 // A syncopated target is drawn where it falls between the beats, and a missed one is named by its count.
+// Wave 7: with `AnswerEnv.tap.lanes` (feature `tap.lanes`, R2.L04's 3 against 2) each bar has two lanes, F taps the
+// first and J the second, each lane drawn and marked on its own (`lanesReport`); in an odd meter (5/4, 7/8, 9/8i)
+// the pad's strong lines fall on the meter's group starts, counted "1 2 | 1 2 | 1 2 3".
 import { createTapInput, type TapEvent, type TapInput, type TapInputExtras } from "@oak/audio";
 import { clsx } from "clsx";
 import { Hand, RotateCcw } from "lucide-react";
@@ -101,7 +104,7 @@ export function TapPadAnswer(p: AnswerWidgetProps<"tap">) {
       tin.onTap((t) => setLive((xs) => [...xs, t]));
       setLive([]);
       onChange([]);
-      tin.arm({ twoVoices: setup.twoVoices === true });
+      tin.arm({ twoVoices: setup.twoVoices === true || Boolean(setup.lanes) });
       let at: number;
       if (setup.start) at = await setup.start();
       else {
@@ -149,17 +152,88 @@ export function TapPadAnswer(p: AnswerWidgetProps<"tap">) {
 
   const taps: { time: number; voice: 0 | 1 }[] =
     phase === "done" || phase === "idle"
-      ? value.map((time, i) => ({ time, voice: live[i]?.voice ?? 0 }))
+      ? value.map((time, i) => ({ time, voice: live[i]?.voice ?? setup.voices?.[i] ?? 0 }))
       : live;
   const showTargets =
-    feedback.state !== "idle" && feedback.state !== "pending" && startAt !== null && setup.targets;
+    feedback.state !== "idle" &&
+    feedback.state !== "pending" &&
+    startAt !== null &&
+    (setup.targets || setup.lanes);
   const steps = beatsPerBar * stepsPerBeat;
   const countNumeral =
     phase === "count-in" && beat !== null && beat < 0
       ? (((beat % beatsPerBar) + beatsPerBar) % beatsPerBar) + 1
       : null;
   const headPos = phase === "taking" && beat !== null && beat >= 0 ? beat / beatsPerBar : null;
-  const twoVoices = setup.twoVoices === true;
+  const lanes = setup.lanes && setup.lanes.length >= 2 ? setup.lanes : null;
+  const laneLabel = (v: 0 | 1) => lanes?.[v]?.label ?? "";
+  const twoVoices = setup.twoVoices === true || lanes !== null;
+  /** A lane's taps, sorted, with their index in the take (marks name a lane's extra taps by sorted index). */
+  const laneTaps = (lane: 0 | 1) =>
+    taps
+      .map((t, i) => ({ ...t, i }))
+      .filter((t) => t.voice === lane)
+      .sort((a, b) => a.time - b.time);
+
+  const gridLines = (counts: boolean) =>
+    Array.from({ length: steps }, (_, st) => (
+      <span
+        key={st}
+        aria-hidden
+        className={clsx(
+          "absolute top-0 h-full",
+          grid.groupStarts?.[st] ? "border-l-2 border-text-2" : "border-l",
+          !grid.groupStarts?.[st] && (st % stepsPerBeat === 0 ? "border-text-3/60" : "border-border"),
+        )}
+        style={{ left: `${(st / steps) * 100}%` }}
+      >
+        {counts ? (
+          <span className="absolute top-0.5 left-1 text-[0.65rem] text-text-3">{grid.counts[st]}</span>
+        ) : null}
+      </span>
+    ));
+  const head = (bar: number) =>
+    headPos !== null && Math.floor(headPos) === bar ? (
+      <span
+        aria-hidden
+        className="absolute top-0 h-full w-0.5 bg-accent"
+        style={{ left: `${(headPos - bar) * 100}%` }}
+      />
+    ) : null;
+  const target = (onset: number, i: number, bar: number, part: number | string, place: string) => {
+    if (startAt === null) return null;
+    const pt = padPoint(startAt + onset / cps, startAt, cps, bars);
+    if (!pt || pt.bar !== bar) return null;
+    const mark = markOf(feedback, part);
+    return (
+      <span
+        key={`t${i}`}
+        aria-hidden
+        title={mark?.note}
+        className={clsx(
+          "absolute size-3 -translate-x-1/2 rotate-45 border-2",
+          place,
+          mark?.ok === false ? "border-issue bg-surface" : "border-accent bg-accent",
+        )}
+        style={{ left: `${pt.pos * 100}%` }}
+      />
+    );
+  };
+  const tick = (t: { time: number }, i: number, bar: number, extraPart: string, place: string) => {
+    if (startAt === null) return null;
+    const pt = padPoint(t.time, startAt, cps, bars);
+    if (!pt || pt.bar !== bar) return null;
+    const extra = markOf(feedback, extraPart);
+    return (
+      <span
+        key={`k${i}`}
+        aria-hidden
+        data-tap-tick
+        className={clsx("absolute w-1 -translate-x-1/2 rounded-full", place, extra ? "bg-issue" : "bg-text")}
+        style={{ left: `${pt.pos * 100}%` }}
+      />
+    );
+  };
 
   return (
     <AnswerFrame
@@ -222,7 +296,7 @@ export function TapPadAnswer(p: AnswerWidgetProps<"tap">) {
           tabIndex={0}
           role="application"
           aria-roledescription="tap pad"
-          aria-label={`Tap pad: ${twoVoices ? "F for the low voice, J for the high voice" : "tap with Space"}, or click`}
+          aria-label={`Tap pad: ${lanes ? `F for ${laneLabel(0)}, J for ${laneLabel(1)}` : twoVoices ? "F for the low voice, J for the high voice" : "tap with Space"}, or click`}
           onPointerDown={twoVoices ? undefined : pointerTap(0)}
           className={clsx(
             "relative flex touch-none flex-col gap-1 rounded-card border-2 bg-surface p-2 select-none",
@@ -240,70 +314,47 @@ export function TapPadAnswer(p: AnswerWidgetProps<"tap">) {
           {Array.from({ length: bars }, (_, bar) => (
             <div key={bar} className="flex items-stretch gap-2">
               <span className="w-10 shrink-0 pt-1 text-right text-[0.7rem] text-text-3">bar {bar + 1}</span>
-              <div className="relative h-14 min-w-0 flex-1 rounded-[6px] bg-surface-2">
-                <div className="absolute inset-y-0 right-3 left-3">
-                  {Array.from({ length: steps }, (_, s) => (
-                    <span
-                      key={s}
-                      aria-hidden
-                      className={clsx(
-                        "absolute top-0 h-full border-l",
-                        s % stepsPerBeat === 0 ? "border-text-3/60" : "border-border",
-                      )}
-                      style={{ left: `${(s / steps) * 100}%` }}
+              {lanes ? (
+                <div className="flex min-w-0 flex-1 flex-col gap-1" data-lanes>
+                  {([0, 1] as const).map((lane) => (
+                    <div
+                      key={lane}
+                      className="relative h-10 min-w-0 rounded-[6px] bg-surface-2"
+                      data-lane={lane}
                     >
-                      <span className="absolute top-0.5 left-1 text-[0.65rem] text-text-3">
-                        {grid.counts[s]}
-                      </span>
-                    </span>
-                  ))}
-                  {headPos !== null && Math.floor(headPos) === bar ? (
-                    <span
-                      aria-hidden
-                      className="absolute top-0 h-full w-0.5 bg-accent"
-                      style={{ left: `${(headPos - bar) * 100}%` }}
-                    />
-                  ) : null}
-                  {showTargets
-                    ? (setup.targets ?? []).map((onset, i) => {
-                        const pt = padPoint(startAt + onset / cps, startAt, cps, bars);
-                        if (!pt || pt.bar !== bar) return null;
-                        const mark = markOf(feedback, i);
-                        return (
-                          <span
-                            key={i}
-                            aria-hidden
-                            title={mark?.note}
-                            className={clsx(
-                              "absolute bottom-1 size-3 -translate-x-1/2 rotate-45 border-2",
-                              mark?.ok === false ? "border-issue bg-surface" : "border-accent bg-accent",
-                            )}
-                            style={{ left: `${pt.pos * 100}%` }}
-                          />
-                        );
-                      })
-                    : null}
-                  {taps.map((t, i) => {
-                    if (startAt === null) return null;
-                    const pt = padPoint(t.time, startAt, cps, bars);
-                    if (!pt || pt.bar !== bar) return null;
-                    const extra = markOf(feedback, `extra:${i}`);
-                    return (
                       <span
-                        key={i}
                         aria-hidden
-                        data-tap-tick
-                        className={clsx(
-                          "absolute w-1 -translate-x-1/2 rounded-full",
-                          t.voice === 1 ? "top-5 h-6" : "top-3 h-8",
-                          extra ? "bg-issue" : "bg-text",
-                        )}
-                        style={{ left: `${pt.pos * 100}%` }}
-                      />
-                    );
-                  })}
+                        className="absolute bottom-0.5 left-0.5 font-mono text-[0.6rem] leading-none text-text-3"
+                      >
+                        {lane === 0 ? "F" : "J"}
+                      </span>
+                      <div className="absolute inset-y-0 right-3 left-3">
+                        {gridLines(lane === 0)}
+                        {head(bar)}
+                        {showTargets
+                          ? (lanes[lane]?.targets ?? []).map((onset, i) =>
+                              target(onset, i, bar, `${lane}:${i}`, "bottom-1"),
+                            )
+                          : null}
+                        {laneTaps(lane).map((t, j) => tick(t, t.i, bar, `${lane}:extra:${j}`, "top-2 h-6"))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
+              ) : (
+                <div className="relative h-14 min-w-0 flex-1 rounded-[6px] bg-surface-2">
+                  <div className="absolute inset-y-0 right-3 left-3">
+                    {gridLines(true)}
+                    {head(bar)}
+                    {showTargets
+                      ? (setup.targets ?? []).map((onset, i) => target(onset, i, bar, i, "bottom-1"))
+                      : null}
+                    {taps.map((t, i) =>
+                      tick(t, i, bar, `extra:${i}`, t.voice === 1 ? "top-5 h-6" : "top-3 h-8"),
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ))}
           {twoVoices ? (
@@ -314,7 +365,7 @@ export function TapPadAnswer(p: AnswerWidgetProps<"tap">) {
                   onPointerDown={pointerTap(v)}
                   className="flex h-12 items-center justify-center rounded-control border border-border bg-surface-2 text-sm text-text-2"
                 >
-                  {v === 0 ? "Low (F)" : "High (J)"}
+                  {lanes ? `${v === 0 ? "F" : "J"}: ${laneLabel(v)}` : v === 0 ? "Low (F)" : "High (J)"}
                 </div>
               ))}
             </div>
@@ -322,7 +373,15 @@ export function TapPadAnswer(p: AnswerWidgetProps<"tap">) {
         </div>
         <p className="sr-only" aria-live="polite">
           {showTargets && "marks" in feedback
-            ? `${feedback.marks?.filter((m) => m.ok && typeof m.part === "number").length ?? 0} of ${setup.targets?.length ?? 0} ${setup.targetWord ?? "beat"}s matched`
+            ? lanes
+              ? lanes
+                  .slice(0, 2)
+                  .map(
+                    (l, lane) =>
+                      `${l.label}: ${feedback.marks?.filter((m) => m.ok && String(m.part).startsWith(`${lane}:`) && !String(m.part).includes("extra")).length ?? 0} of ${l.targets?.length ?? 0}`,
+                  )
+                  .join(". ")
+              : `${feedback.marks?.filter((m) => m.ok && typeof m.part === "number").length ?? 0} of ${setup.targets?.length ?? 0} ${setup.targetWord ?? "beat"}s matched`
             : ""}
         </p>
       </div>

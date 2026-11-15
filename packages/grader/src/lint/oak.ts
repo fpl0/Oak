@@ -42,7 +42,13 @@ import {
 import { checkChord, chordInDict, dictsFor, splitChord } from "./chords.ts";
 import { asFeedbackId, dialectSeverity, type LintCode, renderLint } from "./messages.ts";
 import { cycleLength, type MiniInfo, miniErrorDetail, readMini } from "./mini.ts";
-import { baseFindings, type SafetyFinding, strictFindings } from "./safety.ts";
+import {
+  baseFindings,
+  type SafetyFinding,
+  STRICT_GADGETS,
+  STRICT_SAFE_GLOBALS,
+  strictFindings,
+} from "./safety.ts";
 import { indexToolbox, type ToolIndex, unlockText } from "./toolbox.ts";
 
 // --- what the code uses --------------------------------------------------------------------------
@@ -121,6 +127,19 @@ export function knownStrudelNames(): Set<string> {
   for (const k of Object.getOwnPropertyNames(core.Pattern.prototype)) names.add(k);
   for (const k of VISUAL_METHODS) names.add(k);
   strudelNames = names;
+  return names;
+}
+
+let strictNames: Set<string> | null = null;
+/**
+ * The names code the learner did not type may read from outside itself (contracts §11.3, the strict profile):
+ * Strudel's scope as the grader realm has it and a few plain builtins, without the gadgets (safety.ts).
+ */
+export function strictAllowedNames(): ReadonlySet<string> {
+  if (strictNames) return strictNames;
+  const names = new Set<string>([...knownStrudelNames(), ...STRICT_SAFE_GLOBALS]);
+  for (const g of STRICT_GADGETS) names.delete(g);
+  strictNames = names;
   return names;
 }
 
@@ -927,7 +946,7 @@ function runLint(code: string, ctx: LintContext, toolbox: readonly ToolEntry[], 
   }
   const ast = parsed.ast;
   const diagnostics: LintDiagnostic[] = safetyDiags(code, baseFindings(ast));
-  if (strict) diagnostics.push(...safetyDiags(code, strictFindings(ast)));
+  if (strict) diagnostics.push(...safetyDiags(code, strictFindings(ast, strictAllowedNames())));
 
   const scan = scanProgram(code, ast, ctx);
   for (const f of scan.findings) {
@@ -1014,9 +1033,10 @@ export function lintBase(code: string): LintDiagnostic[] {
 export function lintStrict(code: string): LintDiagnostic[] {
   const parsed = parseProgram(code);
   if (!parsed.ok) return runLint(code, SAFETY_CTX, [], false).diagnostics;
-  return safetyDiags(code, [...baseFindings(parsed.ast), ...strictFindings(parsed.ast)]).sort(
-    (a, b) => a.range.from - b.range.from,
-  );
+  return safetyDiags(code, [
+    ...baseFindings(parsed.ast),
+    ...strictFindings(parsed.ast, strictAllowedNames()),
+  ]).sort((a, b) => a.range.from - b.range.from);
 }
 
 /** Every catalogued thing the code uses, in source order. `[]` when the code does not parse. */

@@ -40,6 +40,7 @@ import { triggerDdl } from "../db/migrate.ts";
 import type { AppDeps } from "../deps.ts";
 import { learnerDay } from "../lib/days.ts";
 import { LearnerTime } from "./context.ts";
+import { seededNext } from "./dev-seed.ts";
 
 /** How long a snapshot stands for a fresh build of the same request, in (dev) clock milliseconds. */
 export const SNAPSHOT_MAX_AGE_MS = 3_600_000;
@@ -228,7 +229,7 @@ export class SeedCache {
         return {
           ...hit.meta.result,
           point: body.point,
-          next: this.d.services.gates.nextMapItem(),
+          next: seededNext(this.d),
           day: time.day(),
         };
       } catch (e) {

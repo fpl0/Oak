@@ -450,3 +450,91 @@ test("ABCJS_LIMITS: every row has an id, says what abcjs does and what Oak write
   ])
     expect(ABCJS_LIMITS.some((l) => l.id === id)).toBe(true);
 });
+
+// --- Wave 7 -------------------------------------------------------------------------------------------------------
+
+test("ghost-notes: a cue-size voice (cue=on) scales the whole element, so a ghost snare under a hat cannot be small", () => {
+  const t = tune("X:1\nM:4/4\nL:1/16\nK:C clef=perc\nV:1 cue=on\n[gc]4 z12 |]\n");
+  expect(t.warnings).toBeUndefined();
+  // biome-ignore lint/suspicious/noExplicitAny: abcjs element
+  const scale = t.lines[0].staff[0].voices[0].find((e: any) => e.el_type === "scale");
+  expect(scale.size).toBe(0.6);
+  expect(parse("!(!C4 z12 |]").warnings.join(" ")).toContain("Unknown decoration");
+});
+
+test("slash-noteheads: !style=rhythm! per element; a tied piece without it is a normal head; a rest is never a slash", () => {
+  const { warnings, notes } = parse(
+    "!class=oak-e0!!style=rhythm!B6- B2 !style=rhythm!B4- !style=rhythm!B4 |]",
+  );
+  expect(warnings).toEqual([]);
+  expect(notes.map((n) => n.style ?? null)).toEqual(["rhythm", null, "rhythm", "rhythm"]);
+  expect(notes[0].extraClass).toBe("oak-e0");
+  expect(parse("!style=rhythm!z4 B12 |]").notes[0].style).toBe("rhythm");
+});
+
+test("rhythm-bracket: an annotation above stands on a note or rest; a tuplet carries only its first number", () => {
+  const { warnings, notes } = parse('"^3:2"(3:2:3B8 B8 B8 |]');
+  expect(warnings).toEqual([]);
+  expect(notes[0].chord).toEqual([{ name: "3:2", position: "above" }]);
+  expect([notes[0].startTriplet, notes[0].tripletMultiplier]).toEqual([3, 2 / 3]);
+  // No bracket syntax over plain notes: a "[" opens a chord, a slur is a slur.
+  expect(parse("(B4 B4 B4 B4) |]").notes[0].pitches[0].startSlur).toBeDefined();
+});
+
+test("polymeter: an inline [M:3/4] in one voice parses without a warning and leaves both staves in 4/4", () => {
+  const t = tune("X:1\nM:4/4\nL:1/16\nK:C\nV:A\nV:B\n[V:A] C4 C4 C4 C4 |]\n[V:B] [M:3/4] C4 C4 C4 | C4 |]\n");
+  expect(t.warnings).toBeUndefined();
+  // biome-ignore lint/suspicious/noExplicitAny: abcjs staff
+  expect(t.lines[0].staff.map((s: any) => s.meter?.value?.[0])).toEqual([
+    { num: "4", den: "4" },
+    { num: "4", den: "4" },
+  ]);
+  expect(parse("!>!C4 z12 |]").notes[0].decoration).toEqual(["accent"]);
+});
+
+test("tuplet-ratio-text: (4:3:4 over a 3/4 bar scales four quarters into three beats", () => {
+  const t = tune("X:1\nM:3/4\nL:1/16\nK:C\n(4:3:4B4 B4 B4 B4 |]\n");
+  expect(t.warnings).toBeUndefined();
+  const n = notesOf(t);
+  expect([n[0].startTriplet, n[0].tripletMultiplier, n[0].tripletR]).toEqual([4, 0.75, 4]);
+});
+
+test("additive-meter: M:2+2+3/8 and M:3+2/4 parse as the groups over the denominator", () => {
+  for (const [m, num, den] of [
+    ["2+2+3/8", "2+2+3", "8"],
+    ["3+2/4", "3+2", "4"],
+    ["2+2+2+3/8", "2+2+2+3", "8"],
+  ] as const) {
+    const t = tune(`X:1\nM:${m}\nL:1/16\nK:C\nC2D2 E2F2 G2A2B2 |]\n`);
+    expect(t.warnings).toBeUndefined();
+    expect(t.lines[0].staff[0].meter.value[0]).toEqual({ num, den });
+  }
+});
+
+test("jazz-chord-glyphs: b and # after a letter become ♭ and ♯; ∆ – ø ° are kept as written", () => {
+  const { warnings, notes } = parse('"C7b9"C4 "F#7#11"C4 "D–7"C4 "C∆9"C4 |]');
+  expect(warnings).toEqual([]);
+  expect(notes.map((n) => n.chord[0].name)).toEqual(["C7♭9", "F♯7♯11", "D–7", "C∆9"]);
+  expect(parse('"Cø7"C4 "C°7"C4 "C7/E"C4 "C6/9"C4 |]').notes.map((n) => n.chord[0].name)).toEqual([
+    "Cø7",
+    "C°7",
+    "C7/E",
+    "C6/9",
+  ]);
+});
+
+test("ABCJS_LIMITS: the Wave 7 rows are listed; only the bracket that falls inside a tuplet warns", async () => {
+  const { ABCJS_LIMITS } = await import("./limits.ts");
+  const w7 = [
+    "slash-noteheads",
+    "rhythm-bracket",
+    "polymeter",
+    "tuplet-ratio-text",
+    "additive-meter",
+    "jazz-chord-glyphs",
+  ];
+  for (const id of w7) expect(ABCJS_LIMITS.some((l) => l.id === id)).toBe(true);
+  expect(ABCJS_LIMITS.filter((l) => w7.includes(l.id) && l.warns !== null).map((l) => l.id)).toEqual([
+    "rhythm-bracket",
+  ]);
+});

@@ -10,7 +10,7 @@ import { useCommandSource } from "../../lib/commands.ts";
 import { useContent } from "../../lib/content.ts";
 import { NAV_ITEMS, SETTINGS_SECTIONS } from "../../lib/nav.ts";
 import { stopAllAudio } from "../../lib/oak.ts";
-import { apiQuery } from "../../lib/queries.ts";
+import { apiQuery, useCourseProgress } from "../../lib/queries.ts";
 import { useShell } from "../../lib/shell-store.ts";
 import { ownOpenSession } from "../../lib/tab-session.ts";
 import { useUnlockedSet } from "../../lib/unlocked.ts";
@@ -238,6 +238,11 @@ function ShortcutSheet() {
   // Wave 5: a Workbench key whose tool is not unlocked yet says when it opens (honest, never hidden).
   const { unlocked, ready } = useUnlockedSet();
   const content = useContent();
+  // Wave 7: a track lens key opens with its lesson as well as its tool; asked only while the sheet is open.
+  const progress = useCourseProgress();
+  const completed = progress.data
+    ? new Set(progress.data.lessons.filter((l) => l.completedAt !== null).map((l) => l.lessonId as string))
+    : null;
   const lockOf = (section: string, keys: string) =>
     rowLock(
       section,
@@ -246,6 +251,7 @@ function ShortcutSheet() {
       ready && content.data !== undefined,
       content.data?.toolbox ?? [],
       content.data?.syllabus ?? null,
+      completed,
     );
   return (
     <Dialog

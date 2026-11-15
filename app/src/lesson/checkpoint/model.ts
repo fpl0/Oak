@@ -7,8 +7,10 @@ import type {
   AttemptResponse,
   CheckpointItemSpec,
   CheckpointOutcome,
+  Exercise,
   FamilyDef,
   GradeResult,
+  KeySpec,
   Trial,
 } from "@oak/api";
 import type { TrialResponse } from "@oak/drills";
@@ -93,6 +95,39 @@ export function familyAnswerSpec(
   if (own || !def) return own;
   const s = surfaceOf(trial as Trial<unknown>, def);
   return s.kind === "widget" ? s.spec : null;
+}
+
+/** A checkpoint is played and graded in its Make's key and tempo, else these. */
+export const CP_KEY: KeySpec = { tonic: "C", mode: "major" };
+export const CP_BPM = 100;
+
+/** The key an item is played and graded in: its own, its trial's, else the checkpoint's. */
+export function itemKey(ex: Exercise, trial: Pick<Trial, "params"> | null, fallback: KeySpec): KeySpec {
+  const tk = (trial?.params as { key?: KeySpec } | undefined)?.key;
+  return ex.key ?? tk ?? fallback;
+}
+
+/**
+ * Wave 7 (`tap.lanes`, contracts §8.4): a drawn polyrhythm trial that is tapped with two hands (`params.tapLanes`,
+ * fam.rhy.polyrhythm "tap-3-over-2": F the 2, J the 3) is drawn as a two-lane tap, its lanes in the trial's order;
+ * the take then reaches the drill grader as `lanes` (`familyResponse`). `null` for a one-lane trial.
+ */
+export function trialTapLanes(
+  trial: Pick<Trial, "params">,
+): { label: string; track: string; key?: string }[] | null {
+  const lanes = (trial.params as { tapLanes?: unknown }).tapLanes;
+  if (!Array.isArray(lanes) || lanes.length < 2) return null;
+  const out: { label: string; track: string; key?: string }[] = [];
+  for (const l of lanes.slice(0, 2)) {
+    const lane = l as { label?: unknown; key?: unknown };
+    if (typeof lane.label !== "string" || lane.label === "") return null;
+    out.push({
+      label: lane.label,
+      track: "drill",
+      ...(typeof lane.key === "string" ? { key: lane.key } : {}),
+    });
+  }
+  return out;
 }
 
 /** A family item answered by singing (contracts §7.6: level-setting, skipped in Quiet mode). */
@@ -206,6 +241,13 @@ export function familyResponse(
     return a ? { answer: a, rtMs, replays } : { skipped: true, rtMs, replays };
   }
   if ("taps" in response) return { taps: response.taps.map((t) => t - responseAt), rtMs, replays };
+  // Wave 7 (`tap.lanes`, a polyrhythm item of R.CP): two lanes, each shifted to the response window; `taps` holds
+  // both in time order for a family that grades one stream.
+  const lanes = (response as { lanes?: unknown }).lanes;
+  if (Array.isArray(lanes) && lanes.every((l) => Array.isArray(l))) {
+    const shifted = (lanes as number[][]).map((l) => l.map((t) => t - responseAt));
+    return { taps: shifted.flat().sort((a, b) => a - b), lanes: shifted, rtMs, replays } as TrialResponse;
+  }
   return { skipped: true, rtMs, replays };
 }
 

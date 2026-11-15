@@ -757,7 +757,38 @@ export const contract = {
     body: D.AlbumTakeChooseSchema,
     res: D.AlbumTrackVersionSchema,
   },
+  // --- Wave 7 additions (docs/design/wave7.md §5). Until the server engineer builds a handler, each answers
+  // 501 `not_implemented` (`WAVE7_ENDPOINTS`; routes.test.ts keeps the list of those still pending). ---
+  /** The learner's choice between the core and the tracks (contracts §2.6; default `core`). */
+  "tracks.focus": { method: "GET", path: "/tracks/focus", res: D.TrackFocusSchema },
+  /** Choose where the New block comes from: the core (default) or one open track. Idempotent. */
+  "tracks.setFocus": {
+    method: "PUT",
+    path: "/tracks/focus",
+    body: D.TrackFocusSetSchema,
+    res: D.TrackFocusSchema,
+  },
+  /** The whole course (259 sessions): its stage, the tracks, Side A and B, what stays open after it. */
+  "course.whole": { method: "GET", path: "/course/whole", res: D.WholeCourseSchema },
+  /** Exactly what a released album version plays, for "Export" (rendered offline in the browser; carry f2). */
+  "album.source": {
+    method: "GET",
+    path: "/album/tracks/:id/versions/:v/source",
+    params: p("id", "v"),
+    res: D.AlbumSourceSchema,
+  },
 } as const satisfies Record<string, EndpointDef>;
+
+/**
+ * The Wave 7 endpoints of docs/design/wave7.md §5. Each answers a typed 501 until built; `routes.test.ts` lists the
+ * ones still pending (`WAVE7_PENDING`), and the server engineer removes a name there as each lands.
+ */
+export const WAVE7_ENDPOINTS = [
+  "tracks.focus",
+  "tracks.setFocus",
+  "course.whole",
+  "album.source",
+] as const satisfies readonly (keyof typeof contract)[];
 
 /**
  * The Wave 6 endpoints of docs/design/wave6.md §5. Each answers a typed 501 until built; `routes.test.ts` lists the

@@ -126,7 +126,7 @@ else if (checkpointMetas.some((c) => c.id === arg)) {
   checkpoints = cps.defs.filter((c) => c.id === arg);
   if (checkpoints.length === 0) {
     console.error(
-      `${FAIL} ${arg}: no checkpoint file yet (content/core/${arg.split(".")[0]}/CP/checkpoint.ts, AUTHORING §10)`,
+      `${FAIL} ${arg}: no checkpoint file yet (${arg.startsWith("U") ? `content/core/${arg.split(".")[0]}/CP` : "the CP folder of the last unit it covers, content/advanced/<unit>/CP"}/checkpoint.ts, AUTHORING §10)`,
     );
     ok = false;
   }
@@ -154,7 +154,7 @@ for (const id of capstoneIds) {
 for (const cp of checkpoints)
   ok =
     print(
-      `${cp.id} ${cp.title}  content/core/${cp.id.split(".")[0]}/CP/checkpoint.ts`,
+      `${cp.id} ${cp.title}  ${relative(process.cwd(), cps.files.get(cp.id) ?? `content/core/${cp.id.split(".")[0]}/CP/checkpoint.ts`)}`,
       await checkCheckpoint(cp),
     ) && ok;
 for (const l of targets)

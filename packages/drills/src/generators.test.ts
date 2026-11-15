@@ -384,6 +384,8 @@ function checkLevel(def: FamilyDef, trial: Trial<Answer>, levelNo: number) {
     "rhythm-echo",
     "rhythm-read",
     "rhythm-dictation",
+    // Wave 7: odd meters count their own unit (7/8 and 9/8 in eighths, R2.L01 at 240 eighths a minute).
+    "rhythm-odd-grouping",
   ].includes(def.generator);
   if (
     bpm !== undefined &&

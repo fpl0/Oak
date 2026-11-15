@@ -147,3 +147,55 @@ describe("API errors and retries", () => {
     setApiClient(createClient());
   });
 });
+
+describe("backup export (W7 gate: fetched with X-Oak, never a bare link)", () => {
+  test("the file name comes from the server's content-disposition, else a dated .oakbackup", async () => {
+    const { backupFileName } = await import("./queries.ts");
+    expect(backupFileName('attachment; filename="oak-2026-11-15.oakbackup"')).toBe(
+      "oak-2026-11-15.oakbackup",
+    );
+    expect(backupFileName(null, new Date("2026-01-02T10:00:00Z"))).toBe("oak-2026-01-02.oakbackup");
+  });
+
+  test("downloadBackup calls backup.export through the client, so X-Oak is sent", async () => {
+    const seen: { url: string; xoak: string | null }[] = [];
+    const fakeFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const h = new Headers(init?.headers);
+      seen.push({ url: String(input), xoak: h.get("X-Oak") });
+      return new Response(new Uint8Array([80, 75]), {
+        headers: {
+          "content-type": "application/zip",
+          "content-disposition": 'attachment; filename="b.oakbackup"',
+        },
+      });
+    }) as typeof fetch;
+    setApiClient(createClient({ fetch: fakeFetch }));
+    const { downloadBackup } = await import("./queries.ts");
+    const g = globalThis as unknown as { document?: unknown; URL: typeof URL };
+    const clicks: string[] = [];
+    const prevDoc = g.document;
+    const prevCreate = URL.createObjectURL;
+    g.document = {
+      createElement: () => ({
+        href: "",
+        download: "",
+        click() {
+          clicks.push(this.download);
+        },
+        remove() {},
+      }),
+      body: { append() {} },
+    };
+    URL.createObjectURL = () => "blob:x";
+    try {
+      expect(await downloadBackup(false)).toBe("b.oakbackup");
+    } finally {
+      g.document = prevDoc;
+      URL.createObjectURL = prevCreate;
+      setApiClient(createClient());
+    }
+    expect(clicks).toEqual(["b.oakbackup"]);
+    expect(seen[0]?.url).toContain("/api/backup/export?audio=0");
+    expect(seen[0]?.xoak).toBe("1");
+  });
+});

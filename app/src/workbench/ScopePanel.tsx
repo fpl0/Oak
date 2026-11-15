@@ -24,6 +24,8 @@ import {
   spectrumBars,
   wavePoints,
 } from "./scope-view.ts";
+import { RegisterBands } from "./TrackStrips.tsx";
+import type { RegisterLens } from "./track-lens.ts";
 
 export interface ScopePanelProps {
   tap: ScopeTap;
@@ -40,6 +42,8 @@ export interface ScopePanelProps {
   sourceNote: string;
   /** The code has run at least once (before that a probe has nothing to read yet). */
   ran: boolean;
+  /** Wave 7, the register lens (A2.L01): the register bands and each part's range on the spectrum's own axis. */
+  registers?: RegisterLens | null;
 }
 
 const WAVE_H = 88;
@@ -246,6 +250,7 @@ export function ScopePanel(p: ScopePanelProps) {
           ) : null}
         </div>
       ) : null}
+      {p.show.spectrum && p.registers ? <RegisterBands registers={p.registers} /> : null}
       {p.probeKind || p.probe ? (
         <ProbeView
           probe={p.probe}

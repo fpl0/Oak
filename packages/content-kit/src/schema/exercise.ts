@@ -32,6 +32,7 @@ import type {
   TrackRef,
 } from "./common.ts";
 import type { RubricRule } from "./rubric.ts";
+import type { TapLane, VoicingShape } from "./wave7.ts";
 
 // --- base ---------------------------------------------------------------------------------------
 
@@ -210,7 +211,13 @@ export type AnswerUi =
       labels?: string[];
       slotKeys?: KeySpec[];
     }
-  | { ui: "text"; normalize: "note" | "chord" | "rn" | "interval" | "key" | "free" }
+  /**
+   * Wave 7 (feature `text.jazz-chord`): with `normalize: "chord"`, `jazz: true` also reads the jazz glyphs and
+   * extensions (∆ ∆7 – –7 ø °7, 9 11 13, ♭9 ♯9 ♯11 ♭13, alt, sus, 6, 69): `D–7`, `Dm7` and `Dmin7` are one
+   * answer, `G7(♭9)` and `G7b9` one, `C∆9` and `Cmaj9` one. Graded on root, quality and extensions, never as a
+   * string.
+   */
+  | { ui: "text"; normalize: "note" | "chord" | "rn" | "interval" | "key" | "free"; jazz?: boolean }
   | { ui: "number" }
   | { ui: "keyboard"; range: [string, string]; mode: "single" | "chord" | "sequence" }
   | {
@@ -318,6 +325,18 @@ export type AnswerUi =
       from?: ScaleMode;
     }
   | { ui: "code"; starter: string; constraints?: AstConstraint[] }
+  /**
+   * Wave 7 (planned). The grouping of an odd-meter bar (R2.L01–L02): the learner cuts the bar's eighths (or
+   * quarters in 5/4) into groups of 2 and 3, `correct: { grouping: [2, 2, 3] }`; graded as the sequence of
+   * group sizes (a rotation is another grouping). `meter` is one of `METER_GROUPINGS`' meters.
+   */
+  | { ui: "grouping"; meter: MeterId }
+  /**
+   * Wave 7 (planned). A Euclidean rhythm's numbers (R3.L01–L03): hits `k`, steps `n` and, with `rotation`, the
+   * rotation `r`, `correct: { euclid: [3, 8] }` or `[5, 8, 1]`. Graded by the onsets the numbers make, so two
+   * spellings of one rhythm are one answer; `maxSteps` bounds the steps offered (8 or 16).
+   */
+  | { ui: "euclid"; maxSteps: number; rotation: boolean }
   | { ui: "tap" }
   | { ui: "mic" }
   | { ui: "bar-buttons"; bars: number }
@@ -345,6 +364,10 @@ export interface Answer {
   sections?: string[];
   /** Wave 6. With a `form` answer in `input: "map"`: the 1-based first bar of each section, in order. */
   bars?: number[];
+  /** Wave 7. The `grouping` answer: group sizes in order (`[2, 2, 3]`). */
+  grouping?: number[];
+  /** Wave 7. The `euclid` answer: `[k, n]` or `[k, n, r]`. */
+  euclid?: number[];
 }
 
 /** Wave 5. The section names a `form` answer may offer (contracts §6.3 item 2: the tag names). */
@@ -702,7 +725,19 @@ export interface FactEx extends ExBase<"fact"> {
 }
 export interface KeyboardEx extends ExBase<"keyboard"> {
   answer: Extract<AnswerUi, { ui: "keyboard" }>;
-  expect: { midi?: number[]; pcs?: number[]; bassPc?: number; sequence?: number[] };
+  expect: {
+    midi?: number[];
+    pcs?: number[];
+    bassPc?: number;
+    sequence?: number[];
+    /**
+     * Wave 7 (feature `keyboard.voicing`): "build this voicing" (J1.L05 shells, J3.L01 rootless A/B, J3.L02
+     * drop-2). The chord the learner plays must be `symbol` in `shape` (`voicingShapeOf`, octave-aware), in any
+     * register inside the keyboard's range. Needs `mode: "chord"` and `pitchMode: "absolute"` (the shape is in
+     * the octaves, `keyboard.voicing`).
+     */
+    voicing?: { shape: VoicingShape | VoicingShape[]; symbol: string };
+  };
   pitchMode: PitchMode;
 }
 export interface StaffReadEx extends ExBase<"staff-read"> {
@@ -743,7 +778,14 @@ export type StaffExpect =
    * `harmony.pcset`, a chord missing or extra `harmony.missing-chord` / `harmony.extra-chord`. Needs
    * `palette.chords` (`staff.chords-palette`). Tests answer with `{ staff: "[C4,E4,G4]:2 [B3,D4,G4]:2" }`.
    */
-  | { e: "chords"; symbols: string[]; spelling: "strict" | "enharmonic"; bass: boolean };
+  | {
+      e: "chords";
+      symbols: string[];
+      spelling: "strict" | "enharmonic";
+      bass: boolean;
+      /** Wave 7 (feature `staff-expect.voicing`): each chord also written in this shape, octave-aware. */
+      voicing?: VoicingShape | VoicingShape[];
+    };
 export interface TapEx extends ExBase<"tap"> {
   mode: "along" | "echo" | "read";
   stimulus: Stimulus;
@@ -751,6 +793,12 @@ export interface TapEx extends ExBase<"tap"> {
   bars: number;
   target: "beat" | { track?: TrackRef; drum?: DrumRole[] };
   tol: TapTolerance;
+  /**
+   * Wave 7 (feature `tap.lanes`): two lanes at once, one per hand (R2.L04, 3 against 2). Each lane follows a
+   * track of the stimulus and is graded on its own (F1 and timing per lane); the step passes when both do.
+   * Tests answer `{ lanes: [[…seconds…], […]] }`, one list per lane in this order. `target` is then ignored.
+   */
+  lanes?: TapLane[];
 }
 /**
  * `pitch`, `degree`: one timed target after the cue. `resolution`: a degree, then the path home.
@@ -1116,6 +1164,8 @@ export type TestResponse =
   | { answer: Answer }
   /** Seconds relative to the stimulus start. */
   | { taps: number[] }
+  /** Wave 7. Two-lane taps (`TapEx.lanes`): one list of seconds per lane. */
+  | { lanes: number[][] }
   /** `tests/fixtures/sing/*.json` frames. */
   | { pitchFixture: string }
   /** Note-list DSL: 'C4:4 D4:8 …'. */
@@ -1129,4 +1179,11 @@ export interface TestCase {
   expect: "pass" | "fail" | "error";
   score?: [number, number];
   feedback?: FeedbackId[];
+  /**
+   * Wave 7 integration (AC1, JC3, JC4; build-author-capstones-sound): what a capstone test grades against beside its
+   * code. `song`: the picked song, whose answer key fills `GradeContext.songMelody` (and `songForm`); `otherVersion`:
+   * the other version's code, filled into `GradeContext.otherVersion` (AC1's `two-versions-differ`). The content
+   * harness fills both (content/validate/harness.ts); a host without them grades as before.
+   */
+  context?: { song?: string; otherVersion?: string };
 }

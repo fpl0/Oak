@@ -114,6 +114,9 @@ export interface LongTakeRun {
   parts: number;
   bytes: number;
   renderMs: number;
+  /** Wave 7: frames the take is missing, and how many gaps it has (both 0 for a whole take). */
+  missingFrames: number;
+  dropouts: number;
 }
 
 /** A click track (every half second) rendered offline for `seconds` + 4 s, recorded from `at` for `seconds` + tail. */
@@ -169,6 +172,8 @@ async function longTakeRun(o: { seconds: number; at: number; tailSec: number }):
     parts: s.parts,
     bytes: buf.byteLength,
     renderMs,
+    missingFrames: r.missingFrames,
+    dropouts: r.dropouts.length,
   };
 }
 

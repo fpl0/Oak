@@ -23,16 +23,28 @@ import { CADENCE_OPTIONS, FUNCTION_OPTIONS, rat } from "@oak/content-kit";
 import {
   chromaticTargets,
   classifyRhythm,
+  claveTargets,
   degreeTargets,
   explainColourResult,
+  gradeClaveTaps,
+  gradeGroupingTaps,
   gradeGuideTones,
+  gradeLaneTaps,
+  gradeLayBackTaps,
   gradeRhythmTaps,
   gradeSung,
+  gradeSungRoots,
+  gradeSungTensions,
   gradeSwingTaps,
   gradeTaps,
+  gradeTimelineTaps,
+  groupingTargets,
   guideToneTargets,
   modalTargets,
+  polyrhythmLanes,
   rhythmTargets,
+  tensionTargets,
+  walkingRootTargets,
 } from "@oak/pitch";
 import { PROFILE as PITCH_PROFILE } from "../../../pitch/src/fixtures.test-data.ts";
 import { ev, line, norm, strudel } from "../analyze/__support__/fixtures.ts";
@@ -43,6 +55,7 @@ import {
   keySignatureCheck,
   spelledNotes,
 } from "../grade/answers.ts";
+import { keyboardVoicingCheck } from "../grade/answers-wave7.ts";
 import { checkConstraints } from "../grade/constraints.ts";
 import { evalFailureDiagnostics } from "../grade/index.ts";
 import { judgeSungPattern } from "../grade/sing.ts";
@@ -402,6 +415,41 @@ beforeAll(async () => {
     keyboardCheck({ midi: [60, 64, 67] }, [60, 64, 67, 70], "absolute", "chord").diagnostics,
   );
   collect("answers", keyboardCheck({ midi: [60, 64, 67] }, [72, 64, 67], "absolute", "sequence").diagnostics);
+  // Wave 7: the voicing shape, the odd-meter grouping and the Euclid numbers (grade/answers-wave7.ts).
+  collect(
+    "answers",
+    keyboardVoicingCheck({ shape: "drop-2", symbol: "Cmaj7" }, [60, 64, 67, 71]).diagnostics,
+  );
+  collect("answers", keyboardVoicingCheck({ shape: "shell", symbol: "Dm7" }, [53, 60, 62]).diagnostics);
+  collect(
+    "answers",
+    gradeAnswer({ ui: "grouping", meter: "7/8" }, { grouping: [2, 2, 3] }, { grouping: [3, 2, 2] })
+      .diagnostics,
+  );
+  collect(
+    "answers",
+    gradeAnswer({ ui: "grouping", meter: "7/8" }, { grouping: [2, 2, 3] }, { grouping: [2, 3, 3] })
+      .diagnostics,
+  );
+  collect(
+    "answers",
+    gradeAnswer({ ui: "grouping", meter: "9/8i" }, { grouping: [2, 2, 2, 3] }, { grouping: [2, 3, 2, 3] })
+      .diagnostics,
+  );
+  collect(
+    "answers",
+    gradeAnswer({ ui: "grouping", meter: "7/8" }, { grouping: [2, 2, 3] }, { grouping: [4, 3] }).diagnostics,
+  );
+  collect(
+    "answers",
+    gradeAnswer({ ui: "euclid", maxSteps: 16, rotation: false }, { euclid: [3, 8] }, { euclid: [5, 8] })
+      .diagnostics,
+  );
+  collect(
+    "answers",
+    gradeAnswer({ ui: "euclid", maxSteps: 16, rotation: true }, { euclid: [5, 8, 1] }, { euclid: [5, 8, 3] })
+      .diagnostics,
+  );
   const staffNote = (written: string, midi: number, beat: number): NEvent => ({
     ...ev({ onset: rat(beat, 4), dur: rat(1, 4), midi, track: "staff" }),
     written,
@@ -890,6 +938,126 @@ beforeAll(async () => {
     );
   }
 
+  // Wave 7 (R1–R3, stage H): the two lanes rushing, dragging, silent, swapped and split on the shared beats; a
+  // timeline, the clave from the other side and the rumba for the son; odd groupings in the wrong order and tapped
+  // evenly; the lay-back (@oak/pitch track-taps, inputs as its own tests play them).
+  {
+    const laneTol = { ...tapTol, forgiveOffset: true };
+    const BAR = (60 / 66) * 4;
+    const pl = polyrhythmLanes({ downbeat: 1, bpm: 66, a: 3, b: 2, cycles: 4 });
+    const L = [
+      { label: "Left hand: the two", key: "F", targets: pl.b },
+      { label: "Right hand: the three", key: "J", targets: pl.a },
+    ];
+    const three = pl.a.map((t, i) => (i % 3 === 0 ? t : t - (i % 3 === 1 ? 0.035 : 0.06)));
+    const two = pl.b.map((t, i) => (i % 2 === 1 ? t + 0.05 : t));
+    for (const taps of [
+      [pl.b, three],
+      [two, pl.a],
+      [pl.b, []],
+      [pl.a, pl.b],
+      [pl.b, pl.a.map((t) => t - 0.08)],
+    ])
+      collect(
+        "taps",
+        gradeLaneTaps(taps, L, laneTol, PITCH_PROFILE, { cycleSec: BAR, downbeat: 1 }).diagnostics,
+      );
+    const TRES = { downbeat: 0.5, bpm: 100, steps: [0, 3, 6], stepsPerBar: 8, cycles: 4 };
+    const quarters = Array.from({ length: 16 }, (_, i) => 0.5 + i * 0.6);
+    collect("taps", gradeTimelineTaps(quarters, TRES, laneTol, PITCH_PROFILE).diagnostics);
+    const SON = { downbeat: 1, bpm: 96, type: "son", direction: "3-2", bars: 4 } as const;
+    collect(
+      "taps",
+      gradeClaveTaps(claveTargets({ ...SON, direction: "2-3" }), SON, laneTol, PITCH_PROFILE).diagnostics,
+    );
+    collect(
+      "taps",
+      gradeClaveTaps(claveTargets({ ...SON, type: "rumba" }), SON, laneTol, PITCH_PROFILE, {
+        level: 3,
+        levels: 4,
+      }).diagnostics,
+    );
+    const SEVEN = { downbeat: 0, bpm: 210, meter: "7/8", bars: 4 } as const;
+    collect(
+      "taps",
+      gradeGroupingTaps(groupingTargets({ ...SEVEN, groups: [3, 2, 2] }), SEVEN, laneTol, PITCH_PROFILE)
+        .diagnostics,
+    );
+    const even = Array.from({ length: 16 }, (_, i) => (i * 2 * 60) / 210).filter(
+      (t) => t < (4 * 7 * 60) / 210,
+    );
+    collect("taps", gradeGroupingTaps(even, SEVEN, laneTol, PITCH_PROFILE).diagnostics);
+    const clicks = Array.from({ length: 16 }, (_, i) => 1 + (i * 60) / 92);
+    for (const by of [0.021, -0.02])
+      collect(
+        "taps",
+        gradeLayBackTaps(
+          clicks.map((b) => b + by),
+          clicks,
+          laneTol,
+          PITCH_PROFILE,
+          { want: { direction: "late" } },
+        ).diagnostics,
+      );
+  }
+
+  // Wave 7 (J2.L03, J3.L04): a tension sung as the root, a root sung as the 3rd (@oak/pitch jazz-lines).
+  {
+    const jazzTol: SingTolerance = { ...tol, driftCompCents: 0 };
+    // The whole line (the audit's `frames` stops at 3.2 s; a twelve-bar walk lasts 24).
+    const singAt = (
+      ts: readonly { midi: number; on: number; off: number }[],
+      semis: (i: number) => number,
+    ) => {
+      const out = [];
+      const end = Math.max(...ts.map((t) => t.off)) + 0.4;
+      for (let t = 0; t < end; t += 512 / 48000) {
+        const i = ts.findIndex((x) => t >= x.on && t < x.off);
+        const m = i < 0 ? null : (ts[i] as { midi: number }).midi + semis(i);
+        out.push({
+          t,
+          hz: m === null ? 0 : hz(m),
+          clarity: m === null ? 0.1 : 0.97,
+          rms: m === null ? 0.0005 : 0.1,
+        });
+      }
+      return out;
+    };
+    const tens = tensionTargets({
+      items: [
+        { chord: "Dm7", tension: "9" },
+        { chord: "G7", tension: "13" },
+        { chord: "C^7", tension: "9" },
+      ],
+      chordSec: 2,
+      startAt: 1,
+      profile: PITCH_PROFILE,
+    });
+    collect(
+      "pitch",
+      gradeSungTensions(
+        singAt(tens, (i) => (i === 0 ? -2 : 0)),
+        tens,
+        jazzTol,
+        PITCH_PROFILE,
+      ).diagnostics,
+    );
+    const roots = walkingRootTargets({
+      chords: ["F7", "Bb7", "F7", "Cm7", "Bb7", "Bo7", "F7", "D7", "Gm7", "C7", "F7", "Gm7"],
+      chordSec: 2,
+      profile: PITCH_PROFILE,
+    });
+    collect(
+      "pitch",
+      gradeSungRoots(
+        singAt(roots, (i) => (i === 7 ? 4 : 0)),
+        roots,
+        jazzTol,
+        PITCH_PROFILE,
+      ).diagnostics,
+    );
+  }
+
   // Wave 6 (U12.L05, U14, U15.L01): a chromatic degree sung as the key's own note, a mode's colour tone sung as
   // the plain scale's note, one sung nearer its neighbour but inside the tolerance, and a guide-tone line sung
   // on the roots and on the other guide tone (@oak/pitch `explainColourResult`, `gradeGuideTones`).
@@ -1097,6 +1265,19 @@ beforeAll(async () => {
           ["G4", 67],
         ]),
       ],
+      { key: C, meter: "4/4" },
+    ).diagnostics,
+  );
+  collect(
+    "staff-chords",
+    staffChordsCheck(
+      { symbols: ["Dm7"], spelling: "enharmonic", bass: false, voicing: "shell" },
+      staffChord(0, [
+        ["D3", 50],
+        ["F3", 53],
+        ["A3", 57],
+        ["C4", 60],
+      ]),
       { key: C, meter: "4/4" },
     ).diagnostics,
   );

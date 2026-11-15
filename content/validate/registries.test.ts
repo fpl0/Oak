@@ -278,8 +278,19 @@ describe("references resolve", () => {
 // Wave 5: every glossary entry's audio example (terms.ts) plays and is legal where the term is introduced,
 // in every legal order, so the glossary card of a side lesson (A1) is playable by a learner at U03.L02.
 describe("glossary examples", () => {
+  // The meter a glossary example's tempo line names (contracts §6.9); the odd meters are the R2 track's.
   const meterOf = (code: string) =>
-    /setcpm\(\d+\/3\)/.test(code) ? "3/4" : /setcpm\(\d+\/2\)/.test(code) ? "2/4" : "4/4";
+    /setcpm\(\d+\/3\)/.test(code)
+      ? "3/4"
+      : /setcpm\(\d+\/2\)/.test(code)
+        ? "2/4"
+        : /setcpm\(\d+\/7\)/.test(code)
+          ? "7/8"
+          : /setcpm\(\d+\/9\)/.test(code)
+            ? "9/8i"
+            : /setcpm\(\d+\/5\)/.test(code)
+              ? "5/4"
+              : "4/4";
   for (const t of R.terms)
     test(`${t.id} plays and lints at ${t.introducedBy}`, async () => {
       const r = await evaluate(t.example, 2);

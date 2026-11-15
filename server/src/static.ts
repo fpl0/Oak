@@ -73,9 +73,21 @@ export function packVersion(soundsDir: string): string | null {
   return dirs.at(-1) ?? null;
 }
 
+/** `/dev` or `/dev/…`, in any case and percent-encoding (the router and a case-insensitive disk both forgive them). */
+export function isDevScreen(path: string): boolean {
+  let p = path;
+  try {
+    p = decodeURIComponent(path);
+  } catch {
+    /* kept as sent */
+  }
+  const lower = p.toLowerCase().replace(/\/{2,}/g, "/");
+  return lower === "/dev" || lower.startsWith("/dev/");
+}
+
 export function staticRoutes(
   app: Hono,
-  opts: { soundsDir: string; distDir: string; serveDist: boolean },
+  opts: { soundsDir: string; distDir: string; serveDist: boolean; dev?: boolean },
 ): void {
   app.get("/sounds/manifest.json", (c) => {
     const v = packVersion(opts.soundsDir);
@@ -104,6 +116,8 @@ export function staticRoutes(
   app.get("*", (c) => {
     const path = c.req.path;
     if (path.startsWith("/api/") || path === "/api" || path.startsWith("/mcp/")) return c.notFound();
+    // The app's /dev/* screens exist only with OAK_DEV=1 (contracts §11.1 rule 7), like /api/dev/*.
+    if (opts.dev !== true && isDevScreen(path)) return c.notFound();
     const abs = path === "/" ? null : safeFile(opts.distDir, path.slice(1));
     if (abs !== null) {
       const hashed = /\/assets\//.test(path);
@@ -112,6 +126,8 @@ export function staticRoutes(
         cacheControl: hashed ? "public, max-age=31536000, immutable" : "no-cache",
       });
     }
+    // The offline renderer's frame page is never the SPA document: its headers let Oak frame it (security.ts).
+    if (path === "/offline-render.html") return c.notFound();
     // SPA fallback: every route of the app is served the same document.
     if (!existsSync(index)) return c.text("Oak is not built yet: run `bun run build`.", 503);
     return serveFile(index, c.req.raw, { mime: "text/html; charset=utf-8", cacheControl: "no-cache" });

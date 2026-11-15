@@ -142,7 +142,7 @@ export function TapPanel({
 }
 
 /** A thin line moving across the window while it is open (it moves under reduced motion too, ux §7.6). */
-function Playhead({ span, running }: { span: number; running: boolean }) {
+export function Playhead({ span, running }: { span: number; running: boolean }) {
   const ref = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(false);
   useEffect(() => {

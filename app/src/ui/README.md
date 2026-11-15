@@ -2,6 +2,41 @@
 
 Owner: **kit** (docs/design/wave4.md §1). Everyone else imports from here and never edits it; ask under `apiNotes`.
 
+## New in Wave 7 (use these instead of a local copy)
+
+`TrackCard`, `TwoLaneTapPad`, `VersionSwitch`, `ExportButton`, `PartLevels`, `EuclidRing`, `PlaySlider` — all exported
+from `kit/index.ts`; specimens in both themes in `kit/gallery/KitWave7.tsx` (`mountKitWave7`, screenshot- and
+keyboard-tested by `kit/e2e/wave7.pw.ts`). Pure rules in `kit/model-w7.ts` (unit-tested in `model-w7.test.ts`). As
+before, each piece draws and reports only: the owner measures, plays, renders and words the music.
+
+| Piece | File | What it is for |
+|---|---|---|
+| `TrackCard` | `kit/TrackCard.tsx` | An advanced track as a place: `track` is the server's `TrackState`. Four states with icon + words: `open` (something to start, nothing done), `in-progress` (the next session named: lesson, checkpoint or capstone session, with minutes), `waiting` ("Waits for: U14 checkpoint passed." — the first closed gate's unmet `requires[].label`, never a count; a waiting track with no closed gate keeps the server's note), `complete` ("All 34 sessions done. Every lesson stays open to replay."). `action` drawn only when there is something to start; `focus` ("Your focus", defaults to `TrackState.focus`); progress bar + "7 of 34 sessions · 1 of 4 capstones released"; `layout="card" | "row"`; `state`/`line` overrides. Use it for Today's `trackOffers`, Progress, the Coda, the Oak's course view. |
+| `TwoLaneTapPad` | `kit/TwoLaneTapPad.tsx` | Two lanes (3 against 2, clave against pulse): F taps lane 1, J lane 2 (one focus stop, `data-keyscope="tap"`), a pointer-down on a lane taps it. `onTap(lane, at)` gives the event's `timeStamp`; the owner keeps the clock and passes `targets`, `marks` ({ at 0–1, state hit / near / miss / extra: each a different shape}), `playhead`, `beats`, `note` per lane, `armed`, `idleText`. (The answers' tap pad keeps its own two-lane mode for `tap.lanes`; this one is for drills, stage H and the capstones.) |
+| `VersionSwitch` | `kit/VersionSwitch.tsx` | Which version of one piece is in front (AC1's two versions, an album track's versions): radio segments with a letter badge, name and detail line; `playing` says which sounds ("…, playing" + a speaker icon); arrows/Home/End; `keyHint`; bind your page key with `nextVersion`. |
+| `ExportButton` | `kit/ExportButton.tsx` | Export a WAV (carry f2): `state: ExportState` (`idle` · `rendering` with `fraction` or indeterminate, Cancel beside it · `done` "Saved X.wav (2.1 MB)." · `failed` the renderer's message + "Nothing was saved." · `cancelled`), `onExport`, `onCancel`, `what`, `disabledReason`. One `role="status"` line. |
+| `PartLevels` | `kit/PartLevels.tsx` | A labelled meter row per part (A2.L05, AC2's mix): `parts: { id, label, db, target? }[]`, dB scale −60…0, the target band shaded, the level in numbers, and a part more than **24 dB under the loudest** marked "Not heard" (icon + hatched bar; `levelRows`, `INAUDIBLE_BELOW_DB`), a silent part "silent"; `role="meter"` with the row's sentence; `live`; `empty`. |
+| `EuclidRing` | `kit/EuclidRing.tsx` | `x(k,n,r)` round a circle from the top, clockwise, the grid from @oak/theory `euclid` (Strudel's rotation). Hits numbered 1-based, joined by a polygon; `playStep`; `showCode` ("x(5,16,10)"). With `onChange`: one tab stop, ArrowUp/Down hits, ArrowLeft/Right rotate, Shift+ArrowUp/Down steps, Home no rotation; `controls` adds three − value + rows. |
+| `PlaySlider` | `kit/PlaySlider.tsx` | A slider that plays (swing amount, a `.late()` offset, a drive): the `FineSlider` props + `playing`, `onPlayToggle` (the button and Space on the slider), `onAudition(v)` once a changed value has rested `PLAY_SETTLE_MS` while playing (a drag never restarts the sound per step), `describe(v)` for the line under it ("1.5:1: light swing"). |
+| helpers | `kit/model-w7.ts` | `trackCardState`, `trackCardLine`, `trackNext`, `trackNextLine`, `trackWaitingFor`, `trackProgressText`, `trackCapstonesText`, `trackCardSummary`, `versionName`, `nextVersion`, `exportStatusText`, `levelRows`, `INAUDIBLE_BELOW_DB`, `euclidGrid`, `euclidText`, `euclidCode`, `euclidKeyValue`, `ringPoint`, `laneOfKey`, `LANE_KEYS`, `tapCountText`, `PLAY_SETTLE_MS`. |
+| tree colours | `theme/palette.ts` | `TREE_COLOURS[theme]` (bg, ground, wood, grain, ink, accent, issue, acorn, `leaf.{introduced,practising,mastered}`) and `TREE_LINES` / `TREE_LINE_SCALE` (hair 0.8, fine 1.2, firm 1.5, bold 2) for the illustrated Oak — equal to tokens.css `--oak-tree-*`, `--oak-leaf-*`, `--oak-tree-line-*` (theme.test.ts); every leaf fill 3:1 on the tree's paper and ground. |
+
+## Shell and settings (Wave 7)
+
+- **The tracks are places.** The palette's "Jazz Harmony" opens the track's next session (a lesson, `/checkpoint/J.CP1`,
+  `/capstone/JC1`), a waiting track says "waits for: U14 checkpoint passed" and leads to the Oak; the rail's Oak label
+  names each open track's next session ("Jazz Harmony: next J1.L03; Advanced Rhythm: next R1.L01"); Arrangement &
+  Sound joins it once its own lessons open (U09.CP), never for the side lessons; a complete track is not named there.
+  `shell/course-state.ts` (`ShellTrack.session`, `card`, `waitingFor`, `trackSessionTarget`).
+- **Settings › Learning › Advanced tracks**: each track as a `TrackCard` row with the way into its next session, and
+  the learner's **focus** (core / an open track; `tracks.focus` + `tracks.setFocus`; says so plainly when the server
+  cannot set it). **Track lenses**: the eight lenses with their state and the lesson that opens each.
+- **Palette**: "Focus on Jazz Harmony" / "Focus on the core" (only once the server answers `tracks.focus`), and the eight
+  track lenses ("Tensions lens: turn off", "Clave lens · Opens with R3.L02 Clave Direction"), `shell/TrackCommands.tsx`,
+  `shell/track-lenses.ts`.
+- **Shortcut sheet**: Shift+X, Shift+Q, Shift+D (the Workbench's rows) are locked until the lens opens — by its tool
+  or by its lesson (`keys/locks.ts` `rowLock(…, completed)`), saying "Opens with J2.L03 Extensions".
+
 ## New in Wave 6 (use these instead of a local copy)
 
 `KeyStrip`, `DeviceCounter`, `LoudnessReadout`, `AlbumPlayerBar`, `BranchCard` — all exported from `kit/index.ts`;

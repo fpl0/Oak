@@ -149,7 +149,8 @@ export function pickStandIn(
   const core = candidates.filter(
     (c) => /^U\d{2}$/.test(c.unit) && (!/^U\d{2}$/.test(unit) || c.unit <= unit),
   );
-  const own = unit.startsWith("A") ? candidates.filter((c) => c.unit === unit) : [];
+  // Wave 7: a track unit (J1–J5, R1–R3, A1, A2) shows its own idea first.
+  const own = /^[JRA]\d$/.test(unit) ? candidates.filter((c) => c.unit === unit) : [];
   for (const c of [...own].reverse()) if (fits(c)) return c;
   for (const c of [...core].reverse()) if (fits(c)) return c;
   return null;

@@ -3,6 +3,7 @@
 // allowed, dialect enforced), and plays the harmony it says. Kits sit in the production ranges.
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { midisOf } from "@oak/grader/testing";
+import { METERS } from "@oak/theory";
 import { bandMeter, bands } from "../bands/index.ts";
 import { FLAVOUR_RULES, flavours, PRODUCTION_RANGES } from "../flavours.ts";
 import { BAD_LOG, evaluate, lint } from "./harness.ts";
@@ -10,11 +11,11 @@ import { BAD_LOG, evaluate, lint } from "./harness.ts";
 setDefaultTimeout(60_000);
 const fill = (code: string, key = "C4:major", beats = 4) =>
   `setcpm(96/${beats})\n\n${code.replaceAll("{{key}}", key).replaceAll("{{bpm}}", "96")}`;
-/** The divisor of a Band's tempo line: the beats in its bar, dotted quarters in a compound meter (contracts §6.9). */
-const beatsOf = (id: string) => {
-  const n = Number(bandMeter(id).split("/")[0]);
-  return bandMeter(id).endsWith("/8") ? n / 3 : n;
-};
+/**
+ * The divisor of a Band's tempo line (contracts §6.9): the meter's tempo units in a bar — beats, dotted quarters in
+ * a compound meter (6/8 → 2), eighths in an odd /8 meter (7/8 → 7, `setcpm(bpm/7)`).
+ */
+const beatsOf = (id: string) => METERS[bandMeter(id) as keyof typeof METERS].unitsPerBar;
 /** The 0-based bar of an event's begin ("a/b" or a whole number). */
 const barOf = (begin: string | number): number => {
   const [a, b] = String(begin).split("/").map(Number);

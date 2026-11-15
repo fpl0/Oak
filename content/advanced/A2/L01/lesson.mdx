@@ -1,0 +1,57 @@
+{/* A2.L01 Roles & Registers: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
+
+<Step id="S1">
+When a loop sounds muddy, two of its parts are usually playing in the same place. A loop in A minor: a bass, chords on a piano and a tune, with the band on drums. First the chords and the tune an octave too low, then the same notes with each part at its own height.
+
+<Example id="hook" views="code,roll" autoplay />
+</Step>
+
+<Step id="S2">
+Every part of a song has a job: the bass holds up the chords, the chords fill the middle, the tune sings over both. Before you hear it, pick the bar where one chord will sound the least clear.
+
+<Predict exercise="which-is-least-clear" />
+</Step>
+
+<Step id="S3">
+In Waves & Harmonics you counted how many times a second a note repeats. Low notes repeat slowly, high notes fast. This panel lays the whole sound out by that number, slow on the left and fast on the right, and draws a peak wherever a note and its harmonics sit. <CodeRef fn="fscope" />
+
+<Example id="one-at-a-time" views="code" />
+
+<OnPass>The bass starts at the far left, the chords further right, the tune further still: each part has its own stretch of the panel. A sound laid out from low to high like this is its **spectrum**. Two parts whose peaks land in the same place get in each other's way.</OnPass>
+</Step>
+
+<Step id="S4">
+Two notes three half steps apart sound sweet in the middle of the keyboard. Hear what happens to the same two notes further down.
+
+<Example id="same-gap" views="code" />
+
+<OnPass>Three half steps in every bar, and only the lowest bar turns to a rumble. Low down, two close notes are near enough in speed that the ear hears them beat against each other instead of as two notes. Arrangers keep close chords out of the bass's octave for that reason: spread them out or lift them up. On some sounds it is worse than on others, but low close chords tend to blur.</OnPass>
+</Step>
+
+<Step id="S5">
+The chords are out of the bass's way now, but the tune plays at the chords' height and gets lost in them.
+
+<Editor exercise="lift-the-tune" />
+
+<OnPass>The tune rides above the chords, and you can follow it again. How high or low a part sits is its **register**: the bass in the low register, the chords in the middle, the tune above. A good place to stop for today if you need to.</OnPass>
+</Step>
+
+<Step id="S6">
+One part has dropped down to where the bass plays. Listen to the bottom of the sound and find it.
+
+<Choice exercise="who-crowds-the-bass" />
+
+<OnPass>The tune: one note at a time, moving against the bass in its own octave. A part in another part's register competes with it, whatever its sound.</OnPass>
+</Step>
+
+<Step id="S7">
+Back to the loop with the chords and the tune too low. Give each part its own register and listen to the low end clear. Add `.fscope()` to a line to see where everything sits.
+
+<Make exercise="give-each-part-its-place" />
+
+<CanDo id="cd.code.registers" />
+
+Next: the same loop as a verse with room in it and a chorus that fills every beat.
+
+<Recap />
+</Step>

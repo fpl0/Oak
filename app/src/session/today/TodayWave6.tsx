@@ -181,8 +181,14 @@ export function OpenToYou({
   disabled,
   skipSideLesson,
   tracksLine,
+  skipTracks = false,
+  footer,
 }: {
   after: AfterCore;
+  /** Wave 7: the tracks have their own offers on Today (`TrackOffers`): their rows are not listed twice. */
+  skipTracks?: boolean;
+  /** Wave 7: one closing line under the list (the whole course: what keeps the Oak green). */
+  footer?: React.ReactNode;
   onGym: (() => void) | null;
   disabled: boolean;
   /** The side lesson already has its own line in the card: never twice. */
@@ -190,8 +196,11 @@ export function OpenToYou({
   /** The tracks' line (`plan.tracks.note`): said once under the list, in place of a row per track. */
   tracksLine: string | null;
 }) {
-  const rows = after.open.filter((r) => !(skipSideLesson && r.kind === "side-lesson"));
-  if (rows.length === 0 && after.waiting.length === 0 && !after.left && !tracksLine) return null;
+  const rows = after.open.filter(
+    (r) => !(skipSideLesson && r.kind === "side-lesson") && !(skipTracks && r.kind === "track"),
+  );
+  const waiting = skipTracks ? after.waiting.filter((r) => r.kind !== "track") : after.waiting;
+  if (rows.length === 0 && waiting.length === 0 && !after.left && !tracksLine && !footer) return null;
   return (
     <Card className="p-4" data-testid="open-to-you" data-stage={after.stage}>
       {after.left && (
@@ -214,9 +223,9 @@ export function OpenToYou({
           <TracksLine line={tracksLine} />
         </div>
       ) : (
-        after.waiting.length > 0 && (
+        waiting.length > 0 && (
           <ul className="mt-2 flex flex-col gap-1.5 border-t border-border pt-2" data-testid="open-waiting">
-            {after.waiting.map((r) => (
+            {waiting.map((r) => (
               <li key={`${r.kind}:${r.id ?? ""}`} className="text-sm" data-track={r.id ?? undefined}>
                 <span className="text-text-2">{r.title}</span>
                 <span className="text-text-3"> · {r.note}</span>
@@ -225,6 +234,7 @@ export function OpenToYou({
           </ul>
         )
       )}
+      {footer}
     </Card>
   );
 }

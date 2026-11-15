@@ -72,13 +72,44 @@ export function lockedParams(d: Diagnostic, toolCode?: (id: string) => string | 
   return { ...d, params: { ...d.params, tool: name, lesson, alt: "what you have so far" } };
 }
 
+/**
+ * What a finding is, in words, before the hint ladder gives its fix (rung 2: "the kind, never the answer", contracts
+ * §10.5). The default reads the bare code, so a chord with the wrong note at the bottom said only "bass" (Wave 7
+ * review: J3.L01's rootless A voicing answered as the B). The keyboard's findings are said as sentences here.
+ */
+const KIND_WORDS: Readonly<Record<string, string>> = {
+  "kb.bass": "The lowest note is not the one this chord stands on.",
+  "kb.missing-note": "A note of the chord is missing.",
+  "kb.extra-note": "A note that does not belong is in the chord.",
+  "kb.wrong-note": "A note is not the one asked for.",
+  "kb.octave": "The right note, in another octave.",
+  "kb.order": "The right notes, in another order.",
+  "kb.voicing": "The notes are right; the shape of the voicing is not the one asked for.",
+};
+
+export function describeIssue(d: Diagnostic): string | undefined {
+  return KIND_WORDS[d.id as string];
+}
+
 export function viewFor(
   result: GradeResult,
   rung: HintRung,
   passed: boolean,
   render: (d: Diagnostic) => string,
 ): GradeView {
-  return toIssueView(result, rung, { passed, render });
+  return toIssueView(result, rung, {
+    passed,
+    render,
+    describe: (d) => describeIssue(d) ?? defaultKind(d),
+  });
+}
+
+/** content-kit's default description: the code's words and, when given, the direction ("wrong degree (up)"). */
+function defaultKind(d: Diagnostic): string {
+  const code = (d.id as string).split(".").slice(1).join(".") || (d.id as string);
+  const kind = code.replace(/[.-]/g, " ");
+  const dir = d.params.dir ?? d.params.shiftLabel;
+  return dir === undefined ? kind : `${kind} (${dir})`;
 }
 
 /**
@@ -213,7 +244,7 @@ export function summaryOf(
       const n = view.issues.filter(
         (i) =>
           (i.severity === "error" || i.severity === "warn") &&
-          !/^tap\.(push-|triplet-|grouping)/.test((i.id as string | undefined) ?? ""),
+          !/^tap\.(push-|triplet-|grouping|clave-|lane)/.test((i.id as string | undefined) ?? ""),
       ).length;
       return n > 0
         ? `Not in time yet: ${n} ${n === 1 ? "tap" : "taps"} to look at. Listen, then tap along again.`
@@ -365,6 +396,11 @@ export function revealValue(ex: Exercise, spec: AnswerSpec | null, trial: Trial 
     case "number":
       if (ex.kind === "predict" && typeof ex.correct === "number") return ex.correct;
       return correct?.number ?? null;
+    // Wave 7: an odd-meter bar's grouping (R2.L01–L02) and a Euclidean rhythm's numbers (R3.L01–L03).
+    case "grouping":
+      return correct?.grouping ?? null;
+    case "euclid":
+      return correct?.euclid ?? null;
     case "bar-buttons":
       // "Which bar?" (U09.L01 S6, U09.L05 S6, U11.L08 S5): the bar the answer names.
       return typeof correct?.number === "number" ? [correct.number] : null;

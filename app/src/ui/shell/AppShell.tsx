@@ -32,6 +32,7 @@ import { useFocusHeader } from "./focus-header.ts";
 import { GlobalKeys } from "./GlobalKeys.tsx";
 import { navItemState } from "./nav-state.ts";
 import { AudioStatus, MicLiveDot, NowPlaying, TutorToggle } from "./status.tsx";
+import { TrackCommands } from "./TrackCommands.tsx";
 import { TutorPanel } from "./TutorPanel.tsx";
 
 const ICONS: Record<NavId, ReactNode> = {
@@ -230,6 +231,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
       <CommandPalette />
       <GlobalKeys />
+      <TrackCommands />
       <Toaster />
     </div>
   );

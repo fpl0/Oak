@@ -4,6 +4,7 @@
 import type { Rat } from "@oak/content-kit";
 import type { AbcElem, AbcVisualParams, OakClickListener, TuneObject } from "abcjs";
 import type { Box, NoteGeometry, StaffBandGeometry, StaffGeometry } from "./geometry.ts";
+import { GHOST_CLASSES, type GhostMark } from "./ghost.ts";
 import { GUIDE_TONE_CLASSES, type GuideToneMark } from "./guide.ts";
 import { CHORD_LABEL_CLASSES } from "./lead-sheet.ts";
 import { ANNOTATION_CLASSES, type AnnotationSet, type NoteAnnotation } from "./options.ts";
@@ -428,7 +429,7 @@ export function placeAnnotations(
 
 /** Text as compared between the Score and abcjs's SVG (abcjs draws b, # and o of a chord symbol as glyphs). */
 const labelKey = (t: string | null | undefined) =>
-  (t ?? "").replace(/♭/g, "b").replace(/♯/g, "#").replace(/°/g, "o").replace(/\s+/g, "");
+  (t ?? "").replace(/♭/g, "b").replace(/♯/g, "#").replace(/°/g, "o").replace(/∕/g, "/").replace(/\s+/g, "");
 
 /**
  * Wave 4 (docs/design/wave4.md §3.3): gives the chord symbols (`abcjs-chord` texts above the top staff) and Roman
@@ -491,6 +492,55 @@ export function markGuideTones(
       const head = heads[m.member];
       if (!head) continue;
       head.classList.add(base, m.role === "third" ? third : seventh);
+      done.push(head);
+    }
+  }
+  return done;
+}
+
+/**
+ * Wave 7 (ghost notes, R1.L03 and RC1): draws the heads of `marks` (`ghostMarks`) in parentheses, as drummers write
+ * a ghost note: the head gets `GHOST_CLASSES.head` and two SVG texts "(" and ")" with `GHOST_CLASSES.paren` stand
+ * either side of it, in the staff's colour (`currentColor`), on every tied piece. abcjs has no parenthesised head
+ * (`ABCJS_LIMITS` "ghost-notes"). Earlier marks are removed first, so it can run after every render. Heads are
+ * matched low to high, as `NoteItem.pitches` are. Returns the heads it marked.
+ */
+export function markGhostNotes(el: HTMLElement, marks: readonly GhostMark[], prefix = "oak-e"): Element[] {
+  const svg = el.querySelector("svg");
+  if (!svg) return [];
+  for (const old of [...svg.querySelectorAll(`.${GHOST_CLASSES.paren}`)]) old.remove();
+  for (const old of [...svg.querySelectorAll(`.${GHOST_CLASSES.head}`)])
+    old.classList.remove(GHOST_CLASSES.head);
+  const done: Element[] = [];
+  const ns = "http://www.w3.org/2000/svg";
+  for (const m of marks) {
+    for (const g of noteGroups(svg, m.n, prefix)) {
+      const heads = [...g.querySelectorAll(".abcjs-notehead")].sort((a, b) => {
+        const ra = rectOf(a);
+        const rb = rectOf(b);
+        return rb.y + rb.height / 2 - (ra.y + ra.height / 2) || ra.x - rb.x;
+      });
+      const head = heads[m.member] as SVGGraphicsElement | undefined;
+      if (!head || typeof head.getBBox !== "function") continue;
+      const box = head.getBBox();
+      const size = Math.max(10, box.height * 1.9);
+      const cy = box.y + box.height / 2;
+      for (const [glyph, x, anchor] of [
+        ["(", box.x - 1, "end"],
+        [")", box.x + box.width + 1, "start"],
+      ] as const) {
+        const t = document.createElementNS(ns, "text");
+        t.setAttribute("class", GHOST_CLASSES.paren);
+        t.setAttribute("x", String(x));
+        t.setAttribute("y", String(cy + size * 0.33));
+        t.setAttribute("font-size", String(size));
+        t.setAttribute("text-anchor", anchor);
+        t.setAttribute("fill", "currentColor");
+        t.setAttribute("aria-hidden", "true");
+        t.textContent = glyph;
+        head.parentNode?.insertBefore(t, head.nextSibling);
+      }
+      head.classList.add(GHOST_CLASSES.head);
       done.push(head);
     }
   }

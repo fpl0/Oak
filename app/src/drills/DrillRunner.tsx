@@ -106,6 +106,7 @@ import { SetSummary } from "./SetSummary.tsx";
 import { SingPanel } from "./SingPanel.tsx";
 import { BarChart, SectionsBar } from "./StageEPanels.tsx";
 import { FollowUpCard, KeyRibbon } from "./StageFPanels.tsx";
+import { LaneTapPanel, QuietSingCard, RhythmLanesView } from "./StageGPanels.tsx";
 import {
   expectedStaffValue,
   isStaffTrial,
@@ -154,6 +155,16 @@ import {
   seventhLine,
   wave6Alone,
 } from "./wave6.ts";
+import {
+  isWave7Listen,
+  lanesComparePlan,
+  rhythmLanesOf,
+  stageGFact,
+  tapLanesOf,
+  wave7Alone,
+  wave7FollowUp,
+  wave7Near,
+} from "./wave7.ts";
 
 export interface SetResult {
   drillSessionId: string | null;
@@ -466,6 +477,8 @@ function TrialView({
   // (each step is checked with Enter).
   const autoSubmit = spec !== null && AUTO_SUBMIT_KINDS.includes(spec.ui) && !dictation && !steps;
   const isSing = surface.kind === "sing";
+  // Wave 7: a sung trial in Quiet mode is heard in the head while it plays (the mic never opens), then Space.
+  const quietSing = isSing && quietNow;
   const isTap = surface.kind === "tap";
   const total = ctx.source?.total ?? 0;
   const hasCue = !isTap && !isSing && cuePlan(trial, data.profile) !== null;
@@ -483,7 +496,10 @@ function TrialView({
   const canReplay = inFeedback
     ? !resolving && (staged.stimulus !== null || audibleAnswer)
     : answering && (isTap || isSing || staged.stimulus !== null);
-  const compare = outcome ? comparePlan(trial, ctx.captured, outcome.sung) : null;
+  const compare = outcome
+    ? (lanesComparePlan(trial, ctx.captured.taps, ctx.captured.voices) ??
+      comparePlan(trial, ctx.captured, outcome.sung))
+    : null;
   const prevLevel = ctx.index > 0 ? ctx.trials[ctx.index - 1]?.level : undefined;
   const levelMove =
     props.purpose === "practice" && prevLevel !== undefined ? levelMoveText(prevLevel, trial.level) : null;
@@ -495,14 +511,42 @@ function TrialView({
   const stageEFamily = STAGE_E_LISTEN.has(trial.family) || fet;
   // Wave 6: the families of stages E–F and H name their own "alone" (the 3rd and 7th, the chord and where it
   // goes, the two homes, the kick), and every one of them can be heard against its near miss.
-  const aloneOk = wave6Alone(trial) !== null || (!harmony && stageEFamily && alonePlan(trial) !== null);
+  // Wave 7: stage G, the rest of H and the sound families name their own "alone" and near miss too.
+  const wave7 = isWave7Listen(trial);
+  const aloneOk =
+    wave7Alone(trial) !== null ||
+    wave6Alone(trial) !== null ||
+    (!harmony && stageEFamily && alonePlan(trial) !== null);
   const aloneLabel = aloneLabelOf(trial);
-  const near = inFeedback ? nearMissOf(trial, def, ctx.captured.answer) : null;
+  const near = inFeedback
+    ? (wave7Near(trial, def, ctx.captured.answer) ?? nearMissOf(trial, def, ctx.captured.answer))
+    : null;
+  // Wave 7: a two-lane take (one hand per pulse), the rhythm drawn as lanes once answered (the clave grid and the
+  // pulse lanes follow their track lenses; an odd bar's groups are the answer itself), a sung trial in Quiet mode.
+  const tapLanes = tapLanesOf(trial);
+  const lanesDrawing = inFeedback ? rhythmLanesOf(trial) : null;
+  const lanesShown =
+    lanesDrawing !== null &&
+    (trial.family === "fam.rhy.clave"
+      ? lenses.track.shown.clave
+      : trial.family === "fam.rhy.polyrhythm"
+        ? lenses.track.shown.polyLanes
+        : true);
+  const trackLensIds =
+    trial.family === "fam.rhy.clave"
+      ? (["clave"] as const)
+      : trial.family === "fam.rhy.polyrhythm"
+        ? (["polyLanes"] as const)
+        : ([] as const);
   const lean = chromaticAskedOf(trial) !== null;
   const keyChange = inFeedback ? keyChangeOf(trial) : null;
   const follow =
-    snap.matches("feedback") && outcome && !outcome.result.skipped ? followUpOf(trial, def) : null;
+    snap.matches("feedback") && outcome && !outcome.result.skipped
+      ? (followUpOf(trial, def) ?? wave7FollowUp(trial))
+      : null;
   const [followPick, setFollowPick] = useState<string | null>(null);
+  // Wave 7: "which key did it land in?" is asked by ear, so the key and the chords stay unsaid until it is answered.
+  const keyAsked = follow !== null && followPick === null && wave7FollowUp(trial) !== null;
   const otherLabel =
     trial.family === "fam.rhy.swing"
       ? playedSwung(trial)
@@ -512,7 +556,7 @@ function TrialView({
         ? "Without its seventh"
         : null;
   const scaleOk = def.generator === "key-mode" && scalePlan(trial) !== null;
-  const contextOk = harmony || stageEFamily || formMode !== null || isBarChartFamily(def.generator);
+  const contextOk = harmony || stageEFamily || wave7 || formMode !== null || isBarChartFamily(def.generator);
   const sections = formMode ? sectionsOf(trial) : [];
   // After a stage E answer the passage again is the thing in context (R, and K as for chords).
   const contextAgain = snap.matches("feedback") && !harmony && contextOk;
@@ -534,7 +578,10 @@ function TrialView({
       // The answer widget's spec as the trial opens (pad keys and choice labels, in the order the widget draws).
       (globalThis as { __oakDrillSpec?: unknown }).__oakDrillSpec =
         surfaceOf(trial, def).kind === "widget" ? (surfaceOf(trial, def) as { spec: unknown }).spec : null;
-      (globalThis as { __oakDrillFollow?: unknown }).__oakDrillFollow = followUpOf(trial, def);
+      (globalThis as { __oakDrillFollow?: unknown }).__oakDrillFollow =
+        followUpOf(trial, def) ?? wave7FollowUp(trial);
+      // Wave 7: a two-lane take's lanes (each hand's targets, in seconds from the response window).
+      (globalThis as { __oakDrillLanes?: unknown }).__oakDrillLanes = tapLanesOf(trial);
       // Wave 5: a bass trial's roots and its line as the learner would write it in code.
       const line = isBassTrial(trial) ? bassLineTrialOf(trial) : null;
       const ak = line?.params.answerKey as { key: KeySpec; octave: number } | undefined;
@@ -580,15 +627,16 @@ function TrialView({
   }, [region]);
 
   // After the quiet "I heard it" button goes, focus comes back to the region (Enter moves on).
+  // Wave 7: a sung trial in Quiet mode keeps focus on its "I heard it" button until it is answered.
   useEffect(() => {
-    if (imagining) return;
+    if (imagining || (quietSing && !inFeedback)) return;
     if (inFeedback || isTap || isSing) region.current?.focus({ preventScroll: true });
-  }, [inFeedback, isTap, isSing, region, imagining, resolving]);
+  }, [inFeedback, isTap, isSing, region, imagining, resolving, quietSing]);
 
   // The session's Pause (Alt+P) puts the page under an overlay: a sung part listening then stops at once (it
   // counts as skipped, no penalty), so the mic is never live behind "Paused".
   const sessionPaused = useRunnerView((v) => v.paused);
-  const listening = (isSing && (presenting || answering)) || resolving || singingPart;
+  const listening = (isSing && !quietSing && (presenting || answering)) || resolving || singingPart;
   useEffect(() => {
     if (sessionPaused && listening) {
       player.stop();
@@ -801,7 +849,7 @@ function TrialView({
       scope: "answer-pad",
       group: "Drills",
       description: "Heard it in my head (Quiet mode)",
-      when: () => imagining,
+      when: () => imagining || (quietSing && (presenting || answering)),
       run: () => send({ type: "HEARD" }),
     },
     {
@@ -877,7 +925,11 @@ function TrialView({
       : [];
   const stage = imagining
     ? "Hear it in your head, then press Space."
-    : stageText(ctx.stage, trial.params.mode);
+    : tapLanes && ctx.stage === "respond"
+      ? "Your turn: F for the left hand, J for the right."
+      : quietSing && ctx.stage === "listen"
+        ? "Hear it in your head while it plays…"
+        : stageText(ctx.stage, trial.params.mode);
   const auditionText =
     ctx.audition === "resolve"
       ? "Hear it walk home…"
@@ -952,9 +1004,11 @@ function TrialView({
                   ? auditionText
                   : "Listen back, or move on."
                 : answering
-                  ? isTap || isSing
-                    ? "Ready."
-                    : "Your turn."
+                  ? quietSing
+                    ? "Hear it in your head, then press Space."
+                    : isTap || isSing
+                      ? "Ready."
+                      : "Your turn."
                   : snap.matches({ trial: "bassAlone" })
                     ? "The bass alone…"
                     : "Getting ready…")}
@@ -988,10 +1042,11 @@ function TrialView({
           />
         )}
         {showKey !== null && <KeyHighlight highlight={showKey} />}
+        {lanesShown && lanesDrawing && <RhythmLanesView lanes={lanesDrawing} />}
         {inFeedback && (keyText(trial) || harmony || instrumentsOf(trial).length > 0) && (
           <p className="text-sm text-text-3" data-testid="trial-details">
             {[
-              keyChange?.to
+              keyChange?.to || keyAsked
                 ? null
                 : keyText(trial)
                   ? `In ${keyText(trial)}`
@@ -1056,13 +1111,26 @@ function TrialView({
             {ctx.micError}
           </Callout>
         )}
-        {isTap && (
+        {isTap && tapLanes && (
+          <LaneTapPanel
+            trial={trial}
+            lanes={tapLanes}
+            stage={ctx.stage}
+            done={inFeedback}
+            taps={inFeedback ? ctx.captured.taps : null}
+            voices={inFeedback ? (ctx.captured.voices ?? null) : null}
+          />
+        )}
+        {isTap && !tapLanes && (
           <TapPanel
             trial={trial}
             stage={ctx.stage}
             done={inFeedback}
             taps={inFeedback ? ctx.captured.taps : null}
           />
+        )}
+        {quietSing && (presenting || answering) && (
+          <QuietSingCard trial={trial} onHeard={() => send({ type: "HEARD" })} />
         )}
         {imagining && (
           <Card className="flex flex-col items-center gap-3 p-5 text-center" data-testid="quiet-resolution">
@@ -1075,7 +1143,7 @@ function TrialView({
             </Button>
           </Card>
         )}
-        {(isSing || (resolving && !quietNow) || singingPart) && (
+        {((isSing && !quietNow) || (resolving && !quietNow) || singingPart) && (
           <SingPanel
             trial={trial}
             targets={singTargets}
@@ -1236,9 +1304,10 @@ function TrialView({
           answer={ctx.captured.answer}
           micError={ctx.micError}
           onQuietToday={() => void voice.setQuiet(true, "today")}
+          heardInHead={ctx.records[ctx.index]?.modality === "quiet" && isSing}
         />
       )}
-      {outcome && isSing && inFeedback && <RecheckHint />}
+      {outcome && isSing && !quietSing && inFeedback && <RecheckHint />}
       {fet &&
         outcome &&
         !outcome.result.skipped &&
@@ -1250,11 +1319,12 @@ function TrialView({
               : `The way home: ${wayHomeText(trial, data.solfege === "syllables")}`}
           </p>
         )}
-      {outcome && !outcome.result.skipped && inFeedback && (
+      {outcome && !outcome.result.skipped && inFeedback && !keyAsked && (
         <FactLine
           trial={trial}
           shown={{
             chordSymbols: lenses.chords.shown.chordSymbols,
+            romanNumerals: lenses.chords.shown.romanNumerals,
             noteNames: lenses.shown.noteNames,
             syllables: lenses.shown.solfege,
           }}
@@ -1369,7 +1439,7 @@ function TrialView({
               Show me
             </Button>
           )}
-          {((isSing && (presenting || answering)) || resolving || imagining || singingPart) && (
+          {((isSing && !quietSing && (presenting || answering)) || resolving || imagining || singingPart) && (
             <Button variant="ghost" onClick={() => send({ type: "SKIP_SUNG" })}>
               Skip singing <Kbd>⇧S</Kbd>
             </Button>
@@ -1383,7 +1453,13 @@ function TrialView({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          {!unlabelled && <LensSwitches lenses={lenses} chords={harmony} />}
+          {/* Wave 7: the jazz families' sentences name chords, so their chord lenses switch here too. */}
+          {!unlabelled && (
+            <LensSwitches lenses={lenses} chords={harmony || trial.family.startsWith("fam.jzz.")} />
+          )}
+          {unlabelled && trackLensIds.length > 0 && (
+            <LensSwitches lenses={lenses} notes={false} track={trackLensIds} />
+          )}
           {(answering || (presenting && steps !== null)) && spec && !autoSubmit && (
             <Button
               variant="primary"
@@ -1492,6 +1568,7 @@ function FeedbackLine({
   answer,
   micError,
   onQuietToday,
+  heardInHead = false,
 }: {
   outcome: TrialOutcome;
   /** The sung part is a chromatic degree's lean to the note beside it, not the walk home. */
@@ -1505,11 +1582,16 @@ function FeedbackLine({
   answer: Answer | null;
   micError: string | null;
   onQuietToday(): void;
+  /** Wave 7: a sung trial heard in the head in Quiet mode (its record says `quiet`). */
+  heardInHead?: boolean;
 }) {
   const r = outcome.result;
   let line: string;
   const mode = trial.params.mode;
-  if (r.skipped) line = "Skipped. No penalty, and nothing counted.";
+  if (r.skipped && heardInHead)
+    line =
+      "Heard in your head. Nothing is recorded for it, and nothing counts against you. Hear the line to check yours.";
+  else if (r.skipped) line = "Skipped. No penalty, and nothing counted.";
   else if (outcome.revealed) line = text ? `It was ${text}. Hear it, then move on.` : "Here is the answer.";
   else if (mode === "tap")
     line = r.correct ? "In time." : "Not quite in time yet. Hear it again, or compare.";
@@ -1579,8 +1661,12 @@ function FeedbackLine({
  */
 function factOf(
   trial: Trial,
-  shown: { chordSymbols: boolean; noteNames: boolean; syllables: boolean },
+  shown: { chordSymbols: boolean; romanNumerals: boolean; noteNames: boolean; syllables: boolean },
 ): string | null {
+  // Wave 7: the ii–V and its key, the guide-tone line, the colour note, the substitute, the clave, the groups, the
+  // pulses, how hard it swings, the sound change, who plays which role.
+  const w7 = stageGFact(trial, shown);
+  if (w7) return w7;
   const key = keyOfTrial(trial);
   const seventh = trial.family === "fam.chd.quality-7th" ? seventhFactsOf(trial) : null;
   if (seventh) return seventhLine(seventh, shown);
@@ -1594,7 +1680,7 @@ function factOf(
 
 function FactLine(props: {
   trial: Trial;
-  shown: { chordSymbols: boolean; noteNames: boolean; syllables: boolean };
+  shown: { chordSymbols: boolean; romanNumerals: boolean; noteNames: boolean; syllables: boolean };
 }) {
   const fact = factOf(props.trial, props.shown);
   if (!fact) return null;

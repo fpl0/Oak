@@ -234,7 +234,7 @@ mel: arrange([2, melVerse], [2, melChorus], [2, melVerse], [2, melChorus])`;
     );
     expect(out.extra.map((d) => d.id)).toEqual(["form.contrast"]);
   });
-  test("swing: straight hats are told the fix; too hard a swing is told to ease off", async () => {
+  test("swing: straight hats are told what swing does, never the call (rule d); too hard a swing is told to ease off", async () => {
     const r = rule({
       rule: "swing",
       track: ["hats", "@drums"],
@@ -243,14 +243,17 @@ mel: arrange([2, melVerse], [2, melChorus], [2, melVerse], [2, melChorus])`;
       ratio: [1.6, 2.4],
     });
     const straight = await check(r, 'hats: s("hh*8")', 1);
-    expect(straight.detail).toBe("`hats` plays straight 8ths; add `.swingBy(1/3, 4)`");
+    expect(straight.detail).toBe("`hats` plays straight 8ths; swing them, long–short");
+    expect(straight.detail).not.toContain("swingBy");
     expect(straight.extra.map((d) => d.id)).toEqual(["rhythm.swing-missing"]);
     const hard = await check(r, 'hats: s("hh*8").swingBy(0.6, 4)', 1);
     expect(hard.ok).toBe(false);
     expect(hard.extra.map((d) => d.id)).toEqual(["rhythm.swing-amount"]);
-    // 3/4 counts three beats a bar.
+    expect(hard.extra[0]?.params.tip).not.toContain("swingBy");
+    // 3/4: a waltz's hats are told the same without the call.
     const waltz = await check(r, 'hats: s("hh*6")', 1, C, { meter: "3/4" });
-    expect(waltz.detail).toContain("`.swingBy(1/3, 3)`");
+    expect(waltz.ok).toBe(false);
+    expect(waltz.detail).not.toContain("swingBy");
   });
   test("groove-lock names a bar where the bass plays without the kick", async () => {
     const r = rule({ rule: "groove-lock", kick: "drums", bass: "bass", min: 0.75 });

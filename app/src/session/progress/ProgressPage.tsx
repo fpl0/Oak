@@ -1,7 +1,9 @@
 // Progress (ux §2.3, §5.5): the can-do ledger by area, the course by unit, time practised, the weekly rhythm over
 // the year and milestones. Honest numbers only: what the server stored, nothing projected except the pace
 // estimate, which is shown as a month (contracts §9.6), never as sessions behind.
+
 import type { CanDoEntry } from "@oak/api";
+import { COURSE_SESSIONS } from "@oak/api";
 import { Link } from "@tanstack/react-router";
 import { clsx } from "clsx";
 import { milestoneById } from "../../../../content/milestones.ts";
@@ -32,7 +34,8 @@ import {
   Skeleton,
 } from "../../ui/kit/basics.tsx";
 import { ErrorState, LoadingState } from "../../ui/kit/QueryState.tsx";
-import { useCompletionWhen, useGymOpen } from "../day-hooks.ts";
+import { courseEndEntry, coursePaceLine } from "../course-end.ts";
+import { useCompletionWhen, useGymOpen, useWholeCourseWhen } from "../day-hooks.ts";
 import { courseEdge, edgeLead, mapNextId } from "../edge.ts";
 import { leftToRelease, progressEnding } from "../finale-model.ts";
 import { REALISM_LINES } from "../gym-day.ts";
@@ -54,7 +57,8 @@ import {
 import { sideLessonsLine } from "../side-lessons.ts";
 import { restsLine, streakLine, weekStatusLabel } from "../streak-model.ts";
 import { itemTitle } from "../titles.ts";
-import { EndingEntry, TracksCard } from "./ProgressWave6.tsx";
+import { EndingEntry } from "./ProgressWave6.tsx";
+import { CourseEndCard, TracksProgressCard } from "./ProgressWave7.tsx";
 
 const AREAS = ["hear", "read", "write", "compose", "transcribe", "sing", "code"] as const;
 const AREA_LABEL: Record<(typeof AREAS)[number], string> = {
@@ -498,6 +502,24 @@ export function ProgressPage() {
   const completion = useCompletionWhen(core);
   const ending = progressEnding(completion.data);
   const left = leftToRelease(completion.data);
+  // Wave 7: once the core is complete, the whole course (the tracks) is what a pace can still estimate. The count
+  // is the core's 185 and each track's own (`TrackState.sessionsDone`); `course.whole` is read once it is complete.
+  const whole = useWholeCourseWhen({ course: course.data?.course });
+  const courseEnd = courseEndEntry(whole.data);
+  const coursePace =
+    core === "complete"
+      ? coursePaceLine(
+          whole.data ?? {
+            stage: course.data?.course ?? "in-progress",
+            sessionsDone:
+              COURSE_SESSIONS.core + (course.data?.tracks ?? []).reduce((n, t) => n + t.sessionsDone, 0),
+            sessionsTotal: COURSE_SESSIONS.total,
+          },
+          report.data?.paceEstimate?.sessionsPerWeek ?? null,
+          today,
+          formatMonth,
+        )
+      : null;
   return (
     <Page>
       <PageHeader
@@ -505,16 +527,19 @@ export function ProgressPage() {
         sub={
           core === "lessons-done"
             ? (left ?? "The lessons of the core are done.")
-            : core !== "complete" && report.data?.paceEstimate
-              ? `At ${report.data.paceEstimate.sessionsPerWeek} sessions a week you'll finish the core around ${formatMonth(report.data.paceEstimate.coreDoneBy)}.`
-              : "What you can do now, in plain words."
+            : core === "complete" && coursePace
+              ? coursePace
+              : core !== "complete" && report.data?.paceEstimate
+                ? `At ${report.data.paceEstimate.sessionsPerWeek} sessions a week you'll finish the core around ${formatMonth(report.data.paceEstimate.coreDoneBy)}.`
+                : "What you can do now, in plain words."
         }
       />
       <div className="grid gap-6 lg:grid-cols-3">
         <section aria-label="Course and can-do ledger" className="flex flex-col gap-4 lg:col-span-2">
+          {courseEnd && <CourseEndCard entry={courseEnd} />}
           {ending && <EndingEntry ending={ending} />}
           <CourseCard />
-          <TracksCard />
+          <TracksProgressCard />
           <span id="ledger" className="-mt-4" />
           <Ledger />
         </section>

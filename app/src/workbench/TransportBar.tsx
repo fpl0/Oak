@@ -35,6 +35,8 @@ export interface TransportSwitch {
 export interface TransportLenses {
   labels: TransportSwitch[];
   panels: TransportSwitch[];
+  /** Wave 7: the advanced tracks' lenses (tensions, voicings, chord-scales, clave, pulse lanes, …), each once open. */
+  track?: TransportSwitch[];
   onToggle(id: string): void;
 }
 
@@ -94,9 +96,9 @@ function SwitchGroup({
           type="button"
           className="oak-toggle oak-toggle--small"
           aria-pressed={it.on}
-          aria-keyshortcuts={it.keys}
+          aria-keyshortcuts={it.keys || undefined}
           onClick={() => onToggle(it.id)}
-          title={`${it.title} (${it.keys})`}
+          title={it.keys ? `${it.title} (${it.keys})` : it.title}
           data-testid={`lens-${it.id}`}
         >
           {it.label}
@@ -271,6 +273,12 @@ export function TransportBar(p: TransportBarProps) {
             items={p.lenses.panels}
             onToggle={p.lenses.onToggle}
             testId="panel-switch"
+          />
+          <SwitchGroup
+            label="Lenses"
+            items={p.lenses.track ?? []}
+            onToggle={p.lenses.onToggle}
+            testId="track-lens-switch"
           />
         </>
       ) : null}

@@ -374,7 +374,7 @@ describe("C5 12-Bar Shuffle (contracts §6.6)", () => {
   test("straight hats: the swing rule names the line and the fix", async () => {
     const r = await gradeC5(c5Piece(FLAVOURS[0] as Flavour, { hats: 'hats: s("hh*8").gain(.5)' }));
     expect(failing(r)).toEqual(["swing"]);
-    expect(detail(r, "swing")).toBe("`hats` plays straight 8ths; add `.swingBy(1/3, 4)`");
+    expect(detail(r, "swing")).toBe("`hats` plays straight 8ths; swing them, long–short");
   });
   test("bar 12 on I is no turnaround", async () => {
     const r = await gradeC5(c5Piece(FLAVOURS[0] as Flavour, { chorus: CHORUS.replace(/G7$/, "C7") }));

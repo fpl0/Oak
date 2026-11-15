@@ -14,7 +14,8 @@
 // chose. The Band plays the chords only (the learner's code has the drums, bass and riff).
 //
 // How it is graded: S5 checks the `.partials()` list with `arg-matches` (four harmonics switched on) while an
-// `events` match keeps the riff's notes; S6 names a wave by ear; the Make requires `.partials()` (`uses`).
+// `events` match keeps the riff's notes; S6 names a wave by ear; the Make requires two or more harmonics chosen
+// with `.partials()` (`control-set`, carry f4).
 // S3 and S4 open the scope panel from the step (`initialPanels: ["scope"]`, feature `panel.wave5`) and S4–S5 draw
 // the harmonics probe beside the riff (`ui.probe: { kind: "harmonics", track: "mel" }`, feature `step.probe`);
 // the learner's own `.scope()` opens the same panel anywhere else.
@@ -411,8 +412,11 @@ export default defineLesson({
             label: "One part's harmonics chosen with .partials()",
             required: true,
             skills: ["D02"],
-            rule: "uses",
-            tool: "tb.partials",
+            // Carry f4 (corrections pass): what is heard, not the call. `.partials([1])` or `[1, 0, 0]` is one
+            // harmonic, a sine; two or more harmonics change the sound.
+            rule: "custom",
+            fn: "control-set",
+            params: { control: "partials", above: 1, call: "partials", example: "[1, 1, 1, 1]" },
           },
           {
             id: "a-wave-with-harmonics",
@@ -457,6 +461,34 @@ export default defineLesson({
           {
             name: "new waves, harmonics not chosen",
             response: { code: code(...DRUMS, bass('.s("sawtooth")'), riff('.s("square")')) },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the riff on a triangle with three harmonics",
+            response: {
+              code: code(...DRUMS, bass('.s("sine")'), riff('.s("triangle").partials([1, 0, 1, 0, 1])')),
+            },
+            expect: "pass",
+          },
+          {
+            name: "the bass on two harmonics only",
+            response: { code: code(...DRUMS, bass('.s("sawtooth").partials([1, 1])'), riff('.s("sine")')) },
+            expect: "pass",
+          },
+          {
+            name: "right function, one harmonic: still a sine",
+            response: {
+              code: code(...DRUMS, bass('.s("sawtooth").partials([1, 0, 0, 0])'), riff('.s("sine")')),
+            },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "the harmonics chosen, then the part muted",
+            response: {
+              code: code(...DRUMS, bass('.s("sawtooth").partials([1, 1, 1, 1]).gain(0)'), riff('.s("sine")')),
+            },
             expect: "fail",
             feedback: ["rubric.unmet"],
           },

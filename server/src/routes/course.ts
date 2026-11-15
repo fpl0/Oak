@@ -76,6 +76,7 @@ export function courseRoutes(mount: Mounter, d: AppDeps): void {
     ...s.gates.courseProgress(),
     tracks: s.tracks.list(),
     core: s.tracks.coreStage(),
+    course: s.tracks.courseStage(),
   }));
   mount("steps.state", ({ params }) => s.course.stepState(params.id, params.stepId));
   // Wave 3 (wave3.md §5.2): a retried or double-submitted attempt with the same key counts once.
@@ -129,7 +130,12 @@ export function courseRoutes(mount: Mounter, d: AppDeps): void {
       () => s.capstoneSessions.recordCheck(params.id, params.checkId, { ...rest }),
     );
   });
-  mount("capstones.gate", ({ params }) => s.capstoneSessions.gate(params.id));
+  mount("capstones.gate", ({ params }) => {
+    const gate = s.capstoneSessions.gate(params.id);
+    // Wave 7 (wave7.md §5.3): AC1's tunes, each open on its own condition (only tunes whose answer key is written).
+    const tunes = s.trackPlan.tunes(params.id);
+    return tunes === null ? gate : { ...gate, tunes };
+  });
   mount("gym.plan", () => s.gym.plan());
   mount("gates.voicing", () => voicingGate(s.unlocks));
 
@@ -140,4 +146,8 @@ export function courseRoutes(mount: Mounter, d: AppDeps): void {
   // where the core stands, what the learner can do and what stays open after it.
   mount("tracks.list", () => ({ items: s.tracks.list() }));
   mount("course.completion", () => s.tracks.completion());
+  // Wave 7 (docs/design/wave7.md §5.2, §5.8): the learner's choice between the core and the tracks, the whole course.
+  mount("tracks.focus", () => s.trackPlan.focus());
+  mount("tracks.setFocus", ({ body }) => s.trackPlan.setFocus(body.focus));
+  mount("course.whole", () => s.tracks.whole());
 }

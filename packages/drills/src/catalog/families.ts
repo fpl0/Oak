@@ -266,8 +266,8 @@ const rhythm: FamilyDef[] = [
       ["2/4", "U01.L08"],
       ["6/8", "U13.L04", ["3/4"]],
       ["12/8", "U13.L04"],
-      ["5/4", "R2.L01"],
-      ["7/8", "R2.L01"],
+      ["5/4", "R2.L01", ["4/4"]],
+      ["7/8", "R2.L01", ["4/4"]],
     ],
     base: base(2, KEYS1, "C", [84, 120], "none"),
     levels: [
@@ -395,7 +395,9 @@ const rhythm: FamilyDef[] = [
     gates: { 4: "R1.L02" },
     // U11.L07 (content/specs/U11.md): level 1 is "straight or swung" with FEEL_OPTIONS' ids; "swung" is the
     // long–short eighth at two thirds of the beat (the triplet feel, a word that waits for U13.L05); level 2
-    // adds a lighter and a harder swing (U11.CP "straight, swung, light, hard").
+    // adds a lighter and a harder swing (U11.CP "straight, swung, light, hard"). The amounts are content-kit
+    // `SWING_FEELS`' (light 3:2, swung 2:1, hard 3:1). Level 4 (R1.L02, content/specs/R1.md S4): the same four
+    // feels named by their ratio (`SWING_RATIO_OPTIONS`), on the eighths or the sixteenths.
     cats: [
       ["straight", "U11.L07", ["swung"]],
       ["swung", "U11.L07", ["straight"]],
@@ -407,7 +409,7 @@ const rhythm: FamilyDef[] = [
       { categories: ["straight", "swung"] },
       { categories: ["light", "hard"] },
       { categories: [], full: true },
-      { categories: [], sixteenths: true, tempo: [80, 100] },
+      { categories: [], ratios: true, tempo: [84, 112] },
     ],
     mastery: 2,
     n: 8,
@@ -425,14 +427,17 @@ const rhythm: FamilyDef[] = [
     skills: "R18",
     lesson: "R3.L01",
     gates: { 2: "R3.L02" },
+    // content/specs/R3.md: R3.L01 seeds level 1 (tresillo, cinquillo, straight, the rimshot over a fixed kick
+    // and hats); R3.L02 opens son 3-2 against 2-3 (the same hits in the two orders, over a two-bar bass that
+    // marks bar 1) and rumba beside son (one hit moved), level 4 the same in a full groove.
     cats: [
-      ["tresillo", "R3.L01"],
+      ["tresillo", "R3.L01", ["cinquillo"]],
       ["cinquillo", "R3.L01", ["tresillo"]],
       ["straight", "R3.L01"],
-      ["son-3-2", "R3.L02", ["son-2-3"]],
-      ["son-2-3", "R3.L02", ["son-3-2"]],
-      ["rumba-3-2", "R3.L02", ["son-3-2"]],
-      ["rumba-2-3", "R3.L02", ["son-2-3"]],
+      ["son-3-2", "R3.L02", ["son-2-3", "rumba-3-2"]],
+      ["son-2-3", "R3.L02", ["son-3-2", "rumba-2-3"]],
+      ["rumba-3-2", "R3.L02", ["son-3-2", "rumba-2-3"]],
+      ["rumba-2-3", "R3.L02", ["son-2-3", "rumba-3-2"]],
     ],
     base: base(2, drums, "C", [90, 120], "none"),
     levels: [
@@ -456,22 +461,25 @@ const rhythm: FamilyDef[] = [
     domain: "rhythm",
     skills: "R16",
     lesson: "R2.L01",
+    // content/specs/R2.md: R2.L01 writes 5/4 (3+2 and 2+3 in quarters) and hears 7/8 in its three groupings;
+    // R2.L02 adds 9/8 as 2+2+2+3 against 3+2+2+2. No 5/8: the course never meets it.
+    gates: { 3: "R2.L02" },
     cats: [
-      ["5/8:2+3", "R2.L01"],
-      ["5/8:3+2", "R2.L01", ["5/8:2+3"]],
-      ["7/8:2+2+3", "R2.L01"],
+      ["5/4:3+2", "R2.L01", ["5/4:2+3"]],
+      ["5/4:2+3", "R2.L01", ["5/4:3+2"]],
+      ["7/8:2+2+3", "R2.L01", ["7/8:2+3+2", "7/8:3+2+2"]],
       ["7/8:2+3+2", "R2.L01", ["7/8:2+2+3"]],
       ["7/8:3+2+2", "R2.L01", ["7/8:2+2+3"]],
-      ["9/8i:2+2+2+3", "R2.L02"],
-      ["9/8i:3+2+2+2", "R2.L02"],
+      ["9/8i:2+2+2+3", "R2.L02", ["9/8i:3+2+2+2"]],
+      ["9/8i:3+2+2+2", "R2.L02", ["9/8i:2+2+2+3"]],
     ],
-    base: base(2, drums, "C", [90, 130], "none"),
+    base: base(2, drums, "C", [110, 120], "none"),
     levels: [
-      { categories: ["5/8:2+3", "5/8:3+2"], only: true },
+      { categories: ["5/4:3+2", "5/4:2+3"], only: true },
       { categories: ["7/8:2+2+3", "7/8:2+3+2", "7/8:3+2+2"], only: true },
       { categories: ["9/8i:2+2+2+3", "9/8i:3+2+2+2"], only: true },
       {
-        categories: ["5/8:2+3", "5/8:3+2", "7/8:2+2+3", "7/8:2+3+2", "7/8:3+2+2"],
+        categories: ["5/4:3+2", "5/4:2+3", "7/8:2+2+3", "7/8:2+3+2", "7/8:3+2+2"],
         only: true,
         melodyOnly: true,
         instruments: KEYS1,
@@ -521,13 +529,15 @@ const rhythm: FamilyDef[] = [
     skills: "R17",
     lesson: "R2.L04",
     gates: { 4: "R2.L05" },
+    // content/specs/R2.md: R2.L04 hears 3:2 against 2:3 and straight, then 4:3 beside them, and taps the three
+    // over the two; R2.L05 tells a polymeter (a three-step cycle at four a bar) from a polyrhythm (three even
+    // beats against four). 5:4 is never taught, so it is never asked.
     cats: [
       ["3:2", "R2.L04", ["2:3"]],
       ["2:3", "R2.L04", ["3:2"]],
-      ["straight", "R2.L04"],
-      ["4:3", "R2.L04"],
+      ["straight", "R2.L04", ["3:2"]],
+      ["4:3", "R2.L04", ["3:2"]],
       ["tap-3-over-2", "R2.L04"],
-      ["5:4", "R2.L05"],
       ["3-vs-4-polymeter", "R2.L05"],
     ],
     base: base(2, drums, "C", [70, 100], "none"),
@@ -535,7 +545,7 @@ const rhythm: FamilyDef[] = [
       { categories: ["3:2", "2:3", "straight"] },
       { categories: ["4:3"] },
       { categories: ["tap-3-over-2"], only: true, tempo: [60, 84] },
-      { categories: ["5:4", "3-vs-4-polymeter"], only: true },
+      { categories: ["3-vs-4-polymeter"], only: true },
     ],
     mastery: 2,
     n: 6,
@@ -2025,9 +2035,14 @@ const jazz: FamilyDef[] = [
     skills: "J04 J05",
     lesson: "J1.L03",
     gates: { 2: "J2.L02" },
+    // content/specs/J1.md J1.L03 S6 and J2.md J2.L02 S5. Level 1: does a four-bar phrase that starts on the tonic
+    // END with a ii–V–I, against its two near misses (ii–V–vi lands deceptively; IV–V–I lands the same way from
+    // IV). Level 2: major ii–V–I against the minor ii–V–i (iiø7 V7♭9 i7, J2.L02's one altered colour). Level 3:
+    // where the ii–V–Is start in eight bars. Level 4: a chain of three ii–V–Is, the first key named.
     cats: [
-      ["ii-V-I", "J1.L03", ["I-IV-V"]],
-      ["I-IV-V", "J1.L03", ["ii-V-I"]],
+      ["ii-V-I", "J1.L03", ["ii-V-vi", "IV-V-I"]],
+      ["ii-V-vi", "J1.L03", ["ii-V-I"]],
+      ["IV-V-I", "J1.L03", ["ii-V-I"]],
       ["major-ii-V", "J2.L02", ["minor-ii-V"]],
       ["minor-ii-V", "J2.L02", ["major-ii-V"]],
       ["locate", "J2.L02"],
@@ -2035,7 +2050,7 @@ const jazz: FamilyDef[] = [
     ],
     base: base(2, KEYS2, "≤2acc", [100, 140], "none"),
     levels: [
-      { categories: ["ii-V-I", "I-IV-V"] },
+      { categories: ["ii-V-I", "ii-V-vi", "IV-V-I"] },
       { categories: ["major-ii-V", "minor-ii-V"], only: true, keys: "all" },
       { categories: ["locate"], only: true, keys: "all" },
       { categories: ["chain"], only: true, keys: "all" },
@@ -2056,11 +2071,14 @@ const jazz: FamilyDef[] = [
     domain: "jazz",
     skills: "J07 V06",
     lesson: "J1.L04",
+    // J1.L04: which voice moves, then the 3rd–7th thread over a ii–V–I (content/specs/J1.md). The other keys
+    // wait for J2.L01 (all twelve), the I–vi–ii–V turnaround for J4.L01, which names it.
+    gates: { 3: "J2.L01", 4: "J4.L01" },
     cats: [
       ["v7-i-voice", "J1.L04"],
       ["sing-3-7", "J1.L04"],
-      ["random-keys", "J1.L04"],
-      ["turnarounds", "J1.L04"],
+      ["random-keys", "J2.L01"],
+      ["turnarounds", "J4.L01"],
     ],
     base: base(2, KEYS2, "≤2acc", [72, 96], "none"),
     levels: [
@@ -2108,20 +2126,24 @@ const jazz: FamilyDef[] = [
     domain: "jazz",
     skills: "J02",
     lesson: "J2.L03",
+    // content/specs/J2.md J2.L03: 9, 11 and 13 are the lesson's (level 1 "7 against 9 against 13" on the V, the
+    // minor 9 against 11 on the ii); ♭9 is J2.L02's, ♯9 heard in J2.L03. The altered and Lydian colours (7alt,
+    // ♭13, maj7♯11) come with their scales at J2.L04. Every trial plays I–ii–V–I with the colour on its chord.
+    gates: { 4: "J2.L04" },
     cats: [
       ["7-9-13", "J2.L03"],
-      ["9-b9-s9", "J2.L03"],
-      ["maj7-s11-69", "J2.L03"],
       ["m7-m9-m11", "J2.L03"],
-      ["alt-13-b13", "J2.L03"],
+      ["9-b9-s9", "J2.L03"],
+      ["alt-13-b13", "J2.L04"],
+      ["maj7-s11-69", "J2.L04"],
     ],
-    base: base(2, KEYS2, "all", [80, 110], "none"),
+    base: base(2, KEYS2, "≤4acc", [80, 110], "none"),
     levels: [
       { categories: ["7-9-13"] },
-      { categories: ["9-b9-s9"] },
-      { categories: ["maj7-s11-69"] },
       { categories: ["m7-m9-m11"] },
+      { categories: ["9-b9-s9"] },
       { categories: ["alt-13-b13"] },
+      { categories: ["maj7-s11-69"] },
     ],
     mastery: 3,
     n: 8,

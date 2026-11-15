@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { capstones } from "../capstones.ts";
 import { checkpointMetas } from "../checkpoints.ts";
+import { PLANNED_DECKS, plannedDeckById } from "../decks/planned.ts";
 import { decks, FAMILY_TABLE } from "../families.ts";
 import { skills } from "../skills.ts";
 import { syllabus } from "../syllabus.ts";
@@ -119,9 +120,15 @@ describe("skill graph (§4.1)", () => {
 
 describe("family catalog (§7.3)", () => {
   const rows = lines.filter((l) => /^\| `(fam|deck)\.[^`]+` \|/.test(l)).map(cells);
+  // A deck row is written in `decks` or, until the drills engine writes it, planned (content/decks/planned.ts).
+  const written = new Set(decks.map((d) => d.id as string));
+  const planned = PLANNED_DECKS.filter((d) => !written.has(d.id)).map((d) => d.id);
   test("the same families and decks", () => {
     const ids = rows.map((r) => (r[0] as string).replaceAll("`", "")).sort();
-    expect<unknown>(ids).toEqual([...FAMILY_TABLE.keys(), ...decks.map((d) => d.id as string)].sort());
+    expect<unknown>(ids).toEqual([...FAMILY_TABLE.keys(), ...written, ...planned].sort());
+  });
+  test("a planned deck is never written and planned at once", () => {
+    for (const d of PLANNED_DECKS) expect<unknown>([d.id, written.has(d.id)]).toEqual([d.id, false]);
   });
   test("kind, first unlock lesson, nodes and mix match", () => {
     const KIND: Record<string, string> = {
@@ -138,7 +145,7 @@ describe("family catalog (§7.3)", () => {
       const firstLesson = /([UJRA]\d+\.L\d{2})/.exec(unlock as string)?.[1];
       if (id.startsWith("deck.")) {
         const d = decks.find((x) => x.id === id);
-        expect<unknown>([id, d?.unlock.lesson]).toEqual([id, firstLesson]);
+        expect<unknown>([id, d?.unlock.lesson ?? plannedDeckById.get(id)?.lesson]).toEqual([id, firstLesson]);
         continue;
       }
       const f = FAMILY_TABLE.get(id);

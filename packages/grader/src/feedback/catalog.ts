@@ -118,7 +118,7 @@ const entries: [string, Sev, string][] = [
   [
     "code.swing-fraction-string",
     E,
-    "A fraction inside quotes gives no swing: write the amount as a plain number, `.swingBy(1/3, 4)`.",
+    "A fraction inside quotes gives no swing: write the amount as a plain number, without quotes.",
   ],
   ["code.setcpm-missing", W, "{detail}: start with a tempo line like `setcpm({example})`."],
   ["code.setcpm-form", W, "Tempo line: {detail}."],
@@ -377,6 +377,37 @@ const entries: [string, Sev, string][] = [
     "You tapped {quarters} even beats to the bar. {meter} has {beats} beats of three eighths: {count}.",
   ],
   ["tap.kind-timing", I, "Your {kind} are {ms} ms {dir} against your on-beat notes."],
+  // Wave 7 (R1–R3, stage H): two lanes, timelines, the clave, odd groupings and the lay-back (@oak/pitch
+  // `gradeLaneTaps`, `gradeTimelineTaps`, `gradeClaveTaps`, `gradeGroupingTaps`, `gradeLayBackTaps`; the texts are
+  // pitch's `TRACK_TAP_FEEDBACK`, word for word: catalog-pitch-wave7.test.ts). Each says what the taps did; the
+  // pattern named is the one the step plays.
+  ["tap.lane-rushing", W, "Your {lane} is rushing against the {other}: its taps come {ms} ms early."],
+  ["tap.lane-dragging", W, "Your {lane} is dragging against the {other}: its taps come {ms} ms late."],
+  ["tap.lane-silent", E, "No taps on {key}: that hand plays the {lane} while the other plays the {other}."],
+  ["tap.lanes-swapped", E, "Your hands swapped parts: {keyA} tapped the {laneB} and {keyB} the {laneA}."],
+  ["tap.lanes-flam", I, "Where both hands play together, they landed {ms} ms apart."],
+  ["tap.timeline", W, "Bar {bar}: you tapped {got}. The pattern is {exp}."],
+  [
+    "tap.clave-direction",
+    W,
+    "You tapped the clave {got}, starting from its {gotFirst} side. This one runs {exp}: the {expFirst} side first.",
+  ],
+  [
+    "tap.clave-type",
+    W,
+    "You tapped a {got} clave: its three side ends {gotWhere}. This one is a {exp} clave, ending {expWhere}.",
+  ],
+  ["tap.grouping-order", W, "You tapped {got} ({gotWords}). This bar of {meter} goes {exp}: {expWords}."],
+  ["tap.grouping-even", W, "You tapped evenly, {every}. This bar of {meter} goes {exp}: {expWords}."],
+  ["tap.lay-back", I, "You sat {about}{ms} ms {dir} the beat (± {pm} ms): {word}."],
+  // Wave 7 (J2.L03, J3.L04): sung tensions and walking roots (@oak/pitch `gradeSungTensions` / `gradeSungRoots`;
+  // pitch's `JAZZ_SING_FEEDBACK`, word for word).
+  ["sing.tension", E, "Note {i}, over {chord}: you sang {gotRole} ({got}), {step} {dir} {expRole} ({exp})."],
+  [
+    "sing.root",
+    E,
+    "Note {i}, over {chord}: you sang {gotRole} ({got}). The bass walks from {expRole}, {exp}.",
+  ],
   // Wave 6 (U12.L05, U14, U15.L01): sung chromatic degrees, a mode's colour tone and guide-tone lines
   // (@oak/pitch `explainColourResult` / `gradeGuideTones`; the texts are pitch's `COLOUR_FEEDBACK`).
   [
@@ -450,6 +481,23 @@ const entries: [string, Sev, string][] = [
   ["kb.octave", W, "Right note, wrong octave: {got} instead of {exp}."],
   ["kb.bass", E, "The lowest note should be {exp}, not {got}."],
   ["kb.order", W, "Right notes, wrong order."],
+  // Wave 7 (`keyboard.voicing`, `staff-expect.voicing`): the shape played, never the notes that would be right.
+  ["kb.voicing", E, "That is {got}; the step asks for {want}."],
+  ["harmony.voicing-shape", E, "Chord {slot}: that is {got}; the step asks for {want}."],
+  // Wave 7 (`grouping` and `euclid` answers): what the learner's own answer is, not the answer.
+  ["id.grouping-count", E, "{got} adds up to {gotTotal}; this bar has {total}. Count the pulses again."],
+  ["id.grouping-order", W, "The right groups in another order ({got}): listen for which group comes first."],
+  ["id.grouping-wrong", E, "{got} is not how this bar falls: listen for where the accents land."],
+  [
+    "id.euclid-wrong",
+    E,
+    "{got} makes {k} hits over {n} steps, another rhythm: count the hits, then the steps.",
+  ],
+  [
+    "id.euclid-rotation",
+    W,
+    "{got} has the right hits and steps but starts from another hit: find where it begins.",
+  ],
   ["staff.wrong-note", E, "Bar {bar}, {beatLabel}: {got} should be {exp}."],
   ["staff.missing-note", E, "Bar {bar}, {beatLabel}: a note is missing."],
   ["staff.extra-note", E, "Bar {bar}, {beatLabel}: one note too many."],

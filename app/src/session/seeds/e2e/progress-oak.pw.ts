@@ -100,8 +100,8 @@ test("the Oak from real progress: U03's leaves after U03.L02; voice leaves wait 
   // U03.L02 grew the degree leaf; U04's intervals are not open yet.
   expect(levels.S02).not.toBe("new");
   await expect(page.locator('[data-node="I01"]')).toHaveAttribute("data-status", "locked");
-  await expect(page.locator('[data-node="V02"]')).toHaveAttribute("aria-label", /waiting for the mic/);
-  await expect(page.locator('[data-node="V02"]')).not.toHaveAttribute("aria-label", /today's warm-up/);
+  await expect(page.locator('[data-node="V02"]')).toHaveAttribute("aria-label", /waiting for the mic/i);
+  await expect(page.locator('[data-node="V02"]')).not.toHaveAttribute("aria-label", /today's warm-up/i);
   await expect(page.getByTestId("legend-quiet")).toBeVisible();
   await matrix(page, "oak-after-u03-l02", open);
 

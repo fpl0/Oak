@@ -218,9 +218,9 @@ function Extra({
           </p>
         ) : null}
         <ul className="flex flex-col gap-1">
-          {items.map((it) => (
+          {items.map((it, i) => (
             <li
-              key={it.text}
+              key={`${i}:${it.text}`}
               data-ok={it.ok ? "true" : "false"}
               className="flex flex-wrap items-center gap-1.5 text-text-2"
             >

@@ -24,6 +24,7 @@ import type {
   FactSwing,
   ReviewFacts,
 } from "./domain.ts";
+import { type W7FactsInput, w7FactLines, w7Facts } from "./review-facts-w7.ts";
 import { DEGREE_SYLLABLES, keyMoveText, MODE_COLOUR, modeOf } from "./vocabulary.ts";
 
 /** The part of `@oak/grader`'s `HarmonyView` the facts read. */
@@ -54,7 +55,7 @@ export interface NoteLike {
   beat: number;
 }
 
-export interface ReviewFactsInput {
+export interface ReviewFactsInput extends W7FactsInput {
   view?: HarmonyViewLike | null;
   analysis?: AnalysisLike | null;
   notes?: readonly NoteLike[];
@@ -198,6 +199,8 @@ export interface BluesViewLike {
 export interface TrackSwingLike {
   track: string;
   eighths: { ratio: number };
+  /** Wave 7: the 16th measure, read when the line swings its 16ths (RC1, AC2). */
+  sixteenths?: { ratio: number };
   swung: 8 | 16 | null;
 }
 
@@ -467,9 +470,12 @@ export function bluesFacts(view: BluesViewLike | null | undefined): FactBlues | 
 
 export function swingFacts(view: readonly TrackSwingLike[] | null | undefined): FactSwing[] {
   // Only lines whose eighths can be measured: a held chord or a bass on the beat says nothing about swing.
-  return (view ?? [])
-    .filter((t) => Number.isFinite(t.eighths.ratio))
-    .map((t) => ({ track: t.track, ratio: round2(t.eighths.ratio), swung: t.swung }));
+  // Wave 7: a line that swings its 16ths is told by its 16th ratio (its 8th measure says nothing about it).
+  return (view ?? []).flatMap((t) => {
+    const sixteen = t.swung === 16 && t.sixteenths && Number.isFinite(t.sixteenths.ratio);
+    const ratio = sixteen ? (t.sixteenths as { ratio: number }).ratio : t.eighths.ratio;
+    return Number.isFinite(ratio) ? [{ track: t.track, ratio: round2(ratio), swung: t.swung }] : [];
+  });
 }
 
 /** A transcription's checks as facts: score, mark and state; the expected notes are never part of a check. */
@@ -523,6 +529,17 @@ export function reviewFactsFrom(input: ReviewFactsInput): ReviewFacts {
   const stages = stageFacts(input.checks);
   if (stages.length > 0) w5.stages = stages;
   Object.assign(w5, w6Facts({ ...input, pickupBars: pickup }, form));
+  // Wave 7: the advanced tracks' views (ii–Vs, voicings, walking bass, devices, clave, feel, registers, levels …).
+  Object.assign(
+    w5,
+    w7Facts(input, {
+      pickup,
+      bars,
+      ...(form?.kind === "sections"
+        ? { sections: form.sections.map((x) => ({ name: x.name, bars: x.bars })) }
+        : {}),
+    }),
+  );
   return {
     // The key the brief gives wins over an estimate (contracts §6.8 item 1); a minor piece is never read in its
     // relative major.
@@ -602,6 +619,7 @@ export function factLines(f: ReviewFacts): string[] {
     lines.push(`chord_tones_on_strong_beats: ${Math.round(f.chordToneShare * 100)}%`);
   lines.push(...w5FactLines(f));
   lines.push(...w6FactLines(f));
+  lines.push(...w7FactLines(f));
   return lines;
 }
 
@@ -739,7 +757,23 @@ export function w6Facts(input: ReviewFactsInput, form: FactForm | null): Partial
   if (chroma) {
     const outside: FactOutsideChord[] = [];
     const sevenths: Record<string, number> = {};
+    // Wave 7: a chord struck again in its own bar (jazz comping: beat 1, then the "and" of 2) is one chord: its
+    // first attack is where it is, its last says where it goes. Without this a jazz blues read every I7 as an
+    // applied chord that "does not resolve" because it goes to itself.
+    const runs: (typeof chroma.chords)[number][] = [];
     for (const c of chroma.chords) {
+      const prev = runs.at(-1);
+      if (
+        prev &&
+        prev.bar === c.bar &&
+        prev.symbol === c.symbol &&
+        prev.rn === c.rn &&
+        keyName(prev.key) === keyName(c.key)
+      )
+        runs[runs.length - 1] = { ...c, bar: prev.bar, beat: prev.beat };
+      else runs.push(c);
+    }
+    for (const c of runs) {
       if (c.seventh) sevenths[c.seventh] = (sevenths[c.seventh] ?? 0) + 1;
       if (c.kind !== "applied" && c.kind !== "borrowed" && c.kind !== "other") continue;
       outside.push({
@@ -874,7 +908,11 @@ export function w6FactLines(f: ReviewFacts): string[] {
     g.at.push(`${c.bar}${c.beat === 1 ? "" : ` (beat ${c.beat})`}`);
     groups.set(key, g);
   }
+  // Wave 7: in a 12-bar blues the dominant sevenths of the form are its own chords (U11), not chords "the course
+  // does not teach": a chord the blues line lists is left to that line.
+  const bluesBars = new Set(f.blues?.variant ? f.blues.bars.filter((x): x is string => x !== null) : []);
   for (const { c, at } of [...groups.values()].slice(0, MAX_FACT_BARS)) {
+    if (c.kind === "other" && bluesBars.has(c.symbol.replace("♭", "b").replace("♯", "#"))) continue;
     const where = `bar${at.length === 1 ? "" : "s"} ${at.join(", ")}`;
     if (c.kind === "applied")
       lines.push(

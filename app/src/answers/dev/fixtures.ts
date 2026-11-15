@@ -13,6 +13,7 @@ import { rnMidis } from "../harmony.ts";
 import { parseSignatureValue } from "../keys/circle.ts";
 import { readsAs, type TextKind } from "../normalize.ts";
 import { emptyValue } from "../response.ts";
+import { groupingMarks, lanesReport, sameEuclid, splitLanes } from "../rhythm7.ts";
 import { valueDegrees } from "../scale.ts";
 import { centsText, degreeNotes } from "../sing.ts";
 import { engrave, normalizeStaffValue, staffChords, staffContext, staffNotes } from "../staff/model.ts";
@@ -28,6 +29,7 @@ import type {
 } from "../types.ts";
 import { WAVE5_FIXTURES } from "./fixtures-wave5.ts";
 import { WAVE6_FIXTURES } from "./fixtures-wave6.ts";
+import { WAVE7_FIXTURES } from "./fixtures-wave7.ts";
 
 export interface Fixture<K extends AnswerKind = AnswerKind> {
   id: string;
@@ -676,6 +678,7 @@ export const FIXTURES: Fixture[] = [
   ...WAVE5_FIXTURES,
   // --- Wave 6: rhythm II, sevenths, modes, chromatic harmony, key changes, the form map -------------------
   ...WAVE6_FIXTURES,
+  ...WAVE7_FIXTURES,
 ];
 
 /** The staged-dictation gallery's loop: I V vi IV in C, chords and a root bass (checked in fixtures.test.ts). */
@@ -806,16 +809,34 @@ export function demoMarks(
       const got = valueDegrees(value as (number | string)[], spec.tonic);
       return got.map((d, i) => ({ part: i, ok: want.has(d) }));
     }
+    case "grouping":
+      return groupingMarks(value as number[], expected as number[]);
+    case "euclid":
+      return [{ part: 0, ok: sameEuclid(value as number[], expected as number[]) }];
     case "slider":
       return [
         {
           part: 0,
           ok: Math.abs((value as number) - (expected as number)) <= 0.05 * Math.abs(spec.max - spec.min),
-          note: (value as number) > (expected as number) ? "a little fast" : "a little slow",
+          note: sliderNote(spec, (value as number) > (expected as number)),
         },
       ];
     default:
       return [{ part: 0, ok: same(value, expected) }];
+  }
+}
+
+/** The gallery host's word for a slider that is off, by what the slider sets. */
+function sliderNote(spec: AnswerSpecOf<"slider">, over: boolean): string {
+  switch (spec.format) {
+    case "hz":
+      return over ? "a little bright" : "a little dark";
+    case "ms":
+      return over ? "a little late" : "a little early";
+    case "swing":
+      return over ? "a little too swung" : "a little too straight";
+    default:
+      return over ? "a little fast" : "a little slow";
   }
 }
 
@@ -835,6 +856,21 @@ export function tapDemo(tap: NonNullable<AnswerEnv["tap"]>, startAt: number) {
 }
 
 export function demoCheck(f: Fixture, value: AnswerValue): AnswerFeedback {
+  // Wave 7: two lanes, each graded on its own (the taps' lanes come with the take; a stored take names them).
+  const lanes = f.spec.ui === "tap" ? f.env?.tap?.lanes : undefined;
+  if (f.spec.ui === "tap" && f.env?.tap && lanes && lanes.length >= 2) {
+    const tap = f.env.tap;
+    const start = tap.startAt ?? 0;
+    const cps = tapDemo(tap, start).cps;
+    const [a, b] = splitLanes(value as number[], tap.voices ?? []);
+    const at = (l: number) => targetSeconds(lanes[l]?.targets ?? [], start, cps);
+    return lanesReport(
+      [a, b],
+      [at(0), at(1)],
+      [lanes[0]?.label ?? "", lanes[1]?.label ?? ""],
+      NEUTRAL_PROFILE,
+    ).feedback;
+  }
   if (f.spec.ui === "tap") {
     const tap = f.env?.tap;
     if (!tap) return tapReport(value as number[], [], NEUTRAL_PROFILE).feedback;

@@ -52,6 +52,6 @@ export default defineConfig({
   publicDir: resolve(import.meta.dirname, "../../../app/public"),
   plugins: [react(), serveSoundPack()],
   // Crawl both pages up front: a dependency discovered mid-test would reload the page under the spec.
-  optimizeDeps: { entries: ["index.html", "render.html"] },
+  optimizeDeps: { entries: ["index.html", "render.html", "offline-test.html", "offline-render.html"] },
   server: { port: 5192, strictPort: true, host: "127.0.0.1" },
 });

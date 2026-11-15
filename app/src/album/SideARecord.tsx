@@ -1,4 +1,5 @@
-// The record: Side A, finished (content/specs/END.md "The record"; ux §5.3). Twelve covers in running order, the
+// The record: Side A, finished (content/specs/END.md "The record"; ux §5.3), and Side B, the eight track capstones
+// in release order (Wave 7, wave7.md §5.5), drawn by the same component. Twelve covers in running order, the
 // single last, the side's length, and one button that plays it from the first track to the last with a breath
 // between tracks. Used as the header of `/album` once every core track is released, and by the finale Coda
 // (`coda`: "Open the album" in place of the download). It never starts by itself, keeps playing while the page
@@ -26,7 +27,7 @@ import {
   recordFileName,
   recordTitleLine,
   type SideARecordView,
-  sideARecord,
+  sideRecord,
   TRACK_GAP_MS,
 } from "./model.ts";
 import { useCoverMusic } from "./music.ts";
@@ -35,6 +36,15 @@ import { zipStore } from "./zip.ts";
 
 /** Side A as the album and the Coda read it: every core capstone in running order with its released track. */
 export function useSideARecord(): { record: SideARecordView | null; isError: boolean; retry(): void } {
+  return useSideRecord("A");
+}
+
+/** One side as a record (Wave 7: Side B holds the eight track capstones, in release order). */
+export function useSideRecord(side: "A" | "B"): {
+  record: SideARecordView | null;
+  isError: boolean;
+  retry(): void;
+} {
   const album = useAlbum();
   const content = useCapstoneContent();
   const tracks = album.data?.tracks ?? [];
@@ -54,7 +64,7 @@ export function useSideARecord(): { record: SideARecordView | null; isError: boo
     details.flatMap((q) => (q.data ? [[q.data.id, q.data] as const] : [])),
   );
   return {
-    record: sideARecord(tracks, detailOf, content.data.capstones),
+    record: sideRecord(side, tracks, detailOf, content.data.capstones),
     isError: false,
     retry: () => void album.refetch(),
   };
@@ -67,7 +77,7 @@ export function pauseOtherAudio(el: HTMLAudioElement | null): void {
 }
 
 /** Fetches every recording of the side and hands the browser one archive. */
-async function downloadSide(record: SideARecordView, albumTitle: string): Promise<number> {
+async function downloadSide(record: SideARecordView, albumTitle: string, side: "A" | "B"): Promise<number> {
   const entries = [];
   for (const t of record.playable) {
     if (!t.trackId || t.version === null) continue;
@@ -86,7 +96,7 @@ async function downloadSide(record: SideARecordView, albumTitle: string): Promis
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "") || "album";
   a.href = url;
-  a.download = `${slug}-side-a.zip`;
+  a.download = `${slug}-side-${side.toLowerCase()}.zip`;
   document.body.append(a);
   a.click();
   a.remove();
@@ -95,7 +105,14 @@ async function downloadSide(record: SideARecordView, albumTitle: string): Promis
 }
 
 export function SideARecord({ coda = false }: { coda?: boolean }) {
-  const { record, isError, retry } = useSideARecord();
+  return <SideRecord side="A" coda={coda} />;
+}
+
+/** One side of the record: its covers in running order, Play from first to last, its recordings in one archive. */
+export function SideRecord({ side, coda = false }: { side: "A" | "B"; coda?: boolean }) {
+  const { record, isError, retry } = useSideRecord(side);
+  const low = side.toLowerCase();
+  const sideName = `Side ${side}`;
   const album = useAlbumTitle();
   const audio = useRef<HTMLAudioElement>(null);
   const gap = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -131,7 +148,7 @@ export function SideARecord({ coda = false }: { coda?: boolean }) {
       // Stopped (or moved to another track) before it began: not a failure.
       if (err instanceof DOMException && err.name === "AbortError") return;
       setPlaying(null);
-      toast.error("The record didn't start", "Press Play Side A again.");
+      toast.error("The record didn't start", `Press Play ${sideName} again.`);
     });
   };
   // At the end of a track: a breath, then the next one (the outline stays on the track that just ended until the
@@ -155,7 +172,7 @@ export function SideARecord({ coda = false }: { coda?: boolean }) {
 
   if (isError)
     return (
-      <section aria-label="Side A" className="rounded-card border border-border bg-surface p-4">
+      <section aria-label={sideName} className="rounded-card border border-border bg-surface p-4">
         <p className="text-text-2">The record is not available right now.</p>
         <Button size="sm" className="mt-2" onClick={retry}>
           Try again
@@ -164,15 +181,15 @@ export function SideARecord({ coda = false }: { coda?: boolean }) {
     );
   if (!record)
     return (
-      <section aria-label="Side A" aria-busy="true" data-testid="side-a-record" data-state="loading">
+      <section aria-label={sideName} aria-busy="true" data-testid={`side-${low}-record`} data-state="loading">
         <Skeleton className="mb-3 h-6 w-72" />
         <div className="grid grid-cols-4 gap-3 min-[1400px]:grid-cols-6">
-          {Array.from({ length: 12 }, (_, i) => (
+          {Array.from({ length: side === "A" ? 12 : 8 }, (_, i) => (
             <Skeleton key={i} className="aspect-square w-full" />
           ))}
         </div>
         <Button variant="primary" className="mt-4" disabled icon={<Play aria-hidden className="size-4" />}>
-          Play Side A
+          Play {sideName}
         </Button>
       </section>
     );
@@ -199,9 +216,9 @@ export function SideARecord({ coda = false }: { coda?: boolean }) {
 
   return (
     <section
-      aria-labelledby="side-a-heading"
+      aria-labelledby={`side-${low}-heading`}
       className="flex flex-col gap-4"
-      data-testid="side-a-record"
+      data-testid={`side-${low}-record`}
       data-state={playing ? "playing" : "stopped"}
       onKeyDown={onKey}
       onKeyUp={onKey}
@@ -210,7 +227,7 @@ export function SideARecord({ coda = false }: { coda?: boolean }) {
       <audio
         ref={audio}
         className="hidden"
-        data-testid="side-a-player"
+        data-testid={`side-${low}-player`}
         onTimeUpdate={(e) => setElapsed(e.currentTarget.currentTime)}
         onPause={(e) => {
           // Paused from outside (another player on the page started): the record stops. The end of a track is not
@@ -230,12 +247,15 @@ export function SideARecord({ coda = false }: { coda?: boolean }) {
       />
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div className="min-w-0">
-          <p className="text-sm tracking-[0.2em] text-text-3 uppercase">Side A</p>
-          <h2 id="side-a-heading" className="font-display text-h2" data-testid="side-a-title">
+          <p className="text-sm tracking-[0.2em] text-text-3 uppercase">
+            {sideName}
+            {side === "B" ? " · the tracks" : ""}
+          </p>
+          <h2 id={`side-${low}-heading`} className="font-display text-h2" data-testid={`side-${low}-title`}>
             {/* On the album's own page the name stands above, as its heading. */}
             {coda
-              ? recordTitleLine(album.title, record)
-              : recordTitleLine(album.title, record).split(" · ").slice(2).join(" · ")}
+              ? recordTitleLine(album.title, record, side)
+              : recordTitleLine(album.title, record, side).split(" · ").slice(2).join(" · ")}
           </h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -247,9 +267,9 @@ export function SideARecord({ coda = false }: { coda?: boolean }) {
               playing ? <Square aria-hidden className="size-4" /> : <Play aria-hidden className="size-4" />
             }
             onClick={() => (playing ? stop() : play(first))}
-            data-testid="play-side-a"
+            data-testid={`play-side-${low}`}
           >
-            {playing ? "Stop" : "Play Side A"}
+            {playing ? "Stop" : `Play ${sideName}`}
           </Button>
           {coda ? (
             <Link to="/album" className={buttonClass("secondary")} data-testid="open-album">
@@ -263,7 +283,7 @@ export function SideARecord({ coda = false }: { coda?: boolean }) {
               onClick={async () => {
                 setZipping(true);
                 try {
-                  const n = await downloadSide(record, album.title);
+                  const n = await downloadSide(record, album.title, side);
                   if (n === 0) toast.info("No recording to download yet.");
                   else toast.success(`${n} ${n === 1 ? "recording" : "recordings"} in one archive.`);
                 } catch (e) {
@@ -272,7 +292,7 @@ export function SideARecord({ coda = false }: { coda?: boolean }) {
                   setZipping(false);
                 }
               }}
-              data-testid="download-side-a"
+              data-testid={`download-side-${low}`}
             >
               Download every recording
             </Button>
@@ -287,14 +307,18 @@ export function SideARecord({ coda = false }: { coda?: boolean }) {
             : "Plays from the first track to the last. A cover plays from that track on."}
       </p>
       <ol
-        className="grid grid-cols-4 gap-x-3 gap-y-4 min-[1400px]:grid-cols-6"
-        aria-label="Side A, in running order"
+        className={clsx(
+          // Both sides in the same grid: Side B's eight covers are as large as Side A's, two rows.
+          "grid grid-cols-4 gap-x-3 gap-y-4 min-[1400px]:grid-cols-6",
+        )}
+        aria-label={`${sideName}, in ${side === "A" ? "running" : "release"} order`}
       >
         {record.tracks.map((t) => (
           <li key={t.capstoneId} className="min-w-0">
             <Cover
               t={t}
               playing={playing?.no === t.no}
+              side={side}
               onPlay={() => play(t)}
               register={(el) => {
                 if (el) covers.current.set(t.no, el);
@@ -311,19 +335,24 @@ export function SideARecord({ coda = false }: { coda?: boolean }) {
 function Cover({
   t,
   playing,
+  side,
   onPlay,
   register,
 }: {
   t: RecordTrack;
   playing: boolean;
+  side: "A" | "B";
   onPlay(): void;
   register(el: HTMLButtonElement | null): void;
 }) {
   const { music, pending } = useCoverMusic(t.sketch, t.flavour);
   const caption = (
-    <span className="mt-1.5 flex min-w-0 items-baseline gap-1.5 text-left text-sm">
+    <span className="mt-1.5 flex min-w-0 items-baseline gap-1.5 text-left text-sm leading-snug">
       <span className="font-display text-text-3 tabular-nums">{t.no}</span>
-      <span className="min-w-0 flex-1 truncate font-medium">{t.title}</span>
+      {/* A long title takes a second line rather than lose its words ("Reharmonize a Standard"). */}
+      <span className="line-clamp-2 min-w-0 flex-1 font-medium" title={t.title}>
+        {t.title}
+      </span>
       <span className="shrink-0 text-text-3 tabular-nums">
         {t.hasAudio && t.durationS ? formatDuration(t.durationS) : ""}
       </span>
@@ -347,7 +376,9 @@ function Cover({
         aria-disabled={!t.hasAudio}
         aria-pressed={playing}
         aria-label={
-          t.hasAudio ? `${t.no}. ${t.title}: play Side A from here` : `${t.no}. ${t.title}: no recording yet`
+          t.hasAudio
+            ? `${t.no}. ${t.title}: play Side ${side} from here`
+            : `${t.no}. ${t.title}: no recording yet`
         }
         onClick={() => {
           if (t.hasAudio) onPlay();

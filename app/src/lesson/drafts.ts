@@ -14,6 +14,13 @@ export const DRAFT_UIS: ReadonlySet<AnswerSpec["ui"]> = new Set<AnswerSpec["ui"]
   // Wave 6 review: notes written on a staff (U13.L03's tied and dotted bars are a dozen keys or clicks) were lost
   // on a reload while a line of numerals came back.
   "staff-input",
+  // Wave 7 review (review:journey): the track widgets built from several picks came back empty after a reload —
+  // a hand voicing on the keyboard (J1.L05 shells, J3.L01 rootless), a bar cut into 2s and 3s (R2), a Euclidean
+  // rhythm's three numbers (R3), the parts placed on the register map (A2).
+  "keyboard",
+  "grouping",
+  "euclid",
+  "slot-choice",
 ]);
 
 export function keepsDraft(spec: AnswerSpec | null): boolean {
@@ -65,6 +72,12 @@ export function draftFits(spec: AnswerSpec, empty: unknown, value: unknown): boo
   if (!Array.isArray(value) || !Array.isArray(empty)) return false;
   const plain = value.every((v) => typeof v === "string" || typeof v === "number");
   if (!plain) return false;
+  const ints = (lo: number, hi: number) =>
+    value.every((v) => typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi);
+  // Keys picked (MIDI notes), a bar's groups of 2 and 3, a Euclidean rhythm's k, n (and r).
+  if (spec.ui === "keyboard") return value.length >= 1 && value.length <= 24 && ints(0, 127);
+  if (spec.ui === "grouping") return value.length >= 1 && value.length <= 16 && ints(1, 4);
+  if (spec.ui === "euclid") return (value.length === 2 || value.length === 3) && ints(0, 64);
   // The scale builder and a form map grow and shrink with the learner's picks.
   if (spec.ui === "scale-builder") return value.length <= 24;
   if (spec.ui === "form" && spec.input === "map") return value.length >= 1 && value.length <= 64;

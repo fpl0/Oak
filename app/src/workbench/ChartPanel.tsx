@@ -20,6 +20,8 @@ export interface ChartPanelProps {
   currentBar: number | null;
   /** The code's own length in bars (its period), when longer than the bars analysed. */
   period: number | null;
+  /** Wave 7: jazz glyphs (D–7, C∆7) once the learner turned them on, as the chord band and the staff print them. */
+  chordStyle?: "lead-sheet" | "jazz";
 }
 
 export function ChartPanel(p: ChartPanelProps) {
@@ -37,8 +39,9 @@ export function ChartPanel(p: ChartPanelProps) {
         meter: p.meter,
         key: null,
         ...(p.swing ? { swing: { subdivision: p.swing, amount: 1 / 3 } } : {}),
+        ...(p.chordStyle === "jazz" ? { chordStyle: "jazz" as const } : {}),
       }),
-    [input, p.meter, p.swing],
+    [input, p.meter, p.swing, p.chordStyle],
   );
   useEffect(() => {
     const el = host.current;

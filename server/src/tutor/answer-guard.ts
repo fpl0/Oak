@@ -13,6 +13,20 @@
 // stricter than the matrix's "fix for the first issue at rung 3" on purpose: on these steps the expected value IS
 // the answer, so redaction.ts withholds a fix or expected value that names it below 4 too. Elements the learner is shown anyway (in the prompt, the starter code or a constraint) are not
 // secrets. Pure; the streaming guard is incremental like markup-guard.ts.
+
+import {
+  euclidAnswer,
+  euclidForms,
+  groupingAnswer,
+  groupingForms,
+  jazzChordPattern,
+  jazzChordTokens,
+  voicingShapeAnswer,
+  voicingShapeForms,
+  type W7Form,
+  w7ChoiceForms,
+  w7CodeForms,
+} from "./answer-guard-w7.ts";
 import type { Rung, StepSource } from "./domain.ts";
 import { MIN_LEVEL } from "./redaction.ts";
 import { DEGREE_SYLLABLES, MODE_COLOUR, MODE_DEGREES, modeOf, tonicPcOf } from "./vocabulary.ts";
@@ -46,8 +60,9 @@ export const WITHHELD = "(withheld until you reveal it)";
 // code writes (C^7, Bo7, Bm7b5).
 const RN =
   /^[b#♭♯]?(?:VII|VI|IV|V|III|II|I|vii|vi|iv|v|iii|ii|i)(?:maj7|M7|ø7|o7|o|°|ø|\+|7|6|64|65|43|42|2)?(?:\/[b#]?(?:VII|VI|IV|V|III|II|I|vii|vi|iv|v|iii|ii|i))?$/;
+// Wave 7: the jazz qualities (G7alt, Bb13, Cm9, C69, D7b9, Ebmaj7#11, C^9, Cm^7, G7sus4).
 const CHORD =
-  /^[A-G][#b♯♭]?(?:m7b5|maj7|maj9|M7|\^7|m7|m9|m6|dim7|o7|dim|aug|sus2|sus4|m|o|°|ø7?|\+|7|6|9)?(?:\/[A-G][#b♯♭]?)?$/;
+  /^[A-G][#b♯♭]?(?:maj7#11|\^7#11|m7b5|mMaj7|m\^7|7sus4|7alt|7b9|7#9|7#11|7b13|maj7|maj9|\^9|M7|\^7|m11|m7|m9|m6|dim7|o7|dim|aug|sus2|sus4|alt|69|13|11|m|o|°|ø7?|\+|7|6|9)?(?:\/[A-G][#b♯♭]?)?$/;
 const NOTE = /^[A-Ga-g][#b♯♭]?-?\d$/;
 const DEG = /^[b#♭♯]?[1-7]$/;
 const QUALITY = /^(?:major|minor|diminished|augmented|maj|min|dim|aug)$/i;
@@ -133,6 +148,9 @@ function degreePattern(
 /** One element, as a music token or a bare word; `bare: false` matches the token form only. */
 function elementPattern(token: string, kind: AnswerElementKind, bare: boolean, syllables = false): string {
   if (kind === "deg") return degreePattern(token, bare, { exact: !syllables && bare === false, syllables });
+  // Wave 7: a seventh or jazz chord in every spelling of its quality (Dm7 = D–7 = Dmin7, C^7 = C∆7 = Cmaj7).
+  const jazz = kind === "chord" ? jazzChordPattern(token, bare) : null;
+  if (jazz !== null) return jazz;
   // A numeral's leading b or # is its accidental (bVI, ♭VI); a note's leading b is the note B.
   const lead = kind === "rn" ? /^[b#]/.exec(flat(token))?.[0] : undefined;
   const body = lead
@@ -888,7 +906,8 @@ export function answerForms(step: StepSource, alsoShown: string | null = null): 
         `${from} ${e.kind}: ${e.token}`,
         elementPattern(e.token, e.kind, bareIsSpecific(e.token, e.kind)),
         minLevel,
-        [e.token],
+        // Wave 7: a jazz chord arrives in any of its spellings (D–7, Dmin7), so the streaming guard holds them all.
+        e.kind === "chord" ? [e.token, ...jazzChordTokens(e.token)] : [e.token],
       );
     }
     // Wave 6: an applied or borrowed numeral in its other names ("five of five", "flat six", and its chord symbol
@@ -1019,8 +1038,42 @@ export function answerForms(step: StepSource, alsoShown: string | null = null): 
       });
   };
 
+  // --- Wave 7: forms from answer-guard-w7.ts ---
+  const shownAll = `${shownRaw}\n${alsoShown ?? ""}`;
+  const addW7 = (list: readonly W7Form[]) => {
+    for (const f of list)
+      add(f.label, f.source, MIN_LEVEL.solution, f.tokens, {
+        ...(f.accept ? { accept: f.accept } : {}),
+        ...(f.sentence ? { sentence: true } : {}),
+      });
+  };
+  const w7Named = (answer: string): boolean => {
+    const shape = voicingShapeAnswer(answer);
+    if (shape !== null) {
+      addW7(voicingShapeForms(shape, shownAll));
+      return true;
+    }
+    const groups = kind === "grouping" || answer.includes("+") ? groupingAnswer(answer) : null;
+    if (groups !== null) {
+      addW7(groupingForms(groups, shownAll));
+      return true;
+    }
+    const e = kind === "euclid" || answer.includes("(") ? euclidAnswer(answer) : null;
+    if (e !== null) {
+      addW7(euclidForms(e, shownAll));
+      return true;
+    }
+    const choice = w7ChoiceForms(answer, shownAll);
+    if (choice !== null) {
+      addW7(choice);
+      return true;
+    }
+    return false;
+  };
+
   for (const s of step.solutions) {
     if (looksLikeCode(s)) {
+      addW7(w7CodeForms(s, shownAll));
       // Wave 5: an arranged piece's section order, unless the step already shows it (the chords line's arrange()).
       const sections = arrangeSequence(s);
       if (sections !== null) formOf(sections, "names", "arrange");
@@ -1117,12 +1170,15 @@ export function answerForms(step: StepSource, alsoShown: string | null = null): 
       else if (/^\d+(?:[\s,]+\d+)+$/.test(s.trim())) mapBarsOf(s);
     } else if (kind === "bar-grid") {
       if (!gridOf(s)) fromElements(s, "answer");
+    } else if (kind === "keyboard" && /^\d{2,3}(?:[\s,]+\d{2,3}){2,}$/.test(s.trim())) {
+      // Wave 7: a voicing played on the keyboard (MIDI numbers): its notes, in any octave and any order.
+      scaleOf(s);
     } else if (kind === "scale-builder") {
       if (!scaleOf(s)) fromElements(s, "answer");
       else scaleModeOf(s);
     } else if ((kind === "quality-pad" || /7|seventh/i.test(s)) && qualitiesOf(s)) {
       // A quality pad's qualities (Wave 6: the five sevenths).
-    } else if (modeNamed(s) || choiceNamed(s) || keyNamed(s)) {
+    } else if (w7Named(s) || modeNamed(s) || choiceNamed(s) || keyNamed(s)) {
       // A mode, a standard choice or a key, named in words.
     } else fromElements(s, "answer");
   }
@@ -1294,7 +1350,12 @@ export function answerKindOf(step: StepSource): string | null {
   const forms = answerForms(step);
   const kinds = new Set(forms.map((f) => /^\S+ (rn|chord|note|sequence)/.exec(f.label)?.[1] ?? f.label));
   if (forms.some((f) => f.label.startsWith("key: "))) return "key plan";
-  if (forms.some((f) => f.label.startsWith("shift: "))) return "rhythm shift";
+  if (forms.some((f) => f.label.startsWith("shift: ") || f.label.startsWith("shift .")))
+    return "rhythm shift";
+  // Wave 7: code whose answer is a swing amount, a Euclidean rhythm or a voicing's control.
+  if (forms.some((f) => f.label.startsWith("swingBy amount"))) return "swing amount";
+  if (forms.some((f) => f.label.startsWith("euclid"))) return "euclidean rhythm";
+  if (forms.some((f) => /^(?:anchor|offset|mode) /.test(f.label))) return "voicing control";
   if ([...kinds].some((k) => k === "rn")) return "numerals";
   if ([...kinds].some((k) => k === "chord")) return "chords";
   if ([...kinds].some((k) => k === "note")) return "notes";

@@ -238,28 +238,37 @@ test("CF-A's fourth session: the lessons of the core are done, the single is lef
   expect(errors).toEqual([]);
 });
 
-test("the tracks open: one honest line on Today, the core still the session, nothing to start that is not written", async ({
+test("the tracks open: the core is still the session; Jazz and Rhythm are offered beside it, one quiet row each", async ({
   page,
   request,
 }) => {
-  const errors = watch(page, [/\/api\/tutor/]);
+  const errors = watch(page, [/\/api\/tutor/, /\/api\/tracks\/focus$/]);
   await seed(request, "tracks open (after U13.CP)");
   const plan = await planOf(request);
+  // The core stays the New block (contracts §2.6; wave7.md §5.2: focus "core" while the core is unfinished).
   expect(plan).toMatchObject({ kind: "lesson", mapItemId: "U14.L02" });
-  expect(plan.tracks).toMatchObject({ open: ["J", "R"], lessonsAuthored: false });
+  expect(plan.tracks ?? null).toBeNull();
   await useUiPrefs(page, { theme: "paper" });
   const open = async (p: Page) => {
     await openToday(p);
-    await expect(p.getByTestId("tracks-line")).toBeVisible({ timeout: 20_000 });
+    await expect(p.getByTestId("track-offers")).toBeVisible({ timeout: 20_000 });
   };
   await open(page);
   await expect(page.getByTestId("today-card")).toHaveAttribute("data-state", "normal");
-  await expect(page.getByTestId("tracks-line")).toContainText(plan.tracks?.note ?? "no note");
-  await expect(page.getByTestId("tracks-line")).toContainText("still being written");
-  // The line is a line: its only link goes to the Oak; no button starts a track.
-  await expect(page.getByTestId("tracks-line").getByRole("button")).toHaveCount(0);
+  const offers = page.getByTestId("track-offers");
+  await expect(offers.getByTestId("track-lead")).toHaveText(
+    "The core is today's session. The open tracks are beside it, never in its place.",
+  );
+  await expect(offers.locator('[data-offer="J"]')).toContainText("J1.L01 Swing Feel & the Ride");
+  await expect(offers.locator('[data-offer="R"]')).toContainText("R1.L01 Metric Weight");
+  // One primary action: Start. An offer is a quiet secondary button; nothing reads as required or counts down.
+  await expect(page.locator('[data-testid="start-session"]')).toHaveCount(1);
+  await expect(
+    offers.getByRole("button", { name: "Start J1.L01 Swing Feel & the Ride instead" }),
+  ).toBeVisible();
+  await expect(page.getByTestId("tracks-line")).toHaveCount(0);
   await expect(page.getByTestId("other-ways")).not.toContainText(/Jazz|Rhythm/);
-  await expect(page.locator("main")).not.toContainText(/required|behind|lessons left/i);
+  await expect(page.locator("main")).not.toContainText(/required|behind|lessons left|still being written/i);
   await matrix(page, "w6-today-tracks", open);
   await startByEnter(page);
   expect((await sessionState(page)).plan).toMatchObject({ kind: "lesson", mapItemId: "U14.L02" });
@@ -274,7 +283,9 @@ test("the day after the ending: an ordinary review day with what is open under i
   await seed(request, "core complete");
   const plan = await planOf(request);
   expect(plan.core).toBe("complete");
-  expect(plan.tracks?.note).toBeTruthy();
+  // Wave 7 (wave7.md §5.2): with no track chosen, the day after the core is an ordinary review or gym day, and the
+  // open tracks are offered beside it (they are never planned in its place before the learner picks one).
+  expect(["review", "gym"]).toContain(plan.kind);
   const completion = await api<{
     stage: string;
     open: { kind: string; title: string; note: string; available: boolean }[];
@@ -305,12 +316,12 @@ test("the day after the ending: an ordinary review day with what is open under i
   await expect(list).toHaveAttribute("data-stage", "complete");
   await expect(list.getByRole("heading", { name: "Open to you" })).toBeVisible();
   const startable = completion.open.filter(
-    (o) => o.available && o.kind !== plan.kind && o.kind !== "side-lesson",
+    (o) => o.available && o.kind !== plan.kind && o.kind !== "side-lesson" && o.kind !== "track",
   );
   for (const o of startable) await expect(list).toContainText(o.title);
-  await expect(list.getByTestId("tracks-line")).toContainText(plan.tracks?.note ?? "no note");
-  // A track with no lesson is named and is not a button or a link to a lesson.
-  await expect(list.locator('a[href^="/learn/J"], a[href^="/learn/R"]')).toHaveCount(0);
+  // The tracks have their own offers (one row each, "Start this instead"), never listed twice in "Open to you".
+  await expect(page.getByTestId("track-offers").locator('[data-offer="J"]')).toContainText("J1.L01");
+  await expect(list.locator('[data-open="track"]')).toHaveCount(0);
   await expect(page.locator("main")).not.toContainText(NEVER);
   await matrix(page, "w6-today-after-core", open);
   // Keyboard: Enter starts the planned session, as on any day.

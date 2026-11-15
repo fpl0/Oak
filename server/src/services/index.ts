@@ -5,7 +5,7 @@ import type { GradeRequest } from "@oak/grader";
 import { freshness as cardFreshness } from "@oak/srs";
 import type { OakConfig } from "../config.ts";
 import { ApiError } from "../errors.ts";
-import { CourseAdapter } from "../srs-wiring.ts";
+import { CourseAdapter, nextSessionOf } from "../srs-wiring.ts";
 import { AudioStore } from "./audio-store.ts";
 import { BackupService } from "./backup.ts";
 import { CanDoService } from "./cando.ts";
@@ -24,6 +24,7 @@ import type { SrsPort } from "./ports.ts";
 import { SessionsService } from "./sessions.ts";
 import { SideLessonsService } from "./side-lessons.ts";
 import { StreakService } from "./streak.ts";
+import { TrackPlanService } from "./track-plan.ts";
 import { TracksService } from "./tracks.ts";
 import { UnlocksService } from "./unlocks.ts";
 import { VoiceService } from "./voice.ts";
@@ -52,6 +53,8 @@ export interface Services {
   sideLessons: SideLessonsService;
   /** Wave 6: the advanced tracks' recorded gates and the end of the core (wave6.md §5.3, §5.5). */
   tracks: TracksService;
+  /** Wave 7: the tracks as sessions, the learner's focus, the whole course (wave7.md §5). */
+  trackPlan: TrackPlanService;
 }
 
 export interface ServiceOptions {
@@ -90,7 +93,9 @@ export function createServices(ctx: ServiceContext, opts: ServiceOptions): Servi
   const cando = new CanDoService(ctx, { sourceDone, freshness });
   const capstoneSessions = new CapstoneSessionsService(ctx, { gates, mastery, streak });
   const sideLessons = new SideLessonsService(ctx, gates);
+  const trackPlan = new TrackPlanService(ctx, { gates });
   const tracks = new TracksService(ctx, {
+    plan: trackPlan,
     gates,
     sideLesson: () => {
       const list = sideLessons.list();
@@ -123,6 +128,8 @@ export function createServices(ctx: ServiceContext, opts: ServiceOptions): Servi
     tutorOff: () => ctx.repos.settings.get("tutor").backend === "off",
     gymSummary: (id) => services.gym.summary(id),
     tracks,
+    trackPlan,
+    nextSession: () => nextSessionOf(services),
   });
   const library = new LibraryService(ctx, {
     streak,
@@ -192,6 +199,7 @@ export function createServices(ctx: ServiceContext, opts: ServiceOptions): Servi
     gym,
     sideLessons,
     tracks,
+    trackPlan,
   };
   return services;
 }

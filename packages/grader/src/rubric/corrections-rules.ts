@@ -15,6 +15,7 @@ import { chordsOfRomans } from "../analyze/chords.ts";
 import { locAt, mod12, onsets, pitched, ratKey } from "../analyze/events.ts";
 import { periodOf, selectTrack, selectTracks } from "../analyze/tracks.ts";
 import { noteName } from "../match/common.ts";
+import { adsrValues } from "../match/controls.ts";
 import type { Normalized } from "../types.ts";
 import type { RubricContext } from "./context.ts";
 import { voicedChords } from "./harmony-rules.ts";
@@ -1162,7 +1163,7 @@ const swungOffbeats: CorrectionRule = (n, ctx, p) => {
     detail: ok
       ? `${plural(offs.length, "note")} between the beats in ${trackWord(ref)}, all long–short`
       : bad
-        ? `${placeText(bad.at, ctx)} in ${trackWord(ref)} divides its beat ${ratioText(bad.ratio)}${bad.ratio < lo ? ", straight" : ""}; a shuffle plays it later, ${ratioText(lo)} to ${ratioText(hi)}: add \`.swingBy(1/3, 4)\` to that line`
+        ? `${placeText(bad.at, ctx)} in ${trackWord(ref)} divides its beat ${ratioText(bad.ratio)}${bad.ratio < lo ? ", straight" : ""}; a shuffle plays it later, ${ratioText(lo)} to ${ratioText(hi)}`
         : `${trackWord(ref)} has no note between the beats to swing`,
     ...(bad ? { where: locAt(bad.at, ctx) } : {}),
   };
@@ -1207,7 +1208,7 @@ const voicedWith: CorrectionRule = (n, _ctx, p) => {
       ok: false,
       value: 0,
       target: minRatio,
-      detail: `no chord in ${trackWord(ref)} is voiced from a chord name: write \`chord(…).dict("${dict}").voicing()\``,
+      detail: `no chord in ${trackWord(ref)} is voiced from a chord name with the \`${dict}\` dictionary yet`,
     };
   const good = voiced.filter((e) => e.voicedWith === dict).length;
   const ratio = good / voiced.length;
@@ -1397,29 +1398,208 @@ const echo: (deps: CorrectionDeps) => CorrectionRule = (deps) => (n, ctx, p) => 
  * (default every learner track) has the sound control `control` (Strudel's value key, as `NEvent.controls` keeps it:
  * `room`, `lpenv`, `attack`, `delaytime`, …) set to a number that changes the sound: above `above` (default 0), or,
  * with `not`, any number other than `not` (the control's neutral value). `.room(0)` is a dry sound. params: `call`
- * (the method name the learner writes, default `control`), `example` (a value to suggest, default ".4"), `share`
+ * (the method name the learner writes, default `control`), `example` (a value to suggest; none by default, so the
+ * detail names no answer below rung 4 unless the content chooses to), `share`
  * (corrections gate: at least this share of the line's notes must have it, so `"<0 0 0 .4>"` is three bars dry;
  * default any one note).
  */
+/**
+ * Wave 7 Build (A1.L01–L07, AC1; the A1 spec's grader request 2): a control set to a value that is heard is not
+ * enough when another control silences it. superdough builds the vibrato only with depth (`vibmod`), the phaser and
+ * the tremolo only with depth, the filter LFO (`lprate`, `lpdepth`) only on a filtered sound, the delay's time and
+ * feedback only with a delay level, the reverb's size only with a reverb level, FM only on a synth (a sample has no
+ * oscillator to modulate). `partials` sounds when it holds two or more harmonics (one is a sine).
+ */
+const SYNTHS = new Set(["sine", "sawtooth", "saw", "square", "triangle", "supersaw", "pulse", "sbd"]);
+function silencedBy(control: string, e: NEvent): string | null {
+  const c = e.controls ?? {};
+  const v = (k: string): number | null => (typeof c[k] === "number" ? (c[k] as number) : null);
+  const zero = (k: string) => v(k) !== null && Math.abs(v(k) as number) < 1e-9;
+  if (control === "vib" && zero("vibmod")) return "the vibrato has no depth";
+  if (control === "phaserrate" && zero("phaserdepth")) return "the phaser has no depth";
+  if (control === "tremolosync" && zero("tremolodepth")) return "the tremolo has no depth";
+  if ((control === "lprate" || control === "lpdepth") && v("cutoff") === null)
+    return "there is no filter for it to move";
+  // superdough builds the lowpass, and with it the filter envelope, only when a cutoff is set (superdough@1.3.0
+  // superdough.mjs `if (fx.cutoff !== undefined)`): `.lpenv(4)` on an unfiltered sound changes nothing
+  // (review:robustness).
+  if (control === "lpenv" && v("cutoff") === null) return "there is no filter for the envelope to open";
+  if (control === "lprate" && zero("lpdepth")) return "the filter's movement has no depth";
+  if (
+    (control === "delaytime" || control === "delayfeedback") &&
+    !(v("delay") !== null && (v("delay") as number) > 0)
+  )
+    return "the delay itself is off";
+  if (control === "roomsize" && !(v("room") !== null && (v("room") as number) > 0))
+    return "the reverb itself is off";
+  if (control === "fmi" && e.s !== undefined && !SYNTHS.has(e.s))
+    return "a sample has no oscillator to modulate";
+  return null;
+}
+/** The number a control holds on an event (`partials` as its count of harmonics), or null. */
+function controlNumber(control: string, e: NEvent): number | null {
+  const raw = e.controls?.[control];
+  if (raw === undefined) return null;
+  if (control === "partials") {
+    // The harmonics superdough builds (synth.mjs `getOscillator`/`waveformN`, @1.3.0): none on a sine (the stock
+    // oscillator) or a sample; on a square or a triangle only the odd harmonics have a level; on a sawtooth or
+    // `user` wave every one (build-author-A1a: `.s("sine").partials([1,1,1,1])` is a plain sine).
+    const alias: Record<string, string> = { tri: "triangle", sqr: "square", saw: "sawtooth", sin: "sine" };
+    const wave = alias[e.s ?? ""] ?? e.s ?? "triangle";
+    if (!["triangle", "square", "sawtooth", "user"].includes(wave)) return 0;
+    const oddOnly = wave === "square" || wave === "triangle";
+    const parts = String(raw)
+      .split(",")
+      .map(Number)
+      .filter((x, i) => Number.isFinite(x) && Math.abs(x) > 1e-9 && (!oddOnly || i % 2 === 0));
+    return parts.length;
+  }
+  const x = typeof raw === "number" ? raw : Number(String(raw).split(",")[0]);
+  return Number.isFinite(x) ? x : null;
+}
+interface ControlWant {
+  control: string;
+  above?: number;
+  below?: number;
+  not?: number;
+}
+const CONTROL_WORDS: Record<string, string> = {
+  lpenv: "the filter envelope",
+  distort: "the distortion",
+  crush: "the bit crusher",
+  coarse: "the sample-rate reducer",
+  vib: "the vibrato",
+  phaserrate: "the phaser",
+  tremolosync: "the tremolo",
+  lprate: "the filter's movement",
+  fmi: "the FM",
+  roomsize: "the reverb's size",
+  room: "the reverb",
+  delaytime: "the delay",
+  partials: "the harmonics",
+  attack: "the attack",
+  release: "the release",
+  decay: "the decay",
+  sustain: "the sustain",
+};
+/** `control-set` with `anyOf` (Wave 7 Build): any one of the controls set to a value that is heard. */
+const controlSetAnyOf = (
+  events: readonly NEvent[],
+  wants: readonly ControlWant[],
+  ref: string,
+): CorrectionEval => {
+  let firstMuted: string | null = null;
+  for (const w of wants) {
+    const heard = events.filter((e) => {
+      const x = controlNumber(w.control, e);
+      if (x === null) return false;
+      const changes =
+        w.not !== undefined
+          ? Math.abs(x - w.not) > 1e-9
+          : (w.above === undefined || x > w.above + 1e-9) && (w.below === undefined || x < w.below - 1e-9);
+      if (!changes) return false;
+      const why = silencedBy(w.control, e);
+      if (why) firstMuted ??= `${CONTROL_WORDS[w.control] ?? w.control} is set, but ${why}`;
+      return !why;
+    });
+    if (heard.length > 0)
+      return {
+        ok: true,
+        value: 1,
+        target: 1,
+        detail: `${CONTROL_WORDS[w.control] ?? w.control} shapes the sound`,
+      };
+  }
+  return {
+    ok: false,
+    value: 0,
+    target: 1,
+    detail: firstMuted
+      ? `${firstMuted}: you do not hear it yet`
+      : `no sound${ref === "*" ? "" : ` in ${trackWord(ref)}`} has one of the sound-design controls set far enough to hear`,
+  };
+};
+/**
+ * `control-set` with `envelope: true` (Wave 7 Build, carry f4: A1.L03): the amplitude envelope superdough plays for
+ * what the code set (`adsrValues`) is shaped beyond the synth's default: a slow attack (20 ms or more), a release you
+ * hear (100 ms or more), or a fall to a sustain at .4 or under (a pluck). `.attack(.001)` or `.sustain(.6)` is where
+ * the sound already is.
+ */
+const envelopeShaped = (events: readonly NEvent[], ref: string): CorrectionEval => {
+  const shaped = events.find((e) => {
+    const c = e.controls ?? {};
+    const set: { attack?: number; decay?: number; sustain?: number; release?: number } = {};
+    for (const k of ["attack", "decay", "sustain", "release"] as const)
+      if (typeof c[k] === "number") set[k] = c[k] as number;
+    if (Object.keys(set).length === 0) return false;
+    const v = adsrValues(set);
+    return v.attack >= 0.02 || v.release >= 0.1 || v.sustain <= 0.4;
+  });
+  return shaped
+    ? {
+        ok: true,
+        value: 1,
+        target: 1,
+        detail: "a part has a shape of its own: its notes start, fall or ring as you set them",
+      }
+    : {
+        ok: false,
+        value: 0,
+        target: 1,
+        detail: `every note${ref === "*" ? "" : ` in ${trackWord(ref)}`} still has the default shape: a start, a fall or a tail you can hear is not set yet`,
+      };
+};
 const controlSet: CorrectionRule = (n, _ctx, p) => {
+  if (p.envelope === true) {
+    const refE = str(p, "track", "*");
+    const evs = selectTrack(n, refE);
+    if (evs.length === 0)
+      return { ok: false, value: 0, target: 1, detail: `nothing plays in ${trackWord(refE)}` };
+    return envelopeShaped(evs, refE);
+  }
+  if (Array.isArray(p.anyOf)) {
+    const ref0 = str(p, "track", "*");
+    const events0 = selectTrack(n, ref0);
+    if (events0.length === 0)
+      return { ok: false, value: 0, target: 1, detail: `nothing plays in ${trackWord(ref0)}` };
+    const wants = (p.anyOf as unknown[]).filter(
+      (x): x is ControlWant =>
+        typeof x === "object" && x !== null && typeof (x as ControlWant).control === "string",
+    );
+    return controlSetAnyOf(events0, wants, ref0);
+  }
   const control = str(p, "control", "");
   if (!control) return { ok: false, detail: "the rule needs `control`" };
   const call = str(p, "call", control);
-  const example = str(p, "example", ".4");
+  // A value is suggested only where the content names one (`example`): by default the detail names no answer.
+  const example = typeof p.example === "string" && p.example !== "" ? p.example : null;
   const ref = str(p, "track", "*");
   const neutral = typeof p.not === "number" ? (p.not as number) : null;
   const above = num(p, "above", 0);
   const events = selectTrack(n, ref);
   if (events.length === 0)
     return { ok: false, value: 0, target: 1, detail: `nothing plays in ${trackWord(ref)}` };
-  const values = events
-    .map((e) => e.controls?.[control])
-    .filter((v): v is number | string => v !== undefined)
-    .map((v) => (typeof v === "number" ? v : Number(String(v).split(",")[0])))
-    .filter((v) => Number.isFinite(v));
+  const below = typeof p.below === "number" ? (p.below as number) : null;
+  const set = events.filter((e) => controlNumber(control, e) !== null);
+  const values = set.map((e) => controlNumber(control, e) as number);
   const changes = (v: number): boolean =>
-    neutral !== null ? Math.abs(v - neutral) > 1e-9 : v > above + 1e-9;
-  const good = values.filter(changes);
+    neutral !== null
+      ? Math.abs(v - neutral) > 1e-9
+      : below !== null
+        ? v < below - 1e-9 && (typeof p.above !== "number" || v > above + 1e-9)
+        : v > above + 1e-9;
+  // Wave 7 Build: a value that changes the sound counts only where no other control silences it.
+  const muted = set.find((e) => changes(controlNumber(control, e) as number) && silencedBy(control, e));
+  const good = set
+    .filter((e) => changes(controlNumber(control, e) as number) && !silencedBy(control, e))
+    .map((e) => controlNumber(control, e) as number);
+  if (good.length === 0 && muted)
+    return {
+      ok: false,
+      value: 0,
+      target: 1,
+      detail: `\`.${call}()\` is set, but ${silencedBy(control, muted)}: you do not hear it yet`,
+    };
   const fmtNum = (v: number): string => String(Number(v.toFixed(3))).replace(/^0\./, ".");
   const share = num(p, "share", 0);
   if (good.length > 0 && good.length / events.length < share)
@@ -1427,7 +1607,7 @@ const controlSet: CorrectionRule = (n, _ctx, p) => {
       ok: false,
       value: good.length / events.length,
       target: share,
-      detail: `only ${good.length} of ${events.length} notes in ${trackWord(ref)} have \`.${call}()\` you can hear; the rest are dry. Set it for the whole line, such as \`.${call}(${example})\``,
+      detail: `only ${good.length} of ${events.length} notes in ${trackWord(ref)} have \`.${call}()\` you can hear; the rest are dry. Set it for the whole line${example ? `, such as \`.${call}(${example})\`` : ""}`,
     };
   if (good.length > 0)
     return { ok: true, value: 1, target: 1, detail: `\`.${call}()\` set to ${fmtNum(good[0] as number)}` };
@@ -1436,14 +1616,14 @@ const controlSet: CorrectionRule = (n, _ctx, p) => {
       ok: false,
       value: 0,
       target: 1,
-      detail: `no sound${ref === "*" ? "" : ` in ${trackWord(ref)}`} has \`.${call}()\` yet: add \`.${call}(${example})\` to the line`,
+      detail: `no sound${ref === "*" ? "" : ` in ${trackWord(ref)}`} has \`.${call}()\` yet${example ? `: add \`.${call}(${example})\` to the line` : ""}`,
     };
   const v = values[0] as number;
   return {
     ok: false,
     value: 0,
     target: 1,
-    detail: `\`.${call}(${fmtNum(v)})\` changes nothing you can hear: ${neutral !== null ? `${fmtNum(neutral)} is where the sound already is` : `at ${fmtNum(v)} it adds nothing`}. Try \`.${call}(${example})\``,
+    detail: `\`.${call}(${fmtNum(v)})\` changes nothing you can hear: ${neutral !== null ? `${fmtNum(neutral)} is where the sound already is` : `at ${fmtNum(v)} it adds nothing`}${example ? `. Try \`.${call}(${example})\`` : ""}`,
   };
 };
 
@@ -1504,7 +1684,7 @@ const partsEnter: (deps: CorrectionDeps) => CorrectionRule = (deps) => (n, ctx, 
  * with one of these tools ("splits a beat, written with `[ ]`"), so one required rule carries both the effect and
  * the notation the step teaches. The effect is checked first; the notation only after it.
  */
-function withAlsoUses(rule: CorrectionRule, deps: CorrectionDeps): CorrectionRule {
+export function withAlsoUses(rule: CorrectionRule, deps: CorrectionDeps): CorrectionRule {
   return (n, ctx, p) => {
     const res = rule(n, ctx, p);
     const also = strs(p, "alsoUses");

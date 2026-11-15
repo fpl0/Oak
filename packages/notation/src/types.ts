@@ -51,6 +51,11 @@ export interface NotationInput {
    * When absent on a `lead` staff, the symbols are taken from the events' `chordSymbol`.
    */
   chords?: { bar: number; beat: number; symbol: string }[];
+  /**
+   * Wave 7 (docs/design/wave7.md §3.3): how `chords` print — `lead-sheet` (default: `Cmaj7`, `Cm7♭5`) or `jazz`
+   * glyphs (`C∆7`, `Cø7`, `C–7`), both from the one chord table (`chordSymbolText`). Pass `chords` in code spelling.
+   */
+  chordStyle?: "lead-sheet" | "jazz";
   /** Roman numerals under the staff (same `bar`/`beat` convention as `chords`). */
   romans?: { bar: number; beat: number; rn: string }[];
   /**
@@ -111,6 +116,76 @@ export interface NotationInput {
    * seventh on two or more roots (a 12-bar blues); `false` turns it off.
    */
   blues?: boolean;
+  // --- Wave 7 (docs/design/wave7.md §3.3) -------------------------------------------------------------------
+  /**
+   * Slash notation (a rhythm staff, `staff: "rhythm"`): every stroke takes a slash notehead (abcjs
+   * `!style=rhythm!`), as comping is written under chord symbols (`compingInput` sets it). Ignored on other staves.
+   */
+  slashes?: boolean;
+  /**
+   * Print the meter's grouping in the time signature, as an additive signature ("3+2" over 4, "2+2+3" over 8,
+   * "2+2+2+3" over 8: ABC `M:2+2+3/8`), for a meter whose bar divides into unequal groups (5/4, 5/8, 7/8, 9/8i).
+   * The beaming follows the grouping either way.
+   */
+  showGrouping?: boolean;
+  /**
+   * Brackets over spans of the top staff (a hemiola's "3 × 2", a polyrhythm's "3:2", a polymeter's "3 over 4"):
+   * the text is printed over the note or rest that starts the span (abcjs cannot draw a bracket that is not a
+   * tuplet's: `ABCJS_LIMITS` "rhythm-bracket"); a tuplet inside the span draws its own bracket.
+   */
+  brackets?: readonly RhythmBracketInput[];
+  /**
+   * A track whose notes divide every bar into `p` equal parts is written as one bar-wide tuplet of `p` in the time of
+   * `q` (`(4:3:4` four quarters over a 3/4 bar), instead of the plain values that would also fit (dotted eighths). A
+   * bar of the track that does not fall on the `p` grid is written as usual. 3:2 over a 4/4 bar needs nothing here:
+   * the quantizer finds it.
+   */
+  polyTuplets?: readonly { track: string; p: number; q: number }[];
+  /**
+   * A polymeter in one meter (Oak draws it with accents, not as two meters: `ABCJS_LIMITS` "polymeter"): every note
+   * of `track` that starts a cycle of the shorter pattern (each `every` cycles from cycle 0: `[3, 4]` for three
+   * quarter-note steps a bar) is accented (`!>!`).
+   */
+  cycleAccents?: readonly { track: string; every: Rat }[];
+  /**
+   * Ghost notes on the percussion and rhythm staves: a stroke whose effective gain is at most `GHOST_MAX_GAIN`
+   * while the loudest stroke of its track in the engraved bars is at least twice as loud is listed by
+   * `ghostMarks` (`NoteItem.ghosts`); `markGhostNotes` (render.dom.ts) draws its head in parentheses.
+   */
+  ghosts?: boolean;
+  /**
+   * Every track of a staff keeps its own voice (stems up for the higher line), also where its notes fall in the
+   * other track's rhythm and would otherwise be merged into chords: a counter-melody against the tune (A2.L03).
+   * At most four voices a staff (more keeps the usual lines).
+   */
+  trackVoices?: boolean;
+}
+
+/** Wave 7: a bracket over a span of one bar (`NotationInput.brackets`); `RhythmBracket` of wave7.ts. */
+export interface RhythmBracketInput {
+  /** 0-based cycle (absolute) where the span starts. */
+  bar: number;
+  /** Start and end inside the piece, in cycles from `bar` (`to` may pass the bar line: a hemiola). */
+  from: Rat;
+  to: Rat;
+  text: string;
+  /**
+   * The bars the span covers whole are written in this many quarter-note beats (6/8 heard in three: `3`), so a
+   * hemiola's quarters are not tied over the dotted-quarter beat. Only for /8 meters whose bar holds that many
+   * quarters (6/8: 3, 12/8: 6); ignored otherwise.
+   */
+  beatsPerBar?: number;
+}
+/** Wave 7: a bracket placed in the Score (`Score.brackets`). */
+export interface ScoreBracket {
+  /** 0-based cycle of the start. */
+  bar: number;
+  /** Absolute start and end in cycles. */
+  at: Rat;
+  to: Rat;
+  /** Where the text stands when no item starts at `at` (inside a tuplet): the item sounding there. */
+  drawnAt?: Rat;
+  text: string;
 }
 
 /** Wave 5: a section label on the staff (`sectionMarks` of `@oak/notation`). */
@@ -166,6 +241,10 @@ export interface NoteItem {
   locs?: CodeRange[];
   /** Lyric syllable under this item (first piece of a note only). */
   lyric?: string;
+  /** Wave 7: the heads (indices in `pitches`) that are ghost notes (`NotationInput.ghosts`). */
+  ghosts?: number[];
+  /** Wave 7: an accent (`!>!`) on the first piece (`NotationInput.cycleAccents`). */
+  accent?: true;
 }
 export interface Voice {
   id: string;
@@ -269,6 +348,12 @@ export interface Score {
   sections?: SectionMark[];
   /** Wave 5: blue notes were spelled as blues (`NotationInput.blues`). */
   blues?: true;
+  /** Wave 7: the strokes of the rhythm staff take slash noteheads (`NotationInput.slashes`). */
+  slashes?: true;
+  /** Wave 7: the meter's grouping as the additive signature prints it ("2+2+3"), when asked for and unequal. */
+  groupingText?: string;
+  /** Wave 7: bracket texts over spans of the top staff (`NotationInput.brackets`), in time order. */
+  brackets?: ScoreBracket[];
 }
 export type NotationModel = Score;
 

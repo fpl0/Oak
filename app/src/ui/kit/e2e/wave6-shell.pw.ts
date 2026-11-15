@@ -1,6 +1,8 @@
-// Wave 6 shell: the advanced tracks in the rail and the palette (open, still being written, never a way into a
-// lesson that does not exist), the shortcut sheet's Wave 6 rows and its honest locked music-lens keys, the days
-// after the core (nothing in the navigation reads as finished) and `G L` resuming this tab's own lesson (d21).
+// Wave 6 shell, rewritten in Wave 7 for tracks that have lessons: the advanced tracks in the rail, the palette and
+// Settings › Learning (each a place: its next session opens from it; a lesson nobody wrote yet never opens), the
+// shortcut sheet's rows and its honest locked lens keys (Wave 7: the track lenses open with their lesson), the eight
+// track lenses in the palette with their state, the days after the core (nothing in the navigation reads as
+// finished) and `G L` resuming this tab's own lesson (d21).
 // Every test seeds its learner and blocks Vite's HMR socket. A Wave 6 seed point the server does not list yet is
 // stood in for by the nearest point that exists with the Wave 6 fields laid over the API answer (as wave5-shell
 // lays an unlock over `/api/unlocks`); the test's annotations say which it used.
@@ -174,23 +176,29 @@ test("the advanced tracks: locked before U13.CP, then open and still being writt
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
 
-  // After the U13 checkpoint: Jazz and Rhythm are open and nothing on them can be started yet.
+  // After the U13 checkpoint: Jazz and Rhythm are open, and (Wave 7) their first lessons are written: the rail names
+  // each track's next session; still never a lock and never a badge (a track is optional). Arrangement & Sound is
+  // open too since U09.CP (its gate A.sound), so the rail names it with its next lesson (the side lessons first).
   const point = await seedFirst(page, ["tracks open (after U13.CP)"], "after U13.CP");
   expect(point).toMatch(/U13\.CP/);
-  await page.reload();
+  await page.goto("/settings/learning");
   await expect(oak).toHaveAttribute(
     "aria-label",
-    "The Oak: Jazz Harmony and Advanced Rhythm are open, their first lessons still being written",
+    /^The Oak: Jazz Harmony: next J1\.L\d\d; Advanced Rhythm: next R1\.L\d\d; Arrangement & Sound: next A1\.L\d\d$/,
   );
   await expect(oak).toHaveAttribute("data-nav-tracks", "open");
-  // Optional, so never a lock: the item is not marked pending and stays a plain link.
   await expect(oak).not.toHaveAttribute("data-nav-pending", "true");
   // The tooltip says the same on keyboard focus; both themes and sizes.
   await page.locator('[data-nav="today"]').focus();
   await page.keyboard.press("Tab");
   await expect(oak).toBeFocused();
   const tip = page.getByRole("tooltip");
-  await expect(tip).toContainText("Jazz Harmony and Advanced Rhythm are open");
+  await expect(tip).toContainText("Jazz Harmony: next J1.L");
+  // Wave 7: Settings › Learning shows the tracks as places, each with its state and the way into its next session.
+  const cards = page.getByTestId("settings-tracks");
+  await expect(cards.locator("[data-track-state]")).toHaveCount(3);
+  await expect(cards.locator('[data-track-state="open"]').first()).toContainText("Jazz Harmony");
+  await expect(cards.getByRole("link", { name: /^Start J1\.L\d\d$/ })).toBeVisible();
   for (const m of SCREENSHOT_MATRIX) {
     await page.setViewportSize({ width: m.width, height: m.height });
     await page.evaluate((t) => {
@@ -202,46 +210,75 @@ test("the advanced tracks: locked before U13.CP, then open and still being writt
       `${m.theme} ${m.width}: the tooltip stays on screen`,
     ).toBeLessThanOrEqual(m.width);
     await page.screenshot({
-      path: `${SHOTS}/w6-rail-tracks-${m.theme}-${m.width}x${m.height}.png`,
+      path: `${SHOTS}/w7-rail-tracks-${m.theme}-${m.width}x${m.height}.png`,
       clip: { x: 0, y: 0, width: 760, height: 220 },
     });
   }
+  await page.locator("#main").focus();
+  await cards.scrollIntoViewIfNeeded();
+  for (const m of SCREENSHOT_MATRIX) {
+    await page.setViewportSize({ width: m.width, height: m.height });
+    await page.evaluate((t) => {
+      document.documentElement.dataset.theme = t;
+    }, m.theme);
+    const sideways = await page.locator("#main").evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(sideways, `${m.theme} ${m.width}: settings fit`).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: `${SHOTS}/w7-settings-tracks-${m.theme}-${m.width}x${m.height}.png` });
+  }
 
-  // The palette: the track is named as open and leads to the course view of the Oak, not to a lesson.
+  // The palette: the track is a place — its next lesson opens from it.
+  await page.goto("/settings/keys");
   await page.waitForLoadState("networkidle");
   input = await openPalette(page);
   await input.fill("Jazz Harmony");
   const first = page.getByRole("option").first();
   await expect(first).toContainText("Jazz Harmony");
-  await expect(first).toContainText("Advanced track · open · its first lessons are still being written");
+  await expect(first).toContainText(/Advanced track · open · next: J1\.L\d\d /);
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/oak\?view=course$/);
-  // A lesson of the track that nobody has written yet says so and leads to the same place, never to /learn.
+  await expect(page).toHaveURL(/\/learn\/J1\.L\d\d$/);
+  // A lesson nobody has written yet still says so and leads to the Oak, never to /learn (while one exists).
+  await page.goto("/settings/keys");
+  await page.waitForLoadState("networkidle");
   input = await openPalette(page);
-  await input.fill("J1.L01");
-  await expect(page.getByRole("option").first()).toContainText("Jazz Harmony · still being written");
-  await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/oak\?view=course$/);
-  await expect(page).not.toHaveURL(/\/learn\//);
-  // A written lesson still shows its ID and opens.
+  await input.fill("J5.L0");
+  const unwritten = page.getByRole("option").filter({ hasText: "still being written" });
+  if ((await unwritten.count()) > 0) {
+    await expect(unwritten.first()).toContainText("Jazz Harmony · still being written");
+    await unwritten.first().click();
+    await expect(page).toHaveURL(/\/oak\?view=course$/);
+  } else {
+    test
+      .info()
+      .annotations.push({ type: "unwritten", description: "every J5 lesson is written in this tree" });
+    await page.keyboard.press("Escape");
+  }
+  // Wave 7: every track lens is listed with its state; one not open yet says where it opens and leads to Settings.
+  await page.goto("/settings/keys");
+  await page.waitForLoadState("networkidle");
   input = await openPalette(page);
-  await input.fill("U12.L01");
-  await expect(page.getByRole("option").first()).toContainText("U12.L01");
-  await expect(page.getByRole("option").first()).not.toContainText("still being written");
+  await input.fill("clave lens");
+  const clave = page.getByRole("option").filter({ hasText: "Clave lens" }).first();
+  await expect(clave).toContainText("Opens with R3.L02 Clave Direction");
+  await input.fill("tensions lens");
+  await expect(page.getByRole("option").filter({ hasText: "Tensions lens" }).first()).toContainText(
+    "Opens with J2.L03",
+  );
   await page.keyboard.press("Escape");
 
-  // The lens keys this learner has now are no longer marked.
-  await page.goto("/settings/keys");
+  // The lens keys this learner has now are no longer marked; the track lens keys say where they open.
   sheet = await openSheet(page);
   await expect(row("Shift+I")).not.toHaveAttribute("data-locked", "true");
   await expect(row("Shift+V")).not.toHaveAttribute("data-locked", "true");
+  await expect(row("Shift+X")).toHaveAttribute("data-locked", "true");
+  await expect(row("Shift+X")).toContainText("Opens with J2.L03");
+  await expect(row("Shift+D")).toContainText("Opens with A2.L02");
 });
 
 test("after the core nothing in the navigation reads as finished, and what is open is one search away", async ({
   page,
 }) => {
-  const point = await seedFirst(page, ["core complete"], "X2 released");
-  if (point !== "core complete") {
+  const point = await seedFirst(page, ["core complete, tracks untouched", "core complete"], "X2 released");
+  if (point === "X2 released") {
     await overlay(page, "**/api/lessons/progress", (b) => ({ ...b, core: "complete", tracks: OPEN_TRACKS }));
     await overlay(page, "**/api/course/completion", () => ({
       stage: "complete",
@@ -317,9 +354,12 @@ test("after the core nothing in the navigation reads as finished, and what is op
     expect(l.pending, l.id).toBeNull();
     expect(FINISHED.test(l.label), l.label).toBe(false);
   }
+  // Wave 7: on the real "core complete" point the tracks have lessons and the Oak names each one's next session; the
+  // stand-in (a Wave 6 overlay) keeps the "still being written" line.
+  const real = point !== "X2 released";
   await expect(nav.locator('[data-nav="oak"]')).toHaveAttribute(
     "aria-label",
-    /are open, their first lessons/,
+    real ? /Jazz Harmony: next J1\.L\d\d/ : /are open, their first lessons/,
   );
 
   // The palette lists what stays open; a track with nothing to start says so and leads to the Oak.
@@ -333,12 +373,16 @@ test("after the core nothing in the navigation reads as finished, and what is op
   expect(texts.some((t) => t.includes("Reviews") && t.includes("Open to you"))).toBe(true);
   expect(texts.some((t) => t.includes("Studio") && t.includes("Your sketchbook"))).toBe(true);
   await input.fill("Jazz Harmony");
-  // The track is listed once, as open with nothing to start yet.
-  await expect(options.filter({ hasText: "Jazz Harmony" })).toHaveCount(1);
-  const track = options.filter({ hasText: "Jazz Harmony" }).first();
-  await expect(track).toContainText(
-    "Open, nothing to start yet · its first lessons are still being written.",
-  );
+  // The track is listed once, as open with nothing to start yet (Wave 7's "Focus on Jazz Harmony" is a command of
+  // its own, not a second entry for the track).
+  await expect(options.filter({ hasText: /^Jazz Harmony/ })).toHaveCount(1);
+  await expect(options.filter({ hasText: /^Focus on Jazz Harmony/ })).toHaveCount(1);
+  const track = options.filter({ hasText: /^Jazz Harmony/ }).first();
+  if (real) await expect(track).toContainText(/Open to you · Next: J1\.L\d\d /);
+  else
+    await expect(track).toContainText(
+      "Open, nothing to start yet · its first lessons are still being written.",
+    );
   mkdirSync(SHOTS, { recursive: true });
   for (const m of SCREENSHOT_MATRIX) {
     await page.setViewportSize({ width: m.width, height: m.height });
@@ -348,7 +392,7 @@ test("after the core nothing in the navigation reads as finished, and what is op
     await page.screenshot({ path: `${SHOTS}/w6-palette-after-core-${m.theme}-${m.width}x${m.height}.png` });
   }
   await track.click();
-  await expect(page).toHaveURL(/\/oak\?view=course$/);
+  await expect(page).toHaveURL(real ? /\/learn\/J1\.L\d\d$/ : /\/oak\?view=course$/);
   input = await openPalette(page);
   await input.fill("Reviews");
   await options.filter({ hasText: "Open to you" }).first().click();

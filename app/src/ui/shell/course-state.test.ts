@@ -13,6 +13,7 @@ import {
   shellTracks,
   trackHint,
   trackOfLesson,
+  trackSessionTarget,
   tracksListedOpen,
   unwrittenHint,
 } from "./course-state.ts";
@@ -240,6 +241,32 @@ describe("after the core", () => {
     expect(new Set(c.map((x) => x.id)).size).toBe(c.length);
   });
 
+  test("Wave 7: a track with a lesson to start leads to it and is listed once", () => {
+    const withLesson: CoreCompletion["open"] = [
+      {
+        kind: "track",
+        id: "J1.L01",
+        title: "Jazz Harmony",
+        note: "Next: J1.L01 Swing Feel & the Ride.",
+        available: true,
+      },
+      {
+        kind: "track",
+        id: "R",
+        title: "Advanced Rhythm",
+        note: "Open. Its next lessons are still being written.",
+        available: false,
+      },
+    ];
+    const c = openCommands(withLesson);
+    expect(c.map((x) => x.to)).toEqual([
+      { kind: "lesson", lessonId: "J1.L01" },
+      { kind: "path", path: "/oak" },
+    ]);
+    expect(c[0]?.hint).toBe("Open to you · Next: J1.L01 Swing Feel & the Ride.");
+    expect([...tracksListedOpen(withLesson)].sort()).toEqual(["J", "R"]);
+  });
+
   test("a track with a next lesson leads to it; a capstone left to release opens its workspace", () => {
     const c = openCommands([
       {
@@ -291,5 +318,131 @@ describe("after the core", () => {
       "progress",
       "settings",
     ]);
+  });
+});
+
+describe("Wave 7: the tracks as places", () => {
+  const g = (gateId: string, label: string, open: boolean): TrackState["gates"][number] => ({
+    gateId,
+    trackId: gateId.startsWith("A") ? "A" : gateId.startsWith("R") ? "R" : "J",
+    opens: "",
+    requires: [{ ref: "U13.CP", kind: "checkpoint", label, met: open }],
+    open,
+    openedAt: open ? "2026-11-13T10:00:00.000Z" : null,
+    lessonsAuthored: 5,
+    lessonsTotal: 5,
+  });
+  const ts = (over: Partial<TrackState> & Pick<TrackState, "trackId">): TrackState => ({
+    ...track(over.trackId, "open", "Next."),
+    gates: [g(`${over.trackId}.main`, "U13 checkpoint passed", true)],
+    ...over,
+  });
+
+  test("a checkpoint or a capstone session is a way in; the rail and the palette name it", () => {
+    const t = shellTracks({
+      lessons: [],
+      checkpoints: [],
+      tracks: [
+        ts({
+          trackId: "J",
+          sessionsDone: 8,
+          next: null,
+          note: "Next: J.CP1 Jazz checkpoint 1.",
+          nextSession: { kind: "checkpoint", mapItemId: "J.CP1", title: "Jazz checkpoint 1", estMinutes: 25 },
+        }),
+        ts({
+          trackId: "R",
+          sessionsDone: 16,
+          next: null,
+          note: "Next: RC1.S2 16th-Note Funk.",
+          nextSession: { kind: "capstone", mapItemId: "RC1.S2", title: "16th-Note Funk", estMinutes: 25 },
+        }),
+        ts({
+          trackId: "A",
+          gates: [g("A.side", "U03.L02 completed", true)],
+          next: "A1.L01",
+          note: "Next: A1.L01.",
+        }),
+      ],
+    });
+    const [j, r, a] = t as [ShellTrackT, ShellTrackT, ShellTrackT];
+    expect([j.state, j.card, trackSessionTarget(j)]).toEqual([
+      "ready",
+      "in-progress",
+      { kind: "checkpoint", unitId: "J.CP1" },
+    ]);
+    expect(trackSessionTarget(r)).toEqual({ kind: "capstone", capstoneId: "RC1" });
+    expect(trackSessionTarget(a)).toEqual({ kind: "lesson", lessonId: "A1.L01" });
+    // Arrangement & Sound's side lessons never mark the rail; its own lessons do (U09.CP).
+    expect(oakTracksNote(t)).toBe("Jazz Harmony: next J.CP1; Advanced Rhythm: next RC1.S2");
+    expect(trackHint(j)).toBe("Advanced track · in progress · next: J.CP1 Jazz checkpoint 1");
+  });
+
+  test("a waiting track names its gate; a complete one is not in the rail and nothing reads as finished", () => {
+    const t = shellTracks({
+      lessons: [],
+      checkpoints: [],
+      tracks: [
+        ts({
+          trackId: "J",
+          sessionsDone: 8,
+          gates: [
+            g("J.main", "U13 checkpoint passed", true),
+            g("J.chord-scales", "U14 checkpoint passed", false),
+          ],
+          next: null,
+          nextSession: null,
+          note: "J2.L04 opens with the U14 checkpoint.",
+        }),
+        ts({ trackId: "R", sessionsDone: 20, sessionsTotal: 20, next: null, nextSession: null }),
+        ts({
+          trackId: "A",
+          gates: [g("A.side", "U03.L02 completed", true), g("A.sound", "U09 checkpoint passed", true)],
+          next: "A1.L05",
+          note: "Next: A1.L05 Grit.",
+          nextSession: { kind: "lesson", mapItemId: "A1.L05", title: "Grit", estMinutes: 20 },
+        }),
+      ],
+    });
+    const [j, r] = t as [ShellTrackT, ShellTrackT];
+    expect(j.card).toBe("waiting");
+    expect(trackHint(j)).toBe("Advanced track · open · waits for: U14 checkpoint passed");
+    expect(r.card).toBe("complete");
+    expect(trackHint(r)).toBe("Advanced track · complete · every lesson stays open to replay");
+    expect(oakTracksNote(t)).toBe("Arrangement & Sound: next A1.L05");
+    const held = shellTracks({
+      lessons: [],
+      checkpoints: [],
+      tracks: [
+        ts({
+          trackId: "J",
+          sessionsDone: 12,
+          gates: [g("J.main", "U13 checkpoint passed", true), g("J.forms", "U15.L06 completed", false)],
+          next: null,
+          nextSession: null,
+        }),
+      ],
+    });
+    expect(oakTracksNote(held)).toBe("Jazz Harmony waits for: U15.L06 completed");
+    for (const s of [trackHint(j), trackHint(r), oakTracksNote(t) ?? ""])
+      expect(FINISHED_WORDS.test(s), s).toBe(false);
+  });
+});
+
+type ShellTrackT = ReturnType<typeof shellTracks>[number];
+
+describe("trackHint never says open twice", () => {
+  test("a server note of just “Open.” adds nothing after open", () => {
+    const base = {
+      trackId: "A",
+      title: "Arrangement & Sound",
+      state: "ready",
+      card: "open",
+      note: "Open.",
+    } as never;
+    expect(trackHint(base)).toBe("Advanced track · open");
+    expect(trackHint({ ...(base as object), note: "Open. Next: A1.L05." } as never)).toBe(
+      "Advanced track · open · next: A1.L05",
+    );
   });
 });

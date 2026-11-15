@@ -193,3 +193,67 @@ export function currentTheme(): ThemeName {
   if (typeof document === "undefined") return "paper";
   return document.documentElement.dataset.theme === "bark" ? "bark" : "paper";
 }
+
+// --- the illustrated Oak (Wave 7) -----------------------------------------------------------------
+
+/**
+ * The illustrated Oak's colours (app/src/map/illustrated), the same values as tokens.css `--oak-tree-*` and
+ * `--oak-leaf-*` (theme.test.ts holds them equal): the chrome's tokens where the tree shares a meaning — `bg` the
+ * card surface, `ground` surface-2, `ink` text-2, `accent`, `issue`, the acorn's amber accent-2 — and the tree's
+ * own wood, grain and practising teal. Every leaf fill holds 3:1 on `bg` and `ground` (WCAG 1.4.11).
+ */
+export interface TreeColours {
+  bg: string;
+  ground: string;
+  wood: string;
+  grain: string;
+  ink: string;
+  accent: string;
+  issue: string;
+  acorn: string;
+  leaf: { introduced: string; practising: string; mastered: string };
+}
+
+export const TREE_COLOURS: Readonly<Record<ThemeName, TreeColours>> = {
+  paper: {
+    bg: "#fffdf8",
+    ground: "#efe9de",
+    wood: "#86715a",
+    grain: "#5c5247",
+    ink: "#5c5247",
+    accent: "#2f6b45",
+    issue: "#a84c25",
+    acorn: "#b7791f",
+    leaf: { introduced: "#b7791f", practising: "#2a7f80", mastered: "#2f6b45" },
+  },
+  bark: {
+    bg: "#1c1814",
+    ground: "#26201a",
+    wood: "#887460",
+    grain: "#d5c0a5",
+    ink: "#bdb2a3",
+    accent: "#6fbf8a",
+    issue: "#e07b4f",
+    acorn: "#e0a54a",
+    leaf: { introduced: "#e0a54a", practising: "#5fc0be", mastered: "#6fbf8a" },
+  },
+};
+
+/**
+ * The illustrated Oak's line weights in the drawing's units, the same in both themes (tokens.css
+ * `--oak-tree-line-*`: hair 0.8, fine 1.2, firm 1.5, bold 2). Named by what they draw so the tree uses four weights,
+ * not a dozen: a branch's grain is hair, a limb's edge, a leaf's edge and its veins fine, the trunk's grain and an
+ * acorn's stem firm, the focus ring bold.
+ */
+export const TREE_LINE_SCALE = { hair: 0.8, fine: 1.2, firm: 1.5, bold: 2 } as const;
+export const TREE_LINES = {
+  branchGrain: TREE_LINE_SCALE.hair,
+  limbEdge: TREE_LINE_SCALE.fine,
+  leafEdge: TREE_LINE_SCALE.fine,
+  vein: TREE_LINE_SCALE.hair,
+  masteredRing: TREE_LINE_SCALE.fine,
+  trunkGrain: TREE_LINE_SCALE.firm,
+  acornStem: TREE_LINE_SCALE.firm,
+  dryEdge: TREE_LINE_SCALE.firm,
+  focus: TREE_LINE_SCALE.bold,
+} as const;

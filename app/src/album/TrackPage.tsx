@@ -7,7 +7,9 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { clsx } from "clsx";
 import { Check, Code2, Download, MessageSquareText, Mic2, Pencil, Play, Square, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useCapstoneContent } from "../capstone/content.ts";
 import { recordingSeconds, recordPerformance } from "../capstone/engine.ts";
+import { versionBandOf } from "../capstone/export.ts";
 import { PIECE_DOES_NOT_RUN } from "../capstone/record.ts";
 import { WorkbenchServicesLoader } from "../capstone/WorkbenchServicesLoader.tsx";
 import { FLAVOUR_LABEL, formatDate, formatDuration } from "../lib/format.ts";
@@ -22,6 +24,7 @@ import {
   useAlbumPatchVersion,
   useAlbumPutAudio,
   useAlbumTrack,
+  useCourseProgress,
   useSketch,
   useTutorReviews,
 } from "../lib/queries.ts";
@@ -42,7 +45,9 @@ import { sideLabel } from "../capstone/Ceremony.tsx";
 import { LINER_MAX_WORDS, wordCount } from "../capstone/liner.ts";
 import { ReviewCard } from "../capstone/ReviewCard.tsx";
 import { useTryRevision } from "../capstone/revision.ts";
+import { bandReached } from "../studio/model.ts";
 import { LinerNotes } from "./AlbumPage.tsx";
+import { ExportButton } from "./ExportButton.tsx";
 import { audioFileName, changeSummary, currentTakeOf, takeFileName, takesOf } from "./model.ts";
 import { useCoverMusic } from "./music.ts";
 
@@ -174,7 +179,9 @@ function Track({ t, v }: { t: AlbumTrackDetail; v: number | undefined }) {
             <p className="mt-2 flex flex-wrap items-center gap-2">
               {t.flavour && <Chip>{FLAVOUR_LABEL[t.flavour] ?? t.flavour}</Chip>}
               <Chip tone={version.version === t.currentVersion ? "accent" : "neutral"}>
-                Version {version.version}
+                {t.capstoneId === "AC1" && version.version <= 2
+                  ? `${version.version === 1 ? "Version one" : "Version two"} (album version ${version.version})`
+                  : `Version ${version.version}`}
                 {version.version === t.currentVersion ? " · current" : ` of ${t.versions.length}`}
               </Chip>
               {version.tutorAssisted && <Chip tone="amber">tutor-assisted</Chip>}
@@ -199,6 +206,7 @@ function Track({ t, v }: { t: AlbumTrackDetail; v: number | undefined }) {
                   : "No recording of this version yet. Open the code below to play it live and record it."}
               </p>
             )}
+            <ExportButton trackId={t.id} version={version.version} capstoneId={t.capstoneId} />
           </section>
 
           <CodeSection
@@ -722,6 +730,19 @@ function LiveCode({
     { sketchId: version.sketchId, sketchVersion: version.sketchVersion },
     track.flavour,
   );
+  // The Band the version was released with plays here too (contracts §5.10 rule 5: the album records the Band unless
+  // muted), built as Export builds it: another take of a Band-backed version is the same music, never the learner's
+  // parts alone. A take waits until the Band is known.
+  const content = useCapstoneContent();
+  const progress = useCourseProgress();
+  const band = content.data
+    ? versionBandOf(version.band, music?.key ?? null, {
+        bands: content.data.bands,
+        capstone: content.data.capstones.find((c) => c.id === track.capstoneId) ?? null,
+        reached: bandReached(progress.data),
+      })
+    : null;
+  const bandPending = version.band != null && content.isPending;
   // The piece's length comes from its analysis: a take started before it is known would be cut at 4 bars. Code that
   // no longer evaluates (a function Oak no longer has) cannot be played or recorded here, only revised.
   const broken = !pending && music === null;
@@ -757,7 +778,7 @@ function LiveCode({
   // d20: a version that has a recording gets another take; the earlier ones stay and can be chosen again.
   const record = async (another: boolean) => {
     const h = oak.editors.get(editorId(slug));
-    if (!h || pending || broken) return;
+    if (!h || pending || bandPending || broken) return;
     setRecording(true);
     live.current.recording = true;
     live.current.stopped = false;
@@ -822,6 +843,7 @@ function LiveCode({
         }}
         lint={{ profile: "studio", unlocked: new Set(), allowPreview: true, meter, key: null }}
         views={["roll", "staff"]}
+        band={band}
         onModel={onModel}
         tutorBars
         toolbar={
@@ -830,8 +852,14 @@ function LiveCode({
               size="sm"
               icon={<Mic2 aria-hidden className="size-4" />}
               loading={recording}
-              disabled={pending || broken}
-              title={pending ? "Reading the piece…" : broken ? "This version's code doesn't run" : undefined}
+              disabled={pending || bandPending || broken}
+              title={
+                pending || bandPending
+                  ? "Reading the piece…"
+                  : broken
+                    ? "This version's code doesn't run"
+                    : undefined
+              }
               onClick={() => void record(version.hasAudio)}
               data-testid="record-version"
               className={clsx(!version.hasAudio && "border-accent")}

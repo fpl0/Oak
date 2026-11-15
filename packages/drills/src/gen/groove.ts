@@ -176,9 +176,17 @@ export const polyrhythm: Generator = {
       });
       const tapTargets: number[] = [];
       for (let b = 1; b < bars; b++) for (let i = 0; i < 3; i++) tapTargets.push((b + i / 3) / piece.cps);
+      // Wave 7 integration (contracts §8.4, wave7.md §11 `tap.lanes`): both hands, the 2 with the kick on F and
+      // the 3 after it stops on J, from bar 2. One-lane hosts still read `tapTargets` (the 3).
+      const twoTargets: number[] = [];
+      for (let b = 1; b < bars; b++) for (let i = 0; i < 2; i++) twoTargets.push((b + i / 2) / piece.cps);
       return trialOf(piece, {}, cueOf(ctx), {
         mode: "tap",
         tapTargets,
+        tapLanes: [
+          { label: "Left hand: the 2, with the kick", key: "f", targets: twoTargets },
+          { label: "Right hand: the 3, after it stops", key: "j", targets: tapTargets },
+        ],
         responseAt: 0,
         levels: ctx.levels,
         prompt: "Tap three even beats in each bar against the two.",

@@ -157,6 +157,9 @@ export const RELEASED_UNITS: readonly string[] = [
   ...["U08", "U09", "U10", "U11", "A1"],
   // Wave 6, the end of the core: U12–U17 (released in the Wave 6 content integration).
   ...["U12", "U13", "U14", "U15", "U16", "U17"],
+  // Wave 7, the advanced tracks (released in the Wave 7 content integration): J1–J5, R1–R3, A2 (A1.L05–L07 are A1's,
+  // released with it) and the track checkpoints J.CP1, J.CP2, R.CP, A.CP (their items are scoped "J", "R", "A").
+  ...["J1", "J2", "J3", "J4", "J5", "R1", "R2", "R3", "A2", "J", "R", "A"],
 ];
 const LESSON_SCOPED = ["step", "exercise", "example"];
 /** The unit of a lesson-scoped ID: "U08" of "U08.L01/S1", "A1" of "A1.L02@hook". */

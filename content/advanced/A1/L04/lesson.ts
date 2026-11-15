@@ -17,7 +17,8 @@
 // match on the riff's notes, the `orbits-differ` rule (the snare and the riff end on different orbits, so
 // `.orbit(2)` on both or on the hats does not pass), `must-use tb.orbit` and `arg-matches` on the first
 // `.orbit()` argument; either part may move; S6 is a `fam.snd.params` level 4
-// ear step (more room or echoes); the Make requires a room size or an echo time (`uses`).
+// ear step (more room or echoes); the Make requires a room size or an echo time you hear (`control-set` with
+// `anyOf`, carry f4).
 import { defineLesson, type HintLadder } from "@oak/content-kit";
 
 const BPM = 100;
@@ -470,8 +471,17 @@ export default defineLesson({
             label: "A space you set: a room size or an echo time",
             required: true,
             skills: ["D05"],
-            rule: "uses",
-            tool: ["tb.roomsize", "tb.delaytime"],
+            // Carry f4 (corrections pass): what is heard, not the call. A room bigger than the one you get without
+            // `.roomsize()` (about 2), on a part sent to the reverb; or echoes timed by `.delaytime()` on a part sent
+            // to the delay. A size or a time on a dry part sets nothing you hear.
+            rule: "custom",
+            fn: "control-set",
+            params: {
+              anyOf: [
+                { control: "roomsize", above: 2.5 },
+                { control: "delaytime", above: 0 },
+              ],
+            },
           },
           {
             id: "echoes",
@@ -512,6 +522,50 @@ export default defineLesson({
             expect: "pass",
           },
           { name: "beyond the brief: room and echoes", response: { code: PLACED }, expect: "pass" },
+          {
+            name: "echoes timed to half a beat on the riff",
+            response: {
+              code: code(KICK, snare(""), HATS, BASS, riff(`${RIFF_SOUND}.delay(.3).delaytime(.3).gain(.8)`)),
+            },
+            expect: "pass",
+          },
+          {
+            name: "the riff in a big room of its own",
+            response: {
+              code: code(
+                KICK,
+                snare(""),
+                HATS,
+                BASS,
+                riff(`${RIFF_SOUND}.room(.4).roomsize(5).orbit(2).gain(.8)`),
+              ),
+            },
+            expect: "pass",
+          },
+          {
+            name: "right function, nothing sent: a room size on a dry snare",
+            response: {
+              code: code(KICK, snare(".roomsize(6)"), HATS, BASS, riff(`${RIFF_SOUND}.gain(.8)`)),
+            },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "right function, nothing sent: an echo time with no delay",
+            response: {
+              code: code(KICK, snare(""), HATS, BASS, riff(`${RIFF_SOUND}.delaytime(.3).gain(.8)`)),
+            },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
+          {
+            name: "right function, the size you already had",
+            response: {
+              code: code(KICK, snare(".room(.5).roomsize(2)"), HATS, BASS, riff(`${RIFF_SOUND}.gain(.8)`)),
+            },
+            expect: "fail",
+            feedback: ["rubric.unmet"],
+          },
           {
             name: "a room with no size",
             response: {

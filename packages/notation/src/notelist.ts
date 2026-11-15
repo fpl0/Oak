@@ -5,6 +5,7 @@
 // cycles through the meter (1 cycle = 1 bar).
 import type { MeterSpec, NEvent, Rat } from "@oak/content-kit";
 import { barOf, R, rat } from "@oak/content-kit";
+import { drumStaffPosition } from "./drums.ts";
 import { parseNoteName } from "./theory-port.ts";
 import type { NoteItem, Score } from "./types.ts";
 
@@ -82,7 +83,10 @@ export function parseNoteList(
     }
     const names = what.startsWith("[") ? what.slice(1, -1).split(",") : [what];
     for (const name of names) {
-      const p = parseNoteName(name);
+      // Wave 7: a drum's own name is a drum hit even where it also reads as a pitch without an octave ("cb", the
+      // cowbell, is not C♭): pitches in the list always carry their octave.
+      const known = /^[a-z]+$/.test(name) && drumStaffPosition(name) !== null;
+      const p = known ? null : parseNoteName(name);
       // Anything that is not a pitch and looks like a sound name is a drum hit ("bd", "hh", "rhythm").
       const drum = !p && /^[a-z]+\d*$/.test(name);
       if (!drum && !p) throw new SyntaxError(`note list: bad pitch "${name}"`);

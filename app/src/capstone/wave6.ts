@@ -50,6 +50,11 @@ export const barsWord = (from: number, to: number = from): string =>
 /** "1, 3 and 5": at most `max` bars, then "and more". */
 export function listBars(bars: readonly number[], max = 4): string {
   const uniq = [...new Set(bars)].sort((a, b) => a - b);
+  // A run of bars with no gap reads as its span ("1–8"), never as "1, 2, 3, 4 and 4 more".
+  const first = uniq[0];
+  const last = uniq.at(-1);
+  if (first !== undefined && last !== undefined && uniq.length >= 3 && last - first === uniq.length - 1)
+    return `${first}–${last}`;
   const shown = uniq.slice(0, max).map(String);
   if (uniq.length > max) return `${shown.join(", ")} and ${uniq.length - max} more`;
   return shown.length <= 1 ? (shown[0] ?? "") : `${shown.slice(0, -1).join(", ")} and ${shown.at(-1)}`;

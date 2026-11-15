@@ -6,6 +6,7 @@
 import type { MeterId } from "@oak/content-kit";
 import type { VisualProbe } from "@oak/strudel/probes";
 import type { PanelId } from "../workbench/panels.ts";
+import { TRACK_TOOL_DEMOS } from "./demos-w7.ts";
 
 export interface ToolDemo {
   code: string;
@@ -17,6 +18,8 @@ export interface ToolDemo {
   hint: string;
   /** The example's meter when its tempo line alone does not say it (6/8: `setcpm(60/2)`). */
   meter?: MeterId;
+  /** Bars the example's loop takes when its alternations alone do not say it (a polymeter's period, a 12-bar form). */
+  bars?: number;
 }
 
 const FORM_SONG = `setcpm(100/4)
@@ -446,9 +449,9 @@ mel: n("<[0 1 0 ~] [4 3 1 0]>").scale("E4:phrygian").s("piano")`,
 
 drums: s("bd ~ sd ~")
 hats: s("hh*8").gain(.4).pan(.85)
-keys: chord("<Dm G>").voicing().s("rhodes").gain(.55).pan(.2)
-mel: n("<[0 2 4 5] [5 4 2 ~]>").scale("D4:dorian").s("piano").pan(.7)
-bass: note("<d2 g1>").s("fingerbass")`,
+keys: chord("<Dm Bb>").voicing().s("rhodes").gain(.55).pan(.2)
+mel: n("<[0 2 4 5] [5 4 2 ~]>").scale("D4:minor").s("piano").pan(.7)
+bass: note("<d2 bb1>").s("fingerbass")`,
     hint: "0 is hard left, 1 hard right, .5 the middle. The keys sit left, the tune and the hats right, the kick and the bass stay in the middle. Best heard on headphones.",
   },
   "tb.jux": {
@@ -500,5 +503,5 @@ mel: n("<[4 ~ 2 0] [5b ~ 3 0] [2 ~ 1 0] [5b 2b 6b 1]>").scale("C4:major").s("ten
 };
 
 export function toolDemo(toolId: string): ToolDemo | null {
-  return TOOL_DEMOS[toolId] ?? null;
+  return TOOL_DEMOS[toolId] ?? TRACK_TOOL_DEMOS[toolId] ?? null;
 }

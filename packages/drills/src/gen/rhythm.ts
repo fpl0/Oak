@@ -2,10 +2,19 @@
 // odd-meter grouping (exercises §4.4 "Rhythm"). Rhythms are built beat by beat; each beat prints with the
 // smallest division that holds its onsets, so the shown code reads like the counting the learner does.
 import type { Answer, MeterId, Rat } from "@oak/content-kit";
-import { BEAT_DIVISION_OPTIONS, FEEL_OPTIONS, R, rat } from "@oak/content-kit";
+import {
+  BEAT_DIVISION_OPTIONS,
+  CLAVE_GRIDS,
+  CLAVE_OPTIONS,
+  FEEL_OPTIONS,
+  METER_GROUPINGS,
+  R,
+  rat,
+  SWING_RATIO_OPTIONS,
+} from "@oak/content-kit";
 import { METERS } from "@oak/theory";
 import { buildPiece, fmtNum, type Piece, type TrackSpec } from "../build.ts";
-import { atom, line, type Node, query, rest, seq } from "../pat.ts";
+import { atom, chordOf, line, type Node, query, rest, seq } from "../pat.ts";
 import type { Rng } from "../types.ts";
 import {
   cueOf,
@@ -600,26 +609,44 @@ export const syncopation: Generator = {
 
 // --- rhy.swing ----------------------------------------------------------------------------------
 
+/**
+ * The swing amounts of the feels, the `swingBy` amounts of content-kit `SWING_FEELS` (one table: straight 1:1,
+ * light .2 = 3:2, swung 1/3 = 2:1, hard .5 = 3:1). U11.L07 calls the 2:1 feel "swung"; R1.L02 names it
+ * "triplet swing".
+ */
 const SWING: Readonly<Record<string, Rat | null>> = {
   straight: null,
-  light: rat(1, 6),
+  light: rat(1, 5),
   swung: rat(1, 3),
   hard: rat(1, 2),
 };
+/** The category of each feel as `SWING_RATIO_OPTIONS` names it (level 4, R1.L02). */
+export const RATIO_ID: Readonly<Record<string, string>> = {
+  straight: "straight",
+  light: "light",
+  swung: "triplet",
+  hard: "hard",
+};
 /**
  * The feels as U11.L07 names them (FEEL_OPTIONS for straight and swung): "swung" puts the off-beat eighth two
- * thirds of the way through the beat (long–short, 2:1); light swing a little less (7:5), hard swing more (3:1).
+ * thirds of the way through the beat (long–short, 2:1); light swing a little less (3:2), hard swing more (3:1).
  */
 const FEEL_LABELS: Readonly<Record<string, string>> = {
   ...Object.fromEntries(FEEL_OPTIONS.map((o) => [o.id, o.label])),
   light: "Light swing: a little long–short",
   hard: "Hard swing: very long–short",
 };
+const RATIO_LABELS: Readonly<Record<string, string>> = Object.fromEntries(
+  SWING_RATIO_OPTIONS.map((o) => [o.id, o.label]),
+);
 export const swingFeel: Generator = {
   name: "rhythm-swing",
   generate(ctx) {
-    const sixteenths = ctx.level.sixteenths === true;
-    const full = ctx.level.full === true;
+    // Level 4 (R1.L02, swing ratios): the four feels by their ratio, on the eighths or on the sixteenths
+    // (`.swingBy(a, 8)` in 4/4); half the trials swing the sixteenths, R1.L02's new idea.
+    const ratios = ctx.level.ratios === true;
+    const sixteenths = ratios ? ctx.rng.next() < 0.5 : ctx.level.sixteenths === true;
+    const full = ctx.level.full === true || ratios;
     const amount = SWING[ctx.category] ?? null;
     const bank = pickKit(ctx);
     const kitOf = bank ? { bank } : {};
@@ -649,12 +676,24 @@ export const swingFeel: Generator = {
     const piece = buildPiece({ bpm: pickTempo(ctx), bars: 2, tracks });
     // Only the feels the level offers and the learner has met, in order from straight to hard.
     const open = ctx.level.categories.filter((c) => ctx.openCategories.includes(c) || c === ctx.category);
-    const options = ["straight", "light", "swung", "hard"].filter((c) => open.includes(c));
+    const feels = ["straight", "light", "swung", "hard"].filter((c) => open.includes(c));
+    if (ratios) {
+      const options = feels.map((f) => RATIO_ID[f] as string);
+      return trialOf(piece, { choice: [RATIO_ID[ctx.category] as string] }, cueOf(ctx), {
+        mode: "choice",
+        options,
+        optionLabels: Object.fromEntries(options.map((o) => [o, RATIO_LABELS[o] as string])),
+        subdivision: sixteenths ? 16 : 8,
+        prompt: sixteenths
+          ? "The sixteenths: how hard do they swing?"
+          : "The eighths: how hard do they swing?",
+      });
+    }
     return trialOf(piece, { choice: [ctx.category] }, cueOf(ctx), {
       mode: "choice",
-      options,
-      optionLabels: Object.fromEntries(options.map((o) => [o, FEEL_LABELS[o] as string])),
-      prompt: options.length > 2 ? "Straight, or how much swing?" : "Straight or swung?",
+      options: feels,
+      optionLabels: Object.fromEntries(feels.map((o) => [o, FEEL_LABELS[o] as string])),
+      prompt: feels.length > 2 ? "Straight, or how much swing?" : "Straight or swung?",
     });
   },
 };
@@ -663,27 +702,29 @@ const midiName = (m: number): string => `${NAMES[m % 12]}${Math.floor(m / 12) - 
 
 // --- rhy.clave ----------------------------------------------------------------------------------
 
-/** Onsets on a 16-step grid per bar. */
+/**
+ * Onsets on a 16-step grid per bar: content-kit `CLAVE_GRIDS` (son and rumba, 3-2 and 2-3, the two-bar 8th
+ * grid) read at 16 steps, and the one-bar cells of R3.L01 (E(3,8) and E(5,8) on the 8th grid).
+ */
 const CLAVES: Readonly<Record<string, number[][]>> = {
   tresillo: [[0, 6, 12]],
   cinquillo: [[0, 4, 6, 10, 12]],
   straight: [[0, 4, 8, 12]],
-  "son-3-2": [
-    [0, 6, 12],
-    [4, 8],
-  ],
-  "son-2-3": [
-    [4, 8],
-    [0, 6, 12],
-  ],
-  "rumba-3-2": [
-    [0, 6, 14],
-    [4, 8],
-  ],
-  "rumba-2-3": [
-    [4, 8],
-    [0, 6, 14],
-  ],
+  ...Object.fromEntries(
+    (["son", "rumba"] as const).flatMap((type) =>
+      (["3-2", "2-3"] as const).map((dir) => [
+        `${type}-${dir}`,
+        CLAVE_GRIDS[type][dir].map((bar) => bar.map(([n, d]) => (n * 16) / d)),
+      ]),
+    ),
+  ),
+};
+/** The answers' words: CLAVE_OPTIONS for the claves (its ids written "son 3-2"), R3.L01's for the cells. */
+const CLAVE_LABELS: Readonly<Record<string, string>> = {
+  tresillo: "Tresillo: three, (3,8)",
+  cinquillo: "Cinquillo: five, (5,8)",
+  straight: "Straight: four on the beat",
+  ...Object.fromEntries(CLAVE_OPTIONS.map((o) => [o.id.replace(" ", "-"), o.label])),
 };
 export const clave: Generator = {
   name: "rhythm-clave",
@@ -692,6 +733,9 @@ export const clave: Generator = {
     const full = ctx.level.full === true;
     const bank = pickKit(ctx);
     const kitOf = bank ? { bank } : {};
+    // Every level plays the kick and the hats the same in both bars (R3.L01–L02: "the kick and hats fixed, the
+    // rimshot changes"). A clave's direction only exists against the phrase, so a two-bar figure is heard over
+    // a two-bar bass vamp (I in bar 1, V in bar 2): bar 1 is marked before the question is asked.
     const tracks: TrackSpec[] = [
       {
         label: "perc",
@@ -703,28 +747,65 @@ export const clave: Generator = {
         gain: jitter(ctx, 0.85),
         ...kitOf,
       },
+      { label: "hats", src: "s", pat: seq([atom("hh", 8)]), gain: jitter(ctx, 0.3), ...kitOf },
+      { label: "kick", src: "s", pat: line(["bd", null, null, "bd"]), gain: jitter(ctx, 0.6), ...kitOf },
     ];
-    if (full) {
-      tracks.push({ label: "hats", src: "s", pat: seq([atom("hh", 8)]), gain: jitter(ctx, 0.35), ...kitOf });
+    const twoBar = bars.length === 2;
+    const k = ctx.rng.pick([0, 2, 5, 7, 9]);
+    if (twoBar || full) {
+      // A bass on 1, the "and" of 2 and beat 4 (beat 1 marks the bar): the root of I in bar 1, of V in bar 2.
+      const root = 36 + k;
+      const fifth = root + 7 > 47 ? root - 5 : root + 7;
       tracks.push({
-        label: "kick",
-        src: "s",
-        pat: line(["bd", null, null, "bd"]),
+        label: "bass",
+        src: "note",
+        pat: {
+          t: "alt",
+          items: [root, fifth].map((m) =>
+            line([midiName(m), null, null, midiName(m), null, null, midiName(m), null]),
+          ),
+        },
+        s: "upright",
         gain: jitter(ctx, 0.7),
-        ...kitOf,
       });
     }
-    const piece = buildPiece({ bpm: pickTempo(ctx), bars: Math.max(2, bars.length), tracks });
-    return trialOf(piece, { choice: [ctx.category] }, cueOf(ctx), { mode: "choice" });
+    if (full) {
+      // In a full groove (level 4) a piano plays the I and the V7 on the bar lines, the clave a little softer.
+      const tonic = 60 + (k > 5 ? k - 12 : k);
+      const I = [tonic, tonic + 4, tonic + 7].map(midiName);
+      const V7 = [tonic - 1, tonic + 2, tonic + 5, tonic + 7].map(midiName);
+      tracks.push({
+        label: "keys",
+        src: "note",
+        pat: { t: "alt", items: [I, V7].map((c) => seq([chordOf(c), rest, rest, rest])) },
+        s: "piano",
+        gain: jitter(ctx, 0.45),
+      });
+    }
+    const piece = buildPiece({ bpm: pickTempo(ctx), bars: 2, tracks });
+    const open = ctx.level.categories.filter((c) => ctx.openCategories.includes(c) || c === ctx.category);
+    return trialOf(piece, { choice: [ctx.category] }, cueOf(ctx), {
+      mode: "choice",
+      options: open,
+      optionLabels: Object.fromEntries(open.map((o) => [o, CLAVE_LABELS[o] ?? o])),
+      prompt: twoBar ? "Which clave, and which way round from bar 1?" : "Which rhythm does the rim play?",
+    });
   },
 };
 
 // --- rhy.odd-grouping ---------------------------------------------------------------------------
 
+/**
+ * Odd-meter groupings (R2.L01–L02): a category "7/8:2+2+3" plays two bars of that meter with the kick on 1 and
+ * the snare on every other group start, the hi-hat on every unit (eighths in 7/8 and 9/8, quarters in 5/4)
+ * accented on the group starts. The tempo is the meter's own unit (contracts §6.9): 7/8 and 9/8 run at 200–260
+ * eighths a minute (R2.L01 plays 7/8 at 240), 5/4 at 100–130 quarters. The options are the groupings of the
+ * trial's meter that the learner has met (content-kit `METER_GROUPINGS`), so 2+2+3 is always heard against its
+ * rotations; `grouping` carries the sizes for the planned grouping widget.
+ */
 export const oddGrouping: Generator = {
   name: "rhythm-odd-grouping",
   generate(ctx) {
-    // Category "7/8:2+2+3".
     const [meterText, groupText] = ctx.category.split(":") as [string, string];
     const meter = meterText as MeterId;
     const groups = groupText.split("+").map(Number);
@@ -764,8 +845,21 @@ export const oddGrouping: Generator = {
         ...kitOf,
       });
     }
-    const piece = buildPiece({ bpm: pickTempo(ctx), meter, bars: 2, tracks });
-    return trialOf(piece, { choice: [groupText] }, cueOf(ctx), { mode: "choice", meter });
+    const piece = buildPiece({ bpm: unitBpm(pickTempo(ctx), meter), meter, bars: 2, tracks });
+    const known = new Set((METER_GROUPINGS[meter] ?? []).map((g) => g.join("+")));
+    const open = ctx.level.categories.filter(
+      (c) => (ctx.openCategories.includes(c) || c === ctx.category) && c.startsWith(`${meter}:`),
+    );
+    const options = open.map((c) => c.slice(meter.length + 1)).filter((g) => known.has(g));
+    const unit = METERS[meter].tempoUnit === "quarter" ? "beats" : "eighths";
+    return trialOf(piece, { choice: [groupText] }, cueOf(ctx), {
+      mode: "choice",
+      meter,
+      grouping: groups,
+      options,
+      optionLabels: Object.fromEntries(options.map((o) => [o, o.replaceAll("+", " + ")])),
+      prompt: `Two bars of ${meter.replace("i", "")}: how are the ${unit} grouped?`,
+    });
   },
 };
 

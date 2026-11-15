@@ -106,6 +106,33 @@ export const SOUND_CONTROL_KEYS = [
   "orbit",
   "vowel",
   "partials",
+  // Wave 7 Build (A1.L05–L07, A2.L04–L05; spec-A request): movement, FM, width, level, slices and ducking, so a
+  // rule can tell a control set to a value you hear from one set where the sound already is.
+  "vib",
+  "vibmod",
+  "phaserrate",
+  "phaserdepth",
+  "tremolosync",
+  "tremolodepth",
+  "lprate",
+  "lpdepth",
+  "fmi",
+  "fmh",
+  "unison",
+  "detune",
+  "spread",
+  "pw",
+  "postgain",
+  "compressor",
+  "compressorRatio",
+  "compressorKnee",
+  "compressorAttack",
+  "compressorRelease",
+  "begin",
+  "end",
+  "speed",
+  "duckorbit",
+  "duckdepth",
 ] as const;
 
 /** The sound controls a hap value sets, or `undefined` when it sets none. */

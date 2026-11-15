@@ -166,7 +166,7 @@ test("U15.L01's Coda opens the first part of the core finale, once, after the le
   expect(errors).toEqual([]);
 });
 
-test("U13.CP's Coda: the Jazz and Rhythm tracks are open, said honestly, with nothing to start that is not written", async ({
+test("U13.CP's Coda: the Jazz and Rhythm tracks are open, said honestly; their lessons are offered beside the core, never in its place", async ({
   page,
   request,
 }) => {
@@ -181,8 +181,9 @@ test("U13.CP's Coda: the Jazz and Rhythm tracks are open, said honestly, with no
   await expect(card).toHaveAttribute("data-tracks", "J,R");
   await expect(card).toContainText("The Jazz and Rhythm tracks are open");
   await expect(card).toContainText("Jazz Harmony and Advanced Rhythm");
-  await expect(card).toContainText("Their first lessons are still being written.");
-  await expect(card).toContainText("The core stays your path");
+  // Wave 7: their first lessons are written; Today offers them beside the core (tracks-day.ts), and the card says so.
+  await expect(card).toContainText("Today offers their lessons beside the core, never in its place.");
+  await expect(card).not.toContainText("still being written");
   // Honest: a link to the branches on the Oak, and nothing that starts a lesson that does not exist.
   await expect(card.getByRole("link", { name: "See the branches on the Oak" })).toHaveAttribute(
     "href",

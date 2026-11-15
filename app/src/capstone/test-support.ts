@@ -27,11 +27,25 @@ export function testPiece(id: string, name: string): string {
   return t.response.code;
 }
 
-export function unlockedFor(id: string): Set<UnlockableId> {
-  return unlockedAt(courseGraph(), toolbox, `${id}.S1` as never) as Set<UnlockableId>;
+export function unlockedFor(id: string, session = 1): Set<UnlockableId> {
+  return unlockedAt(courseGraph(), toolbox, `${id}.S${session}` as never) as Set<UnlockableId>;
 }
 
-export async function gradePiece(id: string, code: string, key: KeySpec | null = null): Promise<GradeResult> {
+/** Wave 7: what a track capstone's grade context carries beyond the brief (the song's melody, the other version). */
+export interface GradeExtras {
+  session?: number;
+  /** The map item whose unlocks the lint reads (default `<id>.S<session>`): a learner further on. */
+  at?: string;
+  songMelody?: readonly grader.SongMelodyNote[];
+  otherVersion?: { id: "a" | "b"; code: string };
+}
+
+export async function gradePiece(
+  id: string,
+  code: string,
+  key: KeySpec | null = null,
+  extras: GradeExtras = {},
+): Promise<GradeResult> {
   await ensureRealm();
   const c = capstone(id);
   return grader.gradeExercise({
@@ -50,7 +64,17 @@ export async function gradePiece(id: string, code: string, key: KeySpec | null =
       rung: 0,
       tutorHints: 0,
       extraReplays: 0,
-      lint: { profile: "graded", unlocked: unlockedFor(id), allowPreview: false, meter: c.meter, key: null },
+      ...(extras.songMelody ? { songMelody: extras.songMelody } : {}),
+      ...(extras.otherVersion ? { otherVersion: extras.otherVersion } : {}),
+      lint: {
+        profile: "graded",
+        unlocked: extras.at
+          ? (unlockedAt(courseGraph(), toolbox, extras.at as never) as Set<UnlockableId>)
+          : unlockedFor(id, extras.session ?? 1),
+        allowPreview: false,
+        meter: c.meter,
+        key: null,
+      },
     },
   });
 }

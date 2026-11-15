@@ -469,16 +469,29 @@ describe("track gates (wave6.md §5.3)", () => {
       const summary = await me.endSession(ses.id);
       expect((summary.gatesOpened ?? []).map((g) => g.gateId).sort()).toEqual(["J.main", "R.main"]);
       const tracks = await ok<Tracks>(h, "GET", "/api/tracks");
-      for (const t of ["J", "R"]) {
+      // Wave 7: the first lessons of J and R are written (the Foundation exemplars J1.L01 and R1.L01), so each track
+      // names its first lesson once open; while one is not written, its track says so instead.
+      const written = (id: string) => full.lessons.some((l) => l.id === id);
+      const first = { J: "J1.L01", R: "R1.L01", A: "A1.L01" } as const;
+      for (const t of ["J", "R"] as const) {
         const st = tracks.items.find((x) => x.trackId === t);
         expect(st?.status).toBe("open");
-        expect(st?.next).toBeNull();
+        expect(st?.next ?? null).toBe(written(first[t]) ? first[t] : null);
         expect(st?.openedAt).not.toBeNull();
       }
       h.clock.advanceDays(1);
       const next = await me.today();
-      expect(next.tracks?.open).toEqual(["J", "R"]);
-      expect(next.tracks?.lessonsAuthored).toBe(false);
+      if (written("J1.L01") || written("R1.L01")) {
+        // Wave 7 (wave7.md §5.2): the core stays the New block; each open track is offered beside it, J, R, A.
+        expect(next.mapItemId).toBe("U14.L02");
+        expect(next.tracks ?? null).toBeNull();
+        expect((next.trackOffers ?? []).map((o) => o.next.mapItemId)).toEqual(
+          (["J", "R", "A"] as const).map((t) => first[t]).filter(written),
+        );
+      } else {
+        expect(next.tracks?.open).toEqual(["J", "R"]);
+        expect(next.tracks?.lessonsAuthored).toBe(false);
+      }
       const ses2 = await me.startSession(next);
       const s2 = await me.endSession(ses2.id);
       expect(s2.gatesOpened ?? []).toEqual([]);

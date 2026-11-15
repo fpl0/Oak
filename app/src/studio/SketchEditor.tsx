@@ -17,6 +17,7 @@ import { lessonTitles } from "../lib/content-model.ts";
 import { applyToEditor } from "../lib/editors.ts";
 import { FLAVOUR_LABEL, formatDate, formatKey } from "../lib/format.ts";
 import { lintInBrowser } from "../lib/grader-client.ts";
+import { TRACK_LENS_GATES, useLenses } from "../lib/lenses.ts";
 import { usePageTitle } from "../lib/nav.ts";
 import {
   useCourseProgress,
@@ -60,14 +61,18 @@ import {
   type LockedHint,
   linerFlags,
   lockedHints,
+  meterLabel,
   musicFactsOf,
   musicLensHints,
   musicLensTips,
   muteMapOf,
+  NO_TRACK_FACTS,
   needsReview,
   type SketchBand,
   type SketchMusicFacts,
+  type SketchTrackFacts,
   STUDIO_FLAVOURS,
+  sameTrackFacts,
   sinceText,
   soundFactsOf,
   strictLint,
@@ -77,6 +82,9 @@ import {
   studioMeters,
   studioModes,
   TONICS,
+  trackFactsOf,
+  trackLensHints,
+  trackLensTips,
   type VersionDraft,
   versionBody,
   versionLabel,
@@ -106,6 +114,7 @@ export function SketchEditor({ sketch }: { sketch: SketchDetail }) {
   const del = useSketchDelete();
   const notes = useTutorNotes({ subjectKind: "sketch", subjectId: id });
   const progress = useCourseProgress();
+  const lenses = useLenses();
   usePageTitle(sketch.title);
 
   const latest: SketchVersion =
@@ -297,6 +306,13 @@ export function SketchEditor({ sketch }: { sketch: SketchDetail }) {
       .join(" or ");
   }).slice(0, 2);
   const musicTips = musicLensTips(musicFacts, unlocked as ReadonlySet<string>);
+  // Wave 7: the advanced tracks' lenses: a tip once a lens is open, a hint naming its lesson before (never a block).
+  const [trackFacts, setTrackFacts] = useState<SketchTrackFacts>(NO_TRACK_FACTS);
+  const trackOpen = lenses.track.available;
+  const trackHints = trackLensHints(trackFacts, trackOpen, (lid) =>
+    siteText(TRACK_LENS_GATES[lid].lesson, titles),
+  ).slice(0, 2);
+  const trackTips = trackLensTips(trackFacts, trackOpen).slice(0, 3);
 
   // --- the tutor's subject: this sketch -----------------------------------------------------------------
   const thread = { subjectKind: "sketch" as const, subjectId: id };
@@ -533,7 +549,7 @@ export function SketchEditor({ sketch }: { sketch: SketchDetail }) {
           >
             {studioMeters(unlocked as ReadonlySet<string>, meter).map((m) => (
               <option key={m} value={m}>
-                {m}
+                {meterLabel(m)}
               </option>
             ))}
           </select>
@@ -667,6 +683,8 @@ export function SketchEditor({ sketch }: { sketch: SketchDetail }) {
                       ? f
                       : facts,
                   );
+                  const tf = trackFactsOf(m.track);
+                  setTrackFacts((f) => (sameTrackFacts(f, tf) ? f : tf));
                   onHarmony(m);
                 }}
                 tutorBars
@@ -715,6 +733,20 @@ export function SketchEditor({ sketch }: { sketch: SketchDetail }) {
                   <li key={t}>{t}</li>
                 ))}
                 {musicHints.map((h) => (
+                  <li key={h.id}>
+                    {h.what}: from {h.at}.
+                  </li>
+                ))}
+              </ul>
+            </Callout>
+          ) : null}
+          {(trackHints.length > 0 || trackTips.length > 0) && !review ? (
+            <Callout tone="info" title="Track lenses for this sketch" className="text-sm">
+              <ul className="flex flex-col gap-0.5" data-testid="track-hints">
+                {trackTips.map((t) => (
+                  <li key={t}>{t}</li>
+                ))}
+                {trackHints.map((h) => (
                   <li key={h.id}>
                     {h.what}: from {h.at}.
                   </li>

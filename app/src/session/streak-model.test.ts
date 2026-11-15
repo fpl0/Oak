@@ -45,6 +45,11 @@ describe("the 7/4 bar (ux §5.4)", () => {
 describe("streak copy (contracts §7.8): calm, no loss framing", () => {
   test("goal line and rest day", () => {
     expect(goalLine(fixtureStreak())).toBe("2 of 5 days this week");
+    // A first week that starts on a Sunday has a goal of one day (pro-rated): "day", never "1 of 1 days".
+    const sunday = fixtureStreak();
+    expect(goalLine({ ...sunday, thisWeek: { ...sunday.thisWeek, qualifyingDays: 1, goal: 1 } })).toBe(
+      "This week's goal is met: 1 of 1 day",
+    );
     const met = fixtureStreak({ thisWeek: { ...fixtureStreak().thisWeek, goal: 2 } });
     expect(goalLine(met)).toBe("This week's goal is met: 2 of 2 days");
     expect(isRestDay(met)).toBe(true);

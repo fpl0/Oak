@@ -27,7 +27,15 @@ import {
   type SwingSpec,
   stripMarkers,
   type TestCase,
+  TRACK_CUSTOM_RULES,
 } from "@oak/content-kit";
+import { AC1_BRIEF_PIECES, AC1_SLB, AC1_TEMPLATE } from "./advanced/capstones/AC1/pieces.ts";
+import { AC2_PIECES, AC2_TEMPLATE } from "./advanced/capstones/AC2/pieces.ts";
+import { JC1_PIECES, JC1_TEMPLATE } from "./advanced/capstones/JC1/pieces.ts";
+import { JC2_PIECES, JC2_TEMPLATE } from "./advanced/capstones/JC2/pieces.ts";
+import { JC3_CHANGES_A, JC3_CHANGES_B, JC3_PIECES } from "./advanced/capstones/JC3/pieces.ts";
+import { RC1_STARTER, rc1BriefTests } from "./advanced/capstones/RC1/pieces.ts";
+import { RC2_STARTER, rc2BriefTests } from "./advanced/capstones/RC2/pieces.ts";
 
 type Body = RubricRule extends infer R
   ? R extends RubricRule
@@ -90,6 +98,11 @@ interface ComposeSpec {
   hints: HintLadder;
   /** Graded by content CI (`bun run content:check <id>`): ≥ 2 passing pieces, ≥ 2 failing ones, the starter. */
   tests?: TestCase[];
+  /**
+   * Wave 7: the songs a compose capstone works on (JC3's model head, JC4's standards): the capstone host passes
+   * the picked song's melody to the grader as `GradeContext.songMelody`.
+   */
+  song?: SongId[];
 }
 
 function compose(c: ComposeSpec): CapstoneDef {
@@ -124,6 +137,7 @@ function compose(c: ComposeSpec): CapstoneDef {
     meter: c.meter,
     ...(c.bpm ? { bpm: c.bpm } : {}),
     ...(c.swing ? { swing: c.swing } : {}),
+    ...(c.song ? { song: c.song } : {}),
     brief,
     sessionDefs: S(
       c.id,
@@ -213,18 +227,26 @@ export const TRANSCRIBE_PASS = {
 export const CUSTOM_RUBRIC_FNS = {
   "hats-grid": "the hi-hat line sits on an 8th or 16th grid",
   "fill-last-bar": "the last bar's drum onsets differ from bar 1",
-  "ii-v-chain": "chained ii–Vs into at least `minKeys` distinct target keys",
-  "guide-tone-motion": "guide-tone melody moves by at most `maxSemis` at chord changes",
-  "walking-bass": "4 onsets per bar, root on beat 1 ≥ 75%, beat-4 approach ≥ 50%",
-  "bridge-guide-tones": "bridge changes met by a 3rd or 7th on the downbeat ≥ `min`",
-  "melody-matches-song": "melody identical to the song's answer key (`pitch`: absolute or pitch-class)",
-  "allowed-tensions": "share of melody-over-chord tensions that are allowed ≥ `min`",
-  "bass-kick-downbeat": "bass and kick both sound at beat 1 of every bar",
-  "horn-stabs": "a track labelled `label` with at least `min` onsets in every `per` bars",
-  "tresillo-bass": "the bass contains tresillo {0, 3/8, 6/8} on every 3-side bar",
-  "two-versions-differ":
-    "two versions: Δ tempo ≥ 20 BPM or swung vs straight; instrument sets differ by ≥ 2 sounds",
-  "extended-chord-share": "a 9th or 11th in at least `min` of the bars",
+  // Wave 7 Foundation: the track capstones' custom rules are the planned ones of `TRACK_CUSTOM_RULES`
+  // (@oak/content-kit, schema/wave7.ts), each with its params; the rest of the old list is written with
+  // implemented rules (JC1's motion is `guide-tones` + `maxMoveSemis`, JC3's bridge `guide-tones` + `section`, RC1's
+  // downbeats and RC2's tresillo `onsets`).
+  "ii-v-chain": TRACK_CUSTOM_RULES["ii-v-chain"]?.doc ?? "",
+  "walking-bass": TRACK_CUSTOM_RULES["walking-bass"]?.doc ?? "",
+  "song-melody-kept": TRACK_CUSTOM_RULES["song-melody-kept"]?.doc ?? "",
+  "allowed-tensions": TRACK_CUSTOM_RULES["allowed-tensions"]?.doc ?? "",
+  stabs: TRACK_CUSTOM_RULES.stabs?.doc ?? "",
+  "two-versions-differ": TRACK_CUSTOM_RULES["two-versions-differ"]?.doc ?? "",
+  "extended-share": TRACK_CUSTOM_RULES["extended-share"]?.doc ?? "",
+  contrafact: TRACK_CUSTOM_RULES.contrafact?.doc ?? "",
+  "clave-aligned": TRACK_CUSTOM_RULES["clave-aligned"]?.doc ?? "",
+  // RC1's "a figure that comes back displaced" suggestion (content/specs/R3.md).
+  "displaced-copy": TRACK_CUSTOM_RULES["displaced-copy"]?.doc ?? "",
+  microtiming: TRACK_CUSTOM_RULES.microtiming?.doc ?? "",
+  // AC1's sound line and AC2's tension suggestion (author: capstones-sound).
+  "control-set":
+    "a sound control set to a value that is heard (`anyOf`: any one of them), and not silenced by another control",
+  "tensions-used": TRACK_CUSTOM_RULES["tensions-used"]?.doc ?? "",
   // Corrections gate (AS-32): C0's fill. The corrections pass's effect check, with `last: true` (the loop's last bar
   // differs from the bar before it), stands for §6.6's `fill-last-bar`.
   "bars-differ":
@@ -1385,6 +1407,100 @@ export const CF_T_ARRANGE_RUBRIC: RubricRule[] = [
   }),
 ];
 
+// --- JC3 Rhythm-Changes Contrafact and JC4 Reharmonize a Standard (content/specs/J5.md) ---------------------
+
+// Rhythm changes' A section in B♭, two chords a bar (theory `schema.rhythm-a`: I vi ii V I vi ii V I I7 IV iv I V I),
+// and the bridge, four dominants round the cycle of fourths, two bars each (III7 VI7 II7 V7 in B♭): defined beside
+// the brief's pieces (content/advanced/capstones/JC3/pieces.ts).
+export { JC3_CHANGES_A, JC3_CHANGES_B };
+/**
+ * JC3's stand-in model head (W7 gate, decision 80): the A section J4.L04 reads (Oak's own head on these changes,
+ * content/advanced/J4/L04/lesson.ts `HEAD_BARS`, straight 8ths), as notes `[onsetNum, onsetDen, durNum, durDen,
+ * midi]` from the section's first bar, placed in the three A sections (bars 1, 9 and 25). `contrafact` reads it only
+ * while song.i-got-rhythm has no answer key, so the capstone can be completed and still judges what is heard: a tune
+ * that repeats the head the course taught fails. content/advanced/capstones/JC3/jc3.test.ts re-evaluates J4.L04's
+ * head and pins these notes.
+ */
+export const JC3_STAND_IN = {
+  name: "the head you read in J4.L04",
+  at: [0, 8, 24],
+  notes: [
+    [0, 1, 1, 2, 74],
+    [1, 2, 1, 4, 70],
+    [3, 4, 1, 4, 74],
+    [1, 1, 1, 2, 75],
+    [3, 2, 1, 2, 69],
+    [2, 1, 1, 2, 74],
+    [5, 2, 1, 4, 70],
+    [11, 4, 1, 4, 67],
+    [3, 1, 1, 4, 72],
+    [13, 4, 1, 8, 70],
+    [27, 8, 1, 8, 69],
+    [7, 2, 1, 4, 65],
+    [4, 1, 1, 4, 72],
+    [17, 4, 1, 4, 75],
+    [9, 2, 1, 2, 74],
+    [5, 1, 1, 4, 67],
+    [21, 4, 1, 4, 70],
+    [11, 2, 1, 2, 73],
+    [6, 1, 1, 4, 65],
+    [25, 4, 1, 4, 69],
+    [13, 2, 1, 4, 71],
+    [27, 4, 1, 4, 74],
+    [7, 1, 1, 2, 72],
+    [15, 2, 1, 2, 69],
+  ],
+} as const;
+const JC3_A_BY_BAR = ["Bb^7", "Cm7", "Bb^7", "Cm7", "Bb^7", "Eb^7", "Bb^7", "Bb^7"];
+/** The 32 bars of rhythm changes, the first chord of each bar: what `contrafact` keeps (A A B A, no tag). */
+export const JC3_CHANGES_BY_BAR: readonly string[] = [
+  ...JC3_A_BY_BAR,
+  ...JC3_A_BY_BAR,
+  ...["D7", "D7", "G7", "G7", "C7", "C7", "F7", "F7"],
+  ...JC3_A_BY_BAR,
+];
+/**
+ * JC3's starter (J5.md JC3.S1): the trio on the A section, eight bars for now, with the bridge's changes, bass and
+ * comping already written for session 2. The tune is the learner's: both melody sections start as `silence`.
+ * Comping strikes each half bar (the A has two chords a bar); the bass is a two-feel written by hand.
+ */
+export const JC3_TEMPLATE = [
+  "setcpm(160/4)",
+  "",
+  `const changesA = "${JC3_CHANGES_A}"`,
+  `const changesB = "${JC3_CHANGES_B}"`,
+  'const bassA = note("<[bb1 g1] [c2 f1] [bb1 g1] [c2 f1] [bb1 d2] [eb2 eb2] [bb1 f1] [bb1 f1]>")',
+  'const bassB = note("<[d2 a1] [d2 f#1] [g1 d2] [g1 b1] [c2 g1] [c2 e2] [f1 c2] [f1 a1]>")',
+  'const chordsA = chord(changesA).dict("lefthand").voicing().struct("[x ~ ~ x]*2")',
+  'const chordsB = chord(changesB).dict("lefthand").voicing().struct("x ~ ~ x ~ ~ ~ ~")',
+  "// your head: eight bars of A, then eight of bridge",
+  "const melA = silence",
+  "const melB = silence",
+  "",
+  'drums: s("rd [rd rd] rd [rd rd]").swingBy(1/3, 4).bank("jazzkit")',
+  'hats: s("~ hh ~ hh").bank("jazzkit")',
+  'bass: arrange([8, bassA]).s("upright").lpf(900)',
+  'chords: arrange([8, chordsA]).swingBy(1/3, 4).s("rhodes").gain(.6)',
+  'mel: arrange([8, melA]).swingBy(1/3, 4).s("mutetpt")',
+].join("\n");
+
+/**
+ * JC4's fallback starter: a ballad trio in F with no tune. The capstone opens on the picked song instead (its
+ * melody, locked, and its original changes, built from the answer key by the capstone host), so a learner sees
+ * this only before a song is chosen.
+ */
+export const JC4_TEMPLATE = [
+  "setcpm(72/4)",
+  "",
+  'const changes = "<Gm7 C7 F^7 D7>"',
+  "",
+  'drums: s("rd [rd rd] rd [rd rd]").swingBy(1/3, 4).bank("jazzkit").gain(.5)',
+  'hats: s("~ hh ~ hh").bank("jazzkit")',
+  "// the song you pick replaces these four bars",
+  'bass: note("<[g1 d2] [c2 g1] [f1 c2] [d2 a1]>").s("upright").lpf(900)',
+  'chords: chord(changes).dict("lefthand").voicing().struct("x ~ x ~").s("rhodes").gain(.6)',
+].join("\n");
+
 /**
  * Liner-note seeds for the release dialog (ux §5, "write a one-line liner note"): first lines the learner
  * can take, edit or ignore. `{bars}` and `{bpm}` are filled from the released piece. They describe what
@@ -1451,6 +1567,46 @@ export const CAPSTONE_LINER_SEEDS: Readonly<Partial<Record<CapstoneId, readonly 
     "A verse, a chorus that lands, and a bridge that goes somewhere else.",
     "The last track of Side A, written from the groove up.",
   ],
+  JC1: [
+    "A ballad at {bpm} BPM: sixteen bars of ii–Vs that move through three keys or more.",
+    "The tune walks the 3rds and 7ths from chord to chord, a step at a time; between the changes it goes where it likes.",
+    "Slow changes in several keys, and a melody that meets each one on its 3rd or its 7th.",
+  ],
+  JC2: [
+    "A jazz blues in F at {bpm} BPM, two choruses: shells, a walking bass and a head of my own.",
+    "One chord pattern drives the band; the bass walks into every bar from a step away.",
+    "The head plays twice, and the second chorus is not the first one again.",
+  ],
+  JC3: [
+    "A head of my own on rhythm changes in B♭ at {bpm} BPM: thirty-two bars, A A B A.",
+    "The changes come from Gershwin's I Got Rhythm (1930); the tune on top is mine.",
+    "The bridge leans away through D7, G7, C7 and F7, and the last A brings the tune home.",
+  ],
+  JC4: [
+    "A 1930 standard at {bpm} BPM, its melody untouched, over chords I chose.",
+    "The tune is the songwriter's; the substitutes, the ii–Vs and the passing chords are mine.",
+    "The same notes on top, new harmony underneath: an old song lit differently.",
+  ],
+  RC1: [
+    "{bars} bars of one-chord funk at {bpm} BPM: everything meets on the one, and the sixteenths breathe in between.",
+    "Ghosted hats, a bass that dances around the kick, and horns that stab and get out of the way.",
+    "One minor seventh chord the whole way through. The groove is the song.",
+  ],
+  RC2: [
+    "{bars} bars of son at {bpm} BPM: the clave runs from the first bar to the last, three strokes then two.",
+    "The bass plays the tresillo in every bar; three against two turns over it, and a bell answers the clave.",
+    "Every layer is a rhythm I can count, and no two of them are the same.",
+  ],
+  AC1: [
+    "One tune, two sides: the same melody arranged twice, in two styles of my own.",
+    "Side A and side B play the same notes; the tempo, the feel and every sound around them changed.",
+    "An old tune from the public domain, given two arrangements: one for each side.",
+  ],
+  AC2: [
+    "A neo-soul ballad at {bpm} BPM: ninth and eleventh chords on a Rhodes, a top line that barely moves, hats that swing.",
+    "The snare sits a few milliseconds behind the beat, and the groove leans back with it.",
+    "Written from the chords up: the voicings first, then the groove, then the tune.",
+  ],
 };
 
 /**
@@ -1466,6 +1622,14 @@ export const CAPSTONE_LINER_PROMPTS: Readonly<Partial<Record<CapstoneId, string>
   C7: "Where does your song lift, and why did you put the colours where they are?",
   "CF-T": "What did the form tell you before you wrote a note?",
   "CF-A": "What is this song about?",
+  JC1: "Which keys did you choose, and why in that order?",
+  JC2: "What changes in your second chorus, and why there?",
+  JC3: "What does your tune do in the bridge that it does not do in the A sections?",
+  JC4: "Which new chord changes the song the most, and why did you put it there?",
+  RC1: "What keeps your groove moving when the chord never changes?",
+  RC2: "Which layer did you write last, and what did it add to the clave?",
+  AC1: "What did each style change, and what did the tune keep?",
+  AC2: "Which chord do you wait for, and what does the groove do around it?",
 };
 
 export const capstones: readonly CapstoneDef[] = [
@@ -2632,7 +2796,10 @@ export const capstones: readonly CapstoneDef[] = [
     objective: "St. Louis Blues (1914) 12-bar strain or Careless Love: bass, changes, then melody.",
     opensAfter: { capstones: ["C5"] },
     meter: "4/4",
-    song: ["song.st-louis-blues", "song.careless-love"],
+    // Careless Love first: X2.S1 names it (contracts §2.4, 1.5), so a session started from Today, which opens on the
+    // first song with an answer key, starts on it; St. Louis Blues is the other choice on the capstone's Start page
+    // while its reading is short of the three-readings bar (carry f8; decisions "Needs you").
+    song: ["song.careless-love", "song.st-louis-blues"],
     sessions: [
       [
         "Bass & changes",
@@ -3350,37 +3517,150 @@ export const capstones: readonly CapstoneDef[] = [
     meter: "4/4",
     bpm: [56, 92],
     swing: { subdivision: 8, amount: 1 / 3 },
+    // content/specs/J2.md "JC1 ii–V Ballad"; the pieces and why each passes or fails are in
+    // content/advanced/capstones/JC1/pieces.ts, the rule-by-rule tests in jc1.test.ts beside it.
     brief:
-      "A 16-bar ballad over chained ii–Vs that reach at least three keys, with a melody built on guide tones.",
-    starter: `setcpm(72/4)\n\nconst changes = "<Dm7 G7 C^7 C^7 Fm7 Bb7 Eb^7 Eb^7>"\n\nchords: chord(changes).dict("guidetones").voicing().s("piano")\nbass: chord(changes).rootNotes(2).s("upright")`,
+      "A ballad of your own: sixteen bars at 56–92 BPM over ii–Vs that reach at least three keys, and a tune that meets the new chords on their 3rds and 7ths, a step or less from the note before. Every line reads `changes`. The keys, their order, the voicings, the sounds and the tune between the changes are yours.",
+    starter: JC1_TEMPLATE,
     skills: ["J04", "J05", "J07"],
+    // contracts §6.6 JC1, as 1.8 settled it. `parts` is a suggestion that never gates: it names the four parts the
+    // learner writes, so the workspace adds no Band under a piece that carries its own drums (spec: "JC1 has no Band").
     rubric: [
-      req("bars", "16 bars", ["F01"], { rule: "bars", min: 16, max: 16 }),
-      req("ii-v", "Chained ii–Vs into at least 3 keys", ["J05"], custom("ii-v-chain", { minKeys: 3 })),
-      req("guide-tones", "Melody on 3rds or 7ths at chord changes", ["J07"], {
-        rule: "guide-tones",
-        track: "@melody",
-        harmony: "@chords",
-        minRatio: 0.7,
-      }),
+      req("bars", "Sixteen bars", ["F01"], { rule: "bars", min: 16, max: 16 }),
+      req("ii-v", "ii–Vs that reach at least three keys", ["J05"], custom("ii-v-chain", { minKeys: 3 })),
       req(
-        "guide-motion",
-        "Guide tones move by 2 semitones or less",
+        "guide-tones",
+        "At each chord change the tune lands on a 3rd or a 7th, a step or less from the last",
         ["J07"],
-        custom("guide-tone-motion", { maxSemis: 2 }),
+        {
+          rule: "guide-tones",
+          track: "@melody",
+          harmony: "@chords",
+          minRatio: 0.7,
+          at: "change",
+          maxMoveSemis: 2,
+        },
       ),
       tempo(56, 92),
+      opt("parts", "Drums, bass, chords and a tune", ["J04"], {
+        rule: "tracks",
+        min: 4,
+        roles: ["drums", "bass", "chords", "melody"],
+      }),
     ],
     sessions: [
-      ["Changes", "16 bars over chained ii–Vs in at least 3 keys."],
-      ["Guide-tone melody", "Guide-tone melody; release."],
+      ["The changes", "16 bars over chained ii–Vs in at least 3 keys."],
+      ["Melody and release", "Guide-tone melody; release."],
+    ],
+    sessionExtras: [
+      { starter: JC1_TEMPLATE, focusRules: ["bars", "ii-v"] },
+      { focusRules: ["bars", "ii-v", "guide-tones", "tempo", "parts"] },
     ],
     canDo: ["cd.compose.ii-v-ballad"],
     hints: ladder(
-      "Which notes of a ii–V move the least?",
-      "The 7th of ii falls to the 3rd of V.",
-      "Over Dm7 to G7, sing C then B.",
+      "Two jobs: the changes reach three keys, and the tune meets each new chord on one of the two notes that give it its colour.",
+      "A ii–V points at the key a 5th below its V, whether or not the I follows, so the keys are the ones your pairs point at. In the tune, inside each ii–V–I, the 7th of each chord sits a half step or a whole step from the 3rd of the next.",
+      "Add a ii–V a whole step below one you already have. For the tune, play only the note at each change, as whole notes, until every move is a step or less; then fill the bars in between.",
     ),
+    tests: [
+      {
+        name: "the starter: eight bars, two keys (C and E♭), no tune yet",
+        response: { code: JC1_PIECES.template },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      // One passing piece per shipped flavour (contracts §6.6); a flavour never changes the rubric.
+      {
+        name: "jazz-soul: round the cycle (C F B♭ E♭) on the Rhodes and the upright, the vibes on the thread",
+        response: { code: JC1_PIECES.jazzSoul },
+        expect: "pass",
+      },
+      {
+        name: "pop: D, C, B♭, then D minor (iiø7 V7♭9 i), hand shells on the piano, at 66",
+        response: { code: JC1_PIECES.pop },
+        expect: "pass",
+      },
+      {
+        name: "indie: the same changes on the acoustic guitar with room, the thread as whole notes, at 80",
+        response: { code: JC1_PIECES.indie },
+        expect: "pass",
+      },
+      {
+        name: "funk: straight 8ths, lefthand voicings pushed, a chain of ii–Vs that never lands, at 88",
+        response: { code: JC1_PIECES.funk },
+        expect: "pass",
+      },
+      {
+        name: "minimal: the guide-tone line alone as whole notes, at 56",
+        response: { code: JC1_PIECES.minimal },
+        expect: "pass",
+      },
+      {
+        name: "beyond the brief: passing 8ths and held 9ths between the changes, swung, over a piano pad, at 92",
+        response: { code: JC1_PIECES.decorated },
+        expect: "pass",
+      },
+      {
+        name: "the right function, one key: four ii–V–Is, all into C",
+        response: { code: JC1_PIECES.oneKey },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "two keys over sixteen bars (C and F)",
+        response: { code: JC1_PIECES.twoKeys },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "a guide tone at every change, but a tritone leap into bar 7",
+        response: { code: JC1_PIECES.leap },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "the tune on the root at every change",
+        response: { code: JC1_PIECES.roots },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "the right tune, not heard: the melody at gain 0",
+        response: { code: JC1_PIECES.silentMel },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "the right changes, not heard: the comping at gain 0, only roots in the bass",
+        response: { code: JC1_PIECES.mutedChords },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "the end of session 1: changes and band, no tune",
+        response: { code: JC1_PIECES.noMelody },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "100 BPM is no ballad",
+        response: { code: JC1_PIECES.fast },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "fifteen bars",
+        response: { code: JC1_PIECES.bars15 },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "seventeen bars",
+        response: { code: JC1_PIECES.bars17 },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+    ],
   }),
   compose({
     id: "JC2",
@@ -3389,22 +3669,43 @@ export const capstones: readonly CapstoneDef[] = [
       "Jazz-blues changes, shell comping and walking bass from one chord() pattern; an original head.",
     opensAfter: { lessonsCompleted: ["J4.L04"] },
     meter: "4/4",
-    key: { tonic: "F", mode: "major" },
+    // Read in F as a blues, as C5 is (contracts §6.8 item 1): a dominant-seventh piece is never told it "reads in C
+    // major" while every chord of the chart sounds.
+    key: { tonic: "F", mode: "blues" },
     bpm: [100, 180],
     swing: { subdivision: 8, amount: 1 / 3 },
+    // content/specs/JC2.md; the pieces and why each passes or fails are in content/advanced/capstones/JC2/pieces.ts,
+    // the rule-by-rule tests in jc2.test.ts beside it.
     brief:
-      "A jazz blues in F: changes, swinging comping and a walking bass all driven by one chord pattern, then your own head over two choruses.",
-    starter: `setcpm(132/4)\n\nconst changes = "<F7 Bb7 F7 Cm7 Bb7 Bo7 F7 D7 Gm7 C7 F7 C7>"\n\nhats: s("rd*8").swingBy(1/3, 4).gain(.5)\nchords: n("0 1").chord(changes).voicing().struct("~ x ~ x").s("piano")\nbass: chord(changes).rootNotes(2).struct("x*4").s("upright")`,
+      "A jazz blues in F, yours. Write the changes once and let them drive the band: shells on the Rhodes, a bass that walks with its roots taken from your chord pattern, the ride swinging. Then put your own head on top for two choruses, the second one changed. Tempo, comping, the walk and the tune are yours.",
+    starter: JC2_TEMPLATE,
     skills: ["J11", "B05", "J08"],
+    // contracts §6.6 JC2 with the spec's settled bodies. Every required rule reads what is heard except
+    // `one-pattern`, which §6.6 binds; the walk's roots are read against the comping's chords, so a bass that walks
+    // other changes than the comping plays fails `walking` too. `head` is the spec's addition (JC2.S2's goal is the
+    // head; without it a band with no tune could be released). Not here: the spec's `one-pattern-heard` (a `harmony`
+    // matcher at the bass level), which fails comping on 2 and 4 under a walk (50% like the reference, evaluated),
+    // a rhythm the brief leaves free.
     rubric: [
-      req("form", "Jazz 12-bar blues", ["J11"], { rule: "blues-form", variant: "jazz" }),
+      req("form", "A jazz blues in F, two choruses", ["J11"], {
+        rule: "blues-form",
+        variant: "jazz",
+        choruses: 2,
+      }),
       req(
         "walking",
-        "A walking bass",
+        "The bass walks",
         ["B05"],
-        custom("walking-bass", { rootOnOne: 0.75, approachOnFour: 0.5 }),
+        custom("walking-bass", {
+          bass: "@bass",
+          harmony: "@chords",
+          rootOnOne: 0.75,
+          chordToneOnThree: 0.5,
+          approachOnFour: 0.5,
+          maxSemis: 2,
+        }),
       ),
-      req("swing", "Swung 8ths on the ride or comping", ["R13"], {
+      req("swing", "Swung 8ths on the ride or the comping", ["R13"], {
         rule: "swing",
         track: ["hats", "@drums", "chords"],
         drums: ["hatClosed", "hatOpen", "ride"],
@@ -3416,17 +3717,138 @@ export const capstones: readonly CapstoneDef[] = [
         tool: ["tb.set", "tb.rootNotes"],
         min: 1,
       }),
+      req("head", "A head on top", ["J11"], {
+        rule: "tracks",
+        min: 4,
+        roles: ["drums", "bass", "chords", "melody"],
+      }),
+      opt("head-sound", "The head on the muted trumpet or the vibes", ["J11"], {
+        rule: "sounds",
+        track: "mel",
+        anyOf: ["snd.mutetpt", "snd.vibes"],
+      }),
+      opt("chord-tones", "The head lands on chord tones", ["M03"], {
+        rule: "chord-tones-strong",
+        minRatio: 0.6,
+        melody: "@melody",
+        harmony: "@chords",
+        strength: "strong",
+      }),
+      opt("tempo", "A medium-swing tempo, 100 to 180 BPM", ["R02"], {
+        rule: "tempo-bpm",
+        min: 100,
+        max: 180,
+      }),
     ],
     sessions: [
-      ["Changes & comping", "Changes, shell comping and walking bass from one `chord()` pattern."],
-      ["Head", "Original head over two choruses; release."],
+      ["The band", "Changes, shell comping and walking bass from one `chord()` pattern."],
+      ["The head and release", "Original head over two choruses; release."],
+    ],
+    sessionExtras: [
+      { starter: JC2_TEMPLATE, focusRules: ["form", "walking", "swing", "one-pattern"] },
+      {
+        focusRules: ["form", "walking", "swing", "one-pattern", "head", "head-sound", "chord-tones", "tempo"],
+      },
     ],
     canDo: ["cd.compose.jazz-blues"],
     hints: ladder(
-      "What does the bass do on beat 4?",
-      "Beat 4 approaches the next root by a step.",
-      "Walk F A C B to reach B♭.",
+      "Everything shares one chord pattern: the chart, the comping and the bass's roots. Which line of the checklist is still open?",
+      "The roots come from `changes` on beat 1; beats 2 to 4 are yours: a chord tone on 3, then a note a half step or a whole step from the next bar's root on 4.",
+      "Into a bar of B♭7, beat 4 can be the B or the A beside it; into F7, the E or the G♭. For the second chorus, keep the head's first eight bars and change its last four.",
     ),
+    tests: [
+      {
+        name: "the starter: U11's blues in two, no walk, no head",
+        response: { code: JC2_PIECES.template },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      // One passing piece per shipped flavour (contracts §6.6); a flavour never changes the rubric.
+      {
+        name: "jazz-soul, the reference: Rhodes shells, the walk on the upright, the muted trumpet's head, at 132",
+        response: { code: JC2_PIECES.jazzSoul },
+        expect: "pass",
+      },
+      {
+        name: "pop: piano shells, the electric bass walking, the head on the piano, at 120",
+        response: { code: JC2_PIECES.pop },
+        expect: "pass",
+      },
+      {
+        name: "indie: clean-guitar shells, Am7 D7 in bar 8, the head on the acoustic guitar, at 112",
+        response: { code: JC2_PIECES.indie },
+        expect: "pass",
+      },
+      {
+        name: "funk: rootless lefthand voicings at A4, the fingerbass walking, the organ head, at 144",
+        response: { code: JC2_PIECES.funk },
+        expect: "pass",
+      },
+      {
+        name: "the head on the vibes at 160 over rootless comping",
+        response: { code: JC2_PIECES.vibes160 },
+        expect: "pass",
+      },
+      {
+        name: "minimal comping: shells on 2 and 4 only, at 104",
+        response: { code: JC2_PIECES.twoAndFour },
+        expect: "pass",
+      },
+      {
+        name: "the right function, no walk: each bar's four notes crowded into beat 1",
+        response: { code: JC2_PIECES.crowded },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "roots on 1 and chord tones on 3, but beat 4 repeats beat 3: no approaches",
+        response: { code: JC2_PIECES.noApproach },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "the roots four to the bar from the pattern: a bass on every beat, not a walk",
+        response: { code: JC2_PIECES.rootsFour },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "the right function on the wrong line: ride and comping straight, the swing on the quarter-note bass",
+        response: { code: JC2_PIECES.swingOnBass },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "U11's blues, walked and with a head: not the jazz chart",
+        response: { code: JC2_PIECES.u11 },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "one chorus",
+        response: { code: JC2_PIECES.oneChorus },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "comping and walk written out note by note: no chord pattern",
+        response: { code: JC2_PIECES.byHand },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "the band without a head",
+        response: { code: JC2_PIECES.noHead },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "the right head, not heard: the melody at gain 0",
+        response: { code: JC2_PIECES.silentHead },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+    ],
   }),
   compose({
     id: "JC3",
@@ -3437,41 +3859,130 @@ export const capstones: readonly CapstoneDef[] = [
     key: { tonic: "Bb", mode: "major" },
     bpm: [120, 220],
     swing: { subdivision: 8, amount: 1 / 3 },
-    brief: "A new head on rhythm changes in B♭: 32 bars, AABA, with the bridge D7 G7 C7 F7.",
-    starter: `setcpm(160/4)\n\nconst chordsA = chord("<[Bb^7 Gm7] [Cm7 F7]>").voicing()\nconst chordsB = chord("<D7 D7 G7 G7 C7 C7 F7 F7>").voicing()\n\nchords: arrange([8, chordsA], [8, chordsA], [8, chordsB], [8, chordsA]).s("piano")`,
+    song: ["song.i-got-rhythm"],
+    brief:
+      "A new head on rhythm changes in B♭: 32 bars, A A B A. The A sections keep the starter's chords, I Got Rhythm's (1930), each A ending on B♭. The bridge is D7 G7 C7 F7, two bars each. The tune is yours: at most a quarter of its bars may echo the old head.",
+    starter: JC3_TEMPLATE,
     skills: ["J12", "J10"],
     rubric: [
-      req("form", "AABA, 32 bars", ["J12"], { rule: "form", pattern: "AABA" }),
+      req("form", "A A B A: three A sections and a bridge", ["J12"], { rule: "form", pattern: "AABA" }),
       req("bars", "32 bars", ["J12"], { rule: "bars", min: 32, max: 32 }),
-      req("a-changes", "A sections on rhythm changes", ["J12"], {
+      req("a-changes", "The A sections on rhythm changes", ["J12"], {
         rule: "progression",
         schema: "schema.rhythm-a",
       }),
-      req("bridge", "Bridge D7 G7 C7 F7", ["J10"], { rule: "progression", rn: ["III7", "VI7", "II7", "V7"] }),
-      req("chord-tones", "Chord tones on strong beats", ["M03"], {
+      // Two bars a chord from bar 17: a bridge of one bar a chord, or one read from bar 1, does not pass.
+      req("bridge", "The bridge D7 G7 C7 F7, two bars each", ["J10"], {
+        rule: "progression",
+        rn: ["III7", "III7", "VI7", "VI7", "II7", "II7", "V7", "V7"],
+        bars: [17, 24],
+      }),
+      req("chord-tones", "Chord tones on the strong beats of the tune", ["M03"], {
         rule: "chord-tones-strong",
         minRatio: 0.55,
         melody: "@melody",
         harmony: "@chords",
         strength: "strong",
       }),
+      req("bridge-guides", "In the bridge, a 3rd or a 7th as each chord arrives", ["J07"], {
+        rule: "guide-tones",
+        track: "@melody",
+        harmony: "@chords",
+        minRatio: 0.5,
+        at: "change",
+        section: { bars: [17, 24] },
+      }),
+      // Reads `GradeContext.songMelody` (I Got Rhythm's head, from its answer key) as the model the tune must not
+      // repeat, and the changes bar by bar from `changes` (the first chord of each bar). While the key is not on file
+      // the model is `standIn`, the head J4.L04 reads on these changes (decision 80).
       req(
-        "bridge-guides",
-        "Bridge changes met by a 3rd or 7th",
-        ["J07"],
-        custom("bridge-guide-tones", { min: 0.5 }),
+        "original",
+        "A tune of your own, not an old head",
+        ["J12"],
+        custom("contrafact", {
+          changes: [...JC3_CHANGES_BY_BAR],
+          changesMinRatio: 0.85,
+          maxSharedRatio: 0.25,
+          standIn: {
+            name: JC3_STAND_IN.name,
+            at: [...JC3_STAND_IN.at],
+            notes: JC3_STAND_IN.notes.map((x) => [...x]),
+          },
+        }),
       ),
+      opt("tempo", "Tempo between 120 and 220 BPM", ["R02"], { rule: "tempo-bpm", min: 120, max: 220 }),
     ],
     sessions: [
       ["A sections", "A sections in B♭."],
       ["Bridge", "Bridge D7 G7 C7 F7."],
       ["Arrange", "Arrange and release."],
     ],
+    sessionExtras: [
+      { focusRules: ["a-changes", "chord-tones", "original"] },
+      { focusRules: ["form", "bars", "bridge", "bridge-guides", "chord-tones", "original"] },
+      {
+        focusRules: ["form", "bars", "a-changes", "bridge", "chord-tones", "bridge-guides", "original"],
+      },
+    ],
     canDo: ["cd.compose.contrafact"],
+    // W7 gate (decision 80): graded with no host context, so `original` reads the brief's stand-in model, J4.L04's
+    // head. content/advanced/capstones/JC3/jc3.test.ts pins each failing piece to the line it breaks.
+    tests: [
+      { name: "the starter: eight bars of the A, no tune", response: { code: JC3_TEMPLATE }, expect: "fail" },
+      {
+        name: "minimal: the reference, 32 bars, the tune on the guide tones",
+        response: { code: JC3_PIECES.reference },
+        expect: "pass",
+      },
+      {
+        name: "an eighth-note line at 200 on jazz guitar",
+        response: { code: JC3_PIECES.bop },
+        expect: "pass",
+      },
+      {
+        name: "a riff head with its own last A on piano",
+        response: { code: JC3_PIECES.riff },
+        expect: "pass",
+      },
+      {
+        name: "a quote of the old head in each A, the rest new",
+        response: { code: JC3_PIECES.quote },
+        expect: "pass",
+      },
+      {
+        name: "beyond the brief: an eighth-note A, a new last A, the bridge in long notes, at 220",
+        response: { code: JC3_PIECES.beyond },
+        expect: "pass",
+      },
+      {
+        name: "the right changes, the old tune: J4.L04's head in every A",
+        response: { code: JC3_PIECES.oldHead },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "the bridge's chords one bar each: right chords, wrong length",
+        response: { code: JC3_PIECES.shortBridge },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "the right tune, not heard: the melody at gain 0",
+        response: { code: JC3_PIECES.muted },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "the bridge tune on the roots, not the 3rds and 7ths",
+        response: { code: JC3_PIECES.rootsBridge },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+    ],
     hints: ladder(
-      "Which note of D7 tells the ear the key has moved?",
-      "F♯, the 3rd of D7, is not in B♭.",
-      "Land on F♯ on the downbeat of the bridge.",
+      "A head lands on the chord's own notes where the beat is strong and moves freely between them.",
+      "Look at beats 1 and 3 of each bar of the A, and at the first beat of each two-bar chord of the bridge.",
+      "Start from a two-bar riff over the first two bars and vary it; in the bridge, land on each chord's 3rd or 7th, each landing a half step from the last.",
     ),
   }),
   compose({
@@ -3481,29 +3992,39 @@ export const capstones: readonly CapstoneDef[] = [
     opensAfter: { checkpoints: ["J.CP2"] },
     meter: "4/4",
     bpm: [56, 100],
-    brief: "Reharmonize a 1930 standard with at least three devices. The melody stays exactly as written.",
-    starter: `setcpm(72/4)\n\nchords: chord("<Dm7 G7 C^7 A7>").voicing().s("piano")`,
+    song: ["song.georgia-on-my-mind", "song.body-and-soul"],
+    brief:
+      "Reharmonize a 1930 standard, Georgia on My Mind or Body and Soul, with at least three different devices: a tritone substitute, a secondary ii–V, a backdoor, a passing diminished chord. The melody stays exactly as written: put each new chord where the notes the tune holds agree with it.",
+    starter: JC4_TEMPLATE,
     skills: ["J14", "J13"],
     rubric: [
+      // Reads `GradeContext.songMelody`: the picked song's melody from its answer key, pickup included.
       req(
         "melody",
-        "Melody identical to the original",
+        "The song's melody, note for note",
         ["J14"],
-        custom("melody-matches-song", {
-          songs: ["song.georgia-on-my-mind", "song.body-and-soul"],
-          pitch: "absolute",
-        }),
+        custom("song-melody-kept", { pitch: "absolute" }),
       ),
       req(
         "tensions",
-        "Tensions over the new chords are allowed ones",
+        "The tune's long notes belong to the new chords: chord tones or tensions that fit",
         ["J02"],
-        custom("allowed-tensions", { min: 0.85 }),
+        custom("allowed-tensions", { minRatio: 0.85 }),
       ),
-      req("devices", "At least 3 reharmonization devices", ["J14", "J13"], {
+      // Contracts §6.6: `device-count` ≥ 3 of the four; it counts DIFFERENT devices and names the ones still open.
+      req("devices", "At least 3 different devices under the tune", ["J14", "J13"], {
         rule: "device-count",
         devices: ["tritone sub", "secondary ii–V", "backdoor", "diminished passing"],
         min: 3,
+      }),
+      opt("tempo", "Tempo between 56 and 100 BPM", ["R02"], { rule: "tempo-bpm", min: 56, max: 100 }),
+      // JC4.S3's stretch: a `voicing()` line is not graded by its top note (contracts §6.7), and the line says so.
+      opt("top-voice", "Chords written by hand, their top note moving by a step or staying", ["C05"], {
+        rule: "voice-leading",
+        track: "@chords",
+        maxMovePerVoice: 2,
+        voice: "top",
+        minRatio: 0.7,
       }),
     ],
     sessions: [
@@ -3511,12 +4032,26 @@ export const capstones: readonly CapstoneDef[] = [
       ["Reharmonize", "Reharmonize with ≥3 devices; melody untouched."],
       ["Voice-lead", "Voice-lead and release."],
     ],
+    sessionExtras: [
+      // The analysis (form, cadences, where a device fits) is the host's analysis stage (a form map belongs to a
+      // transcribe capstone): the session's own work is one device under the untouched tune.
+      { focusRules: ["melody", "devices"] },
+      { focusRules: ["melody", "tensions", "devices"] },
+      { focusRules: ["melody", "tensions", "devices", "top-voice"] },
+    ],
     canDo: ["cd.compose.reharm"],
     hints: ladder(
-      "Which chord could be replaced by one a tritone away?",
-      "Any V7 can become ♭II7 into the same target.",
-      "Swap G7 for Db7 before C^7.",
+      "Where does the tune hold a note long enough for a new chord to sit under it?",
+      "Look at each dominant seventh that resolves, at a chord held for two bars, and at two chords a whole step apart.",
+      "Swap a resolving dominant for the dominant a half step above its target, split a held chord into a ii–V aimed at the next, or climb between two chords a whole step apart with a diminished seventh.",
     ),
+    // Graded beside Georgia on My Mind's melody (content/validate/owners.ts `briefContext`, as the host passes it).
+    // The tests on the song's own pieces live in content/advanced/capstones/JC4/brief-tests.ts and join these in
+    // content CI only (content/validate/song-tests.ts): the pieces read the song's answer key, which must never be
+    // in a module the app loads (on the L8 ladder Georgia is a standard to transcribe).
+    tests: [
+      { name: "the starter: a ballad trio with no tune", response: { code: JC4_TEMPLATE }, expect: "fail" },
+    ],
   }),
   compose({
     id: "RC1",
@@ -3525,28 +4060,73 @@ export const capstones: readonly CapstoneDef[] = [
     opensAfter: { checkpoints: ["R.CP"] },
     meter: "4/4",
     bpm: [90, 115],
-    brief: "A one-chord funk vamp: ghosted 16ths, a syncopated bass that still hits the one, and horn stabs.",
-    starter: `setcpm(100/4)\n\nkick: s("bd ~ ~ bd ~ ~ bd ~")\nsnare: s("~ sd ~ sd")\nhats: s("hh*16").velocity("[1 .35 .6 .35]*4")\nbass: note("⟪c2 ~ ~ c2 ~ eb2 ~ g2⟫").s("fingerbass").lpf(800)`,
+    // content/specs/R3.md "RC1 16th-Note Funk"; the pieces and why each passes or fails are in
+    // content/advanced/capstones/RC1/pieces.ts, the rule-by-rule tests in rc1.test.ts beside it.
+    brief:
+      "A one-chord funk vamp at 90–115 BPM on any minor seventh, the bass on its minor pentatonic (Dorian too, once you have it). Sixteenth hats with accents and ghost notes; kick and bass together on the one of every bar; three bass notes or more between the eighths. Then a clav, and short stabs on a `horns:` track.",
+    starter: RC1_STARTER,
     skills: ["R14", "R15", "R10"],
+    // Contracts §6.6 RC1, every line read from what is heard (AUTHORING §20.2).
+    //  - `ghosts` reads the closed hi-hat with `accents: 2`: a hat line quiet throughout has no ghost notes, however
+    //    loud the kick and the snare are (R3.md asks that "every hat at .3" fail; on the whole kit it passed).
+    //  - `syncopated-bass`: §6.6's "≥ 3 onsets off the 8th grid" counted on one pass of the bass, the e and the a of
+    //    each beat (`velocity-ghosts` with `maxGain` above any level, so every bass note there counts). `syncopation`
+    //    counts every rendered bar and every eighth-grid push (the starter scored 128), so it could not tell the
+    //    starter's eighths from a sixteenth bass.
     rubric: [
-      req("ghosts", "At least 4 ghost notes on 16th off-beats", ["R14"], {
+      req(
+        "ghosts",
+        "Ghost notes on the hi-hat's sixteenths between the eighths, around loud accents",
+        ["R14"],
+        {
+          rule: "velocity-ghosts",
+          track: "@drums",
+          drum: "hatClosed",
+          min: 4,
+          on: "16th-offbeat",
+          accents: 2,
+        },
+      ),
+      req("syncopated-bass", "Three or more bass notes on the sixteenths between the eighths", ["R10"], {
         rule: "velocity-ghosts",
-        track: "@drums",
-        min: 4,
+        track: "@bass",
+        maxGain: 4,
+        min: 3,
         on: "16th-offbeat",
       }),
-      req("syncopated-bass", "Bass with 3+ onsets off the 8th grid", ["R10"], {
-        rule: "syncopation",
+      req("one-bass", "The bass on the one of every bar", ["R14"], {
+        rule: "onsets",
         track: "@bass",
-        min: 3,
+        contains: [[0, 1]],
+        perBar: true,
       }),
-      req("one", "Bass and kick on the one of every bar", ["R14"], custom("bass-kick-downbeat")),
+      req("one-kick", "The kick on the one of every bar", ["R14"], {
+        rule: "onsets",
+        track: "@drums",
+        drum: "kick",
+        contains: [[0, 1]],
+        perBar: true,
+      }),
       req(
         "horns",
-        "A horns track with stabs",
+        "Short stabs on `horns:`, two or more in every two bars",
         ["R14"],
-        custom("horn-stabs", { label: "horns", min: 2, per: 2 }),
+        custom("stabs", { track: "horns", min: 2, perBars: 2 }),
       ),
+      // The spec's suggestions: ticked or unticked lines, never failures. `parts` also names the three roles the
+      // learner writes, so the workspace adds no Band under the vamp (app/src/capstone/content.ts `bandTracksFor`).
+      opt("tempo", "Tempo between 90 and 115 BPM", ["R02"], { rule: "tempo-bpm", min: 90, max: 115 }),
+      opt("parts", "Drums, bass and a chord part such as the clav", ["R14"], {
+        rule: "tracks",
+        min: 3,
+        roles: ["drums", "bass", "chords"],
+      }),
+      opt("clav", "A clav comping on `keys`", ["R14"], {
+        rule: "sounds",
+        track: "keys",
+        anyOf: ["snd.clav"],
+      }),
+      opt("displaced", "A figure that comes back displaced", ["R15"], custom("displaced-copy")),
     ],
     sessions: [
       [
@@ -3558,12 +4138,29 @@ export const capstones: readonly CapstoneDef[] = [
         "Clav and horn stabs on a `horns:` track (the `horns` sound unlocks at the start of this session if U15.L05 has not unlocked it yet); release.",
       ],
     ],
+    sessionExtras: [
+      { focusRules: ["ghosts", "syncopated-bass", "one-bass", "one-kick", "tempo"] },
+      {
+        focusRules: [
+          "ghosts",
+          "syncopated-bass",
+          "one-bass",
+          "one-kick",
+          "horns",
+          "tempo",
+          "parts",
+          "clav",
+          "displaced",
+        ],
+      },
+    ],
     canDo: ["cd.compose.funk"],
     hints: ladder(
-      "Where does funk put its weight?",
-      "Everything meets on the one; the rest dances around it.",
-      'Ghost the hats with `.velocity("[1 .3 .6 .3]*4")`.',
+      "Funk puts every part on the one together; between the ones, each part takes its own sixteenths. Which part is still sitting on the eighths?",
+      "Count each beat 1 e and a. The e and the a are the places between the eighths: the bass needs three notes there, the hats quiet hits there and loud ones on the beats, and a stab lasts an eighth or less.",
+      "Split a bass eighth with `[ ]` into two sixteenths and leave the first one empty; do it in three places of the bar. For the horns, a short chord twice a bar on `horns:`.",
     ),
+    tests: rc1BriefTests(),
   }),
   compose({
     id: "RC2",
@@ -3573,99 +4170,239 @@ export const capstones: readonly CapstoneDef[] = [
     opensAfter: { checkpoints: ["R.CP"] },
     meter: "4/4",
     bpm: [90, 130],
+    // content/specs/R3.md "RC2 Clave & Polyrhythm"; the pieces and why each passes or fails are in
+    // content/advanced/capstones/RC2/pieces.ts, the rule-by-rule tests in rc2.test.ts beside it.
     brief:
-      "A son clave groove, 3-2, at least 8 bars, with a tresillo bass, a 3-against-2 layer and a Euclidean rhythm.",
-    starter: `setcpm(110/4)\n\nperc: s("<[rim ~ ~ rim ~ ~ rim ~] [~ ~ rim ~ rim ~ ~ ~]>")\nbass: note("c2(3,8)").s("ebass").lpf(700)`,
+      "Your son band, eight bars or more at 90–130 BPM: the son clave 3-2 on `perc` from bar 1 to the end, the tresillo in the bass in every bar (not a tumbao). Then layer it: three even hits on `perc2` against two on `kick` in the same bars, and a bell on `perc3`, five hits over sixteen steps.",
+    starter: RC2_STARTER,
     skills: ["R18", "R17"],
+    // Contracts §6.6 RC2 with the pre-flight's coverage and simultaneity fixes (R3.md): the clave in every two-bar
+    // window from bar 1 and nothing else on its line; the two pulses in the same bars, on `kick` (a `drums:` line is a
+    // whole kit and is never two even hits while it carries hats); the heard bell beside §6.6's `uses`, which the
+    // bass's `(3,8)` meets on its own.
     rubric: [
-      req("clave", "Son clave 3-2 for 8+ bars", ["R18"], {
-        rule: "clave",
-        track: "perc",
-        type: "son",
-        direction: "3-2",
-      }),
+      req(
+        "clave",
+        "The son clave 3-2 on `perc`, whole in every two bars from bar 1, for 8 bars or more",
+        ["R18"],
+        {
+          rule: "clave",
+          track: "perc",
+          type: "son",
+          direction: "3-2",
+          minBars: 8,
+        },
+      ),
       req("bars", "At least 8 bars", ["R18"], { rule: "bars", min: 8 }),
-      req("tresillo", "Tresillo in the bass on the 3-side", ["R18"], custom("tresillo-bass")),
-      req("poly", "A 3:2 layer between two tracks", ["R17"], {
+      req("tresillo", "The tresillo in the bass, in every bar", ["R18"], {
+        rule: "onsets",
+        track: "@bass",
+        contains: [
+          [0, 1],
+          [3, 8],
+          [3, 4],
+        ],
+        perBar: true,
+      }),
+      req("poly", "Three even hits on `perc2` against two on `kick`, together for 4 bars or more", ["R17"], {
         rule: "polyrhythm",
         a: "perc2",
-        b: "drums",
+        b: "kick",
         ratio: [3, 2],
+        minBars: 4,
       }),
-      req("euclid", "A Euclidean rhythm", ["R18"], { rule: "uses", tool: "tb.mini.euclid", min: 1 }),
+      req("euclid", "A rhythm written with `(k,n)`", ["R18"], {
+        rule: "uses",
+        tool: "tb.mini.euclid",
+        min: 1,
+      }),
+      req("bell", "A bell on `perc3`: five hits spread over sixteen steps, in every bar", ["R18"], {
+        rule: "euclid",
+        track: "perc3",
+        k: 5,
+        n: 16,
+        rotationFree: true,
+      }),
+      // The spec's suggestions: ticked or unticked lines, never failures. `parts` also names the three roles the
+      // learner writes, so the workspace adds no Band under the son (app/src/capstone/content.ts `bandTracksFor`).
+      opt("parts", "Drums, bass and a chord part such as a montuno on `keys`", ["R18"], {
+        rule: "tracks",
+        min: 3,
+        roles: ["drums", "bass", "chords"],
+      }),
+      opt(
+        "montuno",
+        "The montuno faces the clave",
+        ["R18"],
+        custom("clave-aligned", { track: "keys", clave: "perc" }),
+      ),
     ],
     sessions: [
       ["Clave & tresillo", "Son clave 3-2 on the 2-bar 8th grid with tresillo bass."],
       ["Layers", "A 3:2 layer and Euclidean percussion; release."],
     ],
+    sessionExtras: [
+      { focusRules: ["clave", "bars", "tresillo", "parts", "montuno"] },
+      { focusRules: ["clave", "bars", "tresillo", "poly", "euclid", "bell", "parts", "montuno"] },
+    ],
     canDo: ["cd.compose.clave"],
     hints: ladder(
-      "Which side of the clave has three hits?",
-      "Bar A: 0, 3/8, 6/8. Bar B: 2/8, 4/8.",
-      "Tresillo is `(3,8)`.",
+      "The clave is the line everything else answers. Does it run, unchanged and the right way round, from the first bar to the last?",
+      "Eight bars means every line reaches bar 8: a loop written as `<…>` with eight entries, or `arrange()` on every line. Three against two means both in the same bar: three hits spaced a third of a bar apart while the kick plays two.",
+      "For the bell, give `perc3` a rhythm in the `(k,n)` form over sixteen steps; a third number turns it to start on another step. Try two or three turns against the clave and keep the one that sits best.",
     ),
+    tests: rc2BriefTests(),
   }),
-  compose({
-    id: "AC1",
-    title: "AC1 One Tune, Two Genres",
-    objective: "St. Louis Blues or Sweet Georgia Brown arranged twice, in two genres.",
-    opensAfter: { checkpoints: ["A.CP", "U11.CP"] },
-    meter: "4/4",
-    bpm: [60, 180],
-    brief:
-      "Arrange one public-domain tune twice, in two genres: same melody, different tempo or feel, different instruments.",
-    starter: `setcpm(100/4)\n\nmel: n("⟪0 2 4 2⟫").scale("G4:major").s("piano")`,
-    skills: ["D09", "F06"],
-    rubric: [
-      req(
-        "melody",
-        "Both versions keep the tune's melody",
-        ["D09"],
-        custom("melody-matches-song", {
-          songs: ["song.st-louis-blues", "song.sweet-georgia-brown"],
-          pitch: "pitch-class",
+  // AC1 is two pieces of code, one per version (`versions`, feature `capstone.versions`), on the song the learner
+  // picks (`song`; the host passes its melody as `GradeContext.songMelody` and the other version as
+  // `GradeContext.otherVersion`). content/specs/A2.md "AC1 One Tune, Two Genres"; the pieces are in
+  // content/advanced/capstones/AC1/pieces.ts. The brief's `tests` stay empty: content CI grades a test without a song or
+  // a second version, so `song-melody-kept` and `two-versions-differ` can never pass there. ac1.test.ts beside the
+  // pieces grades every one of them through the real grader in capstone mode, with both.
+  defineCapstone({
+    ...compose({
+      id: "AC1",
+      title: "AC1 One Tune, Two Genres",
+      objective: "St. Louis Blues or Sweet Georgia Brown arranged twice, in two genres.",
+      opensAfter: { checkpoints: ["A.CP", "U11.CP"] },
+      meter: "4/4",
+      bpm: [60, 220],
+      brief:
+        "Arrange the tune twice, in two genres; it stays note for note, at any octave. Put the versions 20 BPM apart or swing only one, and give each two sounds the other lacks. In each, shape one sound with a filter envelope, grit, movement, FM or room until you hear it. Twelve bars or more.",
+      starter: AC1_TEMPLATE,
+      skills: ["D09", "D02", "D06", "D07", "F06"],
+      // contracts §6.6 AC1, as the content lead settled it (A2.md): each rule runs on each version's own code;
+      // `two-versions-differ` reads the other version too. The sound line replaces §6.6's bare `uses` with an A1
+      // control set to a value that is heard (requested contracts change, content lead apiNote 1).
+      rubric: [
+        req(
+          "melody",
+          "The tune is the song's own, note for note, at any octave",
+          ["D09"],
+          custom("song-melody-kept", { melody: "@melody", pitch: "pitch-class" }),
+        ),
+        req(
+          "sound",
+          "One sound shaped with a filter envelope, grit, movement, FM or room, set far enough to hear",
+          ["D02", "D06", "D07"],
+          custom("control-set", {
+            anyOf: [
+              { control: "lpenv", above: 0 },
+              { control: "distort", above: 0.5 },
+              { control: "crush", below: 7 },
+              { control: "vib", above: 0 },
+              { control: "phaserrate", above: 0 },
+              { control: "tremolosync", above: 0 },
+              { control: "lprate", above: 0 },
+              { control: "fmi", above: 0.5 },
+              { control: "roomsize", above: 3 },
+              { control: "delaytime", above: 0 },
+            ],
+          }),
+        ),
+        req(
+          "differ",
+          "The other version is 20 BPM away or in the other feel, with two sounds of its own",
+          ["D09"],
+          custom("two-versions-differ", { melody: "@melody", tempoDelta: 20, soundsDiffer: 2 }),
+        ),
+        // Twelve, not the spec's sixteen: St. Louis Blues is a 12-bar strain, and a strain played twice note for note
+        // is still twelve bars long to the grader (the piece's period).
+        req("bars", "Twelve bars or more: the whole blues, or the A and B sections of the chorus", ["F06"], {
+          rule: "bars",
+          min: 12,
         }),
+        tempo(60, 220),
+      ],
+      sessions: [
+        ["Version one", "St. Louis Blues (1914) or Sweet Georgia Brown (1925), version one."],
+        ["Version two", "Version two in the other flavour."],
+        ["Compare & polish", "Compare, polish, release."],
+      ],
+      sessionExtras: [
+        { starter: AC1_TEMPLATE, focusRules: ["melody", "sound", "bars", "tempo"] },
+        { focusRules: ["melody", "sound", "differ", "bars", "tempo"] },
+        { focusRules: ["melody", "sound", "differ", "bars", "tempo"] },
+      ],
+      canDo: ["cd.compose.two-genres"],
+      hints: ladder(
+        "What stays when a song changes genre, and what moves?",
+        "The tune's notes and their order stay. The tempo, the feel, the drums, the bass, the chords and the sounds can all move.",
+        "Move the tempo a long way, or swing every line of one version and none of the other; swap at least two instruments; then turn one sound control up until you hear the sound change.",
       ),
-      req(
-        "differ",
-        "The two versions differ in tempo or feel, and in instruments",
-        ["D09"],
-        custom("two-versions-differ", { tempoDelta: 20, soundsDiffer: 2 }),
-      ),
-      req("sound-design", "Each version uses a sound-design tool", ["D02", "D03"], {
-        rule: "uses",
-        tool: [
-          "tb.lpenv",
-          "tb.adsr",
-          "tb.hpf",
-          "tb.bpf",
-          "tb.lpq",
-          "tb.roomsize",
-          "tb.delaytime",
-          "tb.delayfeedback",
-          "tb.orbit",
-          "tb.crush",
-          "tb.coarse",
-          "tb.vib",
-          "tb.phaser",
-          "tb.fm",
-          "tb.unison",
-          "tb.pw",
-        ],
-        min: 1,
-      }),
+      // Each test is version one, graded beside Sweet Georgia Brown's melody and the jazz-soul version as version two
+      // (content/validate/owners.ts `briefContext`); ac1.test.ts grades both songs and both orders.
+      tests: [
+        { name: "the starter", response: { code: AC1_BRIEF_PIECES.template }, expect: "fail" },
+        {
+          name: "minimal: funk at 104, a filter envelope on the bass",
+          response: { code: AC1_BRIEF_PIECES.funk },
+          expect: "pass",
+        },
+        {
+          name: "pop at 112: the 808, crushed hats, piano",
+          response: { code: AC1_BRIEF_PIECES.pop },
+          expect: "pass",
+        },
+        {
+          name: "indie at 140: a phaser and a big room",
+          response: { code: AC1_BRIEF_PIECES.indie },
+          expect: "pass",
+        },
+        {
+          name: "funk with the tune an octave lower",
+          response: { code: AC1_BRIEF_PIECES.funkLow },
+          expect: "pass",
+        },
+        {
+          name: "St. Louis Blues: the indie version, beside the jazz-soul one",
+          response: { code: AC1_SLB.indie },
+          context: { song: "song.st-louis-blues", otherVersion: AC1_SLB.jazzSoul },
+          expect: "pass",
+        },
+        {
+          name: "the other version again an octave down: same tempo, feel and sounds",
+          response: { code: AC1_BRIEF_PIECES.sameAsOther },
+          expect: "fail",
+          feedback: ["rubric.unmet"],
+        },
+        {
+          name: "vibrato with no depth: the right call, nothing heard",
+          response: { code: AC1_BRIEF_PIECES.noDepth },
+          expect: "fail",
+          feedback: ["rubric.unmet"],
+        },
+        {
+          name: "crush at 16 bits, where the sound already is",
+          response: { code: AC1_BRIEF_PIECES.crush16 },
+          expect: "fail",
+          feedback: ["rubric.unmet"],
+        },
+        {
+          name: "FM on a sampled piano, which FM does not reach",
+          response: { code: AC1_BRIEF_PIECES.fmPiano },
+          expect: "fail",
+          feedback: ["rubric.unmet"],
+        },
+        {
+          name: "eight bars",
+          response: { code: AC1_BRIEF_PIECES.short },
+          expect: "fail",
+          feedback: ["rubric.unmet"],
+        },
+        {
+          name: "two notes of the tune moved",
+          response: { code: AC1_BRIEF_PIECES.tuneChanged },
+          expect: "fail",
+          feedback: ["rubric.unmet"],
+        },
+      ],
+    }),
+    song: ["song.sweet-georgia-brown", "song.st-louis-blues"],
+    versions: [
+      { id: "a", label: "Version one", startsIn: "AC1.S1" },
+      { id: "b", label: "Version two", startsIn: "AC1.S2" },
     ],
-    sessions: [
-      ["Version one", "St. Louis Blues (1914) or Sweet Georgia Brown (1925), version one."],
-      ["Version two", "Version two in the other flavour."],
-      ["Compare & polish", "Compare, polish, release."],
-    ],
-    canDo: ["cd.compose.two-genres"],
-    hints: ladder(
-      "What stays the same when a song changes genre?",
-      "The melody's pitch classes stay; tempo, feel and sounds move.",
-      "Try the second version 30 BPM slower with swing.",
-    ),
   }),
   compose({
     id: "AC2",
@@ -3675,41 +4412,212 @@ export const capstones: readonly CapstoneDef[] = [
     meter: "4/4",
     bpm: [60, 90],
     swing: { subdivision: 16, amount: 0.2 },
+    // content/specs/A2.md "AC2 Neo-Soul Ballad"; the pieces and why each passes or fails are in
+    // content/advanced/capstones/AC2/pieces.ts, the rule-by-rule tests in ac2.test.ts beside it.
     brief:
-      "A neo-soul ballad: ninth and eleventh chords on Rhodes, smooth voice leading, and a swung 16th groove that leans back.",
-    starter: `setcpm(76/4)\n\nhats: s("hh*16").swingBy(.2, 8).gain(.5)\nsnare: s("~ sd ~ sd").late(1/32)\nchords: chord("<D^9 Em11 F#m7 Bm9>").voicing().s("rhodes")`,
-    skills: ["D09", "D10", "J02"],
+      "A neo-soul ballad where the three tracks meet: eight bars or more at 60–90 BPM. Ninth and eleventh chords on the Rhodes in `chords:`, written note by note, the top note moving a step or less. Hats that swing in 16ths, a snare a few milliseconds behind the beat (about 20 ms at 76 BPM is `.late(.006)`), and your tune.",
+    starter: AC2_TEMPLATE,
+    skills: ["J02", "C05", "R13", "R15", "D10"],
+    // contracts §6.6 AC2, as the content lead settled it (A2.md). The top voice is read on the `chords:` line, the
+    // line the Rhodes rule reads, so a choir pad above the Rhodes never becomes "the top voice" of the chords.
     rubric: [
       req(
         "extensions",
-        "A 9th or 11th in 60% of the bars",
+        "A 9th or an 11th in at least 60% of the bars",
         ["J02"],
-        custom("extended-chord-share", { min: 0.6 }),
+        custom("extended-share", { harmony: "@chords", minRatio: 0.6 }),
       ),
-      req("swing", "Swung 16ths on the hats", ["R13"], {
+      req("swing", "The hats swing in 16ths", ["R13"], {
         rule: "swing",
         track: ["hats", "@drums"],
         subdivision: 16,
         ratio: [1.2, 2.4],
       }),
-      req("voice-leading", "Top voice moves by 2 semitones or less", ["C05"], {
-        rule: "voice-leading",
-        track: "@chords",
-        maxMovePerVoice: 2,
+      req(
+        "voice-leading",
+        "The top note of the chords moves 2 half steps or less at 80% of the changes",
+        ["C05"],
+        {
+          rule: "voice-leading",
+          track: "chords",
+          maxMovePerVoice: 2,
+          voice: "top",
+          minRatio: 0.8,
+        },
+      ),
+      req("rhodes", "The Rhodes plays the chords", ["D10"], {
+        rule: "sounds",
+        contains: ["snd.rhodes"],
+        track: "chords",
       }),
-      req("rhodes", "Rhodes in the mix", ["D01"], { rule: "sounds", contains: ["snd.rhodes"] }),
+      tempo(60, 90),
+      req("bars", "Eight bars or more", ["F06"], { rule: "bars", min: 8 }),
+      // W7 gate (review:studio): the brief asks for "your tune"; a tune mixed more than 24 dB under the band is
+      // not heard, so it is not there (`tracks` reads only the parts that are heard).
+      req("tune", "Your tune, heard over the band", ["D10"], { rule: "tracks", min: 1, roles: ["melody"] }),
+      opt(
+        "lean",
+        "The snare sits 8–45 ms behind the beat",
+        ["R15"],
+        custom("microtiming", { track: "snare", direction: "late", minMs: 8, maxMs: 45 }),
+      ),
+      opt(
+        "tensions",
+        "The tune lands on a 9th, 11th or 13th at least twice",
+        ["J02"],
+        custom("tensions-used", { melody: "@melody", tensions: ["9", "11", "13"], min: 2 }),
+      ),
     ],
     sessions: [
       ["Changes & voicings", "maj9/m11 changes and voicings (choir unlocks at the start)."],
       ["Groove & melody", "Swung-16th groove with `.late()` feel; melody."],
       ["Mix", "Mix and release."],
     ],
+    sessionExtras: [
+      { starter: AC2_TEMPLATE, focusRules: ["extensions", "voice-leading", "rhodes"] },
+      {
+        focusRules: [
+          "extensions",
+          "swing",
+          "voice-leading",
+          "rhodes",
+          "tempo",
+          "bars",
+          "tune",
+          "lean",
+          "tensions",
+        ],
+      },
+      {
+        focusRules: [
+          "extensions",
+          "swing",
+          "voice-leading",
+          "rhodes",
+          "tempo",
+          "bars",
+          "tune",
+          "lean",
+          "tensions",
+        ],
+      },
+    ],
     canDo: ["cd.compose.neo-soul"],
     hints: ladder(
-      "How does a groove sound laid back?",
-      "Late snares, swung 16ths.",
-      "`.late(1/32)` on the snare, `.swingBy(.2, 8)` on the hats.",
+      "Three things make this sound like neo-soul: chords with a 9th or an 11th, a top note that barely moves, and a groove that sits back.",
+      "Follow the highest note of each chord from bar to bar: it moves by a step or stays. On the hats, listen to the second 16th of each pair: in a swung groove it arrives a little late. The snare leans by milliseconds, never by a whole 16th.",
+      "Where the top note leaps, take a lower note of that chord up an octave so it becomes the top, or leave the leaping note out. Keep the swing small, about 3:2, and move the snare by 10 to 30 milliseconds: at a ballad tempo that is a small fraction of a bar.",
     ),
+    tests: [
+      {
+        name: "the starter: the four chords voiced by hand and a bass, no drums and no tune yet",
+        response: { code: AC2_PIECES.template },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      // One passing piece per shipped flavour (contracts §6.6); a flavour never changes the rubric.
+      {
+        name: "jazz-soul: brushes, upright, the Rhodes with a quiet choir under it, vibes on the tune, at 76",
+        response: { code: AC2_PIECES.jazzSoul },
+        expect: "pass",
+      },
+      {
+        name: "funk: 909 hats swung at .2, fingerbass, clav on the off-beats, at 88",
+        response: { code: AC2_PIECES.funk },
+        expect: "pass",
+      },
+      {
+        name: "pop: the learner's own E♭maj9 Fm11 Gm7 Cm9, hand-voiced, a lighter swing, piano tune, at 72",
+        response: { code: AC2_PIECES.pop },
+        expect: "pass",
+      },
+      {
+        name: "indie: the E♭ changes, a 2:1 swing, a clean guitar on the tune, the choir under, at 84",
+        response: { code: AC2_PIECES.indie },
+        expect: "pass",
+      },
+      {
+        name: "minimal: the starter with swung hats and a tune, no kick or snare",
+        response: { code: AC2_PIECES.minimal },
+        expect: "pass",
+      },
+      {
+        name: "beyond the brief: E9sus4 on the last two beats, a tune that climbs to the 13th, at 66",
+        response: { code: AC2_PIECES.beyond },
+        expect: "pass",
+      },
+      {
+        name: "the snare 99 ms late (a 32nd of a bar at 76): the feel line fails, the required lines hold",
+        response: { code: AC2_PIECES.displaced },
+        expect: "pass",
+      },
+      {
+        name: "the right chord names, voiced by the dictionary: the top note is not chosen",
+        response: { code: AC2_PIECES.dictionary },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "hand voicings whose top note leaps at three of four changes",
+        response: { code: AC2_PIECES.leaping },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "triads only, smoothly voiced: no 9th or 11th",
+        response: { code: AC2_PIECES.triads },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "straight 16ths on the hats",
+        response: { code: AC2_PIECES.straight },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "the right function on the wrong grid: the hats swung in 8ths, each pair of 16ths still even",
+        response: { code: AC2_PIECES.swingEighths },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "swung hats nobody hears: the hats at gain 0",
+        response: { code: AC2_PIECES.silentHats },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "the chords on the piano; the Rhodes only doubles the tune",
+        response: { code: AC2_PIECES.piano },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "the Rhodes chords at gain .02, more than 24 dB under the tune",
+        response: { code: AC2_PIECES.quietRhodes },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "a ballad at 104 BPM",
+        response: { code: AC2_PIECES.fast },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "four bars: the starter's loop with drums and no tune",
+        response: { code: AC2_PIECES.fourBars },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+      {
+        name: "the tune written but buried: the vibes at gain .03, more than 24 dB under the band",
+        response: { code: AC2_PIECES.buriedTune },
+        expect: "fail",
+        feedback: ["rubric.unmet"],
+      },
+    ],
   }),
 ];
 export default capstones;

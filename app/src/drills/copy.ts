@@ -5,6 +5,7 @@ import type { Stage } from "./machine.ts";
 import { choiceOptionsOf } from "./model.ts";
 import { stageEPrompt, swingPrompt } from "./wave5.ts";
 import { chromaticAskedOf, clickCellsOf, meterLine } from "./wave6.ts";
+import { stageGPrompt } from "./wave7.ts";
 
 /** The prompt of a Wave 6 trial where the runner asks it its own way, else null. */
 function stageFPrompt(trial: Trial<unknown>, def: FamilyDef): string | null {
@@ -80,6 +81,8 @@ export function promptOf(trial: Trial<unknown>, def: FamilyDef): string {
   if (stageE) return stageE;
   const stageF = stageFPrompt(trial, def);
   if (stageF) return stageF;
+  const stageG = stageGPrompt(trial, def);
+  if (stageG) return stageG;
   if (def.generator === "rhythm-swing" && typeof p.prompt !== "string")
     return swingPrompt(choiceOptionsOf(trial, def).length);
   // Chord dictation names its key in its own prompt; the runner says how it is answered (bass first).

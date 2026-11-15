@@ -179,6 +179,87 @@ export function wave6Cases(): ControlCase[] {
   ];
 }
 
+/**
+ * The tools, chords and scales the advanced tracks unlock (Wave 7: J1–J5, R1–R3; the sound controls of A1.L05–L07
+ * and A2 are in the catalog above and in their lessons' loops below), each as the same music without the tool and
+ * with it.
+ */
+export function wave7Cases(): ControlCase[] {
+  const run = (name: string) => `n("0 1 2 3 4 5 6 7").scale("C4:${name}").s("piano")`;
+  const scale = (id: string, from: string, name: string): ControlCase =>
+    pair(id, "scale", run(from), run(name));
+  const TWO_FIVE = 'chord("<Dm7 G7>")';
+  const HATS = 'note("c3*8").s("piano")';
+  return [
+    pair("tb.swing.patterned", "swingBy", HATS, `${HATS}.swingBy("<.33 .2>", 4)`),
+    // A bar of five against a bar of four: the same hits, regrouped (one cycle is one bar, STYLE §8).
+    pair("tb.meter.odd", "meter", 's("bd hh hh hh")', 's("bd hh hh bd hh")'),
+    pair("tb.mini.polymeter", "{}%", 's("[bd sd hh]")', 's("{bd sd hh}%4")'),
+    pair("tb.mini.euclid", "(k,n)", 's("bd*3")', 's("bd(3,8)")'),
+    pair("tb.mini.euclid-rot", "(k,n,r)", 's("bd(3,8)")', 's("bd(3,8,2)")'),
+    pair("tb.euclid", "euclid", 's("bd*3")', 's("bd").euclid(3, 8)'),
+    pair("tb.euclidRot", "euclidRot", 's("bd").euclid(3, 8)', 's("bd").euclidRot(3, 8, 2)'),
+    pair(
+      "tb.dict.guidetones",
+      "dict",
+      `${TWO_FIVE}.voicing().s("piano")`,
+      `${TWO_FIVE}.dict("guidetones").voicing().s("piano")`,
+    ),
+    pair(
+      "tb.set",
+      "set",
+      `${TWO_FIVE}.voicing().s("vibes")`,
+      `n("0 1 2 3").set(${TWO_FIVE}).voicing().s("vibes")`,
+    ),
+    pair(
+      "tb.voicing.n",
+      "n",
+      `${TWO_FIVE}.voicing().s("vibes")`,
+      `n("0 1 2 3").chord("<Dm7 G7>").voicing().s("vibes")`,
+    ),
+    pair(
+      "tb.dict.ireal-ext",
+      "dict",
+      'chord("<C Co>").voicing().s("piano")',
+      'chord("<C Co>").dict("ireal-ext").voicing().s("piano")',
+    ),
+    pair(
+      "tb.mode.duck",
+      "mode",
+      'chord("C^7").dict("lefthand").anchor("g4").voicing().s("piano")',
+      'chord("C^7").dict("lefthand").anchor("g4").mode("duck").voicing().s("piano")',
+    ),
+    pair(
+      "tb.offset",
+      "offset",
+      'chord("C^7").dict("lefthand").voicing().s("piano")',
+      'chord("C^7").dict("lefthand").offset(1).voicing().s("piano")',
+    ),
+    pair(
+      "chord.sixth-sus",
+      "chord",
+      'chord("C C C C").voicing().s("piano")',
+      'chord("C6 C69 Csus C7sus").voicing().s("piano")',
+    ),
+    pair(
+      "chord.alt",
+      "chord",
+      'chord("C7 C7 C7 C7").voicing().s("piano")',
+      'chord("C7b9 C7#9 C7#11 C7alt").voicing().s("piano")',
+    ),
+    pair(
+      "chord.ext",
+      "chord",
+      'chord("C^7 Cm7 C7 C7").voicing().s("piano")',
+      'chord("C^9 Cm9 C9 C13").voicing().s("piano")',
+    ),
+    scale("scale.locrian", "minor", "locrian"),
+    scale("scale.altered", "mixolydian", "altered"),
+    scale("scale.lydian-dominant", "mixolydian", "lydian:dominant"),
+    scale("scale.bebop", "major", "bebop:major"),
+  ];
+}
+
 export const CONTROL_CASES: ControlCase[] = [
   { id: "tb.room", control: "room", value: 0.6 },
   { id: "tb.clip", control: "clip", value: 0.25 },
@@ -267,6 +348,8 @@ export const CONTROL_CASES: ControlCase[] = [
   ...wave5Cases(),
   // Wave 6: the tools, chords and scales U12–U17 unlock.
   ...wave6Cases(),
+  // Wave 7: the tools, chords and scales of the advanced tracks.
+  ...wave7Cases(),
   // Known silent no-ops (contracts §3.1 rule 7): never taught; listed so a Strudel update that changes them shows.
   { id: "noop.leslie", control: "leslie", value: 1 },
   { id: "noop.lrate", control: "lrate", value: 4 },
@@ -927,5 +1010,253 @@ export const W6_LESSON_CASES: LessonCase[] = [
       'n("<0 5>").struct("x ~ x x").scale("<C2:major D2:major>").s("ebass").lpf(700)',
     ],
     "the lift: the second bar a whole step up, tune and bass",
+  ),
+];
+
+// Wave 7: what A1.L05–L07 and A2 teach, in the lessons' own loops and at the values the specs grade (content/specs
+// A1.ts, A2.ts): the A1 loop at 100 BPM for A1, A2.L01's A-minor loop at 90 and the break at 96 for A2. The `same`
+// rows are the silencers the Makes must fail (a control set where it cannot be heard).
+const A1_HATS = 's("hh*8").gain(.5)';
+const A1_PLACED_BASS = `${A1_BASS}.s("sawtooth").lpf(500).decay(.2).sustain(0)`;
+const A1_LEAD = 'n("<[4@3 2] [5@3 3]>").scale("C5:major").s("triangle")';
+const A1_SYNTH_PAD = 'note("<[c4,e4,g4] [c4,f4,a4]>").s("sawtooth").lpf(900).gain(.3)';
+const A1_PAD_OPEN = 'note("<[c4,e4,g4] [c4,f4,a4]>").s("sawtooth").gain(.3)';
+const A1_SAW_PAD = 'note("<[c3,g3,e4] [f3,c4,a4]>").s("supersaw").lpf(2000).gain(.25)';
+const A2_CPS = 90 / 240;
+const A2_LOOP = [
+  's("bd ~ ~ bd ~ ~ bd ~").gain(.8)',
+  's("~ sd ~ sd").gain(.7)',
+  'n("<[0 ~ 0 ~] [5 ~ 5 ~]>").scale("A1:minor").s("fingerbass").lpf(800)',
+];
+const A2_PAD = 'chord("<Am7 F^7>").voicing().s("rhodes").gain(.5)';
+const a2 = (
+  id: string,
+  control: string,
+  base: string,
+  withCode: string,
+  claim: string,
+  cps = A2_CPS,
+): LessonCase => ({
+  id,
+  lesson: id === "tb.chop" || id === "tb.loopAt" || id === "tb.speed" ? "A2.L04" : "A2.L05",
+  control,
+  value: "=",
+  base,
+  withCode,
+  claim,
+  cps,
+  cycles: 2,
+});
+
+export const W7_LESSON_CASES: LessonCase[] = [
+  // A1.L05 Grit
+  a1(
+    "A1.L05",
+    "tb.distort",
+    "distort",
+    `${A1_PLACED_BASS}`,
+    `${A1_PLACED_BASS}.distort(.5)`,
+    "the Make's threshold: the bass at .distort(.5)",
+  ),
+  a1(
+    "A1.L05",
+    "tb.distort",
+    "distort",
+    `${A1_PLACED_BASS}`,
+    `${A1_PLACED_BASS}.distort(1.5).gain(.6)`,
+    "hook: the bass saturated at 1.5 and turned down to match",
+  ),
+  a1("A1.L05", "tb.crush", "crush", A1_HATS, `${A1_HATS}.crush(5)`, "hook: the hats crushed to five bits"),
+  a1(
+    "A1.L05",
+    "tb.crush",
+    "crush",
+    `${A1_RIFF}.s("square")`,
+    `${A1_RIFF}.s("square").crush(6)`,
+    "the Make's threshold: the riff at six bits",
+  ),
+  a1(
+    "A1.L05",
+    "tb.coarse",
+    "coarse",
+    `${A1_RIFF}.s("square")`,
+    `${A1_RIFF}.s("square").coarse(4)`,
+    "the Make's threshold: every fourth sample held",
+  ),
+  a1(
+    "A1.L05",
+    "tb.distorttype",
+    "distorttype",
+    `${A1_PLACED_BASS}.distort(1)`,
+    `${A1_PLACED_BASS}.distorttype("diode").distort(1)`,
+    "a saturation curve of your own: diode against the default",
+  ),
+  a1(
+    "A1.L05",
+    undefined,
+    "crush",
+    `${A1_RIFF}.s("square")`,
+    `${A1_RIFF}.s("square").crush(16)`,
+    "silencer: 16 bits is too fine to hear",
+    { same: true },
+  ),
+  a1(
+    "A1.L05",
+    undefined,
+    "coarse",
+    `${A1_RIFF}.s("square")`,
+    `${A1_RIFF}.s("square").coarse(1)`,
+    "silencer: .coarse(1) changes nothing",
+    { same: true },
+  ),
+  // A1.L06 Movement
+  a1(
+    "A1.L06",
+    "tb.vib",
+    "vib",
+    A1_LEAD,
+    `${A1_LEAD}.vib(5).vibmod(.25)`,
+    "hook: the lead sings with .vib(5).vibmod(.25)",
+  ),
+  a1("A1.L06", "tb.vib", "vib", A1_LEAD, `${A1_LEAD}.vib(5).vibmod(.3)`, "S4's target, .vib(5).vibmod(.3)"),
+  a1(
+    "A1.L06",
+    "tb.phaser",
+    "phaser",
+    A1_SYNTH_PAD,
+    `${A1_SYNTH_PAD}.phaser(2)`,
+    "the pad through a phaser at 2 Hz",
+  ),
+  a1(
+    "A1.L06",
+    "tb.tremolo",
+    "tremolosync",
+    A1_SYNTH_PAD,
+    `${A1_SYNTH_PAD}.tremolosync(4)`,
+    "the pad's level dipping four times a bar",
+  ),
+  a1(
+    "A1.L06",
+    "tb.lpmod",
+    "lprate",
+    A1_SYNTH_PAD,
+    `${A1_SYNTH_PAD}.lprate(.5).lpdepth(.6)`,
+    "hook: the pad's cutoff swept at .5 Hz",
+  ),
+  a1(
+    "A1.L06",
+    undefined,
+    "vibmod",
+    A1_LEAD,
+    `${A1_LEAD}.vib(5).vibmod(0)`,
+    "silencer: .vibmod(0) is no vibrato",
+    { same: true },
+  ),
+  a1(
+    "A1.L06",
+    undefined,
+    "lprate",
+    A1_PAD_OPEN,
+    `${A1_PAD_OPEN}.lprate(1)`,
+    "silencer: .lprate() on a line with no .lpf() does nothing",
+    { same: true },
+  ),
+  // A1.L07 FM & Supersaw
+  a1(
+    "A1.L07",
+    "tb.fm",
+    "fm",
+    `${A1_RIFF}.s("sine")`,
+    `${A1_RIFF}.s("sine").fm(.5)`,
+    "the Make's threshold: .fm(.5) on the sine riff",
+  ),
+  a1(
+    "A1.L07",
+    "tb.fm",
+    "fmh",
+    `${A1_RIFF}.s("sine").fm(3)`,
+    `${A1_RIFF}.s("sine").fm(3).fmh(3.5)`,
+    "S4: the ratio 3.5 rings like a bell against ratio 1",
+  ),
+  a1(
+    "A1.L07",
+    "tb.unison",
+    "detune",
+    `${A1_SAW_PAD}.detune(0)`,
+    `${A1_SAW_PAD}.detune(.4)`,
+    "S5: the supersaw pad narrow and wide",
+  ),
+  a1(
+    "A1.L07",
+    "tb.pw",
+    "pw",
+    `${A1_RIFF}.s("pulse")`,
+    `${A1_RIFF}.s("pulse").pw(.2)`,
+    "the pulse wave's width, named in the stretch's hint",
+  ),
+  a1(
+    "A1.L07",
+    "snd.wave.supersaw",
+    "s",
+    `${A1_RIFF}.s("sawtooth")`,
+    `${A1_RIFF}.s("supersaw")`,
+    "five detuned saws against one",
+  ),
+  a1(
+    "A1.L07",
+    "snd.wave.pulse",
+    "s",
+    `${A1_RIFF}.s("square")`,
+    `${A1_RIFF}.s("pulse").pw(.2)`,
+    "a narrow pulse against the square",
+  ),
+  a1(
+    "A1.L07",
+    undefined,
+    "fm",
+    `${A1_RIFF}.s("piano")`,
+    `${A1_RIFF}.s("piano").fm(4)`,
+    "silencer: FM does nothing on a recorded instrument",
+    { same: true },
+  ),
+  // A2.L04 Sampling (the break at 96 BPM) and A2.L05 Mix
+  a2(
+    "tb.chop",
+    "slice",
+    's("brk").slice(4, "0 1 2 3")',
+    's("brk").slice(4, "0 2 1 3")',
+    "the break's slices reordered",
+    96 / 240,
+  ),
+  a2("tb.loopAt", "loopAt", 's("brk")', 's("brk").loopAt(2)', "the break stretched over two bars", 96 / 240),
+  a2("tb.speed", "speed", 's("brk")', 's("brk").speed(1.5)', "the break played faster and higher", 96 / 240),
+  a2(
+    "tb.compressor",
+    "compressor",
+    `stack(${A2_LOOP.join(", ")}, ${A2_PAD})`,
+    `stack(${A2_LOOP.join(", ")}, ${A2_PAD}.compressor("-20:4:10:.005:.1"))`,
+    "the pad compressed under the loop",
+  ),
+  a2(
+    "tb.postgain",
+    "postgain",
+    `stack(${A2_LOOP.join(", ")}, ${A2_PAD})`,
+    `stack(${A2_LOOP.join(", ")}, ${A2_PAD}.postgain(.5))`,
+    "the pad turned down after its effects",
+  ),
+  a2(
+    "tb.duck",
+    "duckorbit",
+    // The trigger off t = 0 (superdough schedules the duck 10 ms early, as the catalog's tb.duck row notes).
+    `stack(${A2_PAD}.orbit(1), s("~ bd ~ ~ bd ~ bd ~").orbit(2))`,
+    `stack(${A2_PAD}.orbit(1), s("~ bd ~ ~ bd ~ bd ~").orbit(2).duckorbit(1))`,
+    "the pad ducking under the kick",
+  ),
+  a2(
+    "tb.pan",
+    "pan",
+    `stack(${A2_LOOP.join(", ")}, ${A2_PAD})`,
+    `stack(${A2_LOOP.join(", ")}, ${A2_PAD}.pan(.25))`,
+    "the pad moved left in the mix",
   ),
 ];

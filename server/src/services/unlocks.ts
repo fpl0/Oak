@@ -1,7 +1,7 @@
 // The single unlock table at run time (contracts §3.1, §11.7 rule 5): grants on session complete and
 // on session start, the silent fallback of START rows, the conditional voicing gate, and the backfill
 // pass at start-up. Rows are never revoked.
-import type { NextUnlock, Unlock } from "@oak/api";
+import { CAPSTONE_SESSION_SOUNDS, type NextUnlock, type Unlock } from "@oak/api";
 import type { ToolEntry, UnlockableId } from "@oak/content-kit";
 import { LearnerTime, type ServiceContext } from "./context.ts";
 import type { GatesService } from "./gates.ts";
@@ -132,7 +132,20 @@ export class UnlocksService {
       const album = this.ctx.content.toolbox().filter((t) => t.id === "tb.feature.album");
       out.push(...this.#grant(album, "session-start", sessionId));
     }
+    // Wave 7 (contracts §3.2 rule 11; wave7.md §5.4): a sound that arrives when a capstone session STARTS — horns at
+    // RC1.S2 for a learner U15.L05 has not given them yet, choir at AC2.S1 — is granted as the session begins.
+    out.push(...this.#grant(this.#sessionSounds(sessionId), "session-start", sessionId));
     return out;
+  }
+
+  /** The toolbox rows of `CAPSTONE_SESSION_SOUNDS` granted when `sessionId` starts. */
+  #sessionSounds(sessionId: string): ToolEntry[] {
+    const ids = new Set<string>(
+      CAPSTONE_SESSION_SOUNDS.filter((s) => s.capstoneSessionId === sessionId).map((s) => s.sound),
+    );
+    return this.ctx.content
+      .toolbox()
+      .filter((t) => ids.has(t.id) && t.unlock.when !== "start" && this.ctx.repos.unlocks.get(t.id) === null);
   }
 
   /**
@@ -181,6 +194,7 @@ export class UnlocksService {
     for (const t of [
       ...this.ctx.content.unlockRowsAt(sessionId, "complete"),
       ...this.ctx.content.unlockRowsAt(sessionId, "start"),
+      ...this.#sessionSounds(sessionId),
     ]) {
       if (t.unlock.condition !== undefined && !this.conditionMet(t.unlock.condition)) continue;
       out.add(t.id as UnlockableId);
@@ -195,10 +209,14 @@ export class UnlocksService {
       if (this.ctx.repos.unlocks.get(t.id) !== null) continue;
       if (t.unlock.condition !== undefined && !this.conditionMet(t.unlock.condition)) continue;
       const sites = this.ctx.content.unlockSites(t);
+      // Wave 7: a capstone-session sound (horns at RC1.S2) counts as granted once that session was started.
+      const startSounds = CAPSTONE_SESSION_SOUNDS.filter((x) => x.sound === t.id).map(
+        (x) => x.capstoneSessionId as string,
+      );
       const done =
-        t.unlock.when === "complete"
+        (t.unlock.when === "complete"
           ? sites.find((s) => this.gates.sessionDone(s))
-          : sites.find((s) => this.#started(s));
+          : sites.find((s) => this.#started(s))) ?? startSounds.find((s) => this.#started(s));
       const fallback =
         t.unlock.fallbackAt !== undefined && this.gates.sessionDone(t.unlock.fallbackAt)
           ? t.unlock.fallbackAt

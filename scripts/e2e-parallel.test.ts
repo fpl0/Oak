@@ -455,8 +455,10 @@ describe("budgets", () => {
     ).toThrow();
     const real = readBudgets(JSON.parse(readFileSync(`${REPO_ROOT}e2e/budgets.json`, "utf8")));
     // 105 after the suite pass; 131 after Wave 6 (docs/decisions.md 63: the new specs' measured minutes only); 134
-    // after the Wave 6 gate (decision 66: the two review specs).
-    expect(real.totalMinutes).toBe(134);
+    // after the Wave 6 gate (decision 66: the two review specs); 134.9 after Wave 7 Foundation (decision 73: the
+    // offline renderer's and the illustrated Oak's specs, measured); 156.8 after Wave 7 (decision 79: the new specs'
+    // measured minutes only); 160.7 after the Wave 7 gate (decision 85: the reviews' new specs, measured).
+    expect(real.totalMinutes).toBe(160.7);
     const covered = new Set(real.budgets.flatMap((b) => b.projects));
     for (const p of [
       "lesson",
@@ -497,12 +499,15 @@ describe("budgets", () => {
   });
 });
 
-test("jobs from the machine's size: 8 on 12 cores and 32 GB; memory caps it; never under 2 or over 10", () => {
+test("jobs from the machine's size: 6 on 8 performance cores and 32 GB; memory caps it; never under 2 or over 10", () => {
   const GB = 2 ** 30;
-  expect(autoJobs(12, 32 * GB)).toBe(8);
-  expect(autoJobs(12, 16 * GB)).toBe(5);
-  expect(autoJobs(2, 4 * GB)).toBe(2);
-  expect(autoJobs(32, 128 * GB)).toBe(10);
+  // Wave 7 (wave7.md §7.2): three quarters of the performance cores, else half the cores.
+  expect(autoJobs(12, 32 * GB, 8)).toBe(6);
+  expect(autoJobs(12, 32 * GB, null)).toBe(6);
+  expect(autoJobs(12, 16 * GB, 8)).toBe(5);
+  expect(autoJobs(2, 4 * GB, null)).toBe(2);
+  expect(autoJobs(32, 128 * GB, null)).toBe(10);
+  expect(autoJobs(16, 64 * GB, 12)).toBe(9);
 });
 
 test("a stack serves the runner's development bundle with vite preview when it has one, else the dev server", () => {

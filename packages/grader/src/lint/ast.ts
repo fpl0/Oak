@@ -443,7 +443,17 @@ export function declaredNames(ast: AstNode): Set<string> {
 export interface ArrangedTrack {
   track: string;
   arrange: AstNode;
-  sections: { name: string | null; bars: number | null; node: AstNode; pattern: AstNode | null }[];
+  sections: {
+    name: string | null;
+    /**
+     * The const a call or chain wraps (`chord(A)`, `note(melB).fast(2)`): names the section only where no track
+     * names it outright, and never makes two tracks disagree (Wave 7 integration).
+     */
+    wrapped: string | null;
+    bars: number | null;
+    node: AstNode;
+    pattern: AstNode | null;
+  }[];
   /** A method after `arrange()` that changes the length of every bar (`.fast(2)`, `.slow(2)`), as written. */
   timeScale?: string;
 }
@@ -473,10 +483,12 @@ export function arrangedTracks(info: ProgramInfo): ArrangedTrack[] {
           }
         : {}),
       sections: first.args.map((a) => {
-        if (a.type !== "ArrayExpression") return { name: null, bars: null, node: a, pattern: null };
+        if (a.type !== "ArrayExpression")
+          return { name: null, wrapped: null, bars: null, node: a, pattern: null };
         const [bars, pat] = children(a, "elements");
         return {
           name: pat ? nameOf(pat) : null,
+          wrapped: pat && pat.type !== "Identifier" ? sectionIdent(pat) : null,
           bars: numericValue(bars ?? null),
           node: a,
           pattern: pat ?? null,
@@ -485,6 +497,21 @@ export function arrangedTracks(info: ProgramInfo): ArrangedTrack[] {
     });
   }
   return out;
+}
+
+/**
+ * The const a section plays: `melA` itself, or the one const a call or a chain wraps (`chord(A)`, `note(melB)`,
+ * `chord(A3).voicing()`), so a form written `arrange([8, chord(A)], …, [8, chord(A3)])` reads A A B A
+ * (build-author-J4b: it read four resting sections).
+ */
+function sectionIdent(node: AstNode | null): string | null {
+  if (!node) return null;
+  if (node.type === "Identifier") return node.name as string;
+  if (node.type !== "CallExpression") return null;
+  const callee = child(node, "callee");
+  if (callee?.type === "MemberExpression") return sectionIdent(child(callee, "object"));
+  const args = children(node, "arguments");
+  return callee?.type === "Identifier" && args.length === 1 ? sectionIdent(args[0] ?? null) : null;
 }
 
 /** `melChorus2` → { label: "chorus", tag: "chorus2" }; `silence` → null (a resting section). */
@@ -578,6 +605,15 @@ export function sectionsFromProgram(info: ProgramInfo): SectionsResult {
       }
       // The tag names the variant: a numbered tag (`chorus2`) on any track wins over a plain one.
       if (!named || (!/\d$/.test(named.tag) && /\d$/.test(n.tag))) named = n;
+    }
+    // No track names the section outright: the consts the calls wrap name it when they all agree (J4.L03's
+    // `arrange([8, chord(A)], …, [8, chord(A3)])` reads A A B A; build-author-J4b).
+    if (!named) {
+      const wrapped = tracks
+        .map((t) => sectionName(t.sections[i]?.wrapped ?? null))
+        .filter((x): x is { label: string; tag: string } => x !== null);
+      if (wrapped.length > 0 && wrapped.every((w) => w.label === (wrapped[0] as { label: string }).label))
+        named = wrapped.find((w) => /\d$/.test(w.tag)) ?? (wrapped[0] as { label: string; tag: string });
     }
     const bars = first.sections[i]?.bars as number;
     sections.push({ label: named?.label ?? "rest", tag: named?.tag ?? "rest", bars, startBar: start });

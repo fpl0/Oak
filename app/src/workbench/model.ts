@@ -57,6 +57,7 @@ import {
 import { type WorkbenchHarmony, workbenchHarmony } from "./harmony.ts";
 import { linesOf, type WorkbenchLines } from "./lines.ts";
 import { type ChordRole, chordRoleOf, type PitchLabel, pitchLabel } from "./music.ts";
+import { type WorkbenchTrack, workbenchTrack } from "./track-lens.ts";
 
 export interface ViewEvent {
   /** `NEvent.id`: stable for the same code; the link bus, the roll and the staff share it. */
@@ -140,6 +141,11 @@ export interface WorkbenchModel {
    * pushes, ghost notes and the beat grid. Absent on a model built without them (tests that build one by hand).
    */
   colour?: WorkbenchColour | null;
+  /**
+   * Wave 7 (track-lens.ts): tensions, voicings, chord-scales, ii–V brackets and substitutions, the clave, pulse lanes,
+   * microtiming and swing, registers, density and the odd meter's groups. Absent on a model built without them.
+   */
+  track?: WorkbenchTrack | null;
 }
 
 /** The staff engraves at most this many bars at a time; longer loops turn pages with the playhead. */
@@ -264,6 +270,8 @@ export interface StaffSource {
    * the swung lines straight under "Swing 8ths" / "Swing 16ths" instead of as triplets.
    */
   swing?: SwingSpec;
+  /** Wave 7: chord symbols in jazz glyphs ("C∆7", "D–7", "Bø7"); absent: lead-sheet spelling. */
+  chordStyle?: "lead-sheet" | "jazz";
 }
 
 export interface StaffPage {
@@ -330,6 +338,7 @@ export function staffPage(src: StaffSource, page: number): StaffPage {
       ...(sections.length > 0 ? { sections } : {}),
       ...(src.pickup && startBar === 0 ? { pickup: src.pickup } : {}),
       ...(src.swing ? { swing: src.swing } : {}),
+      ...(src.chordStyle ? { chordStyle: src.chordStyle } : {}),
       key,
       ...(keyChanges.length ? { keyChanges } : {}),
       ...(Object.keys(trackKeys).length ? { trackKeys } : {}),
@@ -475,6 +484,8 @@ export interface ModelOptions {
   maxStaffBars?: number;
   /** A declared pickup: the harmony's bar numbers and the staff's first bar follow it. */
   pickup?: PickupSpec | null;
+  /** Wave 7: chord symbols on the staff in jazz glyphs (`tb.feature.jazz-glyphs`, J1.L02). Default lead-sheet. */
+  chordStyle?: "lead-sheet" | "jazz";
   /**
    * The Band parts the learner hears (a step's `ui.band.tracks`, less the parts muted in the Workbench). The
    * harmony (chord band, numerals, function) reads only these: a Band bass that does not play must not turn the
@@ -663,6 +674,32 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
     lines = null;
   }
 
+  let track: WorkbenchTrack | null = null;
+  try {
+    track = workbenchTrack(heard, {
+      code,
+      meter,
+      key,
+      bars: analysedBars,
+      harmony: harmony ? { view: harmony.view, regions: harmony.regions } : null,
+      sections: lines?.sections ?? [],
+      swing: (lines?.swing ?? []).map((t) => ({
+        track: t.track,
+        swung: t.swung,
+        ratio:
+          t.swung === 8
+            ? Number.isFinite(t.eighths.ratio)
+              ? t.eighths.ratio
+              : null
+            : t.swung === 16 && Number.isFinite(t.sixteenths.ratio)
+              ? t.sixteenths.ratio
+              : null,
+      })),
+    });
+  } catch {
+    track = null;
+  }
+
   let score: Score | null = null;
   let abc: AbcResult | null = null;
   let notationError: string | null = null;
@@ -706,6 +743,7 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
       ...(harmony ? { chordLabels: harmony.labels } : {}),
       ...(opts.pickup ? { pickup: opts.pickup } : {}),
       ...(lines && lines.sections.length > 0 ? { sections: sectionMarks(lines.sections) } : {}),
+      ...(opts.chordStyle === "jazz" ? { chordStyle: "jazz" as const } : {}),
     };
     const swing = staffSwingOf(lines?.swing ?? []);
     if (swing) staffSource.swing = swing;
@@ -742,6 +780,7 @@ export function buildModel(code: string, result: EvalResult, opts: ModelOptions)
       pickup: opts.pickup ?? null,
       lines,
       colour,
+      track,
     },
   };
 }

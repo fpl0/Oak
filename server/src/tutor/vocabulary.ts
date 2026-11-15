@@ -597,3 +597,415 @@ export function w6VocabularyLines(
   );
   return [`vocabulary_later: ${met.join(" · ")}`, `forms_later: ${forms.join("; ")}`];
 }
+
+// --- Wave 7: the advanced tracks (jazz harmony, advanced rhythm, arrangement and sound) ------------------------------
+
+/**
+ * The Wave 7 glossary terms each form waits for (content/terms.ts; J1–J5, R1–R3, A1.L05–A2.L06). Words the course
+ * uses in their everyday sense too (head, register, density, texture, sample, chop, mix, grouping, rotation, idiom)
+ * are named here only so the forms line can say when the track meaning is met.
+ */
+export const W7_TERMS = {
+  // Jazz harmony (J1–J5).
+  ridePattern: "term.ride-pattern",
+  sixthChord: "term.sixth-chord",
+  susChord: "term.sus-chord",
+  twoFiveOne: "term.ii-v-i",
+  shell: "term.shell-voicing",
+  cycleOfFourths: "term.cycle-of-fourths",
+  minorTwoFive: "term.minor-ii-v-i",
+  altered: "term.altered-dominant",
+  extension: "term.extension",
+  avoidNote: "term.avoid-note",
+  chordScale: "term.chord-scale",
+  aVoicing: "term.a-voicing",
+  bVoicing: "term.b-voicing",
+  dropTwo: "term.drop-2",
+  closePosition: "term.close-position",
+  charleston: "term.charleston",
+  walkingBass: "term.walking-bass",
+  jazzBlues: "term.jazz-blues",
+  rhythmChanges: "term.rhythm-changes",
+  head: "term.head",
+  contrafact: "term.contrafact",
+  tritoneSub: "term.tritone-sub",
+  backdoor: "term.backdoor",
+  secondaryTwoFive: "term.secondary-ii-v",
+  passingDiminished: "term.passing-diminished",
+  coltrane: "term.coltrane-changes",
+  // Advanced rhythm (R1–R3).
+  metricWeight: "term.metric-weight",
+  swingRatio: "term.swing-ratio",
+  interlock: "term.interlock",
+  displacement: "term.displacement",
+  laidBack: "term.laid-back",
+  oddMeter: "term.odd-meter",
+  grouping: "term.grouping",
+  hemiola: "term.hemiola",
+  polyrhythm: "term.polyrhythm",
+  polymeter: "term.polymeter",
+  metricModulation: "term.metric-modulation",
+  tresillo: "term.tresillo",
+  cinquillo: "term.cinquillo",
+  clave: "term.clave",
+  euclidean: "term.euclidean-rhythm",
+  rotation: "term.rotation",
+  montuno: "term.montuno",
+  tumbao: "term.tumbao",
+  // Arrangement and sound (A1.L05–L07, A2).
+  saturation: "term.saturation",
+  bitcrusher: "term.bitcrusher",
+  lfo: "term.lfo",
+  vibrato: "term.vibrato",
+  fm: "term.fm-synthesis",
+  detune: "term.detune",
+  spectrum: "term.spectrum",
+  register: "term.register",
+  texture: "term.texture",
+  density: "term.density",
+  counterMelody: "term.counter-melody",
+  sample: "term.sample",
+  chop: "term.chop",
+  mix: "term.mix",
+  compression: "term.compression",
+  idiom: "term.idiom",
+} as const;
+
+export type W7Form = keyof typeof W7_TERMS;
+export type W7Vocabulary = Record<W7Form, boolean>;
+
+export function w7VocabularyOf(terms: IntroducedTerms): W7Vocabulary {
+  const have = introducedSet(terms);
+  const out = {} as W7Vocabulary;
+  for (const [form, id] of Object.entries(W7_TERMS)) out[form as W7Form] = have.has(id);
+  return out;
+}
+
+/** The three advanced tracks and the forms of each. */
+export type TrackId = "jazz" | "rhythm" | "sound";
+const TRACK_FORMS: Readonly<Record<TrackId, readonly W7Form[]>> = {
+  jazz: [
+    "ridePattern",
+    "sixthChord",
+    "susChord",
+    "twoFiveOne",
+    "shell",
+    "cycleOfFourths",
+    "minorTwoFive",
+    "altered",
+    "extension",
+    "avoidNote",
+    "chordScale",
+    "aVoicing",
+    "bVoicing",
+    "dropTwo",
+    "closePosition",
+    "charleston",
+    "walkingBass",
+    "jazzBlues",
+    "rhythmChanges",
+    "head",
+    "contrafact",
+    "tritoneSub",
+    "backdoor",
+    "secondaryTwoFive",
+    "passingDiminished",
+    "coltrane",
+  ],
+  rhythm: [
+    "metricWeight",
+    "swingRatio",
+    "interlock",
+    "displacement",
+    "laidBack",
+    "oddMeter",
+    "grouping",
+    "hemiola",
+    "polyrhythm",
+    "polymeter",
+    "metricModulation",
+    "tresillo",
+    "cinquillo",
+    "clave",
+    "euclidean",
+    "rotation",
+    "montuno",
+    "tumbao",
+  ],
+  sound: [
+    "saturation",
+    "bitcrusher",
+    "lfo",
+    "vibrato",
+    "fm",
+    "detune",
+    "spectrum",
+    "register",
+    "texture",
+    "density",
+    "counterMelody",
+    "sample",
+    "chop",
+    "mix",
+    "compression",
+    "idiom",
+  ],
+};
+
+/**
+ * The track a subject belongs to, from its ID: a jazz lesson or capstone (J1.L02, JC3, J.CP1), a rhythm one (R2.L04,
+ * RC1, R.CP), a sound one (A1.L05–L07, A2.*, AC1, A.CP). A1.L01–L04 are the core's side lessons (Wave 5): null.
+ */
+export function trackOfSubject(id: string | null | undefined): TrackId | null {
+  if (!id) return null;
+  if (/^J(?:\d\.|C\d|\.CP)/.test(id)) return "jazz";
+  if (/^R(?:\d\.|C\d|\.CP)/.test(id)) return "rhythm";
+  if (/^A1\.L0[5-9]|^A2\.|^AC\d|^A\.CP/.test(id)) return "sound";
+  return null;
+}
+
+/** How the met line names each form. */
+const W7_NAMES: Readonly<Record<W7Form, string>> = {
+  ridePattern: "ride pattern",
+  sixthChord: "sixth chords",
+  susChord: "sus chords",
+  twoFiveOne: "ii–V–I",
+  shell: "shell voicings",
+  cycleOfFourths: "cycle of fourths",
+  minorTwoFive: "minor ii–V–i",
+  altered: "altered dominants",
+  extension: "extensions",
+  avoidNote: "avoid notes",
+  chordScale: "chord-scales",
+  aVoicing: "A voicings",
+  bVoicing: "B voicings",
+  dropTwo: "drop-2",
+  closePosition: "close position",
+  charleston: "Charleston",
+  walkingBass: "walking bass",
+  jazzBlues: "jazz blues",
+  rhythmChanges: "rhythm changes",
+  head: "head",
+  contrafact: "contrafact",
+  tritoneSub: "tritone substitution",
+  backdoor: "backdoor",
+  secondaryTwoFive: "secondary ii–V",
+  passingDiminished: "passing diminished",
+  coltrane: "Coltrane changes",
+  metricWeight: "metric weight",
+  swingRatio: "swing ratio",
+  interlock: "interlock",
+  displacement: "displacement",
+  laidBack: "laid back",
+  oddMeter: "odd meters",
+  grouping: "grouping",
+  hemiola: "hemiola",
+  polyrhythm: "polyrhythm",
+  polymeter: "polymeter",
+  metricModulation: "metric modulation",
+  tresillo: "tresillo",
+  cinquillo: "cinquillo",
+  clave: "clave",
+  euclidean: "Euclidean rhythm",
+  rotation: "rotation",
+  montuno: "montuno",
+  tumbao: "tumbao",
+  saturation: "saturation",
+  bitcrusher: "bitcrusher",
+  lfo: "LFO",
+  vibrato: "vibrato",
+  fm: "FM synthesis",
+  detune: "detune",
+  spectrum: "spectrum",
+  register: "register",
+  texture: "texture",
+  density: "density",
+  counterMelody: "counter-melody",
+  sample: "sample",
+  chop: "chop",
+  mix: "mix",
+  compression: "compression",
+  idiom: "idiom",
+};
+const metLine = (t: TrackId, w: W7Vocabulary) =>
+  `${t}: ${TRACK_FORMS[t].map((f) => `${W7_NAMES[f]} ${yn(w[f])}`).join(" · ")}`;
+
+/**
+ * The Wave 7 lines: for each advanced track the learner has started (any of its terms met) or is in now (`track`),
+ * what of it they have met and how to say each thing now; everything not met only as a preview. Empty for a learner
+ * who has met none of it outside a track subject, so a core learner's context stays as it was. Facts the lines
+ * state are checked by execution in wave7.music.test.ts (swing ratios, the clave grids, the rootless shapes).
+ */
+export function w7VocabularyLines(
+  w: W7Vocabulary,
+  v: Vocabulary,
+  o: { track?: TrackId | null } = {},
+): string[] {
+  const started = (t: TrackId) => TRACK_FORMS[t].some((f) => w[f]) || o.track === t;
+  const tracks = (["jazz", "rhythm", "sound"] as const).filter(started);
+  if (tracks.length === 0) return [];
+  const met: string[] = [];
+  const forms: string[] = [];
+  /** The form when met; otherwise the name "only as a preview", and how to say it meanwhile. */
+  const pv = (on: boolean, yes: string, no: string) => {
+    const [name, say] = no.split(": ");
+    forms.push(on ? yes : `${name} only as a preview${say ? `: ${say}` : ""}`);
+  };
+  const chord = (sym: string, stack: string) => (v.chordSymbols ? `[[chord:${sym}]]` : stack);
+
+  if (tracks.includes("jazz")) {
+    met.push(metLine("jazz", w));
+    forms.push(
+      "chord symbols in code spelling ([[chord:C^7]], [[chord:Dm7]], [[chord:Dm7b5]], [[chord:G7alt]]): the chip prints them in the learner's chosen style",
+    );
+    pv(
+      w.sixthChord || w.susChord,
+      `sixth and sus chords: ${chord("C6", "1-3-5-6")} (1-3-5-6), ${chord("G7sus4", "1-4-5-b7")} (1-4-5-b7)`,
+      "sixth and sus chords",
+    );
+    pv(
+      w.twoFiveOne,
+      `the ii–V–I as ${v.numerals ? "[[rn:ii7]] [[rn:V7]] [[rn:Imaj7]]" : "chords on degrees 2, 5 and 1"}, named by the key it lands in${w.minorTwoFive ? "; the minor ii–V–i as [[chord:Dm7b5]] [[chord:G7b9]] [[chord:Cm7]] in C minor" : "; the minor ii–V–i only as a preview"}${w.cycleOfFourths ? "; keys in the cycle of fourths (C F B♭ E♭ …)" : ""}`,
+      "the ii–V–I: say 'the chords on 2 and 5 going home to 1'",
+    );
+    pv(
+      w.altered,
+      "an altered dominant by its bent note: ♭9, ♯9, ♭13, ♯11 over the dominant seventh",
+      "altered dominants",
+    );
+    pv(
+      w.extension,
+      `extensions as 9, 11, 13 counted from the chord's root (the 2nd, 4th and 6th an octave up)${w.avoidNote ? "; an avoid note is a HELD note a half step above a chord tone" : ""}; a tension is 'a common choice', never 'the right note'`,
+      "extensions and avoid notes: say 'the 2nd of the chord an octave up'",
+    );
+    pv(
+      w.chordScale,
+      "chord-scales by name (Dorian over a ii7, Mixolydian over a V7, Locrian over a iiø7, altered over a V7alt), always as 'a common choice'",
+      "chord-scales",
+    );
+    pv(
+      w.shell,
+      `voicings by type, read from the written notes octave by octave: shell (root, 3rd, 7th)${w.aVoicing || w.bVoicing ? "; rootless A (3 5 7 9 from the bottom) and B (7 9 3 5)" : "; rootless A and B only as a preview"}${w.dropTwo ? "; drop-2 (the second note from the top of a close chord dropped an octave)" : "; drop-2 only as a preview"}${w.closePosition ? "; close position" : ""}; a .voicing() line is a dictionary voicing: never call it shell, A, B or drop-2`,
+      "voicing types: say which chord notes are played and which is lowest",
+    );
+    pv(
+      w.charleston,
+      "comping rhythms by name: the Charleston (beat 1, then the 'and' of 2), a push (the 'and' of 4 held over the bar line)",
+      "comping rhythm names",
+    );
+    pv(
+      w.walkingBass,
+      "a walking bass judged on the quarters: a note on every beat, the root on 1, a chord tone on 3, beat 4 a step or half step into the next bar's root; a fault is named by its bar and beat",
+      "walking bass: say 'a note on every beat'",
+    );
+    pv(
+      w.jazzBlues || w.rhythmChanges,
+      `jazz forms by their bars${w.jazzBlues ? ": the jazz blues (12 bars, ii–Vs into bars 5 and 9 and back to the top)" : ""}${w.rhythmChanges ? "; rhythm changes (32 bars, AABA, the bridge's dominants two bars each)" : ""}${w.head ? "; the head (the written melody)" : ""}${w.contrafact ? "; a contrafact (a new head over borrowed changes)" : ""}`,
+      "jazz forms by name",
+    );
+    const devices = [
+      w.tritoneSub &&
+        "tritone substitution (the dominant a tritone away: [[chord:Db7]] for [[chord:G7]] before C)",
+      w.backdoor && "the backdoor (home from the ♭VII7, often after the minor iv)",
+      w.secondaryTwoFive && "a secondary ii–V (a ii–V aimed at a chord other than home)",
+      w.passingDiminished && "a passing diminished seventh (between two chords a whole step apart)",
+      w.coltrane && "Coltrane changes (keys a major 3rd apart, each reached by its own V7)",
+    ].filter((x): x is string => typeof x === "string");
+    forms.push(
+      devices.length > 0
+        ? `reharmonization devices by name and bar: ${devices.join("; ")}${devices.length < 5 ? "; the others only as a preview" : ""}`
+        : "reharmonization devices only as a preview: describe the chord that changed by its root and degrees",
+    );
+  } else forms.push("jazz harmony words (ii–V–I, shells, extensions, walking bass) only as a preview");
+
+  if (tracks.includes("rhythm")) {
+    met.push(metLine("rhythm", w));
+    pv(
+      w.metricWeight,
+      "metric weight: the downbeat strongest, then beat 3, then 2 and 4, then the off-beats; a pull is a strong place left empty",
+      "metric weight: say 'the strong beats'",
+    );
+    pv(
+      w.swingRatio,
+      "swing as a long:short ratio with its amount in code: 3:2 light (.swingBy(0.2, 8)), 2:1 triplet (.swingBy(1/3, 8)), 3:1 hard (.swingBy(0.5, 8)); 16th swing with 16",
+      "swing ratios: say 'long-short' and how long",
+    );
+    forms.push(
+      `the pocket and 'the one' in plain words (where the kick and bass land together on beat 1), never as defined terms${w.interlock ? "; interlock (parts that fill each other's gaps)" : ""}`,
+    );
+    pv(
+      w.laidBack || w.displacement,
+      `${w.laidBack ? "laid back (a hair behind the beat) " : ""}measured in milliseconds at the piece's tempo: 8–45 ms is a feel, more is a displacement; a .late() amount is cycles, so always give its ms${w.displacement ? "; displacement (a whole figure moved to another place in the bar)" : ""}`,
+      "laid back and displacement: say how many milliseconds behind",
+    );
+    pv(
+      w.oddMeter || w.grouping,
+      "odd meters by their groups: 7/8 as 2+2+3 counted 1 2 | 1 2 | 1 2 3; 5/4 as 3+2 or 2+3",
+      "odd meters and groupings",
+    );
+    pv(w.hemiola, "a hemiola: six pulses as two threes, then three twos", "hemiola");
+    pv(
+      w.polyrhythm || w.polymeter,
+      `${w.polyrhythm ? "a polyrhythm as two even pulses in the same span (3 against 2), meeting on the downbeat" : "polyrhythm only as a preview"}${w.polymeter ? "; a polymeter as two cycle lengths over one pulse, with the bar where they line up again ({bd ~ ~}%4: 3 bars)" : ""}${w.metricModulation ? "; metric modulation" : ""}`,
+      "polyrhythm and polymeter",
+    );
+    pv(
+      w.tresillo || w.clave,
+      `${w.tresillo ? "the tresillo (3+3+2) and cinquillo; " : ""}${w.clave ? "the clave by type and direction: son or rumba, 3-2 or 2-3 by which bar holds three strokes (son 3-2 on eighths: 0 3 6 | 2 4); a part 'faces the clave' when it meets its strokes as written, not crossed" : "the clave only as a preview"}${w.montuno || w.tumbao ? "; the montuno and the tumbao (the bass on the 'and' of 2 and on 4)" : ""}`,
+      "the tresillo and the clave: say 'a two-bar pattern of three hits, then two'",
+    );
+    pv(
+      w.euclidean,
+      `a Euclidean rhythm as (k,n): k hits spread over n steps, x(3,8) is the tresillo${w.rotation ? ", (k,n,r) rotated by r steps" : ""}`,
+      "Euclidean rhythms",
+    );
+  } else forms.push("advanced rhythm words (swing ratio, clave, odd meters, polyrhythm) only as a preview");
+
+  if (tracks.includes("sound")) {
+    met.push(metLine("sound", w));
+    pv(
+      w.saturation || w.bitcrusher,
+      "grit: saturation (.distort) rounds the peaks and adds harmonics; a bitcrusher (.crush) rebuilds the sound from fewer steps",
+      "grit controls",
+    );
+    pv(
+      w.lfo || w.vibrato,
+      "movement: an LFO moves a setting up and down; vibrato wobbles the pitch (.vib with a depth that is not 0)",
+      "movement controls",
+    );
+    pv(
+      w.fm || w.detune,
+      "FM synthesis (.fm, bell-like sidebands) and detune (copies a few cents apart)",
+      "FM and detune",
+    );
+    pv(
+      w.spectrum || w.register,
+      "where each part sits: register by role (bass low, chords in the middle, tune above) and the spectrum; a clash is two low notes closer than their limit (a 3rd below about C3), named with its bar",
+      "registers: say 'how high or low the part sits'",
+    );
+    pv(
+      w.texture || w.density,
+      "texture and density by section: how many parts and notes sound per bar",
+      "texture and density",
+    );
+    pv(w.counterMelody, "a counter-melody: a second tune that moves when the melody holds", "counter-melody");
+    pv(
+      w.sample || w.chop,
+      "samples and chops: slices of a recording played in a new order",
+      "samples and chops",
+    );
+    pv(
+      w.mix || w.compression,
+      "the mix: each part's level in dB against the loudest; a part more than 24 dB under it is not heard",
+      "mix and compression",
+    );
+    pv(
+      w.idiom,
+      "an idiom: the habits that make a style itself (drums, feel, instruments, voicings)",
+      "idiom",
+    );
+  } else
+    forms.push("arrangement and sound words (saturation, LFO, register, density, the mix) only as a preview");
+
+  return [`vocabulary_tracks: ${met.join(" | ")}`, `forms_tracks: ${forms.join("; ")}`];
+}

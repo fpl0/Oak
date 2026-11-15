@@ -6,9 +6,12 @@
   "description": "OakStrudel adapter: the only StrudelMirror construction site, transport, prebake, sounds, preload, master bus, recorder, CM6 extensions. Browser only.",
   "exports": {
     ".": "./src/index.ts",
+    "./offline": "./src/offline/index.ts",
+    "./offline/frame": "./src/offline/frame.ts",
     "./reference": "./src/reference.ts",
     "./probes": "./src/probes.ts",
     "./early-jazz": "./src/early-jazz.ts",
+    "./swing-backing": "./src/swing-backing.ts",
     "./audibility": "./src/audibility/harness.ts",
     "./audibility/cases": "./src/audibility/cases.ts",
     "./audibility/render-frame": "./src/audibility/render-frame.ts",

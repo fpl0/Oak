@@ -93,7 +93,8 @@ describe("12-bar blues: numerals by quality, the pickup, the turnaround", () => 
       null,
     );
     expect(r.ok).toBe(false);
-    expect(r.detail).toBe("bar 4 should stay on I (C7); it is v (Gm7)");
+    // Wave 7 Build: read against the variant asked (standard, or quick-change it accepts), not the closest other one.
+    expect(r.detail).toBe("bar 4 should stay on I (C7); it is v (Gm7) (and 3 more bars)");
   });
   test("with a pickup, bar 1 is the first full bar (contracts §6.11)", async () => {
     const code = `chords: chord("<~ C7 C7 C7 C7 F7 F7 C7 C7 G7 F7 C7 G7>").voicing()`;
@@ -129,14 +130,12 @@ describe("swing: which line, and on which subdivision", () => {
     expect(r.detail).toBe("`drums` swings at 2:1");
     const straight = await run(SWING, `drums: s("[bd hh] [sd hh] [bd hh] [sd hh]")`, 2, null);
     expect(straight.ok).toBe(false);
-    expect(straight.detail).toBe("`drums` plays straight 8ths; add `.swingBy(1/3, 4)`");
+    expect(straight.detail).toBe("`drums` plays straight 8ths; swing them, long–short");
   });
   test("swung 16ths where swung 8ths are asked: named as such, not 'no steady 8ths'", async () => {
     const r = await run(SWING, `hats: s("hh*16").swingBy(1/3, 8)`, 2, null);
     expect(r.ok).toBe(false);
-    expect(r.detail).toBe(
-      "`hats` swings 16ths; the brief asks for swung 8ths: play 8ths and use `.swingBy(1/3, 4)`",
-    );
+    expect(r.detail).toBe("`hats` swings 16ths; the brief asks for swung 8ths: swing the 8ths instead");
   });
   test("triplet hats written out (`[hh ~ hh]*4`) are a shuffle", async () => {
     expect((await run(SWING, `hats: s("[hh ~ hh]*4")`, 2, null)).ok).toBe(true);

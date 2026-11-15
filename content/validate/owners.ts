@@ -22,6 +22,7 @@ import {
   unimplementedInCapstoneSessions,
 } from "@oak/content-kit";
 import { exerciseCode } from "../../scripts/content/generate.ts";
+import { AC1_VERSIONS } from "../advanced/capstones/AC1/pieces.ts";
 import { CHECKPOINT_RULES, checkpointMetas } from "../checkpoints.ts";
 import { familyById } from "../families.ts";
 import { courseGraph, registries } from "../index.ts";
@@ -30,7 +31,25 @@ import { songById } from "../repertoire/index.ts";
 import { toolboxById } from "../toolbox.ts";
 import { exerciseTexts, testShapeIssues, voiceIssues } from "./authoring.ts";
 import { type CheckSection, describeOutcome, rubricToolIds } from "./checks.ts";
-import { BAD_LOG, evaluate, grade, lint, unlockedFor } from "./harness.ts";
+import {
+  BAD_LOG,
+  evaluate,
+  type GradeExtra,
+  grade,
+  lint,
+  songFormOfId,
+  songMelodyOf,
+  unlockedFor,
+} from "./harness.ts";
+import { withSongBriefTests } from "./song-tests.ts";
+import {
+  capstoneItems,
+  checkpointItems,
+  type StandardItem,
+  standardIssues,
+  TRACK_CAPSTONES,
+  TRACK_CHECKPOINTS,
+} from "./standard.ts";
 
 interface Owner {
   id: string;
@@ -45,6 +64,8 @@ interface Owner {
    * piece, else `key`.
    */
   statedKey?: boolean;
+  /** The song and the other version a capstone brief is graded beside (the capstone host passes both). */
+  extra?: GradeExtra;
 }
 
 const STATED_MODES = new Set(["major", "minor", "mixolydian", "dorian", "lydian", "phrygian"]);
@@ -113,6 +134,7 @@ async function exerciseSections(owner: Owner, items: Item[], evalBars: number): 
         stated ? { ...lessonLike, key: stated } : lessonLike,
         owner.session,
         owner.mode,
+        owner.extra,
       );
       if (!r.decided) {
         pending.push(`${where}/${t.name}: ${r.note}`);
@@ -137,6 +159,7 @@ async function exerciseSections(owner: Owner, items: Item[], evalBars: number): 
           lessonLike,
           owner.session,
           owner.mode,
+          owner.extra,
         );
         if (r.decided && !r.passed) grading.push(`${where}: reference solution ${i} does not pass`);
       }
@@ -157,6 +180,27 @@ async function exerciseSections(owner: Owner, items: Item[], evalBars: number): 
     { n: 7, name: "Grading", issues: grading, pending, notes },
     { n: 8, name: "Hints", issues: hints },
   ];
+}
+
+/** The corrections-pass standard (./standard.ts) over a track checkpoint's items or a track capstone's brief. */
+async function standardSection(owner: Owner, items: StandardItem[]): Promise<CheckSection> {
+  const lessonLike = { id: owner.id as never, key: owner.key, meter: owner.meter, bpm: owner.bpm };
+  const issues: string[] = [];
+  for (const it of items)
+    issues.push(
+      ...(await standardIssues(it, (e, t) => {
+        const stated = owner.statedKey && "code" in t.response ? statedKeyOf(t.response.code) : null;
+        return grade(
+          e,
+          t,
+          stated ? { ...lessonLike, key: stated } : lessonLike,
+          owner.session,
+          owner.mode,
+          owner.extra,
+        );
+      })),
+    );
+  return { n: 15, name: "Corrections standard (decision 71)", issues };
 }
 
 const voiceAndShape = (items: Item[]): CheckSection => {
@@ -236,6 +280,7 @@ export async function checkCheckpoint(def: CheckpointDef): Promise<CheckSection[
     ...(await exerciseSections(owner, items, 1)),
     { n: 12, name: "Make", issues: make },
     voiceAndShape(items),
+    ...(TRACK_CHECKPOINTS.includes(def.id) ? [await standardSection(owner, checkpointItems(def))] : []),
   ];
 }
 
@@ -351,7 +396,41 @@ export async function capstoneSessionSections(c: CapstoneDef): Promise<CheckSect
 }
 
 /** A capstone: the brief (starter, rubric tests, unlocks at its first session in every legal order) and its sessions. */
-export async function checkCapstone(c: CapstoneDef): Promise<CheckSection[]> {
+/**
+ * The other version a two-version brief's tests are graded beside: the capstone host passes the learner's own
+ * (`GradeContext.otherVersion`); content CI pins one, so each test is a version graded against it.
+ */
+export const BRIEF_OTHER_VERSION: Readonly<Record<string, string>> = { AC1: AC1_VERSIONS.jazzSoul };
+const SONG_RULES = new Set(["song-melody-kept", "contrafact"]);
+
+/**
+ * What a song capstone's brief is graded beside, as the host grades it: the melody of the first song it offers that
+ * has an answer key, in that song's key (a key-less brief reads the picked song's), and the pinned other version.
+ */
+export async function briefContext(
+  c: CapstoneDef,
+): Promise<{ key?: KeySpec; extra: GradeExtra; song?: string }> {
+  const extra: GradeExtra = {};
+  const other = BRIEF_OTHER_VERSION[c.id];
+  if (other) extra.otherVersion = { id: "b", code: other };
+  const reads = (c.brief?.rubric ?? []).some((r) => r.rule === "custom" && SONG_RULES.has(r.fn));
+  for (const id of reads ? (c.song ?? []) : []) {
+    const melody = await songMelodyOf(id);
+    if (!melody) continue;
+    extra.songMelody = melody;
+    // A brief that counts devices reads the song's chart, so the song's own devices are not counted as the learner's.
+    if ((c.brief?.rubric ?? []).some((r) => r.rule === "device-count")) {
+      const form = await songFormOfId(id);
+      if (form) extra.songForm = form;
+    }
+    const key = songById.get(id)?.key;
+    return { ...(key ? { key } : {}), extra, song: id };
+  }
+  return { extra };
+}
+
+export async function checkCapstone(registered: CapstoneDef): Promise<CheckSection[]> {
+  const c = await withSongBriefTests(registered);
   const brief: string[] = [];
   if (c.kind === "compose" && !c.brief) brief.push("a compose capstone has a brief");
   if (!c.brief) return [{ n: 1, name: "Brief", issues: brief }, await capstoneSessionSections(c)];
@@ -366,14 +445,16 @@ export async function checkCapstone(c: CapstoneDef): Promise<CheckSection[]> {
     );
   if (!b.tests.some((t) => "code" in t.response && t.response.code === starter))
     brief.push("tests: grade the starter itself (it usually fails: the brief asks for more than it has)");
+  const context = await briefContext(c);
   const owner: Owner = {
     id: c.id,
     session: c.sessionDefs[0]?.id as SessionId,
-    key: c.key ?? DEFAULT_KEY,
+    key: c.key ?? context.key ?? DEFAULT_KEY,
     meter: c.meter,
     bpm: c.bpm ? Math.round((c.bpm[0] + c.bpm[1]) / 2) : 100,
     mode: "capstone",
-    statedKey: !c.key,
+    statedKey: !c.key && !context.key,
+    extra: context.extra,
   };
   const items: Item[] = [{ where: "brief", e: b }];
   return [
@@ -381,5 +462,6 @@ export async function checkCapstone(c: CapstoneDef): Promise<CheckSection[]> {
     await capstoneSessionSections(c),
     ...(await exerciseSections(owner, items, 4)),
     voiceAndShape(items),
+    ...(TRACK_CAPSTONES.includes(c.id) ? [await standardSection(owner, capstoneItems(c))] : []),
   ];
 }

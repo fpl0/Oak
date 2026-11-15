@@ -33,6 +33,7 @@ import { diag } from "../feedback/catalog.ts";
 import { degreeShown } from "../match/common.ts";
 import type { MatchResult } from "../types.ts";
 import { wave5Answer } from "./answers-wave5.ts";
+import { parseJazzChord, wave7Answer } from "./answers-wave7.ts";
 
 export interface AnswerCheck extends MatchResult {
   /** Per-slot credit, for the overlay of a slot UI. */
@@ -176,6 +177,9 @@ export function gradeAnswer(
   // Wave 5: the form strip, the bar grid and the scale builder (answers-wave5.ts).
   const w5 = wave5Answer(ui, correct, got, o.key ?? null);
   if (w5) return w5;
+  // Wave 7: the odd-meter grouping and the Euclid numbers (answers-wave7.ts).
+  const w7 = wave7Answer(ui, correct, got);
+  if (w7) return w7;
   const parts: AnswerCheck[] = [];
   const order = o.order ?? (ui.ui === "choice" && ui.multi ? "set" : "sequence");
   if (correct.choice && ui.ui === "slot-choice")
@@ -238,6 +242,8 @@ export function gradeAnswer(
           strict: (o.spelling ?? "enharmonic") === "strict",
           order,
           key: o.key ?? null,
+          // Wave 7 (`text.jazz-chord`): ∆ – ø ° and the extensions read as chords, compared on root and quality.
+          ...(ui.ui === "text" && ui.jazz ? { jazz: true } : {}),
           ...(o.partial ? { partial: o.partial } : {}),
         }),
       );
@@ -1065,14 +1071,30 @@ const chordRootName = (c: ChordId): string => c.root;
 export function chordNameSlots(
   expected: readonly string[],
   got: readonly string[],
-  o: { strict: boolean; order?: "sequence" | "set"; key: KeySpec | null; partial?: PartialMap },
+  o: {
+    strict: boolean;
+    order?: "sequence" | "set";
+    key: KeySpec | null;
+    partial?: PartialMap;
+    jazz?: boolean;
+  },
 ): AnswerCheck {
   const parse = (s: string): ChordId | null => {
+    if (o.jazz) {
+      const j = parseJazzChord(s);
+      if (j) return j;
+    }
     const n = norm("chord", s);
     return parseChordWithBass(n) ?? parseChordWithBass(s.trim());
   };
   const same = (e: string, g: string): boolean => {
     if (norm("chord", e) === norm("chord", g)) return true;
+    if (o.jazz) {
+      // A jazz symbol is its chord, however it is written: root, quality (extensions included) and bass.
+      const ce = parse(e);
+      const cg = parse(g);
+      return !!ce && !!cg && ce.rootPc === cg.rootPc && ce.quality === cg.quality && ce.bassPc === cg.bassPc;
+    }
     if (o.strict) return false;
     const ce = parse(e);
     const cg = parse(g);

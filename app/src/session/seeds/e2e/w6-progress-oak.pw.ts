@@ -22,21 +22,22 @@ interface Progress {
   tracks?: { trackId: string; status: string; note: string; next: string | null }[];
 }
 
-test("the tracks open on Progress: Jazz and Rhythm as open branches, each with its honest note; the core stays the path", async ({
+test("the tracks open on Progress: Jazz and Rhythm as open branches with their next lesson and what their gates hold back; the core stays the path", async ({
   page,
   request,
 }) => {
   const errors = watch(page);
-  // The day after the U13 checkpoint was passed. The branches come from `CourseProgress.tracks` when the server
-  // carries them (w6-today.pw.ts pins the server's own fields on this day), else from the same gates read against
-  // course progress: either way the page must show them, with a note that says what is written.
+  // The day after the U13 checkpoint was passed. Wave 7: J1.L01 and R1.L01 are written, so each branch names its
+  // next lesson (`TrackState.next`), and the gates still closed say what they wait for, one line each.
   await seed(request, "after U13.CP");
   const progress = await api<Progress>(request, "GET", "/api/lessons/progress");
   expect(progress.next).toBe("U14.L02");
-  for (const id of ["J", "R"]) {
-    const t = progress.tracks?.find((x) => x.trackId === id);
-    if (progress.tracks) expect(t).toMatchObject({ status: "open", next: null });
-  }
+  const nextOf = { J: "J1.L01 Swing Feel & the Ride", R: "R1.L01 Metric Weight" } as const;
+  for (const id of ["J", "R"] as const)
+    expect(progress.tracks?.find((x) => x.trackId === id)).toMatchObject({
+      status: "open",
+      next: nextOf[id].slice(0, 6),
+    });
   const open = async (p: Page) => {
     await p.goto("/progress");
     await expect(p.getByTestId("progress-tracks")).toBeVisible({ timeout: 30_000 });
@@ -44,22 +45,28 @@ test("the tracks open on Progress: Jazz and Rhythm as open branches, each with i
   await useUiPrefs(page, { theme: "paper" });
   await open(page);
   const card = page.getByTestId("progress-tracks");
-  for (const id of ["J", "R"]) {
+  for (const id of ["J", "R"] as const) {
     const row = card.locator(`[data-track="${id}"]`);
     await expect(row).toHaveAttribute("data-open", "true");
-    await expect(row).toContainText("open");
-    const note = progress.tracks?.find((x) => x.trackId === id)?.note;
-    if (note) await expect(row.getByTestId("track-note")).toHaveText(note);
-    await expect(row.getByTestId("track-note")).toHaveText(
-      "Open. Its first lessons are still being written.",
-    );
+    await expect(row.getByTestId("track-note")).toHaveText(`Next: ${nextOf[id]}.`);
+    await expect(row.getByTestId("track-count")).toHaveText(/^0 of (34|20) sessions$/);
   }
-  // Arrangement & Sound has had its side lessons since U03: named with what exists, never as a count.
-  await expect(card.locator('[data-track="A"]').getByTestId("track-note")).toContainText("side lessons");
+  // J2.L04 is passed over until U14.CP, named as waiting, never as a failure; J4 and J5 say what opens them.
+  const waiting = card.locator('[data-track="J"]').getByTestId("track-waiting");
+  await expect(waiting).toHaveText([
+    "J2.L04 Chord-Scales waits for the U14 checkpoint. The track goes on without it, and it is offered as soon as that is passed.",
+    "J4 opens after Hearing Secondaries.",
+    "J5 opens after the U17 checkpoint.",
+  ]);
+  // A capstone says which gate it waits for; a track checkpoint holds back only its capstones.
+  await expect(card.locator('[data-capstone="JC1"]').getByTestId("capstone-gate")).toHaveText(
+    "Opens after the first jazz checkpoint.",
+  );
+  await expect(card.locator('[data-capstone="RC1"]').getByTestId("capstone-gate")).toHaveText(
+    "Opens after the rhythm checkpoint.",
+  );
   await expect(card).toContainText("The core stays your path; a track is never required.");
-  // A track is named, never offered: no link to a track lesson, no count of what is missing.
-  await expect(card.locator('a[href^="/learn/"]')).toHaveCount(0);
-  await expect(card).not.toContainText(/\d+ of \d+|left|remaining|locked/i);
+  await expect(card).not.toContainText(/still being written|remaining|locked|lessons left|behind/i);
   // The course card is still the core's, and the core is in progress: no ending, the pace estimate as before.
   await expect(page.getByTestId("progress-course")).toContainText("sessions on the map");
   await expect(page.getByTestId("progress-ending")).toHaveCount(0);
@@ -70,7 +77,7 @@ test("the tracks open on Progress: Jazz and Rhythm as open branches, each with i
   expect(errors).toEqual([]);
 });
 
-test("the tracks open on the Oak: a branch bar, rows that read 'open', a leaf that says where it grows (keyboard)", async ({
+test("the tracks open on the Oak: a branch bar with each next lesson, a leaf that says where it grows, the course view's gate lines (keyboard)", async ({
   page,
   request,
 }) => {
@@ -85,8 +92,9 @@ test("the tracks open on the Oak: a branch bar, rows that read 'open', a leaf th
   const bar = page.getByTestId("oak-branches");
   await expect(bar.locator("[data-track]")).toHaveCount(2);
   await expect(bar.locator('[data-track="J"]')).toContainText("Jazz Harmony");
-  await expect(bar.locator('[data-track="J"]')).toContainText("still being written");
+  await expect(bar.locator('[data-track="J"]')).toContainText("Next: J1.L01");
   await expect(bar.locator('[data-track="R"]')).toContainText("Advanced Rhythm");
+  await expect(bar).not.toContainText("still being written");
   // The core is still what is next: the toolbar names the next core lesson.
   await expect(page.getByTestId("whats-next")).toContainText("U14.L02");
   // The branch bar is one more line: the tree view still fits the window at both sizes.
@@ -107,31 +115,36 @@ test("the tracks open on the Oak: a branch bar, rows that read 'open', a leaf th
   await page.keyboard.press("Enter");
   const focused = page.locator("[data-node]:focus");
   await expect(focused).toHaveCount(1);
-  await expect(page.locator('[data-branch-row="J1"]')).toHaveText("open");
   await page.keyboard.press("Enter");
   const panel = page.getByTestId("oak-panel");
   await expect(panel).toBeVisible();
+  // The branch is open and has a next lesson: the panel says where the leaf grows and what the track does next (its
+  // own lesson may be later in the track; it is named "still being written" only while its file does not exist).
+  // Wave 7: the track's lessons are written, so the leaf names its own lesson, in the track's order.
   await expect(panel.getByTestId("leaf-branch")).toHaveText(
-    /^Jazz Harmony is open, and this leaf grows on it\. .*still being written\.$/,
+    "Jazz Harmony is open, and this leaf grows with J1.L02 · Reading 7th-Chord Symbols. Next: J1.L01 Swing Feel & the Ride.",
   );
-  await expect(panel).toContainText("Its branch is open. Its lesson is still being written.");
-  // Never a way into a lesson that does not exist.
   await expect(panel.getByTestId("practise-this")).toHaveCount(0);
   await settle(page);
   await shoot(page, SHOTS, "w6-oak-branch-leaf", "bark");
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0);
 
-  // The course view: the tracks follow the core under their own header, each branch with its note.
+  // The course view: the tracks follow the core under their own header, each branch with its next lesson and the
+  // gates it still waits on; the first lesson of each open track is a link, the rest wait in the track's order.
   await page.goto("/oak?view=course");
   const tracks = page.getByTestId("course-tracks");
   await expect(tracks).toBeVisible({ timeout: 30_000 });
   await expect(tracks).toContainText("The core stays your path; a track is never required.");
   const jBranch = page.locator('[data-testid="course-branch"][data-track="J"]');
   await expect(jBranch).toHaveAttribute("data-open", "true");
-  await expect(jBranch).toContainText("still being written");
+  await expect(jBranch).toContainText("Next: J1.L01 Swing Feel & the Ride.");
+  await expect(jBranch.getByTestId("course-branch-waiting").first()).toHaveText(
+    /^J2\.L04 Chord-Scales waits for the U14 checkpoint\./,
+  );
   await expect(page.locator('[data-testid="course-branch"]')).toHaveCount(3);
-  await expect(page.locator('a[href^="/learn/J"], a[href^="/learn/R"]')).toHaveCount(0);
+  await expect(page.locator('a[href^="/learn/J1.L01"]')).toHaveCount(1);
+  await expect(page.locator('a[href^="/learn/J1.L02"], a[href^="/learn/J4"]')).toHaveCount(0);
   await tracks.scrollIntoViewIfNeeded();
   await settle(page);
   await expectNoOverflow(page);
@@ -230,10 +243,15 @@ test("the core complete: Progress keeps one line for the ending, from graded evi
   // The Oak: nothing "next" on the core, every core row done, the branches named.
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/oak");
-  await expect(page.getByTestId("oak-no-next")).toHaveText(
-    "Every limb of the core is at full length. Reviews keep it green; the tracks are its open branches.",
-    { timeout: 30_000 },
-  );
+  // Wave 7: once a track has lessons, "what's next" names the track's next lesson; with none to start, the core's
+  // full length is said in one line. Either way nothing on the core is next.
+  const nextBar = page.getByTestId("whats-next").or(page.getByTestId("oak-no-next"));
+  await expect(nextBar.first()).toBeVisible({ timeout: 30_000 });
+  if (await page.getByTestId("oak-no-next").isVisible())
+    await expect(page.getByTestId("oak-no-next")).toHaveText(
+      "Every limb of the core is at full length. Reviews keep it green; the tracks are its open branches.",
+    );
+  else await expect(page.getByTestId("whats-next")).toContainText(/[JRA]\d\.L\d\d/);
   await expect(page.getByTestId("oak-branches")).toBeVisible();
   // No core leaf is still closed: every leaf of U12–U17 is introduced or better.
   for (const id of ["C07", "R10", "S12", "S13", "H12", "H13", "H14", "E13"])

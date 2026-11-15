@@ -28,6 +28,9 @@ export const PCM_RECORDER_SOURCE = `class OakPcmRecorder extends AudioWorkletPro
     this.end = -1;
     this.first = -1;
     this.written = 0;
+    this.next = -1;
+    this.skipped = 0;
+    this.skips = [];
     this.peak = 0;
     this.alive = true;
     // Armed at construction (Wave 6): an offline render may finish before a message could arrive.
@@ -42,6 +45,9 @@ export const PCM_RECORDER_SOURCE = `class OakPcmRecorder extends AudioWorkletPro
         this.end = d.startFrame + d.frames;
         this.first = -1;
         this.written = 0;
+        this.next = -1;
+        this.skipped = 0;
+        this.skips = [];
         this.fill = 0;
         this.peak = 0;
       } else if (d.type === "cancel") {
@@ -56,8 +62,22 @@ export const PCM_RECORDER_SOURCE = `class OakPcmRecorder extends AudioWorkletPro
   flush() {
     if (this.fill === 0) return;
     const out = this.buf.slice(0, this.fill * this.channels);
-    this.port.postMessage({ type: "chunk", data: out, frames: this.fill }, [out.buffer]);
+    // \`at\`: the chunk's first frame inside the take, so the page puts it in its place even if one before it is lost.
+    this.port.postMessage({ type: "chunk", data: out, frames: this.fill, at: this.written - this.fill }, [out.buffer]);
     this.fill = 0;
+  }
+  put(sample, c) {
+    let x = sample;
+    if (x > 1) x = 1;
+    else if (x < -1) x = -1;
+    const ax = x < 0 ? -x : x;
+    if (ax > this.peak) this.peak = ax;
+    this.buf[this.fill * this.channels + c] = x < 0 ? x * 0x8000 : x * 0x7fff;
+  }
+  advance() {
+    this.fill++;
+    this.written++;
+    if (this.fill === this.chunkFrames) this.flush();
   }
   process(inputs) {
     if (this.end < 0) return this.alive;
@@ -67,24 +87,36 @@ export const PCM_RECORDER_SOURCE = `class OakPcmRecorder extends AudioWorkletPro
     const from = Math.max(this.start, blockStart);
     const to = Math.min(this.end, blockStart + n);
     if (from < to && this.first < 0) this.first = from;
+    // Render quanta the audio thread skipped inside the take: silence in their place, counted, so every later
+    // sample stays on its own frame (a dropout is heard as a gap, never as the song jumping ahead).
+    if (this.next >= 0 && from > this.next && from < to) {
+      const gap = Math.min(from, this.end) - this.next;
+      this.skips.push({ at: this.next - this.first, frames: gap });
+      this.skipped += gap;
+      for (let g = 0; g < gap; g++) {
+        for (let c = 0; c < this.channels; c++) this.put(0, c);
+        this.advance();
+      }
+    }
     for (let f = from; f < to; f++) {
       const i = f - blockStart;
       for (let c = 0; c < this.channels; c++) {
         const ch = input[c] || input[0];
-        let x = ch ? ch[i] : 0;
-        if (x > 1) x = 1;
-        else if (x < -1) x = -1;
-        const ax = x < 0 ? -x : x;
-        if (ax > this.peak) this.peak = ax;
-        this.buf[this.fill * this.channels + c] = x < 0 ? x * 0x8000 : x * 0x7fff;
+        this.put(ch ? ch[i] : 0, c);
       }
-      this.fill++;
-      this.written++;
-      if (this.fill === this.chunkFrames) this.flush();
+      this.advance();
     }
+    if (from < to) this.next = to;
     if (blockStart + n >= this.end) {
       this.flush();
-      this.port.postMessage({ type: "done", first: this.first, written: this.written, peak: this.peak });
+      this.port.postMessage({
+        type: "done",
+        first: this.first,
+        written: this.written,
+        peak: this.peak,
+        skipped: this.skipped,
+        skips: this.skips,
+      });
       this.start = -1;
       this.end = -1;
     }
@@ -134,10 +166,14 @@ export interface PcmRecording extends ExactRecording {
   /** Frames padded with silence at the start because the recording was asked for after `at` had passed. */
   latePadFrames: number;
   /**
-   * Wave 6: frames of the span the audio thread never delivered (padded with silence at the end so the length
-   * still holds). 0 for a whole take; a host releases a take only when this and `latePadFrames` are both 0.
+   * Wave 6: frames of the span the audio thread never delivered (padded with silence so the length still holds).
+   * Wave 7: a chunk lost on its way to the page, or render quanta the audio thread skipped, leave silence in THEIR
+   * place (every later sample stays on its own frame) and are listed in `dropouts`. 0 for a whole take; a host
+   * releases a take only when this and `latePadFrames` are both 0.
    */
   missingFrames: number;
+  /** Wave 7: each gap inside the take — seconds from the take's start and how long — in time order. */
+  dropouts: { atS: number; seconds: number }[];
 }
 
 export interface PcmRecorderStats {
@@ -282,6 +318,16 @@ export function createPcmRecorderWith(deps: PcmRecorderDeps): PcmRecorder {
         const parts: BlobPart[] = [wavHeader(frames, channels, sr)];
         let pending: Int16Array[] = [];
         let received = 0;
+        /** Frames of the take placed so far (received chunks and the silence put in for lost ones). */
+        let placed = 0;
+        const gaps: { at: number; frames: number }[] = [];
+        const pushPending = (a: Int16Array) => {
+          pending.push(a);
+          stats.chunks++;
+          stats.heldBytes += a.byteLength;
+          stats.peakHeldBytes = Math.max(stats.peakHeldBytes, stats.heldBytes);
+          if (pending.length >= partChunks) fold();
+        };
         stats.heldBytes = 0;
         stats.chunks = 0;
         stats.parts = 0;
@@ -307,26 +353,44 @@ export function createPcmRecorderWith(deps: PcmRecorderDeps): PcmRecorder {
         };
         n.port.onmessage = (e) => {
           const d = e.data as
-            | { type: "chunk"; data: Int16Array; frames: number }
-            | { type: "done"; first: number; written: number; peak: number };
+            | { type: "chunk"; data: Int16Array; frames: number; at?: number }
+            | {
+                type: "done";
+                first: number;
+                written: number;
+                peak: number;
+                skipped?: number;
+                skips?: { at: number; frames: number }[];
+              };
           if (d.type === "chunk") {
-            pending.push(d.data);
+            // A chunk that starts after the frames placed so far: the ones between were lost on the way.
+            const at = d.at ?? placed;
+            if (at > placed) {
+              gaps.push({ at: placed, frames: at - placed });
+              pushPending(new Int16Array((at - placed) * channels));
+              placed = at;
+            }
+            pushPending(d.data);
             received += d.frames;
-            stats.chunks++;
-            stats.heldBytes += d.data.byteLength;
-            stats.peakHeldBytes = Math.max(stats.peakHeldBytes, stats.heldBytes);
-            if (pending.length >= partChunks) fold();
+            placed += d.frames;
             return;
           }
           if (d.type !== "done") return;
           // Armed after `at` had passed: the missing head is silence, so the take still starts at `at`.
           const latePadFrames = d.first > startFrame ? Math.min(frames, d.first - startFrame) : 0;
+          const want = frames - latePadFrames;
+          if (placed < want) {
+            // The last chunks never came (or the take ended early): silence to the end, so the length holds.
+            gaps.push({ at: placed, frames: want - placed });
+            pushPending(new Int16Array((want - placed) * channels));
+            placed = want;
+          }
           fold();
           const body = parts.slice(1);
           const pad = latePadFrames > 0 ? [new Int16Array(latePadFrames * channels)] : [];
-          const missing = Math.max(0, frames - latePadFrames - received);
-          const end = missing > 0 ? [new Int16Array(missing * channels)] : [];
-          const blob = makeBlob([parts[0] as BlobPart, ...pad, ...body, ...end], "audio/wav");
+          const blob = makeBlob([parts[0] as BlobPart, ...pad, ...body], "audio/wav");
+          const skipped = d.skipped ?? 0;
+          const all = [...gaps, ...(d.skips ?? [])].sort((a, b) => a.at - b.at);
           finish();
           resolve({
             blob,
@@ -337,7 +401,8 @@ export function createPcmRecorderWith(deps: PcmRecorderDeps): PcmRecorder {
             frames,
             peak: d.peak,
             latePadFrames,
-            missingFrames: missing,
+            missingFrames: Math.max(0, want - received) + skipped,
+            dropouts: all.map((g) => ({ atS: (g.at + latePadFrames) / sr, seconds: g.frames / sr })),
           });
         };
         if (!fresh) n.port.postMessage({ type: "arm", startFrame, frames });

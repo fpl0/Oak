@@ -4,6 +4,9 @@
 // Wave 4, `chord` mode (the chord builder): every pick plays the whole chord so far, "Hear the chord" replays it, and
 // the line under the keys spells it from the bottom up; the chord's name and inversion show as
 // `AnswerEnv.harmony.nameChords` says.
+// Wave 7, the voicing builder (`keyboard.voicing`; J1.L05 shells, J3.L01 rootless A and B, J3.L02 drop-2): with
+// `AnswerEnv.harmony.voicing` a line under the keys names each held note's role and the shape built
+// (`VoicingLine`), live with the VOICINGS lens, else after the check; the chord name is then left off.
 import { clsx } from "clsx";
 import { Play, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -15,6 +18,7 @@ import { chromaticMidi, pickKey, typingLetter, undoPick } from "../keys.ts";
 import { keyName, keySpoken, midiRange } from "../normalize.ts";
 import type { AnswerWidgetProps } from "../types.ts";
 import { AnswerFrame, KeyHint, markOf, revealedOf, SubmitHint } from "../ui.tsx";
+import { VoicingLine } from "./VoicingLine.tsx";
 
 const BLACK = new Set([1, 3, 6, 8, 10]);
 const isBlack = (m: number) => BLACK.has(((m % 12) + 12) % 12);
@@ -73,6 +77,8 @@ export function KeyboardAnswer(p: AnswerWidgetProps<"keyboard">) {
   // chord's name would be (after a check by default), instead of the name of what was built.
   const guideChord = chordMode ? env.harmony?.guideChord : undefined;
   const guide = guideChord && naming && value.length > 0 ? guideToneFacts(value, guideChord) : null;
+  // Wave 7, the voicing builder (`keyboard.voicing`): the shape is named on its own line; the chord name stays off.
+  const voicing = chordMode ? env.harmony?.voicing : undefined;
   const focusKey = (m: number) => {
     const c = Math.max(lo, Math.min(hi, m));
     setFocusMidi(c);
@@ -220,13 +226,20 @@ export function KeyboardAnswer(p: AnswerWidgetProps<"keyboard">) {
                 </span>
                 {guide ? (
                   <span data-testid="guide-tones">. {guide.map((g) => g.text).join(" · ")}</span>
-                ) : line.name && !guideChord ? (
+                ) : line.name && !guideChord && !voicing ? (
                   <span data-testid="chord-name">. {line.name}</span>
                 ) : null}
               </>
             ) : null}
           </span>
         </div>
+      ) : null}
+      {chordMode && voicing ? (
+        <VoicingLine
+          midis={value}
+          symbol={typeof voicing.symbol === "string" ? voicing.symbol : (voicing.symbol[0] ?? "")}
+          feedback={feedback}
+        />
       ) : null}
       <p className="min-h-6 text-sm text-text-2" aria-live="polite">
         {value.length === 0 ? (

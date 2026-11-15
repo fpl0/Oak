@@ -163,6 +163,15 @@ export async function loadContent(options: LoadOptions): Promise<ContentSource> 
     if (seenCap.has(id)) capstones.splice(i, 1);
     seenCap.add(id);
   }
+  // Brief tests that read a song's answer key (JC4 on Georgia on My Mind) live beside the content checks, out of the
+  // modules the app loads (content/validate/song-tests.ts); the server, like content CI, sees the brief with them
+  // (the dev seeds release the brief's own passing piece).
+  const songTests = (await load("validate/song-tests.ts", false)) as {
+    withSongBriefTests?: (c: CapstoneDef) => Promise<CapstoneDef>;
+  } | null;
+  if (songTests?.withSongBriefTests)
+    for (let i = 0; i < capstones.length; i++)
+      capstones[i] = await songTests.withSongBriefTests(capstones[i] as CapstoneDef);
 
   // Generated files.
   const generated = join(contentDir, ".generated");

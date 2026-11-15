@@ -29,6 +29,7 @@ import blackbird from "./bye-bye-blackbird/song.ts";
 import drunkenSailor from "./drunken-sailor/song.ts";
 import fiveFootTwo from "./five-foot-two/song.ts";
 import { PENDING_VERIFIER } from "./fragment.ts";
+import georgia from "./georgia-on-my-mind/song.ts";
 import { songById } from "./index.ts";
 import oldJoeClark from "./old-joe-clark/song.ts";
 import { SWING_8THS } from "./standards.ts";
@@ -37,7 +38,7 @@ import sweetGeorgia from "./sweet-georgia-brown/song.ts";
 setDefaultTimeout(180_000);
 
 const STANDARDS = [fiveFootTwo, aintSheSweet, blackbird];
-const ALL: SongDef[] = [...STANDARDS, sweetGeorgia, oldJoeClark, drunkenSailor];
+const ALL: SongDef[] = [...STANDARDS, sweetGeorgia, oldJoeClark, drunkenSailor, georgia];
 
 // --- 1. the separate transcriptions -----------------------------------------------------------------------
 
@@ -145,6 +146,35 @@ K:G
 "A7"EF2=G-G3E | BG2^c- c3A | e4^cB2A- | A4"B7"z4 ||
 "Em"B3B-B2z2 | "B7"AF2B- B2B2 | "Em"B3B-B2z2 | "B7"AF2B- B2z2 |
 "G6"DE2G- "E7"GD3 | "A7"d^d2e- "B7"eB3 | "A7"A4 "D7"dB2G- | "G"G4z4 |]`,
+  },
+  "song.georgia-on-my-mind": {
+    from: 'I. Hayden\'s abc-music-files, "Jazz songs/Georgia on my Mind" (in F, 4/4): his notes and chords, written here with explicit lengths (his "e>d" as e3/2 d/2)',
+    shift: 0,
+    scale: 1,
+    chords: true,
+    rename: { Fma7: "F^7", F6: "F" },
+    chartDiffs: {
+      3: { source: "Dm7 /C", oak: "Dm7" },
+      4: { source: "Bm7", oak: "Bm7b5" },
+      11: { source: "Dm7 /C", oak: "Dm7" },
+      12: { source: "Bm7 Eb7", oak: "Bm7b5" },
+      18: { source: "Dm7 Bb A7", oak: "Dm7 A7" },
+      20: { source: "Bb/C G7", oak: "C7 G7" },
+      22: { source: "Dm7/C B7 E7", oak: "Dm7 E7" },
+      27: { source: "Dm7 /C", oak: "Dm7" },
+      28: { source: "Bm7", oak: "Bm7b5" },
+    },
+    abc: `M:4/4
+L:1/4
+K:F
+"Fma7"A c3|"Em7"A "A7"G3|"Dm7"z A d "/C"A|"Bm7"G3 F/2G/2|
+"Am7"A c "D7"e d|"Gm7"B d "C7"A G|"Am7"c2- "D7"c2|"Gm7"d/2d/2d/2d/2 "C7"^G2|
+"Fma7"A c3|"Em7"A "A7"G3|"Dm7"z A d "/C"A|"Bm7"G3 F/2"Eb7"G/2|
+"Am7"A c "D7"e d|"Gm7"B D "C7"A A|"Fma7"F2- "Bb7"F2-|"F6"F "A7"F z2|
+"Dm7"D F "A7"G A|"Dm7"F "Bb"D "A7"F2|"Dm7"D F "A7"G A|"Bb/C"c A "G7"=B2|
+"Dm7"D F "A7"G A|"Dm7/C"c "B7"d "E7"e3/2 d/2|"A7"c A "D7"c A|"Gm7"A2 "C7"^G2|
+"Fma7"A c3|"Em7"A "A7"G3|"Dm7"z A d "/C"A|"Bm7"G3 F/2G/2|
+"Am7"A c "D7"e d|"Gm7"B D "C7"A A|"Fma7"F4-|"Gm7"F2 "C7"z2|]`,
   },
   "song.drunken-sailor": {
     from: "written for this test from the shanty as commonly sung, in ABC (D Dorian has no sharps or flats), apart from the answer key",
@@ -352,6 +382,13 @@ describe("each answer key plays the notes of a separate transcription", () => {
 
 // --- 2. the layers agree with the chart ------------------------------------------------------------------
 
+/**
+ * The share of melody attacks on beats 1 and 3 that are chord notes. Georgia is a ballad whose tune leans on the
+ * 9ths, 11ths and 13ths of its chords (A over Em7, E over D7, A over C7): 28 of its 45 such attacks are chord
+ * notes (0.62).
+ */
+const STRONG_MIN: Record<string, number> = { "song.georgia-on-my-mind": 0.6 };
+
 describe("the layers agree with the chart", () => {
   for (const s of ALL)
     describe(s.id, () => {
@@ -392,7 +429,7 @@ describe("the layers agree with the chart", () => {
                 .includes(n.midi % 12)
             : false;
         });
-        expect(inChord.length / strong.length).toBeGreaterThanOrEqual(0.7);
+        expect(inChord.length / strong.length).toBeGreaterThanOrEqual(STRONG_MIN[s.id] ?? 0.7);
       });
     });
 });
@@ -617,4 +654,42 @@ describe("the U14 spec's pinned bars", () => {
         expect([beat, at ? (((at.midi - (e.midi as number)) % 12) + 12) % 12 : "none"]).toEqual([beat, 0]);
       }
     });
+});
+
+// --- 6. Georgia on My Mind (JC4) ----------------------------------------------------------------------------
+
+describe("Georgia on My Mind, the standard JC4 reharmonizes", () => {
+  const s = georgia;
+  test("32 bars in F, A A B A in eight-bar sections, swing 8ths; the form map passes with that shape and fails with another", () => {
+    expect([s.answerKey.bars, s.key, s.swing]).toEqual([32, { tonic: "F", mode: "major" }, SWING_8THS]);
+    expect(s.answerKey.sections?.map((x) => `${x.label}${x.bars.join("-")}`)).toEqual([
+      "A1-8",
+      "A9-16",
+      "B17-24",
+      "A25-32",
+    ]);
+    const bars = [1, 9, 17, 25];
+    expect(grader.gradeFormMap({ sections: ["A", "A", "B", "A"], bars }, s).passed).toBe(true);
+    expect(grader.gradeFormMap({ sections: ["A", "B", "C", "A"], bars }, s).passed).toBe(false);
+  });
+  test("its sections are cut 8 bars long, so it is not an L6 item (JC4 uses it, the gym does not)", () => {
+    expect(songLadderGaps(s, 6)).toContain("a line of the strain is not 4 bars");
+  });
+  test("what the song file says: each A opens 3 5 | 3 2 (A C, A G), the bridge stays between the D below and C, and the B natural sounds once, over G7 in bar 20", async () => {
+    const mel = await trackOf(s, "melody");
+    const bar = (b: number) => mel.filter((n) => n.beat >= (b - 1) * 4 && n.beat < b * 4).map((n) => n.midi);
+    for (const b of [1, 9, 25]) expect([b, bar(b), bar(b + 1)]).toEqual([b, [69, 72], [69, 67]]);
+    const bridge = mel.filter((n) => n.beat >= 64 && n.beat < 96).map((n) => n.midi);
+    expect([Math.min(...bridge), Math.max(...bridge)]).toEqual([62, 76]);
+    const bNatural = mel.filter((n) => n.midi % 12 === 11);
+    expect(bNatural.map((n) => Math.floor(n.beat / 4) + 1)).toEqual([20]);
+    expect(s.answerKey.chords?.filter((c) => c.bar === 20).map((c) => c.symbol)).toEqual(["C7", "G7"]);
+  });
+  test("the A sections end differently: the first on 5 (C) held a bar, the second and third on 1 (F) held over two bars", async () => {
+    const mel = await trackOf(s, "melody");
+    const at = (beat: number) => mel.find((n) => n.beat === beat);
+    expect([at(24)?.midi, at(24)?.len]).toEqual([72, 4]);
+    expect([at(56)?.midi, at(56)?.len]).toEqual([65, 5]);
+    expect([at(120)?.midi, at(120)?.len]).toEqual([65, 6]);
+  });
 });

@@ -5,6 +5,7 @@ import type { DrumRole, KeySpec, NEvent, Rat } from "@oak/content-kit";
 import { barOf, R, rat } from "@oak/content-kit";
 import type { SpelledPitch } from "@oak/theory";
 import { drumPlace, isFoot } from "./drums.ts";
+import { GHOST_MAX_GAIN } from "./ghost.ts";
 import { abcjsLimitWarnings } from "./limits.ts";
 import { type Grid, gridOf } from "./meter.ts";
 import { toRat } from "./q.ts";
@@ -17,11 +18,13 @@ import {
   countLabel,
   degreeLabel,
   isDominantSeventh,
+  jazzChordDisplay,
   keyFromScaleCtx,
   parseNoteName,
   romanDisplay,
   spell,
   spellBlue,
+  spellTension,
 } from "./theory-port.ts";
 import type {
   KeyChange,
@@ -30,6 +33,7 @@ import type {
   NoteItem,
   Score,
   ScoreAnnotation,
+  ScoreBracket,
   SectionMark,
   Staff,
   StaffKind,
@@ -423,7 +427,7 @@ function assignVoices(slots: Slot[], warnings: NotationWarning[]): { slots: Slot
  * track keeps its own voice or voices instead, so each line reads as the part the code names. At most four voices
  * a staff: a staff whose tracks need more keeps the greedy lines.
  */
-function voicesOf(events: NEvent[], warnings: NotationWarning[]): Slot[][] {
+function voicesOf(events: NEvent[], warnings: NotationWarning[], byTrack = false): Slot[][] {
   const greedyWarnings: NotationWarning[] = [];
   const greedy = assignVoices(groupSlots(events), greedyWarnings).map((v) => v.slots);
   const tracks = [...new Set(events.map((e) => e.track))];
@@ -431,7 +435,7 @@ function voicesOf(events: NEvent[], warnings: NotationWarning[]): Slot[][] {
     warnings.push(...greedyWarnings);
     return greedy;
   };
-  if (tracks.length < 2 || greedy.length < 2) return useGreedy();
+  if (tracks.length < 2 || (greedy.length < 2 && !byTrack)) return useGreedy();
   // A track is torn when its notes sit in more voices than the track alone needs.
   const alone = new Map(
     tracks.map((t) => {
@@ -444,7 +448,9 @@ function voicesOf(events: NEvent[], warnings: NotationWarning[]): Slot[][] {
     const inVoices = greedy.filter((v) => v.some((s) => s.events.some((e) => e.track === t))).length;
     return inVoices > (alone.get(t)?.voices.length ?? 1);
   });
-  if (!torn) return useGreedy();
+  // Wave 7 (`NotationInput.trackVoices`): every track keeps its own voice even where the greedy lines would merge
+  // two tracks into chords (a counter-melody in the tune's rhythm).
+  if (!torn && !byTrack) return useGreedy();
   const perTrack = tracks.flatMap((t) => alone.get(t)?.voices ?? []);
   if (perTrack.length > 4) return useGreedy();
   for (const t of tracks) warnings.push(...(alone.get(t)?.warnings ?? []));
@@ -569,7 +575,15 @@ function spellVoice(
         if (blue.degree === "b5") return spellBlue(midi, key, single ? motion : undefined);
         return spellBlue(midi, key);
       }
-      const plain = spell(midi, { key, ...(chord ? { chord } : {}) });
+      let plain = spell(midi, { key, ...(chord ? { chord } : {}) });
+      // Wave 7: inside a voicing, a tension is spelled from the chord's root (E♭∆7's 9th is F, not the key's E♯);
+      // a single note that the chord would spell as a white-key enharmonic (C♭ for the B of a tune over D♭7) keeps
+      // the key's spelling.
+      if (chord && !chordTone && !single) plain = spellTension(midi, chord) ?? plain;
+      if (chord && single && WHITE_ENHARMONIC.test(plain.name)) {
+        const own = spell(midi, { key });
+        if (!WHITE_ENHARMONIC.test(own.name)) plain = own;
+      }
       const dir = direction ?? approach;
       if (!dir || chordTone) return plain;
       const toward = spell(midi, { key, direction: dir });
@@ -686,7 +700,12 @@ export function buildScore(input: NotationInput): Score {
   const chords: ScoreAnnotation[] = onePerPosition(
     chordList
       .filter((c) => inRange(c.at))
-      .map((c) => ({ bar: R.floor(c.at), at: c.at, source: c.symbol, text: chordDisplay(c.symbol) })),
+      .map((c) => ({
+        bar: R.floor(c.at),
+        at: c.at,
+        source: c.symbol,
+        text: input.chordStyle === "jazz" ? jazzChordDisplay(c.symbol) : chordDisplay(c.symbol),
+      })),
   );
   const romans: ScoreAnnotation[] = onePerPosition(
     (input.romans ?? [])
@@ -695,6 +714,18 @@ export function buildScore(input: NotationInput): Score {
       .sort((a, b) => R.cmp(a.at, b.at))
       .map((r) => ({ bar: R.floor(r.at), at: r.at, source: r.rn, text: romanDisplay(r.rn) })),
   );
+  // Wave 7: bracket texts over spans of the top staff (one per position, the last given wins).
+  const brackets: ScoreBracket[] = (input.brackets ?? [])
+    .filter((b) => Number.isInteger(b.bar) && b.text.trim() !== "" && R.lt(b.from, b.to))
+    .map((b) => ({
+      bar: R.floor(R.add([b.bar, 1], b.from)),
+      at: R.add([b.bar, 1], b.from),
+      to: R.add([b.bar, 1], b.to),
+      text: b.text.replace(/\s+/g, " ").trim(),
+    }))
+    .filter((b) => inRange(b.at))
+    .sort((a, b) => R.cmp(a.at, b.at))
+    .filter((b, i, list) => !list.slice(i + 1).some((o) => R.eq(o.at, b.at)));
 
   // 4. staves and voices
   const blues = bluesContext(input, key, events);
@@ -743,7 +774,7 @@ export function buildScore(input: NotationInput): Score {
     }
     // Clipping at the next onset belongs to a declared swing (§6.10.6); otherwise overlaps are polyphony.
     const evs = input.swing ? clipWithinTracks(p.events) : p.events;
-    const voices = voicesOf(evs, warnings);
+    const voices = voicesOf(evs, warnings, input.trackVoices === true);
     for (const v of voices) spellVoice(v, spellKey, chordList, blues);
     const ms = p.events.map((e) => e.midi as number);
     const lo = p.clef === "treble" ? 48 : 26;
@@ -799,9 +830,33 @@ export function buildScore(input: NotationInput): Score {
       for (const a of list) if (R.floor(a.at) === c) cuts.push(R.mul(R.sub(a.at, [c, 1]), W));
     };
     if (vi === 0 && si === 0) add(chords);
+    if (vi === 0 && si === 0) add(brackets);
     if (vi === 0 && si === romanStaff) add(romans);
     return cuts.filter(inBar);
   };
+
+  // Wave 7: a bar inside a bracket that regroups it (`RhythmBracketInput.beatsPerBar`: 6/8 heard in three quarter-
+  // note beats, the hemiola) is written on that beat, so its quarters are not tied over the dotted-quarter beat.
+  const regrouped = new Map<number, Grid>();
+  for (const b of input.brackets ?? []) {
+    const n = b.beatsPerBar;
+    if (!n || !Number.isInteger(n) || n < 2 || !R.eq(R.mul(W, [4, 1]), [n, 1]) || meter.den !== 8) continue;
+    const from = R.add([b.bar, 1], b.from);
+    const to = R.add([b.bar, 1], b.to);
+    for (let c = Math.ceil(R.toNum(from) - 1e-9); c + 1 <= R.toNum(to) + 1e-9; c++)
+      regrouped.set(
+        c,
+        gridOf({
+          id: meter.id,
+          num: n,
+          den: 4,
+          tempoUnit: "quarter",
+          unitsPerBar: n,
+          grouping: Array.from({ length: n }, () => 1),
+        }),
+      );
+  }
+  const gridForBar = (c: number): Grid => regrouped.get(c) ?? g;
 
   // 6. quantize every voice, bar by bar
   type Bar = { c: number; items: QItem<Slot>[]; partial: boolean };
@@ -828,13 +883,22 @@ export function buildScore(input: NotationInput): Score {
         // A label needs an item that starts where it stands: the note under it is split there (tied), unless
         // that would cut into a tuplet: then it is drawn on the item sounding there (`anchor` below warns).
         const fixed = cutsFor(si, c);
-        let res = quantizeBar(g, segs, fixed);
+        // Wave 7: a bar of one track asked for as a bar-wide tuplet (`polyTuplets`).
+        const sounding = segs.filter((sg) => sg.slot !== null);
+        const forced = (input.polyTuplets ?? []).find(
+          (pt) =>
+            sounding.length > 0 &&
+            sounding.every((sg) => (sg.slot as Slot).events.every((e) => e.track === pt.track)),
+        );
+        const tuplet = forced ? { p: forced.p, q: forced.q } : undefined;
+        const gb = gridForBar(c);
+        let res = quantizeBar(gb, segs, fixed, tuplet);
         const wanted = labelCutsFor(si, vi, c).filter((x) => !res.items.some((it) => R.eq(it.start, x)));
         const kept = wanted.filter((x) => {
           const host = res.items.find((it) => R.lt(it.start, x) && R.lt(x, R.add(it.start, it.dur)));
           return !host?.inTuplet;
         });
-        if (kept.length) res = quantizeBar(g, segs, [...fixed, ...kept].sort(R.cmp));
+        if (kept.length) res = quantizeBar(gb, segs, [...fixed, ...kept].sort(R.cmp), tuplet);
         if (res.approximate) approximate = true;
         for (const w of res.warnings) warnings.push({ ...w, bar: c });
         bars.push({ c, items: res.items, partial: false });
@@ -861,6 +925,17 @@ export function buildScore(input: NotationInput): Score {
   }
 
   // 8. NoteItems, ids, lyrics
+  // Wave 7: a ghost is a stroke at most GHOST_MAX_GAIN loud on a track whose loudest stroke is twice as loud.
+  const loudest = new Map<string, number>();
+  for (const e of events) loudest.set(e.track, Math.max(loudest.get(e.track) ?? 0, e.gain));
+  const isGhost = (e: NEvent) =>
+    e.gain > 0 && e.gain <= GHOST_MAX_GAIN && (loudest.get(e.track) ?? 0) >= 2 * e.gain;
+  const accentAt = (slot: Slot) =>
+    (input.cycleAccents ?? []).some(
+      (a) =>
+        R.lt([0, 1], a.every) &&
+        slot.events.some((e) => e.track === a.track && R.div(e.onset, a.every)[1] === 1),
+    );
   let nextN = 0;
   const lyricStaff = 0;
   const annotations = annotationsOn(input.annotations) ? input.annotations : undefined;
@@ -899,6 +974,15 @@ export function buildScore(input: NotationInput): Score {
             if (locs.length) item.locs = locs;
             if (slot.drums?.length === 1) item.drum = slot.drums[0] as { s: string; head: "normal" | "x" };
             else if (slot.drums && slot.drums.length > 1) item.drums = slot.drums;
+            // Wave 7: ghost heads (percussion and rhythm staves) and the accents of a polymeter's cycles.
+            if (input.ghosts && p.kind !== "pitched") {
+              const ghosts = slot.pitches.flatMap((_p, i) => {
+                const e = slot.events[i];
+                return e && isGhost(e) ? [i] : [];
+              });
+              if (ghosts.length) item.ghosts = ghosts;
+            }
+            if (!it.tieFromPrev && accentAt(slot)) item.accent = true;
           } else if (vi > 0 && !hasNotes) item.hidden = true;
           if (si === lyricStaff && vi === 0 && slot && !it.tieFromPrev && labels !== "none") {
             const first = slot.events[0];
@@ -939,10 +1023,29 @@ export function buildScore(input: NotationInput): Score {
   };
   anchor(chords, 0, "chord symbol");
   anchor(romans, romanStaff, "Roman numeral");
+  {
+    const items = staves[0]?.voices[0]?.bars.flatMap((b) => b.items) ?? [];
+    for (const b of brackets) {
+      if (items.some((it) => R.eq(it.onset, b.at))) continue;
+      const host = items.find((it) => R.lte(it.onset, b.at) && R.lt(b.at, R.add(it.onset, it.dur)));
+      if (!host) continue;
+      b.drawnAt = host.onset;
+      warnings.push({
+        code: "abcjs-limit",
+        bar: b.bar,
+        message: `the bracket "${b.text}" starts inside a tuplet: its text is drawn at the note sounding there`,
+      });
+    }
+  }
 
   warnings.push(...abcjsLimitWarnings({ key, staves }));
   const sections = sectionsIn(input.sections ?? [], startBar, stop);
   const swingText = input.swing ? (input.swing.subdivision === 8 ? "Swing 8ths" : "Swing 16ths") : undefined;
+  const groupingText =
+    input.showGrouping && meter.grouping.length > 1 && new Set(meter.grouping).size > 1
+      ? meter.grouping.join("+")
+      : undefined;
+  const slashes = input.slashes && plans.some((p) => p.kind === "rhythm");
   return {
     meter,
     key,
@@ -964,6 +1067,9 @@ export function buildScore(input: NotationInput): Score {
     ...(input.staff === "lead" ? { lead: true as const } : {}),
     ...(sections.length ? { sections } : {}),
     ...(blues ? { blues: true as const } : {}),
+    ...(slashes ? { slashes: true as const } : {}),
+    ...(groupingText ? { groupingText } : {}),
+    ...(brackets.length ? { brackets } : {}),
   };
 }
 

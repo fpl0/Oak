@@ -37,6 +37,8 @@ export interface ShowOptions {
   split?: NotationInput["split"];
   /** Wave 6: mark the guide tones (`guideToneMarks` + `markGuideTones`) after the render. */
   guide?: boolean;
+  /** Wave 7: draw the ghost notes in parentheses (`ghostMarks` + `markGhostNotes`) after the render. */
+  ghosts?: boolean;
 }
 
 /** A lead sheet laid out for a host `width` px wide (`leadSheetLayout`), every page shown (`leadSheetPages`). */
@@ -72,6 +74,10 @@ export interface Shown {
   barNumbers: string[];
   /** Wave 6: the guide tones marked ("F4=third"), and the classes of each marked head, in mark order. */
   guide: { marks: string[]; heads: string[] };
+  /** Wave 7: the ghost heads marked ("sd@7/16"). */
+  ghosts: string[];
+  /** Wave 7: the glyph abcjs drew for every notehead, voice by voice ("noteheads.quarter", "noteheads.slash.quarter"). */
+  headGlyphs: string[];
   /** Wave 6: what the Score says of itself. */
   approximate: boolean;
   warnings: string[];
@@ -127,12 +133,21 @@ async function show(o: ShowOptions): Promise<Shown> {
   el.id = id;
   block.append(el);
   document.getElementById("root")?.append(block);
-  await dom.renderStaff(el, abc.abc, o.params ? { params: o.params } : {});
+  const rendered = await dom.renderStaff(el, abc.abc, o.params ? { params: o.params } : {});
+  const headGlyphs: string[] = [];
+  // biome-ignore lint/suspicious/noExplicitAny: abcjs's engraved tune
+  for (const ln of (rendered.tune as any).lines ?? [])
+    for (const st of ln.staff ?? [])
+      for (const v of st.voices ?? [])
+        for (const elem of v)
+          for (const h of elem.abselem?.heads ?? []) if (/^noteheads\./.test(h.c ?? "")) headGlyphs.push(h.c);
   if (o.annotations) dom.placeAnnotations(el, notation.noteAnnotations(score, o.annotations), o.annotations);
   dom.tagChordLabels(el, score);
   dom.tagSections(el, score);
   const guideMarks = o.guide ? notation.guideToneMarks(score, { events: input.events }) : [];
   const guideHeads = o.guide ? dom.markGuideTones(el, guideMarks) : [];
+  const ghostMarks = o.ghosts ? notation.ghostMarks(score) : [];
+  if (o.ghosts) dom.markGhostNotes(el, ghostMarks);
   const geometry = dom.measureStaff(el, abc, score);
   const { symbol, roman, at } = notation.CHORD_LABEL_CLASSES;
   const labels: ShownLabel[] = [...el.querySelectorAll(`.${symbol}, .${roman}`)].map((t) => {
@@ -164,6 +179,8 @@ async function show(o: ShowOptions): Promise<Shown> {
       marks: guideMarks.map((m) => `${m.pitch}=${m.role}`),
       heads: guideHeads.map((h) => h.getAttribute("class") ?? ""),
     },
+    headGlyphs,
+    ghosts: ghostMarks.map((g) => `${g.drum}@${g.onset[0]}/${g.onset[1]}`),
     approximate: score.approximate,
     warnings: score.warnings.map((w) => `${w.code}: ${w.message}`),
     geometry,

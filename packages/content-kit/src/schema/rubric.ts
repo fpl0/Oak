@@ -157,6 +157,14 @@ export type RubricRuleBody =
        * back to its first is judged like every other change (one pass of the track's loop is read).
        */
       loop?: boolean;
+      /**
+       * Wave 7 (feature `voice-leading.top`): `voice: "top"` judges only the highest sounding note of each
+       * chord (AC2: "top voice moves by 2 semitones or less"), on a hand-voiced track; `minRatio` is the share of
+       * changes that must meet `maxMovePerVoice` (default 1, every change). A `voicing()` track fails with a
+       * message: a dictionary voicing's top note is not graded (contracts §6.7 item 1).
+       */
+      voice?: "all" | "top";
+      minRatio?: number;
     }
   /**
    * A guide-tone line (U12.L05, J1.L04, JC1): the share of the chord changes of `harmony` at which `track`
@@ -227,9 +235,32 @@ export type RubricRuleBody =
       choruses?: number;
       quickChangeOk?: boolean;
     }
+  /**
+   * A Euclidean rhythm on `track`: its onsets in a bar are E(k, n) (any rotation when `rotationFree`). Planned
+   * for the rhythm track (R3, RC2), graded by the onsets, so `x(3,8)`, `.euclid(3, 8)` and the written-out
+   * `x ~ ~ x ~ ~ x ~` are one answer.
+   */
   | { rule: "euclid"; track: TrackRef; k: number; n: number; rotationFree: boolean }
-  | { rule: "clave"; track: TrackRef; type: "son" | "rumba"; direction: "3-2" | "2-3" }
-  | { rule: "polyrhythm"; a: TrackRef; b: TrackRef; ratio: [number, number] }
+  /**
+   * The clave on the two-bar 8th grid (`CLAVE_GRIDS`; direction read from bar 1, `claveDirectionOf`). Wave 7
+   * (feature `clave.coverage`): `minBars` (default 2) asks that EVERY two-bar window from bar 1 for at least
+   * that many bars holds the whole clave in its direction (RC2: 8, so two bars of clave in an eight-bar piece
+   * fail); `exact` (default true) that the clave line plays nothing else on its grid.
+   */
+  | {
+      rule: "clave";
+      track: TrackRef;
+      type: "son" | "rumba";
+      direction: "3-2" | "2-3";
+      minBars?: number;
+      exact?: boolean;
+    }
+  /**
+   * Two pulses at once (R2.L04, RC2): in the SAME bars, `a` plays `ratio[0]` evenly spaced attacks and `b`
+   * `ratio[1]` (a bar or the span `span` bars long), both audible. Wave 7 (feature `polyrhythm.together`):
+   * `minBars` (default 2) such bars; tracks that take turns bar by bar never meet and fail.
+   */
+  | { rule: "polyrhythm"; a: TrackRef; b: TrackRef; ratio: [number, number]; minBars?: number; span?: number }
   | { rule: "register-separation"; low: TrackRef; high: TrackRef; minGapSemis: number }
   | { rule: "no-muddy-low"; track: TrackRef }
   /** Amended: toolbox IDs, like the `must-use` constraint (Wave 6: a sound ID too). */
@@ -430,6 +461,12 @@ export type RubricRuleBody =
       min: number;
       kinds?: OutsideChordKind[];
       harmony?: TrackRef;
+      /**
+       * Wave 7 (feature `reharmonize.devices`): the new chords count only as these jazz devices (`JAZZ_DEVICES`:
+       * tritone sub, secondary ii–V, backdoor, diminished passing), each detected against the reference's chord
+       * in that bar as `device-count` detects it (J5.L01–L04). At least `min` of them.
+       */
+      devices?: DeviceName[];
     }
   /**
    * Wave 6 Build (U13.L05 "a triplet somewhere"). At least `min` tuplet groups in the line: a beat (or two

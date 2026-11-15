@@ -152,9 +152,11 @@
   }
   /* abcjs writes its text faces as SVG attributes: lens lines in Helvetica, which has no sharp or flat sign,
      so macOS substitutes a full-width glyph ("F ♯ 5"). Staff lyrics and annotations use the UI face, whose
-     fallback (system-ui) has compact accidentals. */
+     fallback (system-ui) has compact accidentals. Chord symbols too (Wave 7): Helvetica has no ♭, ♯ or ∆, so
+     "G7♭9" and "C∆♯11" were set "G7 ♭ 9" with a full-width glyph in each gap. */
   svg .abcjs-lyric,
-  svg .abcjs-annotation {
+  svg .abcjs-annotation,
+  svg .abcjs-chord {
     font-family: var(--oak-font-ui);
   }
   ::selection {
@@ -197,6 +199,15 @@
   }
   [data-motion="reduced"] .skeleton {
     animation-name: none;
+  }
+  /* Wave 7: a bar that does not count (a part more than 24 dB under the loudest, kit PartLevels) is hatched as well
+     as quieter, so it never reads by colour alone. */
+  .oak-hatch {
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent 0 3px,
+      color-mix(in srgb, var(--oak-text) 28%, transparent) 3px 4.5px
+    );
   }
   .sr-only-focusable:not(:focus):not(:focus-within) {
     position: absolute;

@@ -28,6 +28,8 @@ export interface DraftSaverInput {
   tags: () => string[];
   /** The version body for some code (analysis, key, band, flags). */
   body: (code: string, ranOk: boolean) => DraftBody;
+  /** Wave 7 (AC1, `capstone.versions`): which version of a two-version capstone this draft is. */
+  versionId?: "a" | "b";
 }
 
 export interface DraftSaver {
@@ -113,6 +115,7 @@ export function useDraftSaver(i: DraftSaverInput): DraftSaver {
             sessionId: inp.sessionId,
             sketchId: out.sketch.id,
             sketchVersion: out.sketch.currentVersion,
+            ...(inp.versionId ? { versionId: inp.versionId } : {}),
           },
         })
           .then((sessions) => {

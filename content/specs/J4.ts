@@ -1,0 +1,501 @@
+// J4 Forms: Turnarounds, the Jazz Blues, Rhythm Changes and a Standard: the unit spec (rendered to
+// content/specs/J4.md by `bun scripts/content/spec.ts`). Four lessons of the jazz track (contracts §2.6), gated on
+// U15.L06 (§4.3: J10 needs H12, the secondary dominants), no checkpoint of its own (J.CP2 covers J3–J5). Every hook
+// was evaluated with headless Strudel and is linted in its lesson by content/validate/specs.test.ts; the rule claims
+// were run against the real grader for this spec (the results are in each lesson's notes). JC2, the capstone J4
+// opens, has its own spec: content/specs/JC2.ts.
+import type { UnitSpec } from "./types.ts";
+
+const Eb = { tonic: "Eb", mode: "major" } as const;
+const F = { tonic: "F", mode: "major" } as const;
+const Bb = { tonic: "Bb", mode: "major" } as const;
+const T = (bpm: number) => `setcpm(${bpm}/4)\n\n`;
+
+/**
+ * What every J4 lesson may use on its earliest legal route: U15.L06 (so U14's modes, U15's chromatic degrees, named
+ * secondary dominants, `horns` and `trumpet`), J1–J3, J.CP1 and JC1. Not yet: borrowed chords by name (U16), key
+ * changes (U17), `tenor` (U16.L05), J5's substitutions.
+ */
+const BASE = [
+  "tb.setcpm",
+  "tb.label",
+  "tb.mini.seq",
+  "tb.mini.rest",
+  "tb.mini.sub",
+  "tb.mini.alt",
+  "tb.mini.stack",
+  "tb.gain",
+  "tb.s",
+  "tb.bank",
+  "snd.drum.hh",
+  "snd.drum.rd",
+  "snd.jazzkit",
+  "snd.vibes",
+  "snd.upright",
+  "snd.rhodes",
+  "snd.piano",
+  "tb.swingBy",
+  "tb.n",
+  "tb.scale",
+  "scale.major",
+  "tb.note",
+  "tb.note.names",
+  "tb.note.accidentals",
+  "tb.s.pitched",
+  "tb.const",
+  "tb.struct",
+  "tb.chord",
+  "tb.voicing",
+  "tb.anchor",
+  "tb.rootNotes",
+  "chord.seventh",
+  "chord.seventh-dim",
+  "chord.dom7",
+  "tb.dict.lefthand",
+  "tb.dict.guidetones",
+  "tb.feature.chord-symbols",
+  "tb.feature.rn",
+] as const;
+
+const RIDE = 'drums: s("rd [rd rd] rd [rd rd]").swingBy(1/3, 4).bank("jazzkit")';
+const HATS = 'hats: s("~ hh ~ hh").bank("jazzkit")';
+const COMP = (changes: string) =>
+  `chords: chord(${changes}).dict("lefthand").anchor("a4").voicing().struct("x ~ ~ x ~ ~ ~ ~").swingBy(1/3, 4).s("rhodes").gain(.6)`;
+
+/** J4.L01: I–vi–ii–V, then iii–VI–ii–V, in E♭ (C7 is V7 of Fm7, U15's secondary dominant). */
+const TURN = "<Eb^7 Cm7 Fm7 Bb7 Gm7 C7 Fm7 Bb7>";
+const L01_HOOK = `${T(132)}const changes = "${TURN}"\n\n${RIDE}\n${HATS}\nbass: chord(changes).rootNotes(2).s("upright")\n${COMP("changes")}`;
+
+/**
+ * J4.L02: one common jazz-blues chart in F (`jazzBlues("F")`, @oak/theory): F7 | B♭7 | F7 | Cm7 F7 | B♭7 | B°7 | F7 |
+ * D7 | Gm7 | C7 | F7 D7 | Gm7 C7. The walk puts the root on every beat 1 and approaches every bar line by a step or
+ * a half step (evaluated); the head is an Oak original on the muted trumpet, a chord tone on every beat it plays.
+ */
+const BLUES = "<F7 Bb7 F7 [Cm7 F7] Bb7 Bo7 F7 D7 Gm7 C7 [F7 D7] [Gm7 C7]>";
+const BLUES_WALK =
+  "[f2 a2 c3 b2] [bb2 a2 ab2 g2] [f2 a2 c3 db3] [c3 eb3 f2 a2] [bb2 ab2 f2 c3] [b2 ab2 f2 e2] [f2 a2 c3 c#3] [d3 c3 a2 ab2] [g2 bb2 d3 db3] [c3 bb2 g2 gb2] [f2 a2 d2 f#2] [g2 bb2 c3 e2]";
+const BLUES_HEAD =
+  "[f4 a4 c5 eb5] [d5 ~ bb4 ~] [c5 a4 f4 ~] [g4 ~ a4 ~] [bb4 d5 f5 ab5] [f5 ~ d5 ~] [c5 a4 f4 ~] [f#4 ~ a4 ~] [bb4 ~ d5 ~] [e5 ~ c5 ~] [a4 ~ f#4 ~] [g4 ~ e4 ~]";
+const L02_HOOK = `${T(132)}const changes = "${BLUES}"\n\n${RIDE}\n${HATS}\nbass: note("<${BLUES_WALK}>").s("upright")\nchords: chord(changes).dict("guidetones").voicing().struct("x ~ ~ x ~ ~ ~ ~").swingBy(1/3, 4).s("rhodes").gain(.6)\nmel: note("<${BLUES_HEAD}>").swingBy(1/3, 4).s("mutetpt")`;
+
+/** J4.L03: rhythm changes in B♭, 32 bars AABA (the last A ends home), the bridge D7 G7 C7 F7 two bars each. */
+const RC_A = "<[Bb^7 Gm7] [Cm7 F7] [Bb^7 Gm7] [Cm7 F7] [Fm7 Bb7] [Eb^7 Eo7] [Dm7 G7] [Cm7 F7]>";
+const RC_A3 = "<[Bb^7 Gm7] [Cm7 F7] [Bb^7 Gm7] [Cm7 F7] [Fm7 Bb7] [Eb^7 Eo7] [Cm7 F7] Bb^7>";
+const RC_B = "<D7 D7 G7 G7 C7 C7 F7 F7>";
+const RC_FORM = "[8, chord(A)], [8, chord(A)], [8, chord(B)], [8, chord(A3)]";
+const L03_HOOK = `${T(176)}const A = "${RC_A}"\nconst A3 = "${RC_A3}"\nconst B = "${RC_B}"\n\n${RIDE}\n${HATS}\nchords: arrange(${RC_FORM}).dict("lefthand").anchor("a4").voicing().struct("x ~ ~ x ~ ~ ~ ~").swingBy(1/3, 4).s("rhodes").gain(.6)\nbass: arrange(${RC_FORM}).rootNotes(2).s("upright")`;
+
+/**
+ * J4.L04: the first four bars of the A section's changes with a STAND-IN head written for this spec (an Oak
+ * original, a chord tone on every beat it plays). The lesson itself reads I Got Rhythm's own head from the
+ * repertoire answer key once author:repertoire has written and checked it against the 1930 refrain.
+ */
+const STANDIN = "[d5 ~ bb4 d5] [eb5 ~ a4 ~] [d5 ~ bb4 g4] [c5 ~ a4 ~]";
+const L04_HOOK = `${T(160)}const changes = "<[Bb^7 Gm7] [Cm7 F7] [Bb^7 Gm7] [Cm7 F7]>"\n\n${RIDE}\n${HATS}\nbass: chord(changes).rootNotes(2).s("upright")\n${COMP("changes")}\nmel: note("<${STANDIN}>").swingBy(1/3, 4).s("vibes")`;
+
+export const J4: UnitSpec = {
+  unit: "J4",
+  title: "Forms: Turnarounds, the Jazz Blues, Rhythm Changes and a Standard",
+  summary:
+    "The four lessons where the jazz track's chords become whole tunes (contracts §2.6). The turnaround that sends a tune back to its top, I–vi–ii–V and its brighter cousin iii–VI–ii–V (J4.L01); the twelve-bar blues the learner knows from U11 with jazz chords in it, ii–Vs into bars 5, 9 and the top, a diminished chord in bar 6 (J4.L02, the muted trumpet unlocks with it); rhythm changes, the 32-bar AABA on I Got Rhythm's chords, I–vi–ii–V turns in the A sections and a bridge of dominants a 4th apart (J4.L03); and a 1930 standard read from its lead sheet, head and changes (J4.L04). J4 opens after U15.L06 (secondary dominants by name, which the VI7 of a turnaround and the bridge of rhythm changes are) and may interleave with U16–U17; most learners reach it with the core finished. J4.L04 opens JC2, \"Jazz Blues in F\" (content/specs/JC2.ts). Every Make is a whole form the trio plays: a turnaround loop, a twelve-bar chorus, 32 bars of rhythm changes, a standard's A section.",
+  conventions: [
+    "Written for the learner at the gate (contracts §7.6 rule 5, AUTHORING §20.1): J4 is taken after U15.L06, J1–J3, J.CP1 and JC1, possibly before U16–U17 and J2.L04. So U14's modes, U15's chromatic degrees (`n(\"3#\")`), secondary dominants by name (V7/ii, V7/vi: U15.L02–L05), `horns` and `trumpet` may be used; borrowed chords by name (U16), key changes (U17), `tenor` and chord-scales (J2.L04) may not. J4.L02 unlocks `mutetpt` (contracts §3.2) for the blues head.",
+    'Every J4 tune is a form, and the form is the lesson: changes are written once (`const changes = "<…>"`, one entry a bar, two chords in a bar as `[Cm7 F7]`), and every line that plays chords reads them: the comping `chord(changes).dict("lefthand").anchor("a4").voicing()` (J3.L01) or `.dict("guidetones")`, the bass `chord(changes).rootNotes(2)` (two-feel) or a walk in note names (J3.L04). A 32-bar form is `arrange([8, chord(A)], [8, chord(A)], [8, chord(B)], [8, chord(A3)])` on the chords and on the bass, one `arrange` per labelled line (STYLE §10).',
+    'The charts are pinned to @oak/theory (`turnaround`, `jazzBlues`, `rhythmChanges`; contracts §2.8 for I Got Rhythm). Jazz blues in F, one common chart (the lesson says "a" jazz blues, not "the"): F7 | B♭7 | F7 | Cm7 F7 | B♭7 | B°7 | F7 | D7 | Gm7 | C7 | F7 D7 | Gm7 C7; common variants (Am7 D7 in bar 8, F7 in bar 2) are named once as variants. Rhythm changes in B♭: A = B♭maj7 Gm7 | Cm7 F7 | B♭maj7 Gm7 | Cm7 F7 | Fm7 B♭7 | E♭maj7 E°7 | Dm7 G7 | Cm7 F7, the last A ending Cm7 F7 | B♭maj7; the bridge D7 D7 G7 G7 C7 C7 F7 F7. I Got Rhythm\'s published refrain is 34 bars (8 + 8 + 8 + 10, a two-bar tag on the last A); rhythm changes are its 32 bars without the tag (repertoire entry, pre-flight B4): say both once, in J4.L03, never "I Got Rhythm is 32 bars".',
+    "Repertoire and copyright (contracts §2.8): I Got Rhythm (1930) is US public domain since 2026 for the published composition; Oak uses its melody and original changes only, never its lyrics, never a later arrangement or recording. The answer key (melody and changes of the 1930 refrain) is author:repertoire's to write and check; until it is `verified`, J4.L04 runs on the stand-in head of its hook over the same changes and says so in the notes, the pre-flight's fallback (\"an Oak-original melody over the intended harmonic form\").",
+    "Keys: J4.L01 in E♭ (rotation), J4.L02 and JC2 in F (the jazz blues' home key), J4.L03 and J4.L04 in B♭ (rhythm changes' home key). Swing, the kit and the sounds as in J1–J3; the jazz blues head is on `mutetpt`, other tunes on `vibes`.",
+    'Grading (AUTHORING §20.2): every required rule checks what is heard, in the lesson\'s key: forms by their chords (`contains-rn`, `blues-form`, `progression` with `bars`), never by a string. Each graded step names its WRONG ANSWER THAT USES THE RIGHT FUNCTION. Rule details that name the expected chord (`progression`: "the loop wants V/vi (D7) there"; `blues-form`: "bar 4 should stay on I (F7)") are overridden with a neutral "{label}: not yet." in a Make, and a `harmony.pcset` override on chord steps describes the sound, not the notes.',
+    'Words that wait: "contrafact" and "head" are J4.L04\'s terms (J4.L01–L03 say "tune" and "melody"); "tritone substitution", "backdoor" and "secondary ii–V" are J5\'s (J4 says "a ii–V into bar 5" in prose without the term); "register" (A2.L01) and "density" wait. New terms: jazz blues (L02), rhythm changes (L03), head and contrafact (L04). J4.L01 introduces none ("turnaround" is U11\'s).',
+    'Bands: J4.L01, L03 and L04 use `band.two-five-one` with `tracks: ["drums"]` (the learner\'s chords and bass are what the rules read; AUTHORING §8 rule 5). J4.L02 uses `band.blues-12bar` with `tracks: ["drums"]` (twelve bars of the flavour\'s drums; its jazz-soul kit swings). No Band plays a jazz-blues bass or rhythm changes yet: a `band.jazz-blues` and a `band.rhythm-changes` are requested from the bands\' owner (author:CP) for the Studio after J4; the lessons do not need them.',
+    'Ear training and decks (contracts §7.3): `fam.frm.blues` level 4 ("jazz-blues", gate J4.L02) is reviewed from J4.L02; `fam.jzz.ii-v` and `fam.jzz.guide` (its "turnarounds" level) are reviewed through J4. `deck.jzz.forms` deals its turnaround cards from J4.L01, the jazz blues bar by bar from J4.L02 and rhythm changes from J4.L03 once the drills engine writes it (`content/decks/planned.ts`; until then it is named in notes only).',
+    "Feedback the grader emits on J4 steps (pin what `bun run content:check <id> --verbose` prints): `harmony.pcset`, `harmony.bass`, `harmony.rn-quality` / `harmony.rn-degree` on numeral answers, `harmony.blues-bar` (the bar that breaks the jazz blues), `rubric.unmet` (`contains-rn`, `blues-form`, `progression`, the planned `song-melody-kept`), `melody.wrong-degree` / `rhythm.*` on reading a head, `code.unchanged`, `code.unknown-chord` (`Bdim7`, `Bmaj7`), `id.wrong`.",
+  ],
+  lessons: [
+    {
+      id: "J4.L01",
+      author: "J4a",
+      idea: "A turnaround is the last two bars of a tune sending it back to the top: I–vi–ii–V (E♭maj7 Cm7 Fm7 B♭7) is the one jazz shares with doo-wop; swap the first two chords for iii–VI (Gm7 C7) and the C7, a dominant aimed at Fm7, gives the turn a brighter, stronger pull: iii–VI–ii–V.",
+      hook: {
+        hear: "Eight bars of the trio in E♭: four of I–vi–ii–V, then four of iii–VI–ii–V; the second time the C7 lifts the turn before it comes home.",
+        code: L01_HOOK,
+      },
+      key: Eb,
+      meter: "4/4",
+      bpm: 132,
+      canDo: ["cd.write.turnarounds"],
+      uses: [...BASE],
+      steps: [
+        {
+          kind: "listen",
+          exercise: "listen",
+          minutes: 0.5,
+          what: "I–vi–ii–V four times round, then iii–VI–ii–V. The caption names the chord that changed colour (Cm7 became C7).",
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["choice", "number"],
+          minutes: 0.75,
+          panels: ["chords"],
+          what: "With the chord band showing numerals: what C7 is (choice: V7/ii, a dominant aimed at Fm7, U15's secondary dominant; not a borrowed chord, not a passing chord); how many chords the two turnarounds share (number: 2, Fm7 B♭7).",
+        },
+        {
+          kind: "quiz",
+          exercise: "identify",
+          answer: ["rn-palette"],
+          minutes: 1,
+          graded: true,
+          what: 'Name iii–VI–ii–V in E♭ by numeral (`rn-palette`, `allow: ["sevenths", "secondary"]`, four slots): iii7 V7/ii ii7 V7, read by degree, chroma and quality, so `VI7` and `V7/ii` are one answer. Fails `vi7` in slot 2 (`harmony.rn-quality`: the minor chord of I–vi–ii–V).',
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          what: 'The loop plays I–vi–ii–V (`<Eb^7 Cm7 Fm7 Bb7>`); turn it into iii–VI–ii–V. `pcset` per onset with `bass: true` over `chords` and `bass` (the bass reads `rootNotes`, so the lowest note is the root). Passes the reference `<Gm7 C7 Fm7 Bb7>`, the comping on `piano`, the comping held a whole bar instead of the Charleston, and the dictionary at another anchor (`.anchor("g4")`); fails the starter, the WRONG ANSWER WITH THE RIGHT CHORD ROOTS `<Gm7 Cm7 Fm7 Bb7>` (VI left minor: `harmony.pcset`), and `<Eb^7 C7 Fm7 Bb7>` (I–VI7–ii–V, a real turnaround but not the one asked: `harmony.pcset` on bar 1).',
+        },
+        {
+          kind: "ear",
+          exercise: "identify",
+          answer: ["choice"],
+          minutes: 1,
+          graded: true,
+          what: "Four fixed items, four bars each, in E♭ and in C: I–vi–ii–V or iii–VI–ii–V (choice). The tell is the dominant on 6.",
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          what: "Eight bars of your own in E♭ whose last four turn around with iii–VI–ii–V back to the top, with a vibes line if you like.",
+        },
+      ],
+      wrapAt: 4,
+      make: {
+        brief:
+          "Write eight bars for the trio in E♭: four bars of your own (a ii–V–I, a vamp, anything you like), then a turnaround that sends the tune back to the top through iii–VI–ii–V. Comp it, walk or two-feel the bass, add a vibes line.",
+        required: {
+          rule: "contains-rn",
+          label: "A iii–VI–ii–V turnaround",
+          why: '`contains-rn` with `rn: ["iii7", "VI7", "ii7", "V7"]`, `inOrder: true`, `min: 1` in E♭ (run for this spec): `<Eb^7 Cm7 Fm7 Bb7 Gm7 C7 Fm7 Bb7>` passes ("iii7 → VI7 → ii7 → V7 from bar 5"), two chords a bar passes, I–vi–ii–V alone fails, and the right roots with the WRONG QUALITY, I–VI7–ii–V (`Eb^7 C7 Fm7 Bb7`, no iii), fails. Read by degree, chroma and quality: C7 is "V/ii", which the rule counts as VI7.',
+        },
+        suggestions: [
+          "the turnaround in the last two bars, two chords a bar (`harmonic-rhythm` `changesPerBar: [1, 2]`)",
+          "the bass walks (`bass-line` `approach: { min: 2 }`)",
+        ],
+        band: "band.two-five-one",
+        tracks: ["drums"],
+        flavours: "Drums in the flavour's kit; the starter is on `rhodes` and `upright`.",
+      },
+      srs: [{ family: "fam.jzz.ii-v", mode: "review-if-due" }],
+      mistakes: [
+        "quiz: `vi7` in slot 2: `harmony.rn-quality`; `VI` without the 7: `harmony.rn-quality`",
+        "modify: `Cm7` left in place (`<Gm7 Cm7 Fm7 Bb7>`): `harmony.pcset`; I–VI7–ii–V: `harmony.pcset`; `Cdom7`: `code.unknown-chord`; the unchanged starter: `code.unchanged`",
+        "ear: the other turnaround: `id.wrong`",
+        "Make: only I–vi–ii–V; I–VI7–ii–V: `rubric.unmet`",
+      ],
+      connects: {
+        back: "U11 met the blues turnaround; U06.L07 the I–vi–IV–V of doo-wop; J1.L03 the ii–V–I; U15.L02–L05 named the secondary dominant (V7/ii) that the VI7 is.",
+        forward:
+          "J4.L02 ends every jazz-blues chorus on a turnaround; J4.L03's A sections are made of them; J5.L01 swaps the V of a turnaround for its tritone substitute.",
+      },
+      epr: {
+        enjoyment:
+          "The learner's own eight bars in E♭ that turn around and come home through iii–VI–ii–V, the brighter turn that ends half the standards they know, looping like a tune with a last line.",
+        pace: "One idea: the turnaround and its iii–VI version. The other common turnarounds (I–VI7–ii–V, with a tritone sub, the backdoor) are named only as wrong answers or wait for J5.",
+        return:
+          "The Coda says: you can now play the common turnarounds back to the top. Next: the twelve-bar blues with jazz chords in it.",
+      },
+      notes: [
+        'Run for this spec (real grader, `contains-rn` inOrder in E♭): iii–VI–ii–V passes from bar 5; I–vi–ii–V twice fails ("there is no iii7 (Gm7)"); two chords a bar passes; I–VI7–ii–V fails (C7 read as V/ii, no iii7 before it).',
+        '`deck.jzz.forms` (planned) deals its turnaround cards from here: "I–vi–ii–V in C" → `C^7 Am7 Dm7 G7`.',
+      ],
+    },
+    {
+      id: "J4.L02",
+      author: "J4a",
+      idea: "A jazz blues is the twelve bars the learner knows with jazz chords put in: bar 4 becomes a ii–V into bar 5 (Cm7 F7 into B♭7), bar 6 a diminished chord (B°7) that climbs to F7, bars 8 to 10 a chain of dominants and a ii–V (D7 Gm7 C7) into the last line, and bar 12 a turnaround (Gm7 C7) back to the top.",
+      hook: {
+        hear: "A twelve-bar chorus in F by the trio and a muted trumpet: the ride and the hi-hat swinging, a walking bass, the Rhodes on guide tones on the Charleston, and a head on the trumpet that lands on a chord tone of every new chord.",
+        code: L02_HOOK,
+      },
+      key: F,
+      meter: "4/4",
+      bpm: 132,
+      canDo: ["cd.read.jazz-blues"],
+      uses: [...BASE, "snd.mutetpt"],
+      steps: [
+        {
+          kind: "listen",
+          exercise: "listen",
+          minutes: 0.5,
+          what: "The blues of U11 in F (quick change: F7 B♭7 F7 F7 | B♭7 B♭7 F7 F7 | C7 B♭7 F7 C7), then the jazz blues, the same bass rhythm and drums. The caption says where to listen: bars 4, 6 and 8–10.",
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["choice", "number"],
+          minutes: 1,
+          panels: ["chords"],
+          what: "Both charts in the chord band: which bar now holds a ii–V into bar 5 (choice: bar 4); how many bars differ from the U11 blues (number: 7: bars 4, 6, 8, 9, 10, 11, 12). The pass text names the jazz blues and says it is one common chart among several.",
+          term: "term.jazz-blues",
+        },
+        {
+          kind: "quiz",
+          exercise: "identify",
+          answer: ["bar-grid"],
+          minutes: 1.25,
+          graded: true,
+          what: "Fill the twelve-bar grid of the jazz blues in F (`bar-grid` with `qualities` from `SEVENTH_QUALITIES`, bars 4, 11 and 12 with two slots): the roots and the qualities. Fails B7 in bar 6 (`harmony.rn-quality`: a dominant where the chart has a diminished seventh) and Dm7 in bar 8.",
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          what: "`const changes` holds the U11 blues in F; rewrite it as the jazz blues (bars 4, 6, 8, 9, 10, 12). `pcset` per onset with `bass: true` over `chords` and `bass` (the bass reads `rootNotes`). Passes the reference, the variant Am7 D7 in bar 8 (a second reference), bar 11 as `[F7 D7]`, and the chart written over two lines of `< >`; fails the starter, the WRONG ANSWER WITH THE RIGHT ROOTS `Bo7` written `B7` (`harmony.pcset`), `Dm7` for D7 in bar 8 (`harmony.pcset`), and `Bdim7` (`code.unknown-chord`).",
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          what: "Your jazz blues in F: the changes, comping and a walking or two-feel bass from one `const changes`, and a head of your own on the muted trumpet, over the Band's drums.",
+        },
+      ],
+      wrapAt: 3,
+      make: {
+        brief:
+          "The Band plays the drums. Play a jazz blues in F: twelve bars with the jazz chords in them (bar 2 on B♭7), comped and with a bass, and a head of your own on the muted trumpet (`mutetpt`) that you would hum back. The tempo, the comping rhythm, the walk, the head are yours.",
+        required: {
+          rule: "blues-form",
+          label: "A jazz blues: twelve bars with its jazz chords",
+          why: '`blues-form` with `variant: "jazz"` in F (run for this spec): the U11 blues fails, F7 in bar 4 passes, and the chart this lesson teaches, Cm7 F7 in bar 4, FAILS TODAY ("bar 4 should stay on I (F7); it is v (Cm7)"): the grader\'s jazz form (`BLUES_FORMS.jazz`, packages/grader/src/analyze/chords.ts) accepts only the tonic on bar 4\'s downbeat. Requested: bar 4 `[0, 7]` (and bar 2 `[5, 0]`). Until the grader accepts it the lesson\'s Make fails check 7 on its own reference, and the author writes the tests that pin it.',
+        },
+        suggestions: [
+          "the head on the muted trumpet (`sounds` contains `snd.mutetpt` on `mel`)",
+          "the bass walks (`bass-line` `approach: { min: 6 }`)",
+          'the head lands on chord tones (`chord-tones-strong` `minRatio: 0.6`, `strength: "strong"`)',
+        ],
+        band: "band.blues-12bar",
+        tracks: ["drums"],
+        flavours:
+          "The Band's twelve bars of drums in the flavour's kit; the learner's lines start on `rhodes`, `upright` and `mutetpt`.",
+      },
+      srs: [{ family: "fam.frm.blues", mode: "review-if-due", level: 4 }],
+      mistakes: [
+        "bar-grid: B7 in bar 6, Dm7 in bar 8: `harmony.rn-quality`",
+        "modify: `B7` for `Bo7`, `Dm7` for `D7`: `harmony.pcset`; `Bdim7`: `code.unknown-chord`; the unchanged starter: `code.unchanged`",
+        "Make: the U11 blues, eleven bars, F7 in bar 2 (until the grader accepts it): `rubric.unmet`",
+      ],
+      connects: {
+        back: "U11.L05–L06 played the twelve-bar blues and the quick change; J1.L03 the ii–V; U12.L03 the diminished seventh; J3.L03–L04 the comping and the walk.",
+        forward:
+          "JC2 writes a jazz blues of the learner's own over two choruses; J5.L01 puts a tritone substitute into its turnaround.",
+      },
+      epr: {
+        enjoyment:
+          "A twelve-bar jazz blues in F with a muted-trumpet head of the learner's own over a walking trio: the first whole jazz tune they play top to bottom.",
+        pace: "One idea: the jazz blues' chords in the twelve-bar frame they know. The walk and the comping are J3's, reused; writing two choruses and a head is JC2's.",
+        return:
+          "The Coda says: you can now play and chart a jazz blues, and the muted trumpet is yours. Next: rhythm changes, the other form every jazz musician knows.",
+      },
+      notes: [
+        "Run for this spec (real grader, `blues-form` jazz in F): `<F7 Bb7 F7 [Cm7 F7] Bb7 Bo7 F7 D7 Gm7 C7 F7 [Gm7 C7]>` FAILS at bar 4 (\"it is v (Cm7)\"); the same chart with F7 in bar 4 passes; Am7 D7 in bar 8 fails at bar 4 likewise. The grader's jazz form must take Cm7 on bar 4's downbeat before this Make (and JC2) can pass with the chart @oak/theory's `jazzBlues` and `term.jazz-blues` both teach.",
+        'Evaluated: the hook\'s walk has the root on every beat 1 and approaches every bar line by a step or a half step (B→B♭, G→F, D♭→C, A→B♭, C→B, E→F, C♯→D, A♭→G, D♭→C, G♭→F, F♯→G, E→F); its head plays a chord tone of the chord sounding on every beat it plays. `.dict("guidetones")` voices B°7 as D4 A♭4.',
+        '`deck.jzz.forms` (planned) deals "bar 6 of a jazz blues in F" → `Bo7` from here.',
+      ],
+    },
+    {
+      id: "J4.L03",
+      author: "J4b",
+      idea: "Rhythm changes are the 32-bar AABA chords of I Got Rhythm (1930): each A section is a string of I–vi–ii–V turns in B♭, and the bridge (B) is four dominant sevenths a 4th apart, two bars each, D7 G7 C7 F7, each one pulling to the next and the last back home to B♭. Half the bebop tunes ever written are new melodies on these chords.",
+      hook: {
+        hear: "Thirty-two bars of rhythm changes in B♭ at a brisk 176: the turns of the A section twice, the bridge's chain of dominants, and the last A landing home.",
+        code: L03_HOOK,
+      },
+      key: Bb,
+      meter: "4/4",
+      bpm: 176,
+      canDo: ["cd.read.rhythm-changes"],
+      uses: [...BASE, "tb.arrange"],
+      steps: [
+        {
+          kind: "listen",
+          exercise: "listen",
+          minutes: 0.75,
+          what: "The whole form once (32 bars at 176 is about 44 seconds) with the form lens showing A A B A as it plays.",
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["number", "choice"],
+          minutes: 1,
+          panels: ["form", "chords"],
+          what: "How many bars each section has (number: 8); what the bridge's chords are (choice: dominant sevenths a 4th apart, two bars each; not a ii–V in each bar, not the A section moved up). The pass text names rhythm changes and says the published refrain of I Got Rhythm is 34 bars (a two-bar tag on its last A); jazz musicians play the 32 without it.",
+          term: "term.rhythm-changes",
+        },
+        {
+          kind: "quiz",
+          exercise: "identify",
+          answer: ["rn-palette"],
+          minutes: 1,
+          graded: true,
+          what: 'Name the bridge by numeral in B♭ (`rn-palette`, `allow: ["sevenths", "secondary"]`, four slots): V7/vi V7/ii V7/V V7 (or III7 VI7 II7 V7: one answer, read by degree, chroma and quality). Fails `iii7` for D7 (`harmony.rn-quality`).',
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          what: "`const A` and the `arrange()` are given; `const B` holds the A section's first eight bars. Write the bridge. `pcset` per onset with `bass: true` over `chords` and `bass`, the 32 bars. Passes the reference `<D7 D7 G7 G7 C7 C7 F7 F7>`, `<D7!2 G7!2 C7!2 F7!2>`, the comping on `piano`, and the bridge comped in whole bars; fails the starter, the WRONG ANSWER WITH THE RIGHT CHORDS IN THE WRONG LENGTH `<D7 G7 C7 F7>` (one bar each: `harmony.pcset` from bar 18), and `Dm7` for D7 (`harmony.pcset`).",
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          what: "Rhythm changes for your trio: the A section given, your bridge, the AABA `arrange()`, comping and a bass, and a riff of your own if you like.",
+        },
+      ],
+      wrapAt: 3,
+      make: {
+        brief:
+          "The Band plays the drums. Put rhythm changes together for your trio: the A section is given; write the bridge (D7, G7, C7, F7, two bars each), arrange the 32 bars as A A B A, comp them and give them a bass. A riff on the vibes over the A sections is yours to add.",
+        required: {
+          rule: "progression",
+          label: "The bridge in bars 17–24: D7 G7 C7 F7, two bars each",
+          why: '`progression` with `rn: ["III7", "III7", "VI7", "VI7", "II7", "II7", "V7", "V7"]`, `bars: [17, 24]` in B♭ (run for this spec on the hook\'s arrangement): the right bridge passes ("V7/vi V7/vi V7/ii V7/ii V7/V V7/V V7 V7"); one bar per chord fails at bar 18; Dm7 for D7 fails; the bebop variant with a ii–V in each pair (Am7 D7 | D7 | Dm7 G7 …) fails too, so the brief asks for the plain dominants. Because it reads bars 17–24, the rule also needs A A before the bridge. Override `rubric.unmet` with "{label}: not yet." (the rule\'s detail names the expected chord).',
+        },
+        suggestions: [
+          'AABA, 32 bars (`form` `pattern: "AABA"`; `bars` 32–32)',
+          "a riff on the vibes in the A sections (`sounds` contains `snd.vibes`)",
+        ],
+        band: "band.two-five-one",
+        tracks: ["drums"],
+        flavours: "Drums in the flavour's kit; the starter is on `rhodes` and `upright`.",
+      },
+      srs: [{ family: "fam.jzz.ii-v", mode: "review-if-due" }],
+      mistakes: [
+        "quiz: `iii7` for D7: `harmony.rn-quality`",
+        "modify: one bar per chord: `harmony.pcset`; `Dm7` for `D7`: `harmony.pcset`; the unchanged starter: `code.unchanged`",
+        "Make: the bridge one bar per chord, the bridge before the second A (ABAA), the bebop ii–V variant: `rubric.unmet`",
+      ],
+      connects: {
+        back: "U09.L03 named AABA; J4.L01 the I–vi–ii–V turnaround; U15 the secondary dominants the bridge is made of; J3 the comping and the walk.",
+        forward:
+          "J4.L04 reads I Got Rhythm's own head on these changes; JC3 writes a new head over them (a contrafact).",
+      },
+      epr: {
+        enjoyment:
+          "Thirty-two bars of fast, swinging rhythm changes that the learner put together, the bridge's dominants pulling round the circle to home: a form they will hear in every bebop record.",
+        pace: "One idea: the form and its bridge. The A section is given (the turnaround is J4.L01's); the variants of the A section and the bebop bridge are named, not taught; a new head over it is JC3's.",
+        return:
+          "The Coda says: you can now play rhythm changes. Next: reading a 1930 standard, head and changes, from its lead sheet.",
+      },
+      notes: [
+        "Run for this spec (real grader, `progression` with `bars: [17, 24]` in B♭ over the hook's 32 bars): right bridge passes; one bar per chord, Dm7 for D7 and the bebop ii–V variant all fail.",
+        "Evaluated: the hook's `arrange([8, chord(A)], [8, chord(A)], [8, chord(B)], [8, chord(A3)])` sounds 32 bars with the bridge's roots D D G G C C F F in bars 17–24 and B♭ alone in bar 32.",
+        '`deck.jzz.forms` (planned) deals "the bridge of rhythm changes in B♭" → `D7 G7 C7 F7`, two bars each, from here.',
+      ],
+    },
+    {
+      id: "J4.L04",
+      author: "J4b",
+      idea: "A standard is a melody and its changes on one page: the head, the tune a band plays at the start and the end with solos over its changes in between. Reading I Got Rhythm's A section from its lead sheet, the learner plays the head on the vibes over the trio comping the chords above it, and hears how a head and its changes fit: chord tones on the strong beats, steps between them.",
+      hook: {
+        hear: "Four bars of the A section in B♭ from a lead sheet: the vibes play a head over the trio comping the changes written above the staff. (The hook is a stand-in head written for this spec over the A section's changes; the lesson plays I Got Rhythm's own head from the repertoire answer key.)",
+        code: L04_HOOK,
+      },
+      key: Bb,
+      meter: "4/4",
+      bpm: 160,
+      canDo: ["cd.read.standard"],
+      uses: [...BASE],
+      steps: [
+        {
+          kind: "listen",
+          exercise: "listen",
+          minutes: 0.5,
+          what: "The A section of I Got Rhythm played from its lead sheet (the staff panel in `leadSheet` mode, symbols above the staff), then the changes alone.",
+        },
+        {
+          kind: "investigate",
+          exercise: "run-investigate",
+          answer: ["choice", "number"],
+          minutes: 1,
+          panels: ["chords"],
+          what: "Reading the lead sheet: in which bar the first phrase ends (number, from the answer key); what the head plays on the first beat of each chord (choice: a chord tone; not the root every time). The pass text names the head and says what a contrafact is (a new head over borrowed changes: JC3's job).",
+          term: ["term.head", "term.contrafact"],
+        },
+        {
+          kind: "quiz",
+          exercise: "staff-read",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          what: 'Read the head\'s first two bars from the staff and type them as `note()` on `mel` (`events`, `pitch: "absolute"`, `rhythm: "onsets"`, `durations: true`, against the answer key). Passes the reference, note names with flats or sharps for the same keys, the line on `piano`, and with `.swingBy(1/3, 4)`; fails an octave off (`melody.octave`), the rhythm shifted an eighth (`rhythm.displaced`), and the WRONG ANSWER WITH THE RIGHT NOTES IN THE WRONG RHYTHM (every note a quarter).',
+        },
+        {
+          kind: "modify",
+          exercise: "code-modify",
+          answer: ["code"],
+          minutes: 1.25,
+          graded: true,
+          what: "The head plays over a chords line with two wrong bars; read the symbols above the staff and fix the changes. `pcset` per onset with `bass: true` over `chords` and `bass`. Passes the reference, the comping on `piano`, the comping held a whole bar, the dictionary at another anchor; fails the starter, `G7` for Gm7 (`harmony.pcset`: the right root, the wrong quality, the WRONG ANSWER WITH THE RIGHT FUNCTION).",
+        },
+        {
+          kind: "make",
+          exercise: "code-make",
+          answer: ["code"],
+          minutes: 2.75,
+          what: "Play the A section of I Got Rhythm for your trio: the head as written, the changes as written, your comping, bass and tempo.",
+        },
+      ],
+      wrapAt: 3,
+      make: {
+        brief:
+          "Play the first eight bars of I Got Rhythm as the 1930 lead sheet gives them: the head on the vibes, note for note, over the changes above it. The arrangement is yours: the tempo, the comping rhythm, a walk or a two-feel, the sound of the head.",
+        required: {
+          rule: "matches",
+          label: "The head is I Got Rhythm's, note for note",
+          why: '`matches` with a `melody` matcher (`pitch: "absolute"`) on `mel` against the head the page shows, at its threshold: the starter\'s changes with no head fail, the head a step off or a bar late fails, the head as written in any comping or tempo passes. song.i-got-rhythm has no answer key yet (author:repertoire: the 1930 scans were not opened), so the lesson runs on the stand-in head of the hook and says so; once the key exists and `GradeContext.songMelody` is filled for lessons, the rule becomes `custom` `song-melody-kept` (`melody: "mel"`, `pitch: "absolute"`).',
+        },
+        suggestions: [
+          "the changes are the lead sheet's (`matches`, `pcset` without `bass`, ≥ 0.85)",
+          "the bass walks (`bass-line` `approach: { min: 3 }`)",
+        ],
+        band: "band.two-five-one",
+        tracks: ["drums"],
+        flavours: "Drums in the flavour's kit; the head on `vibes`, the starter on `rhodes` and `upright`.",
+      },
+      srs: [{ family: "fam.mel.dictation", mode: "review-if-due" }],
+      mistakes: [
+        "staff-read: an octave off: `melody.octave`; shifted an eighth: `rhythm.displaced`; every note a quarter: `rhythm.*`",
+        "modify: `G7` for `Gm7`: `harmony.pcset`; the unchanged starter: `code.unchanged`",
+        "Make: no head, the head moved a step, a bar late: `rubric.unmet`",
+      ],
+      connects: {
+        back: "U07.L09 read and played from a lead sheet; J4.L03 learned the changes of this tune as rhythm changes; J3 the comping and the walk.",
+        forward:
+          "JC2 (opens now) writes an original head over a jazz blues; JC3 writes a contrafact on rhythm changes; JC4 reharmonises a 1930 standard with its melody kept.",
+      },
+      epr: {
+        enjoyment:
+          "A real 1930 standard, I Got Rhythm's A section, played by the learner's own trio from the lead sheet: the head they have heard all their life, in their arrangement.",
+        pace: "One idea: read a head and its changes from the page and play them. The form is J4.L03's; the bridge and the last A, and soloing, are out of scope; the contrafact is named and left to JC3.",
+        return:
+          "The Coda says: you can now play a standard's head and changes from a lead sheet, and JC2, Jazz Blues in F, is open. Next: your own jazz blues, two choruses with a head of yours.",
+      },
+      notes: [
+        "Copyright (contracts §2.8): the 1930 published composition is US public domain since 2026; Oak uses the melody and the original changes of the refrain only, never the lyrics, never a later arrangement or recording. The answer key (melody, changes, the 34-bar form with its tag marked) is author:repertoire's; nothing in this spec reproduces the melody.",
+        "The hook's head is a stand-in written for this spec: D B♭ D | E♭ A | D B♭ G | C A over B♭maj7 Gm7 | Cm7 F7 | B♭maj7 Gm7 | Cm7 F7 (evaluated: a chord tone on every beat it plays). The lesson replaces it with the answer key's head; if the key is not `verified` by the end of the Build, the lesson keeps the stand-in and its brief says \"a head in the style of\", the pre-flight's fallback.",
+        "Requested: `GradeContext.songMelody` (carry f4) for `song-melody-kept`; the lead-sheet staff panel (`leadSheet`) reading the answer key's chords.",
+      ],
+    },
+  ],
+  capstones: [],
+};

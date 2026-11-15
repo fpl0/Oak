@@ -258,9 +258,17 @@ describe("the beat grid inside a bar (Wave 6: swing, triplets, compound meter)",
     expect(isCompound("3/4")).toBe(false);
     expect(isCompound(null)).toBe(false);
   });
-  test("3/4 has three beats; an odd meter shows its units alone; no meter is 4/4", () => {
+  test("3/4 has three beats; an odd meter shows its groups (Wave 7: 7/8 as 2+2+3); no meter is 4/4", () => {
     expect(gridTicks("3/4", "straight").filter((x) => x.kind === "beat")).toHaveLength(3);
-    expect(gridTicks("7/8", "swing").map((x) => x.kind)).toEqual(Array(7).fill("beat"));
+    expect(gridTicks("7/8", "swing").map((x) => x.kind)).toEqual([
+      "beat",
+      "off",
+      "beat",
+      "off",
+      "beat",
+      "off",
+      "off",
+    ]);
     expect(gridTicks(null, "straight")).toHaveLength(8);
   });
   test("the feel in words", () => {

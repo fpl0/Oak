@@ -277,6 +277,11 @@ test("the weekly streak: a met week, a banked rest, an open tie, then a new phra
   const now = (await serverNow(request)).day;
   const M = addDays(mondayOf(now), 7);
   const offsetTo = (d: string) => daysBetween(day0, d);
+  // The first, partial week (this file's first days) may already have earned a rest, depending on the weekday the
+  // run starts: what week 1 must show is one more than that (the bank holds at most two).
+  const bankBefore = (await api<{ summary: { bankedRests: number } }>(request, "GET", "/api/streak")).summary
+    .bankedRests;
+  const bankAfter = Math.min(2, bankBefore + 1);
   // Week 1: five practice days → met (goal 5), one rest banked.
   for (let i = 0; i < 5; i++) {
     travel(offsetTo(addDays(M, i)));
@@ -285,7 +290,9 @@ test("the weekly streak: a met week, a banked rest, an open tie, then a new phra
   travel(offsetTo(addDays(M, 7)));
   await today(page);
   await expect(page.getByTestId("streak-chip")).toHaveText("1 week in a row");
-  await expect(page.locator("main header")).toContainText("1 rest banked");
+  await expect(page.locator("main header")).toContainText(
+    `${bankAfter} ${bankAfter === 1 ? "rest" : "rests"} banked`,
+  );
   await settle(page);
   await shoot(page, SHOTS, "today-streak-met", "paper");
 

@@ -100,7 +100,37 @@ export type Author =
   | "U16b"
   | "U17a"
   | "U17b"
-  | "finale";
+  | "finale"
+  // Wave 7: the advanced tracks (docs/design/wave7.md ownership table).
+  | "spec-J"
+  | "spec-R"
+  | "spec-A"
+  | "J1a"
+  | "J1b"
+  | "J2a"
+  | "J2b"
+  | "J3a"
+  | "J3b"
+  | "J4a"
+  | "J4b"
+  | "J5a"
+  | "J5b"
+  | "R1a"
+  | "R1b"
+  | "R2a"
+  | "R2b"
+  | "R2c"
+  | "R3a"
+  | "R3b"
+  | "A1a"
+  | "A1b"
+  | "A2a"
+  | "A2b"
+  | "A2c"
+  | "capstones-jazz-a"
+  | "capstones-jazz-b"
+  | "capstones-rhythm"
+  | "capstones-sound";
 
 /**
  * The Wave 3 schema a step uses (AUTHORING §16), so the author and the app engineers know which new shape

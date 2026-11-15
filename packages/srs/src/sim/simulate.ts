@@ -46,6 +46,7 @@ import { stepLevel } from "../level.ts";
 import { planReviewDay, planWarmup } from "../planner.ts";
 import type { Card, GovernorConfig, Rating, ReviewItem, ReviewOutcome, Srs } from "../types.ts";
 import { buildTimeline, maxOpenLevelOf, type SimEntry, type SimFamily } from "./catalog.ts";
+import { memoSrs } from "./memo.ts";
 
 // --- randomness -----------------------------------------------------------------------------------
 
@@ -316,7 +317,9 @@ interface FactS {
 const BASE_DAY_ISO = "2027-01-04"; // a Monday
 
 const EARLY_FOR_TIME = process.env.NOEARLY !== "1";
-export function simulate(srs: Srs, o: SimOptions): SimResult {
+export function simulate(srsIn: Srs, o: SimOptions): SimResult {
+  // A read-through cache of the pure questions asked many times a day (sim/memo.ts): the same answers, faster.
+  const srs = memoSrs(srsIn);
   const cfg = o.governor;
   const L = o.learner;
   const rng = (key: string) => mulberry32(fnv1a(`${o.seed}|${key}`));
