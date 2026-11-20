@@ -159,7 +159,7 @@ const LEAD = { roll: false, staff: "lead", keyboard: false } as const;
 
 export default defineLesson({
   id: "U16.L03",
-  version: 1,
+  version: 2,
   title: "♭III & Minor Plagal",
   objective:
     "I can use ♭III beside iv, ♭VI and ♭VII, name all four as C minor's chords, and hear iv close into I.",
@@ -185,19 +185,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a riff on organ stabs and an overdriven guitar, first over the key's own chords, then with a new chord in bar 2 and the sad IV near the end. Listen to bar 2 each time.",
+          "A riff on organ stabs and an overdriven guitar, twice. The second time bar 2 holds a new chord, and the sad IV comes in near the end. Listen to bar 2 each time: how does the riff's colour change there?",
         skills: [{ skill: "H13", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK_PLAIN,
-            caption: "C, E minor, F, C: every chord is the key's own.",
+            caption: "C, E minor, F, C: the key's own chords.",
             bars: 4,
           },
           {
             code: HOOK,
-            caption: "C, E♭, F, C, then C, E♭, F minor, C: three major chords climbing, then the sad IV.",
+            caption: "C, E♭, F, C, then C, E♭, F minor, C. Listen to bar 2, then to bar 7.",
             bars: 8,
           },
         ],
@@ -243,7 +243,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it with the chord band open: C, E♭, F and F minor, one chord a bar. Read each chord's degrees on the roll and decide which key each one belongs to.",
+          "C, E♭, F and F minor, one chord a bar. Read each chord's degrees on the roll and decide which key each one belongs to.",
         skills: [{ skill: "H13", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -303,7 +303,7 @@ export default defineLesson({
         role: "check",
         key: D,
         prompt:
-          "The page holds four bars of a tune in D major: two sharps, F♯ and C♯. The numerals of the four bars are I, ♭III, IV, iv. Bar 1 is D. Write the four chords by name in `changes`; the starter has D in every bar.",
+          "Four bars of a tune in D major, whose key signature has two sharps, F♯ and C♯. The numerals of the four bars are I, ♭III, IV, iv, and bar 1 is D. Write the four chords by name in `changes`, where the starter has D in every bar.",
         skills: [{ skill: "H13", w: 1 }],
         code: { starter: PAGE_STARTER },
         reference: { solutions: [PAGE_SOLUTION], bars: 4 },
@@ -456,7 +456,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "A riff over C and F with organ stabs and a bass. You have seven chords for it now: C, F and G from C major; E♭, A♭, B♭ and F minor from C minor. Write a four- or eight-bar loop that brings in E♭ and anything else from the minor side. Try closing on F minor into C.",
+          "A riff over C and F with organ stabs and a bass. You have seven chords for it now. C, F and G come from C major; E♭, A♭, B♭ and F minor from C minor. Write a four- or eight-bar loop that brings in E♭ and anything else from the minor side. Try closing on F minor into C.",
         skills: [{ skill: "H13", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

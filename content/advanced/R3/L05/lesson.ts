@@ -184,7 +184,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "R3.L05",
-  version: 1,
+  version: 2,
   title: "Rhythm Master Lab",
   objective: "I can take down syncopated, swung and odd-meter rhythms by ear.",
   key: { tonic: "C", mode: "major" },
@@ -209,7 +209,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the lab tape, a son groove in C, twice through. Then each line on its own, so you know what you will take down.",
+          "The lab tape, a son groove in C, twice through, then each line on its own. As each line plays alone, ask two things: does it play on beat 1, and how many hits does it play in a bar?",
         skills: [{ skill: "E14", w: 1 }],
         hints: null,
         tests: [],
@@ -482,7 +482,7 @@ export default defineLesson({
         role: "practice",
         title: "Displaced son",
         prompt:
-          "Four bars of the lab tape. In bars 1 and 2 the cowbell plays its figure; make bars 3 and 4 play the same figure moved later, by an eighth or a sixteenth, while the clave, the bass and the piano hold their ground. Then make it yours: another bell figure, a ghosted hi-hat, a tempo.",
+          "Four bars of the lab tape. In bars 1 and 2 the cowbell plays its figure; make bars 3 and 4 play the same figure moved later, by an eighth or a sixteenth, while the clave, the bass and the piano hold their ground. Add another bell figure, a ghosted hi-hat or a new tempo if you like.",
         skills: [
           { skill: "R15", w: 0.6 },
           { skill: "E14", w: 0.4 },

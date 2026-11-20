@@ -1,23 +1,25 @@
 {/* U03.L02 Degrees in Code: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
 
 <Step id="S1">
-In Home & the Major Scale you spelled scales with letters. This line uses no letters at all, only numbers, and it sounds the same as letters would.
+Home & the Major Scale gave every scale a home and seven letters. A letter tells you which key to press, not where a note sits in the scale. This line is written in numbers that say exactly that, counted from home.
 
 <Example id="hook" views="code,roll" autoplay />
+
+<OnPass>The line starts on 1 and stops on 2, one step above home, so it never quite lands until the loop brings it back to 1. The numbers show at a glance how far each note sits from home.</OnPass>
 </Step>
 
 <Step id="S2">
-`n` plays notes of the scale named in `.scale()` by their place in it. The first number is home. <CodeRef fn="n" />
+`n` plays the notes of the scale named in `.scale()` by their place in it, counting from 0 at home. <CodeRef fn="n" />
 
 <Predict exercise="which-three-notes" hum />
 </Step>
 
 <Step id="S3">
-The first seven notes of C major, one number each. Run it and compare the code with the labels.
+The first seven notes of C major, one number each. Compare the code with the labels.
 
 <Example id="seven-degrees" views="code,roll" />
 
-<OnPass>The label is the note's **scale degree**: its number in the key, with home as 1. Strudel counts from 0, like an array, so `n` is always one less: degree 5 is `n` 4.</OnPass>
+<OnPass>The label is the note's **scale degree**: its number in the key, with home as 1. Like an array index, `n` counts from 0, so degree 5 is `n` 4.</OnPass>
 </Step>
 
 <Step id="S4">
@@ -25,7 +27,7 @@ You played this tune from letters in Playing from the Page. A tune written in de
 
 <Editor exercise="tune-by-numbers" />
 
-<OnPass>Ode to Joy, by degree: 3 3 4 5, then 5 4 3 2. In `n` every degree is one less, every time: `2 2 3 4`, then `4 3 2 1`.</OnPass>
+<OnPass>`2 2 3 4`, then `4 3 2 1`: every degree one less, every time. Now you can say why the tune's first phrase sounded unfinished in Playing from the Page: it stopped on 2, not on 1.</OnPass>
 </Step>
 
 <Step id="S5">
@@ -33,11 +35,11 @@ The numbers say what each note does; `.scale()` says where home is: its letter, 
 
 <Editor exercise="home-is-g" />
 
-<OnPass>Same numbers, new home: the whole tune moved to G with one word. That is why musicians think in degrees: the tune is the numbers, the key is a setting.</OnPass>
+<OnPass>Same numbers, new home: the whole tune moved to G with one word. In Moving Melodies you counted half steps to move a tune; now you name its home instead. The tune is the numbers, and the key is a setting.</OnPass>
 </Step>
 
 <Step id="S6">
-From here on your ears learn degrees too. First the two clearest: 1, which sounds finished, and 5, which sounds stable but open.
+From here on your ears learn degrees too, starting with the two clearest.
 
 <Choice exercise="rest-or-open" />
 
@@ -45,7 +47,7 @@ From here on your ears learn degrees too. First the two clearest: 1, which sound
 </Step>
 
 <Step id="S7">
-Now 3 joins them. Before each note, a few chords set home, so every key works the same way.
+Now 3 joins them. Judge each note by how it sits against home, not by how high it is.
 
 <EarDrill family="fam.deg.fet-major" level={1} trials={6} />
 
@@ -55,15 +57,15 @@ Now 3 joins them. Before each note, a few chords set home, so every key works th
 </Step>
 
 <Step id="S8">
-Your voice is analysed live on this computer. Nothing is recorded or sent.
+Now the same three degrees in your own voice.
 
 <Sing exercise="sing-one-three-five" />
 
-<OnPass>One, three, five and back home. Those three degrees are the bones of the key.</OnPass>
+<OnPass>One, three, five and back home. Those three degrees are the bones of the key: sounded together, they make the chord that home rests on, which you will build in a later unit.</OnPass>
 </Step>
 
 <Step id="S9">
-Your turn. Think in degrees, write in `n`, and let the band play under you.
+A note used to be a letter. Now it is a place in the key, counted from home. Think in degrees, write in `n`, and end on 1 the way your C major line came home in Home & the Major Scale. The band follows whatever key your `.scale()` names.
 
 <Make exercise="a-line-by-numbers" />
 

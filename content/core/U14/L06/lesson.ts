@@ -150,7 +150,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U14.L06",
-  version: 1,
+  version: 2,
   title: "Mode Lab",
   objective:
     "I can name Mixolydian, Dorian, Lydian and Phrygian by ear, and write a vamp that makes its mode heard.",
@@ -176,15 +176,14 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: one guitar line over a repeated D, six times. The numbers never change; the scale under them does, once a bar.",
+          "One guitar line over a repeated D, six times. The numbers never change; the scale under them does, once a bar. Listen for the bar where the line crosses from bright to dark.",
         skills: [{ skill: "E10", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption:
-              "Lydian, major, Mixolydian, Dorian, minor, Phrygian. Each bar, one note is a half step lower than before.",
+            caption: "Six bars on one home note, D, a new scale in each.",
             bars: 6,
           },
         ],

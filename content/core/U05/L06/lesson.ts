@@ -63,7 +63,7 @@ const BASS_KEYS = { roll: false, staff: "bass", keyboard: true } as const;
 
 export default defineLesson({
   id: "U05.L06",
-  version: 1,
+  version: 2,
   title: "Bass Clef & Grand Staff",
   objective:
     "I can read and write low notes on the bass clef, and read a bass line under chords on the grand staff.",
@@ -92,15 +92,15 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play. An upright bass walks under the piano's chords. Watch the page: the bass has a staff of its own.",
+          "An upright bass plays under the piano's chords. Listen for the notes it keeps coming back to in each bar. Then watch the page: the bass has a staff of its own.",
         skills: [{ skill: "N04", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: HOOK, caption: "An upright bass under the four-chord loop.", bars: 4 },
+          { code: HOOK, caption: "The bass under the four-chord loop. Watch the lower staff.", bars: 4 },
           {
             code: BASS_ALONE,
-            caption: "The bass alone: each chord's root on beats 1 and 3, its 5th on beat 4.",
+            caption: "The bass alone. Which beats repeat a note?",
             bars: 4,
           },
         ],
@@ -119,7 +119,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run the loop and watch both staves. Which one holds the bass line? Then count: the bass's first note is `c2`. How many short lines below its staff does it sit?",
+          "Run the loop and watch both staves. Find the bass line, then its first note, `c2`, and count the short lines between it and its staff.",
         skills: [{ skill: "N04", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -334,7 +334,7 @@ export default defineLesson({
     {
       id: "S6",
       kind: "make",
-      title: "A bass line of your own",
+      title: "Your own bass line",
       minutes: 2.75,
       ui: { panels: BASS_KEYS, band: AXIS_BAND },
       exercise: {
@@ -343,7 +343,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The band plays drums and the four-chord loop: C, G, Am, F, a bar each. Write the bass line under them on `upright` or `ebass`, the root on beat 1 of each bar and anything you like between. Keep it on the bass clef, at `c3` or below.",
+          "Write the bass line under the band's C, G, Am and F, a bar each, on `upright` or `ebass`. Put the root on beat 1 of each bar and anything you like between. Keep it on the bass clef, at `c3` or below.",
         skills: [{ skill: "N04", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [2, 8],
@@ -381,7 +381,7 @@ export default defineLesson({
         hints: ladder(
           "Look at the lower staff while the starter plays. Where do its notes sit, and where do the band's chords sit?",
           "The starter plays `c3` to `g3`, right where the chords are. The number after each letter sets the octave.",
-          "`c3` becomes `c2` and `g3` becomes `g2`: the same line, one octave down. Do the same for the rest, then make it yours.",
+          "`c3` becomes `c2` and `g3` becomes `g2`: the same line, one octave down. Do the same for the rest, then reshape the line.",
         ),
         tests: [
           {

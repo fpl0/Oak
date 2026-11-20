@@ -1,19 +1,21 @@
 {/* U08.L02 Root–Five–Octave: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
 
 <Step id="S1">
-The same four chords, the same drums, three basses. Listen to what each one does to the loop.
+Roots alone give a loop its floor. Most bass lines do more than that, and they need only a couple of extra notes to do it.
 
 <Example id="hook" views="code,roll" autoplay />
+
+<OnPass>Each bass moves more than the last: one note a bar holds the floor, two start to walk, eight bounce. The second is the sound of a lot of rock and country, the third a disco bass. All three use only each chord's root and the notes that blend with it best.</OnPass>
 </Step>
 
 <Step id="S2">
-A bass shape works like a chord stack: write it once as a cell, and `.add()` moves it onto every root.
+Here is the second bass in code. A bass shape works like a chord stack: write it once as a cell, and `.add()` moves it onto every root.
 
 <Predict exercise="what-the-4-adds" />
 </Step>
 
 <Step id="S3">
-Run it and follow the bass. Each bar climbs from its root and comes back.
+A longer cell, `[0 4 7 4]`: each bar climbs from its root and comes back.
 
 <Example id="up-and-back" views="code,roll" />
 
@@ -25,7 +27,7 @@ Disco basses live on this jump. One number to change.
 
 <Editor exercise="the-octave-bounce" />
 
-<OnPass>The root and its octave on alternate eighths, under every chord. `n` counts from 0, so the octave is 7, not 8. That bounce is a whole bass line, and a good place to stop for today if you need to.</OnPass>
+<OnPass>The root and its octave on alternate eighths, under every chord. `n` counts from 0, so the octave is 7, not 8. That bounce is a whole bass line.</OnPass>
 </Step>
 
 <Step id="S5">
@@ -45,7 +47,7 @@ The 5th and the octave are the two notes a bass reaches for after the root. Tell
 </Step>
 
 <Step id="S7">
-The chords and drums are set. The bass walks from each root to its 3rd; this low, the 3rd makes each chord sound less settled. Give it the 5th or the octave instead, then make the cell your own: more notes, rests, the 5th below the root, anything built from those three.
+This bass walks from each root to its 3rd, and this low the 3rd makes each chord sound less settled. Give it the 5th or the octave instead. Then treat the cell like a motif: more notes, rests, the 5th below the root, or the cell turned round. Add a tune on top, and the loop has drums, chords, bass and melody.
 
 <Make exercise="your-bass-groove" />
 

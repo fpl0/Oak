@@ -105,7 +105,7 @@ const CHORDS = { band: "band.two-chord-vamp", tracks: ["chords"] } as const;
 
 export default defineLesson({
   id: "A1.L07",
-  version: 1,
+  version: 2,
   title: "FM & Supersaw",
   objective: "I can build a bright or bell-like sound with FM, and hear what makes a supersaw wide.",
   key: { tonic: "C", mode: "major" },
@@ -133,13 +133,13 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the loop with its riff on a plain sine over a still pad, then the same notes with two richer sounds. Same drums, same bass.",
+          "Loop 2 keeps the drums and the bass and changes two sounds. Listen to the riff: what does it sound as if it is made of now?",
         skills: [{ skill: "D07", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: PLAIN, caption: "Plain: the riff a pure sine, the pad a quiet triangle.", bars: 2 },
-          { code: RICH, caption: "Rich: the riff rings like a bell, the pad is wide.", bars: 2 },
+          { code: PLAIN, caption: "Loop 1: the riff on a plain sine, a quiet pad on a triangle.", bars: 2 },
+          { code: RICH, caption: "Loop 2: listen to the start of each riff note, then to the pad.", bars: 2 },
         ],
       },
     },
@@ -242,7 +242,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Play the target, then yours. The target's riff rings like a struck bell, bright and a little clangy. Yours is a plain sine. Give it the target's sound with FM: how far to bend, and how fast. Keep the notes.",
+          "The target's riff rings like a struck bell, bright and a little clangy. Yours is a plain sine. Give it the target's sound with FM, how far to bend and how fast, and keep the notes.",
         skills: [{ skill: "D07", w: 1 }],
         code: { starter: BELL_STARTER },
         reference: { solutions: [BELL_SOLUTION], bars: 2 },
@@ -379,7 +379,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The same chords on a supersaw: five sawtooth waves per note. In one card the five play at exactly one pitch; in the other they are pulled a little apart. Which card sounds wider?",
+          "The same chords on the supersaw. In one card its five saws play at exactly one pitch; in the other they are pulled a little apart. Which card sounds wider?",
         skills: [{ skill: "D07", w: 1 }],
         hints: ladder(
           "In which card does the chord seem to fill more space between your ears?",
@@ -561,7 +561,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The loop with its riff on a plain sine and a still pad. Give a part an FM sound: a bright lead, a hollow bass, a bell over the chords. Choose how far and how fast by ear. Then, if you like, put the pad on a wide supersaw. Or bring a loop of your own.",
+          "The loop with its riff on a plain sine and a still pad. Give a part an FM sound: a bright lead, a hollow bass, a bell over the chords. Choose how far and how fast by ear. Then, if you like, put the pad on a wide supersaw.",
         skills: [{ skill: "D07", w: 1 }],
         code: { starter: PLAIN },
         bars: [2, 8],

@@ -70,7 +70,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U06.L08",
-  version: 1,
+  version: 2,
   title: "Harmonic Rhythm",
   objective:
     "I can set the pace of a song by changing chords once or twice a bar, and speed up the changes to drive a phrase home.",
@@ -97,14 +97,14 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play. Eight bars over the drums. The tempo never changes, yet the second half seems to run.",
+          "Eight bars, and the tempo never changes. Listen to the second half: does it relax, hold steady, or seem to hurry?",
         skills: [{ skill: "H06", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption: "Four bars of the four-chord loop, then two chords a bar and home.",
+            caption: "The four-chord loop, then four bars more. Feel the second half.",
             bars: 8,
           },
         ],
@@ -123,7 +123,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          'This time the roots come first, `n("<[0 3] [4 0]>")`, and the stack is added to each of them. Each `< >` item is one bar. How many chords will each bar hold?',
+          '`n("<[0 3] [4 0]>")` holds the roots, and the stack is added to each of them. Each `< >` item is one bar. How many chords will each bar hold?',
         skills: [{ skill: "H06", w: 1 }],
         hints: null,
         tests: [],
@@ -211,7 +211,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Play the target. Bars 3 and 4 each hold two chords, half a bar each: vi then IV, and ii then V. Write them into the last two items of the roots.",
+          "In the target, bars 3 and 4 each hold two chords, half a bar each: vi then IV, and ii then V. Write them into the last two items of the roots.",
         skills: [{ skill: "H06", w: 1 }],
         code: { starter: PUSH_STARTER },
         reference: { solutions: [push(PUSH)], bars: 4 },
@@ -359,7 +359,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The starter changes chord once a bar. Write a four- or eight-bar loop over the drums and set its pace: one chord in some bars, two in others. Try the faster changes just before the end.",
+          "The starter changes chord once a bar. Write a four- or eight-bar loop and set its pace: one chord in some bars, two in others. Try the faster changes just before the end.",
         skills: [{ skill: "H06", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

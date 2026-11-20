@@ -108,7 +108,7 @@ const ENDINGS = CADENCE_OPTIONS.filter((o) => ["PAC", "IAC", "HC"].includes(o.id
 
 export default defineLesson({
   id: "U07.L06",
-  version: 1,
+  version: 2,
   title: "Question & Answer",
   objective:
     "I can write a four-bar question that stops open and a four-bar answer that starts the same way and comes home.",
@@ -136,13 +136,12 @@ export default defineLesson({
         id: "ask-then-answer",
         version: 1,
         role: "practice",
-        prompt: "Press Play. Eight bars over the band. Listen to how bar 4 and bar 8 end.",
+        prompt:
+          "Listen to the ends of bar 4 and bar 8. Which one sounds like the end of the song, and which makes you wait?",
         skills: [{ skill: "M06", w: 1 }],
         hints: null,
         tests: [],
-        items: [
-          { code: HOOK, caption: "Four bars that stop, four that start the same way and finish.", bars: 8 },
-        ],
+        items: [{ code: HOOK, caption: "Eight bars. Listen at bar 4, then at bar 8.", bars: 8 }],
       },
     },
     {
@@ -158,7 +157,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The first four bars on their own, without the band. Read the last bar, `[1 ~ ~ ~]`: degree 2, one note above home. When the tune gets there, will it sound finished?",
+          "Read the last bar, `[1 ~ ~ ~]`: degree 2, one note above home. When the tune gets there, will it sound finished?",
         skills: [{ skill: "M06", w: 1 }],
         hints: null,
         tests: [],
@@ -244,7 +243,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Here bars 5–8 copy bars 1–4, so the tune asks twice and never answers. Rewrite bars 7–8: land on 1, with notes of the chord on beats 1 and 3.",
+          "Here bars 5–8 copy bars 1–4, so the tune asks twice and never answers. Rewrite bars 7–8: land on 1, with chord tones on beats 1 and 3.",
         skills: [
           { skill: "M06", w: 0.7 },
           { skill: "M03", w: 0.3 },
@@ -396,7 +395,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The band waits on V in bar 4 and comes home in bar 8. This tune asks twice. Keep its question or write your own, then answer it: start bars 5–8 the way bars 1–4 start, and land on 1.",
+          "This tune asks twice. Keep its question or write your own, then answer it: start bars 5–8 the way bars 1–4 start, and land on 1.",
         skills: [
           { skill: "M06", w: 0.7 },
           { skill: "F01", w: 0.3 },

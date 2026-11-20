@@ -72,7 +72,7 @@ const BASS_STAFF = { roll: false, staff: "bass", keyboard: false } as const;
 
 export default defineLesson({
   id: "U08.L02",
-  version: 1,
+  version: 2,
   title: "Root–Five–Octave",
   objective:
     "I can write a bass line from each chord's root, its 5th and its octave, as one cell moved onto every root.",
@@ -99,14 +99,14 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the four-chord loop over the drums, three times, each with a different bass under it.",
+          "Three basses under the same loop. Listen to how each one changes the feel: which one makes you want to move?",
         skills: [{ skill: "B02", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: ROOTS, caption: "Roots: one note a bar, the floor.", bars: 4 },
-          { code: ROOT_FIFTH, caption: "Root and 5th on beats 1 and 3: rock and country.", bars: 4 },
-          { code: BOUNCE, caption: "The root jumping an octave on every eighth: disco.", bars: 4 },
+          { code: ROOTS, caption: "Bass 1: one note a bar.", bars: 4 },
+          { code: ROOT_FIFTH, caption: "Bass 2: two notes a bar.", bars: 4 },
+          { code: BOUNCE, caption: "Bass 3: a note on every eighth.", bars: 4 },
         ],
       },
     },
@@ -150,7 +150,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run the loop with the bass cell `[0 4 7 4]` and follow the lowest line on the roll: four notes a bar, moved onto every root.",
+          "Run it and follow the lowest line on the roll: four notes a bar, the same cell moved onto every root.",
         skills: [{ skill: "B02", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -395,7 +395,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The four-chord loop over the drums, with a bass that walks from each root to its 3rd. Swap the 3rd for the 5th or the octave. Then build your own cell from root, 5th and octave: any rhythm, any order.",
+          "Swap the 3rd in this bass cell for the 5th or the octave. Then build your own cell from root, 5th and octave: any rhythm, any order.",
         skills: [{ skill: "B02", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

@@ -139,7 +139,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "R1.L03",
-  version: 1,
+  version: 2,
   title: "The One",
   objective: "I can write a 16th-note funk beat with ghost notes that lands together on the downbeat.",
   key: { tonic: "E", mode: "minor" },
@@ -164,21 +164,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a funk groove on one chord, twice. The drums and the clav are the same both times; listen to where the bass starts each bar.",
+          "Only the bass changes, and only by a sixteenth. Which loop stands firm, and which seems to tilt? Listen to the first beat of each bar: what lands there together?",
         skills: [{ skill: "R14", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: GROOVE,
-            caption:
-              "Busy everywhere, and on the first beat of every bar the kick, the bass and the clav hit together.",
+            caption: "Busy everywhere. Listen to beat 1 of each bar.",
             bars: 4,
           },
           {
             code: GROOVE_TILTED,
-            caption:
-              "The same groove with the bass a sixteenth early: it no longer meets the kick, and the floor tilts.",
+            caption: "The bass moves a sixteenth earlier. What happens on beat 1?",
             bars: 4,
           },
         ],
@@ -196,7 +194,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Feel it before you write it. The groove plays four bars with a soft crash on each downbeat. Tap only there, once a bar, four taps in all, and let everything between go by. Any key works.",
+          "Four bars, with a soft crash on each downbeat. Tap only there, once a bar, and let everything in between go by.",
         skills: [{ skill: "R14", w: 1 }],
         hints: ladder(
           "Which hit of the bar do the kick, the bass and the clav share?",
@@ -295,7 +293,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The kick plays four on the floor under a funk snare, bass and clav. Write a funk kick: keep it on the one in every bar, and let it pull against the beat at least twice a bar: hits on light places, with the heavier place after each left empty.",
+          "The kick plays four on the floor under a funk snare, bass and clav. Write a funk kick. Keep it on the one in every bar, and let it pull against the beat at least twice a bar, each time on a light place with the heavier place after it left empty.",
         skills: [{ skill: "R14", w: 1 }],
         code: { starter: KICK_STARTER },
         reference: { solutions: [KICK_SOLUTION], bars: 4 },

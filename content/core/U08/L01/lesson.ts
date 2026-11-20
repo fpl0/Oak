@@ -62,7 +62,7 @@ const ROOT_BASS = {
 
 export default defineLesson({
   id: "U08.L01",
-  version: 1,
+  version: 2,
   title: "Roots Down Low",
   objective:
     "I can write a bass line that plays each chord's root on its downbeat, in degrees or from chord names.",
@@ -89,13 +89,13 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the four-chord loop and its tune, first without a bass, then with one. Listen to the bottom.",
+          "Listen to the bottom of the sound in both loops. What does the added low line do to the chords above it?",
         skills: [{ skill: "B01", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: NO_BASS, caption: "No bass: the chords and the tune float.", bars: 4 },
-          { code: HOOK, caption: "The same loop with a bass under each chord.", bars: 4 },
+          { code: NO_BASS, caption: "The chords and the tune, no bass.", bars: 4 },
+          { code: HOOK, caption: "The same loop with a low line added.", bars: 4 },
         ],
       },
     },
@@ -111,7 +111,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          'The bass line is `n("<0 4 5 3>")`, the same numbers as the chords\' `.add()`, over `.scale("C2:major")`. Which note of each chord does it play?',
+          'The bass line is `n("<0 4 5 3>")`, the same numbers as the chords\' `.add()`, over `.scale("C2:major")`: only the octave differs. Which note of each chord will it play?',
         skills: [{ skill: "B01", w: 1 }],
         hints: null,
         tests: [],
@@ -188,7 +188,7 @@ export default defineLesson({
     {
       id: "S4",
       kind: "modify",
-      title: "Roots for a new loop",
+      title: "New loop, new roots",
       minutes: 1.25,
       graded: true,
       ui: { panels: ROLL, rollLabels: "degree" },
@@ -353,7 +353,7 @@ export default defineLesson({
     {
       id: "S7",
       kind: "make",
-      title: "A floor for the loop",
+      title: "Lay the floor",
       minutes: 2.75,
       ui: { panels: ROLL, rollLabels: "degree", band: DRUMS },
       exercise: {
@@ -361,8 +361,7 @@ export default defineLesson({
         id: "a-floor-for-the-loop",
         version: 1,
         role: "practice",
-        prompt:
-          "The four-chord loop over the drums, and a bass that sits on C under every chord. Give each chord its root on beat 1. Then play with the rhythm: repeat the root, hold it, or answer the kick.",
+        prompt: "Give each chord of the loop its root in the bass, on beat 1. Then choose a rhythm for it.",
         skills: [{ skill: "B01", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

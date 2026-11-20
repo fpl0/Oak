@@ -210,7 +210,7 @@ const HOW_FAR: IdentifyEx = {
 
 export default defineLesson({
   id: "U17.L04",
-  version: 1,
+  version: 2,
   title: "Transcribing Through a Key Change",
   objective:
     "I can write a tune down through its key change: find the bar where home moves and the new do, then write the degrees once and give them a key plan.",
@@ -237,14 +237,14 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play, with nothing to read: a pop chorus, eight bars. Once the first bar has settled, hum do softly and keep it going under the tune. Notice the bar where your do stops fitting.",
+          "A pop chorus, eight bars, with nothing to read. Once the first bar has settled, hum do softly and keep it going under the tune. Notice the bar where your do stops fitting.",
         skills: [{ skill: "E13", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption: "Piano, picked bass and the Band's drums. Home moves once in these eight bars.",
+            caption: "Count the bars as you hum. Home moves once.",
             bars: 8,
           },
         ],
@@ -263,7 +263,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The same eight bars, heard and not seen. Two questions: in which bar does the new key begin, and by how much does the music lift there?",
+          "The same eight bars, heard and not seen. In which bar does the new key begin, and by how much does the music lift there?",
         skills: [{ skill: "E13", w: 1 }],
         hints: ladder(
           "Hum do along with bar 1. Where does your hum stop belonging to the music?",
@@ -373,11 +373,11 @@ export default defineLesson({
         key: D_FLAT_MAJOR,
         bpm: BALLAD_BPM,
         prompt:
-          "Press Play: six bars of a slow ballad, Rhodes, upright bass and tenor sax, in the manner of the standards of 1930. It starts in D♭ major. Home moves once. Listen for the bar, and for how far it moves.",
+          "Six bars of a slow ballad for Rhodes, upright bass and tenor sax, in the manner of the standards of 1930. It starts in D♭ major, and home moves once. Listen for the bar where it moves, and whether home goes up or down.",
         skills: [{ skill: "E13", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: BALLAD, caption: "Home moves once: listen for the bar.", bars: 6 }],
+        items: [{ code: BALLAD, caption: "Follow the tenor: its first phrase comes back.", bars: 6 }],
       },
     },
     {

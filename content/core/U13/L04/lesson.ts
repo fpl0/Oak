@@ -99,7 +99,7 @@ const eighths = (bars: number, every: number) =>
 
 export default defineLesson({
   id: "U13.L04",
-  version: 1,
+  version: 2,
   title: "Compound Meter",
   objective:
     "I can write a groove in 6/8 or 12/8, two or four beats a bar with each beat split in three, and set its tempo by the dotted quarter.",
@@ -128,15 +128,14 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a soul ballad, four seventh chords on the Rhodes, each one rolled up and back down in six even notes. Count along with the hats: 1 la li 2 la li.",
+          "Listen with your body before you count anything. How many times a bar does the music sway, and which drums mark the sway?",
         skills: [{ skill: "R11", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption:
-              "1 la li 2 la li: six hats in every bar, but only two beats: the kick on 1, the snare on 2.",
+            caption: "Four seventh chords on the Rhodes, each rolled up and back down. Six hats a bar.",
             bars: 8,
           },
         ],
@@ -281,7 +280,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "A 6/8 bar with six hats and a kick on 1 only. Give it its second beat: a snare on the fourth eighth. Then add a kick on the sixth eighth, a lift into the next bar. Play the target first.",
+          "A 6/8 bar with six hats and a kick on 1 only. Give it its second beat: a snare on the fourth eighth. Then add a kick on the sixth eighth, a lift into the next bar.",
         skills: [{ skill: "R11", w: 1 }],
         code: { starter: S5_STARTER },
         reference: { solutions: [S5_SOLUTION], bars: 2 },
@@ -443,7 +442,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "A 6/8 ballad that does not sway yet: four held chords, a bass note on 1, six even hats, a kick on 1. Give it its second beat with a snare. Then make it yours: a kick that lifts into the next bar, hats accented in threes, the chords rolled with `.arp()`, a slow tune on top.",
+          "A 6/8 ballad that does not sway yet: four held chords, a bass note on 1, six even hats, a kick on 1. Give it its second beat with a snare. Then go further: a kick that lifts into the next bar, hats accented in threes, the chords rolled with `.arp()`, a slow tune on top.",
         skills: [{ skill: "R11", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

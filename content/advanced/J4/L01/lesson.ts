@@ -152,7 +152,7 @@ const DRUMS = { band: "band.two-five-one", tracks: ["drums"] } as const;
 
 export default defineLesson({
   id: "J4.L01",
-  version: 1,
+  version: 2,
   title: "Turnarounds",
   objective: "I can end a tune with I–vi–ii–V or the brighter iii–VI–ii–V and send it back to the top.",
   key: Eb,
@@ -178,20 +178,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the last bars of a tune in E♭, looping the way a trio sends a tune back to its top. Listen to the second chord of each four.",
+          "Listen to the second chord of each four bars. In which take does it sit back, and in which does it lean forward into the chord after it?",
         skills: [{ skill: "J10", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: PLAIN_TURN,
-            caption: "E♭maj7, Cm7, Fm7, B♭7: four bars that lead home and round again.",
+            caption: "Four bars that lead home and round again.",
             bars: 4,
           },
           {
             code: HOOK,
-            caption:
-              "Then the same four with two chords swapped: Gm7 for E♭maj7, and C7 where Cm7 was. The C7 lifts the turn before it comes home.",
+            caption: "The same turn, with its first two chords swapped.",
             bars: 8,
           },
         ],
@@ -337,7 +336,7 @@ export default defineLesson({
         role: "check",
         key: Eb,
         prompt:
-          "The trio loops I–vi–ii–V in E♭. Turn it into iii–VI–ii–V: change the first two chords and leave the last two. Hear the target first.",
+          "The trio loops I–vi–ii–V in E♭. Turn it into iii–VI–ii–V: change the first two chords and leave the last two.",
         skills: [{ skill: "J10", w: 1 }],
         swing: SWUNG,
         code: { starter: TURN_STARTER },
@@ -450,7 +449,7 @@ export default defineLesson({
         key: Eb,
         title: "Turnaround in E♭",
         prompt:
-          "The Band plays the drums. Eight bars in E♭: four of your own, then a turnaround that goes home through iii–VI–ii–V and loops back to the top. The starter turns with I–vi–ii–V. Then make it yours: the first four bars, the comping, a vibes line.",
+          "Eight bars in E♭: four of your own, then a turnaround through iii–VI–ii–V that loops back to the top. The starter turns with I–vi–ii–V. The first four bars, the comping and a vibes line are yours; a walking bass or Charleston comping would fit here.",
         skills: [{ skill: "J10", w: 1 }],
         swing: SWUNG,
         code: { starter: MAKE_STARTER },

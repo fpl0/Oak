@@ -132,7 +132,7 @@ const DRUMS = { band: "band.two-five-one", tracks: ["drums"] } as const;
 
 export default defineLesson({
   id: "J5.L01",
-  version: 1,
+  version: 2,
   title: "Tritone Substitution",
   objective: "I can swap a V7 for the dominant a tritone away and hear the bass slide home.",
   key: C,
@@ -157,21 +157,19 @@ export default defineLesson({
         id: "two-endings",
         version: 1,
         role: "practice",
-        prompt:
-          "Press Play: the same four bars twice, the way a trio ends a ballad. Only bar 2 changes. Listen to the bass under it.",
+        prompt: "Listen to the bass from bar 1 to the last chord. How does it travel in each take?",
         skills: [{ skill: "J13", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: TRIO_V,
-            caption: "Dm7, G7, Cmaj7: the bass falls a 5th from G and lands on C.",
+            caption: "A ii–V–I in C, as you have played it.",
             bars: 4,
           },
           {
             code: TRIO_SUB,
-            caption:
-              "Dm7, D♭7, Cmaj7: the bass slides down by half steps, D, D♭, C, and the vibes play the same notes.",
+            caption: "The same ending with a new chord in bar 2. The vibes do not change.",
             bars: 4,
           },
         ],
@@ -189,7 +187,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Eight bars: the first ending, then the second, with D♭7 in bar 6. Before you play it: from D in bar 5, where does the bass go in bar 6?",
+          "Eight bars: the first ending, then the second, with D♭7 in bar 6. From D in bar 5, where does the bass go in bar 6?",
         skills: [{ skill: "J13", w: 1 }],
         hints: null,
         tests: [],
@@ -274,7 +272,7 @@ export default defineLesson({
         role: "check",
         key: F,
         prompt:
-          "A ii–V–I in F: Gm7, C7, Fmaj7. Replace C7 with the dominant a tritone away, so the bass slides into F by half steps. Hear the target first.",
+          "A ii–V–I in F: Gm7, C7, Fmaj7. Replace C7 with the dominant a tritone away, so the bass slides into F by half steps.",
         skills: [{ skill: "J13", w: 1 }],
         swing: SWUNG,
         code: { starter: SUB_STARTER },
@@ -440,7 +438,7 @@ export default defineLesson({
         key: Bb,
         title: "Turnaround with a slide",
         prompt:
-          "The turnaround that ends a tune in B♭: B♭maj7, G7, Cm7, F7, looping over the drums. Put a substitute in for one of its dominants, or both, and move the bass with it so it slides. Then make it yours: a vibes line, another tempo.",
+          "The turnaround that ends a tune in B♭: B♭maj7, G7, Cm7, F7. Put a substitute in for one of its dominants, or both, and move the bass with it so it slides. Then add a vibes line that lands on the guide tones each pair of twins shares, or try another tempo.",
         skills: [{ skill: "J13", w: 1 }],
         swing: SWUNG,
         code: { starter: MAKE_STARTER },

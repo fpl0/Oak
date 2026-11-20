@@ -102,7 +102,7 @@ const DRUMS = { band: "band.aeolian-4bar", tracks: ["drums"] } as const;
 
 export default defineLesson({
   id: "A2.L05",
-  version: 1,
+  version: 2,
   title: "Mix & Dynamics",
   objective: "I can balance a mix: the tune on top, every part with its own level, side and room.",
   key: { tonic: "A", mode: "minor" },
@@ -130,20 +130,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the same four bars, twice. Same notes, same sounds. Listen for the tune, and for where each part comes from.",
+          "Both loops play the same notes on the same sounds. Listen for the tune: in which loop can you follow it without searching for it?",
         skills: [{ skill: "D10", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: UNBALANCED,
-            caption: "The chords and the pad over the tune, everything in the middle.",
+            caption: "Loop 1: every part from the middle.",
             bars: 4,
           },
           {
             code: MIXED,
-            caption:
-              "The tune on top, the chords under it a little to the left, the pad quieter still and to the right.",
+            caption: "Loop 2: the same notes. With headphones, listen for the side each part comes from.",
             bars: 4,
           },
         ],
@@ -161,7 +160,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The chords play at `.gain(.8)` and the tune at `.gain(.3)`. Before you run it: which part will be hard to follow?",
+          "The chords play at `.gain(.8)` and the tune at `.gain(.3)`. Which part will be hard to follow?",
         skills: [{ skill: "D10", w: 1 }],
         hints: null,
         tests: [],
@@ -377,7 +376,7 @@ export default defineLesson({
         id: "what-is-too-loud",
         version: 1,
         role: "check",
-        prompt: "The loop again, with one part far too loud for its place. Which part is it?",
+        prompt: "One part of the loop now plays far too loud for its place. Which part is it?",
         skills: [{ skill: "D10", w: 1 }],
         hints: [
           { text: "Which part do you hear before anything else?" },

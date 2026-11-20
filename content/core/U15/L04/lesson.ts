@@ -135,7 +135,7 @@ const earPart = (id: string, prompt: string, form: string, right: string): Ident
 
 export default defineLesson({
   id: "U15.L04",
-  version: 1,
+  version: 2,
   title: "Tonicization",
   objective: "I can lead into a chord with its own leading-tone chord, and hear it from the climbing bass.",
   key: C_MAJOR,
@@ -160,19 +160,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: last lesson's visitor, A7 leaning into D minor, with the bass falling into it. Then an organ walk-up in which the bass climbs by the smallest steps, and a tight, restless chord squeezes into each chord above it.",
+          "Two ways into D minor: first last lesson's A7, then an organ walk-up. Keep your ear on the bass. How does it reach each new chord, by a leap or by the smallest steps?",
         skills: [{ skill: "H12", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: VISITOR,
-            caption: "C, A7, Dm7, G7: A7 leans into D minor, the bass falls from A to D.",
+            caption: "C, A7, Dm7, G7: last lesson's visitor.",
             bars: 4,
           },
           {
             code: HOOK,
-            caption: "C, C♯°7, Dm7, F♯°7, G7, G♯°7, Am7, G7: the bass climbs C C♯ D, then F♯ G G♯ A.",
+            caption: "The walk-up: a new chord squeezes in before Dm7, G7 and Am7.",
             bars: 8,
           },
         ],
@@ -218,7 +218,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it with the chord band open: A7, then C♯°7, then D minor, each stacked from its root. Read the note names on the roll and compare the first two bars, then look at where each root sits against D.",
+          "A7, then C♯°7, then D minor, each stacked from its root. Compare the note names of the first two bars on the roll, then see where each root sits against D.",
         skills: [{ skill: "H12", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -339,7 +339,7 @@ export default defineLesson({
         role: "check",
         key: C_MAJOR,
         prompt:
-          "The walk-up with its first push in place: C♯°7 into Dm7. Bars 4 and 6 only wait on the chord before them. Turn each into the leading-tone chord of the chord in the bar after it. Play the target first.",
+          "The walk-up with its first push in place: C♯°7 into Dm7. Bars 4 and 6 only wait on the chord before them. Turn each into the leading-tone chord of the chord in the bar after it.",
         skills: [{ skill: "H12", w: 1 }],
         code: { starter: MODIFY_STARTER },
         reference: { solutions: [MODIFY_SOLUTION], bars: 8 },
@@ -462,7 +462,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "A slow turn on the organ that waits two bars on C, on Dm7 and on G7. Fill the waits: in the second bar of a pair, write the chord that pushes into the next bar, a leading-tone chord or a V7. Use at least one leading-tone chord and listen to the bass climb. Then make it yours.",
+          "A slow turn on the organ that waits two bars on C, on Dm7 and on G7. Fill the waits: in the second bar of a pair, write the chord that pushes into the next bar, a leading-tone chord or a V7. Use at least one leading-tone chord and listen to the bass climb.",
         skills: [{ skill: "H12", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

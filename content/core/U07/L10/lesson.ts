@@ -109,7 +109,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U07.L10",
-  version: 1,
+  version: 2,
   title: "Hook Lab",
   objective:
     "I can write a short hook that comes back and is easy to sing, and let chance change a few of its repeats.",
@@ -135,14 +135,14 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "A one-bar idea over the four-chord band, four times round. By the second time you can sing along. Listen to the end of bar 4 each time.",
+          "Four times round: hum along as soon as you can. Then listen to the end of each bar 4. Does every repeat end the same way?",
         skills: [{ skill: "M09", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption: "A hook over I V vi IV: its last note comes and goes.",
+            caption: "Over I V vi IV, four times round.",
             bars: 16,
           },
         ],
@@ -159,7 +159,7 @@ export default defineLesson({
         id: "which-one-sticks",
         version: 1,
         role: "practice",
-        prompt: "Two tunes over the same four bars. Which one could you sing back after one hearing?",
+        prompt: "Which one could you sing back after one hearing?",
         skills: [{ skill: "M09", w: 1 }],
         hints: ladder(
           "After which card can you hum the first bar again?",
@@ -508,7 +508,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Four bars that never repeat. Turn them into a hook: one or two bars that come back, simple enough to sing. Then let chance change a few repeats, so it never sounds pasted.",
+          "These four bars never repeat. Turn them into a hook: one or two bars that come back, simple enough to sing. Then let chance change a few of the repeats.",
         skills: [{ skill: "M09", w: 1 }],
         feedbackText: { "rubric.unmet": "{label}: not yet." },
         code: { starter: MAKE_STARTER },

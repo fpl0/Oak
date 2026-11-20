@@ -76,7 +76,7 @@ const DRUMS = { band: "band.aeolian-4bar", tracks: ["drums"] } as const;
 
 export default defineLesson({
   id: "A2.L01",
-  version: 1,
+  version: 2,
   title: "Roles & Registers",
   objective: "I can give each part its own height, so the low end stays clear, and see it on the spectrum.",
   key: { tonic: "A", mode: "minor" },
@@ -104,17 +104,21 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the same four bars, twice. Same notes, same sounds, same drums. Listen to the bottom of the sound.",
+          "Both loops play the same notes, but two parts move between them. Listen to the bottom of the sound: in which loop can you tell the bass from the chords?",
         skills: [{ skill: "D08", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: CROWDED,
-            caption: "The chords and the tune an octave low: the chords sit on the bass.",
+            caption: "Loop 1: the chords and the tune an octave lower.",
             bars: 4,
           },
-          { code: CLEAR, caption: "The same parts, each at its own height.", bars: 4 },
+          {
+            code: CLEAR,
+            caption: "Loop 2: the chords and the tune an octave higher than in loop 1.",
+            bars: 4,
+          },
         ],
       },
     },
@@ -422,7 +426,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The loop with the chords and the tune an octave too low: the chords sit on the bass and the low end blurs. Give each part its own height: the bass low, the chords from C3 up, the tune above them. Then make it yours: a pad high above the tune, or a lead sound from A1.",
+          "The loop with the chords and the tune an octave too low: the chords sit on the bass and the low end blurs. Give each part its own height: the bass low, the chords from C3 up, the tune above them. Then make it yours with a fourth part: an FM bell above the tune, or a wide supersaw pad.",
         skills: [{ skill: "D08", w: 1 }],
         code: { starter: CROWDED },
         bars: [4, 8],

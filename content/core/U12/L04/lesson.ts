@@ -81,7 +81,7 @@ const LEAD = { roll: false, staff: "lead", keyboard: false } as const;
 
 export default defineLesson({
   id: "U12.L04",
-  version: 1,
+  version: 2,
   title: "Diatonic Sevenths in Major",
   objective:
     "I can name the seventh chord on every degree of a major key, Imaj7 to viiø7, and write them by name.",
@@ -107,11 +107,11 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the key of C climbs from Cmaj7 to Fmaj7 in seventh chords, one degree a bar, Cmaj7, Dm7, Em7, Fmaj7, and walks back down. Every chord is the key's own.",
+          "Every chord here is built from C major's own notes. Listen to the colour of each step as the chords climb: which steps sound bright, and which sound softer?",
         skills: [{ skill: "C08", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "Cmaj7, Dm7, Em7, Fmaj7, then down again: one step a bar.", bars: 8 }],
+        items: [{ code: HOOK, caption: "Up four steps of C major and back down, one chord a bar.", bars: 8 }],
       },
     },
     {
@@ -126,7 +126,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          'The stack from Seventh Colour, `n("[0,2,4,6]")`, plays on degree 1, then `.add()` moves it to degree 5 (`n` counts from 0, so degree 5 is 4): G, B, D and F. Which kind of seventh chord is G B D F?',
+          'The stack from Seventh Colour, `n("[0,2,4,6]")`, plays on degree 1, then `.add()` moves it to degree 5 (`n` counts from 0, so degree 5 is `n` 4): G, B, D and F. Which kind of seventh chord is G B D F?',
         skills: [{ skill: "C08", w: 1 }],
         hints: null,
         tests: [],
@@ -154,7 +154,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it with the chord band open: one stack moved up the key a degree a bar, from C to B. The key decides each chord's kind; the band names it. Read the seven names.",
+          "Run it and read the seven names in the chord band, bar by bar. The key has decided each chord's kind.",
         skills: [{ skill: "C08", w: 1 }],
         feedbackText: {
           "investigate.wrong":

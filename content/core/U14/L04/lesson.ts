@@ -123,7 +123,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U14.L04",
-  version: 1,
+  version: 2,
   title: "Lydian Glow",
   objective: "I can turn a major scale into Lydian by raising its 4th, and make it float over I and II.",
   key: { tonic: "F", mode: "major" },
@@ -149,20 +149,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a slow pad over one held bass note, with a piano line that echoes. The numbers of the line are the same in both halves. Listen for the moment the music leaves the ground.",
+          "Halfway through loop 1, one note of the scale changes. Listen for the moment the music leaves the ground. Once it has, does it ever settle back down?",
         skills: [{ skill: "S13", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption:
-              "Two bars on F major, warm and settled; then the same numbers with one note raised, and the second chord turned major.",
+            caption: "Loop 1: F major first; the scale changes at bar 3.",
             bars: 4,
           },
           {
             code: LYDIAN_ALONE,
-            caption: "The second colour on its own, with a longer line: it lifts and stays up.",
+            caption: "Loop 2: four bars on the new scale, with a longer line.",
             bars: 4,
           },
         ],
@@ -208,7 +207,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it with the chord band open: the chord on degree 2, stacked from its root, on F major in bar 1 and on the new scale in bar 2. Read the note names on the roll.",
+          "The chord on degree 2, stacked from its root: F major in bar 1, the new scale in bar 2. Run it and read the note names on the roll.",
         skills: [{ skill: "S13", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -333,7 +332,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The pad piece is in F major: F, then G minor, with the line on `F4:major`. Play the target, then make it Lydian: change the scale word, and turn the second chord major.",
+          "The pad piece is in F major: F, then G minor, with the line on `F4:major`. Make it Lydian: change the scale word, and turn the second chord major.",
         skills: [{ skill: "S13", w: 1 }],
         code: { starter: MODIFY_STARTER },
         reference: { solutions: [MODIFY_SOLUTION], bars: 2 },

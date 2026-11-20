@@ -126,7 +126,7 @@ const MELODIC = { tonic: "A", mode: "melodic minor" } as const;
 
 export default defineLesson({
   id: "U10.L08",
-  version: 1,
+  version: 2,
   title: "Melodic Minor",
   objective:
     "I can tell natural, harmonic and melodic minor apart, and write a tune that climbs home through raised 6 and 7 and comes down in natural minor.",
@@ -153,17 +153,17 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: Am, Dm, E and Am on a Rhodes, a fingerbass under them, and a tune that climbs home in bar 3. Play both. Listen to the climb in the third bar.",
+          "Two versions of the same loop. Listen to the tune's climb in bar 3: which one walks up evenly, and which one stretches somewhere on the way?",
         skills: [{ skill: "S08", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK_HARMONIC,
-            caption: "Bar 3 in harmonic minor: E, F, G♯, then home. Hear the leap in the middle.",
+            caption: "Version 1. Listen to the middle of the climb in bar 3.",
             bars: 4,
           },
-          { code: HOOK, caption: "Bar 3 with F raised too: E, F♯, G♯, then home, by steps.", bars: 4 },
+          { code: HOOK, caption: "Version 2: one note of the climb changed.", bars: 4 },
         ],
       },
     },
@@ -339,7 +339,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Three climbs from 5 up to home over a held A. Is each one natural, harmonic or melodic minor?",
+          "Three climbs from 5 up to home over a held A. Is each one natural, harmonic or melodic minor? Listen hardest to the two notes before home.",
         skills: [{ skill: "S08", w: 1 }],
         hints: ladder(
           "Hum each climb. Does it move by even steps, or is there a wide one?",
@@ -368,7 +368,7 @@ export default defineLesson({
         role: "practice",
         key: MELODIC,
         prompt:
-          "Hear it, then sing it: sol la ti do up into home, then do te le sol back down. Raised on the way up, natural on the way down. Sing in your own range.",
+          "Hear it, then sing it: sol la ti do up into home, then do te le sol back down. Sing in your own range.",
         skills: [
           { skill: "V02", w: 0.6 },
           { skill: "S08", w: 0.4 },
@@ -409,7 +409,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Am, Dm, E and Am, with a tune in natural minor that holds E over the E chord, then leaps up to home. Rewrite its end so it climbs home by steps through raised 6 and 7 over the E chord. Wherever it falls, let it fall in natural minor.",
+          "The tune holds E over the E chord, then leaps up to home. Rewrite its end so it climbs home by steps through raised 6 and 7 over the E chord. Wherever it falls, let it fall in natural minor.",
         skills: [{ skill: "S08", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

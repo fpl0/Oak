@@ -24,7 +24,7 @@ const HOOK = mel("<[c3 ~ c4 c5] [~ c5 c4 c3]>");
 
 export default defineLesson({
   id: "U02.L01",
-  version: 1,
+  version: 2,
   title: "High & Low",
   objective: "I can hear which of two notes is higher and move a line up or down by an octave in code.",
   key: { tonic: "C", mode: "major" },
@@ -51,11 +51,12 @@ export default defineLesson({
         id: "up-and-down",
         version: 1,
         role: "practice",
-        prompt: "Press Play. Follow the piano with your hand: up as it climbs, down as it falls.",
+        prompt:
+          "Let your hand rise as the piano climbs and sink as it falls. Listen for how many heights it uses.",
         skills: [{ skill: "P01", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "A piano line over the band, two bars on repeat.", bars: 2 }],
+        items: [{ code: HOOK, caption: "Bar 1 climbs; bar 2 takes the same steps back down.", bars: 2 }],
       },
     },
     {
@@ -70,7 +71,7 @@ export default defineLesson({
         id: "which-is-higher",
         version: 1,
         role: "practice",
-        prompt: "This line plays `c3`, then `c5`. Before you run it: which of the two sounds higher?",
+        prompt: "`c3`, then `c5`. Hum your guess: which of the two will sound higher?",
         skills: [{ skill: "P01", w: 1 }],
         hints: null,
         tests: [],
@@ -280,7 +281,7 @@ export default defineLesson({
         id: "riff-three-heights",
         version: 1,
         role: "practice",
-        prompt: "Write a riff for the piano over the band. Use `c` at **three or more** different heights.",
+        prompt: "Write a piano riff that uses `c` at **three or more** different heights.",
         skills: [{ skill: "P01", w: 1 }],
         code: { starter: mel("c3 ~ c4 ~") },
         bars: [1, 4],

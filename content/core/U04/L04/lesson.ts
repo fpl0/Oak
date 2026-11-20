@@ -36,7 +36,7 @@ const PAD: AnswerUi = {
 
 export default defineLesson({
   id: "U04.L04",
-  version: 1,
+  version: 2,
   title: "Interval Ear Lab",
   objective: "I can name the distance between two notes in a key, up, down and played together.",
   key: { tonic: "C", mode: "major" },
@@ -61,12 +61,16 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: home, then a 5th, a 3rd, a 6th and the octave. Then twelve pairs from anywhere in the key, each named as it plays. Nothing to answer: listen and let the names sink in.",
+          "Listen for the colour of each distance: close, warm, open or wide? First home with a 5th, a 3rd, a 6th and the octave. Then twelve pairs from anywhere in the key, each named as it plays. Nothing to answer.",
         skills: [{ skill: "E06", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: HOOK, caption: "Home, then a 5th, a 3rd, a 6th and the octave, over the band.", bars: 4 },
+          {
+            code: HOOK,
+            caption: "Home, then a 5th, a 3rd, a 6th and the octave. Hear how far each one reaches.",
+            bars: 4,
+          },
         ],
         passive: { family: "fam.int.in-key", level: 3, items: 12, reveal: "with", gapBeats: 2 },
       },
@@ -74,7 +78,7 @@ export default defineLesson({
     {
       id: "S2",
       kind: "ear",
-      title: "Up",
+      title: "Pairs going up",
       minutes: 1.25,
       graded: true,
       ui: { panels: NONE },
@@ -119,7 +123,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Now eight pairs going down. Name each one silently before Oak says it. Nobody keeps score here.",
+          "Eight pairs going down. Listen to how far the second note falls, name the distance silently, then hear Oak name it. Nobody keeps score here.",
         skills: [{ skill: "E06", w: 1 }],
         hints: null,
         tests: [],
@@ -130,7 +134,7 @@ export default defineLesson({
     {
       id: "S4",
       kind: "ear",
-      title: "Down",
+      title: "Pairs going down",
       minutes: 1.25,
       graded: true,
       ui: { panels: NONE },
@@ -202,7 +206,7 @@ export default defineLesson({
     {
       id: "S6",
       kind: "ear",
-      title: "Together",
+      title: "Pairs together",
       minutes: 1,
       graded: true,
       ui: { panels: NONE },
@@ -241,7 +245,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write a one-bar riff, then answer it in bar 2 with the same shape moved by a named distance: every distance inside the riff keeps its size in half steps. Try a perfect 4th up: the starter's riff then lands on the band's F chord. Other distances work too; some leave C major, and you will hear it.",
+          "Write a one-bar riff, then answer it in bar 2 with the same shape moved by one named distance, so every distance inside the riff keeps its size in half steps. A perfect 4th up puts the starter's riff on the band's F chord. Other distances work too; some leave C major, and you will hear it.",
         skills: [{ skill: "E06", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [1, 4],

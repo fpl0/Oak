@@ -61,7 +61,7 @@ const STAFF = { roll: false, staff: "treble", keyboard: false } as const;
 
 export default defineLesson({
   id: "U06.L02",
-  version: 1,
+  version: 2,
   title: "Roman Numerals",
   objective:
     "I can name the chords of a major key with Roman numerals, I ii iii IV V vi vii°, and play a loop from them in any key.",
@@ -86,13 +86,14 @@ export default defineLesson({
         id: "the-loop-again",
         version: 1,
         role: "practice",
-        prompt: "Press Play. The four chords from Stacking Thirds, with the band and the tune.",
+        prompt:
+          "Four chords and a tune. Listen for the bar where the loop sounds most at home, then find which degree its chord stands on.",
         skills: [{ skill: "H01", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: HOOK, caption: "Triads on degrees 1, 5, 6 and 4, a tune on top.", bars: 4 },
-          { code: LOOP_C, caption: "The chords alone over the drums and the bass.", bars: 4 },
+          { code: HOOK, caption: "The loop with its tune.", bars: 4 },
+          { code: LOOP_C, caption: "The chords alone, without the tune.", bars: 4 },
         ],
       },
     },
@@ -137,7 +138,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The seven triads of C, one a bar, then home. Listen for bright and dark, and read the degree of each root on the roll.",
+          "The seven triads of C, one a bar, then home. Listen for bright, dark and tense, and read the degree of each root on the roll.",
         skills: [{ skill: "H01", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -367,7 +368,7 @@ export default defineLesson({
         role: "practice",
         key: G,
         prompt:
-          "Many songs open on this loop: vi IV I V. Play it in G over the drums, with stacks, `.add()` or chord names, then make it yours: a rhythm for the chords, a tune on top.",
+          "Many songs open on this loop: vi IV I V. Play it in G. Then give the chords a rhythm and put a tune on top.",
         skills: [
           { skill: "N06", w: 0.5 },
           { skill: "H01", w: 0.5 },

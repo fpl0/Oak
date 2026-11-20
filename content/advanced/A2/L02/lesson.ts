@@ -133,7 +133,7 @@ const thinAgainstThick = (label: string): RubricRule => ({
 
 export default defineLesson({
   id: "A2.L02",
-  version: 1,
+  version: 2,
   title: "Texture & Density",
   objective: "I can thin a section out and fill another, so the full one lands.",
   key: { tonic: "A", mode: "minor" },
@@ -161,7 +161,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: eight bars of the A minor loop, a verse and then a chorus. The tune is the same in both. Listen to everything around it.",
+          "The tune stays the same from verse to chorus. Listen around it: when the chorus arrives at bar 5, what do you hear more of?",
         skills: [{ skill: "D09", w: 1 }],
         hints: null,
         tests: [],
@@ -310,7 +310,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Here the verse plays exactly what the chorus plays, so the chorus has nowhere to go. Thin the verse out: change its three section consts so it plays far fewer notes, and leave the tune alone.",
+          "Here the verse plays exactly what the chorus plays. Thin it out: change its three section consts so it plays far fewer notes, and leave the tune alone.",
         skills: [
           { skill: "D09", w: 0.7 },
           { skill: "F05", w: 0.3 },

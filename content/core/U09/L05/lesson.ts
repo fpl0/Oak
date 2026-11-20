@@ -1,7 +1,7 @@
 // U09.L05 Arranging in Code. Inside a section, parts come in and drop out by bar with `.mask()`:
 // `.mask("<0 1 1 1>")` keeps a part silent in the first bar of four and lets it play in the other three. An
 // intro brings the parts in one by one; a part that stops for the bar before the chorus makes the chorus land
-// (a drop). Written inside the section's `const`, the mask restarts with the section (contracts §6.3 item 7).
+// (a breakdown). Written inside the section's `const`, the mask restarts with the section (contracts §6.3 item 7).
 // `tb.mask` unlocks here; no new terms. What the learner has: verse and chorus with one `arrange()` per track
 // and `silence` for a part that rests a whole section (U09.L02), the build-up drawn with a signal (U09.L04),
 // `< >` one item a bar and `!` repeats (U01). Not yet: fades and effects across sections (A1.L05–L07).
@@ -185,10 +185,10 @@ const BASS_MATCH: Matcher = {
 
 export default defineLesson({
   id: "U09.L05",
-  version: 1,
+  version: 2,
   title: "Arranging in Code",
   objective:
-    "I can bring parts in and out of an arrangement by bar with .mask(): an intro that builds, a drop.",
+    "I can bring parts in and out of an arrangement by bar with .mask(): an intro that builds, a part that steps out before the chorus.",
   key: { tonic: "C", mode: "major" },
   meter: "4/4",
   bpm: BPM,
@@ -212,13 +212,13 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a verse with every part from its first beat, then the same verse after four bars where the parts arrive one at a time.",
+          "Listen to the first four bars of loop 2, before the verse. How does the song start there, compared with loop 1?",
         skills: [{ skill: "F06", w: 1 }],
         hints: null,
         tests: [],
         items: [
           { code: VERSE_ONLY, caption: "Everything from bar 1.", bars: 4 },
-          { code: HOOK, caption: "Drums, then bass, then chords, then the tune.", bars: 8 },
+          { code: HOOK, caption: "Four bars of opening, then the same verse.", bars: 8 },
         ],
       },
     },
@@ -373,7 +373,7 @@ export default defineLesson({
     {
       id: "S5",
       kind: "modify",
-      title: "Make room for the chorus",
+      title: "Room for the chorus",
       minutes: 1.25,
       graded: true,
       ui: { panels: ROLL, rollLabels: "degree" },

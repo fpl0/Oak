@@ -122,7 +122,7 @@ const PERC_MATCH: Matcher = {
 
 export default defineLesson({
   id: "U09.L02",
-  version: 1,
+  version: 2,
   title: "Verse & Chorus",
   objective:
     "I can build a song from two contrasting sections, verse and chorus, with one arrange() per track.",
@@ -153,13 +153,13 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: four bars that loop on their own, then a song where a second four bars answer them and both come back.",
+          "In loop 2 a second block of four bars takes over from the first. What happens to the feel of the song when it arrives?",
         skills: [{ skill: "F02", w: 1 }],
         hints: null,
         tests: [],
         items: [
           { code: VERSE_ONLY, caption: "One four-bar section, looping.", bars: 8 },
-          { code: SONG, caption: "Two sections, one after the other, then both again.", bars: 16 },
+          { code: SONG, caption: "The same four bars, then four new ones, then both again.", bars: 16 },
         ],
       },
     },
@@ -385,7 +385,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The verse plays on its own; the chorus has its chords and bass. Arrange the song verse, chorus, verse, chorus, four bars each, one `arrange()` per track. Then make the chorus lift: a higher tune, something new coming in.",
+          "Arrange the song verse, chorus, verse, chorus, four bars each, one `arrange()` per track. Then make the chorus lift: a higher tune, something new coming in.",
         skills: [{ skill: "F02", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [16, 32],

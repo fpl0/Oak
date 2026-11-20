@@ -116,7 +116,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U09.L01",
-  version: 1,
+  version: 2,
   title: "Phrases Make Sections",
   objective: "I can hear where a section starts and count a song in four- and eight-bar phrases.",
   key: { tonic: "C", mode: "major" },
@@ -141,14 +141,13 @@ export default defineLesson({
         id: "where-it-breathes",
         version: 1,
         role: "practice",
-        prompt:
-          "Press Play: eight bars, then the same eight bars with a crash cymbal added. Where does the music take a breath?",
+        prompt: "Where does the music take a breath? In loop 2, notice where the crash falls.",
         skills: [{ skill: "F01", w: 1 }],
         hints: null,
         tests: [],
         items: [
           { code: PLAIN, caption: "Eight bars: a question and its answer.", bars: 8 },
-          { code: HOOK, caption: "The same eight bars, with a crash on bar 1 and bar 5.", bars: 8 },
+          { code: HOOK, caption: "The same eight bars with a crash cymbal added.", bars: 8 },
         ],
       },
     },
@@ -285,7 +284,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Here the crash hits on every bar, so no bar sounds stronger than the next. Make it hit only on the first bar of each four-bar phrase.",
+          "The crash hits on every bar, so no bar sounds stronger than the next. Make it hit only on the first bar of each four-bar phrase.",
         skills: [{ skill: "F01", w: 1 }],
         code: { starter: CRASH_STARTER },
         reference: { solutions: [CRASH_SOLUTION], bars: 8 },
@@ -394,7 +393,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Over the band's eight bars, the tune plays a four-bar idea twice: it asks, then asks again. Make it a section: keep the idea or write your own, then answer it with a phrase that starts the same way and ends home on 1. Mark each phrase with a crash.",
+          "Make the tune a section: keep its four-bar idea or write your own, then answer it with a phrase that starts the same way and ends home on 1. Mark each phrase with a crash.",
         skills: [{ skill: "F01", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [8, 16],

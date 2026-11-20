@@ -107,7 +107,7 @@ const GRAND_KEYS = { roll: false, staff: "grand", keyboard: true } as const;
 
 export default defineLesson({
   id: "U05.L08",
-  version: 1,
+  version: 2,
   title: "Let Strudel Voice It",
   objective:
     'I can write chords as symbols, chord("<C G Am F>"), and let .voicing() place their notes, close to how I would by hand.',
@@ -221,11 +221,12 @@ export default defineLesson({
         id: "chords-by-name",
         version: 1,
         role: "practice",
-        prompt: "Press Play. Four chords on an electric piano, written by name: C, G, Am, F.",
+        prompt:
+          "Four chords on an electric piano, written only by name: C, G, Am, F. Listen to the top of the chords: do they leap from bar to bar, as your first stacks did, or glide?",
         skills: [{ skill: "N05", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "The loop of Stacking Thirds, chords written by name.", bars: 4 }],
+        items: [{ code: HOOK, caption: "Not one note written by hand. Follow the top note.", bars: 4 }],
       },
     },
     {

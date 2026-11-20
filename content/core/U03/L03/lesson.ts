@@ -66,7 +66,7 @@ const SING_HINTS: HintLadder = [
 
 export default defineLesson({
   id: "U03.L03",
-  version: 1,
+  version: 2,
   title: "Restless Neighbours",
   objective: "I can hear degrees 2 and 4 lean home, sing them there, and reach below or above home with `n`.",
   key: { tonic: "C", mode: "major" },
@@ -91,14 +91,14 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play and watch the labels. Some notes sound like they are waiting; others let the line rest. Which numbers do the waiting?",
+          "Watch the labels. Some notes sound like they are waiting; others let the line rest. Which numbers do the waiting?",
         skills: [{ skill: "E05", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption: "A piano line over the band. It dips below home once, near the end.",
+            caption: "Bar 1 stops short of home. Bar 2 gets there, with one dip below it.",
             bars: 2,
           },
         ],
@@ -116,7 +116,7 @@ export default defineLesson({
         id: "below-zero",
         version: 1,
         role: "practice",
-        prompt: '`n` 0 is home. Before you run `n("-3 0 ~ ~")`, guess: where is the first note?',
+        prompt: '`n` 0 is home. Where will the first note of `n("-3 0 ~ ~")` sound? Hum your guess.',
         skills: [{ skill: "S02", w: 1 }],
         hints: null,
         tests: [],
@@ -403,7 +403,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write a two-bar line over the band that **reaches below home or above it** at least once (an `n` below 0 or above 6), then let it settle.",
+          "Write a two-bar line that **reaches below home or above it** at least once (an `n` below 0 or above 6), then let it settle.",
         skills: [{ skill: "S02", w: 1 }],
         code: { starter: deg("<[0 2 4 2] [3 1 0 ~]>") },
         bars: [1, 4],

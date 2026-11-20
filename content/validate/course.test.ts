@@ -591,12 +591,8 @@ describe("vocabulary across lesson boundaries (AUTHORING §7)", () => {
   // A later lesson's term in an earlier lesson's text is advice in content:check (many are plain English).
   // Read as one course, each one is either reworded or listed here with the reason it stays.
   const ALLOWED_LATER_TERMS: Record<string, string> = {
-    'U01.L05 S2 prose "staff"':
-      "the percussion staff is U01.L05's own subject (contracts §2.3); U02.L04 S3 ties the word back to it",
     'U03.L10 S3 title "swing"': 'the song title "Swing Low, Sweet Chariot", not the U11.L07 term',
     'U03.L10 S3 pass text "swing"': 'the song title "Swing Low", not the U11.L07 term',
-    'U04.L01 S4 pass text "bridge"':
-      '"the same bridge as degree and `n`": a link between two ideas, not a song section',
   };
   test("no lesson uses a later lesson's term unless it is listed with its reason", () => {
     const found: string[] = [];

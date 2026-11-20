@@ -110,7 +110,7 @@ const DRUMS = { band: "band.two-five-one", tracks: ["drums"] } as const;
 
 export default defineLesson({
   id: "J5.L04",
-  version: 1,
+  version: 2,
   title: "Reharm Techniques",
   objective: "I can reharmonize a tune with several jazz devices and keep its melody note for note.",
   key: C,
@@ -136,19 +136,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: Aura Lee's verse on the tenor as a slow jazz ballad, first over the sevenths of your U16 setting, then over new ones. Follow the tenor both times, then listen under it.",
+          "Follow the tenor, then listen under it. In the second take, which bars sound most changed, though the tune is the same?",
         skills: [{ skill: "J14", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: PLAIN,
-            caption: "Cmaj7, D7, G7, Cmaj7, twice: the chords you gave the verse in U16, as sevenths.",
+            caption: "The verse over the chords you gave it when you first reharmonized it, now as sevenths.",
             bars: 8,
           },
           {
             code: HOOK,
-            caption: "New chords in bars 1, 3, 6 and 7, two to a bar. The tune is the same, note for note.",
+            caption: "New chords in bars 1, 3, 6 and 7. The tune is the same, note for note.",
             bars: 8,
           },
         ],
@@ -276,7 +276,7 @@ export default defineLesson({
         role: "check",
         key: C,
         prompt:
-          "The verse's first phrase over its sevenths. Put a passing diminished chord on the last beat of bar 1, so the bass climbs into D7 by half steps. Only bar 1's chord changes; the tune stays. Hear the target first.",
+          "The verse's first phrase over its sevenths. Put a passing diminished chord on the last beat of bar 1, so the bass climbs into D7 by half steps. Only bar 1's chord changes; the tune stays.",
         skills: [{ skill: "J14", w: 1 }],
         swing: SWUNG,
         code: { starter: PASSING_STARTER },
@@ -414,7 +414,7 @@ export default defineLesson({
         key: C,
         title: "Aura Lee, reharmonized",
         prompt:
-          "Aura Lee's verse on the tenor over Cmaj7, D7, G7, Cmaj7, with the drums. Reharmonize it with at least two different devices: a tritone substitute, a backdoor, a secondary ii–V, a passing diminished chord. The tune stays exactly as it is: let its long notes tell you where a new chord fits.",
+          "The verse sits over Cmaj7, D7, G7, Cmaj7. Reharmonize it with at least two different devices: a tritone substitute, a backdoor, a secondary ii–V, a passing diminished chord. The tune stays exactly as it is; where the tenor holds one long note, a new chord has room.",
         skills: [{ skill: "J14", w: 1 }],
         swing: SWUNG,
         code: { starter: PLAIN },

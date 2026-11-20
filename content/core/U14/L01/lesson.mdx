@@ -1,33 +1,35 @@
 {/* U14.L01 Modes as Colours: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
 
 <Step id="S1">
-Until now every key you have written in has been one of two things, major or minor. Today you change one note of a scale you know and get a third colour. Hear it before it has a name.
+Until now every key you have written in has been one of two things, major or minor. This lesson changes one note of a scale you know and gets a third colour. Hear it before it has a name.
 
 <Example id="hook" views="code,roll" autoplay />
+
+<OnPass>Same numbers, same rhythm, yet the second half sounds looser and earthier, closer to a rock riff than to a bright major tune. Something in the scale under the numbers changed.</OnPass>
 </Step>
 
 <Step id="S2">
-The riff changed colour and the numbers in `n` did not. So the scale under them changed. Guess how much of it before you look.
+The numbers in `n` stayed put, so the scale under them must have changed.
 
 <Predict exercise="how-many-notes-move" />
 </Step>
 
 <Step id="S3">
-The same eight numbers on both scales, from home up to home. Read the note names on the roll, then look at the staff.
+The same eight numbers on both scales, from home up to home.
 
 <Example id="two-scales" views="code,roll,staff" />
 
-<OnPass>One note: degree 7. G major has F♯, a half step under home; this scale has F, a whole step under it, and on the staff that F needs a natural sign: the one accidental on the page. Its name is **Mixolydian**: major with a ♭7, the te you sang in minor and in the blues, now inside a major scale. Major, minor and Mixolydian are all the same kind of thing: a set of notes around one home, each with its own colour. Such a scale is called a **mode**.</OnPass>
+<OnPass>One note: degree 7. G major has F♯, a half step under home; this scale has F, a whole step under it. On the staff that F needs a natural sign, the one accidental on the page. The scale is **Mixolydian**: major with a ♭7, the te you sang in minor and in the blues, now inside a major scale. Major, minor and Mixolydian are the same kind of thing, a set of notes around one home with its own colour. Such a scale is called a **mode**.</OnPass>
 </Step>
 
 <Step id="S4">
-Now build it yourself, by degree, starting from G major.
+Now build it yourself, by degree.
 
-<OnPass>1 2 3 4 5 6 ♭7. Six notes shared with G major and one that is not. That one note is the **characteristic tone** of the scale: the note that tells your ear which colour it is hearing. For Mixolydian it is ♭7. A good place to stop for today if you need to.</OnPass>
+<OnPass>1 2 3 4 5 6 ♭7: six notes shared with G major and one that is not. That one note is the **characteristic tone** of the scale, the note that tells your ear which colour it is hearing. For Mixolydian it is ♭7. With F a whole step under home, nothing in the scale strains up into G any more, and that is the looser sound you heard in the riff.</OnPass>
 </Step>
 
 <Step id="S5">
-Back to the riff. It is on G major again, and so is the bass. Play the target first.
+Back to the riff, and this time you choose its scale.
 
 <Editor exercise="one-word-twice" />
 
@@ -35,7 +37,7 @@ Back to the riff. It is on G major again, and so is the bass. Play the target fi
 </Step>
 
 <Step id="S6">
-The colour is not tied to G. Four phrases on other home notes: major, or Mixolydian?
+The colour is not tied to G.
 
 <Choice exercise="major-or-mixolydian" />
 
@@ -43,7 +45,7 @@ The colour is not tied to G. Four phrases on other home notes: major, or Mixolyd
 </Step>
 
 <Step id="S7">
-The drums are in. Your riff is on G Mixolydian already, but it never plays the one note that says so.
+Once your riff plays its ♭7, take it further with the last unit's tools: push a note ahead of the bar line with `.early()`, or let one ring across a beat.
 
 <Make exercise="your-mixolydian-riff" />
 

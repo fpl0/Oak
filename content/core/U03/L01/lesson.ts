@@ -58,7 +58,7 @@ const LETTERS = {
 
 export default defineLesson({
   id: "U03.L01",
-  version: 1,
+  version: 2,
   title: "Home & the Major Scale",
   objective:
     "I can hear which note is home, and spell a major scale from any note with whole and half steps, each letter once.",
@@ -87,13 +87,11 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play. The line wanders, then settles. Hum the note it settles on, the one it seems to be heading for all along.",
+          "Hum the note the line comes to rest on, and hold it while the loop starts again. Does it still fit?",
         skills: [{ skill: "E03", w: 1 }],
         hints: null,
         tests: [],
-        items: [
-          { code: HOOK, caption: "A piano line over the band: up and around, then down to rest.", bars: 2 },
-        ],
+        items: [{ code: HOOK, caption: "Bar 1 climbs and turns; bar 2 walks down to rest.", bars: 2 }],
       },
     },
     {
@@ -108,8 +106,7 @@ export default defineLesson({
         id: "which-climb-arrives",
         version: 1,
         role: "practice",
-        prompt:
-          "Two climbs up the white keys. A goes one note further than B. Play each card. Which one sounds finished?",
+        prompt: "Play both cards. Which climb sounds finished, and which leaves you waiting?",
         skills: [{ skill: "E03", w: 1 }],
         hints: ladder(
           "Play B and hum on after it stops. Which note does your voice want next?",
@@ -150,7 +147,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run the climb from `c4` to `c5` and watch the keyboard. Most neighbours have a black key between them. Find the ones that do not.",
+          "Run the climb from `c4` to `c5` and watch the keyboard. Name each of the seven steps, half or whole, and note where the half steps fall.",
         skills: [{ skill: "S01", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -394,7 +391,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write a two-bar line over the band using **only the notes of the C major scale**, and let it come home to `c`. One note of the starter does not belong.",
+          "Write a two-bar line using **only the notes of the C major scale**, and let it come home to `c`. One note of the starter does not belong.",
         skills: [{ skill: "S01", w: 1 }],
         code: { starter: mel(MAKE_STARTER) },
         bars: [1, 4],

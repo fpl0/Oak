@@ -51,7 +51,7 @@ const SOUND_MATCH = {
 
 export default defineLesson({
   id: "U01.L06",
-  version: 1,
+  version: 2,
   title: "Sixteenths & 1-e-&-a",
   objective: "I can count a beat as 1-e-&-a and write four sounds to a beat.",
   key: { tonic: "C", mode: "major" },
@@ -76,11 +76,11 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play and nod on the beat. Then say the count under the roll with it: one-e-and-a, two-e-and-a.",
+          "Nod on the beat, not on the hats. Does the groove feel faster than your last ones, or only busier?",
         skills: [{ skill: "R07", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "Busy hats, a backbeat and a tom run on beat 4.", bars: 4 }],
+        items: [{ code: HOOK, caption: "Kick and snare, racing hats, and a tom run on beat 4.", bars: 4 }],
       },
     },
     {
@@ -95,8 +95,7 @@ export default defineLesson({
         id: "count-the-hats",
         version: 1,
         role: "practice",
-        prompt:
-          "The hats line says `hh*16`, and the bar has four beats. Before you run it: how many hats land in each beat?",
+        prompt: "The hats line says `hh*16`, and the bar has four beats. How many hats land in each beat?",
         skills: [{ skill: "R07", w: 1 }],
         hints: null,
         tests: [],
@@ -221,7 +220,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Put four toms into beat 4: the high tom `ht` twice, then the mid tom `mt` twice. Write each pair with `!`, as in `ht!2`.",
+          "Put four toms into beat 4: the high tom `ht` twice, then the mid tom `mt` twice. Write each pair with `!`.",
         skills: [{ skill: "R07", w: 1 }],
         code: { starter: code(KICK, SNARE_TWO, hats("hh*16"), 'perc: s("~ ~ ~ ⟪~⟫")') },
         reference: { solutions: [withToms("[ht!2 mt!2]")], bars: 1 },
@@ -302,7 +301,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write a groove over the band with four sounds in at least one beat. Beat 1 must be counted out in full: a sound on 1, e, & and a.",
+          "Write a groove with four sounds in at least one beat. Beat 1 must be counted out in full: a sound on 1, e, & and a.",
         skills: [{ skill: "R07", w: 1 }],
         code: { starter: code(KICK, BACKBEAT, hats("hh*8")) },
         bars: [1, 2],

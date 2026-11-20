@@ -1,19 +1,21 @@
 {/* U13.L05 Triplets: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
 
 <Step id="S1">
-Yesterday's chords, back in four. Listen to the piano and the hats in both versions: the kick and the snare keep the same square beat, and the second one rocks like a slow dance at the end of a 1950s prom.
+The ballad chords from Compound Meter, back in a bar of four beats and played twice. The kick and the snare keep the same square beat both times.
 
 <Example id="hook" views="code,roll" autoplay />
+
+<OnPass>In loop 2 the piano and the hats split every beat into three: the rolling feel of 6/8, inside a square bar of four. The three quick snare hits at the end of bar 4 roll into the repeat. Together they make the slow dance of a 1950s ballad.</OnPass>
 </Step>
 
 <Step id="S2">
 Feel it before you code it. The count you said in 6/8, three to a beat, now turns up one beat at a time inside a bar of four.
 
-<OnPass>Two bars echoed back, busy beats included. That is the whole idea of today: a beat can split in two or in three, one beat at a time.</OnPass>
+<OnPass>Two bars echoed back, busy beats included. That is the whole idea of this lesson: a beat can split in two or in three, one beat at a time.</OnPass>
 </Step>
 
 <Step id="S3">
-A new call, `.ply()`. Guess before you run it.
+One new call can do the splitting for you.
 
 <Predict exercise="count-the-hats" />
 </Step>
@@ -27,15 +29,15 @@ Twelve hats in a bar of four beats, on the roll and on the staff. On the staff e
 </Step>
 
 <Step id="S5">
-The hats already rock in threes. Bring the piano with them.
+Now bring the piano into the threes.
 
 <Editor exercise="the-piano-in-threes" />
 
-<OnPass>`.ply(3)` after `.struct()`: three chords to every beat, locked with the hats, while the kick and the snare keep the four beats square. That is the slow-dance ballad sound. A good place to stop for today if you need to.</OnPass>
+<OnPass>`.ply(3)` after `.struct()`: three chords to every beat, locked with the hats, while the kick and the snare keep the four beats square. That is the slow-dance ballad sound.</OnPass>
 </Step>
 
 <Step id="S6">
-Reading triplets. A quarter note fills one beat; a triplet shares one beat between three notes. The tune is in C major from middle C, and `n` counts from 0, so degree 1 is `n` 0.
+Reading triplets. A quarter note fills one beat; a triplet shares one beat between three notes. `n` counts from 0, so degree 1 is `n` 0.
 
 <Editor exercise="read-the-triplets" />
 
@@ -47,15 +49,17 @@ By ear. The kick and the snare mark the four beats; the hats say how each one di
 
 <Choice exercise="two-or-three" />
 
-<OnPass>Two to the beat walks; three to the beat rolls. Tomorrow's warm-up keeps asking.</OnPass>
+<OnPass>Two to the beat walks; three to the beat rolls. Your warm-ups will keep asking.</OnPass>
 </Step>
 
 <Step id="S8">
-A ballad in plain 4/4, square as a march. Set it rolling in threes, then make it the last song on the jukebox. You can now write triplets and rolls, and you know what swing is made of; next, writing the rhythms of this whole unit down by ear.
+A ballad in plain 4/4, square as a march. Set it rolling in threes, then make it the last song on the jukebox. The 6/8 trick still works here: `.velocity()` can lean on the first of each three.
 
 <Make exercise="your-slow-dance" />
 
 <CanDo id="cd.code.triplets" />
+
+You can now write triplets and rolls, and you know what swing is made of. Next: writing the rhythms of this whole unit down by ear.
 
 <Recap />
 </Step>

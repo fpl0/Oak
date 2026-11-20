@@ -1,17 +1,19 @@
 {/* U03.L05 Same Song, Any Key: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
 
 <Step id="S1">
-In Degrees in Code you moved Ode to Joy to G with one word. Here the word itself takes turns: the tune plays with C as home, then with G as home, without stopping.
+In Degrees in Code you moved Ode to Joy to G with one word. Here the word takes turns, so the tune changes home without stopping.
 
 <Example id="hook" views="code,roll" autoplay />
+
+<OnPass>It does. Every note of bars 3 and 4 sits lower, yet the tune ends on 1 again and sounds just as finished. The numbers on the roll never changed; only home moved.</OnPass>
 </Step>
 
 <Step id="S2">
-Before you run it: the numbers in `n` say what each note does; `.scale()` says where home is.
+One more home, F, and this time you guess first.
 
 <Predict exercise="new-home-same-tune" hum />
 
-<OnPass>The same tune, with F as home. A tune is its degrees; the key only decides how high it sits.</OnPass>
+<OnPass>The same tune, with F as home: the numbers kept every note's place in the key, and the new key decided how high the tune sits.</OnPass>
 </Step>
 
 <Step id="S3">
@@ -23,7 +25,7 @@ Before you run it: the numbers in `n` say what each note does; `.scale()` says w
 </Step>
 
 <Step id="S4">
-Now write the key plan yourself. Play the target first: the tune in C, then in G.
+Now write the key plan yourself.
 
 <Editor exercise="visit-g" />
 
@@ -39,7 +41,7 @@ Degrees work both ways: from a number and a key you can name the note without pl
 </Step>
 
 <Step id="S6">
-Your ears get the same deal as your code: the key moves every time, the degrees do not. Listen for how the note sits against home, not for how high it is.
+Your ears get the same deal as your code: the key can change from one note to the next, and the degrees do not.
 
 <EarDrill family="fam.deg.fet-major" level={2} trials={6} />
 
@@ -47,7 +49,7 @@ Your ears get the same deal as your code: the key moves every time, the degrees 
 </Step>
 
 <Step id="S7">
-Your voice is analysed live on this computer. Nothing is recorded or sent.
+Your voice can move home too.
 
 <Sing exercise="sing-it-in-a" />
 
@@ -55,7 +57,7 @@ Your voice is analysed live on this computer. Nothing is recorded or sent.
 </Step>
 
 <Step id="S8">
-Your turn. Change the notes until the tune is yours, then give it a key plan. The band reads your `.scale()` and changes key with you.
+One pattern in `.scale()` now sends a tune through as many keys as you like, and the band changes key with you. Make the tune yours first, perhaps with a 7 that leads home or a run with `..`, then give it a key plan.
 
 <Make exercise="your-tune-two-keys" />
 

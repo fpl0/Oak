@@ -113,7 +113,7 @@ const LEAD = { roll: false, staff: "lead", keyboard: false } as const;
 
 export default defineLesson({
   id: "U09.L03",
-  version: 1,
+  version: 2,
   title: "AABA & Strophic",
   objective:
     "I can name a song's form by ear, verse–chorus, AABA or strophic, and arrange a song A A B A with a bridge of my own.",
@@ -143,11 +143,11 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a song where one section plays twice, something new comes once, and the first section returns. Listen for the moment it leaves, and for the moment it comes home.",
+          "Listen for the moment the song leaves its first music, and for the moment it comes back. How does the return feel?",
         skills: [{ skill: "F03", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: SONG, caption: "Twice, something new, then home again.", bars: 16 }],
+        items: [{ code: SONG, caption: "Sixteen bars, four sections of four.", bars: 16 }],
       },
     },
     {
@@ -185,7 +185,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run the song and watch the roll at bar 9, where `melB` and `chordsB` take over. What does that third section do, and in which bar does A come back?",
+          "Run the song and watch the roll from bar 9, where `melB` and `chordsB` take over, until A comes back.",
         skills: [{ skill: "F03", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -348,7 +348,7 @@ export default defineLesson({
     {
       id: "S6",
       kind: "ear",
-      title: "AABA or verse and chorus?",
+      title: "AABA or verse–chorus?",
       minutes: 1.25,
       graded: true,
       ui: { panels: NONE },
@@ -400,7 +400,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "A is written and loops on its own. A first sketch of the bridge, B, is there too. Make B your own: start away from home, on F or Am, and end on G so A can come back. Then arrange the song A A B A, one `arrange()` per track.",
+          "A loops on its own, and the bridge, B, is a first sketch. Make B your own: start away from home, on F or Am, and end on G so A can come back. Then arrange the song A A B A, one `arrange()` per track.",
         skills: [{ skill: "F03", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [16, 32],

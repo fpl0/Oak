@@ -91,7 +91,7 @@ const CHORDS = { band: "band.two-chord-vamp", tracks: ["chords"] } as const;
 
 export default defineLesson({
   id: "A1.L04",
-  version: 1,
+  version: 2,
   title: "Space",
   objective: "I can put my loop in a room and give a part echoes in time, each part in its own space.",
   key: { tonic: "C", mode: "major" },
@@ -119,13 +119,13 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the loop from Envelopes, dry, then the same loop with the snare in a big room and the riff echoing. Same notes, same sounds.",
+          "Loop 2 adds space to two parts and leaves the others dry. Which two parts now sound further away from you?",
         skills: [{ skill: "D05", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: DRY, caption: "Dry: every part right in front of you, nothing around it.", bars: 2 },
-          { code: PLACED, caption: "Placed: a room around the snare, echoes behind the riff.", bars: 2 },
+          { code: DRY, caption: "Loop 1: the loop as Envelopes left it, dry.", bars: 2 },
+          { code: PLACED, caption: "Loop 2: listen in the gaps, after each hit and each note.", bars: 2 },
         ],
       },
     },
@@ -233,7 +233,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Play the target, then yours. The target echoes half a beat after each note and dies out after two or three repeats. Yours echoes a beat later and keeps going. Change the two numbers to match.",
+          "The target echoes half a beat after each note and dies out after two or three repeats. Yours echoes a beat later and keeps going. Change the two numbers to match.",
         skills: [{ skill: "D05", w: 1 }],
         code: { starter: ECHO_STARTER },
         reference: { solutions: [ECHO_SOLUTION], bars: 2 },
@@ -424,7 +424,7 @@ export default defineLesson({
         id: "room-or-echoes",
         version: 1,
         role: "check",
-        prompt: "One phrase, twice. Bar 2 has a space bar 1 does not. More room, or echoes?",
+        prompt: "Bar 2 repeats the phrase of bar 1 and adds a space around it. More room, or echoes?",
         skills: [{ skill: "D05", w: 1 }],
         hints: [
           { text: "After each note in bar 2, do you hear a wash or a repeat?" },
@@ -460,7 +460,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The loop from Envelopes, dry. Put it somewhere: a room for the drums or the riff, echoes timed to the beat (60 ÷ BPM seconds a beat), and an orbit of its own for any part that needs a different space. Or bring a loop of your own.",
+          "The loop from Envelopes, dry. Put it somewhere: a room for the drums or the riff, echoes timed to the beat (60 ÷ BPM seconds a beat), and an orbit of its own for any part that needs a different space.",
         skills: [{ skill: "D05", w: 1 }],
         code: { starter: DRY },
         bars: [2, 8],

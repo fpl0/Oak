@@ -52,7 +52,7 @@ const NUMBERS = {
 
 export default defineLesson({
   id: "U03.L02",
-  version: 1,
+  version: 2,
   title: "Degrees in Code",
   objective:
     "I can write a melody as scale degrees with n() and .scale(), and move it to another key with one word.",
@@ -77,11 +77,13 @@ export default defineLesson({
         id: "numbers-not-letters",
         version: 1,
         role: "practice",
-        prompt: "Press Play. Watch the numbers on the roll: the note marked 1 is home.",
+        prompt: "Watch the numbers on the roll. The note marked 1 is home: does the line end there?",
         skills: [{ skill: "S02", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "A piano line written in numbers, over the band.", bars: 2 }],
+        items: [
+          { code: HOOK, caption: "Two bars in numbers. Read the roll's labels as they pass.", bars: 2 },
+        ],
       },
     },
     {
@@ -96,8 +98,7 @@ export default defineLesson({
         id: "which-three-notes",
         version: 1,
         role: "practice",
-        prompt:
-          '`n` picks notes of the C major scale by number, counting from 0 at home. Which notes will `n("0 2 4 ~")` play?',
+        prompt: 'Which notes will `n("0 2 4 ~")` play in C major? Hum your guess first.',
         skills: [{ skill: "S02", w: 1 }],
         hints: null,
         tests: [],
@@ -182,8 +183,7 @@ export default defineLesson({
         id: "tune-by-numbers",
         version: 1,
         role: "check",
-        prompt:
-          "The start of Ode to Joy, by degrees: 3 3 4 5, then 5 4 3 2. Write it with `n`. Play the target and listen first.",
+        prompt: "The start of Ode to Joy, by degrees: 3 3 4 5, then 5 4 3 2. Write it with `n`.",
         skills: [
           { skill: "S02", w: 0.7 },
           { skill: "E04", w: 0.3 },
@@ -426,7 +426,7 @@ export default defineLesson({
         // The catalog's text for a `uses` rule names the tool ID; the label says it in words.
         feedbackText: { "rubric.unmet": "{label}: not yet." },
         prompt:
-          "Write a two-bar line in degrees over the band. Use degrees **1, 3 and 5** somewhere in it: `n` 0, 2 and 4.",
+          "Write a two-bar line in degrees. Use degrees **1, 3 and 5** somewhere in it: `n` 0, 2 and 4.",
         skills: [{ skill: "S02", w: 1 }],
         code: { starter: deg("<[0 1 0 ~] [4 [5 4] 1 ~]>") },
         bars: [1, 4],

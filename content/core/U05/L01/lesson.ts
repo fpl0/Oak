@@ -57,7 +57,7 @@ const MAKE_STARTER = code(chords("<[0,2,4] ~ ~ ~>"));
 
 export default defineLesson({
   id: "U05.L01",
-  version: 1,
+  version: 2,
   title: "Stacking Thirds",
   objective: 'I can stack a triad on any degree of a key with n("[0,2,4]"): root, 3rd and 5th.',
   key: { tonic: "C", mode: "major" },
@@ -84,13 +84,14 @@ export default defineLesson({
         id: "three-at-once",
         version: 1,
         role: "practice",
-        prompt: "Press Play. Under the tune, the piano plays three notes at once in every bar.",
+        prompt:
+          "Under the tune, the piano plays three notes at once, one stack a bar. Listen to the stacks change from bar to bar: does any bar sound darker than the others?",
         skills: [{ skill: "C01", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: HOOK, caption: "Drums, bass, a tune, and three notes at once under it.", bars: 4 },
-          { code: LOOP_ONLY, caption: "The same three-note stacks without the tune.", bars: 4 },
+          { code: HOOK, caption: "Drums, bass, a tune, and the stacks under it.", bars: 4 },
+          { code: LOOP_ONLY, caption: "The stacks alone, without the tune. Listen bar by bar.", bars: 4 },
         ],
       },
     },
@@ -107,7 +108,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          'The comma plays notes together, and `n` counts degrees from 0. What will `n("[0,2,4]")` play in C major?',
+          'Three numbers, two commas, and `n` counts degrees from 0. What will `n("[0,2,4]")` play in C major?',
         skills: [{ skill: "C01", w: 1 }],
         hints: null,
         tests: [],
@@ -194,7 +195,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "In bar 3 the bass plays A, degree 6, and the chord has only that one note. Stack two more on it, the way the other bars do. Play the target first.",
+          "In bar 3 the bass plays A, degree 6, and the chord has only that one note. Stack two more on it, the way the other bars do.",
         skills: [{ skill: "C01", w: 1 }],
         code: { starter: code(chords(MISSING)) },
         reference: { solutions: [code(chords(LOOP))], bars: 4 },
@@ -363,7 +364,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The band plays drums and a bass line: degrees 1, 5, 6 and 4, one a bar. Stack a triad on every bass note, then make the loop yours: a rhythm for the chords, a tune on top.",
+          "The band plays drums and a bass line on degrees 1, 5, 6 and 4, one a bar. Stack a triad on every bass note. Then give the chords a rhythm and put a tune on top.",
         skills: [{ skill: "C01", w: 1 }],
         // The catalog's text is "{label}: {detail}", and a progression's detail names the chords in Roman
         // numerals (U06.L02). The same text serves the suggestions, so it says only "not yet".

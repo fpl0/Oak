@@ -202,7 +202,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U13.L06",
-  version: 1,
+  version: 2,
   title: "Rhythm Dictation II",
   objective:
     "I can write down a syncopated, swung or three-to-the-beat rhythm by ear: beat, division, then the hits.",
@@ -228,17 +228,16 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: one two-bar groove, kick and bass on the same hits, three times. Straight, then swung, then with every beat split in three. Listen to what the hats do each time.",
+          "One two-bar groove, three times, the kick and the bass on the same hits. Listen to the hats: one version walks, one shuffles, one rolls. Which is which?",
         skills: [{ skill: "E14", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: STRAIGHT, caption: "Straight: two even hats to the beat.", bars: 2 },
-          { code: SWUNG_HOOK, caption: "Swung: the same hits, long–short.", bars: 2 },
+          { code: STRAIGHT, caption: "Loop 1: count the hats in each beat.", bars: 2 },
+          { code: SWUNG_HOOK, caption: "Loop 2: the same hits. Are the hats still even?", bars: 2 },
           {
             code: TWELVE,
-            caption:
-              "Three to the beat: twelve hats a bar. The kick between the beats sits on the third of three.",
+            caption: "Loop 3: the same hits. Count the hats in each beat again.",
             bars: 2,
           },
         ],
@@ -280,7 +279,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Before writing a rhythm down, get it into your hands. A two-bar rhythm plays over a click: listen, then tap it back. Some hits fall between the beats. Any key works.",
+          "A two-bar rhythm plays over a click: listen, then tap it back. Some hits fall between the beats. Any key works.",
         skills: [{ skill: "R10", w: 1 }],
         hints: ladder(
           "Which hits land with the click, and which fall between two clicks?",

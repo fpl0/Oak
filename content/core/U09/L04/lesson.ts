@@ -215,7 +215,7 @@ const RISER_MATCH: Matcher = {
 
 export default defineLesson({
   id: "U09.L04",
-  version: 1,
+  version: 2,
   title: "The Energy Curve",
   objective: "I can draw a build-up with a signal so the chorus lands with more energy than the verse.",
   key: { tonic: "C", mode: "major" },
@@ -244,13 +244,13 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a verse straight into a chorus, then the same two sections with four bars between them. Which chorus hits harder?",
+          "Which chorus hits harder: the one straight after the verse, or the one with four bars in front of it?",
         skills: [{ skill: "F05", w: 1 }],
         hints: null,
         tests: [],
         items: [
           { code: NO_BUILD, caption: "Verse, then chorus.", bars: 8 },
-          { code: SONG, caption: "Verse, four bars that rise, then the chorus.", bars: 12 },
+          { code: SONG, caption: "Verse, four new bars, then the chorus.", bars: 12 },
         ],
       },
     },
@@ -409,8 +409,7 @@ export default defineLesson({
         id: "which-song-rises",
         version: 1,
         role: "practice",
-        prompt:
-          "The same verse, the same build, two choruses. In which card does the song keep rising into the chorus?",
+        prompt: "Two choruses after one build. In which card does the song keep rising into the chorus?",
         skills: [{ skill: "F05", w: 1 }],
         hints: ladder(
           "Listen to bar 9 of each card. Does the chorus go on from where the build left it?",

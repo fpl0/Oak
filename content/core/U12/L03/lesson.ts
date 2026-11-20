@@ -135,7 +135,7 @@ const drillPart = (n: number): IdentifyEx => ({
 
 export default defineLesson({
   id: "U12.L03",
-  version: 1,
+  version: 2,
   title: "Half-Diminished & Diminished 7",
   objective:
     "I can build, write and hear the two sevenths on the diminished triad: Bm7♭5 (Bm7b5) and B°7 (Bo7), one half step apart.",
@@ -165,15 +165,15 @@ export default defineLesson({
         role: "practice",
         key: HARMONIC,
         prompt:
-          "Press Play: a slow turn into A minor, the kind that opens a torch song. Its first chord is new to you. Then a second loop in a brighter place, where another new chord slips in between C and D minor.",
+          "Each loop has one new chord: the first chord of loop 1, the second of loop 2. Listen to where each goes. Does it settle, or does it pull the music on into the next bar?",
         skills: [{ skill: "C07", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: HOOK, caption: "Bm7♭5, E7, then Am7 for two bars: the first chord aches.", bars: 4 },
+          { code: HOOK, caption: "Loop 1: a slow turn into A minor. The new chord opens it.", bars: 4 },
           {
             code: WALK_UP,
-            caption: "C, C♯°7, Dm7, G7: the second chord is a stepping stone, and the bass climbs C, C♯, D.",
+            caption: "Loop 2: a brighter loop in C. The new chord is bar 2; follow the bass under it.",
             bars: 4,
           },
         ],
@@ -219,7 +219,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it: two chords stacked by hand on the same three notes, B, D and F, the diminished triad. Only the top note differs. Read the note names on the roll, bottom to top.",
+          "Both bars stand on the same three notes, B, D and F: the diminished triad. Run it and read the note names on the roll, bottom to top.",
         skills: [{ skill: "C07", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -344,7 +344,7 @@ export default defineLesson({
         role: "check",
         key: HARMONIC,
         prompt:
-          "The turn again, with Bm7 as its first chord. Bm7 has F♯; A minor has F, and the tune sings it right against the chord. Play the target, then change one symbol so bar 1 is the seventh chord the key builds on B.",
+          "Bar 1 is Bm7, which has F♯. A minor has F, and the tune sings F right against the chord. Change one symbol so bar 1 is the seventh chord the key builds on B.",
         skills: [{ skill: "C07", w: 1 }],
         code: { starter: MODIFY_STARTER },
         reference: { solutions: [MODIFY_SOLUTION], bars: 4 },
@@ -422,7 +422,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Five seventh chords, one at a time. The new sound is the half-diminished seventh: a minor seventh chord whose 5th has sunk a half step. The major seventh chord and the dominant seventh are still on the pad. Which kind is each?",
+          "Five seventh chords, one at a time. The half-diminished seventh joins the pad beside the major seventh, minor seventh and dominant seventh chords. Which kind is each?",
         skills: [{ skill: "E11", w: 1 }],
         hints: earHints(),
         srs: [{ family: "fam.chd.quality-7th", mode: "review-if-due" }],

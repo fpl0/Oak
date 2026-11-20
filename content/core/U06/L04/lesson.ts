@@ -75,7 +75,7 @@ const AUTHENTIC_OR_HALF = CADENCE_OPTIONS.filter((o) => ["PAC", "IAC", "HC"].inc
 
 export default defineLesson({
   id: "U06.L04",
-  version: 1,
+  version: 2,
   title: "Endings",
   objective:
     "I can hear whether a phrase ends closed, V to I, or open on V, and write an eight-bar phrase that waits halfway and comes home at the end.",
@@ -105,11 +105,12 @@ export default defineLesson({
         id: "question-and-answer",
         version: 1,
         role: "practice",
-        prompt: "Press Play. Eight bars: the first four stop and wait, the last four come home.",
+        prompt:
+          "Eight bars in two halves of four. Listen for the moment the music takes a breath, and the moment it settles.",
         skills: [{ skill: "H03", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "Bar 4 waits on V. Bar 8 lands on I, the tune on 1.", bars: 8 }],
+        items: [{ code: HOOK, caption: "Chords and a tune, bars 1 to 4, then 5 to 8.", bars: 8 }],
       },
     },
     {
@@ -318,8 +319,7 @@ export default defineLesson({
         id: "close-the-phrase",
         version: 1,
         role: "check",
-        prompt:
-          "This phrase stops on V and waits. Change bars 3 and 4 so it closes instead: V, then home. Play the target first.",
+        prompt: "This phrase stops on V and waits. Change bars 3 and 4 so it closes instead: V, then home.",
         skills: [{ skill: "H03", w: 1 }],
         code: { starter: MODIFY_STARTER },
         reference: { solutions: [code(triads("<0 3 4 0>"))], bars: 4 },
@@ -380,8 +380,7 @@ export default defineLesson({
         id: "wait-then-land",
         version: 1,
         role: "practice",
-        prompt:
-          "Write eight bars of chords over the drums: let bar 4 wait on V, and bring bar 8 home with V to I. Add a tune that lands on 1 if you like.",
+        prompt: "Write eight bars of chords: let bar 4 wait on V, and bring bar 8 home with V to I.",
         skills: [{ skill: "H03", w: 1 }],
         // The rule's detail names cadences by their abbreviations (PAC, HC, PC), which the prose never uses, and
         // PC is U06.L07's. The same text serves the suggestions, so it says only "not yet".

@@ -140,7 +140,7 @@ const PUSHES = [7, 15, 23, 31];
 
 export default defineLesson({
   id: "U13.L01",
-  version: 1,
+  version: 2,
   title: "Pushes & Anticipations",
   objective:
     "I can make a chord arrive before its beat with .early(), move a line after the beat with .late(), and hear whether chords are pushed.",
@@ -169,16 +169,15 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: four seventh chords on the Rhodes, each landing with the bass on beat 1. Then the same loop with one thing changed: the Rhodes gets to every chord a moment before the bass does.",
+          "Listen to when each new chord arrives. In which loop does the music lean forward, and which instrument is doing the leaning?",
         skills: [{ skill: "R10", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: ON_THE_BEAT, caption: "Every chord lands on beat 1, with the bass.", bars: 4 },
+          { code: ON_THE_BEAT, caption: "Loop 1: every chord changes on beat 1.", bars: 4 },
           {
             code: HOOK,
-            caption:
-              "The Rhodes arrives an eighth note before each bar line. The bass still lands on beat 1.",
+            caption: "Loop 2: one line has moved; everything else is as before.",
             bars: 4,
           },
         ],
@@ -545,7 +544,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "A soul loop with everything on the beat: drums, bass and four seventh chords. Push the Rhodes ahead of the beat. Then make the groove yours: push the bass with it, try a sixteenth, give the chords a rhythm with `.struct()`, change the chords, add a line on top.",
+          "A soul loop with everything on the beat: drums, bass and four seventh chords. Push the Rhodes ahead of the beat. Then keep going: push the bass with it, try a sixteenth, give the chords a rhythm with `.struct()`, change the chords, add a line on top.",
         skills: [{ skill: "R10", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

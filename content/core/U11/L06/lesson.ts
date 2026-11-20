@@ -79,7 +79,7 @@ const NUMERALS = {
 
 export default defineLesson({
   id: "U11.L06",
-  version: 1,
+  version: 2,
   title: "Quick Change & Turnaround",
   objective: "I can add a quick change and a turnaround to a 12-bar blues.",
   key: { tonic: "C", mode: "blues" },
@@ -108,13 +108,17 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the 12-bar blues you wrote last lesson, twelve bars with the riff on top. Then the same blues changed in two places. Listen for where it moves sooner, and for how the end throws it back to the top.",
+          "The 12-bar blues you wrote last lesson, then the same blues changed in two places. Listen for where the second one leaves home sooner, and for how its last bars throw it back to the top.",
         skills: [{ skill: "H10", w: 1 }],
         hints: null,
         tests: [],
         items: [
           { code: PLAIN_PIECE, caption: "The twelve bars as you wrote them last lesson.", bars: 12 },
-          { code: HOOK, caption: "The same blues, changed in bar 2 and in the last two bars.", bars: 12 },
+          {
+            code: HOOK,
+            caption: "The changed blues. Listen to its first line, then to its last two bars.",
+            bars: 12,
+          },
         ],
       },
     },
@@ -390,7 +394,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The blues and its riff, now in G: I, IV and V are G7, C7 and D7. Give it a quick change in bar 2 and a turnaround in bars 11–12. Then play with the turnaround: I–IV then I–V, or I then V, or your own way back that ends on V.",
+          "In G, I, IV and V are G7, C7 and D7. Give the blues a quick change in bar 2 and a turnaround in bars 11–12. Then play with the turnaround: I–IV then I–V, or I then V, or your own way back that ends on V.",
         skills: [{ skill: "H10", w: 1 }],
         key: { tonic: "G", mode: "blues" },
         code: { starter: MAKE_STARTER },

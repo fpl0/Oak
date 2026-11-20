@@ -41,7 +41,7 @@ const NOTE_FEEDBACK = {
 
 export default defineLesson({
   id: "U02.L04",
-  version: 1,
+  version: 2,
   title: "The Treble Staff",
   objective: "I can read and write notes from c4 to f5 on the treble staff and play them in code.",
   key: { tonic: "C", mode: "major" },
@@ -69,11 +69,11 @@ export default defineLesson({
         id: "slow-climb",
         version: 1,
         role: "practice",
-        prompt: "Press Play. Four notes climb, each one a white key, skipping one white key between them.",
+        prompt: "Hum the climb, and watch the keys: how many white keys does each note skip over?",
         skills: [{ skill: "N02", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "Four piano notes over the band, one bar on repeat.", bars: 1 }],
+        items: [{ code: HOOK, caption: "Four white keys, one beat each, going up.", bars: 1 }],
       },
     },
     {
@@ -301,7 +301,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write a melody over the band that you could read back from the staff: every note from `e4` up to `f5`, no ledger lines.",
+          "Write a melody you could read back from the staff: every note from `e4` up to `f5`, no ledger lines.",
         skills: [{ skill: "N02", w: 1 }],
         code: { starter: mel("c4 e4 g4 c5") },
         bars: [1, 4],
@@ -337,7 +337,7 @@ export default defineLesson({
         hints: ladder(
           "Which note of the starter needs a short line of its own?",
           "`c4` sits on a ledger line below the staff. The lowest line note is `e4`.",
-          "Swap `c4` for `e4` and the line is on the staff. Now make it yours.",
+          "Swap `c4` for `e4` and the line is on the staff. Then add notes of your own.",
         ),
         tests: [
           {

@@ -85,7 +85,7 @@ const STAFF = { roll: false, staff: "treble", keyboard: false } as const;
 
 export default defineLesson({
   id: "U07.L08",
-  version: 1,
+  version: 2,
   title: "Pickups",
   objective:
     "I can start a tune with a pickup: rests at the start of bar 0, so its first notes lead into bar 1.",
@@ -111,20 +111,20 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "You wrote this tune down by ear in By-Ear Transcription I. Here it is from its real first note. Then the way you wrote it.",
+          "Loop 1 starts on the real first note, loop 2 the way you wrote it. Which start draws you into the tune, and which drops you straight onto it?",
         skills: [{ skill: "M10", w: 1 }],
         hints: null,
         tests: [],
         items: [
           { code: HOOK, caption: "Auld Lang Syne, from its first note.", bars: 5 },
-          { code: FLAT, caption: "The same tune from beat 1: the first note is missing.", bars: 4 },
+          { code: FLAT, caption: "The same tune as you wrote it, from its first beat 1.", bars: 4 },
         ],
       },
     },
     {
       id: "S2",
       kind: "predict",
-      title: "When is the first note?",
+      title: "When does it start?",
       minutes: 0.5,
       ui: { panels: NONE },
       example: { id: "first-bars", code: HOOK, bars: 2 },
@@ -221,7 +221,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Play the target. Two notes climb into the tune before the chords start. Bar 0 is empty: write them in it, where you hear them.",
+          "In the target, two notes climb into the tune before the chords start. Write them in the empty bar 0, where you hear them.",
         skills: [{ skill: "M10", w: 1 }],
         pickup: { units: [2, 1] },
         code: { starter: STEP("⟪[~ ~ ~ ~]⟫") },
@@ -381,7 +381,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The note in bar 0 comes on beat 1 and just sits there. Move it, or write two, so it leads into bar 1. Then make the tune yours.",
+          "The note in bar 0 comes on beat 1 and just sits there. Move it, or write two, so it leads into bar 1. The tune after it is yours to rework.",
         skills: [{ skill: "M10", w: 1 }],
         pickup: { units: [1, 1] },
         code: { starter: MAKE_STARTER },

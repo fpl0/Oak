@@ -78,7 +78,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U12.L05",
-  version: 1,
+  version: 2,
   title: "Sevenths in Minor & Guide-Tone Preview",
   objective:
     "I can number the seventh chords of a minor key and follow the 3rds and 7ths as a thread through a chain of sevenths.",
@@ -104,13 +104,13 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: eight bars of seventh chords in A minor, each root a 5th below the last, the way a jazz standard moves. Then the same bars with one long piano note a bar on top. Listen to how little that line moves.",
+          "Every chord changes, bar after bar. In loop 2, listen to the long note on top instead: how far does it move while the chords travel?",
         skills: [{ skill: "C08", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: CYCLE_ONLY, caption: "Dm7, G7, Cmaj7, Fmaj7, Bm7♭5, E7, then Am7 for two bars.", bars: 8 },
-          { code: HOOK, caption: "The same chords, and a line on top: F, F, E, E, D, D, C, C.", bars: 8 },
+          { code: CYCLE_ONLY, caption: "Loop 1: eight chords, each root a 5th below the last.", bars: 8 },
+          { code: HOOK, caption: "Loop 2: the same chords, with one long piano note a bar on top.", bars: 8 },
         ],
       },
     },
@@ -154,7 +154,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run the first four bars with the chord band and the chord-tone lens open. The top line plays F, F, E, E. Which member of each chord is it, and how far does it move when G7 goes to Cmaj7?",
+          "Run it with the chord-tone lens open: it marks which member of each chord every note is. The top line plays F, F, E, E. Which member is it each time, and how far does it move when G7 goes to Cmaj7?",
         skills: [{ skill: "C08", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -369,7 +369,7 @@ export default defineLesson({
     {
       id: "S7",
       kind: "make",
-      title: "Your line through the cycle",
+      title: "Your guide-tone line",
       minutes: 2.75,
       ui: { panels: ROLL, rollLabels: "note", band: DRUMS, initialPanels: ["chords", "chord-tones"] },
       exercise: {

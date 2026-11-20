@@ -58,7 +58,7 @@ const KEYS = { roll: false, staff: false, keyboard: true } as const;
 
 export default defineLesson({
   id: "U06.L01",
-  version: 1,
+  version: 2,
   title: "The Seven Chords",
   objective:
     'I can build a triad on any degree of a key and move one stack onto any root with .add(n("…")): seven chords, all from the key\'s own notes.',
@@ -85,11 +85,11 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play. The chords climb the key a step a bar, then turn back, with the bass on every root.",
+          "The chords climb the key a step a bar, then turn back, with the bass on every root. Listen to each chord's colour as it passes: which sound bright, which darker?",
         skills: [{ skill: "H01", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "C, Dm, Em, F, G, then back down: F, Dm, G.", bars: 8 }],
+        items: [{ code: HOOK, caption: "Up the key a step a bar, then back. Listen bar by bar.", bars: 8 }],
       },
     },
     {
@@ -105,7 +105,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          'New: `.add(n("<0 3>"))`, written before `.scale()`. In bar 1 it adds 0 to the stack `[0,2,4]`, in bar 2 it adds 3. What will the two bars play?',
+          '`.add(n("<0 3>"))` comes before `.scale()`. In bar 1 it adds 0 to the stack `[0,2,4]`, in bar 2 it adds 3. What will the two bars play?',
         skills: [{ skill: "H01", w: 1 }],
         hints: null,
         tests: [],
@@ -123,7 +123,7 @@ export default defineLesson({
     {
       id: "S3",
       kind: "investigate",
-      title: "A triad on every degree",
+      title: "Triads on every degree",
       minutes: 1,
       ui: { panels: ROLL, rollLabels: "degree" },
       example: { id: "the-seven", code: SEVEN, bars: 7 },
@@ -132,8 +132,7 @@ export default defineLesson({
         id: "a-triad-on-every-degree",
         version: 1,
         role: "practice",
-        prompt:
-          "One stack, seven bars, a different number added each bar. Run it and read the degree labels on the roll.",
+        prompt: "Run it and read the degree labels on the roll, bar by bar.",
         skills: [{ skill: "H01", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -193,7 +192,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The four-chord loop from Stacking Thirds, one stack moved by `.add()`. Bars 3 and 4 still sit on degree 1. Put bar 3's chord on degree 6 and bar 4's on degree 4. Play the target first.",
+          "The four-chord loop from Stacking Thirds, one stack moved by `.add()`. Bars 3 and 4 still sit on degree 1. Put bar 3's chord on degree 6 and bar 4's on degree 4.",
         skills: [{ skill: "H01", w: 1 }],
         code: { starter: MODIFY_STARTER },
         reference: { solutions: [code(triads(LOOP))], bars: 4 },
@@ -336,7 +335,7 @@ export default defineLesson({
     {
       id: "S7",
       kind: "make",
-      title: "A loop of your own",
+      title: "Your own loop",
       minutes: 2.75,
       ui: { panels: ROLL, rollLabels: "degree", band: DRUMS },
       exercise: {
@@ -345,7 +344,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write a four-bar loop from the seven chords of C with `.add()`, over the drums. Use at least one chord the four-chord loop never had: the one on degree 2, 3 or 7. Then make it yours.",
+          "Write a four-bar loop from the seven chords of C with `.add()`. Use at least one chord the four-chord loop never had: the one on degree 2, 3 or 7. A bass line on the same roots, low on the bass clef, puts a floor under it.",
         skills: [{ skill: "H01", w: 1 }],
         // The catalog's text is "{label}: {detail}", and this rule's detail names the chords in Roman
         // numerals (U06.L02). The same text serves the suggestions, so it says only "not yet".

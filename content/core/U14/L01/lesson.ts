@@ -125,7 +125,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U14.L01",
-  version: 1,
+  version: 2,
   title: "Modes as Colours",
   objective:
     "I can turn a major scale into Mixolydian by lowering its 7th, and hear the colour that one note gives.",
@@ -156,20 +156,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a guitar riff over the drums, twice. The numbers in the code are the same both times. One note of the scale under them has moved.",
+          "The numbers in the code stay the same throughout; only the scale under them changes, halfway through loop 1. Listen to the colour: what does the second half do to the riff's mood?",
         skills: [{ skill: "S12", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption:
-              "Two bars on G major, bright and reaching up for home; then the same numbers with one note a half step lower.",
+            caption: "Loop 1: two bars on G major, then two on the new scale.",
             bars: 4,
           },
           {
             code: RIFF_MIX,
-            caption: "The second colour on its own: looser, a rock riff.",
+            caption: "Loop 2: the new scale on its own.",
             bars: 2,
           },
         ],
@@ -352,7 +351,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The riff and the bass are on G major. Play the target: the same numbers on G Mixolydian. Change one word in each line. The numbers stay as they are.",
+          "The riff and the bass are on G major; the target plays the same numbers on G Mixolydian. Change one word in each line. The numbers stay as they are.",
         skills: [{ skill: "S12", w: 1 }],
         code: { starter: MODIFY_STARTER },
         reference: { solutions: [MODIFY_SOLUTION], bars: 2 },
@@ -460,7 +459,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "A riff on G Mixolydian that never plays the 7th, so nobody can hear which scale it is. Give it its colour: land on the ♭7, `n` 6 above the 5th or `n` -1 just under home, and lean on it. Then make it yours: new numbers, new rhythm, more grit with `.distort()`.",
+          "A riff on G Mixolydian that never plays the 7th, so nobody can hear which scale it is. Give it its colour: land on the ♭7, `n` 6 above the 5th or `n` -1 just under home, and lean on it. Then go further: new numbers, new rhythm, more grit with `.distort()`.",
         skills: [{ skill: "S12", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [2, 8],

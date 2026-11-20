@@ -62,7 +62,7 @@ const ROLL_KEYS = { roll: true, staff: false, keyboard: true } as const;
 
 export default defineLesson({
   id: "U05.L03",
-  version: 1,
+  version: 2,
   title: "Diminished & Augmented",
   objective:
     "I can build and hear the two restless triads: two minor 3rds (diminished) and two major 3rds (augmented).",
@@ -91,14 +91,14 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play. Watch the top note of the chords climb in bars 1 to 3, and listen to how bar 4 pulls back to the start.",
+          "Follow the top note of the chords through bars 1 to 3. Then listen to bar 4: does it sound finished, or does it lean towards the start?",
         skills: [{ skill: "C03", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption: "Four chords and a tune: the top note climbs, then the loop leans home.",
+            caption: "Four chords and a tune. Follow the top of each chord.",
             bars: 4,
           },
           { code: HOOK_CHORDS_ONLY, caption: "The four chords alone.", bars: 4 },
@@ -226,7 +226,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The tune climbs G♯ to A, but bar 1's chord is plain C major, and its top note rubs against the tune. Make bar 1 augmented: two major 3rds. Play the target first.",
+          "The tune climbs G♯ to A, but bar 1's chord is plain C major, and its top note rubs against the tune. Make bar 1 augmented: two major 3rds.",
         skills: [{ skill: "C03", w: 1 }],
         code: { starter: RISE_STARTER },
         reference: { solutions: [RISE], bars: 2 },
@@ -361,7 +361,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The drums keep time. Write a four-bar loop with one restless triad in it, diminished or augmented, and let the next chord answer it: B° to C, or C+ (C, E, G♯) to F.",
+          "Write a four-bar loop with one restless triad in it, diminished or augmented, and let the next chord answer it: B° to C, or C+ (C, E, G♯) to F. A tune on top can climb with the chords, as in the hook.",
         skills: [{ skill: "C03", w: 1 }],
         feedbackText: { "rubric.unmet": "{label}: not yet." },
         code: { starter: MAKE_STARTER },

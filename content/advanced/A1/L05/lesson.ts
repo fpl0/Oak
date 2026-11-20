@@ -77,7 +77,7 @@ const CHORDS = { band: "band.two-chord-vamp", tracks: ["chords"] } as const;
 
 export default defineLesson({
   id: "A1.L05",
-  version: 1,
+  version: 2,
   title: "Grit",
   objective:
     "I can add warmth or grit to a part with saturation and a bitcrusher, and keep it in proportion.",
@@ -106,15 +106,15 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the loop from Space, clean, then the same loop with some dirt on it. Same notes, same rooms, same echoes. Listen to the bass and the hats.",
+          "Loop 2 damages two parts on purpose, the bass and the hats. Listen to the bass: does the damage make it sound smaller, or bigger?",
         skills: [{ skill: "D06", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: CLEAN, caption: "Clean: every part exactly as the waves make it.", bars: 2 },
+          { code: CLEAN, caption: "Loop 1: the loop as Space left it.", bars: 2 },
           {
             code: GRITTY,
-            caption: "Gritty: a bass that growls, hats like a dusty record.",
+            caption: "Loop 2: the rest of the loop exactly as before.",
             bars: 2,
           },
         ],
@@ -132,7 +132,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          'The bass over the drums with `.distort("<0 .5 1 2>")`: a bigger number each bar, starting from none. Before you run it, pick what happens bar by bar.',
+          'The bass over the drums with `.distort("<0 .5 1 2>")`: a bigger number each bar, starting from none. What happens bar by bar?',
         skills: [{ skill: "D06", w: 1 }],
         hints: null,
         tests: [],
@@ -220,7 +220,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Play the target, then yours. The target's bass is saturated: warm and thick, a growl under the riff, never a rasp. Yours is clean. Set its saturation to match by ear, and turn the bass down a little if it jumps out.",
+          "The target's bass is saturated: warm and thick, a growl under the riff. Yours is clean. Saturate it by ear, and turn it down a little if it jumps out.",
         skills: [{ skill: "D06", w: 1 }],
         code: { starter: WARM_STARTER },
         reference: { solutions: [WARM_SOLUTION], bars: 2 },
@@ -400,7 +400,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The loop from Space, clean. Give it some dirt: a bass that growls, crushed hats, a riff like an old record. Saturate or crush at least one part so you can hear it, and turn a saturated part down so it does not win by being louder. Or bring a loop of your own.",
+          "The loop from Space, clean. Give it some dirt: a bass that growls, crushed hats, a riff like an old record. Saturate or crush at least one part so you can hear it, and turn a saturated part down so it does not win by being louder.",
         skills: [{ skill: "D06", w: 1 }],
         code: { starter: CLEAN },
         bars: [2, 8],

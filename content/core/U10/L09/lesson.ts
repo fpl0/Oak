@@ -126,7 +126,7 @@ const HARMONIC = { tonic: "A", mode: "harmonic minor" } as const;
 
 export default defineLesson({
   id: "U10.L09",
-  version: 1,
+  version: 2,
   title: "Minor Melodies",
   objective:
     "I can take a minor spiritual down by ear, sing it from the lead sheet, and arrange it as a ballad with strings and an echo.",
@@ -143,7 +143,7 @@ export default defineLesson({
     {
       id: "S1",
       kind: "listen",
-      title: "A ballad texture",
+      title: "Strings and an echo",
       minutes: 0.75,
       ui: { panels: NONE },
       example: { id: "hook", code: HOOK, bars: 4 },
@@ -154,17 +154,21 @@ export default defineLesson({
         role: "practice",
         key: HARMONIC,
         prompt:
-          "Press Play: strings on Am, F, E and Am, an upright bass, and a slow piano line with an echo after every note. Then a tune over the same chords: the opening of Go Down Moses, a spiritual first printed in 1872.",
+          "Strings, an upright bass and a slow piano line, then the opening of Go Down Moses, an African American spiritual, over the same chords. Listen for what follows each piano note, and for the note the spiritual comes home to.",
         skills: [{ skill: "E07", w: 1 }],
         pickup: PICKUP,
         hints: null,
         tests: [],
         items: [
-          { code: HOOK, caption: "Strings, upright and an echoing piano, in A minor.", bars: 4 },
+          {
+            code: HOOK,
+            caption: "Strings, upright and piano, in A minor. Listen just after each piano note.",
+            bars: 4,
+          },
           {
             code: MOSES,
             caption:
-              "Go Down Moses, the first line of the verse: one note before the first full bar, then four bars.",
+              "Go Down Moses, the verse's first line: one note before the first full bar, then four bars.",
             bars: 5,
           },
         ],
@@ -376,7 +380,7 @@ export default defineLesson({
         role: "practice",
         key: HARMONIC,
         prompt:
-          "Strings and an upright under Go Down Moses, but the tune only sits on home. Put the whole line back, from your two halves, then make it a ballad: an echo on the tune with `.delay()`, your choice of sounds, and a reply of your own if you like.",
+          "The tune only sits on home. Put the whole line back from your two halves, then make it a ballad: an echo on the tune with `.delay()`, your choice of sounds, and a reply of your own if you like.",
         skills: [
           { skill: "E07", w: 0.5 },
           { skill: "V04", w: 0.5 },

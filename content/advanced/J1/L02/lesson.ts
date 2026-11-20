@@ -136,7 +136,7 @@ const DRUMS = { band: "band.two-five-one", tracks: ["drums"] } as const;
 
 export default defineLesson({
   id: "J1.L02",
-  version: 1,
+  version: 2,
   title: "Reading 7th-Chord Symbols",
   objective:
     "I can read a jazz chart's chord symbols, sixths and sus chords included, and play them in code.",
@@ -166,21 +166,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a trio reads a four-bar chart in F, twice. The jazz chart prints it F6 | D–7 | G–7 | C7sus C7. Listen to the first and the last bar.",
+          "The two takes differ only in bar 1 and at the start of bar 4. Listen to those two chords: how does each one feel in the first take, next to the second?",
         skills: [{ skill: "J01", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption:
-              "As written: the first chord is warm and settled, and bar 4 floats for two beats before it leans home.",
+            caption: "As the chart prints it: F6 | D–7 | G–7 | C7sus C7.",
             bars: 4,
           },
           {
             code: PLAIN,
-            caption:
-              "The same chart with both colours taken out: a plain F major triad, a plain C7 for the whole bar.",
+            caption: "The same chart with a plain F triad in bar 1 and a plain C7 all through bar 4.",
             bars: 4,
           },
         ],
@@ -199,7 +197,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run the chart and watch the chord band name each chord as it plays, beside the chart's glyphs: F6 | D–7 | G–7 | C7sus C7.",
+          "Run the chart and watch the chord band name each chord in code as it plays, beside the chart's glyphs.",
         skills: [{ skill: "J01", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -343,7 +341,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Two cards: the same G–7, then a chord on C. In one card the second chord leans toward F; in the other it floats, neither bright nor dark, as if waiting. Which card floats?",
+          "In one card the chord on C leans toward F. In the other it floats, neither bright nor dark, as if waiting. Which card floats?",
         skills: [{ skill: "C09", w: 1 }],
         hints: ladder(
           "Listen to the second bar of each card. Which one sounds finished as a question, and which one hangs?",
@@ -389,7 +387,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "A jazz chart reads G–7 | C7 | F∆7 | F6. The trio plays it as plain triads. Write each bar of `changes` the way the chart has it. Hear the target to check.",
+          "A jazz chart reads G–7 | C7 | F∆7 | F6. The trio plays it as plain triads. Write each bar of `changes` the way the chart has it.",
         skills: [
           { skill: "J01", w: 0.7 },
           { skill: "C09", w: 0.3 },
@@ -470,7 +468,7 @@ export default defineLesson({
         role: "practice",
         title: "Chart in F",
         prompt:
-          "The band plays the drums. Write your own four-bar chart in F for the trio: somewhere a sus chord that floats before it resolves, and a warm sixth chord, best at the end. Then make it yours: more bars, a vibes line.",
+          "Write a four-bar chart in F for the trio: a sus chord that floats before it resolves, and a warm sixth chord, best at the end. For more, add bars, or a swung vibes line whose long notes sit in their chords.",
         skills: [
           { skill: "J01", w: 0.5 },
           { skill: "C09", w: 0.5 },

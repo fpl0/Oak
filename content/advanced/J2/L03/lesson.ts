@@ -104,7 +104,7 @@ const DRUMS = { band: "band.two-five-one", tracks: ["drums"] } as const;
 
 export default defineLesson({
   id: "J2.L03",
-  version: 1,
+  version: 2,
   title: "Extensions",
   objective: "I can add 9ths, 11ths and 13ths to a chord and know which held notes clash.",
   key: { tonic: "Eb", mode: "major" },
@@ -133,20 +133,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a slow ii–V–I in E♭ with a vibes tune, first on plain sevenths, then on richer chords. Listen to the tune's long notes against each version.",
+          "Listen to the tune's long notes. In which take do they sound like part of the chord, and in which do they float above it?",
         skills: [{ skill: "J02", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: PLAIN_BALLAD,
-            caption: "Fm7, B♭7, E♭maj7: the ballad on plain sevenths.",
+            caption: "The ballad on plain sevenths.",
             bars: 4,
           },
           {
             code: HOOK,
-            caption:
-              "Fm9, B♭13, E♭maj9: the same chords doing the same jobs, with more colour. The tune's long notes now belong to the chords.",
+            caption: "The same chords, with more on top.",
             bars: 4,
           },
         ],
@@ -222,8 +221,7 @@ export default defineLesson({
         id: "three-dominants",
         version: 1,
         role: "practice",
-        prompt:
-          "Three cards, each a V going home to E♭maj9. The home chord is the same; only the V's colour changes. Which V sounds brightest?",
+        prompt: "Three cards, each a V going home to the same E♭maj9. Which V sounds brightest?",
         skills: [{ skill: "J02", w: 1 }],
         hints: ladder(
           "Listen to the first bar of each card. Which V sounds sweet, and which ones sound bent?",
@@ -340,7 +338,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The trio plays the ballad on plain sevenths. The chart wants colour: a 9th on the ii, a 13th on the V, a major 9th at home. Write the four chords that way. Hear the target to check.",
+          "The trio plays the ballad on plain sevenths. The chart wants colour: a 9th on the ii, a 13th on the V, a major 9th at home. Write the four chords that way.",
         skills: [{ skill: "J02", w: 1 }],
         swing: SWUNG,
         code: { starter: CHART_STARTER },
@@ -426,7 +424,7 @@ export default defineLesson({
         role: "practice",
         title: "E♭ ballad",
         prompt:
-          "The band plays the drums. The vibes tune sits on chord tones only. Rewrite it so that in every four bars at least two long notes ring on a 9th or a 13th of their chord. Touch a clash in passing if you like, but never hold one.",
+          "The vibes tune sits on chord tones only. Rewrite it so that in every four bars at least two long notes ring on a 9th or a 13th of their chord. Touch a clash in passing if you like, but never hold one. For contrast, let other bars land on a guide tone.",
         skills: [{ skill: "J02", w: 1 }],
         swing: SWUNG,
         code: { starter: MAKE_STARTER },

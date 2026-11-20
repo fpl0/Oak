@@ -123,7 +123,7 @@ const DRUMS = { band: "band.two-five-one", tracks: ["drums"] } as const;
 
 export default defineLesson({
   id: "J5.L03",
-  version: 1,
+  version: 2,
   title: "Secondary ii–Vs & Diminished Passing Chords",
   objective: "I can aim a ii–V at any chord of a tune, so it sounds like a little home of its own.",
   key: C,
@@ -149,19 +149,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: four bars by the trio, twice. The vibes play the same notes both times; only bar 2 changes. Listen to how bar 2 moves into bar 3.",
+          "Listen to the move from bar 2 into bar 3. In which take does bar 3 feel like an arrival, rather than just the next chord?",
         skills: [{ skill: "J14", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK_PLAIN,
-            caption: "Cmaj7, Am7, Dm7, G7: bar 3 arrives as the next chord of the loop.",
+            caption: "The loop as written, one chord a bar.",
             bars: 4,
           },
           {
             code: HOOK,
-            caption: "Cmaj7, Em7 A7, Dm7, G7: bar 2 leans into Dm7, and bar 3 lands like a small homecoming.",
+            caption: "The same loop with two chords in bar 2.",
             bars: 4,
           },
         ],
@@ -179,7 +179,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Bar 2 will hold two chords instead of Am7. Before you play it: which pair makes Dm7 in bar 3 sound like a home of its own?",
+          "Bar 2 will hold two chords instead of Am7. Which pair makes Dm7 in bar 3 sound like a home of its own?",
         skills: [{ skill: "J14", w: 1 }],
         hints: null,
         tests: [],
@@ -268,7 +268,7 @@ export default defineLesson({
         role: "check",
         key: Bb,
         prompt:
-          "A turnaround in B♭: B♭maj7, Gm7, Cm7, F7. Replace Gm7 with two chords, a ii and a V, that treat Cm7 in bar 3 as their home. Hear the target first.",
+          "A turnaround in B♭: B♭maj7, Gm7, Cm7, F7. Replace Gm7 with two chords, a ii and a V, that treat Cm7 in bar 3 as their home.",
         skills: [{ skill: "J14", w: 1 }],
         swing: SWUNG,
         code: { starter: AIM_STARTER },
@@ -470,7 +470,7 @@ export default defineLesson({
         key: G,
         title: "Aimed tune in G",
         prompt:
-          "A tune in G loops over the drums: Gmaj7, Em7, Am7, D7, the vibes on long notes. Aim a ii–V at one of its chords, or at several, so each one sounds like a little home. The tune can stay as it is; check that its long notes agree with each new chord.",
+          "The loop is Gmaj7, Em7, Am7, D7. Aim a ii–V at one of its chords, or at several, so each one sounds like a little home. The tune can stay as it is; check that its long notes agree with each new chord. A diminished seventh between two chords a whole step apart can come after.",
         skills: [{ skill: "J14", w: 1 }],
         swing: SWUNG,
         code: { starter: MAKE_STARTER },

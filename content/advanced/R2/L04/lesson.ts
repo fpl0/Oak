@@ -186,7 +186,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "R2.L04",
-  version: 1,
+  version: 2,
   title: "Polyrhythm 3:2, 4:3",
   objective: "I can play three even notes against two in the same bar, and hear four against three.",
   key: { tonic: "C", mode: "minor" },
@@ -211,7 +211,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: three loops at the same tempo. The first plays two notes a bar, the second three, the third both at once. Listen for where the two meet.",
+          "Three loops at one tempo: the two, the three, then both. In the last loop, does the bar march or roll? Listen for the one place where the two pulses land together.",
         skills: [{ skill: "R17", w: 1 }],
         hints: null,
         tests: [],
@@ -220,8 +220,7 @@ export default defineLesson({
           { code: THREE_ALONE, caption: "The cowbell and the Rhodes: three even notes a bar.", bars: 2 },
           {
             code: HOOK,
-            caption:
-              "Both at once. They land together on the first beat of each bar, and the bar seems to roll.",
+            caption: "Both at once. Where do they land together?",
             bars: 4,
           },
         ],
@@ -360,7 +359,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The kick and the bass keep the two; the cowbell doubles them. Change only the cowbell's line so it plays three even notes in every bar, against the two. Hear the target to check.",
+          "The kick and the bass keep the two; the cowbell doubles them. Change only the cowbell's line so it plays three even notes in every bar, against the two.",
         skills: [{ skill: "R17", w: 1 }],
         code: { starter: S4_STARTER },
         reference: { solutions: [S4_SOLUTION], bars: 4 },
@@ -473,7 +472,7 @@ export default defineLesson({
         role: "practice",
         title: "Three against two",
         prompt:
-          "Your three against two. In the starter every part plays the two. Give the cowbell three even notes a bar against the kick's two, in the same bars, four bars or more. Then make it yours: the Rhodes on the three, another tempo, other sounds, a third part that plays four against the three.",
+          "Your three against two. In the starter every part plays the two. Give the cowbell three even notes a bar against the kick's two, in the same bars, four bars or more. Then build it out: the Rhodes on the three, another tempo, other sounds, a third part that plays four against the three.",
         skills: [{ skill: "R17", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

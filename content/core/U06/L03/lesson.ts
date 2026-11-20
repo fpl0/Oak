@@ -60,7 +60,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U06.L03",
-  version: 1,
+  version: 2,
   title: "Home, Away, Tension",
   objective:
     "I can hear whether a chord sounds like home, away or tension, and write a phrase that goes away and comes home through tension.",
@@ -91,13 +91,11 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play. Four chords and a tune that climbs a step each bar, to land on 1 with the last chord.",
+          "Four chords and a tune that climbs a step each bar. Follow the route: in which bar does the loop leave home, and in which does it arrive back?",
         skills: [{ skill: "H02", w: 1 }],
         hints: null,
         tests: [],
-        items: [
-          { code: HOOK, caption: "I, IV, V, I: the tune tops out on 1 just as home returns.", bars: 4 },
-        ],
+        items: [{ code: HOOK, caption: "I, IV, V, I, and a tune that climbs a step a bar.", bars: 4 }],
       },
     },
     {
@@ -343,7 +341,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write a four- or eight-bar phrase over the drums: start at home, go away, build tension on V, come home. Your choice of chords for home and away; a tune on top if you like.",
+          "Write a four- or eight-bar phrase: start at home, go away, build tension on V, come home. The home and away chords are your choice. A tune that ends on 1 lands with the chords.",
         skills: [{ skill: "H02", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

@@ -177,7 +177,7 @@ const C_MAJOR = { tonic: "C", mode: "major" } as const;
 
 export default defineLesson({
   id: "U17.L02",
-  version: 1,
+  version: 2,
   title: "Truck-Driver & Direct Modulation",
   objective:
     'I can lift a last chorus into a new key: a key plan in .scale("<…>") on every line written in degrees, after arrange(), and new names for the chords.',
@@ -203,14 +203,14 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a verse, a chorus, then the chorus once more. Listen to what happens at bar 9, when the chorus comes back.",
+          "A verse, a chorus, then the chorus once more. Listen to bar 9, where the chorus comes back. What does the band do to it, and what does that do to the energy of the song?",
         skills: [{ skill: "H14", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: SONG,
-            caption: "Verse and chorus in C. At bar 9 the chorus returns a whole step higher, in D.",
+            caption: "Verse, chorus, chorus. The last chorus starts at bar 9.",
             bars: 12,
           },
         ],
@@ -256,7 +256,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run the chorus with the chord band open: four bars in C, then four in D. Compare bar 7 with bar 3 in the chord band, and read the note names on the roll at bar 5.",
+          "Four bars in C, then four in D. Compare bar 7 with bar 3 in the chord band, and read the note names on the roll at bar 5.",
         skills: [{ skill: "H14", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -377,7 +377,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The lift comes in two sizes. Two cards, each two bars of the chorus and then the same two bars lifted. Which card lifts by a half step, the smaller of the two?",
+          "Two cards, each two bars of the chorus and then the same two bars lifted. Which card lifts by a half step, the smaller of the two?",
         skills: [{ skill: "H14", w: 1 }],
         hints: ladder(
           "Sing the first note of the tune before and after each lift. Which jump is smaller?",
@@ -515,7 +515,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The song with everything in C. Lift the last chorus a whole step, to D: a key plan after `arrange()` on the bass and on the tune, and in `chordsChorus2` every chord name a whole step up. Then make it yours: a new chorus tune, strings on a `pad:` line for the lift, a longer song.",
+          "The song with everything in C. Lift the last chorus a whole step, to D: a key plan after `arrange()` on the bass and on the tune, and in `chordsChorus2` every chord name a whole step up. After that, take it further: a new chorus tune, strings on a `pad:` line for the lift, a longer song.",
         skills: [{ skill: "H14", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [12, 24],

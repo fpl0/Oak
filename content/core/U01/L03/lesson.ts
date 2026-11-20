@@ -57,7 +57,7 @@ const TAP_FEEDBACK = {
 
 export default defineLesson({
   id: "U01.L03",
-  version: 2,
+  version: 3,
   title: "Backbeat",
   objective: "I can put the kick on 1 and 3 and the snare on 2 and 4, one labelled line per drum.",
   key: { tonic: "C", mode: "major" },
@@ -81,13 +81,14 @@ export default defineLesson({
         id: "three-lines",
         version: 1,
         role: "practice",
-        prompt: "Press Play on the first groove, then on the second. Listen for what goes missing.",
+        prompt:
+          "Play the first groove, then the second. Which drum goes missing, and what does the groove lose without it?",
         skills: [{ skill: "R04", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: HOOK, caption: "Kick, snare and hats on a drum machine, over the band.", bars: 4 },
-          { code: NO_SNARE, caption: "The same groove with the snare line taken out.", bars: 4 },
+          { code: HOOK, caption: "Three lines of drums on a TR-808.", bars: 4 },
+          { code: NO_SNARE, caption: "The same groove, one line short.", bars: 4 },
         ],
       },
     },
@@ -103,8 +104,7 @@ export default defineLesson({
         id: "where-the-snare-lands",
         version: 1,
         role: "practice",
-        prompt:
-          'The snare line reads `snare: s("~ sd ~ sd")`. Before you run it: on which beats does the snare play?',
+        prompt: 'The snare line reads `snare: s("~ sd ~ sd")`. On which beats does the snare play?',
         skills: [{ skill: "R04", w: 1 }],
         hints: null,
         tests: [],
@@ -141,11 +141,11 @@ export default defineLesson({
         skills: [{ skill: "R04", w: 1 }],
         feedbackText: {
           "investigate.wrong":
-            "Not quite. Clap on 2 and 4 while you mute each line in turn: which line's silence leaves your claps alone?",
+            "Not quite. Keep clapping while you mute each line in turn. Which line, once muted, leaves your claps on their own?",
         },
         hints: ladder(
           "When you clap along to a song, do you clap on 1 and 3, or on 2 and 4?",
-          "Mute each line in turn and clap on 2 and 4. The line whose silence you miss most is the one.",
+          "Mute each line in turn and keep clapping. The line whose silence you miss most is the one.",
           "The kick plays on 1 and 3, so it is not the kick.",
         ),
         code: { starter: HOOK },
@@ -181,7 +181,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Add a third line, `snare:`, that plays the snare `sd` on beats 2 and 4. Leave the kick and hats as they are.",
+          "Add a third line, `snare:`, with `sd` on the two beats the kick leaves empty. Leave the kick and hats as they are.",
         skills: [{ skill: "R04", w: 1 }],
         code: { starter: code(KICK, HATS) },
         reference: { solutions: [code(KICK, SNARE, HATS)], bars: 1 },
@@ -189,7 +189,7 @@ export default defineLesson({
         constraints: [{ c: "labels", min: 3, feedback: "code.labels" }],
         target: { audible: true, showRoll: true },
         hints: ladder(
-          "Which beats does the kick leave empty?",
+          "Where did your claps land in the last step?",
           'A new line needs its own label, then `s("…")` with four words: one per beat.',
           "The kick line is `bd ~ bd ~`. The snare line has the same shape with the gaps swapped.",
         ),
@@ -287,7 +287,7 @@ export default defineLesson({
         id: "tap-the-backbeat",
         version: 1,
         role: "practice",
-        prompt: "Tap only with the snare, on 2 and 4, for two bars: four taps. Let the kick go by.",
+        prompt: "Tap only with the snare, four taps over two bars. Let the kick go by.",
         skills: [
           { skill: "R04", w: 0.5 },
           { skill: "E01", w: 0.5 },
@@ -368,7 +368,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write your own backbeat over the band, one line per drum, on any kit. The snare must land on 2 and 4; everything else is yours.",
+          "Write your own backbeat, one line per drum, on any kit. The snare stays on 2 and 4; everything else is yours.",
         skills: [{ skill: "R04", w: 1 }],
         code: { starter: code(KICK, HATS) },
         bars: [1, 2],

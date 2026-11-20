@@ -76,7 +76,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U06.L09",
-  version: 1,
+  version: 2,
   title: "Chord Dictation Workshop",
   objective:
     "I can take down a chord loop by ear: the bass first, then each chord's quality, then its Roman numeral.",
@@ -93,7 +93,7 @@ export default defineLesson({
     {
       id: "S1",
       kind: "listen",
-      title: "A loop to take down",
+      title: "A loop by ear",
       minutes: 0.5,
       // Code and roll hidden: this loop is taken down by ear in the next step.
       ui: { panels: NONE, band: DRUMS },
@@ -103,7 +103,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play and listen; there is nothing to read. Four chords over the drums, one a bar. Hum the lowest note of each.",
+          "Four chords over the drums, one a bar, with nothing to read. Hum the lowest note of each, and notice which chords sound bright and which dark.",
         skills: [{ skill: "E09", w: 1 }],
         hints: null,
         tests: [],
@@ -123,7 +123,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Take the loop down in three passes. First the bass: the degree under each chord. Then each chord: major or minor. Then the numerals.",
+          "Take the loop down in three passes. First the bass: the degree under each chord. Then each chord's colour: major or minor. Then the numerals: the bass gives the degree, the colour the case.",
         skills: [{ skill: "E09", w: 1 }],
         hints: [
           { text: "Sing the lowest note of each chord. Which is home?" },
@@ -288,7 +288,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Play the loop you took down by ear, I V vi iii, over the drums, in C and in that order. Then make it a track: a rhythm for the chords, a bass, a tune.",
+          "Play the loop you took down by ear, I V vi iii, in C and in that order. Then make it a track: a rhythm for the chords, a bass, a tune.",
         skills: [{ skill: "E09", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

@@ -75,6 +75,8 @@ export interface StepFooterProps {
   /** The line under a held Continue (default: pass the check or show the answer). */
   continueNote?: string;
   onWrapUp: (() => void) | null;
+  /** This is the lesson's `wrapAt` step and it is passed: what the learner made already stands on its own. */
+  stopPoint?: boolean;
   onDismissNotice(): void;
   tutorAvailable: boolean;
 }
@@ -119,6 +121,12 @@ export function StepFooter(p: StepFooterProps) {
             </li>
           ))}
         </ol>
+      )}
+      {p.stopPoint && p.onWrapUp && (
+        <p className="text-sm text-text-2" data-testid="stop-point">
+          A natural place to stop: what you have made so far stands on its own. Wrap up keeps it; the rest of
+          the lesson takes it further.
+        </p>
       )}
       {p.failed && p.attempts >= 3 && !p.passed && p.tutorAvailable && (
         <p className="text-sm text-text-2" data-testid="stuck-line">

@@ -116,7 +116,7 @@ const DRUMS = { band: "band.two-five-one", tracks: ["drums"] } as const;
 
 export default defineLesson({
   id: "J2.L02",
-  version: 1,
+  version: 2,
   title: "Minor ii–V–i",
   objective:
     "I can hear and write a minor ii–V–i: a half-diminished ii, a V with its 9th bent down, a minor home.",
@@ -145,17 +145,15 @@ export default defineLesson({
         id: "light-then-shadow",
         version: 1,
         role: "practice",
-        prompt:
-          "Press Play: the trio plays a ii–V–I home to D, then the same gesture with three chords changed. Same rhythm, same vibes shape. Listen for the shadow.",
+        prompt: "Listen to home, bar 3, in each take. How does the second landing feel next to the first?",
         skills: [{ skill: "J06", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: IN_MAJOR, caption: "Em7, A7, Dmaj7: the ii–V–I of D major, bright.", bars: 4 },
+          { code: IN_MAJOR, caption: "The ii–V–I into D, as you have played it.", bars: 4 },
           {
             code: IN_MINOR,
-            caption:
-              "Em7♭5, A7♭9, Dm7: every chord changed. The vibes lean on B♭ over the V and fall home to a minor D.",
+            caption: "The same gesture with all three chords changed. The vibes keep their shape.",
             bars: 4,
           },
         ],
@@ -174,7 +172,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run the minor version with the chord band open. The V's symbol says one of its notes is bent down a half step. Find it, then find it in D minor's own scale.",
+          "Run the minor version. The V's symbol in the chord band says one of its notes is bent down a half step. Find it, then find it in D minor's own scale.",
         skills: [{ skill: "J06", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -232,8 +230,7 @@ export default defineLesson({
         id: "which-v-bends",
         version: 1,
         role: "practice",
-        prompt:
-          "Two cadences home to D minor, the same in every bar but bar 2, the V. In one the V bends a note down to one D minor already has. Which card?",
+        prompt: "In one card the V, bar 2, bends a note down to one D minor already has. Which card?",
         skills: [{ skill: "J02", w: 1 }],
         hints: ladder(
           "Which card's bar 2 sounds darker, closer to home before it gets there?",
@@ -279,7 +276,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The trio plays the ii–V–I of D major. Rename its chords so it plays the minor ii–V–i of D minor: the same three roots, each chord darkened. Hear the target to check.",
+          "The trio plays the ii–V–I of D major. Rename its chords so it plays the minor ii–V–i of D minor: the same three roots, each chord darkened.",
         skills: [{ skill: "J06", w: 1 }],
         swing: SWUNG,
         code: { starter: CHART_STARTER },
@@ -436,7 +433,7 @@ export default defineLesson({
         role: "practice",
         title: "Minor ii–V–i",
         prompt:
-          "The band plays the drums. Write four or eight bars in D minor: a minor ii–V–i, and a vibes line that leans on B♭ over the V before it falls home. Home can be Dm7, Dm6 or the darker Dm with a major 7th (`Dm^7`). Slow or up.",
+          "Write four or eight bars in D minor: a minor ii–V–i, and a vibes line that leans on B♭ over the V before it falls home. Home can be Dm7, Dm6 or the darker Dm with a major 7th (`Dm^7`). Slow or up; let the line meet the other changes on their guide tones.",
         skills: [{ skill: "J06", w: 1 }],
         swing: SWUNG,
         code: { starter: MAKE_STARTER },

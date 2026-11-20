@@ -111,7 +111,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U07.L07",
-  version: 1,
+  version: 2,
   title: "Call & Response",
   objective: "I can write a call in one part and a response in another part that answers it in the gap.",
   key: { tonic: "C", mode: "major" },
@@ -135,14 +135,15 @@ export default defineLesson({
         id: "two-voices",
         version: 1,
         role: "practice",
-        prompt: "Press Play. A piano and a Rhodes over the band. Listen to how they share the four bars.",
+        prompt:
+          "A piano and a Rhodes share four bars. Listen to how they divide them: do they play at once, or take turns?",
         skills: [{ skill: "M07", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption: "The piano plays, the Rhodes replies, and the Rhodes ends at home.",
+            caption: "Four bars, two voices: piano and Rhodes.",
             bars: 4,
           },
         ],
@@ -161,7 +162,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Read the two lines. Each `< >` holds four bars, and `~` alone is a bar of rest. In which bars will the Rhodes, the `vox` line, play?",
+          "Each `< >` holds four bars, and `~` alone is a bar of rest. In which bars will the Rhodes, the `vox` line, play?",
         skills: [{ skill: "M07", w: 1 }],
         hints: null,
         tests: [],
@@ -248,7 +249,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The piano calls in bars 1 and 3; the `vox` line is silent. Write a response in its bars 2 and 4, on notes of the chord on beats 1 and 3. The chords are in the code: I V vi IV.",
+          "The piano calls in bars 1 and 3; the `vox` line is silent. Write a response in its bars 2 and 4, with chord tones on beats 1 and 3. The chords are in the code: I V vi IV.",
         skills: [
           { skill: "M07", w: 0.7 },
           { skill: "M03", w: 0.3 },
@@ -452,7 +453,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Over the four-chord band, this call climbs twice and leaves bars 2 and 4 empty. Answer it on another sound, in a line of its own: `vox`, on the Rhodes, the organ or the piano. Let the response end somewhere the call did not.",
+          "The call leaves bars 2 and 4 empty. Answer it on another sound, in a line of its own: `vox`, on the Rhodes, the organ or the piano. Let the response end somewhere the call did not.",
         skills: [{ skill: "M07", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

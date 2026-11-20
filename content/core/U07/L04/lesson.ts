@@ -77,7 +77,7 @@ const STAFF = { roll: false, staff: "treble", keyboard: false } as const;
 
 export default defineLesson({
   id: "U07.L04",
-  version: 1,
+  version: 2,
   title: "Passing & Neighbour Tones",
   objective:
     "I can decorate a tune with notes outside the chord that move by step: passing tones between chord tones, neighbour tones around one.",
@@ -107,13 +107,13 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Two chords take turns, a bar each. First a plain tune that sings only their notes, then the same tune with one note slipped into each gap.",
+          "Play both loops. What do the notes added in loop 2 do: rub like wrong notes, or join the line up?",
         skills: [{ skill: "M04", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: PLAIN, caption: "Chord tones only, on beats 1 and 3.", bars: 4 },
-          { code: HOOK, caption: "The same tune, with a note on every beat 2.", bars: 4 },
+          { code: PLAIN, caption: "Only the notes of each chord, on beats 1 and 3.", bars: 4 },
+          { code: HOOK, caption: "The same tune with one more note in each bar. Listen to beat 2.", bars: 4 },
         ],
       },
     },
@@ -158,7 +158,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it with the chord-tone lens on. It marks every tune note that belongs to the chord under it. Look at the notes it leaves unmarked.",
+          "Run it with the chord-tone lens on: it marks every tune note that belongs to the chord under it. Look at the notes it leaves unmarked.",
         skills: [{ skill: "M04", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -222,7 +222,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "A new tune over the same two chords, with a gap on every beat 2. Fill each gap with a note that is a step from the note before it and a step from the note after it, and not in the chord.",
+          "Fill each beat-2 gap with a note that is a step from the note before it, a step from the note after it, and not in the chord.",
         skills: [{ skill: "M04", w: 1 }],
         code: { starter: STEP_STARTER },
         reference: { solutions: [STEP_REF], bars: 4 },
@@ -359,7 +359,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The tune sings only the chords' own notes and jumps between them. Connect some of them: a passing tone between two, a neighbour tone around one, always by step. Then make it yours.",
+          "The tune sings only the chords' own notes and jumps between them. Connect some of them by step: a passing tone between two, a neighbour tone around one.",
         skills: [{ skill: "M04", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

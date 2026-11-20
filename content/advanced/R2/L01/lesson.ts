@@ -183,7 +183,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "R2.L01",
-  version: 1,
+  version: 2,
   title: "Five & Seven",
   objective:
     "I can write a groove in 5/4 grouped 3+2, set its tempo line, and hear how a bar of 7/8 is grouped.",
@@ -212,20 +212,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: one groove, twice. The notes and the sounds are the same both times; only where the drums, the bass and the chords land changes. Count along with the captions.",
+          "The same notes and sounds twice, placed differently in the bar. Count along with the captions. Does the bar feel even, or does it lean? Listen for where the kick starts each group.",
         skills: [{ skill: "R16", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption:
-              "Counted 1-2-3 1-2: a long group, then a short one. The kick starts each, the snare closes each.",
+            caption: "Count 1-2-3 1-2. The kick starts each group, the snare closes it.",
             bars: 4,
           },
           {
             code: HOOK_23,
-            caption: "The same five beats counted 1-2 1-2-3: the short group comes first.",
+            caption: "Count 1-2 1-2-3: the same five beats, the short group first.",
             bars: 4,
           },
         ],
@@ -243,7 +242,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Feel it before you count it. The first groove plays four bars: tap with the kick, where each group starts, counting 1-2-3 1-2. Two taps a bar, eight in all; any key works.",
+          "The first groove plays four bars. Tap with the kick, where each group starts, counting 1-2-3 1-2: two taps a bar, eight in all.",
         skills: [{ skill: "R16", w: 1 }],
         hints: ladder(
           "Does the kick play on every beat, or does it skip some?",
@@ -337,7 +336,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Now seven: four grooves at 240 eighth notes a minute, seven to the bar. The hi-hat plays every eighth; the drums mark where each group starts. How is each bar grouped?",
+          "Four grooves at 240 eighth notes a minute, seven to the bar. The hi-hat plays every eighth; the drums mark each group start. How is each bar grouped?",
         skills: [{ skill: "R16", w: 1 }],
         hints: earHints(),
         srs: [
@@ -373,7 +372,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The tempo line already counts five beats to the bar at 150, but the kick still has the four steps of a 4/4 bar, so its second hit falls between two beats. Give the kick one step per beat and group the bar 3+2: a hit where each group starts, nowhere else. Hear the target to check.",
+          "The tempo line already counts five beats to the bar at 150, but the kick still has the four steps of a 4/4 bar, so its second hit falls between two beats. Give the kick one step per beat and group the bar 3+2: a hit where each group starts, nowhere else.",
         skills: [{ skill: "R16", w: 1 }],
         code: { starter: S5_STARTER },
         reference: { solutions: [S5_SOLUTION], bars: 4 },
@@ -461,7 +460,7 @@ export default defineLesson({
         role: "practice",
         title: "Groove in five",
         prompt:
-          "Your bar of five. The starter counts five beats, but the kick plays every one of them, so nothing groups. Put the kick on the start of each group of 3+2 and nowhere else. Then make it yours: a snare that closes each group, the bass on the group starts, a line on top, a tempo between 120 and 180.",
+          "Your bar of five. The starter counts five beats, but the kick plays every one of them, so nothing groups. Put the kick on the start of each group of 3+2 and nowhere else. Then add what you like: a snare closing each group, the bass on the group starts, a line on top, a tempo between 120 and 180.",
         skills: [{ skill: "R16", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

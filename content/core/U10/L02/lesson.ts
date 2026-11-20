@@ -82,7 +82,7 @@ const keyOptions = (ids: string[]) =>
 
 export default defineLesson({
   id: "U10.L02",
-  version: 1,
+  version: 2,
   title: "Relative & Parallel",
   objective:
     "I can find a major key's relative minor (the same notes, home on degree 6) and its parallel minor (the same home, 3, 6 and 7 lowered).",
@@ -112,15 +112,14 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a two-chord groove and its tune, two bars in C major, two in A minor, two in C minor. Watch the keyboard: which pairs use the same keys, and which keep the same home?",
+          "A two-chord groove and its tune, two bars in C major, two in A minor, two in C minor. Listen to the low note that starts each pair of bars. Which minor keeps C major's home, and which finds a new one?",
         skills: [{ skill: "S06", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption:
-              "Bars 1–2 in C major, bars 3–4 in A minor, bars 5–6 in C minor: the same numbers throughout.",
+            caption: "C major, then A minor, then C minor, two bars each: the same numbers in every line.",
             bars: 6,
           },
         ],
@@ -139,7 +138,7 @@ export default defineLesson({
         role: "practice",
         key: A_MINOR,
         prompt:
-          'A minor from home to home: `n("0 .. 7").scale("A3:minor")`. Minor lowers degrees 3, 6 and 7. How many black keys will it play?',
+          'A minor from home to home: `n("0 .. 7").scale("A3:minor")`. Minor lowers degrees 3, 6 and 7 of A. How many black keys will it play?',
         skills: [{ skill: "S06", w: 1 }],
         hints: null,
         tests: [],
@@ -167,7 +166,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it: C major, A minor, C minor, one bar each, with the key-signature panel open. Compare the notes each bar plays, and where each one starts.",
+          "Run it: C major, A minor, C minor, one bar each. Compare the keys each bar plays, the flats in the key-signature panel, and the note each bar starts on.",
         skills: [{ skill: "S06", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -444,7 +443,7 @@ export default defineLesson({
         role: "practice",
         key: A_MINOR,
         prompt:
-          "A C major loop over the drums: chords, bass and a tune that ends on C. Move it to its relative minor, A minor, so the same notes find a new home and the tune ends there. Then, if you like, let it travel: four bars in each key.",
+          "Move chords, bass and tune to C major's relative minor, A minor, so the same notes find a new home and the tune ends there. Then, if you like, let the loop travel: four bars in each key.",
         skills: [{ skill: "S06", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

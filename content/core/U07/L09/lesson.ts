@@ -97,7 +97,7 @@ const PICKUP = { units: [1, 1] } as const;
 
 export default defineLesson({
   id: "U07.L09",
-  version: 1,
+  version: 2,
   title: "Reading Lead Sheets",
   objective:
     "I can play a song from a lead sheet: the tune from the staff, the chords from the symbols above it, pickup and all.",
@@ -127,7 +127,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Amazing Grace, an old American hymn, sung to the tune called New Britain. Follow the page as it plays: the tune on the staff, the chord names above it.",
+          "Amazing Grace, an old American hymn, sung to the tune called New Britain. Follow the staff as it plays: how does each bar share its three beats between long and short notes?",
         skills: [{ skill: "N07", w: 1 }],
         pickup: PICKUP,
         hints: null,
@@ -135,8 +135,7 @@ export default defineLesson({
         items: [
           {
             code: HOOK,
-            caption:
-              "Amazing Grace, the first phrase: one note before the first full bar, then seven bars in 3.",
+            caption: "Amazing Grace, the first phrase: a pickup, then seven bars in 3.",
             bars: 8,
           },
         ],
@@ -517,7 +516,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "A waltz tune with nothing under it, so its lead sheet has no chord names. Write a `chords` line under it, then make the tune yours: four to eight bars. Start it with a pickup if you like.",
+          "Write a `chords` line under this waltz tune, so its lead sheet gets chord names. Then rework the tune or extend it, to four to eight bars.",
         skills: [{ skill: "N07", w: 1 }],
         // The rules' own details name tracks and onsets; the label says it in words.
         feedbackText: { "rubric.unmet": "{label}: not yet." },

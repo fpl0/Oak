@@ -84,7 +84,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U16.L01",
-  version: 1,
+  version: 2,
   title: "The Sad IV",
   objective: "I can turn IV into the minor iv in a major key, name it, and hear the note that falls.",
   key: C,
@@ -109,19 +109,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a piano ballad that goes C, F, F, C. Then the same four bars with one note changed in the third bar. Listen for the moment the light changes.",
+          "The last line of a piano ballad, twice: C, F, F, C. The second time one note of bar 3 changes. Listen for the moment the light changes. Does it brighten or darken?",
         skills: [{ skill: "H13", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK_PLAIN,
-            caption: "C, F for two bars, and home. Every note belongs to C major.",
+            caption: "C, F for two bars, and home: all inside the key.",
             bars: 4,
           },
           {
             code: HOOK,
-            caption: "C, F, F minor, and home. One note in bar 3 is from outside the key.",
+            caption: "Bar 3 changes. Follow the tune's long notes from bar 2 to bar 4.",
             bars: 4,
           },
         ],
@@ -167,7 +167,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it with the chord band open: F, then F minor, each stacked from its root. Compare the two bars on the roll, note by note.",
+          "F, then F minor, each stacked from its root. Compare the two bars on the roll, note by note.",
         skills: [{ skill: "H13", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -380,7 +380,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "A ballad loop, C, A minor, then F for two bars, with a tune. Put the sad IV where you want the ache: in place of an F, or somewhere new. Then make the loop yours: let the tune touch A♭ over that chord (`5b`), reorder the bars, change the sounds.",
+          "A ballad loop, C, A minor, then F for two bars, with a tune. Put the sad IV where you want the ache: in place of an F, or somewhere new. After that the loop is yours: let the tune touch A♭ over that chord (`5b`), reorder the bars, change the sounds.",
         skills: [{ skill: "H13", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

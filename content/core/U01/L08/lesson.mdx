@@ -1,35 +1,37 @@
 {/* U01.L08 Three to a Bar: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
 
 <Step id="S1">
-Everything so far came in fours. This groove does not. Count along from the kick.
+Every groove you have written, from Heartbeat to your four-bar phrase, counted in fours. This one does not.
 
 <Example id="hook" views="code,roll" autoplay />
 
 <Callout kind="tip">The band leans on 1 with its bass and answers on 2 and 3 with its chords: oom, pah, pah.</Callout>
+
+<OnPass>Four does not fit. The kick comes back after every three beats, so each bar here holds three beats instead of four.</OnPass>
 </Step>
 
 <Step id="S2">
-Put the count in your hands. One tap per bar, on the kick.
+Now put the count in your hands.
 
 <Tap exercise="tap-on-one" />
 
-<OnPass>Every 1 lands on the kick, and three beats pass before the next one. That lilt, strong-weak-weak, is a waltz.</OnPass>
+<OnPass>Your taps marked the strong beat of every bar. That lilt, strong-weak-weak, is a waltz.</OnPass>
 </Step>
 
 <Step id="S3">
 The drums line has three words, and the tempo line ends in a different number.
 
-<OnPass>The number after `/` is the beats in a bar, and the words in the quotes share that bar. How many beats a bar holds, and how they are grouped, is the **meter**. Everything before this lesson was in four; this groove is in three.</OnPass>
+<OnPass>The number after `/` is the beats in a bar, and the words in the quotes share that bar. How many beats a bar holds, and how they are grouped, is the **meter**. This groove is in three.</OnPass>
 </Step>
 
 <Step id="S4">
 One more bar size, for contrast: two beats, `setcpm(100/2)`. Marching bands walk to it.
 
-<OnPass>On paper the bar size is two numbers stacked at the start of a piece: 4/4, 3/4, 2/4. The top number counts the beats in a bar; the bottom 4 says each beat is a quarter note. That pair is the **time signature**. In code, the top number is the one after `/` in the tempo line.</OnPass>
+<OnPass>Left, right: two steps to a bar, where the waltz went strong-weak-weak. On paper each bar size is two numbers stacked at the start of a piece: 2/4, 3/4, 4/4. The top number counts the beats in a bar, and the bottom 4 says each beat is a quarter note. That pair is the **time signature**, and its top number is the one after `/` in the tempo line.</OnPass>
 </Step>
 
 <Step id="S5">
-A drums line written for four, under a tempo line written for three. The words have to fit the bar.
+Here the tempo line and the drums line disagree.
 
 <Editor exercise="make-it-a-waltz" />
 
@@ -41,11 +43,11 @@ Now by ear alone. Find the kick, then count to the next one.
 
 <EarDrill family="fam.rhy.meter" level={1} trials={6} />
 
-<OnPass>Three or four by ear: count from one strong beat to the next.</OnPass>
+<OnPass>You can now tell three from four with no code to read: a question you can ask of any song you hear.</OnPass>
 </Step>
 
 <Step id="S7">
-Your turn. Three beats to every bar, over the waltz band. Keep the kick on 1 and the groove will sway with the bass.
+Write your own waltz. Keep the kick on 1 and the groove sways with the bass. Brackets from Two per Beat work in three as well: hats in pairs split each of the three beats in two.
 
 <Make exercise="your-waltz" />
 

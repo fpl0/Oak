@@ -60,7 +60,7 @@ const DRIFT_FEEDBACK = {
 
 export default defineLesson({
   id: "U02.L07",
-  version: 2,
+  version: 3,
   title: "Sing It Back",
   objective:
     "I can match a note with my voice, hear whether a note goes up or down, and sing back a short phrase.",
@@ -86,11 +86,11 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play. The piano calls with two notes, then leaves a whole bar empty. Hum the call into the gap.",
+          "Hum the two notes back into the empty bar. Listen for which way your hum moves between them: up or down?",
         skills: [{ skill: "V01", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "Two notes on the piano, then a bar of band alone.", bars: 2 }],
+        items: [{ code: HOOK, caption: "Bar 1 is the call. Bar 2 is room for you.", bars: 2 }],
       },
     },
     {
@@ -132,8 +132,7 @@ export default defineLesson({
         id: "up-or-down",
         version: 1,
         role: "check",
-        prompt:
-          "Two notes, close together this time. Does the second go up, go down, or stay on the same note?",
+        prompt: "Does the second note go up, go down, or stay on the same note?",
         skills: [{ skill: "E02", w: 1 }],
         hints: [
           { text: "Sing the first note, then slide your voice to the second. Which way did it move?" },
@@ -336,7 +335,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write a short call over the band that fits your voice: every note between the lowest and highest notes you can sing. Then sing it back in the gap.",
+          "Write a short call that fits your voice: every note between the lowest and highest notes you can sing. Then sing it back in the gap.",
         skills: [
           { skill: "V01", w: 0.5 },
           { skill: "P02", w: 0.5 },

@@ -241,7 +241,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "R3.L03",
-  version: 1,
+  version: 2,
   title: "Euclidean Rhythms & Rotation",
   objective:
     "I can write a rhythm from two numbers, start it from another step, and hear which numbers made it.",
@@ -270,20 +270,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a bossa nova groove, twice. The kick, the bass and the Rhodes are the same both times. Listen to the rimshot.",
+          "Only the rimshot changes between the two loops. Which one sways like bossa nova, and which just ticks along? Listen for where the longest gap between rimshots falls in the bar.",
         skills: [{ skill: "R18", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: BOSSA,
-            caption: "Five rimshots a bar, with the long gap in the middle: the bossa nova rim.",
+            caption: "Five rimshots a bar. Where is the longest gap?",
             bars: 4,
           },
           {
             code: PLAIN,
-            caption:
-              "The same five hits and the same gaps, started from another place: the long gap ends the bar, and the bossa is gone.",
+            caption: "Five rimshots again. Where is the longest gap now?",
             bars: 4,
           },
         ],
@@ -301,7 +300,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The first groove plays four bars. Tap with the rimshot: five taps in every bar, twenty in all. Any key works.",
+          "The first groove plays four bars. Tap with the rimshot: five taps in every bar, twenty in all.",
         skills: [{ skill: "R18", w: 1 }],
         hints: ladder(
           "Are the five rimshots evenly spaced, or is one gap longer?",
@@ -438,7 +437,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The rimshot plays plain `(5,16)` under the bossa groove: the long gap ends the bar. Add a third number so the same rhythm starts from another step and plays the target, with a hit on beat 1. Hear the target to check.",
+          "The rimshot plays plain `(5,16)` under the bossa groove: the long gap ends the bar. Add a third number so the same rhythm starts from another step and plays the target, with a hit on beat 1.",
         skills: [{ skill: "R18", w: 1 }],
         code: { starter: S5_STARTER },
         reference: { solutions: [S5_SOLUTION], bars: 4 },
@@ -541,7 +540,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "`.euclid(3, 8)` is `(3,8)` written as a method, and its numbers may be patterns. The cowbell plays the tresillo in every bar. Make bar 2 the cinquillo, with one change inside the method. Hear the target to check.",
+          "`.euclid(3, 8)` is `(3,8)` written as a method, and its numbers may be patterns. The cowbell plays the tresillo in every bar. Make bar 2 the cinquillo, with one change inside the method.",
         skills: [{ skill: "R18", w: 1 }],
         code: { starter: S7_STARTER },
         reference: { solutions: [S7_SOLUTION], bars: 4 },

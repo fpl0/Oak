@@ -102,7 +102,7 @@ const ROLL_GRAND = { roll: true, staff: "grand", keyboard: false } as const;
 
 export default defineLesson({
   id: "U05.L07",
-  version: 1,
+  version: 2,
   title: "Voice Leading by Hand",
   objective:
     "I can voice a progression by hand so each note moves as little as possible: shared notes stay, the rest move a short way, and every chord keeps all its notes.",
@@ -131,13 +131,13 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The same four chords twice, C F G C, over the same bass. Listen to the top of the chords in each.",
+          "The same four chords twice, C F G C, over the same bass. Listen to how each version gets from one chord to the next: does it lurch or flow?",
         skills: [{ skill: "C05", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: HOOK_JUMP, caption: "Every chord stacked from its root: all three notes leap.", bars: 4 },
-          { code: HOOK, caption: "The same chords, the notes barely moving.", bars: 4 },
+          { code: HOOK_JUMP, caption: "Version 1.", bars: 4 },
+          { code: HOOK, caption: "Version 2: the same chords, the same bass.", bars: 4 },
         ],
       },
     },
@@ -152,7 +152,8 @@ export default defineLesson({
         id: "one-hand",
         version: 1,
         role: "practice",
-        prompt: "Which version sounds like one hand gliding from chord to chord on the keys?",
+        prompt:
+          "Follow the highest note of each chord. In which card does it stay close to where it started, like one hand gliding over the keys?",
         skills: [{ skill: "C05", w: 1 }],
         hints: ladder(
           "In which version does the top of the chords stay in one place?",
@@ -434,7 +435,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The band plays drums and the bass of Stacking Thirds: C, G, A, F. The chords here start from their roots and leap. Rewrite them so every note moves by a step or stays, then make the loop yours.",
+          "The band plays drums and a bass on C, G, A and F. The chords start from their roots and leap. Rewrite them so every note moves by a step or stays. A tune on top can then sit over chords that hold still.",
         skills: [{ skill: "C05", w: 1 }],
         feedbackText: { "rubric.unmet": "{label}: not yet." },
         code: { starter: MAKE_STARTER },

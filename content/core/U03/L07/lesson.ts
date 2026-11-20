@@ -47,7 +47,7 @@ const ROLL_STAFF = { roll: true, staff: "treble", keyboard: false } as const;
 
 export default defineLesson({
   id: "U03.L07",
-  version: 1,
+  version: 2,
   title: "Flat Keys & the Circle",
   objective:
     "I can write the flats of F, B♭ and E♭ major in order, and find any major key's sharps or flats on the circle of fifths.",
@@ -74,11 +74,11 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play. The same four notes, 1 3 5 3, with a new home every bar: C, F, B♭, E♭. Each new home is the 4 of the last one.",
+          "Home moves every bar: C, F, B♭, E♭. Listen at each change: does it sound like a small shift or a big jump?",
         skills: [{ skill: "S04", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "1 3 5 3 in C, F, B♭ and E♭, one key per bar.", bars: 4 }],
+        items: [{ code: HOOK, caption: "The same four notes, 1 3 5 3, from a new home each bar.", bars: 4 }],
       },
     },
     {
@@ -339,7 +339,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write a two-bar line in F major over the band, in note names, with the flat in the right place: **every note in F major**. Fix the starter first, then change its notes and rhythm until the line is yours.",
+          "In note names, write a two-bar line with **every note in F major**. Start by fixing the starter, then change its notes and rhythm until the line is yours.",
         skills: [
           { skill: "S04", w: 0.6 },
           { skill: "N03", w: 0.4 },

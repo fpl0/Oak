@@ -7,6 +7,7 @@ import { getOak } from "../lib/oak.ts";
 import { useHotkeys } from "../ui/keys/KeymapProvider.tsx";
 import { Button } from "../ui/kit/Button.tsx";
 import { Card, Kbd } from "../ui/kit/basics.tsx";
+import { exampleNoun, listenFor } from "./listen-for.ts";
 import { optionLabel } from "./model.ts";
 import { playSettled, preloadSpec } from "./runtime.ts";
 import type { DrillData } from "./use-drill-data.ts";
@@ -109,6 +110,10 @@ export function ListenBlock({
       <div>
         <p className="text-sm text-text-2">Just listen · {def?.title ?? familyId}</p>
         <h2 className="text-h3">Hear each one, nothing to answer.</h2>
+        <p className="mt-2 max-w-[60ch] text-text-2" data-testid="listen-for">
+          <span className="font-medium text-text">Listen for: </span>
+          {listenFor(def)}
+        </p>
       </div>
       {examples.length === 0 ? (
         <p className="text-text-2">No examples are ready for this family yet.</p>
@@ -121,7 +126,7 @@ export function ListenBlock({
               className={playing === i ? "font-medium text-text" : "text-text-2"}
             >
               {/* One category heard several times ("match" × 8) says nothing per line: number the examples. */}
-              {sameCaption ? `Example ${i + 1}` : `${i + 1}. ${optionLabel(e.caption)}`}
+              {sameCaption ? `${exampleNoun(familyId)} ${i + 1}` : `${i + 1}. ${optionLabel(e.caption)}`}
               {playing === i && <span className="ml-2 text-sm text-accent">playing</span>}
             </li>
           ))}

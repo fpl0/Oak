@@ -124,7 +124,7 @@ const earPart = (n: number): IdentifyEx => ({
 
 export default defineLesson({
   id: "U15.L01",
-  version: 1,
+  version: 2,
   title: "Chromatic Degrees",
   objective:
     "I can hear a note from outside the key, name it by the degree it bends (♯4 fi, ♭7 te), and write it in code.",
@@ -150,15 +150,15 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a tune over a soul turn, on the key's own notes. Then the same tune the way a singer would bend it: four notes moved a half step, each leaning into the note after it. Same rhythm; one chord changes with the tune, in bar 6.",
+          "One tune over a soul turn, twice: first on the key's own notes, then with four notes bent a half step. Listen to where each bent note goes next. Does it hang in the air, or slide straight into its neighbour?",
         skills: [{ skill: "E12a", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: PLAIN, caption: "The tune on the key's own notes.", bars: 8 },
+          { code: PLAIN, caption: "Plain: every note from the key.", bars: 8 },
           {
             code: HOOK,
-            caption: "Bent: sol fi sol, la si la, do di re, and te falling to la over C7.",
+            caption: "Bent: four notes moved a half step, and C7 under the bend in bar 6.",
             bars: 8,
           },
         ],
@@ -263,7 +263,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Four bars of the plain tune over C, C7, F and G7. Bend two notes: in bar 1, make fa into fi, so it climbs back to sol; in bar 2, make ti into te, so it falls to la. Play the target first.",
+          "Four bars of the plain tune over C, C7, F and G7. Bend two notes. In bar 1, make fa into fi, so it climbs back to sol. In bar 2, make ti into te, so it falls to la.",
         skills: [
           { skill: "P06", w: 0.6 },
           { skill: "E12a", w: 0.4 },
@@ -344,7 +344,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Six times: a few chords set home, then one note sounds. Is it 4, ♯4, 5, 6, ♭7, 7 or 1? The pad shows the syllables too.",
+          "Six times: a few chords set home, then one note sounds. Which degree is it? The pad offers 4, ♯4, 5, 6, ♭7, 7 and 1, with their syllables.",
         skills: [{ skill: "E12a", w: 1 }],
         hints: ladder(
           "Sing the note, then let it go where it wants. Does it want to move at all?",
@@ -411,7 +411,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "A soul turn, C Am Dm G7, with a bass and a plain tune. Bend it: move at least two notes a half step so each leans into the note after it (try `3#` before a 4, `4#` before a 5, `6b` before a 5). Then make it yours: more bends, a new rhythm, the tune an octave up.",
+          "A soul turn, C Am Dm G7, with a bass and a plain tune. Move at least two notes a half step so each leans into the note after it: try `3#` before a 4, `4#` before a 5, `6b` before a 5. After that the tune is yours: more bends, a new rhythm, an octave up.",
         skills: [
           { skill: "E12a", w: 0.5 },
           { skill: "P06", w: 0.5 },

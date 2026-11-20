@@ -60,7 +60,7 @@ const NUMERALS = {
 
 export default defineLesson({
   id: "U11.L05",
-  version: 1,
+  version: 2,
   title: "Twelve Bars",
   objective: "I can play and write the 12-bar blues: I, IV and V in their twelve-bar order.",
   key: { tonic: "C", mode: "blues" },
@@ -86,13 +86,17 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a blues in C, twelve bars long, then round again. First the chords and the bass alone, then your blues-scale riff on top. Count the bars if you like.",
+          "A blues in C, twelve bars long, first chords and bass alone, then with a riff on top. Listen for the stretch where the music feels furthest from home, and for the bar that sends it round again.",
         skills: [{ skill: "H10", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: CHORDS_ONLY, caption: "The twelve bars: chords and bass.", bars: 12 },
-          { code: HOOK, caption: "The same twelve bars with a riff on the crunch guitar.", bars: 12 },
+          { code: CHORDS_ONLY, caption: "Chords and bass alone, twelve bars, then round again.", bars: 12 },
+          {
+            code: HOOK,
+            caption: "The same twelve bars with the riff of The Dominant Seventh on top.",
+            bars: 12,
+          },
         ],
       },
     },
@@ -331,7 +335,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Twelve bars of C7 and a riff over the drums. Turn the changes into a 12-bar blues: I, IV and V in their order. Then make the riff yours: change its notes, its rhythm or its sound.",
+          "Turn the changes into a 12-bar blues: I, IV and V in their order. Then make the riff yours: change its notes, its rhythm or its sound.",
         skills: [{ skill: "H10", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [12, 24],

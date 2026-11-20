@@ -149,7 +149,7 @@ const singPart = (
 
 export default defineLesson({
   id: "U12.L02",
-  version: 1,
+  version: 2,
   title: "Dominant vs Major 7",
   objective:
     "I can hear a major seventh chord from a dominant seventh on the same root: one half step apart, one rests and the other leans.",
@@ -176,15 +176,15 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: C and F as major seventh chords, a groove that could sit there all night. Then the same two roots as dominant sevenths, the chord of the blues. One note in each chord has moved.",
+          "The same two roots in both loops. Listen to whether each chord is content to stay or wants to move on. Which loop could sit there all night?",
         skills: [{ skill: "E11", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: REST, caption: "Cmaj7 and Fmaj7: each chord rests where it is.", bars: 4 },
+          { code: REST, caption: "Loop 1: Cmaj7 and Fmaj7, the kind from your soul loop.", bars: 4 },
           {
             code: LEAN,
-            caption: "C7 and F7: B has dropped to B♭ in the C chord, E to E♭ in the F chord.",
+            caption: "Loop 2: C7 and F7, the kind from your blues.",
             bars: 4,
           },
         ],
@@ -230,7 +230,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it with the chord band open: Cmaj7, C7, then Fmaj7 for two bars, each stacked by hand from its root. Watch the top note of bars 1 and 2 on the roll, and listen for the bar that wants to move on.",
+          "Run it. Watch the top note of bars 1 and 2 on the roll, and listen for the bar that wants to move on.",
         skills: [
           { skill: "E11", w: 0.6 },
           { skill: "C07", w: 0.4 },
@@ -289,7 +289,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The soul loop you named chord by chord, with one chord changed. It now holds a note from outside C major: on the roll its label carries a ♯. Find that bar, then fix the chord's name so all four of its notes belong to the key.",
+          "One chord of the soul loop has changed, and it now holds a note from outside C major: on the roll its label carries a ♯. Find that bar, then fix the chord's name so all four of its notes belong to the key.",
         skills: [
           { skill: "C07", w: 0.6 },
           { skill: "C06", w: 0.4 },

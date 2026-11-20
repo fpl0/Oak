@@ -76,7 +76,7 @@ const STAFF = { roll: false, staff: "treble", keyboard: false } as const;
 
 export default defineLesson({
   id: "U07.L01",
-  version: 1,
+  version: 2,
   title: "Shape",
   objective: "I can shape a melody: mostly steps, a leap or two, and one high point placed on purpose.",
   key: { tonic: "C", mode: "major" },
@@ -94,7 +94,7 @@ export default defineLesson({
     {
       id: "S1",
       kind: "listen",
-      title: "A line that goes somewhere",
+      title: "A line going somewhere",
       minutes: 0.5,
       ui: { panels: ROLL, rollLabels: "degree", band: BAND, initialPanels: ["range"] },
       example: { id: "hook", code: HOOK, bars: 8 },
@@ -103,12 +103,13 @@ export default defineLesson({
         id: "a-line-that-goes-somewhere",
         version: 1,
         role: "practice",
-        prompt: "Press Play and follow the line on the roll as it rises, peaks and comes back down.",
+        prompt:
+          "Follow the line on the roll. How does the tune move from note to note: mostly small moves, or big jumps?",
         skills: [{ skill: "M01", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: HOOK, caption: "Eight bars over the band: up by steps, one high note, home.", bars: 8 },
+          { code: HOOK, caption: "Eight bars. Watch the gap between each note and the next.", bars: 8 },
         ],
       },
     },
@@ -124,8 +125,7 @@ export default defineLesson({
         id: "read-the-shape",
         version: 1,
         role: "practice",
-        prompt:
-          "Read the numbers in `n` before you play: bigger is higher. What shape will this four-bar line draw?",
+        prompt: "Read the numbers in `n`: bigger is higher. What shape will this four-bar line draw?",
         skills: [{ skill: "M01", w: 1 }],
         hints: null,
         tests: [],
@@ -488,7 +488,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "This draft plays each chord's notes one after another, so it leaps on every note. Rewrite it into a tune that moves mostly by step, reaches its highest note once, in bars 5 to 8, and comes home.",
+          "Every move in this draft is a leap. Rewrite it into a tune that moves mostly by step, reaches its highest note once, in bars 5 to 8, and comes home.",
         skills: [{ skill: "M01", w: 1 }],
         // As in S4: the labels carry the numbers, so the rules' "semitones" details stay out of sight.
         feedbackText: { "rubric.unmet": "{label}: not yet." },

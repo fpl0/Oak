@@ -98,7 +98,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U15.L05",
-  version: 1,
+  version: 2,
   title: "Dominant Chains",
   objective: "I can write a chain of dominant sevenths that falls by 5ths, each the V7 of the next.",
   key: C_MAJOR,
@@ -123,20 +123,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a dance band of the 1920s, with a guitar, an upright bass, horns and a trumpet. First the changes that open Five Foot Two, then the chain of Sweet Georgia Brown, which starts a link later and lets each chord ring longer.",
+          "Two loops for a 1920s dance band: the opening changes of Five Foot Two, then the chain of Sweet Georgia Brown. Listen for the bar where the music finally comes to rest. Until then, does any chord sound settled?",
         skills: [{ skill: "H12", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption:
-              "Five Foot Two (1925): C, then E7, A7, D7 and G7, each leaning into the next, home to C.",
+            caption: "Five Foot Two (1925): after C, four chords in a row, each leaning into the next.",
             bars: 8,
           },
           {
             code: GEORGIA,
-            caption: "Sweet Georgia Brown (1925), set in C, two bars a link: A7, D7, G7, then C.",
+            caption: "Sweet Georgia Brown (1925), set in C: a link later, two bars a chord.",
             bars: 8,
           },
         ],
@@ -182,7 +181,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The chain E7, A7, D7, G7, reduced to two notes a chord over its bass, with the circle of fifths open. Run it and read the roll: watch the two upper notes at every change, and follow where G♯, the 3rd of E7, goes.",
+          "The chain E7, A7, D7, G7 as two notes a chord over the bass, with the circle of fifths open. Watch the two upper notes on the roll at every change, and follow where G♯, the 3rd of E7, goes.",
         skills: [{ skill: "H12", w: 1 }],
         feedbackText: {
           "investigate.wrong":

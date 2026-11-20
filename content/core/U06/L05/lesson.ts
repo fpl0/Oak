@@ -85,7 +85,7 @@ const PAD: AnswerUi = {
 
 export default defineLesson({
   id: "U06.L05",
-  version: 1,
+  version: 2,
   title: "Hear the Bass First",
   objective:
     "I can pick the bass out of a chord loop, sing its roots and write them down in degrees: a root bass of 1 5 6 4 spells I V vi IV.",
@@ -111,17 +111,17 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play. A pick bass drives eighths under the four-chord loop. Then the bass alone: follow it with your voice, under your breath.",
+          "A pick bass drives eighths under the four-chord loop. Listen for the note it keeps returning to in each bar. Then the bass alone: follow it with your voice, under your breath.",
         skills: [{ skill: "E09", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption: "The bass on each chord's root, and one note on beat 4 that leads on.",
+            caption: "The four-chord loop, a pick bass under it.",
             bars: 4,
           },
-          { code: BASS_ALONE, caption: "The bass alone, over the drums.", bars: 4 },
+          { code: BASS_ALONE, caption: "The bass alone, with the drums. Hum along.", bars: 4 },
         ],
       },
     },
@@ -209,7 +209,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "A new loop, one chord a bar, its bass on the roots. Write the bass in `n`, one note a bar. Any octave passes. The chords are there to help: leave them out of your code.",
+          "A new loop, one chord a bar, its bass on the roots. Write the bass in `n`, one note a bar. The chords are there to help: leave them out of your code.",
         skills: [
           { skill: "E09", w: 0.7 },
           { skill: "H01", w: 0.3 },
@@ -284,7 +284,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The `chords` line plays the four-chord loop, I V vi IV, and the drums keep time. Write the bass: on beat 1 of every bar, a note of that bar's chord (the root is the safe one). Between, anything you like.",
+          "The `chords` line plays the four-chord loop, I V vi IV. Write the bass: on beat 1 of every bar, a note of that bar's chord. Between, anything you like.",
         skills: [
           { skill: "E09", w: 0.5 },
           { skill: "H01", w: 0.5 },

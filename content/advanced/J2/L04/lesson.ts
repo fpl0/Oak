@@ -102,7 +102,7 @@ const DRUMS = { band: "band.two-five-one", tracks: ["drums"] } as const;
 
 export default defineLesson({
   id: "J2.L04",
-  version: 1,
+  version: 2,
   title: "Chord-Scales",
   objective:
     "I can choose a scale that fits each chord of a ii–V–I and play a line that follows the changes.",
@@ -129,21 +129,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the trio plays a ii–V–I in G with a vibes line of eighths, the same eight numbers every bar. Then the same numbers again on one scale. Listen to where each bar's line starts.",
+          "Listen to where each bar of the line starts. In which take does the line seem to know when the chord changes?",
         skills: [{ skill: "J03", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption:
-              "A scale for each chord: every bar of the line starts on its chord's root and outlines the chord.",
+            caption: "A scale for each chord.",
             bars: 4,
           },
           {
             code: ONE_SCALE,
-            caption:
-              "The same numbers on G major in every bar: the notes all belong, but the line outlines G over every chord.",
+            caption: "One scale, G major, for every bar.",
             bars: 4,
           },
         ],
@@ -290,7 +288,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The vibes line plays the same numbers on G major in every bar. Give each bar the scale of its chord, so the line outlines Am7, D7 and Gmaj7 as they come. Hear the target to check.",
+          "The vibes line plays the same numbers on G major in every bar. Give each bar the scale of its chord, so the line outlines Am7, D7 and Gmaj7 as they come.",
         skills: [{ skill: "J03", w: 1 }],
         swing: SWUNG,
         code: { starter: LINE_STARTER },
@@ -375,7 +373,7 @@ export default defineLesson({
         role: "practice",
         title: "Two-key solo",
         prompt:
-          "The band plays the drums. The trio now plays the ii–V–I in G, then in B♭, and your line still runs the G scales in bars 5 to 8. Make it follow the chords into B♭, then make the line your own: your numbers, your rhythm.",
+          "The trio now plays the ii–V–I in G, then in B♭, and your line still runs the G scales in bars 5 to 8. Make it follow the chords into B♭. Then make the line your own: your numbers, your rhythm, swung like the ride, and a ♯11 on a beat if you want home brighter.",
         skills: [{ skill: "J03", w: 1 }],
         swing: SWUNG,
         code: { starter: MAKE_STARTER },

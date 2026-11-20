@@ -68,7 +68,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U06.L06",
-  version: 1,
+  version: 2,
   title: "The Four-Chord Schema",
   objective:
     "I can hear the four-chord loop I V vi IV in a song, start it on any of its chords, and hear V swerve to vi instead of going home.",
@@ -97,11 +97,11 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play. The four chords you numbered as I V vi IV, on a warm pad, with the tune and the band.",
+          "I V vi IV on a warm pad, with a tune and the band. Listen for the darkest chord in the loop, and the bar it falls in.",
         skills: [{ skill: "H04", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "C, G, Am, F on the pad, one a bar, the tune on top.", bars: 4 }],
+        items: [{ code: HOOK, caption: "The loop on a pad, one chord a bar, a tune on top.", bars: 4 }],
       },
     },
     {
@@ -353,7 +353,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Make the loop yours: I V vi IV, started on whichever of the four chords you like, on the pad. Then a rhythm for the chords, a bass or a tune on top. The drums keep the time.",
+          "Write I V vi IV on the pad, started on whichever of its chords you like. Then give the chords a rhythm, and add a bass or a tune on top.",
         skills: [{ skill: "H04", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

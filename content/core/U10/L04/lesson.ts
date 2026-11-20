@@ -63,7 +63,7 @@ const MINOR = { tonic: "A", mode: "minor" } as const;
 
 export default defineLesson({
   id: "U10.L04",
-  version: 1,
+  version: 2,
   title: "Minor-Key Chords",
   objective:
     "I can name the seven chords of a minor key, i ii° III iv v VI VII, and use its three major chords to lift a minor loop.",
@@ -90,13 +90,17 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a chord on every note of A minor, from home to home. Then a groove made from four of them. Listen for where the groove brightens.",
+          "A chord on every note of A minor, from home to home, then a groove made from four of them. Listen for the bars where the groove brightens, though the key stays minor.",
         skills: [{ skill: "H07", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: SEVEN, caption: "A triad on each degree of A minor, one a beat, then home.", bars: 2 },
-          { code: HOOK, caption: "Am Dm G C on a Rhodes, a fingerbass and a tune.", bars: 4 },
+          {
+            code: SEVEN,
+            caption: "A triad on each degree of A minor, one a beat, then home. Not all of them are dark.",
+            bars: 2,
+          },
+          { code: HOOK, caption: "The groove: four of those chords, a fingerbass and a tune.", bars: 4 },
         ],
       },
     },
@@ -112,7 +116,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "In A minor, degree ♭3 is C. Stack a triad on it, skipping a note twice: C, E, G. Before you hear it, what kind of chord is it?",
+          "In A minor, degree ♭3 is C. Stack a triad on it, skipping a note twice: C, E, G. What kind of chord is it?",
         skills: [{ skill: "H07", w: 1 }],
         hints: null,
         tests: [],
@@ -140,7 +144,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it with the chord band open: the seven triads of A minor, then home. Read each chord's numeral as it plays, and listen for which ones sound bright.",
+          "Run it: the seven triads of A minor, then home. Read each numeral in the chord band as it plays, and listen for the chords that sound bright.",
         skills: [{ skill: "H07", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -344,7 +348,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "A loop in A minor over the drums, i iv v i, every chord minor. Rewrite it with at least two of the key's major chords, III, VI or VII, and choose where the lift comes. Then put a bass under it.",
+          "The loop plays i iv v i, every chord minor. Rewrite it with at least two of the key's major chords, III, VI or VII, and choose where the lift comes. Then put a bass under it.",
         skills: [{ skill: "H07", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

@@ -126,7 +126,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "R2.L05",
-  version: 1,
+  version: 2,
   title: "Polymeter & Implied Metric Modulation",
   objective:
     "I can write a part whose cycle is not a bar long, so it drifts and meets the bar again, and hear a beat seem to change speed while the bar stays the same.",
@@ -155,7 +155,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: one groove, twice. The snare and the hi-hat are the same both times. Listen to where the kick and the bass land in each bar.",
+          "The snare and the hi-hat mark the same bar in both loops; only the kick and the bass change. Count 1 to 4 under your breath. In the second loop, does the kick land in the same place in every bar, and does it ever come home to beat 1?",
         skills: [{ skill: "R17", w: 1 }],
         hints: null,
         tests: [],
@@ -163,8 +163,7 @@ export default defineLesson({
           { code: IN_THE_BAR, caption: "The kick on beats 1 and 3, the same in every bar.", bars: 2 },
           {
             code: HOOK,
-            caption:
-              "The kick and the bass every three beats: somewhere new in each bar, and back on beat 1 together every third bar.",
+            caption: "The kick and the bass change. Count each bar from 1.",
             bars: 6,
           },
         ],
@@ -182,7 +181,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Six bars of the groove. Tap with the kick, not with the snare: eight taps in all. Count the beats 1 to 4 under your breath and notice where in the bar each tap falls. Any key works.",
+          "Six bars of the groove. Tap with the kick, not with the snare: eight taps in all. Count the beats 1 to 4 under your breath and notice where in the bar each tap falls.",
         skills: [{ skill: "R17", w: 1 }],
         hints: ladder(
           "How many beats pass between one kick and the next?",
@@ -277,7 +276,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The bass already drifts; the kick still plays once a bar, on beat 1. Rewrite the kick's string so it drifts with the bass: a cycle of three steps, played at four steps a bar. Hear the target to check.",
+          "The bass already drifts; the kick still plays once a bar, on beat 1. Rewrite the kick's string so it drifts with the bass: a cycle of three steps, played at four steps a bar.",
         skills: [{ skill: "R17", w: 1 }],
         code: { starter: S4_STARTER },
         reference: { solutions: [S4_SOLUTION], bars: 4 },
@@ -404,7 +403,7 @@ export default defineLesson({
         role: "practice",
         title: "Drift",
         prompt:
-          "Your drift. The snare and the hi-hat keep the bar. Give the kick a cycle in curly brackets that is not a bar long, three or five steps at four a bar, so it crosses the bar line and meets beat 1 again a few bars later. Then make it yours: a drifting bass, a line on top.",
+          "Your drift. The snare and the hi-hat keep the bar. Give the kick a cycle in curly brackets that is not a bar long, three or five steps at four a bar, so it crosses the bar line and meets beat 1 again a few bars later. A drifting bass and a line on top are yours to add.",
         skills: [{ skill: "R17", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

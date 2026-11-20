@@ -85,7 +85,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U06.L11",
-  version: 1,
+  version: 2,
   title: "Slash Chords & Walking Down",
   objective:
     "I can walk a bass down by step under a chord loop, so that some chords stand on their 3rd or 5th (C G/B Am).",
@@ -114,11 +114,11 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play and follow the bass on the lower staff: it steps down, bar by bar, under the chords.",
+          "Follow the bass on the lower staff, bar by bar. Does it leap from root to root, or move another way? Listen to what that does to the ballad.",
         skills: [{ skill: "H15", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "C, G, Am, Am, F, C, Dm, G over a bass that walks down.", bars: 8 }],
+        items: [{ code: HOOK, caption: "A slow ballad, eight bars. Keep your ear on the bottom.", bars: 8 }],
       },
     },
     {
@@ -352,7 +352,7 @@ export default defineLesson({
         hints: ladder(
           "Listen only to the lowest sound. Does it move when the chords change?",
           "In one card the bass follows each chord's root; in the other it keeps playing C.",
-          "Play card 1 and hum the bass. Then card 2. Which one could you hum on a single note?",
+          "Play each card and hum its bass. Which one could you hum on a single note?",
         ),
         stimulus: { src: "code", code: HELD, bars: 4, showCode: false },
         cue: { context: "none", countInBars: 0, click: false, replays: -1 },
@@ -360,8 +360,8 @@ export default defineLesson({
           ui: "choice",
           layout: "audio-cards",
           options: [
-            { id: "moving", label: "The bass moves", audio: MOVING },
-            { id: "held", label: "The bass stays", audio: HELD },
+            { id: "moving", label: "Card A", audio: MOVING },
+            { id: "held", label: "Card B", audio: HELD },
           ],
         },
         correct: { choice: ["held"] },
@@ -457,7 +457,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Four or eight bars over the drums. Here the bass plays every root. Make it walk down by step instead, so at least one chord stands on its 3rd or 5th. Change the chords too, if you like.",
+          "Here the bass plays every root. Make it walk down by step instead, so at least one chord stands on its 3rd or 5th. Four or eight bars; change the chords too, if you like.",
         skills: [
           { skill: "H15", w: 0.6 },
           { skill: "C04", w: 0.4 },

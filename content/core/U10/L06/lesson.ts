@@ -150,7 +150,7 @@ const HARMONIC = { tonic: "A", mode: "harmonic minor" } as const;
 
 export default defineLesson({
   id: "U10.L06",
-  version: 2,
+  version: 3,
   title: "Raise the Seventh",
   objective: "I can raise degree 7 of a minor key to make its v a major V that pulls home to i.",
   key: MINOR,
@@ -177,13 +177,17 @@ export default defineLesson({
         role: "practice",
         key: HARMONIC,
         prompt:
-          "Press Play: a minor ballad loop, four bars, then the same four bars with one chord changed and a tune that climbs. Listen to the last bar of each. Which one arrives?",
+          "A minor ballad loop, four bars, then the same four bars with one chord changed. Listen to the arrival home in bar 4: which version lands, and which only stops?",
         skills: [{ skill: "H09", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: HOOK_A, caption: "Am Dm Em Am: the tune comes down to A.", bars: 4 },
-          { code: HOOK_B, caption: "Am Dm E Am: the tune climbs E, G♯, A.", bars: 4 },
+          { code: HOOK_A, caption: "Version 1: the tune comes down to home.", bars: 4 },
+          {
+            code: HOOK_B,
+            caption: "Version 2: one chord changed in bar 3, and the tune climbs into home.",
+            bars: 4,
+          },
         ],
       },
     },
@@ -367,7 +371,7 @@ export default defineLesson({
         role: "practice",
         key: HARMONIC,
         prompt:
-          "Hear it, then sing it over the last two chords: sol and ti on the V, do on home. Ti is the raised 7, a half step below do. Sing in your own range.",
+          "Over the last two chords: sol and ti on the V, do on home. Listen once, then sing along in your own range.",
         skills: [
           { skill: "V02", w: 0.6 },
           { skill: "S07", w: 0.4 },
@@ -403,7 +407,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The Aeolian loop, Am F C G, circles: G steps up to home without a pull. Give it a landing, a major V that goes home to i: E in place of G, or four more bars that end E Am. Then shape the tune around that landing; a climb through G♯ helps.",
+          "Am F C G circles: G steps up to home without a pull. Give it a landing, a major V that goes home to i: E in place of G, or four more bars that end E Am. Then shape the tune around that landing; a climb through G♯ helps.",
         skills: [{ skill: "H09", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

@@ -73,7 +73,7 @@ const KEYS = { roll: false, staff: false, keyboard: true } as const;
 
 export default defineLesson({
   id: "U06.L10",
-  version: 2,
+  version: 3,
   title: "Seventh Colour (preview)",
   objective: 'I can stack one more 3rd on a triad, n("[0,2,4,6]"), and colour a chord loop with it.',
   key: { tonic: "C", mode: "major" },
@@ -98,15 +98,15 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play. Four chords on the Rhodes, an upright bass and a tune. Then the same loop with plain triads.",
+          "The same four roots twice, on the Rhodes over an upright bass. Listen to the colour of the chords: which version sounds richer, and which more settled?",
         skills: [{ skill: "C10", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: HOOK, caption: "Four notes in every chord, on degrees 1, 6, 2 and 5.", bars: 4 },
+          { code: HOOK, caption: "The loop on 1, 6, 2 and 5, with a tune.", bars: 4 },
           {
             code: HOOK_TRIADS,
-            caption: "The same loop with three notes in every chord, and a tune that keeps to those three.",
+            caption: "The same roots in plain triads, with a tune that fits them.",
             bars: 4,
           },
         ],
@@ -221,7 +221,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The loop plays triads. Change the stack so every chord gets one more 3rd on top, the way the hook sounds. Play the target first.",
+          "The loop plays triads. Change the stack so every chord gets one more 3rd on top, the way the hook sounds.",
         skills: [{ skill: "C10", w: 1 }],
         code: { starter: MODIFY_STARTER },
         reference: { solutions: [MODIFY_SOLUTION], bars: 4 },
@@ -290,7 +290,7 @@ export default defineLesson({
         hints: ladder(
           "Which of the two sounds plainer, and which one sounds richer, a little blurred at the top?",
           "The extra 3rd sits a step under the root's octave, so it keeps a little of a 2nd's rub.",
-          "Play card 1, then the hook of this lesson. Do they share that soft rub?",
+          "Play the hook of this lesson, then each card. Which card shares its soft rub?",
         ),
         stimulus: { src: "code", code: SEVENTHS_ONLY, bars: 4, showCode: false },
         cue: { context: "none", countInBars: 0, click: false, replays: -1 },
@@ -298,8 +298,8 @@ export default defineLesson({
           ui: "choice",
           layout: "audio-cards",
           options: [
-            { id: "four", label: "Four notes a chord", audio: SEVENTHS_ONLY },
-            { id: "three", label: "Three notes a chord", audio: TRIADS_ONLY },
+            { id: "four", label: "Card A", audio: SEVENTHS_ONLY },
+            { id: "three", label: "Card B", audio: TRIADS_ONLY },
           ],
         },
         correct: { choice: ["four"] },
@@ -378,7 +378,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The loop you have played since Stacking Thirds, I V vi IV, in plain triads with its tune. Give at least two of its chords the extra 3rd, the ones you choose, and hear it change colour. The Rhodes suits it; so does a slow tempo.",
+          "Here is I V vi IV in plain triads, with its tune. Give at least two of its chords the extra 3rd, the ones you choose, and hear the loop change colour. The Rhodes suits it; so does a slow tempo.",
         skills: [{ skill: "C10", w: 1 }],
         // The catalog's text is "{label}: {detail}", and this rule's detail names the kinds of four-note
         // chord (major 7th, dominant 7th), which wait for U12. The same text serves the suggestions.

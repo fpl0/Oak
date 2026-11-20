@@ -108,7 +108,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U14.L02",
-  version: 1,
+  version: 2,
   title: "Mixolydian Rock",
   objective:
     "I can find the major chord on Mixolydian's ♭7, write it as ♭VII, and use it in the loop I–♭VII–IV.",
@@ -135,20 +135,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: four bars on organ and bass over the drums, a loop you have written before. Then the same loop with one chord changed and a guitar riff on top. Listen for the bar that changed.",
+          "Loop 1 is a three-chord loop you have written before. In loop 2 one chord changes and a guitar riff joins. Which bar changed, and does the loop still pull back home as hard?",
         skills: [{ skill: "H11", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: THREE_CHORD,
-            caption: "G, D, C, G: the three-chord loop, every chord from G major.",
+            caption: "Loop 1: G, D, C, G on organ and bass, every chord from G major.",
             bars: 4,
           },
           {
             code: HOOK,
-            caption:
-              "G, F, C, G: D became F, a whole step below home, and the riff leans on F above it. Rock.",
+            caption: "Loop 2: one chord swapped, and a guitar riff on top.",
             bars: 4,
           },
         ],
@@ -195,7 +194,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The hook's loop as stacks on G Mixolydian: roots on degrees 1, 7, 4 and 1. Run it with the chord band open and read what it writes under each bar.",
+          "Roots on degrees 1, 7, 4 and 1 of G Mixolydian. Run it and read what the chord band writes under each bar.",
         skills: [{ skill: "H11", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -317,7 +316,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The same colour in A Mixolydian. In bar 2 the riff plays G, te, while the E chord holds G♯ against it. Play the target, then swap that chord for the major chord a whole step below home.",
+          "In bar 2 the riff plays G, te, while the E chord holds G♯ against it. Swap that chord for the major chord a whole step below home.",
         skills: [{ skill: "H11", w: 1 }],
         code: { starter: MODIFY_STARTER },
         reference: { solutions: [MODIFY_SOLUTION], bars: 4 },

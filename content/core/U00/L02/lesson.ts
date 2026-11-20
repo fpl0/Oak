@@ -42,7 +42,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U00.L02",
-  version: 2,
+  version: 3,
   title: "Set Up & First Sing",
   objective:
     "I can sing back a note I hear, and Oak knows my headphones, my microphone, my timing and my range.",

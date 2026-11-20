@@ -120,7 +120,7 @@ const at = (beats: number[]) => beats.map((b) => Number((b * BEAT_SEC).toFixed(3
 
 export default defineLesson({
   id: "U13.L03",
-  version: 1,
+  version: 2,
   title: "Ties Across the Beat",
   objective:
     "I can read and write dotted and tied rhythms, in code with @ and on the staff, and I know how a push looks on paper.",
@@ -149,16 +149,15 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the last phrase of Ode to Joy over a light groove, in plain quarter notes, the way you first played this tune. Then the same notes as Beethoven wrote them.",
+          "The notes are the same both times. Listen for where loop 2 stops marching on the beat: there are two places, one near the start of the phrase and one at its very end.",
         skills: [{ skill: "R09", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: FLAT, caption: "Plain quarter notes, the last one held.", bars: 5 },
+          { code: FLAT, caption: "Loop 1: every note a beat long, the way you first played it.", bars: 5 },
           {
             code: HOOK,
-            caption:
-              "As written: the phrase comes in a beat early and holds across the bar line, and the tune ends long, short, long.",
+            caption: "Loop 2: the same notes in Beethoven's rhythm.",
             bars: 5,
           },
         ],
@@ -438,7 +437,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The other direction. Two bars in code: C and D for a beat each, E for three eighths, then G arrives on the last eighth of the bar and holds into the next one, before E. Write them on the staff.",
+          "Two bars in code: C and D for a beat each, E for three eighths, then G arrives on the last eighth of the bar and holds into the next one, before E. Write them on the staff.",
         skills: [{ skill: "N08", w: 1 }],
         feedbackText: {
           "melody.extra-note":
@@ -509,7 +508,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The rhythm section you pushed two days ago, with a tune that walks in plain quarter notes. Make the tune lean: give notes more than their beat with `@`, let one start on an “and” and hold across the next beat, let one arrive before the bar line and ring over it. Watch the page as you go.",
+          "The rhythm section you pushed in Pushes & Anticipations, with a tune that walks in plain quarter notes. Make the tune lean: give notes more than their beat with `@`, let one start on an “and” and hold across the next beat, let one arrive before the bar line and ring over it. Watch the page as you go.",
         skills: [{ skill: "R09", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

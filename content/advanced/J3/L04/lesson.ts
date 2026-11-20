@@ -170,7 +170,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "J3.L04",
-  version: 1,
+  version: 2,
   title: "Walking Bass",
   objective:
     "I can walk a bass line through a set of changes: the root on beat 1, a chord tone on beat 3, and beat 4 leaning into the next bar.",
@@ -197,20 +197,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the trio plays a ii–V–I in G twice. The ride and the Rhodes are the same both times. Listen to the bass.",
+          "The ride and the Rhodes are the same both times. Listen to the bass at each bar line: in which take does the music roll forward into the next bar?",
         skills: [{ skill: "B05", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: IN_TWO,
-            caption: "The bass in two: the root and the 5th, one long note on beats 1 and 3.",
+            caption: "The bass in two, as you have heard it so far.",
             bars: 4,
           },
           {
             code: HOOK,
-            caption:
-              "The same chords, and now the bass plays a note on every beat, leaning into each new bar.",
+            caption: "The same chords. Count the bass notes in a bar.",
             bars: 4,
           },
         ],
@@ -229,7 +228,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run the bass with the chords held a bar each and read the roll: four notes a bar. Look at the first note of every bar, then at the last note of bar 1 and the first of bar 2.",
+          "Run it: the chords are held a bar each over the bass. Look at the first note of every bar, then at the last note of bar 1 and the first of bar 2.",
         skills: [{ skill: "B05", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -416,7 +415,7 @@ export default defineLesson({
         role: "practice",
         title: "Walking in G",
         prompt:
-          "The Band plays the drums and the comping on Am7 D7 Gmaj7 Gmaj7. The bass is yours: walk it, a note on every beat, the root on 1, a chord tone on 3, and beat 4 a step or a half step from the next bar's first note. Up or down, high or low, is your choice.",
+          "Walk the bass: a note on every beat, the root on 1, a chord tone on 3, and beat 4 a step or a half step from the next bar's first note. Up or down, high or low, is your choice. Approach some bars from above and some from below.",
         skills: [{ skill: "B05", w: 1 }],
         swing: SWUNG,
         code: { starter: MAKE_STARTER },

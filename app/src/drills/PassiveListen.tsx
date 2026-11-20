@@ -13,6 +13,7 @@ import { getOak } from "../lib/oak.ts";
 import { keyScope, useHotkeys } from "../ui/keys/KeymapProvider.tsx";
 import { Button } from "../ui/kit/Button.tsx";
 import { Card, Kbd, Progress } from "../ui/kit/basics.tsx";
+import { listenFor } from "./listen-for.ts";
 import { type PassiveItem, type PassiveSpec, passiveItems, passiveSeconds } from "./passive.ts";
 import { playSettled, preloadSpec } from "./runtime.ts";
 import type { DrillData } from "./use-drill-data.ts";
@@ -153,6 +154,10 @@ export function PassiveListen({
               ? "Each one is named as it plays."
               : "Guess each one silently; its name appears just after."}{" "}
             About {minutes} {minutes === 1 ? "minute" : "minutes"}. Nothing here is scored.
+          </p>
+          <p className="mt-2 max-w-[60ch] text-text-2" data-testid="listen-for">
+            <span className="font-medium text-text">Listen for: </span>
+            {listenFor(def)}
           </p>
         </div>
         <span className="text-sm tabular-nums text-text-2" data-testid="passive-counter">

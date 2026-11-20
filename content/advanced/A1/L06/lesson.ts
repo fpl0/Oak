@@ -81,7 +81,7 @@ const CHORDS = { band: "band.two-chord-vamp", tracks: ["chords"] } as const;
 
 export default defineLesson({
   id: "A1.L06",
-  version: 1,
+  version: 2,
   title: "Movement",
   objective:
     "I can make a sound move while it plays, with vibrato, a phaser, tremolo or a slow filter sweep.",
@@ -110,15 +110,15 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the loop with a held pad and a long-note lead, first perfectly still, then moving. Same notes, same sounds. Listen to the long notes.",
+          "Listen only to the long notes, in the lead and in the pad. In loop 2, what keeps changing while each one holds?",
         skills: [{ skill: "D07", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: STILL, caption: "Still: every held note stays exactly as it started.", bars: 2 },
+          { code: STILL, caption: "Loop 1: every held note stays exactly as it starts.", bars: 2 },
           {
             code: MOVING,
-            caption: "Moving: the lead wobbles like a singer, the pad opens and closes.",
+            caption: "Loop 2: the same notes. Follow the lead first, then the pad.",
             bars: 2,
           },
         ],
@@ -136,7 +136,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          'One G held for a whole bar, twice, with `.vib("<0 5>")`: nothing in bar 1, 5 in bar 2. Before you run it, pick what changes in bar 2.',
+          'One G held for a whole bar, twice, with `.vib("<0 5>")`: nothing in bar 1, 5 in bar 2. What changes in bar 2?',
         skills: [{ skill: "D07", w: 1 }],
         hints: null,
         tests: [],
@@ -224,7 +224,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Play the target, then yours. The target's lead sings: a gentle vibrato, about as fast and as narrow as a singer's. Yours holds its notes perfectly still. Add a vibrato at the end of the lead's line and match it by ear.",
+          "The target's lead sings with a gentle vibrato, about as fast and as narrow as a singer's. Yours holds its notes still. Add a vibrato at the end of the lead's line and match it by ear.",
         skills: [{ skill: "D07", w: 1 }],
         code: { starter: SING_STARTER },
         reference: { solutions: [SING_SOLUTION], bars: 2 },
@@ -440,7 +440,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The loop with a pad and a long-note lead, both perfectly still. Make something move: vibrato on the lead, a phaser on the pad, a slow filter sweep, a level that pulses with the beat. Choose how fast and how far by ear. Or bring a loop of your own with a held part.",
+          "The loop with a pad and a long-note lead, both perfectly still. Make something move: vibrato on the lead, a phaser on the pad, a slow filter sweep, a level that pulses with the beat. Choose how fast and how far by ear.",
         skills: [{ skill: "D07", w: 1 }],
         code: { starter: STILL },
         bars: [2, 8],

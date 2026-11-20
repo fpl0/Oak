@@ -162,7 +162,7 @@ const earPart = (n: number): IdentifyEx => ({
 
 export default defineLesson({
   id: "U12.L06",
-  version: 1,
+  version: 2,
   title: "Seventh Ear Lab & Left-Hand Voicings",
   objective:
     'I can voice seventh chords the way a pianist\'s left hand does with .dict("lefthand"), name the 9th on top as a 2nd an octave up, turn an interval upside down, and hear all five sevenths.',
@@ -192,16 +192,16 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: Dm7, G7 and Cmaj7, held one a bar over the root. Then the same three chords as a jazz pianist plays them, with the bass on the roots, four to the bar, and a guitar answering. Watch the roll: where do the chords sit the second time?",
+          "Watch the roll and follow the chords, not the band: where do they sit the second time, and how far do they jump from one chord to the next?",
         skills: [{ skill: "C07", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: PLAIN, caption: "Dm7, G7, Cmaj7 in the voicing you know, held over the root.", bars: 4 },
+          { code: PLAIN, caption: "Loop 1: Dm7, G7, Cmaj7 in the voicing you know, one a bar.", bars: 4 },
           {
             code: HOOK,
             caption:
-              "The same chords in a narrow band in the middle, comped, over the roots four to the bar, with a guitar.",
+              "Loop 2: the same chords from a pianist, with the bass on every beat and a guitar answering.",
             bars: 4,
           },
         ],
@@ -247,7 +247,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it: Cmaj7 stacked by hand from C, then the left-hand Cmaj7 over the same C. One note of the second chord is not in the stack: D, above the octave from C. Counted from C, that D is a 9th.",
+          "Run it and compare the two bars on the roll. One note of bar 2 is not in the stack: D, above the octave from C. Counted from C, that D is a 9th.",
         skills: [{ skill: "I04", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -378,7 +378,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The trio from the start, with the chords in the voicing you know. Voice them for a pianist's left hand: tell the chords line which dictionary to read. The bass and the guitar stay as they are.",
+          "Voice the chords for a pianist's left hand: tell the chords line which dictionary to read. The bass and the guitar stay as they are.",
         skills: [
           { skill: "C07", w: 0.5 },
           { skill: "I04", w: 0.5 },
@@ -490,7 +490,7 @@ export default defineLesson({
         role: "practice",
         title: "Your trio",
         prompt:
-          "Cmaj7, Am7, Dm7, G7 in the plain voicing, the bass on the roots, a line on top. Make it your trio: comp the chords for the left hand on the Rhodes or the jazz guitar, give the comping a rhythm with `.struct()`, keep the bass on the roots. Or bring a loop of your own from this unit.",
+          "Cmaj7, Am7, Dm7, G7 in the plain voicing, the bass on the roots, a line on top. Comp the chords for the left hand on the Rhodes or the jazz guitar, give the comping a rhythm with `.struct()`, and keep the bass on the roots. Or bring a loop of your own from this unit.",
         skills: [
           { skill: "C07", w: 0.5 },
           { skill: "I04", w: 0.5 },

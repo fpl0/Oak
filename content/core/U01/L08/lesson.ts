@@ -35,7 +35,7 @@ const NONE = { roll: false, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U01.L08",
-  version: 1,
+  version: 2,
   title: "Three to a Bar",
   objective: "I can hear a groove in three, write a waltz with setcpm(bpm/3), and tell three from four.",
   key: { tonic: "C", mode: "major" },
@@ -62,11 +62,14 @@ export default defineLesson({
         id: "count-to-three",
         version: 1,
         role: "practice",
-        prompt: "Press Play and count along. Start on the kick: 1, 2, 3, 1, 2, 3. Does a count of four fit?",
+        prompt:
+          "Count along from the kick: 1, 2, 3, 4. Does a count of four fit, or does the kick come back sooner?",
         skills: [{ skill: "R08", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "Kick, snare, snare, over a waltz band.", bars: 4 }],
+        items: [
+          { code: HOOK, caption: "The kick starts each bar. Count from one kick to the next.", bars: 4 },
+        ],
       },
     },
     {
@@ -186,13 +189,12 @@ export default defineLesson({
         id: "two-to-a-bar",
         version: 1,
         role: "practice",
-        prompt:
-          "A march, heard once for contrast. Count it: 1, 2, 1, 2. Then put it beside the waltz in your head.",
+        prompt: "Count along, 1, 2, 1, 2. Listen for how the march moves compared with the waltz.",
         skills: [{ skill: "R08", w: 1 }],
         meter: "2/4",
         hints: null,
         tests: [],
-        items: [{ code: MARCH, caption: "Kick and snare, two beats to the bar: left, right.", bars: 4 }],
+        items: [{ code: MARCH, caption: "Kick and snare, two beats to the bar.", bars: 4 }],
       },
     },
     {
@@ -297,7 +299,7 @@ export default defineLesson({
         id: "your-waltz",
         version: 1,
         role: "practice",
-        prompt: "Write a groove in three over the waltz band. Every one of the three beats needs a sound.",
+        prompt: "Write a groove in three. Every one of the three beats needs a sound.",
         skills: [{ skill: "R08", w: 1 }],
         code: { starter: code(drums("bd ~ sd")) },
         bars: [1, 4],

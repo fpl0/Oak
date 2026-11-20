@@ -144,7 +144,7 @@ const singPart = (
 
 export default defineLesson({
   id: "U16.L04",
-  version: 1,
+  version: 2,
   title: "Picardy & Dorian IV",
   objective:
     "I can end a minor piece on the major home chord and brighten its iv into IV, one raised note each.",
@@ -170,19 +170,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: eight bars of a minor ballad on piano, strings and acoustic guitar. Then the same eight bars with a brighter chord on the way and a different last chord. Listen to how the second one finishes.",
+          "Eight bars of a minor ballad, twice. The second time some chords change. Listen to the last chord each time: does the verse end in the dark, or somewhere brighter?",
         skills: [{ skill: "H13", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK_PLAIN,
-            caption: "Am, Dm, F, E, twice, ending on A minor. Every chord belongs to the key.",
+            caption: "Am, Dm, F, E, twice, ending on A minor: the key's own chords.",
             bars: 8,
           },
           {
             code: HOOK,
-            caption: "Am, D, F, E, twice, ending on A major. The tune takes F♯ over D and C♯ at the end.",
+            caption: "Bars 2, 6 and 8 change. Listen to the tune's last note.",
             bars: 8,
           },
         ],
@@ -228,7 +228,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it with the chord band open: A minor, then A major; D minor, then D major, each stacked from its root. Compare each pair on the roll, note by note.",
+          "A minor, then A major; D minor, then D major, each stacked from its root. Compare each pair on the roll, note by note.",
         skills: [{ skill: "H13", w: 1 }],
         feedbackText: {
           "investigate.wrong":

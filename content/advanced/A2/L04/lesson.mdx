@@ -1,13 +1,15 @@
 {/* A2.L04 Sampling: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
 
 <Step id="S1">
-Until now every drum you wrote was one hit: a kick, a snare, a hat, placed step by step. This is a whole bar of a drummer in one recording, kick, snare, hats and the quiet notes between them. Hear it as it was played, then cut up and played back in new orders.
+Until now every drum you wrote was one hit: a kick, a snare, a hat, placed step by step. This is a whole bar of a drummer in one recording: kick, snare, hats and the quiet notes between them.
 
 <Example id="hook" views="code,roll" autoplay />
+
+<OnPass>Still one drummer: the same kit and the same touch, the quiet notes carried along with their beats. Only the order of the beats moved. Hip-hop and jungle producers have built whole tracks this way, from one short recorded drum break.</OnPass>
 </Step>
 
 <Step id="S2">
-The recording is one bar long, and the loop plays at its tempo, 96 beats a minute, so each quarter of it is one beat of the loop. Before you run it, pick what four pieces played from the last to the first will sound like.
+The recording is one bar long, and the loop plays at its tempo, 96 beats a minute, so each quarter of it is one beat of the loop.
 
 <Predict exercise="last-piece-first" />
 </Step>
@@ -17,27 +19,27 @@ Each piece carries everything the drummer played in that beat. Change the order 
 
 <Example id="look-inside" views="code,roll" />
 
-<OnPass>Beat 2 holds the first loud snare, and putting piece 0 on beat 3 brings the kick of beat 1 back there. A recording played back as a sound is a **sample**: one drum hit, or a whole bar like this one. Oak made this break itself from public-domain drum hits, so it is free to use in anything you make.</OnPass>
+<OnPass>Beat 2 holds the first loud snare, and putting piece 0 on beat 3 brings the kick of beat 1 back there. A recording played back as a sound is a **sample**: a whole bar like this one, or a single hit. Every `bd` you have written was one. Oak made this break itself from public-domain drum hits, so it is free to use in anything you make.</OnPass>
 </Step>
 
 <Step id="S4">
-Two numbers decide which piece plays on beats 2 and 3. Play the target first and listen to where the snare went.
+Bar 3 of the opening's loop 2 swapped two beats. Two numbers decide which piece plays on beats 2 and 3.
 
 <Editor exercise="swap-the-middle" />
 
-<OnPass>The same drummer, a new groove: the kick comes a beat early, the snare a beat late, and nobody had to play it again. Cutting a sample into equal pieces and playing them in a new order is called a **chop**. `.splice()` does the same and also sets the speed of each piece to fit its place; `.loopAt()` fits a whole break to another tempo, and `.begin()` and `.end()` pick any stretch of a sample by hand. A good place to stop for today if you need to.</OnPass>
+<OnPass>The same drummer, a new groove: the kick comes a beat early, the snare a beat late, and nobody had to play it again. Cutting a sample into equal pieces and playing them in a new order is called a **chop**. `.splice()` does the same and also fits each piece's speed to its place. `.loopAt()` fits a whole break to another tempo, and `.begin()` and `.end()` pick any stretch of a sample by hand.</OnPass>
 </Step>
 
 <Step id="S5">
-The break on its own, cut into four. Count the beats and find the order.
+The drums alone this time, so every beat is plain. Count along.
 
 <Choice exercise="which-order" />
 
-<OnPass>The two middle beats swapped: a kick where the first snare was, and the snare one beat late. The loud hits are what your ear follows, so moving one piece changes the whole feel.</OnPass>
+<OnPass>The two middle beats swapped. You found it by the loud hits: the ear hangs a groove on its kick and snare, so moving one piece changes the whole feel.</OnPass>
 </Step>
 
 <Step id="S6">
-The tune over the break as it was recorded, with the band on bass and chords. Cut it up and play it back as a groove of your own. Eight or sixteen pieces give you smaller steps to move: a repeated kick, a snare a step late, the last beat stuttered.
+Your drum parts used to be hits placed one at a time. Now a whole recorded bar is material to cut and rearrange. Eight or sixteen pieces give you smaller steps to move. For an older sound, try `.crush()` from Grit or a low `.lpf()` on the break.
 
 <Make exercise="flip-the-break" />
 

@@ -1219,6 +1219,11 @@ function PlayerCore(props: CoreProps) {
         {...(freshGateTry ? { newSeriesLabel: "Start a fresh try" } : {})}
         continueNote={continueNote(step, ctx.gate)}
         onWrapUp={step.kind !== "make" && !preview ? () => actor.send({ type: "WRAP_UP" }) : null}
+        // The lesson's own resting place (`wrapAt`), said once by the app rather than in every lesson's prose.
+        // A 15-minute day already ends part A there, so the line is for the longer days only.
+        stopPoint={
+          !preview && step.id === def.wrapAt && passed && ctx.splitPart !== "A" && step.kind !== "make"
+        }
         onDismissNotice={() => actor.send({ type: "DISMISS_NOTICE" })}
       />
     ),

@@ -119,7 +119,7 @@ const pair = (n: number, a: string, b: string, home: "a" | "b"): IdentifyEx => (
 
 export default defineLesson({
   id: "U10.L05",
-  version: 1,
+  version: 2,
   title: "The Aeolian Loop",
   objective: "I can write the Aeolian loop i–VI–III–VII and tell it from vi–IV–I–V by where it comes home.",
   key: MINOR,
@@ -145,13 +145,13 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: four chords on a Rhodes, a driving fingerbass and a tune. Then the same four chords with another tune. Listen for where each tune comes to rest.",
+          "The same four chords twice, with two different tunes. Listen for the note each tune keeps coming back to, and for how settled the loop feels under it.",
         skills: [{ skill: "H08", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: HOOK, caption: "Am F C G; the tune falls from A and comes back to it.", bars: 4 },
-          { code: ON_C, caption: "The same chords; this tune keeps coming to rest on C.", bars: 4 },
+          { code: HOOK, caption: "Tune 1. Hum the note it keeps returning to.", bars: 4 },
+          { code: ON_C, caption: "Tune 2, over the same chords. Does it rest on the same note?", bars: 4 },
         ],
       },
     },
@@ -195,7 +195,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run the first loop with the chord band open. It reads the chords in A minor, home on A. Follow the numerals as they pass.",
+          "Run the first loop. The chord band reads it in A minor, home on A: follow the numerals as they pass.",
         skills: [{ skill: "H08", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -381,7 +381,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "A minor groove that only rocks between Am and Dm. Make it the Aeolian loop, i VI III VII, one chord a bar, then arrange it: a bass that drives, a sound and a room for the chords, a tune that comes home on A.",
+          "Make the groove the Aeolian loop, i VI III VII, one chord a bar. Then arrange it: a bass that drives, a sound and a room for the chords, a tune that comes home on A.",
         skills: [{ skill: "H08", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

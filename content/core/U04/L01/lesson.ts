@@ -40,7 +40,7 @@ const LABELS = { rollLabels: "degree+solfege", staffLabels: "degree+solfege" } a
 
 export default defineLesson({
   id: "U04.L01",
-  version: 1,
+  version: 2,
   title: "Steps Apart",
   objective:
     "I can count the distance between two degrees of a key, and write a second voice a 3rd above a line.",
@@ -66,13 +66,11 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play. Two piano lines over the band. Mute `vox` for a loop, then bring it back: hear what the second voice adds.",
+          "Listen for how the two lines move. When `mel` rises or falls, what does `vox` do? Mute `vox` for one loop, then bring it back.",
         skills: [{ skill: "I01", w: 1 }],
         hints: null,
         tests: [],
-        items: [
-          { code: HOOK, caption: "`mel` and `vox`, the upper voice always two degrees above.", bars: 2 },
-        ],
+        items: [{ code: HOOK, caption: "`mel` below, `vox` above. Follow the upper line.", bars: 2 }],
       },
     },
     {
@@ -111,7 +109,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Three bars, two notes each: home, then one note higher. Run it and read the labels. Name a distance by its count, both ends included: 1 up to 5 is a 5th.",
+          "Three bars, two notes each: home, then a higher note. Run it and read the labels. A distance is named by its count, both ends included, so 1 up to 5 is a 5th.",
         skills: [{ skill: "I01", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -243,7 +241,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Chords set home. Then home, and one note above it. Enter both degrees: 1, then the second note. Its number is the distance: 5 means a 5th.",
+          "Chords set home. Then home, and one note above it. Enter both degrees, 1 and then the second note. The second number is the distance: 5 means a 5th.",
         skills: [{ skill: "E06", w: 1 }],
         hints: [
           { text: "Hum the second note, then sing down to home on syllables. How many notes did you sing?" },
@@ -269,7 +267,7 @@ export default defineLesson({
     {
       id: "S6",
       kind: "make",
-      title: "A riff in two voices",
+      title: "Riff in two voices",
       minutes: 2.5,
       ui: { panels: ROLL, rollLabels: "degree+solfege", band: BAND },
       exercise: {
@@ -280,7 +278,7 @@ export default defineLesson({
         // The catalog's text for a `uses` rule names the tool ID; the label says it in words.
         feedbackText: { "rubric.unmet": "{label}: not yet." },
         prompt:
-          "Write a two-bar riff over the band in two voices: a `mel` line and a `vox` line that moves with it. A 3rd above sounds sweet; try a 6th too.",
+          "Write a two-bar riff in two voices, a `mel` line and a `vox` line that moves with it. A 3rd above sounds sweet. Try a 6th above too, five degrees up, and keep the one you like.",
         skills: [{ skill: "I01", w: 1 }],
         code: { starter: deg(MAKE_RIFF) },
         bars: [1, 4],

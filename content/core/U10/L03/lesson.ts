@@ -71,7 +71,7 @@ const MINOR = { tonic: "A", mode: "minor" } as const;
 
 export default defineLesson({
   id: "U10.L03",
-  version: 1,
+  version: 2,
   title: "Hearing Minor",
   objective:
     "I can hear me, le and te against home in a minor key, and tell a minor tune from a major one by its 3rd.",
@@ -98,15 +98,20 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a soul groove in A minor over the drums. Then hear its tune alone, after four chords that set home, and read the degree of each note on the roll.",
+          "The groove, then its tune alone after four chords that set home on A. Listen for the notes that give the tune its dark colour, and find their degrees on the roll.",
         skills: [{ skill: "E10", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: HOOK, caption: "The groove: Rhodes, fingerbass and a tune that starts on me.", bars: 4 },
+          {
+            code: HOOK,
+            caption: "The groove. Listen to the tune's first note against the chord under it.",
+            bars: 4,
+          },
           {
             code: ALONE,
-            caption: "Four chords set home on A; then the tune alone: me re do, le fa, do le sol, sol.",
+            caption:
+              "Four chords set home on A, then the tune alone. Match each note to its degree on the roll.",
             bars: 5,
           },
         ],
@@ -203,7 +208,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Hear it, then sing it: le falling to sol, then te rising to do. Te climbs a whole step, so it pulls less than ti. Sing in your own range.",
+          "Le falling to sol, then te rising a whole step to do. Listen once, then sing it in your own range.",
         skills: [
           { skill: "V03", w: 0.6 },
           { skill: "E10", w: 0.4 },
@@ -313,7 +318,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The soul groove in A minor over the drums, with a tune of only 1 and 5. Rewrite the tune so it sings me, le and te: ♭3, ♭6 and ♭7. Lean le onto sol somewhere, and let the last note land where it sounds finished to you.",
+          "Rewrite the tune so it sings me, le and te: ♭3, ♭6 and ♭7. Lean le onto sol somewhere, and let the last note land where it sounds finished to you.",
         skills: [{ skill: "E10", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

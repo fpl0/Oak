@@ -191,7 +191,7 @@ const RIGHT = { bass: ["1", "6", "2", "5"], rn: ["I", "V7/ii", "ii", "V7"] };
 
 export default defineLesson({
   id: "U15.L06",
-  version: 1,
+  version: 2,
   title: "Hearing Secondaries",
   objective: "I can find a secondary dominant by ear and name the chord it points at.",
   key: C_MAJOR,
@@ -217,14 +217,14 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play and listen twice, with nothing to read: eight bars of a soul ballad in C major, the trumpet on the tune. Twice the harmony leans out of the key and comes straight back. Raise a finger at each lean and count the bars.",
+          "Eight bars of a soul ballad in C major, the trumpet on the tune, with nothing to read. Twice the harmony leans out of the key and comes straight back. Listen twice, count the bars, and raise a finger at each lean: which bars are they?",
         skills: [{ skill: "E12a", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption: "Rhodes, upright bass, strings and the trumpet. Eight bars, two of them lean.",
+            caption: "Count the bars, 1 to 8. Two of them lean.",
             bars: 8,
           },
         ],
@@ -322,7 +322,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The first four bars of the ballad, taken down in two passes. First the bass: the degree under each chord. Then the numerals, sevenths included. The bass gives you each root; the outside note tells you where the visitor is aimed.",
+          "The first four bars of the ballad, in two passes. First the bass: the degree under each chord. Then the numerals, sevenths included. The bass gives each root; the outside note tells you where the visitor is aimed.",
         skills: [
           { skill: "H12", w: 0.6 },
           { skill: "E12a", w: 0.4 },

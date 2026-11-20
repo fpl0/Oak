@@ -84,7 +84,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U06.L07",
-  version: 1,
+  version: 2,
   title: "Doo-Wop & Three-Chord Rock",
   objective:
     "I can hear and play doo-wop (I vi IV V) and three-chord rock (I IV V), and end a phrase with IV going home to I.",
@@ -112,17 +112,17 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play. A fifties ballad, then a garage band. Both loops are made of chords you can already name.",
+          "A fifties ballad, then a garage band. In each loop, listen for a minor chord: does one ever darken it, and where?",
         skills: [{ skill: "H05", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption: "Doo-wop: I vi IV V, each chord broken into notes three to a beat.",
+            caption: "Doo-wop: a slow ballad, each chord broken into notes, three to a beat.",
             bars: 4,
           },
-          { code: ROCK_LOOP, caption: "Three-chord rock: I IV V IV, chords and bass in eighths.", bars: 4 },
+          { code: ROCK_LOOP, caption: "Three-chord rock: chords and bass in eighths.", bars: 4 },
         ],
       },
     },
@@ -278,7 +278,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The rock phrase gets stuck on V. Play the target: bar 3 drops to IV and bar 4 settles home on I. Change the last two numbers in `.add()`.",
+          "The rock phrase gets stuck on V. In the target, bar 3 drops to IV and bar 4 settles home on I. Change the last two numbers in `.add()`.",
         skills: [
           { skill: "H03", w: 0.6 },
           { skill: "H05", w: 0.4 },
@@ -360,7 +360,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The starter is the four-chord loop in chord names. Reorder it into doo-wop over the drums: I vi IV V, starting on any of the four. Then break the chords into a rhythm of your own with `.arp()` after `.voicing()`. A bass or a tune if you like.",
+          "Reorder the starter's chords into doo-wop, I vi IV V, starting on any of the four. Then break the chords into a rhythm of your own with `.arp()` after `.voicing()`. A bass or a tune if you like.",
         skills: [{ skill: "H05", w: 1 }],
         // A default voicing often puts the 3rd lowest, and the rule's detail then prints inversion figures
         // ("I6"), which wait for U06.L11. The same text serves the suggestions, so it says only "not yet".

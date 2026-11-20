@@ -126,7 +126,7 @@ const NOTES_OF_G: RubricRule = {
 
 export default defineLesson({
   id: "A2.L03",
-  version: 1,
+  version: 2,
   title: "Counter-Melody & Re-Voicing per Section",
   objective: "I can write a second line that answers the tune instead of copying it.",
   key: { tonic: "A", mode: "minor" },
@@ -151,13 +151,13 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the A minor loop with a strings line under the tune, then the loop without it. Follow the strings the first time.",
+          "Loop 1 has a strings line under the tune; loop 2 leaves it out. Follow the strings in loop 1, then listen to loop 2: what does the loop lose without them?",
         skills: [{ skill: "D09", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: HOOK, caption: "The tune, and a strings line that fills its gaps.", bars: 4 },
-          { code: LOOP, caption: "The same loop, the tune alone over the chords.", bars: 4 },
+          { code: HOOK, caption: "Loop 1: the tune, with a strings line under it.", bars: 4 },
+          { code: LOOP, caption: "Loop 2: the same loop without the strings.", bars: 4 },
         ],
       },
     },
@@ -353,7 +353,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The loop again, with a different strings line under the tune. Is it a second tune of its own, or the tune again, lower down?",
+          "A different strings line under the tune this time. Is it a second tune of its own, or the tune again, lower down?",
         skills: [{ skill: "D09", w: 1 }],
         hints: [
           { text: "Does each strings note start on its own, or together with a note of the tune?" },
@@ -400,7 +400,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "For the longer session: eight bars, a verse and a chorus, the chords packed close in both. Spread the chorus's chords: drop each root an octave and lift each 3rd an octave, so the middle, where the strings play, opens up.",
+          "Eight bars, a verse and a chorus, the chords packed close in both. Spread the chorus's chords: drop each root an octave and lift each 3rd an octave, so the middle, where the strings play, opens up.",
         skills: [{ skill: "D09", w: 1 }],
         code: { starter: SPREAD_STARTER },
         reference: { solutions: [sections(SPREAD)], bars: 8 },

@@ -44,7 +44,7 @@ const TAP_FEEDBACK = {
 
 export default defineLesson({
   id: "U01.L02",
-  version: 1,
+  version: 2,
   title: "Count to Four",
   objective: "I can find beat 1, count a bar of four, and leave a beat silent without losing my place.",
   key: { tonic: "C", mode: "major" },
@@ -72,11 +72,11 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play and count along under your breath: one, two, three, four. Start again at one on every crash.",
+          "Count along under your breath: one, two, three, four. Which sound tells you to start again at one?",
         skills: [{ skill: "R03", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "A crash, three kicks, and hats over the band.", bars: 4 }],
+        items: [{ code: HOOK, caption: "Four hits a bar under quick hats.", bars: 4 }],
       },
     },
     {
@@ -129,7 +129,7 @@ export default defineLesson({
         id: "which-beat-goes-quiet",
         version: 1,
         role: "practice",
-        prompt: "This line reads `bd bd ~ bd`. Before you run it: which beat goes quiet?",
+        prompt: "The line reads `bd bd ~ bd`. Which beat goes quiet?",
         skills: [{ skill: "R06", w: 1 }],
         hints: null,
         tests: [],
@@ -360,7 +360,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write a one-bar groove over the band with at least one silent beat: a beat where none of your lines plays, hats included. Any drums you have: `bd`, `sd`, `hh`, `oh`, `cr`, `rd`, `cp`, `rim`.",
+          "Write a one-bar groove with at least one silent beat: a beat where none of your lines plays, hats included. Any drums you have: `bd`, `sd`, `hh`, `oh`, `cr`, `rd`, `cp`, `rim`.",
         skills: [
           { skill: "R06", w: 0.6 },
           { skill: "R03", w: 0.4 },

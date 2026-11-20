@@ -128,7 +128,7 @@ const DRUMS = { band: "band.two-five-one", tracks: ["drums"] } as const;
 
 export default defineLesson({
   id: "J5.L02",
-  version: 1,
+  version: 2,
   title: "Backdoor",
   objective: "I can bring a tune home through the backdoor: the minor iv, the dominant on ♭7, then home.",
   key: C,
@@ -154,20 +154,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the end of a ballad by the trio, twice. Both endings land on Cmaj7; they reach it from different places. Listen to the bass into bar 3.",
+          "Listen to how each ending arrives on Cmaj7 in bar 3. Which arrival is firm, and which is softer?",
         skills: [{ skill: "J13", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: TRIO_FRONT,
-            caption: "Dm7, G7, Cmaj7: the bass falls a 5th, from G down to C.",
+            caption: "A ii–V–I in C, the way you know it.",
             bars: 4,
           },
           {
             code: TRIO_BACK,
-            caption:
-              "Fm7, B♭7, Cmaj7: the bass climbs a whole step, from B♭ up to C, and the vibes lean on A♭.",
+            caption: "Two other chords before the same Cmaj7.",
             bars: 4,
           },
         ],
@@ -185,7 +184,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The second ending: Fm7, B♭7, Cmaj7. Bar 2 ends with the bass on B♭. Before you play it: how does the bass reach C in bar 3?",
+          "The second ending: Fm7, B♭7, Cmaj7. Bar 2 ends with the bass on B♭. How does the bass reach C in bar 3?",
         skills: [{ skill: "J13", w: 1 }],
         hints: null,
         tests: [],
@@ -213,7 +212,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run the second ending and read the roll. Name its three chords as numerals in C major, then follow the A♭ in the Rhodes from bar 2 into bar 3.",
+          "Run it and read the roll. Name the three chords as numerals in C major, then follow the A♭ in the Rhodes from bar 2 into bar 3.",
         skills: [{ skill: "J13", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -274,7 +273,7 @@ export default defineLesson({
         role: "check",
         key: G,
         prompt:
-          "A ii–V–I in G: Am7, D7, Gmaj7. Change the first two chords so the tune comes home the way the second ending did: from the minor iv, then the dominant a whole step below home. Hear the target first.",
+          "A ii–V–I in G: Am7, D7, Gmaj7. Change the first two chords so the tune comes home the way the softer ending did: from the minor iv, then the dominant a whole step below home.",
         skills: [{ skill: "J13", w: 1 }],
         swing: SWUNG,
         code: { starter: BACK_STARTER },
@@ -403,7 +402,7 @@ export default defineLesson({
         key: F,
         title: "Late-night loop in F",
         prompt:
-          "A slow loop in F with a tune on the vibes: Fmaj7, Dm7, Gm7, C7. Bring it home through the back door: the minor iv and the dominant a whole step below home, the bass moving with them. Keep the tune or write your own.",
+          "The loop is Fmaj7, Dm7, Gm7, C7. Bring it home through the back door: the minor iv and the dominant a whole step below home, the bass moving with them. Keep the tune or write your own, and put a tritone substitute somewhere else in the loop if you like.",
         skills: [{ skill: "J13", w: 1 }],
         swing: SWUNG,
         code: { starter: MAKE_STARTER },

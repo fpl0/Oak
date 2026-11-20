@@ -105,7 +105,7 @@ const at = (sixteenths: number[]) => sixteenths.map((s) => Number(((s * BAR_SEC)
 
 export default defineLesson({
   id: "U13.L02",
-  version: 1,
+  version: 2,
   title: "Sixteenth Grooves & Ghost Notes",
   objective:
     "I can give every hit of a groove its own strength with .velocity(), and write a sixteenth-note groove with ghost notes.",
@@ -131,20 +131,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a funk vamp on Dm7 and G7, every hit of each part as strong as the next. Then the same notes again, with one difference. Nothing moves in time; listen to how hard each hit is played.",
+          "Listen to the snare first, then the hats. Which loop sounds like a drum machine, and which like a band playing? What changes inside each part?",
         skills: [{ skill: "R10", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: STIFF,
-            caption: "Each part plays every hit at one strength: kick, snare, hats and guitar.",
+            caption: "Loop 1: every hit of every part at one strength.",
             bars: 4,
           },
           {
             code: HOOK,
-            caption:
-              "The same hits. The small snare hits drop to a whisper, and the hats and the guitar lean on some steps and not others.",
+            caption: "Loop 2: the same hits in the same places. Follow the snare.",
             bars: 4,
           },
         ],

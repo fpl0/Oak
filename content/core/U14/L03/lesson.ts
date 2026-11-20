@@ -114,7 +114,7 @@ const LEAD = { roll: false, staff: "lead", keyboard: false } as const;
 
 export default defineLesson({
   id: "U14.L03",
-  version: 1,
+  version: 2,
   title: "Dorian ♮6",
   objective: "I can turn minor into Dorian by raising its 6th, and write a groove over i and the major IV.",
   key: { tonic: "D", mode: "minor" },
@@ -140,20 +140,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a two-chord groove on the Rhodes over a finger bass, with a piano line on top. Two bars in D minor, then the same two bars with one note of the scale raised. Listen for the lift.",
+          "A two-chord groove with a piano line on top. Loop 1 starts in D minor; halfway through, one note of the scale changes and the numbers stay. Listen to the mood: does the second half sound darker or lighter?",
         skills: [{ skill: "S12", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption:
-              "Two bars in D minor, heavy and closed; then the same numbers with one note a half step higher, and the second chord turns major.",
+            caption: "Loop 1: D minor for two bars, then the new scale.",
             bars: 4,
           },
           {
             code: DORIAN_GROOVE,
-            caption: "The second colour on its own: still minor, with air in it. It never needs to resolve.",
+            caption: "Loop 2: the new groove by itself, round and round.",
             bars: 2,
           },
         ],
@@ -199,7 +198,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The triad on degree 4, bar 1 on D minor and bar 2 on the new scale. Run it with the chord band open and compare the two bars on the roll.",
+          "The triad on degree 4: bar 1 on D minor, bar 2 on the new scale. Run it and compare the two bars on the roll.",
         skills: [
           { skill: "S12", w: 0.5 },
           { skill: "H11", w: 0.5 },
@@ -267,7 +266,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The groove in D minor. Play the target: the same groove in D Dorian. Change the scale word, and the second chord to the key's own seventh chord on degree 4, `G7`.",
+          "The target is the same groove in D Dorian. Change the scale word, and the second chord to the key's own seventh chord on degree 4, `G7`.",
         skills: [
           { skill: "S12", w: 0.5 },
           { skill: "H11", w: 0.5 },

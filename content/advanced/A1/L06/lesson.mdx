@@ -1,13 +1,15 @@
 {/* A1.L06 Movement: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
 
 <Step id="S1">
-Your loop from Space, with a held pad of chords and a lead that holds its notes, in place of the riff. First every long note perfectly still, then the same notes moving while they sound.
+Until now each note of your loop did the same thing every time it played: open, close, ring, echo. This lesson adds movement that goes on while a note is held. Here is the loop from Space with a held pad of chords and a long-note lead in place of the riff.
 
 <Example id="hook" views="code,roll" autoplay />
+
+<OnPass>In loop 2 the lead's pitch wavers a little above and below each note, the way a singer's does, and the pad slowly brightens and darkens. Nothing new plays. A held sound that never changes soon fades into the background; one that moves keeps the ear's attention.</OnPass>
 </Step>
 
 <Step id="S2">
-A machine holds a note perfectly still; a singer never does. Before you run it, pick what the second call changes. <CodeRef fn="vib" />
+A machine holds a note perfectly still; a singer never does. Here is one new call on one held note. <CodeRef fn="vib" />
 
 <Predict exercise="one-long-g" />
 </Step>
@@ -17,15 +19,15 @@ A wobble has two dials: how fast it goes, and how far it moves.
 
 <Example id="how-fast" views="code" />
 
-<OnPass>Six wobbles a second in bar 2, and the same small width in both bars. A small, regular wobble in a note's pitch is **vibrato**, as a singer or a violinist adds it: `.vib()` sets how often, `.vibmod()` how far, in semitones each way.</OnPass>
+<OnPass>Six wobbles a second in bar 2, and the same small width in both bars. A small, regular wobble in a note's pitch is **vibrato**, as a singer or a violinist adds it. `.vib()` sets how often, `.vibmod()` how far, in semitones each way.</OnPass>
 </Step>
 
 <Step id="S4">
-Match a singer's vibrato by ear. Too fast and it buzzes; too wide and it sounds seasick.
+The lead in the opening's loop 2 sang like this. Too fast and a vibrato buzzes; too wide and it sounds seasick.
 
 <Editor exercise="match-the-vibrato" />
 
-<OnPass>The lead leans into its long notes now, the way a singer does. Vibrato on the held notes, none on the short ones, is how many singers and players use it: here every note gets it, and the long ones show it. A good place to stop for today if you need to.</OnPass>
+<OnPass>The lead's long notes sing now. Many singers and players save their vibrato for held notes. Here every note gets it, and the long ones show it most.</OnPass>
 </Step>
 
 <Step id="S5">
@@ -33,19 +35,19 @@ The pitch is one thing a slow wobble can move. Here are three others, one bar ea
 
 <Example id="three-moves" views="code" />
 
-<OnPass>Four dips in bar 2: the level falls and comes back with every beat. That is tremolo; in bar 1 a phaser sweeps the colour, in bar 3 the cutoff opens and closes. Each time a slow wave, too slow to hear as a pitch, pushes one setting up and down: that slow wave is an **LFO**. Vibrato is an LFO on the pitch.</OnPass>
+<OnPass>Four dips in bar 2, one with every beat: that is tremolo. In bar 1 a phaser sweeps the colour; in bar 3 the cutoff opens and closes. Each time, a slow wave, too slow to hear as a pitch, pushes one setting up and down. That slow wave is an **LFO**, short for low-frequency oscillator, and vibrato is an LFO on the pitch.</OnPass>
 </Step>
 
 <Step id="S6">
-Your ear for movement. One pad, one thing moving.
+No code this time. A held chord gives a slow movement the most room to be heard.
 
 <Choice exercise="what-moves" />
 
-<OnPass>The brightness: an LFO on the cutoff. The notes and the level stay put; only the top of the sound opens and closes.</OnPass>
+<OnPass>The brightness: an LFO on the cutoff. The notes and the level stayed put while the top of the sound opened and closed. The pad in the opening's loop 2 moved the same way.</OnPass>
 </Step>
 
 <Step id="S7">
-Back to the still loop, or a loop of your own with a held part. Give it movement you can hear, and choose how fast by ear: slow movement breathes, fast movement shimmers.
+Start from the still loop, or a loop of your own with a held part. Choose how fast by ear: slow movement breathes, fast movement shimmers. A movement counted in the bar, like `.tremolosync()`, locks to the drums the way your timed echoes did in Space.
 
 <Make exercise="make-it-move" />
 

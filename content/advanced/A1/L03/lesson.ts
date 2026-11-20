@@ -73,7 +73,7 @@ const CHORDS = { band: "band.two-chord-vamp", tracks: ["chords"] } as const;
 
 export default defineLesson({
   id: "A1.L03",
-  version: 1,
+  version: 2,
   title: "Envelopes",
   objective:
     "I can shape how each note starts, falls, holds and ends with `.attack() .decay() .sustain() .release()`.",
@@ -99,16 +99,15 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the loop from Filters, then the same loop with every note given a shape. Listen to how each bass note stops and how each riff note starts.",
+          "Listen to the edges of each note. In loop 2, how does a bass note end, and how does a riff note begin?",
         skills: [{ skill: "D04", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: FILTERED, caption: "Every note in its default shape: on at once, off at once.", bars: 2 },
+          { code: FILTERED, caption: "Loop 1: the loop as Filters left it.", bars: 2 },
           {
             code: SHAPED,
-            caption:
-              "The bass punches and stops; the riff, on fewer and longer notes, swells in and rings on.",
+            caption: "Loop 2: the same sounds, the riff on fewer and longer notes.",
             bars: 2,
           },
         ],
@@ -219,7 +218,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Play the target, then yours. In the target each bass note hits and dies away fast, even while it is held: a pluck. Give the bass that shape.",
+          "In the target each bass note hits and dies away fast, even while it is held: a pluck. Give your bass that shape.",
         skills: [{ skill: "D04", w: 1 }],
         code: { starter: PLUCK_STARTER },
         reference: { solutions: [PLUCK_SOLUTION], bars: 2 },
@@ -290,7 +289,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The riff on longer notes, G and E, then A and F. In the target each note swells in and rings on after it ends, like a pad. Match it with two controls.",
+          "The riff on longer notes: G and E, then A and F. In the target each note swells in and rings on after it ends. Match it with two controls.",
         skills: [{ skill: "D04", w: 1 }],
         code: { starter: PAD_STARTER },
         reference: { solutions: [PAD_SOLUTION], bars: 2 },
@@ -357,7 +356,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "One phrase, twice. Between bar 1 and bar 2 one stage of the envelope changed. Softer start, or longer tail?",
+          "Bar 2 plays the phrase of bar 1 with one stage of the envelope changed. Softer start, or longer tail?",
         skills: [{ skill: "D04", w: 1 }],
         hints: [
           { text: "Listen to the first moment of each note in bar 2, then to the gap after it." },
@@ -393,7 +392,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The loop from Filters, every note in its default shape. Give the bass a shape and the riff another: a punchy pluck, a slow swell, a long tail. Or bring a loop of your own.",
+          "The loop from Filters, every note in its default shape. Give the bass one shape and the riff another: a punchy pluck, a slow swell, a long tail. A loop of your own works too.",
         skills: [{ skill: "D04", w: 1 }],
         code: { starter: FILTERED },
         bars: [2, 8],

@@ -103,7 +103,7 @@ const STAFF = { roll: false, staff: "treble", keyboard: false } as const;
 
 export default defineLesson({
   id: "U11.L07",
-  version: 2,
+  version: 3,
   title: "Shuffle",
   objective: "I can swing my own lines in code and hear whether a groove is straight or swung.",
   key: { tonic: "C", mode: "blues" },
@@ -132,13 +132,13 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the start of a blues in C, twice. The notes are the same both times. Listen to the hats and the riff: even the first time, long–short the second.",
+          "The start of a blues in C, twice, with the same notes both times. Nod along with the hats and the riff: what changes in the way they move?",
         skills: [{ skill: "R13", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: STRAIGHT, caption: "Even eighths: the hats and the riff march.", bars: 4 },
-          { code: HOOK, caption: "The same notes, long–short: the blues starts to lope.", bars: 4 },
+          { code: STRAIGHT, caption: "Version 1. Nod along with the hats.", bars: 4 },
+          { code: HOOK, caption: "Version 2: the same notes. Nod along again.", bars: 4 },
         ],
       },
     },
@@ -338,7 +338,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          'The staff shows a two-bar riff in the blues scale on C, in plain eighths. The part says "Swing 8ths": write the riff on the `gtr:` line as it stands, then make it swing. Hear the target to check the feel.',
+          'The staff shows a two-bar riff in the blues scale on C, in plain eighths. The part says "Swing 8ths": write the riff on the `gtr:` line as it stands, then make it swing.',
         skills: [
           { skill: "R13", w: 0.7 },
           { skill: "N04", w: 0.3 },
@@ -466,7 +466,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "A blues with a quick change and a turnaround, played straight. Make it shuffle: swing the hats, then the riff. Try a lighter swing as well, `.swingBy(.2, 4)`, and keep the feel and the tempo you like best.",
+          "Make the blues shuffle: swing the hats, then the riff. Try a lighter swing as well, `.swingBy(.2, 4)`, and keep the feel and the tempo you like best.",
         skills: [{ skill: "R13", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [12, 24],

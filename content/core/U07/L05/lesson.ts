@@ -76,7 +76,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U07.L05",
-  version: 1,
+  version: 2,
   title: "Leaning & Holding",
   objective:
     "I can make a tune lean: a note outside the chord on the strong beat, held over or leapt to, that falls a step into the chord.",
@@ -105,11 +105,11 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Four chords, a bar each, and a slow tune over them. Twice the tune holds a note that does not fit the new chord for a moment, then lets go.",
+          "Listen to the start of bars 3 and 4. How does the tune sit against the new chord there, and what changes when it moves on?",
         skills: [{ skill: "M05", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "I, IV, V, I under a tune that leans twice.", bars: 4 }],
+        items: [{ code: HOOK, caption: "Four bars over I, IV, V and I, a chord a bar.", bars: 4 }],
       },
     },
     {
@@ -124,10 +124,10 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Two bars, IV then V, twice. Over V one tune goes to B at once; the other keeps the C a little longer before it falls to B. Which one leans into the new chord?",
+          "Two bars, IV then V. Over V one tune goes to B at once; the other keeps the C a little longer before it falls to B. Which one makes the G chord wait?",
         skills: [{ skill: "M05", w: 1 }],
         hints: ladder(
-          "In which version does the second chord sound unsettled for a moment?",
+          "In which card does the second chord sound settled the moment it arrives?",
           "B is a note of the G chord; C is not. Listen to beat 1 of the second bar in each card.",
           "Play card 2 and hum along with the tune: does the C still sound when the chord changes?",
         ),
@@ -235,7 +235,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Over V this tune goes to B at once. Play the target: the C from bar 2 holds over into bar 3 and falls to B on beat 3. Change the lengths so yours does the same.",
+          "Change the lengths so the C from bar 2 holds over into bar 3 and falls to B on beat 3, as it does in the target.",
         skills: [{ skill: "M05", w: 1 }],
         code: { starter: STEP_STARTER },
         reference: { solutions: [STEP_REF], bars: 4 },
@@ -395,7 +395,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Over I IV V I this tune never leans. Make it lean at least once: hold a note into the next chord, or leap to a note that rubs on beat 1, and let it fall a step into the chord.",
+          "Make this tune lean at least once: hold a note into the next chord, or leap to a note that rubs on beat 1, and let it fall a step into the chord.",
         skills: [{ skill: "M05", w: 1 }],
         // The rule's own detail ends "step into a note outside the chord and step on", which describes a
         // passing tone, not a lean; the same text serves the suggestions, so it says only "not yet".

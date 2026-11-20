@@ -1,13 +1,15 @@
 {/* U17.L02 Truck-Driver & Direct Modulation: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
 
 <Step id="S1">
-You know this ending from the last minute of many pop records: the chorus has been sung, and it comes round once more. Listen to what the band does with it.
+Last lesson a chord both keys share led the music into its new key. Pop records often skip the door. You know this from the last minute of many of them: the chorus has been sung, and it comes round once more.
 
 <Example id="hook" views="code,roll" autoplay />
+
+<OnPass>At bar 9 everything moved up a whole step at once. The same chorus a step higher feels bigger, though not one note of it is new.</OnPass>
 </Step>
 
 <Step id="S2">
-In Pivot Chords a shared chord led the music into its new key. This time nothing prepares it. Here is the chorus tune alone: read its `.scale()`, then guess before you hear it.
+Here is the chorus tune alone. Read its `.scale()` first.
 
 <Predict exercise="two-keys-one-tune" />
 </Step>
@@ -17,23 +19,23 @@ The whole chorus, twice. The bass and the tune are written once, in numbers, and
 
 <Example id="chorus-lift" views="code,roll" />
 
-<OnPass>C G Am F, then D A Bm G: every chord, every bass note and every note of the tune a whole step up, two half steps, and no chord in between to prepare it. A key change that arrives without warning is a **direct modulation**. When it lifts a last chorus by a half step or a whole step, players call it the truck-driver's gear change. In the code, the numbers did not move. The key did.</OnPass>
+<OnPass>C G Am F, then D A Bm G. Every chord, every bass note and every note of the tune rose two half steps, with no chord in between to prepare it. A key change that arrives without warning is a **direct modulation**. When it lifts a last chorus by a half step or a whole step, players call it the truck-driver's gear change. In the code the numbers did not move; the key did.</OnPass>
 </Step>
 
 <Step id="S4">
-Play this one first and listen to bar 5: the chords and the bass go up, and the tune is left behind in the old key. Then play the target.
+Something is left behind at bar 5 of this one. Hear it before you fix it.
 
 <Editor exercise="lift-the-tune" />
 
-<OnPass>`<C4:major!4 D4:major!4>`: one tune, two keys, each held for four bars. That string is the key plan of the line. A good place to stop for today if you need to.</OnPass>
+<OnPass>`<C4:major!4 D4:major!4>`: one tune, two keys, each held for four bars. That string is the key plan of the line.</OnPass>
 </Step>
 
 <Step id="S5">
-A whole step is the wide lift. Some songs take the narrow one instead. Hear both before you choose for your own song.
+A whole step is the wide lift; some songs take the narrow one. Hear both before you choose for your own song.
 
 <Choice exercise="half-step-or-whole-step" />
 
-<OnPass>Card 2: C to D♭, a half step. Card 1 is the whole step you wrote. Both are the same move, and you can choose between them by ear.</OnPass>
+<OnPass>Card 2: C to D♭, a half step. Card 1 is the whole step you wrote. The half step is the smaller jump but the stranger one: D♭ major shares only two notes with C major, F and C, where D major shares five.</OnPass>
 </Step>
 
 <Step id="S6">
@@ -41,17 +43,17 @@ Now the song from the start of this lesson, in sections. A key plan counts the b
 
 <Editor exercise="after-arrange" />
 
-<OnPass>Bare numbers inside the sections, one key plan after `arrange()`: `<C4:major!8 D4:major!4>`, eight bars of C and four of D. The chords cannot follow a plan, because a chord name is not a number: the lifted chorus has its own section, `chordsChorus2`, with every name moved up.</OnPass>
+<OnPass>Bare numbers inside the sections, one key plan after `arrange()`: `<C4:major!8 D4:major!4>`, eight bars of C and four of D. The chords cannot follow a plan, because a chord name is not a number. That is why the lifted chorus has its own section, `chordsChorus2`, with every name moved up.</OnPass>
 </Step>
 
 <Step id="S7">
-The drums are in and the whole song sits in C. Lift its last chorus: two key plans, four chord names. Then take it further.
+The whole song sits in C. Lift its last chorus: two key plans, four chord names. A lift is also a good moment for a new part to come in, the way parts have entered your arrangements since Arranging in Code.
 
 <Make exercise="your-last-chorus" />
 
 <CanDo id="cd.code.key-lift" />
 
-You can now lift a last chorus into a new key with one key plan after `arrange()`. Next: hearing a song change key, and telling a lift from a move through a shared chord.
+A song of yours can now change key in two ways: through a door, or with a lift that needs none. In code, one key plan after `arrange()` carries every line written in numbers. Next: hearing a song change key, and telling a lift from a move through a shared chord.
 
 <Recap />
 </Step>

@@ -59,7 +59,7 @@ const MAKE_STARTER = code(line("mel", "<[c4 e4 g4 e4] [f4 a4 g4 e4]>", "piano"))
 
 export default defineLesson({
   id: "U02.L06",
-  version: 1,
+  version: 2,
   title: "Tones & Timbres",
   objective:
     "I can play the same line on different instruments and synth waves, and double it on a second sound.",
@@ -84,11 +84,13 @@ export default defineLesson({
         id: "one-riff-four-sounds",
         version: 1,
         role: "practice",
-        prompt: "Press Play. The same four notes come round four times. Listen to what changes each time.",
+        prompt: "Listen to the character of each sound. Which one is gentlest, and which one buzzes?",
         skills: [{ skill: "D01", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "One riff over the band, on a new sound every bar.", bars: 4 }],
+        items: [
+          { code: HOOK, caption: "A new sound every bar. Which ones fade, and which hold steady?", bars: 4 },
+        ],
       },
     },
     {
@@ -342,7 +344,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write a line over the band and play it on **two sounds at once**: a second labelled line that doubles it on another sound, at the same height or an octave apart.",
+          "Write a line and play it on **two sounds at once**: a second labelled line that doubles it on another sound, at the same height or an octave apart.",
         skills: [{ skill: "D01", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [1, 4],
@@ -380,7 +382,7 @@ export default defineLesson({
         hints: ladder(
           "How many lines does the starter have, and how many does the brief ask for?",
           "Copy the `mel` line, label the copy `vox`, and change its sound.",
-          '`vox` with the same notes, `.s("sine")` and `.gain(.4)` is already enough. Then make it yours.',
+          '`vox` with the same notes, `.s("sine")` and `.gain(.4)` is already enough. Change the notes after that if you like.',
         ),
         tests: [
           {

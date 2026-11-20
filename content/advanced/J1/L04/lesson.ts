@@ -110,7 +110,7 @@ const DRUMS = { band: "band.two-five-one", tracks: ["drums"] } as const;
 
 export default defineLesson({
   id: "J1.L04",
-  version: 1,
+  version: 2,
   title: "Guide-Tone Lines",
   objective:
     "I can sing and write the guide-tone lines of a ii–V–I, play them with the guide-tone dictionary, and land a tune on them.",
@@ -136,20 +136,19 @@ export default defineLesson({
         id: "two-notes-a-chord",
         version: 1,
         role: "practice",
-        prompt:
-          "Press Play: a ii–V–I in B♭, Cm7, F7, B♭maj7 (`Bb^7` in code), with the Rhodes playing only two notes of each chord. Then the same loop with a vibes tune on top.",
+        prompt: "Listen to the Rhodes' top note. While the chords change under it, how often does it move?",
         skills: [{ skill: "J07", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: GUIDES_ONLY,
-            caption: "Two notes a chord, and you still hear minor, then dominant, then home.",
+            caption: "Bass, drums, and the Rhodes on two notes a chord.",
             bars: 4,
           },
           {
             code: HOOK,
-            caption: "The vibes start every bar on the Rhodes' top note: B♭, A, A, A.",
+            caption: "The same loop with a vibes tune on top. Listen to the first note of each bar.",
             bars: 4,
           },
         ],
@@ -168,7 +167,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          'Run it with the chord band and the chord-tone lens open. `.dict("guidetones")` gives each chord two notes. Which two, and how far does the top one move from Cm7 to F7?',
+          'Run it. `.dict("guidetones")` gives each chord two notes, and the chord-tone lens names them. Which two members are they, and how far does the top one move from Cm7 to F7?',
         skills: [{ skill: "J07", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -268,7 +267,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The guide tones have a second thread, under the first. The vibes start it on E♭, the 3rd of Cm7. Finish it: one note a bar, each the 3rd or the 7th of its chord, staying put or moving by a half step. Hear the target to check.",
+          "The vibes start the lower thread on E♭, the 3rd of Cm7. Finish it: one note a bar, each the 3rd or the 7th of its chord, staying put or moving by a half step.",
         skills: [{ skill: "J07", w: 1 }],
         swing: SWUNG,
         code: { starter: LOWER_STARTER },
@@ -368,7 +367,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The Rhodes plays full chords under the vibes. Give the chords line the guide-tone dictionary, so the Rhodes plays only the two threads. Hear the target to check.",
+          "Give the chords line the guide-tone dictionary, so the Rhodes plays only the two threads under the vibes.",
         skills: [{ skill: "J07", w: 1 }],
         swing: SWUNG,
         code: { starter: DICT_STARTER },
@@ -455,7 +454,7 @@ export default defineLesson({
         role: "practice",
         title: "Guide-tone tune",
         prompt:
-          "The drums are in; the bass and the guide tones play. The vibes start each bar on its root. Write your own tune: land on a 3rd or a 7th at every chord change, moving at most a whole step from one landing to the next. Between the changes, go anywhere.",
+          "Rewrite the vibes tune: land on a 3rd or a 7th at every chord change, moving at most a whole step from one landing to the next. Between the changes, go anywhere, and swing the line the way the ride swings.",
         skills: [{ skill: "J07", w: 1 }],
         swing: SWUNG,
         code: { starter: MAKE_STARTER },

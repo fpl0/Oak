@@ -106,7 +106,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "R1.L05",
-  version: 1,
+  version: 2,
   title: "Displacement & Laid-Back Feel",
   objective:
     "I can move a figure to another place in the bar, and tell a moved rhythm from a groove that leans back.",
@@ -135,19 +135,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: one groove in D minor, twice. The drums and the bass are the same both times. Listen to the clav's three short chords.",
+          "The drums and the bass hold still; only the clav's three short chords change, and only in some bars. In which bars does the clav sound like a new rhythm? Listen for where its first chord lands against the kick.",
         skills: [{ skill: "R15", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: ON_THE_ONE,
-            caption: "The clav's figure starts on the one in every bar.",
+            caption: "The clav's three chords, the same in every bar.",
             bars: 4,
           },
           {
             code: HOOK,
-            caption: "The same figure, an eighth later in bars 2 and 4: those bars seem to turn round.",
+            caption: "The same three chords. Which bars sound different?",
             bars: 4,
           },
         ],
@@ -164,8 +164,7 @@ export default defineLesson({
         id: "tap-the-figure",
         version: 1,
         role: "practice",
-        prompt:
-          "Feel it before you read it. Tap with the clav's three chords for four bars, wherever they fall: twelve taps in all. Any key works.",
+        prompt: "Tap with the clav's three chords for four bars, wherever they fall: twelve taps in all.",
         skills: [{ skill: "R15", w: 1 }],
         hints: ladder(
           "Does the clav start in the same place in every bar?",
@@ -282,7 +281,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "A cowbell plays the clav's figure: 1, 2 and the “and” after 2, the same in every bar. Keep bar 1 as it is, and in bar 2 move the whole figure one beat later, so it starts on beat 2. Hear the target to check.",
+          "A cowbell plays the clav's figure: 1, 2 and the “and” after 2, the same in every bar. Keep bar 1 as it is, and in bar 2 move the whole figure one beat later, so it starts on beat 2.",
         skills: [{ skill: "R15", w: 1 }],
         code: { starter: BELL_STARTER },
         reference: { solutions: [BELL_SOLUTION], bars: 2 },

@@ -70,7 +70,7 @@ const STARTER_PLAIN = `${TEMPO}mel: n("0 ~ ~ ~").scale("C4:major").s("piano")`;
 
 export default defineLesson({
   id: "U03.L10",
-  version: 1,
+  version: 2,
   title: "By-Ear Transcription I",
   objective: "I can hear a short tune, find home and its first note, and write the rest down in degrees.",
   key: { tonic: "C", mode: "major" },
@@ -94,12 +94,11 @@ export default defineLesson({
         id: "know-this-tune",
         version: 1,
         role: "practice",
-        prompt:
-          "Press Play and listen; there is nothing to read. Do you know the tune? Hum its first note, then hum home.",
+        prompt: "Do you know the tune? Hum its first note, then hum home. Are they the same note?",
         skills: [{ skill: "E07", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: deg(AULD), caption: "A piano tune over the band. No code this time.", bars: 4 }],
+        items: [{ code: deg(AULD), caption: "Four bars on the piano, nothing to read.", bars: 4 }],
       },
     },
     {

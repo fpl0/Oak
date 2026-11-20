@@ -100,7 +100,7 @@ const DRUMS = { band: "band.two-five-one", tracks: ["drums"] } as const;
 
 export default defineLesson({
   id: "J5.L05",
-  version: 1,
+  version: 2,
   title: "Coltrane Changes",
   objective: "I can take a ii–V–I through three keys a major 3rd apart and play a line through them.",
   key: C,
@@ -126,20 +126,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: eight bars by the trio at a brisk swing, first with the tenor, then without. Every other bar is a new home, each reached by its own V7. Listen for the moments the ground shifts.",
+          "Listen for each moment the ground shifts to a new home. How often does one arrive, and does the tenor leap to follow it, or step?",
         skills: [{ skill: "J14", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption:
-              "Bmaj7, D7, Gmaj7, B♭7, E♭maj7, F♯7, Bmaj7. The tenor holds each home's 3rd; on each V7 it plays the 7th, which falls a half step onto the next home's 3rd.",
+            caption: "The trio with the tenor on top.",
             bars: 8,
           },
           {
             code: HOOK_BARE,
-            caption: "The same eight bars without the tenor: three homes, B, G and E♭, and back to B.",
+            caption: "The same eight bars, chords alone. Count the homes.",
             bars: 8,
           },
         ],
@@ -215,7 +214,7 @@ export default defineLesson({
         role: "check",
         key: C,
         prompt:
-          "A ii–V–I in C with a detour: Dm7, then E♭7 into A♭maj7. Bars 4 and 5 still hold A♭maj7. Make them the V7 and the home of the key a major 3rd below A♭, so that G7 can take the line home to C. Hear the target first.",
+          "A ii–V–I in C with a detour: Dm7, then E♭7 into A♭maj7. Bars 4 and 5 still hold A♭maj7. Make them the V7 and the home of the key a major 3rd below A♭, so that G7 can take the line home to C.",
         skills: [{ skill: "J14", w: 1 }],
         swing: SWUNG,
         code: { starter: MODIFY_STARTER },
@@ -295,7 +294,7 @@ export default defineLesson({
         key: C,
         title: "Through three keys",
         prompt:
-          "Your eight bars loop over the drums, and the tenor only plays each chord's root. Write it a line that meets every change on the new chord's 3rd or 7th. Between changes, go anywhere; keep each landing within a few half steps of the last.",
+          "The tenor only plays each chord's root. Write it a line that meets every change on the new chord's 3rd or 7th. Between changes, go anywhere; keep each landing within a few half steps of the last, and swing it.",
         skills: [{ skill: "J14", w: 1 }],
         swing: SWUNG,
         code: { starter: MAKE_STARTER },

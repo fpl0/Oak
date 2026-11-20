@@ -98,7 +98,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U11.L08",
-  version: 1,
+  version: 2,
   title: "Riffs & Response",
   objective: "I can write a blues riff that comes back in every line and answer it on another part.",
   key: { tonic: "C", mode: "blues" },
@@ -129,7 +129,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a shuffle in C, twelve bars, twice. First the guitar riff alone, in the first two bars of every four. Then the same riff with the organ answering it.",
+          "A shuffle in C, twelve bars, twice: the guitar riff alone, then the same riff with the organ. Listen to the silence after each riff. How does the music feel with that space empty, and with it filled?",
         skills: [
           { skill: "M08", w: 0.5 },
           { skill: "M07", w: 0.5 },
@@ -137,8 +137,8 @@ export default defineLesson({
         hints: null,
         tests: [],
         items: [
-          { code: CALLS_ONLY, caption: "The riff alone: it plays, then leaves two bars of room.", bars: 12 },
-          { code: HOOK, caption: "The same riff, and the organ fills the room with an answer.", bars: 12 },
+          { code: CALLS_ONLY, caption: "The riff alone. Listen to the room it leaves.", bars: 12 },
+          { code: HOOK, caption: "The same riff, with the organ.", bars: 12 },
         ],
       },
     },
@@ -182,7 +182,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run the shuffle with the chord band open. Watch the guitar when the chords move to IV7 in bar 5, and count its riffs.",
+          "Run the shuffle. Watch the guitar when the chords move to IV7 in bar 5, and count its riffs.",
         skills: [
           { skill: "M08", w: 0.6 },
           { skill: "F04", w: 0.4 },
@@ -422,7 +422,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The organ answers three times, but the guitar plays something new in every line, so nothing calls. Give the guitar one riff that comes back in bars 1–2 of every line, and keep the answers changing. Then make both yours: your own riff, your own three answers.",
+          "Give the guitar one riff that comes back in bars 1–2 of every line, and keep the answers changing. Then make both yours: your own riff, your own three answers.",
         skills: [
           { skill: "M08", w: 0.7 },
           { skill: "M07", w: 0.3 },

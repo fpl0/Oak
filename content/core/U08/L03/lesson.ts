@@ -91,7 +91,7 @@ const ROOT_BASS = {
 
 export default defineLesson({
   id: "U08.L03",
-  version: 1,
+  version: 2,
   title: "Walking Up to It",
   objective:
     "I can lead a bass line into a chord change with an approach note a step or a half step from the next root.",
@@ -118,13 +118,13 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the doo-wop loop over the drums, first with the root bass, then with one bass note changed at the end of every bar.",
+          "Loop 2 changes one bass note in every bar. Listen at the end of each bar: where does the bass seem to be heading?",
         skills: [{ skill: "B03", w: 1 }],
         hints: null,
         tests: [],
         items: [
           { code: PLAIN, caption: "Roots on beats 1, 3 and 4.", bars: 4 },
-          { code: HOOK, caption: "Beat 4 now leads into the next chord.", bars: 4 },
+          { code: HOOK, caption: "The same bass with one note changed in every bar.", bars: 4 },
         ],
       },
     },
@@ -228,7 +228,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Bar 4 now stays on G to the end, so nothing leads back to C. Change its beat 4 to an approach note into C from the half step below.",
+          "Bar 4 stays on G to the end. Change its beat 4 to an approach note into C from the half step below.",
         skills: [{ skill: "B03", w: 1 }],
         code: { starter: LEAD_STARTER },
         reference: { solutions: [LEAD_SOLUTION], bars: 4 },
@@ -429,7 +429,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "A soul vamp, C F C G, with the bass on each root. Lead it into at least two of the changes: on beat 4, a note a step or a half step from the next root, above or below. Keep every new root on beat 1.",
+          "Lead the bass into at least two of the changes: on beat 4, a note a step or a half step from the next root, above or below. Keep every new root on beat 1.",
         skills: [{ skill: "B03", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

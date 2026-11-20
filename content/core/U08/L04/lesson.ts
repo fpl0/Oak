@@ -80,7 +80,7 @@ const TAP_FEEDBACK = {
 
 export default defineLesson({
   id: "U08.L04",
-  version: 1,
+  version: 2,
   title: "Lock with the Kick",
   objective:
     "I can give the kick drum and the bass one rhythm, named once in a const, so they hit as one instrument.",
@@ -107,13 +107,13 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the same drums and the same bass notes twice, over the four-chord loop. Listen to the kick and the bass together.",
+          "Listen low, where the kick and the bass live. In each loop, do the two sound like two parts or like one?",
         skills: [{ skill: "B04", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: RUB, caption: "The bass on every beat, the kick on its own rhythm: they rub.", bars: 4 },
-          { code: HOOK, caption: "The bass on the kick's rhythm: the two hit as one.", bars: 4 },
+          { code: RUB, caption: "The bass on every beat.", bars: 4 },
+          { code: HOOK, caption: "The same bass notes and drums; only the bass's rhythm changes.", bars: 4 },
         ],
       },
     },
@@ -202,7 +202,7 @@ export default defineLesson({
     {
       id: "S4",
       kind: "modify",
-      title: "Give the bass the kick's rhythm",
+      title: "Match the kick",
       minutes: 1.25,
       graded: true,
       ui: { panels: ROLL, rollLabels: "degree", band: CHORDS },
@@ -343,7 +343,7 @@ export default defineLesson({
     {
       id: "S7",
       kind: "make",
-      title: "Kick and bass as one",
+      title: "Kick and bass together",
       minutes: 2.75,
       ui: { panels: ROLL, rollLabels: "degree", band: CHORDS },
       exercise: {
@@ -352,7 +352,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The Band plays the four-chord loop. Write a rhythm for the kick and the bass in one `const` and give it to both lines; a hit between the beats makes them push. Then add a snare and hats of your own.",
+          "Write one rhythm in a `const` and give it to both the kick and the bass; a hit between the beats makes them push. Then add a snare and hats of your own.",
         skills: [{ skill: "B04", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

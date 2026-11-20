@@ -42,7 +42,7 @@ const TAP_FEEDBACK = {
 
 export default defineLesson({
   id: "U01.L01",
-  version: 1,
+  version: 2,
   title: "Heartbeat",
   objective: "I can find the beat, set a tempo with setcpm, and write a one-bar beat on one line.",
   key: { tonic: "C", mode: "major" },
@@ -70,11 +70,11 @@ export default defineLesson({
         id: "find-the-beat",
         version: 1,
         role: "practice",
-        prompt: "Press Play and nod along. One nod for every kick and every snare.",
+        prompt: "Nod along with the groove. Which sounds does your nod land with?",
         skills: [{ skill: "R01", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: groove(BPM), caption: "Two lines of drums over the band.", bars: 4 }],
+        items: [{ code: groove(BPM), caption: "Kick and snare on one line, hats on the other.", bars: 4 }],
       },
     },
     {
@@ -126,8 +126,7 @@ export default defineLesson({
         id: "bigger-number",
         version: 1,
         role: "practice",
-        prompt:
-          "Same groove, one change: the first line now says 132 where it said 96. Before you run it: what changes?",
+        prompt: "Now it says 132 where it said 96, and nothing else has changed. What will you hear?",
         skills: [{ skill: "R02", w: 1 }],
         hints: null,
         tests: [],
@@ -258,7 +257,7 @@ export default defineLesson({
         id: "set-120",
         version: 1,
         role: "check",
-        prompt: "This groove drags. Make it play at **120** beats per minute without changing the drums.",
+        prompt: "Make it play at **120** beats per minute without changing the drums.",
         skills: [{ skill: "R02", w: 1 }],
         code: { starter: `setcpm(⟪80⟫/4)\n\n${GROOVE_LINES}` },
         reference: { solutions: [groove(120)], bars: 1 },
@@ -367,7 +366,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write your own one-bar beat over the band, at a tempo you choose. The starter has one kick a bar; every one of the four beats needs a sound.",
+          "Write a one-bar beat at a tempo you choose. The starter has one kick a bar; give every one of the four beats a sound.",
         skills: [
           { skill: "R01", w: 0.5 },
           { skill: "R02", w: 0.25 },

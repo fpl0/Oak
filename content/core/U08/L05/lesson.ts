@@ -95,7 +95,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U08.L05",
-  version: 1,
+  version: 2,
   title: "Bass Dictation & Tone",
   objective: "I can take a bass line down by ear, and give a bass its tone.",
   key: { tonic: "C", mode: "major" },
@@ -124,14 +124,18 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the doo-wop loop with the same bass line three times. Only the sound of the bass changes. Which one would you keep?",
+          "Only the sound of the bass changes. Listen to how each note starts and how much it buzzes: which one sits best under these chords for you?",
         skills: [{ skill: "B01", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: EBASS, caption: "`ebass`, the picked bass you have used since your first loop.", bars: 4 },
-          { code: FINGER, caption: "`fingerbass`: rounder, the notes start softer.", bars: 4 },
-          { code: SYNTH, caption: "A sawtooth wave with `.lpf(600)`: the synth bass, buzzier.", bars: 4 },
+          { code: EBASS, caption: "`ebass`, the bass you have used since your first loop.", bars: 4 },
+          { code: FINGER, caption: "`fingerbass`. Listen to how each note starts.", bars: 4 },
+          {
+            code: SYNTH,
+            caption: "The synth bass, a sawtooth wave with `.lpf(600)`. Listen to its edge.",
+            bars: 4,
+          },
         ],
       },
     },
@@ -148,7 +152,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The chords are in the code; the bass is hidden. Write it in `n`, in any octave: two notes a bar. Switch between the source and your code at the same bar to check.",
+          "The bass is hidden. Write it in `n`, in any octave: two notes a bar. Switch between the source and your code at the same bar to check.",
         skills: [
           { skill: "E09", w: 0.6 },
           { skill: "B01", w: 0.4 },
@@ -210,7 +214,7 @@ export default defineLesson({
     {
       id: "S3",
       kind: "ear",
-      title: "The bass under new loops",
+      title: "Bass under new loops",
       minutes: 1.25,
       graded: true,
       ui: { panels: NONE },
@@ -247,7 +251,7 @@ export default defineLesson({
     {
       id: "S4",
       kind: "sing",
-      title: "Sing what you took down",
+      title: "Sing it back",
       minutes: 1.5,
       ui: { panels: NONE },
       exercise: {
@@ -368,7 +372,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "A loop that starts away from home, vi IV I V, over the drums. The bass is a bar late: each chord gets the root of the one before. Put every root on its own beat 1, then use the unit: 5ths, octaves, approach notes, a rhythm with the kick. Choose its tone.",
+          "The bass is a bar late: each chord gets the root of the one before. Put every root on its own beat 1, then build the line out with this unit's tools and choose its tone.",
         skills: [{ skill: "B01", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

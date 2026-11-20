@@ -1,13 +1,15 @@
 {/* A1.L07 FM & Supersaw: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
 
 <Step id="S1">
-Your loop as Space left it: a plucked bass, a snare in a big room, a riff that echoes. First the riff on a plain sine over a quiet pad, then the same notes on two richer sounds.
+Waves & Harmonics started from four plain waves. This last sound lesson builds richer sources out of them. Here is the loop as Space left it, with a quiet pad under the riff.
 
 <Example id="hook" views="code,roll" autoplay />
+
+<OnPass>A struck bell: each riff note in loop 2 clangs with a metallic ring, yet it is still one sine wave underneath. Behind it the pad spreads wide. Both sounds are built from waves you already know, and the next steps take each one apart.</OnPass>
 </Step>
 
 <Step id="S2">
-In Movement a slow wave moved a note's pitch a few times a second, and you heard a wobble. Make that second wave fast, hundreds of times a second, and you no longer hear a wobble. Pick what you will hear instead. <CodeRef fn="fm" />
+In Movement a slow wave moved a note's pitch a few times a second, and you heard a wobble. Make that second wave fast, hundreds of times a second, and the wobble is gone. <CodeRef fn="fm" />
 
 <Predict exercise="bend-it-further" />
 </Step>
@@ -17,15 +19,15 @@ The same bend in bars 2 and 3. Only the speed of the second sine changes.
 
 <Example id="three-ratios" views="code" />
 
-<OnPass>Bar 1 is a plain sine. Bar 2's second sine runs at twice the note, so the new tones land on harmonics of the note and it still sounds like one clear pitch, hollow and reedy. Bar 3's runs at 3.5 times the note, so some of its new tones fall between the harmonics, and the note clangs like a bell. Letting one wave bend another's pitch this fast is **FM synthesis**: `.fm()` is how far, `.fmh()` how fast.</OnPass>
+<OnPass>Bar 1 is a plain sine. In bar 2 the second sine runs at twice the note, so its new tones land on the note's harmonics: one clear pitch, hollow and reedy. In bar 3 it runs at 3.5 times the note, so some new tones fall between the harmonics, and the note clangs like a bell. Letting one wave bend another's pitch this fast is **FM synthesis**. `.fm()` sets how far, `.fmh()` how fast.</OnPass>
 </Step>
 
 <Step id="S4">
-Match a sound by ear: a bell for the riff.
+This is the riff from the opening's loop 2. Rebuild its bell from the plain sine.
 
 <Editor exercise="ring-the-riff" />
 
-<OnPass>A deep bend, at a speed between two whole-number multiples: a struck bell, from one sine wave. Bend less for something softer, use a whole number for a brighter, brassier tone. FM bends an oscillator, so it works on the synth waves and does nothing on a recorded instrument such as the piano. A good place to stop for today if you need to.</OnPass>
+<OnPass>A deep bend, at a speed between two whole numbers: a struck bell from one sine wave. Bend less for something softer, or use a whole number for a brighter, brassier tone. FM works on the synth waves only; a recorded instrument such as the piano has no oscillator to bend. FM synthesizers gave many 1980s records their bright electric pianos and bells.</OnPass>
 </Step>
 
 <Step id="S5">
@@ -33,15 +35,15 @@ The other rich source of this lesson is the pad from the first step: a supersaw,
 
 <Choice exercise="wide-and-narrow" />
 
-<OnPass>Card B. Waves a little out of tune with each other drift in and out of step, so the chord shimmers and spreads; on one pitch the five add up to a single still wave. Copies of a sound tuned a fraction of a half step apart are **detune**: `.detune()` sets how far apart, and `.unison()` how many copies.</OnPass>
+<OnPass>Card B. Pulled apart, the five saws drift in and out of step, so the chord shimmers and spreads; at one pitch they add up to a single still wave. Tuning copies of a sound a fraction of a half step apart is **detune**. `.detune()` sets how far apart, `.unison()` how many copies.</OnPass>
 </Step>
 
 <Step id="S6">
-Your ear for sources. One riff, one sound.
+Three sources, one riff, and no code to read.
 
 <Choice exercise="which-source" />
 
-<OnPass>The ring between the harmonics gives FM away: one pitch, with a metallic edge that fades as the note dies. Oak brings sound questions back in your warm-ups.</OnPass>
+<OnPass>FM: the tones between the harmonics give it away. You heard one pitch, with a metallic edge that fades as the note dies.</OnPass>
 </Step>
 
 <Step id="S7">
@@ -53,7 +55,7 @@ For a longer session: the pad behind your bell riff, made wider by ear. <CodeRef
 </Step>
 
 <Step id="S8">
-Back to the plain loop. Pick a part and give it a sound of your own: bend it a little for brightness, a lot for a clang, and choose the speed by ear. Synth waves only.
+Pick a part of the plain loop, or of a loop you bring, and give it a new sound: bend it a little for brightness, a lot for a clang, and choose the speed by ear. FM needs a synth wave to bend. The riff's quick fade is the pluck from Envelopes: a bell needs that struck shape as much as its clang.
 
 <Make exercise="a-richer-source" />
 

@@ -109,7 +109,7 @@ const DRUMS = { band: "band.two-five-one", tracks: ["drums"] } as const;
 
 export default defineLesson({
   id: "J1.L03",
-  version: 1,
+  version: 2,
   title: "The Major ii–V–I",
   objective: "I can hear a ii–V–I as one gesture and write one in a major key.",
   key: C_MAJOR,
@@ -135,19 +135,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the trio from the ride lesson, then the same four bars somewhere else. Listen for where each one comes to rest.",
+          "Listen for the bar where each take comes to rest. How do the two bars before it feel: settled, or on their way?",
         skills: [{ skill: "J04", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: TRIO_C,
-            caption: "Dm7, G7, then Cmaj7 for two bars: the first two chords pull, the third one is home.",
+            caption: "The trio in C.",
             bars: 4,
           },
           {
             code: TRIO_F,
-            caption: "The same trio moved to F: Gm7, C7, then Fmaj7. The same pull, a new home.",
+            caption: "The same four bars, with F as home.",
             bars: 4,
           },
         ],
@@ -193,7 +193,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run the trio with the chord band open: it shows each chord's numeral in C major. Read the numerals, then follow the bass from the first bar into the second.",
+          "Run the trio. The chord band shows each chord's numeral in C major: read them, then follow the bass from bar 1 into bar 2.",
         skills: [{ skill: "J04", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -318,7 +318,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The trio plays the ii–V–I in C. Move it so that home is F: the same three kinds of chord, on F's degrees 2, 5 and 1. The bass reads `changes` too. Hear the target to check.",
+          "The trio plays the ii–V–I in C. Move it so that home is F: the same three kinds of chord, on F's degrees 2, 5 and 1. The bass reads `changes` too.",
         skills: [{ skill: "J04", w: 1 }],
         swing: SWUNG,
         code: { starter: MOVE_STARTER },
@@ -434,7 +434,7 @@ export default defineLesson({
         role: "practice",
         title: "Two landings",
         prompt:
-          "The band plays the drums. Your trio's loop never makes the gesture. Write eight bars: a ii–V–I into C, then one into a second key you choose (F is close). Then make it yours: give the vibes a line, try another tempo.",
+          "Your trio's loop never makes the gesture. Write eight bars: a ii–V–I into C, then one into a second key you choose (F is close). Last lesson's sixth chord makes a warm home; a vibes line or another tempo can come after.",
         skills: [{ skill: "J04", w: 1 }],
         swing: SWUNG,
         code: { starter: MAKE_STARTER },

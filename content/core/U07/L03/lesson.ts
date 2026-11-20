@@ -95,7 +95,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U07.L03",
-  version: 1,
+  version: 2,
   title: "Landing on Chord Tones",
   objective:
     "I can write a tune that lands on a note of the chord on beats 1 and 3, and moves freely between.",
@@ -120,11 +120,11 @@ export default defineLesson({
         id: "a-tune-that-sits",
         version: 1,
         role: "practice",
-        prompt: "Press Play. A four-bar tune over the four-chord loop. Listen to how it sits on the chords.",
+        prompt: "Does the tune sound settled on its chords, or does it rub against them?",
         skills: [{ skill: "M03", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "A tune over C, G, Am and F, a chord a bar.", bars: 4 }],
+        items: [{ code: HOOK, caption: "Four bars over C, G, Am and F, a chord a bar.", bars: 4 }],
       },
     },
     {
@@ -138,11 +138,12 @@ export default defineLesson({
         id: "which-one-fits",
         version: 1,
         role: "practice",
-        prompt: "The same chords and the same rhythm, two tunes. Which tune sits on the chords?",
+        prompt:
+          "Which tune sits on the chords? Listen hardest at the start of each bar, where the chord changes.",
         skills: [{ skill: "M03", w: 1 }],
         hints: ladder(
           "In which card does the tune sound at rest with the chords on beat 1?",
-          "Listen to the start of each bar, where the chord changes. Does the tune agree with it?",
+          "Hum along with bar 1 of each card. On beat 1, does the tune's note blend with the C chord or rub against it?",
           "Card B is card A moved up one degree. Play bar 4 of each: which one rests on the F chord?",
         ),
         stimulus: { src: "code", code: HOOK, bars: 4, showCode: false },
@@ -184,7 +185,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run the hook. For each note on beat 1 or beat 3, find the chord under it in the `chords` line and check whether the note is one of its three.",
+          "Run the tune. For each note on beat 1 or beat 3, find the chord under it in the `chords` line and check whether the note is one of its three.",
         skills: [{ skill: "M03", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -234,7 +235,7 @@ export default defineLesson({
     {
       id: "S4",
       kind: "quiz",
-      title: "In the chord or not",
+      title: "In the chord?",
       minutes: 1,
       graded: true,
       ui: { panels: ROLL, rollLabels: "degree" },
@@ -359,8 +360,7 @@ export default defineLesson({
         id: "fix-the-landings",
         version: 1,
         role: "check",
-        prompt:
-          "In bars 2 and 4 the tune starts on a note outside its chord. Change only those two notes so every note on beats 1 and 3 is a chord tone.",
+        prompt: "Change only the first note of bars 2 and 4, so every note on beats 1 and 3 is a chord tone.",
         skills: [{ skill: "M03", w: 1 }],
         code: { starter: LANDING_STARTER },
         reference: { solutions: [LANDING("6", "3")], bars: 4 },
@@ -488,7 +488,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Every note on beats 1 and 3 of this tune is a step away from its chord. Rewrite it so it lands on a note of the chord on beats 1 and 3; between them, go where you like.",
+          "Every note on beats 1 and 3 of this tune is a step away from its chord. Rewrite it so it lands on a chord tone on beats 1 and 3; between them, go where you like.",
         skills: [{ skill: "M03", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

@@ -108,7 +108,7 @@ const LEAD = { roll: false, staff: "lead", keyboard: false } as const;
 
 export default defineLesson({
   id: "U17.L01",
-  version: 1,
+  version: 2,
   title: "Pivot Chords",
   objective:
     "I can change key through a chord that both keys share: Am is vi in C and ii in G, then D7 brings G home.",
@@ -142,13 +142,17 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: an eight-bar verse that goes round twice in C and stops on G. Then the same verse with bar 7 changed, chord and tune. It stops on the same G. Listen to how differently that G sits.",
+          "An eight-bar verse, twice. Both versions stop on the same G; the second changes bar 7, chord and tune. Listen to that last G each time. Is it a pause, or an arrival?",
         skills: [{ skill: "H14", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: STAY, caption: "C, Am, F, G twice: the last G still wants to go on to C.", bars: 8 },
-          { code: HOOK, caption: "The second time: C, Am, D7, G. Now G sounds like home.", bars: 8 },
+          { code: STAY, caption: "C, Am, F, G, twice. Hold the last G in your ear.", bars: 8 },
+          {
+            code: HOOK,
+            caption: "The second time round, bar 7 is D7. Hear where the last G sits now.",
+            bars: 8,
+          },
         ],
       },
     },
@@ -164,7 +168,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          '`chord("<C Am D7 G>")`: three chords that C major owns, and D7, which you met as the V7 of V. D7 is D, F♯, A and C. Which of its notes does C major not have?',
+          '`chord("<C Am D7 G>")`: three chords that C major owns, and D7. D7 is D, F♯, A and C. Which of its notes does C major not have?',
         skills: [{ skill: "H14", w: 1 }],
         hints: null,
         tests: [],
@@ -192,7 +196,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run the verse with the chord band open and watch bars 5 to 8. Bar 6 is Am, right before D7. Spell it, then check it against both scales: C major, and G major with its F♯. Then find the first note from outside C major on the roll.",
+          "Watch bars 5 to 8. Bar 6 is Am, right before D7. Spell Am, then check it against both scales: C major, and G major with its F♯. Then find the first note from outside C major on the roll.",
         skills: [{ skill: "H14", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -460,7 +464,7 @@ export default defineLesson({
         role: "practice",
         key: C_MAJOR,
         prompt:
-          "The verse from the start of the lesson, round twice in C. Make the second time leave home: a chord both keys own as the door, then G's own V7, then G, and a key plan that puts the tune's last two bars in G. Then make it yours: another door, a new tune, other sounds.",
+          "The verse from the start of the lesson, round twice in C. Make the second time leave home: a chord both keys own as the door, then G's own V7, then G, and a key plan that puts the tune's last two bars in G. After that, try another door, a new tune, other sounds.",
         skills: [{ skill: "H14", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [8, 16],

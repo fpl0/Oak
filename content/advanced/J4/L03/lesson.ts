@@ -127,7 +127,7 @@ const DRUMS = { band: "band.two-five-one", tracks: ["drums"] } as const;
 
 export default defineLesson({
   id: "J4.L03",
-  version: 1,
+  version: 2,
   title: "Rhythm Changes",
   objective: "I can play rhythm changes: the 32-bar AABA of I Got Rhythm, with its bridge of dominants.",
   key: B_FLAT,
@@ -153,7 +153,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the trio and the vibes in B♭, fast, about 44 seconds from top to bottom. Follow the form lens as it plays, and listen for the part where the vibes stop.",
+          "Follow the form lens, and listen for the stretch where the vibes stop. How do its chords feel against the bars around it?",
         skills: [{ skill: "J12", w: 1 }],
         hints: null,
         tests: [],
@@ -161,7 +161,7 @@ export default defineLesson({
           {
             code: HOOK,
             caption:
-              "A A B A: the same eight bars twice, eight bars somewhere else while the vibes rest, then the first eight again, ending at home.",
+              "Thirty-two bars, top to bottom, in about 44 seconds. Listen for the vibes dropping out, and for when they return.",
             bars: 32,
           },
         ],
@@ -180,7 +180,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it with the form lens and the chord band open. Count the bars of one section, then read the chords of B, the section the vibes leave out.",
+          "Run it. Count the bars of one section in the form lens, then read the chord band in B, the section the vibes leave out.",
         skills: [{ skill: "J12", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -309,7 +309,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The A sections and the order A A B A are written, but `const B` still holds the A section, so the form never leaves home. Write the bridge into `B`: eight bars, the four dominants you just numbered. Hear the target first.",
+          "The A sections and the order A A B A are written, but `const B` still holds the A section, so the form never leaves home. Write the bridge into `B`: eight bars, the four dominants you just numbered.",
         skills: [{ skill: "J12", w: 1 }],
         swing: SWUNG,
         code: { starter: S4_STARTER },
@@ -380,7 +380,7 @@ export default defineLesson({
         role: "practice",
         title: "Rhythm changes",
         prompt:
-          "The Band plays the drums. Your trio only loops the A section. Put the whole form together: write the bridge, then arrange A A B A on the comping and on the bass, the last A from `A3`. Then make it yours: the comping rhythm, a walk, a riff on the vibes over the A sections.",
+          "Your trio only loops the A section. Put the whole form together: write the bridge, then arrange A A B A on the comping and on the bass, the last A from `A3`. The comping rhythm, a walk, and a vibes riff over the A sections are yours.",
         skills: [{ skill: "J12", w: 1 }],
         swing: SWUNG,
         code: { starter: MAKE_STARTER },

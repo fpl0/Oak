@@ -1,13 +1,15 @@
 {/* A1.L03 Envelopes: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
 
 <Step id="S1">
-Your loop from Filters. A low-pass changed what each note is made of; today changes how each note moves in time: how it starts, how it falls, how it ends.
+Filters changed what each note of your loop is made of. This lesson changes how each note moves through time: how fast it starts, how it falls, when it stops.
 
 <Example id="hook" views="code,roll" autoplay />
+
+<OnPass>In loop 2 each bass note hits and dies away at once, so the low end goes quiet between notes. Each riff note fades in and rings on past its end. The waves and the filters stayed. What changed is how each note's loudness moves through time.</OnPass>
 </Step>
 
 <Step id="S2">
-In the filter lesson, `.lpd()` moved the cutoff over a fraction of a second. These controls move the loudness the same way. Pick before you run it. <CodeRef fn="attack" />
+In Filters, `.lpd()` moved the cutoff over a fraction of a second. These controls move the loudness the same way. <CodeRef fn="attack" />
 
 <Predict exercise="a-slower-start" />
 </Step>
@@ -21,15 +23,15 @@ The scope draws loudness as the height of the wave. Watch one note go through it
 </Step>
 
 <Step id="S4">
-A bass that stops on its own leaves room for the kick. Match the target by ear.
+The kick and the bass share the bottom of the sound, and only one of them needs to ring there. A bass that stops on its own leaves that room to the kick.
 
 <Editor exercise="pluck-the-bass" />
 
-<OnPass>A pluck: each bass note hits, falls to nothing in a fifth of a second and gets out of the way. Set only `.decay()` and the sustain falls to nothing on its own, the same pluck. A good place to stop for today if you need to.</OnPass>
+<OnPass>A pluck: each bass note hits, falls to nothing in a fifth of a second and gets out of the way. Set only `.decay()` and the sustain falls to nothing on its own, the same pluck.</OnPass>
 </Step>
 
 <Step id="S5">
-The opposite shape. On longer notes a slow start and a long tail turn a square into something like a pad.
+Now the opposite shape. On longer notes, a slow start and a long tail turn a square wave into something like a pad.
 
 <Editor exercise="swell-the-riff" />
 
@@ -37,21 +39,21 @@ The opposite shape. On longer notes a slow start and a long tail turn a square i
 </Step>
 
 <Step id="S6">
-Your ear for the envelope. Two bars, one change.
+Listen for the same two edges as in the opening, now with no code to read.
 
 <Choice exercise="start-or-tail" />
 
-<OnPass>A softer start blurs the front of each note; a longer tail fills the gaps after it. Oak brings this back in your warm-ups, beside the cutoff.</OnPass>
+<OnPass>The attack lives at the front edge of each note, the release in the silence after it. A singer or a violinist shapes those same two edges on every note.</OnPass>
 </Step>
 
 <Step id="S7">
-Back to the loop from Filters. A punchy part and a floating part sit well together: try a different shape on each.
+Three side lessons in, you choose each note's harmonics, its filter and now its shape in time. A punchy part and a floating part sit well together, so try a different shape on each. The filter pluck from last lesson can ride on the same part as a loudness pluck.
 
 <Make exercise="shape-your-loop" />
 
 <CanDo id="cd.code.envelopes" />
 
-Next, whenever you like: Space puts your loop in a room, with echoes in time.
+Space, the last of these side lessons, puts your loop in a room, with echoes in time.
 
 <Recap />
 </Step>

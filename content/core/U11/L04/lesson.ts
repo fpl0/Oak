@@ -103,7 +103,7 @@ const earPart = (id: string, prompt: string, stimulus: string, answer: "triad" |
 
 export default defineLesson({
   id: "U11.L04",
-  version: 1,
+  version: 2,
   title: "The Dominant Seventh",
   objective: "I can build, name and hear a dominant seventh: a major triad with a ♭7 on top, written C7.",
   key: { tonic: "C", mode: "blues" },
@@ -129,13 +129,13 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a C–F vamp in plain triads over the drums. Then the same vamp with one note added to each chord, and a crunch riff on top.",
+          "A C–F vamp in plain triads, then the same vamp with one note added to each chord and a riff on top. Listen to the chords: does the added note make them more settled, or more restless?",
         skills: [{ skill: "C06", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: TRIADS, caption: "C and F as plain triads.", bars: 4 },
-          { code: HOOK, caption: "C7 and F7, with the blues-scale riff.", bars: 4 },
+          { code: TRIADS, caption: "The vamp in plain triads.", bars: 4 },
+          { code: HOOK, caption: "One note added to each chord, and the blues-scale riff on top.", bars: 4 },
         ],
       },
     },
@@ -178,7 +178,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it with the chord band open: C7, F7, then G7 and a plain C. Read bar 1's degree labels on the roll, bottom to top.",
+          "Run it: C7, F7, then G7 and a plain C. Read bar 1's degree labels on the roll, bottom to top.",
         skills: [{ skill: "C06", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -373,7 +373,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Four chords in different keys and voicings, one at a time. A plain major triad, or a dominant seventh?",
+          "Four chords in different keys and voicings, one at a time. A plain major triad, or a dominant seventh? Listen for a lean at the top of the chord.",
         skills: [{ skill: "C06", w: 1 }],
         hints: earHints(),
         tests: [],
@@ -397,7 +397,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The vamp in plain triads, C and F, with the hook's riff on top. Make both chords dominant sevenths, then make the riff yours: new notes from the blues scale, a new rhythm. Try another pair too: G7 and C7, or F7 and B♭7 (`Bb7`).",
+          "Make both chords dominant sevenths, then make the riff yours: new notes from the blues scale, a new rhythm. Try another pair too: G7 and C7, or F7 and B♭7 (`Bb7`).",
         skills: [{ skill: "C06", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [2, 8],

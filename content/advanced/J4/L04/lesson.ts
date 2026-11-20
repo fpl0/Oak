@@ -168,7 +168,7 @@ const DRUMS = { band: "band.two-five-one", tracks: ["drums"] } as const;
 
 export default defineLesson({
   id: "J4.L04",
-  version: 1,
+  version: 2,
   title: "Reading a Standard",
   objective: "I can play a standard's melody and changes from its lead sheet.",
   key: B_FLAT,
@@ -197,19 +197,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play and follow the page: the vibes play the melody on the staff, the trio plays the chords named above it. Then hear the chords alone.",
+          "Follow the page as it plays. In the second loop the melody drops out: where have you heard these chords before?",
         skills: [{ skill: "N07", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: PAGE,
-            caption: "Eight bars in B♭: the A section of rhythm changes, with a melody on the vibes.",
+            caption: "The melody on the vibes, the chords in the trio.",
             bars: 8,
           },
           {
             code: CHANGES_ALONE,
-            caption: "The same eight bars without the melody: what the band plays under it.",
+            caption: "The same eight bars without the melody.",
             bars: 8,
           },
         ],
@@ -454,7 +454,7 @@ export default defineLesson({
         role: "practice",
         title: "The A section",
         prompt:
-          "The Band plays the drums, your trio the changes. The melody has the two bars you read; play the rest of the head from the page, all eight bars, note for note. The arrangement is yours: the tempo, the comping, a walk or a two-feel, the sound of the head.",
+          "Your trio plays the changes. The melody has the two bars you read; play the rest of the head from the page, all eight bars, note for note. The arrangement is yours: the tempo, Charleston or pushed comping, a walk or a two-feel, the sound of the head.",
         skills: [{ skill: "N07", w: 1 }],
         swing: SWUNG,
         code: { starter: MAKE_STARTER },

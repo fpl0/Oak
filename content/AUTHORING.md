@@ -132,7 +132,7 @@ Rules:
 3. Chord names in prose use the lead-sheet form (Cmaj7, Cm7♭5); code uses the STYLE spelling (`C^7`, `Cm7b5`). When both appear, show both once: "`C^7` (Cmaj7)".
 4. Feedback says **where and how many** first ("2 notes differ, bars 2 and 4"). The catalog template usually suffices; override `feedbackText` only to add the lesson's own image or to avoid a term not yet taught.
 5. Pass copy (`<OnPass>` in the MDX step) names what the learner just did and, if a term is introduced, bolds it once.
-6. Never claim the app or the tutor heard the learner's audio beyond what the mic grader measured. Mic copy: "Your voice is analysed live on this computer. Nothing is recorded or sent."
+6. Never claim the app or the tutor heard the learner's audio beyond what the mic grader measured. Mic copy: "Your voice is analysed live on this computer. Nothing is recorded or sent." The sing widget and the mic set-up already show it; do not repeat it in a step's prose.
 7. No guilt, no streak talk, no countdowns, no "you should". No emoji, no exclamation marks, no "simply", "easy", "obviously", "let's", "awesome". Sentence case in titles and buttons. (Check 14 fails all of these.)
 8. Titles are 2–4 words and concrete ("Count to Four", "Lift the line").
 9. Do not mention unlock mechanics in lesson prose; the Coda announces unlocks.
@@ -895,3 +895,38 @@ Compute these one way (`@oak/content-kit`), in prose, generators and rules:
 ### 20.6 What contracts 1.8 settled
 
 No lesson is split. J5.L03 requires the secondary ii–V and hears the passing diminished chord in a comparison step (J5.L04 applies it); R1.L05 requires displacement and compares the laid-back feel (AC2.S2 applies it); A1.L07 requires FM and compares the supersaw (an optional stretch writes it); A2.L03 requires the counter-melody and leaves re-voicing per section to an optional stretch and A2.L06. J1.L02 reads the sevenths in jazz glyphs and adds two colours (6, sus); J2.L02 introduces one altered dominant (♭9) and leaves ♯9 and alt to J2.L03; twelve-key practice is spread over the track (J2.L01 tours the keys; later Makes rotate keys; `deck.jzz.ii-v`). A2.L06 uses only tools of its earliest route (no swing: ballad against drive, not swung against straight). The ten fact decks of the tracks are in §7.3; until the drills engine writes them they are listed in `content/decks/planned.ts`.
+
+## 21. Listening, repetition and progression (the copy pass of 2026-11-19)
+
+The owner, learning from the course, found the copy repetitive and some listening steps without a point ("it's just sounds playing: why, and what should be noticed?"). Every lesson was rewritten against these rules; keep them.
+
+### 21.1 Every listening moment has a purpose and a payoff
+
+Applies to `listen` and `compare` steps, the prose of `ear` steps, and any prose that asks the learner to play an `<Example>`.
+
+1. **Frame** (prose, one or two sentences): why this sound, now; tied to what the learner can already do or hear.
+2. **Focus** (the `prompt`): one concrete thing to listen for, as a question or "Listen for …". "Press Play." alone is not a focus.
+3. **Captions** point the ear at the feature or the difference without giving the reveal away.
+4. **Reveal**: every `listen` step has an `<OnPass>` that names what was heard and why it matters musically. The player shows it once every loop of the step has been heard through (`ListenItems`), never after the first of two loops.
+5. Two neighbouring steps never ask about the same contrast at the same level. Climb the ladder **feel → count → code → name**: what it does to the music, then where it is and how many, then how it is written, then what it is called.
+
+The warm-up's "Just listen" block and Practice's listening block say what to listen for per family (`app/src/drills/listen-for.ts`). A new perceptual family gets its line there, in the words the learner has at the family's unlock lesson.
+
+### 21.2 No boilerplate
+
+1. The app says the stop point (`wrapAt`: a line under the passed step, beside Wrap up) and the mic privacy line (the sing widget). Never write either in prose.
+2. Each step adds one new thing: the prose, prompt, pass text and hints of neighbouring steps do not restate one fact. A key phrase appears where it is taught and where it is used.
+3. Avoid course-wide formulas ("Your turn." opening every Make, "The drums are in …", "Play the target first", "Same notes, same drums … both times", "Press Play." opening every listen prompt, "Before you run it:" in every predict). Say it the way this lesson needs.
+
+### 21.3 Progression the learner can feel
+
+1. **Bridge in**: the first step ties today to something the learner can already do or hear, concretely, in a different form each time.
+2. **Spiral in the Make**: the prose and prompt invite today's tool together with one or two earlier ones, named. The rubric does not change for it.
+3. **Name the growth** once per lesson, concretely, where it is true: what the learner can now write or hear that they could not before. No generic praise.
+4. The lesson's `<Recap />` card shows, from data, the tools this lesson puts in the learner's code, the earlier skills it brought back (`practises`), its terms and the size of their toolbox. Keep `practises` honest: it is shown to the learner.
+
+### 21.4 Depth by progressive disclosure, readable prose
+
+1. Sound, then code, then the name and its place in music. Where a step names a phenomenon, at most one sentence on why it works or where it lives (at most two per lesson), and only what is true; prefer general statements to dates and names.
+2. One idea per pass text, two at most. Short sentences, one idea each; at most one colon per sentence, no chains of colons and semicolons; concrete verbs; active voice.
+

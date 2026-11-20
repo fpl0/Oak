@@ -48,7 +48,7 @@ const MAKE_STARTER = deg("<[0 4 7 9] [7 4 2 0]>");
 
 export default defineLesson({
   id: "U03.L08",
-  version: 1,
+  version: 2,
   title: "Solfège",
   objective: "I can sing degrees on syllables, do for home in any key, and write a line I can sing.",
   key: { tonic: "C", mode: "major" },
@@ -72,15 +72,14 @@ export default defineLesson({
         id: "names-to-sing",
         version: 1,
         role: "practice",
-        prompt:
-          "Press Play. Under each degree number there is now a short word: read the words along as the line plays.",
+        prompt: "Say or sing the words under the numbers as the line plays. Which word does the line end on?",
         skills: [{ skill: "V03", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption: "do re mi fa-mi, sol mi do: degrees 1 2 3 4-3, 5 3 1, over the band.",
+            caption: "Two bars, each degree with its word underneath.",
             bars: 2,
           },
         ],
@@ -245,7 +244,7 @@ export default defineLesson({
         id: "write-what-you-sing",
         version: 1,
         role: "check",
-        prompt: "Play the target: do re mi re, then do held for a bar. Write it with `n`.",
+        prompt: "The target plays do re mi re, then do held for a bar. Write it with `n`.",
         skills: [
           { skill: "V03", w: 0.5 },
           { skill: "S02", w: 0.5 },
@@ -312,7 +311,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write a two-bar line over the band that you can sing: no wider than from do up to la, 1 to 6. Then sing it on syllables.",
+          "Write a two-bar line you can sing: no wider than from do up to la, 1 to 6. Then sing it on syllables.",
         skills: [{ skill: "V03", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [1, 4],

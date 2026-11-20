@@ -51,7 +51,7 @@ const HARMONY_SEMIS = Array.from({ length: 47 }, (_, i) => i - 23).filter((k) =>
 
 export default defineLesson({
   id: "U04.L02",
-  version: 1,
+  version: 2,
   title: "Major, Minor, Perfect",
   objective:
     'I can tell a major interval from a minor one by its half steps, and move a line by a named interval with .transpose("3M").',
@@ -76,11 +76,12 @@ export default defineLesson({
         id: "open-and-strong",
         version: 1,
         role: "practice",
-        prompt: 'Press Play. `vox` plays the riff again, a 5th higher. Find `.transpose("5P")` in its line.',
+        prompt:
+          "`vox` plays the riff again, moved up by a name. Listen to the pair together: does the copy blend into one sound with the riff, or stand apart as a second tune?",
         skills: [{ skill: "I02", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "A riff and its copy a 5th above, over the band.", bars: 2 }],
+        items: [{ code: HOOK, caption: "The riff in `mel`, its named copy in `vox`.", bars: 2 }],
       },
     },
     {
@@ -97,7 +98,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "C up to E is a 3rd, and so is E up to G: three letters each. Run it, watch the keyboard, and count the half steps inside each one.",
+          "C up to E is a 3rd, and so is E up to G. Run it, watch the keyboard, and count the half steps inside each one.",
         skills: [{ skill: "I02", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -294,7 +295,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          'Write a riff and a harmony line that follows it a named distance away, with `.transpose("…")`. Try a 3rd, a 6th or a 5th, and keep the one you like.',
+          'Write a riff and a harmony line that follows it a named distance away, with `.transpose("…")`. Try a 3rd, a 6th and a 5th, and keep the one you like. A little `.gain()` sets the harmony under the riff.',
         skills: [{ skill: "I02", w: 1 }],
         code: { starter: makePair(".transpose(7)") },
         bars: [1, 4],

@@ -82,7 +82,7 @@ const COLOURS = [...SCALE_COLOUR_OPTIONS];
 
 export default defineLesson({
   id: "U11.L03",
-  version: 1,
+  version: 2,
   title: "Blue Notes",
   objective: "I can give a line its bite with ♭3, ♭5 and ♭7, the notes of the blues scale.",
   key: { tonic: "C", mode: "blues" },
@@ -111,15 +111,15 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: an organ vamp on C and F with a riff on top, then the same rhythm with other notes through a distorted guitar. Listen for the moment it turns gritty.",
+          "An organ vamp on C and F with a riff on top, then the same rhythm on other notes through a distorted guitar. Listen past the distortion to the notes: where does the second riff rub against the organ's chords?",
         skills: [{ skill: "S11", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: SWEET, caption: "The riff on the major pentatonic: C D E G, A G E.", bars: 4 },
+          { code: SWEET, caption: "Riff 1, on the major pentatonic: C D E G, A G E.", bars: 4 },
           {
             code: HOOK,
-            caption: "The same rhythm with E♭ and G♭ in it, through the crunch guitar.",
+            caption: "Riff 2: the same rhythm, other notes, through a distorted guitar.",
             bars: 4,
           },
         ],
@@ -137,7 +137,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          'C minor pentatonic is C E♭ F G B♭. The scale `"C3:blues"` has one note more. Before you run `n("0 1 2 3 4 5")` on it: which note is new?',
+          'C minor pentatonic is C E♭ F G B♭. The scale `"C3:blues"` has one note more. Read `n("0 1 2 3 4 5")` on it: which note is new?',
         skills: [{ skill: "S11", w: 1 }],
         hints: null,
         tests: [],
@@ -283,7 +283,8 @@ export default defineLesson({
         id: "which-scale",
         version: 1,
         role: "check",
-        prompt: "Four short licks over a C chord. Major pentatonic, minor pentatonic or blues scale?",
+        prompt:
+          "Four short licks over a C chord. Major pentatonic, minor pentatonic or blues scale? Listen to the 3rd first, then to the space between 4 and 5.",
         skills: [{ skill: "S11", w: 1 }],
         hints: ladder(
           "Does the lick sound sweet against the chord, or does it bite?",
@@ -438,7 +439,7 @@ export default defineLesson({
         // The starter sits on the major pentatonic of C; the rules read degrees against C either way.
         key: { tonic: "C", mode: "major pentatonic" },
         prompt:
-          "The C–F vamp and a sweet riff on the major pentatonic. Give it the blues: move it to the blues scale, or bend a note in from a blue note below. Then try the crunch guitar and a touch of `.distort()`.",
+          "A sweet riff on the major pentatonic over the C–F vamp. Give it the blues: move it to the blues scale, or bend a note in from a blue note below. Then try the crunch guitar and a touch of `.distort()`.",
         skills: [{ skill: "S11", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [2, 8],

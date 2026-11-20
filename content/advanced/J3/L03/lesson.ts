@@ -97,7 +97,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "J3.L03",
-  version: 1,
+  version: 2,
   title: "Comping Rhythms",
   objective: "I can comp a ii–V–I with the Charleston rhythm and with pushes into the next bar.",
   key: { tonic: "Bb", mode: "major" },
@@ -123,26 +123,24 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the trio plays a ii–V–I in B♭ three times. The ride, the bass and the chords' notes never change. Listen to when the Rhodes plays.",
+          "The ride, the bass and the chords' notes never change. Listen to when the Rhodes plays against the ride: how does each take change the conversation between them?",
         skills: [{ skill: "H06", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HELD_TRIO,
-            caption:
-              "Each chord held for its whole bar: right notes, and the Rhodes says nothing to the ride.",
+            caption: "Each chord held for its whole bar.",
             bars: 4,
           },
           {
             code: CHARLESTON_TRIO,
-            caption: "Two short hits a bar: on beat 1, then just after beat 2, swung with the ride.",
+            caption: "Count the Rhodes' hits in each bar.",
             bars: 4,
           },
           {
             code: PUSHED_TRIO,
-            caption:
-              "Each chord arrives early, just before its bar line, and rings across it into its own bar.",
+            caption: "Listen to where each chord starts, against the bass on beat 1.",
             bars: 4,
           },
         ],
@@ -210,7 +208,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The Rhodes holds each chord for a bar. Give it the rhythm you tapped: a hit on beat 1 and one on the “and” of 2, every bar, swung with the ride. Keep the chords. Hear the target first.",
+          "The Rhodes holds each chord for a bar. Give it the rhythm you tapped: a hit on beat 1 and one on the “and” of 2, every bar, swung with the ride. Keep the chords.",
         skills: [
           { skill: "H06", w: 0.6 },
           { skill: "R10", w: 0.4 },
@@ -414,7 +412,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The Rhodes holds each chord for its bar. Make every chord arrive on the swung “and” of 4 of the bar before and ring across the bar line. Keep the chords. Hear the target first.",
+          "The Rhodes holds each chord for its bar. Make every chord arrive on the swung “and” of 4 of the bar before and ring across the bar line. Keep the chords.",
         skills: [
           { skill: "R10", w: 0.6 },
           { skill: "H06", w: 0.4 },
@@ -533,7 +531,7 @@ export default defineLesson({
         role: "practice",
         title: "Comping in B♭",
         prompt:
-          "The Band plays the drums and the bass in B♭. The Rhodes holds the chords. Make it talk with the ride: the Charleston, pushes into the next bar, or hits that change from bar to bar with `< >`. At least three chords in four bars should land off the beat. A vibes line on top is yours to add.",
+          "The Rhodes holds the chords. Make it talk with the ride: the Charleston, pushes into the next bar, or hits that change from bar to bar with `< >`. At least three chords in four bars should land off the beat. A vibes line on top is yours to add.",
         skills: [
           { skill: "H06", w: 0.6 },
           { skill: "R10", w: 0.4 },

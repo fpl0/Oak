@@ -107,7 +107,7 @@ const earPart = (id: string, prompt: string, symbol: string, answer: "maj7" | "m
 
 export default defineLesson({
   id: "U12.L01",
-  version: 1,
+  version: 2,
   title: "Major 7 & Minor 7",
   objective: "I can write Cmaj7 and Am7 by name (C^7, Am7), build them, and hear what the 7th adds.",
   key: { tonic: "C", mode: "major" },
@@ -135,13 +135,13 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the loop from Seventh Colour in plain triads, C Am Dm G. Then the same loop with the extra note you stacked on each chord back then, this time written by name.",
+          "The loop twice: plain triads, then with the note you stacked on each chord in Seventh Colour. Listen to how the tune sits on the chords. In which loop does it blend in, and in which does it stand apart?",
         skills: [{ skill: "C07", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: HOOK_TRIADS, caption: "C, Am, Dm and G as plain triads.", bars: 4 },
-          { code: HOOK, caption: "Cmaj7, Am7, Dm7 and G7: four notes in every chord.", bars: 4 },
+          { code: HOOK_TRIADS, caption: "Loop 1: C, Am, Dm and G, three notes each.", bars: 4 },
+          { code: HOOK, caption: "Loop 2: the same roots, four notes each, written by name.", bars: 4 },
         ],
       },
     },
@@ -184,7 +184,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it with the chord band open: Cmaj7, then Am7, each stacked by hand from its root. Read the note names on the roll, bottom to top.",
+          "Cmaj7, then Am7, each stacked by hand from its root. Run it and read the note names on the roll, bottom to top.",
         skills: [{ skill: "C07", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -401,7 +401,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "A loop that walks down from F to C in plain triads, with a tune. Turn it into soul: give each chord its seventh by name (two are major, two are minor). Then make it yours: reorder the chords, write a new tune from their notes, try the organ.",
+          "A walk down from F to C in plain triads, with a tune. Turn it into soul: give each chord its seventh by name (two are major, two are minor). Then go further: reorder the chords, comp them with `.struct()`, write a new tune from their notes, try the organ.",
         skills: [{ skill: "C07", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

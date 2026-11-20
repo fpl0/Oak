@@ -106,7 +106,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "J1.L01",
-  version: 1,
+  version: 2,
   title: "Swing Feel & the Ride",
   objective: "I can play a swing ride pattern with the hi-hat on 2 and 4, and make a trio swing.",
   key: { tonic: "C", mode: "major" },
@@ -132,15 +132,15 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a jazz trio, twice. The bass, the chords and the vibes are the same both times. Listen to the cymbal on top.",
+          "Listen to the cymbal on top. In which take does the trio roll forward, and in which does it only keep count?",
         skills: [{ skill: "R13", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: TRIO, caption: "The cymbal plays ding, ding-a, ding, ding-a: the trio swings.", bars: 4 },
+          { code: TRIO, caption: "The cymbal as a swing drummer plays it.", bars: 4 },
           {
             code: TRIO_QUARTERS,
-            caption: "The same trio with the cymbal on four plain beats: the swing drains out of it.",
+            caption: "The same trio. The cymbal plays the four beats and nothing else.",
             bars: 4,
           },
         ],
@@ -241,7 +241,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The cymbal plays four plain beats under the trio. Give it the short swung hit just after beats 2 and 4. Hear the target to check the feel.",
+          "Give the cymbal its short swung hit just after beats 2 and 4. The target plays the feel you are after.",
         skills: [{ skill: "R13", w: 1 }],
         swing: SWUNG,
         code: { starter: RIDE_STARTER },
@@ -340,7 +340,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The trio plays four bars. Tap with the hi-hat, the way a jazz audience snaps: on 2 and 4, eight taps in all. Any key works.",
+          "The trio plays four bars. Tap with the hi-hat, the way a jazz audience snaps on 2 and 4: eight taps in all. Any key works.",
         skills: [{ skill: "R13", w: 1 }],
         hints: ladder(
           "Which beats does the hi-hat close on?",
@@ -383,7 +383,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The cymbal swings. Under it, the drummer's foot closes the hi-hat on the two beats you snapped on. Write that line.",
+          "The hi-hat line is empty. Write it so the drummer's foot closes the hi-hat on the two beats you snapped on.",
         skills: [{ skill: "R13", w: 1 }],
         swing: SWUNG,
         code: { starter: HATS_STARTER },
@@ -454,7 +454,7 @@ export default defineLesson({
         role: "practice",
         title: "Swing pocket",
         prompt:
-          "The band plays bass and chords; the drums are yours. Make them swing: the ride pattern on the cymbal, the hi-hat on 2 and 4. Then make it your own: a soft kick, a vibes line, a tempo you like.",
+          "Swing the drums: the ride pattern on the cymbal, the hi-hat on 2 and 4. Around them, bring back what you know: a soft kick on every beat, a ghost-note snare, a vibes line on `.scale()`, a tempo between 110 and 180.",
         skills: [{ skill: "R13", w: 1 }],
         swing: SWUNG,
         code: { starter: MAKE_STARTER },

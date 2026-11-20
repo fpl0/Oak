@@ -86,7 +86,7 @@ const KEYS = { roll: false, staff: false, keyboard: true } as const;
 
 export default defineLesson({
   id: "U11.L01",
-  version: 1,
+  version: 2,
   title: "Five Notes, No Wrong Ones",
   objective: "I can write a melody on the major pentatonic, the major scale without 4 and 7.",
   key: { tonic: "C", mode: "major" },
@@ -113,13 +113,17 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the four-chord loop with a tune on top, then the same rhythm with other notes. Listen for the places where the tune and the chords rub, and for where they stop.",
+          "The four-chord loop with a tune on top, then the same rhythm on other notes. Listen for the moments where the tune grinds against the chords. Does the second tune have any?",
         skills: [{ skill: "S09", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: RUB, caption: "A tune on all seven notes of C major: two places rub.", bars: 4 },
-          { code: HOOK, caption: "The same rhythm on five of them: nothing rubs.", bars: 4 },
+          {
+            code: RUB,
+            caption: "Tune 1, on all seven notes of C major. Listen for the grinding moments.",
+            bars: 4,
+          },
+          { code: HOOK, caption: "Tune 2: the same rhythm on five of those notes.", bars: 4 },
         ],
       },
     },
@@ -136,7 +140,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          'The second tune used `.scale("C4:major:pentatonic")`. Before you run it: which five notes does `n("0 1 2 3 4")` play on that scale?',
+          'The second tune used `.scale("C4:major:pentatonic")`. Which five notes does `n("0 1 2 3 4")` play on that scale?',
         skills: [{ skill: "S09", w: 1 }],
         hints: null,
         tests: [],
@@ -285,7 +289,8 @@ export default defineLesson({
         id: "five-or-seven",
         version: 1,
         role: "check",
-        prompt: "Four short runs over a C chord. Does each one use five notes or seven?",
+        prompt:
+          "Four short runs over a C chord. Does each one use five notes or seven? Listen for the smallest steps, and for any jumps.",
         skills: [{ skill: "S09", w: 1 }],
         hints: ladder(
           "Some steps in a run are bigger than others. Can you hear a jump?",
@@ -472,7 +477,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The Band plays the four-chord loop. Your tune is on the major scale, and F and B rub as they pass. Move it onto the major pentatonic, then play: change numbers, rests and rhythm, and keep what you like.",
+          "Your tune is on the major scale, and F and B rub as they pass over the Band's four-chord loop. Move it onto the major pentatonic, then play: change numbers, rests and rhythm, and keep what you like.",
         skills: [{ skill: "S09", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

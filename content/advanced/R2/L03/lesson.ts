@@ -168,7 +168,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "R2.L03",
-  version: 1,
+  version: 2,
   title: "Hemiola",
   objective: "I can hear six pulses regroup from two threes into three twos, and write it into a groove.",
   key: { tonic: "A", mode: "minor" },
@@ -193,20 +193,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a slow soul groove in 6/8, twice. The drums and the hi-hat are the same both times. Listen to the Rhodes and the bass.",
+          "The drums and the hi-hat sway the same way in both loops; only the Rhodes and the bass change. In the second loop, which bars stop swaying with the drums, and what do they do instead?",
         skills: [{ skill: "R17", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: GROOVE_THREES,
-            caption: "The Rhodes and the bass land with the drums, on the two big beats of every bar.",
+            caption: "The Rhodes and the bass land with the drums' two big beats.",
             bars: 4,
           },
           {
             code: HOOK,
-            caption:
-              "Every second bar, the Rhodes and the bass play three times instead of two. The drums do not change.",
+            caption: "The same chords over the same drums. Follow the Rhodes in bars 2 and 4.",
             bars: 4,
           },
         ],
@@ -224,7 +223,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Feel it before you read it. The second groove plays four bars: tap with every Rhodes chord, not with the drums. Two taps in some bars, three in others, ten in all. Any key works.",
+          "The second groove plays four bars. Tap with every Rhodes chord, not with the drums: two taps in some bars, three in others, ten in all.",
         skills: [{ skill: "R17", w: 1 }],
         hints: ladder(
           "Which bars have more chords than the others?",
@@ -354,7 +353,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Both bars of these chords fall in two groups of three, with the drums. Keep bar 1 as it is. Make bar 2 fall in three groups of two, with the same six eighths and the same tempo. Hear the target to check.",
+          "Both bars of these chords fall in two groups of three, with the drums. Keep bar 1 as it is. Make bar 2 fall in three groups of two, with the same six eighths and the same tempo.",
         skills: [{ skill: "R17", w: 1 }],
         code: { starter: MODIFY_STARTER },
         reference: { solutions: [MODIFY_SOLUTION], bars: 2 },

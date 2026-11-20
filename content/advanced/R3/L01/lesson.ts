@@ -188,7 +188,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "R3.L01",
-  version: 1,
+  version: 2,
   title: "Tresillo & Cinquillo",
   objective: "I can write the tresillo and the cinquillo, by hand and with (k,n), and hear which is which.",
   key: { tonic: "C", mode: "major" },
@@ -216,19 +216,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: one groove, twice. The drums and the chords are the same both times. Listen to the bass.",
+          "Only the bass changes between the two loops. Which one leans forward into the next bar, and which stands still? Listen for where the bass's second note falls against the beat.",
         skills: [{ skill: "R18", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: GROOVE,
-            caption: "Three bass notes a bar, the second one between two beats: the groove leans forward.",
+            caption: "Three bass notes a bar.",
             bars: 4,
           },
           {
             code: GROOVE_STRAIGHT,
-            caption: "The same groove with the bass on beats 1 and 3: it stands still.",
+            caption: "The same notes, now on beats 1 and 3.",
             bars: 4,
           },
         ],
@@ -245,8 +245,7 @@ export default defineLesson({
         id: "tap-the-bass",
         version: 1,
         role: "practice",
-        prompt:
-          "The groove plays four bars. Tap with the bass: three taps in every bar, twelve in all. Any key works.",
+        prompt: "The groove plays four bars. Tap with the bass: three taps in every bar, twelve in all.",
         skills: [{ skill: "R18", w: 1 }],
         hints: ladder(
           "Does the bass play on every beat, or does it skip some?",
@@ -285,7 +284,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The bass plays on beats 1 and 3. Its `struct` has eight slots, one per eighth note. Give it the rhythm you tapped: three notes a bar, three slots apart, then three, then two to the bar line. Hear the target to check.",
+          "The bass plays on beats 1 and 3. Its `struct` has eight slots, one per eighth note. Give it the rhythm you tapped: three notes a bar, three slots apart, then three, then two to the bar line.",
         skills: [{ skill: "R18", w: 1 }],
         code: { starter: S3_STARTER },
         reference: { solutions: [S3_SOLUTION], bars: 4 },
@@ -390,7 +389,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The cowbell plays the tresillo with `(3,8)`. Keep the eight steps and spread five hits over them instead. Hear the target to check.",
+          "The cowbell plays the tresillo with `(3,8)`. Keep the eight steps and spread five hits over them instead.",
         skills: [{ skill: "R18", w: 1 }],
         code: { starter: S5_STARTER },
         reference: { solutions: [S5_SOLUTION], bars: 4 },
@@ -486,7 +485,7 @@ export default defineLesson({
         role: "practice",
         title: "Tresillo groove",
         prompt:
-          "The band plays drums and two chords, C then G7. The bass and the cowbell are yours. Put the bass on the tresillo, on C in one bar and G in the next. Then make it your own: a cinquillo bell, a note on the last eighth, another sound, a tempo you like.",
+          "The band plays drums and two chords, C then G7. The bass and the cowbell are yours. Put the bass on the tresillo, on C in one bar and G in the next. After that, try a cinquillo bell, a note on the last eighth, another sound, a tempo you like.",
         skills: [{ skill: "R18", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [2, 8],

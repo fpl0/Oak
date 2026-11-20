@@ -101,7 +101,7 @@ const DRUMS_BASS = { band: "band.two-five-one", tracks: ["drums", "bass"] } as c
 
 export default defineLesson({
   id: "J1.L05",
-  version: 1,
+  version: 2,
   title: "Shells",
   objective: "I can voice a ii–V–I in shells, root, 3rd and 7th, and comp it in a swinging trio.",
   key: { tonic: "C", mode: "major" },
@@ -127,15 +127,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the ride, the hi-hat and the bass under a ii–V–I in C, with nobody on the piano. Then the same groove with a pianist's left hand comping three notes a chord.",
+          "Listen to what the Rhodes adds in the second loop. Does it fill the room, or leave space around the bass and the ride?",
         skills: [{ skill: "J08", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: EMPTY_CHAIR, caption: "The rhythm section, and room for a pianist.", bars: 4 },
+          {
+            code: EMPTY_CHAIR,
+            caption: "Ride, hi-hat and bass under a ii–V–I in C. Nobody on the piano.",
+            bars: 4,
+          },
           {
             code: SHELL_TRIO,
-            caption: "Three notes a chord on the Rhodes, on beat 1 and the and of 2: the trio is complete.",
+            caption: "The same groove with a pianist's left hand on the Rhodes.",
             bars: 4,
           },
         ],
@@ -154,7 +158,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run the left hand alone, a chord a bar, with the chord band and the chord-tone lens open. How many notes does each chord have, and which members of G7 are they?",
+          "Run the left hand alone, held a bar a chord. The chord-tone lens names each note. How many notes does each chord have, and which members of G7 are they?",
         skills: [{ skill: "J08", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -276,7 +280,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The Rhodes comps the ii–V–I with full chords from the dictionary. Write the chords yourself as shells, one bracket of three notes a chord, and keep the comping rhythm. Hear the target to check.",
+          "Write the Rhodes' chords yourself as shells, one bracket of three notes a chord, and keep the comping rhythm.",
         skills: [{ skill: "J08", w: 1 }],
         swing: SWUNG,
         code: { starter: SHELL_STARTER },
@@ -394,7 +398,7 @@ export default defineLesson({
         role: "practice",
         title: "Shell comping",
         prompt:
-          "The band plays the drums and the bass in C. The piano chair is yours: comp the ii–V–I in shells you write by hand, root at the bottom, the 3rd and 7th above it. Choose the rhythm: the Charleston, a push on the and of 4, or long notes.",
+          "Comp the ii–V–I in C with shells you write by hand: root at the bottom, the 3rd and 7th above it. Then pick a rhythm: two short hits a bar on 1 and the and of 2, as the trio's pianist played, a push on the and of 4, or long notes.",
         skills: [{ skill: "J08", w: 1 }],
         swing: SWUNG,
         code: { starter: MAKE_STARTER },

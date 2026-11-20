@@ -62,7 +62,7 @@ const ROLL_KEYS = { roll: true, staff: false, keyboard: true } as const;
 
 export default defineLesson({
   id: "U05.L02",
-  version: 1,
+  version: 2,
   title: "Major & Minor",
   objective:
     "I can tell a major triad from a minor one by ear and by its 3rds, and turn one into the other by moving its middle note a half step.",
@@ -81,7 +81,7 @@ export default defineLesson({
     {
       id: "S1",
       kind: "listen",
-      title: "Dark, then bright",
+      title: "One chord, two moods",
       minutes: 0.5,
       ui: { panels: ROLL, rollLabels: "note", band: DRUMS },
       example: { id: "hook", code: HOOK, bars: 4 },
@@ -91,17 +91,17 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play. One chord for two bars, then nearly the same chord for two more. Listen to its colour.",
+          "One chord on A for two bars, then nearly the same chord for two more. Listen for the moment the mood changes, and which way it goes.",
         skills: [{ skill: "C02", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption: "A chord on A twice, with a tune: listen to how bars 3 and 4 differ.",
+            caption: "The chord on A with a tune. Listen across bar 3.",
             bars: 4,
           },
-          { code: A_ONLY, caption: "The two chords alone.", bars: 4 },
+          { code: A_ONLY, caption: "The two chords alone, without the tune.", bars: 4 },
         ],
       },
     },
@@ -207,7 +207,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The tune sings D major, but the chord under it is D minor, and they rub. Move one note of the chord a half step so it becomes D major. Play the target first.",
+          "The tune sings D major, but the chord under it is D minor, and the two rub. Move one note of the chord a half step so it becomes D major.",
         skills: [{ skill: "C02", w: 1 }],
         code: { starter: D_STARTER },
         reference: { solutions: [D_MAJOR], bars: 2 },
@@ -342,7 +342,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The drums keep time. Write a four-bar loop of stacked triads with at least one minor chord in it: a stack on degree 2, 3 or 6. Try where it falls: first, last, in the middle.",
+          "Write a four-bar loop of stacked triads with at least one minor chord in it, a stack on degree 2, 3 or 6. Try it in different places: first, last, in the middle.",
         skills: [{ skill: "C02", w: 1 }],
         // The catalog's text is "{label}: {detail}", and a contains-rn detail names the chords in Roman
         // numerals (U06.L02). The same text serves the suggestions, so it says only "not yet".

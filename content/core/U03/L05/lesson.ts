@@ -42,7 +42,7 @@ const NUMBERS = {
 
 export default defineLesson({
   id: "U03.L05",
-  version: 1,
+  version: 2,
   title: "Same Song, Any Key",
   objective:
     "I can play the same tune in any major key by changing one word, and change key bar by bar with a pattern in .scale().",
@@ -69,7 +69,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play. The tune plays with C as home, then again with G as home. Watch the numbers on the roll.",
+          "Bars 3 and 4 play the tune again from a new home. Does it still sound finished when it ends? Watch the numbers on the roll.",
         skills: [{ skill: "S03", w: 1 }],
         hints: null,
         tests: [],
@@ -291,7 +291,8 @@ export default defineLesson({
         id: "one-to-five-any-key",
         version: 1,
         role: "check",
-        prompt: "Every time, a new home: chords set it, then one note. Which degree is it, 1 to 5?",
+        prompt:
+          "Chords set home, which may change from one note to the next. Then one note: which degree is it, 1 to 5?",
         skills: [{ skill: "E05", w: 1 }],
         hints: [
           { text: "Hum home, the note the chords end on. Is the note above it, or is it home?" },
@@ -360,7 +361,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          'Make this tune yours, then let it visit a **second key** with a pattern in `.scale("< >")`. The band follows you. Four bars or more give each key the whole tune.',
+          'Make this tune yours, then let it visit a **second key** with a pattern in `.scale("< >")`. Four bars or more give each key the whole tune.',
         skills: [{ skill: "S03", w: 1 }],
         code: { starter: deg("<[0 2 1 4] [3 2 0 ~]>") },
         bars: [1, 8],

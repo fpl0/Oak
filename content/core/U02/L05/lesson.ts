@@ -52,7 +52,7 @@ const SAME_OR_NOT = [
 
 export default defineLesson({
   id: "U02.L05",
-  version: 1,
+  version: 2,
   title: "Moving Melodies",
   objective: "I can give a note its number and move a whole line up or down by half steps with .transpose().",
   key: { tonic: "C", mode: "major" },
@@ -80,11 +80,11 @@ export default defineLesson({
         id: "same-tune-climbing",
         version: 1,
         role: "practice",
-        prompt: "Press Play. One short riff, three times, each time higher, then back where it began.",
+        prompt: "Hum along with bar 1, then keep humming. Can you sing bars 2 and 3 to the same shape?",
         skills: [{ skill: "P06", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "A piano riff over the band, four bars on repeat.", bars: 4 }],
+        items: [{ code: HOOK, caption: "Bar 1 sets the riff. Watch where bars 2 and 3 start.", bars: 4 }],
       },
     },
     {
@@ -439,7 +439,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write a riff, then play it again higher or lower with `.transpose()`: on a second line starting with it, or in a second bar.",
+          "Write a riff, then play it again higher or lower with `.transpose()`, on a second line or in a second bar.",
         skills: [{ skill: "P06", w: 1 }],
         code: { starter: riff() },
         bars: [1, 4],

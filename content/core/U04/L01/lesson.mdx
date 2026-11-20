@@ -1,13 +1,15 @@
 {/* U04.L01 Steps Apart: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
 
 <Step id="S1">
-Two voices this time, and the second one never goes its own way: it moves with the first, always the same distance above it.
+You have written a `vox` line before: the same notes as `mel`, an octave higher. This `vox` sits much closer, and it does not play the same notes.
 
 <Example id="hook" views="code,roll" autoplay />
+
+<OnPass>`vox` rises when `mel` rises and falls when it falls, always two degrees above. It adds no new tune. It makes the same tune fuller and sweeter, the sound of two people singing in harmony.</OnPass>
 </Step>
 
 <Step id="S2">
-Musicians name the distance between two notes by counting degrees, and they count both ends. Try it before you hear it.
+Musicians measure the distance between two notes by counting scale notes. Guess before you hear it.
 
 <Predict exercise="count-both-ends" />
 </Step>
@@ -17,29 +19,29 @@ Home is always the first note here. Listen to how the second note changes the so
 
 <Example id="three-pairs" views="code,roll" />
 
-<OnPass>The distance between two notes is an **interval**, named by its count: 1 up to 3 is a 3rd, 1 up to 5 a 5th, 1 up to the 1 above an octave. In code, subtract: `n` 4 minus `n` 0 is 4, one less than the name, because `n` counts from 0.</OnPass>
+<OnPass>The distance between two notes is an **interval**, and its count is its name. 1 up to 3 is a 3rd, 1 up to 5 a 5th, and 1 up to the 1 above is an octave. In code the difference is one less than the name, because `n` counts from 0, so degree 5 is `n` 4.</OnPass>
 </Step>
 
 <Step id="S4">
-The hook's second voice was a 3rd above the first all the way through. Give this riff the same companion.
+The hook's `vox` stayed a 3rd above `mel` all the way through. Give this riff the same companion.
 
 <Editor exercise="a-third-above" />
 
-<OnPass>Every note of `vox` sits two degrees above `mel`: a line in 3rds. Notice that you added 2 to every `n`, and the name says 3. That gap of one is the same bridge as degree and `n`.</OnPass>
+<OnPass>Every note of `vox` now sits a 3rd above `mel`, like the hook. Singing a tune in 3rds is one of the most common ways to harmonise it, in folk duets and pop backing vocals alike.</OnPass>
 </Step>
 
 <Step id="S5">
-Your ear can count too. A few chords set home, then home sounds and one note above it.
+Now count by ear, with no labels to read.
 
 <EarDrill family="fam.int.in-key" level={1} trials={6} />
 
 <Callout kind="tip">Sing up from do to the second note. The number of syllables you sing is the name of the distance.</Callout>
 
-<OnPass>Heard from home, every distance is just a degree: 3 is a 3rd, 5 is a 5th, the 1 above is the octave.</OnPass>
+<OnPass>From home, the degree you hear is already the distance's name. When a pair starts somewhere else, counting takes over.</OnPass>
 </Step>
 
 <Step id="S6">
-Your turn. Write a riff, then give it a second voice that moves with it.
+A tune used to be one line. Now you can give it a partner and choose how far above it walks. Let `< >` make bar 2 answer bar 1, as in your earlier riffs, and keep `vox` a little under `mel` with `.gain()`.
 
 <Make exercise="riff-in-two-voices" />
 

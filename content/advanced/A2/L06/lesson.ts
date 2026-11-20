@@ -162,7 +162,7 @@ const BAND_CHORDS = { band: "band.aeolian-4bar", tracks: ["chords"] } as const;
 
 export default defineLesson({
   id: "A2.L06",
-  version: 1,
+  version: 2,
   title: "Genre Translation",
   objective: "I can arrange one tune in two styles: a ballad and a driving version.",
   key: { tonic: "A", mode: "minor" },
@@ -186,16 +186,14 @@ export default defineLesson({
         id: "one-tune-two-ways",
         version: 1,
         role: "practice",
-        prompt:
-          "Press Play: eight bars, two halves. Listen to what changes from the first half to the second, and what does not.",
+        prompt: "Eight bars in two halves. Which half would you dance to, and which part tells you so first?",
         skills: [{ skill: "D09", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption:
-              "Bars 1–4 a ballad, bars 5–8 the same tune driven: four on the floor, a busy bass, short bright notes.",
+            caption: "A ballad in bars 1–4, a driving version from bar 5. Listen for what arrives at bar 5.",
             bars: 8,
           },
         ],

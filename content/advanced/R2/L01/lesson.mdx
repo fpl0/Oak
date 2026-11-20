@@ -1,13 +1,15 @@
 {/* R2.L01 Five & Seven: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
 
 <Step id="S1">
-Every groove you have written so far split its bar into equal beats, in twos or in threes. This one cannot. Same groove twice: listen to where it leans.
+Every groove you have written so far split its bar into equal beats, in twos or in threes. This one has five beats, and five will not split evenly.
 
 <Example id="five" views="code,roll" autoplay />
+
+<OnPass>Each bar of five is a long group of beats and a short one. Swap their order and the weight moves: the same notes, a different lean.</OnPass>
 </Step>
 
 <Step id="S2">
-Before you count anything, feel where each group begins.
+Put the long and the short of the first loop in your hands.
 
 <Tap exercise="tap-the-group-starts" />
 
@@ -15,19 +17,19 @@ Before you count anything, feel where each group begins.
 </Step>
 
 <Step id="S3">
-Now read it. The roll shows one bar; the code shows how Strudel was told to play it.
+The roll shows one bar; the code shows how Strudel counts it.
 
 <Example id="five-read" views="code,roll" />
 
-<OnPass>Five beats, three and then two. A bar that cannot split into equal beats of two or three is in an **odd meter**: here 5/4, five quarter notes. How its beats are bunched, 3+2 or 2+3, is its **grouping**, and the grouping decides where it feels heavy. The tempo line counts what the bar counts: `setcpm(150/5)` is 150 quarter notes a minute, five to the bar, so one cycle is still one bar.</OnPass>
+<OnPass>Five beats, three and then two. A bar that cannot split into equal beats of two or three is in an **odd meter**, here 5/4: five quarter notes. How its beats are bunched, 3+2 or 2+3, is its **grouping**, and it decides where the bar feels heavy. The tempo line divides by the five: `setcpm(150/5)` is 150 quarter notes a minute, so one cycle is still one bar.</OnPass>
 </Step>
 
 <Step id="S4">
-Seven is made the same way, only faster: seven eighth notes, in two short groups and one long. The order of the groups is what you hear.
+Seven is built the same way, from short groups and a long one, only on quicker eighth notes. Where the long group falls is what you hear.
 
 <Choice exercise="seven-by-ear" />
 
-<OnPass>Seven eighths come as 2+2+3, 2+3+2 or 3+2+2. The tempo line counts eighths there: `setcpm(240/7)` is 240 eighths a minute, seven to the bar. A good place to stop for today if you need to.</OnPass>
+<OnPass>Seven eighths come as 2+2+3, 2+3+2 or 3+2+2. The tempo line counts eighths there: `setcpm(240/7)` is 240 eighths a minute, seven to the bar.</OnPass>
 </Step>
 
 <Step id="S5">
@@ -35,17 +37,17 @@ Back to five. The tempo line already counts the new bar; the kick still thinks i
 
 <Editor exercise="four-to-five" />
 
-<OnPass>Divide by the beats in the bar, and the tempo stays 150; put the kick only where a group begins, and the bar falls into three and two. Under `setcpm(150/4)` the same five steps would have rushed by at 187.5 beats a minute.</OnPass>
+<OnPass>Divide by the beats in the bar and the tempo stays 150. Put the kick only where a group begins and the bar falls into three and two. Under `setcpm(150/4)` the same five steps would rush by at 187.5 beats a minute.</OnPass>
 </Step>
 
 <Step id="S6">
-No band in five: the drums, the bass and the chords are all yours. Give the bar its groups, then make it a groove you would loop.
+Grouping five beats, counting them in the tempo line, hearing how a bar of seven falls: all three are new since this lesson began. No band plays in five, so the drums, the bass and the chords are all yours. The last unit's tools still work here: a pull into a group start, ghost notes in between.
 
 <Make exercise="your-bar-of-five" />
 
 <CanDo id="cd.code.odd-meters" />
 
-You can now write and count a groove in 5/4, set the tempo line of any odd meter, and hear how a bar of seven is grouped. Next: grooves in seven and nine that put the long group last.
+Next: grooves in seven and nine that put the long group last.
 
 <Recap />
 </Step>

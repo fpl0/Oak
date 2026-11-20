@@ -68,7 +68,7 @@ const MINOR = { tonic: "C", mode: "minor" } as const;
 
 export default defineLesson({
   id: "U10.L01",
-  version: 1,
+  version: 2,
   title: "The Dark Twin",
   objective:
     "I can turn a tune minor by lowering degrees 3, 6 and 7, and sing the minor scale as do re me fa sol le te.",
@@ -95,11 +95,17 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the four-chord loop, its bass and its tune, four bars as you know them, then the same four bars again. Listen for the moment the mood turns.",
+          "Four bars as you know them, then the same four bars again. Listen for the bar where the mood turns, and for what happens to the tune's brightness.",
         skills: [{ skill: "S05", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: TWINS, caption: "Bars 1–4 in major; bars 5–8 the same code, in minor.", bars: 8 }],
+        items: [
+          {
+            code: TWINS,
+            caption: "Bars 1–4 as you know them; bars 5–8 with one word changed in every line.",
+            bars: 8,
+          },
+        ],
       },
     },
     {
@@ -114,7 +120,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "At bar 5 the scale word in each line changes from `major` to `minor`, and the numbers in `n()` stay the same. What happens to the notes?",
+          "At bar 5 each line's scale word changes from `major` to `minor`; the numbers in `n()` stay the same. What happens to the notes?",
         skills: [{ skill: "S05", w: 1 }],
         hints: null,
         tests: [],
@@ -142,7 +148,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it: the scale from home to home in major, then in minor, over a held C. Compare the two bars on the roll, degree by degree.",
+          "Run it: home to home in major, then in minor, over a held C. Compare the two bars on the roll, degree by degree, and read the labels.",
         skills: [{ skill: "S05", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -198,7 +204,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The chords and the bass are already in C minor. The tune is in note names, still with major's letters, so the scale word cannot reach it. Lower the three letters minor lowers.",
+          "The chords and the bass are in C minor; the tune still has major's letters. Lower the three letters that minor lowers, so the tune sits on its chords again.",
         skills: [{ skill: "S05", w: 1 }],
         code: { starter: MODIFY_STARTER },
         reference: { solutions: [MODIFY_SOLUTION], bars: 4 },
@@ -272,7 +278,8 @@ export default defineLesson({
         id: "major-or-minor",
         version: 1,
         role: "check",
-        prompt: "A short tune with its chords, each in a new key. Is it in major, or in minor?",
+        prompt:
+          "A short tune with its chords, in a new key each time. Major or minor? Listen to where the tune comes home: does home sound bright or dark?",
         // S05, not E10: the node E10 (minor degrees by ear) is introduced in U10.L03; `fam.key.mode` gives the
         // drill's own evidence from tomorrow's warm-up on.
         skills: [{ skill: "S05", w: 1 }],
@@ -311,7 +318,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Hear it, then sing it: do re me fa sol, up to le, and back down to sol. In minor, 1 is still do. Sing in your own range.",
+          "Hear it, then sing it: do re me fa sol, up to le, and back down to sol. Sing in your own range.",
         skills: [
           { skill: "V02", w: 0.6 },
           { skill: "S05", w: 0.4 },
@@ -348,7 +355,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The loop is dark now: chords and bass in C minor over the drums. The tune only says home. Write a tune that sings me and le, degrees ♭3 and ♭6, and make it one you would loop.",
+          "Chords and bass in C minor, and a tune that only says home. Write a tune that sings me and le, degrees ♭3 and ♭6, and make it one you would want to hear again and again.",
         skills: [{ skill: "S05", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

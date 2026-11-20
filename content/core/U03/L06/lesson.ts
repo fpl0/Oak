@@ -51,7 +51,7 @@ const STAFF_ONLY = { roll: false, staff: "treble", keyboard: false } as const;
 
 export default defineLesson({
   id: "U03.L06",
-  version: 1,
+  version: 2,
   title: "Sharp Keys",
   objective:
     "I can write the sharps of G, D and A major as a key signature, in order, and read a tune in G from the staff.",
@@ -76,11 +76,12 @@ export default defineLesson({
         id: "a-line-in-g",
         version: 1,
         role: "practice",
-        prompt: "Press Play. A line with G as home, over the band. Look at the very start of the staff.",
+        prompt:
+          "Find the sharp at the very start of the staff, on the top line. Then listen for the note that sits on that line: where does it want to go?",
         skills: [{ skill: "S04", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "Degrees 1 3 5 7, then home an octave up, in G.", bars: 2 }],
+        items: [{ code: HOOK, caption: "A line in G. Keep an eye on the top line of the staff.", bars: 2 }],
       },
     },
     {
@@ -367,7 +368,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write a two-bar line in G major over the band, in note names this time, so you apply the key signature yourself: **every note in G major**. Fix the starter first, then change its notes and rhythm until the line is yours.",
+          "Write a two-bar line in G major in note names: **every note in G major**. Fix the starter first, then change its notes and rhythm until the line is yours.",
         skills: [
           { skill: "S04", w: 0.6 },
           { skill: "N03", w: 0.4 },

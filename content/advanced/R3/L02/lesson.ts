@@ -151,7 +151,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "R3.L02",
-  version: 1,
+  version: 2,
   title: "Clave Direction",
   objective: "I can hear which way a clave runs and write a tune that faces it.",
   key: { tonic: "C", mode: "major" },
@@ -176,20 +176,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: one groove, twice. The piano tune, the bass and the chords are the same both times. Listen to the rimshot against the tune.",
+          "Only the rimshot changes between the two loops. In which loop do the tune and the rimshot speak together, and in which do they talk past each other? Listen to each tune note against the rimshot.",
         skills: [{ skill: "R18", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption: "Every note of the tune lands with a rimshot: the two speak together.",
+            caption: "Follow the tune and the rimshot together.",
             bars: 4,
           },
           {
             code: HOOK_CROSSED,
-            caption:
-              "Only the rimshot changed: its two bars swapped places, and now not one tune note meets it.",
+            caption: "Only the rimshot changed. Does any tune note still meet it?",
             bars: 4,
           },
         ],
@@ -207,7 +206,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The first groove plays four bars. Tap with the rimshot: three taps in the first bar, two in the second, and again. Ten in all. Any key works.",
+          "The first groove plays four bars. Tap with the rimshot: three taps in the first bar, two in the second, and again, ten in all.",
         skills: [{ skill: "R18", w: 1 }],
         hints: ladder(
           "Does the rimshot play the same thing in both bars?",
@@ -313,7 +312,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "A new tune: it opens with two notes on beats 2 and 3, then answers with three. The clave under it starts with its three-side, and the two cross. Turn the clave round so it faces the tune. Hear the target to check.",
+          "A new tune: it opens with two notes on beats 2 and 3, then answers with three. The clave under it starts with its three-side, and the two cross. Turn the clave round so it faces the tune.",
         skills: [{ skill: "R18", w: 1 }],
         code: { starter: S4_STARTER },
         reference: { solutions: [S4_SOLUTION], bars: 4 },

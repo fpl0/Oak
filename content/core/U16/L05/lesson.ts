@@ -83,7 +83,7 @@ const LEAD_SHEET = { melody: "mel", chords: "chords", title: "Aura Lee" } as con
 
 export default defineLesson({
   id: "U16.L05",
-  version: 1,
+  version: 2,
   title: "Mixture Lab",
   objective:
     "I can put new chords under a tune without changing it, and tell a borrowed chord from a secondary dominant by ear.",
@@ -109,7 +109,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: Aura Lee's verse as a slow soul ballad, the tune on a tenor sax over its plain chords. Then the same eight bars over other chords. Listen to the tune, then to what is under it.",
+          "Aura Lee's verse twice, first over its plain chords, then over new ones. Follow the sax: does the tune change at all? Then listen under it, and find the bars where the light changes.",
         skills: [{ skill: "E12b", w: 1 }],
         hints: null,
         tests: [],
@@ -117,7 +117,7 @@ export default defineLesson({
           { code: PLAIN, caption: "C, Dm, G, C, twice: the plain chords.", bars: 8 },
           {
             code: HOOK,
-            caption: "C, D7, G7, A♭ and B♭, then the same again with C at the end. The tune has not changed.",
+            caption: "New chords, the same tune. Listen under bars 2 and 4.",
             bars: 8,
           },
         ],
@@ -163,7 +163,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run the new version with the chord band open and read the lead sheet: the tune with its new chords above it. Some chords lean towards the next one; some only change the light.",
+          "Run the new version and read the lead sheet: the tune with its new chords above it. Some chords lean toward the next one; some only change the light.",
         skills: [{ skill: "E12b", w: 1 }],
         feedbackText: {
           "investigate.wrong":

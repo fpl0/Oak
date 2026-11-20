@@ -1,17 +1,19 @@
 {/* J1.L05 Shells: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
 
 <Step id="S1">
-A rhythm section waiting for its pianist, then the pianist sitting down. Listen to how little the left hand plays.
+The two guide-tone threads need one more note to become a pianist's left hand. First the rhythm section with the piano chair empty, then with the pianist sitting down.
 
 <Example id="shell-trio" views="code,roll" autoplay />
+
+<OnPass>The left hand plays short chords on beat 1 and the and of 2. The trio sounds complete, yet it stays open, and the bass and the ride keep their room.</OnPass>
 </Step>
 
 <Step id="S2">
-The left hand alone, one chord a bar. Read the lowest note first.
+Count what the left hand plays, starting from the lowest note.
 
 <Example id="shells-held" views="code,roll" />
 
-<OnPass>Three notes: in bar 2, G at the bottom, then F, the 7th, and B, the 3rd. The 5th is gone, and nothing is lost: the root says which chord, the 3rd and the 7th say what kind. That is a **shell voicing**, the voicing jazz pianists comp with. Above the roots run the guide-tone threads: F stays and C falls to B, then F falls to E and B stays.</OnPass>
+<OnPass>Three notes: in bar 2, G at the bottom, then F, the 7th, and B, the 3rd. The 5th is gone, and nothing is lost: the root says which chord, the 3rd and the 7th say what kind. That is a **shell voicing**, the kind jazz pianists comp with. Above the roots run the two guide-tone threads from last lesson.</OnPass>
 </Step>
 
 <Step id="S3">
@@ -21,21 +23,21 @@ Now with your hands, on a chord that is not in the loop.
 </Step>
 
 <Step id="S4">
-The dictionary's voicings fill the middle of the keyboard. Replace them with your own three notes a chord.
+The dictionary's voicings fill the middle of the keyboard. Your shells will open it up.
 
 <Editor exercise="shells-by-hand" />
 
-<OnPass>Your own shells, comping on beat 1 and the and of 2. Each chord is three notes, and the trio sounds more open for it. A good place to stop for today if you need to.</OnPass>
+<OnPass>Your own shells, comping on beat 1 and the and of 2. Each chord is three notes, and the trio sounds more open for it.</OnPass>
 </Step>
 
 <Step id="S5">
-How a backing like this one is made. The chord string feeds the bass and the vibes: `rootNotes` takes each chord's root, and `n` before `.set(chord(changes))` plays the voicing's notes one at a time, lowest first, so `n` 0 is the lowest note of each chord. The shells are notes you wrote yourself. Read it; nothing to change.
+How a backing like this one is made. One chord string feeds two parts. For the bass, `rootNotes` takes each chord's root. For the vibes, `n` before `.set(chord(changes))` plays the voicing's notes one at a time, lowest first, so `n` 0 is the lowest note of each chord. The shells stay notes you wrote yourself. Read it; nothing to change.
 
 <Example id="one-string" views="code,roll" />
 </Step>
 
 <Step id="S6">
-The band plays the drums and the bass. The piano chair is yours, and the Rhodes starts on the dictionary's full chords.
+So far the jazz track has given you the drummer's pocket, the chart, the ii–V–I and its threads. Now the piano chair is yours. The band plays drums and bass, and the Rhodes starts on the dictionary's full chords.
 
 <Make exercise="your-left-hand" />
 

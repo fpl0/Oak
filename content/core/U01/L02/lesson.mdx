@@ -1,13 +1,15 @@
 {/* U01.L02 Count to Four: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
 
 <Step id="S1">
-Four beats to a bar, over and over. The crash tells you where each bar begins.
+Heartbeat gave you four even beats to a bar. Counting them tells you which beat is which.
 
 <Example id="hook" views="code,roll" autoplay />
+
+<OnPass>The crash: it comes once a bar and sends your count back to one. The three kicks after it carry the count on to four.</OnPass>
 </Step>
 
 <Step id="S2">
-Now tap only the crash. The kicks keep going between your taps; count them in your head.
+Now your hands mark where the count starts, and your head counts the beats in between.
 
 <Tap exercise="tap-the-one" />
 
@@ -15,7 +17,7 @@ Now tap only the crash. The kicks keep going between your taps; count them in yo
 </Step>
 
 <Step id="S3">
-The `~` has been in your loop since the first lesson. Here it sits where a kick used to be. <CodeRef fn="~" />
+The `~` has been in your loop since Hello, Loop. Here it sits where a kick used to be. <CodeRef fn="~" />
 
 <Predict exercise="which-beat-goes-quiet" />
 </Step>
@@ -37,19 +39,19 @@ One careful edit. The bar shares its length among however many words it holds, s
 <Step id="S6">
 Drummers rarely hit every beat equally hard. `.gain()` sets loudness from 0 (silent) to 1 (full). <CodeRef fn="gain" />
 
-<OnPass>A louder downbeat is the oldest trick for keeping a band together: everyone can hear where 1 is.</OnPass>
+<OnPass>A louder downbeat helps a band stay together: everyone can hear where 1 is.</OnPass>
 </Step>
 
 <Step id="S7">
-Kick on 1 and 3 only: the floor that most pop and rock grooves stand on.
+Many pop and rock grooves stand on a kick that plays every other beat.
 
 <Editor exercise="kick-one-and-three" />
 
-<OnPass>`bd ~ bd ~`: two kicks and two rests, every beat accounted for.</OnPass>
+<OnPass>`bd ~ bd ~`: two kicks and two rests, every beat accounted for. Beats 2 and 4 are open now, and the next lesson puts a snare in them.</OnPass>
 </Step>
 
 <Step id="S8">
-Your turn. A sound on every single beat can feel crowded. Leave at least one beat empty and hear how the band breathes in the gap.
+In Heartbeat every beat needed a sound. Now you choose which beats stay silent, and you know which one is 1. Leave at least one beat empty and hear the band breathe in the gap. A crash or a louder `.gain()` can mark the 1.
 
 <Make exercise="groove-with-air" />
 

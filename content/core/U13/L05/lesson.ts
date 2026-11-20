@@ -30,7 +30,7 @@ const ladder = (nudge: string, pointer: string, partial: string): HintLadder => 
   "auto",
 ];
 
-/** Yesterday's ballad chords, back in 4/4: Imaj7 vi7 IVmaj7 V7 in C. */
+/** U13.L04's ballad chords, back in 4/4: Imaj7 vi7 IVmaj7 V7 in C. */
 const changes = (form: string) => `const changes = "${form}"`;
 const LOOP = "<C^7 Am7 F^7 G7>";
 const KICK = 'kick: s("bd ~ bd ~")';
@@ -89,7 +89,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U13.L05",
-  version: 1,
+  version: 2,
   title: "Triplets",
   objective:
     "I can play three even notes in the time of two with .ply(3) or a bracket of three, write a roll, and read a triplet on the staff.",
@@ -115,16 +115,15 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: yesterday's four chords back in 4/4, at a slow-dance tempo. First the piano and the hats move in even eighths. Then the same ballad with each beat cut into three, and a quick snare roll at the end.",
+          "Listen to the piano and the hats against the square kick and snare. In which loop do they walk, and in which do they roll? Where have you felt that roll before?",
         skills: [{ skill: "R12", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: EVEN, caption: "Two notes to every beat: 1 & 2 & 3 & 4 &.", bars: 4 },
+          { code: EVEN, caption: "Loop 1: the piano and the hats in even eighths.", bars: 4 },
           {
             code: HOOK,
-            caption:
-              "Three notes to every beat, while the kick and the snare stay square. Bar 4 ends with three quick snare hits.",
+            caption: "Loop 2: the same chords and drums. Keep an ear on the end of bar 4.",
             bars: 4,
           },
         ],
@@ -254,7 +253,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The hats already move in triplets; the piano still plays one chord a beat. Make the piano play three chords to every beat, with the hats. Play the target first.",
+          "The hats already move in triplets; the piano still plays one chord a beat. Make the piano play three chords to every beat, with the hats.",
         skills: [{ skill: "R12", w: 1 }],
         code: { starter: S5_STARTER },
         reference: { solutions: [S5_SOLUTION], bars: 4 },

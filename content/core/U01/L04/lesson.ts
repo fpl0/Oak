@@ -41,7 +41,7 @@ const ON_ONE = HOOK.indexOf("[hh hh]") + 1;
 
 export default defineLesson({
   id: "U01.L04",
-  version: 1,
+  version: 2,
   title: "Two per Beat",
   objective: "I can split a beat in two with [ ] and write hats that play twice on every beat.",
   key: { tonic: "C", mode: "major" },
@@ -56,7 +56,7 @@ export default defineLesson({
     {
       id: "S1",
       kind: "listen",
-      title: "The hats double",
+      title: "Two kinds of hats",
       minutes: 0.5,
       ui: { panels: ROLL, band: BAND },
       example: { id: "hook", code: HOOK, bars: 4 },
@@ -65,20 +65,20 @@ export default defineLesson({
         id: "the-hats-double",
         version: 1,
         role: "practice",
-        prompt: "Play the first groove, then the second. Same kick, same snare. Listen to the hats.",
+        prompt: "Play Loop 1, then Loop 2. No counting yet: what does Loop 2 do to the feel of the groove?",
         skills: [{ skill: "R05", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: QUARTER_GROOVE, caption: "The backbeat with one hat on every beat.", bars: 4 },
-          { code: HOOK, caption: "The same backbeat with the hats written in brackets.", bars: 4 },
+          { code: QUARTER_GROOVE, caption: "Kick, snare and a plain hats line.", bars: 4 },
+          { code: HOOK, caption: "The same kick and snare, with the hats in brackets.", bars: 4 },
         ],
       },
     },
     {
       id: "S2",
       kind: "compare",
-      title: "Which one moves?",
+      title: "Hats per beat",
       minutes: 0.75,
       ui: { panels: { roll: false, staff: false, keyboard: false } },
       exercise: {
@@ -86,10 +86,10 @@ export default defineLesson({
         id: "which-one-moves",
         version: 1,
         role: "practice",
-        prompt: "Two versions of one groove. In which one do the hats play twice for every beat?",
+        prompt: "Count 1, 2, 3, 4 along with each version. In which one do two hats fit into every beat?",
         skills: [{ skill: "R05", w: 1 }],
         hints: ladder(
-          "Count the beats out loud. How many hats do you hear while you say one number?",
+          "While you say one number, how many hats go by?",
           "Listen to the hats only, against the kick and snare: one hat each, or two?",
           "In one version every hat lands together with a kick or a snare. That is the one-per-beat version.",
         ),
@@ -119,7 +119,7 @@ export default defineLesson({
     {
       id: "S3",
       kind: "predict",
-      title: "Count the hats",
+      title: "Read the brackets",
       minutes: 0.5,
       ui: { panels: { roll: false, staff: false, keyboard: false } },
       example: { id: "one-pair", code: groove("[hh hh] hh hh hh"), bars: 2 },
@@ -128,8 +128,7 @@ export default defineLesson({
         id: "count-the-hats",
         version: 1,
         role: "practice",
-        prompt:
-          'The hats line reads `s("[hh hh] hh hh hh")`. Before you run it: how many hats play in one bar?',
+        prompt: 'The hats line reads `s("[hh hh] hh hh hh")`. How many hats play in one bar?',
         skills: [{ skill: "R05", w: 1 }],
         hints: null,
         tests: [],
@@ -151,7 +150,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it and count along: 1 and 2 and 3 and 4 and. On the roll, click the hat that plays on the and of 1.",
+          "Run it and count along with the hats until you can say the and of every beat. Then answer on the roll.",
         skills: [{ skill: "R05", w: 1 }],
         hints: ladder(
           "Which hats share beat 1 with the kick?",
@@ -200,6 +199,13 @@ export default defineLesson({
         reference: { solutions: [HOOK], bars: 1 },
         matcher: DRUM_EVENTS,
         target: { audible: true, showRoll: true },
+        // The catalog says "1&" and "1e" and names the hat "hatClosed": these say where in the lesson's words.
+        feedbackText: {
+          "rhythm.missing":
+            "Bar {bar}, {beatLabel}: the {track} line has no hit here yet. An & after a number means the second half of that beat.",
+          "rhythm.extra":
+            "Bar {bar}: one hit too many on the {track} line. Every beat gets two hats, no more.",
+        },
         hints: ladder(
           "How many hats does a bar need if every beat gets two?",
           "Each of the four words is one beat. Brackets turn one beat into two sounds.",
@@ -253,16 +259,24 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The kick plays only on 1. Add a second kick on the and of 2, halfway between beats 2 and 3, and nowhere else.",
+          "The kick plays only on 1. Add a second kick on the and of 2, and nowhere else. The and of 2 is the second half of beat 2, and beat 2 is the second word of the kick line.",
         skills: [{ skill: "R05", w: 1 }],
         code: { starter: `${TEMPO}kick: s("⟪bd ~ ~ ~⟫")\n${SNARE}\nhats: s("${EIGHTHS}")` },
         reference: { solutions: [groove(EIGHTHS, 'kick: s("bd [~ bd] ~ ~")')], bars: 1 },
         matcher: DRUM_EVENTS,
         target: { audible: true, showRoll: true },
+        // The learner's real misses: a kick on beat 3 ("just before beat 3" pulled them there) and on beat 2.
+        // The catalog says "2&", a label this lesson never taught: these say where, in the lesson's words.
+        feedbackText: {
+          "rhythm.missing":
+            "Bar {bar}, {beatLabel}: the {track} line has no hit here yet. An & after a number means the second half of that beat.",
+          "rhythm.extra":
+            "Bar {bar}, {beatLabel}: one hit too many on the {track} line. The new kick belongs in the second half of beat 2 and nowhere else.",
+        },
         hints: ladder(
-          "Which beat holds the and of 2?",
-          "The and of 2 is the second half of beat 2. Beat 2 is the second word of the kick line.",
-          "Split beat 2 into two halves: silent first, kick second. The hats line shows the shape.",
+          "Say the count with the hats, 1 and 2 and 3 and 4 and. Which hat falls on the and of 2?",
+          "The second word of the kick line, a `~` for now, is beat 2. A kick on its second half needs that beat split in two with brackets, as the hats split theirs.",
+          "Split beat 2 into two halves inside brackets, silent first and kick second: the same shape as `[~ hh]`.",
         ),
         tests: [
           {
@@ -354,8 +368,7 @@ export default defineLesson({
         id: "your-eighth-groove",
         version: 1,
         role: "practice",
-        prompt:
-          "Write a groove over the band where at least one line plays two sounds inside one beat, written with `[ ]`.",
+        prompt: "Write a groove where at least one line splits a beat in two with `[ ]`.",
         skills: [{ skill: "R05", w: 1 }],
         code: { starter: QUARTER_GROOVE },
         bars: [1, 2],

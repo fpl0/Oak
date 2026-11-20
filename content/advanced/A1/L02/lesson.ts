@@ -71,7 +71,7 @@ const CHORDS = { band: "band.two-chord-vamp", tracks: ["chords"] } as const;
 
 export default defineLesson({
   id: "A1.L02",
-  version: 1,
+  version: 2,
   title: "Filters & Filter Envelopes",
   objective: "I can darken a sound with `.lpf()`, make it ring with `.lpq()` and pluck it with `.lpenv()`.",
   key: { tonic: "C", mode: "major" },
@@ -100,19 +100,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the loop from Waves & Harmonics, twice. Same notes, same drums. Listen to the bass and the riff.",
+          "Loop 2 plays the same notes with part of each sound taken away. Listen to the bass and the riff: which part of their sound is gone?",
         skills: [{ skill: "D03", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: RAW,
-            caption: "Raw: the bass and the riff with all their harmonics, all the way up.",
+            caption: "Loop 1: the bass and the riff as Waves & Harmonics left them.",
             bars: 2,
           },
           {
             code: FILTERED,
-            caption: "The same parts with their top harmonics taken away, and the riff plucked.",
+            caption: "Loop 2: listen to the top of each sound, and to the start of each riff note.",
             bars: 2,
           },
         ],
@@ -130,7 +130,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The riff on a sawtooth with `.lpf()`, the low-pass: its number falls bar by bar, 4000, 2000, 1000, 500. What will you hear from bar to bar?",
+          "The riff on a sawtooth, with the `.lpf()` number falling bar by bar: 4000, 2000, 1000, 500. What will you hear from bar to bar?",
         skills: [{ skill: "D03", w: 1 }],
         hints: null,
         tests: [],
@@ -158,7 +158,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The same four bars with `.scope()`. `.lpf()` keeps the harmonics below its number and takes away those above it. Run it, watch the wave lose its corners, then answer.",
+          "The same four bars with `.scope()` open. Run it, watch the corners of the wave from bar to bar, then answer.",
         skills: [{ skill: "D03", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -223,7 +223,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Play the target, then yours. The target is this bass with its buzz taken away: a round, low line. Change the `.lpf()` number until yours sounds the same.",
+          "The target is this bass with its buzz taken away: a round, low line. Yours still buzzes. Move the `.lpf()` number until the two sound the same.",
         skills: [{ skill: "D03", w: 1 }],
         code: { starter: MATCH_STARTER },
         reference: { solutions: [MATCH_SOLUTION], bars: 2 },

@@ -150,7 +150,7 @@ const earPart = (n: number, form: string, target: Target, other: Target): Identi
 
 export default defineLesson({
   id: "U15.L03",
-  version: 1,
+  version: 2,
   title: "Visiting Other Chords",
   objective:
     "I can aim a secondary dominant at vi, ii or IV (V7/vi, V7/ii, V7/IV), hear where it lands, and name it.",
@@ -176,15 +176,15 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: an eight-bar soul ballad turn on the key's own chords. Then the same turn with three of its chords turned into dominant sevenths on the same roots. Listen for the three places where the harmony tilts toward the next chord and lands on it.",
+          "An eight-bar ballad turn, twice. The second time some of its chords become dominant sevenths on the same roots. Listen for each place where the harmony tilts toward the next chord and lands on it.",
         skills: [{ skill: "H12", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: HOOK_IN_KEY, caption: "C, Em, Am, C, F, Am, Dm, G7: every chord the key's own.", bars: 8 },
+          { code: HOOK_IN_KEY, caption: "C, Em, Am, C, F, Am, Dm, G7: the key's own chords.", bars: 8 },
           {
             code: HOOK,
-            caption: "C, E7, Am, C7, F, A7, Dm, G7: three visitors, each landing on the chord after it.",
+            caption: "Bars 2, 4 and 6 change. Follow each one into the bar after it.",
             bars: 8,
           },
         ],
@@ -230,7 +230,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run the hook with the chord band open. It names each visitor by where it goes: V7/vi, V7/IV, V7/ii. Read A7 in bar 6 on the roll, then count the bars whose chord C major does not own.",
+          "The chord band names each visitor by where it goes, with a slash. Read A7 in bar 6 on the roll, then count the bars whose chord C major does not own.",
         skills: [{ skill: "H12", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -351,7 +351,7 @@ export default defineLesson({
         role: "check",
         key: G_MAJOR,
         prompt:
-          "The page: eight bars of a tune in G major; only bar 1 has its symbol. Its numerals are I, V7/vi, vi, V7/IV, IV, V7/ii, ii, V7. Write the eight chords by name in `changes`; the starter has G in every bar. Each accidental on the page is a note its visitor brings.",
+          "Eight bars of a tune in G major. Only bar 1 has its chord symbol. The numerals of all eight are I, V7/vi, vi, V7/IV, IV, V7/ii, ii, V7. Write the eight chords by name in `changes`, where the starter has G in every bar.",
         skills: [{ skill: "H12", w: 1 }],
         code: { starter: PAGE_STARTER },
         reference: { solutions: [PAGE_SOLUTION], bars: 8 },

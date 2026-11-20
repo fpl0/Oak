@@ -76,7 +76,7 @@ const RHYTHM: Matcher = {
 
 export default defineLesson({
   id: "U06.L12",
-  version: 1,
+  version: 2,
   title: "Comping Patterns",
   objective: 'I can give a chord loop a rhythm that locks with the drums, with .struct("~ x ~ x").',
   key: { tonic: "C", mode: "major" },
@@ -101,11 +101,11 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play. The four-chord loop again, but the piano no longer fills each bar: it hits the chords with the snare on beat 2, then once more just before the next bar.",
+          "Keep your ear on the piano, through the drums and bass. Where in the bar does it play, and where does it leave space?",
         skills: [{ skill: "H06", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "I V vi IV on the piano, in a rhythm of its own.", bars: 4 }],
+        items: [{ code: HOOK, caption: "I V vi IV, the piano in a rhythm of its own.", bars: 4 }],
       },
     },
     {
@@ -215,7 +215,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The chords hit on every beat. Change the rhythm in `.struct()` so they hit only with the snare, on beats 2 and 4. Play the target first.",
+          "The chords hit on every beat. Change the rhythm in `.struct()` so they hit only with the snare, on beats 2 and 4.",
         skills: [{ skill: "H06", w: 1 }],
         code: { starter: S4_STARTER },
         reference: { solutions: [S4_SOLUTION], bars: 4 },
@@ -308,7 +308,7 @@ export default defineLesson({
     {
       id: "S6",
       kind: "modify",
-      title: "Push into the next bar",
+      title: "Push the last hit",
       minutes: 1,
       graded: true,
       ui: { panels: ROLL, rollLabels: "degree" },

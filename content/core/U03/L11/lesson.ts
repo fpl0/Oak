@@ -55,7 +55,7 @@ const ROLL_STAFF = { roll: true, staff: "treble", keyboard: false } as const;
 
 export default defineLesson({
   id: "U03.L11",
-  version: 1,
+  version: 2,
   title: "Melody Workshop",
   objective: "I can write an eight-bar melody that pauses half-way and comes home to 1 at the end.",
   key: { tonic: "C", mode: "major" },
@@ -79,11 +79,14 @@ export default defineLesson({
         id: "eight-bars",
         version: 1,
         role: "practice",
-        prompt: "Press Play. Eight bars on acoustic guitar over a new band. Listen for where it rests.",
+        prompt:
+          "Listen for where the tune pauses and where it truly ends. Which pause sounds as if it wants to go on?",
         skills: [{ skill: "M01", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "Eight bars that pause half-way and end at home.", bars: 8 }],
+        items: [
+          { code: HOOK, caption: "Eight bars on acoustic guitar, one chord a bar underneath.", bars: 8 },
+        ],
       },
     },
     {
@@ -409,7 +412,7 @@ export default defineLesson({
         // The catalog's text for a `uses` rule names the tool ID; the label says it in words.
         feedbackText: { "rubric.unmet": "{label}: not yet." },
         prompt:
-          'Write an eight-bar melody over the band. Let bar 4 pause on an open degree and bar 8 **come home to 1**. Acoustic guitar suits it: `.s("acgtr")`.',
+          'Write an eight-bar melody. Let bar 4 pause on an open degree and bar 8 **come home to 1**. Acoustic guitar suits it: `.s("acgtr")`.',
         skills: [{ skill: "M01", w: 1 }],
         code: { starter: deg(OUTLINE, "piano") },
         bars: [8, 16],

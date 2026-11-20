@@ -146,7 +146,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "R1.L02",
-  version: 1,
+  version: 2,
   title: "Swing Ratios",
   objective:
     "I can set how hard a groove swings, from straight to hard swing, on the eighths or the sixteenths.",
@@ -172,25 +172,24 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: one neo-soul groove, three times. The notes are the same each time; only the sixteenth notes change, on every line that plays them.",
+          "Three loops of one groove; only the spacing of the sixteenths changes. Which loop sits back and leans, and which feels stiff? In the third, listen for the bar where the lean starts to bounce.",
         skills: [{ skill: "R13", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: GROOVE_LIGHT,
-            caption: "The sixteenths lean: the first of each pair a little longer than the second.",
+            caption: "Hear the hi-hat's sixteenths in pairs. Is each pair even?",
             bars: 4,
           },
           {
             code: GROOVE_STRAIGHT,
-            caption: "The same groove with every sixteenth evenly spaced: stiff by comparison.",
+            caption: "The same notes. Does the groove still sit back?",
             bars: 4,
           },
           {
             code: GROOVE_GROWING,
-            caption:
-              "The lean grows bar by bar: even in bar 1, a little more each bar, triplet swing in bar 4.",
+            caption: "Four bars, the spacing a little different in each.",
             bars: 4,
           },
         ],
@@ -208,7 +207,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Feel it before you measure it. The hi-hat plays eighth notes, swung: long, short, long, short. Tap with every hi-hat hit for two bars, sixteen taps in all. Any key works.",
+          "The hi-hat plays swung eighths: long, short, long, short. Tap with every hit for two bars, sixteen taps in all.",
         skills: [{ skill: "R13", w: 1 }],
         hints: ladder(
           "Is the hi-hat's second hit in each beat closer to the beat before it or to the beat after it?",
@@ -352,7 +351,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The hi-hat plays sixteenths, but its swing call works on the eighths: the second half of each beat moves late as a block, and each pair of sixteenths stays even. Make the sixteenths themselves lean, from a light swing up to the triplet feel. Hear the target to compare.",
+          "The hi-hat plays sixteenths, but its swing call works on the eighths: the second half of each beat moves late as a block, and each pair of sixteenths stays even. Make the sixteenths themselves lean, from a light swing up to the triplet feel.",
         skills: [{ skill: "R13", w: 1 }],
         swing: { subdivision: 16, amount: 0.2 },
         code: { starter: S5_STARTER },
@@ -454,7 +453,7 @@ export default defineLesson({
         role: "practice",
         title: "Neo-soul lean",
         prompt:
-          "The band plays the chords; the drums and the bass are yours, straight. Give the sixteenths a lean you like, from a light 3:2 to the triplet's 2:1, on the hi-hat and on every line that plays sixteenths with it. Then make it yours: let the swing grow across the bars, push a kick, slow the tempo.",
+          "The band plays the chords; the drums and the bass are yours, straight. Give the sixteenths a lean you like, from a light 3:2 to the triplet's 2:1, on the hi-hat and on every line that plays sixteenths with it. Let the lean grow across the bars if you like, and find a slow neo-soul tempo.",
         skills: [{ skill: "R13", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

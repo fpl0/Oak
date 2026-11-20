@@ -93,7 +93,7 @@ const NONE = { roll: false, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "J3.L02",
-  version: 1,
+  version: 2,
   title: "Drop-2 & Spread",
   objective: "I can open a close voicing into a drop-2 voicing and carry a tune on its top note.",
   key: { tonic: "C", mode: "major" },
@@ -122,21 +122,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the vibes play four notes, C B B E, and the Rhodes harmonises each one from below. Twice: the tune, the bass and the drums do not change. Listen to the Rhodes.",
+          "The tune, the bass and the drums do not change. Listen to the space between the Rhodes and the vibes: which take sounds thicker, and which one breathes?",
         skills: [{ skill: "J09", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: CLOSE_TRIO,
-            caption:
-              "Each chord packed inside one octave, right under the tune: thick and a little boxed in.",
+            caption: "The vibes play C B B E; the Rhodes sits right under each note.",
             bars: 4,
           },
           {
             code: DROP2_TRIO,
-            caption:
-              "The same chords with one note of each moved down an octave: wider, more open, and the tune still on top.",
+            caption: "The same tune and the same chords. Listen under the vibes.",
             bars: 4,
           },
         ],
@@ -281,7 +279,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The Rhodes harmonises the tune in close position. Turn each of its four chords into a drop-2 voicing, so the tune stays on top. Hear the target first.",
+          "The Rhodes harmonises the tune in close position. Turn each of its four chords into a drop-2 voicing, so the tune stays on top.",
         skills: [{ skill: "J09", w: 1 }],
         swing: SWUNG,
         code: { starter: S4_STARTER },
@@ -418,7 +416,7 @@ export default defineLesson({
         role: "practice",
         title: "Drop-2 ii–V–I",
         prompt:
-          "The Band plays drums and bass on Dm7 G7 Cmaj7 Cmaj7. Keep C B B E or write your own vibes tune, one or two notes a bar, and voice the Rhodes under it in drop-2: build each chord close under the tune's note, then drop its second note from the top.",
+          "Keep C B B E or write your own vibes tune over Dm7 G7 Cmaj7 Cmaj7, one or two notes a bar. Voice the Rhodes under it in drop-2: build each chord close under the tune's note, then drop its second note from the top. A tune note on a 3rd or a 7th makes each change clear.",
         skills: [{ skill: "J09", w: 1 }],
         swing: SWUNG,
         code: { starter: MAKE_STARTER },

@@ -49,7 +49,7 @@ const NUMBERS = {
 
 export default defineLesson({
   id: "U03.L04",
-  version: 1,
+  version: 2,
   title: "Leading Tone & Six",
   objective: "I can hear degrees 6 and 7, feel 7 pull up to home, and write a run of the scale with `..`.",
   key: { tonic: "C", mode: "major" },
@@ -74,13 +74,11 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play and watch the labels. The line climbs past 5 to home and leans back twice. Which note seems most eager to reach 1?",
+          "Watch the labels as the line climbs past 5 to home. Where does the pull towards 1 feel strongest?",
         skills: [{ skill: "E05", w: 1 }],
         hints: null,
         tests: [],
-        items: [
-          { code: HOOK, caption: "A piano line over the band, climbing to home an octave up.", bars: 2 },
-        ],
+        items: [{ code: HOOK, caption: "Bar 1 climbs straight up to home; bar 2 takes its time.", bars: 2 }],
       },
     },
     {
@@ -96,7 +94,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          '`n("4 5 6 ~")` plays degrees 5, 6 and 7, then rests. Before you run it, guess: will it sound finished?',
+          '`n("4 5 6 ~")` plays degrees 5, 6 and 7, then rests. Will it sound finished? Hum your guess.',
         skills: [{ skill: "E05", w: 1 }],
         hints: null,
         tests: [],
@@ -297,7 +295,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write a two-bar line over the band that uses **degrees 6 and 7** (`n` 5 and 6), and let 7 lead somewhere. The starter stops short of them.",
+          "Write a two-bar line that uses **degrees 6 and 7** (`n` 5 and 6), and let 7 lead somewhere. The starter stops short of them.",
         skills: [{ skill: "E05", w: 1 }],
         code: { starter: deg("<[0 1 2 4] [3 2 1 ~]>") },
         bars: [1, 4],

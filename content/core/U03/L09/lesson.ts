@@ -61,7 +61,7 @@ const MAKE_STARTER = deg("<[0 2 4 7] [5 3 5 7] [4 2 0 2] [5 3 5 ~]>");
 
 export default defineLesson({
   id: "U03.L09",
-  version: 1,
+  version: 2,
   title: "Tunes by Number",
   objective:
     "I can write a known tune as degrees, tell its steps from its leaps, join its notes with .legato(), and sing it from the staff.",
@@ -90,11 +90,12 @@ export default defineLesson({
         id: "old-tune-new-spelling",
         version: 1,
         role: "practice",
-        prompt: "Press Play and follow the staff. Read the syllables under the notes as they sound.",
+        prompt:
+          "Follow the staff and read the syllables as they sound. Does the tune move smoothly, or in jumps?",
         skills: [{ skill: "M01", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "Ode to Joy, bars 1 to 4, written in degrees.", bars: 4 }],
+        items: [{ code: HOOK, caption: "Ode to Joy again, now in degrees and syllables.", bars: 4 }],
       },
     },
     {
@@ -110,7 +111,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "When the Saints, in degrees. Bar 1: a rest, then 1 3 4. Bar 2: 5, held for the whole bar. Bars 3 and 4 repeat them. Play the target first.",
+          "When the Saints, in degrees. Bar 1: a rest, then 1 3 4. Bar 2: 5, held for the whole bar. Bars 3 and 4 repeat them.",
         skills: [
           { skill: "M01", w: 0.6 },
           { skill: "S02", w: 0.4 },
@@ -332,7 +333,7 @@ export default defineLesson({
         // The catalog's text for a `uses` rule names the tool ID; the label says it in words.
         feedbackText: { "rubric.unmet": "{label}: not yet." },
         prompt:
-          "Write a four-bar tune in degrees over the band. Move mostly to the next degree, with a leap or two for interest. Join the notes with `.legato()` if you like.",
+          "Write a four-bar tune in degrees. Move mostly to the next degree, with a leap or two for interest.",
         skills: [{ skill: "M01", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [2, 8],

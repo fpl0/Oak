@@ -49,7 +49,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U05.L04",
-  version: 2,
+  version: 3,
   title: "Arpeggios",
   objective: "I can play a chord one note at a time with .arp().",
   key: { tonic: "C", mode: "major" },
@@ -64,7 +64,7 @@ export default defineLesson({
     {
       id: "S1",
       kind: "listen",
-      title: "One note at a time",
+      title: "Note by note",
       minutes: 0.5,
       ui: { panels: ROLL, rollLabels: "degree", band: BAND },
       example: { id: "hook", code: HOOK, bars: 4 },
@@ -74,17 +74,17 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play. These are the four chords of Stacking Thirds, but the piano plays each one a note at a time: up, and back down.",
+          "Loop 1 plays each chord a note at a time, Loop 2 the same chords as blocks. Listen for what the broken chords add between the drum hits.",
         skills: [{ skill: "C01", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption: "C, G, A minor and F, each played up and back down, over the drums and bass.",
+            caption: "Each chord a note at a time, up and back down.",
             bars: 4,
           },
-          { code: code(blocks(LOOP)), caption: "The same four chords as blocks, for comparison.", bars: 4 },
+          { code: code(blocks(LOOP)), caption: "The same four chords as blocks.", bars: 4 },
         ],
       },
     },
@@ -101,7 +101,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          '`.arp()` picks notes out of the stack by position, in the order they are written, the first as 0; this stack is written lowest first. In what order will `n("[0,2,4]").arp("0 2 1")` play C, E and G?',
+          'This stack is written lowest first, so position 0 is C. In what order will `n("[0,2,4]").arp("0 2 1")` play C, E and G?',
         skills: [{ skill: "C01", w: 1 }],
         hints: null,
         tests: [],
@@ -189,7 +189,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Play the target first: every chord now goes up and back down twice in a bar, eight notes instead of four. Change the pattern inside `.arp()` to match it.",
+          "In the target, every chord goes up and back down twice in a bar, eight notes instead of four. Change the pattern inside `.arp()` to match it.",
         skills: [{ skill: "C01", w: 1 }],
         code: { starter: code(broken(LOOP, "⟪0 1 2 1⟫")) },
         reference: { solutions: [EIGHTHS], bars: 4 },
@@ -239,7 +239,7 @@ export default defineLesson({
     {
       id: "S5",
       kind: "make",
-      title: "Broken chords on the bass",
+      title: "Broken chords",
       minutes: 2.75,
       ui: { panels: ROLL, rollLabels: "degree", band: BAND },
       exercise: {
@@ -248,7 +248,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The band plays drums and the bass line, degrees 1, 5, 6 and 4. Your four triads play as blocks. Break them up with `.arp()` in a pattern of your own: up, down, skipping, with gaps.",
+          "Your four triads play as blocks over the band's drums and bass. Break them up with `.arp()` in a pattern of your own: up, down, skipping, with gaps.",
         skills: [{ skill: "C01", w: 1 }],
         // The catalog's text is "{label}: {detail}", and a progression's detail names the chords in Roman
         // numerals (U06.L02). The same text serves every rule, so it says only "not yet".

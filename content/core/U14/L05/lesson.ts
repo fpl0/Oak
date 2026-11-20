@@ -80,7 +80,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U14.L05",
-  version: 1,
+  version: 2,
   title: "Phrygian Edge",
   objective: "I can turn minor into Phrygian by lowering its 2nd, and give a riff its edge over i and ♭II.",
   key: { tonic: "E", mode: "minor" },
@@ -106,20 +106,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: an acoustic guitar strums under a second guitar's riff, over the drums. The riff's numbers are the same in both halves. Listen for the moment it turns.",
+          "Halfway through loop 1 the riff turns, though its numbers stay the same. Listen to what happens to the mood, and to the way the riff comes home.",
         skills: [{ skill: "S13", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption:
-              "Two bars on E minor; then the same numbers with one note a half step lower, and a chord a half step above home under them.",
+            caption: "Loop 1: E minor, then the new scale from bar 3.",
             bars: 4,
           },
           {
             code: LOOP,
-            caption: "The second colour as a loop: two chords a half step apart, dark and Spanish.",
+            caption: "Loop 2: the new scale as a loop of its own.",
             bars: 2,
           },
         ],
@@ -165,7 +164,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it with the chord band open: the chord on degree 2, stacked from its root, on E minor in bar 1 and on the new scale in bar 2. Bar 1 is F♯ A C, the diminished chord. Read bar 2 on the roll.",
+          "The chord on degree 2, stacked from its root: E minor in bar 1, the new scale in bar 2. Bar 1 is F♯ A C, the diminished chord. Run it and read bar 2 on the roll.",
         skills: [{ skill: "S13", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -280,7 +279,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The riff is in E minor over one chord, with the riff on `E4:minor`. Play the target, then make it Phrygian: change the scale word, and in bar 2 put the major chord a half step above home.",
+          "The riff is on `E4:minor` over one chord. Make it Phrygian: change the scale word, and in bar 2 put the major chord a half step above home.",
         skills: [{ skill: "S13", w: 1 }],
         code: { starter: MODIFY_STARTER },
         reference: { solutions: [MODIFY_SOLUTION], bars: 2 },

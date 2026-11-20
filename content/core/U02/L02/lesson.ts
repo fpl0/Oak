@@ -38,7 +38,7 @@ const NOTE_FEEDBACK = {
 
 export default defineLesson({
   id: "U02.L02",
-  version: 1,
+  version: 2,
   title: "The White Keys",
   objective: "I can name the white keys a to g, give each its octave number, and find c4, number 60.",
   key: { tonic: "C", mode: "major" },
@@ -53,7 +53,7 @@ export default defineLesson({
     {
       id: "S1",
       kind: "listen",
-      title: "Seven letters",
+      title: "Five white keys",
       minutes: 0.5,
       ui: { panels: ROLL_KEYS, rollLabels: "note", band: BAND },
       example: { id: "hook", code: HOOK, bars: 2 },
@@ -62,11 +62,11 @@ export default defineLesson({
         id: "white-key-riff",
         version: 1,
         role: "practice",
-        prompt: "Press Play. Watch the keys light up: every note of this riff is a white key.",
+        prompt: "Listen for the note the riff starts on and the note it ends on. Watch the keys as it plays.",
         skills: [{ skill: "P02", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "A piano riff over the band, two bars on repeat.", bars: 2 }],
+        items: [{ code: HOOK, caption: "Bar 1 climbs away from `c4`; bar 2 walks back down.", bars: 2 }],
       },
     },
     {
@@ -335,7 +335,7 @@ export default defineLesson({
         id: "white-key-riff-make",
         version: 1,
         role: "practice",
-        prompt: "Write a riff on the white keys over the band, with at least **four different notes**.",
+        prompt: "Write a white-key riff with at least **four different notes**.",
         skills: [
           { skill: "P02", w: 0.5 },
           { skill: "P05", w: 0.5 },

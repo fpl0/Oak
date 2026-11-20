@@ -64,7 +64,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U05.L05",
-  version: 1,
+  version: 2,
   title: "Inversions",
   objective: "I can turn a triad upside down so its 3rd or 5th is lowest, and name it with a slash: C/E.",
   key: { tonic: "C", mode: "major" },
@@ -92,19 +92,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play and follow the lowest note of each chord on the roll: C, then a step down to B, a step down to A, then down to F.",
+          "Follow the lowest note of each chord, first in Loop 1, then in Loop 2. In which loop does it move by step, and in which does it leap?",
         skills: [{ skill: "C04", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption: "C, G, A minor and F, with the lowest note going down C, B, A, then F.",
+            caption: "The four chords, rearranged. Follow the bottom note.",
             bars: 4,
           },
           {
             code: ROOTS_ONLY,
-            caption: "The same four chords with every root at the bottom: the lowest note jumps about.",
+            caption: "The same four chords, each stacked up from its root.",
             bars: 4,
           },
         ],
@@ -212,7 +212,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "F, C, D minor, G. The lowest notes should walk down F, E, D, but bar 2's C chord has C at the bottom. Rearrange it so its 3rd, E, is lowest. Play the target first.",
+          "F, C, D minor, G. The lowest notes should walk down F, E, D, but bar 2's C chord has C at the bottom. Rearrange it so its 3rd, E, is lowest.",
         skills: [{ skill: "C04", w: 1 }],
         code: { starter: WALK_STARTER },
         reference: { solutions: [WALK], bars: 4 },
@@ -310,7 +310,7 @@ export default defineLesson({
     {
       id: "S6",
       kind: "quiz",
-      title: "Name it with its bass",
+      title: "Name the bass too",
       minutes: 1,
       graded: true,
       ui: { panels: NONE },
@@ -368,7 +368,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The drums keep time. Your four chords, C G Am F, all stand on their roots, so the lowest note jumps. Rearrange some of them so the lowest notes move by step, down or up: C, G/B, Am, … .",
+          "Your four chords, C G Am F, all stand on their roots, so the lowest note jumps. Rearrange some of them so the lowest notes move by step, down or up: C, G/B, Am, … .",
         skills: [{ skill: "C04", w: 1 }],
         // The catalog's text is "{label}: {detail}"; the detail names chords by symbols and members, and the
         // same text serves the suggestions, so it says only "not yet".

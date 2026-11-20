@@ -10,6 +10,7 @@ import { Pause, Play } from "lucide-react";
 import { createContext, type ReactNode, use, useRef, useState } from "react";
 import type { ContentBundle } from "../lib/content-model.ts";
 import { useCalibrations } from "../lib/queries.ts";
+import { useUnlockedSet } from "../lib/unlocked.ts";
 import { Button } from "../ui/kit/Button.tsx";
 import { Chip, Skeleton } from "../ui/kit/basics.tsx";
 import { Callout as KitCallout } from "../ui/kit/Controls.tsx";
@@ -320,17 +321,65 @@ function CanDo(p: P) {
   );
 }
 
+/** Toolbox kinds that are something the learner writes in code (not features, templates or lenses). */
+const CODE_KINDS: ReadonlySet<string> = new Set(["tool", "sound", "scale", "chord"]);
+const unlockSites = (at: string | readonly string[]): readonly string[] =>
+  Array.isArray(at) ? at : [at as string];
+
+/**
+ * The lesson's closing card: what it set out to do, and the learner's progress made visible on two sides. In code:
+ * what this lesson put in their hands and how large their Strudel vocabulary now is. In music: the earlier skills
+ * the lesson brought back (its `practises`) and the words it named.
+ */
 function Recap() {
   const ctx = useMdxStep();
+  const { unlocked, ready } = useUnlockedSet();
   if (!ctx) return null;
   const terms = ctx.lesson.terms
     .map((t) => ctx.content?.terms.find((x) => x.id === t.id)?.term)
     .filter((x): x is string => !!x);
+  const toolbox = ctx.content?.toolbox ?? [];
+  const lessonId = ctx.lesson.id as string;
+  const today = toolbox.filter((t) => CODE_KINDS.has(t.kind) && unlockSites(t.unlock.at).includes(lessonId));
+  // Today's tools open when the Make is saved, so they count already: the card is read just before that.
+  const held = ready
+    ? new Set([
+        ...toolbox.filter((t) => CODE_KINDS.has(t.kind) && unlocked.has(t.id)).map((t) => t.id as string),
+        ...today.map((t) => t.id as string),
+      ]).size
+    : null;
+  const skillName = (id: string) => ctx.content?.skills.nodes.find((n) => n.id === id)?.name ?? null;
+  const brought = [...new Set(ctx.lesson.practises.map((s) => skillName(s)))].filter((x): x is string => !!x);
   return (
-    <section className="mb-3 rounded-card border border-border bg-surface p-3 text-sm" aria-label="Recap">
+    <section
+      className="mb-3 flex flex-col gap-1.5 rounded-card border border-border bg-surface p-3 text-sm"
+      aria-label="Recap"
+      data-testid="recap"
+    >
       <p className="font-medium">In this lesson</p>
-      <p className="mt-1 text-text-2">{ctx.lesson.objective}</p>
-      {terms.length > 0 && <p className="mt-1 text-text-2">Words you met: {terms.join(", ")}.</p>}
+      <p className="text-text-2">{ctx.lesson.objective}</p>
+      {today.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5" data-testid="recap-new-code">
+          <span className="text-text-2">New in your code:</span>
+          {today.map((t) => (
+            <Chip key={t.id}>
+              <code className="font-mono text-xs">{t.code}</code>
+            </Chip>
+          ))}
+        </div>
+      )}
+      {brought.length > 0 && (
+        <p className="text-text-2" data-testid="recap-brought-back">
+          Brought back from earlier lessons: {brought.join(", ")}.
+        </p>
+      )}
+      {terms.length > 0 && <p className="text-text-2">Words you met: {terms.join(", ")}.</p>}
+      {held !== null && held > 0 && (
+        <p className="text-text-3" data-testid="recap-toolbox">
+          Your Strudel so far: {held} {held === 1 ? "tool, sound or scale" : "tools, sounds and scales"} in
+          your toolbox.
+        </p>
+      )}
     </section>
   );
 }

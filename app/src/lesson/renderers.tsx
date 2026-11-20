@@ -265,6 +265,14 @@ function ListenItems() {
   const [i, setI] = useState(0);
   const item = ex.items[i] ?? ex.items[0];
   const timer = useRef<number | null>(null);
+  // Loops heard through at least once. The step completes (and its pass text, the reveal of what to notice,
+  // appears) only when every loop has been heard: with two loops to compare, the reveal after the first would
+  // give the comparison away before the second had played.
+  const heard = useRef<Set<number>>(new Set());
+  const [heardCount, setHeardCount] = useState(0);
+  // A loop chosen with its button starts playing at once (A/B listening), and its editor reports the run, so the
+  // switch counts towards "heard"; the first loop waits for the learner's Play.
+  const [switched, setSwitched] = useState(false);
   useEffect(
     () => () => {
       if (timer.current !== null) window.clearTimeout(timer.current);
@@ -286,7 +294,11 @@ function ListenItems() {
                   size="sm"
                   variant={n === i ? "primary" : "secondary"}
                   aria-pressed={n === i}
-                  onClick={() => setI(n)}
+                  onClick={() => {
+                    if (timer.current !== null) window.clearTimeout(timer.current);
+                    setI(n);
+                    setSwitched(true);
+                  }}
                 >
                   Loop {n + 1}
                 </Button>
@@ -301,20 +313,44 @@ function ListenItems() {
             id={`l-${h.step.id.toLowerCase()}-${i}`}
             code={item.code}
             readOnly
+            autoPlay={switched}
             lessonCtx={{ ...h.workbench.lessonCtx, loopBars: item.bars }}
             onEvaluated={(o) => {
               if (!o.ok) return;
-              // ux §3.2: a listen step is complete once one full loop has played.
+              // ux §3.2: a listen step is complete once one full loop has played; with several loops, once each
+              // of them has.
               if (timer.current !== null) window.clearTimeout(timer.current);
               const loopMs = (item.bars / (o.cps ?? 0.5)) * 1000;
-              timer.current = window.setTimeout(markDone, loopMs);
+              const n = i;
+              timer.current = window.setTimeout(() => {
+                heard.current.add(n);
+                setHeardCount(heard.current.size);
+                if (heard.current.size >= ex.items.length) markDone();
+              }, loopMs);
             }}
           />
         </div>
       }
       answer={
-        <p className="text-sm text-text-2">
-          Press Play (or <Kbd>Space</Kbd> on the workbench) and listen to the whole loop.
+        <p className="text-sm text-text-2" data-testid="listen-progress">
+          {ex.items.length > 1 ? (
+            heardCount >= ex.items.length ? (
+              ex.items.length === 2 ? (
+                "Both heard. Play either one again to compare."
+              ) : (
+                "All heard. Play any of them again to compare."
+              )
+            ) : (
+              <>
+                Press Play (or <Kbd>Space</Kbd> on the workbench) and hear each loop all the way through.{" "}
+                {heardCount > 0 ? `${heardCount} of ${ex.items.length} heard.` : null}
+              </>
+            )
+          ) : (
+            <>
+              Press Play (or <Kbd>Space</Kbd> on the workbench) and listen to the whole loop.
+            </>
+          )}
         </p>
       }
     />

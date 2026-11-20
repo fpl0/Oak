@@ -60,7 +60,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U07.L02",
-  version: 1,
+  version: 2,
   title: "Motif & Variation",
   objective:
     "I can build a tune from one short idea: repeat it, move it to another degree, and play it backwards.",
@@ -89,11 +89,12 @@ export default defineLesson({
         id: "four-notes-four-bars",
         version: 1,
         role: "practice",
-        prompt: "Press Play. One line of code, four notes long, over the four-chord loop.",
+        prompt:
+          "Listen to the four bars. Does each one sound like a new idea, or the same idea in a new place?",
         skills: [{ skill: "M02", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "Four notes, played on each chord of I V vi IV.", bars: 4 }],
+        items: [{ code: HOOK, caption: "Four notes in the code, four bars over I V vi IV.", bars: 4 }],
       },
     },
     {
@@ -135,7 +136,7 @@ export default defineLesson({
         id: "one-idea-moved",
         version: 1,
         role: "practice",
-        prompt: "Run the hook and read each bar on the roll, in degrees.",
+        prompt: "Run it and read each bar on the roll, in degrees.",
         skills: [{ skill: "M02", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -185,7 +186,7 @@ export default defineLesson({
     {
       id: "S4",
       kind: "modify",
-      title: "Climb a step a bar",
+      title: "Make it climb",
       minutes: 1.25,
       graded: true,
       ui: { panels: ROLL, rollLabels: "degree", band: DRUMS },
@@ -195,7 +196,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "`.scaleTranspose(n)`, written after `.scale()`, moves a line up `n` degrees. Give it a pattern so the motif climbs one degree each bar, starting where it is now. Play the target first.",
+          "Add `.scaleTranspose()` after `.scale()` so the motif climbs one degree each bar, starting where it is now. `.scaleTranspose(n)` moves a line up `n` degrees.",
         skills: [{ skill: "M02", w: 1 }],
         code: { starter: CLIMB_STARTER },
         reference: { solutions: [CLIMB], bars: 4 },

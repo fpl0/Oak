@@ -221,7 +221,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "R2.L02",
-  version: 1,
+  version: 2,
   title: "Odd Grooves",
   objective:
     "I can hear how a groove in 7/8 or 9/8 is grouped, and write grooves in both with the long group last.",
@@ -247,21 +247,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a groove in seven at 240 eighth notes a minute, then the same groove with a riff on top. Count along with the caption, and listen to the end of each bar, where the last group runs one eighth longer than the others.",
+          "A groove in seven at 240 eighth notes a minute, then the same groove with a clav riff on top. Count along with the captions. Does each bar march, or does its end tip you forward into the next?",
         skills: [{ skill: "R16", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption:
-              "1-2 1-2 1-2-3: two short groups and a long one. Kick, snare, kick; the louder hi-hat marks each start.",
+            caption: "Count 1-2 1-2 1-2-3. The louder hi-hat marks each group start.",
             bars: 4,
           },
           {
             code: HOOK_RIFF,
-            caption:
-              "The same groove with a clav riff on the group starts: odd-meter funk, each bar pulled round by its long group.",
+            caption: "The same groove with a clav riff on top. Count along: where does the riff land?",
             bars: 4,
           },
         ],
@@ -279,7 +277,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Feel it first. The groove plays four bars with a rimshot on every group start: tap with it, three taps a bar, saying “short, short, long”. Twelve taps in all; any key works.",
+          "Four bars, with a rimshot on every group start. Tap with it, three taps a bar, saying “short, short, long”: twelve taps in all.",
         skills: [{ skill: "R16", w: 1 }],
         hints: ladder(
           "Are the three taps of a bar evenly spaced?",
@@ -414,7 +412,7 @@ export default defineLesson({
         role: "check",
         meter: "9/8i",
         prompt:
-          "The tempo line already counts nine eighths to the bar at 240, but the kick still has the seven steps of a bar of seven, so it slides off the hi-hat. Give the kick one step per eighth and group the bar 2+2+2+3: a hit where each group starts, nowhere else. Hear the target to check.",
+          "The tempo line already counts nine eighths to the bar at 240, but the kick still has the seven steps of a bar of seven, so it slides off the hi-hat. Give the kick one step per eighth and group the bar 2+2+2+3: a hit where each group starts, nowhere else.",
         skills: [{ skill: "R16", w: 1 }],
         code: { starter: S5_STARTER },
         reference: { solutions: [S5_SOLUTION], bars: 4 },
@@ -501,7 +499,7 @@ export default defineLesson({
         role: "practice",
         title: "Groove in seven",
         prompt:
-          "Your groove in seven: 2+2+3, short, short, long. The starter's kick hits every other eighth, so its bar ends on a group of one. Put a kick or a snare on each group start and no loud hit inside a group; quiet hi-hats are free. Then make it yours: the bass on the group starts, a clav riff on top.",
+          "Your groove in seven: 2+2+3, short, short, long. The starter's kick hits every other eighth, so its bar ends on a group of one. Put a kick or a snare on each group start and no loud hit inside a group; quiet hi-hats are free. Then build on it: the bass on the group starts, a clav riff on top.",
         skills: [{ skill: "R16", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

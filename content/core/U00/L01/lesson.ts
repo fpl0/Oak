@@ -38,7 +38,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U00.L01",
-  version: 2,
+  version: 3,
   title: "Hello, Loop",
   objective: "I can start, stop and change a loop in code, and hear what each of its lines plays.",
   key: { tonic: "C", mode: "major" },
@@ -66,15 +66,16 @@ export default defineLesson({
         id: "it-builds",
         version: 1,
         role: "practice",
-        prompt: "Press Play. Four lines of code, four players. They come in one at a time.",
+        prompt:
+          "The players come in one at a time. Let each one play until you hear the music come back to where it started.",
         skills: [{ skill: "D01", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: loopOf(DRUMS), caption: "The drums, alone.", bars: 4 },
+          { code: loopOf(DRUMS), caption: "The drums alone.", bars: 4 },
           { code: loopOf(DRUMS, BASS), caption: "The bass joins underneath.", bars: 4 },
-          { code: loopOf(DRUMS, BASS, CHORDS), caption: "Soft keys come in between them.", bars: 4 },
-          { code: LOOP, caption: "Last, a piano plays the tune.", bars: 4 },
+          { code: loopOf(DRUMS, BASS, CHORDS), caption: "Soft keys come in between.", bars: 4 },
+          { code: LOOP, caption: "Last, a piano plays the tune on top.", bars: 4 },
         ],
       },
     },
@@ -90,7 +91,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it, then use the mute buttons beside each line. Silence one line at a time and listen to what goes missing.",
+          "Run it, then mute one line at a time with the button beside it. The code stays as it is. Listen to what goes missing.",
         skills: [{ skill: "D01", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -211,7 +212,7 @@ export default defineLesson({
         title: "Sketch 001",
         role: "practice",
         prompt:
-          "Make the loop yours. Change any of the numbers in the `mel` line, run it after each change, and save it when it sounds like yours.",
+          "Change any of the numbers in the `mel` line, run it after each change, and save it when it sounds like yours.",
         skills: [{ skill: "D01", w: 1 }],
         code: { starter: LOOP_MELODY_OPEN },
         bars: [4, 4],

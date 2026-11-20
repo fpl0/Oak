@@ -79,7 +79,7 @@ const MINOR = { tonic: "A", mode: "minor" } as const;
 
 export default defineLesson({
   id: "U10.L07",
-  version: 1,
+  version: 2,
   title: "The Andalusian Cadence",
   objective:
     "I can hear and write the Andalusian cadence, i–VII–VI–V: a minor key walking down to its major V.",
@@ -108,13 +108,21 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a guitar, a bass and a tune over the drums, twice round. Then the bass alone. Listen to where it walks, and to the last chord before the loop starts again.",
+          "The loop twice round, then its bass alone. Listen to which way the bass walks, and to how the last chord feels just before the loop starts again.",
         skills: [{ skill: "H09", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: HOOK, caption: "Am G F E on an acoustic guitar, twice round.", bars: 8 },
-          { code: BASS_ALONE, caption: "The bass alone: A, G, F, E, each with its 5th.", bars: 4 },
+          {
+            code: HOOK,
+            caption: "Guitar, bass and tune, twice round. Listen to the last chord of each round.",
+            bars: 8,
+          },
+          {
+            code: BASS_ALONE,
+            caption: "The bass alone, root and 5th in each bar. Follow its roots.",
+            bars: 4,
+          },
         ],
       },
     },
@@ -158,7 +166,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it with the chord band open. Read each chord's numeral in A minor as it plays, and find the one bar where G is raised to G♯.",
+          "Run it. Read each chord's numeral in the chord band as it plays, and find the one bar where G is raised to G♯.",
         skills: [{ skill: "H09", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -264,7 +272,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "A loop in a new key each time, with its bass and drums. Which loop is it? The two minor loops are among the choices now.",
+          "A loop in a new key each time, with its bass and drums. Which loop is it? Six are on offer now, two of them minor.",
         skills: [
           { skill: "H09", w: 0.6 },
           { skill: "H08", w: 0.4 },
@@ -294,7 +302,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Hear it, then sing the bass line's four roots, one a bar: do, te, le, sol, each a step below the last. Sing in your own range.",
+          "The bass line's four roots, one a bar: do, te, le, sol, each a step below the last. Hear them, then sing them in your own range.",
         skills: [
           { skill: "V02", w: 0.6 },
           { skill: "H09", w: 0.4 },
@@ -330,7 +338,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "The bass already walks down, A G F E, but the guitar strums Am over every note. Give each bass note its chord, i VII VI V, then make the descent yours: one chord a bar or two (`<[Am G] [F E]>`, the bass to match), a tune that hangs on the V, a sound, a room.",
+          "The bass walks down A G F E, but the guitar strums Am over every note. Give each bass note its chord, i VII VI V. Then shape the descent: one chord a bar or two (`<[Am G] [F E]>`, the bass to match), a tune that hangs on the V, a sound, a room.",
         skills: [{ skill: "H09", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

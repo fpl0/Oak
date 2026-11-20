@@ -83,7 +83,7 @@ const KEYS = { roll: false, staff: false, keyboard: true } as const;
 
 export default defineLesson({
   id: "U16.L02",
-  version: 1,
+  version: 2,
   title: "♭VI & ♭VII",
   objective: "I can write the ♭VI–♭VII–I ending, two borrowed major chords climbing home from below.",
   key: C,
@@ -108,19 +108,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the last four bars of an anthem, organ and guitar, with the tune climbing do re mi at the end. First it comes home the usual way, then from below. Listen to bar 3.",
+          "The same tune twice, climbing do re mi at the end. First the chords come home the usual way, then from below. Listen to bar 3: which way into home sounds bigger?",
         skills: [{ skill: "H13", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK_PLAIN,
-            caption: "C, F, then F and G, and home: every chord is the key's own.",
+            caption: "C, F, then F and G, and home: the key's own chords.",
             bars: 4,
           },
           {
             code: HOOK,
-            caption: "C, F, then A♭ and B♭, and home: two chords from outside the key, climbing.",
+            caption: "C, F, then A♭ and B♭, and home. Listen to the bass in bar 3.",
             bars: 4,
           },
         ],
@@ -166,7 +166,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it with the chord band open: A♭, B♭ and C, one chord a bar, each root in the bass. Read the roots on the roll and the numerals on the band.",
+          "A♭, B♭ and C, one chord a bar, each root in the bass. Read the roots on the roll and the numerals on the chord band.",
         skills: [{ skill: "H13", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -228,7 +228,7 @@ export default defineLesson({
         role: "check",
         key: G,
         prompt:
-          "The same ending in G major, arriving the usual way: G, C, then C and D, and home. Rebuild bar 3 so it climbs home from below: ♭VI, then ♭VII, two beats each. Play the target first.",
+          "The same ending in G major, arriving the usual way: G, C, then C and D, and home. Rebuild bar 3 so it climbs home from below: ♭VI, then ♭VII, two beats each.",
         skills: [{ skill: "H13", w: 1 }],
         code: { starter: MODIFY_STARTER },
         reference: { solutions: [MODIFY_SOLUTION], bars: 4 },
@@ -396,7 +396,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Eight bars of an anthem with a pumping bass and a tune that ends do re mi. Bar 7 walks home through F. Rebuild it so the ending climbs home from below: A♭ then B♭, two beats each, into C. Then make it yours: move the climb, give each chord a bar, rewrite the tune.",
+          "Eight bars of an anthem with a pumping bass and a tune that ends do re mi. Bar 7 walks home through F. Rebuild it so the ending climbs home from below: A♭ then B♭, two beats each, into C. After that, try it your way: move the climb, give each chord a bar, rewrite the tune.",
         skills: [{ skill: "H13", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

@@ -145,7 +145,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "R1.L01",
-  version: 1,
+  version: 2,
   title: "Metric Weight",
   objective:
     "I can hear which places in a bar are strong, and make a line pull against them by leaving a strong place empty.",
@@ -171,19 +171,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: one groove, twice. The kick, the snare, the bass and the chords are the same both times. Listen to the sixteenth notes on the hi-hat.",
+          "Everything but the hi-hat stays put. Which loop sounds like a drummer, and which like a machine? Listen for the hi-hat hits that stand out in the second loop, and where in the bar they fall.",
         skills: [{ skill: "R10", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: GROOVE_FLAT,
-            caption: "Every hi-hat hit the same strength: a stream of sixteenths with no shape.",
+            caption: "Sixteen hi-hat hits a bar, every one at the same strength.",
             bars: 4,
           },
           {
             code: GROOVE,
-            caption: "The same hits, each as strong as its place in the bar: now the bar has a shape.",
+            caption: "The same sixteen hits. Which of them come forward?",
             bars: 4,
           },
         ],
@@ -201,7 +201,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Feel it before you count it. The groove plays four bars: tap on the two heaviest places of every bar, where the kick lands. Eight taps in all; any key works.",
+          "The shaped groove plays four bars. Tap on the two heaviest places of every bar, where the kick lands: eight taps in all.",
         skills: [{ skill: "R10", w: 1 }],
         hints: ladder(
           "Which hits of the hi-hat sound strongest?",
@@ -328,7 +328,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The bass plays on 1 and 3, square with the beat. Keep beat 1. Make the second note arrive on the lightest place just before beat 3, and leave beat 3 itself empty. Hear the target to check the pull.",
+          "The bass plays on 1 and 3, square with the beat. Keep beat 1. Move the second note to the lightest place just before beat 3, and leave beat 3 itself empty.",
         skills: [{ skill: "R10", w: 1 }],
         code: { starter: PUSH_STARTER },
         reference: { solutions: [PUSH_SOLUTION], bars: 4 },
@@ -466,7 +466,7 @@ export default defineLesson({
         role: "practice",
         title: "Bass that pulls",
         prompt:
-          "The band plays the chords; the drums and the bass are yours. The bass sits square on 1 and 3. Make it pull against the beat: put notes on light places and leave the heavy places after them empty. Then make it your own: the pull into the downbeat, a second note, other notes of the chord.",
+          "The band plays the chords; the drums and the bass are yours, and the bass sits square on 1 and 3. Make it pull: notes on light places, the heavy places after them left empty. Try the hardest pull too, the last sixteenth into an empty downbeat, and other notes of the chord.",
         skills: [{ skill: "R10", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [4, 8],

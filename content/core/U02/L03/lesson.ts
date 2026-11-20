@@ -39,7 +39,7 @@ const NOTE_FEEDBACK = {
 
 export default defineLesson({
   id: "U02.L03",
-  version: 1,
+  version: 2,
   title: "Half & Whole Steps",
   objective:
     "I can find half and whole steps on the keyboard and name a black key as a sharp or a flat of its neighbours.",
@@ -72,12 +72,17 @@ export default defineLesson({
         id: "creep-and-stride",
         version: 1,
         role: "practice",
-        prompt:
-          "Press Play and watch the keys. Bar 1 creeps up key by key; bar 2 strides. Which one sounds tighter?",
+        prompt: "Which bar sounds tighter, bar 1 or bar 2? Keep your eyes on the keys while it plays.",
         skills: [{ skill: "P03", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "A piano line over the band, two bars on repeat.", bars: 2 }],
+        items: [
+          {
+            code: HOOK,
+            caption: "Bar 1 climbs four notes; bar 2 climbs four too, across more keys.",
+            bars: 2,
+          },
+        ],
       },
     },
     {
@@ -92,7 +97,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it and watch the keyboard. Between `e4` and `f4`, and between `b4` and `c5`, there is no black key. Then try `c4 d4` in place of `e4 f4`.",
+          "Run it and watch the keyboard: which neighbours have no black key between them? Then try `c4 d4` in place of `e4 f4`.",
         skills: [{ skill: "P03", w: 1 }],
         feedbackText: {
           "investigate.wrong": "Not quite. Count every key on the way, black and white, then look again.",
@@ -347,7 +352,7 @@ export default defineLesson({
         id: "riff-black-key",
         version: 1,
         role: "practice",
-        prompt: "Write a riff over the band that uses at least **one sharp or flat**.",
+        prompt: "Write a riff that uses at least **one sharp or flat**, and listen to it against the band.",
         skills: [
           { skill: "P04", w: 0.5 },
           { skill: "P03", w: 0.5 },

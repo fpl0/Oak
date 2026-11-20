@@ -70,7 +70,7 @@ const CHORDS = { band: "band.two-chord-vamp", tracks: ["chords"] } as const;
 
 export default defineLesson({
   id: "A1.L01",
-  version: 1,
+  version: 2,
   title: "Waves & Harmonics",
   objective: "I can see a wave's shape, hear its harmonics, and choose them with `.partials()`.",
   key: { tonic: "C", mode: "major" },
@@ -97,13 +97,14 @@ export default defineLesson({
         id: "thin-or-full",
         version: 1,
         role: "practice",
-        prompt: "Press Play: one loop, twice. Same notes, same drums. Listen to the bass and the riff.",
+        prompt:
+          "The notes are the same in both loops; only the waves of the bass and the riff change. Listen to the bass line: in which loop is it easier to follow?",
         skills: [{ skill: "D02", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: THIN, caption: "Bass and riff on a sine: thin, far away.", bars: 2 },
-          { code: FULL, caption: "The same notes on waves with more inside them.", bars: 2 },
+          { code: THIN, caption: "Loop 1: the bass and the riff on a sine.", bars: 2 },
+          { code: FULL, caption: "Loop 2: the bass on a sawtooth, the riff on a square.", bars: 2 },
         ],
       },
     },
@@ -266,7 +267,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The riff is on a sawtooth, but `.partials()` keeps only the bottom note of its stack, so it sounds like a sine. Each number is one note of the stack, from the bottom: 1 on, 0 off. Switch on the next three.",
+          "The riff is on a sawtooth, but `.partials()` keeps only the bottom note of its stack, so it sounds like a sine. Switch on the next three.",
         skills: [{ skill: "D02", w: 1 }],
         code: { starter: BUILD_STARTER },
         reference: { solutions: [BUILD_SOLUTION], bars: 2 },
@@ -347,7 +348,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The bass line on one of three waves. Sine: harmonic 1 only. Square: the odd harmonics, 1, 3, 5 … Sawtooth: every one. Which is it?",
+          "The bass line over the drums, on one of three waves. Listen to what sits above each low note: which wave is it?",
         skills: [{ skill: "D02", w: 1 }],
         hints: [
           { text: "Is the bass round and soft, or does it buzz?" },

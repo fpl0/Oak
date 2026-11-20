@@ -68,7 +68,7 @@ const KEYS = { roll: false, staff: false, keyboard: true } as const;
 
 export default defineLesson({
   id: "U05.L09",
-  version: 1,
+  version: 2,
   title: "Chord Names",
   objective: "I can read a chord's name (C, Cm, C°, C+), play the chord it asks for and name a chord I see.",
   key: { tonic: "C", mode: "major" },
@@ -93,11 +93,11 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the four chords you have stacked since Stacking Thirds. A guitarist would call them out as C, G, A minor, F.",
+          "As each bar arrives, say its name under your breath: C, G, A minor, F. Which name needs an extra word, and can you hear why?",
         skills: [{ skill: "N05", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "C, G, A minor and F: one chord a bar.", bars: 4 }],
+        items: [{ code: HOOK, caption: "Four chords, one a bar. Listen hard to bar 3.", bars: 4 }],
       },
     },
     {

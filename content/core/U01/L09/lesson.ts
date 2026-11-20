@@ -53,7 +53,7 @@ const DRUM_MATCH = {
 
 export default defineLesson({
   id: "U01.L09",
-  version: 1,
+  version: 2,
   title: "Copy That Groove",
   objective: "I can copy a drum groove by ear and play the same groove at half or double time.",
   key: { tonic: "C", mode: "major" },
@@ -81,13 +81,17 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play on each version and nod along. The band keeps the same tempo all three times. What changes in the drums?",
+          "Nod along at the same speed through all three loops. Which version feels heavier, and which more urgent?",
         skills: [{ skill: "R05", w: 1 }],
         hints: null,
         tests: [],
         items: [
           { code: HOOK, caption: "The groove on a LinnDrum, a drum machine from the early 1980s.", bars: 4 },
-          { code: HALF, caption: "The same three lines, each with `.slow(2)`.", bars: 4 },
+          {
+            code: HALF,
+            caption: "The same three lines, each with `.slow(2)`. Keep nodding at the same speed.",
+            bars: 4,
+          },
           { code: DOUBLE, caption: "The same three lines, each with `.fast(2)`.", bars: 4 },
         ],
       },
@@ -303,7 +307,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Play A and B. Same drums, same tempo. In which one do the hats lean back, long-short instead of even?",
+          "Tap your foot and listen to the hats between the taps. In which version do they lean back and roll instead of ticking evenly?",
         skills: [{ skill: "R05", w: 1 }],
         hints: ladder(
           "Listen to the hats alone. Are the gaps between them all the same?",
@@ -342,7 +346,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Write a groove over the band, then flip it with one function: `.slow(2)` for half-time or `.fast(2)` for double-time, on one line or on all of them.",
+          "Write a groove, then flip it with one function: `.slow(2)` for half-time or `.fast(2)` for double-time, on one line or on all of them.",
         skills: [
           { skill: "R05", w: 0.5 },
           { skill: "E01", w: 0.5 },

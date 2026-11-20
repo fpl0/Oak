@@ -53,7 +53,7 @@ const FILL_LAST: string[][] = GROOVES.flatMap((a) =>
 
 export default defineLesson({
   id: "U01.L07",
-  version: 1,
+  version: 2,
   title: "Four-Bar Phrases & Fills",
   objective: "I can write a four-bar drum phrase with < > and end it with a fill.",
   key: { tonic: "C", mode: "major" },
@@ -78,11 +78,11 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play and count the bars with the bar counter: 1, 2, 3, 4, and round again. Listen for what bar 4 does.",
+          "Count the bars with the bar counter: 1, 2, 3, 4, and round again. Which bar sounds different, and what does it do to the bar after it?",
         skills: [{ skill: "R04", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "A backbeat over the band, four bars to a loop.", bars: 8 }],
+        items: [{ code: HOOK, caption: "A backbeat, four bars to a loop, played twice through.", bars: 8 }],
       },
     },
     {
@@ -97,7 +97,7 @@ export default defineLesson({
         id: "one-per-bar",
         version: 1,
         role: "practice",
-        prompt: "This line puts `bd sd` inside `< >` instead of quotes alone. Before you run it: what plays?",
+        prompt: "Here `bd sd` sits inside `< >`. What will you hear?",
         skills: [{ skill: "R04", w: 1 }],
         hints: null,
         tests: [],
@@ -310,8 +310,7 @@ export default defineLesson({
         id: "four-bar-phrase",
         version: 1,
         role: "practice",
-        prompt:
-          "Write a four-bar drum phrase over the band that ends with a fill in bar 4. Change bars with `< >`.",
+        prompt: "Write a four-bar drum phrase that ends with a fill in bar 4. Change bars with `< >`.",
         skills: [
           { skill: "R04", w: 0.5 },
           { skill: "R07", w: 0.5 },

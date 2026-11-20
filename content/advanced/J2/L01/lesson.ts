@@ -125,7 +125,7 @@ const DRUMS = { band: "band.two-five-one", tracks: ["drums"] } as const;
 
 export default defineLesson({
   id: "J2.L01",
-  version: 1,
+  version: 2,
   title: "All Twelve Keys",
   objective: "I can move a ii–V–I round the cycle of fourths and play it in any key.",
   key: { tonic: "C", mode: "major" },
@@ -151,16 +151,15 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the trio plays a ii–V–I with a vibes lick, then the same four bars again and again. Listen for where home is each time.",
+          "Listen for home at the end of each four bars. Is it the same chord each time, or does home keep moving?",
         skills: [{ skill: "J05", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: IN_C, caption: "The ii–V–I in C: Dm7, G7, Cmaj7, with the lick on top.", bars: 4 },
+          { code: IN_C, caption: "The ii–V–I in C, with the lick on top.", bars: 4 },
           {
             code: TOUR_FOUR,
-            caption:
-              "The same four bars four times, each a 4th higher than the last: home is C, then F, then B♭, then E♭.",
+            caption: "The same four bars, four times over. Listen to each landing.",
             bars: 16,
           },
         ],
@@ -262,7 +261,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The trio plays its ii–V–I in C, then in F: `tour` moves every line. Take it one key further round the cycle, four bars more. Hear the target to check.",
+          "The trio plays its ii–V–I in C, then in F: `tour` moves every line. Take it one key further round the cycle, four bars more.",
         skills: [{ skill: "J05", w: 1 }],
         swing: SWUNG,
         code: { starter: TOUR_STARTER },
@@ -332,7 +331,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "A chart reads its keys by name. This one tours C, F, B♭ and E♭, then repeats E♭ where the fifth key should be. Write the fifth key's ii–V–I by name.",
+          "This chart tours C, F, B♭ and E♭, then repeats E♭ where the fifth key should be. Write the fifth key's ii–V–I by name.",
         skills: [{ skill: "J05", w: 1 }],
         swing: SWUNG,
         code: { starter: CHART_STARTER },
@@ -421,7 +420,7 @@ export default defineLesson({
         role: "practice",
         title: "ii–V–I tour",
         prompt:
-          "The band plays the drums. Take your trio on tour: start in any key, and every four bars move the whole trio a 4th higher, at least three keys. Then make it yours: your own lick, a tempo you like, more keys.",
+          "Take your trio on tour: start in any key, and every four bars move the whole trio a 4th higher, at least three keys. Give the vibes a lick of your own that travels with the shells, and pick a swing tempo between 120 and 200.",
         skills: [{ skill: "J05", w: 1 }],
         swing: SWUNG,
         code: { starter: MAKE_STARTER },

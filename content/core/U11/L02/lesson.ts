@@ -74,7 +74,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U11.L02",
-  version: 1,
+  version: 2,
   title: "The Minor Pentatonic Riff",
   objective: "I can write a riff on the minor pentatonic, 1 ♭3 4 5 ♭7, and sing it as do me fa sol te.",
   key: { tonic: "A", mode: "minor pentatonic" },
@@ -100,13 +100,13 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: six notes on a guitar, one bar, round and round. Then the same bar with a bass doubling it an octave down, over a rock beat.",
+          "Six notes on a guitar, round and round, then the same bar doubled by a bass over a rock beat. Listen to the riff's last note before the gap: does it sound finished, or lean into the next bar?",
         skills: [{ skill: "S10", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: RIFF_ALONE, caption: "The riff alone: A C D E D C.", bars: 2 },
-          { code: HOOK, caption: "Guitar and bass together over the drums.", bars: 4 },
+          { code: RIFF_ALONE, caption: "The riff alone: A C D E D C, round and round.", bars: 2 },
+          { code: HOOK, caption: "A bass doubles it an octave down, over a rock beat.", bars: 4 },
         ],
       },
     },
@@ -122,7 +122,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          'The riff\'s scale is `"A2:minor:pentatonic"`. Before you run it: which five notes does `n("0 1 2 3 4")` play on the minor pentatonic of A?',
+          'The riff\'s scale is `"A2:minor:pentatonic"`. Which five notes does `n("0 1 2 3 4")` play on the minor pentatonic of A?',
         skills: [{ skill: "S10", w: 1 }],
         hints: null,
         tests: [],
@@ -267,7 +267,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "Four short lines, each in its own key, over a low note on its home. Major pentatonic or minor pentatonic?",
+          "Four short lines, each in its own key, over a low note on its home. Major pentatonic or minor pentatonic? Listen to each line against the low note under it.",
         skills: [{ skill: "S10", w: 1 }],
         hints: ladder(
           "Does the line sound bright or dark against its low note?",
@@ -425,7 +425,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Hear it, then sing it: do me fa sol te do, and back down. The numbers stay on screen: 1 ♭3 4 5 ♭7 1. Sing in your own range.",
+          "Do me fa sol te do, and back down; the numbers 1 ♭3 4 5 ♭7 1 stay on screen. Hear it first, then sing it in your own range.",
         skills: [
           { skill: "V02", w: 0.6 },
           { skill: "S10", w: 0.4 },
@@ -466,7 +466,7 @@ export default defineLesson({
         // The starter sits on A natural minor; the rule names its own key.
         key: { tonic: "A", mode: "minor" },
         prompt:
-          "The drums, and a riff on A natural minor that leans on B and F. Move it onto the minor pentatonic, then make it yours: a bar or two, notes and rests. Add a bass that doubles it if you like.",
+          "A riff on A natural minor that leans on B and F. Move it onto the minor pentatonic, then rework it: a bar or two, notes and rests. Add a bass that doubles it if you like.",
         skills: [{ skill: "S10", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [2, 8],

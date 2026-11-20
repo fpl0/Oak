@@ -173,7 +173,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "R3.L04",
-  version: 1,
+  version: 2,
   title: "Montuno & Tumbao Layering",
   objective: "I can layer a montuno and a tumbao on the clave.",
   key: { tonic: "C", mode: "major" },
@@ -201,25 +201,24 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a son groove, then its clave and cowbell alone, then the whole band again. Listen to where the bass and the piano land against the rimshot.",
+          "The whole son band, then only its clave and cowbell, then the band again. When the bass and the piano come back, does the groove sit on the beat or lean ahead of it? Listen for where the bass lands against beat 1.",
         skills: [{ skill: "R18", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: HOOK,
-            caption: "The whole groove: the clave 3-2, the cowbell, the bass and the piano over C and G7.",
+            caption: "The whole groove over C and G7: clave 3-2, cowbell, bass and piano.",
             bars: 4,
           },
           {
             code: CLAVE_AND_BELL,
-            caption: "Only the clave and the cowbell: the two-bar key everything else lines up with.",
+            caption: "Only the clave and the cowbell: the two-bar frame.",
             bars: 4,
           },
           {
             code: HOOK,
-            caption:
-              "The bass and the piano back in. The bass never plays on beat 1; the piano only in every other bar.",
+            caption: "The bass and the piano back in. Does the bass ever play on beat 1?",
             bars: 4,
           },
         ],
@@ -298,7 +297,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "This bass plays each chord's root on beats 1 and 3. Turn it into the bass you just read: nothing on beat 1, its own chord's 5th on the “and” of 2, and on beat 4 the root of the chord that comes next. Hear the target to check.",
+          "This bass plays each chord's root on beats 1 and 3. Turn it into the bass you just read: nothing on beat 1, its own chord's 5th on the “and” of 2, and on beat 4 the root of the chord that comes next.",
         skills: [
           { skill: "B04", w: 0.6 },
           { skill: "R18", w: 0.4 },

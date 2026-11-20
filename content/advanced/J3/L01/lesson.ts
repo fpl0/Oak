@@ -118,7 +118,7 @@ const KEYS = { roll: false, staff: false, keyboard: true } as const;
 
 export default defineLesson({
   id: "J3.L01",
-  version: 1,
+  version: 2,
   title: "Rootless A/B Voicings",
   objective:
     "I can voice a ii–V–I with rootless A and B voicings, by hand and with the left-hand dictionary.",
@@ -148,21 +148,19 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: the trio comps a ii–V–I in F twice. The bass and the drums are the same both times. Listen to the Rhodes.",
+          "Bass and drums are the same both times. Listen to the Rhodes: which take sounds richer, and where on the keyboard does each one sit?",
         skills: [{ skill: "J09", w: 1 }],
         hints: null,
         tests: [],
         items: [
           {
             code: SHELL_TRIO,
-            caption:
-              "Shells: the root at the bottom with the 3rd and the 7th, the sound you comped with in J1.",
+            caption: "Shells, as you comped them before.",
             bars: 4,
           },
           {
             code: ROOTLESS_TRIO,
-            caption:
-              "Four notes in the middle of the keyboard, no root: the bass already plays it, and the chord gains a 9th.",
+            caption: "The same changes, in a new shape on the Rhodes.",
             bars: 4,
           },
         ],
@@ -180,8 +178,7 @@ export default defineLesson({
         id: "what-is-missing",
         version: 1,
         role: "practice",
-        prompt:
-          "Run the chords held a bar each, with the bass under them, and read the roll: the Gm7 in bar 1, then what changes in bar 2.",
+        prompt: "Run it and read the roll: the Gm7 in bar 1, then what changes in bar 2.",
         skills: [{ skill: "J09", w: 1 }],
         feedbackText: {
           "investigate.wrong":
@@ -383,7 +380,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The left-hand dictionary with the hand at A4 plays what you wrote: A B A. Turn it round so the progression starts on a B voicing, with one call to the dictionary's placement. Hear the target first.",
+          "Anchored at A4, the dictionary plays what you wrote: A B A. Turn it round so the progression starts on a B voicing. One call before `.voicing()` moves every chord to the next place the dictionary has for it.",
         skills: [{ skill: "J09", w: 1 }],
         swing: SWUNG,
         code: { starter: OFFSET_STARTER },
@@ -524,7 +521,7 @@ export default defineLesson({
         role: "practice",
         title: "Rootless ii–V–I",
         prompt:
-          "The Band plays the drums and the bass in F. The comping is yours: turn the shells into rootless voicings that alternate, A B A or B A B, by hand or with the dictionary. Then make it your own: your rhythm, how high the hand sits, a vibes line on top.",
+          "Turn the shells into rootless voicings that alternate, A B A or B A B, by hand or with the dictionary, each chord sounding on the first beat of its bar. Then choose your rhythm and how high the hand sits, and put a vibes line on top, like your tune on the guide-tone thread.",
         skills: [{ skill: "J09", w: 1 }],
         swing: SWUNG,
         code: { starter: MAKE_STARTER },

@@ -37,7 +37,7 @@ const STAFF_ONLY = { roll: false, staff: "treble", keyboard: false } as const;
 
 export default defineLesson({
   id: "U04.L03",
-  version: 1,
+  version: 2,
   title: "Together Now",
   objective:
     "I can play two notes together with `,` and hear whether a pair is at rest or clashes, the tritone included.",
@@ -68,11 +68,11 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play. Four pairs of notes, each pair played at once. One of them does not want to stay.",
+          "Four pairs, one per bar, each pair played at once. Listen for the pair you would not want the music to stop on.",
         skills: [{ skill: "I05", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "Two notes at a time, one pair per bar, piano alone.", bars: 4 }],
+        items: [{ code: HOOK, caption: "Piano alone, no band: nothing but the four pairs.", bars: 4 }],
       },
     },
     {
@@ -89,7 +89,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "A comma inside brackets plays notes together: `[c4,e4]` is C and E at once. Run the same four pairs, written in letters, and watch the keyboard.",
+          "Inside brackets, a comma plays notes together: `[c4,e4]` is C and E at once. Run the same four pairs, written in letters, and watch the keyboard.",
         skills: [
           { skill: "I05", w: 0.5 },
           { skill: "I03", w: 0.5 },
@@ -195,7 +195,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "On the staff, each pair is stacked on one stem: the two notes sound at once. Your code plays them one after the other. Make it play what the page shows.",
+          "The page shows four pairs, each stacked on one stem. Your code plays each pair one note after the other. Make it play what the page shows.",
         skills: [
           { skill: "I05", w: 0.7 },
           { skill: "I03", w: 0.3 },
@@ -356,7 +356,7 @@ export default defineLesson({
         // The catalog's text for a `uses` rule names the tool ID; the label says it in words.
         feedbackText: { "rubric.unmet": "{label}: not yet." },
         prompt:
-          "Write a two-bar riff over the band that plays two notes together with `,`. Let one pair clash for a moment, then move to a pair at rest.",
+          "Write a two-bar riff that plays two notes together with `,`. Let one pair clash for a moment, then move to a pair at rest.",
         skills: [{ skill: "I05", w: 1 }],
         code: { starter: keys(MAKE_APART) },
         bars: [1, 4],

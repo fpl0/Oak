@@ -146,7 +146,7 @@ const earPart = (
 
 export default defineLesson({
   id: "U15.L02",
-  version: 1,
+  version: 2,
   title: "Five of Five",
   objective: "I can build the V7 of V, hear the bar where it leans, and name it V7/V.",
   key: C_MAJOR,
@@ -171,13 +171,13 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a four-bar turn on the key's own chords. Then the same turn with one note of bar 3 raised a half step, in the chord and in the tune. Listen for the bar that leans forward.",
+          "A four-bar turn, twice. The second time one note of bar 3 is raised a half step, in the chord and in the tune. Listen for the bar that tilts forward, and for how firmly the bar after it lands.",
         skills: [{ skill: "H12", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: HOOK_IN_KEY, caption: "C, Am, Dm, G7: every note belongs to C major.", bars: 4 },
-          { code: HOOK, caption: "C, Am, D7, G7: bar 3 has F♯ where the key has F.", bars: 4 },
+          { code: HOOK_IN_KEY, caption: "C, Am, Dm, G7: all inside the key.", bars: 4 },
+          { code: HOOK, caption: "C, Am, D7, G7: hear bar 3 push into bar 4.", bars: 4 },
         ],
       },
     },
@@ -221,7 +221,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Run it with the chord band open. Bars 1 and 2 are the move you know best: G7 goes home to C. Bars 3 and 4 make the same move starting on D. Read the note names on the roll, bottom to top.",
+          "Bars 1 and 2: G7 goes home to C. Bars 3 and 4 make the same move, starting on D. Read the note names on the roll, bottom to top, and compare the two pairs.",
         skills: [{ skill: "H12", w: 1 }],
         feedbackText: {
           "investigate.wrong":

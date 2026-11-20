@@ -137,7 +137,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "R1.L04",
-  version: 1,
+  version: 2,
   title: "Interlock",
   objective: "I can make bass, clav and guitar fit into each other's gaps, so together they play one rhythm.",
   key: { tonic: "C", mode: "minor" },
@@ -162,23 +162,27 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: three parts of a funk groove, one at a time over a quiet hi-hat, then all three with the drums.",
+          "Three parts one at a time over a quiet hi-hat, then all three with the drums. Listen for the holes in each part. In the last loop, do you hear three parts or one?",
         skills: [{ skill: "R14", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: code(PULSE, BASS), caption: "The bass alone: three notes a bar, and long gaps.", bars: 2 },
+          {
+            code: code(PULSE, BASS),
+            caption: "The bass alone: three notes a bar. Where are its gaps?",
+            bars: 2,
+          },
           {
             code: code(PULSE, KEYS),
-            caption: "The clav alone: four short notes that never land on the one.",
+            caption: "The clav alone: four short notes. Does any land on the one?",
             bars: 2,
           },
           {
             code: code(PULSE, GTR),
-            caption: "The guitar alone: three short chords, each just after a beat or just before one.",
+            caption: "The guitar alone: three short chords, each close to a beat.",
             bars: 2,
           },
-          { code: MACHINE, caption: "All three with the drums: one busy rhythm.", bars: 2 },
+          { code: MACHINE, caption: "All three with the drums.", bars: 2 },
         ],
       },
     },
@@ -193,8 +197,7 @@ export default defineLesson({
         id: "tap-the-clav",
         version: 1,
         role: "practice",
-        prompt:
-          "Feel the gaps first. The bass and the drums play, and the clav plays quietly under them. Tap with the clav only: four taps a bar, eight in all. Any key works.",
+        prompt: "Tap with the clav only, not with the bass: four taps a bar, eight in all.",
         skills: [{ skill: "R14", w: 1 }],
         hints: ladder(
           "Listen past the bass. Which short, bright notes fall where the bass is silent?",
@@ -470,7 +473,7 @@ export default defineLesson({
         role: "practice",
         title: "Funk machine",
         prompt:
-          "The drums are given. Bass, clav and guitar all play the same three places, so they sound like one heavy part. Give each part places of its own, the bass with the kick. When two parts land together off the one, move one of them. Then make it yours: notes, a second chord, a sound.",
+          "The drums are given. Bass, clav and guitar all play the same three places, so they sound like one heavy part. Give each part places of its own, the bass with the kick. When two parts land together off the one, move one of them. Other notes, a second chord or another sound are yours to choose.",
         skills: [
           { skill: "R14", w: 0.5 },
           { skill: "B04", w: 0.5 },

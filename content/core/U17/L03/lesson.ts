@@ -216,7 +216,7 @@ const ROLL = { roll: true, staff: false, keyboard: false } as const;
 
 export default defineLesson({
   id: "U17.L03",
-  version: 1,
+  version: 2,
   title: "Hearing Key Changes",
   objective:
     "I can hear whether a song has changed key, find the bar where the new key begins, and tell a move through a pivot chord from a lift.",
@@ -254,13 +254,12 @@ export default defineLesson({
         items: [
           {
             code: LIFT,
-            caption:
-              "The chorus of Truck-Driver: at bar 5 everything starts again a whole step higher, in D.",
+            caption: "Last lesson's chorus. Keep humming C past bar 4.",
             bars: 8,
           },
           {
             code: HOOK,
-            caption: "C, Am, then E7 in bar 7 brings G♯, and A minor is home. The first C no longer is.",
+            caption: "A verse in C that takes a turn in bar 7.",
             bars: 8,
           },
         ],
@@ -278,7 +277,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Two cards, the same first four bars, from Pivot Chords. One verse comes back home to C at the end; the other has moved. Which card ends in a new home?",
+          "Two cards that start with the same four bars. One verse comes back home to C at the end; the other has moved. Which card ends in a new home? Listen for the bar where the two part ways.",
         skills: [{ skill: "E13", w: 1 }],
         hints: ladder(
           "After each card, sing the first chord's root, C. Does it settle the music or pull against it?",

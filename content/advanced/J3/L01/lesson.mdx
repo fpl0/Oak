@@ -1,17 +1,19 @@
 {/* J3.L01 Rootless A/B Voicings: prose only, one <Step> per step of lesson.ts. Code lives in lesson.ts. */}
 
 <Step id="S1">
-The same trio, the same ii–V–I in F, comped two ways. The first is the shells you wrote in J1. Listen to where the second one sits.
+Your shells put the root at the bottom of every chord, where the bass already plays it. Here the trio comps a ii–V–I in F two ways, starting with your shells.
 
 <Example id="rootless-trio" views="code,roll" autoplay />
+
+<OnPass>The second take sits higher, in the middle of the keyboard, clear of the bass. It plays four notes a chord instead of three, and one of them is a colour above the seventh, so the same changes sound richer.</OnPass>
 </Step>
 
 <Step id="S2">
-The four chords of the second take, held a bar each over the bass. Read them on the roll.
+What changed? The second take's chords are held a bar each here, over the bass, so the roll can show them.
 
 <Example id="rootless-held" views="code,roll" />
 
-<OnPass>The root has gone to the bass, and the chord keeps its colour notes: Gm7 is B♭ D F A, its 3rd, 5th, 7th and 9th, stacked from the 3rd. That is an **A voicing**. C7 keeps three of those notes and moves one: B♭ D E A, its 7th, 9th, 3rd and 13th, stacked from the 7th. That is a **B voicing**. On a dominant the 13th stands in for the 5th. Fmaj7 is an A voicing again. A B A: the hand hardly moves.</OnPass>
+<OnPass>The root has gone to the bass. Gm7 is B♭ D F A, its 3rd, 5th, 7th and 9th stacked from the 3rd: an **A voicing**. C7 keeps three of those notes and moves one. B♭ D E A, its 7th, 9th, 3rd and 13th stacked from the 7th, is a **B voicing** (on a dominant the 13th stands in for the 5th). Fmaj7 is an A voicing again, so the hand hardly moves.</OnPass>
 </Step>
 
 <Step id="S3">
@@ -21,23 +23,23 @@ Now with your hands. Fmaj7 is F A C E, and its 9th is G.
 </Step>
 
 <Step id="S4">
-The trio comps in shells. Give the root to the bass and play the four notes in the middle, alternating as you heard.
+The whole second take, by hand.
 
 <Editor exercise="shells-to-rootless" />
 
-<OnPass>A B A by hand. Between Gm7 and C7 a single note moves a half step, and the chords still change colour. A good place to stop for today if you need to.</OnPass>
+<OnPass>A B A by hand. Between Gm7 and C7 a single note moves a half step, and the chords still change colour.</OnPass>
 </Step>
 
 <Step id="S5">
-The left-hand dictionary holds both shapes of each chord. Anchored at A4 it plays your A B A. One call before `.voicing()` moves every chord to the next place the dictionary has for it.
+The left-hand dictionary holds both shapes of each chord, so code can do what your hand just did.
 
 <Editor exercise="offset-to-b" />
 
-<OnPass>`.offset(1)` moved each chord one place up, and in `lefthand` the next place is the other shape: B A B, the hand starting on F. `.offset(2)` would be the first shapes again, an octave higher. Without an anchor the dictionary keeps every chord's top note at or below C5, and in F that makes Fmaj7 jump to a B voicing: set the anchor and the alternation follows.</OnPass>
+<OnPass>`.offset(1)` moved each chord one place up. In `lefthand` the next place is the other shape, so you hear B A B, the hand starting on F. `.offset(2)` would bring back the first shapes, an octave higher. Without an anchor the dictionary keeps every top note at or below C5, and in F that makes Fmaj7 jump to a B voicing. Set the anchor and the alternation holds.</OnPass>
 </Step>
 
 <Step id="S6">
-A melody on top. The vibes hold A4, and the comping's hand is anchored on the same note.
+With a melody on top, the comping's top note can land on the tune's own note.
 
 <Example id="duck" views="code,roll" />
 
@@ -45,7 +47,7 @@ A melody on top. The vibes hold A4, and the comping's hand is anchored on the sa
 </Step>
 
 <Step id="S7">
-The Band plays the drums and the bass in F. The comping starts in shells; make it rootless, with each chord sounding on the first beat of its bar, then make it yours.
+Your shells gave the left hand three notes on top of the root. Now it plays four, leaves the root to the bass, and alternates between two shapes that sit close together. The band plays the drums and the bass in F; the comping starts in shells.
 
 <Make exercise="your-rootless-comping" />
 

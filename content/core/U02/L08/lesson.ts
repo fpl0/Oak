@@ -47,7 +47,7 @@ const MAKE_STARTER = mel(ODE);
 
 export default defineLesson({
   id: "U02.L08",
-  version: 1,
+  version: 2,
   title: "Playing from the Page",
   objective: "I can read a short tune off the treble staff into code and put it in a room with reverb.",
   key: { tonic: "C", mode: "major" },
@@ -71,11 +71,12 @@ export default defineLesson({
         id: "a-tune-you-know",
         version: 1,
         role: "practice",
-        prompt: "Press Play and follow the notes along the staff as they sound.",
+        prompt:
+          "Follow the notes along the staff as they sound. Does bar 4 end the tune, or leave it waiting?",
         skills: [{ skill: "N02", w: 1 }],
         hints: null,
         tests: [],
-        items: [{ code: HOOK, caption: "Four bars of a famous tune on the piano, over the band.", bars: 4 }],
+        items: [{ code: HOOK, caption: "Ode to Joy, bars 1 to 4. Read along on the staff.", bars: 4 }],
       },
     },
     {
@@ -299,7 +300,7 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Arrange Ode to Joy or When the Saints over the band. Choose the sound and the note lengths, and put the tune in a room with `.room()`.",
+          "Arrange Ode to Joy or When the Saints. Choose the sound and the note lengths, and put the tune in a room with `.room()`.",
         skills: [{ skill: "D05", w: 1 }],
         code: { starter: MAKE_STARTER },
         bars: [2, 8],

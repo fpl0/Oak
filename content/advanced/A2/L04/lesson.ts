@@ -78,7 +78,7 @@ const BAND = { band: "band.aeolian-4bar", tracks: ["bass", "chords"] } as const;
 
 export default defineLesson({
   id: "A2.L04",
-  version: 1,
+  version: 2,
   title: "Sampling",
   objective: "I can cut a drum recording into pieces and play them back in an order of my own.",
   key: { tonic: "A", mode: "minor" },
@@ -106,15 +106,15 @@ export default defineLesson({
         version: 1,
         role: "practice",
         prompt:
-          "Press Play: a drummer's bar, recorded once, under the A minor loop. First as it was played, then cut into four and put back together in new orders.",
+          "Loop 2 plays the same recording, cut into four and put back together in new orders. Count along from bar to bar: does it still sound like one drummer playing?",
         skills: [{ skill: "D11", w: 1 }],
         hints: null,
         tests: [],
         items: [
-          { code: AS_RECORDED, caption: "The drum bar as it was recorded, four times.", bars: 4 },
+          { code: AS_RECORDED, caption: "Loop 1: the drum bar as it was recorded, four times.", bars: 4 },
           {
             code: HOOK,
-            caption: "The same recording cut into four: in order, then three new orders.",
+            caption: "Loop 2: the same recording cut into four, in order, then a new order each bar.",
             bars: 4,
           },
         ],
@@ -216,7 +216,7 @@ export default defineLesson({
         version: 1,
         role: "check",
         prompt:
-          "The break plays its four pieces in their own order. Play the target: in it, beat 2 plays the piece recorded on beat 3, and beat 3 the piece recorded on beat 2. Beats 1 and 4 stay as they are.",
+          "The break plays its four pieces in their own order. In the target, beat 2 plays the piece recorded on beat 3, and beat 3 the piece recorded on beat 2. Beats 1 and 4 stay as they are.",
         skills: [{ skill: "D11", w: 1 }],
         code: { starter: SWAP_STARTER },
         reference: { solutions: [SWAP_SOLUTION], bars: 1 },
